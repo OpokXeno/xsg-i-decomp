@@ -3,6 +3,12 @@
 
 #include "shared.h"
 
+/* The image block filled by sceGsSetDefLoadImage and sent as five quadwords. */
+typedef struct XglLoadImage {
+    u64 giftag;
+    unsigned char unmodeled_08[0x58];
+} XglLoadImage;
+
 /*
  * The VIF1 direct-mode packet builder object. xglPacketInit constructs two
  * of them back to back inside asPacketSource, 0x28 bytes apart (main
@@ -23,7 +29,7 @@ struct XglPacket {
      * argument at +0x00 and +0x04, and xglPacketInit passes it each entry's
      * buffer base (0x00c00000 and 0x00e00000).
      */
-    u32 *start;
+    u32 start;
     /*
  * +0x08 and +0x0c: xglPrimAddGifTagDirect (main 0x00222c00 lw v0,8(s0);
  * main 0x00222c0c lw v0,0xc(s0)) tests both for non-zero to decide

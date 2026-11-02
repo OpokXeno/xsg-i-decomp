@@ -3,6 +3,8 @@
 #include "main/jni.h"
 #include "main/play.h"
 #include "playcontrol.h"
+#include "main/init_vm.h"
+#include "main/string_utf_get_hash.h"
 
 /* Native integer arguments occupy complete 32-bit VM slots. The camera
  * controller takes the low halfword. The VM passes frame bounds as raw
@@ -31,35 +33,7 @@ typedef struct PlayControlTimingCall {
  */
 typedef struct JThread JThread;
 
-/*
- * The engine's playback controller (`Play`, the single instance
- * `playControl` src/main/play.h declares for main's play TU), modeled here
- * only for the fields this TU's natives read or write directly: the signal
- * word at +0x04 (play.h calls the same word `state`; named `signal` here
- * from the accessor pair this TU defines, getSignal__/signal__I), the
- * source pointer at +0x0c (play.h's `source`, stored by loadCamera__) and
- * the flags word at +0x2c (play.h's `flags`, bit 0 set/cleared by
- * start__/stop__). play.h is TU-local to the play TU, so this TU keeps its
- * own tag for the object.
- */
-typedef struct PlayControlHandle {
-    int class_ref;                  /* +0x00, copied as a VM object-header word */
-    int signal;                    /* +0x04, lw/sw at 0x002fa3ec/0x002fa404 */
-    void *timeChart;               /* +0x08, read by setObserver at 0x002fa5d0 */
-    void *source;                  /* +0x0c, sw at 0x002fa4bc */
-    unsigned char unmodeled_10[0x2c - 0x10];
-    unsigned int flags;            /* +0x2c, lw/sw at 0x002fa4e4/0x002fa4f0
-                                       (start__/stop__) and written by init at
-                                       0x002fa420/0x002fa450 */
-    short cameraIndex;             /* +0x30, written by init at 0x002fa41c/0x002fa44c; src/main/play.h */
-    unsigned char unmodeled_32[2];
-    float startTime;               /* +0x34, written at 0x002fa468 */
-    float endTime;                 /* +0x38, written at 0x002fa474 */
-    float frameStep;               /* +0x3c, written at 0x002fa47c */
-    unsigned char unmodeled_40[4];
-    float currentTime;             /* +0x44, written at 0x002fa484 */
-    unsigned char unmodeled_48[4];
-} PlayControlHandle;
+
 
 typedef struct PlayControlStringStorage {
     unsigned char unmodeled_00[4];
@@ -68,12 +42,12 @@ typedef struct PlayControlStringStorage {
 } PlayControlStringStorage;
 
 typedef struct PlayControlString {
-    SceneObjectHeader header;
+    ObjectHeader header;
     PlayControlStringStorage *storage;
 } PlayControlString;
 
 typedef struct PlayControlSetObserverArguments {
-    PlayControlHandle *control;
+    Play *control;
     int event_id;
     int event_key;
     SceneObject observer;
@@ -81,7 +55,7 @@ typedef struct PlayControlSetObserverArguments {
 } PlayControlSetObserverArguments;
 
 typedef struct PlayControlSetChartObserverArguments {
-    PlayControlHandle *control;
+    Play *control;
     int event_id;
     PlayControlString *chart_name;
     SceneObject observer;
@@ -91,7 +65,7 @@ typedef struct PlayControlSetChartObserverArguments {
 /* The call block of signal__I (java signature "(I)V"): the receiving
    PlayControl's native handle and the signal value to store. */
 typedef struct PlayControlSignalArguments {
-    PlayControlHandle *control; /* +0x0 */
+    Play *control; /* +0x0 */
     int value;                   /* +0x4 */
 } PlayControlSignalArguments;
 
@@ -99,7 +73,7 @@ typedef struct PlayControlSignalArguments {
    "(Ljava/lang/Object;)V"): the receiving PlayControl's native handle and
    the Object argument, stored verbatim into the handle's source field. */
 typedef struct PlayControlLoadCameraArguments {
-    PlayControlHandle *control; /* +0x0 */
+    Play *control; /* +0x0 */
     void *camera;                 /* +0x4 */
 } PlayControlLoadCameraArguments;
 
@@ -107,22 +81,18 @@ typedef struct PlayControlLoadCameraArguments {
    "(Ljava/lang/Object;)V"): the receiving PlayControl's native handle and
    the Object argument, passed through to PLAY_setTimeChart unchanged. */
 typedef struct PlayControlLoadTimeChartArguments {
-    PlayControlHandle *control; /* +0x0 */
+    Play *control; /* +0x0 */
     void *time_chart;             /* +0x4 */
 } PlayControlLoadTimeChartArguments;
 
 typedef struct PlayControlCallBackParams PlayControlCallBackParams;
 
-extern SceneType *TYPE_Void;
+extern Play *PLAY_getCurrent(void);
 
-extern PlayControlHandle *PLAY_getCurrent(void);
+extern void PLAY_setObserver(Play *play, int event_id, int event_key,
+                             SceneObject observer, JavaMethod *method);
 
-extern void PLAY_setObserver(PlayControlHandle *play, int event_id, int event_key,
-                             SceneObject observer, SceneMethod *method);
-
-extern SceneString *loadConstString(const char *bytes, int length);
-
-extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+extern JavaMethod *findMethod(JavaClass *clazz, SceneString *name,
                                void *signature_or_type);
 
 extern int TCH_getInfoID(void *chart, const char *name, int length);
@@ -131,21 +101,21 @@ extern int TCH_getInfoID(void *chart, const char *name, int length);
    restated here verbatim (a TU-local declaration cannot be included from
    another TU). Stores its second argument into the playback controller's
    timeChart field (play.h +0x08). */
-extern void PLAY_setTimeChart(PlayControlHandle *play, void *time_chart);
+extern void PLAY_setTimeChart(Play *play, void *time_chart);
 
-extern PlayControlCallBackParams *PLAY_getCallBackParams(PlayControlHandle *play);
+extern PlayControlCallBackParams *PLAY_getCallBackParams(Play *play);
 
 /* Create the native playback object and attach the class reference expected by
    the script VM's SceneObject header. */
 void Java_xeno_PlayControl_create__(JThread *thread, void *arguments,
                                     int *result)
 {
-    SceneClass *window_class;
-    PlayControlHandle *play;
+    JavaClass *window_class;
+    Play *play;
 
     window_class = classJava_xeno_util_Window;
     play = PLAY_getCurrent();
-    play->class_ref = (int)window_class->instance_class_ref;
+    play->class_ref = (int)window_class->classPointer;
     *result = (int)play;
 }
 
@@ -154,7 +124,7 @@ void Java_xeno_PlayControl_create__(JThread *thread, void *arguments,
  * binding). Returns the playback controller's signal word.
  */
 void Java_xeno_PlayControl_getSignal__(JThread *thread,
-                                       PlayControlHandle **arguments,
+                                       Play **arguments,
                                        int *result)
 {
     *result = (*arguments)->signal;
@@ -221,13 +191,13 @@ void Java_xeno_PlayControl_loadTimeChart__Ljava_lang_Object_(
 }
 
 void Java_xeno_PlayControl_start__(JThread *thread,
-                                   PlayControlHandle **arguments)
+                                   Play **arguments)
 {
     (*arguments)->flags |= 1;
 }
 
 void Java_xeno_PlayControl_stop__(JThread *thread,
-                                  PlayControlHandle **arguments)
+                                  Play **arguments)
 {
     (*arguments)->flags &= ~1;
 }
@@ -236,15 +206,15 @@ void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_(
     JThread *thread, PlayControlSetObserverArguments *arguments)
 {
     SceneObject observer;
-    SceneObjectHeader *observer_header;
-    SceneClass *observer_class;
+    ObjectHeader *observer_header;
+    JavaClass *observer_class;
     PlayControlStringStorage *name_storage;
     SceneString *method_name;
-    SceneMethod *method;
+    JavaMethod *method;
 
     observer = arguments->observer;
-    observer_header = (SceneObjectHeader *)observer;
-    observer_class = observer_header->class_ref->scene_class;
+    observer_header = (ObjectHeader *)observer;
+    observer_class = observer_header->classPointer->clazz;
     name_storage = arguments->method_name->storage;
     method_name = loadConstString(name_storage->bytes, name_storage->length);
     method = findMethod(observer_class, method_name, TYPE_Void);
@@ -255,19 +225,19 @@ void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_(
 void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Ljava_lang_String_(
     JThread *thread, PlayControlSetChartObserverArguments *arguments)
 {
-    PlayControlHandle *control;
+    Play *control;
     SceneObject observer;
-    SceneObjectHeader *observer_header;
-    SceneClass *observer_class;
+    ObjectHeader *observer_header;
+    JavaClass *observer_class;
     PlayControlStringStorage *chart_name_storage;
     PlayControlStringStorage *method_name_storage;
     SceneString *method_name;
-    SceneMethod *method;
+    JavaMethod *method;
     int event_key;
 
     observer = arguments->observer;
-    observer_header = (SceneObjectHeader *)observer;
-    observer_class = observer_header->class_ref->scene_class;
+    observer_header = (ObjectHeader *)observer;
+    observer_class = observer_header->classPointer->clazz;
     method_name_storage = arguments->method_name->storage;
     method_name = loadConstString(method_name_storage->bytes,
                                   method_name_storage->length);
@@ -291,7 +261,7 @@ void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Lja
  * binding). Returns the playback controller's callback-parameter object.
  */
 void Java_xeno_PlayControl_getParams__(JThread *thread,
-                                       PlayControlHandle **arguments,
+                                       Play **arguments,
                                        PlayControlCallBackParams **result)
 {
     *result = PLAY_getCallBackParams(*arguments);

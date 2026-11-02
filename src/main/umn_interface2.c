@@ -9,12 +9,17 @@
 #include "ov02/tsk_umn_object_task_main.h"
 #include "main/xgl_packet.h"
 #include "main/xgl_render.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_light.h"
+#include "main/xgl_font.h"
 
-/* The original vector has component and doubleword-copy views. */
+/* The original vector has component and float-array views; it is quadword
+ * aligned, so whole copies are ld/sd doubleword pairs. */
 typedef union UmnBgCubeVec {
-    Vector4 v;
+    AlignedVector4 v;
     float f[4];
-    u64 words[2];
 } UmnBgCubeVec;
 
 typedef struct UmnBgCubeLights {
@@ -28,17 +33,6 @@ typedef struct UmnBgCubeData {
     UmnBgCubeVec scale;
     Matrix4 matrix;
 } UmnBgCubeData;
-
-typedef unsigned int UmnLightQuadword __attribute__((mode(TI)));
-
-/* One contiguous 0xF0-byte light workspace: the light object proper (0x00-0x6F)
- * followed by the two matrices xglLightCalcMatrix fills in (0x70 and 0xB0),
- * which are what nmlModelSetLight receives. */
-typedef struct UmnBgCubeLightWork {
-    UmnLightQuadword light[7];
-    Matrix4 model_set;
-    Matrix4 model_light;
-} UmnBgCubeLightWork;
 
 typedef struct UmnBgCubeMainTask {
     XglTaskPrefix base;
@@ -62,65 +56,16 @@ typedef struct UmnIf2Rgba {
     unsigned char alpha;
 } UmnIf2Rgba;
 
-/* UmnInterface2Init allocates these twelve bytes. UmnInterface2Main fades
- * the two alpha bytes, then queues this record as the callback argument. */
-typedef struct UmnIf2Parameters {
-    unsigned int depth;
-    UmnIf2Rgba first_vertex;
-    UmnIf2Rgba remaining_vertices;
-} UmnIf2Parameters;
-
-typedef struct UmnIf2AdCommand {
-    u64 value;
-    u64 register_address;
-} UmnIf2AdCommand;
-
-typedef struct UmnIf2SetupPacket {
-    u64 tag;
-    u64 registers;
-    UmnIf2AdCommand texture_flush;
-    UmnIf2AdCommand alpha;
-    UmnIf2AdCommand texture;
-    UmnIf2AdCommand test;
-} UmnIf2SetupPacket;
-
-/* GIF PACKED mode expands each register into four 32-bit lanes. The tag's
- * 0x531 list repeats RGBAQ, UV and XYZ2 for each of the six vertices. */
-typedef struct UmnIf2PackedRegister {
-    u32 lane[4];
-} UmnIf2PackedRegister;
-
-typedef struct UmnIf2GeometryPacket {
-    u32 tag_low;
-    u32 tag_high;
-    u32 registers_low;
-    u32 registers_high;
-    UmnIf2PackedRegister payload[18];
-} UmnIf2GeometryPacket;
-
-/* Both direct-data submissions use the same scratchpad address. The setup
- * packet is copied out before the geometry packet overwrites that storage. */
-typedef union UmnIf2PacketWorkspace {
-    UmnIf2SetupPacket setup;
-    UmnIf2GeometryPacket geometry;
-} UmnIf2PacketWorkspace;
-
-typedef struct UmnIf2Context {
-    XglPacket *packet;
-    unsigned char unmodeled_04[0x2C];
-    UmnIf2PacketWorkspace workspace;
-} UmnIf2Context;
-
 /*
- * State reached through the global UmnInterface2 pointer; only the two
- * frame counters UmnInterface2Main touches are evidenced.
+ * State reached through the global UmnInterface2 pointer. UmnInterface2Init
+ * allocates these twelve bytes. UmnInterface2Main fades the two color alphas,
+ * then queues this record as the callback argument; the callback reads
+ * depth and both colors from it.
  */
 typedef struct UmnInterface2State {
-    unsigned int base_color;
-    unsigned char color_a[3];
-    unsigned char intensity_a; /* decremented by 8 each frame until zero */
-    unsigned char color_b[3];
-    unsigned char intensity_b; /* decremented by 2 each frame until zero */
+    unsigned int depth;
+    UmnIf2Rgba color_a; /* alpha decremented by 8 each frame until zero */
+    UmnIf2Rgba color_b; /* alpha decremented by 2 each frame until zero */
 } UmnInterface2State;
 
 extern UmnWorkData UmnWork;
@@ -133,23 +78,13 @@ extern const UmnIf2Coordinates D_00A11EE0;
 extern const UmnIf2Coordinates D_00A11EF8;
 extern UmnInterface2State *UmnInterface2;
 
-extern float xglFRand(void);
 extern void xglLightIntensityParallel(void *light, int index, const Vector4 *intensity);
 extern void xglLightIntensityAmbient(void *light, const Vector4 *intensity);
 extern void xglLightDirection(void *light, unsigned int index, const Vector4 *direction);
-extern void xglLightCalcMatrix(void *light);
-extern void nmlModelSetLight(void *model, void *light);
-extern void nmlModelSetTexture(const char *texture);
-extern void nmlModelSetPlace(const Vector4 *place);
 extern void nmlModelEntry(int entry);
-extern void xglCameraInit(StudioCamera *camera);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
-/* The font queue calls draw(context, arg) with the arg registered below;
- * the context record (read at +0x00 and +0x30) is not yet recovered. */
-static void DrawUmnInterface2(void *context, void *arg);
-
-extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(void *context, void *arg), void *arg);
+static void DrawUmnInterface2(FontDrawCursor *cursor, void *argument);
 
 void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
 {
@@ -158,10 +93,10 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     UmnBgCubeVec *rotation = &task->data->rotation;
     UmnBgCubeVec *spare = &task->data->spare;
     UmnBgCubeVec *scale = &task->data->scale;
-    float (*matrix)[4] = task->data->matrix;
+    Matrix4 *matrix = &task->data->matrix;
     UmnBgCubeVec zero;
     UmnBgCubeVec scale_init;
-    UmnBgCubeLightWork work;
+    StudioLight work;
     UmnBgCubeLights lights;
     StudioCamera *camera;
     int i;
@@ -207,7 +142,7 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     xglMatrixStackRotZ(rotation->v.z);
     xglMatrixStackRotY(rotation->v.y);
     xglMatrixStackRotX(rotation->v.x);
-    xglMatrixStackSave(matrix);
+    xglMatrixStackSave(*matrix);
     lights = D_00A11E70;
     xglLightIntensityAmbient(&work, &lights.v[0].v);
     xglLightIntensityParallel(&work, 0, &lights.v[1].v);
@@ -217,9 +152,9 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     xglLightIntensityParallel(&work, 2, &lights.v[3].v);
     xglLightDirection(&work, 2, &lights.v[6].v);
     xglLightCalcMatrix(&work);
-    nmlModelSetLight(&work.model_light, &work.model_set);
+    nmlModelSetLight(&work.color_modifier_matrix, &work.normal_matrix);
     nmlModelSetTexture((const char *)task->texture);
-    nmlModelSetPlace((const Vector4 *)matrix);
+    nmlModelSetPlace(matrix);
     nmlModelEntry(task->model);
 }
 
@@ -235,7 +170,7 @@ void *UmnBgCubeInit(void *memory)
     UmnBgCubeMainTask *task;
     StudioCamera *camera;
 
-    task = (UmnBgCubeMainTask *)xglTaskEntryNext(
+    task =(UmnBgCubeMainTask *)xglTaskEntryNext(
         scheduler, (int (*)(XglTaskPrefix *))tskUmnBgCubeMain,
         scheduler != 0 ? scheduler->active_tail : 0);
     task->data = (UmnBgCubeData *)address;
@@ -245,12 +180,12 @@ void *UmnBgCubeInit(void *memory)
     camera = xglStudioGetCamera2(0);
     task->camera_id = 0;
     xglCameraInit(camera);
-    camera->rotation.x = 0.0f;
-    camera->rotation.y = 0.0f;
-    camera->rotation.z = 0.0f;
-    camera->position.x = 0.0f;
-    camera->position.y = 0.0f;
-    camera->position.z = 4.0f;
+    (&camera->rotation.vector)->x = 0.0f;
+    (&camera->rotation.vector)->y = 0.0f;
+    (&camera->rotation.vector)->z = 0.0f;
+    (&camera->position.vector)->x = 0.0f;
+    (&camera->position.vector)->y = 0.0f;
+    (&camera->position.vector)->z = 4.0f;
     camera->fov = 0.91593236f;
     camera->active = 1;
     camera->state = 1;
@@ -259,12 +194,11 @@ void *UmnBgCubeInit(void *memory)
     return (void *)address;
 }
 
-static void DrawUmnInterface2(void *context_arg, void *arg)
+static void DrawUmnInterface2(FontDrawCursor *cursor, void *argument)
 {
-    UmnIf2Context *context = (UmnIf2Context *)context_arg;
-    UmnIf2Parameters *parameters = (UmnIf2Parameters *)arg;
-    UmnIf2SetupPacket *setup = &context->workspace.setup;
-    UmnIf2GeometryPacket *geometry = &context->workspace.geometry;
+    UmnInterface2State *parameters = argument;
+    UmnIf2SetupPacket *setup = &cursor->work.umn_setup;
+    UmnIf2GeometryPacket *geometry = &cursor->work.umn_geometry;
     UmnIf2PackedRegister *out;
     UmnIf2Coordinates x_coordinates;
     UmnIf2Coordinates y_coordinates;
@@ -280,7 +214,7 @@ static void DrawUmnInterface2(void *context_arg, void *arg)
     setup->texture.register_address = 6;
     setup->test.value = 0x5000D;
     setup->test.register_address = 0x47;
-    sceVif1PkAddDirectDataN(context->packet, setup, 5);
+    sceVif1PkAddDirectDataN(cursor->packet, setup, 5);
 
     x_coordinates = D_00A11EE0;
     y_coordinates = D_00A11EF8;
@@ -293,15 +227,15 @@ static void DrawUmnInterface2(void *context_arg, void *arg)
 
     for (i = 0; i < 6; i++) {
         if (i == 0) {
-            out->lane[0] = parameters->first_vertex.red;
-            out->lane[1] = parameters->first_vertex.green;
-            out->lane[2] = parameters->first_vertex.blue;
-            out->lane[3] = parameters->first_vertex.alpha;
+            out->lane[0] = parameters->color_a.red;
+            out->lane[1] = parameters->color_a.green;
+            out->lane[2] = parameters->color_a.blue;
+            out->lane[3] = parameters->color_a.alpha;
         } else {
-            out->lane[0] = parameters->remaining_vertices.red;
-            out->lane[1] = parameters->remaining_vertices.green;
-            out->lane[2] = parameters->remaining_vertices.blue;
-            out->lane[3] = parameters->remaining_vertices.alpha;
+            out->lane[0] = parameters->color_b.red;
+            out->lane[1] = parameters->color_b.green;
+            out->lane[2] = parameters->color_b.blue;
+            out->lane[3] = parameters->color_b.alpha;
         }
         out++;
         /* UV: U, V, and the two unused upper lanes. */
@@ -317,17 +251,17 @@ static void DrawUmnInterface2(void *context_arg, void *arg)
         out->lane[3] = 0;
         out++;
     }
-    sceVif1PkAddDirectDataN(context->packet, geometry, 0x13);
+    sceVif1PkAddDirectDataN(cursor->packet, geometry, 0x13);
 }
 
 void UmnInterface2Main(void) {
-    if (UmnInterface2->intensity_a != 0) {
-        UmnInterface2->intensity_a -= 8;
+    if (UmnInterface2->color_a.alpha != 0) {
+        UmnInterface2->color_a.alpha -= 8;
     }
-    if (UmnInterface2->intensity_b != 0) {
-        UmnInterface2->intensity_b -= 2;
+    if (UmnInterface2->color_b.alpha != 0) {
+        UmnInterface2->color_b.alpha -= 2;
     }
-    if (UmnInterface2->intensity_a != 0 || UmnInterface2->intensity_b != 0) {
+    if (UmnInterface2->color_a.alpha != 0 || UmnInterface2->color_b.alpha != 0) {
         xglFontPrintExtFunc(0x03FFFFF0, DrawUmnInterface2, UmnInterface2);
     }
 }
@@ -346,15 +280,15 @@ void *UmnInterface2Init(void *memory) {
     }
 
     color_a_state = UmnInterface2;
-    color_a_state->color_a[0] = 0x80;
-    color_a_state->intensity_a = 0x80;
-    color_a_state->color_a[2] = 0x80;
-    color_a_state->color_a[1] = 0x80;
-    color_a_state->base_color = 0x00fffffe;
+    color_a_state->color_a.red = 0x80;
+    color_a_state->color_a.alpha = 0x80;
+    color_a_state->color_a.blue = 0x80;
+    color_a_state->color_a.green = 0x80;
+    color_a_state->depth = 0x00fffffe;
     color_b_state = UmnInterface2;
-    color_b_state->intensity_b = 0x80;
-    color_b_state->color_b[2] = 0x80;
-    color_b_state->color_b[1] = 0x80;
-    color_b_state->color_b[0] = 0x80;
+    color_b_state->color_b.alpha = 0x80;
+    color_b_state->color_b.blue = 0x80;
+    color_b_state->color_b.green = 0x80;
+    color_b_state->color_b.red = 0x80;
     return result;
 }

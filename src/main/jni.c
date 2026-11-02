@@ -1,105 +1,103 @@
 #include "common.h"
 #include "shared.h"
+#include "main/jni.h"
 #include "jni.h"
+#include "main/data_buffer.h"
 
-extern DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
-extern unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
-extern DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer);
-extern void DataBuffer_seek(DataBuffer *buffer, int offset);
 static const char *checkClass(void *buffer, const char *name, int target);
 static const char *getStrIndex(const char *name, int delimiter);
 extern int DataBuffer_getPos(DataBuffer *buffer);
 extern void DataBuffer_setPos(DataBuffer *buffer, int offset);
 extern int memcmp(const void *a, const void *b, unsigned int size);
 
-const u8 xenoVmSystemClassName[16] = "xeno/vm/System";
+const char xenoVmSystemClassName[16] = "xeno/vm/System";
 
-const u8 xenoUtilFormatClassName[24] = "xeno/util/Format";
+const char xenoUtilFormatClassName[24] = "xeno/util/Format";
 
-const u8 xenoUtilMenuClassName[16] = "xeno/util/Menu";
+const char xenoUtilMenuClassName[16] = "xeno/util/Menu";
 
-const u8 xenoUtilWindowClassName[24] = "xeno/util/Window";
+const char xenoUtilWindowClassName[24] = "xeno/util/Window";
 
-const u8 xenoUtilInputClassName[16] = "xeno/util/Input";
+const char xenoUtilInputClassName[16] = "xeno/util/Input";
 
-const u8 xenoUtilLayoutClassName[24] = "xeno/util/Layout";
+const char xenoUtilLayoutClassName[24] = "xeno/util/Layout";
 
-const u8 xenoUtilRuntimeClassName[24] = "xeno/util/Runtime";
+const char xenoUtilRuntimeClassName[24] = "xeno/util/Runtime";
 
-const u8 xenoUtilToolkitClassName[24] = "xeno/util/Toolkit";
+const char xenoUtilToolkitClassName[24] = "xeno/util/Toolkit";
 
-const u8 xenoUtilTchParamsClassName[24] = "xeno/util/TCHParams";
+const char xenoUtilTchParamsClassName[24] = "xeno/util/TCHParams";
 
-const u8 xenoUtilSplineClassName[24] = "xeno/util/Spline";
+const char xenoUtilSplineClassName[24] = "xeno/util/Spline";
 
-const u8 xenoUtilVector4fClassName[24] = "xeno/util/Vector4f";
+const char xenoUtilVector4fClassName[24] = "xeno/util/Vector4f";
 
-const u8 xenoCameraClassName[16] = "xeno/Camera";
+const char xenoCameraClassName[16] = "xeno/Camera";
 
-const u8 xenoEffectClassName[16] = "xeno/Effect";
+const char xenoEffectClassName[16] = "xeno/Effect";
 
-const u8 xenoLightClassName[16] = "xeno/Light";
+const char xenoLightClassName[16] = "xeno/Light";
 
-const u8 xenoChrClassName[16] = "xeno/Chr";
+const char xenoChrClassName[16] = "xeno/Chr";
 
-const u8 xenoEnepcClassName[16] = "xeno/Enepc";
+const char xenoEnepcClassName[16] = "xeno/Enepc";
 
-const u8 xenoUnitClassName[16] = "xeno/Unit";
+const char xenoUnitClassName[16] = "xeno/Unit";
 
-const u8 xenoUwamonoClassName[16] = "xeno/Uwamono";
+const char xenoUwamonoClassName[16] = "xeno/Uwamono";
 
-const u8 xenoStageClassName[16] = "xeno/Stage";
+const char xenoStageClassName[16] = "xeno/Stage";
 
-const u8 xenoSceneClassName[16] = "xeno/Scene";
+const char xenoSceneClassName[16] = "xeno/Scene";
 
-const u8 xenoPlayControlClassName[24] = "xeno/PlayControl";
+const char xenoPlayControlClassName[24] = "xeno/PlayControl";
 
-const u8 xenoMovieClassName[24] = "xeno/Movie";
+const char xenoMovieClassName[24] = "xeno/Movie";
 
 /* Cached native Java class handles populated by JNI_loadNativeClass. */
-SceneClass *classJava_xeno_Enepc;
+JavaClass *classJava_xeno_Enepc;
 
-SceneClass *classJava_xeno_Scene;
+JavaClass *classJava_xeno_Scene;
 
-SceneClass *classJava_xeno_util_Window;
+JavaClass *classJava_xeno_util_Window;
 
-SceneClass *classJava_xeno_Uwamono;
+JavaClass *classJava_xeno_Uwamono;
 
-SceneClass *classJava_xeno_Chr;
+JavaClass *classJava_xeno_Chr;
 
-SceneClass *classJava_xeno_util_Format;
+JavaClass *classJava_xeno_util_Format;
 
-SceneClass *classJava_xeno_Unit;
+JavaClass *classJava_xeno_Unit;
 
-SceneClass *classJava_xeno_vm_System;
+JavaClass *classJava_xeno_vm_System;
 
-SceneClass *classJava_xeno_util_Vector4f;
+JavaClass *classJava_xeno_util_Vector4f;
 
-SceneClass *classJava_xeno_util_Runtime;
+JavaClass *classJava_xeno_util_Runtime;
 
-SceneClass *classJava_xeno_util_Layout;
+JavaClass *classJava_xeno_util_Layout;
 
-SceneClass *classJava_xeno_Effect;
+JavaClass *classJava_xeno_Effect;
 
-SceneClass *classJava_xeno_Light;
+JavaClass *classJava_xeno_Light;
 
-SceneClass *classJava_xeno_util_Menu;
+JavaClass *classJava_xeno_util_Menu;
 
-SceneClass *classJava_xeno_util_Toolkit;
+JavaClass *classJava_xeno_util_Toolkit;
 
-SceneClass *classJava_xeno_Stage;
+JavaClass *classJava_xeno_Stage;
 
-SceneClass *classJava_xeno_PlayControl;
+JavaClass *classJava_xeno_PlayControl;
 
-SceneClass *classJava_xeno_util_TCHParams;
+JavaClass *classJava_xeno_util_TCHParams;
 
-SceneClass *classJava_xeno_util_Spline;
+JavaClass *classJava_xeno_util_Spline;
 
-SceneClass *classJava_xeno_util_Input;
+JavaClass *classJava_xeno_util_Input;
 
-SceneClass *classJava_xeno_Camera;
+JavaClass *classJava_xeno_Camera;
 
-SceneClass *classJava_xeno_Movie;
+JavaClass *classJava_xeno_Movie;
 
 void JNI_initSystem(xheap_block *heap, int size)
 {
@@ -144,12 +142,12 @@ void JNI_popFrame(void)
     xheap_current_clear();
 }
 
-int JNI_isInstanceOf(SceneObject object, SceneClass *target_class)
+int JNI_isInstanceOf(SceneObject object, JavaClass *target_class)
 {
     int result = 0;
 
     if (object != 0) {
-        result = instanceOf(((SceneObjectHeader *)object)->class_ref->scene_class,
+        result = instanceOf(((ObjectHeader *)object)->classPointer->clazz,
                             target_class);
     }
     return result;
@@ -180,10 +178,10 @@ int JNI_loadClassDB(int class_id, int value)
     return value;
 }
 
-void JNI_callMethod(SceneVm *vm, SceneMethod *method, SceneObject *arguments,
+void JNI_callMethod(SceneVm *vm, JavaMethod *method, SceneObject *arguments,
                     int *output)
 {
-    JThread *thread = (JThread *)vm;
+    JThread *thread = vm;
     u32 flags = thread->flags;
 
     /*
@@ -224,8 +222,8 @@ void JNI_catchException(void)
 JThread *JNI_createThread(int kind, int stack_words, int frame_words)
 {
     JThread *thread;
-    u8 *frames;
-    u8 *stack_end;
+    VMFrame *frames;
+    VMFrame *stack_end;
     int frames_size = stack_words * 24;
 
     thread = xmalloc(frame_words * 4 + frames_size + sizeof(JThread), 8);
@@ -234,18 +232,18 @@ JThread *JNI_createThread(int kind, int stack_words, int frame_words)
     thread->stack_limit = frame_words;
     thread->kind = kind;
     thread->frame_depth = 0;
-    frames = (u8 *)(thread + 1);
+    frames = (VMFrame *)(thread + 1);
     thread->frames = frames;
     thread->stack_offset = 0;
-    stack_end = frames + frames_size;
-    thread->stack = (u32 *)(stack_end + 24);
+    stack_end = frames + stack_words;
+    thread->stack = (VMSlot *)stack_end + 6;
     if (jthreadTop == 0) {
         jthreadTop = thread;
         jthreadCurrent = thread;
         thread->previous = 0;
         return thread;
     }
-    ((JThread *)jthreadCurrent)->next = thread;
+    jthreadCurrent->next = thread;
     thread->previous = jthreadCurrent;
     thread->next = 0;
     jthreadCurrent = thread;
@@ -258,7 +256,7 @@ void JNI_threadException(void)
 
 void JNI_initThread(SceneVm *vm)
 {
-    JThread *thread = (JThread *)vm;
+    JThread *thread = vm;
 
     thread->resume_frames = 0;
     thread->flags = 0;
@@ -397,7 +395,7 @@ const char *JNI_searchClasses(int class_id, const char *names, int target, int *
     int group_index;
     int length;
     int remaining;
-    int buffer[8];
+    DataBuffer buffer;
     const char *result;
     const char *current_name;
 
@@ -411,14 +409,14 @@ const char *JNI_searchClasses(int class_id, const char *names, int target, int *
         if (group_count > 0) {
             do {
                 remaining = group->entry_count;
-                entry = (PdbClassEntry *)((unsigned char *)group + 8);
+                entry = group->entries;
                 if (remaining > 0) {
                     do {
                         data = entry->data;
                         length = entry->length;
                         entry++;
-                        DataBuffer_init((DataBuffer *)buffer, data, length, 1);
-                        result = checkClass(buffer, current_name, target);
+                        DataBuffer_init(&buffer, data, length, 1);
+                        result = checkClass(&buffer, current_name, target);
                         if (result != 0) {
                             return result;
                         }
@@ -459,7 +457,7 @@ void JNI_loadClassLibrary(int class_id)
         do {
             group = groups;
             entry_count = group->entry_count;
-            entry = (PdbClassEntry *)((u8 *)group + 8);
+            entry = group->entries;
             if (entry_count > 0) {
                 do {
                     DataBuffer_init(&buffer, entry->data, entry->length, 1);

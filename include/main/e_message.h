@@ -13,40 +13,28 @@ typedef struct EMessageParam {
     int draw_parameter;
     short text_x_offset;
     short text_y_offset;
-    unsigned char color[4];
+    unsigned char color_r;
+    unsigned char color_g;
+    unsigned char color_b;
+    unsigned char color_a;
     unsigned short text_timer;
     unsigned short frame;
-    char *text;
+    const char *text;
     unsigned char page_available;
     unsigned char page_index;
     unsigned char page_count;
-    ECursol cursor;
+    ECursolMainData cursor;
 } EMessageParam;
 
-struct EMessageSetParam {
-    unsigned char flags;
-    unsigned char mode;
-    unsigned char visible;
-    unsigned char wrap_width_half;
-    short x;
-    short y;
-    int draw_parameter;
-    short text_x_offset;
-    short text_y_offset;
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-    unsigned short text_timer;
-    unsigned short frame;
-    char *text;
-    unsigned char page_available;
-    unsigned char page_index;
-    unsigned char page_count;
-    ECursol cursor;
-};
-
-int eMessageMain(EMessageParam *message);
-void eMessageSet(struct EMessageSetParam *message, char *text);
+/* Functions and data used by other translation units. */
+void eMessageMain(EMessageParam *message);
+void eMessageSet(EMessageParam *message, const char *text);
+void eMessageTextChange(EMessageParam *message, const char *text);
+void eMessageModeChange(EMessageParam *message, unsigned char mode);
+int eMessageNextPage(EMessageParam *message, int reset_page);
+void eMessageDraw(EMessageParam *message);
+void eMessageCpy(char *destination, const char *source);
+void eMessageCat(const char *source);
+int eMessageNextGyouMaxGet(const char *text);
 
 #endif /* INCLUDE_MAIN_E_MESSAGE_H */

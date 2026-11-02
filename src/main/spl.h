@@ -4,6 +4,7 @@
 
 #ifndef SRC_MAIN_SPL_H
 #define SRC_MAIN_SPL_H
+#include "main/spl.h"
 
 typedef struct SplinePoint {
     float weight;
@@ -22,7 +23,7 @@ enum {
 typedef struct SplineState {
     unsigned char unmodeled_00[4];
     unsigned short weight_mode;
-    unsigned short first_key;
+    short first_key;
     unsigned short last_key;
     unsigned short sample_count;
     unsigned int component_count;
@@ -46,6 +47,4 @@ static void setWeightLen2(SplinePoint *points, int count);
 static void setWeightTime(SplinePoint *points, int count, float duration);
 static void setWeightIndex(SplinePoint *points, int count);
 static void SPL_cardinalInit(SplineState *spline);
-extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
-
 #endif /* SRC_MAIN_SPL_H */

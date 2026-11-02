@@ -1,9 +1,42 @@
 #include "common.h"
 #include "shared.h"
 #include "main/sdv.h"
+#include "main/nml_model_set.h"
 #include "main/xgl_thread.h"
 #include "main/control_entry.h"
 #include "main/xgl_sound.h"
+#include "main/look_at_player.h"
+#include "main/map_2.h"
+#include "main/Undulate.h"
+#include "main/act_1.h"
+#include "main/act_2.h"
+#include "main/db_light_write.h"
+#include "main/face_point.h"
+#include "main/game_camera.h"
+#include "main/game_movie.h"
+#include "main/game_over.h"
+#include "main/game_pause_disp.h"
+#include "main/get.h"
+#include "main/init_drill.h"
+#include "main/init_uwamono_sys.h"
+#include "main/jthread.h"
+#include "main/map_1.h"
+#include "main/msg_init.h"
+#include "main/near_dir.h"
+#include "main/outer_product.h"
+#include "main/party.h"
+#include "main/play.h"
+#include "main/res_get_path.h"
+#include "main/runtime.h"
+#include "main/sef.h"
+#include "main/tcamera.h"
+#include "main/twsys_init.h"
+#include "main/vibration.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_light.h"
+#include "main/xgl_pad.h"
+#include "main/xgl_render.h"
+#include "main/xgl_studio.h"
 
 #define game_mode_flags (GameLoopState.flags)
 #define game_mode_kind (GameLoopState.kind)
@@ -11,8 +44,6 @@
 #define game_mode_saved_kind (GameLoopState.saved_kind)
 #define game_mode_debug_storage (GameLoopState.debug_menu.storage)
 #define game_mode_camera_callback (GameLoopState.camera_callback)
-#define ACTOR_NUMBER_OFFSET 0x80
-#define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
 
 /*
  * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
@@ -61,15 +92,10 @@ typedef struct GameUserSave {
     u64 user_longs[2];
 } GameUserSave;
 
-typedef union GameVector8 {
-    Vector4 vector;
-    u64 pair[2];
-} GameVector8;
-
 typedef struct GameMapUnit {
     u32 flags;
     u8 unmodeled_04[0x10 - 0x04];
-    GameVector8 position;
+    DoublewordAlignedVector4 position;
     u8 unmodeled_20[0x60];
     Matrix4 *orientation;
     u8 unmodeled_84[0x1e];
@@ -77,7 +103,7 @@ typedef struct GameMapUnit {
     u8 unmodeled_a3;
     s16 serial;
     u8 unmodeled_a6[0x0a];
-    GameVector8 extent;
+    DoublewordAlignedVector4 extent;
     u8 unmodeled_c0[0x1a0 - 0xc0];
     s16 symbol_kind;
     s16 shop_number;
@@ -114,27 +140,6 @@ typedef struct GameTestEnvironment {
     GamePackedXyz2 vertices[2];
 } GameTestEnvironment;
 
-typedef struct GameSequenceSlot {
-    u32 flags;
-    u32 state_flags;
-    u8 unmodeled_08[4];
-    u32 cleared_on_init;
-    u8 unmodeled_10[4];
-    u32 cleared_on_init_run[4];
-    u32 handler[4];
-    u8 unmodeled_34[0x260 - 0x34];
-} GameSequenceSlot;
-
-/* Private defining-owner proposals. NmlModel's canonical serialized
- * resource prefix/table comes from src/main/nml_model_set.h175..194.
- * The original Game_Data_Push reads each block's signed index at +0x2c.
- * The variable resource tail remains an explicit owner transport concern. */
-typedef struct NmlModel {
-    unsigned char unmodeled_000[0x44];
-    int blockCount;
-    unsigned char unmodeled_048[0x68];
-    int blockOffsets[1];
-} NmlModel;
 
 /* Only the loaded data pointer at +4 is used by the original here.
  * No complete resource-handle extent or unknown prefix field is claimed. */
@@ -143,137 +148,6 @@ typedef struct GameResourceModelPrefix {
     struct NmlModel *data;
 } GameResourceModelPrefix;
 
-struct Actor {
-    u8 unmodeled_00[0x86];
-    short resourceKind;
-    u8 unmodeled_88[0x824 - 0x88];
-    void *jointMatrices;
-};
-
-typedef struct ActorUndulation {
-    u8 unmodeled_00[8];
-    s16 attr_mask;
-} ActorUndulation;
-
-typedef struct ActorHead {
-    u32 flags;
-    void (*update)(void *actor); /* +0x4 */
-    unsigned char unmodeled_008[0x10 - 0x8];
-    Vector4 position;
-    unsigned char unmodeled_020[0x50 - 0x20];
-    Vector4 rotation; /* +0x50 */
-    unsigned char unmodeled_060[0x80 - 0x60];
-    u8 number;
-    u8 unmodeled_81;
-    u8 tag_mark;
-    unsigned char unmodeled_083[0x84 - 0x83];
-    short state84; /* +0x84 */
-    short inUseId;
-    u8 unmodeled_88[0x4c8 - 0x88];
-    union {
-        ActorUndulation undulation;
-        struct {
-            u8 unmodeled_undulation_00[8];
-            u16 status_flags;
-        };
-    };
-    u8 unmodeled_4d2[0x4e8 - 0x4d2];
-    u64 attribute_flags;
-    u8 unmodeled_4f0[0x6f0 - 0x4f0];
-    u32 motion_flags;
-    unsigned char unmodeled_6f4[0x6f8 - 0x6f4];
-    float motion_speed; /* +0x6f8 */
-    unsigned char unmodeled_6fc[0x704 - 0x6fc];
-    u16 motion_id;
-    u8 unmodeled_706[0x70a - 0x706];
-    u16 matrix_buffer_toggle;
-    u8 unmodeled_70c[0x824 - 0x70c];
-    void *jointMatrices;
-    void *previousJointMatrices;
-    void *staticValueRecords;
-    void *valueRecords;
-    u8 unmodeled_834[0x8fc - 0x834];
-    struct Actor *parent;
-    unsigned char unmodeled_900[0x9e4 - 0x900];
-    float target_angle;
-    u8 unmodeled_9e8[0x9ec - 0x9e8];
-    short lookat_timer;
-    short lookat_target;
-    short value_9f0;
-    u8 unmodeled_9f2[0x9f4 - 0x9f2];
-    int talk_message; /* +0x9f4 */
-    int touch_message;
-    u8 unmodeled_9fc[0xA70 - 0x9fc];
-} ActorHead;
-
-/* Accurate defining-owner proposals; normal owner transport is pending.
- * MapUnitSlot fields/extent: src/main/map_2.h. ActorUndulation and
- * LookAtPlayerActor spelling: src/main/look_at_player.c21..75. */
-typedef struct MapUnitSlot {
-    u32 flags;
-    void (*update)(struct MapUnitSlot *unit);
-    u8 unmodeled_08[8];
-    /* Vector consumer at CheckGameSymbol and position producers agree on
-     * four floats at+0x10; canonical map_2.h uses float[4], so this nominal
-     * proposal requires defining-owner transport. Extent remains0x300. */
-    Vector4 position;
-    float rotation[4];
-    float scale[4];
-    u8 unmodeled_40[0xa4 - 0x40];
-    s16 serial;
-    u8 unmodeled_a6[0x1a0 - 0xa6];
-    s16 symbol_kind;
-    s16 shop_id;
-    u8 unmodeled_1a4[0x300 - 0x1a4];
-} MapUnitSlot;
-
-typedef struct PlayerEffect PlayerEffect;
-
-struct LookAtPlayerActor {
-    u32 flags;
-    void (*update)(struct LookAtPlayerActor *actor);
-    void (*draw)(struct LookAtPlayerActor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 external_velocity;
-    float rotation_x;
-    float rotation_y;
-    float rotation_z;
-    float move_speed;
-    Vector4 scale;
-    u8 unmodeled_70[0x10];
-    u8 number;
-    u8 unmodeled_81[0x4c8 - 0x81];
-    ActorUndulation undulation;
-    u8 unmodeled_4d2[0x4e8 - 0x4d2];
-    u64 terrain_flags;
-    u8 unmodeled_4f0[0x694 - 0x4f0];
-    signed char stick_x;
-    signed char stick_y;
-    u8 unmodeled_696[0x6f8 - 0x696];
-    float motion_speed;
-    u8 unmodeled_6fc[0x704 - 0x6fc];
-    u16 motion_id;
-    u8 unmodeled_706[0x9a0 - 0x706];
-    u32 render_flags;
-    u8 unmodeled_9a4[0x9c0 - 0x9a4];
-    float filter_param;
-    u8 unmodeled_9c4[0x9d8 - 0x9c4];
-    u64 flash_frames;
-    u8 unmodeled_9e0[0x9e4 - 0x9e0];
-    float aim_angle;
-    float body_radius;
-    s16 look_at_timer;
-    s16 look_at_target;
-    s16 flash_timer;
-    u8 unmodeled_9f2[0xa10 - 0x9f2];
-    PlayerEffect *effects[8];
-    s16 effect_timer;
-    s16 effect_slot;
-    u8 unmodeled_a34[0xa70 - 0xa34];
-};
 
 typedef struct EnemyWorkPostTalk {
     u8 unmodeled_00[0x4e];
@@ -287,22 +161,8 @@ typedef struct EnemyWorkPostTalk {
     u8 unmodeled_3832[0x38b0 - 0x3832];
 } EnemyWorkPostTalk;
 
-typedef struct GameActorAttributeView {
-    u8 unmodeled_00[0x4e8];
-    u64 attribute_flags;
-} GameActorAttributeView;
 
-typedef struct NmlModelBlockPrefix {
-    u8 unmodeled_00[0x20];
-    u32 flags;
-    u8 unmodeled_24[8];
-    int part_index;
-} NmlModelBlockPrefix;
 
-typedef struct GamePartyData {
-    u8 unmodeled_00[0x2c];
-    u16 leader_battle_id;
-} GamePartyData;
 
 typedef struct GameRadarParams {
     int x;
@@ -332,48 +192,19 @@ extern u16 wpnBox[255];
 extern u16 bltBox[255];
 extern u16 accBox[255];
 extern u16 evtBox[255];
-extern long long moneyBox;
 extern GameClearEnvironment ClearEnv;
-extern int StudioEntrySkip;
-extern GameSequenceSlot actSequence[64];
-extern MapUnitSlot MapUnit[64];
+extern MapUnitRecord MapUnit[64];
 extern EnemyWorkPostTalk enepc[16];
-extern ActorHead actor[ACTOR_COUNT];
+extern Actor actor[ACTOR_COUNT];
 extern const char eobMethodName[];
-extern short NowTester;
-extern signed char FLAG_FRAME_60;
 extern void *const stageVM;
-extern u8 *WorkEnd;
-
-void GameStateSave(void);
-
-/* Partial defining-owner prefix, from act_2.h. Only these two genuine
- * parent fields are accessed; no complete Actor extent is claimed here. */
-extern void ACT_setMotion2(struct Actor *actor, int motion, unsigned int flags);
-
-extern void ACT_updateMotion(struct Actor *actor);
-extern int xglCdSync(void);
-extern void GameResourceLoad(int scene_id);
-void GameStateRestore(void);
 extern void sefPopEffect(void);
-extern void UnlockMapUnit(void);
-extern void ClearUwamonoEffect(MapUnitSlot *unit);
+extern void ClearUwamonoEffect(MapUnitRecord *unit);
 extern void nmlModelSetPartsVisible(NmlModel *model, int part, int visible);
-extern void xglSoundEffectNormalDirect(int effect_id);
 extern void TWSYS_update(void);
-extern void EvtTools(void);
-extern void PauseMenu(void);
-extern void PartyTimePauseEnd(void);
 extern void ACT_pauseUpdate(void);
-extern StudioCamera *xglStudioGetCamera2(int camera_id);
-extern void JTHREAD_cntl(void);
-extern void PLAY_ctrl(void);
-extern void TCAMERA_update(void);
-extern void ACT_update(void);
-extern void MAP_updateUnit(void);
 extern void GameDebugMenu(void);
 int GameModeDebugMenu(void);
-extern void xglSoundSendEffect(void *swd, void *sed, int bank);
 extern void After_Talk(SceneObject object);
 void GameStateRestoreCameraLight(void);
 extern void GameStateRestoreKoware(void);
@@ -381,27 +212,16 @@ extern void GameStateRestoreKoware(void);
 /* Defined in src/main/act_3.c (main/tu265). */
 void ACT_DrawShadowBegin(void);
 
-void ACT_DrawShadow(ActorHead *unit);
+void ACT_DrawShadow(Actor *unit);
 void ACT_DrawShadowEnd(void);
 extern void sefPushEffect(void);
-extern void ACT_setModelWrapper(ActorHead *actor, int enabled);
-extern void ACT_setHumanHand(ActorHead *actor, int hand);
 extern void xglFontLoad(int font, int mode);
-extern void Vibration_Stop(void);
-extern void xglPadRead(void);
 extern void UwamonoBgmFadeOut(void);
 extern void ACT_init(void);
-extern void MAP_initUnit(void);
-extern void GameCameraReset(void);
-extern void XTK_setWindowOwner(int owner);
+extern void XTK_setWindowOwner(void *owner);
 extern void ResetShootSys(void);
-extern void sefInitEffectCf(void);
-extern void xglLightSetDefault(void *light);
-extern void Player_System_Init(struct LookAtPlayerActor *player_actor);
-extern void xglRenderCopyDisp2Draw(void);
-extern float CheckDist3D(const Vector4 *a, const Vector4 *b);
+extern void Player_System_Init(Actor *player_actor);
 extern void SCRIPT_incCfTime(void);
-extern int WIN_checkActiveWindow(void);
 extern int SCRIPT_sceneChangeTimeGet(void);
 extern int SCRIPT_talkIgnoreGet(void);
 extern void nmlModelSendMenuStart(void);
@@ -414,30 +234,17 @@ extern int func_00A0B5F0(void);
 extern void WindowTexLoad(int first, int second);
 extern void CallMethod_I(const char *name, int argument);
 extern int Enemy_After_Battle(int result);
-extern void Actor_LookAt_Init(ActorHead *actors);
-extern void Actor_LookAt(ActorHead *actor);
-extern void Actor_LookAt_Release(ActorHead *actor, int flag);
-extern void ACT_updateSequence(ActorHead *actor);
-extern void GameIdLightSet(ActorHead *actor, void *query);
-extern void GameCfPlayerMove(void);
+extern void Actor_LookAt_Init(Actor *actors);
+extern void Actor_LookAt(Actor *actor);
+extern void Actor_LookAt_Release(Actor *actor, int flag);
+extern void ACT_updateSequence(Actor *actor);
+extern void GameIdLightSet(Actor *actor, void *query);
 extern void SCRIPT_execEntered(int attribute);
-extern void SCRIPT_execTouchto(int touch);
-extern float Get_Angle(const Vector4 *from, const Vector4 *to);
-extern float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target, float speed);
+extern void SCRIPT_execTouchto(void *actor);
 extern void GameRadarDraw(GameRadarParams *params);
-extern void MSG_init(void);
-extern void TWSYS_init(void);
-extern void xglSoundStreamStop(int stream);
-extern void nmlModelSetFadeInCancel(int frames);
-extern void nmlModelSetEffectWrite(int enabled);
 extern void Enemy_SystemInit(void);
-extern void InitUwamonoSys(void);
 extern void xglRenderClearDepth(void);
-extern void xglRenderGlobalFadeInit(void);
-extern void xglRenderClearOff(void);
-extern void xglStudioChange(int studio);
 extern void GameResourceInit(int first, int second);
-extern void MapInit(void);
 extern void SCRIPT_sceneChangeTimeInit(void);
 extern void SCRIPT_sceneChangeTimeDec(void);
 extern void SCRIPT_clrEventActiveFlag(void);
@@ -448,24 +255,12 @@ extern void func_A22628(void);
 extern void *xglTaskInitial(void *manager, int capacity, int flags);
 extern u8 *SCRIPT_init(u8 *work);
 extern void GameRadarInit(void);
-extern void GameCfPlayerMoveInit(void);
-extern ActorHead *ACT_create(int kind, int flag);
-extern void Java_xeno_util_Runtime_jump_sub(int event_id, int mode);
 extern void nmlModelSendPauseSignal(int paused);
 extern void Disp_Homing(void);
-extern void GameMovieStop(void);
-extern void xglCdReset(void);
 extern void xglCullingMapInit(void);
-extern void xglStudioMainCameraInit(void);
-extern void nmlModelConstruct(void);
-extern void GameOver(void);
 extern void sefDeleteEffectCf(SchedulerState *effect);
 extern void PartyTimePauseStart(void);
-extern void xglCullingIgnore(void);
-extern void Java_xeno_util_Runtime_jumpCF__II(void *vm, void *arguments, void *result);
-static ActorHead *checkTouch(ActorHead *player);
-void checkTalkPoint(void);
-
+static Actor *checkTouch(Actor *player);
 const char cfRegistSoundName[9] = "REGISTCF";
 
 const char eobAlwaysMethodName[11] = "EOB_Always";
@@ -508,10 +303,11 @@ static unsigned char GameCFSoundMenuPurgeFlag;
 
 static u64 attrPrev;
 
-static int prevTouch;
+static Actor *prevTouch;
 
 /* Declared here, not at the top: moving it up changes the original code. */
 #include "game.h"
+#include "main/game.h"
 
 const char dispTagFormat[8] = "%4x\n%6x";
 
@@ -526,17 +322,6 @@ typedef union GameDebugMenuStorage {
         u8 unmodeled_02[14];
     } fields;
 } GameDebugMenuStorage;
-
-typedef struct GameLightParallel {
-    Quadword intensity;
-    Quadword direction;
-} GameLightParallel;
-
-typedef struct GameLightSet {
-    Quadword ambient_intensity;
-    GameLightParallel parallel[3];
-    Quadword matrices[8];
-} GameLightSet;
 
 /*
  * PARTIAL ACCESSED VIEW of GameLoopState (0x2a030-byte object at 0x338680).
@@ -558,7 +343,7 @@ typedef struct GameLightSet {
  */
 typedef struct GameLoopStateLayout {
     u8 *saved_work_end;
-    struct LookAtPlayerActor *controlled_actor;
+    Actor *controlled_actor;
     XglTaskScheduler *scheduler;
     u16 kind;
     u16 kindDetail;
@@ -611,14 +396,14 @@ typedef struct GameLoopStateLayout {
     u32 saved_actor_flags; /* +0x1f0 */
     short saved_actor_state84; /* +0x1f4 */
     short saved_actor_in_use_id; /* +0x1f6 */
-    void (*saved_actor_update)(void *actor); /* +0x1f8 */
+    void (*saved_actor_update)(Actor *actor); /* +0x1f8 */
     unsigned char unmodeled_1fc[0x200 - 0x1fc];
     Vector4 saved_actor_position; /* +0x200 */
     Vector4 saved_actor_rotation; /* +0x210 */
     u16 saved_map_number; /* +0x220 */
     unsigned char unmodeled_222[0x250 - 0x222];
-    ActorHead saved_actors[64];
-    GameLightSet saved_light; /* +0x29e50, 0xf0-byte native-TI camera light snapshot */
+    Actor saved_actors[64];
+    StudioLight saved_light; /* +0x29e50, 0xf0-byte camera light snapshot */
     u8 status;
     u8 _unmodeled_29f41[3];
     float shoot_range;
@@ -628,7 +413,7 @@ typedef struct GameLoopStateLayout {
     unsigned char unmodeled_29f62[0x29f97 - 0x29f62];
     u8 battle_flags;
     unsigned char unmodeled_29f98[0x29f9c - 0x29f98];
-    ActorHead *battle_enemy;
+    Actor *battle_enemy;
     unsigned char unmodeled_29fa0[0x2a018 - 0x29fa0];
     u32 user_word; /* +0x2a018 */
     unsigned char unmodeled_2a01c[0x2a020 - 0x2a01c];
@@ -648,17 +433,17 @@ GameLoopStateLayout GameLoopState = {0};
  */
 extern PadDataDebugLayout PadData;
 
-extern GameLightSet GameIdLight[16];
+extern StudioLight GameIdLight[16];
 
 static inline Vector4 *GameSymbolPosition(int index)
 {
-    MapUnitSlot *unit = &MapUnit[index];
+    MapUnitRecord *unit = &MapUnit[index];
     return &unit->position;
 }
 
 static inline s16 *GameSymbolKindAddress(int index)
 {
-    return (s16 *)((u8 *)&MapUnit[0].symbol_kind + index * sizeof(MapUnitSlot));
+    return &MapUnit[index].symbol_kind;
 }
 
 static void GameCFSoundPurgeSub(void)
@@ -766,7 +551,7 @@ void Game_Data_Push(void)
     short actor_index;
     short index;
     NmlModel *model;
-    NmlModelBlockPrefix *block;
+    NmlModelBlock *block;
     int *block_offsets;
 
     for (actor_index = 0; actor_index < ACTOR_COUNT; actor_index++) {
@@ -778,12 +563,12 @@ void Game_Data_Push(void)
     for (index = 0; index < 32; index++) {
         GameLoopState.hidden_parts[index] = 0;
     }
-    model = (NmlModel *)GameLoopState.model->data;
+    model = GameLoopState.model->data;
     block_offsets = model->blockOffsets;
     for (index = 0; index < model->blockCount; index++) {
-        block = (NmlModelBlockPrefix *)((u8 *)model + block_offsets[index]);
+        block = (NmlModelBlock *)((u8 *)model + block_offsets[index]);
         if ((block->flags & 8) != 0) {
-            int part_index = block->part_index;
+            int part_index = block->partId;
             int word_index = part_index / 32;
             GameLoopState.hidden_parts[word_index] |= 1 << part_index;
         }
@@ -794,7 +579,7 @@ void Game_Data_Pop(void)
 {
     unsigned short serials[64];
     short index;
-    ActorHead *backup;
+    Actor *backup;
     NmlModel *model;
     int bit;
 
@@ -818,32 +603,32 @@ void Game_Data_Pop(void)
         if (actor[index].inUseId == 0)
             continue;
         {
-            ActorHead *unit = &actor[index];
+            Actor *unit = &actor[index];
             {
                 void *matrices;
 
-                ACT_setMotion2((struct Actor *)unit, actor[index].motion_id, actor[index].motion_flags & ~3);
-                ACT_updateMotion((struct Actor *)unit);
+                ACT_setMotion2(unit, actor[index].animation.slot.currentDataId, actor[index].animation.slot.flags & ~3);
+                ACT_updateMotion(unit);
                 matrices = unit->jointMatrices;
                 unit->jointMatrices = unit->previousJointMatrices;
                 unit->previousJointMatrices = matrices;
                 matrices = unit->staticValueRecords;
                 unit->staticValueRecords = unit->valueRecords;
                 unit->valueRecords = matrices;
-                unit->matrix_buffer_toggle = (unit->matrix_buffer_toggle + 1) & 1;
+                unit->animation.slot.bufferIndex = (unit->animation.slot.bufferIndex + 1) & 1;
             }
             {
                 void *matrices;
 
-                ACT_setMotion2((struct Actor *)unit, actor[index].motion_id, actor[index].motion_flags & ~3);
-                ACT_updateMotion((struct Actor *)unit);
+                ACT_setMotion2(unit, actor[index].animation.slot.currentDataId, actor[index].animation.slot.flags & ~3);
+                ACT_updateMotion(unit);
                 matrices = unit->jointMatrices;
                 unit->jointMatrices = unit->previousJointMatrices;
                 unit->previousJointMatrices = matrices;
                 matrices = unit->staticValueRecords;
                 unit->staticValueRecords = unit->valueRecords;
                 unit->valueRecords = matrices;
-                unit->matrix_buffer_toggle = (unit->matrix_buffer_toggle + 1) & 1;
+                unit->animation.slot.bufferIndex = (unit->animation.slot.bufferIndex + 1) & 1;
             }
         }
     }
@@ -855,7 +640,7 @@ void Game_Data_Pop(void)
     UnlockMapUnit();
     for (index = 0; index < 64; index++) {
         if (MapUnit[index].serial != -1 && (MapUnit[index].flags & 0x20000)) {
-            MapUnitSlot *map_unit = &MapUnit[index];
+            MapUnitRecord *map_unit = &MapUnit[index];
             MapUnit[index].serial = -1;
             MapUnit[index].update = 0;
             ClearUwamonoEffect(map_unit);
@@ -873,7 +658,7 @@ void Game_Data_Pop(void)
     {
         u32 flags = GameLoopState.flags;
 
-        GameLoopState.controlled_actor->undulation.attr_mask |= 0x1000;
+        GameLoopState.controlled_actor->status_flags |= 0x1000;
         flags &= ~0x4000;
         flags &= ~0x8000;
         flags &= ~0x40;
@@ -896,16 +681,16 @@ void MenuGameDataPop(void)
 {
     short i;
     int id_changed;
-    GamePartyData *party;
-    ActorHead *target;
+    PartyDataPrefix *party;
+    Actor *target;
     void *matrices;
     void *restored_buffer;
 
     GameStateRestore();
     for (i = 0; i < ACTOR_COUNT; i++) {
         id_changed = 0;
-        party = (GamePartyData *)PartyDataGet();
-        if ((struct LookAtPlayerActor *)&actor[i] == GameLoopState.controlled_actor) {
+        party = PartyDataGet();
+        if (&actor[i] == GameLoopState.controlled_actor) {
             if (GameLoopState.saved_actors[i].inUseId != 0 &&
                 GameLoopState.saved_actors[i].inUseId != party->leader_battle_id) {
                 GameLoopState.saved_actors[i].inUseId = party->leader_battle_id;
@@ -918,26 +703,26 @@ void MenuGameDataPop(void)
                 target = &actor[i];
                 ACT_setModelWrapper(target, 0);
                 ACT_setHumanHand(target, 0);
-                ACT_setMotion2((struct Actor *)target, 0, 8);
-                ACT_updateMotion((struct Actor *)target);
+                ACT_setMotion2(target, 0, 8);
+                ACT_updateMotion(target);
                 matrices = target->jointMatrices;
                 target->jointMatrices = target->previousJointMatrices;
                 target->previousJointMatrices = matrices;
                 matrices = target->staticValueRecords;
                 target->staticValueRecords = target->valueRecords;
                 target->valueRecords = matrices;
-                target->matrix_buffer_toggle = (target->matrix_buffer_toggle + 1) & 1;
-                ACT_setMotion2((struct Actor *)target, 0, 8);
-                ACT_updateMotion((struct Actor *)target);
+                target->animation.slot.bufferIndex = (target->animation.slot.bufferIndex + 1) & 1;
+                ACT_setMotion2(target, 0, 8);
+                ACT_updateMotion(target);
                 restored_buffer = target->jointMatrices;
                 target->jointMatrices = target->previousJointMatrices;
                 target->previousJointMatrices = restored_buffer;
                 restored_buffer = target->staticValueRecords;
                 target->staticValueRecords = target->valueRecords;
                 target->valueRecords = restored_buffer;
-                target->matrix_buffer_toggle = (target->matrix_buffer_toggle + 1) & 1;
+                target->animation.slot.bufferIndex = (target->animation.slot.bufferIndex + 1) & 1;
             } else {
-                ACT_updateMotion((struct Actor *)&actor[i]);
+                ACT_updateMotion(&actor[i]);
             }
         }
     }
@@ -945,30 +730,30 @@ void MenuGameDataPop(void)
 
 void GameStateSaveCameraLight(void)
 {
-    GameLightSet *saved_light = &GameLoopState.saved_light;
+    StudioLight *saved_light = &GameLoopState.saved_light;
 
     GameCameraStateSave();
-    *saved_light = *(GameLightSet *)xglStudioGetLight2();
+    *saved_light = *xglStudioGetLight2();
 }
 
 void GameStateRestoreCameraLight(void)
 {
-    GameLightSet *light;
-    GameLightSet *saved_light;
+    StudioLight *light;
+    StudioLight *saved_light;
 
     GameCameraStateRestore();
-    light = (GameLightSet *)xglStudioGetLight2();
+    light = xglStudioGetLight2();
     saved_light = &GameLoopState.saved_light;
     *light = *saved_light;
 }
 
 void GameStateSave(void)
 {
-    ActorHead *controlled_actor;
+    Actor *controlled_actor;
 
     GameLoopState.restoreKind = GameLoopState.kind;
     GameLoopState.restoreKindDetail = GameLoopState.kindDetail;
-    controlled_actor = (ActorHead *)GameLoopState.controlled_actor;
+    controlled_actor = GameLoopState.controlled_actor;
     GameLoopState.saved_actor_flags = controlled_actor->flags;
     GameLoopState.saved_actor_state84 = controlled_actor->state84;
     GameLoopState.saved_actor_in_use_id = controlled_actor->inUseId;
@@ -1109,7 +894,7 @@ void InitCfSystem(void)
     Vibration_Stop();
     xglPadRead();
     SoundWork.packet_count = 0u;
-    memset(SoundWork.packet_buffer, 0, sizeof(SoundWork.packet_buffer));
+    memset(SoundWork.packets, 0, sizeof(SoundWork.packets));
     EnemySound_StopAll(1u);
     UwamonoBgmFadeOut();
     ACT_init();
@@ -1154,7 +939,7 @@ void InitCfSystem(void)
     xglRenderCopyDisp2Draw();
 }
 
-static int checkAttr(GameActorAttributeView *actor)
+static int checkAttr(Actor *actor)
 {
     u64 attributes;
     u64 selected_attributes;
@@ -1174,16 +959,15 @@ static int checkAttr(GameActorAttributeView *actor)
 
 int getScriptFlag(SceneObject object)
 {
-    int *script_flags = (int *)((SceneByte *)object + ACTOR_SCRIPT_FLAGS_OFFSET);
-    return *script_flags;
+    return ((Actor *)object)->args.locator_flags;
 }
 
-static ActorHead *checkTalk(ActorHead *player)
+static Actor *checkTalk(Actor *player)
 {
     int index;
     float best_distance;
-    ActorHead *best_actor;
-    ActorHead *target;
+    Actor *best_actor;
+    Actor *target;
     Vector4 origin;
     float delta_x;
     float delta_z;
@@ -1216,7 +1000,7 @@ static ActorHead *checkTalk(ActorHead *player)
         target = &actor[index];
         reach_margin = 1.0f;
         if (!(__builtin_fabsf(target->position.y - player->position.y) > 2.0f)
-            && target->talk_message != 0 && (getScriptFlag((SceneObject)target) & 0x10000)
+            && target->talk_message != 0 && (getScriptFlag(target) & 0x10000)
             && target->inUseId != 0 && target->number != player->number) {
             delta_x = target->position.x - origin.x;
             delta_z = target->position.z - origin.z;
@@ -1234,13 +1018,13 @@ static ActorHead *checkTalk(ActorHead *player)
     return best_actor;
 }
 
-static ActorHead *checkTouch(ActorHead *player)
+static Actor *checkTouch(Actor *player)
 {
     int index;
     float best_distance;
     float limit;
-    ActorHead *best_actor;
-    ActorHead *target;
+    Actor *best_actor;
+    Actor *target;
     Vector4 origin;
     u32 flags;
 
@@ -1263,7 +1047,7 @@ static ActorHead *checkTouch(ActorHead *player)
     for (index = 0; index < ACTOR_COUNT; index++) {
         target = actor + index;
         if (!(__builtin_fabsf(target->position.y - player->position.y) > 2.0f)
-            && target->touch_message != 0 && (getScriptFlag((SceneObject)target) & 0x20000)
+            && target->touch_message != 0 && (getScriptFlag(target) & 0x20000)
             && target->inUseId != 0 && target->number != player->number) {
             float delta_x;
             float delta_z;
@@ -1286,27 +1070,27 @@ static ActorHead *checkTouch(ActorHead *player)
     return best_actor;
 }
 
-int checkItemBoxDir(ActorHead *actor, GameMapUnit *unit)
+int checkItemBoxDir(Actor *actor, GameMapUnit *unit)
 {
     Vector4 start;
     Vector4 end;
-    GameVector8 extent;
-    GameVector8 position;
+    DoublewordAlignedVector4 extent;
+    DoublewordAlignedVector4 position;
     Matrix4 *orientation;
 
     position = unit->position;
     extent = unit->extent;
     orientation = unit->orientation;
-    start.x = position.vector.x - (extent.vector.x * (*orientation)[0][0] + extent.vector.z * (*orientation)[2][0]);
-    start.y = position.vector.y;
-    start.z = position.vector.z - (extent.vector.x * (*orientation)[0][2] + extent.vector.z * (*orientation)[2][2]);
-    end.x = position.vector.x + (extent.vector.z * (*orientation)[0][2] + extent.vector.x * (*orientation)[2][2]);
-    end.y = position.vector.y;
-    end.z = position.vector.z - (extent.vector.z * (*orientation)[0][0] + extent.vector.x * (*orientation)[2][0]);
+    start.x = position.x - (extent.x * (*orientation)[0][0] + extent.z * (*orientation)[2][0]);
+    start.y = position.y;
+    start.z = position.z - (extent.x * (*orientation)[0][2] + extent.z * (*orientation)[2][2]);
+    end.x = position.x + (extent.z * (*orientation)[0][2] + extent.x * (*orientation)[2][2]);
+    end.y = position.y;
+    end.z = position.z - (extent.z * (*orientation)[0][0] + extent.x * (*orientation)[2][0]);
     return CheckPointLine(&start, &end, &actor->position) == 2;
 }
 
-static GameMapUnit *checkItemBox(ActorHead *actor)
+static GameMapUnit *checkItemBox(Actor *actor)
 {
     int index;
     float best_distance;
@@ -1327,13 +1111,13 @@ static GameMapUnit *checkItemBox(ActorHead *actor)
     origin.z = actor->position.z;
     for (index = 0; index < 64; index++) {
         unit = (GameMapUnit *)&MapUnit[index];
-        if (!(__builtin_fabsf(actor->position.y - unit->position.vector.y) > 1.8f) && unit->serial != -1
+        if (!(__builtin_fabsf(actor->position.y - unit->position.y) > 1.8f) && unit->serial != -1
             && (unit->flags & 0x08000000) && unit->action_sub == 0) {
             reach_margin = 1.0f;
-            delta_x = unit->position.vector.x - origin.x;
-            delta_z = unit->position.vector.z - origin.z;
-            extent_x = unit->extent.vector.x;
-            extent_z = unit->extent.vector.z;
+            delta_x = unit->position.x - origin.x;
+            delta_z = unit->position.z - origin.z;
+            extent_x = unit->extent.x;
+            extent_z = unit->extent.z;
             distance = delta_x * delta_x + delta_z * delta_z;
             if (extent_z < extent_x) {
                 origin.w = extent_x * extent_x;
@@ -1352,7 +1136,7 @@ static GameMapUnit *checkItemBox(ActorHead *actor)
     return best_unit;
 }
 
-void CheckGameSymbol(struct LookAtPlayerActor *player)
+void CheckGameSymbol(Actor *player)
 {
     int save_unit;
     int shop_unit;
@@ -1360,7 +1144,7 @@ void CheckGameSymbol(struct LookAtPlayerActor *player)
     int return_unit;
     int index;
     s16 *symbol_kind;
-    MapUnitSlot *unit;
+    MapUnitRecord *unit;
 
     save_unit = -1;
     shop_unit = -1;
@@ -1388,7 +1172,7 @@ void CheckGameSymbol(struct LookAtPlayerActor *player)
     }
 
     if (save_unit != -1) {
-        MapUnitSlot *save_symbol = &MapUnit[save_unit];
+        MapUnitRecord *save_symbol = &MapUnit[save_unit];
         if ((GameLoopState.flags & 0x20000000) == 0) {
             if (saveEffe != 0)
                 sefDeleteEffectCf(saveEffe);
@@ -1404,7 +1188,7 @@ void CheckGameSymbol(struct LookAtPlayerActor *player)
         }
     }
     if (shop_unit != -1) {
-        MapUnitSlot *shop_symbol = &MapUnit[shop_unit];
+        MapUnitRecord *shop_symbol = &MapUnit[shop_unit];
         shopNo = shop_symbol->shop_id;
         if ((GameLoopState.flags & 0x40000000) == 0) {
             if (shopEffe != 0)
@@ -1421,7 +1205,7 @@ void CheckGameSymbol(struct LookAtPlayerActor *player)
         }
     }
     if (event_unit != -1) {
-        MapUnitSlot *event_symbol = &MapUnit[event_unit];
+        MapUnitRecord *event_symbol = &MapUnit[event_unit];
         if ((GameLoopState.flags & 0x400000) == 0) {
             if (evsEffe != 0)
                 sefDeleteEffectCf(evsEffe);
@@ -1437,7 +1221,7 @@ void CheckGameSymbol(struct LookAtPlayerActor *player)
         }
     }
     if (return_unit != -1) {
-        MapUnitSlot *return_symbol = &MapUnit[return_unit];
+        MapUnitRecord *return_symbol = &MapUnit[return_unit];
         if ((GameLoopState.flags & 0x800000) == 0) {
             if (retEffe != 0)
                 sefDeleteEffectCf(retEffe);
@@ -1478,8 +1262,8 @@ static void GameDispTag(void)
     }
     format = str_0;
     for (index = 0; index < ACTOR_COUNT; index++) {
-        ActorHead *unit = &actor[index];
-        struct Actor *parent;
+        Actor *unit = &actor[index];
+        Actor *parent;
 
         if (unit->inUseId == 0)
             continue;
@@ -1490,11 +1274,11 @@ static void GameDispTag(void)
             matrix[3][3] = 1.0f;
             xglRotTransPers((Vector4 *)&projected, 0, (Vector4 *)matrix[3], camera_id);
         } else {
-            if (parent != 0 && (parent->resourceKind & 0xf000) == 0) {
+            if (parent != 0 && (parent->inUseId & 0xf000) == 0) {
                 Matrix4 *parent_matrices = parent->jointMatrices;
                 xglMatrixMul((Matrix *)matrix, (Matrix *)parent_matrices[0], (Matrix *)parent_matrices[45]);
             } else {
-                const Matrix4 *root_matrix = unit->jointMatrices;
+                Matrix4 *root_matrix = unit->jointMatrices;
                 /* The original copies these four complete matrix rows
                  * with the SDK quadword idiom. The scratch is confined
                  * to this block; both bases are genuine C objects. */
@@ -1524,7 +1308,7 @@ static void GameDispTag(void)
         screen_y = projected.y;
         depth = projected.z;
         color = 0xffffff;
-        if (unit->tag_mark == 1) {
+        if (unit->kind == 1) {
             color = 0xff9933;
         } else {
             switch (unit->inUseId & 0xf000) {
@@ -1542,17 +1326,17 @@ static void GameDispTag(void)
     }
     map_format = str_1;
     for (index = 0; index < 64; index++) {
-        MapUnitSlot *unit = &MapUnit[index];
+        MapUnitRecord *unit = &MapUnit[index];
         if (unit->serial < 0)
             continue;
         xglMatrixStackUnit();
-        xglMatrixStackScale(unit->scale);
+        xglMatrixStackScale(&unit->scale.x);
         xglMatrixStackTrans(&unit->position.x);
-        xglMatrixStackRotX(unit->rotation[0]);
-        xglMatrixStackRotY(unit->rotation[1]);
-        xglMatrixStackRotZ(unit->rotation[2]);
+        xglMatrixStackRotX(unit->rotation.x);
+        xglMatrixStackRotY(unit->rotation.y);
+        xglMatrixStackRotZ(unit->rotation.z);
         xglMatrixStackSave(matrix);
-        xglRotTransPers((Vector4 *)&projected, (const float (*)[4])matrix, &origin, camera_id);
+        xglRotTransPers((Vector4 *)&projected, matrix, &origin, camera_id);
         screen_x = projected.x;
         if ((unsigned int)screen_x - 0x7001u >= 0x1fffu ||
             projected.y < 0x7201 || projected.y > 0x8dff ||
@@ -1577,7 +1361,7 @@ static void GameDispTag(void)
 
 void GameDrawShadow(void)
 {
-    ActorHead *unit;
+    Actor *unit;
     int i;
 
     unit = actor;
@@ -1661,7 +1445,7 @@ void GameDrawSync(void)
 static int GameModeEvtTools(void)
 {
     if (game_mode_status == 0) {
-        if (((u16)PadData.pressed & 0x800) != 0) {
+        if ((PadData.pressed & 0x800) != 0) {
             u16 buttons = PadData.held;
             game_mode_status = 16;
 
@@ -1692,7 +1476,7 @@ static int GameModeEvtTools(void)
 static int GameModePause(void)
 {
     if (game_mode_status == 0) {
-        if (((u16)PadData.pressed & 0x800) != 0) {
+        if ((PadData.pressed & 0x800) != 0) {
             u16 buttons = PadData.held;
             game_mode_status = 16;
 
@@ -1727,7 +1511,7 @@ static int GameModePause(void)
 static int GameModeEvtDebug(void)
 {
     if (game_mode_status == 0) {
-        if (((u16)PadData.pressed & 0x800) != 0) {
+        if ((PadData.pressed & 0x800) != 0) {
             u16 buttons = PadData.held;
             game_mode_status = 16;
 
@@ -1758,12 +1542,12 @@ int GameModeCfMain(void)
 {
     VMSlot umn_arguments[2];
     VMSlot drill_arguments[2];
-    ActorHead *player;
-    ActorHead *window_owner;
+    Actor *player;
+    Actor *window_owner;
     EnemyWorkPostTalk *encounter_enemy;
     int battle_result;
     int attribute;
-    int touch;
+    Actor *touch;
     short i;
     short index;
     int countdown;
@@ -1882,17 +1666,17 @@ int GameModeCfMain(void)
         always_method = eobAlwaysMethodName;
         battle_enemies = enepc;
         CallMethod_I(always_method,
-            battle_enemies[((ActorHead *)GameLoopState.battle_enemy)->number].enemy_id);
+            battle_enemies[GameLoopState.battle_enemy->number].enemy_id);
         switch (battle_result) {
         case 1:
             Enemy_After_Battle(1);
             CallMethod_I(eobMethodName,
-                battle_enemies[((ActorHead *)GameLoopState.battle_enemy)->number].enemy_id);
+                battle_enemies[GameLoopState.battle_enemy->number].enemy_id);
             break;
         case 3:
             Enemy_After_Battle(3);
             CallMethod_I(eobEscapeMethodName,
-                battle_enemies[((ActorHead *)GameLoopState.battle_enemy)->number].enemy_id);
+                battle_enemies[GameLoopState.battle_enemy->number].enemy_id);
             break;
         default:
             Enemy_After_Battle(1);
@@ -1901,7 +1685,7 @@ int GameModeCfMain(void)
         if (GameLoopState.kind == 3) {
             return 0;
         }
-        ((ActorHead *)GameLoopState.controlled_actor)->value_9f0 = 0x4B;
+        GameLoopState.controlled_actor->flash_timer = 0x4B;
         Actor_LookAt_Init(actor);
         MAP_updateUnit();
         return 0;
@@ -1912,8 +1696,7 @@ int GameModeCfMain(void)
                 index = (NowTester + i) % ACTOR_COUNT;
                 if (actor[index].inUseId > 0) {
                     NowTester = index;
-                    GameLoopState.controlled_actor =
-                        (struct LookAtPlayerActor *)(void *)&actor[NowTester];
+                    GameLoopState.controlled_actor = &actor[NowTester];
                     break;
                 }
             }
@@ -1924,24 +1707,24 @@ int GameModeCfMain(void)
         u16 previous_status;
         float restored_facing;
 
-        player = (ActorHead *)(void *)GameLoopState.controlled_actor;
-        actSequenceClear((struct ActorHead *)player);
+        player = GameLoopState.controlled_actor;
+        actSequenceClear(player);
         previous_flags = GameLoopState.flags;
-        previous_status = player->undulation.attr_mask;
+        previous_status = player->status_flags;
         restored_facing = player->rotation.y;
         GameLoopState.flags = previous_flags & ~0x4000;
-        player->undulation.attr_mask = previous_status | 0x1000;
+        player->status_flags = previous_status | 0x1000;
         player->target_angle = restored_facing;
     }
     if ((GameLoopState.flags_wide & 0x0001000000010000ULL) == 0x10000) {
-        ActorHead *motion_player;
+        Actor *motion_player;
 
-        motion_player = (ActorHead *)(void *)GameLoopState.controlled_actor;
-        motion_player->undulation.attr_mask |= 0x1000;
-        ACT_setMotion2((struct Actor *)motion_player, 0, 9);
+        motion_player = GameLoopState.controlled_actor;
+        motion_player->status_flags |= 0x1000;
+        ACT_setMotion2(motion_player, 0, 9);
     }
     flags = GameLoopState.flags;
-    player = (ActorHead *)(void *)GameLoopState.controlled_actor;
+    player = GameLoopState.controlled_actor;
     GameLoopState.base_flags = flags;
     if (!(flags & 0x20000)) {
         if (!(flags & 0x10000)) {
@@ -1950,7 +1733,7 @@ int GameModeCfMain(void)
                 checkTalkPoint();
             }
         } else {
-            if (player->lookat_timer == 2) {
+            if (player->look_at_timer == 2) {
                 Actor_LookAt(player);
             } else {
                 Actor_LookAt_Release(player, 0);
@@ -1961,18 +1744,18 @@ int GameModeCfMain(void)
     } else {
         GameIdLightSet(player, 0);
     }
-    attribute = checkAttr((GameActorAttributeView *)GameLoopState.controlled_actor);
+    attribute = checkAttr(GameLoopState.controlled_actor);
     if (attribute != 0) {
         SCRIPT_execEntered(attribute - 1);
     }
-    window_owner = (ActorHead *)XTK_getWindowOwner();
+    window_owner = XTK_getWindowOwner();
     if (window_owner != 0) {
-        if (getScriptFlag((SceneObject)window_owner) & 2) {
+        if (getScriptFlag(window_owner) & 2) {
             window_owner->target_angle = Get_Angle(&window_owner->position, &GameLoopState.controlled_actor->position);
             window_owner->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(window_owner->rotation.y, window_owner->target_angle, 6.0f);
         }
     }
-    touch = (int)checkTouch((ActorHead *)(void *)GameLoopState.controlled_actor);
+    touch = checkTouch(GameLoopState.controlled_actor);
     if (touch != 0) {
         if (touch != prevTouch) {
             prevTouch = touch;
@@ -2024,7 +1807,7 @@ const char eobMethodName[4] = "EOB";
 
 void checkTalkPoint(void)
 {
-    ActorHead *talker;
+    Actor *talker;
     GameMapUnit *unit;
 
     if (PadData.pressed & 0x20) {
@@ -2051,13 +1834,13 @@ void checkTalkPoint(void)
                 return;
             }
         }
-        talker = checkTalk((ActorHead *)GameLoopState.controlled_actor);
+        talker = checkTalk(GameLoopState.controlled_actor);
         if (talker != 0) {
             EnemyWorkPostTalk *enemy = &enepc[talker->number];
             enemy->post_talk_flags = 0;
             SCRIPT_execTalkto(talker);
         } else {
-            unit = checkItemBox((ActorHead *)GameLoopState.controlled_actor);
+            unit = checkItemBox(GameLoopState.controlled_actor);
             if (unit != 0) {
                 unit->item_box_hit = 1;
             }
@@ -2065,29 +1848,29 @@ void checkTalkPoint(void)
     }
 }
 
-void actSequenceClear(ActorHead *actor)
+void actSequenceClear(Actor *actor)
 {
-    GameSequenceSlot *sequence = &actSequence[actor->number];
+    ActSequenceEntry *sequence = &actSequence[actor->number];
 
     actor->flags &= ~2;
-    actor->motion_speed = 0.033333335f;
-    sequence->flags = 0;
-    sequence->state_flags = 0;
-    sequence->cleared_on_init = 0;
-    sequence->handler[3] = 0;
-    actor->motion_flags = 8;
-    sequence->cleared_on_init_run[1] = 0;
-    sequence->cleared_on_init_run[2] = 0;
-    sequence->cleared_on_init_run[3] = 0;
-    sequence->handler[0] = 0;
-    sequence->handler[1] = 0;
-    sequence->handler[2] = 0;
-    sequence->cleared_on_init_run[0] = 0;
+    actor->animation.slot.speed = 0.033333335f;
+    sequence->state.flags = 0;
+    sequence->state.state_flags = 0;
+    sequence->state.cleared_on_init = 0;
+    sequence->state.cleared_on_init_run[0] = 0;
+    sequence->state.cleared_on_init_run[1] = 0;
+    sequence->state.cleared_on_init_run[2] = 0;
+    sequence->state.cleared_on_init_run[3] = 0;
+    sequence->state.handler[0] = 0;
+    sequence->state.handler[1] = 0;
+    sequence->state.handler[2] = 0;
+    sequence->state.handler[3] = 0;
+    actor->animation.slot.flags = 8;
 }
 
 void actTalkAfter(SceneObject object)
 {
-    EnemyWorkPostTalk *enemy = &enepc[object[ACTOR_NUMBER_OFFSET]];
+    EnemyWorkPostTalk *enemy = &enepc[((Actor *)object)->number];
 
     After_Talk(object);
     enemy->post_talk_flags = GameLoopState.flags & 0x400;
@@ -2137,10 +1920,10 @@ int GameModeDebugMenu(void)
 void Game(void)
 {
     int i;
-    ActorHead *player;
+    Actor *player;
     float zero = 0.0f;
     float one = 1.0f;
-    void *work_end = (void *)WorkEnd;
+    void *work_end = WorkEnd;
     short *pause_flag = &pause_check;
 
     GameLoopState.map_number = (s16)-1;
@@ -2180,7 +1963,7 @@ void Game(void)
     xglRenderGlobalFadeInit();
     xglRenderClearOff();
     xglStudioChange(0);
-    xglLightSetDefault((GameLightSet *)xglStudioGetLight2());
+    xglLightSetDefault(xglStudioGetLight2());
     GameCameraReset();
     GameCFSoundReload();
     GameResourceInit(0x1000000, 0x1000000);
@@ -2204,13 +1987,13 @@ void Game(void)
     WorkEnd = SCRIPT_init(WorkEnd);
     GameRadarInit();
     GameCfPlayerMoveInit();
-    GameLoopState.controlled_actor = (struct LookAtPlayerActor *)ACT_create(0, 1);
+    GameLoopState.controlled_actor = ACT_create(0, 1);
     Player_System_Init(GameLoopState.controlled_actor);
     GameLoopState.status = 0x10;
     if (GameLoopState.kindDetail != 0) {
         Quadword *position_dst;
 
-        player = (ActorHead *)GameLoopState.controlled_actor;
+        player = GameLoopState.controlled_actor;
         GamePopSaveDataUser();
         position_dst = (Quadword *)&player->position;
         Java_xeno_util_Runtime_jump_sub(GameLoopState.current_event_id, -1);

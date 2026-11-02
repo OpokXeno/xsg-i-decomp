@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "main/string_utf_get_hash.h"
 #include "xheap.h"
+#include "main/xheap.h"
 
 extern void reloadClassEntry(void *heap_boundary);
 
@@ -13,7 +14,7 @@ static xheap_frame *frame_stack;
 
 static xheap_block *freeBlock;
 
-void *jthreadCurrent;
+struct JThread *jthreadCurrent;
 
 static void xmemchk() {
 }
@@ -108,7 +109,6 @@ void infoMemory(void) {
 
 void *xmalloc(unsigned int size, int category) {
     xheap_block *block;
-    unsigned char *payload;
     xheap_block *next;
 
     if (size == 0) {
@@ -117,18 +117,19 @@ void *xmalloc(unsigned int size, int category) {
 
     size = ((size + 3) >> 2) << 2;
     block = freeBlock->next;
-    payload = (unsigned char *)block;
-    next = (xheap_block *)(payload + size + 12);
+    next = (xheap_block *)((unsigned char *)block + size + 12);
     block->size_words = size >> 2;
     block->category = category;
     block->next = next;
     freeBlock = block;
     xmemchk(block);
-    return payload + 12;
+    return block + 1;
 }
 
 void xfree(void *payload) {
+    xheap_block *block = payload;
+
     if (payload != 0) {
-        ((xheap_block *)payload - 1)->category = 0;
+        (block - 1)->category = 0;
     }
 }

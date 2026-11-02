@@ -15,19 +15,6 @@ typedef struct AgwsInfoContents {
     unsigned char unmodeled_10[0x1B0 - 0x10];
 } AgwsInfoContents;
 
-typedef struct AgwsInfoWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    const char *title;
-    unsigned char state;
-    unsigned char unmodeled_11[3];
-    void (*callback)(void *window, void *contents);
-    struct AgwsInfoContents *callbackArg;
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-} AgwsInfoWindow;
 
 typedef struct AgwsInfoWork {
     unsigned char state;
@@ -35,7 +22,7 @@ typedef struct AgwsInfoWork {
     unsigned char detail;
     unsigned char unmodeled_03;
     int color;
-    AgwsInfoWindow window;
+    WindowDX window;
     unsigned char unmodeled_19c[4];
     AgwsInfoContents contents;
     char text[256];
@@ -66,8 +53,8 @@ typedef struct AgwsMenuWork {
     signed char weaponChange;
     unsigned char unmodeled_23[0x26 - 0x23];
     short weaponId;
-    unsigned short ammoId; /* +0x28 */
-    unsigned short accessoryId; /* +0x2a */
+    short ammoId; /* +0x28 */
+    short accessoryId; /* +0x2a */
     short pilotId; /* +0x2c */
     short weaponHandKind; /* +0x2e */
     unsigned char flags;
@@ -283,41 +270,6 @@ enum {
 #define PAD_L1 0x0004
 #define PAD_R1 0x0008
 
-typedef struct AgwsListRow {
-    const char *text; /* +0x0 */
-    unsigned char unmodeled_004[0x8 - 0x4];
-    unsigned char flag;
-    unsigned char equipped;
-    unsigned char unmodeled_0a[0x0C - 0x0A];
-} AgwsListRow;
-
-typedef struct AgwsListSPWindow {
-    unsigned char state;
-    unsigned char rowCount;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    int flags;
-    unsigned char columns;
-    unsigned char rows;
-    unsigned char unmodeled_16[0x1C - 0x16];
-    struct AgwsListRow *items;
-} AgwsListSPWindow;
-
-typedef struct AgwsListTag {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int depth;
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char unmodeled_0f[0x20 - 0x0F];
-} AgwsListTag;
-
 typedef struct AgwsListCursor {
     unsigned char unmodeled_00[4];
     short x;
@@ -332,9 +284,9 @@ typedef struct AgwsListWork {
     unsigned char selectedRow;
     unsigned char unmodeled_03;
     int color;
-    AgwsListTag tag[8];
+    ETagFontMainData tag[8];
     AgwsListCursor cursor;
-    AgwsListSPWindow window;
+    WindowSPCursor window[4];       /* AgwsWinSP[0..3] */
 } AgwsListWork;
 
 typedef union AgwsCameraPreset {
@@ -350,24 +302,13 @@ typedef struct AgwsSprite {
     unsigned char unmodeled_0c[0x28 - 0x0C];
 } AgwsSprite;
 
-typedef struct AgwsWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    unsigned char state;
-    unsigned char unmodeled_11[0x14 - 0x11];
-} AgwsWindow;
 
 typedef struct AgwsFaceWork {
     unsigned char state;
     unsigned char visible;
     unsigned char unmodeled_02[2];
     int color;
-    AgwsWindow window;
-    unsigned char unmodeled_1c[0x19C - 0x1C];
+    WindowDX window;
     AgwsSprite face;
 } AgwsFaceWork;
 
@@ -378,6 +319,22 @@ typedef struct AgwsSwitchWork {
     int spriteWork;
     AgwsSprite sprite[2];
 } AgwsSwitchWork;
+
+/*
+ * Partial view of MenuModelUnit (include/main/menu_model.h): the agws unit.
+ * Named unions with MenuModelUnit change this TU's .text (GCC 2.96 union
+ * accesses), so the agws view stays separate.
+ */
+typedef struct MenuModelUnitAgwsView {
+    unsigned char unmodeled_00[0x10];
+    signed char taskPhase;
+    unsigned char active;
+    unsigned char unmodeled_12[1];
+    unsigned char state;
+    struct AgwsModelOrg *org;
+    unsigned char unmodeled_18[0x20 - 0x18];
+    struct AgwsModelActor *actor;
+} MenuModelUnitAgwsView;
 
 typedef struct AgwsSwitchSlideStep {
     signed char side[2];
@@ -403,66 +360,17 @@ typedef struct AgwsModelOrg {
     short weaponId[3];
 } AgwsModelOrg;
 
-typedef struct AgwsModelUnit {
-    unsigned char unmodeled_00[0x10];
-    signed char taskPhase;
-    unsigned char active;
-    unsigned char unmodeled_12[1];
-    unsigned char state;
-    struct AgwsModelOrg *org;
-    unsigned char unmodeled_18[0x20 - 0x18];
-    struct AgwsModelActor *actor;
-} AgwsModelUnit;
-
 typedef union AgwsModelPositions {
     Vector4 position[7];
     u64 doublewords[14];
 } AgwsModelPositions;
-
-typedef union AgwsModelVector {
-    Vector4 vector;
-    u64 doublewords[2];
-} AgwsModelVector;
 
 typedef union AgwsCameraTargets {
     float value[2][4];
     u64 doublewords[4];
 } AgwsCameraTargets;
 
-typedef struct AgwsStatusWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    signed char state;
-    unsigned char unmodeled_11[0x194 - 0x11];
-} AgwsStatusWindow;
 
-typedef struct AgwsStatusLabel {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int color;
-    signed char rgba[4];
-    unsigned char unmodeled_10[0x20 - 0x10];
-} AgwsStatusLabel;
-
-typedef struct AgwsStatusNumber {
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_08[0x0E - 0x08];
-    unsigned char format;
-    unsigned char digits;
-    unsigned char unmodeled_10[1];
-    signed char arrow;
-    unsigned char unmodeled_12[1];
-    signed char arrowHidden;
-    int value;
-    unsigned char unmodeled_18[0x90 - 0x18];
-} AgwsStatusNumber;
 
 typedef struct AgwsStatusWork {
     unsigned char state;
@@ -470,35 +378,12 @@ typedef struct AgwsStatusWork {
     signed char selectNo;
     unsigned char unmodeled_03;
     int color;
-    AgwsStatusWindow window;
-    AgwsStatusLabel label[7];
+    WindowDX window;
+    ETagFontMainData label[7];
     unsigned char unmodeled_27c[0x29C - 0x27C];
-    AgwsStatusNumber number[7];
+    ENumberMainData number[7];
 } AgwsStatusWork;
 
-typedef struct AgwsPasWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    signed char state;
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void (*callback)(void);
-    void *callbackArg;
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-} AgwsPasWindow;
-
-typedef struct AgwsPasMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x44 - 0x0C];
-} AgwsPasMessage;
 
 typedef struct AgwsPasBox {
     short x;
@@ -514,8 +399,8 @@ typedef struct AgwsPasWork {
     signed char selectNo;
     unsigned char unmodeled_03;
     int color;
-    AgwsPasWindow window;
-    AgwsPasMessage message[17];
+    WindowDX window;
+    EMessageParam message[17];
     unsigned char unmodeled_620[0x6EC - 0x620];
     AgwsPasBox box;
     unsigned char unmodeled_6f8[0x700 - 0x6F8];
@@ -532,11 +417,11 @@ extern AgwsSwitchWork *AgwsSwitch;
 extern AgwsStatusWork *AgwsStatus;
 extern AgwsPasWork *AgwsPas;
 extern PadPrefix PadData;
-extern const unsigned char pilotListTitleText[];
+extern const char pilotListTitleText[];
 extern const AgwsCameraPreset cameraSetPreset;
 extern const AgwsCameraTargets cameraMoveTargets;
 extern const AgwsModelPositions modelPositionTable;
-extern const AgwsModelVector modelUnitScaleVector;
+extern const DoublewordAlignedVector4 modelUnitScaleVector;
 extern AgwsSwitchSlideStep switchSlideStepTable[];
 
 extern WeaponWaglData *func_A1A3D8(int weaponId);
@@ -544,7 +429,7 @@ extern int MenuRWeaponCheck2(int weaponId);
 extern AgwsUnitOrg *func_A191C0(int chrNo);
 extern AgwsCharPara *func_00A11108(int chrNo, int *attack, int *defense);
 int *MenuSortAddrGet(int listIndex);
-AgwsListRow *MenuListGet(int listIndex);
+MenuListEntry *MenuListGet(int listIndex);
 void MenuListMake(int listIndex, int sortType);
 int MenuSortCheck(int listIndex);
 void MenuSortSet(int listIndex, int type, int order);
@@ -561,27 +446,21 @@ void eSpriteMain(void *sprite);
 
 int MenuSortGet(int listIndex, int index);
 
-void eNumberSet(void *number, int mode);
-void eNumberMain(void *number);
-void eTagFontSet(void *tag, const char *text);
-void eTagFontMain(void *tag);
 int MenuPasLengthGet(const char *text);
-void MenuPasWindow(void);
-void eMessageSet(void *message, const char *text);
-void eMessageMain(void *message);
+void MenuPasWindow(WindowDX *window, void *arg);
 void endPrintExtFunc(int color, int id, void *data);
-void MenuModelUnitBreak(AgwsModelUnit *unit);
-void MenuModelControl2(AgwsModelUnit *unit, int mode);
-void MenuModelUnitOpen(AgwsModelUnit *unit, int drawType);
-int MenuModelWeaponCreate(AgwsModelUnit *unit, int drawType, int weaponIndex);
+void MenuModelUnitBreak(MenuModelUnitAgwsView *unit);
+void MenuModelControl2(MenuModelUnitAgwsView *unit, int mode);
+void MenuModelUnitOpen(MenuModelUnitAgwsView *unit, int drawType);
+int MenuModelWeaponCreate(MenuModelUnitAgwsView *unit, int drawType, int weaponIndex);
 int MenuEquipStealMaskCheck(void);
 
 typedef struct AgwsSelectContents {
     unsigned char unmodeled_00[2];
     unsigned short mode;
     int selectedIndex;
-    char *text;
-    char *annotation;
+    const char *text;
+    const char *annotation;
     unsigned char unmodeled_10[0x5F8 - 0x10];
 } AgwsSelectContents;
 

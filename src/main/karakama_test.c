@@ -4,18 +4,22 @@
 #include "main/xgl_studio.h"
 #include "main/control_entry.h"
 #include "main/xgl_cd.h"
-
-typedef struct CfActor {
-    u32 flags;
-    u8 unmodeled_04[12];
-    float x;
-    float y;
-    float z;
-    u8 unmodeled_1c[0x4DC - 0x1C];
-    float undulation;
-    u8 unmodeled_4e0[8];
-    u32 collision_bits;
-} CfActor;
+#include "main/act_1.h"
+#include "main/karakama_test.h"
+#include "main/act_2.h"
+#include "main/game.h"
+#include "main/game_camera.h"
+#include "main/init_uwamono_sys.h"
+#include "main/look_at_player.h"
+#include "main/map_1.h"
+#include "main/map_2.h"
+#include "main/msg_init.h"
+#include "main/pause_menu_page_uwamono.h"
+#include "main/twsys_init.h"
+#include "main/xgl_2.h"
+#include "main/xgl_font.h"
+#include "main/xgl_light.h"
+#include "main/xgl_render.h"
 
 typedef struct CfCamera {
     u32 active;
@@ -40,7 +44,7 @@ typedef struct CfClearEnvironment {
 
 typedef struct CfGameLoopState {
     u32 unmodeled_00;
-    CfActor *current_actor;
+    Actor *current_actor;
     u8 unmodeled_08[4];
     u16 kind;
     u16 kindDetail;
@@ -148,7 +152,6 @@ typedef struct TexTestSprite {
 } TexTestSprite;
 
 extern SePacketPad PadData;
-extern struct SoundWork SoundWork;
 const char saveDataSizeFormat[];
 const char actorSizeFormat[];
 const char mapUnitSizeFormat[];
@@ -182,43 +185,25 @@ const char chaHitTexturePath[];
 const char texDataNotFoundFormat[];
 const char setMapUnitTestFormat[];
 extern int MapNo;
-extern u8 UseTestPath;
 extern const char initCfCompleteFormat[];
 extern const char initCompleteFormat[];
 extern const char mapUndulationFormat[];
 extern const char actorPositionFormat[];
 extern const char nameFormat[];
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern void xglSoundLoadEffect(const char *name, int address, int bank);
 extern void xglMakeSePacket(int command, int handle, int volume, ...);
 extern int printf(const char *format, ...);
-extern void xglRenderClearFrame(void);
 extern void xglRenderClearDepth(void);
 static void CfTest(void);
 extern void SePacketTest(void);
 static void TexTest(void);
-extern float I2F(int value);
 extern void xglPrimAddGouraudStripN(void *buffer, int count);
-extern void xglLightSetDefault(StudioLight *light);
-extern void xglCdInitial(void);
-extern void xglCdReset(void);
 extern void xglCdSetCallback(int callback);
 extern void GameResourceInit(int resource_bytes, int work_bytes);
 extern void ACT_init(void);
 extern void ACT_DrawShadowInit(void);
-extern void MSG_init(void);
-extern void TWSYS_init(void);
-extern void MapInit(void);
-extern void MAP_initUnit(void);
 extern void Enemy_SystemInit(void);
-extern void InitUwamonoSys(void);
-extern void GameCfPlayerMoveInit(void);
-extern CfActor *ACT_create(int type, int id);
-extern void ACT_initMotion(CfActor *actor);
-extern void ACT_loadMotion(CfActor *actor, int motion_id, int category);
-extern void ACT_loadResource(CfActor *actor, int resource_id);
-extern void ACT_setMotion(CfActor *actor, int motion_id);
 extern void FlushCache(int mode);
 extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
 extern int sceGsSyncPath(int mode, int timeout);
@@ -228,14 +213,6 @@ extern void CreateUwamono(int unit_id, float x, float y, float z, float rotation
 extern void InitCf(void);
 extern void SetMapUnitTest(void);
 extern void PrimTest(void);
-extern void GameCameraReset(void);
-extern void GameCamera(void);
-extern void GameCfPlayerMove(void);
-extern void ACT_update(void);
-extern void MAP_updateUnit(void);
-extern void DispDebugUwamono(void);
-extern void GameDrawSync(void);
-extern void MapChange(int map_id);
 extern void xglStudioGetCamera(CfCamera **camera_out, int camera_index);
 extern void *memset(void *destination, int value, unsigned int length);
 extern double fptodp(float value);
@@ -274,7 +251,7 @@ static TexTestSprite TestEnv_1_0036DDB0 = {
     {0x8FF8, 0x8DF8, 0x40000000, 0}
 };
 
-static CfActor *tActor;
+static Actor *tActor;
 
 void KarakamaTest(void)
 {
@@ -331,8 +308,8 @@ static void CfTest(void)
 {
     CfCamera *const camera;
     CfCamera *camera_after;
-    CfActor *actor;
-    CfActor *position_actor;
+    Actor *actor;
+    Actor *position_actor;
     CfCamera *view;
     u32 bits;
     u32 acc;
@@ -383,27 +360,27 @@ static void CfTest(void)
         held = PadData.input.buttons.held;
         actor = tActor;
         if (held & 0x8000) {
-            actor->x -= 0.1f;
+            actor->position.x -= 0.1f;
         }
         if (held & 0x2000) {
-            actor->x += 0.1f;
+            actor->position.x += 0.1f;
         }
         if (held & 0x10) {
-            actor->y += 0.1f;
+            actor->position.y += 0.1f;
         }
         if (held & 0x40) {
-            actor->y -= 0.1f;
+            actor->position.y -= 0.1f;
         }
         if (held & 0x1000) {
-            actor->z -= 0.1f;
+            actor->position.z -= 0.1f;
         }
         if (held & 0x4000) {
-            actor->z += 0.1f;
+            actor->position.z += 0.1f;
         }
         view = camera;
-        view->target_x = actor->x;
-        view->target_y = actor->y + 1.0f;
-        view->target_z = actor->z;
+        view->target_x = actor->position.x;
+        view->target_y = actor->position.y + 1.0f;
+        view->target_z = actor->position.z;
         if (held & 0x10) {
             view->distance -= 0.1f;
         }
@@ -445,10 +422,10 @@ static void CfTest(void)
             }
         }
         map_no = MapNo;
-        xglFontDebugPrintf(8, 8, mapUndulationFormat, map_no, fptodp(tActor->undulation));
+        xglFontDebugPrintf(8, 8, mapUndulationFormat, map_no, fptodp(tActor->translate_y));
         position_actor = tActor;
-        xglFontDebugPrintf(8, 176, actorPositionFormat, fptodp(position_actor->x),
-                           fptodp(position_actor->y), fptodp(position_actor->z));
+        xglFontDebugPrintf(8, 176, actorPositionFormat, fptodp(position_actor->position.x),
+                           fptodp(position_actor->position.y), fptodp(position_actor->position.z));
         xglStudioGetCamera(&camera_after, 0);
         if (camera_after->state == 4 && GameLoopState.camera_callback != 0) {
             GameLoopState.camera_callback();
@@ -611,8 +588,8 @@ void InitCf(void)
     ACT_loadResource(tActor, 1);
     ACT_setMotion(tActor, 2);
     GameLoopState.current_actor = tActor;
-    tActor->x = -14.0f;
-    tActor->z = 18.0f;
+    tActor->position.x = -14.0f;
+    tActor->position.z = 18.0f;
     tActor->flags |= 0x10000;
 }
 

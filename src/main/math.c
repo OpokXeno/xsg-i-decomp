@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/xgl_2.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -14,11 +15,7 @@ typedef struct {
     float x;
 } MathAtan2Call;
 
-extern unsigned int xglLRand(void);
 extern float atan2f(float y, float x);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-
 void Java_xeno_vm_Math_random__(JThread *thread, void *arguments, unsigned int *result)
 {
     *result = xglLRand();

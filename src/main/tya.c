@@ -1,5 +1,13 @@
 #include "common.h"
 #include "shared.h"
+#include "main/exm_2.h"
+#include "main/act_1.h"
+#include "main/tya.h"
+#include "main/act_2.h"
+#include "main/control_entry.h"
+#include "main/map_2.h"
+#include "main/xgl_2.h"
+#include "main/xgl_font.h"
 
 /*
  * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
@@ -14,17 +22,10 @@
 
 #define ACTOR_IN_USE_ID_OFFSET 0x86
 
-/*
- * MapUnit[] entries are game-wide unit records (src/main/init_drill.c,
- * src/main/init_uwamono_sys.c and src/main/map_create_unit_peer.h keep
- * their own views of the same array); only the field this TU touches is
- * named. tyaCaptureUnit reads +0xA4 serial, the same field
- * src/main/init_uwamono_sys.c's UwamonoCommonUnit and
- * src/main/init_drill.c's DrillMapUnit name.
- */
+/* MapUnit[] entries are MapUnitRecord (include/main/exm_2.h); tyaCaptureUnit
+ * reads its +0xA4 serial and tyaCaptureUnit2 its parent_peer owner. */
 #define MAP_UNIT_COUNT 64
 
-#define MAP_UNIT_SERIAL_OFFSET 0xA4
 #define SCRATCHPAD ((u8 *)0x70000000)
 #define SPR_COLOR ((u32 *)0x70000070)
 #define SPR_DEPTH ((u32 *)0x70000870)
@@ -39,21 +40,11 @@
 #define CAPTURE_WIDTH 512
 #define CAPTURE_HEIGHT 448
 
-typedef struct ActorModelParam {
-    float scale;
-    u8 unmodeled_04[0x80 - 0x04];
-    u32 flags;
-    u8 unmodeled_84[0xA0 - 0x84];
-    float transparency;
-    u8 unmodeled_a4[0xB8 - 0xA4];
-    int alpha;
-    u8 unmodeled_bc[0x150 - 0xBC];
-} ActorModelParam;
-
+/* Partial view of GsDispEnv; the full type changes this object (xgl_render.c's own GsDispEnv definition keeps its GS register types .c-local). */
 typedef struct {
     u8 unmodeled_00[0x38];
     u64 buffer_select;
-} TyaDisplayEnvironment;
+} GsDispEnvBufferView;
 
 typedef struct {
     u8 unmodeled_00[8];
@@ -61,28 +52,6 @@ typedef struct {
     u8 unmodeled_0a[0x12 - 0x0A];
     u16 framebuffer_base_page[2];
 } TyaFramebufferState;
-
-typedef struct {
-    u32 flags;
-    u8 unmodeled_04[4];
-    void (*draw)(void *self);
-    u8 unmodeled_0c[0x80 - 0x0C];
-    u8 captureLayer;
-    u8 unmodeled_81[ACTOR_IN_USE_ID_OFFSET - 0x81];
-    short inUseId;
-    u8 unmodeled_88[0x8FC - (ACTOR_IN_USE_ID_OFFSET + 2)];
-    void *parent;
-    u8 unmodeled_900[0x920 - 0x900];
-    ActorModelParam model;
-} ActorHead;
-
-typedef struct {
-    u8 unmodeled_00[MAP_UNIT_SERIAL_OFFSET];
-    short serial;
-    u8 unmodeled_a6[0xFC - (MAP_UNIT_SERIAL_OFFSET + 2)];
-    ActorHead *owner;
-    u8 unmodeled_100[0x300 - 0x100];
-} MapUnitHead;
 
 typedef int (*TyaCaptureCallback)(int);
 
@@ -105,21 +74,16 @@ typedef struct {
 
 typedef struct { int v; } TyaAlpha;
 
-extern TyaDisplayEnvironment DispEnv;
+extern GsDispEnvBufferView DispEnv;
 extern TyaFramebufferState sRender;
-extern ActorHead actor[ACTOR_COUNT];
-extern MapUnitHead MapUnit[MAP_UNIT_COUNT];
+extern Actor actor[ACTOR_COUNT];
+extern MapUnitRecord MapUnit[MAP_UNIT_COUNT];
 extern TyaGameLoop GameLoopState;
-extern u8 *WorkEnd;
-
 /* Defined in src/main/act_3.c (main/tu265). */
 void ACT_DrawShadowBegin(void);
 
-void ACT_DrawShadow(ActorHead *unit);
+void ACT_DrawShadow(Actor *unit);
 void ACT_DrawShadowEnd(void);
-
-/* Defined in src/main/map_2.c (main/tu269). */
-void MAP_drawUnitAt(MapUnitHead *unit);
 
 int sceGsSyncPath(int mode, int timeout);
 
@@ -133,14 +97,8 @@ int sceGsSetDefStoreImage(void *image, short sbp, short sbw, short spsm, short x
 int sceGsExecStoreImage(void *image, void *destination);
 void *memcpy(void *destination, const void *source, unsigned int size);
 int printf(const char *format, ...);
-float I2F(int value);
-int xglFontGetFlags(void);
-void xglFontSetFlags(int flags);
 void *GameResourceGetFreeAddr(void);
-void ACT_filterGuno(void *unit);
-void ACT_modelDraw(ActorHead *unit);
-int F2I(float value);
-
+void ACT_filterGuno(Actor *unit);
 static u8 BmpHeader[0x36] = {
     'B', 'M', 0x36, 0x80, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
     0x28, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0xC0, 0x01, 0x00, 0x00, 0x01, 0x00,
@@ -203,7 +161,7 @@ int tyaBmpOutput(char *path, u8 *pixels)
     int fbp;
     u8 *dst;
     u8 *src;
-    unsigned long image;
+    unsigned long image; /* 64-bit holder of the scratchpad GS image address */
 
     sceGsSyncPath(0, 0);
     fd = sceOpen(path, 0x602);
@@ -549,7 +507,7 @@ static void tyaCaptureActor(void)
 {
     int i;
     int *alpha_value;
-    ActorHead *unit;
+    Actor *unit;
 
     alpha_value = &alpha;
     for (i = 0, unit = actor; i < ACTOR_COUNT; i++, unit++) {
@@ -557,19 +515,19 @@ static void tyaCaptureActor(void)
             continue;
         }
         if (layer != i + 0x200) {
-            if (unit->parent == 0 || layer != ((ActorHead *)unit->parent)->captureLayer + 0x200) {
+            if (unit->parent == 0 || layer != unit->parent->number + 0x200) {
                 continue;
             }
         }
         if (unit->draw == ACT_filterGuno) {
             *alpha_value = 1;
-            transparency = F2I(unit->model.scale * 128.0f);
+            transparency = F2I(unit->drawEnv.fogDistance[0] * 128.0f);
         } else {
-            ActorModelParam *model = &unit->model;
+            ActorDrawEnv *env = &unit->drawEnv;
 
-            if (model->flags & 1) {
-                *alpha_value = model->alpha;
-                transparency = F2I(model->transparency);
+            if (env->flags & 1) {
+                *alpha_value = env->alpha;
+                transparency = F2I(env->transparency);
             } else {
                 *alpha_value = 0;
             }
@@ -581,7 +539,7 @@ static void tyaCaptureActor(void)
 static void tyaCaptureShadow(void)
 {
     int i;
-    ActorHead *unit;
+    Actor *unit;
 
     unit = actor;
     i = 0;
@@ -598,7 +556,7 @@ static void tyaCaptureShadow(void)
 static void tyaCaptureUnit(void)
 {
     int i;
-    MapUnitHead *unit;
+    MapUnitRecord *unit;
 
     for (i = 0, unit = MapUnit; i < MAP_UNIT_COUNT; i++, unit++) {
         if (unit->serial >= 0 && layer == i + 0x300) {
@@ -610,11 +568,11 @@ static void tyaCaptureUnit(void)
 static void tyaCaptureUnit2(void)
 {
     int i;
-    ActorHead *unit;
-    ActorHead *selected;
-    MapUnitHead *mapUnit;
+    Actor *unit;
+    Actor *selected;
+    MapUnitRecord *mapUnit;
 
-    selected = (ActorHead *)-1;
+    selected = (Actor *)-1;
     for (i = 0, unit = actor; i < ACTOR_COUNT; i++, unit++) {
         if (unit->inUseId != 0 && !(unit->flags & 8) && layer == i + 0x200) {
             selected = unit;
@@ -622,7 +580,7 @@ static void tyaCaptureUnit2(void)
         }
     }
     for (i = MAP_UNIT_COUNT - 1, mapUnit = MapUnit; i >= 0; i--, mapUnit++) {
-        if (mapUnit->serial >= 0 && mapUnit->owner == selected) {
+        if (mapUnit->serial >= 0 && mapUnit->parent_peer == selected) {
             MAP_drawUnitAt(mapUnit);
         }
     }
@@ -696,7 +654,7 @@ void tyaCaptureStart(const char *name, int mode)
         GameLoopState.hook[2] = 0;
         GameLoopState.hook[3] = 0;
         GameLoopState.flags &= ~0x4000000;
-        xglFontSetFlags((u16)xglFontGetFlags() | 1);
+        xglFontSetFlags(xglFontGetFlags() | 1);
         return;
     case 1:
         GameLoopState.hook[0] = 0;
@@ -725,7 +683,7 @@ void tyaCaptureStart(const char *name, int mode)
         GameLoopState.flags &= ~0x4000000;
         break;
     case 0x10:
-        xglFontSetFlags((u16)xglFontGetFlags() | 1);
+        xglFontSetFlags(xglFontGetFlags() | 1);
         break;
     }
 }
@@ -733,6 +691,6 @@ void tyaCaptureStart(const char *name, int mode)
 void tyaCaptureEnd(void)
 {
     tyaCaptureMain(1);
-    xglFontSetFlags((unsigned short)(xglFontGetFlags() | 3));
+    xglFontSetFlags(xglFontGetFlags() | 3);
     GameLoopState.flags &= 0xFAFFFFFF;
 }

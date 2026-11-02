@@ -56,7 +56,7 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
     }
 
     output[0] = (u32)vertex_count + 0x8000u;
-    output[1] = ((u32)prim->tag_control << 18) ^ 0x20064000u;
+    output[1] = (prim->tag_control << 18) ^ 0x20064000u;
     output[2] = 81;
     output[3] = 0;
     output += 4;
@@ -176,7 +176,7 @@ void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
     colors = prim->colors;
 
     output[0] = 1;
-    output[1] = ((u32)prim->tag_control << 18) ^ 0x10014000u;
+    output[1] = (prim->tag_control << 18) ^ 0x10014000u;
     output[2] = 1;
     output[3] = 0;
 

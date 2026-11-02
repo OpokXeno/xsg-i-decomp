@@ -1,10 +1,12 @@
 #include "common.h"
 #include "main/init_vm.h"
+#include "main/scene_1.h"
 #include "find_native_method.h"
+#include "main/find_native_method.h"
+#include "main/jni.h"
+#include "main/string_utf_get_hash.h"
 
 typedef struct ClassCacheEntry ClassCacheEntry;
-
-struct JavaMethod;
 
 /* One row of the default_native[] table: a native method's exported name
  * and the address of its native implementation. */
@@ -46,20 +48,6 @@ typedef struct StringInstance {
     StringValue *value;  /* +0x4 */
 } StringInstance;
 
-typedef struct JavaMethod JavaMethod;
-
-typedef struct JavaFieldEntry FieldEntry;
-
-typedef struct DispatchTable DispatchTable;
-
-typedef union ConstantPoolEntry ConstantPoolEntry;
-
-union ConstantSlot {
-    u8 *tags;
-    StringConstant *stringConstant;
-    StringInstance *stringObject;
-};
-
 enum {
     CLASS_STATE_MEMBERS_RESOLVED = 4,
     CLASS_STATE_BEFORE_CONSTANTS = 5,
@@ -77,80 +65,24 @@ enum {
     CONSTANT_POOL_TAG_RESOLVED_STRING = 0x18
 };
 
-struct ClassNameKey {
-    u8 unmodeled_00[4];
-    u16 hash;
-    u8 unmodeled_06[2];
-    const char *bytes;
-};
-
 struct ClassCacheEntry {
-    ClassNameKey *name;
+    SceneString *name;
     void *classLoader;
     JavaClass *resolvedClass;
     struct ClassCacheEntry *next;
 };
 
-union ConstantPoolEntry {
-    u8 *tags;
-    void *object;
-    int intValue;
-    float floatValue;
-    u8 byteValue;
-    u16 halfValue;
-    struct StringConstant *stringConstant;
-    struct StringInstance *stringObject;
-};
-
-struct JavaFieldEntry {
-    u8 unmodeled_00[4];
-    u16 flags;
-    u8 unmodeled_06[2];
-    ElementType *type;
-    union { int constantIndex; int size; int value; } payload;
-    union { void *address; int offset; int initialValue; } location;
-};
-
-struct JavaMethod {
-    ClassNameKey *name;
-    ClassNameKey *descriptor;
-    u8 unmodeled_08[4];
-    JavaClass *owner;
-    u16 accessFlags;
-    s16 dispatchIndex;
-    void *nativeFunction;
-};
-
-struct DispatchTable {
-    JavaClass *clazz;
-    JavaMethod *methods[1];
-};
-
 extern ClassCacheEntry **classEntryPool;
 extern NativeMethodEntry default_native[];
-extern ElementType *classBoolean;
-extern ElementType *classByte;
-extern ElementType *classChar;
-extern ElementType *classShort;
-extern ElementType *classInt;
-extern ElementType *classLong;
-extern ElementType *classFloat;
-extern ElementType *classDouble;
-extern ElementType *classVoid;
-extern ClassNameKey *NAME_Constructor;
-extern ClassNameKey *NAME_Init;
-extern ClassNameKey *TYPE_Void;
-extern SceneVm *initVMThread;
-
+extern JavaClass *classByte;
+extern JavaClass *classVoid;
 int strcmp(const char *, const char *);
 JavaClass *findClass(ClassCacheEntry *entry);
-ClassCacheEntry *lookupClassEntry(ClassNameKey *name, void *classLoader);
+ClassCacheEntry *lookupClassEntry(SceneString *name, void *classLoader);
 int processClass(JavaClass *clazz, int targetState);
 void *classFromSig(const char **cursor, void *classLoader);
 static int sizeofDescripter(u8 **cursor);
 char *strcpy(char *, const char *);
-extern ClassNameKey *loadConstString(const char *bytes, int length);
-extern ClassNameKey *loadConstString2(const char *bytes, int length);
 static struct JavaMethod *findSuperMethod(struct JavaMethod *method, JavaClass *classEntry);
 static void buildDispatchMethodTable(JavaClass *clazz);
 static void allocStaticField(JavaClass *classEntry);
@@ -158,43 +90,10 @@ static void resolveInstanceField(JavaClass *classEntry);
 static void resolveStaticField(JavaClass *clazz);
 static int resolveConstants(JavaClass *classEntry);
 extern JavaClass *getClass(JavaClass *classRef, JavaClass *owner);
-extern SceneMethod *findMethodLocal(JavaClass *clazz, ClassNameKey *name, ClassNameKey *type);
+extern JavaMethod *findMethodLocal(JavaClass *clazz, SceneString *name, SceneString *type);
 extern void JNI_initThread(SceneVm *thread);
-extern void JNI_callMethod(SceneVm *thread, SceneMethod *method, SceneObject *object, int *args);
 static int sizeofDescripterType(u8 **cursor);
-int instanceOf(SceneClass *fromClass, SceneClass *toClass);
-
 static JavaClass _dummyClass;
-
-/*
- * The full layout of the VM class record (include/shared.h's SceneClass is
- * the shared view of the same 0x40 bytes).
- */
-#ifndef INCLUDE_MAIN_FIND_NATIVE_METHOD_H
-struct JavaClass {
-    ObjectHeader header;
-    ClassNameKey *name;
-    u16 accessFlags;
-    u16 flags;
-    void *classLoader;
-    JavaClass *superClass;
-    ConstantPoolEntry *constants;
-    DispatchTable *classPointer;
-    FieldEntry *fields;
-    JavaMethod *methods;
-    JavaClass **interfaces;
-    u16 constantCount;
-    u16 dispatchSize;
-    u16 methodCount;
-    u16 interfaceCount;
-    u16 fieldCount;
-    u16 staticFieldCount;
-    u16 declaredInterfaceCount;
-    s16 state;
-    int instanceSize;
-    ElementType *elementClass;
-};
-#endif
 
 /*
  * Looks up name in the default_native[] table, which a NULL name terminates,
@@ -279,7 +178,7 @@ void resolveNativeMethod(JavaMethod *method)
         function = findNativeMethod(name);
     }
     if (function != 0) {
-        method->nativeFunction = function;
+        method->native = function;
     }
 }
 
@@ -300,11 +199,11 @@ StringInstance *Const2JavaString(StringConstant *constant)
     return string;
 }
 
-void *newObject(SceneClass *scene_class)
+void *newObject(JavaClass *clazz)
 {
-    ObjectHeader *instance = xmalloc(scene_class->instance_size, 0xE);
+    ObjectHeader *instance = xmalloc(clazz->instanceSize, 0xE);
 
-    instance->classPointer = scene_class->instance_class_ref;
+    instance->classPointer = clazz->classPointer;
     return instance;
 }
 
@@ -319,7 +218,7 @@ void *newClass(void)
     return clazz;
 }
 
-void *newArray(ElementType *elementType, int length)
+void *newArray(JavaClass *elementType, int length)
 {
     ArrayHeader *array;
     void *classPointer;
@@ -332,7 +231,7 @@ void *newArray(ElementType *elementType, int length)
     classPointer = lookupArray(elementType)->classPointer;
     array->length = length;
     array->classPointer = classPointer;
-    array->data = (void *)(array + 1);
+    array->data = array + 1;
     return array;
 }
 
@@ -341,7 +240,7 @@ int processClass(JavaClass *clazz, int targetState)
     JavaClass *super;
     u16 interfaceCount;
     int i;
-    SceneMethod *init;
+    JavaMethod *init;
     int initializedState;
     int preparedState;
 
@@ -442,7 +341,7 @@ static void buildDispatchMethodTable(JavaClass *clazz)
     JavaMethod **inherited;
     int inheritedCount;
     int slot;
-    ClassNameKey **constructorName = &NAME_Constructor;
+    SceneString **constructorName = &NAME_Constructor;
 
     if (clazz->superClass != 0) {
         clazz->dispatchSize = clazz->superClass->dispatchSize;
@@ -484,7 +383,7 @@ static void buildDispatchMethodTable(JavaClass *clazz)
 
 static void resolveStaticField(JavaClass *clazz)
 {
-    FieldEntry *field;
+    SceneField *field;
     ConstantPoolEntry *address;
     ConstantPoolEntry *constants;
     int i;
@@ -498,34 +397,34 @@ static void resolveStaticField(JavaClass *clazz)
         if (!(field->flags & FIELD_FLAG_HAS_CONSTANT_VALUE)) {
             continue;
         }
-        index = field->payload.constantIndex;
+        index = field->payload.constant_index;
         address = field->location.address;
         switch (constants[0].tags[index]) {
         case CONSTANT_POOL_TAG_INTEGER:
-            if (field->type == classBoolean || field->type == classByte) {
+            if (field->type.resolved == classBoolean || field->type.resolved == classByte) {
                 address->byteValue = constants[index].byteValue;
-                field->payload.constantIndex = classByte->elementSize;
+                field->payload.constant_index = classByte->elementSize;
             } else {
-                ElementType *shortType = classShort;
+                JavaClass *shortType = classShort;
 
-                if (field->type == classChar || field->type == shortType) {
+                if (field->type.resolved == classChar || field->type.resolved == shortType) {
                     address->halfValue = constants[index].halfValue;
-                    field->payload.constantIndex = shortType->elementSize;
+                    field->payload.constant_index = shortType->elementSize;
                 } else {
                     address->intValue = constants[index].intValue;
-                    field->payload.constantIndex = classInt->elementSize;
+                    field->payload.constant_index = classInt->elementSize;
                 }
             }
             break;
         case CONSTANT_POOL_TAG_FLOAT:
             address->floatValue = constants[index].floatValue;
-            field->payload.constantIndex = classFloat->elementSize;
+            field->payload.constant_index = classFloat->elementSize;
             break;
         case CONSTANT_POOL_TAG_LONG:
         case CONSTANT_POOL_TAG_DOUBLE:
             address[0].intValue = constants[index].intValue;
             address[1].intValue = constants[index + 1].intValue;
-            field->payload.constantIndex = classLong->elementSize;
+            field->payload.constant_index = classLong->elementSize;
             break;
         case CONSTANT_POOL_TAG_STRING:
             constants[0].tags[index] = CONSTANT_POOL_TAG_RESOLVED_STRING;
@@ -533,7 +432,7 @@ static void resolveStaticField(JavaClass *clazz)
             /* fall through: the slot now holds the String instance */
         case CONSTANT_POOL_TAG_RESOLVED_STRING:
             address->object = constants[index].object;
-            field->payload.constantIndex = 4;
+            field->payload.constant_index = 4;
             break;
         }
     }
@@ -543,13 +442,13 @@ static void resolveInstanceField(JavaClass *classEntry)
 {
     int instanceSize = classEntry->instanceSize;
     int remaining = classEntry->fieldCount - classEntry->staticFieldCount;
-    FieldEntry *field = classEntry->fields + classEntry->staticFieldCount;
+    SceneField *field = classEntry->fields + classEntry->staticFieldCount;
 
     if (instanceSize == 0) {
         instanceSize = 4;
     }
     while (--remaining >= 0) {
-        int alignedSize = ((unsigned int)field->payload.size + 3U) / 4U * 4U;
+        int alignedSize = (field->payload.size + 3U) / 4U * 4U;
 
         instanceSize = ((instanceSize + alignedSize - 1) / alignedSize) * alignedSize;
         field->location.offset = instanceSize;
@@ -589,7 +488,7 @@ static int resolveConstants(JavaClass *classEntry)
     return 1;
 }
 
-JavaClass *loadArray(ClassNameKey *name, void *classLoader)
+JavaClass *loadArray(SceneString *name, void *classLoader)
 {
     void *elementClass = getClassFromSignature(name->bytes + 1, classLoader);
 
@@ -599,7 +498,7 @@ JavaClass *loadArray(ClassNameKey *name, void *classLoader)
     return 0;
 }
 
-JavaClass *loadClass(ClassNameKey *classKey, void *classLoader)
+JavaClass *loadClass(SceneString *classKey, void *classLoader)
 {
     ClassCacheEntry *entry;
     void *resolved;
@@ -665,7 +564,7 @@ void reloadClassEntry(void *heapBoundary)
     } while (bucketsRemaining >= 0);
 }
 
-ClassCacheEntry *lookupClassEntry(ClassNameKey *name, void *classLoader)
+ClassCacheEntry *lookupClassEntry(SceneString *name, void *classLoader)
 {
     ClassCacheEntry **pool = classEntryPool;
     ClassCacheEntry **slot;
@@ -701,14 +600,14 @@ ClassCacheEntry *lookupClassEntry(ClassNameKey *name, void *classLoader)
     return entry;
 }
 
-JavaClass *lookupArray(ElementType *elementType)
+JavaClass *lookupArray(JavaClass *elementType)
 {
     extern const char primitiveArrayDescriptorFormat[];
     extern const char nestedArrayDescriptorFormat[];
     extern const char objectArrayDescriptorFormat[];
     char name[1024];
     ClassCacheEntry *entry;
-    ClassNameKey *key;
+    SceneString *key;
 
     if (elementType->flags & 0x100) {
         sprintf(name, primitiveArrayDescriptorFormat, elementType->typeCode);
@@ -781,7 +680,7 @@ void *classFromSig(const char **cursor, void *classLoader)
     return 0;
 }
 
-SceneClass *getClassFromSignature(const char *signature, void *classLoader)
+JavaClass *getClassFromSignature(const char *signature, void *classLoader)
 {
     const char *cursor = signature;
 
@@ -793,11 +692,11 @@ static void allocStaticField(JavaClass *classEntry)
     int remaining = classEntry->staticFieldCount;
 
     if (remaining != 0) {
-        FieldEntry *field = classEntry->fields;
+        SceneField *field = classEntry->fields;
         int storageOffset = 0;
 
         while (--remaining >= 0) {
-            int alignedSize = ((unsigned int)field->payload.size + 3U) / 4U * 4U;
+            int alignedSize = (field->payload.size + 3U) / 4U * 4U;
 
             storageOffset += alignedSize;
             field->payload.size = ((storageOffset - 1) / alignedSize) * alignedSize;
@@ -809,7 +708,7 @@ static void allocStaticField(JavaClass *classEntry)
             field = classEntry->fields;
             remaining = classEntry->staticFieldCount;
             while (--remaining >= 0) {
-                int initialValue = field->location.initialValue;
+                int initialValue = field->location.initial_value;
 
                 storageOffset = field->payload.size;
                 field->payload.value = initialValue;
@@ -824,9 +723,9 @@ void methodDescripter(u8 *descriptor, s16 *paramSize, s16 *returnSize, s8 *retur
 {
     u8 *cursor = descriptor;
 
-    *paramSize = (s16)sizeofDescripter(&cursor);
+    *paramSize = sizeofDescripter(&cursor);
     *returnType = (s8)*cursor;
-    *returnSize = (s16)sizeofDescripter(&cursor);
+    *returnSize = sizeofDescripter(&cursor);
 }
 
 static int sizeofDescripter(u8 **cursor)
@@ -850,8 +749,8 @@ static int sizeofDescripter(u8 **cursor)
 static inline u8 arrayInstanceOf(JavaClass *source, JavaClass *target)
 {
     while (source->name->bytes[0] == '[' && target->name->bytes[0] == '[') {
-        source = (JavaClass *)source->elementClass;
-        target = (JavaClass *)target->elementClass;
+        source = source->elementClass;
+        target = target->elementClass;
     }
     if (source->name->bytes[0] == '[') {
         return 0;
@@ -865,7 +764,7 @@ static inline u8 arrayInstanceOf(JavaClass *source, JavaClass *target)
     if (target->flags & 0x100) {
         return 0;
     }
-    return instanceOf((SceneClass *)source, (SceneClass *)target);
+    return instanceOf(source, target);
 }
 
 static inline int implementsInterface(JavaClass *from, JavaClass *to)
@@ -893,11 +792,8 @@ static inline int inheritsFrom(JavaClass *from, JavaClass *to)
     return 0;
 }
 
-int instanceOf(SceneClass *fromClass, SceneClass *toClass)
+int instanceOf(JavaClass *from, JavaClass *to)
 {
-    JavaClass *from = (JavaClass *)fromClass;
-    JavaClass *to = (JavaClass *)toClass;
-
     if (from == to) {
         return 1;
     }

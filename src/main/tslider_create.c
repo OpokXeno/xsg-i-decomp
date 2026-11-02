@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "tslider_create.h"
+#include "main/tslider_create.h"
 
 typedef struct TsliderLiteralPool {
     char close_command[24];
@@ -14,9 +15,9 @@ const TsliderLiteralPool tsliderLiteralTable = {
     ""
 };
 
-TwinWindow2 *TSLIDER_create(int requestedSlot)
+TComponent *TSLIDER_create(int requestedSlot)
 {
-    TwinWindow2 *window;
+    TComponent *window;
 
     window = TWSYS_createComponent(requestedSlot, 2);
     if (window != 0) {
@@ -25,8 +26,8 @@ TwinWindow2 *TSLIDER_create(int requestedSlot)
         window->max_value = 100;
         window->flags = 0x15;
         window->state = 1;
-        window->width = 0x60;
-        window->height = 0x28;
+        window->pixelWidth = 0x60;
+        window->pixelHeight = 0x28;
         window->x = 48.0f;
         window->y = 64.0f;
         window->min_value = 0;
@@ -37,7 +38,7 @@ TwinWindow2 *TSLIDER_create(int requestedSlot)
     return window;
 }
 
-void TSLIDER_init(TwinWindow2 *slider)
+void TSLIDER_init(TComponent *slider)
 {
     int value = slider->value;
     int digitWidth;
@@ -50,21 +51,21 @@ void TSLIDER_init(TwinWindow2 *slider)
         slider->value = slider->max_value;
     }
     digitWidth = (slider->options & 2) ? 20 : 10;
-    slider->width = slider->max_digits * digitWidth + 0x10;
+    slider->pixelWidth = slider->max_digits * digitWidth + 0x10;
 }
 
-void TSLIDER_updateDefault(TwinWindow2 *slider)
+void TSLIDER_updateDefault(TComponent *slider)
 {
     if ((slider->flags & 2) == 0) {
         switch (slider->state) {
         case 1:
         case 14:
         case 15:
-            slider->timer = 0;
+            slider->waitFrames = 0;
             slider->flags |= 2;
             break;
         case 2:
-            slider->timer = 10;
+            slider->waitFrames = 10;
             slider->flags |= 2;
             break;
         }
@@ -88,28 +89,28 @@ void TSLIDER_updateDefault(TwinWindow2 *slider)
             slider->flags &= ~2;
             slider->value = -1;
         }
-        slider->timer = (slider->timer + 1) & 0xFF;
+        slider->waitFrames = (slider->waitFrames + 1) & 0xFF;
         if (PadData.repeat & PAD_LEFT) {
-            slider->timer = 0;
+            slider->waitFrames = 0;
             slider->value -= 10;
             if (slider->value < slider->min_value) {
                 slider->value = slider->min_value;
             }
         } else if (PadData.repeat & PAD_DOWN) {
-            slider->timer = 0;
+            slider->waitFrames = 0;
             slider->value -= 1;
             if (slider->value < slider->min_value) {
                 slider->value = slider->min_value;
             }
         }
         if (PadData.repeat & PAD_RIGHT) {
-            slider->timer = 0;
+            slider->waitFrames = 0;
             slider->value += 10;
             if (slider->max_value < slider->value) {
                 slider->value = slider->max_value;
             }
         } else if (PadData.repeat & PAD_UP) {
-            slider->timer = 0;
+            slider->waitFrames = 0;
             slider->value += 1;
             if (slider->max_value < slider->value) {
                 slider->value = slider->max_value;
@@ -117,14 +118,14 @@ void TSLIDER_updateDefault(TwinWindow2 *slider)
         }
         break;
     case 2:
-        slider->timer--;
-        if (slider->timer < 0) {
+        slider->waitFrames--;
+        if (slider->waitFrames < 0) {
             slider->flags &= ~0x11;
         }
         break;
     case 1:
-        slider->timer++;
-        if (slider->timer >= 11) {
+        slider->waitFrames++;
+        if (slider->waitFrames >= 11) {
             slider->state = 14;
             slider->flags &= ~2;
         }
@@ -132,7 +133,7 @@ void TSLIDER_updateDefault(TwinWindow2 *slider)
     }
 }
 
-void TSLIDER_drawDefault(TwinWindow2 *window)
+void TSLIDER_drawDefault(TComponent *window)
 {
     unsigned char digits[0x10];
     unsigned int fullWidthDigits[8];
@@ -154,12 +155,12 @@ void TSLIDER_drawDefault(TwinWindow2 *window)
             padding = 0;
         }
         STRING_h2zEUC(fullWidthDigits, digits);
-        textArg = (long long) (int) fullWidthDigits;
+        textArg = (int) fullWidthDigits;
         xglFontPrintf(x + padding + 0xA, y + 8, 0x01FFFFF0 - brightness, &textArg);
     }
 }
 
-void TMENU_addQuery2(MenuNative *menu, char **texts, int count)
+void TMENU_addQuery2(MenuNativeQueryView *menu, char **texts, int count)
 {
     unsigned char *out = menu->textEnd;
     int i;
@@ -274,17 +275,17 @@ void TMENU_addQuery2(MenuNative *menu, char **texts, int count)
 
 void TWIN_initCF(void *window)
 {
-    TwinWindow2 *textWindow = window;
+    TComponent *textWindow = window;
 
-    textWindow->mode = (textWindow->mode & 0xFF00) | 3;
+    textWindow->kindAndGroup = (textWindow->kindAndGroup & 0xFF00) | 3;
     TWIN_init2(window);
 }
 
-void TWIN_initScene(TwinWindow2 *window)
+void TWIN_initScene(TComponent *window)
 {
     window->param = 0x30;
     window->kind = 3;
-    window->mode = (window->mode & 0xFF00) | 4;
+    window->kindAndGroup = (window->kindAndGroup & 0xFF00) | 4;
     TWIN_init2(window);
     window->x = 0.0f;
     window->y = 324.0f;
@@ -292,7 +293,7 @@ void TWIN_initScene(TwinWindow2 *window)
 
 void *createItemGetWin(const char *text)
 {
-    TwinWindow *window;
+    TComponent *window;
     int length;
 
     window = TWIN_create2(-1);
@@ -302,5 +303,5 @@ void *createItemGetWin(const char *text)
     TWIN_initCF(window);
     MSG_print2(window, text, length);
     MSG_print2(window, tsliderLiteralTable.close_command, -1);
-    return window->body;
+    return &window->state;
 }

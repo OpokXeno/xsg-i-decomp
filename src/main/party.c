@@ -6,16 +6,6 @@
 #include "party.h"
 
 /*
- * The complete 0x188-byte party state that PartyDataGet() points into
- * (SaveData + 0x10078), handled here only as a whole block. Its members are
- * not recovered in this unit: the image records just the evidenced size and
- * the 8-byte alignment implied by the original's doubleword ld/sd block copy.
- */
-typedef struct PartyStateImage {
-    unsigned long long words[0x188 / 8];
-} PartyStateImage;
-
-/*
  * Party state: the original party source file, main 0x002b56c0..0x002b6494
  * (the file begins at the gcc2_compiled. marker 0x002b56c0; this candidate
  * stops after PartyAllPartyGet2, before PartyAgwsGet).
@@ -29,9 +19,9 @@ typedef struct PartyStateImage {
  * the same file; compiled alone the same source produces beql.
  */
 /* The party state is the 0x188-byte region embedded at SaveData + 0x10078. */
-unsigned char *PartyDataGet(void)
+PartyDataPrefix *PartyDataGet(void)
 {
-    return SaveData + 0x10078;
+    return (PartyDataPrefix *)(SaveData + 0x10078);
 }
 
 /*
@@ -44,9 +34,9 @@ unsigned char *PartyDataGet(void)
 void PartyDataInit(void)
 {
     PartyDataPrefix *party_state = (PartyDataPrefix *)(SaveData + SAVE_PARTY_STATE);
-    unsigned char *party;
+    PartyDataPrefix *party;
     TecInitEntry *tec_init;
-    unsigned char *skill_party;
+    PartyDataPrefix *skill_party;
     unsigned char *skill_data;
     PartySkillPoints *next_level_points;
     unsigned char *skill_level;
@@ -67,7 +57,7 @@ void PartyDataInit(void)
     tec_init = MenuWorkEndGet();
     xglCdReadFile("data\\endou\\tec\\tecinit.bin", tec_init, 0, 1);
     for (record = 0; record < 8; record++) {
-        ((TecInitEntry *)(party + PARTY_TEC_RECORDS))[record] = tec_init[record];
+        party->tech_records[record] = tec_init[record];
     }
 
     /* Every character starts at skill level 1 with the level-1 entry of the
@@ -79,8 +69,8 @@ void PartyDataInit(void)
     skill_data = MenuWorkEndGet();
     xglCdReadFile("data\\endou\\skill\\skilldat.bin", skill_data, 0, 1);
     initial_skill_level = 1;
-    next_level_points = (PartySkillPoints *)(skill_party + PARTY_SKILL_POINTS);
-    skill_level = ((PartySkillLevelArray *)(skill_party + PARTY_SKILL_LEVELS))->level_by_character;
+    next_level_points = skill_party->next_level_points;
+    skill_level = skill_party->skill_levels.level_by_character;
     for (chr = 0; chr < 8; chr++) {
         *skill_level++ = initial_skill_level;
         *next_level_points++ = ((unsigned short *)(skill_data + SKILL_NEXT_LEVEL_TABLE))[1];
@@ -155,13 +145,13 @@ void PartyDataInit2(void)
     PartyAttackerSet(0, 3, 1);
     PartyAttackerSet(1, 1, 2);
     PartyAttackerSet(2, 2, 3);
-    party_data = (PartyDataPrefix *)PartyDataGet();
+    party_data = PartyDataGet();
     party_data->leader_battle_id = 0;
 }
 
 void PartyFriendOn(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
     if (index < 7 && id != 4) {
         data->friend_mask |= (unsigned short)(1 << index);
@@ -170,7 +160,7 @@ void PartyFriendOn(int id)
 
 void PartyFriendOff(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
     if (index < 7 && id != 4) {
         data->friend_mask &= (unsigned short)~(1 << index);
@@ -180,7 +170,7 @@ void PartyFriendOff(int id)
 int PartyFriendCheck(int id)
 {
     unsigned int index = (unsigned int)(id - 1);
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int mask;
     if (index >= 7u || id == 4) {
         return 0;
@@ -191,7 +181,7 @@ int PartyFriendCheck(int id)
 
 void PartyLockPartyOn(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
     if (index < 12 && id != 4) {
         data->lock_party_mask |= (unsigned short)(1 << index);
@@ -200,7 +190,7 @@ void PartyLockPartyOn(int id)
 
 void PartyLockPartyOff(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
     if (index < 12 && id != 4) {
         data->lock_party_mask &= (unsigned short)~(1 << index);
@@ -210,7 +200,7 @@ void PartyLockPartyOff(int id)
 int PartyLockPartyCheck(int id)
 {
     unsigned int index = (unsigned int)(id - 1);
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int mask;
     if (index >= 12u || id == 4) {
         return 0;
@@ -221,7 +211,7 @@ int PartyLockPartyCheck(int id)
 
 void PartyOutFriendOn(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
     if (index < 12 && id != 4) {
         data->out_friend_mask |= (unsigned short)(1 << index);
@@ -230,7 +220,7 @@ void PartyOutFriendOn(int id)
 
 void PartyOutFriendOff(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
     if (index < 12 && id != 4) {
         data->out_friend_mask &= (unsigned short)~(1 << index);
@@ -240,7 +230,7 @@ void PartyOutFriendOff(int id)
 int PartyOutFriendCheck(int id)
 {
     unsigned int index = (unsigned int)(id - 1);
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int mask;
     if (index >= 12u || id == 4) {
         return 0;
@@ -251,7 +241,7 @@ int PartyOutFriendCheck(int id)
 
 void PartyTakeAgwsOn(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 17;
     if (index < 16) {
         data->take_agws_mask |= (unsigned short)(1 << index);
@@ -260,7 +250,7 @@ void PartyTakeAgwsOn(int id)
 
 void PartyTakeAgwsOff(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 17;
     if (index < 16) {
         data->take_agws_mask &= (unsigned short)~(1 << index);
@@ -269,7 +259,7 @@ void PartyTakeAgwsOff(int id)
 
 int PartyTakeAgwsCheck(int id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = (unsigned int)(id - 17);
     unsigned int bit;
 
@@ -287,7 +277,7 @@ int PartyTakeAgwsCheck(int id)
  */
 int PartyAttackerSet(int slot_index, int party_id, int attack_position)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
 
     if (party_id != 0) {
         if (PartyFriendCheck(party_id) != 0) {
@@ -312,7 +302,7 @@ int PartyAttackerSet(int slot_index, int party_id, int attack_position)
  */
 void PartyBattleChange(int party_id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     PartyAttackPosition *slot;
     int reserve_ids[6];
     int slot_index;
@@ -356,7 +346,7 @@ int PartyLeaderSet(int leader)
         { 0, 0 },
         { 0, 0 },
     };
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     int party_id = leader & 0xffff;
     int costume;
     int battle_id;
@@ -379,20 +369,20 @@ int PartyLeaderSet(int leader)
 
 int PartyLeaderCheck(int chara_id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
 
     return data->leader_battle_id == dataCidGet(chara_id);
 }
 
 void PartyRadarDispSet(int value)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     data->radar_disp = value;
 }
 
 int PartyFriendLockCheck(int id, int flag)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     unsigned int index = (unsigned int)(id - 1);
     unsigned int bits = data->friend_mask;
     if (index >= 12u || id == 4) {
@@ -460,7 +450,7 @@ int PartyAllPartyGet(int *out, int mode)
  */
 int PartyAttackerGet(int *out)
 {
-    PartyAttackPosition *slot = ((PartyDataPrefix *)PartyDataGet())->attack_slots;
+    PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int count = 0;
     int slot_index = 0;
 
@@ -506,10 +496,10 @@ int PartyReserveGet(int *reserve_ids)
 
 /* Runs PartyAllPartyGet(out, 0) against a caller-supplied party state and
  * restores the live state afterwards; returns the number of ids stored. */
-int PartyAllPartyGet2(int *out, PartyStateImage *state)
+int PartyAllPartyGet2(int *out, PartyDataPrefix *state)
 {
-    PartyStateImage *party = (PartyStateImage *)PartyDataGet();
-    PartyStateImage saved;
+    PartyDataPrefix *party = PartyDataGet();
+    PartyDataPrefix saved;
     int count;
 
     saved = *party;
@@ -525,7 +515,7 @@ int PartyAgwsGet(int *party_ids)
     int agws_index;
     int party_count;
 
-    owned_agws = ((PartyDataPrefix *)PartyDataGet())->take_agws_mask;
+    owned_agws = (PartyDataGet())->take_agws_mask;
     party_count = 0;
     agws_index = 0;
 
@@ -545,7 +535,7 @@ int PartyAgwsGet(int *party_ids)
 /* Count every set bit in the first two bytes of the party-state prefix. */
 int PartyCharNumGet(void)
 {
-    unsigned char *party_prefix = PartyDataGet();
+    unsigned char *party_prefix = (unsigned char *)PartyDataGet();
     int bit_index;
     int set_bit_count;
 
@@ -563,7 +553,7 @@ int PartyCharNumGet(void)
 /* Count the low-nibble bits of the first four party-state prefix bytes. */
 int PartyAgwsNumGet(void)
 {
-    unsigned char *party_prefix = PartyDataGet();
+    unsigned char *party_prefix = (unsigned char *)PartyDataGet();
     int nibble_bit_index;
     int set_bit_count;
 
@@ -580,7 +570,7 @@ int PartyAgwsNumGet(void)
 
 int PartyAttackerCheck(int party_id)
 {
-    PartyDataPrefix *data = (PartyDataPrefix *)PartyDataGet();
+    PartyDataPrefix *data = PartyDataGet();
     PartyAttackPosition *slot;
     int slot_index;
 
@@ -608,7 +598,7 @@ int PartyAttackerCheck(int party_id)
 
 int PartyAttackPosCheck(int attack_position)
 {
-    PartyAttackPosition *slot = ((PartyDataPrefix *)PartyDataGet())->attack_slots;
+    PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
 
     for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
@@ -621,7 +611,7 @@ int PartyAttackPosCheck(int attack_position)
 
 int PartyAttackPosGet(int party_id)
 {
-    PartyAttackPosition *slot = ((PartyDataPrefix *)PartyDataGet())->attack_slots;
+    PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
 
     for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
@@ -634,7 +624,7 @@ int PartyAttackPosGet(int party_id)
 
 void PartyAttackPosSet(int party_id, int attack_position)
 {
-    PartyAttackPosition *slot = ((PartyDataPrefix *)PartyDataGet())->attack_slots;
+    PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
 
     for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
@@ -647,7 +637,7 @@ void PartyAttackPosSet(int party_id, int attack_position)
 
 void PartyAttackPosChange(int first_party_id, int second_party_id)
 {
-    PartyAttackPosition *slot = ((PartyDataPrefix *)PartyDataGet())->attack_slots;
+    PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
     int first_attack_position = 0;
     int second_attack_position = 0;

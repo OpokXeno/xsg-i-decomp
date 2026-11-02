@@ -1,5 +1,10 @@
 #include "common.h"
+#include "main/act_1.h"
 #include "act_1.h"
+#include "main/act_2.h"
+#include "main/exm_2.h"
+#include "main/game_init_camera.h"
+#include "main/xgl_studio.h"
 
 /* PadData's pressed-button halfword layout as ACT_info reads it. */
 typedef struct ActInfoPad {
@@ -22,30 +27,16 @@ extern void *memset(void *destination, int value, unsigned int count);
  */
 extern void *RSRC_alloc(MatrixHeap *heap, int size, int tag);
 
-extern void RSRC_inactiveSource(MatrixHeap *heap, ActRecord *actor);
-
-extern void ACT_resetParent(ActRecord *self, ActRecord *parent);
-void ACT_dispose2(ActRecord *self, int quick);
-
-extern void EXM_StepShakeWind(void);
+extern void RSRC_inactiveSource(MatrixHeap *heap, Actor *actor);
 
 extern void ACT_info_00306090(void);
-extern void ACT_modelDraw(ActRecord *actor);
-
-extern void xglStudioFlushActiveCamera(void);
-
-extern void DB_reset(int, int);
 extern void LOOK_target_doit(void);
 
-extern void ACT_updateMotionPause(ActRecord *actor);
+extern void ACT_updateMotionPause(Actor *actor);
 
-extern void ACT_resetMatrix(ActRecord *self);
 extern void UnduParamInit(void *param);
-extern void EXM_InitMovedHair(ActRecord *actor);
-extern void EXM_InitWind(void);
+extern void EXM_InitMovedHair(Actor *actor);
 extern void DB_params(const char *params);
-extern void DB_println(const char *format, ...);
-
 static MatrixHeap *actMatrixHeap = 0;
 
 static MatrixHeap matrixHeap;
@@ -93,7 +84,7 @@ const char actorParentFormat[] = "PARENT %d";
 
 const char actorChildFormat[] = "CHILD[%d] %d";
 
-int ACT_allocMatrix(ActRecord *self, int count)
+int ACT_allocMatrix(Actor *self, int count)
 {
     unsigned char *block;
     int extra;
@@ -101,7 +92,7 @@ int ACT_allocMatrix(ActRecord *self, int count)
 
     if (count < 0) {
         count = 1;
-        move = self->resource[2];
+        move = self->move;
         if (move != 0) {
             count = move->matrixCount;
         }
@@ -116,12 +107,12 @@ int ACT_allocMatrix(ActRecord *self, int count)
         }
         block = RSRC_alloc(actMatrixHeap, count * 128 + extra, (int)self);
         if (block != 0) {
-            self->matrixBlock = block;
-            self->matrixBlockEnd = block + count * 64;
+            self->jointMatrices = block;
+            self->previousJointMatrices = block + count * 64;
             if (self->kind == 1) {
                 block += count * 128;
-                self->matrixExtra = block;
-                self->matrixExtraEnd = block + count * 32;
+                self->staticValueRecords = block;
+                self->valueRecords = block + count * 32;
                 memset(block, 0, count * 64);
             }
             ACT_resetMatrix(self);
@@ -172,19 +163,19 @@ void ACT_matrixInit(void)
 
 void ACT_init(void)
 {
-    ActRecord *self;
+    Actor *self;
     int index;
     int count;
-    unsigned char *byte;
+    signed char *byte;
     void **resource;
-    ActRecord **child;
-    float *quad;
+    Actor **child;
+    float (*quad)[4];
 
     ACT_matrixInit();
     for (index = 0; index < ACTOR_COUNT; index++) {
         self = &actor[index];
         self->flags = 0x20;
-        self->pixel_alpha = 117;
+        self->drawEnv.pixelAlpha = 117;
         self->state84 = 0;
         self->childCount = 0;
         self->inUseId = 0;
@@ -196,36 +187,36 @@ void ACT_init(void)
         self->scale.z = 1.0f;
         self->scale.w = 1.0f;
         self->position.w = 1.0f;
-        self->global_position.w = 1.0f;
+        self->globalPosition.w = 1.0f;
         self->velocity.w = 0;
         self->acceleration.w = 0;
-        self->render_flags = 0;
-        self->render_command = 0;
-        self->pixel_alpha_parts = 0;
-        self->state9d0 = 0;
-        self->sort_offset = 0;
-        self->hair_stop_a = 0;
-        self->hair_stop_b = -1;
-        self->state83 = 0;
-        self->state698 = 0;
-        self->state69c = -1;
-        self->state696 = 0;
-        byte = self->state6e0 + 7;
+        self->drawEnv.flags = 0;
+        self->drawEnv.renderLevel = 0;
+        self->drawEnv.partAlphaCount = 0;
+        self->drawEnv.cameraCullDistance = 0;
+        self->sortOffset = 0;
+        self->transitionFrames = 0;
+        self->holdFrames = -1;
+        self->humanKind = 0;
+        self->attachmentCount = 0;
+        self->attachmentIndex = -1;
+        self->pauseCounter = 0;
+        byte = self->attachmentUsed + 7;
         count = 7;
         do {
             count -= 1;
             *byte = 0;
             byte -= 1;
         } while (count >= 0);
-        quad = self->state970;
+        quad = self->drawEnv.lightColor;
         count = 2;
         do {
             __asm__ __volatile__("sq $0, 0(%0)" : : "r"(quad) : "memory");
             count -= 1;
-            quad += 4;
+            quad += 1;
         } while (count >= 0);
         count = 10;
-        resource = self->resource + 10;
+        resource = ACTOR_RESOURCES(self) + ACTOR_RESOURCE_COUNT - 1;
         do {
             count -= 1;
             *resource = 0;
@@ -239,7 +230,7 @@ void ACT_init(void)
             child -= 1;
         } while (count >= 0);
         UnduParamInit(&self->undulation);
-        self->state676 = 0;
+        self->windowId = 0;
         self->look_eye_control = 0;
         self->look_mode = 1;
         self->look_target = 0;
@@ -248,17 +239,17 @@ void ACT_init(void)
         __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&self->lookState[8]) : "memory");
         self->look_speed = 1.0f;
         self->look_eye_speed = 1.0f;
-        self->shadow_clip_scale = 1.0f;
-        self->shadow_map = 0;
+        self->shadowClipScale = 1.0f;
+        self->mapShadowPartCount = 0;
         EXM_InitMovedHair(self);
         self->statea60 = 0;
     }
     EXM_InitWind();
 }
 
-ActRecord *ACT_create(int slot, int id)
+Actor *ACT_create(int slot, int id)
 {
-    ActRecord *self;
+    Actor *self;
     int index;
 
     if (slot < 0) {
@@ -298,13 +289,13 @@ ActRecord *ACT_create(int slot, int id)
     self->draw = 0;
     if ((id & 0xf000) == 0) {
         self->shadow_kind = 4;
-        self->shadow_size = 16;
+        self->shadowSize = 16;
     } else {
         self->shadow_kind = 1;
-        self->shadow_size = 80;
+        self->shadowSize = 80;
     }
     self->talk_message = 0;
-    self->state9e8 = 0.35f;
+    self->body_radius = 0.35f;
     self->touch_message = 0;
     EXM_InitMovedHair(self);
     self->statea60 = 0;
@@ -316,7 +307,7 @@ ActRecord *ACT_create(int slot, int id)
  * tail-calls it, and it always asks ACT_dispose2 for the full teardown
  * (main:0x00305e64..0x00305e6c).
  */
-void ACT_dispose(ActRecord *self)
+void ACT_dispose(Actor *self)
 {
     ACT_dispose2(self, 0);
 }
@@ -329,10 +320,10 @@ void ACT_dispose(ActRecord *self)
  * (+0x8d4..+0x8f8) when it is nonzero; ACT_dispose always passes zero (full
  * teardown).
  */
-void ACT_dispose2(ActRecord *self, int quick)
+void ACT_dispose2(Actor *self, int quick)
 {
-    ActRecord *parent;
-    int *word;
+    Actor *parent;
+    void **resource;
     int count;
 
     RSRC_inactiveSource(actMatrixHeap, self);
@@ -345,12 +336,12 @@ void ACT_dispose2(ActRecord *self, int quick)
     self->draw = 0;
     self->flags = 0;
     if (!quick) {
-        word = (int *)((unsigned char *)self + ACTOR_LINKED_BLOCK_END_OFFSET);
         count = 10;
+        resource = ACTOR_RESOURCES(self) + ACTOR_RESOURCE_COUNT - 1;
         do {
             count -= 1;
-            *word = 0;
-            word -= 1;
+            *resource = 0;
+            resource -= 1;
         } while (count >= 0);
     }
 }
@@ -358,11 +349,11 @@ void ACT_dispose2(ActRecord *self, int quick)
 /*
  * Steps the wind simulation, refreshes the debug actor printer, then draws
  * every in-use actor (ACT_info_00306090's own "ACT[%02x]"/in-use reading
- * confirms the same test; see the ActRecord comment in act_1.h).
+ * confirms the same test; see the Actor comment in act_1.h).
  */
 void ACT_draw(void)
 {
-    ActRecord *cursor;
+    Actor *cursor;
     int remaining;
 
     remaining = ACTOR_COUNT - 1;
@@ -387,7 +378,7 @@ void ACT_draw(void)
  */
 void ACT_update(void)
 {
-    ActRecord *cursor;
+    Actor *cursor;
     int remaining;
 
     remaining = ACTOR_COUNT - 1;
@@ -412,7 +403,7 @@ void ACT_pauseUpdate(void)
 
     xglStudioFlushActiveCamera();
     for (index = 0; index < ACTOR_COUNT; index++) {
-        actor[index].runtimeFlags |= 0x80000;
+        actor[index].animation.slot.flags |= 0x80000;
     }
     for (index = 0; index < ACTOR_COUNT; index++) {
         if (actor[index].inUseId != 0 && (actor[index].flags & 8) == 0) {
@@ -420,7 +411,7 @@ void ACT_pauseUpdate(void)
         }
     }
     for (index = 0; index < ACTOR_COUNT; index++) {
-        actor[index].runtimeFlags &= ~0x80000;
+        actor[index].animation.slot.flags &= ~0x80000;
     }
 }
 
@@ -437,9 +428,9 @@ static void ACT_info(void)
 {
     ActInfoPad *pad = &PadData;
     ActInfoState *info = &actInfo;
-    ActRecord *self;
+    Actor *self;
     ActModel *model;
-    ActRecord *parent;
+    Actor *parent;
     unsigned int buttons;
     int index;
 
@@ -493,17 +484,17 @@ static void ACT_info(void)
         DB_println("%8.3f", (double)self->scale.y);
         DB_println("%8.3f", (double)self->scale.z);
         DB_println("ANIM");
-        DB_println(actorMotionNumberFormat, self->motionNumber);
-        DB_println(actorFlagsFormat, self->runtimeFlags);
-        DB_println(actorSpeedFormat, (double)(self->speed / (1.0f / 30.0f)));
+        DB_println(actorMotionNumberFormat, self->animation.slot.currentDataId);
+        DB_println(actorFlagsFormat, self->animation.slot.flags);
+        DB_println(actorSpeedFormat, (double)(self->animation.slot.speed / (1.0f / 30.0f)));
         break;
     case 1:
         for (index = 0; index < 11; index++) {
-            if (self->resource[index] != 0) {
-                DB_println(actorResourceFormat, index, self->resource[index]);
+            if (ACTOR_RESOURCES(self)[index] != 0) {
+                DB_println(actorResourceFormat, index, ACTOR_RESOURCES(self)[index]);
             }
         }
-        model = self->resource[0];
+        model = self->modelResource;
         if (model != 0) {
             DB_println("MDL");
             DB_println(modelPartCountFormat, model->numParts);

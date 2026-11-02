@@ -11,24 +11,29 @@
  * `heap_bound` is the byte offset where the item table begins, i.e. the
  * heap's usable limit.
  */
-typedef struct RsrcManager {
-    u8 *heap_origin;
-    u8 *heap_cursor;
-    u32 heap_bound;
-    void *items;
-    u16 item_count;
-    u16 item_capacity;
-    u8 unmodeled_14[12];
-} RsrcManager;
+typedef union RsrcKey {
+    u32 value;
+    char *name;
+} RsrcKey;
 
 typedef struct RsrcItem {
     u32 size;
     u8 kind;
     u8 item_id;
     u16 flags;
-    u8 *data;
-    u32 key : 32;
+    char *data;
+    RsrcKey key;
 } RsrcItem;
+
+typedef struct RsrcManager {
+    char *heap_origin;
+    char *heap_cursor;
+    u32 heap_bound;
+    RsrcItem *items;
+    u16 item_count;
+    u16 item_capacity;
+    u8 unmodeled_14[12];
+} RsrcManager;
 
 extern char EWDefaultResourcePath[];
 extern const char rsrcBlankText[];
@@ -101,8 +106,8 @@ void RSRC_inactiveSource(RsrcManager *manager, int source)
 
     if (count != 0) {
         do {
-            if (item->key == source) {
-                item->key = 0;
+            if (item->key.value == source) {
+                item->key.value = 0;
                 item->flags |= 0x8000;
             }
             index++;
@@ -111,12 +116,12 @@ void RSRC_inactiveSource(RsrcManager *manager, int source)
     }
 }
 
-RsrcManager *RSRC_create(u8 *memory, u32 memory_size, int item_capacity)
+RsrcManager *RSRC_create(void *memory, u32 memory_size, int item_capacity)
 {
     RsrcManager *manager;
 
     memset(memory, 0, memory_size);
-    manager = (RsrcManager *)(memory + memory_size - sizeof(RsrcManager));
+    manager = memory + memory_size - sizeof(RsrcManager);
     manager->heap_cursor = manager->heap_origin = memory;
     manager->heap_bound = memory_size - item_capacity * sizeof(RsrcItem) - sizeof(RsrcManager);
     manager->items = (RsrcItem *)manager - item_capacity;
@@ -161,7 +166,7 @@ int RSRC_info(RsrcManager *manager, int mode)
     while (index < last) {
         marks[0] = 0;
         line[0] = 0;
-        item = (RsrcItem *)manager->items + index;
+        item = manager->items + index;
         index++;
         if (item->flags & 2) {
             strcat(line, selectedSTR[mode][0]);
@@ -178,7 +183,7 @@ int RSRC_info(RsrcManager *manager, int mode)
             strcat(marks, normalSTR[mode][1]);
         }
         if (item->kind == 1 && show_path != 0) {
-            DB_pathGetShortPath(path, (char *)item->key, 22);
+            DB_pathGetShortPath(path, item->key.name, 22);
         }
     }
     infoIndex = -1;
@@ -206,7 +211,7 @@ void RSRC_init(RsrcManager *manager)
     manager->item_count = 0;
 
     if (manager->item_capacity != 0) {
-        item_flags = &((RsrcItem *)manager->items)->flags;
+        item_flags = &manager->items->flags;
         do {
             *item_flags = 0;
             index++;
@@ -236,7 +241,7 @@ void *RSRC_alloc(RsrcManager *manager, u32 size, int key)
                 RSRC_info(manager, 0);
             }
         } else {
-            item = (RsrcItem *)manager->items + manager->item_count++;
+            item = manager->items + manager->item_count++;
         }
         if (RSRC_check(manager, size)) {
             RSRC_info(manager, 0);
@@ -246,7 +251,7 @@ void *RSRC_alloc(RsrcManager *manager, u32 size, int key)
         item->size = aligned;
         manager->heap_cursor += aligned;
     }
-    item->key = key;
+    item->key.value = key;
     item->flags = 0;
     item->kind = 2;
     memset(item->data, 0, item->size);
@@ -262,7 +267,7 @@ void *RSRC_searchFile(RsrcManager *manager, char *name)
 
     if (count != 0) {
         do {
-            if (item->kind == 1 && strncmp((char *)item->key, name, length) == 0) {
+            if (item->kind == 1 && strncmp(item->key.name, name, length) == 0) {
                 return item->data;
             }
             index++;
@@ -281,7 +286,7 @@ void RSRC_dispose(RsrcManager *manager, int mode)
 {
     RsrcItem *item = manager->items;
     u16 count = manager->item_count;
-    u8 *dst = manager->heap_origin;
+    char *dst = manager->heap_origin;
     int index;
     int live;
 
@@ -290,10 +295,10 @@ void RSRC_dispose(RsrcManager *manager, int mode)
             if (dst != item->data) {
                 memcpy(dst, item->data, item->size);
                 if (item->kind == 1) {
-                    u32 offset = item->key - (u32)item->data;
+                    u32 offset = item->key.value - (u32)item->data;
 
                     item->data = dst;
-                    item->key = (u32)dst + offset;
+                    item->key.value = (u32)dst + offset;
                 }
             }
             dst += item->size;
@@ -354,7 +359,7 @@ RsrcItem *RSRC_getItem2(RsrcManager *manager, u32 key)
 
     if (count != 0) {
         do {
-            if (item->key == key)
+            if (item->key.value == key)
                 return item;
             index++;
             item++;
@@ -383,7 +388,7 @@ RsrcItem *RSRC_getItem(RsrcManager *manager, void *data)
 void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name)
 {
     char buffer[1024];
-    u8 *data;
+    char *data;
     void *found;
     int fd;
     int size;
@@ -418,12 +423,12 @@ void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name)
     manager->heap_cursor += blocks * 16;
     name_length = strlen(file_name);
     strcpy(manager->heap_cursor, file_name);
-    item = (RsrcItem *)manager->items + manager->item_count;
+    item = manager->items + manager->item_count;
     name_blocks = (name_length + 16) / 16;
     item->kind = 1;
     item->data = data;
     item->flags = 0;
-    item->key = (u32)manager->heap_cursor;
+    item->key.name = manager->heap_cursor;
     item->size = (blocks + name_blocks) * 16;
     manager->heap_cursor += name_blocks * 16;
     manager->item_count++;

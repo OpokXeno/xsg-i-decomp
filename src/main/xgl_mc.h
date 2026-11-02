@@ -4,15 +4,11 @@
 
 #ifndef SRC_MAIN_XGL_MC_H
 #define SRC_MAIN_XGL_MC_H
+#include "main/xgl_mc.h"
 
 int xglMcGetState(void);
 void xglMcReset(void);
 
-void xglMcSetMapName(const unsigned char *primary_euc_name,
-                     const unsigned char *secondary_euc_name);
-
-void xglMcWriteMapName(char *buffer, int slot);
-void xglMcInitial(void);
 extern void sceMcInit(void);
 
 #endif /* SRC_MAIN_XGL_MC_H */

@@ -1,7 +1,6 @@
 #include "common.h"
 #include "main/xgl_thread.h"
-
-extern void xglRenderClearFrame(void);
+#include "main/xgl_render.h"
 
 void LOG(const char *format, ...)
 {

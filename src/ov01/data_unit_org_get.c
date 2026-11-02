@@ -5,6 +5,7 @@
 #include "data_unit_org_get.h"
 #include "ov01/calc.h"
 #include "main/xgl_pad.h"
+#include "main/party.h"
 
 extern const char D_00A457B0[32];
 
@@ -816,20 +817,11 @@ void dataLeaderCidReset(void) {
     leaderCid = 0;
 }
 
-extern unsigned char *PartyDataGet(void);
 extern const char D_00A45AB0[];
-
-/* src/main/party.c owns PartyDataPrefix; this TU's own overlay reaches
- * only the leader battle id PartyLeaderSet/PartyLeaderCheck evidence at
- * +0x2C. */
-typedef struct PartyLeaderView {
-    unsigned char unmodeled_00[0x2C];
-    unsigned short leader_battle_id; /* +0x2C */
-} PartyLeaderView;
 
 void dataLeaderReload(void)
 {
-    unsigned short leaderBattleId = ((PartyLeaderView *)PartyDataGet())->leader_battle_id;
+    unsigned short leaderBattleId = PartyDataGet()->leader_battle_id;
 
     if (leaderBattleId != leaderCid) {
         printf(D_00A45AB0);

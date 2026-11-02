@@ -1,72 +1,7 @@
 #include "common.h"
-#include "e_message.h"
-
-/*
- * The message object eMessageModeChange, eMessageDraw and eMessageMain
- * receive.  Callers build it on their stack and it extends well past the
- * mode byte (eMessageMain also reads +0x00 and +0x18, TextTest fills +0x04
- * to +0x1C); only the mode byte eMessageModeChange writes is modelled.
- * eMessageMain dispatches on it with lbu, so it is unsigned.
- */
-typedef struct EMessageParam {
-    unsigned char flags;
-    unsigned char mode;
-    unsigned char visible;
-    unsigned char wrap_width_half;
-    short x;
-    short y;
-    int draw_parameter;
-    short text_x_offset;
-    short text_y_offset;
-    unsigned char color[4];
-    unsigned short text_timer;
-    unsigned short frame;
-    char *text;
-    unsigned char page_available;
-    unsigned char page_index;
-    unsigned char page_count;
-    ECursol cursor;
-} EMessageParam;
-
-typedef struct EMessageTextParam {
-    unsigned char unmodeled_00[0x18];
-    char *text;
-    unsigned char page_available;
-    unsigned char page_index;
-    unsigned char page_count;
-} EMessageTextParam;
-
-typedef struct EMessagePageState {
-    unsigned char flags;
-    unsigned char mode;
-    unsigned char unmodeled_02[26];
-    unsigned char page_available;
-    unsigned char page_index;
-    unsigned char page_count;
-} EMessagePageState;
-
-struct EMessageSetParam {
-    unsigned char flags;
-    unsigned char mode;
-    unsigned char visible;
-    unsigned char wrap_width_half;
-    short x;
-    short y;
-    int draw_parameter;
-    short text_x_offset;
-    short text_y_offset;
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-    unsigned short text_timer;
-    unsigned short frame;
-    char *text;
-    unsigned char page_available;
-    unsigned char page_index;
-    unsigned char page_count;
-    ECursol cursor;
-};
+#include "main/e_message.h"
+#include "main/end_print.h"
+#include "main/xgl_font.h"
 
 typedef struct EMessageSprite {
     short x, y;
@@ -81,7 +16,7 @@ typedef struct EMessageSprite {
 struct EMessageColor { unsigned char channel[4]; };
 
 union EMessageWrapSlot {
-    char *position;
+    const char *position;
     int line;
 };
 
@@ -97,19 +32,11 @@ enum EMessageFontWidthMode {
     EMESSAGE_FONT_WIDTH_PROPORTIONAL = 3
 };
 
-int eMessageMain(EMessageParam *message);
-char *eMessageNextWaitKeySearch(char *text);
-void eMessageCat(char *src);
+const char *eMessageNextWaitKeySearch(const char *text);
 
-char *eMessageNextGyou(const char *text);
+const char *eMessageNextGyou(const char *text);
 
-int xglFontGetStringWidth(const char *text);
-void xglFontPrint(int x, int y, int draw_parameter, const char *text);
 void endSpriteSet(void *sprite, int attributes);
-void endPrintExtFunc(int draw_parameter, int kind, void *object);
-void eCursolModeChange(ECursol *cursor, signed char mode);
-int xglFontGetSPcodeSize(int code, const unsigned char *text);
-
 /* Number of message sprites currently allocated by the print routines. */
 static int msg_spr_count = 0;
 
@@ -154,7 +81,7 @@ void eMessageDrawType00(void)
 {
 }
 
-int eMessageHalfSpaseCheck(unsigned char *text)
+int eMessageHalfSpaseCheck(const unsigned char *text)
 {
     unsigned char character = *text++;
     int half_spaces = 0;
@@ -166,7 +93,7 @@ int eMessageHalfSpaseCheck(unsigned char *text)
     return half_spaces;
 }
 
-char *eMessageNextGyou(const char *text)
+const char *eMessageNextGyou(const char *text)
 {
     int character = (unsigned char)*text;
     int half_spaces;
@@ -174,7 +101,7 @@ char *eMessageNextGyou(const char *text)
     while (*text != 0 && *text != '\n') {
         if ((unsigned int)(character - 1) < 25) {
             text += xglFontGetSPcodeSize((unsigned char)*text,
-                                        (unsigned char *)text) + 1;
+                                        (const unsigned char *)text) + 1;
         } else {
             switch ((signed char)character) {
             case 30:
@@ -185,7 +112,7 @@ char *eMessageNextGyou(const char *text)
                     (character >= 32 && character < 127)) {
                     text++;
                 } else {
-                    half_spaces = eMessageHalfSpaseCheck((unsigned char *)text);
+                    half_spaces = eMessageHalfSpaseCheck((const unsigned char *)text);
                     text = half_spaces ? text + half_spaces : text + 2;
                 }
                 break;
@@ -193,13 +120,13 @@ char *eMessageNextGyou(const char *text)
         }
         character = *text == 0 ? 0 : (*text & 255);
     }
-    return (char *)text;
+    return text;
 }
 
-int eMessageNextGyouMaxGet(char *text)
+int eMessageNextGyouMaxGet(const char *text)
 {
     int line_count = 0;
-    char *cursor = text;
+    const char *cursor = text;
 
     for (;;) {
         char character;
@@ -220,14 +147,14 @@ int eMessageNextGyouMaxGet(char *text)
     return line_count;
 }
 
-char *eMessageNextWaitKeySearch(char *text)
+const char *eMessageNextWaitKeySearch(const char *text)
 {
     signed char sentinel = *text;
     int character = sentinel == 0 ? 0 : (*text & 255);
     int half_spaces;
 
     while (sentinel != 0) {
-        char *command = text;
+        const char *command = text;
 
         if (sentinel == 31) {
             text++;
@@ -236,7 +163,7 @@ char *eMessageNextWaitKeySearch(char *text)
         if (eMessageIsFontCommand(character)) {
             unsigned char command_byte = (unsigned char)*command;
             text = command + xglFontGetSPcodeSize(command_byte,
-                                                  (unsigned char *)command) + 1;
+                                                  (const unsigned char *)command) + 1;
         } else {
             switch ((signed char)character) {
             case 30:
@@ -246,7 +173,7 @@ char *eMessageNextWaitKeySearch(char *text)
                 if (character >= 32 && character < 127) {
                     text = command + 1;
                 } else {
-                    half_spaces = eMessageHalfSpaseCheck((unsigned char *)command);
+                    half_spaces = eMessageHalfSpaseCheck((const unsigned char *)command);
                     text = half_spaces ? command + half_spaces : command + 2;
                 }
                 break;
@@ -282,9 +209,9 @@ void eMessageDrawType01(EMessageParam *message)
     int y_offset;
     int waiting;
     short remaining;
-    char *text;
-    char *scan;
-    char *word_start;
+    const char *text;
+    const char *scan;
+    const char *word_start;
     int line_width;
     union EMessageWrapSlot *wrap_cursor;
     int i;
@@ -292,10 +219,10 @@ void eMessageDrawType01(EMessageParam *message)
     int sentinel;
     int size;
 
-    initial_color.channel[0] = message->color[0];
-    initial_color.channel[1] = message->color[1];
-    initial_color.channel[2] = message->color[2];
-    initial_color.channel[3] = message->color[3];
+    initial_color.channel[0] = message->color_r;
+    initial_color.channel[1] = message->color_g;
+    initial_color.channel[2] = message->color_b;
+    initial_color.channel[3] = message->color_a;
     max_width = message->wrap_width_half * 2;
     width_high = max_width / 256;
     width_low = max_width % 256;
@@ -315,9 +242,9 @@ void eMessageDrawType01(EMessageParam *message)
         *output++ = otb[23];
         *output++ = otb[24];
         *output++ = otb[1];
-        *output++ = eMessageScaleChannel(otb[2], message->color[0]);
-        *output++ = eMessageScaleChannel(otb[3], message->color[1]);
-        *output++ = eMessageScaleChannel(otb[4], message->color[2]);
+        *output++ = eMessageScaleChannel(otb[2], message->color_r);
+        *output++ = eMessageScaleChannel(otb[3], message->color_g);
+        *output++ = eMessageScaleChannel(otb[4], message->color_b);
         *output++ = otb[5];
         *output++ = otb[6];
         *output++ = otb[7];
@@ -329,7 +256,7 @@ void eMessageDrawType01(EMessageParam *message)
         *output++ = otb[13];
         *output++ = otb[14];
         *output++ = otb[15];
-        *output++ = eMessageScaleChannel(otb[16], message->color[3]);
+        *output++ = eMessageScaleChannel(otb[16], message->color_a);
         *output++ = otb[17];
         *output++ = otb[18];
         *output++ = otb[19];
@@ -360,7 +287,7 @@ void eMessageDrawType01(EMessageParam *message)
                 line_width = 0;
             }
             scan += xglFontGetSPcodeSize((unsigned char)*scan,
-                                       (unsigned char *)scan) + 1;
+                                       (const unsigned char *)scan) + 1;
         } else if ((signed char)code == 30) {
             scan += 2;
         } else if ((signed char)code == 31) {
@@ -368,7 +295,7 @@ void eMessageDrawType01(EMessageParam *message)
         } else if ((signed char)code == 32) {
             line_width += 4;
             scan++;
-            if ((int)max_width < line_width) {
+            if (max_width < line_width) {
                 (wrap_cursor++)->position = word_start;
                 scan = word_start;
                 line_width = 0;
@@ -412,16 +339,16 @@ void eMessageDrawType01(EMessageParam *message)
             if (eMessageIsFontCommand(code)) {
                 int special_code = (signed char)code;
                 size = xglFontGetSPcodeSize((unsigned char)*text,
-                                          (unsigned char *)text) + 1;
+                                          (const unsigned char *)text) + 1;
                 switch (special_code) {
                 case 12:
                     *output++ = *text++;
                     output[0] = eMessageScaleChannel((unsigned char)*text++,
-                                                    message->color[0]);
+                                                    message->color_r);
                     output[1] = eMessageScaleChannel((unsigned char)*text++,
-                                                    message->color[1]);
+                                                    message->color_g);
                     output[2] = eMessageScaleChannel((unsigned char)*text++,
-                                                    message->color[2]);
+                                                    message->color_b);
                     color.channel[0] = *output++;
                     color.channel[1] = *output++;
                     color.channel[2] = *output++;
@@ -431,7 +358,7 @@ void eMessageDrawType01(EMessageParam *message)
                     *output++ = *text++;
                     *output++ = *text++;
                     color.channel[3] = *output++ =
-                        eMessageScaleChannel((unsigned char)*text++, message->color[3]);
+                        eMessageScaleChannel((unsigned char)*text++, message->color_a);
                     break;
                 case 10:
                     if (line_timing) {
@@ -568,15 +495,20 @@ void eMessageDrawType01(EMessageParam *message)
             message->cursor.y = message->y + (message->text_y_offset + y_offset) + 6;
             message->cursor.work = message->draw_parameter;
             eCursolModeChange(&message->cursor, 32);
-            eCursolMain((ECursolMainData *)(void *)(&message->cursor));
+            eCursolMain(&message->cursor);
         } else {
             message->cursor.state = 0;
         }
     }
 }
 
-/* Legacy procedure ABI hypothesis: callers discard the function result. */
-int eMessageMain(EMessageParam *message)
+/* Every caller compiles as the original only with a void declaration (a
+   discarded int result changes their register allocation around the call),
+   while the original body does not tail-call eMessageDrawType01, as an int
+   definition falling off its end would compile. The address-taken parameter
+   reproduces that: GCC 2.96 makes no sibling call in a function using
+   ADDRESSOF. */
+void eMessageMain(EMessageParam *message)
 {
     switch (message->mode) {
     case 0:
@@ -644,7 +576,9 @@ int eMessageMain(EMessageParam *message)
         break;
     }
     if (message->text != 0 && message->visible != 0) {
-        eMessageDrawType01(message);
+        EMessageParam **drawn = &message;
+
+        eMessageDrawType01(*drawn);
     }
 }
 
@@ -653,12 +587,12 @@ void eMessageModeChange(EMessageParam *message, unsigned char mode)
     message->mode = mode;
 }
 
-void eMessageSet(struct EMessageSetParam *message, char *text)
+void eMessageSet(EMessageParam *message, const char *text)
 {
     message->x = 0;
     message->y = 0;
     message->draw_parameter = 0;
-    message->alpha = message->blue = message->green = message->red = 128;
+    message->color_a = message->color_b = message->color_g = message->color_r = 128;
     message->text = text;
     message->flags = 1;
     message->wrap_width_half = 240;
@@ -673,7 +607,7 @@ void eMessageSet(struct EMessageSetParam *message, char *text)
     eCursolSet(&message->cursor, 3);
 }
 
-void eMessageTextChange(EMessageTextParam *message, char *text)
+void eMessageTextChange(EMessageParam *message, const char *text)
 {
     message->text = text;
     if (message->page_available != 0) {
@@ -685,7 +619,7 @@ void eMessageTextChange(EMessageTextParam *message, char *text)
     }
 }
 
-int eMessageNextPage(EMessagePageState *message, int reset_page)
+int eMessageNextPage(EMessageParam *message, int reset_page)
 {
     int next_page;
     unsigned char wrapped_page;
@@ -719,13 +653,13 @@ void eMessageDraw(EMessageParam *message)
     eMessageMain(message);
 }
 
-void eMessageCpy(char *dst, char *src)
+void eMessageCpy(char *dst, const char *src)
 {
     MessageCpyEnd = dst;
     eMessageCat(src);
 }
 
-void eMessageCat(char *src)
+void eMessageCat(const char *src)
 {
     char *dst = MessageCpyEnd;
     int count;
@@ -738,7 +672,7 @@ void eMessageCat(char *src)
             if ((unsigned int)(encoded_byte - 1) < 25) {
                 char command_byte = *src;
                 count = xglFontGetSPcodeSize((unsigned char)command_byte,
-                                           (unsigned char *)src) + 1;
+                                           (const unsigned char *)src) + 1;
                 for (copied = 0; copied < count; copied++) {
                     *dst++ = *src++;
                 }
@@ -750,10 +684,10 @@ void eMessageCat(char *src)
                     *dst++ = *src++;
                 } else if (control == 31 ||
                            (unsigned char)(*src - 32) < 95) {
-                    *dst++ = (unsigned char)*src;
+                    *dst++ = *src;
                     src++;
                 } else {
-                    count = eMessageHalfSpaseCheck((unsigned char *)src);
+                    count = eMessageHalfSpaseCheck((const unsigned char *)src);
                     if (count != 0) {
                         for (copied = 0; copied < count; copied++) {
                             *dst++ = *src++;

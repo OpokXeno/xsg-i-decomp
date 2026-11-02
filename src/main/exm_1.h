@@ -4,81 +4,28 @@
 #define SRC_MAIN_EXM_1_H
 
 #include "main/xgl_2.h"
+#include "main/jnt.h"
+#include "main/act_1.h"
 #include "shared.h"
+#include "main/matrix_print.h"
 
 /*
- * The engine's actor record, defined here exactly as src/main/near_dir.h
- * (main/tu257), src/main/set_motion.h (main/tu193) and src/main/chr.h
- * (main/tu248) define its head; the full field-by-field evidence for
- * +0x00..+0x70 is in near_dir.h's copy and in
- * .work/analysis/layout-actor-family.md.
- *
- * EXM_InitMovedHair/EXM_OnMovedHair/EXM_OffMovedHair/EXM_SetDelayMovedHair
- * (this unit, main/tu267) extend it with the fields they read or write on
- * one entry of the 64-entry `actor` array (main 0x0043c1e0, 0xa70-byte
- * stride):
+ * The actor record is Actor (main/act_1.h). EXM_InitMovedHair,
+ * EXM_OnMovedHair, EXM_OffMovedHair and EXM_SetDelayMovedHair (this unit,
+ * main/tu267) use its moved-hair fields on one entry of the 64-entry `actor`
+ * array (main 0x0043c1e0, 0xa70-byte stride):
  *   +0xa40 moved_hair_mode: EXM_OnMovedHair sets 2, EXM_OffMovedHair sets 0,
  *          EXM_InitMovedHair defaults to 2; JNT_computeMatrix reads it with
  *          lbu (0x00314b70).
  *   +0xa44 moved_hair_delay: EXM_SetDelayMovedHair overwrites it from $f12,
  *          EXM_InitMovedHair defaults it to 0.5f; JNT_computeMatrix reads it
  *          as a float (0x00314c24).
- *   +0xa50 moved_hair_sway[4]: a four-float state JNT_computeMatrix filters
+ *   +0xa50 moved_hair_sway: a four-float state JNT_computeMatrix filters
  *          every frame (0x00314bb0..0x00314c88, lwc1/swc1); EXM_InitMovedHair
  *          clears all four elements.
+ *   +0xa60 previous_joint_matrices: the union member EXM_CalcExMotion reads as
+ *          the owner's previous motion matrices (statea60 in ACT_init).
  */
-typedef struct Actor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    unsigned char unmodeled_070[0x4dc - 0x70];
-    float ground_height;
-    unsigned char unmodeled_4e0[0xa40 - 0x4e0];
-    unsigned char moved_hair_mode;  /* +0xa40 */
-    unsigned char unmodeled_a41[3];
-    float moved_hair_delay;         /* +0xa44 */
-    unsigned char unmodeled_a48[8];
-    float moved_hair_sway[4];       /* +0xa50 */
-    Matrix *previous_joint_matrices; /* +0xa60 */
-} Actor;
-
-typedef struct ExMotionJointState {
-    unsigned char unmodeled_00[16];
-    Vector4 translation;
-    unsigned char unmodeled_20[16];
-    Vector4 rotation;
-} ExMotionJointState;
-
-typedef struct ExMotionJointWork {
-    unsigned char unmodeled_000[0x28];
-    struct JntHairIdSource *hair_id_source;
-    int current_index;
-    unsigned char unmodeled_030[8];
-    unsigned int flags;
-    unsigned char unmodeled_03c[0xa0 - 0x3c];
-    ExMotionJointState channels[16];
-    unsigned char unmodeled_4a0[0x20];
-    unsigned short matrix_index;
-    short saved_index;
-    unsigned char unmodeled_4c4[0x4d0 - 0x4c4];
-    Matrix saved_matrix; /* +0x4d0 */
-    unsigned char unmodeled_510[0x720 - 0x510];
-    Matrix root_matrix; /* +0x720 */
-    unsigned char unmodeled_760[0x7a0 - 0x760];
-    struct JntMatrix *matrix_buffer;
-    unsigned char unmodeled_7a4[0x80c - 0x7a4];
-    signed char *hair_joint_name;
-    unsigned int animation_flags;
-    unsigned char unmodeled_814[0x820 - 0x814];
-    struct Actor *owner;
-} ExMotionJointWork;
 
 typedef struct ExHairTypeSelection {
     int kind;
@@ -98,10 +45,6 @@ typedef struct ExCollisionRequest {
     unsigned int flags;
     float *correction;
 } ExCollisionRequest;
-
-typedef struct JntMatrix {
-    Matrix4 transform;
-} JntMatrix;
 
 typedef struct ExMotionChannel {
     unsigned short type;
@@ -179,15 +122,7 @@ extern float vel_0[4];
 extern ExHairParameters hairpara[];
 extern float JR_coatAdjust[];
 
-void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
-float xglSin(float angle);
-float xglCos(float angle);
-void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 void xglMatrixMul(Matrix *destination, Matrix *first, Matrix *second);
-void xglVectorInner(float *result, const Vector4 *first, const Vector4 *second);
-void MATRIX_rotX4s(Matrix *matrix, float angle);
-void MATRIX_rotY4s(Matrix *matrix, float angle);
-void MATRIX_rotZ4s(Matrix *matrix, float angle);
 void EXM_ResetWave(void);
 void UnduParamInit(void *query);
 float asinf(float value);

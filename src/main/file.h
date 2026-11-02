@@ -6,6 +6,7 @@
 #define MAIN_GAME_167_FILE_H
 
 #include "shared.h"
+#include "main/xgl_task.h"
 
 typedef struct SaveDataHeader {
     u64 version;
@@ -72,8 +73,8 @@ typedef struct FileWorkBlock {
     unsigned char unmodeled_49[0x80 - 0x49];
 } FileWorkBlock;
 
-extern byte *FileObjectData;
-extern byte *FileJpegDec;
+extern struct FileObjectEntryView *FileObjectData;
+extern struct FileJpegDecodeSlotView *FileJpegDec;
 extern FileWorkBlock *FileWork;
 
 void FileVersionCheck(SaveDataHeader *save_data);
@@ -81,7 +82,5 @@ void FileObjectDataClear(void);
 void FileCheckSumGet(FileChecksumData *source, long long *checksum);
 int FileCheckSumCheck(FileChecksumData *data);
 void FileSinkiSaveDataPush(void);
-
-int xglTaskWaitRemove(XglTaskPrefix *task);
 
 #endif /* MAIN_GAME_167_FILE_H */

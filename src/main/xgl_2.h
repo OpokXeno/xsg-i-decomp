@@ -6,17 +6,12 @@
 #define SRC_MAIN_XGL_2_H
 
 #include "shared.h"
+#include "main/xgl_2.h"
 
 typedef unsigned int XglQuadword __attribute__((mode(TI)));
 
-typedef union Matrix {
-    float elements[16];
-    XglQuadword quadwords[4];
-} Matrix;
-
 extern unsigned long long iRandSeed;
 
-extern float xglAtan2(float x, float y);
 void xglMatrix2Quaternion(float quaternion[4], const Matrix *matrix);
 
 void xglVectorClamp(Vector4 *destination, const Vector4 *source,
@@ -25,23 +20,15 @@ void xglVectorClamp(Vector4 *destination, const Vector4 *source,
 void xglVectorClampXYZ(Vector4 *destination, const Vector4 *source,
                        float minimum, float maximum);
 
-void xglMatrixScale(Matrix4 destination, const Matrix4 source,
-                    const float scale[4]);
-
 void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
                     const float translation[4]);
 
 void xglRandSeedInit(void);
-unsigned int xglLRand(void);
-
 void xglVectorDiv(Vector4 *destination, const Vector4 *numerator,
                   const Vector4 *divisor);
 
 void xglVectorDivXYZ(Vector4 *destination, const Vector4 *numerator,
                      const Vector4 *divisor);
-
-void xglVectorMulAdd(Vector4 *destination, const Vector4 *left,
-                     const Vector4 *right, const Vector4 *addend);
 
 void xglVectorMulAddXYZ(Vector4 *destination, const Vector4 *left,
                         const Vector4 *right, const Vector4 *addend);
@@ -65,14 +52,8 @@ void xglVectorDivSubXYZ(Vector4 *destination, const Vector4 *numerator,
                         const Vector4 *divisor, const Vector4 *subtrahend);
 
 extern void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right);
-void xglVectorScale(Vector4 *destination, const Vector4 *source, float scale);
-void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
-
 void xglVectorScaleAdd(float scale, Vector4 *destination,
                        const Vector4 *source, const Vector4 *other);
-
-void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
-                          const Vector4 *source, const Vector4 *other);
 
 void xglVectorScaleSub(float scale, Vector4 *destination,
                        const Vector4 *source, const Vector4 *other);
@@ -80,17 +61,10 @@ void xglVectorScaleSub(float scale, Vector4 *destination,
 void xglVectorScaleSubXYZ(float scale, Vector4 *destination,
                           const Vector4 *source, const Vector4 *other);
 
-void xglVectorInter(float fraction, Vector4 *destination,
-                    const Vector4 *start, const Vector4 *end);
-
 void xglVectorInterXYZ(float fraction, Vector4 *destination,
                        const Vector4 *start, const Vector4 *end);
 
-void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
 float xglVectorInner4(const Vector4 *left, const Vector4 *right);
-
-void xglVectorOuter(Vector4 *destination, const Vector4 *left,
-                    const Vector4 *right);
 
 /*
  * xglMatrixStack* (main/tu100, from the accepted src/main/xgl_2/stack.s):
@@ -121,23 +95,8 @@ extern void Vu0CallMatrixStackPush(void);
 extern void Vu0CallMatrixStackPop(void);
 extern void Vu0CallMatrixStackMulVector(void);
 extern void Vu0CallMatrixStackRTPS(void);
-void xglMatrixStackMul(const Matrix4 matrix);
-void xglMatrixStackReverse(void);
-void xglMatrixStackInverse(void);
-void xglMatrixStackScale(const float scale[4]);
-void xglMatrixStackTrans(const float translation[4]);
 void xglMatrixStackRotV(const float axis[4], float angle);
-void xglMatrixStackRotZ(float angle);
-
-void xglMatrixStackFrustum(float left, float right, float bottom, float top,
-                           float nearPlane, float farPlane);
-
-void xglMatrixStackLoad(float matrix[4][4]);
 void xglMatrixStackPushUnit(void);
-void xglMatrixStackPush(void);
-void xglMatrixStackPop(int count);
-void xglMatrixStackMulVector(Vector4 *out, const Vector4 *vector);
-
 void xglMatrixStackRTPS(Vector4 *out, const Vector4 *point,
                         const Vector4 *scale, const Vector4 *offset);
 

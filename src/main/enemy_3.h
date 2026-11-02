@@ -33,7 +33,7 @@ typedef struct EnemyReadyWork {
     unsigned char unmodeled_37e4[0x70];
     float saved_actor_speed;
     unsigned char unmodeled_3858[0x48];
-    EnemyActionEffect *effect;
+    SchedulerState *effect;
     unsigned char unmodeled_38a4[0x0c];
 } EnemyReadyWork;
 

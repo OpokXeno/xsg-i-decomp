@@ -1,15 +1,9 @@
 #include "common.h"
+#include "main/exm_1.h"
 #include "exm_1.h"
 
 #define EXM_SET_JOINT_POSITION(joint, pos)     do {         (joint)->elements[12] = (pos)[0];         (joint)->elements[13] = (pos)[1];         (joint)->elements[14] = (pos)[2];     } while (0)
 
-/* The body accesses only these two fields of the larger actor record. */
-typedef struct HairSelectionWork {
-    unsigned char unmodeled_000[0x4c2];
-    s16 hair_type_code;
-    unsigned char unmodeled_4c4[0x80c - 0x4c4];
-    signed char *hair_joint_name;
-} HairSelectionWork;
 
 typedef float ExMatrixRow[4];
 
@@ -217,12 +211,12 @@ static inline float *ExMatrixData(Matrix *matrix)
 
 static inline ExMatrixRow *ExMatrixRows(Matrix *matrix)
 {
-    return (ExMatrixRow *)(void *)matrix->elements;
+    return matrix->rows;
 }
 
 static inline const ExMatrixRow *ExMatrixConstRows(const Matrix *matrix)
 {
-    return (const ExMatrixRow *)(const void *)matrix->elements;
+    return matrix->rows;
 }
 
 static inline Matrix *CopyExMatrixObject(Matrix *destination, const Matrix *source)
@@ -268,10 +262,10 @@ static inline void OrientExMotionJoint(ExMotionJointWork *work, int index,
     yawSin = -transformed->y / horizontalLength;
     yawCos = transformed->x / horizontalLength;
     pitchAngle = -atan2f(transformed->z / length, horizontalLength / length);
-    MATRIX_rotY4s(&ExMotionMatrices(work)[work->saved_index + index], pitchAngle);
+    MATRIX_rotY4s(ExMotionMatrices(work)[work->saved_index + index].rows, pitchAngle);
     yawAngle = -atan2f(yawSin, yawCos);
     matrixIndex = work->saved_index + index;
-    MATRIX_rotZ4s(&ExMotionMatrices(work)[matrixIndex], yawAngle);
+    MATRIX_rotZ4s(ExMotionMatrices(work)[matrixIndex].rows, yawAngle);
 }
 
 static signed char GetLastWord(signed char *text)
@@ -1026,7 +1020,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
     }
 }
 
-static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *work)
+static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *work)
 {
     u32 result;
     signed char *jointName;
@@ -1040,6 +1034,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *w
         switch (kind) {
         case 'P':
             {
+                s16 hairTypeCode = work->hair_type_code;
                 float unitSize = 1.0f;
                 float sizeValue = 0.8f;
                 float footRadius = 0.05f;
@@ -1048,7 +1043,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *w
                 skirtColliSize = sizeValue;
                 skirtColliSizeS = (skirtColliSizeB = unitSize);
                 skirtColliFootRad = footRadius;
-                switch (work->hair_type_code) {
+                switch (hairTypeCode) {
                 case 'J':
                     *flags = 0x4400;
                     result = 16;
@@ -1075,6 +1070,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *w
             break;
         case 'S':
             {
+                s16 hairTypeCode = work->hair_type_code;
                 float unitSize = 1.0f;
 
                 *palette = shelleycol;
@@ -1082,7 +1078,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *w
                 skirtColliSizeB = unitSize;
                 skirtColliSizeS = unitSize;
                 skirtColliFootRad = 0.05f;
-                switch (work->hair_type_code) {
+                switch (hairTypeCode) {
                 case 'J':
                     *flags = 0x4400;
                     result = 16;
@@ -1110,13 +1106,14 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *w
             break;
         case 'B':
             {
+                s16 hairTypeCode = work->hair_type_code;
                 float unitSize = 1.0f;
 
                 skirtColliFootRad = 0.15f;
                 skirtColliSize = unitSize;
                 skirtColliSizeB = unitSize;
                 skirtColliSizeS = unitSize;
-                switch (work->hair_type_code) {
+                switch (hairTypeCode) {
                 case 'q':
                     *flags = 0x5500;
                     result = 16;
@@ -1154,32 +1151,36 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, HairSelectionWork *w
             }
             break;
         case 'K':
-            *palette = kosmoscol;
-            switch (work->hair_type_code) {
-            case 'J':
-            case 'M':
-            case 'P':
-            case 'S':
-                result = 12;
-                break;
-            case 'V':
-                *flags |= 1;
-                result = 3;
-                break;
-            case 0x5c:
-            case '_':
-                result = 5;
-                break;
-            case 'b':
-            case 'g':
-                *flags |= 2;
-                result = 4;
-                break;
-            case 'l':
-                result = 8;
-                break;
-            default:
-                break;
+            {
+                s16 hairTypeCode = work->hair_type_code;
+
+                *palette = kosmoscol;
+                switch (hairTypeCode) {
+                case 'J':
+                case 'M':
+                case 'P':
+                case 'S':
+                    result = 12;
+                    break;
+                case 'V':
+                    *flags |= 1;
+                    result = 3;
+                    break;
+                case 0x5c:
+                case '_':
+                    result = 5;
+                    break;
+                case 'b':
+                case 'g':
+                    *flags |= 2;
+                    result = 4;
+                    break;
+                case 'l':
+                    result = 8;
+                    break;
+                default:
+                    break;
+                }
             }
             break;
         default:
@@ -1212,9 +1213,9 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
             index++;
             continue;
         }
-        __builtin_memcpy(startMatrix.transform, work->matrix_buffer[primitive->joint].transform,
-                         sizeof(startMatrix.transform));
-        MATRIX_translate4s(startMatrix.transform, primitive->start.x,
+        __builtin_memcpy(startMatrix.elements, work->matrix_buffer[primitive->joint].elements,
+                         sizeof(startMatrix.elements));
+        MATRIX_translate4s(startMatrix.elements, primitive->start.x,
                            primitive->start.y, primitive->start.z);
         switch (primitive->kind) {
         case 5:
@@ -1240,9 +1241,9 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
             if (request->flags & 1) {
                 break;
             }
-            difference.x = position[0] - startMatrix.transform[3][0];
-            difference.y = position[1] - startMatrix.transform[3][1];
-            difference.z = position[2] - startMatrix.transform[3][2];
+            difference.x = position[0] - startMatrix.elements[3][0];
+            difference.y = position[1] - startMatrix.elements[3][1];
+            difference.z = position[2] - startMatrix.elements[3][2];
             separationMeasure = difference.x * difference.x +
                               difference.y * difference.y +
                               difference.z * difference.z;
@@ -1286,9 +1287,9 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
             if (request->flags & 1) {
                 float radiusSquared;
                 float separationMeasure;
-                difference.x = position[0] - startMatrix.transform[3][0];
-                difference.y = position[1] - startMatrix.transform[3][1];
-                difference.z = position[2] - startMatrix.transform[3][2];
+                difference.x = position[0] - startMatrix.elements[3][0];
+                difference.y = position[1] - startMatrix.elements[3][1];
+                difference.z = position[2] - startMatrix.elements[3][2];
                 separationMeasure = difference.x * difference.x +
                                   difference.y * difference.y +
                                   difference.z * difference.z;
@@ -1323,15 +1324,15 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
                 float originX;
                 float originY;
                 float originZ;
-                __builtin_memcpy(endMatrix.transform, startMatrix.transform, sizeof(endMatrix.transform));
-                MATRIX_translate4s(endMatrix.transform, primitive->end.x,
+                __builtin_memcpy(endMatrix.elements, startMatrix.elements, sizeof(endMatrix.elements));
+                MATRIX_translate4s(endMatrix.elements, primitive->end.x,
                                    primitive->end.y, primitive->end.z);
-                originX = startMatrix.transform[3][0];
-                originY = startMatrix.transform[3][1];
-                axis.x = endMatrix.transform[3][0] - originX;
-                axis.y = endMatrix.transform[3][1] - originY;
-                originZ = startMatrix.transform[3][2];
-                axis.z = endMatrix.transform[3][2] - originZ;
+                originX = startMatrix.elements[3][0];
+                originY = startMatrix.elements[3][1];
+                axis.x = endMatrix.elements[3][0] - originX;
+                axis.y = endMatrix.elements[3][1] - originY;
+                originZ = startMatrix.elements[3][2];
+                axis.z = endMatrix.elements[3][2] - originZ;
                 axisOriginDot = axis.x * originX;
                 axisOriginDot += axis.y * originY;
                 axisOriginDot += axis.z * originZ;
@@ -1470,63 +1471,63 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
             JntMatrix *joints;
             float (*originRow)[4];
             if (reverseSide) {
-                __builtin_memcpy(basis.transform, work->matrix_buffer[14].transform, sizeof(basis.transform));
-                basis.transform[3][0] = basis.transform[3][1] = basis.transform[3][2] = 0.0f;
-                MATRIX_translate4s(basis.transform, 0.0f, 0.0f, 1.0f);
-                orientationCos = basis.transform[3][0];
-                orientationSin = -basis.transform[3][2];
+                __builtin_memcpy(basis.elements, work->matrix_buffer[14].elements, sizeof(basis.elements));
+                basis.elements[3][0] = basis.elements[3][1] = basis.elements[3][2] = 0.0f;
+                MATRIX_translate4s(basis.elements, 0.0f, 0.0f, 1.0f);
+                orientationCos = basis.elements[3][0];
+                orientationSin = -basis.elements[3][2];
             } else {
-                __builtin_memcpy(basis.transform, work->matrix_buffer[36].transform, sizeof(basis.transform));
-                basis.transform[3][0] = basis.transform[3][1] = basis.transform[3][2] = 0.0f;
-                MATRIX_translate4s(basis.transform, 0.0f, 0.0f, 1.0f);
-                orientationCos = basis.transform[3][0];
-                orientationSin = -basis.transform[3][2];
+                __builtin_memcpy(basis.elements, work->matrix_buffer[36].elements, sizeof(basis.elements));
+                basis.elements[3][0] = basis.elements[3][1] = basis.elements[3][2] = 0.0f;
+                MATRIX_translate4s(basis.elements, 0.0f, 0.0f, 1.0f);
+                orientationCos = basis.elements[3][0];
+                orientationSin = -basis.elements[3][2];
             }
             joints = work->matrix_buffer;
-            originRow = &joints[13].transform[3];
+            originRow = &joints[13].elements[3];
             switch (rootBorn) {
             case 0:
-                firstStart = &joints[16].transform[3];
-                secondStart = &joints[26].transform[3];
-                firstEnd = &joints[17].transform[3];
-                secondEnd = &joints[27].transform[3];
+                firstStart = &joints[16].elements[3];
+                secondStart = &joints[26].elements[3];
+                firstEnd = &joints[17].elements[3];
+                secondEnd = &joints[27].elements[3];
                 break;
             case 2:
-                firstStart = &joints[54].transform[3];
-                secondStart = &joints[66].transform[3];
-                firstEnd = &joints[56].transform[3];
-                secondEnd = &joints[68].transform[3];
+                firstStart = &joints[54].elements[3];
+                secondStart = &joints[66].elements[3];
+                firstEnd = &joints[56].elements[3];
+                secondEnd = &joints[68].elements[3];
                 break;
             case 3:
-                firstStart = &joints[54].transform[3];
-                secondStart = &joints[66].transform[3];
-                firstEnd = &joints[60].transform[3];
-                secondEnd = &joints[72].transform[3];
+                firstStart = &joints[54].elements[3];
+                secondStart = &joints[66].elements[3];
+                firstEnd = &joints[60].elements[3];
+                secondEnd = &joints[72].elements[3];
                 break;
             case 4:
-                firstStart = &joints[16].transform[3];
-                secondStart = &joints[29].transform[3];
-                firstEnd = &joints[17].transform[3];
-                secondEnd = &joints[30].transform[3];
+                firstStart = &joints[16].elements[3];
+                secondStart = &joints[29].elements[3];
+                firstEnd = &joints[17].elements[3];
+                secondEnd = &joints[30].elements[3];
                 break;
             case 5:
-                firstStart = &joints[16].transform[3];
-                secondStart = &joints[29].transform[3];
-                firstEnd = &joints[20].transform[3];
-                secondEnd = &joints[33].transform[3];
+                firstStart = &joints[16].elements[3];
+                secondStart = &joints[29].elements[3];
+                firstEnd = &joints[20].elements[3];
+                secondEnd = &joints[33].elements[3];
                 break;
             case 6:
-                firstStart = &joints[16].transform[3];
-                secondStart = &joints[26].transform[3];
-                firstEnd = &joints[18].transform[3];
-                secondEnd = &joints[28].transform[3];
+                firstStart = &joints[16].elements[3];
+                secondStart = &joints[26].elements[3];
+                firstEnd = &joints[18].elements[3];
+                secondEnd = &joints[28].elements[3];
                 break;
             case 1:
             case 7:
-                firstStart = &joints[16].transform[3];
-                secondStart = &joints[26].transform[3];
-                firstEnd = &joints[20].transform[3];
-                secondEnd = &joints[30].transform[3];
+                firstStart = &joints[16].elements[3];
+                secondStart = &joints[26].elements[3];
+                firstEnd = &joints[20].elements[3];
+                secondEnd = &joints[30].elements[3];
                 break;
             default:
                 return;
@@ -1537,10 +1538,10 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                     float sine;
                     responseZ = xglCos(angle);
                     sine = xglSin(angle);
-                    __builtin_memcpy(&basis.transform, &work->matrix_buffer[14].transform, sizeof(basis.transform));
-                    MATRIX_translate4s(basis.transform, 0.0f, responseZ, sine);
+                    __builtin_memcpy(&basis.elements, &work->matrix_buffer[14].elements, sizeof(basis.elements));
+                    MATRIX_translate4s(basis.elements, 0.0f, responseZ, sine);
                     {
-                        float (*translatedOrigin)[4] = &basis.transform[3];
+                        float (*translatedOrigin)[4] = &basis.elements[3];
                         responseX = (*translatedOrigin)[0] - (*originRow)[0];
                         {
                             float profileDepth = (*translatedOrigin)[2];
@@ -1553,10 +1554,10 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                     float sine;
                     responseZ = xglCos(profileAngle);
                     sine = xglSin(profileAngle);
-                    __builtin_memcpy(&basis.transform, &work->matrix_buffer[13].transform, sizeof(basis.transform));
-                    MATRIX_translate4s(basis.transform, 0.0f, responseZ, sine);
+                    __builtin_memcpy(basis.elements, work->matrix_buffer[13].elements, sizeof(basis.elements));
+                    MATRIX_translate4s(basis.elements, 0.0f, responseZ, sine);
                     {
-                        float (*translatedOrigin)[4] = &basis.transform[3];
+                        float (*translatedOrigin)[4] = &basis.elements[3];
                         distanceScale = (*translatedOrigin)[0] - (*originRow)[0];
                         responseX = (*translatedOrigin)[2] - (*originRow)[2];
                     }
@@ -1567,16 +1568,16 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
         }
         {
             JntMatrix *motionMatrices = work->matrix_buffer;
-            position[0] -= motionMatrices[11].transform[3][0];
-            position[2] -= motionMatrices[11].transform[3][2];
-            (*firstStart)[0] -= motionMatrices[11].transform[3][0];
-            (*firstStart)[2] -= motionMatrices[11].transform[3][2];
-            (*secondStart)[0] -= motionMatrices[11].transform[3][0];
-            (*secondStart)[2] -= motionMatrices[11].transform[3][2];
-            (*firstEnd)[0] -= motionMatrices[11].transform[3][0];
-            (*firstEnd)[2] -= motionMatrices[11].transform[3][2];
-            (*secondEnd)[0] -= motionMatrices[11].transform[3][0];
-            (*secondEnd)[2] -= motionMatrices[11].transform[3][2];
+            position[0] -= motionMatrices[11].elements[3][0];
+            position[2] -= motionMatrices[11].elements[3][2];
+            (*firstStart)[0] -= motionMatrices[11].elements[3][0];
+            (*firstStart)[2] -= motionMatrices[11].elements[3][2];
+            (*secondStart)[0] -= motionMatrices[11].elements[3][0];
+            (*secondStart)[2] -= motionMatrices[11].elements[3][2];
+            (*firstEnd)[0] -= motionMatrices[11].elements[3][0];
+            (*firstEnd)[2] -= motionMatrices[11].elements[3][2];
+            (*secondEnd)[0] -= motionMatrices[11].elements[3][0];
+            (*secondEnd)[2] -= motionMatrices[11].elements[3][2];
         }
         {
             Vector4 normalizedPosition;
@@ -1715,12 +1716,12 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
     if (flags & 0x10000) {
         if (rootBorn == 0) {
             float (*endpoint)[4] = 0;
-            position[1] -= work->matrix_buffer[13].transform[3][1];
-            (*firstEnd)[1] -= work->matrix_buffer[13].transform[3][1];
-            (*secondEnd)[1] -= work->matrix_buffer[13].transform[3][1];
-            referencePosition[0] -= work->matrix_buffer[11].transform[3][0];
-            referencePosition[1] -= work->matrix_buffer[13].transform[3][1];
-            referencePosition[2] -= work->matrix_buffer[11].transform[3][2];
+            position[1] -= work->matrix_buffer[13].elements[3][1];
+            (*firstEnd)[1] -= work->matrix_buffer[13].elements[3][1];
+            (*secondEnd)[1] -= work->matrix_buffer[13].elements[3][1];
+            referencePosition[0] -= work->matrix_buffer[11].elements[3][0];
+            referencePosition[1] -= work->matrix_buffer[13].elements[3][1];
+            referencePosition[2] -= work->matrix_buffer[11].elements[3][2];
             for (; endpoint != secondEnd;) {
                 if (endpoint == 0) {
                     endpoint = firstEnd;
@@ -1757,17 +1758,17 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                     }
                 }
             }
-            position[1] += work->matrix_buffer[13].transform[3][1];
-            (*firstEnd)[1] += work->matrix_buffer[13].transform[3][1];
-            (*secondEnd)[1] += work->matrix_buffer[13].transform[3][1];
-            referencePosition[0] += work->matrix_buffer[11].transform[3][0];
-            referencePosition[1] += work->matrix_buffer[13].transform[3][1];
-            referencePosition[2] += work->matrix_buffer[11].transform[3][2];
+            position[1] += work->matrix_buffer[13].elements[3][1];
+            (*firstEnd)[1] += work->matrix_buffer[13].elements[3][1];
+            (*secondEnd)[1] += work->matrix_buffer[13].elements[3][1];
+            referencePosition[0] += work->matrix_buffer[11].elements[3][0];
+            referencePosition[1] += work->matrix_buffer[13].elements[3][1];
+            referencePosition[2] += work->matrix_buffer[11].elements[3][2];
         } else if (rootBorn == 6) {
             float (*endpoint)[4] = 0;
-            position[1] -= work->matrix_buffer[13].transform[3][1];
-            (*firstEnd)[1] -= work->matrix_buffer[13].transform[3][1];
-            (*secondEnd)[1] -= work->matrix_buffer[13].transform[3][1];
+            position[1] -= work->matrix_buffer[13].elements[3][1];
+            (*firstEnd)[1] -= work->matrix_buffer[13].elements[3][1];
+            (*secondEnd)[1] -= work->matrix_buffer[13].elements[3][1];
             while (endpoint != secondEnd) {
                 if (endpoint == 0) {
                     endpoint = firstEnd;
@@ -1793,19 +1794,19 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                         }
                     }
             }
-            position[1] += work->matrix_buffer[13].transform[3][1];
-            (*firstEnd)[1] += work->matrix_buffer[13].transform[3][1];
-            (*secondEnd)[1] += work->matrix_buffer[13].transform[3][1];
+            position[1] += work->matrix_buffer[13].elements[3][1];
+            (*firstEnd)[1] += work->matrix_buffer[13].elements[3][1];
+            (*secondEnd)[1] += work->matrix_buffer[13].elements[3][1];
         }
     }
     if ((flags & 0x20000) && rootBorn == 1) {
         float (*endpoint)[4] = 0;
-        position[1] -= work->matrix_buffer[13].transform[3][1];
-        (*firstEnd)[1] -= work->matrix_buffer[13].transform[3][1];
-        (*secondEnd)[1] -= work->matrix_buffer[13].transform[3][1];
-        referencePosition[0] -= work->matrix_buffer[11].transform[3][0];
-        referencePosition[1] -= work->matrix_buffer[13].transform[3][1];
-        referencePosition[2] -= work->matrix_buffer[11].transform[3][2];
+        position[1] -= work->matrix_buffer[13].elements[3][1];
+        (*firstEnd)[1] -= work->matrix_buffer[13].elements[3][1];
+        (*secondEnd)[1] -= work->matrix_buffer[13].elements[3][1];
+        referencePosition[0] -= work->matrix_buffer[11].elements[3][0];
+        referencePosition[1] -= work->matrix_buffer[13].elements[3][1];
+        referencePosition[2] -= work->matrix_buffer[11].elements[3][2];
         for (; endpoint != secondEnd;) {
             if (endpoint == 0) {
                 endpoint = firstEnd;
@@ -1842,25 +1843,25 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                 }
             }
         }
-        position[1] += work->matrix_buffer[13].transform[3][1];
-        (*firstEnd)[1] += work->matrix_buffer[13].transform[3][1];
-        (*secondEnd)[1] += work->matrix_buffer[13].transform[3][1];
-        referencePosition[0] += work->matrix_buffer[11].transform[3][0];
-        referencePosition[1] += work->matrix_buffer[13].transform[3][1];
-        referencePosition[2] += work->matrix_buffer[11].transform[3][2];
+        position[1] += work->matrix_buffer[13].elements[3][1];
+        (*firstEnd)[1] += work->matrix_buffer[13].elements[3][1];
+        (*secondEnd)[1] += work->matrix_buffer[13].elements[3][1];
+        referencePosition[0] += work->matrix_buffer[11].elements[3][0];
+        referencePosition[1] += work->matrix_buffer[13].elements[3][1];
+        referencePosition[2] += work->matrix_buffer[11].elements[3][2];
     }
     {
         JntMatrix *motionMatrices = work->matrix_buffer;
-        position[0] += motionMatrices[11].transform[3][0];
-        position[2] += motionMatrices[11].transform[3][2];
-        (*firstStart)[0] += motionMatrices[11].transform[3][0];
-        (*firstStart)[2] += motionMatrices[11].transform[3][2];
-        (*secondStart)[0] += motionMatrices[11].transform[3][0];
-        (*secondStart)[2] += motionMatrices[11].transform[3][2];
-        (*firstEnd)[0] += motionMatrices[11].transform[3][0];
-        (*firstEnd)[2] += motionMatrices[11].transform[3][2];
-        (*secondEnd)[0] += motionMatrices[11].transform[3][0];
-        (*secondEnd)[2] += motionMatrices[11].transform[3][2];
+        position[0] += motionMatrices[11].elements[3][0];
+        position[2] += motionMatrices[11].elements[3][2];
+        (*firstStart)[0] += motionMatrices[11].elements[3][0];
+        (*firstStart)[2] += motionMatrices[11].elements[3][2];
+        (*secondStart)[0] += motionMatrices[11].elements[3][0];
+        (*secondStart)[2] += motionMatrices[11].elements[3][2];
+        (*firstEnd)[0] += motionMatrices[11].elements[3][0];
+        (*firstEnd)[2] += motionMatrices[11].elements[3][2];
+        (*secondEnd)[0] += motionMatrices[11].elements[3][0];
+        (*secondEnd)[2] += motionMatrices[11].elements[3][2];
     }
 }
 
@@ -1960,9 +1961,9 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         work->matrix_index = 0;
         MATRIX_translate4s(ExMatrixRows(CopyExMatrix(matrix.elements, ExMotionMatrices(work)[baseMatrixIndex].elements)),
                            translation->x, translation->y, translation->z);
-        MATRIX_rotZ4s(&matrix, rotation->x);
-        MATRIX_rotY4s(&matrix, rotation->y);
-        MATRIX_rotX4s(&matrix, rotation->z);
+        MATRIX_rotZ4s(matrix.rows, rotation->x);
+        MATRIX_rotY4s(matrix.rows, rotation->y);
+        MATRIX_rotX4s(matrix.rows, rotation->z);
         jointIndex = work->current_index;
         currentMatrix = CopyExMatrixObject(&ExMotionMatrices(work)[jointIndex], &matrix);
         CopyExMatrix(work->saved_matrix.elements, currentMatrix->elements);
@@ -1982,7 +1983,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             break;
         case 1000:
             kind = GetHairTypeSelection(&flags, &collisionTable,
-                                        (HairSelectionWork *)(void *)work);
+                                        work);
             break;
         default:
             flags = htypebuf[ibuf].flags;
@@ -1992,12 +1993,12 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             break;
         }
         parameters = &hairpara[kind];
-        if (owner != 0 && (owner->moved_hair_mode & 1) && owner->moved_hair_sway[3] > 0.0f) {
+        if (owner != 0 && (owner->moved_hair_mode & 1) && owner->moved_hair_sway.w > 0.0f) {
             CopyExMatrix(matrix.elements, ExMotionMatrices(work)[13].elements);
             MATRIX_translate4s(ExMatrixRows(&matrix), 0.0f, 1.0f, 0.0f);
-            sway.x = (matrix.elements[12] - ExMotionMatrices(work)[13].elements[12]) * owner->moved_hair_sway[3];
-            sway.y = (matrix.elements[13] - ExMotionMatrices(work)[13].elements[13]) * owner->moved_hair_sway[3];
-            sway.z = (matrix.elements[14] - ExMotionMatrices(work)[13].elements[14]) * owner->moved_hair_sway[3];
+            sway.x = (matrix.elements[12] - ExMotionMatrices(work)[13].elements[12]) * owner->moved_hair_sway.w;
+            sway.y = (matrix.elements[13] - ExMotionMatrices(work)[13].elements[13]) * owner->moved_hair_sway.w;
+            sway.z = (matrix.elements[14] - ExMotionMatrices(work)[13].elements[14]) * owner->moved_hair_sway.w;
         } else {
             sway.x = 0.0f;
             sway.y = 0.0f;
@@ -2007,9 +2008,9 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         matrix = work->saved_matrix;
         MATRIX_translate4s(ExMatrixRows(&matrix), state->translation.x,
                            state->translation.y, state->translation.z);
-        MATRIX_rotZ4s(&matrix, state->rotation.x);
-        MATRIX_rotY4s(&matrix, state->rotation.y);
-        MATRIX_rotX4s(&matrix, state->rotation.z);
+        MATRIX_rotZ4s(matrix.rows, state->rotation.x);
+        MATRIX_rotY4s(matrix.rows, state->rotation.y);
+        MATRIX_rotX4s(matrix.rows, state->rotation.z);
         {
             int matrixIndex = work->saved_index;
             ExMotionMatrices(work)[matrixIndex + 1] = matrix;
@@ -2030,9 +2031,9 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             state = &work->channels[index];
             if (work->animation_flags & 0x10000) {
                 int matrixIndex = work->saved_index;
-                const Matrix *previousGroup = &previousMatrices[matrixIndex];
+                Matrix *previousGroup = &previousMatrices[matrixIndex];
                 xglMatrixInverse(ExMatrixRows(&inverse),
-                                 ExMatrixConstRows(&previousGroup[1]));
+                                 ExMatrixRows(&previousGroup[1]));
                 xglMatrixMul(&relative, &inverse, &previousMatrices[work->saved_index + index + 1]);
                 matrixIndex = work->saved_index;
                 xglMatrixMul(&inverse, &ExMotionMatrices(work)[matrixIndex + 1], &relative);
@@ -2051,9 +2052,9 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                 parent = current - 1;
                 CopyExMatrix(ExMatrixData(current), ExMatrixData(parent));
                 MATRIX_translate4s(ExMatrixRows(current), state->translation.x, state->translation.y, state->translation.z);
-                MATRIX_rotZ4s(current, state->rotation.x);
-                MATRIX_rotY4s(current, state->rotation.y);
-                MATRIX_rotX4s(current, state->rotation.z);
+                MATRIX_rotZ4s(current->rows, state->rotation.x);
+                MATRIX_rotY4s(current->rows, state->rotation.y);
+                MATRIX_rotX4s(current->rows, state->rotation.z);
                 if (!(work->animation_flags & 0x200000)) {
                     position[1] -= parameters->gravity;
                 }
@@ -2094,8 +2095,8 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                     }
                 }
                 if (!(work->animation_flags & 0x400000)) {
-                    if (owner != 0 && owner->ground_height != -1000.0f) {
-                        response = owner->ground_height - owner->position.y + 0.07f;
+                    if (owner != 0 && owner->translate_y != -1000.0f) {
+                        response = owner->translate_y - owner->position.y + 0.07f;
                     } else {
                         UnduParamInit(&ground);
                         ground.attribute_mask = 0x800;
@@ -2171,7 +2172,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                     : "memory");
                 OrientExMotionJoint(work, index, &direction);
                 if (flags & 1) {
-                    MATRIX_rotX4s(&ExMotionMatrices(work)[work->saved_index + index],
+                    MATRIX_rotX4s(ExMotionMatrices(work)[work->saved_index + index].rows,
                                    (float)index * response);
                 }
                 index++;
@@ -2204,10 +2205,10 @@ void EXM_InitMovedHair(Actor *actor)
     if (actor != 0) {
         actor->moved_hair_mode = 2;
         actor->moved_hair_delay = 0.5f;
-        actor->moved_hair_sway[0] = 0.0f;
-        actor->moved_hair_sway[1] = 0.0f;
-        actor->moved_hair_sway[2] = 0.0f;
-        actor->moved_hair_sway[3] = 0.0f;
+        actor->moved_hair_sway.x = 0.0f;
+        actor->moved_hair_sway.y = 0.0f;
+        actor->moved_hair_sway.z = 0.0f;
+        actor->moved_hair_sway.w = 0.0f;
     }
 }
 

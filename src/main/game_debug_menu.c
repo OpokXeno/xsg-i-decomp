@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "game_debug_menu.h"
+#include "main/game_debug_menu.h"
 
 char hexIdFormat[];
 
@@ -356,7 +357,7 @@ static void PauseMenuPage3(void)
     int remain;
     unsigned int repeat;
     DebugPlayerUnit *player;
-    DebugLayoutHeader *header;
+    LayoutHeader *header;
     const char *text;
 
     if (GameLoopState.debugPageInitialized == 0) {
@@ -455,10 +456,10 @@ static void PauseMenuPage3(void)
             leader->angle = 0;
             header = UnduDataGetHeader(513, 0x8000);
             if (header != 0) {
-                leader->x = header->components[0];
-                leader->y = header->components[1];
-                leader->z = header->components[2];
-                leader->layoutAngle = leader->angle = header->components[3];
+                leader->x = header->locator.x;
+                leader->y = header->locator.y;
+                leader->z = header->locator.z;
+                leader->layoutAngle = leader->angle = header->locator.w;
             }
             break;
         }

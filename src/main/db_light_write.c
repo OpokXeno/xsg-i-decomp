@@ -2,40 +2,15 @@
 #include "shared.h"
 #include "main/get.h"
 #include "db_light_write.h"
+#include "main/db_light_write.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_2.h"
-
-/*
- * The retail ELF has a GLOBAL OBJECT named cursor at 0x0099C7F0 with size
- * 0x60. The shared declaration and this TU's uses establish a 16-byte
- * HomogeneousVector slot at +0x10; the callback pair is accessed as raw
- * words at +0x50/+0x54. Six slots of the existing vector type express the
- * recorded object extent without assigning meanings to the other words.
- */
-typedef struct CursorState {
-    int mode;
-    union { int flag_04; int submode; };
-    int actor_index;
-    int step;
-    HomogeneousVector position;
-    unsigned char unmodeled_20[0x10];
-    int attach_state;
-    union { int flag_34; ActorHead *attached_actor; };
-    union {
-        struct {
-            unsigned char unmodeled_38[0x0c];
-            float offset_44;
-            unsigned char unmodeled_48[8];
-        };
-        struct {
-            unsigned char unmodeled_38_to_40[8];
-            HomogeneousVector attach_offset;
-        };
-    };
-    CursorCallback callback;
-    void *callback_argument;
-    unsigned char unmodeled_58[8];
-} CursorState;
+#include "main/Undulate.h"
+#include "main/exm_2.h"
+#include "main/matrix_print.h"
+#include "main/transform_vector.h"
+#include "main/xgl_font.h"
+#include "main/xgl_prim_add.h"
 
 /* Owner declarations used by these debug views; storage remains original scaffolding. */
 typedef struct {
@@ -55,23 +30,17 @@ typedef struct {
     Vector4 stage_color;
 } MapGameLoopStateView;
 
-typedef struct {
+/* One controller of PadData (two 0x68-byte entries; the held/pressed/repeat
+   words are the ones src/main/input.c's getHeld/getPressed/getRepeat read). */
+typedef struct DbLightWritePad {
     unsigned char unmodeled_00[0x28];
-    unsigned short half_28;
-    unsigned short half_2a;
-    unsigned short half_2c;
+    unsigned short held;
+    unsigned short pressed;
+    unsigned short repeat;
     unsigned char unmodeled_2e[0x66 - 0x2e];
     signed char stick_x;
     signed char stick_y;
-} DbLightWritePadSecondPrefix;
-
-typedef struct {
-    unsigned char unmodeled_00[0x28];
-    unsigned short half_28;
-    unsigned short half_2a;
-    unsigned char unmodeled_2c[0x68 - 0x2c];
-    DbLightWritePadSecondPrefix second;
-} DbLightWritePadData;
+} DbLightWritePad;
 
 /* Clear-environment colour words (the GS clear block's color_r/g/b at 0x20). */
 typedef struct {
@@ -80,12 +49,6 @@ typedef struct {
     unsigned int color_g;
     unsigned int color_b;
 } ClearEnvColorView;
-
-typedef struct { float f[28]; } LightFloats;
-
-typedef struct {
-    Matrix4 m;
-} Matrix4Block;
 
 typedef struct {
     unsigned char unmodeled_00[0x0C];
@@ -113,13 +76,8 @@ typedef struct WindRecord {
     float offset_b;
 } WindRecord;
 
-typedef union WindPoint {
-    Vector4 vector;
-    unsigned long long raw[2];
-} WindPoint;
-
 typedef struct WindMarker {
-    WindPoint from;
+    DoublewordVector4 from; /* copied whole from camera->chasePosition (a DoublewordVector4 in shared.h): ld/sd needs the union-to-union copy */
     Vector4 to;
     int color[4];
 } WindMarker;
@@ -141,40 +99,19 @@ typedef struct UpdateLightKeys {
     signed char stick_y;
 } UpdateLightKeys;
 
-enum CursorMode {
-    CURSOR_MODE_NONE = -1,
-    CURSOR_MODE_0,
-    CURSOR_MODE_1,
-    CURSOR_MODE_2,
-    CURSOR_MODE_3,
-    CURSOR_MODE_4
-};
-
+/* Both scratchpad layouts start with the GIF packet the debug primitives
+   build: one quadword (four words) per row, row 0 the GIFtag
+   (count, primitive, registers, 0), then colour/position row pairs. */
 typedef struct {
-    Matrix4 matrix;
-    Matrix4 world;
-    Vector4 screen_scale;
-    Vector4 screen_offset;
-    Matrix4 *local;
-} DebugDrawTransform;
-
-typedef struct {
-    unsigned int count, primitive, registers, reserved;
-    unsigned int payload[8][4];
-} DebugRectPacket;
-
-typedef struct {
-    DebugRectPacket packet;
-    unsigned char unmodeled_90[0x400 - 0x90];
-    DebugDrawTransform transform;
+    unsigned int packet[0x40][4];
+    TransformParams transform;
     unsigned char unmodeled_4a4[0x4e0 - 0x4a4];
     Vector4 positions[5];
 } DebugRectScratch;
 
 typedef struct {
-    DebugRectPacket packet;
-    unsigned char unmodeled_90[0x400 - 0x90];
-    DebugDrawTransform transform;
+    unsigned int packet[0x40][4];
+    TransformParams transform;
     unsigned char unmodeled_4a4[0x4b0 - 0x4a4];
     Vector4 input[2];
     unsigned char unmodeled_4d0[0x10];
@@ -188,26 +125,15 @@ typedef struct DebugCursorColour {
     unsigned char alpha;
 } DebugCursorColour;
 
-/* The lighting editor copies direction into the bar position with doubleword
-   ld/sd pairs: the vector storage is eight-byte aligned. The union gives it
-   that alignment without a GNU attribute. */
-typedef union LightEditorVector {
+/* One colour of the light table: read as a float[4] row by the light editor
+   and as the Vector4 that the light helpers take. */
+typedef union LightColour {
+    RgVector components;
     Vector4 vector;
-    u64 doublewords[2];
-} LightEditorVector;
-
-typedef struct FloatLightEntry {
-    RgVector color;
-    RgVector direction;
-} FloatLightEntry;
-
-typedef struct FloatLight {
-    RgVector ambient_color;
-    FloatLightEntry lights[3];
-} FloatLight;
+} LightColour;
 
 extern MapGameLoopStateView GameLoopState;
-extern DbLightWritePadData PadData;
+extern DbLightWritePad PadData[2];
 extern const char matrixRowFormat[];
 extern const char partsIndexFormat[];
 extern const char lightSetColorFormat[];
@@ -260,8 +186,6 @@ extern const char DBCursorModeYzLabel[8];
 extern const char DBCursorModeXyLabel[8];
 extern const char DBCursorModeFcvLabel[8];
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 extern void nmlModelSetPartsVisible(MapPartListView *parts,
                                     int part_index, int visible);
 
@@ -275,41 +199,25 @@ extern void xglLightDirection(void *light, unsigned int index,
                               const Vector4 *direction);
 
 extern float atan2f(float y, float x);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
 extern int sceWrite(int descriptor, const void *buffer, int size);
 extern double fptodp(float value);
 extern StudioCamera *xglStudioGetActiveCamera(void);
 
-extern void xglVectorMulMat(Vector4 *destination, const void *matrix,
-                            const Vector4 *vector);
-
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *vector);
-extern void ACT_updateSequence(ActorHead *actor);
-extern float UnduGet(float x, float z);
+extern void ACT_updateSequence(Actor *actor);
 void updateCursorModePlane(void);
-extern void PAD_getKey(unsigned short *keys, int port, int mask);
-extern void EXM_ResetWind(void);
+extern void PAD_getKey(struct CursorPadKeyResult *result, int port, int mask);
 void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index);
 void drawCircle2(Matrix4 *matrix, float radius, int color_index);
 void updateCursorMode0(void);
 void updateCursorMode2(void);
 
-extern void transformVector(Vector4 *destination, const Vector4 *vectors,
-                            int count, DebugDrawTransform *params);
-
-extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *tag, int count);
-extern void xglMatrixStackLoad(Matrix4 matrix);
-extern void MATRIX_transpose3(Matrix4 matrix);
 extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
 extern float dptofp(double value);
-extern void xglStudioFlushActiveCamera(void);
-
 static int visible_0;
 
 static Vector4 lightDir[6];
 
-static RgVector lightCol[6];
+static LightColour lightCol[6];
 
 static float cursorSpeed[9];
 
@@ -355,15 +263,15 @@ static const char * cursorModeName[5] = { DBCursorModeFreeLabel, DBCursorModeYzL
 
 static unsigned char col[56] = { 192, 192, 192, 128, 192, 0, 0, 128, 192, 192, 192, 128, 0, 192, 0, 128, 192, 192, 192, 128, 0, 0, 192, 128, 192, 192, 192, 128, 192, 192, 0, 128, 192, 192, 192, 128, 0, 192, 192, 128, 192, 192, 192, 128, 192, 0, 192, 128, 16, 16, 16, 128, 192, 192, 192, 128 };
 
-static RgVector lightCol[6] = { { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.2f, 0.2f, 0.2f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } };
+static LightColour lightCol[6] = { { { 0.6f, 0.6f, 0.6f, 1.0f } }, { { 0.6f, 0.6f, 0.6f, 1.0f } }, { { 0.6f, 0.6f, 0.6f, 1.0f } }, { { 0.2f, 0.2f, 0.2f, 1.0f } }, { { 0.0f, 0.0f, 0.0f, 1.0f } }, { { 1.0f, 1.0f, 1.0f, 1.0f } } };
 
 static int mode_004DC5A8;
 
-HomogeneousVector cursor[6];
+CursorState cursor;
 
 static int partsIndex;
 
-static unsigned short keyData[8];
+static struct CursorPadKeyResult keyData;
 
 static int toolFlags;
 
@@ -390,14 +298,14 @@ void DB_lightWrite(int descriptor)
         lightNumber = lightIndex + 1;
         sceWrite(descriptor, buffer,
                  sprintf(buffer, lightSetColorFormat, lightNumber,
-                         ((LightFloats *)light)->f[lightIndex * 8 + 4],
-                         ((LightFloats *)light)->f[lightIndex * 8 + 5],
-                         ((LightFloats *)light)->f[lightIndex * 8 + 6]));
+                         light->lights[lightIndex].color_row[0],
+                         light->lights[lightIndex].color_row[1],
+                         light->lights[lightIndex].color_row[2]));
         sceWrite(descriptor, buffer,
                  sprintf(buffer, lightSetDirection2Format, lightNumber,
-                         ((LightFloats *)light)->f[lightIndex * 8 + 8],
-                         ((LightFloats *)light)->f[lightIndex * 8 + 9],
-                         ((LightFloats *)light)->f[lightIndex * 8 + 10]));
+                         light->lights[lightIndex].direction_row[0],
+                         light->lights[lightIndex].direction_row[1],
+                         light->lights[lightIndex].direction_row[2]));
         lightIndex = lightNumber;
     } while (lightIndex < 3);
 
@@ -431,21 +339,21 @@ void drawRect2(Matrix4 *matrix, int color_index)
     xglStudioGetCamera(&camera, 0);
     xglMatrixStackUnit();
     xglMatrixStackSave(scratch->transform.world);
-    scratch->transform.screen_offset = camera->screenOffset;
-    scratch->transform.screen_scale.x = 1.0f;
-    scratch->transform.screen_scale.y = -1.0f;
-    scratch->transform.screen_scale.z = 1.0f;
-    scratch->transform.screen_scale.w = 1.0f;
+    scratch->transform.screenOffset = camera->screenOffset;
+    scratch->transform.screenScale.x = 1.0f;
+    scratch->transform.screenScale.y = -1.0f;
+    scratch->transform.screenScale.z = 1.0f;
+    scratch->transform.screenScale.w = 1.0f;
     scratch->transform.local = matrix;
     color_index = color_index * 4 + 4;
     transformVector(scratch->positions, vRect, 4, &scratch->transform);
-    write = (unsigned int *)0x70000000;
+    write = scratch->packet[0];
     write[0] = 0x8004;
     write[1] = 0x20064000;
     write[2] = 0xffffff51;
     write[3] = 0;
     write += 4;
-    position = (Vector4 *)0x700004e0;
+    position = scratch->positions;
     red = &col[color_index];
     green = &col[1] + color_index;
     blue = &col[2] + color_index;
@@ -467,7 +375,7 @@ void drawRect2(Matrix4 *matrix, int color_index)
             write += 4;
         }
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 9);
+    xglPrimAddGifTagDirect(0, scratch, 9);
 }
 
 void drawBox2(Matrix4 *matrix, int color_index)
@@ -487,21 +395,21 @@ void drawBox2(Matrix4 *matrix, int color_index)
     xglStudioGetCamera(&camera, 0);
     xglMatrixStackUnit();
     xglMatrixStackSave(scratch->transform.world);
-    scratch->transform.screen_offset = camera->screenOffset;
-    scratch->transform.screen_scale.x = 1.0f;
-    scratch->transform.screen_scale.y = -1.0f;
-    scratch->transform.screen_scale.z = 1.0f;
-    scratch->transform.screen_scale.w = 1.0f;
+    scratch->transform.screenOffset = camera->screenOffset;
+    scratch->transform.screenScale.x = 1.0f;
+    scratch->transform.screenScale.y = -1.0f;
+    scratch->transform.screenScale.z = 1.0f;
+    scratch->transform.screenScale.w = 1.0f;
     scratch->transform.local = matrix;
     color_index = color_index * 4 + 4;
     transformVector(scratch->positions, vBox, vertex_count, &scratch->transform);
-    write = (unsigned int (*)[4])0x70000000;
+    write = scratch->packet;
     (*write)[0] = 0x8000 | vertex_count;
     (*write)[1] = 0x20054000;
     (*write)[2] = 0xffffff51;
     (*write)[3] = 0;
     write++;
-    position = (Vector4 *)0x700004e0;
+    position = scratch->positions;
     red = &col[color_index];
     green = &col[1] + color_index;
     blue = &col[2] + color_index;
@@ -518,7 +426,7 @@ void drawBox2(Matrix4 *matrix, int color_index)
         (*write)[3] = 0;
         write++;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, vertex_count * 2 + 1);
+    xglPrimAddGifTagDirect(0, scratch, vertex_count * 2 + 1);
 }
 
 void drawCircle2(Matrix4 *matrix, float radius, int color_index)
@@ -543,11 +451,11 @@ void drawCircle2(Matrix4 *matrix, float radius, int color_index)
     xglStudioGetCamera(&camera, 0);
     xglMatrixStackUnit();
     xglMatrixStackSave(scratch->transform.world);
-    scratch->transform.screen_offset = camera->screenOffset;
-    scratch->transform.screen_scale.x = 1.0f;
-    scratch->transform.screen_scale.y = -1.0f;
-    scratch->transform.screen_scale.z = 1.0f;
-    scratch->transform.screen_scale.w = 1.0f;
+    scratch->transform.screenOffset = camera->screenOffset;
+    scratch->transform.screenScale.x = 1.0f;
+    scratch->transform.screenScale.y = -1.0f;
+    scratch->transform.screenScale.z = 1.0f;
+    scratch->transform.screenScale.w = 1.0f;
     scratch->transform.local = matrix;
     scratch->input[0].x = 0.0f;
     scratch->input[0].y = 0.0f;
@@ -557,11 +465,11 @@ void drawCircle2(Matrix4 *matrix, float radius, int color_index)
     colour = color_index * 4 + 4;
     angle = 0.0f;
     scale = 16.0f;
-    write = (unsigned int *)scratch;
-    ((DebugRectPacket *)write)->count = 0x8011;
-    ((DebugRectPacket *)write)->primitive = 0x20054000;
-    ((DebugRectPacket *)write)->registers = 0xffffff51;
-    ((DebugRectPacket *)write)->reserved = 0;
+    write = scratch->packet[0];
+    scratch->packet[0][0] = 0x8011;
+    scratch->packet[0][1] = 0x20054000;
+    scratch->packet[0][2] = 0xffffff51;
+    scratch->packet[0][3] = 0;
     write += 4;
     red_column = &col[0];
     green_column = &col[1];
@@ -586,7 +494,7 @@ void drawCircle2(Matrix4 *matrix, float radius, int color_index)
         write[3] = 0;
         write += 4;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 35);
+    xglPrimAddGifTagDirect(0, scratch, 35);
 }
 
 void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
@@ -601,11 +509,11 @@ void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
     xglStudioGetCamera(&camera, 0);
     xglMatrixStackUnit();
     xglMatrixStackSave(scratch->transform.world);
-    scratch->transform.screen_offset = camera->screenOffset;
-    scratch->transform.screen_scale.x = 1.0f;
-    scratch->transform.screen_scale.y = -1.0f;
-    scratch->transform.screen_scale.z = 1.0f;
-    scratch->transform.screen_scale.w = 1.0f;
+    scratch->transform.screenOffset = camera->screenOffset;
+    scratch->transform.screenScale.x = 1.0f;
+    scratch->transform.screenScale.y = -1.0f;
+    scratch->transform.screenScale.z = 1.0f;
+    scratch->transform.screenScale.w = 1.0f;
     scratch->input[0].w = 1.0f;
     scratch->input[0].x = 0.0f;
     scratch->input[0].y = 0.0f;
@@ -616,13 +524,13 @@ void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
     scratch->input[1].z = vector->z;
     scratch->input[1].w = 1.0f;
     transformVector(scratch->output, scratch->input, 2, &scratch->transform);
-    write = (unsigned int (*)[4])0x70000000;
+    write = scratch->packet;
     (*write)[0] = 0x8002;
     (*write)[1] = 0x2004c000;
     (*write)[2] = 0xffffff51;
     (*write)[3] = 0;
     write++;
-    position = (Vector4 *)0x700004e0;
+    position = scratch->output;
     for (vertex_index = 0; vertex_index < 2;
          vertex_index++, position++, color_index++) {
         (*write)[0] = col[color_index * 4];
@@ -636,7 +544,7 @@ void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
         (*write)[3] = 0;
         write++;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 5);
+    xglPrimAddGifTagDirect(0, scratch, 5);
 }
 
 void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
@@ -655,8 +563,8 @@ void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
     camera = *slot_ptr;
     scratch->transform.local = matrix;
     *(Matrix4Block *)scratch->transform.world = *(Matrix4Block *)camera->viewMatrix;
-    scratch->transform.screen_offset = camera->screenOffset;
-    scratch->transform.screen_scale = camera->screenScale;
+    scratch->transform.screenOffset = camera->screenOffset;
+    scratch->transform.screenScale = camera->screenScale;
     scratch->input[0].w = 1.0f;
     scratch->input[0].x = 0.0f;
     scratch->input[0].y = 0.0f;
@@ -668,7 +576,7 @@ void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
     position = scratch->output;
     transformVector(position, scratch->input, 2, &scratch->transform);
     colour = &col[color_index * 4];
-    write = (unsigned int (*)[4])scratch;
+    write = scratch->packet;
     (*write)[0] = 0x8002;
     (*write)[1] = 0x2004c000;
     (*write)[2] = 0xffffff51;
@@ -697,16 +605,16 @@ void drawGrid(Matrix4 matrix, float scale)
     Matrix4 *local_matrix_pointer;
     StudioCamera *camera;
     StudioCamera *source_camera;
-    DebugDrawTransform *params = (DebugDrawTransform *)0x70000400;
+    TransformParams *params = (TransformParams *)0x70000400;
     Vector4 *position;
     unsigned int (*write)[4];
     int vertex_index;
 
     xglStudioGetCamera(&camera, 0);
     source_camera = camera;
-    params->screen_offset = source_camera->screenOffset;
+    params->screenOffset = source_camera->screenOffset;
     __builtin_memcpy(params->world, source_camera->viewMatrix, sizeof(Matrix4));
-    params->screen_scale = source_camera->screenScale;
+    params->screenScale = source_camera->screenScale;
     local_matrix_pointer = &local_matrix;
     __builtin_memcpy(&params->local, &local_matrix_pointer,
                      sizeof(local_matrix_pointer));
@@ -774,15 +682,15 @@ void drawAxis(Matrix4 matrix, float scale)
     Matrix4 local_matrix;
     Matrix4 *local_matrix_pointer;
     StudioCamera *camera;
-    DebugDrawTransform *params = (DebugDrawTransform *)0x70000400;
+    TransformParams *params = (TransformParams *)0x70000400;
     Vector4 *position;
     unsigned int (*write)[4];
     int vertex_index;
 
     camera = getCurrentCamera();
-    params->screen_offset = camera->screenOffset;
+    params->screenOffset = camera->screenOffset;
     __builtin_memcpy(params->world, camera->viewMatrix, sizeof(Matrix4));
-    params->screen_scale = camera->screenScale;
+    params->screenScale = camera->screenScale;
     local_matrix_pointer = &local_matrix;
     __builtin_memcpy(&params->local, &local_matrix_pointer,
                      sizeof(local_matrix_pointer));
@@ -850,9 +758,9 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
 
     color_index *= 2;
     xglStudioGetCamera(camera, 0);
-    ((DebugLineScratch *)0x70000000)->transform.screen_offset = (*camera)->screenOffset;
+    ((DebugLineScratch *)0x70000000)->transform.screenOffset = (*camera)->screenOffset;
     *(Matrix4Block *)((DebugLineScratch *)0x70000000)->transform.world = *(Matrix4Block *)(*camera)->viewMatrix;
-    ((DebugLineScratch *)0x70000000)->transform.screen_scale = (*camera)->screenScale;
+    ((DebugLineScratch *)0x70000000)->transform.screenScale = (*camera)->screenScale;
     ((DebugLineScratch *)0x70000000)->transform.local = matrix;
     ((DebugLineScratch *)0x70000000)->input[0].x = position->x;
     ((DebugLineScratch *)0x70000000)->input[0].y = position->y;
@@ -929,9 +837,9 @@ void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
 
     xglStudioGetCamera(&camera_slot, 0);
     camera = camera_slot;
-    scratch->transform.screen_offset = camera->screenOffset;
+    scratch->transform.screenOffset = camera->screenOffset;
     *(Matrix4Block *)scratch->transform.world = *(Matrix4Block *)camera->viewMatrix;
-    scratch->transform.screen_scale = camera->screenScale;
+    scratch->transform.screenScale = camera->screenScale;
     scratch->input[0].x = position->x;
     scratch->input[0].y = position->y;
     scratch->input[0].z = position->z;
@@ -965,8 +873,8 @@ void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
     color_index *= 2;
     camera = xglStudioGetActiveCamera();
     *(Matrix4Block *)scratch->transform.world = *(Matrix4Block *)camera->viewMatrix;
-    scratch->transform.screen_offset = camera->screenOffset;
-    scratch->transform.screen_scale = camera->screenScale;
+    scratch->transform.screenOffset = camera->screenOffset;
+    scratch->transform.screenScale = camera->screenScale;
     scratch->input[0].w = 1.0f;
     scratch->input[0].x = 0.0f;
     scratch->input[0].y = 0.0f;
@@ -978,7 +886,7 @@ void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
     scratch->input[1].w = 1.0f;
     transformVector(scratch->output, scratch->input, 2, &scratch->transform);
     position = scratch->output;
-    write = (unsigned int (*)[4])scratch;
+    write = scratch->packet;
     (*write)[0] = 0x8002;
     (*write)[1] = 0x2004c000;
     (*write)[2] = 0xffffff51;
@@ -999,7 +907,7 @@ void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
         position++;
         write++;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 5);
+    xglPrimAddGifTagDirect(0, scratch, 5);
 }
 
 float ball2point(const Vector4 *cursor_position,
@@ -1029,23 +937,15 @@ void *prevActor(int startIndex)
     return 0;
 }
 
-ActorHead *nextActor(register int startIndex)
+Actor *nextActor(int startIndex)
 {
-    register ActorHead *entry;
-    ActorHead *end;
+    Actor *entry;
+    int i;
 
-    if (startIndex < ACTOR_COUNT) {
-        startIndex *= sizeof(ActorHead);
-        entry = (ActorHead *)((char *)actor + startIndex);
-        end = &actor[ACTOR_COUNT];
-        for (;;) {
-            if (entry->inUseId != 0 && !(entry->flags & 8)) {
-                return entry;
-            }
-            entry++;
-            if ((int)entry >= (int)end) {
-                break;
-            }
+    for (i = startIndex; i < ACTOR_COUNT; i++) {
+        entry = &actor[i];
+        if (entry->inUseId != 0 && !(entry->flags & 8)) {
+            return entry;
         }
     }
     return 0;
@@ -1053,8 +953,7 @@ ActorHead *nextActor(register int startIndex)
 
 void updateCursorMode1(void)
 {
-    const struct CursorPadKeyResult *keys =
-        (const struct CursorPadKeyResult *)(const void *)keyData;
+    const struct CursorPadKeyResult *keys = &keyData;
     StudioCamera *camera;
     HomogeneousVector *cursor_position;
     Vector4 direction;
@@ -1064,16 +963,16 @@ void updateCursorMode1(void)
     int submode;
 
     xglStudioGetCamera(&camera, 0);
-    cursor_position = &cursor[1];
+    cursor_position = &cursor.position;
     if (keys->pressed & 2) {
-        CursorState *cursor_base = (CursorState *)(cursor_position - 1);
+        CursorState *cursor_base = &cursor;
         cursor_base->submode++;
         if (cursor_base->submode >= 3)
             cursor_base->submode = 0;
     }
 
     direction_length = 0.0f;
-    submode = ((CursorState *)cursor)->submode;
+    submode = cursor.submode;
     switch (submode) {
     case 0:
         direction.x = (float)keys->flags[0];
@@ -1123,23 +1022,23 @@ void updateCursorMode1(void)
 
 void updateCursorMode2(void)
 {
-    DbLightWritePadSecondPrefix *pad;
+    DbLightWritePad *pad;
     unsigned short keys;
     CursorState *state;
     StudioCamera *camera;
     HomogeneousVector *cursor_position;
-    ActorHead *selected_actor;
-    ActorHead *candidate;
+    Actor *selected_actor;
+    Actor *candidate;
     Vector4 *actor_position;
     int count;
 
     selected_actor = 0;
-    pad = &PadData.second;
+    pad = &PadData[1];
     xglStudioGetCamera(&camera, 0);
-    cursor_position = &cursor[1];
+    cursor_position = &cursor.position;
 
-    if (pad->half_2a & 8) {
-        state = (CursorState *)(cursor_position - 1);
+    if (pad->pressed & 8) {
+        state = &cursor;
         selected_actor = nextActor(state->actor_index);
         if (selected_actor == 0) {
             state->actor_index = 0;
@@ -1147,8 +1046,8 @@ void updateCursorMode2(void)
             state->actor_index = selected_actor->number + 1;
         }
     }
-    if (pad->half_2a & 2) {
-        state = (CursorState *)cursor;
+    if (pad->pressed & 2) {
+        state = &cursor;
         selected_actor = prevActor(state->actor_index);
         if (selected_actor == 0) {
             state->actor_index = 63;
@@ -1163,15 +1062,15 @@ void updateCursorMode2(void)
         cursor_position->z = actor_position->z;
     }
 
-    if (((CursorState *)cursor)->attached_actor != 0) {
-        if (((CursorState *)cursor)->attach_state == 0) {
-            keys = pad->half_28;
-            actor_position = &((CursorState *)cursor)->attached_actor->rotation;
+    if (cursor.attached_actor != 0) {
+        if (cursor.attach_state == 0) {
+            keys = pad->held;
+            actor_position = &cursor.attached_actor->rotation;
             if (keys & 0x1000) {
-                ((CursorState *)cursor)->attach_offset.y += 1.0f / 30.0f;
+                cursor.attach_offset.y += 1.0f / 30.0f;
             }
             if (keys & 0x4000) {
-                ((CursorState *)cursor)->attach_offset.y -= 1.0f / 30.0f;
+                cursor.attach_offset.y -= 1.0f / 30.0f;
             }
             if (keys & 0x2000) {
                 actor_position->y += 3.14159265f / 120.0f;
@@ -1182,32 +1081,32 @@ void updateCursorMode2(void)
         }
     }
 
-    pad = (DbLightWritePadSecondPrefix *)&PadData;
-    candidate = ((CursorState *)cursor)->attached_actor;
+    pad = &PadData[0];
+    candidate = cursor.attached_actor;
     if (candidate != 0) {
-        if (pad->half_2a & 0x10) {
+        if (pad->pressed & 0x10) {
             selected_actor = candidate;
-            ((CursorState *)cursor)->attached_actor = 0;
+            cursor.attached_actor = 0;
             selected_actor->velocity.x = 0.0f;
             selected_actor->velocity.y = 0.0f;
             selected_actor->velocity.z = 0.0f;
-        } else if (((CursorState *)cursor)->attach_state == 0) {
+        } else if (cursor.attach_state == 0) {
             selected_actor = candidate;
             actor_position = &selected_actor->position;
-            actor_position->x = cursor_position->x + ((CursorState *)cursor)->attach_offset.x;
-            actor_position->y = cursor_position->y + ((CursorState *)cursor)->attach_offset.y;
-            actor_position->z = cursor_position->z + ((CursorState *)cursor)->attach_offset.z;
+            actor_position->x = cursor_position->x + cursor.attach_offset.x;
+            actor_position->y = cursor_position->y + cursor.attach_offset.y;
+            actor_position->z = cursor_position->z + cursor.attach_offset.z;
             if (mode_004DC5A8 == 0) {
                 ACT_updateSequence(selected_actor);
             }
         }
-    } else if (pad->half_2a & 0x10) {
+    } else if (pad->pressed & 0x10) {
         float threshold;
 
-        ((CursorState *)cursor)->attach_offset.x = 0.0f;
-        ((CursorState *)cursor)->attach_offset.y = 0.0f;
-        ((CursorState *)cursor)->attach_offset.z = 0.0f;
-        threshold = ((CursorState *)cursor)->attach_offset.x;
+        cursor.attach_offset.x = 0.0f;
+        cursor.attach_offset.y = 0.0f;
+        cursor.attach_offset.z = 0.0f;
+        threshold = cursor.attach_offset.x;
         selected_actor = actor;
         for (count = 63; count >= 0; selected_actor++, count--) {
             if (selected_actor->inUseId == 0) {
@@ -1218,7 +1117,7 @@ void updateCursorMode2(void)
             }
             actor_position = &selected_actor->position;
             if (threshold <= ball2point((const Vector4 *)cursor_position, actor_position, 0.5f)) {
-                ((CursorState *)cursor)->attached_actor = selected_actor;
+                cursor.attached_actor = selected_actor;
             }
         }
     }
@@ -1226,7 +1125,7 @@ void updateCursorMode2(void)
 
 void updateCursorModePlane(void)
 {
-    unsigned short *keys;
+    const struct CursorPadKeyResult *keys;
     Vector4 stick;
     Vector4 direction;
     Matrix rotation;
@@ -1239,12 +1138,12 @@ void updateCursorModePlane(void)
     const char *missing_format;
     HomogeneousVector *position;
 
-    keys = keyData;
+    keys = &keyData;
     xglStudioGetCamera(&camera, 0);
-    position = &cursor[1];
-    stick.x = (float)((signed char *)keys)[8];
+    position = &cursor.position;
+    stick.x = (float)keys->flags[0];
     zero = 0.0f;
-    stick.z = (float)((signed char *)keys)[9];
+    stick.z = (float)keys->flags[1];
     stick.w = 1.0f;
     length = zero;
     stick.y = zero;
@@ -1267,20 +1166,20 @@ void updateCursorModePlane(void)
         rotation.elements[12] = zero;
         rotation.elements[13] = zero;
         rotation.elements[14] = zero;
-        xglVectorMulMat(&direction, (float (*)[4])rotation.elements, &stick);
+        xglVectorMulMat(&direction, rotation.rows, &stick);
         xglVectorNormal(&stick, &stick);
         xglVectorLength(&length, &stick);
-        length *= cursorSpeed[((CursorState *)cursor)->step];
+        length *= cursorSpeed[cursor.step];
         xglVectorNormal(&direction, &direction);
-        switch (((CursorState *)cursor)->flag_04) {
+        switch (cursor.flag_04) {
         case 0:
             position->x += direction.x * length;
             position->y += direction.y * length;
             position->z += direction.z * length;
             active_camera = camera;
-            active_camera->position.x += direction.x * length;
-            active_camera->position.y += direction.y * length;
-            active_camera->position.z += direction.z * length;
+            (&active_camera->position.vector)->x += direction.x * length;
+            (&active_camera->position.vector)->y += direction.y * length;
+            (&active_camera->position.vector)->z += direction.z * length;
             break;
         case 1:
             position->x += direction.x * length;
@@ -1288,19 +1187,19 @@ void updateCursorModePlane(void)
             position->z += direction.z * length;
             break;
         case 2:
-            if (((CursorState *)cursor)->mode == 0) {
+            if (cursor.mode == 0) {
                 active_camera = camera;
-                active_camera->position.x += direction.x * length;
-                active_camera->position.y += direction.y * length;
-                active_camera->position.z += direction.z * length;
+                (&active_camera->position.vector)->x += direction.x * length;
+                (&active_camera->position.vector)->y += direction.y * length;
+                (&active_camera->position.vector)->z += direction.z * length;
             } else {
-                tcamera.translation[((CursorState *)cursor)->mode - 1] += direction.y * length;
+                tcamera.translation[cursor.mode - 1] += direction.y * length;
             }
             break;
         }
     }
-    stick.x = (float)((signed char *)keys)[10];
-    stick.y = (float)-((signed char *)keys)[11];
+    stick.x = (float)keys->flags[2];
+    stick.y = (float)-keys->flags[3];
     stick.w = 1.0f;
     length = 0.0f;
     stick.z = 0.0f;
@@ -1323,12 +1222,12 @@ void updateCursorModePlane(void)
         rotation.elements[12] = 0.0f;
         rotation.elements[13] = 0.0f;
         rotation.elements[14] = 0.0f;
-        xglVectorMulMat(&direction, (float (*)[4])rotation.elements, &stick);
+        xglVectorMulMat(&direction, rotation.rows, &stick);
         xglVectorNormal(&stick, &stick);
         xglVectorLength(&length, &stick);
-        length *= cursorSpeed[((CursorState *)cursor)->step];
+        length *= cursorSpeed[cursor.step];
         xglVectorNormal(&direction, &direction);
-        switch (((CursorState *)cursor)->flag_04) {
+        switch (cursor.flag_04) {
         case 0:
             position->x += direction.x * length;
             position->y += direction.y * length;
@@ -1339,38 +1238,38 @@ void updateCursorModePlane(void)
             position->y += direction.y * length;
             position->z += direction.z * length;
             active_camera = camera;
-            active_camera->position.x += direction.x * length;
-            active_camera->position.y += direction.y * length;
-            active_camera->position.z += direction.z * length;
+            (&active_camera->position.vector)->x += direction.x * length;
+            (&active_camera->position.vector)->y += direction.y * length;
+            (&active_camera->position.vector)->z += direction.z * length;
             break;
         case 2:
-            if (((CursorState *)cursor)->mode == 0) {
+            if (cursor.mode == 0) {
                 active_camera = camera;
-                active_camera->position.x += direction.x * length;
-                active_camera->position.y += direction.y * length;
-                active_camera->position.z += direction.z * length;
+                (&active_camera->position.vector)->x += direction.x * length;
+                (&active_camera->position.vector)->y += direction.y * length;
+                (&active_camera->position.vector)->z += direction.z * length;
             } else {
-                tcamera.translation[((CursorState *)cursor)->mode - 1] += direction.y * length;
+                tcamera.translation[cursor.mode - 1] += direction.y * length;
             }
             break;
         }
     }
-    if (keys[0] & 0x2000) {
-        camera->rotation.z -= cursorPlaneRotateDecrement;
+    if (keys->held & 0x2000) {
+        (&camera->rotation.vector)->z -= cursorPlaneRotateDecrement;
     }
-    if (keys[0] & 0x8000) {
-        camera->rotation.z += cursorPlaneRotateIncrement;
+    if (keys->held & 0x8000) {
+        (&camera->rotation.vector)->z += cursorPlaneRotateIncrement;
     }
-    length = cursorSpeed[((CursorState *)cursor)->step];
-    if (keys[0] & 4) {
+    length = cursorSpeed[cursor.step];
+    if (keys->held & 4) {
         position->y += length;
-        camera->position.y += length;
+        (&camera->position.vector)->y += length;
     }
-    if ((unsigned short)(keys[0] & 1)) {
+    if ((unsigned short)(keys->held & 1)) {
         position->y -= length;
-        camera->position.y -= length;
+        (&camera->position.vector)->y -= length;
     }
-    if (keys[0] & 0x40) {
+    if (keys->held & 0x40) {
         height = UnduGet(position->x, position->z);
         if (height != -1000.0f) {
             height_format = mapHeightFormat;
@@ -1380,15 +1279,15 @@ void updateCursorModePlane(void)
             missing_format = mapHoleHeightText;
             xglFontDebugPrintf(4, 0xC4, missing_format, fptodp(height));
         }
-        if (((CursorState *)cursor)->flag_34 != 0) {
-            position->y -= ((CursorState *)cursor)->offset_44;
+        if (cursor.flag_34 != 0) {
+            position->y -= cursor.offset_44;
         }
     }
 }
 
 void updateCursorMode0(void)
 {
-    unsigned short *keys;
+    const struct CursorPadKeyResult *keys;
     Vector4 stick;
     Vector4 direction;
     Matrix rotation;
@@ -1401,12 +1300,12 @@ void updateCursorMode0(void)
     const char *missing_format;
     HomogeneousVector *position;
 
-    keys = keyData;
+    keys = &keyData;
     xglStudioGetCamera(&camera, 0);
-    position = &cursor[1];
-    stick.x = (float)((signed char *)keys)[10];
+    position = &cursor.position;
+    stick.x = (float)keys->flags[2];
     zero = 0.0f;
-    stick.z = (float)((signed char *)keys)[11];
+    stick.z = (float)keys->flags[3];
     stick.w = 1.0f;
     length = zero;
     stick.y = zero;
@@ -1429,20 +1328,20 @@ void updateCursorMode0(void)
         rotation.elements[12] = zero;
         rotation.elements[13] = zero;
         rotation.elements[14] = zero;
-        xglVectorMulMat(&direction, (float (*)[4])rotation.elements, &stick);
+        xglVectorMulMat(&direction, rotation.rows, &stick);
         xglVectorNormal(&stick, &stick);
         xglVectorLength(&length, &stick);
-        length *= cursorSpeed[((CursorState *)cursor)->step];
+        length *= cursorSpeed[cursor.step];
         xglVectorNormal(&direction, &direction);
-        switch (((CursorState *)cursor)->flag_04) {
+        switch (cursor.flag_04) {
         case 0:
             position->x += direction.x * length;
             position->y += direction.y * length;
             position->z += direction.z * length;
             active_camera = camera;
-            active_camera->position.x += direction.x * length;
-            active_camera->position.y += direction.y * length;
-            active_camera->position.z += direction.z * length;
+            (&active_camera->position.vector)->x += direction.x * length;
+            (&active_camera->position.vector)->y += direction.y * length;
+            (&active_camera->position.vector)->z += direction.z * length;
             break;
         case 1:
             position->x += direction.x * length;
@@ -1450,19 +1349,19 @@ void updateCursorMode0(void)
             position->z += direction.z * length;
             break;
         case 2:
-            if (((CursorState *)cursor)->mode == 0) {
+            if (cursor.mode == 0) {
                 active_camera = camera;
-                active_camera->position.x += direction.x * length;
-                active_camera->position.y += direction.y * length;
-                active_camera->position.z += direction.z * length;
+                (&active_camera->position.vector)->x += direction.x * length;
+                (&active_camera->position.vector)->y += direction.y * length;
+                (&active_camera->position.vector)->z += direction.z * length;
             } else {
-                tcamera.translation[((CursorState *)cursor)->mode - 1] += direction.y * length;
+                tcamera.translation[cursor.mode - 1] += direction.y * length;
             }
             break;
         }
     }
-    stick.x = (float)((signed char *)keys)[8];
-    stick.y = (float)-((signed char *)keys)[9];
+    stick.x = (float)keys->flags[0];
+    stick.y = (float)-keys->flags[1];
     stick.w = 1.0f;
     length = 0.0f;
     stick.z = 0.0f;
@@ -1485,19 +1384,19 @@ void updateCursorMode0(void)
         rotation.elements[12] = 0.0f;
         rotation.elements[13] = 0.0f;
         rotation.elements[14] = 0.0f;
-        xglVectorMulMat(&direction, (float (*)[4])rotation.elements, &stick);
+        xglVectorMulMat(&direction, rotation.rows, &stick);
         xglVectorNormal(&stick, &stick);
         xglVectorLength(&length, &stick);
-        length *= cursorSpeed[((CursorState *)cursor)->step];
+        length *= cursorSpeed[cursor.step];
         xglVectorNormal(&direction, &direction);
-        switch (((CursorState *)cursor)->flag_04) {
+        switch (cursor.flag_04) {
         case 0:
             position->x += direction.x * length;
             position->y += direction.y * length;
             position->z += direction.z * length;
             break;
         case 1:
-            if (((CursorState *)cursor)->mode == 0) {
+            if (cursor.mode == 0) {
                 position->x += direction.x * length;
                 position->y += direction.y * length;
                 position->z += direction.z * length;
@@ -1507,38 +1406,38 @@ void updateCursorMode0(void)
             position->y += direction.y * length;
             position->z += direction.z * length;
             active_camera = camera;
-            active_camera->position.x += direction.x * length;
-            active_camera->position.y += direction.y * length;
-            active_camera->position.z += direction.z * length;
+            (&active_camera->position.vector)->x += direction.x * length;
+            (&active_camera->position.vector)->y += direction.y * length;
+            (&active_camera->position.vector)->z += direction.z * length;
             break;
         case 2:
-            if (((CursorState *)cursor)->mode == 0) {
+            if (cursor.mode == 0) {
                 active_camera = camera;
-                active_camera->position.x += direction.x * length;
-                active_camera->position.y += direction.y * length;
-                active_camera->position.z += direction.z * length;
+                (&active_camera->position.vector)->x += direction.x * length;
+                (&active_camera->position.vector)->y += direction.y * length;
+                (&active_camera->position.vector)->z += direction.z * length;
             } else {
-                tcamera.translation[((CursorState *)cursor)->mode - 1] += direction.y * length;
+                tcamera.translation[cursor.mode - 1] += direction.y * length;
             }
             break;
         }
     }
-    if (keys[0] & 0x2000) {
-        camera->rotation.z -= cursorMode0RotateDecrement;
+    if (keys->held & 0x2000) {
+        (&camera->rotation.vector)->z -= cursorMode0RotateDecrement;
     }
-    if (keys[0] & 0x8000) {
-        camera->rotation.z += cursorMode0RotateIncrement;
+    if (keys->held & 0x8000) {
+        (&camera->rotation.vector)->z += cursorMode0RotateIncrement;
     }
-    length = cursorSpeed[((CursorState *)cursor)->step];
-    if (keys[0] & 4) {
+    length = cursorSpeed[cursor.step];
+    if (keys->held & 4) {
         position->y += length;
-        camera->position.y += length;
+        (&camera->position.vector)->y += length;
     }
-    if ((unsigned short)(keys[0] & 1)) {
+    if ((unsigned short)(keys->held & 1)) {
         position->y -= length;
-        camera->position.y -= length;
+        (&camera->position.vector)->y -= length;
     }
-    if (keys[0] & 0x40) {
+    if (keys->held & 0x40) {
         height = UnduGet(position->x, position->z);
         if (height != -1000.0f) {
             height_format = mapHeightFormat;
@@ -1548,8 +1447,8 @@ void updateCursorMode0(void)
             missing_format = mapHoleHeightText;
             xglFontDebugPrintf(4, 0xC4, missing_format, fptodp(height));
         }
-        if (((CursorState *)cursor)->flag_34 != 0) {
-            position->y -= ((CursorState *)cursor)->offset_44;
+        if (cursor.flag_34 != 0) {
+            position->y -= cursor.offset_44;
         }
     }
 }
@@ -1564,8 +1463,8 @@ void changeCameraMode(void)
     int mode;
 
     xglStudioGetCamera(&camera, 0);
-    state = (void *)cursor;
-    camera_position = &camera->position;
+    state = &cursor;
+    camera_position = &camera->position.vector;
     difference.x = state->position.x - camera_position->x;
     difference.y = state->position.y - camera_position->y;
     difference.z = state->position.z - camera_position->z;
@@ -1574,7 +1473,7 @@ void changeCameraMode(void)
         distance = 1.0f;
     }
     mode = state->mode;
-    camera->rotation.z = 0.0f;
+    (&camera->rotation.vector)->z = 0.0f;
     state->flag_04 = 0;
     if (mode != 4) {
         tcamera.mode1 = 20;
@@ -1586,14 +1485,14 @@ void changeCameraMode(void)
     }
     switch (mode) {
     case 0:
-        ((CursorState *)cursor)->flag_04 = 2;
+        cursor.flag_04 = 2;
         tcamera.mode0 = 16;
         break;
     case 2: {
         float translationDistance = distance;
         tcamera.mode0 = 20;
         tcamera.unmodeled_40 = 1;
-        tcamera.translation_constraint = &cursor[1];
+        tcamera.translation_constraint = &cursor.position;
         tcamera.translation[1] = translationDistance;
         tcamera.translation[2] = 0.0f;
         tcamera.translation[0] = 0.0f;
@@ -1601,7 +1500,7 @@ void changeCameraMode(void)
     }
     case 3:
         tcamera.mode0 = 20;
-        tcamera.translation_constraint = &cursor[1];
+        tcamera.translation_constraint = &cursor.position;
         tcamera.translation[2] = -distance;
         tcamera.translation[0] = 0.0f;
         tcamera.translation[1] = 0.0f;
@@ -1609,18 +1508,18 @@ void changeCameraMode(void)
         break;
     case 1:
         tcamera.mode0 = 20;
-        tcamera.translation_constraint = cursor + 1;
+        tcamera.translation_constraint = &cursor.position;
         tcamera.translation[0] = -distance;
         tcamera.translation[1] = 0.0f;
         tcamera.translation[2] = 0.0f;
         tcamera.unmodeled_40 = 1;
         /* fall through */
     case 4:
-        if (((CursorState *)cursor)->callback != 0) {
+        if (cursor.callback != 0) {
             tcamera.mode0 = 16;
             tcamera.mode1 = 16;
         } else {
-            ((CursorState *)cursor)->mode = 0;
+            cursor.mode = 0;
             changeCameraMode();
         }
         break;
@@ -1629,7 +1528,7 @@ void changeCameraMode(void)
 
 void updateCursor(int mode)
 {
-    unsigned short *keys;
+    struct CursorPadKeyResult *keys;
     int plane;
     int selected;
     StudioCamera *camera;
@@ -1640,7 +1539,7 @@ void updateCursor(int mode)
     const char *position_format;
     const char *camera_format;
 
-    keys = keyData;
+    keys = &keyData;
     switch (mode) {
     case 0:
         toolFlags = 0;
@@ -1659,14 +1558,14 @@ void updateCursor(int mode)
         PAD_getKey(keys, 0, 0x57BF);
         break;
     }
-    if ((keys[0] & 0xA0) != 0) {
+    if ((keys->held & 0xA0) != 0) {
         if (cursorMode < 0) {
-            cursorMode = ((CursorState *)cursor)->mode;
+            cursorMode = cursor.mode;
         }
-        if (keys[1] & 0x1000) {
+        if (keys->pressed & 0x1000) {
             cursorMode += 1;
         }
-        if (keys[1] & 0x4000) {
+        if (keys->pressed & 0x4000) {
             cursorMode -= 1;
         }
         if (cursorMode < 0) {
@@ -1677,47 +1576,47 @@ void updateCursor(int mode)
         }
     } else {
         if (cursorMode >= 0) {
-            ((CursorState *)cursor)->mode = cursorMode;
+            cursor.mode = cursorMode;
             changeCameraMode();
             cursorMode = -1;
         }
-        if (keys[1] & 0x1000) {
-            ((CursorState *)cursor)->step += 1;
+        if (keys->pressed & 0x1000) {
+            cursor.step += 1;
         }
-        if (keys[1] & 0x4000) {
-            ((CursorState *)cursor)->step -= 1;
+        if (keys->pressed & 0x4000) {
+            cursor.step -= 1;
         }
-        ((CursorState *)cursor)->step = ((CursorState *)cursor)->step & 7;
+        cursor.step = cursor.step & 7;
     }
-    position = &cursor[1];
+    position = &cursor.position;
     xglStudioGetCamera(&camera, 0);
-    if ((keys[1] & 0x200) != 0) {
+    if ((keys->pressed & 0x200) != 0) {
         position->x = 0.0f;
         position->y = 0.0f;
         position->z = 0.0f;
     }
-    if (keys[1] & 0x400) {
+    if (keys->pressed & 0x400) {
         reset_camera = camera;
-        reset_camera->position.y = 0.0f;
-        reset_camera->position.z = 4.0f;
-        reset_camera->position.x = 0.0f;
+        (&reset_camera->position.vector)->y = 0.0f;
+        (&reset_camera->position.vector)->z = 4.0f;
+        (&reset_camera->position.vector)->x = 0.0f;
     }
-    if (keys[1] & 8) {
-        ((CursorState *)cursor)->flag_04 -= 1;
+    if (keys->pressed & 8) {
+        cursor.flag_04 -= 1;
     }
-    if (keys[1] & 2) {
-        ((CursorState *)cursor)->flag_04 += 1;
+    if (keys->pressed & 2) {
+        cursor.flag_04 += 1;
     }
-    plane = ((CursorState *)cursor)->flag_04;
+    plane = cursor.flag_04;
     if (plane < 0) {
-        ((CursorState *)cursor)->flag_04 = 2;
+        cursor.flag_04 = 2;
         plane = 2;
     }
     if (!(plane < 3)) {
-        ((CursorState *)cursor)->flag_04 = 0;
+        cursor.flag_04 = 0;
     }
-    if (((CursorState *)cursor)->mode != 4) {
-        switch (((CursorState *)cursor)->mode) {
+    if (cursor.mode != 4) {
+        switch (cursor.mode) {
         case 0:
         case 1:
         case 3:
@@ -1729,7 +1628,7 @@ void updateCursor(int mode)
         }
         updateCursorMode2();
         if (toolFlags == 0) {
-            camera_position = &camera->position;
+            camera_position = &camera->position.vector;
             position_format = cursorPositionFormat;
             sprintf(text, position_format, fptodp(position->x), fptodp(position->y),
                     fptodp(position->z));
@@ -1740,17 +1639,17 @@ void updateCursor(int mode)
             xglFontDebugPrintf(0xAA, 0xC6, text);
         }
     } else {
-        if (((CursorState *)cursor)->callback != 0) {
-            ((CursorState *)cursor)->callback(((CursorState *)cursor)->callback_argument);
+        if (cursor.callback != 0) {
+            cursor.callback(cursor.callback_argument);
         }
     }
     selected = cursorMode;
     if (selected < 0) {
-        selected = ((CursorState *)cursor)->mode;
+        selected = cursor.mode;
     }
     if (toolFlags == 0) {
-        xglFontDebugPrintf(4, 0xB4, cursorModeSpeedFormat, cursorModeName[selected], ((CursorState *)cursor)->flag_04,
-                           ((CursorState *)cursor)->step + 1);
+        xglFontDebugPrintf(4, 0xB4, cursorModeSpeedFormat, cursorModeName[selected], cursor.flag_04,
+                           cursor.step + 1);
     }
 }
 
@@ -1759,7 +1658,7 @@ void drawCursor(void)
     Matrix4 matrix;
     HomogeneousVector *position;
 
-    position = &cursor[1];
+    position = &cursor.position;
     position->w = 1.0f;
     xglMatrixStackUnit();
     xglMatrixStackTrans(&position->x);
@@ -1786,10 +1685,10 @@ void initCursor(void)
         }
     }
 
-    cursor_position = &cursor[1];
+    cursor_position = &cursor.position;
     tcamera.mode1 = 20;
     tcamera.view_constraint = cursor_position;
-    state = (CursorState *)(cursor_position - 1);
+    state = &cursor;
     tcamera.view_offset[0] = 0;
     tcamera.view_offset[1] = 0;
     tcamera.view_offset[2] = 0;
@@ -1799,7 +1698,7 @@ void initCursor(void)
     state->position.x = 0.0f;
     state->position.y = 0.0f;
     state->position.z = 0.0f;
-    *(enum CursorMode *)&state->mode = CURSOR_MODE_0;
+    state->mode = CURSOR_MODE_0;
     state->submode = 2;
     changeCameraMode();
 }
@@ -1828,26 +1727,26 @@ void MAP_serach(void)
 {
     MapStageModelView *model;
     MapPartListView *parts;
-    DbLightWritePadSecondPrefix *mapPad;
+    DbLightWritePad *mapPad;
     unsigned char *matrix_base;
     void *matrix_data;
     char buffer[256];
 
     model = GameLoopState.model;
-    mapPad = &PadData.second;
+    mapPad = &PadData[1];
     visible_0++;
     if (model != 0) {
         parts = model->parts;
         if (parts != 0) {
             matrix_base = (unsigned char *)parts +
                           parts->matrix_data_offset;
-            if (mapPad->half_2c & 0x4000) {
+            if (mapPad->repeat & 0x4000) {
                 nmlModelSetPartsVisible(parts, partsIndex, 1);
                 visible_0 = 0;
                 partsIndex--;
             }
 
-            if (mapPad->half_2c & 0x1000) {
+            if (mapPad->repeat & 0x1000) {
                 nmlModelSetPartsVisible(model->parts,
                                         partsIndex, 1);
                 visible_0 = 0;
@@ -1868,7 +1767,7 @@ void MAP_serach(void)
 
 void EvtTools(void)
 {
-    if ((PadData.half_2a & 0x10) && (PadData.half_28 & 0x100)) {
+    if ((PadData[0].pressed & 0x10) && (PadData[0].held & 0x100)) {
         mode_004DC5A8 = (mode_004DC5A8 + 1) & 1;
     }
     MAP_serach();
@@ -1899,13 +1798,13 @@ void initLight3(void)
 
     xglStudioGetLight(&light);
     l = light;
-    slot = &lightCol[3];
+    slot = &lightCol[3].vector;
     slot->x = l->ambient_color.x;
     slot->y = l->ambient_color.y;
     slot->z = l->ambient_color.z;
     sum = slot->x + slot->y + slot->z;
     slot->w = sum / 3.0f;
-    colour = lightCol;
+    colour = &lightCol[0].vector;
     i = 0;
     do {
         filled = i + 1;
@@ -1917,12 +1816,12 @@ void initLight3(void)
         colour++;
         i = filled;
     } while (filled < 3);
-    slot = &lightCol[4];
+    slot = &lightCol[4].vector;
     slot->x = (float)ClearEnv.color_r / 255.0f;
     slot->y = (float)ClearEnv.color_g / 255.0f;
     slot->z = (float)ClearEnv.color_b / 255.0f;
     slot->w = (slot->x + slot->y + slot->z) / 3.0f;
-    slot = &lightCol[5];
+    slot = &lightCol[5].vector;
     slot->w = (slot->x + slot->y + slot->z) / 3.0f;
     source = l;
     i = 0;
@@ -1951,7 +1850,7 @@ void initLight2(void)
 
     xglStudioGetLight(&light);
     source = light;
-    destination = &lightCol[3];
+    destination = &lightCol[3].vector;
     destination->x = source->ambient_color.x;
     destination->y = source->ambient_color.y;
     destination->z = source->ambient_color.z;
@@ -1964,7 +1863,7 @@ void initLight2(void)
 
         float *walk;
 
-        destination = lightCol + i;
+        destination = &lightCol[i].vector;
         walk = &source->lights[i].color.z;
         lred = walk[-2];
         destination->x = lred;
@@ -1975,13 +1874,13 @@ void initLight2(void)
         destination->z = lblue;
     }
 
-    destination = &lightCol[4];
+    destination = &lightCol[4].vector;
     destination->x = (float)ClearEnv.color_r / 255.0f;
     destination->y = (float)ClearEnv.color_g / 255.0f;
     destination->z = (float)ClearEnv.color_b / 255.0f;
     destination->w = (destination->x + destination->y + destination->z) / 3.0f;
 
-    destination = &lightCol[5];
+    destination = &lightCol[5].vector;
     destination->w = (destination->x + destination->y + destination->z) / 3.0f;
 
     walk = &source->lights[0].direction.z;
@@ -2028,30 +1927,29 @@ void initLight(void)
         if (source->z < 0.0f)
             direction.z = -direction.z;
 
-        xglLightIntensityParallel(light, lightIndex, &lightCol[lightIndex]);
+        xglLightIntensityParallel(light, lightIndex, &lightCol[lightIndex].vector);
         xglLightDirection(light, lightIndex, &direction);
     } while (++lightIndex < 3);
 
-    xglLightIntensityAmbient(light, &lightCol[3]);
+    xglLightIntensityAmbient(light, &lightCol[3].vector);
 }
 
 void updateLight(int mode)
 {
-    const struct CursorPadKeyResult *keys =
-        (const struct CursorPadKeyResult *)(const void *)keyData;
+    const struct CursorPadKeyResult *keys = &keyData;
     Matrix4 matrix;
     Matrix4 cameraMatrix;
     Vector4 stick;
-    LightEditorVector direction;
+    AlignedVector4 direction;
     Vector4 barScale;
-    LightEditorVector barPosition;
+    AlignedVector4 barPosition;
     Vector4 translation;
     char text[256];
     Vector3 flat;
     char dumpText[128];
     float stickLength;
     StudioLight *light;
-    FloatLight *dumpLight;
+    StudioLight *dumpLight;
     float horizontal;
     float level;
     StudioCamera *camera;
@@ -2064,10 +1962,10 @@ void updateLight(int mode)
 
     switch (mode) {
     case 0:
-        PAD_getKey(keyData, 0, 0xf7ff);
+        PAD_getKey(&keyData, 0, 0xf7ff);
         break;
     case 1:
-        PAD_getKey(keyData, 0, 0xf6ff);
+        PAD_getKey(&keyData, 0, 0xf6ff);
         break;
     }
 
@@ -2095,14 +1993,14 @@ void updateLight(int mode)
             lightColIndex = 3;
         if (lightColIndex >= 4)
             lightColIndex = 0;
-        component = lightCol[lightIndex] + lightColIndex;
+        component = lightCol[lightIndex].components + lightColIndex;
         if (lightIndex == 5)
             limit = 10.0f;
         if (lightColIndex == 3) {
             float total = 0.0f;
 
             for (i = 0; i < 3; i++) {
-                float *value = lightCol[lightIndex] + i;
+                float *value = lightCol[lightIndex].components + i;
 
                 if (keys->held & 0x2000)
                     *value += 0.01f;
@@ -2119,7 +2017,7 @@ void updateLight(int mode)
                 }
                 total += level;
             }
-            lightCol[lightIndex][3] = total / 3.0f;
+            lightCol[lightIndex].components[3] = total / 3.0f;
         } else {
             float total;
 
@@ -2137,8 +2035,8 @@ void updateLight(int mode)
                 level = limit;
             }
             for (total = 0.0f, i = 0; i < 3; i++)
-                total += lightCol[lightIndex][i];
-            lightCol[lightIndex][3] = total / 3.0f;
+                total += lightCol[lightIndex].components[i];
+            lightCol[lightIndex].components[3] = total / 3.0f;
         }
     } else if (keys->held & 0x20) {
         if (keys->pressed & 8)
@@ -2175,12 +2073,12 @@ void updateLight(int mode)
     }
 
     horizontal = 1.0f - (source->x * source->x + source->z * source->z);
-    direction.vector.x = source->x;
-    direction.vector.y = __builtin_sqrtf(horizontal);
-    direction.vector.z = source->z;
+    direction.x = source->x;
+    direction.y = __builtin_sqrtf(horizontal);
+    direction.z = source->z;
     if (source->y < 0.0f)
-        direction.vector.y = -direction.vector.y;
-    xglVectorLength(&stickLength, &direction.vector);
+        direction.y = -direction.y;
+    xglVectorLength(&stickLength, &direction);
 
     xglStudioFlushActiveCamera();
     camera = xglStudioGetActiveCamera();
@@ -2201,7 +2099,7 @@ void updateLight(int mode)
         : "r" (camera->cameraToWorldMatrix), "r" (cameraMatrix)
         : "$2", "memory");
     xglMatrixStackUnit();
-    xglMatrixStackMul((const float (*)[4])cameraMatrix);
+    xglMatrixStackMul(cameraMatrix);
     xglMatrixStackTrans(&translation.x);
     xglMatrixStackSave(cameraMatrix);
     cameraMatrix[0][0] = 1.0f;
@@ -2216,11 +2114,11 @@ void updateLight(int mode)
     cameraMatrix[2][1] = 0.0f;
     cameraMatrix[2][2] = 1.0f;
     cameraMatrix[2][3] = 0.0f;
-    drawVector4((const Vector3 *)&direction.vector, &cameraMatrix, 0);
+    drawVector4((const Vector3 *)&direction, &cameraMatrix, 0);
 
-    stick.x = lightCol[lightIndex][0];
-    stick.y = lightCol[lightIndex][1];
-    stick.z = lightCol[lightIndex][2];
+    stick.x = lightCol[lightIndex].components[0];
+    stick.y = lightCol[lightIndex].components[1];
+    stick.z = lightCol[lightIndex].components[2];
     stick.w = 1.0f;
     switch (lightIndex) {
     case 0:
@@ -2228,7 +2126,7 @@ void updateLight(int mode)
     case 2:
         xglStudioGetLight(&light);
         xglLightIntensityParallel(light, lightIndex, &stick);
-        xglLightDirection(light, lightIndex, &direction.vector);
+        xglLightDirection(light, lightIndex, &direction);
         break;
     case 3:
         xglStudioGetLight(&light);
@@ -2240,9 +2138,9 @@ void updateLight(int mode)
         ClearEnv.color_b = (unsigned int)(stick.z * 255.0f);
         break;
     case 5:
-        GameLoopState.stage_color.x = lightCol[5][0];
-        GameLoopState.stage_color.y = lightCol[5][1];
-        GameLoopState.stage_color.z = lightCol[5][2];
+        GameLoopState.stage_color.x = lightCol[5].components[0];
+        GameLoopState.stage_color.y = lightCol[5].components[1];
+        GameLoopState.stage_color.z = lightCol[5].components[2];
         break;
     }
 
@@ -2251,7 +2149,7 @@ void updateLight(int mode)
     xglFontDebugPrintf(baseX, 160, text);
     sprintf(text, rgbColorFormat, stick.x, stick.y, stick.z);
     xglFontDebugPrintf(baseX, 170, text);
-    sprintf(text, directionVectorFormat, direction.vector.x, direction.vector.y, direction.vector.z);
+    sprintf(text, directionVectorFormat, direction.x, direction.y, direction.z);
     xglFontDebugPrintf(baseX, 198, text);
 
     baseX = 200 + lightStateOffset / 2;
@@ -2262,12 +2160,12 @@ void updateLight(int mode)
     stick.y = 56.0f;
     stick.z = 1.0f;
     stick.w = 1.0f;
-    direction.vector.x = (float)lightStateOffset + 196.0f;
-    direction.vector.y = 192.0f - (float)lightIndex * 51.0f;
-    direction.vector.z = 0.0f;
-    direction.vector.w = 1.0f;
+    direction.x = (float)lightStateOffset + 196.0f;
+    direction.y = 192.0f - (float)lightIndex * 51.0f;
+    direction.z = 0.0f;
+    direction.w = 1.0f;
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&direction.vector.x);
+    xglMatrixStackTrans(&direction.x);
     xglMatrixStackScale(&stick.x);
     xglMatrixStackSave(matrix);
     drawBox2(&matrix, 6);
@@ -2276,13 +2174,13 @@ void updateLight(int mode)
     stick.y = 6.0f;
     stick.z = 1.0f;
     stick.w = 1.0f;
-    direction.vector.x = (float)lightStateOffset + 196.0f;
-    direction.vector.y = 192.0f - (float)lightIndex * 51.0f + 12.0f -
+    direction.x = (float)lightStateOffset + 196.0f;
+    direction.y = 192.0f - (float)lightIndex * 51.0f + 12.0f -
                   (float)lightColIndex * 12.0f;
-    direction.vector.z = 0.0f;
-    direction.vector.w = 1.0f;
+    direction.z = 0.0f;
+    direction.w = 1.0f;
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&direction.vector.x);
+    xglMatrixStackTrans(&direction.x);
     xglMatrixStackRotZ(3.14159265f / 4.0f);
     xglMatrixStackScale(&stick.x);
     xglMatrixStackSave(matrix);
@@ -2292,16 +2190,16 @@ void updateLight(int mode)
     stick.y = 24.0f;
     stick.z = 1.0f;
     stick.w = 1.0f;
-    direction.vector.y = 192.0f;
-    direction.vector.x = (float)lightStateOffset + 166.0f;
-    direction.vector.z = 0.0f;
-    direction.vector.w = 1.0f;
+    direction.y = 192.0f;
+    direction.x = (float)lightStateOffset + 166.0f;
+    direction.z = 0.0f;
+    direction.w = 1.0f;
     for (k = 0; k < 6; k++) {
         float scale;
 
         source = &lightDir[k];
         xglMatrixStackUnit();
-        xglMatrixStackTrans(&direction.vector.x);
+        xglMatrixStackTrans(&direction.x);
         xglMatrixStackScale(&stick.x);
         xglMatrixStackSave(matrix);
         drawCircle2(&matrix, 24.0f, 1);
@@ -2315,42 +2213,42 @@ void updateLight(int mode)
                 drawVector2(&flat, &matrix, 2);
         }
         barPosition = direction;
-        barPosition.vector.x += 36.0f;
-        barPosition.vector.y += 16.0f;
+        barPosition.x += 36.0f;
+        barPosition.y += 16.0f;
         barScale.z = 1.0f;
         barScale.w = 1.0f;
         barScale.y = 8.0f;
         scale = 1.0f;
         for (j = 0; j < 4; j++) {
-            barScale.x = lightCol[k][j] * 48.0f * scale;
+            barScale.x = lightCol[k].components[j] * 48.0f * scale;
             xglMatrixStackUnit();
-            xglMatrixStackTrans(&barPosition.vector.x);
+            xglMatrixStackTrans(&barPosition.x);
             xglMatrixStackScale(&barScale.x);
             xglMatrixStackSave(matrix);
             if (j < 3)
                 drawRect2(&matrix, j);
             else
                 drawRect2(&matrix, 6);
-            barPosition.vector.y -= 12.0f;
+            barPosition.y -= 12.0f;
         }
-        direction.vector.y -= 51.0f;
+        direction.y -= 51.0f;
     }
 
     if (keys->pressed & 0x100) {
         MapGameLoopStateView *state;
 
         i = 0;
-        xglStudioGetLight((StudioLight **)&dumpLight);
-        sprintf(dumpText, lightSetColorFormat, i, dumpLight->ambient_color[0],
-                dumpLight->ambient_color[1], dumpLight->ambient_color[2]);
+        xglStudioGetLight(&dumpLight);
+        sprintf(dumpText, lightSetColorFormat, i, dumpLight->ambient_color_row[0],
+                dumpLight->ambient_color_row[1], dumpLight->ambient_color_row[2]);
         state = &GameLoopState;
         do {
-            sprintf(dumpText, lightSetColorFormat, i + 1, dumpLight->lights[i].color[0],
-                    dumpLight->lights[i].color[1],
-                    dumpLight->lights[i].color[2]);
-            sprintf(dumpText, lightSetDirection2Format, i + 1, dumpLight->lights[i].direction[0],
-                    dumpLight->lights[i].direction[1],
-                    dumpLight->lights[i].direction[2]);
+            sprintf(dumpText, lightSetColorFormat, i + 1, dumpLight->lights[i].color_row[0],
+                    dumpLight->lights[i].color_row[1],
+                    dumpLight->lights[i].color_row[2]);
+            sprintf(dumpText, lightSetDirection2Format, i + 1, dumpLight->lights[i].direction_row[0],
+                    dumpLight->lights[i].direction_row[1],
+                    dumpLight->lights[i].direction_row[2]);
             sprintf(dumpText, stageSetColorFormat, state->stage_color.x,
                     state->stage_color.y,
                     state->stage_color.z);
@@ -2361,7 +2259,7 @@ void updateLight(int mode)
 void updateWind(WindRecord *wind)
 {
     StudioCamera *camera;
-    DbLightWritePadSecondPrefix *pad;
+    DbLightWritePad *pad;
     char text[256];
     char text_line[256];
     WindMarker marker;
@@ -2380,9 +2278,9 @@ void updateWind(WindRecord *wind)
     const char *format1, *format2, *format3, *format4, *format5, *format6, *format7, *format8, *format9, *format10;
     char *line;
 
-    pad = &PadData.second;
+    pad = &PadData[1];
     camera = xglStudioGetActiveCamera();
-    buttons = pad->half_2c;
+    buttons = pad->repeat;
     if (buttons & 0x1000) {
         selection = csr_1;
         selection += 4;
@@ -2396,11 +2294,11 @@ void updateWind(WindRecord *wind)
         csr_1 = selection;
     }
     selection = csr_1;
-    if ((pad->half_2a & 0x20) && selection < 3) {
+    if ((pad->pressed & 0x20) && selection < 3) {
         wind->mode = csr_1;
         selection = csr_1;
     }
-    stick = pad->half_28;
+    stick = pad->held;
     buttons = stick;
     step = (buttons & 0x80) ? 0.001f : 0.01f;
 
@@ -2455,7 +2353,7 @@ void updateWind(WindRecord *wind)
     wind->x = wind->x + (cos_angle * stick_x - sin_angle * stick_y);
     wind->z = wind->z + (cos_angle * stick_y + sin_angle * stick_x);
 
-    if (pad->half_2a & 0x10) {
+    if (pad->pressed & 0x10) {
         mode = wind->mode;
         EXM_ResetWind();
         wind->mode = mode;
@@ -2504,8 +2402,7 @@ void updateWind(WindRecord *wind)
     sprintf(line, format6, fptodp(wind->w));
     xglFontDebugPrintf(182, dispy_2 + 104, line);
     if (wind->mode == 1) {
-        marker.from.raw[0] = *(unsigned long long *)((char *)camera + 288);
-        marker.from.raw[1] = *(unsigned long long *)((char *)camera + 296);
+        marker.from = camera->chasePosition;
         marker.color[0] = 255;
         marker.color[1] = 60;
         marker.color[2] = 60;
@@ -2520,7 +2417,7 @@ void updateWind(WindRecord *wind)
     } else {
         xglFontDebugPrintf(150, dispy_2 + csr_1 * 12 + 12, cursorMarkerText);
     }
-    if (pad->half_2a & 0x100) {
+    if (pad->pressed & 0x100) {
         wide_text = text_wide;
         format7 = windShakeCommandFormat;
         sprintf(wide_text, format7, fptodp(wind->offset_a), fptodp(wind->offset_b));
@@ -2543,7 +2440,7 @@ void updateWind(WindRecord *wind)
 
 void VW_setCursorMode(int mode)
 {
-    CursorState *state = (void *)cursor;
+    CursorState *state = &cursor;
 
     state->mode = mode;
     changeCameraMode();
@@ -2551,7 +2448,7 @@ void VW_setCursorMode(int mode)
 
 void VW_setCursorFunc(CursorCallback callback, void *argument)
 {
-    CursorState *state = (void *)cursor;
+    CursorState *state = &cursor;
 
     state->callback = callback;
     state->callback_argument = argument;
@@ -2559,16 +2456,16 @@ void VW_setCursorFunc(CursorCallback callback, void *argument)
 
 void VW_setCursor(const Vector4 *position)
 {
-    cursor[1].x = position->x;
-    cursor[1].y = position->y;
-    cursor[1].z = position->z;
+    cursor.position.x = position->x;
+    cursor.position.y = position->y;
+    cursor.position.z = position->z;
 }
 
 void VW_getCursor(HomogeneousVector *destination)
 {
-    destination->x = cursor[1].x;
-    destination->y = cursor[1].y;
-    destination->z = cursor[1].z;
+    destination->x = cursor.position.x;
+    destination->y = cursor.position.y;
+    destination->z = cursor.position.z;
     destination->w = 1.0f;
 }
 

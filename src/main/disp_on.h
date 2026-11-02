@@ -6,6 +6,8 @@
 #define SRC_MAIN_DISP_ON_H
 
 #include "shared.h"
+#include "main/disp_on.h"
+#include "main/xgl_task.h"
 
 #define DISP_REQUEST_ON  0
 #define DISP_REQUEST_OFF 1
@@ -120,13 +122,9 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry);
 
-/* canon: config/header-canon.json chose src/core/main-0021c6b0/xglTaskRemove.c over 0 other accepted spellings */
-int xglTaskRemove(XglTaskPrefix *task);
-
 void DISP_on(int countdown);
 static int disptest(XglTaskPrefix *task);
 void DISP_off(int countdown);
-void setEventTimerTaskEntry(const char *method_reference, int countdown);
 extern int EventTimerTask(XglTaskPrefix *task);
 
 #endif /* SRC_MAIN_DISP_ON_H */

@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "game_pause_disp.h"
 #include "main/xgl_packet.h"
+#include "main/game_pause_disp.h"
 
 static PauseShadowCommand ShadowEnv = {
     .dma_tag = 0,
@@ -25,14 +26,14 @@ static char msg1_1[44] = "\013\015\003\014 \200 \242\244\014\200\200\200\031\003
 /* Text: {reset}{effect 3}{style 3}START Button : Cancel PAUSE{style 2} */
 static char msg2_2[35] = "\013\015\003\031\003START Button : Cancel PAUSE\031\002";
 
-static void DrawShadow(PauseDrawContext *context)
+static void DrawShadow(FontDrawCursor *cursor, void *argument)
 {
-    sceVif1PkAddDirectDataN(context->packet, &ShadowEnv, 7);
+    sceVif1PkAddDirectDataN(cursor->packet, &ShadowEnv, 7);
 }
 
-static void DrawCredit(PauseDrawContext *context)
+static void DrawCredit(FontDrawCursor *cursor, void *argument)
 {
-    PauseCreditData *data = &context->credit_data;
+    PauseCreditData *data = &cursor->work.credit_data;
     int first_vertex_x = 30072;
     int first_vertex_y = 0x8C37;
     int vertex_depth = -1;
@@ -61,13 +62,13 @@ static void DrawCredit(PauseDrawContext *context)
     data->body_words[9] = first_vertex_y;
     data->body_words[18] = vertex_depth;
 
-    sceVif1PkAddDirectDataN(context->packet, &context->credit_data, 8);
+    sceVif1PkAddDirectDataN(cursor->packet, &cursor->work.credit_data, 8);
 }
 
 void PauseMenu(void)
 {
     int pause_mode = GameLoopState.pause_mode;
-    unsigned int snapshot_work;
+    unsigned char *snapshot_work;
     int snapshot_size;
     int scanline_value;
 
@@ -88,7 +89,7 @@ void PauseMenu(void)
     default:
         return;
     }
-    snapshot_work = ((unsigned int)WorkEnd + 63) & ~63u;
+    snapshot_work = (unsigned char *)(((unsigned int)WorkEnd + 63) & ~63u);
     snapshot_size = GameSnapShotSave(GameLoopState.snapshot_slot, snapshot_work);
     GameSnapShotSaveFile(-1, snapshot_work, snapshot_size);
     xglFontSetFlags(GameLoopState.snapshot_flags);

@@ -2,7 +2,10 @@
 #include "shared.h"
 #include "main/xgl_thread.h"
 #include "game_over.h"
+#include "main/game_over.h"
 #include "main/xgl_packet.h"
+#include "main/res_get_path.h"
+#include "main/xgl_sound.h"
 
 /* GameLoopState.scene_id value that routes GameOver to the ending screen. */
 #define GAME_END_SCENE_ID 9998
@@ -51,23 +54,6 @@
 
 #define INTERMISSION_LOAD_OFFSET 0x100000
 
-/*
- * sRender's destination-buffer selector: folded (with a fixed high bit)
- * into the register DrawImage primes at TestEnv0[4] before the two-part
- * image transfer below. Only this halfword is evidenced here (see
- * src/main/map_1.c's MapRenderState for the same object's callback member
- * and src/main/window_tex_load.c's UmnRenderSize for the screen-size
- * halfwords).
- */
-/* DrawBack reads the framebuffer-page halfword at sRender +0x14. */
-typedef struct {
-    u8 unmodeled_00[0x10];
-    u16 width;
-    u16 height;
-    u16 framebuffer_page;
-    u8 unmodeled_16[0x0a];
-    u16 buffer_select;
-} DrawImageRenderState;
 
 extern GameLoopStatePrefix GameLoopState;
 extern DrawImageRenderState sRender;
@@ -78,8 +64,6 @@ extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern u32 GameResourceGetFreeAddr(void);
-extern void GameResourceReset(int mode);
-
 const char GameEndImagePath[24] = "data\\yajima\\end.jpg";
 
 /* JP: Save clear data? /  /  ○  Button: Yes /  /  ×  Button: No

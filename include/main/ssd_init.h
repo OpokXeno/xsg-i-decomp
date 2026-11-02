@@ -44,6 +44,11 @@ typedef struct RssdRpcResponse {
     unsigned char unmodeled_010[0x20 - 0x10];          /* +0x0c..0x1f: 32-bit words, not read here */
 } RssdRpcResponse;
 
+/*
+ * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
+ * ELF symbol size 0x200 bytes. Only the evidenced members are modeled here;
+ * bytes that no recovered function accesses stay explicit unmodeled spans.
+ */
 typedef struct RssdWorkFlags {
     int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
     int rpc_buffer_size;                  /* +0x004: RPC buffer capacity */
@@ -120,7 +125,8 @@ typedef struct RssdWorkFlags {
     int busy_sema_id;                     /* +0x1b8: signalled by RssdBusy */
     unsigned char _unmodeled_1bc[4];      /* +0x1bc..0x1bf */
     struct SsdMemoryBlock *first_block;   /* +0x1c0: first allocator-list node */
-    unsigned char _unmodeled_1c4[8];     /* +0x1c4..0x1cb */
+    int memory_end;                       /* +0x1c4: allocator arena end */
+    int memory_size;                      /* +0x1c8: aligned arena size */
     int spu_bytes_remaining;              /* +0x1cc: drained by RssdBackNextWaveThread */
     /*
      * Running destination pointer for streamed sample data. RssdSpuRead
@@ -129,7 +135,10 @@ typedef struct RssdWorkFlags {
      * (main:0x00240690, still asm) sets it from its own destination argument.
      */
     unsigned char *spu_write_ptr;         /* +0x1d0: streamed sample write position */
-    unsigned char _unmodeled_1d4[0x14];   /* +0x1d4..0x1e7 */
+    int wave_id;                          /* +0x1d4: active wave id */
+    unsigned char _unmodeled_1d8[4];      /* +0x1d8..0x1db */
+    unsigned short wave_chunk_index;      /* +0x1dc: streamed chunk index */
+    unsigned char _unmodeled_1de[0x0a];   /* +0x1de..0x1e7 */
     /*
      * Two (callback, argument) pairs stored verbatim by main/tu112:
      * SsdSetSampleDmaCallback (main:0x002410a0) `sw $4,488($2)` /
@@ -179,6 +188,15 @@ typedef struct RssdRequest {
  * Returns -1 when the rounded payload exceeds the buffer, otherwise the
  * sceSifCallRpc result.
  */
+/*
+ * Sends one RSSD command over SIF RPC; see main:0x0023fff0 (still
+ * INCLUDE_ASM, main/tu110). `request` may be null, otherwise its 32 bytes
+ * are copied into the SIF RPC buffer, and `size` bytes of `data` are copied
+ * after it.
+ */
 int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
+
+/* Functions and data used by other translation units. */
+int SsdGetResultValue(int *value);
 
 #endif /* INCLUDE_MAIN_SSD_INIT_H */

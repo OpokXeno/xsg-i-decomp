@@ -22,12 +22,12 @@ void Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_(
     JThread *thread, Thread2SetTargetArguments *arguments)
 {
     SceneObject target;
-    SceneClass *target_class;
-    Thread2Handle *handle;
-    SceneMethod *method;
+    JavaClass *target_class;
+    JThread *handle;
+    JavaMethod *method;
 
     target = arguments->target;
-    target_class = ((SceneObjectHeader *)target)->class_ref->scene_class;
+    target_class = ((ObjectHeader *)target)->classPointer->clazz;
     handle = arguments->thread;
     method = findMethod(target_class,
                         loadConstString(arguments->name->storage->bytes,
@@ -43,9 +43,9 @@ void Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_(
  * binding). Resets the thread's native handle and sets its start-pending
  * bit (0x10).
  */
-void Java_xeno_vm_Thread_start__(JThread *thread, Thread2Handle **arguments)
+void Java_xeno_vm_Thread_start__(JThread *thread, JThread **arguments)
 {
-    Thread2Handle *handle;
+    JThread *handle;
 
     handle = *arguments;
     JNI_initThread(handle);
@@ -56,9 +56,9 @@ void Java_xeno_vm_Thread_start__(JThread *thread, Thread2Handle **arguments)
  * Java_xeno_vm_Thread_stop__ (main VA 0x002f6638, 24 bytes, GLOBAL
  * binding). Clears the thread's start-pending bit (0x10).
  */
-void Java_xeno_vm_Thread_stop__(JThread *thread, Thread2Handle **arguments)
+void Java_xeno_vm_Thread_stop__(JThread *thread, JThread **arguments)
 {
-    Thread2Handle *handle;
+    JThread *handle;
 
     handle = *arguments;
     handle->flags &= ~0x10;

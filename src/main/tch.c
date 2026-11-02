@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "tch.h"
+#include "main/tch.h"
 
 struct PlayTCHCurveSet;
 
@@ -23,8 +24,8 @@ static void getInfoAddr(TimeChart *chart)
     if (recordCount != 0) {
         remainingRecords = recordCount;
         do {
-            if (entry->name != 0) {
-                entry->name = (char *)chartAddress + (u32)entry->name;
+            if (entry->nameOffset != 0) {
+                entry->name = (char *)chartAddress + entry->nameOffset;
             }
 
             pointerCount = entry->wordCount;
@@ -65,7 +66,7 @@ int TCH_getInfoID(TimeChart *chart, const char *name, int length)
                 return index;
             }
             index += 1;
-            entry = (const TchEntry *)((const char *)entry + entry->wordCount * 4 + 8);
+            entry = (const TchEntry *)&entry->pointerOffsets[entry->wordCount];
         } while (index < chart->recordCount);
     }
     return -1;
@@ -75,7 +76,7 @@ struct PlayTCHCurveSet *TCH_getInfo(void *timeChart, int index)
 {
     TimeChart *chart;
     int entryIndex;
-    void *entry;
+    TchEntry *entry;
 
     chart = timeChart;
     if (chart->relocated == 0) {
@@ -85,13 +86,13 @@ struct PlayTCHCurveSet *TCH_getInfo(void *timeChart, int index)
         return 0;
     }
 
-    entry = (struct PlayTCHCurveSet *)chart->records;
+    entry = chart->records;
     entryIndex = 0;
     while (entryIndex < chart->recordCount) {
         if (index == entryIndex) {
-            return entry;
+            return (struct PlayTCHCurveSet *)entry;
         }
-        entry = &((TchEntry *)entry)->pointerOffsets[((TchEntry *)entry)->wordCount];
+        entry = (TchEntry *)&entry->pointerOffsets[entry->wordCount];
         entryIndex++;
     }
     return 0;

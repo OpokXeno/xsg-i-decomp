@@ -1,5 +1,7 @@
 #include "common.h"
 #include "debug_break.h"
+#include "main/Undulate.h"
+#include "main/xgl_2.h"
 
 #define UNDU_ORIENT(x0, z0, x1, z1, x2, z2) \
     ((x0) * (z1) + (x1) * (z2) + (x2) * (z0) - (x0) * (z2) - (x1) * (z0) - (x2) * (z1))
@@ -10,11 +12,17 @@
             (field) = (void *)((unsigned char *)(field) + (unsigned int)(base)); \
     } while (0)
 
+#define UNDU_RELOCATE_BYTES(field, base) \
+    do { \
+        if ((field) != 0) \
+            (field) = (field) + (unsigned int)(base); \
+    } while (0)
+
 #define UNDU_RELOCATE_HEADER(header, base) \
     do { \
-        UNDU_RELOCATE((header)->vertexData, base); \
-        UNDU_RELOCATE((header)->normalData, base); \
-        UNDU_RELOCATE((header)->subList, base); \
+        UNDU_RELOCATE_BYTES((header)->vertexData, base); \
+        UNDU_RELOCATE_BYTES((header)->normalData, base); \
+        UNDU_RELOCATE_BYTES((header)->subList, base); \
         UNDU_RELOCATE((header)->wallAttributeTable, base); \
     } while (0)
 
@@ -32,18 +40,14 @@ extern const char unduAssertExpression[];
 extern const char unduSourcePath[];
 
 extern float atan2f(float y, float x);
-extern float xglSin(float x);
-extern float xglCos(float x);
 extern int printf(const char *format, ...);
-extern float UnduGet2(int flag, float x, float z);
-
 int StudioEntrySkip = 0;
 
 signed char FLAG_FRAME_60 = 0;
 
 const float unduInitialSlopeTable[1] = { -0.0f };
 
-static unsigned char *CurrentColiHead;
+static union UnduColiBlob *CurrentColiHead;
 
 /* The collision solver distinguishes positive and negative zero by their
  * 32-bit IEEE representation; copying bytes avoids incompatible scalar aliases. */
@@ -61,14 +65,7 @@ static __inline__ int unduSlopeBits(const float *value)
 #ifndef SRC_MAIN_UNDULATE_H
 #define SRC_MAIN_UNDULATE_H
 
-typedef struct LayoutHeader LayoutHeader;
 struct UnduDataHeader;
-
-/* Collision mode in the wall-attribute header. */
-typedef struct UnduWallAttrHeader {
-    unsigned char unmodeled_00[8];
-    unsigned short flags;
-} UnduWallAttrHeader;
 
 /* Each wall-attribute table entry consists of two words. */
 typedef union UnduWallAttributes {
@@ -103,18 +100,14 @@ typedef struct UnduResult {
     UnduWallAttributes attributes;
 } UnduResult;
 
-typedef struct UnduGroupItem {
-    unsigned char unmodeled_00[16];
-} UnduGroupItem;
-
 typedef struct UnduColiGroup {
     unsigned short firstIdentifier;
     unsigned short count;
-    UnduGroupItem *items;
+    float (*headers)[4];
 } UnduColiGroup;
 
 typedef struct UnduColiRecord {
-    unsigned short count;
+    short count; /* The list ends at the first negative count. */
     unsigned char unmodeled_02[2];
     struct UnduDataHeader *headers;
 } UnduColiRecord;
@@ -136,28 +129,11 @@ typedef struct UnduColiHead {
     UnduColiRecord *records;
 } UnduColiHead;
 
-typedef struct UnduDataHeaderGroup {
-    unsigned short firstIdentifier;
-    unsigned short headerCount;
-    float (*headers)[4];
-} UnduDataHeaderGroup;
-
-typedef struct UnduDataHeaderSubList {
-    short headerCount;
-    unsigned char unmodeled_02[2];
-    struct UnduDataHeader *headers;
-} UnduDataHeaderSubList;
-
-typedef struct UnduDataHeaderIndex {
-    unsigned char type;
-    unsigned char firstCount;
-    unsigned char secondCount;
-    unsigned char groupCount;
-    struct UnduDataHeader *firstHeaders;
-    struct UnduDataHeader *secondHeaders;
-    UnduDataHeaderGroup *groups;
-    UnduDataHeaderSubList *subLists;
-} UnduDataHeaderIndex;
+/* The collision blob is one of these kinds; its type byte is the first byte of each. */
+typedef union UnduColiBlob {
+    UnduColiTables tables;
+    UnduColiHead head;
+} UnduColiBlob;
 
 typedef struct UnduGameLoopState {
     unsigned char unmodeled_00[0x10];
@@ -172,18 +148,18 @@ typedef struct UnduWork {
     unsigned char unmodeled_00[0x40];
     float sample[3];
     unsigned char unmodeled_4c[4];
-    UnduWallAttrHeader *wallAttrHeader;
+    struct UnduQueryParameters *wallAttrHeader;
     int subCount;           /* 0x54: number of collision sub-primitives to test */
     unsigned char *vertexData;
     unsigned char *normalData;
-    int subListOffset;      /* 0x60: byte offset of the first sub-primitive; entries are 0x18 bytes apart */
+    unsigned int subListOffset; /* 0x60: byte offset of the first sub-primitive; entries are 0x18 bytes apart */
     UnduWallAttributes *wallAttributeTable;
     unsigned char unmodeled_68[8];
     float collisionPoint[3];
     unsigned char unmodeled_7c[4];
     float hitPoint[3];
     unsigned char unmodeled_8c[4];
-    int hasCollisionPoint;
+    float *output;          /* 0x90: the caller's move vector; null when none was given */
     float heightTolerance;
     float collisionHeight;
     unsigned short *collisionAttribute;
@@ -212,7 +188,7 @@ typedef struct UnduDataHeader {
 typedef struct UnduQueryParameters {
     unsigned short *attribute;
     unsigned short *previousAttribute;
-    short flags;
+    unsigned short flags;
     short collisionType;
     unsigned char crossCheckCountX;
     unsigned char crossCheckCountZ;
@@ -251,10 +227,10 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
  * pointer field again after its null test, and rereads each list head and count
  * after the stores. The type 0 table is read once per field.
  */
-void UnduInit(unsigned char *data)
+void UnduInit(union UnduColiBlob *data)
 {
-    UnduColiTables *flat = (UnduColiTables *)data;
-    volatile UnduColiHead *head = (volatile UnduColiHead *)data;
+    UnduColiTables *flat = &data->tables;
+    volatile UnduColiHead *head = &data->head;
     volatile UnduDataHeader *header;
     volatile UnduColiGroup *group;
     volatile UnduColiRecord *record;
@@ -262,9 +238,9 @@ void UnduInit(unsigned char *data)
     CurrentColiHead = data;
     if (data == 0)
         return;
-    if (data[0] & 0x80)
+    if (data->tables.type & 0x80)
         return;
-    switch (data[0]) {
+    switch (data->tables.type) {
     case 0:
         UNDU_RELOCATE(flat->tables[0], data);
         UNDU_RELOCATE(flat->tables[1], data);
@@ -292,13 +268,13 @@ void UnduInit(unsigned char *data)
         UNDU_RELOCATE_HEADERS(header, head->secondHeaders, head->secondCount, i, data);
         group = head->groups;
         for (i = 0; i < head->groupCount; i++, group++)
-            UNDU_RELOCATE(group->items, data);
+            UNDU_RELOCATE(group->headers, data);
         if ((void *)&head->records != (void *)head->directHeaders) {
             UNDU_RELOCATE(head->records, data);
             record = head->records;
-            while ((short)record->count >= 0) {
+            while (record->count >= 0) {
                 UNDU_RELOCATE(record->headers, data);
-                UNDU_RELOCATE_HEADERS(header, record->headers, (short)record->count, i, data);
+                UNDU_RELOCATE_HEADERS(header, record->headers, record->count, i, data);
                 record++;
             }
         }
@@ -307,12 +283,12 @@ void UnduInit(unsigned char *data)
     default:
         break;
     }
-    data[0] |= 0x80;
+    data->tables.type |= 0x80;
 }
 
-static UnduDataHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
-                                            unsigned int count,
-                                            unsigned int identifier)
+static LayoutHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
+                                          unsigned int count,
+                                          unsigned int identifier)
 {
     unsigned int index;
     UnduDataHeader *header;
@@ -320,29 +296,29 @@ static UnduDataHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
     if (identifier & 0x8000) {
         identifier &= 0x7fff;
         if (identifier < count)
-            return &headers[identifier];
+            return (LayoutHeader *)&headers[identifier];
     } else {
         header = headers;
         for (index = 0; index < count; index++, header++) {
             if (header->identifier == identifier)
-                return header;
+                return (LayoutHeader *)header;
         }
     }
     return 0;
 }
 
-LayoutHeader *UnduDataGetHeader(int map_index, int unit_index)
+LayoutHeader *UnduDataGetHeader(int map_index, unsigned int unit_index)
 {
-    UnduDataHeaderIndex *headerIndex;
-    UnduDataHeaderGroup *group;
-    UnduDataHeaderSubList *subList;
+    UnduColiHead *headerIndex;
+    UnduColiGroup *group;
+    UnduColiRecord *subList;
     float (*header)[4];
     unsigned int group_index;
     unsigned int header_index;
     int entry_index;
     unsigned int identifier;
 
-    headerIndex = (UnduDataHeaderIndex *)CurrentColiHead;
+    headerIndex = &CurrentColiHead->head;
     if (headerIndex == 0) {
         return 0;
     }
@@ -352,44 +328,44 @@ LayoutHeader *UnduDataGetHeader(int map_index, int unit_index)
 
     switch ((unsigned int)map_index & 0xff00) {
     case 0:
-        return (LayoutHeader *)UnduDataGetHeaderSub(
-            headerIndex->firstHeaders, headerIndex->firstCount,
-            (unsigned int)unit_index);
+        return UnduDataGetHeaderSub(
+            headerIndex->directHeaders, headerIndex->directCount,
+            unit_index);
     case 0x100:
-        return (LayoutHeader *)UnduDataGetHeaderSub(
+        return UnduDataGetHeaderSub(
             headerIndex->secondHeaders, headerIndex->secondCount,
-            (unsigned int)unit_index);
+            unit_index);
     case 0x200:
         group_index = (unsigned int)map_index & 0xff;
         group = headerIndex->groups;
         if (group_index < headerIndex->groupCount) {
             group = &group[group_index];
             if ((unit_index & 0x8000) != 0) {
-                header_index = (unsigned int)unit_index & 0x7fff;
-                if (header_index < group->headerCount) {
+                header_index = unit_index & 0x7fff;
+                if (header_index < group->count) {
                     return (LayoutHeader *)&group->headers[header_index];
                 }
                 return 0;
             }
             header = group->headers;
             identifier = group->firstIdentifier;
-            for (entry_index = 0; entry_index < group->headerCount;
+            for (entry_index = 0; entry_index < group->count;
                  entry_index++, header++, identifier++) {
-                if (identifier == (unsigned int)unit_index) {
+                if (identifier == unit_index) {
                     return (LayoutHeader *)header;
                 }
             }
         }
         break;
     case 0x300:
-        if ((void *)&headerIndex->subLists != (void *)headerIndex->firstHeaders) {
-            subList = headerIndex->subLists;
-            for (; subList->headerCount >= 0; subList++) {
+        if ((void *)&headerIndex->records != (void *)headerIndex->directHeaders) {
+            subList = headerIndex->records;
+            for (; subList->count >= 0; subList++) {
                 if (((unsigned int)map_index & 0xff) == 0) {
-                    return (LayoutHeader *)UnduDataGetHeaderSub(
+                    return UnduDataGetHeaderSub(
                         subList->headers,
-                        (unsigned int)(int)subList->headerCount,
-                        (unsigned int)unit_index);
+                        subList->count,
+                        unit_index);
                 }
                 map_index--;
             }
@@ -686,7 +662,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                     edgeBC = UNDU_ORIENT(hitPoint[0], hitPoint[2], vertexB->x, vertexB->z, vertexC->x, vertexC->z);
                     edgeCA = UNDU_ORIENT(hitPoint[0], hitPoint[2], vertexC->x, vertexC->z, vertexA->x, vertexA->z);
                     if (edgeAB <= 0.0f && edgeBC <= 0.0f && edgeCA <= 0.0f) {
-                        flags = (unsigned short)parameters->flags;
+                        flags = parameters->flags;
                         inside = 0;
                         if (flags & 0x400) {
                             low = vertexA->y;
@@ -817,7 +793,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 moveDistance = 0.0f;
                 moveAngle = 0.0f;
                 angle = 0.0f;
-                move = (float *)work->hasCollisionPoint;
+                move = work->output;
                 if (move != 0) {
                     moveAngle = atan2f(move[0], move[2]);
                     moveDistance = __builtin_sqrtf(move[0] * move[0] + move[2] * move[2]);
@@ -846,7 +822,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                     turn = flipped;
                 }
                 distance = moveDistance * xglCos(turn);
-                if (work->hasCollisionPoint != 0) {
+                if (work->output != 0) {
                     hitPoint[0] = work->collisionPoint[0] + xglSin(angle) * distance;
                     hitPoint[2] = work->collisionPoint[2] + xglCos(angle) * distance;
                 }
@@ -989,7 +965,7 @@ static float UnduCheckResultCheck(UnduWork *work, UnduResult *result, float *poi
         } else {
             result->attributes.bits = *work->collisionAttribute;
         }
-        if (work->hasCollisionPoint != 0) {
+        if (work->output != 0) {
             point[0] = work->hitPoint[0];
             point[1] = work->hitPoint[1];
             point[2] = work->hitPoint[2];
@@ -997,7 +973,7 @@ static float UnduCheckResultCheck(UnduWork *work, UnduResult *result, float *poi
     } else {
         result->attribute = 0;
         result->attributes.bits = 0;
-        if ((result->flags & 7) == 1 && work->hasCollisionPoint != 0) {
+        if ((result->flags & 7) == 1 && work->output != 0) {
             point[0] = work->hitPoint[0];
             point[1] = work->hitPoint[1];
             point[2] = work->hitPoint[2];
@@ -1028,9 +1004,9 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
         return 0.0f;
     header = query->prefix.parameters.header;
     if (header == 0) {
-        if ((CurrentColiHead[0] & 0x7f) != 2)
+        if ((CurrentColiHead->tables.type & 0x7f) != 2)
             return 0.0f;
-        header = ((UnduColiHead *)CurrentColiHead)->directHeaders;
+        header = CurrentColiHead->head.directHeaders;
     }
     work->heightTolerance = query->prefix.parameters.heightLimit;
     work->collisionHeight = -1000.0f;
@@ -1040,19 +1016,19 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     subList = header->subList;
     work->subCount = header->subCount;
     work->normalData = header->normalData;
-    work->subListOffset = (int)subList;
+    work->subListOffset = (unsigned int)subList;
     work->wallAttributeTable = header->wallAttributeTable;
     work->collisionPoint[2] = sample[2];
     work->collisionType = 0;
     work->wallAttributeMask = query->excludedAttributes;
     work->wallAttributeValue = query->includedAttributes;
-    work->wallAttrHeader = (UnduWallAttrHeader *)query;
+    work->wallAttrHeader = &query->prefix.parameters;
     work->collisionAttribute = 0;
-    work->hasCollisionPoint = (int)output;
+    work->output = output;
     if (output != 0
         && (((int *)output)[0] == 0x7fffffff || ((int *)output)[1] == 0x7fffffff
             || ((int *)output)[2] == 0x7fffffff))
-        work->hasCollisionPoint = 0;
+        work->output = 0;
     if (query->prefix.parameters.previousAttribute == 0
         || (*(long long *)&query->prefix.result.flags & 0x5000)
         || (GameLoopState.flags & 0x20)) {
@@ -1061,7 +1037,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
         work->hitPoint[2] = work->collisionPoint[2];
         UnduCheckSubCheckAll(work);
         height = UnduCheckResultCheck(work, &query->prefix.result, sample);
-        if (height == -1000.0f || work->hasCollisionPoint == 0)
+        if (height == -1000.0f || work->output == 0)
             return height;
         work->collisionHeight = -1000.0f;
         work->collisionAttribute = 0;
@@ -1070,7 +1046,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
         attribute = query->prefix.parameters.attribute;
     else
         attribute = query->prefix.parameters.previousAttribute;
-    if ((unsigned int)attribute < (unsigned int)work->subListOffset
+    if ((unsigned int)attribute < work->subListOffset
         && (unsigned int)attribute >= work->subListOffset + work->subCount * 0x18) {
         printf("\nUnduCheck() call from %08x\n", caller);
         if (unduParamErrorMessage != 0) {
@@ -1081,7 +1057,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     x = work->collisionPoint[0];
     y = work->collisionPoint[1];
     z = work->collisionPoint[2];
-    offset = (float *)work->hasCollisionPoint;
+    offset = work->output;
     if (offset != 0) {
         x += offset[0];
         y += offset[1];
@@ -1093,7 +1069,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     height = UnduCheckSub(work, (int)attribute);
     if (height != -1000.0f)
         UnduCheckSubHeightCheck(work, (int)attribute, height);
-    else if (work->hasCollisionPoint == 0)
+    else if (work->output == 0)
         UnduCheckSubCheckAll(work);
     else
         UnduCheckSubCrossCheck(work, query, (int)attribute);
@@ -1101,7 +1077,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     return height;
 }
 
-float UnduGet2(int queryAddress, float x, float z)
+float UnduGet2(void *queryAddress, float x, float z)
 {
     UnduQuery *query;
     UnduWork *work;
@@ -1112,11 +1088,11 @@ float UnduGet2(int queryAddress, float x, float z)
         return 0.0f;
     if (queryAddress == 0) {
         UnduParamInit((UnduQuery *)0x70000000);
-        queryAddress = 0x70000000;
+        queryAddress = (void *)0x70000000;
     }
-    query = (UnduQuery *)queryAddress;
+    query = queryAddress;
     work = query->prefix.parameters.scratchpad;
-    type = CurrentColiHead[0] & 0x7f;
+    type = CurrentColiHead->tables.type & 0x7f;
     if (work == 0)
         work = (UnduWork *)0x70000000;
     if (type < 3) {

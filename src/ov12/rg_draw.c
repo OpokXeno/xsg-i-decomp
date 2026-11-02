@@ -544,9 +544,9 @@ void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
         }
     }
     if (pCamera != 0) {
-        pCamera->position.x = pPosition->x;
-        pCamera->position.y = pPosition->y;
-        pCamera->position.z = pPosition->z;
+        pCamera->position.vector.x = pPosition->x;
+        pCamera->position.vector.y = pPosition->y;
+        pCamera->position.vector.z = pPosition->z;
     }
 }
 
@@ -576,7 +576,7 @@ void RgDrawViewSetRotateX(RgDrawView *pView, float angle)
         }
     }
     if (pCamera != 0) {
-        pCamera->rotation.x = angle;
+        pCamera->rotation.vector.x = angle;
     }
 }
 
@@ -606,7 +606,7 @@ void RgDrawViewSetRotateY(RgDrawView *pView, float angle)
         }
     }
     if (pCamera != 0) {
-        pCamera->rotation.y = angle;
+        pCamera->rotation.vector.y = angle;
     }
 }
 
@@ -636,7 +636,7 @@ void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
         }
     }
     if (pCamera != 0) {
-        pCamera->rotation.z = angle;
+        pCamera->rotation.vector.z = angle;
     }
 }
 

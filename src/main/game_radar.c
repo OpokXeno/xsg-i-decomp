@@ -1,6 +1,12 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_cd.h"
+#include "main/enemy_2.h"
+#include "main/act_1.h"
+#include "main/game_radar.h"
+#include "main/nml_model_set.h"
+#include "main/twsys_init.h"
+#include "main/xgl_2.h"
 
 #define image_004DC554 radarImage
 #define rate radarRate
@@ -8,37 +14,7 @@
 #define ACTOR_ANGLE_MAX (6.2831854820251465f)
 #define ACTOR_ANGLE_MIN (-6.2831854820251465f)
 
-typedef struct RadarActor {
-    u32 flags;
-    void (*update)(struct RadarActor *actor);
-    void (*draw)(struct RadarActor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    u8 unmodeled_70[0x10];
-    u8 number;
-    u8 unmodeled_81[5];
-    short inUseId;
-    u8 unmodeled_88[0x454];
-    float radarVisibility;
-    u8 unmodeled_4e0[0x41C];
-    struct RadarActor *parent;
-    u8 unmodeled_900[0x170];
-} RadarActor;
-
 typedef unsigned int GameLoopStateWords[];
-
-typedef struct EnemyWork {
-    u8 unmodeled_00[0x48];
-    signed char type;
-    u8 unmodeled_49[0x3797];
-    u32 flags;
-    u8 unmodeled_37e4[0xCC];
-} EnemyWork;
 
 typedef struct RadarPoint {
     int x;
@@ -93,21 +69,18 @@ typedef struct RadarPingEnd {
     u32 unmodeled_1c;
 } RadarPingEnd;
 
+typedef union RadarPacket {
+    RadarVertex vertex;
+    RadarPingEnd end;
+} RadarPacket;
+
 extern u8 *image_004DC554;
 extern u8 rate;
 extern GameLoopStateWords GameLoopState;
 extern EnemyWork enepc[16];
-extern RadarActor actor[64];
+extern Actor actor[64];
 
-extern float xglSin(float);
-extern float xglCos(float);
-extern void nmlModelDirectSend(int, u8 *, int);
-int CheckActorExist(RadarActor *actor);
 static void DrawActorPoint(float angle, int *position, u32 *color);
-int WIN_checkActiveWindow(void);
-void nmlModelDirectSendXtx(int, u8 *);
-float I2F(int);
-int F2I(float);
 static void DrawRadarPing(int *);
 static void DrawRadarInfo(int *);
 
@@ -141,7 +114,7 @@ void GameRadarDraw(RadarOrigin *origin)
     }
     RadarSpritePacketInit(&packet);
     nmlModelDirectSendXtx(5, image_004DC554);
-    nmlModelDirectSend(6, (u8 *)TestEnv, 7);
+    nmlModelDirectSend(6, TestEnv, 7);
     packet->dma[0] = 0;
     packet->dma[1] = 0;
     packet->dma[2] = 0;
@@ -191,16 +164,16 @@ void GameRadarDraw(RadarOrigin *origin)
     packet->uv1.u = 0x800; packet->uv1.v = 0x800;
     packet->xyz1.y = bottom; packet->xyz1.x = right;
     secondSpritePrimitive = 0x2007678621343800ULL;
-    nmlModelDirectSend(5, (u8 *)packet, 9);
+    nmlModelDirectSend(5, packet, 9);
     packet->uv0.u = 0x800;
     packet->primitive = secondSpritePrimitive;
     packet->uv1.u = 0x880; packet->uv1.v = 0x900;
     packet->xyz0.x = outerLeft; packet->xyz0.y = outerTop;
     packet->xyz1.x = innerLeft; packet->xyz1.y = outerBottom;
-    nmlModelDirectSend(5, (u8 *)packet, 9);
+    nmlModelDirectSend(5, packet, 9);
     packet->uv0.u = 0x880; packet->uv1.u = 0x900; packet->xyz0.x = right;
     packet->xyz1.x = outerRight;
-    nmlModelDirectSend(5, (u8 *)packet, 9);
+    nmlModelDirectSend(5, packet, 9);
     }
     DrawRadarPing(&origin->x);
     DrawRadarInfo(&origin->x);
@@ -210,12 +183,12 @@ static void DrawRadarPing(int *origin)
 {
     static u32 TestEnv[16] = { 0U, 0U, 0U, 1358954499U, 32769U, 536870912U, 238U, 0U, 458752U, 0U, 71U, 0U, 68U, 0U, 66U, 0U };
 
-    RadarVertex *vertex = (RadarVertex *)0x70000040;
+    RadarPacket *packet = (RadarPacket *)0x70000040;
     RadarPingEnd *end;
     int segment = 0;
     int xOrigin;
     int yOrigin;
-    nmlModelDirectSend(6, (u8 *)TestEnv, 4);
+    nmlModelDirectSend(6, TestEnv, 4);
     {
     RadarPingHeader *header = (RadarPingHeader *)0x70000000;
     u64 scissor;
@@ -241,24 +214,25 @@ static void DrawRadarPing(int *origin)
         float cosine;
         innerRadius *= 16.0f; outerRadius *= 16.0f; segment++;
         sine = xglSin(angle); cosine = xglCos(angle);
-        vertex[0].color[0] = 96; vertex[0].color[1] = 96;
-        vertex[0].color[2] = 128; vertex[0].color[3] = 0;
-        vertex[0].position[0] = xOrigin + F2I(sine * innerRadius);
-        vertex[0].position[1] = yOrigin + F2I(cosine * innerRadius);
+        packet[0].vertex.color[0] = 96; packet[0].vertex.color[1] = 96;
+        packet[0].vertex.color[2] = 128; packet[0].vertex.color[3] = 0;
+        packet[0].vertex.position[0] = xOrigin + F2I(sine * innerRadius);
+        packet[0].vertex.position[1] = yOrigin + F2I(cosine * innerRadius);
         {
             u32 alpha = rate >> 1;
             int depth = origin[2] + 1;
-            vertex[1].color[3] = alpha;
-            vertex[0].position[3] = 0;
-            vertex[0].position[2] = depth;
+            packet[1].vertex.color[3] = alpha;
+            packet[0].vertex.position[3] = 0;
+            packet[0].vertex.position[2] = depth;
         }
-        vertex[1].color[0] = 96; vertex[1].color[1] = 96; vertex[1].color[2] = 128;
-        vertex[1].position[0] = xOrigin + F2I(sine * outerRadius);
-        vertex[1].position[1] = yOrigin + F2I(cosine * outerRadius);
-        vertex[1].position[2] = origin[2] + 1; vertex[1].position[3] = 0;
-        vertex += 2;
+        packet[1].vertex.color[0] = 96; packet[1].vertex.color[1] = 96;
+        packet[1].vertex.color[2] = 128;
+        packet[1].vertex.position[0] = xOrigin + F2I(sine * outerRadius);
+        packet[1].vertex.position[1] = yOrigin + F2I(cosine * outerRadius);
+        packet[1].vertex.position[2] = origin[2] + 1; packet[1].vertex.position[3] = 0;
+        packet += 2;
     } while (segment < 25);
-    end = (RadarPingEnd *)vertex;
+    end = &packet->end;
     end->tag[0] = 0x8001;
     end->tag[1] = 0x10000000; end->tag[2] = 14;
     end->scissor = 0x01bf000001ff0000ULL; end->tag[3] = 0; end->scissorRegister = 0x40;
@@ -272,8 +246,8 @@ static void DrawRadarInfo(int *origin)
 
     RadarMarkerColor color;
     RadarPoint point;
-    RadarActor *player = (RadarActor *)GameLoopState[1];
-    RadarActor *current;
+    Actor *player = (Actor *)GameLoopState[1];
+    Actor *current;
     int xOrigin;
     int yOrigin;
     int actorIndex;
@@ -295,11 +269,11 @@ static void DrawRadarInfo(int *origin)
                 if (absX < 0x381) {
                     absY = yDistance < 0 ? -yDistance : yDistance;
                     if (absY < 0x301) {
-                        if (enepc[current->number].flags & 1) {
-                            if (current->radarVisibility == -1000.0f) {
+                        if (enepc[current->number].state_flags & 1) {
+                            if (current->translate_y == -1000.0f) {
                                 continue;
                             }
-                            actorType = enepc[actorIndex].type;
+                            actorType = enepc[actorIndex].action;
                             if (actorType == 6 || actorType == 10) {
                                 color.green = 0;
                                 color.red = cnt;
@@ -375,10 +349,10 @@ static void DrawActorPoint(float angle, int *position, u32 *color)
     sPoint[26] = position[2];
     sPoint[27] = position[3];
 
-    nmlModelDirectSend(5, (u8 *)sPoint, 7);
+    nmlModelDirectSend(5, sPoint, 7);
 }
 
-int CheckActorExist(RadarActor *actor)
+int CheckActorExist(Actor *actor)
 {
     if (actor->inUseId <= 0) {
         return 0;

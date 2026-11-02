@@ -3,6 +3,11 @@
 #include "shared.h"
 #include "main/xgl_thread.h"
 #include "main/xgl_packet.h"
+#include "main/Undulate.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_pad.h"
+#include "main/xgl_studio.h"
 
 /* VIF error registers used by the original renderer initialization. */
 #define VIF0_ERR_ADDRESS 0x10003820
@@ -404,34 +409,25 @@ extern GsDrawPacket DrawEnv;
 extern GsClearPacket ClearEnv;
 extern GsDispEnv DispEnv;
 extern XglRenderState sRender;
-extern signed char FLAG_FRAME_60;
-
 extern int sceGsSyncV(int mode);
 extern int sceGsResetGraph(int mode, int interlace, int output, int ffmode);
 extern void sceGsResetPath(void);
 extern void xglRenderSetReso(int index);
 extern void xglRenderGlobalFadeInit(void);
 extern void xglRenderClearOff(void);
-extern void nmlModelConstruct(void);
 extern int nmlModelIsBackBufferRequest(void);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern void FlushCache(int mode);
-extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
 extern void xglRenderInit(void);
 static void xglRenderMove(void);
-extern void xglPadRead(void);
 extern void xglSendSePacket(void);
 extern void SyncDCache(void *start, void *end);
 extern int xglRenderVSyncCallback(void);
 extern void *sceGsSyncVCallback(int (*func)(void));
 extern int sceGsSyncPath(int mode, int timeout);
-extern void xglStudioInit(void);
-extern void xglStudioMainCameraInit(void);
-extern void nmlModelFlush(void);
-extern void nmlModelFlushClear(void);
 extern int nmlModelSendPacketChangeSignal(void);
 extern void sefDrawEffect3D(void);
 extern void xglFontFlush(void);
@@ -454,7 +450,7 @@ int LoopCount = 0;
 
 /* The GS VSync interrupt callback increments this counter while
  * xglRenderSyncMove polls it on the render thread. */
-volatile int VSyncCount = 0;
+volatile u32 VSyncCount = 0;
 
 int ScanLineInterpolate = 0;
 
@@ -621,10 +617,10 @@ static void xglRenderSyncMove(void)
 
     while (sceGsSyncV(0) != 0) {
     }
-    while ((unsigned int)VSyncCount < 2U) {
+    while (VSyncCount < 2U) {
     }
 
-    if ((unsigned int)VSyncCount >= 3U) {
+    if (VSyncCount >= 3U) {
         sRender.frame_delta = 1;
     }
     VSyncCount = 0;
@@ -812,7 +808,7 @@ static void xglRenderClearEnvInit(void)
 
 void xglRenderClearEnvMove(void)
 {
-    SyncDCache(&ClearEnv.value, (u8 *) &ClearEnv.value + sizeof(ClearEnv.value));
+    SyncDCache(&ClearEnv.value, &ClearEnv.value + 1);
     xglDmaDirectNormal(2, (u32) &ClearEnv.value, 6);
 }
 

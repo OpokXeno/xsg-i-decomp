@@ -4,7 +4,18 @@
 #include "main/sef.h"
 #include "main/enemy_1.h"
 #include "main/map_2.h"
+#include "main/exm_2.h"
 #include "shared.h"
+#include "main/init_uwamono_sys.h"
+#include "main/Undulate.h"
+#include "main/act_1.h"
+#include "main/act_2.h"
+#include "main/get.h"
+#include "main/karakama_test.h"
+#include "main/outer_product.h"
+#include "main/pause_menu_page_uwamono.h"
+#include "main/vibration.h"
+#include "main/xgl_font.h"
 
 #define UWAMONO_SYMBOL_PHASE_STEP 0.05f
 #define WIND_POSITION_W 0.3f
@@ -13,18 +24,6 @@
 #define CROSS_CHECK_MAP_UNIT_HEIGHT 0.6f
 #define SAVE_SYMBOL_PHASE_STEP 0.05f
 #define SHOP_SYMBOL_PHASE_STEP 0.05f
-
-typedef union UwamonoAlignedVector {
-    Vector4 value;
-    long long words[2];
-} UwamonoAlignedVector;
-
-typedef struct UwamonoNyuruAlignedActor {
-    unsigned char unmodeled_00[0x10];
-    UwamonoAlignedVector position;
-    unsigned char unmodeled_20[0x10];
-    UwamonoAlignedVector displacement;
-} UwamonoNyuruAlignedActor;
 
 typedef struct UwamonoScreenPoint {
     int x;
@@ -55,69 +54,26 @@ typedef struct UwamonoLinePacket {
     UwamonoScreenPoint position1;
 } UwamonoLinePacket;
 
+/*
+ * The unit's 4x4 world matrix (MapUnitRecord.basis) read as rows: x axis,
+ * y axis, z axis and anchor (translation); the checks copy it whole.
+ */
 typedef struct UwamonoCrossBasis {
-    float xAxisX;
-    unsigned char unmodeled_04[4];
-    float xAxisZ;
-    unsigned char unmodeled_0c[0x14];
-    float zAxisX;
-    unsigned char unmodeled_24[4];
-    float zAxisZ;
-    unsigned char unmodeled_2c[4];
-    Vector4 anchor;
+    union {
+        struct {
+            float xAxisX;
+            unsigned char unmodeled_04[4];
+            float xAxisZ;
+            unsigned char unmodeled_0c[0x14];
+            float zAxisX;
+            unsigned char unmodeled_24[4];
+            float zAxisZ;
+            unsigned char unmodeled_2c[4];
+            float anchor[4];
+        };
+        float rows[4][4]; /* the same matrix as MapUnitRecord.basis rows */
+    };
 } UwamonoCrossBasis;
-
-/*
- * UwamonoMapUnit is this TU's local view of the same MapUnit[] record that
- * src/main/init_drill.c also touches; only the fields SendBrokenSignal,
- * GetUwamonoSignal and CreateUwamonoCommon read or write are named, and the
- * rest is unmodeled padding recovered as its exact byte span so the offsets
- * below stay exact.
- */
-typedef struct UwamonoMapUnit {
-    u32 flags;                        /* +0x00 */
-    unsigned char unmodeled_04[0x0c];
-    Vector4 position;                 /* +0x10 */
-    unsigned char unmodeled_20[4];
-    /*
-     * MAP_updateUnitSymbol (VA 0x002bfbe0) adds the scaffold-owned .lit4
-     * constant symbolPhaseStep (value 0.05) to this field unconditionally
-     * (`lwc1`/`add.s`/`swc1`, no branch in the original); no other role is
-     * evidenced here.
-     */
-    float symbolPhase;                /* +0x24 */
-    unsigned char unmodeled_28[0x58];
-    struct UwamonoCrossBasis *basis;         /* +0x80 */
-    unsigned char unmodeled_84[0x1d];
-    signed char actionNo;             /* +0xA1 */
-    signed char actionSub;            /* +0xA2 */
-    unsigned char unmodeled_a3;
-    short serial;                     /* +0xA4 */
-    unsigned char unmodeled_a6[2];
-    short sequenceNo;                 /* +0xA8 */
-    short sequenceSub;                /* +0xAA */
-    unsigned char unmodeled_ac[4];
-    float radius;                     /* +0xB0 */
-    float height;                     /* +0xB4 */
-    float boxDepth;                   /* +0xB8 */
-    unsigned char unmodeled_bc[0xe8];
-    signed char signal;               /* +0x1A4 */
-    unsigned char unmodeled_1a5[0x28];
-    signed char crossType;            /* +0x1CD */
-} UwamonoMapUnit;
-
-/*
- * MAP_LoadUwamonoResource's own additive view of the same MapUnit[] record
- * UwamonoMapUnit above already partially names; only the fields
- * MAP_LoadUwamonoResource (VA 0x002be5f0) writes are named here: it stores
- * uwares_tbl[index] and xtxres_tbl[index], where index = resourceId -
- * 0x7001.
- */
-typedef struct UwamonoResourceUnit {
-    unsigned char unmodeled_00[0xe0];
-    int uwaresId;                     /* +0xE0 */
-    int xtxresId;                     /* +0xE4 */
-} UwamonoResourceUnit;
 
 /*
  * GetPartsPos's own additive view of the global game-loop record (TU-local
@@ -136,20 +92,9 @@ typedef struct MapPartsRoot {
     struct MapPartsResource *resource;   /* +0x04 */
 } MapPartsRoot;
 
-typedef struct UwamonoSoundActor {
-    unsigned char unmodeled_00[0x10];
-    Vector4 position;
-    unsigned char unmodeled_20[0x60];
-    unsigned char actorIndex;
-    unsigned char unmodeled_81[0x4d0 - 0x81];
-    unsigned short flags;
-} UwamonoSoundActor;
-
-typedef UwamonoSoundActor AimHeightReference;
-
 typedef struct UwamonoGameLoopState {
     unsigned char unmodeled_00[4];
-    struct UwamonoSoundActor *actor; /* +0x04 */
+    Actor *actor; /* +0x04 */
     unsigned char unmodeled_08[8];
     unsigned int systemFlags;             /* +0x10 */
     unsigned char unmodeled_14[8];
@@ -166,41 +111,8 @@ typedef struct UwamonoGameLoopState {
 } UwamonoGameLoopState;
 
 /*
- * GetPartsPos's own additive view of the same MapUnit[] record other
- * functions in this TU already partially name; only the fields it writes
- * are named here: position (+0x10, the full Vector4 copied from the
- * resource entry, w set to 1.0f) and rotation's three touched components
- * (+0x20/+0x24/+0x28, x and z always cleared, y set from atan2f); entry
- * (+0x80, the resource entry pointer stored for later use); serial (+0xA4,
- * this unit's index into the resource entry array).
- */
-typedef struct GetPartsPosEntry {
-    unsigned char unmodeled_00[0x20];
-    float basisX;             /* +0x20 */
-    unsigned char unmodeled_24[4];
-    float basisZ;              /* +0x28 */
-    unsigned char unmodeled_2c[4];
-    float x;                    /* +0x30 */
-    float y;                     /* +0x34 */
-    float z;                      /* +0x38 */
-    unsigned char unmodeled_3c[4];
-} GetPartsPosEntry;
-
-typedef struct GetPartsPosUnit {
-    unsigned char unmodeled_00[0x10];
-    Vector4 position;      /* +0x10, w set to 1.0f */
-    float rotationX;         /* +0x20, always cleared */
-    float rotationY;          /* +0x24, atan2f(entry->basisX, entry->basisZ) */
-    float rotationZ;           /* +0x28, always cleared */
-    unsigned char unmodeled_2c[0x54];
-    struct GetPartsPosEntry *entry;      /* +0x80 */
-    unsigned char unmodeled_84[0x20];
-    short serial;                  /* +0xA4 */
-} GetPartsPosUnit;
-
-/*
  * ClearUwamonoEffect's own additive view of the same MapUnit[] record
- * UwamonoMapUnit above already partially names; only the fields
+ * MapUnitRecord above already partially names; only the fields
  * ClearUwamonoEffect (VA 0x002be8c0) reads or writes are named here.
  */
 typedef struct UwamonoEffectUnit {
@@ -262,7 +174,7 @@ typedef struct UwamonoTimers {
 typedef struct UwamonoCommonUnit {
     unsigned int flags;
     unsigned char unmodeled_04[0x0c];
-    UwamonoAlignedVector position;                 /* +0x10 */
+    AlignedVector4 position;                 /* +0x10 */
     float rotationX;
     float rotationY;
     float rotationZ;
@@ -278,25 +190,6 @@ typedef struct UwamonoCommonUnit {
     float heightVelocity; /* +0x224 */
 } UwamonoCommonUnit;
 
-/*
- * UwamonoBgmFadeOut's own additive view of the same MapUnit[] record the
- * structs above already partially name; only the fields it reads are named
- * here. flags (+0x00) is the same field UwamonoMapUnit and DrillMapUnit
- * name; bit 0x10000 is the created/active flag CreateUwamonoCommon sets.
- * seChannel (+0xA0) is the same field ClearUwamonoEffect's UwamonoEffectUnit
- * names, used the same way (+1 as a channel-shaped argument). bgmTimer
- * (+0x1E8) is the same field UwamonoTimers/UwamonoEffectTimers name; here
- * its high halfword is a SoundWork effect-bank index and its low halfword
- * a sub-id, combined below into the effect_id SsdFadeoutEffect takes.
- */
-typedef struct UwamonoBgmFadeOutUnit {
-    u32 flags;                        /* +0x00 */
-    unsigned char unmodeled_04[0x9c];
-    unsigned char seChannel;          /* +0xA0 */
-    unsigned char unmodeled_a1[0x147];
-    int bgmTimer;                     /* +0x1E8 */
-    unsigned char unmodeled_1ec[0x114];
-} UwamonoBgmFadeOutUnit;
 
 typedef struct UwamonoMapSlot UwamonoMapSlot;
 
@@ -311,7 +204,7 @@ struct UwamonoMapSlot {
     void (*update)(void *);
     void (*draw)(void *);
     unsigned char unmodeled_0c[4];
-    UwamonoAlignedVector position;
+    AlignedVector4 position;
     float rotationX, rotationY, rotationZ;
     unsigned char unmodeled_2c[0x14];
     Matrix4 localMatrix;
@@ -324,7 +217,7 @@ struct UwamonoMapSlot {
     unsigned char linkedUnitIndex;
     short serial;
     unsigned char unmodeled_a6[0x0a];
-    UwamonoAlignedVector dimensions;
+    AlignedVector4 dimensions;
     unsigned char unmodeled_c0[0x28];
     int effectCf[3];
     unsigned char unmodeled_f4[0xac];
@@ -347,113 +240,10 @@ typedef struct UwamonoSoundWorkView {
     } effectBanks[16];
 } UwamonoSoundWorkView;
 
-typedef struct UwamonoInitSymbolState {
-    unsigned char unmodeled_00[0x2d];
-    signed char state;                 /* +0x2d */
-    unsigned char unmodeled_2e[0x16];
-    int timer;                         /* +0x44 */
-} UwamonoInitSymbolState;
-
-typedef struct UwamonoInitSymbolUnit {
-    int flags;                         /* +0x00 */
-    void (*updateFunction)(struct UwamonoMapUnit *unit); /* +0x04 */
-    unsigned char unmodeled_08[8];
-    Vector4 position;                  /* +0x10 */
-    float rotationX;                   /* +0x20 */
-    float rotationY;                   /* +0x24 */
-    float rotationZ;                   /* +0x28 */
-    unsigned char unmodeled_2c[0x14];
-    float matrix[4][4];                /* +0x40 */
-    float (*savedMatrix)[4];           /* +0x80 */
-    unsigned char unmodeled_84[0x5c];
-    int uwaresId;                      /* +0xe0 */
-    int xtxresId;                      /* +0xe4 */
-    unsigned char unmodeled_e8[0xb8];
-    UwamonoInitSymbolState timerState; /* +0x1a0 */
-} UwamonoInitSymbolUnit;
-
-typedef struct UwamonoCreatedState {
-    short mapType;                    /* +0x00 */
-    short initialUnitId;              /* +0x02 */
-    unsigned char unmodeled_04;
-    signed char signal;
-    unsigned char unmodeled_06[0x1e];
-    float height;
-    unsigned char unmodeled_28[4];
-    signed char state;
-    signed char initialState;
-    signed char heightCheckFlag;
-    signed char unmodeled_2f;
-    short initialPartId;              /* +0x30 */
-    signed char target;
-    unsigned char unmodeled_33;
-    int initialValue34;
-    int initialValue38;
-    unsigned char unmodeled_3c[4];
-    int initialValue40;
-    int timer;
-    int initialValue48;
-    unsigned char unmodeled_4c[0x34];
-} UwamonoCreatedState;
-
-typedef struct UwamonoCreatedUnit {
-    unsigned int flags;
-    void (*initialize)(struct UwamonoCreatedUnit *);
-    unsigned char unmodeled_08[8];
-    Vector4 position;
-    float rotationX;
-    float rotationY;
-    float rotationZ;
-    unsigned char unmodeled_2c[0x14];
-    Matrix4 matrix; /* +0x40 */
-    float (*savedMatrix)[4]; /* +0x80 */
-    unsigned char unmodeled_84[0x1c];
-    unsigned char sequenceIndex;
-    unsigned char actionNo;
-    unsigned char actionSub;
-    unsigned char unmodeled_a3;
-    short serial;
-    unsigned char unmodeled_a6[2];
-    short sequenceNo;
-    short sequenceSub;
-    unsigned char unmodeled_ac[0xf4];
-    UwamonoCreatedState state;
-} UwamonoCreatedUnit;
-
-typedef struct UwamonoMapUnitState {
-    unsigned char unmodeled_00[2];
-    short kindIndex;
-    signed char signal;                 /* +0x04 */
-    signed char hideObjectIndex;
-    unsigned char unmodeled_06[6];
-    float baseSizeX;
-    float baseSizeY;
-    float baseSizeZ;
-    float sizeOffsetX;
-    float sizeOffsetY;
-    float sizeOffsetZ;
-    unsigned char unmodeled_24[8];
-    signed char enemyIndex;
-    signed char state;                 /* +0x2d */
-    unsigned char unmodeled_2e[2];
-    short initialPartId;               /* +0x30 */
-    signed char target;                /* +0x32 */
-    unsigned char unmodeled_33[9];
-    int frameLimit;                    /* +0x3c */
-    union { int effectResourceId; int kindParameter; };              /* +0x40 */
-    int timer;                         /* +0x44 */
-} UwamonoMapUnitState;
-
-typedef union UwamonoKowareDimensions {
-    unsigned long long lanes[2];
-    unsigned long long words[2];
-    Vector4 vector;
-} UwamonoKowareDimensions;
-
 typedef struct UwamonoKowareKind {
     signed char shape;
     unsigned char unmodeled_01[0xf];
-    UwamonoKowareDimensions dimensions; /* +0x10 */
+    DoublewordAlignedVector4 dimensions; /* +0x10 */
     signed char target;
     unsigned char unmodeled_21[3];
     int kindParameter;                 /* +0x24 */
@@ -475,19 +265,18 @@ typedef struct UwamonoKowareUnit {
     unsigned char unmodeled_a6[2];
     short breakCount;                  /* +0xA8 */
     unsigned char unmodeled_aa[6];
-    UwamonoKowareDimensions dimensions;
+    DoublewordAlignedVector4 dimensions;
     unsigned char unmodeled_c0[0xe0];
     UwamonoMapUnitState state;         /* +0x1a0 */
 } UwamonoKowareUnit;
 
-typedef union UwamonoCollisionPosition {
-    Vector4 value;
-    XglQuadword quadword;
-} UwamonoCollisionPosition;
-
+/*
+ * The MapUnit[] vectors the box checks copy are DoublewordAlignedVector4: copied one
+ * 64-bit word at a time, high word first (ld/sd pairs at +8 then +0).
+ */
 typedef struct UwamonoCollisionUnit {
     unsigned char unmodeled_00[0x10];
-    UwamonoCollisionPosition position;
+    DoublewordVector4 position; /* copied word by word (words[1] first) in HitCheckBoxCorner */
     float rotationX;                  /* +0x20 */
     float rotationY;                  /* +0x24 */
     float rotationZ;                  /* +0x28 */
@@ -495,7 +284,7 @@ typedef struct UwamonoCollisionUnit {
     Matrix4 matrix;                   /* +0x40 */
     struct UwamonoCrossBasis *basis;
     unsigned char unmodeled_84[0x2c];
-    UwamonoAlignedVector dimensions;
+    AlignedVector4 dimensions;
     unsigned char unmodeled_c0[0xe0];
     UwamonoMapUnitState state;
     unsigned char unmodeled_1e8[0x118];
@@ -511,9 +300,9 @@ typedef struct UwamonoAimQuery {
 
 typedef struct UwamonoCollisionActor {
     unsigned char unmodeled_00[0x10];
-    Vector4 position;
+    AlignedVector4 position;
     unsigned char unmodeled_20[0x10];
-    Vector4 displacement;              /* +0x30 */
+    AlignedVector4 displacement;       /* +0x30 */
     unsigned char unmodeled_40[0x488];
     UwamonoAimQuery undulation; /* +0x4c8 */
     unsigned char unmodeled_508[0x4e0];
@@ -563,55 +352,16 @@ typedef struct UwamonoCrossState {
 
 typedef struct UwamonoCrossUnit {
     unsigned char unmodeled_00[0x10];
-    union {
-        Vector4 position;
-        UwamonoAlignedVector alignedPosition;
-    };
+    AlignedVector4 position;
     unsigned char unmodeled_20[0x60];
     struct UwamonoCrossBasis *basis;
     unsigned char unmodeled_84[0x2c];
-    UwamonoAlignedVector dimensions;
+    DoublewordVector4 dimensions; /* copied word by word (words[1] first) in CrossCheckMapUnitBox */
     unsigned char unmodeled_c0[0xe0];
     UwamonoCrossState state;
 } UwamonoCrossUnit;
 
-typedef Vector4 UwamonoNyuruVector;
-
 typedef Vector4 UwamonoBoxVector;
-
-typedef struct UwamonoNyuruActor {
-    unsigned char unmodeled_00[0x10];
-    UwamonoNyuruVector position;
-    unsigned char unmodeled_20[0x10];
-    UwamonoNyuruVector displacement;
-    unsigned char unmodeled_40[0x488];
-    UwamonoAimQuery undulation;
-    unsigned char unmodeled_508[0x4e0];
-    float radius; /* +0x9e8 */
-} UwamonoNyuruActor;
-
-struct UwamonoEnemyUnit;
-
-typedef struct UwamonoCrossActor {
-    unsigned int flags;
-    void (*update)(struct UwamonoEnemyUnit *);
-    unsigned char unmodeled_08[8];
-    union {
-        Vector4 position;
-        UwamonoAlignedVector alignedPosition;
-    };
-    unsigned char unmodeled_20[0x30];
-    float unmodeled_50[3];
-    unsigned char unmodeled_5c[0x24];
-    unsigned char actorIndex;
-    unsigned char unmodeled_81[5];
-    short resourceId;
-    unsigned char unmodeled_88[0x848];
-    void *collisionObject;
-    unsigned char unmodeled_8d4[0x114];
-    float radius;
-    unsigned char unmodeled_9ec[0x84];
-} UwamonoCrossActor;
 
 typedef struct BrokenMapUnitState {
     unsigned char unmodeled_00[4];
@@ -652,13 +402,21 @@ struct UwamonoEnemyUnit {
     unsigned int flags;
     void (*update)(UwamonoEnemyUnit *);
     unsigned char unmodeled_08[8];
-    UwamonoAlignedVector position;
-    unsigned char unmodeled_20[0x34];
-    float heading;
-    unsigned char unmodeled_58[0x28];
-    unsigned char enemyIndex;
-    unsigned char unmodeled_81[0x963];
-    float actorHeading;
+    AlignedVector4 position;
+    unsigned char unmodeled_20[0x30];
+    float rotationX;                   /* +0x50 */
+    float heading;                     /* +0x54 */
+    float rotationZ;                   /* +0x58 */
+    unsigned char unmodeled_5c[0x24];
+    unsigned char actorIndex;          /* +0x80: this actor's actor[] index */
+    unsigned char unmodeled_81[5];
+    short resourceId;                  /* +0x86: negative for a free actor */
+    unsigned char unmodeled_88[0x848];
+    void *collisionObject;             /* +0x8d0 */
+    unsigned char unmodeled_8d4[0x110];
+    float actorHeading;                /* +0x9e4 */
+    float radius;                      /* +0x9e8 */
+    unsigned char unmodeled_9ec[0x84];
 };
 
 typedef struct UwamonoWind {
@@ -718,7 +476,7 @@ typedef struct UwamonoKowareSizeUnit {
     unsigned char unmodeled_a1[3];
     short serial;
     unsigned char unmodeled_a6[0x0a];
-    UwamonoKowareDimensions dimensions;
+    DoublewordAlignedVector4 dimensions;
     unsigned char unmodeled_c0[0xe0];
     UwamonoMapUnitState state;
 } UwamonoKowareSizeUnit;
@@ -752,7 +510,7 @@ typedef struct KowarePartsSizeState {
 } KowarePartsSizeState;
 
 typedef union KowarePartsSizeUnitDimensions {
-    UwamonoKowareDimensions raw;
+    DoublewordAlignedVector4 raw;
     Vector4 vector;
 } KowarePartsSizeUnitDimensions;
 
@@ -785,15 +543,11 @@ typedef struct KowareInitUnit {
     unsigned char unmodeled_a1[3];
     short serial;
     unsigned char unmodeled_a6[0x0a];
-    UwamonoKowareDimensions dimensions;
+    DoublewordAlignedVector4 dimensions;
     unsigned char unmodeled_c0[0xe0];
     KowareInitState state;
 } KowareInitUnit;
 
-typedef struct KowareInitResourceCount {
-    unsigned char unmodeled_00[0x40];
-    int partCount;
-} KowareInitResourceCount;
 
 typedef struct UwamonoHideEffect {
     unsigned char unmodeled_00[0xa9a];
@@ -802,7 +556,7 @@ typedef struct UwamonoHideEffect {
 
 typedef struct UwamonoCreatedPosition {
     unsigned char unmodeled_00[0x10];
-    UwamonoAlignedVector position;
+    AlignedVector4 position;
 } UwamonoCreatedPosition;
 
 typedef struct DrawActiveCursorUnit {
@@ -815,22 +569,13 @@ typedef struct DrawActiveCursorUnit {
     signed char signal;
 } DrawActiveCursorUnit;
 
-typedef struct DrawActiveCursorEffect {
-    unsigned char unmodeled_00[0xa0];
-    Vector4 scale;
-    unsigned char unmodeled_b0[0x614];
-    void *casterUnit;
-    unsigned char unmodeled_6c8[0x3c4];
-    unsigned int flags;
-} DrawActiveCursorEffect;
-
 typedef struct UwamonoCornerCollisionUnit {
     unsigned char unmodeled_00[0x10];
-    UwamonoAlignedVector position;
+    DoublewordVector4 position; /* copied word by word (words[1] first) in HitCheckBox */
     unsigned char unmodeled_20[0x60];
     const float (*basis)[4];
     unsigned char unmodeled_84[0x2c];
-    UwamonoAlignedVector halfSize;
+    AlignedVector4 halfSize;
 } UwamonoCornerCollisionUnit;
 
 typedef struct UwamonoBoxDimensions {
@@ -845,28 +590,10 @@ typedef union UwamonoAlignedBoxDims {
     long long words[2];
 } UwamonoAlignedBoxDims;
 
-typedef struct UwamonoAimActor {
-    unsigned char unmodeled_00[0x10];
-    UwamonoAlignedVector position;
-    unsigned char unmodeled_20[0x60];
-    unsigned char actorIndex;
-    unsigned char unmodeled_81[0x4D0 - 0x81];
-    unsigned short flags;
-    unsigned char unmodeled_4d2[0x16];
-    unsigned long long shootModeFlags;    /* +0x4e8 */
-    unsigned char unmodeled_4f0[0x200];
-    int shootFlags;                       /* +0x6f0 */
-    float shootProgress;                  /* +0x6f4 */
-    float motionSpeed;                    /* +0x6f8 */
-    unsigned char unmodeled_6fc[8];
-    unsigned short motion;                /* +0x704 */
-    unsigned char unmodeled_706[0x9e4 - 0x706];
-    float targetAngle;                    /* +0x9e4 */
-} UwamonoAimActor;
 
 typedef struct UwamonoShotEffect {
     unsigned char unmodeled_000[0x6bc];
-    struct UwamonoAimActor *owner;
+    Actor *owner;
     unsigned char unmodeled_6c0[0x3cc];
     unsigned int flags;
 } UwamonoShotEffect;
@@ -886,7 +613,6 @@ typedef struct UwamonoAimCandidate {
 
 typedef struct NativeUnitPeer NativeUnitPeer;
 
-extern signed char lineflg;
 extern UwamonoGameLoopState GameLoopState;
 extern UwamonoMapSlot MapUnit[];
 extern UwamonoSoundWorkView SoundWork;
@@ -897,7 +623,7 @@ extern const float mapUnitHitHeightScale;
 extern const float mapUnitHitBelowMargin;
 extern const float mapUnitPosHitHeightScale;
 extern const float mapUnitPosHitBelowMargin;
-extern UwamonoCrossActor actor[64];
+extern UwamonoEnemyUnit actor[64];
 extern const float crossActorHeightLimit;
 extern UwamonoEnemyLink enepc[16];
 extern const char fieldResidentOverflowFormat[];
@@ -908,7 +634,6 @@ extern const char lexFileExtension[];
 extern const char xtxFileExtension[];
 extern unsigned char ItemBoxTbl[0x12C8];
 extern unsigned char EvtItemTbl[0x7F80];
-extern signed char printflg;
 extern const char alreadyMapUnitFormat[];
 extern const char createUwamonoOverflowFormat[];
 extern UwamonoSequenceRecord unitSequence[];
@@ -939,8 +664,6 @@ extern float activeCursolScaleFloor;
 extern float nyuruCircleRadiusMargin;
 extern float nyuruMatrixStillThreshold;
 extern float nyuruMatrixStillEpsilon;
-extern signed char dispflg;
-extern signed char collflg;
 extern const char shootMapUnitFormat[];
 extern float shootMotionSpeed;
 extern float shootProgressThreshold;
@@ -964,8 +687,6 @@ extern void InitMapDoor(InitMapPartsUnit *unit);
 void InitMapKoware(InitMapPartsUnit *mapUnit);
 extern void InitDrill(InitMapPartsUnit *unit);
 
-int HitCheckMapUnitPosSize(const Vector4 *position, float radius);
-
 /* Defined in src/main/map_create_unit_peer.c (main/tu270), still in asm. */
 extern void MAP_updateUnitPartsSequence(void *unit);
 
@@ -980,23 +701,20 @@ void UwamonoBgmFunc(UwamonoCommonUnit *unit);
 /* Defined in src/main/ssd_1.c (main/tu ssd_1), already C. */
 extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
 
-void MAP_updateUnitSaveSymbol(UwamonoMapUnit *unit);
-void MAP_updateUnitShopSymbol(UwamonoMapUnit *unit);
-void MAP_updateUnitSymbol(UwamonoMapUnit *unit);
-extern int MAP_loadUnitResource(UwamonoCreatedUnit *unit, int resourceId);
-extern void InitMapTrap(UwamonoCreatedUnit *unit);
+void MAP_updateUnitSaveSymbol(MapUnitRecord *unit);
+void MAP_updateUnitShopSymbol(MapUnitRecord *unit);
+void MAP_updateUnitSymbol(MapUnitRecord *unit);
+extern int MAP_loadUnitResource(MapUnitRecord *unit, int resourceId);
+extern void InitMapTrap(MapUnitRecord *unit);
 extern void *memset(void *destination, int value, unsigned int bytes);
 void MAP_updateUnitKoware(void *argument);
-void CreateUwamonoCommon(UwamonoMapUnit *unit);
-extern float CheckDist2D(const Vector4 *first, const Vector4 *second);
+void CreateUwamonoCommon(MapUnitRecord *unit);
 int HitCheckBoxCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 unsigned int HitCheckMapUnitPosAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 int HitCheckBox(UwamonoCollisionActor *actor, struct UwamonoBoxUnit *boxUnit);
 int HitCheckCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
-static int NyuruCircle(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit);
-static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int mode);
-int HitCheckMapUnit(void *actor);
-
+static int NyuruCircle(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
+static int NyuruMatrix(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode);
 /*
  * Still assembler: it only reads `from` and `to`, and reads the unit's
  * position and radius (+0x10/+0x18, +0xB0), so it takes the collision view.
@@ -1004,7 +722,6 @@ int HitCheckMapUnit(void *actor);
 int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
                             UwamonoCollisionUnit *unit);
 
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius);
 int CrossCheckMapUnitAt(Vector4 *first, Vector4 *second, UwamonoCrossUnit *unit);
 extern int CheckCrossCircle(float radius, const Vector4 *from, const Vector4 *to, const Vector4 *center);
@@ -1019,14 +736,10 @@ extern void EXM_SetWindStruct(UwamonoWind *wind);
 extern void xglSoundEffectNormalID(int soundId, int channel);
 int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit);
 extern void nmlModelSetPartsVisible(void *resource, int partsId, int visible);
-extern float Get_Angle(const Vector4 *first, const Vector4 *second);
-extern float CheckDist3D(const Vector4 *first, const Vector4 *second);
-void UnlockMapUnit(void);
-
 /*
  * The hit and cross checks read a MapUnit[] slot through the collision view
  * (position, radius/height, shape byte); callers holding the slot as a
- * UwamonoMapSlot or UwamonoMapUnit pass it in that view, the same way
+ * UwamonoMapSlot or MapUnitRecord pass it in that view, the same way
  * CheckNearMapUnit hands its scan slot to CheckCornerDist.
  */
 int HitCheckMapUnitAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
@@ -1035,46 +748,33 @@ void CalcNearCrossPointCircle(const Vector4 *from, const Vector4 *to,
                               UwamonoCollisionUnit *unit, Vector4 *out);
 
 void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
-                           UwamonoMapUnit *unit, Vector4 *result);
+                           MapUnitRecord *unit, AlignedVector4 *result);
 
 int CrossCheckMapUnitBox(Vector4 *first, Vector4 *second,
                          UwamonoCrossUnit *unit);
 
 extern char *strcpy(char *destination, const char *source);
-void InitUwamono(UwamonoCreatedUnit *unit);
+void InitUwamono(MapUnitRecord *unit);
 extern double fptodp(float value);
-extern void *UnduDataGetHeader(int dataId, int flags);
 extern void UnduParamInit(void *parameters);
 extern float UnduCheck(Vector4 *position, Vector4 *displacement, void *parameters);
-extern void InitItemBox(UwamonoCreatedUnit *unit);
-extern void InitItemSymbol(UwamonoCreatedUnit *unit);
-void InitSaveSymbol(UwamonoInitSymbolUnit *unit);
-void InitShopSymbol(UwamonoInitSymbolUnit *unit);
-void InitEvsSymbol(UwamonoInitSymbolUnit *unit);
-void InitRetSymbol(UwamonoInitSymbolUnit *unit);
-extern void InitSpecialSymbol(UwamonoCreatedUnit *unit);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-void SetHideObject(void *argument);
+extern void InitItemBox(MapUnitRecord *unit);
+extern void InitItemSymbol(MapUnitRecord *unit);
+void InitSaveSymbol(MapUnitRecord *unit);
+void InitShopSymbol(MapUnitRecord *unit);
+void InitEvsSymbol(MapUnitRecord *unit);
+void InitRetSymbol(MapUnitRecord *unit);
+extern void InitSpecialSymbol(MapUnitRecord *unit);
 void MAP_updateUnitHide(void *argument);
-void DrawActiveCursol(UwamonoMapUnit *argument);
-extern void Vibration_Set_Strong(int strength, int duration, int interval);
-extern void EXM_ClearWindStruct(void);
+void DrawActiveCursol(MapUnitRecord *argument);
 extern void MAP_updateUnitTrap(void *unit);
 extern void MAP_updateUnitItemBox(void *unit);
 extern void MAP_drawUnitItemBox(void *unit);
 extern void MAP_updateUnitItemSymbol(void *unit);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
 int AimMapUnit(void);
-extern void DispDebugUwamono(void);
 extern void DispCollUwamono(void);
-extern void Vibration_Set_Weak(int strength);
-extern void ACT_setMotion(UwamonoAimActor *actor, unsigned int motion);
-extern void Enemy_FindByEar(UwamonoAimActor *actor, Vector4 *position);
+extern void Enemy_FindByEar(Actor *actor, Vector4 *position);
 int UwamonoAreaCheck(const Vector4 *position, UwamonoMapSlot *unit, float radius);
-
-extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
-                          const Vector4 *point);
 
 extern int CheckCrossLine(const Vector4 *first, const Vector4 *second,
                           const Vector4 *edgeStart, const Vector4 *edgeEnd);
@@ -1082,24 +782,21 @@ extern int CheckCrossLine(const Vector4 *first, const Vector4 *second,
 extern void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
                            const Vector4 *edgeStart, const Vector4 *edgeEnd, Vector4 *out);
 
-float xglRotTransPers(Vector4 *out, const Matrix4 matrix,
+float xglRotTransPers(Vector4 *out, Matrix4 matrix,
                       Vector4 *point, int camera_id);
 
 void InitMapParts(InitMapPartsUnit *unit);
-int HitCheckNyuru(UwamonoNyuruAlignedActor *actor, UwamonoCollisionUnit *unit);
+int HitCheckNyuru(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 void MAP_updateUnitEnemy(UwamonoEnemyUnit *unit);
 void UwamonoBrokenSe(UwamonoBrokenSoundUnit *unit);
 
 void DrawSprite(const UwamonoAlignedScreenPoint *position,
                 const UwamonoScreenPoint *color, int width, int height);
 
-static void NyuruCorner(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit);
+static void NyuruCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 
 void CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second,
-                         UwamonoMapUnit *unit, void *result);
-
-int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
-                      float radius, Vector4 *result);
+                         MapUnitRecord *unit, void *result);
 
 void CheckNearPoint(const Vector4 *origin, const Vector4 *candA,
                     const Vector4 *candB, Vector4 *out);
@@ -1138,7 +835,7 @@ static UwamonoSpritePacket sPoint_0 = { .unmodeled_00 = { 1, 128, 0, 0, 0, 64, 3
 
 static UwamonoLinePacket sSortLine_1 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 64, 1, 64, 81, 81, 0, 0, 0, 0, 0, 0 }, .color0 = { .x = 0, .y = 0, .z = 255, .w = 0 }, .position0 = { .x = 0, .y = 0, .z = 0, .w = 0 }, .color1 = { .x = 0, .y = 0, .z = 255, .w = 0 }, .position1 = { .x = 0, .y = 0, .z = 0, .w = 0 } };
 
-UwamonoKowareKind KowareKind_t[127] = { { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 602, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 603, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 604, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 605, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 606, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 607, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 608, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418014806016ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 609, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 628, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 629, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 630, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 631, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 632, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 633, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 634, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 635, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 636, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019503226880ULL, 1075838976ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 637, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222456999936ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 658, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019475963904ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 659, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417985445888ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 660, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 661, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 662, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 663, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222469582848ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 664, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019488546816ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 665, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417998028800ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 666, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019494838272ULL, 1073741824ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 667, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1048576000ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 688, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1048576000ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 689, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1048576000ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 690, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 691, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 692, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 693, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 694, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 695, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 696, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019501129728ULL, 1067450368ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 697, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619094945792ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 718, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619115917312ULL, 1040187392ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 719, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4647714816503316480ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4647714816509607936ULL, 1050253722ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619107528704ULL, 1040187392ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 610, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 611, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 612, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 613, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 614, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 615, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 616, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 617, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418014806016ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 618, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 638, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 639, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 640, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 641, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 642, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 643, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 644, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 645, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 646, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019503226880ULL, 1075838976ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 647, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222456999936ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 668, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019475963904ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 669, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417985445888ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 670, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 671, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 672, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 673, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222469582848ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 674, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019488546816ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 675, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417998028800ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 676, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019494838272ULL, 1073741824ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 677, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1048576000ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 698, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1048576000ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 699, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1048576000ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 700, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 701, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 702, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 703, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 704, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 705, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 706, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019501129728ULL, 1067450368ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 707, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 619, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 620, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 621, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 622, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 623, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 624, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 625, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 626, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418014806016ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 627, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 648, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 649, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 650, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 651, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 652, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 653, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 654, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 655, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 656, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019503226880ULL, 1075838976ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 657, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222456999936ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 678, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019475963904ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 679, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417985445888ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 680, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 681, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 682, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 683, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222469582848ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 684, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019488546816ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 685, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417998028800ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 686, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019494838272ULL, 1073741824ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 687, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1048576000ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 708, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1048576000ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 709, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1048576000ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 710, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 711, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 712, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 713, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 714, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 715, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 716, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019501129728ULL, 1067450368ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 717, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619094945792ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619115917312ULL, 1040187392ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619094945792ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619115917312ULL, 1040187392ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4627160387240291467ULL, 1020054733ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL } };
+UwamonoKowareKind KowareKind_t[127] = { { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 602, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 603, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 604, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 605, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 606, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 607, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 608, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 3.0f, 3.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 609, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 628, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 629, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 630, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 631, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 632, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 633, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 634, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 635, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 3.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 636, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.5f, 2.0f, 2.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 637, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 658, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 2.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 659, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 3.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 660, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 661, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 662, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 1.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 663, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 1.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 664, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 2.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 665, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 3.0f, 1.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 666, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.25f, 2.0f, 2.0f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 667, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 0.25f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 688, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 0.25f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 689, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 0.25f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 690, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 691, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 692, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 693, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 0.75f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 694, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 0.75f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 695, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 3.0f, 0.75f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 696, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.0f, 2.0f, 1.25f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 697, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.125f, 2.25f, 0.75f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 718, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 2.25f, 0.125f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 719, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 4.0f, 0.5f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.875f, 4.0f, 0.3f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.375f, 2.25f, 0.125f, 0.0f }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 610, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 611, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 612, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 613, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 614, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 615, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 616, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 617, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 3.0f, 3.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 618, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 638, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 639, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 640, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 641, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 642, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 643, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 644, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 645, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 3.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 646, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.5f, 2.0f, 2.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 647, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 668, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 2.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 669, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 3.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 670, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 671, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 672, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 1.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 673, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 1.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 674, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 2.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 675, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 3.0f, 1.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 676, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.25f, 2.0f, 2.0f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 677, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 0.25f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 698, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 0.25f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 699, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 0.25f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 700, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 701, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 702, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 0.5f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 703, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 0.75f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 704, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 0.75f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 705, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 3.0f, 0.75f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 706, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.0f, 2.0f, 1.25f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 707, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 619, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 620, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 621, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 622, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 623, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 624, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 625, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 626, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 3.0f, 3.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 627, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 648, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 649, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 650, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 651, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 652, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 653, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 654, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 655, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 3.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 656, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.5f, 2.0f, 2.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 657, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 678, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 2.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 679, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 3.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 680, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 681, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 2.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 682, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 3.0f, 1.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 683, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 1.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 684, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 2.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 685, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 3.0f, 1.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 686, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.25f, 2.0f, 2.0f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 687, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 0.25f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 708, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 0.25f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 709, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 0.25f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 710, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 1.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 711, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 2.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 712, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.0f, 3.0f, 0.5f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 713, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 1.0f, 0.75f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 714, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 2.0f, 0.75f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 715, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 1.5f, 3.0f, 0.75f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 716, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.0f, 2.0f, 1.25f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 717, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.125f, 2.25f, 0.75f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 2.25f, 0.125f, 0.0f }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.125f, 2.25f, 0.75f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.75f, 2.25f, 0.125f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 2.866f, 2.859f, 0.025f, 0.0f }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL } };
 
 static unsigned char uwamono_dat[327680];
 
@@ -1209,11 +906,11 @@ void InitUwamonoSys(void)
     GameLoopState.selectionDistance = 3.0f;
 }
 
-UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
+MapUnitRecord *Unit_CreateUwamono(int index, int resourceId)
 {
     int slot;
     float identityScale;
-    UwamonoCreatedUnit *unit = 0;
+    MapUnitRecord *unit = 0;
     UwamonoCreatedState *state;
 
     if (resourceId < 0x1000) {
@@ -1227,13 +924,13 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
             if (printflg != 0) {
                 printf(alreadyMapUnitFormat, resourceId);
             }
-            unit = (UwamonoCreatedUnit *)&MapUnit[slot];
+            unit = (MapUnitRecord *)&MapUnit[slot];
             break;
         }
     }
 
     if (unit == 0) {
-        unit = (UwamonoCreatedUnit *)MAP_createUnit(index, resourceId);
+        unit = MAP_createUnit(index, resourceId);
         if (unit == 0) {
             printf(createUwamonoOverflowFormat);
             return 0;
@@ -1249,7 +946,7 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
 
     identityScale = 1.0f;
     unit->flags = 0x10004;
-    unit->savedMatrix = unit->matrix;
+    unit->basis = unit->matrix;
     unit->actionNo = 0;
     unit->sequenceNo = 0;
     unit->sequenceSub = 0;
@@ -1259,7 +956,7 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
     unit->position.z = 0.0f;
     unit->position.w = identityScale;
 
-    state = &unit->state;
+    state = &unit->uwamono;
     memset(state, 0, sizeof(*state));
     state->signal = -1;
     state->initialUnitId = -1;
@@ -1273,9 +970,9 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
     state->initialValue38 = -1;
     state->initialValue40 = -1;
     state->initialPartId = -1;
-    unit->initialize = InitUwamono;
+    unit->update = InitUwamono;
     {
-        UwamonoSequenceRecord *sequence = &unitSequence[unit->sequenceIndex];
+        UwamonoSequenceRecord *sequence = &unitSequence[unit->slot];
 
         sequence->initialValues00[0] = 0;
         sequence->initialValues00[1] = 0;
@@ -1306,13 +1003,13 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
  * uwares_tbl and xtxres_tbl); 0x7012 is excluded explicitly ahead of the
  * broader >= 0x1000 range check.
  */
-void MAP_LoadUwamonoResource(UwamonoResourceUnit *unit, int resourceId)
+void MAP_LoadUwamonoResource(MapUnitRecord *unit, int resourceId)
 {
     int index;
     int uwaresId;
     int xtxresId;
 
-    printf((const char *) loadResidentObjectFormat);
+    printf(loadResidentObjectFormat);
     if (resourceId != 0x7012 && resourceId >= 0x1000) {
         index = resourceId - 0x7001;
         uwaresId = uwares_tbl[index];
@@ -1322,31 +1019,31 @@ void MAP_LoadUwamonoResource(UwamonoResourceUnit *unit, int resourceId)
     }
 }
 
-void GetPartsPos(GetPartsPosUnit *unit)
+void GetPartsPos(MapUnitRecord *unit)
 {
     MapPartsRoot *root;
     MapPartsResource *resource;
-    GetPartsPosEntry *table;
-    GetPartsPosEntry *entry;
+    Matrix4 *table;
+    float (*entry)[4];
 
     root = GameLoopState.partsRoot;
     resource = root->resource;
-    table = (GetPartsPosEntry *) ((char *) resource + resource->arrayOffset);
-    entry = &table[unit->serial];
+    table = (Matrix4 *) ((char *) resource + resource->arrayOffset);
+    entry = table[unit->serial];
 
-    unit->entry = entry;
-    unit->position.x = entry->x;
-    unit->position.y = entry->y;
-    unit->position.z = entry->z;
+    unit->basis = entry;
+    unit->position.x = entry[3][0];
+    unit->position.y = entry[3][1];
+    unit->position.z = entry[3][2];
     unit->position.w = 1.0f;
-    unit->rotationX = 0.0f;
-    unit->rotationY = atan2f(entry->basisX, entry->basisZ);
-    unit->rotationZ = 0.0f;
+    unit->rotation.x = 0.0f;
+    unit->rotation.y = atan2f(entry[2][0], entry[2][2]);
+    unit->rotation.z = 0.0f;
 }
 
-void SendBrokenSignal(UwamonoMapUnit *unit)
+void SendBrokenSignal(MapUnitRecord *unit)
 {
-    unit->signal = 2;
+    unit->trap.state = 2;
 }
 
 void GetPartsSize(UwamonoKowareSizeUnit *unit)
@@ -1360,9 +1057,9 @@ void GetPartsSize(UwamonoKowareSizeUnit *unit)
         state->state = KowareKind_t[kindIndex].shape;
     }
     if (state->baseSizeX > 0.0f) {
-        unit->dimensions.vector.x = state->baseSizeX * 0.5f;
-        unit->dimensions.vector.y = state->baseSizeY;
-        unit->dimensions.vector.z = state->baseSizeZ * 0.5f;
+        unit->dimensions.x = state->baseSizeX * 0.5f;
+        unit->dimensions.y = state->baseSizeY;
+        unit->dimensions.z = state->baseSizeZ * 0.5f;
         if (printflg != 0) {
             const char *format = xyzVectorFormat;
             printf(setSizeFormat);
@@ -1372,9 +1069,9 @@ void GetPartsSize(UwamonoKowareSizeUnit *unit)
     } else {
         unit->dimensions = KowareKind_t[kindIndex].dimensions;
     }
-    unit->dimensions.vector.x += state->sizeOffsetX * 0.5f;
-    unit->dimensions.vector.y += state->sizeOffsetY;
-    unit->dimensions.vector.z += state->sizeOffsetZ * 0.5f;
+    unit->dimensions.x += state->sizeOffsetX * 0.5f;
+    unit->dimensions.y += state->sizeOffsetY;
+    unit->dimensions.z += state->sizeOffsetZ * 0.5f;
     if (state->target == -1) {
         state->target = KowareKind_t[kindIndex].target;
     }
@@ -1402,21 +1099,21 @@ void ClearUwamonoEffect(UwamonoEffectUnit *unit)
     }
 }
 
-signed char GetUwamonoSignal(UwamonoMapUnit *unit)
+signed char GetUwamonoSignal(MapUnitRecord *unit)
 {
-    return unit->signal;
+    return unit->trap.state;
 }
 
-void InitUwamono(UwamonoCreatedUnit *unit)
+void InitUwamono(MapUnitRecord *unit)
 {
-    UwamonoCreatedState *map = &unit->state;
+    UwamonoCreatedState *map = &unit->uwamono;
     UwamonoProbeParameters parameters;
 
     unit->flags &= ~4;
     if (map->mapType == 0) {
-        printf(illegalUwaNullFormat, unit->serial, unit->sequenceIndex);
+        printf(illegalUwaNullFormat, unit->serial, unit->slot);
         unit->serial = -1;
-        unit->initialize = 0;
+        unit->update = 0;
         return;
     }
 
@@ -1448,23 +1145,23 @@ void InitUwamono(UwamonoCreatedUnit *unit)
         InitMapTrap(unit);
         return;
     case 6:
-        InitSaveSymbol((UwamonoInitSymbolUnit *)(void *)unit);
+        InitSaveSymbol(unit);
         return;
     case 7:
-        InitShopSymbol((UwamonoInitSymbolUnit *)(void *)unit);
+        InitShopSymbol(unit);
         return;
     case 8:
-        InitEvsSymbol((UwamonoInitSymbolUnit *)(void *)unit);
+        InitEvsSymbol(unit);
         return;
     case 9:
-        InitRetSymbol((UwamonoInitSymbolUnit *)(void *)unit);
+        InitRetSymbol(unit);
         return;
     case 10:
         InitSpecialSymbol(unit);
         return;
     default:
         printf(illegalUwamonoTypeFormat, map->mapType);
-        unit->initialize = 0;
+        unit->update = 0;
         return;
     }
 }
@@ -1493,20 +1190,20 @@ void InitMapKoware(InitMapPartsUnit *mapUnit)
 {
     KowareInitUnit *unit = (KowareInitUnit *)mapUnit;
     MapPartsResource *resource = GameLoopState.partsRoot->resource;
-    KowareInitResourceCount *resourceCount = (KowareInitResourceCount *)resource;
+    MapPartsResource *resourceCount = (MapPartsResource *)resource;
     KowareInitState *state = &unit->state;
     short kindIndex = state->kindIndex;
     if (kindIndex < 0) {
         printf(illegalKowareKindFormat, kindIndex);
     }
-    GetPartsPos((GetPartsPosUnit *)unit);
-    GetPartsSize((UwamonoKowareSizeUnit *)(void *)unit);
+    GetPartsPos((MapUnitRecord *)unit);
+    GetPartsSize((UwamonoKowareSizeUnit *)unit);
     if (state->timer == -1) {
         state->timer = 1;
     }
     unit->flags = 0;
     unit->updateFunction = MAP_updateUnitKoware;
-    CreateUwamonoCommon((UwamonoMapUnit *)unit);
+    CreateUwamonoCommon((MapUnitRecord *)unit);
     SetHideObject(unit);
     if (unit->serial >= 0 && unit->serial < resourceCount->partCount) {
         nmlModelSetPartsVisible(resource, unit->serial, 1);
@@ -1522,9 +1219,9 @@ void InitMapKoware(InitMapPartsUnit *mapUnit)
     }
 }
 
-void InitSaveSymbol(UwamonoInitSymbolUnit *unit)
+void InitSaveSymbol(MapUnitRecord *unit)
 {
-    UwamonoInitSymbolState *timerState = &unit->timerState;
+    UwamonoInitSymbolState *timerState = &unit->symbol;
     float (*matrix)[4] = unit->matrix;
     Vector4 *position = &unit->position;
     int uwaresId = uwares_tbl[5];
@@ -1534,17 +1231,19 @@ void InitSaveSymbol(UwamonoInitSymbolUnit *unit)
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&position->x);
-    xglMatrixStackRotX(unit->rotationX);
-    xglMatrixStackRotY(unit->rotationY);
-    xglMatrixStackRotZ(unit->rotationZ);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
     xglMatrixStackSave(matrix);
-    unit->savedMatrix = matrix;
+    unit->basis = matrix;
 
     if (timerState->state == -1) {
         timerState->state = 0;
     }
-    *(int *)((char *)timerState + 0x44) = 0;
-    unit->updateFunction = MAP_updateUnitSaveSymbol;
+    /* Stored through the timer's address (a plain int store, not a member
+     * store), so the printflg load below stays behind it. */
+    *&timerState->timer = 0;
+    unit->update = MAP_updateUnitSaveSymbol;
     unit->flags |= 0x10000;
     unit->flags |= 0x20000000;
 
@@ -1556,9 +1255,9 @@ void InitSaveSymbol(UwamonoInitSymbolUnit *unit)
     }
 }
 
-void InitShopSymbol(UwamonoInitSymbolUnit *unit)
+void InitShopSymbol(MapUnitRecord *unit)
 {
-    UwamonoInitSymbolState *timerState = &unit->timerState;
+    UwamonoInitSymbolState *timerState = &unit->symbol;
     float (*matrix)[4] = unit->matrix;
     Vector4 *position = &unit->position;
     int uwaresId = uwares_tbl[6];
@@ -1568,17 +1267,18 @@ void InitShopSymbol(UwamonoInitSymbolUnit *unit)
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&position->x);
-    xglMatrixStackRotX(unit->rotationX);
-    xglMatrixStackRotY(unit->rotationY);
-    xglMatrixStackRotZ(unit->rotationZ);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
     xglMatrixStackSave(matrix);
-    unit->savedMatrix = matrix;
+    unit->basis = matrix;
 
     if (timerState->state == -1) {
         timerState->state = 0;
     }
-    *(int *)((char *)timerState + 0x44) = 0;
-    unit->updateFunction = MAP_updateUnitShopSymbol;
+    /* As in InitSaveSymbol: a plain int store through the timer's address. */
+    *&timerState->timer = 0;
+    unit->update = MAP_updateUnitShopSymbol;
     unit->flags |= 0x10000;
     unit->flags |= 0x40000000;
 
@@ -1590,23 +1290,23 @@ void InitShopSymbol(UwamonoInitSymbolUnit *unit)
     }
 }
 
-void InitEvsSymbol(UwamonoInitSymbolUnit *unit)
+void InitEvsSymbol(MapUnitRecord *unit)
 {
-    UwamonoInitSymbolState *timerState = &unit->timerState;
+    UwamonoInitSymbolState *timerState = &unit->symbol;
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&unit->position.x);
-    xglMatrixStackRotX(unit->rotationX);
-    xglMatrixStackRotY(unit->rotationY);
-    xglMatrixStackRotZ(unit->rotationZ);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
     xglMatrixStackSave(&unit->matrix[0]);
-    unit->savedMatrix = &unit->matrix[0];
+    unit->basis = &unit->matrix[0];
 
     if (timerState->state == -1) {
         timerState->state = 0;
     }
     timerState->timer = 0;
-    unit->updateFunction = MAP_updateUnitSymbol;
+    unit->update = MAP_updateUnitSymbol;
     unit->flags = unit->flags | 0x10000;
     if (printflgReadOnly == 0) return;
     printf(createShopSymbolFormat,
@@ -1615,25 +1315,25 @@ void InitEvsSymbol(UwamonoInitSymbolUnit *unit)
            fptodp(unit->position.z));
 }
 
-void InitRetSymbol(UwamonoInitSymbolUnit *unit)
+void InitRetSymbol(MapUnitRecord *unit)
 {
-    UwamonoInitSymbolState *timerState = &unit->timerState;
+    UwamonoInitSymbolState *timerState = &unit->symbol;
     float (*matrix)[4] = unit->matrix;
     Vector4 *position = &unit->position;
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&position->x);
-    xglMatrixStackRotX(unit->rotationX);
-    xglMatrixStackRotY(unit->rotationY);
-    xglMatrixStackRotZ(unit->rotationZ);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
     xglMatrixStackSave(matrix);
-    unit->savedMatrix = matrix;
+    unit->basis = matrix;
 
     if (timerState->state == -1) {
         timerState->state = 0;
     }
     timerState->timer = 0;
-    unit->updateFunction = MAP_updateUnitSymbol;
+    unit->update = MAP_updateUnitSymbol;
     unit->flags |= 0x10000;
 
     if (printflgReadOnly != 0) {
@@ -1646,25 +1346,25 @@ void InitRetSymbol(UwamonoInitSymbolUnit *unit)
 
 void SetHideObject(void *argument)
 {
-    UwamonoCreatedUnit *created = argument;
+    MapUnitRecord *created = argument;
     UwamonoCreatedPosition *createdPosition = argument;
-    UwamonoCreatedState *state = &created->state;
+    UwamonoCreatedState *state = &created->uwamono;
     signed char actorIndex = state->state;
     signed char mapUnitIndex;
 
     if (actorIndex != -1) {
-        unsigned char sequenceIndex = created->sequenceIndex;
-        UwamonoCrossActor *enemy = &actor[actorIndex];
+        unsigned char sequenceIndex = created->slot;
+        UwamonoEnemyUnit *enemy = &actor[actorIndex];
         unsigned char *linkState = enepc[enemy->actorIndex].linkState;
 
         enemy->update = MAP_updateUnitEnemy;
         linkState[8] = 0;
         linkState[11] = sequenceIndex;
-        enemy->alignedPosition = createdPosition->position;
-        enemy->unmodeled_50[0] = 0.0f;
-        enemy->unmodeled_50[1] = 0.0f;
-        enemy->unmodeled_50[2] = 0.0f;
-        ACT_updateEnemy((UwamonoEnemyUnit *)enemy);
+        enemy->position = createdPosition->position;
+        enemy->rotationX = 0.0f;
+        enemy->heading = 0.0f;
+        enemy->rotationZ = 0.0f;
+        ACT_updateEnemy(enemy);
         enemy->flags |= 8;
     }
 
@@ -1675,7 +1375,7 @@ void SetHideObject(void *argument)
         UwamonoHideEffect *effect = (UwamonoHideEffect *)unit->effectCf[0];
         MapPartsResource *resource = GameLoopState.partsRoot->resource;
 
-        unit->linkedUnitIndex = created->sequenceIndex;
+        unit->linkedUnitIndex = created->slot;
         unit->position = createdPosition->position;
         unit->update = MAP_updateUnitHide;
         unit->flags |= 0x100004;
@@ -1710,7 +1410,7 @@ void GameStateRestoreKoware(void)
 void SetMapUwamono(void)
 {
     UwamonoGameLoopState *state = &GameLoopState;
-    UwamonoMapSlot *unit = (UwamonoMapSlot *) MapUnit;
+    UwamonoMapSlot *unit = MapUnit;
     short *shootUnit = state->shootUnit;
     int remaining = 63;
 
@@ -1742,10 +1442,10 @@ void ResetShootSys(void)
     UnlockMapUnit();
 }
 
-UwamonoCreatedUnit *CreateUwamono(float x, float y, float z, float rotationY, int resourceId)
+MapUnitRecord *CreateUwamono(float x, float y, float z, float rotationY, int resourceId)
 {
-    UwamonoCreatedUnit *unit =
-        (UwamonoCreatedUnit *)(void *)MAP_createUnit(-1, resourceId);
+    MapUnitRecord *unit =
+        MAP_createUnit(-1, resourceId);
     UwamonoCreatedState *state;
     int inactiveValue;
 
@@ -1754,7 +1454,7 @@ UwamonoCreatedUnit *CreateUwamono(float x, float y, float z, float rotationY, in
         return 0;
     }
     MAP_loadUnitResource(unit, resourceId);
-    state = &unit->state;
+    state = &unit->uwamono;
     memset(state, 0, sizeof(*state));
     inactiveValue = -1;
     state->height = 3.0f;
@@ -1767,9 +1467,9 @@ UwamonoCreatedUnit *CreateUwamono(float x, float y, float z, float rotationY, in
     unit->position.y = y;
     unit->position.z = z;
     unit->position.w = 1.0f;
-    unit->rotationY = rotationY;
-    unit->rotationX = 0.0f;
-    unit->rotationZ = 0.0f;
+    unit->rotation.y = rotationY;
+    unit->rotation.x = 0.0f;
+    unit->rotation.z = 0.0f;
     InitMapTrap(unit);
     return unit;
 }
@@ -1782,7 +1482,7 @@ UwamonoKowareUnit *CreateKowaremono(short resourceId, short kindIndex)
         printf(createKowaremonoUnitOverflowFormat);
         return 0;
     }
-    GetPartsPos((GetPartsPosUnit *)unit);
+    GetPartsPos((MapUnitRecord *)unit);
     state = &unit->state;
     if (state->state == -1) {
         state->state = KowareKind_t[kindIndex].shape;
@@ -1792,12 +1492,12 @@ UwamonoKowareUnit *CreateKowaremono(short resourceId, short kindIndex)
         state->target = KowareKind_t[kindIndex].target;
     }
     unit->flags = 0;
-    CreateUwamonoCommon((UwamonoMapUnit *)unit);
+    CreateUwamonoCommon((MapUnitRecord *)unit);
     unit->updateFunction = MAP_updateUnitKoware;
     return unit;
 }
 
-void CreateUwamonoCommon(UwamonoMapUnit *unit)
+void CreateUwamonoCommon(MapUnitRecord *unit)
 {
     unit->actionNo = 0;
     unit->flags |= 0x10000;
@@ -1813,9 +1513,9 @@ void MAP_updateUnitKoware(void *argument)
     int slot;
 
     if (state->timer != 0) {
-        DrawActiveCursol((UwamonoMapUnit *)(void *)unit);
+        DrawActiveCursol((MapUnitRecord *)unit);
     }
-    UwamonoCommonFunc((UwamonoCommonUnit *)(void *)unit);
+    UwamonoCommonFunc((UwamonoCommonUnit *)unit);
 
     switch (unit->actionSub) {
     case 0:
@@ -1863,7 +1563,7 @@ void MAP_updateUnitKoware(void *argument)
 
 void MAP_updateUnitEnemy(UwamonoEnemyUnit *unit)
 {
-    unsigned char linkedUnitId = enepc[unit->enemyIndex].unitId;
+    unsigned char linkedUnitId = enepc[unit->actorIndex].unitId;
     UwamonoGameLoopState *state;
 
     if (!MapUnit[linkedUnitId].actionSub) {
@@ -1874,7 +1574,7 @@ void MAP_updateUnitEnemy(UwamonoEnemyUnit *unit)
         unit->update = ACT_updateEnemy;
         state = &GameLoopState;
         state->enemyUpdateState = 0;
-        unit->actorHeading = (unit->heading = Get_Angle(&unit->position.value, &state->actor->position));
+        unit->actorHeading = (unit->heading = Get_Angle(&unit->position, &state->actor->position));
     }
 }
 
@@ -1904,9 +1604,9 @@ void MAP_updateUnitHide(void *argument)
         effect->enabled = 1;
     }
     matrix = unit->matrixView;
-    (*matrix)[3][0] = unit->position.value.x;
-    (*matrix)[3][1] = unit->position.value.y;
-    (*matrix)[3][2] = unit->position.value.z;
+    (*matrix)[3][0] = unit->position.x;
+    (*matrix)[3][1] = unit->position.y;
+    (*matrix)[3][2] = unit->position.z;
 
     switch (state->kindIndex) {
     case 4:
@@ -1938,23 +1638,23 @@ void MAP_updateUnitHide(void *argument)
     }
 }
 
-void MAP_updateUnitSaveSymbol(UwamonoMapUnit *unit)
+void MAP_updateUnitSaveSymbol(MapUnitRecord *unit)
 {
-    unit->symbolPhase += SAVE_SYMBOL_PHASE_STEP;
+    unit->rotation.y += SAVE_SYMBOL_PHASE_STEP;
     if (CheckDist3D(&GameLoopState.actor->position, &unit->position) < 0.0f)
         return;
 }
 
-void MAP_updateUnitShopSymbol(UwamonoMapUnit *unit)
+void MAP_updateUnitShopSymbol(MapUnitRecord *unit)
 {
-    unit->symbolPhase += SHOP_SYMBOL_PHASE_STEP;
+    unit->rotation.y += SHOP_SYMBOL_PHASE_STEP;
     if (CheckDist3D(&GameLoopState.actor->position, &unit->position) < 0.0f)
         return;
 }
 
-void MAP_updateUnitSymbol(UwamonoMapUnit *unit)
+void MAP_updateUnitSymbol(MapUnitRecord *unit)
 {
-    unit->symbolPhase = unit->symbolPhase + UWAMONO_SYMBOL_PHASE_STEP;
+    unit->rotation.y = unit->rotation.y + UWAMONO_SYMBOL_PHASE_STEP;
 }
 
 void SetUwaWind(UwamonoWindUnit *unit)
@@ -1963,8 +1663,8 @@ void SetUwaWind(UwamonoWindUnit *unit)
     float heightDelta;
 
     wind->mode = 2;
-    __builtin_memcpy((UwamonoVectorWords *) &wind->position,
-                     (const UwamonoVectorWords *) &unit->position, sizeof(Vector4));
+    __builtin_memcpy(&wind->position,
+                     &unit->position, sizeof(Vector4));
     heightDelta = unit->height * 0.5f;
     wind->position.w = WIND_POSITION_W;
     wind->decay = WIND_DECAY;
@@ -2000,11 +1700,11 @@ void UwamonoBrokenSe(UwamonoBrokenSoundUnit *unit)
     }
 }
 
-void DrawActiveCursol(UwamonoMapUnit *argument)
+void DrawActiveCursol(MapUnitRecord *argument)
 {
     DrawActiveCursorUnit *unit = (DrawActiveCursorUnit *)argument;
     UwamonoEffectUnit *effects = (UwamonoEffectUnit *)argument;
-    DrawActiveCursorEffect *effect;
+    SchedulerState *effect;
     float scale;
     if (unit->signal == 1 || !(unit->flags & 0x40000)) {
         if (effects->effectCf[1] != 0) {
@@ -2022,7 +1722,7 @@ void DrawActiveCursol(UwamonoMapUnit *argument)
             effects->effectCf[1] = 0;
         }
         if (effects->effectCf[2] == 0) {
-            effect = (DrawActiveCursorEffect *)sefCreateEffectCf(0x2e3, 0, 0);
+            effect = sefCreateEffectCf(0x2e3, 0, 0);
             if (effect != 0) {
                 scale = (unit->cursorScale[0] + unit->cursorScale[1] +
                                 unit->cursorScale[2]) / 3.0f;
@@ -2047,7 +1747,7 @@ void DrawActiveCursol(UwamonoMapUnit *argument)
             effects->effectCf[2] = 0;
         }
         if (effects->effectCf[1] == 0) {
-            effect = (DrawActiveCursorEffect *)sefCreateEffectCf(0x2e2, 0, 0);
+            effect = sefCreateEffectCf(0x2e2, 0, 0);
             if (effect != 0) {
                 scale = (unit->cursorScale[0] + unit->cursorScale[1] +
                                 unit->cursorScale[2]) / 3.0f;
@@ -2092,14 +1792,14 @@ int HitCheckMapUnit(void *actor)
     return -1;
 }
 
-int HitCheckMapUnitWithNyuru(UwamonoNyuruAlignedActor *actor)
+int HitCheckMapUnitWithNyuru(UwamonoCollisionActor *actor)
 {
     int candidates[64];
     int count;
     int index;
     int candidate;
-    UwamonoAlignedVector position;
-    UwamonoAlignedVector displacement;
+    AlignedVector4 position;
+    AlignedVector4 displacement;
 
     for (index = 63; index >= 0; index--) {
         candidates[index] = -1;
@@ -2112,7 +1812,7 @@ int HitCheckMapUnitWithNyuru(UwamonoNyuruAlignedActor *actor)
         UwamonoMapSlot *unit = &MapUnit[index];
         if (unit->serial != -1 && !(unit->flags & 0x100000) &&
             state->crossType != 0 && (unit->flags & 0x10000) &&
-            HitCheckMapUnitAt((UwamonoCollisionActor *)actor,
+            HitCheckMapUnitAt(actor,
                               (UwamonoCollisionUnit *)unit)) {
             candidates[count] = index;
             count++;
@@ -2135,12 +1835,11 @@ int HitCheckMapUnitWithNyuru(UwamonoNyuruAlignedActor *actor)
             displacement = actor->displacement;
             switch (unit->state.crossType) {
             case 1:
-                NyuruCircle((UwamonoNyuruActor *)actor,
+                NyuruCircle(actor,
                             (UwamonoCollisionUnit *)unit);
                 break;
             case 2:
-                NyuruMatrix((UwamonoNyuruActor *)actor,
-                            (UwamonoCollisionUnit *)unit, 1);
+                NyuruMatrix(actor, (UwamonoCollisionUnit *)unit, 1);
                 break;
             }
 
@@ -2154,10 +1853,10 @@ int HitCheckMapUnitWithNyuru(UwamonoNyuruAlignedActor *actor)
         }
     }
 
-    actor->position.value.x -= actor->displacement.value.x;
-    actor->position.value.z -= actor->displacement.value.z;
-    actor->displacement.value.x = 0.0f;
-    actor->displacement.value.z = 0.0f;
+    actor->position.x -= actor->displacement.x;
+    actor->position.z -= actor->displacement.z;
+    actor->displacement.x = 0.0f;
+    actor->displacement.z = 0.0f;
     return 0;
 }
 
@@ -2233,19 +1932,19 @@ int HitCheckMapUnitAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapUnitState *state;
 
-    if (unit->position.value.y + unit->dimensions.value.y * mapUnitHitHeightScale < actor->position.y) {
+    if (unit->position.vector.y + unit->dimensions.y * mapUnitHitHeightScale < actor->position.y) {
         return 0;
     }
 
     state = &unit->state;
-    if (actor->position.y < unit->position.value.y - mapUnitHitBelowMargin) {
+    if (actor->position.y < unit->position.vector.y - mapUnitHitBelowMargin) {
         return 0;
     }
 
     switch (state->state) {
     case 1: {
-        float distance = CheckDist2D(&actor->position, &unit->position.value);
-        float collisionRadius = actor->radius + unit->dimensions.value.x;
+        float distance = CheckDist2D(&actor->position, &unit->position.vector);
+        float collisionRadius = actor->radius + unit->dimensions.x;
         if (!(distance < collisionRadius)) {
             return 0;
         }
@@ -2260,11 +1959,11 @@ int HitCheckMapUnitAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 unsigned int HitCheckMapUnitPosAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapUnitState *state = &unit->state;
-    float unitY = unit->position.value.y;
+    float unitY = unit->position.vector.y;
     float actorY = actor->position.y;
     signed char shape;
 
-    if (unitY + unit->dimensions.value.y * mapUnitPosHitHeightScale < actorY) {
+    if (unitY + unit->dimensions.y * mapUnitPosHitHeightScale < actorY) {
         return 0;
     }
     if (actorY < unitY - mapUnitPosHitBelowMargin) {
@@ -2273,8 +1972,8 @@ unsigned int HitCheckMapUnitPosAt(UwamonoCollisionActor *actor, UwamonoCollision
     shape = state->state;
     switch (shape) {
     case 1:
-        if (CheckDist2D(&actor->position, &unit->position.value) <
-            actor->radius + unit->dimensions.value.x) {
+        if (CheckDist2D(&actor->position, &unit->position.vector) <
+            actor->radius + unit->dimensions.x) {
             return 1;
         }
         return 0;
@@ -2289,8 +1988,8 @@ int HitCheckBox(UwamonoCollisionActor *actor, struct UwamonoBoxUnit *boxUnit)
 {
     const float (*basis)[4];
     UwamonoCornerCollisionUnit *unit = (UwamonoCornerCollisionUnit *)boxUnit;
-    UwamonoAlignedVector dimensions = unit->halfSize;
-    UwamonoAlignedVector position;
+    AlignedVector4 dimensions = unit->halfSize;
+    DoublewordVector4 position;
     float unitX;
     float actorX;
     float actorZ;
@@ -2309,26 +2008,26 @@ int HitCheckBox(UwamonoCollisionActor *actor, struct UwamonoBoxUnit *boxUnit)
     position.words[1] = unit->position.words[1];
     position.words[0] = unit->position.words[0];
     /* Begin with unit-relative X before reconstructing projected world X. */
-    unitX = position.value.x;
+    unitX = position.vector.x;
     actorX = actor->position.x;
     actorZ = actor->position.z;
-    deltaZ = actorZ - position.value.z;
+    deltaZ = actorZ - position.vector.z;
     basis = unit->basis;
     axisX = actorX - unitX;
     /* The saved transform's first row supplies the horizontal box axis. */
     testDistance = axisX * basis[0][0] + deltaZ * basis[0][2];
-    halfWidth = dimensions.value.x;
+    halfWidth = dimensions.x;
     margin = actor->radius * 1.5f;
     if (halfWidth + margin < __builtin_fabsf(testDistance)) {
         return 0;
     }
-    depth = dimensions.value.z + margin;
+    depth = dimensions.z + margin;
     depthSquared = depth * depth;
     basisZ = basis[0][2];
     basisX = basis[0][0];
     axisX = testDistance * basisX + unitX;
     differenceX = actorX - axisX;
-    deltaZ = testDistance * basisZ + position.value.z;
+    deltaZ = testDistance * basisZ + position.vector.z;
     differenceZ = actorZ - deltaZ;
     /* The final test measures squared residual distance from the box axis. */
     testDistance = differenceX * differenceX + differenceZ * differenceZ;
@@ -2339,8 +2038,8 @@ int HitCheckBoxCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapSlot *box = (UwamonoMapSlot *)unit;
     int outsideWidth = 0;
-    UwamonoAlignedVector dimensions = box->dimensions;
-    UwamonoAlignedVector position;
+    AlignedVector4 dimensions = box->dimensions;
+    DoublewordVector4 position;
     struct UwamonoBoxBasis *basis;
     struct UwamonoBoxBasis **basisSlot;
     float basisX;
@@ -2354,31 +2053,31 @@ int HitCheckBoxCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     float differenceZ;
     float depth;
 
-    position.words[1] = box->position.words[1];
-    position.words[0] = box->position.words[0];
+    position.words[1] = unit->position.words[1];
+    position.words[0] = unit->position.words[0];
     actorX = actor->position.x;
     actorZ = actor->position.z;
     basisSlot = &box->basis;
     basis = *basisSlot;
     basisX = basis->x;
     basisZ = basis->z;
-    offsetX = actorX - position.value.x;
-    offsetZ = actorZ - position.value.z;
+    offsetX = actorX - position.vector.x;
+    offsetZ = actorZ - position.vector.z;
     testDistance = offsetX * basisX + offsetZ * basisZ;
-    if (dimensions.value.x + actor->radius * 1.5f < __builtin_fabsf(testDistance)) {
+    if (dimensions.x + actor->radius * 1.5f < __builtin_fabsf(testDistance)) {
         return 0;
     }
-    if (dimensions.value.x < __builtin_fabsf(testDistance)) {
+    if (dimensions.x < __builtin_fabsf(testDistance)) {
         outsideWidth = 1;
     }
-    offsetX = testDistance * basisX + position.value.x;
+    offsetX = testDistance * basisX + position.vector.x;
     differenceX = actorX - offsetX;
-    offsetZ = testDistance * basisZ + position.value.z;
+    offsetZ = testDistance * basisZ + position.vector.z;
     differenceZ = actorZ - offsetZ;
-    depth = dimensions.value.z + actor->radius * 1.5f;
+    depth = dimensions.z + actor->radius * 1.5f;
     testDistance = differenceX * differenceX + differenceZ * differenceZ;
     if (testDistance < depth * depth) {
-        if (dimensions.value.z * dimensions.value.z < testDistance &&
+        if (dimensions.z * dimensions.z < testDistance &&
             outsideWidth == 1) {
             return HitCheckCorner(actor, unit) != 0;
         }
@@ -2392,42 +2091,42 @@ int HitCheckCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     UwamonoCornerCollisionUnit *box = (UwamonoCornerCollisionUnit *)unit;
     const float (*basis)[4] = box->basis;
     Vector4 corners[4];
-    UwamonoAlignedVector center = box->position;
-    UwamonoAlignedVector halfSize = box->halfSize;
+    DoublewordVector4 center = box->position;
+    AlignedVector4 halfSize = box->halfSize;
 
-    corners[0].x = center.value.x + (halfSize.value.x * basis[0][0] + halfSize.value.z * basis[2][0]);
-    corners[0].y = center.value.y;
-    corners[0].z = center.value.z + (halfSize.value.x * basis[0][2] + halfSize.value.z * basis[2][2]);
+    corners[0].x = center.vector.x + (halfSize.x * basis[0][0] + halfSize.z * basis[2][0]);
+    corners[0].y = center.vector.y;
+    corners[0].z = center.vector.z + (halfSize.x * basis[0][2] + halfSize.z * basis[2][2]);
     if (CheckDist2D(&actor->position, &corners[0]) < actor->radius * 1.5f) {
         return 1;
     }
 
-    corners[1].x = center.value.x - (halfSize.value.z * basis[0][2] + halfSize.value.x * basis[2][2]);
-    corners[1].y = center.value.y;
-    corners[1].z = center.value.z + (halfSize.value.z * basis[0][0] + halfSize.value.x * basis[2][0]);
+    corners[1].x = center.vector.x - (halfSize.z * basis[0][2] + halfSize.x * basis[2][2]);
+    corners[1].y = center.vector.y;
+    corners[1].z = center.vector.z + (halfSize.z * basis[0][0] + halfSize.x * basis[2][0]);
     if (CheckDist2D(&actor->position, &corners[1]) < actor->radius * 1.5f) {
         return 1;
     }
 
-    corners[2].x = center.value.x - (halfSize.value.x * basis[0][0] + halfSize.value.z * basis[2][0]);
-    corners[2].y = center.value.y;
-    corners[2].z = center.value.z - (halfSize.value.x * basis[0][2] + halfSize.value.z * basis[2][2]);
+    corners[2].x = center.vector.x - (halfSize.x * basis[0][0] + halfSize.z * basis[2][0]);
+    corners[2].y = center.vector.y;
+    corners[2].z = center.vector.z - (halfSize.x * basis[0][2] + halfSize.z * basis[2][2]);
     if (CheckDist2D(&actor->position, &corners[2]) < actor->radius * 1.5f) {
         return 1;
     }
 
-    corners[3].x = center.value.x + (halfSize.value.z * basis[0][2] + halfSize.value.x * basis[2][2]);
-    corners[3].y = center.value.y;
-    corners[3].z = center.value.z - (halfSize.value.z * basis[0][0] + halfSize.value.x * basis[2][0]);
+    corners[3].x = center.vector.x + (halfSize.z * basis[0][2] + halfSize.x * basis[2][2]);
+    corners[3].y = center.vector.y;
+    corners[3].z = center.vector.z - (halfSize.z * basis[0][0] + halfSize.x * basis[2][0]);
     return CheckDist2D(&actor->position, &corners[3]) < actor->radius * 1.5f;
 }
 
 int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoCrossBasis basisCopy;
-    const float (*basis)[4];
-    UwamonoAlignedVector dimensions;
-    UwamonoCollisionPosition center;
+    float (*basis)[4];
+    AlignedVector4 dimensions;
+    DoublewordVector4 center;
     float nearestX;
     float nearestY;
     float nearestZ;
@@ -2437,13 +2136,13 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     float radiusSquared;
     float distance;
 
-    basis = unit->basis;
+    basis = unit->basis->rows;
     basisCopy = *unit->basis;
     dimensions = unit->dimensions;
     if (PadData.half_28 & 0x20) {
         unit->rotationY += 0.05f;
         xglMatrixStackUnit();
-        xglMatrixStackTrans(&unit->position.value.x);
+        xglMatrixStackTrans(&unit->position.vector.x);
         xglMatrixStackRotX(unit->rotationX);
         xglMatrixStackRotY(unit->rotationY);
         xglMatrixStackRotZ(unit->rotationZ);
@@ -2452,7 +2151,7 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     if (PadData.half_28 & 0x40) {
         unit->rotationY -= 0.05f;
         xglMatrixStackUnit();
-        xglMatrixStackTrans(&unit->position.value.x);
+        xglMatrixStackTrans(&unit->position.vector.x);
         xglMatrixStackRotX(unit->rotationX);
         xglMatrixStackRotY(unit->rotationY);
         xglMatrixStackRotZ(unit->rotationZ);
@@ -2477,37 +2176,37 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
                        basis[3][2]);
 
     center = unit->position;
-    center.value.x = unit->position.value.x -
-               ((dimensions.value.x * basis[0][0] +
-                 dimensions.value.z * basis[2][0]) * 0.5f);
-    center.value.y = unit->position.value.y;
-    center.value.z = unit->position.value.z -
-               ((dimensions.value.x * basis[0][2] +
-                 dimensions.value.z * basis[2][2]) * 0.5f);
-    basisCopy.anchor.x = center.value.x;
-    basisCopy.anchor.y = center.value.y + 2.0f;
-    basisCopy.anchor.z = center.value.z;
-    basisCopy.anchor.x = unit->position.value.x + basis[0][0];
-    basisCopy.anchor.y = unit->position.value.y + 2.0f;
-    basisCopy.anchor.z = unit->position.value.z + basis[0][2];
-    basisCopy.anchor.x = unit->position.value.x + basis[2][0];
-    basisCopy.anchor.y = unit->position.value.y + 2.0f;
-    basisCopy.anchor.z = unit->position.value.z + basis[2][2];
-    nearestX = actor->position.x - center.value.x;
-    nearestY = actor->position.y - center.value.y;
-    nearestZ = actor->position.z - center.value.z;
+    center.vector.x = unit->position.vector.x -
+               ((dimensions.x * basis[0][0] +
+                 dimensions.z * basis[2][0]) * 0.5f);
+    center.vector.y = unit->position.vector.y;
+    center.vector.z = unit->position.vector.z -
+               ((dimensions.x * basis[0][2] +
+                 dimensions.z * basis[2][2]) * 0.5f);
+    basisCopy.anchor[0] = center.vector.x;
+    basisCopy.anchor[1] = center.vector.y + 2.0f;
+    basisCopy.anchor[2] = center.vector.z;
+    basisCopy.anchor[0] = unit->position.vector.x + basis[0][0];
+    basisCopy.anchor[1] = unit->position.vector.y + 2.0f;
+    basisCopy.anchor[2] = unit->position.vector.z + basis[0][2];
+    basisCopy.anchor[0] = unit->position.vector.x + basis[2][0];
+    basisCopy.anchor[1] = unit->position.vector.y + 2.0f;
+    basisCopy.anchor[2] = unit->position.vector.z + basis[2][2];
+    nearestX = actor->position.x - center.vector.x;
+    nearestY = actor->position.y - center.vector.y;
+    nearestZ = actor->position.z - center.vector.z;
     distance = (nearestX * basis[0][0]) + (nearestY * basis[0][1]) + (nearestZ * basis[0][2]);
     xglFontDebugPrintf(8, 0x3C, hitCheckLenFormat, distance);
 
     if (distance < 0.0f) {
         return 0;
     }
-    if (unit->dimensions.value.x < distance) {
+    if (unit->dimensions.x < distance) {
         return 0;
     }
-    nearestX = distance * basis[0][0] + center.value.x;
-    nearestY = distance * basis[0][1] + center.value.y;
-    nearestZ = distance * basis[0][2] + center.value.z;
+    nearestX = distance * basis[0][0] + center.vector.x;
+    nearestY = distance * basis[0][1] + center.vector.y;
+    nearestZ = distance * basis[0][2] + center.vector.z;
     xglFontDebugPrintf(8, 0x18, hitCheckXFormat, nearestX);
     xglFontDebugPrintf(8, 0x20, hitCheckYFormat, nearestY);
     xglFontDebugPrintf(8, 0x28, hitCheckZFormat, nearestZ);
@@ -2515,7 +2214,7 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     dx = actor->position.x - nearestX;
     dy = actor->position.y - nearestY;
     dz = actor->position.z - nearestZ;
-    radiusSquared = unit->dimensions.value.z * unit->dimensions.value.z;
+    radiusSquared = unit->dimensions.z * unit->dimensions.z;
     distance = (dx * dx) + (dy * dy) + (dz * dz);
     xglFontDebugPrintf(8, 0x54, hitCheckUFormat, dx);
     xglFontDebugPrintf(8, 0x5C, hitCheckVFormat, dy);
@@ -2529,21 +2228,21 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return 0;
 }
 
-int HitCheckNyuru(UwamonoNyuruAlignedActor *actor, UwamonoCollisionUnit *unit)
+int HitCheckNyuru(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
-    UwamonoAlignedVector position = actor->position;
-    UwamonoAlignedVector displacement = actor->displacement;
+    AlignedVector4 position = actor->position;
+    AlignedVector4 displacement = actor->displacement;
     int mapIndex = -1;
 
     switch (unit->state.state) {
     case 1:
-        if (!NyuruCircle((UwamonoNyuruActor *)actor, unit)) {
+        if (!NyuruCircle(actor, unit)) {
             return 0;
         }
         mapIndex = HitCheckMapUnit(actor);
         break;
     case 2:
-        if (!NyuruMatrix((UwamonoNyuruActor *)actor, unit, 0)) {
+        if (!NyuruMatrix(actor, unit, 0)) {
             return 0;
         }
         mapIndex = HitCheckMapUnit(actor);
@@ -2552,16 +2251,16 @@ int HitCheckNyuru(UwamonoNyuruAlignedActor *actor, UwamonoCollisionUnit *unit)
     if (mapIndex != -1) {
         actor->position = position;
         actor->displacement = displacement;
-        actor->position.value.x -= actor->displacement.value.x;
-        actor->position.value.z -= actor->displacement.value.z;
-        actor->displacement.value.x = 0.0f;
-        actor->displacement.value.z = 0.0f;
+        actor->position.x -= actor->displacement.x;
+        actor->position.z -= actor->displacement.z;
+        actor->displacement.x = 0.0f;
+        actor->displacement.z = 0.0f;
         return 0;
     }
     return 1;
 }
 
-static int NyuruCircle(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
+static int NyuruCircle(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     float gapZ;
     float gapX;
@@ -2581,29 +2280,29 @@ static int NyuruCircle(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
     direction.x = actor->displacement.x / scale;
     direction.z = actor->displacement.z / scale;
 
-    displacementAngle = Get_Angle(&actor->position, &unit->position.value);
+    displacementAngle = Get_Angle(&actor->position, &unit->position.vector);
     (void)atan2f(actor->displacement.x, actor->displacement.z);
-    combinedRadius = actor->radius + unit->dimensions.value.x;
+    combinedRadius = actor->radius + unit->dimensions.x;
     actor->position.x -= actor->displacement.x;
     actor->position.z -= actor->displacement.z;
-    movedAngle = Get_Angle(&actor->position, &unit->position.value);
+    movedAngle = Get_Angle(&actor->position, &unit->position.vector);
 
-    target.x = unit->position.value.x - combinedRadius * xglSin(displacementAngle);
-    target.z = unit->position.value.z - combinedRadius * xglCos(displacementAngle);
+    target.x = unit->position.vector.x - combinedRadius * xglSin(displacementAngle);
+    target.z = unit->position.vector.z - combinedRadius * xglCos(displacementAngle);
     gapX = actor->position.x - target.x;
     gapZ = actor->position.z - target.z;
     distance = __builtin_sqrtf(gapX * gapX + gapZ * gapZ);
     scale = (displacementLength - distance) * 0.25f;
-    angleCorrection = scale / (unit->dimensions.value.x * 2.0f);
+    angleCorrection = scale / (unit->dimensions.x * 2.0f);
     if (0.0f < movedAngle - displacementAngle) {
         displacementAngle -= angleCorrection;
     } else {
         displacementAngle += angleCorrection;
     }
 
-    combinedRadius = actor->radius + unit->dimensions.value.x + nyuruCircleRadiusMargin;
-    target.x = unit->position.value.x - combinedRadius * xglSin(displacementAngle);
-    target.z = unit->position.value.z - combinedRadius * xglCos(displacementAngle);
+    combinedRadius = actor->radius + unit->dimensions.x + nyuruCircleRadiusMargin;
+    target.x = unit->position.vector.x - combinedRadius * xglSin(displacementAngle);
+    target.z = unit->position.vector.z - combinedRadius * xglCos(displacementAngle);
     actor->displacement.x = target.x - actor->position.x;
     actor->displacement.z = target.z - actor->position.z;
     height = UnduCheck(&actor->position, &actor->displacement,
@@ -2617,10 +2316,10 @@ static int NyuruCircle(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
     return 1;
 }
 
-static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int mode)
+static int NyuruMatrix(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
 {
     UwamonoCrossBasis *basis;
-    UwamonoAlignedVector dims;
+    AlignedVector4 dims;
     float dx = actor->displacement.x;
     float dz = actor->displacement.z;
     float remainingX = actor->position.x - dx;
@@ -2639,8 +2338,8 @@ static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int
     basisCopy = *basis;
     actor->position.x = remainingX;
     actor->position.z = remainingZ;
-    relativeX = remainingX - unit->position.value.x;
-    relativeZ = remainingZ - unit->position.value.z;
+    relativeX = remainingX - unit->position.vector.x;
+    relativeZ = remainingZ - unit->position.vector.z;
     alongX = relativeX * basis->xAxisX + relativeZ * basis->xAxisZ;
     distance = __builtin_sqrtf(distanceSquared);
     if (distance == 0.0f) {
@@ -2650,16 +2349,16 @@ static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int
     direction.z = actor->displacement.z / distance;
     direction.y = 0.0f;
 
-        if (__builtin_fabsf(alongX) < dims.value.x + actor->radius * 1.5f) {
+        if (__builtin_fabsf(alongX) < dims.x + actor->radius * 1.5f) {
         projection = direction.x * basis->xAxisX + direction.z * basis->xAxisZ;
         actor->displacement.x = projection * basis->xAxisX * distance;
         actor->displacement.z = projection * basis->xAxisZ * distance;
         if (__builtin_fabsf(actor->displacement.x) < nyuruMatrixStillThreshold &&
             __builtin_fabsf(actor->displacement.z) < nyuruMatrixStillThreshold && mode == 0) {
-            if (alongX > dims.value.x) {
+            if (alongX > dims.x) {
                 actor->displacement.x = basis->xAxisX * distance * 0.5f;
                 actor->displacement.z = basis->xAxisZ * distance * 0.5f;
-            } else if (alongX < -dims.value.x) {
+            } else if (alongX < -dims.x) {
                 actor->displacement.x = -basis->xAxisX * distance * 0.5f;
                 actor->displacement.z = -basis->xAxisZ * distance * 0.5f;
             }
@@ -2671,10 +2370,10 @@ static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int
         if (__builtin_fabsf(actor->displacement.x) < nyuruMatrixStillEpsilon &&
             __builtin_fabsf(actor->displacement.z) < nyuruMatrixStillEpsilon && mode == 0) {
             alongX = relativeX * basis->zAxisX + relativeZ * basis->zAxisZ;
-            if (alongX > dims.value.z) {
+            if (alongX > dims.z) {
                 actor->displacement.x = basis->zAxisX * distance * 0.5f;
                 actor->displacement.z = basis->zAxisZ * distance * 0.5f;
-            } else if (alongX < -dims.value.z) {
+            } else if (alongX < -dims.z) {
                 actor->displacement.x = -basis->zAxisX * distance * 0.5f;
                 actor->displacement.z = -basis->zAxisZ * distance * 0.5f;
             }
@@ -2698,7 +2397,7 @@ static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int
 int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
 {
     UwamonoCrossBasis *basis;
-    UwamonoAlignedVector dims;
+    AlignedVector4 dims;
     Vector4 normal;
     UwamonoCrossBasis basisCopy;
     float dx;
@@ -2714,15 +2413,15 @@ int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
     dims = unit->dimensions;
 
     if (mode == 0 && HitCheckCorner(actor, unit)) {
-        NyuruCorner((UwamonoNyuruActor *)actor, unit);
+        NyuruCorner(actor, unit);
         return 1;
     }
     dx = actor->displacement.x;
     dz = actor->displacement.z;
     actor->position.x -= dx;
     actor->position.z -= dz;
-    relativeX = actor->position.x - unit->position.value.x;
-    relativeZ = actor->position.z - unit->position.value.z;
+    relativeX = actor->position.x - unit->position.vector.x;
+    relativeZ = actor->position.z - unit->position.vector.z;
     alongX = relativeX * basis->xAxisX + relativeZ * basis->xAxisZ;
     distance = __builtin_sqrtf(actor->displacement.x * actor->displacement.x + actor->displacement.z * actor->displacement.z);
     if (distance == 0.0f) {
@@ -2732,7 +2431,7 @@ int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
     normal.x = actor->displacement.x / distance;
     normal.y = 0.0f;
     normal.z = actor->displacement.z / distance;
-    if (__builtin_fabsf(alongX) < dims.value.x + actor->radius * 1.5f) {
+    if (__builtin_fabsf(alongX) < dims.x + actor->radius * 1.5f) {
         projection = normal.x * basis->xAxisX + normal.z * basis->xAxisZ;
         actor->displacement.x = projection * basis->xAxisX * distance;
         actor->displacement.z = projection * basis->xAxisZ * distance;
@@ -2742,10 +2441,10 @@ int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
         actor->displacement.z = projection * basis->zAxisZ * distance;
     }
 
-    ((UwamonoNyuruActor *)actor)->undulation.attributeMask |= 0x4000;
+    actor->undulation.attributeMask |= 0x4000;
     {
         float height = UnduCheck(&actor->position, &actor->displacement,
-                                 &((UwamonoNyuruActor *)actor)->undulation);
+                                 &actor->undulation);
         if (height == -1000.0f) {
             actor->position.x -= actor->displacement.x;
             actor->position.z -= actor->displacement.z;
@@ -2756,13 +2455,13 @@ int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
     return 1;
 }
 
-static void NyuruCorner(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
+static void NyuruCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoCrossBasis *basis;
-    UwamonoCollisionPosition nearest;
-    UwamonoCollisionPosition candidate;
-    UwamonoCollisionPosition center;
-    UwamonoAlignedVector dimensions;
+    DoublewordVector4 nearest;
+    DoublewordVector4 candidate;
+    DoublewordVector4 center;
+    AlignedVector4 dimensions;
     UwamonoCollisionUnit adjustedUnit;
     float nearestDistance;
     float distance;
@@ -2772,48 +2471,48 @@ static void NyuruCorner(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
     basis = unit->basis;
     center = unit->position;
     dimensions = unit->dimensions;
-    nearest.value.x = center.value.x +
-                      (dimensions.value.x * basis->xAxisX +
-                       dimensions.value.z * basis->zAxisX);
-    nearest.value.y = center.value.y;
-    nearest.value.z = center.value.z +
-                      (dimensions.value.x * basis->xAxisZ +
-                       dimensions.value.z * basis->zAxisZ);
-    candidate.value.x = center.value.x -
-                        (dimensions.value.z * basis->xAxisZ +
-                         dimensions.value.x * basis->zAxisZ);
-    candidate.value.y = center.value.y;
-    candidate.value.z = center.value.z +
-                        (dimensions.value.z * basis->xAxisX +
-                         dimensions.value.x * basis->zAxisX);
-    nearestDistance = CheckDist2D(&actor->position, &nearest.value);
-    distance = CheckDist2D(&actor->position, &candidate.value);
+    nearest.vector.x = center.vector.x +
+                      (dimensions.x * basis->xAxisX +
+                       dimensions.z * basis->zAxisX);
+    nearest.vector.y = center.vector.y;
+    nearest.vector.z = center.vector.z +
+                      (dimensions.x * basis->xAxisZ +
+                       dimensions.z * basis->zAxisZ);
+    candidate.vector.x = center.vector.x -
+                        (dimensions.z * basis->xAxisZ +
+                         dimensions.x * basis->zAxisZ);
+    candidate.vector.y = center.vector.y;
+    candidate.vector.z = center.vector.z +
+                        (dimensions.z * basis->xAxisX +
+                         dimensions.x * basis->zAxisX);
+    nearestDistance = CheckDist2D(&actor->position, &nearest.vector);
+    distance = CheckDist2D(&actor->position, &candidate.vector);
     if (nearestDistance > distance) {
         nearest = candidate;
     }
 
-    candidate.value.x = center.value.x -
-                        (dimensions.value.x * basis->xAxisX +
-                         dimensions.value.z * basis->zAxisX);
-    candidate.value.y = center.value.y;
-    candidate.value.z = center.value.z -
-                        (dimensions.value.x * basis->xAxisZ +
-                         dimensions.value.z * basis->zAxisZ);
-    nearestDistance = CheckDist2D(&actor->position, &nearest.value);
-    distance = CheckDist2D(&actor->position, &candidate.value);
+    candidate.vector.x = center.vector.x -
+                        (dimensions.x * basis->xAxisX +
+                         dimensions.z * basis->zAxisX);
+    candidate.vector.y = center.vector.y;
+    candidate.vector.z = center.vector.z -
+                        (dimensions.x * basis->xAxisZ +
+                         dimensions.z * basis->zAxisZ);
+    nearestDistance = CheckDist2D(&actor->position, &nearest.vector);
+    distance = CheckDist2D(&actor->position, &candidate.vector);
     if (nearestDistance > distance) {
         nearest = candidate;
     }
 
-    candidate.value.x = center.value.x +
-                        (dimensions.value.z * basis->xAxisZ +
-                         dimensions.value.x * basis->zAxisZ);
-    candidate.value.y = center.value.y;
-    candidate.value.z = center.value.z -
-                        (dimensions.value.z * basis->xAxisX +
-                         dimensions.value.x * basis->zAxisX);
-    nearestDistance = CheckDist2D(&actor->position, &nearest.value);
-    distance = CheckDist2D(&actor->position, &candidate.value);
+    candidate.vector.x = center.vector.x +
+                        (dimensions.z * basis->xAxisZ +
+                         dimensions.x * basis->zAxisZ);
+    candidate.vector.y = center.vector.y;
+    candidate.vector.z = center.vector.z -
+                        (dimensions.z * basis->xAxisX +
+                         dimensions.x * basis->zAxisX);
+    nearestDistance = CheckDist2D(&actor->position, &nearest.vector);
+    distance = CheckDist2D(&actor->position, &candidate.vector);
     if (nearestDistance > distance) {
         nearest = candidate;
     }
@@ -2822,8 +2521,8 @@ static void NyuruCorner(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
     adjustedUnit.position = nearest;
     actorRadius = actor->radius;
     adjustedRadius = actorRadius * 1.5f;
-    adjustedUnit.dimensions.value.z = adjustedRadius;
-    adjustedUnit.dimensions.value.x = adjustedRadius;
+    adjustedUnit.dimensions.z = adjustedRadius;
+    adjustedUnit.dimensions.x = adjustedRadius;
     actor->radius = nyuruCornerRadius;
     NyuruCircle(actor, &adjustedUnit);
     actor->radius = actorRadius;
@@ -2832,12 +2531,12 @@ static void NyuruCorner(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
 void ShootMapUnit(void)
 {
     UwamonoGameLoopState *state = &GameLoopState;
-    UwamonoAimActor *actor = (UwamonoAimActor *)state->actor;
+    Actor *actor = state->actor;
     int unitIndex;
     struct UwamonoMapCollisionState *unitState;
     float threshold;
 
-    if (actor->shootModeFlags & 0x0F000000) {
+    if (actor->attribute_flags & 0x0F000000) {
         UnlockMapUnit();
         return;
     }
@@ -2848,7 +2547,7 @@ void ShootMapUnit(void)
         DispCollUwamono();
     }
 
-    if (actor->motion != 14) {
+    if (actor->animation.slot.currentDataId != 14) {
         if (!(state->systemFlags & 0x8000)) {
             AimMapUnit();
             if ((PadData.half_2a & 0x80) &&
@@ -2856,8 +2555,8 @@ void ShootMapUnit(void)
                 const Vector4 *targetPosition;
 
                 unitIndex = state->aimMapUnitIndex;
-                targetPosition = &MapUnit[unitIndex].position.value;
-                actor->targetAngle = Get_Angle(&actor->position.value,
+                targetPosition = &MapUnit[unitIndex].position;
+                actor->target_angle = Get_Angle(&actor->position,
                                                targetPosition);
                 {
                     UwamonoShotEffect *effect =
@@ -2867,39 +2566,39 @@ void ShootMapUnit(void)
                         effect->flags &= ~0x400u;
                     }
                 }
-                actor->motionSpeed = shootMotionSpeed;
+                actor->animation.slot.speed = shootMotionSpeed;
                 state->systemFlags |= 0xC000;
                 ACT_setMotion(actor, 14);
-                actor->shootFlags = actor->shootFlags & ~8;
+                actor->animation.slot.flags = actor->animation.slot.flags & ~8;
                 xglSoundEffectNormalID(0x10002, 0);
             }
         }
-        if (actor->motion != 14) {
+        if (actor->animation.slot.currentDataId != 14) {
             return;
         }
     }
 
     unitIndex = GameLoopState.aimMapUnitIndex;
     unitState = &MapUnit[unitIndex].state;
-    if (actor->shootProgress > shootProgressThreshold &&
-        actor->shootProgress < 0.36f) {
+    if (actor->animation.slot.frame > shootProgressThreshold &&
+        actor->animation.slot.frame < 0.36f) {
             Vibration_Set_Weak(4);
     }
     threshold = 0.36f;
-    if (threshold < actor->shootProgress) {
+    if (threshold < actor->animation.slot.frame) {
         if (unitState->signal == 0) {
             if (printflg != 0) {
                 printf(shootMapUnitFormat, GameLoopState.aimMapUnitIndex);
             }
-            Enemy_FindByEar(actor, &MapUnit[unitIndex].position.value);
+            Enemy_FindByEar(actor, &MapUnit[unitIndex].position);
             unitState->signal = 1;
         }
     }
-    if (actor->shootProgress > 0.5f) {
+    if (actor->animation.slot.frame > 0.5f) {
         GameLoopState.aimMapUnitIndex = -1;
         GameLoopState.systemFlags &= ~0x4000u;
         GameLoopState.systemFlags &= ~0x8000u;
-        actor->shootFlags |= 8;
+        actor->animation.slot.flags |= 8;
     }
 }
 
@@ -2935,7 +2634,7 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
         struct UwamonoMapCollisionState *state = &MapUnit[i].state;
         UwamonoMapSlot *unit = &MapUnit[i];
         if (unit->serial != -1 && !(unit->flags & 0x100000) &&
-            !(0.3f < __builtin_fabsf(position->y - unit->position.value.y)) &&
+            !(0.3f < __builtin_fabsf(position->y - unit->position.y)) &&
             state->crossType != 0 && (unit->flags & 0x10000) &&
             UwamonoAreaCheck(position, unit, reach)) {
             candidates[count] = i;
@@ -2973,22 +2672,22 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
         }
         unit = &MapUnit[candidates[i]];
         CrossPointUwamonoAt(&nearStart, &nearEnd,
-                            (UwamonoMapUnit *)unit, &candidate);
+                            (MapUnitRecord *)unit, &candidate);
         if (candidate.y != -1000.0f) {
             CheckNearPoint(position, &candidate, result, result);
         }
         CrossPointUwamonoAt(&farStart, &farEnd,
-                            (UwamonoMapUnit *)unit, &candidate);
+                            (MapUnitRecord *)unit, &candidate);
         if (candidate.y != -1000.0f) {
             CheckNearPoint(position, &candidate, result, result);
         }
-        candidate.x = position->x - unit->position.value.x;
-        candidate.z = position->z - unit->position.value.z;
+        candidate.x = position->x - unit->position.x;
+        candidate.z = position->z - unit->position.z;
         if ((normal.x * candidate.x + normal.z * candidate.z) > 0.0f &&
-            CheckPointLine(&nearStart, &nearEnd, &unit->position.value) !=
-                CheckPointLine(&farStart, &farEnd, &unit->position.value)) {
-            CrossPointUwamonoAt(position, &unit->position.value,
-                                (UwamonoMapUnit *)unit, &candidate);
+            CheckPointLine(&nearStart, &nearEnd, &unit->position) !=
+                CheckPointLine(&farStart, &farEnd, &unit->position)) {
+            CrossPointUwamonoAt(position, &unit->position,
+                                (MapUnitRecord *)unit, &candidate);
             CheckNearPoint(position, &candidate, result, result);
         }
     }
@@ -3012,9 +2711,9 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
     return 1;
 }
 
-void CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second, UwamonoMapUnit *unit, void *result)
+void CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second, MapUnitRecord *unit, void *result)
 {
-    switch (unit->crossType) {
+    switch (unit->trap.windState) {
     case 1:
         CalcNearCrossPointCircle(first, second, (UwamonoCollisionUnit *)unit, result);
         return;
@@ -3032,18 +2731,18 @@ void CalcNearCrossPointCircle(const Vector4 *from, const Vector4 *to,
     float distance;
     if (CrossCheckMapUnitCircle(from, to, unit)) {
         delta = *from;
-        delta.y = unit->position.value.y;
+        delta.y = unit->position.vector.y;
         __asm__ __volatile__(
             "lqc2 vf3,0(%0)\n\t"
             "lqc2 vf2,0(%1)\n\t"
             "vsub.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
             "sqc2 vf2,0(%2)"
             :
-            : "r"(from), "r"(&unit->position.value), "r"(&delta)
+            : "r"(from), "r"(&unit->position), "r"(&delta)
             : "memory");
         xglVectorLength(&distance, &delta);
         xglVectorNormal(&direction, &delta);
-        distance -= unit->dimensions.value.x;
+        distance -= unit->dimensions.x;
         if (distance < 0.0f) {
             *out = *from;
         } else {
@@ -3057,41 +2756,41 @@ void CalcNearCrossPointCircle(const Vector4 *from, const Vector4 *to,
 }
 
 void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
-                           UwamonoMapUnit *unit, Vector4 *result)
+                           MapUnitRecord *unit, AlignedVector4 *result)
 {
     Vector4 corners[4];
-    UwamonoAlignedVector centerCopy;
+    DoublewordVector4 centerCopy; /* read through the pointer cast below: only the union keeps the 8-byte alignment (ld/sd) there */
     UwamonoAlignedBoxDims dims;
-    Vector4 candidate;
-    UwamonoCrossBasis *basis = unit->basis;
+    AlignedVector4 candidate;
+    float (*basis)[4] = unit->basis;
 
-    centerCopy = *(UwamonoAlignedVector *)&unit->position;
+    centerCopy = *(DoublewordVector4 *)&unit->position;
     dims = *(UwamonoAlignedBoxDims *)&unit->radius;
     result->y = -1000.0f;
     candidate.y = first->y;
 
-    corners[0].x = centerCopy.value.x + (dims.value.radius * basis->xAxisX + dims.value.boxDepth * basis->zAxisX);
-    corners[0].y = centerCopy.value.y;
-    corners[0].z = centerCopy.value.z + (dims.value.radius * basis->xAxisZ + dims.value.boxDepth * basis->zAxisZ);
-    corners[1].x = centerCopy.value.x - (dims.value.boxDepth * basis->xAxisZ + dims.value.radius * basis->zAxisZ);
-    corners[1].y = centerCopy.value.y;
-    corners[1].z = centerCopy.value.z + (dims.value.boxDepth * basis->xAxisX + dims.value.radius * basis->zAxisX);
-    corners[2].x = centerCopy.value.x - (dims.value.radius * basis->xAxisX + dims.value.boxDepth * basis->zAxisX);
-    corners[2].y = centerCopy.value.y;
-    corners[2].z = centerCopy.value.z - (dims.value.radius * basis->xAxisZ + dims.value.boxDepth * basis->zAxisZ);
-    corners[3].x = centerCopy.value.x + (dims.value.boxDepth * basis->xAxisZ + dims.value.radius * basis->zAxisZ);
-    corners[3].y = centerCopy.value.y;
-    corners[3].z = centerCopy.value.z - (dims.value.boxDepth * basis->xAxisX + dims.value.radius * basis->zAxisX);
+    corners[0].x = centerCopy.vector.x + (dims.value.radius * basis[0][0] + dims.value.boxDepth * basis[2][0]);
+    corners[0].y = centerCopy.vector.y;
+    corners[0].z = centerCopy.vector.z + (dims.value.radius * basis[0][2] + dims.value.boxDepth * basis[2][2]);
+    corners[1].x = centerCopy.vector.x - (dims.value.boxDepth * basis[0][2] + dims.value.radius * basis[2][2]);
+    corners[1].y = centerCopy.vector.y;
+    corners[1].z = centerCopy.vector.z + (dims.value.boxDepth * basis[0][0] + dims.value.radius * basis[2][0]);
+    corners[2].x = centerCopy.vector.x - (dims.value.radius * basis[0][0] + dims.value.boxDepth * basis[2][0]);
+    corners[2].y = centerCopy.vector.y;
+    corners[2].z = centerCopy.vector.z - (dims.value.radius * basis[0][2] + dims.value.boxDepth * basis[2][2]);
+    corners[3].x = centerCopy.vector.x + (dims.value.boxDepth * basis[0][2] + dims.value.radius * basis[2][2]);
+    corners[3].y = centerCopy.vector.y;
+    corners[3].z = centerCopy.vector.z - (dims.value.boxDepth * basis[0][0] + dims.value.radius * basis[2][0]);
     if (CheckCrossLine(first, second, &corners[0], &corners[1])) {
         CalcCrossPoint(first, second, &corners[0], &corners[1], &candidate);
-        *(UwamonoAlignedVector *)result = *(UwamonoAlignedVector *)&candidate;
+        *result = candidate;
     }
     if (CheckCrossLine(first, second, &corners[1], &corners[2])) {
         CalcCrossPoint(first, second, &corners[1], &corners[2], &candidate);
         if (result->y != -1000.0f) {
             CheckNearPoint(first, &candidate, result, result);
         } else {
-            *(UwamonoAlignedVector *)result = *(UwamonoAlignedVector *)&candidate;
+            *result = candidate;
         }
     }
     if (CheckCrossLine(first, second, &corners[2], &corners[3])) {
@@ -3099,7 +2798,7 @@ void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
         if (result->y != -1000.0f) {
             CheckNearPoint(first, &candidate, result, result);
         } else {
-            *(UwamonoAlignedVector *)result = *(UwamonoAlignedVector *)&candidate;
+            *result = candidate;
         }
     }
     if (CheckCrossLine(first, second, &corners[3], &corners[0])) {
@@ -3107,7 +2806,7 @@ void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
         if (result->y != -1000.0f) {
             CheckNearPoint(first, &candidate, result, result);
         } else {
-            *(UwamonoAlignedVector *)result = *(UwamonoAlignedVector *)&candidate;
+            *result = candidate;
         }
     }
 }
@@ -3150,18 +2849,18 @@ int UwamonoAreaCheck(const Vector4 *position, UwamonoMapSlot *unit, float radius
 {
     const struct UwamonoMapCollisionState *state = &unit->state;
     float positionY = position->y;
-    float unitY = unit->position.value.y;
+    float unitY = unit->position.y;
     float lowerHeight;
 
-    if (positionY > unitY + unit->dimensions.value.y * uwamonoAreaHeightScale)
+    if (positionY > unitY + unit->dimensions.y * uwamonoAreaHeightScale)
         return 0;
     lowerHeight = unitY - uwamonoAreaLowerMargin;
     if (positionY < lowerHeight)
         return 0;
     switch (state->crossType) {
     case 1: {
-        float distance = CheckDist2D(position, &unit->position.value);
-        float limit = radius + unit->dimensions.value.x;
+        float distance = CheckDist2D(position, &unit->position);
+        float limit = radius + unit->dimensions.x;
         if (distance < limit)
             return 1;
         break;
@@ -3179,14 +2878,14 @@ int UwamonoAreaCheck(const Vector4 *position, UwamonoMapSlot *unit, float radius
 }
 
 static inline float UwamonoProjectBoxAxisXZ(float x, float z,
-                                           const Matrix4 *matrix)
+                                           Matrix4 *matrix)
 {
     return x * (*matrix)[0][0] + z * (*matrix)[0][2];
 }
 
 int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius)
 {
-    UwamonoAlignedVector dimensionsSnapshot;
+    AlignedVector4 dimensionsSnapshot;
     float pointX = position->x;
     float pointZ = position->z;
     float unitZ;
@@ -3201,8 +2900,8 @@ int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius)
     float projection;
     float depth;
 
-    unitX = unit->position.value.x;
-    unitZ = unit->position.value.z;
+    unitX = unit->position.x;
+    unitZ = unit->position.z;
     /* The routine snapshots dimensions here but reads live bounds below. */
     dimensionsSnapshot = unit->dimensions;
     offsetX = pointX - unitX;
@@ -3210,11 +2909,11 @@ int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius)
     /* Keep an addressed reference to the real matrixView member. */
     matrixReference = &unit->matrixView;
     matrix = *matrixReference;
-    projection = UwamonoProjectBoxAxisXZ(offsetX, offsetZ, (const Matrix4 *)matrix);
-    if (unit->dimensions.value.x + radius < __builtin_fabsf(projection)) {
+    projection = UwamonoProjectBoxAxisXZ(offsetX, offsetZ, matrix);
+    if (unit->dimensions.x + radius < __builtin_fabsf(projection)) {
         return 0;
     }
-    depth = unit->dimensions.value.z + radius;
+    depth = unit->dimensions.z + radius;
     basisZ = (*matrix)[0][2];
     basisX = (*matrix)[0][0];
     offsetX = pointX - (projection * basisX + unitX);
@@ -3272,7 +2971,7 @@ int CrossCheckMapUnit(Vector4 *from, Vector4 *to)
     return -1;
 }
 
-int CrossCheckActor(UwamonoCrossActor *source, const Vector4 *to)
+int CrossCheckActor(UwamonoEnemyUnit *source, const Vector4 *to)
 {
     int index;
     for (index = 0; index < 64; ++index) {
@@ -3318,7 +3017,7 @@ int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
     direction.x = to->x - from->x;
     direction.y = 0.0f;
     direction.z = to->z - from->z;
-    radius = unit->dimensions.value.x;
+    radius = unit->dimensions.x;
     halfLength = __builtin_sqrtf(direction.x * direction.x +
                                  direction.z * direction.z) * 0.5f;
     /* The normalizer's vector ABI uses w as storage, not an xyz input. */
@@ -3327,13 +3026,13 @@ int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
     hit = 0;
     middle.x = from->x + (to->x - from->x) * 0.5f;
     middle.z = from->z + (to->z - from->z) * 0.5f;
-    offsetX = unit->position.value.x - middle.x;
-    offsetZ = unit->position.value.z - middle.z;
+    offsetX = unit->position.vector.x - middle.x;
+    offsetZ = unit->position.vector.z - middle.z;
     projection = offsetX * direction.x + offsetZ * direction.z;
     if (!(halfLength < __builtin_fabsf(projection))) {
         projectedX = projection * direction.x;
-        offsetX = unit->position.value.x - (projectedX + middle.x);
-        offsetZ = unit->position.value.z - (projection * direction.z + middle.z);
+        offsetX = unit->position.vector.x - (projectedX + middle.x);
+        offsetZ = unit->position.vector.z - (projection * direction.z + middle.z);
         hit = 1;
         if (!(offsetX * offsetX + offsetZ * offsetZ < radius * radius)) {
             hit = 0;
@@ -3346,37 +3045,37 @@ int CrossCheckMapUnitBox(Vector4 *first, Vector4 *second,
                          UwamonoCrossUnit *unit)
 {
     Vector4 corners[4];
-    UwamonoAlignedVector center;
-    UwamonoAlignedVector extents;
+    AlignedVector4 center;
+    DoublewordVector4 extents;
     UwamonoCrossBasis *basis;
 
     extents.words[1] = unit->dimensions.words[1];
     extents.words[0] = unit->dimensions.words[0];
-    center = unit->alignedPosition;
+    center = unit->position;
     basis = unit->basis;
-    extents.value.x += crossCheckMapUnitPadding;
-    extents.value.z += crossCheckMapUnitPadding;
-    corners[0].x = center.value.x + (extents.value.x * basis->xAxisX + extents.value.z * basis->zAxisX);
-    corners[0].y = center.value.y;
-    corners[0].z = center.value.z + (extents.value.x * basis->xAxisZ + extents.value.z * basis->zAxisZ);
+    extents.vector.x += crossCheckMapUnitPadding;
+    extents.vector.z += crossCheckMapUnitPadding;
+    corners[0].x = center.x + (extents.vector.x * basis->xAxisX + extents.vector.z * basis->zAxisX);
+    corners[0].y = center.y;
+    corners[0].z = center.z + (extents.vector.x * basis->xAxisZ + extents.vector.z * basis->zAxisZ);
 
-    corners[1].x = center.value.x - (extents.value.z * basis->xAxisZ + extents.value.x * basis->zAxisZ);
-    corners[1].y = center.value.y;
-    corners[1].z = center.value.z + (extents.value.z * basis->xAxisX + extents.value.x * basis->zAxisX);
+    corners[1].x = center.x - (extents.vector.z * basis->xAxisZ + extents.vector.x * basis->zAxisZ);
+    corners[1].y = center.y;
+    corners[1].z = center.z + (extents.vector.z * basis->xAxisX + extents.vector.x * basis->zAxisX);
     if (CheckCrossLine(first, second, &corners[0], &corners[1]) != 0) {
         return 1;
     }
 
-    corners[2].x = center.value.x - (extents.value.x * basis->xAxisX + extents.value.z * basis->zAxisX);
-    corners[2].y = center.value.y;
-    corners[2].z = center.value.z - (extents.value.x * basis->xAxisZ + extents.value.z * basis->zAxisZ);
+    corners[2].x = center.x - (extents.vector.x * basis->xAxisX + extents.vector.z * basis->zAxisX);
+    corners[2].y = center.y;
+    corners[2].z = center.z - (extents.vector.x * basis->xAxisZ + extents.vector.z * basis->zAxisZ);
     if (CheckCrossLine(first, second, &corners[1], &corners[2]) != 0) {
         return 1;
     }
 
-    corners[3].x = center.value.x + (extents.value.z * basis->xAxisZ + extents.value.x * basis->zAxisZ);
-    corners[3].y = center.value.y;
-    corners[3].z = center.value.z - (extents.value.z * basis->xAxisX + extents.value.x * basis->zAxisX);
+    corners[3].x = center.x + (extents.vector.z * basis->xAxisZ + extents.vector.x * basis->zAxisZ);
+    corners[3].y = center.y;
+    corners[3].z = center.z - (extents.vector.z * basis->xAxisX + extents.vector.x * basis->zAxisX);
     if (CheckCrossLine(first, second, &corners[2], &corners[3]) != 0) {
         return 1;
     }
@@ -3409,7 +3108,7 @@ void UnlockMapUnit(void)
 int CheckNearMapUnit(void)
 {
     UwamonoScanUnit *unit = (UwamonoScanUnit *)MapUnit;
-    struct UwamonoSoundActor *actor = GameLoopState.actor;
+    Actor *actor = GameLoopState.actor;
     float nearest = GameLoopState.selectionDistance + 1000.0f;
     int selected = -1;
     int index = 0;
@@ -3452,10 +3151,10 @@ int CheckBrokenMapUnit(BrokenMapUnit *unit)
     return brokenId == -1 ? 0 : brokenId;
 }
 
-int AimHeightCheck(UwamonoMapUnit *unit)
+int AimHeightCheck(MapUnitRecord *unit)
 {
     UwamonoGameLoopState *state = &GameLoopState;
-    AimHeightReference *heightReference = state->actor;
+    Actor *heightReference = state->actor;
     if (!(state->aimHeightFlags & 2))
         return 1;
     return __builtin_fabsf(heightReference->position.y - unit->position.y) < 0.3f;
@@ -3466,18 +3165,18 @@ int AimMapUnit(void)
     UwamonoAlignedScreenPoint actorScreen;
     UwamonoAimCandidate candidates[64];
     UwamonoAimCandidate savedCandidate;
-    UwamonoAlignedVector actorPosition;
-    UwamonoAlignedVector unitPosition;
+    AlignedVector4 actorPosition;
+    AlignedVector4 unitPosition;
     int candidateCount;
     int selectedFound;
     UwamonoAimCandidate *candidate;
     UwamonoAimCandidate *list;
-    UwamonoSoundActor *actor = GameLoopState.actor;
+    Actor *actor = GameLoopState.actor;
     int index;
 
-    actorPosition = *(UwamonoAlignedVector *)&actor->position;
-    actorPosition.value.y += 1.0f;
-    xglRotTransPers((Vector4 *)&actorScreen, 0, &actorPosition.value, 0);
+    actorPosition = actor->position;
+    actorPosition.y += 1.0f;
+    xglRotTransPers((Vector4 *)&actorScreen, 0, &actorPosition, 0);
     candidateCount = 0;
     selectedFound = 0;
     candidate = candidates;
@@ -3492,7 +3191,7 @@ int AimMapUnit(void)
         if (!(CheckBrokenMapUnit((BrokenMapUnit *)&MapUnit[index]) & 1)) {
             continue;
         }
-        if (!AimHeightCheck((UwamonoMapUnit *)&MapUnit[index])) {
+        if (!AimHeightCheck((MapUnitRecord *)&MapUnit[index])) {
             continue;
         }
 
@@ -3510,14 +3209,14 @@ int AimMapUnit(void)
         }
         candidate->distance = distance;
         unitPosition = MapUnit[index].position;
-        ((Vector4 *)&unitPosition)->y += 0.5f * ((const Vector4 *)&MapUnit[index].dimensions)->y;
+        unitPosition.y += 0.5f * MapUnit[index].dimensions.y;
         MapUnit[index].flags = MapUnit[index].flags | 0x40000u;
         if (GameLoopState.aimMapUnitIndex == index) {
             selectedFound = 1;
         }
         candidate->unitIndex = index;
         xglRotTransPers((Vector4 *)&candidate->screenPoint, 0,
-                        &unitPosition.value, 0);
+                        &unitPosition, 0);
         ++candidateCount;
         ++candidate;
     }
@@ -3596,9 +3295,9 @@ int AimMapUnit(void)
 
 int AimMapUnitLookCheck(UwamonoScanUnit *target)
 {
-    UwamonoSoundActor *listener = GameLoopState.actor;
+    Actor *listener = GameLoopState.actor;
     UwamonoAimQuery query;
-    UwamonoAlignedVector position;
+    AlignedVector4 position;
     Vector4 direction;
     float result;
 
@@ -3614,55 +3313,55 @@ int AimMapUnitLookCheck(UwamonoScanUnit *target)
     query.header = UnduDataGetHeader(0x305, 0x8000);
     if (query.header == 0) {
         query.header = UnduDataGetHeader(0, 0x8000);
-        if ((listener->flags & 0x20) != 0) {
+        if ((listener->status_flags & 0x20) != 0) {
             query.attributeMask |= 0x20;
         }
     }
-    position = *(UwamonoAlignedVector *)&listener->position;
+    position = listener->position;
     direction.x = target->position.x - listener->position.x;
     direction.y = target->position.y - listener->position.y;
     direction.z = target->position.z - listener->position.z;
     direction.w = 1.0f;
     query.attributeMask = 0x1810;
-    result = UnduCheck(&position.value, &direction, &query);
+    result = UnduCheck(&position, &direction, &query);
     if (result == -1000.0f) {
         return 0;
     }
-    if (!(__builtin_fabsf(position.value.x - target->position.x) < aimMapUnitLookEpsilon)) {
+    if (!(__builtin_fabsf(position.x - target->position.x) < aimMapUnitLookEpsilon)) {
         return 0;
     }
-    return __builtin_fabsf(position.value.z - target->position.z) < aimMapUnitLookEpsilon;
+    return __builtin_fabsf(position.z - target->position.z) < aimMapUnitLookEpsilon;
 }
 
 static float CheckCornerDist(const Vector4 *position, UwamonoCollisionUnit *unit)
 {
-    UwamonoAlignedVector corner;
+    AlignedVector4 corner;
     float distance;
 
     switch (unit->state.state) {
     case 1:
-        distance = CheckDist2D(position, &unit->position.value) - unit->dimensions.value.x;
+        distance = CheckDist2D(position, &unit->position.vector) - unit->dimensions.x;
         break;
     case 2:
-        corner = ((UwamonoMapSlot *)unit)->dimensions;
+        corner = unit->dimensions;
         {
-            float offsetX = __builtin_fabsf(position->x - unit->position.value.x);
+            float offsetX = __builtin_fabsf(position->x - unit->position.vector.x);
             float offsetZ;
 
-            if (offsetX < corner.value.x) {
-                corner.value.x = offsetX;
+            if (offsetX < corner.x) {
+                corner.x = offsetX;
             }
-            offsetZ = __builtin_fabsf(position->z - unit->position.value.z);
-            if (offsetZ < corner.value.z) {
-                corner.value.z = offsetZ;
+            offsetZ = __builtin_fabsf(position->z - unit->position.vector.z);
+            if (offsetZ < corner.z) {
+                corner.z = offsetZ;
             }
         }
-        distance = CheckDist2D(position, &unit->position.value);
-        distance -= __builtin_sqrtf(corner.value.x * corner.value.x +
-                                    corner.value.z * corner.value.z);
+        distance = CheckDist2D(position, &unit->position.vector);
+        distance -= __builtin_sqrtf(corner.x * corner.x +
+                                    corner.z * corner.z);
         break;
     default:
-        distance = CheckDist2D(position, &unit->position.value);
+        distance = CheckDist2D(position, &unit->position.vector);
         break;
     }
     return distance;
@@ -3682,9 +3381,9 @@ void UwamonoCommonFunc(UwamonoCommonUnit *unit)
         CheckUwamonoHeight(unit);
     }
 
-    unit->linkedUnit->position.x = unit->position.value.x;
-    unit->linkedUnit->position.y = unit->position.value.y;
-    unit->linkedUnit->position.z = unit->position.value.z;
+    unit->linkedUnit->position.x = unit->position.x;
+    unit->linkedUnit->position.y = unit->position.y;
+    unit->linkedUnit->position.z = unit->position.z;
 
     if (timers->bgmTimer > 0) {
         UwamonoBgmFunc(unit);
@@ -3694,37 +3393,37 @@ void UwamonoCommonFunc(UwamonoCommonUnit *unit)
 void UwamonoBgmFunc(UwamonoCommonUnit *unit)
 {
     UwamonoTimers *timers = &unit->timers;
-    UwamonoAlignedVector soundPosition;
+    AlignedVector4 soundPosition;
 
     if (timers->projectSound == 0) {
         soundPosition = unit->position;
     } else {
-        float x = unit->position.value.x;
-        float y = unit->position.value.y;
-        float z = unit->position.value.z;
+        float x = unit->position.x;
+        float y = unit->position.y;
+        float z = unit->position.z;
         UwamonoLinkedUnit *linkedUnit = unit->linkedUnit;
         float projection =
             (GameLoopState.actor->position.x - x) * linkedUnit->direction[0] +
             (GameLoopState.actor->position.y - y) * linkedUnit->direction[1] +
             (GameLoopState.actor->position.z - z) * linkedUnit->direction[2];
 
-        soundPosition.value.x = x + projection * linkedUnit->direction[0];
-        soundPosition.value.y = y + projection * linkedUnit->direction[1];
-        soundPosition.value.z = z + projection * linkedUnit->direction[2];
-        soundPosition.value.w = 1.0f;
+        soundPosition.x = x + projection * linkedUnit->direction[0];
+        soundPosition.y = y + projection * linkedUnit->direction[1];
+        soundPosition.z = z + projection * linkedUnit->direction[2];
+        soundPosition.w = 1.0f;
     }
-    xglSoundEffectPosID(timers->bgmTimer, &soundPosition.value.x, 1, unit->seChannel + 1);
+    xglSoundEffectPosID(timers->bgmTimer, &soundPosition.x, 1, unit->seChannel + 1);
 }
 
 void UwamonoBgmFadeOut(void)
 {
-    UwamonoBgmFadeOutUnit *unit;
+    MapUnitRecord *unit;
     int i;
     int bgmTimer;
     int bank;
     unsigned short handle;
 
-    unit = (UwamonoBgmFadeOutUnit *) MapUnit;
+    unit = (MapUnitRecord *) MapUnit;
     for (i = 0; i < 0x40; i++, unit++) {
         if (!(unit->flags & 0x10000)) {
             continue;
@@ -3741,7 +3440,7 @@ void UwamonoBgmFadeOut(void)
         if (handle == 0xFFFF) {
             continue;
         }
-        SsdFadeoutEffect((handle << 16) + (bgmTimer & 0xFFFF), 0x12C, unit->seChannel + 1);
+        SsdFadeoutEffect((handle << 16) + (bgmTimer & 0xFFFF), 0x12C, unit->slot + 1);
     }
 }
 
@@ -3759,15 +3458,15 @@ void CheckUwamonoHeight(UwamonoCommonUnit *unit)
         query.attributeMask = 0x1010;
     }
 
-    floorHeight = UnduCheck(&unit->position.value, 0, &query);
+    floorHeight = UnduCheck(&unit->position, 0, &query);
     if (unit->heightVelocity > uwamonoMaxFallVelocity) {
         unit->heightVelocity -= uwamonoGravity;
     }
 
-    unit->position.value.y += unit->heightVelocity;
-    if (floorHeight > unit->position.value.y) {
+    unit->position.y += unit->heightVelocity;
+    if (floorHeight > unit->position.y) {
         unit->heightVelocity = -unit->heightVelocity * 0.25f;
-        unit->position.value.y = floorHeight + uwamonoFloorOffset;
+        unit->position.y = floorHeight + uwamonoFloorOffset;
         if (unit->heightVelocity < uwamonoLandStopVelocity) {
             unit->flags |= 0x80000;
             unit->heightVelocity = 0.0f;
@@ -3779,11 +3478,11 @@ void CheckUwamonoHeight(UwamonoCommonUnit *unit)
         if (hitIndex == -1) {
             return;
         }
-        hitHeight = MapUnit[hitIndex].position.value.y +
-                    MapUnit[hitIndex].dimensions.value.y + uwamonoHitHeightPadding;
+        hitHeight = MapUnit[hitIndex].position.y +
+                    MapUnit[hitIndex].dimensions.y + uwamonoHitHeightPadding;
         reboundVelocity = -unit->heightVelocity;
         unit->heightVelocity = 0.25f * reboundVelocity;
-        unit->position.value.y = hitHeight;
+        unit->position.y = hitHeight;
         if (unit->heightVelocity < uwamonoBounceStopVelocity) {
             unit->heightVelocity = 0.0f;
         }
@@ -3842,8 +3541,8 @@ int HitCheckUwamonoAt(UwamonoBoxUnit *actor, UwamonoBoxUnit *unit)
 
 int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit)
 {
-    UwamonoAlignedVector dimensionsSnapshot;
-    UwamonoAlignedVector position;
+    AlignedVector4 dimensionsSnapshot;
+    AlignedVector4 position;
     Matrix4 *matrix;
     Matrix4 **matrixReference;
     float margin;
@@ -3862,22 +3561,22 @@ int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit)
     position = unit->position;
     /* The routine snapshots dimensions here but reads live bounds below. */
     dimensionsSnapshot = unit->dimensions;
-    offsetZ = actorZ - position.value.z;
+    offsetZ = actorZ - position.z;
     /* Keep an addressed reference to the real matrixView member. */
     matrixReference = &unit->matrixView;
     matrix = *matrixReference;
-    offsetX = actorX - position.value.x;
-    testDistance = UwamonoProjectBoxAxisXZ(offsetX, offsetZ, (const Matrix4 *)matrix);
+    offsetX = actorX - position.x;
+    testDistance = UwamonoProjectBoxAxisXZ(offsetX, offsetZ, matrix);
     margin = 0.15f;
-    if (__builtin_fabsf(testDistance) > unit->dimensions.value.x + margin) {
+    if (__builtin_fabsf(testDistance) > unit->dimensions.x + margin) {
         return 0;
     }
-    offsetX = testDistance * (*matrix)[0][0] + position.value.x;
+    offsetX = testDistance * (*matrix)[0][0] + position.x;
     differenceX = actorX - offsetX;
-    offsetZ = testDistance * (*matrix)[0][2] + position.value.z;
+    offsetZ = testDistance * (*matrix)[0][2] + position.z;
     differenceZ = actorZ - offsetZ;
     testDistance = differenceX * differenceX + differenceZ * differenceZ;
-    depth = unit->dimensions.value.z + margin;
+    depth = unit->dimensions.z + margin;
     depthSquared = depth * depth;
     return testDistance < depthSquared;
 }
@@ -3886,8 +3585,8 @@ void DrawRadar(void)
 {
     UwamonoScreenPoint color;
     UwamonoAlignedScreenPoint position;
-    const UwamonoSoundActor *listener = GameLoopState.actor;
-    const UwamonoCrossActor *candidate;
+    const Actor *listener = GameLoopState.actor;
+    const UwamonoEnemyUnit *candidate;
     int index;
     float diffX;
     float diffZ;
@@ -3916,7 +3615,7 @@ void DrawRadar(void)
         candidate = actor + index;
         if (candidate->resourceId < 0 || (candidate->flags & 8) != 0 ||
             !candidate->collisionObject ||
-            index == listener->actorIndex) {
+            index == listener->number) {
             continue;
         }
 
@@ -4006,7 +3705,7 @@ void SortLine(const UwamonoAlignedScreenPoint *from,
         sSortLine_1.position1.y = to->coordinates[1];
         sSortLine_1.position1.z = to->coordinates[2];
         sSortLine_1.position1.w = 128;
-        nmlModelDirectSend(5, (unsigned char *)&sSortLine_1, 6);
+        nmlModelDirectSend(5, &sSortLine_1, 6);
     }
 }
 

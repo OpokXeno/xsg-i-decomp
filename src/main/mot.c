@@ -1,8 +1,6 @@
 #include "common.h"
 #include "main/xgl_2.h"
 
-extern void xglMatrixStackLoad(float matrix[4][4]);
-
 float *MotTransXYZ(float *xyz)
 {
     Matrix4 matrix;

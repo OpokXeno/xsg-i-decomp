@@ -51,10 +51,10 @@ typedef struct GameraGsPacket {
 /* The GAMERA record, at +0x20 of the pooled effect object. */
 typedef struct GameraWork {
     unsigned char unmodeled_00[8];
-    ActRecord *actor;        /* +0x08, the matrix source makePath reads */
+    Actor *actor;        /* +0x08, the matrix source makePath reads */
     u32 coordinate;          /* +0x0c, its coordinate selector */
     unsigned char unmodeled_10[0x14];
-    ActRecord *target_actor; /* +0x24, the coordinate source of target */
+    Actor *target_actor; /* +0x24, the coordinate source of target */
     u32 target_coordinate;   /* +0x28, its coordinate selector */
     unsigned char unmodeled_2c[0x44];
     short frame; /* +0x70 */

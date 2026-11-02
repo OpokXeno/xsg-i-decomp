@@ -2,23 +2,13 @@
 #include "shared.h"
 #include "main/xgl_packet.h"
 #include "tya_display_setting.h"
+#include "main/game_over.h"
 
 #define PLAY_RESET_SOUND_EFFECT()                                       \
     do {                                                                \
         xglSoundEffectNormalDirect(1);                                  \
     } while (0)
 
-/*
- * sRender's destination-buffer selector: folded (with a fixed high bit)
- * into the register DrawImage primes at TestEnv0[4] before the two-part
- * image transfer below. Only this halfword is evidenced here (see
- * src/main/game_over.c's DrawImage for the same global read through its
- * own local view).
- */
-typedef struct {
-    u8 unmodeled_00[0x20];
-    u16 buffer_select;
-} DrawImageRenderState;
 
 typedef union {
     u64 value;
@@ -123,7 +113,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
 {
     short saved_x;
     short saved_y;
-    TyaDisplayEnvironment environment;
+    GsDispEnvDisplayView environment;
 
     sceGsSetDefDispEnv(&environment, 0, 512, 448, 0, 0);
     saved_x = ((TyaSaveDataRecord *)SaveData)->horizontal_display_offset;

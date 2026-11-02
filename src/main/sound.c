@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/xgl_sound.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -40,17 +41,8 @@ typedef struct SoundStreamPlayCall {
     int pan;
 } SoundStreamPlayCall;
 
-/* xglSoundSequenceNormal is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceNormal(int volume);
-
-/* xglSoundSequenceNormal2 is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceNormal2(int channel, int volume);
-
 /* xglSoundSequenceFadeOut is defined in main/tu098 (src/main/xgl_sound.c). */
 extern void xglSoundSequenceFadeOut(int time);
-
-/* xglSoundSequenceFadeOut2 is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceFadeOut2(int channel, int time);
 
 /*
  * xglSoundEffectParamID is not yet recovered (still INCLUDE_ASM in
@@ -58,21 +50,6 @@ extern void xglSoundSequenceFadeOut2(int channel, int time);
  * pan, flags) shape src/ov12/xrg_sound.h and this call site agree on.
  */
 extern void xglSoundEffectParamID(int sound_id, int volume, int pan, int flags);
-
-/*
- * xglSoundEffectStopID is not yet recovered (still INCLUDE_ASM in
- * main/tu098, src/main/xgl_sound.c); declared with the (sound_id, flags)
- * shape src/ov12/xrg_sound.h and this call site agree on.
- */
-extern void xglSoundEffectStopID(int sound_id, int flags);
-
-void xglSoundStreamStop(int channel);
-
-void xglSoundStreamOpenVagMultiParam(int stream, const char *path, int pitch,
-                                     int volume, int pan);
-
-void xglSoundStreamOpenVagStereoParam(int stream, const char *path, int pitch,
-                                     int volume);
 
 void Java_xeno_Sound_sequencePlay__I(JThread *thread, int *arguments,
                                      unsigned int *result)
@@ -137,7 +114,7 @@ void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
     }
 
     for (digit_index = 5; digit_index >= 0; digit_index--) {
-        path_end[digit_index] = (char)('0' + quotient % 10);
+        path_end[digit_index] = '0' + quotient % 10;
         quotient /= 10;
     }
 
@@ -151,7 +128,7 @@ void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
         xglSoundStreamStop(0);
         xglSoundStreamOpenVagMultiParam(
             0, path,
-            (int)((unsigned int)arguments->pitch << 12) / 48000,
+            (arguments->pitch << 12) / 48000,
             arguments->volume, arguments->pan);
         return;
     }
@@ -161,6 +138,6 @@ void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
     xglSoundStreamStop(0);
     xglSoundStreamOpenVagStereoParam(
         0, path,
-        (int)((unsigned int)arguments->pitch << 12) / 48000,
+        (arguments->pitch << 12) / 48000,
         arguments->volume);
 }

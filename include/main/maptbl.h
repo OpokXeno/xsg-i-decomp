@@ -1,6 +1,8 @@
 #ifndef INCLUDE_MAIN_MAPTBL_H
 #define INCLUDE_MAIN_MAPTBL_H
 
+#include "shared.h"
+
 typedef struct {
     char **names;
     int count;
@@ -23,22 +25,28 @@ typedef struct CfCameraDefinition {
         } offset;
         float pedestal[4];
     } parameters;                         /* +0x20 */
-    float angles[4];                      /* +0x30 */
+    /* GameCamera reloads scratchpad->definition after storing angles[1]:
+     * the original stores the angles through this union (alias set 0). */
+    union {
+        float values[4];
+        unsigned int words[4];
+    } angles;                             /* +0x30 */
     float lock_position[3];               /* +0x40 */
     int lock_mode;                        /* +0x4c */
     float interpolation[2];               /* +0x50 */
     unsigned char unmodeled_58[8];
     float fog_parameters[4];              /* +0x60 */
-    float fog_color[4];                   /* +0x70 */
-    unsigned char unmodeled_80[32];
+    Vector4 fog_color;                    /* +0x70 */
+    unsigned char unmodeled_80[8];
+    struct {
+        float depth;        /* +0x88, +0x90, +0x98 */
+        short width;        /* +0x8c, +0x94, +0x9c */
+        short height;       /* +0x8e, +0x96, +0x9e */
+    } defocus[3];                         /* +0x88 */
 } CfCameraDefinition;
-
-typedef struct CameraImage {
-    unsigned long long words[0x5f0 / 8];
-} CameraImage;
 
 extern MapNameGroup maptbl[20];
 extern CfCameraDefinition CfCameraDefine[33];
-extern CameraImage save_cam;
+extern StudioCamera save_cam;
 
 #endif /* INCLUDE_MAIN_MAPTBL_H */

@@ -6,24 +6,9 @@
 #define SRC_MAIN_ETHER_TREE_H
 
 #include "shared.h"
+#include "main/end_print.h"
 
-typedef struct PrintSpriteInfo {
-    short x;
-    short y;
-    int depth;
-    short width;
-    short height;
-    unsigned char color[4];
-    short uv;
-    unsigned char column;
-    unsigned char row;
-} EtherTreeSprite;
-
-/* These four-float positions are copied as two aligned doublewords. */
-typedef union EtherTreePosition {
-    Vector4 vector;
-    unsigned long long words[2];
-} EtherTreePosition;
+typedef struct PrintSpriteInfo EtherTreeSprite;
 
 /*
  * EtherTreeLineSet (main:0x002ba6f8) reads a record's id (offset 0, matches
@@ -41,9 +26,9 @@ struct EtherTreeObjectData {
     struct EtherTreeObjectData *children[3];
     unsigned char flags;
     unsigned char unmodeled_19;
-    signed char displayType;
+    unsigned char displayType;
     unsigned char unmodeled_1b[5];
-    EtherTreePosition position;
+    AlignedVector4 position;
     EtherTreeSprite sprite; /* +0x30 */
     unsigned char unmodeled_44;
     signed char isSet;

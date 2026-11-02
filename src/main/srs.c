@@ -1,6 +1,10 @@
 #include "common.h"
 #include "shared.h"
+#include "main/srs.h"
 #include "srs.h"
+#include "main/sef_print.h"
+#include "main/sm_initilize.h"
+#include "main/xgl_cd.h"
 
 /*
  * One _srsChrEfTbl3 row (6 bytes; the 0xD8-byte symbol holds 36 rows).
@@ -186,16 +190,11 @@ extern char shelleyEffectName[];
 extern char emptyEffectName[];
 extern char _loadEsdData[0xC800];
 extern char *_loadComboData[195];
-extern SrsMemRes _srsMemRes;
 extern char *_loadCfCommonData;
 
-extern int srsGetEffect2Idx(int effectNo);
-
-extern unsigned char *strcpy(unsigned char *destination, const unsigned char *source);
+extern char *strcpy(char *destination, const char *source);
 extern int srsGetWeaponEffectIdx(int effectNo);
 extern void sresDataMapping(void);
-extern void *smAlloc(unsigned int size);
-
 /*
  * svAddImageMapper takes the address of a chunk list; svAnalyzeChunk walks it
  * from its first entry, which is the only one these two loaders fill.
@@ -204,17 +203,14 @@ extern void svAddImageMapper(int type, int width, void *chunk, int height);
 
 extern void smFree(void *block);
 extern void svDeleteImageMapper(int type);
-extern void sresFreeReloaderMemory(int reload_bgm);
 extern int strcmp(const char *s1, const char *s2);
 extern char *strcat(char *destination, const char *source);
-extern int xglCdGetFileSize(const char *name);
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceLseek(int descriptor, int offset, int whence);
 extern int sceRead(int descriptor, void *buffer, int bytes);
 extern int sceClose(int descriptor);
 extern int func_00A103C8(const char *path, void *buffer);
 extern void srsCdReadCallback(int code);
-extern void tracePrint(const char *format, ...);
 extern void *memcpy(void *destination, const void *source, unsigned int count);
 
 /* JP: #### ＣＦエフェクトメモリが足りません!!
@@ -227,7 +223,7 @@ static const char srsEffectNotLoadedText[40] = "-- err : eftNo is not cf load";
 
 static SrsChrEfTbl3Entry _srsChrEfTbl3[36];
 
-static unsigned char srsViewPath[256];
+static char srsViewPath[256];
 
 static WeaponTblEntry _weaponTbl[45];
 
@@ -273,7 +269,7 @@ char chaosEffectName[8] = "chaos";
  * The original srs prefix is retained; its historical expansion is not
  * established by the available evidence. The mode word is local to this TU.
  */
-static unsigned char srsViewPath[256] = {0};
+static char srsViewPath[256] = {0};
 
 /*
  * 0x30C-byte table of 195 pointer-sized slots (config/symbols/main.txt).
@@ -770,7 +766,7 @@ int srsGetLoadMode(void)
     return srsLoadMode;
 }
 
-void srsSetViewPath(unsigned char *path)
+void srsSetViewPath(char *path)
 {
     strcpy(srsViewPath, path);
 }

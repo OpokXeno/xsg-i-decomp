@@ -1,6 +1,7 @@
 #include "common.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_packet.h"
+#include "main/xgl_font.h"
 
 #define FONT_STATE_FLAGS (FS.state.flags)
 #define FONT_PRINT_QUEUE (fontPrintQueueBuffer.slots)
@@ -22,7 +23,8 @@
               (8 - __builtin_args_info(2)) * 8))
 
 struct FontImage {
-    unsigned char unmodeled_00000[0x78040];
+    unsigned char kanji_texture_0[0x3c020];
+    unsigned char kanji_texture_1[0x3c020];
     unsigned short proportional_widths[256];
 };
 
@@ -96,53 +98,12 @@ struct FontHexCommand {
     unsigned char terminator;
 };
 
-struct FontEffectScratchPacket {
-    unsigned long long vif_tag;
-    unsigned long long vif_count;
-    unsigned long long effect_state;
-    unsigned long long payload_count;
-};
-
 union FontScalePair {
     struct {
         unsigned short x;
         unsigned short y;
     } axis;
     unsigned int both;
-};
-
-struct FontDrawCursor {
-    XglPacket *packet;
-    unsigned short origin_x;
-    unsigned char unmodeled_06[2];
-    unsigned short x;
-    unsigned short y;
-    int depth;
-    unsigned short offset_x;
-    unsigned short offset_y;
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char unmodeled_17;
-    unsigned char flags;
-    unsigned char effect;
-    unsigned char attributes;
-    unsigned char draw_state_high;
-    unsigned char unmodeled_1c[4];
-    signed char effect_x;
-    signed char effect_y;
-    unsigned char unmodeled_22[2];
-    unsigned char effect_red;
-    unsigned char effect_green;
-    unsigned char effect_blue;
-    unsigned char unmodeled_27;
-    unsigned char primitive_flags;
-    unsigned char primitive_mode;
-    unsigned char alpha;
-    unsigned char unmodeled_2b;
-    unsigned short scale_x;
-    unsigned short scale_y;
-    struct FontEffectScratchPacket effect_packet;
 };
 
 struct FontPositionCommand {
@@ -296,13 +257,8 @@ static void set_ot(int ot);
  */
 static void xglFontFlushSub(int u, int v, int size, int flags);
 
-extern int xglFontGetStringWidth2(const char *text, int);
-
-void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern int xglFontCheckProportional(unsigned char high, int low);
-unsigned int xglFontGetProportionalSize(int code);
-unsigned int xglFontAscii2Euc(signed char character, signed char **text);
 static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text);
 extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int words);
@@ -406,7 +362,7 @@ void xglFontDebugMode(int mode)
         unsigned long long value1;
 
         FS.state.debug_mode = mode;
-        value1 = (unsigned char)FS.state.debug_mode | 0x50000ULL;
+        value1 = FS.state.debug_mode | 0x50000ULL;
         value0 = 0x50000;
         value0 |= ((unsigned int)FS.state.debug_mode & 0xff) + 0x23;
 
@@ -681,10 +637,14 @@ void xglFontPrintDirectOT(int ot, const char *text)
     }
 }
 
-void xglFontPrintExtFunc(int ot, unsigned int function_address, unsigned int argument)
+/* Queues a draw callback: the command stores the function address and the
+ * argument as big-endian bytes, and xglFontFlushCore calls it back. */
+void xglFontPrintExtFunc(int ot, FontExtFunc function, void *argument)
 {
     struct FontState *state = &FS.state;
     struct FontExtCommand *command;
+    unsigned int function_address = (unsigned int)function;
+    unsigned int argument_word = (unsigned int)argument;
 
     if (state->flags & 1 & 0xffff) {
         set_ot(ot);
@@ -693,10 +653,10 @@ void xglFontPrintExtFunc(int ot, unsigned int function_address, unsigned int arg
         command->function_high = function_address >> 16;
         command->function_middle = function_address >> 8;
         command->function_low = function_address;
-        command->argument_high = argument >> 24;
-        command->argument_mid_high = argument >> 16;
-        command->argument_mid_low = argument >> 8;
-        command->argument_low = argument;
+        command->argument_high = argument_word >> 24;
+        command->argument_mid_high = argument_word >> 16;
+        command->argument_mid_low = argument_word >> 8;
+        command->argument_low = argument_word;
         command->terminator = 0;
         state->queue_cursor += sizeof(*command);
     }
@@ -978,8 +938,8 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
         unsigned char opcode = *text;
         switch (opcode) {
         case 1: case 2: case 3: {
-            unsigned int position_high = (unsigned char)text[0];
-            unsigned int position_low = (unsigned char)text[1];
+            unsigned int position_high = text[0];
+            unsigned int position_low = text[1];
             int position;
             text += 2;
             position = position_low + (position_high << 8) - 0x100;
@@ -988,8 +948,8 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             break;
         }
         case 4: case 5: {
-            unsigned int position_high = (unsigned char)text[0];
-            unsigned int position_low = (unsigned char)text[1];
+            unsigned int position_high = text[0];
+            unsigned int position_low = text[1];
             int position;
             text += 2;
             position = position_low + (position_high << 8) - 0x400;
@@ -997,7 +957,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             break;
         }
         case 6: {
-            int depth = ((unsigned char)text[1] << 16) + ((unsigned char)text[2] << 8) + (unsigned char)text[3];
+            int depth = (text[1] << 16) + (text[2] << 8) + text[3];
             text += 4;
             cursor->depth = depth;
             break;
@@ -1009,25 +969,25 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             unsigned char flags = text[1];
             text += 2;
             if (flags & 1) {
-                cursor->x = (unsigned char)text[1] + ((unsigned char)text[0] << 8);
+                cursor->x = text[1] + (text[0] << 8);
                 if (!(flags & 0x80)) cursor->origin_x = cursor->x;
                 text += 2;
             }
             if (flags & 2) {
-                cursor->y = (unsigned char)text[1] + ((unsigned char)text[0] << 8);
+                cursor->y = text[1] + (text[0] << 8);
                 text += 2;
             }
             if (flags & 4) {
-                cursor->depth = ((unsigned char)text[0] << 16) + ((unsigned char)text[1] << 8) + (unsigned char)text[2];
+                cursor->depth = (text[0] << 16) + (text[1] << 8) + text[2];
                 text += 3;
             }
             if (flags & 8) {
-                cursor->x += (unsigned char)text[1] + ((unsigned char)text[0] << 8);
+                cursor->x += text[1] + (text[0] << 8);
                 if (!(flags & 0x80)) cursor->origin_x = cursor->x;
                 text += 2;
             }
             if (flags & 16) {
-                cursor->y += (unsigned char)text[1] + ((unsigned char)text[0] << 8);
+                cursor->y += text[1] + (text[0] << 8);
                 text += 2;
             }
             break;
@@ -1191,7 +1151,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             break;
         }
         case 18:
-            cursor->scale_x = (unsigned char)text[1]; cursor->scale_y = (unsigned char)text[2];
+            cursor->scale_x = text[1]; cursor->scale_y = text[2];
             if (((union FontScalePair *)&cursor->scale_x)->both == 0x100010)
                 sceVif1PkAddDirectDataN(cursor->packet, nearest_5, 2);
             else sceVif1PkAddDirectDataN(cursor->packet, biliner_6, 2);
@@ -1199,7 +1159,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             break;
         case 19: {
             struct FontEffectScratchPacket *packet = (struct FontEffectScratchPacket *)
-                (((unsigned int)&cursor->effect_packet + 15) & ~15);
+                (((unsigned int)&cursor->work.effect_packet + 15) & ~15);
             long long horizontal_mode;
             long long horizontal_mask;
             long long vertical_mask;
@@ -1208,25 +1168,25 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             long long vertical_random;
             packet->vif_tag = 0x1000000000008001ULL;
             packet->vif_count = 14;
-            if (!(unsigned char)text[1]) {
+            if (!text[1]) {
                 horizontal_mode = 1; horizontal_mask = horizontal_random = 0;
             } else {
                 unsigned long long mask_byte = text[1];
                 horizontal_mode = 3; horizontal_mask = mask_byte ^ 0x3ff;
                 if (mask_byte & 0x80) {
                     unsigned short random = xglSRand();
-                    horizontal_random = (unsigned char)text[1] & random;
+                    horizontal_random = text[1] & random;
                 } else {
                     horizontal_random = 0;
                 }
             }
-            if (!(unsigned char)text[2]) {
+            if (!text[2]) {
                 vertical_mode = 1; vertical_mask = vertical_random = 0;
             } else {
-                vertical_mode = 3; vertical_mask = (unsigned char)text[1] ^ 0x3ff;
+                vertical_mode = 3; vertical_mask = text[1] ^ 0x3ff;
                 if (text[2] & 0x80) {
                     unsigned short random = xglSRand();
-                    vertical_random = (unsigned char)text[1] & random;
+                    vertical_random = text[1] & random;
                 } else {
                     vertical_random = 0;
                 }
@@ -1254,14 +1214,14 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
         case 23: {
             const struct FontExtCommand *command =
                 (const struct FontExtCommand *)text;
-            void (*callback)(struct FontDrawCursor *, int) = (void (*)(struct FontDrawCursor *, int))
+            FontExtFunc callback = (FontExtFunc)
                 (((unsigned int)command->function_high << 16) +
                  ((unsigned int)command->function_middle << 8) +
                  command->function_low);
-            int argument = ((unsigned int)command->argument_high << 24) +
+            void *argument = (void *)(((unsigned int)command->argument_high << 24) +
                 ((unsigned int)command->argument_mid_high << 16) +
                 ((unsigned int)command->argument_mid_low << 8) +
-                command->argument_low;
+                command->argument_low);
             text += 8;
             cursor->flags &= 0xbf;
             callback(cursor, argument);
@@ -1297,7 +1257,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
         default: {
             signed char sign;
             if ((short)FS.state.character_spacing > 0 && opcode == 32 &&
-                (short)cursor->x - (short)cursor->origin_x + xglFontGetStringWidth2((const char *)text, 1) > (short)FS.state.character_spacing) {
+                (short)cursor->x - cursor->origin_x + xglFontGetStringWidth2((const char *)text, 1) > (short)FS.state.character_spacing) {
                 xglFontFlushSubCRLF();
             } else if ((sign = *text) >= 0 && !(cursor->flags & 4)) {
                 if (sign < 64) xglFontFlushSub((sign & 63) << 7, 0x2f00, 0x808, 0x13);
@@ -1519,13 +1479,14 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
         sceVif1PkRef(cursor->packet, &KanjiClutEnv, 15, 0, 0, 0);
         sceVif1PkRef(cursor->packet, KanjiTex1Env_9, 7, 0, 0, 0);
         sceVif1PkRef(cursor->packet,
-                    (unsigned char *)FS.state.font_image + 0x3c020,
+                    FS.state.font_image->kanji_texture_1,
                     15362, 0, 0, 0);
     }
     if (flags == 2) {
         struct FontWindowTextureHeader *window = FS.state.window_image;
+        unsigned char *window_bytes = FS.state.window_image;
         struct FontWindowTextureEntry *entry =
-            (struct FontWindowTextureEntry *)((unsigned char *)window + window->table_offset);
+            (struct FontWindowTextureEntry *)(window_bytes + window->table_offset);
         int subimage = 0;
 
         while (subimage < window->subimage_count) {
@@ -1540,7 +1501,7 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
                 ((unsigned long long)entry->height_word << 32);
             sceVif1PkCnt(cursor->packet, 0);
             sceVif1PkAddDataN(cursor->packet, &WinTexEnv_10, 24);
-            sceVif1PkRef(cursor->packet, (unsigned char *)window + entry->data_offset,
+            sceVif1PkRef(cursor->packet, window_bytes + entry->data_offset,
                         entry->dma_quadwords, 0, 0, 0);
             entry++;
             subimage++;
@@ -1551,7 +1512,7 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
     if (FS.state.debug_mode) {
         sceVif1PkRef(cursor->packet, &ModeEnv[LoopCount & 1], 8, 0, 0, 0);
     } else {
-        const unsigned char *environment;
+        const unsigned int *environment;
 
         switch (cursor->effect) {
         case 0:

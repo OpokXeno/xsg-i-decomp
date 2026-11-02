@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "main/nml_packet_add.h"
 #include "main/xgl_2.h"
+#include "main/face_point.h"
+#include "main/xgl_studio.h"
 
 typedef int s32;
 
@@ -37,11 +39,13 @@ typedef struct CullingVolume {
  * nmlModelSetMapLastEntry when the last-entry indices are consumed.
  */
 typedef struct CullingMap {
-    u8 active;
-    u8 unmodeled_001[31];
+    union {
+        u8 active;
+        char name[32];
+    };
     CullingVolume volumes[10];
     s32 count;
-    s32 source;
+    const s32 *source;
     s32 cullingMap;
 } CullingMap;
 
@@ -58,11 +62,6 @@ typedef struct CullingMapNameSource {
     u8 unmodeled_000[0x10];
     char name_with_prefix[32];
 } CullingMapNameSource;
-
-typedef struct CullingCameraView {
-    u8 unmodeled_000[0x1B0];
-    Matrix4 occlusionTransform;
-} CullingCameraView;
 
 /*
  * Declared as an incomplete array, not a scalar: cc1 -G8 would otherwise
@@ -143,32 +142,22 @@ extern const char cullingMapKas04Name[16];
 extern const char cullingMapKas31Name[16];
 extern const char cullingMapUtk04Name[16];
 extern const char cullingMapUtk05Name[16];
-extern const u64 cullingForwardAxisVector[2];
-extern const u64 cullingCornerLowerLeftVector[2];
-extern const u64 cullingCornerLowerRightVector[2];
-extern const u64 cullingCornerUpperRightVector[2];
-extern const u64 cullingCornerUpperLeftVector[2];
+extern const DoublewordAlignedVector4 cullingForwardAxisVector;
+extern const DoublewordAlignedVector4 cullingCornerLowerLeftVector;
+extern const DoublewordAlignedVector4 cullingCornerLowerRightVector;
+extern const DoublewordAlignedVector4 cullingCornerUpperRightVector;
+extern const DoublewordAlignedVector4 cullingCornerUpperLeftVector;
 
 extern unsigned int strlen(const char *string);
 
-void setup_occlusion(CullingVolume *volume, s32 camera);
+void setup_occlusion(CullingVolume *volume, const StudioCamera *camera);
 
 int strcmp(const char *, const char *);
 
-s32 xglStudioGetActiveCamera(void);
-
-static s32 _ModelCalcClip(s32 model);
-s32 xglCullingCheck(s32 camera, s32 model);
-static s32 _ModelCalcClipMat1(s32 model, s32 matrix);
-static s32 _ModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2);
-s32 xglStudioSelectGetActiveCamera(s32 cameraIndex);
-void xglVectorOuter(Vector4 *out, const Vector4 *a, const Vector4 *b);
-extern void xglMatrixStackInverse(void);
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
-extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
-                              float scale);
-
+static s32 _ModelCalcClip(const Vector4 *model);
+s32 xglCullingCheck(const StudioCamera *camera, const Vector4 *model);
+static s32 _ModelCalcClipMat1(const Vector4 *model, const Matrix4 *matrix);
+static s32 _ModelCalcClipMat2(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2);
 static const float s_aCullingBase[9];
 
 static int s_nIgnoreCulling = 0;
@@ -537,8 +526,8 @@ const char cullingMapVok04Name[16] = "mc_vok04";
 
 static void culling_matrix(CullingVolume *volume)
 {
-    u64 axis[2];
-    u64 corners[4][2];
+    DoublewordAlignedVector4 axis;
+    DoublewordAlignedVector4 corners[4];
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&volume->position.x);
@@ -550,8 +539,7 @@ static void culling_matrix(CullingVolume *volume)
     xglMatrixStackInverse();
     xglMatrixStackSave(volume->inverseTransform);
 
-    axis[0] = cullingForwardAxisVector[0];
-    axis[1] = cullingForwardAxisVector[1];
+    axis = cullingForwardAxisVector;
     __asm__ __volatile__(
         "lqc2 vf31, 0(%0)\n\t"
         "lqc2 vf27, 0(%1)\n\t"
@@ -563,18 +551,14 @@ static void culling_matrix(CullingVolume *volume)
         "vmaddz.xyz vf31, vf29, vf31z\n\t"
         "sqc2 vf31, 0(%2)\n\t"
         :
-        : "r"(&axis[0]), "r"(volume->transform), "r"(&volume->normalizedDirection)
+        : "r"(&axis), "r"(volume->transform), "r"(&volume->normalizedDirection)
         : "memory");
     xglVectorNormal(&volume->normalizedDirection, &volume->normalizedDirection);
 
-    corners[0][0] = cullingCornerLowerLeftVector[0];
-    corners[0][1] = cullingCornerLowerLeftVector[1];
-    corners[1][0] = cullingCornerLowerRightVector[0];
-    corners[1][1] = cullingCornerLowerRightVector[1];
-    corners[2][0] = cullingCornerUpperRightVector[0];
-    corners[2][1] = cullingCornerUpperRightVector[1];
-    corners[3][0] = cullingCornerUpperLeftVector[0];
-    corners[3][1] = cullingCornerUpperLeftVector[1];
+    corners[0] = cullingCornerLowerLeftVector;
+    corners[1] = cullingCornerLowerRightVector;
+    corners[2] = cullingCornerUpperRightVector;
+    corners[3] = cullingCornerUpperLeftVector;
 
     __asm__ __volatile__(
         "lqc2 vf31, 0(%1)\n\t"
@@ -588,7 +572,7 @@ static void culling_matrix(CullingVolume *volume)
         "vmaddw.xyz vf31, vf30, vf0w\n\t"
         "sqc2 vf31, 0(%0)\n\t"
         :
-        : "r"(&volume->cullingCorners[0]), "r"(&corners[0][0]),
+        : "r"(&volume->cullingCorners[0]), "r"(&corners[0]),
           "r"(volume->transform)
         : "memory");
     __asm__ __volatile__(
@@ -603,7 +587,7 @@ static void culling_matrix(CullingVolume *volume)
         "vmaddw.xyz vf31, vf30, vf0w\n\t"
         "sqc2 vf31, 0(%0)\n\t"
         :
-        : "r"(&volume->cullingCorners[1]), "r"(&corners[1][0]),
+        : "r"(&volume->cullingCorners[1]), "r"(&corners[1]),
           "r"(volume->transform)
         : "memory");
     __asm__ __volatile__(
@@ -618,7 +602,7 @@ static void culling_matrix(CullingVolume *volume)
         "vmaddw.xyz vf31, vf30, vf0w\n\t"
         "sqc2 vf31, 0(%0)\n\t"
         :
-        : "r"(&volume->cullingCorners[2]), "r"(&corners[2][0]),
+        : "r"(&volume->cullingCorners[2]), "r"(&corners[2]),
           "r"(volume->transform)
         : "memory");
     __asm__ __volatile__(
@@ -633,7 +617,7 @@ static void culling_matrix(CullingVolume *volume)
         "vmaddw.xyz vf31, vf30, vf0w\n\t"
         "sqc2 vf31, 0(%0)\n\t"
         :
-        : "r"(&volume->cullingCorners[3]), "r"(&corners[3][0]),
+        : "r"(&volume->cullingCorners[3]), "r"(&corners[3]),
           "r"(volume->transform)
         : "memory");
 }
@@ -787,10 +771,9 @@ static void plane_from_points(const Vector4 *point0, const Vector4 *point1,
     plane->w = -(normal.x * point0->x + normal.y * point0->y + normal.z * point0->z);
 }
 
-void setup_occlusion(CullingVolume *volume, s32 camera)
+void setup_occlusion(CullingVolume *volume, const StudioCamera *camera)
 {
-    const CullingCameraView *cameraView = (const CullingCameraView *) camera;
-    const Matrix4 *cameraTransform = &cameraView->occlusionTransform;
+    const Matrix4 *cameraTransform = &camera->occlusionTransform;
     Vector4 corners[4];
     Vector4 origin;
 
@@ -881,11 +864,10 @@ void setup_occlusion(CullingVolume *volume, s32 camera)
     }
 }
 
-s32 check_occlusion(CullingVolume *volume, s32 camera, s32 model)
+s32 check_occlusion(CullingVolume *volume, const StudioCamera *camera, const Vector4 *model)
 {
-    const CullingCameraView *cameraView = (const CullingCameraView *) camera;
-    const Matrix4 *cameraTransform = &cameraView->occlusionTransform;
-    const Vector4 *modelBounds = (const Vector4 *) model;
+    const Matrix4 *cameraTransform = &camera->occlusionTransform;
+    const Vector4 *modelBounds = model;
     Vector4 viewPoint;
     float negativeZ;
     float negativeW;
@@ -937,7 +919,7 @@ s32 check_occlusion(CullingVolume *volume, s32 camera, s32 model)
     return result;
 }
 
-s32 xglCullingCheck(s32 camera, s32 model)
+s32 xglCullingCheck(const StudioCamera *camera, const Vector4 *model)
 {
     s32 i = 0;
     s32 result = 0;
@@ -959,7 +941,7 @@ s32 xglCullingCheck(s32 camera, s32 model)
  * that the xglCullingCheckSeparate calls that follow only have to test
  * model against them. xglCullingCheck does both steps per volume instead.
  */
-void xglCullingCheckSeparateInit(s32 camera)
+void xglCullingCheckSeparateInit(const StudioCamera *camera)
 {
     s32 i;
 
@@ -968,7 +950,7 @@ void xglCullingCheckSeparateInit(s32 camera)
     }
 }
 
-s32 xglCullingCheckSeparate(s32 camera, s32 model)
+s32 xglCullingCheckSeparate(const StudioCamera *camera, const Vector4 *model)
 {
     s32 i = 0;
     s32 result = 0;
@@ -993,7 +975,7 @@ void xglCullingMapLastCheck(void)
 
     if (s_inCulling.source != 0) {
         for (i = 0; i < 12; i++) {
-            entry = ((const s32 *) s_inCulling.source)[i];
+            entry = s_inCulling.source[i];
             if (entry >= 0) {
                 nmlModelSetMapLastEntry(s_inCulling.cullingMap, entry);
             } else {
@@ -1040,12 +1022,12 @@ void xglCullingMapSet(s32 cullingMap)
     s_inCulling.count = 0;
     s_inCulling.source = 0;
     if (strlen(nameSource->name_with_prefix) < 32) {
-        strcpy((char *) &s_inCulling, &nameSource->name_with_prefix[1]);
+        strcpy(s_inCulling.name, &nameSource->name_with_prefix[1]);
     }
-    index = check_culling_map((const char *) &s_inCulling);
+    index = check_culling_map(s_inCulling.name);
     if (index >= 0) {
         s_inCulling.cullingMap = cullingMap;
-        s_inCulling.source = (s32) s_aCullingMap[index].source;
+        s_inCulling.source = s_aCullingMap[index].source;
         if (s_aCullingMap[index].entryCount != 0) {
             recordIndex = 0;
             while (1) {
@@ -1180,7 +1162,7 @@ static void _ModelCalcClipInit(const Matrix4 clip[2])
  * Returns 1 as soon as one plane distance is not below the radius, else 0.
  * Original hand-written VU0 assembly (labels _$mcc2_*).
  */
-static s32 _ModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2)
+static s32 _ModelCalcClipMat2(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2)
 {
     s32 clipped;
 
@@ -1279,7 +1261,7 @@ static s32 _ModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2)
  * _ModelCalcClipMat1: the same test after one transform by `matrix`
  * (labels _$mcc1_*).
  */
-static s32 _ModelCalcClipMat1(s32 model, s32 matrix)
+static s32 _ModelCalcClipMat1(const Vector4 *model, const Matrix4 *matrix)
 {
     s32 clipped;
 
@@ -1353,7 +1335,7 @@ static s32 _ModelCalcClipMat1(s32 model, s32 matrix)
  * the six planes of the clip matrices in vf16..vf19 and vf12..vf15
  * (labels _$mcc_*).
  */
-static s32 _ModelCalcClip(s32 model)
+static s32 _ModelCalcClip(const Vector4 *model)
 {
     s32 clipped;
 
@@ -1411,33 +1393,33 @@ static s32 _ModelCalcClip(s32 model)
     return clipped;
 }
 
-s32 nmlModelCalcClip(s32 model) {
+s32 nmlModelCalcClip(const Vector4 *model) {
     s32 clip;
-    s32 camera = xglStudioGetActiveCamera();
+    const StudioCamera *camera = xglStudioGetActiveCamera();
 
     if (camera != 0) {
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        _ModelCalcClipInit(camera->clipMatrices);
         clip = _ModelCalcClip(model);
         clip |= xglCullingCheck(camera, model);
         return clip;
     }
-    return camera;
+    return 0;
 }
 
-s32 nmlModelCalcClipNoCulling(s32 model) {
-    s32 camera = xglStudioGetActiveCamera();
+s32 nmlModelCalcClipNoCulling(const Vector4 *model) {
+    const StudioCamera *camera = xglStudioGetActiveCamera();
 
     if (camera != 0) {
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        _ModelCalcClipInit(camera->clipMatrices);
         return _ModelCalcClip(model);
     }
-    return camera;
+    return 0;
 }
 
-s32 nmlModelCalcClipMat1(s32 model, s32 matrix) {
+s32 nmlModelCalcClipMat1(const Vector4 *model, const Matrix4 *matrix) {
     Vector4 bounds;
     s32 clip;
-    s32 camera = xglStudioGetActiveCamera();
+    const StudioCamera *camera = xglStudioGetActiveCamera();
 
     if (camera != 0) {
         __asm__ __volatile__(
@@ -1455,18 +1437,18 @@ s32 nmlModelCalcClipMat1(s32 model, s32 matrix) {
             : "r"(model), "r"(matrix), "r"(&bounds)
             : "memory"
         );
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        clip = _ModelCalcClip((s32) &bounds);
-        clip |= xglCullingCheck(camera, (s32) &bounds);
+        _ModelCalcClipInit(camera->clipMatrices);
+        clip = _ModelCalcClip(&bounds);
+        clip |= xglCullingCheck(camera, &bounds);
         return clip;
     }
-    return camera;
+    return 0;
 }
 
-s32 nmlModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2) {
+s32 nmlModelCalcClipMat2(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2) {
     Vector4 bounds;
     s32 clip;
-    s32 camera = xglStudioGetActiveCamera();
+    const StudioCamera *camera = xglStudioGetActiveCamera();
 
     if (camera != 0) {
         __asm__ __volatile__(
@@ -1492,53 +1474,53 @@ s32 nmlModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2) {
             : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
             : "memory"
         );
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        clip = _ModelCalcClip((s32) &bounds);
-        clip |= xglCullingCheck(camera, (s32) &bounds);
+        _ModelCalcClipInit(camera->clipMatrices);
+        clip = _ModelCalcClip(&bounds);
+        clip |= xglCullingCheck(camera, &bounds);
         return clip;
     }
-    return camera;
+    return 0;
 }
 
-void nmlModelCalcClipCam(s32 model, s32 camera) {
-    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+void nmlModelCalcClipCam(const Vector4 *model, const StudioCamera *camera) {
+    _ModelCalcClipInit(camera->clipMatrices);
     _ModelCalcClip(model);
 }
 
-void nmlModelCalcClipMat1Cam(s32 model, s32 matrix, s32 camera) {
-    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+void nmlModelCalcClipMat1Cam(const Vector4 *model, const Matrix4 *matrix, const StudioCamera *camera) {
+    _ModelCalcClipInit(camera->clipMatrices);
     _ModelCalcClipMat1(model, matrix);
 }
 
-void nmlModelCalcClipMat2Cam(s32 model, s32 matrix1, s32 matrix2, s32 camera) {
-    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+void nmlModelCalcClipMat2Cam(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2, const StudioCamera *camera) {
+    _ModelCalcClipInit(camera->clipMatrices);
     _ModelCalcClipMat2(model, matrix1, matrix2);
 }
 
-s32 nmlModelCalcClipStudio(s32 model, s32 cameraIndex) {
+s32 nmlModelCalcClipStudio(const Vector4 *model, s32 cameraIndex) {
     s32 clip = 0;
-    s32 camera = xglStudioSelectGetActiveCamera(cameraIndex);
+    const StudioCamera *camera = xglStudioSelectGetActiveCamera(cameraIndex);
 
     if (camera != 0) {
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        _ModelCalcClipInit(camera->clipMatrices);
         clip = _ModelCalcClip(model);
         clip |= xglCullingCheck(camera, model);
     }
     return clip;
 }
 
-s32 nmlModelCalcClipMat1AllCam(s32 model, s32 matrix)
+s32 nmlModelCalcClipMat1AllCam(const Vector4 *model, const Matrix4 *matrix)
 {
     Vector4 bounds;
     s32 clipped = 1;
-    s32 camera;
+    const StudioCamera *camera;
     s32 clip;
     s32 i;
 
     for (i = 0; i < 4; i++) {
         camera = xglStudioSelectGetActiveCamera(i);
         if (camera == 0) {
-            return camera;
+            return 0;
         }
         if (g_aSubWindow[i] != 0) {
             __asm__ __volatile__(
@@ -1556,9 +1538,9 @@ s32 nmlModelCalcClipMat1AllCam(s32 model, s32 matrix)
                 : "r"(model), "r"(matrix), "r"(&bounds)
                 : "memory"
             );
-            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-            clip = _ModelCalcClip((s32) &bounds);
-            clip |= xglCullingCheck(camera, (s32) &bounds);
+            _ModelCalcClipInit(camera->clipMatrices);
+            clip = _ModelCalcClip(&bounds);
+            clip |= xglCullingCheck(camera, &bounds);
             if (clip == 0) {
                 clipped = 0;
                 break;
@@ -1568,13 +1550,13 @@ s32 nmlModelCalcClipMat1AllCam(s32 model, s32 matrix)
     return clipped;
 }
 
-s32 nmlModelCalcClipMat2AllCam(s32 model, s32 matrix1, s32 matrix2)
+s32 nmlModelCalcClipMat2AllCam(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2)
 {
     Vector4 bounds;
     s32 clipMask = 0;
     s32 tested = 0;
     s32 total = 0;
-    s32 camera;
+    const StudioCamera *camera;
     s32 clip;
     s32 i;
 
@@ -1582,9 +1564,9 @@ s32 nmlModelCalcClipMat2AllCam(s32 model, s32 matrix1, s32 matrix2)
         if (g_aSubWindow[i] != 0) {
             camera = xglStudioSelectGetActiveCamera(i);
             if (camera == 0) {
-                return camera;
+                return 0;
             }
-            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+            _ModelCalcClipInit(camera->clipMatrices);
             __asm__ __volatile__(
                 "lqc2 vf31, 0(%0)\n\t"
                 "lqc2 vf27, 0(%1)\n\t"
@@ -1608,7 +1590,7 @@ s32 nmlModelCalcClipMat2AllCam(s32 model, s32 matrix1, s32 matrix2)
                 : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
                 : "memory"
             );
-            clip = _ModelCalcClip((s32) &bounds);
+            clip = _ModelCalcClip(&bounds);
             tested++;
             clipMask |= clip << i;
             total += clip;
@@ -1639,7 +1621,7 @@ void _ApplyMatrix33(Vector4 *destination, const Matrix4 matrix, const Vector4 *v
     );
 }
 
-void _ApplyMatrix(Vector4 *destination, const Matrix4 matrix, const Vector4 *vector) {
+void _ApplyMatrix(Vector4 *destination, Matrix4 matrix, const Vector4 *vector) {
     __asm__ __volatile__(
         "lqc2 vf31, 0(%0)\n\t"
         "lqc2 vf27, 0(%1)\n\t"
@@ -1688,12 +1670,12 @@ const char cullingMapVok03Name[16] = "MC_VOK03";
 
 static const float s_aCullingBase[9] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };
 
-const u64 cullingForwardAxisVector[2] = { 0ULL, 4575657222473777152ULL };
+const DoublewordAlignedVector4 cullingForwardAxisVector = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-const u64 cullingCornerLowerLeftVector[2] = { 13799029261476036608ULL, 4575657221408423936ULL };
+const DoublewordAlignedVector4 cullingCornerLowerLeftVector = { -1.0f, -1.0f, 0.0f, 1.0f };
 
-const u64 cullingCornerLowerRightVector[2] = { 13799029259328552960ULL, 4575657221408423936ULL };
+const DoublewordAlignedVector4 cullingCornerLowerRightVector = { 1.0f, -1.0f, 0.0f, 1.0f };
 
-const u64 cullingCornerUpperRightVector[2] = { 4575657222473777152ULL, 4575657221408423936ULL };
+const DoublewordAlignedVector4 cullingCornerUpperRightVector = { 1.0f, 1.0f, 0.0f, 1.0f };
 
-const u64 cullingCornerUpperLeftVector[2] = { 4575657224621260800ULL, 4575657221408423936ULL };
+const DoublewordAlignedVector4 cullingCornerUpperLeftVector = { -1.0f, 1.0f, 0.0f, 1.0f };

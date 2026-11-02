@@ -1,5 +1,20 @@
 #include "common.h"
 #include "pause_menu_page_enemy.h"
+#include "main/pause_menu_page_enemy.h"
+
+/* Partial view of UnduParam; the full type changes this object (the extern
+ * UnduTemp of this TU is recorded at its 0x28-byte view size). */
+typedef struct UnduParamPauseView {
+    int queryFlags;
+    unsigned char unmodeled_04[4];
+    short attrMask;
+    unsigned char unmodeled_0a[0x18 - 0x0a];
+    struct LayoutHeader *header;
+    unsigned char unmodeled_1c[4];
+    long long attribute;
+} UnduParamPauseView;
+
+extern UnduParamPauseView UnduTemp;
 
 short DebugActor = 0;
 
@@ -164,7 +179,7 @@ static inline int printEnemyFlag(int y, const char *format, int value,
     return y + 12;
 }
 
-static inline int printEnemyLookAt(int y, const EnemyWork *enemy, const Actor *selected)
+static inline int printEnemyLookAt(int y, const EnemyWork *enemy, const ActorPauseView *selected)
 {
     const char *height_format = ENEMY_HEIGHT_LOOK_AT_FORMAT;
     double display_height = enemy->height;
@@ -248,9 +263,9 @@ static inline int wrappedEnemyDebugPage(int page, int increment)
 
 void PauseMenuPageEnemy(void)
 {
-    const Actor *selected = &actor[DebugActor];
+    const ActorPauseView *selected = &actor[DebugActor];
     const EnemyWork *enemy = &enepc[selected->number];
-    const EnemyParameters *parameters = &selected->parameters;
+    const EnemyParams *parameters = &selected->parameters;
     int line_spacing;
     short y;
     short row;
@@ -286,7 +301,7 @@ void PauseMenuPageEnemy(void)
          * EN: Spline */
         ENEMY_STRAIGHT_LINE_LABEL, "\245\271\245\327\245\351\245\244\245\363"
     };
-    EnemyVector4 final_target;
+    DoublewordAlignedVector4 final_target;
 
     if (PadData.half_2a & 0x1000)
         Page_0 = wrappedEnemyDebugPage(Page_0, 14);
@@ -323,9 +338,9 @@ void PauseMenuPageEnemy(void)
         switch (Page_0) {
         case 0: {
             const Vector4 *position = &selected->position;
-            UnduParamInit(&UnduTemp);
+            UnduParamInit((UnduParam *)&UnduTemp);
             UnduTemp.header = UnduDataGetHeader(enemy->map_index, 0x8000);
-            UnduCheck(position, 0, &UnduTemp);
+            UnduCheck(position, 0, (UnduParam *)&UnduTemp);
             {
                 const char *position_format = ENEMY_CURRENT_POSITION_FORMAT;
                 xglFontDebugPrintf(0x60, y, ENEMY_MOVE_HEADING_TEXT);
@@ -554,8 +569,8 @@ void PauseMenuPageEnemy(void)
                 {
                     int locator_type = Get_LocaterType(column / 2);
                     const char *const *label = &locator_labels[locator_type];
-                    y = printLocatorHeaderRow(y, column, label, entry->components[0],
-                        entry->components[2], entry->components[3]);
+                    y = printLocatorHeaderRow(y, column, label, entry->locator.x,
+                        entry->locator.z, entry->locator.w);
                 }
             }
             break;
@@ -577,7 +592,7 @@ void PauseMenuPageEnemy(void)
         case 8: {
             const short *sound_effect;
             y = printEnemyHeading(0x60, y, ENEMY_CIRCLE_HEADING_TEXT);
-            sound_effect = parameters->sound_effects;
+            sound_effect = parameters->monster_set_numbers;
             for (column = 0; column < 8; ++column, ++sound_effect) {
                 y = printEnemySound(y, column, *sound_effect);
             }
@@ -719,7 +734,7 @@ void Debug_Mark(const Vector4 *position, int entry)
         "sq $2, 32(%0)\n"
         "lq $2, 48(%1)\n"
         "sq $2, 48(%0)\n"
-        : : "r" (colorMatrix), "r" (&light->unmodeled_70[64])
+        : : "r" (colorMatrix), "r" (&light->color_modifier_matrix)
         : "$2", "memory");
     __asm__ __volatile__(
         "lq $2, 0(%1)\n"
@@ -730,10 +745,10 @@ void Debug_Mark(const Vector4 *position, int entry)
         "sq $2, 32(%0)\n"
         "lq $2, 48(%1)\n"
         "sq $2, 48(%0)\n"
-        : : "r" (normalMatrix), "r" (&light->unmodeled_70[0])
+        : : "r" (normalMatrix), "r" (&light->normal_matrix)
         : "$2", "memory");
-    nmlModelSetLight(colorMatrix, normalMatrix);
-    nmlModelSetPlace(place);
+    nmlModelSetLight(&colorMatrix, &normalMatrix);
+    nmlModelSetPlace(&place);
     nmlModelEntry(entry);
 }
 

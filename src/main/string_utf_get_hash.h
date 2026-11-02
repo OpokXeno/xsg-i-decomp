@@ -6,6 +6,7 @@
 #define SRC_MAIN_STRING_UTF_GET_HASH_H
 
 #include "shared.h"
+#include "main/string_utf_get_hash.h"
 
 typedef struct ConstString ConstString;
 
@@ -31,8 +32,4 @@ extern void *memcpy(void *destination, const void *source, unsigned int count);
 int StringUtf_getHash(const char *bytes, int length);
 void *StringUtf_create(int length);
 ConstString *findConstString(const char *bytes, int length);
-void reloadConstString(void *heap_boundary);
-SceneString *loadConstString(const char *bytes, int length);
-SceneString *loadConstString2(const char *bytes, int length);
-
 #endif /* SRC_MAIN_STRING_UTF_GET_HASH_H */

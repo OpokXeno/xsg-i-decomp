@@ -6,22 +6,12 @@
 #define SRC_MAIN_SCRIPT_H
 
 #include "shared.h"
+#include "main/act_1.h"
 #include "main/jni.h"
+#include "main/twsys_init.h"
 
 #define SCENE_THREAD_CALL_PENDING 0x8u
 #define OBSERVER_TASK_VM_CLAIMED 1u
-
-/*
- * The actor's own script object, 0x4c0 bytes into the engine's 0xa70-strided
- * actor record (src/main/near_dir.h, `Actor`): SCRIPT_execTalkto reads it to
- * check the actor is a xeno/Chr instance before it queues the talk task (lw
- * 0x4c0 at 0x00261540) and DB_evtMonitor reads it to find the actor's VM
- * thread (lw 0x4c0 at 0x0026443c).  The recovered head of `Actor` ends at
- * +0x70 and nothing between there and +0x4c0 is recovered, so this offset
- * cannot become a member without inventing that span (docs/naming.md) and
- * takes docs/style.md rule 2's named-offset fallback.
- */
-#define ACTOR_SCRIPT_OBJECT_OFFSET 0x4c0
 
 /*
  * MINIMAL PARTIAL VIEW (explicit limitation, per review 16064):
@@ -51,27 +41,11 @@ typedef struct {
  */
 typedef void *GameLoopStateAddressView[];
 
-/* An actor record of the engine's actor table; the records are 0xa70 bytes
- * apart.  +0x86 is the in-use id that ACT_loadMotion and ACT_loadResource
- * take as their resource argument. */
-typedef struct ScriptActorRecord {
-    unsigned int flags;                 /* +0x00 */
-    unsigned char unmodeled_04[0xc];
-    float position[3];                  /* +0x10 */
-    unsigned char unmodeled_1c[0x34];
-    float rotation[3];                  /* +0x50: radians */
-    unsigned char unmodeled_5c[0x86 - 0x5c];
-    short in_use_id;                    /* +0x86 */
-    unsigned char unmodeled_88[0x4c0 - 0x88];
-    SceneObject script_object;          /* +0x4c0: the actor's own script object */
-    unsigned char unmodeled_4c4[0xa70 - 0x4c4];
-} ScriptActorRecord;
-
 /* Game-loop members used by this unit: task scheduler at +8, mode at +c,
  * and flags at +10. Remaining storage belongs to the game-loop owner. */
 typedef struct ScriptGameLoopState {
     unsigned char unmodeled_00[4];
-    struct ScriptActorRecord *main_actor;
+    Actor *main_actor;
     XglTaskScheduler *task_scheduler;
     unsigned short kind;
     unsigned short kindDetail;
@@ -96,14 +70,6 @@ typedef struct ScriptGameLoopState {
     unsigned short saved_kind;   /* +0x29f60: mode restored when a debug task returns to the menu */
 } ScriptGameLoopState;
 
-/* The held/pressed button halfwords of the first PadData record. */
-typedef struct ScriptPadButtons {
-    unsigned char unmodeled_00[0x28];
-    unsigned short held;
-    unsigned short pressed;
-    unsigned short repeat;
-} ScriptPadButtons;
-
 /* Render state prefix: +0x58 is the flag PauseSkipCheck raises while the
  * pause screen copies the frame. */
 typedef struct ScriptRenderState {
@@ -113,27 +79,6 @@ typedef struct ScriptRenderState {
     unsigned char scene_disabled;
 } ScriptRenderState;
 
-/* Native actor peer used for the talk method's JNI argument. */
-typedef struct Actor {
-    unsigned char unmodeled_00[0x4c0];
-    void *peer;
-} Actor;
-
-/* Window prefix shared by the close-state store and TWIN_dispose. */
-typedef struct TComponent {
-    SceneObjectClassRef *class_ref;
-    unsigned char unmodeled_04[0xc];
-    unsigned int flags;
-    unsigned short state;
-} TComponent;
-
-/* PadData contains two 0x68-byte records. Talk cancellation tests the
- * packed input word at +28 in the first record. */
-typedef struct ScriptPadRecord {
-    unsigned char unmodeled_00[0x28];
-    unsigned long long packed_input;
-    unsigned char unmodeled_30[0x68 - 0x30];
-} ScriptPadRecord;
 
 /* JNI argument slots are references or integers according to the method
  * signature, matching the VM's four-byte reference/integer value slots. */
@@ -161,11 +106,11 @@ typedef struct ScriptObserverTask ScriptObserverTask;
  *                 CallMethod_II and createTalkTask at 0x00261690); and
  *                 DB_evtMonitor follows its class chain to print the thread as
  *                 "class.method" (0x002641dc..0x0026421c).
- *   +0x14 entry   the hook JTHREAD_cntl calls once per visit with the thread
+ *   +0x14 reset   the hook JTHREAD_cntl calls once per visit with the thread
  *                 as its only argument (lw 0x14/jalr at
  *                 0x00305910..0x00305920); SCENE_start installs
  *                 JTHREAD_defaultScene here.
- *   +0x18 method  the method `entry` runs: JTHREAD_defaultScene loads it,
+ *   +0x18 method  the method `reset` runs: JTHREAD_defaultScene loads it,
  *                 returns when it is null and otherwise calls it on `object`
  *                 (lw 0x18 at 0x00305654).
  *   +0x24 flags   bit 3 is the pending-call bit this unit tests after
@@ -175,29 +120,9 @@ typedef struct ScriptObserverTask ScriptObserverTask;
  *                 clears it in the thread it wakes (0x003057c0).  Bit 4, which
  *                 src/main/scene_1.c sets, is "there is a method to run".
  *
- * Nothing between those members is recovered, and the record does not end at
- * +0x28: JTHREAD_waitFor uses +0x0d, +0x30 and +0x34, and DB_evtMonitor prints
- * a call stack from +0x2c with its depth at +0x3e.
+ * JThread (include/main/jni.h) is the record; this unit uses it directly.
  */
-typedef struct ScriptCallFrame {
-    unsigned short program_counter;
-    unsigned char unmodeled_02[2];
-    SceneMethod *method;
-    unsigned char unmodeled_08[0x18 - 8];
-} ScriptCallFrame;
 
-struct SceneThread {
-    unsigned char unmodeled_00[16];      /* +0x00 */
-    SceneObject object;                  /* +0x10 */
-    void (*entry)(SceneThread *thread);  /* +0x14 */
-    SceneMethod *method;                 /* +0x18 */
-    unsigned char unmodeled_1c[8];       /* +0x1c */
-    unsigned int flags;                  /* +0x24 */
-    void *call_frame;                    /* +0x28: null once the thread has no call left to run */
-    ScriptCallFrame *frames;             /* +0x2c: 0x18-byte call-stack records printed by DB_evtMonitor */
-    unsigned char unmodeled_30[0x3e - 0x30];
-    short frame_depth;                  /* +0x3e: signed call-stack depth */
-};
 
 /*
  * The observer task of the script system, behind the scheduler's 0x80-byte
@@ -272,7 +197,7 @@ struct ScriptObserverTask {
     signed char vm_slot;             /* +0x38 */
     u8 invocation_state;            /* +0x39: cleared before the initial call */
     u8 unmodeled_3a[2];              /* +0x3a */
-    SceneMethod *method;             /* +0x3c */
+    JavaMethod *method;              /* +0x3c */
 };
 
 /* Task node of sceneObserver and sceneObserver2, which wait for a script
@@ -287,8 +212,10 @@ typedef struct ScriptSceneTask {
     int elapsed_frames;              /* +0x24: frames since the fade-out began */
 } ScriptSceneTask;
 
-/* Window records the debug menus create (TMENU_create / TSLIDER_create). */
-typedef struct ScriptWindow {
+/* Partial view of MenuNative (src/main/menu_2.c): the debug-menu window that
+ * TMENU_create/TSLIDER_create return. The two layouts overlap on fields with
+ * other names, so it stays a separate view. */
+typedef struct MenuNativeScriptView {
     unsigned char unmodeled_00[0x10];
     unsigned int flags;           /* +0x10 */
     unsigned short state;         /* +0x14: 0 while open, 2 once the choice is made */
@@ -304,7 +231,7 @@ typedef struct ScriptWindow {
     int value;                    /* +0x58 */
     unsigned char unmodeled_5c[4];
     int max_value;                /* +0x60 */
-} ScriptWindow;
+} MenuNativeScriptView;
 
 /* The file browser state xglCdFileSelect drives; 0x268 bytes in its owner
  * (src/main/set_path.c). */
@@ -331,7 +258,6 @@ typedef struct ScriptMenuTask {
 
 /* Wind debug parameter block, shared with the engine's wind module; only its
  * address is taken in this unit. */
-typedef struct ScriptWindParams ScriptWindParams;
 
 static void DB_light(ScriptMenuTask *task);
 static void DB_memory(ScriptMenuTask *task);

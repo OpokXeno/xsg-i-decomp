@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/e_message.h"
 
 extern void *UmnGunoDataBaseTop;
 
@@ -277,21 +278,10 @@ INCLUDE_ASM("asm/nonmatchings/ov02/umn_guno_data_base_get", tskUmnDataBaseMenu);
 #define PAD_SQUARE 0x0080
 #define PAD_LEFT   0x0004
 #define PAD_RIGHT  0x0008
-typedef struct UmnDataBaseExWinMessage {
-    unsigned char unmodeled_00[0x04];
-    short x;                                /* +0x04 */
-    short y;                                /* +0x06 */
-    int color;                              /* +0x08 */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    signed char blue;                       /* +0x10 */
-    signed char green;                      /* +0x11 */
-    signed char red;                        /* +0x12 */
-    unsigned char unmodeled_13[0x44 - 0x13];
-} UmnDataBaseExWinMessage;
 typedef struct UmnDataBaseExWinLine {
     short x;                                /* +0x00 */
     short y;                                /* +0x02 */
-    UmnDataBaseExWinMessage message;        /* +0x04 */
+    EMessageParam message;                  /* +0x04 */
 } UmnDataBaseExWinLine;
 typedef struct UmnDataBaseExWinSprite {
     unsigned char unmodeled_00[0x04];
@@ -319,9 +309,6 @@ typedef struct UmnDataBaseArrowSteps {
 static const UmnDataBaseArrowSprites D_00A13138 = {{0x0112, 0x0110}};
 static const UmnDataBaseArrowSteps D_00A13140 = {{1, -1}};
 static char *text_3_00A10720[5];
-void eMessageSet(void *message, const char *text);
-void eMessageModeChange(UmnDataBaseExWinMessage *message, int mode);
-void eMessageMain(void *message);
 void eSpriteSet(UmnDataBaseExWinSprite *sprite, short spriteId);
 void eSpriteMain(UmnDataBaseExWinSprite *sprite);
 
@@ -399,16 +386,16 @@ void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
             MoveSlide(&work->lines[i].x, &lineTarget[i], 3.0f);
             work->lines[i].message.x = work->lines[i].x;
             work->lines[i].message.y = work->lines[i].y;
-            work->lines[i].message.color = work->color;
+            work->lines[i].message.draw_parameter = work->color;
             if (i == 4) {
                 if (UmnWork.analysed != 0) {
-                    work->lines[i].message.red = -0x80;
-                    work->lines[i].message.green = -0x80;
-                    work->lines[i].message.blue = -0x80;
+                    work->lines[i].message.color_b = 0x80;
+                    work->lines[i].message.color_g = 0x80;
+                    work->lines[i].message.color_r = 0x80;
                 } else {
-                    work->lines[i].message.red = 0x40;
-                    work->lines[i].message.green = 0x40;
-                    work->lines[i].message.blue = 0x40;
+                    work->lines[i].message.color_b = 0x40;
+                    work->lines[i].message.color_g = 0x40;
+                    work->lines[i].message.color_r = 0x40;
                 }
             }
             if (work->textShown != 0) {
@@ -475,15 +462,6 @@ typedef struct UmnKeyWordNumber {
     int value;                              /* +0x14 */
     unsigned char unmodeled_18[0x90 - 0x18];
 } UmnKeyWordNumber;
-typedef struct UmnKeyWordMessage {
-    unsigned char unmodeled_00;             /* +0x00 */
-    unsigned char mode;                     /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short x;                                /* +0x04 */
-    short y;                                /* +0x06 */
-    unsigned int color;                     /* +0x08 */
-    unsigned char unmodeled_0c[0x48 - 0x0C];
-} UmnKeyWordMessage;
 typedef struct UmnDataBaseKeyWordWork {
     unsigned char step;                     /* +0x000 */
     unsigned char active;                   /* +0x001 */
@@ -502,7 +480,7 @@ typedef struct UmnDataBaseKeyWordWork {
     UmnKeyWordTagFont tag;                  /* +0x84C */
     UmnKeyWordRibbon ribbon;                /* +0x86C */
     UmnKeyWordNumber number;                /* +0x8DC */
-    UmnKeyWordMessage message;              /* +0x96C */
+    EMessageParam message;                  /* +0x96C */
 } UmnDataBaseKeyWordWork;
 #define UMN_KEYWORD_HIDDEN_X (-272)
 static const char D_00A13148[5] = "\x01Num";
@@ -595,7 +573,7 @@ void tskUmnDataBaseKeyWord(UmnDataBaseTask *task, UmnDataBaseKeyWordWork *work)
             if (work->messageShown != 0) {
                 work->message.x = 48;
                 work->message.y = 416;
-                work->message.color = work->color + 15;
+                work->message.draw_parameter = work->color + 15;
                 eMessageMain(&work->message);
             }
         }

@@ -1,6 +1,8 @@
 #include "common.h"
 #include "shared.h"
 #include "nml_filter_set.h"
+#include "main/nml_packet_add.h"
+#include "main/xgl_2.h"
 
 struct NmlFilterRenderView {
     u8 unmodeled_00[2];
@@ -45,10 +47,12 @@ struct NmlFilterGridPoint {
     NmlFilterGridVector displaced;
 };
 
-typedef union NmlFilterPositionView {
+/* One projected cube corner: the clip helper stores it as a Vector4, and the
+ * GS packer reads its integer screen coordinates back. */
+typedef union NmlFilterScreenPoint {
     Vector4 vector;
-    unsigned long long words[2];
-} NmlFilterPositionView;
+    NmlFilterGridVector coords;
+} NmlFilterScreenPoint;
 
 extern struct NmlFilterRenderView sRender;
 extern struct NmlStealthDescriptor s_aStealthDat[10];
@@ -57,29 +61,16 @@ extern struct NmlStealthDescriptor s_inStealthUnitDat;
 static void nmlModelSetFilterGunosys(const LayoutStore *model, int flags, int count);
 static void nmlModelSetFilterStealth(const LayoutStore *model, int flags);
 
-extern void nmlPacketGsInit(void);
-
 /* Defining-owner interface; normal header transport remains an integration need. */
 extern void packet_gs_entry64(u32 registerId, const u64 *value);
 
-extern void nmlPacketAddGsFlush(void);
-extern void nmlPacketAddGsFrame(int frame, int offset);
 extern void nmlPacketAddGsFBA(int value);
 extern void nmlPacketAddGsZbuf(int zBuffer);
-extern void nmlPacketAddGsFlushWide(void);
 extern void *nmlPacketSetAttributeAlloc16N(int records);
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
-extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
-    float scale);
-
-extern float xglAtan2(float x, float y);
-
 /* Private owner proposals; original data stays unchanged scaffolding. */
 static void _WeightToGlobalPlaceVec(Vector4 *destination,
     const Matrix4 *jointMatrix, const Matrix4 *jointAuxMatrix);
 
-extern void nmlPacketAddGsFrame1(int frame, int offset);
 extern StudioCamera *xglStudioGetActiveCamera(void);
 
 /* Base tint of the stealth outline (red, green, blue, unused). */
@@ -179,7 +170,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
     packet[0].registerSlot.value = 0x3f;
     packet[0].payload.value = 0;
     entryCount = 1;
-    if (model->fields.filterFlags & 4) {
+    if (model->fields.packetFilterFlags & 4) {
         packet[entryCount].payload.value = (u64)(0x24020000 | (sRender.framebufferPage << 5)) |
             0x2000000640000000ULL;
     } else {
@@ -358,7 +349,7 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
     }
     nmlPacketAddGsFlushWide();
 
-    for (part = 0; part < model->fields.stealthPartCount; part++) {
+    for (part = 0; part < model->fields.stealthEntryCount; part++) {
         geometry = model->fields.stealthParts[part];
         packet[0].payload.value = 0x154;
         packet[0].registerSlot.value = 0;
@@ -583,7 +574,7 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
         int top;
         int bottom;
     } clipBounds;
-    struct NmlStealthJointData *jointData = model->fields.jointData;
+    NmlModel *jointModel = model->fields.model;
     struct NmlStealthGeometry *geometry;
     const struct NmlStealthDescriptor *descriptor;
     Vector4 *firstEndpoint;
@@ -599,27 +590,27 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
     geometry = nmlPacketSetAttributeAlloc16N(31);
     model->fields.stealthParts[partIndex] = geometry;
     firstEndpoint = &geometry->endpoints[0];
-    jointCount = model->fields.jointData->jointCount;
+    jointCount = model->fields.model->sampleCount;
     descriptor = &s_aStealthDat[partIndex];
     if (descriptor->firstJoint < jointCount &&
         descriptor->secondJoint < jointCount) {
-        _WeightToGlobalPlaceInit(model->fields.modelToWorld);
+        _WeightToGlobalPlaceInit(model->fields.place);
         _WeightToGlobalPlaceVec(firstEndpoint,
-            &((const Matrix4 *)((const unsigned char *)jointData +
-                jointData->jointMatrixOffset))[descriptor->firstJoint],
-            &((const Matrix4 *)((const unsigned char *)jointData +
-                jointData->jointAuxMatrixOffset))[descriptor->firstJoint]);
+            &((const Matrix4 *)((const unsigned char *)jointModel +
+                jointModel->weightOffset))[descriptor->firstJoint],
+            &((const Matrix4 *)((const unsigned char *)jointModel +
+                jointModel->transformOffset))[descriptor->firstJoint]);
         _WeightToGlobalPlaceVec(&geometry->endpoints[1],
-            &((const Matrix4 *)((const unsigned char *)jointData +
-                jointData->jointMatrixOffset))[descriptor->secondJoint],
-            &((const Matrix4 *)((const unsigned char *)jointData +
-                jointData->jointAuxMatrixOffset))[descriptor->secondJoint]);
+            &((const Matrix4 *)((const unsigned char *)jointModel +
+                jointModel->weightOffset))[descriptor->secondJoint],
+            &((const Matrix4 *)((const unsigned char *)jointModel +
+                jointModel->transformOffset))[descriptor->secondJoint]);
     } else {
         descriptor = &s_inStealthUnitDat;
         __asm__ __volatile__(
             "lq $2,0(%1)\n\t"
             "sq $2,0(%0)"
-            : : "r"(&fallback), "r"(&model->fields.fallbackSphere) : "$2", "memory");
+            : : "r"(&fallback), "r"(&model->fields.center) : "$2", "memory");
         fallback.y -= fallback.w * 0.3f;
         __asm__ __volatile__(
             "lq $2,0(%1)\n\t"
@@ -640,7 +631,7 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
         : : "r"(firstEndpoint), "r"(&geometry->endpoints[1]), "r"(&center) : "memory");
     xglVectorScaleXYZ(&center, &center, 0.5f);
     geometry->sortClass = (float)descriptor->sortClass;
-    firstEndpoint->w = _VectorLengthSQ(&camera->position, &center);
+    firstEndpoint->w = _VectorLengthSQ(&camera->position.vector, &center);
     if (descriptor->firstExtension != 0.0f) {
         __asm__ __volatile__(
             "lqc2 $vf3,0(%0)\n\t"
@@ -828,12 +819,12 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
 #undef NML_STEALTH_EXTEND_UV
 #undef NML_STEALTH_CLIP_ENDPOINT
 
-void nmlFilterSetPacket(int *model, int count)
+void nmlFilterSetPacket(LayoutStore *model, int count)
 {
     int flags;
     int i;
 
-    flags = model[0x234 / 4];
+    flags = model->fields.packetFilterFlags;
     for (i = 0; i < 31; i++) {
         switch (flags & (1 << i)) {
         case 1:
@@ -1130,7 +1121,7 @@ void nmlFilterSetFlatRender(LayoutStore *model)
         gsEntry14[1].value = 0x14;
         gsEntry8[0].value = 0;
         gsEntry8[1].value = clampRegisterId;
-        alphaPayload.value = ((u64)(int)(model->fields.transparency * 128.0f) << 32) | 0x68;
+        alphaPayload.value = ((u64)(int)(model->fields.circleShadowScale * 128.0f) << 32) | 0x68;
         gsEntry42 = (GsTag *)0x70000040;
         gsEntry47First = (GsTag *)0x70000050;
         gsEntry1 = (GsTag *)0x70000060;
@@ -1184,8 +1175,8 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     u64 testRegister;
 
     remaining = 4;
-    mapAlpha = (float)model->fields.textureMapAlpha;
-    fillWeight = model->fields.textureFillWeight;
+    mapAlpha = (float)model->fields.texMapSize;
+    fillWeight = model->fields.textureTransparency;
     packet[0].payload.value = 0x35001;
     packet[0].registerSlot.value = 0x47;
     alphaBits = ((u64)(fillScale - ((fillScale - (fillScale - mapAlpha)) * fillWeight)) << 24);
@@ -1376,20 +1367,22 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     int facingCamera[6];
     Vector4 corners[8];
     Vector4 *cornerBase;
-    int projected[8][4];
+    NmlFilterScreenPoint projected[8];
     int vertexClip[8];
     int faceClip[6];
     struct NmlFilterCubeFaces faces;
     int needsClipping;
     StudioCamera *camera;
-    NmlFilterPositionView *cameraPosition;
+    /* Genuine union: StudioCamera.position is shared.h's DoublewordVector4, and the
+     * original reloads camera->position across the facingCamera stores (alias set 0). */
+    DoublewordVector4 *cameraPosition;
     struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)0x70000000;
     int iteration;
 
     camera = xglStudioGetActiveCamera();
     needsClipping = 0;
     memset(facingCamera, 0, sizeof(facingCamera));
-    cameraPosition = (NmlFilterPositionView *)&camera->position;
+    cameraPosition = &camera->position;
     memset(faceClip, 0, sizeof(faceClip));
     faces = (struct NmlFilterCubeFaces){ .vertices = { { 1, 0, 5, 4 }, { 3, 2, 7, 6 }, { 0, 3, 4, 7 }, { 2, 1, 6, 5 }, { 0, 1, 3, 2 }, { 6, 5, 7, 4 } } };
 
@@ -1417,11 +1410,11 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     _CurSetViewScaleTrans(&camera->screenScale.x, &camera->screenOffset.x);
     cornerBase = &corners[0];
     for (iteration = 0; iteration < 8; iteration++) {
-        vertexClip[iteration] = _CurRotTransPersClip(projected[iteration], &cornerBase[iteration]);
+        vertexClip[iteration] = _CurRotTransPersClip(&projected[iteration].vector, &cornerBase[iteration]);
     }
     {
         int *clipEntry = faceClip;
-        const int (*faceVertices)[4] = faces.vertices;
+        int (*faceVertices)[4] = faces.vertices;
         for (iteration = 5; iteration >= 0; iteration--, faceVertices++, clipEntry++) {
             *clipEntry = vertexClip[(*faceVertices)[0]] +
                          vertexClip[(*faceVertices)[1]] +
@@ -1492,9 +1485,9 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
 #define NML_CUBE_CORNER(indices, index) { \
     struct NmlFilterGsPair *corner = &packet[1 + (index)]; \
     int vertexIndex = (indices)[index]; \
-    u64 coordinates = (u64)projected[vertexIndex][0] | \
-        ((u64)projected[vertexIndex][1] << 16) | \
-        ((u64)projected[vertexIndex][2] << 32); \
+    u64 coordinates = (u64)projected[vertexIndex].coords[0] | \
+        ((u64)projected[vertexIndex].coords[1] << 16) | \
+        ((u64)projected[vertexIndex].coords[2] << 32); \
     corner->registerSlot.value = 4; \
     corner->payload.value = coordinates; \
 }

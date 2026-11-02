@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "main/xgl_thread.h"
 #include "xgl_thread.h"
+#include "main/xgl_studio.h"
 
 /*
  * TU-local thread descriptor view (config/header-canon.json: ee_thread_t is
@@ -36,7 +37,6 @@ static int xglCreateSignal(void);
 extern int CreateThread(ee_thread_t *thread);
 extern void xglRenderEntry(void *argument);
 extern void xglCdControlThread(void *argument);
-extern void xglStudioEntry(void *argument);
 extern void ControlEntry(void *argument);
 
 static system_thread_entry_t asSystemThreadList[4] = {
@@ -94,32 +94,20 @@ void xglThreadInitial(void)
     static ee_thread_t sThreadParam;
 
     active_thread_t *active = asActiveThreadList;
-    system_thread_entry_t *system_record = asSystemThreadList;
-    /* The evidenced stack-size/priority tail begins at byte 8 of each record. */
-    system_thread_tail_t *thread_config =
-        (system_thread_tail_t *)((char *)system_record + 8);
-    /* Keep an addressed reference to the real stack_size member. */
-    int *stack_size_reference = &thread_config->stack_size;
     ee_thread_t *thread = &sThreadParam;
     unsigned int count = 0;
-    int active_offset = 0;
     int stack = 0x1f8000;
 
     do {
-        int stack_size = *stack_size_reference;
-        thread_entry_t entry =
-            ((system_thread_entry_t *)((char *)thread_config - 8))->entry;
-        int priority = thread_config->priority;
-        /* Address the known priority member in the parallel active record. */
-        int *priority_slot =
-            (int *)((char *)&asActiveThreadList[0].priority + active_offset);
+        int stack_size = asSystemThreadList[count].stack_size;
+        thread_entry_t entry = asSystemThreadList[count].entry;
+        int priority = asSystemThreadList[count].priority;
         void *stack_base;
 
-        count++;
         stack_base = (void *)(stack - stack_size);
         active->stack_size = stack_size;
         thread->stack_size = stack_size;
-        *priority_slot = priority;
+        asActiveThreadList[count].priority = priority;
         active->entry = entry;
         active->stack = stack_base;
         thread->entry = entry;
@@ -128,11 +116,8 @@ void xglThreadInitial(void)
         thread->initial_priority = priority;
         active->id = CreateThread(thread);
         StartThread(active->id, 0);
-        active_offset += sizeof(active_thread_t);
-        stack -= *stack_size_reference;
-        thread_config =
-            (system_thread_tail_t *)((char *)thread_config + 20);
-        stack_size_reference = &thread_config->stack_size;
+        stack -= asSystemThreadList[count].stack_size;
+        count++;
         active++;
     } while (count < 4);
 

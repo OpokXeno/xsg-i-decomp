@@ -11,7 +11,7 @@ typedef struct XglRenderReso {
     unsigned char unmodeled_00[2];
     short frame_psm;                   /* +0x02 */
     short frame_width;                 /* +0x04 */
-    unsigned char unmodeled_06[2];
+    short frame_height;                /* +0x06 */
 } XglRenderReso;
 
 typedef struct XglRenderState {
@@ -36,5 +36,15 @@ typedef struct XglRenderState {
 } XglRenderState;
 
 extern XglRenderState sRender;
+
+/* Functions and data used by other translation units. */
+extern int ScanLineInterpolate;
+void xglRenderClearFrame(void);
+extern void xglRenderInit(void);
+void xglRenderCopyDisp2Draw(void);
+extern void xglRenderGlobalFadeInit(void);
+extern void xglRenderClearOff(void);
+void xglRenderClearColor(u32 color);
+void xglRenderDrawFlipPk(XglPacket *packet);
 
 #endif /* INCLUDE_MAIN_XGL_RENDER_H */

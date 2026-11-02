@@ -27,7 +27,7 @@ typedef struct EwContainerState {
     short childCapacity;
     /* +0x04: caller-owned array of child widget-slot pointers, set by
        the same owners and read by the same three functions. */
-    void **children;
+    struct EwWidget **children;
     /* +0x08/+0x0C: zeroed here; no code reachable from this allocation
        (EW_create, EW_addComponent, EW_drawContainer, EW_dispose, this
        TU's set_clip/label_put, and TWIN_create2/TMENU_init, the only
@@ -85,5 +85,30 @@ typedef struct EwWidget {
     short height;
     unsigned char unmodeled_10[0x18];
 } EwWidget;
+
+typedef struct EwSpriteState {
+    /* +0x00/+0x02: cleared/set by sprt_init; same "no reader in this TU"
+       evidence tier as EwFrameState's fields above. */
+    short flags;
+    signed char alpha;
+    /* +0x04/+0x06: texture cell coordinates. Not touched by sprt_init,
+       but written by EW_sprtSetCursorUV and read back by sprt_put with
+       lhu (main:0x0026bf80, 0x0026ca98), which fixes the width as
+       unsigned short. */
+    unsigned short u;
+    unsigned short v;
+} EwSpriteState;
+
+typedef struct EwSpriteWidget {
+    unsigned short flags;
+    unsigned short type;
+    short x;
+    short y;
+    int z;
+    short width;
+    short height;
+    EwSpriteState sprite;
+    unsigned char unmodeled_18[0x10];
+} EwSpriteWidget;
 
 #endif /* INCLUDE_MAIN_EW_SPRT_SET_CURSOR_UV_H */

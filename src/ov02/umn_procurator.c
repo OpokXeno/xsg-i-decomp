@@ -8,7 +8,6 @@
 
 #include "shared.h"
 extern PadPrefix PadData;
-extern int eMessageNextPage(void *page, int arg);
 extern void xglSoundEffectNormalID(int id, int arg);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern const char D_00A12060[];
@@ -97,8 +96,8 @@ extern const UmnLightSet D_00A120F0;
 static void LocalLightSet(void *model, int unused)
 {
     UmnLightSet lights = D_00A120F0;
-    MenuModelActor *actor = model;
-    MenuModelActorLight *light = &actor->light;
+    Actor *actor = model;
+    StudioLight *light = &actor->light;
 
     xglLightIntensityAmbient(light, &lights.v[0]);
     xglLightIntensityParallel(light, 0, &lights.v[1]);
@@ -107,7 +106,7 @@ static void LocalLightSet(void *model, int unused)
     xglLightDirection(light, 1, &lights.v[5]);
     xglLightIntensityParallel(light, 2, &lights.v[3]);
     xglLightDirection(light, 2, &lights.v[6]);
-    actor->actorFlags |= 0x8000;
+    actor->flags |= 0x8000;
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_procurator", UmnProcuratorManzai2);
@@ -130,23 +129,14 @@ static void Rotation(float *out, float *position, float *base, float *rotation)
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_procurator", UmnProcuratorManzai);
 
-/*
- * The camera vectors are bit-preserving 16-byte copies. The original moves
- * each through two aligned doublewords, represented alongside its float lanes.
- */
-typedef union UmnMailVec {
-    Vector4 v;
-    u64 words[2];
-} UmnMailVec;
-
-extern UmnMailVec D_00A12230;
+extern DoublewordAlignedVector4 D_00A12230;
 
 void UmnProcuratorMail(void *argument)
 {
     MenuModelUnit *task = argument;
-    MenuModelTransformVector *offset;
-    MenuModelTransformVector *rotation;
-    MenuModelTransformVector *scale;
+    AlignedVector4 *offset;
+    AlignedVector4 *rotation;
+    AlignedVector4 *scale;
     int done;
     int state;
 
@@ -165,46 +155,46 @@ void UmnProcuratorMail(void *argument)
             return;
         {
             StudioCamera *camera;
-            UmnMailVec camera_rotation;
-            UmnMailVec position;
+            DoublewordAlignedVector4 camera_rotation;
+            DoublewordAlignedVector4 position;
 
             task->extFuncFlag = 1;
             LocalLightSet(task->actor, 0);
             camera = xglStudioGetCamera2(0);
             memset(&camera_rotation, 0, sizeof(camera_rotation));
-            camera_rotation.v.w = 1.0f;
+            camera_rotation.w = 1.0f;
             position = D_00A12230;
-            *(UmnMailVec *)&camera->position = position;
-            *(UmnMailVec *)&camera->rotation = camera_rotation;
+            camera->position.vector = position;
+            camera->rotation.vector = camera_rotation;
             MenuModelUnitOpen(task, 2);
         }
     }
     done = 0;
-    scale->value.x += 0.01f;
-    if (scale->value.x >= 1.0f) {
-        scale->value.x = 1.0f;
+    scale->x += 0.01f;
+    if (scale->x >= 1.0f) {
+        scale->x = 1.0f;
         done++;
     }
-    scale->value.y = scale->value.x;
-    scale->value.z = scale->value.x;
-    offset->value.x += 0.02f;
-    if (offset->value.x >= 1.0f) {
-        offset->value.x = 1.0f;
+    scale->y = scale->x;
+    scale->z = scale->x;
+    offset->x += 0.02f;
+    if (offset->x >= 1.0f) {
+        offset->x = 1.0f;
         done++;
     }
-    offset->value.y -= 0.01f;
-    if (offset->value.y <= -0.3f) {
-        offset->value.y = -0.3f;
+    offset->y -= 0.01f;
+    if (offset->y <= -0.3f) {
+        offset->y = -0.3f;
         done++;
     }
-    rotation->value.x += 0.01f;
-    if (rotation->value.x >= 0.0f) {
-        rotation->value.x = 0.0f;
+    rotation->x += 0.01f;
+    if (rotation->x >= 0.0f) {
+        rotation->x = 0.0f;
         done++;
     }
-    rotation->value.y -= 0.01f;
-    if (rotation->value.y <= -0.7853982f) {
-        rotation->value.y = -0.7853982f;
+    rotation->y -= 0.01f;
+    if (rotation->y <= -0.7853982f) {
+        rotation->y = -0.7853982f;
         done++;
     }
     if (done == 5)
@@ -214,10 +204,10 @@ void UmnProcuratorMail(void *argument)
 void UmnProcuratorTop(void *argument)
 {
     MenuModelUnit *task = argument;
-    MenuModelTransformVector *offset;
-    MenuModelTransformVector *rotation;
+    AlignedVector4 *offset;
+    AlignedVector4 *rotation;
     int state;
-    MenuModelActor *actor;
+    Actor *actor;
 
     if (task->active == 0)
         return;
@@ -232,10 +222,10 @@ void UmnProcuratorTop(void *argument)
             return;
         if (state != 0)
             return;
-        offset->value.x = 1.0f;
-        offset->value.y = -0.3f;
-        rotation->value.x = 0.0f;
-        rotation->value.y = -0.7853982f;
+        offset->x = 1.0f;
+        offset->y = -0.3f;
+        rotation->x = 0.0f;
+        rotation->y = -0.7853982f;
         LocalLightSet(actor, 0);
         task->extFuncFlag = 1;
     }
@@ -246,8 +236,8 @@ void UmnProcuratorTop(void *argument)
 void UmnProcuratorGoodBy(void *argument)
 {
     MenuModelUnit *task = argument;
-    MenuModelTransformControl *menu;
-    MenuModelTransformVector *rotation;
+    ActorMenuControl *menu;
+    AlignedVector4 *rotation;
 
     if (task->active == 0)
         return;
@@ -261,8 +251,8 @@ void UmnProcuratorGoodBy(void *argument)
         LocalLightSet(task->actor, 0);
         MenuModelUnitOpen(task, 3);
     case 1:
-        menu->offset.value.x += 0.4f;
-        rotation->value.y += 0.4f;
+        menu->offset.x += 0.4f;
+        rotation->y += 0.4f;
         if (menu->transparency == 0.0f)
             task->taskPhase = -1;
         break;

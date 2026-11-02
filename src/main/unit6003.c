@@ -1,8 +1,11 @@
 #include "common.h"
 #include "shared.h"
 #include "main/toolkit.h"
+#include "main/exm_2.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_2.h"
+#include "main/nml_model_set.h"
+#include "main/res_get_path.h"
 
 #define UNIT6003_FRAME_TYPE_ERROR_FORMAT "frame_type error(%d)\n"
 
@@ -24,8 +27,12 @@ typedef struct MovieXtxHeader {
     u32 content[3];
 } MovieXtxHeader;
 
-/* The movie playback resource owns two contiguous XTX header sequences. */
-typedef struct MoviePlaybackWork {
+/*
+ * Partial view of XglMovieWork (src/main/xgl_1.c): the XTX header sequences
+ * read here conflict with its packet and image address words (+0x46, +0x90,
+ * +0x9a, +0xb0..+0xbf, +0xc8), so the full type changes this object.
+ */
+typedef struct XglMovieWorkXtxView {
     unsigned char unmodeled_00[0x40];
     unsigned short image_width;
     unsigned short image_height;
@@ -47,7 +54,7 @@ typedef struct MoviePlaybackWork {
     u8 header_index;
     unsigned char unmodeled_c9[7];
     MovieXtxHeader xtx_headers[0];
-} MoviePlaybackWork;
+} XglMovieWorkXtxView;
 
 enum {
     MOVIE_NEXT_HEADER = 0,
@@ -55,7 +62,7 @@ enum {
 };
 
 typedef struct Unit6003ResourceEntry {
-    u32 address;
+    void *address;
     int size;
     int handle;
     int state;
@@ -64,49 +71,6 @@ typedef struct Unit6003ResourceEntry {
 typedef struct Unit6003ResourceHeader {
     u32 signature;
 } Unit6003ResourceHeader;
-
-typedef union Unit6003Coordinate {
-    int screen;
-    float world;
-} Unit6003Coordinate;
-
-typedef struct Unit6003Work {
-    u32 flags;
-    unsigned char unmodeled_04[0x08 - 0x04];
-    void (*draw_callback)(void *unit);
-    unsigned char unmodeled_0c[0xa1 - 0x0c];
-    u8 active;
-    u8 state;
-    unsigned char unmodeled_a3[0xa6 - 0xa3];
-    short render_mode;
-    short transition_timer;
-    unsigned char unmodeled_aa[0x1a0 - 0xaa];
-    Unit6003Coordinate left;
-    Unit6003Coordinate top;
-    Unit6003Coordinate width;
-    Unit6003Coordinate height;
-    u32 resource_id;
-    int use_screen_coordinates;
-    unsigned int texture_width : 16;
-    unsigned int frames_per_row : 16;
-    unsigned int texture_height : 16;
-    unsigned int frames_per_column : 16;
-    u8 alpha;
-    unsigned char unmodeled_1c1[3];
-    u32 movie_advance_count;
-    int frame_count;
-    int playback_direction;
-    float top_depth;
-    float bottom_depth;
-    u8 frame_index;
-    u8 frame_timer;
-    u8 frame_delay;
-    u8 frame_type;
-    unsigned char unmodeled_1dc[4];
-    MoviePlaybackWork *movie_work;
-} Unit6003Work;
-
-struct MapUnitRecord;
 
 enum {
     UNIT6003_RESOURCE_GROUP_FM = 10000,
@@ -168,23 +132,18 @@ typedef struct Unit6003Scratch {
 extern Unit6003ResourceEntry GameResource[128];
 extern Unit6003RenderState sRender;
 
-extern void *GameResourceAlloc(int size);
 extern void *GameResourceRealloc(void *resource, int size);
-extern void xglMovieInfoInit(MoviePlaybackWork *info);
-extern int xglMovieOpen(MoviePlaybackWork *info, int mode);
-extern MovieXtxHeader *xglMovieMakeXtxHeader(MoviePlaybackWork *info, MovieXtxHeader *header);
+extern void xglMovieInfoInit(XglMovieWorkXtxView *info);
+extern int xglMovieOpen(XglMovieWorkXtxView *info, int mode);
+extern MovieXtxHeader *xglMovieMakeXtxHeader(XglMovieWorkXtxView *info, MovieXtxHeader *header);
 extern int GameResourceGetIndex(int address);
 
 extern int RES_loadFile(int command, int callback, int resource_id,
                         int flags);
 
 extern int printf(const char *format, ...);
-extern void MAP_updateUnitDefault(struct MapUnitRecord *unit);
+extern void MAP_updateUnitDefault(MapUnitRecord *unit);
 extern int xglMoviePlay(void *info);
-extern float I2F(int value);
-extern void nmlModelDirectSend(int mode, unsigned char *packet, int size);
-extern void nmlModelDirectSendXtx(int mode, void *texture);
-
 extern float xglRotTransPers(int *result, float matrix[4][4],
                              float *position, int camera);
 
@@ -221,38 +180,37 @@ static unsigned char clut_1[32] = {
     0x48, 0x4c, 0x58, 0x5c, 0x68, 0x6c, 0x78, 0x7c,
 };
 
-static void unit6003_draw(void *object)
+static void unit6003_draw(MapUnitRecord *unit)
 {
-    Unit6003Work *unit = object;
     Unit6003Scratch *scratch = (Unit6003Scratch *)0x70000000;
     Unit6003DrawVertex *vertex;
-    int draw_mode = unit->render_mode == 0 ? 5 : 1;
+    int draw_mode = unit->monitor_priority == 0 ? 5 : 1;
     int camera_index;
     int corner;
     int texture_page;
     float texture_scale;
 
-    switch (unit->frame_type) {
+    switch (unit->unit6003.frame_type) {
     case 0:
-        nmlModelDirectSendXtx(draw_mode, unit->movie_work);
+        nmlModelDirectSendXtx(draw_mode, unit->unit6003.movie_work.resource);
         break;
     case 1: {
-        MoviePlaybackWork *movie = unit->movie_work;
+        XglMovieWorkXtxView *movie = unit->unit6003.movie_work.movie;
         nmlModelDirectSendXtx(draw_mode,
                               movie->headers[movie->header_index]);
         break;
     }
     default:
-        printf(UNIT6003_FRAME_TYPE_ERROR_FORMAT, unit->frame_type);
+        printf(UNIT6003_FRAME_TYPE_ERROR_FORMAT, unit->unit6003.frame_type);
         break;
     }
 
-    switch (unit->frame_type) {
+    switch (unit->unit6003.frame_type) {
     case 0:
         texture_page = sRender.texture_page << 5;
         TestEnv_0_00490520.texture =
             (0x25320000 | texture_page) |
-            ((u64)(texture_page + clut_1[unit->frame_index] + 0x380) << 37) |
+            ((u64)(texture_page + clut_1[unit->unit6003.frame_index] + 0x380) << 37) |
             0x2000000640000000ULL;
         break;
     case 1:
@@ -267,45 +225,45 @@ static void unit6003_draw(void *object)
             break;
     }
 
-    switch (unit->frame_type) {
+    switch (unit->unit6003.frame_type) {
     case 0:
         texture_scale = 1.0f / 512.0f;
         scratch->texture_left = I2F(
-            (unit->frame_index % unit->frames_per_row) *
-            unit->texture_width) / 512.0f;
+            (unit->unit6003.frame_index % unit->unit6003.frames_per_row) *
+            unit->unit6003.texture_width) / 512.0f;
         scratch->texture_top = I2F(
-            (unit->frame_index / unit->frames_per_row) *
-            unit->texture_height) / 512.0f;
-        scratch->texture_width = I2F(unit->texture_width) * texture_scale;
-        scratch->texture_height = I2F(unit->texture_height) * texture_scale;
+            (unit->unit6003.frame_index / unit->unit6003.frames_per_row) *
+            unit->unit6003.texture_height) / 512.0f;
+        scratch->texture_width = I2F(unit->unit6003.texture_width) * texture_scale;
+        scratch->texture_height = I2F(unit->unit6003.texture_height) * texture_scale;
         break;
     case 1:
         scratch->texture_left = 0.0f;
         scratch->texture_top = 0.0f;
         texture_scale = 1.0f / 256.0f;
-        scratch->texture_width = I2F(unit->texture_width) * texture_scale;
-        scratch->texture_height = I2F(unit->texture_height) * texture_scale;
+        scratch->texture_width = I2F(unit->unit6003.texture_width) * texture_scale;
+        scratch->texture_height = I2F(unit->unit6003.texture_height) * texture_scale;
         break;
     }
 
-    scratch->screen_coordinates = unit->use_screen_coordinates;
-    scratch->alpha = unit->alpha;
+    scratch->screen_coordinates = unit->unit6003.use_screen_coordinates;
+    scratch->alpha = unit->unit6003.alpha;
     if (scratch->screen_coordinates == 0) {
-        scratch->world_left = unit->left.world - unit->width.world * 0.5f;
-        scratch->world_top = unit->top.world + unit->height.world * 0.5f;
-        scratch->depth[0] = unit->top_depth;
-        scratch->depth[1] = unit->bottom_depth;
-        scratch->world_width = unit->width.world;
-        scratch->world_height = unit->height.world;
+        scratch->world_left = unit->unit6003.left.world - unit->unit6003.width.world * 0.5f;
+        scratch->world_top = unit->unit6003.top.world + unit->unit6003.height.world * 0.5f;
+        scratch->depth[0] = unit->unit6003.top_depth;
+        scratch->depth[1] = unit->unit6003.bottom_depth;
+        scratch->world_width = unit->unit6003.width.world;
+        scratch->world_height = unit->unit6003.height.world;
     } else {
-        scratch->screen_left = unit->left.screen * 16 + 0x6ff8;
+        scratch->screen_left = unit->unit6003.left.screen * 16 + 0x6ff8;
         {
-            int top = unit->top.screen;
+            int top = unit->unit6003.top.screen;
             scratch->screen_depth = -1;
             scratch->screen_top = top * 16 + 0x71f8;
         }
-        scratch->screen_width = unit->width.screen * 16;
-        scratch->screen_height = unit->height.screen * 16;
+        scratch->screen_width = unit->unit6003.width.screen * 16;
+        scratch->screen_height = unit->unit6003.height.screen * 16;
     }
     xglMatrixStackSave(scratch->matrix);
 
@@ -347,12 +305,12 @@ static void unit6003_draw(void *object)
         vertex->texture_q = perspective;
         vertex->alpha = scratch->alpha;
     }
-    nmlModelDirectSend(draw_mode, (unsigned char *)&TestEnv_0_00490520, 0x15);
+    nmlModelDirectSend(draw_mode, &TestEnv_0_00490520, 0x15);
 }
 
-static MoviePlaybackWork *movie_work_setup(void *source_data, int source_size)
+static XglMovieWorkXtxView *movie_work_setup(void *source_data, int source_size)
 {
-    MoviePlaybackWork *info;
+    XglMovieWorkXtxView *info;
     MovieXtxHeader *header_cursor;
     int allocation_size;
 
@@ -370,17 +328,18 @@ static MoviePlaybackWork *movie_work_setup(void *source_data, int source_size)
     header_cursor = xglMovieMakeXtxHeader(info, header_cursor);
     info->second_header = header_cursor;
     header_cursor += info->xtx_header_count;
-    allocation_size = (int)((unsigned char *)header_cursor - (unsigned char *)info);
+    allocation_size = sizeof(XglMovieWorkXtxView) +
+        (header_cursor - info->xtx_headers) * sizeof(MovieXtxHeader);
     GameResourceRealloc(info, allocation_size);
     return info;
 }
 
-void unit6003_update(Unit6003Work *unit)
+void unit6003_update(MapUnitRecord *unit)
 {
-    switch (unit->state) {
+    switch (unit->actionSub) {
     case 0: {
-        u32 resource_index = unit->resource_id;
-        Unit6003ResourceHeader *resource;
+        u32 resource_index = unit->unit6003.resource_id;
+        Unit6003MovieSource source;
 
         if (resource_index - UNIT6003_RESOURCE_GROUP_FM <
             UNIT6003_RESOURCE_GROUP_SIZE) {
@@ -389,7 +348,7 @@ void unit6003_update(Unit6003Work *unit)
             printf(UNIT6003_LOADING_FM_FORMAT, resource_file_id);
             resource_index = GameResourceGetIndex(
                 RES_loadFile(-1, 11, resource_file_id, 0));
-            unit->resource_id = resource_index;
+            unit->unit6003.resource_id = resource_index;
         } else if (resource_index - UNIT6003_RESOURCE_GROUP_MVS <
                    UNIT6003_RESOURCE_GROUP_SIZE) {
             unsigned int resource_file_id =
@@ -397,138 +356,135 @@ void unit6003_update(Unit6003Work *unit)
             printf(UNIT6003_LOADING_MVS_FORMAT, resource_file_id);
             resource_index = GameResourceGetIndex(
                 RES_loadFile(-1, 10, resource_file_id, 0));
-            unit->resource_id = resource_index;
+            unit->unit6003.resource_id = resource_index;
         }
 
-        unit->state = 1;
+        unit->actionSub = 1;
         unit->flags |= 4;
-        unit->draw_callback = 0;
-        unit->frame_index = 0;
-        unit->frame_timer = 0;
-        if (unit->playback_direction < 0)
-            unit->frame_delay = -(u8)unit->playback_direction;
+        unit->draw = 0;
+        unit->unit6003.frame_index = 0;
+        unit->unit6003.frame_timer = 0;
+        if (unit->unit6003.playback_direction < 0)
+            unit->unit6003.frame_delay = -unit->unit6003.playback_direction;
         else
-            unit->frame_delay = (u8)unit->playback_direction;
+            unit->unit6003.frame_delay = unit->unit6003.playback_direction;
 
-        resource =
-            (Unit6003ResourceHeader *)GameResource[unit->resource_id].address;
-        unit->frame_type = 0xff;
-        if (resource != 0) {
-            if (resource->signature == UNIT6003_XTX_SIGNATURE) {
-                if (unit->texture_width == 0)
-                    unit->texture_width = 0x80;
-                if (unit->texture_height == 0)
-                    unit->texture_height = 0x70;
-                unit->frames_per_row =
-                    (u16)(0x200 / (int)unit->texture_width);
-                unit->frames_per_column =
-                    (u16)(0x1c0 / (int)unit->texture_height);
-                unit->frame_type = 0;
-            } else if (resource->signature == UNIT6003_IPUM_SIGNATURE) {
+        source.resource = GameResource[unit->unit6003.resource_id].address;
+        unit->unit6003.frame_type = 0xff;
+        if (source.resource != 0) {
+            if (source.resource->signature == UNIT6003_XTX_SIGNATURE) {
+                if (unit->unit6003.texture_width == 0)
+                    unit->unit6003.texture_width = 0x80;
+                if (unit->unit6003.texture_height == 0)
+                    unit->unit6003.texture_height = 0x70;
+                unit->unit6003.frames_per_row = 0x200 / unit->unit6003.texture_width;
+                unit->unit6003.frames_per_column = 0x1c0 / unit->unit6003.texture_height;
+                unit->unit6003.frame_type = 0;
+            } else if (source.resource->signature == UNIT6003_IPUM_SIGNATURE) {
                 u32 played;
-                MoviePlaybackWork *movie_work;
+                XglMovieWorkXtxView *movie_work;
 
                 movie_work = movie_work_setup(
-                    resource, GameResource[unit->resource_id].size);
+                    source.resource, GameResource[unit->unit6003.resource_id].size);
                 played = 0;
-                unit->texture_width = movie_work->image_width;
-                unit->texture_height = movie_work->image_height;
+                unit->unit6003.texture_width = movie_work->image_width;
+                unit->unit6003.texture_height = movie_work->image_height;
                 do {
                     played += 1;
                     xglMoviePlay(movie_work);
-                } while (played <= unit->movie_advance_count);
-                __builtin_memset(&unit->movie_advance_count, 0,
-                                 sizeof(unit->movie_advance_count));
+                } while (played <= unit->unit6003.movie_advance_count);
+                __builtin_memset(&unit->unit6003.movie_advance_count, 0,
+                                 sizeof(unit->unit6003.movie_advance_count));
                 {
                     const short *movie_frame_count_source = &movie_work->frame_count;
                     short movie_frame_count = *movie_frame_count_source;
 
-                    unit->frame_type = 1;
-                    unit->frame_count = movie_frame_count;
+                    unit->unit6003.frame_type = 1;
+                    unit->unit6003.frame_count = movie_frame_count;
                 }
-                resource = (Unit6003ResourceHeader *)movie_work;
+                source.movie = movie_work;
             }
         }
-        unit->movie_work = (MoviePlaybackWork *)resource;
+        unit->unit6003.movie_work = source;
     }
         /* fall through */
     case 1:
-        if (unit->active != 0) {
-            unit->state = 2;
-            unit->transition_timer = 0x0f;
-            unit->draw_callback = unit6003_draw;
+        if (unit->signal != 0) {
+            unit->actionSub = 2;
+            unit->sequenceNo = 0x0f;
+            unit->draw = unit6003_draw;
     case 2:
-            if (unit->transition_timer == 0) {
-                unit->state = 3;
+            if (unit->sequenceNo == 0) {
+                unit->actionSub = 3;
     case 3:
-                if (unit->active == 0) {
-                    unit->state = 4;
-                    unit->transition_timer = 0x0f;
+                if (unit->signal == 0) {
+                    unit->actionSub = 4;
+                    unit->sequenceNo = 0x0f;
                 }
             } else {
-                unit->transition_timer =
-                    (short)(unit->transition_timer - 1);
+                unit->sequenceNo =
+                    unit->sequenceNo - 1;
             }
         }
         break;
     case 4:
-        if (unit->transition_timer != 0) {
-            unit->transition_timer = (short)(unit->transition_timer - 1);
+        if (unit->sequenceNo != 0) {
+            unit->sequenceNo = unit->sequenceNo - 1;
             break;
         }
-        unit->draw_callback = 0;
-        unit->state = 1;
+        unit->draw = 0;
+        unit->actionSub = 1;
         break;
     }
 
-    if (unit->frame_type == 1) {
-        MoviePlaybackWork *movie_work = unit->movie_work;
+    if (unit->unit6003.frame_type == 1) {
+        XglMovieWorkXtxView *movie_work = unit->unit6003.movie_work.movie;
 
         if (GameResourceGetIndex((int)movie_work) == -1 ||
             movie_work->source_data !=
-                (void *)GameResource[unit->resource_id].address ||
+                GameResource[unit->unit6003.resource_id].address ||
             movie_work->headers[MOVIE_NEXT_HEADER]->signature !=
                 UNIT6003_XTX_SIGNATURE ||
             movie_work->headers[MOVIE_XTX_DATA]->signature !=
                 UNIT6003_XTX_SIGNATURE) {
-            MoviePlaybackWork *repaired_work;
+            XglMovieWorkXtxView *repaired_work;
 
             printf(UNIT6003_MOVIE_WORK_BROKEN_MESSAGE);
             repaired_work = movie_work_setup(
-                (void *)GameResource[unit->resource_id].address,
-                GameResource[unit->resource_id].size);
-            printf(UNIT6003_MOVIE_WORK_ADDRESS_FORMAT, (u32)unit->movie_work,
-                   (u32)repaired_work);
-            unit->movie_work = repaired_work;
+                GameResource[unit->unit6003.resource_id].address,
+                GameResource[unit->unit6003.resource_id].size);
+            printf(UNIT6003_MOVIE_WORK_ADDRESS_FORMAT,
+                   (u32)unit->unit6003.movie_work.movie, (u32)repaired_work);
+            unit->unit6003.movie_work.movie = repaired_work;
         }
     }
 
-    if (unit->active != 0) {
-        unsigned int frame_timer = unit->frame_timer + 1;
+    if (unit->signal != 0) {
+        unsigned int frame_timer = unit->unit6003.frame_timer + 1;
 
-        unit->frame_timer = frame_timer;
-        if ((u8)frame_timer >= unit->frame_delay) {
-            unit->frame_timer = 0;
-            switch (unit->frame_type) {
+        unit->unit6003.frame_timer = frame_timer;
+        if ((u8)frame_timer >= unit->unit6003.frame_delay) {
+            unit->unit6003.frame_timer = 0;
+            switch (unit->unit6003.frame_type) {
             case 0: {
-                unit->frame_index++;
-                if (unit->frame_index > (u32)unit->frame_count) {
-                    if (unit->playback_direction < 0)
-                        unit->frame_index = 0;
+                unit->unit6003.frame_index++;
+                if (unit->unit6003.frame_index > unit->unit6003.frame_count) {
+                    if (unit->unit6003.playback_direction < 0)
+                        unit->unit6003.frame_index = 0;
                     else
-                        unit->frame_index = (u8)unit->frame_count;
+                        unit->unit6003.frame_index = unit->unit6003.frame_count;
                 }
                 break;
             }
             case 1: {
-                MoviePlaybackWork *movie_work = unit->movie_work;
+                XglMovieWorkXtxView *movie_work = unit->unit6003.movie_work.movie;
 
-                if (unit->movie_advance_count == 0) {
+                if (unit->unit6003.movie_advance_count == 0) {
                     if (xglMoviePlay(movie_work) != 0) {
-                        if (unit->playback_direction >= 0)
-                            unit->movie_advance_count = 1;
+                        if (unit->unit6003.playback_direction >= 0)
+                            unit->unit6003.movie_advance_count = 1;
                     }
-                    unit->frame_index = movie_work->current_frame_index;
+                    unit->unit6003.frame_index = movie_work->current_frame_index;
                 }
                 break;
             }
@@ -536,5 +492,5 @@ void unit6003_update(Unit6003Work *unit)
         }
     }
 
-    MAP_updateUnitDefault((struct MapUnitRecord *)unit);
+    MAP_updateUnitDefault(unit);
 }

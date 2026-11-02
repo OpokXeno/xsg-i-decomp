@@ -2,19 +2,8 @@
 #include "shared.h"
 #include "main/party.h"
 #include "menu_skill.h"
-
-/*
- * Offset of the per-level "points required for next skill level" table inside
- * the loaded skill data block (SkillDataBuf). Evidenced by the original
- * SkillNextLvGet (`lhu $2, 382($4)`, 382 = 0x17e);
- */
-#define SKILL_NEXT_LV_TABLE_OFFSET 0x17e
-
-/* Base of the loaded skill table used by this translation unit. */
-extern unsigned char *SkillDataBuf;
-
-extern const char MenuSkillSetSuffixText[8];
-extern const char MenuSkillTitleText[8];
+#include "main/menu_skill.h"
+#include "main/menu_system.h"
 
 const char skillExtractCommandText[9] = "/Extract";
 
@@ -22,10 +11,10 @@ static const char * msg_0_0036DD58[3] = { MenuSkillTitleText, skillExtractComman
 
 static short MenuSkillParty[8];
 
-int SkillSetLvGet(int skill_id)
+unsigned int SkillSetLvGet(int skill_id)
 {
     int skill_index = (unsigned short)skill_id;
-    MenuSkillData *skill_data = (MenuSkillData *)SkillDataBuf;
+    MenuSkillData *skill_data = SkillDataBuf;
 
     if (skill_index <= 0)
         return 0;
@@ -35,7 +24,7 @@ int SkillSetLvGet(int skill_id)
 int SkillGetPtGet(int skill_id)
 {
     int skill_index = (unsigned short)skill_id;
-    MenuSkillData *skill_data = (MenuSkillData *)SkillDataBuf;
+    MenuSkillData *skill_data = SkillDataBuf;
 
     if (skill_index <= 0)
         return 0;
@@ -44,16 +33,15 @@ int SkillGetPtGet(int skill_id)
 
 unsigned short SkillNextLvGet(int level)
 {
-    return ((unsigned short *)(SkillDataBuf + SKILL_NEXT_LV_TABLE_OFFSET))[level];
+    return SkillDataBuf->next_level_points[level];
 }
 
-int SkillCharSkillLvGet(int character_id)
+unsigned int SkillCharSkillLvGet(int character_id)
 {
-    unsigned char *party = PartyDataGet();
-    PartySkillLevelArray *skill_levels;
+    PartyDataPrefix *party = PartyDataGet();
+    PartySkillLevelArray *skill_levels = &party->skill_levels;
     int character_index = (unsigned short)character_id;
 
-    skill_levels = (PartySkillLevelArray *)(party + 0x140);
     if (character_index == 0)
         return 0;
     if (character_index >= 9)
@@ -65,7 +53,7 @@ int SkillCharPointPlus(int character_id, int point_delta)
 {
     int character_index = (unsigned short)character_id;
     PlayerCharacter *character;
-    unsigned char *party_bytes;
+    PartyDataPrefix *party;
     unsigned char *level_by_character;
     PartySkillPoints *points_to_next_level;
     int level;
@@ -76,18 +64,18 @@ int SkillCharPointPlus(int character_id, int point_delta)
     if (character_index == 0 || character_index >= 9)
         return 0;
 
-    character = (PlayerCharacter *)dataPlChaGet(character_index);
-    party_bytes = PartyDataGet();
+    character = dataPlChaGet(character_index);
+    party = PartyDataGet();
     character_points = character->skill_points - point_delta;
     if (character_points < 0)
         character_points = 0;
     character->skill_points = character_points;
 
-    level_by_character = party_bytes + character_id + 0x13f;
+    level_by_character = &party->skill_levels.level_by_character[character_id - 1];
     if (*level_by_character >= 5)
         return 1;
 
-    points_to_next_level = (PartySkillPoints *)(character_id * 8 + (unsigned int)party_bytes + 0x140);
+    points_to_next_level = (PartySkillPoints *)((unsigned int)(character_id - 1) * 8 + (unsigned int)party->next_level_points);
     remaining_points = *points_to_next_level;
     remaining_points -= point_delta;
     if (remaining_points <= 0) {
@@ -125,11 +113,11 @@ void MenuSkillPasMain(void)
         WindowDXSet(&work->window);
         work->window.x = -288;
         work->window.y = 8;
-        work->window.color = work->color;
+        work->window.style = work->color;
         work->window.width = 272;
         work->window.height = 30;
-        work->window.callback = MenuPasWindow;
-        work->window.callbackArg = work->callbackWork;
+        work->window.close_callback = MenuPasWindow;
+        work->window.close_callback_arg = work->callbackWork;
         work->window.state = 1;
         WindowDXMain(&work->window);
         work->window.state = 3;
@@ -138,7 +126,7 @@ void MenuSkillPasMain(void)
             work->message[i].mode = 32;
             work->message[i].x = 288;
             work->message[i].y = 11;
-            work->message[i].color = work->color + 2;
+            work->message[i].draw_parameter = work->color + 2;
         }
         work->state = 2;
         /* fallthrough */
@@ -190,7 +178,7 @@ void MenuSkillPasMain(void)
 
 void MenuSkillInfoMain(void)
 {
-    SkillScreenState **workSlot = &MenuSkillInfo;
+    MenuSkillInfoWork **workSlot = &MenuSkillInfo;
     char *characterHelp[] = {
         "Select a character.",
         " cannot be selected."
@@ -210,7 +198,7 @@ void MenuSkillInfoMain(void)
         "Skill has already been extracted.",
         "Skill cannot be extracted from the selected item."
     };
-    MenuSkillInfoWork *work = (MenuSkillInfoWork *)*workSlot;
+    MenuSkillInfoWork *work = *workSlot;
     short target;
 
     switch (work->state) {
@@ -218,12 +206,12 @@ void MenuSkillInfoMain(void)
         work->color = 0x00fffff0;
         WindowDXSet(&work->window);
         work->window.x = -16;
-        work->window.color = work->color;
+        work->window.style = work->color;
         work->window.y = 480;
         work->window.width = 544;
         work->window.height = 54;
-        work->window.callback = MenuInfoWindow;
-        work->window.callbackArg = &work->info;
+        work->window.close_callback = MenuInfoWindow;
+        work->window.close_callback_arg = &work->info;
         work->info.x = 0;
         work->info.y = 0;
         work->info.text = 0;
@@ -250,10 +238,10 @@ void MenuSkillInfoMain(void)
     } else if (PadData.repeat != 0) {
         work->reasonShown = 0;
     }
-    switch ((int)MenuWork.state) {
+    switch (MenuWork.state) {
     case SKILL_CHARACTER:
         eMessageCpy(work->message, characterHelp[0]);
-        if (work->reasonShown != 0 && (signed char)MenuWork.char_denied != 0) {
+        if (work->reasonShown != 0 && MenuWork.char_denied != 0) {
             eMessageCpy(work->message, MenuCharNameGet(MenuWork.characterNo));
             eMessageCat(characterHelp[1]);
         }
@@ -273,12 +261,12 @@ void MenuSkillInfoMain(void)
             if (work->reasonShown == 0) {
                 eMessageCpy(work->message, skillHelp[0]);
                 if (skill->prerequisite != 0)
-                    eMessageCat(func_A2C648(skill->prerequisite)->text);
+                    eMessageCat(func_A2C648(skill->prerequisite)->name);
                 eMessageCat(skillHelp[1]);
                 if (skill->prerequisite != 0)
-                    eMessageCat(func_A2C648(skill->prerequisite)->description);
-            } else if ((signed char)MenuWork.list_accessory != 0) {
-                if (func_A1A548((signed char)MenuWork.list_accessory)->prerequisite == 0)
+                    eMessageCat(func_A2C648(skill->prerequisite)->auxiliary);
+            } else if (MenuWork.list_accessory != 0) {
+                if (func_A1A548(MenuWork.list_accessory)->prerequisite == 0)
                     eMessageCpy(work->message, learnHelp[1]);
                 else if (func_A19698(MenuWork.characterNo, skill->prerequisite) != 0)
                     eMessageCpy(work->message, learnHelp[0]);
@@ -291,13 +279,13 @@ void MenuSkillInfoMain(void)
 
             eMessageCpy(work->message, skillHelp[0]);
             if (skill->prerequisite != 0)
-                eMessageCat(func_A2C648(skill->prerequisite)->text);
+                eMessageCat(func_A2C648(skill->prerequisite)->name);
             eMessageCat(skillHelp[2]);
         }
         break;
     case SKILL_EQUIP:
         if (MenuWork.list_select >= 0)
-            eMessageCpy(work->message, MenuTextGet(MenuSortGet(0, MenuWork.list_select))->description);
+            eMessageCpy(work->message, MenuTextGet(MenuSortGet(0, MenuWork.list_select))->auxiliary);
         else
             eMessageCpy(work->message, skillEmptyText);
         break;
@@ -320,45 +308,45 @@ void MenuSkillStatusMain(void)
     short targetOffset[8];
     int i;
 
-    switch (status->window[0].header.state) {
+    switch (status->state) {
     case 0:
-        status->window[0].header.color = 0x00FFF000;
+        status->color = 0x00FFF000;
         for (i = 0; i < MenuWork.partyCount; i++) {
             short chrNo = MenuSkillParty[i];
 
-            WindowDXSet(&status->window[i].window);
-            status->window[i].window.x = (i & 1) * 816 - 272;
-            status->window[i].window.y = (i / 2) * 104 + 64;
-            status->window[i].window.color = status->window[0].header.color;
-            status->window[i].window.width = 240;
-            status->window[i].window.height = 82;
-            status->window[i].window.visible = 1;
+            WindowDXSet(&status->window[i]);
+            status->window[i].x = (i & 1) * 816 - 272;
+            status->window[i].y = (i / 2) * 104 + 64;
+            status->window[i].style = status->color;
+            status->window[i].width = 240;
+            status->window[i].height = 82;
+            status->window[i].ribbon_initialized = 1;
             if (PartyAttackerCheck(chrNo) != 0) {
-                status->window[i].window.title = MenuTagTextGet(1);
+                status->window[i].tag_id = MenuTagTextGet(1);
             } else {
-                status->window[i].window.title = MenuTagTextGet(2);
+                status->window[i].tag_id = MenuTagTextGet(2);
             }
-            status->window[i].window.disp = MenuStatusDisp;
-            status->window[i].window.dispWork = &status->disp[i].work;
-            status->disp[i].work.offsetX = 0;
-            status->disp[i].work.chrNo = chrNo;
-            status->disp[i].work.fullStatus = 0;
-            status->disp[i].work.offsetY = 0;
-            status->window[i].window.state = 1;
-            WindowDXMain(&status->window[i].window);
-            status->window[i].window.state = 3;
+            status->window[i].close_callback = MenuStatusDisp;
+            status->window[i].close_callback_arg = &status->panel[i];
+            status->panel[i].offsetX = 0;
+            status->panel[i].chrNo = chrNo;
+            status->panel[i].enabled = 0;
+            status->panel[i].offsetY = 0;
+            status->window[i].state = 1;
+            WindowDXMain(&status->window[i]);
+            status->window[i].state = 3;
         }
         for (i = 0; i < 1; i++) {
-            eCursolSet(&status->cursor[i].cursor, 0);
-            status->cursor[i].cursor.state = 0;
-            status->cursor[i].cursor.work = 0x00FFFFFF;
+            eCursolSet(&status->cursor[i], 0);
+            status->cursor[i].state = 0;
+            status->cursor[i].work = 0x00FFFFFF;
         }
-        status->window[0].header.cursorOn = 0;
-        status->window[0].header.flags = 0;
-        status->window[0].header.subState = 0;
-        status->window[0].header.moveVert = 0;
-        status->window[0].header.lastCursor = MenuWork.partyCursor;
-        status->window[0].header.state = 2;
+        status->cursorOn = 0;
+        status->flags = 0;
+        status->subState = 0;
+        status->moveVert = 0;
+        status->lastCursor = MenuWork.partyCursor;
+        status->state = 2;
         /* fall through */
     case 2:
         for (i = 0; i < MenuWork.partyCount; i++) {
@@ -371,15 +359,15 @@ void MenuSkillStatusMain(void)
         switch (MenuWork.state) {
         case SKILL_CHARACTER:
             if (MenuWork.flags & MENU_FLAG_ENTER) {
-                status->cursor[0].cursor.state = 32;
-                status->window[0].header.cursorOn = 1;
-                status->window[0].header.moveVert = 1;
-                if ((status->window[0].header.flags & 1) != 0) {
+                status->cursor[0].state = 32;
+                status->cursorOn = 1;
+                status->moveVert = 1;
+                if ((status->flags & 1) != 0) {
                     if (i != MenuWork.partyCursor) {
-                        status->window[i].window.x = (i & 1) * 816 - 272;
-                        status->window[i].window.y = 24;
+                        status->window[i].x = (i & 1) * 816 - 272;
+                        status->window[i].y = 24;
                     }
-                    status->window[0].header.flags &= ~1;
+                    status->flags &= ~1;
                 }
             }
             for (i = 0; i < MenuWork.partyCount; i++) {
@@ -388,27 +376,27 @@ void MenuSkillStatusMain(void)
             break;
         case SKILL_COMMAND:
             if (MenuWork.flags & MENU_FLAG_ENTER) {
-                status->cursor[0].cursor.state = 0;
-                status->window[0].header.lastCursor = MenuWork.partyCursor;
+                status->cursor[0].state = 0;
+                status->lastCursor = MenuWork.partyCursor;
             }
             /* fall through */
         case SKILL_LEARN:
         case SKILL_CONFIRM:
         case SKILL_EXTRACT:
         case SKILL_EQUIP:
-            if (status->window[0].header.lastCursor != MenuWork.partyCursor) {
-                status->window[MenuWork.partyCursor].window.x = 264;
-                status->window[MenuWork.partyCursor].window.y = 32;
-                status->window[0].header.lastCursor = MenuWork.partyCursor;
+            if (status->lastCursor != MenuWork.partyCursor) {
+                status->window[MenuWork.partyCursor].x = 264;
+                status->window[MenuWork.partyCursor].y = 32;
+                status->lastCursor = MenuWork.partyCursor;
             }
-            if ((status->window[0].header.flags & 1) != 0) {
+            if ((status->flags & 1) != 0) {
                 for (i = 0; i < MenuWork.partyCount; i++) {
                     if (i == MenuWork.partyCursor) {
                         targetX[i] = 264;
                         targetY[i] = 32;
                     } else {
                         targetX[i] = (i & 1) * 816 - 272;
-                        status->window[i].window.x = targetX[i];
+                        status->window[i].x = targetX[i];
                     }
                 }
             } else {
@@ -418,43 +406,43 @@ void MenuSkillStatusMain(void)
                         targetY[i] = 32;
                     }
                 }
-                if (targetY[MenuWork.partyCursor] == status->window[MenuWork.partyCursor].window.y) {
-                    status->window[0].header.flags |= 1;
+                if (targetY[MenuWork.partyCursor] == status->window[MenuWork.partyCursor].y) {
+                    status->flags |= 1;
                 }
             }
-            status->window[0].header.cursorOn = 0;
-            status->window[0].header.moveVert = 0;
+            status->cursorOn = 0;
+            status->moveVert = 0;
             break;
         }
         for (i = 0; i < MenuWork.partyCount; i++) {
-            if (status->window[0].header.moveVert == 0) {
-                MoveSlide(&status->window[i].window.width, &targetWidth[i], 3.0f);
-                MoveSlide(&status->window[i].window.height, &targetHeight[i], 3.0f);
-                MoveSlide(&status->disp[i].work.offsetX, &targetOffset[i], 3.0f);
-                MoveSlide(&status->window[i].window.x, &targetX[i], 3.0f);
-                if (status->window[i].window.x == targetX[i]) {
-                    MoveSlide(&status->window[i].window.y, &targetY[i], 3.0f);
+            if (status->moveVert == 0) {
+                MoveSlide(&status->window[i].width, &targetWidth[i], 3.0f);
+                MoveSlide(&status->window[i].height, &targetHeight[i], 3.0f);
+                MoveSlide(&status->panel[i].offsetX, &targetOffset[i], 3.0f);
+                MoveSlide(&status->window[i].x, &targetX[i], 3.0f);
+                if (status->window[i].x == targetX[i]) {
+                    MoveSlide(&status->window[i].y, &targetY[i], 3.0f);
                 }
             } else {
-                MoveSlide(&status->window[i].window.y, &targetY[i], 3.0f);
-                if (status->window[i].window.y == targetY[i]) {
-                    MoveSlide(&status->window[i].window.width, &targetWidth[i], 3.0f);
-                    MoveSlide(&status->disp[i].work.offsetX, &targetOffset[i], 3.0f);
-                    MoveSlide(&status->window[i].window.x, &targetX[i], 3.0f);
+                MoveSlide(&status->window[i].y, &targetY[i], 3.0f);
+                if (status->window[i].y == targetY[i]) {
+                    MoveSlide(&status->window[i].width, &targetWidth[i], 3.0f);
+                    MoveSlide(&status->panel[i].offsetX, &targetOffset[i], 3.0f);
+                    MoveSlide(&status->window[i].x, &targetX[i], 3.0f);
                 }
             }
             if (i == MenuWork.partyCursor) {
-                status->window[i].window.color = 0x7F00;
+                status->window[i].style = 0x7F00;
             } else {
-                status->window[i].window.color = 0x7E00;
+                status->window[i].style = 0x7E00;
             }
-            WindowDXMain(&status->window[i].window);
+            WindowDXMain(&status->window[i]);
         }
-        status->cursor[0].cursor.x = status->window[MenuWork.partyCursor].window.x + 3;
-        status->cursor[0].cursor.y = status->window[MenuWork.partyCursor].window.y
-                                     + status->window[MenuWork.partyCursor].window.height / 2 - 4;
-        status->cursor[0].cursor.work = 0x00FFFFFF;
-        eCursolMain(&status->cursor[0].cursor);
+        status->cursor[0].x = status->window[MenuWork.partyCursor].x + 3;
+        status->cursor[0].y = status->window[MenuWork.partyCursor].y
+                                     + status->window[MenuWork.partyCursor].height / 2 - 4;
+        status->cursor[0].work = 0x00FFFFFF;
+        eCursolMain(&status->cursor[0]);
         break;
     }
 }
@@ -478,10 +466,10 @@ void MenuSkillMenuMain(void)
             self->window[i].x = 528;
             self->window[i].width = 129;
             self->window[i].height = 78;
-            self->window[i].color = self->color;
-            self->window[i].title = skillMenuText;
-            self->window[i].select = MenuSelectWindow;
-            self->window[i].selectArg = &self->list[i];
+            self->window[i].style = self->color;
+            self->window[i].tag_id = skillMenuText;
+            self->window[i].close_callback = MenuSelectWindow;
+            self->window[i].close_callback_arg = &self->list[i];
             self->list[i].cursor = 0;
             if (i != 1) {
                 self->list[i].hasPrompt = 0;
@@ -530,7 +518,7 @@ const char skillSetSearchText[19] = "\014\200\200\200\036\000: Set Search";
 
 void MenuSkillExMain(void)
 {
-    MenuSkillExWork *work = (MenuSkillExWork *)MenuSkillEx;
+    MenuSkillExWork *work = MenuSkillEx;
     short ribbonTarget[2];
     short messageTarget;
     int i;
@@ -544,19 +532,19 @@ void MenuSkillExMain(void)
             eRibbonSet(&work->ribbon[i], 3);
             work->ribbon[i].x = -272;
             work->ribbon[i].y = 48 + i * 32;
-            work->ribbon[i].color = work->color;
+            work->ribbon[i].work = work->color;
             work->ribbon[i].width = 256;
             work->ribbon[i].height = 24;
             eTagFontSet(&work->tag[i], msg00_3_0036DD78[i]);
-            work->tag[i].color = work->color + 2;
+            work->tag[i].work = work->color + 2;
             eNumberSet(&work->number[i], 0);
-            work->number[i].color = work->color + 2;
+            work->number[i].work = work->color + 2;
         }
         eMessageSet(&work->message, msg00_3_0036DD78[2]);
         work->message.mode = 32;
         work->message.x = 528;
         work->message.y = 120;
-        work->message.color = work->color + 2;
+        work->message.draw_parameter = work->color + 2;
         work->state = 2;
         /* fallthrough */
     case 2:
@@ -587,7 +575,7 @@ void MenuSkillExMain(void)
         eTagFontMain(&work->tag[i]);
         work->number[i].x = work->ribbon[i].x + work->ribbon[i].width - 60;
         work->number[i].y = work->ribbon[i].y + 4;
-        work->number[i].style = 0;
+        work->number[i].format = 0;
         if (i == 0) {
             work->number[i].digits = 1;
             work->number[i].value = SkillCharSkillLvGet(MenuWork.characterNo);
@@ -600,7 +588,8 @@ void MenuSkillExMain(void)
         }
         eNumberMain(&work->number[i]);
     }
-    messageColor = msg00_3_0036DD78[2] + 1;
+    /* The original patches the colour escape bytes of this string, which lives in read-only data. */
+    messageColor = (char *)msg00_3_0036DD78[2] + 1;
     unit = func_A191C0(MenuWork.characterNo);
     if (MenuWork.list_select < 0 || unit->setSkill[0] + unit->setSkill[1] + unit->setSkill[2] == 0) {
         messageColor[2] = 64;
@@ -702,18 +691,18 @@ void MenuSkillSetListMain(void)
         self->color = 0x00FFFFF0;
         WindowDXSet(&self->window);
         self->window.x = -222;
-        self->window.color = self->color;
+        self->window.style = self->color;
         self->window.y = 280;
         self->window.width = 209;
         self->window.height = 78;
-        self->window.title = skillSetListText;
+        self->window.tag_id = skillSetListText;
         self->window.state = 1;
         WindowDXMain(&self->window);
         self->window.state = 3;
         for (i = 0; i < 4; i++) {
             eMessageSet(&self->message[i], 0);
             self->message[i].mode = 32;
-            self->message[i].color = self->color + 2;
+            self->message[i].draw_parameter = self->color + 2;
         }
         self->message[3].text = msg00_4_0036DD88[0];
         self->state = 2;
@@ -729,7 +718,7 @@ void MenuSkillSetListMain(void)
             if (unit->setSkill[i] != 0) {
                 self->message[i].x = self->window.x + 43;
                 self->message[i].y = self->window.y + i * 24 + 3;
-                self->message[i].text = MenuTextGet(0x80000 + (unsigned short)unit->setSkill[i])->text;
+                self->message[i].text = MenuTextGet(0x80000 + (unsigned short)unit->setSkill[i])->name;
                 eMessageMain(&self->message[i]);
             }
         }
@@ -892,8 +881,8 @@ const char skillListHeaderText[18] = "List\003\220S.Lv\003\007S.Pts";
 static int MenuSkillListChange00(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    SkillListRow *rows = MenuListGet(0);
-    SkillSPWindow *window = &MenuSkillList->window;
+    MenuListEntry *rows = MenuListGet(0);
+    WindowSPCursor *window = &MenuSkillList->window;
     PlayerCharacter *character = dataPlChaGet(MenuWork.characterNo);
     int count;
     int i;
@@ -907,20 +896,20 @@ static int MenuSkillListChange00(void)
         int cost = SkillGetPtGet(skillId);
         int characterLevel = SkillCharSkillLvGet(MenuWork.characterNo);
 
-        rows[i].value = cost;
-        rows[i].level = SkillSetLvGet(skillId);
-        rows[i].locked = 0;
+        rows[i].amount = cost;
+        rows[i].status = SkillSetLvGet(skillId);
+        rows[i].flag = 0;
         if (record->prerequisite == 0)
-            rows[i].locked = 1;
+            rows[i].flag = 1;
         else if (func_A19698(MenuWork.characterNo, record->prerequisite) != 0)
-            rows[i].locked = 1;
-        if (characterLevel < rows[i].level)
-            rows[i].locked = 1;
+            rows[i].flag = 1;
+        if (characterLevel < rows[i].status)
+            rows[i].flag = 1;
         if (character->skill_points < cost)
-            rows[i].locked = 1;
+            rows[i].flag = 1;
     }
     window->title = skillListHeaderText;
-    window->rowCount = 7;
+    window->draw_flags = 7;
     window->columns = 1;
     window->rows = 8;
     window->width = 276;
@@ -928,15 +917,15 @@ static int MenuSkillListChange00(void)
     window->items = MenuListGet(0);
     WindowSPItemChange(window);
     WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.mode * 5]);
-    window->cursorStyle = 4;
+    window->mode = 4;
     return WindowSPSelect(window, 0);
 }
 
 static int MenuSkillListChange01(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    SkillListRow *rows = MenuListGet(0);
-    SkillSPWindow *window = &MenuSkillList->window;
+    MenuListEntry *rows = MenuListGet(0);
+    WindowSPCursor *window = &MenuSkillList->window;
     int count;
     int i;
 
@@ -944,14 +933,14 @@ static int MenuSkillListChange01(void)
     MenuListMake(0, 0);
     count = MenuSortCheck(0);
     for (i = 0; i < count; i++) {
-        rows[i].value = SkillSetLvGet(sortRow[i]);
+        rows[i].amount = SkillSetLvGet(sortRow[i]);
         if (MenuSkillEquipCheck(MenuWork.characterNo, sortRow[i]) != 0)
-            rows[i].level = 1;
+            rows[i].status = 1;
         else
-            rows[i].level = 0;
+            rows[i].status = 0;
     }
     window->title = skillSetText;
-    window->rowCount = 3;
+    window->draw_flags = 3;
     window->columns = 1;
     window->rows = 8;
     window->width = 256;
@@ -975,8 +964,8 @@ void MenuSkillListMain(void)
         work->window.x = 528;
         work->window.y = 64;
         work->color = 0x00fffff8;
-        work->window.color = 0x00fffff8;
-        work->window.rowCount = 7;
+        work->window.style = 0x00fffff8;
+        work->window.draw_flags = 7;
         work->window.title = skillEmptyText;
         work->window.rows = 11;
         work->window.height = 270;
@@ -990,7 +979,7 @@ void MenuSkillListMain(void)
         }
         for (equippedCount = 0; equippedCount < 8; equippedCount++) {
             eNumberSet(&work->levelNumber[equippedCount], 0);
-            work->levelNumber[equippedCount].color = 0x00fffffa;
+            work->levelNumber[equippedCount].work = 0x00fffffa;
         }
         work->resetPending = 0;
         work->state = 2;
@@ -1061,27 +1050,27 @@ void MenuSkillListMain(void)
     WindowSPMain(&work->window);
     if (work->displayMode != 0) {
         equippedCount = 0;
-        if (work->window.itemCount > 0) {
+        if (work->window.item_count > 0) {
             for (i = 0; i < 8; i++) {
-                int row = work->window.firstRow + i;
-                if (row < work->window.itemCount) {
+                int row = work->window.current_row + i;
+                if (row < work->window.item_count) {
                     if (work->displayMode == 1) {
                         work->levelNumber[i].x = work->window.x + work->window.width - 85;
                         work->levelNumber[i].y = work->window.y + i * 24 + 8;
                         work->levelNumber[i].digits = 1;
-                        work->levelNumber[i].style = 0;
-                        work->levelNumber[i].value = work->window.items[row].level;
-                        if ((signed char)work->window.items[row].locked == 0) {
-                            work->levelNumber[i].blue = -128;
-                            work->levelNumber[i].green = -128;
-                            work->levelNumber[i].red = -128;
+                        work->levelNumber[i].format = 0;
+                        work->levelNumber[i].value = work->window.items[row].status;
+                        if (work->window.items[row].flag == 0) {
+                            work->levelNumber[i].color_b = -128;
+                            work->levelNumber[i].color_g = -128;
+                            work->levelNumber[i].color_r = -128;
                         } else {
-                            work->levelNumber[i].blue = 64;
-                            work->levelNumber[i].green = 64;
-                            work->levelNumber[i].red = 64;
+                            work->levelNumber[i].color_b = 64;
+                            work->levelNumber[i].color_g = 64;
+                            work->levelNumber[i].color_r = 64;
                         }
                         eNumberMain(&work->levelNumber[i]);
-                    } else if (work->window.items[row].level != 0) {
+                    } else if (work->window.items[row].status != 0) {
                         work->equipped[equippedCount].x = work->window.x + work->window.width - 39;
                         work->equipped[equippedCount].y = work->window.y + i * 24 + 3;
                         eSpriteMain(&work->equipped[equippedCount]);
@@ -1119,40 +1108,40 @@ const char skillDataPath[30] = "data\\endou\\skill\\skilldat.bin";
 void MenuSkill(void)
 {
     if (MenuWork.state == 0) {
-        unsigned char *heap;
-        MenuSkillAttackSlot *slot;
+        void *heap;
+        PartyAttackPosition *slot;
         int i;
         int id;
 
         heap = MainMenuWorkEnd;
-        SkillDataBuf = (unsigned char *)(((int)heap + 0x7FF) & ~0x7FF);
+        SkillDataBuf = (MenuSkillData *)(((int)heap + 0x7FF) & ~0x7FF);
         xglCdReadFile(skillDataPath, SkillDataBuf, 0, 1);
-        heap = SkillDataBuf + SKILL_DATA_SIZE;
-        MenuSkillPas = (SkillPasWork *)heap;
+        heap = (unsigned char *)SkillDataBuf + SKILL_DATA_SIZE;
+        MenuSkillPas = heap;
         heap = (unsigned char *)MenuSkillPas + SKILL_PAS_SIZE;
         MenuSkillPas->state = 0;
-        MenuSkillInfo = (SkillScreenState *)heap;
+        MenuSkillInfo = heap;
         heap = (unsigned char *)MenuSkillInfo + SKILL_INFO_SIZE;
         MenuSkillInfo->state = 0;
-        MenuSkillStatus = (MenuSkillStatusWork *)heap;
+        MenuSkillStatus = heap;
         heap = (unsigned char *)MenuSkillStatus + SKILL_STATUS_SIZE;
-        MenuSkillStatus->window[0].header.state = 0;
-        MenuSkillMenu = (MenuSkillMenuWork *)heap;
+        MenuSkillStatus->state = 0;
+        MenuSkillMenu = heap;
         heap = (unsigned char *)MenuSkillMenu + SKILL_MENU_SIZE;
         MenuSkillMenu->state = 0;
-        MenuSkillEx = (SkillScreenState *)heap;
+        MenuSkillEx = heap;
         heap = (unsigned char *)MenuSkillEx + SKILL_EX_SIZE;
         MenuSkillEx->state = 0;
-        MenuSkillL1R1 = (MenuSkillL1R1Work *)heap;
+        MenuSkillL1R1 = heap;
         heap = (unsigned char *)MenuSkillL1R1 + SKILL_L1R1_SIZE;
         MenuSkillL1R1->state = 0;
-        MenuSkillSetList = (MenuSkillSetListWork *)heap;
+        MenuSkillSetList = heap;
         heap = (unsigned char *)MenuSkillSetList + SKILL_SET_LIST_SIZE;
         MenuSkillSetList->state = 0;
-        MenuSkillCategory = (MenuSkillCategoryWork *)heap;
+        MenuSkillCategory = heap;
         heap = (unsigned char *)MenuSkillCategory + SKILL_CATEGORY_SIZE;
         MenuSkillCategory->state = 0;
-        MenuSkillList = (MenuSkillListWork *)heap;
+        MenuSkillList = heap;
         MenuSkillList->state = 0;
         MenuWork.next_state = SKILL_CHARACTER;
         MenuWork.wait = 12;
@@ -1160,7 +1149,7 @@ void MenuSkill(void)
         MenuWork.partyCursor = 0;
         MenuWork.partyCount = 0;
         MenuKeepSelectReset();
-        slot = ((MenuSkillPartyData *)PartyDataGet())->attack_slots;
+        slot = PartyDataGet()->attack_slots;
         for (i = 0; i < 3; i++, slot++) {
             id = slot->party_id;
             if (id != 0) {
@@ -1339,8 +1328,8 @@ void MenuSkill(void)
                 int cost = SkillGetPtGet(accessory);
 
                 if (data->prerequisite != 0
-                    && (unsigned int)SkillCharSkillLvGet(MenuWork.characterNo)
-                           >= (unsigned int)SkillSetLvGet(accessory)
+                    && SkillCharSkillLvGet(MenuWork.characterNo)
+                           >= SkillSetLvGet(accessory)
                     && func_A19698(MenuWork.characterNo, data->prerequisite) == 0
                     && character->skill_points >= cost) {
                     xglSoundEffectNormalID(SE_DECIDE, 0);
@@ -1421,13 +1410,13 @@ void MenuSkill(void)
         if (PadData.repeat == PAD_SQUARE && MenuWork.list_select >= 0) {
             int start = MenuWork.list_select + 1;
             int count = MenuSortCheck(0);
-            SkillListRow *rows = MenuListGet(0);
+            MenuListEntry *rows = MenuListGet(0);
             int row = 0;
             int i;
 
             for (i = 0; i < count; i++) {
                 row = (start + i) % count;
-                if (rows[row].level != 0) {
+                if (rows[row].status != 0) {
                     break;
                 }
             }
@@ -1490,25 +1479,25 @@ void MenuSkill(void)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Defined after MenuSkill: the original .sdata holds it at 0x004DB658, after
  * MenuSkill's "\x0bskill" literal at 0x004DB650. */
-unsigned char *SkillDataBuf = 0;
+MenuSkillData *SkillDataBuf = 0;
 
 static const char * msg00_1_0036DD68[] = { skillExtractSetCancelText };
 
 static const char * msg01_2_0036DD70[] = { skillYesNoText, skillExtractQuestionText };
 
-static char * msg00_3_0036DD78[3] = { skillLevelText, skillPointsText, skillSetSearchText };
+static const char * msg00_3_0036DD78[3] = { skillLevelText, skillPointsText, skillSetSearchText };
 
 static const char * msg00_4_0036DD88[] = { skillNumberedListText };
 
 SkillPasWork * MenuSkillPas = 0;
 
-SkillScreenState * MenuSkillInfo = 0;
+MenuSkillInfoWork * MenuSkillInfo = 0;
 
 MenuSkillStatusWork * MenuSkillStatus = 0;
 
 MenuSkillMenuWork * MenuSkillMenu = 0;
 
-SkillScreenState * MenuSkillEx = 0;
+MenuSkillExWork * MenuSkillEx = 0;
 
 MenuSkillL1R1Work * MenuSkillL1R1 = 0;
 

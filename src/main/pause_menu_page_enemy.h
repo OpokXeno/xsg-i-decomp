@@ -2,8 +2,19 @@
 #define PAUSE_MENU_PAGE_ENEMY_H
 
 #include "main/enemy_1.h"
+#include "main/enemy_2.h"
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"
+#include "main/Undulate.h"
+#include "main/get.h"
+#include "main/get_ladder.h"
+#include "main/init_drill.h"
+#include "main/nml_model_set.h"
+#include "main/pause_menu_page_enemy.h"
+#include "main/vibration.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_light.h"
 
 #define DEBUG_WELCOME_60FRAME_TEXT ("Welcome to the 60-Frame world!")
 #define DEBUG_MODE_30FRAME_TEXT ("     30-Frame Debug Mode      ")
@@ -111,32 +122,11 @@
 #define ENEMY_ROW_INDEX_FORMAT ("%2d:")
 #define ENEMY_NONE_LABEL ("--")
 
-typedef struct EnemyParameters {
-    float route_step_length;
-    float chase_distance;
-    float move_speed;
-    float chase_speed;
-    float sight_angle;
-    float sight_distance;
-    short stiff_duration;
-    short pause_interval;
-    short threat_duration;
-    short threat_interval;
-    short turn_duration;
-    short gravity_mode;
-    unsigned char unmodeled_24[0x50 - 0x24];
-    short sound_effects[8];
-    unsigned char unmodeled_60[4];
-    int locator_flags;
-    float hearing_distance;
-    short unmodeled_6c;
-    short light_level;
-} EnemyParameters;
-
-typedef struct Actor {
+/* Partial view of Actor; the full type changes this object (the body_radius and motion_number fields and the Vector4 scale have no matching Actor fields yet). Its EnemyParams record at +0xc0 is the canonical one from include/main/enemy_1.h. */
+typedef struct ActorPauseView {
     unsigned int flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
+    void (*update)(struct ActorPauseView *actor);
+    void (*draw)(struct ActorPauseView *actor);
     unsigned char unmodeled_0c[4];
     Vector4 position;
     Vector4 previous_position;
@@ -151,8 +141,8 @@ typedef struct Actor {
     unsigned char unmodeled_83[3];
     short in_use_id;
     unsigned char unmodeled_88[0xc0 - 0x88];
-    EnemyParameters parameters;
-    unsigned char unmodeled_130[0x704 - 0x130];
+    EnemyParams parameters;
+    unsigned char unmodeled_2e8[0x704 - 0x2e8];
     unsigned short motion_number;
     unsigned char unmodeled_706[0x9e4 - 0x706];
     float target_angle;
@@ -160,82 +150,8 @@ typedef struct Actor {
     short look_at_state;
     short look_at_target;
     unsigned char unmodeled_9f0[0xa70 - 0x9f0];
-} Actor;
+} ActorPauseView;
 
-typedef struct EnemyScale {
-    float current;
-    float start;
-    float target;
-    short frame;
-    short duration;
-} EnemyScale;
-
-typedef struct EnemyWork {
-    float tentacle_range;
-    short tentacle_duration;
-    short locator_start_frame;
-    short locator_end_frame;
-    short territory_index;
-    float height;
-    Vector4 goback_position;
-    Vector4 step_limit;
-    Vector4 stop_cause;
-    short spline_parameter;
-    short fast_point_count;
-    short hit_count;
-    short hit_limit;
-    signed char action;
-    unsigned char unmodeled_49;
-    unsigned char pause_kind;
-    unsigned char hidden_unit;
-    short turn_count;
-    short explosion_count;
-    short electric_count;
-    short fall_count;
-    signed char page_status[2][8];
-    short page_count[2];
-    unsigned char unmodeled_68[4];
-    short chase_frame_limit;
-    short chase_frame;
-    unsigned int map_index;
-    short mark;
-    short mark_timer;
-    unsigned char unmodeled_78[8];
-    float spline_coordinates[256 * 4];
-    short spline_point_count;
-    unsigned char unmodeled_1082[0x2090 - 0x1082];
-    short motion_tables[2][256][4];
-    short route_index;
-    short action_index;
-    unsigned char unmodeled_3094[0x30a0 - 0x3094];
-    float route_coordinates[64 * 4];
-    short route_values[64][4];
-    short route_metadata[2 * 64];
-    short route_point_count;
-    signed char freeze_state;
-    signed char turn_lock;
-    short target_number;
-    unsigned char unmodeled_37a6[2];
-    unsigned int previous_motion;
-    unsigned char unmodeled_37ac[0x37b8 - 0x37ac];
-    unsigned int entry_id;
-    unsigned char unmodeled_37bc[4];
-    Vector4 target_position;
-    EnemyScale scale;
-    int state_flags;
-    unsigned char unmodeled_37e4[0x37f0 - 0x37e4];
-    /* Enemy_Chase copies target_position or a collision-result position here
-     * and passes the complete position to TM_Enemy_Move_Step. */
-    EnemyVector4 final_target;
-    unsigned char unmodeled_3800[0x3858 - 0x3800];
-    float freeze_saved_speed;
-    unsigned char unmodeled_385c[0x3890 - 0x385c];
-    float sight_position[3];
-    unsigned char unmodeled_389c[0x38a8 - 0x389c];
-    short applied_light_level;
-    short light;
-    unsigned char unmodeled_38ac[4];
-} EnemyWork;
 
 typedef struct GameLoopStateRecord {
     unsigned char unmodeled_00000[0x29fa0];
@@ -245,29 +161,9 @@ typedef struct GameLoopStateRecord {
     unsigned char unmodeled_2a000[0x30];
 } GameLoopStateRecord;
 
-typedef struct LayoutHeader {
-    float components[4];
-} LayoutHeader;
-
-typedef struct UnduParam {
-    int queryFlags;
-    unsigned char unmodeled_04[4];
-    short attrMask;
-    unsigned char unmodeled_0a[0x18 - 0x0a];
-    struct LayoutHeader *header;
-    unsigned char unmodeled_1c[4];
-    long long attribute;
-} UnduParam;
-
-extern short Times;
-extern Actor actor[64];
+extern ActorPauseView actor[64];
 extern EnemyWork enepc[16];
-extern short DebugActor;
 extern short Page_0;
-extern short SelNum;
-extern signed char FLAG_FRAME_60;
-extern PadPrefix PadData;
-extern UnduParam UnduTemp;
 extern unsigned long long EneTerritoryID[];
 extern const char PauseMenuPageEnemyNotInitializedText[];
 extern const char PauseMenuPageEnemyAlertPoseText[];
@@ -311,16 +207,8 @@ extern const char selectCursorText[];
 extern const char downText[];
 extern GameLoopStateRecord GameLoopState;
 
-void xglLightCalcMatrix(StudioLight *light);
-void nmlModelSetLight(Matrix4 colorMatrix, Matrix4 normalMatrix);
-void nmlModelSetPlace(Matrix4 matrix);
 void nmlModelEntry(int entry);
-int Get_Attr(const Vector4 *position, int map_index, int mask);
-LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 void UnduParamInit(UnduParam *param);
 float UnduCheck(const Vector4 *position, void *exclude, UnduParam *param);
 char Get_LocaterType(short index);
-void Vibration_Set_Strong(int start, int end, int duration);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 #endif

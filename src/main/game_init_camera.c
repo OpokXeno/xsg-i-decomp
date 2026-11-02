@@ -2,6 +2,9 @@
 #include "shared.h"
 #include "main/xgl_studio.h"
 #include "game_init_camera.h"
+#include "main/game_init_camera.h"
+#include "main/xgl_font.h"
+#include "main/xgl_light.h"
 
 #define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
 #define va_end(ap) ((void)0)
@@ -28,11 +31,9 @@ typedef char *va_list;
 
 extern PADControllerState PadData[];
 
-extern void xglLightSetDefault(StudioLight *light);
 extern unsigned int strlen(const char *string);
 extern char *strchr(const char *string, int character);
 extern char *strncpy(char *destination, const char *source, unsigned int count);
-extern int xglFontGetFlags(void);
 extern int vsprintf(char *buffer, const char *format, va_list args);
 extern char *strrchr(const char *s, int c);
 

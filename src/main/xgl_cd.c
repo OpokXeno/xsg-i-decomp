@@ -3,6 +3,7 @@
 #include "main/xgl_cd.h"
 #include "main/xgl_thread.h"
 #include "main/xgl_hdd.h"
+#include "main/xgl_timer0.h"
 
 /* StrList holds a single global stream slot; queue_next's stream scan below
  * walks it as a one-entry list, as xglCdStreamClose already does. */
@@ -25,76 +26,6 @@
 #define CD_PACKED_MAGIC 0x585241
 
 typedef void CdCompletionCallback(int event, int value);
-
-typedef struct StreamXssBuffer StreamXssBuffer;
-
-typedef struct StreamRing StreamRing;
-
-typedef struct CdStreamParam CdStreamParam;
-
-struct StreamRing {
-    unsigned char *buffer;
-    int capacity;
-    int write_position;
-    int read_position;
-};
-
-struct StreamXssBuffer {
-    unsigned char *source;
-    unsigned char *position;
-    unsigned char value;
-    unsigned char mode;
-    short sectors;
-};
-
-struct CdStreamParam {
-    int iop_buffer;
-    unsigned short sector_count;
-    unsigned short block_count;
-    unsigned char state;
-    unsigned char mode;
-    /* xss is naturally aligned at 0x0c; no field is asserted at 0x0a. */
-    StreamXssBuffer *xss;
-    int descriptor;
-    int file_byte_count;
-    int remaining; /* Bytes not yet transferred into the stream rings. */
-    int ring_size;
-    StreamRing ring;
-    StreamRing alternate_ring;
-};
-
-typedef struct CdReadMode {
-    unsigned char try_count;
-    unsigned char spindle_control;
-    unsigned char data_pattern;
-} CdReadMode;
-
-/* Only the fields xglCdArcInitSub1 writes are evidenced here. */
-typedef struct CdArchiveEntry {
-    unsigned char state;
-    unsigned char unmodeled_01;
-    unsigned char packed;
-    unsigned char unmodeled_03;
-    unsigned char *destination;
-    int lbn;
-    int file_lbn_offset;
-    int stored_bytes;
-    int size_bytes;
-} CdArchiveEntry;
-
-/* xglCdGetFilePos fills a 0x30-byte file-position record; only its leading
- * lbn word is evidenced by its callers in this TU. */
-typedef struct CdFilePosition {
-    int lbn;
-    int stored_bytes;
-    unsigned char unmodeled_08[0x1c];
-    unsigned char source;
-    unsigned char unmodeled_25;
-    unsigned char packed;
-    unsigned char unmodeled_27;
-    int descriptor;
-    int size_bytes;
-} CdFilePosition;
 
 /*
  * The queue entries occupy 0x80 bytes; only their used prefix is named.
@@ -198,8 +129,6 @@ extern const char xenosagaPfs0Path[];
 extern const char xenosagaArc00Name[];
 extern CdSelectPad PadData;
 
-extern void xglHddErrorScreen(void);
-
 /* SDK entry points used by this translation unit. */
 extern int sceCdGetDiskType(void);
 extern int sceCdStatus(void);
@@ -224,23 +153,14 @@ extern void FlushCache(int mode);
 static CdFilePosition *xglCdGetFilePos(CdFilePosition *file_position, const char *path,
                            void (*callback)(int event, int value));
 
-int xglCdGetFileSize(const char *path);
-void xglCdPowerOffCB(void);
 extern int sceCdReadClock(unsigned char *clock);
-int xglCdSync(void);
 int sceCdStSeek(int descriptor);
 int sceLseek(int descriptor, int offset, int whence);
 int sceCdStStop(void);
 int sceSifFreeIopHeap(void *buffer);
-void xglCdStreamReadRingCore(CdStreamParam *stream);
-int xglCdStreamReadRing(CdStreamParam *stream, int bytes);
-int xglCdStreamRewind(CdStreamParam *stream);
-int xglCdStreamClose(CdStreamParam *stream);
-void xglCdStreamParamInit(CdStreamParam *param);
 extern int sceCdSync(int mode);
 extern int sceCdDiskReady(int mode);
 extern int sceCdRead(int lbn, int sectors, void *destination, CdReadMode *read_mode);
-void xglCdArcCheck(void);
 static void xglCdArcInit(void);
 
 /*
@@ -254,15 +174,11 @@ static int BCD2INT(unsigned char x);
  * an implicit declaration. */
 static void extract(u32 *destination, u32 *source, int byte_count);
 
-extern int xglArxExtract(u32 *dest, u32 *src);
 extern int sceCdStRead(int sectors, void *buffer, int mode, int *result);
 extern int sceRead(int descriptor, void *buffer, int bytes);
 static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sectors);
 static void StreamReadRingCoreNormal(CdStreamParam *stream);
 static void StreamReadRingCoreXss(CdStreamParam *stream);
-
-extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
-                             CdCompletionCallback *callback, int offset, int length);
 
 extern int sceDevctl(const char *device, int command, const void *input,
                      unsigned int input_size, void *output, unsigned int output_size);
@@ -273,8 +189,6 @@ extern u32 sceCdGetReadPos(void);
 
 extern int sceCdGetError(void);
 extern int sceCdLayerSearchFile(CdFilePosition *file, const char *name, int layer);
-extern int xglHddCheck(void);
-
 const char xenosagaArc10Name[16] = "xenosaga.10";
 
 const char xenosagaArc20Name[16] = "xenosaga.20";
@@ -819,7 +733,7 @@ resolved:
             buffer[0] = 92;
             destination = buffer + 1;
             for (cursor = name; *cursor != 0; cursor++, destination++) {
-                if ((char)*cursor < 97)
+                if (*cursor < 97)
                     *destination = *cursor;
                 else
                     *destination = *cursor - 32;
@@ -897,13 +811,13 @@ resolved:
             if (position->packed == 0)
                 position->size_bytes = size;
         }
-        offset = (long)(unsigned int)position->lbn << 11;
+        offset = (long)position->lbn << 11;
         sceLseek(descriptor, 0, 0);
         while (offset > 0x40000000) {
             sceLseek(descriptor, 0x40000000, 1);
             offset -= 0x40000000;
         }
-        sceLseek(descriptor, (int)offset, 1);
+        sceLseek(descriptor, offset, 1);
         position->descriptor = descriptor;
         break;
     }
@@ -1126,8 +1040,8 @@ int xglCdStreamOpen(CdStreamParam *stream, const char *path)
         sceCdSync(0);
         sceCdDiskReady(0);
         stream->descriptor = position.lbn;
-        stream->iop_buffer = sceSifAllocIopHeap(((short)stream->sector_count << 11) + 128);
-        sceCdStInit((short)stream->sector_count, (short)stream->block_count,
+        stream->iop_buffer = sceSifAllocIopHeap((stream->sector_count << 11) + 128);
+        sceCdStInit(stream->sector_count, stream->block_count,
                     (stream->iop_buffer + 127) & -128);
         read_mode.try_count = 0;
         read_mode.spindle_control = 0;
@@ -1700,7 +1614,7 @@ void xglCdSifLoadModule(const char *path, const char *args)
         dst++;
     }
     for (src = path; *src != 0; src++, dst++) {
-        if ((char)*src < 'a')
+        if (*src < 'a')
             *dst = *src;
         else
             *dst = *src - ('a' - 'A');

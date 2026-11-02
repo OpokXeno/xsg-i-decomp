@@ -1,5 +1,11 @@
 #include "common.h"
 #include "shared.h"
+#include "main/control_entry.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_mc.h"
+#include "main/xgl_menu.h"
+#include "main/xgl_render.h"
+#include "main/xgl_thread.h"
 
 /*
  * REGIST/REGIST2 (main:0x0021826c/0x0021827c): the sound-effect bank name
@@ -14,16 +20,10 @@ extern char padmanModuleName[];
 extern char libsdModuleName[];
 extern char ssdModuleName[];
 extern char rssdModuleName[];
-extern u8 *WorkEnd;
-extern int main_param_argc;
-extern int main_param_argv;
 extern const char soundRegist2Path[16];
 extern const char iopRebootImagePath[32];
 
 extern void BootDisplay(void);
-extern void xglThreadInitial(void);
-extern void xglThreadRotate(void);
-
 /*
  * InitializeSystem is file-local (LOCAL in the original symbol table) and is
  * still asm, so it is declared static before its use in main below.
@@ -63,20 +63,14 @@ extern void *sceCdPOffCallback(void (*func)(void), void *old_func);
  * types evidenced by these cross-TU call sites. */
 extern int xglCdSifLoadModule(const char *path, int flags);
 
-extern void xglCdPowerOffCB(void);
 extern void xglSoundInitial(void);
-extern void xglCdInitial(void);
 extern void xglPadInitial(void);
-extern void xglMcInitial(void);
 extern void *xglTaskInitial(void *pool, int capacity, int flags);
 extern void xglDmaInitial(void);
 extern void xglGeometryInit(void);
 extern void xglPacketInit(void);
-extern void xglRenderInit(void);
 extern void xglFontInitial(void);
 extern int xglMovieInit(void);
-extern void xglMenuInitial(void);
-
 char soundEffectBankName[8] = "REGIST";
 
 char sio2manModuleName[8] = "sio2man";
@@ -97,7 +91,7 @@ u8 *WorkEnd = 0;
 
 int main_param_argc = 0;
 
-int main_param_argv = 0;
+char **main_param_argv = 0;
 
 /*
  * Loads the boot sound banks, waits for the SPU DMA transfer to finish,
@@ -179,7 +173,7 @@ static void InitializeSystem(void)
  * at entry to any function literally named main; that call precedes the
  * statements below and needs no explicit source-level call.
  */
-int main(int argc, int argv)
+int main(int argc, char **argv)
 {
     main_param_argc = argc;
     main_param_argv = argv;

@@ -6,6 +6,10 @@
 #define SRC_MAIN_XGL_HDD_H
 
 #include "shared.h"
+#include "main/xgl_hdd.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_mc.h"
+#include "main/xgl_sound.h"
 
 struct HddRenderState {
     unsigned char unmodeled_00[0x58];
@@ -49,24 +53,6 @@ typedef struct HddErrorPacket {
     HddGsXyz2 corners[2];
 } HddErrorPacket;
 
-struct HddLoadRequest {
-    int card;
-    void *data;
-    int size;
-};
-
-struct HddTransferInfo {
-    int unmodeled_00;
-    int begin;
-    int end;
-};
-
-struct HddCheckState {
-    int status;
-    struct HddTransferInfo *transfer;
-    int dataSize;
-};
-
 struct HddIoStat {
     unsigned int mode;
     unsigned int attributes;
@@ -78,26 +64,18 @@ struct HddIoStat {
     unsigned int privateData[6];
 };
 
-struct HddSaveRequest {
-    int card;
-    const void *data;
-    int size;
-};
-
-struct HddExistRequest {
-    int card;
-    unsigned char *found;
-};
-
 struct HddFileStat {
-    unsigned char unmodeled_00[29];
+    unsigned int mode;
+    unsigned int flags;
+    unsigned char unmodeled_08[21];
     unsigned char second;
     unsigned char minute;
     unsigned char hour;
     unsigned char day;
     unsigned char month;
     unsigned short year;
-    unsigned char unmodeled_24[28];
+    unsigned char unmodeled_24[4];
+    unsigned int privateData[6];
 };
 
 struct HddDirectoryEntry {
@@ -122,40 +100,18 @@ typedef struct HddInstallCBParam {
 } HddInstallCBParam;
 
 extern struct HddRenderState sRender;
-extern PadPrefix PadData;
 extern HddErrorPacket TestEnv_0_004A8A80[];
-extern const unsigned char hddLoadErrorText[];
-extern char hdd_mc_path[];
 extern u8 system_cnf[];
-extern u8 mount_device[];
-
-/*
- * The xglHdd layer keeps its own copy of the "hdd0:" device name at
- * main:0x004DC368; the HddTest debug tool has an identical string of its own
- * at 0x004DA2D0, which accepted source calls hdd_device.  Neither address
- * carries an original symbol, so this one is named for the layer that owns
- * it.
- */
-extern char xgl_hdd_device[];
-
-extern const char cd_filename[];
 extern HddInstallCBParam *HddInstallCBparam;
 
 extern int xglCdGetFileData();
-extern void xglDmaDirectNormal(int channel, const void *packet, int qwords);
-extern void xglSoundEffectNormalDirect(int sound_id);
 int sceRead(int descriptor, void *buffer, int bytes);
 int xglHddCheck2(void);
 static int xglHddCheckCore(void);
-extern int xglHddMcUmount(void);
 extern int sceUmount(const char *path);
 int xglHddMcLoad(void *save);
-extern int xglHddMcLoadMount(void);
-extern int xglHddMcLoadCore(void *save);
 int xglHddUninstall(void);
 extern int sceRemove(const char *path);
-extern int xglHddCheck(void);
-extern void xglHddErrorScreen(void);
 extern void xglCdArcCheck(void);
 
 extern int sceMount(char *mount_point, char *device, int flags,
@@ -185,8 +141,6 @@ static int xglHddMcCheckYourSaves(int);
 static int xglHddMcCheckCore(struct HddCheckState *state);
 extern int xglHddMcCheck(struct HddCheckState *state);
 static int create_file(int card, int slot, const void *data, int size);
-extern unsigned char *xglMcSetFullPath(int card, int slot);
-extern int xglHddMcGetFree(void);
 extern int xglCdReadCancel(void);
 
 #endif /* SRC_MAIN_XGL_HDD_H */

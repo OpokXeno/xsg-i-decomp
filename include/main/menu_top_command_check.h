@@ -3,6 +3,8 @@
 
 #include "main/e_battle_win_open.h"
 #include "main/party.h"
+#include "main/e_number_main.h"
+#include "main/open_close_main.h"
 
 typedef struct MenuStatusPanelWindow MenuStatusPanelWindow;
 
@@ -14,30 +16,6 @@ typedef union MenuStatusValuePair {
     short halfwords[2];
     int scalar;
 } MenuStatusValuePair;
-
-typedef struct MenuStatusNumber {
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_08[0x0E - 0x08];
-    unsigned char format;       /* +0x0E */
-    unsigned char digits;       /* +0x0F */
-    unsigned char flag[4];      /* +0x10 */
-    MenuStatusValuePair value;   /* +0x14 */
-    unsigned char unmodeled_18[0x90 - 0x18];
-} MenuStatusNumber;
-
-typedef struct MenuStatusMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;         /* +0x01 */
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x18 - 0x0C];
-    char *text;                 /* +0x18 */
-    unsigned char unmodeled_1c[0x44 - 0x1C];
-} MenuStatusMessage;
 
 typedef struct MenuStatusCorner {
     short x;
@@ -116,31 +94,6 @@ typedef struct MenuStatusLine {
     unsigned char unmodeled_20[4];
 } MenuStatusLine;
 
-typedef struct MenuSelectCursor {
-    unsigned char mode;
-    unsigned char unmodeled_01[3];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x24 - 0x0C];
-} MenuSelectCursor;
-
-typedef struct MenuSelectMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[4];
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char unmodeled_13[5];
-    const char *text;
-    unsigned char unmodeled_1c[0x44 - 0x1C];
-} MenuSelectMessage;
-
 typedef struct MenuTopMenuPanel {
     unsigned char unmodeled_00[2];
     unsigned short rows;
@@ -149,24 +102,14 @@ typedef struct MenuTopMenuPanel {
     const char *heading;
     struct MenuTopCommandEntry *commands;
     unsigned char unmodeled_14[0x1A8 - 0x14];
-    MenuSelectCursor marker;
-    MenuSelectMessage message[12];
+    ECursolMainData marker;
+    EMessageParam message[12];
     MenuStatusLine headingLine;
     MenuStatusQuad cursorBand;
     MenuStatusQuad cursorShade;
     MenuStatusQuad cursorFill;
     MenuStatusLine divider;
 } MenuTopMenuPanel;
-
-typedef struct MenuStatusRibbon {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[4];
-    MenuStatusVertex vertex[6];
-} MenuStatusRibbon;
 
 typedef struct MenuStatusPanel {
     signed char chrNo;
@@ -181,8 +124,8 @@ typedef struct MenuStatusPanel {
     unsigned short maxEp;           /* +0x10: with the pending point spend */
     unsigned char epMark;           /* +0x12 */
     unsigned char unmodeled_13;
-    MenuStatusNumber number[6];     /* +0x14 */
-    MenuStatusMessage name;         /* +0x374 */
+    ENumberMainData number[6];      /* +0x14 */
+    EMessageParam name;             /* +0x374 */
     MenuStatusCorner shadeCorner[4]; /* +0x3B8 */
     unsigned char shadeRgba[4][4];  /* +0x3D8 */
     int shadeTexture;               /* +0x3E8 */
@@ -203,13 +146,19 @@ typedef struct MenuStatusPanel {
     MenuStatusLine headerLine;      /* +0x764 */
     MenuStatusLine statsLine;       /* +0x788 */
     MenuStatusLine divider;         /* +0x7AC */
-    MenuStatusRibbon ribbon;        /* +0x7D0 */
-    unsigned char unmodeled_828[0x840 - 0x828];
+    ERibbonMainData ribbon;         /* +0x7D0 */
 } MenuStatusPanel;
 
-int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel);
-int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel);
-void MenuPasWindow(void);
-void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work);
+/* WindowDX close callbacks: WindowDXMain calls them as callback(window, arg)
+ * with the window's close_callback_arg, a MenuTopMenuPanel, MenuTopInfoPanel
+ * or MenuStatusPanel according to the callback. MenuSelectWindow and
+ * MenuInfoWindow are int functions that fall off their end (the original
+ * does not tail-call endPrintExtFunc); the window stores them through a cast
+ * to the void callback type. */
+int MenuSelectWindow(WindowDX *window, void *arg);
+int MenuInfoWindow(WindowDX *window, void *arg);
+/* MenuPasWindow (main/menu_top_command_check.c): an empty callback stub. */
+void MenuPasWindow(WindowDX *window, void *arg);
+void MenuStatusDisp(WindowDX *window, void *arg);
 
 #endif /* INCLUDE_MAIN_MENU_TOP_COMMAND_CHECK_H */

@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/e_message.h"
 
 struct UmnPluginState {
     unsigned char unmodeled_00;
@@ -81,10 +82,7 @@ struct UmnPluginPasWindow {
 
 struct UmnPluginPasLabel {
     unsigned char unmodeled_00[12];
-    unsigned char message[4];
-    short slide_x;
-    short slide_y;
-    int accent_color;
+    EMessageParam message;
 };
 
 struct UmnPluginPasRect {
@@ -103,12 +101,10 @@ struct UmnPluginPasWork {
     struct UmnPluginPasWindow window;
     unsigned char unmodeled_1c[0x190 - 0x1c];
     struct UmnPluginPasLabel label;
-    unsigned char unmodeled_1a8[0x3bc - 0x1a8];
+    unsigned char unmodeled_1e0[0x3bc - 0x1e0];
     struct UmnPluginPasRect caption_rect;
 };
 
-void eMessageSet(void *message, void *text);
-void eMessageMain(void *message);
 void endPrintExtFunc(int color, int mode, void *rectangle);
 
 void tskUmnPluginPas(void *task, void *work);
@@ -151,16 +147,16 @@ void tskUmnPluginPas(void *task_opaque, void *work_opaque)
             work->window.state = initial_state;
             WindowDXMain(&work->window);
             work->window.state = 3;
-            eMessageSet(work->label.message, msg00_0_00A10C40);
+            eMessageSet(&work->label.message, msg00_0_00A10C40);
             {
             struct UmnPluginPasLabel *label = &work->label;
-            label->message[1] = label_font_size;
+            label->message.mode = label_font_size;
             panel_color = work->color;
-            label->slide_x = label_x;
-            label->slide_y = label_y;
+            label->message.x = label_x;
+            label->message.y = label_y;
             work->initialized = initial_state;
             }
-            work->label.accent_color = panel_color + 2;
+            work->label.message.draw_parameter = panel_color + 2;
             break;
         }
         case 2:
@@ -192,9 +188,9 @@ void tskUmnPluginPas(void *task_opaque, void *work_opaque)
                     work->caption_rect.height = work->window.height - 6;
                     work->caption_rect.color = work->color;
                     endPrintExtFunc(work->color, caption_mode, &work->caption_rect);
-                    MoveSlide(&work->label.slide_x, label_target, 3.0f);
-                    if (work->label.slide_x < 256) {
-                        eMessageMain(work->label.message);
+                    MoveSlide(&work->label.message.x, label_target, 3.0f);
+                    if (work->label.message.x < 256) {
+                        eMessageMain(&work->label.message);
                     }
                     endPrintExtFunc(work->color, 102, 0);
                 }

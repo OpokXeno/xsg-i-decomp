@@ -82,7 +82,7 @@ typedef struct MEfWeaponCoord {
     Vector4 local_position;
 } MEfWeaponCoord;
 
-extern Matrix4 *MEfGetActorMatrix(Matrix4 *destination, ActRecord *actor, u32 coordinate);
+extern Matrix4 *MEfGetActorMatrix(Matrix4 *destination, Actor *actor, u32 coordinate);
 
 /*
  * MEfCalcAngle: sibling function of this same TU, still INCLUDE_ASM

@@ -2,6 +2,20 @@
 #include "shared.h"
 #include "yajima_test.h"
 #include "main/xgl_menu.h"
+#include "main/control_entry.h"
+#include "main/end_print.h"
+#include "main/game_movie.h"
+#include "main/game_snap_shot.h"
+#include "main/nml_model_set.h"
+#include "main/tya.h"
+#include "main/xgl_2.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_flags.h"
+#include "main/xgl_font.h"
+#include "main/xgl_hdd.h"
+#include "main/xgl_mc.h"
+#include "main/xgl_render.h"
+#include "main/xgl_thread.h"
 
 #define hdd_mkdir_status_format fileLineFormat
 #define PAD_U64_AT(byte_offset) PadData.doublewords[(byte_offset) / sizeof(u64)]
@@ -217,7 +231,9 @@ typedef struct TestLineVertex {
     unsigned char unmodeled_08[8];
 } TestLineVertex;
 
-typedef struct UmlDispParam {
+/* Partial view of TyaUmlDispParam (src/main/tya_uml.c): the record is 0x3C
+ * bytes here and UmlDatabaseParam embeds it, so it cannot take the owner size. */
+typedef struct TyaUmlDispParamTestView {
     int file_number;
     unsigned char unmodeled_04[4];
     short x;
@@ -234,10 +250,10 @@ typedef struct UmlDispParam {
     unsigned char unmodeled_2a[2];
     short scroll_target;
     unsigned char unmodeled_2e[0x12];
-} UmlDispParam;
+} TyaUmlDispParamTestView;
 
 typedef struct UmlDatabaseParam {
-    UmlDispParam disp;
+    TyaUmlDispParamTestView disp;
     unsigned char *work[4];
     short cursor;
     unsigned char unmodeled_52[6];
@@ -264,7 +280,7 @@ typedef struct UmlHeaderRecord {
     int size;
     int id;
     unsigned char unmodeled_08[0x60];
-    char text[1];
+    unsigned char text[1];
 } UmlHeaderRecord;
 
 typedef struct UmlDispRect {
@@ -283,19 +299,6 @@ typedef struct McRequestParam {
     void *data;
     int size;
 } McRequestParam;
-
-typedef struct HddMcRequestParam {
-    int file;
-    void *data;
-    int size;
-} HddMcRequestParam;
-
-/* carddata.new's two payload offsets are read at +4 and +8. */
-typedef struct CardDataHeader {
-    unsigned char unmodeled_00[4];
-    int begin;
-    int end;
-} CardDataHeader;
 
 typedef struct MemcardTestWork {
     int result;
@@ -356,7 +359,7 @@ static const char hdd_test_title[];
 static char hdd_use_title[];
 static const char hdd_no_use_title[];
 static char menu_cursor[];
-static char *name_47[];
+static const char *name_47[];
 
 /*
  * "%s:%d\n" (0x004DA2F8), the per-directory mkdir report of HddTest1024Save
@@ -390,8 +393,6 @@ static const char dummySaveFilePath[];
 static const char openHandleFormat[];
 static char counterWroteFormat[];
 static const char xtxDecodeText[];
-extern int main_param_argc;
-extern int main_param_argv;
 static const char specifyFileNameText[];
 static const char xtxFinishedText[];
 static char selectText[];
@@ -415,7 +416,6 @@ extern const char smallCharacterTestText[];
 extern const char test000Text[];
 extern const char test001Text[];
 extern const char hesitationText[];
-extern unsigned char SaveData[];
 extern const char umlDispFormat[];
 extern const char umnHeaderPath[];
 extern const char umnRecordFormat[];
@@ -531,7 +531,7 @@ extern const char resource1001AltName[8];
 extern const char resource10OpName[8];
 
 extern int printf(const char *format, ...);
-extern int sceFormat(char *device, char *block_device, void *argument, int argument_size);
+extern int sceFormat(char *device, const char *block_device, void *argument, int argument_size);
 
 extern int sceDevctl(const char *device, int command, const void *input,
                      unsigned int input_size, void *output, unsigned int output_size);
@@ -542,25 +542,12 @@ extern int sceClose(int descriptor);
 extern int sceIoctl2(int handle, int command, const void *input, unsigned int input_size,
                      void *output, unsigned int output_size);
 
-extern int sceMount(char *mount_point, char *device, int flags,
+extern int sceMount(char *mount_point, const char *device, int flags,
                     void *payload, unsigned int payload_length);
 
 extern int sceUmount(const char *path);
 extern int sceMkdir(const char *path, int mode);
 extern int sceChstat(const char *path, void *status, unsigned int properties);
-extern int xglHddMcGetFree(void);
-extern int xglHddActivate(int state);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern void xglSleep(void);
-
-/* tya* are defined in main/tu133 (tyaCaptureStart, tyaCaptureEnd),
- * main/tu134 (tyaMenuBgEntry), main/tu135 (tyaElevatorTask), main/tu136
- * (tyaDisplaySetting) and main/tu137 (tyaDrawGauge), none recovered yet;
- * every call in this TU passes literal 0 arguments, so only the argument
- * count is evidenced. */
-extern void tyaCaptureStart(int, int);
-
-extern void tyaCaptureEnd(void);
 extern void tyaMenuBgEntry(int, int);
 extern void tyaElevatorTask(int);
 extern void tyaDisplaySetting(int);
@@ -599,18 +586,10 @@ extern int sceGsSetDefStoreImage(void *image, short address, short width, short 
 extern int sceGsExecStoreImage(void *image, void *destination);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
-/* Only the packet handle at +0x00 is evidenced. */
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
-
 extern int sceWrite(int descriptor, void *buffer, unsigned int size);
-extern void xglRenderClearFrame(void);
-extern void xglRenderClearColor(unsigned int color);
 extern void xglRenderClearDepth(void);
-extern void xglMenuInitial(void);
 extern void xglMenuOpen(int mode, YajimaMenuState *menu);
 extern void xglMenuDraw(void);
-extern void xglClockRead(XglClock *clock);
-extern float xglFRand(void);
 static void FontTest(void);
 static void UmlDispTest(void);
 static void MemcardTest(void);
@@ -619,47 +598,25 @@ static void XenoMovieCheck(void);
 static void HddTest(void);
 static void XtxDecode(void);
 static void FontTestSub(void);
-extern int xglCdGetFileSize(const char *name);
 extern int xglFontLoad(int font, int mode);
-extern void xglFontPrint(int x, int y, int color, const char *text);
-extern void xglFontPrintDirect(const char *text);
-extern int xglFontGetStringWidth(const char *text);
-extern int xglFontGetProportionalSize(int character);
-extern int GameSnapShotNumber(int number);
-extern void GameSnapShotCheck(void);
 extern void xglFontDebugHex(int x, int y, int value, int digits);
 extern void FlushCache(int mode);
 static void FontTestP0(void);
 static void FontTestP1(void);
 static void FontTestP2(void);
-extern int xglFontGetSPcodeSize(int code, const char *text);
-extern void tyaUmlDispMain(UmlDispParam *param);
+extern void tyaUmlDispMain(TyaUmlDispParamTestView *param);
 extern void xglCdLoadOverlay(int overlay);
 extern void tyaUmlDispInit2(unsigned char *area);
 extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
-extern void xglFlagsInitial(void);
-extern int xglFlagsSet(int flag, int a, int b);
-extern unsigned short xglSRand(void);
 extern void xglSoundLoadRequestSmd(const char *name, void *buffer);
-extern void endPrintExtFunc(int x, int y, void *data);
-extern int tyaUmlDispParamReset(UmlDispParam *param, int mode);
+extern int tyaUmlDispParamReset(TyaUmlDispParamTestView *param, int mode);
 extern int tyaUmlDatabaseMain(UmlDatabaseParam *param);
 extern void GameResourceInit(int, int);
-extern int GameMpeg2Play(char *path, int mode);
-extern int xglMcMain(void);
 extern int xglMcRequest(int port, int command, McRequestParam *param, int *result);
 extern int xglMcEasySave(const char *path, const void *buffer, int size);
 
-extern void xglMcSetMapName(const unsigned char *primary_euc_name,
-                            const unsigned char *secondary_euc_name);
-
 extern int sceMcSync(int mode, int *command, int *result);
-extern int xglHddCheck(void);
-extern int xglHddMcExist(HddMcRequestParam *request);
-extern int xglHddMcLoad(HddMcRequestParam *request);
-extern int xglHddMcCreate(HddMcRequestParam *request);
-extern int xglHddMcSave(HddMcRequestParam *request);
-
+extern int xglHddMcLoad(struct HddLoadRequest *request);
 const char nisuiFontPath[24] = "data\\yajima\\nisui.euc";
 
 const char scenarioTextPath[32] = "data\\yajima\\scenario.txt";
@@ -1019,7 +976,7 @@ static HddTestMenuEntry hdd_test_menu[8] = {
     { 0, 0 },
 };
 
-static char *name_47[3] = { port1Label, port2Label, hddText };
+static const char *name_47[3] = { port1Label, port2Label, hddText };
 
 static void (*func_51[7])(void) = {
     FontTest, UmlDispTest, HddTest, MemcardTest,
@@ -1036,7 +993,7 @@ static XglMenuRow i1_52[7] = {
     { xtxDecodeLabel, XGL_MENU_ACTION(7) }
 };
 
-static XglMenuNode l1_53 = { 7, { 255, 1, 8 }, 0, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, i1_52 };
+static XglMenuNode l1_53 = { 7, { 255, 1, 8 }, 0, { 0, 0, 0 }, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }, i1_52 };
 
 static YajimaMenuState m_54 = {
     { 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF },
@@ -1467,7 +1424,7 @@ static void FontTestLine(int xIndex, int yIndex, int width)
   TestEnv_34[4].y = y;
   TestEnv_34[5].y = y;
   TestEnv_34[4].x = x0;
-  nmlModelDirectSend(1, (u8 *) TestEnv_34, 6);
+  nmlModelDirectSend(1, TestEnv_34, 6);
 }
 
 static void FontTestP2(void)
@@ -1559,13 +1516,13 @@ static void UmlDispTestSub(XglPacket **packet, UmlDispRect *rect)
 
 static void UmlDispTest(void)
 {
-    UmlDispParam param;
+    TyaUmlDispParamTestView param;
     SaveDataDebug *save;
     SaveDataDebug *first;
     int detail = 0;
     int number = 0;
     UmlHeaderRecord *record;
-    char *text;
+    unsigned char *text;
     int id;
     int size;
     unsigned char character;
@@ -2012,7 +1969,7 @@ static void HddTest(void)
     }
 }
 
-static char *mt_GetPortName(int port)
+static const char *mt_GetPortName(int port)
 {
     return name_47[port];
 }
@@ -2027,16 +1984,16 @@ static void MemcardTest(void)
     McRequestParam create_request;
     char progress[32];
     McRequestParam save_request;
-    HddMcRequestParam hdd_list_request;
-    HddMcRequestParam hdd_load_request;
-    HddMcRequestParam hdd_check_request;
-    HddMcRequestParam hdd_create_request;
-    HddMcRequestParam hdd_save_request;
+    struct HddExistRequest hdd_list_request;
+    struct HddLoadRequest hdd_load_request;
+    struct HddExistRequest hdd_check_request;
+    struct HddCheckState hdd_create_request;
+    struct HddSaveRequest hdd_save_request;
     int sync_command;
     int sync_result;
-    CardDataHeader *carddata = (CardDataHeader *)0x01002000;
+    struct HddTransferInfo *carddata = (struct HddTransferInfo *)0x01002000;
     unsigned char *found = (unsigned char *)0x01000000;
-    char *name;
+    const char *name;
     char *bar;
     unsigned char *flags;
     unsigned char *shown_flags;
@@ -2414,8 +2371,8 @@ static void MemcardTest(void)
             break;
 
         case 0x70:
-            hdd_list_request.file = -1;
-            hdd_list_request.data = found;
+            hdd_list_request.card = -1;
+            hdd_list_request.found = found;
             if (xglHddMcExist(&hdd_list_request) < 0) {
                 state = 0x71;
             } else {
@@ -2450,7 +2407,7 @@ static void MemcardTest(void)
             }
             if (PAD_U16_AT(42) & 0x20) {
                 if (found[work.file] != 0) {
-                    hdd_load_request.file = work.file;
+                    hdd_load_request.card = work.file;
                     hdd_load_request.data = SaveData;
                     hdd_load_request.size = 0x163B0;
                     printf("xglHddMcLoad():%d\n", xglHddMcLoad(&hdd_load_request));
@@ -2479,7 +2436,7 @@ static void MemcardTest(void)
             if (PAD_U16_AT(42) & 0x20) {
                 int exist;
 
-                hdd_check_request.file = work.file;
+                hdd_check_request.card = work.file;
                 state = 0x82;
                 exist = xglHddMcExist(&hdd_check_request);
                 printf("xglHddMcExist():%d\n", exist);
@@ -2496,9 +2453,9 @@ static void MemcardTest(void)
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_SAVE_FREE, work.result);
             xglFontDebugPrintf(16, 48, MC_TEXT_CREATE_CONFIRM);
             if (PAD_U16_AT(42) & 0x20) {
-                hdd_create_request.file = work.file;
-                hdd_create_request.data = carddata;
-                hdd_create_request.size = 0x163B0;
+                hdd_create_request.status = work.file;
+                hdd_create_request.transfer.info = carddata;
+                hdd_create_request.dataSize = 0x163B0;
                 printf("xglHddMcCreate():%d\n", xglHddMcCreate(&hdd_create_request));
                 state = 0x84;
             }
@@ -2519,7 +2476,7 @@ static void MemcardTest(void)
             break;
 
         case 0x84:
-            hdd_save_request.file = work.file;
+            hdd_save_request.card = work.file;
             hdd_save_request.data = SaveData;
             hdd_save_request.size = 0x163B0;
             printf("xglHddMcSave():%d\n", xglHddMcSave(&hdd_save_request));
@@ -2684,7 +2641,7 @@ static int xtxdec_sub(char *filename)
     while (line != 0) {
         dst = path;
         for (src_name = h_50; *src_name != 0; src_name++)
-            *dst++ = (unsigned char)*src_name;
+            *dst++ = *src_name;
         if (*line != '"')
             return -1;
         line++;
@@ -2831,10 +2788,10 @@ static void XtxDecode(void)
         }
         y = 16;
         for (index = 1; index <= i; index++) {
-            xglFontDebugPrintf(0, y, ((char **) main_param_argv)[index]);
+            xglFontDebugPrintf(0, y, main_param_argv[index]);
             y += 8;
         }
-        status = xtxdec_sub(((char **) main_param_argv)[i]);
+        status = xtxdec_sub(main_param_argv[i]);
         if (status < 0) {
             break;
         }

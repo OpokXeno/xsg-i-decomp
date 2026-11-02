@@ -1,6 +1,10 @@
 #include "common.h"
 #include "shared.h"
 #include "init_map_door.h"
+#include "main/karakama_test.h"
+#include "main/near_dir.h"
+#include "main/outer_product.h"
+#include "main/xgl_dma.h"
 
 typedef struct DoorPlayerState {
     unsigned char unmodeled_00[0x10];
@@ -15,11 +19,8 @@ typedef struct DoorGameLoopState {
     unsigned char unmodeled_08[0x2a028];
 } DoorGameLoopState;
 
-extern signed char printflg;
-extern DoorMapUnit MapUnit[64];
+extern DoorUnit MapUnit[64];
 extern DoorGameLoopState GameLoopState;
-extern PadPrefix PadData;
-
 int printf(const char *, ...);
 
 /*
@@ -50,11 +51,7 @@ int xglSoundEffectCheckID();
 void xglSoundEffectPosID();
 void xglSoundEffectStopID();
 
-/* The original uses these as compiler-emitted single-precision constants. */
-float CheckDist2D(Vector4 *player_position, DoorPosition *door_position);
-
 float atan2f(float y, float x);
-float nearDir(float first, float second);
 void GetPartsPos();
 void GetPartsSize();
 void MAP_updateUnitDoor(DoorUnit *door);
@@ -84,11 +81,11 @@ void InitMapDoor(DoorUnit *door)
     __builtin_memcpy(&door->x, &door->model_x, 16);
     GetPartsSize(door);
     if (params->travel_distance == 0.0f) {
-        params->travel_distance = door->resting_position.values.x +
-                                 door->resting_position.values.x;
+        params->travel_distance = door->resting_position.x +
+                                 door->resting_position.x;
     }
     door->update_func = MAP_updateUnitDoor;
-    if ((unsigned char) door->open_phase != 4) {
+    if (door->open_phase != 4) {
         door->open_phase = 0;
     }
     linked_index = params->linked_unit;
@@ -123,8 +120,8 @@ void InitMapDoor(DoorUnit *door)
     printf(doorInfoFormat, door->door_number, params->kind,
            params->door_type, params->travel_distance);
     printf(doorPositionFormat, door->x, door->y, door->z);
-    printf(doorHitSizeFormat, door->resting_position.values.x,
-           door->resting_position.values.y, door->resting_position.values.z);
+    printf(doorHitSizeFormat, door->resting_position.x,
+           door->resting_position.y, door->resting_position.z);
     printf(doorRangeFormat, params->travel_distance,
            params->trigger_distance, params->open_limit);
 }
@@ -159,17 +156,17 @@ void MAP_updateUnitDoor(DoorUnit *door)
         DoorModel *model;
 
         MapUnit[index].open_timer = door->open_timer;
-        DoorCommonFunc((DoorUnit *) &MapUnit[index]);
+        DoorCommonFunc(&MapUnit[index]);
         model = MapUnit[index].model;
-        MapUnit[index].model_position.lanes[0] = model->x;
-        MapUnit[index].model_position.lanes[1] = model->y;
-        MapUnit[index].model_position.lanes[2] = model->z;
+        MapUnit[index].model_lanes[0] = model->x;
+        MapUnit[index].model_lanes[1] = model->y;
+        MapUnit[index].model_lanes[2] = model->z;
     }
 }
 
 void AutoDoorFunc(DoorUnit *door)
 {
-    switch ((unsigned char) door->open_phase) {
+    switch (door->open_phase) {
     case 0:
         AutoDoorStanbyFunc(door);
         return;
@@ -191,7 +188,7 @@ void AutoDoorFunc(DoorUnit *door)
 
 int EventDoorFunc(DoorUnit *door)
 {
-    switch ((unsigned char) door->open_phase) {
+    switch (door->open_phase) {
     case 0:
         EventDoorStanbyFunc(door);
         return;
@@ -213,7 +210,7 @@ int EventDoorFunc(DoorUnit *door)
 
 int HalfAutoDoorFunc(DoorUnit *door)
 {
-    switch ((unsigned char) door->open_phase) {
+    switch (door->open_phase) {
     case 0:
         EventDoorStanbyFunc(door);
         return;
@@ -235,7 +232,7 @@ int HalfAutoDoorFunc(DoorUnit *door)
 
 int MjDoorFunc(DoorUnit *door)
 {
-    switch ((unsigned char) door->open_phase) {
+    switch (door->open_phase) {
     case 0:
         MjDoorStanbyFunc(door);
         return;
@@ -388,7 +385,7 @@ void EventDoorStanbyFunc(DoorUnit *door)
     event_signal = params->event_signal;
     if (event_signal == 1) {
         if (printflg != 0) {
-            printf((char *) doorOpenFormat, door->door_number);
+            printf(doorOpenFormat, door->door_number);
         }
         if (xglSoundEffectCheckID(params->move_sound_channel, door->sound_channel + 1) != 0) {
             xglSoundEffectStopID(params->move_sound_channel, door->sound_channel + 1);
@@ -424,7 +421,7 @@ void EventDoorOpenNowFunc(DoorUnit *door)
     DoorOpenStanbyFunc(door);
     if (params->event_signal == 0) {
         if (printflg != 0) {
-            printf((char *) doorCloseFormat, door->door_number);
+            printf(doorCloseFormat, door->door_number);
         }
         door->open_phase = 3;
         door->open_timer = params->open_limit;
@@ -503,7 +500,7 @@ void HalfAutoDoorOpenNowFunc(DoorUnit *door)
 
 void DoorCommonFunc(DoorUnit *door)
 {
-    DoorPosition resting = door->resting_position;
+    AlignedVector4 resting = door->resting_position;
     DoorParams *params = &door->params;
     DoorModel *opening_model;
     DoorModel *closing_model;
@@ -538,10 +535,10 @@ void DoorCommonFunc(DoorUnit *door)
         closing_model->z = door->z - closing_model->direction_z * params->travel_distance * closing_progress / closing_limit;
         break;
     case 3:
-        door->model->y = door->y + resting.values.y * (float) (short) door->open_timer / (float) params->open_limit;
+        door->model->y = door->y + resting.y * (float) (short) door->open_timer / (float) params->open_limit;
         break;
     case 4:
-        door->model->y = door->y - resting.values.y * (float) (short) door->open_timer / (float) params->open_limit;
+        door->model->y = door->y - resting.y * (float) (short) door->open_timer / (float) params->open_limit;
         break;
     }
     door->model_x = door->model->x;
@@ -551,7 +548,7 @@ void DoorCommonFunc(DoorUnit *door)
 
 void DoorOpenStanbyFunc(DoorUnit *door)
 {
-    DoorPosition resting = door->resting_position;
+    AlignedVector4 resting = door->resting_position;
     DoorParams *params = &door->params;
     DoorModel *model;
 
@@ -568,11 +565,11 @@ void DoorOpenStanbyFunc(DoorUnit *door)
         break;
     case 3:
         model = door->model;
-        model->y = door->y + resting.values.y;
+        model->y = door->y + resting.y;
         break;
     case 4:
         model = door->model;
-        model->y = door->y - resting.values.y;
+        model->y = door->y - resting.y;
         break;
     }
 }
@@ -587,7 +584,7 @@ float CheckDoorDist(DoorUnit *door)
     }
 
     {
-        DoorPosition position;
+        AlignedVector4 position;
         CheckDoorPos(door, &position);
         return CheckDist2D(&player->position, &position);
     }
@@ -610,10 +607,10 @@ int CheckDoorSwitch(DoorUnit *door)
     return 0;
 }
 
-void CheckDoorPos(DoorUnit *door, DoorPosition *position)
+void CheckDoorPos(DoorUnit *door, AlignedVector4 *position)
 {
     signed char linked_index = door->params.linked_unit;
-    DoorMapUnit *target_unit;
+    DoorUnit *target_unit;
 
     if (linked_index == -1) {
         __builtin_memcpy(position, &door->x, sizeof(*position));
@@ -621,7 +618,7 @@ void CheckDoorPos(DoorUnit *door, DoorPosition *position)
     }
 
     target_unit = &MapUnit[linked_index];
-    position->values.x = door->x - (door->x - target_unit->position.values.x) * 0.5f;
-    position->values.y = door->y;
-    position->values.z = door->z - (door->z - target_unit->position.values.z) * 0.5f;
+    position->x = door->x - (door->x - target_unit->position.x) * 0.5f;
+    position->y = door->y;
+    position->z = door->z - (door->z - target_unit->position.z) * 0.5f;
 }

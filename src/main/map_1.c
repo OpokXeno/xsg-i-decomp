@@ -1,6 +1,14 @@
 #include "common.h"
 #include "shared.h"
 #include "main/maptbl.h"
+#include "main/res_get_path.h"
+#include "main/xgl_studio.h"
+#include "main/map_1.h"
+#include "main/Undulate.h"
+#include "main/game.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_light.h"
+#include "main/xgl_packet.h"
 
 /* Partial view of the resource record RES_loadFile hands back for a map:
  * MapReset (0x00246598, still INCLUDE_ASM) dereferences it at +0x04
@@ -8,10 +16,10 @@
  * argument to the still-unrecovered func_A1CFB8). Only those three offsets
  * are evidenced; the rest stays unmodeled. */
 typedef struct {
-    const Vector4 *place;
+    Matrix4 *place;
     int culling_map;
     const char *texture;
-    unsigned char *undu_state;
+    union UnduColiBlob *undu_state;
     const void *think_data;
 } MapResource;
 
@@ -65,13 +73,6 @@ struct MapPlayerActorState {
 };
 
 typedef struct {
-    MapResource *resource;
-    int size;
-    int handle;
-    int state;
-} GameResourceEntry;
-
-typedef struct {
     u8 unmodeled_00[0x20];
     u64 task_state_word;
     u8 unmodeled_28[0x28];
@@ -79,53 +80,21 @@ typedef struct {
     u8 unmodeled_58[0x58];
 } MapTestPrimData;
 
-typedef struct {
-    float components[4];
-} MapEntranceHeader;
-
-typedef struct {
-    Vector4 color;
-    Vector4 direction;
-} MapDrawLightEntry;
-
-typedef struct {
-    Vector4 ambient_color;
-    MapDrawLightEntry lights[3];
-    float normal_matrix[4][4];
-    float color_modifier_matrix[4][4];
-} MapDrawLight;
-
 extern MapGameState GameLoopState;
-extern u8 UseTestPath;
 extern MapTaskState tsk;
 extern MapRenderState sRender;
 extern GameResourceEntry GameResource[];
 
-extern void MapChangeFadeSet(void);
-extern void MapChange2(int map_id);
 extern MapResource *RES_loadFile(int file_id, int resource_type, int map_id, int flags);
-extern void MapReset(void);
-extern XglPacket *xglPacketGetCurrent(void);
 extern void xglRenderDrawFlipPk(XglPacket *packet);
-extern void nmlModelSetFadeInCancel(int model_id);
-extern void nmlModelSetFadeOutCancel(int model_id);
 static void taskMapChange(void *task);
-extern MapEntranceHeader *UnduDataGetHeader(int map_index, int unit_index);
-extern void UnduInit(unsigned char *data);
 extern int func_A1CFB8(int think_no, const void *data);
-extern void nmlModelSetMapLastInit(void);
 extern void xglCullingMapSet(int culling_map);
-extern MapDrawLight *xglStudioGetLight2(void);
-extern void xglLightCalcMatrix(MapDrawLight *light);
-extern void nmlModelSetLight(void *color_modifier, void *normal);
-extern void nmlModelSetTexture(const char *texture);
+extern StudioLight *xglStudioGetLight2(void);
 extern void nmlModelSetMapEntry(void);
 extern void nmlModelSetMulColor(const float color[4]);
-extern void nmlModelSetRenderLevel(int level);
-extern void nmlModelSetPlace(const Vector4 *place);
-extern void nmlModelSetClip(int clip);
 extern void nmlModelEntry(int entry);
-extern void sceVif1PkCnt(NmlPacket packet, int count);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern void nmlModelSendBackBufferSignal(void);
 
@@ -841,22 +810,22 @@ void MapChangeResource(int map_id, int entrance_id)
 {
     if (GameResource[map_id].state == 1) {
         GameLoopState.map_no = GameResource[map_id].handle;
-        GameLoopState.map_resource = GameResource[map_id].resource;
+        GameLoopState.map_resource = (MapResource *)GameResource[map_id].address;
         if (map_id < 1000) {
             MapChangeFadeSet();
         }
         MapReset();
         GameLoopState.entrance_no = (short)entrance_id;
         {
-            MapEntranceHeader *header = UnduDataGetHeader(0x201, entrance_id + 0x8000);
+            LayoutHeader *header = UnduDataGetHeader(0x201, entrance_id + 0x8000);
 
             if (header != 0) {
                 float last_component;
 
-                GameLoopState.player_actor->position_x = header->components[0];
-                GameLoopState.player_actor->position_y = header->components[1];
-                GameLoopState.player_actor->position_z = header->components[2];
-                last_component = header->components[3];
+                GameLoopState.player_actor->position_x = header->locator.x;
+                GameLoopState.player_actor->position_y = header->locator.y;
+                GameLoopState.player_actor->position_z = header->locator.z;
+                last_component = header->locator.w;
                 GameLoopState.player_actor->entrance_rotation = last_component;
                 GameLoopState.player_actor->entrance_rotation_copy = last_component;
             }
@@ -912,10 +881,10 @@ void MapDraw(void)
     }
 
     if (resource != 0 && resource->culling_map != 0) {
-        MapDrawLight *light = xglStudioGetLight2();
+        StudioLight *light = xglStudioGetLight2();
 
         xglLightCalcMatrix(light);
-        nmlModelSetLight(light->color_modifier_matrix, light->normal_matrix);
+        nmlModelSetLight(&light->color_modifier_matrix, &light->normal_matrix);
         if (resource->texture != 0) {
             nmlModelSetTexture(resource->texture);
         }

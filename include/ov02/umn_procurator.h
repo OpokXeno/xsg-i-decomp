@@ -10,7 +10,6 @@ typedef struct UmnManzaiWinTask {
     unsigned char task_index;
     unsigned char unmodeled_02[0x5e];
     EMessageParam message;
-    unsigned char unmodeled_90[0x14];
 } UmnManzaiWinTask;
 
 #endif /* INCLUDE_OV02_UMN_PROCURATOR_H */

@@ -6,44 +6,36 @@
 #define SRC_MAIN_NML_MODEL_SET_H
 
 #include "shared.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_2.h"
 
 #define NML_BLOCK_HIDDEN 0x8u
 #define NML_BLOCK_MATERIAL_NAMED_PARTS 0x10u
 
-/* The same 16 bytes as two doublewords, for the plain ld/sd copies. */
-typedef struct NmlQword {
-    unsigned long long lo;
-    unsigned long long hi;
-} NmlQword;
-
-/* A vector on a doubleword boundary: the original copies it with ld/sd. */
-typedef union NmlVector4Overlay {
-    Vector4 v;
-    NmlQword q;
-} NmlVector4Overlay;
-
-typedef struct NmlAlphaGroup {
-    short firstBlock;
-    short blockCount;
-    float sortDistance;
-    u32 status;
+/*
+ * One render group: a run of s_apBlock entries drawn together.  The alpha
+ * groups (s_aAlphaGroup) and the non-alpha groups (s_aNonAlphaGroup) share
+ * this record and its render-kind flags (1 texture, 0x80 drop, 0x100 circle,
+ * 0x200 drop circle), so the render helpers take either.  Only alpha groups
+ * are depth sorted.  The block range is reached through a union (alias set
+ * 0): in nmlModelEntryEffect the original keeps the blockCount store ahead
+ * of the following s_apBlock store, which a plain short member does not
+ * order.
+ */
+typedef struct NmlBlockGroup {
+    union {
+        struct {
+            short firstBlock;
+            short blockCount;
+        };
+    };
+    float sortDistance; /* +0x04; alpha groups only */
+    u32 flags;
     union {
         union LayoutStore *layout; /* layout record this group was built from */
-        int address;
+        int address;     /* read back as a word by the circle renderers */
     } owner;                       /* +0x0c */
-} NmlAlphaGroup;
-
-typedef union {
-    float f;
-    int i;
-} LayoutSlot;
-
-typedef struct NmlPartPixelAlpha {
-    short alpha;
-    short partId;
-} NmlPartPixelAlpha;
-
-typedef union LayoutStore LayoutStore;
+} NmlBlockGroup;
 
 /*
  * Partial view of one fade controller (the four global instances are
@@ -97,53 +89,6 @@ typedef struct {
 
 typedef unsigned int NmlPointQuadword __attribute__((mode(TI)));
 
-/*
- * One named mesh block in a loaded model.  The name matcher below witnesses
- * the block name at +0x00, its visibility flags at +0x20, and the first
- * block's material flags at +0xc0.
- */
-typedef struct NmlModelBlock {
-    char name[0x20];
-    u32 flags;
-    int baseOffset;
-    int textOffset;
-    int partId; /* +0x2c */
-    unsigned short matrixIndices[48]; /* +0x30; transform then weighted entries */
-    float clipBounds[4]; /* +0x90; element 3 is the weighted clip radius */
-    unsigned char unmodeled_0a0[0x20];
-    u32 materialFlags;
-    unsigned char unmodeled_0c4[0x3c];
-    Vector4 multiplyColor; /* +0x100 */
-    float translationX, translationY;
-    float translationStepX, translationStepY;
-    unsigned char unmodeled_120[0x4c];
-    signed char shapeMathParameter;
-    signed char shapeMode, shapeWeight;
-    unsigned char shapeFlags;
-    char materialName[32]; /* +0x170 */
-} NmlModelBlock;
-
-/*
- * A loaded model resource.  Its block count is +0x44 and the table at +0xb0
- * holds byte offsets from this record to individual NmlModelBlock records.
- */
-typedef struct NmlModel {
-    unsigned char unmodeled_000[0x3f];
-    signed char unclassified_3f;
-    int partCount; /* +0x40 */
-    int blockCount;
-    int sampleCount; /* +0x48 */
-    unsigned char unmodeled_04c[4];
-    int weightedMatrixOffset; /* +0x50: byte offset from the model to its weighted matrices */
-    unsigned char unmodeled_054[0x18];
-    int unclassified_6c;
-    unsigned char unmodeled_070[0x20];
-    Vector4 entryTranslation; /* +0x90; w at +0x9c */
-    int unclassified_a0;
-    unsigned char unmodeled_0a4[0x0c];
-    int blockOffsets[1];
-} NmlModel;
-
 /* Parent records reference render layouts; +8/+0xc are the two entry counters. */
 typedef struct NmlParentBuffer {
     LayoutStore *layout;
@@ -153,86 +98,6 @@ typedef struct NmlParentBuffer {
 } NmlParentBuffer;
 
 typedef NmlParentBuffer NmlParentBuf;
-
-/* Partial prefix of packets emitted by nmlFilterStealthMake. */
-typedef struct NmlStealthPacket {
-    unsigned char unmodeled_00[0x0c];
-    float distanceSquared;
-    unsigned char unmodeled_10[0x10];
-    float unclassified_20;
-} NmlStealthPacket;
-
-/*
- * Partial view of the render volume a layout points at through +0x260: a
- * plane normal pair at +0x160/+0x168, an origin vector at +0x190, a min and a
- * max bounds vector at +0x1a0/+0x1b0, and the u64 alpha word at +0x1c8.
- * Only these witnessed offsets are named.
- */
-typedef struct NmlRenderVolume {
-    unsigned char unmodeled_000[0x160];
-    float planeNormalX; /* +0x160 */
-    unsigned char unmodeled_164[4];
-    float planeNormalZ; /* +0x168 */
-    unsigned char unmodeled_16c[0x190 - 0x16c];
-    Vector4 origin; /* +0x190 */
-    Vector4 boundsMin; /* +0x1a0 */
-    Vector4 boundsMax; /* +0x1b0 */
-    unsigned char unmodeled_1c0[0x1c8 - 0x1c0];
-    u64 alpha; /* +0x1c8 */
-} NmlRenderVolume;
-
-union LayoutStore {
-    LayoutSlot slots[200];
-    unsigned long long qwords[100];
-    struct {
-        Matrix4 lightDirection; /* +0x0 */
-        Matrix4 lightColor; /* +0x40 */
-        Matrix4 place; /* +0x80 */
-        Matrix4 inversePlace; /* +0xc0 */
-        Vector4 pointPosition[4]; /* +0x100 */
-        Vector4 pointColor[4]; /* +0x140 */
-        Matrix4 projectionMatrix; /* +0x180; saved by the circle and map projection paths */
-        Vector4 fogColor; /* +0x1c0 */
-        Vector4 fogPara; /* +0x1d0 */
-        unsigned char unmodeled_1e0[0x1f0 - 0x1e0];
-        NmlVector4Overlay unmodeled_1f0; /* +0x1f0; copied as a projection input and passed to AlphaGroupSortEntry */
-        Vector4 multiplyColor; /* +0x200 */
-        unsigned char unmodeled_210[0x234 - 0x210];
-        unsigned int packetFilterFlags;
-        int pixelAlpha;                     /* +0x238, full-width pixel-alpha word */
-        unsigned char unmodeled_23c[4];
-        const char *texture;                /* +0x240 */
-        int texfunc;                        /* +0x244 */
-        u64 alpha;                          /* +0x248 */
-        u32 render_status;                  /* +0x250 */
-        int parent; /* +0x254 */
-        Matrix4 *weightedMatrices; /* +0x258 */
-        unsigned char unmodeled_25c[4];
-        NmlRenderVolume *volume; /* +0x260 */
-        NmlRenderVolume *renderVolume; /* +0x264; set while the layout renders */
-        int texMapMode; /* +0x268; supplied by map and actor shadow setup */
-        float textureTransparency;
-        int texMapSize; /* +0x270 */
-        float texMapWeight; /* +0x274 */
-        int mapShadowPartCount; /* +0x278 */
-        int renderLevel; /* +0x27c */
-        NmlStealthPacket *stealthPackets[10]; /* +0x280 */
-        unsigned char unmodeled_2a8[0x2b0 - 0x2a8];
-        unsigned int featureFlags;
-        int partPixelAlphaCount; /* +0x2b4 */
-        unsigned char *clipMasks; /* +0x2b8 */
-        unsigned char unmodeled_2bc[4];
-        float circleShadowScale; /* +0x2c0 */
-        unsigned char unmodeled_2c4[4];
-        int stealthEntryCount; /* +0x2c8 */
-        unsigned char unmodeled_2cc[4];
-        NmlPartPixelAlpha partPixelAlpha[4]; /* +0x2d0 */
-        unsigned short mapShadowParts[8];    /* +0x2e0 */
-        unsigned char unmodeled_2f0[0x300 - 0x2f0];
-        float viewportAlpha[4];
-        int viewportFlags[4];
-    } fields;
-};
 
 extern Vector4 s_inMainCameraPos;
 extern Vector4 s_inMainCameraAng;
@@ -246,7 +111,7 @@ extern int s_nUseStealth;
 extern int s_nUseGnosys;
 extern int s_nMapAlphaEntry;
 extern int s_nMainCameraWarp;
-extern NmlAlphaGroup s_aAlphaGroup[512];
+extern NmlBlockGroup s_aAlphaGroup[512];
 extern float s_fSortOffset;
 
 /*
@@ -332,9 +197,6 @@ extern NmlParentBuffer s_aParentBuf[];
  */
 void nmlModelSetMatrix(void *matrix);
 
-/* Marks model fades for processing during the next render pass. */
-void nmlModelSetFadeDoit(void);
-void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
 void nmlPacketAddGsScissor1(u64 scissor);
 void nmlPacketAddScreenClear(void);
 void nmlPacketClrTextureCache(void);

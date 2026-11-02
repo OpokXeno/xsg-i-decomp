@@ -2,6 +2,7 @@
 #include "ether_tree.h"
 #include "main/xgl_dma.h"
 #include "ov01/data_unit_org_get.h"
+#include "main/end_print.h"
 
 /* Only a .lit4 literal in the original (0x004D7E7C); no storage object. */
 #define ETHER_TREE_NODE_Z 65535.0f
@@ -15,8 +16,6 @@
  */
 typedef struct EtherTreeObjectData EtherTreeObjectData;
 
-typedef struct PrintSpriteInfo EtherTreeSprite;
-
 typedef struct EtherTreeRibbonPoint {
     short x;
     short y;
@@ -29,10 +28,10 @@ typedef struct EtherTreeLineDrawMethods {
 } EtherTreeLineDrawMethods;
 
 typedef struct EtherTreeGeometrySegment {
-    EtherTreePosition from;
+    AlignedVector4 from;
     unsigned char fromColor[4];
     unsigned char unmodeled_14[12];
-    EtherTreePosition to;
+    AlignedVector4 to;
     unsigned char toColor[4];
     unsigned char unmodeled_34[12];
 } EtherTreeGeometrySegment;
@@ -109,7 +108,7 @@ typedef struct EtherTreeRightData {
     unsigned char flags;
     unsigned char mode;
     unsigned char unmodeled_002[0x10 - 0x2];
-    EtherTreePosition position; /* +0x10 */
+    AlignedVector4 position; /* +0x10 */
     EtherTreeObjectData *object;
     short screenX; /* +0x24 */
     short screenY; /* +0x26 */
@@ -135,7 +134,7 @@ typedef struct EtherTreeBlackData {
     EtherTreeRibbonPoint points[5]; /* +0x4 */
 } EtherTreeBlackData;
 
-typedef EtherTreePosition EtherTreeLine2Corner;
+typedef AlignedVector4 EtherTreeLine2Corner;
 
 /* EtherTreeLineColorGet (this unit) fills the four colour bytes at 0x10. */
 typedef struct EtherTreeLine2Vertex {
@@ -168,7 +167,7 @@ typedef struct EtherTreeLine2Data {
     int selectedIndex;
     unsigned char unmodeled_08[0x08];
     EtherTreeLine2Corner from[3];
-    EtherTreePosition to[3];
+    AlignedVector4 to[3];
     EtherTreeObjectData *object;
     unsigned char unmodeled_74[0x0c];
     EtherTreeLine2Line line[3];
@@ -210,14 +209,12 @@ extern EtherTreeObjectData *EtherTreeObjectGet(int id);
 extern void *memset(void *destination, int value, unsigned int count);
 extern void subEtherTreeRightMain(EtherTreeRightData *record);
 extern void EtherTreeLineColorGet(unsigned char *color, int colorIndex);
-extern void endPrintExtFunc(int kind, int id, void *data);
-
 /*
  * Build the three lines of the block: line[i] runs from corner from[i] to
  * corner to[i], each offset by the tree node and the screen centre and
  * scaled, and both of its vertices sit one unit in front of the node plane.
  * corner walks the four floats the pair needs (from[i].x, from[i].y,
- * to[i].x, to[i].y) and block walks the 0x40 bytes of one line record.
+ * to[i].x, to[i].y) and index walks the three line[] records.
  */
 extern void subLine2_DrawType_1(EtherTreeLine2Data *line2);
 
@@ -299,11 +296,11 @@ static inline void subLine2SettleYAtChild(EtherTreeLine2Data *line2,
 {
     EtherTreeObjectData *child = subLine2ChildAtIndex(selectedIndex, children);
 
-    line2->to[1].vector.y = child->position.vector.y;
+    line2->to[1].y = child->position.y;
     line2->to[2] = child->position;
-    line2->from[2].vector = line2->to[2].vector;
-    line2->from[2].vector.x -= 28.5f;
-    line2->to[2].vector.x -= 28.5f;
+    line2->from[2] =line2->to[2];
+    line2->from[2].x -= 28.5f;
+    line2->to[2].x -= 28.5f;
     line2->counter = 3;
 }
 
@@ -431,22 +428,22 @@ int subPosSet(EtherTreeObjectData *object)
             EtherTreeObjectData *child = object->children[i];
 
             childCount = object->childCount;
-            child->position.vector.x = childX;
-            childDepth = object->position.vector.z;
-            child->position.vector.y = 0.0f;
-            child->position.vector.z = childDepth + childDepthStep;
+            child->position.x = childX;
+            childDepth = object->position.z;
+            child->position.y = 0.0f;
+            child->position.z = childDepth + childDepthStep;
             switch (childCount) {
             case 2:
                 if (i == 0)
-                    child->position.vector.y = twoChildLeft;
+                    child->position.y = twoChildLeft;
                 else
-                    child->position.vector.y = twoChildRight;
+                    child->position.y = twoChildRight;
                 break;
             case 3:
                 if (i == 0)
-                    child->position.vector.y = threeChildLeft;
+                    child->position.y = threeChildLeft;
                 else if (i == 2)
-                    child->position.vector.y = threeChildRight;
+                    child->position.y = threeChildRight;
                 break;
             }
 
@@ -454,20 +451,20 @@ int subPosSet(EtherTreeObjectData *object)
         }
     }
 
-    if (object->position.vector.y < 0.0f)
-        object->position.vector.y -= (float) (total - 1) * 36.0f;
-    else if (object->position.vector.y > 0.0f)
-        object->position.vector.y += (float) (total - 1) * 36.0f;
+    if (object->position.y < 0.0f)
+        object->position.y -= (float) (total - 1) * 36.0f;
+    else if (object->position.y > 0.0f)
+        object->position.y += (float) (total - 1) * 36.0f;
 
     if (EtherTreeSystem->firstDataIndex == 6 && (object->flags & 0x20))
-        object->children[2]->position.vector.y += 36.0f;
+        object->children[2]->position.y += 36.0f;
 
     return total;
 }
 
 void subPosSet2(EtherTreeObjectData *object, Vector4 *parentPosition)
 {
-    EtherTreePosition position;
+    AlignedVector4 position;
     int i;
 
     if (object == 0)
@@ -475,12 +472,12 @@ void subPosSet2(EtherTreeObjectData *object, Vector4 *parentPosition)
 
     position = object->position;
     if (parentPosition != 0) {
-        position.vector.x += parentPosition->x;
-        position.vector.y += parentPosition->y;
+        position.x += parentPosition->x;
+        position.y += parentPosition->y;
     }
 
     for (i = 0; i < object->childCount; i++)
-        subPosSet2(object->children[i], &position.vector);
+        subPosSet2(object->children[i], &position);
 
     object->position = position;
 }
@@ -497,14 +494,14 @@ void subPosSet3(void)
             EtherTreeObjectData *first = object->children[0];
             EtherTreeObjectData *last = object->children[1];
 
-            object->position.vector.y = ((last->position.vector.y - first->position.vector.y) * midpointScale) + first->position.vector.y;
+            object->position.y = ((last->position.y - first->position.y) * midpointScale) + first->position.y;
             break;
         }
         case 3: {
             EtherTreeObjectData *first = object->children[0];
             EtherTreeObjectData *last = object->children[2];
 
-            object->position.vector.y = ((last->position.vector.y - first->position.vector.y) * midpointScale) + first->position.vector.y;
+            object->position.y = ((last->position.y - first->position.y) * midpointScale) + first->position.y;
             break;
         }
         }
@@ -517,7 +514,7 @@ void sub2JoutoYGet(EtherTreeObjectData *object, float *y)
     if (object->childCount != 0)
         sub2JoutoYGet(object->children[object->childCount - 1], y);
     else
-        *y = object->position.vector.y;
+        *y = object->position.y;
 }
 
 void subJoutoPosSet(void)
@@ -545,9 +542,9 @@ void subJoutoPosSet(void)
 
                 object->flags |= 8;
                 object->id = objectId;
-                object->position.vector.x = baseX + column * columnSpacing;
-                object->position.vector.y = baseY[0] + row * 72.0f;
-                object->position.vector.z = node->z;
+                object->position.x = baseX + column * columnSpacing;
+                object->position.y = baseY[0] + row * 72.0f;
+                object->position.z = node->z;
                 count++;
                 object++;
             }
@@ -628,10 +625,10 @@ void EtherTreeTargetChange(int id, int mode)
     if (object == 0)
         return;
 
-    nodeX = -object->position.vector.x;
+    nodeX = -object->position.x;
     EtherTreeSystem->targetObject = object;
     EtherTreeSystem->targetNode.x = nodeX;
-    nodeY = -object->position.vector.y;
+    nodeY = -object->position.y;
     EtherTreeSystem->targetNode.y = nodeY;
     if (mode == 1) {
         EtherTreeSystem->node.x = nodeX;
@@ -857,18 +854,18 @@ void EtherTreeRightMain(void)
 void subRightDraw(EtherTreeRightData *record)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
-    float *positionX = &record->position.vector.x;
-    float *positionY = &record->position.vector.y;
+    float *positionX = &record->position.x;
+    float *positionY = &record->position.y;
     EtherTreeNodeTransform *node;
     EtherTreeCoordinates *center;
     float screenX;
     float screenY;
     float depth;
 
-    subMoveSlide(positionX, &record->object->position.vector.x, 0.2f);
+    subMoveSlide(positionX, &record->object->position.x, 0.2f);
     node = &system->node;
     center = &system->center;
-    subMoveSlide(positionY, &record->object->position.vector.y, 0.2f);
+    subMoveSlide(positionY, &record->object->position.y, 0.2f);
     screenX = (*positionX + node->x) + center->x;
     screenY = (*positionY + node->y) + center->y;
     depth = node->z + 4.0f;
@@ -1000,9 +997,9 @@ void EtherTreeLine2Set(int id, int selectionType)
         object = EtherTreeObjectGet(id);
         record->object = object;
         for (i = 0; i < object->childCount; i++, object = nextObject) {
-            record->to[i].vector = object->position.vector;
+            record->to[i] =object->position;
             nextObject = record->object;
-            record->from[i].vector = record->to[i].vector;
+            record->from[i] =record->to[i];
         }
         record->selectionType = selectionType;
         record->mode = 0;
@@ -1027,8 +1024,8 @@ void EtherTreeLine2ModeChange(int mode)
                 if (record->mode == 1) {
                     record->counter = 0;
                     for (i = 0; i < 3; i++) {
-                        record->to[i].vector = record->object->position.vector;
-                        record->from[i].vector = record->to[i].vector;
+                        record->to[i] =record->object->position;
+                        record->from[i] =record->to[i];
                     }
                 }
                 break;
@@ -1062,7 +1059,7 @@ void EtherTreeLine2SelectChange(int index)
 
 static inline float *line2EndpointY(EtherTreeLine2Data *line2, unsigned int index)
 {
-    return &line2->to[index].vector.y;
+    return &line2->to[index].y;
 }
 
 /*
@@ -1077,26 +1074,24 @@ void subLine2_DrawType_1(EtherTreeLine2Data *line2)
 {
     float *node = &EtherTreeSystem->node.x;
     float *center = &EtherTreeSystem->center.x;
-    float *corner = &line2->to[0].vector.y;
-    EtherTreeLine2Data *block = line2;
+    float *corner = &line2->to[0].y;
     EtherTreeLine2Line *line;
-    int remaining = 2;
+    int index = 0;
 
     do {
-        line = &block->line[0];
-        remaining -= 1;
-        block->line[0].from.x = ((corner[-13] + node[0]) + center[0]) * node[3];
-        block->line[0].from.y = ((corner[-12] + node[1]) + center[1]) * node[3];
-        block->line[0].from.z = node[2] - 1.0f;
-        block->line[0].to.x = ((corner[-1] + node[0]) + center[0]) * node[3];
-        block->line[0].to.y = ((corner[0] + node[1]) + center[1]) * node[3];
-        block->line[0].to.z = node[2] - 1.0f;
+        line = &line2->line[index];
+        line->from.x = ((corner[-13] + node[0]) + center[0]) * node[3];
+        line->from.y = ((corner[-12] + node[1]) + center[1]) * node[3];
+        line->from.z = node[2] - 1.0f;
+        line->to.x = ((corner[-1] + node[0]) + center[0]) * node[3];
+        line->to.y = ((corner[0] + node[1]) + center[1]) * node[3];
+        line->to.z = node[2] - 1.0f;
         corner += 4;
-        EtherTreeLineColorGet(block->line[0].from.color, 3);
-        EtherTreeLineColorGet(block->line[0].to.color, 3);
-        block = (EtherTreeLine2Data *) (((char *) block) + 0x40);
+        EtherTreeLineColorGet(line->from.color, 3);
+        EtherTreeLineColorGet(line->to.color, 3);
+        index += 1;
         endPrintExtFunc(0, 0x10, line);
-    } while (remaining >= 0);
+    } while (index < 3);
 }
 
 void EtherTreeLine2Draw(void)
@@ -1120,16 +1115,16 @@ int subLine2_OpenType_0(EtherTreeLine2Data *line2)
     switch (counter) {
     case 0:
         line2->to[0] = object->position;
-        line2->from[0].vector = line2->to[0].vector;
+        line2->from[0] =line2->to[0];
         line2->counter = 1;
         /* fall through */
     case 1:
         firstChild = object->children[0];
-        line2->to[0].vector.x += 4.0f;
-        if (line2->to[0].vector.x < firstChild->position.vector.x)
+        line2->to[0].x += 4.0f;
+        if (line2->to[0].x < firstChild->position.x)
             return 0;
 
-        line2->to[0].vector.x = firstChild->position.vector.x;
+        line2->to[0].x = firstChild->position.x;
         return 1;
 
     default:
@@ -1149,18 +1144,18 @@ int subLine2_OpenType_1(EtherTreeLine2Data *line2)
     case 0:
         line2->counter = 1;
         line2->to[0] = object->position;
-        line2->from[0].vector = line2->to[0].vector;
+        line2->from[0] =line2->to[0];
         /* fall through */
     case 1:
-        line2->to[0].vector.x += 4.0f;
-        cornerX = (object->position.vector.x + 19.0f) + 9.5f;
-        if (line2->to[0].vector.x < cornerX)
+        line2->to[0].x += 4.0f;
+        cornerX = (object->position.x + 19.0f) + 9.5f;
+        if (line2->to[0].x < cornerX)
             return 0;
-        line2->to[0].vector.x = cornerX;
+        line2->to[0].x = cornerX;
         line2->to[1] = object->position;
-        line2->from[1].vector = line2->to[1].vector;
-        line2->from[1].vector.x += 28.5f;
-        line2->to[1].vector.x += 28.5f;
+        line2->from[1] =line2->to[1];
+        line2->from[1].x += 28.5f;
+        line2->to[1].x += 28.5f;
         line2->counter = 2;
         /* fall through */
     case 2: {
@@ -1169,18 +1164,18 @@ int subLine2_OpenType_1(EtherTreeLine2Data *line2)
         if (ySelection == 0) {
             EtherTreeObjectData **directionChildren = children = object->children;
             EtherTreeObjectData *directionChild = directionChildren[0];
-            float steppedY = line2->to[1].vector.y - 8.0f;
+            float steppedY = line2->to[1].y - 8.0f;
 
-            line2->to[1].vector.y = steppedY;
-            if (directionChild->position.vector.y < steppedY)
+            line2->to[1].y = steppedY;
+            if (directionChild->position.y < steppedY)
                 return 0;
         } else {
             EtherTreeObjectData **directionChildren = children = object->children;
             EtherTreeObjectData *directionChild = subLine2ChildAtIndex(ySelection, directionChildren);
-            float steppedY = line2->to[1].vector.y + 8.0f;
+            float steppedY = line2->to[1].y + 8.0f;
 
-            line2->to[1].vector.y = steppedY;
-            if (directionChild->position.vector.y > steppedY)
+            line2->to[1].y = steppedY;
+            if (directionChild->position.y > steppedY)
                 return 0;
         }
         subLine2SettleYAtChild(line2, selectedIndex, children);
@@ -1194,10 +1189,10 @@ int subLine2_OpenType_1(EtherTreeLine2Data *line2)
         goto pending;
     }
     child = subLine2ChildAtIndex(selectedIndex, children);
-    line2->to[2].vector.x += 4.0f;
-    if (line2->to[2].vector.x < child->position.vector.x)
+    line2->to[2].x += 4.0f;
+    if (line2->to[2].x < child->position.x)
         return 0;
-    line2->to[2].vector.x = child->position.vector.x;
+    line2->to[2].x = child->position.x;
     return 1;
 pending:
     return 0;
@@ -1276,7 +1271,7 @@ void sub2ObjectLampDraw(EtherTreeObjectData *object)
     lampHeight = object->lamp.height;
     object->lamp.width = lampWidth * sizeScale;
     object->lamp.height = lampHeight * sizeScale;
-    object->lamp.depth = (unsigned int)object->sprite.depth + 1;
+    object->lamp.depth = object->sprite.depth + 1;
     lamp->x = (originX + positionScale * 27.0f) - 2.0f;
     object->lamp.y = (object->sprite.y + positionScale) - 3.0f;
     endPrintExtFunc(0, 2, lamp);
@@ -1295,7 +1290,7 @@ void EtherTreeObjectDraw(void)
     do {
         object = &objects[i];
         sprite = &objects[i].sprite;
-        objectPosition = &object->position.vector;
+        objectPosition = &object->position;
 
         if (object->flags & 8) {
             EtherTreeSystemData *system = EtherTreeSystem;
@@ -1308,7 +1303,7 @@ void EtherTreeObjectDraw(void)
             position.x = ((translatedX + center->x) - 19.0f) * node->scale;
             position.y = ((objectPosition->y + node->y + center->y) - 24.0f) * node->scale;
             position.z = node->z;
-            object->sprite.uv = uvs[(unsigned char)object->displayType];
+            object->sprite.uv = uvs[object->displayType];
             endSpriteSet(sprite, 255);
             object->sprite.x = (int)position.x;
             object->sprite.y = (int)position.y;
@@ -1411,7 +1406,7 @@ void subTreeLineDraw_type_2(void *context)
 
     geometryObject = line->object;
     line->segments[0].from = line->segments[0].to = geometryObject->position;
-    line->segments[0].to.vector.x += 28.5f;
+    line->segments[0].to.x += 28.5f;
     geometryChild = geometryObject->children;
     for (childCount = 0; childCount < 2; childCount++) {
         EtherTreeObjectData *child = *geometryChild;
@@ -1420,11 +1415,11 @@ void subTreeLineDraw_type_2(void *context)
 
         line->segments[verticalSegment].from =
             line->segments[verticalSegment].to = line->segments[0].to;
-        junctionX = line->segments[verticalSegment].to.vector.x;
-        line->segments[verticalSegment].to.vector.y = child->position.vector.y;
+        junctionX = line->segments[verticalSegment].to.x;
+        line->segments[verticalSegment].to.y = child->position.y;
         line->segments[verticalSegment + 1].from =
             line->segments[verticalSegment + 1].to = child->position;
-        line->segments[verticalSegment + 1].from.vector.x = junctionX;
+        line->segments[verticalSegment + 1].from.x = junctionX;
         geometryChild++;
     }
     subTreeLineDraw(context, colorIndices);
@@ -1468,7 +1463,7 @@ void subTreeLineDraw_type_3(void *context)
 
     geometryObject = line->object;
     line->segments[0].from = line->segments[0].to = geometryObject->position;
-    line->segments[0].to.vector.x += 28.5f;
+    line->segments[0].to.x += 28.5f;
     for (childCount = 0; childCount < 2; childCount++) {
         EtherTreeObjectData *child = geometryObject->children[childCount * 2];
         int verticalSegment = childCount * 2 + 1;
@@ -1476,17 +1471,17 @@ void subTreeLineDraw_type_3(void *context)
 
         line->segments[verticalSegment].from =
             line->segments[verticalSegment].to = line->segments[0].to;
-        branchX = line->segments[verticalSegment].to.vector.x;
-        line->segments[verticalSegment].to.vector.y = child->position.vector.y;
+        branchX = line->segments[verticalSegment].to.x;
+        line->segments[verticalSegment].to.y = child->position.y;
         line->segments[verticalSegment + 1].from =
             line->segments[verticalSegment + 1].to = child->position;
-        line->segments[verticalSegment + 1].from.vector.x = branchX;
+        line->segments[verticalSegment + 1].from.x = branchX;
     }
 
     middleChild = geometryObject->children[1];
-    junctionX = line->segments[0].to.vector.x;
+    junctionX = line->segments[0].to.x;
     line->segments[5].from = line->segments[5].to = middleChild->position;
-    line->segments[5].from.vector.x = junctionX;
+    line->segments[5].from.x = junctionX;
     subTreeLineDraw(context, colorIndices);
 }
 
@@ -1516,7 +1511,7 @@ void EtherTreeCursolDraw(void)
     cursor->uv = 0x1204;
     endSpriteSet(cursor, 255);
     node = &system->node;
-    position = &target->position.vector;
+    position = &target->position;
     cursor->x = (position->x - 23.0f) + (node->x + center->x);
     cursor->y = (position->y - 28.0f) + (node->y + center->y);
     cursor->width = cursor->width * node->scale;
@@ -1549,9 +1544,9 @@ void EtherTreeDraw(void)
     endPrintExtFunc(0, 0xF, 0);
 }
 
-int EtherTreeInit(int arenaBase)
+unsigned char *EtherTreeInit(int arenaBase)
 {
-    int addr = (arenaBase + 0xf) & ~0xf;
+    unsigned char *addr = (unsigned char *)((arenaBase + 0xf) & ~0xf);
 
     EtherTreeSystem = (EtherTreeSystemData *) addr;
     addr += 0x80;

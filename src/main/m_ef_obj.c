@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_studio.h"
+#include "main/m_ef_obj.h"
 #include "m_ef_obj.h"
 
 /* The pool contains 96 records of 0x420 bytes each. */
@@ -54,7 +55,7 @@ void MEfObjExec1st(void)
         int index;
 
         camera = xglStudioGetCamera2(0);
-        rotation = &camera->rotation;
+        rotation = &camera->rotation.vector;
         viewMatrix = &camera->viewMatrix;
         mefCamParams.screen = camera;
         mefCamParams.matrix = viewMatrix;

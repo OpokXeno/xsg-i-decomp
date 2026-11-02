@@ -6,10 +6,16 @@
 #define SRC_MAIN_SEISAN_COUNT_INIT1_H
 
 #include "shared.h"
-
-#define SEISAN_WORK_STATE 1
-#define SEISAN_WORK_FLAGS 2
-#define SEISAN_WORK_NEXT_STATE 4
+#include "main/menu_1.h"
+#include "main/data.h"
+#include "main/e_battle_win_open.h"
+#include "main/e_number_main.h"
+#include "main/end_print.h"
+#include "main/file.h"
+#include "main/menu_top_command_check.h"
+#include "main/party.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_dma.h"
 
 /*
  * The closing state subSeisanCheck selects when no check selected one:
@@ -21,15 +27,14 @@
 
 #define SEISAN_STATE_FINISHED 0xff
 
-/* Additional named fields of the 64-byte allocation cleared by SeisanInit.
- * The original byte-oriented SeisanWork interface is retained below. */
+/* The settlement screen's 64-byte control block, cleared by SeisanInit. */
 typedef struct SeisanControlState {
     unsigned char unmodeled_00;
     unsigned char state;
     unsigned char flags;
     unsigned char requestedState;
-    unsigned char selectedState;
-    unsigned char closingTicks;
+    unsigned char nextState;
+    unsigned char transitionTicks;
     unsigned char partySize;
     unsigned char unmodeled_07[64 - 7];
 } SeisanControlState;
@@ -121,23 +126,6 @@ typedef struct SeisanRibbonData {
     unsigned int unmodeled_00[15];
 } SeisanRibbonData;
 
-/*
- * Partial prompt-button layout used by tskSeisanButton. Its original
- * instructions pass the message object at +0x08 and sprite at +0x4c; the
- * named fields below match the byte/halfword/word accesses in that function.
- */
-typedef struct SeisanButtonMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;             /* +0x01 */
-    unsigned char unmodeled_0a[2];
-    short x;                        /* +0x04 */
-    short y;                        /* +0x06 */
-    int color;                      /* +0x08 */
-    unsigned char unmodeled_0c[0x18 - 0x0c];
-    const char *text;               /* +0x18 */
-    unsigned char unmodeled_1c[0x28];
-} SeisanButtonMessage;
-
 typedef struct SeisanButtonSprite {
     unsigned char unmodeled_00[4];
     short x;                        /* +0x04 */
@@ -146,10 +134,14 @@ typedef struct SeisanButtonSprite {
     unsigned char unmodeled_0c[0x28 - 0x0c];
 } SeisanButtonSprite;
 
+/*
+ * Prompt-button layout used by tskSeisanButton. Its original instructions
+ * pass the message object at +0x08 and the sprite at +0x4c.
+ */
 typedef struct SeisanButtonWork {
     unsigned char unmodeled_00[4];
     int color;                      /* +0x04 */
-    SeisanButtonMessage message;    /* +0x08 */
+    EMessageParam message;          /* +0x08 */
     SeisanButtonSprite sprite;      /* +0x4c */
 } SeisanButtonWork;
 
@@ -174,44 +166,8 @@ typedef struct SeisanFadeData {
     unsigned char unmodeled_3c[4];  /* SeisanInit advances 64 bytes after this block. */
 } SeisanFadeData;
 
-typedef struct SeisanTimeWindow {
-    short x;
-    short y;
-    int depth;
-    short width;
-    short height;
-    const char *title;
-    signed char state;
-    unsigned char ribbonInitialized;
-    unsigned char unmodeled_12[2];
-    void (*callback)(struct SeisanTimeWindow *window, void *argument);
-    void *callbackArgument;
-    unsigned char unmodeled_1c[0x194 - 0x1c];
-} SeisanTimeWindow;
 
-typedef struct SeisanTimeTag {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int depth;
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-    unsigned char unmodeled_10[0x20 - 0x10];
-} SeisanTimeTag;
 
-typedef struct SeisanTimeNumber {
-    short x;
-    short y;
-    int depth;
-    unsigned char unmodeled_08[6];
-    unsigned char option;
-    unsigned char digits;
-    unsigned char unmodeled_10[4];
-    int value;
-    unsigned char unmodeled_18[0x90 - 0x18];
-} SeisanTimeNumber;
 
 typedef struct SeisanTimeSprite {
     unsigned char unmodeled_00[4];
@@ -226,9 +182,9 @@ typedef struct SeisanTimeSprite {
 typedef struct SeisanTimePanel {
     unsigned char unmodeled_00[4];
     int depth;
-    SeisanTimeWindow window;
-    SeisanTimeTag tags[2];
-    SeisanTimeNumber numbers[3];
+    WindowDX window;
+    ETagFontMainData tags[2];
+    ENumberMainData numbers[3];
     SeisanTimeSprite sprites[2];
 } SeisanTimePanel;
 
@@ -240,20 +196,15 @@ typedef struct SeisanItemPanel {
     unsigned char itemCount;
     unsigned char unmodeled_03;
     int depth;
-    SeisanTimeWindow windows[2];
-    SeisanButtonMessage title;
-    SeisanButtonMessage items[8];
+    WindowDX windows[2];
+    EMessageParam title;
+    EMessageParam items[8];
 } SeisanItemPanel;
 
 typedef struct SeisanItemEntry {
     int itemId;
     int count;
 } SeisanItemEntry;
-
-/* The name prefix returned by MenuTextGet (main/tu169). */
-typedef struct SeisanItemTextEntry {
-    const char *name;
-} SeisanItemTextEntry;
 
 typedef struct SeisanMoneyData {
     unsigned char unmodeled_00[0x10];
@@ -297,12 +248,12 @@ typedef struct SeisanStatusPanel {
     unsigned short previousLevel;
     unsigned short levelFlashTimer;
     int depth;
-    SeisanTimeWindow window;
+    WindowDX window;
     SeisanStatusProfile profile;
-    SeisanTimeNumber numbers[10];
-    SeisanTimeTag tags[4];
-    SeisanButtonMessage learnedTitle;
-    SeisanButtonMessage learned[6];
+    ENumberMainData numbers[10];
+    ETagFontMainData tags[4];
+    EMessageParam learnedTitle;
+    EMessageParam learned[6];
     SeisanFadeVertex separator[3];
     SeisanStatusSprite sprites[14];
     SeisanFadeVertex highlight[5];
@@ -323,33 +274,41 @@ typedef struct SeisanRenderPrefix {
     unsigned short flipBase;
 } SeisanRenderPrefix;
 
-typedef struct SeisanBackgroundColor {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char unmodeled_03;
-} SeisanBackgroundColor;
-
 typedef struct SeisanItemCategoryTable {
     short entries[4];
 } SeisanItemCategoryTable;
 
+/* A five-byte glyph label template: two two-byte glyphs and a terminator. */
+typedef struct SeisanLabelBytes {
+    unsigned char bytes[5];
+} SeisanLabelBytes;
+
+/* A printed glyph label: the template is copied in, then one glyph replaced. */
+typedef union SeisanGlyphText {
+    SeisanLabelBytes label;
+    unsigned short glyphs[3];
+    char text[6];
+} SeisanGlyphText;
+
 /*
- * The settlement (seisan) screen's state bytes. subSeisanMain (0x002a15c0)
- * drives them as a state machine:
- *   [1] the current state: subSeisanMain copies the requested state at [3]
- *       into it when they differ (lbu 0x3/lbu 0x1/sb 0x1 at
- *       0x002a15cc..0x002a15dc), and subSeisanCheck and SeisanMain switch on
- *       or test it (0x002a14d0, 0x002a18d8).
- *   [2] flags: bit 0 is set on the frame the state changes and cleared
+ * The settlement (seisan) screen's control block. subSeisanMain (0x002a15c0)
+ * drives it as a state machine:
+ *   state (+1): subSeisanMain copies requestedState (+3) into it when they
+ *       differ (lbu 0x3/lbu 0x1/sb 0x1 at 0x002a15cc..0x002a15dc), and
+ *       subSeisanCheck and SeisanMain switch on or test it (0x002a14d0,
+ *       0x002a18d8).
+ *   flags (+2): bit 0 is set on the frame the state changes and cleared
  *       otherwise (0x002a15e4..0x002a15f4); subSeisanCheck sets bit 2 when no
  *       check selected a state of its own.
- *   [4] the next state: subSeisanCheck stores each check's result here
+ *   nextState (+4): subSeisanCheck stores each check's result here
  *       (sb 0x4 at 0x002a1524..0x002a1584) and subSeisanMain copies it into
- *       the requested state at [3] (lbu 0x4/sb 0x3 at 0x002a170c/0x002a1714).
- * Only these bytes are named here; the work area itself is not modeled.
+ *       requestedState (lbu 0x4/sb 0x3 at 0x002a170c/0x002a1714).
+ *   transitionTicks (+5): reloaded on each state change and counted down by
+ *       subSeisanMain.
+ *   partySize (+6): incremented by SeisanInit for each party slot with a
+ *       character.
  */
-extern unsigned char *SeisanWork;
+extern SeisanControlState *SeisanWork;
 
 extern SeisanCountData SeisanCN;
 extern SeisanResultData *SeisanResult;
@@ -357,15 +316,12 @@ extern const SeisanRibbonData seisanRibbonTable;
 extern XglTaskScheduler *SeisanBgTask;
 extern XglTaskScheduler *SeisanTask;
 
-/* Original shared pad prefix and interfaces used by the recovered callbacks. */
-extern PadPrefix PadData;
-
 extern SeisanFadeData *SeisanFade;
 extern SeisanItemEntry *SeisanItemBox;
 extern const char *msg00_2_0036DAD0[];
 extern const unsigned short *msg_number[10];
-extern const char seisanOrdinalPrefixText[];
-extern const char seisanQuantityMarkText[];
+extern const SeisanLabelBytes seisanOrdinalPrefixText[];
+extern const SeisanLabelBytes seisanQuantityMarkText[];
 extern SeisanMoneyData *SeisanMg;
 extern const char *msg00_0_0036DAB8[3];
 extern const char combatantTitleText[];
@@ -376,21 +332,12 @@ extern unsigned int GameLoopState[];
 extern const SeisanItemCategoryTable seisanItemCategoryTable[];
 
 void tskTskMain2(TskObject *task);
-int subSeisanHissatuCheck00(unsigned char *seisan_work);
+int subSeisanHissatuCheck00(SeisanControlState *seisanWork);
 int subSeisanHissatuCheck01(void);
 void subSeisanMain(void);
 extern SeisanCharRecord *func_A19210(int chrNo);
 extern SeisanUnitRecord *func_A191C0(int chrNo);
 extern void endPrintDirectRibbon(SeisanRibbonData *ribbon);
-
-/*
- * endPrintExtFunc (still asm, main/tu164 src/main/end_print.c) and
- * MenuLoadSync/MenuBgTaskMain (still asm, main/tu160 src/main/window_tex_load.c)
- * are declared locally here until those TUs recover them; see
- * src/main/ether_tree.c and src/main/window_tex_load.h for the same
- * signatures under the same scaffold labels.
- */
-extern void endPrintExtFunc(int kind, int id, void *data);
 
 extern int MenuLoadSync(void);
 extern void MenuBgTaskMain(void);
@@ -398,39 +345,22 @@ void SeisanFadeMain(void);
 extern void MoveSlide(short *current, short *target, float rate);
 extern void eSpriteSet(void *sprite, short spriteId);
 extern void eSpriteMain(void *sprite);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageMain(void *message);
 extern void MenuBgTaskBreak(void);
 void SeisanCountMain(int mode);
-extern SeisanItemTextEntry *MenuTextGet(int index);
-extern void WindowDXSet(void *window);
-extern void WindowDXMain(void *window);
-extern void eTagFontSet(void *tag, const char *title);
-extern void eTagFontMain(void *tag);
-extern void eNumberSet(void *number, int value);
-extern void eNumberMain(void *number);
 extern unsigned int func_A22908(void);
-extern void xglClockUInt2DayTime(XglClock *clock, unsigned int seconds);
-extern int PartyTimeLimitCheck(XglClock *clock);
 extern void PartyTimeDispChange(XglClock *clock);
-extern int dataMoneyBoxChk(void);
-
 /* SeisanInit allocates these objects consecutively after xglTaskInitial. */
 /* SQ masks the low four address bits. The containing storage block is aligned
  * explicitly before typed access; SeisanWork retains the control-byte address. */
-const int *func_A19338(int tableId);
+const struct BattleExperienceAndParameters *func_A19338(int tableId);
 
-extern void MenuStatusDisp(SeisanTimeWindow *window, void *argument);
 extern void endSpriteSet(void *sprite, int flags);
-extern SeisanItemTextEntry *func_A2C7D8(int abilityId);
+extern MenuTextEntry *func_A2C7D8(int abilityId);
 extern void *MenuWorkEndGet(void);
-extern XglTaskScheduler *MenuBgTaskInit(void *work, int cameraId);
+extern unsigned char *MenuBgTaskInit(void *work, int cameraId);
 extern void *xglTaskInitial(void *pool, int capacity, int flags);
-extern void endPrintInit(void);
 extern void func_A17C08(SeisanResultData *result);
 extern SeisanMoneyData *func_00A0F110(void);
-extern void endPrintDirectFrameCopy(XglPacket *packet, int height, int flipBase);
-extern void endBackTexDraw(SeisanBackgroundColor *color);
 extern void MenuLoadInit(void);
 extern void MenuFontLoad(int font, int option);
 extern int WindowTexLoad(unsigned char *buffer, unsigned int request);

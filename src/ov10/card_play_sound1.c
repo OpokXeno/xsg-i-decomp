@@ -326,12 +326,11 @@ enum CardCursorKind {
 extern u16 CardCommandPlay[CARD_ID_COUNT];
 extern u8 CardInitialDataPack[CARD_DECK_SIZE];
 extern float s_asIntensity[4][4];
-extern float s_asDirection[4][4];
+extern Vector4 s_asDirection[4];
 extern unsigned char SaveData[];
 extern void CardHelpFileLoad(void);
 extern void InitCpuDeck(void);
 extern void xglLightIntensityParallel(void *light, int index, void *intensity);
-extern void xglLightAngle(void *light, int index, void *angle);
 
 /*
  * CardMainInit (0x00a00ad0, 0x110c bytes): one-time setup of the card game, called from
@@ -625,7 +624,7 @@ int CardMainInit(CardGameWork *work)
     eyePosition[2] = 5.8f;
     eyePosition[3] = 1.0f;
     {
-        float *cameraEye = &xglStudioSelectGetActiveCamera(0)->position.x;
+        float *cameraEye = &xglStudioSelectGetActiveCamera(0)->position.vector.x;
 
         /*
          * sceVu0CopyVector shape: addiu/addiu, then lq/sq through $2. Plain C compiles this copy
@@ -656,7 +655,7 @@ int CardMainInit(CardGameWork *work)
             xglLightIntensityAmbient(light, s_asIntensity);
         } else {
             xglLightIntensityParallel(light, lightNo - 1, s_asIntensity[lightNo]);
-            xglLightAngle(light, lightNo - 1, s_asDirection[lightNo]);
+            xglLightAngle(light, lightNo - 1, &s_asDirection[lightNo]);
         }
     }
     return 1;
@@ -3443,7 +3442,7 @@ s32 CardMainProc(CardGameWork *work) {
     position[0] = 0.0f;
     position[1] = 0.0f;
     {
-        float *eye = &xglStudioSelectGetActiveCamera(0)->position.x;
+        float *eye = &xglStudioSelectGetActiveCamera(0)->position.vector.x;
 
         /* sceVu0CopyVector: the original copies the quadword with lq/sq. */
         __asm__ __volatile__(

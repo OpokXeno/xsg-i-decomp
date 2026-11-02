@@ -1,5 +1,17 @@
 #include "common.h"
 #include "shared.h"
+#include "main/init_drill.h"
+#include "main/act_1.h"
+#include "main/exm_2.h"
+#include "main/act_2.h"
+#include "main/init_uwamono_sys.h"
+#include "main/outer_product.h"
+#include "main/sef.h"
+#include "main/vibration.h"
+#include "main/xgl_2.h"
+#include "main/xgl_flags.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 /* The scene record contains a byte offset to its array of 4x4 matrices. */
 #define DRILL_SCENE_MATRIX(index)                                           \
@@ -25,9 +37,9 @@ typedef struct DrillMapUnit {
     u32 flags;
     void *update;
     unsigned char unmodeled_08[8];
-    float position[4];
+    AlignedVector4 position;
     unsigned char unmodeled_20[0x84];
-    u16 serial;
+    s16 serial;
     unsigned char unmodeled_a6[0x0a];
     float size[4];
     unsigned char unmodeled_c0[0xe0];
@@ -50,23 +62,7 @@ typedef struct DrillPadLayout {
     signed char yawStick;
 } DrillPadLayout;
 
-typedef union DrillVector {
-    Vector4 vector;
-    u64 words[2];
-} DrillVector;
-
 typedef struct Drill Drill;
-
-typedef struct DrillEffectRef {
-    unsigned char unmodeled_000[0x80];
-    DrillVector offset;
-    unsigned char unmodeled_090[0x634];
-    Drill *owner;
-    unsigned char unmodeled_6c8[0x3c4];
-    u32 flags;
-    unsigned char unmodeled_a90[0x0a];
-    u8 hidden;
-} DrillEffectRef;
 
 typedef struct DrillCameraAngles {
     unsigned char unmodeled_00[4];
@@ -132,10 +128,10 @@ typedef struct DrillSave {
     int returnCount;
     int frameCount;
     unsigned char unmodeled_44[8];
-    DrillEffectRef *effect1;
+    SchedulerState *effect1;
     int partIndexC;
     int partIndexD;
-    u32 flags;
+    int flags;
     int frameLimit;
 } DrillSave;
 
@@ -143,12 +139,12 @@ struct Drill {
     unsigned char unmodeled_000[4];
     void *update;
     unsigned char unmodeled_008[8];
-    DrillVector position;
+    AlignedVector4 position;
     float rotationX;
     float rotationY;
     float rotationZ;
     unsigned char unmodeled_02c[0x54];
-    float (*matrix)[4];
+    struct DrillMatrix *matrix;
     unsigned char unmodeled_084[0x1c];
     u8 slot;
     unsigned char unmodeled_0a1;
@@ -159,14 +155,14 @@ struct Drill {
     s16 crashTimer;
     s16 bounceCount;
     unsigned char unmodeled_0ac[0x3c];
-    DrillEffectRef *effect3;
+    SchedulerState *effect3;
     unsigned char unmodeled_0ec[0xb4];
     DrillSave save;
     unsigned char unmodeled_200[0x20];
     float cameraYaw;
     float cameraPitch;
     unsigned char unmodeled_228[8];
-    DrillEffectRef *effect2;
+    SchedulerState *effect2;
 };
 
 typedef struct DrillItemInfo {
@@ -184,25 +180,10 @@ typedef struct DrillItemUnit {
     unsigned char unmodeled_1a6[0x15a];
 } DrillItemUnit;
 
-/* Container records use the same 0x300-byte MapUnit slots. The work-area
- * fields below are read or written by the container creation/hit routines. */
-typedef struct DrillContainerInfo {
-    unsigned char unmodeled_00[4];
-    signed char hit;
-    u8 spawnedItemKind;
-    unsigned char unmodeled_06[0x27];
-    signed char containerType;
-    u8 active;
-    unsigned char unmodeled_2f;
-    s16 containerSerial;
-    u8 hitMode;
-    unsigned char unmodeled_33[0x0d];
-    int modelId;
-    int extraId;
-    unsigned char unmodeled_48[0x118];
-} DrillContainerInfo;
-
-typedef struct DrillContainerUnit {
+/* Partial view of MapUnitRecord (include/main/exm_2.h); kept: switching it changes
+ * init_drill.raw .text (measured with tucheck; the size/matrixRef gap names and the
+ * DrillContainerInfo cast on +0x1a0 were tried). */
+typedef struct MapUnitRecordDrillView {
     u32 flags;
     void *update;
     unsigned char unmodeled_08[8];
@@ -218,25 +199,10 @@ typedef struct DrillContainerUnit {
     unsigned char unmodeled_a1[3];
     s16 serial;
     unsigned char unmodeled_a6[0x0a];
-    DrillVector size;
+    DoublewordAlignedVector4 size;
     unsigned char unmodeled_c0[0xe0];
     DrillContainerInfo info;
-} DrillContainerUnit;
-
-typedef struct DrillContainerModel {
-    u8 hitMode;
-    unsigned char unmodeled_01[3];
-    int modelId;
-    int itemBase;
-    int unmodeled_0c;
-} DrillContainerModel;
-
-typedef struct DrillContainerDef {
-    u8 type;
-    unsigned char unmodeled_01[0x0f];
-    DrillVector size;
-    DrillContainerModel model;
-} DrillContainerDef;
+} MapUnitRecordDrillView;
 
 typedef struct DrillItemBox {
     unsigned char unmodeled_00[3];
@@ -258,93 +224,15 @@ typedef struct DrillSceneRoot {
     DrillSceneBlock *block;
 } DrillSceneRoot;
 
-/* HitCheckEnemy's partial actor view keeps the original 0xa70 table stride. */
-typedef struct DrillHitActor {
-    u32 flags;
-    unsigned char unmodeled_04[0x0c];
-    Vector4 position;
-    unsigned char unmodeled_20[0x60];
-    u8 number;
-    unsigned char unmodeled_81[5];
-    s16 sound_effect_id;
-    unsigned char unmodeled_88[0x84];
-    int methodArg;
-    unsigned char unmodeled_110[0x8d8];
-    float body_radius;
-    unsigned char unmodeled_9ec[0x84];
-} DrillHitActor;
-
-typedef DrillHitActor DrillMotionActor;
-
 typedef struct DrillEnemyWork {
     unsigned char unmodeled_00[0x0c];
     float height;
     unsigned char unmodeled_10[0x38a0];
 } DrillEnemyWork;
 
-struct DrillReturnView;
-
-typedef struct DrillReturnEffectRef {
-    unsigned char unmodeled_000[0x80];
-    Vector4 offset;                     /* +0x080: effect offset vector */
-    unsigned char unmodeled_090[0x634];
-    void *owner;                         /* +0x6c4: owning Drill */
-    unsigned char unmodeled_6c8[0x3c4];
-    u32 flags;                            /* +0xa8c */
-    unsigned char unmodeled_a90[0x0a];
-    u8 hidden;                            /* +0xa9a: visibility flag */
-} DrillReturnEffectRef;
-
-typedef struct DrillReturnSave {
-    unsigned char unmodeled_00[4];
-    signed char hit;                     /* +0x004 */
-    unsigned char unmodeled_05[7];
-    float xSpeed;                         /* +0x00c */
-    float fallSpeed;                      /* +0x010 */
-    float zSpeed;                         /* +0x014 */
-    float xReturnSpeed;                   /* +0x018 */
-    float riseSpeed;                      /* +0x01c */
-    float zReturnSpeed;                   /* +0x020 */
-    unsigned char unmodeled_24[8];
-    signed char returnLimit;              /* +0x02c */
-    unsigned char unmodeled_2d;
-    signed char kind;                     /* +0x02e */
-    unsigned char unmodeled_2f[4];
-    signed char hitCount;                 /* +0x033 */
-    unsigned char unmodeled_34[8];
-    int returnCount;                      /* +0x03c */
-    unsigned char unmodeled_40[0x0c];
-    DrillReturnEffectRef *effect1;        /* +0x04c */
-    unsigned char unmodeled_50[8];
-    u32 flags;                            /* +0x058 */
-} DrillReturnSave;
-
-typedef struct DrillReturnView {
-    unsigned char unmodeled_000[0x10];
-    Vector4 position;                    /* +0x010: direct xyz view used by DrillReturnFunc */
-    float rotationX;                      /* +0x020 */
-    float rotationY;                      /* +0x024 */
-    float rotationZ;                      /* +0x028 */
-    unsigned char unmodeled_02c[0x54];
-    float (*matrix)[4];                   /* +0x080 */
-    unsigned char unmodeled_084[0x1e];
-    u8 phase;                             /* +0x0a2 */
-    unsigned char unmodeled_0a3[5];
-    s16 crashTimer;                       /* +0x0a8 */
-    unsigned char unmodeled_0aa[0x3e];
-    DrillReturnEffectRef *effect3;        /* +0x0e8 */
-    unsigned char unmodeled_0ec[0xb4];
-    DrillReturnSave save;                 /* +0x1a0 */
-    unsigned char unmodeled_1fc[0x24];
-    float cameraYaw;                      /* +0x220 */
-    float cameraPitch;                    /* +0x224 */
-    unsigned char unmodeled_228[8];
-    DrillReturnEffectRef *effect2;        /* +0x230 */
-} DrillReturnView;
-
 typedef struct DrillGameLoopState {
     unsigned char unmodeled_000[4];
-    DrillMotionActor *playerActor;
+    Actor *playerActor;
     unsigned char unmodeled_008[8];
     u32 flags;
     unsigned char unmodeled_014[0x40];
@@ -361,9 +249,8 @@ typedef struct DrillMapUnitHitProbe {
 
 extern DrillMapUnit MapUnit[64];
 extern DrillPadLayout PadData;
-extern DrillContainerDef container[31];
 extern DrillItemBox ItemBoxTbl[];
-extern DrillHitActor actor[64];
+extern Actor actor[64];
 extern DrillEnemyWork enepc[16];
 
 /* These unchanged data records are supplied by the original scaffolding. */
@@ -389,76 +276,51 @@ extern const char drillReturnText[];
 extern const char drillStandbyMethodName[];
 extern const char drillEndMethodName[];
 extern const char cameraControlText[16];
-extern short Times;
-extern short NowTester;
-
-float xglFRand(void);
-float CheckDist2D(const Vector4 *first, const Vector4 *second);
 int HitCheckContainerPosSize(Vector4 *position, int slot, float radius);
 int HitCheckEnemy(Vector4 *position, float radius);
 DrillCamera *xglStudioGetActiveCamera(void);
-void *sefCreateEffectCf(int effect_id, const void *position, const void *orientation);
-void sefRewindEffectCf(DrillEffectRef *effect);
-void xglFontDebugPrintf(int x, int y, const char *fmt, ...);
-void xglMatrixStackUnit(void);
-void xglMatrixStackRotY(float angle);
-void xglMatrixStackSave(float matrix[4][4]);
-void xglSoundEffectStopID(int id, int channel);
-void xglSoundEffectNormalID(int id, int channel);
-void Vibration_Set_Strong(int left, int right, int duration);
 void DrillHitCheck(Drill *drill);
 void DrillCalcCameraPos(DrillCamera *camera);
 void DrillResetCameraPos(Drill *drill, DrillCamera *camera);
 void DrillCameraControlFunc(Drill *drill, DrillCamera *camera);
-float xglSin(float angle);
-float xglCos(float angle);
 void *Unit_CreateUwamono(int identifier, int unit_id);
 void InitItemSymbol(void *item);
-void SetHideObject(void *unit);
-int xglFlagsSet1(int bit_offset, int value);
-int xglFlagsGet1(int bit_offset);
-unsigned short xglSRand(void);
-void xglMatrixStackTrans(const float translation[4]);
-void xglMatrixStackRotX(float angle);
-void xglMatrixStackRotZ(float angle);
 void DrillClearContainer(void);
 void SetContainer(int count);
-void SetContainerItem(DrillItemUnit *unit, int value);
-void CreateUwamonoCommon(DrillContainerUnit *unit);
+void SetContainerItem(MapUnitRecordDrillView *unit, int value);
+void CreateUwamonoCommon(MapUnitRecordDrillView *unit);
 void MAP_updateUnitTrap(void);
-void SetContainerParam(DrillContainerUnit *unit);
-int CalcPosContainer(DrillContainerUnit *unit);
+void SetContainerParam(MapUnitRecordDrillView *unit);
+int CalcPosContainer(MapUnitRecordDrillView *unit);
 void DrillPowerOffFunc(Drill *drill);
 void DrillStandbyFunc(Drill *drill);
 void DrillZMoveFunc(Drill *drill);
 void DrillZStopFunc(Drill *drill);
 void DrillXMoveFunc(Drill *drill);
 void DrillCrashFunc(Drill *drill);
-void DrillReturnFunc(struct DrillReturnView *drill);
+void DrillReturnFunc(Drill *drill);
 void MAP_updateUnitDrill(Drill *drill);
 void DrillResetFlag(Drill *drill);
 void GetPartsPos(Drill *drill);
 int printf(const char *format, ...);
 int HexToStr(int value, char *text);
-void xglFontPrint(int x, int y, int colour, const char *text);
 void xglFontPrintDirectOT(int ot, const char *text);
-void Enemy_Command_Freeze(DrillHitActor *target, int frozen);
+void Enemy_Command_Freeze(Actor *target, int frozen);
 void CallMethod_I(const char *method, int argument);
-void ACT_setMotion2(DrillMotionActor *actor, int motion, int mode);
 int CreateContainer(int, int);
 extern void CallMethod(const char *method);
 int HitCheckMapUnitPosAt(DrillMapUnitHitProbe *probe, DrillMapUnit *unit);
 
-DrillContainerDef container[31] = { { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 501, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 503, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 505, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 507, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 509, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 511, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 513, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 515, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 517, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 519, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 521, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 523, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 525, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 527, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 529, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 531, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 614, .itemBase = 533, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 614, .itemBase = 535, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 642, .itemBase = 537, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 642, .itemBase = 539, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 629, .itemBase = 1, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 632, .itemBase = 3, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.5f, .y = 1.0f, .z = 1.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 635, .itemBase = 5, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 7, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 604, .itemBase = 9, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.5f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 1, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 3, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.40000000596046448f, .y = 1.5f, .z = 0.40000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 7, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 8, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 604, .itemBase = 9, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 10, .unmodeled_0c = 0 } } };
+DrillContainerDef container[31] = { { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 501, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 503, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 505, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 507, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 509, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 511, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 513, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 515, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 517, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 519, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 521, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 523, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 525, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 527, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 529, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 531, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 614, .itemBase = 533, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 614, .itemBase = 535, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 642, .itemBase = 537, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 642, .itemBase = 539, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 629, .itemBase = 1, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.0f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 632, .itemBase = 3, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.5f, .y = 1.0f, .z = 1.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 635, .itemBase = 5, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 7, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.0f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 604, .itemBase = 9, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.15000000596046448f, .y = 1.5f, .z = 0.15000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 1, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 3, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.40000000596046448f, .y = 1.5f, .z = 0.40000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 7, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 8, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 604, .itemBase = 9, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .x =0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 10, .unmodeled_0c = 0 } } };
 
-static u32 * pDrillFlag;
+static int *pDrillFlag;
 
 void InitDrill(Drill *drill)
 {
     DrillSave *save = &drill->save;
-    DrillEffectRef *effect;
+    SchedulerState *effect;
 
-    printf((char *) initDrillDebugFormat, save->partIndexA, save->partIndexB, drill->serial);
+    printf(initDrillDebugFormat, save->partIndexA, save->partIndexB, drill->serial);
     GetPartsPos(drill);
     save->runState = 0;
     drill->phase = 0;
@@ -477,30 +339,30 @@ void InitDrill(Drill *drill)
         effect = sefCreateEffectCf(1539, 0, 0);
     }
     drill->effect3 = effect;
-    effect->offset.vector.x = -3.2f;
-    effect->offset.vector.y = 6.67f;
-    effect->offset.vector.z = -12.5f;
-    effect->hidden = 0;
+    effect->position.x = -3.2f;
+    effect->position.y = 6.67f;
+    effect->position.z = -12.5f;
+    effect->display =0;
 
     effect = sefCreateEffectCf(1661, 0, 0);
     if (effect == 0) {
         effect = sefCreateEffectCf(1539, 0, 0);
     }
     drill->effect2 = effect;
-    effect->offset.vector.z = -12.5f;
-    effect->offset.vector.x = -3.03f;
-    effect->offset.vector.y = 6.23f;
-    effect->hidden = 0;
+    effect->position.z = -12.5f;
+    effect->position.x = -3.03f;
+    effect->position.y = 6.23f;
+    effect->display =0;
 
     effect = sefCreateEffectCf(1581, 0, 0);
     save->effect1 = effect;
-    effect->hidden = 0;
+    effect->display =0;
     DrillResetFlag(drill);
 }
 
 void SetContainer(int count)
 {
-    printf((char *) setContainerFormat);
+    printf(setContainerFormat);
     DrillClearContainer();
     if (count > 0) {
         do {
@@ -526,7 +388,7 @@ void SetContainer(int count)
 
 int CreateContainer(int identifier, int unit_id)
 {
-    DrillContainerUnit *unit;
+    MapUnitRecordDrillView *unit;
     DrillItemBox *table;
     u16 roll;
     int base;
@@ -549,7 +411,7 @@ int CreateContainer(int identifier, int unit_id)
     }
     if ((u16)(unit->serial - 0x701C) < 4 && (xglSRand() & 0xF) == 0) {
         tries = 0;
-        slot = (u16)(xglSRand() % 5U);
+        slot = xglSRand() % 5U;
         do {
             pick = (slot + tries) % 5;
             tries++;
@@ -558,8 +420,8 @@ int CreateContainer(int identifier, int unit_id)
                 *pDrillFlag |= 0x10 << pick;
                 item = pick + 0x21D;
                 if (xglFlagsGet1(pick + 0x7A0E4) == 0) {
-                    SetContainerItem((DrillItemUnit *)unit, item);
-                    printf((char *) rareItemPlacedFormat, item);
+                    SetContainerItem(unit, item);
+                    printf(rareItemPlacedFormat, item);
                     return (int)unit;
                 }
             }
@@ -571,12 +433,12 @@ int CreateContainer(int identifier, int unit_id)
     weight = table[base].weight;
     roll = xglSRand() % 100U;
     if (roll < weight) {
-        SetContainerItem((DrillItemUnit *)unit, base);
+        SetContainerItem(unit, base);
     } else {
         base++;
         weight += table[base].weight;
         if (roll < weight) {
-            SetContainerItem((DrillItemUnit *)unit, base);
+            SetContainerItem(unit, base);
         }
     }
     return (int)unit;
@@ -589,10 +451,10 @@ void DrillClearContainer(void)
     for (i = 0; i < 64; i++) {
         DrillMapUnit *unit = &MapUnit[i];
 
-        if ((u32)unit->serial - 0x7014 < 0x14) {
-            unit->serial = (u16)-1;
+        if ((u16)(unit->serial - 0x7014) < 0x14) {
+            unit->serial = -1;
         } else if ((unit->flags & 0x100000) != 0) {
-            unit->serial = (u16)-1;
+            unit->serial = -1;
         } else {
             continue;
         }
@@ -600,7 +462,7 @@ void DrillClearContainer(void)
     }
 }
 
-void SetContainerParam(DrillContainerUnit *unit)
+void SetContainerParam(MapUnitRecordDrillView *unit)
 {
     DrillContainerInfo *info = &unit->info;
     int index;
@@ -625,7 +487,7 @@ void SetContainerParam(DrillContainerUnit *unit)
     }
 }
 
-void SetContainerItem(DrillItemUnit *container, int value)
+void SetContainerItem(MapUnitRecordDrillView *container, int value)
 {
     DrillItemUnit *item;
 
@@ -636,12 +498,12 @@ void SetContainerItem(DrillItemUnit *container, int value)
         info->value = value;
         info->state = 5;
         InitItemSymbol(item);
-        container->spawnedItemKind = item->itemKind;
+        container->info.spawnedItemKind = item->itemKind;
         SetHideObject(container);
     }
 }
 
-int CalcPosContainer(DrillContainerUnit *unit)
+int CalcPosContainer(MapUnitRecordDrillView *unit)
 {
     DrillContainerInfo *info = &unit->info;
     float radius;
@@ -665,7 +527,7 @@ int CalcPosContainer(DrillContainerUnit *unit)
         xglMatrixStackRotY(unit->rotationY);
         xglMatrixStackRotZ(unit->rotationZ);
         xglMatrixStackSave(unit->matrix);
-        radius = unit->size.vector.x;
+        radius = unit->size.x;
         if (info->containerType == 2) {
             radius *= 1.5f;
         }
@@ -673,16 +535,16 @@ int CalcPosContainer(DrillContainerUnit *unit)
         if (hit == -1) {
             return 1;
         }
-        distance = CheckDist2D(&unit->position, (const Vector4 *)MapUnit[hit].position);
+        distance = CheckDist2D(&unit->position, &MapUnit[hit].position);
         if (distance < MapUnit[hit].size[0] - radius) {
-            unit->position.y = MapUnit[hit].position[1] + MapUnit[hit].size[1];
-            hit = HitCheckContainerPosSize(&unit->position, unit->slot, radius);
+            unit->position.y = MapUnit[hit].position.y + MapUnit[hit].size[1];
+            hit =HitCheckContainerPosSize(&unit->position, unit->slot, radius);
             if (hit == -1) {
                 return 1;
             }
-            distance = CheckDist2D(&unit->position, (const Vector4 *)MapUnit[hit].position);
+            distance = CheckDist2D(&unit->position, &MapUnit[hit].position);
             if (distance < MapUnit[hit].size[0] - radius) {
-                unit->position.y = MapUnit[hit].position[1] + MapUnit[hit].size[1];
+                unit->position.y = MapUnit[hit].position.y + MapUnit[hit].size[1];
                 if (HitCheckContainerPosSize(&unit->position, unit->slot, radius) == -1) {
                     return 1;
                 }
@@ -724,7 +586,7 @@ void MAP_updateUnitDrill(Drill *drill)
         DrillCrashFunc(drill);
         break;
     case 6:
-        DrillReturnFunc((struct DrillReturnView *) drill);
+        DrillReturnFunc(drill);
         break;
     }
 
@@ -747,13 +609,13 @@ void MAP_updateUnitDrill(Drill *drill)
                         CallMethod(drillTimeoverMethodName);
                         save->flags |= 0x80000000;
                         if (drill->phase != 5) {
-                            DrillEffectRef *effect;
+                            SchedulerState *effect;
 
                             drill->phase = 6;
                             effect = drill->effect3;
-                            effect->hidden = 0;
+                            effect->display =0;
                             effect = save->effect1;
-                            effect->hidden = 0;
+                            effect->display =0;
                         }
                     }
                     seconds = 0;
@@ -769,11 +631,11 @@ void MAP_updateUnitDrill(Drill *drill)
         }
     }
 
-    matrix = (DrillMatrix *) drill->matrix;
-    matrix->m[3][0] = drill->position.vector.x;
-    matrix->m[3][1] = drill->position.vector.y;
+    matrix = drill->matrix;
+    matrix->m[3][0] = drill->position.x;
+    matrix->m[3][1] = drill->position.y;
     part = &DRILL_SCENE_MATRIX(save->partIndexA);
-    part->m[3][2] = matrix->m[3][2] = drill->position.vector.z;
+    part->m[3][2] = matrix->m[3][2] = drill->position.z;
     part = &DRILL_SCENE_MATRIX(save->partIndexB);
     part->m[3][0] = matrix->m[3][0];
     part->m[3][2] = matrix->m[3][2];
@@ -809,16 +671,16 @@ void MAP_updateUnitDrill(Drill *drill)
 void DrillPowerOffFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
-    DrillMotionActor *actor = GameLoopState.playerActor;
+    Actor *actor = GameLoopState.playerActor;
     DrillCamera *camera;
     float initialAngle;
-    DrillEffectRef *effect;
+    SchedulerState *effect;
     signed char hit;
 
     xglFontDebugPrintf(8, 16, drillPowerOffText);
-    drill->position.vector.x = -2.9f;
-    drill->position.vector.y = 4.5f;
-    drill->position.vector.z = -12.5f;
+    drill->position.x = -2.9f;
+    drill->position.y = 4.5f;
+    drill->position.z = -12.5f;
     save->returnCount = 0;
     save->startState = 0;
     save->hitCount = 0;
@@ -841,9 +703,9 @@ void DrillPowerOffFunc(Drill *drill)
         save->flags &= 0x7fffffff;
     }
     effect = drill->effect2;
-    effect->hidden = 0;
+    effect->display =0;
     effect = save->effect1;
-    effect->hidden = 0;
+    effect->display =0;
 }
 
 void DrillStandbyFunc(Drill *drill)
@@ -853,7 +715,7 @@ void DrillStandbyFunc(Drill *drill)
 
     if (save->command == 2) {
         save->cameraPreset = 1;
-        xglFontDebugPrintf(8, 16, (char *) drillStopText);
+        xglFontDebugPrintf(8, 16, drillStopText);
         DrillResetCameraPos(drill, camera);
         return;
     } else if (save->command == 1) {
@@ -864,8 +726,8 @@ void DrillStandbyFunc(Drill *drill)
         save->hit = 0;
         save->command = 0;
     } else {
-        xglFontDebugPrintf(8, 16, (char *) drillStandbyText);
-        if ((int) save->flags >= 0) {
+        xglFontDebugPrintf(8, 16, drillStandbyText);
+        if (save->flags >= 0) {
             DrillCameraControlFunc(drill, camera);
             drill->crashTimer = 0;
             drill->bounceCount = 0;
@@ -889,7 +751,7 @@ void DrillStandbyFunc(Drill *drill)
                 && ((save->flags & 1) == 0 || save->frameLimit - save->frameCount >= 60)
                 && save->command != 1) {
                 save->command = 2;
-                CallMethod((const char *) drillStopMethodName);
+                CallMethod(drillStopMethodName);
             }
         }
     }
@@ -898,22 +760,22 @@ void DrillStandbyFunc(Drill *drill)
 void DrillZMoveFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
-    DrillEffectRef *effect;
+    SchedulerState *effect;
 
-    xglFontDebugPrintf(8, 16, (char *) drillZMoveText);
+    xglFontDebugPrintf(8, 16, drillZMoveText);
     Vibration_Set_Strong(128, 128, 2);
     save->cameraPreset = 1;
 
     if ((PadData.half_28 & 0x80) != 0) {
-        drill->position.vector.z -= save->zSpeed;
+        drill->position.z -= save->zSpeed;
     } else {
         drill->phase = 3;
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectNormalID(0x30097, 0);
     }
 
-    if (drill->position.vector.z < -23.3f) {
-        drill->position.vector.z = -23.3f;
+    if (drill->position.z < -23.3f) {
+        drill->position.z = -23.3f;
         drill->phase = 3;
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectNormalID(0x30097, 0);
@@ -921,24 +783,24 @@ void DrillZMoveFunc(Drill *drill)
 
     effect = drill->effect2;
     sefRewindEffectCf(effect);
-    effect->hidden = 1;
-    effect->offset.vector.z = drill->position.vector.z;
+    effect->display =1;
+    effect->position.z = drill->position.z;
 
     effect = save->effect1;
     sefRewindEffectCf(effect);
-    effect->hidden = 1;
-    effect->offset.vector.x = -4.0f;
-    effect->offset.vector.y = 1.5f;
-    effect->offset.vector.z = drill->position.vector.z + 0.5f;
+    effect->display =1;
+    effect->position.x = -4.0f;
+    effect->position.y = 1.5f;
+    effect->position.z = drill->position.z + 0.5f;
 }
 
 void DrillZStopFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
     DrillCamera *camera;
-    DrillEffectRef *effect;
+    SchedulerState *effect;
 
-    xglFontDebugPrintf(8, 16, (char *) drillZStandbyText);
+    xglFontDebugPrintf(8, 16, drillZStandbyText);
     camera = xglStudioGetActiveCamera();
     DrillCameraControlFunc(drill, camera);
 
@@ -961,36 +823,36 @@ void DrillZStopFunc(Drill *drill)
     }
 
     effect = drill->effect2;
-    effect->hidden = 0;
+    effect->display =0;
     effect = save->effect1;
-    effect->hidden = 0;
+    effect->display =0;
 }
 
 void DrillXMoveFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
     DrillCamera *camera;
-    DrillEffectRef *effect;
+    SchedulerState *effect;
 
     camera = xglStudioGetActiveCamera();
-    xglFontDebugPrintf(8, 16, (char *) drillXMoveText);
+    xglFontDebugPrintf(8, 16, drillXMoveText);
     Vibration_Set_Strong(128, 128, 2);
 
     if ((PadData.half_28 & 0x80) != 0) {
-        drill->position.vector.x += save->xSpeed;
-    } else if (drill->position.vector.x < -1.9000001f) {
-        drill->position.vector.x += save->xSpeed;
+        drill->position.x += save->xSpeed;
+    } else if (drill->position.x < -1.9000001f) {
+        drill->position.x += save->xSpeed;
     } else {
         drill->phase = 5;
 
         effect = sefCreateEffectCf(1594, 0, 0);
-        effect->offset = drill->position;
+        effect->position = drill->position;
         effect->flags &= ~0x10;
-        effect->offset.vector.y = 0.0f;
+        effect->position.y = 0.0f;
 
         effect = sefCreateEffectCf(1657, 0, 0);
         effect->flags &= ~0x400;
-        effect->owner = drill;
+        effect->casterUnit = (MapUnitRecord *)drill;
 
         drill->cameraYaw = camera->angles.yaw;
         drill->cameraPitch = camera->angles.pitch;
@@ -1000,18 +862,18 @@ void DrillXMoveFunc(Drill *drill)
         return;
     }
 
-    if (drill->position.vector.x > 4.3f) {
-        drill->position.vector.x = 4.3f;
+    if (drill->position.x > 4.3f) {
+        drill->position.x = 4.3f;
         drill->phase = 5;
 
         effect = sefCreateEffectCf(1594, 0, 0);
-        effect->offset = drill->position;
+        effect->position = drill->position;
         effect->flags &= ~0x10;
-        effect->offset.vector.y = 0.0f;
+        effect->position.y = 0.0f;
 
         effect = sefCreateEffectCf(1657, 0, 0);
         effect->flags &= ~0x400;
-        effect->owner = drill;
+        effect->casterUnit = (MapUnitRecord *)drill;
 
         drill->cameraYaw = camera->angles.yaw;
         drill->cameraPitch = camera->angles.pitch;
@@ -1022,30 +884,30 @@ void DrillXMoveFunc(Drill *drill)
 
     effect = drill->effect3;
     sefRewindEffectCf(effect);
-    effect->hidden = 1;
-    effect->offset.vector.x = drill->position.vector.x;
-    effect->offset.vector.z = drill->position.vector.z;
+    effect->display =1;
+    effect->position.x = drill->position.x;
+    effect->position.z = drill->position.z;
 
     effect = save->effect1;
     sefRewindEffectCf(effect);
-    effect->hidden = 1;
-    effect->offset.vector.x = drill->position.vector.x;
-    effect->offset.vector.y = 6.0f;
-    effect->offset.vector.z = drill->position.vector.z;
+    effect->display =1;
+    effect->position.x = drill->position.x;
+    effect->position.y = 6.0f;
+    effect->position.z = drill->position.z;
 }
 
 void DrillCrashFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
     DrillCamera *camera;
-    DrillEffectRef *effect;
+    SchedulerState *effect;
 
     effect = drill->effect3;
-    effect->hidden = 0;
+    effect->display =0;
     effect = save->effect1;
-    effect->hidden = 0;
+    effect->display =0;
     camera = xglStudioGetActiveCamera();
-    xglFontDebugPrintf(8, 16, (char *) drillCrashFormat, save->hitCount);
+    xglFontDebugPrintf(8, 16, drillCrashFormat, save->hitCount);
 
     drill->crashTimer++;
     drill->rotationY += drill->crashTimer * 0.1f;
@@ -1053,25 +915,25 @@ void DrillCrashFunc(Drill *drill)
     drill->rotationZ = 0.0f;
     xglMatrixStackUnit();
     xglMatrixStackRotY(drill->rotationY);
-    xglMatrixStackSave(drill->matrix);
+    xglMatrixStackSave(drill->matrix->m);
 
-    camera->angles.positionX = drill->position.vector.x + 4.0f;
-    camera->angles.positionY = drill->position.vector.y + 5.0f;
-    camera->angles.positionZ = drill->position.vector.z - 4.0f;
+    camera->angles.positionX = drill->position.x + 4.0f;
+    camera->angles.positionY = drill->position.y + 5.0f;
+    camera->angles.positionZ = drill->position.z - 4.0f;
     camera->angles.yaw = -0.78539819f;
     camera->angles.pitch = 2.3561945f;
     camera->angles.roll = 0.0f;
 
     if (drill->crashTimer >= 16) {
         drill->crashTimer = 16;
-        drill->position.vector.y -= save->fallSpeed;
+        drill->position.y -= save->fallSpeed;
         DrillHitCheck(drill);
-        if (drill->position.vector.y < 0.0f) {
+        if (drill->position.y < 0.0f) {
             if (drill->bounceCount == 0) {
                 sefCreateEffectCf(1721, &drill->position, 0);
             }
             drill->bounceCount++;
-            drill->position.vector.y = 0.0f;
+            drill->position.y = 0.0f;
             if (drill->bounceCount >= 9) {
                 camera->angles.yaw = drill->cameraYaw;
                 camera->angles.pitch = drill->cameraPitch;
@@ -1082,13 +944,13 @@ void DrillCrashFunc(Drill *drill)
     }
 }
 
-void DrillReturnFunc(DrillReturnView *drill)
+void DrillReturnFunc(Drill *drill)
 {
-    DrillReturnSave *save = &drill->save;
-    DrillReturnEffectRef *effect;
+    DrillSave *save = &drill->save;
+    SchedulerState *effect;
     DrillCamera *camera;
 
-    xglFontDebugPrintf(8, 16, (const char *)drillReturnText);
+    xglFontDebugPrintf(8, 16, drillReturnText);
     if (drill->crashTimer > 0) {
         drill->crashTimer--;
         drill->rotationY += drill->crashTimer * 0.1f;
@@ -1096,8 +958,8 @@ void DrillReturnFunc(DrillReturnView *drill)
         drill->rotationZ = 0.0f;
         xglMatrixStackUnit();
         xglMatrixStackRotY(drill->rotationY);
-        xglMatrixStackSave(drill->matrix);
-        DrillHitCheck((Drill *)drill);
+        xglMatrixStackSave(drill->matrix->m);
+        DrillHitCheck(drill);
         return;
     }
 
@@ -1119,22 +981,22 @@ void DrillReturnFunc(DrillReturnView *drill)
             xglSoundEffectNormalID(0x30096, 0);
         }
         effect = drill->effect3;
-        sefRewindEffectCf((DrillEffectRef *)effect);
-        effect->hidden = 1;
-        effect->offset.x = drill->position.x;
-        effect->offset.z = drill->position.z;
+        sefRewindEffectCf(effect);
+        effect->display =1;
+        effect->position.x = drill->position.x;
+        effect->position.z = drill->position.z;
         effect = save->effect1;
-        sefRewindEffectCf((DrillEffectRef *)effect);
-        effect->hidden = 1;
-        effect->offset.x = drill->position.x;
-        effect->offset.y = 6.0f;
-        effect->offset.z = drill->position.z;
+        sefRewindEffectCf(effect);
+        effect->display =1;
+        effect->position.x = drill->position.x;
+        effect->position.y = 6.0f;
+        effect->position.z = drill->position.z;
         return;
     }
 
     drill->position.x = -2.9000001f;
     effect = drill->effect3;
-    effect->hidden = 0;
+    effect->display =0;
     if (drill->position.z < -12.5f) {
         drill->position.z += save->zReturnSpeed;
         if (drill->position.z >= -12.5f) {
@@ -1143,27 +1005,27 @@ void DrillReturnFunc(DrillReturnView *drill)
             xglSoundEffectNormalID(0x30097, 0);
         }
         effect = drill->effect2;
-        sefRewindEffectCf((DrillEffectRef *)effect);
-        effect->hidden = 1;
-        effect->offset.z = drill->position.z;
+        sefRewindEffectCf(effect);
+        effect->display =1;
+        effect->position.z = drill->position.z;
         effect = save->effect1;
-        effect->offset.x = -4.0f;
-        effect->offset.y = 1.5f;
-        effect->offset.z = drill->position.z - 0.5f;
+        effect->position.x = -4.0f;
+        effect->position.y = 1.5f;
+        effect->position.z = drill->position.z - 0.5f;
         return;
     }
 
     drill->phase = 1;
     drill->position.z = -12.5f;
     effect = drill->effect2;
-    effect->hidden = 0;
+    effect->display =0;
     effect = save->effect1;
-    effect->hidden = 0;
+    effect->display =0;
     save->returnCount++;
     if (save->returnLimit == -1) {
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectStopID(0x30098, 0);
-        CallMethod((const char *)drillStandbyMethodName);
+        CallMethod(drillStandbyMethodName);
         return;
     }
     if (save->returnLimit < save->returnCount) {
@@ -1175,11 +1037,11 @@ void DrillReturnFunc(DrillReturnView *drill)
         save->hit = 0;
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectStopID(0x30098, 0);
-        CallMethod((const char *)drillEndMethodName);
+        CallMethod(drillEndMethodName);
     } else {
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectStopID(0x30098, 0);
-        CallMethod((const char *)drillStandbyMethodName);
+        CallMethod(drillStandbyMethodName);
     }
 }
 
@@ -1188,7 +1050,7 @@ void DrillCameraControlFunc(Drill *drill, DrillCamera *camera)
     DrillSave *save;
     DrillCameraAngles *angles = &camera->angles;
 
-    xglFontDebugPrintf(8, 32, (char *) cameraControlText);
+    xglFontDebugPrintf(8, 32, cameraControlText);
     save = &drill->save;
 
     camera->state = 0;
@@ -1298,9 +1160,9 @@ void DrillResetFlag(Drill *drill)
     for (i = 0; i < 64; i++) {
         DrillMapUnit *unit = &MapUnit[i];
 
-        if ((s16)unit->serial == 0x7000 || (s16)unit->serial == 0x7009) {
+        if (unit->serial == 0x7000 || unit->serial == 0x7009) {
             if ((u32)(unit->info.drill_reset_value - 501) < 50) {
-                unit->serial = (u16)-1;
+                unit->serial = -1;
                 unit->update = 0;
             }
         }
@@ -1310,7 +1172,7 @@ void DrillResetFlag(Drill *drill)
 void DrillHitCheck(Drill *drill)
 {
     DrillSave *save = &drill->save;
-    Vector4 *position = &drill->position.vector;
+    Vector4 *position = &drill->position;
     int hit;
     DrillMapUnitInfo *container;
 
@@ -1319,11 +1181,11 @@ void DrillHitCheck(Drill *drill)
         container = &MapUnit[hit].info;
         container->hit = 1;
         save->hitCount++;
-        if ((u16)((s16)MapUnit[hit].serial - 0x7014) < 4) {
+        if ((u16)(MapUnit[hit].serial - 0x7014) < 4) {
             sefCreateEffectCf(1752, 0, 0);
-        } else if ((u16)((s16)MapUnit[hit].serial - 0x7018) < 12) {
+        } else if ((u16)(MapUnit[hit].serial - 0x7018) < 12) {
             sefCreateEffectCf(1753, 0, 0);
-        } else if ((u16)((s16)MapUnit[hit].serial - 0x7024) < 4) {
+        } else if ((u16)(MapUnit[hit].serial - 0x7024) < 4) {
             sefCreateEffectCf(1754, 0, 0);
         }
     } else {
@@ -1341,7 +1203,7 @@ int HitCheckContainerPosSize(Vector4 *position, int slot, float radius)
     probe.radius = radius;
     for (i = 0; i < 64; i++) {
         container = &MapUnit[i].info;
-        if ((s16)MapUnit[i].serial == -1) {
+        if (MapUnit[i].serial == -1) {
             continue;
         }
         if (container->hit != 0) {
@@ -1369,11 +1231,11 @@ int HitCheckEnemy(Vector4 *position, float radius)
     int i;
 
     for (i = 0; i < 64; i++) {
-        DrillHitActor *target = &actor[i];
+        Actor *target = &actor[i];
 
         work = enepc;
 
-        if (target->sound_effect_id == 0) {
+        if (target->inUseId == 0) {
             continue;
         }
         if ((target->flags & 8) != 0) {
@@ -1390,7 +1252,7 @@ int HitCheckEnemy(Vector4 *position, float radius)
             sefCreateEffectCf(635, &target->position, 0);
             xglSoundEffectNormalID(0x10003, 0);
             Enemy_Command_Freeze(target, 1);
-            CallMethod_I(enemyBrokenMethodName, target->methodArg);
+            CallMethod_I(enemyBrokenMethodName, target->args.methodArg);
             return i;
         }
     }

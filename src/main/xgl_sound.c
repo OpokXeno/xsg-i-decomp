@@ -1,91 +1,26 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/xgl_sound.h"
+#include "main/ssd_3.h"
+#include "main/ssd_init.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_font.h"
 
+/* Steps back over the register save area in SoundArgumentSlot (8-byte) units. */
 #define SOUND_ARGUMENT_START(ap, last) \
     ((ap) = (SoundArgumentList) __builtin_next_arg(last) - \
-            (8 - __builtin_args_info(2)) * 8)
+            (8 - __builtin_args_info(2)))
 
 #define SOUND_PAN_HALF_TURN 3.1415927f
-
-typedef struct SoundChannelEntry {
-    unsigned short _unmodeled_00;
-    unsigned short sequence;
-} SoundChannelEntry;
-
-typedef struct SoundEffectBankEntry {
-    unsigned short handle;
-    unsigned short file_handle;
-} SoundEffectBankEntry;
-
-/*
- * SoundWork (main:0x004a8140), ELF symbol size 0x8a4:
- * - +0x000..0x01f: 8 per-channel entries of 4 bytes; the high halfword of
- *   each entry is the active RSSD sequence handle, read at absolute offset
- *   2 + channel * 4 (xglSoundSequenceNormal3 main:0x00226198,
- *   xglSoundSequenceStop2 main:0x00226298); the low halfword of each entry
- *   is not read by either function.
- * - +0x020..0x09f: 32 per-bank entries of 4 bytes; the low halfword of each
- *   entry is the active direct-play effect handle, read at absolute offset
- *   0x20 + bank * 4 (xglSoundEffectStopDirect main:0x00226720), and the
- *   high halfword is the active file-ID effect handle, read at absolute
- *   offset 0x22 + bank * 4 (xglSoundEffectStopBank main:0x00226770);
- *   0x20 + 32 * 4 == 0xa0, the next field's offset.
- * - +0x0a0: the number of SE packets queued in packet_buffer.
- * - +0x0a4..0x8a3: the queued SE packets, 0x800 bytes (xglSendSePacket
- *   main:0x00227000 passes its address to SsdSendFuncPacket and clears it
- *   with memset); 0xa4 + 0x800 == 0x8a4, the full symbol size.
- */
-struct SoundWork {
-    SoundChannelEntry channels[8];
-    SoundEffectBankEntry effect_banks[32];
-    int packet_count;
-    unsigned char packet_buffer[0x800];
-};
-
-typedef struct SoundStreamState {
-    unsigned char unmodeled_00[0x1c];
-    int segment_size;            /* +0x1c: bytes per streaming segment, always 0x1000 */
-    unsigned char unmodeled_20[0x0c];
-    int read_position;           /* +0x2c: cleared when a stream is (re)opened */
-    unsigned char type;          /* +0x30: 0 none, 1 pcm, 2 vag stereo, 3 vag multi */
-    unsigned char unmodeled_31[2];
-    unsigned char segment_index; /* +0x33: cleared when a stream is (re)opened */
-} SoundStreamState;
-
-typedef struct CdStreamParam CdStreamParam;
-
-/* CD stream ring fields used by this TU; see the owner, main/tu092. */
-typedef struct SoundRingStatus {
-    unsigned char unmodeled_00[8];
-    unsigned char state;
-    unsigned char unmodeled_09[23];
-    unsigned char *buffer;
-    int capacity;
-    int write_position;
-    int read_position;
-} SoundRingStatus;
-
-typedef struct SePacket {
-    short command;
-    unsigned char unmodeled_02[14];
-    int arguments[4];
-} SePacket;
 
 typedef struct SoundArgumentSlot {
     int value;
     int upper;
 } SoundArgumentSlot;
 
-typedef char *SoundArgumentList;
+typedef SoundArgumentSlot *SoundArgumentList;
 
-typedef struct SoundPlaybackState {
-    SoundRingStatus ring;
-    unsigned char type;
-    unsigned char unmodeled_31[2];
-    unsigned char segment_index;
-    unsigned char *playback_buffer;
-} SoundPlaybackState;
 
 /*
  * The sound listener is the player actor held in GameLoopState's second
@@ -110,15 +45,10 @@ extern const char animationCharFormat[];
 extern int SsdSpuDmaCompleted(int wait);
 
 extern void xglSoundSequenceNormal3(int channel, int volume, int time);
-extern void xglSoundSequenceFadeOut2(int channel, int time);
-extern void xglSoundSequenceStop2(int channel);
 void xglMakeSePacket(short command, ...);
 void SsdPlayEffectParam(int effect_id, int source_id, int volume, int pan);
-int xglSoundSendSmd2(void *smd, int bank);
-extern int xglSoundSendSwd(void *swd, int bank);
 int xglSoundSendSed(void *sed, int bank);
 void SsdStartSequence(int sequence, int start, int loop);
-int SsdGetResultValue(int *value);
 void SsdPauseSequence(int sequence, int time);
 void SsdStopSequence(int sequence);
 void SsdPlayEffectNormal(int effect_id, int source_id);
@@ -126,27 +56,15 @@ void SsdStopEffect(int effect_id, int source_id);
 void SsdStopEffectFileID(int file_id);
 int SsdCheckPlayEffect(int effect_id);
 int SsdCheckPlayEffectAll(void);
-int xglCdStreamOpen(SoundStreamState *stream, int size);
-void xglCdStreamReadRing(SoundStreamState *stream, int bytes);
 void SsdInitPcmStream(int channel, int volume);
 void SsdPlayPcmStream(int channel, int loop);
-void SsdInitVagStreamStereo(int channel, int volume);
-void SsdPlayVagStream(int channel, int start, int loop);
-void xglSoundStreamOpenVagStereoParam(int stream, int source, int pitch, int volume);
 void SsdInitVagStreamMono(int channel, int volume, int pan);
 void SsdSetVagStreamPanpot(int channel, int panpot, int duration);
-void xglSoundStreamOpenVagMultiParam(int stream, int source, int pitch, int volume, int pan);
-extern int xglCdStreamClose(CdStreamParam *stream);
 void SsdDisposePcmStream(void);
 void SsdStopPcmStream(int channel);
 int SsdGetPcmStreamStatus(void);
-int SsdGetVagStreamStatusStereo(void);
-void SsdDisposeVagStream(void);
-void SsdStopVagStream(int channel);
-void SsdSetVagStreamDataStereo(int channel, int address, int size);
 void SsdSendFuncPacket(void *packets, int count);
 extern void *memset(void *destination, int value, unsigned int count);
-void xglCdStreamParamInit(void *state);
 void SsdInit(int size);
 void SsdDisposeSequence(int sequence);
 int SsdAddSequenceData(void *smd);
@@ -154,16 +72,11 @@ void SsdDisposeEffectData(int file_id);
 int SsdAddEffectData(void *sed);
 void SsdDisposeWaveBank(int bank);
 int SsdAddWaveData(void *wave, int offset, int size);
-void xglSoundSequenceNormal2(int channel, int volume);
 extern float atan2f(float y, float x);
-extern int F2I(float value);
-void xglSoundEffectStopID(int soundEffectId, int source);
 void SsdSetPcmStreamData(void *data, int size);
 int SsdGetVagStreamStatusAll(void);
 int SsdGetResultParam(int *parameters);
 void SsdSetVagStreamDataMono(int channel, int address, int size);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 static char SoundDataPath[12] = "data\\sound\\";
 
 static unsigned char ext_0[5] = { '.', 'S', 'W', 'D', '\0' };
@@ -572,7 +485,7 @@ void xglSoundEffectNormalID(int soundEffectId, int pitch)
     }
 
     xglMakeSePacket(112,
-                    ((int) handle << 16) + (soundEffectId & 0xFFFF),
+                    (handle << 16) + (soundEffectId & 0xFFFF),
                     pitch);
 }
 
@@ -640,7 +553,7 @@ void xglSoundEffectPosID(int soundEffectId, const float *position, int use_updat
         return;
     }
     xglMakeSePacket(124,
-                    ((int) SoundWork.effect_banks[soundEffectId >> 16].handle << 16)
+                    (SoundWork.effect_banks[soundEffectId >> 16].handle << 16)
                         + (soundEffectId & 0xFFFF),
                     volume, pan, source);
 }
@@ -699,17 +612,17 @@ int xglSoundEffectCheckID(int soundEffectId)
     return result;
 }
 
-void xglSoundStreamOpenPcm(int stream, int source)
+void xglSoundStreamOpenPcm(int stream, const char *source)
 {
-    SoundStreamState *state;
+    SoundStream *state;
     int result;
 
     if (stream == 0) {
-        state = (SoundStreamState *) &SoundWork.effect_banks[16];
-        if ((source != 0) && (xglCdStreamOpen(state, source) >= 0)) {
-            state->segment_size = 0x1000;
-            xglCdStreamReadRing(state, 0x2000);
-            state->read_position = 0;
+        state = &SoundWork.stream;
+        if ((source != 0) && (xglCdStreamOpen(&state->cd, source) >= 0)) {
+            state->cd.ring_size = 0x1000;
+            xglCdStreamReadRing(&state->cd, 0x2000);
+            state->cd.ring.read_position = 0;
             SsdInitPcmStream(0x1000, 4);
             do {
 
@@ -718,23 +631,23 @@ void xglSoundStreamOpenPcm(int stream, int source)
             do {
 
             } while (SsdGetResultValue(&result) < 0);
-            state->segment_index = 0;
-            state->type = 1;
+            state->playback.segment_index = 0;
+            state->playback.type = 1;
         }
     }
 }
 
-void xglSoundStreamOpenVagStereoParam(int stream, int source, int pitch, int volume)
+void xglSoundStreamOpenVagStereoParam(int stream, const char *source, int pitch, int volume)
 {
-    SoundStreamState *state;
+    SoundStream *state;
     int result;
 
     if (stream == 0) {
-        state = (SoundStreamState *) &SoundWork.effect_banks[16];
-        if ((source != 0) && (xglCdStreamOpen(state, source) >= 0)) {
-            state->segment_size = 0x1000;
-            xglCdStreamReadRing(state, 0x2000);
-            state->read_position = 0;
+        state = &SoundWork.stream;
+        if ((source != 0) && (xglCdStreamOpen(&state->cd, source) >= 0)) {
+            state->cd.ring_size = 0x1000;
+            xglCdStreamReadRing(&state->cd, 0x2000);
+            state->cd.ring.read_position = 0;
             SsdInitVagStreamStereo(0x1000, 4);
             do {
 
@@ -743,28 +656,28 @@ void xglSoundStreamOpenVagStereoParam(int stream, int source, int pitch, int vol
             do {
 
             } while (SsdGetResultValue(&result) < 0);
-            state->segment_index = 0;
-            state->type = 2;
+            state->playback.segment_index = 0;
+            state->playback.type = 2;
         }
     }
 }
 
-void xglSoundStreamOpenVagStereo(int stream, int source)
+void xglSoundStreamOpenVagStereo(int stream, const char *source)
 {
     xglSoundStreamOpenVagStereoParam(stream, source, 0x1000, 0x7F);
 }
 
-void xglSoundStreamOpenVagMultiParam(int stream, int source, int pitch, int volume, int pan)
+void xglSoundStreamOpenVagMultiParam(int stream, const char *source, int pitch, int volume, int pan)
 {
-    SoundStreamState *state;
+    SoundStream *state;
     int result;
 
     if (stream == 0) {
-        state = (SoundStreamState *) &SoundWork.effect_banks[16];
-        if ((source != 0) && (xglCdStreamOpen(state, source) >= 0)) {
-            state->segment_size = 0x1000;
-            xglCdStreamReadRing(state, 0x2000);
-            state->read_position = 0;
+        state = &SoundWork.stream;
+        if ((source != 0) && (xglCdStreamOpen(&state->cd, source) >= 0)) {
+            state->cd.ring_size = 0x1000;
+            xglCdStreamReadRing(&state->cd, 0x2000);
+            state->cd.ring.read_position = 0;
             SsdInitVagStreamMono(0x1000, 1, 4);
             do {
 
@@ -777,20 +690,20 @@ void xglSoundStreamOpenVagMultiParam(int stream, int source, int pitch, int volu
             do {
 
             } while (SsdGetResultValue(&result) < 0);
-            state->segment_index = 0;
-            state->type = 3;
+            state->playback.segment_index = 0;
+            state->playback.type = 3;
         }
     }
 }
 
-void xglSoundStreamOpenVagMulti(int stream, int source)
+void xglSoundStreamOpenVagMulti(int stream, const char *source)
 {
     xglSoundStreamOpenVagMultiParam(stream, source, 0x1000, 0x7F, 0x40);
 }
 
 void xglSoundStreamStop(int stream)
 {
-    SoundStreamState *state;
+    SoundStream *state;
     int result;
     unsigned char type;
 
@@ -798,9 +711,9 @@ void xglSoundStreamStop(int stream)
         return;
     }
 
-    state = (SoundStreamState *) &SoundWork.effect_banks[16];
-    xglCdStreamClose((CdStreamParam *) state);
-    type = state->type;
+    state = &SoundWork.stream;
+    xglCdStreamClose(&state->cd);
+    type = state->playback.type;
     switch (type) {
     case 0:
         break;
@@ -831,7 +744,7 @@ void xglSoundStreamStop(int stream)
         } while (SsdGetResultValue(&result) < 0);
         break;
     }
-    state->type = 0;
+    state->playback.type = 0;
 }
 
 void xglSoundStreamMute(void)
@@ -861,7 +774,7 @@ void xglSoundStreamMute(void)
     }
 }
 
-static int stream_check(int stream_flags, SoundRingStatus *ring)
+static int stream_check(int stream_flags, CdStreamParam *stream)
 {
     int request = stream_flags >> 8;
     int remaining;
@@ -869,19 +782,19 @@ static int stream_check(int stream_flags, SoundRingStatus *ring)
     int result = 0;
 
     if (request != 0) {
-        if (ring->state != 0) {
-            if (ring->state < 6) {
+        if (stream->state != 0) {
+            if (stream->state < 6) {
                 remaining = 4095;
-                destination = &ring->buffer[ring->write_position];
+                destination = &stream->ring.buffer[stream->ring.write_position];
                 do {
                     remaining--;
                     *destination = 0;
                     destination++;
                 } while (remaining >= 0);
-                ring->write_position =
-                    (ring->write_position + 4096) % ring->capacity;
-                ring->state++;
-            } else if (ring->read_position == ring->write_position) {
+                stream->ring.write_position =
+                    (stream->ring.write_position + 4096) % stream->ring.capacity;
+                stream->state++;
+            } else if (stream->ring.read_position == stream->ring.write_position) {
                 return request == 3 ? -1 : 0;
             }
         }
@@ -892,17 +805,17 @@ static int stream_check(int stream_flags, SoundRingStatus *ring)
 
 int xglSoundStreamMain(void)
 {
-    SoundPlaybackState *state = (SoundPlaybackState *) &SoundWork.effect_banks[16];
+    SoundStream *state = &SoundWork.stream;
     int parameters[8];
     int result;
     int status;
 
-    if (state->type != 0) {
+    if (state->playback.type != 0) {
         count_3++;
         xglFontDebugPrintf(244, 8, animationCharFormat, anim_4_004DC358[(count_3 >> 3) & 3]);
     }
     status = -1;
-    switch (state->type) {
+    switch (state->playback.type) {
     case 0:
         break;
     case 1:
@@ -910,13 +823,13 @@ int xglSoundStreamMain(void)
         do {
 
         } while (SsdGetResultValue(&result) < 0);
-        status = stream_check(result, &state->ring);
+        status = stream_check(result, &state->cd);
         if (status == -1) {
             xglSoundStreamStop(0);
         } else if (status == 1) {
-            SsdSetPcmStreamData(state->playback_buffer + (state->segment_index << 12), 0x1000);
-            state->ring.read_position = state->segment_index << 12;
-            state->segment_index = (state->segment_index + 1) & 3;
+            SsdSetPcmStreamData(state->playback.playback_buffer + (state->playback.segment_index << 12), 0x1000);
+            state->cd.ring.read_position = state->playback.segment_index << 12;
+            state->playback.segment_index = (state->playback.segment_index + 1) & 3;
         }
         break;
     case 2:
@@ -924,13 +837,13 @@ int xglSoundStreamMain(void)
         do {
 
         } while (SsdGetResultValue(&result) < 0);
-        status = stream_check(result, &state->ring);
+        status = stream_check(result, &state->cd);
         if (status == -1) {
             xglSoundStreamStop(0);
         } else if (status == 1) {
-            SsdSetVagStreamDataStereo(0, (int) (state->playback_buffer + (state->segment_index << 12)), 0x1000);
-            state->ring.read_position = state->segment_index << 12;
-            state->segment_index = (state->segment_index + 1) & 3;
+            SsdSetVagStreamDataStereo(0, (int) (state->playback.playback_buffer + (state->playback.segment_index << 12)), 0x1000);
+            state->cd.ring.read_position = state->playback.segment_index << 12;
+            state->playback.segment_index = (state->playback.segment_index + 1) & 3;
         }
         break;
     case 3:
@@ -939,13 +852,13 @@ int xglSoundStreamMain(void)
 
         } while (SsdGetResultParam(parameters) < 0);
         result = parameters[4];
-        status = stream_check(result, &state->ring);
+        status = stream_check(result, &state->cd);
         if (status == -1) {
             xglSoundStreamStop(0);
         } else if (status == 1) {
-            SsdSetVagStreamDataMono(0, (int) (state->playback_buffer + (state->segment_index << 12)), 0x1000);
-            state->ring.read_position = state->segment_index << 12;
-            state->segment_index = (state->segment_index + 1) & 3;
+            SsdSetVagStreamDataMono(0, (int) (state->playback.playback_buffer + (state->playback.segment_index << 12)), 0x1000);
+            state->cd.ring.read_position = state->playback.segment_index << 12;
+            state->playback.segment_index = (state->playback.segment_index + 1) & 3;
         }
         break;
     }
@@ -954,15 +867,6 @@ int xglSoundStreamMain(void)
 
 void xglMakeSePacket(short command, ...)
 {
-    /* The 0x800-byte queue holds 64 fixed-size SE packets. */
-    typedef struct SoundPacketWork {
-        SoundChannelEntry channels[8];
-        SoundEffectBankEntry effect_banks[32];
-        int packet_count;
-        SePacket packets[64];
-    } SoundPacketWork;
-
-    SoundPacketWork *queue = (SoundPacketWork *) &SoundWork;
     SoundArgumentList args;
     struct SoundWork *work = &SoundWork;
     SePacket *packet;
@@ -972,9 +876,9 @@ void xglMakeSePacket(short command, ...)
 
     if (work->packet_count < 65) {
         SOUND_ARGUMENT_START(args, command);
-        packet = &queue->packets[work->packet_count];
-        arguments = (SoundArgumentSlot *) args;
-        queue->packets[work->packet_count].command = command;
+        packet = &work->packets[work->packet_count];
+        arguments = args;
+        work->packets[work->packet_count].command = command;
         remaining = 3;
         do {
             slot = arguments;
@@ -988,36 +892,36 @@ void xglMakeSePacket(short command, ...)
 
 void xglSendSePacket(void)
 {
-    SsdSendFuncPacket(SoundWork.packet_buffer, SoundWork.packet_count);
+    SsdSendFuncPacket(SoundWork.packets, SoundWork.packet_count);
     SoundWork.packet_count = 0;
-    memset(SoundWork.packet_buffer, 0, 0x800U);
+    memset(SoundWork.packets, 0, 0x800U);
 }
 
 void xglSoundReset(void)
 {
-    SoundPlaybackState *state;
+    SoundStream *state;
     int bank;
 
     for (bank = 0; bank < 8; bank++) {
         xglSoundSendSwd(0, -1 - bank);
-        ((int (*)(void *, int)) xglSoundSendSmd2)(0, bank);
+        (xglSoundSendSmd2)(0, bank);
     }
     for (bank = 0; bank < 16; bank++) {
         xglSoundSendEffect(0, 0, bank);
     }
-    state = (SoundPlaybackState *) &SoundWork.effect_banks[16];
-    state->type = 0;
-    xglCdStreamParamInit(state);
-    state->ring.buffer = state->playback_buffer;
-    state->ring.capacity = 0x4000;
+    state = &SoundWork.stream;
+    state->playback.type = 0;
+    xglCdStreamParamInit(&state->cd);
+    state->cd.ring.buffer = state->playback.playback_buffer;
+    state->cd.ring.capacity = 0x4000;
     SoundWork.packet_count = 0;
-    memset(SoundWork.packet_buffer, 0, 0x800U);
+    memset(SoundWork.packets, 0, 0x800U);
 }
 
 void xglSoundInitial(void)
 {
     SoundChannelEntry *channel;
-    SoundPlaybackState *state;
+    SoundStream *state;
     int result;
     int index;
 
@@ -1026,8 +930,8 @@ void xglSoundInitial(void)
     } while (SsdGetResultValue(&result) < 0);
 
     channel = SoundWork.channels;
-    state = (SoundPlaybackState *) &SoundWork.effect_banks[16];
-    state->playback_buffer = StreamBuffer;
+    state = &SoundWork.stream;
+    state->playback.playback_buffer = StreamBuffer;
     index = 7;
     do {
         index--;

@@ -2,6 +2,7 @@
 #define SRC_MAIN_GAME_MOVIE_H
 
 #include "shared.h"
+#include "main/game_movie.h"
 
 /* The movie handle has a 0xd0-byte extent. Playback reads state at +0x40,
  * returns its frame at +0x46 and writes transparency at +0xcb. */
@@ -64,10 +65,5 @@ typedef struct MovieMpegContext {
     int frame;
     unsigned char unmodeled_3c[0x84];
 } MovieMpegContext;
-
-void GameMovieMain(void);
-void GameMovieStop(void);
-int GameMoviePlay(char *name);
-void GameMpeg2Play(char *name, int mode);
 
 #endif

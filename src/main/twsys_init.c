@@ -1,8 +1,12 @@
 #include "common.h"
 #include "shared.h"
+#include "main/db_light_write.h"
 #include "main/msg_init.h"
 #include "main/ew_sprt_set_cursor_uv.h"
+#include "main/transform_vector.h"
+#include "main/twsys_init.h"
 #include "twsys_init.h"
+#include "main/xgl_sound.h"
 
 /*
  * The font control strings TWSYS_draw emits before a component's own drawing
@@ -16,50 +20,11 @@
 #define TWSYS_DRAW_SCENE_FONT  "\x0d\x03\x0e\x02\x02\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
 
 /*
- * One slot of the fixed-size `tcomponent` table TWSYS_createComponent hands
- * out (still assembler in this TU). Only the header fields every component
- * kind shares, evidenced from this allocation, are modeled:
- *  - +0x10 flags: TWIN_dispose/TMENU_dispose clear bits 0x11 on disposal;
- *    TWSYS_update tests bit 0x10 before dispatching the component's update.
- *  - +0x16 kindAndGroup: low nibble selects the update/draw handler
- *    (TMENU/TSLIDER/TWIN), bits 4-5 select the `groupStatus` slot.
- *  - +0x32 closeState: cleared with the flags when a slot is (re)claimed.
- *  - +0x54 ewHandle: TWIN_dispose passes it to EW_dispose (a window-kind
- *    slot's own layout; other kinds keep their own ewHandle elsewhere).
- *  - +0x9C/+0xA0 msgBuffer: TWIN_dispose passes each non-zero entry to
- *    MBUF_dispose.
- * The 0x5B0 stride between slots is TWSYS_init/TWSYS_update/TWSYS_draw's own
- * loop increment.
- */
-typedef struct TComponent {
-    unsigned char unmodeled_00[0xc];
-    unsigned short pixelWidth; /* +0xc */
-    unsigned short pixelHeight;        /* +0xE */
-    unsigned int flags;                /* +0x10 */
-    unsigned char unmodeled_14[0x16 - 0x14];
-    unsigned short kindAndGroup;       /* +0x16 */
-    unsigned char unmodeled_18[0x20 - 0x18];
-    float width;                       /* +0x20: TMENU_create/TMENU_init */
-    float height;                      /* +0x24: TMENU_create/TMENU_init */
-    unsigned char unmodeled_28[0x32 - 0x28];
-    unsigned short closeState;         /* +0x32 */
-    unsigned char unmodeled_34[0x44 - 0x34];
-    Vector4 *ownerPosition;            /* +0x44: TW_setPos's owner anchor */
-    unsigned char unmodeled_48[0x54 - 0x48];
-    int ewHandle;                      /* +0x54 */
-    unsigned char unmodeled_58[0x9C - 0x58];
-    int *msgBuffer[2];                 /* +0x9C */
-    unsigned char unmodeled_a4[0x5B0 - 0xA4];
-} TComponent;
-
-/* TWindow belongs to main/tu143. Its width at +0x0C is read as a signed short:
- * TWIN_popScene compares a signed halfword there, and TW_setPos sign-extends
- * that halfword before its centering calculation. */
-/*
- * The text-window record TWSYS_createComponent hands back (still assembler
- * in this TU). Only the fields this allocation and its evidenced siblings
- * touch are modeled:
- *  - +0xC/+0xE width/height: TW_setPos (0x0025d660) reads both as unsigned
+ * The text-window kind of TComponent (include/main/twsys_init.h). Its width
+ * at +0x0C is read as a signed short: TWIN_popScene compares a signed
+ * halfword there, and TW_setPos sign-extends that halfword before its
+ * centering calculation. Evidence for the window fields:
+ *  - +0xC/+0xE pixelWidth/pixelHeight: TW_setPos (0x0025d660) reads both as unsigned
  *    halfwords for its on-screen centering math.
  *  - +0xA6 line_pitch: TWIN_drawScene2 (0x0025ec24, still assembler)
  *    multiplies the current line index (+0x185) by this halfword to place
@@ -70,46 +35,6 @@ typedef struct TComponent {
  *  - +0x187 line_count: TWIN_update2 and TWIN_popCF/TWIN_popScene (still
  *    assembler) loop up to this byte over the +0x17C line-pointer array.
  */
-typedef struct TWindow {
-    unsigned char unmodeled_00[0xC];
-    unsigned short width;          /* +0xC */
-    unsigned short height;         /* +0xE */
-    unsigned int flags;            /* +0x10 */
-    unsigned short state;          /* +0x14 */
-    unsigned short kindAndGroup;   /* +0x16 */
-    unsigned char unmodeled_018[0x20 - 0x18];
-    float x; /* +0x20 */
-    float y; /* +0x24 */
-    unsigned char unmodeled_028[0x30 - 0x28];
-    short waitFrames; /* +0x30 */
-    unsigned short closeState;     /* +0x32 */
-    unsigned char unmodeled_034[0x50 - 0x34];
-    unsigned short textVerticalOffset; /* +0x50 */
-    unsigned char unmodeled_052[0x54 - 0x52];
-    EwContainerWidget *rootWidget; /* +0x54 */
-    unsigned char unmodeled_058[0x9c - 0x58];
-    MsgBuffer *messageBuffer[2]; /* +0x9c */
-    short currentPage;             /* +0xA4 */
-    short line_pitch;              /* +0xA6 */
-    char *textOutput;              /* +0xA8 */
-    MsgQueue queue; /* +0xac */
-    unsigned int frameCounter; /* +0xcc */
-    void *widgets[8]; /* +0xd0 */
-    unsigned int initializationWord0; /* +0xF0 */
-    unsigned char unmodeled_f4[0x108 - 0xF4];
-    unsigned int initializationWord1; /* +0x108 */
-    unsigned char unmodeled_10c[0x120 - 0x10c];
-    int pendingMessage; /* +0x120 */
-    unsigned char unmodeled_124[0x14c - 0x124];
-    unsigned short lineWidths[24]; /* +0x14c */
-    char **lineBufferPointers;     /* +0x17C */
-    char *textScratchBuffer;       /* +0x180 */
-    unsigned char lineCharacterOffset; /* +0x184 */
-    unsigned char currentLineIndex; /* +0x185 */
-    unsigned char layout_offset;   /* +0x186 */
-    unsigned char line_count;      /* +0x187 */
-    char *lineData[1];             /* +0x188; inline pointer and character buffers follow */
-} TWindow;
 
 /* TMenu belongs to main/tu143. TMENU_init initializes the pointer at +0x154
  * to its inline string workspace; TMENU_addItem advances it after each line.
@@ -152,8 +77,11 @@ typedef struct TMenu {
     unsigned char unmodeled_69[0xD8 - 0x69];
     MsgQueue queryQueue;               /* +0xD8 */
     unsigned int frameCounter;         /* +0xF8: cursor animation frame */
-    int ewHandle;                      /* +0xFC */
-    void *widgets[16];                 /* +0x100 */
+    union {
+        int ewHandle;                  /* +0xFC: TMENU_dispose passes it to EW_dispose */
+        EwContainerWidget *rootWidget; /* +0xFC: TMENU_init stores the type-4 root here */
+    };
+    EwWidget *widgets[16];             /* +0x100 */
     unsigned char itemCapacity;    /* +0x140 */
     unsigned char queryLineCount;  /* +0x141: MSG_queueGetInfo line count */
     signed char currentQueryLine;       /* +0x142: signed index read by text reveal */
@@ -168,60 +96,22 @@ typedef struct TMenu {
     char queryText[1];                /* +0x1A4: inline string workspace */
 } TMenu;
 
-typedef union EwRootView { EwContainerWidget container; EwWidget widget; } EwRootView;
-
 typedef union EwLabelBody {
     EwLabelWidget label;
     EwContainerWidget container;
 } EwLabelBody;
-
-typedef struct Matrix4Block {
-    Matrix4 value;
-} Matrix4Block;
-
-typedef struct TransformParams {
-    Matrix4 matrix;
-    Matrix4 world;
-    Vector4 screenScale;
-    Vector4 screenOffset;
-    Matrix4 *local;
-} TransformParams;
 
 typedef struct WindowOwnerPrefix {
     unsigned char unmodeled_00[0x10];
     Vector4 position;
 } WindowOwnerPrefix;
 
-typedef struct EwSpriteState {
-    short flags;
-    signed char alpha;
-    unsigned short u;
-    unsigned short v;
-} EwSpriteState;
-
-typedef struct EwSpriteWidget {
-    unsigned short flags;
-    unsigned short type;
-    short x;
-    short y;
-    int z;
-    short width;
-    short height;
-    EwSpriteState sprite;
-    unsigned char unmodeled_18[0x10];
-} EwSpriteWidget;
-
-typedef union WindowCoord {
-    float value;
-    int bits;
-} WindowCoord;
-
+/* A label's text-line slot as the menu fills it: the menu's item texts are
+ * const strings (TMENU_setItem keeps the caller's text), the label reads the
+ * same slot as its char ** line array. */
 typedef union EwLabelSlot {
-    unsigned short *lineWidths;
-    const unsigned char *textStyle;
     char **textLines;
     const char **readOnlyTextLines;
-    int bits;
 } EwLabelSlot;
 
 extern const char twsysResetControl[];
@@ -232,7 +122,6 @@ extern const char twinFontParamControl[];
 extern const char twinStyleControl[];
 extern const unsigned char twinLabelStyleControl[];
 
-extern void xglSoundEffectNormalID(int soundEffectId, int pitch);
 void TW_setPos(TComponent *component);
 void EW_init(unsigned char *freeSpace);
 void MBUF_init(void);
@@ -251,17 +140,13 @@ extern void xglFontPrintDirectOT(int ot, const char *text);
 void EW_dispose(int handle);
 
 void MBUF_dispose(int *mbuf);
-TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup);
 void TMENU_init(TComponent *component);
 int MSG_queuePush(int queue, int *message, int messageSize, int encoding);
 extern void *memcpy(void *destination, const void *source, unsigned int size);
 extern int MSG_copyln(char **destination, const char **source, int flags);
 
-void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
-                     TransformParams *params);
-
 void xglStudioGetCamera(StudioCamera **camera, int index);
-int XTK_getWindowOwner(void);
+void *XTK_getWindowOwner(void);
 void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell);
 unsigned int strlen(const char *string);
 
@@ -522,18 +407,18 @@ void STRING_h2zEUC(char *destination, const char *source)
     character = *source++;
     while (character != 0) {
         if (character >= '0' && character <= '9') {
-            *destination++ = (char)0xA3;
+            *destination++ = 0xA3;
             *destination++ = character - 0x80;
         } else if (character >= 'a' && character <= 'z') {
-            *destination++ = (char)0xA3;
+            *destination++ = 0xA3;
             *destination++ = character - 0x80;
         } else if (character >= 'A' && character <= 'Z') {
-            *destination++ = (char)0xA3;
+            *destination++ = 0xA3;
             *destination++ = character + 0x60;
         } else if (character < 160) {
         } else {
             *destination++ = character;
-            *destination++ = (unsigned char)*source++;
+            *destination++ = *source++;
         }
         character = *source++;
     }
@@ -575,7 +460,7 @@ void TW_setPos(TComponent *component)
     float distanceOffset;
     float rightEdge;
 
-    owner = (WindowOwnerPrefix *)XTK_getWindowOwner();
+    owner = XTK_getWindowOwner();
     if (owner == 0 || !(component->flags & 0x40))
         return;
 
@@ -596,7 +481,7 @@ void TW_setPos(TComponent *component)
     params->screenOffset = sourceCamera->screenOffset;
     params->screenScale = sourceCamera->screenScale;
     transformVector(projected, &vSample, 1, params);
-    cameraPosition = &cameras[0]->position;
+    cameraPosition = &cameras[0]->position.vector;
     projected->x -= 2048.0f;
     projected->y = projected->y - 2048.0f;
 
@@ -648,33 +533,33 @@ void TW_setPos(TComponent *component)
         projected->x = rightEdge;
     if (projected->y > 224.0f)
         projected->y = 224.0f;
-    component->width = projected->x;
-    component->height = projected->y;
+    component->x = projected->x;
+    component->y = projected->y;
 }
 
 /* Configures a field-conversation text window's line pitch, layout offset,
  * line count and on-screen size. */
-void WIN_initCF(TWindow *window)
+void WIN_initCF(TComponent *window)
 {
     window->line_pitch = 0x18;
     window->layout_offset = 0x2A;
     window->line_count = 3;
-    window->width = 0x1CC;
-    window->height = 0x50;
+    window->pixelWidth = 0x1CC;
+    window->pixelHeight = 0x50;
 }
 
 /* Configures a scene-message text window's line pitch, layout offset, line
  * count and on-screen size. */
-void WIN_initScene(TWindow *window)
+void WIN_initScene(TComponent *window)
 {
     window->line_pitch = 0x1A;
     window->layout_offset = 0x30;
     window->line_count = 3;
-    window->width = 0x1E0;
-    window->height = 0x56;
+    window->pixelWidth = 0x1E0;
+    window->pixelHeight = 0x56;
 }
 
-void TWIN_init2(TWindow *window)
+void TWIN_init2(TComponent *window)
 {
     unsigned int kind;
     unsigned int flagsValue;
@@ -697,7 +582,7 @@ void TWIN_init2(TWindow *window)
         break;
     }
 
-    lineBuffer = (char *)window->lineData;
+    lineBuffer = window->lineData;
     window->lineBufferPointers = (char **)lineBuffer;
     lineBuffer += window->line_count * sizeof(*window->lineBufferPointers);
     for (lineIndex = 0; lineIndex < window->line_count; lineIndex++) {
@@ -738,9 +623,9 @@ int WIN_checkActiveWindow(void)
 
 /* TWIN_create2 and TWIN_draw2 establish the label's line count at +0x14
  * and its caller-owned line pointer table at +0x24. */
-TWindow *TWIN_create2(int index)
+TComponent *TWIN_create2(int index)
 {
-    TWindow *window;
+    TComponent *window;
     MsgBuffer *messageBuffer;
     EwContainerWidget *root;
     EwMaskWidget *mask;
@@ -748,7 +633,7 @@ TWindow *TWIN_create2(int index)
     EwWidget *widget;
     int childIndex;
 
-    window = (TWindow *)TWSYS_createComponent(index, 0);
+    window = TWSYS_createComponent(index, 0);
     if (window == 0) {
         return 0;
     }
@@ -775,7 +660,7 @@ TWindow *TWIN_create2(int index)
     widget = EW_create(-1, 10);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 1, &widget->flags);
+    EW_addComponent(root, 1, widget);
     mask = (EwMaskWidget *)window->widgets[1];
     mask->mask.fix = 0x00808000;
     mask->mask.blend |= 0x100;
@@ -783,13 +668,13 @@ TWindow *TWIN_create2(int index)
     widget = EW_create(-1, 9);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 0, &widget->flags);
+    EW_addComponent(root, 0, widget);
 
     widget = EW_create(-1, 7);
     label = (EwLabelWidget *)widget;
     label->textLines = window->lineBufferPointers;
     label->lineCount = -1;
-    EW_addComponent(root, 2, &widget->flags);
+    EW_addComponent(root, 2, widget);
 
     widget = EW_create(-1, 9);
     widget->width = 512;
@@ -797,16 +682,16 @@ TWindow *TWIN_create2(int index)
     widget->x = 0;
     widget->y = 0;
     widget->drawValue = 0;
-    EW_addComponent(root, 3, &widget->flags);
+    EW_addComponent(root, 3, widget);
     widget->flags |= 0x4000;
 
     widget = EW_create(-1, 1);
-    EW_addComponent(root, 4, &widget->flags);
+    EW_addComponent(root, 4, widget);
 
     widget = EW_create(-1, 5);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 5, &widget->flags);
+    EW_addComponent(root, 5, widget);
 
     window->messageBuffer[0] = messageBuffer;
     window->queue.buffer = messageBuffer->cursor;
@@ -840,7 +725,7 @@ void TWIN_dispose(TComponent *window)
     }
 }
 
-void TWIN_popCF(TWindow *window)
+void TWIN_popCF(TComponent *window)
 {
     MsgQueue *queue;
     int code;
@@ -852,7 +737,7 @@ void TWIN_popCF(TWindow *window)
         return;
     }
     queue = &window->queue;
-    window->queue.limit = (short)window->width - 24;
+    window->queue.limit = (short)window->pixelWidth - 24;
     window->lineCharacterOffset += MSG_queuePop(queue,
         (unsigned char *)window->lineBufferPointers[window->currentLineIndex]
             + window->lineCharacterOffset, 2);
@@ -862,7 +747,7 @@ void TWIN_popCF(TWindow *window)
         switch (code) {
         case 131:
             window->state = 13;
-            window->waitFrames = window->queue.label;
+            window->waitFrames = window->queue.label.value;
             break;
         case 132:
             window->state = 2;
@@ -874,10 +759,10 @@ void TWIN_popCF(TWindow *window)
             break;
         case 128:
             window->state = 8;
-            window->pendingMessage = window->queue.label;
+            window->pendingMessage = window->queue.label.value;
             break;
         case 133:
-            strcpy(window->textOutput, (const char *)window->queue.label);
+            strcpy(window->textOutput, (const char *)window->queue.label.text);
             break;
         }
     } else if (window->queue.width >= window->queue.limit || code == 10) {
@@ -895,9 +780,9 @@ void TWIN_popCF(TWindow *window)
     MSG_queueReset(queue, 0);
 }
 
-void TWIN_popScene(TWindow *window)
+void TWIN_popScene(TComponent *window)
 {
-    TComponent *component = (TComponent *)window;
+    TComponent *component = window;
     int code;
     MsgQueue *queue;
 
@@ -919,7 +804,7 @@ void TWIN_popScene(TWindow *window)
             switch (code) {
             case 131:
                 window->state = 13;
-                window->waitFrames = window->queue.label;
+                window->waitFrames = window->queue.label.value;
                 break;
             case 132:
                 window->state = 2;
@@ -930,10 +815,10 @@ void TWIN_popScene(TWindow *window)
                 break;
             case 128:
                 window->state = 8;
-                window->pendingMessage = window->queue.label;
+                window->pendingMessage = window->queue.label.value;
                 break;
             case 133:
-                strcpy(window->textOutput, (const char *)window->queue.label);
+                strcpy(window->textOutput, (const char *)window->queue.label.text);
                 break;
             }
             return;
@@ -945,7 +830,7 @@ void TWIN_popScene(TWindow *window)
             if ((unsigned int)window->currentLineIndex >= window->line_count) {
                 window->currentLineIndex = window->line_count - 1;
                 window->state = 12;
-                window->pendingMessage = window->queue.label;
+                window->pendingMessage = window->queue.label.value;
                 return;
             }
         }
@@ -955,7 +840,7 @@ void TWIN_popScene(TWindow *window)
 
 void TWIN_update2(TComponent *component)
 {
-    TWindow *window = (TWindow *)component;
+    TComponent *window = component;
     unsigned int flags;
     EwMaskWidget *mask;
     EwLabelWidget *label;
@@ -1042,7 +927,7 @@ void TWIN_update2(TComponent *component)
         break;
     case 13:
         window->waitFrames--;
-        if ((short)window->waitFrames < 0) {
+        if (window->waitFrames < 0) {
             window->flags &= ~2;
             window->state = 0;
         }
@@ -1059,7 +944,7 @@ void TWIN_update2(TComponent *component)
         break;
     case 2:
         window->waitFrames--;
-        if ((short)window->waitFrames < 0) {
+        if (window->waitFrames < 0) {
             window->closeState = 255;
             TWIN_dispose(component);
         }
@@ -1085,9 +970,9 @@ void TWIN_update2(TComponent *component)
         break;
     case 10:
         if (window->currentLineIndex >= window->line_count - 1) {
-            window->textVerticalOffset = (int)((float)(short)window->waitFrames * -6.0f);
+            window->textVerticalOffset = (int)((float)window->waitFrames * -6.0f);
             window->waitFrames++;
-            if ((short)window->waitFrames >= 5) {
+            if (window->waitFrames >= 5) {
                 firstLine = window->lineBufferPointers[0];
                 for (index = 0; index < window->line_count - 1; index++) {
                     window->lineWidths[index] = window->lineWidths[index + 1];
@@ -1115,10 +1000,10 @@ void TWIN_update2(TComponent *component)
         break;
     case 1:
         window->waitFrames++;
-        if ((short)window->waitFrames < 2) {
+        if (window->waitFrames < 2) {
             window->textVerticalOffset = 0;
         }
-        if ((short)window->waitFrames >= 11) {
+        if (window->waitFrames >= 11) {
             window->state = 0;
             window->flags |= 1;
             window->flags &= ~2;
@@ -1134,56 +1019,54 @@ const char twinFontParamControl[19] = "\r\002\016\002\003\030\030\030\017\000\00
 /* Text: {effect 3}{effect params}{blend}{color #808080}{char width 4}{spacing 0,0} */
 const unsigned char twinLabelStyleControl[26] = "\r\003\016\002\002\030\030\030\017\000\000\200\014\200\200\200\025\002\002\004\025\003\003\000\000";
 
-void TWIN_draw2(TComponent *component)
+void TWIN_draw2(TComponent *window)
 {
-    TWindow *window = (TWindow *)component;
     EwWidget *mask;
     EwWidget *widget;
     EwLabelBody *body;
     int x;
     int y;
-    float *windowX;
-    float *windowY;
+    unsigned short *textOffset;
 
     if (window->state == 1 || window->state == 2) {
         return;
     }
-    windowX = &window->x;
-    windowY = &window->y;
-    x = (int)(16.0f + *windowX);
-    y = (int)(*windowY + 16.0f + 32.0f);
-    mask = (EwWidget *)window->widgets[1];
-    widget = (EwWidget *)window->widgets[4];
+    x = (int)(16.0f + window->x);
+    y = (int)(window->y + 16.0f + 32.0f);
+    mask = window->widgets[1];
+    widget = window->widgets[4];
     mask->drawValue = 0xFFFFF1;
     widget->drawValue = 0xFFFFF0;
     mask->x = x;
     mask->y = y;
-    mask->width = window->width;
-    mask->height = window->height;
+    mask->width = window->pixelWidth;
+    mask->height = window->pixelHeight;
     mask->flags |= 0x4000;
     widget->x = x;
     widget->y = y;
-    widget->width = window->width;
-    widget->height = window->height;
+    widget->width = window->pixelWidth;
+    widget->height = window->pixelHeight;
     widget->flags |= 0x4000;
-    widget = (EwWidget *)window->widgets[0];
+    widget = window->widgets[0];
     widget->x = x;
     widget->y = y;
-    widget->width = window->width;
+    widget->width = window->pixelWidth;
     widget->drawValue = 0xFFFFFF;
-    widget->height = window->height;
+    widget->height = window->pixelHeight;
     widget->flags |= 0x4000;
     body = (EwLabelBody *)window->widgets[2];
     widget = (EwWidget *)body;
     body->label.colorScale = 0;
     widget->x = x + 12;
     widget->drawValue = 0x00FFFFFF;
-    widget->y = window->textVerticalOffset + (y + 4);
+    /* The text window's halfword at +0x50, read as that kind's own field. */
+    textOffset = &window->textVerticalOffset;
+    widget->y = *textOffset + (y + 4);
     body->label.textLines = window->lineBufferPointers;
     body->label.lineCount = window->line_count;
     widget->flags |= 0x4000;
 
-    widget = (EwWidget *)window->widgets[5];
+    widget = window->widgets[5];
     if (window->state == 11 || window->state == 8 || window->state == 17) {
         x = (short)window->lineWidths[window->currentLineIndex];
         y = window->currentLineIndex * 24;
@@ -1216,9 +1099,8 @@ void TWIN_draw2(TComponent *component)
     xglFontPrintDirectOT(0x00FFFFF0, twinStyleControl);
 }
 
-void TWIN_drawScene2(TComponent *component)
+void TWIN_drawScene2(TComponent *window)
 {
-    TWindow *window = (TWindow *)component;
     EwWidget *mask;
     EwWidget *widget;
     int x;
@@ -1226,47 +1108,47 @@ void TWIN_drawScene2(TComponent *component)
     int panelDrawValue;
 
     if (window->state != 1 && window->state != 2) {
-        widget = (EwWidget *)window->widgets[0];
-        mask = (EwWidget *)window->widgets[1];
-        x = (int)(16.0f + ((WindowCoord *)&window->x)->value);
-        y = (int)(((WindowCoord *)&window->y)->value + 16.0f);
+        widget = window->widgets[0];
+        mask = window->widgets[1];
+        x = (int)(16.0f + window->x);
+        y = (int)(window->y + 16.0f);
         mask->drawValue = 0x00FFFFF1;
         widget->drawValue = 0x00FFFFFF;
         panelDrawValue = widget->drawValue;
         mask->x = x;
         mask->y = y;
-        mask->width = (unsigned short)window->width;
-        mask->height = window->height;
+        mask->width = window->pixelWidth;
+        mask->height = window->pixelHeight;
         mask->flags = mask->flags | 0x4000;
         widget->x = x;
         widget->y = y;
-        widget->width = window->width;
-        widget->height = window->height;
+        widget->width = window->pixelWidth;
+        widget->height = window->pixelHeight;
         widget->flags = widget->flags | 0x4000;
 
-        widget = (EwWidget *)window->widgets[2];
+        widget = window->widgets[2];
         {
-            EwLabelWidget *label = (EwLabelWidget *)widget;
+            EwLabelBody *body = (EwLabelBody *)widget;
 
             widget->x = x;
             widget->drawValue = panelDrawValue;
             widget->y = window->textVerticalOffset + (y + 4);
-            widget->width = window->width;
-            widget->height = window->height;
-            ((EwLabelSlot *)&label->textLines)->textLines = window->lineBufferPointers;
-            label->lineCount = window->line_count;
-            ((EwLabelSlot *)&label->lineWidths)->lineWidths = window->lineWidths;
-            label->linePitch = 26;
-            ((EwLabelSlot *)&label->textStyle)->textStyle = twinLabelStyleControl;
+            widget->width = window->pixelWidth;
+            widget->height = window->pixelHeight;
+            body->label.textLines = window->lineBufferPointers;
+            body->label.lineCount = window->line_count;
+            body->label.lineWidths = window->lineWidths;
+            body->label.linePitch = 26;
+            body->label.textStyle = twinLabelStyleControl;
             widget->flags |= 0x4000;
         }
 
-        widget = (EwWidget *)window->widgets[5];
+        widget = window->widgets[5];
         if (window->state == 11 || window->state == 8
             || window->state == 12 || window->state == 17) {
             float cursorOriginX = 16.0f + (window->x + 4.0f);
             float cursorOriginY = 16.0f + (window->y + 12.0f);
-            x = (short)window->width / 2
+            x = (short)window->pixelWidth / 2
                 + (short)window->lineWidths[window->currentLineIndex] / 2;
             y = window->currentLineIndex * window->line_pitch;
             y = (int)((float)y + cursorOriginY);
@@ -1355,18 +1237,18 @@ void TMENU_init(TComponent *component)
     root = (EwContainerWidget *)EW_create(-1, 4);
     root->container.children = menu->widgets;
     root->container.childCapacity = 16;
-    ((EwRootView *)root)->widget.flags |= 0x4000;
-    menu->ewHandle = (int)root;
+    root->flags |= 0x4000;
+    menu->rootWidget = root;
 
     widget = EW_create(-1, 9);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 0, &widget->flags);
+    EW_addComponent(root, 0, widget);
 
     widget = EW_create(-1, 10);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 1, &widget->flags);
+    EW_addComponent(root, 1, widget);
     mask = (EwMaskWidget *)menu->widgets[1];
     mask->mask.fix = 0x00808000;
     mask->mask.blend |= 0x100;
@@ -1377,7 +1259,7 @@ void TMENU_init(TComponent *component)
     label->colorScale = 0;
     ((EwLabelBody *)label)->label.lineCount = -1;
     ((EwLabelSlot *)&label->textLines)->readOnlyTextLines = itemTexts;
-    EW_addComponent(root, 2, &widget->flags);
+    EW_addComponent(root, 2, widget);
 
     widget = EW_create(-1, 7);
     label = (EwLabelWidget *)widget;
@@ -1385,7 +1267,7 @@ void TMENU_init(TComponent *component)
     label->colorScale = 0;
     ((EwLabelBody *)label)->label.lineCount = -1;
     label->textLines = textLines;
-    EW_addComponent(root, 3, &widget->flags);
+    EW_addComponent(root, 3, widget);
 
     widget = EW_create(-1, 9);
     widget->width = 512;
@@ -1393,26 +1275,26 @@ void TMENU_init(TComponent *component)
     widget->x = 0;
     widget->y = 0;
     widget->drawValue = 0;
-    EW_addComponent(root, 4, &widget->flags);
+    EW_addComponent(root, 4, widget);
     widget->flags |= 0x4000;
 
     widget = EW_create(-1, 1);
-    EW_addComponent(root, 5, &widget->flags);
+    EW_addComponent(root, 5, widget);
 
     widget = EW_create(-1, 5);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 6, &widget->flags);
+    EW_addComponent(root, 6, widget);
 
     widget = EW_create(-1, 5);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 7, &widget->flags);
+    EW_addComponent(root, 7, widget);
 
     widget = EW_create(-1, 5);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 8, &widget->flags);
+    EW_addComponent(root, 8, widget);
     menu->flags = 0x55;
     menu->state = 1;
 }
@@ -1427,8 +1309,8 @@ TComponent *TMENU_create(int slotIndex)
     }
 
     TMENU_init(component);
-    component->width = 48.0f;
-    component->height = 64.0f;
+    component->x = 48.0f;
+    component->y = 64.0f;
     return component;
 }
 
@@ -1502,8 +1384,8 @@ void TMENU_addItem(int menuHandle, const char *text)
     int moreLines;
 
     MSG_convert(output, 0x400, text, -1);
-    lineStart = (char *)menu->nextQueryId;
-    itemCount = (int)menu->itemCount;
+    lineStart = menu->nextQueryId;
+    itemCount = menu->itemCount;
     maximumWidth = menu->width;
     outputCursor = lineStart;
     inputCursor = (const char *)output;
@@ -1612,7 +1494,7 @@ void TMENU_updateDefault(TComponent *component)
         }
         break;
     case 14:
-        if (PadData[0].mappedPressed & 0x40) {
+        if (PadData[0].direction_pressed & 0x40) {
             xglSoundEffectNormalID(2, 0);
             menu->flags &= ~2;
             menu->state = 15;
@@ -1620,20 +1502,20 @@ void TMENU_updateDefault(TComponent *component)
             break;
         }
         oldSelection = menu->selectedItem;
-        if (PadData[0].mappedPressed & 0x20) {
+        if (PadData[0].direction_pressed & 0x20) {
             xglSoundEffectNormalID(1, 0);
             menu->flags &= ~2;
             menu->state = 15;
             break;
         }
         menu->waitFrames = (menu->waitFrames + 1) & 0xFF;
-        if ((PadData[0].mappedRepeat & 0x1000)
+        if ((PadData[0].direction_repeated & 0x1000)
             && oldSelection > 0 && menu->selectionResult == 0) {
             xglSoundEffectNormalID(3, 0);
             menu->selectedItem--;
             menu->waitFrames = 0;
         }
-        if ((PadData[0].mappedRepeat & 0x4000)
+        if ((PadData[0].direction_repeated & 0x4000)
             && menu->selectedItem < menu->itemCount - 1) {
             xglSoundEffectNormalID(3, 0);
             menu->selectedItem++;
@@ -1728,7 +1610,7 @@ void TMENU_updateDefault(TComponent *component)
                 switch (code) {
                 case 131:
                     menu->state = 13;
-                    menu->waitFrames = menu->queryQueue.label;
+                    menu->waitFrames = menu->queryQueue.label.value;
                     break;
                 case 128:
                 case 129:
@@ -1775,14 +1657,14 @@ void TMENU_drawDefault(TComponent *component)
     }
     x = (int)menu->x + 16;
     y = (int)menu->y + 16;
-    widget = (EwWidget *)menu->widgets[1];
+    widget = menu->widgets[1];
     widget->x = (int)(menu->x + 16.0f);
     widget->drawValue = 0xFFFFF1;
     widget->y = (int)(menu->y + 16.0f);
     widget->width = menu->width;
     widget->height = menu->height;
     widget->flags |= 0x4000;
-    widget = (EwWidget *)menu->widgets[5];
+    widget = menu->widgets[5];
     widget->drawValue = 0x00FFFFF0;
     widget->x = x;
     widget->y = y;
@@ -1794,33 +1676,33 @@ void TMENU_drawDefault(TComponent *component)
     } else {
         queryHeight = 0x0;
     }
-    widget = (EwWidget *)menu->widgets[0];
+    widget = menu->widgets[0];
     widget->drawValue = 0x00FFFFF1;
     widget->x = x;
     widget->y = y;
     widget->width = menu->width;
     widget->height = menu->height;
     widget->flags |= 0x4000;
-    widget = (EwWidget *)menu->widgets[3];
+    widget = menu->widgets[3];
     body = (EwLabelBody *)widget;
     body->label.textLines = menu->queryLines;
     widget->drawValue = 0xFFFFFF;
     widget->x = x;
     widget->y = y;
-    body->label.lineCount = (short)menu->queryLineCount;
+    body->label.lineCount = menu->queryLineCount;
     body->label.firstLine = 0x0;
     widget->flags |= 0x4000;
-    widget = (EwWidget *)menu->widgets[2];
+    widget = menu->widgets[2];
     body = (EwLabelBody *)widget;
     widget->x = x + 20;
     widget->drawValue = 0x00FFFFFF;
     widget->y = y + queryHeight;
-    body->label.firstLine = (short)menu->firstVisibleItem;
+    body->label.firstLine = menu->firstVisibleItem;
     ((EwLabelSlot *)&body->label.textLines)->readOnlyTextLines = menu->itemTexts;
     body->label.lineCount = menu->visibleLineCount + 1;
     widget->flags |= 0x4000;
 
-    widget = (EwWidget *)menu->widgets[6];
+    widget = menu->widgets[6];
     widget->x = x + menu->width - 16;
     widget->y = y;
     widget->drawValue = 0x00FFFFFF;
@@ -1830,10 +1712,10 @@ void TMENU_drawDefault(TComponent *component)
     } else {
         widget->flags = widget->flags & 0xBFFF;
     }
-    widget = (EwWidget *)menu->widgets[7];
+    widget = menu->widgets[7];
     widget->drawValue = 0x00FFFFFF;
-    widget->x = (unsigned short)menu->width + x - 16;
-    widget->y = (unsigned short)menu->height + y - 16;
+    widget->x = menu->width + x - 16;
+    widget->y = menu->height + y - 16;
     EW_sprtSetCursorUV((EwSpriteWidget *)widget, 2, menu->frameCounter);
     if (menu->firstVisibleItem + menu->visibleLineCount < menu->itemCount) {
         widget->flags |= 0x4000;
@@ -1849,7 +1731,7 @@ void TMENU_drawDefault(TComponent *component)
     } else {
         queryHeight = 0;
     }
-    widget = (EwWidget *)menu->widgets[8];
+    widget = menu->widgets[8];
     widget->drawValue = 0x00FFFFFF;
     /* Retain both floating zero-offset additions in the cursor layout. */
     x = (int)(menu->x + 20.0f + 0.0f + 0.0f);

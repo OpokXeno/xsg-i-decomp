@@ -35,4 +35,11 @@ extern SrsMemRes _srsMemRes;
 int srsLoadEffectData(void *buffer, int effectNo);
 int srsFileLoadCf(int cfId, int effectNo);
 
+/* Functions and data used by other translation units. */
+char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType);
+extern int srsGetEffect2Idx(int effectNo);
+extern void sresFreeReloaderMemory(int reload_bgm);
+void srsSetLoadMode(int load_mode);
+char *srsGetEsdData(int index);
+
 #endif /* INCLUDE_MAIN_SRS_H */

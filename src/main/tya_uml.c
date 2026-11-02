@@ -2,6 +2,8 @@
 #include "common.h"
 
 #include "shared.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_font.h"
 
 typedef unsigned char u8;
 
@@ -37,12 +39,6 @@ typedef struct TyaUmlRenderSize {
     s16 width;
     s16 height;
 } TyaUmlRenderSize;
-
-typedef struct TyaUmlGsPacket {
-    XglPacket *packet;
-    u8 unmodeled_04[0x28];
-    u64 commands[4];
-} TyaUmlGsPacket;
 
 /*
  * The parser cursor mark() and tail() read from: only the two columns they
@@ -123,16 +119,10 @@ extern const char D_00A13418[8];
 extern const char *idx_7;
 extern char msg_8[5];
 
-extern int xglCdGetFileSize(const char *name);
-extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
 extern void *memset(void *dest, int value, unsigned int size);
 extern int tyaUmlDispLoad(TyaUmlDispParam *parameter);
 static void tyaUmlDispType3(TyaUmlDispParam *parameter);
-extern void tyaUmlDispType3Sub0(void *context, void *argument);
-
-extern void xglFontPrintExtFunc(unsigned int flags,
-                                void (*draw)(void *context, void *argument),
-                                void *argument);
+extern void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument);
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
                                     int count);
@@ -180,9 +170,8 @@ static void texture_trans(XglPacket **packet, TyaUmlImage *texture)
 
 INCLUDE_ASM("asm/main/nonmatchings/ov02/12_tya_uml", tyaUmlDispType3Sub0);
 
-static void tyaUmlDispType3Sub1(void *context, void *argument)
+static void tyaUmlDispType3Sub1(FontDrawCursor *cursor, void *argument)
 {
-    TyaUmlGsPacket *command = context;
     u64 packed_dimensions;
     u64 *command_words;
     s16 width = sRender.width;
@@ -190,12 +179,12 @@ static void tyaUmlDispType3Sub1(void *context, void *argument)
 
     packed_dimensions = ((u64)(width - 1) << 16) |
                         ((u64)(height - 1) << 48);
-    command_words = command->commands;
+    command_words = cursor->work.qwords;
     command_words[0] = 0x1000000000008001ULL;
     command_words[1] = 14;
     command_words[2] = packed_dimensions;
     command_words[3] = 64;
-    sceVif1PkAddDirectDataN(command->packet, command_words, 2);
+    sceVif1PkAddDirectDataN(cursor->packet, command_words, 2);
 }
 
 static void tyaUmlDispType3(TyaUmlDispParam *parameter)
@@ -212,7 +201,7 @@ static void tyaUmlDispType3(TyaUmlDispParam *parameter)
 
     x = render_x - parameter->clip_x;
     y = render_y - parameter->clip_y;
-    xglFontPrint(x, y, (int)(parameter->color + 15), D_00A13660 + 96);
+    xglFontPrint(x, y, (int)(parameter->color + 15), (const char *)(D_00A13660 + 96));
     xglFontPrintExtFunc((unsigned int)(parameter->color + 1),
                         tyaUmlDispType3Sub1, parameter);
 }
@@ -343,7 +332,7 @@ static void dbfileno_load(void)
 
     do {
     skip_destination:
-        if ((u8)*source == 0)
+        if (*source == 0)
             goto done;
     } while (*source++ != '\n');
     }

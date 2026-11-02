@@ -2,6 +2,11 @@
 #include "get_ladder.h"
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/get_ladder.h"
+#include "main/act_1.h"
+#include "main/act_2.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 #define FLY_TO_LADDER_SPEED (0.033333335071802139f)
 #define FLY_TO_LADDER_RISE_STEP (0.69999998807907104f)
@@ -15,16 +20,10 @@ struct ArrivalAttributeTable {
     int attributes[4];
 };
 
-/* The original copies these 16-byte points with aligned doubleword loads and stores. */
-typedef struct LadderPoint {
-    Vector4 coordinates;
-    u64 alignment[0];
-} LadderPoint;
-
 typedef struct LadderWork {
     unsigned char unmodeled_0000[0x3800];
-    LadderPoint from;
-    LadderPoint to;
+    AlignedVector4 from;
+    AlignedVector4 to;
     short fly_frame;
     short fly_frames;
     unsigned char unmodeled_3824[0x3830 - 0x3824];
@@ -46,24 +45,6 @@ typedef struct LadderWork {
     Vector4 lookat_target;
     unsigned char unmodeled_38a0[0x10];
 } LadderWork;
-
-typedef struct LadderActor {
-    unsigned char unmodeled_00[0x10];
-    LadderPoint position;
-    unsigned char unmodeled_20[0x30];
-    Vector4 rotation;
-    unsigned char unmodeled_60[0x20];
-    unsigned char number;
-    unsigned char unmodeled_81[0x4dc - 0x81];
-    float translate_y;
-    unsigned char unmodeled_4e0[0x6f4 - 0x4e0];
-    float motion_time;
-    float speed;
-    float motion_start;
-    float motion_end;
-    unsigned char unmodeled_704[0x9e4 - 0x704];
-    float target_angle;
-} LadderActor;
 
 typedef struct LadderPlayer {
     unsigned char unmodeled_00[0x4d0];
@@ -91,14 +72,11 @@ typedef struct LadderPad {
     signed char axis[4];
 } LadderPad;
 
-extern short PhCunt;
 extern short NowLadderStep;
 extern LadderWork enepc[16];
 extern LadderGameState GameLoopState;
 extern LadderPad PadData[2];
 extern const char hashigoBottomName[16];
-extern short SelNum;
-
 extern int Get_Attr_NU(const float *position, int mapIndex, int attrMask);
 
 extern void Get_LadderID_Limit(const float *position, float *result,
@@ -117,21 +95,14 @@ extern void Get_MiddlePoint_Parabora(const Vector4 *start,
 
 extern float Get_Height(const Vector4 *point, int mode, int flags);
 extern float Get_Multi_Max_Under(float first, float second, float third);
-extern void ACT_setMotion2(LadderActor *actor, int motion, int blend);
-
 extern float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
                                                    float speed);
 
 extern float *MotTransXYZ(float *xyz);
-extern void ACT_updateMotion(LadderActor *actor);
-extern void ACT_setMotion(LadderActor *actor, unsigned int motion);
 extern void CallMethod_I(const char *method_name, int argument1);
-extern void xglSoundEffectNormalID(int id, int channel);
-extern void xglSoundEffectStopID(int id, int channel);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern void *memset(void *destination, int value, unsigned int count);
 
-extern void On_Ladder(LadderActor *actor);
+extern void On_Ladder(Actor *actor);
 
 const struct LadderAttributeTable ladderAttributeTable = {{
     0x00100000, 0x00110000, 0x00120000, 0x00130000,
@@ -249,17 +220,17 @@ int Get_ArrivalID_First(const float *start, float *position,
     return index != 256;
 }
 
-void Fly_to_Ladder(LadderActor *actor)
+void Fly_to_Ladder(Actor *actor)
 {
     LadderWork *work = &enepc[actor->number];
-    LadderPoint point;
+    AlignedVector4 point;
     float height;
     short i;
     short state = work->state;
 
     if (state == 1) {
         work->fly_frame++;
-        if ((short) work->fly_frame < 13) {
+        if (work->fly_frame < 13) {
             return;
         }
 
@@ -271,13 +242,13 @@ void Fly_to_Ladder(LadderActor *actor)
             int motion = 21;
 
             if (direction == 0 &&
-                work->to.coordinates.x < work->from.coordinates.x) {
+                work->to.x < work->from.x) {
                 motion = 19;
             } else if (direction == state &&
-                       work->from.coordinates.y < work->to.coordinates.y) {
+                       work->from.y < work->to.y) {
                 motion = 19;
             } else if (direction == 3 &&
-                       work->from.coordinates.y < work->to.coordinates.y) {
+                       work->from.y < work->to.y) {
                 motion = 19;
             }
             ACT_setMotion2(actor, motion, 8);
@@ -287,11 +258,11 @@ void Fly_to_Ladder(LadderActor *actor)
         work->state = 3;
     }
 
-    Get_MiddlePoint_Parabora(&work->from.coordinates, &work->to.coordinates,
+    Get_MiddlePoint_Parabora(&work->from, &work->to,
                              work->fly_frame, work->fly_frames, 0.0f,
-                             &actor->position.coordinates);
+                             &actor->position);
 
-    if ((short) work->fly_frame++ < work->fly_frames) {
+    if (work->fly_frame++ < work->fly_frames) {
         return;
     }
 
@@ -299,38 +270,38 @@ void Fly_to_Ladder(LadderActor *actor)
     work->state = 4;
     work->step_wait = 20;
     ACT_setMotion2(actor, 20, 8);
-    actor->speed = FLY_TO_LADDER_SPEED;
+    actor->animation.slot.speed = FLY_TO_LADDER_SPEED;
 
     point = actor->position;
-    point.coordinates.x -= AdjTable_X[GameLoopState.ladder_direction[work->ladder_id]];
-    point.coordinates.z -= AdjTable_Z[GameLoopState.ladder_direction[work->ladder_id]];
-    height = Get_Height(&point.coordinates, 0, 0);
+    point.x -= AdjTable_X[GameLoopState.ladder_direction[work->ladder_id]];
+    point.z -= AdjTable_Z[GameLoopState.ladder_direction[work->ladder_id]];
+    height = Get_Height(&point, 0, 0);
 
     NowLadderStep = 63;
-    if (actor->position.coordinates.y < height || work->from_top == 1) {
-        actor->position.coordinates.y = height;
+    if (actor->position.y < height || work->from_top == 1) {
+        actor->position.y = height;
     }
-    LadderStep[63] = actor->position.coordinates.y;
+    LadderStep[63] = actor->position.y;
 
     for (i = 1; i < 63; i++) {
         float rise = i * FLY_TO_LADDER_RISE_STEP;
-        float base = actor->position.coordinates.y;
+        float base = actor->position.y;
 
         LadderStep[63 + i] = base + rise;
         LadderStep[63 - i] = base - rise;
     }
 }
 
-void Get_Off_Ladder(LadderActor *actor)
+void Get_Off_Ladder(Actor *actor)
 {
     LadderWork *work = &enepc[actor->number];
 
     work->fly_frame++;
-    Get_MiddlePoint(&work->from.coordinates.x, &work->to.coordinates.x,
+    Get_MiddlePoint(&work->from.x, &work->to.x,
                     work->fly_frame, work->fly_frames,
-                    &actor->position.coordinates.x);
+                    &actor->position.x);
 
-    if ((short) work->fly_frame >= work->fly_frames) {
+    if (work->fly_frame >= work->fly_frames) {
         work->fly_frame = -1;
         work->state = 0;
         ACT_setMotion2(actor, 0, 8);
@@ -338,13 +309,13 @@ void Get_Off_Ladder(LadderActor *actor)
         GameLoopState.map_flags |= 0x20;
     }
 
-    actor->speed = GET_OFF_LADDER_SPEED;
+    actor->animation.slot.speed = GET_OFF_LADDER_SPEED;
 }
 
-short Ready_Ladder(LadderActor *actor)
+short Ready_Ladder(Actor *actor)
 {
-    LadderPoint point;
-    LadderPoint edge;
+    AlignedVector4 point;
+    AlignedVector4 edge;
     float limit_x[4] = {0.0f, 0.001f, 0.0f, -0.001f};
     float limit_z[4] = {-0.001f, 0.0f, 0.001f, 0.0f};
     float probe_x[4] = {0.0f, 0.79999995f, 0.0f, -0.79999995f};
@@ -358,8 +329,8 @@ short Ready_Ladder(LadderActor *actor)
     float height;
     float ceiling;
 
-    Get_Height(&actor->position.coordinates, 0, 0);
-    attribute = Get_Attr(&actor->position.coordinates, 0, 0);
+    Get_Height(&actor->position, 0, 0);
+    attribute = Get_Attr(&actor->position, 0, 0);
     ladder = Get_Ladder(attribute);
     if (ladder == -1 && Get_Arrival(attribute) == -1) {
         return 0;
@@ -375,9 +346,9 @@ short Ready_Ladder(LadderActor *actor)
     } else {
         actor->target_angle = facing[Get_Arrival(attribute)];
         point = actor->position;
-        point.coordinates.x += probe_x[Get_Arrival(attribute)];
-        point.coordinates.z += probe_z[Get_Arrival(attribute)];
-        ladder = Get_Ladder(Get_Attr(&point.coordinates, 0, 0));
+        point.x += probe_x[Get_Arrival(attribute)];
+        point.z += probe_z[Get_Arrival(attribute)];
+        ladder = Get_Ladder(Get_Attr(&point, 0, 0));
         if (ladder == -1) {
             return 0;
         }
@@ -393,14 +364,14 @@ short Ready_Ladder(LadderActor *actor)
     ACT_setMotion2(actor, 0, 9);
 
     point = work->to;
-    point.coordinates.y += Get_Height(&work->to.coordinates, 0, 0);
-    Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x,
+    point.y += Get_Height(&work->to, 0, 0);
+    Get_LadderID_Limit(&point.x, &edge.x,
                        limit_x[direction], limit_z[direction]);
-    height = Get_Height(&edge.coordinates, 0, 0);
+    height = Get_Height(&edge, 0, 0);
     work->to = edge;
     ceiling = Get_Multi_Max_Under(
-        height, 0.7f, actor->position.coordinates.y + lift + 0.35f);
-    work->to.coordinates.y = ceiling;
+        height, 0.7f, actor->position.y + lift + 0.35f);
+    work->to.y = ceiling;
     work->fly_frame = 0;
     work->ladder_id = ladder;
     work->ceiling_height = ceiling;
@@ -408,46 +379,46 @@ short Ready_Ladder(LadderActor *actor)
 
     switch (direction) {
     case 0:
-        Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x, -0.001f,
+        Get_LadderID_Limit(&point.x, &edge.x, -0.001f,
                            0.0f);
-        work->limit_low = edge.coordinates.x;
-        Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x, 0.001f,
+        work->limit_low = edge.x;
+        Get_LadderID_Limit(&point.x, &edge.x, 0.001f,
                            0.0f);
-        work->limit_high = edge.coordinates.x;
-        work->to.coordinates.x = work->limit_low + (work->limit_high - work->limit_low) * 0.5f;
-        work->to.coordinates.z -= 0.4f;
+        work->limit_high = edge.x;
+        work->to.x = work->limit_low + (work->limit_high - work->limit_low) * 0.5f;
+        work->to.z -= 0.4f;
         break;
     case 1:
-        Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x, 0.0f,
+        Get_LadderID_Limit(&point.x, &edge.x, 0.0f,
                            -0.001f);
-        work->limit_low = edge.coordinates.z;
-        Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x, 0.0f,
+        work->limit_low = edge.z;
+        Get_LadderID_Limit(&point.x, &edge.x, 0.0f,
                            0.001f);
-        work->limit_high = edge.coordinates.z;
-        work->to.coordinates.x += 0.4f;
-        work->to.coordinates.z = work->limit_low + (work->limit_high - work->limit_low) * 0.5f;
+        work->limit_high = edge.z;
+        work->to.x += 0.4f;
+        work->to.z = work->limit_low + (work->limit_high - work->limit_low) * 0.5f;
         break;
     case 3:
-        Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x, 0.0f,
+        Get_LadderID_Limit(&point.x, &edge.x, 0.0f,
                            -0.001f);
-        work->limit_low = edge.coordinates.z;
-        Get_LadderID_Limit(&point.coordinates.x, &edge.coordinates.x, 0.0f,
+        work->limit_low = edge.z;
+        Get_LadderID_Limit(&point.x, &edge.x, 0.0f,
                            0.001f);
-        work->limit_high = edge.coordinates.z;
-        work->to.coordinates.x -= 0.4f;
-        work->to.coordinates.z = work->limit_low + (work->limit_high - work->limit_low) * 0.5f;
+        work->limit_high = edge.z;
+        work->to.x -= 0.4f;
+        work->to.z = work->limit_low + (work->limit_high - work->limit_low) * 0.5f;
         break;
     }
 
-    actor->speed = 1.0f / 30.0f;
+    actor->animation.slot.speed = 1.0f / 30.0f;
     Fly_to_Ladder(actor);
     return 1;
 }
 
-void On_Ladder(register LadderActor * const actor)
+void On_Ladder(register Actor * const actor)
 {
-    LadderPoint destination;
-    LadderPoint probe;
+    AlignedVector4 destination;
+    AlignedVector4 probe;
     float up_step[4][4];
     float down_step[4][4];
     float left_step[4][4];
@@ -490,11 +461,11 @@ void On_Ladder(register LadderActor * const actor)
     ladder_id = work->ladder_id;
     direction = GameLoopState.ladder_direction[ladder_id];
     probe = actor->position;
-    probe.coordinates.x -= AdjTable_X[direction];
-    probe.coordinates.z -= AdjTable_Z[direction];
+    probe.x -= AdjTable_X[direction];
+    probe.z -= AdjTable_Z[direction];
     height = GameLoopState.ladder_height[ladder_id];
-    ground = Get_Height(&probe.coordinates, 0, 0);
-    Get_Attr(&probe.coordinates, 0, 0);
+    ground = Get_Height(&probe, 0, 0);
+    Get_Attr(&probe, 0, 0);
     actor->translate_y = ground;
 
     if (!(GameLoopState.ladder_flags & 0x8000)) {
@@ -562,9 +533,9 @@ void On_Ladder(register LadderActor * const actor)
                        move_y, move_z);
     top = ground + height;
     xglFontDebugPrintf(4, 18, "HEI = %4f<%4f<%4f", ground,
-                       actor->position.coordinates.y, top);
+                       actor->position.y, top);
     xglFontDebugPrintf(4, 26, "LIM = %4f<%4f<%4f", work->limit_low,
-                       actor->position.coordinates.x,
+                       actor->position.x,
                        work->limit_high);
 
     for (step = 0; step < 127; step++) {
@@ -587,11 +558,11 @@ void On_Ladder(register LadderActor * const actor)
         }
         move_y = work->step_from +
                  (work->step_to - work->step_from) * work->step_frame / 15.0f -
-                 actor->position.coordinates.y;
+                 actor->position.y;
         work->lookat_point = &work->lookat_target.x;
-        work->lookat_target.x = actor->position.coordinates.x - AdjTable_X[direction];
-        work->lookat_target.y = actor->position.coordinates.y + 2.0f;
-        work->lookat_target.z = actor->position.coordinates.z - AdjTable_Z[direction];
+        work->lookat_target.x = actor->position.x - AdjTable_X[direction];
+        work->lookat_target.y = actor->position.y + 2.0f;
+        work->lookat_target.z = actor->position.z - AdjTable_Z[direction];
         break;
     case 6:
         work->step_frame++;
@@ -600,11 +571,11 @@ void On_Ladder(register LadderActor * const actor)
         }
         move_y = work->step_from +
                  (work->step_to - work->step_from) * work->step_frame / 15.0f -
-                 actor->position.coordinates.y;
+                 actor->position.y;
         work->lookat_point = &work->lookat_target.x;
-        work->lookat_target.x = actor->position.coordinates.x - AdjTable_X[direction];
-        work->lookat_target.y = actor->position.coordinates.y - 2.0f;
-        work->lookat_target.z = actor->position.coordinates.z - AdjTable_Z[direction];
+        work->lookat_target.x = actor->position.x - AdjTable_X[direction];
+        work->lookat_target.y = actor->position.y - 2.0f;
+        work->lookat_target.z = actor->position.z - AdjTable_Z[direction];
         break;
     case 4:
         work->step_frame = 0;
@@ -616,22 +587,22 @@ void On_Ladder(register LadderActor * const actor)
             move_y = 0.0f;
         }
         if (move_y < 0.0f) {
-            if (actor->position.coordinates.y - 0.7f <= ground &&
+            if (actor->position.y - 0.7f <= ground &&
                 GameLoopState.ladder_bottom_exit[ladder_id] == 0) {
                 return;
             }
             xglSoundEffectNormalID(0x20011, 0);
             work->step_frame = 0;
-            work->step_from = actor->position.coordinates.y;
+            work->step_from = actor->position.y;
             work->state = 6;
             work->step_to = LadderStep[NowLadderStep-- - 1];
             ACT_setMotion(actor, 20);
             move_y = work->step_from +
                      (work->step_to - work->step_from) * work->step_frame / 15.0f -
-                     actor->position.coordinates.y;
+                     actor->position.y;
         }
         if (move_y > 0.0f) {
-            if (top <= actor->position.coordinates.y + 0.7f) {
+            if (top <= actor->position.y + 0.7f) {
                 CallMethod_I("HashigoTop", work->ladder_id);
                 if (GameLoopState.ladder_flags & 0x20) {
                     work->state = 8;
@@ -640,13 +611,13 @@ void On_Ladder(register LadderActor * const actor)
             }
             xglSoundEffectNormalID(0x20011, 0);
             work->step_frame = 0;
-            work->step_from = actor->position.coordinates.y;
+            work->step_from = actor->position.y;
             work->state = 5;
             work->step_to = LadderStep[NowLadderStep++ + 1];
             ACT_setMotion(actor, 16);
             move_y = work->step_from +
                      (work->step_to - work->step_from) * work->step_frame / 15.0f -
-                     actor->position.coordinates.y;
+                     actor->position.y;
         }
         break;
     }
@@ -655,44 +626,45 @@ void On_Ladder(register LadderActor * const actor)
         work->step_wait = 0;
     }
 
-    if (actor->position.coordinates.y + move_y > top) {
-        actor->position.coordinates.y = top;
+    if (actor->position.y + move_y > top) {
+        actor->position.y = top;
         return;
     }
 
-    actor->speed = 0.0f;
-    actor->motion_time =
-        (actor->motion_end - actor->motion_start) * work->step_frame / 15.0f;
+    actor->animation.slot.speed = 0.0f;
+    actor->animation.slot.frame =
+        (actor->animation.slot.forwardLimit - actor->animation.slot.reverseLimit) *
+        work->step_frame / 15.0f;
 
-    if (actor->position.coordinates.y + move_y < ground &&
+    if (actor->position.y + move_y < ground &&
         GameLoopState.ladder_bottom_exit[ladder_id] == 1) {
         CallMethod_I(hashigoBottomName, work->ladder_id);
         if (GameLoopState.ladder_flags & 0x20) {
             work->state = 8;
             return;
         }
-        actor->position.coordinates.y = ground;
+        actor->position.y = ground;
         arrived = 1;
         destination = actor->position;
         switch (direction) {
         case 0:
-            destination.coordinates.z = actor->position.coordinates.z + 0.5f + 0.41f;
+            destination.z = actor->position.z + 0.5f + 0.41f;
             break;
         case 1:
-            destination.coordinates.x = actor->position.coordinates.x - 0.5f - 0.41f;
+            destination.x = actor->position.x - 0.5f - 0.41f;
             break;
         case 3:
-            destination.coordinates.x = actor->position.coordinates.x + 0.5f + 0.41f;
+            destination.x = actor->position.x + 0.5f + 0.41f;
             break;
         }
         ACT_setMotion2(actor, 31, 8);
     } else {
         if (direction != 0) {
-            actor->position.coordinates.x += move_x;
+            actor->position.x += move_x;
         }
-        actor->position.coordinates.y += move_y;
+        actor->position.y += move_y;
         if (direction != 1 && direction != 3) {
-            actor->position.coordinates.z += move_z;
+            actor->position.z += move_z;
         }
         arrived = 0;
         destination = actor->position;
@@ -701,14 +673,14 @@ void On_Ladder(register LadderActor * const actor)
             if (direction == 0) {
                 if (move_x < 0.0f) {
                     probe = actor->position;
-                    probe.coordinates.x = probe.coordinates.x - AdjTable_X[direction] - 0.79999995f;
-                    probe.coordinates.z -= AdjTable_Z[direction];
-                    if (Get_Arrival(Get_Attr(&probe.coordinates, 0, 0)) != -1) {
-                        ground = Get_Height(&probe.coordinates, 0, 0x800);
-                        if (ground <= actor->position.coordinates.y &&
-                            actor->position.coordinates.y < ground + 1.0f) {
+                    probe.x = probe.x - AdjTable_X[direction] - 0.79999995f;
+                    probe.z -= AdjTable_Z[direction];
+                    if (Get_Arrival(Get_Attr(&probe, 0, 0)) != -1) {
+                        ground = Get_Height(&probe, 0, 0x800);
+                        if (ground <= actor->position.y &&
+                            actor->position.y < ground + 1.0f) {
                             destination = probe;
-                            destination.coordinates.x -= 0.15f;
+                            destination.x -= 0.15f;
                             actor->target_angle = 3.1415927f;
                             work->lookat_point = 0;
                             arrived = 1;
@@ -718,14 +690,14 @@ void On_Ladder(register LadderActor * const actor)
                 }
                 if (move_x > 0.0f) {
                     probe = actor->position;
-                    probe.coordinates.x = probe.coordinates.x - AdjTable_X[direction] + 0.79999995f;
-                    probe.coordinates.z -= AdjTable_Z[direction];
-                    if (Get_Arrival(Get_Attr(&probe.coordinates, 0, 0)) != -1) {
-                        ground = Get_Height(&probe.coordinates, 0, 0x800);
-                        if (ground <= actor->position.coordinates.y &&
-                            actor->position.coordinates.y < ground + 1.0f) {
+                    probe.x = probe.x - AdjTable_X[direction] + 0.79999995f;
+                    probe.z -= AdjTable_Z[direction];
+                    if (Get_Arrival(Get_Attr(&probe, 0, 0)) != -1) {
+                        ground = Get_Height(&probe, 0, 0x800);
+                        if (ground <= actor->position.y &&
+                            actor->position.y < ground + 1.0f) {
                             destination = probe;
-                            destination.coordinates.x += 0.15f;
+                            destination.x += 0.15f;
                             actor->target_angle = 3.1415927f;
                             work->lookat_point = 0;
                             arrived = 1;
@@ -736,15 +708,15 @@ void On_Ladder(register LadderActor * const actor)
             } else {
                 if (move_z < 0.0f) {
                     probe = actor->position;
-                    probe.coordinates.x -= AdjTable_X[direction];
-                    probe.coordinates.z = probe.coordinates.z - AdjTable_Z[direction] - 0.79999995f;
-                    if (Get_Arrival(Get_Attr(&probe.coordinates, 0, 0)) != -1) {
-                        ground = Get_Height(&probe.coordinates, 0, 0x800);
-                        if (ground - 0.5f <= actor->position.coordinates.y &&
-                            actor->position.coordinates.y < ground + 1.0f) {
+                    probe.x -= AdjTable_X[direction];
+                    probe.z = probe.z - AdjTable_Z[direction] - 0.79999995f;
+                    if (Get_Arrival(Get_Attr(&probe, 0, 0)) != -1) {
+                        ground = Get_Height(&probe, 0, 0x800);
+                        if (ground - 0.5f <= actor->position.y &&
+                            actor->position.y < ground + 1.0f) {
                             arrived = 1;
                             destination = probe;
-                            destination.coordinates.z -= 0.15f;
+                            destination.z -= 0.15f;
                             work->lookat_point = 0;
                             if (direction == 1) {
                                 ACT_setMotion2(actor, 18, 8);
@@ -756,15 +728,15 @@ void On_Ladder(register LadderActor * const actor)
                 }
                 if (move_z > 0.0f) {
                     probe = actor->position;
-                    probe.coordinates.x -= AdjTable_X[direction];
-                    probe.coordinates.z = probe.coordinates.z - AdjTable_Z[direction] + 0.79999995f;
-                    if (Get_Arrival(Get_Attr(&probe.coordinates, 0, 0)) != -1) {
-                        ground = Get_Height(&probe.coordinates, 0, 0x800);
-                        if (ground <= actor->position.coordinates.y &&
-                            actor->position.coordinates.y < ground + 1.0f) {
+                    probe.x -= AdjTable_X[direction];
+                    probe.z = probe.z - AdjTable_Z[direction] + 0.79999995f;
+                    if (Get_Arrival(Get_Attr(&probe, 0, 0)) != -1) {
+                        ground = Get_Height(&probe, 0, 0x800);
+                        if (ground <= actor->position.y &&
+                            actor->position.y < ground + 1.0f) {
                             arrived = 1;
                             destination = probe;
-                            destination.coordinates.z += 0.15f;
+                            destination.z += 0.15f;
                             work->lookat_point = 0;
                             if (direction == 1) {
                                 ACT_setMotion2(actor, 17, 8);
@@ -781,19 +753,19 @@ void On_Ladder(register LadderActor * const actor)
     if (arrived == 1) {
         work->from = actor->position;
         work->to = destination;
-        work->to.coordinates.y = ground;
+        work->to.y = ground;
         work->fly_frames = 13;
         work->fly_frame = 0;
         work->state = 7;
         xglSoundEffectStopID(0x20011, 0);
-        actor->speed = 0.033333335f;
+        actor->animation.slot.speed = 0.033333335f;
     }
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char hashigoBottomName[16] = "HashigoBottom";
 
-int Ladder_Main(LadderActor *actor)
+int Ladder_Main(Actor *actor)
 {
     LadderWork *work = &enepc[actor->number];
 
@@ -818,7 +790,7 @@ int Ladder_Main(LadderActor *actor)
     }
 
     xglMatrixStackUnit();
-    MotTransXYZ(&actor->position.coordinates.x);
+    MotTransXYZ(&actor->position.x);
     xglMatrixStackRotZ(actor->rotation.z);
     xglMatrixStackRotY(actor->rotation.y);
     xglMatrixStackRotX(actor->rotation.x);

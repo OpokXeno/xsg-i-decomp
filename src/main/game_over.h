@@ -7,6 +7,12 @@
 
 #include "main/xgl_2.h"
 #include "shared.h"
+#include "main/file.h"
+#include "main/game_over.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_jpeg.h"
+#include "main/xgl_sound.h"
+#include "main/xgl_studio.h"
 
 typedef union GameOverDmaPacket4 {
     u64 words[4];
@@ -62,7 +68,6 @@ typedef struct {
     u8 unmodeled_08[0x18];
 } JpegDecodeRequest;
 
-extern PadPrefix PadData;
 extern const char GameEndImagePath[];
 extern const char GameEndQuestion[];
 extern const char GameEndSaveQuestion[];
@@ -79,23 +84,10 @@ extern GameOverDmaPacket12 TestEnv4;
 extern GameOverDmaPacket12 TestEnv5;
 
 static int copyframe(void);
-extern void xglSoundEffectNormalDirect(int effect_id);
-
-/* The game-over screen: show the game-over image with its stream, then
- * fade picture and stream volume out together. */
-void GameOver(void);
-
-extern int xglJpegDecode(JpegDecodeRequest *request);
 extern void xglRenderDrawFlipPk(XglPacket *packet);
 static void DrawImage(void *framebuffer);
 static void DrawBack(int alpha);
 static void redraw_frame(void *framebuffer);
-extern void xglStudioMainCameraInit(void);
-extern int MenuFileMain(int mode);
 extern void FlushCache(int mode);
-extern int xglSoundStreamOpenVagStereoParam(int channel, const char *path, int size, int volume);
-extern int xglSoundStreamMain(void);
 extern void SsdSetVagStreamVolume(int channel, int volume, int pan);
-extern void xglSoundStreamStop(int channel);
-
 #endif /* SRC_MAIN_GAME_OVER_H */

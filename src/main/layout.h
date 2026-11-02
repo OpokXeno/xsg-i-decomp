@@ -10,11 +10,8 @@
  */
 #include "shared.h"
 #include "main/jni.h"
-
-/* UnduDataGetHeader returns this bounded four-component result. */
-typedef struct LayoutHeader {
-    float components[4];
-} LayoutHeader;
+#include "main/Undulate.h"
+#include "main/string_utf_get_hash.h"
 
 /*
  * The Java xeno.Effect peer LAYOUT_mapID_setEffect's field lookup resolves
@@ -61,17 +58,9 @@ typedef struct LayoutSetArgs {
  * config/symbols/main.txt and keeps its splat name. */
 extern int layoutManagerId;
 
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
-extern void *loadConstString(const char *bytes, int length);
-
 /* canon: config/header-canon.json, as src/main/toolkit.h and src/main/chr.h
  * spell it. The former `void *` return here forced every use site to respell
  * the +16 read as a cast. */
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
-/* canon: config/header-canon.json (SceneObject/SceneClass are already
- * available through shared.h); restated here since the defining TU's
- * header is not shared. */
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 
 #endif

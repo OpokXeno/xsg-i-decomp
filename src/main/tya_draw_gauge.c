@@ -1,6 +1,8 @@
 #include "common.h"
 #include "shared.h"
 #include "tya_draw_gauge.h"
+#include "main/tya_draw_gauge.h"
+#include "main/nml_model_set.h"
 
 enum TyaGaugeVertexWord {
     TYA_GAUGE_VERTEX_X,
@@ -26,8 +28,6 @@ typedef struct TyaGaugePacket {
     u32 unfilled_color[4];
     u32 unfilled_vertices[2][TYA_GAUGE_VERTEX_WORD_COUNT];
 } TyaGaugePacket;
-
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
 static TyaGaugePacket TestEnv_0_0036AC70[] = {
     {
@@ -89,5 +89,5 @@ void tyaDrawGauge(TyaGaugeArgs *gauge)
     TestEnv_0_0036AC70[0].unfilled_vertices[1][TYA_GAUGE_VERTEX_ATTRIBUTE] =
         gauge->vertex_attribute;
 
-    nmlModelDirectSend(1, (u8 *)TestEnv_0_0036AC70, 9);
+    nmlModelDirectSend(1, TestEnv_0_0036AC70, 9);
 }

@@ -1,14 +1,14 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_2.h"
 #include "xgl_2.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_studio.h"
 
 extern unsigned int D_004ADE80[];
 extern char Vu0CallSin[];
 extern char Vu0CallCos[];
 extern const int nextAxisTable[3];
-
-extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
-extern StudioCamera *xglStudioGetCamera2(int cameraId);
 
 static unsigned long long iRandSeed;
 
@@ -563,7 +563,7 @@ void xglPlaneParameter(Vector4 *destination, const Vector4 *p0,
     destination->w = -destination->w;
 }
 
-void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
+void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
                      const Vector4 *vector)
 {
     __asm__ __volatile__(
@@ -583,7 +583,7 @@ void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
     );
 }
 
-float xglRotTransPers(Vector4 *out, const Matrix4 matrix, Vector4 *point, int cameraId)
+float xglRotTransPers(Vector4 *out, Matrix4 matrix, Vector4 *point, int cameraId)
 {
     StudioCamera *camera;
 
@@ -598,7 +598,7 @@ float xglRotTransPers(Vector4 *out, const Matrix4 matrix, Vector4 *point, int ca
     return out->w;
 }
 
-void xglRotTransPersN(Vector4 *destination, const Matrix4 matrix,
+void xglRotTransPersN(Vector4 *destination, Matrix4 matrix,
                       const Vector4 *points, int count, int cameraId)
 {
     StudioCamera *camera;
@@ -704,16 +704,15 @@ void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right)
     );
 }
 
-void xglMatrixReverse(Matrix *destination, const Matrix *source)
+void xglMatrixReverse(Matrix4 destination, Matrix4 source)
 {
-    Matrix transposed;
+    Matrix4 transposed;
     int row;
     int column;
 
     for (row = 0; row < 4; ++row) {
         for (column = 0; column < 4; ++column) {
-            transposed.elements[row * 4 + column] =
-                source->elements[column * 4 + row];
+            transposed[row][column] = source[column][row];
         }
     }
     /* The original SDK copy reuses scratch $2 for all four rows. */
@@ -732,7 +731,7 @@ void xglMatrixReverse(Matrix *destination, const Matrix *source)
     );
 }
 
-void xglMatrixInverse(Matrix4 destination, const Matrix4 source)
+void xglMatrixInverse(Matrix4 destination, Matrix4 source)
 {
     Matrix4 inverseMatrix;
     float cofactor00 = source[1][1] * source[2][2] - source[1][2] * source[2][1];
@@ -787,7 +786,7 @@ void xglMatrixInverse(Matrix4 destination, const Matrix4 source)
     destination[3][2] = inverseMatrix[3][2];
 }
 
-void xglMatrixScale(Matrix4 destination, const Matrix4 source,
+void xglMatrixScale(Matrix4 destination, Matrix4 source,
                     const float scale[4])
 {
     int column;
@@ -1112,7 +1111,7 @@ void xglMatrixStackUnit(void)
     );
 }
 
-void xglMatrixStackMul(const Matrix4 matrix)
+void xglMatrixStackMul(Matrix4 matrix)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackMul >> 3;
 
@@ -1263,8 +1262,8 @@ void xglMatrixStackFrustum(float left, float right, float bottom, float top,
     window[4] = right;
     window[5] = top;
     window[6] = farPlane;
-    ((volatile int *)window)[7] = 0;
-    ((volatile int *)window)[3] = 0;
+    window[7] = 0;
+    window[3] = 0;
     __asm__ __volatile__("sync" : : : "memory");
     __asm__ __volatile__("vcallmsr $vi27"
                          : : : "memory");
@@ -1532,7 +1531,7 @@ void xglGeometryInit(void)
 unsigned short xglSRand(void)
 {
     iRandSeed = iRandSeed * 1103515245ULL + 12345ULL;
-    return (unsigned short)((iRandSeed >> 16) & 0x7fff);
+    return (iRandSeed >> 16) & 0x7fff;
 }
 
 unsigned int xglLRand(void)

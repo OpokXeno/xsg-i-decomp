@@ -43,11 +43,11 @@ enum { SMP01_SMOKE_TRAILS = 10, SMP01_SMOKE_POINTS = 3 };
 /* The SMP01 work area (object + 0x20). */
 typedef struct Smp01Work {
     unsigned char unmodeled_000[8];    /* 0x000 */
-    ActRecord *sourceActor;            /* 0x008: the matrix source */
+    Actor *sourceActor;            /* 0x008: the matrix source */
     u32 sourceCoordinate;              /* 0x00C: its coordinate selector */
     Vector4 sourceOffset;              /* 0x010 */
     unsigned char unmodeled_020[4];    /* 0x020 */
-    ActRecord *targetActor;            /* 0x024: the coordinate source */
+    Actor *targetActor;            /* 0x024: the coordinate source */
     unsigned char unmodeled_028[0x18]; /* 0x028 */
     int modelEntry;                    /* 0x040 */
     const char *textureName;           /* 0x044 */

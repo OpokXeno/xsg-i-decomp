@@ -1,8 +1,6 @@
 #include "common.h"
+#include "main/align.h"
 
-extern void alignXAxis(int, int);
-extern void alignYAxis(int, int);
-extern void alignZAxis(int, int);
 extern void func_00A0A5F0(void);
 
 void YtachiTest(void)

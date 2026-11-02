@@ -138,6 +138,7 @@ static signed char aaiVertexIndex[6][3] = { { 0, 2, 4 }, { 1, 0, 5 }, { 0, 1, 2 
 
 /* Declared here, not at the top: moving it up changes the original code. */
 #include "xgl_camera.h"
+#include "main/xgl_camera.h"
 
 static void xglCameraControlInit(StudioCamera *camera)
 {

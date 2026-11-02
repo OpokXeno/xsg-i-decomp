@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "ssd_init.h"
+#include "main/ssd_init.h"
 
 enum {
     RSSD_CMD_QUIT    = 0x02,

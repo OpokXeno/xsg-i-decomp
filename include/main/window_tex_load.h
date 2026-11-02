@@ -2,6 +2,7 @@
 #define INCLUDE_MAIN_WINDOW_TEX_LOAD_H
 
 #include "main/xgl_studio.h"
+#include "main/xgl_2.h"
 
 /*
  * The UMN database's saved state: the 0x9c-byte window of the save record
@@ -55,5 +56,46 @@ void MenuFontLoad(int original_font, int asynchronous);
 void MenuCfTaikiPush(void);
 void MenuCfTaikiPop(void);
 void MenuBgTaskMain(void);
+
+/*
+ * MenuWork, the menu state block window_tex_load.c defines and menu_tec.c
+ * drives. window_tex_load's view: menu_state[1] is the top-level state,
+ * menu_state[3] and item_selection/sub_selection are its cursors, and
+ * ChangeTopLevel clears the area from +0x10 on as seven quadwords. menu_tec's
+ * view names the fields of that area. The state byte menu_tec calls `state` is
+ * menu_state[3].
+ */
+typedef struct MenuWorkState {
+    unsigned char menu_state[4];    /* +0x00 */
+    unsigned char item_selection;   /* +0x04 */
+    signed char sub_selection;      /* +0x05 */
+    unsigned char unmodeled_06[0x10 - 0x06];
+    union {
+        XglQuadword reset_work[7];  /* +0x10, cleared 16 bytes at a time */
+        struct {
+            signed char characterHelp;  /* +0x10 */
+            unsigned char unmodeled_11[0x20 - 0x11];
+            unsigned char resetFlags;   /* +0x20 */
+            unsigned char nextState;    /* +0x21 */
+            unsigned char unmodeled_22[0x2a - 0x22];
+            unsigned char inputDelay;   /* +0x2a */
+            unsigned char unmodeled_2b[0x30 - 0x2b];
+            signed char listCursor;     /* +0x30 */
+            signed char mode;           /* +0x31 */
+            signed char rowCursor;      /* +0x32 */
+            signed char selectCursor;   /* +0x33 */
+            unsigned char unmodeled_34[0x0C];
+            signed char characterNo;    /* +0x40 */
+            signed char rosterCount;    /* +0x41 */
+            signed char rosterCursor;   /* +0x42 */
+            signed char tecBit;         /* +0x43 */
+            signed char point;          /* +0x44 */
+            unsigned char unmodeled_45[0x50 - 0x45];
+            int selectedTechnique;      /* +0x50 */
+            unsigned char unmodeled_54[0x80 - 0x54];
+        };
+    };
+} MenuWorkState;
+
 
 #endif /* INCLUDE_MAIN_WINDOW_TEX_LOAD_H */

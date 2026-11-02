@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "matrix_print.h"
+#include "main/matrix_print.h"
 
 extern int printf(const char *format, ...);
 void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);

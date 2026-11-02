@@ -7,10 +7,9 @@
 
 #include "shared.h"
 #include "main/jni.h"
-
-/* The actual JNI thread owns object+0x10, method+0x18 and flags+0x24.
- * This owner uses that same record through its historical handle name. */
-typedef JThread JThreadHandle;
+#include "main/jthread.h"
+#include "main/string_utf_get_hash.h"
+#include "main/xgl_font.h"
 
 /*
  * The Unit class's native peer, reached through its "peer" Java field
@@ -65,8 +64,6 @@ extern const char jthreadDottedNameFormat[]; /* "%s.%s" */
 
 extern GameLoopStateWords GameLoopState;
 
-void JTHREAD_defaultUnit(JThreadHandle *thread);
-
 /*
  * lookupClassField/loadConstString/JNI_callMethod are the runtime's
  * class-field lookup and JVM-call primitives, already recovered with this
@@ -76,17 +73,5 @@ void JTHREAD_defaultUnit(JThreadHandle *thread);
  * again here.
  */
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
-extern SceneString *loadConstString(const char *bytes, int length);
-
-extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
-                           SceneObject *arguments, int *output);
-
-/*
- * The screen-space debug text primitive, already recovered with this exact
- * signature in several other TUs (e.g. src/main/script.c) and restated
- * verbatim here for the same reason as the primitives above.
- */
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 #endif /* SRC_MAIN_JTHREAD_H */

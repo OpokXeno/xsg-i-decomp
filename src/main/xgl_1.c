@@ -1,5 +1,9 @@
 #include "common.h"
 #include "shared.h"
+#include "main/nml_model_set.h"
+#include "main/ssd_3.h"
+#include "main/ssd_init.h"
+#include "main/xgl_dma.h"
 
 #define D_ENABLEW ((volatile u32 *) 0x1000f590)
 #define D3_CHCR   ((volatile u32 *) 0x1000b000)
@@ -19,20 +23,27 @@
 
 typedef struct CdStreamParam CdStreamParam;
 
+/* The sceMpeg decoder handle embedded in the MPEG2 movie record. */
+typedef struct XglMpegState {
+    int width;                          /* +0x00 */
+    int height;                         /* +0x04 */
+    int frameCount;                     /* +0x08 */
+    unsigned char unmodeled_0c[0x14];
+    unsigned long pictureType;          /* +0x20 */
+} XglMpegState;
+
 typedef struct XglMovieInfo {
     unsigned char unmodeled_00[8];
     unsigned char streamState;          /* +0x08 */
-    unsigned char unmodeled_09[0x17];
+    unsigned char unmodeled_09[0x0f];
+    int errorState;                     /* +0x18 */
+    unsigned char unmodeled_1c[4];
     unsigned char *ringBuffer;          /* +0x20 */
     int ringCapacity;                   /* +0x24 */
     int ringWrite;                      /* +0x28 */
     int ringRead;                       /* +0x2c */
-    unsigned char mpeg[0x10];           /* +0x30 */
-    short width;                        /* +0x40 */
-    short height;                       /* +0x42 */
-    unsigned char unmodeled_44[2];
-    short currentFrame;                 /* +0x46 */
-    unsigned char unmodeled_48[0x30];
+    XglMpegState mpeg;                  /* +0x30 */
+    unsigned char unmodeled_58[0x20];
     unsigned char *arena;               /* +0x78 */
     int reservedSize;                   /* +0x7c */
     unsigned char *videoBuffer;         /* +0x80 */
@@ -148,7 +159,7 @@ typedef struct XglMovieWork {
 typedef struct MpegStreamData {
     unsigned char unmodeled_00[8];
     unsigned char *buffer;              /* +0x08 */
-    int length;                         /* +0x0c */
+    unsigned int length;                /* +0x0c */
 } MpegStreamData;
 
 typedef struct {
@@ -169,39 +180,7 @@ typedef struct {
  */
 typedef struct CdStreamParam CdStreamParam;
 
-typedef XglMovieWork MoviePlaybackWork;
-
 typedef unsigned int Quadword __attribute__((mode(TI)));
-
-typedef struct XglMpegState {
-    int width;                          /* +0x00 */
-    int height;                         /* +0x04 */
-    int frameCount;                     /* +0x08 */
-    unsigned char unmodeled_0c[0x14];
-    unsigned long pictureType;          /* +0x20 */
-} XglMpegState;
-
-typedef struct XglMpeg2Work {
-    unsigned char unmodeled_00[0x18];
-    int errorState;                     /* +0x18 */
-    unsigned char unmodeled_1c[0x14];
-    XglMpegState mpeg;                  /* +0x30 */
-    unsigned char unmodeled_58[0x28];
-    unsigned char *videoBuffer;         /* +0x80 */
-    unsigned char *mpegBuffer;          /* +0x84 */
-    unsigned char unmodeled_88[8];
-    int audioSampleRate;                /* +0x90 */
-    unsigned char unmodeled_94[4];
-    unsigned char decodeState;          /* +0x98 */
-    unsigned char streamOpen;           /* +0x99 */
-    unsigned char missCount;            /* +0x9a */
-    unsigned char videoCount;           /* +0x9b */
-    unsigned char unmodeled_9c[0x14];
-    unsigned char *soundBuffer;         /* +0xb0 */
-    int soundBufferSize;                /* +0xb4 */
-    int soundWrite;                     /* +0xb8 */
-    int soundRead;                      /* +0xbc */
-} XglMpeg2Work;
 
 struct XglMovieSourceHeader {
     unsigned int signature;             /* "ipum" */
@@ -255,13 +234,9 @@ extern void sceMpegAddStrCallback(void *mpeg, int stream, int channel,
                                   int (*callback)(), void *argument);
 
 extern int sceMpegDemuxPss(void *mpeg, unsigned char *source, int size);
-extern int SsdGetResultValue(int *value);
-extern void SsdInitVagStreamStereo(int size, int channels);
 static int fillBuff(XglMovieInfo *info, int wait);
 static int nodataCallback(int event, void *data, XglMovieInfo *info);
 extern int printf(const char *format, ...);
-extern void SsdDisposeVagStream(void);
-extern void SsdStopVagStream(int channel);
 extern void sceMpegReset(void *mpegHandle);
 
 /*
@@ -276,12 +251,7 @@ extern void SyncDCache(void *start, void *end);
 int xglMovieClose(XglMovieInfo *info);
 extern int sceMpegIsEnd(void *mpeg);
 extern int sceMpegGetPicture(void *mpeg, unsigned char *destination, int size);
-extern void SsdPlayVagStream(int channel, int start, int loop);
-extern int SsdGetVagStreamStatusStereo(void);
-extern void SsdSetVagStreamDataStereo(int channel, int address, int size);
 extern int sceGsSyncPath(int mode, int timeout);
-extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
 extern int xglCdStreamRewind(struct CdStreamParam *stream);
 static int checkdma(XglMovieWork *info);
 
@@ -360,7 +330,7 @@ static unsigned long *make_gstrans(XglMovieWork *info, int y)
     return packet;
 }
 
-static int checkdma(MoviePlaybackWork *info)
+static int checkdma(XglMovieWork *info)
 {
     int wait = 0;
     unsigned int consumed;
@@ -373,7 +343,7 @@ static int checkdma(MoviePlaybackWork *info)
     case 0:
         if ((unsigned int)info->sourceSize < consumed) {
             if (info->ringRead != info->ringWrite &&
-                (unsigned int)(info->ringWrite - consumed) <
+                (info->ringWrite - consumed) <
                 (unsigned int)(info->sourceSize / 2) && !info->streamState) {
                 wait = 1;
                 break;
@@ -393,7 +363,7 @@ static int checkdma(MoviePlaybackWork *info)
     case 1:
         if (consumed < (unsigned int)info->sourceSize) {
             if (info->ringRead != info->ringWrite &&
-                (unsigned int)(info->ringWrite - consumed) <
+                (info->ringWrite - consumed) <
                 (unsigned int)(info->sourceSize / 2) && !info->streamState) {
                 wait = 1;
                 break;
@@ -766,7 +736,7 @@ static int fillBuff(XglMovieInfo *info, int wait)
         position = info->readBuffer;
         remaining = info->pendingBytes;
     }
-    count = sceMpegDemuxPss(info->mpeg, position, remaining);
+    count = sceMpegDemuxPss(&info->mpeg, position, remaining);
     info->pendingBytes -= count;
     return count;
 }
@@ -783,7 +753,7 @@ static int videoCallback(int event, MpegStreamData *data, XglMovieInfo *info)
     if (free < 0) {
         free += info->dmaSize;
     }
-    if ((unsigned int) free < (unsigned int) data->length) {
+    if ((unsigned int) free < data->length) {
         return 0;
     }
     overflow = write + data->length - info->dmaSize;
@@ -917,17 +887,17 @@ int xglMpeg2Open(XglMovieInfo *info)
     int result;
     int retry;
 
-    if (xglCdStreamOpen((struct CdStreamParam *) info) < 0) {
+    if (xglCdStreamOpen(info) < 0) {
         return -1;
     }
     xglCdStreamReadRing((struct CdStreamParam *) info, info->ringCapacity / 2);
     info->ringRead = 0;
     sceMpegInit();
-    sceMpegCreate(info->mpeg, info->arena, info->reservedSize);
-    sceMpegAddStrCallback(info->mpeg, 0, 0, videoCallback, info);
-    sceMpegAddStrCallback(info->mpeg, 3, 0, audioCallback, info);
-    sceMpegAddCallback(info->mpeg, 1, nodataCallback, info);
-    sceMpegAddCallback(info->mpeg, 0, errorCallback, info);
+    sceMpegCreate(&info->mpeg, info->arena, info->reservedSize);
+    sceMpegAddStrCallback(&info->mpeg, 0, 0, videoCallback, info);
+    sceMpegAddStrCallback(&info->mpeg, 3, 0, audioCallback, info);
+    sceMpegAddCallback(&info->mpeg, 1, nodataCallback, info);
+    sceMpegAddCallback(&info->mpeg, 0, errorCallback, info);
     info->pendingBytes = 0;
     info->audioHeaderRead = 0;
     info->audioSampleRate = 0;
@@ -984,7 +954,7 @@ static void setLoadImageTags(unsigned int destination, unsigned int image, int w
     ((XglDmaRefTag *) packet)[-1].tag &= 0x0fffffff;
 }
 
-int xglMpeg2Play(XglMpeg2Work *info)
+int xglMpeg2Play(XglMovieInfo *info)
 {
     static unsigned long TestEnv[24] = { 0x0000000000000000ULL, 0x5100000b00000000ULL, 0xa08b400000008001ULL, 0x00000053531eeeeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000000000060ULL, 0x0000000000000014ULL, 0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000000000000000ULL, 0x0000000000000008ULL, 0x000000000007000dULL, 0x0000000000000047ULL, 0x0000008000000080ULL, 0x0000008000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071f700006ff8ULL, 0x0000000000f00000ULL, 0x00001c0000002000ULL, 0x0000000000000000ULL, 0x00008df700008ff8ULL, 0x0000000000f00000ULL };
 
@@ -1040,7 +1010,7 @@ int xglMpeg2Play(XglMpeg2Work *info)
         }
     }
     for (i = 15; i >= 0; i--) {
-        fillBuff((XglMovieInfo *) info, 0);
+        fillBuff(info, 0);
     }
     sceGsSyncPath(0, 0);
     packet = UNCACHED(info->mpegBuffer);
@@ -1049,16 +1019,16 @@ int xglMpeg2Play(XglMpeg2Work *info)
     sceGsSyncPath(0, 0);
     env = TestEnv;
     env[8] = (0x24020000 | sRender.bufferBase0 << 5) | 0x2000000640000000;
-    nmlModelDirectSend(5, (u8 *) env, 12);
+    nmlModelDirectSend(5, env, 12);
     return 0;
 }
 
-int xglMpeg2Close(unsigned char *stream)
+int xglMpeg2Close(XglMovieInfo *info)
 {
-    void *mpegHandle;
+    XglMpegState *mpegHandle;
     int value;
 
-    mpegHandle = stream + 0x30;
+    mpegHandle = &info->mpeg;
     sceMpegReset(mpegHandle);
     sceMpegDelete(mpegHandle);
     SsdStopVagStream(0);
@@ -1067,7 +1037,7 @@ int xglMpeg2Close(unsigned char *stream)
     SsdDisposeVagStream();
     do {
     } while (SsdGetResultValue(&value) < 0);
-    xglCdStreamClose((CdStreamParam *) stream);
+    xglCdStreamClose((CdStreamParam *) info);
     return 0;
 }
 

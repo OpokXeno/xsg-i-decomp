@@ -1,7 +1,9 @@
 #include "common.h"
 #include "shared.h"
 #include "main/jni.h"
+#include "main/spline.h"
 #include "spline.h"
+#include "main/spl.h"
 
 struct SplineFloatArray {
     void *class_pointer;
@@ -21,7 +23,7 @@ struct SplineGetValueArgs {
 };
 
 struct SplineValueVector4f {
-    SceneObjectClassRef *class_ref;
+    DispatchTable *class_ref;
     float z;
     float y;
     float x;
@@ -37,18 +39,16 @@ union SplineResultValue {
 extern void SPL_init2(Spline *spline, int order, float *control_points,
                       int point_count, int component_count);
 
-extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
-
 void Java_xeno_util_Spline_create__(void *environment, void *arguments,
                                     void **result)
 {
-    SceneClass *spline_class;
+    JavaClass *spline_class;
     void *class_pointer;
     Spline *spline;
 
     spline_class = classJava_xeno_util_Spline;
     spline = xmalloc(0x494, 0xE);
-    class_pointer = spline_class->instance_class_ref;
+    class_pointer = spline_class->classPointer;
     spline->class_pointer = class_pointer;
     *result = spline;
 }
@@ -76,7 +76,7 @@ void Java_xeno_util_Spline_getValue__I(
 {
     static struct SplineValueVector4f value;
     float coordinates[3];
-    SceneClass *vector_class;
+    JavaClass *vector_class;
     struct SplineValueVector4f *vector;
 
     SPL_getValueXYZ(coordinates, arguments->spline, (float)arguments->frame);
@@ -86,6 +86,6 @@ void Java_xeno_util_Spline_getValue__I(
     vector->y = coordinates[1];
     vector->z = coordinates[2];
     vector->w = 1.0f;
-    vector->class_ref = vector_class->instance_class_ref;
+    vector->class_ref = vector_class->classPointer;
     result->object = vector;
 }

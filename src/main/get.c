@@ -1,7 +1,11 @@
 #include "common.h"
 #include "shared.h"
 #include "main/init_uwamono_sys.h"
+#include "main/Undulate.h"
 #include "main/xgl_2.h"
+#include "main/check.h"
+#include "main/outer_product.h"
+#include "main/xgl_font.h"
 
 /* Query layout and floating return follow the original UnduCheck accesses. */
 typedef struct SplineMotionParameters {
@@ -24,10 +28,6 @@ typedef struct EnemySplineState {
     unsigned char unmodeled_48[0x38b0 - 0x48];
 } EnemySplineState;
 
-typedef struct Vector3 { float x, y, z; } Vector3;
-
-typedef Vector4 Point4;
-
 typedef struct ParabolaVec { float x, y, z, w; } ParabolaVec;
 
 typedef struct LayoutHeader LayoutHeader;
@@ -39,25 +39,11 @@ typedef struct PlayerActorHeaderView {
     LayoutHeader *data_header;
 } PlayerActorHeaderView;
 
-typedef struct UnduParam {
-    int queryFlags;
-    unsigned char unmodeled_04[4];
-    short attrMask;
-    unsigned char unmodeled_0a[0x0e];
-    LayoutHeader *header;
-    unsigned char unmodeled_1c[4];
-    long long attribute;
-    unsigned char unmodeled_28[8];
-    long long excluded_units; /* Check_Undu stores the excluded mask at +0x30. */
-    long long query_mode;     /* Check_Undu stores the included mask at +0x38. */
-} UnduParam;
-
 extern EnemySplineState enepc[];
 extern GameLoopStateWords GameLoopState;
 extern UnduParam UnduTest;
 extern UnduParam UnduTemp;
 extern const float unduDistanceTolerance;
-extern unsigned short *DataSpline;
 extern const float getPi;
 extern const float fanMinDistance;
 extern const float fanHeightTolerance;
@@ -69,46 +55,16 @@ extern const float wallFullTurnRadians;
 extern const float wallAngleStep;
 
 extern void UnduParamInit(UnduParam *param);
-extern float UnduCheck(const Point4 *position, void *exclude, UnduParam *param);
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+extern float UnduCheck(const Vector4 *position, void *exclude, UnduParam *param);
 extern float cosf(float angle);
 extern float atan2f(float y, float x);
-float Get_Distance(const Point4 *first, const Point4 *second);
-float Get_Decimal_Surplus_for_Radius(float angle);
-
-/* MARK: provisional extern block. The four words are _gp-relative .sdata
-   witnesses at 0x004d81a8..0x004d81b4, not proven original declarations.
-   Names below record roles observed in this function only. */
-extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
-                          const Vector4 *point);
-
-/* Check_Angle: defined below in this file, still assembler. */
-int Check_Angle(float angle, float rangeStart, float rangeEnd);
-
-int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
-                Point4 *destination, int query_mode, int excluded_units,
-                int flags);
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern int HitCheckMapUnitPosSize(const Vector4 *position, float radius);
-
-int Check_Straight(const Point4 *start, const Point4 *end, short steps,
-                   unsigned long *destination, float radius, int map_index,
-                   int excluded_actors, int territory);
-
-extern int Check_Actor(const Vector4 *position, short number);
-
-int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
-                       const Vector4 *second_start, const Vector4 *second_end);
-
-int Get_Attr(const Point4 *position, int mapIndex, int attrMask);
-
 /* Declared here, not at the top: moving it up changes the original code. */
 /* MARK: provisional extern block. All eight words are _gp-relative .sdata
    witnesses at 0x004d81cc..0x004d81e8. They are not proven original
    declarations; names below record roles observed in this function only. */
 /* Role name for TwoPiD:
    subtracted to wrap the cursor down at/above the high clamp. */
+#include "main/get.h"
 #include "get.h"
 
 float Get_Decimal_Surplus_for_Radius(float angle)
@@ -128,19 +84,19 @@ float Get_Decimal_Surplus_for_Radius(float angle)
     return angle;
 }
 
-int Check_MoveSquare(const Point4 *first, const Point4 *second,
-                     Point4 *destination, int map_index, float radius)
+int Check_MoveSquare(const Vector4 *first, const Vector4 *second,
+                     Vector4 *destination, int map_index, float radius)
 {
-    Point4 first_intersection;
-    Point4 first_crossing;
-    Point4 second_intersection;
-    Point4 second_crossing;
-    Point4 third_intersection;
-    Point4 third_crossing;
-    Point4 fourth_intersection;
-    Point4 fourth_crossing;
-    Point4 first_corner;
-    Point4 second_corner;
+    Vector4 first_intersection;
+    Vector4 first_crossing;
+    Vector4 second_intersection;
+    Vector4 second_crossing;
+    Vector4 third_intersection;
+    Vector4 third_crossing;
+    Vector4 fourth_intersection;
+    Vector4 fourth_crossing;
+    Vector4 first_corner;
+    Vector4 second_corner;
     int debug_color[4];
     float first_x = first->x;
     float second_x = second->x;
@@ -203,19 +159,19 @@ int Check_MoveSquare(const Point4 *first, const Point4 *second,
     fourth_intersection = fourth_crossing;
 
     xglFontDebugPrintf(8, 0x64, moveSquarePlaceholderText);
-    if (Check_CrossingOver((const Vector4 *)second,
-                           (const Vector4 *)&first_intersection,
-                           (const Vector4 *)first,
-                           (const Vector4 *)&fourth_intersection) == 1) {
+    if (Check_CrossingOver(second,
+                           &first_intersection,
+                           first,
+                           &fourth_intersection) == 1) {
         *destination = first_intersection;
         destination->z = second->z;
         crossed = 1;
         xglFontDebugPrintf(8, 0x64, moveSquareForecastText);
     }
-    if (Check_CrossingOver((const Vector4 *)second,
-                           (const Vector4 *)&second_intersection,
-                           (const Vector4 *)first,
-                           (const Vector4 *)&third_intersection) == 1) {
+    if (Check_CrossingOver(second,
+                           &second_intersection,
+                           first,
+                           &third_intersection) == 1) {
         *destination = second_intersection;
         destination->x = second->x;
         crossed = 1;
@@ -290,13 +246,13 @@ void Check_Wall(float distance_scale, float wall_parameter,
     short first = 0;
     short end = count;
     short index;
-    Point4 sample;
+    Vector4 sample;
     const float full_turn = 6.2831855f;
     float angle;
 
     if (count <= 0) {
-        first = (int)xglSRand() % (count < 0 ? -(int)count : (int)count);
-        end = (short)(first + 1);
+        first = xglSRand() % (count < 0 ? -(int)count : (int)count);
+        end = first + 1;
         for (index = 0; index < (count < 0 ? -(int)count : (int)count); index++)
             blocked[index] = 0;
     }
@@ -315,7 +271,7 @@ void Check_Wall(float distance_scale, float wall_parameter,
         blocked[index] = 0;
         if (!Get_HeightAttr(&sample, map_index, 0, &UnduTest)) {
             blocked[index] = 1;
-        } else if (HitCheckMapUnitPosSize((const Vector4 *)&sample,
+        } else if (HitCheckMapUnitPosSize(&sample,
                                           wall_parameter) != -1) {
             blocked[index] = 1;
         } else if (territory != 0 &&
@@ -327,13 +283,13 @@ void Check_Wall(float distance_scale, float wall_parameter,
     }
 }
 
-void Check_Octpus(float length, float radius, const Point4 *origin,
-                  Point4 *destination, int count_argument, int map_index,
+void Check_Octpus(float length, float radius, const Vector4 *origin,
+                  Vector4 *destination, int count_argument, int map_index,
                   int excluded_actors, int territory)
 {
     short count = (short)count_argument;
-    Point4 sample;
-    Point4 checked[16];
+    Vector4 sample;
+    Vector4 checked[16];
     float distance[16];
     signed char used[16];
     short ranked[16];
@@ -414,8 +370,8 @@ float Get_WallSpace(int unused, const signed char *wall_flags,
     return (float)selected * (wallAngleStep / count_as_float);
 }
 
-void Get_One_Step(float length, const Point4 *source,
-                  const Point4 *destination, Point4 *output)
+void Get_One_Step(float length, const Vector4 *source,
+                  const Vector4 *destination, Vector4 *output)
 {
     float x_step = destination->x - source->x;
     float z_step = destination->z - source->z;
@@ -427,13 +383,13 @@ void Get_One_Step(float length, const Point4 *source,
     output->w = 1.0f;
 }
 
-int Check_Straight(const Point4 *start, const Point4 *end, short steps,
+int Check_Straight(const Vector4 *start, const Vector4 *end, short steps,
                    unsigned long *destination, float radius, int map_index,
                    int excluded_actors, int territory)
 {
-    Point4 current;
-    Point4 previous;
-    Point4 intersection;
+    Vector4 current;
+    Vector4 previous;
+    Vector4 intersection;
     short territory_index = (short)territory;
     short step;
     __builtin_memcpy(&previous, start, sizeof(previous));
@@ -452,7 +408,7 @@ int Check_Straight(const Point4 *start, const Point4 *end, short steps,
             if ((territory_index != 0 &&
                  Get_Attr(&current, map_index, 0x10) !=
                     EneTerritoryID[territory_index]) ||
-                HitCheckMapUnitPosSize((const Vector4 *)&current, radius) != -1 ||
+                HitCheckMapUnitPosSize(&current, radius) != -1 ||
                 Check_Actor((const Vector4 *)&current, (short)excluded_actors) == 1) {
                 __builtin_memcpy(destination, &previous, sizeof(previous));
                 return (short)(step - 1);
@@ -465,11 +421,11 @@ int Check_Straight(const Point4 *start, const Point4 *end, short steps,
     return steps;
 }
 
-int Check_Straight_ID(const Point4 *start, const Point4 *end,
-                      short count, Point4 *destination, int map_index)
+int Check_Straight_ID(const Vector4 *start, const Vector4 *end,
+                      short count, Vector4 *destination, int map_index)
 {
-    Point4 current;
-    Point4 previous;
+    Vector4 current;
+    Vector4 previous;
     short checked = 0;
     int signed_count = count;
 
@@ -485,7 +441,7 @@ int Check_Straight_ID(const Point4 *start, const Point4 *end,
             current.y = start->y + (end->y - start->y) * step / count_as_float;
             current.z = start->z + (end->z - start->z) * step / count_as_float;
             if (UnduCheck(&current, 0, &UnduTemp) == -1000.0f
-                || HitCheckMapUnitPos((const Vector4 *)&current) != -1) {
+                || HitCheckMapUnitPos(&current) != -1) {
                 destination->x = previous.x;
                 destination->y = previous.y;
                 destination->z = previous.z;
@@ -503,7 +459,7 @@ int Check_Straight_ID(const Point4 *start, const Point4 *end,
     return signed_count;
 }
 
-float Get_Distance(const Point4 *first, const Point4 *second)
+float Get_Distance(const Vector4 *first, const Vector4 *second)
 {
     float first_x = first->x;
     float first_z = first->z;
@@ -512,7 +468,7 @@ float Get_Distance(const Point4 *first, const Point4 *second)
                            + (second->z - first_z) * (second->z - first_z));
 }
 
-float Get_Distance3D(const Point4 *first, const Point4 *second)
+float Get_Distance3D(const Vector4 *first, const Vector4 *second)
 {
     float first_x = first->x;
     float first_y = first->y;
@@ -523,7 +479,7 @@ float Get_Distance3D(const Point4 *first, const Point4 *second)
                            + (second->z - first_z) * (second->z - first_z));
 }
 
-float Get_Angle(const Point4 *first, const Point4 *second)
+float Get_Angle(const Vector4 *first, const Vector4 *second)
 {
     return atan2f(second->x - first->x, second->z - first->z);
 }
@@ -546,7 +502,7 @@ int Check_Angle(float angle, float rangeStart, float rangeEnd)
     return 0;
 }
 
-float Get_Angle_Relative(const Point4 *first, const Point4 *second,
+float Get_Angle_Relative(const Vector4 *first, const Vector4 *second,
                          float reference)
 {
     float relative = Get_Angle(first, second) - reference;
@@ -575,10 +531,10 @@ int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
 }
 
 int Check_InsideFan(float facing, float radius, float fan_width_degrees,
-                    float crossing_radius, const Point4 *origin,
-                    const Point4 *target, int map_index)
+                    float crossing_radius, const Vector4 *origin,
+                    const Vector4 *target, int map_index)
 {
-    Point4 intersection;
+    Vector4 intersection;
     float angle;
     float half_width;
 
@@ -608,7 +564,7 @@ int Check_InsideFan(float facing, float radius, float fan_width_degrees,
     return CrossPointUwamono(origin, target, crossing_radius, &intersection) != 1;
 }
 
-int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
+int Check_InsideFan_Wooo(const Vector4 *origin, const Vector4 *target,
                          float facing, float radius, float fanWidthDegrees)
 {
     int inside = 0;
@@ -647,11 +603,11 @@ float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
     return cursor;
 }
 
-void Get_EnemyIDPos(const Point4 *origin, Point4 *destination)
+void Get_EnemyIDPos(const Vector4 *origin, Vector4 *destination)
 {
-    Point4 sample;
-    Point4 checked;
-    Point4 intersection;
+    Vector4 sample;
+    Vector4 checked;
+    Vector4 intersection;
     short index = 0;
     float nearest = 1000.0f;
     int debugColor[4]; /* RGBA; written but never read in the release build */
@@ -705,7 +661,7 @@ float Get_Multi_Max_Under(float value, float step, float maximum)
     return value;
 }
 
-float Get_HeightAttr(const Point4 *position, int mapIndex, int attrMask,
+float Get_HeightAttr(const Vector4 *position, int mapIndex, int attrMask,
                     UnduParam *param)
 {
     UnduParamInit(param);
@@ -719,7 +675,7 @@ float Get_HeightAttr(const Point4 *position, int mapIndex, int attrMask,
     return UnduCheck(position, 0, param);
 }
 
-void Get_Height(const Point4 *position, int mapIndex, int attrMask)
+void Get_Height(const Vector4 *position, int mapIndex, int attrMask)
 {
     UnduParamInit(&UnduTest);
     UnduTest.queryFlags = 0;
@@ -732,7 +688,7 @@ void Get_Height(const Point4 *position, int mapIndex, int attrMask)
     UnduCheck(position, 0, &UnduTest);
 }
 
-int Get_Attr(const Point4 *position, int mapIndex, int attrMask)
+int Get_Attr(const Vector4 *position, int mapIndex, int attrMask)
 {
     UnduParamInit(&UnduTest);
     UnduTest.queryFlags = 0;
@@ -746,7 +702,7 @@ int Get_Attr(const Point4 *position, int mapIndex, int attrMask)
     return (int)UnduTest.attribute;
 }
 
-int Get_Attr_NU(const Point4 *position, int mapIndex, int attrMask)
+int Get_Attr_NU(const Vector4 *position, int mapIndex, int attrMask)
 {
     UnduParamInit(&UnduTest);
     UnduTest.queryFlags = 0;
@@ -760,11 +716,11 @@ int Get_Attr_NU(const Point4 *position, int mapIndex, int attrMask)
     return (int)UnduTest.attribute;
 }
 
-int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
-                Point4 *destination, int query_mode, int excluded_units,
+int Check_Undu(const Vector4 *start, const Vector4 *end, int map_index,
+                Vector4 *destination, int query_mode, int excluded_units,
                 int flags)
 {
-    Point4 delta;
+    Vector4 delta;
 
     UnduParamInit(&UnduTest);
     UnduTest.queryFlags = 0;
@@ -840,7 +796,7 @@ void GetBSplineLoop(short frame, short count, int period_value,
 }
 
 void GetBSplineLoopDummy(short frame, short count, short period,
-                         const Point4 *points, Point4 *destination,
+                         const Vector4 *points, Vector4 *destination,
                          const SplineMotionActor *actor)
 {
     int actor_number = actor->number;

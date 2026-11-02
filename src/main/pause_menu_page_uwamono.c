@@ -1,5 +1,11 @@
 #include "common.h"
 #include "shared.h"
+#include "main/pause_menu_page_uwamono.h"
+#include "main/init_uwamono_sys.h"
+#include "main/karakama_test.h"
+#include "main/xgl_2.h"
+#include "main/xgl_flags.h"
+#include "main/xgl_font.h"
 
 #define PILLAR_SEGMENT_ANGLE (0.3926991f)
 #define PILLAR_CORNER_ANGLE (0.3926991f)
@@ -18,13 +24,10 @@ typedef struct ItemBoxEntry {
     int money;
 } ItemBoxEntry;
 
-/* The doubleword view gives the vector the 8-byte alignment the original
- * copies rely on (ld/sd instead of unaligned ldl/ldr pairs). */
-typedef union UwamonoVector {
-    Vector4 vector;
-    u64 words[2];
-} UwamonoVector;
-
+/* Corner arrays: the original copies their elements with aligned doublewords
+ * (ld/sd). AlignedVector4 array elements are copied with ldl/ldr under this
+ * compiler (gcc 2.96 drops the typedef's aligned(8) on array elements, also for
+ * DoublewordAlignedVector4), so the arrays stay the union. */
 typedef struct UwamonoPadEntry {
     unsigned char unmodeled_00[0x28];
     u16 held;
@@ -53,13 +56,13 @@ typedef struct UwamonoInfo {
 typedef struct UwamonoDebugUnit {
     u32 flags;
     unsigned char unmodeled_04[0x0c];
-    UwamonoVector position;
+    AlignedVector4 position;
     unsigned char unmodeled_20[0x60];
     float (*matrix)[4];
     unsigned char unmodeled_84[0x20];
     short serial;
     unsigned char unmodeled_a6[0x0a];
-    UwamonoVector size;
+    AlignedVector4 size;
     unsigned char unmodeled_c0[0xe0];
     UwamonoInfo info;
     unsigned char unmodeled_1ec[0x300 - 0x1ec];
@@ -75,14 +78,9 @@ enum {
     UWAMONO_SHOP
 };
 
-extern signed char dispflg;
-extern signed char lineflg;
-extern signed char printflg;
-extern signed char collflg;
-
 /* PadData's +0x28/+0x2a/+0x2c fields match the local input view in input.c. */
 extern UwamonoPadEntry PadData[2];
-extern unsigned char EvtItemTbl[255 * 0x80];
+extern char EvtItemTbl[255 * 0x80];
 extern ItemBoxEntry ItemBoxTbl[601];
 extern UwamonoGameStatePrefix GameLoopState;
 extern UwamonoDebugUnit MapUnit[64];
@@ -105,16 +103,10 @@ const char treasureChestListText[];
 const char pressCrossToReturnText[];
 const char eventItemRowFormat[];
 
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-extern void UnlockMapUnit(void);
-extern char *GetItemName(int category, int index);
+extern const char *GetItemName(int category, int index);
 extern int HexToStr(int value, char *buffer);
-extern int xglFlagsGet1(int flag);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern void *memset(void *s, int c, unsigned int n);
 extern void xglRotTransPers(int *screen, float (*matrix)[4], Vector4 *point, int mode);
-extern void DispPillar(Vector4 *base, Vector4 *step, const int *colors);
 void DebDispEvtItem(void);
 void DebDispItemBox(void);
 
@@ -247,7 +239,7 @@ void DebDispEvtItem(void)
     static int page = 0;
     int row;
     int item_index;
-    unsigned char *event_item;
+    char *event_item;
 
     xglFontDebugPrintf(16, 16, eventItemListText);
     xglFontDebugPrintf(16, 32, pressCrossToReturnText);
@@ -258,7 +250,7 @@ void DebDispEvtItem(void)
         }
         event_item = &EvtItemTbl[item_index * 0x80];
         xglFontDebugPrintf(4, 60 + row * 34, eventItemRowFormat,
-                           item_index + 1, event_item, (signed char)event_item[0]);
+                           item_index + 1, event_item, event_item[0]);
         while (*event_item++ != 0) {
         }
         xglFontDebugPrintf(16, 72 + row * 34, eventItemNameFormat, event_item);
@@ -295,7 +287,7 @@ void DebDispItemBox(void)
         int money;
         int count;
         int chance;
-        char *name;
+        const char *name;
 
         memset(amount_text, 0, sizeof(amount_text));
         memset(chance_text, 0, sizeof(chance_text));
@@ -515,10 +507,10 @@ void DispDebugUwamono(void)
 
 void DispCollUwamono(void)
 {
-    UwamonoVector bottom[4];
-    UwamonoVector top[4];
-    UwamonoVector position;
-    UwamonoVector size;
+    DoublewordVector4 bottom[4];
+    DoublewordVector4 top[4];
+    AlignedVector4 position;
+    AlignedVector4 size;
     int colors[8];
     float position_w;
     float corner_w;
@@ -547,16 +539,16 @@ void DispCollUwamono(void)
             unit = &MapUnit[i];
             position = unit->position;
             if (info->bounds_shown == 0) {
-                position.vector.w = position_w;
+                position.w = position_w;
             } else {
                 rotation = unit->matrix;
-                bottom[0].vector.x = position.vector.x - rotation[0][0];
-                bottom[0].vector.y = position.vector.y - rotation[0][1];
-                bottom[0].vector.z = position.vector.z - rotation[0][2];
+                bottom[0].vector.x = position.x - rotation[0][0];
+                bottom[0].vector.y = position.y - rotation[0][1];
+                bottom[0].vector.z = position.z - rotation[0][2];
                 bottom[0].vector.w = 0.0f;
-                bottom[1].vector.x = position.vector.x + rotation[0][0];
-                bottom[1].vector.y = position.vector.y + rotation[0][1];
-                bottom[1].vector.z = position.vector.z + rotation[0][2];
+                bottom[1].vector.x = position.x + rotation[0][0];
+                bottom[1].vector.y = position.y + rotation[0][1];
+                bottom[1].vector.z = position.z + rotation[0][2];
                 bottom[1].vector.w = 0.0f;
             }
         } else if (info->shape != 0 && (MapUnit[i].flags & 0x10000)) {
@@ -565,18 +557,18 @@ void DispCollUwamono(void)
             position = unit->position;
             size = unit->size;
             if (info->shape == 2) {
-                bottom[0].vector.x = position.vector.x + (size.vector.x * rotation[0][0] + size.vector.z * rotation[2][0]);
-                bottom[0].vector.y = position.vector.y;
-                bottom[0].vector.z = position.vector.z + (size.vector.x * rotation[0][2] + size.vector.z * rotation[2][2]);
-                bottom[1].vector.x = position.vector.x - (size.vector.z * rotation[0][2] + size.vector.x * rotation[2][2]);
-                bottom[1].vector.y = position.vector.y;
-                bottom[1].vector.z = position.vector.z + (size.vector.z * rotation[0][0] + size.vector.x * rotation[2][0]);
-                bottom[2].vector.x = position.vector.x - (size.vector.x * rotation[0][0] + size.vector.z * rotation[2][0]);
-                bottom[2].vector.y = position.vector.y;
-                bottom[2].vector.z = position.vector.z - (size.vector.x * rotation[0][2] + size.vector.z * rotation[2][2]);
-                bottom[3].vector.x = position.vector.x + (size.vector.z * rotation[0][2] + size.vector.x * rotation[2][2]);
-                bottom[3].vector.y = position.vector.y;
-                bottom[3].vector.z = position.vector.z - (size.vector.z * rotation[0][0] + size.vector.x * rotation[2][0]);
+                bottom[0].vector.x = position.x + (size.x * rotation[0][0] + size.z * rotation[2][0]);
+                bottom[0].vector.y = position.y;
+                bottom[0].vector.z = position.z + (size.x * rotation[0][2] + size.z * rotation[2][2]);
+                bottom[1].vector.x = position.x - (size.z * rotation[0][2] + size.x * rotation[2][2]);
+                bottom[1].vector.y = position.y;
+                bottom[1].vector.z = position.z + (size.z * rotation[0][0] + size.x * rotation[2][0]);
+                bottom[2].vector.x = position.x - (size.x * rotation[0][0] + size.z * rotation[2][0]);
+                bottom[2].vector.y = position.y;
+                bottom[2].vector.z = position.z - (size.x * rotation[0][2] + size.z * rotation[2][2]);
+                bottom[3].vector.x = position.x + (size.z * rotation[0][2] + size.x * rotation[2][2]);
+                bottom[3].vector.y = position.y;
+                bottom[3].vector.z = position.z - (size.z * rotation[0][0] + size.x * rotation[2][0]);
                 bottom[0].vector.w = corner_w;
                 bottom[1].vector.w = corner_w;
                 bottom[2].vector.w = corner_w;
@@ -585,17 +577,17 @@ void DispCollUwamono(void)
                 top[1] = bottom[1];
                 top[2] = bottom[2];
                 top[3] = bottom[3];
-                top[0].vector.y += size.vector.y;
-                top[1].vector.y += size.vector.y;
-                top[2].vector.y += size.vector.y;
-                top[3].vector.y += size.vector.y;
+                top[0].vector.y += size.y;
+                top[1].vector.y += size.y;
+                top[2].vector.y += size.y;
+                top[3].vector.y += size.y;
             } else if (info->shape == 1) {
-                DispPillar(&unit->position.vector, &unit->size.vector, colors);
+                DispPillar(&unit->position, &unit->size, colors);
             }
             if (info->sound > 0) {
                 unit = &MapUnit[i];
                 position = unit->position;
-                position.vector.w = position_w;
+                position.w = position_w;
             }
         }
     }
@@ -605,10 +597,7 @@ void DispCollUwamono(void)
  * not consume them in the original implementation. */
 void DispPillar(Vector4 *base, Vector4 *step, const int *colors)
 {
-    union PillarVertex {
-        Vector4 vector;
-        u64 words[2];
-    } corners[4];
+    DoublewordVector4 corners[4];
     int segment = 0;
     float angle;
 

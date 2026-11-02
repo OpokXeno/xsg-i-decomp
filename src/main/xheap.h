@@ -26,7 +26,7 @@ extern xheap_block *heap_top;
 extern int heap_size;
 extern xheap_frame *frame_stack;
 extern xheap_block *freeBlock;
-extern void *jthreadCurrent;
+extern struct JThread *jthreadCurrent;
 
 void *xheap_push(void);
 

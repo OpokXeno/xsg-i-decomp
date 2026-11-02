@@ -1,6 +1,8 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_thread.h"
+#include "main/xgl_font.h"
+#include "main/xgl_render.h"
 
 typedef struct YosikawaPadInputPrefix {
     u8 unmodeled_00[0x28];
@@ -25,9 +27,6 @@ extern const char CallJavaMethodColliTestLabel[];
 extern void HairTest(void);
 extern void WindTest(void);
 extern void ColliTest(void);
-extern void xglRenderClearFrame(void);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 static int csr;
 
 static void (*funclist[3])(void);

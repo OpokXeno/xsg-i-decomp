@@ -14,7 +14,7 @@ typedef struct MdlPart MdlPart;
  * size or describe bytes after that prefix.
  */
 typedef struct MdlHandle {
-    int entry;                         /* +0x00: MDL_draw loads and passes to nmlModelEntry */
+    u32 entry;                         /* +0x00: resource address; MDL_draw passes it to nmlModelEntry */
     u32 visibleParts[4];               /* +0x04..+0x13: MDL_create writes four words */
     unsigned char unmodeled_14[0x2c];  /* +0x14..+0x3f */
     int partCount;                     /* +0x40: MDL_partsSetVisible reads one word */
@@ -24,5 +24,13 @@ typedef struct MdlHandle {
     unsigned char unmodeled_5c[4];     /* +0x5c..+0x5f */
     Vector4 copiedData[4];             /* +0x60..+0x9f: four slots; MDL_create writes three */
 } MdlHandle;
+
+/* Functions and data used by other translation units. */
+void MDL_setVisible(MdlHandle *model, int partIndex, int visible);
+/*
+ * MDL_partsSetVisible: defined in this TU (src/main/mdl.c) and called by
+ * MDL_draw.
+ */
+extern void MDL_partsSetVisible(MdlHandle *model);
 
 #endif /* INCLUDE_MAIN_MDL_H */

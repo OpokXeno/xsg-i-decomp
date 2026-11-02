@@ -1,5 +1,7 @@
 #include "common.h"
 #include "game_id_light_set.h"
+#include "main/game_id_light_set.h"
+#include "main/Undulate.h"
 
 /* The background parameter block ends in the light preset table's first slot. */
 typedef struct GameBgDrawType2 {
@@ -11,7 +13,6 @@ extern GameBgDrawType2 GameBgDrawType2Param;
 extern IdLightSet GameIdLight[];
 
 extern void UnduParamInit(void *param);
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 extern void *xglStudioGetLight2(void);
 extern void UnduCheck(void *position, void *exclude, void *param);
 extern float I2F(int value);

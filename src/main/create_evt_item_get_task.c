@@ -1,48 +1,37 @@
 #include "common.h"
 #include "shared.h"
+#include "main/menu_1.h"
 #include "main/xgl_task.h"
 #include "main/xgl_2.h"
 #include "create_evt_item_get_task.h"
+#include "main/exm_2.h"
+#include "main/data.h"
+#include "main/karakama_test.h"
+#include "main/nml_model_set.h"
+#include "main/outer_product.h"
+#include "main/xgl_flags.h"
+#include "main/xgl_sound.h"
 
 #define UNIT_ITEM_SPIN_STEP (0.05f)
 #define UNIT_ITEM_SYMBOL_SPIN_STEP (0.05f)
 #define UNIT_ITEM_PICKUP_DISTANCE (0.8f)
-
-/* One MapUnit record view shared by the initialization and item-update
- * functions below.  Its stride and all named members are supported by their
- * combined accesses; gaps remain unmodelled. */
-typedef struct ItemUnitInfo {
-    unsigned char unmodeled_00[2];
-    unsigned short itemNo;
-    signed char signal;
-    signed char unitNo;
-    unsigned char unmodeled_06[0x27];
-    signed char rsrcIndex;
-    unsigned char unmodeled_2e[2];
-    short item_get_method;
-    unsigned char unmodeled_32[2];
-    int seId;
-    unsigned char unmodeled_38[0xc];
-    int clearedWord;
-} ItemUnitInfo;
 
 typedef struct ItemModelHeader {
     unsigned char unmodeled_00[0x50];
     int matrixOffset;
 } ItemModelHeader;
 
-/* Position records are copied by two aligned doubleword loads and stores. */
-typedef union ItemMapVectorBlock {
-    Vector4 vector;
-    unsigned long long words[2];
-} ItemMapVectorBlock;
-
-typedef struct ItemMapUnit {
+/* Partial view of MapUnitRecord (include/main/exm_2.h); kept: switching it needs
+ * canonical names MapUnitRecord lacks (texture, sequenceNo, sequenceEnd, translation,
+ * extent, matrixPtr, seChannel, ownerNo, savedMatrix), and its position/translation are copied with aligned
+ * doublewords (ld/sd), which MapUnitRecord's 4-aligned Vector4 position does
+ * not reproduce. Not switched; no object measurement taken. */
+typedef struct MapUnitRecordItemView {
     unsigned int flags;
-    void (*update)(struct ItemMapUnit *);
-    void (*draw)(struct ItemMapUnit *);
+    void (*update)(struct MapUnitRecordItemView *);
+    void (*draw)(struct MapUnitRecordItemView *);
     unsigned char unmodeled_0c[4];
-    ItemMapVectorBlock position;
+    AlignedVector4 position;
     Vector4 rotation;
     Vector4 scale;
     Matrix4 matrix;
@@ -59,7 +48,7 @@ typedef struct ItemMapUnit {
     unsigned char unmodeled_ac[4];
     float extent[3];
     unsigned char unmodeled_bc[4];
-    ItemMapVectorBlock translation;
+    AlignedVector4 translation;
     unsigned char unmodeled_d0[0x10];
     void *model;
     const char *texture;
@@ -69,7 +58,7 @@ typedef struct ItemMapUnit {
     ItemUnitInfo info;
     unsigned char unmodeled_1e8[0x230 - 0x1e8];
     Matrix4 *savedMatrix;
-} ItemMapUnit;
+} MapUnitRecordItemView;
 
 typedef struct MapDisplayRecord {
     unsigned char unmodeled_00[4];
@@ -79,7 +68,7 @@ typedef struct MapDisplayRecord {
 typedef struct ItemOwnerUnit {
     unsigned int flags;
     unsigned char unmodeled_04[0xc];
-    ItemMapVectorBlock position;
+    AlignedVector4 position;
     unsigned char unmodeled_20[0x82];
     unsigned char actionSub;
     unsigned char unmodeled_a3;
@@ -121,14 +110,9 @@ typedef struct ItemBoxRecord {
     int money;
 } ItemBoxRecord;
 
-typedef struct ItemNameRecord {
-    char *name;
-} ItemNameRecord;
-
 /* Event-item IDs index a 0x80-byte formatted name slot. */
-extern unsigned char EvtItemTbl[255 * 0x80];
+extern char EvtItemTbl[255 * 0x80];
 extern ItemOwnerUnit MapUnit[64];
-extern signed char printflg;
 extern void *uwares_tbl[14];
 extern const char *xtxres_tbl[14];
 extern const char CreateEvtItemGetDigit9Text[];
@@ -143,39 +127,30 @@ extern const char CreateEvtItemGetDigit1Text[];
 extern const char CreateEvtItemGetDigit0Text[];
 extern ItemBoxRecord ItemBoxTbl[601];
 
-extern int dataBoxInc(int category, int id);
-extern char *GetItemName(int category, int id);
+extern const char *GetItemName(int category, int id);
 
 extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                        int (*callback)(XglTaskPrefix *),
                                        XglTaskPrefix *entry);
 
-extern void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit);
-extern void MAP_updateUnitItemSymbol(ItemMapUnit *unit);
-extern void SetItemSymbolRsrc(ItemMapUnit *unit);
-extern void MAP_updateUnitItemBox(ItemMapUnit *unit);
-extern int xglFlagsGet1(int bitOffset);
+extern void MAP_updateUnitSpecialSymbol(MapUnitRecordItemView *unit);
+extern void MAP_updateUnitItemSymbol(MapUnitRecordItemView *unit);
+extern void SetItemSymbolRsrc(MapUnitRecordItemView *unit);
+extern void MAP_updateUnitItemBox(MapUnitRecordItemView *unit);
 extern int printf(const char *format, ...);
 extern void sefDeleteEffectCf(int effectId);
 extern void nmlModelSetPartsVisible(void *model, short partsNo, int visible);
-extern void DrawActiveCursol(ItemMapUnit *unit);
+extern void DrawActiveCursol(MapUnitRecordItemView *unit);
 extern void nmlModelEntry(int entry);
-extern void nmlModelSetClip(int clip);
-extern void nmlModelSetPlace(Matrix4 matrix);
-extern void nmlModelSetTexture(const char *texture);
 extern void MAP_drawUnitItemBox(UnitItemBox *box);
 
 static void taskItemGet(XglTaskPrefix *entry);
-extern ItemNameRecord *func_A2C5F8(int item);
-extern ItemNameRecord *func_A2C6E8(int item);
-extern ItemNameRecord *func_A2C738(int item);
-extern ItemNameRecord *func_A2C698(int item);
+extern MenuTextEntry *func_A2C5F8(int item);
+extern MenuTextEntry *func_A2C6E8(int item);
+extern MenuTextEntry *func_A2C738(int item);
+extern MenuTextEntry *func_A2C698(int item);
 extern void UwamonoCommonFunc(void *unit);
-extern float CheckDist3D(const void *first, const void *second);
-extern void xglSoundEffectNormalID(int effectId, int channel);
 extern void ClearUwamonoEffect(void *unit);
-extern int xglFlagsSet1(int flag, int value);
-extern int dataMoneyBoxInc(int money);
 extern int CallMethod_I(const char *method, int value);
 extern char *strcat(char *destination, const char *source);
 
@@ -214,7 +189,7 @@ static const char *strno[10] = {
 
 ItemBoxRecord ItemBoxTbl[601] = {{0}};
 
-unsigned char EvtItemTbl[255 * 0x80] = { 0 };
+char EvtItemTbl[255 * 0x80] = { 0 };
 
 /* Definitions follow their callers so references remain address-based. */
 static void taskItemGet(XglTaskPrefix *entry)
@@ -222,17 +197,17 @@ static void taskItemGet(XglTaskPrefix *entry)
     EventItemTask *task = (EventItemTask *)entry;
     ItemBoxRecord *table;
     ItemBoxRecord *item;
-    ItemMapUnit *unit;
+    MapUnitRecordItemView *unit;
     ItemUnitInfo *info;
     char message[64];
     int item_id;
     int item_index;
     int count;
-    GameLoopState[7] = 0;
+    GameLoopState->cleared_1c = 0;
     if (task->window_created == 0) {
         memset(message, 0, sizeof(message));
         table = ItemBoxTbl;
-        item_index = (short)task->item_no;
+        item_index = task->item_no;
         item = &table[item_index];
         task->category = item->category;
         item_id = item->item;
@@ -275,12 +250,12 @@ static void taskItemGet(XglTaskPrefix *entry)
             }
         }
         task->window = createItemGetWin(message);
-        GameLoopState[4] |= 0x20000;
+        GameLoopState->flags |= 0x20000;
     }
     if (task->window->state == 2) {
         unit = task->owner_unit;
         info = &unit->info;
-        GameLoopState[4] &= ~0x20000;
+        GameLoopState->flags &= ~0x20000;
         if (info->item_get_method != -1) {
             CallMethod_I("itemget", info->item_get_method);
         }
@@ -294,7 +269,7 @@ static void taskItemGet(XglTaskPrefix *entry)
 static void taskEvtItemGet(EventItemTask *task)
 {
     char message[64];
-    GameLoopState[0x1c / sizeof(unsigned int)] = 0;
+    GameLoopState->cleared_1c = 0;
     if (task->window_created == 0) {
         memset(message, 0, 64);
         task->window_created = 1;
@@ -306,7 +281,7 @@ static void taskEvtItemGet(EventItemTask *task)
         task->window = createItemGetWin(message);
     }
     if (task->window->state == 2) {
-        GameLoopState[0x10 / sizeof(unsigned int)] &= 0xfffdffffu;
+        GameLoopState->flags &= 0xfffdffffu;
         xglTaskWaitRemove(&task->task);
     }
 }
@@ -319,7 +294,7 @@ int CreateEvtItemGetTask(int item, int count)
     if (dataBoxInc(item, count) == 0) {
         return 0;
     }
-    scheduler = (XglTaskScheduler *) GameLoopState[2];
+    scheduler = GameLoopState->scheduler;
     task = (EventItemTask *) xglTaskEntryNext(
         scheduler, (int (*)(XglTaskPrefix *)) taskEvtItemGet,
         scheduler != 0 ? scheduler->active_tail : 0);
@@ -328,15 +303,15 @@ int CreateEvtItemGetTask(int item, int count)
     task->category = item;
     task->window_created = 0;
     task->item_name = GetItemName(item, count);
-    GameLoopState[4] |= 0x20000;
+    GameLoopState->flags |= 0x20000;
     return 1;
 }
 
-char *GetItemName(int category, int item)
+const char *GetItemName(int category, int item)
 {
     static char deb[5] = "NULL";
 
-    ItemNameRecord *record;
+    MenuTextEntry *record;
     char *name;
     if (item == 0) {
         return deb;
@@ -373,7 +348,7 @@ char *GetItemName(int category, int item)
 
 char *dataEvtItmNameGet(int index)
 {
-    return (char *)EvtItemTbl + index * 0x80 - 0x80;
+    return EvtItemTbl + index * 0x80 - 0x80;
 }
 
 static int Pow(int base, int exponent)
@@ -421,7 +396,7 @@ int HexToStr(int value, char *result)
     return digits;
 }
 
-void InitItemBox(ItemMapUnit *unit)
+void InitItemBox(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
     ItemModelHeader *header;
@@ -448,12 +423,12 @@ void InitItemBox(ItemMapUnit *unit)
     header = unit->model;
     matrix = (Matrix4 *)((char *)header + header->matrixOffset) + 1;
     unit->savedMatrix = matrix;
-    unit->translation.vector.x = (*matrix)[3][0];
-    unit->translation.vector.y = (*matrix)[3][1];
-    unit->translation.vector.z = (*matrix)[3][2];
-    unit->translation.vector.w = 1.0f;
+    unit->translation.x = (*matrix)[3][0];
+    unit->translation.y = (*matrix)[3][1];
+    unit->translation.z = (*matrix)[3][2];
+    unit->translation.w = 1.0f;
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&unit->translation.vector.x);
+    xglMatrixStackTrans(&unit->translation.x);
     xglMatrixStackSave(*unit->savedMatrix);
     if (info->rsrcIndex == -1) {
         info->rsrcIndex = 2;
@@ -464,14 +439,14 @@ void InitItemBox(ItemMapUnit *unit)
     unit->extent[1] = 0.5f;
     unit->extent[2] = 0.2f;
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&unit->position.vector.x);
+    xglMatrixStackTrans(&unit->position.x);
     xglMatrixStackRotX(unit->rotation.x);
     xglMatrixStackRotY(unit->rotation.y);
     xglMatrixStackRotZ(unit->rotation.z);
     xglMatrixStackSave(unit->matrix);
     unit->matrixPtr = &unit->matrix;
     unit->update = MAP_updateUnitItemBox;
-    unit->draw = (void (*)(ItemMapUnit *))MAP_drawUnitItemBox;
+    unit->draw = (void (*)(MapUnitRecordItemView *))MAP_drawUnitItemBox;
     unit->flags |= 0x10000;
     unit->flags |= 0x8000000;
     unit->actionNo = 0;
@@ -501,13 +476,13 @@ void InitItemBox(ItemMapUnit *unit)
     }
 }
 
-void InitItemSymbol(ItemMapUnit *unit)
+void InitItemSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
     int i;
 
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&unit->position.vector.x);
+    xglMatrixStackTrans(&unit->position.x);
     xglMatrixStackRotX(unit->rotation.x);
     xglMatrixStackRotY(unit->rotation.y);
     xglMatrixStackRotZ(unit->rotation.z);
@@ -543,12 +518,12 @@ void InitItemSymbol(ItemMapUnit *unit)
     SetItemSymbolRsrc(unit);
 }
 
-void InitSpecialSymbol(ItemMapUnit *unit)
+void InitSpecialSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
 
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&unit->position.vector.x);
+    xglMatrixStackTrans(&unit->position.x);
     xglMatrixStackRotX(unit->rotation.x);
     xglMatrixStackRotY(unit->rotation.y);
     xglMatrixStackRotZ(unit->rotation.z);
@@ -563,7 +538,7 @@ void InitSpecialSymbol(ItemMapUnit *unit)
     SetItemSymbolRsrc(unit);
 }
 
-void SetItemSymbolRsrc(ItemMapUnit *unit)
+void SetItemSymbolRsrc(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
     int category;
@@ -645,7 +620,7 @@ void SetItemSymbolRsrc(ItemMapUnit *unit)
     }
 }
 
-void MAP_updateUnitItemBox(ItemMapUnit *unit)
+void MAP_updateUnitItemBox(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
     int (*callback)(XglTaskPrefix *);
@@ -668,7 +643,7 @@ void MAP_updateUnitItemBox(ItemMapUnit *unit)
     case 1:
         unit->sequenceNo++;
         callback = (int (*)(XglTaskPrefix *))taskItemGet;
-        scheduler = (XglTaskScheduler *)GameLoopState[2];
+        scheduler = GameLoopState->scheduler;
         entry = scheduler != 0 ? scheduler->active_tail : 0;
         task = (EventItemTask *)xglTaskEntryNext(
             scheduler, callback, entry);
@@ -705,7 +680,7 @@ void MAP_drawUnitItemBox(UnitItemBox *box)
     xglMatrixStackRotX((float) box->angle / 9.0f);
     xglMatrixStackSave(*box->saved_matrix);
     nmlModelSetTexture(box->texture);
-    nmlModelSetPlace(box->place);
+    nmlModelSetPlace(&box->place);
     nmlModelSetClip(1);
     nmlModelEntry(box->model_entry);
     xglMatrixStackUnit();
@@ -713,7 +688,7 @@ void MAP_drawUnitItemBox(UnitItemBox *box)
     xglMatrixStackSave(*box->saved_matrix);
 }
 
-void MAP_updateUnitItemSymbol(ItemMapUnit *unit)
+void MAP_updateUnitItemSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info;
     XglTaskScheduler *scheduler;
@@ -726,10 +701,10 @@ void MAP_updateUnitItemSymbol(ItemMapUnit *unit)
     UwamonoCommonFunc(unit);
     switch (unit->actionSub) {
     case 0:
-        if (CheckDist3D(&((ItemMapUnit *) GameLoopState[1])->position,
+        if (CheckDist3D(&GameLoopState->player->position,
                         &unit->position) < UNIT_ITEM_PICKUP_DISTANCE &&
-            (GameLoopState[4] & 0x20000) == 0) {
-            scheduler = (XglTaskScheduler *) GameLoopState[2];
+            (GameLoopState->flags & 0x20000) == 0) {
+            scheduler = GameLoopState->scheduler;
             callback = (int (*)(XglTaskPrefix *)) taskItemGet;
             entry = scheduler != 0 ? scheduler->active_tail : 0;
             task = (EventItemTask *) xglTaskEntryNext(
@@ -742,7 +717,7 @@ void MAP_updateUnitItemSymbol(ItemMapUnit *unit)
             unit->actionSub = 1;
             unit->flags |= 4;
             xglSoundEffectNormalID(6, 0);
-            GameLoopState[4] |= 0x20000;
+            GameLoopState->flags |= 0x20000;
         }
         break;
     case 1:
@@ -752,11 +727,11 @@ void MAP_updateUnitItemSymbol(ItemMapUnit *unit)
     }
 }
 
-void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit)
+void MAP_updateUnitSpecialSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
-    ItemMapVectorBlock targetBlock;
-    Vector4 *target = &targetBlock.vector;
+    AlignedVector4 targetBlock;
+    Vector4 *target = &targetBlock;
 
     switch (unit->actionSub) {
     case 0:
@@ -769,7 +744,7 @@ void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit)
         break;
     case 1:
         unit->rotation.y += 0.05f;
-        unit->position.vector.y += 0.03f;
+        unit->position.y += 0.03f;
         unit->sequenceNo++;
         unit->scale.x = unit->scale.y = unit->scale.z = unit->sequenceNo * 0.06;
         unit->scale.w = 1.0f;
@@ -784,11 +759,11 @@ void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit)
         unit->rotation.y += 0.05f;
         break;
     case 5:
-        targetBlock = ((ItemMapUnit *)GameLoopState[1])->position;
+        targetBlock = GameLoopState->player->position;
         target->y += 1.2f;
-        unit->position.vector.x = target->x + (unit->translation.vector.x - target->x) * unit->sequenceNo / unit->sequenceEnd;
-        unit->position.vector.y = target->y + (unit->translation.vector.y - target->y) * unit->sequenceNo / unit->sequenceEnd;
-        unit->position.vector.z = target->z + (unit->translation.vector.z - target->z) * unit->sequenceNo / unit->sequenceEnd;
+        unit->position.x = target->x + (unit->translation.x - target->x) * unit->sequenceNo / unit->sequenceEnd;
+        unit->position.y = target->y + (unit->translation.y - target->y) * unit->sequenceNo / unit->sequenceEnd;
+        unit->position.z = target->z + (unit->translation.z - target->z) * unit->sequenceNo / unit->sequenceEnd;
         unit->rotation.y += 0.05f;
         unit->scale.x = unit->scale.y = unit->scale.z = --unit->sequenceNo * 0.06;
         if (unit->scale.x < 0.0f) {
@@ -799,7 +774,7 @@ void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit)
     }
 }
 
-void MAP_updateUnitItem(ItemMapUnit *unit)
+void MAP_updateUnitItem(MapUnitRecordItemView *unit)
 {
     unsigned short nextSequenceNo;
 
@@ -819,9 +794,9 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
         unit->sequenceNo++;
         nextSequenceNo = unit->sequenceNo;
         if ((nextSequenceNo & 1) == 0) {
-            nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 0);
+            nmlModelSetPartsVisible(GameLoopState->model_record->model, unit->serial, 0);
         } else {
-            nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 1);
+            nmlModelSetPartsVisible(GameLoopState->model_record->model, unit->serial, 1);
         }
         if (unit->sequenceNo < 4) {
             return;
@@ -829,7 +804,7 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
         if (unit->sequenceNo < 17) {
             return;
         }
-        nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 0);
+        nmlModelSetPartsVisible(GameLoopState->model_record->model, unit->serial, 0);
         if (printflg != 0) {
             printf(unitDeleteFormat, (short) unit->serial, unit->seChannel);
         }

@@ -2,8 +2,8 @@
 #include "shared.h"
 #include "main/xgl_2.h"
 #include "m_math.h"
-
-extern const Vector4 McMathUnitVector;
+#include "main/m_math.h"
+#include "main/sdv.h"
 
 extern float srsAtan2(float deltaX, float deltaZ);
 
@@ -712,7 +712,7 @@ Vector4 *MMathSpecialVectorSub(Vector4 *destination, const Vector4 *first, const
     return destination;
 }
 
-Matrix4 *MMathRotateMatrixX(Matrix4 *out, const Matrix4 *matrix, float angle)
+Matrix4 *MMathRotateMatrixX(Matrix4 *out, Matrix4 *matrix, float angle)
 {
     __asm__ __volatile__(
         "lui $8,%%hi(McMathUnitMatrix)\n\t"
@@ -741,7 +741,7 @@ Matrix4 *MMathRotateMatrixX(Matrix4 *out, const Matrix4 *matrix, float angle)
     return out;
 }
 
-Matrix4 *MMathRotateMatrixY(Matrix4 *out, const Matrix4 *matrix, float angle)
+Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle)
 {
     __asm__ __volatile__(
         "lui $8,%%hi(McMathUnitMatrix)\n\t"
@@ -770,7 +770,7 @@ Matrix4 *MMathRotateMatrixY(Matrix4 *out, const Matrix4 *matrix, float angle)
     return out;
 }
 
-Matrix4 *MMathRotateMatrixZ(Matrix4 *out, const Matrix4 *matrix, float angle)
+Matrix4 *MMathRotateMatrixZ(Matrix4 *out, Matrix4 *matrix, float angle)
 {
     __asm__ __volatile__(
         "lui $8,%%hi(McMathUnitMatrix)\n\t"
@@ -877,7 +877,7 @@ Matrix4 *MMathRotateMatrixYX(Matrix4 *out, const Matrix4 *matrix, const Vector4 
     return out;
 }
 
-Matrix4 *MMathRotateMatrixXYZ(Matrix4 *out, const Matrix4 *matrix, const Vector4 *angles)
+Matrix4 *MMathRotateMatrixXYZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angles)
 {
     __asm__ __volatile__(
         "lui $8,%%hi(McMathUnitMatrix)\n\t"
@@ -926,7 +926,7 @@ Matrix4 *MMathRotateMatrixXYZ(Matrix4 *out, const Matrix4 *matrix, const Vector4
     return out;
 }
 
-Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, const Matrix4 *matrix, const Vector4 *angles)
+Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angles)
 {
     __asm__ __volatile__(
         "lui $8,%%hi(McMathUnitMatrix)\n\t"
@@ -975,7 +975,7 @@ Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, const Matrix4 *matrix, const Vector4
     return out;
 }
 
-Vector4 *MMathApplyMatrix(Vector4 *out, const Matrix4 *matrix, const Vector4 *vector)
+Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector)
 {
     __asm__ __volatile__(
         "lqc2 $vf1,0(%2)\n\t"
@@ -992,7 +992,7 @@ Vector4 *MMathApplyMatrix(Vector4 *out, const Matrix4 *matrix, const Vector4 *ve
     return out;
 }
 
-Matrix4 *MMathMulMatrix(Matrix4 *out, const Matrix4 *left, const Matrix4 *right)
+Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *left, Matrix4 *right)
 {
     __asm__ __volatile__(
         "lqc2 $vf2,0(%1)\n\t"
@@ -1027,7 +1027,7 @@ Matrix4 *MMathMulMatrix(Matrix4 *out, const Matrix4 *left, const Matrix4 *right)
     return out;
 }
 
-Matrix4 *MMathScaleMatrix(Matrix4 *out, const Matrix4 *matrix, const Vector4 *scale)
+Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *scale)
 {
     __asm__ __volatile__(
         "lqc2 $vf5,0(%2)\n\t"
@@ -1068,7 +1068,7 @@ Matrix4 *MMathScaleMatrixS(Matrix4 *out, const Matrix4 *matrix, float scale)
     return out;
 }
 
-Matrix4 *MMathTranslateMatrix(Matrix4 *out, const Matrix4 *matrix, const Vector4 *translation)
+Matrix4 *MMathTranslateMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *translation)
 {
     __asm__ __volatile__(
         "lqc2 $vf5,0(%2)\n\t"
@@ -1102,10 +1102,10 @@ Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
 
     directionX = direction->x;
     if (directionX == 0.0f && direction->z == 0.0f) {
-        MMathRotateMatrixX(out, (const Matrix4 *) out, srsAtan2(direction->y, 0.0f));
+        MMathRotateMatrixX(out, out, srsAtan2(direction->y, 0.0f));
     } else {
-        MMathRotateMatrixY(out, (const Matrix4 *) out, srsAtan2(directionX, direction->z));
-        MMathRotateMatrixX(out, (const Matrix4 *) out, srsAtan2(direction->y, MMathCalcLengthXZ(direction)));
+        MMathRotateMatrixY(out, out, srsAtan2(directionX, direction->z));
+        MMathRotateMatrixX(out, out, srsAtan2(direction->y, MMathCalcLengthXZ(direction)));
     }
     return out;
 }

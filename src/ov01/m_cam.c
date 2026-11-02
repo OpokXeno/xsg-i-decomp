@@ -122,13 +122,13 @@ typedef struct MCamPointParams {
     unsigned int mode;
     unsigned char unmodeled_04[0xC];
     MCamVector fixedCoord;
-    ActRecord *actor;
+    Actor *actor;
     unsigned char unmodeled_24[0x4];
     int partSelector;
-    ActRecord *actorA;
+    Actor *actorA;
     int atkUnitId;
     int partSelectorA;
-    ActRecord *actorB;
+    Actor *actorB;
     int defUnitId;
     int partSelectorB;
     unsigned char unmodeled_44[0x28];
@@ -523,7 +523,7 @@ int MCamIsShaking(void)
 }
 
 /* Local in the original: splat emits `glabel MCamGetActorCoord, local`; no reference outside m_cam.c. */
-static Vector4 *MCamGetActorCoord(Vector4 *coord, ActRecord *actor, int part)
+static Vector4 *MCamGetActorCoord(Vector4 *coord, Actor *actor, int part)
 {
     __asm__ __volatile__("sq $0,0(%0)" : : "r"(coord) : "memory");
     if (actor == 0) {

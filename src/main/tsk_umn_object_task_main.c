@@ -5,6 +5,14 @@
 #include "main/xgl_cd.h"
 #include "ov02/tsk_umn_object_task_main.h"
 #include "main/xgl_task.h"
+#include "main/e_battle_win_open.h"
+#include "main/end_print.h"
+#include "main/game_snap_shot.h"
+#include "main/menu_model.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_render.h"
+#include "main/xgl_sound.h"
+#include "main/xgl_thread.h"
 
 /* TU-local types of ov02/tu005 (src/ov02/tsk_umn_object_task_main.h). */
 typedef struct UmnObjectTask UmnObjectTask;
@@ -34,8 +42,7 @@ extern unsigned char *umn_task;
 extern unsigned char *task_xmx;
 extern int UmnWorkEndTop;
 extern int UmnEventTextMakeWork;
-extern UmnMainRenderSize sRender;
-extern int MenuModelWorkTop;
+extern unsigned char *MenuModelWorkTop;
 extern int UmnModelUkn;
 extern int UmnModelSon;
 
@@ -53,39 +60,25 @@ extern int UmnBgCubeLex;
 extern int UmnTexAddr;
 extern int UmnWorkEnd;
 
-extern void endPrintInit(void);
 extern void GameCFSoundMenuPurge(int flag);
 extern void xglRenderClearDepth(void);
-extern int xglSoundSendSwd(void *swd, int bank);
 extern int SsdSpuDmaCompleted(int wait);
-extern int xglSoundSendSmd2(void *smd, int bank);
-extern void xglSoundSequenceNormal2(int channel, int volume);
 extern void xglFSrand(float seed);
 extern void tyaUmlDispInit(void);
 extern void tyaUmlDispInit2(unsigned char *work_buffer);
 extern void *UmnInterface2Init(void *work);
 extern void *UmnBgCubeInit(void *work);
-extern void *eBattleWinInit2(void *arg);
 extern int UmnMailHeaderCreate(int work);
 extern int UmnHistoryTreeLoad(int work);
-extern XglPacket *xglPacketGetCurrent(void);
-extern void endPrintDirectFrameCopy(XglPacket *packet, int width, int height);
-extern void xglSleep(void);
 extern void *memset(void *dest, int value, unsigned int size);
 extern void MenuLoadInit(void);
-extern void MenuModelMemoryInit(void *base, int size);
-extern void MenuModelMemorySet(int count);
 extern void UmnChangeTopLevel(int level);
-extern void GameSnapShotCheck(void);
 extern void UmnTopMenu(void);
 extern void UmnMail(int menuId);
 extern void UmnDataBase(void);
 extern void UmnSimulation(void);
 extern void UmnPlugin(void);
-extern void endPrintExtFunc(int kind, int id, void *data);
 extern void UmnInterface2Main(void);
-extern void MenuModelMain(void);
-extern void MenuModelAllBreak(void);
 extern void GameCFSoundMenuReload(void);
 extern void UmnProcuratorSet(void);
 

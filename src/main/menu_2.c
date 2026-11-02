@@ -141,19 +141,19 @@ void Java_xeno_util_Menu_addItem__Ljava_lang_String_(JThread *thread,
     TMENU_addItem(arguments->menu, arguments->string->value->bytes);
 }
 
-/* Menu.create writes the SceneObjectClassRef at +0x00 from its SceneClass
- * instance-class-ref field. setLocation converts the integer arguments at
+/* Menu.create writes the dispatch table at +0x00 from its JavaClass
+ * classPointer field. setLocation converts the integer arguments at
  * +0x04/+0x08 and writes floats at +0x20/+0x24; getSelected reads signed
  * bytes at +0x54/+0x55, using the latter as the negative-status override. */
 void Java_xeno_util_Menu_create__(JThread *thread, void *arguments,
                                   MenuArgumentSlot *result)
 {
-    SceneClass *menuClass;
+    JavaClass *menuClass;
     MenuNative *menu;
 
     menuClass = classJava_xeno_util_Menu;
     menu = TMENU_create(-1);
-    menu->class_ref = menuClass->instance_class_ref;
+    menu->class_ref = menuClass->classPointer;
     result[0].ref = menu;
 }
 

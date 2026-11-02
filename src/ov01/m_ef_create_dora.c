@@ -18,11 +18,11 @@ typedef unsigned int DoraQuadword __attribute__((mode(TI)));
  * The earlier quadword arrays preserve its observed sixteen-byte alignment. */
 typedef struct DoraHermiteState {
     u32 unmodeled_00[2];
-    ActRecord *actor;       /* +0x08, the matrix source makePath reads */
+    Actor *actor;       /* +0x08, the matrix source makePath reads */
     u32 coordinate;         /* +0x0c, its coordinate selector */
     Vector4 offset;         /* +0x10, translation applied to that matrix */
     unsigned char unmodeled_20[4];
-    ActRecord *target_actor; /* +0x24, the coordinate source MEfCreate_DORA reads */
+    Actor *target_actor; /* +0x24, the coordinate source MEfCreate_DORA reads */
     u32 target_coordinate;   /* +0x28, its coordinate selector */
     unsigned char unmodeled_2c[0x44];
     short frame;

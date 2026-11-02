@@ -7,7 +7,7 @@
 } while (0)
 
 #define SYSTEM_COMMIT_WAIT_STATE(thread, targetValue, kind, frameValue, flagsValue) do { \
-    (thread)->wait_target = (targetValue); \
+    (thread)->wait_target.object = (targetValue); \
     (thread)->wait_kind = (kind); \
     (thread)->resume_frames = (frameValue); \
     SYSTEM_MARK_SUSPENDED(thread, flagsValue); \
@@ -215,9 +215,9 @@ void Java_xeno_vm_System_println__Ljava_lang_String_(
 static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
                            int wait_parameter)
 {
-    struct JThreadNode *thread = (struct JThreadNode *)vmThread;
-    SceneClass *waitClass;
-    struct JThreadNode *targetThread;
+    JThread *thread = vmThread;
+    JavaClass *waitClass;
+    struct JThread *targetThread;
 
     if (JNI_isInstanceOf(wait_target, classJava_xeno_Chr) == 1) {
         waitClass = classJava_xeno_Chr;
@@ -262,7 +262,7 @@ static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
                 thread->wait_kind = wait_kind;
                 thread->resume_frames = thread->frame_depth;
                 SYSTEM_MARK_SUSPENDED(thread, suspendedFlags);
-                thread->wait_target = targetThread;
+                thread->wait_target.thread = targetThread;
                 break;
             }
         }

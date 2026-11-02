@@ -4,6 +4,14 @@
 #include "shared.h"
 #include "main/xgl_studio.h"
 
+/* Spline channel of a sequence entry (near_dir.c and chr.c read it at +0x38/+0xb8/+0x1b8). */
+typedef struct {
+    void *spline;
+    short frame;
+    short last_frame;
+    u16 flags;
+} SplineTrack;
+
 /*
  * The actSequence entry head. `flags` and `state_flags` are the two words
  * every function below reads; ACT_initSequenceAt additionally clears six
@@ -24,13 +32,17 @@
  *                    the scale channel's own handler slot the same way
  *                    (main/tu248). ACT_initSequenceAt clears all four.
  *
- * +0x08 and +0x10 are between evidenced words and untouched by every
- * function in this TU, so they stay unmodeled gaps.
+ * +0x08 channel_mask
+ *                    the spline natives in chr.c select their channel group
+ *                    here (SequenceState's view of this entry).
+ *
+ * +0x10 is between evidenced words and untouched by every function in this
+ * TU, so it stays an unmodeled gap.
  */
 typedef struct SequenceState {
     u32 flags;
     u32 state_flags;
-    u32 unmodeled_08;
+    u32 channel_mask;
     u32 cleared_on_init;
     u32 unmodeled_10;
     void *cleared_on_init_run[4];
@@ -58,14 +70,56 @@ typedef struct MotionTrack {
     float speed;
 } MotionTrack;
 
+typedef struct RotationTrack {
+    struct Actor *target;
+    u8 unmodeled_04[0x10 - 0x04];
+    int duration[3];
+    u32 face_flags;
+    float start[3];
+    u8 unmodeled_2c[0x30 - 0x2c];
+    float goal[3];
+    u8 unmodeled_3c[0x40 - 0x3c];
+    float step[3];
+} RotationTrack;
+
+/* The scale track of a sequence entry (+0x1b8): per-axis frame counts, then
+ * the start, goal and per-frame step SEQ_scale walks the actor's scale
+ * through. */
+typedef struct ScaleTrack {
+    u8 unmodeled_00[0x10];
+    int duration[3];
+    u8 unmodeled_1c[0x20 - 0x1c];
+    float start[3];
+    u8 unmodeled_2c[0x30 - 0x2c];
+    float goal[3];
+    u8 unmodeled_3c[0x40 - 0x3c];
+    float step[3];
+} ScaleTrack;
+
 typedef struct ActSequenceEntry {
     SequenceState state;
     u32 frame_counter;
-    MoveTrack move;
-    u8 unmodeled_68[0x138 - 0x68];
+    /* +0x38: the movement channel (SEQ_move) or, in the spline form, the spline channel. */
+    union {
+        SplineTrack spline;
+        MoveTrack move;
+    } move_channel;
+    u8 unmodeled_68[0xb8 - 0x68];
+    /* +0xb8: the rotation channel (SEQ_rotate) or, in the spline form, the spline channel. */
+    union {
+        SplineTrack spline;
+        RotationTrack rotation;
+    } rotation_channel;
+    u8 unmodeled_104[0x138 - 0x104];
     MotionTrack motion;
-    u8 unmodeled_158[0x238 - 0x158];
-    u32 unmodeled_238;
+    u8 unmodeled_158[0x1b8 - 0x158];
+    /* +0x1b8: the scale channel (SEQ_scale) or, in the spline form, the spline channel. */
+    union {
+        SplineTrack spline;
+        ScaleTrack scale;
+    } scale_channel;
+    u8 unmodeled_204[0x238 - 0x204];
+    u32 idle_roll;
     u32 unmodeled_23c;
     Vector4 anchor;
     u8 unmodeled_250[0x260 - 0x250];
@@ -73,5 +127,9 @@ typedef struct ActSequenceEntry {
 
 /* The original array at 0x0046f460 has 64 records, totaling 0x9800 bytes. */
 extern ActSequenceEntry actSequence[64];
+
+/* Functions and data used by other translation units. */
+extern float nearDir(float from, float to);
+void ACT_initScene(void);
 
 #endif /* INCLUDE_MAIN_NEAR_DIR_H */

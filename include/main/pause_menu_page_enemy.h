@@ -8,4 +8,7 @@
 
 void Debug_Mark(const Vector4 *position, int entry);
 
+/* Functions and data used by other translation units. */
+extern short DebugActor;
+
 #endif /* INCLUDE_MAIN_PAUSE_MENU_PAGE_ENEMY_H */

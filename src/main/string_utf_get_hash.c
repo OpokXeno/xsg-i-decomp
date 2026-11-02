@@ -1,5 +1,6 @@
 #include "common.h"
 #include "string_utf_get_hash.h"
+#include "main/string_utf_get_hash.h"
 
 static int constStringCount = 0;
 

@@ -31,4 +31,13 @@ extern const char nmlEmptyName[4];
 
 void nmlPacketAddGsScissor(u64 scissor);
 
+/* Functions and data used by other translation units. */
+void nmlPacketGsInit(void);
+void nmlPacketAddGsFlush(void);
+void nmlPacketAddGsFrame(int frame_base, int frame_mask);
+void nmlPacketAddGsFlushWide(void);
+void nmlPacketAddGsFrame1(int frame_base, int frame_mask);
+void *nmlPacketSetAttributeData16N(const void *data, int count);
+void nmlPacketSetCurrent(void);
+
 #endif /* INCLUDE_MAIN_NML_PACKET_ADD_H */

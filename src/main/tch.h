@@ -9,15 +9,18 @@
 
 /*
  * One variable-length record of a TimeChart's index: the string identifier
- * TCH_getInfoID compares against, followed by wordCount * 4 bytes of data
- * this function never reads. Records are packed back to back starting at
- * TimeChart.records, so the next one is reached by
- * (char *)entry + entry->wordCount * 4 + 8, not by array indexing.
+ * TCH_getInfoID compares against, followed by wordCount * 4 bytes of trailing
+ * data (pointerOffsets). Records are packed back to back starting at
+ * TimeChart.records, so the next one starts just past that trailing data:
+ * &entry->pointerOffsets[entry->wordCount].
  */
 typedef struct TchEntry {
     u16 wordCount; /* +0x00: size of this record's trailing data, in 4-byte words */
     unsigned char unmodeled_02[2];
-    const char *name; /* +0x04: identifier TCH_getInfoID's caller looks up */
+    union {
+        const char *name; /* +0x04: identifier TCH_getInfoID's caller looks up, once getInfoAddr() has fixed it up */
+        u32 nameOffset;   /* +0x04: before that fixup, the offset of the identifier from the chart's address */
+    };
     u32 pointerOffsets[1]; /* +0x08: relocatable addresses in the trailing data */
 } TchEntry;
 

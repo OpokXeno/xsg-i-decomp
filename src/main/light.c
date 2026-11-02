@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "main/jni.h"
 #include "main/nml_model_set.h"
+#include "main/string_utf_get_hash.h"
+#include "main/xgl_light.h"
 
 /* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */
 #define PI_F (3.141592741f)
@@ -20,22 +22,12 @@ typedef struct LightVectorCall {
 extern const char lightIdFieldName[];
 extern const char lightPeerFieldName[];
 
-extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern void *xglStudioGetLight2(void);
 extern void xglLightIntensityAmbient(void *light, void *intensity);
 extern void xglLightIntensityParallel(void *light, int index, void *intensity);
-extern void xglLightAngle(void *light, int index, const Vector4 *angles);
-
 extern void xglLightDirection(void *light, unsigned int index,
                               const Vector4 *direction);
-
-/*
- * nmlModelSetGlobalPointLightReset is defined in src/main/nml_model_set.c
- * (main/tu106); this TU only tail-calls it, so it keeps a local declaration
- * here.
- */
-void nmlModelSetGlobalPointLightReset(void);
 
 void Java_xeno_Light_setColor__FFF(JThread *thread, LightVectorCall *arguments)
 {
@@ -150,15 +142,13 @@ void Java_xeno_Light_setGlobalPointLightPos__IFFF(
         int integer;
         float real;
     } *arguments = argument_block;
-    void nmlModelSetGlobalPointLightPos(int light_id,
-                                        const float (*position)[3]);
-    float position[3];
+    Vector4 position;
 
-    position[0] = arguments[2].real;
-    position[1] = arguments[3].real;
-    position[2] = arguments[4].real;
+    position.x = arguments[2].real;
+    position.y = arguments[3].real;
+    position.z = arguments[4].real;
     nmlModelSetGlobalPointLightPos(
-        arguments[1].integer, (const float (*)[3])&position);
+        arguments[1].integer, &position);
 }
 
 void Java_xeno_Light_setGlobalPointLightReset__(void)

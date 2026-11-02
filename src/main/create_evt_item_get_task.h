@@ -15,7 +15,7 @@ typedef struct ItemGetWindow {
 
 typedef struct EventItemTask EventItemTask;
 
-struct ItemMapUnit;
+struct MapUnitRecordItemView;
 
 /*
  * The scheduler places this task in a 0x80-byte pool node whose first 16 bytes
@@ -43,7 +43,7 @@ struct EventItemTask {
     unsigned int zero_word_10;       /* +0x10: cleared by CreateEvtItemGetTask */
     unsigned int zero_word_14;       /* +0x14: cleared by CreateEvtItemGetTask */
     const char *item_name;           /* +0x18 */
-    struct ItemMapUnit *owner_unit;  /* +0x1c */
+    struct MapUnitRecordItemView *owner_unit;  /* +0x1c */
     ItemGetWindow *window;           /* +0x20 */
     signed char category;            /* +0x24 */
     unsigned char unmodeled_25;      /* +0x25 */
@@ -55,14 +55,30 @@ struct EventItemTask {
     signed char window_created;      /* +0x30 */
 };
 
-typedef unsigned int GameLoopStateWords[];
-
 extern const char evt_item_format_special[];
 extern const char evt_item_format_normal[];
-extern unsigned char EvtItemTbl[];
+extern char EvtItemTbl[];
 
-/* GameLoopState is opaque here; only these two scalar offsets are evidenced. */
-extern GameLoopStateWords GameLoopState;
+/*
+ * Partial view of GameLoopState (game.c's GameLoopStateLayout) for this unit:
+ * the controlled player (+0x04), the task scheduler (+0x08), the flags word
+ * (+0x10, bit 0x20000 marks an item-get window in progress), the cleared word
+ * (+0x1c) and the map display record (+0x54). Other spans are unmodeled.
+ */
+typedef struct GameLoopStateItemView {
+    unsigned char unmodeled_00[4];
+    struct MapUnitRecordItemView *player;  /* +0x04 */
+    XglTaskScheduler *scheduler;           /* +0x08 */
+    unsigned char unmodeled_0c[4];
+    unsigned int flags;                    /* +0x10 */
+    unsigned char unmodeled_14[8];
+    unsigned int cleared_1c;               /* +0x1c */
+    unsigned char unmodeled_20[0x54 - 0x20];
+    struct MapDisplayRecord *model_record; /* +0x54 */
+} GameLoopStateItemView;
+
+/* Declared without a bound, as in the owner's object (no .extern size). */
+extern GameLoopStateItemView GameLoopState[];
 
 extern ItemGetWindow *createItemGetWin(const char *message);
 char *dataEvtItmNameGet(int index);

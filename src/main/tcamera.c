@@ -1,6 +1,14 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_studio.h"
+#include "main/tcamera.h"
+#include "camera.h"
+#include "main/game_init_camera.h"
+#include "main/nml_model_set.h"
+#include "main/spl.h"
+#include "main/xgl_2.h"
+#include "main/xgl_font.h"
+#include "main/fcv2.h"
 
 #define TCAMERA_ROTATION(camera)    (&((TCamera *)(camera))->rotation)
 #define TCAMERA_TRANSLATION(camera) (&((TCamera *)(camera))->translation)
@@ -13,18 +21,6 @@
 
 #define TCAMERA_MPACK_SCRATCH ((void *)0x70000000)
 
-/* Partial camera view: TCAMERA_setFov/fovSPL use fieldOfView at +0x94;
- * TCAMERA_setView uses rotation at +0xa0 and translation at +0xd0.
- * Unevidenced spans remain explicitly unmodeled. */
-typedef struct TCamera {
-    unsigned char unmodeled_00[0x94];
-    float fieldOfView;
-    unsigned char unmodeled_98[8];
-    Vector4 rotation;
-    unsigned char unmodeled_b0[0x20];
-    Vector4 translation;
-} TCamera;
-
 typedef unsigned int CameraVectorStorage __attribute__((mode(TI)));
 
 typedef union {
@@ -32,47 +28,20 @@ typedef union {
     CameraVectorStorage storage;
 } MpackInterest;
 
-typedef struct {
-    unsigned char unmodeled_00[12];
-    int mode[4];
-    unsigned char unmodeled_1c[0x12c0 - 28];
-} CameraInitRecord;
-
 /*
  * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
  * Java_xeno_Camera_create__I (src/main/camera.c) computes the same
  * `tcamera + camera_id * 0x12c0` address for the same table.
  */
-extern unsigned char tcamera[];
+extern CameraWork tcamera[];
 
 extern PadPrefix PadData[];
-
-extern float xglAtan2(float x, float y);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-
-/* Every accepted call site of SPL_getValueXYZ (near_dir.c, spl.h) spells this
- * prototype; SPL_getValue has no accepted definition yet, so its second
- * parameter is named from the one value every recovered call site here
- * passes it, literal 0, and its third from the frame argument TCAMERA_update
- * (VA 0x0030931c, 0x00309348) loads into $f12 before calling TCAMERA_rollSPL/
- * TCAMERA_fovSPL, which forward it untouched into SPL_getValue, whose body
- * reads $f12 (c.le.s at 0x0030c0d8). */
-extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 
 extern float SPL_getValue(void *spline, int index, float frame);
 extern StudioCamera *xglStudioGetActiveCamera(void);
 extern void DB_incPos(int x, int y);
-extern void DB_println(const char *format, ...);
 extern void FCV_resetPack(void *pack, void *source);
-extern float FCV_getPackValue(void *pack, float frame);
 extern void FCV2_resetPack(void *pack, void *source);
-extern float FCV2_getPackValue(void *pack, float frame);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern void nmlModelSetGlobalFogDist(float start, float end,
-                                     float parameter0, float parameter1);
-
 extern void nmlModelSetGlobalFogCol(const Vector4 *color);
 
 const char translationXFormat[] = "TX %7.3f";
@@ -107,14 +76,14 @@ static MpackInterest mpack_interest;
 
 TCamera *TCAMERA_get(int camera_id)
 {
-    return (TCamera *)(tcamera + camera_id * 0x12c0);
+    return (TCamera *)&tcamera[camera_id];
 }
 
 void TCAMERA_info(void)
 {
-    TCamera *camera = (TCamera *)xglStudioGetActiveCamera();
-    Vector4 *translation = TCAMERA_TRANSLATION(camera);
-    Vector4 *rotation = TCAMERA_ROTATION(camera);
+    StudioCamera *camera = xglStudioGetActiveCamera();
+    Vector4 *translation = &camera->position.vector;
+    Vector4 *rotation = &camera->rotation.vector;
     Vector4 *interest = &mpack_interest.vector;
 
     DB_println(translationXFormat, (double)translation->x);
@@ -132,7 +101,7 @@ void TCAMERA_info(void)
         DB_println(rotationZFormat, (double)(rotation->z / 3.1415927f * 180.0f));
     }
     DB_incPos(0, 6);
-    DB_println(fovValueFormat, (double)(TCAMERA_FOV(camera) / 3.1415927f * 180.0f));
+    DB_println(fovValueFormat, (double)(camera->fov / 3.1415927f * 180.0f));
 }
 
 /*
@@ -143,8 +112,8 @@ void TCAMERA_info(void)
  * cursor lives in an FCVPack this function places at the EE scratchpad base
  * (docs/ee-reference/memory-dma.md); every call below addresses that same
  * fixed pack, matching the original's repeated `lui $4,0x7000` before each
- * call (FCV_resetPack/FCV_getPackValue's own record types are TU-local to
- * fcv2.c, so the pack and source are reached as opaque pointers here).
+ * call (FCVPack and FCV2Pack are declared in main/fcv2.h; FCV_resetPack's
+ * source record stays an opaque pointer here).
  *
  * The interest point and the translation just written feed the same VU0
  * macro-mode subtraction TCAMERA_setView uses to turn a look-at point into
@@ -340,23 +309,23 @@ void TCAMERA_viewSPL(TCamera *camera, void *spline, float frame)
     rotation->x = -xglAtan2(direction.y, pitchDenominator);
 }
 
-void TCAMERA_transCNS(TCamera *camera, float **constraint, Vector4 *offset, int mode)
+void TCAMERA_transCNS(TCamera *camera, Vector4 **reference_position, Vector4 *offset, int mode)
 {
     Vector4 *translation = TCAMERA_TRANSLATION(camera);
     float point[4];
 
     if (mode == 0) {
-        point[0] = (*constraint)[4];
-        point[1] = (*constraint)[5];
-        point[2] = (*constraint)[6];
+        point[0] = (*reference_position)[1].x;
+        point[1] = (*reference_position)[1].y;
+        point[2] = (*reference_position)[1].z;
     } else if (mode == 1) {
-        point[0] = (*constraint)[0];
-        point[1] = (*constraint)[1];
-        point[2] = (*constraint)[2];
+        point[0] = (*reference_position)[0].x;
+        point[1] = (*reference_position)[0].y;
+        point[2] = (*reference_position)[0].z;
     } else {
-        point[0] = (*constraint)[4];
-        point[1] = (*constraint)[5];
-        point[2] = (*constraint)[6];
+        point[0] = (*reference_position)[1].x;
+        point[1] = (*reference_position)[1].y;
+        point[2] = (*reference_position)[1].z;
     }
     __asm__ __volatile__(
         "lqc2 $vf3, 0(%0)\n\t"
@@ -368,7 +337,7 @@ void TCAMERA_transCNS(TCamera *camera, float **constraint, Vector4 *offset, int 
         : "memory");
 }
 
-void TCAMERA_viewCNS(TCamera *camera, float **constraint, Vector4 *offset, int mode)
+void TCAMERA_viewCNS(TCamera *camera, Vector4 **reference_position, Vector4 *offset, int mode)
 {
     Vector4 *rotation = TCAMERA_ROTATION(camera);
     float point[4];
@@ -379,17 +348,17 @@ void TCAMERA_viewCNS(TCamera *camera, float **constraint, Vector4 *offset, int m
     float pitchDenominator;
 
     if (mode == 0) {
-        point[0] = (*constraint)[4];
-        point[1] = (*constraint)[5];
-        point[2] = (*constraint)[6];
+        point[0] = (*reference_position)[1].x;
+        point[1] = (*reference_position)[1].y;
+        point[2] = (*reference_position)[1].z;
     } else if (mode == 1) {
-        point[0] = (*constraint)[0];
-        point[1] = (*constraint)[1];
-        point[2] = (*constraint)[2];
+        point[0] = (*reference_position)[0].x;
+        point[1] = (*reference_position)[0].y;
+        point[2] = (*reference_position)[0].z;
     } else {
-        point[0] = (*constraint)[4];
-        point[1] = (*constraint)[5];
-        point[2] = (*constraint)[6];
+        point[0] = (*reference_position)[1].x;
+        point[1] = (*reference_position)[1].y;
+        point[2] = (*reference_position)[1].z;
     }
     camera = (TCamera *)((u8 *)camera + 0xd0);
     __asm__ __volatile__(
@@ -430,59 +399,13 @@ void TCAMERA_fovSPL(TCamera *camera, void *spline, float frame)
 
 void TCAMERA_update(void)
 {
-    struct TCameraSpline {
-        unsigned char unmodeled_00[6];
-        short firstKey;
-        short lastKey;
-    };
-    struct TCameraConstraint {
-        Vector4 offset;
-        int mode;
-        float *point;
-    };
-    struct TCameraMotionPack {
-        void *source;
-        float frame;
-    };
-    /* One control track: translation, view, roll or field of view. */
-    union TCameraTrack {
-        struct TCameraSpline spline;
-        struct TCameraMotionPack packed;
-        struct TCameraConstraint constraint;
-        unsigned char storage[0x4a0];
-    };
-    struct TCameraWorkView {
-        unsigned char unmodeled_00[4];
-        int camera_id;
-        unsigned char unmodeled_08[4];
-        int mode[4];
-        int frame[4];
-        unsigned char unmodeled_2c[4];
-        union TCameraTrack track[4];
-        unsigned char unmodeled_12b0[0x10];
-    };
     struct TCameraLoopState {
         unsigned char unmodeled_00[0xc8];
         unsigned short activeCameraIndex;
     };
-    struct TCameraFogEntry {
-        float start;
-        float end;
-        float parameter0;
-        float parameter1;
-        Vector4 color;
-        unsigned char unmodeled_20[0x80];
-    };
-    struct TCameraFogTable {
-        unsigned char unmodeled_00[0x60];
-        struct TCameraFogEntry camera[32];
-        unsigned char unmodeled_1460[0x40];
-    };
 
     extern struct TCameraLoopState GameLoopState;
-    extern struct TCameraFogTable CfCameraDefine;
     int cameraIndex;
-    int cameraOffset;
     float radiansPerHalfTurn;
 
     if ((PadData[0].half_2a & 4) != 0 && (PadData[0].half_28 & 0x100) != 0) {
@@ -490,12 +413,11 @@ void TCAMERA_update(void)
     }
 
     radiansPerHalfTurn = 3.1415927f;
-    for (cameraIndex = 0, cameraOffset = 0; cameraIndex < 8;
-         cameraIndex++, cameraOffset += 0x12c0) {
+    for (cameraIndex = 0; cameraIndex < 8; cameraIndex++) {
         StudioCamera *studioCamera = xglStudioGetCamera2(cameraIndex);
         TCamera *camera = (TCamera *)studioCamera;
-        Vector4 *position = &studioCamera->position;
-        Vector4 *rotation = &studioCamera->rotation;
+        Vector4 *position = &studioCamera->position.vector;
+        Vector4 *rotation = &studioCamera->rotation.vector;
 
         if (camDisp != 0 && studioCamera->active != 0) {
             xglFontDebugPrintf(0, 0x10, translationVectorFormat, (double)position->x,
@@ -510,97 +432,93 @@ void TCAMERA_update(void)
         }
 
         if (studioCamera->state != 2) {
-            struct TCameraWorkView *work =
-                (struct TCameraWorkView *)(tcamera + cameraOffset);
+            CameraWork *work = &tcamera[cameraIndex];
 
             switch (work->mode[0]) {
             case 0x15:
-                TCAMERA_transMPack2(camera, work->track[0].packed.source,
-                                    work->track[0].packed.frame);
+                TCAMERA_transMPack2(camera, work->translate.packed.source,
+                                    work->translate.packed.frame);
                 work->frame[0]++;
                 break;
             case 0x11:
-                TCAMERA_transMPack(camera, work->track[0].packed.source,
+                TCAMERA_transMPack(camera, work->translate.packed.source,
                                    (float)work->frame[0]);
                 work->frame[0]++;
                 break;
             case 0x12:
-                TCAMERA_transSPL(camera, &work->track[0].spline,
+                TCAMERA_transSPL(camera, &work->translate.spline,
                                  (float)work->frame[0]);
-                if (work->track[0].spline.firstKey >= 0) {
+                if (work->translate.spline.first_key >= 0) {
                     work->frame[0]++;
-                    if (work->track[0].spline.lastKey < work->frame[0]) {
-                        work->frame[0] = work->track[0].spline.lastKey;
+                    if (work->translate.spline.last_key < work->frame[0]) {
+                        work->frame[0] = work->translate.spline.last_key;
                     }
                 } else {
                     work->frame[0]++;
                 }
                 break;
             case 0x14:
-                TCAMERA_transCNS(camera, &work->track[0].constraint.point,
-                                 &work->track[0].constraint.offset,
-                                 work->track[0].constraint.mode);
+                TCAMERA_transCNS(camera, &work->translate.constant.reference_position,
+                                 &work->translate.constant.offset,
+                                 work->translate.constant.reference_mode);
                 break;
             }
 
             switch (work->mode[1]) {
             case 0x11:
-                TCAMERA_viewMPack(camera, work->track[1].packed.source,
+                TCAMERA_viewMPack(camera, work->view.packed.source,
                                   (float)work->frame[1]);
                 work->frame[1]++;
                 break;
             case 0x12:
-                TCAMERA_viewSPL(camera, &work->track[1].spline,
+                TCAMERA_viewSPL(camera, &work->view.spline,
                                 (float)work->frame[1]);
-                if (work->track[1].spline.firstKey >= 0) {
+                if (work->view.spline.first_key >= 0) {
                     work->frame[1]++;
-                    if (work->track[1].spline.lastKey < work->frame[1]) {
-                        work->frame[1] = work->track[1].spline.lastKey;
+                    if (work->view.spline.last_key < work->frame[1]) {
+                        work->frame[1] = work->view.spline.last_key;
                     }
                 } else {
                     work->frame[1]++;
                 }
                 break;
             case 0x13:
-                TCAMERA_rotateSPL(camera, &work->track[1].spline,
+                TCAMERA_rotateSPL(camera, &work->view.spline,
                                   (float)work->frame[1]);
-                if (work->track[1].spline.firstKey >= 0) {
+                if (work->view.spline.first_key >= 0) {
                     work->frame[1]++;
-                    if (work->track[1].spline.lastKey < work->frame[1]) {
-                        work->frame[1] = work->track[1].spline.lastKey;
+                    if (work->view.spline.last_key < work->frame[1]) {
+                        work->frame[1] = work->view.spline.last_key;
                     }
                 } else {
                     work->frame[1]++;
                 }
                 break;
             case 0x14:
-                TCAMERA_viewCNS(camera, &work->track[1].constraint.point,
-                                &work->track[1].constraint.offset,
-                                work->track[1].constraint.mode);
+                TCAMERA_viewCNS(camera, &work->view.constant.reference_position,
+                                &work->view.constant.offset,
+                                work->view.constant.reference_mode);
                 break;
             }
 
             if (work->mode[2] == 0x12) {
-                TCAMERA_rollSPL(camera, &work->track[2].spline,
+                TCAMERA_rollSPL(camera, &work->roll.spline,
                                 (float)work->frame[2]);
                 work->frame[2]++;
             }
             if (work->mode[3] == 0x12) {
-                TCAMERA_fovSPL(camera, &work->track[3].spline,
+                TCAMERA_fovSPL(camera, &work->fov.spline,
                                (float)work->frame[3]);
                 work->frame[3]++;
             }
         }
 
         if (studioCamera->active != 0) {
-            struct TCameraFogEntry *fog =
-                &CfCameraDefine.camera[GameLoopState.activeCameraIndex];
+            float *fog = CfCameraDefine[GameLoopState.activeCameraIndex].fog_parameters;
 
-            if (fog->start != 0.0f && fog->end != 0.0f) {
-                nmlModelSetGlobalFogDist(fog->start, fog->end, fog->parameter0,
-                                         fog->parameter1);
-                nmlModelSetGlobalFogCol(
-                    &CfCameraDefine.camera[GameLoopState.activeCameraIndex].color);
+            if (fog[0] != 0.0f && fog[1] != 0.0f) {
+                nmlModelSetGlobalFogDist(fog[0], fog[1], fog[2], fog[3]);
+                nmlModelSetGlobalFogCol(&CfCameraDefine[GameLoopState.activeCameraIndex].fog_color);
             }
         }
     }
@@ -608,7 +526,7 @@ void TCAMERA_update(void)
 
 void TCAMERA_init(void)
 {
-    CameraInitRecord *cameras = (CameraInitRecord *)tcamera;
+    CameraWork *cameras = tcamera;
     int cameraIndex;
     int modeIndex;
 

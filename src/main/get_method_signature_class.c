@@ -1,14 +1,15 @@
 #include "common.h"
 #include "get_method_signature_class.h"
+#include "main/get_method_signature_class.h"
 
-SceneMethod *getMethodSignatureClass(int index, VMConstantOwner *owner)
+JavaMethod *getMethodSignatureClass(int index, JavaClass *owner)
 {
-    VMConstantPoolEntry *constant_pool;
-    VMConstantPoolEntry *entries;
-    VMClassLink *class_obj;
+    ConstantPoolEntry *constant_pool;
+    ConstantPoolEntry *entries;
+    JavaClass *class_obj;
     SceneString *name;
-    SceneClass *type;
-    SceneMethod *method;
+    SceneString *type;
+    JavaMethod *method;
 
     constant_pool = owner->constants;
     if ((unsigned int)(constant_pool[0].tags[index] - 10) >= 2) {
@@ -16,12 +17,11 @@ SceneMethod *getMethodSignatureClass(int index, VMConstantOwner *owner)
     }
 
     entries = constant_pool;
-    name = entries[entries[entries[index].member_ref.name_and_type_index]
-                       .name_and_type.name_index].object;
-    type = entries[entries[entries[index].member_ref.name_and_type_index]
-                       .name_and_type.type_index].object;
-    class_obj = (VMClassLink *)getClass(entries[index].member_ref.class_index,
-                                        owner);
+    name = entries[entries[entries[index].memberRef.nameAndTypeIndex]
+                       .nameAndType.nameIndex].object;
+    type = entries[entries[entries[index].memberRef.nameAndTypeIndex]
+                       .nameAndType.typeIndex].object;
+    class_obj = getClass(entries[index].memberRef.classIndex, owner);
     if (class_obj == 0) {
         return 0;
     }
@@ -32,17 +32,17 @@ SceneMethod *getMethodSignatureClass(int index, VMConstantOwner *owner)
         if (method != 0) {
             break;
         }
-        class_obj = class_obj->superclass;
+        class_obj = class_obj->superClass;
     }
     return method;
 }
 
-int getField(int index, VMConstantOwner *owner, int is_static,
+int getField(int index, JavaClass *owner, int is_static,
              VMResolvedFieldRef *ref)
 {
-    VMConstantPoolEntry *constant_pool;
-    VMConstantPoolEntry *entries;
-    SceneClass *class_obj;
+    ConstantPoolEntry *constant_pool;
+    ConstantPoolEntry *entries;
+    JavaClass *class_obj;
     SceneString *name;
     JavaField *field;
 
@@ -53,13 +53,13 @@ int getField(int index, VMConstantOwner *owner, int is_static,
         return 0;
     }
 
-    class_obj = getClass(entries[index].member_ref.class_index, owner);
+    class_obj = getClass(entries[index].memberRef.classIndex, owner);
     if (class_obj == 0) {
         return 0;
     }
 
-    name = entries[entries[entries[index].member_ref.name_and_type_index]
-                       .name_and_type.name_index].object;
+    name = entries[entries[entries[index].memberRef.nameAndTypeIndex]
+                       .nameAndType.nameIndex].object;
     field = lookupClassField(class_obj, name, is_static);
     if (field == 0) {
         return 0;
@@ -70,12 +70,12 @@ int getField(int index, VMConstantOwner *owner, int is_static,
     return 1;
 }
 
-SceneClass *getClass(int index, VMConstantOwner *owner)
+JavaClass *getClass(int index, JavaClass *owner)
 {
-    VMConstantPoolEntry *constant_pool;
-    VMConstantPoolEntry *entries;
-    VMClassNameRef *class_name;
-    SceneClass *class_obj;
+    ConstantPoolEntry *constant_pool;
+    ConstantPoolEntry *entries;
+    SceneString *class_name;
+    JavaClass *class_obj;
     unsigned char tag;
 
     constant_pool = owner->constants;
@@ -89,11 +89,10 @@ SceneClass *getClass(int index, VMConstantOwner *owner)
     }
 
     class_name = entries[index].object;
-    if (class_name->name[0] == '[') {
-        class_obj = loadArray(class_name, owner->class_loader);
+    if (class_name->bytes[0] == '[') {
+        class_obj = loadArray(class_name, owner->classLoader);
     } else {
-        class_obj = (SceneClass *)loadClass((int)entries[index].value,
-                                            owner->class_loader);
+        class_obj = loadClass(entries[index].object, owner->classLoader);
     }
     if (class_obj == 0) {
         return 0;
@@ -106,8 +105,8 @@ SceneClass *getClass(int index, VMConstantOwner *owner)
 
 JavaField *lookupClassField(void *class_object, void *name, int flags)
 {
-    VMClassLink *class_link;
-    VMFieldEntry *field;
+    JavaClass *class_link;
+    SceneField *field;
     SceneString *field_name;
     int remaining;
 
@@ -115,11 +114,11 @@ JavaField *lookupClassField(void *class_object, void *name, int flags)
     field_name = name;
     flags &= 0xff;
     if (flags != 0) {
-        remaining = class_link->static_field_count;
+        remaining = class_link->staticFieldCount;
         field = class_link->fields;
     } else {
-        unsigned short static_count = class_link->static_field_count;
-        unsigned short field_count = class_link->field_count;
+        unsigned short static_count = class_link->staticFieldCount;
+        unsigned short field_count = class_link->fieldCount;
         field = &class_link->fields[static_count];
         remaining = field_count - static_count;
     }
@@ -135,18 +134,18 @@ JavaField *lookupClassField(void *class_object, void *name, int flags)
     return 0;
 }
 
-SceneMethod *findMethodLocal(VMClassLink *class_obj, SceneString *name,
-                             SceneClass *type)
+JavaMethod *findMethodLocal(JavaClass *class_obj, SceneString *name,
+                            SceneString *type)
 {
-    VMMethodEntry *method_entry;
+    JavaMethod *method_entry;
     int remaining;
 
     method_entry = class_obj->methods;
-    remaining = class_obj->method_count;
+    remaining = class_obj->methodCount;
     remaining--;
     while (remaining >= 0) {
-        if (method_entry->name == name && method_entry->type == type) {
-            return (SceneMethod *)method_entry;
+        if (method_entry->name == name && method_entry->descriptor == type) {
+            return method_entry;
         }
         method_entry++;
         remaining--;
@@ -156,14 +155,14 @@ SceneMethod *findMethodLocal(VMClassLink *class_obj, SceneString *name,
 }
 
 /*
- * Searches class_obj and each superclass in turn (VMClassLink.superclass,
+ * Searches class_obj and each superclass in turn (JavaClass.superClass,
  * +0x10) for a local method matching name/type, returning the first hit
  * from findMethodLocal or 0 once the superclass chain is exhausted.
  */
-SceneMethod *findMethod(VMClassLink *class_obj, SceneString *name,
-                         SceneClass *type)
+JavaMethod *findMethod(JavaClass *class_obj, SceneString *name,
+                       SceneString *type)
 {
-    SceneMethod *method;
+    JavaMethod *method;
 
     if (class_obj != 0) {
         do {
@@ -171,7 +170,7 @@ SceneMethod *findMethod(VMClassLink *class_obj, SceneString *name,
             if (method != 0) {
                 return method;
             }
-            class_obj = class_obj->superclass;
+            class_obj = class_obj->superClass;
         } while (class_obj != 0);
     }
 

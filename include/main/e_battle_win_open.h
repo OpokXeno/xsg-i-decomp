@@ -1,6 +1,10 @@
 #ifndef INCLUDE_MAIN_E_BATTLE_WIN_OPEN_H
 #define INCLUDE_MAIN_E_BATTLE_WIN_OPEN_H
 
+#include "main/e_message.h"
+#include "main/e_number_main.h"
+#include "main/open_close_main.h"
+
 /*
  * WindowDX is the sub-window control block WindowDXSet/WindowDXMain/
  * WindowDXFlagChange share, and the type every "*Main" screen task that
@@ -27,6 +31,9 @@
  */
 typedef struct WindowDX WindowDX;
 
+/* What WindowDXMain calls through WindowDX.close_callback. */
+typedef void (*WindowDXCallback)(WindowDX *window, void *arg);
+
 typedef struct WindowDXRect {
     short x;
     short y;
@@ -47,86 +54,19 @@ typedef struct WindowDXFrame {
     unsigned char unmodeled_12[0x44 - 0x12];
 } WindowDXFrame;
 
-typedef struct WindowDXRibbonCell {
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char a;
-    unsigned char unmodeled_04[8];
-} WindowDXRibbonCell;
-
-typedef struct WindowDXRibbon {
-    short x;
-    short y;
-    int style;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x18 - 0x0c];
-    WindowDXRibbonCell cells[6];
-    unsigned char unmodeled_60[0x70 - 0x60];
-} WindowDXRibbon;
-
 typedef struct WindowDXSprite {
     unsigned char unmodeled_00[0x10];
     unsigned short kind;
     unsigned char unmodeled_12[0x14 - 0x12];
 } WindowDXSprite;
 
-typedef struct BattleWinTagFont {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int style;
-    unsigned char color_r;
-    unsigned char color_g;
-    unsigned char color_b;
-    unsigned char color_a;
-    unsigned char unmodeled_10[0x20 - 0x10];
-} BattleWinTagFont;
-
-typedef struct BattleWinMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int extent;
-    unsigned char unmodeled_0c[4];
-    unsigned char color_r;
-    unsigned char color_g;
-    unsigned char color_b;
-    unsigned char unmodeled_13[0x18 - 0x13];
+typedef struct BattleWinCommand {
     const char *text;
-    unsigned char paged;
-    unsigned char unmodeled_1d[0x44 - 0x1d];
-} BattleWinMessage;
-
-typedef struct BattleWinNumber {
-    short x;
-    short y;
-    int style;
-    unsigned char color_r;
-    unsigned char color_g;
-    unsigned char color_b;
-    unsigned char unmodeled_0b;
-    unsigned char font;
-    unsigned char unmodeled_0d;
-    unsigned char option;
-    unsigned char places;
-    unsigned char unmodeled_10[4];
-    int value;
-    unsigned char unmodeled_18[0x90 - 0x18];
-} BattleWinNumber;
-
-typedef struct BattleWinCursor {
-    unsigned char mode;
-    unsigned char shown;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int style;
-    unsigned char unmodeled_0c[0x24 - 0x0c];
-} BattleWinCursor;
+    const char *description;
+    unsigned char flags;
+    signed char icon;
+    unsigned char unmodeled_0a[2];
+} BattleWinCommand;
 
 struct WindowDX {
     short x;                           /* +0x00 */
@@ -135,10 +75,15 @@ struct WindowDX {
     short width;                       /* +0x08 */
     short height;                      /* +0x0A */
     const char *tag_id;                 /* +0x0C: title text */
-    unsigned char state;               /* +0x10 */
+    signed char state;                 /* +0x10 */
     unsigned char ribbon_initialized;  /* +0x11 */
     unsigned char unmodeled_12[2];
-    void (*close_callback)(WindowDX *window, void *arg); /* +0x14 */
+    /* +0x14: a generic slot. The menus store void and int callbacks alike
+     * (MenuStatusDisp, MenuSelectWindow, MenuInfoWindow) without casts,
+     * and CharMenuMain's store schedule needs the data-pointer alias set
+     * (user decision 2026-11-02). WindowDXMain calls it as a
+     * WindowDXCallback. */
+    void *close_callback;
     void *close_callback_arg;          /* +0x18 */
     unsigned char unmodeled_1c[4];
     WindowDXRect rect;                 /* +0x20 */
@@ -148,9 +93,9 @@ struct WindowDX {
     unsigned char alpha;               /* +0x2F */
     unsigned char unmodeled_30[0x3C - 0x30];
     WindowDXFrame frame;               /* +0x3C */
-    BattleWinTagFont title_font;        /* +0x80 */
-    WindowDXRibbon ribbon_top;          /* +0xA0 */
-    WindowDXRibbon ribbon_bottom;       /* +0x110 */
+    ETagFontMainData title_font;        /* +0x80 */
+    ERibbonMainData ribbon_top;         /* +0xA0 */
+    ERibbonMainData ribbon_bottom;      /* +0x110 */
     WindowDXSprite sprite;              /* +0x180 */
 };
 
@@ -169,7 +114,7 @@ typedef struct WindowSPCursor {
     signed char rows;
     unsigned char unmodeled_16[2];
     int buttons;
-    struct BattleWinItem *items;
+    struct MenuListEntry *items;
     signed char visible_top;
     signed char visible_bottom;
     signed char visible_cols;
@@ -181,9 +126,9 @@ typedef struct WindowSPCursor {
     short selected_index;
     short item_count;
     WindowDX window;
-    BattleWinCursor cursors[3];
-    BattleWinMessage messages[24];
-    BattleWinNumber numbers[26];
+    ECursolMainData cursors[3];
+    EMessageParam messages[24];
+    ENumberMainData numbers[26];
     WindowDXRect rect;
 } WindowSPCursor;
 
@@ -202,5 +147,8 @@ void eBattleWinClose3(void);
 void eBattleWinInit(void);
 void WindowSPKeepSelect(WindowSPCursor *cursor, WindowSPKeepBuffer keep);
 void WindowSPKeepSelectCheck(WindowSPKeepBuffer keep);
+
+/* Functions and data used by other translation units. */
+void *eBattleWinInit2(void *arg);
 
 #endif /* INCLUDE_MAIN_E_BATTLE_WIN_OPEN_H */

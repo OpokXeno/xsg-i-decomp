@@ -4,6 +4,10 @@
 #include "shared.h"
 #include "menu_agws_para_set.h"
 #include "main/menu_top_command_check.h"
+#include "main/open_close_main.h"
+#include "main/party.h"
+#include "main/xgl_font.h"
+#include "main/menu_para_pt_rate_get.h"
 
 #define MENU_TEXT_WEAPON 0x30000
 #define MENU_TEXT_BULLET 0x40000
@@ -11,18 +15,6 @@
 #define AGWS_WEAPON2_MAIN  2
 #define M2C_FIELD(expr, type_ptr, offset) (*(type_ptr)((s8 *)(expr) + (offset)))
 #define NULL ((void *)0)
-
-typedef struct AgwsWeapon2Message {
-    unsigned char unmodeled_00;
-    unsigned char mode;                     /* +0x01 */
-    unsigned char unmodeled_02[2];
-    short x;                                /* +0x04 */
-    short y;                                /* +0x06 */
-    int color;                              /* +0x08 */
-    unsigned char unmodeled_0c[0x18 - 0x0C];
-    const char *text;
-    unsigned char unmodeled_1c[0x44 - 0x1C];
-} AgwsWeapon2Message;
 
 typedef struct AgwsWeapon2Sprite {
     unsigned char unmodeled_00[4];
@@ -32,21 +24,11 @@ typedef struct AgwsWeapon2Sprite {
     unsigned char unmodeled_0c[0x28 - 0x0C];
 } AgwsWeapon2Sprite;
 
-typedef struct AgwsWeapon2WindowDX {
-    short x;                                /* +0x000 */
-    short y;                                /* +0x002 */
-    int color;                              /* +0x004 */
-    short width;                            /* +0x008 */
-    short height;                           /* +0x00A */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    unsigned char state;                    /* +0x010 */
-    unsigned char unmodeled_11[0x194 - 0x11];
-} AgwsWeapon2WindowDX;
 
 typedef struct AgwsWeapon2Row {
     unsigned char unmodeled_00[0x14];
-    AgwsWeapon2WindowDX window;             /* +0x014 */
-    AgwsWeapon2Message message[3];          /* +0x1A8 */
+    WindowDX window;             /* +0x014 */
+    EMessageParam message[3];               /* +0x1A8 */
     AgwsWeapon2Sprite sprite[3];            /* +0x274 */
     unsigned char unmodeled_2ec[0x300 - 0x2EC];
 } AgwsWeapon2Row;
@@ -117,20 +99,6 @@ typedef struct AgwsNamePoint {
     unsigned char r, g, b, a;
 } AgwsNamePoint;
 
-typedef struct AgwsNameWindow {
-    short x, y;
-    int color;
-    short width, height;
-    char *title;
-    unsigned char state;
-    unsigned char ribbonInitialized;
-    unsigned char unmodeled_12[0x80 - 0x12];
-    struct {
-        unsigned char unmodeled_00[0x1C];
-        const char *text;
-    } titleFont;
-    unsigned char unmodeled_a0[0x194 - 0xA0];
-} AgwsNameWindow;
 
 typedef struct AgwsNameWorkPrefix {
     unsigned char unmodeled_00[0x10];
@@ -140,44 +108,25 @@ typedef struct AgwsNameWorkPrefix {
     signed char selection;
     int timer;
     int color;
-    AgwsNameWindow window[8];
+    struct WindowDX window[8];
     AgwsWeapon2Sprite portrait[8];
     unsigned char unmodeled_dfc[0xF3C - 0xDFC];
-    AgwsWeapon2Message message[8][2];
+    EMessageParam message[8][2];
     AgwsWeapon2Cursol cursol;
     AgwsNamePoint ribbon[8][20];
     unsigned char unmodeled_1b20[0x1D00 - 0x1B20];
 } AgwsNameWorkPrefix;
 
-/* These labels are the original menu strings referenced by the message table. */
-extern const char MenuAgwsUnequipCommandLabel[];
-
-extern const char MenuAgwsNameLabel[];
-extern const char MenuAgwsRightShoulderCommandLabel[];
-extern const char MenuAgwsLeftShoulderCommandLabel[];
-extern const char MenuAgwsAccessoryCommandLabel[];
-extern const char MenuAgwsEngineUnitCommandLabel[];
-extern const char MenuAgwsAssignPilotCommandLabel[];
-extern const char MenuAgwsEquipCommandLabel[];
-extern const char MenuAgwsPilotCommandLabel[];
-extern const char MenuAgwsListCommandLabel[];
-extern const char MenuAgwsRightArmCommandLabel[];
-extern const char MenuAgwsLeftArmCommandLabel[];
-extern const char MenuAgwsRightAltCommandLabel[];
-extern const char MenuAgwsLeftAltCommandLabel[];
-extern const char MenuAgwsAmmoCommandLabel[];
-extern const char MenuAgwsAssignCommandLabel[];
-extern const char MenuAgwsRemoveCommandLabel[];
 extern const char infoClearText[];
 extern AgwsWeapon2Work *AgwsWeapon2;
 extern AgwsWeapon2MountRow weapon2MountRowTable[];
 extern const AgwsWeapon2MountSide weapon2MountSideTable[];
 extern AgwsNameWorkPrefix *AgwsName;
 extern unsigned char *MainMenuWorkEnd;
-extern const unsigned char equipPosFormat[];
-extern unsigned char agwsTitleText[];
-extern unsigned char paddedNumberFormat[];
-extern int MenuModelOut[4];
+extern const char equipPosFormat[];
+extern char agwsTitleText[];
+extern char paddedNumberFormat[];
+extern void *MenuModelOut[4];
 extern AgwsInfoWork *AgwsInfo;
 static const char * msg00_1_0036D988[] ;
 extern const char menuAgwsParaSetPeriodText[];
@@ -234,21 +183,16 @@ void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
 int PartyAttackerCheck(int chrNo);
 char *MenuTagTextGet(int index);
 int MenuAgwsPilotCheck(int chrNo);
-void eMessageSet(void *message, const char *text);
 void eSpriteSet(void *sprite, short spriteId);
 void eSpriteMain(void *sprite);
-void eCursolSet(void *cursor, signed char width);
-void eCursolMain(void *cursor);
-int MenuIdChange(short id, int kind);
 s32 MenuMainAgwsCheck(s16);
 void MenuModelAllBreak(void);
-void MenuModelCreate(int *output, int character);
-void MenuModelExtFuncSet(s32, void (*)(AgwsModelUnit *), M2C_UNK);
+void MenuModelCreate(void **output, int character);
+void MenuModelExtFuncSet(void *, void (*)(MenuModelUnitAgwsView *), M2C_UNK);
 void MenuModelMemorySet(int);
 void MenuModelMenuMotionLoad(void);
 s32 MenuRWeaponCheck(s16, s32);
 void MenuWorkEndCheck(u8 *end);
-s32 PartyTakeAgwsCheck(s32);
 int dataAccBoxDec(int);
 void dataAccBoxInc(int);
 s32 dataBltBoxChk(s16);
@@ -259,11 +203,8 @@ void dataWpnBoxInc(int);
 void xglFontDebugHex(int x, int y, int value, int digits);
 extern int MenuSelectMove(int selection, int count, int wrap);
 extern int MenuCursorKeepCheck(void);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void AgwsNameMain(void);
 void AgwsWeapon2Main(void);
-void eMessageCpy(void *destination, const void *text);
-void eMessageCat(const void *text);
 void *memset(void *destination, int value, unsigned int size);
 int OptMntToWpnPos(int mountCode);
 char *MenuCharNameGet(unsigned int charId);
@@ -332,9 +273,9 @@ static const char * msg04_5[4];
 
 static const char * msg05_6[5];
 
-static char * msg_7_0036D9F8[17];
+static const char * msg_7_0036D9F8[17];
 
-static char * msg01_8_0036DA40[3];
+static const char * msg01_8_0036DA40[3];
 
 static const char * msg00_1_0036D988[] = { MenuAgwsSelectPromptText };
 
@@ -348,18 +289,18 @@ static const char * msg04_5[4] = { MenuAgwsAndEquipAnotherText, MenuAgwsRemoveWe
 
 static const char * msg05_6[5] = { assignVerbText, removeVerbText, MenuAgwsIsAssignedToText, menuAgwsParaSetPeriodText, MenuAgwsAsPilotOfThisText };
 
-static char * msg_7_0036D9F8[17] = { 0, MenuAgwsEquipUnequipPilotText, MenuAgwsEquipUnequipCancelText, MenuAgwsEquipUnequipCancelText, MenuAgwsPilotChoicesText, MenuAgwsConfirmPromptText, menuAgwsParaSetYesNoText, MenuAgwsGrayedSlotChoicesText, MenuAgwsArmSlotChoicesText, MenuAgwsShoulderSlotChoicesText, MenuAgwsAltSlotChoicesText, rightArmText, leftArmText, MenuAgwsRightShoulderSlotText, MenuAgwsLeftShoulderSlotText, rightAltText, leftAltText };
+static const char * msg_7_0036D9F8[17] = { 0, MenuAgwsEquipUnequipPilotText, MenuAgwsEquipUnequipCancelText, MenuAgwsEquipUnequipCancelText, MenuAgwsPilotChoicesText, MenuAgwsConfirmPromptText, menuAgwsParaSetYesNoText, MenuAgwsGrayedSlotChoicesText, MenuAgwsArmSlotChoicesText, MenuAgwsShoulderSlotChoicesText, MenuAgwsAltSlotChoicesText, rightArmText, leftArmText, MenuAgwsRightShoulderSlotText, MenuAgwsLeftShoulderSlotText, rightAltText, leftAltText };
 
-static char * msg01_8_0036DA40[3] = { MenuAgwsAssignRemoveCancelText, okayQuestionText, menuAgwsParaSetYesNoText };
+static const char * msg01_8_0036DA40[3] = { MenuAgwsAssignRemoveCancelText, okayQuestionText, menuAgwsParaSetYesNoText };
 
 static unsigned short AgwsNo[16];
 
-static AgwsListSPWindow * AgwsWinSP[4];
+static WindowSPCursor * AgwsWinSP[4];
 
 static char mmsg_9[128];
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
-const unsigned char pilotListTitleText[24] = "Menu         Party";
+const char pilotListTitleText[24] = "Menu         Party";
 
 const AgwsCameraPreset cameraSetPreset = {{
     { 0.5f, 2.8f, 4.5f, 1.0f },
@@ -381,7 +322,7 @@ const AgwsModelPositions modelPositionTable = {{
     { 0.3926991f, -2.0943952f, 0.0f, 0.0f },
 }};
 
-const AgwsModelVector modelUnitScaleVector = {{ 1.0f, 1.0f, 1.0f, 1.0f }};
+const DoublewordAlignedVector4 modelUnitScaleVector = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 static short WaglGet(AgwsCharPara *para)
 {
@@ -447,23 +388,23 @@ void AgwsPasMain(void)
     switch (pas->state) {
     case AGWS_PAS_START:
         pas->color = AGWS_PAS_COLOR;
-        WindowDXSet((WindowDX *)(void *)(&pas->window));
+        WindowDXSet(&pas->window);
         pas->window.x = AGWS_PAS_X_OUT;
         pas->window.y = 8;
-        pas->window.color = pas->color;
+        pas->window.style = pas->color;
         pas->window.width = AGWS_PAS_WIDTH;
         pas->window.height = 0x20;
-        pas->window.callback = MenuPasWindow;
-        pas->window.callbackArg = pas->callbackWork;
+        pas->window.close_callback = MenuPasWindow;
+        pas->window.close_callback_arg = pas->callbackWork;
         pas->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(&pas->window));
+        WindowDXMain(&pas->window);
         pas->window.state = 3;
         for (i = 0; i < 17; i++) {
             eMessageSet(&pas->message[i], msg00_0_0036D940[i]);
             pas->message[i].mode = 0x20;
             pas->message[i].x = AGWS_PAS_TAB_PARKED;
             pas->message[i].y = 0xB;
-            pas->message[i].color = pas->color + 2;
+            pas->message[i].draw_parameter = pas->color + 2;
         }
         pas->mask = 1;
         pas->selectNo = -1;
@@ -523,7 +464,7 @@ void AgwsPasMain(void)
     }
 
     MoveSlide(&pas->window.x, &slideTarget, 3.0f);
-    WindowDXMain((WindowDX *)(void *)(&pas->window));
+    WindowDXMain(&pas->window);
     if (pas->window.state == 3) {
         pas->box.x = pas->window.x + 3;
         pas->box.y = pas->window.y + 3;
@@ -548,25 +489,25 @@ void AgwsInfoMain(void)
     int position;
     int selectedPosition;
     int selectedRow;
-    AgwsListRow *row;
+    MenuListEntry *row;
 
     switch (info->state) {
     case 0:
         info->color = 0x00FFFFF0;
-        WindowDXSet((WindowDX *)(void *)(&info->window));
+        WindowDXSet(&info->window);
         info->window.x = -16;
         info->window.y = 480;
         info->window.width = 544;
         info->window.height = 54;
         info->window.state = 0;
-        info->window.callback = (void (*)(void *, void *))MenuInfoWindow;
-        info->window.callbackArg = &info->contents;
-        info->window.callbackArg->textOffset[0] = 0;
-        info->window.color = info->color;
+        info->window.close_callback = MenuInfoWindow;
+        info->window.close_callback_arg = &info->contents;
+        info->contents.textOffset[0] = 0;
+        info->window.style = info->color;
         info->window.state = 1;
         info->contents.textOffset[1] = 0;
         info->contents.text = 0;
-        WindowDXMain((WindowDX *)(void *)(&info->window));
+        WindowDXMain(&info->window);
         info->window.state = 3;
         info->state = 2;
         info->detail = 0;
@@ -680,19 +621,19 @@ void AgwsInfoMain(void)
         case 0xC2:
             if (MenuWork.agws.listSelect >= 0) {
                 row = &MenuListGet(0)[MenuWork.agws.listSelect];
-                if ((signed char)row->flag == 1) {
+                if (row->flag == 1) {
                     AgwsUnitOrg *selectedOrg = func_A191C0((short)MenuSortAddrGet(0)[MenuWork.agws.listSelect]);
 
-                    eMessageCpy(info->text, row->text);
+                    eMessageCpy(info->text, row->name);
                     eMessageCat(msg05_6[2]);
                     eMessageCat(MenuCharNameGet(selectedOrg->agwsId));
                     eMessageCat(msg05_6[3]);
                 } else {
-                    if ((signed char)row->equipped == 0)
+                    if (row->status == 0)
                         eMessageCpy(info->text, msg05_6[0]);
                     else
                         eMessageCpy(info->text, msg05_6[1]);
-                    eMessageCat(row->text);
+                    eMessageCat(row->name);
                     eMessageCat(msg05_6[4]);
                 }
             } else {
@@ -705,7 +646,7 @@ void AgwsInfoMain(void)
         }
         info->contents.text = info->text;
         MoveSlide(&info->window.y, &targetY, 3.0f);
-        WindowDXMain((WindowDX *)(void *)(&info->window));
+        WindowDXMain(&info->window);
         break;
     }
 }
@@ -721,8 +662,8 @@ void AgwsSelectMain(void)
     case 0: {
         select->color = 0x00FFFFF0;
         for (i = 0; i <= 3; i++) {
-            char **menuText;
-            WindowDXSet((WindowDX *)(void *)(&select->window[i]));
+            const char **menuText;
+            WindowDXSet((WindowDX *)(&select->window[i]));
             menuText = msg_7_0036D9F8;
             select->window[i].color = select->color;
             select->window[i].title = menuWindowTitleText;
@@ -756,7 +697,7 @@ void AgwsSelectMain(void)
         select->contents[3].annotation = msg01_8_0036DA40[1];
         for (i = 0; i < 4; i++) {
             select->window[i].state = 1;
-            WindowDXMain((WindowDX *)(void *)(&select->window[i]));
+            WindowDXMain((WindowDX *)(&select->window[i]));
             select->window[i].state = 3;
         }
         select->visible = 1;
@@ -795,7 +736,7 @@ void AgwsSelectMain(void)
         for (i = 0; i < 4; i++) {
             MoveSlide(&select->window[i].x, &targetX[i], 3.0f);
             MoveSlide(&select->window[i].y, &targetY[i], 3.0f);
-            WindowDXMain((WindowDX *)(void *)(&select->window[i]));
+            WindowDXMain((WindowDX *)(&select->window[i]));
         }
         break;
     }
@@ -804,8 +745,8 @@ void AgwsSelectMain(void)
 void MenuAgwsListMake_Wpn(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    AgwsListRow *entries = MenuListGet(0);
-    AgwsListSPWindow *window = &AgwsList->window;
+    MenuListEntry *entries = MenuListGet(0);
+    WindowSPCursor *window = &AgwsList->window[0];
     int count;
     int i;
 
@@ -825,18 +766,18 @@ void MenuAgwsListMake_Wpn(void)
     window->rows = 7;
     window->height = 174;
     window->columns = 1;
-    window->rowCount = 7;
-    window->flags = 0;
+    window->draw_flags = 7;
+    window->title = 0;
     window->items = MenuListGet(0);
-    WindowSPItemChange((WindowSPCursor *)(void *)(window));
-    WindowSPSetSelect((WindowSPCursor *)(void *)(window), &MenuKeepSelect[MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex] * 5 - 5]);
+    WindowSPItemChange(window);
+    WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex] * 5 - 5]);
 }
 
 void MenuAgwsListMake_Gun(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    AgwsListRow *entries = MenuListGet(0);
-    AgwsListSPWindow *window = &AgwsList->window;
+    MenuListEntry *entries = MenuListGet(0);
+    WindowSPCursor *window = &AgwsList->window[0];
     int count;
     int i;
 
@@ -854,18 +795,18 @@ void MenuAgwsListMake_Gun(void)
     window->rows = 7;
     window->height = 174;
     window->columns = 1;
-    window->rowCount = 7;
-    window->flags = 0;
+    window->draw_flags = 7;
+    window->title = 0;
     window->items = MenuListGet(0);
-    WindowSPItemChange((WindowSPCursor *)(void *)(window));
-    WindowSPSetSelect((WindowSPCursor *)(void *)(window), &MenuKeepSelect[30]);
+    WindowSPItemChange(window);
+    WindowSPSetSelect(window, &MenuKeepSelect[30]);
 }
 
 void MenuAgwsListMake_Acc(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    AgwsListRow *entries = MenuListGet(0);
-    AgwsListSPWindow *window = &AgwsList->window;
+    MenuListEntry *entries = MenuListGet(0);
+    WindowSPCursor *window = &AgwsList->window[0];
     int count;
     int i;
 
@@ -883,18 +824,18 @@ void MenuAgwsListMake_Acc(void)
     window->height = 150;
     window->columns = 1;
     window->rows = 6;
-    window->rowCount = 7;
-    window->flags = 0;
+    window->draw_flags = 7;
+    window->title = 0;
     window->items = MenuListGet(0);
-    WindowSPItemChange((WindowSPCursor *)(void *)(window));
-    WindowSPSetSelect((WindowSPCursor *)(void *)(window), &MenuKeepSelect[35]);
+    WindowSPItemChange(window);
+    WindowSPSetSelect(window, &MenuKeepSelect[35]);
 }
 
 void MenuAgwsListMake_Pilot(void)
 {
-    AgwsListRow *entries = MenuListGet(0);
+    MenuListEntry *entries = MenuListGet(0);
     int *sortRow = MenuSortAddrGet(0);
-    AgwsListSPWindow *window = &AgwsList->window;
+    WindowSPCursor *window = &AgwsList->window[0];
     AgwsUnitOrg *org;
     int count;
     int i;
@@ -910,20 +851,20 @@ void MenuAgwsListMake_Pilot(void)
             entries[i].flag = 0;
         }
         if (org->agwsId == MenuWork.agws.chrNo) {
-            entries[i].equipped = 1;
+            entries[i].status = 1;
         } else {
-            entries[i].equipped = 0;
+            entries[i].status = 0;
         }
     }
     window->width = 208;
     window->height = 144;
     window->columns = 1;
     window->rows = 5;
-    window->rowCount = 3;
-    window->flags = (int) pilotListTitleText;
+    window->draw_flags = 3;
+    window->title = pilotListTitleText;
     window->items = MenuListGet(0);
-    WindowSPItemChange((WindowSPCursor *)(void *)(window));
-    WindowSPSetSelect((WindowSPCursor *)(void *)(window), &MenuKeepSelect[40]);
+    WindowSPItemChange(window);
+    WindowSPSetSelect(window, &MenuKeepSelect[40]);
 }
 
 void AgwsListMain(void)
@@ -932,21 +873,21 @@ void AgwsListMain(void)
     short targetX;
     int i;
     int count;
-    AgwsListRow *rows;
+    MenuListEntry *rows;
 
     switch (list->state) {
     case 0:
         list->color = 0x00FFF000;
-        list->window.x = 528;
-        list->window.color = list->color;
-        list->window.flags = (int)infoClearText;
-        list->window.y = 64;
-        list->window.rowCount = 7;
-        list->window.rows = 11;
-        list->window.height = 270;
-        list->window.state = 0;
-        list->window.items = 0;
-        WindowSPSet((WindowSPCursor *)(void *)(&list->window));
+        list->window[0].x = 528;
+        list->window[0].style = list->color;
+        list->window[0].title = infoClearText;
+        list->window[0].y = 64;
+        list->window[0].draw_flags = 7;
+        list->window[0].rows = 11;
+        list->window[0].height = 270;
+        list->window[0].state = 0;
+        list->window[0].items = 0;
+        WindowSPSet(&list->window[0]);
         list->visible = 1;
         list->state = 2;
         list->selectedRow = 0;
@@ -965,17 +906,17 @@ void AgwsListMain(void)
     case 30:
     case 40:
         if (list->state == 40) {
-            list->window.x = 528;
-            list->window.y = 128;
+            list->window[0].x = 528;
+            list->window[0].y = 128;
             MenuAgwsListMake_Pilot();
             list->visible = 2;
             list->state = 41;
         } else {
-            list->window.x = -244;
+            list->window[0].x = -244;
             if (list->state == 30) {
-                list->window.y = 126;
+                list->window[0].y = 126;
             } else {
-                list->window.y = 104;
+                list->window[0].y = 104;
             }
             list->visible = 1;
             if (list->state == 20) {
@@ -989,7 +930,7 @@ void AgwsListMain(void)
             case 30: MenuAgwsListMake_Acc(); break;
             }
         }
-        list->window.state = 17;
+        list->window[0].state = 17;
         /* fall through */
     case 11:
     case 13:
@@ -1002,8 +943,8 @@ void AgwsListMain(void)
         case 13: targetX = -244; break;
         case 43: targetX = 528; break;
         }
-        MoveSlide(&list->window.x, &targetX, 3.0f);
-        if (list->window.x == targetX) {
+        MoveSlide(&list->window[0].x, &targetX, 3.0f);
+        if (list->window[0].x == targetX) {
             switch (list->state) {
             case 21: list->state = 22; break;
             case 11:
@@ -1027,7 +968,7 @@ void AgwsListMain(void)
         break;
     }
     if (list->visible != 0) {
-        WindowSPMain((WindowSPCursor *)(void *)(&list->window));
+        WindowSPMain(&list->window[0]);
         if (list->visible == 2 && MenuWork.agws.listSelect >= 0) {
             count = MenuSortCheck(0);
             rows = MenuListGet(0);
@@ -1038,24 +979,24 @@ void AgwsListMain(void)
                 } else {
                     eTagFontSet(&list->tag[i], MenuTagTextGet(2));
                 }
-                if ((signed char)rows[i].flag == 1) {
-                    list->tag[i].green = 64;
-                    list->tag[i].blue = 64;
-                    list->tag[i].red = 64;
+                if (rows[i].flag == 1) {
+                    list->tag[i].color[1] = 64;
+                    list->tag[i].color[2] = 64;
+                    list->tag[i].color[0] = 64;
                 } else {
-                    list->tag[i].green = 128;
-                    list->tag[i].blue = 128;
-                    list->tag[i].red = 128;
+                    list->tag[i].color[1] = 128;
+                    list->tag[i].color[2] = 128;
+                    list->tag[i].color[0] = 128;
                 }
-                list->tag[i].x = list->window.x + 107;
-                list->tag[i].depth = list->window.color + 2;
-                list->tag[i].y = list->window.y + i * 24 + 7;
+                list->tag[i].x = list->window[0].x + 107;
+                list->tag[i].work = list->window[0].style + 2;
+                list->tag[i].y = list->window[0].y + i * 24 + 7;
                 eTagFontMain(&list->tag[i]);
                 if (chrNo == MenuAgwsPilotCheck(MenuWork.agws.chrNo)) {
                     eSpriteSet(&list->cursor, 0x60A);
-                    list->cursor.x = list->window.x + list->window.width - 24;
-                    list->cursor.y = list->window.y + i * 24 + 3;
-                    list->cursor.depth = list->window.color + 2;
+                    list->cursor.x = list->window[0].x + list->window[0].width - 24;
+                    list->cursor.y = list->window[0].y + i * 24 + 3;
+                    list->cursor.depth = list->window[0].style + 2;
                     eSpriteMain(&list->cursor);
                 }
             }
@@ -1071,26 +1012,26 @@ void AgwsStatusMain(void)
     switch (status->state) {
     case AGWS_STATUS_START:
         status->color = AGWS_STATUS_COLOR;
-        WindowDXSet((WindowDX *)(void *)(&status->window));
+        WindowDXSet(&status->window);
         status->window.x = AGWS_STATUS_X_OUT;
         status->window.y = 304;
-        status->window.color = status->color;
+        status->window.style = status->color;
         status->window.width = 480;
         status->window.height = 64;
         status->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(&status->window));
+        WindowDXMain(&status->window);
         status->window.state = 3;
         for (i = 0; i < 7; i++) {
             eTagFontSet(&status->label[i], msg_10[i]);
-            status->label[i].color = status->color + 2;
-            status->label[i].rgba[0] = 112;
+            status->label[i].work = status->color + 2;
+            status->label[i].color[0] = 112;
         }
         {
             unsigned char digit[7] = { 4, 3, 3, 3, 2, 2, 4 };
 
             for (i = 0; i < 7; i++) {
                 eNumberSet(&status->number[i], 0);
-                status->number[i].color = status->color + 2;
+                status->number[i].work = status->color + 2;
                 status->number[i].format = 5;
                 status->number[i].digits = digit[i];
             }
@@ -1125,7 +1066,7 @@ void AgwsStatusMain(void)
             break;
         }
         MoveSlide(&status->window.x, &slideTarget, 3.0f);
-        WindowDXMain((WindowDX *)(void *)(&status->window));
+        WindowDXMain(&status->window);
         if (status->window.state == 3) {
             for (i = 0; i < 6; i++) {
                 int rows = 3;
@@ -1144,14 +1085,14 @@ void AgwsStatusMain(void)
                 shown[0] = status->number[i].value;
                 shown[1] = status->number[i].value >> 16;
                 if (shown[0] < shown[1]) {
-                    status->number[i].arrow = 2;
-                    status->number[i].arrowHidden = 0;
+                    status->number[i].colorModeSecond = 2;
+                    status->number[i].firstOnly = 0;
                 } else if (shown[1] < shown[0]) {
-                    status->number[i].arrow = 1;
-                    status->number[i].arrowHidden = 0;
+                    status->number[i].colorModeSecond = 1;
+                    status->number[i].firstOnly = 0;
                 } else {
-                    status->number[i].arrow = 0;
-                    status->number[i].arrowHidden = 1;
+                    status->number[i].colorModeSecond = 0;
+                    status->number[i].firstOnly = 1;
                 }
                 {
                     int rows = 3;
@@ -1196,9 +1137,9 @@ void AgwsWeapon2Main(void)
     case AGWS_WEAPON2_SETUP:
         work->color = 0xFFFF00;
         for (i = 0; i < 4; i++) {
-            WindowDXSet((WindowDX *)(void *)(&work->row[i].window));
+            WindowDXSet(&work->row[i].window);
             work->row[i].window.y = 0x30 + i * 0x36;
-            work->row[i].window.color = work->color;
+            work->row[i].window.style = work->color;
             work->row[i].window.height = 0x36;
             work->row[i].window.x = -0x102;
             work->row[i].window.width = 0xE5;
@@ -1209,10 +1150,10 @@ void AgwsWeapon2Main(void)
                 work->row[i].window.height = 0x36;
             }
             work->row[i].window.state = 1;
-            WindowDXMain((WindowDX *)(void *)(&work->row[i].window));
+            WindowDXMain(&work->row[i].window);
             work->row[i].window.state = 3;
         }
-        eCursolSet(&storage->cursor.cursol.control, 0);
+        eCursolSet((ECursolMainData *)&storage->cursor.cursol, 0);
         work->mode = 0;
         work->state = AGWS_WEAPON2_MAIN;
         /* fallthrough */
@@ -1249,7 +1190,7 @@ void AgwsWeapon2Main(void)
             MoveSlide(&work->row[i].window.y, &y[i], 3.0f);
         }
         for (i = 0; i < 3; i++) {
-            WindowDXMain((WindowDX *)(void *)(&work->row[i].window));
+            WindowDXMain(&work->row[i].window);
             one = 1;
             if (para->weaponId[i] != 0)
                 equipped[i] = one;
@@ -1267,7 +1208,7 @@ void AgwsWeapon2Main(void)
             for (textIndex = 0; textIndex < lines; textIndex++) {
                 eMessageSet(&work->row[i].message[textIndex], text[textIndex]);
                 work->row[i].message[textIndex].mode = 0x20;
-                work->row[i].message[textIndex].color = work->row[i].window.color + 2;
+                work->row[i].message[textIndex].draw_parameter = work->row[i].window.style + 2;
                 work->row[i].message[textIndex].x = work->row[i].window.x + 39;
                 work->row[i].message[textIndex].y = work->row[i].window.y + ((lines & 1) * 12 + textIndex * 24) + 3;
                 eMessageMain(&work->row[i].message[textIndex]);
@@ -1284,14 +1225,14 @@ void AgwsWeapon2Main(void)
                     work->row[i].sprite[digit].x = px;
                     sy = work->row[i].window.y + (digit * 14 + (bullet[i] ^ 1) * 12) + 3;
                     work->row[i].sprite[digit].y = sy;
-                    work->row[i].sprite[digit].color = work->row[i].window.color + digit * 2 + 2;
+                    work->row[i].sprite[digit].color = work->row[i].window.style + digit * 2 + 2;
                     eSpriteMain(&work->row[i].sprite[digit]);
                 }
                 if (bullet[i] != 0) {
                     eSpriteSet(&work->row[i].sprite[2], 0x31B);
                     px = work->row[i].window.x + 19;
                     work->row[i].sprite[2].x = px;
-                    work->row[i].sprite[2].color = work->row[i].window.color + 2;
+                    work->row[i].sprite[2].color = work->row[i].window.style + 2;
                     py = work->row[i].window.y + 27;
                     work->row[i].sprite[2].y = py;
                     eSpriteMain(&work->row[i].sprite[2]);
@@ -1299,23 +1240,23 @@ void AgwsWeapon2Main(void)
             } else {
                 eSpriteSet(&work->row[i].sprite[2], 0x321);
                 work->row[i].sprite[2].x = work->row[i].window.x + 19;
-                work->row[i].sprite[2].color = work->row[i].window.color + 2;
+                work->row[i].sprite[2].color = work->row[i].window.style + 2;
                 work->row[i].sprite[2].y = work->row[i].window.y + 15;
                 eSpriteMain(&work->row[i].sprite[2]);
             }
         }
-        WindowDXMain((WindowDX *)(void *)(&work->row[3].window));
+        WindowDXMain(&work->row[3].window);
         for (i = 0; i < 3; i++) {
             eSpriteSet(&work->row[3].sprite[i], 0x315);
             work->row[3].sprite[i].x = work->row[3].window.x + 19;
-            work->row[3].sprite[i].color = work->row[3].window.color + 2;
+            work->row[3].sprite[i].color = work->row[3].window.style + 2;
             work->row[3].sprite[i].y = work->row[3].window.y + i * 24 + 3;
             eSpriteMain(&work->row[3].sprite[i]);
             eMessageSet(&work->row[3].message[i],
                         MenuTextGet(MenuIdChange(para->accessoryId[i], 5))->name);
             work->row[3].message[i].mode = 0x20;
             work->row[3].message[i].x = work->row[3].window.x + 39;
-            work->row[3].message[i].color = work->row[3].window.color + 2;
+            work->row[3].message[i].draw_parameter = work->row[3].window.style + 2;
             work->row[3].message[i].y = work->row[3].window.y + i * 24 + 3;
             eMessageMain(&work->row[3].message[i]);
         }
@@ -1328,7 +1269,7 @@ void AgwsWeapon2Main(void)
                     || bullet[MenuWork.agws.weaponHand] == 0))
             storage->cursor.cursol.control.y = lineY + 19;
         storage->cursor.cursol.control.work = work->color + 2;
-        eCursolMain(&storage->cursor.cursol);
+        eCursolMain((ECursolMainData *)&storage->cursor.cursol);
         break;
     }
 }
@@ -1384,27 +1325,27 @@ void AgwsNameMain(void) {
             int character = AgwsNo[rowIndex];
             func_A191C0(character);
             pilot = MenuAgwsPilotCheck(character);
-            WindowDXSet((WindowDX *)(void *)&name->window[rowIndex]);
+            WindowDXSet(&name->window[rowIndex]);
             name->window[rowIndex].x = (rowIndex & 1) * 0x320 - 0x100;
             name->window[rowIndex].y = rowIndex / 2 * 0x60 + 0x40;
-            name->window[rowIndex].color = name->color;
+            name->window[rowIndex].style = name->color;
             name->window[rowIndex].width = 0xE0;
             name->window[rowIndex].height = 0x36;
             if (pilot == 0)
-                name->window[rowIndex].title = MenuTagTextGet(2);
+                name->window[rowIndex].tag_id = MenuTagTextGet(2);
             else if (PartyAttackerCheck(pilot) != 0)
-                name->window[rowIndex].title = MenuTagTextGet(3);
+                name->window[rowIndex].tag_id = MenuTagTextGet(3);
             else
-                name->window[rowIndex].title = MenuTagTextGet(4);
-            name->window[rowIndex].ribbonInitialized = 1;
+                name->window[rowIndex].tag_id = MenuTagTextGet(4);
+            name->window[rowIndex].ribbon_initialized = 1;
             name->window[rowIndex].state = 1;
-            WindowDXMain((WindowDX *)(void *)&name->window[rowIndex]);
+            WindowDXMain(&name->window[rowIndex]);
             name->window[rowIndex].state = 3;
             eMessageSet(&name->message[rowIndex][0], MenuCharNameGet(character));
-            name->message[rowIndex][0].color = name->color + 2;
+            name->message[rowIndex][0].draw_parameter = name->color + 2;
             name->message[rowIndex][0].mode = 0x20;
             eMessageSet(&name->message[rowIndex][1], MenuCharNameGet(pilot));
-            name->message[rowIndex][1].color = name->color + 4;
+            name->message[rowIndex][1].draw_parameter = name->color + 4;
             name->message[rowIndex][1].mode = 0x20;
             for (band = 0; band < 4; band++) {
                 AgwsNamePoint *ribbonColors;
@@ -1436,7 +1377,7 @@ void AgwsNameMain(void) {
             eSpriteSet(&name->portrait[rowIndex], face);
             name->portrait[rowIndex].color = name->color + 1;
         }
-        eCursolSet(&name->cursol, 0);
+        eCursolSet((ECursolMainData *)&name->cursol, 0);
         name->mode = 0;
         name->selection = -1;
         name->state = 0xA;
@@ -1445,7 +1386,7 @@ void AgwsNameMain(void) {
         break;
     }
     case 0xA:
-        for (rowIndex = 0; rowIndex < (short)MenuWork.agws.agwsCount; rowIndex++) {
+        for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
             name->window[rowIndex].y = rowIndex / 2 * 0x60 + 0x40;
             name->window[rowIndex].x = (rowIndex & 1) * 0x320 - 0x100;
         }
@@ -1455,7 +1396,7 @@ void AgwsNameMain(void) {
     case 0xB:
     case 0x33:
         settledRows = 0;
-        for (rowIndex = 0; rowIndex < (short)MenuWork.agws.agwsCount; rowIndex++) {
+        for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
             short target;
             if (name->state == 0xB)
                 target = (rowIndex & 1) * 0xF0 + 0x18;
@@ -1465,7 +1406,7 @@ void AgwsNameMain(void) {
             if (name->window[rowIndex].x == target)
                 settledRows++;
         }
-        if (settledRows == (short)MenuWork.agws.agwsCount) {
+        if (settledRows == MenuWork.agws.agwsCount) {
             if (name->state == 0xB)
                 name->state = 0xC;
             else
@@ -1488,7 +1429,7 @@ void AgwsNameMain(void) {
         /* fallthrough */
     case 0x15:
         settledRows = 0;
-        for (rowIndex = 0; rowIndex < (short)MenuWork.agws.agwsCount; rowIndex++) {
+        for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
             short targetX, targetY;
             if (rowIndex == MenuWork.agws.selectedAgws) {
                 targetX = 0x110;
@@ -1504,12 +1445,12 @@ void AgwsNameMain(void) {
                     settledRows++;
             }
         }
-        if (settledRows == (short)MenuWork.agws.agwsCount)
+        if (settledRows == MenuWork.agws.agwsCount)
             name->state = 0x16;
         break;
     case 0x3D:
         settledRows = 0;
-        for (rowIndex = 0; rowIndex < (short)MenuWork.agws.agwsCount; rowIndex++) {
+        for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
             short targetY;
             short targetX;
             targetX = (rowIndex & 1) * 0xF0 + 0x18;
@@ -1521,7 +1462,7 @@ void AgwsNameMain(void) {
                     settledRows++;
             }
         }
-        if (settledRows == (short)MenuWork.agws.agwsCount)
+        if (settledRows == MenuWork.agws.agwsCount)
             name->state = 0xC;
         break;
     case 0x16:
@@ -1534,7 +1475,7 @@ void AgwsNameMain(void) {
             name->state = 0x1E;
             break;
         }
-        for (rowIndex = 0; rowIndex < (short)MenuWork.agws.agwsCount; rowIndex++) {
+        for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
             if (rowIndex == MenuWork.agws.selectedAgws) {
                 name->window[rowIndex].x = 0x110;
                 name->window[rowIndex].y = 0x18;
@@ -1564,26 +1505,26 @@ void AgwsNameMain(void) {
     }
     cursor = &name->cursol;
     rowIndex = 0;
-    if ((short) MenuWork.agws.agwsCount > 0) {
-        for (rowIndex = 0; rowIndex < (short)MenuWork.agws.agwsCount; rowIndex++) {
+    if (MenuWork.agws.agwsCount > 0) {
+        for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
             func_A191C0(AgwsNo[rowIndex]);
-            if (rowIndex == (signed char) MenuWork.agws.selectedAgws) {
-                name->window[rowIndex].color = 0xFFFF00;
+            if (rowIndex == MenuWork.agws.selectedAgws) {
+                name->window[rowIndex].style = 0xFFFF00;
             } else {
-                name->window[rowIndex].color = 0xFFF000;
+                name->window[rowIndex].style = 0xFFF000;
             }
             pilot = MenuAgwsPilotCheck(AgwsNo[rowIndex]);
             if (pilot == 0) {
-                name->window[rowIndex].titleFont.text = MenuTagTextGet(2);
+                name->window[rowIndex].title_font.render.text =MenuTagTextGet(2);
             } else if (PartyAttackerCheck(pilot) != 0) {
-                name->window[rowIndex].titleFont.text = MenuTagTextGet(3);
+                name->window[rowIndex].title_font.render.text =MenuTagTextGet(3);
             } else {
-                name->window[rowIndex].titleFont.text = MenuTagTextGet(4);
+                name->window[rowIndex].title_font.render.text =MenuTagTextGet(4);
             }
-            WindowDXMain((WindowDX *)(void *)&name->window[rowIndex]);
+            WindowDXMain(&name->window[rowIndex]);
             portraitRibbon = &name->ribbon[rowIndex][0];
             portraitLeft = (unsigned short)name->window[rowIndex].x + 3;
-            portraitDepth = name->window[rowIndex].color;
+            portraitDepth = name->window[rowIndex].style;
             portraitRibbon[1].x = (short) portraitLeft;
             portraitRibbon[0].x = (short) portraitLeft;
             name->ribbon[rowIndex][3].depth = portraitDepth;
@@ -1602,7 +1543,7 @@ void AgwsNameMain(void) {
             endPrintExtFunc(name->color, 3, portraitRibbon);
             pilotRibbon = &name->ribbon[rowIndex][5];
             pilotLeft = ((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 0x8E;
-            pilotDepth = name->window[rowIndex].color;
+            pilotDepth = name->window[rowIndex].style;
             name->ribbon[rowIndex][6].x = (short) pilotLeft;
             name->ribbon[rowIndex][5].x = (short) pilotLeft;
             name->ribbon[rowIndex][8].depth = pilotDepth;
@@ -1621,7 +1562,7 @@ void AgwsNameMain(void) {
             endPrintExtFunc(name->color, 3, pilotRibbon);
             titleRibbon = &name->ribbon[rowIndex][10];
             titleRight = ((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 3;
-            titleDepth = name->window[rowIndex].color;
+            titleDepth = name->window[rowIndex].style;
             name->ribbon[rowIndex][11].x = (short) titleRight;
             name->ribbon[rowIndex][10].x = (short) titleRight;
             name->ribbon[rowIndex][13].depth = titleDepth;
@@ -1639,12 +1580,12 @@ void AgwsNameMain(void) {
             name->ribbon[rowIndex][11].y = (short) titleBottom;
             endPrintExtFunc(name->color, 3, titleRibbon);
             name->portrait[rowIndex].x = (short) ((unsigned short)name->window[rowIndex].x + 0x13);
-            name->portrait[rowIndex].color = name->window[rowIndex].color;
-            name->portrait[rowIndex].y = (short) ((unsigned short)name->window[rowIndex].y + 3);
+            name->portrait[rowIndex].color = name->window[rowIndex].style;
+            name->portrait[rowIndex].y = (unsigned short)name->window[rowIndex].y + 3;
             eSpriteMain(&name->portrait[rowIndex]);
             nameRibbon = &name->ribbon[rowIndex][15];
             nameRight = ((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 0x8C;
-            nameDepth = name->window[rowIndex].color;
+            nameDepth = name->window[rowIndex].style;
             name->ribbon[rowIndex][16].x = (short) nameRight;
             name->ribbon[rowIndex][15].x = (short) nameRight;
             name->ribbon[rowIndex][18].depth = nameDepth;
@@ -1662,16 +1603,16 @@ void AgwsNameMain(void) {
             name->ribbon[rowIndex][16].y = (short) nameBottom;
             endPrintExtFunc(name->color, 3, nameRibbon);
             name->message[rowIndex][0].x = (short) ((unsigned short)name->window[rowIndex].x + 0x3C);
-            name->message[rowIndex][0].color = name->window[rowIndex].color + 2;
-            name->message[rowIndex][0].y = (short) ((unsigned short)name->window[rowIndex].y + 0x1B);
+            name->message[rowIndex][0].draw_parameter = name->window[rowIndex].style + 2;
+            name->message[rowIndex][0].y = (unsigned short)name->window[rowIndex].y + 0x1B;
             eMessageMain(&name->message[rowIndex][0]);
-            name->message[rowIndex][1].x = (short) (((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 0x53);
-            name->message[rowIndex][1].y = (short) ((unsigned short)name->window[rowIndex].y + 3);
+            name->message[rowIndex][1].x = ((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 0x53;
+            name->message[rowIndex][1].y = (unsigned short)name->window[rowIndex].y + 3;
             character = AgwsNo[rowIndex];
-            pilotText = MenuCharNameGet(MenuAgwsPilotCheck((int) character));
-            messageDepth = name->window[rowIndex].color;
+            pilotText = MenuCharNameGet(MenuAgwsPilotCheck(character));
+            messageDepth = name->window[rowIndex].style;
             name->message[rowIndex][1].text = pilotText;
-            name->message[rowIndex][1].color = messageDepth + 2;
+            name->message[rowIndex][1].draw_parameter = messageDepth + 2;
             eMessageMain(&name->message[rowIndex][1]);
         }
     }
@@ -1679,7 +1620,7 @@ void AgwsNameMain(void) {
     cursorY = (unsigned short)name->window[MenuWork.agws.selectedAgws].y + 0x13;
     name->cursol.color = name->color + 3;
     name->cursol.y = cursorY;
-    eCursolMain(cursor);
+    eCursolMain((ECursolMainData *)cursor);
     endPrintExtFunc(name->color, 6, NULL);
 }
 
@@ -1691,14 +1632,14 @@ void AgwsFaceMain(void)
     switch (self->state) {
     case 0:
         self->color = 0x00FFFFF0;
-        WindowDXSet((WindowDX *)(void *)(&self->window));
+        WindowDXSet(&self->window);
         self->window.x = -103;
-        self->window.color = self->color;
+        self->window.style = self->color;
         self->window.y = 128;
         self->window.width = 71;
         self->window.height = 100;
         self->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(&self->window));
+        WindowDXMain(&self->window);
         self->window.state = 3;
         eSpriteSet(&self->face, 0);
         self->visible = 0;
@@ -1724,12 +1665,12 @@ void AgwsFaceMain(void)
         if (self->window.x == -103) {
             self->visible = 0;
         }
-        WindowDXMain((WindowDX *)(void *)(&self->window));
+        WindowDXMain(&self->window);
         if (MenuWork.agws.listSelect >= 0) {
             eSpriteSet(&self->face, MenuFaceEpidGet((short)MenuSortGet(0, MenuWork.agws.listSelect), 0));
             self->face.x = self->window.x + 3;
             self->face.y = self->window.y + 3;
-            self->face.work = self->window.color + 2;
+            self->face.work = self->window.style + 2;
             eSpriteMain(&self->face);
         }
     }
@@ -1801,14 +1742,14 @@ void MenuAgwsCameraSet(void)
 
     camera = xglStudioGetCamera2(0);
     xglCameraInit(camera);
-    camera->position = preset.vectors[0];
+    camera->position.vector = preset.vectors[0];
     camera->state = 1;
-    camera->rotation = preset.vectors[1];
+    camera->rotation.vector = preset.vectors[1];
 }
 
 void MenuAgwsCameraMove(void)
 {
-    Vector4 *position = &xglStudioGetCamera2(0)->position;
+    Vector4 *position = &xglStudioGetCamera2(0)->position.vector;
     AgwsCameraTargets targets = cameraMoveTargets;
     int target;
 
@@ -1827,7 +1768,7 @@ void MenuAgwsCameraMove(void)
     position->z += (targets.value[target][2] - position->z) * 0.1f;
 }
 
-void MenuAgwsModelMain(AgwsModelUnit *self)
+void MenuAgwsModelMain(MenuModelUnitAgwsView *self)
 {
     AgwsModelActor *actor = self->actor;
     AgwsModelTransform *transform;
@@ -1847,7 +1788,7 @@ void MenuAgwsModelMain(AgwsModelUnit *self)
         MenuModelControl2(self, 1);
     } else {
         AgwsModelPositions positions = modelPositionTable;
-        AgwsModelVector rotation = modelUnitScaleVector;
+        DoublewordAlignedVector4 rotation = modelUnitScaleVector;
         Vector4 *position = &transform->position;
         Vector4 *rotationOf = &transform->rotation;
         Vector4 *from = &positions.position[0];
@@ -1862,9 +1803,9 @@ void MenuAgwsModelMain(AgwsModelUnit *self)
         position->x += (from->x - position->x) * 0.2f;
         position->y += (from->y - position->y) * 0.2f;
         position->z += (from->z - position->z) * 0.2f;
-        rotationOf->x += (rotation.vector.x - rotationOf->x) * 0.2f;
-        rotationOf->y += (rotation.vector.y - rotationOf->y) * 0.2f;
-        rotationOf->z += (rotation.vector.z - rotationOf->z) * 0.2f;
+        rotationOf->x += (rotation.x - rotationOf->x) * 0.2f;
+        rotationOf->y += (rotation.y - rotationOf->y) * 0.2f;
+        rotationOf->z += (rotation.z - rotationOf->z) * 0.2f;
     }
     if (MenuWork.agws.modelBreak != 0 || MenuWork.agws.state == 0x10) {
         self->state = 30;
@@ -1953,9 +1894,8 @@ void MenuAgws(void) {
     u16 temp_17_4;
 
     if (MenuWork.agws.state == 0) {
-        unsigned char *workCursor;
+        void *workCursor;
         unsigned char *blockBase;
-        unsigned char *windowBase;
         unsigned short *acceptedAgws;
         AgwsNameWorkPrefix *name;
         AgwsMenuWork *menu;
@@ -1965,46 +1905,44 @@ void MenuAgws(void) {
 
         windowIndex = 3;
         workCursor = MainMenuWorkEnd;
-        pas = (AgwsPasWork *) workCursor;
+        pas = workCursor;
         AgwsPas = pas;
         blockBase = workCursor;
         workCursor += 1904;
         pas->state = 0;
-        AgwsInfo = (AgwsInfoWork *) workCursor;
+        AgwsInfo = workCursor;
         blockBase = workCursor;
         workCursor += 1104;
         *blockBase = 0;
-        AgwsSelect = (AgwsSelectWork *) workCursor;
+        AgwsSelect = workCursor;
         blockBase = workCursor;
         workCursor += 7736;
         *blockBase = 0;
-        AgwsList = (AgwsListWork *) workCursor;
+        AgwsList = workCursor;
         blockBase = workCursor;
         workCursor += 0x5E10;
         *blockBase = 0;
-        windowBase = (unsigned char *) &AgwsList->window;
         do {
-            AgwsWinSP[windowIndex] = (AgwsListSPWindow *)
-                (windowBase + windowIndex * 0x1738);
+            AgwsWinSP[windowIndex] = &AgwsList->window[windowIndex];
             windowIndex--;
         } while (windowIndex >= 0);
-        AgwsStatus = (AgwsStatusWork *) workCursor;
+        AgwsStatus = workCursor;
         blockBase = workCursor;
         workCursor += 0x71C;
         *blockBase = 0;
-        AgwsWeapon2 = (AgwsWeapon2Work *) workCursor;
+        AgwsWeapon2 = workCursor;
         blockBase = workCursor;
         workCursor += sizeof(AgwsWeapon2Work);
         *blockBase = 0;
-        AgwsSwitch = (AgwsSwitchWork *) workCursor;
+        AgwsSwitch = workCursor;
         blockBase = workCursor;
         workCursor += 0x1B8;
         *blockBase = 0;
-        AgwsFace = (AgwsFaceWork *) workCursor;
+        AgwsFace = workCursor;
         blockBase = workCursor;
         workCursor += 0x1C4;
         *blockBase = 0;
-        AgwsName = (AgwsNameWorkPrefix *)workCursor;
+        AgwsName = workCursor;
         name = AgwsName;
         workCursor += sizeof(AgwsNameWorkPrefix);
         name->state = 0;
@@ -2036,14 +1974,14 @@ void MenuAgws(void) {
         menu->transitionTicks = 0x10;
     }
     if (MenuWork.agws.state != MenuWork.agws.pendingState) {
-        MenuWork.agws.state = (u8) MenuWork.agws.pendingState;
+        MenuWork.agws.state = MenuWork.agws.pendingState;
         MenuWork.agws.flags |= 1;
-        MenuWork.agws.commandState = (u8) MenuWork.agws.pendingState;
+        MenuWork.agws.commandState = MenuWork.agws.pendingState;
     } else {
         MenuWork.agws.flags &= 0xFE;
     }
     if (MenuWork.agws.transitionTicks != 0) {
-        MenuWork.agws.transitionTicks = (u8) (MenuWork.agws.transitionTicks + 0xFF);
+        MenuWork.agws.transitionTicks = MenuWork.agws.transitionTicks + 0xFF;
     }
     MenuAgwsCameraMove();
     switch (MenuWork.agws.state) {                       /* switch 1; irregular */
@@ -2070,7 +2008,7 @@ void MenuAgws(void) {
                         int lastAgws = (unsigned char)selectionMenu->agwsCount - 1;
                         selectionMenu->selectedAgws = lastAgws;
                     }
-                    if (selectionMenu->selectedAgws >= (short)selectionMenu->agwsCount) {
+                    if (selectionMenu->selectedAgws >= selectionMenu->agwsCount) {
                         selectionMenu->selectedAgws = 0;
                     }
                     selectionMenu->chrNo = AgwsNo[selectionMenu->selectedAgws];
@@ -2078,15 +2016,15 @@ void MenuAgws(void) {
                 xglSoundEffectNormalID(3, 0);
             }
             if (PadData.half_2a & 0x20) {
-                MenuWork.agws.pendingState = (u8) 0x22;
-                MenuWork.agws.transitionTicks = (u8) 0x18;
-                MenuWork.agws.weaponHand = (s8) 0;
-                MenuWork.agws.equipSlot = (s8) 0;
-                MenuWork.agws.selectedIndex = (s8) 0;
+                MenuWork.agws.pendingState = 0x22;
+                MenuWork.agws.transitionTicks = 0x18;
+                MenuWork.agws.weaponHand = 0;
+                MenuWork.agws.equipSlot = 0;
+                MenuWork.agws.selectedIndex = 0;
                 xglSoundEffectNormalID(1, 0);
                 MenuModelCreate(MenuModelOut, MenuWork.agws.chrNo);
                 MenuModelExtFuncSet(MenuModelOut[0], MenuAgwsModelMain, 0);
-                MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
+                MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
             }
             if (PadData.half_2a & 0x40) {
                 MenuWork.agws.pendingState = (u8) -0x10;
@@ -2109,11 +2047,11 @@ void MenuAgws(void) {
                     break;
                 }
                 if (MenuWork.agws.selectedAgws < 0)
-                    MenuWork.agws.selectedAgws = (unsigned char)MenuWork.agws.selectedAgws
-                                           + (unsigned char)MenuWork.agws.agwsCount;
-                else if (MenuWork.agws.selectedAgws >= (short)MenuWork.agws.agwsCount)
-                    MenuWork.agws.selectedAgws = (unsigned char)MenuWork.agws.selectedAgws
-                                           - (unsigned char)MenuWork.agws.agwsCount;
+                    MenuWork.agws.selectedAgws = MenuWork.agws.selectedAgws
+                                           + MenuWork.agws.agwsCount;
+                else if (MenuWork.agws.selectedAgws >= MenuWork.agws.agwsCount)
+                    MenuWork.agws.selectedAgws = MenuWork.agws.selectedAgws
+                                           - MenuWork.agws.agwsCount;
                 MenuWork.agws.modelBreak = 1;
                 MenuWork.agws.weaponHand = 0;
                 character = AgwsNo[MenuWork.agws.selectedAgws];
@@ -2166,34 +2104,34 @@ void MenuAgws(void) {
         break;
     case 0x40:                                      /* switch 1 */
         if (MenuWork.agws.flags & 1 & 0xFF) {
-            MenuWork.agws.weaponId = (s16) 0;
-            MenuWork.agws.ammoId = (u16) 0;
-            MenuWork.agws.accessoryId = (u16) 0;
+            MenuWork.agws.weaponId = 0;
+            MenuWork.agws.ammoId = 0;
+            MenuWork.agws.accessoryId = 0;
         }
         if (MenuWork.agws.transitionTicks == 0) {
             temp_16_3 = PadData.mappedRepeat;
             if (temp_16_3 == 0x1000) {
-                temp_6_2 = func_A191C0((s32) MenuWork.agws.chrNo);
+                temp_6_2 = func_A191C0(MenuWork.agws.chrNo);
                 previousWeaponHand = MenuWork.agws.weaponHand;
                 if (MenuWork.agws.weaponHand == 3) {
                     if (MenuWork.agws.equipSlot == 0) {
-                        if (MenuBulletCheck((s32) temp_6_2->accessoryId[0], -1) != 0) {
-                            MenuWork.agws.equipSlot = (s8) 1;
+                        if (MenuBulletCheck(temp_6_2->accessoryId[0], -1) != 0) {
+                            MenuWork.agws.equipSlot = 1;
                         } else {
-                            MenuWork.agws.equipSlot = (s8) 0;
+                            MenuWork.agws.equipSlot = 0;
                         }
-                        MenuWork.agws.weaponHand = (s8) 2;
+                        MenuWork.agws.weaponHand = 2;
                     } else {
                         MenuWork.agws.equipSlot--;
                     }
                     xglSoundEffectNormalID(3, 0);
                 } else if (MenuWork.agws.equipSlot == 1) {
-                    MenuWork.agws.equipSlot = (s8) 0;
+                    MenuWork.agws.equipSlot = 0;
                     xglSoundEffectNormalID(3, 0);
                 } else if (MenuWork.agws.weaponHand == 0) {
                     if (PadData.mappedPressed == temp_16_3) {
-                        MenuWork.agws.weaponHand = (s8) 3;
-                        MenuWork.agws.equipSlot = (s8) 2;
+                        MenuWork.agws.weaponHand = 3;
+                        MenuWork.agws.equipSlot = 2;
                     }
                 } else {
                     temp_3_3 = previousWeaponHand - 1;
@@ -2206,15 +2144,15 @@ void MenuAgws(void) {
             }
             temp_17_4 = PadData.mappedRepeat;
             if (temp_17_4 == 0x4000) {
-                temp_4_2 = func_A191C0((s32) MenuWork.agws.chrNo);
+                temp_4_2 = func_A191C0(MenuWork.agws.chrNo);
                 if (MenuWork.agws.weaponHand == 3) {
                     if (MenuWork.agws.equipSlot == 2) {
                         if (PadData.mappedPressed == temp_17_4) {
-                            MenuWork.agws.equipSlot = (s8) 0;
-                            MenuWork.agws.weaponHand = (s8) 0;
+                            MenuWork.agws.equipSlot = 0;
+                            MenuWork.agws.weaponHand = 0;
                         }
                     } else {
-                        MenuWork.agws.equipSlot = (s8) ((u8) MenuWork.agws.equipSlot + 1);
+                        MenuWork.agws.equipSlot = MenuWork.agws.equipSlot + 1;
                         xglSoundEffectNormalID(3, 0);
                     }
                 } else {
@@ -2223,7 +2161,7 @@ void MenuAgws(void) {
                         MenuWork.agws.equipSlot = (s8) temp_2_10;
                     } else {
                         MenuWork.agws.equipSlot = (s8) 0;
-                        MenuWork.agws.weaponHand = (s8) ((u8) MenuWork.agws.weaponHand + 1);
+                        MenuWork.agws.weaponHand = (s8) (MenuWork.agws.weaponHand + 1);
                     }
                     xglSoundEffectNormalID(3, 0);
                 }
@@ -2239,16 +2177,16 @@ void MenuAgws(void) {
                             selectionMenu->selectedIndex = 0;
                         } else {
                             MenuWork.agws.pendingState = 0x46;
-                            MenuWork.agws.selectedAmmo = (s8) -1;
+                            MenuWork.agws.selectedAmmo = -1;
                         }
                     } else {
                         MenuWork.agws.pendingState = 0x62;
-                        MenuWork.agws.selectedAccessory = (s8) -1;
+                        MenuWork.agws.selectedAccessory = -1;
                     }
-                    MenuWork.agws.transitionTicks = (u8) 0x10;
+                    MenuWork.agws.transitionTicks = 0x10;
                     xglSoundEffectNormalID(1, 0);
                 } else {
-                    temp_3_4 = func_A191C0((s32) MenuWork.agws.chrNo);
+                    temp_3_4 = func_A191C0(MenuWork.agws.chrNo);
                     if (MenuWork.agws.weaponHand != 3) {
                         if (MenuWork.agws.equipSlot != 1) {
                             temp_18_2 = MenuRWeaponCheck2(temp_3_4->weaponId[MenuWork.agws.weaponHand]);
@@ -2257,7 +2195,7 @@ void MenuAgws(void) {
                             if (temp_18_2 != 0) {
                                 dataWpnBoxInc(temp_18_2);
                             }
-                            MenuWork.agws.weaponChange = (s8) 1;
+                            MenuWork.agws.weaponChange = 1;
                             temp_16_5 = temp_3_4->ammoId[MenuWork.agws.weaponHand];
                             temp_3_4->ammoId[MenuWork.agws.weaponHand] = 0;
                             if ((MenuBulletCheck(temp_18_2, -1) != 0) && (temp_16_5 != 0)) {
@@ -2274,15 +2212,15 @@ void MenuAgws(void) {
                             dataAccBoxInc(temp_4_3);
                         }
                     }
-                    MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
+                    MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     xglSoundEffectNormalID(0x11, 0);
                 }
             }
             if (PadData.half_2a == 0x40) {
                 if (MenuCursorKeepCheck() == 0) {
-                    MenuWork.agws.reserveCursor = (s8) 0;
+                    MenuWork.agws.reserveCursor = 0;
                 }
-                    MenuWork.agws.pendingState = (u8) 0x22;
+                    MenuWork.agws.pendingState = 0x22;
                 xglSoundEffectNormalID(2, 0);
             }
         }
@@ -2313,15 +2251,15 @@ void MenuAgws(void) {
             }
         }
         if (MenuWork.agws.transitionTicks == 0) {
-            MenuWork.agws.selectedIndex = (s8) MenuSelectMove((s32) MenuWork.agws.selectedIndex, (s32) MenuWork.agws.nameRow, 0);
+            MenuWork.agws.selectedIndex = (s8) MenuSelectMove(MenuWork.agws.selectedIndex, MenuWork.agws.nameRow, 0);
             if (PadData.half_2a & 0x40) {
                 MenuWork.agws.pendingState = (u8) 0x40;
                 MenuWork.agws.transitionTicks = (u8) 0x10;
                 xglSoundEffectNormalID(2, 0);
             }
             if (PadData.half_2a & 0x20) {
-                MenuWork.agws.pendingState = (u8) 0x44;
-                MenuWork.agws.transitionTicks = (u8) 0x10;
+                MenuWork.agws.pendingState = 0x44;
+                MenuWork.agws.transitionTicks = 0x10;
                 xglSoundEffectNormalID(1, 0);
             }
         }
@@ -2329,17 +2267,17 @@ void MenuAgws(void) {
     case 0x44:                                      /* switch 1 */
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Wpn();
-            MenuWork.agws.selectedWeapon = (s8) -1;
-            MenuWork.agws.weaponId = (s16) 0;
+            MenuWork.agws.selectedWeapon = -1;
+            MenuWork.agws.weaponId = 0;
         } else if (MenuWork.agws.transitionTicks == 0) {
-                temp_19 = WindowSPSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), PadData.mappedRepeat);
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), &MenuKeepSelect[MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex] * 5 - 5]);
+                temp_19 = WindowSPSelect(AgwsWinSP[0], PadData.mappedRepeat);
+                WindowSPKeepSelect(AgwsWinSP[0], &MenuKeepSelect[MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex] * 5 - 5]);
                 if (MenuWork.agws.selectedWeapon != temp_19) {
-                    temp_2_3 = func_A191C0((s32) MenuWork.agws.chrNo);
+                    temp_2_3 = func_A191C0(MenuWork.agws.chrNo);
                     MenuWork.agws.selectedWeapon = (s8) temp_19;
                     temp_2_4 = MenuSortGet(0, MenuWork.agws.selectedWeapon);
                     MenuWork.agws.weaponId = (s16) temp_2_4;
-                    temp_2_5 = MenuWeaponEquipPosCheck((s32) MenuWork.agws.chrNo, (s32) (s16) temp_2_4, (s32) MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex], (s32) MenuWork.agws.weaponHand);
+                    temp_2_5 = MenuWeaponEquipPosCheck(MenuWork.agws.chrNo, (s16) temp_2_4, (s32) MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex], MenuWork.agws.weaponHand);
                     MenuWork.agws.weaponHandKind = (short) temp_2_5;
                     if (MenuWork.agws.weaponHandKind != 0) {
                         temp_23 = temp_2_3->hand[MenuWork.agws.weaponHand];
@@ -2352,21 +2290,21 @@ void MenuAgws(void) {
                         } else {
                             temp_2_3->ammoId[MenuWork.agws.weaponHand] = 0;
                         }
-                        MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 1);
+                        MenuAgwsParaSet(MenuWork.agws.chrNo, 1);
                         temp_2_3->ammoId[MenuWork.agws.weaponHand] = temp_21;
                         temp_2_3->weaponId[MenuWork.agws.weaponHand] = temp_22;
                         temp_2_3->hand[MenuWork.agws.weaponHand] = temp_23;
-                        MenuWork.agws.weaponChange = (s8) 1;
+                        MenuWork.agws.weaponChange = 1;
                     } else {
-                        MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
-                        MenuWork.agws.weaponChange = (s8) 2;
+                        MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
+                        MenuWork.agws.weaponChange = 2;
                     }
                     MenuWork.agws.selectedWeapon = (s8) temp_19;
                 }
                 if ((PadData.half_2a == 0x20) && (MenuWork.agws.selectedWeapon >= 0)) {
-                    temp_2_7 = MenuWeaponEquipPosCheck((s32) MenuWork.agws.chrNo, (s32) MenuWork.agws.weaponId, (s32) MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex], (s32) MenuWork.agws.weaponHand);
+                    temp_2_7 = MenuWeaponEquipPosCheck(MenuWork.agws.chrNo, MenuWork.agws.weaponId, (s32) MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex], MenuWork.agws.weaponHand);
                     if (temp_2_7 != 0) {
-                        temp_2_8 = func_A191C0((s32) MenuWork.agws.chrNo);
+                        temp_2_8 = func_A191C0(MenuWork.agws.chrNo);
                         temp_21_2 = MenuRWeaponCheck2(temp_2_8->weaponId[MenuWork.agws.weaponHand]);
                         temp_19_2 = temp_2_8->ammoId[MenuWork.agws.weaponHand];
                         temp_2_8->weaponId[MenuWork.agws.weaponHand] = MenuRWeaponCheck(MenuWork.agws.weaponId, temp_2_7);
@@ -2387,27 +2325,27 @@ void MenuAgws(void) {
                                 }
                             }
                         }
-                        MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
-                        MenuWork.agws.pendingState = (u8) 0x40;
-                        MenuWork.agws.transitionTicks = (u8) 0x10;
+                        MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
+                        MenuWork.agws.pendingState = 0x40;
+                        MenuWork.agws.transitionTicks = 0x10;
                         xglSoundEffectNormalID(0x10, 0);
                     } else {
                         xglSoundEffectNormalID(5, 0);
                     }
                 }
                 if (PadData.half_2a == 0x40) {
-                    MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
-                    MenuWork.agws.pendingState = (u8) 0x42;
-                    MenuWork.agws.weaponChange = (s8) 2;
-                    MenuWork.agws.transitionTicks = (u8) 0x10;
+                    MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
+                    MenuWork.agws.pendingState = 0x42;
+                    MenuWork.agws.weaponChange = 2;
+                    MenuWork.agws.transitionTicks = 0x10;
                     xglSoundEffectNormalID(2, 0);
                     if (MenuCursorKeepCheck() == 0) {
-                        MenuWork.agws.selectedIndex = (s8) 0;
+                        MenuWork.agws.selectedIndex = 0;
                     }
                     {
                         int savedSelection;
                         for (savedSelection = 0; savedSelection < 8; savedSelection++)
-                            WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[savedSelection * 5]));
+                            WindowSPKeepSelectCheck(&MenuKeepSelect[savedSelection * 5]);
                     }
                 }
         }
@@ -2419,13 +2357,13 @@ void MenuAgws(void) {
             MenuAgwsListMake_Gun();
             MenuWork.agws.selectedAmmo = -1;
         } else if (MenuWork.agws.transitionTicks == 0) {
-                int selection = WindowSPSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), PadData.mappedRepeat);
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), &MenuKeepSelect[0x1E]);
+                int selection = WindowSPSelect(AgwsWinSP[0], PadData.mappedRepeat);
+                WindowSPKeepSelect(AgwsWinSP[0], &MenuKeepSelect[0x1E]);
                 if (MenuWork.agws.selectedAmmo != selection) {
                     AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
                     MenuWork.agws.selectedAmmo = selection;
                     MenuWork.agws.ammoId = MenuSortGet(0, MenuWork.agws.selectedAmmo);
-                    if (MenuBulletCheck(MenuWork.agws.weaponId, (short)MenuWork.agws.ammoId) != 0) {
+                    if (MenuBulletCheck(MenuWork.agws.weaponId, MenuWork.agws.ammoId) != 0) {
                         short previousAmmo = org->ammoId[MenuWork.agws.weaponHand];
                         org->ammoId[MenuWork.agws.weaponHand] = MenuWork.agws.ammoId;
                         MenuAgwsParaSet(MenuWork.agws.chrNo, 1);
@@ -2435,7 +2373,7 @@ void MenuAgws(void) {
                     }
                 }
                 if (PadData.half_2a & 0x20) {
-                    if (MenuBulletCheck(MenuWork.agws.weaponId, (short)MenuWork.agws.ammoId) != 0) {
+                    if (MenuBulletCheck(MenuWork.agws.weaponId, MenuWork.agws.ammoId) != 0) {
                         AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
                         short previousAmmo = org->ammoId[MenuWork.agws.weaponHand];
                         short weapon;
@@ -2451,11 +2389,11 @@ void MenuAgws(void) {
                                 dataBltBoxInc(previousAmmo);
                             }
                         }
-                        if ((short)MenuWork.agws.ammoId != 0) {
+                        if (MenuWork.agws.ammoId != 0) {
                             weapon = org->weaponId[MenuWork.agws.weaponHand];
                             if (weapon != 0
-                                    && func_A1A3D8(weapon)->defaultAmmoId != (short)MenuWork.agws.ammoId)
-                                dataBltBoxDec((short)MenuWork.agws.ammoId);
+                                    && func_A1A3D8(weapon)->defaultAmmoId != MenuWork.agws.ammoId)
+                                dataBltBoxDec(MenuWork.agws.ammoId);
                         }
                         MenuWork.agws.pendingState = 0x40;
                         MenuWork.agws.transitionTicks = 0x10;
@@ -2469,7 +2407,7 @@ void MenuAgws(void) {
                     MenuWork.agws.pendingState = 0x40;
                     MenuWork.agws.transitionTicks = 0x10;
                     xglSoundEffectNormalID(2, 0);
-                    WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[0x1E]));
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[0x1E]);
                 }
         }
         break;
@@ -2478,14 +2416,14 @@ void MenuAgws(void) {
             MenuAgwsListMake_Acc();
             MenuWork.agws.selectedAccessory = -1;
         } else if (MenuWork.agws.transitionTicks == 0) {
-                signed char selection = WindowSPSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), PadData.mappedRepeat);
+                signed char selection = WindowSPSelect(AgwsWinSP[0], PadData.mappedRepeat);
                 unsigned short buttons;
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), &MenuKeepSelect[0x23]);
+                WindowSPKeepSelect(AgwsWinSP[0], &MenuKeepSelect[0x23]);
                 if (MenuWork.agws.selectedAccessory != selection) {
                     MenuWork.agws.selectedAccessory = selection;
                     MenuWork.agws.accessoryId = MenuSortGet(0, selection);
                     if (MenuAccessoryEquipCheck(MenuWork.agws.chrNo,
-                                               (short)MenuWork.agws.accessoryId,
+                                               MenuWork.agws.accessoryId,
                                                MenuWork.agws.equipSlot) != 0) {
                         AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
                         short previousAccessory = org->accessoryId[MenuWork.agws.equipSlot];
@@ -2498,7 +2436,7 @@ void MenuAgws(void) {
                 }
                 if (MenuWork.agws.selectedAccessory >= 0 && PadData.half_2a == 0x20) {
                     if (MenuAccessoryEquipCheck(MenuWork.agws.chrNo,
-                                               (short)MenuWork.agws.accessoryId,
+                                               MenuWork.agws.accessoryId,
                                                MenuWork.agws.equipSlot) != 0) {
                         AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
                         short previousAccessory = org->accessoryId[MenuWork.agws.equipSlot];
@@ -2506,7 +2444,7 @@ void MenuAgws(void) {
                         MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                         if (previousAccessory != 0)
                             dataAccBoxInc(previousAccessory);
-                        dataAccBoxDec((short)MenuWork.agws.accessoryId);
+                        dataAccBoxDec(MenuWork.agws.accessoryId);
                         MenuWork.agws.pendingState = 0x40;
                         xglSoundEffectNormalID(0x10, 0);
                     } else {
@@ -2518,7 +2456,7 @@ void MenuAgws(void) {
                     MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     MenuWork.agws.pendingState = buttons;
                     xglSoundEffectNormalID(2, 0);
-                    WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[0x23]));
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[0x23]);
                 }
         }
         break;
@@ -2527,36 +2465,36 @@ void MenuAgws(void) {
             MenuAgwsListMake_Pilot();
         } else {
             if (MenuWork.agws.transitionTicks == 0) {
-                MenuWork.agws.listSelect = (s8) WindowSPSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), PadData.mappedRepeat);
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), MenuKeepSelect + 0x28);
-                temp_22_2 = MenuAgwsPilotCheck((s32) MenuWork.agws.chrNo);
-                temp_23_2 = MenuSortGet(0, (s32) MenuWork.agws.listSelect);
+                MenuWork.agws.listSelect = (s8) WindowSPSelect(AgwsWinSP[0], PadData.mappedRepeat);
+                WindowSPKeepSelect(AgwsWinSP[0], MenuKeepSelect + 0x28);
+                temp_22_2 = MenuAgwsPilotCheck(MenuWork.agws.chrNo);
+                temp_23_2 = MenuSortGet(0, MenuWork.agws.listSelect);
                 temp_21_3 = func_A191C0(temp_22_2);
-                temp_19_3 = func_A191C0((s32) temp_23_2);
+                temp_19_3 = func_A191C0(temp_23_2);
                 temp_17_3 = temp_21_3->agwsId;
                 temp_16_2 = temp_19_3->agwsId;
-                temp_21_3->agwsId = (s16) 0;
-                temp_19_3->agwsId = (s16) (u16) MenuWork.agws.chrNo;
-                MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 1);
-                temp_19_3->agwsId = (s16) temp_16_2;
-                temp_21_3->agwsId = (s16) temp_17_3;
+                temp_21_3->agwsId = 0;
+                temp_19_3->agwsId = MenuWork.agws.chrNo;
+                MenuAgwsParaSet(MenuWork.agws.chrNo, 1);
+                temp_19_3->agwsId = temp_16_2;
+                temp_21_3->agwsId = temp_17_3;
                 if (PadData.half_2a & 0x20) {
                     if (temp_22_2 == 0) {
                         if (temp_19_3->agwsId == 0) {
-                            temp_19_3->agwsId = (s16) (u16) MenuWork.agws.chrNo;
+                            temp_19_3->agwsId = MenuWork.agws.chrNo;
                             xglSoundEffectNormalID(0x12, 0);
                             MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                         } else {
                             xglSoundEffectNormalID(5, 0);
                         }
                     } else if (temp_22_2 == temp_23_2) {
-                        temp_19_3->agwsId = (s16) 0;
+                        temp_19_3->agwsId = 0;
                         xglSoundEffectNormalID(0x13, 0);
-                        MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
+                        MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     } else {
                         if (temp_19_3->agwsId == 0) {
-                            temp_19_3->agwsId = (s16) (u16) MenuWork.agws.chrNo;
-                            temp_21_3->agwsId = (s16) 0;
+                            temp_19_3->agwsId = MenuWork.agws.chrNo;
+                            temp_21_3->agwsId = 0;
                             xglSoundEffectNormalID(0x12, 0);
                             MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                         } else {
@@ -2566,18 +2504,18 @@ void MenuAgws(void) {
                     MenuAgwsListMake_Pilot();
                 }
                 if (PadData.half_2a & 0x40) {
-                    MenuAgwsParaSet((s32) MenuWork.agws.chrNo, 0);
-                    MenuWork.agws.pendingState = (u8) 0x22;
-                    MenuWork.agws.transitionTicks = (u8) 0x10;
+                    MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
+                    MenuWork.agws.pendingState = 0x22;
+                    MenuWork.agws.transitionTicks = 0x10;
                     xglSoundEffectNormalID(2, 0);
                     if (MenuCursorKeepCheck() == 0) {
-                        MenuWork.agws.reserveCursor = (s8) 0;
+                        MenuWork.agws.reserveCursor = 0;
                     }
-                    WindowSPKeepSelectCheck((unsigned char *)(void *)(MenuKeepSelect + 0x28));
+                    WindowSPKeepSelectCheck(MenuKeepSelect + 0x28);
                 }
             } else {
-                MenuWork.agws.listSelect = (s8) WindowSPSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), 0U);
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(AgwsWinSP[0]), MenuKeepSelect + 0x28);
+                MenuWork.agws.listSelect = (s8) WindowSPSelect(AgwsWinSP[0], 0U);
+                WindowSPKeepSelect(AgwsWinSP[0], MenuKeepSelect + 0x28);
             }
         }
         break;
@@ -2605,7 +2543,7 @@ void MenuAgws(void) {
     AgwsSwitchMain();
     AgwsFaceMain();
     AgwsNameMain();
-    xglFontDebugPrintf(0, 0x38, (s8 *) agwsTitleText);
+    xglFontDebugPrintf(0, 0x38, agwsTitleText);
     xglFontDebugHex(0, 0x48, MenuWork.agws.state, 2);
     xglFontDebugHex(0, 0x60, MenuWork.agws.menuSelection, 2);
     xglFontDebugHex(0, 0x68, MenuWork.agws.selectedAgws, 2);
@@ -2614,17 +2552,17 @@ void MenuAgws(void) {
     xglFontDebugHex(0, 0x80, MenuWork.agws.weaponHand, 2);
     xglFontDebugHex(0, 0x88, MenuWork.agws.equipSlot, 2);
     xglFontDebugHex(0, 0x90, MenuWork.agws.agwsCount, 1);
-    xglFontDebugPrintf(0x40, 0x50, (s8 *) paddedNumberFormat, MenuWork.agws.selectedWeapon);
-    xglFontDebugPrintf(0x40, 0x58, (s8 *) paddedNumberFormat, MenuWork.agws.selectedAmmo);
-    xglFontDebugPrintf(0x40, 0x60, (s8 *) paddedNumberFormat, MenuWork.agws.selectedAccessory);
-    xglFontDebugPrintf(0x40, 0x68, (s8 *) paddedNumberFormat, MenuWork.agws.listSelect);
-    xglFontDebugPrintf(0x40, 0x78, (s8 *) equipPosFormat, MenuWork.agws.pilotId);
+    xglFontDebugPrintf(0x40, 0x50, paddedNumberFormat, MenuWork.agws.selectedWeapon);
+    xglFontDebugPrintf(0x40, 0x58, paddedNumberFormat, MenuWork.agws.selectedAmmo);
+    xglFontDebugPrintf(0x40, 0x60, paddedNumberFormat, MenuWork.agws.selectedAccessory);
+    xglFontDebugPrintf(0x40, 0x68, paddedNumberFormat, MenuWork.agws.listSelect);
+    xglFontDebugPrintf(0x40, 0x78, equipPosFormat, MenuWork.agws.pilotId);
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char menuAgwsParaSetPeriodText[2] = ".";
 
-const unsigned char equipPosFormat[16] = "equip_pos %4d";
+const char equipPosFormat[16] = "equip_pos %4d";
 
 /* Text: \x01Clear Time */
 const char SeisanClearTimeText[16] = "\001Clear Time";
@@ -2668,9 +2606,9 @@ const char emptyMessageText[8] = "";
 const AgwsWeapon2MountSide weapon2MountSideTable[2] = { { .icon = { 799, 800 } }, { .icon = { 0, 0 } } };
 
 /* Text: {reset}AGWS */
-unsigned char agwsTitleText[8] = "\013AGWS";
+char agwsTitleText[8] = "\013AGWS";
 
-unsigned char paddedNumberFormat[4] = "%4d";
+char paddedNumberFormat[4] = "%4d";
 
 AgwsInfoWork * AgwsInfo = 0;
 

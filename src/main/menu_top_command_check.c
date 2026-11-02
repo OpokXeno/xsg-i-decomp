@@ -1,9 +1,15 @@
 #include "common.h"
+#include "main/menu_top_command_check.h"
 #include "menu_top_command_check.h"
 #include "main/e_battle_win_open.h"
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_task.h"
+#include "main/nml_model_set.h"
+#include "main/open_close_main.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_font.h"
+#include "main/xgl_light.h"
 
 typedef struct MenuPointaTask {
     XglTaskPrefix link;
@@ -51,32 +57,18 @@ extern const char TopMenuBattleFormationText[24];
 extern const char TopMenuGameOptionsText[16];
 extern const char TopMenuReserveText[24];
 
-extern void xglMatrixStackLoad(float matrix[4][4]);
 char *MenuTagTextGet(int index);
 int MenuMaryIdChange(int id);
 static void tskMenuTaiPointa(MenuPointaTask *task);
-extern void xglCameraInit(StudioCamera *camera);
-void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work);
 void xglLightIntensityAmbient(void *light, void *intensity);
 void xglLightIntensityParallel(void *light, int index, void *intensity);
 void xglLightDirection(void *light, int index, void *direction);
-void xglLightCalcMatrix(void *light);
-void nmlModelSetLight(Matrix4 intensity, Matrix4 direction);
-void nmlModelSetTexture(const char *texture);
-void nmlModelSetPlace(float matrix[4][4]);
 void nmlModelEntry(int model);
-void nmlModelFlush(void);
-
 void xglRotTransPersN(void *destination, Matrix4 *matrix,
                      const Vector4 *points, int count, int cameraId);
 
 void endPrintDirectLine(MenuModelLinePoint *line);
 int WindowTexAddrGet(int index);
-void eMessageMain(void *message);
-void eCursolSet(MenuSelectCursor *cursor, int mode);
-void eCursolMain(MenuSelectCursor *cursor);
-int xglFontGetStringWidth(const char *text);
-
 static const float pointerTargetRotationVector[4] = {1.57079637f, 0.0f, 0.0f, 1.0f};
 
 static const MenuLightingSources menuLightingDefaults = {
@@ -118,12 +110,12 @@ static inline MenuStatusValuePair MenuStatusEncodeValue(short current, short max
     return value;
 }
 
+/* Index 3 addresses the halfword at +0x3c, the first word after the three
+ * attack slots (the first technique record), as the original does. */
 static inline unsigned short MenuPointaGuardWord(MenuPointaTask *task)
 {
-    MenuTopPartyData *party = (MenuTopPartyData *)PartyDataGet();
-    return *((const void *)(party->slot + task->index) ==
-        (const void *)&party->firstTechniqueWord ?
-        &party->firstTechniqueWord : &party->slot[task->index].id);
+    PartyDataPrefix *party = PartyDataGet();
+    return party->attack_slots[task->index].party_id;
 }
 
 int MenuTopCommandCheck(int commandId)
@@ -147,33 +139,33 @@ void TopStatusWinMain(void)
         y = 28;
         i = 0;
         do {
-            MenuTopPartyData *party;
+            PartyDataPrefix *party;
             unsigned short partyId;
 
-            party = (MenuTopPartyData *)PartyDataGet();
-            partyId = party->slot[i].id;
+            party = PartyDataGet();
+            partyId = party->attack_slots[i].party_id;
             chrNo = MenuMaryIdChange(partyId);
             if (chrNo != 0) {
-                MenuTopWindow *const window = &status->window[i];
+                WindowDX *const window = &status->window[i];
                 MenuStatusPanel *const panel = &status->panel[i];
 
-                WindowDXSet((WindowDX *)window);
-                status->window[i].draw = (void (*)(WindowDX *, void *))MenuStatusDisp;
+                WindowDXSet(window);
+                status->window[i].close_callback = MenuStatusDisp;
                 window->x = 16;
                 window->x = -272;
-                status->window[i].color = status->color;
+                status->window[i].style = status->color;
                 status->window[i].width = 240;
                 status->window[i].height = 99;
-                window->panel = panel;
+                window->close_callback_arg = panel;
                 status->window[i].y = y;
-                status->window[i].title = MenuTagTextGet(1);
-                window->enabled = 1;
+                status->window[i].tag_id = MenuTagTextGet(1);
+                window->ribbon_initialized = 1;
                 status->panel[i].enabled = 1;
                 status->panel[i].offsetX = 0;
                 status->panel[i].offsetY = 0;
                 status->panel[i].chrNo = chrNo;
                 window->state = 1;
-                WindowDXMain((WindowDX *)window);
+                WindowDXMain(window);
                 status->window[i].state = 3;
                 status->count++;
             }
@@ -194,7 +186,7 @@ void TopStatusWinMain(void)
         }
         for (i = 0; i < status->count; i++) {
             MoveSlide(&status->window[i].x, &slideTarget, 5.0f);
-            WindowDXMain((WindowDX *)&status->window[i]);
+            WindowDXMain(&status->window[i]);
         }
         break;
     }
@@ -207,18 +199,18 @@ void TopInfoMain(void)
 
     switch (info->state) {
     case 0:
-        WindowDXSet((WindowDX *)&info->window);
+        WindowDXSet(&info->window);
         info->window.x = -0x10;
         info->window.y = 0x1E0;
         info->window.width = 0x220;
         info->window.height = 0x36;
-        info->window.color = 0xF000F0;
-        info->window.draw = (void (*)(WindowDX *, void *))MenuInfoWindow;
-        info->window.panel = &info->panel;
+        info->window.style = 0xF000F0;
+        info->window.close_callback = MenuInfoWindow;
+        info->window.close_callback_arg = &info->panel;
         info->panel.x = 0;
         info->panel.y = 0;
         info->window.state = 1;
-        WindowDXMain((WindowDX *)&info->window);
+        WindowDXMain(&info->window);
         info->window.state = 3;
         info->slide = -1;
         info->enabled = 1;
@@ -243,7 +235,7 @@ void TopInfoMain(void)
             info->panel.text = topMenuEmptyText;
         }
         MoveSlide(&info->window.y, &slideTarget, 5.0f);
-        WindowDXMain((WindowDX *)&info->window);
+        WindowDXMain(&info->window);
         break;
     }
 }
@@ -265,20 +257,20 @@ void TopMenuWinMain(void)
                 command_0[i].locked = 0;
             }
         }
-        WindowDXSet((WindowDX *)&menu->window);
+        WindowDXSet(&menu->window);
         menu->window.x = 0x220;
         menu->window.y = 0x1C;
-        menu->window.color = menu->color;
+        menu->window.style = menu->color;
         menu->window.width = 0xC2;
         menu->window.height = 0xDE;
-        menu->window.draw = (void (*)(WindowDX *, void *))MenuSelectWindow;
-        menu->window.panel = &menu->panel;
-        menu->window.title = topMenuTitleText;
+        menu->window.close_callback = MenuSelectWindow;
+        menu->window.close_callback_arg = &menu->panel;
+        menu->window.tag_id = topMenuTitleText;
         menu->panel.commands = command_0;
         menu->panel.cursor = 0;
         menu->panel.rows = 2;
         menu->window.state = 1;
-        WindowDXMain((WindowDX *)&menu->window);
+        WindowDXMain(&menu->window);
         menu->window.state = 3;
         menu->enabled = 1;
         menu->state = 2;
@@ -295,7 +287,7 @@ void TopMenuWinMain(void)
             slideTarget = 0x220;
         }
         MoveSlide(&menu->window.x, &slideTarget, 5.0f);
-        WindowDXMain((WindowDX *)&menu->window);
+        WindowDXMain(&menu->window);
         break;
     }
 }
@@ -324,12 +316,12 @@ void TopFaceExWinMain(void)
             face->first = 1;
         }
         for (j = face->first; j < 3; j++) {
-            eRibbonSet(&face->ribbon[j].ribbon, 3);
-            face->ribbon[j].ribbon.x = 0x280;
-            face->ribbon[j].ribbon.y = ((j - face->first) << 5) + 0x100;
-            face->ribbon[j].ribbon.color = face->color;
-            face->ribbon[j].ribbon.width = 0xF8;
-            face->ribbon[j].ribbon.height = 0x18;
+            eRibbonSet(&face->ribbon[j], 3);
+            face->ribbon[j].x = 0x280;
+            face->ribbon[j].y = ((j - face->first) << 5) + 0x100;
+            face->ribbon[j].work = face->color;
+            face->ribbon[j].width = 0xF8;
+            face->ribbon[j].height = 0x18;
         }
         for (j = 0; j < face->count; j++) {
             eSpriteSet(&face->sprite[j], MenuFaceEpidGet(face->ids[j], 1));
@@ -337,11 +329,11 @@ void TopFaceExWinMain(void)
         }
         for (i = 0; i < 3; i++) {
             eTagFontSet(&face->tag[i], msg_1_0036C360[i]);
-            face->tag[i].color = face->color + 2;
+            face->tag[i].work = face->color + 2;
         }
         for (i = 0; i < 2; i++) {
             eNumberSet(&face->number[i], 0);
-            face->number[i].color = face->color + 2;
+            face->number[i].work = face->color + 2;
         }
         face->enabled = 1;
         face->state = 2;
@@ -355,30 +347,30 @@ void TopFaceExWinMain(void)
             }
         }
         for (i = face->first; i < 3; i++) {
-            MoveSlide(&face->ribbon[i].ribbon.x, &slideTarget[i], 5.0f);
-            eRibbonMain(&face->ribbon[i].ribbon);
+            MoveSlide(&face->ribbon[i].x, &slideTarget[i], 5.0f);
+            eRibbonMain(&face->ribbon[i]);
         }
         for (i = face->first; i < 3; i++) {
-            face->tag[i].x = face->ribbon[i].ribbon.x + 0x42;
-            face->tag[i].y = face->ribbon[i].ribbon.y + 4;
+            face->tag[i].x = face->ribbon[i].x + 0x42;
+            face->tag[i].y = face->ribbon[i].y + 4;
             eTagFontMain(&face->tag[i]);
         }
         for (j = 0; j < face->count; j++) {
-            face->sprite[j].x = face->ribbon[0].ribbon.x + j * 20 + 0x4A;
-            face->sprite[j].y = face->ribbon[0].ribbon.y;
+            face->sprite[j].x = face->ribbon[0].x + j * 20 + 0x4A;
+            face->sprite[j].y = face->ribbon[0].y;
             eSpriteMain(&face->sprite[j]);
         }
         face->time = *PartyTimeUpDate();
         PartyTimeDispChange(&face->time);
-        face->number[0].x = face->ribbon[1].ribbon.x + 0x4A;
-        face->number[0].digits = 2;
-        face->number[0].y = face->ribbon[1].ribbon.y + 4;
+        face->number[0].x = face->ribbon[1].x + 0x4A;
+        face->number[0].format = 2;
+        face->number[0].y = face->ribbon[1].y + 4;
         face->number[0].value = face->time.packed;
         eNumberMain(&face->number[0]);
-        face->number[1].x = face->ribbon[2].ribbon.x + 0x4A;
-        face->number[1].y = face->ribbon[2].ribbon.y + 4;
-        face->number[1].width = 9;
-        face->number[1].digits = 0xE;
+        face->number[1].x = face->ribbon[2].x + 0x4A;
+        face->number[1].y = face->ribbon[2].y + 4;
+        face->number[1].digits = 9;
+        face->number[1].format = 0xE;
         face->number[1].value = dataMoneyBoxChk();
         eNumberMain(&face->number[1]);
         break;
@@ -416,7 +408,7 @@ void TopMenu(void)
         } else {
             MenuTopCommandLock = 0;
         }
-        if (((MenuTopPartyData *)PartyDataGet())->takeAgwsMask == 0) {
+        if ((PartyDataGet())->take_agws_mask == 0) {
             MenuTopCommandLock |= 8;
         }
         if (PartyFriendLockCheck(3, 1) == 0) {
@@ -463,11 +455,11 @@ void TopMenu(void)
             MenuModelMemorySet(12);
             MenuModelMenuMotionLoad();
             for (modelIndex = 0; modelIndex < 3; modelIndex++) {
-                if (((MenuTopPartyData *)PartyDataGet())
-                        ->slot[modelIndex].id < 0x11) {
+                if ((PartyDataGet())
+                        ->attack_slots[modelIndex].party_id < 0x11) {
                     MenuModelCreate(&MenuModelOut[modelIndex],
-                        ((MenuTopPartyData *)PartyDataGet())
-                            ->slot[modelIndex].id);
+                        (PartyDataGet())
+                            ->attack_slots[modelIndex].party_id);
                 }
             }
         }
@@ -500,14 +492,14 @@ void TopMenu(void)
 static void tskMenuTai(MenuTaiTask *task)
 {
     Vector4 targetRotation;
-    MenuModelLighting light;
+    StudioLight light;
     MenuLightingSources sources;
     Vector4 grid[24];
     Vector4 *gridPoint;
     MenuModelProjectedPoint projected[2][4][3];
     MenuModelLinePoint lines[98];
     MenuModelLinePoint *point;
-    MenuModelScalarTransform *model;
+    MenuModelTransform *model;
     float targetScale;
     short currentCommand;
     int i;
@@ -596,9 +588,9 @@ static void tskMenuTai(MenuTaiTask *task)
         xglLightIntensityParallel(&light, 2, sources.value.intensity[2]);
         xglLightDirection(&light, 2, sources.value.direction[2]);
         xglLightCalcMatrix(&light);
-        nmlModelSetLight(light.matrix[1], light.matrix[0]);
+        nmlModelSetLight(&light.color_modifier_matrix, &light.normal_matrix);
         nmlModelSetTexture(MenuTairetuModelXtxAddr);
-        nmlModelSetPlace(task->model->place);
+        nmlModelSetPlace(&task->model->place);
         nmlModelEntry(MenuTairetuModelLexAddr);
         nmlModelFlush();
 
@@ -686,7 +678,7 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
 {
     MenuFormationPositions positions;
     Vector4 targetScale;
-    MenuModelLighting light;
+    StudioLight light;
     MenuLightingSources sources;
 
     __builtin_memcpy(positions.words, menuFormationPositionTable.words, sizeof(positions.words));
@@ -702,10 +694,10 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
         MenuModelTransform *pointer;
 
         pointer = task->pointer;
-        (&pointer->position.vector)->x = 0.0f;
-        (&pointer->position.vector)->y = 0.0f;
-        (&pointer->position.vector)->z = 0.0f;
-        (&pointer->position.vector)->w = 1.0f;
+        pointer->position.x = 0.0f;
+        pointer->position.y = 0.0f;
+        pointer->position.z = 0.0f;
+        pointer->position.w = 1.0f;
         pointer->rotation.x = 0.0f;
         pointer->rotation.y = 0.0f;
         pointer->rotation.z = 0.0f;
@@ -733,11 +725,11 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
         if (currentCommand == 0) {
             if (task->initialized == 0) {
                 if (task->index != 3) {
-                    MenuTopPartyData *party = (MenuTopPartyData *)PartyDataGet();
+                    PartyDataPrefix *party = PartyDataGet();
 
                     pointer = task->pointer;
-                    pointer->position.vector =
-                        positions.vector[party->slot[task->index].attackPosition - 1];
+                    pointer->position =
+                        positions.vector[party->attack_slots[task->index].attack_position - 1];
                     pointer->target = pointer->position;
                     pointer->rotation.x = 0.0f;
                     pointer->rotation.y = 0.0f;
@@ -748,7 +740,7 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
                     pointer->scale.z = 0.0f;
                     pointer->scale.w = 1.0f;
                     task->selectedSlot = task->index;
-                    task->formationIndex = ((MenuTopPartyData *)PartyDataGet())->slot[task->index].attackPosition - 1;
+                    task->formationIndex = (PartyDataGet())->attack_slots[task->index].attack_position - 1;
                     task->enabled = 1;
                     task->paletteIndex = 0;
                 } else {
@@ -770,17 +762,19 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
             xglStudioGetCamera2(2)->active = 1;
             xglMatrixStackUnit();
             xglMatrixStackLoad(task->formation[task->selectedSlot].place);
-            xglMatrixStackTrans(&task->pointer->position.vector.x);
+            xglMatrixStackTrans(&task->pointer->position.x);
             xglMatrixStackScale(&task->pointer->scale.x);
             xglMatrixStackSave(task->pointer->place);
             sources = pointerLightingSources;
             {
-                MenuModelVector ambient[3] = {
-                    {.vector = {0.40499997f, 0.27f, 0.179999992f, 1.0f}},
-                    {.vector = {0.3f, 0.5f, 0.1f, 1.0f}},
-                    {.vector = {1.0f, 0.3f, 0.3f, 1.0f}}
+                /* The ambient colour table's .rodata initializer is only
+                 * 8-aligned, so it is not an AlignedVector4. */
+                DoublewordAlignedVector4 ambient[3] = {
+                    {0.40499997f, 0.27f, 0.179999992f, 1.0f},
+                    {0.3f, 0.5f, 0.1f, 1.0f},
+                    {1.0f, 0.3f, 0.3f, 1.0f}
                 };
-                xglLightIntensityAmbient(&light, &ambient[task->paletteIndex].vector.x);
+                xglLightIntensityAmbient(&light, &ambient[task->paletteIndex].x);
             }
             xglLightIntensityParallel(&light, 0, sources.value.intensity[0]);
             xglLightDirection(&light, 0, sources.value.direction[0]);
@@ -789,9 +783,9 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
             xglLightIntensityParallel(&light, 2, sources.value.intensity[2]);
             xglLightDirection(&light, 2, sources.value.direction[2]);
             xglLightCalcMatrix(&light);
-            nmlModelSetLight(light.matrix[1], light.matrix[0]);
+            nmlModelSetLight(&light.color_modifier_matrix, &light.normal_matrix);
             nmlModelSetTexture(MenuTairetuModelPointerXtxAddr);
-            nmlModelSetPlace(task->pointer->place);
+            nmlModelSetPlace(&task->pointer->place);
             nmlModelEntry((int)MenuTairetuModelPointerLexAddr);
             nmlModelFlush();
         }
@@ -809,14 +803,14 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
     int modelIndex;
 
     xglCameraInit(camera);
-    camera->position.x = 0.0f;
-    camera->position.y = 0.0f;
-    camera->position.z = 4.0f;
-    camera->position.w = 1.0f;
-    camera->rotation.x = 0.0f;
-    camera->rotation.y = 0.0f;
-    camera->rotation.z = 0.0f;
-    camera->rotation.w = 1.0f;
+    (&camera->position.vector)->x = 0.0f;
+    (&camera->position.vector)->y = 0.0f;
+    (&camera->position.vector)->z = 4.0f;
+    (&camera->position.vector)->w = 1.0f;
+    (&camera->rotation.vector)->x = 0.0f;
+    (&camera->rotation.vector)->y = 0.0f;
+    (&camera->rotation.vector)->z = 0.0f;
+    (&camera->rotation.vector)->w = 1.0f;
     camera->fov = menuBackModelFov;
     camera->state = 1;
     camera->active = 1;
@@ -849,12 +843,12 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
 
     modelIndex = 0;
     do {
-        MenuTopPartyData *party = (MenuTopPartyData *)PartyDataGet();
+        PartyDataPrefix *party = PartyDataGet();
         MenuTaiTask *task;
 
-        if (party->slot[modelIndex].id != 0) {
-            party = (MenuTopPartyData *)PartyDataGet();
-            if (party->slot[modelIndex].id >= 17) {
+        if (party->attack_slots[modelIndex].party_id != 0) {
+            party = PartyDataGet();
+            if (party->attack_slots[modelIndex].party_id >= 17) {
                 break;
             }
             task = (MenuTaiTask *)xglTaskEntryNext(
@@ -866,7 +860,7 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
                 task->state = 0;
                 base = MenuVecMat;
                 task->index = modelIndex;
-                task->model = (MenuModelScalarTransform *)&base[modelIndex + 1];
+                task->model = &base[modelIndex + 1];
             }
         } else {
             return allocationStart;
@@ -876,8 +870,9 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
     return allocationStart;
 }
 
-void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
+void MenuStatusDisp(WindowDX *window, void *arg)
 {
+    MenuStatusPanel *work = arg;
     int chrNo;
     MenuStatusExp *exp;
     int showStats;
@@ -911,7 +906,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         work->hpMark = 0;
         eMessageSet(&work->name, MenuCharNameGet(chrNo));
         work->name.mode = 32;
-        work->name.color = 0xFFFFFF;
+        work->name.draw_parameter = 0xFFFFFF;
         {
             MenuStatusTagInit init[8] = {
                 { 4, 1, para->hp },
@@ -930,7 +925,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
                 work->tag[tag].value = init[tag].value;
                 work->tag[tag].type = init[tag].type;
                 work->tag[tag].mode = init[tag].mode;
-                work->tag[tag].color = window->color + 2;
+                work->tag[tag].color = window->style + 2;
             }
         }
         work->shadeRgba[3][2] = 128;
@@ -950,7 +945,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         work->shadeRgba[3][3] = 16;
         work->shadeRgba[2][3] = 0;
         work->shadeCorner[0].color = work->shadeCorner[1].color =
-            work->shadeCorner[2].color = work->shadeCorner[3].color = window->color + 1;
+            work->shadeCorner[2].color = work->shadeCorner[3].color = window->style + 1;
         work->shadeTexture = work->chrNo + 0xC00;
         eRibbonSet(&work->ribbon, 0);
         for (i = 0; i < 6; i++) {
@@ -959,28 +954,28 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             case 1:
             case 2:
             case 3:
-                work->ribbon.vertex[i].r = 32;
-                work->ribbon.vertex[i].g = 52;
-                work->ribbon.vertex[i].b = 52;
+                work->ribbon.points[i].red = 32;
+                work->ribbon.points[i].green = 52;
+                work->ribbon.points[i].blue = 52;
                 break;
             case 4:
             case 5:
-                work->ribbon.vertex[i].b = 0;
-                work->ribbon.vertex[i].g = 0;
-                work->ribbon.vertex[i].r = 0;
+                work->ribbon.points[i].blue = 0;
+                work->ribbon.points[i].green = 0;
+                work->ribbon.points[i].red = 0;
                 break;
             }
             if (i >= 2 && i < 4) {
-                work->ribbon.vertex[i].a = 32;
+                work->ribbon.points[i].alpha = 32;
             } else {
-                work->ribbon.vertex[i].a = 0;
+                work->ribbon.points[i].alpha = 0;
             }
         }
         for (i = 0; i < 4; i++) {
             work->nameShade.vertex[i].b = 16;
             work->nameShade.vertex[i].g = 16;
             work->nameShade.vertex[i].r = 16;
-            work->nameShade.vertex[i].color = window->color + 1;
+            work->nameShade.vertex[i].color = window->style + 1;
         }
         work->nameShade.vertex[3].a = 0;
         work->nameShade.vertex[1].a = 128;
@@ -991,7 +986,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->headerBand.vertex[i].b = 1;
             work->headerBand.vertex[i].g = 1;
             work->headerBand.vertex[i].r = 1;
-            work->headerBand.vertex[i].color = window->color + 2;
+            work->headerBand.vertex[i].color = window->style + 2;
         }
         work->headerBand.vertex[3].a = 0;
         work->headerBand.vertex[1].a = 128;
@@ -1002,7 +997,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->statsBand.vertex[i].b = 1;
             work->statsBand.vertex[i].g = 1;
             work->statsBand.vertex[i].r = 1;
-            work->statsBand.vertex[i].color = window->color + 2;
+            work->statsBand.vertex[i].color = window->style + 2;
         }
         work->statsBand.vertex[3].a = 0;
         work->statsBand.vertex[1].a = 128;
@@ -1014,7 +1009,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->headerFill.vertex[i].g = 1;
             work->headerFill.vertex[i].r = 1;
             work->headerFill.vertex[i].a = 32;
-            work->headerFill.vertex[i].color = window->color + 3;
+            work->headerFill.vertex[i].color = window->style + 3;
         }
         work->headerFill.flags = 0;
         for (i = 0; i < 4; i++) {
@@ -1022,7 +1017,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->statsFill.vertex[i].g = 1;
             work->statsFill.vertex[i].r = 1;
             work->statsFill.vertex[i].a = 32;
-            work->statsFill.vertex[i].color = window->color + 3;
+            work->statsFill.vertex[i].color = window->style + 3;
         }
         work->statsFill.flags = 0;
         for (i = 0; i < 2; i++) {
@@ -1030,7 +1025,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->headerLine.vertex[i].g = 224;
             work->headerLine.vertex[i].r = 224;
             work->headerLine.vertex[i].a = 128;
-            work->headerLine.vertex[i].color = window->color + 5;
+            work->headerLine.vertex[i].color = window->style + 5;
         }
         work->headerLine.flags = 0;
         for (i = 0; i < 2; i++) {
@@ -1038,7 +1033,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->statsLine.vertex[i].g = 240;
             work->statsLine.vertex[i].r = 240;
             work->statsLine.vertex[i].a = 128;
-            work->statsLine.vertex[i].color = window->color + 5;
+            work->statsLine.vertex[i].color = window->style + 5;
         }
         work->statsLine.flags = 0;
         for (i = 0; i < 2; i++) {
@@ -1046,20 +1041,23 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->divider.vertex[i].g = 240;
             work->divider.vertex[i].r = 240;
             work->divider.vertex[i].a = 128;
-            work->divider.vertex[i].color = window->color + 5;
+            work->divider.vertex[i].color = window->style + 5;
         }
         work->divider.flags = 0;
         break;
 
     case 3:
     {
+        /* Formats 4, 6 and 13 print the current/maximum pair that the number
+         * record keeps in its one value word: the two halfwords sit in memory
+         * and are read back as that word. */
         short shown[2];
 
         left = window->x + work->offsetX;
         top = window->y + work->offsetY;
         work->box.x = window->x + 3;
         work->box.y = window->y + 3;
-        work->box.color = window->color;
+        work->box.color = window->style;
         work->box.width = window->width - 6;
         work->box.height = window->height - 6;
         endPrintExtFunc(work->box.color, 5, &work->box);
@@ -1073,7 +1071,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->ribbon.y = top + ribbonRow * 16 + 15;
             work->ribbon.width = (5 - ribbonRow) * 20 + 23;
             work->ribbon.height = 13;
-            work->ribbon.color = window->color;
+            work->ribbon.work = window->style;
             for (pass = 0; pass < 6; pass++) {
                 eRibbonMain(&work->ribbon);
             }
@@ -1081,7 +1079,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
 
         work->name.x = left + 82;
         work->name.y = nameY = top + 3;
-        work->name.color = window->color + 15;
+        work->name.draw_parameter = window->style + 15;
         work->name.text = MenuCharNameGet(chrNo);
         eMessageDraw(&work->name);
 
@@ -1091,7 +1089,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             } else {
                 work->label[0].x = left + 114;
             }
-            work->label[0].color = window->color + 15;
+            work->label[0].color = window->style + 15;
             work->label[0].y = top + 29;
             /* Text: \x01Hp */
             work->label[0].text = "\001Hp";
@@ -1116,22 +1114,22 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
                 work->number[0].x = left + 161;
             }
             work->number[0].y = top + 32;
-            work->number[0].color = window->color + 15;
-            work->number[0].value = *(MenuStatusValuePair *)shown;
+            work->number[0].work = window->style + 15;
+            work->number[0].value = *(int *)shown;
             work->number[0].digits = 4;
-            work->number[0].flag[0] = 0;
+            work->number[0].colorModeFirst = 0;
             if (work->hpMark != 0) {
                 if (para->maxHp < work->maxHp) {
-                    work->number[0].flag[1] = 2;
+                    work->number[0].colorModeSecond = 2;
                 } else if (work->maxHp < para->maxHp) {
-                    work->number[0].flag[1] = 1;
+                    work->number[0].colorModeSecond = 1;
                 } else {
-                    work->number[0].flag[1] = 0;
+                    work->number[0].colorModeSecond = 0;
                 }
             } else {
-                work->number[0].flag[1] = 0;
+                work->number[0].colorModeSecond = 0;
             }
-            work->number[0].flag[2] = 1;
+            work->number[0].alignment = 1;
             eNumberMain(&work->number[0]);
         }
         if (showStats) {
@@ -1140,7 +1138,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             } else {
                 work->label[1].x = left + 114;
             }
-            work->label[1].color = window->color + 15;
+            work->label[1].color = window->style + 15;
             work->label[1].y = top + 45;
             /* Text: \x01Ep */
             work->label[1].text = "\001Ep";
@@ -1165,26 +1163,26 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
                 work->number[1].x = left + 161;
             }
             work->number[1].y = top + 48;
-            work->number[1].color = window->color + 15;
-            work->number[1].value = *(MenuStatusValuePair *)shown;
+            work->number[1].work = window->style + 15;
+            work->number[1].value = *(int *)shown;
             work->number[1].digits = 2;
-            work->number[1].flag[0] = 0;
+            work->number[1].colorModeFirst = 0;
             if (work->epMark != 0) {
                 if (para->maxEp < work->maxEp) {
-                    work->number[1].flag[1] = 2;
+                    work->number[1].colorModeSecond = 2;
                 } else if (work->maxEp < para->maxEp) {
-                    work->number[1].flag[1] = 1;
+                    work->number[1].colorModeSecond = 1;
                 } else {
-                    work->number[1].flag[1] = 0;
+                    work->number[1].colorModeSecond = 0;
                 }
             } else {
-                work->number[1].flag[1] = 0;
+                work->number[1].colorModeSecond = 0;
             }
-            work->number[1].flag[2] = 1;
+            work->number[1].alignment = 1;
             eNumberMain(&work->number[1]);
         }
 
-        work->label[2].color = window->color + 15;
+        work->label[2].color = window->style + 15;
         work->label[2].x = left + 205;
         work->label[2].y = top + 7;
         /* Text: \x01Lv */
@@ -1193,9 +1191,9 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         endPrintExtFunc(work->label[2].color, 7, &work->label[2]);
         eNumberSet(&work->number[2], 0);
         work->number[2].x = work->label[2].x + 8;
-        work->number[2].color = window->color + 15;
+        work->number[2].work = window->style + 15;
         work->number[2].y = top + 7;
-        work->number[2].value.scalar = para->level;
+        work->number[2].value = para->level;
         work->number[2].digits = 2;
         work->number[2].format = 0;
         eNumberMain(&work->number[2]);
@@ -1208,7 +1206,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             } else {
                 work->label[3].x = left + 138;
             }
-            work->label[3].color = window->color + 15;
+            work->label[3].color = window->style + 15;
             work->label[3].y = top + 63;
             /* Text: \x01Nextlv */
             work->label[3].text = "\001Nextlv";
@@ -1224,11 +1222,11 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
                 work->number[3].x = left + 146;
             }
             work->number[3].y = top + 66;
-            work->number[3].color = window->color + 15;
+            work->number[3].work = window->style + 15;
             if (para->level == 99) {
-                work->number[3].value.scalar = -1;
+                work->number[3].value = -1;
             } else {
-                work->number[3].value.scalar = exp->nextExp;
+                work->number[3].value = exp->nextExp;
             }
             work->number[3].digits = 6;
             work->number[3].format = 1;
@@ -1238,7 +1236,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             if (work->chrNo >= 0 && PartyLeaderCheck(chrNo)) {
                 work->leader.x = left + 83;
                 work->leader.y = top + 35;
-                work->leader.color = window->color + 15;
+                work->leader.color = window->style + 15;
                 work->leader.spriteId = 811;
                 endSpriteSet(&work->leader, 255);
                 endPrintExtFunc(work->leader.color, 2, &work->leader);
@@ -1248,7 +1246,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->label[5].y = top + 79;
             /* Text: \x01Exp */
             work->label[5].text = "\001Exp";
-            work->label[5].color = window->color + 15;
+            work->label[5].color = window->style + 15;
             work->label[5].r = 112;
             work->label[5].g = 128;
             work->label[5].b = 128;
@@ -1258,8 +1256,8 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             eNumberSet(&work->number[5], 0);
             work->number[5].x = left + 146;
             work->number[5].y = top + 82;
-            work->number[5].color = window->color + 15;
-            work->number[5].value.scalar = exp->exp;
+            work->number[5].work = window->style + 15;
+            work->number[5].value = exp->exp;
             work->number[5].digits = 7;
             work->number[5].format = 1;
             eNumberMain(&work->number[5]);
@@ -1269,7 +1267,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         work->nameShade.vertex[0].y = work->nameShade.vertex[2].y = nameY;
         work->nameShade.vertex[2].x = work->nameShade.vertex[3].x = (float)left + 148.5f - 3.0f;
         work->nameShade.vertex[0].color = work->nameShade.vertex[1].color =
-            work->nameShade.vertex[2].color = work->nameShade.vertex[3].color = window->color + 1;
+            work->nameShade.vertex[2].color = work->nameShade.vertex[3].color = window->style + 1;
         work->nameShade.vertex[1].y = work->nameShade.vertex[3].y = window->height + top - 3;
         endPrintExtFunc(work->nameShade.vertex[0].color, 3, &work->nameShade);
 
@@ -1280,7 +1278,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         }
         work->headerBand.vertex[0].y = work->headerBand.vertex[2].y = window->y + 3;
         work->headerBand.vertex[0].color = work->headerBand.vertex[1].color =
-            work->headerBand.vertex[2].color = work->headerBand.vertex[3].color = window->color + 2;
+            work->headerBand.vertex[2].color = work->headerBand.vertex[3].color = window->style + 2;
         work->headerBand.vertex[1].y = work->headerBand.vertex[3].y = work->headerBand.vertex[0].y + 23;
         endPrintExtFunc(work->headerBand.vertex[0].color, 3, &work->headerBand);
 
@@ -1291,7 +1289,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         }
         work->headerFill.vertex[0].y = work->headerFill.vertex[2].y = window->y + 3;
         work->headerFill.vertex[0].color = work->headerFill.vertex[1].color =
-            work->headerFill.vertex[2].color = work->headerFill.vertex[3].color = window->color + 4;
+            work->headerFill.vertex[2].color = work->headerFill.vertex[3].color = window->style + 4;
         work->headerFill.vertex[1].y = work->headerFill.vertex[3].y = work->headerFill.vertex[0].y + 23;
         endPrintExtFunc(work->headerFill.vertex[0].color, 3, &work->headerFill);
 
@@ -1305,7 +1303,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         }
         work->statsBand.vertex[1].y = work->statsBand.vertex[3].y = window->y + 96;
         work->statsBand.vertex[0].color = work->statsBand.vertex[1].color =
-            work->statsBand.vertex[2].color = work->statsBand.vertex[3].color = window->color + 2;
+            work->statsBand.vertex[2].color = work->statsBand.vertex[3].color = window->style + 2;
         endPrintExtFunc(work->statsBand.vertex[0].color, 3, &work->statsBand);
 
         work->headerLine.vertex[0].x = left + 3;
@@ -1314,7 +1312,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             work->headerLine.vertex[1].x = left + 238;
         }
         work->headerLine.vertex[1].y = work->headerLine.vertex[0].y = window->y + 26;
-        work->headerLine.vertex[0].color = work->headerLine.vertex[1].color = window->color + 6;
+        work->headerLine.vertex[0].color = work->headerLine.vertex[1].color = window->style + 6;
         endPrintExtFunc(work->headerLine.vertex[0].color, 0, &work->headerLine);
 
         work->statsLine.vertex[0].x = left + 3;
@@ -1329,11 +1327,11 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             }
             work->statsLine.vertex[1].y = work->statsLine.vertex[0].y = window->y + 61;
         }
-        work->statsLine.vertex[0].color = work->statsLine.vertex[1].color = window->color + 6;
+        work->statsLine.vertex[0].color = work->statsLine.vertex[1].color = window->style + 6;
         endPrintExtFunc(work->statsLine.vertex[0].color, 0, &work->statsLine);
 
         work->divider.vertex[1].x = work->divider.vertex[0].x = left + 80;
-        work->divider.vertex[0].color = work->divider.vertex[1].color = window->color + 6;
+        work->divider.vertex[0].color = work->divider.vertex[1].color = window->style + 6;
         work->divider.vertex[0].y = window->y + 3;
         work->divider.vertex[1].y = window->y + 96;
         endPrintExtFunc(work->divider.vertex[0].color, 0, &work->divider);
@@ -1350,12 +1348,12 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             }
             work->statsFill.vertex[1].y = work->statsFill.vertex[3].y = window->y + 96;
             work->statsFill.vertex[0].color = work->statsFill.vertex[1].color =
-                work->statsFill.vertex[2].color = work->statsFill.vertex[3].color = window->color + 7;
+                work->statsFill.vertex[2].color = work->statsFill.vertex[3].color = window->style + 7;
             endPrintExtFunc(work->statsFill.vertex[0].color, 3, &work->statsFill);
         }
 
         work->face.x = left + 16;
-        work->face.color = window->color + 15;
+        work->face.color = window->style + 15;
         work->face.y = nameY;
         work->face.spriteId = MenuFaceEpidGet(chrNo, 0);
         endSpriteSet(&work->face, 255);
@@ -1367,8 +1365,9 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
 }
 
 /* WindowDX discards this callback's return value. */
-int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
+int MenuInfoWindow(WindowDX *window, void *arg)
 {
+    MenuTopInfoPanel *panel = arg;
     const char *scan;
     int i;
     int color;
@@ -1384,7 +1383,7 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         panel->x = 0;
         panel->y = 0;
         panel->lineCount = 2;
-        panel->message.lines = 2;
+        panel->message.page_available = 2;
         panel->page = 0;
         panel->inputLock = 0;
         panel->text = 0;
@@ -1412,7 +1411,7 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         }
 
         panel->texture = WindowTexAddrGet(2);
-        endPrintExtFunc(window->color, 14, &panel->texture);
+        endPrintExtFunc(window->style, 14, &panel->texture);
         panel->header.image = 0xB01;
         panel->header.flag = 1;
         panel->header.mode = 0;
@@ -1430,10 +1429,10 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         panel->header.vertex[1].y = panel->header.vertex[3].y = window->y + 2;
         panel->header.vertex[0].color = panel->header.vertex[1].color =
             panel->header.vertex[2].color = panel->header.vertex[3].color = 0xFFFFFF;
-        endPrintExtFunc(window->color, 8, &panel->header);
+        endPrintExtFunc(window->style, 8, &panel->header);
 
         panel->box.x = window->x + 3;
-        color = window->color;
+        color = window->style;
         panel->box.color = color;
         panel->box.y = window->y + 3;
         panel->box.width = window->width - 6;
@@ -1454,7 +1453,7 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         panel->border.vertex[0].color = 0xFFFFFF;
         panel->border.vertex[0].x = window->x + 24;
         panel->border.vertex[0].y = window->y + 3;
-        endPrintExtFunc(window->color, 8, &panel->border);
+        endPrintExtFunc(window->style, 8, &panel->border);
 
         panel->footer.image = 0xB00;
         panel->footer.mode = 0;
@@ -1465,13 +1464,13 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         }
         panel->footer.vertex[0].x = 127;
         panel->footer.vertex[0].y = window->y + window->height - 51;
-        panel->footer.vertex[0].color = window->color;
-        endPrintExtFunc(window->color, 8, &panel->footer);
+        panel->footer.vertex[0].color = window->style;
+        endPrintExtFunc(window->style, 8, &panel->footer);
         endPrintExtFunc(panel->box.color, 6, 0);
         endPrintExtFunc(0, 15, 0);
 
         panel->clip.x = window->x + 3;
-        color = window->color;
+        color = window->style;
         panel->clip.color = color;
         panel->clip.y = window->y + 3;
         panel->clip.width = window->width - 6;
@@ -1482,7 +1481,7 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
             endSpriteSet(&panel->scroll, 255);
             shade = ((panel->blink * 4) & 24) + 72;
             panel->scroll.r = panel->scroll.g = panel->scroll.b = shade;
-            color = panel->scroll.color = window->color;
+            color = panel->scroll.color = window->style;
             panel->scroll.x = window->x + window->width - 64;
             panel->scroll.y = window->y + window->height - 30;
             panel->blink++;
@@ -1492,7 +1491,7 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         }
         panel->message.x = window->x + panel->x + 35;
         panel->message.text = panel->text;
-        panel->message.color = window->color + 2;
+        panel->message.draw_parameter = window->style + 2;
         panel->message.y = window->y + panel->y - panel->page * 48 + 3;
         eMessageMain(&panel->message);
         endPrintExtFunc(panel->clip.color, 102, 0);
@@ -1501,8 +1500,9 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
 }
 
 /* WindowDX discards this callback's return value. */
-int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
+int MenuSelectWindow(WindowDX *window, void *arg)
 {
+    MenuTopMenuPanel *panel = arg;
     short rowShift;
     int i;
     MenuTopCommandEntry *entry;
@@ -1511,11 +1511,11 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
     case 0:
         break;
     case 1: {
-        MenuSelectCursor *cursor;
+        ECursolMainData *cursor;
 
         cursor = &panel->marker;
         eCursolSet(cursor, 0);
-        cursor->mode = 32;
+        cursor->state = 32;
         for (i = 0; i < 12; i++) {
             eMessageSet(&panel->message[i], 0);
             panel->message[i].mode = 32;
@@ -1535,7 +1535,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
 
             bandLeft = (unsigned short)window->x + 3;
             panel->cursorBand.vertex[0].x = panel->cursorBand.vertex[1].x = bandLeft;
-            bandColor = window->color + 2;
+            bandColor = window->style + 2;
             panel->cursorBand.vertex[0].color = panel->cursorBand.vertex[1].color =
                 panel->cursorBand.vertex[2].color = panel->cursorBand.vertex[3].color = bandColor;
             bandRight = bandLeft + (unsigned short)window->width - 6;
@@ -1554,7 +1554,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
             panel->cursorBand.vertex[0].r = 16;
             panel->cursorBand.vertex[0].a = panel->cursorBand.vertex[1].a = 64;
             panel->cursorBand.vertex[2].a = panel->cursorBand.vertex[3].a = 0;
-            endPrintExtFunc(window->color, 3, &panel->cursorBand);
+            endPrintExtFunc(window->style, 3, &panel->cursorBand);
         }
 
         {
@@ -1567,7 +1567,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
             panel->cursorFill.vertex[1].x = fillLeft;
             panel->cursorFill.vertex[0].x = fillLeft;
             panel->cursorFill.vertex[0].color = panel->cursorFill.vertex[1].color =
-                panel->cursorFill.vertex[2].color = panel->cursorFill.vertex[3].color = window->color + 2;
+                panel->cursorFill.vertex[2].color = panel->cursorFill.vertex[3].color = window->style + 2;
             fillRight = fillLeft + (unsigned short)window->width - window->width / 4 - 6;
             panel->cursorFill.vertex[2].x = panel->cursorFill.vertex[3].x = fillRight;
             panel->cursorFill.flags = 0;
@@ -1583,7 +1583,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
                 panel->cursorFill.vertex[2].b = panel->cursorFill.vertex[3].b = 64;
             panel->cursorFill.vertex[0].a = panel->cursorFill.vertex[1].a = 64;
             panel->cursorFill.vertex[2].a = panel->cursorFill.vertex[3].a = 0;
-            endPrintExtFunc(window->color, 3, &panel->cursorFill);
+            endPrintExtFunc(window->style, 3, &panel->cursorFill);
         }
 
         {
@@ -1591,7 +1591,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
             int dividerBottom;
 
             panel->divider.vertex[0].x = panel->divider.vertex[1].x = (unsigned short)window->x + 17;
-            panel->divider.vertex[0].color = panel->divider.vertex[1].color = window->color + 2;
+            panel->divider.vertex[0].color = panel->divider.vertex[1].color = window->style + 2;
             panel->divider.flags = 0;
             dividerTop = (unsigned short)window->y + 3;
             panel->divider.vertex[0].y = dividerTop;
@@ -1601,11 +1601,11 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
             panel->divider.vertex[0].r = panel->divider.vertex[1].r = 160;
             panel->divider.vertex[0].a = panel->divider.vertex[1].a = 128;
             panel->divider.vertex[1].y = dividerBottom;
-            endPrintExtFunc(window->color, 0, &panel->divider);
+            endPrintExtFunc(window->style, 0, &panel->divider);
         }
             if (panel->rows == 0) {
                 panel->message[0].x = (unsigned short)window->x + 19;
-                panel->message[0].color = window->color + 6;
+                panel->message[0].draw_parameter = window->style + 6;
                 panel->message[0].text = panel->text;
                 panel->message[0].y = (unsigned short)window->y + 3;
                 eMessageMain(&panel->message[0]);
@@ -1620,16 +1620,16 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
                         break;
                     }
                     panel->message[i].x = (unsigned short)window->x + 19;
-                    panel->message[i].color = window->color + 6;
+                    panel->message[i].draw_parameter = window->style + 6;
                     panel->message[i].y = (unsigned short)window->y + i * 24 + 3;
                     if (entry->locked == 0) {
-                        panel->message[i].b = 128;
-                        panel->message[i].g = 128;
-                        panel->message[i].r = 128;
+                        panel->message[i].color_b = 128;
+                        panel->message[i].color_g = 128;
+                        panel->message[i].color_r = 128;
                     } else {
-                        panel->message[i].b = 64;
-                        panel->message[i].g = 64;
-                        panel->message[i].r = 64;
+                        panel->message[i].color_b = 64;
+                        panel->message[i].color_g = 64;
+                        panel->message[i].color_r = 64;
                     }
                     panel->message[i].text = entry->name;
                     entry++;
@@ -1639,7 +1639,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
             }
             panel->marker.x = (unsigned short)window->x + 3;
             panel->marker.y = (unsigned short)window->y + panel->cursor * 24 + 7;
-            panel->marker.color = window->color + 3;
+            panel->marker.work = window->style + 3;
             eCursolMain(&panel->marker);
             break;
         case 1:
@@ -1656,18 +1656,18 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
                 markerInset = markerAvailable / 2;
                 panel->marker.x = markerInset + (unsigned short)window->x - 16;
                 panel->marker.y = (unsigned short)window->y + (panel->cursor * 24 + rowShift * 20) + 55;
-                panel->marker.color = window->color + 2;
+                panel->marker.work = window->style + 2;
                 eCursolMain(&panel->marker);
             }
             panel->message[0].x = (unsigned short)window->x + (window->width - width) / 2;
             panel->message[0].y = (unsigned short)window->y + rowShift * 20 + 51;
-            panel->message[0].color = window->color + 2;
+            panel->message[0].draw_parameter = window->style + 2;
             panel->message[0].text = panel->text;
             eMessageMain(&panel->message[0]);
             width = xglFontGetStringWidth(panel->heading);
             panel->message[1].x = (unsigned short)window->x + (window->width - width) / 2;
             panel->message[1].y = (unsigned short)window->y + 3;
-            panel->message[1].color = window->color + 2;
+            panel->message[1].draw_parameter = window->style + 2;
             panel->message[1].text = panel->heading;
             eMessageMain(&panel->message[1]);
             {
@@ -1679,7 +1679,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
 
                 panel->headingLine.vertex[0].x = (unsigned short)window->x + 3;
                 top = (unsigned short)window->y + rowShift * 9 + 39;
-                color = window->color + 2;
+                color = window->style + 2;
                 panel->headingLine.vertex[0].y = top;
                 headingWidth = (unsigned short)window->width;
                 headingOriginX = (unsigned short)window->x;
@@ -1701,7 +1701,7 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
     }
 }
 
-void MenuPasWindow(void) {
+void MenuPasWindow(WindowDX *window, void *arg) {
 
 }
 

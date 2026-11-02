@@ -641,11 +641,11 @@ void grPacketSend(GrPacket *packet)
 
 Matrix *grWorldMatGet(void)
 {
-    Matrix *camera;
+    StudioCamera *camera;
 
-    /* Camera zero owns the current world matrix at the observed +0x470. */
+    /* Camera zero's view matrix (+0x470) is the current world matrix. */
     xglStudioGetCamera(&camera, 0);
-    return (Matrix *)((u8 *)camera + 0x470);
+    return (Matrix *)camera->viewMatrix;
 }
 
 void grCalcMatrix(MatrixCommand *command, Matrix *destination)

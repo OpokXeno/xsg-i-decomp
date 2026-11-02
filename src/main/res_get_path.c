@@ -3,10 +3,18 @@
 #include "main/maptbl.h"
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
+#include "main/look_at_player.h"
+#include "main/res_get_path.h"
 #include "shared.h"
 #include "main/xgl_thread.h"
+#include "main/act_1.h"
+#include "main/enemy_1.h"
+#include "main/game_movie.h"
+#include "main/ssd_2.h"
+#include "main/ssd_init.h"
+#include "main/xgl_2.h"
+#include "main/xgl_cd.h"
 
-#define ACTOR_RESOURCE_OFFSET 0x8dc
 
 typedef struct {
     const char *name;
@@ -32,25 +40,12 @@ typedef struct {
  * recovered caller, so its role remains intentionally unnamed. */
 typedef struct ResourceKeyEntry {
     const char *key;
-    const void *aliases;
+    union {
+        const char **names;               /* CIDn, MU, ... lists of alias names */
+        struct ResourceKeyEntry *children; /* model: the key table nested under it */
+    } aliases;
     const char *path_prefix;
 } ResourceKeyEntry;
-
-/*
- * The runtime resource-block table: up to 128 blocks carved out of the
- * arc-file load heap GameResourceInit sizes. address/size describe the
- * block's extent; handle is a random token GameResourceAlloc
- * (main:0x0024a9d8) assigns with xglSRand() when it hands a block out, and
- * both it and GameResourceReset (main:0x0024d8e8) clear it back to 0; state
- * is -1 for a free block (this TU's readers) and 9 once GameResourceAlloc
- * marks one in use (original bytes; neither function is claimed here).
- */
-typedef struct {
-    unsigned char *address;   /* +0x0 */
-    int size;       /* +0x4 */
-    int handle;     /* +0x8 */
-    int state;      /* +0xC, -1 = free */
-} GameResourceEntry;
 
 /*
  * The game loop's own record, as far as this TU reads it. Two spans are
@@ -67,36 +62,9 @@ typedef struct {
     u8 unmodeled_1c[0x34];
     s16 map_id;
     u16 unmodeled_52;
-    int map_load_result;
+    void *map_load_result;
 } GameLoopStatePrefix;
 
-/*
- * The resource record an actor's `resource` pointer refers to.
- * RES_GetFootStepNo is the only reader in this TU, and it reads only the
- * footstep number byte at +6; the bytes before it are an unread span here.
- */
-typedef struct ActorResource {
-    unsigned char unmodeled_000[6];
-    u8 foot_step_no; /* +6 */
-} ActorResource;
-
-/*
- * The engine's actor record: main/tu194 (src/main/enemy_2.h) defines and
- * owns it. This TU only reads the resource pointer past that definition's
- * extent, so it names the same tag without completing it (no local header
- * can include another TU's TU-local one) rather than modelling a
- * competing layout.
- */
-/*
- * +0x8dc: the actor's resource pointer, past the extent src/main/enemy_2.h
- * completes; RES_GetFootStepNo is the only reader of it in this TU.
- */
-struct Actor {
-    unsigned char unmodeled_000[ACTOR_RESOURCE_OFFSET];
-    struct ActorResource *resource;
-};
-
-struct Actor;
 
 typedef struct {
     const char *name;
@@ -133,39 +101,6 @@ typedef struct {
 
 extern MotionEntry cfMtnList[31];
 extern FaceEntry faceTbl[7];
-extern void *AdrsEnemyPreset;
-extern const char ResDataScenePath[];
-extern const char ResDataSceneTestPath[];
-extern const char ResDataSceneCheckPath[];
-extern const char ResDataSceneCfPath[];
-extern const char ResDataSceneEventPath[];
-extern const char ResDataSceneGashPath[];
-extern const char ResDataSceneFujiPath[];
-extern const char ResDataSceneKojimaPath[];
-extern const char ResDataSceneSakisakoPath[];
-extern const char ResDataSceneKonishiPath[];
-extern const char ResDataSceneKojiPath[];
-extern const char ResDataSceneNvYonePath[];
-extern const char ResDataSceneNakaharaPath[];
-extern const char ResDataSceneYajimaPath[];
-extern const char ResDataSceneKuramotoPath[];
-extern const char ResDataSceneKeiichiPath[];
-extern const char ResDataSceneSatoPath[];
-extern const char ResDataSceneSugisawaPath[];
-extern const char ResDataSceneYagiPath[];
-extern const char ResDataSceneItaiPath[];
-extern const char ResCidName[];
-extern const char ResCharPath[];
-extern const char ResRidName[];
-extern const char ResRoboPath[];
-extern const char ResEnemyPath[];
-extern const char ResWidName[];
-extern const char ResWeaponPath[];
-extern const char ResEidName[];
-extern const char ResObjPath[];
-extern const char ResAidName[];
-extern const char ResMidName[];
-extern const char ResEmptyName[];
 extern const char *AID0[];
 extern const char *CID0[];
 extern const char *CID1[];
@@ -174,64 +109,6 @@ extern const char *CID3[];
 extern const char *CID4[];
 extern const char *CID5[];
 extern const char *CID6[];
-extern const char ResBossBossPath[];
-extern const char ResFereFerePath[];
-extern const char ResFesoFesoPath[];
-extern const char ResFeroFeroPath[];
-extern const char ResFemaFemaPath[];
-extern const char ResUtroUtroPath[];
-extern const char ResUtsoUtsoPath[];
-extern const char ResUtreUtrePath[];
-extern const char ResUtmaUtmaPath[];
-extern const char ResGunoGunoPath[];
-extern const char ResMobj000MobjPath[];
-extern const char ResAobj000AccPath[];
-extern const char ResMusobjMusPath[];
-extern const char ResMufobjMufPath[];
-extern const char ResMuxobjMuxPath[];
-extern const char ResTreobjTrePath[];
-extern const char ResMuwobjMuwPath[];
-extern const char ResMuobjMUPath[];
-extern const char ResCitiPath[];
-extern const char ResPplPath[];
-extern const char ResNpcPath[];
-extern const char ResPcPath[];
-extern const char ResEtcPath[];
-extern const char ResAgAgPath[];
-extern const char ResAgName[];
-extern const char ResVxVxPath[];
-extern const char ResVxName[];
-extern const char ResPcChoPath[];
-extern const char ResChoName[];
-extern const char ResPcSonPath[];
-extern const char ResSonName[];
-extern const char ResPcStnPath[];
-extern const char ResStnName[];
-extern const char ResPcJrPath[];
-extern const char ResJrPrefixName[];
-extern const char ResPcZigPath[];
-extern const char ResZigName[];
-extern const char ResPcMmoPath[];
-extern const char ResMmoName[];
-extern const char ResPcKosPath[];
-extern const char ResKosName[];
-extern const char ResBossName[];
-extern const char ResSeparatorName[];
-extern const char ResFereName[];
-extern const char ResFesoName[];
-extern const char ResFeroName[];
-extern const char ResFemaName[];
-extern const char ResUtroName[];
-extern const char ResUtsoName[];
-extern const char ResUtreName[];
-extern const char ResUtmaName[];
-extern const char ResGunoName[];
-extern const char ResMusName[];
-extern const char ResMufName[];
-extern const char ResMuxName[];
-extern const char ResTreName[];
-extern const char ResMuwName[];
-extern const char ResMuName[];
 extern const char *EID0[];
 extern const char *EID1[];
 extern const char *EID2[];
@@ -262,648 +139,16 @@ extern const char *WID6[];
 extern const char *WID7[];
 extern const char *WID8[];
 extern GameLoopStatePrefix GameLoopState;
-extern const char ResShitanName[];
-extern const char ResKosmosHName[];
-extern const char ResJr1HName[];
-extern const char ResMomo6Name[];
-extern const char ResShion6HName[];
-extern const char ResShion1Shion5Name[];
-extern const char ResMomo2Name[];
-extern const char ResChaosHName[];
-extern const char ResKosmosH4Name[];
-extern const char ResJr3Name[];
-extern const char ResKosmos3Name[];
-extern const char ResChaos2Name[];
-extern const char ResJr4Name[];
-extern const char ResMomo4Name[];
-extern const char ResShionName[];
-extern const char ResKosmosName[];
-extern const char ResMomo3Name[];
-extern const char ResJr1Name[];
-extern const char ResShionChName[];
-extern const char ResShitan2Name[];
-extern const char ResShion2HName[];
-extern const char ResShion3HName[];
-extern const char ResShitan1Name[];
-extern const char ResKosmosH2Name[];
-extern const char ResJr2Name[];
-extern const char ResShion2Name[];
-extern const char ResKosmosH3Name[];
-extern const char ResKosmosH6Name[];
-extern const char ResMomo5Name[];
-extern const char ResJrHName[];
-extern const char ResZiggy1Name[];
-extern const char ResShion4HShionHName[];
-extern const char ResShion5Shion1Name[];
-extern const char ResKosmos2Name[];
-extern const char ResChaosName[];
-extern const char ResChaos1Name[];
-extern const char ResMomo5HName[];
-extern const char ResShion1HShion5HName[];
-extern const char ResShionShion4Name[];
-extern const char ResKosmosH5Name[];
-extern const char ResKosmos5Name[];
-extern const char ResJrName[];
-extern const char ResShionHShion4HName[];
-extern const char ResShion5HShion1HName[];
-extern const char ResMomo1Name[];
-extern const char ResMomoHName[];
-extern const char ResKosmosH1Name[];
-extern const char ResShitanHName[];
-extern const char ResZiggyHName[];
-extern const char ResZiggyName[];
-extern const char ResKosmos1Name[];
-extern const char ResMomoName[];
-extern const char ResShion3Name[];
-extern const char ResMiyukiName[];
-extern const char ResEllyName[];
-extern const char ResTonnyName[];
-extern const char ResLapisName[];
-extern const char ResAlbeltHName[];
-extern const char ResMarglis1Name[];
-extern const char ResVirgil3Name[];
-extern const char ResJoachimName[];
-extern const char ResVirgil1Name[];
-extern const char ResGaignun1Name[];
-extern const char ResKebin1Name[];
-extern const char ResVirgilName[];
-extern const char ResAndrew2Name[];
-extern const char ResAndrew7Name[];
-extern const char ResMatehwsHMatehwsName[];
-extern const char ResHammerHHammerName[];
-extern const char ResKebin1HName[];
-extern const char ResVirgil2HName[];
-extern const char ResAndDaugName[];
-extern const char ResGaignunHName[];
-extern const char ResAndWifeName[];
-extern const char ResAndrew8Name[];
-extern const char ResAndrewHAndrew6Name[];
-extern const char ResHammerName[];
-extern const char ResAbelName[];
-extern const char ResChiefName[];
-extern const char ResAndrew4Name[];
-extern const char ResAndrewHAndrew1Name[];
-extern const char ResAndrewHAndrew3Name[];
-extern const char ResKJoachName[];
-extern const char ResShalronName[];
-extern const char ResVirgil4HName[];
-extern const char ResShelleyName[];
-extern const char ResVirgil3HName[];
-extern const char ResJoachim1Name[];
-extern const char ResVoyagerName[];
-extern const char ResMarglisName[];
-extern const char ResAllenHName[];
-extern const char ResAlbelt2HName[];
-extern const char ResKebinName[];
-extern const char ResAndrewName[];
-extern const char ResShiDadName[];
-extern const char ResAndrew6Name[];
-extern const char ResElly2Name[];
-extern const char ResFeb1Name[];
-extern const char ResTonnyHTonnyName[];
-extern const char ResHynlinName[];
-extern const char ResAndrewHAndrewName[];
-extern const char ResTogashiName[];
-extern const char ResAndrewHAndrew4Name[];
-extern const char ResAndrew5Name[];
-extern const char ResAlbelt3HName[];
-extern const char ResCecilia1Name[];
-extern const char ResSellersName[];
-extern const char ResPelegriName[];
-extern const char ResFriedName[];
-extern const char ResAlbeltName[];
-extern const char ResYuriName[];
-extern const char ResVirgil1HName[];
-extern const char ResCeciliaName[];
-extern const char ResStepMamName[];
-extern const char ResAndrewHAndrew2Name[];
-extern const char ResAndrewHAndrew5Name[];
-extern const char ResAndrew3Name[];
-extern const char ResVirgil2Name[];
-extern const char ResShiMamName[];
-extern const char ResMarglisHName[];
-extern const char ResFriedHName[];
-extern const char ResEllyHName[];
-extern const char ResGaignunName[];
-extern const char ResCathName[];
-extern const char ResVanName[];
-extern const char ResVirgil4Name[];
-extern const char ResKebin2Name[];
-extern const char ResCath1Name[];
-extern const char ResVirgilHName[];
-extern const char ResMatehwsName[];
-extern const char ResMaryName[];
-extern const char ResMoriyamaName[];
-extern const char ResMatehws1Name[];
-extern const char ResAndrew1Name[];
-extern const char ResAllen1Name[];
-extern const char ResAndrew9Name[];
-extern const char ResHelmerName[];
-extern const char ResAlbelt1Name[];
-extern const char ResKebinHName[];
-extern const char ResFebName[];
-extern const char ResAllenName[];
-extern const char ResEngName[];
-extern const char ResBrealW1Name[];
-extern const char ResVecMName[];
-extern const char ResPilotName[];
-extern const char ResRwW1Name[];
-extern const char ResVecM2Name[];
-extern const char ResBrealM4Name[];
-extern const char ResOffM3Name[];
-extern const char ResEsoldName[];
-extern const char ResBrealM1Name[];
-extern const char ResSuukiName[];
-extern const char ResRwWName[];
-extern const char ResEngOffName[];
-extern const char ResBrealMName[];
-extern const char ResOffWName[];
-extern const char ResBrealWName[];
-extern const char ResOffW1Name[];
-extern const char ResRwM1Name[];
-extern const char ResRwMName[];
-extern const char ResSpaceName[];
-extern const char ResOffMName[];
-extern const char ResOffM1Name[];
-extern const char ResBrealM3Name[];
-extern const char ResVecW1Name[];
-extern const char ResRwW2Name[];
-extern const char ResOffM2Name[];
-extern const char ResRwM2Name[];
-extern const char ResVecWName[];
-extern const char ResBrealM2Name[];
-extern const char ResSoldName[];
-extern const char ResVecM1Name[];
-extern const char ResCommiName[];
-extern const char ResCommi1Name[];
-extern const char ResGoveW2Name[];
-extern const char ResRealM2Name[];
-extern const char ResRealM1Name[];
-extern const char ResCommi4Name[];
-extern const char ResRealWName[];
-extern const char ResUSoldsName[];
-extern const char ResCommi3Name[];
-extern const char ResGoveWName[];
-extern const char ResCommi5Name[];
-extern const char ResRealW2Name[];
-extern const char ResGoveW1Name[];
-extern const char ResCommi2Name[];
-extern const char ResRealMName[];
-extern const char ResUSoldName[];
-extern const char ResRealW1Name[];
-extern const char ResUSpaceName[];
-extern const char ResAssWName[];
-extern const char ResHyakuName[];
-extern const char ResDuName[];
-extern const char ResAssM4Name[];
-extern const char ResAssM3Name[];
-extern const char ResAssMName[];
-extern const char ResAssM1Name[];
-extern const char ResDu1Name[];
-extern const char ResGoveM2Name[];
-extern const char ResKanchoName[];
-extern const char ResAssM2Name[];
-extern const char ResGoveMName[];
-extern const char ResDu2Name[];
-extern const char ResGoveM1Name[];
-extern const char ResUticW1Name[];
-extern const char ResUticM2Name[];
-extern const char ResUticWName[];
-extern const char ResUticW2Name[];
-extern const char ResContName[];
-extern const char ResPolWName[];
-extern const char ResUticM1Name[];
-extern const char ResPolMName[];
-extern const char ResUticMName[];
-extern const char ResGirlAName[];
-extern const char ResGoroName[];
-extern const char ResKingName[];
-extern const char ResBabaB1Name[];
-extern const char ResRobotName[];
-extern const char ResManA2Name[];
-extern const char ResEngOjiName[];
-extern const char ResManB2Name[];
-extern const char ResGirlA1Name[];
-extern const char ResInnGirlName[];
-extern const char ResKidswA2Name[];
-extern const char ResJijiA2Name[];
-extern const char ResWmanAName[];
-extern const char ResScotName[];
-extern const char ResKidswBName[];
-extern const char ResKidswA1Name[];
-extern const char ResObaB1Name[];
-extern const char ResWmanA2Name[];
-extern const char ResMouthName[];
-extern const char ResBoyAName[];
-extern const char ResInnOjiName[];
-extern const char ResManB1Name[];
-extern const char ResObaA1Name[];
-extern const char ResBabaA1Name[];
-extern const char ResGirlB2Name[];
-extern const char ResDoctorName[];
-extern const char ResKidsmAName[];
-extern const char ResKidswAName[];
-extern const char ResBartenName[];
-extern const char ResWmanB2Name[];
-extern const char ResSpyName[];
-extern const char ResBabaBName[];
-extern const char ResBoyB2Name[];
-extern const char ResBreadName[];
-extern const char ResKidsmBName[];
-extern const char ResBarOjiName[];
-extern const char ResNurseName[];
-extern const char ResOjiAName[];
-extern const char ResGirlBName[];
-extern const char ResJijiAName[];
-extern const char ResKidsmB1Name[];
-extern const char ResManBName[];
-extern const char ResBabaB2Name[];
-extern const char ResCleChName[];
-extern const char ResBoyBName[];
-extern const char ResBabaA2Name[];
-extern const char ResJijiB2Name[];
-extern const char ResObaAName[];
-extern const char ResBreadChName[];
-extern const char ResManA1Name[];
-extern const char ResObaB2Name[];
-extern const char ResObaBName[];
-extern const char ResBoyB1Name[];
-extern const char ResPilotNoName[];
-extern const char ResWmanB1Name[];
-extern const char ResWmanA1Name[];
-extern const char ResKidswB1Name[];
-extern const char ResBarMName[];
-extern const char ResJijiB1Name[];
-extern const char ResGirlB1Name[];
-extern const char ResManAName[];
-extern const char ResOjiA1Name[];
-extern const char ResWmanBName[];
-extern const char ResKingCatName[];
-extern const char ResKidsmB2Name[];
-extern const char ResOjiA2Name[];
-extern const char ResKidswB2Name[];
-extern const char ResBoyA2Name[];
-extern const char ResKidsmA1Name[];
-extern const char ResCleObaName[];
-extern const char ResGirlA2Name[];
-extern const char ResBabaAName[];
-extern const char ResOjiB1Name[];
-extern const char ResJijiBName[];
-extern const char ResJijiA1Name[];
-extern const char ResKidsmA2Name[];
-extern const char ResBoyA1Name[];
-extern const char ResObaA2Name[];
-extern const char ResOjiB2Name[];
-extern const char ResOjiBName[];
-extern const char ResFile05Name[];
-extern const char ResFile01Name[];
-extern const char ResFile04Name[];
-extern const char ResFile06Name[];
-extern const char ResFile03Name[];
-extern const char ResFile02Name[];
-extern const char ResSuffix06Name[];
-extern const char ResSuffix05Name[];
-extern const char ResFile01CvName[];
-extern const char ResSuffix04Name[];
-extern const char ResFile01HoName[];
-extern const char ResSuffix02Name[];
-extern const char ResFile01Ho2Name[];
-extern const char ResSuffix01Name[];
-extern const char ResFile08Name[];
-extern const char ResSuffix03Name[];
-extern const char ResFile07Name[];
-extern const char ResFile09Name[];
-extern const char ResFile02HoName[];
-extern const char ResVx1MName[];
-extern const char ResUkunSName[];
-extern const char ResUkunBName[];
-extern const char ResUknGName[];
-extern const char ResGrHeadName[];
-extern const char ResGrHandName[];
-extern const char ResGrBodyName[];
-extern const char ResGrFinalName[];
-extern const char ResGrLegName[];
-extern const char ResTs01Name[];
-extern const char ResHw05Name[];
-extern const char ResBw01Name[];
-extern const char ResBw02Name[];
-extern const char ResBw03Name[];
-extern const char ResHw04Name[];
-extern const char ResHw02Name[];
-extern const char ResHw03Name[];
-extern const char ResHw06Name[];
-extern const char ResHw01Name[];
-extern const char ResBw04Name[];
-extern const char ResRd02Name[];
-extern const char ResRd16Name[];
-extern const char ResRd17Name[];
-extern const char ResRd06Name[];
-extern const char ResRd09Name[];
-extern const char ResRd14Name[];
-extern const char ResRd15Name[];
-extern const char ResRd01Name[];
-extern const char ResRd12Name[];
-extern const char ResRd07Name[];
-extern const char ResRd08Name[];
-extern const char ResRd05Name[];
-extern const char ResRd10Name[];
-extern const char ResRd13Name[];
-extern const char ResRd04Name[];
-extern const char ResRd11Name[];
-extern const char ResRd03Name[];
-extern const char ResSw01Name[];
-extern const char ResGun05Name[];
-extern const char ResJrHg07Name[];
-extern const char ResJrHg06Name[];
-extern const char ResGun01Name[];
-extern const char ResJrHg08Name[];
-extern const char ResGun03Name[];
-extern const char ResGun04Name[];
-extern const char ResGun02Name[];
-extern const char ResSw05Name[];
-extern const char ResSw04Name[];
-extern const char ResSw02Name[];
-extern const char ResSw03Name[];
-extern const char ResMboxName[];
-extern const char ResHb00RName[];
-extern const char ResMg01Name[];
-extern const char ResPbk00Name[];
-extern const char ResDlc00Name[];
-extern const char ResMsp01Name[];
-extern const char ResDeff00Name[];
-extern const char ResFl00Name[];
-extern const char ResSmp01Name[];
-extern const char ResRf02Name[];
-extern const char ResEcm01Name[];
-extern const char ResFsd00Name[];
-extern const char ResMsp03Name[];
-extern const char ResDrl00Name[];
-extern const char ResHg01Name[];
-extern const char ResCb00Name[];
-extern const char ResLsr00Name[];
-extern const char ResRf00Name[];
-extern const char ResWire00Name[];
-extern const char ResLgc00Name[];
-extern const char ResBam00Name[];
-extern const char ResBl00Name[];
-extern const char ResShb00Name[];
-extern const char ResEcm02Name[];
-extern const char ResMg00Name[];
-extern const char ResWct00Name[];
-extern const char ResMsp00Name[];
-extern const char ResGlg00Name[];
-extern const char ResBbc00Name[];
-extern const char ResBw00Name[];
-extern const char ResBd00Name[];
-extern const char ResGnd00Name[];
-extern const char ResBp00Name[];
-extern const char ResAx00Name[];
-extern const char ResGlg00RName[];
-extern const char ResHmr02Name[];
-extern const char ResMsp02RName[];
-extern const char ResBs00Name[];
-extern const char ResEad00Name[];
-extern const char ResRf01Name[];
-extern const char ResSol00Name[];
-extern const char ResEac00Name[];
-extern const char ResHmr00Name[];
-extern const char ResBd01Name[];
-extern const char ResVsd00Name[];
-extern const char ResHb00Name[];
-extern const char ResAmp02Name[];
-extern const char ResMsp02Name[];
-extern const char ResDrl01Name[];
-extern const char ResHg00Name[];
-extern const char ResAcc030Name[];
-extern const char ResAcc031Name[];
-extern const char ResAcc028Name[];
-extern const char ResAcc033Name[];
-extern const char ResAcc029Name[];
-extern const char ResAcc018Name[];
-extern const char ResAcc036Name[];
-extern const char ResEwpHg01Name[];
-extern const char ResAcc032Name[];
-extern const char ResAcc034Name[];
-extern const char ResAcc035Name[];
-extern const char ResWingName[];
-extern const char ResFile013Name[];
-extern const char ResFile007Name[];
-extern const char ResFile324Name[];
-extern const char ResFile325Name[];
-extern const char ResFile003Name[];
-extern const char ResFile006Name[];
-extern const char ResFile114Name[];
-extern const char ResFile311Name[];
-extern const char ResFile310Name[];
-extern const char ResFile015Name[];
-extern const char ResFile025Name[];
-extern const char ResFile320Name[];
-extern const char ResFile018Name[];
-extern const char ResFile318Name[];
-extern const char ResFile313Name[];
-extern const char ResFile016Name[];
-extern const char ResFile004Name[];
-extern const char ResFile014Name[];
-extern const char ResFile307Name[];
-extern const char ResFile020Name[];
-extern const char ResFile312Name[];
-extern const char ResFile009Name[];
-extern const char ResFile002Name[];
-extern const char ResFile317Name[];
-extern const char ResFile023Name[];
-extern const char ResFile309Name[];
-extern const char ResFile323Name[];
-extern const char ResFile021Name[];
-extern const char ResFile022Name[];
-extern const char ResFile305Name[];
-extern const char ResFile001Name[];
-extern const char ResFile017Name[];
-extern const char ResFile302Name[];
-extern const char ResFile308Name[];
-extern const char ResFile319Name[];
-extern const char ResFile303Name[];
-extern const char ResFile010Name[];
-extern const char ResFile019Name[];
-extern const char ResFile024Name[];
-extern const char ResFile304Name[];
-extern const char ResFile315Name[];
-extern const char ResFile008Name[];
-extern const char ResFile005Name[];
-extern const char ResFile314Name[];
-extern const char ResFile301Name[];
-extern const char ResFile316Name[];
-extern const char ResFile011Name[];
-extern const char ResFile012Name[];
-extern const char ResFile321Name[];
-extern const char ResFile306Name[];
-extern const char ResFile322Name[];
-extern const char ResFile028Name[];
-extern const char ResFile030Name[];
-extern const char ResFile026Name[];
-extern const char ResFile027Name[];
-extern const char ResFile029Name[];
-extern const char ResFile032Name[];
-extern const char ResFile033Name[];
-extern const char ResFile031Name[];
-extern const char ResFile115Name[];
-extern const char ResFile078Name[];
-extern const char ResFile103Name[];
-extern const char ResFile126Name[];
-extern const char ResFile081Name[];
-extern const char ResFile057Name[];
-extern const char ResFile169Name[];
-extern const char ResFile129Name[];
-extern const char ResFile138Name[];
-extern const char ResFile067Name[];
-extern const char ResFile166Name[];
-extern const char ResFile054Name[];
-extern const char ResFile069Name[];
-extern const char ResFile037Name[];
-extern const char ResFile084Name[];
-extern const char ResFile086Name[];
-extern const char ResFile087Name[];
-extern const char ResFile090Name[];
-extern const char ResFile093Name[];
-extern const char ResFile042Name[];
-extern const char ResFile074Name[];
-extern const char ResFile130Name[];
-extern const char ResFile132Name[];
-extern const char ResFile134Name[];
-extern const char ResFile146Name[];
-extern const char ResFile113Name[];
-extern const char ResFile122Name[];
-extern const char ResFile176Name[];
-extern const char ResFile075Name[];
-extern const char ResFile131Name[];
-extern const char ResFile068Name[];
-extern const char ResFile150Name[];
-extern const char ResFile178Name[];
-extern const char ResFile180Name[];
-extern const char ResFile041Name[];
-extern const char ResFile140Name[];
-extern const char ResFile047Name[];
-extern const char ResFile170Name[];
-extern const char ResFile076Name[];
-extern const char ResFile096Name[];
-extern const char ResFile123Name[];
-extern const char ResFile097Name[];
-extern const char ResFile108Name[];
-extern const char ResFile082Name[];
-extern const char ResFile152Name[];
-extern const char ResFile110Name[];
-extern const char ResFile046Name[];
-extern const char ResFile145Name[];
-extern const char ResFile040Name[];
-extern const char ResFile177Name[];
-extern const char ResFile073Name[];
-extern const char ResFile092Name[];
-extern const char ResFile160Name[];
-extern const char ResFile168Name[];
-extern const char ResFile055Name[];
-extern const char ResFile098Name[];
-extern const char ResFile116Name[];
-extern const char ResFile064Name[];
-extern const char ResFile060Name[];
-extern const char ResFile000Name[];
-extern const char ResFile089Name[];
-extern const char ResFile142Name[];
-extern const char ResFile107Name[];
-extern const char ResFile039Name[];
-extern const char ResFile091Name[];
-extern const char ResFile048Name[];
-extern const char ResFile154Name[];
-extern const char ResFile155Name[];
-extern const char ResFile175Name[];
-extern const char ResFile133Name[];
-extern const char ResFile105Name[];
-extern const char ResFile162Name[];
-extern const char ResFile179Name[];
-extern const char ResFile164Name[];
-extern const char ResFile172Name[];
-extern const char ResFile034Name[];
-extern const char ResFile165Name[];
-extern const char ResFile088Name[];
-extern const char ResFile125Name[];
-extern const char ResFile156Name[];
-extern const char ResFile049Name[];
-extern const char ResFile062Name[];
-extern const char ResFile080Name[];
-extern const char ResFile063Name[];
-extern const char ResFile151Name[];
-extern const char ResFile167Name[];
-extern const char ResFile065Name[];
-extern const char ResFile100Name[];
-extern const char ResFile061Name[];
-extern const char ResFile139Name[];
-extern const char ResFile094Name[];
-extern const char ResFile038Name[];
-extern const char ResFile102Name[];
-extern const char ResFile059Name[];
-extern const char ResFile056Name[];
-extern const char ResFile117Name[];
-extern const char ResFile149Name[];
-extern const char ResFile174Name[];
-extern const char ResFile072Name[];
-extern const char ResFile161Name[];
-extern const char ResFile109Name[];
-extern const char ResFile135Name[];
-extern const char ResFile159Name[];
-extern const char ResFile052Name[];
-extern const char ResFile111Name[];
-extern const char ResFile085Name[];
-extern const char ResFile153Name[];
-extern const char ResFile051Name[];
-extern const char ResFile118Name[];
-extern const char ResFile106Name[];
-extern const char ResFile035Name[];
-extern const char ResFile136Name[];
-extern const char ResFile143Name[];
-extern const char ResFile173Name[];
-extern const char ResFile058Name[];
-extern const char ResFile158Name[];
-extern const char ResFile157Name[];
-extern const char ResFile043Name[];
-extern const char ResFile120Name[];
-extern const char ResFile121Name[];
-extern const char ResFile045Name[];
-extern const char ResFile036Name[];
-extern const char ResFile079Name[];
-extern const char ResFile124Name[];
-extern const char ResFile053Name[];
-extern const char ResFile066Name[];
-extern const char ResFile147Name[];
-extern const char ResFile101Name[];
-extern const char ResFile099Name[];
-extern const char ResFile071Name[];
-extern const char ResFile137Name[];
-extern const char ResFile144Name[];
-extern const char ResFile163Name[];
-extern const char ResFile050Name[];
-extern const char ResFile077Name[];
-extern const char ResFile104Name[];
-extern const char ResFile127Name[];
-extern const char ResFile044Name[];
-extern const char ResFile112Name[];
-extern const char ResFile070Name[];
-extern const char ResFile128Name[];
-extern const char ResFile141Name[];
-extern const char ResFile083Name[];
-extern const char ResFile095Name[];
-extern const char ResFile119Name[];
-extern const char ResFile171Name[];
-extern const char ResFile148Name[];
-extern struct SoundWork SoundWork;
 extern const char soundSwdPathFormat[];
 extern const char soundSedPathFormat[];
 extern const char soundSmdPathFormat[];
-extern const u8 lexSuffix[];
-extern const u8 xtxSuffix[];
-extern const u8 idSuffix[];
+extern const char lexSuffix[];
+extern const char xtxSuffix[];
+extern const char idSuffix[];
 extern const char faceSuffix[];
 extern const char resourceDumpRowFormat[];
 extern const char jntSuffix[];
 extern const char motionFpkPathFormat[];
-extern unsigned char ModelPath;
 extern const char ResZ8Name[8];
 extern const char ResCSName[8];
 extern const char ResMOName[8];
@@ -939,66 +184,36 @@ extern const char ResGuno323Name[16];
 extern const char ResGuno324Name[16];
 extern const char ResGuno325Name[16];
 extern const char ResGuno307Name[16];
-extern const char ResResetName[];
-extern const char ResLoadmapName[];
-extern const char ResLoadactName[];
-extern const char ResLoadmotName[];
-extern const char ResLoadtexName[];
-extern const char ResLoadeneName[];
-extern const char ResScriptName[];
-extern const char ResPlayerName[];
-extern const char ResDummyName[];
-extern const char ResLoadseName[];
-extern const char ResLoadsmdName[];
-extern const char ResMpeg2Name[];
-extern const char ResEneseName[];
-extern const char ResNpcseName[];
-extern const char ResDiskName[];
-extern const char ResSaveName[];
-
 static char *command_enenpcse(int command, char *cursor, int mode);
 extern int GameDiskChange(int disk_number);
 extern void Intermission(int save_number);
-extern int xglCdGetFileSize(const char *name);
 extern void SCRIPT_fade(int time);
 static char *command_mpeg2_core(int command, char *cursor, int mode);
 static int next_arc_size(void *address);
 extern void Enemy_LoadPreset(void *address, const char *name);
 extern void ACT_init(void);
 extern void MapChangeFadeSet(void);
-void GameResourceLoad(int scene_id);
 /* RES_loadFile callback: (resource type, file name, resource address). */
-int RES_loadFile(int command, int callback, int resource_id, int flags);
-static char *search_key(char *cursor, u8 *table, int *id);
+void *RES_loadFile(int command, int callback, int resource_id, int flags);
+static char *search_key(char *cursor, ResourceKeyEntry *table, int *id);
 extern int sefLoadEffectCfName(int cf_id, char *effect_name);
 extern int sefLoadMemoryEffectCfName(void *data, char *effect_name, int size);
 extern void GameCfPlayerLoadResource(int resource_set);
 extern void SCRIPT_frameLock2Battle(void);
-void GameResourceReset(int slot);
-extern void *GameResourceAlloc(int size);
 void *GameResourceRealloc(void *address, int size);
 extern void MapReset(void);
 extern void xglSoundLoadEffect(const char *name, void *address, int bank);
-extern int SsdGetResultValue(int *result);
-extern int SsdGetSeqPlayStatus(int sequence_id);
 extern int SsdCheckPlayEffectFileID(u16 file_id);
 extern void xglSoundSendSmd(void *address);
-extern void xglSoundSequenceNormal(int mode);
 extern char *MAP_getPath(char *name);
-extern void xglMatrixUnit(float matrix[4][4]);
 extern char *MapGetName(int scene_id);
 extern int func_A1CF18(char *path, int scene_id);
-void RES_GetMdlFileName(char *destination, int selector);
-int GameResourceGetIndex(int address);
+int GameResourceGetIndex(void *address);
 static int RES_GetMdlFileNameSub(char *dst, int selector);
 extern char *strcpy(char *destination, const char *source);
 int GameResourceSearch(int type, int key);
-static int RES_loadFileSubMapSub(char *name, char *suffix, void *buffer);
+static int RES_loadFileSubMapSub(char *name, const char *suffix, void *buffer);
 static int RES_loadFileSub(int callback, int resource_id, void *address);
-extern int xglSoundSendSmd2(void *address, int sequence_index);
-extern void xglSoundSequenceNormal2(int sequence_index, int mode);
-extern void GameMpeg2Play(const char *name, int mode);
-
 u8 ScenePath = 0;
 
 static ResourceKeyEntry CID[8] = {
@@ -1076,14 +291,14 @@ static ResourceKeyEntry MOBJ[10] = {
 };
 
 static ResourceKeyEntry model[9] = {
-    {ResCidName, CID, ResCharPath},
-    {ResCidName, CID, ResCharPath},
-    {ResRidName, RID, ResRoboPath},
-    {ResWidName, WID, ResWeaponPath},
-    {ResEidName, EID, ResEnemyPath},
-    {ResMidName, MID, ResObjPath},
-    {ResAidName, AID, ResObjPath},
-    {ResEmptyName, MOBJ, ResObjPath},
+    {ResCidName, {.children = CID}, ResCharPath},
+    {ResCidName, {.children = CID}, ResCharPath},
+    {ResRidName, {.children = RID}, ResRoboPath},
+    {ResWidName, {.children = WID}, ResWeaponPath},
+    {ResEidName, {.children = EID}, ResEnemyPath},
+    {ResMidName, {.children = MID}, ResObjPath},
+    {ResAidName, {.children = AID}, ResObjPath},
+    {ResEmptyName, {.children = MOBJ}, ResObjPath},
     {0, 0, 0},
 };
 
@@ -1204,11 +419,11 @@ static char base_7[29] = "data\\movie\\small\\mvs0000.ipu";
 
 static char base_8[24] = "data\\texture\\fm0000.xtx";
 
-const u8 lexSuffix[8] = ".lex";
+const char lexSuffix[8] = ".lex";
 
-const u8 xtxSuffix[8] = ".xtx";
+const char xtxSuffix[8] = ".xtx";
 
-const u8 idSuffix[8] = ".id";
+const char idSuffix[8] = ".id";
 
 static const char root_4[6] = "data\\";
 
@@ -1271,7 +486,16 @@ static char foot_name[16];
 
 static char env_name[0x10];
 
-static char scene_txt_buffer[0x800];
+typedef struct {
+    u32 signature;
+} SceneTextHeader;
+
+typedef union {
+    SceneTextHeader header;
+    u8 text[0x800];
+} SceneTextBuffer;
+
+static SceneTextBuffer scene_txt_buffer;
 
 static u32 archeader[0x40];
 
@@ -1311,13 +535,13 @@ static char *RES_getScenePath(char *path, int resource_id)
 
     scene_id = resource_id & 0x0fffffff;
 
-    path[5] = (char)('0' + scene_id % 10);
+    path[5] = '0' + scene_id % 10;
     scene_id /= 10;
-    path[4] = (char)('0' + scene_id % 10);
+    path[4] = '0' + scene_id % 10;
     scene_id /= 10;
-    path[3] = (char)('0' + scene_id % 10);
+    path[3] = '0' + scene_id % 10;
     scene_id /= 10;
-    path[2] = (char)('0' + scene_id % 10);
+    path[2] = '0' + scene_id % 10;
     path[6] = '.';
     path[7] = 't';
     path[8] = 'x';
@@ -1469,16 +693,17 @@ static int resource_get_free(void)
     return -1;
 }
 
-u32 GameResourceGetFreeAddr(void)
+void *GameResourceGetFreeAddr(void)
 {
-    u32 free_address = GameResource[resource_get_free()].address;
+    unsigned char *free_address = GameResource[resource_get_free()].address;
 
-    if (free_address <= 0x01129FFF)
-        return 0x0112A000;
+    /* Fixed EE RAM addresses, like the resource buffers of GameResourceInit. */
+    if (free_address <= (unsigned char *)0x01129FFF)
+        return (void *)0x0112A000;
     return free_address;
 }
 
-u32 GameResourceWorkAlloc(int size)
+unsigned char *GameResourceWorkAlloc(int size)
 {
     int index;
     GameResourceEntry *entry;
@@ -1497,7 +722,7 @@ u32 GameResourceWorkAlloc(int size)
         entry++;
     } while (index < 0x80);
     GameResourceWorkReloadTable[0] = 1;
-    return 0x0112A000;
+    return (unsigned char *)0x0112A000;
 }
 
 void GameResourceWorkReload(void)
@@ -1531,9 +756,9 @@ void *GameResourceRealloc(void *address, int size)
 {
     int index;
     int combined_size;
-    u32 old_address;
+    unsigned char *old_address;
 
-    index = GameResourceGetIndex((int)address);
+    index = GameResourceGetIndex(address);
     if (index < 0)
         return 0;
     if (GameResource[index + 1].state == -1) {
@@ -1579,7 +804,7 @@ static int next_arc_size(void *address)
         else
             memcpy(address, source, size);
     }
-    if ((u32)archeader[0] >> 2 <= (u32)arcno)
+    if (archeader[0] >> 2 <= (u32)arcno)
         arcfileaddr = 0;
     return size;
 }
@@ -1603,9 +828,9 @@ static u8 *skip_space(u8 *cursor)
     return cursor;
 }
 
-static char *search_key(char *cursor, u8 *table, int *id)
+static char *search_key(char *cursor, ResourceKeyEntry *table, int *id)
 {
-    ResourceKeyEntry *record = (ResourceKeyEntry *)table;
+    ResourceKeyEntry *record = table;
     int root_id = 0;
 
     while (record->key != 0) {
@@ -1617,7 +842,7 @@ static char *search_key(char *cursor, u8 *table, int *id)
             char root_character = *root_input;
 
             if (expected == '\0') {
-                ResourceKeyEntry *child = (ResourceKeyEntry *)record->aliases;
+                ResourceKeyEntry *child = record->aliases.children;
                 int child_id = root_id;
 
                 if (child->key != 0) {
@@ -1629,7 +854,7 @@ static char *search_key(char *cursor, u8 *table, int *id)
                             char child_expected = *child_key;
                             char child_character = *child_input;
                             if (child_expected == '\0') {
-                                const char **leaf = (const char **)child->aliases;
+                                const char **leaf = child->aliases.names;
                                 int leaf_id = child_id + 1;
 
                                 if (*leaf != 0) {
@@ -1717,7 +942,7 @@ static char *command_loadmap(int command, char *cursor)
     MapNameGroup *group;
     int group_id;
     int name_index;
-    int load_result;
+    void *load_result;
     int no_load;
     char **name_entry;
     const char *name_cursor;
@@ -1769,7 +994,7 @@ map_name_found:
 static char *command_loadact(int command, char *cursor, int mode)
 {
     int resource_id = 0;
-    char *next_cursor = search_key(cursor, (u8 *)model, &resource_id);
+    char *next_cursor = search_key(cursor, model, &resource_id);
 
     RES_loadFile(command, 0, resource_id, 0);
     return next_cursor;
@@ -1778,7 +1003,7 @@ static char *command_loadact(int command, char *cursor, int mode)
 static char *command_loadface(int command, char *cursor, int mode)
 {
     int resource_id = 0;
-    char *next_cursor = search_key(cursor, (u8 *)model, &resource_id);
+    char *next_cursor = search_key(cursor, model, &resource_id);
 
     RES_loadFile(command, 0, resource_id + 0x10000, 0);
     return next_cursor;
@@ -1840,9 +1065,9 @@ static char *command_loadmot(int command, char *cursor)
     return cursor;
 }
 
-u8 RES_GetFootStepNo(struct Actor *actor)
+u8 RES_GetFootStepNo(Actor *actor)
 {
-    ActorResource *resource = actor->resource;
+    ActorResource *resource = actor->animPackTables[0];
     u8 foot_step_no = 0;
 
     if (resource != 0) {
@@ -2000,7 +1225,7 @@ static int command_dummy(int resource_id, int result)
     if (GameResource[resource_id + 1].address == 0)
         GameResourceAlloc(0);
     else
-        GameResourceRealloc((void *)GameResource[resource_id].address, 0);
+        GameResourceRealloc(GameResource[resource_id].address, 0);
     return result;
 }
 
@@ -2039,14 +1264,14 @@ static u8 *command_loadse(int command, u8 *cursor)
     char sequence_name[0x40];
     char path[0x100];
     int character;
-    u32 address;
+    unsigned char *address;
     u16 file_id;
     int keep_current;
     u8 set_normal;
     int first_size;
     int second_size;
-    u8 *name_end;
-    u8 *sequence_end;
+    char *name_end;
+    char *sequence_end;
     void *second_address;
 
     address = GameResourceGetFreeAddr();
@@ -2064,7 +1289,7 @@ static u8 *command_loadse(int command, u8 *cursor)
 
     keep_current = 0;
     for (;;) {
-        character = (u8)*cursor;
+        character = *cursor;
         if ((character & 0xff) == ',' || (character & 0xff) == ' ' ||
             (character & 0xff) == '\t') {
             cursor++;
@@ -2095,7 +1320,7 @@ environment_name_done:
 
     set_normal = 0;
     for (;;) {
-        character = (u8)*cursor;
+        character = *cursor;
         if ((character & 0xff) == ',' || (character & 0xff) == ' ' ||
             (character & 0xff) == '\t') {
             cursor++;
@@ -2142,8 +1367,8 @@ environment_name_done:
             second_size = next_arc_size(second_address);
         } else {
             sprintf(path, soundSwdPathFormat, env_name);
-            first_size = xglCdReadFile(path, (void *)address, 0, 0);
-            second_address = (void *)(address + first_size);
+            first_size = xglCdReadFile(path, address, 0, 0);
+            second_address = address + first_size;
             sprintf(path, soundSedPathFormat, env_name);
             second_size = xglCdReadFile(path, second_address, 0, 0);
         }
@@ -2163,7 +1388,7 @@ environment_name_done:
             }
         }
         if (!keep_current && first_size > 0 && second_size > 0)
-            xglSoundSendEffect((void *)address, second_address, 3);
+            xglSoundSendEffect(address, second_address, 3);
     }
 
     if (sequence_name[0] != 0) {
@@ -2172,13 +1397,13 @@ environment_name_done:
         } else {
             int size;
             if (arcfileaddr != 0) {
-                size = next_arc_size((void *)address);
+                size = next_arc_size(address);
             } else {
                 sprintf(path, soundSmdPathFormat, sequence_name);
-                size = xglCdReadFile(path, (void *)address, 0, 0);
+                size = xglCdReadFile(path, address, 0, 0);
             }
             if (size != 0) {
-                xglSoundSendSmd((void *)address);
+                xglSoundSendSmd(address);
                 if (set_normal)
                     xglSoundSequenceNormal(0x7F);
             }
@@ -2192,7 +1417,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
     char name[0x40];
     char path[0x100];
     s16 character;
-    u32 address;
+    unsigned char *address;
     int sequence_index;
     int first_character;
 
@@ -2246,7 +1471,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
                 const char *sequence_format = soundSmdPathFormat;
 
                 sprintf(path, sequence_format, name);
-                file_size = xglCdReadFile(path, (void *)address, 0, 0);
+                file_size = xglCdReadFile(path, address, 0, 0);
             }
 
             if (sequence_id != ((SoundLoadBuffer *)address)->sequence_id) {
@@ -2260,7 +1485,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
                     stop_current = 0;
             }
             if (!stop_current && file_size > 0) {
-                xglSoundSendSmd2((void *)address, sequence_index);
+                xglSoundSendSmd2(address, sequence_index);
                 if (set_normal)
                     xglSoundSequenceNormal2(sequence_index, 0x7F);
             }
@@ -2351,13 +1576,13 @@ static char *command_enenpcse(int command, char *cursor, int mode)
     int resource_id;
     int motion_id;
     int slot;
-    u32 address;
+    unsigned char *address;
     int first_size;
     int second_size;
     void *second_address;
 
     resource_id = 0;
-    next = search_key(cursor, (u8 *)model, &resource_id);
+    next = search_key(cursor, model, &resource_id);
     for (;;) {
         character = (u8)*next;
         if ((character & 0xff) == ',' || (character & 0xff) == ' ' ||
@@ -2414,13 +1639,13 @@ enemy_digit_test:
     strcpy(EnemySeBank[slot].name, name);
 
     if (arcfileaddr != 0) {
-        first_size = next_arc_size((void *)address);
-        second_address = (void *)(address + first_size);
+        first_size = next_arc_size(address);
+        second_address = address + first_size;
         second_size = next_arc_size(second_address);
         if (first_size != 0 && second_size != 0)
-            xglSoundSendEffect((void *)address, second_address, slot + 4);
+            xglSoundSendEffect(address, second_address, slot + 4);
     } else {
-        xglSoundLoadEffect(name, (void *)address, slot + 4);
+        xglSoundLoadEffect(name, address, slot + 4);
     }
     return next;
 }
@@ -2470,7 +1695,7 @@ void GameResourcePreLoad(int scene_number)
     archive_path = RES_getScenePath(path, scene_number);
     arcfilepreload = 0;
     if (xglCdGetFileSize(path) > 0) {
-        xglCdReadFile(path, scene_txt_buffer, 1, 1);
+        xglCdReadFile(path, scene_txt_buffer.text, 1, 1);
 
         archive_path[0] = 'a';
         archive_path[1] = '\0';
@@ -2489,13 +1714,8 @@ static void readreq(const char *name, void *buffer)
 
 void GameResourceLoad(int scene_id)
 {
-    typedef struct {
-        u32 signature;
-    } SceneTextHeader;
-
     char path[0x100];
     u8 *cursor;
-    u8 *load_buffer;
     char *extension;
     int file_size;
 
@@ -2504,11 +1724,10 @@ void GameResourceLoad(int scene_id)
     if (arcfilepreload != 0) {
         arcfileaddr = (u32 *)arcfilepreload;
     } else {
-        load_buffer = (u8 *)scene_txt_buffer;
-        ((SceneTextHeader *)load_buffer)->signature = 0xCDCDCDCD;
+        scene_txt_buffer.header.signature = 0xCDCDCDCD;
         arcfileaddr = 0;
         extension = RES_getScenePath(path, scene_id);
-        readreq(path, load_buffer);
+        readreq(path, scene_txt_buffer.text);
         *extension++ = 'a';
         *extension = '\0';
         file_size = xglCdGetFileSize(path);
@@ -2518,8 +1737,8 @@ void GameResourceLoad(int scene_id)
         }
     }
 
-    cursor = (u8 *)scene_txt_buffer;
-    if (((SceneTextHeader *)cursor)->signature == 0x6E637323) {
+    cursor = scene_txt_buffer.text;
+    if (scene_txt_buffer.header.signature == 0x6E637323) {
         int resource_id;
 
         cursor = next_line(cursor);
@@ -2533,11 +1752,11 @@ void GameResourceLoad(int scene_id)
             } else {
                 resource_id = 0;
                 cursor = skip_space(cursor);
-                if ((unsigned char)((unsigned char)*cursor + 0xD0) < 10) {
+                if ((unsigned char)(*cursor + 0xD0) < 10) {
                     do {
                         resource_id *= 10;
-                        resource_id += (u8)*cursor++ - '0';
-                    } while ((unsigned char)((unsigned char)*cursor + 0xD0) < 10);
+                        resource_id += *cursor++ - '0';
+                    } while ((unsigned char)(*cursor + 0xD0) < 10);
                 }
                 cursor = skip_space(cursor);
                 entry = command;
@@ -2581,13 +1800,13 @@ void GameResourceLoad(int scene_id)
     }
 }
 
-static int RES_loadFileSubMapSub(char *name, char *suffix, void *buffer)
+static int RES_loadFileSubMapSub(char *name, const char *suffix, void *buffer)
 {
     char path[0x100];
     char *dst = path;
     char *fallback_dst;
-    char *prefix_cursor;
-    char *fallback_cursor;
+    const char *prefix_cursor;
+    const char *fallback_cursor;
     int size;
 
     prefix_cursor = MAP_getPath(name);
@@ -2608,7 +1827,7 @@ static int RES_loadFileSubMapSub(char *name, char *suffix, void *buffer)
     size = xglCdGetFileSize(path);
     if (size <= 0) {
         fallback_dst = path;
-        fallback_cursor = (char *)dummy_3;
+        fallback_cursor = dummy_3;
         while (*fallback_cursor != 0) {
             *fallback_dst++ = *fallback_cursor++;
         }
@@ -2639,14 +1858,14 @@ static int RES_loadFileSubMap(u8 *end_address, int scene_id)
     if (arcfileaddr != 0)
         file_size = next_arc_size(end_address);
     else
-        file_size = RES_loadFileSubMapSub(map_name, (char *)lexSuffix, end_address);
+        file_size = RES_loadFileSubMapSub(map_name, lexSuffix, end_address);
     end_address = (u8 *)(((u32)end_address + file_size + 0xF) & ~0xF);
     state->texture_file = end_address;
 
     if (arcfileaddr != 0)
         file_size = next_arc_size(end_address);
     else
-        file_size = RES_loadFileSubMapSub(map_name, (char *)xtxSuffix,
+        file_size = RES_loadFileSubMapSub(map_name, xtxSuffix,
                                            end_address);
     if (file_size <= 0) {
         state->texture_file = 0;
@@ -2658,7 +1877,7 @@ static int RES_loadFileSubMap(u8 *end_address, int scene_id)
     if (arcfileaddr != 0)
         file_size = next_arc_size(end_address);
     else
-        file_size = RES_loadFileSubMapSub(map_name, (char *)idSuffix,
+        file_size = RES_loadFileSubMapSub(map_name, idSuffix,
                                             end_address);
     if (file_size <= 0) {
         state->id_file = 0;
@@ -2751,8 +1970,8 @@ static int RES_GetMdlFileNameSub(char *dst, int selector)
         return selector;
     }
 
-    alias_entry = (const ResourceKeyEntry *)model_entry->aliases + alias_group;
-    names = (const char *const *)alias_entry->aliases;
+    alias_entry = model_entry->aliases.children + alias_group;
+    names = alias_entry->aliases.names;
     alias_index = selector & 0xff;
     for (; names != 0; names++) {
         if (--alias_index == 0)
@@ -2880,7 +2099,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         __builtin_memcpy(single_end, jntSuffix, 5);
         size = xglCdGetFileSize(single_path);
         if (size > 0)
-            readreq(single_path, (void *)address);
+            readreq(single_path, address);
         break;
     }
     case 0:
@@ -2894,7 +2113,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         model_end = model_path;
         while (*model_end != 0)
             model_end++;
-        files = (ResourceFileSet *)address;
+        files = address;
         files->first_file = 0;
         files->second_file = 0;
         files->third_file = 0;
@@ -2954,7 +2173,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         size = xglCdGetFileSize(motion_path);
         if (size > 0) {
             size = xglCdGetFileSize(motion_path);
-            readreq(motion_path, (void *)address);
+            readreq(motion_path, address);
         }
         break;
     case 3: {
@@ -2996,7 +2215,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         size = xglCdGetFileSize(named_path);
         if (size > 0) {
             size = xglCdGetFileSize(named_path);
-            readreq(named_path, (void *)address);
+            readreq(named_path, address);
         }
         break;
     }
@@ -3037,7 +2256,7 @@ format_numbered_path:
         end[-8] = (u8)end[-8] + quotient % 10;
         size = xglCdGetFileSize(path);
         if (size > 0)
-            readreq(path, (void *)address);
+            readreq(path, address);
         break;
     case 5: {
         char *texture_end;
@@ -3071,9 +2290,9 @@ format_numbered_path:
     return size;
 }
 
-int RES_loadFile(int command, int callback, int resource_id, int flags)
+void *RES_loadFile(int command, int callback, int resource_id, int flags)
 {
-    int result = 0;
+    unsigned char *result = 0;
     int slot;
     int loaded_size;
     int old_span;
@@ -3085,11 +2304,11 @@ int RES_loadFile(int command, int callback, int resource_id, int flags)
         } else if (command < 0 && callback == 0) {
             command = GameResourceSearch(4, resource_id);
             if (command >= 0) {
-                ResourceFileSet *resource_info = (void *)GameResource[command].address;
+                ResourceFileSet *resource_info = (ResourceFileSet *)GameResource[command].address;
 
                 if (resource_info->third_file == 0) {
                     slot = resource_get_free();
-                    resource_info->third_file = (void *)GameResource[slot].address;
+                    resource_info->third_file = GameResource[slot].address;
                     RES_loadFile(slot, 7, resource_id, flags);
                 }
             }
@@ -3102,10 +2321,10 @@ int RES_loadFile(int command, int callback, int resource_id, int flags)
                 result = RES_loadFile(command, callback, resource_id, flags);
         }
     } else if (command < 0x80) {
-        result = (int)GameResource[command].address;
+        result = GameResource[command].address;
         if (flags == 0)
             flags = (int)RES_loadFileSub;
-        loaded_size = ((int (*)(int, int, void *))flags)(callback, resource_id, (void *)result);
+        loaded_size = ((int (*)(int, int, void *))flags)(callback, resource_id, result);
         if (loaded_size < 0)
             return 0;
         {
@@ -3126,11 +2345,11 @@ int RES_loadFile(int command, int callback, int resource_id, int flags)
     return result;
 }
 
-int GameResourceGetIndex(int address)
+int GameResourceGetIndex(void *address)
 {
     int index = 0;
     GameResourceEntry *entry = GameResource;
-    int resourceAddress;
+    unsigned char *resourceAddress;
     int result;
 
     do {
@@ -3205,7 +2424,7 @@ void GameResourceReset(int slot)
     arcfilepreload = 0;
 }
 
-void GameResourceInit(u32 address, int size)
+void GameResourceInit(unsigned char *address, int size)
 {
     u32 *resource_buffer;
     int remaining = 0x7F;

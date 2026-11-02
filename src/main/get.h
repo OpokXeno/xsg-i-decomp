@@ -6,6 +6,8 @@
 #define SRC_MAIN_GET_H
 
 #include "shared.h"
+#include "main/Undulate.h"
+#include "main/get.h"
 
 /*
  * UnduDataGetHeader's result type: src/main/layout.h, src/main/call_java_method.h
@@ -79,43 +81,13 @@ extern UnduParam UnduTest;
 
 extern const float getRandomFloat;
 
-void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
-                              float angle, float length);
-
 extern float cosf(float angle);
 
-float Get_Angle_Relative(const Point4 *first, const Point4 *second,
-                         float reference);
-
-void BSpline_Add(short frame, short count, short period,
-                 Vector4 *destination, const Vector3 *source, short offset);
-
-void Get_One_Step(float length, const Point4 *source,
-                  const Point4 *destination, Point4 *output);
-
-float Get_Distance(const Point4 *first, const Point4 *second);
-float Get_Distance3D(const Point4 *first, const Point4 *second);
 extern float atan2f(float y, float x);
-
-/* canon: config/header-canon.json chose src/math/main/review11-002d8058/Get_Angle.c over 1 other accepted spelling */
-float Get_Angle(const Point4 *first, const Point4 *second);
-
-float Get_Decimal_Surplus_for_Radius(float angle);
 
 void Get_MiddlePoint_Parabora(const ParabolaVec *first, const ParabolaVec *second,
                               int current, int total, float height,
                               ParabolaVec *destination);
-
-float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
-                                            float speed);
-
-void Get_MiddlePoint(const float *start, const float *following,
-                     short point_index, short point_count, float *result);
-
-float Get_Multi_Max_Under(float value, float step, float maximum);
-
-/* canon: config/header-canon.json (src/math/main/review09-002f6c50/private.h) */
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 
 /*
  * UnduParamInit and UnduCheck are still original bytes in src/main/Undulate.c
@@ -125,13 +97,7 @@ extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
  */
 extern void UnduParamInit(UnduParam *param);
 
-float Get_HeightAttr(const Point4 *position, int mapIndex, int attrMask,
+float Get_HeightAttr(const Vector4 *position, int mapIndex, int attrMask,
                     UnduParam *param);
-
-void Get_Height(const Point4 *position, int mapIndex, int attrMask);
-int Get_Rnd(int min, int max);
-
-int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
-                         float facing, float radius, float fanWidthDegrees);
 
 #endif /* SRC_MAIN_GET_H */

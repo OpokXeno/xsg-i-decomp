@@ -5,6 +5,11 @@
 #include "nml_model_set.h"
 #include "main/xgl_studio.h"
 #include "main/get.h"
+#include "main/nml_model_set.h"
+#include "main/face_point.h"
+#include "main/nml_packet_add.h"
+#include "main/nml_filter_set.h"
+#include "main/xgl_light.h"
 
 #define NML_RENDER_MAP_ENTRY 0x10000u
 
@@ -125,8 +130,8 @@ struct NmlShadowTexture {
 
 typedef struct NmlDirectRecord {
     void *data;
-    s16 count;
-    s16 attribute;
+    u16 count;
+    u16 attribute;
 } NmlDirectRecord;
 
 typedef struct {
@@ -143,108 +148,16 @@ typedef struct {
     int dataOffset;
 } NmlDirectXtxEntry;
 
-typedef struct NmlModelSampleView {
-    unsigned char unmodeled_000[0x48];
-    int sampleCount;
-    unsigned char unmodeled_04c[0x58 - 0x4c];
-    int weightOffset;
-    int transformOffset;
-    unsigned char unmodeled_060[0x90 - 0x60];
-    Vector4 samplePosition;
-} NmlModelSampleView;
 
-typedef struct {
-    unsigned char unmodeled_00[0x94];
-    float fov;
-} NmlStudioFovView;
 
 typedef int NmlProjectedPoint[4];
 
-typedef struct NmlMaterialRenderState NmlMaterialRenderState;
-
-typedef struct NmlModelRenderState NmlModelRenderState;
-
-struct NmlModelRenderRange {
-    short first;
-    short count;
-    unsigned char unmodeled_04[8];
-    LayoutStore *layout;
-};
-
-typedef struct NmlProRealOrigin {
-    u64 word0;
-    u64 word8;
-} NmlProRealOrigin;
-
-typedef struct {
-    short x;                            /* +0x00 */
-    short y;                            /* +0x02 */
-    unsigned char unmodeled_004[8];
-    int ownerAddress;                   /* +0x0c, 32-bit word */
-} NmlCircleOrigin;
-
-typedef struct {
-    unsigned char unmodeled_000[0x250];
-    unsigned int flags;                 /* +0x250 */
-    unsigned char unmodeled_254[0x270 - 0x254];
-    int ratio;                          /* +0x270 */
-    unsigned char unmodeled_274[0x2c0 - 0x274];
-    float scale;                        /* +0x2c0 */
-} NmlCircleModelView;
-
-typedef struct {
-    unsigned char unmodeled_000[0x26c];
-    float viewLimit;                    /* +0x26c */
-} NmlCircleOwnerView;
-
-typedef struct NmlCircleLayout {
-    unsigned char unmodeled_000[0x250];
-    u32 renderFlags;
-    unsigned char unmodeled_254[0x26c - 0x254];
-    float clipThreshold;
-    int ratioValue;
-    unsigned char unmodeled_274[0x2c0 - 0x274];
-    float ratioScale;
-} NmlCircleLayout;
-
-typedef struct NmlFlushMaterialView {
-    char name[0x20];
-    unsigned int render_flags; /* +0x20 */
-    unsigned char unmodeled_024[0x2c - 0x24];
-    int partIndex; /* +0x2c */
-    unsigned char unmodeled_030[0xc0 - 0x30];
-    unsigned int material_flags; /* +0xc0 */
-} NmlFlushMaterialView;
 
 typedef struct NmlDirectEntry {
     const void *data;
     unsigned short size;
     unsigned short type;
 } NmlDirectEntry;
-
-/* The block range is reached through a union (alias set 0): in
- * nmlModelEntryEffect the original keeps the blockCount store ahead of the
- * following s_apBlock store, which a plain short member does not order. */
-typedef struct NmlNonAlphaGroup {
-    union {
-        struct {
-            short firstBlock;
-            short blockCount;
-        };
-    };
-    unsigned char unmodeled_04[4];
-    unsigned int flags;
-    union {
-        LayoutStore *layout;
-        int address;     /* read back as a word by the circle renderers */
-    } owner;             /* +0x0c */
-} NmlNonAlphaGroup;
-
-typedef struct NmlPartFlagData {
-    unsigned char unmodeled_00[0x1c];
-    unsigned int flags; /* +0x1c */
-    unsigned char unmodeled_20[0x40 - 0x20];
-} NmlPartFlagData;
 
 typedef union GifCommandData {
     u64 value;
@@ -253,8 +166,6 @@ typedef union GifCommandData {
         u32 high;
     } words;
 } GifCommandData;
-
-typedef union { Vector4 v; u64 q[2]; } ProjectionQuad;
 
 /* A block whose material flag 0x10 is set keeps its bounding-box corner
  * offsets at +0x70/+0x80, in the bytes a weighted block uses for its matrix
@@ -319,7 +230,7 @@ extern f32 entryClipPoolRear;
 extern char faceNameSuffix[];
 extern float calcSampleThreshold;
 extern int g_nPacketOver;
-extern const NmlProRealOrigin proRealOrigin;
+extern const DoublewordAlignedVector4 proRealOrigin;
 extern float circleViewLimitMin;
 extern const char magicCarpetComeName[];
 extern const char eyeMaterialName[];
@@ -331,17 +242,7 @@ static void CONSTRUCT_MODELSYSTEM(void);
  * does not see an implicit declaration. */
 static void INIT_BACK_BUFFER(void);
 
-/*
- * nmlModelSetFadeInCancel/nmlModelSetFadeOutCancel/nmlModelSetBackBuffer
- * (below, this TU) and nmlModelSetBackBufferToBattle (still INCLUDE_ASM)
- * are used before their definitions; declare them so these calls do not
- * see an implicit declaration.
- */
-void nmlModelSetFadeInCancel(int frames);
-void nmlModelSetFadeOutCancel(int frames);
-void nmlModelSetBackBuffer(int modelId, int duration, int ownerIndex, int value);
-void nmlModelSetBackBufferToBattle(int ownerIndex);
-static void fade_render(NmlPacket packet, FadeControl *control);
+static void fade_render(XglPacket *packet, FadeControl *control);
 
 /* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
  * this caller does not see an implicit declaration. */
@@ -371,8 +272,6 @@ static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId);
  * this caller does not see an implicit declaration.
  */
 static void CONSTRUCT_CIRCLR_SHADOW(void);
-void nmlModelClear(void);
-
 /* CLEAR_LAYOUT_MODEL and CLEAR_MODEL_ENTRY (near the top of this TU) are
  * still INCLUDE_ASM; declare them so this caller does not see an implicit
  * declaration. */
@@ -383,38 +282,31 @@ static void CLEAR_MODEL_ENTRY(void);
  * caller does not see an implicit declaration. */
 static void FLUSH_MODELSYSTEM(void);
 
-extern void xglStudioChange(int);
-extern void xglLightCalcMatrix(StudioLight *);
 extern float xglPointLength(Vector4 *first, Vector4 *second);
-extern u8 *nmlPacketSetAttributeData16N(const void *data, int count);
 extern void nmlFilterStealthMake(int, f32, void *, LayoutSlot *);
 extern f32 tanf(f32);
 extern int nmlModelCalcClipStudio(Vector4 *, int);
 static float deapth_for_studio(int studio, Vector4 *position, float scale);
-extern void nmlPacketGsInit(void);
 extern void nmlPacketAddGsZbuf(int);
 extern void nmlPacketAddGsFBA(int);
-extern void nmlPacketAddGsFlush(void);
 extern void nmlPacketAddGsPixeltest(int);
 extern void nmlPacketAddGsAlpha(u64 alpha);
 extern void nmlPacketAddGifTagStandard(int, int);
-extern void nmlPacketAddScreen(NmlModelRenderState *);
+extern void nmlPacketAddScreen(const StudioCamera *);
 
-extern void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *,
-                                       const NmlModelRenderState *);
+extern void nmlPacketAddTransMicrocode(const NmlModelBlock *,
+                                       const LayoutStore *);
 
-extern void nmlPacketAddExecProg(NmlMaterialRenderState *,
-                                 NmlModelRenderState *, int, int);
+extern void nmlPacketAddExecProg(NmlModelBlock *,
+                                 LayoutStore *, int, int);
 
-extern StudioCamera *nmlPacketAddParts(NmlMaterialRenderState *,
-                                       NmlModelRenderState *, StudioCamera *);
+extern int nmlPacketAddParts(NmlModelBlock *,
+                                       LayoutStore *, StudioCamera *);
 
-extern void nmlPacketAddBlockMaterial(NmlMaterialRenderState *,
-                                      NmlModelRenderState *, int, int);
+extern void nmlPacketAddBlockMaterial(NmlModelBlock *,
+                                      LayoutStore *, int, int);
 
 extern void nmlFilterSetFrameAlphaClear(void);
-extern void nmlPacketAddGsFrame(int, int);
-extern void nmlPacketAddGsFrame1(int, int);
 extern void nmlPacketAddGsFBA1(unsigned int);
 extern void nmlFilterSetFrameToBuffer(int);
 static void AlphaGroupSort(void);
@@ -426,36 +318,29 @@ extern void nmlPacketAddGsTexture(void);
 extern void nmlPacketAddGsClamp(unsigned int);
 extern void nmlFilterSetBufferRender(float);
 extern void sefDrawEffect(void);
-void xglMatrixScale(Matrix4 destination, const Matrix4 source, const float scale[4]);
 
-extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
-                            const Vector4 *vector);
-
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 static int nmlModelRenderProreal(LayoutStore *model, int frame);
 void nmlPacketSendCircleTexture(void *shadow, void *clut);
 static void set_circle_shadow_ratio(int scale);
-static void _WeightToGlobalVec(Vector4 *destination, const Matrix4 matrix, const Matrix4 weights);
-void nmlFadePacketWrite(NmlPacket packet);
-void nmlModelDirectSend(int mode, const void *data, int count);
-void nmlModelFlushClear(void);
+static void _WeightToGlobalVec(Vector4 *destination, Matrix4 matrix, Matrix4 weights);
+void nmlFadePacketWrite(XglPacket *packet);
 static void AlphaGroupLastEntry(void);
-static int nmlModelRenderTexture(struct NmlModelRenderRange *, int, int);
-static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int frame);
-static int nmlModelRenderDropCircle(const NmlCircleOrigin *, int, StudioCamera *);
+static int nmlModelRenderTexture(NmlBlockGroup *, int, int);
+static int nmlModelRenderCircle(const NmlBlockGroup *group, int pitch, int frame);
+static int nmlModelRenderDropCircle(const NmlBlockGroup *, int, StudioCamera *);
 
-static StudioCamera *nmlModelRenderDrop(struct NmlModelRenderRange *range,
-                                        int step, StudioCamera *screen, int mode);
+static int nmlModelRenderDrop(NmlBlockGroup *range,
+                              int step, StudioCamera *screen, int mode);
 
 extern void nmlPacketClrModelCache(void);
 extern void nmlPacketAddGsFogCol(const float color[3]);
-extern void nmlPacketAddGifTag(NmlMaterialRenderState *, NmlModelRenderState *, int);
-extern void nmlPacketAddTextureParam(NmlMaterialRenderState *, NmlModelRenderState *);
-extern void nmlPacketAddPixelControl(NmlMaterialRenderState *, NmlModelRenderState *, int);
-extern int nmlPacketAddTexture(NmlModelRenderState *);
-extern void nmlPacketAddReflectParam(NmlMaterialRenderState *, NmlModelRenderState *);
-extern void nmlPacketAddFog(NmlModelRenderState *, int);
-extern void nmlPacketAddReflRot(NmlMaterialRenderState *, NmlModelRenderState *);
+extern void nmlPacketAddGifTag(NmlModelBlock *, LayoutStore *, int);
+extern void nmlPacketAddTextureParam(NmlModelBlock *, LayoutStore *);
+extern void nmlPacketAddPixelControl(NmlModelBlock *, LayoutStore *, int);
+extern int nmlPacketAddTexture(LayoutStore *);
+extern void nmlPacketAddReflectParam(NmlModelBlock *, LayoutStore *);
+extern void nmlPacketAddFog(LayoutStore *, int);
+extern void nmlPacketAddReflRot(NmlModelBlock *, LayoutStore *);
 extern void nmlFilterBackClear(void);
 extern void nmlFilterSetFlatRender(LayoutStore *);
 extern void nmlFilterSetPacket(LayoutStore *, int);
@@ -464,19 +349,16 @@ extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 
-extern void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
-                                       const StudioCamera *camera);
+extern void nmlPacketMakeCircleTexture(LayoutStore *model,
+                                       StudioCamera *camera);
 
-extern int nmlModelCalcClip(Vector4 *);
 extern int nmlModelCalcClipNoCulling(Vector4 *);
-extern void _ApplyMatrix(Vector4 *, const Matrix4, const Vector4 *);
-void nmlPacketSetCurrent(void);
-void xglMatrixReverse(Matrix4 destination, const Matrix4 source);
+extern void _ApplyMatrix(Vector4 *, Matrix4, const Vector4 *);
 void xglCullingMapLastCheck(void);
 void xglMemCopy2(void *destination, const void *source, int count);
 void xglMemCopy4(void *destination, const void *source, int count);
 void *nmlPacketSetAttributeAlloc16N(int count);
-u8 *nmlPacketSetAttributeData64N(const void *data, int count);
+void *nmlPacketSetAttributeData64N(const void *data, int count);
 unsigned char nmlModelCalcClipMat2AllCam(const void *a, const void *b, void *c);
 extern int nmlFilterSetVolumeCubeRender(Vector4 *, Vector4 *);
 
@@ -501,7 +383,7 @@ static int s_nMapShadowParts = 0;
 
 static float s_fSortOffsetEntry = 0.0f;
 
-static int s_nParent = 0;
+static void *s_nParent = 0;
 
 static int s_nClip = 0;
 
@@ -617,7 +499,7 @@ static int s_nNonAlphaGroup;
 
 static int s_aToumeiId[16];
 
-static float s_aToumei[16];
+static LayoutSlot s_aToumei[16];
 
 static int s_aShapeId[32];
 
@@ -684,7 +566,7 @@ static LayoutStore * s_apModelLayout[512];
 
 static Vector4 s_inMulColor;
 
-static NmlNonAlphaGroup s_aNonAlphaGroup[512];
+static NmlBlockGroup s_aNonAlphaGroup[512];
 
 static unsigned short s_aBLsave[256];
 
@@ -704,7 +586,7 @@ static Vector4 s_inMainCameraPos;
 
 static Vector4 s_inMainCameraAng;
 
-static NmlAlphaGroup s_aAlphaGroup[512];
+static NmlBlockGroup s_aAlphaGroup[512];
 
 static NmlPointQuadword s_inGblPointP[4];
 
@@ -856,7 +738,7 @@ static void _CurApplyMatrix(Vector4 *destination, const Vector4 *vector) {
     );
 }
 
-static void _WeightToGlobalVec(Vector4 *destination, const Matrix4 matrix, const Matrix4 weights)
+static void _WeightToGlobalVec(Vector4 *destination, Matrix4 matrix, Matrix4 weights)
 {
     __asm__ __volatile__(
         "lq $2, 0(%2)\n\t"
@@ -936,7 +818,7 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
         "lq $2, 48(%1)\n\t"
         "sq $2, 48(%0)"
         :
-        : "r"(arg0->fields.lightDirection), "r"(&light->unmodeled_70[0x40])
+        : "r"(arg0->fields.lightDirection), "r"(&light->color_modifier_matrix)
         : "$2", "memory"
     );
     __asm__ __volatile__(
@@ -949,7 +831,7 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
         "lq $2, 48(%1)\n\t"
         "sq $2, 48(%0)"
         :
-        : "r"(arg0->fields.lightColor), "r"(light->unmodeled_70)
+        : "r"(arg0->fields.lightColor), "r"(light->normal_matrix)
         : "$2", "memory"
     );
     __asm__ __volatile__(
@@ -1101,9 +983,9 @@ static void FLUSH_ALPHA_GROUP(void)
     s_nNonAlphaGroup = 0;
 }
 
-static void CLEAR_PROREAL(int *proReal)
+static void CLEAR_PROREAL(NmlProRealState *proReal)
 {
-    proReal[0x1c0 / 4] = 0;
+    proReal->projection_entry = 0;
 }
 
 static void CONSTRUCT_BACK_BUFFER(void)
@@ -1430,7 +1312,7 @@ int nmlModelSetRenderLevel(int level)
     return renderLevel;
 }
 
-static void fade_render(NmlPacket packet, FadeControl *control)
+static void fade_render(XglPacket *packet, FadeControl *control)
 {
     int mode = control->unclassified_1c;
     unsigned int zeroModeDepthAndFog = 0x00fffffc;
@@ -1520,7 +1402,7 @@ static void fade_render(NmlPacket packet, FadeControl *control)
     }
 }
 
-void nmlFadePacketWrite(NmlPacket packet)
+void nmlFadePacketWrite(XglPacket *packet)
 {
     fade_render(packet, &s_inActiveFadeIn);
     fade_render(packet, &s_inActiveFadeOut);
@@ -1551,7 +1433,7 @@ static void fade_set(FadeControl *control, float *color, int skipRender,
     if (duration < 0) {
         control->frame = -1;
     }
-    sRender.fade_callback = (XglRenderFadeCallback)nmlFadePacketWrite;
+    sRender.fade_callback = nmlFadePacketWrite;
 }
 
 void nmlModelSetFadeOutLock(void) {
@@ -1694,7 +1576,7 @@ int nmlModelAskNonLinearCamera(void)
         camera = xglStudioSelectGetActiveCamera(0);
         if (camera != 0) {
             s_nMainCameraWarp = 1;
-            length = xglPointLength(&s_inMainCameraPos, &camera->position);
+            length = xglPointLength(&s_inMainCameraPos, &camera->position.vector);
             if (length >= 1.0f) {
                 s_nMainCameraWarp = 2;
             } else {
@@ -1817,7 +1699,7 @@ void nmlModelSetGlobalPointLightCol(int index, const Vector4 *color)
     }
 }
 
-void nmlModelSetGlobalPointLightPos(unsigned int index, const NmlPointQuadword *position)
+void nmlModelSetGlobalPointLightPos(unsigned int index, const Vector4 *position)
 {
     if (index < 3) {
         NmlPointQuadword *destination = &s_inGblPointP[index];
@@ -1909,7 +1791,7 @@ void nmlModelSetTexMap(int mode, int size, float weight)
 
 void nmlModelSetProreal(NmlProRealState *input)
 {
-    u64 transformOrigin[2];
+    DoublewordAlignedVector4 transformOrigin;
     Vector4 scale;
     Matrix4 scaledTransform;
     int textureStartX;
@@ -1926,13 +1808,12 @@ void nmlModelSetProreal(NmlProRealState *input)
     screenHeight = 0x200;
     scale.x = (float)input->fields.unmodeled_108 * 0.015625f * input->fields.unmodeled_120;
     scale.y = (float)input->fields.unmodeled_10c * 0.015625f * input->fields.unmodeled_124;
-    transformOrigin[0] = proRealOrigin.word0;
-    transformOrigin[1] = proRealOrigin.word8;
+    transformOrigin = proRealOrigin;
     scale.w = 1.0f;
     scale.z = 1.0f;
-    xglMatrixScale(scaledTransform, (const float (*)[4])input->fields.matrix_000, &scale.x);
-    xglVectorMulMat(&input->fields.transformOrigin, (const float (*)[4])scaledTransform,
-                    (const Vector4 *)transformOrigin);
+    xglMatrixScale(scaledTransform, input->fields.matrix_000, &scale.x);
+    xglVectorMulMat(&input->fields.transformOrigin, scaledTransform,
+                    &transformOrigin);
 
     __asm__ __volatile__(
         "lqc2 vf3, 0(%0)\n"
@@ -1944,13 +1825,13 @@ void nmlModelSetProreal(NmlProRealState *input)
           "r"(&input->fields.unmodeled_160)
         : "memory");
 
-    xglMatrixInverse(input->fields.inverseTransform, (const float (*)[4])scaledTransform);
+    xglMatrixInverse(input->fields.inverseTransform, scaledTransform);
     xglVectorNormal(&input->fields.unmodeled_160, &input->fields.unmodeled_160);
 
     textureMode = input->fields.unmodeled_114;
     switch (textureMode) {
     case 20: {
-        int textureBase = (int)input->fields.unmodeled_116 << 5;
+        int textureBase = input->fields.unmodeled_116 << 5;
         input->fields.textureWord =
             (u64)(textureBase | 0x29440000) |
             ((u64)(textureBase + input->fields.unmodeled_118) << 37) |
@@ -1958,7 +1839,7 @@ void nmlModelSetProreal(NmlProRealState *input)
         break;
     }
     case 19: {
-        int textureBase = (int)input->fields.unmodeled_116 << 5;
+        int textureBase = input->fields.unmodeled_116 << 5;
         input->fields.textureWord =
             (u64)(textureBase | 0x29340000) |
             ((u64)(textureBase + input->fields.unmodeled_118) << 37) |
@@ -1967,7 +1848,7 @@ void nmlModelSetProreal(NmlProRealState *input)
     }
     case 0:
         screenWidth = 0x200;
-        input->fields.textureWord = (u64)((int)input->fields.unmodeled_116 << 5) |
+        input->fields.textureWord = (u64)(input->fields.unmodeled_116 << 5) |
                                0x24020000ULL | 0x2000000640000000ULL;
         break;
     }
@@ -1981,8 +1862,8 @@ void nmlModelSetProreal(NmlProRealState *input)
     textureEndY = input->fields.unmodeled_112 != 0 ? input->fields.unmodeled_104 :
                   input->fields.unmodeled_104 + input->fields.unmodeled_10c - 1;
 
-    input->fields.clampWord = (u64)textureXDirection |
-        ((u64)textureYDirection << 2) |
+    input->fields.clampWord = textureXDirection |
+        (textureYDirection << 2) |
         ((u64)textureStartX << 4) |
         ((u64)textureEndX << 14) |
         ((u64)textureStartY << 24) |
@@ -2030,7 +1911,7 @@ int nmlModelSetAxisSymmetry(float symmetry) {
     return flags;
 }
 
-void nmlModelSetParent(int parent)
+void nmlModelSetParent(void *parent)
 {
     s_nParent = parent;
 }
@@ -2058,11 +1939,11 @@ void nmlModelSetShapeId(int shapeId, float weight)
 void nmlModelSetToumeiParts(int partId, float alpha)
 {
     extern int s_aToumeiId[];
-    extern float s_aToumei[];
+    extern LayoutSlot s_aToumei[];
 
     if (s_nToumeiNum < 16) {
         s_aToumeiId[s_nToumeiNum] = partId;
-        s_aToumei[s_nToumeiNum++] = alpha;
+        s_aToumei[s_nToumeiNum++].f = alpha;
     }
 }
 
@@ -2186,7 +2067,7 @@ void nmlModelSetToumei(int enabled)
     }
 }
 
-void nmlModelSetLight(const Matrix4 *direction, const Matrix4 *color)
+void nmlModelSetLight(Matrix4 *direction, Matrix4 *color)
 {
     __asm__ __volatile__(
         "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
@@ -2225,17 +2106,13 @@ void nmlModelSetTexfunc(int texfunc)
     s_inLayout.fields.texfunc = texfunc;
 }
 
-/*
- * Stores the current model matrix pointer in the pointer-width s_inLayout
- * word at byte offset 0x23c (slot 143 of the shared LayoutStore view, which
- * gives that slot no pointer member).
- */
+/* Stores the current model matrix pointer in the layout store at +0x23c. */
 void nmlModelSetMatrix(void *matrix)
 {
-    *(void **)&s_inLayout.slots[0x23c / 4] = matrix;
+    s_inLayout.fields.currentMatrix = matrix;
 }
 
-void nmlModelSetPlace(const Matrix4 *place)
+void nmlModelSetPlace(Matrix4 *place)
 {
     __asm__ __volatile__(
         "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
@@ -2597,7 +2474,7 @@ static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId)
     u64 env8;
     u64 *env;
 
-    block = (NmlDirectXtxBlock *) data;
+    block = data;
     entry = (NmlDirectXtxEntry *) ((char *) data + block->entriesOffset);
     for (index = 0; index < block->entryCount; index++) {
         env = TestEnv_0_004A9170;
@@ -2626,7 +2503,7 @@ void nmlModelDirectSendXtx(int modelId, void *data)
     const signed char *bytes = data;
 
     if (s_nPacketSignal == 0 &&
-        (u32)((u32)data - NML_TEXTURE_RAM_BASE) <= NML_TEXTURE_RAM_MAX_OFFSET &&
+        ((u32)data - NML_TEXTURE_RAM_BASE) <= NML_TEXTURE_RAM_MAX_OFFSET &&
         ((u32)data & 0xF) == 0 &&
         bytes[0] == 'X' && bytes[1] == 'T' && bytes[2] == bytes[0]) {
         nmlModelDirectXtxSub(data, modelId, modelId + 1);
@@ -2677,10 +2554,10 @@ static void set_group_status(LayoutStore *layout, u32 *status)
 
 static void AlphaGroupSortEntry(const Vector4 *position)
 {
-    StudioCamera *camera = xglStudioSelectGetActiveCamera(s_inLayout.fields.renderLevel);
+    StudioCamera *camera = xglStudioSelectGetActiveCamera(s_inLayout.fields.window);
     float distance = 0.0f;
     if (camera != 0) {
-        distance = _VectorLengthSQ(&camera->position, position);
+        distance = _VectorLengthSQ(&camera->position.vector, position);
     }
     s_aAlphaGroup[s_nAlphaGroup].sortDistance = distance + s_fSortOffset;
 }
@@ -2712,7 +2589,7 @@ static void AlphaGroupLastEntry(void)
                                      sizeof(appendedBlockCount));
                     __builtin_memset(&s_aAlphaGroup[groupIndex].sortDistance, 0,
                                      sizeof(s_aAlphaGroup[groupIndex].sortDistance));
-                    set_group_status(modelLayout, &s_aAlphaGroup[groupIndex].status);
+                    set_group_status(modelLayout, &s_aAlphaGroup[groupIndex].flags);
                     ++s_nAlphaGroup;
                 }
             }
@@ -2823,7 +2700,7 @@ NmlParentBuffer *parent_buf_entry(LayoutStore *inLayout)
     return entry;
 }
 
-static NmlParentBuf *parent_buf_search(int parent)
+static NmlParentBuf *parent_buf_search(const NmlModel *parent)
 {
     NmlParentBuf *found;
     int i;
@@ -2832,7 +2709,7 @@ static NmlParentBuf *parent_buf_search(int parent)
     for (i = s_nParentBuf - 1; i >= 0; i--) {
         NmlParentBuf *record = &s_aParentBuf[i];
 
-        if (record->layout != 0 && record->layout->fields.parent == parent && parent != 0) {
+        if (record->layout != 0 && record->layout->fields.model == parent && parent != 0) {
             found = record;
             break;
         }
@@ -2863,13 +2740,13 @@ int nmlModelLexDataCheck(NmlModel *model)
         && ((unsigned int) model & 0xf) == 0
         && (*(u64 *) model & 0x00ffffffULL) == 0x78656cULL) {
         if (model->unclassified_3f == 0
-            || model->unclassified_6c != 0
+            || model->textureSetOffset != 0
             || (offsets = model->blockOffsets,
                 lastBlock = (NmlModelBlock *) ((char *) model
                     + offsets[model->blockCount - 1]),
-                name = (char *) lastBlock + lastBlock->baseOffset,
+                name = (char *) lastBlock + lastBlock->dataOffset,
                 name += model->unclassified_a0 != 0 ? model->blockCount << 4 : 0,
-                strstr(name + lastBlock->textOffset, magicCarpetComeName) != 0)) {
+                strstr(name + lastBlock->dataSize, magicCarpetComeName) != 0)) {
             long long count = model->blockCount;
 
             if (count > 0) {
@@ -2982,9 +2859,9 @@ static void nmlModelLexBlockDoit(NmlModel *model)
 
 static void nmlModelStealthEntry(void *arg0, void *arg1)
 {
-    NmlModelSampleView *model = arg0;
+    NmlModel *model = arg0;
     StudioCamera *camera = arg1;
-    const NmlStudioFovView *fovView = arg1;
+    const struct StudioCamera *fovView = arg1;
     const Vector4 *samplePosition;
     NmlProjectedPoint projected;
     f32 depth;
@@ -2994,7 +2871,7 @@ static void nmlModelStealthEntry(void *arg0, void *arg1)
     _CurSetMatrix(camera->viewMatrix);
     _CurSetViewScaleTrans((const float *)&camera->screenScale,
                          (const float *)&camera->screenOffset);
-    samplePosition = &s_inLayout.fields.unmodeled_1f0;
+    samplePosition = &s_inLayout.fields.center.v;
     _CurRotTransPersClip(projected, samplePosition);
     depth = ((float)projected[2] * stealthDepthScale) / tanf(fovView->fov * 0.5f);
 
@@ -3012,14 +2889,14 @@ static void nmlModelStealthEntry(void *arg0, void *arg1)
             while (swapped != 0) {
                 swapped = 0;
                 for (index = 1; index <= 9; ++index) {
-                    NmlStealthPacket *left = sortLayout->fields.stealthPackets[index - 1];
-                    NmlStealthPacket *right;
-                    if (sortThreshold < left->unclassified_20) {
-                        right = sortLayout->fields.stealthPackets[index];
-                        if (left->distanceSquared + distanceTolerance < right->distanceSquared) {
-                            sortLayout->fields.stealthPackets[index - 1] = right;
+                    struct NmlStealthGeometry *left = sortLayout->fields.stealthParts[index - 1];
+                    struct NmlStealthGeometry *right;
+                    if (sortThreshold < left->sortClass) {
+                        right = sortLayout->fields.stealthParts[index];
+                        if (left->endpoints[0].w + distanceTolerance < right->endpoints[0].w) {
+                            sortLayout->fields.stealthParts[index - 1] = right;
                             swapped = 1;
-                            sortLayout->fields.stealthPackets[index] = left;
+                            sortLayout->fields.stealthParts[index] = left;
                         }
                     }
                 }
@@ -3031,23 +2908,23 @@ static void nmlModelStealthEntry(void *arg0, void *arg1)
     }
 }
 
-static void nmlModelCalcSample(void *arg0, void **arg1)
+static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
 {
     unsigned char *modelBytes = (unsigned char *)arg0;
-    NmlModelSampleView *model = (NmlModelSampleView *)arg0;
-    NmlPointQuadword *weightedPosition;
-    NmlPointQuadword *currentPosition;
+    NmlModel *model = (NmlModel *)arg0;
+    Vector4 *weightedPosition;
+    Vector4 *currentPosition;
 
     if (model->sampleCount != 0) {
-        weightedPosition = (NmlPointQuadword *)&s_inLayout.slots[0x7C];
-        _WeightToGlobalVec((Vector4 *)weightedPosition,
-                           (const float (*)[4])(const void *)(modelBytes + model->weightOffset),
-                           (const float (*)[4])(const void *)(modelBytes + model->transformOffset));
+        weightedPosition = &s_inLayout.fields.center.v;
+        _WeightToGlobalVec(weightedPosition,
+                           (float (*)[4])(modelBytes + model->weightOffset),
+                           (float (*)[4])(modelBytes + model->transformOffset));
         if ((s_inLayout.slots[0x230 / 4].i & 1) != 0) {
             s_inLayout.slots[0x1F4 / 4].f =
                 s_inLayout.slots[0x230 / 4].f - s_inLayout.slots[0x1F4 / 4].f;
         }
-        currentPosition = (NmlPointQuadword *)&s_inLayout.slots[0x84];
+        currentPosition = &s_inLayout.fields.currentPosition;
         __asm__ __volatile__(
             "lq $2, 0(%1)\n\t"
             "sq $2, 0(%0)"
@@ -3055,9 +2932,8 @@ static void nmlModelCalcSample(void *arg0, void **arg1)
             : "r"(currentPosition), "r"(weightedPosition)
             : "$2", "memory"
         );
-        if (arg1 != 0) {
-            NmlPointQuadword *parentPosition =
-                (NmlPointQuadword *)((char *)*arg1 + 0x210);
+        if (parent != 0) {
+            Vector4 *parentPosition = &parent->layout->fields.currentPosition;
             __asm__ __volatile__(
                 "lq $2, 0(%1)\n\t"
                 "sq $2, 0(%0)"
@@ -3073,21 +2949,20 @@ static void nmlModelCalcSample(void *arg0, void **arg1)
             "vadd.xyz vf2, vf2, vf3\n\t"
             "sqc2 vf2, 0(%0)"
             :
-            : "r"((char *)&s_inLayout + 0x1F0),
-              "r"(&model->samplePosition)
+            : "r"(&s_inLayout.fields.center),
+              "r"(&model->entryTranslation)
             : "memory"
         );
     }
 
     _CurSetMatrix((f32 (*)[4])&s_inLayout.fields.place);
-    _CurApplyMatrix((Vector4 *)((char *)&s_inLayout + 0x1F0),
-                    (Vector4 *)((char *)&s_inLayout + 0x1F0));
-    s_inLayout.slots[0x1FC / 4].f = model->samplePosition.w;
-    s_inLayout.slots[0x2C4 / 4].f = model->samplePosition.w;
-    if (arg1 != 0) {
-        NmlModelSampleView *parentModel =
-            *(NmlModelSampleView **)((char *)*arg1 + 0x254);
-        s_inLayout.slots[0x2C4 / 4].f = parentModel->samplePosition.w;
+    _CurApplyMatrix(&s_inLayout.fields.center.v,
+                    &s_inLayout.fields.center.v);
+    s_inLayout.slots[0x1FC / 4].f = model->entryTranslation.w;
+    s_inLayout.slots[0x2C4 / 4].f = model->entryTranslation.w;
+    if (parent != 0) {
+        NmlModel *parentModel = parent->layout->fields.model;
+        s_inLayout.slots[0x2C4 / 4].f = parentModel->entryTranslation.w;
     }
 
     if (strstr((char *)modelBytes + 0x11, "boss_030") != 0 && model->sampleCount >= 30) {
@@ -3095,12 +2970,12 @@ static void nmlModelCalcSample(void *arg0, void **arg1)
         int sampleOffset = 0x7C0;
 
         _WeightToGlobalVec(&sample,
-                           (const float (*)[4])(const void *)(modelBytes + model->weightOffset + sampleOffset),
-                           (const float (*)[4])(const void *)(modelBytes + model->transformOffset + sampleOffset));
+                           (float (*)[4])(modelBytes + model->weightOffset + sampleOffset),
+                           (float (*)[4])(modelBytes + model->transformOffset + sampleOffset));
         _CurSetMatrix((f32 (*)[4])&s_inLayout.fields.place);
         _CurApplyMatrix(&sample, &sample);
         if (sample.y < 0.0f) {
-            s_inLayout.slots[0x2C4 / 4].f = model->samplePosition.w * 0.25f;
+            s_inLayout.slots[0x2C4 / 4].f = model->entryTranslation.w * 0.25f;
         }
     }
 
@@ -3121,7 +2996,7 @@ static void nmlModelCalcSample(void *arg0, void **arg1)
     }
 }
 
-static int nmlModelCalcEntryClip(NmlModelSampleView *model, StudioCamera *camera)
+static int nmlModelCalcEntryClip(NmlModel *model, StudioCamera *camera)
 {
     Vector4 clip;
     int anySubwindow;
@@ -3188,7 +3063,7 @@ static float deapth_for_studio(int studio, Vector4 *position, float scale)
                           (const float *)&camera->screenOffset);
     _CurRotTransPersClip(projected, position);
     depth = ((float)projected[2] * factor) /
-            tanf(((NmlStudioFovView *)camera)->fov * 0.5f);
+            tanf(((struct StudioCamera *)camera)->fov * 0.5f);
     return depth;
 }
 
@@ -3202,15 +3077,15 @@ static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
     int index;
 
     if (strstr((char *)model + 0x10, faceNameSuffix) == 0 && s_nParent != 0) {
-        NmlModelSampleView *parent = (NmlModelSampleView *)(unsigned int)s_nParent;
-        distanceScale = parent->samplePosition.w;
+        NmlModel *parent = (NmlModel *)s_nParent;
+        distanceScale = parent->entryTranslation.w;
     }
     if (useParentDepth != 0) {
-        NmlModelSampleView *parent = (NmlModelSampleView *)(unsigned int)s_nParent;
-        distanceScale = parent->samplePosition.w;
+        NmlModel *parent = (NmlModel *)s_nParent;
+        distanceScale = parent->entryTranslation.w;
     }
 
-    depth = deapth_for_studio(s_inLayout.fields.renderLevel, &s_inLayout.fields.unmodeled_1f0, distanceScale);
+    depth = deapth_for_studio(s_inLayout.fields.window, &s_inLayout.fields.center.v,distanceScale);
     flags = s_inLayout.slots[0xAC].i;
     if ((flags & 2) == 0) {
         if ((flags & 0x20) == 0) {
@@ -3255,7 +3130,7 @@ static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
             if (s_inLayout.slots[0x9F].i != index &&
                 g_aSubWindow[index] != 0) {
                 f32 subwindowAbsoluteDepth;
-                depth = deapth_for_studio(index, &s_inLayout.fields.unmodeled_1f0, distanceScale);
+                depth = deapth_for_studio(index, &s_inLayout.fields.center.v,distanceScale);
                 subwindowAbsoluteDepth = __builtin_fabsf(depth);
 
                 if (subwindowAbsoluteDepth < 62582.0f) {
@@ -3327,14 +3202,14 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     extern void xglMatrixStackInverse(void);
     extern void xglVectorNormal(Vector4 *, const Vector4 *);
     extern void xglVectorScaleXYZ(Vector4 *, const Vector4 *, float);
-    extern ProjectionQuad circleScaleVector;
-    extern ProjectionQuad circleCenterVector;
-    extern ProjectionQuad circleOffsetVector;
+    extern DoublewordAlignedVector4 circleScaleVector;
+    extern DoublewordAlignedVector4 circleCenterVector;
+    extern DoublewordAlignedVector4 circleOffsetVector;
     Vector3 projectionAngles;
     Matrix savedMatrix;
-    ProjectionQuad screenScaleStorage = circleScaleVector;
-    ProjectionQuad screenCenter = circleCenterVector;
-    ProjectionQuad screenOffsetStorage = circleOffsetVector;
+    DoublewordAlignedVector4 screenScaleStorage = circleScaleVector;
+    DoublewordAlignedVector4 screenCenter = circleCenterVector;
+    DoublewordAlignedVector4 screenOffsetStorage = circleOffsetVector;
     Vector4 cameraTranslation;
     Vector4 normal;
     Vector4 spare;
@@ -3345,15 +3220,15 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     float value;
     float one;
 
-    s_inProReal[0].fields.unmodeled_190[0].q = s_inLayout.fields.unmodeled_1f0.q;
+    s_inProReal[0].fields.unmodeled_190[0].q = s_inLayout.fields.center.q;
     inverseScale = 0.9f;
     modelScale = model->entryTranslation.w * inverseScale;
     scale = 1.0f;
     one = 1.0f;
     scale /= modelScale;
 
-    screenScaleStorage.v.x *= scale;
-    screenScaleStorage.v.y *= scale;
+    screenScaleStorage.x *= scale;
+    screenScaleStorage.y *= scale;
     projectionAngles.x = 1.5707964f;
     cameraTranslation.x = 0.0f;
     cameraTranslation.y = one;
@@ -3379,15 +3254,15 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     xglMatrixStackSave((float (*)[4])savedMatrix.elements);
     xglMatrixStackUnit();
 
-    screenOffsetStorage.v.x -= ((float)sRender.reso.frame_width - screenCenter.v.x) * 0.5f;
-    screenOffsetStorage.v.y -= ((float)*(short *)((char *)&sRender + 0x6) - screenCenter.v.y) * 0.5f;
-    xglMatrixStackTrans(&screenOffsetStorage.v.x);
-    xglMatrixStackScale(&screenScaleStorage.v.x);
-    xglMatrixStackMul((const float (*)[4])savedMatrix.elements);
+    screenOffsetStorage.x -= ((float)sRender.reso.frame_width - screenCenter.x) * 0.5f;
+    screenOffsetStorage.y -= ((float)sRender.reso.frame_height - screenCenter.y) * 0.5f;
+    xglMatrixStackTrans(&screenOffsetStorage.x);
+    xglMatrixStackScale(&screenScaleStorage.x);
+    xglMatrixStackMul(savedMatrix.rows);
     xglMatrixStackSave(s_inLayout.fields.projectionMatrix);
 
-    *(u64 *)((char *)s_inProReal + 0x1c8) = 0x89;
-    *(u64 *)((char *)s_inProReal + 0x1d0) = 0x3200000062LL;
+    s_inProReal[0].unmodeled_1c8 = 0x89;
+    s_inProReal[0].unmodeled_1d0 = 0x3200000062LL;
     s_inProReal[0].fields.unmodeled_100 = 0;
     s_inProReal[0].fields.unmodeled_104 = 0;
     s_inProReal[0].fields.unmodeled_108 = 0x40;
@@ -3493,8 +3368,8 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     screenCenter = mapCenterVector;
     screenOffset = mapOffsetVector;
     denom = model->entryTranslation.w;
-    if (5.0f + camera->position.y < s_inLayout.slots[0x7d].f) {
-        if (5.0f + camera->position.y < s_inLayout.slots[0x2d].f) {
+    if (5.0f + camera->position.vector.y < s_inLayout.slots[0x7d].f) {
+        if (5.0f + camera->position.vector.y < s_inLayout.slots[0x2d].f) {
             s_inLayout.fields.render_status &= ~0x4000;
             return;
         }
@@ -3502,7 +3377,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
 
     __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
                          : : "r"(&s_inProReal[0].fields.unmodeled_190[0]),
-                             "r"(&s_inLayout.fields.unmodeled_1f0) : "$2", "memory");
+                             "r"(&s_inLayout.fields.center) : "$2", "memory");
     s_inProReal[0].fields.unmodeled_190[0].v.y -= 0.2f;
     distance = __builtin_fabsf(s_inProReal[0].fields.unmodeled_190[0].v.y - s_inLayout.slots[0x2d].f);
     if (distance > model->entryTranslation.w) {
@@ -3546,10 +3421,10 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     xglMatrixStackUnit();
 
     screenOffset.v.x -= ((float)sRender.reso.frame_width - screenCenter.v.x) * 0.5f;
-    screenOffset.v.y -= ((float)*(short *)((char *)&sRender + 0x6) - screenCenter.v.y) * 0.5f;
+    screenOffset.v.y -= ((float)sRender.reso.frame_height - screenCenter.v.y) * 0.5f;
     xglMatrixStackTrans(&screenOffset.v.x);
     xglMatrixStackScale(&projectionScale.v.x);
-    xglMatrixStackMul((const float (*)[4])savedMatrix.elements);
+    xglMatrixStackMul(savedMatrix.rows);
     xglMatrixStackSave(s_inLayout.fields.projectionMatrix);
 
     s_inProReal[0].unmodeled_1c8 = 0x89;
@@ -3636,10 +3511,10 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
 
 static inline void nmlModelWeightAttributeVector(
     Vector4 *destination,
-    const struct NmlPartFlagData *transform,
-    const struct NmlPartFlagData *weights)
+    Matrix4 transform,
+    Matrix4 weights)
 {
-    _WeightToGlobalVec(destination, (const void *)transform, (const void *)weights);
+    _WeightToGlobalVec(destination, transform, weights);
 }
 
 static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
@@ -3660,10 +3535,10 @@ static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
             int firstMatrix = model->partCount * 2 + vertexIndex;
             int secondMatrix = model->partCount * 2 + model->sampleCount
                              + vertexIndex;
-            NmlPartFlagData *matrixRecords = (NmlPartFlagData *)layout->fields.weightedMatrices;
+            NmlWeightedMatrix *matrixRecords = layout->fields.weightedMatrices;
 
-            nmlModelWeightAttributeVector(weightedVector, &matrixRecords[firstMatrix],
-                                          &matrixRecords[secondMatrix]);
+            nmlModelWeightAttributeVector(weightedVector, matrixRecords[firstMatrix].matrix,
+                                          matrixRecords[secondMatrix].matrix);
             if ((s_inLayout.slots[0x230 / 4].i & 1) != 0) {
                 weightedVector->y = s_inLayout.slots[0x230 / 4].f
                                   - weightedVector->y;
@@ -3677,8 +3552,8 @@ static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
                 Vector4 partClipBounds;
 
                 _ApplyMatrix(&partClipBounds,
-                             (const void *)(((NmlPartFlagData *)layout->fields.weightedMatrices) + block->matrixIndices[0] - 1),
-                             (const void *)block->clipBounds);
+                             (layout->fields.weightedMatrices + block->matrixIndices[0] - 1)->matrix,
+                             &block->clipBounds);
                 _ApplyMatrix(&partClipBounds, layout->fields.place, &partClipBounds);
                 layout->fields.clipMasks[partIndex] =
                     (unsigned char)nmlModelCalcClip(&partClipBounds);
@@ -3700,7 +3575,7 @@ static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
                     clipIndex = block->matrixIndices[weightedIndex + 1]
                               - firstWeightedMatrix - 1;
                     clipBounds = &((Vector4 *)0x70000000)[clipIndex];
-                    clipBounds->w = block->clipBounds[3] * entryPartsClipScale;
+                    clipBounds->w = block->clipBounds.w * entryPartsClipScale;
                     if (nmlModelCalcClipNoCulling(clipBounds) != 0) {
                         ++passingCount;
                     }
@@ -3746,7 +3621,7 @@ void nmlModelEntry(NmlModel *model)
     unsigned int clipBits;
     NmlModelBlock *first;
     Vector4 sortPos;
-    NmlAlphaGroup *alphaGroup;
+    NmlBlockGroup *alphaGroup;
     int *blockOffsets;
 
     nmlPacketSetCurrent();
@@ -3758,7 +3633,10 @@ void nmlModelEntry(NmlModel *model)
         alphaParentAdded = 0;
         camera = xglStudioSelectGetActiveCamera(LAYOUT_S32(0x27c));
         if (camera != 0) {
-            ((int *)&s_inLayout)[0x254 / 4] = (int)model;
+            /* Stored through the field's address, as a plain word: the
+             * original orders it against the scalar globals read next.
+             * The parent entry counters below are written the same way. */
+            (&s_inLayout.fields.model)[0] = model;
             LAYOUT_S32(0x25c) = s_nModel;
             s_inLayout.fields.mapShadowPartCount = s_nMapShadowParts;
             if ((s_inLayout.qwords[0x250 / 8] & 0x1000002) == 0x1000000) {
@@ -3802,15 +3680,15 @@ void nmlModelEntry(NmlModel *model)
             } else {
                 s_inLayout.fields.packetFilterFlags &= 0xfffffffd;
             }
-            if (nmlModelCalcEntryClip((NmlModelSampleView *)model, camera) == 0) {
-                if ((s_inLayout.fields.featureFlags & 0x400) != 0 &&
+            if (nmlModelCalcEntryClip(model, camera) == 0) {
+                if ((s_inLayout.fields.renderLevel & 0x400) != 0 &&
                     (s_inLayout.fields.packetFilterFlags & 1) != 0) {
                     s_nUseGnosys = 1;
                     s_inLayout.fields.packetFilterFlags |= 4;
                 }
                 if (s_inLayout.fields.render_status & 0x1000002) {
-                    fogColorWord = (int *)&s_inLayout.fields.fogColor.w;
-                    fogValue = nmlModelGetFogParaStudio(&s_inLayout.fields.unmodeled_1f0,
+                    fogColorWord = &s_inLayout.fields.fogColor.intensity;
+                    fogValue = nmlModelGetFogParaStudio(&s_inLayout.fields.center.v,
                                                         LAYOUT_S32(0x27c));
                     LAYOUT_W(0x2bc) = (float)fogValue / 255.0f;
                     LAYOUT_W(0x2f0 + LAYOUT_S32(0x27c) * 4) = LAYOUT_W(0x2bc);
@@ -3820,7 +3698,7 @@ void nmlModelEntry(NmlModel *model)
                     *fogColorWord = (int)fogValue << 4;
                     for (groupIndex = 1; groupIndex < 4; groupIndex++) {
                         if (g_aSubWindow[groupIndex] != 0) {
-                            fogValue = nmlModelGetFogParaStudio(&s_inLayout.fields.unmodeled_1f0,
+                            fogValue = nmlModelGetFogParaStudio(&s_inLayout.fields.center.v,
                                                                 groupIndex);
                             LAYOUT_W(0x2f0 + groupIndex * 4) = (float)fogValue / 255.0f;
                         }
@@ -3839,9 +3717,9 @@ void nmlModelEntry(NmlModel *model)
                 }
                 xglMatrixReverse(s_inLayout.fields.lightColor, s_inLayout.fields.lightColor);
                 if (s_inMapHandle[0] != 0) {
-                    s_inLayout.fields.weightedMatrices = (Matrix4 *)((char *)model + model->weightedMatrixOffset);
+                    s_inLayout.fields.weightedMatrices = (NmlWeightedMatrix *)((char *)model + model->weightedMatrixOffset);
                 } else {
-                    s_inLayout.fields.weightedMatrices = (Matrix4 *)nmlPacketSetAttributeData64N(
+                    s_inLayout.fields.weightedMatrices = nmlPacketSetAttributeData64N(
                         (char *)model + model->weightedMatrixOffset,
                         (model->partCount + model->sampleCount) * 2);
                 }
@@ -3858,7 +3736,7 @@ void nmlModelEntry(NmlModel *model)
                     LAYOUT_S32(0x260) = (int)nmlPacketSetAttributeData16N(s_inProReal, 0x1e);
                 }
                 LAYOUT_S32(0x264) = 0;
-                layout = (LayoutStore *)nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
+                layout = nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
                 s_apModelLayout[s_nModel] = layout;
                 if (s_inMapHandle[0] != 0) {
                     s_inMapHandle[1] = (int)layout;
@@ -3868,7 +3746,7 @@ void nmlModelEntry(NmlModel *model)
                 }
                 if (s_nShapeNum != 0) {
                     for (shapeIndex = 0; shapeIndex < s_nShapeNum; shapeIndex++) {
-                        float (*shapeMatrix)[4] = layout->fields.weightedMatrices[s_aShapeId[shapeIndex]];
+                        float (*shapeMatrix)[4] = layout->fields.weightedMatrices[s_aShapeId[shapeIndex]].matrix;
                         if (s_aShapeWeight[shapeIndex] < 0.0f) {
                             s_aShapeWeight[shapeIndex] = 0.0f;
                         }
@@ -3878,14 +3756,14 @@ void nmlModelEntry(NmlModel *model)
                 if (s_nToumeiNum != 0) {
                     toumeiSlot.i = 0;
                     for (toumeiIndex = 0; toumeiIndex < s_nToumeiNum; toumeiIndex++) {
-                        float (*toumeiMatrix)[4] = layout->fields.weightedMatrices[s_aToumeiId[toumeiIndex]];
-                        toumeiSlot.i = ((LayoutSlot *)&s_aToumei[toumeiIndex])->i | 1;
+                        float (*toumeiMatrix)[4] = layout->fields.weightedMatrices[s_aToumeiId[toumeiIndex]].matrix;
+                        toumeiSlot.i = s_aToumei[toumeiIndex].i | 1;
                         toumeiMatrix[1][3] = toumeiSlot.f;
                     }
                 }
                 if (s_nClip != 1 && model->sampleCount != 0 &&
                     (layout->fields.render_status & 0x100000) == 0 &&
-                    (layout->fields.featureFlags & 0x200) != 0) {
+                    (layout->fields.renderLevel & 0x200) != 0) {
                     nmlModelCalcEntryPartsClip(model, layout);
                 }
                 alphaGroup = &s_aAlphaGroup[s_nAlphaGroup];
@@ -3901,7 +3779,7 @@ void nmlModelEntry(NmlModel *model)
                     __builtin_memset(&s_aAlphaGroup[s_nAlphaGroup].sortDistance, 0,
                                      sizeof(s_aAlphaGroup[s_nAlphaGroup].sortDistance));
                     s_aAlphaGroup[s_nAlphaGroup].owner.layout = layout;
-                    set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].status);
+                    set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].flags);
                 }
                 if (s_nNonAlphaGroup < 0x1ff) {
                     s_aNonAlphaGroup[s_nNonAlphaGroup].firstBlock = (short)s_nBlocks;
@@ -3917,7 +3795,7 @@ void nmlModelEntry(NmlModel *model)
                     block = (NmlModelBlock *)((char *)model + blockOffsets[index]);
                     if (s_nClip != 1) {
                         if ((block->materialFlags & 0x10) != 0 || s_nMapClip != 0) {
-                            clipBits = nmlModelCalcClipMat2AllCam(block->clipBounds, &layout->fields.place,
+                            clipBits = nmlModelCalcClipMat2AllCam(&block->clipBounds, &layout->fields.place,
                                                                   layout->fields.weightedMatrices + block->matrixIndices[0] - 1);
                             layout->fields.clipMasks[index] |= clipBits;
                             if ((layout->fields.clipMasks[index] & 0x80) != 0) {
@@ -3940,7 +3818,7 @@ void nmlModelEntry(NmlModel *model)
                         }
                     }
                     if ((block->flags & 0x48) == 0 && s_nBlocksAlpha + s_nBlocks < 0xfff) {
-                        if (((layout->fields.featureFlags & 0x800) == 0 || (s_inLayout.fields.render_status & 0x20) != 0) &&
+                        if (((layout->fields.renderLevel & 0x800) == 0 || (s_inLayout.fields.render_status & 0x20) != 0) &&
                             !((block->materialFlags & 6) == 0 &&
                                              (layout->fields.render_status & 0x20) == 0 &&
                                              is_parts_transparency(block) == 0)) {
@@ -3955,7 +3833,7 @@ void nmlModelEntry(NmlModel *model)
                                 s_aBlockLayout[0xfff - s_nBlocksAlpha++] = s_nModel;
                                 alphaBlockCount++;
                                 if (parentEntry != 0) {
-                                    ((int *)parentEntry)[3]++;
+                                    (&parentEntry->alphaCount)[0]++;
                                 }
                                 if (s_nParent != 0 && parent != 0 && parentAlphaCount == 0) {
                                     alphaParentAdded = 1;
@@ -3964,14 +3842,14 @@ void nmlModelEntry(NmlModel *model)
                             }
                         }
                         if ((block->materialFlags & 2) == 0 && (layout->fields.render_status & 0x20) == 0 &&
-                            (*(u64 *)&block->materialFlags & 0x40004) != 0x40004 && is_parts_transparency(block) == 0) {
+                            (block->materialFlagsQword & 0x40004) != 0x40004 && is_parts_transparency(block) == 0) {
                             nonAlphaGroupDelta = (s_nParent != 0 && parent != 0 && parentNonAlphaCount != 0) ? -1 : 0;
                             nonAlphaAdded = 1;
                             s_aNonAlphaGroup[s_nNonAlphaGroup + nonAlphaGroupDelta].blockCount++;
                             s_apBlock[s_nBlocks] = block;
                             s_aBlockLayout[s_nBlocks++] = s_nModel;
                             if (parentEntry != 0) {
-                                ((int *)parentEntry)[2]++;
+                                (&parentEntry->nonAlphaCount)[0]++;
                             }
                             if (s_nParent != 0 && parent != 0 && parentNonAlphaCount == 0) {
                                 nonAlphaParentAdded = 1;
@@ -4004,7 +3882,7 @@ void nmlModelEntry(NmlModel *model)
                 }
                 if (alphaAdded != 0 && (s_nParent == 0 || alphaParentAdded != 0) &&
                     s_nAlphaGroup < 0x1ff) {
-                    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)" : : "r"(&sortPos), "r"(&layout->fields.unmodeled_1f0) : "$2", "memory");
+                    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)" : : "r"(&sortPos), "r"(&layout->fields.center) : "$2", "memory");
                     first = (NmlModelBlock *)((char *)model + blockOffsets[0]);
                     if (first->materialFlags & 0x10) {
                         sortPos.z = 10000.0f;
@@ -4022,7 +3900,7 @@ void nmlModelEntry(NmlModel *model)
         break;
     }
     for (groupScan = 0; groupScan < s_nAlphaGroup; groupScan++) {
-        if (s_aAlphaGroup[groupScan].status & 0x10) {
+        if (s_aAlphaGroup[groupScan].flags & 0x10) {
             s_nMapAlphaEntry = 1;
         }
     }
@@ -4050,22 +3928,22 @@ void nmlModelEntryEffect(NmlModel *model)
         blockTable = model->blockOffsets;
         LAYOUT_S32(0x25c) = s_nModel;
         s_fSortOffset = s_fSortOffsetEntry;
-        s_inLayout.fields.parent = (int)model;
+        s_inLayout.fields.model = model;
         __asm__ __volatile__(
             "lqc2 vf3, 0(%1)\n\t"
             "lqc2 vf2, 0(%0)\n\t"
             "vadd.xyz vf2, vf2, vf3\n\t"
             "sqc2 vf2, 0(%0)"
             :
-            : "r"(&s_inLayout.fields.unmodeled_1f0), "r"(&model->entryTranslation)
+            : "r"(&s_inLayout.fields.center), "r"(&model->entryTranslation)
             : "memory");
         _CurSetMatrix(s_inLayout.fields.place);
-        _CurApplyMatrix(&s_inLayout.fields.unmodeled_1f0.v, &s_inLayout.fields.unmodeled_1f0.v);
-        s_inLayout.fields.unmodeled_1f0.v.w = model->entryTranslation.w;
+        _CurApplyMatrix(&s_inLayout.fields.center.v, &s_inLayout.fields.center.v);
+        s_inLayout.fields.center.v.w = model->entryTranslation.w;
         s_inLayout.fields.textureTransparency = 1.0f;
         LAYOUT_S32(0x228) = 0;
-        s_inLayout.fields.viewportAlpha[s_inLayout.fields.renderLevel] = 0.0f;
-        s_inLayout.fields.weightedMatrices = (Matrix4 *)nmlPacketSetAttributeData64N(
+        s_inLayout.fields.viewportAlpha[s_inLayout.fields.window] = 0.0f;
+        s_inLayout.fields.weightedMatrices = nmlPacketSetAttributeData64N(
             (char *)model + model->weightedMatrixOffset,
             (model->partCount + model->sampleCount) * 2);
         LAYOUT_S32(0x264) = 0;
@@ -4078,7 +3956,7 @@ void nmlModelEntryEffect(NmlModel *model)
             __asm__ __volatile__("sq $0, 0(%0)"
                 : : "r"(quadIndex * 16 + (int)s_inLayout.fields.clipMasks) : "memory");
         }
-        layout = (LayoutStore *)nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
+        layout = nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
         alphaAdded = 0;
         nonAlphaAdded = 0;
         s_apModelLayout[s_nModel] = layout;
@@ -4087,7 +3965,7 @@ void nmlModelEntryEffect(NmlModel *model)
             s_aAlphaGroup[s_nAlphaGroup].blockCount = 0;
             s_aAlphaGroup[s_nAlphaGroup].sortDistance = 0.0f;
             s_aAlphaGroup[s_nAlphaGroup].owner.layout = layout;
-            set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].status);
+            set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].flags);
         }
         if (s_nNonAlphaGroup < 0x1ff) {
             s_aNonAlphaGroup[s_nNonAlphaGroup].firstBlock = (short)s_nBlocks;
@@ -4111,7 +3989,7 @@ void nmlModelEntryEffect(NmlModel *model)
                 }
                 if ((block->materialFlags & 2) == 0 &&
                     (layout->fields.render_status & 0x20) == 0 &&
-                    (*(u64 *)&block->materialFlags & 0x40004) != 0x40004 &&
+                    (block->materialFlagsQword & 0x40004) != 0x40004 &&
                     is_parts_transparency(block) == 0) {
                     nonAlphaGroupDelta = (s_nParent != 0) ? -1 : 0;
                     nonAlphaAdded = 1;
@@ -4128,7 +4006,7 @@ void nmlModelEntryEffect(NmlModel *model)
         __builtin_memcpy(&s_nModel, &nextModel, sizeof(nextModel));
         if (alphaAdded != 0 && s_nAlphaGroup < 0x1ff) {
             __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                : : "r"(&sortPos), "r"(&layout->fields.unmodeled_1f0) : "$2", "memory");
+                : : "r"(&sortPos), "r"(&layout->fields.center) : "$2", "memory");
             AlphaGroupSortEntry(&sortPos);
             s_nAlphaGroup = s_nAlphaGroup + 1;
         }
@@ -4159,24 +4037,24 @@ void nmlModelEntryCard(NmlModel *model)
         blockTable = model->blockOffsets;
         LAYOUT_S32(0x25c) = s_nModel;
         s_fSortOffset = s_fSortOffsetEntry;
-        s_inLayout.fields.parent = (int)model;
+        s_inLayout.fields.model = model;
         __asm__ __volatile__(
             "lqc2 vf3, 0(%1)\n\t"
             "lqc2 vf2, 0(%0)\n\t"
             "vadd.xyz vf2, vf2, vf3\n\t"
             "sqc2 vf2, 0(%0)"
             :
-            : "r"(&s_inLayout.fields.unmodeled_1f0), "r"(&model->entryTranslation)
+            : "r"(&s_inLayout.fields.center), "r"(&model->entryTranslation)
             : "memory");
         _CurSetMatrix(s_inLayout.fields.place);
-        _CurApplyMatrix(&s_inLayout.fields.unmodeled_1f0.v, &s_inLayout.fields.unmodeled_1f0.v);
-        s_inLayout.fields.unmodeled_1f0.v.w = model->entryTranslation.w;
+        _CurApplyMatrix(&s_inLayout.fields.center.v, &s_inLayout.fields.center.v);
+        s_inLayout.fields.center.v.w = model->entryTranslation.w;
         s_inLayout.fields.textureTransparency = 1.0f;
         LAYOUT_S32(0x228) = 0;
-        s_inLayout.fields.viewportAlpha[s_inLayout.fields.renderLevel] = 0.0f;
-        s_inLayout.fields.featureFlags |= 2;
+        s_inLayout.fields.viewportAlpha[s_inLayout.fields.window] = 0.0f;
+        s_inLayout.fields.renderLevel |= 2;
         xglMatrixReverse(s_inLayout.fields.lightColor, s_inLayout.fields.lightColor);
-        s_inLayout.fields.weightedMatrices = (Matrix4 *)nmlPacketSetAttributeData64N(
+        s_inLayout.fields.weightedMatrices = nmlPacketSetAttributeData64N(
             (char *)model + model->weightedMatrixOffset,
             (model->partCount + model->sampleCount) * 2);
         LAYOUT_S32(0x264) = 0;
@@ -4189,7 +4067,7 @@ void nmlModelEntryCard(NmlModel *model)
             __asm__ __volatile__("sq $0, 0(%0)"
                 : : "r"(quadIndex * 16 + (int)s_inLayout.fields.clipMasks) : "memory");
         }
-        layout = (LayoutStore *)nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
+        layout = nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
         __builtin_memset(&alphaAdded, 0, sizeof(alphaAdded));
         __builtin_memset(&nonAlphaAdded, 0, sizeof(nonAlphaAdded));
         s_apModelLayout[s_nModel] = layout;
@@ -4198,7 +4076,7 @@ void nmlModelEntryCard(NmlModel *model)
             s_aAlphaGroup[s_nAlphaGroup].blockCount = 0;
             s_aAlphaGroup[s_nAlphaGroup].sortDistance = 0.0f;
             s_aAlphaGroup[s_nAlphaGroup].owner.layout = layout;
-            set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].status);
+            set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].flags);
         }
         if (s_nNonAlphaGroup < 0x1ff) {
             s_aNonAlphaGroup[s_nNonAlphaGroup].firstBlock = (short)s_nBlocks;
@@ -4222,7 +4100,7 @@ void nmlModelEntryCard(NmlModel *model)
                 }
                 if ((block->materialFlags & 2) == 0 &&
                     (layout->fields.render_status & 0x20) == 0 &&
-                    (*(u64 *)&block->materialFlags & 0x40004) != 0x40004 &&
+                    (block->materialFlagsQword & 0x40004) != 0x40004 &&
                     is_parts_transparency(block) == 0) {
                     s_aNonAlphaGroup[s_nNonAlphaGroup].blockCount++;
                     nonAlphaAdded = 1;
@@ -4238,7 +4116,7 @@ void nmlModelEntryCard(NmlModel *model)
         __builtin_memcpy(&s_nModel, &nextModel, sizeof(nextModel));
         if (alphaAdded != 0 && s_nAlphaGroup < 0x1ff) {
             __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                : : "r"(&sortPos), "r"(&layout->fields.unmodeled_1f0) : "$2", "memory");
+                : : "r"(&sortPos), "r"(&layout->fields.center) : "$2", "memory");
             AlphaGroupSortEntry(&sortPos);
             s_nAlphaGroup = s_nAlphaGroup + 1;
         }
@@ -4264,7 +4142,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
 
     groupIndex = 0;
     result = groupIndex;
-    camera = xglStudioSelectGetActiveCamera(model->fields.renderLevel);
+    camera = xglStudioSelectGetActiveCamera(model->fields.window);
     if (camera == 0) {
         return 0;
     }
@@ -4278,15 +4156,15 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
         if (visible == 0) {
             continue;
         }
-        cube = nmlFilterSetVolumeCubeRender(&model->fields.volume->boundsMin, &model->fields.volume->boundsMax);
+        cube = nmlFilterSetVolumeCubeRender(&model->fields.proreal->bounds_min, &model->fields.proreal->bounds_max);
         pass = (model->fields.texMapMode & 0x40000) ? 1 : cube;
         if (model == s_aNonAlphaGroup[groupIndex].owner.layout) {
             continue;
         }
         if ((s_aNonAlphaGroup[groupIndex].flags & 0x10) == 0) {
-            Vector4 *bound = &s_aNonAlphaGroup[groupIndex].owner.layout->fields.unmodeled_1f0.v;
-            if (model->fields.volume->boundsMax.x < bound->x || bound->z > model->fields.volume->boundsMax.z ||
-                bound->x < model->fields.volume->boundsMin.x || bound->z < model->fields.volume->boundsMin.z) {
+            Vector4 *bound = &s_aNonAlphaGroup[groupIndex].owner.layout->fields.center.v;
+            if (model->fields.proreal->bounds_max.x < bound->x || bound->z > model->fields.proreal->bounds_max.z ||
+                bound->x < model->fields.proreal->bounds_min.x || bound->z < model->fields.proreal->bounds_min.z) {
                 continue;
             }
             __asm__ __volatile__(
@@ -4294,8 +4172,8 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                 "lqc2 vf2, 0(%2)\n\t"
                 "vsub.xyz vf2, vf2, vf3\n\t"
                 "sqc2 vf2, 0(%0)"
-                : : "r"(&pointA), "r"(bound), "r"(&model->fields.volume->origin) : "memory");
-            if (pointA.x * model->fields.volume->planeNormalX + pointA.z * model->fields.volume->planeNormalZ < 0.0f) {
+                : : "r"(&pointA), "r"(bound), "r"(&model->fields.proreal->reference_point) : "memory");
+            if (pointA.x * model->fields.proreal->plane_normal_x + pointA.z * model->fields.proreal->plane_normal_z < 0.0f) {
                 continue;
             }
         }
@@ -4310,9 +4188,9 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
             nmlPacketAddGsPixeltest(0x5d001);
         }
         if (s_aNonAlphaGroup[groupIndex].flags & 0x10) {
-            nmlPacketAddGsAlpha(model->fields.volume->alpha);
+            nmlPacketAddGsAlpha(model->fields.proreal->alpha);
         } else {
-            nmlPacketAddGsAlpha(model->fields.volume->alpha);
+            nmlPacketAddGsAlpha(model->fields.proreal->alpha);
         }
         nmlPacketAddGsFlush();
         nmlPacketAddGifTagStandard(1, 1);
@@ -4335,7 +4213,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                     }
                 } else if (entry->block.materialFlags & 0x10) {
                     Vector4 *minCorner = &pointB;
-                    float *matrixRow = layout->fields.weightedMatrices[entry->block.matrixIndices[0] - 1][3];
+                    float *matrixRow = layout->fields.weightedMatrices[entry->block.matrixIndices[0] - 1].matrix[3];
 
                     __asm__ __volatile__(
                         "lqc2 vf3, 0(%1)\n\t"
@@ -4353,9 +4231,9 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                         : "=m"(*minCorner) : "r"(minCorner),
                             "r"(matrixRow),
                             "r"(&entry->bounds.boxMinOffset) : "memory");
-                    if (model->fields.volume->boundsMax.x < pointA.x || pointA.y > model->fields.volume->boundsMax.y ||
-                        pointA.z > model->fields.volume->boundsMax.z || pointB.x < model->fields.volume->boundsMin.x ||
-                        pointB.y < model->fields.volume->boundsMin.y || pointB.z < model->fields.volume->boundsMin.z) {
+                    if (model->fields.proreal->bounds_max.x < pointA.x || pointA.y > model->fields.proreal->bounds_max.y ||
+                        pointA.z > model->fields.proreal->bounds_max.z || pointB.x < model->fields.proreal->bounds_min.x ||
+                        pointB.y < model->fields.proreal->bounds_min.y || pointB.z < model->fields.proreal->bounds_min.z) {
                         continue;
                     }
                 } else {
@@ -4365,40 +4243,40 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                         "vadd.xyz vf2, vf2, vf3\n\t"
                         "sqc2 vf2, 0(%0)"
                         : : "r"(worldMax),"r"(&layout->fields.place[3]),
-                            "r"(&((LayoutStore *)layout->fields.parent)->fields.place[0]) : "memory");
+                            "r"(&layout->fields.model->boxMaxOffset) : "memory");
                     __asm__ __volatile__(
                         "lqc2 vf3, 0(%2)\n\t"
                         "lqc2 vf2, 0(%3)\n\t"
                         "vadd.xyz vf2, vf2, vf3\n\t"
                         "sqc2 vf2, 0(%1)"
                         : "=m"(*worldMin) : "r"(worldMin),"r"(&layout->fields.place[3]),
-                            "r"(&((LayoutStore *)layout->fields.parent)->fields.lightColor[3]) : "memory");
-                    if (model->fields.volume->boundsMax.x < pointC.x || pointC.y > model->fields.volume->boundsMax.y ||
-                        pointC.z > model->fields.volume->boundsMax.z || pointD.x < model->fields.volume->boundsMin.x ||
-                        pointD.y < model->fields.volume->boundsMin.y || pointD.z < model->fields.volume->boundsMin.z) {
+                            "r"(&layout->fields.model->boxMinOffset) : "memory");
+                    if (model->fields.proreal->bounds_max.x < pointC.x || pointC.y > model->fields.proreal->bounds_max.y ||
+                        pointC.z > model->fields.proreal->bounds_max.z || pointD.x < model->fields.proreal->bounds_min.x ||
+                        pointD.y < model->fields.proreal->bounds_min.y || pointD.z < model->fields.proreal->bounds_min.z) {
                         continue;
                     }
                 }
             }
 
             layout->fields.render_status |= 0x800;
-            layout->fields.renderVolume = model->fields.volume;
-            nmlPacketAddTransMicrocode((NmlMaterialRenderState *)&entry->block,
-                                       (NmlModelRenderState *)layout);
-            nmlPacketAddTextureParam((NmlMaterialRenderState *)&entry->block,
-                                     (NmlModelRenderState *)layout);
-            nmlPacketAddBlockMaterial((NmlMaterialRenderState *)&entry->block,
-                                      (NmlModelRenderState *)layout, 0, frame);
-            result = (int)nmlPacketAddParts((NmlMaterialRenderState *)&entry->block,
-                                            (NmlModelRenderState *)layout, camera);
+            layout->fields.prorealOverride = model->fields.proreal;
+            nmlPacketAddTransMicrocode(&entry->block,
+                                       layout);
+            nmlPacketAddTextureParam(&entry->block,
+                                     layout);
+            nmlPacketAddBlockMaterial(&entry->block,
+                                      layout, 0, frame);
+            result = nmlPacketAddParts(&entry->block,
+                                            layout, camera);
             if (result != 0) {
                 break;
             }
             nmlPacketAddGsFlush();
-            nmlPacketAddExecProg((NmlMaterialRenderState *)&entry->block,
-                                 (NmlModelRenderState *)layout, 1, 0);
+            nmlPacketAddExecProg(&entry->block,
+                                 layout, 1, 0);
             layout->fields.render_status &= ~0x800u;
-            layout->fields.renderVolume = 0;
+            layout->fields.prorealOverride = 0;
         }
         if (result != 0) {
             return result;
@@ -4407,7 +4285,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
     return result;
 }
 
-static int nmlModelRenderTexture(struct NmlModelRenderRange *range, int step,
+static int nmlModelRenderTexture(NmlBlockGroup *range, int step,
                                  int frame)
 {
     extern float textureTransparencyMin;
@@ -4420,7 +4298,7 @@ static int nmlModelRenderTexture(struct NmlModelRenderRange *range, int step,
     int result = 0;
     StudioCamera *camera;
     LayoutStore *layout;
-    NmlMaterialRenderState *material;
+    NmlModelBlock *material;
     int index;
 
     capturedBase = sRender.texture_buffer_base;
@@ -4444,11 +4322,11 @@ render_body:
     nmlPacketAddGsFlush();
     nmlPacketAddGifTagStandard(0, 0);
     if (s_nAnotherStudio != 0) {
-        nmlPacketAddScreen((NmlModelRenderState *)camera);
+        nmlPacketAddScreen(camera);
     }
 
-    index = range->first - step;
-    while (index != range->first + range->count * step - step) {
+    index = range->firstBlock - step;
+    while (index != range->firstBlock + range->blockCount * step - step) {
         index += step;
         material = s_apBlock[index];
         layout = s_apModelLayout[s_aBlockLayout[index]];
@@ -4458,15 +4336,15 @@ render_body:
                 firstLayout = layout;
             }
             nmlPacketAddTransMicrocode(material,
-                                       (NmlModelRenderState *)layout);
+                                       layout);
             result = nmlPacketAddParts(material,
-                                       (NmlModelRenderState *)layout,
+                                       layout,
                                        camera);
             if (result != 0) {
                 break;
             }
             nmlPacketAddExecProg(material,
-                                 (NmlModelRenderState *)layout, 0, 0);
+                                 layout, 0, 0);
             layout->fields.render_status &= ~0x8000;
         }
     }
@@ -4486,7 +4364,7 @@ render_body:
     goto render_done;
 
 test_fov:
-    if (textureTransparencyMin >= range->layout->fields.textureTransparency) {
+    if (textureTransparencyMin >= range->owner.layout->fields.textureTransparency) {
         goto render_done;
     }
     firstLayout = 0;
@@ -4496,11 +4374,11 @@ render_done:
     return result;
 }
 
-static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int frame)
+static int nmlModelRenderCircle(const NmlBlockGroup *group, int pitch, int frame)
 {
     extern unsigned short s_aBlockLayout[4096];
     extern float circleViewLimitMin;
-    NmlCircleOwnerView *owner;
+    LayoutStore *owner;
     LayoutStore *model;
     int result;
     int index;
@@ -4509,13 +4387,13 @@ static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int fr
 
     model = 0;
     result = 0;
-    owner = (NmlCircleOwnerView *) origin->ownerAddress;
-    if (owner->viewLimit <= circleViewLimitMin) {
+    owner = group->owner.layout;
+    if (owner->fields.textureTransparency <= circleViewLimitMin) {
         result = 0;
     } else {
-        index = origin->x - pitch;
+        index = group->firstBlock - pitch;
         for (;;) {
-            end = origin->x + origin->y * pitch - pitch;
+            end = group->firstBlock + group->blockCount * pitch - pitch;
             if (index == end) {
                 break;
             }
@@ -4537,15 +4415,15 @@ static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int fr
     return result;
 }
 
-static int nmlModelRenderDropCircle(const NmlCircleOrigin *origin, int pitch, StudioCamera *camera)
+static int nmlModelRenderDropCircle(const NmlBlockGroup *group, int pitch, StudioCamera *camera)
 {
     int index;
     int end;
     LayoutStore *model = 0;
 
     do {
-        index = origin->x - pitch;
-        end = origin->x + origin->y * pitch - pitch;
+        index = group->firstBlock - pitch;
+        end = group->firstBlock + group->blockCount * pitch - pitch;
         while (index != end) {
             index += pitch;
             model = s_apModelLayout[s_aBlockLayout[index]];
@@ -4556,14 +4434,14 @@ static int nmlModelRenderDropCircle(const NmlCircleOrigin *origin, int pitch, St
 
     set_circle_shadow_ratio((int)((float)model->fields.texMapSize * model->fields.circleShadowScale));
     nmlPacketSendCircleTexture(&s_aCircleShadow, s_aCircleShadowClut);
-    nmlPacketMakeCircleTexture((NmlModelRenderState *)model, camera);
+    nmlPacketMakeCircleTexture(model, camera);
     return 0;
 }
 
-static StudioCamera *nmlModelRenderDrop(struct NmlModelRenderRange *range,
-                                        int step, StudioCamera *screen, int mode)
+static int nmlModelRenderDrop(NmlBlockGroup *range,
+                              int step, StudioCamera *screen, int mode)
 {
-    StudioCamera *partsResult = 0;
+    int partsResult = 0;
     unsigned int index;
     void *block;
     LayoutStore *layout;
@@ -4577,23 +4455,23 @@ static StudioCamera *nmlModelRenderDrop(struct NmlModelRenderRange *range,
     nmlPacketAddGifTagStandard(0, 1);
     nmlPacketAddGsFlush();
     if (s_nAnotherStudio) {
-        nmlPacketAddScreen((NmlModelRenderState *)screen);
+        nmlPacketAddScreen(screen);
     }
     do {
-        index = range->first - step;
-        while (index != range->first + range->count * step - step) {
+        index = range->firstBlock - step;
+        while (index != range->firstBlock + range->blockCount * step - step) {
             index += step;
             block = s_apBlock[index];
             layout = s_apModelLayout[s_aBlockLayout[index]];
             if ((layout->slots[0x94].i & 0x100000) == 0) {
                 layout->slots[0x94].i |= 0x80000;
-                nmlPacketAddTransMicrocode(block, (NmlModelRenderState *)layout);
-                nmlPacketAddBlockMaterial(block, (NmlModelRenderState *)layout, 0, mode);
-                partsResult = nmlPacketAddParts(block, (NmlModelRenderState *)layout, screen);
+                nmlPacketAddTransMicrocode(block, layout);
+                nmlPacketAddBlockMaterial(block, layout, 0, mode);
+                partsResult = nmlPacketAddParts(block, layout, screen);
                 if (partsResult != 0) {
                     break;
                 }
-                nmlPacketAddExecProg(block, (NmlModelRenderState *)layout, 0, 0);
+                nmlPacketAddExecProg(block, layout, 0, 0);
                 layout->slots[0x94].i &= ~0x80000u;
             }
         }
@@ -4606,7 +4484,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
     int result;
     int group_index;
     int previous_tag;
-    NmlFlushMaterialView *material;
+    NmlModelBlock *material;
     int tag;
 
     nmlPacketClrModelCache();
@@ -4635,18 +4513,18 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
         {
             int subwindow = g_aSubWindow[viewport];
             if (subwindow == 1) {
-                if (viewport != layout->fields.renderLevel) {
+                if (viewport != layout->fields.window) {
                     continue;
                 }
             } else if (subwindow == 2) {
-                if (layout->fields.renderLevel != 0) {
+                if (layout->fields.window != 0) {
                     continue;
                 }
             }
         }
 
         nmlPacketAddFog(layout, viewport);
-        nmlPacketAddGsFogCol(&layout->fields.fogColor.x);
+        nmlPacketAddGsFogCol(layout->fields.fogColor.color);
         {
             float viewportAlpha = layout->fields.viewportAlpha[viewport];
             nmlPacketAddGsAlpha(((unsigned long long)(int)(viewportAlpha * 128.0f) << 32) | 104);
@@ -4667,7 +4545,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
                     }
                 }
 
-                tag = (material->material_flags & 1) |
+                tag = (material->materialFlags & 1) |
                       (layout->fields.render_status & 0x01004002);
                 if (previous_tag != tag) {
                     previous_tag = tag;
@@ -4682,8 +4560,8 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
                 nmlPacketAddPixelControl(material, layout, viewport);
                 nmlPacketAddGsFlush();
 
-                if ((material->material_flags & 0x1000) &&
-                    (!(layout->fields.featureFlags & 0x10) ||
+                if ((material->materialFlags & 0x1000) &&
+                    (!(layout->fields.renderLevel & 0x10) ||
                      ((layout->fields.render_status & 0x100000) &&
                       strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflRot(material, layout);
@@ -4692,7 +4570,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
 
                 nmlPacketAddBlockMaterial(material, layout, 0,
                                           viewport);
-                if ((result = (int)nmlPacketAddParts(material, layout, camera)) != 0) {
+                if ((result = nmlPacketAddParts(material, layout, camera)) != 0) {
                     break;
                 }
                 nmlPacketAddExecProg(material, layout, 0, 0);
@@ -4716,7 +4594,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         int block_index;
 
         filter_model = 0;
-        if (s_aAlphaGroup[group_index].status & 0x48) {
+        if (s_aAlphaGroup[group_index].flags & 0x48) {
             continue;
         }
         if (result != 0) {
@@ -4725,11 +4603,11 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         nmlPacketAddGsZbuf(0);
         nmlPacketAddGsAlpha(0x68);
         nmlPacketAddGsFrame(sRender.display_buffer_base,
-                            (s_aAlphaGroup[group_index].status & 2) ? 0xffffff : s_nStencilVal);
+                            (s_aAlphaGroup[group_index].flags & 2) ? 0xffffff : s_nStencilVal);
         nmlPacketAddGsFrame1(sRender.display_buffer_base,
-                             (s_aAlphaGroup[group_index].status & 2) ? 0xffffff : s_nStencilVal);
-        nmlPacketAddGsFBA(s_aAlphaGroup[group_index].status & 2);
-        nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].status & 2);
+                             (s_aAlphaGroup[group_index].flags & 2) ? 0xffffff : s_nStencilVal);
+        nmlPacketAddGsFBA(s_aAlphaGroup[group_index].flags & 2);
+        nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].flags & 2);
         nmlPacketAddGifTagStandard(1, 1);
         nmlPacketAddGsFlush();
         nmlPacketClrModelCache();
@@ -4739,7 +4617,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                                s_aAlphaGroup[group_index].blockCount;
              --block_index) {
             LayoutStore *layout = s_apModelLayout[s_aBlockLayout[block_index]];
-            NmlFlushMaterialView *material = s_apBlock[block_index];
+            NmlModelBlock *material = s_apBlock[block_index];
 
             if (s_nAnotherStudio != 0) {
                 if (layout->fields.viewportFlags[viewport] != 0) {
@@ -4753,24 +4631,24 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                 filter_model = layout;
             }
             if (g_aSubWindow[viewport] == 1) {
-                if (viewport != layout->fields.renderLevel) {
+                if (viewport != layout->fields.window) {
                     continue;
                 }
             } else if (g_aSubWindow[viewport] == 2) {
-                if (layout->fields.renderLevel != 0) {
+                if (layout->fields.window != 0) {
                     continue;
                 }
             }
-            if ((((const NmlPartFlagData *)layout->fields.weightedMatrices)[material->partIndex].flags & 1) == 0 &&
-                (material->material_flags & 0x8000) == 0 &&
+            if ((layout->fields.weightedMatrices[material->partId].part.flags & 1) == 0 &&
+                (material->materialFlags & 0x8000) == 0 &&
                 (layout->fields.render_status & 8) == 0) {
                 continue;
             }
-            if (material->material_flags & 2) {
+            if (material->materialFlags & 2) {
                 continue;
             }
             nmlPacketAddTransMicrocode(material, layout);
-            if (material->material_flags & 4) {
+            if (material->materialFlags & 4) {
                 result = nmlPacketAddTexture(layout);
                 if (result != 0) {
                     break;
@@ -4778,7 +4656,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                 nmlPacketAddTextureParam(material, layout);
             }
             nmlPacketAddBlockMaterial(material, layout, 1, viewport);
-            result = (int)nmlPacketAddParts(material, layout, camera);
+            result = nmlPacketAddParts(material, layout, camera);
             if (result != 0) {
                 break;
             }
@@ -4799,23 +4677,23 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         }
 
         {
-            if (s_aAlphaGroup[group_index].status & 0x800) {
+            if (s_aAlphaGroup[group_index].flags & 0x800) {
                 nmlFilterBackClear();
             }
             nmlPacketGsInit();
             nmlPacketAddGsZbuf(1);
             nmlPacketAddGsPixeltest(0x50000);
             display_base = sRender.display_buffer_base;
-            if (s_aAlphaGroup[group_index].status & 0x800) {
+            if (s_aAlphaGroup[group_index].flags & 0x800) {
                 display_base = sRender.flip_base;
             }
             previous_gif_flags = -1;
             nmlPacketAddGsFrame((unsigned short)display_base,
-                                (s_aAlphaGroup[group_index].status & 2) ? 0 : s_nStencilVal);
+                                (s_aAlphaGroup[group_index].flags & 2) ? 0 : s_nStencilVal);
             nmlPacketAddGsFrame1((unsigned short)display_base,
-                                 (s_aAlphaGroup[group_index].status & 2) ? 0 : s_nStencilVal);
-            nmlPacketAddGsFBA(s_aAlphaGroup[group_index].status & 2);
-            nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].status & 2);
+                                 (s_aAlphaGroup[group_index].flags & 2) ? 0 : s_nStencilVal);
+            nmlPacketAddGsFBA(s_aAlphaGroup[group_index].flags & 2);
+            nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].flags & 2);
             nmlPacketAddGsFlush();
 
             for (block_index = s_aAlphaGroup[group_index].firstBlock;
@@ -4823,7 +4701,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                                    s_aAlphaGroup[group_index].blockCount;
                  --block_index) {
                 LayoutStore *layout = s_apModelLayout[s_aBlockLayout[block_index]];
-                NmlFlushMaterialView *material = s_apBlock[block_index];
+                NmlModelBlock *material = s_apBlock[block_index];
                 unsigned int flags;
                 unsigned int render_status;
 
@@ -4836,11 +4714,11 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                     }
                 }
                 if (g_aSubWindow[viewport] == 1) {
-                    if (viewport != layout->fields.renderLevel) {
+                    if (viewport != layout->fields.window) {
                         continue;
                     }
                 } else if (g_aSubWindow[viewport] == 2) {
-                    if (layout->fields.renderLevel != 0) {
+                    if (layout->fields.window != 0) {
                         continue;
                     }
                 }
@@ -4849,12 +4727,12 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                     filter_model = layout;
                 }
                 if (filter_model == 0 &&
-                    (s_aAlphaGroup[group_index].status & 0x800) != 0) {
+                    (s_aAlphaGroup[group_index].flags & 0x800) != 0) {
                     filter_model = layout;
                 }
 
                 render_status = layout->fields.render_status;
-                flags = (material->material_flags & 1) | (render_status & 0x01004002);
+                flags = (material->materialFlags & 1) | (render_status & 0x01004002);
                 if (render_status & 0x2000) {
                     flags &= ~(render_status & 0x01000002);
                 }
@@ -4870,30 +4748,30 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                 nmlPacketAddTextureParam(material, layout);
                 if (flags & 0x01000002) {
                     nmlPacketAddFog(layout, viewport);
-                    nmlPacketAddGsFogCol(&layout->fields.fogColor.x);
+                    nmlPacketAddGsFogCol(layout->fields.fogColor.color);
                 }
-                if ((material->material_flags & 0x1000) != 0 &&
-                    ((layout->fields.featureFlags & 0x10) == 0 ||
+                if ((material->materialFlags & 0x1000) != 0 &&
+                    ((layout->fields.renderLevel & 0x10) == 0 ||
                      ((layout->fields.render_status & 0x100000) != 0 &&
                       strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflRot(material, layout);
                 }
                 nmlPacketAddBlockMaterial(material, layout, 0, viewport);
-                result = (int)nmlPacketAddParts(material, layout, camera);
+                result = nmlPacketAddParts(material, layout, camera);
                 if (result != 0) {
                     break;
                 }
                 nmlPacketAddPixelControl(material, layout, viewport | 0x10000);
-                if (material->material_flags & 0x20) {
+                if (material->materialFlags & 0x20) {
                     nmlPacketAddGsAlpha(0x48);
-                } else if (material->material_flags & 0x40) {
+                } else if (material->materialFlags & 0x40) {
                     nmlPacketAddGsAlpha(0x42);
                 } else {
                     nmlPacketAddGsAlpha(layout->fields.alpha);
                 }
                 nmlPacketAddGsFlush();
-                if ((material->material_flags & 0x1000) != 0 &&
-                    ((layout->fields.featureFlags & 0x10) == 0 ||
+                if ((material->materialFlags & 0x1000) != 0 &&
+                    ((layout->fields.renderLevel & 0x10) == 0 ||
                      ((layout->fields.render_status & 0x100000) != 0 &&
                       strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflectParam(material, layout);
@@ -4903,7 +4781,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
 
         }
 
-        if (s_aAlphaGroup[group_index].status & 0x800) {
+        if (s_aAlphaGroup[group_index].flags & 0x800) {
             nmlFilterSetFlatRender(filter_model);
         }
         if (s_nUseStealth != 0) {
@@ -4915,7 +4793,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         if (result != 0) {
             break;
         }
-        if ((s_aAlphaGroup[group_index].status & 0x10) != 0 && viewport == 0 &&
+        if ((s_aAlphaGroup[group_index].flags & 0x10) != 0 && viewport == 0 &&
             s_nUseStealth != 0 && s_nMapAlphaEntry != 0) {
             nmlFilterSetFrameToBuffer(sRender.display_buffer_base);
         }
@@ -4937,7 +4815,7 @@ static int nmlModelFlushSub(int viewport)
     if (camera == 0) {
         return 0;
     }
-    nmlPacketAddScreen((NmlModelRenderState *)camera);
+    nmlPacketAddScreen(camera);
     nmlPacketGsInit();
     nmlPacketAddGsScissor(
         ((u64)(int)SCISSOR_F(camera, 0) |
@@ -4960,8 +4838,8 @@ static int nmlModelFlushSub(int viewport)
     if (result == 0 && viewport == 0) {
         for (index = 0; index < s_nDirect; index++) {
             NmlDirectRecord *record = &s_aDirect[index];
-            if ((u16)record->attribute == 1) {
-                result = nmlPacketDirectData(record->data, (u16)record->count);
+            if (record->attribute == 1) {
+                result = nmlPacketDirectData(record->data, record->count);
                 if (result != 0) {
                     break;
                 }
@@ -4983,7 +4861,7 @@ static int nmlModelFlushSub(int viewport)
                 continue;
             }
             if (flags & 0x100) {
-                result = nmlModelRenderCircle((const NmlCircleOrigin *)&s_aNonAlphaGroup[index], 1, viewport);
+                result = nmlModelRenderCircle(&s_aNonAlphaGroup[index], 1, viewport);
                 if (result != 0) {
                     break;
                 }
@@ -4997,7 +4875,7 @@ static int nmlModelFlushSub(int viewport)
                 continue;
             }
             if (flags & 0x80) {
-                result = (int)nmlModelRenderDrop((struct NmlModelRenderRange *)&s_aNonAlphaGroup[index], 1, camera, viewport);
+                result = nmlModelRenderDrop(&s_aNonAlphaGroup[index], 1, camera, viewport);
                 if (result != 0) {
                     break;
                 }
@@ -5009,29 +4887,29 @@ static int nmlModelFlushSub(int viewport)
         {
             int callback_mode = -1;
             for (index = 0; index < s_nAlphaGroup && result == 0; index++) {
-                if (s_aAlphaGroup[index].status & 0x20) {
-                    if (s_aAlphaGroup[index].status & 1) {
+                if (s_aAlphaGroup[index].flags & 0x20) {
+                    if (s_aAlphaGroup[index].flags & 1) {
                         result = nmlModelRenderTexture(&s_aAlphaGroup[index], callback_mode, viewport);
                         if (result != 0) {
                             break;
                         }
                         continue;
-                    } else if (s_aAlphaGroup[index].status & 0x100) {
-                        result = nmlModelRenderCircle((const NmlCircleOrigin *)&s_aAlphaGroup[index], callback_mode, viewport);
+                    } else if (s_aAlphaGroup[index].flags & 0x100) {
+                        result = nmlModelRenderCircle(&s_aAlphaGroup[index], callback_mode, viewport);
                         if (result != 0) {
                             break;
                         }
                         continue;
-                    } else if (s_aAlphaGroup[index].status & 0x200) {
+                    } else if (s_aAlphaGroup[index].flags & 0x200) {
                         result = nmlModelRenderDropCircle(&s_aAlphaGroup[index], callback_mode, camera);
                         if (result != 0) {
                             break;
                         }
                         continue;
-                    } else if ((s_aAlphaGroup[index].status & 0x80) == 0) {
+                    } else if ((s_aAlphaGroup[index].flags & 0x80) == 0) {
                         continue;
                     } else {
-                        result = (int)nmlModelRenderDrop((struct NmlModelRenderRange *)&s_aAlphaGroup[index], callback_mode, camera, viewport);
+                        result = nmlModelRenderDrop(&s_aAlphaGroup[index], callback_mode, camera, viewport);
                         if (result != 0) {
                             break;
                         }
@@ -5065,9 +4943,9 @@ static int nmlModelFlushSub(int viewport)
             if (result == 0) {
                 for (index = 0; index < s_nDirect; index++) {
                     NmlDirectRecord *record = &s_aDirect[index];
-                    if (((u16)record->attribute == 2 && viewport == 0) ||
-                        (u16)record->attribute - 3 == viewport) {
-                        result = nmlPacketDirectData(record->data, (u16)record->count);
+                    if ((record->attribute == 2 && viewport == 0) ||
+                        record->attribute - 3 == viewport) {
+                        result = nmlPacketDirectData(record->data, record->count);
                         if (result != 0) {
                             break;
                         }
@@ -5114,7 +4992,7 @@ void nmlModelInit(void)
 
 void nmlModelClear(void) {
     CLEAR_LAYOUT_MODEL(&s_inLayout);
-    CLEAR_PROREAL((int *) s_inProReal);
+    CLEAR_PROREAL(s_inProReal);
     CLEAR_MAP_HANDLE(s_inMapHandle);
     CLEAR_MODEL_ENTRY();
 }
@@ -5268,15 +5146,15 @@ void nmlModelFlushClear(void) {
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-const NmlProRealOrigin proRealOrigin = { .word0 = 0ULL, .word8 = 4575657222557270016ULL };
+const DoublewordAlignedVector4 proRealOrigin = { 0.0f, 0.0f, 1000.0f, 1.0f };
 
 const char magicCarpetComeName[16] = "MagicCarpetCome";
 
-const ProjectionQuad circleScaleVector = { .v = { .x = 64.0f, .y = -64.0f, .z = 8000.0f, .w = 1.0f } };
+const DoublewordAlignedVector4 circleScaleVector = { .x = 64.0f, .y = -64.0f, .z = 8000.0f, .w = 1.0f };
 
-const ProjectionQuad circleCenterVector = { .v = { .x = 64.0f, .y = 64.0f, .z = 1.0f, .w = 1.0f } };
+const DoublewordAlignedVector4 circleCenterVector = { .x = 64.0f, .y = 64.0f, .z = 1.0f, .w = 1.0f };
 
-const ProjectionQuad circleOffsetVector = { .v = { .x = 2048.0f, .y = 2048.0f, .z = 0.0f, .w = 1.0f } };
+const DoublewordAlignedVector4 circleOffsetVector = { .x = 2048.0f, .y = 2048.0f, .z = 0.0f, .w = 1.0f };
 
 const NmlVector4Overlay mapScaleVector = { .v = { .x = 128.0f, .y = -128.0f, .z = 8000.0f, .w = 1.0f } };
 

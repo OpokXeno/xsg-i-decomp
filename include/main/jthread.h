@@ -9,4 +9,12 @@ typedef JThread JThreadHandle;
 
 void JTHREAD_defaultUnit(JThreadHandle *thread);
 
+/* Functions and data used by other translation units. */
+JThread *JTHREAD_get(SceneObject object);
+void JTHREAD_defaultChr(JThreadHandle *thread);
+void JTHREAD_cntl(void);
+void JTHREAD_default(JThreadHandle *thread);
+void JTHREAD_defaultScene(JThreadHandle *thread);
+void JTHREAD_defaultStage(JThreadHandle *thread);
+
 #endif /* INCLUDE_MAIN_JTHREAD_H */

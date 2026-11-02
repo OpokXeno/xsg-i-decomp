@@ -2,6 +2,7 @@
 #define SRC_MAIN_GAME_INIT_CAMERA_H
 
 #include "shared.h"
+#include "main/tcamera.h"
 
 struct UnitActorStorage;
 
@@ -22,7 +23,6 @@ typedef struct GameInitCameraRecord {
 extern GameInitCameraRecord tcamera[];
 extern struct UnitActorStorage actor;
 
-extern void TCAMERA_init(void);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 
 #endif

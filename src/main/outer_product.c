@@ -2,30 +2,20 @@
 #include "shared.h"
 #include "main/xgl_2.h"
 #include "outer_product.h"
-
-typedef union {
-    Vector4 vector;
-    u64 words[2];
-} OuterProductVector;
+#include "main/outer_product.h"
 
 extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                                const Vector4 *third, Vector4 *vertical);
 
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-extern void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
-
-void OuterProduct(const OuterProductVector *left, const OuterProductVector *right,
-                  OuterProductVector *destination)
+void OuterProduct(const Vector4 *left, const Vector4 *right,
+                  AlignedVector4 *destination)
 {
-    OuterProductVector result;
+    AlignedVector4 result;
 
-    result.vector.x = left->vector.y * right->vector.z
-                    - left->vector.z * right->vector.y;
-    result.vector.y = left->vector.z * right->vector.x
-                    - left->vector.x * right->vector.z;
-    result.vector.z = left->vector.x * right->vector.y
-                    - left->vector.y * right->vector.x;
-    __builtin_memcpy(destination, &result, sizeof(result));
+    result.x = left->y * right->z - left->z * right->y;
+    result.y = left->z * right->x - left->x * right->z;
+    result.z = left->x * right->y - left->y * right->x;
+    *destination = result;
 }
 
 void CalcVerticalVector(const Vector4 *first, const Vector4 *second,

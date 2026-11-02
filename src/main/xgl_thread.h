@@ -6,6 +6,7 @@
 #define SRC_MAIN_XGL_THREAD_H
 
 #include "shared.h"
+#include "main/xgl_thread.h"
 
 typedef struct {
     int count;
@@ -18,18 +19,13 @@ typedef struct {
 
 typedef void (*thread_entry_t)(void *);
 
-typedef struct {
+typedef struct system_thread_entry_t {
     thread_entry_t entry;
     int unmodeled_04;
     int stack_size;
     int priority;
     int unmodeled_10;
 } system_thread_entry_t;
-
-typedef struct {
-    int stack_size;
-    int priority;
-} system_thread_tail_t;
 
 typedef struct {
     thread_entry_t entry;
@@ -52,7 +48,4 @@ extern int GetThreadId(void);
 extern void SleepThread(void);
 extern int CancelWakeupThread(int thread_id);
 extern int SignalSema(int sema_id);
-void xglThreadInitial(void);
-void xglThreadRotate(void);
-
 #endif /* SRC_MAIN_XGL_THREAD_H */

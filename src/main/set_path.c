@@ -3,6 +3,15 @@
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"
 #include "main/sef.h"
+#include "main/data.h"
+#include "main/nml_model_set.h"
+#include "main/party.h"
+#include "main/srs.h"
+#include "main/xgl_font.h"
+#include "main/xgl_light.h"
+#include "main/xgl_render.h"
+#include "main/xgl_sound.h"
+#include "main/xgl_thread.h"
 
 #define SCAM_TAKE_DEFAULT_RATE 0.1f
 #define SCAM_TAKE_DEFAULT_RANGE 2.6f
@@ -36,11 +45,6 @@ typedef struct SetPathEffectVector {
     float z;
 } SetPathEffectVector;
 
-typedef struct SetPathEffectPeer {
-    unsigned char unmodeled_00[0xa9a];
-    signed char debugFlag;
-} SetPathEffectPeer;
-
 typedef struct CfSelectState {
     int horizontalOrigin; /* +0x0 */
     int verticalOrigin; /* +0x4 */
@@ -53,7 +57,7 @@ typedef struct CfSelectState {
     /* +0x11c: the selected entry's path, filled by xglCdFileSelect and
      * handed to setPath() by execFileSelect; its extent past this offset
      * is unmodeled. */
-    unsigned char selectedPath[1];
+    char selectedPath[1];
     unsigned char unmodeled_11d[0x268 - 0x11d];
 } CfSelectState;
 
@@ -109,8 +113,8 @@ extern PadDataMenuLayout PadData[2];
 const char cfEffectSelectText[];
 const char hamaLexName[];
 const char hamaXtxName[];
-extern unsigned char _defMatLcMod[];
-extern unsigned char _defMatLn[];
+extern Matrix4 _defMatLcMod[];
+extern Matrix4 _defMatLn[];
 extern const char debugVersionFormat[16];
 extern const char buildDateText[16];
 extern const char buildTimeText[16];
@@ -131,24 +135,16 @@ extern void sefLoadEffect(int effect, int variant);
 static void dummyMapLoad(void);
 extern void sefCreateEffect(SetPathEffectParams *params);
 extern unsigned int strlen(const char *string);
-static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name);
-void srsSetViewPath(unsigned char *path);
-extern void xglRenderClearFrame(void);
-extern void xglSleep(void);
+static void splitName(char *filename, char *path, char *name);
+void srsSetViewPath(char *path);
 extern int xglCdFileSelect(CfSelectState *state);
-extern void sefExecEffect(void);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern void func_A31438(void);
-extern int xglSoundStreamMain(void);
 extern int sprintf(char *destination, const char *format, ...);
 extern char *srsGetEsdData2(int index);
 extern void func_A31688(void);
 extern void func_A31920(int kind, float *params);
 extern void func_A318B8(void);
 extern void *memset(void *destination, int value, unsigned int count);
-extern void PartyDataInit2(void);
-extern int dataItmBoxChk(int id);
-extern int dataItmBoxInc(int id);
 extern void func_A2F6A8(void);
 extern void func_A22668(void);
 extern void func_A1D1C0(int level);
@@ -157,34 +153,22 @@ extern int srsFileLoad(void *buffer, const char *name, int mode);
 extern int func_A1A760(void);
 extern void func_A2C488(int level);
 extern void nmlModelEntry(int entry);
-extern void nmlModelSetLight(void *colorMod, void *normal);
-extern void nmlModelSetPlace(Matrix4 matrix);
-extern void nmlModelSetTexture(const char *texture);
 extern int sefCheckLoad(void);
-extern void xglLightCalcMatrix(StudioLight *light);
-extern void xglLightSetDefault(StudioLight *light);
 extern StudioLight *xglStudioGetLight2(void);
-extern void srsSetLoadMode(int mode);
-extern void sefDestroyEffect(void);
 extern void initFileSelect(void);
 extern void func_A22628(void);
 extern void func_A31840(void);
 static void seffectDebugBattle(void);
 static void seffectDebugCf(void);
 static void seffectDebugDb(void);
-extern void sresFreeReloaderMemory(int mode);
-extern void sefDestroyEffectCf(void);
 extern void sefInitEffectBattle(void);
 static void dummyMapDraw(void);
-extern void xglStudioChange(int camera);
 extern void xglStudioGetCamera(SetPathCamera **camera, int index);
 extern void SinitCamera(void);
 static int debugEnemySelect(void);
 extern int srsEftNo2WeaponID(int effect);
-extern int srsAnalyzeEftNo(int effect, int *kind, int *variant);
 extern void sefSetupPlayer(int charaId, int weaponId, int setupParam1, int setupParam2);
 extern void sefSetupEnemy(int charaId);
-extern void sefSetupEffect(void);
 extern void sefHitEffect(void);
 
 static char * cfScript;
@@ -193,7 +177,7 @@ static char basepath[23];
 
 static int cur_6;
 
-static SetPathEffectPeer * handle_9;
+static SchedulerState *handle_9;
 
 static Vector4 point_10;
 
@@ -258,9 +242,9 @@ static Vector4 tgtpos_16 = {0.0f, 0.0f, -4.0f, 1.0f};
 
 static Vector4 scale_17 = {0.1f, 0.1f, 0.1f, 1.0f};
 
-static unsigned char path_0[0x80];
+static char path_0[0x80];
 
-static unsigned char name_1[0x40];
+static char name_1[0x40];
 
 static SetPathEffectParams prm_8;
 
@@ -271,17 +255,17 @@ static SetPathEffectParams prm_13;
 static CfSelectState cfs;
 
 /* Initialized objects recovered for this TU. */
-static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name)
+static void splitName(char *filename, char *path, char *name)
 {
     int len;
     int slash;
     int i;
     int nameLen;
 
-    len = strlen((const char *) filename);
+    len = strlen(filename);
     slash = 0;
     for (i = len; i >= 0; i--) {
-        if ((signed char) filename[i] == '/') {
+        if (filename[i] == '/') {
             slash = i;
             break;
         }
@@ -300,7 +284,7 @@ static void splitName(unsigned char *filename, unsigned char *path, unsigned cha
     name[nameLen] = 0;
 }
 
-void setPath(unsigned char *filename)
+void setPath(char *filename)
 {
     splitName(filename, path_0, name_1);
     srsSetViewPath(path_0);
@@ -728,8 +712,8 @@ static void seffectDebugCf(void)
         if (sefCheckLoad() == 0) {
             xglFontDebugPrintf(8, 8, pressConfirmToStartText);
             if (PadData[0].buttons.halfwords.pressed & 0x20) {
-                handle_9 = (SetPathEffectPeer *)sefCreateEffectCf(
-                    effect, (const Vector4 *)&point_10, (const Vector4 *)&angle_11);
+                handle_9 = sefCreateEffectCf(
+                    effect, &point_10, &angle_11);
             }
             if (PadData[0].buttons.halfwords.pressed & 0x80) {
                 sefKillEffect(effect);
@@ -739,7 +723,7 @@ static void seffectDebugCf(void)
             }
             if (PadData[0].buttons.halfwords.repeat & 0x2) {
                 if (handle_9 != 0) {
-                    handle_9->debugFlag = (handle_9->debugFlag == 0);
+                    handle_9->display = (handle_9->display == 0);
                 }
             }
             if (PadData[0].buttons.halfwords.pressed & 0x4) {
@@ -899,7 +883,7 @@ static void dummyMapDraw(void)
         xglMatrixStackScale(&scale_17.x);
         xglMatrixStackSave(sp0);
         nmlModelSetTexture(gridxtxTop);
-        nmlModelSetPlace(sp0);
+        nmlModelSetPlace(&sp0);
         nmlModelSetLight(_defMatLcMod, _defMatLn);
         nmlModelEntry((int) gridlexTop);
     }
@@ -909,7 +893,7 @@ static void dummyMapDraw(void)
         xglMatrixStackScale(&scale_17.x);
         xglMatrixStackSave(sp0);
         nmlModelSetTexture(hamaxtxTop);
-        nmlModelSetPlace(sp0);
+        nmlModelSetPlace(&sp0);
         nmlModelSetLight(_defMatLcMod, _defMatLn);
         nmlModelEntry((int) hamalexTop);
     }
@@ -919,7 +903,7 @@ static void dummyMapDraw(void)
         xglMatrixStackScale(&scale_17.x);
         xglMatrixStackSave(sp0);
         nmlModelSetTexture(hamaxtxTop);
-        nmlModelSetPlace(sp0);
+        nmlModelSetPlace(&sp0);
         nmlModelEntry((int) hamalexTop);
     }
 }
@@ -1052,7 +1036,7 @@ char enemySelectFormat[8] = "%s : %d";
 
 static int cur_7 = 0x259;
 
-static SetPathEffectPeer * handle_9 = 0;
+static SchedulerState *handle_9 = 0;
 
 char senLexName[8] = "sen.lex";
 

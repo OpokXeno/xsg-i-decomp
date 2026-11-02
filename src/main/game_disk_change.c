@@ -1,6 +1,11 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_packet.h"
+#include "main/game_disk_change.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_thread.h"
 
 typedef struct GifAdData {
     u64 value;
@@ -46,18 +51,12 @@ extern const u8 D_8000[];
 extern const char diskChangeFormat[24];
 extern const unsigned char disk1And2Text[16];
 extern const unsigned char detectingText[16];
-extern const unsigned char pressStartForceContinueText[40];
+extern const char pressStartForceContinueText[40];
 extern const char diskChangeEffectControl[];
-extern u8 GameDiskChangeT10K;
-extern PadPrefix PadData;
-
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern int printf(const char *format, ...);
-extern void xglSleep(void);
 extern int xglCdDiskCheck(void);
-extern void xglCdArcCheck(void);
-extern void xglFontPrint(int x, int y, int color, const char *text);
 extern void xglFontPrintDirectOT(int ot, const char *text);
 
 const char diskChangeFormat[24] = "GameDiskChange:%d %d\n";
@@ -72,7 +71,7 @@ const unsigned char detectingText[16] = "\xC7\xA7\xBC\xB1\xC3\xE6\xA1\xC4";
 
 /* JP: ＳＴＡＲＴで強制続行
  * EN: Press START to force continuation */
-const unsigned char pressStartForceContinueText[40] = "\x19\x01\xA3\xD3\xA3\xD4\xA3\xC1\xA3\xD2\xA3\xD4\x19\x00\xA4\xC7\xB6\xAF\xC0\xA9\xC2\xB3\xB9\xD4";
+const char pressStartForceContinueText[40] = "\x19\x01\xA3\xD3\xA3\xD4\xA3\xC1\xA3\xD2\xA3\xD4\x19\x00\xA4\xC7\xB6\xAF\xC0\xA9\xC2\xB3\xB9\xD4";
 
 /* VIF DIRECT sends the five-qword GIF packet that clears and outlines the
  * backdrop while GameDiskChange waits for its replacement disc. */

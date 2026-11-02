@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_font.h"
 
 typedef unsigned char u8;
 typedef signed short s16;
@@ -37,18 +38,9 @@ typedef struct TyaUmlRenderSize {
     s16 height;
 } TyaUmlRenderSize;
 
-typedef struct TyaUmlGsPacket {
-    XglPacket *packet;
-    u8 unmodeled_04[0x28];
-    u64 commands[4];
-} TyaUmlGsPacket;
-
 extern TyaUmlRenderSize sRender;
 static void tyaUmlDispType3(TyaUmlDispParam *parameter);
-extern void tyaUmlDispType3Sub0(void *context, void *argument);
-extern void xglFontPrintExtFunc(unsigned int flags,
-                                void (*draw)(void *context, void *argument),
-                                void *argument);
+extern void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument);
 /* Font control stream consumed by xglFontPrint; individual opcodes remain
  * unmodeled, but all 24 original bytes and the call-site type are known. */
 static const char D_00A13380[24] = {
@@ -156,9 +148,8 @@ static void texture_trans(XglPacket **packet, TyaUmlImage *texture)
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispType3Sub0);
 
-static void tyaUmlDispType3Sub1(void *context, void *argument)
+static void tyaUmlDispType3Sub1(FontDrawCursor *cursor, void *argument)
 {
-    TyaUmlGsPacket *command = context;
     u64 packed_dimensions;
     u64 *command_words;
     s16 width = sRender.width;
@@ -166,12 +157,12 @@ static void tyaUmlDispType3Sub1(void *context, void *argument)
 
     packed_dimensions = ((u64)(width - 1) << 16) |
                         ((u64)(height - 1) << 48);
-    command_words = command->commands;
+    command_words = cursor->work.qwords;
     command_words[0] = 0x1000000000008001ULL;
     command_words[1] = 14;
     command_words[2] = packed_dimensions;
     command_words[3] = 64;
-    sceVif1PkAddDirectDataN(command->packet, command_words, 2);
+    sceVif1PkAddDirectDataN(cursor->packet, command_words, 2);
 }
 
 static void tyaUmlDispType3(TyaUmlDispParam *parameter)

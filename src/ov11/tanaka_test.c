@@ -18,14 +18,14 @@ static void Init(void)
     xglStudioChange(0);
     xglStudioGetCamera(&camera, 0);
     camera_to_initialize = camera;
-    camera_to_initialize->position.y = 1.0f;
-    camera_to_initialize->position.z = 8.0f;
-    camera_to_initialize->position.w = 1.0f;
-    camera_to_initialize->rotation.w = 1.0f;
-    camera_to_initialize->rotation.x = 0.0f;
-    camera_to_initialize->rotation.y = 0.0f;
-    camera_to_initialize->rotation.z = 0.0f;
-    camera_to_initialize->position.x = 0.0f;
+    camera_to_initialize->position.vector.y = 1.0f;
+    camera_to_initialize->position.vector.z = 8.0f;
+    camera_to_initialize->position.vector.w = 1.0f;
+    camera_to_initialize->rotation.vector.w = 1.0f;
+    camera_to_initialize->rotation.vector.x = 0.0f;
+    camera_to_initialize->rotation.vector.y = 0.0f;
+    camera_to_initialize->rotation.vector.z = 0.0f;
+    camera_to_initialize->position.vector.x = 0.0f;
 
     xglStudioGetLight(&light);
     xglLightSetDefault(light);

@@ -1,48 +1,27 @@
 #include "common.h"
 #include "shared.h"
 #include "main/toolkit.h"
+#include "main/exm_2.h"
+#include "main/init_uwamono_sys.h"
+#include "main/karakama_test.h"
+#include "main/outer_product.h"
+#include "main/sef.h"
+#include "main/vibration.h"
+#include "main/xgl_2.h"
+#include "main/xgl_sound.h"
 
-typedef struct {
-    unsigned long long xy;
-    float z;
-    float w;
-} TrapPosition;
-
-typedef struct {
-    unsigned char unmodeled_00[2];
-    s16 kindIndex;
-    signed char state;
-    unsigned char unmodeled_05[7];
-    float sizeX;
-    float sizeY;
-    float sizeZ;
-    float offsetX;
-    float offsetY;
-    float offsetZ;
-    float damageRadius;
-    unsigned char unmodeled_28[5];
-    signed char windState;
-    unsigned char unmodeled_2e[2];
-    s16 methodId;
-    signed char target;
-    unsigned char unmodeled_33[9];
-    int activeDuration;
-    int effectId;
-    unsigned int activeFlags;
-} TrapDamageProperties;
-
-typedef struct TrapMapUnit TrapMapUnit;
+typedef struct MapUnitRecordTrapView MapUnitRecordTrapView;
 
 typedef struct {
     unsigned int flags;
     unsigned char unmodeled_04[0x0c];
-    TrapPosition position;
+    DoublewordAlignedVector4 position;
     unsigned char unmodeled_20[0xa50];
 } TrapDamageActor;
 
 typedef struct {
     unsigned char unmodeled_00[0x20];
-    TrapPosition trapPosition;
+    DoublewordAlignedVector4 trapPosition;
     unsigned long long unmodeled_30;
     unsigned char unmodeled_38[0x3878];
 } TrapEnemyWorkEntry;
@@ -52,7 +31,7 @@ typedef struct {
     unsigned int green;
     unsigned int blue;
     unsigned int mode;
-    TrapPosition sphere;
+    DoublewordAlignedVector4 sphere;
 } TrapCollisionRecord;
 
 struct SchedulerState;
@@ -62,12 +41,15 @@ typedef struct {
     unsigned char trap_active;
 } TrapLinkedObject;
 
-struct TrapMapUnit {
+/* Kept as a view: uwaresId/linkedObject sit on canonical union members
+ * (model/effectCf). Only the trap work area at +0x1a0 is canonical (exm_2.h).
+ * The unit's vectors are only 8-aligned and copied as two doublewords. */
+struct MapUnitRecordTrapView {
     unsigned int flags;
-    void (*update)(TrapMapUnit *);
+    void (*update)(MapUnitRecordTrapView *);
     unsigned char unmodeled_08[0x08];
-    TrapPosition position;
-    TrapPosition effectOrientation;
+    DoublewordAlignedVector4 position;
+    DoublewordAlignedVector4 effectOrientation;
     unsigned char unmodeled_30[0x10];
     float matrix[4][4];
     float (*matrixRef)[4];
@@ -80,7 +62,7 @@ struct TrapMapUnit {
     unsigned char unmodeled_a6[2];
     s16 trapTimer;
     unsigned char unmodeled_aa[6];
-    TrapPosition dimensions;
+    DoublewordAlignedVector4 dimensions;
     unsigned char unmodeled_c0[0x20];
     int uwaresId;
     int xtxresId;
@@ -95,7 +77,7 @@ typedef unsigned int TrapGameLoopStateWords[0xa80c];
 typedef struct {
     signed char windState;
     unsigned char unmodeled_01[0x0f];
-    TrapPosition dimensions;
+    DoublewordAlignedVector4 dimensions;
     unsigned int flags;
     int effectId;
     unsigned char unmodeled_28[8];
@@ -104,32 +86,13 @@ typedef struct {
 typedef struct {
     signed char shape;
     unsigned char unmodeled_01[0x0f];
-    TrapPosition dimensions;
+    DoublewordAlignedVector4 dimensions;
     signed char target;
     unsigned char unmodeled_21[0x0f];
 } KowareKindEntry;
 
-/* The map unit's struct copies move 8-byte halves of TrapPosition; the float
- * arithmetic below reads and writes the same vectors as plain floats. */
-typedef struct {
-    float x;
-    float y;
-    float z;
-    float w;
-} TrapVector;
-
-typedef struct {
-    unsigned char unmodeled_00[0x10];
-    TrapVector position;
-    TrapVector rotation;
-    unsigned char unmodeled_30[0x80];
-    TrapVector dimensions;
-} TrapMapUnitVectors;
-
 extern TrapDamageActor actor[64];
 extern TrapEnemyWorkEntry enepc[16];
-extern signed char collflg;
-extern signed char printflg;
 extern const char actElectricFormat[24];
 extern const char actExplosionFormat[24];
 extern const char actFallFormat[16];
@@ -145,41 +108,23 @@ extern const char setTrapSizeFormat[16];
 extern const char trapSizeXyzFormat[16];
 extern const char createTrapPosFormat[0x30];
 
-extern float CheckDist3D(const TrapPosition *, const TrapPosition *);
 extern int printf(const char *, ...);
 
-/* The effect API reads complete 16-byte position/orientation vectors and
- * returns the allocated scheduler, or null when allocation fails. */
-extern struct SchedulerState *sefCreateEffectCf(int effectNo,
-                                              const Vector4 *position,
-                                              const Vector4 *orientation);
-
-extern void DrawActiveCursol(TrapMapUnit *unit);
-extern void UwamonoCommonFunc(TrapMapUnit *unit);
-extern void ClearUwamonoEffect(TrapMapUnit *unit);
-extern void SetUwaWind(TrapMapUnit *unit);
-extern void UwamonoBrokenSe(TrapMapUnit *unit);
-extern void Vibration_Set_Strong(int a, int b, int c);
-extern void xglSoundEffectNormalID(int soundId, int variant);
+extern void DrawActiveCursol(MapUnitRecordTrapView *unit);
+extern void UwamonoCommonFunc(MapUnitRecordTrapView *unit);
+extern void ClearUwamonoEffect(MapUnitRecordTrapView *unit);
+extern void SetUwaWind(MapUnitRecordTrapView *unit);
+extern void UwamonoBrokenSe(MapUnitRecordTrapView *unit);
 extern void CallMethod_I(const char *method_name, int argument1);
-extern void EXM_ClearWindStruct();
-extern void CreateUwamonoCommon(TrapMapUnit *unit);
-extern void SetContainerParam(TrapMapUnit *unit);
-extern void SetHideObject(TrapMapUnit *unit);
-extern void xglMatrixStackUnit(void);
-extern void xglMatrixStackTrans(const float translation[4]);
-extern void xglMatrixStackRotX(float angle);
-extern void xglMatrixStackRotY(float angle);
-extern void xglMatrixStackRotZ(float angle);
-extern void xglMatrixStackSave(float matrix[4][4]);
-void MAP_updateUnitTrap(TrapMapUnit *unit);
-int GivesEnemyDamage(TrapMapUnit *unit);
+extern void CreateUwamonoCommon(MapUnitRecordTrapView *unit);
+extern void SetContainerParam(MapUnitRecordTrapView *unit);
+void MAP_updateUnitTrap(MapUnitRecordTrapView *unit);
+int GivesEnemyDamage(MapUnitRecordTrapView *unit);
 
-void InitMapTrap(TrapMapUnit *unit)
+void InitMapTrap(MapUnitRecordTrapView *unit)
 {
-    static TrapKindEntry TrapKind_t[5] = { { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .xy = 4575657222456999936ULL, .z = 0.25f, .w = 0.0f }, .flags = 4194304U, .effectId = 730, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .xy = 4575657222456999936ULL, .z = 0.25f, .w = 0.0f }, .flags = 8388608U, .effectId = 731, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .xy = 4575657222456999936ULL, .z = 0.25f, .w = 0.0f }, .flags = 67108864U, .effectId = 732, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .xy = 4561245704516796416ULL, .z = 0.5f, .w = 0.0f }, .flags = 33554432U, .effectId = 733, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .xy = 4575657222465388544ULL, .z = 0.5f, .w = 0.0f }, .flags = 2097152U, .effectId = 601, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } } };
+    static TrapKindEntry TrapKind_t[5] = { { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 0.25f, 0.0f }, .flags = 4194304U, .effectId = 730, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 0.25f, 0.0f }, .flags = 8388608U, .effectId = 731, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 0.25f, 0.0f }, .flags = 67108864U, .effectId = 732, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 0.8f, 0.5f, 0.0f }, .flags = 33554432U, .effectId = 733, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .flags = 2097152U, .effectId = 601, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } } };
 
-    TrapMapUnitVectors *view = (TrapMapUnitVectors *)unit;
     TrapDamageProperties *trap = &unit->trap;
     int index;
     int xtxres;
@@ -231,17 +176,17 @@ void InitMapTrap(TrapMapUnit *unit)
         }
     }
     if (trap->sizeX > 0.0f) {
-        view->dimensions.x = trap->sizeX * 0.5f;
-        view->dimensions.y = trap->sizeY;
-        view->dimensions.z = trap->sizeZ * 0.5f;
+        unit->dimensions.x = trap->sizeX * 0.5f;
+        unit->dimensions.y = trap->sizeY;
+        unit->dimensions.z = trap->sizeZ * 0.5f;
         if (printflg) {
             printf(setTrapSizeFormat);
             printf(trapSizeXyzFormat, trap->sizeX, trap->sizeY, trap->sizeZ);
         }
     }
-    view->dimensions.x += trap->offsetX * 0.5f;
-    view->dimensions.y += trap->offsetY;
-    view->dimensions.z += trap->offsetZ * 0.5f;
+    unit->dimensions.x += trap->offsetX * 0.5f;
+    unit->dimensions.y += trap->offsetY;
+    unit->dimensions.z += trap->offsetZ * 0.5f;
     if (trap->activeFlags == -1) {
         trap->activeFlags = 1;
     }
@@ -256,20 +201,20 @@ void InitMapTrap(TrapMapUnit *unit)
     }
     CreateUwamonoCommon(unit);
     xglMatrixStackUnit();
-    xglMatrixStackTrans(&view->position.x);
-    xglMatrixStackRotX(view->rotation.x);
-    xglMatrixStackRotY(view->rotation.y);
-    xglMatrixStackRotZ(view->rotation.z);
+    xglMatrixStackTrans(&unit->position.x);
+    xglMatrixStackRotX(unit->effectOrientation.x);
+    xglMatrixStackRotY(unit->effectOrientation.y);
+    xglMatrixStackRotZ(unit->effectOrientation.z);
     xglMatrixStackSave(unit->matrix);
     unit->matrixRef = unit->matrix;
     SetHideObject(unit);
     if (printflg) {
-        printf(createTrapPosFormat, view->position.x, view->position.y, view->position.z,
-               view->rotation.y / 3.1415927f * 180.0f);
+        printf(createTrapPosFormat, unit->position.x, unit->position.y, unit->position.z,
+               unit->effectOrientation.y / 3.1415927f * 180.0f);
     }
 }
 
-void MAP_updateUnitTrap(TrapMapUnit *unit)
+void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
 {
     TrapDamageProperties *trap = &unit->trap;
 
@@ -319,8 +264,8 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
                 Vibration_Set_Strong(0xff, 0x20, 0x5a);
         }
         sefCreateEffectCf(trap->effectId,
-                          (const void *)&unit->position,
-                          (const void *)&unit->effectOrientation);
+                          &unit->position,
+                          &unit->effectOrientation);
         unit->flags |= 0x00020004;
             ClearUwamonoEffect(unit);
             SetUwaWind(unit);
@@ -338,8 +283,8 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
             unit->trapState = 1;
             UwamonoBrokenSe(unit);
             sefCreateEffectCf(0x259,
-                              (const void *)&unit->position,
-                              (const void *)&unit->effectOrientation);
+                              &unit->position,
+                              &unit->effectOrientation);
             unit->flags |= 0x00020004u;
             ClearUwamonoEffect(unit);
             SetUwaWind(unit);
@@ -353,7 +298,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
     }
 
     case 3: {
-        unit->trapTimer = (s16)(unit->trapTimer + 1);
+        unit->trapTimer = unit->trapTimer + 1;
         if (unit->trapTimer >= 5) {
             trap->windState = 0;
             EXM_ClearWindStruct();
@@ -374,7 +319,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
     case 1: {
         s16 elapsed;
 
-        elapsed = unit->trapTimer = (s16)(unit->trapTimer + 1);
+        elapsed = unit->trapTimer = unit->trapTimer + 1;
         if (elapsed >= 5) {
             trap->windState = 0;
             if (printflg != 0) {
@@ -389,7 +334,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
     }
 }
 
-int GivesEnemyDamage(TrapMapUnit *unit)
+int GivesEnemyDamage(MapUnitRecordTrapView *unit)
 {
     /* Prepare the collision sphere and its display color when collision
      * display is enabled. No reader of this local record is evidenced here. */

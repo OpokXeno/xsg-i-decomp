@@ -6,6 +6,19 @@
 #define SRC_MAIN_GAME_DEBUG_MENU_H
 
 #include "shared.h"
+#include "main/act_1.h"
+#include "main/exm_2.h"
+#include "main/Undulate.h"
+#include "main/game.h"
+#include "main/game_debug_menu.h"
+#include "main/game_disk_change.h"
+#include "main/game_snap_shot.h"
+#include "main/look_at_player.h"
+#include "main/map_1.h"
+#include "main/res_get_path.h"
+#include "main/runtime.h"
+#include "main/xgl_font.h"
+#include "main/xgl_render.h"
 
 /*
  * PadData's pressed-button halfword (include/shared.h PadPrefix.half_2a).
@@ -26,7 +39,6 @@
 
 #define ACTOR_COUNT 64
 
-#define ACTOR_IN_USE_ID_OFFSET 0x86
 
 #define DEBUG_ROW_COUNT 10
 
@@ -56,21 +68,6 @@ typedef struct {
     u16 half_2c;
     u16 half_2e;
 } PadDebugView;
-
-/*
- * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
- * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
- * src/main/enemy_2.h, src/main/set_motion.h and src/main/db_light_write.h).
- * PauseMenuPage0 reads only `inUseId` (+0x86, the in-use id ACT_create
- * writes and ACT_update skips a slot on when it is zero); the offsets
- * between the head and it are not evidenced by this TU and stay unmodeled.
- */
-typedef struct {
-    u32 flags;
-    u8 unmodeled_04[ACTOR_IN_USE_ID_OFFSET - 0x04];
-    short inUseId;
-    u8 unmodeled_88[0xA70 - (ACTOR_IN_USE_ID_OFFSET + 2)];
-} ActorHead;
 
 /* The unit GameLoopState points at (+0x04); page 3 resets and replaces its
  * position from the map's layout header. */
@@ -141,17 +138,8 @@ typedef struct {
     unsigned char unmodeled_08[0x10 - 0x08];
 } DebugResourceSlot;
 
-typedef struct {
-    float components[4];
-} DebugLayoutHeader;
-
-typedef struct {
-    u32 flags;
-    u8 unmodeled_04[0x300 - 0x04];
-} MapUnitHead;
-
 extern PadDebugView PadData;
-extern ActorHead actor[ACTOR_COUNT];
+extern Actor actor[ACTOR_COUNT];
 extern DebugMenuPageState GameLoopState;
 static const char *tbl_1_00367A70[];
 extern const char debugMenuHeaderLabel[];
@@ -165,14 +153,8 @@ extern char mapChangeIdNameFormat[];
 extern char debugPathFormat[];
 extern char scriptJumpIdFormat[];
 extern DebugResourceSlot GameResource[GAME_RESOURCE_COUNT];
-extern int DebugMenuResourceSizeAdd;
-extern unsigned char ModelPath;
 extern unsigned char ScenePath;
-extern u8 UseTestPath;
-extern int ScanLineInterpolate;
-extern MapUnitHead MapUnit[MAP_UNIT_COUNT];
-extern unsigned char SnapDrawCreditFlag;
-extern u8 GameDiskChangeT10K;
+extern MapUnitRecord MapUnit[MAP_UNIT_COUNT];
 extern const char debugFlagsHeaderLabel[];
 extern char fullWidthCursorText[];
 extern char hexDigitFormat[];
@@ -201,18 +183,8 @@ extern const char snapShotFileNameFormat[16];
 extern const char dataDirectoryPath[16];
 extern const char dataTestDirectoryPath[24];
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void GameResourceDump(int dump);
-extern char *MapGetName(int mapId);
-extern void MapChange(int mapId);
-extern DebugLayoutHeader *UnduDataGetHeader(int mapIndex, int unitIndex);
-extern void GameCfPlayerLoadResource(int resource);
-extern int GameSnapShotNumber(int number);
-extern void GameStateSave(void);
-extern void GameStateRestore(void);
 extern void func_A22668(void);
-extern void Java_xeno_util_Runtime_jump_sub(int target, int argument);
-extern char *MAP_getPath(void);
 extern char *RES_getPath(void);
 static void PauseMenuPage2(void);
 static void PauseMenuPage3(void);

@@ -4,6 +4,7 @@
 #include "map_create_unit_peer.h"
 #include "main/map_2.h"
 #include "main/play.h"
+#include "main/map_create_unit_peer.h"
 
 /* One component of `goal` carried through a bone matrix: the three
  * rotation/scale rows, then the translation row. */
@@ -25,8 +26,6 @@
 
 extern void ANM_resetDefault(MapUnitAnmState *anim, int param);
 extern void *PLAY_getCurrent(void);
-extern void SEQ_motionUnit(MapUnitMotionRecord *unit);
-
 MapUnitGroupEntry *MAP_createUnitPeer(int slot, int serial)
 {
     MapUnitGroupEntry *unit = (MapUnitGroupEntry *)MAP_createUnit(slot, serial);
@@ -74,7 +73,7 @@ void SEQ_rotYCNSUnitChr(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
     Vector4 *rotation = &unit->rotation;
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitBoneAimTrack *track = &sequence->rotation.bone;
     Vector4 goal;
     Vector4 world;
@@ -93,7 +92,7 @@ void SEQ_rotYCNSUnitChr(MapUnitRecord *unit)
 void SEQ_transCNSUnitChr(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitBoneTrack *track = &sequence->move.bone;
     Vector4 goal;
     Vector4 world;
@@ -116,7 +115,7 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
     Vector4 *rotation = &unit->rotation;
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitTurnTrack *track = &sequence->rotation.turn;
     float *start = track->start;
     float *goal = track->goal;
@@ -213,7 +212,7 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
 
 void SEQ_scaleUnit(MapUnitRecord *unit)
 {
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitScaleTrack *track = &sequence->scale;
     float *start = track->start;
     float *goal = track->goal;
@@ -289,7 +288,7 @@ void SEQ_scaleUnit(MapUnitRecord *unit)
 
 void SEQ_rotateUnitSPL(MapUnitRecord *unit)
 {
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitSplineTrack *track = &sequence->rotation.spline;
     void *spline = track->spline;
     float sample[3];
@@ -306,13 +305,13 @@ void SEQ_rotateUnitSPL(MapUnitRecord *unit)
     unit->rotation.z = sample[2] / 180.0f * 3.1415927f;
 
     track->frame++;
-    if (track->lastFrame < (short)track->frame)
+    if (track->lastFrame < track->frame)
         sequence->state &= ~0xe;
 }
 
 void SEQ_scaleUnitSPL(MapUnitRecord *unit)
 {
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitScaleTrack *track = &sequence->scale;
     void *spline = track->spline;
     float sample[3];
@@ -329,13 +328,13 @@ void SEQ_scaleUnitSPL(MapUnitRecord *unit)
     unit->scale.z = sample[2];
 
     track->frame++;
-    if (track->lastFrame < (short)track->frame)
+    if (track->lastFrame < track->frame)
         sequence->state &= ~0xe0;
 }
 
 void SEQ_moveUnitSPL(MapUnitRecord *unit)
 {
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitSplineTrack *track = &sequence->move.spline;
     void *spline = track->spline;
     float sample[3];
@@ -356,7 +355,7 @@ void SEQ_moveUnitSPL(MapUnitRecord *unit)
     unit->position.x = sample[0];
     unit->position.y = sample[1];
     unit->position.z = sample[2];
-    if (track->lastFrame < (short)track->frame)
+    if (track->lastFrame < track->frame)
         sequence->state &= ~0x1;
 }
 
@@ -364,7 +363,7 @@ void SEQ_moveUnitChr(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
     Vector4 *rotation = &unit->rotation;
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitWalkTrack *track = &sequence->move.walk;
     Vector4 *start = &track->start;
     float *step = &track->destination.w;
@@ -413,7 +412,7 @@ void SEQ_moveUnitXZ(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
     Vector4 *rotation = &unit->rotation;
-    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
+    MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
     MapUnitWalkTrack *track = &sequence->move.walk;
     Vector4 *start = &track->start;
     Vector4 *target = &track->destination;
@@ -526,7 +525,7 @@ void MAP_updateUnitSequence(MapUnitRecord *unit)
     MapUnitGroupSequenceEntry *sequence_entry;
     int callback_index;
 
-    sequence_entry = &unitSequence[unit->serial];
+    sequence_entry = &unitSequence[unit->slot];
     for (callback_index = 0; callback_index < 4; callback_index++) {
         if (sequence_entry->update_callbacks[callback_index] != 0) {
             sequence_entry->update_callbacks[callback_index](unit);
@@ -611,7 +610,7 @@ void MAP_updateUnitPartsSequence(MapUnitRecord *unit)
     MapPartsDisplay *display;
     int callback_index;
 
-    sequence_entry = &unitSequence[unit->serial];
+    sequence_entry = &unitSequence[unit->slot];
     for (callback_index = 0; callback_index < 4; callback_index++) {
         if (sequence_entry->update_callbacks[callback_index] != 0) {
             sequence_entry->update_callbacks[callback_index](unit);
@@ -655,7 +654,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
     MapPartsDisplay *display;
     int callback_index;
 
-    sequence_entry = &unitSequence[unit->serial];
+    sequence_entry = &unitSequence[unit->slot];
     for (callback_index = 0; callback_index < 4; callback_index++) {
         if (sequence_entry->update_callbacks[callback_index] != 0) {
             sequence_entry->update_callbacks[callback_index](unit);
@@ -721,7 +720,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             xglMatrixStackReverse();
             xglMatrixStackSave(inverse);
             xglMatrixStackLoad(aligned);
-            xglMatrixStackMul((const float (*)[4])local);
+            xglMatrixStackMul(local);
             __asm__ __volatile__(
                 "lqc2 $vf20, 0(%1)\n"
                 "lqc2 $vf21, 0(%2)\n"
@@ -754,13 +753,13 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             negated.w = 1.0f;
             xglMatrixStackUnit();
             xglMatrixStackTrans(&centre.x);
-            xglMatrixStackMul((const float (*)[4])inverse);
+            xglMatrixStackMul(inverse);
             xglMatrixStackRotX(angles.x);
             xglMatrixStackRotY(angles.y);
             xglMatrixStackRotZ(angles.z);
             xglMatrixStackScale(&unit->scale.x);
-            xglMatrixStackMul((const float (*)[4])local);
-            xglMatrixStackMul((const float (*)[4])aligned);
+            xglMatrixStackMul(local);
+            xglMatrixStackMul(aligned);
             xglMatrixStackTrans(&negated.x);
             xglMatrixStackSave(local);
             angles.x = unit->position.x * inverse[0][0] + unit->position.y * inverse[1][0] + unit->position.z * inverse[2][0];

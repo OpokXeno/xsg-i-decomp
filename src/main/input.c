@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "main/jni.h"
 #include "main/find_native_method.h"
+#include "main/string_utf_get_hash.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -61,8 +62,6 @@ extern const char inputIdFieldName[];
 extern InputPadEntry PadData[];
 
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-extern SceneString *loadConstString(const char *bytes, int length);
-
 const char inputIdFieldName[] = "id";
 
 /*

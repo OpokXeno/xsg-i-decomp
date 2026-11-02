@@ -1,13 +1,10 @@
 #include "common.h"
 #include "look.h"
-
-typedef struct LookEnemyPlace {
-    unsigned long long words[2];
-} LookEnemyPlace;
+#include "main/look.h"
 
 typedef struct LookEnemyTargetSlot {
     unsigned char unmodeled_000[0x0c];
-    LookEnemyPlace *lookPlaceTarget;
+    LookAlignedVector4 *lookPlaceTarget;
 } LookEnemyTargetSlot;
 
 typedef struct LookEnemyWorkEntry {
@@ -26,7 +23,7 @@ extern const char eyeTargetMomoName[];
 /* MARK provisional: .lit4 0x004d8564 */
 extern StudioCamera *xglStudioGetActiveCamera(void);
 
-int look_get_place(LookCharacter *actor, LookAlignedVector4 *place);
+static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place);
 void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side);
 extern char *strstr(const char *haystack, const char *needle);
 
@@ -123,19 +120,19 @@ static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place)
 
     switch (mode) {
     case 1: {
-        LookEnemyPlace *enemyPlace;
+        LookAlignedVector4 *enemyPlace;
 
         if (enemyEntry != 0) {
             enemyPlace = enemyEntry->lookPlaceTarget;
             if (enemyPlace != 0) {
                 result = 0;
-                *(LookEnemyPlace *)place = *enemyPlace;
+                *place = *enemyPlace;
             }
         }
         break;
     }
     case 2:
-        look_copy_place(place, &xglStudioGetActiveCamera()->position);
+        look_copy_place(place, &xglStudioGetActiveCamera()->position.vector);
         result = 0;
         break;
     case 3:
@@ -215,13 +212,13 @@ void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 
                         look_zero_vector(&targetAngle);
                         xglVectorMulMat(&localPlace, matrix, &place.v);
-                        angle = &actor->lookAngles[0].y;
+                        angle = &actor->lookAngles[0][1];
                         targetAngle.y = xglAtan2(localPlace.x, localPlace.z);
                         look_limit_add(angle, targetAngle.y, weight * LOOK_SEBO_STEP);
                     }
                     element->rotation[2] += *angle * LOOK_SEBO_ROTATION_SCALE;
                 } else {
-                    float *angle = &actor->lookAngles[0].y;
+                    float *angle = &actor->lookAngles[0][1];
 
                     look_limit(angle, weight * LOOK_SEBO_LIMIT);
                     element->rotation[2] += *angle * LOOK_SEBO_ROTATION_SCALE;
@@ -253,8 +250,8 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
             if (weight <= 0.0f)
                 weight = 1.0f;
             CUR_MATRIX_Set(work->matrixBuffer[work->jointIndex - 1]);
-            CUR_MATRIX_Txyz4s(element->translation);
-            CUR_MATRIX_Rzyx4s(element->rotation);
+            CUR_MATRIX_Txyz4s(&element->translation);
+            CUR_MATRIX_Rzyx4s((const int *)element->rotation); /* COP2 takes the raw float words, as in jnt.c */
             CUR_MATRIX_Get(currentMatrix);
             MATRIX_convert4(matrix, currentMatrix);
             MATRIX_convert4(rootMatrix, work->rootMatrix);
@@ -290,15 +287,15 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
                 }
                 rotation.y *= LOOK_HEAD_Y_SCALE;
                 rotation.z *= LOOK_HEAD_Z_SCALE;
-                look_limit_add(&actor->lookAngles[1].y, rotation.y, weight * LOOK_HEAD_Y_STEP);
-                look_limit_add(&actor->lookAngles[1].z, rotation.z, weight * LOOK_HEAD_Z_STEP);
+                look_limit_add(&actor->lookAngles[1][1], rotation.y, weight * LOOK_HEAD_Y_STEP);
+                look_limit_add(&actor->lookAngles[1][2], rotation.z, weight * LOOK_HEAD_Z_STEP);
             } else {
-                look_limit(&actor->lookAngles[1].y, weight * LOOK_HEAD_Y_LIMIT);
-                look_limit(&actor->lookAngles[1].z, weight * LOOK_HEAD_Z_LIMIT);
+                look_limit(&actor->lookAngles[1][1], weight * LOOK_HEAD_Y_LIMIT);
+                look_limit(&actor->lookAngles[1][2], weight * LOOK_HEAD_Z_LIMIT);
             }
             xglMatrixUnit(matrix);
-            xglMatrixRotX(matrix, matrix, actor->lookAngles[1].z);
-            xglMatrixRotY(matrix, matrix, actor->lookAngles[1].y);
+            xglMatrixRotX(matrix, matrix, actor->lookAngles[1][2]);
+            xglMatrixRotY(matrix, matrix, actor->lookAngles[1][1]);
             element->rotation[0] += xglAtan2(matrix[1][2], matrix[2][2]);
             element->rotation[1] -= xglAsin(matrix[0][2]);
             element->rotation[2] += xglAtan2(matrix[0][1], matrix[0][0]);
@@ -310,16 +307,16 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 static float s_fEyeOffset = 0.0f;
 
-void LOOK_eyeL_cont(int model, int target, int step)
+void *LOOK_eyeL_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 {
     s_fEyeOffset = LOOK_EYE_L_OFFSET;
-    LOOK_eye_cont(model, target, step, 0);
+    return LOOK_eye_cont(work, channels, actor, 0);
 }
 
-void LOOK_eyeR_cont(int model, int target, int step)
+void *LOOK_eyeR_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 {
     s_fEyeOffset = LOOK_EYE_R_OFFSET;
-    LOOK_eye_cont(model, target, step, 1);
+    return LOOK_eye_cont(work, channels, actor, 1);
 }
 
 static const float s_aEyeIdling[22][4];
@@ -337,7 +334,6 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
     Vector4 angles;
     LookJointElement *element;
     LookEyeState *eyes;
-    LookAngleView *view;
     float eyeWeight;
     float yawScale;
     float pitchScale;
@@ -356,7 +352,6 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
     controlled = 0;
     element = work->elements + work->jointIndex;
     eyes = actor->eyes;
-    view = (LookAngleView *)actor;
     pitchScale = 1.0f;
     yawScale = pitchScale;
     if (eyeWeight <= 0.0f)
@@ -452,20 +447,20 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
         step = LOOK_EYE_STEP;
         step = eyeWeight * step;
         angles.z = xglAtan2(localPlace.y, horizontalDistance);
-        look_limit_add(&view->lookAngles[side][0], angles.y, step);
-        look_limit_add(&view->lookAngles[side][3], angles.z, step);
-        element->rotation[1] -= view->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
-        element->rotation[0] += view->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
+        look_limit_add(&actor->lookAngles[side][0], angles.y, step);
+        look_limit_add(&actor->lookAngles[side][3], angles.z, step);
+        element->rotation[1] -= actor->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
+        element->rotation[0] += actor->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
     } else {
         step = LOOK_EYE_LIMIT;
         step = eyeWeight * step;
-        look_limit(&view->lookAngles[side][0], step);
-        look_limit(&view->lookAngles[side][3], step);
-        element->rotation[1] -= view->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
-        element->rotation[0] += view->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
+        look_limit(&actor->lookAngles[side][0], step);
+        look_limit(&actor->lookAngles[side][3], step);
+        element->rotation[1] -= actor->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
+        element->rotation[0] += actor->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
     }
-    element->rotation[1] += view->eyeAngles[side][2];
-    element->rotation[0] += view->eyeAngles[side][3];
+    element->rotation[1] += actor->eyeAngles[side][2];
+    element->rotation[0] += actor->eyeAngles[side][3];
     }
     return channels;
 }

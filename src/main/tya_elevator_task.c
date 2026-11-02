@@ -1,5 +1,6 @@
 #include "common.h"
 #include "tya_elevator_task.h"
+#include "main/tya_elevator_task.h"
 
 void tyaElevatorTask(void *peer_context, int field_offset)
 {

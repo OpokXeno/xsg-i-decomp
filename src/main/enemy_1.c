@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/enemy_1.h"
 #include "enemy_1.h"
 
 #define ENEMY_CONTACT_PADDING 0.3f
@@ -35,7 +36,7 @@
 #define ROUTE_RETREAT_FULL_TURN 6.2831855f
 #define ENEMY_DRIFT_DAMPING 0.9f
 
-EnemyVector4 EnemyTarget = { .vector = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f } };
+DoublewordVector4 EnemyTarget ={ .vector = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f } };
 
 /* Per-actor work records are cleared before use. */
 EnemyWorkEntry enepc[16] = {{0}};
@@ -106,9 +107,9 @@ int Get_EffectCode(int attr)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char finalInitMethodName[11] = "Final_init";
 
-void Enemy_Init(EnemyActor *self)
+void Enemy_Init(Actor *self)
 {
-    EnemyParams *params = &self->params;
+    EnemyParams *params = &self->enemy;
     EnemyWorkEntry *work = &enepc[self->number];
     short i;
     short j;
@@ -127,12 +128,12 @@ void Enemy_Init(EnemyActor *self)
         self->body_radius = params->body_radius;
         work->value_0c = params->value_108;
     } else {
-        params->value_d8 = AdrsEnemy[params->preset_index].value_d8;
+        params->stiff_duration = AdrsEnemy[params->preset_index].value_d8;
         params->route_step_length = AdrsEnemy[params->preset_index].route_step_length;
         params->pause_interval = AdrsEnemy[params->preset_index].pause_interval;
         params->chase_distance = AdrsEnemy[params->preset_index].chase_distance;
-        params->value_dc = AdrsEnemy[params->preset_index].value_dc;
-        params->value_c8 = AdrsEnemy[params->preset_index].value_c8;
+        params->threat_duration = AdrsEnemy[params->preset_index].value_dc;
+        params->move_speed = AdrsEnemy[params->preset_index].value_c8;
         params->threat_interval = AdrsEnemy[params->preset_index].threat_interval;
         params->chase_speed = AdrsEnemy[params->preset_index].chase_speed;
         work->value_4c = AdrsEnemy[params->preset_index].value_2c;
@@ -152,7 +153,7 @@ void Enemy_Init(EnemyActor *self)
     }
     work->wall_attribute = params->wall_attribute;
     work->event_type = params->event_type;
-    self->target_angle = self->angle;
+    self->target_angle = self->rotation.y;
     if (work->route_point_count == 0) {
         work->route_point_count = params->route_value_count / 3;
         for (i = 0; i < work->route_point_count; i++) {
@@ -209,7 +210,7 @@ void Enemy_Init(EnemyActor *self)
         work->route_marks[0][Get_Rnd(0, params->pause_interval) % 8] = 1;
     if (params->threat_interval != 0)
         work->route_marks[1][Get_Rnd(0, params->threat_interval) % 8] = 1;
-    if (self->sound_effect_id >= 0x4000 && self->sound_effect_id <= 0x4f22)
+    if (self->inUseId >= 0x4000 && self->inUseId <= 0x4f22)
         work->map_index = 772;
     else
         work->map_index = 768;
@@ -224,12 +225,12 @@ void Enemy_Init(EnemyActor *self)
     else
         CallMethod_I(finalInitMethodName, work->event_type);
     UnduParamInit(&self->undulation);
-    self->undulation.attr_mask = 2;
+    self->status_flags = 2;
     UnduCheck(&self->position, 0, &self->undulation);
-    self->undulation.attr_mask |= 0x1000;
+    self->status_flags |= 0x1000;
 }
 
-void Enemy_Damage_Explosion(EnemyActor *actor)
+void Enemy_Damage_Explosion(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     unsigned short count;
@@ -255,7 +256,7 @@ void Enemy_Damage_Explosion(EnemyActor *actor)
     }
 }
 
-void Enemy_Damage_Electric(EnemyActor *actor)
+void Enemy_Damage_Electric(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     int count = work->hit_count + 1;
@@ -265,14 +266,14 @@ void Enemy_Damage_Electric(EnemyActor *actor)
     if ((short)count >= limit) {
         u32 flags = actor->flags;
 
-        work->state_40.alert_level = 0;
+        work->spline_parameter = 0;
         actor->flags = flags & ~ACTOR_FLAG_AILMENT_ACTIVE;
         Homing_Search(actor);
         Enemy_ActionReady(actor, 2);
     }
 }
 
-void Enemy_Damage_Seal(EnemyActor *actor)
+void Enemy_Damage_Seal(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     int count = work->hit_count + 1;
@@ -282,14 +283,14 @@ void Enemy_Damage_Seal(EnemyActor *actor)
     if ((short)count >= limit) {
         u32 flags = actor->flags;
 
-        work->state_40.alert_level = 0;
+        work->spline_parameter = 0;
         actor->flags = flags & ~ACTOR_FLAG_AILMENT_ACTIVE;
         Homing_Search(actor);
         Enemy_ActionReady(actor, 1);
     }
 }
 
-void Enemy_Stiff(EnemyActor *actor)
+void Enemy_Stiff(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     int timer = work->stiff_timer - 1;
@@ -298,18 +299,18 @@ void Enemy_Stiff(EnemyActor *actor)
     if ((short)timer <= 0) {
         work->stiff_flag &= ~ENEMY_STIFF_ACTIVE_BIT;
         work->stiff_timer = 0;
-        actor->speed = work->stiff_saved_speed;
+        actor->animation.slot.speed = work->stiff_saved_speed;
         actor->flags &= ~ACTOR_FLAG_STIFF_ACTIVE;
         sefDeleteEffectCf(work->stiff_effect);
         work->stiff_effect = 0;
         Homing_Search(actor);
         Enemy_ActionReady(actor, 2);
     } else {
-        actor->speed = 0.0f;
+        actor->animation.slot.speed = 0.0f;
     }
 }
 
-void Enemy_Found(EnemyActor *actor)
+void Enemy_Found(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     unsigned short count = work->hit_count;
@@ -318,13 +319,13 @@ void Enemy_Found(EnemyActor *actor)
     if ((short)count >= work->hit_limit)
         Enemy_ActionReady(actor, 6);
 
-    if (actor->sound_effect_id != 0x2201) {
-        EnemyActor *player = GameLoopState.player;
+    if (actor->inUseId != 0x2201) {
+        Actor *player = GameLoopState.player;
         actor->target_angle = Get_Angle(&actor->position, &player->position);
     }
 }
 
-void Enemy_Tentacle(EnemyActor *self)
+void Enemy_Tentacle(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
     short count;
@@ -353,16 +354,16 @@ void Enemy_Tentacle(EnemyActor *self)
                 mark.y = self->position.y + 1.0f;
                 mark.z = self->position.z + cosf(angle) * radius;
                 mark.w = 1.0f;
-                Debug_Mark(&mark, AdrsEnemySphere);
+                Debug_Mark(&mark, (int)AdrsEnemySphere);
             }
         }
 
-        Get_Point_By_AngleLength(&self->position, &point, self->angle, radius);
+        Get_Point_By_AngleLength(&self->position, &point, self->rotation.y, radius);
         unit = CrossCheckMapUnit(&self->position, &point);
         if (unit != -1)
             SendBrokenSignal(&MapUnit[unit]);
 
-        if (GameLoopState.player->encount_lock == 0 && distance < radius)
+        if (GameLoopState.player->flash_timer == 0 && distance < radius)
             Check_Encount(self, 0, 0);
         else
             GameLoopState.encount_reset = -1;
@@ -374,15 +375,15 @@ void Enemy_Tentacle(EnemyActor *self)
         Enemy_ActionReady(self, 1);
 }
 
-void Enemy_Chase(EnemyActor *self)
+void Enemy_Chase(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
-    EnemyParams *params = &self->params;
-    EnemyVector4 start;
+    EnemyParams *params = &self->enemy;
+    AlignedVector4 start;
     Vector4 hit;
     Vector4 cross_point;
     int color[4];
-    EnemyVector4 square;
+    DoublewordVector4 square;
     float distance;
     float speed;
     int crossed;
@@ -396,7 +397,7 @@ void Enemy_Chase(EnemyActor *self)
         Set_Motion(self, Get_DefaultMotion(self, 1), 9);
     }
 
-    start = self->position_pair;
+    start = self->position;
     Check_Undu(&self->position, &work->escape_target.position, work->map_index,
                &hit, 1, 0, 0);
     crossed = CrossPointUwamono(&self->position,
@@ -441,13 +442,13 @@ void Enemy_Chase(EnemyActor *self)
     }
 
     if (distance >= params->chase_distance || work->move_result == 0x58 ||
-        ((short)work->chase_frame++ >=
+        (work->chase_frame++ >=
              (work->chase_frame_limit < 0 ? -work->chase_frame_limit : work->chase_frame_limit) &&
          work->chase_frame_limit != 0) ||
         (Get_Distance(&self->position, &work->last_player_position.vector) <
              CHASE_LOST_DISTANCE &&
          work->move_result != 0x60 && work->move_result != 99)) {
-        work->state_40.alert_level = 0;
+        work->spline_parameter = 0;
         Homing_Search(self);
         Enemy_ActionReady(self, 2);
     } else if (Get_Distance(&self->position,
@@ -465,16 +466,16 @@ void Enemy_Chase(EnemyActor *self)
     }
 }
 
-void Enemy_Route(EnemyActor *self)
+void Enemy_Route(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
-    EnemyParams *params = &self->params;
+    EnemyParams *params = &self->enemy;
     Vector4 point;
     Vector4 origin;
     Vector4 target;
     Vector4 hit;
     signed char directions[16];
-    int saved_parameter = (*(short *)&work->state_40);
+    int saved_parameter = work->spline_parameter;
     short length = 0;
     short i;
     short available;
@@ -498,10 +499,10 @@ void Enemy_Route(EnemyActor *self)
         self->flags &= 0x7fffffff;
     }
 
-    if ((work->state_40.spline_parameter % 128) == 0 &&
+    if ((work->spline_parameter % 128) == 0 &&
         (self->flags & 0x80000000) == 0) {
         for (i = 0; i < 2; i++) {
-            if (work->action_motion_table[(*(short *)&work->state_40) / 128][0] != -1) {
+            if (work->action_motion_table[work->spline_parameter / 128][0] != -1) {
                 work->unique_step = 0;
                 Enemy_ActionReady(self, 9);
                 return;
@@ -541,22 +542,22 @@ void Enemy_Route(EnemyActor *self)
     }
 
     if (work->state_flags & ENEMY_ALERT_RAISE_FLAG) {
-        GetBSplineLoop((*(short *)&work->state_40), work->spline_point_count, 128,
+        GetBSplineLoop(work->spline_parameter, work->spline_point_count, 128,
                        work->spline_points, &point);
         if (work->fast_point_count == 0)
-            work->state_40.spline_parameter +=
-                work->state_40.spline_parameter % 2 + 2;
+            work->spline_parameter +=
+                work->spline_parameter % 2 + 2;
         else
-            work->state_40.spline_parameter +=
-                work->state_40.spline_parameter % 8 + 16;
+            work->spline_parameter +=
+                work->spline_parameter % 8 + 16;
     } else {
-        GetBSplineLoopDummy((*(short *)&work->state_40), work->spline_point_count, 128,
+        GetBSplineLoopDummy(work->spline_parameter, work->spline_point_count, 128,
                             work->spline_points, &point, self);
     }
 
     distance = Get_Distance(&self->position, &point);
-    if (work->spline_point_count << 7 <= work->state_40.spline_parameter)
-        work->state_40.spline_parameter = 0;
+    if (work->spline_point_count << 7 <= work->spline_parameter)
+        work->spline_parameter = 0;
     if (ROUTE_NEAR_LOOKBACK_DISTANCE <= distance)
         self->target_angle = Get_Angle(&self->position, &point);
 
@@ -576,7 +577,7 @@ void Enemy_Route(EnemyActor *self)
         if ((int)self->flags < 0) {
             Homing_Search(self);
         } else if (work->pause_kind == 8 || work->pause_kind == 3) {
-            work->state_40.spline_parameter = saved_parameter;
+            work->spline_parameter = saved_parameter;
         } else {
             available = 0;
             Check_Wall(1.0f, self->body_radius, &origin, directions, -16,
@@ -591,7 +592,7 @@ void Enemy_Route(EnemyActor *self)
                 angle = directions[xglSRand() % available] * ROUTE_DIRECTION_FULL_TURN *
                         0.0625f;
             BSpline_Init(work->spline_points, &self->position, angle);
-            work->state_40.spline_parameter = 0;
+            work->spline_parameter = 0;
         }
         Set_Motion(self, Get_DefaultMotion(self, 0), 9);
     } else {
@@ -603,10 +604,10 @@ void Enemy_Route(EnemyActor *self)
     }
 
     if ((work->pause_kind == 1 || work->pause_kind == 2) &&
-        (int)self->flags >= 0 && (work->state_40.spline_parameter % 128) == 0) {
+        (int)self->flags >= 0 && (work->spline_parameter % 128) == 0) {
         if (work->fast_point_count > 0)
             work->fast_point_count--;
-        index = (*(&work->state_40.spline_parameter) / 128 + 2) %
+        index = (work->spline_parameter / 128 + 2) %
                 work->spline_point_count;
         origin.x = work->spline_coordinates[index][0];
         origin.y = work->spline_coordinates[index][1];
@@ -631,12 +632,12 @@ void Enemy_Route(EnemyActor *self)
         if (work->state_flags & ENEMY_AIRBORNE_FLAG)
             hit.y = Get_Height(&hit, work->map_index, 0) +
                     Get_Rnd(30, 50) / 10.0f;
-        BSpline_Add(work->state_40.spline_parameter, work->spline_point_count,
+        BSpline_Add(work->spline_parameter, work->spline_point_count,
                     128, work->spline_points, &hit, 3);
     }
 }
 
-void Enemy_Escape(EnemyActor *actor)
+void Enemy_Escape(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     Vector4 point;
@@ -651,7 +652,7 @@ void Enemy_Escape(EnemyActor *actor)
 
     for (i = 0; i < 3; i++) {
         length = work->spline_point_count * 32;
-        GetBSplineLoop((work->state_40.spline_parameter + length + i - 1) % length,
+        GetBSplineLoop((work->spline_parameter + length + i - 1) % length,
                        work->spline_point_count, 32, work->spline_points,
                        &point);
         distance[i] = Get_Distance(&work->escape_target.position, &point);
@@ -662,10 +663,10 @@ void Enemy_Escape(EnemyActor *actor)
     else
         i = distance[0] < distance[2] ? 2 : 0;
 
-    work->state_40.spline_parameter =
-        (work->state_40.spline_parameter + work->spline_point_count * 32 + i - 1) %
+    work->spline_parameter =
+        (work->spline_parameter + work->spline_point_count * 32 + i - 1) %
         (work->spline_point_count * 32);
-    GetBSplineLoop(work->state_40.spline_parameter, work->spline_point_count, 32,
+    GetBSplineLoop(work->spline_parameter, work->spline_point_count, 32,
                    work->spline_points, &point);
 
     if (i == 1) {
@@ -686,14 +687,14 @@ void Enemy_Escape(EnemyActor *actor)
     }
     Set_Motion(actor, motion, 9);
 
-    actor->speed = ESCAPE_SPEED;
+    actor->animation.slot.speed = ESCAPE_SPEED;
     work->goback_x = point.x - actor->position.x;
     work->goback_z = point.z - actor->position.z;
     actor->position.x = point.x;
     actor->position.z = point.z;
 }
 
-void Enemy_Route_Chase(EnemyActor *self)
+void Enemy_Route_Chase(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
     Vector4 point;
@@ -708,7 +709,7 @@ void Enemy_Route_Chase(EnemyActor *self)
 
     for (i = 0; i < 3; i++) {
         length = work->spline_point_count * 32;
-        GetBSplineLoop((work->state_40.spline_parameter + length + i - 1) % length,
+        GetBSplineLoop((work->spline_parameter + length + i - 1) % length,
                        work->spline_point_count, 32, work->spline_points,
                        &point);
         distance[i] = Get_Distance(&work->escape_target.position, &point);
@@ -719,10 +720,10 @@ void Enemy_Route_Chase(EnemyActor *self)
     else
         i = distance[1] < distance[2] ? 1 : 2;
 
-    work->state_40.spline_parameter =
-        (work->state_40.spline_parameter + work->spline_point_count * 32 + i - 1) %
+    work->spline_parameter =
+        (work->spline_parameter + work->spline_point_count * 32 + i - 1) %
         (work->spline_point_count * 32);
-    GetBSplineLoop(work->state_40.spline_parameter, work->spline_point_count, 32,
+    GetBSplineLoop(work->spline_parameter, work->spline_point_count, 32,
                    work->spline_points, &point);
 
     if (i == 1) {
@@ -743,14 +744,14 @@ void Enemy_Route_Chase(EnemyActor *self)
     }
     Set_Motion(self, motion, 9);
 
-    self->speed = ROUTE_CHASE_SPEED;
+    self->animation.slot.speed = ROUTE_CHASE_SPEED;
     work->goback_x = point.x - self->position.x;
     work->goback_z = point.z - self->position.z;
     self->position.x = point.x;
     self->position.z = point.z;
 }
 
-void Enemy_Pause(EnemyActor *actor)
+void Enemy_Pause(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     unsigned short count;
@@ -779,7 +780,7 @@ void Enemy_Pause(EnemyActor *actor)
         case 9:
             Enemy_ActionReady(actor, 4);
             if (work->state_flags & ENEMY_ALERT_RAISE_FLAG)
-                work->state_40.spline_parameter += 2;
+                work->spline_parameter += 2;
             break;
         case 12:
             Enemy_ActionReady(actor, 14);
@@ -804,7 +805,7 @@ void Enemy_Pause(EnemyActor *actor)
     }
 }
 
-void Enemy_Threat(EnemyActor *actor)
+void Enemy_Threat(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     unsigned short count = work->hit_count;
@@ -814,11 +815,11 @@ void Enemy_Threat(EnemyActor *actor)
     if ((short)count >= limit) {
         Enemy_ActionReady(actor, 4);
         if (work->state_flags & ENEMY_ALERT_RAISE_FLAG)
-            work->state_40.alert_level += 2;
+            work->spline_parameter += 2;
     }
 }
 
-void Enemy_Unique(EnemyActor *actor)
+void Enemy_Unique(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
     unsigned short count = work->hit_count;
@@ -834,7 +835,7 @@ void Enemy_Unique(EnemyActor *actor)
         } else {
             Enemy_ActionReady(actor, 4);
             if (work->state_flags & ENEMY_ALERT_RAISE_FLAG)
-                work->state_40.spline_parameter += 2;
+                work->spline_parameter += 2;
         }
     }
 }
@@ -852,12 +853,12 @@ const char animNumberFormat[20] = "%3d AnimNumb  = %3d";
 
 const char animBlendFormat[20] = "%3d Hokan     = %8f";
 
-void ACT_updateEnemy(EnemyActor *self)
+void ACT_updateEnemy(Actor *self)
 {
     Vector4 marker;
     int color[4];
-    EnemyVector4 pillar;
-    EnemyParams *params = &self->params;
+    AlignedVector4 pillar;
+    EnemyParams *params = &self->enemy;
     EnemyWorkEntry *work = &enepc[self->number];
     int effect_code;
     float angle;
@@ -874,36 +875,36 @@ void ACT_updateEnemy(EnemyActor *self)
     marker.x = 0.0f;
     marker.z = 0.0f;
     if (self->number == DebugActor) {
-        xglFontDebugPrintf(8, 52, animTimeFormat, self->number, (double)self->anim_time);
+        xglFontDebugPrintf(8, 52, animTimeFormat, self->number, (double)self->animation.slot.frame);
         if (self->number == DebugActor) {
-            xglFontDebugPrintf(8, 62, animStartFormat, self->number, (double)self->anim_start);
+            xglFontDebugPrintf(8, 62, animStartFormat, self->number, (double)self->animation.slot.reverseLimit);
             if (self->number == DebugActor) {
-                xglFontDebugPrintf(8, 72, animFinalFormat, self->number, (double)self->anim_final);
+                xglFontDebugPrintf(8, 72, animFinalFormat, self->number, (double)self->animation.slot.forwardLimit);
                 if (self->number == DebugActor) {
-                    xglFontDebugPrintf(8, 82, animSpeedFormat, self->number, (double)self->speed);
+                    xglFontDebugPrintf(8, 82, animSpeedFormat, self->number, (double)self->animation.slot.speed);
                     if (self->number == DebugActor) {
-                        xglFontDebugPrintf(8, 92, animNumberFormat, self->number, self->anim_number);
+                        xglFontDebugPrintf(8, 92, animNumberFormat, self->number, self->animation.slot.currentDataId);
                         if (self->number == DebugActor)
-                            xglFontDebugPrintf(8, 102, animBlendFormat, self->number, (double)self->anim_blend);
+                            xglFontDebugPrintf(8, 102, animBlendFormat, self->number, (double)self->animation.blendDuration);
                     }
                 }
             }
         }
     }
     if (FLAG_FRAME_60) {
-        pillar = self->position_pair;
-        pillar.vector.x = self->body_radius;
-        pillar.vector.y = 0.0f;
+        pillar = self->position;
+        pillar.x = self->body_radius;
+        pillar.y = 0.0f;
         DispPillar(&self->position, &pillar, color);
     }
     work->move_result = 99;
     if (params->gravity_mode != 1) {
         if (Get_Height(&self->position, work->map_index, 16) != -1000.0f)
-            self->saved_position = self->position_pair;
+            self->saved_position = self->position;
     }
     if (work->sense_block_timer > 0)
         work->sense_block_timer--;
-    if (!(self->flags & ACTOR_FLAG_COLLIDABLE) || self->sound_effect_id <= 0 ||
+    if (!(self->flags & ACTOR_FLAG_COLLIDABLE) || self->inUseId <= 0 ||
         self == GameLoopState.player)
         return;
 
@@ -912,38 +913,38 @@ void ACT_updateEnemy(EnemyActor *self)
             self->flags &= ~0x800;
         } else if (work->applied_light_level == 1000) {
             self->flags |= 0x800;
-            self->light_flags |= 3;
-            self->light_blend_frames = 72;
+            self->drawEnv.flags |= 3;
+            self->drawEnv.alpha = 72;
         }
-        self->light_scale = (float)params->light_level / 1000.0f;
+        self->drawEnv.transparency = (float)params->light_level / 1000.0f;
     }
     work->applied_light_level = params->light_level;
     GameIdLightSet(self, 0);
 
-    if (self->sound_effect_id != 16646 && self->sound_effect_id != 20594) {
+    if (self->inUseId != 16646 && self->inUseId != 20594) {
         effect_code = Get_EffectCode(Get_Attr(&self->position, 0, 0));
         if (work->action == 6 || work->action == 3 || work->action == 4 ||
             work->action == 8 || work->action == 10 || work->action == 14 ||
             work->action == 15 || EfTab_Code[effect_code] == 1) {
             if (effect_code != -1) {
-                EnemyEffect *effect;
+                SchedulerState *effect;
 
                 if (EfTab_Intr[effect_code] != -1)
-                    self->effect_interval++;
+                    self->effect_timer++;
                 if ((EfTab_Intr[effect_code] != -1 &&
-                     self->effect_interval >= EfTab_Intr[effect_code]) ||
-                    self->effect_interval == -1) {
+                     self->effect_timer >= EfTab_Intr[effect_code]) ||
+                    self->effect_timer == -1) {
                     effect = sefCreateEffectCf(EfTab_Code[effect_code], 0, 0);
-                    self->effects[self->effect_next] = effect;
+                    self->effects[self->effect_slot] = effect;
                     if (effect != 0) {
                         float size = params->body_radius * EfTab_Scal[effect_code];
 
-                        effect->owner = self;
-                        self->effect_interval = 0;
-                        self->effect_next = (self->effect_next + 1) % 8;
-                        effect->scale_z = size;
-                        effect->scale_y = size;
-                        effect->scale_x = size;
+                        effect->caster = self;
+                        self->effect_timer = 0;
+                        self->effect_slot = (self->effect_slot + 1) % 8;
+                        effect->scale.z = size;
+                        effect->scale.y = size;
+                        effect->scale.x = size;
                     }
                 }
             } else {
@@ -951,7 +952,7 @@ void ACT_updateEnemy(EnemyActor *self)
                     if (self->effects[i])
                         sefDeleteEffectCf(self->effects[i]);
                 }
-                self->effect_interval = -1;
+                self->effect_timer = -1;
             }
         }
     }
@@ -976,7 +977,7 @@ void ACT_updateEnemy(EnemyActor *self)
             work->escape_target.scale_to -
             (work->escape_target.scale_to - work->escape_target.scale_from) *
                 (float)(count * count - frame * frame) / (float)(count * count);
-        ACT_setMotion(self, self->anim_number);
+        ACT_setMotion(self, self->animation.slot.currentDataId);
         work->escape_target.scale_frame++;
         if (work->escape_target.scale_frame >= work->escape_target.scale_frame_count)
             work->escape_target.scale_frame = -1;
@@ -984,9 +985,9 @@ void ACT_updateEnemy(EnemyActor *self)
         self->scale.x = self->scale.y = self->scale.z = scale;
         self->scale.w = 1.0f;
     }
-    if (self->lookat_timer == 2)
+    if (self->look_at_timer == 2)
         Actor_LookAt(self);
-    if (self->sound_effect_id == 8705)
+    if (self->inUseId == 8705)
         Check_Locater(self);
 
     if (work->freeze_state != 0) {
@@ -996,7 +997,7 @@ void ACT_updateEnemy(EnemyActor *self)
                 self->body_radius + GameLoopState.player->body_radius + ENEMY_CONTACT_PADDING &&
             __builtin_fabsf(self->position.y - GameLoopState.player->position.y) <
                 ENEMY_CONTACT_HEIGHT &&
-            GameLoopState.player->encount_lock == 0 &&
+            GameLoopState.player->flash_timer == 0 &&
             enepc[GameLoopState.player->number].encount_lock == 0 &&
             FLAG_FRAME_60 == 0)
             Check_Encount(self, 0, 0);
@@ -1010,9 +1011,9 @@ void ACT_updateEnemy(EnemyActor *self)
         if (work->freeze_state == 1 && params->gravity_mode == 0) {
             float height;
 
-            self->undulation_header = UnduDataGetHeader(work->map_index, 0x8000);
+            self->data_header = UnduDataGetHeader(work->map_index, 0x8000);
             height = Get_Height(&self->position, work->map_index, 16);
-            self->ground_height = height;
+            self->translate_y = height;
             work->fall_speed += ENEMY_FALL_ACCEL;
             self->position.y += work->fall_speed;
             if (self->position.y < height) {
@@ -1022,11 +1023,11 @@ void ACT_updateEnemy(EnemyActor *self)
         }
         if (work->mark != 0)
             Disp_EnemyMark(self);
-        self->undulation_header = UnduDataGetHeader(0, 0x8000);
+        self->data_header = UnduDataGetHeader(0, 0x8000);
         return;
     }
 
-    if (self->sound_effect_id != 8705)
+    if (self->inUseId != 8705)
         Check_Locater(self);
     switch (work->action) {
     case 0:
@@ -1076,15 +1077,15 @@ void ACT_updateEnemy(EnemyActor *self)
         if (!(self->flags & 8) && work->sense_block_timer <= 0 &&
             enepc[0].encount_lock == 0) {
             if (params->sight_angle < 0.0f) {
-                if (self->sound_effect_id == 8705 || self->sound_effect_id == 16646) {
-                    if (Check_InsideFan_Wooo(self->angle + INSIDE_FAN_WOOO_ANGLE_OFFSET,
+                if (self->inUseId == 8705 || self->inUseId == 16646) {
+                    if (Check_InsideFan_Wooo(self->rotation.y + INSIDE_FAN_WOOO_ANGLE_OFFSET,
                                              params->sight_distance,
                                              __builtin_fabsf(params->sight_angle),
                                              self->body_radius, &self->position,
                                              &work->escape_target.position,
                                              work->map_index) == 1)
                         Check_Discovery(self);
-                } else if (Check_InsideFan(self->angle + INSIDE_FAN_ANGLE_OFFSET,
+                } else if (Check_InsideFan(self->rotation.y + INSIDE_FAN_ANGLE_OFFSET,
                                            params->sight_distance,
                                            __builtin_fabsf(params->sight_angle),
                                            self->body_radius, &self->position,
@@ -1093,14 +1094,14 @@ void ACT_updateEnemy(EnemyActor *self)
                     Check_Discovery(self);
                 }
             } else {
-                if (self->sound_effect_id == 8705 || self->sound_effect_id == 16646) {
-                    if (Check_InsideFan_Wooo(self->angle, params->sight_distance,
+                if (self->inUseId == 8705 || self->inUseId == 16646) {
+                    if (Check_InsideFan_Wooo(self->rotation.y, params->sight_distance,
                                              __builtin_fabsf(params->sight_angle),
                                              self->body_radius, &self->position,
                                              &work->escape_target.position,
                                              work->map_index) == 1)
                         Check_Discovery(self);
-                } else if (Check_InsideFan(self->angle, params->sight_distance,
+                } else if (Check_InsideFan(self->rotation.y, params->sight_distance,
                                            __builtin_fabsf(params->sight_angle),
                                            self->body_radius, &self->position,
                                            &work->escape_target.position,
@@ -1112,13 +1113,13 @@ void ACT_updateEnemy(EnemyActor *self)
     }
     if (FLAG_FRAME_60 && (PadData.pressed & 1)) {
         angle = self->target_angle;
-        work->state_40.spline_parameter = 0;
+        work->spline_parameter = 0;
         BSpline_Init(work->spline_points, &self->position, angle);
         Enemy_ActionReady(self, 2);
         Homing_Search(self);
     }
 
-    if ((unsigned short)self->sound_effect_id - 0x4000 < 0xf23u) {
+    if ((unsigned short)self->inUseId - 0x4000 < 0xf23u) {
         if (self->flags & ACTOR_FLAG_AILMENT_ACTIVE) {
             if (self->flags & ACTOR_FLAG_STIFF_ACTIVE) {
                 if (work->action != 11 && work->action != 7)
@@ -1134,38 +1135,38 @@ void ACT_updateEnemy(EnemyActor *self)
             }
         }
     }
-    id = self->sound_effect_id;
+    id = self->inUseId;
     type = RES_GetEnemySeType(id);
     if (type == 1) {
-        if (self->anim_number == 1 || self->anim_number == 3)
+        if (self->animation.slot.currentDataId == 1 || self->animation.slot.currentDataId == 3)
             Sound_FootStep(self);
     } else {
         if (work->action != 4) {
-            xglSoundEffectStopID(RES_GetEnemySeBank(self->sound_effect_id) + 2,
+            xglSoundEffectStopID(RES_GetEnemySeBank(self->inUseId) + 2,
                                  self->number + 1);
         } else if (SCRIPT_getCfTime() >= 3) {
-            xglSoundEffectPosID(RES_GetEnemySeBank(self->sound_effect_id) + 2,
-                                &self->position, 1, self->number + 1);
+            xglSoundEffectPosID(RES_GetEnemySeBank(self->inUseId) + 2,
+                                &self->position.x, 1, self->number + 1);
         }
         if (work->action != 6) {
-            xglSoundEffectStopID(RES_GetEnemySeBank(self->sound_effect_id) + 4,
+            xglSoundEffectStopID(RES_GetEnemySeBank(self->inUseId) + 4,
                                  self->number + 1);
         } else {
-            xglSoundEffectPosID(RES_GetEnemySeBank(self->sound_effect_id) + 4,
-                                &self->position, 1, self->number + 1);
+            xglSoundEffectPosID(RES_GetEnemySeBank(self->inUseId) + 4,
+                                &self->position.x, 1, self->number + 1);
         }
     }
-    if (work->effect_timer[0] > 0) {
-        if (--work->effect_timer[0] <= 0) {
-            work->effect_timer[0] = 0;
+    if (work->elec_timer > 0) {
+        if (--work->elec_timer <= 0) {
+            work->elec_timer = 0;
             work->stiff_flag &= ~2;
             sefDeleteEffectCf(work->stiff_effect);
             work->stiff_effect = 0;
             xglSoundEffectStopID(0x10008, 0);
         }
     }
-    if (work->effect_timer[1] > 0) {
-        if (--work->effect_timer[1] == 0) {
+    if (work->status_4_timer > 0) {
+        if (--work->status_4_timer == 0) {
             work->stiff_flag &= ~4;
             xglSoundEffectStopID(0x1000b, 0);
         }
@@ -1180,7 +1181,7 @@ void ACT_updateEnemy(EnemyActor *self)
             self->body_radius + GameLoopState.player->body_radius + ENEMY_HIT_PADDING &&
         __builtin_fabsf(self->position.y - GameLoopState.player->position.y) <
             ENEMY_HIT_HEIGHT &&
-        GameLoopState.player->encount_lock == 0 &&
+        GameLoopState.player->flash_timer == 0 &&
         enepc[GameLoopState.player->number].encount_lock == 0 &&
         FLAG_FRAME_60 == 0)
         Check_Encount(self, 0, 0);
@@ -1189,9 +1190,9 @@ void ACT_updateEnemy(EnemyActor *self)
         Move_BeltConveyer(self);
     if (work->turn_lock != 1 && work->action != 7) {
         if (work->stiff_flag & 2)
-            self->angle = Get_Cursol_by_Reduce_Speed_Angle_Loop(self->angle, self->target_angle, 36.0f);
+            self->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(self->rotation.y, self->target_angle, 36.0f);
         else
-            self->angle = Get_Cursol_by_Reduce_Speed_Angle_Loop(self->angle, self->target_angle, 6.0f);
+            self->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(self->rotation.y, self->target_angle, 6.0f);
     }
     {
         float scale = work->escape_target.scale;
@@ -1201,13 +1202,13 @@ void ACT_updateEnemy(EnemyActor *self)
     }
     if (params->gravity_mode != 1) {
         if (Get_Height(&self->position, work->map_index, 16) == -1000.0f)
-            self->position_pair = self->saved_position;
+            self->position = self->saved_position;
     }
     ACT_updateMotion(self);
     if (params->gravity_mode == 0) {
         float height = Get_Height(&self->position, work->map_index, 16);
 
-        self->ground_height = height;
+        self->translate_y = height;
         work->fall_speed += ENEMY_AIR_FALL_ACCEL;
         if (!(work->state_flags & ENEMY_AIRBORNE_FLAG))
             self->position.y += work->fall_speed;
@@ -1223,8 +1224,8 @@ void ACT_updateEnemy(EnemyActor *self)
 unsigned char TM_Enemy_Move_Step(int actor_number, Vector4 *step_limit,
                                  float goback_x)
 {
-    EnemyActor *self = &actor[actor_number];
-    EnemyVector4 old = self->position_pair;
+    EnemyActorHead *self = &actor[actor_number];
+    DoublewordVector4 old = self->position_pair;
 
     Get_One_Step(goback_x, &actor[actor_number].position, step_limit,
                  &enepc[actor_number].goback[0]);
@@ -1249,7 +1250,7 @@ unsigned char TM_Enemy_Move_Step(int actor_number, Vector4 *step_limit,
     return TM_Check_Move(self);
 }
 
-void TM_Check_Move_at_GoBack(EnemyActor *actor)
+void TM_Check_Move_at_GoBack(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
 
@@ -1257,13 +1258,13 @@ void TM_Check_Move_at_GoBack(EnemyActor *actor)
     actor->position.z -= work->goback_z;
 }
 
-int TM_Check_Move(EnemyActor *self)
+int TM_Check_Move(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
     float height = Get_Height(&self->position, work->map_index, 0x10);
     int attr = Get_Attr(&self->position, work->map_index, 0x10);
-    EnemyVector4 start;
-    EnemyVector4 end;
+    AlignedVector4 start;
+    AlignedVector4 end;
     Vector4 hit;
     signed char blocker;
 
@@ -1273,12 +1274,12 @@ int TM_Check_Move(EnemyActor *self)
         return 0;
     }
 
-    end = self->position_pair;
-    start = self->position_pair;
-    end.vector.y = height;
-    start.vector.x -= work->goback_x;
-    start.vector.z -= work->goback_z;
-    if (!Check_Undu(&start.vector, &end.vector, work->map_index, &hit, 1, 0,
+    end = self->position;
+    start = self->position;
+    end.y = height;
+    start.x -= work->goback_x;
+    start.z -= work->goback_z;
+    if (!Check_Undu(&start, &end, work->map_index, &hit, 1, 0,
                     0x10)) {
         TM_Check_Move_at_GoBack(self);
         work->move_result = 0x40;
@@ -1323,16 +1324,16 @@ int TM_Check_Move(EnemyActor *self)
     return 1;
 }
 
-char TM_Check_Before_Eyes(EnemyActor *self, float length)
+char TM_Check_Before_Eyes(Actor *self, float length)
 {
     EnemyWorkEntry *work = &enepc[self->number];
     Vector4 point;
     short i;
 
-    Get_Point_By_AngleLength(&self->position, &point, self->angle, length);
+    Get_Point_By_AngleLength(&self->position, &point, self->rotation.y, length);
 
     for (i = 0; i < 64; i++) {
-        if (actor[i].sound_effect_id <= 0)
+        if (actor[i].inUseId <= 0)
             continue;
         if (actor[i].kind == 1)
             continue;
@@ -1351,7 +1352,7 @@ char TM_Check_Before_Eyes(EnemyActor *self, float length)
     return 99;
 }
 
-void Set_EnemyMark(EnemyActor *actor, short mark)
+void Set_EnemyMark(Actor *actor, short mark)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
 
@@ -1359,7 +1360,7 @@ void Set_EnemyMark(EnemyActor *actor, short mark)
     work->mark_timer = 0;
 }
 
-void Disp_EnemyMark(EnemyActor *actor)
+void Disp_EnemyMark(Actor *actor)
 {
     EnemyMarkSet mark[16];
 

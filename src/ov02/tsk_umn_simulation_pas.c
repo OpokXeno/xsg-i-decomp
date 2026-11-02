@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/e_message.h"
 
 typedef struct UmnTaskCommand {
     unsigned char unmodeled_00[0x10];
@@ -20,18 +21,9 @@ typedef struct UmnWindow {
     void (*callback)(void);
     void *callback_arg;
 } UmnWindow;
-typedef struct UmnMessageControl {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x44 - 0x0c];
-} UmnMessageControl;
 typedef struct UmnMessage {
     unsigned char unmodeled_00[0x0c];
-    UmnMessageControl control;
+    EMessageParam control;
 } UmnMessage;
 typedef struct UmnBox {
     short x;
@@ -84,8 +76,6 @@ const char D_00A132F8[] =
 extern void WindowDXSet(void *window);
 extern void WindowDXMain(void *window);
 extern void MoveSlide(short *current, short *target, float rate);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageMain(void *message);
 extern void endPrintExtFunc(int kind, int id, void *data);
 
 void tskUmnSimulationPas(UmnTaskCommand *task, UmnSimulationPasWork *work)
@@ -119,7 +109,7 @@ void tskUmnSimulationPas(UmnTaskCommand *task, UmnSimulationPasWork *work)
             message->control.x = message_x;
             message->control.y = message_y;
             work->state = opening_state;
-            work->message.control.color = work->kind + 2;
+            work->message.control.draw_parameter = work->kind + 2;
             break;
         }
 

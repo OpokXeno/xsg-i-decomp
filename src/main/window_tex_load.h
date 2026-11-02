@@ -7,6 +7,19 @@
 
 #include "xgl_render.h"
 #include "main/xgl_studio.h"
+#include "main/xgl_pad.h"
+#include "main/menu_1.h"
+#include "main/end_print.h"
+#include "main/game.h"
+#include "main/game_snap_shot.h"
+#include "main/look_at_player.h"
+#include "main/menu_model.h"
+#include "main/nml_model_set.h"
+#include "main/res_get_path.h"
+#include "main/window_tex_load.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 /*
  * Save-record offset of the UMN mail table: one 2-byte entry per mail box,
@@ -21,63 +34,6 @@
 #define MENU_BG_CAMERA_ROTATION_X (-0.42479878664016724f)
 #define MENU_BG_CAMERA_ROTATION_Z (2.784193754196167f)
 #define MENU_BG_CAMERA_POSITION_Z (7.0559511184692383f)
-
-/*
- * The UMN database's saved state: the 0x9c-byte window of the save record
- * that build/main/aliases.ld names `UmnDataBaseStateData = SaveData + 66140`
- * (0x1025c).  Two bit sets of the same 0x1d monster ids (ids 0x22..0x3e, the
- * `monster_id - 0x22` and `< 0x1d` test both functions of this pair share)
- * are evidenced, each read and written one byte at a time as
- * `bits[id / 8] & (1 << (id % 8))`:
- * - +0x88, whether the monster has been met: written by
- *   UmnDataBaseMonsterSet (main:0x002761f0, `lbu/sb 0x0($5)` with
- *   $5 = base + id/8 + 0x88) and read by UmnDataBaseMonsterCheck
- *   (main:0x00276248, `lbu $2,0x88($3)`).
- * - +0x98, whether it has been scanned: the same pair of functions one
- *   displacement further on, UmnDataBaseAnalisisSet (main:0x00276298,
- *   `addiu $5,$3,0x98`) and UmnDataBaseAnalisisCheck (main:0x002762f0,
- *   `lbu $2,0x98($3)`), which this candidate recovers as C.  It is what the
- *   0x9c extent of the published UmnDataBaseStateData declaration ends on.
- * The spans around them stay unmodeled byte ranges with no meaning claimed
- * (docs/naming.md), and this is what was searched to leave them so. Every
- * access through this window's base in main and the overlays was enumerated:
- * the head (+0x00, +0x02, +0x03, +0x10..+0x12, +0x2a, +0x31, +0x56, +0x59,
- * +0x84, +0x86) belongs to the UMN mail and plugin screens (UmnMail,
- * UmnTopMenu, UmnMailBoxSet, UmnMailFolderSet, UmnMailAttachSet, UmnPlugin,
- * Java_xeno_util_Runtime_mailFlag), which this allocation does not recover,
- * and +0x8c..+0x97 is touched by nothing at all. The nearby +0x10254,
- * +0x102dc, +0x102e2 and +0x10304 accesses (MenuSaveDataGet, MenuBoxMoneyGet,
- * tyaUmlDispLoad, UmnMailDataGet) address the save record directly rather
- * than this alias, so they witness neighbours of the window, not members.
- */
-typedef struct UmnDataBase {
-    unsigned char _unmodeled_00[0x88];      /* +0x00..+0x87 */
-    unsigned char monster_discovered[4];    /* +0x88: one bit per monster id */
-    unsigned char _unmodeled_8c[0x0c];      /* +0x8c..+0x97 */
-    unsigned char monster_analysed[4];      /* +0x98: one bit per monster id */
-} UmnDataBase;
-
-/* Controller records are 0x68 bytes. The menu reads the trigger and repeat
- * halfwords at +0x32/+0x34 and writes the actuator bytes at +0x50. */
-typedef struct XglPadRecord {
-    unsigned char unmodeled_00[0x32];
-    unsigned short trigger;
-    unsigned short repeat;
-    unsigned char unmodeled_36[0x12];
-    signed char repeat_delay;
-    signed char repeat_interval;
-    unsigned short repeat_mask;
-    signed char repeat_wait;
-    signed char repeat_count;
-    unsigned char horizontal_dead_zone;
-    unsigned char vertical_dead_zone;
-    unsigned char actuator[6];
-    unsigned char actuator_pending;
-    unsigned char unmodeled_57;
-    unsigned char button_map[8];
-    unsigned char axis_dead_zone[4];
-    signed char axis[4];
-} XglPadRecord;
 
 /* Only the menu's flags word is accessed here. The defining game TU models
  * the complete GameLoopState object. */
@@ -100,7 +56,7 @@ typedef struct {
     u32 reset_value;
     float rotation_z;
     float camera_position_z;
-    u64 saved_camera_words[0xbe];
+    StudioCamera saved_camera;
 } MenuBgTaskParameters;
 
 typedef struct {
@@ -132,10 +88,6 @@ typedef struct {
 } UmnUnitTextRecord;
 
 typedef struct {
-    const char *text;
-} UmnTextLookup;
-
-typedef struct {
     char unit_name[0x20];
     short unit_type;
     short duplicate_unit_type;
@@ -150,7 +102,7 @@ typedef struct {
     char description[0x16];
 } UmnGunoRecord;
 
-extern unsigned char UmnDataBaseStateData[0x9c];
+extern UmnDataBase UmnDataBaseStateData[1];
 extern int MenuLoadCount;
 extern unsigned char MenuBibrationAct;
 extern unsigned char MenuBibrationCount;
@@ -165,7 +117,7 @@ extern unsigned char *MenuWinAddr;
 extern int original_font_no_1;
 extern MenuBgTaskParameters *MenuBgParam;
 extern int MenuBgCameraId;
-extern u64 *MenuBgKeepCamera;
+extern StudioCamera *MenuBgKeepCamera;
 extern const MenuModelPath tairetuTexturePath;
 extern unsigned char *MenuTairetuModelXtxAddr;
 extern unsigned char *MenuTairetuModelLexAddr;
@@ -174,14 +126,14 @@ extern unsigned char *MenuTairetuModelPointerLexAddr;
 extern int mini_game_no;
 extern int MenuDrillCall;
 extern XglTaskScheduler *MenuTask;
-extern int MenuModelWorkTop;
+extern unsigned char *MenuModelWorkTop;
 extern int UmnSimulationNo;
 extern int MenuScenarioNo;
-extern void *UmnGunoDataBaseTop;
+extern UmnGunoRecord *UmnGunoDataBaseTop;
 extern XglTaskScheduler *MenuTask_XMX;
 extern unsigned char *MainMenuWorkEnd;
-extern int MenuModelOut[4];
-extern UmnTextPageMap menuTextPageTable;
+extern void *MenuModelOut[4];
+extern const UmnTextPageMap menuTextPageTable;
 extern unsigned char defaultCharacterBuffer[];
 
 /*
@@ -198,14 +150,10 @@ void MenuLoadFile(const char *name, void *buffer);
 static void menuCallback(int event);
 void UmnDataBaseMonsterSet(int monster_id);
 int UmnDataBaseMonsterCheck(int monster_id);
-int MenuLoadSync(void);
-void MenuLoadInit(void);
 void MenuLoadEnd(void);
 
 /* Defined in main/xgl_cd.c (main:0x0021e330). */
 extern void xglCdReadCancel(void);
-
-void MenuLoadCancel(void);
 
 /*
  * The vibration request MenuBibrationMain replays: while count is non-zero it
@@ -218,38 +166,20 @@ void MenuBibrationSet(unsigned char pad, unsigned char act, unsigned char speed,
 
 void MenuBibrationInit(void);
 void UmnkosmosSpecialInit(void);
-unsigned char *UmnMailDataGet(int box_id);
-int MenuModelInit(int work_start);
-extern void endPrintInit(void);
 extern int xglFontLoad(int font, void (*callback)(int));
-extern void xglSoundEffectNormalID(int sound, int channel);
 extern void *xglTaskInitial(void *pool, int capacity, int flags);
 extern StudioCamera *xglStudioGetActiveCamera(void);
-extern void xglCameraInit(StudioCamera *camera);
-
 extern void tyaMenuBgEntry(XglTaskScheduler *scheduler,
                            MenuBgTaskParameters *work);
 
-extern void endPrintDirectFrameCopy(XglPacket *, int, int);
-extern void MenuGameDataPush(void);
-extern void MenuGameDataPop(void);
 extern void GameCFSoundMenuPurge(int);
-extern void xglStudioChange(int);
 extern void *xglStudioGetLight2(void);
 extern void xglLightIntensityAmbient(void *, void *);
 extern void xglLightIntensityParallel(void *, int, void *);
 extern void xglLightDirection(void *, int, void *);
-extern void *GameResourceWorkAlloc(int);
-extern void MenuModelMemoryInit(void *, int);
-extern void MenuModelMemorySet(int);
-extern unsigned char *MenuBgTaskInit(unsigned char *, int);
 extern unsigned char *MenuBackModelSet(unsigned char *);
 extern unsigned char *MenuMapExTextLoad(unsigned char *, int);
 extern unsigned char *MenuTairetuLoad(unsigned char *, int);
-extern void MenuBgTaskBreak(void);
-extern int MenuScenarioNoGet(void);
-extern int MenuEquipStealMaskCheck(void);
-extern void GameSnapShotCheck(void);
 extern void TopMenu(void);
 extern int MenuItem(void);
 extern void MenuEther(void);
@@ -259,12 +189,7 @@ extern void MenuSkill(void);
 extern void MenuAgws(void);
 extern void UmnInterface(void);
 extern void MenuSystem(void);
-extern void endPrintExtFunc(int, int, int);
-extern void nmlModelFlush(void);
-extern void MenuModelMain(void);
-extern void xglFontDebugPrintf(int, int, const char *, ...);
 extern void xglFontDebugHex(int, int, int, int);
-extern void MenuModelAllBreak(void);
 extern void xglPadSetRepeat(int, unsigned short, int, int);
 extern void xglCullingIgnoreOff(void);
 extern void nmlModelSendMenuEnd(void);
@@ -278,13 +203,10 @@ extern void func_00A00338(void);
 extern void func_00A00070(void);
 extern void xglRenderClearDepth(void);
 extern void nmlModelInit(void);
-extern void GameResourceWorkReload(void);
-extern void GameCfPlayerLoadResource(int);
 extern void func_A19750(int category, int item);
 extern UmnUnitInitRecord *func_A19270(int unit_id);
 extern UmnUnitTextRecord *func_A1A698(int unit_id);
 extern const char *const *func_A2C828(int unit_id);
-extern UmnTextLookup *MenuTextGet(int text_id);
 extern char *strcpy(char *destination, const char *source);
 extern void UmnMain(void);
 

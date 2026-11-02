@@ -17,6 +17,8 @@
  * record is unmodeled storage.
  */
 #include "main/maptbl.h"
+#include "main/game_camera.h"
+#include "main/xgl_studio.h"
 
 /* Bounded spline record at camera + 0x4d0.
  * Only offsets 4/6/8/10/12/16 carry use-site evidence:
@@ -28,8 +30,8 @@
 typedef struct CameraSpline {
     unsigned char reserved0[4];
     unsigned short weight_mode;
-    unsigned short first_key;
-    unsigned short last_key;
+    short first_key; /* TCAMERA_update tests it >= 0 (lh), -1 = no key range */
+    short last_key;  /* lh in TCAMERA_update's frame clamp */
     unsigned short sample_count;
     unsigned int component_count;
     const float *samples;
@@ -85,22 +87,41 @@ typedef struct JavaFloatArray {
  * advances exactly the word at +0x1c + 4 * channel; that grouping is an
  * inference from the parallel, not from an indexed access.
  *
- * Partial type: it stops at +0x2c. The record is 0x12c0 bytes long, and more
- * of it is evidenced -- the four channel payloads at +0x30, +0x4d0, +0x970 and
- * +0xe10 (stride 0x4a0), a float at +0x2c the debug light cursor edits
- * (updateCursorMode0 0x00267d3c), the peer written at +0x12b0 by
- * Java_xeno_Camera_start (0x002fbf1c) and the float at +0x12b4 seeded by
- * create (0x002fb7d8) -- but nothing evidences the internal extent of a
- * channel payload, so no member may be declared for any of them without
- * inventing the 0x4a0 span in between (docs/naming.md). The one this TU needs,
- * the view channel at +0x4d0, keeps the offset spelling it was accepted with.
+ * The record is 0x12c0 bytes long. Its four channel payloads sit at +0x30,
+ * +0x4d0, +0x970 and +0xe10 (stride 0x4a0); each is a CameraChannelPayload
+ * whose bytes past the spline or constant body stay unmodeled, so the 0x4a0
+ * stride is spelled out as unmodeled arrays rather than invented members. The
+ * peer written at +0x12b0 by Java_xeno_Camera_start (0x002fbf1c) and the float
+ * at +0x12b4 seeded by create (0x002fb7d8) are named. The float at +0x2c that
+ * the debug light cursor edits (updateCursorMode0 0x00267d3c) is not named yet.
  */
+/* Channel mode selects the interpretation of a channel payload.
+ * Constant handlers read/write xyz +0, reference mode +0x10, position +0x14.
+ * Spline handlers use CameraSpline at the same channel addresses. */
+typedef struct CameraConstantChannel {
+    Vector4 offset; /* TCAMERA_transCNS/viewCNS add it as one VU0 vector */
+    int reference_mode;
+    Vector4 *reference_position;
+} CameraConstantChannel;
+
+/* Motion-pack handlers (TCAMERA_transMPack/transMPack2/viewMPack) read the
+ * packed curve at +0 and, for transMPack2, its frame at +4. */
+typedef struct CameraMotionPackChannel {
+    void *source;
+    float frame;
+} CameraMotionPackChannel;
+
+typedef union CameraChannelPayload {
+    CameraConstantChannel constant;
+    CameraSpline spline;
+    CameraMotionPackChannel packed;
+} CameraChannelPayload;
+
 typedef struct CameraWork {
     /* +0x00: the object header word. Java_xeno_Camera_create__I (0x002fb7dc)
      * and STAGE_instance (0x0025aef8) both fill it from +0x18 of the loaded
-     * class record; no camera body reads it and what it denotes is not
-     * recovered, so it is a word of storage and not a named field. */
-    unsigned int : 32;
+     * class record; no camera body reads it, so it is a word of storage. */
+    ObjectHeader object_header;
     /* +0x04: the studio camera this record commands, as
      * xglStudioGetCamera2(int camera_id) indexes them. Written by create from
      * the Java argument (0x002fb7e4); camera_change (0x002fb598) compares it
@@ -110,9 +131,24 @@ typedef struct CameraWork {
      * GAME_initCamera, STAGE_instance or of the db_light_write camera cursors
      * reads or writes it. It is the word the next member's offset requires,
      * not a field. */
-    unsigned int : 32;
+    unsigned char unmodeled_08[4];
     int mode[4];   /* +0x0c: CameraChannelMode, indexed by CameraChannel */
     int frame[4];  /* +0x1c: frames elapsed in each channel */
+    unsigned char unmodeled_2c[4];
+    /* The four channel payloads, 0x4a0 apart (see the channel enum): each is
+     * a CameraChannelPayload, and the bytes between them are not evidenced
+     * beyond the payload's own use, so they stay unmodeled. */
+    CameraChannelPayload translate; /* +0x30 */
+    unsigned char unmodeled_48[0x4d0 - 0x48];
+    CameraChannelPayload view;      /* +0x4d0 */
+    unsigned char unmodeled_4e8[0x970 - 0x4e8];
+    CameraChannelPayload roll;      /* +0x970 */
+    unsigned char unmodeled_988[0xe10 - 0x988];
+    CameraChannelPayload fov;       /* +0xe10 */
+    unsigned char unmodeled_e28[0x12b0 - 0xe28];
+    struct Actor *peer;             /* +0x12b0: the Chr peer Java_xeno_Camera_start seeds */
+    float fov_scale;                /* +0x12b4 */
+    unsigned char unmodeled_12b8[0x12c0 - 0x12b8];
 } CameraWork;
 
 /*
@@ -238,16 +274,9 @@ typedef struct CameraVector3 {
     float z;
 } CameraVector3;
 
-/* Interpreter native-call storage, defined by main/tu226 init_vm.c.
- * Native callbacks receive arrays of these four-byte value slots for both
- * arguments and results; the method descriptor selects each member. */
-typedef struct VMThreadP VMThread;
-
 extern void SPL_init(CameraSpline *spline, unsigned int weight_mode,
                      const float *samples, unsigned int sample_count,
                      unsigned int component_count);
-
-extern StudioCamera *xglStudioGetCamera2(int camera_id);
 
 /*
  * CAMERA_transSPL (main:0x002fb900) and CAMERA_viewSPL (main:0x002fbb30) are
@@ -269,7 +298,5 @@ static void CAMERA_transSPL(int selection, JavaEnvironment *environment,
 
 static void CAMERA_viewSPL(int selection, JavaEnvironment *environment,
                            CameraSplineRequest *request, void *result);
-
-extern void GameCameraChangeID(int, int, int);
 
 #endif /* SRC_MAIN_CAMERA_H */

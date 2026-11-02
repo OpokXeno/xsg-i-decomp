@@ -1,17 +1,17 @@
 #include "common.h"
 #include "shared.h"
 #include "disp_on.h"
+#include "main/disp_on.h"
+#include "main/map_1.h"
+#include "main/res_get_path.h"
+#include "main/xgl_thread.h"
 
 const char event_suffix[];
 
-extern void xglSleep(void);
-extern void MapChange(int map_id);
-extern char *MapGetName(int map_id);
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int SCRIPT_load(const char *path);
 extern int SCRIPT_exec(void);
-extern void GameResourceReset(int reset_mode);
 extern void ACT_init(void);
 extern void CallMethod(const char *method_name);
 

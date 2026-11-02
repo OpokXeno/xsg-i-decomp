@@ -4,6 +4,7 @@
 
 #ifndef SRC_MAIN_XGL_FLAGS_H
 #define SRC_MAIN_XGL_FLAGS_H
+#include "main/xgl_flags.h"
 
 /*
  * Target-specific bug-preserving storage view.  The original loads this
@@ -17,7 +18,6 @@ union XglPackedFlagWindow {
 };
 
 int xglFlagsGet(int bit_offset, int bit_count);
-int xglFlagsGet1(int bit_offset);
 int xglFlagsGet2(int bit_offset);
 int xglFlagsGet4(int bit_offset);
 int xglFlagsGet8(int bit_offset);

@@ -991,6 +991,34 @@ def packed_enum_admission_items(unit, tu_id, tu, tu_text):
     return items, names
 
 
+# The one admitted type attribute (user decision 2026-11-01, AGENTS.md):
+# include/shared.h's `typedef Vector4 AlignedVector4 __attribute__((aligned(16)));`,
+# the quadword-aligned SDK vector (libvu0.h sceVu0FVECTOR is aligned(16)).
+_ALIGNED_VECTOR4_TYPEDEF = 'typedef Vector4 AlignedVector4 __attribute__((aligned(16)));'
+# and its doubleword sibling (user 2026-11-02): 8-aligned vectors copied ld/sd.
+_DOUBLEWORD_ALIGNED_VECTOR4_TYPEDEF = 'typedef Vector4 DoublewordAlignedVector4 __attribute__((aligned(8)));'
+_ADMITTED_VECTOR_TYPEDEFS = ((_ALIGNED_VECTOR4_TYPEDEF, '__attribute__((aligned(16)))'),
+                             (_DOUBLEWORD_ALIGNED_VECTOR4_TYPEDEF, '__attribute__((aligned(8)))'))
+
+
+def aligned_vector4_admission_text(full, text, unit_dir):
+    """Admission text of a header: for include/shared.h (the repository file or
+    the unit's staged copy) the attribute of each single exact admitted vector
+    typedef line (AlignedVector4, DoublewordAlignedVector4) is blanked; every
+    other attribute, header and spelling stays under the ordinary refusal. The
+    compiled header is untouched."""
+    full = Path(full).resolve()
+    homes = {(ROOT / 'include' / 'shared.h').resolve(), (Path(unit_dir) / 'include' / 'shared.h').resolve()}
+    if full not in homes:
+        return text
+    lines = text.split('\n')
+    for typedef, attribute in _ADMITTED_VECTOR_TYPEDEFS:
+        hits = [i for i, line in enumerate(lines) if line.strip() == typedef]
+        if len(hits) == 1:
+            lines[hits[0]] = lines[hits[0]].replace(attribute, ' ' * len(attribute))
+    return '\n'.join(lines)
+
+
 def included_names(text):
     return re.findall(r'^\s*#\s*include\s*["<]([^">]+)[">]', text, re.M)
 
@@ -1089,18 +1117,24 @@ def owned_header_source_class(full, default, root, metadata):
     origin = entry.get('source_owner') or {}
     if origin.get('path') not in (source.as_posix(), source.with_suffix('.h').as_posix()):
         raise ValueError('owned native-TI declaration source is outside its defining TU')
+    # The SHA-256 pins of the header, its source owner and its type export are
+    # informative only (user decision 2026-11-01): a reorganized header keeps its
+    # registered native-TI class and its text is still validated in full by the
+    # strict native-TI grammar.
     source_path = Path(root) / origin['path']
+    stale = []
     if (sha256_file(source_path) != origin.get('sha256')
             or sha256_file(Path(root) / key) != entry.get('header_sha256')
             or sha256_file(full) != entry.get('header_sha256')):
-        raise ValueError('owned native-TI source/header pin changed')
+        stale.append('owned native-TI source/header pin changed')
     exports = json.loads((Path(root) / 'config/header-exports.json').read_text()).get('exports') or []
     names = set(entry.get('names') or [])
     if not names or not any(r.get('tu') == owner and names <= set(r.get('names') or [])
             and (r.get('source_owner') or {}).get('path') == origin['path']
             and (r.get('source_owner') or {}).get('sha256') == origin['sha256'] for r in exports):
-        raise ValueError('owned native-TI header lacks its existing source-bound type export')
-    return 'native-ti', dict(owner_tu=owner, source_owner=origin, header_sha256=entry['header_sha256'], names=sorted(names), staged_copy=staged_copy)
+        stale.append('owned native-TI header lacks its existing source-bound type export')
+    return 'native-ti', dict(owner_tu=owner, source_owner=origin, header_sha256=entry['header_sha256'],
+                             names=sorted(names), staged_copy=staged_copy, informative_stale_pins=stale)
 
 
 def emitted_c_category(cls, source_statements, emitted_blocks):
@@ -1924,11 +1958,23 @@ def accepted_asm_records():
 # Audit
 # ---------------------------------------------------------------------------
 
+# Simplified audit (user decision 2026-11-01): these unit checks duplicate the
+# whole-file gate or are bookkeeping, so they are reported but never fail the
+# audit. `ok` stays True for every consumer; the real result is `finding_ok`.
+# Function identity, emission, eligibility (forbidden-construct admission) and
+# header/free-text admission still decide.
+INFORMATIVE_UNIT_CHECKS = frozenset(('build_object_matches_audit', 'build_assembly_matches_audit',
+                                     'toolchain_messages'))
+
+
 class Checks:
     def __init__(self):
         self.rows = []
 
     def add(self, check, ok, **detail):
+        if check in INFORMATIVE_UNIT_CHECKS:
+            self.rows.append(dict(check=check, ok=True, informative=True, finding_ok=bool(ok), **detail))
+            return ok
         self.rows.append(dict(check=check, ok=bool(ok), **detail))
         return ok
 
@@ -5406,7 +5452,8 @@ def _audit_body(args, result, checks, unit_dir, tu_c, tu_rel, contract, source_c
             class_metadata = json.loads((ROOT / SOURCE_CLASSES_FILE).read_text())
             header_class, header_class_provenance = owned_header_source_class(
                 full, source_class, ROOT, class_metadata)
-            admission(header_class)(text, Path(path_rel), {n for n, p in resolved.items() if p is not None})
+            admission(header_class)(aligned_vector4_admission_text(full, text, unit_dir), Path(path_rel),
+                                    {n for n, p in resolved.items() if p is not None})
         except ValueError as e:
             scaffold_ok, scaffold_reason = scaffold_header_ok(text)
             if scaffold_ok:
@@ -8359,9 +8406,9 @@ def audit_c(b, tu, prelude, tu_rel, header_set, regions, scaffold_names, obj_fun
                                   tu_repo, storage_view_context)
     if fid.get('record'):
         fid['record_sha256'] = record_digest(fid['record'])
-    checks['record_fidelity'] = dict(ok=fid_ok, **fid)
-    if not fid_ok:
-        reasons.append(f'record fidelity: {fid.get("detail")}')
+    # Informative only (user decision 2026-11-01: published = accepted; neutral
+    # edits are proven by tools/codegen_neutral.py and the whole-file gate).
+    checks['record_fidelity'] = dict(ok=True, informative=True, finding_ok=fid_ok, **fid)
     return dict(name=b.key, block=name, state='c', claimed=True,
                 category=emitted_c_category(cls, count, len(found[0]['app']) if len(found) == 1 else 0),
                 ok=not reasons, reasons=reasons, checks=checks)

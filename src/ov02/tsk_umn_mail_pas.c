@@ -4,6 +4,7 @@
 #include "common.h"
 
 #include "shared.h"
+#include "main/e_message.h"
 typedef struct UmnMailPasTask {
     unsigned char unmodeled_00[0x10];
     int command;
@@ -20,15 +21,6 @@ typedef struct UmnMailPasWindow {
     void (*callback)(void);
     void *callback_arg;
 } UmnMailPasWindow;
-typedef struct UmnMailPasMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x44 - 0x0c];
-} UmnMailPasMessage;
 typedef struct UmnMailPasBox {
     short x;
     short y;
@@ -43,7 +35,7 @@ typedef struct UmnMailPasWork {
     int kind;
     UmnMailPasWindow window;
     unsigned char unmodeled_24[0x19c - 0x24];
-    UmnMailPasMessage messages[5];
+    EMessageParam messages[5];
     unsigned char unmodeled_2f0[0x3bc - 0x2f0];
     UmnMailPasBox box;
 } UmnMailPasWork;
@@ -83,8 +75,6 @@ extern int MenuPasLengthGet(const char *text);
 extern void WindowDXSet(void *window);
 extern void WindowDXMain(void *window);
 extern void MoveSlide(short *current, short *target, float rate);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageMain(void *message);
 extern void endPrintExtFunc(int kind, int id, void *data);
 
 void tskUmnMailPas(UmnMailPasTask *task, UmnMailPasWork *work)
@@ -119,7 +109,7 @@ void tskUmnMailPas(UmnMailPasTask *task, UmnMailPasWork *work)
                 work->messages[i].mode = 0x20;
                 work->messages[i].x = 0x120;
                 work->messages[i].y = 0x0b;
-                work->messages[i].color = work->kind + 2;
+                work->messages[i].draw_parameter = work->kind + 2;
             }
             work->state = 1;
             break;

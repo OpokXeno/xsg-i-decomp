@@ -1,6 +1,9 @@
 #include "common.h"
 #include "map_2.h"
 #include "main/xgl_2.h"
+#include "main/map_2.h"
+#include "main/mdl.h"
+#include "main/nml_model_set.h"
 
 #define NULL ((void *)0)
 
@@ -9,34 +12,14 @@ struct MdlHandle;
 extern MapUnitResource *RES_loadFile(int command, int callback, int resource_id, int flags);
 extern void LOG(const char *format, ...);
 extern int MDL_create(void *model_instance, void *resource_model);
-extern void unit6003_update(MapUnitSlot *unit);
-extern void MDL_partsSetVisible(struct MdlHandle *model);
-extern void nmlModelSetTexture(const char *texture);
-extern void nmlModelSetPlace(const Vector4 *place);
-extern void nmlModelSetRenderLevel(int level);
-extern void nmlModelSetSortOffset(float offset);
-extern void nmlModelSetClip(int enabled);
-extern void nmlModelSetMapShadowParts(unsigned short part);
-extern void nmlModelSetTexMap(int mode, int size, float weight);
-extern void nmlModelSetToumei(int enabled);
-extern void nmlModelSetZwrite(int enabled);
-extern void nmlModelSetStencil(int enabled);
-extern void nmlModelSetFilter(int filter, float start, float end);
-extern void nmlModelSetTransparency(float transparency);
-extern void nmlModelSetReflTransparency(float transparency);
+extern void unit6003_update(MapUnitRecord *unit);
 extern void nmlModelSetShadowMapEntry(void);
 extern void nmlModelEntry(int entry);
-extern void nmlModelGetGblPosition(Vector4 *position);
-extern void xglMatrixStackLoad(float matrix[4][4]);
-extern void xglMatrixStackMul(const Matrix4 matrix);
-extern void xglMatrixStackPush(void);
-extern void xglMatrixStackPop(int count);
-
-int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
+int MAP_loadUnitResource(MapUnitRecord *unit, int resource_id)
 {
     MapUnitResource *resource = RES_loadFile(-1, 4, resource_id, 0);
     void *model;
-    int status;
+    const char *status;
 
     if (resource == 0) {
         resource = RES_loadFile(-1, 4, resource_id & 0x7F00, 0);
@@ -57,15 +40,15 @@ int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
         LOG("\245\342\245\307\245\353\244\254\270\253\244\304\244\253\244\352\244\336\244\273\244\363\244\307\244\267\244\277\241\243\n");
     }
 
-    unit->resource_status = status;
-    unit->resource_model = model;
+    unit->resourceStatus = status;
+    unit->resourceModel = model;
     unit->model = model;
-    return MDL_create(&unit->model_state, model);
+    return MDL_create(&unit->modelState, model);
 }
 
 void MAP_initUnit(void)
 {
-    MapUnitSlot *unit = MapUnit;
+    MapUnitRecord *unit = MapUnit;
     int i;
     int j;
 
@@ -75,28 +58,28 @@ void MAP_initUnit(void)
         unit->update = 0;
         unit->draw = 0;
         unit->typeUpdate = 0;
-        unit->resource_model = 0;
+        unit->resourceModel = 0;
         unit->sequence = 0;
-        unit->scale[0] = 1.0f;
-        unit->scale[1] = 1.0f;
-        unit->scale[2] = 1.0f;
-        unit->scale[3] = 1.0f;
-        unit->position[0] = 0;
-        unit->position[1] = 0;
-        unit->position[2] = 0;
-        unit->position[3] = 1.0f;
+        unit->scale.x = 1.0f;
+        unit->scale.y = 1.0f;
+        unit->scale.z = 1.0f;
+        unit->scale.w = 1.0f;
+        unit->position.x = 0;
+        unit->position.y = 0;
+        unit->position.z = 0;
+        unit->position.w = 1.0f;
         unit->modelPosition[0] = 0;
         unit->modelPosition[1] = 0;
         unit->modelPosition[2] = 0;
         unit->modelPosition[3] = 1.0f;
-        unit->renderLevel = 0;
-        unit->filter = 0;
+        unit->render_command = 0;
+        unit->filter_mode = 0;
         unit->texMapMode = 0;
         unit->texMapSize = 16;
-        unit->shadowPartCount = 0;
+        unit->shadow_map_count = 0;
         unit->texMapWeight = 0.5f;
-        unit->sortOffset = 0;
-        unit->cleared_a6 = 0;
+        unit->sort_offset = 0;
+        unit->monitor_priority = 0;
         for (j = 0; j < 2; j++) {
             unit->cleared_d8[j] = 0;
         }
@@ -107,16 +90,16 @@ void MAP_initUnit(void)
             unit->effectCf[j] = 0;
         }
         unit->parent = 0;
-        unit->model_state = 0;
+        unit->modelState = 0;
         unit++;
     }
 }
 
-MapUnitSlot *MAP_createUnit(int slot, int serial)
+MapUnitRecord *MAP_createUnit(int slot, int serial)
 {
-    MapUnitSlot *unit;
+    MapUnitRecord *unit;
     int i;
-    void (*typeUpdate)(MapUnitSlot *);
+    void (*typeUpdate)(MapUnitRecord *);
 
     if (slot < 0) {
         for (i = 0; i < 64; i++) {
@@ -132,10 +115,10 @@ MapUnitSlot *MAP_createUnit(int slot, int serial)
     unit = &MapUnit[slot];
     unit->slot = slot;
     unit->serial = serial;
-    unit->scale[0] = 1.0f;
-    unit->scale[1] = 1.0f;
-    unit->scale[2] = 1.0f;
-    unit->scale[3] = 1.0f;
+    unit->scale.x = 1.0f;
+    unit->scale.y = 1.0f;
+    unit->scale.z = 1.0f;
+    unit->scale.w = 1.0f;
     unit->modelPosition[0] = 0;
     unit->modelPosition[1] = 0;
     unit->modelPosition[2] = 0;
@@ -158,7 +141,7 @@ MapUnitSlot *MAP_createUnit(int slot, int serial)
 
 void MAP_updateUnit(void)
 {
-    MapUnitSlot *unit = MapUnit;
+    MapUnitRecord *unit = MapUnit;
     int i;
 
     for (i = 0; i < 64; i++) {
@@ -174,7 +157,7 @@ void MAP_updateUnit(void)
     }
 }
 
-void MAP_drawUnitAt(MapUnitSlot *unit)
+void MAP_drawUnitAt(MapUnitRecord *unit)
 {
     Matrix4 place;
     Matrix4 joint;
@@ -184,16 +167,16 @@ void MAP_drawUnitAt(MapUnitSlot *unit)
     int model;
     int i;
     unsigned short *shadowPart;
-    void (*draw)(MapUnitSlot *);
+    void (*draw)(MapUnitRecord *);
     void *modelState;
     float homogeneousZero;
 
     xglMatrixStackUnit();
-    xglMatrixStackTrans(unit->position);
-    xglMatrixStackRotX(unit->rotation[0]);
-    xglMatrixStackRotY(unit->rotation[1]);
-    xglMatrixStackRotZ(unit->rotation[2]);
-    xglMatrixStackScale(unit->scale);
+    xglMatrixStackTrans(&unit->position.x);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
+    xglMatrixStackScale(&unit->scale.x);
     xglMatrixStackSave(place);
     if (unit->parent != 0) {
         matrixIndex = unit->parentMatrixIndex;
@@ -248,33 +231,33 @@ void MAP_drawUnitAt(MapUnitSlot *unit)
                 root[1][3] = homogeneousZero;
                 root[0][3] = homogeneousZero;
                 xglMatrixStackLoad(root);
-                xglMatrixStackMul((const float (*)[4])joint);
+                xglMatrixStackMul(joint);
             }
-            xglMatrixStackMul((const float (*)[4])place);
+            xglMatrixStackMul(place);
             xglMatrixStackSave(place);
         }
     }
-    model = (int)unit->model;
+    model = unit->modelEntry;
     if (model != 0) {
         if (!(unit->flags & 4)) {
-            if (unit->resource_status != 0) {
-                nmlModelSetTexture((const char *)unit->resource_status);
+            if (unit->resourceStatus != 0) {
+                nmlModelSetTexture(unit->resourceStatus);
             }
-            modelState = &unit->model_state;
+            modelState = &unit->modelState;
             MDL_partsSetVisible(modelState);
-            nmlModelSetPlace((const Vector4 *)place);
-            nmlModelSetRenderLevel(unit->renderLevel);
-            nmlModelSetSortOffset((float)unit->sortOffset);
+            nmlModelSetPlace(&place);
+            nmlModelSetRenderLevel(unit->render_command);
+            nmlModelSetSortOffset((float)unit->sort_offset);
             if (unit->flags & 0x40) {
                 nmlModelSetClip(1);
             }
             i = 0;
-            if (unit->shadowPartCount > 0) {
-                shadowPart = unit->shadowParts;
+            if (unit->shadow_map_count > 0) {
+                shadowPart = unit->shadow_map_ids;
                 do {
                     nmlModelSetMapShadowParts(*shadowPart++);
                     i++;
-                } while (i < unit->shadowPartCount);
+                } while (i < unit->shadow_map_count);
             }
             switch (unit->texMapMode) {
             case 5:
@@ -296,11 +279,11 @@ void MAP_drawUnitAt(MapUnitSlot *unit)
                 nmlModelSetTexMap(0x30000, unit->texMapSize, unit->texMapWeight);
                 break;
             }
-            if (unit->filter != 0) {
+            if (unit->filter_mode != 0) {
                 nmlModelSetToumei(1);
                 nmlModelSetZwrite(1);
                 nmlModelSetStencil(1);
-                nmlModelSetFilter(unit->filter, unit->filterStart, unit->filterEnd);
+                nmlModelSetFilter(unit->filter_mode, unit->filterStart, unit->filterEnd);
                 nmlModelSetTransparency(unit->transparency);
                 nmlModelSetReflTransparency(unit->reflTransparency);
             }
@@ -321,7 +304,7 @@ void MAP_drawUnitAt(MapUnitSlot *unit)
 
 void MAP_drawUnit(void)
 {
-    MapUnitSlot *unit = MapUnit;
+    MapUnitRecord *unit = MapUnit;
     int i;
 
     for (i = 0; i < 64; i++) {

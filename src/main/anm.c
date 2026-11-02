@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "anm.h"
+#include "main/anm.h"
 
 #define FPK_MAGIC 0x004B5046
 #define FPK_MAGIC_MASK 0x00FFFFFF

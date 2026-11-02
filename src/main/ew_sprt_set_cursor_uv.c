@@ -1,8 +1,11 @@
 #include "common.h"
 
+#include "main/ew_sprt_set_cursor_uv.h"
 #include "ew_sprt_set_cursor_uv.h"
 
 #include "shared.h"
+#include "main/xgl_font.h"
+#include "main/xgl_prim_add.h"
 
 typedef struct EwFrameState {
     /* +0x00: cleared by frame_init; no reader found among this TU's own
@@ -15,39 +18,15 @@ typedef struct EwFrameState {
     signed char alpha;
 } EwFrameState;
 
-typedef struct EwSpriteState {
-    /* +0x00/+0x02: cleared/set by sprt_init; same "no reader in this TU"
-       evidence tier as EwFrameState's fields above. */
-    short flags;
-    signed char alpha;
-    /* +0x04/+0x06: texture cell coordinates. Not touched by sprt_init,
-       but written by EW_sprtSetCursorUV and read back by sprt_put with
-       lhu (main:0x0026bf80, 0x0026ca98), which fixes the width as
-       unsigned short. */
-    unsigned short u;
-    unsigned short v;
-} EwSpriteState;
-
-typedef struct EwSpriteWidget {
-    unsigned short flags;
-    unsigned short type;
-    short x;
-    short y;
-    int z;
-    short width;
-    short height;
-    EwSpriteState sprite;
-    unsigned char unmodeled_18[0x10];
-} EwSpriteWidget;
-
-typedef struct EwDrawContext {
-    XglPacket *packet;
-} EwDrawContext;
-
 typedef struct EwGifRegister {
     u64 data;
     u64 reg;
 } EwGifRegister;
+
+typedef union EwGifQuad {
+    unsigned int words[4];
+    EwGifRegister reg;
+} EwGifQuad;
 
 typedef struct EwDrawEnvPacket {
     unsigned int tag[4];
@@ -97,26 +76,21 @@ typedef struct EwTextWidget {
  * and EW_draw test the type via (flags & 0xE000) == 0xC000; EW_drawContainer
  * tests only the enabled bit via flags & 0x4000.
  */
-void EW_drawComoponent(int context, EwWidget *widget);
+void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget);
 
-static void EW_setDrawEnv(int context);
-extern void xglFontReloadTexture(int context, int mode);
+static void EW_setDrawEnv(FontDrawCursor *cursor);
 
-/* The font queue invokes callbacks with its render context and the saved
- * argument. EW_draw registers EW_sendPacket with a null saved argument. */
-extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(int, void *), void *arg);
-
-extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
 static void container_init(EwContainerState *container);
 
-static void frame_put(int context, EwWidget *widget);
+static void frame_put(FontDrawCursor *cursor, EwWidget *widget);
 
-static void label_put(EwDrawContext *context, EwLabelWidget *widget);
-static void mask_put(int context, void *arg);
-static void set_clip(int context, void *arg);
-static void sprt_put(int context, EwSpriteWidget *widget);
-extern void xglFontPrint(int x, int y, int color, const char *text);
-
+/* The font queue calls these back with its draw cursor; EW_draw registers
+ * EW_sendPacket with a null argument, the clip and mask widgets pass
+ * themselves. */
+static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget);
+static void mask_put(FontDrawCursor *cursor, void *arg);
+static void set_clip(FontDrawCursor *cursor, void *arg);
+static void sprt_put(FontDrawCursor *cursor, EwSpriteWidget *widget);
 static int ew_send_mode = 0;
 
 static u64 sprt_base_register[4] = {
@@ -204,13 +178,13 @@ static void mask_init(EwMaskState *mask)
     mask->fix = 0x80 << 8;
 }
 
-static void EW_setDrawEnv(int context)
+static void EW_setDrawEnv(FontDrawCursor *cursor)
 {
     EwDrawEnvPacket *env;
     EwGifRegister *regs;
     EwGifRegister *entry;
 
-    env = (EwDrawEnvPacket *) ((context + 63) & -16);
+    env = (EwDrawEnvPacket *) (((unsigned int)&cursor->work + 15) & ~15);
     env->tag[0] = 0x8006;
     env->tag[1] = 0x10000000;
     env->tag[2] = -2;
@@ -234,7 +208,7 @@ static void EW_setDrawEnv(int context)
     entry = regs + 5;
     entry->data = 0x31001;
     entry->reg = 71;
-    xglPrimAddGifTagDirect(((EwDrawContext *) context)->packet, env, 7);
+    xglPrimAddGifTagDirect(cursor->packet, env, 7);
 }
 
 /*
@@ -297,9 +271,9 @@ EwWidget *EW_create(int index, int type)
 
 void EW_dispose(EwContainerWidget *widget)
 {
-    void **firstChild;
-    void **children;
-    unsigned short *childFlags;
+    EwWidget **firstChild;
+    EwWidget **children;
+    EwWidget *child;
     int capacity;
     int remaining;
 
@@ -315,11 +289,11 @@ void EW_dispose(EwContainerWidget *widget)
                 remaining = capacity;
                 do
                 {
-                    childFlags = *children;
+                    child = *children;
                     children++;
-                    if (childFlags != 0)
+                    if (child != 0)
                     {
-                        *childFlags = 0;
+                        child->flags = 0;
                     }
                     remaining--;
                 } while (remaining != 0);
@@ -329,9 +303,9 @@ void EW_dispose(EwContainerWidget *widget)
     widget->flags = 0;
 }
 
-int EW_addComponent(EwContainerWidget *widget, int index, unsigned short *child)
+int EW_addComponent(EwContainerWidget *widget, int index, EwWidget *child)
 {
-    void **children;
+    EwWidget **children;
     int capacity;
     int i;
 
@@ -360,7 +334,7 @@ int EW_addComponent(EwContainerWidget *widget, int index, unsigned short *child)
         }
     }
     if (index >= 0 && index < capacity) {
-        *child |= 0x2000;
+        child->flags |= 0x2000;
         children[index] = child;
     } else {
         index = -1;
@@ -368,7 +342,7 @@ int EW_addComponent(EwContainerWidget *widget, int index, unsigned short *child)
     return index;
 }
 
-void EW_drawContainer(int context, EwContainerState *container)
+void EW_drawContainer(FontDrawCursor *cursor, EwContainerState *container)
 {
     EwWidget **firstChild;
     EwWidget **children;
@@ -376,7 +350,7 @@ void EW_drawContainer(int context, EwContainerState *container)
     short capacity;
     int count;
 
-    firstChild = (EwWidget **) container->children;
+    firstChild = container->children;
     if (firstChild != 0)
     {
         capacity = container->childCapacity;
@@ -390,7 +364,7 @@ void EW_drawContainer(int context, EwContainerState *container)
                 children++;
                 if (child != 0 && (child->flags & 0x4000))
                 {
-                    EW_drawComoponent(context, child);
+                    EW_drawComoponent(cursor, child);
                 }
                 count--;
             } while (count != 0);
@@ -398,41 +372,41 @@ void EW_drawContainer(int context, EwContainerState *container)
     }
 }
 
-void EW_drawComoponent(int context, EwWidget *widget)
+void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
 {
     switch (widget->type)
     {
     case 0:
         if (ew_send_mode & 1)
         {
-            label_put((EwDrawContext *) context, (EwLabelWidget *) widget);
+            label_put(cursor, (EwLabelWidget *) widget);
         }
         break;
     case 1:
         if (ew_send_mode & 1)
         {
-            frame_put(context, widget);
+            frame_put(cursor, widget);
         }
         break;
     case 4:
-        EW_drawContainer(context, &((EwContainerWidget *) widget)->container);
+        EW_drawContainer(cursor, &((EwContainerWidget *) widget)->container);
         break;
     case 5:
         if (ew_send_mode & 1)
         {
-            sprt_put(context, (EwSpriteWidget *) widget);
+            sprt_put(cursor, (EwSpriteWidget *) widget);
         }
         break;
     case 6:
         if (ew_send_mode & 1)
         {
-            set_clip(context, widget);
+            set_clip(cursor, widget);
         }
         break;
     case 8:
         if (ew_send_mode & 1)
         {
-            mask_put(context, (EwMaskWidget *) widget);
+            mask_put(cursor, widget);
         }
         break;
     case 9:
@@ -565,21 +539,21 @@ void EW_init(void)
     }
 }
 
-void EW_sendPacket(int context, void *argument)
+void EW_sendPacket(FontDrawCursor *cursor, void *argument)
 {
     int i;
 
-    xglFontReloadTexture(context, 2);
+    xglFontReloadTexture(cursor, 2);
     ew_send_mode = 1;
-    EW_setDrawEnv(context);
+    EW_setDrawEnv(cursor);
     for (i = 0; i < 64; i++)
     {
         if ((ewComponent[i].flags & 0xE000) == 0xC000)
         {
-            EW_drawComoponent(context, &ewComponent[i]);
+            EW_drawComoponent(cursor, &ewComponent[i]);
         }
     }
-    xglFontReloadTexture(context, 1);
+    xglFontReloadTexture(cursor, 1);
     ew_send_mode = 0;
 }
 
@@ -614,9 +588,8 @@ static void container_init(EwContainerState *container)
  * word swaps the two middle vertices, which turns the gradient from
  * vertical to horizontal.
  */
-static void mask_put(int context, void *arg)
+static void mask_put(FontDrawCursor *cursor, void *arg)
 {
-    EwDrawContext *drawContext;
     EwMaskWidget *widget;
     EwMaskState *mask;
     unsigned int *gif;
@@ -628,10 +601,9 @@ static void mask_put(int context, void *arg)
     int z;
     unsigned int color;
 
-    drawContext = (EwDrawContext *) context;
     widget = (EwMaskWidget *) arg;
     mask = &widget->mask;
-    gif = (unsigned int *) (((int) context + 63) & -16);
+    gif = (unsigned int *) (((unsigned int)&cursor->work + 15) & ~15);
     qword = gif;
     qword[0] = 1;
     qword[1] = 0x10000000;
@@ -739,10 +711,10 @@ static void mask_put(int context, void *arg)
         qword[3] = 0;
         qword += 4;
     }
-    xglPrimAddGifTagDirect(drawContext->packet, gif, (qword - gif) / 4);
+    xglPrimAddGifTagDirect(cursor->packet, gif, (qword - gif) / 4);
 }
 
-static void sprt_put(int context, EwSpriteWidget *widget)
+static void sprt_put(FontDrawCursor *cursor, EwSpriteWidget *widget)
 {
     unsigned int *packet;
     unsigned int *quad;
@@ -756,7 +728,7 @@ static void sprt_put(int context, EwSpriteWidget *widget)
     int screenY;
     int z;
 
-    packet = (unsigned int *) ((context + 63) & -16);
+    packet = (unsigned int *) (((unsigned int)&cursor->work + 15) & ~15);
     quad = packet;
     quad[0] = 1;
     quad[1] = 0x20000000;
@@ -802,10 +774,10 @@ static void sprt_put(int context, EwSpriteWidget *widget)
     quad[1] = screenY + height;
     quad[2] = z;
     quad[3] = 0;
-    xglPrimAddGifTagDirect(((EwDrawContext *) context)->packet, packet, 9);
+    xglPrimAddGifTagDirect(cursor->packet, packet, 9);
 }
 
-static void set_clip(int context, void *arg)
+static void set_clip(FontDrawCursor *cursor, void *arg)
 {
     EwWidget *widget;
     EwDrawEnvPacket *env;
@@ -816,7 +788,7 @@ static void set_clip(int context, void *arg)
     int right;
 
     widget = (EwWidget *) arg;
-    env = (EwDrawEnvPacket *) ((context + 63) & -16);
+    env = (EwDrawEnvPacket *) (((unsigned int)&cursor->work + 15) & ~15);
     left = widget->x;
     top = widget->y;
     right = left + widget->width - 1;
@@ -840,7 +812,7 @@ static void set_clip(int context, void *arg)
     entry = &env->regs[0];
     entry->data = (u64) left | (u64) right << 16 | (u64) top << 32 | (u64) (bottom - 2) << 48;
     entry->reg = 64;
-    xglPrimAddGifTagDirect(((EwDrawContext *) context)->packet, env, 2);
+    xglPrimAddGifTagDirect(cursor->packet, env, 2);
 }
 
 static int checkN2(int value)
@@ -862,11 +834,11 @@ static int checkN2(int value)
     return 0;
 }
 
-static void frame_put(int context, EwWidget *widget)
+static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
 {
     int xs[16];
     int ys[16];
-    unsigned int *gif;
+    EwGifQuad *gif;
     unsigned int *qword;
     EwGifRegister *reg;
     int rawWidth;
@@ -882,17 +854,17 @@ static void frame_put(int context, EwWidget *widget)
     int z;
     int i;
 
-    gif = (unsigned int *) ((context + 63) & -16);
-    qword = gif;
+    gif = (EwGifQuad *) (((unsigned int)&cursor->work + 15) & ~15);
+    qword = gif->words;
     qword[0] = 2;
     qword[1] = 0x10000000;
     qword[2] = -2;
     qword[3] = 0;
     qword += 4;
-    reg = (EwGifRegister *) qword;
+    reg = &gif[1].reg;
     reg->data = 0x7F0007FF;
     reg->reg = 8;
-    reg = (EwGifRegister *) (qword + 4);
+    reg = &gif[2].reg;
     reg->data = 68;
     reg->reg = 66;
     qword += 8;
@@ -945,7 +917,7 @@ static void frame_put(int context, EwWidget *widget)
     qword[2] = -2;
     qword[3] = 0;
     qword += 4;
-    reg = (EwGifRegister *) qword;
+    reg = &gif[10].reg;
     reg->data = 5;
     reg->reg = 8;
     qword += 4;
@@ -1017,7 +989,7 @@ static void frame_put(int context, EwWidget *widget)
         qword[3] = 0;
         qword += 4;
     }
-    xglPrimAddGifTagDirect(((EwDrawContext *) context)->packet, gif, (qword - gif) / 4);
+    xglPrimAddGifTagDirect(cursor->packet, gif, (qword - gif->words) / 4);
 }
 
 /*
@@ -1027,11 +999,11 @@ static void frame_put(int context, EwWidget *widget)
  * 0x3D: the top, left and right edges and all four corners, but not the
  * bottom edge.
  */
-static void label_put(EwDrawContext *context, EwLabelWidget *widget)
+static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget)
 {
     int xs[16];
     int ys[16];
-    unsigned int *gif;
+    EwGifQuad *gif;
     unsigned int *qword;
     EwGifRegister *reg;
     int rawWidth;
@@ -1046,17 +1018,17 @@ static void label_put(EwDrawContext *context, EwLabelWidget *widget)
     int pieces;
     int i;
 
-    gif = (unsigned int *) (((int) context + 63) & -16);
-    qword = gif;
+    gif = (EwGifQuad *) (((unsigned int)&cursor->work + 15) & ~15);
+    qword = gif->words;
     qword[0] = 2;
     qword[1] = 0x10000000;
     qword[2] = -2;
     qword[3] = 0;
     qword += 4;
-    reg = (EwGifRegister *) qword;
+    reg = &gif[1].reg;
     reg->data = 0x7F0007FF;
     reg->reg = 8;
-    reg = (EwGifRegister *) (qword + 4);
+    reg = &gif[2].reg;
     reg->data = 68;
     reg->reg = 66;
     qword += 8;
@@ -1138,7 +1110,7 @@ static void label_put(EwDrawContext *context, EwLabelWidget *widget)
     qword[2] = -2;
     qword[3] = 0;
     qword += 4;
-    reg = (EwGifRegister *) qword;
+    reg = &gif[17].reg;
     reg->data = 5;
     reg->reg = 8;
     qword += 4;
@@ -1208,7 +1180,7 @@ static void label_put(EwDrawContext *context, EwLabelWidget *widget)
         }
         pieces >>= 1;
     }
-    xglPrimAddGifTagDirect(context->packet, gif, (qword - gif) / 4);
+    xglPrimAddGifTagDirect(cursor->packet, gif, (qword - gif->words) / 4);
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */

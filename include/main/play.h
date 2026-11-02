@@ -3,12 +3,7 @@
 
 #include "shared.h"
 #include "main/jni.h"
-
-typedef struct FCV2Value {
-    u16 cursor;
-    u16 type;
-    f32 value;
-} FCV2Value;
+#include "main/fcv2.h"
 
 /*
  * The pointer PLAY_setupDefault clears (sw $0,12 at 0x0026a674). Its
@@ -27,7 +22,7 @@ typedef struct PlaySource PlaySource;
  */
 typedef struct PlayObserver {
     SceneObject argument;          /* +0x00 */
-    SceneMethod *method;           /* +0x04 */
+    JavaMethod *method;            /* +0x04 */
     unsigned short chartIndex;     /* +0x08 */
     unsigned short keyIndex;       /* +0x0a */
 } PlayObserver;
@@ -35,13 +30,13 @@ typedef struct PlayObserver {
 /*
  * The playback controller's embedded callback-parameter object
  * (PLAY_getCallBackParams, VA 0x0026ab90): +0x00 is set from
- * classJava_xeno_util_TCHParams->instance_class_ref (lw 24 at 0x0026ab9c),
- * the same class-ref slot SceneObjectHeader keeps at its own +0x00, so a
+ * classJava_xeno_util_TCHParams->classPointer (lw 24 at 0x0026ab9c),
+ * the same dispatch table slot ObjectHeader keeps at its own +0x00, so a
  * Java peer can be read back through this object. The rest of the object
  * is touched only by PLAY_checkTCH, still assembly in this TU.
  */
 typedef struct TCHParams {
-    SceneObjectClassRef *class_ref; /* +0x00 */
+    DispatchTable *class_ref;       /* +0x00 */
     float value;                    /* +0x04 */
     int frame;                      /* +0x08 */
     int curveIndex;                 /* +0x0c */
@@ -67,9 +62,9 @@ typedef struct PlayTCHCurveSet {
  * 0x1dc-byte size (config/symbols/main.txt).
  */
 typedef struct Play {
-    unsigned char unmodeled_00[4];
-    unsigned int state;              /* +0x04 */
-    void *timeChart;
+    int class_ref;                   /* +0x00, copied as a VM object-header word (playcontrol.c) */
+    unsigned int signal;             /* +0x04, getSignal__/signal__I (playcontrol.c); play.c's PLAY_setup reset writes it */
+    void *timeChart;                 /* +0x08, read by setObserver (playcontrol.c) */
     PlaySource *source;              /* +0x0c */
     unsigned char unmodeled_10[28];  /* +0x10 */
     unsigned int flags;              /* +0x2c */
@@ -84,5 +79,8 @@ typedef struct Play {
     PlayObserver observers[32];      /* +0x4c */
     TCHParams callbackParams;        /* +0x1cc */
 } Play;
+
+/* Functions and data used by other translation units. */
+void PLAY_ctrl(void);
 
 #endif /* INCLUDE_MAIN_PLAY_H */

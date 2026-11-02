@@ -1435,12 +1435,6 @@ def subset(tu, keep, skeleton=None, asm_dir=None, headers=None):
     not_c = sorted(b.name for b in kept_blocks if b.state != 'c' or b.role != 'function')
     if not_c:
         raise EditError(f'functions to keep are not original C functions in this TU: {not_c}')
-    out, reverted = tu, []
-    for b in tu.blocks:
-        if b.state == 'c' and b.role == 'function' and b not in kept_blocks:
-            out = to_asm(out, b.name, skeleton=skeleton, asm_dir=asm_dir)
-            reverted.append(b.name)
-    report = dict(kept=sorted(b.name for b in kept_blocks), reverted=reverted, warnings=[])
     keep = {b.name for b in kept_blocks}
     # A reverted static function still referenced by kept C needs a prototype.
     # It can come from the TU's own free items or from the TU's own header, which
@@ -1450,9 +1444,9 @@ def subset(tu, keep, skeleton=None, asm_dir=None, headers=None):
         header = tu_header_path(tu)
         headers = [header] if header else []
     declared = set()
-    for item in out.free_items():
+    for item in tu.free_items():
         if item.kind == 'decl':
-            declared |= {k for kind, k in decl_keys(item.text(out.text)) if kind == 'ordinary'}
+            declared |= {k for kind, k in decl_keys(item.text(tu.text)) if kind == 'ordinary'}
     header_sources = []
     for header in headers:
         try:
@@ -1461,15 +1455,38 @@ def subset(tu, keep, skeleton=None, asm_dir=None, headers=None):
             continue
         header_sources.append(str(header))
         declared |= declared_names(text)
+    kept_text = ''.join(lexical(tu.block_text(tu.by_name[n])) for n in keep)
+    out, reverted, prototypes, warnings = tu, [], [], []
+    for b in tu.blocks:
+        if b.state == 'c' and b.role == 'function' and b not in kept_blocks:
+            out = to_asm(out, b.name, skeleton=skeleton, asm_dir=asm_dir)
+            reverted.append(b.name)
+            if not (re.search(r'\b' + re.escape(b.name) + r'\b', kept_text)
+                    and b.name not in declared):
+                continue
+            # The C definition declared the function for all code after it: a
+            # static callee, or any function whose address kept C takes (ov02/
+            # tu011 `UmnObjectTaskCreate(tskUmnSimulationInfo, ...)`), is
+            # otherwise undeclared. Keep exactly that declaration (the
+            # definition's own head) where the definition stood, so every kept
+            # function sees the same declarations as in the full candidate.
+            head = tu.text[b.core_start:tu.text.index('{', b.core_start)]
+            prototype = ' '.join(head.split())
+            if declarator_name(lexical(prototype)) not in (b.name, b.key):
+                if not b.static:
+                    continue
+                warnings.append(dict(kind='missing_prototype', function=b.name,
+                                     detail='reverted static function is referenced by kept C '
+                                            'but has no file-scope declaration'))
+                continue
+            at = out.by_name[b.name].start
+            out = out.splice(at, at, prototype + ';\n')
+            prototypes.append(dict(function=b.name, prototype=prototype + ';'))
+    report = dict(kept=sorted(b.name for b in kept_blocks), reverted=reverted, warnings=warnings)
     if header_sources:
         report['declaration_sources'] = header_sources
-    kept_text = ''.join(lexical(out.block_text(out.by_name[n])) for n in keep)
-    for name in reverted:
-        if tu.by_name[name].static and re.search(r'\b' + re.escape(name) + r'\b', kept_text) \
-                and name not in declared:
-            report['warnings'].append(dict(kind='missing_prototype', function=name,
-                                           detail='reverted static function is referenced by kept C '
-                                                  'but has no file-scope declaration'))
+    if prototypes:
+        report['added_prototypes'] = prototypes
     return out, report
 
 

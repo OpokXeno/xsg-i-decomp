@@ -5,10 +5,9 @@
 
 #include "main/jni.h"
 #include "main/near_dir.h"
-
-#define SEQUENCE_MOVE_OFFSET 0x38
-#define SEQUENCE_ROTATE_OFFSET 0xb8
-#define SEQUENCE_MOTION_OFFSET 0x138
+#include "main/act_1.h"
+#include "main/Undulate.h"
+#include "main/string_utf_get_hash.h"
 
 /* The actor's own slot in the 64-entry `actor` array at main 0x0043c1e0,
  * which ACT_create writes there (sb a2,0x80(s0) at 0x00305de0) and ACT_info
@@ -151,10 +150,6 @@
 #define SEQUENCE_ROTATION_HANDLER(entry) \
     (*(void (**)(void))((u8 *)(entry) + 0x28))
 
-/* Where that channel sits inside the entry; see SEQUENCE_SCALE_HANDLER for
- * why the entry's own head stops before it. */
-#define SEQUENCE_SCALE_OFFSET 0x1b8
-
 typedef unsigned char u8;
 
 typedef unsigned short u16;
@@ -163,11 +158,9 @@ typedef unsigned int u32;
 
 typedef unsigned char SceneByte;
 
-typedef struct SceneClass SceneClass;
-
 typedef struct SceneString SceneString;
 
-typedef SceneByte *SceneObject;
+typedef void *SceneObject;
 
 /*
  * The JVM's class-field handle, as `lookupClassField` returns it. Only the
@@ -183,7 +176,7 @@ typedef union ChrScaleArgument {
 } ChrScaleArgument;
 
 typedef struct ChrScaleCall {
-    u8 *object;
+    SceneObject object;
     ChrScaleArgument first;
     ChrScaleArgument second;
     u8 wait;
@@ -209,38 +202,13 @@ typedef struct ChrRotCall ChrRotCall;
  */
 typedef struct ChrMotionCall ChrMotionCall;
 
-typedef struct SequenceRotate {
-    void *target_actor;
-    unsigned char unmodeled_04[0x10 - 0x04];
-    int frames[3];
-    u32 follow_axes;
-    unsigned char unmodeled_20[0x30 - 0x20];
-    float target[3];
-    unsigned char unmodeled_3c[0x40 - 0x3c];
-    float step[3];
-} SequenceRotate;
-
-typedef SequenceRotate SequenceRotation;
-
-typedef struct SequenceMotion {
-    unsigned char unmodeled_00[8];
-    int motion;
-    unsigned char unmodeled_0c[4];
-    short first_frame;
-    short last_frame;
-    u8 flags;
-    unsigned char unmodeled_15[3];
-    int blend;
-    float rate;
-} SequenceMotion;
-
 typedef struct ChrSpline {
     unsigned char unmodeled_0[8];
     u16 last_frame;
 } ChrSpline;
 
 typedef struct ChrSplineCall {
-    u8 *object;
+    SceneObject object;
     struct ChrSpline *spline;
     int frames;
     u8 wait;
@@ -249,7 +217,7 @@ typedef struct ChrSplineCall {
 /* Java_xeno_Chr_setMotionFlags__IZ call block: object +0, mask +4,
  * enabled byte +8 (original reads lw 4(a1), lbu 8(a1)). */
 typedef struct ChrMotionFlagsCall {
-    u8 *object;
+    SceneObject object;
     int mask;
     u8 enabled;
 } ChrMotionFlagsCall;
@@ -257,7 +225,7 @@ typedef struct ChrMotionFlagsCall {
 /* Java_xeno_Chr_shadow_map_id__I reads its id as an unsigned halfword at
  * +4; its native object pointer is at +0. */
 typedef struct ChrShadowMapIdCall {
-    u8 *object;
+    SceneObject object;
     u16 id;
 } ChrShadowMapIdCall;
 
@@ -374,81 +342,9 @@ typedef struct ChrPointLightVector {
  *                        it just wrote here too (swc1 $f1,0x4dc(s2) at
  *                        0x002feb98); no other evidenced reader in this TU.
  */
-typedef struct Actor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    unsigned char unmodeled_70[0x81 - 0x70];
-    u8 signal;                                   /* +0x81 */
-    u8 relation_kind;                            /* +0x82 */
-    unsigned char unmodeled_83[0x86 - 0x83];
-    unsigned short shadow_definition_flags;   /* +0x86 */
-    short frame_counter;                         /* +0x88 */
-    unsigned char unmodeled_8a[0x90 - 0x8a];
-    unsigned char shadow_kind;                  /* +0x90 */
-    unsigned char shadow_size;                  /* +0x91 */
-    unsigned char unmodeled_92[0xc0 - 0x92];
-    unsigned char args[0x4c0 - 0xc0];            /* +0xc0 through +0x4bf */
-    /* Java_xeno_Chr_setPeer stores its Java peer object here (sw at +0x4c0). */
-    u8 *java_object;                             /* +0x4c0 */
-    unsigned char unmodeled_4c4[0x4d0 - 0x4c4];
-    unsigned short status_flags;                /* +0x4d0 */
-    unsigned char unmodeled_4d2[0x4dc - 0x4d2];
-    float translate_y;                          /* +0x4dc */
-    LayoutHeader *data_header;                  /* +0x4e0 */
-    unsigned char unmodeled_4e4[0x600 - 0x4e4];
-    u32 look_clear_600[8]; /* +0x600 */
-    /* The look_point native copies three float argument slots here. */
-    float look_point[3];                     /* +0x620 */
-    float look_eye_speed;                       /* +0x62c */
-    unsigned char unmodeled_630[0x640 - 0x630];
-    u32 look_clear_640[8]; /* +0x640 */
-    float look_eye_angle[2];                     /* +0x660 */
-    unsigned char unmodeled_668[0x66c - 0x668];
-    float look_speed;                           /* +0x66c */
-    float shadow_clip_scale;                    /* +0x670 */
-    short look_mode;                            /* +0x674 */
-    unsigned char unmodeled_676[0x678 - 0x676];
-    int look_eye_control;                       /* +0x678 */
-    void *look_target;                          /* +0x67c */
-    u16 shadow_map_ids[8];                     /* +0x680 */
-    int shadow_map;                             /* +0x690 */
-    unsigned char unmodeled_694[0x6f0 - 0x694];
-    u32 motion_flags;                          /* +0x6f0 */
-    unsigned char unmodeled_6f4[0x754 - 0x6f4];
-    int hair_stop_a;                            /* +0x754 */
-    int hair_stop_b;                            /* +0x758 */
-    unsigned char unmodeled_75c[0x8d0 - 0x75c];
-    u32 resource_data[4];                        /* +0x8d0 */
-    unsigned char unmodeled_8e0[0x900 - 0x8e0];
-    int child_count;                             /* +0x900 */
-    struct Actor *children[15];                  /* +0x904; ends at +0x940 */
-    /* Original setters write three floats per 16-byte row; lane +0xc is
-     * retained as unknown bytes (stores at 0x300548 and 0x300600). */
-    struct ChrPointLightVector point_light_position[3]; /* +0x940 */
-    struct ChrPointLightVector point_light_color[3];    /* +0x970 */
-    int render_flags;                           /* +0x9a0 */
-    int render_command;                         /* +0x9a4 */
-    int pixel_alpha;                            /* +0x9a8 */
-    int pixel_alpha_parts;                      /* +0x9ac */
-    u16 pixel_alpha_part[8];                     /* +0x9b0 */
-    float filter_param[4];                      /* +0x9c0 */
-    unsigned char unmodeled_9d0[0x9e0 - 0x9d0];
-    float sort_offset;                          /* +0x9e0 */
-    unsigned char unmodeled_9e4[0x9f4 - 0x9e4];
-    int talk_message;                           /* +0x9f4 */
-    int touch_message;                          /* +0x9f8 */
-} Actor;
 
 typedef struct ChrScaleVector {
-    SceneObjectClassRef *class_ref;
+    DispatchTable *class_ref;
     float z;
     float y;
     float x;
@@ -459,15 +355,8 @@ typedef struct ChrScaleVector {
 typedef union ChrResultValue {
     u32 word;
     struct ChrScaleVector *vector;
-    struct Actor *actor;
+    Actor *actor;
 } ChrResultValue;
-
-typedef struct {
-    void *spline;
-    short frame;
-    short last_frame;
-    u16 flags;
-} SplineTrack;
 
 /*
  * The scale channel of a sequence entry, at +0x1b8 of the entry.
@@ -518,25 +407,13 @@ typedef struct {
  * float block is untouched in the six images, so each block is the three
  * floats it evidences and no more.
  */
-typedef struct SequenceScale {
-    SplineTrack track;   /* +0x00 */
-    unsigned int : 32;   /* +0x0c */
-    int frames[3];       /* +0x10 */
-    unsigned int : 32;   /* +0x1c */
-    float start[3];      /* +0x20 */
-    unsigned int : 32;   /* +0x2c */
-    float target[3];     /* +0x30 */
-    unsigned int : 32;   /* +0x3c */
-    float step[3];       /* +0x40 */
-} SequenceScale;
-
 /*
  * Call block of Java_xeno_Chr_setVisible__IZ (0x002fee70..0x002feecc): the
  * boolean argument is a single byte at +0x8 (lbu a2,8(s1) at 0x002feeb0),
  * not the 4-byte union ChrScaleCall's `second` models.
  */
 typedef struct ChrVisibleCall {
-    u8 *object;
+    SceneObject object;
     int part;
     unsigned char visible;
 } ChrVisibleCall;
@@ -547,7 +424,7 @@ typedef struct ChrVisibleCall {
  * at 0x002ffec0/0x002ffec8), each in its own 4-byte argument slot.
  */
 typedef struct ChrShadowCall {
-    u8 *object;
+    SceneObject object;
     unsigned char kind;
     unsigned char unmodeled_5[3];
     unsigned char size;
@@ -579,7 +456,7 @@ typedef struct JavaString {
  * +0x4 (lw v1,4(s1) at 0x00300780/0x003007e8).
  */
 typedef struct ChrTalkCall {
-    u8 *object;
+    SceneObject object;
     struct JavaString *message;
 } ChrTalkCall;
 
@@ -589,15 +466,17 @@ typedef struct ChrTalkCall {
  * at +0x4 (lw s1,4(s0) at 0x003012e4/0x00301350), read through the same
  * peer field offset as `object`.
  */
+/* The second argument is a Java object for the weapon and look natives, and
+ * the peer Actor itself for Java_xeno_Chr_setPeer. */
 typedef struct ChrWeaponCall {
-    u8 *object;
-    u8 *other;
+    SceneObject object;
+    union { SceneObject object; Actor *peer; } other;
 } ChrWeaponCall;
 
 /* Call block shape shared by every native below that reads only the object:
  * Java_xeno_Chr_getSignal__ and Java_xeno_Chr_getState__. */
 typedef struct ChrObjectCall {
-    u8 *object;
+    SceneObject object;
 } ChrObjectCall;
 
 /*
@@ -605,7 +484,7 @@ typedef struct ChrObjectCall {
  * byte at +0x4 (lbu v1,4(s1) at 0x002fe8c8), in its own 4-byte slot.
  */
 typedef struct ChrSignalCall {
-    u8 *object;
+    SceneObject object;
     u8 value;
 } ChrSignalCall;
 
@@ -616,7 +495,7 @@ typedef struct ChrSignalCall {
  * Java_xeno_Chr_dispRadar__Z.
  */
 typedef struct ChrBoolCall {
-    u8 *object;
+    SceneObject object;
     u8 flag;
 } ChrBoolCall;
 
@@ -627,7 +506,7 @@ typedef struct ChrBoolCall {
  * Java_xeno_Chr_setSymmetryY__I and Java_xeno_Chr_ignoreShape__I).
  */
 typedef struct ChrIntCall {
-    u8 *object;
+    SceneObject object;
     int value;
 } ChrIntCall;
 
@@ -637,7 +516,7 @@ typedef struct ChrIntCall {
  * 0x002ff2f0/0x002ff30c/0x002ff314).
  */
 typedef struct ChrVector3Call {
-    u8 *object;
+    SceneObject object;
     float x;
     float y;
     float z;
@@ -645,7 +524,7 @@ typedef struct ChrVector3Call {
 
 /* Point-light setters read an index word followed by three float components. */
 typedef struct ChrPointLightCall {
-    u8 *object;
+    SceneObject object;
     union { int integer; float floating; } index;
     union { int integer; float floating; } x;
     union { int integer; float floating; } y;
@@ -653,8 +532,8 @@ typedef struct ChrPointLightCall {
 } ChrPointLightCall;
 
 typedef struct ChrParentCall {
-    u8 *object;
-    u8 *other;
+    SceneObject object;
+    SceneObject other;
     int joint;
     int type;
     int id;
@@ -667,7 +546,7 @@ typedef struct ChrParentCall {
  * 0x002ff014..0x002ff028).
  */
 typedef struct ChrArgsWordCall {
-    u8 *object;
+    SceneObject object;
     int offset;
     int value;
     int size;
@@ -681,7 +560,7 @@ typedef struct ChrArgsWordCall {
  * never reads.
  */
 typedef struct ChrArgsObjectCall {
-    u8 *object;
+    SceneObject object;
     int offset;
     struct ChrScaleCall *source;
     unsigned char unmodeled_0c[4];
@@ -694,7 +573,7 @@ typedef struct ChrArgsObjectCall {
  * word to read.
  */
 typedef struct ChrArgsReadCall {
-    u8 *object;
+    SceneObject object;
     int offset;
     int size;
 } ChrArgsReadCall;
@@ -717,7 +596,7 @@ typedef struct ChrFilterParamArray {
 /* Call block of Java_xeno_Chr_setFilterParam__aF: object +0x0, the array
  * argument at +0x4 (lw a0,4(s1) at 0x003003a0). */
 typedef struct ChrFilterParamCall {
-    u8 *object;
+    SceneObject object;
     struct ChrFilterParamArray *array;
 } ChrFilterParamCall;
 
@@ -732,15 +611,6 @@ typedef unsigned int GameLoopStateWords[];
 
 extern GameLoopStateWords GameLoopState;
 
-/* Restated verbatim from include/main/jni.h, the owner header of the class
- * slots (see JavaField above for why chr.h does not include shared.h and
- * the headers built on it).
- * Java_xeno_Chr_look_unit__Ljava_lang_Object_ looks its target's own peer
- * field up on xeno.Unit's class, not xeno.Chr's (lw a0,-13252(gp) at
- * 0x00300b5c). */
-extern SceneClass *classJava_xeno_Chr;
-
-extern SceneClass *classJava_xeno_Unit;
 extern const char chr_peer_string[];
 extern const char chr_algorithm_string[];
 extern const char chrTranslateXKey[];
@@ -757,8 +627,6 @@ extern const char chrRotateXKey[];
 
 extern const char chrRotateYKey[];
 extern const char chrRotateZKey[];
-extern ActSequenceEntry actSequence[64];
-
 extern void SEQ_moveSPL(void);
 extern void SEQ_rotate(void);
 extern void SEQ_rotateSPL(void);
@@ -779,15 +647,6 @@ extern void ACT_setHand(Actor *actor, int hand);
 extern void ACT_setArms(Actor *actor, Actor *other, int acc_id, int flags);
 extern void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
 
-/* canon: config/header-canon.json (src/math/main/review09-002f6c50/private.h),
- * verbatim again here as src/main/layout.h and src/main/call_java_method.h
- * already do. Java_xeno_Chr_setID__I passes a "type selector" 0 and this
- * unit's id (a0=0, a1=id at 0x300070/0x300074), the same two-argument shape
- * both other accepted call sites use. */
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
-
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern void SEQ_scale(void);
 

@@ -1,8 +1,33 @@
 #include "common.h"
 #include "shared.h"
+#include "main/runtime.h"
 #include "main/find_native_method.h"
 #include "main/init_vm.h"
 #include "main/party.h"
+#include "main/Undulate.h"
+#include "main/act_2.h"
+#include "act_1.h"
+#include "main/data.h"
+#include "main/disp_on.h"
+#include "main/exm_2.h"
+#include "main/face_point.h"
+#include "main/fx_screen_mask.h"
+#include "main/game.h"
+#include "main/game_movie.h"
+#include "main/jthread.h"
+#include "main/look_at_player.h"
+#include "main/map_1.h"
+#include "main/menu_shop.h"
+#include "main/near_dir.h"
+#include "main/nml_model_set.h"
+#include "main/res_get_path.h"
+#include "main/tya.h"
+#include "main/vibration.h"
+#include "main/xgl_flags.h"
+#include "main/xgl_light.h"
+#include "main/xgl_pad.h"
+#include "main/xgl_sound.h"
+#include "main/xgl_thread.h"
 
 #define RUNTIME_UMN_BOX_OFFSET 0x1025C
 
@@ -31,41 +56,6 @@ typedef struct {
 } IntTripleCall;
 
 /*
- * An 8-byte-aligned view of Vector4, so a whole-vector assignment compiles
- * to the aligned ld/sd pair the original uses instead of an unaligned
- * ldl/ldr sequence (config/compiler-patterns.json CP-0237, same technique
- * as src/main/pp_init.c's PpVector4).
- */
-typedef union RuntimeVector4 {
-    Vector4 vector;
-    unsigned long long words[2];
-} RuntimeVector4;
-
-/*
- * A partial, TU-local view of the engine's actor record (the same object
- * fully recovered as `Actor` in src/main/chr.h, src/main/near_dir.h and
- * src/main/set_motion.h for main's chr/near_dir/set_motion TUs) for the two
- * members scriptReset_evsExit touches: the position vector at +0x10 and the
- * status flags word at +0x4D0, both documented for the same object in
- * chr.h. Named separately from those TUs' `Actor` tag because it collides
- * with the canonical spelling elsewhere (config/header-canon.json).
- */
-typedef struct RuntimeActor {
-    unsigned char unmodeled_00[0x10];
-    RuntimeVector4 position;              /* +0x10, ld/sd at
-                                              0x002f76bc..0x002f76d8
-                                              (scriptReset_evsExit) */
-    unsigned char unmodeled_20[0x86 - 0x20];
-    short state_flags;
-    unsigned char unmodeled_88[0x4D0 - 0x88];
-    unsigned short status_flags;          /* +0x4D0, lhu/sh at
-                                              0x002f76c0..0x002f76e0
-                                              (scriptReset_evsExit) */
-    unsigned char unmodeled_4d2[0x8D0 - 0x4D2];
-    int resource_guard;
-} RuntimeActor;
-
-/*
  * GameLoopState offsets this TU touches. GameLoopState is a TU-local
  * divergent view (config/header-canon.json "GameLoopState"): every unit
  * models only the offsets its own bytes evidence, and no shared header
@@ -73,7 +63,7 @@ typedef struct RuntimeActor {
  */
 typedef struct {
     unsigned char unmodeled_00[4];
-    RuntimeActor *player;                  /* +0x04, lw at 0x002f76b0
+    Actor *player;                         /* +0x04, lw at 0x002f76b0
                                               (scriptReset_evsExit) */
     XglTaskScheduler *task_scheduler;     /* +0x08, lw/beq at 0x002f7350
                                               (setLocation) */
@@ -114,7 +104,7 @@ typedef struct {
     unsigned char unmodeled_29f48[0x2A018 - 0x29F48];
     int active_event_id;                  /* +0x2A018, lw at 0x002f8730 */
     unsigned char unmodeled_2a01c[0x2A020 - 0x2A01C];
-    RuntimeVector4 saved_position;        /* +0x2A020, ld/sd at
+    AlignedVector4 saved_position;        /* +0x2A020, ld/sd at
                                               0x002f76bc..0x002f76d8
                                               (scriptReset_evsExit) */
 } GameLoopStateRuntimeView;
@@ -157,30 +147,6 @@ typedef struct {
     float run_threshold;
     float vector_rate;
 } PlayerMoveParamCall;
-
-/*
- * A java.lang.String argument, as CaptureStart/setEventTimer below read it:
- * offset +0x00 (the class word every object reference begins with, per
- * shared.h) is untouched by this TU, and +0x04 holds the interned string
- * record the String was loaded from (lw v1,4(v0) at 0x002f7514/0x002f78ac).
- */
-typedef struct {
-    void *unmodeled_00;
-    struct InternedString *value;
-} StringRef;
-
-/*
- * The interned constant-string record `StringRef.value` points to, modeled
- * here only for the `bytes` pointer both natives below read at +0x08 (lw
- * v0,8(v0) at 0x002f7518/0x002f78b0). Same object as `ConstString` of
- * src/main/string_utf_get_hash.h (main/tu224): next-in-bucket link and
- * packed hash/length occupy the same leading 8 bytes there.
- */
-struct InternedString {
-    unsigned char unmodeled_00[4];
-    int length;
-    char *bytes;
-};
 
 /* The call block of a native taking (java.lang.String, int). */
 typedef struct {
@@ -240,19 +206,13 @@ typedef struct {
 } RuntimeWindCall;
 
 /* Native argument and result words share the VM operand-slot storage. */
-typedef struct RuntimeIdLightSet {
-    unsigned char unmodeled_00[0xF0];
-} RuntimeIdLightSet;
-
 extern GameLoopStateRuntimeView GameLoopState;
-extern void (*jthreadResetFunc)(void);
-
 /* A defocus parameter table of seventeen-entry rows, one word ahead of the
    symbol (index 0 is untouched by this TU). */
 extern int GameDefocusParam[];
 
 extern void *classByte;
-extern RuntimeIdLightSet GameIdLight[];
+extern StudioLight GameIdLight[];
 
 /* Original storage of this TU without a C reader; typed from its original bytes. */
 extern void *tiSymbol[12];
@@ -309,7 +269,6 @@ extern void Java_xeno_util_Runtime_enable__I();
 extern void Java_xeno_util_Runtime_getGameState__();
 extern void Java_xeno_util_Runtime_CaptureEnd__();
 extern void Java_xeno_util_Runtime_CaptureStart__Ljava_lang_String_I();
-extern void Java_xeno_util_Runtime_jumpCF__II();
 extern void Java_xeno_util_Runtime_jumpEvent__I();
 extern void Java_xeno_util_Runtime_setDefocusQuick__IIII();
 extern void Java_xeno_util_Runtime_setDefocus__IIaI();
@@ -669,99 +628,37 @@ extern void Java_xeno_Stage_clrBackBuffer__();
 extern void SCRIPT_sceneChangeTimeSet(int value);
 extern void CharactorAllRecovery(void);
 extern void AgwsAllRecovery(void);
-extern void tyaCaptureEnd(void);
 extern int xglFlagsGet(int group, int bit);
-extern int xglFlagsSet(int bit_offset, int bit_count, int value);
 extern void LoadMapOnly(int map_id);
-extern void MapChange2(int map_id);
-extern int MapGetNo(void);
-
 extern void GameCfPlayerMoveParamSet(float walk_threshold, float run_threshold,
                                       float vector_rate);
 
-extern void tyaCaptureStart(const char *name, int count);
-extern void Java_xeno_util_Runtime_jump_sub(int destination, int argument);
 extern void SCRIPT_talkIgnoreSet(void);
 extern void GameDefocusQuickSet(int first, int second, int third, int fourth);
 extern void GameDefocusSet(int mode, int strength, int *table);
-extern void setEventTimerTaskEntry(const char *method_reference, int countdown);
 extern void MapChangeResource(int map_id, int resource_id);
-extern int dataBoxInc(int item, int count);
 extern int CreateEvtItemGetTask(int item, int count);
-extern int dataBoxDec(int item, int count);
-extern int dataBoxChk(int item, int count);
-extern int dataMoneyBoxInc(int amount);
-extern int dataMoneyBoxDec(int amount);
-extern int dataMoneyBoxChk(void);
 extern void sefProgressEffect(int frame_count);
 extern void GameStateRestoreCameraLight(void);
-extern void GameStateSaveCameraLight(void);
-extern void MenuShopMain(int shop);
-
-/* Converts a Java character id to the one-based battle-party index used by
-   the Party* entry points below. */
-extern void PartyFriendOn(int battle_index);
-
-extern void PartyFriendOff(int battle_index);
-extern int PartyFriendCheck(int battle_index);
-extern void PartyLockPartyOn(int battle_index);
-extern void PartyLockPartyOff(int battle_index);
-extern int PartyLockPartyCheck(int battle_index);
-extern void PartyOutFriendOn(int battle_index);
-extern void PartyOutFriendOff(int battle_index);
-extern int PartyOutFriendCheck(int battle_index);
-extern void PartyTakeAgwsOn(int battle_index);
-extern void PartyTakeAgwsOff(int battle_index);
-extern int PartyTakeAgwsCheck(int battle_index);
-extern void PartyBattleChange(int battle_index);
 extern void nmlModelSetMpeg2CrossFadeTime(int time);
 extern void UmnMailMain(int mail);
-extern void xglCullingIgnore(void);
 extern void xglCullingIgnoreOff(void);
 static void scriptReset_evsExit(void);
 extern void dataEtherTecSet(int value);
 
 extern unsigned char xglFontLoad(int font, int option);
 
-extern void GameStateSave(void);
-extern void GameStateRestore(void);
 extern void func_00A0B728(int map);
 extern void func_00A0B708(int monster_set);
 extern void func_A22668(void);
-extern void ACT_resourceInit(void);
-extern void ACT_initScene(void);
-extern void ACT_initMTNResource(void);
-extern void nmlModelSetFadeIn(int frames, int option);
-extern void FX_ScreenMask(int mask, unsigned int color, int frames, int mode);
-
 extern char *GetItemName(int item, int language);
 
 extern void *newArray(void *element_class, int length);
 extern unsigned int strlen(const char *string);
 
-extern void xglSoundStreamStop(int stream);
-
-extern void GameMovieStop(void);
-extern void xglSoundSequenceFadeOut2(int sequence, int duration);
-extern void InitCfSystem(void);
-extern void UnduInit(unsigned char *data);
 extern void SCRIPT_reset(int mode);
-extern void GameResourceLoad(int event);
-extern void ACT_setModelWrapper(void *actor, int model);
-extern void ACT_setHumanHand(void *actor, int hand);
-
-extern void xglSleep(void);
-
-extern void GameCfPlayerLoadResource(int load);
 extern void EXM_StopWind(void);
-extern void EXM_SetShakePower(float power);
-extern void EXM_SetShakeTime(float time);
-extern void EXM_SetDirectionalWind(const Vector4 *wind);
-extern void EXM_SetPointWind(const Vector4 *wind);
 extern int SCRIPT_fadeGet(void);
-extern int GameMpeg2Play(const char *path, int mode);
-extern void Vibration_Stop(void);
-extern void xglPadRead(void);
 extern void Game_Data_Push(void);
 extern void Game_Data_Pop(void);
 extern void ACT_init(void);
@@ -775,16 +672,8 @@ extern void xglLightIntensityAmbient(void *light, const void *intensity);
 extern void xglLightIntensityParallel(void *light, unsigned int index,
                                       const void *intensity);
 
-extern void xglLightAngle(void *light, unsigned int index, const Vector4 *angle);
-
 extern void xglLightDirection(void *light, unsigned int index,
                               const Vector4 *direction);
-
-void JTHREAD_defaultUnit(struct JThread *thread);
-void JTHREAD_defaultChr(struct JThread *thread);
-void JTHREAD_default(struct JThread *thread);
-void JTHREAD_defaultScene(struct JThread *thread);
-void JTHREAD_defaultStage(struct JThread *thread);
 
 const char javaSystemArraycopyName[80] = "Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II";
 
@@ -2178,17 +2067,13 @@ static void scriptReset_evsExit(void)
     GameLoopState.player->status_flags |= 0x1000;
 }
 
-void Java_xeno_util_Runtime_jumpCF__II(RuntimeThreadState *thread, IntPairCall *arguments,
+void Java_xeno_util_Runtime_jumpCF__II(RuntimeThreadState *thread, VMSlot *arguments,
                                        unsigned int *result)
 {
-    union ArgWord {
-        int value;
-        void (*func)(void);
-    } *words = (void *)arguments;
     void (**reset_slot)(void) = &jthreadResetFunc;
 
-    args_jump.destination = arguments->first;
-    args_jump.argument = words[1].value;
+    args_jump.destination = arguments[0].i;
+    args_jump.argument = arguments[1].i;
     *reset_slot = scriptReset_jump;
     SCRIPT_talkIgnoreSet();
     thread->resume_frames = thread->frame_depth;
@@ -2434,13 +2319,13 @@ void Java_xeno_util_Runtime_setPartyData__II(JThread *thread,
         break;
     }
     if (arguments->first == 0x0100002C) {
-        RuntimeActor *player = GameLoopState.player;
-        int resource_guard = player->resource_guard;
-        if (player->state_flags != arguments->second) {
-            player->resource_guard = 0;
+        Actor *player = GameLoopState.player;
+        void *model_resource = player->modelResource;
+        if (player->inUseId != arguments->second) {
+            player->modelResource = 0;
             xglSleep();
             xglSleep();
-            player->resource_guard = resource_guard;
+            player->modelResource = model_resource;
             GameCfPlayerLoadResource(1);
         }
     }
@@ -2773,14 +2658,10 @@ void Java_xeno_util_Runtime_setMenuLock__(JThread *thread, void *arguments,
 void Java_xeno_util_Runtime_evsSetRetPoint__(RuntimeThreadState *thread, void *arguments,
                                              unsigned int *result)
 {
-    RuntimeActor *player = GameLoopState.player;
-    unsigned long long first_pair = player->position.words[0];
-    unsigned long long last_pair;
+    Actor *player = GameLoopState.player;
 
     GameLoopState.active_event_id = GameLoopState.current_event_id;
-    GameLoopState.saved_position.words[0] = first_pair;
-    last_pair = player->position.words[1];
-    GameLoopState.saved_position.words[1] = last_pair;
+    GameLoopState.saved_position = player->position;
 }
 
 void Java_xeno_util_Runtime_evsExit__(RuntimeThreadState *thread, void *arguments,

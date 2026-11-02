@@ -6,8 +6,8 @@
 #define SRC_MAIN_ALIGN_H
 
 #include "shared.h"
+#include "main/xgl_2.h"
 
-extern float xglAtan2(float x, float y);
 void alignXAxisEuler(const Vector4 *direction, Vector4 *euler);
 
 #endif

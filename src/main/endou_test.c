@@ -3,33 +3,31 @@
 #include "main/open_close_main.h"
 #include "main/e_number_main.h"
 #include "shared.h"
+#include "main/e_battle_win_open.h"
 #include "endou_test.h"
 #include "main/control_entry.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_font.h"
+#include "main/end_print.h"
+#include "main/e_message.h"
+#include "main/act_2.h"
+#include "main/data.h"
+#include "main/file.h"
+#include "main/game_snap_shot.h"
+#include "main/menu_model.h"
+#include "main/menu_shop.h"
+#include "main/nml_model_set.h"
+#include "main/party.h"
+#include "main/res_get_path.h"
+#include "main/window_tex_load.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_thread.h"
 
-/* Clear the CPU button state before the render thread samples it again. */
-#define ENDOU_PAD_BUTTONS ((EndouPadDataPrefix *)(void *)&PadData)
-
-/* Volatile input view: the separate xglRenderEntry thread calls xglPadRead,
- * which writes the decoded controller words. xglSleep yields between reads. */
-#define ENDOU_PAD_INPUT ((volatile EndouPadDataPrefix *)(void *)&PadData)
-
-#define ENDOU_CLEAR_ENV ((EndouClearEnvironment *)(void *)&ClearEnv)
+#define ENDOU_CLEAR_ENV (&ClearEnv)
 #define NULL ((void *)0)
-#define ENDOU_MODEL_PAD ((EndouModelPadState *)(void *)&PadData)
-#define ENDOU_MODEL_MESSAGE ((EndouModelMessagePrefix *)(void *)&msg_11)
+#define ENDOU_MODEL_PAD ((EndouModelPadState *)&PadData)
 
-typedef struct PartyAttackSlot {
-    unsigned short character;
-    signed char position;
-    unsigned char unmodeled_03;
-} PartyAttackSlot;
-
-typedef struct PartyDataView {
-    unsigned char unmodeled_00[0x30];
-    PartyAttackSlot attack_slots[3];
-} PartyDataView;
 
 typedef struct EndouBattleWindowParams {
     int x;
@@ -77,14 +75,6 @@ typedef struct EndouBattleRewardParams {
     const char *text;
     const char *title;
 } EndouBattleRewardParams;
-
-typedef struct BattleWinCommand {
-    const char *text;
-    const char *description;
-    unsigned char flags;
-    signed char icon;
-    unsigned char unmodeled_0a[2];
-} BattleWinCommand;
 
 /* ld at +0x28 and lhu/sh at +0x28/+0x2a access the same button storage. */
 typedef struct PadDataButtonView {
@@ -179,33 +169,6 @@ typedef struct WinTexEnvironment {
     GifAdWrite transfer_direction;
 } WinTexEnvironment;
 
-/*
- * The context e_test's argument points to: only the VIF packet pointer at
- * +0x00 is evidenced here (main VA 0x002728f8, lw $4,0x0($16) before each
- * sceVif1Pk* call); the rest stays an unmodeled span (docs/naming.md).
- */
-typedef struct ETestContext {
-    XglPacket *packet;
-} ETestContext;
-
-/*
- * The original PadData object is 0xD0 bytes at 0x00490D90. EndouTest uses the
- * same eight bytes at +0x28 as two halfwords for button state and as one
- * 64-bit exit-chord word; this local prefix models only that evidenced view.
- * SeisanTest keeps its separate full-width declaration above unchanged.
- */
-typedef struct EndouPadDataPrefix {
-    u8 unmodeled_00[0x28];
-    union {
-        u64 button_state;
-        struct {
-            u16 half_28;
-            u16 half_2a;
-            u8 unmodeled_2c[4];
-        } halves;
-    } buttons;
-} EndouPadDataPrefix;
-
 typedef struct EndouClearEnvironment {
     u8 unmodeled_00[0x20];
     u32 color_r;
@@ -218,22 +181,11 @@ typedef struct ShopDataRecord {
     u16 values[0xb8];
 } ShopDataRecord;
 
+/* eMessageTest's three windows (and msg_11) are 0x50 bytes apart/long, and
+ * EMessageParam is 0x44 bytes: the message plus the tail the original reserves. */
 typedef struct EMessageTestWindow {
-    u8 unmodeled_00;
-    u8 mode;
-    u8 unmodeled_02[2];
-    u16 message_x;
-    u16 message_y;
-    u32 message_color;
-    u8 unmodeled_0c[2];
-    s16 selection_value;
-    u8 unmodeled_10[2];
-    u8 debug_value;
-    u8 debug_cursor;
-    u8 unmodeled_14[4];
-    const char *message_text;
-    u8 page_state;
-    u8 unmodeled_1d[0x33];
+    EMessageParam message;
+    u8 unmodeled_44[0xc];
 } EMessageTestWindow;
 
 typedef struct UmnEventTextRecord {
@@ -241,17 +193,9 @@ typedef struct UmnEventTextRecord {
     const char *message_text;
 } UmnEventTextRecord;
 
-typedef struct TextTestMessage {
-    u8 unmodeled_00[4];
-    u16 message_x;
-    u16 message_y;
-    int message_parameter;
-    u8 unmodeled_0c[0x10];
-    u8 page_state;
-    u8 unmodeled_1d[0x33];
-} TextTestMessage;
-
-typedef struct UmnMailDisplayParams {
+/* Partial view of TyaUmlDispParam (src/main/tya_uml.c): 0x40 bytes here and used
+ * as a windows[2] array, so it cannot take the owner size. */
+typedef struct TyaUmlDispParamMailView {
     int mode;
     u8 unmodeled_04[4];
     u16 texture_x;
@@ -264,7 +208,7 @@ typedef struct UmnMailDisplayParams {
     u16 view_width;
     u16 view_height;
     u8 unmodeled_20[0x20];
-} UmnMailDisplayParams;
+} TyaUmlDispParamMailView;
 
 typedef struct JpegTestDecodeRequest {
     void *source;
@@ -290,7 +234,7 @@ typedef struct JpegTestDisplay {
 
 typedef struct FileLoadState {
     int state;
-    void *buffer;
+    unsigned char *buffer;
     unsigned char unmodeled_08[0x40];
 } FileLoadState;
 
@@ -300,28 +244,9 @@ typedef s32 M2C_UNK;
 
 typedef struct StudioLight StudioLight;
 
-typedef Vector4 EndouVector __attribute__((aligned(16)));
-
-typedef struct EndouModelActor {
-    unsigned char unmodeled_00[0x10];
-    EndouVector position;
-    unsigned char unmodeled_20[0x30];
-    EndouVector rotation;
-    EndouVector scale;
-    unsigned char unmodeled_70[0x16];
-    short resource_kind;
-    unsigned char unmodeled_88[0x8d0 - 0x88];
-    void *model_resource;
-    void *matrix_resource;
-    void *move;
-    void *anim_pack_tables[8];
-    unsigned char unmodeled_8fc[0x9d8 - 0x8fc];
-    unsigned long long draw_alpha;
-} EndouModelActor;
-
 typedef struct EndouTestLighting {
-    unsigned long long ambient[2];
-    unsigned long long parallel_intensity[3][2];
+    DoublewordAlignedVector4 ambient;
+    DoublewordAlignedVector4 parallel_intensity[3];
     Vector4 direction[3];
 } EndouTestLighting;
 
@@ -339,8 +264,8 @@ typedef struct EndouModelLinePoint {
 } EndouModelLinePoint;
 
 typedef struct EndouOrientationStorage {
-    EndouVector rotation;
-    EndouVector scale;
+    AlignedVector4 rotation;
+    AlignedVector4 scale;
 } EndouOrientationStorage;
 
 typedef struct EndouModelBackQuad {
@@ -366,15 +291,6 @@ typedef struct EndouELinePoint {
     signed char blue;
     signed char alpha;
 } EndouELinePoint;
-
-typedef struct EndouELineSetData {
-    u8 state;
-    u8 unmodeled_001[2];
-    u8 duration;
-    u8 progress[5];
-    u8 unmodeled_009[3];
-    EndouELinePoint points[5];
-} EndouELineSetData;
 
 typedef struct EndouELineEntry {
     u8 state;
@@ -429,22 +345,8 @@ typedef struct EndouQuadDescriptor {
     unsigned int format;
 } EndouQuadDescriptor;
 
-typedef struct EndouRibbonRecord {
-    short x;
-    short y;
-    int work;
-    short width;
-    short height;
-    signed char mode;
-    unsigned char progress;
-    unsigned char visible;
-    unsigned char style;
-    ERibbonPoint points[6];
-    unsigned char unmodeled_058[0x18];
-} EndouRibbonRecord;
-
 typedef union EndouTagFontViews {
-    ETagFont control;
+    ETagFontMainData control;
     ETagFontMainData draw;
 } EndouTagFontViews;
 
@@ -456,16 +358,6 @@ typedef struct EndouModelPadState {
     unsigned char unmodeled_30[8];
     signed char stick_axis[4];
 } EndouModelPadState;
-
-typedef struct EndouModelMessagePrefix {
-    unsigned char flags;
-    unsigned char mode;
-    unsigned char visible;
-    unsigned char wrap_width_half;
-    short x;
-    short y;
-    int draw_parameter;
-} EndouModelMessagePrefix;
 
 enum FileLoadDrawState {
     FILE_DRAW_UNINITIALIZED = -1,
@@ -523,6 +415,7 @@ extern const char condorPasaName[];
 extern const char battleWindowTitleText[];
 extern const char padRepeatFormat[];
 extern PadDataButtonView PadData;
+
 extern BgTestRenderState sRender;
 extern EndouClearEnvironment ClearEnv;
 extern const char settlementScreenTestLabel[];
@@ -579,7 +472,7 @@ extern void (*xglCdSetCallback(void (*callback)(int, int)))(int, int);
 extern const EndouTestLighting modelTestLighting;
 extern const char modelTestFpkName[152];
 extern const char modelTestMotionName[];
-extern const unsigned long long modelTestQuadWordTable[8];
+extern const DoublewordAlignedVector4 modelTestQuadWordTable[4];
 extern const char modelTestLexExtension[8];
 extern const char modelTestXtxExtension[8];
 extern const char modelTestJntExtension[];
@@ -663,7 +556,6 @@ extern const char satsukiShoText[8];
 extern const char okaShoText[8];
 extern const char kikukaShoText[8];
 
-extern void xglSleep(void);
 extern void xglCdLoadOverlay(int overlayId);
 extern void SeisanInit(void);
 extern int SeisanMain(void);
@@ -672,23 +564,16 @@ extern void xglRenderClearFrame(void);
 extern void MenuModelUnitOpen(void *unit, int drawType);
 extern void MenuModelControl(void *unit);
 extern void ACT_init(void);
-extern void MenuLoadInit(void);
-extern void *MenuModelInit(void *work_start);
-extern void MenuModelMemoryInit(void *base, int size);
-extern void MenuModelMemorySet(int count);
-extern void MenuModelCreate(int *model, int character_id);
+extern void MenuModelCreate(void **model, int character_id);
 
-extern void MenuModelExtFuncSet(int model,
+extern void MenuModelExtFuncSet(void *model,
                                 void (*callback)(EModelTestState *),
                                 int argument);
 
-extern void MenuModelMain(void);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-extern void xglFontReloadTexture(ETestContext *context, int mode);
-extern void endPrintInit(void);
 void SeisanTest(void);
 void eMessageTest(void);
 void eNumberTest(void);
@@ -699,57 +584,24 @@ void BattleWindowTest(void);
 void ModelTest(void);
 void TextTest(void);
 void ShopTest(void);
-extern int MenuFileMain(int mode);
-extern void PartyFriendOn(int party_id);
-extern void PartyTakeAgwsOn(int characterId);
 extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageTextChange(void *message, const char *text);
-extern int eMessageNextPage(void *message, int mode);
-extern void eMessageDraw(void *message);
-extern void eMessageMain(void *message);
-extern void endPrintExtFunc(int mode, int amount, void *data);
 extern void xglFontDebugHex(int x, int y, int value, int digits);
 
-extern void xglFontPrintExtFunc(unsigned int mask,
-                                void (*callback)(ETestContext *),
-                                void *context);
 
 extern u8 *UmnEventTextInit(u8 *work_end);
 extern int UmnEventTextMake(int mode);
 extern UmnEventTextRecord *UmnEventTextNextGet(int index);
-extern void eMessageModeChange(void *message, u8 mode);
 extern void tyaUmlDispInit(void);
-extern void tyaUmlDispParamReset(UmnMailDisplayParams *params, int mode);
-extern void tyaUmlDispMain(UmnMailDisplayParams *params);
-extern int GameSnapShotSaveThumbnail(int quality, void *jpeg_buffer);
-extern char *MenuCharNameGet(int characterId);
-extern int PartyTakeAgwsCheck(int characterId);
-extern void PartyTakeAgwsOff(int characterId);
-extern int PartyLockPartyCheck(int characterId);
-extern void PartyLockPartyOn(int characterId);
-extern void PartyLockPartyOff(int characterId);
+extern void tyaUmlDispParamReset(TyaUmlDispParamMailView *params, int mode);
+extern void tyaUmlDispMain(TyaUmlDispParamMailView *params);
+extern const char *MenuCharNameGet(int characterId);
 extern void func_A22628(void);
-extern int dataMoneyBoxInc(int amount);
-extern void MenuShopMain(int menu_selection);
-M2C_UNK ACT_initMotion();
-void ACT_modelDraw(EndouModelActor *actor);
-
-EndouModelActor *ACT_setArms(EndouModelActor *actor, EndouModelActor *parent,
-                             unsigned int accessory_id, int flags);
-
-void ACT_setModelWrapper(EndouModelActor *actor, int unused);
-void ACT_setMotion(EndouModelActor *actor, int motion_id);
-void ACT_updateMotion(EndouModelActor *actor);
 void GameResourceInit(unsigned int address, int size);
-void RES_GetMdlFileName(char *filename, int resource_kind);
-void nmlModelFlush(void);
 char *strcpy(char *destination, const char *source);
 
-void xglRotTransPersN(void *destination, const Matrix4 matrix,
+void xglRotTransPersN(void *destination, Matrix4 *matrix,
                       const void *points, int count, int cameraId);
 
-void xglStudioChange(int studio_index);
 StudioCamera *xglStudioGetActiveCamera(void);
 
 void xglLightDirection(void *light, unsigned int index,
@@ -760,8 +612,7 @@ void xglLightIntensityAmbient(void *light, const void *intensity);
 void xglLightIntensityParallel(void *light, unsigned int index,
                                const void *intensity);
 
-void xglStudioGetLight(StudioLight **light_out);
-void eLineSet(EndouELineSetData *line, int unused);
+void eLineSet(EndouELineEntry *line, int unused);
 void eLineMain(EndouELineEntry *line);
 void endPrintDirectLine(EndouPrintLinePoint *line);
 void endSpriteSet(void *sprite, int mode);
@@ -776,14 +627,13 @@ extern void eBattleWinOpen3(EndouBattleAnalysisParams *params);
 extern int eBattleWinMain3(void);
 extern void eBattleWinOpen4(EndouBattleMessageParams *params);
 extern int eBattleWinMain4(void);
-extern XglPacket *xglPacketGetCurrent(void);
 extern void xglRenderClearDepth(void);
 extern void FlushCache(int mode);
 
 /* EUC-JP bytes for the model-test diagnostic with its leading control byte. */
 /* JP: モデルテスト
  * EN: Model test */
-const unsigned char eModelTestLabel[16] =
+const char eModelTestLabel[16] =
     "\x0B\xA5\xE2\xA5\xC7\xA5\xEB\xA5\xC6\xA5\xB9\xA5\xC8";
 
 static const char not_found_format[16] = "%s/NotFound";
@@ -819,7 +669,7 @@ static BgTestEnvironment TestEnv_47 = {
     { 0x8FF8, 0x8DF8, 0, 0 },
 };
 
-void *test_data = 0;
+u8 *test_data = 0;
 
 static unsigned int TestEnv_66[32] = {
     0x00008001, 0x208B4000, 0x000000EE, 0x00000000,
@@ -883,9 +733,9 @@ static EndouPrintPoint d_43;
 
 static EndouPrintPoint line_34[6];
 
-static unsigned char moji2_27[27];
+static char moji2_27[27];
 
-static unsigned char moji_26[27];
+static char moji_26[27];
 
 static TexturTestUploadEnvironment eNumberTexEnv_48;
 
@@ -905,9 +755,9 @@ static const char * msg_19[] = { slowMessageText, temptationMessageText };
 
 static char tag_20[17] = "BattleWindowTest";
 
-static unsigned char moji_26[27] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+static char moji_26[27] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-static unsigned char moji2_27[27] = "abcdefghijklmnopqrstuvwxyz";
+static char moji2_27[27] = "abcdefghijklmnopqrstuvwxyz";
 
 static EndouPrintPoint line_34[6] = { { .x = 64, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 128, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 256, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 128 } }, { .x = 384, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 448, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
 
@@ -1292,7 +1142,7 @@ static char fname_67[64];
 
 static float size_68;
 
-static unsigned char msg_11[80];
+static EMessageTestWindow msg_11;
 
 static EndouModelLinePoint line00_3[7];
 
@@ -1340,7 +1190,7 @@ static ENumberMainData num_31[1];
 
 static ENumberMainData num_32[1];
 
-static EndouRibbonRecord rbn_21[4];
+static ERibbonMainData rbn_21[4];
 
 static ESprite spr_22[4];
 
@@ -1358,21 +1208,21 @@ static inline void endouShopHeading(int y, const char *format, int shop_number)
 static inline void endModelCameraPosition(StudioCamera *camera,
                                          float x, float y, float z)
 {
-    camera->position.x = x;
-    camera->position.y = y;
-    camera->position.z = z;
+    camera->position.vector.x = x;
+    camera->position.vector.y = y;
+    camera->position.vector.z = z;
 }
 
 static __inline__ void EndouApplyModelLighting(StudioLight **light_slot,
                                               EndouTestLighting profile)
 {
     xglStudioGetLight(light_slot);
-    xglLightIntensityAmbient(*light_slot, profile.ambient);
-    xglLightIntensityParallel(*light_slot, 0, profile.parallel_intensity[0]);
+    xglLightIntensityAmbient(*light_slot, &profile.ambient);
+    xglLightIntensityParallel(*light_slot, 0, &profile.parallel_intensity[0]);
     xglLightDirection(*light_slot, 0, &profile.direction[0]);
-    xglLightIntensityParallel(*light_slot, 1, profile.parallel_intensity[1]);
+    xglLightIntensityParallel(*light_slot, 1, &profile.parallel_intensity[1]);
     xglLightDirection(*light_slot, 1, &profile.direction[1]);
-    xglLightIntensityParallel(*light_slot, 2, profile.parallel_intensity[2]);
+    xglLightIntensityParallel(*light_slot, 2, &profile.parallel_intensity[2]);
     xglLightDirection(*light_slot, 2, &profile.direction[2]);
 }
 
@@ -1384,73 +1234,73 @@ void EndouTest(void)
     ENDOU_CLEAR_ENV->color_b = 0;
     ENDOU_CLEAR_ENV->color_a = 0;
 
-    ENDOU_PAD_BUTTONS->buttons.halves.half_2a = 0;
+    PadData.buttons.input.pressed = 0;
     endPrintInit();
 
     for (;;) {
         xglRenderClearFrame();
-        if ((ENDOU_PAD_INPUT->buttons.button_state & 0x08000100ULL) == 0x08000100ULL) {
+        if ((PadData.buttons.button_state & 0x08000100ULL) == 0x08000100ULL) {
             break;
         }
 
         xglFontDebugPrintf(0, 0, GameEndouTestTitleText);
         xglFontDebugPrintf(0, 0x10, settlementScreenTestLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x10) != 0) {
+        if ((PadData.buttons.input.pressed & 0x10) != 0) {
             SeisanTest();
         }
 
         xglFontDebugPrintf(0, 0x20, textTestSquareLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_28 & 0x80) != 0) {
+        if ((PadData.buttons.input.held & 0x80) != 0) {
             TextTest();
         }
 
         xglFontDebugPrintf(0, 0x30, messageTestCrossLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x40) != 0) {
+        if ((PadData.buttons.input.pressed & 0x40) != 0) {
             eMessageTest();
         }
 
         xglFontDebugPrintf(0, 0x40, miscTestCircleLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x20) != 0) {
+        if ((PadData.buttons.input.pressed & 0x20) != 0) {
             eNumberTest();
         }
 
         xglFontDebugPrintf(0, 0x50, modelTestL1Label);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x4) != 0) {
+        if ((PadData.buttons.input.pressed & 0x4) != 0) {
             eModelTest();
         }
 
         xglFontDebugPrintf(0, 0x60, loadTestL2Label);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x1) != 0) {
+        if ((PadData.buttons.input.pressed & 0x1) != 0) {
             MenuFileMain(1);
         }
 
         xglFontDebugPrintf(0, 0x70, textureTestR1Label);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x8) != 0) {
+        if ((PadData.buttons.input.pressed & 0x8) != 0) {
             TexturTest();
         }
 
         xglFontDebugPrintf(0, 0x80, jpegTestR2Label);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x2) != 0) {
+        if ((PadData.buttons.input.pressed & 0x2) != 0) {
             JpegTest();
         }
 
         xglFontDebugPrintf(0, 0x90, battleWindowTestUpLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x1000) != 0) {
+        if ((PadData.buttons.input.pressed & 0x1000) != 0) {
             BattleWindowTest();
         }
 
         xglFontDebugPrintf(0, 0xa0, saveTestDownLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x4000) != 0) {
+        if ((PadData.buttons.input.pressed & 0x4000) != 0) {
             MenuFileMain(0);
         }
 
         xglFontDebugPrintf(0, 0xb0, modelTestRightLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x2000) != 0) {
+        if ((PadData.buttons.input.pressed & 0x2000) != 0) {
             ModelTest();
         }
 
         xglFontDebugPrintf(0, 0xc0, shopTestLeftLabel);
-        if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x8000) != 0) {
+        if ((PadData.buttons.input.pressed & 0x8000) != 0) {
             ShopTest();
         }
 
@@ -1460,7 +1310,7 @@ void EndouTest(void)
 
 void TextTest(void)
 {
-    TextTestMessage message;
+    EMessageParam message;
     UmnEventTextRecord *record;
 
     xglCdLoadOverlay(2);
@@ -1475,10 +1325,10 @@ void TextTest(void)
     }
 
     eMessageSet(&message, record->message_text);
-    message.message_x = 0x40;
-    message.message_y = 0x40;
-    message.message_parameter = 0x00fffff0;
-    message.page_state = 2;
+    message.x = 0x40;
+    message.y = 0x40;
+    message.draw_parameter = 0x00fffff0;
+    message.page_available = 2;
     eMessageModeChange(&message, 0x22);
 
     while (xglFontDebugPrintf(0, 0x10, textTestLabel),
@@ -1649,7 +1499,7 @@ void ModelTest(void) {
     int motion;
 
     motion = 1;
-    xglStudioChange((M2C_UNK) 0);
+    xglStudioChange(0);
     EndouApplyModelLighting(&light, modelTestLighting);
     {
     int point_index;
@@ -1691,136 +1541,136 @@ void ModelTest(void) {
     u8 *temp_3_7;
     u8 *temp_3_8;
     u8 *temp_3_9;
-    EndouModelActor *temp_23_9;
-    EndouModelActor *temp_2_12;
-    EndouModelActor *temp_2_3;
+    Actor *temp_23_9;
+    Actor *temp_2_12;
+    Actor *temp_2_3;
     u8 *resource_buffer;
     u8 *accessory_resource_buffer;
 
     temp_2 = xglStudioGetCamera2(0);
-    temp_2->rotation.x = 0.0f;
-    temp_2->rotation.y = 0.0f;
-    temp_2->rotation.z = 0.0f;
+    temp_2->rotation.vector.x = 0.0f;
+    temp_2->rotation.vector.y = 0.0f;
+    temp_2->rotation.vector.z = 0.0f;
     endModelCameraPosition(temp_2, 0.0f, 1.0f, 4.0f);
     temp_2->active = 1;
     temp_2->state = 1;
     temp_2_2 = xglStudioGetCamera2(1);
     temp_2_2->state = 1;
     endModelCameraPosition(temp_2_2, -1.0f, 1.0f, 4.0f);
-    temp_2_2->rotation.y = 0.0f;
-    temp_2_2->rotation.z = 0.0f;
+    temp_2_2->rotation.vector.y = 0.0f;
+    temp_2_2->rotation.vector.z = 0.0f;
     temp_2_2->active = 0;
-    temp_2_2->rotation.x = 0.0f;
+    temp_2_2->rotation.vector.x = 0.0f;
     GameResourceInit(0x07000000U, 0x06000000);
     ACT_init();
-    temp_2_3 = (EndouModelActor *)(void *)ACT_create(-1, 0x2101);
+    temp_2_3 = ACT_create(-1, 0x2101);
     ACT_initMotion(temp_2_3);
     {
     char sp70[128] = "\0";
     char spF0[128] = "\0";
     EndouTestLighting unused_lighting;
 
-    RES_GetMdlFileName(sp70, temp_2_3->resource_kind);
+    RES_GetMdlFileName(sp70, temp_2_3->inUseId);
     resource_buffer = (u8 *)((u32)((*work_end) + 0x7f) & ~0x7fU);
     strcpy(spF0, sp70);
     strcat(spF0, modelTestLexExtension);
-    temp_2_5 = xglCdReadFile(&spF0, resource_buffer, 0, 0);
+    temp_2_5 = xglCdReadFile(spF0, resource_buffer, 0, 0);
     temp_3 = (*work_end) + temp_2_5;
-    temp_2_3->model_resource = resource_buffer;
+    temp_2_3->modelResource = resource_buffer;
     (*work_end) = temp_3;
     resource_buffer = (u8 *)((u32)(temp_3 + 0x7f) & ~0x7fU);
     strcpy(spF0, sp70);
     strcat(spF0, modelTestXtxExtension);
-    temp_2_7 = xglCdReadFile(&spF0, resource_buffer, 0, 0);
+    temp_2_7 = xglCdReadFile(spF0, resource_buffer, 0, 0);
     temp_3_2 = (*work_end) + temp_2_7;
-    temp_2_3->matrix_resource = resource_buffer;
+    temp_2_3->matrixResource = resource_buffer;
     (*work_end) = temp_3_2;
     resource_buffer = (u8 *)((u32)(temp_3_2 + 0x7f) & ~0x7fU);
     strcpy(spF0, sp70);
     strcat(spF0, modelTestJntExtension);
-    temp_2_9 = xglCdReadFile(&spF0, resource_buffer, 0, 0);
+    temp_2_9 = xglCdReadFile(spF0, resource_buffer, 0, 0);
     }
     temp_3_3 = ((*work_end) + temp_2_9);
     temp_2_3->move = resource_buffer;
     resource_buffer = (u8 *)((u32)(temp_3_3 + 0x7f) & ~0x7fU);
     (*work_end) = temp_3_3;
-    temp_2_11 = xglCdReadFile(&modelTestFpkName, resource_buffer, 0, 0);
+    temp_2_11 = xglCdReadFile(modelTestFpkName, resource_buffer, 0, 0);
     temp_3_4 = (*work_end) + temp_2_11;
-    temp_2_3->anim_pack_tables[0] = resource_buffer;
+    temp_2_3->animPackTables[0] = resource_buffer;
     (*work_end) = temp_3_4;
-    ACT_allocMatrix((ActRecord *)(void *)temp_2_3, -1);
+    ACT_allocMatrix(temp_2_3, -1);
     ACT_setModelWrapper(temp_2_3, 0);
-    ACT_setMotion(temp_2_3, (s32) 1);
-    temp_2_12 = (EndouModelActor *)(void *)ACT_create(-1, 1);
+    ACT_setMotion(temp_2_3, 1);
+    temp_2_12 = ACT_create(-1, 1);
     ACT_initMotion(temp_2_12);
     {
     char sp1E0[128] = "\0";
     char sp260[128] = "\0";
 
-    RES_GetMdlFileName(sp1E0, temp_2_12->resource_kind);
+    RES_GetMdlFileName(sp1E0, temp_2_12->inUseId);
     resource_buffer = (u8 *)((u32)((*work_end) + 0x7f) & ~0x7fU);
     strcpy(sp260, sp1E0);
     strcat(sp260, modelTestLexExtension);
-    temp_2_14 = xglCdReadFile(&sp260, resource_buffer, 0, 0);
+    temp_2_14 = xglCdReadFile(sp260, resource_buffer, 0, 0);
     temp_3_5 = (*work_end) + temp_2_14;
-    temp_2_12->model_resource = resource_buffer;
+    temp_2_12->modelResource = resource_buffer;
     (*work_end) = temp_3_5;
     resource_buffer = (u8 *)((u32)(temp_3_5 + 0x7f) & ~0x7fU);
     strcpy(sp260, sp1E0);
     strcat(sp260, modelTestXtxExtension);
-    temp_2_16 = xglCdReadFile(&sp260, resource_buffer, 0, 0);
+    temp_2_16 = xglCdReadFile(sp260, resource_buffer, 0, 0);
     temp_3_6 = (*work_end) + temp_2_16;
-    temp_2_12->matrix_resource = resource_buffer;
+    temp_2_12->matrixResource = resource_buffer;
     (*work_end) = temp_3_6;
     resource_buffer = (u8 *)((u32)(temp_3_6 + 0x7f) & ~0x7fU);
     strcpy(sp260, sp1E0);
     strcat(sp260, modelTestJntExtension);
-    temp_2_18 = xglCdReadFile(&sp260, resource_buffer, 0, 0);
+    temp_2_18 = xglCdReadFile(sp260, resource_buffer, 0, 0);
     }
     temp_3_7 = (*work_end) + temp_2_18;
     temp_2_12->move = resource_buffer;
     resource_buffer = (u8 *)((u32)(temp_3_7 + 0x7f) & ~0x7fU);
     (*work_end) = temp_3_7;
-    temp_2_20 = xglCdReadFile(&modelTestMotionName, resource_buffer, 0, 0);
+    temp_2_20 = xglCdReadFile(modelTestMotionName, resource_buffer, 0, 0);
     temp_3_8 = (*work_end) + temp_2_20;
-    temp_2_12->anim_pack_tables[0] = resource_buffer;
+    temp_2_12->animPackTables[0] = resource_buffer;
     (*work_end) = temp_3_8;
-    ACT_allocMatrix((ActRecord *)(void *)temp_2_12, -1);
+    ACT_allocMatrix(temp_2_12, -1);
     ACT_setModelWrapper(temp_2_12, 0);
-    ACT_setMotion(temp_2_12, (s32) 1);
-    temp_23_9 = (EndouModelActor *)(void *)ACT_create(-1, 0x3003);
+    ACT_setMotion(temp_2_12, 1);
+    temp_23_9 = ACT_create(-1, 0x3003);
     {
     char sp2E0[128] = "\0";
     char sp360[128] = "\0";
 
-    RES_GetMdlFileName(sp2E0, temp_23_9->resource_kind);
+    RES_GetMdlFileName(sp2E0, temp_23_9->inUseId);
     accessory_resource_buffer = (u8 *)((u32)((*work_end) + 0x7f) & ~0x7fU);
     strcpy(sp360, sp2E0);
     strcat(sp360, modelTestLexExtension);
-    temp_2_22 = xglCdReadFile(&sp360, accessory_resource_buffer, 0, 0);
+    temp_2_22 = xglCdReadFile(sp360, accessory_resource_buffer, 0, 0);
     temp_3_9 = (*work_end) + temp_2_22;
-    temp_23_9->model_resource = accessory_resource_buffer;
+    temp_23_9->modelResource = accessory_resource_buffer;
     (*work_end) = temp_3_9;
     accessory_resource_buffer = (u8 *)((u32)(temp_3_9 + 0x7f) & ~0x7fU);
     strcpy(sp360, sp2E0);
     strcat(sp360, modelTestXtxExtension);
-    temp_2_24 = xglCdReadFile(&sp360, accessory_resource_buffer, 0, 0);
+    temp_2_24 = xglCdReadFile(sp360, accessory_resource_buffer, 0, 0);
     temp_3_10 = (*work_end) + temp_2_24;
-    temp_23_9->matrix_resource = accessory_resource_buffer;
+    temp_23_9->matrixResource = accessory_resource_buffer;
     (*work_end) = temp_3_10;
     accessory_resource_buffer = (u8 *)((u32)(temp_3_10 + 0x7f) & ~0x7fU);
     strcpy(sp360, sp2E0);
     strcat(sp360, modelTestJntExtension);
-    if (xglCdGetFileSize(&sp360) < 0) {
+    if (xglCdGetFileSize(sp360) < 0) {
         temp_23_9->move = NULL;
     } else {
-        temp_2_26 = xglCdReadFile(&sp360, accessory_resource_buffer, 0, 0);
+        temp_2_26 = xglCdReadFile(sp360, accessory_resource_buffer, 0, 0);
         temp_3_11 = (*work_end) + temp_2_26;
         temp_23_9->move = accessory_resource_buffer;
         (*work_end) = temp_3_11;
     }
     }
-    ACT_allocMatrix((ActRecord *)(void *)temp_23_9, -1);
+    ACT_allocMatrix(temp_23_9, -1);
     ACT_setModelWrapper(temp_23_9, 0);
     ACT_setArms(temp_23_9, temp_2_3, 0x108U, 0);
     {
@@ -1835,9 +1685,9 @@ void ModelTest(void) {
             }
             temp_4 = ENDOU_MODEL_PAD->held;
             if (temp_4 & 0x100) {
-                EndouVector reset_position = {0.0f, 0.0f, 0.0f, 1.0f};
-                EndouVector reset_rotation = {0.0f, 0.0f, 0.0f, 1.0f};
-                EndouVector reset_scale = {1.0f, 1.0f, 1.0f, 1.0f};
+                AlignedVector4 reset_position = {0.0f, 0.0f, 0.0f, 1.0f};
+                AlignedVector4 reset_rotation = {0.0f, 0.0f, 0.0f, 1.0f};
+                AlignedVector4 reset_scale = {1.0f, 1.0f, 1.0f, 1.0f};
                 temp_4 = ENDOU_MODEL_PAD->held;
                 temp_2_3->position = reset_position;
                 temp_2_3->rotation = reset_rotation;
@@ -1850,7 +1700,7 @@ void ModelTest(void) {
             Matrix4 projection_matrix;
             unsigned char column_alphas[5];
             unsigned char row_alphas[6];
-            unsigned long long quad_words[8];
+            DoublewordAlignedVector4 quad_words[4];
             if (temp_4 & 0x10) {
                 if (temp_4 & 0x2000) {
                     temp_2_3->scale.x += 0.1f;
@@ -1923,17 +1773,17 @@ void ModelTest(void) {
             xglMatrixStackSave(camera_matrix);
             temp_f0_21 = ang_0[0];
             temp_16 = ENDOU_MODEL_PAD->held;
-            temp_17_4->rotation.x = temp_f0_21;
+            temp_17_4->rotation.vector.x = temp_f0_21;
             temp_f0_22 = ang_0[1];
-            temp_17_4->rotation.y = temp_f0_22;
+            temp_17_4->rotation.vector.y = temp_f0_22;
             temp_f1 = ang_0[2];
-            temp_17_4->rotation.z = temp_f1;
+            temp_17_4->rotation.vector.z = temp_f1;
             temp_f2 = camera_matrix[3][0];
-            temp_17_4->position.x = temp_f2;
+            temp_17_4->position.vector.x = temp_f2;
             temp_f0_23 = camera_matrix[3][1] + 1.0f;
-            temp_17_4->position.y = temp_f0_23;
+            temp_17_4->position.vector.y = temp_f0_23;
             temp_f20 = camera_matrix[3][2];
-            temp_17_4->position.z = temp_f20;
+            temp_17_4->position.vector.z = temp_f20;
             if (temp_16 & 8) {
                 temp_f0_24 = pipo_2 + 0.2;
                 pipo_2 = temp_f0_24;
@@ -1944,7 +1794,7 @@ void ModelTest(void) {
             }
             temp_f0_25 = pipo_2;
             temp_f0_27 = temp_f20 + temp_f0_25;
-            temp_17_4->position.z = temp_f0_27;
+            temp_17_4->position.vector.z = temp_f0_27;
             temp_2_12->position = temp_2_3->position;
             temp_2_12->position.x += 1.0f;
             temp_2_12->rotation = temp_2_3->rotation;
@@ -1987,7 +1837,7 @@ void ModelTest(void) {
             __builtin_memcpy(row_alphas, modelTestRowAlphaTable, sizeof(row_alphas));
             xglMatrixStackUnit();
             xglMatrixStackSave(projection_matrix);
-            xglRotTransPersN(screen_points, projection_matrix, world_points, 30, 0);
+            xglRotTransPersN(screen_points, &projection_matrix, world_points, 30, 0);
             {
                 for (point_index = 0; point_index < 5; point_index++) {
                     unsigned char *color;
@@ -2096,22 +1946,22 @@ void ModelTest(void) {
             endPrintExtFunc(0, 0x6A, NULL);
             endPrintExtFunc(0, 0x6C, NULL);
             if (*message_time == 0) {
-                eMessageSet(&msg_11, msg00_14[no_13]);
-                ENDOU_MODEL_MESSAGE->mode = 0x24;
+                eMessageSet(&msg_11.message, msg00_14[no_13]);
+                msg_11.message.mode = 0x24;
                 *message_time = 0x40;
                 no_13 = (no_13 + 1) & 3;
             }
             (*message_time)--;
-            ENDOU_MODEL_MESSAGE->x = 0;
-            ENDOU_MODEL_MESSAGE->draw_parameter = 0xFFFFF0;
-            ENDOU_MODEL_MESSAGE->y = 0;
-            eMessageMain(&msg_11);
+            msg_11.message.x = 0;
+            msg_11.message.draw_parameter = 0xFFFFF0;
+            msg_11.message.y = 0;
+            eMessageMain(&msg_11.message);
             endPrintExtFunc(0, 0x6B, NULL);
             bsp_12.uv[0] = 0.0f;
             bsp_12.uv[2] = 0.234375f;
             bsp_12.uv[3] = 0.046875f;
             bsp_12.uv[1] = 0.0f;
-            xglRotTransPersN(bsp_12.vertices, NULL, (Vector4 *)quad_words, 4, 0);
+            xglRotTransPersN(bsp_12.vertices, NULL, quad_words, 4, 0);
             endPrintExtFunc(0, 0x6D, &bsp_12);
             xglSleep();
             }
@@ -2221,34 +2071,34 @@ void eNumberTest(void) {
     eRibbonSet(&rbn_21[0], 1);
     eRibbonSet(&rbn_21[1], 0);
     eRibbonSet(&rbn_21[2], 0);
-    eLineSet((EndouELineSetData *)&line_23[0], 0);
-    eLineSet((EndouELineSetData *)&line_23[1], 0);
-    eLineSet((EndouELineSetData *)&line_23[2], 0);
-    eLineSet((EndouELineSetData *)&line_23[3], 0);
-    eCursolSet((ECursol *)&cur_25, 0);
+    eLineSet(&line_23[0], 0);
+    eLineSet(&line_23[1], 0);
+    eLineSet(&line_23[2], 0);
+    eLineSet(&line_23[3], 0);
+    eCursolSet(&cur_25, 0);
     eTagFontSet(&tgf_24[0].control, moji_26);
     eTagFontSet(&tgf_24[1].control, moji2_27);
     cursor = &d_43;
     xglRenderClearFrame();
-    xglStudioChange((M2C_UNK) 0);
+    xglStudioChange(0);
     xglStudioGetCamera(&camera, 0);
-    PadData.buttons.input.pressed = (u16) 0;
+    PadData.buttons.input.pressed = 0;
     studio_camera = camera;
-    studio_camera->rotation.x = 0.0f;
-    studio_camera->rotation.y = 0.0f;
-    studio_camera->rotation.z = 0.0f;
-    studio_camera->position.x = 0.0f;
-    studio_camera->position.y = 0.0f;
-    studio_camera->position.z = 1.0f;
+    studio_camera->rotation.vector.x = 0.0f;
+    studio_camera->rotation.vector.y = 0.0f;
+    studio_camera->rotation.vector.z = 0.0f;
+    studio_camera->position.vector.x = 0.0f;
+    studio_camera->position.vector.y = 0.0f;
+    studio_camera->position.vector.z = 1.0f;
     studio_camera->active = 1;
     studio_camera->state = 1;
     second_camera = xglStudioGetCamera2(0);
-    second_camera->position.y = 1.0f;
-    second_camera->position.z = 4.0f;
-    second_camera->rotation.x = 0.0f;
-    second_camera->rotation.y = 0.0f;
-    second_camera->rotation.z = 0.0f;
-    second_camera->position.x = 0.0f;
+    second_camera->position.vector.y = 1.0f;
+    second_camera->position.vector.z = 4.0f;
+    second_camera->rotation.vector.x = 0.0f;
+    second_camera->rotation.vector.y = 0.0f;
+    second_camera->rotation.vector.z = 0.0f;
+    second_camera->position.vector.x = 0.0f;
     second_camera->active = 1;
     second_camera->state = 1;
     WindowTexLoad(NULL, 1U);
@@ -2286,15 +2136,15 @@ void eNumberTest(void) {
             num_29[0].y = 0x80;
             num_29[0].digits = 5;
             num_29[0].work = number_order;
-            num_29[0].value.integer = -1;
+            num_29[0].value = -1;
             num_29[0].format = 0;
             eNumberMain(num_29);
             xglClockRead(&sp60);
             eNumberSet(&num_30[0], 0);
             num_30[0].x = 0x10;
             num_30[0].y = 0xA0;
-            __builtin_memcpy(&num_30[0].value.integer, &sp60,
-                             sizeof(num_30[0].value.integer));
+            __builtin_memcpy(&num_30[0].value, &sp60,
+                             sizeof(num_30[0].value));
             num_30[0].work = number_order;
             num_30[0].format = 2;
             eNumberMain(num_30);
@@ -2305,10 +2155,10 @@ void eNumberTest(void) {
             num_31[0].format = 3;
             sp70[1] = 0xC8;
             sp70[0] = 0;
-            num_31[0].value.integer = *(int *)sp70;
+            num_31[0].value = *(int *)sp70;
             num_31[0].digits = 3;
-            num_31[0].colorMode[0] = 1;
-            num_31[0].colorMode[1] = 2;
+            num_31[0].colorModeFirst = 1;
+            num_31[0].colorModeSecond = 2;
             num_31[0].alignment = 0;
             num_31[0].firstOnly = 0;
             eNumberMain(num_31);
@@ -2317,7 +2167,7 @@ void eNumberTest(void) {
             num_32[0].y = 0xE0;
             num_32[0].format = 7;
             num_32[0].digits = 4;
-            num_32[0].value.integer = 0x4D2;
+            num_32[0].value = 0x4D2;
             num_32[0].work = number_order;
             eNumberMain(num_32);
             d_33.spriteId = 1024;
@@ -2361,7 +2211,7 @@ void eNumberTest(void) {
             rbn_21[0].y = 0x80;
             rbn_21[0].width = 0x100;
             rbn_21[0].height = 0x20;
-            eRibbonMain((ERibbonMainData *)&rbn_21[0]);
+            eRibbonMain(&rbn_21[0]);
             d_39.payload.number.value = 0x7B;
             d_39.argument1 = 3;
             d_39.x = 0xA;
@@ -2437,7 +2287,7 @@ void eNumberTest(void) {
             tgf_24[0].draw.x = 0x40;
             tgf_24[0].draw.y = 0x12C;
             tgf_24[0].draw.work = primary_order;
-            eTagFontMain((ETagFontMainData *)&tgf_24[0].draw);
+            eTagFontMain(&tgf_24[0].draw);
             tgf_24[1].draw.y = 0x140;
             tgf_24[1].draw.x = 0x40;
             tgf_24[1].draw.work = primary_order;
@@ -2601,7 +2451,7 @@ void eModelTestMain(EModelTestState *unit)
 
 void eModelTest(void)
 {
-    int model_id;
+    void *model_id;
 
     xglCdLoadOverlay(1);
     ACT_init();
@@ -2633,18 +2483,18 @@ void eMessageTest(void)
 
     WindowTexLoad(0, 0);
     endPrintInit();
-    eMessageSet(&windows[0], msg_45[0]);
-    eMessageSet(&windows[1], msg_45[0]);
-    windows[1].mode = 0x20;
-    eMessageSet(&current, text00_46);
-    current.page_state = 1;
-    eMessageTextChange(&current, text00_46);
+    eMessageSet(&windows[0].message, msg_45[0]);
+    eMessageSet(&windows[1].message, msg_45[0]);
+    windows[1].message.mode = 0x20;
+    eMessageSet(&current.message, text00_46);
+    current.message.page_available = 1;
+    eMessageTextChange(&current.message, text00_46);
 
     PadData.buttons.input.pressed = 0;
-    current.message_x = 0x40;
-    current.message_y = 300;
-    current.message_color = 0x00fffff0;
-    current.mode = 0x24;
+    current.message.x = 0x40;
+    current.message.y = 300;
+    current.message.draw_parameter = 0x00fffff0;
+    current.message.mode = 0x24;
     ClearEnv.color_g = 0x40;
     ClearEnv.color_r = 0;
     ClearEnv.color_b = 0;
@@ -2654,48 +2504,48 @@ void eMessageTest(void)
         do {
             xglFontDebugPrintf(0, 0, eMessageTestLabel);
             if ((PadData.buttons.input.pressed & 0x20U) != 0) {
-                eMessageNextPage(&current, 0);
+                eMessageNextPage(&current.message, 0);
             }
             if ((PadData.buttons.input.pressed & 0x100U) != 0) {
                 message_index += 1;
                 if (message_index >= 5) {
                     message_index = 0;
                 }
-                windows[0].message_text = msg_45[message_index];
+                windows[0].message.text = msg_45[message_index];
             }
             if ((PadData.buttons.input.pressed & 8U) != 0) {
-                windows[0].mode = 0x22;
-                windows[1].mode = 0x22;
-                eMessageNextPage(&current, 1);
-                current.mode = 0x22;
+                windows[0].message.mode = 0x22;
+                windows[1].message.mode = 0x22;
+                eMessageNextPage(&current.message, 1);
+                current.message.mode = 0x22;
             }
             if ((PadData.buttons.input.pressed & 2U) != 0) {
-                windows[0].mode = 0x70;
-                windows[1].mode = 0x70;
-                current.mode = 0x70;
+                windows[0].message.mode = 0x70;
+                windows[1].message.mode = 0x70;
+                current.message.mode = 0x70;
             }
             if ((PadData.buttons.input.held & 4U) != 0) {
-                windows[0].selection_value -= 1;
+                windows[0].message.text_y_offset -= 1;
             }
             if ((PadData.buttons.input.held & 1U) != 0) {
-                windows[0].selection_value += 1;
+                windows[0].message.text_y_offset += 1;
             }
             if ((PadData.buttons.input.held & 0x1000U) != 0) {
-                windows[0].debug_cursor -= 1;
+                windows[0].message.color_a -= 1;
             }
             if ((PadData.buttons.input.held & 0x4000U) != 0) {
-                windows[0].debug_cursor += 1;
+                windows[0].message.color_a += 1;
             }
 
-            xglFontDebugHex(0, 0x10, windows[0].debug_value, 2);
-            windows[0].message_color = 0x01ffffff;
-            windows[1].message_color = 0x01ffff00;
-            windows[0].message_x = 100;
-            windows[0].message_y = 100;
-            windows[1].message_x = 0xa4;
-            windows[1].message_y = 0xa4;
-            eMessageDraw(&windows[1]);
-            eMessageMain(&current);
+            xglFontDebugHex(0, 0x10, windows[0].message.color_b, 2);
+            windows[0].message.draw_parameter = 0x01ffffff;
+            windows[1].message.draw_parameter = 0x01ffff00;
+            windows[0].message.x = 100;
+            windows[0].message.y = 100;
+            windows[1].message.x = 0xa4;
+            windows[1].message.y = 0xa4;
+            eMessageDraw(&windows[1].message);
+            eMessageMain(&current.message);
             endPrintExtFunc(0x00ffffff, 100, 0);
             xglSleep();
         } while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U);
@@ -2798,7 +2648,7 @@ void UmnPrintTest(void)
 
 void UmnMailDispTest(void)
 {
-    UmnMailDisplayParams windows[2];
+    TyaUmlDispParamMailView windows[2];
 
     tyaUmlDispInit();
     tyaUmlDispParamReset(&windows[0], 0);
@@ -2859,24 +2709,24 @@ void UmnMailDispTest(void)
     }
 }
 
-static void e_test(ETestContext *context)
+static void e_test(FontDrawCursor *cursor, void *argument)
 {
-    sceVif1PkCloseDirectHLCode(context->packet);
-    sceVif1PkRef(context->packet, (unsigned char *)&WinTexEnv_65,
+    sceVif1PkCloseDirectHLCode(cursor->packet);
+    sceVif1PkRef(cursor->packet, &WinTexEnv_65,
                  7, 0, 0, 0);
-    sceVif1PkRef(context->packet, (unsigned char *) test_data + 0x30, 0x4002, 0, 0, 0);
-    sceVif1PkCnt(context->packet, 0);
-    sceVif1PkOpenDirectHLCode(context->packet, 0);
-    sceVif1PkAddDirectDataN(context->packet, TestEnv_66, 8);
-    xglFontReloadTexture(context, 0);
+    sceVif1PkRef(cursor->packet, test_data + 0x30, 0x4002, 0, 0, 0);
+    sceVif1PkCnt(cursor->packet, 0);
+    sceVif1PkOpenDirectHLCode(cursor->packet, 0);
+    sceVif1PkAddDirectDataN(cursor->packet, TestEnv_66, 8);
+    xglFontReloadTexture(cursor, 0);
 }
 
 void ReLoadTest(void)
 {
     xglRenderClearFrame();
     xglSleep();
-    test_data = (void *)(((u32)WorkEnd + 0x0fU) & 0xfffffff0U);
-    WorkEnd = (u8 *)test_data +
+    test_data = (u8 *)(((u32)WorkEnd + 0x0fU) & 0xfffffff0U);
+    WorkEnd = test_data +
         xglCdReadFile(reLoadTestFloorPath, test_data, 0, 0);
 
     while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
@@ -2935,8 +2785,8 @@ void FileLoadTest(void)
 
     xglRenderClearFrame();
     xglSleep();
-    files.buffer = (void *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
-    WorkEnd = (u8 *)files.buffer + 0x100000;
+    files.buffer = (u8 *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
+    WorkEnd = files.buffer + 0x100000;
     previous_callback = xglCdSetCallback(endCallback);
     xglCdReadFile(fileLoadTestMenuPath, files.buffer, 0, 0);
     files.state = 1U;
@@ -2951,7 +2801,7 @@ void FileLoadTest(void)
             XglPacket *packet = xglPacketGetCurrent();
 
             sceVif1PkRef(packet, eNumberTexEnv_69, 6, 0, 0, 0);
-            sceVif1PkRef(packet, (u8 *)files.buffer + 0x30, 0x4002, 0, 0, 0);
+            sceVif1PkRef(packet, files.buffer + 0x30, 0x4002, 0, 0, 0);
             xglFontDebugHex(0, 0x20, x_71, 5);
             if ((PadData.buttons.input.repeat & 0x2000U) != 0) {
                 x_71 += 0x100;
@@ -2982,7 +2832,7 @@ void JpegTest(void)
     WorkEnd = destination_buffer + 0x80000;
     memset(destination_buffer, 0, 0x80000);
 
-    GameSnapShotSaveThumbnail(100, source_buffer);
+    GameSnapShotSaveThumbnail(100, (unsigned int)source_buffer);
 
     memset(&request, 0, sizeof(request));
     request.source = source_buffer;
@@ -3275,7 +3125,7 @@ void PauseMenuPagePartyDebugFriend(void)
 
 void PauseMenuPagePartyDebugAttacker(void)
 {
-    PartyDataView *party;
+    PartyDataPrefix *party;
     int character;
     int position;
     int i;
@@ -3296,41 +3146,41 @@ void PauseMenuPagePartyDebugAttacker(void)
     }
 
     if (Select_82 < 3) {
-        party = (PartyDataView *)PartyDataGet();
-        character = party->attack_slots[Select_82].character;
+        party = PartyDataGet();
+        character = party->attack_slots[Select_82].party_id;
         if (PadData.buttons.input.repeat & 0x8000) {
             character = (character != 0) ? character - 1 : 0x1d;
         }
         if (PadData.buttons.input.repeat & 0x2000) {
             character = (character != 0x1d) ? character + 1 : 0;
         }
-        party = (PartyDataView *)PartyDataGet();
-        party->attack_slots[Select_82].character = character;
+        party = PartyDataGet();
+        party->attack_slots[Select_82].party_id = character;
     } else {
-        party = (PartyDataView *)PartyDataGet();
-        position = party->attack_slots[Select_82 - 3].position;
+        party = PartyDataGet();
+        position = party->attack_slots[Select_82 - 3].attack_position;
         if (PadData.buttons.input.repeat & 0x8000) {
             position = (position != 0) ? position - 1 : 9;
         }
         if (PadData.buttons.input.repeat & 0x2000) {
             position = (position != 9) ? position + 1 : 0;
         }
-        party = (PartyDataView *)PartyDataGet();
-        party->attack_slots[Select_82 - 3].position = position;
+        party = PartyDataGet();
+        party->attack_slots[Select_82 - 3].attack_position = position;
     }
 
-    party = (PartyDataView *)PartyDataGet();
+    party = PartyDataGet();
     xglFontDebugPrintf(8, 0x20, attackerHeadingLabel);
     xglFontDebugPrintf(8, Select_82 * 0x10 + 0x30, menuCursorText);
     for (i = 0; i < 3; i++) {
         xglFontDebugPrintf(0x10, i * 0x10 + 0x30, text01_84[i]);
         xglFontDebugPrintf(0x30, i * 0x10 + 0x30, text02_85[0]);
-        xglFontDebugPrintf(0x70, i * 0x10 + 0x30, MenuCharNameGet(party->attack_slots[i].character));
+        xglFontDebugPrintf(0x70, i * 0x10 + 0x30, MenuCharNameGet(party->attack_slots[i].party_id));
     }
     for (i = 0; i < 3; i++) {
         xglFontDebugPrintf(0x10, i * 0x10 + 0x60, text01_84[i]);
         xglFontDebugPrintf(0x30, i * 0x10 + 0x60, text02_85[1]);
-        xglFontDebugPrintf(0x70, i * 0x10 + 0x60, text00_83[party->attack_slots[i].position]);
+        xglFontDebugPrintf(0x70, i * 0x10 + 0x60, text00_83[party->attack_slots[i].attack_position]);
     }
     xglFontDebugPrintf(8, 0xc0, attackerControlsLabel);
 }
@@ -3437,11 +3287,16 @@ const char shopRunQuitLabel[24] = "\013\274\302\271\324\241\241\241\373\241\241\
 /* Text: {reset}ShopNo = %2d */
 const char shopNoFormat[24] = "\013ShopNo = %2d";
 
-const EndouTestLighting modelTestLighting = { .ambient = { 4510805389542529434ULL, 4575657222458677658ULL }, .parallel_intensity = { { 4546834186569882010ULL, 4575657222467066266ULL }, { 0ULL, 4575657221408423936ULL }, { 0ULL, 4575657221408423936ULL } }, .direction = { { .x = 0.0f, .y = 0.0f, .z = 1.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
+const EndouTestLighting modelTestLighting = { .ambient = { 0.3f, 0.3f, 0.3f, 1.0f }, .parallel_intensity = { { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f } }, .direction = { { .x = 0.0f, .y = 0.0f, .z = 1.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
 
 const char modelTestMotionName[32] = "newd\\motion\\chaos_cf.fpk";
 
-const unsigned long long modelTestQuadWordTable[8] = { 4453159315607388160ULL, 4575657221408423936ULL, 13676531352462163968ULL, 4575657221408423936ULL, 4453159313459904512ULL, 4575657221408423936ULL, 13676531350314680320ULL, 4575657221408423936ULL };
+const DoublewordAlignedVector4 modelTestQuadWordTable[4] = {
+    { -0.5f, 0.1f, 0.0f, 1.0f },
+    { -0.5f, -0.1f, 0.0f, 1.0f },
+    { 0.5f, 0.1f, 0.0f, 1.0f },
+    { 0.5f, -0.1f, 0.0f, 1.0f },
+};
 
 /* JP: もでるてすと
  * EN: Model test */

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "pdb.h"
+#include "main/pdb.h"
 
 enum {
     PDB_MAGIC = 0x30304C46,

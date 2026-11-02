@@ -1,8 +1,8 @@
 #include "common.h"
+#include "main/jc_face.h"
 #include "jc_face.h"
 
-static inline void copyMatrix(XglQuadword *destination,
-                              const XglQuadword *source)
+static inline void copyMatrix(void *destination, const void *source)
 {
     __asm__ __volatile__(
         "lq $2, 0(%0)\n"
@@ -16,13 +16,18 @@ static inline void copyMatrix(XglQuadword *destination,
         : : "r"(source), "r"(destination) : "$2", "memory");
 }
 
-JcElement *JC_face(JcWork *work, JcElement *elements, JcChain *chain)
+/*
+ * The joint table is JntMatrix, a union of the float and quadword views
+ * (alias set 0), which fixes the original store/load order of the w-column
+ * stores against the quadword copies.
+ */
+JntStaticChannel *JC_face(JntWork *work, JntStaticChannel *elements, JcChain *chain)
 {
-    JcElement *element_array;
-    JcElement *cursor;
-    Matrix *destination;
-    Matrix *root_destination;
-    void (*filter)(void *, void *, int);
+    JntStaticChannel *element_array;
+    JntStaticChannel *cursor;
+    JntMatrix *destination;
+    JntMatrix *root_destination;
+    JntProductionConsumer filter;
     int chain_length;
     unsigned int flags_after_scan;
     float frame;
@@ -31,7 +36,7 @@ JcElement *JC_face(JcWork *work, JcElement *elements, JcChain *chain)
     int interpolate_end;
     int bound;
     int slot;
-    const Matrix *matrix_table;
+    const JntMatrix *matrix_table;
 
     element_array = elements;
     if (work->matrix_buffer != 0) {
@@ -64,10 +69,10 @@ matrix_available:
                 : "$2", "memory");
         }
         flags_after_copy = work->flags | 8;
-        destination->elements[3] = 1.0f;
+        destination->flat[3] = 1.0f;
         work->flags = flags_after_copy;
-        destination->elements[7] = 1.0f;
-        destination->elements[11] = 1.0f;
+        destination->flat[7] = 1.0f;
+        destination->flat[11] = 1.0f;
         return 0;
     }
 
@@ -98,8 +103,8 @@ matrix_available:
             copyMatrix(root_destination, &matrix_table[0]);
             copyMatrix(destination, &matrix_table[chain->static_index]);
         }
-        destination->elements[3] = destination->elements[7] =
-            destination->elements[11] = 1.0f;
+        destination->flat[3] = destination->flat[7] =
+            destination->flat[11] = 1.0f;
 
         bound = work->hair_id_source->channel_limit;
         while (work->current_index < bound) {
@@ -117,7 +122,7 @@ matrix_available:
         if (work->flags & 2) {
             work->current_index = chain->index;
             if (element_array[chain->index].type == 2) {
-                Matrix *previous_destination;
+                JntMatrix *previous_destination;
                 matrix_table = *chain->source;
                 root_destination = work->matrix_buffer;
                 root_destination += chain->index;
@@ -142,7 +147,7 @@ matrix_available:
                 do {
                     int destination_index = chain->index + slot;
                     int source_index = chain->static_index + slot;
-                    unsigned int destination = destination_index * sizeof(Matrix) + (unsigned int)work->matrix_buffer;
+                    unsigned int destination = destination_index * sizeof(JntMatrix) + (unsigned int)work->matrix_buffer;
                     unsigned int source = source_index * sizeof(*matrix_table) + (unsigned int)matrix_table;
                     {
                         __asm__ __volatile__(
@@ -184,11 +189,11 @@ matrix_available:
             copyMatrix(root_destination, &matrix_table[0]);
             copyMatrix(destination, &matrix_table[chain->static_index]);
         }
-        destination->elements[3] = destination->elements[7] =
-            destination->elements[11] = 1.0f;
+        destination->flat[3] = destination->flat[7] =
+            destination->flat[11] = 1.0f;
 
         bound = work->hair_id_source->primary_id + work->hair_id_source->secondary_id;
-        if (work->attribute_key == work->expected_attribute_key) {
+        if (work->attribute_key == work->requested_attribute_key) {
             while (work->current_index < bound) {
                 cursor = JNT_getVal(work, cursor, frame);
                 if (work->flags & 4) {
@@ -240,18 +245,18 @@ matrix_available:
 
     work->flags &= ~0x40;
     if (chain->index == 0) {
-        xglMatrixUnit4s(work->matrix_buffer);
+        xglMatrixUnit4s(work->matrix_buffer->elements);
     }
     return cursor;
 }
 
-void *JC_setParent(JcWork *work, JcElement *elements, const JcChain *chain)
+void *JC_setParent(JntWork *work, JntStaticChannel *elements, const JcChain *chain)
 {
-    JcElement *element_array;
-    JcElement *cursor;
-    const Matrix *records;
-    Matrix *destination;
-    Matrix *root_destination;
+    JntStaticChannel *element_array;
+    JntStaticChannel *cursor;
+    const JntMatrix *records;
+    JntMatrix *destination;
+    JntMatrix *root_destination;
     unsigned int source_byte_offset;
     int chain_length;
     int flags_after_scan;
@@ -260,7 +265,7 @@ void *JC_setParent(JcWork *work, JcElement *elements, const JcChain *chain)
     int bound;
     int interpolate_end;
     unsigned int dest_offset;
-    Matrix *previous_destination;
+    JntMatrix *previous_destination;
 
     element_array = elements;
     if (work->matrix_buffer != 0) {
@@ -290,14 +295,14 @@ matrix_available:
                 "sq $2, 32(%0)\n"
                 "lq $2, 48(%1)\n"
                 "sq $2, 48(%0)\n"
-            : : "r"(destination), "r"((const Matrix *)((chain->static_index * sizeof(*records)) + (unsigned int)records))
+            : : "r"(destination), "r"((chain->static_index * sizeof(*records)) + (unsigned int)records)
                 : "$2", "memory");
         }
         flags_after_copy = work->flags | 8;
-        destination->elements[3] = 1.0f;
+        destination->flat[3] = 1.0f;
         work->flags = flags_after_copy;
-        destination->elements[7] = 1.0f;
-        destination->elements[11] = 1.0f;
+        destination->flat[7] = 1.0f;
+        destination->flat[11] = 1.0f;
         return 0;
     }
 
@@ -321,8 +326,8 @@ matrix_available:
         }
         if (chain->index == 0) {
             source_byte_offset = chain->static_index;
-            root_destination = (Matrix *)(chain->index * sizeof(Matrix));
-            destination = (Matrix *)((unsigned int)work->matrix_buffer + (unsigned int)root_destination);
+            root_destination = (JntMatrix *)(chain->index * sizeof(JntMatrix));
+            destination = (JntMatrix *)((unsigned int)work->matrix_buffer + (unsigned int)root_destination);
             source_byte_offset *= sizeof(*records);
         } else {
             root_destination = &work->matrix_buffer[0];
@@ -353,11 +358,11 @@ matrix_available:
                 "sq $2, 32(%0)\n"
                 "lq $2, 48(%1)\n"
                 "sq $2, 48(%0)\n"
-            : : "r"(destination), "r"((const Matrix *)(source_byte_offset + (unsigned int)records))
+            : : "r"(destination), "r"(source_byte_offset + (unsigned int)records)
                 : "$2", "memory");
         }
-        destination->elements[3] = destination->elements[7] =
-            destination->elements[11] = 1.0f;
+        destination->flat[3] = destination->flat[7] =
+            destination->flat[11] = 1.0f;
 
         bound = work->hair_id_source->channel_limit;
         while (work->current_index < bound) {
@@ -380,7 +385,7 @@ matrix_available:
                         "sq $2, 32(%0)\n"
                         "lq $2, 48(%1)\n"
                         "sq $2, 48(%0)\n"
-                    : : "r"(previous_destination), "r"((const Matrix *)((chain->static_index * sizeof(*records)) + (unsigned int)records))
+                    : : "r"(previous_destination), "r"((chain->static_index * sizeof(*records)) + (unsigned int)records)
                         : "$2", "memory");
                 }
             }
@@ -398,7 +403,7 @@ matrix_available:
                             "sq $2, 32(%0)\n"
                             "lq $2, 48(%1)\n"
                             "sq $2, 48(%0)\n"
-                        : : "r"((Matrix *)(((chain->index + slot) * sizeof(Matrix)) + (unsigned int)work->matrix_buffer)), "r"((const Matrix *)(((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records))
+                        : : "r"(((chain->index + slot) * sizeof(JntMatrix)) + (unsigned int)work->matrix_buffer), "r"(((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records)
                             : "$2", "memory");
                     }
                     cursor = JNT_nextElement(cursor);
@@ -421,8 +426,8 @@ matrix_available:
         }
         if (chain->index == 0) {
             source_byte_offset = chain->static_index;
-            root_destination = (Matrix *)(chain->index * sizeof(Matrix));
-            destination = (Matrix *)((unsigned int)work->matrix_buffer + (unsigned int)root_destination);
+            root_destination = (JntMatrix *)(chain->index * sizeof(JntMatrix));
+            destination = (JntMatrix *)((unsigned int)work->matrix_buffer + (unsigned int)root_destination);
             source_byte_offset *= sizeof(*records);
         } else {
             root_destination = &work->matrix_buffer[0];
@@ -453,14 +458,14 @@ matrix_available:
                 "sq $2, 32(%0)\n"
                 "lq $2, 48(%1)\n"
                 "sq $2, 48(%0)\n"
-            : : "r"(destination), "r"((const Matrix *)(source_byte_offset + (unsigned int)records))
+            : : "r"(destination), "r"(source_byte_offset + (unsigned int)records)
                 : "$2", "memory");
         }
-        destination->elements[3] = destination->elements[7] =
-            destination->elements[11] = 1.0f;
+        destination->flat[3] = destination->flat[7] =
+            destination->flat[11] = 1.0f;
 
         bound = work->hair_id_source->primary_id + work->hair_id_source->secondary_id;
-        if (work->attribute_key == work->expected_attribute_key) {
+        if (work->attribute_key == work->requested_attribute_key) {
             while (work->current_index < bound) {
                 cursor = JNT_getVal2(work, cursor, frame);
                 if (work->flags & 4) {
@@ -499,7 +504,7 @@ matrix_available:
                         "sq $2, 32(%0)\n"
                         "lq $2, 48(%1)\n"
                         "sq $2, 48(%0)\n"
-                    : : "r"(previous_destination), "r"((const Matrix *)((chain->static_index * sizeof(*records)) + (unsigned int)records))
+                    : : "r"(previous_destination), "r"((chain->static_index * sizeof(*records)) + (unsigned int)records)
                         : "$2", "memory");
                 }
             }
@@ -517,7 +522,7 @@ matrix_available:
                             "sq $2, 32(%0)\n"
                             "lq $2, 48(%1)\n"
                             "sq $2, 48(%0)\n"
-                        : : "r"((Matrix *)(((chain->index + slot) * sizeof(Matrix)) + (unsigned int)work->matrix_buffer)), "r"((const Matrix *)(((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records))
+                        : : "r"(((chain->index + slot) * sizeof(JntMatrix)) + (unsigned int)work->matrix_buffer), "r"(((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records)
                             : "$2", "memory");
                     }
                     slot++;
@@ -534,19 +539,19 @@ matrix_available:
     }
     work->flags &= ~0x40;
     if (chain->index == 0) {
-        xglMatrixUnit4s(work->matrix_buffer);
+        xglMatrixUnit4s(work->matrix_buffer->elements);
     }
     return cursor;
 }
 
-JcElement *JC_setParent2(JcWork *work, JcElement *elements, JcChain *chain)
+JntStaticChannel *JC_setParent2(JntWork *work, JntStaticChannel *elements, JcChain *chain)
 {
-    JcElement *element_array;
-    JcElement *cursor;
-    Matrix *matrix_buffer;
-    const Matrix *records;
-    Matrix *destination;
-    const Matrix *indexed_source;
+    JntStaticChannel *element_array;
+    JntStaticChannel *cursor;
+    JntMatrix *matrix_buffer;
+    const JntMatrix *records;
+    JntMatrix *destination;
+    const JntMatrix *indexed_source;
     unsigned int source_byte_offset;
     int chain_length;
     int slot;
@@ -572,14 +577,13 @@ matrix_available:
         unsigned int flags_after_copy;
         destination = &matrix_buffer[chain->index];
 
-        copyMatrix(destination->quadwords, records[0].quadwords);
-        copyMatrix(destination->quadwords,
-                   records[chain->static_index].quadwords);
+        copyMatrix(destination, &records[0]);
+        copyMatrix(destination, &records[chain->static_index]);
         flags_after_copy = work->flags | 8;
-        destination->elements[3] = 1.0f;
+        destination->flat[3] = 1.0f;
         work->flags = flags_after_copy;
-        destination->elements[7] = 1.0f;
-        destination->elements[11] = 1.0f;
+        destination->flat[7] = 1.0f;
+        destination->flat[11] = 1.0f;
         return 0;
     }
 
@@ -600,22 +604,20 @@ matrix_available:
             cursor = JNT_getStaticVal2(work, cursor);
         }
         if (chain->index == 0) {
-            Matrix *row_base = work->matrix_buffer;
+            JntMatrix *row_base = work->matrix_buffer;
 
             destination = &row_base[chain->index];
-            copyMatrix(destination->quadwords,
-                       records[chain->static_index].quadwords);
-            destination->elements[3] = destination->elements[7] =
-                destination->elements[11] = 1.0f;
+            copyMatrix(destination, &records[chain->static_index]);
+            destination->flat[3] = destination->flat[7] =
+                destination->flat[11] = 1.0f;
         } else {
-            Matrix *root_matrix = work->matrix_buffer;
+            JntMatrix *root_matrix = work->matrix_buffer;
 
             destination = &root_matrix[chain->index];
-            copyMatrix(root_matrix->quadwords, records[0].quadwords);
-            copyMatrix(destination->quadwords,
-                       records[chain->static_index].quadwords);
-            destination->elements[3] = destination->elements[7] =
-                destination->elements[11] = 1.0f;
+            copyMatrix(root_matrix, &records[0]);
+            copyMatrix(destination, &records[chain->static_index]);
+            destination->flat[3] = destination->flat[7] =
+                destination->flat[11] = 1.0f;
         }
         bound = work->hair_id_source->channel_limit;
         while (work->current_index < bound) {
@@ -624,18 +626,18 @@ matrix_available:
         if (work->flags & 2) {
             work->current_index = chain->index;
             if (element_array[chain->index].type == 2) {
-                Matrix *previous_destination;
+                JntMatrix *previous_destination;
                 records = *chain->source;
                 previous_destination = &work->matrix_buffer[chain->index - 1];
-                copyMatrix(previous_destination->quadwords,
-                           records[chain->static_index].quadwords);
+                copyMatrix(previous_destination,
+                           &records[chain->static_index]);
             }
             cursor = &element_array[work->current_index];
             slot = 0;
             if (work->current_index < bound && cursor->type != 4) {
                 do {
-                    copyMatrix(work->matrix_buffer[chain->index + slot].quadwords,
-                               records[chain->static_index + slot].quadwords);
+                    copyMatrix(&work->matrix_buffer[chain->index + slot],
+                               &records[chain->static_index + slot]);
                     cursor = JNT_nextElement(cursor);
                     slot++;
                     work->current_index++;
@@ -654,26 +656,24 @@ matrix_available:
             cursor = JNT_getVal2(work, cursor, frame);
         }
         if (chain->index == 0) {
-            Matrix *row_base = work->matrix_buffer;
+            JntMatrix *row_base = work->matrix_buffer;
 
             destination = &row_base[chain->index];
-            copyMatrix(destination->quadwords,
-                       records[chain->static_index].quadwords);
-            destination->elements[3] = destination->elements[7] =
-                destination->elements[11] = 1.0f;
+            copyMatrix(destination, &records[chain->static_index]);
+            destination->flat[3] = destination->flat[7] =
+                destination->flat[11] = 1.0f;
         } else {
-            Matrix *root_matrix = work->matrix_buffer;
+            JntMatrix *root_matrix = work->matrix_buffer;
 
             destination = &root_matrix[chain->index];
-            copyMatrix(root_matrix->quadwords, records[0].quadwords);
-            copyMatrix(destination->quadwords,
-                       records[chain->static_index].quadwords);
-            destination->elements[3] = destination->elements[7] =
-                destination->elements[11] = 1.0f;
+            copyMatrix(root_matrix, &records[0]);
+            copyMatrix(destination, &records[chain->static_index]);
+            destination->flat[3] = destination->flat[7] =
+                destination->flat[11] = 1.0f;
         }
         bound = work->hair_id_source->primary_id +
                 work->hair_id_source->secondary_id;
-        if (work->attribute_key == work->expected_attribute_key) {
+        if (work->attribute_key == work->requested_attribute_key) {
             while (work->current_index < bound) {
                 cursor = JNT_getVal2(work, cursor, frame);
                 if (work->flags & 4) {
@@ -698,18 +698,18 @@ matrix_available:
         if (work->flags & 2) {
             work->current_index = chain->index;
             if (element_array[chain->index].type == 2) {
-                Matrix *previous_destination;
+                JntMatrix *previous_destination;
                 records = *chain->source;
                 previous_destination = &work->matrix_buffer[chain->index - 1];
-                copyMatrix(previous_destination->quadwords,
-                           records[chain->static_index].quadwords);
+                copyMatrix(previous_destination,
+                           &records[chain->static_index]);
             }
             cursor = &element_array[work->current_index];
             slot = 0;
             if (work->current_index < bound && cursor->type != 4) {
                 do {
-                    copyMatrix(work->matrix_buffer[chain->index + slot].quadwords,
-                               records[chain->static_index + slot].quadwords);
+                    copyMatrix(&work->matrix_buffer[chain->index + slot],
+                               &records[chain->static_index + slot]);
                     slot++;
                     cursor = JNT_nextElement(cursor);
                     work->current_index++;
@@ -723,7 +723,7 @@ matrix_available:
     }
     work->flags &= ~0x40;
     if (chain->index == 0) {
-        xglMatrixUnit4s(work->matrix_buffer);
+        xglMatrixUnit4s(work->matrix_buffer->elements);
     }
     return cursor;
 }

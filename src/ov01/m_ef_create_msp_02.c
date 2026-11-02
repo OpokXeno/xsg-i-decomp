@@ -93,11 +93,11 @@ extern float tanf(float value);
 
 struct MspCreationParameters {
     unsigned char unmodeled_000[0x08];
-    ActRecord *actor;                                              /* 0x008 */
+    Actor *actor;                                              /* 0x008 */
     u32 actorCoordinate;                                           /* 0x00c */
     Vector4 creationOffset;                                        /* 0x010 */
     unsigned char unmodeled_020[0x04];
-    ActRecord *targetActor;                                        /* 0x024 */
+    Actor *targetActor;                                        /* 0x024 */
     u32 targetCoordinate;                                          /* 0x028 */
     unsigned char unmodeled_02c[0x14];
     int model_entry;

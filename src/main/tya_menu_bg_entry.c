@@ -1,5 +1,8 @@
 #include "common.h"
 #include "main/xgl_2.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_task.h"
 
 /* Original .lit4 words byte-pinned at their mapped VAs. */
 #define MENUBG_VERTICAL_OFFSET_SCALE (0.4f) /* 0x004D7C88: cd cc cc 3e */
@@ -96,12 +99,6 @@ typedef struct MenuBgScratch {
 XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry);
-
-extern float xglFRand(void);
-extern float I2F(int value);
-extern void xglCameraMove(StudioCamera *camera);
-extern int xglTaskRemove(XglTaskPrefix *task);
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
 extern void xglRotTransPersN(MenuBgProjectedPoint *destination,
                              Matrix4 *matrix, const Vector4 *points,
@@ -207,7 +204,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
         }
     }
 
-    /* The byte cursor follows the interleaved color and vertex-index records. */
+    /* The byte cursor walks the interleaved color and vertex-index fields. */
     quad_bytes = (const u8 *)index;
     texture_x = task->position_x;
     texture_y = task->position_y;
@@ -268,7 +265,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
         scratch->packet.vertices[3].projected[2] = (*screen_vertex)[2];
         scratch->packet.vertices[3].projected[3] = 0;
 
-        nmlModelDirectSend(1, (u8 *)&scratch->packet, 0xb);
+        nmlModelDirectSend(1, &scratch->packet, 0xb);
     }
 }
 
@@ -308,16 +305,16 @@ static int task_menubg(XglTaskPrefix *task_prefix)
         StudioCamera *camera;
 
         nmlModelDirectSend(2, TestEnv_2_0036AAA0, 11);
-        nmlModelDirectSend(1, (u8 *)task->work, 130);
+        nmlModelDirectSend(1, task->work, 130);
         camera = xglStudioGetCamera2(task->work->camera_id);
-        camera->position.x = 0.0f;
-        camera->position.y = 0.0f;
-        camera->position.z = task->work->camera_position_z;
-        camera->position.w = 1.0f;
-        camera->rotation.w = 1.0f;
-        camera->rotation.x = 0.0f;
-        camera->rotation.y = 0.0f;
-        camera->rotation.z = 0.0f;
+        (&camera->position.vector)->x = 0.0f;
+        (&camera->position.vector)->y = 0.0f;
+        (&camera->position.vector)->z = task->work->camera_position_z;
+        (&camera->position.vector)->w = 1.0f;
+        (&camera->rotation.vector)->w = 1.0f;
+        (&camera->rotation.vector)->x = 0.0f;
+        (&camera->rotation.vector)->y = 0.0f;
+        (&camera->rotation.vector)->z = 0.0f;
         xglCameraMove(camera);
     }
 

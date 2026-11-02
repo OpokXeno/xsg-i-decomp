@@ -4764,9 +4764,12 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
     `split_mixed` (a retry only, see `_derive_current`) routes a legacy run
     whose owners are partly named C OBJECTs and partly anonymous emissions
     item by item instead of refusing it.
+
+    Overlay units refresh the same way (ov02/tu009, 2026-11-01): a candidate
+    whose C emits a new jump table or moves its strings needs its explicit
+    `c_input_spans` rebound to the current object exactly as MAIN does. The
+    MAIN-only GP literal (`.lit4`) pairing below stays MAIN-only.
     """
-    if unit != 'main':
-        return declared, None
     initialized = {sec: runs for sec, runs in declared.items() if sec not in ('.bss', '.sbss')}
     if not initialized:
         return declared, None
@@ -4802,7 +4805,12 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                            list(run.get('uncredited_c_symbols') or []) +
                            [name for part in run.get('c_input_spans') or []
                             for name in part.get('symbols') or []])}
-    mixed = any(run.get('c_input_spans') for runs in initialized.values() for run in runs) and \
+    # Canonicalizing a mixed legacy/explicit request, and routing a new named
+    # owner from here, are MAIN's registry form. An overlay entry is refreshed
+    # only when the current object makes its explicit spans stale; its legacy
+    # runs and new owners keep the overlay discovery path below `derive`.
+    mixed = unit == 'main' and \
+            any(run.get('c_input_spans') for runs in initialized.values() for run in runs) and \
             any(not run.get('c_input_spans') for runs in initialized.values() for run in runs)
     stale = False
     # Named owners a declared span still lists but the C object no longer
@@ -4826,6 +4834,19 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                     covered_inputs[name] = max(covered_inputs.get(name, 0),int(part['object_range'][1]))
     stale |= any(section.size != covered_inputs[section.name] for section in elf.sections
                  if section.name in covered_inputs and section.type != 8)
+    if (unit != 'main' and not stale and
+            any(not run.get('c_input_spans') for runs in initialized.values() for run in runs)):
+        # An overlay legacy run (no c_input_spans) is laid out in raw-object
+        # order by the planner. When the current C object no longer fits that
+        # request (ov02/tu011: tskUmnSimulationList's new jump table follows
+        # D_00A132F8 in .rodata but precedes it in the original), the request
+        # is stale: re-prove it below exactly as a stale explicit span.
+        probe = copy.deepcopy(load_registry(root))
+        probe['tus'][tu_id] = declared
+        try:
+            split_plans(root, unit, unit_dir, tu_id, elf, registry=probe)
+        except CarveError:
+            stale = True
     literal_coordinates = {}
     if unit == 'main' and any(part.get('anonymous_emission') is True
             for run in initialized.get('.lit4', []) for part in run.get('c_input_spans', [])):
@@ -4840,7 +4861,7 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                             lo = hx(part.get('range', run['range'])[0])
                             stale |= any(offset <= at < end and address != lo + at - offset
                                          for at, address in literal_coordinates.items())
-    if not mixed and not stale and not (set(current_named) - old_names):
+    if not mixed and not stale and (unit != 'main' or not (set(current_named) - old_names)):
         return declared, None
     items = {sec: section_items(ctx, sec) for sec in initialized if sec in ctx['pieces']}
     for sec in SECTIONS:
@@ -5242,7 +5263,22 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                 refreshed[sec] = [r for r in refreshed[sec] if r is not run]
                 continue
             if len(exact) != 1:
-                raise CarveError(f'{tu_id} {sec}: anonymous original span {h8(lo)}-{h8(hi)} has {len(exact)} exact compiler coordinates')
+                # ov02/tu009 (2026-11-01): C that declares `extern ... D_00A10640[]`
+                # for the scaffold item `text_2` leaves the placeholder undefined,
+                # so the item looks C-emitted here. Name that cause instead of a
+                # bare coordinate count; the refusal itself is unchanged.
+                placeholders = sorted(
+                    s.name for s in elf.symbols if s.shndx == 0 and s.name and
+                    re.fullmatch(r'D_([0-9A-Fa-f]{8})', s.name) and lo <= int(s.name[2:], 16) < hi)
+                labels = sorted({label for it in items.get(sec, []) if lo <= it['start'] < hi
+                                 for label in it.get('labels', [])} - set(placeholders))
+                hint = ''
+                if placeholders and labels:
+                    hint = (f'; the C object references {", ".join(placeholders)}, which the scaffold '
+                            f'does not define: declare the scaffold item by its label '
+                            f'({", ".join(labels)}; config/symbols/{unit}.txt) instead of its '
+                            f'address placeholder')
+                raise CarveError(f'{tu_id} {sec}: anonymous original span {h8(lo)}-{h8(hi)} has {len(exact)} exact compiler coordinates{hint}')
             part['object_range'] = [exact[0], exact[0] + length]
             target_parts.append(dict(offset=exact[0], end=exact[0]+length, length=length,
                                      lo=lo, hi=hi, input_section=input_sec, target_section=sec))

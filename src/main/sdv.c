@@ -1,7 +1,11 @@
 #include "common.h"
 #include "shared.h"
+#include "main/sdv.h"
 #include "sdv.h"
 #include "main/m_ef_obj.h"
+#include "main/m_math.h"
+#include "main/sef.h"
+#include "main/sef_print.h"
 
 /* A key field halfway between two keys: blend is the 8-bit fraction. */
 #define SDV_BLEND(dest, field) \
@@ -83,8 +87,6 @@ typedef union SdvTextureCoordinate {
 
 extern short _hitFlag;
 extern short _hitSignal;
-extern int _nowEftNo;
-extern const char sdvOpNameNop[8];
 extern const char SdvOpcodeNameAconstNull[16];
 extern const char SdvOpcodeNameIconstM1[16];
 extern const char SdvOpcodeNameIconst0[16];
@@ -100,49 +102,6 @@ extern const char SdvOpcodeNameFconst1[16];
 extern const char SdvOpcodeNameFconst2[16];
 extern const char SdvOpcodeNameDconst0[16];
 extern const char SdvOpcodeNameDconst1[16];
-extern const char sdvOpNameBipush[8];
-extern const char sdvOpNameSipush[8];
-extern const char sdvOpNameLdc1[8];
-extern const char sdvOpNameLdc2[8];
-extern const char sdvOpNameLdc2w[8];
-extern const char sdvOpNameIload[8];
-extern const char sdvOpNameLload[8];
-extern const char sdvOpNameFload[8];
-extern const char sdvOpNameDload[8];
-extern const char sdvOpNameAload[8];
-extern const char sdvOpNameIload0[8];
-extern const char sdvOpNameIload1[8];
-extern const char sdvOpNameIload2[8];
-extern const char sdvOpNameIload3[8];
-extern const char sdvOpNameLload0[8];
-extern const char sdvOpNameLload1[8];
-extern const char sdvOpNameLload2[8];
-extern const char sdvOpNameLload3[8];
-extern const char sdvOpNameFload0[8];
-extern const char sdvOpNameFload1[8];
-extern const char sdvOpNameFload2[8];
-extern const char sdvOpNameFload3[8];
-extern const char sdvOpNameDload0[8];
-extern const char sdvOpNameDload1[8];
-extern const char sdvOpNameDload2[8];
-extern const char sdvOpNameDload3[8];
-extern const char sdvOpNameAload0[8];
-extern const char sdvOpNameAload1[8];
-extern const char sdvOpNameAload2[8];
-extern const char sdvOpNameAload3[8];
-extern const char sdvOpNameIaload[8];
-extern const char sdvOpNameLaload[8];
-extern const char sdvOpNameFaload[8];
-extern const char sdvOpNameDaload[8];
-extern const char sdvOpNameAaload[8];
-extern const char sdvOpNameBaload[8];
-extern const char sdvOpNameCaload[8];
-extern const char sdvOpNameSaload[8];
-extern const char sdvOpNameIstore[8];
-extern const char sdvOpNameLstore[8];
-extern const char sdvOpNameFstore[8];
-extern const char sdvOpNameDstore[8];
-extern const char sdvOpNameAstore[8];
 extern const char SdvOpcodeNameIstore0[16];
 extern const char SdvOpcodeNameIstore1[16];
 extern const char SdvOpcodeNameIstore2[16];
@@ -163,86 +122,9 @@ extern const char SdvOpcodeNameAstore0[16];
 extern const char SdvOpcodeNameAstore1[16];
 extern const char SdvOpcodeNameAstore2[16];
 extern const char SdvOpcodeNameAstore3[16];
-extern const char sdvOpNameIastore[8];
-extern const char sdvOpNameLastore[8];
-extern const char sdvOpNameFastore[8];
-extern const char sdvOpNameDastore[8];
-extern const char sdvOpNameAastore[8];
-extern const char sdvOpNameBastore[8];
-extern const char sdvOpNameCastore[8];
-extern const char sdvOpNameSastore[8];
-extern const char sdvOpNamePop[8];
-extern const char sdvOpNamePop2[8];
-extern const char sdvOpNameDup[8];
-extern const char sdvOpNameDupX1[8];
-extern const char sdvOpNameDupX2[8];
-extern const char sdvOpNameDup2[8];
-extern const char sdvOpNameDup2X1[8];
-extern const char sdvOpNameDup2X2[8];
-extern const char sdvOpNameSwap[8];
-extern const char sdvOpNameIadd[8];
-extern const char sdvOpNameLadd[8];
-extern const char sdvOpNameFadd[8];
-extern const char sdvOpNameDadd[8];
-extern const char sdvOpNameIsub[8];
-extern const char sdvOpNameLsub[8];
-extern const char sdvOpNameFsub[8];
-extern const char sdvOpNameDsub[8];
-extern const char sdvOpNameImul[8];
-extern const char sdvOpNameLmul[8];
-extern const char sdvOpNameFmul[8];
-extern const char sdvOpNameDmul[8];
-extern const char sdvOpNameIdiv[8];
-extern const char sdvOpNameLdiv[8];
-extern const char sdvOpNameFdiv[8];
-extern const char sdvOpNameDdiv[8];
-extern const char sdvOpNameIrem[8];
-extern const char sdvOpNameLrem[8];
-extern const char sdvOpNameFrem[8];
-extern const char sdvOpNameDrem[8];
-extern const char sdvOpNameIneg[8];
-extern const char sdvOpNameLneg[8];
-extern const char sdvOpNameFneg[8];
-extern const char sdvOpNameDneg[8];
-extern const char sdvOpNameIshl[8];
-extern const char sdvOpNameLshl[8];
-extern const char sdvOpNameIshr[8];
-extern const char sdvOpNameLshr[8];
-extern const char sdvOpNameIushr[8];
-extern const char sdvOpNameLushr[8];
-extern const char sdvOpNameIand[8];
-extern const char sdvOpNameLand[8];
-extern const char sdvOpNameIor[8];
-extern const char sdvOpNameLor[8];
-extern const char sdvOpNameIxor[8];
-extern const char sdvOpNameLxor[8];
-extern const char sdvOpNameIinc[8];
-extern const char sdvOpNameI2l[8];
-extern const char sdvOpNameI2f[8];
-extern const char sdvOpNameI2d[8];
-extern const char sdvOpNameL2i[8];
-extern const char sdvOpNameL2f[8];
-extern const char sdvOpNameL2d[8];
-extern const char sdvOpNameF2i[8];
-extern const char sdvOpNameF2l[8];
-extern const char sdvOpNameF2d[8];
-extern const char sdvOpNameD2i[8];
-extern const char sdvOpNameD2l[8];
-extern const char sdvOpNameD2f[8];
 extern const char SdvOpcodeNameInt2byte[16];
 extern const char SdvOpcodeNameInt2char[16];
 extern const char SdvOpcodeNameInt2short[16];
-extern const char sdvOpNameLcmp[8];
-extern const char sdvOpNameFcmpl[8];
-extern const char sdvOpNameFcmpg[8];
-extern const char sdvOpNameDcmpl[8];
-extern const char sdvOpNameDcmpg[8];
-extern const char sdvOpNameIfeq[8];
-extern const char sdvOpNameIfne[8];
-extern const char sdvOpNameIflt[8];
-extern const char sdvOpNameIfge[8];
-extern const char sdvOpNameIfgt[8];
-extern const char sdvOpNameIfle[8];
 extern const char SdvOpcodeNameIfIcmpeq[16];
 extern const char SdvOpcodeNameIfIcmpne[16];
 extern const char SdvOpcodeNameIfIcmplt[16];
@@ -251,17 +133,8 @@ extern const char SdvOpcodeNameIfIcmpgt[16];
 extern const char SdvOpcodeNameIfIcmple[16];
 extern const char SdvOpcodeNameIfAcmpeq[16];
 extern const char SdvOpcodeNameIfAcmpne[16];
-extern const char sdvOpNameGoto[8];
-extern const char sdvOpNameJsr[8];
-extern const char sdvOpNameRet[8];
 extern const char SdvOpcodeNameTableswitch[16];
 extern const char SdvOpcodeNameLookupswitch[16];
-extern const char sdvOpNameIreturn[8];
-extern const char sdvOpNameLreturn[8];
-extern const char sdvOpNameFreturn[8];
-extern const char sdvOpNameDreturn[8];
-extern const char sdvOpNameAreturn[8];
-extern const char sdvOpNameReturn[8];
 extern const char SdvOpcodeNameGetstatic[16];
 extern const char SdvOpcodeNamePutstatic[16];
 extern const char SdvOpcodeNameGetfield[16];
@@ -270,22 +143,15 @@ extern const char SdvOpcodeNameInvokevirtual[16];
 extern const char SdvOpcodeNameInvokespecial[16];
 extern const char SdvOpcodeNameInvokestatic[16];
 extern const char SdvOpcodeNameInvokeinterface[16];
-extern const char sdvOpNameUnknown[4];
-extern const char sdvOpNameNew[8];
 extern const char SdvOpcodeNameNewarray[16];
 extern const char SdvOpcodeNameAnewarray[16];
 extern const char SdvOpcodeNameArraylength[16];
-extern const char sdvOpNameAthrow[8];
 extern const char SdvOpcodeNameCheckcast[16];
 extern const char SdvOpcodeNameInstanceof[16];
 extern const char SdvOpcodeNameMonitorenter[16];
 extern const char SdvOpcodeNameMonitorexit[16];
-extern const char sdvOpNameWide[8];
 extern const char SdvOpcodeNameMultianewarray[16];
-extern const char sdvOpNameIfnull[8];
 extern const char SdvOpcodeNameIfnonnull[16];
-extern const char sdvOpNameGotoW[8];
-extern const char sdvOpNameJsrW[8];
 extern const char SdvOpcodeNameBreakpoint[16];
 extern const char SdvOpcodeNameCheckcastFast[16];
 extern const char SdvOpcodeNameInstanceofFast[16];
@@ -297,7 +163,6 @@ extern Vector4 *MMathVectorInterpolation(Vector4 *destination,
                                          const Vector4 *second,
                                          float parameter);
 
-extern unsigned char *sefGetBattleData(void);
 extern void sefMemZero(void *data, unsigned int size);
 extern Vector4 *func_A2C3F8(void);
 extern int sefGetDmgNull(void);
@@ -310,10 +175,7 @@ extern int func_A31C30(int kind);
 extern void func_A31CA0(int value0, int value1, int value2, int value3,
                         int value4);
 
-extern SdvScheduler *sefGetNowScheduler(void);
 extern StudioCamera *xglStudioGetActiveCamera(void);
-extern void MMathMulMatrix(void *destination, void *first, void *second);
-
 extern Vector4 *MMathApplyMatrix(Vector4 *destination, const void *matrix,
                                  const Vector4 *point);
 
@@ -322,22 +184,22 @@ extern int MMathRotTransPersClip(SdvScreenPoint *destination, const void *screen
 
 extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
 extern void sefGetWeaponPosition(Vector4 *position, void *weapon, int part);
-extern void SGsInitGifPacket(SdvGifPacket *packet);
+extern void SGsInitGifPacket(SGsPacket *packet);
 
-extern void SGsOpenGifPacket(SdvGifPacket *packet, int prim,
+extern void SGsOpenGifPacket(SGsPacket *packet, int prim,
                              unsigned long long registers, unsigned int nreg);
 
-extern void SGsCloseGifPacket(SdvGifPacket *packet);
+extern void SGsCloseGifPacket(SGsPacket *packet);
 
-extern void SGsAddReg(SdvGifPacket *packet, unsigned long long address,
+extern void SGsAddReg(SGsPacket *packet, unsigned long long address,
                       unsigned long long value);
 
-extern void SGsAddGifSTQ(SdvGifPacket *packet, float texture_s, float texture_t,
+extern void SGsAddGifSTQ(SGsPacket *packet, float texture_s, float texture_t,
                          float texture_q);
 
-extern void SGsAddGifRGBA(SdvGifPacket *packet, Quadword rgba);
-extern void SGsAddGifData(SdvGifPacket *packet, Quadword data);
-extern void SGsSendPacket(SdvGifPacket *packet);
+extern void SGsAddGifRGBA(SGsPacket *packet, Quadword rgba);
+extern void SGsAddGifData(SGsPacket *packet, Quadword data);
+extern void SGsSendPacket(SGsPacket *packet);
 
 static float _sdvMapRgb[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
@@ -363,7 +225,7 @@ unsigned short accBox[255] = {0};
 
 unsigned short evtBox[255] = {0};
 
-long long moneyBox = 0;
+unsigned long long moneyBox = 0;
 
 BattleDataStorage batDatBuf = {0};
 
@@ -428,7 +290,7 @@ static short _sdvSpecialBuf[8];
 
 static SdvAlter _sdvAlter[16];
 
-static unsigned char charID_0;
+static int charID_0;
 
 static int eftCate_1;
 
@@ -976,7 +838,7 @@ static int sdvTransOffset(SdvScreenPoint *screen, SdvScreenPoint *offset,
     local_offset.z *= 0.01f;
     sefGetPosition(&position, &local_offset, part);
     if (scheduler->flags & 2) {
-        MMathMulMatrix(local_matrix, slot->matrix, scheduler->matrix);
+        MMathMulMatrix(&local_matrix, &slot->matrix, &scheduler->matrix);
         MMathApplyMatrix(&position, local_matrix, &position);
     }
     __asm__ __volatile__(
@@ -993,7 +855,7 @@ static int sdvTransOffset(SdvScreenPoint *screen, SdvScreenPoint *offset,
         : "r"(&position), "r"(local_matrix)
         : "memory");
     camera = xglStudioGetActiveCamera();
-    MMathMulMatrix(view_matrix, camera->viewMatrix, local_matrix);
+    MMathMulMatrix(&view_matrix, &camera->viewMatrix, &local_matrix);
     __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(&position) : "memory");
     if (MMathRotTransPersClip(screen, camera, view_matrix, &position) != 0)
         return 0;
@@ -1368,7 +1230,7 @@ void sdvScheduleAlter(SdvSequence *sequence, SdvAlterRequest *request)
     struct SdvAlterImageItem *primary;
     struct SdvAlterImageItem *secondary;
     SdvAlterParameters parameters;
-    unsigned char character_id;
+    int character_id;
     int event_index;
     int category;
     int mapper_index;
@@ -1516,15 +1378,15 @@ void sdvExecAlter(SdvAlter *alter)
 
     alter->parameters.life--;
     if (alter->parameters.life > 0) {
-        if ((short)alter->cursor < 128) {
-            if ((short)alter->cursor < alter->parameters.max_samples) {
+        if (alter->cursor < 128) {
+            if (alter->cursor < alter->parameters.max_samples) {
                 alter->cursor++;
             }
         }
     } else {
         alter->cursor -= alter->parameters.shrink;
     }
-    if ((short)alter->cursor > 0) {
+    if (alter->cursor > 0) {
         for (i = 0; i < 2; i++) {
             int selector = alter->parameters.selector[i];
             SdvActorPosition *actor;
@@ -1606,7 +1468,7 @@ const float McMathUnitMatrix[4][4] = {
     {0.0f, 0.0f, 0.0f, 1.0f},
 };
 
-void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet)
+void sdvDrawAlter(SdvAlter *alter, SGsPacket *packet)
 {
     HermiteVector tangent[2];
     HermiteVector points[2][8];
@@ -1631,7 +1493,7 @@ void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet)
     float s_step = 0.0f;
     float textureS;
 
-    count = (short)alter->cursor;
+    count = alter->cursor;
     head = alter->samples - 1;
     camera = xglStudioGetActiveCamera();
     textureS = alter->phase;
@@ -1655,15 +1517,15 @@ void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet)
     if (alter->parameters.image_count != 0) {
         SGsOpenGifPacket(packet, 92, 3822, 3);
         alter->parameters.image_timer++;
-        if ((short)alter->parameters.image_timer >= alter->parameters.image_frames) {
+        if (alter->parameters.image_timer >= alter->parameters.image_frames) {
             alter->parameters.image_timer = 0;
             alter->parameters.image_index++;
-            if ((short)alter->parameters.image_index >= alter->parameters.image_count) {
+            if (alter->parameters.image_index >= alter->parameters.image_count) {
                 alter->parameters.image_index = 0;
             }
         }
         SGsAddReg(packet, 6,
-                  alter->parameters.tex0[(short)alter->parameters.image_index]);
+                  alter->parameters.tex0[alter->parameters.image_index]);
         if (alter->parameters.mode == 3) {
             SGsAddReg(packet, 8, 5);
         } else {
@@ -1673,7 +1535,7 @@ void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet)
         SGsOpenGifPacket(packet, 76, 14, 1);
     }
     SGsAddReg(packet, 66, alphaTbl_004CC8D8[alter->parameters.blend]);
-    packet->loop_count = 1;
+    packet->loopCount = 1;
     SGsCloseGifPacket(packet);
     __asm__ __volatile__(
         "lq $8, 0(%1)\n\t"
@@ -1752,7 +1614,7 @@ void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet)
                 alpha -= alpha_step;
             }
         }
-        packet->loop_count = 10;
+        packet->loopCount = 10;
         SGsCloseGifPacket(packet);
         if ((i & 7) == 7) {
             SGsSendPacket(packet);

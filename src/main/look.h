@@ -6,6 +6,9 @@
 #define SRC_MAIN_LOOK_H
 
 #include "shared.h"
+#include "main/look.h"
+#include "main/matrix_print.h"
+#include "main/xgl_2.h"
 
 /* Head bounds, position adjustment and smoothing steps. */
 #define LOOK_HEAD_MIN_WEIGHT 0.0001f
@@ -62,8 +65,8 @@ typedef struct LookJointElement {
     unsigned char unmodeled_0c[4];
     float rotation[3];
     unsigned char unmodeled_1c[4];
-    float translation[3];
-    unsigned char unmodeled_2c[0x40 - 0x2c];
+    Vector4 translation;
+    unsigned char unmodeled_30[0x40 - 0x30];
 } LookJointElement;
 
 typedef struct LookJointWork {
@@ -93,10 +96,23 @@ typedef struct LookCharacter {
     unsigned char unmodeled_084[0x90 - 0x84];
     Vector4 eyePosition;
     unsigned char unmodeled_0a0[0x600 - 0xa0];
-    Vector4 lookAngles[2];
+    /*
+     * Look angle rows: [n][0] and [n][3] are eye n's yaw and pitch
+     * (LOOK_eye_cont), [0][1] the sebo angle, [1][1]/[1][2] the head Y/Z
+     * angles. A float row array, not Vector4: LOOK_eye_cont's [side] stores
+     * keep the 0x600 in the displacement.
+     */
+    float lookAngles[2][4];
     Vector4 worldPosition;
     Vector4 headPosition;
-    LookEyeState eyes[2];
+    /*
+     * Eye states; LOOK_eye_cont reads each eye's yaw/pitch back as row
+     * elements [side][2]/[side][3] of the same storage.
+     */
+    union {
+        LookEyeState eyes[2];
+        float eyeAngles[2][4];
+    };
     float eyeYaw;
     float eyePitch;
     unsigned char unmodeled_668[4];
@@ -114,14 +130,6 @@ typedef struct LookCharacter {
     unsigned int headFlags;
 } LookCharacter;
 
-/* The character's look rows and eye states viewed as float rows (0x600 and 0x640). */
-typedef struct LookAngleView {
-    unsigned char unmodeled_000[0x600];
-    float lookAngles[2][4];
-    unsigned char unmodeled_620[0x20];
-    float eyeAngles[2][4];
-} LookAngleView;
-
 typedef struct LookModelRecord {
     unsigned char unmodeled_00[0x11];
     char name[0x48 - 0x11];
@@ -136,20 +144,10 @@ typedef union LookAlignedVector4 {
 } LookAlignedVector4;
 
 void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
-void xglMatrixInverse(Matrix4 destination, Matrix4 source);
 void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *source);
-float xglAtan2(float x, float y);
-void CUR_MATRIX_Set(Matrix4 matrix);
-void CUR_MATRIX_Txyz4s(const float *displacement);
-void CUR_MATRIX_Rzyx4s(const float *angles);
-void CUR_MATRIX_Get(Matrix4 matrix);
-void MATRIX_convert4(Matrix4 destination, Matrix4 source);
 void xglMatrixRotX(Matrix4 destination, Matrix4 source, float angle);
 void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
 float xglAsin(float value);
 void look_limit(float *angle, float limit);
 void look_limit_add(float *angle, float target, float step);
-void LOOK_eyeL_cont(int model, int target, int step);
-void LOOK_eyeR_cont(int model, int target, int step);
-
 #endif /* SRC_MAIN_LOOK_H */

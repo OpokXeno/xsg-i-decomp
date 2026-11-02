@@ -1,6 +1,8 @@
 #include "common.h"
 #include "main/xgl_font.h"
+#include "main/msg_init.h"
 #include "msg_init.h"
+#include "main/twsys_init.h"
 
 #define MIF2_FONT_ESCAPE_BYTE 0x19u
 #define MIF2_FONT_BEGIN_BYTE 0x01u
@@ -22,6 +24,7 @@ typedef struct Mif2Argument {
     union {
         int number;
         const char *text;
+        const unsigned char *bytes;
     } value;
 } Mif2Argument;
 
@@ -51,12 +54,6 @@ typedef struct RubyFontContext {
     unsigned char flags;
 } RubyFontContext;
 
-typedef struct MsgQueueInfo {
-    short count;
-    short lines;
-    short width;
-} MsgQueueInfo;
-
 extern const char tokenDelimiters[];
 extern char msgWidthProbeControl[];
 
@@ -80,14 +77,8 @@ char *MIF2_dummy(char *out, int argc, const Mif2Argument *args);
 char *MIF2_gaiji(char *out, int argc, const Mif2Argument *args);
 char *MIF2_code(char *out, int argc, const Mif2Argument *args);
 
-extern int PARSE_int(const char *str, int len, int base);
-
-unsigned int MSG_convert(unsigned char *destination, int capacity, const char *text, int length);
 int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int length);
 extern int xglFontCheckProportional(unsigned int high, unsigned int low);
-extern unsigned int xglFontGetProportionalSize(int code);
-extern int xglFontGetStringWidth(const char *text);
-extern int xglFontGetStringWidth2(const char *text, int mode);
 static void _skipCTRLCode(unsigned char **source);
 
 static int ctrlCodeFlags = 0;
@@ -489,14 +480,14 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
                 case 0x84:
                     break;
                 case 0x85:
-                    queue->label = (int)input.bytes;
+                    queue->label.text = input.bytes;
                     while (0 != *input.bytes++)
                         ;
                     break;
                 case 0x80:
                 case 0x82:
                 case 0x83:
-                    queue->label = *input.bytes++;
+                    queue->label.value = *input.bytes++;
                     break;
                 }
                 input.bytes++;
@@ -687,7 +678,7 @@ int MSG_copyln(unsigned char **destination, unsigned char **source, int flags, u
             if (code > 159) {
                 int glyph = xglFontCheckProportional(code & 0xFF, low & 0xFF);
 
-                *output++ = (unsigned char)low;
+                *output++ = low;
                 if (proportional && glyph >= 0) {
                     unsigned int bounds = xglFontGetProportionalSize(glyph);
 
@@ -1004,16 +995,16 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
 
 char *MIF2_font(char *out, int argc, const Mif2Argument *args)
 {
-    const unsigned char *text = (const unsigned char *)args[0].value.text;
+    const unsigned char *text = args[0].value.bytes;
     unsigned char ch;
 
-    *out++ = (char)(unsigned char)MIF2_FONT_ESCAPE_BYTE;
-    *out++ = (char)(unsigned char)MIF2_FONT_BEGIN_BYTE;
+    *out++ = (unsigned char)MIF2_FONT_ESCAPE_BYTE;
+    *out++ = (unsigned char)MIF2_FONT_BEGIN_BYTE;
     while ((ch = *text++) != '/' && ch != 0) {
         *out++ = ch;
     }
-    *out++ = (char)(unsigned char)MIF2_FONT_ESCAPE_BYTE;
-    *out++ = (char)(unsigned char)MIF2_FONT_END_BYTE;
+    *out++ = (unsigned char)MIF2_FONT_ESCAPE_BYTE;
+    *out++ = (unsigned char)MIF2_FONT_END_BYTE;
     *out = 0;
     return out;
 }
@@ -1023,7 +1014,7 @@ char *MIF2_color(char *out, int argc, const Mif2Argument *args)
     char *end;
     unsigned int rgb = args[0].value.number;
 
-    out[0] = (char)(unsigned char)MIF2_COLOR_BYTE;
+    out[0] = (unsigned char)MIF2_COLOR_BYTE;
     out[1] = rgb >> 16;
     out[2] = rgb >> 8;
     out[3] = rgb;
@@ -1034,7 +1025,7 @@ char *MIF2_color(char *out, int argc, const Mif2Argument *args)
 
 char *MIF2_label(char *out, int argc, const Mif2Argument *args)
 {
-    const unsigned char *text = (const unsigned char *)args[0].value.text;
+    const unsigned char *text = args[0].value.bytes;
     unsigned char ch;
 
     *out++ = '/';

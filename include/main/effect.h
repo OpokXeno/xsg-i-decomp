@@ -3,14 +3,6 @@
 
 #include "shared.h"
 #include "main/jni.h"
-
-struct UnitScaleVector {
-    SceneObjectClassRef *class_ref;
-    float z;
-    float y;
-    float x;
-    float w;
-    unsigned char unmodeled_14[4];
-};
+#include "main/unit.h"
 
 #endif /* INCLUDE_MAIN_EFFECT_H */

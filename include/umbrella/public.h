@@ -5,8 +5,6 @@ void ACT_draw(void);
 
 extern u8 *WorkEnd;
 
-extern HomogeneousVector cursor[];
-
 extern void eBattleWinClose2(void);
 extern int eBattleWinPageCheck4(void);
 extern void eBattleWinClose4(void);
@@ -21,7 +19,7 @@ extern int Get_ActorNumber(int target);
 
 extern int MenuFileMain(int mode);
 
-void *newObject(SceneClass *scene_class);
+void *newObject(JavaClass *clazz);
 void *newClass(void);
 void loadStaticClass(void *class_slot, const char *name);
 
@@ -46,25 +44,25 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
                       float radius, Vector4 *result);
 int HitCheckMapUnitPos(const Vector4 *position);
 
-extern SceneClass *classString;
+extern JavaClass *classString;
 
-extern SceneClass *classJava_xeno_Scene;
-extern SceneClass *classJava_xeno_Stage;
-extern SceneClass *classJava_xeno_Chr;
-extern SceneClass *classJava_xeno_Unit;
-extern SceneClass *classJava_xeno_Enepc;
-extern SceneClass *classJava_xeno_util_Window;
-extern SceneClass *classJava_xeno_Uwamono;
-extern SceneClass *classJava_xeno_util_Vector4f;
-extern SceneClass *classJava_xeno_util_Layout;
-extern SceneClass *classJava_xeno_Effect;
-extern SceneClass *classJava_xeno_Light;
-extern SceneClass *classJava_xeno_util_Menu;
-extern SceneClass *classJava_xeno_util_TCHParams;
-extern SceneClass *classJava_xeno_util_Spline;
-extern SceneClass *classJava_xeno_util_Input;
-extern SceneClass *classJava_xeno_Camera;
-extern SceneClass *classJava_xeno_Movie;
+extern JavaClass *classJava_xeno_Scene;
+extern JavaClass *classJava_xeno_Stage;
+extern JavaClass *classJava_xeno_Chr;
+extern JavaClass *classJava_xeno_Unit;
+extern JavaClass *classJava_xeno_Enepc;
+extern JavaClass *classJava_xeno_util_Window;
+extern JavaClass *classJava_xeno_Uwamono;
+extern JavaClass *classJava_xeno_util_Vector4f;
+extern JavaClass *classJava_xeno_util_Layout;
+extern JavaClass *classJava_xeno_Effect;
+extern JavaClass *classJava_xeno_Light;
+extern JavaClass *classJava_xeno_util_Menu;
+extern JavaClass *classJava_xeno_util_TCHParams;
+extern JavaClass *classJava_xeno_util_Spline;
+extern JavaClass *classJava_xeno_util_Input;
+extern JavaClass *classJava_xeno_Camera;
+extern JavaClass *classJava_xeno_Movie;
 void JNI_popFrame(void);
 
 extern char *STR_tokenGetNext(char *text, const char *delimiters);
@@ -107,7 +105,8 @@ void MenuModelAllBreak(void);
 
 void MenuShopMain(int shopType);
 
-void MenuPasWindow(void);
+struct WindowDX;
+void MenuPasWindow(struct WindowDX *window, void *arg);
 
 void nmlFilterSetTexClear(int frameBase);
 
@@ -126,7 +125,7 @@ void nmlPacketAddGsScissor(u64 scissor);
 int CheckPointLine(const Vector4 *first, const Vector4 *second,
                    const Vector4 *point);
 
-unsigned char *PartyDataGet(void);
+struct PartyDataPrefix *PartyDataGet(void);
 extern void PartyDataInit(void);
 void PartyFriendOff(int id);
 int PartyFriendCheck(int id);
@@ -154,7 +153,7 @@ int sefLoadEffectCf(int cf_id, int effect_no);
 int sefIsFinishEffect2(int effect_no);
 void sefSetLoadQue(int effect_no);
 int *sefGetLoadQue(void);
-unsigned char *sevGetPtAllocator2(int allocator_index);
+void *sevGetPtAllocator2(int allocator_index);
 
 void *smAlloc(unsigned int size);
 

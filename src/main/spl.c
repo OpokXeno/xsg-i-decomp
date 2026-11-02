@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "spl.h"
+#include "main/spl.h"
 
 float minCardinalInterval = 9.9999999747524271e-07f;
 
@@ -364,7 +365,7 @@ void SPL_getValueXYZ(float *destination, void *state, float frame)
     cubic = &spline->coefficients[SPL_CUBIC_TERM];
     sample_count = spline->sample_count;
 
-    easing_mode = (short)spline->first_key;
+    easing_mode = spline->first_key;
     switch (easing_mode) {
     case 0:
         weight = frame * (1.0f / (float)(short)spline->last_key);

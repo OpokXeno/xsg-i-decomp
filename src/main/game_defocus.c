@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_2.h"
 
 #define NULL ((void *)0)
 #define DEFOCUS_SCRATCH ((DefocusSolidPacket *)0x70000000)
@@ -318,21 +319,16 @@ static void DefocusMainType09Final(DefocusLayer *layer);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern int printf(const char *format, ...);
-extern float I2F(int value);
-extern int F2I(float value);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-extern float xglFRand(void);
-extern void DefocusMainType01(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType06(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType02(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType07(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType11(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType09(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType03(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType05(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType08(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType10(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType01(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType06(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType02(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType07(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType11(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType09(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType03(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType05(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet);
+static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet);
 
 static DefocusSolidPacketHeader Head_6_00367240;
 
@@ -560,9 +556,9 @@ static void DefocusMainType05(DefocusLayer *layer, XglPacket *packet)
     texture = GetTex0(0, 0);
     Head_5.texture = texture;
     width_dimensions =
-        ((u64)((long long)layer->parameters[6] ^ 0x3ffULL) << 4) | 15;
+        (((long long)layer->parameters[6] ^ 0x3ffULL) << 4) | 15;
     height_dimensions =
-        (u64)((long long)layer->parameters[7] ^ 0x3ffULL) << 24;
+        ((long long)layer->parameters[7] ^ 0x3ffULL) << 24;
     texture_dimensions = width_dimensions | height_dimensions;
     Head_5.texture_dimensions = texture_dimensions;
     DEFOCUS_TYPE05_PACKET->gif_tag = 0x51000006;
@@ -1257,9 +1253,8 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
 {
     DefocusLayer *layers;
     u32 first_index;
-    u32 row_address;
 
-    row_address = (u32)GameDefocusParam + (u32)group_index * 0x110u;
+    layers = &GameDefocusParam[group_index * 4];
     if (group_index >= 4) {
         /* JP: GameDefocusQuickSet()の引数が異常です(%d)。\n
          * EN: Invalid argument to GameDefocusQuickSet() (%d).\n */
@@ -1267,7 +1262,6 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
         return;
     }
 
-    layers = (DefocusLayer *)row_address;
     first_index = (u32)group_index * 4u;
     GameDefocusFinalize(first_index);
     GameDefocusFinalize(first_index + 1);

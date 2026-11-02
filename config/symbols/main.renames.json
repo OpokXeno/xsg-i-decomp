@@ -3955,7 +3955,6 @@
   "D_004DC593": "groupByteState",
   "D_00532A38": "printFuncTableEnd",
   "D_0058518C": "WIND_POSITION_PTR",
-  "D_0065A9A0": "savedEffectStack",
   "D_0065A9B0": "schedulerStates",
   "D_0065AFCC": "soundParameterRecords",
   "D_0065B030": "effectBlockRecords",

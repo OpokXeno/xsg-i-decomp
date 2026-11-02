@@ -1,7 +1,10 @@
 #include "common.h"
 #include "main/xgl_thread.h"
 #include "shared.h"
+#include "main/xgl_studio.h"
 #include "xgl_studio.h"
+#include "main/Undulate.h"
+#include "main/xgl_camera.h"
 
 /*
  * StudioCamera (include/shared.h; config/header-canon.json,
@@ -21,25 +24,11 @@ typedef struct Studio {
     StudioCamera cameras[8];
 } Studio;
 
-extern int StudioEntrySkip;
-
-extern void xglStudioChange(int studio_index);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 extern StudioLight *xglStudioGetLight2(void);
-extern StudioCamera *xglStudioGetCamera2(int camera_index);
 extern StudioCamera *xglStudioGetActiveCamera(void);
-extern StudioCamera *xglStudioSelectGetActiveCamera(int studio_index);
-extern void xglStudioFlushActiveCamera(void);
-extern void xglStudioMainCameraInit(void);
-extern StudioCamera *xglStudioMainCameraMove(void);
-extern void xglStudioInit(void);
-extern void xglStudioMove(void);
-extern void xglStudioEntry(void);
-extern void xglCameraMove(StudioCamera *camera);
 extern void xglCameraTravelProc(StudioCamera *camera);
 extern void xglLightInit(StudioLight *light);
-extern void xglCameraInit(StudioCamera *camera);
-
 static Studio asStudioSource[4];
 
 static Studio *pCurrentStudio;
@@ -165,7 +154,7 @@ void xglStudioMove(void)
     xglStudioChange(0);
 }
 
-void xglStudioEntry(void)
+void xglStudioEntry(void *argument)
 {
     xglSleep();
     xglStudioInit();

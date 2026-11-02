@@ -1,6 +1,8 @@
 #include "common.h"
 #include "shared.h"
 #include "main/jni.h"
+#include "main/runtime.h"
+#include "main/twsys_init.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -28,53 +30,24 @@ typedef struct JThread JThread;
  * into the same two offsets; setLocation__II clears that bit and overwrites
  * both floats with its own arguments instead.
  */
-typedef struct UtilWindow {
-    /*
-     * The xeno/util/Window class record the VM loaded: create__I stamps the
-     * window it builds with the class's own instance class ref, so the native
-     * window can be handed back as a xeno/util/Window instance. It is the same
-     * word newObject (main 0x002f4828) seeds a freshly allocated instance with
-     * and SCENE_instance (src/main/scene_1.c) writes into the window it builds
-     * with the same TWIN_create2 call.
-     *
-     * That word is the class ref of the object header every VM instance
-     * reference begins with, but this TU only copies it and never follows it,
-     * and UtilWindow.class_ref keeps it as the plain word it is copied as:
-     * create__I writes it (main 0x002f88f0) and only then reads its call
-     * block's argument word (main 0x002f88f4), an order the compiler holds
-     * for two accesses of one type and not for a header modeled with the
-     * pointer member SceneObjectHeader declares.
-     */
-    int class_ref;                         /* +0x00 */
-    unsigned char unmodeled_04[0x10 - 4];
-    unsigned int flags;                    /* +0x10 */
-    unsigned char unmodeled_14[0x20 - 0x14];
-    float x;                               /* +0x20 */
-    float y;                               /* +0x24 */
-    unsigned char unmodeled_28[0x32 - 0x28];
-    unsigned short closeState;             /* +0x32 */
-    unsigned char unmodeled_34[0x186 - 0x34];
-    unsigned char layout_offset;           /* +0x186 */
-    unsigned char line_count;              /* +0x187 */
-} UtilWindow;
 
 /* The call block of every Window native taking no Java arguments beyond the
    window itself. */
 typedef struct WindowCall {
-    UtilWindow *window;
+    TComponent *window;
 } WindowCall;
 
 /* The call block of Window.signal(int): the target window and the value
    stored into its closeState field. */
 typedef struct WindowSignalCall {
-    UtilWindow *window;
+    TComponent *window;
     unsigned short value;
 } WindowSignalCall;
 
 /* The call block of Window.waitkey(int)/Window.wait(int): the target window
    and the value formatted into the control string. */
 typedef struct WindowIntCall {
-    UtilWindow *window;
+    TComponent *window;
     int value;
 } WindowIntCall;
 
@@ -89,7 +62,7 @@ typedef struct WindowCreateCall {
 /* The call block of Window.setSize(int, int): the target window and the two
    byte-sized values stored into its layout_offset/line_count fields. */
 typedef struct WindowSizeCall {
-    UtilWindow *window;              /* +0x00 */
+    TComponent *window;              /* +0x00 */
     unsigned char first;          /* +0x04 */
     unsigned char unmodeled_05[3];
     unsigned char second;         /* +0x08 */
@@ -98,40 +71,15 @@ typedef struct WindowSizeCall {
 /* The call block of Window.setLocation(int, int): the target window and the
    integer x/y position converted to float. */
 typedef struct WindowLocationCall {
-    UtilWindow *window;
+    TComponent *window;
     int x;
     int y;
 } WindowLocationCall;
 
-typedef struct StringStorage StringStorage;
-
-/*
- * A java.lang.String argument, as the print natives below read it: +0x00
- * (the class word every object reference begins with) is untouched by this
- * TU, and +0x04 holds the interned string record the String was loaded from
- * (the same shape src/main/runtime.c's StringRef reads for its own String
- * arguments).
- */
-typedef struct StringRef {
-    void *unmodeled_00;
-    StringStorage *value;   /* +0x04 */
-} StringRef;
-
-/*
- * The interned constant-string record StringRef.value points to: the print
- * natives below read the byte count at +0x04 and the bytes at +0x08 as
- * MSG_print2's length/text pair.
- */
-struct StringStorage {
-    unsigned char unmodeled_00[4];
-    int length;              /* +0x04 */
-    const char *bytes;       /* +0x08 */
-};
-
 /* The call block of Window.print(String): the target window and the string
    to print. */
 typedef struct WindowStringCall {
-    UtilWindow *window;
+    TComponent *window;
     StringRef *string;
 } WindowStringCall;
 
@@ -150,16 +98,15 @@ typedef struct JavaStringArray {
 /* The call block of Window.print(String[], int): the target window and the
    string array; the trailing int is unused by this native. */
 typedef struct WindowStringArrayCall {
-    UtilWindow *window;
+    TComponent *window;
     JavaStringArray *array;
 } WindowStringArrayCall;
 
-extern void MSG_print2(UtilWindow *window, const char *text, int length);
+extern void MSG_print2(TComponent *window, const char *text, int length);
 extern int sprintf(char *destination, const char *format, ...);
-extern UtilWindow *TWIN_create2(int component_id);
-extern void TWIN_initCF(UtilWindow *window);
-extern void TWIN_initScene(UtilWindow *window);
-extern void TWIN_init2(UtilWindow *window);
+extern void TWIN_initCF(TComponent *window);
+extern void TWIN_initScene(TComponent *window);
+extern void TWIN_init2(TComponent *window);
 
 const char windowClearCommand[] = "/[clear()]";
 
@@ -174,7 +121,7 @@ const char windowCloseWaitKeyCommand[] = "/[waitkey(0);close()]";
 void Java_xeno_util_Window_getSignal__(JThread *thread, WindowCall *arguments,
                                        int *result)
 {
-    UtilWindow *window;
+    TComponent *window;
     short signal;
 
     /* Window's load stays in its own do/while(0) block: inlined into the
@@ -211,7 +158,7 @@ void Java_xeno_util_Window_close__(JThread *thread, WindowCall *arguments,
 void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
                                       void *result)
 {
-    UtilWindow *window;
+    TComponent *window;
     char buffer[0x40];
 
     window = arguments->window;
@@ -222,7 +169,7 @@ void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
 void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
                                    void *result)
 {
-    UtilWindow *window;
+    TComponent *window;
     char buffer[0x40];
 
     window = arguments->window;
@@ -231,14 +178,14 @@ void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
 }
 
 void Java_xeno_util_Window_create__I(JThread *thread, WindowCreateCall *arguments,
-                                     UtilWindow **result)
+                                     TComponent **result)
 {
-    SceneClass *window_class;
-    UtilWindow *window;
+    JavaClass *window_class;
+    TComponent *window;
 
     window_class = classJava_xeno_util_Window;
     window = TWIN_create2(-1);
-    window->class_ref = (int)window_class->instance_class_ref;
+    window->class_word = (int)window_class->classPointer;
     switch (arguments->kind) {
     case 0:
         TWIN_initCF(window);
@@ -253,7 +200,7 @@ void Java_xeno_util_Window_create__I(JThread *thread, WindowCreateCall *argument
 void Java_xeno_util_Window_setSize__II(JThread *thread, WindowSizeCall *arguments,
                                        void *result)
 {
-    UtilWindow *window;
+    TComponent *window;
     unsigned char second;
 
     window = arguments->window;
@@ -266,7 +213,7 @@ void Java_xeno_util_Window_setSize__II(JThread *thread, WindowSizeCall *argument
 void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *arguments,
                                            void *result)
 {
-    UtilWindow *window;
+    TComponent *window;
 
     window = arguments->window;
     window->flags &= ~0x40;
@@ -285,9 +232,9 @@ void Java_xeno_util_Window_print__Ljava_lang_String_(JThread *thread,
                                                       WindowStringCall *arguments,
                                                       void *result)
 {
-    UtilWindow *window;
+    TComponent *window;
     StringRef *string;
-    StringStorage *storage;
+    struct InternedString *storage;
 
     window = arguments->window;
     string = arguments->string;
@@ -301,10 +248,10 @@ void Java_xeno_util_Window_print__aLjava_lang_String_I(JThread *thread,
                                                         WindowStringArrayCall *arguments,
                                                         void *result)
 {
-    UtilWindow *window;
+    TComponent *window;
     JavaStringArray *array;
     StringRef *element;
-    StringStorage *storage;
+    struct InternedString *storage;
     unsigned int index;
     unsigned int length;
 

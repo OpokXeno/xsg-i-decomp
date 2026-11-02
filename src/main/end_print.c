@@ -1,14 +1,15 @@
 #include "common.h"
 #include "shared.h"
+#include "main/end_print.h"
 #include "end_print.h"
 #include "main/xgl_jpeg.h"
 #include "main/xgl_packet.h"
+#include "main/xgl_2.h"
+#include "main/xgl_prim_add.h"
 
 #define NULL ((void *)0)
 
-#define SPRITE_UV_BYTES(u, v, width, height) \
-    (u) & 255, (u) >> 8, (v) & 255, (v) >> 8, \
-    (width) & 255, (width) >> 8, (height) & 255, (height) >> 8
+#define SPRITE_UV(u, v, width, height) { (u), (v), (width), (height) }
 
 /* EE scratchpad RAM base (src/ov01/gr_gp_init.c's grPacketSend and
  * src/ov01/m_gs.c's MGsGPTerm build the same VIF1 direct-mode packet at the
@@ -25,28 +26,21 @@ typedef struct EndPrintRenderState {
     unsigned short draw_back_reset_value; /* +0x20 */
 } EndPrintRenderState;
 
+typedef struct SpriteUv {
+    short u;      /* +0x00 */
+    short v;      /* +0x02 */
+    short width;  /* +0x04 */
+    short height; /* +0x06 */
+} SpriteUv;
+
 /*
  * uv_clut: a fixed table of UV/CLUT entries; only the CLUT id at +0x04 of
  * each 8-byte entry is read here.
  */
 typedef struct UvClutEntry {
-    const unsigned char *uv;       /* +0x00 */
+    const SpriteUv *uv;            /* +0x00 */
     int clut;                      /* +0x04 */
 } UvClutEntry;
-
-/* Sprite coordinates, color and packed UV/CLUT indices consumed by the draw routines. */
-/*
- * The sprite descriptor subPrintSprite (still asm) draws; only the CLUT
- * index byte at +0x11 is read by PrintSprite00.
- */
-typedef struct PrintSpriteInfo {
-    short x, y;
-    int depth;
-    short width, height;
-    unsigned char color[4];
-    short uv; /* low byte: UV table entry; high byte: CLUT table entry */
-    unsigned char column, row;
-} PrintSpriteInfo;
 
 typedef struct PrintPointInfo {
     short x;                /* +0x00 */
@@ -85,13 +79,6 @@ typedef struct EndDecodeJpegContext {
     int source;                    /* +0x30 */
     int destination;               /* +0x34 */
 } EndDecodeJpegContext;
-
-typedef struct SpriteUv {
-    short u;      /* +0x00 */
-    short v;      /* +0x02 */
-    short width;  /* +0x04 */
-    short height; /* +0x06 */
-} SpriteUv;
 
 typedef struct PrintTagFontInfo {
     short x;                  /* +0x00 */
@@ -182,7 +169,7 @@ typedef struct PrintJpegInfo {
     short offsetX;                  /* +0x0c */
     short offsetY;                  /* +0x0e */
     unsigned char unmodeled_10[0x24]; /* +0x10..+0x33 */
-    const void *image;              /* +0x34 */
+    const unsigned char *image;     /* +0x34 */
 } PrintJpegInfo;
 
 enum { QUAD_X, QUAD_Y, QUAD_DEPTH };
@@ -232,16 +219,15 @@ typedef struct EtherLineEndpoint {
 } EtherLineEndpoint;
 
 extern EndPrintRenderState sRender;
-extern void (*func_tbl_4[])(EndPrintContext *context, int param);
-extern void (*func_tbl2_5[])(EndPrintContext *context, int param);
+extern void (*func_tbl_4[])(FontDrawCursor *context, int param);
+extern FontExtFunc func_tbl2_5[];
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern void eMessageSpriteReset(void);
-extern void xglFontReloadTexture(EndPrintContext *context, int mode);
-static void endPrintInfoSet(EndPrintContext *context, int clut, int flag);
-static void subPrintSprite(EndPrintContext *context, PrintSpriteInfo *sprite);
-static void subPrintLine(EndPrintContext *context, PrintPointInfo *line);
-static void subPrintRibbon(EndPrintContext *context, PrintPointInfo *ribbon);
+static void endPrintInfoSet(FontDrawCursor *context, int clut, int flag);
+static void subPrintSprite(FontDrawCursor *context, PrintSpriteInfo *sprite);
+static void subPrintLine(FontDrawCursor *context, PrintPointInfo *line);
+static void subPrintRibbon(FontDrawCursor *context, PrintPointInfo *ribbon);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
@@ -250,396 +236,391 @@ extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
  * function points it at. */
 static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *circle);
 
-extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
-
 extern void endSpriteSet(PrintSpriteInfo *sprite, int flags);
 extern WindowTexDirectory *WindowTexAddrGet(int index);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-extern void xglFontPrintExtFunc(int order, void (*func)(EndPrintContext *context, int param), void *param);
 
-static const unsigned char cur_uv[32] = {
-    SPRITE_UV_BYTES(0, 192, 16, 16),
-    SPRITE_UV_BYTES(64, 160, 16, 16),
-    SPRITE_UV_BYTES(0, 176, 16, 16),
-    SPRITE_UV_BYTES(64, 176, 16, 16)
+static const SpriteUv cur_uv[4] = {
+    SPRITE_UV(0, 192, 16, 16),
+    SPRITE_UV(64, 160, 16, 16),
+    SPRITE_UV(0, 176, 16, 16),
+    SPRITE_UV(64, 176, 16, 16)
 };
 
-static const unsigned char others_uv[200] = {
-    SPRITE_UV_BYTES(199, 227, 8, 16),
-    SPRITE_UV_BYTES(200, 243, 7, 13),
-    SPRITE_UV_BYTES(16, 192, 18, 12),
-    SPRITE_UV_BYTES(34, 192, 18, 12),
-    SPRITE_UV_BYTES(88, 192, 18, 12),
-    SPRITE_UV_BYTES(70, 192, 18, 12),
-    SPRITE_UV_BYTES(143, 217, 47, 10),
-    SPRITE_UV_BYTES(122, 192, 11, 16),
-    SPRITE_UV_BYTES(188, 243, 10, 13),
-    SPRITE_UV_BYTES(218, 0, 29, 20),
-    SPRITE_UV_BYTES(218, 20, 29, 20),
-    SPRITE_UV_BYTES(209, 194, 43, 62),
-    SPRITE_UV_BYTES(160, 80, 16, 16),
-    SPRITE_UV_BYTES(218, 40, 22, 22),
-    SPRITE_UV_BYTES(218, 62, 22, 22),
-    SPRITE_UV_BYTES(160, 0, 29, 20),
-    SPRITE_UV_BYTES(160, 20, 29, 20),
-    SPRITE_UV_BYTES(160, 40, 29, 20),
-    SPRITE_UV_BYTES(160, 60, 29, 20),
-    SPRITE_UV_BYTES(189, 0, 29, 20),
-    SPRITE_UV_BYTES(189, 20, 29, 20),
-    SPRITE_UV_BYTES(189, 40, 29, 20),
-    SPRITE_UV_BYTES(189, 60, 29, 20),
-    SPRITE_UV_BYTES(0, 192, 16, 16),
-    SPRITE_UV_BYTES(176, 80, 8, 8)
+static const SpriteUv others_uv[25] = {
+    SPRITE_UV(199, 227, 8, 16),
+    SPRITE_UV(200, 243, 7, 13),
+    SPRITE_UV(16, 192, 18, 12),
+    SPRITE_UV(34, 192, 18, 12),
+    SPRITE_UV(88, 192, 18, 12),
+    SPRITE_UV(70, 192, 18, 12),
+    SPRITE_UV(143, 217, 47, 10),
+    SPRITE_UV(122, 192, 11, 16),
+    SPRITE_UV(188, 243, 10, 13),
+    SPRITE_UV(218, 0, 29, 20),
+    SPRITE_UV(218, 20, 29, 20),
+    SPRITE_UV(209, 194, 43, 62),
+    SPRITE_UV(160, 80, 16, 16),
+    SPRITE_UV(218, 40, 22, 22),
+    SPRITE_UV(218, 62, 22, 22),
+    SPRITE_UV(160, 0, 29, 20),
+    SPRITE_UV(160, 20, 29, 20),
+    SPRITE_UV(160, 40, 29, 20),
+    SPRITE_UV(160, 60, 29, 20),
+    SPRITE_UV(189, 0, 29, 20),
+    SPRITE_UV(189, 20, 29, 20),
+    SPRITE_UV(189, 40, 29, 20),
+    SPRITE_UV(189, 60, 29, 20),
+    SPRITE_UV(0, 192, 16, 16),
+    SPRITE_UV(176, 80, 8, 8)
 };
 
-static const unsigned char pad_uv[64] = {
-    SPRITE_UV_BYTES(0, 208, 22, 24),
-    SPRITE_UV_BYTES(22, 208, 22, 24),
-    SPRITE_UV_BYTES(44, 208, 22, 24),
-    SPRITE_UV_BYTES(66, 208, 22, 24),
-    SPRITE_UV_BYTES(198, 132, 29, 20),
-    SPRITE_UV_BYTES(198, 92, 29, 20),
-    SPRITE_UV_BYTES(227, 132, 29, 20),
-    SPRITE_UV_BYTES(227, 92, 29, 20)
+static const SpriteUv pad_uv[8] = {
+    SPRITE_UV(0, 208, 22, 24),
+    SPRITE_UV(22, 208, 22, 24),
+    SPRITE_UV(44, 208, 22, 24),
+    SPRITE_UV(66, 208, 22, 24),
+    SPRITE_UV(198, 132, 29, 20),
+    SPRITE_UV(198, 92, 29, 20),
+    SPRITE_UV(227, 132, 29, 20),
+    SPRITE_UV(227, 92, 29, 20)
 };
 
-static const unsigned char icom_uv[376] = {
-    SPRITE_UV_BYTES(388, 67, 20, 24),
-    SPRITE_UV_BYTES(408, 67, 20, 24),
-    SPRITE_UV_BYTES(428, 67, 20, 24),
-    SPRITE_UV_BYTES(448, 67, 20, 24),
-    SPRITE_UV_BYTES(468, 67, 20, 24),
-    SPRITE_UV_BYTES(488, 67, 20, 24),
-    SPRITE_UV_BYTES(388, 91, 20, 24),
-    SPRITE_UV_BYTES(408, 91, 20, 24),
-    SPRITE_UV_BYTES(428, 91, 20, 24),
-    SPRITE_UV_BYTES(448, 91, 20, 24),
-    SPRITE_UV_BYTES(468, 91, 20, 24),
-    SPRITE_UV_BYTES(488, 91, 20, 24),
-    SPRITE_UV_BYTES(388, 115, 20, 24),
-    SPRITE_UV_BYTES(408, 115, 20, 24),
-    SPRITE_UV_BYTES(428, 115, 20, 24),
-    SPRITE_UV_BYTES(388, 139, 20, 24),
-    SPRITE_UV_BYTES(408, 139, 20, 24),
-    SPRITE_UV_BYTES(428, 139, 20, 24),
-    SPRITE_UV_BYTES(448, 139, 20, 24),
-    SPRITE_UV_BYTES(468, 139, 20, 24),
-    SPRITE_UV_BYTES(488, 139, 20, 24),
-    SPRITE_UV_BYTES(388, 163, 20, 24),
-    SPRITE_UV_BYTES(408, 163, 20, 24),
-    SPRITE_UV_BYTES(428, 163, 20, 24),
-    SPRITE_UV_BYTES(448, 163, 20, 24),
-    SPRITE_UV_BYTES(468, 163, 20, 24),
-    SPRITE_UV_BYTES(488, 163, 20, 24),
-    SPRITE_UV_BYTES(388, 187, 20, 24),
-    SPRITE_UV_BYTES(428, 187, 20, 24),
-    SPRITE_UV_BYTES(408, 187, 20, 24),
-    SPRITE_UV_BYTES(448, 187, 20, 24),
-    SPRITE_UV_BYTES(484, 187, 16, 16),
-    SPRITE_UV_BYTES(468, 187, 16, 16),
-    SPRITE_UV_BYTES(388, 211, 20, 24),
-    SPRITE_UV_BYTES(256, 162, 20, 24),
-    SPRITE_UV_BYTES(276, 162, 20, 24),
-    SPRITE_UV_BYTES(296, 162, 20, 24),
-    SPRITE_UV_BYTES(316, 162, 20, 24),
-    SPRITE_UV_BYTES(336, 162, 20, 24),
-    SPRITE_UV_BYTES(356, 162, 20, 24),
-    SPRITE_UV_BYTES(276, 186, 20, 24),
-    SPRITE_UV_BYTES(296, 186, 20, 24),
-    SPRITE_UV_BYTES(256, 186, 20, 24),
-    SPRITE_UV_BYTES(209, 232, 32, 24),
-    SPRITE_UV_BYTES(448, 115, 20, 24),
-    SPRITE_UV_BYTES(388, 67, 20, 24),
-    SPRITE_UV_BYTES(408, 67, 20, 24)
+static const SpriteUv icom_uv[47] = {
+    SPRITE_UV(388, 67, 20, 24),
+    SPRITE_UV(408, 67, 20, 24),
+    SPRITE_UV(428, 67, 20, 24),
+    SPRITE_UV(448, 67, 20, 24),
+    SPRITE_UV(468, 67, 20, 24),
+    SPRITE_UV(488, 67, 20, 24),
+    SPRITE_UV(388, 91, 20, 24),
+    SPRITE_UV(408, 91, 20, 24),
+    SPRITE_UV(428, 91, 20, 24),
+    SPRITE_UV(448, 91, 20, 24),
+    SPRITE_UV(468, 91, 20, 24),
+    SPRITE_UV(488, 91, 20, 24),
+    SPRITE_UV(388, 115, 20, 24),
+    SPRITE_UV(408, 115, 20, 24),
+    SPRITE_UV(428, 115, 20, 24),
+    SPRITE_UV(388, 139, 20, 24),
+    SPRITE_UV(408, 139, 20, 24),
+    SPRITE_UV(428, 139, 20, 24),
+    SPRITE_UV(448, 139, 20, 24),
+    SPRITE_UV(468, 139, 20, 24),
+    SPRITE_UV(488, 139, 20, 24),
+    SPRITE_UV(388, 163, 20, 24),
+    SPRITE_UV(408, 163, 20, 24),
+    SPRITE_UV(428, 163, 20, 24),
+    SPRITE_UV(448, 163, 20, 24),
+    SPRITE_UV(468, 163, 20, 24),
+    SPRITE_UV(488, 163, 20, 24),
+    SPRITE_UV(388, 187, 20, 24),
+    SPRITE_UV(428, 187, 20, 24),
+    SPRITE_UV(408, 187, 20, 24),
+    SPRITE_UV(448, 187, 20, 24),
+    SPRITE_UV(484, 187, 16, 16),
+    SPRITE_UV(468, 187, 16, 16),
+    SPRITE_UV(388, 211, 20, 24),
+    SPRITE_UV(256, 162, 20, 24),
+    SPRITE_UV(276, 162, 20, 24),
+    SPRITE_UV(296, 162, 20, 24),
+    SPRITE_UV(316, 162, 20, 24),
+    SPRITE_UV(336, 162, 20, 24),
+    SPRITE_UV(356, 162, 20, 24),
+    SPRITE_UV(276, 186, 20, 24),
+    SPRITE_UV(296, 186, 20, 24),
+    SPRITE_UV(256, 186, 20, 24),
+    SPRITE_UV(209, 232, 32, 24),
+    SPRITE_UV(448, 115, 20, 24),
+    SPRITE_UV(388, 67, 20, 24),
+    SPRITE_UV(408, 67, 20, 24)
 };
 
-static const unsigned char face_puti_uv[80] = {
-    SPRITE_UV_BYTES(896, 0, 20, 24),
-    SPRITE_UV_BYTES(916, 0, 20, 24),
-    SPRITE_UV_BYTES(936, 0, 20, 24),
-    SPRITE_UV_BYTES(956, 0, 20, 24),
-    SPRITE_UV_BYTES(896, 24, 20, 24),
-    SPRITE_UV_BYTES(916, 24, 20, 24),
-    SPRITE_UV_BYTES(936, 24, 20, 24),
-    SPRITE_UV_BYTES(976, 24, 20, 24),
-    SPRITE_UV_BYTES(976, 0, 20, 24),
-    SPRITE_UV_BYTES(996, 0, 20, 24)
+static const SpriteUv face_puti_uv[10] = {
+    SPRITE_UV(896, 0, 20, 24),
+    SPRITE_UV(916, 0, 20, 24),
+    SPRITE_UV(936, 0, 20, 24),
+    SPRITE_UV(956, 0, 20, 24),
+    SPRITE_UV(896, 24, 20, 24),
+    SPRITE_UV(916, 24, 20, 24),
+    SPRITE_UV(936, 24, 20, 24),
+    SPRITE_UV(976, 24, 20, 24),
+    SPRITE_UV(976, 0, 20, 24),
+    SPRITE_UV(996, 0, 20, 24)
 };
 
-static const unsigned char tag_uv[416] = {
-    SPRITE_UV_BYTES(253, 0, 10, 16),
-    SPRITE_UV_BYTES(263, 0, 10, 16),
-    SPRITE_UV_BYTES(273, 0, 10, 16),
-    SPRITE_UV_BYTES(283, 0, 10, 16),
-    SPRITE_UV_BYTES(293, 0, 9, 16),
-    SPRITE_UV_BYTES(302, 0, 9, 16),
-    SPRITE_UV_BYTES(311, 0, 10, 16),
-    SPRITE_UV_BYTES(321, 0, 10, 16),
-    SPRITE_UV_BYTES(331, 0, 6, 16),
-    SPRITE_UV_BYTES(337, 0, 8, 16),
-    SPRITE_UV_BYTES(345, 0, 10, 16),
-    SPRITE_UV_BYTES(355, 0, 9, 16),
-    SPRITE_UV_BYTES(364, 0, 13, 16),
-    SPRITE_UV_BYTES(377, 0, 12, 16),
-    SPRITE_UV_BYTES(389, 0, 10, 16),
-    SPRITE_UV_BYTES(399, 0, 9, 16),
-    SPRITE_UV_BYTES(408, 0, 10, 16),
-    SPRITE_UV_BYTES(418, 0, 10, 16),
-    SPRITE_UV_BYTES(428, 0, 10, 16),
-    SPRITE_UV_BYTES(438, 0, 10, 16),
-    SPRITE_UV_BYTES(448, 0, 10, 16),
-    SPRITE_UV_BYTES(458, 0, 10, 16),
-    SPRITE_UV_BYTES(468, 0, 13, 16),
-    SPRITE_UV_BYTES(481, 0, 10, 16),
-    SPRITE_UV_BYTES(491, 0, 10, 16),
-    SPRITE_UV_BYTES(501, 0, 11, 16),
-    SPRITE_UV_BYTES(253, 16, 8, 11),
-    SPRITE_UV_BYTES(261, 16, 8, 11),
-    SPRITE_UV_BYTES(269, 16, 8, 11),
-    SPRITE_UV_BYTES(277, 16, 8, 11),
-    SPRITE_UV_BYTES(285, 16, 7, 11),
-    SPRITE_UV_BYTES(292, 16, 7, 11),
-    SPRITE_UV_BYTES(299, 16, 8, 11),
-    SPRITE_UV_BYTES(307, 16, 8, 11),
-    SPRITE_UV_BYTES(315, 16, 5, 11),
-    SPRITE_UV_BYTES(320, 16, 6, 11),
-    SPRITE_UV_BYTES(326, 16, 8, 11),
-    SPRITE_UV_BYTES(334, 16, 7, 11),
-    SPRITE_UV_BYTES(341, 16, 10, 11),
-    SPRITE_UV_BYTES(351, 16, 9, 11),
-    SPRITE_UV_BYTES(360, 16, 8, 11),
-    SPRITE_UV_BYTES(368, 16, 8, 11),
-    SPRITE_UV_BYTES(376, 16, 8, 11),
-    SPRITE_UV_BYTES(384, 16, 8, 11),
-    SPRITE_UV_BYTES(392, 16, 8, 11),
-    SPRITE_UV_BYTES(400, 16, 7, 11),
-    SPRITE_UV_BYTES(407, 16, 8, 11),
-    SPRITE_UV_BYTES(415, 16, 9, 11),
-    SPRITE_UV_BYTES(424, 16, 11, 11),
-    SPRITE_UV_BYTES(435, 16, 9, 11),
-    SPRITE_UV_BYTES(444, 16, 8, 11),
-    SPRITE_UV_BYTES(452, 16, 8, 11)
+static const SpriteUv tag_uv[52] = {
+    SPRITE_UV(253, 0, 10, 16),
+    SPRITE_UV(263, 0, 10, 16),
+    SPRITE_UV(273, 0, 10, 16),
+    SPRITE_UV(283, 0, 10, 16),
+    SPRITE_UV(293, 0, 9, 16),
+    SPRITE_UV(302, 0, 9, 16),
+    SPRITE_UV(311, 0, 10, 16),
+    SPRITE_UV(321, 0, 10, 16),
+    SPRITE_UV(331, 0, 6, 16),
+    SPRITE_UV(337, 0, 8, 16),
+    SPRITE_UV(345, 0, 10, 16),
+    SPRITE_UV(355, 0, 9, 16),
+    SPRITE_UV(364, 0, 13, 16),
+    SPRITE_UV(377, 0, 12, 16),
+    SPRITE_UV(389, 0, 10, 16),
+    SPRITE_UV(399, 0, 9, 16),
+    SPRITE_UV(408, 0, 10, 16),
+    SPRITE_UV(418, 0, 10, 16),
+    SPRITE_UV(428, 0, 10, 16),
+    SPRITE_UV(438, 0, 10, 16),
+    SPRITE_UV(448, 0, 10, 16),
+    SPRITE_UV(458, 0, 10, 16),
+    SPRITE_UV(468, 0, 13, 16),
+    SPRITE_UV(481, 0, 10, 16),
+    SPRITE_UV(491, 0, 10, 16),
+    SPRITE_UV(501, 0, 11, 16),
+    SPRITE_UV(253, 16, 8, 11),
+    SPRITE_UV(261, 16, 8, 11),
+    SPRITE_UV(269, 16, 8, 11),
+    SPRITE_UV(277, 16, 8, 11),
+    SPRITE_UV(285, 16, 7, 11),
+    SPRITE_UV(292, 16, 7, 11),
+    SPRITE_UV(299, 16, 8, 11),
+    SPRITE_UV(307, 16, 8, 11),
+    SPRITE_UV(315, 16, 5, 11),
+    SPRITE_UV(320, 16, 6, 11),
+    SPRITE_UV(326, 16, 8, 11),
+    SPRITE_UV(334, 16, 7, 11),
+    SPRITE_UV(341, 16, 10, 11),
+    SPRITE_UV(351, 16, 9, 11),
+    SPRITE_UV(360, 16, 8, 11),
+    SPRITE_UV(368, 16, 8, 11),
+    SPRITE_UV(376, 16, 8, 11),
+    SPRITE_UV(384, 16, 8, 11),
+    SPRITE_UV(392, 16, 8, 11),
+    SPRITE_UV(400, 16, 7, 11),
+    SPRITE_UV(407, 16, 8, 11),
+    SPRITE_UV(415, 16, 9, 11),
+    SPRITE_UV(424, 16, 11, 11),
+    SPRITE_UV(435, 16, 9, 11),
+    SPRITE_UV(444, 16, 8, 11),
+    SPRITE_UV(452, 16, 8, 11)
 };
 
-static const unsigned char win_uv[96] = {
-    SPRITE_UV_BYTES(141, 141, 3, 3),
-    SPRITE_UV_BYTES(0, 141, 128, 3),
-    SPRITE_UV_BYTES(144, 141, 3, 3),
-    SPRITE_UV_BYTES(141, 0, 3, 128),
-    SPRITE_UV_BYTES(144, 0, 3, 128),
-    SPRITE_UV_BYTES(141, 144, 3, 3),
-    SPRITE_UV_BYTES(0, 144, 128, 3),
-    SPRITE_UV_BYTES(144, 144, 3, 3),
-    SPRITE_UV_BYTES(0, 0, 128, 128),
-    SPRITE_UV_BYTES(154, 208, 44, 19),
-    SPRITE_UV_BYTES(316, 187, 20, 24),
-    SPRITE_UV_BYTES(512, 186, 165, 24)
+static const SpriteUv win_uv[12] = {
+    SPRITE_UV(141, 141, 3, 3),
+    SPRITE_UV(0, 141, 128, 3),
+    SPRITE_UV(144, 141, 3, 3),
+    SPRITE_UV(141, 0, 3, 128),
+    SPRITE_UV(144, 0, 3, 128),
+    SPRITE_UV(141, 144, 3, 3),
+    SPRITE_UV(0, 144, 128, 3),
+    SPRITE_UV(144, 144, 3, 3),
+    SPRITE_UV(0, 0, 128, 128),
+    SPRITE_UV(154, 208, 44, 19),
+    SPRITE_UV(316, 187, 20, 24),
+    SPRITE_UV(512, 186, 165, 24)
 };
 
-static const unsigned char num_uv[80] = {
-    SPRITE_UV_BYTES(88, 227, 11, 16),
-    SPRITE_UV_BYTES(88, 243, 10, 13),
-    SPRITE_UV_BYTES(199, 227, 8, 16),
-    SPRITE_UV_BYTES(200, 243, 7, 13),
-    SPRITE_UV_BYTES(188, 243, 10, 13),
-    SPRITE_UV_BYTES(88, 211, 11, 16),
-    SPRITE_UV_BYTES(99, 211, 11, 16),
-    SPRITE_UV_BYTES(121, 211, 11, 16),
-    SPRITE_UV_BYTES(132, 211, 11, 16),
-    SPRITE_UV_BYTES(143, 211, 4, 4)
+static const SpriteUv num_uv[10] = {
+    SPRITE_UV(88, 227, 11, 16),
+    SPRITE_UV(88, 243, 10, 13),
+    SPRITE_UV(199, 227, 8, 16),
+    SPRITE_UV(200, 243, 7, 13),
+    SPRITE_UV(188, 243, 10, 13),
+    SPRITE_UV(88, 211, 11, 16),
+    SPRITE_UV(99, 211, 11, 16),
+    SPRITE_UV(121, 211, 11, 16),
+    SPRITE_UV(132, 211, 11, 16),
+    SPRITE_UV(143, 211, 4, 4)
 };
 
-static const unsigned char pad2_uv[176] = {
-    SPRITE_UV_BYTES(256, 67, 22, 24),
-    SPRITE_UV_BYTES(278, 67, 22, 24),
-    SPRITE_UV_BYTES(300, 67, 22, 24),
-    SPRITE_UV_BYTES(322, 67, 22, 24),
-    SPRITE_UV_BYTES(344, 67, 22, 24),
-    SPRITE_UV_BYTES(366, 67, 22, 24),
-    SPRITE_UV_BYTES(256, 91, 22, 24),
-    SPRITE_UV_BYTES(278, 91, 22, 24),
-    SPRITE_UV_BYTES(300, 91, 22, 24),
-    SPRITE_UV_BYTES(322, 91, 22, 24),
-    SPRITE_UV_BYTES(344, 91, 22, 24),
-    SPRITE_UV_BYTES(366, 91, 22, 24),
-    SPRITE_UV_BYTES(256, 115, 22, 24),
-    SPRITE_UV_BYTES(278, 115, 22, 24),
-    SPRITE_UV_BYTES(300, 115, 22, 24),
-    SPRITE_UV_BYTES(322, 115, 22, 24),
-    SPRITE_UV_BYTES(344, 115, 22, 24),
-    SPRITE_UV_BYTES(366, 115, 22, 24),
-    SPRITE_UV_BYTES(256, 139, 22, 24),
-    SPRITE_UV_BYTES(278, 139, 22, 24),
-    SPRITE_UV_BYTES(300, 139, 22, 24),
-    SPRITE_UV_BYTES(322, 139, 22, 24)
+static const SpriteUv pad2_uv[22] = {
+    SPRITE_UV(256, 67, 22, 24),
+    SPRITE_UV(278, 67, 22, 24),
+    SPRITE_UV(300, 67, 22, 24),
+    SPRITE_UV(322, 67, 22, 24),
+    SPRITE_UV(344, 67, 22, 24),
+    SPRITE_UV(366, 67, 22, 24),
+    SPRITE_UV(256, 91, 22, 24),
+    SPRITE_UV(278, 91, 22, 24),
+    SPRITE_UV(300, 91, 22, 24),
+    SPRITE_UV(322, 91, 22, 24),
+    SPRITE_UV(344, 91, 22, 24),
+    SPRITE_UV(366, 91, 22, 24),
+    SPRITE_UV(256, 115, 22, 24),
+    SPRITE_UV(278, 115, 22, 24),
+    SPRITE_UV(300, 115, 22, 24),
+    SPRITE_UV(322, 115, 22, 24),
+    SPRITE_UV(344, 115, 22, 24),
+    SPRITE_UV(366, 115, 22, 24),
+    SPRITE_UV(256, 139, 22, 24),
+    SPRITE_UV(278, 139, 22, 24),
+    SPRITE_UV(300, 139, 22, 24),
+    SPRITE_UV(322, 139, 22, 24)
 };
 
-static const unsigned char face_agws_uv[112] = {
-    SPRITE_UV_BYTES(768, 93, 63, 48),
-    SPRITE_UV_BYTES(832, 93, 63, 48),
-    SPRITE_UV_BYTES(896, 93, 63, 48),
-    SPRITE_UV_BYTES(960, 93, 63, 48),
-    SPRITE_UV_BYTES(768, 141, 63, 48),
-    SPRITE_UV_BYTES(832, 141, 63, 48),
-    SPRITE_UV_BYTES(896, 141, 63, 48),
-    SPRITE_UV_BYTES(960, 141, 63, 48),
-    SPRITE_UV_BYTES(768, 93, 63, 32),
-    SPRITE_UV_BYTES(832, 93, 63, 32),
-    SPRITE_UV_BYTES(896, 93, 63, 32),
-    SPRITE_UV_BYTES(960, 93, 63, 32),
-    SPRITE_UV_BYTES(768, 141, 63, 32),
-    SPRITE_UV_BYTES(832, 141, 63, 32)
+static const SpriteUv face_agws_uv[14] = {
+    SPRITE_UV(768, 93, 63, 48),
+    SPRITE_UV(832, 93, 63, 48),
+    SPRITE_UV(896, 93, 63, 48),
+    SPRITE_UV(960, 93, 63, 48),
+    SPRITE_UV(768, 141, 63, 48),
+    SPRITE_UV(832, 141, 63, 48),
+    SPRITE_UV(896, 141, 63, 48),
+    SPRITE_UV(960, 141, 63, 48),
+    SPRITE_UV(768, 93, 63, 32),
+    SPRITE_UV(832, 93, 63, 32),
+    SPRITE_UV(896, 93, 63, 32),
+    SPRITE_UV(960, 93, 63, 32),
+    SPRITE_UV(768, 141, 63, 32),
+    SPRITE_UV(832, 141, 63, 32)
 };
 
-static const unsigned char others2_uv[24] = {
-    SPRITE_UV_BYTES(0, 208, 384, 48),
-    SPRITE_UV_BYTES(0, 201, 500, 7),
-    SPRITE_UV_BYTES(230, 56, 10, 72)
+static const SpriteUv others2_uv[3] = {
+    SPRITE_UV(0, 208, 384, 48),
+    SPRITE_UV(0, 201, 500, 7),
+    SPRITE_UV(230, 56, 10, 72)
 };
 
-static const unsigned char face00_uv[16] = {
-    SPRITE_UV_BYTES(512, 0, 64, 93),
-    SPRITE_UV_BYTES(576, 0, 64, 93)
+static const SpriteUv face00_uv[2] = {
+    SPRITE_UV(512, 0, 64, 93),
+    SPRITE_UV(576, 0, 64, 93)
 };
 
-static const unsigned char face01_uv[16] = {
-    SPRITE_UV_BYTES(640, 0, 64, 93),
-    SPRITE_UV_BYTES(704, 0, 64, 93)
+static const SpriteUv face01_uv[2] = {
+    SPRITE_UV(640, 0, 64, 93),
+    SPRITE_UV(704, 0, 64, 93)
 };
 
-static const unsigned char face02_uv[16] = {
-    SPRITE_UV_BYTES(512, 93, 64, 93),
-    SPRITE_UV_BYTES(576, 93, 64, 93)
+static const SpriteUv face02_uv[2] = {
+    SPRITE_UV(512, 93, 64, 93),
+    SPRITE_UV(576, 93, 64, 93)
 };
 
-static const unsigned char face03_uv[16] = {
-    SPRITE_UV_BYTES(640, 93, 64, 93),
-    SPRITE_UV_BYTES(704, 93, 64, 93)
+static const SpriteUv face03_uv[2] = {
+    SPRITE_UV(640, 93, 64, 93),
+    SPRITE_UV(704, 93, 64, 93)
 };
 
-static const unsigned char face04_uv[16] = {
-    SPRITE_UV_BYTES(768, 0, 64, 93),
-    SPRITE_UV_BYTES(832, 0, 64, 93)
+static const SpriteUv face04_uv[2] = {
+    SPRITE_UV(768, 0, 64, 93),
+    SPRITE_UV(832, 0, 64, 93)
 };
 
-static const unsigned char ether_uv[40] = {
-    SPRITE_UV_BYTES(0, 0, 38, 48),
-    SPRITE_UV_BYTES(38, 0, 38, 48),
-    SPRITE_UV_BYTES(76, 0, 38, 48),
-    SPRITE_UV_BYTES(160, 0, 13, 16),
-    SPRITE_UV_BYTES(114, 0, 46, 56)
+static const SpriteUv ether_uv[5] = {
+    SPRITE_UV(0, 0, 38, 48),
+    SPRITE_UV(38, 0, 38, 48),
+    SPRITE_UV(76, 0, 38, 48),
+    SPRITE_UV(160, 0, 13, 16),
+    SPRITE_UV(114, 0, 46, 56)
 };
 
-static const unsigned char seg_uv[192] = {
-    SPRITE_UV_BYTES(0, 48, 72, 58),
-    SPRITE_UV_BYTES(0, 106, 72, 58),
-    SPRITE_UV_BYTES(72, 56, 46, 57),
-    SPRITE_UV_BYTES(160, 16, 10, 22),
-    SPRITE_UV_BYTES(173, 0, 28, 25),
-    SPRITE_UV_BYTES(221, 0, 20, 24),
-    SPRITE_UV_BYTES(201, 0, 20, 24),
-    SPRITE_UV_BYTES(72, 56, 46, 57),
-    SPRITE_UV_BYTES(118, 56, 42, 53),
-    SPRITE_UV_BYTES(160, 56, 18, 61),
-    SPRITE_UV_BYTES(178, 56, 14, 57),
-    SPRITE_UV_BYTES(192, 56, 21, 72),
-    SPRITE_UV_BYTES(213, 56, 17, 68),
-    SPRITE_UV_BYTES(72, 113, 34, 34),
-    SPRITE_UV_BYTES(106, 113, 30, 30),
-    SPRITE_UV_BYTES(0, 183, 47, 9),
-    SPRITE_UV_BYTES(47, 183, 47, 9),
-    SPRITE_UV_BYTES(94, 183, 43, 9),
-    SPRITE_UV_BYTES(0, 192, 47, 9),
-    SPRITE_UV_BYTES(47, 192, 47, 9),
-    SPRITE_UV_BYTES(94, 192, 43, 9),
-    SPRITE_UV_BYTES(256, 0, 88, 169),
-    SPRITE_UV_BYTES(512, 0, 240, 48),
-    SPRITE_UV_BYTES(512, 48, 240, 24)
+static const SpriteUv seg_uv[24] = {
+    SPRITE_UV(0, 48, 72, 58),
+    SPRITE_UV(0, 106, 72, 58),
+    SPRITE_UV(72, 56, 46, 57),
+    SPRITE_UV(160, 16, 10, 22),
+    SPRITE_UV(173, 0, 28, 25),
+    SPRITE_UV(221, 0, 20, 24),
+    SPRITE_UV(201, 0, 20, 24),
+    SPRITE_UV(72, 56, 46, 57),
+    SPRITE_UV(118, 56, 42, 53),
+    SPRITE_UV(160, 56, 18, 61),
+    SPRITE_UV(178, 56, 14, 57),
+    SPRITE_UV(192, 56, 21, 72),
+    SPRITE_UV(213, 56, 17, 68),
+    SPRITE_UV(72, 113, 34, 34),
+    SPRITE_UV(106, 113, 30, 30),
+    SPRITE_UV(0, 183, 47, 9),
+    SPRITE_UV(47, 183, 47, 9),
+    SPRITE_UV(94, 183, 43, 9),
+    SPRITE_UV(0, 192, 47, 9),
+    SPRITE_UV(47, 192, 47, 9),
+    SPRITE_UV(94, 192, 43, 9),
+    SPRITE_UV(256, 0, 88, 169),
+    SPRITE_UV(512, 0, 240, 48),
+    SPRITE_UV(512, 48, 240, 24)
 };
 
-static const unsigned char umn_uv[96] = {
-    SPRITE_UV_BYTES(0, 0, 102, 128),
-    SPRITE_UV_BYTES(102, 0, 102, 128),
-    SPRITE_UV_BYTES(0, 128, 102, 128),
-    SPRITE_UV_BYTES(102, 128, 102, 128),
-    SPRITE_UV_BYTES(256, 48, 20, 24),
-    SPRITE_UV_BYTES(276, 48, 20, 24),
-    SPRITE_UV_BYTES(296, 48, 20, 24),
-    SPRITE_UV_BYTES(316, 48, 20, 24),
-    SPRITE_UV_BYTES(256, 0, 38, 48),
-    SPRITE_UV_BYTES(294, 0, 38, 48),
-    SPRITE_UV_BYTES(332, 0, 38, 48),
-    SPRITE_UV_BYTES(512, 0, 511, 96)
+static const SpriteUv umn_uv[12] = {
+    SPRITE_UV(0, 0, 102, 128),
+    SPRITE_UV(102, 0, 102, 128),
+    SPRITE_UV(0, 128, 102, 128),
+    SPRITE_UV(102, 128, 102, 128),
+    SPRITE_UV(256, 48, 20, 24),
+    SPRITE_UV(276, 48, 20, 24),
+    SPRITE_UV(296, 48, 20, 24),
+    SPRITE_UV(316, 48, 20, 24),
+    SPRITE_UV(256, 0, 38, 48),
+    SPRITE_UV(294, 0, 38, 48),
+    SPRITE_UV(332, 0, 38, 48),
+    SPRITE_UV(512, 0, 511, 96)
 };
 
-static const unsigned char btl_msg_uv[184] = {
-    SPRITE_UV_BYTES(256, 47, 22, 24),
-    SPRITE_UV_BYTES(278, 47, 22, 24),
-    SPRITE_UV_BYTES(300, 47, 22, 24),
-    SPRITE_UV_BYTES(322, 47, 22, 24),
-    SPRITE_UV_BYTES(344, 47, 22, 24),
-    SPRITE_UV_BYTES(256, 71, 22, 24),
-    SPRITE_UV_BYTES(278, 71, 22, 24),
-    SPRITE_UV_BYTES(300, 71, 22, 24),
-    SPRITE_UV_BYTES(322, 71, 22, 24),
-    SPRITE_UV_BYTES(344, 71, 22, 24),
-    SPRITE_UV_BYTES(366, 71, 22, 24),
-    SPRITE_UV_BYTES(256, 95, 22, 24),
-    SPRITE_UV_BYTES(278, 95, 22, 24),
-    SPRITE_UV_BYTES(300, 95, 22, 24),
-    SPRITE_UV_BYTES(322, 95, 22, 24),
-    SPRITE_UV_BYTES(344, 95, 22, 24),
-    SPRITE_UV_BYTES(366, 95, 22, 24),
-    SPRITE_UV_BYTES(256, 119, 22, 24),
-    SPRITE_UV_BYTES(278, 119, 22, 24),
-    SPRITE_UV_BYTES(300, 119, 22, 24),
-    SPRITE_UV_BYTES(322, 119, 22, 24),
-    SPRITE_UV_BYTES(344, 119, 22, 24),
-    SPRITE_UV_BYTES(366, 119, 22, 24)
+static const SpriteUv btl_msg_uv[23] = {
+    SPRITE_UV(256, 47, 22, 24),
+    SPRITE_UV(278, 47, 22, 24),
+    SPRITE_UV(300, 47, 22, 24),
+    SPRITE_UV(322, 47, 22, 24),
+    SPRITE_UV(344, 47, 22, 24),
+    SPRITE_UV(256, 71, 22, 24),
+    SPRITE_UV(278, 71, 22, 24),
+    SPRITE_UV(300, 71, 22, 24),
+    SPRITE_UV(322, 71, 22, 24),
+    SPRITE_UV(344, 71, 22, 24),
+    SPRITE_UV(366, 71, 22, 24),
+    SPRITE_UV(256, 95, 22, 24),
+    SPRITE_UV(278, 95, 22, 24),
+    SPRITE_UV(300, 95, 22, 24),
+    SPRITE_UV(322, 95, 22, 24),
+    SPRITE_UV(344, 95, 22, 24),
+    SPRITE_UV(366, 95, 22, 24),
+    SPRITE_UV(256, 119, 22, 24),
+    SPRITE_UV(278, 119, 22, 24),
+    SPRITE_UV(300, 119, 22, 24),
+    SPRITE_UV(322, 119, 22, 24),
+    SPRITE_UV(344, 119, 22, 24),
+    SPRITE_UV(366, 119, 22, 24)
 };
 
-static const unsigned char btl_msg_uv2[64] = {
-    SPRITE_UV_BYTES(353, 143, 22, 24),
-    SPRITE_UV_BYTES(375, 143, 22, 24),
-    SPRITE_UV_BYTES(397, 143, 22, 24),
-    SPRITE_UV_BYTES(419, 143, 22, 24),
-    SPRITE_UV_BYTES(281, 143, 18, 46),
-    SPRITE_UV_BYTES(299, 143, 18, 46),
-    SPRITE_UV_BYTES(317, 143, 18, 46),
-    SPRITE_UV_BYTES(335, 143, 18, 46)
+static const SpriteUv btl_msg_uv2[8] = {
+    SPRITE_UV(353, 143, 22, 24),
+    SPRITE_UV(375, 143, 22, 24),
+    SPRITE_UV(397, 143, 22, 24),
+    SPRITE_UV(419, 143, 22, 24),
+    SPRITE_UV(281, 143, 18, 46),
+    SPRITE_UV(299, 143, 18, 46),
+    SPRITE_UV(317, 143, 18, 46),
+    SPRITE_UV(335, 143, 18, 46)
 };
 
-static const unsigned char btl_msg_uv3[48] = {
-    SPRITE_UV_BYTES(160, 0, 20, 24),
-    SPRITE_UV_BYTES(180, 0, 20, 24),
-    SPRITE_UV_BYTES(200, 0, 20, 24),
-    SPRITE_UV_BYTES(160, 24, 9, 10),
-    SPRITE_UV_BYTES(169, 24, 13, 10),
-    SPRITE_UV_BYTES(182, 24, 11, 10)
+static const SpriteUv btl_msg_uv3[6] = {
+    SPRITE_UV(160, 0, 20, 24),
+    SPRITE_UV(180, 0, 20, 24),
+    SPRITE_UV(200, 0, 20, 24),
+    SPRITE_UV(160, 24, 9, 10),
+    SPRITE_UV(169, 24, 13, 10),
+    SPRITE_UV(182, 24, 11, 10)
 };
 
-static const unsigned char umn2_uv[32] = {
-    SPRITE_UV_BYTES(370, 0, 38, 40),
-    SPRITE_UV_BYTES(408, 0, 40, 40),
-    SPRITE_UV_BYTES(370, 40, 38, 40),
-    SPRITE_UV_BYTES(408, 40, 38, 40)
+static const SpriteUv umn2_uv[4] = {
+    SPRITE_UV(370, 0, 38, 40),
+    SPRITE_UV(408, 0, 40, 40),
+    SPRITE_UV(370, 40, 38, 40),
+    SPRITE_UV(408, 40, 38, 40)
 };
 
-static const unsigned char umn3_uv[32] = {
-    SPRITE_UV_BYTES(448, 0, 22, 26),
-    SPRITE_UV_BYTES(470, 0, 22, 26),
-    SPRITE_UV_BYTES(448, 26, 22, 26),
-    SPRITE_UV_BYTES(470, 26, 22, 26)
+static const SpriteUv umn3_uv[4] = {
+    SPRITE_UV(448, 0, 22, 26),
+    SPRITE_UV(470, 0, 22, 26),
+    SPRITE_UV(448, 26, 22, 26),
+    SPRITE_UV(470, 26, 22, 26)
 };
 
-static const unsigned char name_uv[8] = {
-    SPRITE_UV_BYTES(256, 210, 105, 24)
+static const SpriteUv name_uv[1] = {
+    SPRITE_UV(256, 210, 105, 24)
 };
 
-static const unsigned char thumnail_uv[8] = {
-    SPRITE_UV_BYTES(0, 0, 128, 112)
+static const SpriteUv thumnail_uv[1] = {
+    SPRITE_UV(0, 0, 128, 112)
 };
 
 static UvClutEntry uv_clut[26] = {
@@ -734,10 +715,10 @@ void endPrintWinTexLoad(XglPacket *packet)
     }
 }
 
-static void PrintFlush(EndPrintContext *context)
+static void PrintFlush(FontDrawCursor *context)
 {
     PrintFuncEntry *cursor;
-    void (*func)(EndPrintContext *context, int param);
+    void (*func)(FontDrawCursor *context, int param);
     int param;
 
     xglFontReloadTexture(context, 2);
@@ -755,7 +736,7 @@ static void PrintFlush(EndPrintContext *context)
     eMessageSpriteReset();
 }
 
-void endPrintExtFuncPack(void (*func)(EndPrintContext *context, int param), int param)
+void endPrintExtFuncPack(void (*func)(FontDrawCursor *context, int param), int param)
 {
     PrintFuncEntry *entry;
 
@@ -764,29 +745,29 @@ void endPrintExtFuncPack(void (*func)(EndPrintContext *context, int param), int 
     entry->param = param;
     entry++;
     pPrintFuncTop = entry;
-    if ((u32)(PrintFunc + 511) < (u32)entry) {
+    if ((PrintFunc + 511) < entry) {
         endPrintInit();
         entry = pPrintFuncTop;
     }
     entry->func = NULL;
 }
 
-static void endPrintInfoSet(EndPrintContext *context, int clut, int flag)
+static void endPrintInfoSet(FontDrawCursor *context, int clut, int flag)
 {
     u64 *command;
     int count;
     unsigned short useClut;
 
-    command = context->scratch + 2;
+    command = context->work.qwords + 2;
     command[1] = 0x3F;
     command[0] = 0;
-    command = context->scratch + 4;
+    command = context->work.qwords + 4;
     command[0] = 0x44;
     command[1] = 0x42;
-    command = context->scratch + 6;
+    command = context->work.qwords + 6;
     command[0] = 0x3FFFF0;
     command[1] = 8;
-    command = context->scratch + 8;
+    command = context->work.qwords + 8;
     count = 3;
     useClut = flag & 1;
     if (useClut) {
@@ -802,7 +783,7 @@ static void endPrintInfoSet(EndPrintContext *context, int clut, int flag)
     command[0] = 0x5000D;
     count++;
     command[1] = 0x47;
-    command = context->scratch;
+    command = context->work.qwords;
     command[0] = count + ((u64)0x8000 << 45);
     command[1] = 0xE;
     xglPrimAddGifTagDirect(context->packet, command, count + 1);
@@ -814,7 +795,7 @@ void endSpriteSet(PrintSpriteInfo *sprite, int flags)
     const SpriteUv *table;
 
     entry = ((const unsigned char *)&sprite->uv)[0];
-    table = (const SpriteUv *)uv_clut[((const unsigned char *)&sprite->uv)[1]].uv;
+    table = uv_clut[((const unsigned char *)&sprite->uv)[1]].uv;
     if (flags & 1) {
         sprite->width = table[entry].width;
         sprite->height = table[entry].height;
@@ -827,7 +808,7 @@ void endSpriteSet(PrintSpriteInfo *sprite, int flags)
     }
 }
 
-static void subPrintSprite(EndPrintContext *context, PrintSpriteInfo *sprite)
+static void subPrintSprite(FontDrawCursor *context, PrintSpriteInfo *sprite)
 {
     int *words;
     const SpriteUv *table;
@@ -838,22 +819,22 @@ static void subPrintSprite(EndPrintContext *context, PrintSpriteInfo *sprite)
     int left;
     int top;
 
-    words = (int *)context->scratch;
+    words = context->work.words;
     words[0] = 0x8001;
     words[1] = 0x50AB4000;
     words[2] = 0x53531;
     words[3] = 0;
-    table = (const SpriteUv *)uv_clut[(sprite->uv >> 8) & 0xFF].uv;
+    table = uv_clut[(sprite->uv >> 8) & 0xFF].uv;
     uvLeft = table[sprite->uv & 0xFF].u;
     uvTop = table[sprite->uv & 0xFF].v;
     width = table[sprite->uv & 0xFF].width;
     height = table[sprite->uv & 0xFF].height;
-    words = (int *)context->scratch + 4;
+    words = context->work.words + 4;
     words[0] = sprite->color[0];
     words[1] = sprite->color[1];
     words[2] = sprite->color[2];
     words[3] = sprite->color[3];
-    words = (int *)context->scratch + 8;
+    words = context->work.words + 8;
     left = sprite->x * 16 + 0x6FF8;
     top = sprite->y * 16 + 0x71F8;
     words[0] = (uvLeft + width * sprite->column) * 16;
@@ -872,17 +853,17 @@ static void subPrintSprite(EndPrintContext *context, PrintSpriteInfo *sprite)
     words[13] = top + sprite->height * 16;
     words[14] = words[6];
     words[15] = 0;
-    xglPrimAddGifTagDirect(context->packet, context->scratch, 6);
+    xglPrimAddGifTagDirect(context->packet, context->work.qwords, 6);
 }
 
 /* The high byte of the packed UV word selects the CLUT on little-endian EE. */
-static void PrintSprite00(EndPrintContext *context, PrintSpriteInfo *sprite)
+static void PrintSprite00(FontDrawCursor *context, PrintSpriteInfo *sprite)
 {
     endPrintInfoSet(context, uv_clut[((const unsigned char *)&sprite->uv)[1]].clut, 1);
     subPrintSprite(context, sprite);
 }
 
-static void PrintSprite01(EndPrintContext *context, PrintSpriteQuad *sprite)
+static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
 {
     int cornerU[4];
     int cornerV[4];
@@ -893,7 +874,7 @@ static void PrintSprite01(EndPrintContext *context, PrintSpriteQuad *sprite)
     unsigned char useDefaultColor;
 
     entry = sprite->uv & 255;
-    table = (const SpriteUv *)uv_clut[sprite->uv >> 8].uv;
+    table = uv_clut[sprite->uv >> 8].uv;
     endPrintInfoSet(context, uv_clut[sprite->uv >> 8].clut, 1);
     switch (sprite->coordinateMode) {
     case 0: {
@@ -932,7 +913,7 @@ static void PrintSprite01(EndPrintContext *context, PrintSpriteQuad *sprite)
     cornerV[2] = cornerV[0];
     cornerV[3] = (table[entry].v + table[entry].height) * 16;
     cornerV[1] = cornerV[3];
-    words = (int *)context->scratch;
+    words = context->work.words;
     words[0] = 0x8004;
     words[1] = 0x30ae4000;
     words[2] = 0x531;
@@ -955,10 +936,10 @@ static void PrintSprite01(EndPrintContext *context, PrintSpriteQuad *sprite)
         words[3] = 0;
         words += 4;
     }
-    xglPrimAddGifTagDirect(context->packet, context->scratch, 13);
+    xglPrimAddGifTagDirect(context->packet, context->work.qwords, 13);
 }
 
-static void PrintPoint(EndPrintContext *context, PrintPointInfo *point)
+static void PrintPoint(FontDrawCursor *context, PrintPointInfo *point)
 {
     int *words;
     int tagHigh;
@@ -967,25 +948,25 @@ static void PrintPoint(EndPrintContext *context, PrintPointInfo *point)
     endPrintInfoSet(context, 0, 0);
     tagLow = 0x8001;
     tagHigh = 0x20204000;
-    words = (int *)context->scratch;
+    words = context->work.words;
     words[0] = tagLow;
     words[1] = tagHigh;
     words[2] = 0x51;
     words[3] = 0;
-    words = (int *)context->scratch + 4;
+    words = context->work.words + 4;
     words[0] = point->color[0];
     words[1] = point->color[1];
     words[2] = point->color[2];
     words[3] = point->color[3];
-    words = (int *)context->scratch + 8;
+    words = context->work.words + 8;
     words[0] = point->x * 16 + 0x6FF8;
     words[1] = point->y * 16 + 0x71F8;
     words[2] = point->depth & 0xFFFFFF;
     words[3] = 0;
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, 3);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 3);
 }
 
-static void subPrintLine(EndPrintContext *context, PrintPointInfo *line)
+static void subPrintLine(FontDrawCursor *context, PrintPointInfo *line)
 {
     int *words;
     PrintPointInfo *point;
@@ -993,7 +974,7 @@ static void subPrintLine(EndPrintContext *context, PrintPointInfo *line)
     int count;
     int qwords;
 
-    words = (int *)context->scratch;
+    words = context->work.words;
     count = 0;
     scan = line + 1;
     if (line->depth != 0) {
@@ -1023,17 +1004,17 @@ static void subPrintLine(EndPrintContext *context, PrintPointInfo *line)
         words += 4;
         point++;
     }
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, qwords);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, qwords);
 }
 
 /* Deferred print callbacks receive their descriptor address in an int slot. */
-static void PrintLine(EndPrintContext *context, int lineAddress)
+static void PrintLine(FontDrawCursor *context, int lineAddress)
 {
     endPrintInfoSet(context, 0, 0);
     subPrintLine(context, (PrintPointInfo *)lineAddress);
 }
 
-static void PrintLine2(EndPrintContext *context, PrintLinePoint *line)
+static void PrintLine2(FontDrawCursor *context, PrintLinePoint *line)
 {
     int *words;
     PrintLinePoint *point;
@@ -1043,7 +1024,7 @@ static void PrintLine2(EndPrintContext *context, PrintLinePoint *line)
 
     endPrintInfoSet(context, 0, 0);
     scan = line + 1;
-    words = (int *)context->scratch;
+    words = context->work.words;
     count = 0;
     if (line->terminator != 0) {
         do {
@@ -1072,7 +1053,7 @@ static void PrintLine2(EndPrintContext *context, PrintLinePoint *line)
         words += 4;
         point++;
     }
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, qwords);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, qwords);
 }
 
 void endPrintDirectRibbon(PrintPointInfo *ribbon)
@@ -1130,7 +1111,7 @@ void endPrintDirectRibbon(PrintPointInfo *ribbon)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-static void subPrintRibbon(EndPrintContext *context, PrintPointInfo *ribbon)
+static void subPrintRibbon(FontDrawCursor *context, PrintPointInfo *ribbon)
 {
     int *words;
     PrintPointInfo *point;
@@ -1138,7 +1119,7 @@ static void subPrintRibbon(EndPrintContext *context, PrintPointInfo *ribbon)
     int count;
     int qwords;
 
-    words = (int *)context->scratch;
+    words = context->work.words;
     count = 0;
     scan = ribbon + 1;
     if (ribbon->depth != 0) {
@@ -1168,16 +1149,16 @@ static void subPrintRibbon(EndPrintContext *context, PrintPointInfo *ribbon)
         words += 4;
         point++;
     }
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, qwords);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, qwords);
 }
 
-static void PrintRibbon(EndPrintContext *context, int ribbonAddress)
+static void PrintRibbon(FontDrawCursor *context, int ribbonAddress)
 {
     endPrintInfoSet(context, 0, 0);
     subPrintRibbon(context, (PrintPointInfo *)ribbonAddress);
 }
 
-static void PrintTagFont(EndPrintContext *context, PrintTagFontInfo *tag)
+static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
 {
     PrintSpriteInfo sprite;
     unsigned char *text;
@@ -1282,7 +1263,7 @@ static void PrintTagFont(EndPrintContext *context, PrintTagFontInfo *tag)
     }
 }
 
-static void ScissorSet(EndPrintContext *context, PrintRect *rect)
+static void ScissorSet(FontDrawCursor *context, PrintRect *rect)
 {
     u64 *scratch;
     int x;
@@ -1290,7 +1271,7 @@ static void ScissorSet(EndPrintContext *context, PrintRect *rect)
     int width;
     int height;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x10000000 << 32) | 0x8001;
     scratch[1] = 14;
     x = rect->x;
@@ -1327,11 +1308,11 @@ static void ScissorSet(EndPrintContext *context, PrintRect *rect)
     sceVif1PkAddDirectDataN(context->packet, scratch, 2);
 }
 
-static void ScissorReset(EndPrintContext *context)
+static void ScissorReset(FontDrawCursor *context)
 {
     u64 *scratch;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x10000000 << 32) | 0x8001;
     scratch[1] = 14;
     scratch[2] = ((u64)(sRender.scissor_width - 1) << 16) |
@@ -1340,7 +1321,7 @@ static void ScissorReset(EndPrintContext *context)
     sceVif1PkAddDirectDataN(context->packet, scratch, 2);
 }
 
-static void PrintNumber(EndPrintContext *context, PrintNumberInfo *number)
+static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
 {
     PrintSpriteInfo sprite;
     int offset;
@@ -1401,7 +1382,7 @@ static void PrintNumber(EndPrintContext *context, PrintNumberInfo *number)
     }
 }
 
-static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
+static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
 {
     short left[8];
     short top[8];
@@ -1425,7 +1406,7 @@ static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
     int depth;
     int strip;
 
-    command = (int *)context->scratch;
+    command = context->work.words;
     endPrintInfoSet(context, 0xfde00, 1);
     words = command;
     words[1] = 0x10000000;
@@ -1454,7 +1435,7 @@ static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
             int textureV;
             int depthWord;
             int stripWidth;
-            const SpriteUv *interiorUv = (const SpriteUv *)win_uv;
+            const SpriteUv *interiorUv = win_uv;
             unsigned short windowX = frame->x;
             unsigned short windowY = frame->y;
             unsigned short windowWidth = frame->width;
@@ -1521,15 +1502,15 @@ static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
     words[3] = 0;
     words += 4;
     for (i = 0; i < 8; i++) {
-        words[0] = ((const short *)win_uv)[i * 4] * 16;
-        words[1] = ((const short *)win_uv)[i * 4 + 1] * 16;
+        words[0] = win_uv[i].u * 16;
+        words[1] = win_uv[i].v * 16;
         words[4] = left[i] * 16 + 0x6ff8;
         words[5] = top[i] * 16 + 0x71f8;
         words[2] = 0;
         words[3] = 0;
         depth = frame->depth & 0xffffff;
-        words[8] = words[0] + ((const short *)win_uv)[i * 4 + 2] * 16;
-        words[9] = words[1] + ((const short *)win_uv)[i * 4 + 3] * 16;
+        words[8] = words[0] + win_uv[i].width * 16;
+        words[9] = words[1] + win_uv[i].height * 16;
         words[12] = words[4] + width[i] * 16;
         words[13] = words[5] + height[i] * 16;
         words[14] = words[6] = depth;
@@ -1542,7 +1523,7 @@ static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
     xglPrimAddGifTagDirect(context->packet, command, count + i * 4 + 1);
 }
 
-static void PrintFrame(EndPrintContext *context, int param)
+static void PrintFrame(FontDrawCursor *context, int param)
 {
     const PrintUnsignedFrameInfo *frame;
     short left[8];
@@ -1565,7 +1546,7 @@ static void PrintFrame(EndPrintContext *context, int param)
     int frameHeight;
 
     frame = (const PrintUnsignedFrameInfo *)param;
-    command = (int *)context->scratch;
+    command = context->work.words;
     endPrintInfoSet(context, 0xfde00, 1);
     words = command;
     words[1] = 0x10000000;
@@ -1611,15 +1592,15 @@ static void PrintFrame(EndPrintContext *context, int param)
     words[3] = 0;
     words += 4;
     for (i = 0; i < 8; i++) {
-        words[0] = ((const short *)win_uv)[i * 4] * 16;
-        words[1] = ((const short *)win_uv)[i * 4 + 1] * 16;
+        words[0] = win_uv[i].u * 16;
+        words[1] = win_uv[i].v * 16;
         words[4] = left[i] * 16 + 0x6ff8;
         words[5] = top[i] * 16 + 0x71f8;
         words[2] = 0;
         words[3] = 0;
         depth = frame->depth & 0xffffff;
-        words[8] = words[0] + ((const short *)win_uv)[i * 4 + 2] * 16;
-        words[9] = words[1] + ((const short *)win_uv)[i * 4 + 3] * 16;
+        words[8] = words[0] + win_uv[i].width * 16;
+        words[9] = words[1] + win_uv[i].height * 16;
         words[12] = words[4] + width[i] * 16;
         words[13] = words[5] + height[i] * 16;
         words[14] = words[6] = depth;
@@ -1632,7 +1613,7 @@ static void PrintFrame(EndPrintContext *context, int param)
     xglPrimAddGifTagDirect(context->packet, command, i * 4 + 3);
 }
 
-static void PrintThumbnail(EndPrintContext *context, PrintThumbnailInfo *thumbnail)
+static void PrintThumbnail(FontDrawCursor *context, PrintThumbnailInfo *thumbnail)
 {
     int *words;
 
@@ -1712,16 +1693,16 @@ void endPrintDirectCircle(int circleAddress) {
     sceVif1PkCloseDirectHLCode(vif1Packet);
 }
 
-static void PrintCircle(EndPrintContext *context, int circleAddress)
+static void PrintCircle(FontDrawCursor *context, int circleAddress)
 {
-    PrintCircleCore(context->packet, context->scratch, (PrintCircleInfo *)circleAddress);
+    PrintCircleCore(context->packet, context->work.qwords, (PrintCircleInfo *)circleAddress);
 }
 
-static void FontTexReload(EndPrintContext *context)
+static void FontTexReload(FontDrawCursor *context)
 {
     u64 *scratch;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64) 0x10000000 << 32) | 0x8000;
     scratch[1] = 0xE;
     scratch[3] = 0x3F;
@@ -1730,7 +1711,7 @@ static void FontTexReload(EndPrintContext *context)
     xglFontReloadTexture(context, 2);
 }
 
-static void FontTexChange(EndPrintContext *context, WindowTexDirectory **window)
+static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
 {
     u64 *scratch;
     int i;
@@ -1740,7 +1721,7 @@ static void FontTexChange(EndPrintContext *context, WindowTexDirectory **window)
     unsigned int imageLow;
 
     i = 0;
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x10000000 << 32) | 0x8000;
     scratch[1] = 0xE;
     scratch[3] = 0x3F;
@@ -1763,12 +1744,12 @@ static void FontTexChange(EndPrintContext *context, WindowTexDirectory **window)
     sceVif1PkOpenDirectHLCode(context->packet, 0);
 }
 
-static void DrawBackSet(DrawBackContext *context)
+static void DrawBackSet(FontDrawCursor *context)
 {
     u64 *scratch;
     unsigned int draw_back_control;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     draw_back_control = sRender.draw_back_value;
     draw_back_control |= 0x80000;
     scratch[0] = ((u64)0x10000000 << 32) | 0x8003;
@@ -1782,12 +1763,12 @@ static void DrawBackSet(DrawBackContext *context)
     sceVif1PkAddDirectDataN(context->packet, scratch, 4);
 }
 
-static void DrawBackReset(DrawBackContext *context)
+static void DrawBackReset(FontDrawCursor *context)
 {
     u64 *scratch;
     unsigned int draw_back_control;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     draw_back_control = sRender.draw_back_reset_value;
     draw_back_control |= 0x80000;
     scratch[0] = ((u64)0x10000000 << 32) | 0x8003;
@@ -1801,18 +1782,18 @@ static void DrawBackReset(DrawBackContext *context)
     sceVif1PkAddDirectDataN(context->packet, scratch, 4);
 }
 
-static void ScreenClear(EndPrintContext *context)
+static void ScreenClear(FontDrawCursor *context)
 {
     u64 *scratch;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x40AB4000 << 32) | 0x8001;
     scratch[1] = 0x551E;
     scratch[2] = 0x31001;
     scratch[3] = 0x47;
     scratch[4] = 0;
     scratch[5] = 0;
-    scratch = context->scratch + 6;
+    scratch = context->work.qwords + 6;
     ((int *)scratch)[0] = 0x6FF8;
     ((int *)scratch)[1] = 0x71F8;
     ((int *)scratch)[2] = 0;
@@ -1821,21 +1802,21 @@ static void ScreenClear(EndPrintContext *context)
     ((int *)scratch)[5] = 0x8DF8;
     ((int *)scratch)[6] = 0;
     ((int *)scratch)[7] = 0;
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, 5);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 5);
 }
 
-static void ZScissor(EndPrintContext *context, PrintRect *rect)
+static void ZScissor(FontDrawCursor *context, PrintRect *rect)
 {
     u64 *scratch;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x40834000 << 32) | 0x8001;
     scratch[1] = 0x551E;
     scratch[2] = 0x32001;
     scratch[3] = 0x47;
     scratch[4] = 0;
     scratch[5] = 0;
-    scratch = context->scratch + 6;
+    scratch = context->work.qwords + 6;
     ((int *)scratch)[0] = rect->x * 16 + 0x6FF8;
     ((int *)scratch)[1] = rect->y * 16 + 0x71F8;
     ((int *)scratch)[2] = rect->depth;
@@ -1844,14 +1825,14 @@ static void ZScissor(EndPrintContext *context, PrintRect *rect)
     ((int *)scratch)[5] = (rect->y + rect->height) * 16 + 0x71F8;
     ((int *)scratch)[6] = rect->depth;
     ((int *)scratch)[7] = 0;
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, 5);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 5);
 }
 
-static void PrintBackSprite(EndPrintContext *context, PrintBackQuad *quad)
+static void PrintBackSprite(FontDrawCursor *context, PrintBackQuad *quad)
 {
     u64 *scratch;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x10000000 << 32) | 5;
     scratch[1] = 14;
     scratch[2] = 68;
@@ -1877,7 +1858,7 @@ static void PrintBackSprite(EndPrintContext *context, PrintBackQuad *quad)
         ((int *)scratch)[1] = 0x302A4000;
         ((int *)scratch)[2] = 0x521;
         ((int *)scratch)[3] = 0;
-        words = (int *)context->scratch + 4;
+        words = context->work.words + 4;
         gray = 128;
         vertex = quad->vertex;
         for (i = 0; i < 4; i++) {
@@ -1903,12 +1884,12 @@ static void PrintBackSprite(EndPrintContext *context, PrintBackQuad *quad)
     sceVif1PkAddDirectDataN(context->packet, scratch, 13);
 }
 
-static void PrintBackSprite2(EndPrintContext *context, PrintBackSpriteInfo *sprite)
+static void PrintBackSprite2(FontDrawCursor *context, PrintBackSpriteInfo *sprite)
 {
     u64 *scratch;
     int *words;
 
-    scratch = context->scratch;
+    scratch = context->work.qwords;
     scratch[0] = ((u64)0x10000000 << 32) | 5;
     scratch[1] = 14;
     scratch[2] = 68;
@@ -1926,35 +1907,35 @@ static void PrintBackSprite2(EndPrintContext *context, PrintBackSpriteInfo *spri
     ((int *)scratch)[1] = 0x50AB4000;
     ((int *)scratch)[2] = 0x53531;
     ((int *)scratch)[3] = 0;
-    words = (int *)context->scratch + 4;
+    words = context->work.words + 4;
     words[0] = sprite->color[0];
     words[1] = sprite->color[1];
     words[2] = sprite->color[2];
     words[3] = sprite->color[3];
-    words = (int *)context->scratch + 8;
+    words = context->work.words + 8;
     words[0] = 0;
     words[1] = 0;
     words[2] = 0;
     words[3] = 0;
-    words = (int *)context->scratch + 12;
+    words = context->work.words + 12;
     words[0] = sprite->x * 16 + 0x6FF8;
     words[1] = sprite->y * 16 + 0x71F8;
     words[2] = sprite->depth;
     words[3] = 0;
-    words = (int *)context->scratch + 16;
+    words = context->work.words + 16;
     words[0] = sprite->u * 16;
     words[1] = sprite->v * 16;
     words[2] = 0;
     words[3] = 0;
-    words = (int *)context->scratch + 20;
+    words = context->work.words + 20;
     words[0] = (sprite->x + sprite->width) * 16 + 0x6FF8;
     words[1] = (sprite->y + sprite->height) * 16 + 0x71F8;
     words[2] = sprite->depth;
     words[3] = 0;
-    sceVif1PkAddDirectDataN(context->packet, context->scratch, 6);
+    sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 6);
 }
 
-static void PrintEtherLine(EndPrintContext *context, int param)
+static void PrintEtherLine(FontDrawCursor *context, int param)
 {
     const EtherLineEndpoint *endpoints;
     PrintPointInfo line[3];
@@ -1964,7 +1945,7 @@ static void PrintEtherLine(EndPrintContext *context, int param)
     u64 *command;
 
     endpoints = (const EtherLineEndpoint *)param;
-    command = context->scratch;
+    command = context->work.qwords;
     command[0] = ((u64)0x10000000 << 32) | 2;
     command[1] = 14;
     command[2] = 68;
@@ -2180,7 +2161,7 @@ void endPrintJpeg(PrintJpegInfo *jpeg)
     sceVif1PkAddDirectDataN(packet, JpegEnv01_8, 10);
     sceVif1PkCloseDirectHLCode(packet);
     sceVif1PkRef(packet, JpegEnv10_9, 8, 0, 0, 0);
-    sceVif1PkRef(packet, (const unsigned char *)jpeg->image + 0x70000, 28672, 0, 0, 0);
+    sceVif1PkRef(packet, jpeg->image + 0x70000, 28672, 0, 0, 0);
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     bottomWords = (int *)JpegEnv11_10;
@@ -2207,9 +2188,9 @@ static u64 ThumDrawEnv_2[24] = { 0x1000000000000005ULL, 0x000000000000000eULL, 0
 
 static u64 Env_3[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x1000000000000004ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x0000000000000000ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
 
-static void (*func_tbl_4[])(EndPrintContext *context, int param) = { PrintLine, (void (*)(EndPrintContext *, int))PrintWindow, (void (*)(EndPrintContext *, int))PrintSprite00, PrintRibbon, (void (*)(EndPrintContext *, int))PrintPoint, (void (*)(EndPrintContext *, int))ScissorSet, (void (*)(EndPrintContext *, int))ScissorReset, (void (*)(EndPrintContext *, int))PrintTagFont, (void (*)(EndPrintContext *, int))PrintSprite01, PrintFrame, (void (*)(EndPrintContext *, int))PrintNumber, (void (*)(EndPrintContext *, int))PrintLine2, (void (*)(EndPrintContext *, int))ZScissor, (void (*)(EndPrintContext *, int))PrintThumbnail, (void (*)(EndPrintContext *, int))FontTexChange, (void (*)(EndPrintContext *, int))FontTexReload, PrintEtherLine, PrintCircle, (void (*)(EndPrintContext *, int))DrawBackSet, (void (*)(EndPrintContext *, int))DrawBackReset, (void (*)(EndPrintContext *, int))ScreenClear, (void (*)(EndPrintContext *, int))PrintBackSprite, (void (*)(EndPrintContext *, int))PrintBackSprite2 };
+static void (*func_tbl_4[])(FontDrawCursor *context, int param) = { PrintLine, (void (*)(FontDrawCursor *, int))PrintWindow, (void (*)(FontDrawCursor *, int))PrintSprite00, PrintRibbon, (void (*)(FontDrawCursor *, int))PrintPoint, (void (*)(FontDrawCursor *, int))ScissorSet, (void (*)(FontDrawCursor *, int))ScissorReset, (void (*)(FontDrawCursor *, int))PrintTagFont, (void (*)(FontDrawCursor *, int))PrintSprite01, PrintFrame, (void (*)(FontDrawCursor *, int))PrintNumber, (void (*)(FontDrawCursor *, int))PrintLine2, (void (*)(FontDrawCursor *, int))ZScissor, (void (*)(FontDrawCursor *, int))PrintThumbnail, (void (*)(FontDrawCursor *, int))FontTexChange, (void (*)(FontDrawCursor *, int))FontTexReload, PrintEtherLine, PrintCircle, (void (*)(FontDrawCursor *, int))DrawBackSet, (void (*)(FontDrawCursor *, int))DrawBackReset, (void (*)(FontDrawCursor *, int))ScreenClear, (void (*)(FontDrawCursor *, int))PrintBackSprite, (void (*)(FontDrawCursor *, int))PrintBackSprite2 };
 
-static void (*func_tbl2_5[])(EndPrintContext *context, int param) = { (void (*)(EndPrintContext *, int))PrintFlush, (void (*)(EndPrintContext *, int))ScissorSet, (void (*)(EndPrintContext *, int))ScissorReset, (void (*)(EndPrintContext *, int))FontTexChange, (void (*)(EndPrintContext *, int))FontTexReload, (void (*)(EndPrintContext *, int))ZScissor };
+static FontExtFunc func_tbl2_5[] = { (FontExtFunc)PrintFlush, (FontExtFunc)ScissorSet, (FontExtFunc)ScissorReset, (FontExtFunc)FontTexChange, (FontExtFunc)FontTexReload, (FontExtFunc)ZScissor };
 
 static u64 JpegEnv01_8[20] = { 0x908b400000008001ULL, 0x000000053531eeeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000000000000ULL, 0x0000000000000014ULL, 0x0000000664023800ULL, 0x0000000000000006ULL, 0x0000000000000005ULL, 0x0000000000000008ULL, 0x0000008000000080ULL, 0x0000008000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x00007bf800007c00ULL, 0x0000000010000000ULL, 0x00000e0000002000ULL, 0x0000000000000000ULL, 0x000083f800008400ULL, 0x0000000010000000ULL };
 

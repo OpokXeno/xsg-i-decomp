@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/mdl.h"
 #include "mdl.h"
 
 #define SWAP32(x) \
@@ -7,7 +8,7 @@
 
 int MDL_setGroupVisible(MdlHandle *model, int group, int visible)
 {
-    MdlResource *resource = (MdlResource *)(u32)model->entry;
+    MdlResource *resource = (MdlResource *)model->entry;
     u32 bit;
     int count;
     int partCount;
@@ -39,7 +40,7 @@ int MDL_setGroupVisible(MdlHandle *model, int group, int visible)
 
 int MDL_setNameVisible(MdlHandle *model, const int *name, int visible)
 {
-    MdlResource *resource = (MdlResource *)(u32)model->entry;
+    MdlResource *resource = (MdlResource *)model->entry;
     u32 bit;
     int key0;
     int key1;
@@ -113,7 +114,7 @@ void MDL_create(MdlHandle *model, const MdlResource *resource)
 
 void MDL_partsSetVisible(MdlHandle *model)
 {
-    MdlResource *resource = (MdlResource *)(u32)model->entry;
+    MdlResource *resource = (MdlResource *)model->entry;
     u32 *visibleWords;
     int partCount;
     int bitIndexMask;
@@ -140,7 +141,7 @@ void MDL_partsSetVisible(MdlHandle *model)
     }
 }
 
-void MDL_draw(MdlHandle *model, const Vector4 *place)
+void MDL_draw(MdlHandle *model, Matrix4 *place)
 {
     int entry = model->entry;
 

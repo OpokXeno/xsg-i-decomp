@@ -1,22 +1,12 @@
 #include "common.h"
 #include "shared.h"
 #include "main/control_entry.h"
+#include "main/game_id_light_set.h"
+#include "main/game_bg_draw_type.h"
+#include "main/xgl_2.h"
+#include "main/xgl_render.h"
 
 #define GAME_BG_DRAW_TYPE1_SCRATCH ((GameBgDrawType1Packet *)0x70000000)
-
-/* Exact existing light view from src/main/game_id_light_set.h:8-20. */
-typedef unsigned int IdLightQuadword __attribute__((mode(TI)));
-
-typedef struct IdLightPair {
-    IdLightQuadword color;
-    IdLightQuadword direction;
-} IdLightPair;
-
-typedef struct IdLightSet {
-    IdLightQuadword ambientColor;
-    IdLightPair lights[3];
-    IdLightQuadword unmodeled_70[8];
-} IdLightSet;
 
 /* Hardware-reserved bits are not C padding. */
 typedef struct GameBgSetupEnvironment {
@@ -328,22 +318,12 @@ struct StageBackground;
 
 extern GameLoopBackgroundCallbacks GameLoopState;
 
-extern float xglFRand(void);
 void GameBgDrawType1(void);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 
-extern float I2F(int value);
-
-extern float xglCos(float angle);
-extern float xglSin(float angle);
-extern void xglRenderClearColor(unsigned int color);
-extern unsigned int xglLRand(void);
-
 extern void xglRotTransPersN(GameBgProjectedPoint *destination, Matrix4 *matrix,
                            const Vector4 *source, int count, int mode);
-
-void GameBgDrawType2(void);
 
 static unsigned char TestEnv_0_00367AA0[0x60] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x51, 0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x03, 0x40, 0x1E, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x6F, 0x00, 0x00, 0xF7, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x8F, 0x00, 0x00, 0xF7, 0x8D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00

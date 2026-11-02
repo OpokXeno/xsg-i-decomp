@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "sc_wait_parse_script.h"
 #include "main/sef.h"
+#include "main/sv_get_image_item.h"
 
 /* Capture the common command fields and the first record's z and tail parameter. */
 #define MISSILE_CAPTURE_COMMON_HEADER(spawn_value, data_value, first_entry_value, parameter_value) do { \
@@ -10,27 +11,25 @@
     (parameter_value) = (first_entry_value)->spawn_parameter; \
 } while (0)
 
-static int scWaitParseNopScript(ScriptObject *script);
-static int scWaitParseCntScript(ScriptObject *script);
-static int scWaitParseEveScript(ScriptObject *script);
-static int scWaitParseEftScript(ScriptObject *script);
-static int scWaitParseMovieScript(ScriptObject *script);
-static int scWaitParseMovScript(ScriptObject *script);
-static int scWaitMissileScript(ScriptObject *script);
-extern int sefSearchMapperIndex(int effect_no);
-extern MissileImage *svGetImageListItem(int mapper_index, int image_index);
+static int scWaitParseNopScript(ScriptTaskWaitView *script);
+static int scWaitParseCntScript(ScriptTaskWaitView *script);
+static int scWaitParseEveScript(ScriptTaskWaitView *script);
+static int scWaitParseEftScript(ScriptTaskWaitView *script);
+static int scWaitParseMovieScript(ScriptTaskWaitView *script);
+static int scWaitParseMovScript(ScriptTaskWaitView *script);
+static int scWaitMissileScript(ScriptTaskWaitView *script);
 extern void sefCaclAllTarget(int *target);
 
 /* OV01 MEfCreate at 0x00a33648 returns the allocation success status.
  * The main linker retains its address alias; this caller discards the status. */
 extern int func_A33648(MissileSpawn *spawn);
 
-static int scWaitParseNopScript(ScriptObject *script)
+static int scWaitParseNopScript(ScriptTaskWaitView *script)
 {
     return 1;
 }
 
-static int scWaitParseCntScript(ScriptObject *script)
+static int scWaitParseCntScript(ScriptTaskWaitView *script)
 {
     int remaining_frames = script->wait_frames - 1;
 
@@ -38,14 +37,14 @@ static int scWaitParseCntScript(ScriptObject *script)
     return remaining_frames < 1;
 }
 
-static int scWaitParseEveScript(ScriptObject *script)
+static int scWaitParseEveScript(ScriptTaskWaitView *script)
 {
-    EventTask *event_task = scGetTaskAdr(_nowScript, script->wait_operand);
+    ScriptTask *event_task = scGetTaskAdr(_nowScript, script->wait_operand);
 
-    return event_task == 0 || event_task->active == 0;
+    return event_task == 0 || event_task->flags == 0;
 }
 
-static int scWaitParseEftScript(ScriptObject *script)
+static int scWaitParseEftScript(ScriptTaskWaitView *script)
 {
     int scheduler_dead = sefIsDeadSchduler(script->wait_operand);
 
@@ -62,17 +61,17 @@ static int scWaitParseEftScript(ScriptObject *script)
     return (short)scheduler_dead;
 }
 
-static int scWaitParseMovieScript(ScriptObject *script)
+static int scWaitParseMovieScript(ScriptTaskWaitView *script)
 {
     return func_A33248() == 0;
 }
 
-static int scWaitParseMovScript(ScriptObject *script)
+static int scWaitParseMovScript(ScriptTaskWaitView *script)
 {
     return ((script->flags >> 5) ^ 1) & 1;
 }
 
-int scWaitParseScript(ScriptObject *script)
+int scWaitParseScript(ScriptTaskWaitView *script)
 {
 
 /* WAITNOP: no condition to wait on; the command finishes on its first visit. */
@@ -101,7 +100,7 @@ int scWaitParseScript(ScriptObject *script)
 
 /* WAITMOV: the wait is over while `flags` bit 5 is clear. */
 
-static int (*waitHandlerTbl[6])(ScriptObject *) = {
+static int (*waitHandlerTbl[6])(ScriptTaskWaitView *) = {
     scWaitParseNopScript,
     scWaitParseCntScript,
     scWaitParseEveScript,
@@ -125,7 +124,7 @@ static int (*waitHandlerTbl[6])(ScriptObject *) = {
     return (short)result;
 }
 
-static int scWaitMissileScript(ScriptObject *script)
+static int scWaitMissileScript(ScriptTaskWaitView *script)
 {
     const float position_scale = 0.01f;
     MissileCommandData *data;
@@ -242,9 +241,9 @@ static int scWaitMissileScript(ScriptObject *script)
     return 0;
 }
 
-int scMoveParseScript(ScriptObject *script)
+int scMoveParseScript(ScriptTaskWaitView *script)
 {
-    static int (*moveHandlerTbl[])(ScriptObject *) = {
+    static int (*moveHandlerTbl[])(ScriptTaskWaitView *) = {
     scWaitParseNopScript, scWaitMissileScript
 };
 

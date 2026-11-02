@@ -1,5 +1,8 @@
 #include "common.h"
+#include "main/open_close_main.h"
 #include "open_close_main.h"
+#include "main/end_print.h"
+#include "main/xgl_2.h"
 
 /* The transition primitives in this TU set red, blue, then green. */
 #define E_WIDGET_SET_RGB(widget_value, red_value, green_value, blue_value) do { \
@@ -64,18 +67,6 @@ typedef struct EWindow {
     signed char visible;       /* +0x1a */
 } EWindow;
 
-typedef struct ECursolSprite {
-    short x;
-    short y;
-    int work;
-    short width;
-    short height;
-    signed char color[4];
-    short style;
-    signed char frame;
-    signed char flags;
-} ECursolSprite;
-
 typedef struct EWindowRenderPacket {
     short x;
     short y;
@@ -101,33 +92,9 @@ typedef struct EWindowMainData {
     OpenCloseController controller;
 } EWindowMainData;
 
-/*
- * Partial view of the object eCursolSet initialises. eCursolMain (still
- * INCLUDE_ASM in this TU) dispatches on state through a jump table, gates its
- * render call on active, advances timer once per call to drive a blink
- * pattern, and uses width in the cursor's box-position arithmetic; x, y and
- * work are copied into an embedded sprite record at +0x10 the same way
- * eSpriteSet's own x/y/work are used (src/main/e_number_main.c), and color is
- * the same four-channel quad convention as that file's other e* widgets.
- */
-typedef struct ECursolMainData {
-    unsigned char state;
-    unsigned char active;
-    unsigned char timer;
-    unsigned char width;
-    unsigned short x;
-    unsigned short y;
-    int work;
-    unsigned char color[4];
-    ECursolSprite sprite;
-} ECursolMainData;
-
 static void OpenSubType00(OpenCloseController *);
 static void OpenSubType01(OpenCloseController *);
 static void CloseSubType00(OpenCloseController *);
-extern float xglCos(float);
-extern float xglSin(float);
-extern void endPrintExtFunc(int, int, void *);
 extern void endSpriteSet(void *, int);
 
 /* Four original function pointers: open subtype 00/01, close 00/00. */
@@ -440,7 +407,7 @@ void eWindowMain(EWindowMainData *window)
     case 0xa1:
         break;
     }
-    if ((unsigned char)window->visible)
+    if (window->visible)
         endPrintExtFunc(window->primitive.work, 1, &window->primitive);
 }
 
@@ -460,7 +427,7 @@ void eWindowSet(EWindow *window)
 
 void eCursolMain(ECursolMainData *cursol)
 {
-    switch ((unsigned char)cursol->state) {
+    switch (cursol->state) {
     case 0:
         cursol->active = 0;
         cursol->state = 0;
@@ -476,9 +443,9 @@ void eCursolMain(ECursolMainData *cursol)
         cursol->state = 0x21;
         /* fall through */
     case 0x21:
-        cursol->sprite.x = (unsigned short)cursol->x;
-        cursol->sprite.y = (unsigned short)cursol->y;
-        cursol->sprite.style = (unsigned char)cursol->width;
+        cursol->sprite.x = cursol->x;
+        cursol->sprite.y = cursol->y;
+        cursol->sprite.style = cursol->width;
         cursol->state = 0x50;
         break;
     case 0x22:
@@ -487,15 +454,15 @@ void eCursolMain(ECursolMainData *cursol)
         cursol->state = 0x23;
         /* fall through */
     case 0x23:
-        cursol->sprite.x = (unsigned short)cursol->x;
+        cursol->sprite.x = cursol->x;
         cursol->sprite.y = cursol->y - (signed char)cursol->timer + 8;
         cursol->sprite.width = 24 - (signed char)cursol->timer;
         cursol->sprite.height = (signed char)cursol->timer * 2;
-        cursol->sprite.style = (unsigned char)cursol->width;
+        cursol->sprite.style = cursol->width;
         if ((signed char)cursol->timer == 8)
             cursol->state = 0x50;
         else
-            cursol->timer = (unsigned char)cursol->timer + 1;
+            cursol->timer = cursol->timer + 1;
         break;
     case 0x50:
         cursol->active = 1;
@@ -503,9 +470,9 @@ void eCursolMain(ECursolMainData *cursol)
         cursol->timer = 0;
         /* fall through */
     case 0x51:
-        cursol->sprite.x = (unsigned short)cursol->x;
-        cursol->sprite.y = (unsigned short)cursol->y;
-        cursol->sprite.style = (unsigned char)cursol->width;
+        cursol->sprite.x = cursol->x;
+        cursol->sprite.y = cursol->y;
+        cursol->sprite.style = cursol->width;
         break;
     case 0x70:
         cursol->active = 0;
@@ -514,15 +481,15 @@ void eCursolMain(ECursolMainData *cursol)
     case 0x71:
         break;
     }
-    if ((unsigned char)cursol->active) {
+    if (cursol->active) {
         int frame = cursol->timer + 1;
         unsigned char style = cursol->width;
         int phase;
 
-        cursol->sprite.color[0] = (unsigned char)cursol->color[0];
-        cursol->sprite.color[1] = (unsigned char)cursol->color[1];
-        cursol->sprite.color[2] = (unsigned char)cursol->color[2];
-        cursol->sprite.color[3] = (unsigned char)cursol->color[3];
+        cursol->sprite.color[0] = cursol->color[0];
+        cursol->sprite.color[1] = cursol->color[1];
+        cursol->sprite.color[2] = cursol->color[2];
+        cursol->sprite.color[3] = cursol->color[3];
         cursol->timer = frame;
         cursol->sprite.flags = 0;
         if (style == 0) {
@@ -538,7 +505,7 @@ void eCursolMain(ECursolMainData *cursol)
     }
 }
 
-void eCursolModeChange(unsigned char *state, unsigned int mode)
+void eCursolModeChange(ECursolMainData *cursol, unsigned int mode)
 {
     if (mode < 34) {
         if (mode < 32)
@@ -552,20 +519,20 @@ void eCursolModeChange(unsigned char *state, unsigned int mode)
     goto set_state;
 
 protected_early_states:
-    if (*state == 'P') return;
-    if (*state == 'Q') return;
-    if (*state == ' ') return;
-    if (*state == '!') return;
+    if (cursol->state == 'P') return;
+    if (cursol->state == 'Q') return;
+    if (cursol->state == ' ') return;
+    if (cursol->state == '!') return;
     goto set_state;
 
 protected_late_states:
-    if (*state == 'P') return;
-    if (*state == 'Q') return;
+    if (cursol->state == 'P') return;
+    if (cursol->state == 'Q') return;
 set_state:
-    *state = mode;
+    cursol->state = mode;
 }
 
-void eCursolSet(ECursol *cursol, int width)
+void eCursolSet(ECursolMainData *cursol, int width)
 {
     cursol->x = 0;
     cursol->y = 0;

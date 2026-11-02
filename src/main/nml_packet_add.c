@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/nml_packet_add.h"
 #include "nml_packet_add.h"
 #include "main/xgl_packet.h"
 #include "main/ssd_init.h"
@@ -22,11 +23,6 @@ typedef union NmlPacketData128 {
 } NmlPacketData128;
 
 typedef unsigned int GameLoopStateWords[];
-
-typedef struct XglLoadImage {
-    u64 giftag;
-    unsigned char unmodeled_08[0x58];
-} XglLoadImage;
 
 typedef struct NmlScreenGsScratchEntry {
     GsTag payload;
@@ -93,6 +89,7 @@ typedef union NmlReflectionPacketTag {
 
 typedef union NmlCircleVector {
     Vector4 vector;
+    float lanes[4];
     int words[4];
     u32 unsigned_words[4];
 } NmlCircleVector;
@@ -182,7 +179,7 @@ extern const NmlCircleOffsetTable circleXOffsetTable;
 extern const NmlCircleOffsetTable circleZOffsetTable;
 
 /* One VIF unpack value passed to sceVif1PkAddUpkData128 by value. */
-extern void sceVif1PkAddUpkData128(NmlPacket packet, Quadword data);
+extern void sceVif1PkAddUpkData128(XglPacket *packet, Quadword data);
 extern void *memcpy(void *destination, const void *source, unsigned int count);
 extern int sceVif1PkSize(XglPacket *packet);
 
@@ -200,24 +197,21 @@ extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
                                  int count);
 
 extern void sceVif1PkCloseDirectCode(XglPacket *packet);
-u8 *nmlPacketSetAttributeData16N(const void *data, int count);
-extern void xglPacketTextureTrans(void *texture);
-static void nmlPacketTextureTrans(NmlModelRenderState *model);
-void nmlPacketAddGsFlushWide(void);
-
+extern void xglPacketTextureTrans(const void *texture);
+static void nmlPacketTextureTrans(LayoutStore *model);
 static int s_nPixelTestType;
 
 static int s_nModelParts;
 
 static NmlCurrentPacket s_pPacket = { 0 };
 
-static void *s_pCacheTexture = 0;
+static const void *s_pCacheTexture = 0;
 
-static void *s_pMatrixCache = 0;
+static const u16 *s_pMatrixCache = 0;
 
 static void *s_pModelCache = 0;
 
-static void *s_pModelLayout = 0;
+static const LayoutStore *s_pModelLayout = 0;
 
 static void *s_pLightLayout = 0;
 
@@ -333,7 +327,7 @@ static NmlPacketData128 s_inLc0[4];
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static const float s_aNormalTbl[114][4];
 
-static inline void nmlPacketSelectLighting(NmlModelRenderState *model,
+static inline void nmlPacketSelectLighting(LayoutStore *model,
                                            const u32 *material_flags)
 {
     s_pLightLayout = model;
@@ -401,7 +395,7 @@ static inline u64 nmlCircleMakeTextureParameter(u32 texture_base)
 }
 
 static inline u32 nmlPacketInvalidatePixelModel(
-    NmlModelResource *const *resource, const u32 *material_flags)
+    NmlModel *const *resource, const u32 *material_flags)
 {
     s_nPixelTestType = -1;
     s_pModelCache = *resource;
@@ -430,7 +424,7 @@ static inline u64 nmlPacketMakeGsFixedAlpha(int alpha_value)
     return ((u64)alpha_value << 32) | 0x68;
 }
 
-static inline void nmlPacketSetPixelBlend(NmlModelRenderState *model,
+static inline void nmlPacketSetPixelBlend(LayoutStore *model,
                                           int pixel_type, float alpha,
                                           float reflect_alpha,
                                           int alpha_reference,
@@ -438,7 +432,7 @@ static inline void nmlPacketSetPixelBlend(NmlModelRenderState *model,
 {
     if (s_nPixelTestType != pixel_type) {
         int alpha_value =
-            (int)(model->material_alpha_scale * 128.0f * alpha);
+            (int)(model->fields.transparency * 128.0f * alpha);
         u64 test_value = 0x50000;
         u64 blend_value;
 
@@ -452,13 +446,13 @@ static inline void nmlPacketSetPixelBlend(NmlModelRenderState *model,
         nmlPacketAppendGsWords(0x47, 0, (u32)test_value);
         nmlPacketAppendGsValue(0x43, &blend_value);
         nmlPacketAddPixelTestPacket(0x47, test_value, 0x50000,
-                                    0x42, *(u64 *)&model->pixel_test_parameters,
+                                    0x42, *(u64 *)&model->fields.alpha,
                                     blend_value);
     }
 }
 
 static inline void nmlPartsCopyGeometryMatrix(NmlPartsScratchMatrix *destination,
-                                              const NmlBlockVectorBlock *source)
+                                              const Vector4 *source)
 {
     __asm__ __volatile__(
         "lq $2,0(%1)\n\t"
@@ -475,7 +469,7 @@ static inline void nmlPartsCopyGeometryMatrix(NmlPartsScratchMatrix *destination
 }
 
 static inline void nmlPartsCopyLayoutMatrix(NmlPartsScratchMatrix *destination,
-                                             const NmlBlockVectorBlock *source)
+                                             const Vector4 *source)
 {
     __asm__ __volatile__(
         "lq $2,0(%1)\n\t"
@@ -510,7 +504,7 @@ static inline void nmlPartsSetNormalTranslation(NmlPartsScratchMatrix *normal,
     }
 }
 
-static void _CurMatrixSet(const Matrix4 matrix)
+static void _CurMatrixSet(Matrix4 matrix)
 {
     __asm__ __volatile__(
         "lqc2 vf27, 0(%0)\n\t"
@@ -536,7 +530,7 @@ static void _CurMatrixGet(Matrix4 matrix)
     );
 }
 
-static void _CurMatrixMul(const Matrix4 matrix)
+static void _CurMatrixMul(Matrix4 matrix)
 {
     __asm__ __volatile__(
         "lqc2 vf2, 0(%0)\n\t"
@@ -583,7 +577,7 @@ static void _CurApplyMatrix(Vector4 *destination, const Vector4 *source)
     );
 }
 
-static void _CurMatrixMul33norm(Vector4 *destination, const Vector4 *source)
+static void _CurMatrixMul33norm(Vector4 *destination, Matrix4 source)
 {
     __asm__ __volatile__(
         "lqc2 vf20, 0(%0)\n\t"
@@ -696,7 +690,7 @@ static int _CurRotTransPersClip(
     return destinationOrFlags;
 }
 
-static void _CurSetMatrix(const Matrix4 matrix)
+static void _CurSetMatrix(Matrix4 matrix)
 {
     __asm__ __volatile__(
         "lqc2 vf27, 0(%0)\n\t"
@@ -811,16 +805,16 @@ void nmlPacketAddGsFlushWide(void)
     g_nGsEntry = 0;
 }
 
-void nmlPacketAddReflectParam(const NmlMaterialRenderState *material,
-                              const NmlModelRenderState *model)
+void nmlPacketAddReflectParam(const NmlModelBlock *material,
+                              const LayoutStore *model)
 {
     NmlCurrentPacket *current_packet = &s_pPacket;
     NmlReflectionPacketTag tags[5];
     float reflection_alpha;
 
     s_pPacket.sdk = xglPacketGetCurrent();
-    reflection_alpha = model->reflect_alpha;
-    if ((model->render_status & 0x100000) &&
+    reflection_alpha = model->fields.reflTransparency;
+    if ((model->fields.render_status & 0x100000) &&
         (strstr(material->name, eye_name) != 0))
         reflection_alpha = 2.0f;
     sceVif1PkCnt(current_packet->sdk, 0);
@@ -831,29 +825,29 @@ void nmlPacketAddReflectParam(const NmlMaterialRenderState *material,
     tags[0].words[3] = 0;
     tags[1].halves[0] = 0;
     tags[1].halves[1] = 0x3F;
-    tags[2].words[0] = material->texture_parameters[0].buffer +
+    tags[2].words[0] = material->textureParameters[0].buffer +
                        (sRender.texture_buffer_base << 5);
-    tags[2].words[1] = material->texture_parameters[0].width +
+    tags[2].words[1] = material->textureParameters[0].width +
                        (sRender.texture_buffer_base << 10);
     tags[2].halves[1] = 6;
-    tags[3].words[0] = material->texture_parameters[1].buffer;
-    tags[3].words[1] = material->texture_parameters[1].width;
+    tags[3].words[0] = material->textureParameters[1].buffer;
+    tags[3].words[1] = material->textureParameters[1].width;
     tags[3].halves[1] = 0x14;
-    tags[4].words[0] = material->texture_parameters[2].buffer;
-    tags[4].words[1] = material->texture_parameters[2].width;
+    tags[4].words[0] = material->textureParameters[2].buffer;
+    tags[4].words[1] = material->textureParameters[2].width;
     tags[4].halves[1] = 8;
     sceVif1PkOpenUpkCode(current_packet->sdk, 0x3D5, 0x6C, 1, 1);
     sceVif1PkAddUpkData128N(current_packet->sdk, tags, 5);
     sceVif1PkCloseUpkCode(current_packet->sdk);
 
-    tags[2].words[0] = material->texture_parameters[3].buffer +
+    tags[2].words[0] = material->textureParameters[3].buffer +
                        (sRender.texture_buffer_base << 5);
-    tags[2].words[1] = material->texture_parameters[3].width +
+    tags[2].words[1] = material->textureParameters[3].width +
                        (sRender.texture_buffer_base << 10);
-    tags[3].words[0] = material->texture_parameters[4].buffer;
-    tags[3].words[1] = material->texture_parameters[4].width;
-    tags[4].words[0] = material->texture_parameters[5].buffer;
-    tags[4].words[1] = material->texture_parameters[5].width;
+    tags[3].words[0] = material->textureParameters[4].buffer;
+    tags[3].words[1] = material->textureParameters[4].width;
+    tags[4].words[0] = material->textureParameters[5].buffer;
+    tags[4].words[1] = material->textureParameters[5].width;
     sceVif1PkOpenUpkCode(current_packet->sdk, 0x3DA, 0x6C, 1, 1);
     sceVif1PkAddUpkData128N(current_packet->sdk, tags, 5);
     sceVif1PkCloseUpkCode(current_packet->sdk);
@@ -861,7 +855,7 @@ void nmlPacketAddReflectParam(const NmlMaterialRenderState *material,
     {
         u32 alpha[4];
 
-        alpha[0] = (int)(material->reflect_alpha * 128.0f);
+        alpha[0] = (int)(material->reflectAlpha * 128.0f);
         if (reflection_alpha < 2.0f)
             alpha[0] = (int)(reflection_alpha * 128.0f);
         alpha[1] = alpha[0];
@@ -914,8 +908,8 @@ void nmlPacketAddTransMicrocodeInit(void)
         s_inLc0[3].lanes[2] = s_inLc0[3].lanes[3] = 1.0f;
 }
 
-void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
-                                const NmlModelRenderState *model)
+void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
+                                const LayoutStore *model)
 {
     NmlCurrentPacket selected;
     u32 status;
@@ -923,7 +917,7 @@ void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
 
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
-    status = model->render_status;
+    status = model->fields.render_status;
     program_type = 2;
     if (status & 0x8000) {
         program_type = 6;
@@ -934,13 +928,13 @@ void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
     } else {
         if (status & 0x02001000) {
             program_type = 5;
-            if (material->render_flags & 1) {
+            if (material->flags & 1) {
                 program_type = 4;
-            } else if ((material->material_flags_qword & 0x10010) == 0x10) {
+            } else if ((material->materialFlagsQword & 0x10010) == 0x10) {
                 program_type = 2;
             }
         } else {
-            program_type = (material->render_flags & 1) ? 1 : 2;
+            program_type = (material->flags & 1) ? 1 : 2;
         }
     }
 
@@ -1016,7 +1010,7 @@ void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
 
 }
 
-void nmlPacketAddScreen(NmlModelRenderState *model)
+void nmlPacketAddScreen(const StudioCamera *camera)
 {
     NmlPacketData128 translation;
     XglPacket *packet = xglPacketGetCurrent();
@@ -1029,7 +1023,7 @@ void nmlPacketAddScreen(NmlModelRenderState *model)
         "lq $2, 0(%1)\n\t"
         "sq $2, 0(%0)"
         :
-        : "r"(&translation), "r"(&model->screen_translation)
+        : "r"(&translation), "r"(&camera->screenOffset)
         : "$2", "memory"
     );
     translation.lanes[3] = 0.0f;
@@ -1039,7 +1033,9 @@ void nmlPacketAddScreen(NmlModelRenderState *model)
     sceVif1PkAddUpkData128(s_pPacket.sdk, translation.quad);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
     sceVif1PkOpenUpkCode(s_pPacket.sdk, 966, 108, 1, 1);
-    sceVif1PkAddUpkData128(s_pPacket.sdk, model->screen_scale);
+    /* The scale vector is sent as one native quadword; StudioCamera has no
+     * quadword view of it yet. */
+    sceVif1PkAddUpkData128(s_pPacket.sdk, *(const Quadword *)&camera->screenScale);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
 }
 
@@ -1088,8 +1084,8 @@ void nmlPacketAddWaitMicrocode(void)
     sceVif1PkAddCode(selected.sdk, VIF_CODE_FLUSH);
 }
 
-void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
-                               NmlModelRenderState *model,
+void nmlPacketAddBlockMaterial(NmlModelBlock *material,
+                               LayoutStore *model,
                                int use_base_alpha, int view_index)
 {
     NmlCurrentPacket selected;
@@ -1100,15 +1096,15 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
     float material_alpha;
     float vector_length;
 
-    proreal = model->proreal;
-    if (model->proreal_override != 0)
-        proreal = model->proreal_override;
+    proreal = model->fields.proreal;
+    if (model->fields.prorealOverride != 0)
+        proreal = model->fields.prorealOverride;
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
     sceVif1PkCnt(selected.sdk, 0);
 
-    material->block_material_parameters.lanes[3] =
-        material->block_material_alpha_scale * model->material_alpha_scale;
+    material->materialParameters.lanes[3] =
+        material->materialAlphaScale * model->fields.transparency;
     {
         union {
             float value;
@@ -1116,58 +1112,58 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
         } vector_scale;
 
         vector_scale.value =
-            model->geometry_blocks[material->geometry_block_index]
-                .vectors[1].w;
+            model->fields.weightedMatrices[material->partId]
+                .rows[1].w;
         if (vector_scale.bits & 1) {
-            material->block_material_parameters.lanes[3] *=
+            material->materialParameters.lanes[3] *=
                 vector_scale.value;
         }
     }
     if (use_base_alpha) {
-        material->block_material_parameters.lanes[3] =
-            material->block_material_alpha_scale;
+        material->materialParameters.lanes[3] =
+            material->materialAlphaScale;
     }
 
     selected = s_pPacket;
     sceVif1PkOpenUpkCode(selected.sdk, 0x3C8, 0x6C, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk,
-                            &material->block_material_parameters, 5);
+                            &material->materialParameters, 5);
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
-    material_alpha = model->default_block_alpha;
+    material_alpha = model->fields.defaultBlockAlpha;
     material_tag_data = &material_tag;
-    if (view_index != model->block_alpha_view)
-        material_alpha = model->block_alpha_by_view[view_index];
-    if ((model->render_status & 0x100000) &&
+    if (view_index != model->fields.window)
+        material_alpha = model->fields.viewportAlpha[view_index];
+    if ((model->fields.render_status & 0x100000) &&
         ((strstr(material->name, lenz_name) != 0) ||
          (strstr(material->name, eye_name) != 0)))
-        material_alpha = model->special_block_alpha;
+        material_alpha = model->fields.specialBlockAlpha;
 
-    material_tag_data->words[0] = material->alpha_tag;
+    material_tag_data->words[0] = material->alphaTag;
     material_tag.lanes[1] = material_alpha;
     material_tag_data->words[2] = 0;
-    if ((alphaLimitHigh < model->alpha_limit) ||
-        (model->alpha_limit < alphaLimitLow))
+    if ((alphaLimitHigh < model->fields.alphaLimit) ||
+        (model->fields.alphaLimit < alphaLimitLow))
         material_tag_data->words[2] = 1;
 
     xglVectorLength(&vector_length,
-                    &model->geometry_blocks[material->geometry_block_index].vectors[0]);
+                    &model->fields.weightedMatrices[material->partId].rows[0]);
     if ((vectorLengthHigh < vector_length) || (vector_length < vectorLengthLow))
         material_tag_data->words[2] = 1;
 
-    if (material->render_flags & 1) {
+    if (material->flags & 1) {
         const Vector4 *previous_block =
-            &model->geometry_blocks[material->secondary_geometry_block_index - 1]
-                 .vectors[0];
+            &model->fields.weightedMatrices[material->matrixIndices[1] - 1]
+                 .rows[0];
 
         xglVectorLength(&vector_length, previous_block);
         if ((previousVectorLengthHigh < vector_length) || (vector_length < previousVectorLengthLow))
             material_tag_data->words[2] = 1;
     }
 
-    material_tag_data->words[3] = (int)material->alpha_mode;
+    material_tag_data->words[3] = material->alphaMode;
     selected = s_pPacket;
     sceVif1PkOpenUpkCode(selected.sdk, 0x3F0, 0x6C, 1, 1);
     selected = s_pPacket;
@@ -1176,8 +1172,8 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
     sceVif1PkCloseUpkCode(selected.sdk);
 
     alpha_options.words[2] = 0;
-    if (model->alpha_options & 1)
-        alpha_options.lanes[2] = model->alpha_options_value;
+    if (model->fields.alphaOptions & 1)
+        alpha_options.lanes[2] = model->fields.alphaOptionsValue;
     selected = s_pPacket;
     sceVif1PkOpenUpkCode(selected.sdk, 0x3F9, 0x6C, 1, 1);
     selected = s_pPacket;
@@ -1185,7 +1181,7 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
-    if (model->render_status & 0x800) {
+    if (model->fields.render_status & 0x800) {
         selected = s_pPacket;
         sceVif1PkOpenUpkCode(selected.sdk, 0x3C9, 0x6C, 1, 1);
         selected = s_pPacket;
@@ -1194,18 +1190,18 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
         sceVif1PkCloseUpkCode(selected.sdk);
     }
 
-    nmlPacketSelectLighting(model, &material->material_flags);
+    nmlPacketSelectLighting(model, &material->materialFlags);
     selected = s_pPacket;
     sceVif1PkCnt(selected.sdk, 0);
     selected = s_pPacket;
     sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, 0x6C, 1, 1);
-    if (model->render_status & 0x800) {
+    if (model->fields.render_status & 0x800) {
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, proreal->block_material_data, 4);
-    } else if (model->render_status & 0x80000) {
-        model->block_material_alpha = (float)(0x80 - (int)(
-            model->block_alpha_multiplier * model->material_alpha_scale *
-            model->fog_intensity[view_index]));
+    } else if (model->fields.render_status & 0x80000) {
+        model->fields.lightDirection[3][3] = (float)(0x80 - (int)(
+            model->fields.texMapSize * model->fields.transparency *
+            model->fields.fogIntensity[view_index]));
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, model, 4);
     } else {
@@ -1215,7 +1211,7 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
-    if (material->material_flags & 0x20000) {
+    if (material->materialFlags & 0x20000) {
         selected = s_pPacket;
         sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, 0x6C, 1, 1);
         selected = s_pPacket;
@@ -1225,8 +1221,8 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
     }
 }
 
-void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
-                                const StudioCamera *camera)
+void nmlPacketMakeCircleTexture(LayoutStore *model,
+                                StudioCamera *camera)
 {
     NmlCircleScratchpad *scratch = (NmlCircleScratchpad *)0x70000000;
     NmlCircleVector *transform = (NmlCircleVector *)0x70000040;
@@ -1244,7 +1240,7 @@ void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
     x_offsets = circleXOffsetTable;
     z_offsets = circleZOffsetTable;
 
-    matrix = (float *)transform;
+    matrix = transform->lanes;
 
     matrix[14] = 1.0f;
     matrix[0] = 0.0f;
@@ -1272,17 +1268,17 @@ void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
         NmlCircleVector *vertex_transform = &transform[i];
 
         position->vector.x =
-            model->circle_center_x +
-            x_offsets.values[i] * model->circle_scale * radius_scale;
+            model->fields.center.v.x +
+            x_offsets.values[i] * model->fields.circleScale * radius_scale;
         position->vector.z =
-            model->circle_center_z +
-            z_offsets.values[i] * model->circle_scale * radius_scale;
+            model->fields.center.v.z +
+            z_offsets.values[i] * model->fields.circleScale * radius_scale;
         position->vector.y =
-            model->projection_matrix.elements[13] + height_offset;
+            model->fields.place[3][1] + height_offset;
         i++;
-        if (model->shadow_height_enabled != 0)
+        if (model->fields.shadowHeightEnabled != 0)
             position->vector.y =
-                model->shadow_height + height_offset;
+                model->fields.shadowHeight + height_offset;
 
         clip_flags = _CurRotTransPersClip(&projected->vector,
             &perspective->vector, &position->vector, &vertex_transform->vector);
@@ -1398,11 +1394,11 @@ void nmlPacketSendCircleTexture(const void *indices, const void *palette)
     sceVif1PkRef(selected.sdk, palette_copy, 66, 0, 0, 0);
 }
 
-static void nmlPacketTextureTrans(NmlModelRenderState *model)
+static void nmlPacketTextureTrans(LayoutStore *model)
 {
     XglLoadImage image;
     NmlCurrentPacket selected;
-    NmlModelResource *resource;
+    NmlModel *resource;
     NmlTextureResourceSet *set;
     u32 texture_set_address;
     const u32 *offset;
@@ -1410,14 +1406,13 @@ static void nmlPacketTextureTrans(NmlModelRenderState *model)
 
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
-    resource = model->resource;
-    if (resource->texture_reference == 0)
+    resource = model->fields.model;
+    if (resource->textureSetOffset == 0)
         return;
     /* Serialized references use byte offsets in the 32-bit EE address space. */
-    texture_set_address = resource->texture_reference + (u32)resource;
+    texture_set_address = resource->textureSetOffset + (u32)resource;
     set = (NmlTextureResourceSet *)texture_set_address;
-    /* The serialized offset list follows the fixed set header. */
-    offset = (const u32 *)(set + 1);
+    offset = set->entry_offsets;
     for (index = 0; index < set->count; index++) {
         NmlTextureResourceEntry *entry;
         u32 entry_address;
@@ -1461,17 +1456,17 @@ void nmlPacketClrModelCache(void)
     s_pLightLayout = 0;
 }
 
-int nmlPacketAddTexture(NmlModelRenderState *model)
+int nmlPacketAddTexture(LayoutStore *model)
 {
-    NmlProRealParam *proreal = model->proreal;
+    NmlProRealParam *proreal = model->fields.proreal;
     NmlCurrentPacket selected;
     XglPacket *packet;
     int size;
     u32 texture_reference;
-    struct XglTextureTransSet *texture;
+    const struct XglTextureTransSet *texture;
 
-    if (model->proreal_override)
-        proreal = model->proreal_override;
+    if (model->fields.prorealOverride)
+        proreal = model->fields.prorealOverride;
     packet = xglPacketGetCurrent();
     selected.sdk = packet;
     s_pPacket = selected;
@@ -1483,8 +1478,8 @@ int nmlPacketAddTexture(NmlModelRenderState *model)
         0x200000u)
         return 1;
 
-    if (model->render_status & 0x800u) {
-        void *cached_texture;
+    if (model->fields.render_status & 0x800u) {
+        const void *cached_texture;
         texture = proreal->texture;
         cached_texture = s_pCacheTexture;
         if (texture && cached_texture != texture) {
@@ -1494,18 +1489,18 @@ int nmlPacketAddTexture(NmlModelRenderState *model)
             packet = selected.sdk;
         }
     } else {
-        texture_reference = model->resource->texture_reference;
+        texture_reference = model->fields.model->textureSetOffset;
         if (texture_reference - 1 <= 0x7ffffeu) {
             if (s_pCacheTexture != (void *)texture_reference) {
                 nmlPacketTextureTrans(model);
-                s_pCacheTexture = (void *)model->resource->texture_reference;
+                s_pCacheTexture = (void *)model->fields.model->textureSetOffset;
                 selected = s_pPacket;
                 packet = selected.sdk;
             }
         } else {
-            texture = model->texture;
+            texture = model->fields.texture;
             if (texture && s_pCacheTexture != texture) {
-                void **texture_slot = &model->texture;
+                const void *const *texture_slot = &model->fields.texture;
                 s_pCacheTexture = texture;
                 xglPacketTextureTrans(*texture_slot);
                 selected = s_pPacket;
@@ -1523,30 +1518,30 @@ int nmlPacketAddTexture(NmlModelRenderState *model)
     }
 }
 
-int nmlPacketAddParts(const NmlPartsBlockView *block,
-                      const NmlModelRenderState *model,
-                      const StudioCamera *camera)
+int nmlPacketAddParts(const NmlModelBlock *block,
+                      LayoutStore *model,
+                      StudioCamera *camera)
 {
     NmlCurrentPacket selected;
     NmlCurrentPacket current;
     XglPacket *packet;
     NmlPartsWorkingScratch matrices;
-    NmlModelResource *resource;
+    NmlModel *resource;
     NmlProRealParam *proreal;
     const u16 *vertex_indices;
-    const u16 *bone_indices = block->bone_indices;
+    const u16 *bone_indices = block->matrixIndices;
     const int *geometry_offsets;
     const Vector4 *block_vectors;
-    const NmlBlockVectorBlock *geometry_block;
+    const Vector4 *geometry_rows;
     int i;
     int matrix_changed;
     int code;
     int size;
 
-    proreal = model->proreal;
-    if (model->proreal_override != 0)
-        proreal = model->proreal_override;
-    resource = model->resource;
+    proreal = model->fields.proreal;
+    if (model->fields.prorealOverride != 0)
+        proreal = model->fields.prorealOverride;
+    resource = model->fields.model;
     packet = xglPacketGetCurrent();
     current.sdk = packet;
     s_pPacket = current;
@@ -1556,15 +1551,15 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
         0x10000u > 0x200000u)
         return 1;
     {
-        if (block->render_flags & 0x10) {
+        if (block->flags & 0x10) {
             geometry_offsets = (const int *)((const u8 *)resource +
-                              resource->geometry_block_table_offset);
+                              resource->geometryTableOffset);
             block_vectors = (const Vector4 *)((const u8 *)resource +
-                            geometry_offsets[block->geometry_index] + 0x30);
+                            geometry_offsets[block->geometryIndex] + 0x30);
             vertex_indices = (const u16 *)((const u8 *)block +
-                              block->vertex_index_offset);
-            for (i = 0; i < block->vertex_index_count; i++) {
-                u16 code_index = block->vertex_index_base + i * 2;
+                              block->vertexIndexOffset);
+            for (i = 0; i < block->vertexIndexCount; i++) {
+                u16 code_index = block->vertexIndexBase + i * 2;
                 selected = s_pPacket;
                 sceVif1PkOpenUpkCode(selected.sdk, code_index, 0x6c, 1, 1);
                 selected = s_pPacket;
@@ -1580,8 +1575,8 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
             s_pModelLayout = model;
             s_pMatrixCache = 0;
         }
-        if (s_nModelParts != block->part_id) {
-            s_nModelParts = block->part_id;
+        if (s_nModelParts != block->partId) {
+            s_nModelParts = block->partId;
             s_pMatrixCache = 0;
         }
         if (s_pMatrixCache != 0 &&
@@ -1591,64 +1586,68 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
         s_pMatrixCache = bone_indices;
 
         {
-            geometry_block = model->geometry_blocks;
+            geometry_rows = model->fields.weightedMatrices->rows;
             if (*bone_indices != 0) {
                 code = 0x2dc;
                 do {
                     u16 bone_index = *bone_indices++;
 
-                    geometry_block = (const NmlBlockVectorBlock *)((const u8 *)geometry_block + (bone_index - 1) * sizeof(NmlBlockVectorBlock));
+                    geometry_rows += (bone_index - 1) *
+                        (sizeof(NmlWeightedMatrix) / sizeof(Vector4));
 
                     selected = s_pPacket;
                     sceVif1PkOpenUpkCode(selected.sdk, code & 0xffff,
                                          0x6c, 1, 1);
                     selected = s_pPacket;
                     sceVif1PkAddUpkData128N(selected.sdk,
-                                            geometry_block->vectors, 4);
+                                            geometry_rows, 4);
                     selected = s_pPacket;
                     sceVif1PkCloseUpkCode(selected.sdk);
                     code += 4;
-                    geometry_block = model->geometry_blocks;
+                    geometry_rows = model->fields.weightedMatrices->rows;
                 } while (*bone_indices != 0);
             }
         }
 
         if (matrix_changed) {
             const u16 *cached_bones = s_pMatrixCache;
-            const NmlBlockVectorBlock *base_block =
-                &geometry_block[cached_bones[0] - 1];
+            const Vector4 *base_rows =
+                geometry_rows + cached_bones[0] * 4 - 4;
             float homogeneous_w;
 
-            nmlPartsCopyGeometryMatrix(&matrices.part, base_block);
+            nmlPartsCopyGeometryMatrix(&matrices.part, base_rows);
             homogeneous_w = 0.0f;
             nmlPartsSetRowW(&matrices.part, homogeneous_w);
 
-            if (!(block->render_flags & 1) &&
-                !(block->material_flags & 0x10)) {
+            if (!(block->flags & 1) &&
+                !(block->materialFlags & 0x10)) {
                 xglMatrixInverse(matrices.inverse_part.values,
                                  matrices.part.values);
             } else {
-                const NmlBlockVectorBlock *layout_block =
-                    (const NmlBlockVectorBlock *)(resource->matrix_base_index * sizeof(NmlBlockVectorBlock) + (u32)base_block);
+                /* Byte arithmetic with the offset first: the original adds
+                 * partCount * 0x40 to the base in that operand order, which
+                 * no pointer expression produces. */
+                const Vector4 *layout_rows =
+                    (const Vector4 *)(resource->partCount * sizeof(NmlWeightedMatrix) + (u32)base_rows);
 
-                nmlPartsCopyLayoutMatrix(&matrices.inverse_part, layout_block);
+                nmlPartsCopyLayoutMatrix(&matrices.inverse_part, layout_rows);
             }
 
             _CurMatrixSet(matrices.inverse_part.values);
-            _CurMatrixMul(model->reference_transform);
-            if (model->render_status & 0x800) {
+            _CurMatrixMul(model->fields.inversePlace);
+            if (model->fields.render_status & 0x800) {
                 _CurMatrixMul33norm(matrices.normal.rows,
-                    (const Vector4 *)proreal->normal_transform);
+                    proreal->normal_transform);
             } else {
                 _CurMatrixMul33norm(matrices.normal.rows,
-                                    model->normal_vectors);
+                                    model->fields.lightColor);
             }
             _CurApplyMatrix(&matrices.reference_point.vector,
-                            &camera->position);
+                            &camera->position.vector);
 
-            if (model->render_status & 0x02001000) {
+            if (model->fields.render_status & 0x02001000) {
                 NmlPartsLightPayload *light_payload = &matrices.light_payload;
-                const Vector4 *source_points = model->light_points;
+                const Vector4 *source_points = model->fields.pointPosition;
                 _CurApplyMatrix(&matrices.light_payload.current_point,
                                 source_points);
                 matrices.light_payload.rows[0].x = matrices.light_payload.current_point.x;
@@ -1675,15 +1674,15 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
                 sceVif1PkOpenUpkCode(selected.sdk, 0x3e9, 0x6c, 1, 1);
                 selected = s_pPacket;
                 sceVif1PkAddUpkData128N(selected.sdk,
-                                        model->light_parameters, 3);
+                                        model->fields.pointColor, 3);
                 selected = s_pPacket;
                 sceVif1PkCloseUpkCode(selected.sdk);
             }
 
-            if (model->render_status & 0x800) {
+            if (model->fields.render_status & 0x800) {
                 xglMatrixMul(&matrices.projected_placement.xgl_matrix,
                     &proreal->projection_transform,
-                    (Matrix *)&model->projection_matrix);
+                    &model->fields.place);
                 selected = s_pPacket;
                 sceVif1PkOpenUpkCode(selected.sdk, 0x3ec, 0x6c, 1, 1);
                 selected = s_pPacket;
@@ -1697,7 +1696,7 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
 
             nmlPartsSetNormalTranslation(&matrices.normal,
                                          &matrices.reference_point, 3);
-            if (model->render_status & 0x800) {
+            if (model->fields.render_status & 0x800) {
                 const NmlScreenQuadword *source_row = &proreal->final_normal_row;
                 NmlScreenQuadword *destination_row = &matrices.normal.quadwords[3];
 
@@ -1719,15 +1718,15 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
 
         }
         if (matrix_changed) {
-            if (model->render_status & 0x8000) {
-                _CurMatrixSet(model->shadow_transform);
+            if (model->fields.render_status & 0x8000) {
+                _CurMatrixSet(model->fields.projectionMatrix);
             } else {
                 _CurMatrixSet(camera->viewMatrix);
-                if (model->render_status & 0x80000)
-                    _CurMatrixMul(model->shadow_transform);
+                if (model->fields.render_status & 0x80000)
+                    _CurMatrixMul(model->fields.projectionMatrix);
             }
-            if (model->render_status & 1) {
-                _CurMatrixMul(model->projection_rows);
+            if (model->fields.render_status & 1) {
+                _CurMatrixMul(model->fields.place);
                 _CurMatrixMul(matrices.part.values);
             } else {
                 _CurMatrixMul(matrices.part.values);
@@ -1748,38 +1747,38 @@ int nmlPacketAddParts(const NmlPartsBlockView *block,
            0x200000u;
 }
 
-void nmlPacketAddTextureParam(NmlMaterialRenderState *material,
-                              NmlModelRenderState *model)
+void nmlPacketAddTextureParam(NmlModelBlock *material,
+                              LayoutStore *model)
 {
     NmlProRealParam *proreal;
 
-    proreal = model->proreal;
-    if (model->proreal_override != 0)
-        proreal = model->proreal_override;
+    proreal = model->fields.proreal;
+    if (model->fields.prorealOverride != 0)
+        proreal = model->fields.prorealOverride;
     s_pPacket.sdk = xglPacketGetCurrent();
-    if (model->render_status & 0x800) {
+    if (model->fields.render_status & 0x800) {
         u64 texture_filter = 0x60;
 
         nmlPacketAppendGsWords(0x3f, 0, 0);
         nmlPacketAppendGsValue(6, &proreal->texture_gs_parameters[0].value);
         nmlPacketAppendGsValue(0x14, &texture_filter);
         nmlPacketAppendGsValue(8, &proreal->texture_gs_parameters[1].value);
-    } else if (material->material_flags & 1) {
-        u32 tex0_low = material->texture_parameters[0].buffer +
+    } else if (material->materialFlags & 1) {
+        u32 tex0_low = material->textureParameters[0].buffer +
                        (sRender.texture_buffer_base << 5);
-        u32 tex0_high = material->texture_parameters[0].width +
+        u32 tex0_high = material->textureParameters[0].width +
                         (sRender.texture_buffer_base << 10);
 
         nmlPacketAppendGsWords(0x3f, 0, 0);
         nmlPacketAppendGsWords(6, tex0_high, tex0_low);
-        nmlPacketAppendGsWords(0x14, *(u32 *)&material->texture_parameters[1].width,
-                               *(u32 *)&material->texture_parameters[1].buffer);
-        nmlPacketAppendGsFields(8, material->texture_parameters[2].width,
-                                &material->texture_parameters[2].buffer);
+        nmlPacketAppendGsWords(0x14, *&material->textureParameters[1].width,
+                               *&material->textureParameters[1].buffer);
+        nmlPacketAppendGsFields(8, material->textureParameters[2].width,
+                                &material->textureParameters[2].buffer);
     }
 }
 
-static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *model,
+static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
                          int program_index)
 {
     int eye_material;
@@ -1803,11 +1802,11 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     type7_programs = s_aUcodeTbl[program_index].programs[6];
 
     eye_material = 0;
-    proreal = model->proreal;
-    if (model->proreal_override != 0)
-        proreal = model->proreal_override;
+    proreal = model->fields.proreal;
+    if (model->fields.prorealOverride != 0)
+        proreal = model->fields.prorealOverride;
 
-    if ((model->render_status & 0x100000) != 0 &&
+    if ((model->fields.render_status & 0x100000) != 0 &&
         (strstr(material->name, lenz_name) != 0 ||
          strstr(material->name, eye_name) != 0))
         eye_material = 1;
@@ -1819,13 +1818,13 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 7: {
         int slot = 0;
 
-        if (material->material_flags & 0x10)
+        if (material->materialFlags & 0x10)
             slot = 1;
-        else if (material->render_flags & 1) {
+        else if (material->flags & 1) {
             slot = 2;
-            if (material->render_flags & 2)
+            if (material->flags & 2)
                 slot = 3;
-            else if (material->render_flags & 4)
+            else if (material->flags & 4)
                 slot = 4;
         }
         program = type7_programs[slot];
@@ -1839,14 +1838,14 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 6: {
         int slot;
 
-        if (material->render_flags & 1) {
+        if (material->flags & 1) {
             slot = 2;
-            if (material->render_flags & 2)
+            if (material->flags & 2)
                 slot = 3;
-            else if (material->render_flags & 4)
+            else if (material->flags & 4)
                 slot = 4;
         }
-        else if (material->material_flags & 0x10)
+        else if (material->materialFlags & 0x10)
             slot = 1;
         else
             slot = 0;
@@ -1861,15 +1860,15 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 5: {
         int slot = 0;
 
-        if ((material->material_flags & 0x10) == 0) {
+        if ((material->materialFlags & 0x10) == 0) {
             slot = 1;
-            if ((material->material_flags & 0x1000) &&
-                (!(model->render_level & 0x10) || eye_material))
+            if ((material->materialFlags & 0x1000) &&
+                (!(model->fields.renderLevel & 0x10) || eye_material))
                 slot = 4;
-            else if ((material->material_flags & 8) &&
-                     (!(model->render_level & 2) || eye_material)) {
-                if ((material->material_flags & 0x800) ||
-                    ((model->render_level & 1) && !eye_material))
+            else if ((material->materialFlags & 8) &&
+                     (!(model->fields.renderLevel & 2) || eye_material)) {
+                if ((material->materialFlags & 0x800) ||
+                    ((model->fields.renderLevel & 1) && !eye_material))
                     slot = 2;
                 else
                     slot = 3;
@@ -1886,19 +1885,19 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 4: {
         int slot;
 
-        if (material->render_flags & 2)
+        if (material->flags & 2)
             slot = 4;
-        else if (material->render_flags & 4)
+        else if (material->flags & 4)
             slot = 8;
         else
             slot = 0;
-        if ((material->material_flags & 0x1000) &&
-            (!(model->render_level & 0x10) || eye_material))
+        if ((material->materialFlags & 0x1000) &&
+            (!(model->fields.renderLevel & 0x10) || eye_material))
             slot += 3;
-        else if ((material->material_flags & 8) &&
-                 (!(model->render_level & 2) || eye_material)) {
-            if ((material->material_flags & 0x800) ||
-                ((model->render_level & 1) && !eye_material))
+        else if ((material->materialFlags & 8) &&
+                 (!(model->fields.renderLevel & 2) || eye_material)) {
+            if ((material->materialFlags & 0x800) ||
+                ((model->fields.renderLevel & 1) && !eye_material))
                 slot += 1;
             else
                 slot += 2;
@@ -1914,15 +1913,15 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 3: {
         int slot;
 
-        if (material->material_flags & 0x10) {
+        if (material->materialFlags & 0x10) {
             slot = 3;
             if (proreal->projection_entry)
                 slot = 4;
         }
-        else if (material->render_flags & 1) {
-            if (material->render_flags & 2)
+        else if (material->flags & 1) {
+            if (material->flags & 2)
                 slot = 1;
-            else if (material->render_flags & 4)
+            else if (material->flags & 4)
                 slot = 2;
             else
                 slot = 0;
@@ -1940,19 +1939,19 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 1: {
         int slot;
 
-        if (material->render_flags & 2)
+        if (material->flags & 2)
             slot = 4;
-        else if (material->render_flags & 4)
+        else if (material->flags & 4)
             slot = 8;
         else
             slot = 0;
-        if ((material->material_flags & 0x1000) &&
-            (!(model->render_level & 0x10) || eye_material))
+        if ((material->materialFlags & 0x1000) &&
+            (!(model->fields.renderLevel & 0x10) || eye_material))
             slot += 3;
-        else if ((material->material_flags & 8) &&
-                 (!(model->render_level & 2) || eye_material)) {
-            if ((material->material_flags & 0x800) ||
-                ((model->render_level & 1) && !eye_material))
+        else if ((material->materialFlags & 8) &&
+                 (!(model->fields.renderLevel & 2) || eye_material)) {
+            if ((material->materialFlags & 0x800) ||
+                ((model->fields.renderLevel & 1) && !eye_material))
                 slot += 1;
             else
                 slot += 2;
@@ -1968,21 +1967,21 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     case 2: {
         int slot;
 
-        if ((material->material_flags & 0x10) == 0) {
+        if ((material->materialFlags & 0x10) == 0) {
             slot = 2;
-            if ((material->material_flags & 0x1000) &&
-                (!(model->render_level & 0x10) || eye_material))
+            if ((material->materialFlags & 0x1000) &&
+                (!(model->fields.renderLevel & 0x10) || eye_material))
                 slot = 5;
-            else if ((material->material_flags & 8) &&
-                     (!(model->render_level & 2) || eye_material)) {
-                if ((material->material_flags & 0x800) ||
-                    ((model->render_level & 1) && !eye_material))
+            else if ((material->materialFlags & 8) &&
+                     (!(model->fields.renderLevel & 2) || eye_material)) {
+                if ((material->materialFlags & 0x800) ||
+                    ((model->fields.renderLevel & 1) && !eye_material))
                     slot = 3;
                 else
                     slot = 4;
             }
         }
-        else if (material->render_flags & 0x10)
+        else if (material->flags & 0x10)
             slot = 1;
         else
             slot = 0;
@@ -2001,8 +2000,8 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
     return result;
 }
 
-void nmlPacketAddExecProg(NmlMaterialRenderState *material,
-                          NmlModelRenderState *model,
+void nmlPacketAddExecProg(NmlModelBlock *material,
+                          LayoutStore *model,
                           int allow_extended_programs,
                           int add_transform_data)
 {
@@ -2013,23 +2012,23 @@ void nmlPacketAddExecProg(NmlMaterialRenderState *material,
         return;
     }
 
-    if ((material->render_flags & 0x80)
-        || (model->render_status & 0x100)) {
+    if ((material->flags & 0x80)
+        || (model->fields.render_status & 0x100)) {
         if (!add_exec_prog(material, model, 1))
             return;
         nmlPacketAddTransData(material);
         return;
     }
 
-    if ((material->render_flags & 0x100)
-        || (model->render_status & 0x200)) {
+    if ((material->flags & 0x100)
+        || (model->fields.render_status & 0x200)) {
         if (!add_exec_prog(material, model, 2))
             return;
         nmlPacketAddTransData(material);
         return;
     }
 
-    if (material->render_flags & 0x200) {
+    if (material->flags & 0x200) {
         if (add_exec_prog(material, model, 2))
             nmlPacketAddTransData(material);
         nmlPacketAddWaitMicrocode();
@@ -2040,9 +2039,9 @@ void nmlPacketAddExecProg(NmlMaterialRenderState *material,
     }
 
     if (allow_extended_programs
-        && !(material->render_flags & 0x400)
-        && !(model->render_status & 0x8)) {
-        if (model->render_level & 0x4) {
+        && !(material->flags & 0x400)
+        && !(model->fields.render_status & 0x8)) {
+        if (model->fields.renderLevel & 0x4) {
             if (!add_exec_prog(material, model, 3))
                 return;
             nmlPacketAddTransData(material);
@@ -2063,22 +2062,15 @@ void nmlPacketAddExecProg(NmlMaterialRenderState *material,
     nmlPacketAddTransData(material);
 }
 
-void nmlPacketAddTransData(NmlMaterialRenderState *material)
+void nmlPacketAddTransData(NmlModelBlock *material)
 {
-    typedef struct NmlMaterialTransPrefix {
-        char name[0x20];
-        u32 render_flags;
-        int data_offset;
-        int data_size;
-    } NmlMaterialTransPrefix;
-    NmlMaterialTransPrefix *transfer = (void *)material;
     NmlCurrentPacket selected;
 
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
-    /* The span starts data_offset bytes into the material (32-bit EE addresses). */
-    sceVif1PkRef(selected.sdk, (void *)(transfer->data_offset + (u32)material),
-                 transfer->data_size / 16, 0, 0, 0);
+    /* The span starts dataOffset bytes into the block (32-bit EE addresses). */
+    sceVif1PkRef(selected.sdk, (void *)(material->dataOffset + (u32)material),
+                 material->dataSize / 16, 0, 0, 0);
     nmlPacketAddWaitMicrocode();
 }
 
@@ -2135,7 +2127,7 @@ u8 *nmlPacketSetAttributeData64(const void *data)
     }
 }
 
-u8 *nmlPacketSetAttributeData64N(const void *data, int count)
+void *nmlPacketSetAttributeData64N(const void *data, int count)
 {
     int remaining;
     XglPacket *packet;
@@ -2170,7 +2162,7 @@ u8 *nmlPacketSetAttributeData64N(const void *data, int count)
     return s_pPacket.sdk->cursor;
 }
 
-u8 *nmlPacketSetAttributeData16N(const void *data, int count)
+void *nmlPacketSetAttributeData16N(const void *data, int count)
 {
     NmlAttributePacket *packet;
     Quadword *destination;
@@ -2213,12 +2205,12 @@ u8 *nmlPacketSetAttributeAlloc16N(u32 count)
     return current->cursor.bytes;
 }
 
-void nmlPacketAddGifTag(NmlMaterialRenderState *material,
-                        NmlModelRenderState *model, int count)
+void nmlPacketAddGifTag(NmlModelBlock *material,
+                        LayoutStore *model, int count)
 {
     NmlPacketData128 giftag;
     NmlCurrentPacket *current_packet = &s_pPacket;
-    u32 flags = model->render_status;
+    u32 flags = model->fields.render_status;
     u32 end_of_packet = (flags & 0x01000002) != 0;
 
     if (flags & 0x2000)
@@ -2226,17 +2218,17 @@ void nmlPacketAddGifTag(NmlMaterialRenderState *material,
 
     current_packet->sdk = xglPacketGetCurrent();
     sceVif1PkCnt(current_packet->sdk, 0);
-    giftag.quad = material->gif_tag;
+    giftag.quad = material->gifTag;
     giftag.words[1] |= (count << 21) | (end_of_packet << 20);
-    if (material->material_flags & 1) {
+    if (material->materialFlags & 1) {
         giftag.words[1] |= 0x00080000;
     } else {
         giftag.words[1] &= ~0x00080000;
     }
-    if (model->render_status & 0x8000) {
+    if (model->fields.render_status & 0x8000) {
         giftag.words[1] &= ~((count << 21) | 0x00080000);
     }
-    if (model->render_status & 0x800) {
+    if (model->fields.render_status & 0x800) {
         giftag.words[1] |= 0x00080000;
     }
     sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F3, 0x6C, 1, 1);
@@ -2273,66 +2265,66 @@ void nmlPacketAddGifTagStandard(int eop, int count)
     sceVif1PkCloseUpkCode(selected.sdk);
 }
 
-void nmlPacketAddFog(NmlModelRenderState *model, int viewport_index)
+void nmlPacketAddFog(LayoutStore *model, int viewport_index)
 {
     s_pPacket.sdk = xglPacketGetCurrent();
     sceVif1PkCnt(s_pPacket.sdk, 0);
 
     if (g_aSubWindow[viewport_index] != 0)
-        model->fog_color[3] = ((int)(model->fog_intensity[viewport_index] * 255.0f)) << 4;
+        model->fields.fogColor.intensity = ((int)(model->fields.fogIntensity[viewport_index] * 255.0f)) << 4;
 
     sceVif1PkOpenUpkCode(s_pPacket.sdk, 998, 108, 1, 1);
-    sceVif1PkAddUpkData128N(s_pPacket.sdk, model->fog_color, 1);
+    sceVif1PkAddUpkData128N(s_pPacket.sdk, &model->fields.fogColor, 1);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
     sceVif1PkOpenUpkCode(s_pPacket.sdk, 1007, 108, 1, 1);
-    sceVif1PkAddUpkData128N(s_pPacket.sdk, model->fog_parameters, 1);
+    sceVif1PkAddUpkData128N(s_pPacket.sdk, &model->fields.fogPara, 1);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
 }
 
-void nmlPacketAddPixelControl(NmlMaterialRenderState *material,
-                              NmlModelRenderState *model,
+void nmlPacketAddPixelControl(NmlModelBlock *material,
+                              LayoutStore *model,
                               u32 pixel_control_flags)
 {
     NmlCurrentPacket selected;
     u16 viewport = pixel_control_flags;
-    int pixel_reference = model->pixel_test_reference;
-    float reflect_alpha = model->reflect_alpha;
+    int pixel_reference = model->fields.pixelAlpha;
+    float reflect_alpha = model->fields.reflTransparency;
     float alpha;
     int special_material = 0;
     u32 material_flags;
     u64 packed_alpha;
     int i;
 
-    alpha = model->default_block_alpha;
-    if (viewport != model->block_alpha_view)
-        alpha = model->block_alpha_by_view[viewport];
-    if (model->render_status & 0x100000) {
+    alpha = model->fields.defaultBlockAlpha;
+    if (viewport != model->fields.window)
+        alpha = model->fields.viewportAlpha[viewport];
+    if (model->fields.render_status & 0x100000) {
         if (strstr(material->name, lenz_name) != 0 ||
             strstr(material->name, eye_name) != 0) {
-            alpha = model->special_block_alpha;
+            alpha = model->fields.specialBlockAlpha;
             reflect_alpha = 2.0f;
             special_material = 1;
             s_nPixelTestType = -1;
         }
     }
 
-    for (i = 0; i < *(int *)&model->pixel_test_count; i++) {
+    for (i = 0; i < *&model->fields.partPixelAlphaCount; i++) {
         s_nPixelTestType = -1;
         if (((short *)((u8 *)model + i * 4))[361] ==
-            *(u32 *)&material->geometry_block_index) {
-            pixel_reference = model->pixel_test_entries[i].reference;
+            *&material->partId) {
+            pixel_reference = model->fields.partPixelAlpha[i].alpha;
             break;
         }
     }
 
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
-    material_flags = material->material_flags;
+    material_flags = material->materialFlags;
     if (material_flags & 0x10)
         pixel_reference = 0x7F;
-    if (s_pModelCache != model->resource) {
+    if (s_pModelCache != model->fields.model) {
         material_flags = nmlPacketInvalidatePixelModel(
-            &model->resource, &material->material_flags);
+            &model->fields.model, &material->materialFlags);
     }
 
     if (pixel_control_flags & 0x10000) {
@@ -2342,7 +2334,7 @@ void nmlPacketAddPixelControl(NmlMaterialRenderState *material,
                     u64 blend_mode = 0x68;
 
                     s_nPixelTestType = 1;
-                    if (*(u32 *)&material->material_flags & 0x8000) {
+                    if (*&material->materialFlags & 0x8000) {
                         nmlPacketAppendGsWords(0x47, 0, 0x50000);
                     } else {
                         nmlPacketAppendGsWords(0x47, 0,
@@ -2351,7 +2343,7 @@ void nmlPacketAddPixelControl(NmlMaterialRenderState *material,
                     }
                     nmlPacketAppendGsValue(0x42, &blend_mode);
                 }
-            } else if (model->render_status & 0x20) {
+            } else if (model->fields.render_status & 0x20) {
                 nmlPacketSetPixelBlend(model, 2, alpha, reflect_alpha,
                                        pixel_reference, 0);
             } else {
@@ -2367,7 +2359,7 @@ void nmlPacketAddPixelControl(NmlMaterialRenderState *material,
                 blend_mode = 0x68;
                 nmlPacketAppendGsValue(0x42, &blend_mode);
                 nmlPacketAddPixelTestPacket(0x47, 0x50000, 0x50000,
-                                            0x42, *(u64 *)&model->pixel_test_parameters,
+                                            0x42, *&model->fields.alpha,
                                             blend_mode);
             }
         } else {
@@ -2380,7 +2372,7 @@ void nmlPacketAddPixelControl(NmlMaterialRenderState *material,
             u32 depth_base;
 
             pixel_reference =
-                (int)(model->material_alpha_scale * (float)pixel_reference);
+                (int)(model->fields.transparency * (float)pixel_reference);
             test_value = nmlPacketMakeGsTest(1, 5, pixel_reference,
                                              0, 0, 0, 1, 2);
             depth_base = sRender.depth_buffer_base;
@@ -2424,14 +2416,14 @@ void nmlPacketSetCurrent(void)
     s_pPacket.sdk = xglPacketGetCurrent();
 }
 
-void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
-                         const NmlModelRenderState *model)
+void nmlPacketAddReflRot(const NmlModelBlock *material,
+                         const LayoutStore *model)
 {
     float matrix[4][4];
     int type = 1;
     NmlCurrentPacket selected;
 
-    if ((material->material_flags & 0x2000u) != 0)
+    if ((material->materialFlags & 0x2000u) != 0)
         type = 2;
 
     selected.sdk = xglPacketGetCurrent();
@@ -2658,14 +2650,14 @@ void nmlPacketAddGsPAbe(u64 pabe)
     g_nGsEntry++;
 }
 
-void nmlPacketAddGsPrmode(NmlMaterialRenderState *material)
+void nmlPacketAddGsPrmode(NmlModelBlock *material)
 {
     u64 mode;
 
     mode = 72;
-    if (material->material_flags & 1)
+    if (material->materialFlags & 1)
         mode = 88;
-    else if (material->material_flags & 2)
+    else if (material->materialFlags & 2)
         mode = 72;
     g_aGsTag[g_nGsEntry * 2 + 2].value = mode;
     g_aGsTag[g_nGsEntry * 2 + 3].value = 27;

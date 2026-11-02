@@ -2,8 +2,12 @@
 #include "shared.h"
 #include "sdv.h"
 #include "main/xgl_cd.h"
+#include "main/menu_1.h"
 #include "menu_1.h"
 #include "main/party.h"
+#include "main/data.h"
+#include "main/res_get_path.h"
+#include "main/xgl_mc.h"
 
 typedef struct MenuNumberDigits {
     const char *text[10];
@@ -35,25 +39,6 @@ struct BulletData {
     short weaponId; /* +0xC: the weapon this ammunition belongs to */
 };
 
-typedef struct PartEquipData PartEquipData;
-
-/*
- * dataFrmGet and dataEngGet (ov01/data_unit_org_get.c, still asm) return
- * per-entry AGWS part records that share this layout as far as
- * MenuFrameEquipCheck/MenuEngineEquipCheck read it: a halfword at +0x6
- * bitmask of the characters that can equip the part, tested against
- * chrEquipGet's per-character bit.
- */
-struct PartEquipData {
-    unsigned char price[4];
-    unsigned char unmodeled_04[2];
-    unsigned short equipMask; /* +0x6 */
-    unsigned char unmodeled_08[2];
-    unsigned short category; /* +0xa */
-    unsigned char unmodeled_0c[2];
-    unsigned short associatedId; /* +0xe */
-};
-
 /*
  * dataUnitOrgGet's own 0x180-byte per-character record (ov01 VA 0x00a191c0,
  * cross-overlay call under the scaffold label func_A191C0, matching
@@ -80,20 +65,8 @@ typedef struct {
  * dataWpnGet's own record (ov01 VA 0x00a1a3d8). MenuBulletCheck above models
  * its +0x6 flags halfword as WeaponStatus, already accepted and unable to
  * grow, so this call site keeps its own scaffold label func_A1A3D8 (matching
- * src/main/menu_shop.c) for the different +0x12 halfword summed here.
+ * src/main/menu_shop.c) for the battle weapon price record it returns.
  */
-typedef struct {
-    unsigned char unmodeled_000[2];
-    unsigned char price[4];
-    unsigned char unmodeled_006[2];
-    unsigned short characterEquipMask; /* +0x8 */
-    unsigned char unmodeled_00a[0xc - 0xa];
-    unsigned short categoryMask; /* +0xc */
-    unsigned char mountMask; /* +0xe */
-    unsigned char unmodeled_00f[0x11 - 0xf];
-    unsigned char equipWeight; /* +0x11 */
-    short wagl; /* +0x12 */
-} WeaponWaglData;
 
 struct MenuScenarioRange {
     int scenario;
@@ -110,17 +83,6 @@ struct MenuScenarioTable {
     unsigned char unmodeled_3c[4];
 };
 
-struct MenuPriceRecord {
-    unsigned char price[4];
-};
-
-struct MenuBulletPriceRecord {
-    unsigned char unmodeled_00[6];
-    unsigned char price[4]; /* +0x6 */
-    unsigned char unmodeled_0a[2];
-    short weaponId;
-};
-
 extern const MenuNumberDigits numberDigitTexts;
 extern const char numberEmptyText[];
 extern const unsigned short largeFaceTable[12];
@@ -133,7 +95,6 @@ static const char *f_exten_15[];
 static const char *f_ukn_name_16[];
 static const char *f_char_mot_17[];
 static char *f_mons_mot_18[];
-extern unsigned char SaveData[];
 extern char noneName[5];
 extern const unsigned char blankText[1];
 
@@ -210,8 +171,14 @@ extern const char lexExtension[5];
 extern const char ukunBName[6];
 extern const char ukunSName[6];
 extern const char uknGName[6];
-extern int map_ex_text;
-extern int save_map_text;
+typedef struct SaveMapNameEntry {
+    unsigned char names[2][0x21];
+    short map_id;
+    unsigned char unknown[2];
+} SaveMapNameEntry;
+
+extern unsigned char *map_ex_text;
+extern SaveMapNameEntry *save_map_text;
 extern const char roboEtcPath[15];
 extern const char yamamotoMotPath[19];
 extern const char motionPath[13];
@@ -219,21 +186,8 @@ extern const char menuAgwsName[9];
 extern const char mtnMeqpName[9];
 extern const char gunoMotionName[9];
 
-extern void RES_GetMdlFileName(char *destination, int modelId);
-int MenuIdChange(short id, int highPart);
-
 /* OptMntToPosEquip2 maps the mount code through this asm sibling first. */
 int OptMntToPosEquip(int mountCode);
-
-int MenuScenarioNoGet(void);
-
-/*
- * dataEvtBoxChk is defined in src/main/data.c and xglFlagsGet in
- * src/main/xgl_flags.c; neither is published in include/main/ yet (only
- * xglFlagsInitial is), so both are forward-declared here like
- * MenuScenarioNoGet above and OptMntToPosEquip at the top of this file.
- */
-int dataEvtBoxChk(int eventId);
 
 int xglFlagsGet(int bitOffset, int bitCount);
 
@@ -242,10 +196,10 @@ extern void MenuLoadFile(const char *name, void *buffer);
 
 extern WeaponStatus *dataWpnGet(int weaponId);
 extern BulletData *dataAttGet(int ammoId);
-extern PartEquipData *dataFrmGet(int frameId);
-extern PartEquipData *dataEngGet(int engineId);
+extern BattleFramePriceRecord *dataFrmGet(int frameId);
+extern BattleEnginePriceRecord *dataEngGet(int engineId);
 extern UnitOrgWeapons *func_A191C0(int chrNo);
-extern WeaponWaglData *func_A1A3D8(int weaponId);
+extern BattleWeaponPriceRecord *func_A1A3D8(int weaponId);
 extern short func_A197E8(int characterId, int specialId);
 extern MenuTextEntry *func_A2C5A8(unsigned int itemId);
 extern MenuTextEntry *func_A2C5F8(unsigned int itemId);
@@ -257,33 +211,16 @@ extern MenuTextEntry *func_A2C7D8(unsigned int itemId);
 extern MenuTextEntry *func_A2C918(unsigned int itemId);
 extern MenuTextEntry *func_A2C968(unsigned int itemId);
 extern char *dataEvtItmNameGet(unsigned int itemId);
-char *MenuCharNameGet(unsigned int charId);
-int dataItmBoxChk(int id);
-int dataWpnBoxChk(int id);
-int dataBltBoxChk(int id);
-int dataAccBoxChk(int id);
-int dataItmBoxInc(int id);
-int dataEvtBoxInc(int id);
-int dataWpnBoxInc(int id);
-int dataBltBoxInc(int id);
-int dataAccBoxInc(int id);
-void dataItmBoxDec(int id);
-void dataEvtBoxDec(int id);
-void dataWpnBoxDec(int id);
-void dataBltBoxDec(int id);
-void dataAccBoxDec(int id);
-void PartyTakeAgwsOn(int id);
-
+const char *MenuCharNameGet(unsigned int charId);
 /* dataUnitOrgGet's per-character record fields used by this TU are at
  * +0x5A, +0x5E, +0x64, and +0xA6. */
-extern PartEquipData *func_A1A548(int accessoryId);
+extern BattleAccessoryPriceRecord *func_A1A548(int accessoryId);
 
-extern struct MenuPriceRecord *func_A1A4E8(int itemId);
-extern struct MenuBulletPriceRecord *func_A1A428(int bulletId);
-extern struct MenuPriceRecord *func_A1A598(int frameId);
-extern struct MenuPriceRecord *func_A1A5E8(int engineId);
+extern BattleItemPriceRecord *func_A1A4E8(int itemId);
+extern BattleBulletPriceRecord *func_A1A428(int bulletId);
+extern BattleFramePriceRecord *func_A1A598(int frameId);
+extern BattleEnginePriceRecord *func_A1A5E8(int engineId);
 extern void *memset(void *destination, int value, unsigned int bytes);
-extern int PartyAllPartyGet(int *party, int selection);
 static void MenuSortSubType00(unsigned int *first, unsigned int *second);
 static void MenuSortSubType01(unsigned int *first, unsigned int *second);
 static void MenuSortSubType02(int *first, int *second);
@@ -309,34 +246,34 @@ static char f_name_0_0036D6C8[21] = "data\\endou\\mapex.bin";
 
 static char f_name_1[23] = "data\\endou\\savemap.bin";
 
-static char *tag_name_3[9] = {
+static const char *tag_name_3[9] = {
     0, combatantText, menu1ReserveText, registeredCombatantText, registeredReserveText,
     userText, fromText, targetText, toText
 };
 
-static char *para_name_4[8] = {
+static const char *para_name_4[8] = {
     menu1HpText, epText, strengthText, vitalityText,
     etherAttackText, etherDefenseText, dexterityText, evasionText
 };
 
-static char *para_name2_5[8] = {
+static const char *para_name2_5[8] = {
     menu1HpText, epText, strText, vitText,
     eatkText, edefText, dexText, evaText
 };
 
-static char * char_name_6[30] = { noneName, chaosName, kosMosName, shionName, blankNameText, menu1ZiggyName, momoName, jrName, cassiriaText, catalinaText, virgilName, maryName, soldierName, bic13Name, bic14Name, bic15Name, bic16Name, vx10000Name, vx7000Name, vx9000Name, vx20000Name, vx05Name, vx4000Name, ag01Name, ag02Name, ag03Name, ag04Name, ag05Name, ag06Name, bunnieName };
+static const char *char_name_6[30] = { noneName, chaosName, kosMosName, shionName, blankNameText, menu1ZiggyName, momoName, jrName, cassiriaText, catalinaText, virgilName, maryName, soldierName, bic13Name, bic14Name, bic15Name, bic16Name, vx10000Name, vx7000Name, vx9000Name, vx20000Name, vx05Name, vx4000Name, ag01Name, ag02Name, ag03Name, ag04Name, ag05Name, ag06Name, bunnieName };
 
-static char * char_name2_7[] = { ziggurat8Name };
+static const char *char_name2_7[] = { ziggurat8Name };
 
 static MenuTextEntry dumm_msg_8 = {
     noneName,
-    blankText,
+    (const char *)blankText,
     blankText
 };
 
 static MenuTextEntry dumm_9 = {
     0,
-    blankText,
+    (const char *)blankText,
     blankText
 };
 
@@ -359,7 +296,9 @@ static const char * f_ukn_name_16[] = { ukunSName, ukunBName };
 
 static const char * f_char_mot_17[3] = { mtnMeqpName, uknGName, menuAgwsName };
 
-static char * f_mons_mot_18[] = { gunoMotionName };
+/* The monster number digits are rewritten in place through this pointer
+ * (case 4 of the motion-name builder), so the view is writable. */
+static char *f_mons_mot_18[] = { (char *)gunoMotionName };
 
 unsigned char ParaDataChangeTbl[] = {
     6, 7, 0, 1, 2, 3, 4, 5
@@ -427,7 +366,7 @@ int MenuCursorKeepCheck(void)
 
 char *MenuSegmentInfoTextGet(int segment)
 {
-    unsigned char *text = (unsigned char *)map_ex_text;
+    unsigned char *text = map_ex_text;
 
     while (segment >= 2) {
         while (*text++ != 0) {
@@ -439,7 +378,7 @@ char *MenuSegmentInfoTextGet(int segment)
 
 char *MenuSegmentMapNameGet(int segment)
 {
-    unsigned char *text = (unsigned char *)map_ex_text + 0x540;
+    unsigned char *text = map_ex_text + 0x540;
 
     while (segment >= 2) {
         while (*text++ != 0) {
@@ -452,7 +391,7 @@ char *MenuSegmentMapNameGet(int segment)
 
 char *MenuSegmentItemNameGet(int segment)
 {
-    unsigned char *text = (unsigned char *)map_ex_text + 0x3C0;
+    unsigned char *text = map_ex_text + 0x3C0;
 
     while (segment >= 2) {
         while (*text++ != 0) {
@@ -463,29 +402,23 @@ char *MenuSegmentItemNameGet(int segment)
     return (char *)text;
 }
 
-int MenuMapExTextLoad(int work, int mode)
+unsigned char *MenuMapExTextLoad(unsigned char *work, int mode)
 {
-    int aligned = (work + 0xF) & ~0xF;
-    int next = aligned + 0x2000;
+    unsigned char *aligned = (unsigned char *)(((u32)work + 0xF) & ~0xF);
+    unsigned char *next = aligned + 0x2000;
 
     map_ex_text = aligned;
     if (mode == 0) {
-        xglCdReadFile(f_name_0_0036D6C8, (void *)aligned, 0, 1);
+        xglCdReadFile(f_name_0_0036D6C8, aligned, 0, 1);
     } else {
-        MenuLoadFile(f_name_0_0036D6C8, (void *)aligned);
+        MenuLoadFile(f_name_0_0036D6C8, aligned);
     }
     return next;
 }
 
 const unsigned char *MenuSaveMapNameGet(int mapId)
 {
-    typedef struct {
-        unsigned char names[2][0x21];
-        short map_id;
-        unsigned char unknown[2];
-    } SaveMapNameEntry;
-
-    SaveMapNameEntry *entry = (SaveMapNameEntry *)save_map_text;
+    SaveMapNameEntry *entry = save_map_text;
     int count = 0;
     SaveMapNameEntry *first = entry;
 
@@ -500,16 +433,16 @@ const unsigned char *MenuSaveMapNameGet(int mapId)
     return first->names[0];
 }
 
-int MenuSaveMapTextLoad(int work, int mode)
+void *MenuSaveMapTextLoad(void *work, int mode)
 {
-    int aligned = (work + 0xF) & ~0xF;
-    int next = aligned + 0x1000;
+    unsigned char *aligned = (unsigned char *)(((u32)work + 0xF) & ~0xF);
+    unsigned char *next = aligned + 0x1000;
 
-    save_map_text = aligned;
+    save_map_text = (SaveMapNameEntry *)aligned;
     if (mode == 0) {
-        xglCdReadFile(f_name_1, (void *)aligned, 0, 1);
+        xglCdReadFile(f_name_1, aligned, 0, 1);
     } else {
-        MenuLoadFile(f_name_1, (void *)aligned);
+        MenuLoadFile(f_name_1, aligned);
     }
     return next;
 }
@@ -751,11 +684,11 @@ const char ukunSName[6] = "ukunS";
 
 const char uknGName[6] = "ukn_g";
 
-int map_ex_text = 0;
+unsigned char *map_ex_text = 0;
 
-int save_map_text = 0;
+SaveMapNameEntry *save_map_text = 0;
 
-char *MenuTagTextGet(int index)
+const char *MenuTagTextGet(int index)
 {
     return tag_name_3[index];
 }
@@ -831,19 +764,19 @@ const char blankNameText[11] = "\241\274\241\274\241\274\241\274\241\274";
 
 const char ziggurat8Name[11] = "Ziggurat 8";
 
-char *MenuParaNameGet(int index)
+const char *MenuParaNameGet(int index)
 {
     return para_name_4[index];
 }
 
-char *MenuParaNameGet2(int index)
+const char *MenuParaNameGet2(int index)
 {
     return para_name2_5[index];
 }
 
-char *MenuCharNameGet(unsigned int charId)
+const char *MenuCharNameGet(unsigned int charId)
 {
-    char *name = char_name_6[charId];
+    const char *name = char_name_6[charId];
 
     if (charId == 5) {
         if (MenuScenarioNoGet() < 108) {
@@ -871,7 +804,7 @@ MenuTextEntry *MenuTextGet(int index)
             break;
         case 1: {
             const char *itemName = dataEvtItmNameGet(itemId);
-            const unsigned char *end = (const unsigned char *)itemName;
+            const char *end = itemName;
 
             dumm2_10.name = itemName;
             dumm2_10.sortName = (const unsigned char *)itemName;
@@ -1055,7 +988,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
     switch (category) {
     case 1:
         {
-            int rawPrice = ((BattleItemPriceRecord *)func_A1A4E8(itemId))->price.value;
+            int rawPrice = func_A1A4E8(itemId)->price.value;
             price = (int)(rawPrice * rate[0]);
         }
         break;
@@ -1066,7 +999,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
         }
         break;
     case 3:
-        price = ((BattleWeaponPriceRecord *)func_A1A3D8(itemId))->price.value;
+        price = func_A1A3D8(itemId)->price.value;
         if (func_A1A3D8(itemId)->categoryMask & 0x4000) {
             price = (int)(price * rate[4]);
         } else {
@@ -1074,7 +1007,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
         }
         break;
     case 4:
-        price = ((BattleBulletPriceRecord *)func_A1A428(itemId))->price.value;
+        price = func_A1A428(itemId)->price.value;
         weaponId = func_A1A428(itemId)->weaponId;
         if (weaponId != 0) {
             if (func_A1A3D8(weaponId)->categoryMask & 0x4000) {
@@ -1085,7 +1018,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
         }
         break;
     case 5:
-        price = ((BattleAccessoryPriceRecord *)func_A1A548(itemId))->price.value;
+        price = func_A1A548(itemId)->price.value;
         if (itemId < 129) {
             price = (int)(price * rate[4]);
         } else {
@@ -1093,10 +1026,10 @@ int MenuBoxMoneyGet(int index, int priceMode)
         }
         break;
     case 11:
-        price = ((BattleFramePriceRecord *)func_A1A598(itemId))->price.value;
+        price = func_A1A598(itemId)->price.value;
         break;
     case 12:
-        price = ((BattleEnginePriceRecord *)func_A1A5E8(itemId))->price.value;
+        price = func_A1A5E8(itemId)->price.value;
         break;
     case 7:
         memset(agwsPrices, 0, sizeof(agwsPrices));
@@ -1270,7 +1203,7 @@ int OptMntToWpnPos(int mountCode)
 
 int WpnPosToOptMnt(int mountId, int weaponId)
 {
-    WeaponWaglData *weapon = 0;
+    BattleWeaponPriceRecord *weapon = 0;
     int result = 0;
 
     if (weaponId != 0) {
@@ -1363,7 +1296,7 @@ int MenuWeaponEquipCheck(int charId, int weaponId)
 int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int replacementSlot)
 {
     UnitOrgWeapons *character;
-    WeaponWaglData *weapon;
+    BattleWeaponPriceRecord *weapon;
     unsigned char occupiedPositions = 0;
     unsigned short blockedPositions = 0;
     int weight;
@@ -1501,7 +1434,7 @@ int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex)
 {
     unsigned short characterMask;
     UnitOrgWeapons *characterWeapons;
-    PartEquipData *accessory;
+    BattleAccessoryPriceRecord *accessory;
     unsigned short categoryToScan;
     int index;
 
@@ -1526,7 +1459,7 @@ int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex)
     }
 
     if (characterWeapons->accessoryId[slotIndex] != 0) {
-        PartEquipData *equipped =
+        BattleAccessoryPriceRecord *equipped =
             func_A1A548(characterWeapons->accessoryId[slotIndex]);
 
         if (equipped->category == accessory->category) {
@@ -1553,7 +1486,7 @@ int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex)
             short equippedId = characterWeapons->accessoryId[index];
 
             if (equippedId != 0) {
-                PartEquipData *equipped = func_A1A548(equippedId);
+                BattleAccessoryPriceRecord *equipped = func_A1A548(equippedId);
 
                 if (equipped->category == accessory->category) {
                     return 0;
@@ -1800,8 +1733,8 @@ void MenuSortSet(int bufferIndex, int categoryMask, int filter)
     int partyCount;
     int *partyMember;
     int currentMember;
-    WeaponWaglData *weapon;
-    PartEquipData *accessory;
+    BattleWeaponPriceRecord *weapon;
+    BattleAccessoryPriceRecord *accessory;
     UnitOrgWeapons *character;
     short selectedCharId;
     short *etherId;

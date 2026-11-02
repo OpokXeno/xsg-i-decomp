@@ -8,14 +8,10 @@
 #include "shared.h"
 #include "main/jni.h"
 #include "main/find_native_method.h"
-
-typedef struct JavaThread {
-    unsigned int : 32; /* +0 */
-    unsigned int : 32; /* +4 */
-    unsigned int : 32; /* +8 */
-    unsigned int : 32; /* +12 */
-    void *java_object; /* +16: written at 0x2f9480 (sw s1,16(v0)) */
-} JavaThread;
+#include "main/act_1.h"
+#include "main/sef.h"
+#include "main/stage_1.h"
+#include "main/string_utf_get_hash.h"
 
 typedef struct NativeUnitPeer {
     unsigned int : 32; /* +0 */
@@ -72,7 +68,7 @@ typedef struct NativeUnitPeer {
     unsigned int : 32; /* +196 */
     unsigned int : 32; /* +200 */
     unsigned int : 32; /* +204 */
-    void *java_object; /* +208: written at 0x2f9488 (sw s1,208(s0)) */
+    SceneObject java_object; /* +208: written at 0x2f9488 (sw s1,208(s0)) */
 } NativeUnitPeer;
 
 /*
@@ -82,14 +78,6 @@ typedef struct NativeUnitPeer {
  * verbatim because a TU-local header cannot be included from another TU.
  */
 typedef struct JThread JThread;
-
-/*
- * The engine's actor record a xeno.Chr's "peer" field points to, already
- * completed independently by src/main/chr.h/act_2.h and others. This TU
- * only forwards the pointer to ACT_loadResource/ACT_loadMotion without
- * reading any member, so it stays the incomplete tag those TUs define.
- */
-typedef struct Actor Actor;
 
 /*
  * The native peer a Java xeno.Unit's "peer" field points to, as far as
@@ -115,8 +103,8 @@ typedef struct ToolkitUnitResourcePeerView {
  * the Java Object argument and the int id (lw at 0x2f9c20/0x2f9c34).
  */
 typedef struct ToolkitResourceCall {
-    u8 *object; /* +0x0 */
-    int id;     /* +0x4 */
+    SceneObject object; /* +0x0 */
+    int id;             /* +0x4 */
 } ToolkitResourceCall;
 
 /*
@@ -125,9 +113,9 @@ typedef struct ToolkitResourceCall {
  * 0x2f9ed0/0x2f9ee4/0x2f9edc).
  */
 typedef struct ToolkitResourceIndexCall {
-    u8 *object;      /* +0x0 */
-    int id;          /* +0x4 */
-    int resource_id; /* +0x8 */
+    SceneObject object; /* +0x0 */
+    int id;             /* +0x4 */
+    int resource_id;    /* +0x8 */
 } ToolkitResourceIndexCall;
 
 /*
@@ -164,65 +152,8 @@ typedef struct ToolkitStringCall {
  */
 typedef struct ToolkitStagePeer {
     unsigned char unmodeled_00[0x2c];
-    void *java_object; /* +0x2c */
+    SceneObject java_object; /* +0x2c */
 } ToolkitStagePeer;
-
-/* The three-coordinate records passed from getPeer_Effect to the CF helper. */
-typedef struct ToolkitEffectVector {
-    float x;
-    float y;
-    float z;
-} ToolkitEffectVector;
-
-/* The effect peer's Java object association written by getPeer_Effect. */
-typedef struct ToolkitEffectPeer {
-    unsigned char unmodeled_00[0x6b8];
-    SceneObject java_object; /* +0x6b8: assigned at main 0x002f9ae8 */
-} ToolkitEffectPeer;
-
-/* Fields written by getPeer_Enepc; other Actor contents remain unmodeled. */
-typedef struct ToolkitEnemyPeer {
-    unsigned char unmodeled_00[4];
-    void (*update)(struct ToolkitEnemyPeer *peer); /* +0x4 */
-    unsigned char unmodeled_08[8];
-    float position_x; /* +0x10 */
-    float position_y; /* +0x14 */
-    float position_z; /* +0x18 */
-    unsigned char unmodeled_1c[0x34];
-    float rotation_x; /* +0x50, converted from degrees to radians */
-    float rotation_y; /* +0x54, converted from degrees to radians */
-    float rotation_z; /* +0x58, converted from degrees to radians */
-    unsigned char unmodeled_5c[0x24];
-    unsigned char slot_number; /* +0x80: actSequence index */
-    unsigned char unmodeled_81[0x4c0 - 0x81];
-    void *java_object; /* +0x4c0 */
-    unsigned char unmodeled_4c4[0x4c];
-    unsigned char light_peer; /* +0x510; only its address is passed to Java */
-} ToolkitEnemyPeer;
-
-typedef struct ToolkitActorVector4 {
-    float x;
-    float y;
-    float z;
-    float w;
-} ToolkitActorVector4;
-
-typedef struct ToolkitChrPeer {
-    unsigned char unmodeled_00[4];
-    void (*update)(struct ToolkitChrPeer *peer); /* +0x4 */
-    unsigned char unmodeled_08[8];
-    ToolkitActorVector4 position; /* +0x10 */
-    unsigned char unmodeled_20[0x30];
-    ToolkitActorVector4 rotation; /* +0x50 */
-    unsigned char unmodeled_60[0x20];
-    unsigned char slot_number; /* +0x80: actSequence index */
-    unsigned char unmodeled_81[0x4c0 - 0x81];
-    void *java_object; /* +0x4c0 */
-    unsigned char unmodeled_4c4[0x4c];
-    unsigned char light_peer; /* +0x510 */
-    unsigned char unmodeled_511[0x8d0 - 0x511];
-    int resource_handles[11]; /* +0x8d0 */
-} ToolkitChrPeer;
 
 /*
  * pi: the float at .lit4 0x004d83b0 (bytes db 0f 49 40 = 3.1415927...),
@@ -243,9 +174,6 @@ extern const char unit_field_peer[];
 extern const char lightPeerClassName[];
 extern const float toolkitEnemyConstant;
 
-/* this domain's accepted files spell it differently; the canonical form is repeated here */
-extern SceneString *loadConstString(const char *bytes, int length);
-
 /* canon: config/header-canon.json chose src/math/main/002ff538-chr-scl/private.h over 1 other accepted spelling */
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 
@@ -256,24 +184,14 @@ extern JavaField *lookupClassField(void *class_object, void *name, int flags);
  * into the peer, normalizes rotations from degrees to radians, and stores
  * the peer back into the Java peer field.
  */
-void *getPeer_Uwamono(void *java_unit);
+void *getPeer_Uwamono(SceneObject java_unit);
 
 extern NativeUnitPeer *Unit_CreateUwamono(int identifier, int unit_id);
 
 extern JavaThread *JNI_createThread(int kind, int stack_words,
                                     int frame_words);
 
-/* Canonical spelling (config/header-canon.json) for this primitive. */
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-
-extern ToolkitStagePeer *STAGE_create(u16 stage_id);
-extern int sefLoadEffectCf(int cf_id, int effect_no);
-
-extern ToolkitEffectPeer *sefCreateEffectCf(int effect_id,
-                                            ToolkitEffectVector *position,
-                                            ToolkitEffectVector *orientation);
-
-extern ToolkitEnemyPeer *ACT_createEnemy(int identifier, int enemy_id);
+extern Actor *ACT_createEnemy(int identifier, int enemy_id);
 extern int ACT_initMotion(void *peer);
 
 /* Still INCLUDE_ASM in src/main/act_2.c (main/tu255); local hypothesis

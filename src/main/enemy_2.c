@@ -1,5 +1,6 @@
 #include "common.h"
 #include "enemy_2.h"
+#include "main/enemy_2.h"
 
 #define ENEMY_FREEZE_SPEED 0.03333333507f
 #define FRAME_TIME_30FPS 0.03333333507f
@@ -11,78 +12,34 @@
  * enemy state machine. Capture the actor once for both operations. */
 #define ENEMY_SELECT_TYPE(actor_value, type_value) do { \
     Actor *command_actor = (actor_value); \
-    unsigned char *type_work = (unsigned char *)(enepc + command_actor->number); \
+    EnemyWork *type_work = enepc + command_actor->number; \
     ENEMY_TYPE(type_work) = (type_value); \
     Enemy_Pause(command_actor); \
 } while (0)
 
 #define ENEMY_SELECT_CODE(actor_value, code_value) do { \
     Actor *command_actor = (actor_value); \
-    command_actor->command_code = (code_value); \
+    command_actor->args.command_code = (code_value); \
     Enemy_Init(command_actor); \
 } while (0)
 
-/* Enemy command queue: count at +0x120, types at +0x140 and five
- * sixteen-word parameter rows at +0x180. */
+/* Enemy command queue in the actor's Java argument area (ActorJavaArgs):
+ * count at +0x120, types at +0x140 and five sixteen-word parameter rows at
+ * +0x180. */
 enum { ENEMY_COMMAND_QUEUE_SIZE = 16 };
-
-typedef struct EnemyCommandActor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    Vector4 global_position;
-    u8 number;
-    u8 unmodeled_81[0xec - 0x81];
-    int command_code;
-    unsigned char unmodeled_f0[0x120 - 0xf0];
-    int enemy_command_count;             /* +0x120 */
-    unsigned char unmodeled_124[0x140 - 0x124];
-    unsigned int enemy_command_type[16]; /* +0x140 */
-    int enemy_command_parameter[5][16];  /* +0x180 */
-    unsigned char unmodeled_2c0[0x6f4 - 0x2c0];
-    float motion_frame;               /* +0x6F4 */
-    float motion_speed;               /* +0x6F8 */
-    float motion_start;               /* +0x6FC */
-    float motion_end;                 /* +0x700 */
-    unsigned short motion_number;     /* +0x704 */
-    short motion_progress;            /* +0x706 */
-    unsigned char unmodeled_708[0x712 - 0x708];
-    short motion_state;               /* +0x712 */
-    unsigned char unmodeled_714[0x9ee - 0x714];
-    short look_at_target;             /* +0x9EE */
-    unsigned char unmodeled_9f0[0xa70 - 0x9f0];
-} EnemyCommandActor;
-
-/* The command queue Start_Enemy_Command drains, viewed from the actor's
- * extension block at ACTOR_EXT_OFFSET (the original keeps actor + 0xc0 in a
- * register and loads lw 96/128/192.. from it). */
-typedef struct EnemyCommandQueue {
-    unsigned char unmodeled_00[0x60];
-    int count;                                       /* actor +0x120 */
-    unsigned char unmodeled_64[0x80 - 0x64];
-    unsigned int type[ENEMY_COMMAND_QUEUE_SIZE];     /* actor +0x140 */
-    int parameter[5][ENEMY_COMMAND_QUEUE_SIZE];      /* actor +0x180 */
-} EnemyCommandQueue;
 
 int Get_ActorNumber(int target)
 {
-    unsigned char *base;
-    int *id;
+    EnemyWork *base;
+    unsigned int *id;
     short i;
 
-    base = (unsigned char *)enepc;
-    id = (int *)(base + ENEMY_ID_OFFSET);
+    base = enepc;
+    id = &base->entry_id;
     for (i = 0; i < 64; i++) {
         if (*id == target)
             return i;
-        id = (int *)((unsigned char *)id + sizeof(EnemyWork));
+        id += sizeof(EnemyWork) / sizeof(*id);
     }
     return -1;
 }
@@ -102,23 +59,23 @@ void Enemy_Command_Motion(Actor *actor, int motion, signed char mode,
         flags |= 1;
     ACT_setMotion2(actor, selected_motion, flags);
     if (mode != loop_mode) {
-        actor->motion_progress = 0;
-        actor->motion_state = 9;
+        actor->animation.slot.nextDataId = 0;
+        actor->animation.slot.animQueuedFlags = 9;
     }
-    actor->motion_speed = ((float)speed_percent / 100.0f) * FRAME_TIME_30FPS;
+    actor->animation.slot.speed = ((float)speed_percent / 100.0f) * FRAME_TIME_30FPS;
     if (motion_start != -1)
-        actor->motion_start = (float)motion_start * FRAME_TIME_30FPS;
+        actor->animation.slot.reverseLimit = (float)motion_start * FRAME_TIME_30FPS;
     if (motion_end != -1)
-        actor->motion_end = (float)motion_end * FRAME_TIME_30FPS;
+        actor->animation.slot.forwardLimit = (float)motion_end * FRAME_TIME_30FPS;
     if (motion_start != -1)
-        actor->motion_frame = actor->motion_start;
+        actor->animation.slot.frame = actor->animation.slot.reverseLimit;
 }
 
 void Enemy_Command_Freeze(Actor *actor, int command)
 {
-    unsigned char *work;
+    EnemyWork *work;
 
-    work = (unsigned char *)(enepc + actor->number);
+    work = enepc + actor->number;
 
     if (ENEMY_FREEZE_STATE(work) == command)
         return;
@@ -131,27 +88,27 @@ void Enemy_Command_Freeze(Actor *actor, int command)
     case 0:
         if (ENEMY_FREEZE_SAVED_SPEED(work) == ENEMY_FREEZE_NO_SAVED_SPEED)
             return;
-        ACTOR_SPEED(actor) = ENEMY_FREEZE_SAVED_SPEED(work);
+        actor->animation.slot.speed = ENEMY_FREEZE_SAVED_SPEED(work);
         return;
     case 1:
         ENEMY_FREEZE_SAVED_SPEED(work) = ENEMY_FREEZE_NO_SAVED_SPEED;
         return;
     case 2:
-        ENEMY_FREEZE_SAVED_SPEED(work) = ACTOR_SPEED(actor);
-        ACTOR_SPEED(actor) = 0.0f;
+        ENEMY_FREEZE_SAVED_SPEED(work) = actor->animation.slot.speed;
+        actor->animation.slot.speed = 0.0f;
         return;
     case 3:
-        ENEMY_FREEZE_SAVED_SPEED(work) = ACTOR_SPEED(actor);
-        ACTOR_SPEED(actor) = ENEMY_FREEZE_SPEED;
+        ENEMY_FREEZE_SAVED_SPEED(work) = actor->animation.slot.speed;
+        actor->animation.slot.speed = ENEMY_FREEZE_SPEED;
         return;
     }
 }
 
 void Enemy_Command_Turn(Actor *actor, signed char command)
 {
-    unsigned char *work;
+    EnemyWork *work;
 
-    work = (unsigned char *)(enepc + actor->number);
+    work = enepc + actor->number;
 
     switch (command) {
     case 0:
@@ -173,9 +130,9 @@ void Enemy_Command_Turn(Actor *actor, signed char command)
 
 void Enemy_Command_Light(Actor *actor, signed char light)
 {
-    unsigned char *work;
+    EnemyWork *work;
 
-    work = (unsigned char *)(enepc + actor->number);
+    work = enepc + actor->number;
 
     switch (light) {
     case 0:
@@ -199,10 +156,10 @@ void Enemy_Command_Stop_FreeFall(Actor *actor, signed char command)
 {
     switch (command) {
     case 0:
-        ACTOR_RUNTIME_FLAGS(actor) |= 0xc0000000u;
+        actor->animation.slot.flags |= 0xc0000000u;
         break;
     case 1:
-        ACTOR_RUNTIME_FLAGS(actor) &= 0x3fffffffu;
+        actor->animation.slot.flags &= 0x3fffffffu;
         break;
     }
 }
@@ -256,9 +213,9 @@ int Enemy_Command_LookAt(Actor *enemy_actor, int target)
 
 void Enemy_Command_Scale(Actor *actor, int scale_percent, int duration)
 {
-    unsigned char *work;
+    EnemyWork *work;
 
-    work = (unsigned char *)(enepc + ENEMY_ACTOR_NUMBER(actor));
+    work = enepc + actor->number;
     do {
         if (duration == 0) {
             float scale;
@@ -266,7 +223,7 @@ void Enemy_Command_Scale(Actor *actor, int scale_percent, int duration)
 
             scale = (float)scale_percent / 100.0f;
             ENEMY_SCALE(work)->frame = -1;
-            motion = ACTOR_MOTION_NUMBER(actor);
+            motion = actor->animation.slot.currentDataId;
             ENEMY_SCALE(work)->current = scale;
             ENEMY_SCALE(work)->target = scale;
             ACT_setMotion(actor, motion);
@@ -282,24 +239,23 @@ void Enemy_Command_Scale(Actor *actor, int scale_percent, int duration)
 void Enemy_Command_Action(Actor *actor, int action_id, int value,
                           int argument)
 {
-    unsigned char *work;
-    ActorAction *ext;
+    EnemyWork *work;
+    ActorJavaArgs *args;
     short *slot;
     short *argument_slot;
     short i;
 
-    ext = (ActorAction *)((unsigned char *)actor + ACTOR_EXT_OFFSET);
-    work = (unsigned char *)(enepc + ENEMY_ACTOR_NUMBER(actor));
-    slot = (short *)(work + ENEMY_ACTION_VALUE_OFFSET +
-                     action_id * ENEMY_ACTION_STRIDE);
+    args = &actor->args;
+    work = enepc + actor->number;
+    slot = work->motion_tables[0][action_id];
 
     for (i = 0; i < ENEMY_ACTION_SLOT_COUNT; i++) {
         if (*slot == -1) {
             *slot = value;
-            argument_slot = (short *)((unsigned char *)slot + ENEMY_ACTION_ARGUMENT_DELTA);
+            argument_slot = slot + ENEMY_ACTION_ARGUMENT_DELTA / sizeof(*slot);
             *argument_slot = argument;
-            ext->frame = 0;
-            ext->duration = 0;
+            args->action_frame = 0;
+            args->action_duration = 0;
             return;
         }
         slot++;
@@ -347,9 +303,9 @@ void Enemy_Command_Sac_Turn(Actor *actor, int duration,
                             float angle_degrees, float angle_mode,
                             short axis)
 {
-    unsigned char *work;
+    EnemyWork *work;
 
-    work = (unsigned char *)(enepc + actor->number);
+    work = enepc + actor->number;
 
     /* `axis` selects one lane of Actor.rotation at run time, so the lane is
      * indexed from the first one instead of named. That is what the original
@@ -379,7 +335,7 @@ void Enemy_Command_Sac_Turn(Actor *actor, int duration,
     if (duration == 0) {
         (&actor->rotation.x)[axis] = angle_degrees;
         ENEMY_TURN(work)->frame = -1;
-        ACTOR_TARGET_ANGLE(actor) = angle_degrees;
+        actor->target_angle = angle_degrees;
     } else {
         ENEMY_TURN(work)->duration = duration;
         ENEMY_TURN(work)->frame = 0;
@@ -402,7 +358,7 @@ void Map_Command_Ladder(int state_index, int ladder_type, int scale_percent,
 
 void Start_Enemy_Command(Actor *actor)
 {
-    EnemyCommandQueue *queue;
+    ActorJavaArgs *queue;
     unsigned int type;
     int first;
     int second;
@@ -411,14 +367,14 @@ void Start_Enemy_Command(Actor *actor)
     int fifth;
     short i;
 
-    queue = (EnemyCommandQueue *)((unsigned char *)actor + ACTOR_EXT_OFFSET);
-    for (i = 0; i < queue->count && i < ENEMY_COMMAND_QUEUE_SIZE; i++) {
-        type = queue->type[i];
-        first = queue->parameter[0][i];
-        second = queue->parameter[1][i];
-        third = queue->parameter[2][i];
-        fourth = queue->parameter[3][i];
-        fifth = queue->parameter[4][i];
+    queue = &actor->args;
+    for (i = 0; i < queue->command_count && i < ENEMY_COMMAND_QUEUE_SIZE; i++) {
+        type = queue->command_type[i];
+        first = queue->command_parameter[0][i];
+        second = queue->command_parameter[1][i];
+        third = queue->command_parameter[2][i];
+        fourth = queue->command_parameter[3][i];
+        fifth = queue->command_parameter[4][i];
         /* A type-15 (Sac_Move) test that leaves the values unchanged: the
          * fifth column is read again through a plain int pointer. The
          * original carries it - the compare constant survives without a
@@ -427,7 +383,7 @@ void Start_Enemy_Command(Actor *actor)
          * statement-macro block reproduces. */
         do {
             if (type == 15)
-                fifth = *(queue->parameter[4] + i);
+                fifth = *(queue->command_parameter[4] + i);
         } while (0);
 
         switch (type) {
@@ -478,28 +434,28 @@ void Start_Enemy_Command(Actor *actor)
             break;
         case 15:
             Enemy_Command_Sac_Move(actor, third,
-                                   *(float *)&queue->parameter[0][i],
-                                   *(float *)&queue->parameter[1][i]);
+                                   *(float *)&queue->command_parameter[0][i],
+                                   *(float *)&queue->command_parameter[1][i]);
             break;
         case 16:
             Enemy_Command_Sac_Turn(actor, third,
-                                   *(float *)&queue->parameter[0][i],
-                                   *(float *)&queue->parameter[1][i], 0);
+                                   *(float *)&queue->command_parameter[0][i],
+                                   *(float *)&queue->command_parameter[1][i], 0);
             break;
         case 17:
             Enemy_Command_Sac_Turn(actor, third,
-                                   *(float *)&queue->parameter[0][i],
-                                   *(float *)&queue->parameter[1][i], 1);
+                                   *(float *)&queue->command_parameter[0][i],
+                                   *(float *)&queue->command_parameter[1][i], 1);
             break;
         case 18:
             Enemy_Command_Sac_Turn(actor, third,
-                                   *(float *)&queue->parameter[0][i],
-                                   *(float *)&queue->parameter[1][i], 2);
+                                   *(float *)&queue->command_parameter[0][i],
+                                   *(float *)&queue->command_parameter[1][i], 2);
             break;
         case 19:
             Map_Command_Ladder(first, second, third, fourth);
             break;
         }
     }
-    queue->count = 0;
+    queue->command_count = 0;
 }

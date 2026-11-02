@@ -6,8 +6,12 @@
 
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/menu_model.h"
 #include "main/e_message.h"
 #include "ov02/tsk_umn_object_task_main.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 /* The two original UmnManzaiWin records have a 0xa4-byte stride. */
 typedef struct UmnManzaiWinTask {
@@ -15,72 +19,7 @@ typedef struct UmnManzaiWinTask {
     u8 task_index;
     u8 unmodeled_02[0x5e];
     EMessageParam message;
-    u8 unmodeled_90[0x14];
 } UmnManzaiWinTask;
-
-/* Owner proposal: src/main/menu_model.c, main/tu165. */
-typedef struct MenuModelActor MenuModelActor;
-
-typedef union MenuModelTransformVector {
-    struct {
-        float x;
-        float y;
-        float z;
-        float w;
-    } value;
-    unsigned long long words[2];
-} MenuModelTransformVector;
-
-typedef struct MenuModelTransformControl {
-    MenuModelTransformVector offset;
-    MenuModelTransformVector rotation;
-    MenuModelTransformVector scale;
-    int enabled;
-    u8 unmodeled_34[0x0c];
-    MenuModelTransformVector position;
-    u8 unmodeled_50[0x10];
-    float transparency;
-    void (*drawTypeFunction)(MenuModelActor *actor);
-    int initialMotionId;
-    u8 unmodeled_6c[4];
-} MenuModelTransformControl;
-
-typedef unsigned int XglLightQuadword __attribute__((mode(TI)));
-
-typedef struct XglPackedParallelLight {
-    XglLightQuadword intensity;
-    XglLightQuadword direction;
-} XglPackedParallelLight;
-
-typedef struct XglPackedLightSet {
-    XglLightQuadword ambientIntensity;
-    XglPackedParallelLight parallel[3];
-} XglPackedLightSet;
-
-typedef struct MenuModelActorLight {
-    XglPackedLightSet source;
-    Matrix4 directionMatrix;
-    Matrix4 intensityMatrix;
-} MenuModelActorLight;
-
-struct MenuModelActor {
-    u32 actorFlags;
-    u8 unmodeled_04[0xbc];
-    MenuModelTransformControl menu;
-    u8 unmodeled_130[0x3e0];
-    MenuModelActorLight light;
-};
-
-/* The menu unit is a scheduler task, distinct from the actor at +0x20. */
-typedef struct MenuModelUnit {
-    u8 unmodeled_00[0x10];
-    signed char taskPhase;
-    u8 active;
-    u8 unmodeled_12;
-    u8 extFuncFlag;
-    u8 unmodeled_14[0x0c];
-    MenuModelActor *actor;
-} MenuModelUnit;
 
 /* The light table is copied as fourteen original doublewords. */
 typedef union UmnLightSet {
@@ -88,26 +27,11 @@ typedef union UmnLightSet {
     u64 words[14];
 } UmnLightSet;
 
-/*
- * These are bit-preserving copies of the camera's 16-byte vectors.  The
- * original copies each vector with two aligned doublewords; the union keeps
- * that evidenced storage representation alongside its float components.
- */
-typedef union UmnMailVec {
-    Vector4 v;
-    u64 words[2];
-} UmnMailVec;
-
 extern UmnWorkData UmnWork;
 extern UmnManzaiWinTask UmnManzaiWin[2];
-extern PadPrefix PadData;
 extern const char D_00A12060[];
 extern const UmnLightSet D_00A120F0;
-extern UmnMailVec D_00A12230;
-
-extern int eMessageNextPage(void *page, int arg);
-extern void xglSoundEffectNormalID(int id, int arg);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern DoublewordAlignedVector4 D_00A12230;
 
 extern void xglLightIntensityParallel(void *light, int index,
                                       const Vector4 *intensity);
@@ -221,8 +145,8 @@ INCLUDE_ASM("asm/main/nonmatchings/ov02/08_umn_procurator", tskUmnManzaiWin);
 static void LocalLightSet(void *model, int unused)
 {
     UmnLightSet lights = D_00A120F0;
-    MenuModelActor *actor = model;
-    MenuModelActorLight *light = &actor->light;
+    Actor *actor = model;
+    StudioLight *light = &actor->light;
 
     xglLightIntensityAmbient(light, &lights.v[0]);
     xglLightIntensityParallel(light, 0, &lights.v[1]);
@@ -231,7 +155,7 @@ static void LocalLightSet(void *model, int unused)
     xglLightDirection(light, 1, &lights.v[5]);
     xglLightIntensityParallel(light, 2, &lights.v[3]);
     xglLightDirection(light, 2, &lights.v[6]);
-    actor->actorFlags |= 0x8000;
+    actor->flags |= 0x8000;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/ov02/08_umn_procurator", UmnProcuratorManzai2);
@@ -257,9 +181,9 @@ INCLUDE_ASM("asm/main/nonmatchings/ov02/08_umn_procurator", UmnProcuratorManzai)
 void UmnProcuratorMail(void *argument)
 {
     MenuModelUnit *task = argument;
-    MenuModelTransformVector *offset;
-    MenuModelTransformVector *rotation;
-    MenuModelTransformVector *scale;
+    AlignedVector4 *offset;
+    AlignedVector4 *rotation;
+    AlignedVector4 *scale;
     int done;
     int state;
 
@@ -278,46 +202,46 @@ void UmnProcuratorMail(void *argument)
             return;
         {
             StudioCamera *camera;
-            UmnMailVec camera_rotation;
-            UmnMailVec position;
+            DoublewordAlignedVector4 camera_rotation;
+            DoublewordAlignedVector4 position;
 
             task->extFuncFlag = 1;
             LocalLightSet(task->actor, 0);
             camera = xglStudioGetCamera2(0);
             memset(&camera_rotation, 0, sizeof(camera_rotation));
-            camera_rotation.v.w = 1.0f;
+            camera_rotation.w = 1.0f;
             position = D_00A12230;
-            *(UmnMailVec *)&camera->position = position;
-            *(UmnMailVec *)&camera->rotation = camera_rotation;
+            camera->position.vector = position;
+            camera->rotation.vector = camera_rotation;
             MenuModelUnitOpen(task, 2);
         }
     }
     done = 0;
-    scale->value.x += 0.01f;
-    if (scale->value.x >= 1.0f) {
-        scale->value.x = 1.0f;
+    scale->x += 0.01f;
+    if (scale->x >= 1.0f) {
+        scale->x = 1.0f;
         done++;
     }
-    scale->value.y = scale->value.x;
-    scale->value.z = scale->value.x;
-    offset->value.x += 0.02f;
-    if (offset->value.x >= 1.0f) {
-        offset->value.x = 1.0f;
+    scale->y = scale->x;
+    scale->z = scale->x;
+    offset->x += 0.02f;
+    if (offset->x >= 1.0f) {
+        offset->x = 1.0f;
         done++;
     }
-    offset->value.y -= 0.01f;
-    if (offset->value.y <= -0.3f) {
-        offset->value.y = -0.3f;
+    offset->y -= 0.01f;
+    if (offset->y <= -0.3f) {
+        offset->y = -0.3f;
         done++;
     }
-    rotation->value.x += 0.01f;
-    if (rotation->value.x >= 0.0f) {
-        rotation->value.x = 0.0f;
+    rotation->x += 0.01f;
+    if (rotation->x >= 0.0f) {
+        rotation->x = 0.0f;
         done++;
     }
-    rotation->value.y -= 0.01f;
-    if (rotation->value.y <= -0.7853982f) {
-        rotation->value.y = -0.7853982f;
+    rotation->y -= 0.01f;
+    if (rotation->y <= -0.7853982f) {
+        rotation->y = -0.7853982f;
         done++;
     }
     if (done == 5)
@@ -327,10 +251,10 @@ void UmnProcuratorMail(void *argument)
 void UmnProcuratorTop(void *argument)
 {
     MenuModelUnit *task = argument;
-    MenuModelTransformVector *offset;
-    MenuModelTransformVector *rotation;
+    AlignedVector4 *offset;
+    AlignedVector4 *rotation;
     int state;
-    MenuModelActor *actor;
+    Actor *actor;
 
     if (task->active == 0)
         return;
@@ -345,10 +269,10 @@ void UmnProcuratorTop(void *argument)
             return;
         if (state != 0)
             return;
-        offset->value.x = 1.0f;
-        offset->value.y = -0.3f;
-        rotation->value.x = 0.0f;
-        rotation->value.y = -0.7853982f;
+        offset->x = 1.0f;
+        offset->y = -0.3f;
+        rotation->x = 0.0f;
+        rotation->y = -0.7853982f;
         LocalLightSet(actor, 0);
         task->extFuncFlag = 1;
     }
@@ -359,8 +283,8 @@ void UmnProcuratorTop(void *argument)
 void UmnProcuratorGoodBy(void *argument)
 {
     MenuModelUnit *task = argument;
-    MenuModelTransformControl *menu;
-    MenuModelTransformVector *rotation;
+    ActorMenuControl *menu;
+    AlignedVector4 *rotation;
 
     if (task->active == 0)
         return;
@@ -374,8 +298,8 @@ void UmnProcuratorGoodBy(void *argument)
         LocalLightSet(task->actor, 0);
         MenuModelUnitOpen(task, 3);
     case 1:
-        menu->offset.value.x += 0.4f;
-        rotation->value.y += 0.4f;
+        menu->offset.x += 0.4f;
+        rotation->y += 0.4f;
         if (menu->transparency == 0.0f)
             task->taskPhase = -1;
         break;

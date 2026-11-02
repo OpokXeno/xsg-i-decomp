@@ -1,26 +1,26 @@
 #include "common.h"
 #include "shared.h"
 #include "data.h"
+#include "main/data.h"
+#include "main/sdv.h"
 
-extern unsigned char accBox[0x1FE];
-extern unsigned char bltBox[0x1FE];
-extern unsigned char evtBox[0x1FE];
-extern unsigned char itmBox[0x1FE];
-extern unsigned char wpnBox[0x1FE];
-extern long long moneyBox;
-
+extern u16 accBox[255];
+extern u16 bltBox[255];
+extern u16 evtBox[255];
+extern u16 itmBox[255];
+extern u16 wpnBox[255];
 u16 *dataBoxPtrGet(int category) {
     switch (category) {
     case 0:
-        return (u16 *) itmBox;
+        return itmBox;
     case 1:
-        return (u16 *) wpnBox;
+        return wpnBox;
     case 2:
-        return (u16 *) bltBox;
+        return bltBox;
     case 3:
-        return (u16 *) accBox;
+        return accBox;
     case 10:
-        return (u16 *) evtBox;
+        return evtBox;
     default:
         return 0;
     }
@@ -138,7 +138,7 @@ int dataMoneyBoxChk(void)
 int dataMoneyBoxInc(int amount)
 {
     moneyBox += amount;
-    if ((unsigned long long) moneyBox >= 1000000000ULL) {
+    if (moneyBox >= 1000000000ULL) {
         moneyBox = 999999999;
         return 0;
     }
@@ -148,7 +148,7 @@ int dataMoneyBoxInc(int amount)
 
 int dataMoneyBoxDec(int amount)
 {
-    if ((unsigned long long) moneyBox < (unsigned long long) amount) {
+    if (moneyBox < amount) {
         return 0;
     }
 

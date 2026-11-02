@@ -17,6 +17,13 @@
 #include "main/open_close_main.h"
 #include "main/e_number_main.h"
 #include "main/xgl_sound.h"
+#include "main/data.h"
+#include "main/e_message.h"
+#include "main/end_print.h"
+#include "main/menu_model.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
 
 #define NULL ((void *)0)
 
@@ -41,39 +48,11 @@ typedef union ShopDataTail {
     unsigned short agwsSlots[4];
 } ShopDataTail;
 
-typedef struct MenuShopListRow {
-    const char *name;
-    int amount;
-    unsigned char flag;
-} MenuShopListRow;
-
-typedef struct MenuShopWindowDX {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    const char *title;
-    unsigned char state;
-    unsigned char unmodeled_11[0x183];
-} MenuShopWindowDX;
-
-typedef struct MenuShopMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x0c];
-    const char *text;
-} MenuShopMessage;
-
 typedef struct MenuShopEx2Work {
     unsigned char unmodeled_00[4];
     int color;
-    MenuShopWindowDX window;
-    MenuShopMessage message;
+    WindowDX window;
+    EMessageParam message;
 } MenuShopEx2Work;
 
 typedef struct MenuShopWeapon {
@@ -93,21 +72,6 @@ typedef struct {
     ShopDataCategory records[9];
     ShopDataTail tail;
 } MenuShopData;
-
-typedef struct MenuShopWindowSP {
-    unsigned char unmodeled_00;
-    unsigned char row_count;
-    unsigned char unmodeled_02[0x0A];
-    short width;
-    short height;
-    const char *title;
-    unsigned char columns;
-    unsigned char rows;
-    unsigned char unmodeled_16[0x06];
-    struct MenuShopListRow *items;
-    unsigned char unmodeled_20[0x06];
-    unsigned char state;
-} MenuShopWindowSP;
 
 /* Referenced original data recovered from this translation unit. */
 struct MenuShopPasMessage {
@@ -159,39 +123,6 @@ struct MenuShopAgwsListState {
     unsigned short itemIds[4];
 };
 
-typedef struct AgwsModelTransform {
-    unsigned char unmodeled_00[0x10];
-    Vector4 position;
-    Vector4 rotation;
-    unsigned char unmodeled_30[0x60 - 0x30];
-    float fade;
-} AgwsModelTransform;
-
-typedef struct AgwsModelActor {
-    unsigned char unmodeled_00[0xC0];
-    AgwsModelTransform transform;
-} AgwsModelActor;
-
-typedef struct AgwsModelOrg {
-    unsigned char unmodeled_00[0x5A];
-    signed char hand[3];
-    unsigned char unmodeled_5d[0x5E - 0x5D];
-    short weaponId[3];
-} AgwsModelOrg;
-
-typedef struct AgwsModelUnit {
-    unsigned char unmodeled_00[0x10];
-    signed char taskPhase;
-    unsigned char active;
-    unsigned char unmodeled_12[1];
-    unsigned char state;
-    struct AgwsModelOrg *org;
-    unsigned char unmodeled_18[0x20 - 0x18];
-    struct AgwsModelActor *actor;
-} AgwsModelUnit;
-
-struct AgwsModelUnit;
-
 /* Partial unit record used by the shop's repair and equipment operations. */
 typedef struct MenuShopUnitData {
     unsigned char unmodeled_00[0x34];
@@ -205,15 +136,6 @@ typedef struct MenuShopUnitData {
     short attachmentIds[3];
     unsigned char unmodeled_70[0x110];
 } MenuShopUnitData;
-
-struct MenuShopListWork {
-    unsigned char state;
-    unsigned char active;
-    unsigned char initialFlags[2];
-    int category;
-    int color;
-    MenuShopWindowSP window;
-};
 
 struct MenuShopSortOption {
     unsigned char type;
@@ -258,7 +180,7 @@ typedef struct { unsigned char bytes[8]; } M2C_BLOCK8;
 
 typedef struct MenuShopSortEntry {
     const short *itemIds;
-    int highWord;
+    unsigned int highWord;
     int count;
 } MenuShopSortEntry;
 
@@ -324,18 +246,6 @@ typedef struct MenuShopAttackData {
     unsigned short flags;
 } MenuShopAttackData;
 
-typedef struct MenuShopPasMessageSlot {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x0c];
-    const char *text;
-    unsigned char unmodeled_1c[0x28];
-} MenuShopPasMessageSlot;
-
 typedef struct MenuShopPasBounds {
     short x1;
     short y1;
@@ -355,7 +265,7 @@ typedef struct MenuShopPasData {
     short y;
     int color;
     MenuShopPasWindow window;
-    MenuShopPasMessageSlot messages[16];
+    EMessageParam messages[16];
     MenuShopPasBounds bounds;
 } MenuShopPasData;
 
@@ -420,11 +330,11 @@ struct MenuShopUnitPanel {
     unsigned char selectionFlags;
     unsigned char flags;
     int depth;
-    WindowDXRibbon ribbon;
-    BattleWinTagFont label;
+    ERibbonMainData ribbon;
+    ETagFontMainData label;
     struct MenuShopPortrait portraits[7];
     unsigned char unmodeled_1b0[4];
-    BattleWinCursor cursor;
+    ECursolMainData cursor;
 };
 
 struct MenuShopIconIds {
@@ -459,38 +369,6 @@ struct MenuShopIconDisplay {
     struct MenuShopIconSprite sprites[11];
 };
 
-struct MenuShopParameterLabel {
-    unsigned char state;
-    unsigned char subState;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int depth;
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-    unsigned char unmodeled_10[12];
-    const char *text;
-};
-
-struct MenuShopParameterNumber {
-    unsigned short x;
-    unsigned short y;
-    int depth;
-    unsigned char color[4];
-    unsigned char mode;
-    unsigned char unmodeled_0d;
-    unsigned char format;
-    unsigned char digits;
-    unsigned char unmodeled_10;
-    unsigned char comparisonColor;
-    unsigned char alignment;
-    unsigned char firstOnly;
-    MenuStatusValuePair value;
-    unsigned char unmodeled_18[0x78];
-};
-
 struct MenuShopParameterDisplay {
     unsigned char state;
     unsigned char active;
@@ -498,8 +376,8 @@ struct MenuShopParameterDisplay {
     unsigned char twoColumns;
     int depth;
     WindowDX window;
-    struct MenuShopParameterLabel labels[9];
-    struct MenuShopParameterNumber numbers[9];
+    ETagFontMainData labels[9];
+    ENumberMainData numbers[9];
 };
 
 struct MenuShopParameterDigits8 { unsigned char digits[8]; };
@@ -510,13 +388,13 @@ struct MenuShopExBullet {
     unsigned char unmodeled_00[4];
     int depth;
     WindowDX window;
-    MenuShopMessage message;
+    EMessageParam message;
 };
 
 struct MenuShopExHeader {
-    WindowDXRibbon ribbon;
-    BattleWinTagFont label;
-    BattleWinNumber number;
+    ERibbonMainData ribbon;
+    ETagFontMainData label;
+    ENumberMainData number;
 };
 
 struct MenuShopExPortrait {
@@ -534,8 +412,8 @@ struct MenuShopExPortrait {
 };
 
 struct MenuShopExParty {
-    WindowDXRibbon ribbon;
-    BattleWinTagFont label;
+    ERibbonMainData ribbon;
+    ETagFontMainData label;
     struct MenuShopExPortrait sprites[7];
     unsigned char unmodeled_1a8[4];
 };
@@ -608,20 +486,6 @@ struct MenuShopSaleVertex {
     signed char alpha;
 };
 
-struct MenuShopSaleRibbon {
-    short x;
-    short y;
-    int depth;
-    short width;
-    short height;
-    signed char mode;
-    unsigned char progress;
-    unsigned char visible;
-    unsigned char colorStyle;
-    struct MenuShopSaleVertex points[6];
-    unsigned char unmodeled_58[0x70 - 0x58];
-};
-
 struct MenuShopSalePanel {
     unsigned char state;
     unsigned char active;
@@ -629,8 +493,8 @@ struct MenuShopSalePanel {
     unsigned char selectionFlags;
     int depth;
     WindowDX window;
-    BattleWinTagFont labels[4];
-    BattleWinNumber numbers[6];
+    ETagFontMainData labels[4];
+    ENumberMainData numbers[6];
     struct MenuShopSaleSprite sprites[2];
     struct MenuShopSaleVertex quantityDivider[2];
     unsigned char unmodeled_5e4[4];
@@ -640,54 +504,23 @@ struct MenuShopSalePanel {
     unsigned char unmodeled_608[4];
     int moneyDividerState;
     unsigned char unmodeled_610[4];
-    struct MenuShopSaleRibbon ribbon;
+    ERibbonMainData ribbon;
 };
 
 typedef enum MenuShopListIndex {
     MENU_SHOP_LIST_NONE = -1
 } MenuShopListIndex;
 
-typedef struct MenuShopSelectCommand {
-    const char *text;
-    unsigned char unmodeled_04[4];
-    unsigned char locked;
-    unsigned char unmodeled_09[3];
-} MenuShopSelectCommand;
-
-typedef struct MenuShopCommandPanel {
-    unsigned char unmodeled_00[2];
-    unsigned short displayMode;
-    int cursor;
-    unsigned char unmodeled_08[4];
-    unsigned char unmodeled_0c[4];
-    MenuShopSelectCommand *commands;
-    unsigned char unmodeled_14[1508];
-} MenuShopCommandPanel;
-
-typedef enum MenuShopChoiceCursor {
-    MENU_SHOP_CHOICE_FIRST = 0
-} MenuShopChoiceCursor;
-
-typedef struct MenuShopChoicePanel {
-    unsigned short unmodeled_00;
-    unsigned short displayMode : 16;
-    MenuShopChoiceCursor cursor;
-    const char *choices;
-    const char *prompt;
-    int unmodeled_10;
-    void *unmodeled_14;
-    unsigned char unmodeled_18[1504];
-} MenuShopChoicePanel;
-
+/* Both panes hold the MenuTopMenuPanel that MenuSelectWindow reads. */
 typedef struct MenuShopCommandPane {
     WindowDX window;
-    MenuShopCommandPanel panel;
-    MenuShopSelectCommand commands[8];
+    MenuTopMenuPanel panel;
+    MenuTopCommandEntry commands[8];
 } MenuShopCommandPane;
 
 typedef struct MenuShopChoicePane {
     WindowDX window;
-    MenuShopChoicePanel panel;
+    MenuTopMenuPanel panel;
 } MenuShopChoicePane;
 
 typedef struct MenuShopSelectWork {
@@ -709,11 +542,9 @@ typedef struct MenuShopHelpWork {
     short y;
     int depth;
     WindowDX window;
-    MenuShopPasMessageSlot messages[16];
+    EMessageParam messages[16];
     MenuShopPasBounds bounds;
 } MenuShopHelpWork;
-
-typedef union MenuShopRibbonView { WindowDXRibbon draw; ERibbonSetData set; } MenuShopRibbonView;
 
 /* The display is seven halfwords; foreign MenuAgwsPara uses the same layout. */
 typedef struct AgwsParaDisplay {
@@ -795,7 +626,6 @@ extern u8 menuShopBulletTailFirst[];
 extern u8 menuShopBulletTailSecond[];
 extern u8 menuShopBulletTailThird[];
 extern u8 menuShopBulletTailFourth[];
-extern PadPrefix PadData;
 extern const char * const menuShopMainPromptTexts[4];
 extern const char * const menuShopQuantityPromptTexts[4];
 extern const char * const menuShopUnitCountPromptTexts[3];
@@ -819,8 +649,8 @@ extern const char menuShopSelectTagText[];
 extern const struct MenuShopSortOptionTable menuShopSortOptionTable;
 extern const struct MenuShopRowCountTable menuShopRowCountTable;
 static const char * msg00_4_0036DB60[] ;
-extern const float menuShopModelCameraVector[4];
-extern int MenuModelOut[4];
+extern const DoublewordAlignedVector4 menuShopModelCameraVector;
+extern void *MenuModelOut[4];
 extern AgwsParaDisplay MenuShopPara;
 extern AgwsParaDisplay MenuShopPara2;
 extern AgwsParaDisplay MenuAgwsPara;
@@ -888,27 +718,18 @@ extern const char MenuShopPeriodText[];
 
 extern void *MenuSortAddrGet(int list);
 extern int MenuSortGet(int list, int index);
-extern MenuShopListRow *MenuListGet(int list);
+extern MenuListEntry *MenuListGet(int list);
 extern int MenuSortCheck(int list);
-extern int MenuBoxMoneyGet(int item, int mode);
-extern int dataMoneyBoxChk(void);
-extern int MenuBoxChk(int item);
 int subMenuShopEquipCheck(int item, int category);
 int MenuShopNoSaleCheck(int item);
-extern void MenuSortSet(int list, int type, int order);
-extern int dataEvtBoxChk(int event_id);
 extern void MoveSlide(short *current, short *target, float rate);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageMain(void *message);
 extern MenuShopWeapon *func_A1A3D8(int item);
 extern const char **func_A2C738(int bullet);
-extern MenuShopListRow *MenuListMake(int list, int mode);
+extern MenuListEntry *MenuListMake(int list, int mode);
 void MenuShopSortSet(int list, int type, int order, int option);
-extern void MenuModelUnitBreak(struct AgwsModelUnit *unit);
-extern void MenuModelUnitOpen(struct AgwsModelUnit *unit, int drawType);
+extern void MenuModelUnitOpen(MenuModelUnit *unit, int drawType);
 void *func_A191C0(int);
 extern int MenuShopListChange00(int list);
-int PartyAgwsGet(int *);
 ShopCalculatedPara *func_00A11108(int, int *, int *);
 void MenuAgwsParaSet(int, int);
 s32 MenuEngineEquipCheck(int, int);
@@ -920,10 +741,7 @@ s32 MenuCharHpCheck(s16);
 s32 MenuCursorKeepCheck(void);
 int MenuSelectMove(int, int, int);
 int MenuSelectMove2(int, int, int);
-int dataMoneyBoxDec(s32);
-int dataMoneyBoxInc(s32);
 void xglFontDebugHex(int, int, unsigned int, int);
-void xglFontDebugPrintf(int, int, const char *, ...);
 extern MenuShopWeapon *dataWpnGet(int item);
 extern MenuShopAttackData *dataAttGet(int item);
 extern MenuShopItemData *func_A1A4E8(int item);
@@ -936,27 +754,19 @@ void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
 #define s32 int
 #define s64 long long
 
-/* Referenced original data recovered from this translation unit. */
-extern int PartyTakeAgwsCheck(int id);
-
 extern MenuTextEntry *func_A2C918(unsigned int itemId);
 extern MenuTextEntry *func_A2C968(unsigned int itemId);
-extern void eMessageCpy(void *message, const char *text);
-extern void eMessageCat(const char *text);
 extern const char *MenuCharNameGet(int unitId);
 extern const char *MenuNumberTextGet(long value, int digits, int flag);
 extern void eSpriteSet(void *sprite, short spriteId);
 extern void eSpriteMain(void *sprite);
-extern unsigned short MenuFaceEpidGet(int unitId, int smallPortrait);
-static void MenuShopList(TskObject *task, struct MenuShopListDisplay *work);
+static void MenuShopList(TskObject *task, void *data);
 static void MenuShopSelect(TskObject *task, void *data);
-static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work);
-static void MenuShopIcon(TskObject *task, struct MenuShopIconDisplay *work);
+static void MenuShopEx02(TskObject *task, void *data);
+static void MenuShopIcon(TskObject *task, void *data);
 static void MenuShopModelMain(TskObject *task, void *data);
-extern void xglCameraInit(StudioCamera *camera);
-extern void MenuModelCreate(int *slot, int partyId);
-extern void MenuModelExtFuncSet(int, void (*)(AgwsModelUnit *), int);
-extern void endPrintExtFunc(int depth, int mode, void *vertices);
+extern void MenuModelCreate(void **slot, int partyId);
+extern void MenuModelExtFuncSet(void *, void (*)(MenuModelUnit *), int);
 extern MenuShopEquipmentValues *func_A1A598(int item);
 extern MenuShopEngineValue *func_A1A5E8(int item);
 extern unsigned short *func_A1A428(int item);
@@ -1009,7 +819,7 @@ static MenuShopWorkData *MenuShopWork;
 
 static MenuShopData ShopData;
 
-static MenuShopWindowSP *MenuShopWinSP;
+static WindowSPCursor *MenuShopWinSP;
 
 static XglTaskScheduler * MenuShopTask;
 
@@ -1020,17 +830,17 @@ static inline MenuShopWorkData *MenuShopWorkRead(void)
     return *(MenuShopWorkData *const *)&MenuShopWork;
 }
 
-static inline MenuShopWindowSP *MenuShopWinSPRead(void)
+static inline WindowSPCursor *MenuShopWinSPRead(void)
 {
-    return *(MenuShopWindowSP *const *)&MenuShopWinSP;
+    return *&MenuShopWinSP;
 }
 
-static inline unsigned char *MenuShopAlignBuffer(unsigned char *buffer,
+static inline void *MenuShopAlignBuffer(unsigned char *buffer,
     unsigned int alignment)
 {
     unsigned int address = (unsigned int)buffer;
 
-    return (unsigned char *)((address + alignment - 1) & ~(alignment - 1));
+    return (void *)((address + alignment - 1) & ~(alignment - 1));
 }
 
 static inline void MenuShopAppendPartyId(MenuShopWorkData *work, int *nextSlot,
@@ -1102,10 +912,10 @@ static void tskTskMain3(TskObject *task)
     worker(task, task->data);
 }
 
-void MenuShopModelDisp(AgwsModelUnit *unit)
+void MenuShopModelDisp(MenuModelUnit *unit)
 {
-    AgwsModelActor *actor = unit->actor;
-    AgwsModelTransform *transform;
+    Actor *actor = unit->actor;
+    ActorMenuControl *transform;
     int state;
 
     if (actor == 0) {
@@ -1116,27 +926,27 @@ void MenuShopModelDisp(AgwsModelUnit *unit)
     }
 
     if (unit->active != 0) {
-        transform = &actor->transform;
+        transform = &actor->menu;
         if (MenuShopWork->modelPending != 0) {
-            unit->state = 0x1e;
+            unit->extFuncFlag = 0x1e;
             MenuShopWork->modelPending = 0;
         }
 
-        state = unit->state;
+        state = unit->extFuncFlag;
         switch (state) {
         case 10:
             break;
         case 0:
-            transform->position.y = -0.2f;
+            transform->rotation.y = -0.2f;
             MenuModelUnitOpen(unit, 2);
-            unit->state = 10;
+            unit->extFuncFlag = 10;
             return;
         case 0x1e:
             MenuModelUnitOpen(unit, 1);
-            unit->state = 0x1f;
+            unit->extFuncFlag = 0x1f;
             /* fall through */
         case 0x1f:
-            if (transform->fade == 0.0f)
+            if (transform->transparency == 0.0f)
                 unit->taskPhase = -1;
             break;
         default:
@@ -1148,8 +958,8 @@ void MenuShopModelDisp(AgwsModelUnit *unit)
 static void MenuShopModelMain(TskObject *task, void *data)
 {
     MenuShopModelTask *model = (MenuShopModelTask *)task;
-    s64 position[2];
-    s64 rotation[2];
+    DoublewordAlignedVector4 position;
+    DoublewordAlignedVector4 rotation;
     StudioCamera *camera;
     StudioCamera *camera2;
     MenuShopWorkData *work;
@@ -1166,18 +976,15 @@ static void MenuShopModelMain(TskObject *task, void *data)
     switch (task->state) {
     case 0:
         *modelId = 0;
-        position[0] = ((s64 *)menuShopModelCameraVector)[0];
-        position[1] = ((s64 *)menuShopModelCameraVector)[1];
+        position = menuShopModelCameraVector;
         MenuModelOut[0] = 0;
-        memset(rotation, 0, 16);
-        ((float *)rotation)[3] = 1.0f;
+        memset(&rotation, 0, sizeof(rotation));
+        rotation.w = 1.0f;
         camera = xglStudioGetCamera2(0);
         xglCameraInit(camera);
         camera->state = 1;
-        ((s64 *)&camera->rotation)[0] = rotation[0];
-        ((s64 *)&camera->rotation)[1] = rotation[1];
-        ((s64 *)&camera->position)[0] = position[0];
-        ((s64 *)&camera->position)[1] = position[1];
+        camera->rotation.vector = rotation;
+        camera->position.vector = position;
         camera2 = xglStudioGetCamera2(2);
         camera2->active = 1;
         camera2->state = 1;
@@ -1235,21 +1042,21 @@ static void MenuShopPas(TskObject *task, void *data)
         work->y = 8;
         work->depth = 0xfffff0;
         window = &work->window;
-        WindowDXSet((WindowDX *)(void *)(window));
+        WindowDXSet(window);
         window->x = work->x;
         work->window.style = work->depth;
         work->window.width = 272;
         work->window.y = work->y;
         work->window.height = 32;
         work->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(window));
+        WindowDXMain(window);
         work->window.state = 3;
         text = msg00_0_0036DAF0;
         for (i = 0; i < 16; i++, text++) {
             eMessageSet(&work->messages[i], *text);
             work->messages[i].mode = 32;
             work->messages[i].x = 288;
-            work->messages[i].color = work->depth + 2;
+            work->messages[i].draw_parameter = work->depth + 2;
             work->messages[i].y = work->y + 3;
         }
         break;
@@ -1291,7 +1098,7 @@ static void MenuShopPas(TskObject *task, void *data)
         }
         window = &work->window;
         MoveSlide(&window->x, &windowX, 3.0f);
-        WindowDXMain((WindowDX *)(void *)(window));
+        WindowDXMain(window);
         work->bounds.x1 = window->x + 3;
         work->bounds.y1 = work->window.y + 3;
         work->bounds.x2 = work->window.width - 6;
@@ -1309,8 +1116,9 @@ static void MenuShopPas(TskObject *task, void *data)
     }
 }
 
-static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
+static void MenuShopInfo(TskObject *task, void *data)
 {
+    MenuShopInfoWork *work = data;
     MenuShopInfoT0 tab0;
     MenuShopInfoT16 tab16;
     MenuShopInfoT32 tab32;
@@ -1335,17 +1143,17 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
     switch (task->state) {
     case 0:
         work->ticker = 0x00fffff0;
-        WindowDXSet((WindowDX *)(void *)(&work->window));
+        WindowDXSet(&work->window);
         work->window.x = -16;
         work->window.y = 480;
         work->window.width = 544;
         work->window.height = 54;
         work->window.style = work->ticker;
-        work->window.close_callback = (void (*)(WindowDX *, void *))MenuInfoWindow;
+        work->window.close_callback = MenuInfoWindow;
         work->window.state = 1;
         panel = &work->panel;
         work->window.close_callback_arg = panel;
-        WindowDXMain((WindowDX *)(void *)(&work->window));
+        WindowDXMain(&work->window);
         work->window.state = 3;
         panel->textOffset[0] = 0;
         work->panel.textOffset[1] = 0;
@@ -1376,7 +1184,7 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
             else
                 eMessageCpy(work->message, tab112.p[1]);
         } else {
-            eMessageCpy(work->message, (const char *)MenuTextGet(MenuShopWork->itemId)->auxiliary);
+            eMessageCpy(work->message, MenuTextGet(MenuShopWork->itemId)->auxiliary);
         }
         break;
     case 160:
@@ -1430,7 +1238,7 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
         if (MenuShopWork->listIndex < 0 || MenuShopWork->equipmentId == 0) {
             eMessageCpy(work->message, menuShopBlankText);
         } else {
-            eMessageCpy(work->message, (const char *)func_A2C968(MenuShopWork->equipmentId)->auxiliary);
+            eMessageCpy(work->message, func_A2C968(MenuShopWork->equipmentId)->auxiliary);
         }
         break;
     case 210:
@@ -1483,14 +1291,14 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
     MoveSlide(&work->window.y, &targetY, 3.0f);
     MoveSlide(&work->window.height, &targetH, 3.0f);
     work->panel.text = work->message;
-    WindowDXMain((WindowDX *)(void *)(&work->window));
+    WindowDXMain(&work->window);
 }
 
 static void MenuShopSelect(TskObject *task, void *data)
 {
     MenuShopSelectWork *work = data;
 
-    MenuShopSelectCommand *ListMake(int menuIndex)
+    MenuTopCommandEntry *ListMake(int menuIndex)
     {
         MenuShopCommandPane *pane = (MenuShopCommandPane *)(menuIndex * sizeof(MenuShopCommandPane) + (int)work + 8);
 
@@ -1499,11 +1307,11 @@ static void MenuShopSelect(TskObject *task, void *data)
             int commandIndex;
 
             for (commandIndex = 0; commandIndex < 4; commandIndex++) {
-                work->menus[menuIndex].commands[commandIndex].text =
+                work->menus[menuIndex].commands[commandIndex].name =
                     msg00_1_0036DB30[menuIndex * 4 + commandIndex];
                 work->menus[menuIndex].commands[commandIndex].locked = 0;
             }
-            work->menus[menuIndex].commands[commandIndex].text = 0;
+            work->menus[menuIndex].commands[commandIndex].name = 0;
         }
         if (menuIndex == 0) {
             if (MenuShopWork->noCategories != 0)
@@ -1529,11 +1337,11 @@ static void MenuShopSelect(TskObject *task, void *data)
                 work->menus[i].window.width = 205;
             work->menus[i].window.height = 102;
             work->menus[i].window.close_callback_arg = &work->menus[i].panel;
-            work->menus[i].window.close_callback = (void (*)(WindowDX *, void *))MenuSelectWindow;
+            work->menus[i].window.close_callback = MenuSelectWindow;
             work->menus[i].window.tag_id = menuShopMenuTagText;
             work->menus[i].panel.cursor = 0;
             work->menus[i].panel.commands = ListMake(i);
-            work->menus[i].panel.displayMode = 2;
+            work->menus[i].panel.rows = 2;
             work->menus[i].window.state = 1;
             WindowDXMain(&work->menus[i].window);
             work->menus[i].window.state = 3;
@@ -1545,12 +1353,12 @@ static void MenuShopSelect(TskObject *task, void *data)
             work->choices[i].window.height = 102;
             work->choices[i].window.style = work->depth;
             work->choices[i].window.tag_id = menuShopSelectTagText;
-            work->choices[i].panel.choices = msg01_2_0036DB50[3];
-            work->choices[i].panel.prompt = msg01_2_0036DB50[0];
+            work->choices[i].panel.text = msg01_2_0036DB50[3];
+            work->choices[i].panel.heading = msg01_2_0036DB50[0];
             work->choices[i].window.close_callback_arg = &work->choices[i].panel;
-            work->choices[i].window.close_callback = (void (*)(WindowDX *, void *))MenuSelectWindow;
+            work->choices[i].window.close_callback = MenuSelectWindow;
             work->choices[i].panel.cursor = 0;
-            work->choices[i].panel.displayMode = 1;
+            work->choices[i].panel.rows = 1;
             work->choices[i].window.state = 1;
             WindowDXMain(&work->choices[i].window);
             work->choices[i].window.state = 3;
@@ -1599,7 +1407,7 @@ static void MenuShopSelect(TskObject *task, void *data)
             if (updatePopup) {
                 switch (*mode) {
                 case 0:
-                    work->choices[0].panel.prompt = msg01_2_0036DB50[0];
+                    work->choices[0].panel.heading = msg01_2_0036DB50[0];
                     switch (mode[1]) {
                     case 0:
                         work->choices[0].window.x = 528;
@@ -1624,7 +1432,7 @@ static void MenuShopSelect(TskObject *task, void *data)
                     }
                     break;
                 default:
-                    work->choices[0].panel.prompt = msg01_2_0036DB50[1];
+                    work->choices[0].panel.heading = msg01_2_0036DB50[1];
                     switch (mode[1]) {
                     case 0:
                     case 8:
@@ -1673,7 +1481,7 @@ static void MenuShopSelect(TskObject *task, void *data)
         }
         case 0xc4:
             if (shop->stateFlags & 1) {
-                work->choices[0].panel.prompt = msg01_2_0036DB50[2];
+                work->choices[0].panel.heading = msg01_2_0036DB50[2];
                 work->choices[0].window.x = -136;
                 work->choices[0].window.y = 192;
                 work->popupFlags |= 1;
@@ -1683,7 +1491,7 @@ static void MenuShopSelect(TskObject *task, void *data)
             break;
         case 0xd4:
             if (shop->stateFlags & 1) {
-                work->choices[0].panel.prompt = msg01_2_0036DB50[0];
+                work->choices[0].panel.heading = msg01_2_0036DB50[0];
                 work->choices[0].window.x = 528;
                 work->choices[0].window.y = 176;
                 work->popupFlags &= ~1;
@@ -1734,7 +1542,7 @@ void MenuShopSortSet(int list, int type, int order, int option)
 
                 if (itemId == 0)
                     break;
-                *output++ = itemValue + ((unsigned int)table.entries[type].highWord << 16);
+                *output++ = itemValue + (table.entries[type].highWord << 16);
                 i++;
             } while (i < table.entries[type].count);
         }
@@ -1880,7 +1688,7 @@ void MenuShopListColorChange(int list, int kind)
 {
     int *sorted = MenuSortAddrGet(list);
     int count = MenuSortCheck(list);
-    MenuShopListRow *entry = MenuListGet(list);
+    MenuListEntry *entry = MenuListGet(list);
     int i;
 
     if (MenuShopWork->mode == 0 || kind == 2) {
@@ -1906,10 +1714,10 @@ int MenuShopListChange00(int list)
     struct MenuShopSortOptionTable sortOptions;
     struct MenuShopRowCountTable rowCounts;
     MenuShopWorkData *shop;
-    MenuShopWindowSP *window;
+    WindowSPCursor *window;
     short width;
     unsigned int columns;
-    unsigned int visibleRows;
+    unsigned int drawFlags;
 
     if (MenuShopWork->mode == 0) {
         MenuShopSortSet(0, MenuShopWork->category, 0, 0);
@@ -1925,7 +1733,7 @@ int MenuShopListChange00(int list)
     rowCounts = menuShopRowCountTable;
     shop = MenuShopWorkRead();
     columns = 1;
-    visibleRows = 7;
+    drawFlags = 7;
     width = 272 - shop->mode * 32;
     window = MenuShopWinSPRead();
     window->width = width;
@@ -1935,20 +1743,20 @@ int MenuShopListChange00(int list)
         rowCounts.values[shop->category + shop->mode * 9];
     MenuShopWinSP->columns = columns;
     MenuShopWinSP->title = msg00_4_0036DB60[MenuShopWork->mode];
-    MenuShopWinSP->row_count = visibleRows;
+    MenuShopWinSP->draw_flags = drawFlags;
     MenuShopWinSP->items = MenuListGet(0);
-    WindowSPItemChange((void *)MenuShopWinSP);
-    WindowSPSetSelect((void *)MenuShopWinSP,
+    WindowSPItemChange(MenuShopWinSP);
+    WindowSPSetSelect(MenuShopWinSP,
         &MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * 9) * 5]);
     if (MenuShopWork->mode == 0)
-        MenuShopWinSP->state = 6;
-    return WindowSPSelect((void *)MenuShopWinSP, 0);
+        MenuShopWinSP->mode = 6;
+    return WindowSPSelect(MenuShopWinSP, 0);
 }
 
 int MenuShopListChange01(int list)
 {
     int type = 18;
-    MenuShopWindowSP *window;
+    WindowSPCursor *window;
     short window_width;
 
     if (MenuShopWork->sort_mode_selector == 0)
@@ -1965,17 +1773,18 @@ int MenuShopListChange01(int list)
     window->width = window_width;
     MenuShopWinSP->columns = 1;
     MenuShopWinSP->title = menuShopPriceListTitleText;
-    MenuShopWinSP->row_count = 7;
+    MenuShopWinSP->draw_flags = 7;
     MenuShopWinSP->items = MenuListGet(0);
-    WindowSPItemChange((WindowSPCursor *)(void *)((void *)MenuShopWinSP));
-    WindowSPSetSelect((WindowSPCursor *)(void *)((void *)MenuShopWinSP), &MenuKeepSelect[type * 5]);
+    WindowSPItemChange(MenuShopWinSP);
+    WindowSPSetSelect(MenuShopWinSP, &MenuKeepSelect[type * 5]);
 
-    MenuShopWinSP->state = 6;
-    return WindowSPSelect((WindowSPCursor *)(void *)((void *)MenuShopWinSP), 0);
+    MenuShopWinSP->mode = 6;
+    return WindowSPSelect(MenuShopWinSP, 0);
 }
 
-static void MenuShopList(TskObject *task, struct MenuShopListDisplay *work)
+static void MenuShopList(TskObject *task, void *data)
 {
+    struct MenuShopListDisplay *work = data;
     MenuShopWorkData *selection;
     short closeX;
     short secondTargetX;
@@ -1992,7 +1801,7 @@ static void MenuShopList(TskObject *task, struct MenuShopListDisplay *work)
         work->window.height = 0x10e;
         work->window.state = 0;
         work->window.items = 0;
-        WindowSPSet((WindowSPCursor *)(void *)(&work->window));
+        WindowSPSet(&work->window);
         work->initialFlags[0] = 0;
         work->initialFlags[1] = 0;
         work->state = 0;
@@ -2072,13 +1881,14 @@ static void MenuShopList(TskObject *task, struct MenuShopListDisplay *work)
             break;
         }
         if (work->active != 0)
-            WindowSPMain((WindowSPCursor *)(void *)(&work->window));
+            WindowSPMain(&work->window);
         break;
     }
 }
 
-static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
+static void MenuShopEx(TskObject *task, void *data)
 {
+    struct MenuShopExDisplay *work = data;
     MenuShopWorkData **shop = &MenuShopWork;
     short ribbonX[2];
     short rosterX[2];
@@ -2096,27 +1906,27 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
     case 0:
         work->depth = 0x00fffff0;
         for (i = 0; i < 2; i++) {
-            eRibbonSet((ERibbonSetData *)(void *)&work->headers[i].ribbon, 3);
+            eRibbonSet(&work->headers[i].ribbon, 3);
             work->headers[i].ribbon.x = 0x210;
             work->headers[i].ribbon.y = 0;
             work->headers[i].ribbon.width = 0x100;
             work->headers[i].ribbon.height = 0x18;
             work->headers[i].ribbon.x = 0x220;
             work->headers[i].ribbon.y = 0x53 + 0x20 * i;
-            work->headers[i].ribbon.style = work->depth;
-            eTagFontSet((ETagFont *)(void *)&work->headers[i].label, msg00_5_0036DB68[i]);
-            work->headers[i].label.style = work->depth + 2;
-            eNumberSet((void *)&work->headers[i].number, 0);
-            work->headers[i].number.style = work->depth + 2;
+            work->headers[i].ribbon.work = work->depth;
+            eTagFontSet(&work->headers[i].label, msg00_5_0036DB68[i]);
+            work->headers[i].label.work = work->depth + 2;
+            eNumberSet(&work->headers[i].number, 0);
+            work->headers[i].number.work = work->depth + 2;
         }
         for (i = 0; i < 2; i++) {
-            eRibbonSet((ERibbonSetData *)(void *)&work->parties[i].ribbon, 3);
+            eRibbonSet(&work->parties[i].ribbon, 3);
             work->parties[i].ribbon.width = 0x100;
-            work->parties[i].ribbon.style = work->depth;
+            work->parties[i].ribbon.work = work->depth;
             work->parties[i].ribbon.x = 0x220;
             work->parties[i].ribbon.y = 0x93;
-            eTagFontSet((ETagFont *)(void *)&work->parties[i].label, msg00_5_0036DB68[2]);
-            work->parties[i].label.style = work->depth + 2;
+            eTagFontSet(&work->parties[i].label, msg00_5_0036DB68[2]);
+            work->parties[i].label.work = work->depth + 2;
         }
         work->parties[0].ribbon.height = 0x30;
         for (j = 0; j < (*shop)->partyCount; j++) {
@@ -2128,7 +1938,7 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
             eSpriteSet(&work->parties[1].sprites[j], MenuFaceEpidGet(*(short *)((char *)(*shop)->unitIds + (j << 1)), 1));
             work->parties[1].sprites[j].depth = work->depth + 2;
         }
-        eRibbonSet((ERibbonSetData *)(void *)&work->equipment.ribbon, 3);
+        eRibbonSet(&work->equipment.ribbon, 3);
         {
             const char **labels;
             short width, height, left, top;
@@ -2147,18 +1957,18 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
             width = 0x100;
             work->equipment.ribbon.x = left;
             work->equipment.ribbon.width = width;
-            work->equipment.ribbon.style = style;
+            work->equipment.ribbon.work = style;
             work->equipment.ribbon.height = height;
             work->equipment.ribbon.y = top;
-            eTagFontSet((ETagFont *)(void *)&work->equipment.label, labels[3]);
+            eTagFontSet(&work->equipment.label, labels[3]);
         }
-        work->equipment.label.style = work->depth + 2;
-        eNumberSet((void *)&work->equipment.number, 0);
-        work->equipment.number.style = work->depth + 2;
+        work->equipment.label.work = work->depth + 2;
+        eNumberSet(&work->equipment.number, 0);
+        work->equipment.number.work = work->depth + 2;
         work->slideFlags = 0;
-        work->equipment.number.option = 0;
+        work->equipment.number.format = 0;
         work->flags = 0;
-        work->equipment.number.places = 1;
+        work->equipment.number.digits = 1;
         break;
     case 2:
 
@@ -2179,9 +1989,9 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
         case 0xa4:
             if ((unsigned char)((*shop)->stateFlags & 1)) {
                 if ((*shop)->mode == 0)
-                    eTagFontSet((ETagFont *)(void *)&work->headers[0].label, msg00_5_0036DB68[0]);
+                    eTagFontSet(&work->headers[0].label, msg00_5_0036DB68[0]);
                 else
-                    eTagFontSet((ETagFont *)(void *)&work->headers[0].label, msg00_5_0036DB68[4]);
+                    eTagFontSet(&work->headers[0].label, msg00_5_0036DB68[4]);
                 work->slideFlags |= 2;
             }
             for (i = 0; i < 2; i++) {
@@ -2198,7 +2008,7 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
             case 2:
                 work->equipment.ribbon.y = totalY[0] = 0xcb;
                 totalX[0] = 0x130;
-                eTagFontSet((ETagFont *)(void *)&work->parties[0].label, msg00_5_0036DB68[2]);
+                eTagFontSet(&work->parties[0].label, msg00_5_0036DB68[2]);
                 rosterX[0] = 0x130;
                 rosterY[0] = 0x93;
                 work->parties[0].ribbon.y = 0x93;
@@ -2209,7 +2019,7 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
             case 5:
                 work->equipment.ribbon.y = totalY[0] = 0xfb;
                 totalX[0] = 0x130;
-                eTagFontSet((ETagFont *)(void *)&work->parties[1].label, msg00_5_0036DB68[2]);
+                eTagFontSet(&work->parties[1].label, msg00_5_0036DB68[2]);
                 rosterX[1] = 0x130;
                 rosterY[1] = 0x93;
                 work->parties[1].ribbon.y = 0x93;
@@ -2249,42 +2059,42 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
             MoveSlide(&work->headers[i].ribbon.x, &ribbonX[i], 3.0f);
             if (work->headers[i].ribbon.x == ribbonX[i])
                 MoveSlide(&work->headers[i].ribbon.y, &ribbonY[i], 3.0f);
-            eRibbonMain((ERibbonMainData *)(void *)&work->headers[i].ribbon);
+            eRibbonMain(&work->headers[i].ribbon);
             work->headers[i].number.x = work->headers[i].ribbon.x + 0x40;
             work->headers[i].number.y = work->headers[i].ribbon.y + 4;
-            work->headers[i].number.option = 0;
+            work->headers[i].number.format = 0;
             if (i == 0) {
                 if ((*shop)->mode == 0) {
-                    work->headers[i].number.places = 2;
+                    work->headers[i].number.digits = 2;
                     if ((*shop)->listIndex >= 0)
                         work->headers[0].number.value = MenuBoxChk(MenuSortGet(0, (*shop)->listIndex));
                     else
                         work->headers[0].number.value = 0;
                 } else {
-                    work->headers[i].number.places = 6;
+                    work->headers[i].number.digits = 6;
                     if ((*shop)->listIndex >= 0)
                         work->headers[0].number.value = MenuBoxMoneyGet(MenuSortGet(0, (*shop)->listIndex), 1);
                     else
                         work->headers[0].number.value = 0;
                 }
             } else {
-                work->headers[i].number.places = 9;
+                work->headers[i].number.digits = 9;
                 if ((*shop)->listIndex >= 0)
                     work->headers[i].number.value = dataMoneyBoxChk();
                 else
                     work->headers[i].number.value = 0;
             }
-            eNumberMain((ENumberMainData *)(void *)&work->headers[i].number);
+            eNumberMain(&work->headers[i].number);
             work->headers[i].label.x = work->headers[i].number.x - 8;
             work->headers[i].label.y = work->headers[i].ribbon.y + 4;
-            eTagFontMain((ETagFontMainData *)(void *)&work->headers[i].label);
+            eTagFontMain(&work->headers[i].label);
         }
 
         for (i = 0; i < 2; i++) {
             MoveSlide(&work->parties[i].ribbon.x, &rosterX[i], 3.0f);
             if (work->parties[i].ribbon.x == rosterX[i])
                 MoveSlide(&work->parties[i].ribbon.y, &rosterY[i], 3.0f);
-            eRibbonMain((ERibbonMainData *)(void *)&work->parties[i].ribbon);
+            eRibbonMain(&work->parties[i].ribbon);
             if (i == 0) {
                 for (j = 0; j < (*shop)->partyCount; j++) {
                     int usable;
@@ -2349,32 +2159,33 @@ static void MenuShopEx(TskObject *task, struct MenuShopExDisplay *work)
                         work->parties[i].sprites[j].red = 0x40;
                     }
                     work->parties[i].sprites[j].x = work->parties[i].ribbon.x + (j & 1) * 64 + 0x40;
-                    work->parties[i].sprites[j].depth = work->parties[i].ribbon.style + 2;
+                    work->parties[i].sprites[j].depth = work->parties[i].ribbon.work + 2;
                     work->parties[i].sprites[j].y = work->parties[i].ribbon.y + (j / 2) * 32;
                     eSpriteMain(&work->parties[i].sprites[j]);
                 }
             }
             work->parties[i].label.x = work->parties[i].sprites[0].x - 8;
             work->parties[i].label.y = work->parties[i].ribbon.y + i * 28 + 16;
-            eTagFontMain((ETagFontMainData *)(void *)&work->parties[i].label);
+            eTagFontMain(&work->parties[i].label);
         }
         MoveSlide(&work->equipment.ribbon.x, &totalX[0], 3.0f);
         if ((&work->equipment)[i].ribbon.x == totalX[i])
             MoveSlide(&work->equipment.ribbon.y, &totalY[0], 3.0f);
-        eRibbonMain((ERibbonMainData *)(void *)&work->equipment.ribbon);
+        eRibbonMain(&work->equipment.ribbon);
         work->equipment.number.x = work->equipment.ribbon.x + 0x40;
         work->equipment.number.y = work->equipment.ribbon.y + 4;
         work->equipment.number.value = (*shop)->canEquip;
-        eNumberMain((ENumberMainData *)(void *)&work->equipment.number);
+        eNumberMain(&work->equipment.number);
         work->equipment.label.x = work->equipment.number.x - 8;
         work->equipment.label.y = work->equipment.ribbon.y + 4;
-        eTagFontMain((ETagFontMainData *)(void *)&work->equipment.label);
+        eTagFontMain(&work->equipment.label);
         break;
     }
 }
 
-static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
+static void MenuShopSeisan(TskObject *task, void *data)
 {
+    struct MenuShopSalePanel *work = data;
     short targetX[1];
     int i;
 
@@ -2392,12 +2203,12 @@ static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
         WindowDXMain(&work->window);
         work->window.state = 3;
         for (i = 0; i < 4; i++) {
-            eTagFontSet((ETagFont *)(void *)&work->labels[i], msg01_7[i]);
-            work->labels[i].style = work->depth + 2;
+            eTagFontSet(&work->labels[i], msg01_7[i]);
+            work->labels[i].work = work->depth + 2;
         }
         for (i = 0; i < 6; i++) {
             eNumberSet(&work->numbers[i], 0);
-            work->numbers[i].style = work->depth + 2;
+            work->numbers[i].work = work->depth + 2;
         }
         for (i = 0; i < 2; i++) {
             eSpriteSet(&work->sprites[i], i + 0x705);
@@ -2419,7 +2230,7 @@ static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
             work->moneyDivider[i].depth = work->depth + 2;
         }
         work->moneyDividerState = 0;
-        eRibbonSet((ERibbonSetData *)(void *)&work->ribbon, 0);
+        eRibbonSet(&work->ribbon, 0);
         {
         int cellIndex;
         for (cellIndex = 0; cellIndex < 6; cellIndex++) {
@@ -2446,15 +2257,13 @@ static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
         if (MenuShopWork->state == 0xa0 || MenuShopWork->state == 0xa2)
             targetX[0] = 0x130;
         MoveSlide(&work->window.x, targetX, 3.0f);
-        /* The final four bytes of the title font record hold its text pointer. */
-        __builtin_memcpy(&work->window.title_font.unmodeled_10[12],
-                         &msg00_6[MenuShopWork->mode & 1], sizeof(const char *));
+        work->window.title_font.render.text = msg00_6[MenuShopWork->mode & 1];
         WindowDXMain(&work->window);
         for (i = 0; i < 4; i++) {
             work->labels[i].x = (unsigned short)work->window.x + 0x43;
             work->labels[i].y = (unsigned short)work->window.y +
                 ((i % 2) * 0x30 + (i / 2) * 0x4c) + 4;
-            eTagFontMain((ETagFontMainData *)(void *)&work->labels[i]);
+            eTagFontMain(&work->labels[i]);
         }
         for (i = 0; i < 2; i++) {
             if (MenuShopWork->mode == 0)
@@ -2469,17 +2278,17 @@ static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
         work->ribbon.y = (unsigned short)work->window.y + 0x1c;
         work->ribbon.width = 0x2c;
         work->ribbon.height = 0x10;
-        work->ribbon.depth = work->depth + 1;
+        work->ribbon.work = work->depth + 1;
         for (i = 0; i < 6; i++)
-            eRibbonMain((ERibbonMainData *)(void *)&work->ribbon);
+            eRibbonMain(&work->ribbon);
         {
         MenuShopWorkData *selection = MenuShopWork;
         if (selection->listIndex >= 0) {
             unsigned char quantityLimit;
             signed char quantity;
             int unitPrice;
-            work->numbers[0].places = work->numbers[1].places = work->numbers[2].places = 2;
-            work->numbers[3].places = work->numbers[4].places = work->numbers[5].places = 9;
+            work->numbers[0].digits = work->numbers[1].digits = work->numbers[2].digits = 2;
+            work->numbers[3].digits = work->numbers[4].digits = work->numbers[5].digits = 9;
             quantityLimit = MenuShopWork->quantityLimit;
             work->numbers[0].value = quantityLimit;
             quantity = MenuShopWork->quantity;
@@ -2505,8 +2314,8 @@ static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
             do {
                 work->numbers[i].x = (unsigned short)work->window.x + 0x47;
                 work->numbers[i].y = (unsigned short)work->window.y + ((i % 3) * 0x18 + (i / 3) * 0x4c) + 4;
-                work->numbers[i].option = 0;
-                eNumberMain((ENumberMainData *)(void *)&work->numbers[i]);
+                work->numbers[i].format = 0;
+                eNumberMain(&work->numbers[i]);
                 if (++i >= 6)
                     break;
             } while (MenuShopWork->listIndex >= 0);
@@ -2526,8 +2335,9 @@ static void MenuShopSeisan(TskObject *task, struct MenuShopSalePanel *work)
     }
 }
 
-static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
+static void MenuShopSeisan02(TskObject *task, void *data)
 {
+    MenuShopSeisan02Work *work = data;
     int i;
     unsigned char *spriteBase;
     short slideTarget48;
@@ -2552,7 +2362,7 @@ static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
         WindowDXMain(&work->window);
         work->window.state = 3;
         for (i = 0; i < 2; i++) {
-            eTagFontSet((ETagFont *)(void *)&work->tags[i], msg01_8_0036DBA0[i]);
+            eTagFontSet(&work->tags[i], msg01_8_0036DBA0[i]);
             work->tags[i].work = work->ticker + 2;
         }
         for (i = 0; i < 3; i++) {
@@ -2565,7 +2375,7 @@ static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
         for (i = 0; i < 2; i++) {
             int off = 928 + 12 * i;
             unsigned char *ent = (unsigned char *)work + off;
-            unsigned char *stateBase;
+            signed char *stateBase;
 
             ent[30] = -96;
             ent[29] = -96;
@@ -2652,9 +2462,9 @@ static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
         *(short *)(spriteBase + 16) = work->window.x + 65;
         *(short *)(spriteBase + 18) = work->window.y + 31;
         eSpriteMain(&work->sprite);
-        work->numbers[0].value.integer = dataMoneyBoxChk();
+        work->numbers[0].value = dataMoneyBoxChk();
         if (work->kind == i) {
-            work->numbers[1].value.integer = 100;
+            work->numbers[1].value = 100;
         } else {
             int item;
 
@@ -2662,9 +2472,9 @@ static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
                 item = 0xB0000 + (unsigned short)MenuShopWork->equipmentId;
             else
                 item = 0xC0000 + (unsigned short)MenuShopWork->equipmentId;
-            work->numbers[1].value.integer = MenuBoxMoneyGet(item, 0);
+            work->numbers[1].value = MenuBoxMoneyGet(item, 0);
         }
-        work->numbers[2].value.integer = work->numbers[0].value.integer - work->numbers[1].value.integer;
+        work->numbers[2].value = work->numbers[0].value - work->numbers[1].value;
         for (i = 0; i < 3; i++) {
             work->numbers[i].digits = 9;
             work->numbers[i].x = work->window.x + 83;
@@ -2681,8 +2491,9 @@ static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
     }
 }
 
-static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work)
+static void MenuShopEx02(TskObject *task, void *data)
 {
+    struct MenuShopUnitPanel *work = data;
     short openX;
     short closeX;
     int i;
@@ -2692,22 +2503,22 @@ static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work)
     {
         short *unitIds;
         work->depth = 0xffff0;
-        eRibbonSet((ERibbonSetData *)(void *)(&work->ribbon), 3);
+        eRibbonSet(&work->ribbon, 3);
         work->ribbon.x = 0x210;
         work->ribbon.y = 0x40;
-        work->ribbon.style = work->depth;
+        work->ribbon.work = work->depth;
         work->ribbon.width = 0x100;
         work->ribbon.height = 0x90;
-        eTagFontSet((ETagFont *)(void *)(&work->label), menuShopTargetTagText);
-        work->label.style = work->depth + 2;
+        eTagFontSet(&work->label, menuShopTargetTagText);
+        work->label.work = work->depth + 2;
         for (i = 0; i < MenuShopWork->unitCount; i++) {
             unitIds = MenuShopWork->unitIds;
             eSpriteSet(&work->portraits[i], MenuFaceEpidGet(unitIds[i], 0));
             work->portraits[i].style = work->depth + 2;
         }
-        eCursolSet((ECursol *)(void *)(&work->cursor), 0);
-        work->cursor.style = work->depth + 4;
-        work->cursor.mode = 0;
+        eCursolSet(&work->cursor, 0);
+        work->cursor.work = work->depth + 4;
+        work->cursor.state = 0;
         work->active = work->flags = work->selectionFlags = 0;
         work->state = 0;
         return;
@@ -2735,7 +2546,7 @@ static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work)
             work->active = 1;
             if (work->state == 10) {
                 work->state = 11;
-                work->cursor.mode = 0x20;
+                work->cursor.state = 0x20;
             } else {
                 work->state = 21;
             }
@@ -2776,10 +2587,10 @@ static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work)
                         work->portraits[i].red = -0x80;
                     }
                 }
-                if (MenuShopWork->state == 0xd2 && work->cursor.mode == 0)
-                    work->cursor.mode = 0x20;
+                if (MenuShopWork->state == 0xd2 && work->cursor.state == 0)
+                    work->cursor.state = 0x20;
                 if (MenuShopWork->state == 0xd0)
-                    work->cursor.mode = 0;
+                    work->cursor.state = 0;
             } else {
                 for (i = 0; i < MenuShopWork->unitCount; i++) {
                     short *unitIds = MenuShopWork->unitIds;
@@ -2803,31 +2614,32 @@ static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work)
             MoveSlide(&work->ribbon.x, &closeX, 3.0f);
             if (work->ribbon.x == closeX)
                 work->state = 0;
-            work->cursor.mode = 0;
+            work->cursor.state = 0;
             break;
         }
         if (work->active != 0) {
-            eRibbonMain((ERibbonMainData *)(void *)(&work->ribbon));
+            eRibbonMain(&work->ribbon);
             work->label.x = work->ribbon.x + 8;
-            work->label.y = (unsigned short)work->ribbon.y + 0x44;
-            eTagFontMain((ETagFontMainData *)(void *)(&work->label));
+            work->label.y = work->ribbon.y + 0x44;
+            eTagFontMain(&work->label);
             for (i = 0; i < MenuShopWork->unitCount; i++) {
                 work->portraits[i].x = work->ribbon.x + (i & 1) * 0x40 + 0x40;
-                work->portraits[i].y = (unsigned short)work->ribbon.y + (i / 2) * 0x30;
+                work->portraits[i].y = work->ribbon.y + (i / 2) * 0x30;
                 work->portraits[i].style = work->depth + 2;
                 eSpriteMain(&work->portraits[i]);
             }
             work->cursor.x = work->ribbon.x + ((unsigned char)MenuShopWork->unitSelection & 1) * 0x40 + 0x40;
-            work->cursor.y = (unsigned short)work->ribbon.y + (MenuShopWork->unitSelection / 2) * 0x30 + 0x10;
-            work->cursor.style = work->depth + 4;
-            eCursolMain((ECursolMainData *)(void *)(&work->cursor));
+            work->cursor.y = work->ribbon.y + (MenuShopWork->unitSelection / 2) * 0x30 + 0x10;
+            work->cursor.work = work->depth + 4;
+            eCursolMain(&work->cursor);
         }
         break;
     }
 }
 
-static void MenuShopIcon(TskObject *task, struct MenuShopIconDisplay *work)
+static void MenuShopIcon(TskObject *task, void *data)
 {
+    struct MenuShopIconDisplay *work = data;
     int i;
 
     switch (task->state) {
@@ -3139,24 +2951,24 @@ static void MenuShopParameter(TskObject *task, void *data)
     switch (task->state) {
     case 0:
         work->depth = 0xffff00;
-        WindowDXSet((WindowDX *)(void *)(&work->window));
+        WindowDXSet(&work->window);
         work->window.x = -0x1f0;
         work->window.style = work->depth;
         work->window.y = 0x149;
         work->window.width = 0x1e0;
         work->window.height = 0x36;
         work->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(&work->window));
+        WindowDXMain(&work->window);
         work->window.state = 3;
         for (i = 0; i < 9; i++) {
-            eTagFontSet((ETagFont *)(void *)(&work->labels[i]), 0);
-            work->labels[i].depth = work->depth + 2;
-            work->labels[i].red = 0x70;
+            eTagFontSet(&work->labels[i], 0);
+            work->labels[i].work = work->depth + 2;
+            work->labels[i].color[0] = 0x70;
         }
         for (i = 0; i < 9; i++) {
             eNumberSet(&work->numbers[i], 0);
             work->numbers[i].format = 5;
-            work->numbers[i].depth = work->depth + 2;
+            work->numbers[i].work = work->depth + 2;
         }
         work->count = 0;
         work->twoColumns = 0;
@@ -3179,13 +2991,13 @@ static void MenuShopParameter(TskObject *task, void *data)
                     work->twoColumns = 0;
                     work->count = 7;
                     for (i = 0; i < work->count; i++)
-                        work->labels[i].text = msg00_9[i];
+                        work->labels[i].render.text = msg00_9[i];
                     for (i = 0; i < work->count; i++) {
                         work->numbers[i].format = 5;
                         work->numbers[i].digits = characterDigits.digits[i];
-                        work->numbers[i].comparisonColor = 0;
+                        work->numbers[i].colorModeSecond = 0;
                         work->numbers[i].firstOnly = 1;
-                        work->numbers[i].value.scalar = MenuShopPara.value[i];
+                        work->numbers[i].value = MenuShopPara.value[i];
                     }
                 break;
             case 4:
@@ -3201,13 +3013,13 @@ static void MenuShopParameter(TskObject *task, void *data)
                     work->count = 6;
                     work->twoColumns = 1;
                     for (i = 0; i < work->count; i++)
-                        work->labels[i].text = msg01_10[i];
+                        work->labels[i].render.text = msg01_10[i];
                     for (i = 0; i < work->count; i++) {
                         work->numbers[i].format = 5;
                         work->numbers[i].digits = agwsDigits.digits[i];
-                        work->numbers[i].comparisonColor = 0;
+                        work->numbers[i].colorModeSecond = 0;
                         work->numbers[i].firstOnly = 1;
-                        work->numbers[i].value.scalar = MenuShopPara.value[i];
+                        work->numbers[i].value = MenuShopPara.value[i];
                     }
                 break;
             }
@@ -3230,19 +3042,19 @@ static void MenuShopParameter(TskObject *task, void *data)
             work->count = 6;
             work->twoColumns = 1;
             for (i = 0; i < work->count; i++)
-                work->labels[i].text = msg01_10[i];
+                work->labels[i].render.text = msg01_10[i];
             for (i = 0; i < work->count; i++) {
                 work->numbers[i].format = 5;
                 work->numbers[i].digits = agwsDigits.digits[i];
-                work->numbers[i].value.scalar = (unsigned int)MenuShopPara.value[i] +
+                work->numbers[i].value = (unsigned int)MenuShopPara.value[i] +
                     ((unsigned int)MenuShopPara2.value[i] << 16);
-                work->numbers[i].comparisonColor = 0;
+                work->numbers[i].colorModeSecond = 0;
                 work->numbers[i].firstOnly = 1;
                 if (MenuShopPara.value[i] < MenuShopPara2.value[i]) {
-                    work->numbers[i].comparisonColor = 2;
+                    work->numbers[i].colorModeSecond = 2;
                     work->numbers[i].firstOnly = 0;
                 } else if (MenuShopPara2.value[i] < MenuShopPara.value[i]) {
-                    work->numbers[i].comparisonColor = 1;
+                    work->numbers[i].colorModeSecond = 1;
                     work->numbers[i].firstOnly = 0;
                 }
             }
@@ -3255,17 +3067,17 @@ static void MenuShopParameter(TskObject *task, void *data)
             work->count = 6;
             work->twoColumns = 1;
             for (i = 0; i < work->count; i++)
-                work->labels[i].text = msg01_10[i];
+                work->labels[i].render.text = msg01_10[i];
             for (i = 0; i < work->count; i++) {
                 work->numbers[i].format = 5;
-                work->numbers[i].comparisonColor = 0;
+                work->numbers[i].colorModeSecond = 0;
                 work->numbers[i].digits = agwsDigits.digits[i];
                 work->numbers[i].firstOnly = 1;
-                work->numbers[i].value.scalar = (unsigned int)MenuShopPara.value[i] +
+                work->numbers[i].value = (unsigned int)MenuShopPara.value[i] +
                     ((unsigned int)MenuShopPara2.value[i] << 16);
             }
             work->numbers[0].format = 3;
-            work->numbers[0].comparisonColor = 0;
+            work->numbers[0].colorModeSecond = 0;
             work->numbers[0].firstOnly = 0;
             targetX = 0x10;
             break;
@@ -3278,7 +3090,7 @@ static void MenuShopParameter(TskObject *task, void *data)
             work->window.y = 0x149;
             work->window.height = 0x26;
         }
-        WindowDXMain((WindowDX *)(void *)(&work->window));
+        WindowDXMain(&work->window);
         for (i = 0; i < work->count; i++) {
             if (work->twoColumns == 0) {
                 work->labels[i].x = (unsigned short)work->window.x + (i / 3) * 0xa0 + 0x30;
@@ -3287,7 +3099,7 @@ static void MenuShopParameter(TskObject *task, void *data)
                 work->labels[i].x = (unsigned short)work->window.x + (i / 2) * 0xa0 + 0x30;
                 work->labels[i].y = (unsigned short)work->window.y + (i % 2) * 0x10 + 3;
             }
-            eTagFontMain((ETagFontMainData *)(void *)(&work->labels[i]));
+            eTagFontMain(&work->labels[i]);
         }
         for (i = 0; i < work->count; i++) {
             if (work->twoColumns == 0) {
@@ -3297,33 +3109,34 @@ static void MenuShopParameter(TskObject *task, void *data)
                 work->numbers[i].x = (unsigned short)work->window.x + (i / 2) * 0xa0 + 0x60;
                 work->numbers[i].y = (unsigned short)work->window.y + (i % 2) * 0x10 + 3;
             }
-            eNumberMain((ENumberMainData *)(void *)(&work->numbers[i]));
+            eNumberMain(&work->numbers[i]);
         }
         return;
     }
 }
 
-static void MenuShopEx2(TskObject *task, MenuShopEx2Work *work)
+static void MenuShopEx2(TskObject *task, void *data)
 {
+    MenuShopEx2Work *work = data;
     short x;
     MenuShopWeapon *weapon;
 
     switch (task->state) {
     case 0:
         work->color = 0xFFFF00;
-        WindowDXSet((WindowDX *)(void *)((void *)&work->window));
+        WindowDXSet(&work->window);
         work->window.x = -0xB6;
-        work->window.color = work->color;
+        work->window.style = work->color;
         work->window.y = 0x100;
         work->window.width = 0xA6;
         work->window.height = 0x1E;
-        work->window.title = menuShopBulletTitleText;
+        work->window.tag_id = menuShopBulletTitleText;
         work->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)((void *)&work->window));
+        WindowDXMain(&work->window);
         work->window.state = 3;
         eMessageSet(&work->message, 0);
         work->message.mode = 0x20;
-        work->message.color = work->color + 2;
+        work->message.draw_parameter = work->color + 2;
         break;
 
     case 2:
@@ -3336,7 +3149,7 @@ static void MenuShopEx2(TskObject *task, MenuShopEx2Work *work)
             }
         }
         MoveSlide(&work->window.x, &x, 3.0f);
-        WindowDXMain((WindowDX *)(void *)((void *)&work->window));
+        WindowDXMain(&work->window);
         work->message.x = work->window.x + 3;
         work->message.y = work->window.y + 3;
         eMessageMain(&work->message);
@@ -3348,8 +3161,9 @@ static void MenuShopEx2(TskObject *task, MenuShopEx2Work *work)
 /* MenuShopEx2 takes the window title by address; the string follows it in .sdata. */
 const char menuShopBulletTitleText[8] = "Bullet";
 
-static void MenuShopLine(TskObject *task, MenuShopDividerWork *work)
+static void MenuShopLine(TskObject *task, void *data)
 {
+    MenuShopDividerWork *work = data;
     short targets[4];
     short verticalTarget[1];
     int i;
@@ -3550,8 +3364,8 @@ void MenuShopCore(void) {
             MenuShopWork->availableMoney = dataMoneyBoxChk();
         }
         if (MenuShopWork->waitFrames == 0) {
-            MenuShopWork->listIndex = WindowSPSelect((WindowSPCursor *)(void *)((void *)MenuShopWinSP), PadData.mappedRepeat);
-            WindowSPKeepSelect((WindowSPCursor *)(void *)(MenuShopWinSP), &MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * 9) * 5]);
+            MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,PadData.mappedRepeat);
+            WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * 9) * 5]);
             if (MenuShopWork->listIndex >= 0) {
                 MenuShopWork->canEquip = subMenuShopEquipCheck(MenuSortGet(0, MenuShopWork->listIndex), MenuShopWork->category);
             } else {
@@ -3569,7 +3383,7 @@ void MenuShopCore(void) {
                 int count;
 
                 previousCategory = MenuShopWork->category;
-                WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[(previousCategory + MenuShopWork->mode * 9) * 5]));
+                WindowSPKeepSelectCheck(&MenuKeepSelect[(previousCategory + MenuShopWork->mode * 9) * 5]);
                 categoryStep = (PadData.mappedRepeat & 0x2000) ? 1 : -1;
                 category = MenuShopWork->category;
                 for (count = 0; count < 9; count += categoryStep) {
@@ -3623,7 +3437,7 @@ void MenuShopCore(void) {
                 xglSoundEffectNormalID(2, 0);
             }
         } else {
-            MenuShopWork->listIndex = WindowSPSelect((WindowSPCursor *)(void *)((void *)MenuShopWinSP), 0);
+            MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,0);
         }
         break;
 
@@ -3834,9 +3648,9 @@ void MenuShopCore(void) {
                 }
                 xglSoundEffectNormalID(1, 0);
                 if (MenuShopWork->sort_mode_selector != 0) {
-                    WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[0x5A]));
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[0x5A]);
                 } else {
-                    WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[0x5F]));
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[0x5F]);
                 }
                 MenuShopWork->listIndex = MenuShopListChange01(0);
                 MenuShopWork->nextState = 0xD0;
@@ -3944,11 +3758,11 @@ void MenuShopCore(void) {
 
     case 0xD0:
         if (MenuShopWork->waitFrames == 0) {
-            MenuShopWork->listIndex = WindowSPSelect((WindowSPCursor *)(void *)((void *)MenuShopWinSP), PadData.mappedRepeat);
+            MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,PadData.mappedRepeat);
             if (MenuShopWork->sort_mode_selector != 0) {
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(MenuShopWinSP), &MenuKeepSelect[0x5A]);
+                WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[0x5A]);
             } else {
-                WindowSPKeepSelect((WindowSPCursor *)(void *)(MenuShopWinSP), &MenuKeepSelect[0x5F]);
+                WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[0x5F]);
             }
             if (MenuShopWork->listIndex >= 0) {
                 int itemId;
@@ -3993,7 +3807,7 @@ void MenuShopCore(void) {
                 xglSoundEffectNormalID(2, 0);
             }
         } else {
-            MenuShopWork->listIndex = WindowSPSelect((WindowSPCursor *)(void *)((void *)MenuShopWinSP), 0);
+            MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,0);
             if (MenuShopWork->listIndex >= 0) {
                 int itemId;
 
@@ -4143,7 +3957,7 @@ void MenuShopMain(int shopType)
     extern unsigned char *MenuBgTaskInit(unsigned char *work, int cameraId);
     extern void *xglTaskInitial(void *pool, int capacity, int flags);
     extern void *MenuModelInit(void *workStart);
-    extern unsigned int GameResourceWorkAlloc(int size);
+    extern unsigned char *GameResourceWorkAlloc(int size);
     extern void MenuModelMemoryInit(void *base, int size);
     extern void MenuModelMemorySet(int count);
     extern void MenuModelMenuMotionLoad(void);
@@ -4173,8 +3987,8 @@ void MenuShopMain(int shopType)
     extern void endPrintDirectFrameCopy(XglPacket *packet, int x, int y);
     extern void xglStudioChange(int mode);
 
-    endPrintDirectFrameCopy(xglPacketGetCurrent(), (int)sRender.width << 5,
-        (int)sRender.height << 5);
+    endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.width << 5,
+        sRender.height << 5);
     GameLoopState[4] |= 0x04000000;
     xglSleep();
     endPrintInit();
@@ -4182,14 +3996,14 @@ void MenuShopMain(int shopType)
     MenuCfTaikiPush();
     MenuGameDataPush();
     xglStudioChange(0);
-    endPrintDirectFrameCopy(xglPacketGetCurrent(), (int)sRender.height << 5,
-        (int)sRender.flip_base << 5);
+    endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.height << 5,
+        sRender.flip_base << 5);
 
     workspace = (unsigned char *)(((unsigned int)MenuWorkEndGet() + 127) & ~127U);
     ShopDataBufTop = workspace;
     {
         MenuShopWorkData *initialWork =
-            (MenuShopWorkData *)MenuShopAlignBuffer(workspace + 8192, 2048);
+            MenuShopAlignBuffer(workspace + 8192, 2048);
         MenuShopWork = initialWork;
         workspace = (unsigned char *)initialWork + 128;
         memset(initialWork, 0, 128);
@@ -4212,7 +4026,7 @@ void MenuShopMain(int shopType)
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopList, workspace);
-    MenuShopWinSP = (MenuShopWindowSP *)(workspace + 12);
+    MenuShopWinSP = (WindowSPCursor *)(workspace + 12);
     workspace += 5956;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
@@ -4265,7 +4079,7 @@ void MenuShopMain(int shopType)
         MenuShopModelMain, 0);
     workspace = MenuModelInit(workspace);
 
-    modelMemory = (unsigned char *)GameResourceWorkAlloc(0x180000);
+    modelMemory = GameResourceWorkAlloc(0x180000);
     xglStudioChange(0);
     MenuModelMemoryInit(modelMemory, 0x180000);
     MenuModelMemorySet(20);
@@ -4353,7 +4167,7 @@ void MenuShopMain(int shopType)
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* MenuShopModelMain copies all four coordinates to the camera at +0xD0. */
-const float menuShopModelCameraVector[4] = { -2.0f, 1.8f, 8.5f, 1.0f };
+const DoublewordAlignedVector4 menuShopModelCameraVector = { -2.0f, 1.8f, 8.5f, 1.0f };
 
 /* MenuShopInfo copies this pair and chooses the AG or VX maker prompt. */
 const char *menuShopMakerNames[2] = { menuShopHyamsMakerText, menuShopVectorMakerText };

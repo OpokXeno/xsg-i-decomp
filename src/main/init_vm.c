@@ -1,5 +1,7 @@
 #include "common.h"
+#include "main/init_vm.h"
 #include "init_vm.h"
+#include "main/jni.h"
 
 #define VM_ACC_STATIC 0x8
 #define VM_ACC_NATIVE 0x100
@@ -161,57 +163,6 @@ enum {
     VM_CONSTANT_STRING = 24
 };
 
-typedef struct VMSlots {
-    short top;
-    unsigned short size;
-    VMSlot *base;
-} VMSlots;
-
-typedef struct VMMethodP VMMethod;
-
-typedef struct VMFrame {
-    unsigned short pc;
-    unsigned short nextPc;
-    VMMethod *callee;
-    VMSlots locals;
-    VMSlots stack;
-} VMFrame;
-
-typedef struct VMThreadP {
-    unsigned char unmodeled_00[0x24];
-    unsigned int flags;
-    VMSlot *stack;
-    VMFrame *frames;
-    unsigned char unmodeled_30[8];
-    unsigned short stack_offset;
-    short stack_limit;
-    short resume_frames;
-    short frame_depth;
-} VMThread;
-
-typedef void (*VMNativeFunc)(VMThread *thread, VMSlot *arguments, VMSlot *result);
-
-typedef struct VMClassP {
-    unsigned char unmodeled_00[0x14];
-    VMSlot *constants;
-} VMOwner;
-
-struct VMMethodP {
-    unsigned char unmodeled_00[8];
-    short arg_count;
-    unsigned short result_size;
-    VMOwner *owner;
-    unsigned short access;
-    unsigned char unmodeled_12[2];
-    union {
-        unsigned char *code;       /* +0x14: bytecode */
-        VMNativeFunc native;       /* +0x14: native implementation */
-    };
-    unsigned short max_stack;
-    unsigned short max_locals;
-    unsigned short code_length;
-};
-
 typedef struct VMArray {
     unsigned char unmodeled_00[4];
     int length;
@@ -222,7 +173,7 @@ typedef struct VMField {
     unsigned char unmodeled_00[4];
     unsigned short flags;
     unsigned char unmodeled_06[2];
-    VMClass *type;
+    JavaClass *type;
     unsigned char unmodeled_0c[4];
     union {
         int *intAddress;           /* static field storage, by field type */
@@ -240,15 +191,8 @@ typedef struct VMFieldRef {
 } VMFieldRef;
 
 extern JavaClass _dummyClass;
-extern VMClass *primitiveClassTable[16];
-extern VMClass *classBoolean;
-extern VMClass *classByte;
-extern VMClass *classChar;
-extern VMClass *classShort;
-extern VMClass *classInt;
-extern VMClass *classLong;
-extern VMClass *classFloat;
-extern VMClass *classDouble;
+extern JavaClass *primitiveClassTable[16];
+extern JavaClass *classByte;
 extern const char booleanTypeName[];
 extern const char byteTypeName[];
 extern const char charTypeName[];
@@ -265,16 +209,13 @@ extern const char doubleTypeName[];
  */
 static void initBaseClasses(void);
 static void initPrimitiveTypes(void);
-extern void resolveNativeMethod(VMMethod *method);
-extern void JNI_callMethod(VMThread *thread, VMMethod *method, VMSlot *arguments, VMSlot *result);
+extern void resolveNativeMethod(JavaMethod *method);
 extern void JNI_threadException();
-extern int getField(int index, VMOwner *owner, int isStatic, VMFieldRef *ref);
-extern VMMethod *getMethodSignatureClass(int index, VMOwner *owner, int mode);
-extern VMClass *getClass(int index, VMOwner *owner);
-extern void *newArray(VMClass *elementClass, int length);
-extern int JNI_isInstanceOf(void *object, VMClass *vmClass);
-
-static void initWrapperClass(VMClass **class_slot, const char *name,
+extern int getField(int index, JavaClass *owner, int isStatic, VMFieldRef *ref);
+extern JavaMethod *getMethodSignatureClass(int index, JavaClass *owner, int mode);
+extern JavaClass *getClass(int index, JavaClass *owner);
+extern void *newArray(JavaClass *elementClass, int length);
+static void initWrapperClass(JavaClass **class_slot, const char *name,
                               signed char type_code, int element_size);
 
 const char clinitName[16] = "<clinit>";
@@ -317,7 +258,7 @@ const char floatTypeName[8] = "float";
 const char doubleTypeName[8] = "double";
 
 /* Keep the pointer's original zero-initialized storage after its extern uses. */
-VMClass *classBoolean = 0;
+JavaClass *classBoolean = 0;
 
 JavaClass *classClass = &_dummyClass;
 
@@ -332,7 +273,7 @@ SceneString *ATTR_LineNumberTable;
 
 unsigned short XTK_peerGroup[4];
 
-SceneClass *classStringBuffer;
+JavaClass *classStringBuffer;
 
 SceneString *TYPE_Chr_talk;
 
@@ -352,13 +293,13 @@ SceneString *TYPE_Stage_entered;
 
 void *jthreadTop;
 
-VMClass *classByte;
+JavaClass *classByte;
 
-VMClass *classChar;
+JavaClass *classChar;
 
-VMClass *classVoid;
+JavaClass *classVoid;
 
-VMClass *classShort;
+JavaClass *classShort;
 
 void (*jthreadResetFunc)(void);
 
@@ -368,17 +309,17 @@ JavaClass *classObject;
 
 void *classEntryPool;
 
-VMClass *classFloat;
+JavaClass *classFloat;
 
-VMClass *classDouble;
+JavaClass *classDouble;
 
-VMClass *classLong;
+JavaClass *classLong;
 
-SceneClass *classString;
+JavaClass *classString;
 
-VMClass *classInt;
+JavaClass *classInt;
 
-VMClass *primitiveClassTable[16];
+JavaClass *primitiveClassTable[16];
 
 /* 0x0099D510, 0x400 bytes of COMMON storage allocated after primitiveClassTable;
    no MAIN function reads it. */
@@ -417,17 +358,17 @@ static inline VMSlot *_StackTop(VMSlots *stack)
     return &stack->base[stack->top];
 }
 
-void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *result)
+void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *result)
 {
-    VMThread *thread = (VMThread *)vm;
-    unsigned short access = method->access;
+    JThread *thread = vm;
+    unsigned short access = method->accessFlags;
     VMFrame *frame;
     VMSlots *locals;
     VMSlots *stack;
     unsigned char *code;
     unsigned int codeLength;
     unsigned int flags;
-    VMMethod *callee;
+    JavaMethod *callee;
     VMSlot *args;
 
     if (access & VM_ACC_NATIVE) {
@@ -448,23 +389,23 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
 
         frame = &thread->frames[thread->frame_depth];
         code = method->code;
-        codeLength = method->code_length;
+        codeLength = method->codeLength;
         locals = &frame->locals;
         stack = &frame->stack;
         args = &thread->stack[(short)thread->stack_offset];
-        thread->stack_offset += method->max_locals + method->max_stack + 1;
+        thread->stack_offset += method->maxLocals + method->maxStack + 1;
         if ((short)thread->stack_offset >= thread->stack_limit) {
             JNI_threadException(thread, method);
         }
         locals->top = 0;
         locals->base = args;
-        locals->size = method->max_locals;
-        stack->base = args + method->max_locals;
+        locals->size = method->maxLocals;
+        stack->base = args + method->maxLocals;
         stack->top = 0;
-        stack->size = method->max_stack;
+        stack->size = method->maxStack;
         frame->pc = 0;
         if (arguments != 0) {
-            count = method->arg_count;
+            count = method->parameterSize;
             if (!(access & VM_ACC_STATIC)) {
                 count++;
             }
@@ -477,46 +418,46 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
         frame = &thread->frames[thread->frame_depth - thread->resume_frames];
         thread->resume_frames--;
         code = method->code;
-        codeLength = method->code_length;
+        codeLength = method->codeLength;
         locals = &frame->locals;
         stack = &frame->stack;
         switch (code[frame->pc - 1]) {
         case OP_INVOKESTATIC:
             callee = frame->callee;
-            JNI_callMethod(thread, callee, &STACK(1 - callee->arg_count), &STACK(1 - callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(1 - callee->parameterSize).ref, &STACK(1 - callee->parameterSize).i);
             if (!(thread->flags & 5)) {
                 thread->frame_depth--;
-                stack->top = stack->top - callee->arg_count;
-                stack->top = stack->top + callee->result_size;
+                stack->top = stack->top - callee->parameterSize;
+                stack->top = stack->top + callee->returnSize;
                 frame->nextPc = frame->pc + 2;
             }
             break;
         case OP_INVOKEVIRTUAL:
             callee = frame->callee;
-            JNI_callMethod(thread, callee, &STACK(-callee->arg_count), &STACK(-callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(-callee->parameterSize).ref, &STACK(-callee->parameterSize).i);
             if (!(thread->flags & 5)) {
                 thread->frame_depth--;
-                stack->top = stack->top - callee->arg_count - 1;
-                stack->top = stack->top + callee->result_size;
+                stack->top = stack->top - callee->parameterSize - 1;
+                stack->top = stack->top + callee->returnSize;
                 frame->nextPc = frame->pc + 2;
             }
             break;
         case OP_INVOKESPECIAL:
             callee = frame->callee;
-            JNI_callMethod(thread, callee, &STACK(-callee->arg_count), &STACK(-callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(-callee->parameterSize).ref, &STACK(-callee->parameterSize).i);
             if (!(thread->flags & 5)) {
                 thread->frame_depth--;
-                stack->top = stack->top - callee->arg_count - 1;
+                stack->top = stack->top - callee->parameterSize - 1;
                 frame->nextPc = frame->pc + 2;
             }
             break;
         case OP_INVOKEINTERFACE:
             callee = frame->callee;
-            JNI_callMethod(thread, callee, &STACK(-callee->arg_count), &STACK(-callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(-callee->parameterSize).ref, &STACK(-callee->parameterSize).i);
             if (!(thread->flags & 5)) {
                 thread->frame_depth--;
-                stack->top = stack->top - callee->arg_count - 1;
-                stack->top = stack->top + callee->result_size;
+                stack->top = stack->top - callee->parameterSize - 1;
+                stack->top = stack->top + callee->returnSize;
                 frame->nextPc = frame->pc + 4;
             }
             break;
@@ -567,18 +508,18 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             break;
         case OP_LDC: {
             unsigned char index = code[frame->pc];
-            VMSlot *constants = method->owner->constants;
+            ConstantPoolEntry *constants = method->owner->constants;
 
             stack->top++;
-            switch (((unsigned char *)constants[0].ref)[index]) {
+            switch (constants[0].tags[index]) {
             case VM_CONSTANT_STRING:
-                STACK(0).i = constants[index].i;
+                STACK(0).i = constants[index].intValue;
                 break;
             case VM_CONSTANT_FLOAT:
-                STACK(0).f = constants[index].f;
+                STACK(0).f = constants[index].floatValue;
                 break;
             case VM_CONSTANT_INTEGER:
-                STACK(0).i = constants[index].i;
+                STACK(0).i = constants[index].intValue;
                 break;
             }
             frame->nextPc = frame->pc + 1;
@@ -586,18 +527,18 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
         }
         case OP_LDC_W: {
             unsigned int index = CODE_U16(0);
-            VMSlot *constants = method->owner->constants;
+            ConstantPoolEntry *constants = method->owner->constants;
 
             stack->top++;
-            switch (((unsigned char *)constants[0].ref)[index]) {
+            switch (constants[0].tags[index]) {
             case VM_CONSTANT_STRING:
-                STACK(0).i = constants[index].i;
+                STACK(0).i = constants[index].intValue;
                 break;
             case VM_CONSTANT_INTEGER:
-                STACK(0).f = constants[index].f;
+                STACK(0).f = constants[index].floatValue;
                 break;
             case VM_CONSTANT_FLOAT:
-                STACK(0).f = constants[index].f;
+                STACK(0).f = constants[index].floatValue;
                 break;
             }
             frame->nextPc = frame->pc + 2;
@@ -709,37 +650,42 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             break;
         case OP_IASTORE: {
             VMSlot *sp = &stack->base[stack->top];
+            VMArray *array = sp[-2].ref;
 
-            ((int *)((VMArray *)sp[-2].ref)->data)[sp[-1].i] = sp[0].i;
+            ((int *)array->data)[sp[-1].i] = sp[0].i;
             stack->top -= 3;
             break;
         }
         case OP_FASTORE: {
             VMSlot *sp = &stack->base[stack->top];
+            VMArray *array = sp[-2].ref;
 
-            ((float *)((VMArray *)sp[-2].ref)->data)[sp[-1].i] = sp[0].f;
+            ((float *)array->data)[sp[-1].i] = sp[0].f;
             stack->top -= 3;
             break;
         }
         case OP_AASTORE: {
             VMSlot *sp = &stack->base[stack->top];
+            VMArray *array = sp[-2].ref;
 
-            ((void **)((VMArray *)sp[-2].ref)->data)[sp[-1].i] = sp[0].ref;
+            ((void **)array->data)[sp[-1].i] = sp[0].ref;
             stack->top -= 3;
             break;
         }
         case OP_BASTORE: {
             VMSlot *sp = &stack->base[stack->top];
+            VMArray *array = sp[-2].ref;
 
-            ((unsigned char *)((VMArray *)sp[-2].ref)->data)[sp[-1].i] = sp[0].b;
+            ((unsigned char *)array->data)[sp[-1].i] = sp[0].b;
             stack->top -= 3;
             break;
         }
         case OP_CASTORE:
         case OP_SASTORE: {
             VMSlot *sp = &stack->base[stack->top];
+            VMArray *array = sp[-2].ref;
 
-            ((unsigned short *)((VMArray *)sp[-2].ref)->data)[sp[-1].i] = sp[0].s;
+            ((unsigned short *)array->data)[sp[-1].i] = sp[0].s;
             stack->top -= 3;
             break;
         }
@@ -1200,11 +1146,11 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 1, &ref) == 1) {
-                if (!(ref.field->type->type_flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
                     stack->top++;
                     STACK(0).i = *ref.field->intAddress;
                 } else {
-                    switch (ref.field->type->type_code) {
+                    switch (ref.field->type->typeCode) {
                     case 'I':
                         stack->top++;
                         STACK(0).i = *ref.field->intAddress;
@@ -1235,11 +1181,11 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 1, &ref) == 1) {
-                if (!(ref.field->type->type_flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
                     *ref.field->intAddress = STACK(0).i;
                     stack->top--;
                 } else {
-                    switch (ref.field->type->type_code) {
+                    switch (ref.field->type->typeCode) {
                     case 'I':
                         *ref.field->intAddress = STACK(0).i;
                         stack->top--;
@@ -1268,10 +1214,10 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 0, &ref) == 1) {
-                if (!(ref.field->type->type_flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
                     STACK(0).i = *(int *)((char *)STACK(0).ref + ref.field->offset);
                 } else {
-                    switch (ref.field->type->type_code) {
+                    switch (ref.field->type->typeCode) {
                     case 'I':
                         STACK(0).i = *(int *)((char *)STACK(0).ref + ref.field->offset);
                         break;
@@ -1298,11 +1244,11 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 0, &ref) == 1) {
-                if (!(ref.field->type->type_flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
                     *(int *)((char *)_StackTop(stack)[-1].ref + ref.field->offset) = _StackTop(stack)[0].i;
                     stack->top -= 2;
                 } else {
-                    switch (ref.field->type->type_code) {
+                    switch (ref.field->type->typeCode) {
                     case 'B':
                     case 'C':
                     case 'F':
@@ -1326,56 +1272,56 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             callee = getMethodSignatureClass(CODE_U16(0), method->owner, 0);
             frame->callee = callee;
             thread->frame_depth++;
-            JNI_callMethod(thread, callee, &STACK(-callee->arg_count), &STACK(-callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(-callee->parameterSize).ref, &STACK(-callee->parameterSize).i);
             if (thread->flags & 5) {
                 return;
             }
             thread->frame_depth--;
-            stack->top = stack->top - callee->arg_count - 1;
-            stack->top = stack->top + callee->result_size;
+            stack->top = stack->top - callee->parameterSize - 1;
+            stack->top = stack->top + callee->returnSize;
             frame->nextPc = frame->pc + 2;
             break;
         case OP_INVOKESPECIAL:
             callee = getMethodSignatureClass(CODE_U16(0), method->owner, 1);
             frame->callee = callee;
             thread->frame_depth++;
-            JNI_callMethod(thread, callee, &STACK(-callee->arg_count), &STACK(-callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(-callee->parameterSize).ref, &STACK(-callee->parameterSize).i);
             if (thread->flags & 5) {
                 return;
             }
             thread->frame_depth--;
-            stack->top = stack->top - callee->arg_count - 1;
+            stack->top = stack->top - callee->parameterSize - 1;
             frame->nextPc = frame->pc + 2;
             break;
         case OP_INVOKESTATIC:
             callee = getMethodSignatureClass(CODE_U16(0), method->owner, 0);
             frame->callee = callee;
             thread->frame_depth++;
-            JNI_callMethod(thread, callee, &STACK(1 - callee->arg_count), &STACK(1 - callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(1 - callee->parameterSize).ref, &STACK(1 - callee->parameterSize).i);
             if (thread->flags & 5) {
                 return;
             }
             thread->frame_depth--;
-            stack->top = stack->top - callee->arg_count;
-            stack->top = stack->top + callee->result_size;
+            stack->top = stack->top - callee->parameterSize;
+            stack->top = stack->top + callee->returnSize;
             frame->nextPc = frame->pc + 2;
             break;
         case OP_INVOKEINTERFACE:
             callee = getMethodSignatureClass(CODE_U16(0), method->owner, 1);
             frame->callee = callee;
             thread->frame_depth++;
-            JNI_callMethod(thread, callee, &STACK(-callee->arg_count), &STACK(-callee->arg_count));
+            JNI_callMethod(thread, callee, &STACK(-callee->parameterSize).ref, &STACK(-callee->parameterSize).i);
             if (thread->flags & 5) {
                 return;
             }
             thread->frame_depth--;
-            stack->top = stack->top - callee->arg_count - 1;
-            stack->top = stack->top + callee->result_size;
+            stack->top = stack->top - callee->parameterSize - 1;
+            stack->top = stack->top + callee->returnSize;
             frame->nextPc = frame->pc + 4;
             break;
         case OP_NEW:
             stack->top++;
-            STACK(0).ref = newObject((SceneClass *)getClass(CODE_U16(0), method->owner));
+            STACK(0).ref = newObject(getClass(CODE_U16(0), method->owner));
             frame->nextPc = frame->pc + 2;
             break;
         case OP_NEWARRAY:
@@ -1386,9 +1332,12 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
             STACK(0).ref = newArray(getClass(CODE_U16(0), method->owner), STACK(0).i);
             frame->nextPc = frame->pc + 2;
             break;
-        case OP_ARRAYLENGTH:
-            STACK(0).i = ((VMArray *)STACK(0).ref)->length;
+        case OP_ARRAYLENGTH: {
+            VMArray *array = STACK(0).ref;
+
+            STACK(0).i = array->length;
             break;
+        }
         case OP_CHECKCAST:
             frame->nextPc = frame->pc + 2;
             break;
@@ -1463,7 +1412,7 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
         frame->pc = frame->nextPc;
     }
 
-    thread->stack_offset = thread->stack_offset - (method->max_locals + method->max_stack) - 1;
+    thread->stack_offset = thread->stack_offset - (method->maxLocals + method->maxStack) - 1;
     if ((short)thread->stack_offset < 0) {
         JNI_threadException(thread, method);
     }
@@ -1506,19 +1455,19 @@ static void initPrimitiveTypes(void) {
     primitiveClassTable[7] = classDouble;
 }
 
-static void initWrapperClass(VMClass **class_slot, const char *name,
+static void initWrapperClass(JavaClass **class_slot, const char *name,
                               signed char type_code, int element_size)
 {
-    VMClass *new_class = newClass();
+    JavaClass *new_class = newClass();
     SceneString *interned_name;
-    VMClass *stored_class;
+    JavaClass *stored_class;
 
     *class_slot = new_class;
-    new_class->type_flags = 0x100;
+    new_class->flags = 0x100;
 
     interned_name = loadConstString(name, -1);
     stored_class = *class_slot;
-    stored_class->type_code = type_code;
+    stored_class->typeCode = type_code;
     stored_class->name = interned_name;
-    (*class_slot)->element_size = element_size;
+    (*class_slot)->elementSize = element_size;
 }

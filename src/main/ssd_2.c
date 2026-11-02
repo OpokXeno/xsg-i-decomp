@@ -7,6 +7,7 @@
  * header is included directly.
  */
 #include "ssd_init.h"
+#include "main/ssd_2.h"
 
 typedef struct SsdSequenceData {
     unsigned char _unmodeled_00[8];

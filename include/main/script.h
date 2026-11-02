@@ -21,4 +21,11 @@ int SCRIPT_getCfTime(void);
 void SCRIPT_execTalkto(void *actor);
 int SCRIPT_load2(const char *path);
 
+/* Functions and data used by other translation units. */
+ScriptDbEntry *SCRIPT_exec(void);
+void XTK_setWindowOwner(void *owner);
+void *XTK_getWindowOwner(void);
+void SCRIPT_fade(int time);
+void SCRIPT_load_DBG(const char *path);
+
 #endif /* INCLUDE_MAIN_SCRIPT_H */

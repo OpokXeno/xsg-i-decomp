@@ -5,6 +5,22 @@
 #ifndef SRC_MAIN_MENU_SKILL_H
 #define SRC_MAIN_MENU_SKILL_H
 
+#include "main/menu_1.h"
+#include "main/e_battle_win_open.h"
+#include "main/e_message.h"
+#include "main/e_number_main.h"
+#include "main/end_print.h"
+#include "main/menu_para_pt_rate_get.h"
+#include "main/menu_skill.h"
+#include "main/menu_top_command_check.h"
+#include "main/open_close_main.h"
+#include "main/party.h"
+#include "main/window_tex_load.h"
+#include "main/xgl_2.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+
 #define PAD_L1 0x0004
 #define PAD_R1 0x0008
 #define PAD_RIGHT 0x2000
@@ -102,36 +118,13 @@ typedef struct PlayerCharacter {
  * 0x7e using the ID itself; SkillNextLvGet reads the following halfword table
  * at 0x17e, bounding this cost table at 0x80 entries.
  */
-typedef struct MenuSkillData {
+struct MenuSkillData {
     unsigned char level_cap_by_skill_id[0x7e];
     unsigned short point_cost_by_skill_id[0x80];
-} MenuSkillData;
+    unsigned short next_level_points[5];  /* +0x17e: indexed by skill level 0..4 */
+};
 
 /* Skill-menu screen records and controller fields read by this TU. */
-typedef struct SkillPasWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[4];
-    signed char state;
-    unsigned char unmodeled_11[3];
-    void (*callback)(void);
-    void *callbackArg;
-    unsigned char unmodeled_1c[0x194 - 0x1c];
-} SkillPasWindow;
-
-typedef struct SkillPasMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x44 - 0x0c];
-} SkillPasMessage;
-
 typedef struct SkillPasBox {
     short x;
     short y;
@@ -144,8 +137,8 @@ typedef struct SkillPasWork {
     unsigned char state;
     unsigned char unmodeled_01[3];
     int color;
-    SkillPasWindow window;
-    SkillPasMessage message[3];
+    WindowDX window;
+    EMessageParam message[3];
     unsigned char unmodeled_268[0x2ac - 0x268];
     SkillPasBox box;
     unsigned char unmodeled_2b8[8];
@@ -156,7 +149,7 @@ typedef struct MenuSkillWorkState {
     unsigned char unmodeled_00[0x03];
     unsigned char state;            /* +0x03 */
     unsigned char unmodeled_04[0x10 - 0x04];
-    unsigned char char_denied;      /* +0x10 */
+    signed char char_denied;        /* +0x10 */
     unsigned char unmodeled_11[0x20 - 0x11];
     unsigned char flags;            /* +0x20 */
     unsigned char next_state;       /* +0x21 */
@@ -171,7 +164,7 @@ typedef struct MenuSkillWorkState {
     signed char partyCount;        /* +0x41 */
     signed char partyCursor;       /* +0x42 */
     unsigned char unmodeled_43;
-    unsigned char list_accessory;   /* +0x44 */
+    signed char list_accessory;     /* +0x44 */
     unsigned char unmodeled_45[0x50 - 0x45];
     int list_select;                /* +0x50 */
     unsigned char unmodeled_54[0x80 - 0x54];
@@ -194,45 +187,10 @@ typedef struct SkillMenuList {
     unsigned char unmodeled_10[0x5F8 - 0x10];
 } SkillMenuList;
 
-typedef struct SkillSetWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    const char *title;
-    unsigned char state;
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void (*select)(struct SkillSetWindow *, struct SkillMenuList *); /* +0x14 */
-    void *selectArg;                    /* +0x18 */
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-} SkillSetWindow;
-
-struct SkillSetWindow;
-
-struct SkillMenuList;
-
-typedef struct SkillSetMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;                 /* +0x01 */
-    unsigned char unmodeled_02[2];
-    short x;                            /* +0x04 */
-    short y;                            /* +0x06 */
-    int color;                          /* +0x08 */
-    unsigned char unmodeled_0c[0x0C];
-    const char *text;                   /* +0x18 */
-    unsigned char unmodeled_1c[0x44 - 0x1C];
-} SkillSetMessage;
-
 typedef struct SkillUnitOrg {
     unsigned char unmodeled_00[0xA6];
     short setSkill[3];                  /* +0xA6 */
 } SkillUnitOrg;
-
-typedef struct SkillMenuText {
-    char *text;                     /* +0x00 */
-    char *description;              /* +0x04 */
-} SkillMenuText;
 
 typedef struct SkillRecord {
     unsigned char unmodeled_00[0x0E];
@@ -241,71 +199,21 @@ typedef struct SkillRecord {
     int pointLimit;                /* +0x14 */
 } SkillRecord;
 
-typedef struct SkillStatusHeader {
-    unsigned char state;                /* +0x00 */
-    unsigned char cursorOn;             /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    unsigned char moveVert;             /* +0x04: slide y before x */
-    unsigned char flags;                /* +0x05: bit 0 = the slide finished */
-    unsigned char subState;             /* +0x06 */
-    signed char lastCursor;             /* +0x07 */
-    int color;                          /* +0x08 */
-} SkillStatusHeader;
-
-typedef struct SkillStatusRecord {
-    unsigned char chrNo;                /* +0x00 */
-    unsigned char fullStatus;           /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short offsetX;                      /* +0x04 */
-    short offsetY;                      /* +0x06 */
-    unsigned char unmodeled_08[0x834 - 0x08];
-} SkillStatusRecord;
-
-typedef struct SkillStatusWindow {
-    short x;                            /* +0x00 */
-    short y;                            /* +0x02 */
-    int color;                          /* +0x04 */
-    short width;                        /* +0x08 */
-    short height;                       /* +0x0A */
-    char *title;                        /* +0x0C */
-    signed char state;                  /* +0x10: 1 while opening, 3 when open */
-    unsigned char visible;              /* +0x11 */
-    unsigned char unmodeled_12[0x14 - 0x12];
-    void (*disp)(struct SkillStatusRecord *record);  /* +0x14 */
-    struct SkillStatusRecord *dispWork;        /* +0x18 */
-    unsigned char unmodeled_1c[0x188 - 0x1C];
-} SkillStatusWindow;
-
-typedef struct SkillStatusCursor {
-    signed char state;                  /* +0x00 */
-    unsigned char unmodeled_01[0x04 - 0x01];
-    short x;                            /* +0x04 */
-    short y;                            /* +0x06 */
-    int work;                           /* +0x08 */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-} SkillStatusCursor;
-
-typedef struct SkillStatusWindowEntry {
-    SkillStatusHeader header;           /* +0x0000 */
-    SkillStatusWindow window;           /* +0x000C */
-} SkillStatusWindowEntry;
-
-typedef struct SkillStatusRecordEntry {
-    SkillStatusHeader header;           /* +0x0000 */
-    SkillStatusRecord work;             /* +0x000C */
-} SkillStatusRecordEntry;
-
-typedef struct SkillStatusCursorEntry {
-    SkillStatusHeader header;           /* +0x0000 */
-    SkillStatusCursor cursor;           /* +0x000C */
-    unsigned char unmodeled_1c[0x24 - 0x1C];
-} SkillStatusCursorEntry;
-
+/* The party status panels of the skill menu: one WindowDX per member whose
+ * close callback MenuStatusDisp draws the member's MenuStatusPanel, plus the
+ * selection cursor (SKILL_STATUS_SIZE = 0x4EF4). */
 typedef struct MenuSkillStatusWork {
-    SkillStatusWindowEntry window[8];   /* +0x0000 */
-    SkillStatusRecordEntry disp[8];     /* +0x0CA0 */
-    SkillStatusCursorEntry cursor[2];   /* +0x4EA0 */
-    SkillStatusHeader endHeader;        /* +0x4EE8 */
+    unsigned char state;                /* +0x0000 */
+    unsigned char cursorOn;             /* +0x0001 */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    unsigned char moveVert;             /* +0x0004: slide y before x */
+    unsigned char flags;                /* +0x0005: bit 0 = the slide finished */
+    unsigned char subState;             /* +0x0006 */
+    signed char lastCursor;             /* +0x0007 */
+    int color;                          /* +0x0008 */
+    WindowDX window[8];                 /* +0x000C */
+    MenuStatusPanel panel[8];           /* +0x0CAC */
+    ECursolMainData cursor[2];          /* +0x4EAC */
 } MenuSkillStatusWork;
 
 typedef struct MenuSkillMenuWork {
@@ -313,7 +221,7 @@ typedef struct MenuSkillMenuWork {
     unsigned char unmodeled_01[0x02];
     unsigned char subState;             /* +0x003 */
     int color;                          /* +0x004 */
-    SkillSetWindow window[2];           /* +0x008 */
+    WindowDX window[2];                 /* +0x008 */
     SkillMenuList list[2];              /* +0x330 */
 } MenuSkillMenuWork;
 
@@ -345,8 +253,8 @@ typedef struct MenuSkillSetListWork {
     unsigned char state;                /* +0x00 */
     unsigned char unmodeled_01[3];
     int color;                          /* +0x04 */
-    SkillSetWindow window;              /* +0x08 */
-    SkillSetMessage message[4];         /* +0x19C */
+    WindowDX window;                    /* +0x08 */
+    EMessageParam message[4];           /* +0x19C */
 } MenuSkillSetListWork;
 
 typedef struct SkillCategorySprite {
@@ -385,77 +293,15 @@ typedef struct SkillCategoryEdgeStep {
     signed char side[2];
 } SkillCategoryEdgeStep;
 
-typedef struct SkillListRow {
-    unsigned char unmodeled_00[0x04];
-    int value;                     /* +0x04 */
-    unsigned char locked;          /* +0x08 */
-    signed char level;             /* +0x09 */
-    unsigned char unmodeled_0a[0x0C - 0x0A];
-} SkillListRow;
-
-typedef struct SkillSPWindow {
-    unsigned char state;
-    unsigned char rowCount;        /* +0x01 */
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    short width;                   /* +0x0C */
-    short height;                  /* +0x0E */
-    const char *title;             /* +0x10 */
-    unsigned char columns;         /* +0x14 */
-    unsigned char rows;            /* +0x15 */
-    unsigned char unmodeled_16[0x1C - 0x16];
-    struct SkillListRow *items;           /* +0x1C */
-    unsigned char unmodeled_20[4];
-    signed char firstRow;
-    unsigned char unmodeled_25;
-    unsigned char cursorStyle;     /* +0x26 */
-    unsigned char unmodeled_27[3];
-    short itemCount;
-} SkillSPWindow;
-
-typedef struct SkillListNumber {
-    short x;
-    short y;
-    int color;
-    signed char red;
-    signed char green;
-    signed char blue;
-    unsigned char unmodeled_0b[3];
-    unsigned char style;
-    unsigned char digits;
-    unsigned char unmodeled_10[4];
-    int value;
-    unsigned char unmodeled_18[0x90 - 0x18];
-} SkillListNumber;
-
 /* Two ribbons, tag labels and number displays form the extraction screen. */
-typedef struct SkillExRibbon {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x70 - 0x0c];
-} SkillExRibbon;
-
-typedef struct SkillExTag {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x20 - 0x0c];
-} SkillExTag;
-
 typedef struct MenuSkillExWork {
     unsigned char state;
     unsigned char unmodeled_01[3];
     int color;
-    SkillExRibbon ribbon[2];
-    SkillExTag tag[2];
-    SkillListNumber number[2];
-    SkillSetMessage message;
+    ERibbonMainData ribbon[2];
+    ETagFontMainData tag[2];
+    ENumberMainData number[2];
+    EMessageParam message;
 } MenuSkillExWork;
 
 typedef struct MenuSkillListWork {
@@ -465,24 +311,13 @@ typedef struct MenuSkillListWork {
     unsigned char displayMode;
     int color;
     unsigned char unmodeled_08[4];
-    SkillSPWindow window;          /* +0x0C */
-    unsigned char unmodeled_38[0x5cec - 0x38];
+    WindowSPCursor window;          /* +0x0C */
+    unsigned char unmodeled_1744[0x5cec - 0x1744];
     SkillL1R1Sprite equipped[3];
     unsigned char unmodeled_5d64[0x5e2c - 0x5d64];
-    SkillListNumber levelNumber[8];
+    ENumberMainData levelNumber[8];
 } MenuSkillListWork;
 
-typedef struct MenuSkillAttackSlot {
-    unsigned short party_id;
-    signed char attack_position;
-} MenuSkillAttackSlot;
-
-typedef struct MenuSkillPartyData {
-    unsigned char unmodeled_00[0x30];
-    MenuSkillAttackSlot attack_slots[3]; /* +0x30 */
-} MenuSkillPartyData;
-
-typedef struct SkillScreenState { unsigned char state; } SkillScreenState;
 
 typedef struct MenuStatusPanelWindow MenuStatusPanelWindow;
 
@@ -496,33 +331,17 @@ typedef struct MenuSkillInfoText {
     unsigned char unmodeled_10[0x1B0 - 0x10];
 } MenuSkillInfoText;
 
-typedef struct MenuSkillInfoWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0C[4];
-    unsigned char state;
-    unsigned char unmodeled_11[3];
-    int (*callback)(MenuStatusPanelWindow *, MenuTopInfoPanel *);
-    void *callbackArg;
-    unsigned char unmodeled_1C[0x198 - 0x1C];
-} MenuSkillInfoWindow;
-
 typedef struct MenuSkillInfoWork {
     unsigned char state;
     unsigned char opened;
     signed char selected;
     unsigned char reasonShown;
     int color;
-    MenuSkillInfoWindow window;
-    MenuSkillInfoText info;
+    WindowDX window;                /* +0x008 */
+    unsigned char unmodeled_19c[4];
+    MenuSkillInfoText info;         /* +0x1A0 */
     char message[128];
 } MenuSkillInfoWork;
-
-/* Populated with the loaded skill table by MenuSkill (INCLUDE_ASM below). */
-extern unsigned char *SkillDataBuf;
 
 extern SkillPasWork *MenuSkillPas;
 extern const char *msg_0_0036DD58[];
@@ -546,7 +365,7 @@ extern const SkillCategoryEdgeStep skillCategoryEdgeStep[];
 extern unsigned char MenuKeepSelect[0x64];
 
 /* Three pointers in the original .data; the final message has mutable color bytes. */
-extern char *msg00_3_0036DD78[];
+extern const char *msg00_3_0036DD78[];
 
 extern const char skillEmptyText[];
 extern MenuSkillListWork *MenuSkillList;
@@ -554,52 +373,27 @@ extern const char skillSetText[];
 extern const char skillListHeaderText[];
 extern const char skillDataPath[];
 extern unsigned char *MainMenuWorkEnd;
-extern SkillScreenState *MenuSkillInfo;
-extern SkillScreenState *MenuSkillEx;
+extern MenuSkillInfoWork *MenuSkillInfo;
+extern MenuSkillExWork *MenuSkillEx;
 extern short MenuSkillParty[8];
 
-int SkillCharSkillLvGet(int character_id);
+unsigned int SkillCharSkillLvGet(int character_id);
 int SkillCharPointPlus(int character_id, int point_delta);
-extern void *dataPlChaGet(unsigned int character_id);
+extern PlayerCharacter *dataPlChaGet(unsigned int character_id);
 unsigned short SkillNextLvGet(int level);
-extern void xglSoundEffectNormalID(int sound_id, int variant);
-int MenuPasLengthGet(const char *text);
-void MenuPasWindow(void);
-void endPrintExtFunc(int color, int operation, void *box);
-void MoveSlide(short *current, short *target, float rate);
 void eSpriteSet(void *sprite, short spriteId);
 void eSpriteMain(void *sprite);
-void WindowDXSet(void *window);
-void WindowDXMain(void *window);
-void eMessageSet(void *message, const char *text);
-void eMessageMain(void *message);
 extern SkillUnitOrg *func_A191C0(int characterNo);
-SkillMenuText *MenuTextGet(int textId);
 extern SkillRecord *func_A1A548(int id);
 extern int func_A19698(int characterNo, unsigned short skillId);
-void MenuStatusDisp(SkillStatusRecord *record);
 char *MenuTagTextGet(int kind);
-void eCursolSet(void *cursor, int width);
-void eCursolMain(void *cursor);
-void MenuSelectWindow(SkillSetWindow *window, SkillMenuList *list);
-float xglCos(float radians);
-void eRibbonSet(void *ribbon, int mode);
-void eRibbonMain(void *ribbon);
-void eTagFontSet(void *tag, const char *text);
-void eTagFontMain(void *tag);
-void WindowSPSet(SkillSPWindow *window);
-void WindowSPMain(SkillSPWindow *window);
-void eNumberSet(void *number, int value);
-void eNumberMain(void *number);
+void WindowSPSet(WindowSPCursor *window);
+void WindowSPMain(WindowSPCursor *window);
 int *MenuSortAddrGet(int listIndex);
-SkillListRow *MenuListGet(int listIndex);
-SkillListRow *MenuListMake(int listIndex, int mode);
+MenuListEntry *MenuListGet(int listIndex);
+MenuListEntry *MenuListMake(int listIndex, int mode);
 int MenuSortCheck(int listIndex);
-void MenuSortSet(int listIndex, int type, int order);
 int MenuSkillEquipCheck(int characterNo, int skillId);
-void WindowSPItemChange(SkillSPWindow *window);
-void WindowSPSetSelect(SkillSPWindow *window, unsigned char *savedSelection);
-int WindowSPSelect(SkillSPWindow *window, int input);
 static int MenuSkillListChange00(void);
 static int MenuSkillListChange01(void);
 void MenuSkillPasMain(void);
@@ -611,26 +405,13 @@ void MenuSkillL1R1Main(void);
 void MenuSkillSetListMain(void);
 void MenuSkillCategoryMain(void);
 void MenuSkillListMain(void);
-int PartyFriendLockCheck(int id, int flag);
 int PartyAttackerCheck(int id);
-int MenuMaryIdChange(int id);
-int MenuMainCharCheck(int character_id);
-void MenuKeepSelectReset(void);
 int MenuCursorKeepCheck(void);
-signed char MenuSelectMove(int cursor, int count, int wrap);
 int MenuSortGet(int list_index, int entry_index);
 void MenuSkillEquip(int character_id, int accessory, int slot);
-void ChangeTopLevel(int level);
-void WindowSPKeepSelect(SkillSPWindow *window, unsigned char *keep);
-void WindowSPKeepSelectCheck(unsigned char *keep);
-void WindowSPSelectJump(SkillSPWindow *window, int row);
-int xglCdReadFile(const char *name, void *buffer, int offset, int mode);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
+void WindowSPSelectJump(WindowSPCursor *window, int row);
 void func_A19600(int character_id, int skill_id);
-extern int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel);
 char *MenuCharNameGet(int characterNo);
-void eMessageCpy(char *destination, const char *source);
-void eMessageCat(const char *source);
-SkillMenuText *func_A2C648(int skillId);
+MenuTextEntry *func_A2C648(int skillId);
 
 #endif /* SRC_MAIN_MENU_SKILL_H */

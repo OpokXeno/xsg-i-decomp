@@ -1,93 +1,9 @@
 #include "common.h"
 #include "shared.h"
+#include "main/e_number_main.h"
+#include "main/end_print.h"
 
 #define E_NUMBER_STORE_STRING(destination, string) (*(destination) = (string))
-
-/*
- * Partial view of the object eNumberSet initialises. eNumberMain (still
- * INCLUDE_ASM in this TU) copies the four bytes at +0x08..+0x0b verbatim into
- * the same +0x20..+0x23 render colour slot that eSpriteMain fills from its
- * own colour quad (and again into +0x74..+0x77), so they are a colour quad
- * set to 0x80 per channel, not digits; the number itself is the word at
- * +0x14 that eNumberMain formats in base 10. It runs only when the low
- * nibble of mode is 3 and reads flag[0] to pick a display format; the other
- * unmodeled bytes are untouched by eNumberSet.
- */
-typedef struct ENumber {
-    u8 unmodeled_000[8];    /* +0x00..0x07 */
-    signed char color[4];   /* +0x08..0x0b */
-    signed char mode;       /* +0x0c */
-    u8 unmodeled_00d[3];    /* +0x0d..0x0f */
-    signed char flag[4];    /* +0x10..0x13 */
-} ENumber;
-
-/* The first 16 bytes are the fields initialized by eSpriteSet. The following
- * coordinates, work word, and color quad form the descriptor submitted by
- * eSpriteMain. */
-typedef struct ESpriteMainData {
-    signed char state;
-    u8 unmodeled_001[3];
-    short x;
-    short y;
-    int work;
-    signed char color[4];
-    u8 unmodeled_010[4];
-    short renderX;
-    short renderY;
-    int renderWork;
-    u8 unmodeled_01c[4];
-    signed char renderColor[4];
-} ESpriteMainData;
-
-/*
- * Partial view of the object eSpriteSet initialises. eSpriteMain copies x,
- * y and work verbatim into its own render fields, and copies mode together
- * with the three following bytes as one contiguous quad into a render
- * buffer, so they are modelled here as one 4-byte color quad rather than a
- * scalar mode plus three unrelated bytes; eTagFontMain evidences the same
- * grouping at the same offsets.
- */
-typedef struct ESprite {
-    signed char state;      /* +0x00 */
-    u8 unmodeled_001[3];    /* +0x01..0x03 */
-    short x;                 /* +0x04 */
-    short y;                 /* +0x06 */
-    int work;                /* +0x08 */
-    signed char color[4];    /* +0x0c..0x0f */
-    u8 unmodeled_010[0x14]; /* +0x10..0x23 */
-    short spriteId;          /* +0x24 */
-} ESprite;
-
-/*
- * Partial view of the object eRibbonModeChange writes, limited to the mode
- * field it evidences.
- */
-typedef struct ERibbonEntry {
-    u8 unmodeled_000[0xc]; /* +0x00..0x0b */
-    signed char mode;      /* +0x0c */
-} ERibbonEntry;
-
-typedef struct ERibbonPoint {
-    short x;
-    short y;
-    int work;
-    signed char red;
-    signed char green;
-    signed char blue;
-    signed char alpha;
-} ERibbonPoint;
-
-typedef struct ERibbonSetData {
-    short x;
-    short y;
-    int work;
-    u8 unmodeled_008[4];
-    signed char mode;
-    unsigned char progress;
-    unsigned char visible;
-    unsigned char style;
-    ERibbonPoint points[6];
-} ERibbonSetData;
 
 typedef struct ELinePoint {
     int x;
@@ -119,118 +35,9 @@ typedef struct ELineSetData {
     ELinePoint points[5];
 } ELineSetData;
 
-/* The source color quad is copied into the descriptor with its two middle
- * channels exchanged. Opcode 7 reads the descriptor's trailing text pointer. */
-typedef struct ETagFontMainData {
-    u8 unmodeled_000[4];
-    short x;
-    short y;
-    int work;
-    signed char color[4];
-    struct {
-        short x;
-        short y;
-        int work;
-        signed char color[4];
-        const char *text;
-    } render;
-} ETagFontMainData;
-
-/*
- * Partial view of the object eTagFontSet initialises. eTagFontMain copies
- * the same 4-byte color quad at +0xc..+0xf into its own render buffer that
- * eSpriteMain copies from its object (same offsets, same grouping).
- */
-typedef struct ETagFont {
-    signed char state;      /* +0x00 */
-    signed char subState;   /* +0x01 */
-    u8 unmodeled_002[10];   /* +0x02..0x0b */
-    signed char color[4];    /* +0x0c..0x0f */
-    u8 unmodeled_010[0xc];  /* +0x10..0x1b */
-    const char *text;        /* +0x1c */
-} ETagFont;
-
-typedef struct ERibbonRenderPoint {
-    short x;
-    short y;
-    int work;
-    u8 unmodeled_008[4];
-} ERibbonRenderPoint;
-
-typedef struct ERibbonMainData {
-    short x;
-    short y;
-    int work;
-    short width;
-    short height;
-    signed char mode;
-    unsigned char progress;
-    unsigned char visible;
-    unsigned char style;
-    ERibbonRenderPoint points[6];
-    u8 unmodeled_058[4];
-    int renderCount;
-} ERibbonMainData;
-
-/* Print opcode 10 takes a number descriptor, opcode 2 takes a sprite
- * descriptor, and opcode 7 takes a text descriptor in the same render slots.
- * The format byte selects the active descriptor representation. */
-typedef struct ENumberSpriteDescriptor {
-    short x, y;
-    int work;
-    short width, height;
-    unsigned char color[4];
-    short spriteId;
-    short unmodeled_012;
-} ENumberSpriteDescriptor;
-
-typedef struct ENumberRenderDescriptor {
-    unsigned short x, y;
-    int work;
-    union {
-        struct {
-            signed char red, green, blue, alpha;
-            int value;
-        } number;
-        struct {
-            short width, height;
-            unsigned char color[4];
-        } sprite;
-        struct {
-            unsigned char color[4];
-            const char *text;
-        } text;
-    } payload;
-    /* Opcode 10: digit count and flags; opcode 2: sprite ID in argument1. */
-    unsigned short argument1, argument2;
-} ENumberRenderDescriptor;
-
 typedef ENumberRenderDescriptor ENumberRenderArray[4];
 
-typedef union ENumberValue {
-    int integer;
-    const char *text;
-} ENumberValue;
-
-typedef struct ENumberMainData {
-    unsigned short x, y;
-    int work;
-    unsigned char color[4];
-    unsigned char mode;
-    unsigned char unmodeled_00d;
-    unsigned char format;
-    unsigned char digits;
-    unsigned char colorMode[2];
-    unsigned char alignment;
-    unsigned char firstOnly;
-    ENumberValue value;
-    ENumberRenderArray render;
-    ENumberSpriteDescriptor separators[2];
-} ENumberMainData;
-
 extern void endSpriteSet(void *sprite, int mode);
-extern void endPrintExtFunc(int work, int mode, void *descriptor);
-
 void eNumberMain(ENumberMainData *number)
 {
     unsigned char byteValue[4];
@@ -238,14 +45,14 @@ void eNumberMain(ENumberMainData *number)
     unsigned char colors[2];
     int component;
     unsigned short componentX;
-    int byteX;
+    unsigned short byteX;
     int componentWork;
     unsigned char componentValue;
     int blankWork;
     int blankComponent;
     int blankValue;
     int part;
-    int partX;
+    unsigned short partX;
     int dash;
     int signX;
     int dashX;
@@ -269,18 +76,18 @@ void eNumberMain(ENumberMainData *number)
         number->render[0].x = number->x;
         number->render[0].y = number->y;
         number->render[0].work = number->work;
-        number->render[0].payload.number.red = number->color[0];
-        number->render[0].payload.number.green = number->color[1];
-        number->render[0].payload.number.blue = number->color[2];
-        number->render[0].payload.number.alpha = number->color[3];
-        number->render[0].payload.number.value = number->value.integer;
+        number->render[0].payload.number.red = number->color_r;
+        number->render[0].payload.number.green = number->color_g;
+        number->render[0].payload.number.blue = number->color_b;
+        number->render[0].payload.number.alpha = number->color_a;
+        number->render[0].payload.number.value = number->value;
         number->render[0].argument1 = number->digits;
         if (number->format == 1)
-            number->render[0].argument2 = number->colorMode[0] * 16 + 1;
+            number->render[0].argument2 = number->colorModeFirst * 16 + 1;
         else
-            number->render[0].argument2 = number->colorMode[0] * 16;
+            number->render[0].argument2 = number->colorModeFirst * 16;
         endPrintExtFunc(number->work, 10, &number->render[0]);
-        if (number->format == 14 && number->value.integer >= 0) {
+        if (number->format == 14 && number->value >= 0) {
             number->separators[0].spriteId = 0x506;
             endSpriteSet(&number->separators[0], 255);
             number->separators[0].x = number->x + number->digits * 11;
@@ -293,7 +100,7 @@ void eNumberMain(ENumberMainData *number)
         break;
     case 2:
         /* This format interprets the stored word as three byte components. */
-        __builtin_memcpy(byteValue, &number->value.integer, sizeof byteValue);
+        __builtin_memcpy(byteValue, &number->value, sizeof byteValue);
         for (component = 0; component < 3; component++) {
             byteX = number->x;
             componentWork = number->work;
@@ -304,10 +111,10 @@ void eNumberMain(ENumberMainData *number)
                 number->render[component].work = componentWork;
                 number->render[component].y = y;
             }
-            number->render[component].payload.number.red = number->color[0];
-            number->render[component].payload.number.green = number->color[1];
-            number->render[component].payload.number.blue = number->color[2];
-            number->render[component].payload.number.alpha = number->color[3];
+            number->render[component].payload.number.red = number->color_r;
+            number->render[component].payload.number.green = number->color_g;
+            number->render[component].payload.number.blue = number->color_b;
+            number->render[component].payload.number.alpha = number->color_a;
             componentValue = byteValue[3 - component];
             number->render[component].argument1 = 2;
             number->render[component].payload.number.value = componentValue;
@@ -321,10 +128,10 @@ void eNumberMain(ENumberMainData *number)
             number->separators[part].x = number->x + part * 32 + 22;
             number->separators[part].work = number->work;
             number->separators[part].y = number->y + 2;
-            number->separators[part].color[0] = number->color[0];
-            number->separators[part].color[1] = number->color[1];
-            number->separators[part].color[2] = number->color[2];
-            number->separators[part].color[3] = number->color[3];
+            number->separators[part].color[0] = number->color_r;
+            number->separators[part].color[1] = number->color_g;
+            number->separators[part].color[2] = number->color_b;
+            number->separators[part].color[3] = number->color_a;
             endPrintExtFunc(number->work, 2, separatorSprite);
         }
         break;
@@ -340,10 +147,10 @@ void eNumberMain(ENumberMainData *number)
                 number->render[blankComponent].y = y;
             }
             blankValue = -1;
-            number->render[blankComponent].payload.number.red = number->color[0];
-            number->render[blankComponent].payload.number.green = number->color[1];
-            number->render[blankComponent].payload.number.blue = number->color[2];
-            number->render[blankComponent].payload.number.alpha = number->color[3];
+            number->render[blankComponent].payload.number.red = number->color_r;
+            number->render[blankComponent].payload.number.green = number->color_g;
+            number->render[blankComponent].payload.number.blue = number->color_b;
+            number->render[blankComponent].payload.number.alpha = number->color_a;
             number->render[blankComponent].argument1 = 2;
             number->render[blankComponent].payload.number.value = blankValue;
             number->render[blankComponent].argument2 = 0;
@@ -356,18 +163,18 @@ void eNumberMain(ENumberMainData *number)
             number->separators[part].x = number->x + part * 32 + 22;
             number->separators[part].work = number->work;
             number->separators[part].y = number->y + 2;
-            number->separators[part].color[0] = number->color[0];
-            number->separators[part].color[1] = number->color[1];
-            number->separators[part].color[2] = number->color[2];
-            number->separators[part].color[3] = number->color[3];
+            number->separators[part].color[0] = number->color_r;
+            number->separators[part].color[1] = number->color_g;
+            number->separators[part].color[2] = number->color_b;
+            number->separators[part].color[3] = number->color_a;
             endPrintExtFunc(number->work, 2, separatorSprite);
         }
         break;
     case 3: case 4: case 5: case 6: case 12: case 13:
         /* Paired formats interpret the stored word as two signed values. */
-        __builtin_memcpy(pairValue, &number->value.integer, sizeof pairValue);
-        colors[0] = number->colorMode[0];
-        colors[1] = number->colorMode[1];
+        __builtin_memcpy(pairValue, &number->value, sizeof pairValue);
+        colors[0] = number->colorModeFirst;
+        colors[1] = number->colorModeSecond;
         switch (number->format - 3) {
         case 0: case 9: number->separators[0].spriteId = 0x702; break;
         case 1: case 10: number->separators[0].spriteId = 0x703; break;
@@ -401,10 +208,10 @@ void eNumberMain(ENumberMainData *number)
             number->render[part].y = number->y;
             switch (colors[part]) {
             case 0:
-                number->render[part].payload.number.red = number->color[0];
-                number->render[part].payload.number.green = number->color[1];
-                number->render[part].payload.number.blue = number->color[2];
-                number->render[part].payload.number.alpha = number->color[3];
+                number->render[part].payload.number.red = number->color_r;
+                number->render[part].payload.number.green = number->color_g;
+                number->render[part].payload.number.blue = number->color_b;
+                number->render[part].payload.number.alpha = number->color_a;
                 break;
             case 1:
                 number->render[part].payload.number.red = tintHigh;
@@ -429,30 +236,30 @@ void eNumberMain(ENumberMainData *number)
         }
         break;
     case 7: case 8:
-        signX = (short)number->x;
-        if (number->value.integer < 0)
+        signX = number->x;
+        if (number->value < 0)
             number->separators[0].spriteId = 0x706;
         else
             number->separators[0].spriteId = 0x705;
         endSpriteSet(&number->separators[0], 255);
         number->separators[0].x = signX;
         number->separators[0].y = number->y - number->format * 2 + 15;
-        number->separators[0].color[0] = number->color[0];
-        number->separators[0].color[1] = number->color[1];
-        number->separators[0].color[2] = number->color[2];
-        number->separators[0].color[3] = number->color[3];
+        number->separators[0].color[0] = number->color_r;
+        number->separators[0].color[1] = number->color_g;
+        number->separators[0].color[2] = number->color_b;
+        number->separators[0].color[3] = number->color_a;
         number->separators[0].work = number->work;
         endPrintExtFunc(number->work, 2, &number->separators[0]);
         signX += number->separators[0].width;
-        magnitude = number->value.integer;
+        magnitude = number->value;
         if (magnitude < 0)
             magnitude = -magnitude;
         number->render[0].x = signX;
         number->render[0].y = number->y;
-        number->render[0].payload.number.red = number->color[0];
-        number->render[0].payload.number.green = number->color[1];
-        number->render[0].payload.number.blue = number->color[2];
-        number->render[0].payload.number.alpha = number->color[3];
+        number->render[0].payload.number.red = number->color_r;
+        number->render[0].payload.number.green = number->color_g;
+        number->render[0].payload.number.blue = number->color_b;
+        number->render[0].payload.number.alpha = number->color_a;
         number->render[0].payload.number.value = magnitude;
         number->render[0].argument1 = number->digits;
         number->render[0].argument2 = number->format - 7;
@@ -460,14 +267,14 @@ void eNumberMain(ENumberMainData *number)
         endPrintExtFunc(number->work, 10, &number->render[0]);
         break;
     case 9:
-        dashX = (short)number->x;
+        dashX = number->x;
         sprite = &number->render[0];
         for (dash = 0; dash < number->digits; dash++, sprite++) {
             sprite->argument1 = 0x706;
             endSpriteSet(sprite, 255);
             sprite->x = dashX;
             sprite->work = number->work;
-            sprite->y = (short)number->y - 2;
+            sprite->y = number->y - 2;
             endPrintExtFunc(number->work, 2, sprite);
             dashX += sprite->payload.sprite.width;
         }
@@ -477,11 +284,11 @@ void eNumberMain(ENumberMainData *number)
         text->x = number->x;
         text->work = number->work;
         text->y = number->y;
-        text->payload.text.color[0] = number->color[0];
-        text->payload.text.color[1] = number->color[1];
-        text->payload.text.color[2] = number->color[2];
-        text->payload.text.color[3] = number->color[3];
-        E_NUMBER_STORE_STRING(&text->payload.text.text, number->value.text);
+        text->payload.text.color[0] = number->color_r;
+        text->payload.text.color[1] = number->color_g;
+        text->payload.text.color[2] = number->color_b;
+        text->payload.text.color[3] = number->color_a;
+        E_NUMBER_STORE_STRING(&text->payload.text.text, (const char *)number->value);
         endPrintExtFunc(number->work, 7, text);
         break;
     }
@@ -492,13 +299,11 @@ void eNumberNumberChange(void)
 }
 
 /* Callers pass a second argument, which this initializer does not read. */
-void eNumberSet(void *data, int unused)
+void eNumberSet(ENumberMainData *number, int unused)
 {
-    ENumber *number = data;
-
-    number->color[0] = number->color[1] = number->color[2] = number->color[3] = -128;
+    number->color_r = number->color_g = number->color_b = number->color_a = 128;
     number->mode = 3;
-    number->flag[0] = number->flag[1] = number->flag[2] = number->flag[3] = 0;
+    number->colorModeFirst = number->colorModeSecond = number->alignment = number->firstOnly = 0;
 }
 
 void eSpriteMain(ESpriteMainData *sprite)
@@ -531,7 +336,7 @@ void eRibbonMain(ERibbonMainData *ribbon)
 {
     int right;
 
-    switch ((unsigned char)ribbon->mode) {
+    switch (ribbon->mode) {
     case 0x20:
         ribbon->points[1].x = ribbon->points[0].x = ribbon->x;
         ribbon->points[2].y = ribbon->points[0].y = ribbon->y;
@@ -580,12 +385,12 @@ void eRibbonMain(ERibbonMainData *ribbon)
         endPrintExtFunc(ribbon->points[0].work, 3, &ribbon->points[0]);
 }
 
-void eRibbonModeChange(ERibbonEntry *entry, signed char mode)
+void eRibbonModeChange(ERibbonMainData *ribbon, signed char mode)
 {
-    entry->mode = mode;
+    ribbon->mode = mode;
 }
 
-void eRibbonSet(ERibbonSetData *ribbon, int style)
+void eRibbonSet(ERibbonMainData *ribbon, int style)
 {
     int point;
 
@@ -752,7 +557,7 @@ void eTagFontMain(ETagFontMainData *tag)
     }
 }
 
-void eTagFontSet(ETagFont *tag, const char *text)
+void eTagFontSet(ETagFontMainData *tag, const char *text)
 {
     tag->state = 0;
     tag->subState = 0;
@@ -760,7 +565,7 @@ void eTagFontSet(ETagFont *tag, const char *text)
     tag->color[1] = -128;
     tag->color[2] = -128;
     tag->color[0] = -128;
-    tag->text = text;
+    tag->render.text = text;
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */

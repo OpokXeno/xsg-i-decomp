@@ -1,70 +1,23 @@
 #include "common.h"
+#include "main/near_dir.h"
 #include "near_dir.h"
 #include "main/play.h"
 #include "main/xgl_studio.h"
+#include "main/Undulate.h"
+#include "main/act_1.h"
+#include "main/act_2.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_2.h"
 
 typedef struct {
     u32 active;
 } StudioCameraActivePrefix;
 
-typedef struct MoveSplineTrack {
-    void *spline;
-    int frames;
-    u8 unmodeled_08[0x10 - 0x08];
-    Vector4 start;
-    u8 unmodeled_20[0x2c - 0x20];
-    float step;
-} MoveSplineTrack;
-
-typedef struct MovingSequence {
-    u32 flags;
-    u32 state_flags;
-    u32 active_mask;
-    u32 cleared_on_init;
-    u32 unmodeled_10;
-    u32 cleared_on_init_run[4];
-    void *handler[4];
-    u32 frame_counter;
-    MoveSplineTrack move;
-    u8 unmodeled_68[0x238 - 0x68];
-    u32 idle_roll;
-    u8 unmodeled_23c[0x240 - 0x23c];
-    Vector4 anchor;
-} MovingSequence;
-
-typedef struct RotationTrack {
-    Actor *target;
-    u8 unmodeled_04[0x10 - 0x04];
-    int duration[3];
-    u32 face_flags;
-    float start[3];
-    u8 unmodeled_2c[0x30 - 0x2c];
-    float goal[3];
-    u8 unmodeled_3c[0x40 - 0x3c];
-    float step[3];
-} RotationTrack;
-
-/* The scale track of a sequence entry (+0x1b8): per-axis frame counts, then
- * the start, goal and per-frame step SEQ_scale walks the actor's scale
- * through. */
-typedef struct ScaleTrack {
-    u8 unmodeled_00[0x10];
-    int duration[3];
-    u8 unmodeled_1c[0x20 - 0x1c];
-    float start[3];
-    u8 unmodeled_2c[0x30 - 0x2c];
-    float goal[3];
-    u8 unmodeled_3c[0x40 - 0x3c];
-    float step[3];
-} ScaleTrack;
-
 /* MotionTrack is defined by this TU's owning near_dir.h. */
 /* Additional sequence-owned Actor slots. The canonical Actor describes the
  * common head; ACT_updateNPC and ACT_initSequence witness these later slots. */
 typedef struct NearActorSequenceFields {
-    u8 unmodeled_000[0x4c0];
-    void *java_object_ref;
-    u8 unmodeled_4c4[4];
+    u8 unmodeled_000[0x4c8];
     u32 undulation;
     u8 unmodeled_4cc[4];
     short undulation_attr_mask;
@@ -87,10 +40,6 @@ typedef struct PlayerPad {
     u16 stick_in_use;
 } PlayerPad;
 
-typedef struct CameraBasis {
-    u8 unmodeled_00[0x170];
-    Matrix4 matrix;
-} CameraBasis;
 
 /* The 64-entry array itself (see the Actor doc comment above); no accepted
  * function in this TU has needed the symbol until now. */
@@ -109,51 +58,19 @@ extern float piForDoubledWhole;
 
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 
-/* Defined below in this file; forward-declared for the two callers here. */
-extern void ACT_updateMotion(Actor *actor);
-
-/* Undulate.c (main); no header is published for it yet. */
-extern float UnduGet(float x, float z);
-
 /* play.c (main); no header is published for it yet. */
 extern void *PLAY_getCurrent(void);
 
 /* Defined below in this file. */
 extern void SEQ_motion(Actor *actor);
 
-/* Undulate.c (main); no header is published for it yet. */
-extern float UnduGet2(void *destination, float x, float z);
-
-/* include/main/xgl_2.h's own declaration: not included directly because it
- * (through include/shared.h) redefines struct Vector4, which this TU's own
- * near_dir.h already defines locally. */
-extern void xglMatrixStackUnit(void);
-
 /* Undulate.c (main); no header is published for it yet, and its own
  * UnduWork type is TU-local there, so the destination stays opaque here,
  * exactly as UnduGet2 above already does. */
 extern void UnduParamInit(void *undulation);
 
-/* Still original asm (0x003083b8, main); ACT_setHand's own call to it is a
- * genuine tail call (j, not jal), so its return value, if any, is never
- * observed here. */
-extern void ACT_setHumanHand(Actor *actor, int hand);
-
-/* nml_model_set.c (main); no header is published for it yet. */
-extern void nmlModelSetToumei(int enabled);
-
-extern void nmlModelSetZwrite(int enabled);
-extern void nmlModelSetStencil(int enabled);
-extern void nmlModelSetFilter(int mode, float filter_param_1, float filter_param_2);
-extern void nmlModelSetTransparency(float transparency);
-extern void nmlModelSetReflTransparency(float transparency);
 extern void ACT_updateSequence(Actor *actor);
 extern void ACT_updateNPC(Actor *actor);
-extern float nearDir(float from, float to);
-extern void ACT_setMotion(Actor *actor, unsigned int motion);
-
-extern unsigned short xglSRand(void);
-
 /* Still original asm elsewhere. */
 extern void SEQ_setMotion(Actor *actor);
 
@@ -166,10 +83,6 @@ extern float UnduCheck(const Vector4 *position, void *exclude, void *param);
 static StudioCamera *getCurrentCamera(void);
 
 extern void ACT_updateDefault(Actor *actor);
-extern Actor *ACT_create(int type, int id);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-extern void ACT_setMotion2(Actor *actor, unsigned int motion, unsigned int flags);
 extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *vector);
 
 ActSequenceEntry actSequence[64] = { 0 };
@@ -199,9 +112,9 @@ void SEQ_scaleSPL(Actor *actor)
 {
     /* Same walk as SEQ_rotateSPL below, over the scale track at +0x1b8. */
     u8 *actor_bytes = (u8 *)actor;
-    SequenceState *sequence =
-        &actSequence[actor_bytes[0x80]].state;
-    SplineTrack *track = (SplineTrack *)((u8 *)sequence + 0x1b8);
+    ActSequenceEntry *entry = &actSequence[actor_bytes[0x80]];
+    SequenceState *sequence = &entry->state;
+    SplineTrack *track = &entry->scale_channel.spline;
     void *spline = track->spline;
     float sample[3];
 
@@ -217,80 +130,80 @@ void SEQ_scaleSPL(Actor *actor)
     actor->scale.z = sample[2];
 
     track->frame++;
-    if (track->last_frame < (short)track->frame)
+    if (track->last_frame < track->frame)
         sequence->state_flags &= ~0xe0u;
 }
 
 void SEQ_scale(Actor *actor)
 {
-    MovingSequence *sequence = (MovingSequence *)&actSequence[actor->number];
-    ScaleTrack *track = (ScaleTrack *)((u8 *)sequence + 0x1b8);
+    ActSequenceEntry *sequence = &actSequence[actor->number];
+    ScaleTrack *track = &sequence->scale_channel.scale;
     float *start = track->start;
     float *goal = track->goal;
     float *step = track->step;
     Vector4 *scale = &actor->scale;
     float distance[3];
 
-    if ((sequence->flags & 0x20) == 0) {
-        if (sequence->state_flags & 0x20) {
+    if ((sequence->state.flags & 0x20) == 0) {
+        if (sequence->state.state_flags & 0x20) {
             start[0] = scale->x;
             if (track->duration[0] > 0)
                 step[0] = (goal[0] - start[0]) * (1.0f / track->duration[0]);
-            sequence->flags |= 0x20;
+            sequence->state.flags |= 0x20;
             sequence->frame_counter = 0;
         } else {
             step[0] = 0.0f;
-            sequence->flags |= 0x20;
+            sequence->state.flags |= 0x20;
         }
     }
-    if ((sequence->flags & 0x40) == 0) {
-        if (sequence->state_flags & 0x40) {
+    if ((sequence->state.flags & 0x40) == 0) {
+        if (sequence->state.state_flags & 0x40) {
             start[1] = scale->y;
             if (track->duration[1] > 0)
                 step[1] = (goal[1] - start[1]) * (1.0f / track->duration[1]);
-            sequence->flags |= 0x40;
+            sequence->state.flags |= 0x40;
             sequence->frame_counter = 0;
         } else {
             step[1] = 0.0f;
-            sequence->flags |= 0x40;
+            sequence->state.flags |= 0x40;
         }
     }
-    if ((sequence->flags & 0x80) == 0) {
-        if (sequence->state_flags & 0x80) {
+    if ((sequence->state.flags & 0x80) == 0) {
+        if (sequence->state.state_flags & 0x80) {
             start[2] = scale->z;
             if (track->duration[2] > 0)
                 step[2] = (goal[2] - start[2]) * (1.0f / track->duration[2]);
-            sequence->flags |= 0x80;
+            sequence->state.flags |= 0x80;
             sequence->frame_counter = 0;
         } else {
             step[2] = 0.0f;
-            sequence->flags |= 0x80;
+            sequence->state.flags |= 0x80;
         }
     }
 
-    if (sequence->state_flags & 0x20) {
+    if (sequence->state.state_flags & 0x20) {
         distance[0] = __builtin_fabsf(goal[0] - scale->x);
         if (distance[0] <= __builtin_fabsf(step[0])) {
             scale->x = goal[0];
-            sequence->state_flags &= ~0x20;
+            sequence->state.state_flags &= ~0x20;
         } else {
             scale->x += step[0];
         }
     }
-    if (sequence->state_flags & 0x40) {
+    if (sequence->state.state_flags & 0x40) {
         distance[1] = __builtin_fabsf(goal[1] - scale->y);
         if (distance[1] <= __builtin_fabsf(step[1])) {
             scale->y = goal[1];
-            sequence->state_flags &= ~0x40;
+            sequence->state.state_flags &= ~0x40;
         } else {
             scale->y += step[1];
         }
     }
-    if (sequence->state_flags & 0x80) {
+    if (sequence->state.state_flags & 0x80) {
         distance[2] = __builtin_fabsf(goal[2] - scale->z);
         if (distance[2] <= __builtin_fabsf(step[2])) {
             scale->z = goal[2];
-            sequence->state_flags &= ~0x80;
+            sequence->state.state_flags &= ~0x80;
         } else {
             scale->z += step[2];
         }
@@ -301,16 +214,16 @@ void SEQ_rotate(Actor *actor)
 {
     Vector4 *rotation = &actor->rotation;
     Vector4 *position = &actor->position;
-    MovingSequence *sequence = (MovingSequence *)&actSequence[actor->number];
-    RotationTrack *track = (RotationTrack *)((u8 *)sequence + 0xb8);
+    ActSequenceEntry *sequence = &actSequence[actor->number];
+    RotationTrack *track = &sequence->rotation_channel.rotation;
     float *start = track->start;
     float *goal = track->goal;
     float *step = track->step;
     Actor *target = track->target;
     float distance[3];
 
-    if ((sequence->flags & 0x2) == 0) {
-        if (sequence->state_flags & 0x2) {
+    if ((sequence->state.flags & 0x2) == 0) {
+        if (sequence->state.state_flags & 0x2) {
             start[0] = rotation->x;
             if (track->face_flags & 0x1)
                 goal[1] = xglAtan2(target->position.y - position->y, target->position.z - position->z);
@@ -319,15 +232,15 @@ void SEQ_rotate(Actor *actor)
 
                 step[0] = nearDir(start[0], goal[0]) * inverse;
             }
-            sequence->flags |= 0x2;
+            sequence->state.flags |= 0x2;
             sequence->frame_counter = 0;
         } else {
             step[0] = 0.0f;
-            sequence->flags |= 0x2;
+            sequence->state.flags |= 0x2;
         }
     }
-    if ((sequence->flags & 0x4) == 0) {
-        if (sequence->state_flags & 0x4) {
+    if ((sequence->state.flags & 0x4) == 0) {
+        if (sequence->state.state_flags & 0x4) {
             start[1] = rotation->y;
             if (track->face_flags & 0x2)
                 goal[1] = xglAtan2(target->position.x - position->x, target->position.z - position->z);
@@ -336,15 +249,15 @@ void SEQ_rotate(Actor *actor)
 
                 step[1] = nearDir(start[1], goal[1]) * inverse;
             }
-            sequence->flags |= 0x4;
+            sequence->state.flags |= 0x4;
             sequence->frame_counter = 0;
         } else {
             step[1] = 0.0f;
-            sequence->flags |= 0x4;
+            sequence->state.flags |= 0x4;
         }
     }
-    if ((sequence->flags & 0x8) == 0) {
-        if (sequence->state_flags & 0x8) {
+    if ((sequence->state.flags & 0x8) == 0) {
+        if (sequence->state.state_flags & 0x8) {
             start[2] = rotation->z;
             if (track->face_flags & 0x4)
                 goal[1] = xglAtan2(target->position.x - position->x, target->position.y - position->y);
@@ -353,49 +266,49 @@ void SEQ_rotate(Actor *actor)
 
                 step[2] = nearDir(start[2], goal[2]) * inverse;
             }
-            sequence->flags |= 0x8;
+            sequence->state.flags |= 0x8;
             sequence->frame_counter = 0;
         } else {
             step[2] = 0.0f;
-            sequence->flags |= 0x8;
+            sequence->state.flags |= 0x8;
         }
     }
 
-    if (sequence->state_flags & 0x2) {
+    if (sequence->state.state_flags & 0x2) {
         if (track->face_flags & 0x1)
             goal[1] = xglAtan2(target->position.y - position->y, target->position.z - position->z);
         distance[0] = __builtin_fabsf(nearDir(goal[0], rotation->x));
         if (distance[0] <= __builtin_fabsf(step[0])) {
-            sequence->state_flags &= ~0x2;
+            sequence->state.state_flags &= ~0x2;
             rotation->x = goal[0];
-            if ((sequence->state_flags & ~0x10) == 0)
-                sequence->state_flags = 0;
+            if ((sequence->state.state_flags & ~0x10) == 0)
+                sequence->state.state_flags = 0;
         } else {
             rotation->x += step[0];
         }
     }
-    if (sequence->state_flags & 0x4) {
+    if (sequence->state.state_flags & 0x4) {
         if (track->face_flags & 0x2)
             goal[1] = xglAtan2(target->position.x - position->x, target->position.z - position->z);
         distance[1] = __builtin_fabsf(nearDir(goal[1], rotation->y));
         if (distance[1] <= __builtin_fabsf(step[1])) {
-            sequence->state_flags &= ~0x4;
+            sequence->state.state_flags &= ~0x4;
             rotation->y = goal[1];
-            if ((sequence->state_flags & ~0x10) == 0)
-                sequence->state_flags = 0;
+            if ((sequence->state.state_flags & ~0x10) == 0)
+                sequence->state.state_flags = 0;
         } else {
             rotation->y += step[1];
         }
     }
-    if (sequence->state_flags & 0x8) {
+    if (sequence->state.state_flags & 0x8) {
         if (track->face_flags & 0x4)
             goal[1] = xglAtan2(target->position.x - position->x, target->position.y - position->y);
         distance[2] = __builtin_fabsf(nearDir(goal[2], rotation->z));
         if (distance[2] <= __builtin_fabsf(step[2])) {
-            sequence->state_flags &= ~0x8;
+            sequence->state.state_flags &= ~0x8;
             rotation->z = goal[2];
-            if ((sequence->state_flags & ~0x10) == 0)
-                sequence->state_flags = 0;
+            if ((sequence->state.state_flags & ~0x10) == 0)
+                sequence->state.state_flags = 0;
         } else {
             rotation->z += step[2];
         }
@@ -409,12 +322,12 @@ void SEQ_rotateSPL(Actor *actor)
      * as "ACT[%02x]"; it selects this actor's 0x260-byte actSequence entry.
      * It is past the recovered head of Actor, so it keeps the byte view. */
     u8 *actor_bytes = (u8 *)actor;
-    SequenceState *sequence =
-        &actSequence[actor_bytes[0x80]].state;
+    ActSequenceEntry *entry = &actSequence[actor_bytes[0x80]];
+    SequenceState *sequence = &entry->state;
     /* The sequence entry carries several spline tracks; +0xb8 is the rotation
      * track, as +0x38 is the movement track SEQ_moveSPL below walks and
      * Java_xeno_Chr_move fills in (0x002fd398..0x002fd3e4). */
-    SplineTrack *track = (SplineTrack *)((u8 *)sequence + 0xb8);
+    SplineTrack *track = &entry->rotation_channel.spline;
     void *spline = track->spline;
     float sample[3];
 
@@ -430,7 +343,7 @@ void SEQ_rotateSPL(Actor *actor)
     actor->rotation.z = sample[2] / 180.0f * 3.1415927f;
 
     track->frame++;
-    if (track->last_frame < (short)track->frame)
+    if (track->last_frame < track->frame)
         sequence->state_flags &= ~0xeu;
 }
 
@@ -440,9 +353,9 @@ void SEQ_moveSPL(Actor *actor)
      * track, the one Java_xeno_Chr_move fills in before it installs this
      * routine (0x002fd398..0x002fd3e4). */
     u8 *actor_bytes = (u8 *)actor;
-    SequenceState *sequence =
-        &actSequence[actor_bytes[0x80]].state;
-    SplineTrack *track = (SplineTrack *)((u8 *)sequence + 0x38);
+    ActSequenceEntry *entry = &actSequence[actor_bytes[0x80]];
+    SequenceState *sequence = &entry->state;
+    SplineTrack *track = &entry->move_channel.spline;
     void *spline = track->spline;
     Vector4 sample;
 
@@ -496,7 +409,7 @@ void SEQ_moveSPL(Actor *actor)
     actor->position.z = sample.z;
 
     track->frame++;
-    if (track->last_frame < (short)track->frame)
+    if (track->last_frame < track->frame)
         sequence->state_flags &= ~0x1u;
 }
 
@@ -505,7 +418,7 @@ void SEQ_moveChr(Actor *actor)
     Vector4 *rotation = &actor->rotation;
     Vector4 *position = &actor->position;
     ActSequenceEntry *sequence = &actSequence[actor->number];
-    MoveTrack *track = &sequence->move;
+    MoveTrack *track = &sequence->move_channel.move;
     Vector4 *start = &track->start;
     float *step = &track->target.w;
     Vector4 *target = &track->target_actor->position;
@@ -546,7 +459,7 @@ void SEQ_moveChr(Actor *actor)
         position->x += xglSin(yaw) * *step;
         position->z += xglCos(yaw) * *step;
         if ((sequence->state.state_flags & 0x10) == 0) {
-            u32 *move_flags = &actor->move_flags;
+            u32 *move_flags = &actor->animation.slot.flags;
 
             if ((*move_flags & 0x8) == 0)
                 *move_flags |= 0x8;
@@ -563,8 +476,9 @@ void SEQ_moveChr(Actor *actor)
  * defined here once every user of its literals is recovered). */
 void SEQ_setMotion(Actor *actor)
 {
-    SequenceState *sequence = &actSequence[actor->number].state;
-    MotionTrack *track = (MotionTrack *)((u8 *)sequence + 0x138);
+    ActSequenceEntry *entry = &actSequence[actor->number];
+    SequenceState *sequence = &entry->state;
+    MotionTrack *track = &entry->motion;
     /* The four idle motions; the original names this function-scope table mtnIDLE.0. */
     static u32 mtnIDLE[4] = { 1, 6, 11, 9 };
     unsigned int variant;
@@ -582,7 +496,7 @@ void SEQ_setMotion(Actor *actor)
 void SEQ_setPositionRAND(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
-    MoveTrack *track = &sequence->move;
+    MoveTrack *track = &sequence->move_channel.move;
     Vector4 *target = &track->target;
 
     track->target.w = 1.0f / 24.0f;
@@ -601,8 +515,9 @@ void SEQ_setPositionRAND(Actor *actor)
 
 void SEQ_setRotY2Player(Actor *actor)
 {
-    SequenceState *sequence = &actSequence[actor->number].state;
-    RotationTrack *track = (RotationTrack *)((u8 *)sequence + 0xb8);
+    ActSequenceEntry *entry = &actSequence[actor->number];
+    SequenceState *sequence = &entry->state;
+    RotationTrack *track = &entry->rotation_channel.rotation;
 
     sequence->handler[1] = (void *)SEQ_rotate;
     sequence->state_flags |= 0x4;
@@ -617,7 +532,7 @@ void SEQ_moveNPC_XZ(Actor *actor)
     Vector4 *rotation = &actor->rotation;
     Vector4 *position = &actor->position;
     ActSequenceEntry *sequence = &actSequence[actor->number];
-    MoveTrack *track = &sequence->move;
+    MoveTrack *track = &sequence->move_channel.move;
     Vector4 *start = &track->start;
     Vector4 *target = &track->target;
     float *step = &track->target.w;
@@ -646,7 +561,7 @@ void SEQ_moveNPC_XZ(Actor *actor)
     if ((sequence->state.state_flags & 0x4) == 0)
         rotation->y += nearDir(rotation->y, yaw) * 0.1f;
     if ((sequence->state.state_flags & 0x10) == 0) {
-        u32 *move_flags = &actor->move_flags;
+        u32 *move_flags = &actor->animation.slot.flags;
 
         if ((*move_flags & 0x8) == 0)
             *move_flags |= 0x8;
@@ -675,7 +590,7 @@ void SEQ_moveXZ(Actor *actor)
     Vector4 *rotation = &actor->rotation;
     Vector4 *position = &actor->position;
     ActSequenceEntry *sequence = &actSequence[actor->number];
-    MoveTrack *track = &sequence->move;
+    MoveTrack *track = &sequence->move_channel.move;
     Vector4 *start = &track->start;
     Vector4 *target = &track->target;
     float *step = &track->target.w;
@@ -704,7 +619,7 @@ void SEQ_moveXZ(Actor *actor)
     if ((sequence->state.state_flags & 0x4) == 0)
         rotation->y += nearDir(rotation->y, yaw) * 0.1f;
     if ((sequence->state.state_flags & 0x10) == 0) {
-        u32 *move_flags = &actor->move_flags;
+        u32 *move_flags = &actor->animation.slot.flags;
 
         if ((*move_flags & 0x8) == 0)
             *move_flags |= 0x8;
@@ -726,19 +641,9 @@ void SEQ_moveXZ(Actor *actor)
 
 void SEQ_motion(Actor *actor)
 {
-    /* The actor's motion block at +0x6F0, addressed from one base. */
-    typedef struct ActorMotionState {
-        u32 move_flags;           /* +0x6F0 */
-        float time;               /* +0x6F4 */
-        float speed;              /* +0x6F8 */
-        float loop_start;         /* +0x6FC */
-        float loop_end;           /* +0x700 */
-        u8 unmodeled_704[0x714 - 0x704];
-        float blend;              /* +0x714 */
-    } ActorMotionState;
     ActSequenceEntry *sequence = &actSequence[actor->number];
     MotionTrack *track = &sequence->motion;
-    ActorMotionState *motion = (ActorMotionState *)&actor->move_flags;
+    ActorAnimationState *animation = &actor->animation;
     float seconds_per_frame;
     float blend;
     float speed;
@@ -746,29 +651,29 @@ void SEQ_motion(Actor *actor)
     if ((sequence->state.flags & 0x10) == 0) {
         seconds_per_frame = 0.033333335f;
         sequence->state.flags |= 0x10;
-        motion->move_flags |= 0x1;
+        animation->slot.flags |= 0x1;
         blend = track->blend * seconds_per_frame;
-        motion->move_flags &= ~0x1;
+        animation->slot.flags &= ~0x1;
         track->flags |= 0x20000000;
-        motion->blend = blend;
-        motion->speed = track->speed * seconds_per_frame;
+        animation->blendDuration = blend;
+        animation->slot.speed = track->speed * seconds_per_frame;
         ACT_setMotion2(actor, track->motion, track->flags);
         if (track->loop_start >= 0) {
             float loop_end = track->loop_end * seconds_per_frame;
             float loop_start = track->loop_start * seconds_per_frame;
 
-            motion->loop_start = loop_start;
-            motion->loop_end = loop_end;
-            if (motion->speed < 0.0f)
-                motion->time = loop_end;
+            animation->slot.reverseLimit = loop_start;
+            animation->slot.forwardLimit = loop_end;
+            if (animation->slot.speed < 0.0f)
+                animation->slot.frame = loop_end;
             else
-                motion->time = loop_start;
+                animation->slot.frame = loop_start;
         }
     }
-    speed = motion->speed;
+    speed = animation->slot.speed;
 
     if ((sequence->state.state_flags & ~0x10) == 0) {
-        if (motion->move_flags & 0x1000)
+        if (animation->slot.flags & 0x1000)
             sequence->state.state_flags = 0;
     }
     track->time += speed;
@@ -776,8 +681,8 @@ void SEQ_motion(Actor *actor)
 
 void ACT_updateSequence(Actor *actor)
 {
-    MovingSequence *sequence = (MovingSequence *)&actSequence[actor->number];
-    void **handler = sequence->handler;
+    ActSequenceEntry *sequence = &actSequence[actor->number];
+    void **handler = sequence->state.handler;
     int remaining = 3;
 
     do {
@@ -787,24 +692,24 @@ void ACT_updateSequence(Actor *actor)
             ((void (*)(Actor *))address)(actor);
     } while (--remaining >= 0);
 
-    if (sequence->flags & 0x100) {
-        unsigned int state = sequence->state_flags;
+    if (sequence->state.flags & 0x100) {
+        unsigned int state = sequence->state.state_flags;
 
         if ((state & 0x1) == 0)
-            sequence->handler[0] = 0;
+            sequence->state.handler[0] = 0;
         if ((state & 0xe) == 0)
-            sequence->handler[1] = 0;
+            sequence->state.handler[1] = 0;
         if ((state & 0x10) == 0)
-            sequence->handler[2] = 0;
-        if ((state & sequence->active_mask) == 0)
+            sequence->state.handler[2] = 0;
+        if ((state & sequence->state.channel_mask) == 0)
             actor->flags &= ~0x2;
-    } else if (sequence->state_flags == 0) {
-        sequence->handler[3] = 0;
+    } else if (sequence->state.state_flags == 0) {
+        sequence->state.handler[3] = 0;
         actor->flags &= ~0x2;
-        sequence->handler[0] = 0;
-        sequence->handler[1] = 0;
-        sequence->handler[2] = 0;
-        sequence->flags = 0;
+        sequence->state.handler[0] = 0;
+        sequence->state.handler[1] = 0;
+        sequence->state.handler[2] = 0;
+        sequence->state.flags = 0;
     }
 
     if (actor->flags & 0x40) {
@@ -818,7 +723,7 @@ void ACT_updateSequence(Actor *actor)
 
 void ACT_updateNPC(Actor *actor)
 {
-    MovingSequence *sequence = (MovingSequence *)&actSequence[actor->number];
+    ActSequenceEntry *sequence = &actSequence[actor->number];
     int remaining;
     Vector4 moved;
     float value;
@@ -831,25 +736,25 @@ void ACT_updateNPC(Actor *actor)
     moved.z = actor->position.z;
 
     for (remaining = 0; remaining < 4; remaining++) {
-        unsigned int address = (unsigned int)sequence->handler[remaining];
+        unsigned int address = (unsigned int)sequence->state.handler[remaining];
 
         if (address >= 0x1f0000 && address < 0x2000000 && (address & 0x3) == 0)
             ((void (*)(Actor *))address)(actor);
     }
 
-    if (sequence->state_flags == 0) {
-        sequence->handler[0] = 0;
-        sequence->handler[1] = 0;
+    if (sequence->state.state_flags == 0) {
+        sequence->state.handler[0] = 0;
+        sequence->state.handler[1] = 0;
         actor->flags &= ~0x2;
-        sequence->handler[2] = 0;
-        sequence->flags = 0;
-        sequence->handler[3] = 0;
+        sequence->state.handler[2] = 0;
+        sequence->state.flags = 0;
+        sequence->state.handler[3] = 0;
         if (sequence->idle_roll == 0) {
-            sequence->handler[2] = (void *)SEQ_motion;
+            sequence->state.handler[2] = (void *)SEQ_motion;
             SEQ_setMotion(actor);
         } else {
             SEQ_setPositionRAND(actor);
-            sequence->handler[0] = (void *)SEQ_moveNPC_XZ;
+            sequence->state.handler[0] = (void *)SEQ_moveNPC_XZ;
         }
         sequence->idle_roll = xglSRand() & 0x3;
     }
@@ -877,8 +782,8 @@ void ACT_updateNPC(Actor *actor)
         xglVectorLength(&expected, &moved);
         xglVectorLength(&value, &actor->position);
         if (expected - value != 0.0f) {
-            if (sequence->state_flags & 0x1)
-                sequence->state_flags &= ~0x1;
+            if (sequence->state.state_flags & 0x1)
+                sequence->state.state_flags &= ~0x1;
         }
     }
     ACT_updateMotion(actor);
@@ -913,7 +818,7 @@ void ACT_updatePlayer(Actor *actor)
             position->z = 0.0f;
         }
         if (pad->pressed & 0x4)
-            actor->cleared_on_scene_init = ((u16)actor->cleared_on_scene_init + 1) & 0x1;
+            actor->state84 = (actor->state84 + 1) & 0x1;
     }
     if (pad->pressed & 0x8)
         position->y += 0.5f;
@@ -972,7 +877,7 @@ void ACT_updatePlayer(Actor *actor)
             "lq $2, 48(%1)\n"
             "sq $2, 48(%0)\n"
             :
-            : "r"(&matrix), "r"(&((CameraBasis *)camera)->matrix)
+            : "r"(&matrix), "r"(&camera->cameraToWorldMatrix)
             : "$2", "memory");
         matrix[3][0] = 0.0f;
         matrix[3][1] = 0.0f;
@@ -1002,7 +907,7 @@ void ACT_updatePlayer(Actor *actor)
 
     if (__builtin_fabsf(actor->rotation.y * 0.31830987f) >= 2.0f)
         actor->rotation.y -= (int)(actor->rotation.y * 0.31830987f) * 3.1415927f;
-    if (actor->cleared_on_scene_init == 0)
+    if (actor->state84 == 0)
         actor->position.y = UnduGet2(&actor->undulation, actor->position.x, actor->position.z);
     ACT_updateMotion(actor);
 }
@@ -1051,17 +956,17 @@ void ACT_initSequence(void)
     for (i = 0; i < 64; i++) {
         NearActorSequenceFields *sequence_fields = (void *)entry;
 
-        entry->java_object_ref = 0;
+        entry->java_object = 0;
         entry->flags = 0x20;
         entry->signal = 0;
-        entry->cleared_on_create_half = 0;
+        entry->frame_counter = 0;
         entry->update = ACT_updateDefault;
         entry->draw = 0;
         sequence_fields->cleared_on_init_words[1] = 0;
         sequence_fields->cleared_on_init_words[0] = 0;
         UnduParamInit(&entry->undulation);
         entry->shadow_kind = 1;
-        entry->shadow_size = 0x50;
+        entry->shadowSize = 0x50;
         /* ACT_initSequence's original array stride is 0xa70. Actor is a
          * partial shared prefix and its C sizeof does not express that stride. */
         entry = (Actor *)((u8 *)entry + ACTOR_RECORD_STRIDE);
@@ -1077,11 +982,11 @@ void ACT_initVMObject(Actor *entry)
         for (i = 0; i < 64; i++) {
             entry->flags = 0x20;
             entry->shadow_kind = 1;
-            entry->shadow_size = 0x50;
-            entry->java_object_ref = 0;
+            entry->shadowSize = 0x50;
+            entry->java_object = 0;
         }
     } else {
-        entry->java_object_ref = 0;
+        entry->java_object = 0;
     }
 }
 
@@ -1094,15 +999,15 @@ Actor *ACT_createChr(int type, int id)
 
         actor->shadow_kind = 1;
         actor->signal = 0;
-        actor->java_object_ref = 0;
+        actor->java_object = 0;
         actor->flags = 0x20;
         actor->update = ACT_updateSequence;
-        actor->cleared_on_create_half = 0;
+        actor->frame_counter = 0;
         actor->scale.x = 1.0f;
         actor->scale.y = 1.0f;
         actor->scale.z = 1.0f;
         actor->scale.w = 1.0f;
-        actor->shadow_size = 0x50;
+        actor->shadowSize = 0x50;
         sequence->flags = 0;
         sequence->state_flags = 0;
         sequence->cleared_on_init = 0;
@@ -1128,8 +1033,8 @@ Actor *ACT_createNPC(int type, int id)
         UnduParamInit(&actor->undulation);
         actor->update = ACT_updateNPC;
         actor->signal = 0;
-        actor->cleared_on_create_half = 0;
-        actor->java_object_ref = 0;
+        actor->frame_counter = 0;
+        actor->java_object = 0;
         sequence = &actSequence[actor->number].state;
         sequence->flags = 0;
         sequence->state_flags = 0;
@@ -1161,7 +1066,7 @@ static StudioCamera *getCurrentCamera(void)
 
     for (camera_index = 0; camera_index < 8; camera_index++) {
         xglStudioGetCamera(&camera, camera_index);
-        if (((StudioCameraActivePrefix *)camera)->active)
+        if (camera->active)
             return camera;
     }
 
@@ -1178,10 +1083,11 @@ void ACT_updateMPack(Actor *actor)
     ACT_updateMotion(actor);
 
     /* PLAY_setupDefault and PLAY_ctrl establish currentTime at +0x44. */
-    actor->motion_time = play->currentTime;
-    actor->undulation = 0;
+    actor->animation.slot.frame = play->currentTime;
+    /* A u32 access: the union member form reorders this store (tucheck, 2026-11-01). */
+    *(u32 *)&actor->undulation = 0;
 
-    linked_actor = actor->linked_actor;
+    linked_actor = actor->jointMatrices;
     UnduGet2(&actor->undulation, linked_actor->velocity.x,
              linked_actor->velocity.z);
 }
@@ -1197,9 +1103,9 @@ void ACT_initScene(void)
         remaining--;
         entry->flags = 0x20;
         entry->shadow_kind = 1;
-        entry->shadow_size = 0x50;
-        entry->cleared_on_scene_init = 0;
-        entry->state_flags = 0;
+        entry->shadowSize = 0x50;
+        entry->state84 = 0;
+        entry->inUseId = 0;
         entry->update = 0;
         entry->draw = 0;
         entry->position.w = 1.0f;
@@ -1215,7 +1121,7 @@ void ACT_setHand(Actor *actor, int hand)
     int category;
     int code;
 
-    if (actor->state_flags & 0xf000) {
+    if (actor->inUseId & 0xf000) {
         return;
     }
 
@@ -1240,9 +1146,9 @@ void ACT_filterGuno(Actor *actor)
     nmlModelSetToumei(1);
     nmlModelSetZwrite(1);
     nmlModelSetStencil(1);
-    nmlModelSetFilter(1, actor->filter_param_1, actor->filter_param_2);
-    nmlModelSetTransparency(actor->transparency);
-    nmlModelSetReflTransparency(actor->refl_transparency);
+    nmlModelSetFilter(1, actor->drawEnv.filter_param[2], actor->drawEnv.filter_param[1]);
+    nmlModelSetTransparency(actor->drawEnv.transparency);
+    nmlModelSetReflTransparency(actor->drawEnv.filter_param[0]);
 }
 
 void ACT_filterStealth(Actor *actor)
@@ -1250,9 +1156,9 @@ void ACT_filterStealth(Actor *actor)
     nmlModelSetToumei(1);
     nmlModelSetZwrite(1);
     nmlModelSetStencil(1);
-    nmlModelSetFilter(2, actor->filter_param_1, actor->filter_param_2);
-    nmlModelSetTransparency(actor->transparency);
-    nmlModelSetReflTransparency(actor->refl_transparency);
+    nmlModelSetFilter(2, actor->drawEnv.filter_param[2], actor->drawEnv.filter_param[1]);
+    nmlModelSetTransparency(actor->drawEnv.transparency);
+    nmlModelSetReflTransparency(actor->drawEnv.filter_param[0]);
 }
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */

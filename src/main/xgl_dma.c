@@ -2,8 +2,20 @@
 #include "shared.h"
 #include "xgl_pad.h"
 
-/* EE DMAC global registers and the SPR-from channel registers. */
-#define DMAC_CTRL      ((volatile u32 *)0x1000E000)
+/* Layout of the DMAC_CTRL register. */
+typedef struct XglDmacControl {
+    u32 dma_enable : 1;
+    u32 cycle_steal_release : 1;
+    u32 drain_mode : 2;
+    u32 stall_source : 2;
+    u32 stall_drain : 2;
+    u32 release_cycle : 3;
+    u32 reserved : 21;
+} XglDmacControl;
+
+/* EE DMAC global registers and the SPR-from channel registers.  DMAC_CTRL
+ * is not volatile: its drain_mode updates are whole-word read-modify-writes. */
+#define DMAC_CTRL      ((XglDmacControl *)0x1000E000)
 
 #define DMAC_STAT      ((volatile u32 *)0x1000E010)
 #define DMAC_RBSR      ((volatile u32 *)0x1000E040)
@@ -39,17 +51,6 @@ struct MfifoDrainStorage {
     XglDmaChannel *channel;
     u32 unmodeled_04;
 };
-
-/* Layout of the DMAC_CTRL register. */
-typedef struct XglDmacControl {
-    u32 dma_enable : 1;
-    u32 cycle_steal_release : 1;
-    u32 drain_mode : 2;
-    u32 stall_source : 2;
-    u32 stall_drain : 2;
-    u32 release_cycle : 3;
-    u32 reserved : 21;
-} XglDmacControl;
 
 extern void FlushCache(int mode);
 extern int sceGsSyncPath(int mode, int timeout);
@@ -181,7 +182,7 @@ void xglDmaMFIFOSetup(u32 address, u32 size, int channel)
         return;
     rbor = DMAC_RBOR;
     rbsr = DMAC_RBSR;
-    ((XglDmacControl *)DMAC_CTRL)->drain_mode = 3;
+    DMAC_CTRL->drain_mode = 3;
     *rbor = address;
     *rbsr = size - 16U;
     drain = tbl[channel];
@@ -219,7 +220,7 @@ void xglDmaMFIFOLeave(void)
     XglDmaChannel *drain;
 
     sceGsSyncPath(0, 0);
-    *DMAC_CTRL &= ~0xcU;
+    DMAC_CTRL->drain_mode = 0;
     while (*D8_CHCR & 0x100U)
         ;
     drain = mfifo_drain;

@@ -2,6 +2,10 @@
 #include "shared.h"
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"
+#include "main/Undulate.h"
+#include "main/nml_model_set.h"
+#include "main/res_get_path.h"
+#include "main/xgl_sound.h"
 
 #define GIF_TAG_NLOOP_1 1u
 #define GIF_TAG_EOP (1u << 15)
@@ -106,7 +110,7 @@ typedef struct {
 typedef struct {
     int x;
     int y;
-    u32 z;
+    int z;
 } DropShadowSourcePoint;
 
 typedef struct {
@@ -116,34 +120,9 @@ typedef struct {
 typedef struct {
     u32 x;
     u32 y;
-    u32 z;
+    int z;
     u32 w;
 } DropShadowPacketPoint;
-
-/* Only the packet words and four 16-byte output points written here are modeled. */
-typedef struct {
-    u8 unmodeled_00[0x0c];
-    u32 packet_tag_0c;
-    u8 unmodeled_10[4];
-    u32 packet_header_14;
-    u32 packet_header_18;
-    u8 unmodeled_1c[4];
-    u32 packet_header_20;
-    u8 unmodeled_24[0x10];
-    u32 packet_header_34;
-    u8 unmodeled_38[8];
-    u32 packet_state[3];
-    u32 draw_mode;
-    DropShadowPacketPoint points[4];
-} DropShadowBackPacket;
-
-/* Status bytes and 16-byte source records immediately precede the sent packet. */
-typedef struct {
-    u8 unmodeled_00[0x11a0];
-    u8 back_shadow_status[16];
-    DropShadowBackEntry back_shadow_entries[17];
-    DropShadowBackPacket back_shadow_packet;
-} ActDropShadowState;
 
 typedef unsigned int ActShadowQuadword __attribute__((mode(TI)));
 
@@ -175,13 +154,20 @@ typedef struct {
 } DropShadowSourceVertex;
 
 typedef struct {
+    float s;
+    float t;
+    u8 unmodeled_08[8];
+    DropShadowPacketPoint point;
+} DropShadowTexturedPoint;
+
+/* One shadow quad packet: the back passes send RGBAQ + four XYZ2 (GIF
+ * registers 0x055551ee), the front pass RGBAQ + four ST/XYZ2 pairs
+ * (0x252521ee), so the vertex block is either point kind. */
+typedef struct {
     GifCommandData dma_tag;
     u32 vif_nop;
-    u32 packet_tag_0c;
-    u32 test_environment_control;
-    u32 packet_header_14;
-    u32 packet_header_18;
-    u8 unmodeled_1c[4];
+    u32 vif_direct;
+    GifTag gif_tag;
     u32 packet_header_20;
     u8 unmodeled_24[4];
     u32 test_environment_register;
@@ -190,25 +176,34 @@ typedef struct {
     u32 packet_header_34;
     u32 shadow_context_register;
     u32 unmodeled_3c;
-    u32 packet_state[3];
-    u32 draw_mode;
-    DropShadowPacketPoint points[4];
+    u32 color[4];
+    union {
+        DropShadowPacketPoint points[4];
+        DropShadowTexturedPoint textured_points[4];
+    };
 } ActDropShadowPacket;
 
 typedef struct {
     Matrix4 elements;
 } ActShadowMatrix;
 
+/* One 16-byte scratch vector: indexed as four floats while it is built, and
+   passed to the Vector4 helpers and VU blocks as a whole. */
+typedef union {
+    float values[4];
+    Vector4 vector;
+} ActShadowScratchVector;
+
 typedef struct {
-    float temporary[4];
+    ActShadowScratchVector temporary;
     Vector4 outer_offset;
     Vector4 inner_offset;
     Vector4 axial_offset;
     u8 unmodeled_40[0x10];
     Vector4 perpendicular;
-    Matrix model;
+    ActShadowMatrix model;
     ActShadowMatrix flatten;
-    Matrix translated_end;
+    ActShadowMatrix translated_end;
     ActShadowMatrix first_world;
     ActShadowMatrix second_world;
     Vector4 vertices[128];
@@ -232,7 +227,7 @@ typedef union {
     struct {
         u32 x;
         u32 y;
-        u32 z;
+        int z;
         u32 w;
     } value;
 } ActZeldaShadowPoint;
@@ -311,7 +306,7 @@ typedef struct {
     u8 unmodeled_6f8[0xc];
     u16 motion;
     u8 unmodeled_706[0x11e];
-    Matrix *shadow_matrices; /* +0x824; stride 0x40 */
+    ActShadowMatrix *shadow_matrices; /* +0x824; stride 0x40 */
     u8 unmodeled_828[0x1c0];
     float shadow_radius;
 } ActShadowActor;
@@ -409,62 +404,8 @@ typedef struct {
 } CircleShadowScratchpad;
 
 typedef struct {
-    float s;
-    float t;
-    u8 unmodeled_08[8];
-    DropShadowPacketPoint point;
-} DropShadowTexturedPoint;
-
-typedef struct {
-    u8 unmodeled_00[0x0c];
-    u32 vif_direct;
-    GifTag gif_tag;
-    u32 primitive;
-    u8 unmodeled_24[0x10];
-    u32 draw_state;
-    u8 unmodeled_38[8];
-    u32 color[4];
-    DropShadowTexturedPoint points[4];
-} DropShadowFrontPacket;
-
-typedef struct {
-    u8 unmodeled_00[0x11a0];
-    u8 status[16];
-    DropShadowBackEntry entries[16];
-    u8 unmodeled_12b0[0xb];
-    u8 alpha;
-    u8 unmodeled_12bc[4];
-    DropShadowFrontPacket packet;
-} ActDropShadowFrontState;
-
-typedef struct {
     ActShadowQuadword qwords[4];
 } ActShadowMatrixStorage;
-
-/* The actor owns aligned matrices; Zelda uses their native whole-row copies. */
-typedef struct {
-    u8 unmodeled_000[0x14];
-    float base_height;
-    u8 unmodeled_018[0x88];
-    float direction[3];
-    u8 unmodeled_0ac[0x430];
-    float height_override;
-    u8 unmodeled_4e0[0x344];
-    Matrix *shadow_matrices;
-} ActZeldaStorageActor;
-
-typedef struct {
-    Vector4 translation;
-    Matrix matrix;
-    Matrix transform;
-    Vector4 vertices[5];
-    ActZeldaShadowPoint projected[5];
-    float height;
-    float angle;
-    float radius;
-    u32 camera_index;
-    ActZeldaShadowPacket packet;
-} ActZeldaStorageScratchpad;
 
 typedef union {
     struct {
@@ -504,8 +445,8 @@ typedef struct {
 
 typedef struct {
     float temporary[4];
-    Matrix transform;
-    Matrix model;
+    ActShadowMatrix transform;
+    ActShadowMatrix model;
     Vector4 vertices[16];
     DropShadowPacketPoint projected[16];
     int camera_index;
@@ -513,24 +454,6 @@ typedef struct {
     CircleShadowPacket packet;
 } CircleShadowMatrixScratchpad;
 
-typedef struct {
-    u8 unmodeled_000[0x86];
-    u16 kind;
-    u8 unmodeled_088[9];
-    u8 shadow_alpha;
-    u8 unmodeled_092[0xe];
-    Vector4 light_direction;
-    u8 unmodeled_0b0[0x774];
-    Matrix *shadow_matrices;
-} ActDropShadowSetupActor;
-
-typedef struct {
-    u8 unmodeled_00[0x60];
-    Matrix model;
-    Vector4 flatten[4];
-    u8 unmodeled_0e0[0x11d8];
-    u8 camera_index;
-} ActDropShadowSetupMatrixWorkspace;
 
 typedef struct {
     u16 kind_mask;
@@ -552,33 +475,18 @@ extern const float dropCircleCornerScale;
 extern const float dropCircleHeightOffset;
 extern float zeldaShadowMinRadius;
 
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
 extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
 
 extern void xglRotTransPersN(void *destination, const Matrix4 matrix,
                              const void *vertices, int count, int camera_index);
 
-extern float I2F(int value);
-
 static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
                               ActShadowMatrix *matrix);
 
-extern void xglMatrixStackUnit(void);
-extern void xglMatrixStackTrans(const float translation[4]);
-extern void xglMatrixStackRotY(float angle);
-
-extern void xglMatrixStackMulVector(Vector4 *destination,
-                                    const Vector4 *source);
-
-extern int F2I(float value);
 extern void UnduParamInit(void *collision);
 extern void UnduCheck(const float *position, void *unused, void *collision);
-extern void *UnduDataGetHeader(int map_index, int unit_index);
-extern int RES_GetEnemySeBank(int kind);
-extern void xglSoundEffectNormalID(int sound, int flags);
-
-static u8 *DrawDropShadowSub(ActShadowActor *actor,
-                            ActDropShadowWorkspace *work, u8 *contacts);
+static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
+                            ActDropShadowWorkspace *work, DropShadowContactRecord *contacts);
 
 static void DrawCircleShadow(void *actor_pointer);
 static void DrawDropCircle(ActShadowActor *actor);
@@ -588,15 +496,6 @@ extern void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
 
 extern void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
                             const float translation[4]);
-
-extern void xglVectorOuter(Vector4 *destination, const Vector4 *left,
-                            const Vector4 *right);
-
-extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
-                               float scale);
-
-extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
-                             const Vector4 *source);
 
 extern float atan2f(float x, float z);
 
@@ -777,14 +676,14 @@ static void Footstep(ActShadowActor *actor)
     }
 }
 
-static inline ActShadowMatrixRow *ActShadowMatrixRows(Matrix *matrix)
+static inline ActShadowMatrixRow *ActShadowMatrixRows(ActShadowMatrix *matrix)
 {
-    return (ActShadowMatrixRow *)(void *)matrix->elements;
+    return matrix->elements;
 }
 
-static inline const ActShadowMatrixRow *ActShadowMatrixConstRows(const Matrix *matrix)
+static inline const ActShadowMatrixRow *ActShadowMatrixConstRows(const ActShadowMatrix *matrix)
 {
-    return (const ActShadowMatrixRow *)(const void *)matrix->elements;
+    return matrix->elements;
 }
 
 static void DrawCircleShadow(void *actor_pointer)
@@ -802,12 +701,12 @@ static void DrawCircleShadow(void *actor_pointer)
     u8 *flags;
 
     xglMatrixUnit(ActShadowMatrixRows(&scratchpad->model));
-    scratchpad->model.elements[12] = actor->position[0];
-    scratchpad->model.elements[14] = actor->position[2];
+    scratchpad->model.elements[3][0] = actor->position[0];
+    scratchpad->model.elements[3][2] = actor->position[2];
     if (actor->height_override == -1000.0f) {
-        scratchpad->model.elements[13] = actor->position[1] + 0.02f;
+        scratchpad->model.elements[3][1] = actor->position[1] + 0.02f;
     } else {
-        scratchpad->model.elements[13] = actor->height_override + 0.02f;
+        scratchpad->model.elements[3][1] = actor->height_override + 0.02f;
     }
     xglMatrixRotY(ActShadowMatrixRows(&scratchpad->transform),
                   ActShadowMatrixRows(&scratchpad->model), actor->yaw);
@@ -867,12 +766,12 @@ static void DrawCircleShadow(void *actor_pointer)
         int clip_index;
         for (clip_index = 0; clip_index < 16; clip_index++, clip++) {
             if ((clip->x & 0xffff0000) ||
-                (clip->y & 0xffff0000) || (int)clip->z < 0) {
+                (clip->y & 0xffff0000) || clip->z < 0) {
                 return;
             }
         }
     }
-    nmlModelDirectSend(1, (u8 *)Head_1, 5);
+    nmlModelDirectSend(1, Head_1, 5);
     flags = rgbaw_0;
     scratchpad->packet.vif_command = 0x5100001100000000ULL;
     scratchpad->packet.gif_control = 0x0026c00000008001ULL;
@@ -895,9 +794,9 @@ static void DrawCircleShadow(void *actor_pointer)
             output->point.z = projected->z;
             output->point.w = (*flags & 2) ? 0x8000 : 0;
         }
-        nmlModelDirectSend(1, (u8 *)&scratchpad->packet, 18);
+        nmlModelDirectSend(1, &scratchpad->packet, 18);
     }
-    nmlModelDirectSend(1, (u8 *)Tail_2, 3);
+    nmlModelDirectSend(1, Tail_2, 3);
 }
 
 static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
@@ -940,7 +839,7 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
         if (point->value.y & 0xffff0000U) {
             return;
         }
-        if ((int)point->value.z < 0) {
+        if (point->value.z < 0) {
             return;
         }
         point->value.w = 0;
@@ -1002,14 +901,13 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
         : "$2", "$3", "memory");
     scratchpad->packet.trailer[0] = 0x31000000;
     scratchpad->packet.trailer[1] = 0x4e;
-    nmlModelDirectSend(1, (u8 *)&scratchpad->packet, 0x12);
+    nmlModelDirectSend(1, &scratchpad->packet, 0x12);
 }
 
 static void DrawZeldaShadow(void *actor_pointer)
 {
-    ActZeldaStorageActor *actor = actor_pointer;
-    ActZeldaStorageScratchpad *scratchpad =
-        (ActZeldaStorageScratchpad *)0x70000000;
+    ActZeldaShadowActor *actor = actor_pointer;
+    ActShadowScratchpad *scratchpad = (ActShadowScratchpad *)0x70000000;
     int camera_index;
     float *direction;
 
@@ -1025,8 +923,8 @@ static void DrawZeldaShadow(void *actor_pointer)
     }
     scratchpad->camera_index = camera_index;
     {
-        Matrix *destination = &scratchpad->matrix;
-        Matrix *matrix = actor->shadow_matrices;
+        ActShadowMatrix *destination = &scratchpad->matrix;
+        ActShadowMatrix *matrix = actor->shadow_matrices->matrices;
         /* Four aligned copies use the original scratch data register. */
         __asm__ __volatile__(
             "lq $2,0(%1)\n\t"
@@ -1045,9 +943,8 @@ static void DrawZeldaShadow(void *actor_pointer)
         scratchpad->radius = zeldaShadowMinRadius;
     }
     scratchpad->angle = atan2f(-direction[0], -direction[2]);
-    /* Preserve the helper's existing interface pending owner-header transport. */
-    DrawZeldaShadowSub((void *)scratchpad, (void *)&actor->shadow_matrices[30]);
-    DrawZeldaShadowSub((void *)scratchpad, (void *)&actor->shadow_matrices[20]);
+    DrawZeldaShadowSub(scratchpad, &actor->shadow_matrices->matrices[30]);
+    DrawZeldaShadowSub(scratchpad, &actor->shadow_matrices->matrices[20]);
 }
 
 static int DrawDropShadowSubChk(ActDropShadowWorkspace *shadow, u8 *quad_indices,
@@ -1072,28 +969,27 @@ static int DrawDropShadowSubChk(ActDropShadowWorkspace *shadow, u8 *quad_indices
             int y0;
             int y1;
             int y2;
-            u32 orientation_word;
+            int orientation_word;
 
             if (point0->valid == 0 || point1->valid == 0 ||
                 point2->valid == 0 || point3->valid == 0) {
                 return 0;
             }
-            x0 = (int)point0->point.x;
-            x2 = (int)point2->point.x;
-            y0 = (int)point0->point.y;
-            y1 = (int)point1->point.y;
-            x1 = (int)point1->point.x;
-            y2 = (int)point2->point.y;
+            x0 = point0->point.x;
+            x2 = point2->point.x;
+            y0 = point0->point.y;
+            y1 = point1->point.y;
+            x1 = point1->point.x;
+            y2 = point2->point.y;
             entry->points[3] = &point3->point;
             entry->points[0] = &point0->point;
             entry->points[1] = &point1->point;
             entry->points[2] = &point2->point;
             entry++;
 
-            orientation_word = (u32)x2 * (u32)y0 + (u32)x0 * (u32)y1 +
-                               (u32)x1 * (u32)y2 - (u32)x2 * (u32)y1 -
-                               (u32)x0 * (u32)y2 - (u32)x1 * (u32)y0;
-            if ((float)(int)orientation_word >= 0.0f) {
+            orientation_word = x2 * y0 + x0 * y1 + x1 * y2 - x2 * y1 -
+                               x0 * y2 - x1 * y0;
+            if ((float)orientation_word >= 0.0f) {
                 *status = 1;
             } else {
                 *status = 2;
@@ -1107,7 +1003,7 @@ static int DrawDropShadowSubChk(ActDropShadowWorkspace *shadow, u8 *quad_indices
     return status_sum;
 }
 
-static void DrawDropShadowSubBack(ActDropShadowState *shadow, int vertex_count,
+static void DrawDropShadowSubBack(ActDropShadowWorkspace *shadow, int vertex_count,
                                   int draw_mode)
 {
     int remaining;
@@ -1116,19 +1012,19 @@ static void DrawDropShadowSubBack(ActDropShadowState *shadow, int vertex_count,
     int active_status;
 
     entry = shadow->back_shadow_entries;
-    shadow->back_shadow_packet.packet_tag_0c = 0x51000008;
-    shadow->back_shadow_packet.packet_header_14 = 0x70024000;
-    shadow->back_shadow_packet.packet_header_18 = 0x055551ee;
-    shadow->back_shadow_packet.packet_header_20 = 0x00071001;
-    shadow->back_shadow_packet.packet_header_34 = 0x7fffffff;
-    shadow->back_shadow_packet.draw_mode = draw_mode;
-    shadow->back_shadow_packet.packet_state[0] = 0;
-    shadow->back_shadow_packet.packet_state[1] = 0;
-    shadow->back_shadow_packet.packet_state[2] = 0;
-    shadow->back_shadow_packet.points[0].w = 0;
-    shadow->back_shadow_packet.points[1].w = 0;
-    shadow->back_shadow_packet.points[2].w = 0;
-    shadow->back_shadow_packet.points[3].w = 0;
+    shadow->packet.vif_direct = 0x51000008;
+    shadow->packet.gif_tag.control_high = 0x70024000;
+    shadow->packet.gif_tag.registers_low = 0x055551ee;
+    shadow->packet.packet_header_20 = 0x00071001;
+    shadow->packet.packet_header_34 = 0x7fffffff;
+    shadow->packet.color[3] = draw_mode;
+    shadow->packet.color[0] = 0;
+    shadow->packet.color[1] = 0;
+    shadow->packet.color[2] = 0;
+    shadow->packet.points[0].w = 0;
+    shadow->packet.points[1].w = 0;
+    shadow->packet.points[2].w = 0;
+    shadow->packet.points[3].w = 0;
 
     if (vertex_count <= 0) {
         return;
@@ -1141,19 +1037,21 @@ static void DrawDropShadowSubBack(ActDropShadowState *shadow, int vertex_count,
     /* The original advances the status bytes and vertex records in lockstep. */
     do {
         if (*status == active_status) {
-            shadow->back_shadow_packet.points[0].x = entry->points[0]->x;
-            shadow->back_shadow_packet.points[0].y = entry->points[0]->y;
-            shadow->back_shadow_packet.points[0].z = entry->points[0]->z;
-            shadow->back_shadow_packet.points[1].x = entry->points[1]->x;
-            shadow->back_shadow_packet.points[1].y = entry->points[1]->y;
-            shadow->back_shadow_packet.points[1].z = entry->points[1]->z;
-            shadow->back_shadow_packet.points[2].x = entry->points[2]->x;
-            shadow->back_shadow_packet.points[2].y = entry->points[2]->y;
-            shadow->back_shadow_packet.points[2].z = entry->points[2]->z;
-            shadow->back_shadow_packet.points[3].x = entry->points[3]->x;
-            shadow->back_shadow_packet.points[3].y = entry->points[3]->y;
-            shadow->back_shadow_packet.points[3].z = entry->points[3]->z;
-            nmlModelDirectSend(1, (u8 *)&shadow->back_shadow_packet, 9);
+            /* Pointer form: a store through the vertex union itself is alias
+             * set 0 and would pin the entry->points loads behind it. */
+            (shadow->packet.points + 0)->x = entry->points[0]->x;
+            (shadow->packet.points + 0)->y = entry->points[0]->y;
+            (shadow->packet.points + 0)->z = entry->points[0]->z;
+            (shadow->packet.points + 1)->x = entry->points[1]->x;
+            (shadow->packet.points + 1)->y = entry->points[1]->y;
+            (shadow->packet.points + 1)->z = entry->points[1]->z;
+            (shadow->packet.points + 2)->x = entry->points[2]->x;
+            (shadow->packet.points + 2)->y = entry->points[2]->y;
+            (shadow->packet.points + 2)->z = entry->points[2]->z;
+            (shadow->packet.points + 3)->x = entry->points[3]->x;
+            (shadow->packet.points + 3)->y = entry->points[3]->y;
+            (shadow->packet.points + 3)->z = entry->points[3]->z;
+            nmlModelDirectSend(1, &shadow->packet, 9);
         }
         remaining--;
         status++;
@@ -1161,11 +1059,11 @@ static void DrawDropShadowSubBack(ActDropShadowState *shadow, int vertex_count,
     } while (remaining != 0);
 }
 
-static void DrawDropShadowSubFront(ActDropShadowFrontState *shadow, int count)
+static void DrawDropShadowSubFront(ActDropShadowWorkspace *shadow, int count)
 {
     float coordinate_scale = DROP_SHADOW_TEXTURE_COORDINATE_SCALE;
-    DropShadowTexturedPoint *points = shadow->packet.points;
-    DropShadowBackEntry *entry = shadow->entries;
+    DropShadowTexturedPoint *points = shadow->packet.textured_points;
+    DropShadowBackEntry *entry = shadow->back_shadow_entries;
     u8 *status;
     int remaining;
 
@@ -1176,10 +1074,10 @@ static void DrawDropShadowSubFront(ActDropShadowFrontState *shadow, int count)
     shadow->packet.gif_tag.control_high = 0xb02a4000;
     shadow->packet.gif_tag.registers_low = 0x252521ee;
     shadow->packet.gif_tag.registers_high = 0x525;
-    shadow->packet.primitive = primitive;
+    shadow->packet.packet_header_20 = primitive;
     shadow->packet.color[3] = alpha;
     }
-    shadow->packet.draw_state = 0;
+    shadow->packet.packet_header_34 = 0;
     shadow->packet.color[0] = 0;
     shadow->packet.color[1] = 0;
     shadow->packet.color[2] = 0;
@@ -1189,7 +1087,7 @@ static void DrawDropShadowSubFront(ActDropShadowFrontState *shadow, int count)
     points[3].point.w = 0;
     if (count > 0) {
         remaining = count;
-        status = shadow->status;
+        status = shadow->back_shadow_status;
         do {
             if (*status == 2) {
                 points[0].s = I2F(entry->points[0]->x - DROP_SHADOW_TEXTURE_U_ORIGIN) * coordinate_scale;
@@ -1212,7 +1110,7 @@ static void DrawDropShadowSubFront(ActDropShadowFrontState *shadow, int count)
                 points[3].point.x = entry->points[3]->x;
                 points[3].point.y = entry->points[3]->y;
                 points[3].point.z = entry->points[3]->z;
-                nmlModelDirectSend(1, (u8 *)&shadow->packet, 13);
+                nmlModelDirectSend(1, &shadow->packet, 13);
             }
             status++;
             remaining--;
@@ -1221,8 +1119,8 @@ static void DrawDropShadowSubFront(ActDropShadowFrontState *shadow, int count)
     }
 }
 
-static u8 *DrawDropShadowSub(ActShadowActor *actor,
-                            ActDropShadowWorkspace *work, u8 *contacts)
+static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
+                            ActDropShadowWorkspace *work, DropShadowContactRecord *contacts)
 {
     float ground_height;
     float length;
@@ -1230,8 +1128,8 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
     int vertex_count;
     int visible;
     int i;
-    Matrix *translated_end;
-    Matrix *model;
+    ActShadowMatrix *translated_end;
+    ActShadowMatrix *model;
     Vector4 *perpendicular;
     Vector4 *inner_offset;
     Vector4 *axial_offset;
@@ -1247,7 +1145,7 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
         ground_height = actor->height_override - 0.5f;
     }
     segments = 0;
-    if (contacts[0] != 255) {
+    if (contacts[0].matrix_index != 255) {
         float *first_position;
         float *second_position;
 
@@ -1262,22 +1160,22 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
         first_position = (*first_world)[3];
         second_position = (*second_world)[3];
         do {
-            Matrix *first = &actor->shadow_matrices[contacts[segments * 3]];
-            Matrix *second;
-            u8 *contact = &contacts[segments * 3];
-            u8 *next_contact = &contacts[(segments + 1) * 3];
+            ActShadowMatrix *first = &actor->shadow_matrices[contacts[segments].matrix_index];
+            ActShadowMatrix *second;
+            DropShadowContactRecord *contact = &contacts[segments];
+            DropShadowContactRecord *next_contact = &contacts[segments + 1];
 
-            if (next_contact[0] != 255) {
-                second = &actor->shadow_matrices[next_contact[0]];
+            if (next_contact->matrix_index != 255) {
+                second = &actor->shadow_matrices[next_contact->matrix_index];
             } else {
-                work->temporary[0] = 0.0f;
-                work->temporary[1] = 0.0f;
-                work->temporary[2] = 0.0f;
-                work->temporary[(signed char)next_contact[2]] =
-                    I2F((signed char)next_contact[1]) * contactCoordScale;
-                work->temporary[3] = 1.0f;
+                work->temporary.values[0] = 0.0f;
+                work->temporary.values[1] = 0.0f;
+                work->temporary.values[2] = 0.0f;
+                work->temporary.values[next_contact->payload.terminal.axis] =
+                    I2F(next_contact->payload.terminal.offset) * contactCoordScale;
+                work->temporary.values[3] = 1.0f;
                 xglMatrixTrans(ActShadowMatrixRows(translated_end),
-                                ActShadowMatrixConstRows(first), work->temporary);
+                                ActShadowMatrixConstRows(first), work->temporary.values);
                 second = translated_end;
             }
             xglMatrixMul(*first_world, ActShadowMatrixRows(model), ActShadowMatrixRows(first));
@@ -1291,31 +1189,31 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "lqc2 vf2,0(%2)\n\t"
                 "vsub.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
-                : : "r"(work->temporary), "r"(first_position),
+                : : "r"(work->temporary.values), "r"(first_position),
                     "r"(second_position) : "memory");
-            xglVectorOuter(perpendicular, (const Vector4 *)(const void *)work->temporary,
+            xglVectorOuter(perpendicular, &work->temporary.vector,
                              light_direction);
             xglVectorLength(&length, perpendicular);
             xglVectorScaleXYZ(&work->outer_offset, perpendicular,
-                                I2F((signed char)contact[1]) * contactCoordScale / length);
+                                I2F(contact->payload.segment.end_width) * contactCoordScale / length);
             xglVectorScaleXYZ(inner_offset, perpendicular,
-                                I2F((signed char)contact[2]) * contactCoordScale / length);
-            xglVectorLength(&length, (const Vector4 *)(const void *)work->temporary);
-            xglVectorScaleXYZ(axial_offset, (const Vector4 *)(const void *)work->temporary,
-                                I2F((signed char)contact[1]) * contactCoordScale / length);
+                                I2F(contact->payload.segment.midpoint_width) * contactCoordScale / length);
+            xglVectorLength(&length, &work->temporary.vector);
+            xglVectorScaleXYZ(axial_offset, &work->temporary.vector,
+                                I2F(contact->payload.segment.end_width) * contactCoordScale / length);
 
-            work->temporary[3] = ground_height;
-            work->temporary[0] = first_position[0];
-            work->temporary[1] = first_position[1];
-            work->temporary[2] = first_position[2];
+            work->temporary.values[3] = ground_height;
+            work->temporary.values[0] = first_position[0];
+            work->temporary.values[1] = first_position[1];
+            work->temporary.values[2] = first_position[2];
             __asm__ __volatile__(
                 "lqc2 vf3,0(%1)\n\t"
                 "lqc2 vf2,0(%2)\n\t"
                 "vadd.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[0]), "r"(&work->outer_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[8], (const float (*)[4])work->flatten.elements, &points[0]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[8], work->flatten.elements, &points[0]);
             points[0].w = 1.0f;
             points[8].w = 1.0f;
             __asm__ __volatile__(
@@ -1324,8 +1222,8 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "vsub.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[1]), "r"(&work->outer_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[9], (const float (*)[4])work->flatten.elements, &points[1]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[9], work->flatten.elements, &points[1]);
             points[1].w = 1.0f;
             points[9].w = 1.0f;
             __asm__ __volatile__(
@@ -1334,22 +1232,22 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "vsub.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[4]), "r"(axial_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[12], (const float (*)[4])work->flatten.elements, &points[4]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[12], work->flatten.elements, &points[4]);
             points[4].w = 1.0f;
             points[12].w = 1.0f;
 
-            work->temporary[0] = second_position[0];
-            work->temporary[1] = second_position[1];
-            work->temporary[2] = second_position[2];
+            work->temporary.values[0] = second_position[0];
+            work->temporary.values[1] = second_position[1];
+            work->temporary.values[2] = second_position[2];
             __asm__ __volatile__(
                 "lqc2 vf3,0(%1)\n\t"
                 "lqc2 vf2,0(%2)\n\t"
                 "vadd.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[2]), "r"(&work->outer_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[10], (const float (*)[4])work->flatten.elements, &points[2]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[10], work->flatten.elements, &points[2]);
             points[2].w = 1.0f;
             points[10].w = 1.0f;
             __asm__ __volatile__(
@@ -1358,8 +1256,8 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "vsub.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[3]), "r"(&work->outer_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[11], (const float (*)[4])work->flatten.elements, &points[3]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[11], work->flatten.elements, &points[3]);
             points[3].w = 1.0f;
             points[11].w = 1.0f;
             __asm__ __volatile__(
@@ -1368,16 +1266,16 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "vadd.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[5]), "r"(axial_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[13], (const float (*)[4])work->flatten.elements, &points[5]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[13], work->flatten.elements, &points[5]);
             points[5].w = 1.0f;
             points[13].w = 1.0f;
 
-            work->temporary[0] =
+            work->temporary.values[0] =
                 (first_position[0] + second_position[0]) * 0.5f;
-            work->temporary[1] =
+            work->temporary.values[1] =
                 (first_position[1] + second_position[1]) * 0.5f;
-            work->temporary[2] =
+            work->temporary.values[2] =
                 (first_position[2] + second_position[2]) * 0.5f;
             __asm__ __volatile__(
                 "lqc2 vf3,0(%1)\n\t"
@@ -1385,8 +1283,8 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "vadd.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[6]), "r"(inner_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[14], (const float (*)[4])work->flatten.elements, &points[6]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[14], work->flatten.elements, &points[6]);
             points[6].w = 1.0f;
             points[14].w = 1.0f;
             __asm__ __volatile__(
@@ -1395,13 +1293,13 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 "vsub.xyz vf2,vf2,vf3\n\t"
                 "sqc2 vf2,0(%0)"
                 : : "r"(&points[7]), "r"(inner_offset),
-                    "r"(work->temporary) : "memory");
-            xglVectorMulMat(&points[15], (const float (*)[4])work->flatten.elements, &points[7]);
+                    "r"(work->temporary.values) : "memory");
+            xglVectorMulMat(&points[15], work->flatten.elements, &points[7]);
             points[7].w = 1.0f;
             points[15].w = 1.0f;
             points += 16;
             segments++;
-        } while (contacts[segments * 3] != 255);
+        } while (contacts[segments].matrix_index != 255);
     }
     vertex_count = segments * 16;
     xglRotTransPersN(work->source_vertices, 0, work->vertices,
@@ -1412,7 +1310,7 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
         int remaining = vertex_count;
         do {
             if ((projected->point.x & 0xffff0000) ||
-                (projected->point.y & 0xffff0000) || (int)projected->point.z < 0) {
+                (projected->point.y & 0xffff0000) || projected->point.z < 0) {
                 projected->valid = 0;
             } else {
                 visible = 1;
@@ -1421,10 +1319,10 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
         } while (--remaining != 0);
     }
     if (!visible) {
-        return contacts + segments * 3 + 3;
+        return contacts + segments + 1;
     }
     work->alpha = actor->shadow_alpha;
-    work->packet.test_environment_control = 0x8001;
+    work->packet.gif_tag.control_low = 0x8001;
     work->packet.test_environment_register = 71;
     work->packet.render_state_register = sRender.shadow_state | 0x80000;
     work->packet.shadow_context_register = 76;
@@ -1434,20 +1332,19 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
     for (i = 0; i < segments; i++) {
         DrawDropCircleIndexTable indices = dropShadowIndexTable;
         if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], i * 16, 14)) {
-            DrawDropShadowSubBack((ActDropShadowState *)(void *)work, 14, 0);
+            DrawDropShadowSubBack(work, 14, 0);
             nmlModelDirectSend(2, TestEnv_3_00478D80, 3);
-            DrawDropShadowSubFront((ActDropShadowFrontState *)(void *)work, 14);
-            DrawDropShadowSubBack((ActDropShadowState *)(void *)work, 14, 128);
+            DrawDropShadowSubFront(work, 14);
+            DrawDropShadowSubBack(work, 14, 128);
         }
     }
-    return contacts + segments * 3 + 3;
+    return contacts + segments + 1;
 }
 
 static void DrawDropShadow(void *actor_pointer)
 {
-    ActDropShadowSetupActor *actor = actor_pointer;
-    ActDropShadowSetupMatrixWorkspace *work =
-        (ActDropShadowSetupMatrixWorkspace *)0x70000000;
+    ActShadowActor *actor = actor_pointer;
+    ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)0x70000000;
     DropShadowContactDefinition *entry;
     DropShadowContactRecord *contacts;
     u16 actor_kind;
@@ -1462,7 +1359,7 @@ static void DrawDropShadow(void *actor_pointer)
         Head_4_00478DB0.set_render_state.data.value =
             ((u64)0xc800 << 19) | render_state_bits;
     }
-    nmlModelDirectSend(1, (u8 *)&Head_4_00478DB0, 5);
+    nmlModelDirectSend(1, &Head_4_00478DB0, 5);
     for (camera_index = 0; camera_index < 8; camera_index++) {
         if (xglStudioGetCamera2(camera_index)->active == 1) {
             break;
@@ -1470,8 +1367,8 @@ static void DrawDropShadow(void *actor_pointer)
     }
     work->camera_index = camera_index;
     {
-        Matrix *matrix = actor->shadow_matrices;
-        Matrix *destination = &work->model;
+        ActShadowMatrix *matrix = actor->shadow_matrices;
+        ActShadowMatrix *destination = &work->model;
         /* Match the original four aligned SDK copies through its scratch GPR. */
         __asm__ __volatile__(
             "lq $2,0(%1)\n\t"
@@ -1487,22 +1384,22 @@ static void DrawDropShadow(void *actor_pointer)
     {
         float light_x = actor->light_direction.x;
         float light_z = actor->light_direction.z;
-        work->flatten[0].x = 1.0f;
-        work->flatten[0].y = 0.0f;
-        work->flatten[0].z = 0.0f;
-        work->flatten[0].w = 0.0f;
-        work->flatten[1].x = -light_x;
-        work->flatten[1].y = 0.0f;
-        work->flatten[1].z = -light_z;
-        work->flatten[1].w = 0.0f;
-        work->flatten[2].x = 0.0f;
-        work->flatten[2].y = 0.0f;
-        work->flatten[2].z = 1.0f;
-        work->flatten[2].w = 0.0f;
-        work->flatten[3].x = light_x;
-        work->flatten[3].y = 1.0f;
-        work->flatten[3].z = light_z;
-        work->flatten[3].w = 0.0f;
+        work->flatten.elements[0][0] = 1.0f;
+        work->flatten.elements[0][1] = 0.0f;
+        work->flatten.elements[0][2] = 0.0f;
+        work->flatten.elements[0][3] = 0.0f;
+        work->flatten.elements[1][0] = -light_x;
+        work->flatten.elements[1][1] = 0.0f;
+        work->flatten.elements[1][2] = -light_z;
+        work->flatten.elements[1][3] = 0.0f;
+        work->flatten.elements[2][0] = 0.0f;
+        work->flatten.elements[2][1] = 0.0f;
+        work->flatten.elements[2][2] = 1.0f;
+        work->flatten.elements[2][3] = 0.0f;
+        work->flatten.elements[3][0] = light_x;
+        work->flatten.elements[3][1] = 1.0f;
+        work->flatten.elements[3][2] = light_z;
+        work->flatten.elements[3][3] = 0.0f;
     }
     actor_kind = actor->kind;
     for (entry = DropShadowDefineTable; entry->contacts; entry++) {
@@ -1510,9 +1407,7 @@ static void DrawDropShadow(void *actor_pointer)
             contacts = entry->contacts;
             while (contacts->matrix_index != 255) {
                 /* Keep the separately authored partial workspace interface. */
-                contacts = (DropShadowContactRecord *)(void *)DrawDropShadowSub(
-                    (ActShadowActor *)(void *)actor, (ActDropShadowWorkspace *)(void *)work,
-                    (u8 *)(void *)contacts);
+                contacts = DrawDropShadowSub(actor, work, contacts);
             }
             break;
         }
@@ -1521,13 +1416,13 @@ static void DrawDropShadow(void *actor_pointer)
         u64 shadow_register = (u64)sRender.shadow_state | 0x80000;
         Tail_5.set_shadow_register.data.value = shadow_register;
     }
-    nmlModelDirectSend(1, (u8 *)&Tail_5, 3);
+    nmlModelDirectSend(1, &Tail_5, 3);
 }
 
 static void DrawDropCircle(ActShadowActor *actor)
 {
     ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)0x70000000;
-    const float *center = work->temporary;
+    const float *center = work->temporary.values;
     Vector4 *vertices = work->vertices;
     float radius;
     float corner;
@@ -1547,19 +1442,19 @@ static void DrawDropCircle(ActShadowActor *actor)
         u64 render_state_value = ((u64)0xc800 << 19) | render_state_bits;
         Head_6_00478E30.set_render_state.data.value = render_state_value;
     }
-    nmlModelDirectSend(1, (u8 *)&Head_6_00478E30, 5);
+    nmlModelDirectSend(1, &Head_6_00478E30, 5);
     for (camera_index = 0; camera_index < 8; camera_index++) {
         if (xglStudioGetCamera2(camera_index)->active == 1) {
             break;
         }
     }
     work->camera_index = camera_index;
-    work->temporary[0] = actor->position[0];
-    work->temporary[2] = actor->position[2];
+    work->temporary.values[0] = actor->position[0];
+    work->temporary.values[2] = actor->position[2];
     if (actor->height_override == -1000.0f) {
-        work->temporary[1] = actor->position[1] + 0.02f;
+        work->temporary.values[1] = actor->position[1] + 0.02f;
     } else {
-        work->temporary[1] = actor->height_override + 0.02f;
+        work->temporary.values[1] = actor->height_override + 0.02f;
     }
     radius = actor->shadow_radius;
     corner = radius * dropCircleCornerScale;
@@ -1570,7 +1465,7 @@ static void DrawDropCircle(ActShadowActor *actor)
     vertices[7].x = center[0] - radius;
     vertices[0].y = vertices[1].y = vertices[2].y =
         vertices[3].y = vertices[4].y = vertices[5].y =
-        vertices[6].y = vertices[7].y = work->temporary[1] + dropCircleHeightOffset;
+        vertices[6].y = vertices[7].y = work->temporary.values[1] + dropCircleHeightOffset;
     vertices[6].z = vertices[7].z = center[2];
     vertices[0].z = vertices[1].z = center[2] + corner;
     vertices[2].z = vertices[3].z = center[2] - corner;
@@ -1607,7 +1502,7 @@ static void DrawDropCircle(ActShadowActor *actor)
     clip_mask = 0xffff0000;
     for (i = 15; i >= 0; i--, projected++) {
         if ((projected->point.x & clip_mask) ||
-            (projected->point.y & clip_mask) || (int)projected->point.z < 0) {
+            (projected->point.y & clip_mask) || projected->point.z < 0) {
             projected->valid = 0;
         } else {
             visible = 1;
@@ -1616,7 +1511,7 @@ static void DrawDropCircle(ActShadowActor *actor)
     if (visible) {
         DrawDropCircleIndexTable indices;
         work->alpha = actor->shadow_alpha;
-        work->packet.test_environment_control = 0x8001;
+        work->packet.gif_tag.control_low = 0x8001;
         work->packet.test_environment_register = 71;
         work->packet.render_state_register = sRender.shadow_state | 0x80000;
         work->packet.shadow_context_register = 76;
@@ -1625,13 +1520,12 @@ static void DrawDropCircle(ActShadowActor *actor)
         work->packet.dma_tag.words.high = 0;
         work->packet.vif_nop = 0;
         if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], 0, 14)) {
-            /* Retain the immutable helper interfaces pending header composition. */
-            DrawDropShadowSubBack((void *)work, 14, 0);
-            nmlModelDirectSend(2, (u8 *)TestEnv_7, 3);
-            DrawDropShadowSubFront((void *)work, 14);
-            DrawDropShadowSubBack((void *)work, 14, 128);
+            DrawDropShadowSubBack(work, 14, 0);
+            nmlModelDirectSend(2, TestEnv_7, 3);
+            DrawDropShadowSubFront(work, 14);
+            DrawDropShadowSubBack(work, 14, 128);
             Tail_8.set_shadow_register.data.value = (u64)sRender.shadow_state | 0x80000;
-            nmlModelDirectSend(1, (u8 *)&Tail_8, 3);
+            nmlModelDirectSend(1, &Tail_8, 3);
         }
     }
 }
@@ -1644,12 +1538,12 @@ void ACT_DrawShadowBegin(void)
     Head_9.set_shadow_context.data.value = shadow_state;
     /* Set the command-enable bit after initializing the state bits. */
     Head_9.set_shadow_context.data.value |= 0x80000;
-    nmlModelDirectSend(1, (u8 *)&Head_9, 10);
+    nmlModelDirectSend(1, &Head_9, 10);
 }
 
 void ACT_DrawShadowEnd(void)
 {
-    nmlModelDirectSend(1, (u8 *)&Tail_10, 3);
+    nmlModelDirectSend(1, &Tail_10, 3);
 }
 
 void ACT_DrawShadow(ActDrawShadowActor *actor)
@@ -1673,7 +1567,7 @@ void ACT_DrawShadow(ActDrawShadowActor *actor)
         DrawCircleShadow(actor);
         break;
     case 2:
-        DrawZeldaShadow((ActZeldaShadowActor *)actor);
+        DrawZeldaShadow(actor);
         break;
     case 3:
         DrawDropCircle((ActShadowActor *)actor);

@@ -10,8 +10,6 @@
 #include "main/xgl_flags.h"
 #include "xgl_flags.h"
 
-int xglFlagsSet(int bit_offset, int bit_count, int value);
-
 int xglFlagsSet(int bit_offset, int bit_count, int value)
 {
     union XglPackedFlagWindow flag_window;
@@ -121,7 +119,7 @@ int xglFlagsGet(int bit_offset, int bit_count)
      * offsets and widths unchecked; sufficient access bounds are not enforced
      * by this function.
      */
-    return (int)((value.signed_value >> (bit_offset & 7)) & ((1u << bit_count) - 1u));
+    return (value.signed_value >> (bit_offset & 7)) & ((1u << bit_count) - 1u);
 }
 
 int xglFlagsGet1(int bit_offset)

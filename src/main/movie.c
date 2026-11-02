@@ -1,6 +1,9 @@
 #include "common.h"
 #include "shared.h"
 #include "main/jni.h"
+#include "main/game_movie.h"
+#include "main/game_snap_shot.h"
+#include "main/string_utf_get_hash.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -15,20 +18,7 @@ typedef struct MovieObjectCall {
     unsigned char *object;
 } MovieObjectCall;
 
-extern short GameMovieFrame;
-extern unsigned char GameMovieTransparent;
-extern unsigned char GameMovieAlpha;
-
-/* GameMovieStop is defined in main/tu125 (src/main/game_movie.c), not yet
- * recovered. */
-extern void GameMovieStop(void);
-
-/* Runtime class-field helpers are still assembly; keep the established ABI. */
-extern SceneString *loadConstString(const char *bytes, int length);
-
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-extern void GameMoviePlay(char *path);
-
 /* GameMovieInit is defined in main/tu125 (src/main/game_movie.c), not yet
  * recovered. */
 extern void GameMovieInit(int size);
@@ -45,13 +35,13 @@ void Java_xeno_Movie_start__I(JThread *thread, int *arguments,
     static char name[] = "data\\movie\\full\\mv0000.ipu";
     int movie_id = arguments[1];
 
-    name[21] = (char)(movie_id % 10 + '0');
+    name[21] = movie_id % 10 + '0';
     movie_id /= 10;
-    name[20] = (char)(movie_id % 10 + '0');
+    name[20] = movie_id % 10 + '0';
     movie_id /= 10;
-    name[19] = (char)(movie_id % 10 + '0');
+    name[19] = movie_id % 10 + '0';
     movie_id /= 10;
-    name[18] = (char)(movie_id % 10 + '0');
+    name[18] = movie_id % 10 + '0';
 
     GameMoviePlay(name);
 }

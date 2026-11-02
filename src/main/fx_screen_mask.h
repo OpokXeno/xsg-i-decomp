@@ -6,6 +6,9 @@
 #define SRC_MAIN_FX_SCREEN_MASK_H
 
 #include "shared.h"
+#include "main/fx_screen_mask.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_task.h"
 
 /*
  * The task body of this unit's fade tasks, behind the scheduler's 0x80-byte
@@ -46,13 +49,15 @@ typedef struct {
     int duration;                               /* +0x24 */
     int mode;                                   /* +0x28 */
     unsigned char unmodeled_2c[20];             /* +0x2c */
-    short frame;                                /* +0x40 */
+    unsigned short frame;                       /* +0x40 */
 } ScreenMaskTask;
 
 /*
  * A task dispatched through fxAdapter uses the same scheduler prefix but a
  * different payload: four words copied from FX_call's argument block, and a
- * signed countdown initialized from its `command` argument.  fxAdapter
+ * halfword countdown initialized from its `command` argument; fxAdapter reads
+ * it back with lhu at both of its reads and compares the decremented value as
+ * a signed 16-bit number.  fxAdapter
  * forwards the saved callback and all four words when the countdown expires.
  * These offsets are the lw/sw sites in fxAdapter (0x0026ace0) and FX_call
  * (0x0026ae48); the remaining bytes are deliberately left unnamed.
@@ -65,7 +70,7 @@ typedef struct {
     void *state;                               /* +0x1c */
     int callback_arguments[4];                 /* +0x20 */
     unsigned char unmodeled_30[0x10];          /* +0x30 */
-    short countdown;                           /* +0x40 */
+    unsigned short countdown;                  /* +0x40 */
 } FxAdapterTask;
 
 /*
@@ -79,9 +84,6 @@ extern GameLoopStateAddressView GameLoopState;
 
 static int fxAdapter(XglTaskPrefix *entry);
 
-int xglTaskRemove(XglTaskPrefix *task);
-extern void nmlModelSetFadeDoit(void);
-
 /* canon: config/header-canon.json chose src/core/main-0021c5c0/xglTaskEntryPrev.c over 0 other accepted spellings */
 XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
@@ -89,8 +91,5 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
 
 extern void nmlModelSetActiveFadeIn(int argument0, int argument1, int command);
 extern void nmlModelSetActiveFadeOut(int argument0, int argument1, int command);
-
-extern void FX_call(int command, int effect_index, const void *arguments,
-                    int argument_count);
 
 #endif /* SRC_MAIN_FX_SCREEN_MASK_H */

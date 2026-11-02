@@ -5,6 +5,12 @@
 #include "main/xgl_font.h"
 #include "main/xgl_cd.h"
 #include "main/party.h"
+#include "main/game_movie.h"
+#include "main/game_pause_disp.h"
+#include "main/nml_model_set.h"
+#include "main/res_get_path.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_sound.h"
 
 #define MOVIE_FLAG_SKIP_ALL 0x10000000
 #define PAD_BUTTON_SKIP 0x10
@@ -25,7 +31,6 @@ typedef enum MovieAlpha {
 
 extern MovieGameLoopState GameLoopState;
 extern MovieRenderState sRender;
-extern PadPrefix PadData;
 extern MovieTransparency GameMovieTransparent;
 extern MovieAlpha GameMovieAlpha;
 extern short GameMovieFrame;
@@ -34,8 +39,6 @@ extern short GameMovieFrame;
 extern int xglMovieClose(void *movie);
 
 extern void xglMovieInfoInit(MovieInfo *movie);
-extern void *GameResourceAlloc(int size);
-
 /* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
 extern int xglMovieOpen(void *movie, char *name);
 
@@ -44,25 +47,16 @@ extern int SCRIPT_getFadeTime(void);
 extern void SCRIPT_sendMovieSkipSignal(void);
 extern void nmlModelSetActiveFadeInCancel(int fadeTime);
 extern int xglMoviePlay(void *movie);
-extern void nmlModelDirectSend(int mode, void *data, int count);
-extern int xglFontGetStringWidth(const char *text);
 extern char *GameResourceGetFreeAddr(void);
 extern void nmlModelSendSignalMovieStart(void);
 extern void nmlModelSendSignalMovieFinish(int mode);
 extern void xglRenderClearDepth(void);
-extern void xglSoundStreamStop(int stream);
-extern void xglSoundStreamMute(void);
-extern void xglSoundEffectNormalDirect(int effect);
 extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
 extern int xglMpeg2Open(void *info, const char *name);
 extern int xglMpeg2Play(void *info);
 extern int xglMpeg2Close(void *info);
 extern void xglRenderCopyDisp2Draw(void);
-extern void xglFontPrintDirect(const char *text);
-extern void GamePauseDispBG(void);
-extern void GamePauseDispEvent(void);
 extern void PartyTimePauseStart(void);
-extern void PartyTimePauseEnd(void);
 static char *caption_nextline(char *cursor);
 static char *caption_getparam(char *cursor, int *time, char *out);
 static void caption_convert(char *text);

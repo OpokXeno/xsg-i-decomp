@@ -32,6 +32,10 @@ void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_en
                           const HermiteVector *point_prev, const HermiteVector *point_start,
                           const HermiteVector *point_end, const HermiteVector *point_next);
 
-Matrix4 *MMathScaleMatrix(Matrix4 *out, const Matrix4 *matrix, const Vector4 *scale);
+Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *scale);
+
+/* Functions and data used by other translation units. */
+Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angles);
+Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *left, Matrix4 *right);
 
 #endif /* INCLUDE_MAIN_M_MATH_H */

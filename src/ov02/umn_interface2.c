@@ -163,12 +163,12 @@ void *UmnBgCubeInit(void *memory)
     camera = xglStudioGetCamera2(0);
     task->camera_id = 0;
     xglCameraInit(camera);
-    camera->rotation.x = 0.0f;
-    camera->rotation.y = 0.0f;
-    camera->rotation.z = 0.0f;
-    camera->position.x = 0.0f;
-    camera->position.y = 0.0f;
-    camera->position.z = 4.0f;
+    (&camera->rotation.vector)->x = 0.0f;
+    (&camera->rotation.vector)->y = 0.0f;
+    (&camera->rotation.vector)->z = 0.0f;
+    (&camera->position.vector)->x = 0.0f;
+    (&camera->position.vector)->y = 0.0f;
+    (&camera->position.vector)->z = 4.0f;
     camera->fov = 0.91593236f;
     camera->active = 1;
     camera->state = 1;
@@ -179,6 +179,7 @@ void *UmnBgCubeInit(void *memory)
 
 #include "main/xgl_packet.h"
 #include "main/xgl_render.h"
+#include "main/xgl_font.h"
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
@@ -204,53 +205,11 @@ typedef struct UmnIf2Parameters {
     UmnIf2Rgba remaining_vertices;
 } UmnIf2Parameters;
 
-typedef struct UmnIf2AdCommand {
-    u64 value;
-    u64 register_address;
-} UmnIf2AdCommand;
-
-typedef struct UmnIf2SetupPacket {
-    u64 tag;
-    u64 registers;
-    UmnIf2AdCommand texture_flush;
-    UmnIf2AdCommand alpha;
-    UmnIf2AdCommand texture;
-    UmnIf2AdCommand test;
-} UmnIf2SetupPacket;
-
-/* GIF PACKED mode expands each register into four 32-bit lanes. The tag's
- * 0x531 list repeats RGBAQ, UV and XYZ2 for each of the six vertices. */
-typedef struct UmnIf2PackedRegister {
-    u32 lane[4];
-} UmnIf2PackedRegister;
-
-typedef struct UmnIf2GeometryPacket {
-    u32 tag_low;
-    u32 tag_high;
-    u32 registers_low;
-    u32 registers_high;
-    UmnIf2PackedRegister payload[18];
-} UmnIf2GeometryPacket;
-
-/* Both direct-data submissions use the same scratchpad address. The setup
- * packet is copied out before the geometry packet overwrites that storage. */
-typedef union UmnIf2PacketWorkspace {
-    UmnIf2SetupPacket setup;
-    UmnIf2GeometryPacket geometry;
-} UmnIf2PacketWorkspace;
-
-typedef struct UmnIf2Context {
-    XglPacket *packet;
-    unsigned char unmodeled_04[0x2C];
-    UmnIf2PacketWorkspace workspace;
-} UmnIf2Context;
-
-static void DrawUmnInterface2(void *context_arg, void *arg)
+static void DrawUmnInterface2(FontDrawCursor *cursor, void *argument)
 {
-    UmnIf2Context *context = (UmnIf2Context *)context_arg;
-    UmnIf2Parameters *parameters = (UmnIf2Parameters *)arg;
-    UmnIf2SetupPacket *setup = &context->workspace.setup;
-    UmnIf2GeometryPacket *geometry = &context->workspace.geometry;
+    UmnIf2Parameters *parameters = argument;
+    UmnIf2SetupPacket *setup = &cursor->work.umn_setup;
+    UmnIf2GeometryPacket *geometry = &cursor->work.umn_geometry;
     UmnIf2PackedRegister *out;
     UmnIf2Coordinates x_coordinates;
     UmnIf2Coordinates y_coordinates;
@@ -266,7 +225,7 @@ static void DrawUmnInterface2(void *context_arg, void *arg)
     setup->texture.register_address = 6;
     setup->test.value = 0x5000D;
     setup->test.register_address = 0x47;
-    sceVif1PkAddDirectDataN(context->packet, setup, 5);
+    sceVif1PkAddDirectDataN(cursor->packet, setup, 5);
 
     x_coordinates = D_00A11EE0;
     y_coordinates = D_00A11EF8;
@@ -303,7 +262,7 @@ static void DrawUmnInterface2(void *context_arg, void *arg)
         out->lane[3] = 0;
         out++;
     }
-    sceVif1PkAddDirectDataN(context->packet, geometry, 0x13);
+    sceVif1PkAddDirectDataN(cursor->packet, geometry, 0x13);
 }
 
 /*
@@ -318,10 +277,6 @@ typedef struct UmnInterface2State {
     unsigned char intensity_b; /* decremented by 2 each frame until zero */
 } UmnInterface2State;
 
-/* The font queue calls draw(context, arg) with the arg registered below;
- * the context record (read at +0x00 and +0x30) is not yet recovered. */
-static void DrawUmnInterface2(void *context, void *arg);
-extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(void *context, void *arg), void *arg);
 extern UmnInterface2State *UmnInterface2;
 
 void UmnInterface2Main(void) {

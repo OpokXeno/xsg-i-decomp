@@ -102,7 +102,7 @@ Vector4 *MEfCalcAngleMatrix(Vector4 *out, const Vector4 *matrix)
  * height of 1.5, and 0..0x27 an accessory joint whose matrix is copied out of
  * the actor's matrix block. Anything else, or no actor, leaves the identity.
  */
-Matrix4 *MEfGetActorMatrix(Matrix4 *destination, ActRecord *actor, u32 coordinate)
+Matrix4 *MEfGetActorMatrix(Matrix4 *destination, Actor *actor, u32 coordinate)
 {
     int joint;
 
@@ -153,7 +153,7 @@ Matrix4 *MEfGetActorMatrix(Matrix4 *destination, ActRecord *actor, u32 coordinat
                operand, which every pointer-arithmetic spelling (ptr + joint,
                &ptr[joint], via a named local) reverses ($2/$3 swap and an
                extra move). */
-            Matrix4 *jointMatrix = (Matrix4 *)(joint * sizeof(Matrix4) + (u32)actor->matrixBlock);
+            Matrix4 *jointMatrix = (Matrix4 *)(joint * sizeof(Matrix4) + (u32)actor->jointMatrices);
 
             /* The R5900's native 128-bit copy of the joint's four rows. */
             __asm__ __volatile__(
@@ -179,7 +179,7 @@ Matrix4 *MEfGetActorMatrix(Matrix4 *destination, ActRecord *actor, u32 coordinat
 /*
  * MEfGetActorCoord: the translation row of MEfGetActorMatrix, with w = 1.
  */
-Vector4 *MEfGetActorCoord(Vector4 *destination, ActRecord *actor, u32 coordinate)
+Vector4 *MEfGetActorCoord(Vector4 *destination, Actor *actor, u32 coordinate)
 {
     Matrix4 matrix;
 

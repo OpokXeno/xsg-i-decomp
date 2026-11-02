@@ -30,12 +30,4 @@ typedef struct RssdStreamWork {
 
 extern RssdStreamWork RssdStrWork;
 
-/*
- * Sends one RSSD command over SIF RPC; see main:0x0023fff0 (still
- * INCLUDE_ASM, main/tu110). `request` may be null, otherwise its 32 bytes
- * are copied into the SIF RPC buffer, and `size` bytes of `data` are copied
- * after it.
- */
-int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
-
 #endif /* SRC_MAIN_SSD_3_H */

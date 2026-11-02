@@ -5,9 +5,11 @@
 #ifndef SRC_MAIN_SDV_H
 #define SRC_MAIN_SDV_H
 
-typedef struct GamePlayerRecord {
-    u8 unmodeled_00[0xa8];
-} GamePlayerRecord;
+#include "main/sv_get_image_item.h"
+#include "main/sc_get.h"
+#include "main/sdv.h"
+#include "main/srs.h"
+#include "main/xgl_sound.h"
 
 /* Private typed view of the zero-initialized serialized battle-data buffer.
  * The resource is loaded at runtime; it is not an ELF initializer. */
@@ -304,9 +306,9 @@ typedef struct SdvAlterParameters {
     short blend;                    /* +0x62 */
     short image_count;              /* +0x64 */
     short mode;                     /* +0x66 */
-    unsigned short image_index;     /* +0x68 */
+    short image_index;              /* +0x68 */
     short image_frames;             /* +0x6a */
-    unsigned short image_timer;     /* +0x6c */
+    short image_timer;              /* +0x6c */
     short category;                 /* +0x6e */
 } SdvAlterParameters;
 
@@ -319,7 +321,7 @@ typedef struct SdvAlter {
     Vector4 trail[2][128];          /* +0x70 */
     float level[128];               /* +0x1070 */
     float phase;
-    unsigned short cursor;
+    short cursor;
     unsigned short samples;
     unsigned short active;          /* +0x1278 */
     unsigned short wrapped;         /* +0x127a */
@@ -327,30 +329,13 @@ typedef struct SdvAlter {
     unsigned char unmodeled_127e[2];
 } SdvAlter;
 
-/* The GIF packet accumulator of the SGs* family: a growing array of 16-byte
- * records at `base`, `count` records long; `tag_index` is the record the open
- * GIF tag sits in and `loop_count` is what closing it ORs into its NLOOP. */
-typedef struct SdvGifPacket {
-    int count;                      /* +0x00 */
-    int tag_index;                  /* +0x04 */
-    int loop_count;                 /* +0x08 */
-    void *base;                     /* +0x0c */
-} SdvGifPacket;
-
 extern BattleDataStorage batDatBuf;
-extern const Vector4 McMathUnitVector;
 extern int _sdvAmbFrame;
 extern int _sdvAmbState;
-extern unsigned char charID_0;
+extern int charID_0;
 extern int eftCate_1;
 extern short _sefBattleMode;
 extern short _sdvSpecialBuf[8];
-extern SdvGifPacket _packet;
-
-/* These typed caller declarations agree with the defining sc_get and sef
- * functions; their generated owner headers do not yet export these names. */
-extern int scGetImmAdrImmIdx2(int base, unsigned short *table, int index);
-
 extern short scGetImmNumIdx(short *table, int index);
 extern int sefIsEntryBoss(void);
 extern int rand(void);
@@ -358,24 +343,13 @@ static void sdvSetAmbStateSub(int state, int effect_no, int force);
 extern void *xglStudioGetLight2(void);
 extern void xglLightIntensityAmbient(void *light, void *ambient);
 extern void func_A2C3D8(void *map_rgb);
-extern void xglSoundEffectNormalID(int sound_id, int variant);
-
-extern int srsAnalyzeEftNo(int effectId, unsigned char *charId,
-                            int *effectCategory);
-
 int sdvProgressPrm(int kind, void *data, int size);
 extern void func_A31920(int kind, float *params);
 void sdvScheduleCamera(SdvCameraTask *task);
 extern void GameDefocusSet(int index, int, const int *);
-void sdvClearSpecialWork(void);
 int sdvCreateAlter(SdvAlterParameters *parameters);
 void sdvInitAlter(SdvAlter *alter);
 void sdvDestroyAlter(SdvAlter *alter);
 void sdvExecAlter(SdvAlter *alter);
-void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet);
-extern void SGsInitEnv(void);
-void sdvInitAlters(void);
-void sdvDestroyAlters(void);
-void sdvExecAlters(void);
-
+void sdvDrawAlter(SdvAlter *alter, SGsPacket *packet);
 #endif /* SRC_MAIN_SDV_H */

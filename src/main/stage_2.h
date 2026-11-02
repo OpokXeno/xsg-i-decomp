@@ -7,6 +7,11 @@
 
 #include "shared.h"
 #include "main/jni.h"
+#include "main/nml_model_set.h"
+#include "main/init_vm.h"
+#include "main/jthread.h"
+#include "main/string_utf_get_hash.h"
+#include "main/xgl_render.h"
 
 /*
  * The "runnable" bit src/main/chr.h's JThread.flags documents at this same
@@ -15,27 +20,8 @@
  */
 #define STAGE_THREAD_RUNNING 0x10u
 
-struct JThreadHandle;
-
-/*
- * The VM thread argument every Java_xeno_* native receives, already
- * recovered under different TU-local names in src/main/chr.h (JThread) and
- * src/main/scene_1.h (SceneThread). Java_xeno_Stage_stop__ touches only its
- * +0x24 status word, the same offset those two TUs document as the
- * thread's flags word.
- */
-typedef struct StageThread {
-    u8 unmodeled_00[0x0d];
-    u8 wait_kind;            /* +0x0d */
-    u8 unmodeled_0e[0x14 - 0x0e];
-    void (*entry)(struct JThreadHandle *thread); /* +0x14 */
-    SceneMethod *method;     /* +0x18 */
-    u8 unmodeled_1c[0x24 - 0x1c];
-    unsigned int flags;      /* +0x24 */
-    u8 unmodeled_28[0x3c - 0x28];
-    u16 resume_frames;       /* +0x3c */
-    u16 frame_depth;         /* +0x3e */
-} StageThread;
+/* The VM thread argument every Java_xeno_* native receives is the JThread of
+ * include/main/jni.h. */
 
 /*
  * Call blocks: the natives below take no Java object receiver, only their
@@ -89,16 +75,6 @@ typedef struct StageVisibleCall {
     int part_index;
     unsigned char visible;
 } StageVisibleCall;
-
-typedef struct StagePartList {
-    u8 unmodeled_00[0x40];
-    int part_count;              /* +0x40 */
-} StagePartList;
-
-typedef struct StageBackground {
-    u8 unmodeled_00[8];
-    int draw_parameter;          /* +0x08 */
-} StageBackground;
 
 typedef struct StageCFBGCall {
     int draw_type;
@@ -189,31 +165,25 @@ typedef struct StageGameLoopState {
 extern const char stagePeerFieldName[];
 
 extern StageGameLoopState GameLoopState;
-extern SceneType *TYPE_Void;
-
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-extern StageThread *JTHREAD_get(SceneObject object);
-
-extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+extern JavaMethod *findMethod(JavaClass *clazz, SceneString *name,
                                void *signature_or_type);
 
-extern void JTHREAD_defaultStage(struct JThreadHandle *thread);
-extern void nmlModelSetMapLastEntry(int model_id, int entry);
-extern void nmlModelSetBackBuffer(int model_id, int count, int priority, int mode);
-extern void nmlModelSetFadeInCancel(int frames);
-extern void nmlModelSetFadeOutCancel(int frames);
-extern void nmlModelSetEffectWrite(int enabled);
 extern void EnemySound_StopAll(int clear);
 extern void nmlModelSetFadeInInterrupt(int frames, float red, float green, float blue);
 extern void SCRIPT_fade(int frames);
 extern void SCRIPT_load_DBG(const char *text);
 extern void SCRIPT_exec(void);
-extern void xglRenderClearColor(u32 color);
 extern void GameBgDrawType1Entry(int parameter, StageBackground *background);
 extern void GameBgDrawType2Entry(int parameter, StageBackground *background);
-extern void nmlModelSetPartsVisible(StagePartList *parts, int part_index, int visible);
-extern void nmlModelInitPartsVisible(StagePartList *parts, int visible);
+/* Partial view of NmlModel (include/main/nml_model_set.h): the parts helpers
+ * below read only part_count. */
+typedef struct NmlModelPartListView {
+    u8 unmodeled_00[0x40];
+    int part_count;              /* +0x40 */
+} NmlModelPartListView;
+
+extern void nmlModelSetPartsVisible(NmlModelPartListView *parts, int part_index, int visible);
+extern void nmlModelInitPartsVisible(NmlModelPartListView *parts, int visible);
 
 #endif /* SRC_MAIN_STAGE_2_H */

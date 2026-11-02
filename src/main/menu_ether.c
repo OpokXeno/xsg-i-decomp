@@ -4,6 +4,14 @@
 #include "main/menu_1.h"
 
 #include "shared.h"
+#include "main/e_number_main.h"
+#include "main/end_print.h"
+#include "main/menu_para_pt_rate_get.h"
+#include "main/open_close_main.h"
+#include "main/party.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 #define PAD_L1 0x0004
 #define PAD_R1 0x0008
@@ -96,14 +104,6 @@ typedef struct MenuEtherWork {
     unsigned char targetList[8];    /* +0x60 */
 } MenuEtherWork;
 
-typedef struct EtherListRow {
-    const char *name;   /* +0x00 */
-    int amount;         /* +0x04 */
-    signed char flag;   /* +0x08 */
-    signed char status; /* +0x09 */
-    unsigned char unmodeled_0a[2];
-} EtherListRow;
-
 typedef struct MenuEtherPadData {
     unsigned char unmodeled_00[0x2A];
     unsigned short pressed; /* +0x2A */
@@ -123,44 +123,9 @@ typedef struct EtherL1R1SlideStep {
 
 typedef struct EtherInfoCharacterHelp { const char *text[2]; } EtherInfoCharacterHelp;
 
-typedef struct EtherPasWindow {
-    short x; /* +0x00 */
-    short y; /* +0x02 */
-    int color; /* +0x04 */
-    short width; /* +0x08 */
-    short height; /* +0x0A */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    signed char state; /* +0x10 */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void (*callback)(void); /* +0x14 */
-    void *callbackArg; /* +0x18 */
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-} EtherPasWindow;
-
-typedef struct EtherMessageColor {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-} EtherMessageColor;
-
-typedef struct EtherPasMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode; /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short x; /* +0x04 */
-    short y; /* +0x06 */
-    int color; /* +0x08 */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    EtherMessageColor glyphColor; /* +0x10 */ /* +0x10; first three bytes are RGB */
-    unsigned char unmodeled_14[0x18 - 0x14];
-    const char *text; /* +0x18 */
-    unsigned char unmodeled_1c[0x44 - 0x1C];
-} EtherPasMessage;
-
 typedef struct EtherPasBox {
     short x; /* +0x00 */
-    short y; /* +0x02 */
+    unsigned short y; /* +0x02 */
     int kind; /* +0x04 */
     short width; /* +0x08 */
     short height; /* +0x0A */
@@ -170,27 +135,12 @@ typedef struct EtherPasWork {
     unsigned char state; /* +0x000 */
     unsigned char unmodeled_01[3];
     int kind; /* +0x004 */
-    EtherPasWindow window; /* +0x008 */
-    EtherPasMessage messages[6]; /* +0x19C */
+    WindowDX window; /* +0x008 */
+    EMessageParam messages[6]; /* +0x19C */
     EtherPasBox box; /* +0x334 */
     unsigned char callbackWork[1]; /* +0x340 */
 } EtherPasWork;
 
-typedef struct EtherMenuWindowDX {
-    short x; /* +0x00 */
-    short y; /* +0x02 */
-    int color; /* +0x04 */
-    short width; /* +0x08 */
-    short height; /* +0x0A */
-    const char *title; /* +0x0C */
-    unsigned char state; /* +0x10: 1 while the frame opens, 3 once it is up */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void *select; /* +0x14 */
-    void *selectArg; /* +0x18 */
-    unsigned char unmodeled_1c[0x9C - 0x1C];
-    const char *renderTitle; /* +0x9C; active title after initialization */
-    unsigned char unmodeled_a0[0x194 - 0xA0];
-} EtherMenuWindowDX;
 
 typedef struct EtherMenuList {
     unsigned char unmodeled_00[0x02];
@@ -205,7 +155,7 @@ typedef struct EtherMenuScreen {
     unsigned char state; /* +0x000 */
     unsigned char unmodeled_01[3];
     int color; /* +0x004 */
-    EtherMenuWindowDX window[2]; /* +0x008 */
+    WindowDX window[2]; /* +0x008 */
     EtherMenuList list[2]; /* +0x330 */
 } EtherMenuScreen;
 
@@ -224,31 +174,6 @@ typedef struct EtherL1R1Work {
     int spriteWork; /* +0x04: initial work value of both sprites */
     EtherL1R1Sprite sprite[2]; /* +0x08: L1, then R1 */
 } EtherL1R1Work;
-
-typedef struct EtherScreenWork {
-    unsigned char state;
-} EtherScreenWork;
-
-typedef struct EtherListSPWindow {
-    unsigned char unmodeled_00[0x26];
-    unsigned char state;            /* +0x26 */
-} EtherListSPWindow;
-
-typedef struct EtherListWork {
-    unsigned char state;
-    unsigned char unmodeled_01[0x0C - 0x01];
-    EtherListSPWindow window;       /* +0x0C */
-} EtherListWork;
-
-typedef struct EtherPartySlot {
-    unsigned short party_id;
-    unsigned char unmodeled_02[0x02];
-} EtherPartySlot;
-
-typedef struct EtherPartyData {
-    unsigned char unmodeled_00[0x30];
-    EtherPartySlot attack_slots[3]; /* +0x30 */
-} EtherPartyData;
 
 typedef struct EtherInfoCommandHelp {
     const char *text[5];
@@ -275,20 +200,6 @@ typedef struct EtherInfoMessage {
     unsigned char unmodeled_10[0x1B0 - 0x10];
 } EtherInfoMessage;
 
-typedef struct EtherInfoWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    const char *title;
-    unsigned char state;
-    unsigned char enabled;
-    unsigned char unmodeled_12[2];
-    void (*callback)(struct WindowDX *, void *);
-    void *callbackArg;
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-} EtherInfoWindow;
 
 typedef struct EtherInfoWork {
     unsigned char state;
@@ -296,7 +207,7 @@ typedef struct EtherInfoWork {
     signed char previous;
     unsigned char helpHeld;
     int work;
-    EtherInfoWindow window;
+    WindowDX window;
     unsigned char unmodeled_19c[4];
     EtherInfoMessage message;
     char text[256];
@@ -333,18 +244,10 @@ typedef struct EtherStatusWindowEarly {
     void *callback;
     void *callbackArg;
     unsigned char unmodeled_1c[0x9C - 0x1C];
-    char *renderTitle;
+    const char *renderTitle;
     unsigned char unmodeled_a0[0x194 - 0xA0];
 } EtherStatusWindowEarly;
 
-typedef struct EtherStatusCursorEarly {
-    unsigned char state;
-    unsigned char unmodeled_01[3];
-    unsigned short x;
-    unsigned short y;
-    int work;
-    unsigned char unmodeled_0c[0x24 - 0x0C];
-} EtherStatusCursorEarly;
 
 typedef struct EtherStatusRecordHeaderEarly {
     unsigned char state;
@@ -361,7 +264,7 @@ typedef struct EtherPartyStatusWorkEarly {
     EtherStatusRecordHeaderEarly header;
     EtherStatusWindowEarly window[8];
     EtherStatusPanelEarly panel[8];
-    EtherStatusCursorEarly cursor[2];
+    ECursolMainData cursor[2];
 } EtherPartyStatusWorkEarly;
 
 typedef struct EtherStatusPanel {
@@ -388,18 +291,10 @@ typedef struct EtherStatusWindow {
     void (*callback)(struct WindowDX *, void *);
     struct EtherStatusPanel *callbackArg;
     unsigned char unmodeled_1c[0x9C - 0x1C];
-    char *renderTitle;
+    const char *renderTitle;
     unsigned char unmodeled_a0[0x194 - 0xA0];
 } EtherStatusWindow;
 
-typedef struct EtherTargetCursor {
-    unsigned char state;
-    unsigned char unmodeled_01[3];
-    unsigned short x;
-    unsigned short y;
-    int work;
-    unsigned char unmodeled_0c[0x24 - 0x0C];
-} EtherTargetCursor;
 
 typedef struct EtherTargetStatusWork {
     unsigned char state;
@@ -417,36 +312,15 @@ typedef struct EtherTargetStatusWork {
     int color;
     EtherStatusWindow window[8];
     EtherStatusPanel panel[8];
-    EtherTargetCursor cursor[3];
+    ECursolMainData cursor[3];
     EtherPasBox frame[2][2];
     EtherPasBox scrollBar;
     unsigned char unmodeled_4f58[0x4F64 - 0x4F58];
 } EtherTargetStatusWork;
 
-typedef struct EtherMenuListWindow {
-    unsigned char state;
-    unsigned char itemType;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int work;
-    short width;
-    short height;
-    const char *title;
-    signed char active;
-    signed char lineCount;
-    unsigned char unmodeled_16[6];
-    struct EtherListRow *items;
-    unsigned char unmodeled_20[4];
-    signed char firstVisible;
-    unsigned char unmodeled_25;
-    signed char selectionMode;
-    unsigned char unmodeled_27[3];
-    short itemCount;
-    unsigned char unmodeled_2c[0x172C - 0x2C];
-} EtherMenuListWindow;
-
-typedef struct EtherMenuListHeader {
+/* MenuEtherList: the two ether list windows (window[1] shows list 1, opened
+ * in menu state 132) with the marks and point numbers drawn over window[0]. */
+typedef struct EtherMenuListsWork {
     unsigned char state;
     unsigned char unmodeled_01;
     unsigned char configured;
@@ -454,56 +328,12 @@ typedef struct EtherMenuListHeader {
     unsigned char showNumbers;
     unsigned char unmodeled_05[3];
     int work;
-} EtherMenuListHeader;
-
-typedef struct EtherMenuListEntry {
-    EtherMenuListHeader header;
-    EtherMenuListWindow window;
-} EtherMenuListEntry;
-
-typedef struct EtherDetailNumber {
-    short x;
-    short y;
-    int work;
-    unsigned char unmodeled_08[6];
-    unsigned char format;
-    unsigned char digits;
-    unsigned char unmodeled_10[4];
-    int value;
-    unsigned char unmodeled_18[0x90 - 0x18];
-} EtherDetailNumber;
-
-typedef struct EtherMenuListsWork {
-    EtherMenuListEntry window[2];
-    EtherMenuListHeader endHeader;
+    WindowSPCursor window[2];       /* +0x0C */
     EtherL1R1Sprite sprite[8];
-    EtherDetailNumber number[8];
+    ENumberMainData number[8];
 } EtherMenuListsWork;
 
-typedef struct EtherListCursor {
-    unsigned char state;
-    unsigned char unmodeled_01[3];
-    unsigned short x;
-    unsigned short y;
-    int work;
-    unsigned char unmodeled_0c[0x24 - 0x0C];
-} EtherListCursor;
 
-typedef struct EtherResultWindowDX {
-    short x; /* +0x00 */
-    short y; /* +0x02 */
-    int color; /* +0x04 */
-    short width; /* +0x08 */
-    short height; /* +0x0A */
-    const char *title; /* +0x0C */
-    unsigned char state; /* +0x10: 1 while the frame opens, 3 once it is up */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void *select; /* +0x14 */
-    void *selectArg; /* +0x18 */
-    unsigned char unmodeled_1c[0x9C - 0x1C];
-    const char *renderTitle; /* +0x9C; active title after initialization */
-    unsigned char unmodeled_a0[0x194 - 0xA0];
-} EtherResultWindowDX;
 
 typedef struct EtherResultWork {
     unsigned char state;
@@ -511,33 +341,17 @@ typedef struct EtherResultWork {
     unsigned char rightPanel;
     unsigned char unmodeled_03;
     int work;
-    EtherResultWindowDX window;
-    EtherPasMessage messages[3];
-    EtherDetailNumber numbers[3];
-    EtherListCursor cursor;
+    WindowDX window;
+    EMessageParam messages[3];
+    ENumberMainData numbers[3];
+    ECursolMainData cursor;
 } EtherResultWork;
 
-typedef struct EtherDetailRibbon {
-    short x;
-    short y;
-    int work;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x70 - 0x0C];
-} EtherDetailRibbon;
-
-typedef struct EtherDetailFont {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int work;
-    unsigned char unmodeled_0c[0x20 - 0x0C];
-} EtherDetailFont;
 
 typedef struct EtherDetailRow {
-    EtherDetailRibbon ribbon;
-    EtherDetailFont font;
-    EtherDetailNumber number;
+    ERibbonMainData ribbon;
+    ETagFontMainData font;
+    ENumberMainData number;
 } EtherDetailRow;
 
 typedef struct EtherDetailWork {
@@ -545,7 +359,7 @@ typedef struct EtherDetailWork {
     unsigned char unmodeled_01[3];
     int work;
     EtherDetailRow rows[2];
-    EtherPasMessage message;
+    EMessageParam message;
 } EtherDetailWork;
 
 extern const char etherEvolveMenuText[];
@@ -577,13 +391,13 @@ extern char etherResultTitleText[];
 extern EtherPasWork *MenuEtherPas;
 extern EtherMenuScreen *MenuEtherMenu;
 extern EtherL1R1Work *MenuEtherL1R1;
-extern EtherScreenWork *MenuEtherInfo;
-extern EtherScreenWork *MenuEtherEx;
-extern EtherScreenWork *MenuEtherStatus;
-extern EtherScreenWork *MenuEtherStatus2;
-extern EtherListWork *MenuEtherList;
-extern EtherScreenWork *MenuEtherList2;
-extern int MainMenuWorkEnd;
+extern EtherInfoWork *MenuEtherInfo;
+extern EtherDetailWork *MenuEtherEx;
+extern EtherPartyStatusWorkEarly *MenuEtherStatus;
+extern EtherTargetStatusWork *MenuEtherStatus2;
+extern EtherMenuListsWork *MenuEtherList;
+extern EtherResultWork *MenuEtherList2;
+extern unsigned char *MainMenuWorkEnd;
 extern unsigned char MenuKeepSelect[0x64];
 extern const EtherInfoCommandHelp etherCommandHelp;
 extern const EtherInfoActionHelp etherActionHelp;
@@ -615,7 +429,7 @@ extern TecStatus *func_A1A378(short tecId);
 extern MenuTextEntry *func_A2C5A8(unsigned int etherId);
 extern EtherUnitRecord *func_A191C0(int chrNo);
 extern EtherCharRecord *func_A19210(int chrNo);
-EtherListRow *MenuListGet(int listIndex);
+MenuListEntry *MenuListGet(int listIndex);
 extern void MenuListMake(int listIndex, int mode);
 extern int *MenuSortAddrGet(int listIndex);
 int MenuSortCheck(int listIndex);
@@ -626,15 +440,10 @@ extern void MoveSlide(short *current, short *target, float rate);
 
 extern void eSpriteSet(void *sprite, short spriteId);
 extern void eSpriteMain(void *sprite);
-extern void MenuPasWindow(void);
-extern int MenuPasLengthGet(const char *text);
-extern void endPrintExtFunc(int kind, int id, void *data);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageMain(void *message);
 void func_A194E0(int chrNo, int etherId);
 int func_A19578(int chrNo, int etherId);
 void func_00A11270(int chrNo, int targetChrNo, int etherId);
-int EtherTreeInit();
+unsigned char *EtherTreeInit();
 void EtherTreeMain(void);
 void MenuEtherCapSet(void);
 void MenuEtherPasMain(void);
@@ -651,36 +460,16 @@ void MenuEtherListMake01(void);
 void MenuEtherListMake02(int listIndex);
 void MenuEtherListMake03(int listIndex);
 int MenuEtherEquip(void);
-int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-void xglSoundEffectNormalID(int sound_id, int variant);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-unsigned char *PartyDataGet(void);
-int PartyFriendLockCheck(int id, int flag);
 int PartyAttackerCheck(int id);
-int MenuMaryIdChange(int id);
-int MenuMainCharCheck(int chrNo);
 int MenuCharHpCheck(int chrNo);
 void MenuWorkEndCheck(unsigned char *end);
 void MenuKeepSelectReset(void);
 int MenuCursorKeepCheck(void);
 int MenuSelectMove(int cursor, int count, int wrap);
-void MenuSortSet(int listIndex, int type, int order);
 int MenuSortGet(int listIndex, int index);
 void ChangeTopLevel(int level);
-extern char *MenuCharNameGet(unsigned int charId);
-extern void eMessageCpy(char *message, const char *text);
-extern void eMessageCat(const char *text);
-extern void eCursolMain(void *cursor);
-extern char *MenuTagTextGet(int index);
-extern void eCursolSet(void *cursor, int width);
-extern void eCursolModeChange(void *cursor, unsigned int mode);
-void eRibbonSet(void *ribbon, int mode);
-void eRibbonMain(void *ribbon);
-void eTagFontSet(void *font, const char *text);
-void eTagFontMain(void *font);
-void eNumberSet(void *number, int mode);
-void eNumberMain(void *number);
-
+extern const char *MenuCharNameGet(unsigned int charId);
+extern const char *MenuTagTextGet(int index);
 static const char *msg_0_0036DC00[6] = {
     "Ether",
     "/Use",
@@ -696,12 +485,14 @@ static const char * msg01_2_0036DC20[] = { etherYesNoText, etherConfirmText };
 
 static const char * msg00_3_0036DC28[] = { etherPointsText, etherWtText };
 
-static char * msg01_4_0036DC30[] = { etherSetSearchText };
+/* Genuine conversion: the colour bytes of this .rodata text are rewritten at
+ * run time (MenuEtherExMain), as through the original's char string literal. */
+static char * msg01_4_0036DC30[] = { (char *)etherSetSearchText };
 
 short MenuEtherParty[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static inline EtherInfoWork *EtherInfoWorkGet(EtherScreenWork **slot) {
-    return (void *)*slot;
+static inline EtherInfoWork *EtherInfoWorkGet(EtherInfoWork **slot) {
+    return *slot;
 }
 
 /* The four-byte record of an ether (its slot ethers), or 0 outside 1..80. */
@@ -802,7 +593,7 @@ void MenuEtherCapSet(void) {
         for (slot = 0; slot < 12; slot++) {
             int etherId = *equippedEther++;
             if (etherId != 0) {
-                unit->capUsed = (unsigned char)unit->capUsed +
+                unit->capUsed = unit->capUsed +
                     (unsigned char)func_A1A488(etherId)->capCost;
             } else {
                 break;
@@ -825,23 +616,23 @@ void MenuEtherPasMain(void) {
     switch (pas->state) {
     case 0:
         pas->kind = 0x00FFFFF0;
-        WindowDXSet((WindowDX *)(void *)(&pas->window));
+        WindowDXSet(&pas->window);
         pas->window.x = -288;
         pas->window.y = 8;
-        pas->window.color = pas->kind;
+        pas->window.style = pas->kind;
         pas->window.width = 272;
         pas->window.height = 30;
-        pas->window.callback = MenuPasWindow;
-        pas->window.callbackArg = pas->callbackWork;
+        pas->window.close_callback = MenuPasWindow;
+        pas->window.close_callback_arg = pas->callbackWork;
         pas->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(&pas->window));
+        WindowDXMain(&pas->window);
         pas->window.state = 3;
         for (i = 0; i < 6; i++) {
             eMessageSet(&pas->messages[i], msg_0_0036DC00[i]);
             pas->messages[i].mode = 0x20;
             pas->messages[i].x = 288;
             pas->messages[i].y = 11;
-            pas->messages[i].color = pas->kind + 2;
+            pas->messages[i].draw_parameter = pas->kind + 2;
         }
         pas->state = 2;
         break;
@@ -886,7 +677,7 @@ void MenuEtherPasMain(void) {
     }
 
     MoveSlide(&pas->window.x, &slideTarget, 3.0f);
-    WindowDXMain((WindowDX *)(void *)(&pas->window));
+    WindowDXMain(&pas->window);
     if (pas->window.state == 3) {
         pas->box.x = pas->window.x + 3;
         pas->box.y = pas->window.y + 3;
@@ -996,7 +787,7 @@ void MenuEtherInfoMain(void) {
     EtherInfoAcquireHelp acquireHelp = etherAcquireHelp;
     EtherInfoTransferHelp transferHelp = etherTransferHelp;
     short targetY;
-    EtherInfoWindow *window;
+    WindowDX *window;
     char *text;
 
     switch (screen->state) {
@@ -1004,23 +795,23 @@ void MenuEtherInfoMain(void) {
         screen->work = 0x00FFFFF0;
         window = &screen->window;
         text = screen->text;
-        WindowDXSet((WindowDX *)(void *)(window));
+        WindowDXSet(window);
         screen->window.x = -16;
         screen->window.y = 480;
-        screen->window.color = screen->work;
+        screen->window.style = screen->work;
         screen->window.width = 544;
         screen->window.height = 54;
-        screen->window.callback =
+        screen->window.close_callback =
             (void (*)(struct WindowDX *, void *))MenuInfoWindow;
         {
             EtherInfoMessage *message = &screen->message;
             message->x = 0;
-            screen->window.callbackArg = message;
+            screen->window.close_callback_arg = message;
         }
         screen->message.y = 0;
         __builtin_memset(&screen->message.text, 0, sizeof(screen->message.text));
         screen->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(window));
+        WindowDXMain(window);
         screen->window.state = 3;
         screen->previous = -1;
         screen->active = 1;
@@ -1093,7 +884,7 @@ void MenuEtherInfoMain(void) {
         } else {
             eMessageCpy(text, MenuTextGet(MenuSortGet(0, MenuWork.listSelect))->auxiliary);
             if (screen->helpHeld == 1) {
-                EtherListRow *rows = MenuListGet(0);
+                MenuListEntry *rows = MenuListGet(0);
                 if (rows[MenuWork.listSelect].flag == 1 &&
                     rows[MenuWork.listSelect].status == 0) {
                     eMessageCpy(text, capHelp);
@@ -1205,7 +996,7 @@ void MenuEtherInfoMain(void) {
     }
     screen->message.text = text;
     MoveSlide(&screen->window.y, &targetY, 3.0f);
-    WindowDXMain((WindowDX *)(void *)(window));
+    WindowDXMain(window);
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
@@ -1229,36 +1020,36 @@ void MenuEtherMenuMain(void) {
     switch (work->state) {
     case 0:
         work->color = 0x00FFFFF0;
-        WindowDXSet((WindowDX *)(void *)(&work->window[0]));
+        WindowDXSet(&work->window[0]);
         work->window[0].x = 528;
-        work->window[0].title = etherMenuTitleText;
-        work->window[0].color = work->color;
+        work->window[0].tag_id = etherMenuTitleText;
+        work->window[0].style = work->color;
         work->window[0].width = 145;
-        work->window[0].selectArg = &work->list[0];
+        work->window[0].close_callback_arg = &work->list[0];
         work->list[0].items = msg00_1_0036DC18[0];
         work->window[0].state = 1;
         work->window[0].y = 192;
         work->window[0].height = 102;
-        work->window[0].select = MenuSelectWindow;
+        work->window[0].close_callback = MenuSelectWindow;
         work->list[0].cursor = 0;
         work->list[0].hasPrompt = 0;
-        WindowDXMain((WindowDX *)(void *)(&work->window[0]));
+        WindowDXMain(&work->window[0]);
         work->window[0].state = 3;
-        WindowDXSet((WindowDX *)(void *)(&work->window[1]));
+        WindowDXSet(&work->window[1]);
         work->window[1].x = 528;
-        work->window[1].title = etherSelectTitleText;
+        work->window[1].tag_id = etherSelectTitleText;
         work->window[1].y = 192;
-        work->window[1].color = work->color;
+        work->window[1].style = work->color;
         work->window[1].width = 169;
         work->list[1].items = msg01_2_0036DC20[0];
         work->list[1].prompt = msg01_2_0036DC20[1];
         work->window[1].height = 102;
-        work->window[1].select = MenuSelectWindow;
-        work->window[1].selectArg = &work->list[1];
+        work->window[1].close_callback = MenuSelectWindow;
+        work->window[1].close_callback_arg = &work->list[1];
         work->list[1].cursor = 0;
         work->list[1].cursor = 0;
         work->window[1].state = work->list[1].hasPrompt = 1;
-        WindowDXMain((WindowDX *)(void *)(&work->window[1]));
+        WindowDXMain(&work->window[1]);
         work->window[1].state = 3;
         work->state = 2;
 	    /* fallthrough */
@@ -1307,7 +1098,7 @@ void MenuEtherMenuMain(void) {
         }
         for (i = 0; i < 2; i++) {
             MoveSlide(&work->window[i].x, &target[i], 3.0f);
-            WindowDXMain((WindowDX *)(void *)(&work->window[i]));
+            WindowDXMain(&work->window[i]);
         }
         break;
     }
@@ -1326,7 +1117,7 @@ char etherPointsText[8] = "\x01" "E.Pts";
 
 void MenuEtherExMain(void)
 {
-  EtherDetailWork *screen = (void *) MenuEtherEx;
+  EtherDetailWork *screen = MenuEtherEx;
   short rowTargets[2];
   short messageTarget;
   int i;
@@ -1355,7 +1146,7 @@ void MenuEtherExMain(void)
       screen->message.mode = 32;
       screen->message.x = 528;
       screen->message.y = 120;
-      screen->message.color = screen->work;
+      screen->message.draw_parameter = screen->work;
       screen->state = 2;
 
     case 2:
@@ -1530,7 +1321,7 @@ void MenuEtherL1R1Main(void) {
 }
 
 void MenuEtherStatusMain(void) {
-    EtherPartyStatusWorkEarly *screen = (void *)MenuEtherStatus;
+    EtherPartyStatusWorkEarly *screen = MenuEtherStatus;
     short targetX[8];
     short targetY[8];
     short targetWidth[8];
@@ -1565,7 +1356,7 @@ void MenuEtherStatusMain(void) {
             screen->panel[i].enabled = 0;
             screen->panel[i].offsetY = 0;
             screen->window[i].state = 1;
-            WindowDXMain((WindowDX *)(void *)(&screen->window[i]));
+            WindowDXMain((WindowDX *)&screen->window[i]);
             screen->window[i].state = 3;
         }
         }
@@ -1708,7 +1499,7 @@ void MenuEtherStatusMain(void) {
         } else {
             screen->window[i].color = 0x00F07E00;
         }
-        WindowDXMain((WindowDX *)(void *)(&screen->window[i]));
+        WindowDXMain((WindowDX *)&screen->window[i]);
     }
     screen->cursor[0].x = screen->window[MenuWork.partyCursor].x + 3;
     {
@@ -1724,7 +1515,7 @@ void MenuEtherStatusMain(void) {
 
 void MenuEtherStatusMain2(void)
 {
-    EtherTargetStatusWork *screen = (void *)MenuEtherStatus2;
+    EtherTargetStatusWork *screen = MenuEtherStatus2;
     int i;
 
     if (MenuWork.state == 255) {
@@ -1734,7 +1525,7 @@ void MenuEtherStatusMain2(void)
     case 0:
         screen->color = 0x00FFF000;
         for (i = 0; i < MenuWork.partyCount; i++) {
-            WindowDXSet((WindowDX *)(void *)(&screen->window[i]));
+            WindowDXSet((WindowDX *)&screen->window[i]);
             screen->window[i].x = -272;
             screen->window[i].width = 240;
             screen->window[i].height = 82;
@@ -1743,13 +1534,13 @@ void MenuEtherStatusMain2(void)
             screen->window[i].enabled = 1;
             screen->window[i].title = MenuTagTextGet(7);
             screen->window[i].callback =
-                (void (*)(struct WindowDX *, void *))MenuStatusDisp;
+                MenuStatusDisp;
             screen->window[i].callbackArg = &screen->panel[i];
             screen->panel[i].chrNo = MenuEtherParty[i];
             screen->panel[i].x = 0;
             screen->panel[i].y = 0;
             screen->window[i].state = 1;
-            WindowDXMain((WindowDX *)(void *)(&screen->window[i]));
+            WindowDXMain((WindowDX *)&screen->window[i]);
             screen->window[i].state = 3;
         }
         for (i = 0; i < 3; i++) {
@@ -1952,7 +1743,7 @@ void MenuEtherStatusMain2(void)
             if (screen->listMode == 2) {
                 screen->scrollBar.y = 80;
             }
-            screen->scrollBar.height = 354 - (unsigned short)screen->scrollBar.y;
+            screen->scrollBar.height = 354 - screen->scrollBar.y;
             endPrintExtFunc(screen->color, 101, &screen->scrollBar);
         }
         for (i = 0; i < screen->visibleCount; i++) {
@@ -1966,7 +1757,7 @@ void MenuEtherStatusMain2(void)
                 unsigned short clipOffset = screen->window[i].y + 39;
 
                 if (clipOffset < 415) {
-                    WindowDXMain((WindowDX *)(void *)(&screen->window[i]));
+                    WindowDXMain((WindowDX *)&screen->window[i]);
                 }
             }
         }
@@ -2044,18 +1835,18 @@ const char etherListSubTitleText[12] = "List\003\232E.Pts";
 void MenuEtherListMain(void)
 {
     short targetX[2];
-    EtherMenuListsWork *screen = (void *)MenuEtherList;
+    EtherMenuListsWork *screen = MenuEtherList;
     int i;
 
-    switch (screen->window[0].header.state) {
+    switch (screen->state) {
     case 0:
-        screen->window[0].header.work = 0x00FFFFF8;
+        screen->work = 0x00FFFFF8;
         for (i = 0; i < 2; i++) {
-            screen->window[i].window.work = screen->window[0].header.work;
-            screen->window[i].window.items = 0;
-            screen->window[i].window.x = 528;
-            screen->window[i].window.y = 64;
-            WindowSPSet((WindowSPCursor *)(void *)(&screen->window[i].window));
+            screen->window[i].style = screen->work;
+            screen->window[i].items = 0;
+            screen->window[i].x = 528;
+            screen->window[i].y = 64;
+            WindowSPSet(&screen->window[i]);
         }
         for (i = 0; i < 8; i++) {
             eSpriteSet(&screen->sprite[i], 1546);
@@ -2065,10 +1856,10 @@ void MenuEtherListMain(void)
             eNumberSet(&screen->number[i], 0);
             screen->number[i].work = 0x00FFFFFA;
         }
-        screen->window[0].header.configured = 0;
-        screen->window[0].header.state = 2;
-        screen->window[0].header.acquireLayout = 0;
-        screen->window[0].header.showNumbers = 0;
+        screen->configured = 0;
+        screen->state = 2;
+        screen->acquireLayout = 0;
+        screen->showNumbers = 0;
         break;
     case 2:
         break;
@@ -2076,7 +1867,7 @@ void MenuEtherListMain(void)
         return;
     }
 
-    if (screen->window[0].header.acquireLayout == 0) {
+    if (screen->acquireLayout == 0) {
         targetX[0] = 528;
         targetX[1] = -262;
     } else {
@@ -2085,25 +1876,25 @@ void MenuEtherListMain(void)
     }
     switch (MenuWork.state) {
     case 48:
-        if ((MenuWork.flags & 1) && screen->window[0].header.configured == 0) {
-            EtherMenuListWindow *window = &screen->window[0].window;
+        if ((MenuWork.flags & 1) && screen->configured == 0) {
+            WindowSPCursor *window = &screen->window[0];
 
-            screen->window[0].window.x = 528;
-            screen->window[0].window.y = 144;
-            screen->window[0].window.height = 222;
-            screen->window[0].window.lineCount = 9;
-            screen->window[0].window.width = 232;
-            screen->window[0].window.title = etherListEpTitleText;
-            screen->window[0].window.active = 1;
-            screen->window[0].window.items = MenuListGet(0);
-            screen->window[0].window.itemType = 7;
-            WindowSPItemChange((WindowSPCursor *)(void *)((void *)window));
-            WindowSPSetSelect((WindowSPCursor *)(void *)(window), MenuKeepSelect);
-            screen->window[0].window.state = 17;
-            WindowSPMain((WindowSPCursor *)(void *)(window));
-            screen->window[0].header.configured = 1;
-            screen->window[0].header.acquireLayout = 0;
-            screen->window[0].header.showNumbers = 0;
+            screen->window[0].x = 528;
+            screen->window[0].y = 144;
+            screen->window[0].height = 222;
+            screen->window[0].rows = 9;
+            screen->window[0].width = 232;
+            screen->window[0].title = etherListEpTitleText;
+            screen->window[0].columns = 1;
+            screen->window[0].items = MenuListGet(0);
+            screen->window[0].draw_flags = 7;
+            WindowSPItemChange(window);
+            WindowSPSetSelect(window, MenuKeepSelect);
+            screen->window[0].state = 17;
+            WindowSPMain(window);
+            screen->configured = 1;
+            screen->acquireLayout = 0;
+            screen->showNumbers = 0;
         }
         /* fall through */
     case 50:
@@ -2111,47 +1902,47 @@ void MenuEtherListMain(void)
         break;
     case 80:
         if (MenuWork.flags & 1) {
-            EtherMenuListWindow *window = &screen->window[0].window;
+            WindowSPCursor *window = &screen->window[0];
 
-            screen->window[0].window.x = 528;
-            screen->window[0].window.y = 160;
-            screen->window[0].window.height = 198;
-            screen->window[0].window.lineCount = 8;
-            screen->window[0].window.width = 256;
-            screen->window[0].window.title = etherListWtTitleText;
-            screen->window[0].window.active = 1;
-            screen->window[0].window.items = MenuListGet(0);
-            screen->window[0].window.itemType = 3;
-            WindowSPItemChange((WindowSPCursor *)(void *)((void *)window));
-            WindowSPSetSelect((WindowSPCursor *)(void *)(window), &MenuKeepSelect[5]);
-            screen->window[0].window.state = 17;
-            WindowSPMain((WindowSPCursor *)(void *)(window));
-            screen->window[0].header.acquireLayout = 0;
-            screen->window[0].header.showNumbers = 1;
+            screen->window[0].x = 528;
+            screen->window[0].y = 160;
+            screen->window[0].height = 198;
+            screen->window[0].rows = 8;
+            screen->window[0].width = 256;
+            screen->window[0].title = etherListWtTitleText;
+            screen->window[0].columns = 1;
+            screen->window[0].items = MenuListGet(0);
+            screen->window[0].draw_flags = 3;
+            WindowSPItemChange(window);
+            WindowSPSetSelect(window, &MenuKeepSelect[5]);
+            screen->window[0].state = 17;
+            WindowSPMain(window);
+            screen->acquireLayout = 0;
+            screen->showNumbers = 1;
         }
         targetX[0] = 16;
         break;
     case 112:
-        if ((MenuWork.flags & 1) && screen->window[0].header.configured == 0) {
-            EtherMenuListWindow *window = &screen->window[0].window;
+        if ((MenuWork.flags & 1) && screen->configured == 0) {
+            WindowSPCursor *window = &screen->window[0];
 
-            screen->window[0].window.x = -262;
-            screen->window[0].window.y = 92;
-            screen->window[0].window.height = 174;
-            screen->window[0].window.width = 246;
-            screen->window[0].window.title = etherListEPointsTitleText;
-            screen->window[0].window.lineCount = 7;
-            screen->window[0].window.active = 1;
-            screen->window[0].window.items = MenuListGet(0);
-            screen->window[0].window.itemType = 7;
-            WindowSPItemChange((WindowSPCursor *)(void *)((void *)window));
-            WindowSPSetSelect((WindowSPCursor *)(void *)(window), &MenuKeepSelect[10]);
-            screen->window[0].window.selectionMode = 4;
-            screen->window[0].window.state = 17;
-            WindowSPMain((WindowSPCursor *)(void *)(window));
-            screen->window[0].header.showNumbers = 0;
-            screen->window[0].header.configured = 1;
-            screen->window[0].header.acquireLayout = 1;
+            screen->window[0].x = -262;
+            screen->window[0].y = 92;
+            screen->window[0].height = 174;
+            screen->window[0].width = 246;
+            screen->window[0].title = etherListEPointsTitleText;
+            screen->window[0].rows = 7;
+            screen->window[0].columns = 1;
+            screen->window[0].items = MenuListGet(0);
+            screen->window[0].draw_flags = 7;
+            WindowSPItemChange(window);
+            WindowSPSetSelect(window, &MenuKeepSelect[10]);
+            screen->window[0].mode = 4;
+            screen->window[0].state = 17;
+            WindowSPMain(window);
+            screen->showNumbers = 0;
+            screen->configured = 1;
+            screen->acquireLayout = 1;
         }
         /* fall through */
     case 114:
@@ -2165,22 +1956,22 @@ void MenuEtherListMain(void)
         unsigned char initializeList = MenuWork.flags & 1;
 
         if (initializeList) {
-            EtherMenuListWindow *window = &screen->window[1].window;
+            WindowSPCursor *window = &screen->window[1];
             i = 0;
 
-            screen->window[1].window.x = -262;
-            screen->window[1].window.y = 196;
-            screen->window[1].window.width = 246;
-            screen->window[1].window.height = 174;
-            screen->window[1].window.itemType = 7;
-            screen->window[1].window.active = 1;
-            screen->window[1].window.lineCount = 7;
-            screen->window[1].window.title = etherListSubTitleText;
-            screen->window[1].window.items = MenuListGet(1);
-            WindowSPItemChange((WindowSPCursor *)(void *)((void *)window));
-            screen->window[1].window.selectionMode = 4;
-            screen->window[1].window.state = 17;
-            WindowSPMain((WindowSPCursor *)(void *)(window));
+            screen->window[1].x = -262;
+            screen->window[1].y = 196;
+            screen->window[1].width = 246;
+            screen->window[1].height = 174;
+            screen->window[1].draw_flags = 7;
+            screen->window[1].columns = 1;
+            screen->window[1].rows = 7;
+            screen->window[1].title = etherListSubTitleText;
+            screen->window[1].items = MenuListGet(1);
+            WindowSPItemChange(window);
+            screen->window[1].mode = 4;
+            screen->window[1].state = 17;
+            WindowSPMain(window);
             {
                 int *sortRows = MenuSortAddrGet(1);
                 int count = MenuSortCheck(1);
@@ -2194,9 +1985,9 @@ void MenuEtherListMain(void)
                     }
                     i++;
                 }
-                WindowSPSelectJump((WindowSPCursor *)(void *)((void *)window), i);
+                WindowSPSelectJump(window, i);
             }
-            screen->window[0].header.configured = 2;
+            screen->configured = 2;
         }
     }
         /* fall through */
@@ -2204,39 +1995,39 @@ void MenuEtherListMain(void)
         targetX[1] = 10;
         break;
     default:
-        screen->window[0].header.configured = 0;
+        screen->configured = 0;
         break;
     }
     for (i = 0; i < 2; i++) {
-        MoveSlide(&screen->window[i].window.x, &targetX[i], 3.0f);
-        WindowSPMain((WindowSPCursor *)(void *)(&screen->window[i].window));
+        MoveSlide(&screen->window[i].x, &targetX[i], 3.0f);
+        WindowSPMain(&screen->window[i]);
     }
-    if (screen->window[0].header.showNumbers != 0) {
+    if (screen->showNumbers != 0) {
         unsigned int iconIndex = 0;
         int displayRow;
 
         for (displayRow = 0; displayRow < 8; displayRow++) {
-            int row = screen->window[0].window.firstVisible + displayRow;
+            int row = screen->window[0].current_row + displayRow;
 
-            if (row < screen->window[0].window.itemCount) {
-                if (screen->window[0].window.items[row].status != 0) {
+            if (row < screen->window[0].item_count) {
+                if (screen->window[0].items[row].status != 0) {
                     screen->sprite[iconIndex].x =
-                        (screen->window[0].window.x + screen->window[0].window.width) - 39;
+                        (screen->window[0].x + screen->window[0].width) - 39;
                     screen->sprite[iconIndex].y =
-                        (screen->window[0].window.y + displayRow * 24) + 3;
+                        (screen->window[0].y + displayRow * 24) + 3;
                     eSpriteMain(&screen->sprite[iconIndex]);
                     iconIndex++;
                 }
                 screen->number[displayRow].x =
-                    (screen->window[0].window.x + screen->window[0].window.width) - 63;
+                    (screen->window[0].x + screen->window[0].width) - 63;
                 {
-                    unsigned short numberWindowY = screen->window[0].window.y;
+                    unsigned short numberWindowY = screen->window[0].y;
 
                     screen->number[displayRow].digits = 2;
                     screen->number[displayRow].format = 0;
                     screen->number[displayRow].y = (numberWindowY + displayRow * 24) + 7;
                 }
-                screen->number[displayRow].value = screen->window[0].window.items[row].amount;
+                screen->number[displayRow].value = screen->window[0].items[row].amount;
                 eNumberMain(&screen->number[displayRow]);
             }
         }
@@ -2249,8 +2040,8 @@ const char etherTransferRenderTitle[14] = "TransferEther";
 char etherResultTitleText[8] = "Result";
 
 void MenuEtherListMain2(void) {
-    EtherResultWork *screen = (void *)MenuEtherList2;
-    EtherResultWindowDX *window;
+    EtherResultWork *screen = MenuEtherList2;
+    WindowDX *window;
     short targetX;
     short targetY;
     int i;
@@ -2259,20 +2050,20 @@ void MenuEtherListMain2(void) {
     case 0:
         screen->work = 0x00FFFFF8;
         window = &screen->window;
-        WindowDXSet((WindowDX *)(void *)(window));
+        WindowDXSet(window);
         screen->window.x = -240;
         screen->window.y = 280;
         screen->window.width = 185;
         screen->window.height = 78;
-        screen->window.color = screen->work;
-        screen->window.title = etherResultTitleText;
+        screen->window.style = screen->work;
+        screen->window.tag_id = etherResultTitleText;
         screen->window.state = 1;
-        WindowDXMain((WindowDX *)(void *)(&screen->window));
+        WindowDXMain(&screen->window);
         screen->window.state = 3;
         for (i = 0; i < 3; i++) {
             eMessageSet(&screen->messages[i], 0);
             screen->messages[i].mode = 32;
-            screen->messages[i].color = screen->work + 2;
+            screen->messages[i].draw_parameter = screen->work + 2;
         }
         for (i = 0; i < 3; i++) {
             eNumberSet(&screen->numbers[i], 0);
@@ -2309,7 +2100,7 @@ void MenuEtherListMain2(void) {
             screen->window.x = -240;
             screen->window.y = 288;
             screen->window.height = 78;
-            screen->window.renderTitle = etherResultTitleText;
+            screen->window.title_font.render.text =etherResultTitleText;
             screen->rightPanel = 0;
             slotEthers = MenuEtherDataGet(MenuSortGet(0, MenuWork.listSelect));
             for (i = 0; i < 3; i++) {
@@ -2317,13 +2108,13 @@ void MenuEtherListMain2(void) {
                     screen->messages[i].text = func_A2C5A8(slotEthers[i])->name;
                     screen->numbers[i].value = func_A1A488(slotEthers[i])->pointCost;
                     if (func_A19578(MenuWork.chrNo, slotEthers[i]) != 0) {
-                        screen->messages[i].glyphColor.blue = 64;
-                        screen->messages[i].glyphColor.green = 64;
-                        screen->messages[i].glyphColor.red = 64;
+                        screen->messages[i].color_b = 64;
+                        screen->messages[i].color_g = 64;
+                        screen->messages[i].color_r = 64;
                     } else {
-                        screen->messages[i].glyphColor.blue = -128;
-                        screen->messages[i].glyphColor.green = -128;
-                        screen->messages[i].glyphColor.red = -128;
+                        screen->messages[i].color_b = 0x80;
+                        screen->messages[i].color_g = 0x80;
+                        screen->messages[i].color_r = 0x80;
                     }
                 } else {
                     screen->messages[i].text = 0;
@@ -2340,7 +2131,7 @@ void MenuEtherListMain2(void) {
             screen->window.x = 528;
             screen->window.y = 144;
             screen->window.height = 30;
-            screen->window.renderTitle = etherTransferRenderTitle;
+            screen->window.title_font.render.text =etherTransferRenderTitle;
             {
                 EtherTextEntry *entry;
                 int next;
@@ -2351,9 +2142,9 @@ void MenuEtherListMain2(void) {
                 entry = func_A2C5A8(MenuWork.etherId);
                 *firstValue = 0;
                 screen->messages[i].text = entry->name;
-                screen->messages[i].glyphColor.blue = normalShade;
-                screen->messages[i].glyphColor.green = normalShade;
-                screen->messages[i].glyphColor.red = normalShade;
+                screen->messages[i].color_b = normalShade;
+                screen->messages[i].color_g = normalShade;
+                screen->messages[i].color_r = normalShade;
                 for (i = 1; i < 3; i = next) {
                     next = i + 1;
                     screen->messages[i].text = 0;
@@ -2375,7 +2166,7 @@ void MenuEtherListMain2(void) {
     if (window->x == targetX) {
         MoveSlide(&screen->window.y, &targetY, 3.0f);
     }
-    WindowDXMain((WindowDX *)(void *)(window));
+    WindowDXMain(window);
     for (i = 0; i < 3; i++) {
         screen->messages[i].x = screen->window.x + 19;
         screen->messages[i].y = screen->window.y + 24 * i + 3;
@@ -2387,7 +2178,7 @@ void MenuEtherListMain2(void) {
 }
 
 void MenuEtherListMake00(void) {
-    EtherListRow *rows = MenuListGet(0);
+    MenuListEntry *rows = MenuListGet(0);
     int *sortRow = MenuSortAddrGet(0);
     int count = MenuSortCheck(0);
     EtherUnitRecord *unit = func_A191C0(MenuWork.chrNo);
@@ -2414,7 +2205,7 @@ void MenuEtherListMake00(void) {
 
 void MenuEtherListMake01(void) {
     int i;
-    EtherListRow *rows = MenuListGet(0);
+    MenuListEntry *rows = MenuListGet(0);
     int *sortRow = MenuSortAddrGet(0);
     int count = MenuSortCheck(0);
     EtherUnitRecord *unit = func_A191C0(MenuWork.chrNo);
@@ -2446,7 +2237,7 @@ void MenuEtherListMake01(void) {
 }
 
 void MenuEtherListMake02(int listIndex) {
-    EtherListRow *rows = MenuListGet(listIndex);
+    MenuListEntry *rows = MenuListGet(listIndex);
     int *sortRow = MenuSortAddrGet(listIndex);
     int count = MenuSortCheck(listIndex);
     EtherCharRecord *chr = func_A19210(MenuWork.chrNo);
@@ -2472,7 +2263,7 @@ void MenuEtherListMake02(int listIndex) {
 }
 
 void MenuEtherListMake03(int listIndex) {
-    EtherListRow *rows = MenuListGet(listIndex);
+    MenuListEntry *rows = MenuListGet(listIndex);
     int *sortRow = MenuSortAddrGet(listIndex);
     EtherCharRecord *character = func_A19210(MenuWork.targetChrNo);
     int maskByte = (MenuWork.etherId - 1) / 8;
@@ -2495,7 +2286,7 @@ void MenuEtherListMake03(int listIndex) {
 }
 
 int MenuEtherEquip(void) {
-    EtherListRow *rows = MenuListGet(0);
+    MenuListEntry *rows = MenuListGet(0);
     int *sortRow = MenuSortAddrGet(0);
     EtherUnitRecord *unit = func_A191C0(MenuWork.chrNo);
     int slot;
@@ -2507,7 +2298,7 @@ int MenuEtherEquip(void) {
         for (slot = 0; slot < 12; slot++) {
             if (unit->etherId[slot] == (short)sortRow[MenuWork.listSelect]) {
                 unit->etherId[slot] = 0;
-                unit->capUsed = (unsigned char)unit->capUsed -
+                unit->capUsed = unit->capUsed -
                     (unsigned char)rows[MenuWork.listSelect].amount;
                 break;
             }
@@ -2523,7 +2314,7 @@ int MenuEtherEquip(void) {
                 if (unit->etherId[slot] == 0) {
                     __builtin_memcpy(slotId, &sortRow[MenuWork.listSelect],
                                      sizeof(unit->etherId[slot]));
-                    unit->capUsed = (unsigned char)unit->capUsed +
+                    unit->capUsed = unit->capUsed +
                         (unsigned char)rows[MenuWork.listSelect].amount;
                     break;
                 }
@@ -2560,42 +2351,42 @@ void MenuEther(void)
 {
     if (MenuWork.state == 0) {
         int heap;
-        EtherPartySlot *slot;
+        PartyAttackPosition *slot;
         int i;
         int id;
 
-        heap = MainMenuWorkEnd;
+        heap = (int)MainMenuWorkEnd;
         MenuEtherDataBuf = (unsigned char (*)[4])((heap + 0x7FF) & ~0x7FF);
-        xglCdReadFile((char *)etherTreePath, MenuEtherDataBuf, 0, 1);
+        xglCdReadFile(etherTreePath, MenuEtherDataBuf, 0, 1);
         heap = (int)MenuEtherDataBuf + ETHER_DATA_SIZE;
         MenuEtherPas = (EtherPasWork *)heap;
         heap = (int)MenuEtherPas + ETHER_PAS_SIZE;
         MenuEtherPas->state = 0;
-        MenuEtherInfo = (EtherScreenWork *)heap;
+        MenuEtherInfo = (EtherInfoWork *)heap;
         heap = (int)MenuEtherInfo + ETHER_INFO_SIZE;
         MenuEtherInfo->state = 0;
-        MenuEtherStatus = (EtherScreenWork *)heap;
+        MenuEtherStatus = (EtherPartyStatusWorkEarly *)heap;
         heap = (int)MenuEtherStatus + ETHER_STATUS_SIZE;
-        MenuEtherStatus->state = 0;
-        MenuEtherStatus2 = (EtherScreenWork *)heap;
+        MenuEtherStatus->header.state = 0;
+        MenuEtherStatus2 = (EtherTargetStatusWork *)heap;
         heap = (int)MenuEtherStatus2 + ETHER_STATUS2_SIZE;
         MenuEtherStatus2->state = 0;
         MenuEtherMenu = (EtherMenuScreen *)heap;
         heap = (int)MenuEtherMenu + ETHER_MENU_SIZE;
         MenuEtherMenu->state = 0;
-        MenuEtherList = (EtherListWork *)heap;
+        MenuEtherList = (EtherMenuListsWork *)heap;
         heap = (int)MenuEtherList + ETHER_LIST_SIZE;
         MenuEtherList->state = 0;
-        MenuEtherList2 = (EtherScreenWork *)heap;
+        MenuEtherList2 = (EtherResultWork *)heap;
         heap = (int)MenuEtherList2 + ETHER_LIST2_SIZE;
         MenuEtherList2->state = 0;
-        MenuEtherEx = (EtherScreenWork *)heap;
+        MenuEtherEx = (EtherDetailWork *)heap;
         heap = (int)MenuEtherEx + ETHER_EX_SIZE;
         MenuEtherEx->state = 0;
         MenuEtherL1R1 = (EtherL1R1Work *)heap;
         heap = (int)MenuEtherL1R1 + ETHER_L1R1_SIZE;
         MenuEtherL1R1->state = 0;
-        MenuWorkEndCheck((unsigned char *)EtherTreeInit(heap, MenuEtherDataBuf));
+        MenuWorkEndCheck(EtherTreeInit(heap, MenuEtherDataBuf));
         MenuWork.nextState = 0x10;
         MenuWork.wait = 12;
         MenuWork.flags = 0;
@@ -2603,7 +2394,7 @@ void MenuEther(void)
         MenuWork.partyCount = 0;
         MenuEtherCapSet();
         MenuKeepSelectReset();
-        slot = ((EtherPartyData *)PartyDataGet())->attack_slots;
+        slot = PartyDataGet()->attack_slots;
         for (i = 0; i < 3; i++, slot++) {
             id = slot->party_id;
             if (id != 0) {
@@ -2758,8 +2549,8 @@ void MenuEther(void)
         if (MenuWork.wait != 0) {
             break;
         }
-        MenuWork.listSelect = WindowSPSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), PadData.repeat);
-        WindowSPKeepSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), &MenuKeepSelect[0]);
+        MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], PadData.repeat);
+        WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[0]);
         if (PadData.pressed & PAD_CIRCLE) {
             if (MenuWork.listSelect >= 0) {
                 short etherId = MenuSortGet(0, MenuWork.listSelect);
@@ -2784,7 +2575,7 @@ void MenuEther(void)
             if (MenuCursorKeepCheck() == 0) {
                 MenuWork.commandCursor = 0;
             }
-            WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[0]));
+            WindowSPKeepSelectCheck(&MenuKeepSelect[0]);
             MenuWork.nextState = 0x20;
             MenuWork.wait = 12;
             xglSoundEffectNormalID(SE_CANCEL, 0);
@@ -2833,7 +2624,7 @@ void MenuEther(void)
                     xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
             } else {
-                EtherPartyData *party = (EtherPartyData *)PartyDataGet();
+                PartyDataPrefix *party = PartyDataGet();
 
                 if (MenuCharHpCheck(-1) == 0) {
                     if (party->attack_slots[0].party_id != 0) {
@@ -2864,12 +2655,12 @@ void MenuEther(void)
             MenuEtherListMake01();
         }
         if (MenuWork.wait == 0) {
-            MenuWork.listSelect = WindowSPSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), PadData.repeat);
-            WindowSPKeepSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), &MenuKeepSelect[5]);
+            MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], PadData.repeat);
+            WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[5]);
             if ((PadData.pressed & PAD_SQUARE) && MenuWork.listSelect >= 0) {
                 int start = MenuWork.listSelect + 1;
                 int count = MenuSortCheck(0);
-                EtherListRow *rows = MenuListGet(0);
+                MenuListEntry *rows = MenuListGet(0);
                 int i;
                 int row = 0;
 
@@ -2879,7 +2670,7 @@ void MenuEther(void)
                         break;
                     }
                 }
-                WindowSPSelectJump((WindowSPCursor *)(void *)(&MenuEtherList->window), row);
+                WindowSPSelectJump(&MenuEtherList->window[0], row);
                 xglSoundEffectNormalID(SE_DECIDE, 0);
             }
             if ((PadData.repeat & PAD_CIRCLE) && MenuWork.listSelect >= 0) {
@@ -2895,10 +2686,10 @@ void MenuEther(void)
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.commandCursor = 0;
                 }
-                WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[5]));
+                WindowSPKeepSelectCheck(&MenuKeepSelect[5]);
             }
         }
-        MenuWork.listSelect = WindowSPSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), 0);
+        MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], 0);
         if (MenuWork.listSelect >= 0) {
             MenuWork.etherId = MenuSortGet(0, MenuWork.listSelect);
         }
@@ -2914,8 +2705,8 @@ void MenuEther(void)
             MenuWork.etherId = 0;
         }
         if (MenuWork.wait == 0) {
-            MenuWork.listSelect = WindowSPSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), PadData.repeat);
-            WindowSPKeepSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), &MenuKeepSelect[10]);
+            MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], PadData.repeat);
+            WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[10]);
             if (MenuWork.listSelect >= 0) {
                 unsigned char *slots = MenuEtherDataGet(MenuSortGet(0, MenuWork.listSelect));
                 int i;
@@ -2948,10 +2739,10 @@ void MenuEther(void)
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.commandCursor = 0;
                 }
-                WindowSPKeepSelectCheck((unsigned char *)(void *)(&MenuKeepSelect[10]));
+                WindowSPKeepSelectCheck(&MenuKeepSelect[10]);
             }
         }
-        MenuWork.listSelect = WindowSPSelect((WindowSPCursor *)(void *)(&MenuEtherList->window), 0);
+        MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], 0);
         if (MenuWork.listSelect >= 0) {
             MenuWork.etherId = MenuSortGet(0, MenuWork.listSelect);
         }
@@ -3065,11 +2856,11 @@ void MenuEther(void)
 
                 func_A194E0(MenuWork.chrNo, MenuEtherDataGet(MenuWork.etherId)[MenuWork.slotCursor]);
                 character = func_A19210(MenuWork.chrNo);
-                character->points -= (short)func_A1A488(MenuWork.etherId)->pointCost;
+                character->points -= func_A1A488(MenuWork.etherId)->pointCost;
                 MenuSortSet(0, 0x80, MenuWork.chrNo);
                 MenuEtherListMake02(0);
-                WindowSPItemChange((WindowSPCursor *)(void *)(&MenuEtherList->window));
-                MenuEtherList->window.state = 4;
+                WindowSPItemChange(&MenuEtherList->window[0]);
+                MenuEtherList->window[0].mode = 4;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
                 MenuWork.nextState = 0x78;
             } else {
@@ -3146,13 +2937,13 @@ void MenuEther(void)
         if (PadData.pressed & PAD_CIRCLE) {
             if (MenuWork.confirmCursor == 0) {
                 EtherCharRecord *character;
-                EtherListRow *rows;
+                MenuListEntry *rows;
                 int count;
                 int i;
 
                 func_A194E0(MenuWork.targetChrNo, MenuWork.etherId);
                 character = func_A19210(MenuWork.chrNo);
-                character->points -= (short)func_A1A488(MenuWork.etherId)->pointCost / 2;
+                character->points -= func_A1A488(MenuWork.etherId)->pointCost / 2;
                 rows = MenuListGet(1);
                 count = MenuSortCheck(1);
                 for (i = 0; i < count; i++) {
@@ -3227,21 +3018,21 @@ unsigned char (*MenuEtherDataBuf)[4] = 0;
 
 EtherPasWork *MenuEtherPas = 0;
 
-EtherScreenWork *MenuEtherInfo = 0;
+EtherInfoWork *MenuEtherInfo = 0;
 
 EtherMenuScreen *MenuEtherMenu = 0;
 
-EtherScreenWork *MenuEtherEx = 0;
+EtherDetailWork *MenuEtherEx = 0;
 
 EtherL1R1Work *MenuEtherL1R1 = 0;
 
-EtherScreenWork *MenuEtherStatus = 0;
+EtherPartyStatusWorkEarly *MenuEtherStatus = 0;
 
-EtherScreenWork *MenuEtherStatus2 = 0;
+EtherTargetStatusWork *MenuEtherStatus2 = 0;
 
-EtherListWork *MenuEtherList = 0;
+EtherMenuListsWork *MenuEtherList = 0;
 
-EtherScreenWork *MenuEtherList2 = 0;
+EtherResultWork *MenuEtherList2 = 0;
 
 const char MenuTecUseTpText[11] = "/Use T.Pts";
 

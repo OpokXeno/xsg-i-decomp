@@ -148,7 +148,7 @@ struct UnitRecord {
                                          * first when it is set */
 };
 
-/* Defined in src/main/act_1.c on its own ActRecord spelling of the actor. */
+/* Defined in src/main/act_1.c on its own Actor spelling of the actor. */
 extern void ACT_dispose(Actor *actor);
 
 /* Its first parameter is already Actor-typed (src/main/act_2.c). */

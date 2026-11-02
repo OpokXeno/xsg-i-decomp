@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "main/xgl_cd.h"
 #include "xgl_mc.h"
+#include "main/xgl_mc.h"
+#include "main/xgl_2.h"
 
 /* The state machine uses both a word and per-slot halfwords at offset 4. */
 typedef struct McRequestState {
@@ -23,12 +25,12 @@ typedef struct McRequestState {
 /* State and its 0x60-byte full-path buffer share the original workspace. */
 typedef struct McRequestStorage {
     McRequestState state;
-    unsigned char fullPath[0x60];
+    char fullPath[0x60];
 } McRequestStorage;
 
 typedef union McRequestPath {
     int empty;
-    unsigned char bytes[108];
+    char bytes[108];
 } McRequestPath;
 
 /* The caller's request parameters: file slot, name, data and size. */
@@ -73,7 +75,7 @@ typedef struct McSaveChecksum {
 
 typedef struct McWorkspaceView {
     McRequestState state;
-    unsigned char full_path[96];
+    char full_path[96];
     unsigned char map_name[36];
     McRequestEntry request;
 } McWorkspaceView;
@@ -100,34 +102,31 @@ int sceMcWrite(int fd, const void *buffer, int size);
 int sceMcSync(int mode, int *command, int *result);
 int sceMcGetInfo(int port, int slot, int *type, int *free, int *format);
 
-int sceMcGetDir(int port, int slot, unsigned char *entries, int mode,
+int sceMcGetDir(int port, int slot, const char *name, int mode,
                 int max_entries, int reserved);
 
-int sceMcMkdir(int port, int slot, unsigned char *path);
+int sceMcMkdir(int port, int slot, const char *path);
 int sceMcFormat(int port, int slot);
 int sceMcUnformat(int port, int slot);
 static void execute(McRequestEntry *request);
 static int create_sub2(int result);
-unsigned char *xglMcSetFullPath(int card, int selector);
-void xglMcWriteMapName(char *buffer, int slot);
-float xglFRand(void);
 void FlushCache(int mode);
 int sceMcDelete(int port, int slot, const char *path);
 
 /* The request routines zero and use this complete memory-card save workspace. */
 unsigned char SaveData[0x163B0] = { 0 };
 
-static unsigned char base_0_00491770[18];
+static char base_0_00491770[18];
 
-static unsigned char n_1[10];
+static char n_1[10];
 
-static unsigned char n_2[14];
+static char n_2[14];
 
-static unsigned char base_0_00491770[18] = "/BASLUS-20469Xeno";
+static char base_0_00491770[18] = "/BASLUS-20469Xeno";
 
-static unsigned char n_1[10] = "/icon.sys";
+static char n_1[10] = "/icon.sys";
 
-static unsigned char n_2[14] = "/xenosaga.ico";
+static char n_2[14] = "/xenosaga.ico";
 
 static McRequestStorage mw;
 
@@ -147,7 +146,7 @@ int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
     int entry_index = queue_end;
     McRequestEntry *entry;
     int copied;
-    signed char *destination;
+    char *destination;
     const unsigned char *source;
     const unsigned char *path;
 
@@ -184,7 +183,7 @@ int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
         else
         {
             source = path;
-            destination = (signed char *)entry->path.bytes;
+            destination = entry->path.bytes;
             copied = 0;
             if ((*destination = *source) != 0)
             {
@@ -324,7 +323,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
                 {
                     break;
                 }
-                lead = ((const unsigned char *)secondary_euc_name)[0];
+                lead = secondary_euc_name[0];
             } while (lead != 0);
         }
     }
@@ -348,13 +347,13 @@ void xglMcWriteMapName(char *buffer, int slot)
     buffer[227] = value % 10 + 'O';
 }
 
-unsigned char *xglMcSetFullPath(int card, int selector)
+char *xglMcSetFullPath(int card, int selector)
 {
-    signed char *dest;
-    const unsigned char *source;
-    const signed char *prefix_end;
+    char *dest;
+    const char *source;
+    const char *prefix_end;
 
-    dest = (signed char *)mw.fullPath;
+    dest = mw.fullPath;
     source = base_0_00491770;
     while ((*dest = *source) != 0)
     {
@@ -378,7 +377,7 @@ unsigned char *xglMcSetFullPath(int card, int selector)
     {
     case 0:
         prefix_end = dest;
-        for (source = mw.fullPath; source != (const unsigned char *)prefix_end; source++)
+        for (source = mw.fullPath; source != prefix_end; source++)
         {
             *dest = *source;
             dest++;
@@ -411,7 +410,7 @@ unsigned char *xglMcSetFullPath(int card, int selector)
     default:
         *dest = '/';
         dest++;
-        source = (const unsigned char *)selector;
+        source = (const char *)selector;
         while ((*dest = *source) != 0)
         {
             dest++;
@@ -441,12 +440,12 @@ static void execute(McRequestEntry *request)
             return;
         }
         xglMcSetFullPath(request->slot, 0);
-        sceMcOpen(request->card, 0, (const char *)mw.fullPath, 1);
+        sceMcOpen(request->card, 0, mw.fullPath, 1);
         mw.state.phase = 2;
         return;
     case 3:
         xglMcSetFullPath(0, (int)&request->path.empty);
-        sceMcOpen(request->card, 0, (const char *)mw.fullPath, 1);
+        sceMcOpen(request->card, 0, mw.fullPath, 1);
         mw.state.phase = 2;
         return;
     case 5:
@@ -454,12 +453,12 @@ static void execute(McRequestEntry *request)
         xglMcSetFullPath(0, (int)&request->path.empty);
         if (request->operation == 7)
         {
-            sceMcOpen(request->card, 0, (const char *)mw.fullPath, 0x202);
+            sceMcOpen(request->card, 0, mw.fullPath, 0x202);
             mw.state.phase = 3;
         }
         else
         {
-            sceMcOpen(request->card, 0, (const char *)mw.fullPath, 1);
+            sceMcOpen(request->card, 0, mw.fullPath, 1);
             mw.state.phase = 4;
         }
         mw.state.subphase = 0;
@@ -472,13 +471,13 @@ static void execute(McRequestEntry *request)
         return;
     case 6:
         xglMcSetFullPath(request->slot, 0);
-        sceMcOpen(request->card, 0, (const char *)mw.fullPath, 0x202);
+        sceMcOpen(request->card, 0, mw.fullPath, 0x202);
         mw.state.subphase = 0;
         mw.state.phase = 3;
         return;
     case 4:
         xglMcSetFullPath(request->slot, 0);
-        sceMcOpen(request->card, 0, (const char *)mw.fullPath, 1);
+        sceMcOpen(request->card, 0, mw.fullPath, 1);
         mw.state.subphase = 0;
         mw.state.phase = 4;
         return;
@@ -511,12 +510,12 @@ static int create_sub2(int result)
     McSaveChecksum *trailer;
     float *checksum;
     int size;
-    unsigned char *write_data;
+    void *write_data;
 
     if (mw.state.subphase < 2 && (result >= 0 || result == -4)) {
         if (mw.state.subphase == 0) {
             xglMcSetFullPath(slot, 0);
-            sceMcDelete(((McWorkspaceView *)&mw)->request.card, 0, (char *)((McWorkspaceView *)&mw)->full_path);
+            sceMcDelete(((McWorkspaceView *)&mw)->request.card, 0, ((McWorkspaceView *)&mw)->full_path);
         } else {
             xglMcSetFullPath(slot, 1);
             sceMcOpen(((McWorkspaceView *)&mw)->request.card, 0, (char *)&mw + 32, 0x202);
@@ -530,8 +529,8 @@ static int create_sub2(int result)
         case 1:
         case 2:
             mw.state.descriptor = result;
-            write_data = (unsigned char *)save->icon_header;
-            xglMcWriteMapName((char *)write_data, slot);
+            write_data = save->icon_header;
+            xglMcWriteMapName(write_data, slot);
             sceMcWrite(mw.state.descriptor, write_data, 964);
             break;
         case 3:
@@ -546,8 +545,8 @@ static int create_sub2(int result)
             break;
         case 5:
             mw.state.descriptor = result;
-            write_data = (unsigned char *)&save->payload;
-            payload = (McSavePayload *)write_data;
+            write_data = &save->payload;
+            payload = write_data;
             trailer = (McSaveChecksum *)((unsigned char *)payload + (payload->entry_count * 8 + 16) * payload->group_count);
             checksum = &trailer->checksum;
             size = save->end - save->start - 40;

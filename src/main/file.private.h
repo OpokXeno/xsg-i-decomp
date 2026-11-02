@@ -7,6 +7,7 @@
 #include "main/party.h"
 #include "main/menu_1.h"
 #include "main/e_message.h"
+#include "main/game.h"
 
 /*
  * file.c's own view of xglMcRequest's argument record: it stores integer
@@ -56,7 +57,7 @@ typedef struct FileSaveRecord {
     unsigned char unmodeled_10[0x68 - 0x10];
     XglClock elapsed;
     unsigned char unmodeled_70[0x10078 - 0x70];
-    unsigned char party[0x188];
+    PartyDataPrefix party;
     unsigned char unmodeled_10200[0x50];
     short map_number;
     unsigned char chapter;
@@ -76,8 +77,6 @@ typedef struct FileObjectSystem {
     signed char card_status[99];
     unsigned char state[99];
 } FileObjectSystem;
-
-typedef struct PartyStateImage PartyStateImage;
 
 typedef struct FileSaveData {
     u64 version;
@@ -102,18 +101,6 @@ typedef struct FileGameLoopState {
     short map_no;
 } FileGameLoopState;
 
-/* e_message.c interface proposal and the FILE explanation context. */
-typedef struct FileMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[0x02];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x18 - 0x0c];
-    char *text;
-    unsigned char unmodeled_1c[0x44 - 0x1c];
-} FileMessage;
 
 typedef struct FileExplanation {
     unsigned char unmodeled_00[0x04];
@@ -121,7 +108,7 @@ typedef struct FileExplanation {
     unsigned char open;
     unsigned char unmodeled_09;
     short target_x;
-    FileMessage message;
+    EMessageParam message;
 } FileExplanation;
 
 /* xgl_render.c and SDK packet-builder interface proposals. */
@@ -166,15 +153,14 @@ typedef struct FileBackTexturePacket {
 extern FileSaveRecord *FileSaveData;
 extern FileObjectSystem *FileObjectDataSystem;
 extern FileGameLoopState GameLoopState;
-extern char *msg00_4_0036D658[3];
+extern const char *msg00_4_0036D658[3];
 extern FileRenderState sRender;
 
 int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
                  int *result);
 
-extern int PartyAllPartyGet2(int *out, PartyStateImage *state);
+extern int PartyAllPartyGet2(int *out, PartyDataPrefix *state);
 extern void PartyTimeDispChange(XglClock *elapsed);
-extern void GamePushSaveDataUser(void);
 extern int MenuScenarioNoGet(void);
 extern XglClock *PartyTimeUpDate(void);
 extern void xglClockRead(XglClock *clock);

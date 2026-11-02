@@ -1,13 +1,14 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_packet.h"
 #include "xgl_packet.h"
+#include "main/xgl_dma.h"
 
 #define XGL_SCRATCH ((u64 *)0x70000000)
 
 extern struct XglPacketRenderState sRender;
 
 extern void sceVif1PkInit(XglPacket *packet, u32 buffer_address);
-extern void xglDmaDirectSrcChain(u32 channel, u32 address);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddCode(XglPacket *packet, u32 code);
 extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
@@ -135,6 +136,6 @@ void xglPacketMove(void)
 void xglPacketSend(void)
 {
     if (pSendPacket != 0) {
-        xglDmaDirectSrcChain(1, (u32)pSendPacket->start);
+        xglDmaDirectSrcChain(1, pSendPacket->start);
     }
 }

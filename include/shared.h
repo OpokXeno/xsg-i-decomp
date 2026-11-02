@@ -37,12 +37,17 @@ typedef struct JavaField {
 
 typedef unsigned char SceneByte;
 
-typedef struct SceneClass SceneClass;
+typedef struct JavaClass JavaClass;
 
 typedef struct SceneString SceneString;
 
-/* Object references begin with a pointer to an object header whose first word is its class. */
-typedef SceneByte *SceneObject;
+/* A VM object reference (the JNI jobject): a pointer to an object header
+ * whose first word is its class. The original type aliased `void *`: the
+ * sequence stores of ACT_createChr/ACT_createNPC (near_dir) and the JThread
+ * object/script argument slots schedule only under void*'s alias set, not
+ * under a char-pointer one. Field slots are reached by byte offset
+ * (field->location.offset), so SceneByte views remain for that. */
+typedef void *SceneObject;
 
 typedef struct {
     unsigned char status;
@@ -80,6 +85,31 @@ typedef struct Vector4 {
     float z;
     float w;
 } Vector4;
+
+/*
+ * The same vector with the quadword alignment of the SDK's sceVu0FVECTOR
+ * (libvu0.h: aligned(16)); whole-vector copies of it are two ld/sd
+ * doublewords, while plain Vector4 copies use ldl/ldr. User 2026-11-01.
+ */
+typedef Vector4 AlignedVector4 __attribute__((aligned(16)));
+
+/*
+ * The same vector with doubleword alignment: objects the original keeps only
+ * 8-aligned (e.g. pooled local initializers at 8 mod 16) that are still
+ * copied as two ld/sd doublewords, without a union. User 2026-11-02.
+ */
+typedef Vector4 DoublewordAlignedVector4 __attribute__((aligned(8)));
+
+/*
+ * A vector the original stores only 8-aligned (its objects sit at 8 mod 16)
+ * but still copies as two ld/sd doublewords: the vector shares storage with
+ * its two doubleword words. The u64 member keeps the 8-byte alignment in
+ * arrays and through pointers too. User 2026-11-01.
+ */
+typedef union DoublewordVector4 {
+    Vector4 vector;
+    u64 words[2];
+} DoublewordVector4;
 
 typedef float Matrix4[4][4];
 
@@ -119,95 +149,205 @@ typedef struct StudioCamera {
     u8 unmodeled_90[4];
     float fov;
     u8 unmodeled_98[8];
-    Vector4 rotation;
+    DoublewordVector4 rotation;
     Vector4 angleVelocity;
     u8 unmodeled_c0[0x10];
-    Vector4 position;
-    u8 unmodeled_e0[0x90];
+    DoublewordVector4 position;
+    u8 unmodeled_e0[0x40];
+    DoublewordVector4 chasePosition;
+    u8 unmodeled_130[0x40];
     Matrix4 cameraToWorldMatrix;
-    u8 unmodeled_1b0[0x2c0];
+    Matrix4 occlusionTransform; /* 0x1B0: read by face_point.c's setup_occlusion/check_occlusion */
+    u8 unmodeled_1f0[0x280];
     Matrix4 viewMatrix;
-    u8 unmodeled_4b0[0x140];
+    u8 unmodeled_4b0[0x40];
+    Matrix4 clipMatrices[2]; /* 0x4F0: the pair _ModelCalcClipInit loads into vf12..vf19 */
+    u8 unmodeled_570[0x80];
 } StudioCamera;
-
-typedef struct SceneClassName SceneClassName;
 
 typedef struct SceneField SceneField;
 
-typedef struct SceneTypeDescriptor SceneTypeDescriptor;
+typedef struct JavaMethod JavaMethod;
 
-typedef struct SceneWindow SceneWindow;
+typedef struct DispatchTable DispatchTable;
 
-/*
- * These are bounded partial views, not complete object layouts. Offsets
- * below are evidenced only by the original SCENE_instance reads/writes at
- * this TU: class name at +4, loader at +12, instance class-ref at +24,
- * fields at +28, counts at +48/+50, field entries of 20 bytes (flags +4,
- * descriptor +8, offset +16). Every other span is an explicit unmodeled
- * byte range, not a named/invented field (review core-cc-20260911-b8 item
- * 4.1; docs/naming.md: renaming an unresolved span to "reserved" does not
- * resolve it).
- */
-struct SceneClassName {
-    unsigned char unmodeled_00[8];
-    const char *binary_name;
-};
+typedef union ConstantPoolEntry ConstantPoolEntry;
 
-struct SceneTypeDescriptor {
-    unsigned char unmodeled_00[8];
-    const char *signature;
-};
-
-struct SceneField {
-    unsigned char unmodeled_00[4];
-    unsigned short flags;
-    unsigned char unmodeled_06[2];
-    SceneTypeDescriptor *type_or_descriptor;
-    unsigned char unmodeled_0c[4];
-    unsigned int instance_offset;
-};
-
-typedef struct SceneMethod SceneMethod;
-
-typedef struct SceneType SceneType;
+/* include/main/jni.h: the VM thread and its operand slots. */
+struct JThread;
+union VMSlot;
 
 typedef struct SceneStringStorage SceneStringStorage;
 
-typedef struct SceneThread SceneThread;
+/*
+ * The word every heap object (instances, strings, arrays, class records)
+ * starts with: the dispatch table of its class. newObject stores the class's
+ * classPointer here; JNI_isInstanceOf, SCENE_start/SCENE_cleanup and the
+ * script observers read the class back as header->classPointer->clazz.
+ */
+typedef struct ObjectHeader {
+    DispatchTable *classPointer; /* +0x0 */
+} ObjectHeader;
 
-typedef void SceneVm;
-
-/* Proposal: the partial layout behind a SceneObject reference, as far as
- * this allocation reads it: the reference points at a record whose first
- * word leads to a second record whose first word is the object's class.
- * Only those two words are evidenced (talktoObserver/funcObserver class
- * lookups; SCENE_cleanup/SCENE_start in src/core/main-0025a6d8 spell the
- * same double dereference as `*(SceneClass **)*(void **)object`). The
- * typed view compiles to the same bytes (attempt-5684d45333e0 forms 09/10
- * vs 05/06). */
-typedef struct SceneObjectClassRef {
-    SceneClass *scene_class; /* +0x0 */
-} SceneObjectClassRef;
-
-struct SceneClass {
-    unsigned char unmodeled_00[4];
-    SceneClassName *name;
-    unsigned char unmodeled_08[4];
-    void *class_loader;
-    unsigned char unmodeled_10[8];
-    SceneObjectClassRef *instance_class_ref;
-    SceneField *fields;
-    unsigned char unmodeled_20[16];
-    unsigned short field_count;
-    unsigned short static_field_count;
-    unsigned char unmodeled_34[4];
-    int instance_size; /* +0x38: newObject's xmalloc size for an instance */
-    unsigned char unmodeled_3c[4]; /* end of the 0x40-byte class record */
+/*
+ * The VM's own text record: a length and the bytes it counts.
+ *
+ * SCENE_start reads both of them out of the storage a java.lang.String hands
+ * it and passes them straight to loadConstString (lw 4 and lw 8 at
+ * 0x0025a7f4/0x0025a7f8), whose second parameter is the byte count -1 stands
+ * for elsewhere.  Word 0 is read by nothing and stays a byte range.
+ */
+struct SceneStringStorage {
+    unsigned char unmodeled_00[4];  /* +0x00 */
+    int length;                     /* +0x04 */
+    const char *bytes;              /* +0x08 */
 };
 
-typedef struct SceneObjectHeader {
-    SceneObjectClassRef *class_ref; /* +0x0 */
-} SceneObjectHeader;
+/*
+ * A java.lang.String instance: the object header, then the text record the
+ * string's characters live in (lw 4 at 0x0025a7ec).
+ *
+ * The same object is the interned name key of classes, methods, fields and
+ * type descriptors (loadConstString): +0x04 holds the key's 16-bit hash
+ * (ClassCacheEntry bucket index, lookupClassEntry) and +0x08 the key's byte
+ * pointer, which DB_evtMonitor prints as "%s.%s" for a class name and a
+ * method name and SCENE_instance passes to getClassFromSignature for a field
+ * descriptor. The two views read +0x04 as different types, so it is a union.
+ */
+struct SceneString {
+    ObjectHeader header;          /* +0x00 */
+    union {
+        struct SceneStringStorage *storage;  /* +0x04: the VM's text record */
+        u16 hash;                            /* +0x04: the interned key's hash */
+    };
+    const char *bytes;            /* +0x08: the interned key's name bytes */
+};
+
+/* One 20-byte field entry of JavaClass.fields: static fields first. */
+struct SceneField {
+    SceneString *name; /* +0: the key lookupClassField compares per entry */
+    unsigned short flags;
+    unsigned char unmodeled_06[2];
+    /* +8: the type descriptor while flags bit 0x8000 is set, then the class
+       getClassFromSignature resolved it to. */
+    union {
+        SceneString *descriptor;
+        JavaClass *resolved;
+    } type;
+    union { int constant_index; int size; int value; } payload; /* +12 */
+    union { void *address; int offset; int initial_value; } location; /* +16 */
+};
+
+/*
+ * One 32-byte method entry of JavaClass.methods (JVM class file method_info
+ * as addMethod/addCode build it, virtualMachine runs it): name and
+ * descriptor, the argument slot count without the receiver and the result
+ * slot count methodDescripter computes, the declaring class (its constant
+ * pool resolves the method's operands), access flags, the dispatch table
+ * slot buildDispatchMethodTable assigns (-1: static or constructor), the
+ * bytecode or, for an ACC_NATIVE method, the native implementation
+ * resolveNativeMethod finds, max_stack/max_locals and a 16-bit code length
+ * holding the low half of the classfile's 32-bit attribute length.
+ */
+struct JavaMethod {
+    SceneString *name;              /* +0x00 */
+    SceneString *descriptor;        /* +0x04 */
+    s16 parameterSize;              /* +0x08 */
+    s16 returnSize;                 /* +0x0a */
+    JavaClass *owner;               /* +0x0c */
+    u16 accessFlags;                /* +0x10 */
+    s16 dispatchIndex;              /* +0x12 */
+    union {
+        unsigned char *code;        /* +0x14: bytecode */
+        void (*native)(struct JThread *thread, union VMSlot *arguments,
+                       union VMSlot *result); /* +0x14: ACC_NATIVE body */
+    };
+    u16 maxStack;                   /* +0x18 */
+    u16 maxLocals;                  /* +0x1a */
+    u16 codeLength;                 /* +0x1c */
+    u16 unmodeled_1e;
+};
+
+/*
+ * A class's virtual method table (buildDispatchMethodTable): the class it
+ * belongs to, then one method per dispatchIndex. Every object's header
+ * points at its class's table.
+ */
+struct DispatchTable {
+    JavaClass *clazz;               /* +0x0 */
+    JavaMethod *methods[1];         /* +0x4 */
+};
+
+/*
+ * One class constant pool slot. Entry 0 holds the tag byte table; every
+ * other entry holds its constant's value, its resolved object (tags 0x17
+ * class, 0x18 string) or, before resolution, the classfile's index pair.
+ */
+union ConstantPoolEntry {
+    u8 *tags;
+    void *object;
+    int intValue;
+    float floatValue;
+    u8 byteValue;
+    u16 halfValue;
+    struct StringConstant *stringConstant;
+    struct StringInstance *stringObject;
+    struct {
+        u16 classIndex;
+        u16 nameAndTypeIndex;
+    } memberRef;
+    struct {
+        u16 nameIndex;
+        u16 typeIndex;
+    } nameAndType;
+};
+
+/*
+ * The VM class record (0x40 bytes, newClass), shared by the class loader,
+ * the interpreter and every native that reads an object's class.
+ */
+struct JavaClass {
+    ObjectHeader header;            /* +0x00 */
+    SceneString *name;              /* +0x04 */
+    u16 accessFlags;                /* +0x08 */
+    u16 flags;                      /* +0x0a: bit 0x100 primitive class */
+    void *classLoader;              /* +0x0c */
+    /* +0x10: the classfile's super_class constant pool index (setupClass)
+       until processClass resolves it; findMethod walks the resolved chain. */
+    union {
+        JavaClass *superClass;
+        u32 superClassIndex;
+    };
+    ConstantPoolEntry *constants;   /* +0x14 */
+    DispatchTable *classPointer;    /* +0x18: the header word of an instance */
+    SceneField *fields;             /* +0x1c */
+    JavaMethod *methods;            /* +0x20 */
+    JavaClass **interfaces;         /* +0x24 */
+    u16 constantCount;              /* +0x28 */
+    u16 dispatchSize;               /* +0x2a */
+    u16 methodCount;                /* +0x2c */
+    u16 interfaceCount;             /* +0x2e */
+    u16 fieldCount;                 /* +0x30 */
+    u16 staticFieldCount;           /* +0x32 */
+    u16 declaredInterfaceCount;     /* +0x34 */
+    s16 state;                      /* +0x36 */
+    /* +0x38: a primitive class (flags bit 0x100) has no instances; its
+       descriptor character and element byte size live in these bytes
+       (initWrapperClass). */
+    union {
+        int instanceSize;
+        struct {
+            unsigned char unmodeled_38;
+            signed char typeCode;
+            unsigned char elementSize;
+        };
+    };
+    JavaClass *elementClass;        /* +0x3c */
+};
+
+typedef struct SceneType SceneType;
+
+typedef void SceneVm;
 
 typedef struct TskObject TskObject;
 
@@ -287,8 +427,6 @@ typedef struct {
 typedef struct SequenceActor SequenceActor;
 
 typedef float f32;
-
-typedef void *NmlPacket;
 
 typedef struct {
     float x;

@@ -3,6 +3,9 @@
 
 /* The camera record copied by value as doubleword pairs. */
 #include "main/maptbl.h"
+#include "main/game_camera.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_2.h"
 
 #define MoveHokanStateFlag (GameLoopState.camera_flags)
 
@@ -46,46 +49,6 @@ typedef struct GameLoopCameraView {
     unsigned char unmodeled_250[0x2a030 - 0x250];
 } GameLoopCameraView;
 
-/* One record of the camera table CfCameraDefine (main:0x00362e80, 33 records
- * of 0xa0 bytes, defined by src/main/maptbl.c). Only the members the camera
- * update reads or resets are named. */
-typedef struct CameraDefinition {
-    unsigned char pedestal_mode;          /* +0x00 */
-    unsigned char pedestal_interpolation; /* +0x01 */
-    unsigned char unmodeled_02[6];
-    float current_yaw;                    /* +0x08 */
-    unsigned char unmodeled_0c[4];
-    float offset[3];                      /* +0x10 */
-    float perspective;                    /* +0x1c */
-    union {
-        struct {
-            int first_mode;     /* +0x20 */
-            float first_value;  /* +0x24 */
-            int second_mode;    /* +0x28 */
-            float second_value; /* +0x2c */
-        } offset;
-        float pedestal[4];
-    } parameters;                         /* +0x20 */
-    union {
-        float values[4];
-        unsigned int words[4];
-    } angles;                            /* +0x30 */
-    float lock_position[3];               /* +0x40 */
-    int lock_mode;                        /* +0x4c */
-    float interpolation[2];               /* +0x50 */
-    unsigned char unmodeled_58[8];
-    float fog_parameters[4];              /* +0x60 */
-    Vector4 fog_color;                    /* +0x70 */
-    unsigned char unmodeled_80[8];
-    struct {
-        float depth;        /* +0x88, +0x90, +0x98 */
-        short width;        /* +0x8c, +0x94, +0x9c */
-        short height;       /* +0x8e, +0x96, +0x9e */
-    } defocus[3];                         /* +0x88 */
-} CameraDefinition;
-
-struct CameraDefinition;
-
 /* The view block of the studio camera record, from StudioCamera + 0x90. */
 typedef struct CameraView {
     unsigned char unmodeled_00[4];
@@ -101,13 +64,8 @@ typedef struct CameraView {
 
 struct CameraView;
 
-typedef struct CameraPoint {
-    Vector4 coordinates;
-    unsigned long long alignment[0];
-} CameraPoint;
-
 struct CameraScratchpad {
-    struct CameraDefinition *definition;         /* +0x00 */
+    CfCameraDefinition *definition;   /* +0x00 */
     StudioCamera *studio;                        /* +0x04 */
     const struct CameraCenterSource *target;     /* +0x08 */
     struct CameraView *view;                     /* +0x0c */
@@ -120,7 +78,10 @@ struct CameraScratchpad {
     Vector4 look_at;                             /* +0x20 */
     Vector4 position;                            /* +0x30 */
     float matrix[4][4];
-    float translation[4];
+    union {
+        float translation[4];
+        Vector4 translation_vector;
+    };
     Vector4 position_delta;                      /* +0x90 */
     Vector4 probe_delta;                         /* +0xa0 */
     Vector4 look_at_delta;                       /* +0xb0 */
@@ -131,9 +92,9 @@ struct CameraScratchpad {
         int unmodeled_0c;
     } defocus[3];                                /* +0xd0 */
     unsigned char unmodeled_100[0x40];
-    CameraPoint saved_look_at;                     /* +0x140 */
+    DoublewordAlignedVector4 saved_look_at;                   /* +0x140 */
     unsigned char unmodeled_150[0x40];
-    CameraPoint saved_position;                     /* +0x190 */
+    DoublewordAlignedVector4 saved_position;                   /* +0x190 */
 };
 
 /* Interpolation state of the camera pair (position, look-at): the per-frame
@@ -171,7 +132,9 @@ struct LayoutHeader {
 /* Query block of UnduCheck (still original bytes in src/main/Undulate.c): the
  * ground probe each camera point owns. Only the members the camera update
  * touches are named. */
-typedef struct CameraUnduParam {
+/* Partial view of UnduParam; the full type cannot be included in this TU, which
+ * defines its own struct LayoutHeader body. */
+typedef struct UnduParamCameraView {
     int query_flags;                      /* +0x00 */
     int query_cursor;                     /* +0x04 */
     short attribute_mask;                 /* +0x08 */
@@ -183,7 +146,7 @@ typedef struct CameraUnduParam {
     void *exclude;                        /* +0x1c */
     unsigned long long attribute;         /* +0x20 */
     unsigned char unmodeled_28[0x18];
-} CameraUnduParam;
+} UnduParamCameraView;
 
 typedef struct CameraDefocusLayer {
     unsigned char type;
@@ -229,28 +192,14 @@ extern const float oneThirdCentroid;
 extern const float cameraLookAtMargin;
 extern CameraEnemyWork enepc[16];
 
-/* xglVectorScaleAddXYZ is defined by main/tu100 (src/main/xgl_2.c);
- * this prototype follows that TU's declaration. */
-void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
-                          const Vector4 *source, const Vector4 *other);
-
-extern LayoutHeader *UnduDataGetHeader(int, int);
+extern LayoutHeader *UnduDataGetHeader(int, unsigned int);
 extern StudioCamera *xglStudioGetActiveCamera(void);
-extern float xglAtan2(float, float);
-extern int F2I(float);
 extern float xglRotTransPers(int *, void *, const float *, int);
 extern void GameDefocusCheck(void);
-void GameCameraChangeID(int id, int unused1, int unused2);
 extern double sqrt(double);
-extern float UnduCheck(const Vector4 *, void *, CameraUnduParam *);
-extern void UnduParamInit(CameraUnduParam *);
-extern void xglMatrixStackUnit(void);
-extern void xglMatrixStackTrans(const float translation[4]);
-extern void xglMatrixStackRotY(float angle);
-extern void xglMatrixStackSave(float matrix[4][4]);
-extern void nmlModelSetGlobalFogDist(float start, float end, float parameter0, float parameter1);
+extern float UnduCheck(const Vector4 *, void *, UnduParamCameraView *);
+extern void UnduParamInit(UnduParamCameraView *);
 extern void nmlModelSetGlobalFogCol(const Vector4 *color);
-void GameCamera(void);
 static void CameraType1(void);
 static void CalcLookAt(struct CameraScratchpad *scratchpad);
 static void CalcCameraPos(struct CameraScratchpad *scratchpad);
@@ -261,13 +210,13 @@ static float CfCameraOfsNow[4];
 
 static HokanState HokanNow;
 
-static CameraUnduParam CamLookAt;
+static UnduParamCameraView CamLookAt;
 
-static Vector4 CamLookAtPos;
+static DoublewordAlignedVector4 CamLookAtPos;
 
-static CameraUnduParam CamPos;
+static UnduParamCameraView CamPos;
 
-static Vector4 CamPosPos;
+static DoublewordAlignedVector4 CamPosPos;
 
 static unsigned char pre_mode;
 
@@ -275,7 +224,7 @@ static float pa_0;
 
 static int t_1;
 
-static CameraUnduParam CamPlayer;
+static UnduParamCameraView CamPlayer;
 
 static Vector4 CamPlyPosOld;
 
@@ -297,7 +246,7 @@ void GameCameraReset(void)
 
     camera = xglStudioGetCamera2(0);
     camera->state = 4;
-    camera->rotation.z = 0.0f;
+    camera->rotation.vector.z = 0.0f;
     for (i = 0; i < 33; i++) {
         CfCameraDefine[i].pedestal_mode = 0;
         CfCameraDefine[i].current_yaw = 0.0f;
@@ -309,10 +258,10 @@ void GameCameraReset(void)
         CfCameraDefine[i].parameters.offset.first_value = 0.05f;
         CfCameraDefine[i].parameters.offset.second_mode = 60;
         CfCameraDefine[i].parameters.offset.second_value = 0.05f;
-        CfCameraDefine[i].angles[0] = -0.3926991f;
-        CfCameraDefine[i].angles[1] = 0.0f;
-        CfCameraDefine[i].angles[2] = 0.0f;
-        CfCameraDefine[i].angles[3] = 3.0f;
+        CfCameraDefine[i].angles.values[0] = -0.3926991f;
+        CfCameraDefine[i].angles.values[1] = 0.0f;
+        CfCameraDefine[i].angles.values[2] = 0.0f;
+        CfCameraDefine[i].angles.values[3] = 3.0f;
         CfCameraDefine[i].lock_position[0] = 0.0f;
         CfCameraDefine[i].lock_position[1] = 0.0f;
         CfCameraDefine[i].lock_position[2] = 0.0f;
@@ -321,9 +270,9 @@ void GameCameraReset(void)
         CfCameraDefine[i].interpolation[1] = 0.03f;
         CfCameraDefine[i].fog_parameters[0] = 0.0f;
         CfCameraDefine[i].fog_parameters[1] = 0.0f;
-        ((CameraDefinition *)&CfCameraDefine[i])->defocus[0].depth = 0.0f;
-        ((CameraDefinition *)&CfCameraDefine[i])->defocus[1].depth = 0.0f;
-        ((CameraDefinition *)&CfCameraDefine[i])->defocus[2].depth = 0.0f;
+        CfCameraDefine[i].defocus[0].depth = 0.0f;
+        CfCameraDefine[i].defocus[1].depth = 0.0f;
+        CfCameraDefine[i].defocus[2].depth = 0.0f;
     }
     HokanNow.position_step = 0.0f;
     HokanNow.look_at_step = 0.0f;
@@ -345,12 +294,12 @@ void GameCameraStateSave(void)
     StudioCamera *camera;
 
     camera = xglStudioGetCamera2(0);
-    save_cam = *(CameraImage *)camera;
+    save_cam = *camera;
     __asm__ __volatile__(
         "lq $2, 0(%1)\n"
         "sq $2, 0(%0)\n"
         :
-        : "r" (GameLoopState.saved_camera_angles), "r" (CfCameraDefine[0].angles)
+        : "r" (GameLoopState.saved_camera_angles), "r" (CfCameraDefine[0].angles.values)
         : "$2", "memory");
     GameLoopState.saved_camera_callback = GameLoopState.camera_callback;
 }
@@ -361,14 +310,14 @@ void GameCameraStateRestore(void)
     StudioCamera *active;
 
     camera = xglStudioGetCamera2(0);
-    *(CameraImage *)camera = save_cam;
+    *camera = save_cam;
     camera->state = 4;
-    camera->rotation.z = 0.0f;
+    camera->rotation.vector.z = 0.0f;
     __asm__ __volatile__(
         "lq $2, 0(%1)\n"
         "sq $2, 0(%0)\n"
         :
-        : "r" (CfCameraDefine[0].angles), "r" (GameLoopState.saved_camera_angles)
+        : "r" (CfCameraDefine[0].angles.values), "r" (GameLoopState.saved_camera_angles)
         : "$2", "memory");
     GameLoopState.camera_callback = GameLoopState.saved_camera_callback;
     HokanNow.position_step = 0.0f;
@@ -737,8 +686,8 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
 static void CameraType0(void)
 {
     struct CameraScratchpad *scratchpad = (void *)0x70000000;
-    CameraUnduParam ground;
-    CameraUnduParam edge_probe;
+    UnduParamCameraView ground;
+    UnduParamCameraView edge_probe;
     Vector4 hit;
     const struct CameraFloorTriangle *triangle;
     const unsigned char *vertices;
@@ -1056,7 +1005,7 @@ static void CameraType1(void)
 static void CameraType4(void)
 {
     struct CameraScratchpad *scratchpad = (void *)0x70000000;
-    const CameraDefinition *definition;
+    const CfCameraDefinition *definition;
     int mode;
     float horizontal;
 
@@ -1168,13 +1117,13 @@ static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
 void GameCamera(void)
 {
     struct CameraScratchpad *scratchpad = (void *)0x70000000;
-    const CameraDefinition *previous;
+    const CfCameraDefinition *previous;
     unsigned char mode;
     int index;
     float distance;
     int count;
-    CameraPoint *saved_look_at;
-    CameraPoint *saved_position;
+    DoublewordAlignedVector4 *saved_look_at;
+    DoublewordAlignedVector4 *saved_position;
     const float *fog;
 
     if (GameLoopState.map == 0) {
@@ -1264,7 +1213,7 @@ void GameCamera(void)
             }
         }
     }
-    scratchpad->definition = (CameraDefinition *)&CfCameraDefine[GameLoopState.camera_index];
+    scratchpad->definition = &CfCameraDefine[GameLoopState.camera_index];
     if (HokanNow.position_remaining == 0.0f) {
         HokanNow.position_step = scratchpad->definition->interpolation[0];
     }
@@ -1272,7 +1221,7 @@ void GameCamera(void)
         HokanNow.look_at_step = scratchpad->definition->interpolation[1];
     }
     if (GameLoopState.camera_flags & 0x40) {
-        previous = (CameraDefinition *)&CfCameraDefine[scratchpad->previous_index];
+        previous = &CfCameraDefine[scratchpad->previous_index];
         if ((scratchpad->previous_mode == 4 && (previous->pedestal_interpolation & 1))
             || (GameLoopState.camera_mode == 4 && (scratchpad->definition->pedestal_interpolation & 1))) {
             float yaw;
@@ -1291,15 +1240,15 @@ void GameCamera(void)
                 if (GameLoopState.camera_mode == 3 && previous->current_yaw == scratchpad->definition->current_yaw) {
                     saved_look_at = &scratchpad->saved_look_at;
                     saved_position = &scratchpad->saved_position;
-                    *saved_look_at = *(CameraPoint *)&CamLookAtPos;
-                    *saved_position = *(CameraPoint *)&CamPosPos;
+                    *saved_look_at = CamLookAtPos;
+                    *saved_position = CamPosPos;
                     CameraType1Core();
-                    scratchpad->translation[0] = saved_look_at->coordinates.x - CamLookAtPos.x;
-                    scratchpad->translation[1] = saved_look_at->coordinates.y - CamLookAtPos.y;
-                    scratchpad->translation[2] = saved_look_at->coordinates.z - CamLookAtPos.z;
-                    scratchpad->position_delta.x = saved_position->coordinates.x - CamPosPos.x;
-                    scratchpad->position_delta.y = saved_position->coordinates.y - CamPosPos.y;
-                    scratchpad->position_delta.z = saved_position->coordinates.z - CamPosPos.z;
+                    scratchpad->translation[0] = saved_look_at->x - CamLookAtPos.x;
+                    scratchpad->translation[1] = saved_look_at->y - CamLookAtPos.y;
+                    scratchpad->translation[2] = saved_look_at->z - CamLookAtPos.z;
+                    scratchpad->position_delta.x = saved_position->x - CamPosPos.x;
+                    scratchpad->position_delta.y = saved_position->y - CamPosPos.y;
+                    scratchpad->position_delta.z = saved_position->z - CamPosPos.z;
                     scratchpad->probe_delta.x = __builtin_sqrtf(scratchpad->translation[0] * scratchpad->translation[0]
                                                                     + scratchpad->translation[1] * scratchpad->translation[1]
                                                                     + scratchpad->translation[2] * scratchpad->translation[2]);
@@ -1357,7 +1306,7 @@ void GameCamera(void)
                 scratchpad->translation[1] = -CfCameraOfsNow[1];
                 scratchpad->translation[2] = -CfCameraOfsNow[2];
                 xglVectorScaleAddXYZ(scratchpad->definition->parameters.offset.second_value,
-                                     (Vector4 *)CfCameraOfsNow, (Vector4 *)scratchpad->translation,
+                                     (Vector4 *)CfCameraOfsNow, &scratchpad->translation_vector,
                                      (Vector4 *)CfCameraOfsNow);
             }
         } else if (scratchpad->definition->parameters.offset.first_mode < count) {
@@ -1378,7 +1327,7 @@ void GameCamera(void)
                 : "r" (scratchpad->translation), "r" (CfCameraOfsNow), "r" (scratchpad->matrix[3])
                 : "memory");
             xglVectorScaleAddXYZ(scratchpad->definition->parameters.offset.first_value,
-                                 (Vector4 *)CfCameraOfsNow, (Vector4 *)scratchpad->translation,
+                                 (Vector4 *)CfCameraOfsNow, &scratchpad->translation_vector,
                                  (Vector4 *)CfCameraOfsNow);
         }
     } else {

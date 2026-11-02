@@ -1,6 +1,13 @@
 #ifndef INCLUDE_MAIN_XGL_PAD_H
 #define INCLUDE_MAIN_XGL_PAD_H
 
+/*
+ * Controller record, 0x68 bytes per pad. The pressed halfword at +0x2A is also
+ * established by main/tu236's getEdge and main/tu144's slider input. The menu
+ * (window_tex_load.c) reads the direction pressed/repeat halfwords at
+ * +0x32/+0x34 and writes the actuator bytes at +0x50; the twsys_init.c menu
+ * reads the same two halfwords.
+ */
 typedef struct XglPadRecord {
     unsigned char packet[0x20];
     unsigned char mode;
@@ -9,10 +16,17 @@ typedef struct XglPadRecord {
     unsigned char unmodeled_24[2];
     unsigned char connection_state;
     unsigned char setup_state;
-    unsigned short buttons;
-    unsigned short pressed;
-    unsigned short repeated;
-    unsigned short released;
+    union {
+        struct {
+            unsigned short buttons;
+            unsigned short pressed;
+            unsigned short repeated;
+            unsigned short released;
+        };
+        /* +0x28: the four button halfwords read as one doubleword
+           (script.c sceneObserver's talk-cancel test). */
+        unsigned long long button_state;
+    };
     unsigned short directions;
     unsigned short direction_pressed;
     unsigned short direction_repeated;
@@ -35,5 +49,8 @@ typedef struct XglPadRecord {
     unsigned char axis_dead_zone[4];/* +0x60 */
     signed char axis[4];            /* +0x64 */
 } XglPadRecord;
+
+/* Functions and data used by other translation units. */
+void xglPadRead(void);
 
 #endif /* INCLUDE_MAIN_XGL_PAD_H */

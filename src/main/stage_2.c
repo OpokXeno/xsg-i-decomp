@@ -1,7 +1,8 @@
 #include "common.h"
+#include "main/stage_2.h"
 #include "stage_2.h"
+#include "main/nml_model_set.h"
 
-void nmlModelSetMapLastInit(void);
 void nmlModelSetBackBufferClear(void);
 
 const char stagePeerFieldName[8] = "peer";
@@ -10,14 +11,14 @@ void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
                                                  StageNativeSlot *arguments,
                                                  unsigned int *failure_result)
 {
-    SceneClass *scene_class = classJava_xeno_Stage;
+    JavaClass *scene_class = classJava_xeno_Stage;
     SceneObject object = arguments[0].object;
     JavaField *peer_field;
     StagePeer *peer;
     StageStringStorage *storage;
     SceneString *name;
-    SceneMethod *method;
-    StageThread *peer_thread;
+    JavaMethod *method;
+    JThread *peer_thread;
     StageJavaString *method_object;
 
     if (JNI_isInstanceOf(object, scene_class) == 0) {
@@ -32,30 +33,30 @@ void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
         if (arguments[1].integer == 1) {
             method_object = arguments[2].method_name;
             peer->stage_state = 0;
-            scene_class = ((SceneObjectHeader *)object)->class_ref->scene_class;
+            scene_class = ((ObjectHeader *)object)->classPointer->clazz;
             storage = method_object->storage;
             name = loadConstString(storage->text, storage->length);
             method = findMethod(scene_class, name, TYPE_Void);
-            peer_thread = JTHREAD_get((SceneObject)peer);
+            peer_thread = JTHREAD_get(peer);
             if (peer_thread != 0) {
-                peer_thread->entry = JTHREAD_defaultStage;
+                peer_thread->reset = JTHREAD_defaultStage;
                 peer_thread->method = method;
                 peer_thread->flags |= 0x10;
             }
-            if (peer_thread == (StageThread *)thread) {
+            if (peer_thread == thread) {
                 peer_thread->flags |= 0x21;
             }
         }
     }
 }
 
-void Java_xeno_Stage_stop__(StageThread *thread, StageObjectCall *arguments,
+void Java_xeno_Stage_stop__(JThread *thread, StageObjectCall *arguments,
                             u32 *failure_result)
 {
     SceneObject object;
     JavaField *peer_field;
     SceneObject peer;
-    StageThread *peer_thread;
+    JThread *peer_thread;
 
     object = arguments->object;
     if (JNI_isInstanceOf(object, classJava_xeno_Stage) == 0) {
@@ -71,7 +72,7 @@ void Java_xeno_Stage_stop__(StageThread *thread, StageObjectCall *arguments,
     }
 }
 
-void Java_xeno_Stage_play__Ljava_lang_String_(StageThread *thread,
+void Java_xeno_Stage_play__Ljava_lang_String_(JThread *thread,
                                               StagePlayCall *arguments)
 {
     StageJavaString *script = arguments->string;
@@ -85,13 +86,13 @@ void Java_xeno_Stage_play__Ljava_lang_String_(StageThread *thread,
     SCRIPT_exec();
 }
 
-void Java_xeno_Stage_setPartsLast__I(StageThread *thread, StageIntCall *arguments)
+void Java_xeno_Stage_setPartsLast__I(JThread *thread, StageIntCall *arguments)
 {
     StageModel *model;
 
     model = GameLoopState.model;
     if (model != 0 && model->id != 0) {
-        nmlModelSetMapLastEntry(model->id, arguments->value);
+        nmlModelSetMapLastEntry((void *)model->id, arguments->value);
     }
 }
 
@@ -100,14 +101,14 @@ void Java_xeno_Stage_setPartsLastReset__(void)
     nmlModelSetMapLastInit();
 }
 
-void Java_xeno_Stage_setColor__FFF(StageThread *thread, StageColorCall *arguments)
+void Java_xeno_Stage_setColor__FFF(JThread *thread, StageColorCall *arguments)
 {
     GameLoopState.color_r = arguments->r;
     GameLoopState.color_g = arguments->g;
     GameLoopState.color_b = arguments->b;
 }
 
-void Java_xeno_Stage_setFade__IIFFF(StageThread *thread, StageFadeCall *arguments)
+void Java_xeno_Stage_setFade__IIFFF(JThread *thread, StageFadeCall *arguments)
 {
     int channel;
 
@@ -137,7 +138,7 @@ void Java_xeno_Stage_setFade__IIFFF(StageThread *thread, StageFadeCall *argument
     SCRIPT_fade(arguments->duration_frames);
 }
 
-void Java_xeno_Stage_setEventFade__IFFFIFFF(StageThread *thread,
+void Java_xeno_Stage_setEventFade__IFFFIFFF(JThread *thread,
                                              StageNativeSlot *arguments)
 {
     nmlModelSetFadeInInterrupt(arguments[0].integer,
@@ -153,12 +154,12 @@ void Java_xeno_Stage_setEventFade__IFFFIFFF(StageThread *thread,
     SCRIPT_fade(arguments[4].integer);
 }
 
-void Java_xeno_Stage_setFrameRender__II(StageThread *thread, StageFrameRenderCall *arguments)
+void Java_xeno_Stage_setFrameRender__II(JThread *thread, StageFrameRenderCall *arguments)
 {
     nmlModelSetBackBuffer(arguments->model_id, arguments->count, -1, 0);
 }
 
-void Java_xeno_Stage_setFadeCancel__I(StageThread *thread, StageIntCall *arguments)
+void Java_xeno_Stage_setFadeCancel__I(JThread *thread, StageIntCall *arguments)
 {
     switch (arguments->value) {
     case 0:
@@ -174,16 +175,16 @@ void Java_xeno_Stage_setFadeCancel__I(StageThread *thread, StageIntCall *argumen
     }
 }
 
-void Java_xeno_Stage_setVisible__IZ(StageThread *thread, StageVisibleCall *arguments)
+void Java_xeno_Stage_setVisible__IZ(JThread *thread, StageVisibleCall *arguments)
 {
     StageModel *model = GameLoopState.model;
-    StagePartList *parts;
+    NmlModelPartListView *parts;
 
     if (model == 0 || model->id == 0) {
         return;
     }
     /* The model's integer ID is also the address of its part list. */
-    parts = (StagePartList *)model->id;
+    parts = (NmlModelPartListView *)model->id;
     if (arguments->part_index >= 0) {
         if (arguments->part_index < parts->part_count) {
             nmlModelSetPartsVisible(parts, arguments->part_index,
@@ -194,7 +195,7 @@ void Java_xeno_Stage_setVisible__IZ(StageThread *thread, StageVisibleCall *argum
     }
 }
 
-void Java_xeno_Stage_setCFBG__II_F(StageThread *thread, StageCFBGCall *arguments)
+void Java_xeno_Stage_setCFBG__II_F(JThread *thread, StageCFBGCall *arguments)
 {
     StageBackground *background = arguments->background;
 
@@ -212,17 +213,17 @@ void Java_xeno_Stage_setCFBG__II_F(StageThread *thread, StageCFBGCall *arguments
     }
 }
 
-void Java_xeno_Stage_setEffectRender__I(StageThread *thread, StageIntCall *arguments)
+void Java_xeno_Stage_setEffectRender__I(JThread *thread, StageIntCall *arguments)
 {
     nmlModelSetEffectWrite(arguments->value);
 }
 
-void Java_xeno_Stage_renderCommand__I(StageThread *thread, StageIntCall *arguments)
+void Java_xeno_Stage_renderCommand__I(JThread *thread, StageIntCall *arguments)
 {
     GameLoopState.render_command = arguments->value;
 }
 
-void Java_xeno_Stage_setBgColor__FFF(StageThread *thread, StageBgColorCall *arguments)
+void Java_xeno_Stage_setBgColor__FFF(JThread *thread, StageBgColorCall *arguments)
 {
     xglRenderClearColor(
         (((unsigned int)(arguments->blue * 255.0f) & 0xffu) << 16) +
@@ -230,7 +231,7 @@ void Java_xeno_Stage_setBgColor__FFF(StageThread *thread, StageBgColorCall *argu
         ((unsigned int)(arguments->red * 255.0f) & 0xffu));
 }
 
-void Java_xeno_Stage_setBgClip__I(StageThread *thread, StageIntCall *arguments)
+void Java_xeno_Stage_setBgClip__I(JThread *thread, StageIntCall *arguments)
 {
     GameLoopState.bg_clip = arguments->value;
 }

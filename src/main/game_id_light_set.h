@@ -2,22 +2,9 @@
 #define MAIN_GAME_ID_LIGHT_SET_H
 
 #include "shared.h"
+#include "main/game_id_light_set.h"
 
 typedef struct LayoutHeader LayoutHeader;
-
-typedef unsigned int IdLightQuadword __attribute__((mode(TI)));
-
-typedef struct IdLightPair {
-    IdLightQuadword color;
-    IdLightQuadword direction;
-} IdLightPair;
-
-/* A studio light block (0xF0 bytes): ambient, then colour/direction pairs. */
-typedef struct IdLightSet {
-    IdLightQuadword ambientColor;
-    IdLightPair lights[3];
-    IdLightQuadword unmodeled_70[8];
-} IdLightSet;
 
 /* The actor fields GameIdLightSet touches. */
 typedef struct IdLightActor {

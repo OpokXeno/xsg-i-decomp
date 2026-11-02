@@ -1,8 +1,10 @@
 #include "common.h"
 #include "shared.h"
 #include "sc_get.h"
-
-#define SCRIPT_WORK_BYTES ((unsigned char *)(void *)_scriptWork)
+#include "main/sc_get.h"
+#include "main/sdv.h"
+#include "main/sef.h"
+#include "main/srs.h"
 
 /* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
 ScriptRecord _scriptWork[];
@@ -22,13 +24,6 @@ static const char taskWorkEmptyFormat[];
 static const char effectStackOverflowFormat[];
 static const char badExpressionFormat[];
 static const char simajiriMoviePath[];
-
-/*
- * scFindScriptData is a genuine tail call (`j sefSearchMapperIndex`, not
- * `jal`) into the mapper-index search main/tu211 (src/main/sef.c) defines;
- * that function is still INCLUDE_ASM there.
- */
-extern int sefSearchMapperIndex(int eftNo);
 
 /*
  * sefDestroyScriptScheduler2 (main:0x002e5320, defined in main/tu211/sef.c)
@@ -95,8 +90,6 @@ extern unsigned int strlen(const char *s);
  * `value` into the resolved register instead of reading it. */
 extern void scSetReg(int reg, int value);
 
-extern void sdvSetAmbState(int state, int effect_no);
-extern void sdvSetAmbState2(int state, int effect_no);
 extern int scGetAdrImmScript(ScriptTask *task);
 
 /*
@@ -114,7 +107,6 @@ extern void sefCreateBattleActorTbl(short effect_no);
 /* scFreezeCamera (still assembly in this TU) takes the task's effect_no. */
 static void scFreezeCamera(int effect_no);
 
-extern char *srsAnalyzeEftNo(int effectId, int *charId, int *effectCategory);
 static int scERRORScript(ScriptTask *task);
 static int scGOScript(ScriptTask *task);
 static int scGOSUBScript(ScriptTask *task);
@@ -160,8 +152,6 @@ static int scMISSILEScript(ScriptTask *task);
 static int scMISSILE3Script(ScriptTask *task);
 extern void **svGetScript(int effectNo);
 extern void sefDestroyScriptScheduler(int script_index);
-extern int srsGetEffect2Idx(int effectNo);
-extern int sefCreateScheduler2(int address, void *taskData, void *positionData, int table, int flags, int taskIndex);
 extern int func_A32FA8(const char *filename);
 extern int rand(void);
 extern void func_A31500(int *position, int mode);
@@ -173,7 +163,7 @@ int _scMslCate;
 
 static int (*_scFuncHandler[73])(ScriptTask *task);
 
-static ScriptZeroPosition _zeroPos_0041E290;
+static DoublewordAlignedVector4 _zeroPos_0041E290;
 
 static short _cmdPut = 0;
 
@@ -183,7 +173,8 @@ const char registerDumpFormat[8] = " %04x";
 
 ScriptRecord _scriptWork[16] = {{0}};
 
-static ScriptZeroPosition _zeroPos_0041E290 = {{0, 0x3f80000000000000ULL}};
+/* The constant position scCreateTask seeds every task with: (0, 0, 0, 1). */
+static DoublewordAlignedVector4 _zeroPos_0041E290 = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 static int (*_scFuncHandler[73])(ScriptTask *task) = {
     scERRORScript, scGOScript, scGOSUBScript, scBRAScript,
@@ -250,12 +241,12 @@ int scCreateScript(ScriptTaskParameters *info)
     effectNo = info->effect_no;
     dataIndex = scFindScriptData(effectNo);
     if (dataIndex < 0) {
-        tracePrint((unsigned char *)noLoadEffectDataFormat, effectNo);
+        tracePrint(noLoadEffectDataFormat, effectNo);
         return dataIndex;
     }
     for (script = 0; script < 16; script++) {
         if (_scriptWork[script].dataTable != 0 && _scriptWork[script].event == effectNo) {
-            task = scCreateTask(script, -1, ((short *)_scriptWork[script].dataTable)[((short *)_scriptWork[script].dataTable)[0]], info);
+            task = scCreateTask(script, -1, _scriptWork[script].dataTable[_scriptWork[script].dataTable[0]], info);
             if (task >= 0) {
                 return task | (script << 8);
             }
@@ -270,7 +261,7 @@ int scCreateScript(ScriptTaskParameters *info)
             _scriptWork[script].event = effectNo;
             _scriptWork[script].dataIndex = dataIndex;
             _scriptWork[script].dataTable = *entry;
-            task = scCreateTask(script, 0, ((short *)_scriptWork[script].dataTable)[((short *)_scriptWork[script].dataTable)[0]], info);
+            task = scCreateTask(script, 0, _scriptWork[script].dataTable[_scriptWork[script].dataTable[0]], info);
             if (task >= 0) {
                 task |= script << 8;
             }
@@ -307,14 +298,14 @@ void scDestroyScript2(int script_index, int task_index)
 {
     /* tracePrint's other callers in this TU (below) declare it with fewer
      * trailing arguments; this call needs both script_index and task_index. */
-    extern int tracePrint(unsigned char *fmt, int script_index, int task_index);
+    extern int tracePrint(const char *fmt, int script_index, int task_index);
 
     if ((unsigned int)script_index >= 16u) {
-        tracePrint((unsigned char *)outOfRangeEffectDeleteFormat, script_index, task_index);
+        tracePrint(outOfRangeEffectDeleteFormat, script_index, task_index);
         return;
     }
     sefDestroyScriptScheduler2(script_index, task_index);
-    if (((ScriptRecord *)(SCRIPT_WORK_BYTES + script_index * 1104))->dataTable != (int *)0) {
+    if (_scriptWork[script_index].dataTable != 0) {
         scDeleteTask(script_index, task_index);
         return;
     }
@@ -363,7 +354,7 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
     ScriptTask *task;
 
     if (task_index >= 8) {
-        tracePrint((unsigned char *)taskOutOfRangeFormat, task_index);
+        tracePrint(taskOutOfRangeFormat, task_index);
         return -1;
     }
     if (task_index < 0) {
@@ -381,13 +372,12 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
         task->script_pc[task->branch_depth] = address;
         task->parameters = *data;
         task->effect_scheduler = -1;
-        task->initial_position.words[0] = _zeroPos_0041E290.words[0];
+        task->initial_position = _zeroPos_0041E290;
         task->slot_no = task_index;
         _scriptWork[script_index].eventValue = task_index;
         _scriptWork[script_index].activeTasks++;
-        task->initial_position.words[1] = _zeroPos_0041E290.words[1];
     } else {
-        tracePrint((unsigned char *)taskWorkEmptyFormat, script_index);
+        tracePrint(taskWorkEmptyFormat, script_index);
     }
     return task_index;
 }
@@ -402,30 +392,19 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
 static void scDeleteTask(int script_index, int task_index)
 {
     ScriptTask *task;
-    unsigned char *task_scripts;
-    unsigned char *count_scripts;
-    ScSchedulerWord *active_task_count;
-    int task_offset;
     int remaining_tasks;
 
     if ((unsigned int)task_index < 9u) {
         if (task_index < 0) {
             task = (ScriptTask *)0;
         } else {
-            task_offset =
-                script_index * 1104
-                + task_index * 128;
-            task_scripts = SCRIPT_WORK_BYTES;
-            task = (ScriptTask *)(task_scripts + task_offset);
+            task = &_scriptWork[script_index].tasks[task_index];
         }
 
         if (task->flags != 0) {
-            count_scripts = SCRIPT_WORK_BYTES;
-            active_task_count = (ScSchedulerWord *)(count_scripts
-                + script_index * 1104 + 1088);
-            remaining_tasks = active_task_count[4];
+            remaining_tasks = (ScSchedulerWord)_scriptWork[script_index].activeTasks;
             remaining_tasks -= 1;
-            active_task_count[4] = (ScSchedulerWord)remaining_tasks;
+            _scriptWork[script_index].activeTasks = (ScSchedulerWord)remaining_tasks;
         }
 
         task->flags = 0;
@@ -456,10 +435,10 @@ int scGetReg(int reg)
         reg = scGetReg(reg & ~0x8000);
     }
     if ((unsigned int)reg >= 16u) {
-        tracePrint((unsigned char *)registerOverflowFormat, reg);
+        tracePrint(registerOverflowFormat, reg);
         address = (int *)0;
     } else {
-        address = (int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x404 + reg * 4);
+        address = &_scriptWork[_nowScript].registers[reg];
     }
     value = 0;
     if (address != (int *)0) {
@@ -476,10 +455,10 @@ void scSetReg(int reg, int value)
         reg = scGetReg(reg & ~0x8000);
     }
     if ((unsigned int)reg >= 16u) {
-        tracePrint((unsigned char *)registerOverflowFormat, reg);
+        tracePrint(registerOverflowFormat, reg);
         address = (int *)0;
     } else {
-        address = (int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x404 + reg * 4);
+        address = &_scriptWork[_nowScript].registers[reg];
     }
     if (address != (int *)0) {
         *address = value;
@@ -497,7 +476,7 @@ int scGetCmdScript(ScriptTask *task)
     offset = task->script_pc[task->branch_depth];
     depth = task->branch_depth;
     if (offset != 0) {
-        command = (short *)_scriptWork[_nowScript].dataTable + offset;
+        command = _scriptWork[_nowScript].dataTable + offset;
     }
     task->script_pc[(short)depth]++;
     return *command;
@@ -555,7 +534,7 @@ unsigned short scGetAdrIdx(ScriptTask *task, int index)
     table = (unsigned short *)0;
     operand = task->script_pc[task->branch_depth];
     if (operand != 0) {
-        table = (unsigned short *)((int)((ScriptRecord *)(SCRIPT_WORK_BYTES + _nowScript * 1104))->dataTable + operand * 2);
+        table = (unsigned short *)((int)_scriptWork[_nowScript].dataTable + operand * 2);
     }
     value = table[index];
     if (value == 0xFFFF || value == -1) {
@@ -631,7 +610,7 @@ short scGetTableNumIdx(int base, int index)
 
     table = 0;
     if (base != 0) {
-        table = (short *)_scriptWork[_nowScript].dataTable + base;
+        table = _scriptWork[_nowScript].dataTable + base;
     }
     return table[index];
 }
@@ -651,7 +630,7 @@ int scGetAdrImmScript(ScriptTask *task)
     if (table_index == 0)
         return 0;
 
-    script_record = (ScriptRecord *)(SCRIPT_WORK_BYTES + _nowScript * 1104);
+    script_record = &_scriptWork[_nowScript];
     table = (unsigned short *)script_record->dataTable;
     return (int)&table[table_index];
 }
@@ -678,7 +657,7 @@ static int scGOSUBScript(ScriptTask *task)
         task->branch_depth = next_depth;
         task->script_pc[(int)shifted_depth >> 16] = destination;
     } else {
-        ((int (*)(unsigned char *))tracePrint)((unsigned char *)effectStackOverflowFormat);
+        tracePrint(effectStackOverflowFormat);
     }
     return 1;
 }
@@ -692,7 +671,7 @@ static int scRETURNScript(ScriptTask *task)
         task->branch_depth = depthU - 1;
         task->script_pc[depth] = 0;
     } else {
-        tracePrint((unsigned char *)effectStackUnderflowFormat, depthU);
+        tracePrint(effectStackUnderflowFormat, depthU);
     }
     return 1;
 }
@@ -718,7 +697,7 @@ static int scBRAScript(ScriptTask *task)
     case 4: if (left < right) take_branch = 1; break;
     case 5: if (left <= right) take_branch = 1; break;
     default:
-        tracePrint((unsigned char *)badExpressionFormat, comparison);
+        tracePrint(badExpressionFormat, comparison);
         break;
     }
     if (take_branch)
@@ -774,7 +753,7 @@ static int scOBJEVEScript(ScriptTask *task)
     number = scGetNumScript(task);
     newTaskIndex = scCreateTask(_nowScript, -1, scGetAdrScript(task), &task->parameters);
     if (newTaskIndex >= 0) {
-        newTask = (ScriptTask *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + newTaskIndex * 128);
+        newTask = &_scriptWork[_nowScript].tasks[newTaskIndex];
         newTask->effect_scheduler = number;
     }
     return 1;
@@ -808,7 +787,7 @@ static int scPRINTScript(ScriptTask *task)
 
     string = (char *)0;
     if (task->script_pc[task->branch_depth] != 0) {
-        string = (char *)((int)((ScriptRecord *)(SCRIPT_WORK_BYTES + _nowScript * 1104))->dataTable
+        string = (char *)((int)_scriptWork[_nowScript].dataTable
             + task->script_pc[task->branch_depth] * 2);
     }
     length = strlen(string);
@@ -1001,7 +980,7 @@ static int scREVEScript(ScriptTask *task)
     short value;
 
     reg = scGetCmdScript(task);
-    value = ((ScriptRecord *)(SCRIPT_WORK_BYTES + _nowScript * 1104))->eventValue;
+    value = _scriptWork[_nowScript].eventValue;
     scSetReg(reg, value);
     return 1;
 }
@@ -1014,7 +993,7 @@ static int scWAITCNTScript(ScriptTask *task)
     if (wait_count <= 0)
         return 1;
 
-    task->wait_count = wait_count;
+    task->wait_frames = wait_count;
     /* Reuse the local after the count is stored to hold the yielded mode. */
     wait_count = 1;
     task->wait_mode = wait_count;
@@ -1023,7 +1002,7 @@ static int scWAITCNTScript(ScriptTask *task)
 
 static int scWAITEVEScript(ScriptTask *task)
 {
-    task->wait_value = scGetNumScript(task);
+    task->wait_operand = scGetNumScript(task);
     task->wait_mode = 2;
     return 2;
 }
@@ -1032,7 +1011,7 @@ static int scWAITEFTScript(ScriptTask *task)
 {
     scGetNumScript(task);
     task->wait_mode = 3;
-    task->wait_value = task->effect_scheduler;
+    task->wait_operand = task->effect_scheduler;
     return 2;
 }
 
@@ -1093,7 +1072,7 @@ static int scEFFECTScript(ScriptTask *task)
     address = scGetAdrImmScript(task);
     if (address != 0) {
         schedulerId = sefCreateScheduler(address, &task->parameters, &task->initial_position,
-            (int)((ScriptRecord *)(SCRIPT_WORK_BYTES + _nowScript * 1104))->dataTable, -1);
+            (int)_scriptWork[_nowScript].dataTable, -1);
         task->effect_scheduler = schedulerId;
         sefCreateBattleActorTbl(task->parameters.effect_no);
         if (schedulerId >= 0) {
@@ -1124,7 +1103,7 @@ static int scEFFECT2Script(ScriptTask *task)
         if (entry == 0) {
             address = 0;
         } else {
-            address = (int)((unsigned char *)_scriptWork[_nowScript].dataTable + entry * 2);
+            address = (int)_scriptWork[_nowScript].dataTable + entry * 2;
         }
     }
     task->script_pc[task->branch_depth] = next;
@@ -1199,8 +1178,8 @@ static int scMISSILEScript(ScriptTask *task)
         task->missile_adr = address;
         task->missile_active = 1;
         task->flags |= 0x20;
-        task->missile_reset0 = 0;
-        task->missile_reset1 = 0;
+        task->missile_wait_frames = 0;
+        task->missile_record_index = 0;
         srsAnalyzeEftNo(task->parameters.effect_no, &charId, &_scMslCate);
     }
     return 1;
@@ -1218,8 +1197,8 @@ static int scMISSILE3Script(ScriptTask *task)
         task->missile_active = 1;
         task->missile_adr = address;
         task->flags |= 0x20;
-        task->missile_reset1 = 0;
-        task->missile_reset0 = -count * _nowEvent;
+        task->missile_record_index = 0;
+        task->missile_wait_frames = -count * _nowEvent;
         srsAnalyzeEftNo(task->parameters.effect_no, &charId, &_scMslCate);
     }
     return 1;
@@ -1297,7 +1276,7 @@ short *scAnalyzeScriptCf(int effectNo, int *offset)
     index = scFindScriptData(effectNo);
     *offset = 0;
     if (index < 0) {
-        tracePrint((unsigned char *)noLoadEffectDataFormat, effectNo);
+        tracePrint(noLoadEffectDataFormat, effectNo);
         return (short *)0;
     }
     entry = svGetScript(effectNo);
@@ -1328,24 +1307,21 @@ short *scAnalyzeScriptCf(int effectNo, int *offset)
     return (short *)0;
 }
 
-struct EventTask *scGetTaskAdr(int script_index, int task_index)
+ScriptTask *scGetTaskAdr(int script_index, int task_index)
 {
     if (task_index < 0)
         return 0;
 
-    return (struct EventTask *)(SCRIPT_WORK_BYTES + script_index * 1104 + task_index * 128);
+    return &_scriptWork[script_index].tasks[task_index];
 }
 
 void *scGetRegAdr(unsigned int reg)
 {
-    unsigned char *register_address;
-
     if (reg >= 16u) {
-        tracePrint((unsigned char *)registerOverflowFormat, reg);
+        tracePrint(registerOverflowFormat, reg);
         return (void *)0;
     }
-    register_address = SCRIPT_WORK_BYTES + (_nowScript * 276 + reg) * 4;
-    return register_address + 0x404;
+    return &_scriptWork[_nowScript].registers[reg];
 }
 
 int scOfsToAdr(int offset)

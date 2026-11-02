@@ -4,6 +4,18 @@
 #include "main/xgl_task.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_2.h"
+#include "main/menu_1.h"
+#include "main/menu_para_pt_rate_get.h"
+#include "main/data.h"
+#include "main/e_battle_win_open.h"
+#include "main/e_number_main.h"
+#include "main/end_print.h"
+#include "main/menu_model.h"
+#include "main/menu_top_command_check.h"
+#include "main/open_close_main.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 #define MENU_WORK_END 0xFF
 
@@ -33,9 +45,6 @@
 #define ACCESSORY_KEEP_HP 95
 
 #define ACCESSORY_KEEP_EP 96
-/* CHAR_LIST_EMPTY_FLAGS: scaffold data CharListMain and CharListMake_Para store as the
- * list window's flags; no further evidence of its own layout. */
-#define CHAR_LIST_EMPTY_FLAGS ((unsigned char *)"")
 #define PAD_L2       0x0001
 #define PAD_R2       0x0002
 #define PAD_L1       0x0004
@@ -175,9 +184,6 @@
 #define LINE_FIELD_SHRINK_STEP (0.20000000298023224f)
 #define LINE_FIELD_FADE_OUT_STEP (0.019999999552965164f)
 
-/* The callback prototype precedes this TU's complete model definition. */
-typedef struct MenuCharacterModel MenuCharacterModel;
-
 /*
  * The menu work block (window_tex_load's MenuWork data, 0x80 bytes). Only the
  * members tskCharSpotLight reads are modelled.
@@ -228,7 +234,7 @@ typedef struct CharacterMenuWorkData {
     signed char leaderLocked;       /* +0x19 */
     unsigned char guestDenied;      /* +0x1A */
     unsigned char unmodeled_1b[0x20 - 0x1B];
-    unsigned char swapOutId;        /* +0x20 */
+    signed char swapOutId;          /* +0x20 */
     signed char swapInId;           /* +0x21 */
     signed char modelSlot;          /* +0x22 */
     signed char weaponChanged;      /* +0x23 */
@@ -309,12 +315,11 @@ typedef struct DirectCircle {
  * The six spotlight positions (x = 1, 0, -1 on the z = 0.6 and z = -0.6 rows),
  * scaffold .rodata at 0x004C6770. tskCharSpotLight copies the whole table to
  * its frame with ld/sd and no alignment test (0x00297440..0x00297470), which
- * 2.96 emits only for a source type aligned to 8 bytes; the doubleword member
- * carries that alignment.
+ * 2.96 emits only for an aligned source type; the quadword-aligned vectors
+ * carry that alignment.
  */
-typedef union SpotLightTable {
-    Vector4 position[6];
-    u64 doublewords[12];
+typedef struct SpotLightTable {
+    AlignedVector4 position[6];
 } SpotLightTable;
 
 /*
@@ -339,10 +344,10 @@ typedef union SpotLightTable {
 typedef struct CharParaData {
     short maxHp;                /* +0x00 */
     short maxEp;                /* +0x02 */
-    unsigned short attack;      /* +0x04 */
-    unsigned short phyDefense;  /* +0x06 */
-    unsigned short stat4;       /* +0x08: statIndex 4 of MenuParaPtNowGet */
-    unsigned short magDefense;  /* +0x0A */
+    short attack;               /* +0x04 */
+    short phyDefense;           /* +0x06 */
+    short stat4;                /* +0x08: statIndex 4 of MenuParaPtNowGet */
+    short magDefense;           /* +0x0A */
     signed char stat6;          /* +0x0C: statIndex 6 */
     signed char stat7;          /* +0x0D: statIndex 7 */
     signed char stat8;          /* +0x0E */
@@ -366,41 +371,6 @@ typedef struct CharPointData {
     int skillPoints;
 } CharPointData;
 
-/*
- * CharPasWindow is the sub-window control block WindowDXSet/WindowDXMain
- * share with every other "*Main" screen task (see e.g. MoveSlide's
- * work->window.x use elsewhere); only the members CharPasMain itself sets
- * are modeled. callback/callbackArg are the members WindowDXMain calls once
- * non-null; CharPasMain points them at the empty MenuPasWindow stub and at
- * the trailing callbackWork span of its own work block.
- */
-typedef struct CharPasWindow {
-    short x;                           /* +0x00 */
-    short y;                           /* +0x02 */
-    int color;                         /* +0x04 */
-    short width;                       /* +0x08 */
-    short height;                      /* +0x0A */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    unsigned char state;               /* +0x10 */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void (*callback)(void);            /* +0x14 */
-    void *callbackArg;                 /* +0x18 */
-} CharPasWindow;
-
-/*
- * One category-tab caption. eMessageSet/eMessageMain read/write the rest of
- * this record; only the members CharPasMain itself sets are modeled.
- */
-typedef struct CharPasMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;                /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short x;                           /* +0x04 */
-    short y;                           /* +0x06 */
-    int color;                         /* +0x08 */
-    unsigned char unmodeled_0c[0x44 - 0x0C];
-} CharPasMessage;
-
 /* The inset frame endPrintExtFunc draws behind the tab strip. */
 typedef struct CharPasBox {
     short x;                           /* +0x00 */
@@ -421,9 +391,10 @@ typedef struct CharPasWork {
     unsigned char unmodeled_01[0x03 - 0x01];
     unsigned char tabCount;            /* +0x03 */
     int kind;                          /* +0x04 */
-    CharPasWindow window;              /* +0x08 */
-    unsigned char unmodeled_24[0x19C - 0x24];
-    CharPasMessage messages[12];       /* +0x19C */
+    WindowDX window;                   /* +0x08: CharPasMain points its close
+                                        * callback at the empty MenuPasWindow
+                                        * stub and at callbackWork */
+    EMessageParam messages[12];        /* +0x19C: the category-tab captions */
     CharPasBox box;                    /* +0x4CC */
     unsigned char unmodeled_4d8[0x4E0 - 0x4D8];
     unsigned char callbackWork[0x550 - 0x4E0];  /* +0x4E0 */
@@ -451,17 +422,6 @@ typedef struct MenuPadData {
 } MenuPadData;
 
 /*
- * The sub-window control block WindowDXSet/WindowDXMain/WindowDXFlagChange
- * (main/e_battle_win_open.c) manage, embedded at +0x08 of the help window's
- * work block; src/main/menu_shop.c names x/y/color/width/height of the same
- * block in its own view, and state (+0x10) is the member WindowDXFlagChange
- * writes. WindowDXMain calls callback(window, callbackArg) every frame: here
- * MenuInfoWindow, which switches on window->state (lb 0x10 at 0x0027a12c) and
- * hands the text of callbackArg (lw 0xC at 0x0027a158) to eMessageSet.
- */
-typedef struct CharInfoWindow CharInfoWindow;
-
-/*
  * The record MenuInfoWindow draws one line from. Only the two coordinates the
  * setup clears and the text pointer are modelled; from +0x10 on it is the
  * eMessage block MenuInfoWindow fills itself.
@@ -473,20 +433,6 @@ typedef struct CharInfoText {
     char *text;                     /* +0x0C */
     unsigned char unmodeled_10[0x1B0 - 0x10];
 } CharInfoText;
-
-struct CharInfoWindow {
-    short x;                        /* +0x00 */
-    short y;                        /* +0x02 */
-    int color;                      /* +0x04 */
-    short width;                    /* +0x08 */
-    short height;                   /* +0x0A */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    unsigned char state;            /* +0x10 */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void (*callback)(CharInfoWindow *window, struct CharInfoText *text); /* +0x14 */
-    struct CharInfoText *callbackArg;      /* +0x18 */
-    unsigned char unmodeled_1c[0x198 - 0x1C];
-};
 
 /*
  * The help window's work block, the 0x450 bytes MenuCharactor carves out of
@@ -507,21 +453,14 @@ typedef struct CharInfoWork {
     signed char selected;           /* +0x02 */
     unsigned char reasonShown;      /* +0x03 */
     int color;                      /* +0x04 */
-    CharInfoWindow window;          /* +0x08 */
+    /* +0x08: WindowDXMain calls MenuInfoWindow(window, &info) every frame;
+     * it switches on window->state (lb 0x10 at 0x0027a12c) and hands
+     * info.text (lw 0xC at 0x0027a158) to eMessageSet. */
+    WindowDX window;
+    unsigned char unmodeled_19c[0x1A0 - 0x19C];
     CharInfoText info;              /* +0x1A0 */
     char message[0x100];            /* +0x350 */
 } CharInfoWork;
-
-/*
- * One entry of the text table MenuTextGet indexes: the display name at +0x00
- * (main/menu_1.c models the same record with its sort name at +0x08) and, at
- * +0x04, the description line this help window prints. The index carries the
- * category in its high halfword and the item or character id in its low one.
- */
-typedef struct MenuTextRecord {
-    char *name;                     /* +0x00 */
-    char *description;              /* +0x04 */
-} MenuTextRecord;
 
 /*
  * One of CharCategory's five equip-category icons (weapon/bullet/accessory/
@@ -567,33 +506,11 @@ typedef struct CharCategoryIconIdTable {
 } CharCategoryIconIdTable;
 
 /*
- * The character screen's command windows. CharMenuMain builds one WindowDX
- * (main/tu166, 0x194 bytes) per command list and hands MenuSelectWindow the
- * matching list block as the window's close callback argument. Only the
- * members this screen writes are modelled: the slide-in x and the y of the
- * top-left corner, the frame colour, the frame size, the title string, the
- * state WindowDXMain switches on (1 while the frame opens, 3 once it is up)
- * and the untyped handler/argument pair WindowDXMain calls with the window:
- * both slots hold plain addresses, so a store to one orders against a store
- * to the other.
+ * The character screen's command windows: CharMenuMain builds one WindowDX
+ * per command list and hands MenuSelectWindow the matching list block as the
+ * window's close callback argument.
  */
-typedef struct CharMenuWindowDX CharMenuWindowDX;
-
 typedef struct CharMenuList CharMenuList;
-
-struct CharMenuWindowDX {
-    short x;                            /* +0x00 */
-    short y;                            /* +0x02 */
-    int color;                          /* +0x04 */
-    short width;                        /* +0x08 */
-    short height;                       /* +0x0A */
-    const char *title;                  /* +0x0C */
-    unsigned char state;                /* +0x10 */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void *select;                       /* +0x14 */
-    void *selectArg;                    /* +0x18 */
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-};
 
 /*
  * One selection list MenuSelectWindow (main/menu_top_command_check.c) draws
@@ -623,78 +540,27 @@ typedef struct CharMenuWork {
     unsigned char windowCount;          /* +0x002 */
     unsigned char subState;             /* +0x003 */
     int color;                          /* +0x004 */
-    CharMenuWindowDX window[3];         /* +0x008 */
+    WindowDX window[3];                 /* +0x008 */
     unsigned char unmodeled_4c4[0x658 - 0x4C4];
     CharMenuList list[3];               /* +0x658 */
 } CharMenuWork;
 
 /*
- * The three display elements of the point bar, as this screen writes them.
- * src/main/e_number_main.c owns the records and models the members its
- * setters write (color, mode, flag, state, subState, value); each definition
- * below keeps those members and their names, names the members this screen
- * writes in the spans that file left as padding, and carries the element's
- * whole stride, which the work block below needs: 0x70 for a ribbon (ex + 0x18 + i * 0x70), 0x20 for
- * a label and 0x90 for a number. The word that follows x and y in all three
+ * The character screen's point bar: three rows, each one ribbon with its
+ * label and its value. The word that follows x and y in each element (work)
  * is the draw order the element's own Main copies verbatim into its render
  * record (eNumberMain: lw 0x4, sw 0x6C at 0x0027648c); this screen gives
  * every ribbon the bar's base order and puts the label and the value two in
  * front of it.
- */
-typedef struct CharExRibbon {
-    short x;                        /* +0x00 */
-    short y;                        /* +0x02 */
-    unsigned int drawOrder;         /* +0x04 */
-    short width;                    /* +0x08 */
-    short height;                   /* +0x0A */
-    signed char mode;               /* +0x0C */
-    u8 unmodeled_00d[0x70 - 0x0D];
-} CharExRibbon;
-
-typedef struct CharExLabel {
-    signed char state;              /* +0x00 */
-    signed char subState;           /* +0x01 */
-    u8 unmodeled_002[2];            /* +0x02..0x03 */
-    short x;                        /* +0x04 */
-    short y;                        /* +0x06 */
-    unsigned int drawOrder;         /* +0x08 */
-    signed char color[4];           /* +0x0c..0x0f */
-    u8 unmodeled_010[0xc];          /* +0x10..0x1b */
-    int value;                      /* +0x1c */
-} CharExLabel;
-
-/*
- * digits (+0x0F) is the number of digit cells eNumberMain lays out, twelve
- * pixels apart (lbu then *3*4 at 0x0027647c), and format (+0x0E) is the
- * layout it selects with, rejecting anything above 14 (sltiu 0xF at
- * 0x002763a0).
- */
-typedef struct CharExNumber {
-    short x;                        /* +0x00 */
-    short y;                        /* +0x02 */
-    unsigned int drawOrder;         /* +0x04 */
-    signed char color[4];           /* +0x08..0x0b */
-    signed char mode;               /* +0x0c */
-    u8 unmodeled_00d;               /* +0x0d */
-    unsigned char format;           /* +0x0E */
-    unsigned char digits;           /* +0x0F */
-    signed char flag[4];            /* +0x10..0x13 */
-    int value;                      /* +0x14 */
-    u8 unmodeled_018[0x90 - 0x18];
-} CharExNumber;
-
-/*
- * The character screen's point bar: three rows, each one ribbon with its
- * label and its value.
  */
 typedef struct CharExWork {
     unsigned char unmodeled_00[0x10];
     unsigned char state;            /* +0x10 */
     unsigned char unmodeled_11[0x14 - 0x11];
     unsigned int drawOrder;         /* +0x14 */
-    CharExRibbon ribbon[3];         /* +0x18 */
-    CharExLabel label[3];              /* +0x168 */
-    CharExNumber number[3];              /* +0x1C8 */
+    ERibbonMainData ribbon[3];      /* +0x18 */
+    ETagFontMainData label[3];      /* +0x168 */
+    ENumberMainData number[3];      /* +0x1C8 */
 } CharExWork;
 
 /*
@@ -740,180 +606,54 @@ typedef struct L1R1SlideStep {
 } L1R1SlideStep;
 
 /*
- * One entry of the CharStatus block: a twelve-byte entry header followed by
- * the record the drawing function reads. The menu writes the build-time
- * fields of a status entry through the entry (header+0x0C, +0x0D, +0x10,
- * +0x12 = record chrNo, fullStatus, offsetX, offsetY) and hands the record
- * address itself to MenuStatusDisp, and the swap cursor's state is written the
- * same way (entry+0x0C at CharStatus+0x4EC4). The block's own control fields
- * are the header of its first entry.
+ * A swap cursor reached as a list node: twelve bytes of node header, then the
+ * cursor record (the node pointer is the cursor address minus 12). Only the
+ * state byte is written through the node.
  */
-typedef struct CharStatusHeader {
-    unsigned char state;                /* +0x00 */
-    unsigned char cursorOn;             /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    unsigned char moveVert;             /* +0x04: slide y before x */
-    unsigned char flags;                /* +0x05: bit 0 = the slide finished */
-    unsigned char subState;             /* +0x06 */
-    signed char lastCursor;             /* +0x07 */
-    int color;                          /* +0x08 */
-} CharStatusHeader;
-
-/*
- * The 0x834-byte record MenuStatusDisp (main/menu_status.c, VA 0x00279098)
- * draws one character's status panel from. Only the fields this menu writes
- * are modelled.
- */
-typedef struct MenuStatusWork {
-    unsigned char chrNo;                /* +0x00 */
-    unsigned char fullStatus;           /* +0x01: 1 outside the formation menu */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short offsetX;                      /* +0x04 */
-    short offsetY;                      /* +0x06 */
-    unsigned char unmodeled_08[0x0C - 0x08];
-    short maxHp;                        /* +0x0C: with the pending point spend */
-    signed char hpMark;                 /* +0x0E */
-    short maxEp;                        /* +0x10 */
-    signed char epMark;                 /* +0x12 */
-    unsigned char unmodeled_13[0x834 - 0x13];
-} MenuStatusWork;
-
-/*
- * The window record WindowDXSet initialises and WindowDXMain draws, as this
- * menu uses it (the shared control block is defined by the translation unit
- * that owns WindowDXSet; this is the partial view of the members the status
- * windows write). The caption is MenuTagTextGet's result, which WindowDXMain
- * passes on as a tag id, and the drawing callback receives the status record.
- */
-typedef struct MenuStatusWindow {
-    short x;                            /* +0x00 */
-    short y;                            /* +0x02 */
-    int color;                          /* +0x04 */
-    short width;                        /* +0x08 */
-    short height;                       /* +0x0A */
-    char *title;                        /* +0x0C */
-    signed char state;                  /* +0x10: 1 while opening, 3 when open */
-    unsigned char visible;              /* +0x11 */
-    unsigned char unmodeled_12[0x14 - 0x12];
-    void (*disp)(struct MenuStatusWork *work);  /* +0x14 */
-    struct MenuStatusWork *dispWork;           /* +0x18 */
-    unsigned char unmodeled_1c[0x188 - 0x1C];
-} MenuStatusWindow;
-
-/*
- * The cursor record eCursolSet initialises and eCursolMain draws, as this
- * menu uses it (the shared record is defined by the translation unit that
- * owns eCursolSet, which clears the record and takes its width as the second
- * argument).
- */
-typedef struct MenuStatusCursor {
-    signed char state;                  /* +0x00 */
-    unsigned char unmodeled_01[0x04 - 0x01];
-    short x;                            /* +0x04 */
-    short y;                            /* +0x06 */
-    int work;                           /* +0x08 */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-} MenuStatusCursor;
-
-typedef struct CharStatusWindowEntry {
-    CharStatusHeader header;            /* +0x0000 */
-    MenuStatusWindow window;           /* +0x000C */
-} CharStatusWindowEntry;
-
-typedef struct CharStatusDispEntry {
-    CharStatusHeader header;            /* +0x0000 */
-    MenuStatusWork work;               /* +0x000C */
-} CharStatusDispEntry;
-
-typedef struct CharStatusCursorEntry {
-    CharStatusHeader header;            /* +0x0000 */
-    MenuStatusCursor cursor;           /* +0x000C */
-    unsigned char unmodeled_1c[0x24 - 0x1C];
-} CharStatusCursorEntry;
+typedef struct CharStatusCursorNode {
+    unsigned char header[0x0C];         /* +0x00 */
+    unsigned char state;                /* +0x0C: the cursor's state */
+    unsigned char unmodeled_0d[0x24 - 0x0D];
+} CharStatusCursorNode;
 
 /*
  * The character-status work block MenuCharactor carves from the menu heap
- * (0x4EF4 bytes, entry-header state 0 means it still has to be built): eight
- * window entries, the three party slots followed by the five reserve slots,
- * then their eight status records, then the two swap cursors (cursor[0] marks
- * the party slot and cursor[1] the reserve slot), and the header that closes
- * the list.
+ * (0x4EF4 bytes, state 0 means it still has to be built): the control fields,
+ * the eight status windows (the three party slots followed by the five
+ * reserve slots), their eight status panels, then the two swap cursors
+ * (cursor[0] marks the party slot and cursor[1] the reserve slot). Same
+ * layout as MenuSkillStatusWork.
  */
 typedef struct CharStatusWork {
-    CharStatusWindowEntry window[8];   /* +0x0000 */
-    CharStatusDispEntry disp[8];       /* +0x0CA0 */
-    CharStatusCursorEntry cursor[2];   /* +0x4EA0 */
-    CharStatusHeader endHeader;        /* +0x4EE8 */
+    unsigned char state;                /* +0x0000 */
+    unsigned char cursorOn;             /* +0x0001 */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    unsigned char moveVert;             /* +0x0004: slide y before x */
+    unsigned char flags;                /* +0x0005: bit 0 = the slide finished */
+    unsigned char subState;             /* +0x0006 */
+    signed char lastCursor;             /* +0x0007 */
+    int color;                          /* +0x0008 */
+    WindowDX window[8];                 /* +0x000C */
+    MenuStatusPanel panel[8];           /* +0x0CAC */
+    ECursolMainData cursor[2];          /* +0x4EAC */
 } CharStatusWork;
 
 /*
- * The portrait icon slots of the equip-list screen (CharListWork below holds
- * three of them). Only the colour word CharListMain writes right after
- * eSpriteSet is modeled; the rest is the sprite record's own layout
- * (main/e_number_main.c).
+ * The block is also walked as list nodes (a twelve-byte header followed by the
+ * record): the reserve cursor's state is armed through its node, 0x18 bytes
+ * into the cursor pair where the node header starts, while every other access
+ * goes through CharStatusWork.
  */
-typedef struct CharListIcon {
-    unsigned char unmodeled_00[0x08];
-    int color;                      /* +0x08 */
-    unsigned char unmodeled_0c[0x28 - 0x0C];
-} CharListIcon;
+typedef union CharStatusBlock {
+    CharStatusWork work;
+    struct {
+        unsigned char unmodeled_00[0x4EC4];
+        CharStatusCursorNode swap;      /* +0x4EC4 */
+    } node;
+} CharStatusBlock;
 
-/*
- * The per-character stat rows of the equip-list screen (CharListWork below
- * holds eight of them). Only the colour word CharListMain writes right after
- * eNumberSet is modeled; the rest is the number record's own layout
- * (main/e_number_main.c).
- */
-typedef struct CharListStatRow {
-    unsigned char unmodeled_00[0x04];
-    int color;                      /* +0x04 */
-    unsigned char unmodeled_08[0x90 - 0x08];
-} CharListStatRow;
 
-/*
- * The list rows MenuListMake builds and MenuListGet returns, twelve bytes
- * each: CharListMake_Gun only sets the per-row flag at +0x08 that
- * MenuListMake and its subListMake00/01 fills clear. main/menu_1.c owns the
- * record and declares the same members in its own TU-local header, so this
- * is this TU's view of the rows it touches.
- */
-typedef struct CharListRow {
-    unsigned char unmodeled_00[0x08];
-    unsigned char flag;             /* +0x08 */
-    unsigned char unmodeled_09[0x0C - 0x09];
-} CharListRow;
 
-/*
- * CharListSPWindow is the scrollable list window CharListMake_Wpn builds at
- * CharList+0x504 and hands to WindowSPItemChange/WindowSPSetSelect. Its
- * +0x14/+0x15 row/column grid and +0x1C item list match the fields those
- * still-assembler functions read at the same offsets for every WindowSP*
- * list they manage (main/e_battle_win_open.c). CharListMake_Gun, and
- * CharListMake_Acc/_Para (still assembler), fill this same window for their
- * own category: all four load CharList+0x504.
- * - state (+0x00): 0 while the list is still being built, 0x11 once a
- *   category has been populated (CharListMain).
- * - position (+0x04): the short MoveSlide eases toward the target the list
- *   state selects (CharListMain).
- * - contentHeight (+0x06): the scrolled content height, set per category
- *   (CharListMain); distinct from height (+0x0E), the fixed frame height.
- * - color (+0x08): the packed 0xRRGGBB tint CharListMain sets once.
- */
-typedef struct CharListSPWindow {
-    unsigned char state;        /* +0x00 */
-    unsigned char rowCount;    /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short position;             /* +0x04 */
-    short contentHeight;        /* +0x06 */
-    int color;                  /* +0x08 */
-    short width;                /* +0x0C */
-    short height;                /* +0x0E */
-    int flags;                  /* +0x10 */
-    unsigned char columns;      /* +0x14 */
-    unsigned char rows;         /* +0x15 */
-    unsigned char unmodeled_16[0x1C - 0x16];
-    struct CharListRow *items;         /* +0x1C */
-} CharListSPWindow;
 
 /*
  * CharListWork is the equip-list screen's work block.
@@ -930,14 +670,17 @@ typedef struct CharListWork {
     unsigned char scrollIndex;  /* +0x03 */
     unsigned char unmodeled_04[0x08 - 0x04];
     int color;                  /* +0x08 */
-    CharListIcon icons[3];      /* +0x0C */
-    CharListStatRow rows[8];    /* +0x84 */
-    CharListSPWindow weapon;   /* +0x504 */
-    unsigned char unmodeled_524[0x3374 - 0x524];
+    ESprite icons[3];      /* +0x0C */
+    ENumberMainData rows[8];    /* +0x84 */
+    /* +0x504: the list window CharListMake_Wpn/_Gun/_Acc/_Para fill for
+     * their category; CharListMain keeps its state at 0 while building it
+     * and sets 0x11 once a category is populated. */
+    WindowSPCursor weapon;
+    WindowSPCursor paraWindow;   /* +0x1C3C: the parameter-up list window */
     /* +0x3374: the twelve twelve-byte list rows CharListMake_Para builds in
      * place (addiu $16,$16,0xC at 0x00295900) and hands to the window as its
      * item list; CharListMain clears them when the screen opens. */
-    unsigned char paraItems[12 * 12];
+    MenuListEntry paraItems[12];
 } CharListWork;
 
 /*
@@ -952,81 +695,16 @@ typedef struct MenuBulletData {
     short weapon;                   /* +0x0C */
 } MenuBulletData;
 
-typedef struct ParaWindow {
-    short x;                    /* +0x00 */
-    short y;                    /* +0x02 */
-    int color;                  /* +0x04 */
-    short width;                /* +0x08 */
-    short height;               /* +0x0A */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
-    signed char state;          /* +0x10 */
-    unsigned char unmodeled_11[0x194 - 0x11];
-} ParaWindow;
-
-/*
- * One of the eight numbers. eNumberSet clears the render colour, the mode at
- * +0x0C and the four bytes at +0x10..+0x13; eNumberMain formats the word at
- * +0x14 in base 10 and, when the byte at +0x13 is zero, draws one more sprite
- * chosen from the byte at +0x11 (lbu 0x13/0x11 at 0x002767f8/0x00276798).
- * This screen packs the current value in the low halfword of +0x14 and the
- * recalculated one in its high halfword, and reads both halves back to pick
- * the arrow (2 above, 1 below, 0 equal, and then no arrow at all).
- */
-typedef struct ParaNumber {
-    short x;                    /* +0x00 */
-    short y;                    /* +0x02 */
-    int color;                  /* +0x04 */
-    unsigned char unmodeled_08[0x0E - 0x08];
-    signed char size;           /* +0x0E: 5 for every number of this window */
-    unsigned char digits;       /* +0x0F */
-    unsigned char unmodeled_10[1];
-    signed char arrow;          /* +0x11 */
-    unsigned char unmodeled_12[1];
-    signed char arrowHidden;    /* +0x13 */
-    int value;                  /* +0x14 */
-    unsigned char unmodeled_18[0x90 - 0x18];
-} ParaNumber;
-
-/*
- * One of the eight stat labels. eTagFontSet clears the state pair at +0x00 and
- * the render colour at +0x0C and stores the text pointer; this screen only
- * moves the label and dims its first colour channel.
- */
-typedef struct ParaTagFont {
-    unsigned char unmodeled_00[4];
-    short x;                    /* +0x04 */
-    short y;                    /* +0x06 */
-    int color;                  /* +0x08 */
-    signed char rgba[4];        /* +0x0C */
-    unsigned char unmodeled_10[0x20 - 0x10];
-} ParaTagFont;
-
-typedef struct ParaRibbonPoint {
-    unsigned char unmodeled_00[8];
-    unsigned char rgba[4];      /* +0x08 */
-} ParaRibbonPoint;
-
-/*
- * The ribbon that marks the selected parameter row: the same x/y/colour/size
- * head the sub-window uses, then the eight corner records eRibbonMain walks,
- * of which this screen colours six.
- */
-typedef struct ParaRibbon {
-    short x;                    /* +0x00 */
-    short y;                    /* +0x02 */
-    int color;                  /* +0x04 */
-    short width;                /* +0x08 */
-    short height;               /* +0x0A */
-    unsigned char unmodeled_0c[4];
-    ParaRibbonPoint point[8];   /* +0x10 */
-} ParaRibbon;
 
 /*
  * CharParameter is the parameter window's work block. MenuCharactor carves it
  * out of the menu heap and CharParameterMain drives it: state 0 builds the
  * window and its widgets, state 2 runs one frame. The sub-window sits at +0x08
  * and is the same 0x194-byte control block WindowDXSet/WindowDXMain share, so
- * the eight numbers start at +0x19C.
+ * the eight numbers start at +0x19C. This screen packs each number's current
+ * value in the low halfword of its value word and the recalculated one in the
+ * high halfword, and reads both halves back to pick the arrow (2 above, 1
+ * below, 0 equal, and then no arrow at all).
  */
 typedef struct CharParameterWork {
     unsigned char state;        /* +0x00 */
@@ -1037,12 +715,12 @@ typedef struct CharParameterWork {
     signed char selectNo;       /* +0x02 */
     unsigned char unmodeled_03[1];
     int color;                  /* +0x04 */
-    ParaWindow window;          /* +0x08 */
-    ParaNumber number[8];       /* +0x19C */
+    WindowDX window;          /* +0x08 */
+    ENumberMainData number[8];  /* +0x19C */
     unsigned char unmodeled_61c[0x75C - 0x61C];
-    ParaTagFont tag[8];         /* +0x75C */
+    ETagFontMainData tag[8];    /* +0x75C */
     unsigned char ribbonShown;  /* +0x85C */
-    ParaRibbon ribbon;          /* +0x860 */
+    ERibbonMainData ribbon;     /* +0x860 */
 } CharParameterWork;
 
 /* The digit count of each of the eight numbers (three digits for the halfword
@@ -1051,55 +729,7 @@ typedef struct ParaDigitCounts {
     unsigned char count[8];
 } ParaDigitCounts;
 
-/*
- * The widget control blocks the menu screens embed. WindowDXSet/WindowDXMain
- * take the sub-window (stride 404 bytes: CharWeaponMain reaches its second
- * one with `mult $3,$2,404` on MenuWork.character.equipKind), eMessageSet/eMessageMain
- * the text line, eSpriteSet/eSpriteMain the icon and eCursolSet/eCursolMain
- * the selection cursor. All four carry x/y at +0x04/+0x06 and the display
- * word this screen fills from CharWeaponWork.color at +0x08; the window
- * instead starts with its own x/y at +0x00/+0x02 and keeps that word at
- * +0x04, which is what MoveSlide slides and WindowDXMain draws.
- */
-typedef struct CharWeaponWindow {
-    short x;                            /* +0x000 */
-    short y;                            /* +0x002 */
-    int color;                          /* +0x004 */
-    short width;                        /* +0x008 */
-    short height;                       /* +0x00A */
-    unsigned char unmodeled_00c[0x10 - 0x0C];
-    signed char state;                  /* +0x010 */
-    unsigned char unmodeled_011[0x194 - 0x11];
-} CharWeaponWindow;
 
-typedef struct CharWeaponMessage {
-    unsigned char unmodeled_000[0x01];
-    unsigned char mode;                 /* +0x001 */
-    unsigned char unmodeled_002[0x04 - 0x02];
-    short x;                            /* +0x004 */
-    short y;                            /* +0x006 */
-    int color;                          /* +0x008 */
-    unsigned char unmodeled_00c[0x18 - 0x0C];
-    const char *text;                   /* +0x018 */
-    unsigned char unmodeled_01c[0x44 - 0x1C];
-} CharWeaponMessage;
-
-typedef struct CharWeaponSprite {
-    unsigned char unmodeled_000[0x04];
-    short x;                            /* +0x004 */
-    short y;                            /* +0x006 */
-    int color;                          /* +0x008 */
-    unsigned char unmodeled_00c[0x28 - 0x0C];
-} CharWeaponSprite;
-
-typedef struct CharWeaponCursor {
-    signed char state;                  /* +0x000 */
-    unsigned char unmodeled_001[0x04 - 0x01];
-    short x;                            /* +0x004 */
-    short y;                            /* +0x006 */
-    int color;                          /* +0x008 */
-    unsigned char unmodeled_00c[0x24 - 0x0C];
-} CharWeaponCursor;
 
 /*
  * The weapon icon of every party character (chrNo 1..7), as the scaffold's
@@ -1144,18 +774,11 @@ typedef struct CharWeaponWork {
     unsigned char subState;             /* +0x001: cleared with the move to state 2 */
     unsigned char unmodeled_002[0x04 - 0x02];
     int color;                          /* +0x004 */
-    CharWeaponWindow window[3];             /* +0x008 */
-    CharWeaponCursor cursor;                  /* +0x4C4 */
-    CharWeaponMessage message[6];             /* +0x4E8 */
-    CharWeaponSprite sprite[6];               /* +0x680 */
+    WindowDX window[3];             /* +0x008 */
+    ECursolMainData cursor;                   /* +0x4C4 */
+    EMessageParam message[6];                 /* +0x4E8 */
+    ESprite sprite[6];               /* +0x680 */
 } CharWeaponWork;
-
-typedef struct CharParaRow {
-    char *name;                     /* +0x00 */
-    unsigned char unmodeled_04[0x08 - 0x04];
-    unsigned char flag;             /* +0x08 */
-    unsigned char unmodeled_09[0x0C - 0x09];
-} CharParaRow;
 
 /*
  * Partial view of the sprite object eSpriteSet/eSpriteMain (main/e_number_main.c,
@@ -1171,21 +794,6 @@ typedef struct CharSwitchArrow {
 } CharSwitchArrow;
 
 /*
- * Partial view of the message object eMessageSet/eMessageMain (main/e_message.c,
- * still assembler at this TU's boundary) receive, at the same x/y/color
- * offsets menu_shop.c's MenuShopMessage evidences for the same two
- * functions; mode is eMessageModeChange's own field (main/e_message.c).
- */
-typedef struct CharSwitchMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;             /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short x;                        /* +0x04 */
-    short y;                        /* +0x06 */
-    int color;                      /* +0x08 */
-} CharSwitchMessage;
-
-/*
  * The switch-character arrow indicator MenuCharactor carves from the menu
  * heap (still assembler there); only the members CharSwitchMain touches are
  * modelled.
@@ -1196,40 +804,8 @@ typedef struct CharSwitchWork {
     int color;                      /* +0x04 */
     CharSwitchArrow arrow;          /* +0x08 */
     unsigned char unmodeled_14[0x30 - 0x14];
-    CharSwitchMessage message;      /* +0x30 */
+    EMessageParam message;          /* +0x30 */
 } CharSwitchWork;
-
-/*
- * One title-row slot (eTagFontSet/eTagFontMain object): x/y (+0x04/+0x06)
- * position the row and id (+0x08) is a per-row handle CharPointMain derives
- * from tagBase.
- */
-typedef struct CharPointTagSlot {
-    unsigned char unmodeled_00[0x04];
-    short x;                        /* +0x04 */
-    short y;                        /* +0x06 */
-    int id;                         /* +0x08 */
-    unsigned char unmodeled_0c[0x20 - 0x0C];
-} CharPointTagSlot;
-
-/*
- * One point-value slot (eNumberSet/eNumberMain object): x/y position it,
- * id is the per-row handle. format (+0x0E) selects the number display
- * format, while digits (+0x0F) bounds the rendered digit count. This
- * panel selects format 0 and four digits before eNumberMain, and
- * value (+0x14) is the number eNumberMain formats in base 10.
- */
-typedef struct CharPointNumberSlot {
-    short x;                        /* +0x00 */
-    short y;                        /* +0x02 */
-    int id;                         /* +0x04 */
-    unsigned char unmodeled_08[0x0E - 0x08];
-    unsigned char format;           /* +0x0E */
-    unsigned char digits;           /* +0x0F */
-    unsigned char unmodeled_10[0x14 - 0x10];
-    int value;                       /* +0x14 */
-    unsigned char unmodeled_18[0x90 - 0x18];
-} CharPointNumberSlot;
 
 /*
  * The panel's background quad (eSpriteSet/eSpriteMain object): x/y position
@@ -1266,22 +842,14 @@ typedef struct CharPointColorSlot {
  * CharPointMain's own work block: window_tex_load carves it from the menu
  * heap (0x3D8 bytes) and CharPoint points at it. state (+0x000) is 0 before
  * the panel has been built and 1 once CharPointMain has built it once.
- * width/height (+0x008/+0x00A) are the WindowDXSet/WindowDXMain window's own
- * size, and every child slot below is positioned relative to them.
- * windowTagId/windowField3/windowField4/title/windowState (+0x00C..+0x018)
- * are the remaining window fields CharPointMain itself writes.
+ * The window's position is what every child slot below is positioned
+ * relative to; the two tag slots carry the row titles and the three number
+ * slots the point values (format 0, four digits).
  */
 typedef struct CharPointPanel {
-    short width;                                    /* +0x000 */
-    unsigned short height;                          /* +0x002 */
-    int windowTagId;                                /* +0x004 */
-    short windowField3;                             /* +0x008 */
-    short windowField4;                             /* +0x00A */
-    const char *title;                              /* +0x00C */
-    unsigned char windowState;                      /* +0x010 */
-    unsigned char unmodeled_011[0x194 - 0x011];
-    CharPointTagSlot tagSlots[2];                   /* +0x194 */
-    CharPointNumberSlot numberSlots[3];             /* +0x1D4 */
+    WindowDX window;                                /* +0x000 */
+    ETagFontMainData tagSlots[2];                   /* +0x194 */
+    ENumberMainData numberSlots[3];                 /* +0x1D4 */
     CharPointSprite sprite;                         /* +0x384 */
     CharPointColorSlot colors[2];                   /* +0x3B0 */
     int frameStart;                                 /* +0x3C8 */
@@ -1302,74 +870,24 @@ typedef struct MenuWeaponData {
     short bullet;                   /* +0x1A */
 } MenuWeaponData;
 
-typedef struct PartyAttackPosition {
-    unsigned short party_id;
-    signed char attack_position;
-} PartyAttackPosition;
-
-typedef struct PartyDataPrefix {
-    u8 _unmodeled_00[0x24];
-    u16 lock_party_mask;
-    u16 out_friend_mask;
-    u16 friend_mask;
-    u16 take_agws_mask;
-    u16 leader_battle_id;
-    u8 radar_disp;
-    PartyAttackPosition attack_slots[3];
-} PartyDataPrefix;
-
 /* The model task invokes callbacks with its model in a0 and the stored
  * context word in a1 (main 0x0028124c..0x00281254). */
-typedef void (*MenuCharacterModelCallback)(MenuCharacterModel *unit, void *argument);
-
-typedef union MenuCharacterVector {
-    Vector4 vector;
-    unsigned long long words[2];
-} MenuCharacterVector;
-
-typedef struct MenuCharacterTransform {
-    MenuCharacterVector position;
-    MenuCharacterVector rotation;
-    MenuCharacterVector scale;
-    unsigned char unmodeled_30[0x10];
-    MenuCharacterVector defaultPosition;
-    unsigned char unmodeled_50[0x10];
-    float fade;
-} MenuCharacterTransform;
-
-typedef struct MenuCharacterActor {
-    unsigned char unmodeled_00[0xC0];
-    MenuCharacterTransform transform;
-} MenuCharacterActor;
-
-typedef struct MenuCharacterModel {
-    unsigned char unmodeled_00[0x10];
-    signed char taskPhase;
-    unsigned char active;
-    unsigned char unmodeled_12;
-    unsigned char state;
-    struct CharParaData *org;
-    unsigned short chrNo;
-    unsigned char unmodeled_1a[6];
-    struct MenuCharacterActor *actor;
-} MenuCharacterModel;
+typedef void (*MenuCharacterModelCallback)(MenuModelUnit *unit, void *argument);
 
 typedef union MenuCameraPair {
-    Vector4 vector[2];
+    AlignedVector4 vector[2];
     float component[2][4];
-    unsigned long long words[4];
 } MenuCameraPair;
 
-typedef union MenuCameraRotationPair {
-    Vector4 vector[2];
-    unsigned long long words[4];
+typedef struct MenuCameraRotationPair {
+    AlignedVector4 vector[2];
 } MenuCameraRotationPair;
 
-typedef MenuCharacterVector MenuCameraVector;
-
-typedef union MenuCharacterPositions {
-    Vector4 vector[6];
-    unsigned long long words[12];
+/* TairetuRot/TairetuPos (.bss +0x320/+0x330) are copied as two doublewords,
+ * but the original .bss is only 8-aligned, so their copy type is the 8-aligned
+ * DoublewordAlignedVector4 rather than AlignedVector4. */
+typedef struct MenuCharacterPositions {
+    AlignedVector4 vector[6];
 } MenuCharacterPositions;
 
 typedef struct MenuCameraSetPositionVectors {
@@ -1395,7 +913,7 @@ typedef struct MenuCameraSetRotationPair {
 } MenuCameraSetRotationPair;
 
 typedef struct MenuCameraSetVector {
-    MenuCameraVector storage;
+    DoublewordAlignedVector4 storage;
 } MenuCameraSetVector;
 
 typedef struct CharLineFieldTask {
@@ -1404,7 +922,7 @@ typedef struct CharLineFieldTask {
     unsigned char visible;
     signed char wait;
     unsigned char unmodeled_13[0x20 - 0x13];
-    MenuCharacterVector scale;
+    AlignedVector4 scale;
     float alpha;
 } CharLineFieldTask;
 
@@ -1511,7 +1029,7 @@ extern const L1R1SpriteIdPair l1r1SpriteIdTable[];
 extern const L1R1SlideStep l1r1SlideStepTable[];
 
 /* The block MenuCharactor allocated for the character status menu. */
-extern CharStatusWork *CharStatus;
+extern CharStatusBlock *CharStatus;
 
 extern CharListWork *CharList;
 
@@ -1525,7 +1043,7 @@ extern ParaDigitCounts paraDigitCountTable[];
 extern const WeaponIconTable charWeaponIconTable;
 extern const AccessoryIconTable charAccessoryIconTable[];
 extern CharWeaponWork *CharWeapon;
-extern unsigned char listWindowTag[];
+extern char listWindowTag[];
 extern CharSwitchWork *CharSwitch;
 
 /* The character-switch prompt's text pointer (config/symbols/main.txt: msg_6,
@@ -1553,35 +1071,14 @@ extern const char paraUpBinPath[32];
 extern const char charactorText[16];
 
 /* The three menu model handles, one per attacker slot. */
-extern int MenuModelOut[];
+extern void *MenuModelOut[];
 
-/* Menu-local work storage and the original slot/point lookup tables. */
-/* Font-script caption pointers; the strings keep their established owners. */
-/* Tables consumed through the existing partial views. */
-extern const char MenuAgwsAssignPilotCommandLabel[16];
-
-extern const char MenuAgwsEngineUnitCommandLabel[16];
-extern const char MenuAgwsAccessoryCommandLabel[16];
-extern const char MenuAgwsLeftShoulderCommandLabel[16];
-extern const char MenuAgwsRightShoulderCommandLabel[16];
-extern const char MenuAgwsUnequipCommandLabel[16];
-extern const char MenuAgwsNameLabel[16];
-extern const char MenuAgwsRemoveCommandLabel[8];
-extern const char MenuAgwsAssignCommandLabel[8];
-extern const char MenuAgwsAmmoCommandLabel[8];
-extern const char MenuAgwsLeftAltCommandLabel[8];
-extern const char MenuAgwsRightAltCommandLabel[8];
-extern const char MenuAgwsLeftArmCommandLabel[8];
-extern const char MenuAgwsRightArmCommandLabel[8];
-extern const char MenuAgwsListCommandLabel[8];
-extern const char MenuAgwsPilotCommandLabel[8];
-extern const char MenuAgwsEquipCommandLabel[8];
 extern const MenuCameraPair singleCameraPositionTable;
 extern const MenuCameraPair singleCameraRotationTable;
 extern const MenuCameraPair formationCameraRotationTable;
 extern const MenuCameraPair formationCameraPositionTable;
 extern const MenuCharacterPositions battleModelPositionTable;
-extern const MenuCharacterVector lineFieldInitialScaleVector;
+extern const AlignedVector4 lineFieldInitialScaleVector;
 extern const unsigned char rowOpacityTable[];
 extern const unsigned char columnOpacityTable[];
 
@@ -1606,8 +1103,6 @@ CharParaData *func_A191C0(int chrNo);
  * that address. */
 CharParaData *func_00A11108(int chrNo, int *attack, int *defense);
 
-int PartyFriendCheck(int id);
-
 /* dataPlChaGet (ov01 VA 0x00a19210; see src/main/menu_skill.h and
  * src/main/menu_tec.c, which model this same per-character record under the
  * same scaffold label). Kept under the scaffold's undefined_funcs_auto.txt
@@ -1616,85 +1111,26 @@ CharPointData *func_A19210(int chrNo);
 int MenuParaNextPointGet(int chrNo, int statIndex, int count);
 /* main/party.c: non-zero while the character fights in the active party. */
 int PartyAttackerCheck(int chrNo);
-int PartyLeaderCheck(int chara_id);
-int MenuAccessoryEquipCheck(int chrNo, int accessory, int slot);
-void eMessageCpy(char *destination, char *source);
-void eMessageCat(char *source);
-
-extern int xglFontGetStringWidth(const char *text);
-
-/* MenuPasLengthGet (this TU, still assembler): the caption's pixel width. */
-int MenuPasLengthGet(const char *text);
-
-/* MenuPasWindow (main/menu_top_command_check.c): an empty callback stub. */
-void MenuPasWindow(void);
 
 /* MoveSlide (main/window_tex_load.c): eases a short position toward its
  * target at 1/rate of the remaining distance. */
 void MoveSlide(short *current, short *target, float rate);
 
-/*
- * The display elements every "*Main" screen of this menu builds: the
- * sub-window WindowDXSet clears and WindowDXMain draws, the text line, the
- * icon, the selection cursor, the number, the label and the ribbon. Each
- * screen models only the members of the element record it writes itself, so
- * the element is passed untyped and every screen keeps its own view above
- * (main/e_battle_win_open.c, main/e_message.c and main/e_number_main.c own
- * the records).
- */
-void WindowDXSet(void *window);
-
-void WindowDXMain(void *window);
-void eMessageSet(void *message, const char *text);
-void eMessageMain(void *message);
 void eSpriteSet(void *sprite, short spriteId);
 void eSpriteMain(void *sprite);
-void eCursolSet(void *cursor, int width);
-void eCursolMain(void *cursor);
-
-/* eNumberSet, eTagFontSet and eRibbonSet take a second argument every call
- * site of this menu passes and the initialisers themselves leave unused
- * (move a1,zero at 0x002931e8, daddu $5,$0,$0 at 0x00295aa8); eTagFontSet
- * takes a pointer to the label text it draws. */
-void eNumberSet(void *number, int mode);
-
-void eNumberMain(void *number);
-void eTagFontSet(void *tag, const char *text);
-void eTagFontMain(void *tag);
-void eRibbonSet(void *ribbon, int mode);
-void eRibbonMain(void *ribbon);
-void endPrintExtFunc(int kind, int id, void *data);
 int MenuCharEquipCalcPointGet(int chrNo);
-void MenuInfoWindow(CharInfoWindow *window, CharInfoText *text);
 void WindowDXFlagChange(void *window, int flag);
 char *MenuCharNameGet(int chrNo);
 char *MenuParaNameGet(int statIndex);
 char *MenuNumberTextGet(int value, int width, int mode);
-MenuTextRecord *MenuTextGet(int index);
 int MenuSortGet(int listIndex, int entryIndex);
-int PartyAttackPosCheck(int attackPosition);
 int strcmp(const char *first, const char *second);
-float xglCos(float radians);
-void MenuSelectWindow(CharMenuWindowDX *window, CharMenuList *list);
-
-/* Whether the shown character may use the Equip command. */
-int MenuMainCharCheck(int chrNo);
-
-void MenuStatusDisp(MenuStatusWork *work);
-
 /* main/menu_tag.c: the caption string of one window kind. */
 char *MenuTagTextGet(int kind);
 
-CharListRow *MenuListMake(int listIndex, int mode);
-CharListRow *MenuListGet(int listIndex);
+MenuListEntry *MenuListMake(int listIndex, int mode);
+MenuListEntry *MenuListGet(int listIndex);
 
-/* MenuSortSet, WindowSPItemChange and WindowSPSetSelect are not yet
- * recovered (main/menu_1.c and main/e_battle_win_open.c, still
- * assembler). */
-void MenuSortSet(int listIndex, int type, int order);
-
-void WindowSPItemChange(CharListSPWindow *window);
-void WindowSPSetSelect(CharListSPWindow *window, unsigned char *savedSelection);
 MenuBulletData *func_A1A428(int ammoId);
 
 /*
@@ -1720,9 +1156,9 @@ char *MenuParaNameGet2(int statIndex);
  * pointer in $4 (WindowSPSet overwrites $5 and $6 with its own values at
  * 0x00283b88 before reading them), so the window geometry this state stores
  * stays in the argument registers across the call without being passed. */
-void WindowSPSet(CharListSPWindow *window);
+void WindowSPSet(WindowSPCursor *window);
 
-void WindowSPMain(CharListSPWindow *window);
+void WindowSPMain(WindowSPCursor *window);
 
 /* CharListMake_Acc and CharListMake_Para are still assembler in this TU;
  * like CharListMake_Wpn they take no arguments. */
@@ -1734,14 +1170,6 @@ void CharListMake_Para(void);
  * undefined_funcs_auto.txt placeholder name. */
 MenuWeaponData *func_A1A3D8(int weapon);
 
-int PartyLeaderSet(int leader);
-int PartyFriendLockCheck(int id, int flag);
-int MenuMaryIdChange(int id);
-int PartyAttackerGet(int *out);
-void PartyAttackPosSet(int party_id, int attack_position);
-void PartyAttackPosChange(int first_party_id, int second_party_id);
-void xglSoundEffectNormalID(int sound_id, int variant);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void xglFontDebugHex(int x, int y, int value, int digits);
 
 XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
@@ -1762,39 +1190,21 @@ int MenuSelectMove(int cursor, int count, int wrap);
  */
 int MenuCharLeaderMask(unsigned short chrNo);
 int MenuBulletCheck(int weapon, int bullet);
-void MenuModelMemorySet(int count);
-void MenuModelMenuMotionLoad(void);
-void MenuModelCreate(int *model, int chrNo);
-void MenuModelExtFuncSet(int model, MenuCharacterModelCallback func, void *argument);
-void MenuModelAllBreak(void);
+void MenuModelCreate(void **model, int chrNo);
+void MenuModelExtFuncSet(void *model, MenuCharacterModelCallback func, void *argument);
 void ChangeTopLevel(int level);
-int WindowSPSelect(CharListSPWindow *window, int pad);
-void WindowSPKeepSelect(CharListSPWindow *window, unsigned char *keep);
-void WindowSPKeepSelectCheck(unsigned char *keep);
-void dataWpnBoxInc(int weapon);
-void dataWpnBoxDec(int weapon);
-void dataAccBoxInc(int accessory);
-void dataAccBoxDec(int accessory);
-void dataBltBoxInc(int bullet);
-void dataBltBoxDec(int bullet);
-int dataBltBoxChk(int bullet);
-
 /* MenuParaUp (this TU, still assembler): adds one level of the parameter. */
 void MenuParaUp(int chrNo, int statIndex);
 
 void MenuCharCameraSet(void);
 void MenuCharCameraMove(void);
-void MenuCharModelMain(MenuCharacterModel *unit, void *argument);
-void MenuBattleModelMain(MenuCharacterModel *unit, void *argument);
+void MenuCharModelMain(MenuModelUnit *unit, void *argument);
+void MenuBattleModelMain(MenuModelUnit *unit, void *argument);
 static int tskCharLineField(XglTaskPrefix *task);
-void MenuModelUnitBreak(void *unit);
 void MenuModelUnitOpen(void *unit, int drawType);
 int MenuModelWeaponCreate(void *unit, int drawType, int weaponIndex);
 void MenuModelControl2(void *unit, int mode);
-int MenuEquipStealMaskCheck(void);
 int MenuShionMwsCheck(void);
-void xglCameraInit(StudioCamera *camera);
-int PartyAttackPosGet(int partyId);
 void endPrintDirectLine(DirectLineVertex *vertices);
 
 /* The twelve normal-menu category captions ("Characters", "/Equip", ...). */
@@ -1873,11 +1283,11 @@ static unsigned short MenuCharPartyReser[4];
 
 /* The two list windows of CharList the selection calls work on: the
  * weapon/accessory list (+0x504) and the parameter-up list (+0x1C3C). */
-static CharListSPWindow *CharWinSP[2];
+static WindowSPCursor *CharWinSP[2];
 
-static MenuCameraVector TairetuRot;
+static DoublewordAlignedVector4 TairetuRot;
 
-static MenuCameraVector TairetuPos;
+static DoublewordAlignedVector4 TairetuPos;
 
 static inline int MenuCharCameraViewGet(int state)
 {
@@ -2103,7 +1513,7 @@ int MenuPasLengthGet(const char *text)
     char label[3] = "\x19\x03";
 
     eMessageCpy(message, label);
-    eMessageCat((char *)text);
+    eMessageCat(text);
     return xglFontGetStringWidth(message);
 }
 
@@ -2165,15 +1575,16 @@ void CharPasMain(void)
         WindowDXSet(&pas->window);
         pas->window.x = -0x120;
         pas->window.y = 8;
-        pas->window.color = pas->kind;
+        pas->window.style = pas->kind;
         if (MenuWork.character.partyMode == 1) {
             pas->window.width = 0x130;
         } else {
             pas->window.width = 0x110;
         }
         pas->window.height = 0x1E;
-        pas->window.callback = MenuPasWindow;
-        pas->window.callbackArg = pas->callbackWork;
+        /* The generic close callback slot holds the empty MenuPasWindow stub. */
+        pas->window.close_callback = MenuPasWindow;
+        pas->window.close_callback_arg = pas->callbackWork;
         pas->window.state = 1;
         WindowDXMain(&pas->window);
         pas->window.state = 3;
@@ -2185,7 +1596,7 @@ void CharPasMain(void)
             for (i = 0; i < 12; i++) {
                 pas->messages[i].x = 0x120;
                 pas->messages[i].y = 0xB;
-                pas->messages[i].color = pas->kind + 2;
+                pas->messages[i].draw_parameter = pas->kind + 2;
             }
             pas->tabCount = 12;
         } else {
@@ -2196,7 +1607,7 @@ void CharPasMain(void)
             for (i = 0; i < 3; i++) {
                 pas->messages[i].x = 0x120;
                 pas->messages[i].y = 0xB;
-                pas->messages[i].color = pas->kind + 2;
+                pas->messages[i].draw_parameter = pas->kind + 2;
             }
             pas->tabCount = 3;
         }
@@ -2303,22 +1714,22 @@ int MenuCharEquipCalcPointGet(int chrNo)
             points -= org->maxEp;
             break;
         case 2:
-            points = (short)total->attack;
-            points -= (short)org->attack;
+            points = total->attack;
+            points -= org->attack;
             points += attack[setSlotTbl[MenuWork.character.chrNo - 1]];
             break;
         case 3:
-            points = (short)total->phyDefense;
-            points -= (short)org->phyDefense;
+            points = total->phyDefense;
+            points -= org->phyDefense;
             points += defense[0];
             break;
         case 4:
-            points = (short)total->stat4;
-            points -= (short)org->stat4;
+            points = total->stat4;
+            points -= org->stat4;
             break;
         case 5:
-            points = (short)total->magDefense;
-            points -= (short)org->magDefense;
+            points = total->magDefense;
+            points -= org->magDefense;
             points += defense[1];
             break;
         case 6:
@@ -2413,12 +1824,13 @@ void CharInfoMain(void)
         work->color = 0x00FFFFF0;
         WindowDXSet(&work->window);
         work->window.x = -16;
-        work->window.color = work->color;
+        work->window.style = work->color;
         work->window.y = 480;
         work->window.width = 544;
         work->window.height = 54;
-        work->window.callback = MenuInfoWindow;
-        work->window.callbackArg = &work->info;
+        /* The generic close callback slot holds the typed MenuInfoWindow handler. */
+        work->window.close_callback = MenuInfoWindow;
+        work->window.close_callback_arg = &work->info;
         work->info.x = 0;
         work->info.y = 0;
         work->info.text = 0;
@@ -2474,11 +1886,11 @@ void CharInfoMain(void)
                 if (weapon != 0) {
                     if (MenuWork.character.equipSlot == 0) {
                         eMessageCpy(work->message,
-                                    MenuTextGet(MENU_TEXT_WEAPON + (unsigned short)weapon)->description);
+                                    MenuTextGet(MENU_TEXT_WEAPON + (unsigned short)weapon)->auxiliary);
                     } else {
                         eMessageCpy(work->message,
                                     MenuTextGet(MENU_TEXT_BULLET
-                                                + (unsigned short)para->bullet[slot])->description);
+                                                + para->bullet[slot])->auxiliary);
                     }
                 } else {
                     eMessageCpy(work->message, equipHelp[1]);
@@ -2488,7 +1900,7 @@ void CharInfoMain(void)
 
                 if (accessory != 0) {
                     eMessageCpy(work->message,
-                                MenuTextGet(MENU_TEXT_ACCESSORY + (unsigned short)accessory)->description);
+                                MenuTextGet(MENU_TEXT_ACCESSORY + (unsigned short)accessory)->auxiliary);
                 } else {
                     eMessageCpy(work->message, equipHelp[2]);
                 }
@@ -2500,7 +1912,7 @@ void CharInfoMain(void)
         case 0x55:
             if (MenuWork.character.listSelect >= 0) {
                 eMessageCpy(work->message,
-                            MenuTextGet(MenuSortGet(0, MenuWork.character.listSelect))->description);
+                            MenuTextGet(MenuSortGet(0, MenuWork.character.listSelect))->auxiliary);
             } else {
                 eMessageCpy(work->message, "");
             }
@@ -2807,10 +2219,10 @@ static void CharMenuMain(void)
             work->window[i].x = 528;
             work->window[i].width = 126;
             work->window[i].height = 78;
-            work->window[i].color = work->color;
-            work->window[i].title = menuTitleLabel;
-            work->window[i].select = (void *)MenuSelectWindow;
-            work->window[i].selectArg = &work->list[i];
+            work->window[i].style = work->color;
+            work->window[i].tag_id = menuTitleLabel;
+            work->window[i].close_callback = MenuSelectWindow;
+            work->window[i].close_callback_arg = &work->list[i];
             work->list[i].cursor = 0;
             if (i != 2) {
                 work->list[i].hasPrompt = 0;
@@ -2819,7 +2231,7 @@ static void CharMenuMain(void)
                 work->window[i].x = 528;
                 work->window[i].width = 166;
                 work->window[i].height = 102;
-                work->window[i].title = selectTitleLabel;
+                work->window[i].tag_id = selectTitleLabel;
                 work->list[i].hasPrompt = 1;
                 work->list[i].items = msg01_3[0];
                 work->list[i].prompt = msg01_3[1];
@@ -2896,11 +2308,11 @@ void CharExMain(void)
             ex->ribbon[i].y = 128 + i * 28;
             ex->ribbon[i].width = 248;
             ex->ribbon[i].height = 23;
-            ex->ribbon[i].drawOrder = ex->drawOrder;
+            ex->ribbon[i].work = ex->drawOrder;
             eTagFontSet(&ex->label[i], msg00_4_0036D900[i]);
-            ex->label[i].drawOrder = ex->drawOrder + 2;
+            ex->label[i].work = ex->drawOrder + 2;
             eNumberSet(&ex->number[i], 0);
-            ex->number[i].drawOrder = ex->drawOrder + 2;
+            ex->number[i].work = ex->drawOrder + 2;
         }
         ex->state = CHAR_EX_SLIDE;
         /* fallthrough */
@@ -3019,104 +2431,105 @@ void CharL1R1Main(void)
 
 void CharStatusMain(void)
 {
-    CharStatusWork *status = CharStatus;
+    CharStatusBlock *block = CharStatus;
+    CharStatusWork *status = &block->work;
     short targetX[8];
     short targetY[8];
     short targetHeight[8];
     short targetOffset[8];
-    CharStatusCursorEntry *swapEntry;
+    CharStatusCursorNode *swapNode;
     int para[4];
     int i;
 
-    switch (status->window[0].header.state) {
+    switch (status->state) {
     case CHAR_STATUS_BUILD:
-        status->window[0].header.color = 0x00FFF000;
+        status->color = 0x00FFF000;
         if (MenuWork.character.partyMode == 0) {
             for (i = 0; i < MenuWork.character.partyCount; i++) {
                 short chrNo = MenuCharParty[i];
 
-                WindowDXSet(&status->window[i].window);
-                status->window[i].window.x = (i & 1) * STATUS_OFF_RIGHT + STATUS_OFF_LEFT;
-                status->window[i].window.y = (i / 2) * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
-                status->window[i].window.color = status->window[0].header.color;
-                status->window[i].window.width = STATUS_WINDOW_WIDTH;
-                status->window[i].window.height = STATUS_WINDOW_HEIGHT;
-                status->window[i].window.visible = 1;
+                WindowDXSet(&status->window[i]);
+                status->window[i].x = (i & 1) * STATUS_OFF_RIGHT + STATUS_OFF_LEFT;
+                status->window[i].y = (i / 2) * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
+                status->window[i].style = status->color;
+                status->window[i].width = STATUS_WINDOW_WIDTH;
+                status->window[i].height = STATUS_WINDOW_HEIGHT;
+                status->window[i].ribbon_initialized = 1;
                 if (PartyAttackerCheck(chrNo) != 0) {
-                    status->window[i].window.title = MenuTagTextGet(1);
+                    status->window[i].tag_id = MenuTagTextGet(1);
                 } else {
-                    status->window[i].window.title = MenuTagTextGet(2);
+                    status->window[i].tag_id = MenuTagTextGet(2);
                 }
-                status->window[i].window.disp = MenuStatusDisp;
-                status->window[i].window.dispWork = &status->disp[i].work;
-                status->disp[i].work.offsetX = 0;
-                status->disp[i].work.fullStatus = 1;
-                status->disp[i].work.chrNo = chrNo;
-                status->disp[i].work.offsetY = 0;
-                status->window[i].window.state = 1;
-                WindowDXMain(&status->window[i].window);
-                status->window[i].window.state = 3;
+                status->window[i].close_callback = MenuStatusDisp;
+                status->window[i].close_callback_arg = &status->panel[i];
+                status->panel[i].offsetX = 0;
+                status->panel[i].enabled = 1;
+                status->panel[i].chrNo = chrNo;
+                status->panel[i].offsetY = 0;
+                status->window[i].state = 1;
+                WindowDXMain(&status->window[i]);
+                status->window[i].state = 3;
             }
         } else {
             for (i = 0; i < 3; i++) {
                 short chrNo = MenuCharParty[i];
 
-                WindowDXSet(&status->window[i].window);
-                status->window[i].window.x = STATUS_OFF_LEFT;
-                status->window[i].window.y = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
-                status->window[i].window.color = status->window[0].header.color;
-                status->window[i].window.width = STATUS_WINDOW_WIDTH;
-                status->window[i].window.height = STATUS_WINDOW_HEIGHT;
-                status->window[i].window.visible = 1;
-                status->window[i].window.title = MenuTagTextGet(1);
-                status->window[i].window.disp = MenuStatusDisp;
-                status->window[i].window.dispWork = &status->disp[i].work;
-                status->disp[i].work.chrNo = chrNo;
-                status->disp[i].work.fullStatus = 0;
-                status->disp[i].work.offsetX = 0;
-                status->disp[i].work.offsetY = 0;
-                status->window[i].window.state = 1;
-                WindowDXMain(&status->window[i].window);
-                status->window[i].window.state = 3;
+                WindowDXSet(&status->window[i]);
+                status->window[i].x = STATUS_OFF_LEFT;
+                status->window[i].y = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
+                status->window[i].style = status->color;
+                status->window[i].width = STATUS_WINDOW_WIDTH;
+                status->window[i].height = STATUS_WINDOW_HEIGHT;
+                status->window[i].ribbon_initialized = 1;
+                status->window[i].tag_id = MenuTagTextGet(1);
+                status->window[i].close_callback = MenuStatusDisp;
+                status->window[i].close_callback_arg = &status->panel[i];
+                status->panel[i].chrNo = chrNo;
+                status->panel[i].enabled = 0;
+                status->panel[i].offsetX = 0;
+                status->panel[i].offsetY = 0;
+                status->window[i].state = 1;
+                WindowDXMain(&status->window[i]);
+                status->window[i].state = 3;
             }
             for (i = 0; i < MenuWork.character.reserveCount; i++) {
                 short chrNo = MenuCharPartyReser[i];
 
-                WindowDXSet(&status->window[3 + i].window);
-                status->window[3 + i].window.x = 544;
-                status->window[3 + i].window.width = STATUS_WINDOW_WIDTH;
-                status->window[3 + i].window.height = STATUS_WINDOW_HEIGHT;
-                status->window[3 + i].window.color = status->window[0].header.color;
-                status->window[3 + i].window.y = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
-                status->window[3 + i].window.visible = 1;
-                status->window[3 + i].window.title = MenuTagTextGet(2);
-                status->window[3 + i].window.disp = MenuStatusDisp;
-                status->window[3 + i].window.dispWork = &status->disp[3 + i].work;
-                status->disp[3 + i].work.chrNo = chrNo;
-                status->disp[3 + i].work.fullStatus = 0;
-                status->disp[3 + i].work.offsetX = 0;
-                status->disp[3 + i].work.offsetY = 0;
-                status->window[3 + i].window.state = 1;
-                WindowDXMain(&status->window[3 + i].window);
-                status->window[3 + i].window.state = 3;
+                WindowDXSet(&status->window[3 + i]);
+                status->window[3 + i].x = 544;
+                status->window[3 + i].width = STATUS_WINDOW_WIDTH;
+                status->window[3 + i].height = STATUS_WINDOW_HEIGHT;
+                status->window[3 + i].style = status->color;
+                status->window[3 + i].y = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
+                status->window[3 + i].ribbon_initialized = 1;
+                status->window[3 + i].tag_id = MenuTagTextGet(2);
+                status->window[3 + i].close_callback = MenuStatusDisp;
+                status->window[3 + i].close_callback_arg = &status->panel[3 + i];
+                status->panel[3 + i].chrNo = chrNo;
+                status->panel[3 + i].enabled = 0;
+                status->panel[3 + i].offsetX = 0;
+                status->panel[3 + i].offsetY = 0;
+                status->window[3 + i].state = 1;
+                WindowDXMain(&status->window[3 + i]);
+                status->window[3 + i].state = 3;
             }
         }
         for (i = 0; i < 2; i++) {
-            eCursolSet(&status->cursor[i].cursor, 0);
+            eCursolSet(&status->cursor[i], 0);
             if (i == 1) {
-                swapEntry = &status->cursor[1];
-                swapEntry->cursor.state = CHAR_STATUS_CURSOR_STATE;
+                swapNode = &block->node.swap;
+                swapNode->state = CHAR_STATUS_CURSOR_STATE;
             } else {
-                status->cursor[i].cursor.state = 0;
+                status->cursor[i].state = 0;
             }
-            status->cursor[i].cursor.work = CHAR_STATUS_CURSOR_WORK;
+            status->cursor[i].work = CHAR_STATUS_CURSOR_WORK;
         }
-        status->window[0].header.cursorOn = 0;
-        status->window[0].header.flags = 0;
-        status->window[0].header.subState = 0;
-        status->window[0].header.moveVert = 0;
-        status->window[0].header.lastCursor = MenuWork.character.partyCursor;
-        status->window[0].header.state = CHAR_STATUS_RUN;
+        status->cursorOn = 0;
+        status->flags = 0;
+        status->subState = 0;
+        status->moveVert = 0;
+        status->lastCursor = MenuWork.character.partyCursor;
+        status->state = CHAR_STATUS_RUN;
         /* fall through */
     case CHAR_STATUS_RUN:
         if (MenuWork.character.partyMode == 0) {
@@ -3140,19 +2553,19 @@ void CharStatusMain(void)
                 targetOffset[3 + i] = 0;
             }
         }
-        status->disp[MenuWork.character.partyCursor].work.hpMark =
-            status->disp[MenuWork.character.partyCursor].work.epMark = 0;
+        status->panel[MenuWork.character.partyCursor].hpMark =
+            status->panel[MenuWork.character.partyCursor].epMark = 0;
         switch (MenuWork.character.state) {
         case 0x10:
-            status->window[0].header.cursorOn = 1;
-            status->cursor[0].cursor.state = CHAR_STATUS_CURSOR_STATE;
-            status->window[0].header.moveVert = 1;
-            if ((status->window[0].header.flags & 1) != 0) {
+            status->cursorOn = 1;
+            status->cursor[0].state = CHAR_STATUS_CURSOR_STATE;
+            status->moveVert = 1;
+            if ((status->flags & 1) != 0) {
                 if (i != MenuWork.character.partyCursor) {
-                    status->window[i].window.x = (i & 1) * STATUS_OFF_RIGHT + STATUS_OFF_LEFT;
-                    status->window[i].window.y = (i / 2) * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
+                    status->window[i].x = (i & 1) * STATUS_OFF_RIGHT + STATUS_OFF_LEFT;
+                    status->window[i].y = (i / 2) * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
                 }
-                status->window[0].header.flags &= ~1;
+                status->flags &= ~1;
             }
             /* fall through */
         case 0x11:
@@ -3161,7 +2574,7 @@ void CharStatusMain(void)
             }
             break;
         case 0x20:
-            status->window[0].header.lastCursor = MenuWork.character.partyCursor;
+            status->lastCursor = MenuWork.character.partyCursor;
             if (MenuWork.character.state != 0x20) {
                 for (i = 0; i < MenuWork.character.partyCount; i++) {
                     targetHeight[i] = STATUS_WINDOW_HEIGHT;
@@ -3182,8 +2595,8 @@ void CharStatusMain(void)
 
             total = func_00A11108(MenuWork.character.chrNo, para, para);
             mark = 1;
-            status->disp[MenuWork.character.partyCursor].work.maxHp = total->maxHp + UpPara[0];
-            status->disp[MenuWork.character.partyCursor].work.maxEp = total->maxEp + UpPara[1];
+            status->panel[MenuWork.character.partyCursor].maxHp = total->maxHp + UpPara[0];
+            status->panel[MenuWork.character.partyCursor].maxEp = total->maxEp + UpPara[1];
             menuState = MenuWork.character.state;
             if (menuState < 0x84) {
                 if (menuState >= 0x82) {
@@ -3192,22 +2605,22 @@ void CharStatusMain(void)
             }
             switch (MenuWork.character.paraIndex) {
             case 0:
-                status->disp[MenuWork.character.partyCursor].work.hpMark = mark;
+                status->panel[MenuWork.character.partyCursor].hpMark = mark;
                 break;
             case 1:
-                status->disp[MenuWork.character.partyCursor].work.epMark = mark;
+                status->panel[MenuWork.character.partyCursor].epMark = mark;
                 break;
             }
         }
             /* fall through */
         case 0x21:
-            if (status->window[0].header.lastCursor != MenuWork.character.partyCursor) {
-                status->window[MenuWork.character.partyCursor].window.x = 264;
-                status->window[MenuWork.character.partyCursor].window.y = 24;
-                status->window[MenuWork.character.partyCursor].window.height = STATUS_WINDOW_OPEN_H;
-                status->window[0].header.lastCursor = MenuWork.character.partyCursor;
+            if (status->lastCursor != MenuWork.character.partyCursor) {
+                status->window[MenuWork.character.partyCursor].x = 264;
+                status->window[MenuWork.character.partyCursor].y = 24;
+                status->window[MenuWork.character.partyCursor].height = STATUS_WINDOW_OPEN_H;
+                status->lastCursor = MenuWork.character.partyCursor;
             }
-            if ((status->window[0].header.flags & 1) != 0) {
+            if ((status->flags & 1) != 0) {
                 for (i = 0; i < MenuWork.character.partyCount; i++) {
                     if (i == MenuWork.character.partyCursor) {
                         targetX[i] = 264;
@@ -3215,7 +2628,7 @@ void CharStatusMain(void)
                         targetHeight[i] = STATUS_WINDOW_OPEN_H;
                     } else {
                         targetX[i] = (i & 1) * STATUS_OFF_RIGHT + STATUS_OFF_LEFT;
-                        status->window[i].window.x = targetX[i];
+                        status->window[i].x = targetX[i];
                     }
                 }
             } else {
@@ -3226,12 +2639,12 @@ void CharStatusMain(void)
                         targetHeight[i] = STATUS_WINDOW_OPEN_H;
                     }
                 }
-                if (targetY[MenuWork.character.partyCursor] == status->window[MenuWork.character.partyCursor].window.y) {
-                    status->window[0].header.flags |= 1;
+                if (targetY[MenuWork.character.partyCursor] == status->window[MenuWork.character.partyCursor].y) {
+                    status->flags |= 1;
                 }
             }
-            status->window[0].header.cursorOn = 0;
-            status->window[0].header.moveVert = 0;
+            status->cursorOn = 0;
+            status->moveVert = 0;
             break;
         case 0x40:
         case 0x41:
@@ -3243,7 +2656,7 @@ void CharStatusMain(void)
                     targetOffset[i] = -80;
                 } else {
                     targetX[i] = (i & 1) * STATUS_OFF_RIGHT + STATUS_OFF_LEFT;
-                    status->window[i].window.x = targetX[i];
+                    status->window[i].x = targetX[i];
                 }
             }
             break;
@@ -3251,15 +2664,15 @@ void CharStatusMain(void)
         case 0x53:
         case 0x54:
         case 0x55:
-            status->window[0].header.moveVert = 0;
-            status->window[0].header.flags &= ~1;
+            status->moveVert = 0;
+            status->flags &= ~1;
             for (i = 0; i < MenuWork.character.partyCount; i++) {
                 targetX[i] = 544;
                 if (i == MenuWork.character.partyCursor) {
                     targetY[i] = 192;
                     targetHeight[i] = STATUS_WINDOW_OPEN_H;
                 } else {
-                    status->window[i].window.x = 544;
+                    status->window[i].x = 544;
                 }
             }
             targetOffset[MenuWork.character.partyCursor] = -80;
@@ -3274,7 +2687,7 @@ void CharStatusMain(void)
         case 0xB5:
         case 0xB6:
         case 0xBF:
-            status->cursor[0].cursor.state = CHAR_STATUS_CURSOR_STATE;
+            status->cursor[0].state = CHAR_STATUS_CURSOR_STATE;
             for (i = 0; i < 3; i++) {
                 targetX[i] = STATUS_COLUMN_LEFT;
                 targetY[i] = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
@@ -3284,16 +2697,16 @@ void CharStatusMain(void)
         case 0xC5:
             if (MenuWork.character.state == 0xC2) {
                 for (i = 0; i < MenuWork.character.reserveCount; i++) {
-                    status->disp[3 + i].work.chrNo = MenuCharPartyReser[i];
-                    status->window[3 + i].window.state = 1;
-                    WindowDXMain(&status->window[3 + i].window);
-                    status->window[3 + i].window.state = 3;
+                    status->panel[3 + i].chrNo = MenuCharPartyReser[i];
+                    status->window[3 + i].state = 1;
+                    WindowDXMain(&status->window[3 + i]);
+                    status->window[3 + i].state = 3;
                 }
             } else {
-                status->disp[MenuWork.character.partyCursor].work.chrNo = MenuWork.character.swapInId;
-                status->window[MenuWork.character.partyCursor].window.state = 1;
-                WindowDXMain(&status->window[MenuWork.character.partyCursor].window);
-                status->window[MenuWork.character.partyCursor].window.state = 3;
+                status->panel[MenuWork.character.partyCursor].chrNo = MenuWork.character.swapInId;
+                status->window[MenuWork.character.partyCursor].state = 1;
+                WindowDXMain(&status->window[MenuWork.character.partyCursor]);
+                status->window[MenuWork.character.partyCursor].state = 3;
             }
             /* fall through */
         case 0xC3:
@@ -3319,61 +2732,61 @@ void CharStatusMain(void)
         }
         if (MenuWork.character.partyMode == 0) {
             for (i = 0; i < MenuWork.character.partyCount; i++) {
-                if (status->window[0].header.moveVert == 0) {
-                    MoveSlide(&status->window[i].window.height, &targetHeight[i], 3.0f);
-                    MoveSlide(&status->window[i].window.x, &targetX[i], 3.0f);
-                    if (status->window[i].window.x == targetX[i]) {
-                        MoveSlide(&status->window[i].window.y, &targetY[i], 3.0f);
+                if (status->moveVert == 0) {
+                    MoveSlide(&status->window[i].height, &targetHeight[i], 3.0f);
+                    MoveSlide(&status->window[i].x, &targetX[i], 3.0f);
+                    if (status->window[i].x == targetX[i]) {
+                        MoveSlide(&status->window[i].y, &targetY[i], 3.0f);
                     }
                 } else {
-                    MoveSlide(&status->window[i].window.y, &targetY[i], 3.0f);
-                    if (status->window[i].window.y == targetY[i]) {
-                        MoveSlide(&status->window[i].window.height, &targetHeight[i], 3.0f);
-                        MoveSlide(&status->window[i].window.x, &targetX[i], 3.0f);
+                    MoveSlide(&status->window[i].y, &targetY[i], 3.0f);
+                    if (status->window[i].y == targetY[i]) {
+                        MoveSlide(&status->window[i].height, &targetHeight[i], 3.0f);
+                        MoveSlide(&status->window[i].x, &targetX[i], 3.0f);
                     }
                 }
                 if (i == MenuWork.character.partyCursor) {
-                    status->window[i].window.color = CHAR_STATUS_COLOR_SELECTED;
+                    status->window[i].style = CHAR_STATUS_COLOR_SELECTED;
                 } else {
-                    status->window[i].window.color = CHAR_STATUS_COLOR_NORMAL;
+                    status->window[i].style = CHAR_STATUS_COLOR_NORMAL;
                 }
-                WindowDXMain(&status->window[i].window);
+                WindowDXMain(&status->window[i]);
             }
-            if (status->window[0].header.cursorOn != 0) {
+            if (status->cursorOn != 0) {
                 int open = 0;
 
                 for (i = 0; i < MenuWork.character.partyCount; i++) {
-                    if (status->window[i].window.state == 3) {
+                    if (status->window[i].state == 3) {
                         open = 1;
                         break;
                     }
                 }
                 if (open != 0) {
-                    status->cursor[0].cursor.x = status->window[MenuWork.character.partyCursor].window.x + 3;
-                    status->cursor[0].cursor.y = status->window[MenuWork.character.partyCursor].window.y
-                                        + status->window[MenuWork.character.partyCursor].window.height / 2 - 4;
-                    status->cursor[0].cursor.work = CHAR_STATUS_CURSOR_WORK;
-                    eCursolMain(&status->cursor[0].cursor);
+                    status->cursor[0].x = status->window[MenuWork.character.partyCursor].x + 3;
+                    status->cursor[0].y = status->window[MenuWork.character.partyCursor].y
+                                        + status->window[MenuWork.character.partyCursor].height / 2 - 4;
+                    status->cursor[0].work = CHAR_STATUS_CURSOR_WORK;
+                    eCursolMain(&status->cursor[0]);
                 }
             }
         } else {
             for (i = 0; i < MenuWork.character.partyCount; i++) {
-                MoveSlide(&status->window[i].window.x, &targetX[i], 3.0f);
-                WindowDXMain(&status->window[i].window);
+                MoveSlide(&status->window[i].x, &targetX[i], 3.0f);
+                WindowDXMain(&status->window[i]);
             }
             for (i = 0; i < MenuWork.character.reserveCount; i++) {
-                MoveSlide(&status->window[3 + i].window.x, &targetX[3 + i], 3.0f);
-                WindowDXMain(&status->window[3 + i].window);
+                MoveSlide(&status->window[3 + i].x, &targetX[3 + i], 3.0f);
+                WindowDXMain(&status->window[3 + i]);
             }
-            status->cursor[0].cursor.x = status->window[MenuWork.character.partyCursor].window.x + 3;
-            status->cursor[0].cursor.y = status->window[MenuWork.character.partyCursor].window.y
-                                + status->window[MenuWork.character.partyCursor].window.height / 2 - 4;
-            eCursolMain(&status->cursor[0].cursor);
+            status->cursor[0].x = status->window[MenuWork.character.partyCursor].x + 3;
+            status->cursor[0].y = status->window[MenuWork.character.partyCursor].y
+                                + status->window[MenuWork.character.partyCursor].height / 2 - 4;
+            eCursolMain(&status->cursor[0]);
             if (MenuWork.character.partyMode == 1 && MenuWork.character.reserveCount != 0) {
-                status->cursor[1].cursor.x = status->window[3 + MenuWork.character.reserveCursor].window.x + 3;
-                status->cursor[1].cursor.y = status->window[3 + MenuWork.character.reserveCursor].window.y
-                                    + status->window[3 + MenuWork.character.reserveCursor].window.height / 2 - 4;
-                eCursolMain(&status->cursor[1].cursor);
+                status->cursor[1].x = status->window[3 + MenuWork.character.reserveCursor].x + 3;
+                status->cursor[1].y = status->window[3 + MenuWork.character.reserveCursor].y
+                                    + status->window[3 + MenuWork.character.reserveCursor].height / 2 - 4;
+                eCursolMain(&status->cursor[1]);
             }
         }
         break;
@@ -3394,7 +2807,7 @@ void CharParameterMain(void)
             work->color = 0x00FFFFF0;
             WindowDXSet(&work->window);
             work->window.x = PARA_WINDOW_HIDDEN;
-            work->window.color = work->color;
+            work->window.style = work->color;
             work->window.y = 313;
             work->window.width = 480;
             work->window.height = 64;
@@ -3404,40 +2817,40 @@ void CharParameterMain(void)
             digits = paraDigitCountTable[0];
             for (i = 0; i < 8; i++) {
                 eNumberSet(&work->number[i], 0);
-                work->number[i].color = work->color + 2;
-                work->number[i].size = 5;
+                work->number[i].work = work->color + 2;
+                work->number[i].format = 5;
                 work->number[i].digits = digits.count[i];
             }
             for (i = 0; i < 8; i++) {
                 eTagFontSet(&work->tag[i], msg_5[i]);
-                work->tag[i].color = work->color + 2;
-                work->tag[i].rgba[0] = 112;
+                work->tag[i].work = work->color + 2;
+                work->tag[i].color[0] = 112;
             }
             work->ribbonShown = 0;
             eRibbonSet(&work->ribbon, 0);
             for (corner = 0; corner < 6; corner++) {
-                ParaRibbonPoint *point = &work->ribbon.point[corner];
+                ERibbonPoint *point = &work->ribbon.points[corner];
 
                 switch (corner) {
                 case 0:
                 case 1:
                 case 2:
                 case 3:
-                    point->rgba[0] = 32;
-                    point->rgba[1] = 52;
-                    point->rgba[2] = 52;
+                    point->red = 32;
+                    point->green = 52;
+                    point->blue = 52;
                     break;
                 case 4:
                 case 5:
-                    point->rgba[2] = 0;
-                    point->rgba[1] = 0;
-                    point->rgba[0] = 0;
+                    point->blue = 0;
+                    point->green = 0;
+                    point->red = 0;
                     break;
                 }
                 if (corner == 2 || corner == 3) {
-                    point->rgba[3] = 32;
+                    point->alpha = 32;
                 } else {
-                    point->rgba[3] = 0;
+                    point->alpha = 0;
                 }
             }
             work->mask = 1;
@@ -3501,14 +2914,14 @@ void CharParameterMain(void)
             WindowDXMain(&work->window);
             if (work->ribbonShown == 1) {
                 const int rows = 3;
-                ParaRibbon *ribbon;
+                ERibbonMainData *ribbon;
 
                 work->ribbon.x = (MenuWork.character.paraIndex - 2) / rows * 160 -
                                  (rows - (MenuWork.character.paraIndex - 2) / 4) * 11 + 104;
                 work->ribbon.y = (MenuWork.character.paraIndex - 2) % rows * 20 + 316;
                 work->ribbon.width = (rows - (MenuWork.character.paraIndex - 2) / 4) * 22 + 23;
                 work->ribbon.height = 16;
-                work->ribbon.color = work->color;
+                work->ribbon.work = work->color;
                 ribbon = &work->ribbon;
                 for (i = 5; i >= 0; i--) {
                     eRibbonMain(ribbon);
@@ -3527,14 +2940,14 @@ void CharParameterMain(void)
                  * halfwords eNumberMain shows is read signed here (the eight
                  * lh at 0x00294cb0..0x00294cf8), so a value below its base
                  * shows as a negative difference. */
-                work->number[0].value = (short)paraUnit[0].attack +
-                                        (((short)paraUnit[1].attack + UpPara[2]) << 16);
-                work->number[1].value = (short)paraUnit[0].phyDefense +
-                                        (((short)paraUnit[1].phyDefense + UpPara[3]) << 16);
-                work->number[2].value = (short)paraUnit[0].stat4 +
-                                        (((short)paraUnit[1].stat4 + UpPara[4]) << 16);
-                work->number[3].value = (short)paraUnit[0].magDefense +
-                                        (((short)paraUnit[1].magDefense + UpPara[5]) << 16);
+                work->number[0].value = paraUnit[0].attack +
+                                        ((paraUnit[1].attack + UpPara[2]) << 16);
+                work->number[1].value = paraUnit[0].phyDefense +
+                                        ((paraUnit[1].phyDefense + UpPara[3]) << 16);
+                work->number[2].value = paraUnit[0].stat4 +
+                                        ((paraUnit[1].stat4 + UpPara[4]) << 16);
+                work->number[3].value = paraUnit[0].magDefense +
+                                        ((paraUnit[1].magDefense + UpPara[5]) << 16);
                 work->number[4].value = paraUnit[0].stat6 +
                                         ((paraUnit[1].stat6 + UpPara[6]) << 16);
                 work->number[5].value = paraUnit[0].stat7 +
@@ -3547,13 +2960,13 @@ void CharParameterMain(void)
                     shown[0] = work->number[i].value;
                     shown[1] = work->number[i].value >> 16;
                     if (shown[0] < shown[1]) {
-                        work->number[i].arrowHidden = 0;
-                        work->number[i].arrow = 2;
+                        work->number[i].firstOnly = 0;
+                        work->number[i].colorModeSecond = 2;
                     } else if (shown[1] < shown[0]) {
-                        work->number[i].arrow = 1;
-                        work->number[i].arrowHidden = 0;
+                        work->number[i].colorModeSecond = 1;
+                        work->number[i].firstOnly = 0;
                     } else {
-                        work->number[i].arrow = 0;
+                        work->number[i].colorModeSecond = 0;
                         if (MenuWork.character.paraIndex - 2 == i) {
                             switch (MenuWork.character.state) {
                             case 128:
@@ -3563,14 +2976,14 @@ void CharParameterMain(void)
                             case 132:
                             case 133:
                             case 135:
-                                work->number[i].arrowHidden = 0;
+                                work->number[i].firstOnly = 0;
                                 break;
                             default:
-                                work->number[i].arrowHidden = 1;
+                                work->number[i].firstOnly = 1;
                                 break;
                             }
                         } else {
-                            work->number[i].arrowHidden = 1;
+                            work->number[i].firstOnly = 1;
                         }
                     }
                     work->number[i].x = work->window.x + i / rows * 160 + 89;
@@ -3604,7 +3017,7 @@ void CharWeaponMain(void)
         WindowDXSet(&work->window[0]);
         work->window[0].x = -238;
         work->window[0].y = 48;
-        work->window[0].color = work->color;
+        work->window[0].style = work->color;
         work->window[0].width = 228;
         work->window[0].height = 54;
         for (i = 0; i < 2; i++) {
@@ -3618,7 +3031,7 @@ void CharWeaponMain(void)
         WindowDXSet(&work->window[1]);
         work->window[1].x = -238;
         work->window[1].y = 102;
-        work->window[1].color = work->color;
+        work->window[1].style = work->color;
         work->window[1].width = 228;
         work->window[1].height = 78;
         for (i = 0; i < 3; i++) {
@@ -3630,7 +3043,7 @@ void CharWeaponMain(void)
         WindowDXMain(&work->window[1]);
         work->window[1].state = 3;
         eCursolSet(&work->cursor, 0);
-        work->cursor.color = work->color + 2;
+        work->cursor.work = work->color + 2;
         work->cursor.state = 32;
         work->state = 2;
         work->subState = 0;
@@ -3672,7 +3085,7 @@ void CharWeaponMain(void)
             WindowDXMain(&work->window[0]);
             work->message[0].text = MenuTextGet(MENU_TEXT_WEAPON + (unsigned short)weaponId)->name;
             work->message[0].x = work->window[0].x + 39;
-            work->message[0].color = work->color + 2;
+            work->message[0].draw_parameter = work->color + 2;
             work->message[0].y = work->window[0].y + (bulletFits ^ 1) * MENU_WEAPON_LINE_DROP + 3;
             eMessageMain(&work->message[0]);
             {
@@ -3681,19 +3094,19 @@ void CharWeaponMain(void)
                 eSpriteSet(&work->sprite[0], weaponIcon.icon[MenuWork.character.chrNo - 1]);
             }
             work->sprite[0].x = work->window[0].x + 19;
-            work->sprite[0].color = work->color + 2;
+            work->sprite[0].work = work->color + 2;
             work->sprite[0].y = work->window[0].y + (bulletFits ^ 1) * MENU_WEAPON_LINE_DROP + 3;
             eSpriteMain(&work->sprite[0]);
             if (bulletFits != 0) {
                 work->message[1].text =
                     MenuTextGet(MENU_TEXT_BULLET + total->bullet[setSlotTbl[MenuWork.character.chrNo - 1]])->name;
                 work->message[1].x = work->window[0].x + 39;
-                work->message[1].color = work->color + 2;
+                work->message[1].draw_parameter = work->color + 2;
                 work->message[1].y = work->window[0].y + 27;
                 eMessageMain(&work->message[1]);
                 eSpriteSet(&work->sprite[1], SPRITE_BULLET);
                 work->sprite[1].x = work->window[0].x + 19;
-                work->sprite[1].color = work->color + 2;
+                work->sprite[1].work = work->color + 2;
                 work->sprite[1].y = work->window[0].y + 27;
                 eSpriteMain(&work->sprite[1]);
             }
@@ -3707,7 +3120,7 @@ void CharWeaponMain(void)
                     MenuTextGet(MENU_TEXT_ACCESSORY + (unsigned short)total->accessory[i])->name;
                 work->message[i + 2].x = work->window[1].x + 39;
                 work->message[i + 2].y = work->window[1].y + i * MENU_WEAPON_ROW_HEIGHT + 3;
-                work->message[i + 2].color = work->color + 2;
+                work->message[i + 2].draw_parameter = work->color + 2;
                 eMessageMain(&work->message[i + 2]);
                 spriteId = SPRITE_NO_ACCESSORY;
                 if (total->accessory[i] != 0) {
@@ -3717,7 +3130,7 @@ void CharWeaponMain(void)
                 }
                 eSpriteSet(&work->sprite[i + 2], spriteId);
                 work->sprite[i + 2].x = work->window[1].x + 19;
-                work->sprite[i + 2].color = work->color + 2;
+                work->sprite[i + 2].work = work->color + 2;
                 work->sprite[i + 2].y = work->window[1].y + i * MENU_WEAPON_ROW_HEIGHT + 3;
                 eSpriteMain(&work->sprite[i + 2]);
             }
@@ -3735,7 +3148,7 @@ void CharWeaponMain(void)
 
 void CharListMake_Wpn(void)
 {
-    CharListSPWindow *window = &CharList->weapon;
+    WindowSPCursor *window = &CharList->weapon;
 
     /* MenuSortSet's order argument is MenuWork.character.chrNo (+0x60), the character
      * whose equipment the screen lists. */
@@ -3745,8 +3158,8 @@ void CharListMake_Wpn(void)
     window->rows = 7;
     window->height = 174;
     window->columns = 1;
-    window->rowCount = 7;
-    window->flags = 0;
+    window->draw_flags = 7;
+    window->title = 0;
     window->items = MenuListGet(0);
     WindowSPItemChange(window);
     WindowSPSetSelect(window, &MenuKeepSelect[15]);
@@ -3757,8 +3170,8 @@ void CharListMake_Wpn(void)
 void CharListMake_Gun(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    CharListRow *entries = MenuListGet(0);
-    CharListSPWindow *window = &CharList->weapon;
+    MenuListEntry *entries = MenuListGet(0);
+    WindowSPCursor *window = &CharList->weapon;
     int count;
     int i;
 
@@ -3776,8 +3189,8 @@ void CharListMake_Gun(void)
     window->rows = 7;
     window->height = 174;
     window->columns = 1;
-    window->rowCount = 7;
-    window->flags = 0;
+    window->draw_flags = 7;
+    window->title = 0;
     window->items = MenuListGet(0);
     WindowSPItemChange(window);
     WindowSPSetSelect(window, &MenuKeepSelect[20]);
@@ -3790,8 +3203,8 @@ void CharListMake_Gun(void)
 void CharListMake_Acc(void)
 {
     int *sortRow = MenuSortAddrGet(0);
-    CharListRow *entries = MenuListGet(0);
-    CharListSPWindow *window = &CharList->weapon;
+    MenuListEntry *entries = MenuListGet(0);
+    WindowSPCursor *window = &CharList->weapon;
     int count;
     int i;
 
@@ -3810,8 +3223,8 @@ void CharListMake_Acc(void)
     window->height = 126;
     window->columns = 1;
     window->rows = 5;
-    window->rowCount = 7;
-    window->flags = 0;
+    window->draw_flags = 7;
+    window->title = 0;
     window->items = MenuListGet(0);
     WindowSPItemChange(window);
     WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.character.accessoryList * 5]);
@@ -3823,8 +3236,8 @@ void CharListMake_Acc(void)
  * directly instead of through MenuListMake. */
 void CharListMake_Para(void)
 {
-    CharParaRow *row = (CharParaRow *)CharList->paraItems;
-    CharListSPWindow *window = &CharList->weapon;
+    MenuListEntry *row = CharList->paraItems;
+    WindowSPCursor *window = &CharList->weapon;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -3836,15 +3249,15 @@ void CharListMake_Para(void)
         }
         row++;
     }
-    row->name = (char *)CHAR_LIST_EMPTY_FLAGS;
+    row->name = "";
     row[1].name = 0;
     window->columns = 1;
     window->rows = 8;
-    window->rowCount = 3;
-    window->flags = (int)listWindowTag;
+    window->draw_flags = 3;
+    window->title = listWindowTag;
     window->width = 105;
     window->height = 198;
-    window->items = (CharListRow *)CharList->paraItems;
+    window->items = CharList->paraItems;
     WindowSPItemChange(window);
     WindowSPSetSelect(window, &MenuKeepSelect[25]);
 }
@@ -3861,12 +3274,12 @@ void CharListMain(void)
 
     switch (list->state) {
     case 0:
-        list->weapon.position = 528;
-        list->weapon.contentHeight = 64;
+        list->weapon.x = 528;
+        list->weapon.y = 64;
         list->color = 0x00FFFFF8;
-        list->weapon.color = 0x00FFFFF8;
-        list->weapon.rowCount = 7;
-        list->weapon.flags = (int)CHAR_LIST_EMPTY_FLAGS;
+        list->weapon.style = 0x00FFFFF8;
+        list->weapon.draw_flags = 7;
+        list->weapon.title = "";
         list->weapon.rows = 11;
         list->weapon.height = 270;
         list->weapon.state = 0;
@@ -3874,11 +3287,11 @@ void CharListMain(void)
         WindowSPSet(&list->weapon);
         for (i = 0; i < 3; i++) {
             eSpriteSet(&list->icons[i], 1546);
-            list->icons[i].color = 0x00FFFFFF;
+            list->icons[i].work = 0x00FFFFFF;
         }
         for (i = 0; i < 8; i++) {
             eNumberSet(&list->rows[i], 0);
-            list->rows[i].color = 0x00FFFFFA;
+            list->rows[i].work = 0x00FFFFFA;
         }
         list->cursorIndex = 0;
         list->state = 2;
@@ -3904,22 +3317,22 @@ void CharListMain(void)
     case 10:
     case 20:
     case 30:
-        list->weapon.position = -244;
+        list->weapon.x = -244;
         if (list->state == 10) {
             if (MenuWork.character.equipKind == 0) {
-                list->weapon.contentHeight = 102;
+                list->weapon.y = 102;
                 CharListMake_Wpn();
             } else {
-                list->weapon.contentHeight = 153;
+                list->weapon.y = 153;
                 CharListMake_Acc();
             }
             list->state = 11;
         } else if (list->state == 20) {
-            list->weapon.contentHeight = 102;
+            list->weapon.y = 102;
             CharListMake_Gun();
             list->state = 21;
         } else {
-            list->weapon.contentHeight = 80;
+            list->weapon.y = 80;
             CharListMake_Para();
             list->state = 11;
         }
@@ -3935,8 +3348,8 @@ void CharListMain(void)
         if (list->state == 13) {
             target = -244;
         }
-        MoveSlide(&list->weapon.position, &target, 3.0f);
-        if (list->weapon.position == target) {
+        MoveSlide(&list->weapon.x, &target, 3.0f);
+        if (list->weapon.x == target) {
             switch (list->state) {
             case 13:
                 list->state = 2;
@@ -3994,7 +3407,7 @@ void CharSwitchMain(void)
         csw->arrow.y = 0x0C;
         csw->arrow.work = csw->color;
         eMessageSet(&csw->message, *msg_6);
-        csw->message.color = csw->color;
+        csw->message.draw_parameter = csw->color;
         csw->message.mode = 0x20;
         csw->state = 2;
         /* fallthrough */
@@ -4012,7 +3425,7 @@ void CharSwitchMain(void)
         eSpriteMain(&csw->arrow);
         csw->message.x = csw->arrow.x + 20;
         csw->message.y = csw->arrow.y - 2;
-        csw->message.color = csw->arrow.work;
+        csw->message.draw_parameter = csw->arrow.work;
         eMessageMain(&csw->message);
         break;
     }
@@ -4029,25 +3442,25 @@ void CharPointMain(void)
         int i;
 
         work->tagBase = 0xF00000;
-        WindowDXSet(&work->panel.width);
-        work->panel.width = 0x210;
-        work->panel.height = 0xA0;
-        work->panel.windowTagId = work->tagBase;
-        work->panel.title = tPtsTitleLabel;
-        work->panel.windowField3 = 0x80;
-        work->panel.windowField4 = 0x50;
-        work->panel.windowState = 1;
-        WindowDXMain(&work->panel.width);
-        work->panel.windowState = 3;
+        WindowDXSet(&work->panel.window);
+        work->panel.window.x = 0x210;
+        work->panel.window.y = 0xA0;
+        work->panel.window.style = work->tagBase;
+        work->panel.window.tag_id = tPtsTitleLabel;
+        work->panel.window.width = 0x80;
+        work->panel.window.height = 0x50;
+        work->panel.window.state = 1;
+        WindowDXMain(&work->panel.window);
+        work->panel.window.state = 3;
 
         for (i = 0; i < 2; i++) {
             eTagFontSet(&work->panel.tagSlots[i], msg_7_0036D938[i]);
-            work->panel.tagSlots[i].id = work->tagBase + 2;
+            work->panel.tagSlots[i].work = work->tagBase + 2;
         }
 
         for (i = 0; i < 3; i++) {
             eNumberSet(&work->panel.numberSlots[i], 0);
-            work->panel.numberSlots[i].id = work->tagBase + 2;
+            work->panel.numberSlots[i].work = work->tagBase + 2;
         }
 
         eSpriteSet(&work->panel.sprite, 1798);
@@ -4091,17 +3504,17 @@ void CharPointMain(void)
             }
         }
 
-        MoveSlide(&work->panel.width, &targetWidth, 3.0f);
-        WindowDXMain(&work->panel.width);
+        MoveSlide(&work->panel.window.x, &targetWidth, 3.0f);
+        WindowDXMain(&work->panel.window);
 
         for (i = 0; i < 2; i++) {
-            work->panel.tagSlots[i].x = work->panel.width + 68;
-            work->panel.tagSlots[i].y = work->panel.height + ((i % 2) * 3 + (i / 2) * 5) * 16 + 4;
+            work->panel.tagSlots[i].x = work->panel.window.x + 68;
+            work->panel.tagSlots[i].y = work->panel.window.y + ((i % 2) * 3 + (i / 2) * 5) * 16 + 4;
             eTagFontMain(&work->panel.tagSlots[i]);
         }
 
-        work->panel.sprite.x = work->panel.width + 57;
-        work->panel.sprite.y = work->panel.height + 28;
+        work->panel.sprite.x = work->panel.window.x + 57;
+        work->panel.sprite.y = work->panel.window.y + 28;
         eSpriteMain(&work->panel.sprite);
 
         record = func_A19210(MenuWork.character.chrNo);
@@ -4112,17 +3525,17 @@ void CharPointMain(void)
         work->panel.numberSlots[2].value = points - cost;
 
         for (i = 0; i < 3; i++) {
-            work->panel.numberSlots[i].x = work->panel.width + 72;
-            work->panel.numberSlots[i].y = work->panel.height + ((i % 3) * 24 + (i / 3) * 80) + 4;
+            work->panel.numberSlots[i].x = work->panel.window.x + 72;
+            work->panel.numberSlots[i].y = work->panel.window.y + ((i % 3) * 24 + (i / 3) * 80) + 4;
             work->panel.numberSlots[i].format = 0;
             work->panel.numberSlots[i].digits = 4;
             eNumberMain(&work->panel.numberSlots[i]);
         }
 
-        work->panel.sprite.printX = work->panel.width + 11;
-        work->panel.colors[0].extraX = work->panel.width + 115;
-        work->panel.colors[0].extraY = work->panel.height + 48;
-        work->panel.sprite.printY = work->panel.height + 48;
+        work->panel.sprite.printX = work->panel.window.x + 11;
+        work->panel.colors[0].extraX = work->panel.window.x + 115;
+        work->panel.colors[0].extraY = work->panel.window.y + 48;
+        work->panel.sprite.printY = work->panel.window.y + 48;
         endPrintExtFunc(work->tagBase, 0, &work->panel.sprite.printX);
     }
 }
@@ -4145,18 +3558,22 @@ void MenuCharCameraSet(void)
     MenuCameraSetPositionVectors *positionValues;
     MenuCameraSetRotationVectors *rotationValues;
     StudioCamera *camera = xglStudioGetCamera2(0);
+    Vector4 *cameraRotation;
+    Vector4 *cameraPosition;
 
     xglCameraInit(camera);
     positionValues = &position.storage.values;
     rotationValues = &rotation.storage.values;
-    camera->rotation = rotationValues->vector[MenuWork.character.partyMode];
-    camera->position = positionValues->vector[MenuWork.character.partyMode];
+    cameraRotation = &camera->rotation.vector;
+    *cameraRotation = rotationValues->vector[MenuWork.character.partyMode];
+    cameraPosition = &camera->position.vector;
+    *cameraPosition = positionValues->vector[MenuWork.character.partyMode];
     camera->state = 1;
     formationRotation.storage.representation = (MenuCameraPair){ .vector = { { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.52359879016876221f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
-    TairetuRot.vector = formationRotation.storage.representation.vector[MenuWork.character.partyMode];
-    formationPosition = (MenuCameraSetVector){ .storage = { .vector = { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f } } };
+    TairetuRot = formationRotation.storage.representation.vector[MenuWork.character.partyMode];
+    formationPosition = (MenuCameraSetVector){ .storage = { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f } };
     memset(&zeroRotation, 0, sizeof(zeroRotation));
-    zeroRotation.storage.vector.x = NEG_QUARTER_PI;
+    zeroRotation.storage.x = NEG_QUARTER_PI;
     TairetuPos = formationPosition.storage;
     TairetuRot = zeroRotation.storage;
 }
@@ -4184,14 +3601,14 @@ void MenuCharCameraMove(void)
     if (MenuWork.character.partyMode == 0) {
         int view;
         int state = MenuWork.character.state;
-        Vector4 *position = &camera->position;
-        Vector4 *rotation = &camera->rotation;
+        Vector4 *position = &camera->position.vector;
+        Vector4 *rotation = &camera->rotation.vector;
         float x;
         float y;
         float z;
 
-        __builtin_memcpy(singlePositions.words, singleCameraPositionTable.words, sizeof(singlePositions.words));
-        __builtin_memcpy(singleRotations.words, singleCameraRotationTable.words, sizeof(singleRotations.words));
+        singlePositions = singleCameraPositionTable;
+        singleRotations = singleCameraRotationTable;
         view = MenuCharCameraViewGet(state);
         x = position->x;
         y = position->y;
@@ -4201,10 +3618,10 @@ void MenuCharCameraMove(void)
         position->z = z + (singlePositions.component[view][2] - z) * CHAR_CAMERA_POSITION_RATE;
         rotation->x += (singleRotations.component[view][0] - rotation->x) * CHAR_CAMERA_ROTATION_RATE;
     } else {
-        Vector4 *cameraRotation = &camera->rotation;
-        Vector4 *cameraPosition = &camera->position;
-        Vector4 *formationRotation = &TairetuRot.vector;
-        Vector4 *formationPosition = &TairetuPos.vector;
+        Vector4 *cameraRotation = &camera->rotation.vector;
+        Vector4 *cameraPosition = &camera->position.vector;
+        Vector4 *formationRotation = &TairetuRot;
+        Vector4 *formationPosition = &TairetuPos;
         int view = (MenuWork.character.state >> 4) == 11;
         float x;
         float y;
@@ -4213,8 +3630,8 @@ void MenuCharCameraMove(void)
         float targetY;
         float targetZ;
 
-        __builtin_memcpy(formationRotations.words, formationCameraRotationTable.words, sizeof(formationRotations.words));
-        __builtin_memcpy(formationPositions.words, formationCameraPositionTable.words, sizeof(formationPositions.words));
+        formationRotations = formationCameraRotationTable;
+        formationPositions = formationCameraPositionTable;
         targetX = formationRotations.component[view][0];
         targetY = formationRotations.component[view][1];
         targetZ = formationRotations.component[view][2];
@@ -4281,17 +3698,17 @@ void MenuCharCameraMove(void)
     }
 }
 
-void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
+void MenuCharModelMain(MenuModelUnit *unit, void *argument)
 {
-    MenuCharacterVector position;
+    AlignedVector4 position;
     Vector4 rotation;
-    MenuCharacterVector scale;
-    MenuCharacterActor *actor = unit->actor;
-    MenuCharacterTransform *transform;
+    AlignedVector4 scale;
+    Actor *actor = unit->actor;
+    ActorMenuControl *transform;
     unsigned char slot;
 
-    if (actor == 0 && ((signed char)MenuWork.character.swapOutId != 0 || MenuWork.character.state == 16 ||
-        MenuWork.character.state == 17 || MenuWork.character.state == 240 || unit != (MenuCharacterModel *)MenuModelOut[MenuWork.character.modelSlot])) {
+    if (actor == 0 && (MenuWork.character.swapOutId != 0 || MenuWork.character.state == 16 ||
+        MenuWork.character.state == 17 || MenuWork.character.state == 240 || unit != MenuModelOut[MenuWork.character.modelSlot])) {
         MenuModelUnitBreak(unit);
         MenuWork.character.swapOutId = 0;
     }
@@ -4299,25 +3716,25 @@ void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
         return;
     }
     slot = setSlotTbl[MenuWork.character.chrNo - 1];
-    transform = &actor->transform;
-    if ((signed char)MenuWork.character.swapOutId != 0 || MenuWork.character.state == 16 || MenuWork.character.state == 17 || MenuWork.character.state == 240) {
-        unit->state = 30;
+    transform = &actor->menu;
+    if (MenuWork.character.swapOutId != 0 || MenuWork.character.state == 16 || MenuWork.character.state == 17 || MenuWork.character.state == 240) {
+        unit->extFuncFlag = 30;
         MenuWork.character.swapOutId = 0;
     }
-    switch (unit->state) {
+    switch (unit->extFuncFlag) {
     case 0:
-        unit->state = 10;
-        transform->position = transform->defaultPosition;
-        transform->position.vector.y = -transform->position.vector.y;
+        unit->extFuncFlag = 10;
+        transform->offset = transform->position;
+        transform->offset.y = -transform->offset.y;
         MenuModelUnitOpen(unit, 2);
         if (MenuEquipStealMaskCheck() == 0) {
-            if (unit->chrNo != 3 || MenuShionMwsCheck() != 0) {
+            if (unit->modelId != 3 || MenuShionMwsCheck() != 0) {
                 MenuModelWeaponCreate(unit, 0, slot);
             }
         }
         break;
     case 10:
-        if (MenuEquipStealMaskCheck() == 0 && (unit->chrNo != 3 || MenuShionMwsCheck() != 0)) {
+        if (MenuEquipStealMaskCheck() == 0 && (unit->modelId != 3 || MenuShionMwsCheck() != 0)) {
             if (MenuWork.character.weaponChanged != 0) {
                 short weapon = unit->org->weapon[slot];
                 unit->org->weapon[slot] = MenuWork.character.weaponId;
@@ -4329,46 +3746,46 @@ void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
         break;
     case 30:
         MenuModelUnitOpen(unit, 1);
-        unit->state = 31;
+        unit->extFuncFlag = 31;
         /* fallthrough */
     case 31:
-        if (transform->fade == 0.0f) {
+        if (transform->transparency == 0.0f) {
             unit->taskPhase = -1;
         }
         break;
     }
     if (MenuWork.character.state == 33 || (MenuWork.character.state >> 4) == 8) {
-        position = transform->defaultPosition;
-        position.vector.y = -position.vector.y;
+        position = transform->position;
+        position.y = -position.y;
         {
-            Vector4 *current = &transform->position.vector;
+            Vector4 *current = &transform->offset;
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (position.vector.x - x) * CHAR_MODEL_DEFAULT_MOVE_RATE;
-            current->y = y + (position.vector.y - y) * CHAR_MODEL_DEFAULT_MOVE_RATE;
-            current->z = z + (position.vector.z - z) * CHAR_MODEL_DEFAULT_MOVE_RATE;
+            current->x = x + (position.x - x) * CHAR_MODEL_DEFAULT_MOVE_RATE;
+            current->y = y + (position.y - y) * CHAR_MODEL_DEFAULT_MOVE_RATE;
+            current->z = z + (position.z - z) * CHAR_MODEL_DEFAULT_MOVE_RATE;
         }
         if (MenuWork.character.state == 33) {
             MenuModelControl2(unit, 0);
         }
     } else {
         memset(&position, 0, 16);
-        position.vector.w = 1.0f;
+        position.w = 1.0f;
         memset(&rotation, 0, 16);
         rotation.w = 1.0f;
-        scale = (MenuCharacterVector){ .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 1.0f } };
+        scale = (AlignedVector4){ .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 1.0f };
         {
-            Vector4 *current = &transform->position.vector;
+            Vector4 *current = &transform->offset;
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (position.vector.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
-            current->y = y + (position.vector.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
-            current->z = z + (position.vector.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->x = x + (position.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->y = y + (position.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->z = z + (position.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
         }
         {
-            Vector4 *current = &transform->rotation.vector;
+            Vector4 *current = &transform->rotation;
             float x = current->x;
             float y = current->y;
             float z = current->z;
@@ -4377,13 +3794,13 @@ void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
             current->z = z + (rotation.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
         }
         {
-            Vector4 *current = &transform->scale.vector;
+            Vector4 *current = &transform->scale;
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (scale.vector.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
-            current->y = y + (scale.vector.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
-            current->z = z + (scale.vector.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->x = x + (scale.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->y = y + (scale.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->z = z + (scale.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
         }
     }
 }
@@ -4391,94 +3808,94 @@ void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const MenuCharacterPositions battleModelPositionTable = { .vector = { { .x = 1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f } } };
 
-void MenuBattleModelMain(MenuCharacterModel *unit, void *argument)
+void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
 {
-    MenuCharacterActor *actor = unit->actor;
+    Actor *actor = unit->actor;
 
     if (actor == 0 && MenuWork.character.state == 240) {
         MenuModelUnitBreak(unit);
     }
     if (unit->active != 0) {
         MenuCharacterPositions positions;
-        MenuCharacterTransform *transform;
+        ActorMenuControl *transform;
         PartyDataPrefix *party;
         signed char formationSlot;
         int i;
         Vector4 *target;
 
-        __builtin_memcpy(positions.words, battleModelPositionTable.words, sizeof(positions.words));
-        transform = &actor->transform;
-        party = (PartyDataPrefix *)PartyDataGet();
+        positions = battleModelPositionTable;
+        transform = &actor->menu;
+        party = PartyDataGet();
         formationSlot = 1;
         for (i = 0; i < 3; i++) {
-            if (party->attack_slots[i].party_id == unit->chrNo) {
+            if (party->attack_slots[i].party_id == unit->modelId) {
                 formationSlot = party->attack_slots[i].attack_position;
                 break;
             }
         }
-        switch (unit->state) {
+        switch (unit->extFuncFlag) {
         case 0:
-            transform->position.vector = positions.vector[formationSlot - 1];
-            unit->state = 1;
+            transform->offset = positions.vector[formationSlot - 1];
+            unit->extFuncFlag = 1;
             break;
         case 1:
             MenuModelUnitOpen(unit, 2);
-            unit->state = 20;
+            unit->extFuncFlag = 20;
             /* fallthrough */
         case 20:
-            if ((MenuWork.character.state >> 4) == 11 && unit->chrNo != MenuWork.character.chrNo) {
-                unit->state = 22;
+            if ((MenuWork.character.state >> 4) == 11 && unit->modelId != MenuWork.character.chrNo) {
+                unit->extFuncFlag = 22;
                 MenuModelUnitOpen(unit, 4);
             }
             if ((MenuWork.character.state >> 4) == 12) {
-                unit->state = 24;
+                unit->extFuncFlag = 24;
                 MenuModelUnitOpen(unit, 3);
             }
             break;
         case 22:
             if ((MenuWork.character.state >> 4) != 11) {
                 MenuModelUnitOpen(unit, 2);
-                unit->state = 20;
+                unit->extFuncFlag = 20;
             }
             break;
         case 24:
             if ((MenuWork.character.state >> 4) != 12) {
                 MenuModelUnitOpen(unit, 2);
-                unit->state = 20;
+                unit->extFuncFlag = 20;
             }
             break;
         case 30:
             MenuModelUnitOpen(unit, 3);
-            unit->state = 31;
+            unit->extFuncFlag = 31;
             /* fallthrough */
         case 31:
-            if (transform->fade == 0.0f) {
+            if (transform->transparency == 0.0f) {
                 unit->taskPhase = -1;
             }
             break;
         }
         if (MenuWork.character.state == 240) {
-            unit->state = 30;
+            unit->extFuncFlag = 30;
         }
-        if (unit->chrNo == (signed char)MenuWork.character.swapOutId) {
+        if (unit->modelId == MenuWork.character.swapOutId) {
             MenuWork.character.swapOutId = 0;
-            unit->state = 30;
+            unit->extFuncFlag = 30;
         }
         target = &positions.vector[formationSlot - 1];
         if (MenuWork.character.state != 181) {
-            if (MenuWork.character.state == 182 && unit->chrNo == MenuWork.character.chrNo) {
+            if (MenuWork.character.state == 182 && unit->modelId == MenuWork.character.chrNo) {
                 target = &positions.vector[MenuWork.character.formationSlot - 1];
             }
         } else {
             int occupant = PartyAttackPosCheck(MenuWork.character.formationSlot);
-            if (unit->chrNo == MenuWork.character.chrNo) {
+            if (unit->modelId == MenuWork.character.chrNo) {
                 target = &positions.vector[MenuWork.character.formationSlot - 1];
-            } else if (unit->chrNo == occupant) {
+            } else if (unit->modelId == occupant) {
                 target = &positions.vector[PartyAttackPosGet(MenuWork.character.chrNo) - 1];
             }
         }
         {
-            Vector4 *current = &transform->position.vector;
+            Vector4 *current = &transform->offset;
             float x = current->x;
             float y = current->y;
             float z = current->z;
@@ -4490,7 +3907,7 @@ void MenuBattleModelMain(MenuCharacterModel *unit, void *argument)
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-const MenuCharacterVector lineFieldInitialScaleVector = { .vector = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f } };
+const AlignedVector4 lineFieldInitialScaleVector = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f };
 
 const SpotLightTable spotLightPositionTable = {{
     {1.0f, 0.0f, 0.6f, 1.0f},
@@ -4509,7 +3926,7 @@ const char charactorText[16] = "\013charactor";
 static int tskCharLineField(XglTaskPrefix *task)
 {
     CharLineFieldTask *line = (CharLineFieldTask *)task;
-    MenuCharacterVector initialScale;
+    AlignedVector4 initialScale;
     Vector4 vertices[6][5];
     LineProjection screen[6][5];
     DirectLineVertex points[8];
@@ -4527,9 +3944,9 @@ static int tskCharLineField(XglTaskPrefix *task)
     }
     switch (line->state) {
     case 0:
-        __builtin_memcpy(initialScale.words, lineFieldInitialScaleVector.words, sizeof(initialScale.words));
+        initialScale = lineFieldInitialScaleVector;
         line->wait = 8;
-        __builtin_memcpy(line->scale.words, initialScale.words, sizeof(line->scale.words));
+        line->scale = initialScale;
         line->state = 2;
         line->visible = 0;
         line->alpha = 0.0f;
@@ -4543,9 +3960,9 @@ static int tskCharLineField(XglTaskPrefix *task)
     case 10:
         {
             float step = LINE_FIELD_GROW_STEP;
-            float x = line->scale.vector.x;
+            float x = line->scale.x;
             float deltaX = 1.0f - x;
-            float z = line->scale.vector.z;
+            float z = line->scale.z;
             float deltaZ = 1.0f - z;
             float alpha = line->alpha;
             deltaX *= step;
@@ -4554,8 +3971,8 @@ static int tskCharLineField(XglTaskPrefix *task)
             x += deltaX;
             z += deltaZ;
             line->alpha = alpha;
-            line->scale.vector.x = x;
-            line->scale.vector.z = z;
+            line->scale.x = x;
+            line->scale.z = z;
             if (alpha >= 1.0f) {
                 line->alpha = 1.0f;
                 line->state = 20;
@@ -4574,9 +3991,9 @@ static int tskCharLineField(XglTaskPrefix *task)
         }
         {
             float step = LINE_FIELD_SHRINK_STEP;
-            float x = line->scale.vector.x;
+            float x = line->scale.x;
             float deltaX = 0.0f - x;
-            float z = line->scale.vector.z;
+            float z = line->scale.z;
             float deltaZ = 0.0f - z;
             float alpha = line->alpha;
             deltaX *= step;
@@ -4585,8 +4002,8 @@ static int tskCharLineField(XglTaskPrefix *task)
             x += deltaX;
             z += deltaZ;
             line->alpha = alpha;
-            line->scale.vector.x = x;
-            line->scale.vector.z = z;
+            line->scale.x = x;
+            line->scale.z = z;
             if (alpha <= 0.0f) {
                 line->alpha = 0.0f;
                 if (line->state == 99) {
@@ -4619,7 +4036,7 @@ static int tskCharLineField(XglTaskPrefix *task)
             }
         }
         xglMatrixStackUnit();
-        xglMatrixStackScale(&line->scale.vector.x);
+        xglMatrixStackScale(&line->scale.x);
         xglMatrixStackSave(matrix);
         xglRotTransPersN(screen[0][0].component, &matrix, vertices[0], 30, 0);
         __builtin_memcpy(rowOpacity, rowOpacityTable, sizeof(rowOpacity));
@@ -4795,7 +4212,7 @@ void MenuCharParaSet(int chrNo, int previewOnly)
 void MenuCharactor(int partyMode)
 {
     if (MenuWork.character.state == 0) {
-        unsigned char *heap = MainMenuWorkEnd;
+        void *heap = MainMenuWorkEnd;
         PartyAttackPosition *slot;
         int i;
         int id;
@@ -4805,42 +4222,42 @@ void MenuCharactor(int partyMode)
             heap = (unsigned char *)ParaDataBuf + 0x800;
             xglCdReadFile(paraUpBinPath, ParaDataBuf, 0, 1);
         }
-        CharPas = (CharPasWork *)heap;
+        CharPas = heap;
         heap += CHAR_PAS_SIZE;
         CharPas->state = 0;
-        CharCategory = (CharCategoryWork *)heap;
+        CharCategory = heap;
         heap += CHAR_CATEGORY_SIZE;
         CharCategory->state = 0;
-        CharMenu = (CharMenuWork *)heap;
+        CharMenu = heap;
         heap += CHAR_MENU_SIZE;
         CharMenu->state = 0;
-        CharInfo = (CharInfoWork *)heap;
+        CharInfo = heap;
         heap += CHAR_INFO_SIZE;
         CharInfo->state = 0;
-        CharStatus = (CharStatusWork *)heap;
+        CharStatus = heap;
         heap += CHAR_STATUS_SIZE;
-        CharStatus->window[0].header.state = 0;
-        CharParameter = (CharParameterWork *)heap;
+        CharStatus->work.state = 0;
+        CharParameter = heap;
         heap += CHAR_PARAMETER_SIZE;
         CharParameter->state = 0;
-        CharEx = (CharExWork *)heap;
+        CharEx = heap;
         heap += CHAR_EX_SIZE;
         CharEx->state = 0;
-        CharWeapon = (CharWeaponWork *)heap;
+        CharWeapon = heap;
         heap += CHAR_WEAPON_SIZE;
         CharWeapon->state = 0;
-        CharList = (CharListWork *)heap;
+        CharList = heap;
         heap += CHAR_LIST_SIZE;
         CharList->state = 0;
-        CharSwitch = (CharSwitchWork *)heap;
+        CharSwitch = heap;
         heap += CHAR_SWITCH_SIZE;
         CharWinSP[0] = &CharList->weapon;
-        CharWinSP[1] = (CharListSPWindow *)((unsigned char *)CharList + 0x1C3C);
+        CharWinSP[1] = &CharList->paraWindow;
         CharSwitch->state = 0;
-        CharL1R1 = (CharL1R1Work *)heap;
+        CharL1R1 = heap;
         heap += CHAR_L1R1_SIZE;
         CharL1R1->state = 0;
-        CharPoint = (CharPointWork *)heap;
+        CharPoint = heap;
         heap += CHAR_POINT_SIZE;
         CharPoint->state = 0;
         {
@@ -4862,7 +4279,7 @@ void MenuCharactor(int partyMode)
         memset(UpPara, 0, sizeof(UpPara));
         MenuWorkEndCheck(heap);
         MenuWork.character.partyMode = partyMode;
-        slot = ((PartyDataPrefix *)PartyDataGet())->attack_slots;
+        slot = (PartyDataGet())->attack_slots;
         for (i = 0; i < 3; i++, slot++) {
             id = slot->party_id;
             if (id != 0) {
@@ -5549,7 +4966,7 @@ void MenuCharactor(int partyMode)
                 if (PadData.pressed & PAD_CIRCLE) {
                     switch (MenuWork.character.commandCursor) {
                     case 0:
-                        MenuWork.character.formationSlot = ((PartyDataPrefix *)PartyDataGet())
+                        MenuWork.character.formationSlot = (PartyDataGet())
                                                      ->attack_slots[MenuWork.character.partyCursor].attack_position;
                         MenuWork.character.formationColumn = (MenuWork.character.formationSlot - 1) % 3;
                         if (MenuWork.character.formationSlot < 4) {
@@ -5713,7 +5130,7 @@ void MenuCharactor(int partyMode)
                 /* The slot's byte offset in the party state (4-byte slots
                  * from +0x30) is computed as an unsigned integer before it
                  * is added to the pointer (0x00299a18..0x00299a24). */
-                PartyAttackPosition *slot = (PartyAttackPosition *)(PartyDataGet()
+                PartyAttackPosition *slot = (PartyAttackPosition *)((unsigned char *)PartyDataGet()
                     + (unsigned int)(MenuWork.character.partyCursor * 4 + 0x30));
                 short inId = MenuCharPartyReser[MenuWork.character.reserveCursor];
                 unsigned short outId = slot->party_id;
@@ -5934,7 +5351,7 @@ ParaDigitCounts paraDigitCountTable[1] = {{{3, 3, 3, 3, 2, 2, 2, 3}}};
 
 const AccessoryIconTable charAccessoryIconTable[1] = {{{0x032E, 0x032D, 0x030D}}};
 
-unsigned char listWindowTag[8] = "List";
+char listWindowTag[8] = "List";
 
 const char tPtsTitleLabel[8] = "T.Pts";
 
@@ -5961,7 +5378,7 @@ CharExWork *CharEx = 0;
 
 CharL1R1Work *CharL1R1 = 0;
 
-CharStatusWork *CharStatus = 0;
+CharStatusBlock *CharStatus = 0;
 
 CharParameterWork *CharParameter = 0;
 

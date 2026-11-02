@@ -6,12 +6,8 @@
 #define SRC_MAIN_SC_WAIT_PARSE_SCRIPT_H
 
 #include "shared.h"
-
-typedef struct EventTask {
-    unsigned short active;
-} EventTask;
-
-typedef struct ScriptObject ScriptObject;
+#include "main/sc_get.h"
+#include "main/sdv.h"
 
 typedef struct MissileImagePair {
     short primary_index;
@@ -72,6 +68,13 @@ typedef struct MissileCommandData {
 } MissileCommandData;
 
 /*
+ * Partial view of ScriptTask (include/main/sc_get.h): the wait handlers of this
+ * unit use the task record through this view. The full type changes this
+ * object: with ScriptTask's union members (missile_spawn_context and the
+ * parameters block share +0x30) the spawn_parameter store of scWaitMissileScript
+ * moves past the missile_spawn_context loads (GCC 2.96 alias sets; measured with
+ * tucheck on sc_wait_parse_script).
+ *
  * The script command record the wait handlers of this unit are dispatched on.
  *
  * The members below are the ones this original object establishes for itself;
@@ -109,7 +112,7 @@ typedef struct MissileCommandData {
  * array at 128 bytes (sll 7 at 0x002ebc4c), so the object is at least that
  * long, and nothing else of it is recovered here.
  */
-struct ScriptObject {
+struct ScriptTaskWaitView {
     unsigned short flags;               /* +0x00 */
     unsigned char unmodeled_02[0x2e];   /* +0x02 */
     int missile_spawn_context[3];       /* +0x30, copied into missile parameters */
@@ -128,20 +131,7 @@ struct ScriptObject {
     MissileCommandData *missile_data;    /* +0x70 */
 };
 
-extern int _nowScript;
-
-extern EventTask *scGetTaskAdr(int script_index, int task_index);
-
-/*
- * sdvSetAmbState/sdvSetAmbState2 are defined in src/main/sdv.c (main/tu215)
- * with external linkage, but that TU's own src/main/sdv.h does not yet
- * declare them for another TU to call (nothing else needed them before this
- * one).  Declared here with sdv.c's own parameter names/types until a header
- * harvest gives them a canonical home in sdv.h.
- */
-extern void sdvSetAmbState(int state, int effect_no);
-
-extern void sdvSetAmbState2(int state, int effect_no);
+typedef struct ScriptTaskWaitView ScriptTaskWaitView;
 
 /*
  * scWaitParseMovieScript polls the movie-playback status routine at

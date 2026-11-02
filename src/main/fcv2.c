@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "fcv2.h"
+#include "main/fcv2.h"
 
 #define FCV2_CURSOR_COUNT_SCALE (1.5259021893143654e-05f)
 #define FCV2_PACK_OFFSET_FRAME_TIME (0.033333335071802139f)
@@ -35,28 +36,14 @@ typedef struct FCVKeyData {
  * float through +0xC advancing it by 4, and reads/writes +0x10 as the key
  * index; the leading word it never touches stays unmodeled.
  */
-typedef struct FCVPack {
+struct FCVPack {
     unsigned char unmodeled_00[4];
     u8 *key_types;
     u16 *key_frames;
     f32 *key_values;
     s16 key_index;
-} FCVPack;
+};
 
-/*
- * FCV2Value is the curve FCV2_getValue samples: a cursor into its key table,
- * the same two-bit type code FCV_getFKeyType returns (1 = constant sample,
- * 3 = sampled spline), and either the constant itself or the base of its key
- * table, aliased in the same word (FCV2_getValue, VA 0x0030d740).
- * FCV2_getVal (VA 0x0030d428, still ASM) compares and subtracts a float
- * argument in $f12; FCV2_getValue never writes $f12 before its tail call, so
- * `frame` is its own parameter, forwarded unchanged.
- */
-typedef struct FCV2Value {
-    u16 cursor;
-    u16 type;
-    f32 value;
-} FCV2Value;
 
 typedef struct FCV2DataHeader {
     u32 signature;
@@ -139,7 +126,7 @@ static f32 FCV_getPackVal2s(FCVPack *pack, u32 keyCount, f32 frame);
  * byte, stored in reverse bit order within each byte (FCV_getFKeyType,
  * VA 0x0030d060).
  */
-static s32 FCV_getFKeyType(u32 keyIndex, u8 *types);
+static u32 FCV_getFKeyType(u32 keyIndex, u8 *types);
 static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 frame);
 
 static f32 fcv2Step = 0.033333335f;
@@ -272,7 +259,7 @@ void FCV_skipPack(FCVPack *pack, s32 keyCount)
 
 f32 FCV_getPackValue(FCVPack *pack, f32 frame)
 {
-    u32 keyType = (u32)FCV_getFKeyType((u32)pack->key_index, pack->key_types);
+    u32 keyType = FCV_getFKeyType((u32)pack->key_index, pack->key_types);
     f32 value;
 
     switch (keyType) {
@@ -293,7 +280,7 @@ f32 FCV_getPackValue(FCVPack *pack, f32 frame)
         break;
     }
 
-    pack->key_index = (s16)((u16)pack->key_index + 1);
+    pack->key_index = (u16)pack->key_index + 1;
     return value;
 }
 
@@ -477,7 +464,7 @@ static f32 FCV_getPackVal2f(FCVPack *pack, s32 key_count, f32 frame)
 static f32 FCV_getPackVal2s(FCVPack *pack, u32 key_count, f32 frame)
 {
     FCV2Sample *previous = (FCV2Sample *)pack->key_values;
-    FCV2Sample *next = (FCV2Sample *)((u16 *)previous + 8);
+    FCV2Sample *next = previous + 1;
     FCV2Sample *last;
     FCV2Sample *end;
     FCV2SampleValues *values;
@@ -515,7 +502,7 @@ static f32 FCV_getPackVal2s(FCVPack *pack, u32 key_count, f32 frame)
             end = (FCV2Sample *)((u16 *)end + 4);
             break;
         case 1:
-            end = (FCV2Sample *)((u16 *)last + 8);
+            end = last + 1;
             break;
         default:
             break;
@@ -553,7 +540,7 @@ static f32 FCV_getPackVal2s(FCVPack *pack, u32 key_count, f32 frame)
             next = (FCV2Sample *)((u16 *)next + 4);
             break;
         case 1:
-            next = (FCV2Sample *)((u16 *)previous + 8);
+            next = previous + 1;
             break;
         default:
             break;
@@ -637,7 +624,7 @@ static f32 FCV_getPackVal2s(FCVPack *pack, u32 key_count, f32 frame)
     }
 }
 
-static s32 FCV_getFKeyType(u32 keyIndex, u8 *types)
+static u32 FCV_getFKeyType(u32 keyIndex, u8 *types)
 {
     unsigned char packed = types[keyIndex >> 2];
     return (packed >> ((3 - (keyIndex & 3)) * 2)) & 3;
@@ -673,7 +660,7 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
         next = (FCV2Sample *)((u16 *)keys + 6);
         break;
     case 1:
-        next = (FCV2Sample *)((u16 *)keys + 8);
+        next = keys + 1;
         break;
     default:
         break;
@@ -697,7 +684,7 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
                 next = (FCV2Sample *)((u16 *)next + 6);
                 break;
             case 1:
-                next = (FCV2Sample *)((u16 *)next + 8);
+                next = next + 1;
                 break;
             default:
                 break;
@@ -729,7 +716,7 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
             next = (FCV2Sample *)((u16 *)next + 6);
             break;
         case 1:
-            next = (FCV2Sample *)((u16 *)next + 8);
+            next = next + 1;
             break;
         default:
             break;
@@ -834,7 +821,7 @@ static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
 {
     FCV2Sample **key_output = output;
     FCV2Sample *previous = data;
-    FCV2Sample *next = (FCV2Sample *)((u16 *)previous + 8);
+    FCV2Sample *next = previous + 1;
     FCV2SampleValues *values;
     u16 previous_type = previous->type;
     s32 index;
@@ -892,7 +879,7 @@ static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
             next = (FCV2Sample *)((u16 *)next + 4);
             break;
         case 1:
-            next = (FCV2Sample *)((u16 *)previous + 8);
+            next = previous + 1;
             break;
         default:
             break;
@@ -1089,6 +1076,7 @@ void FCV2_resetPack(FCV2Pack *pack, FCV2CurveData *curve)
     f32 frame_scale;
     f32 frame_offset;
     u16 *frame_cursor;
+    void *cursor;
 
     if (curve == 0) {
         return;
@@ -1101,7 +1089,7 @@ void FCV2_resetPack(FCV2Pack *pack, FCV2CurveData *curve)
         frame_offset = (f32)curve->frame_offset * FCV2_PACK_OFFSET_FRAME_TIME;
         frame_scale = normalized_count * FCV2_PACK_OFFSET_FRAME_TIME;
     } else {
-        f32 normalized_count = (f32)((s32)curve->last_frame - curve->first_frame) * FCV2_RANGE_COUNT_SCALE;
+        f32 normalized_count = (f32)(curve->last_frame - curve->first_frame) * FCV2_RANGE_COUNT_SCALE;
         frame_scale = normalized_count * FCV2_PACK_SCALE_FRAME_TIME;
         frame_offset = 0.0f;
     }
@@ -1113,11 +1101,11 @@ void FCV2_resetPack(FCV2Pack *pack, FCV2CurveData *curve)
 
         FCV2_readAttribute(pack, attributes);
         stream_size = attributes->byte_size;
-        frame_cursor = (u16 *)((u8 *)attributes + stream_size);
+        cursor = (u8 *)attributes + stream_size;
     } else {
-        frame_cursor = (u16 *)&curve->attributes;
+        cursor = &curve->attributes;
     }
-    pack->cursor = (u8 *)frame_cursor;
+    pack->cursor = cursor;
     pack->frame_scale = frame_scale;
     pack->frame_offset = frame_offset;
     pack->step = fcv2Step;

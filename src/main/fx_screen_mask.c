@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "fx_screen_mask.h"
+#include "main/fx_screen_mask.h"
 
 static void screenMask(ScreenMaskTask *task);
 
@@ -17,8 +18,8 @@ static void screenMask(ScreenMaskTask *task)
         task->frame = -1;
     }
     nmlModelSetFadeDoit();
-    next_frame = (unsigned short)task->frame + 1u;
-    task->frame = (unsigned short)next_frame;
+    next_frame = task->frame + 1u;
+    task->frame = next_frame;
     if (task->duration < (short)next_frame) {
         xglTaskRemove(&task->entry);
     }
@@ -33,9 +34,9 @@ static int fxAdapter(XglTaskPrefix *entry)
         task->flags |= 1u;
     }
 
-    countdown = (unsigned short)task->countdown;
+    countdown = task->countdown;
     countdown--;
-    task->countdown = (short)countdown;
+    task->countdown = countdown;
     if ((short)countdown >= 0) {
         return countdown;
     }
@@ -107,7 +108,7 @@ void FX_call(int command, int effect_index, const void *arguments,
     if (argument_count >= 5) {
         argument_count = 4;
     }
-    task->countdown = (short)command;
+    task->countdown = command;
     task->next_callback = fxFunction[effect_index];
     for (i = 0; i < argument_count; i++) {
         task->callback_arguments[i] = callback_arguments[i];

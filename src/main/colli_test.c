@@ -1,16 +1,13 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_studio.h"
-
-typedef struct CollisionPoint {
-    float x;
-    float y;
-    float z;
-    float w;
-} CollisionPoint;
+#include "main/pp_init.h"
+#include "main/xgl_font.h"
+#include "main/xgl_render.h"
+#include "main/xgl_thread.h"
 
 typedef struct CollisionBoundsFrame {
-    CollisionPoint bounds[2];
+    Vector4 bounds[2];
     /* The frame reserves 16 bytes after the two bounds corners that
      * this function never accesses. */
     unsigned char unmodeled_20[16];
@@ -20,22 +17,18 @@ typedef struct FractionCell {
     float value;
 } FractionCell;
 
-typedef struct ParticleState {
-    CollisionPoint position;
-    CollisionPoint previous_position;
-    CollisionPoint velocity;
-    float gravity;
-    float damping;
-    /* The symbol's 0x40-byte extent is evidenced, while the last eight
-     * bytes have no known semantic use in this translation unit. */
+/* A PpParticle (0x38 bytes) followed by eight bytes this TU never accesses:
+ * the original .bss places pos2 0x40 bytes after pos1 (section 2**3). */
+typedef struct CollisionParticle {
+    PpParticle particle;
     unsigned char unmodeled_38[8];
-} ParticleState;
+} CollisionParticle;
 
 typedef struct BallBoxCollisionArgs {
-    struct CollisionPoint *box_corner_a;
-    struct CollisionPoint *box_corner_b;
-    struct CollisionPoint *line_start;
-    struct CollisionPoint *line_end;
+    Vector4 *box_corner_a;
+    Vector4 *box_corner_b;
+    Vector4 *line_start;
+    Vector4 *line_end;
 } BallBoxCollisionArgs;
 
 typedef union CollisionPadButtons {
@@ -56,28 +49,14 @@ typedef struct CollisionPadState {
 
 extern CollisionPadState PadData;
 
-int CheckIntersect(CollisionPoint *line_start, CollisionPoint *line_end,
-                    CollisionPoint *lower, CollisionPoint *upper);
+static int CheckIntersect(Vector4 *line_start, Vector4 *line_end,
+                          Vector4 *lower, Vector4 *upper);
 
-extern void ppSetPos(ParticleState *particle, float x, float y, float z);
-
-static int CheckBallBoxCollision(CollisionPoint *hit_position,
+static int CheckBallBoxCollision(Vector4 *hit_position,
                                  const BallBoxCollisionArgs *args, int mode);
 
 static int InitTest(void);
-extern void xglRenderClearFrame(void);
-extern void xglSleep(void);
-extern void xglFontDebugPrintf(int x, int y, const char *text, ...);
-extern void ppNextStart(ParticleState *particle);
-extern void ppNextEnd(ParticleState *particle);
-
-/* Defining-owner interface proposals; transport belongs to integration. */
-extern void xglStudioInit(void);
-extern void xglStudioChange(int mode);
-extern void xglStudioMainCameraInit(void);
 extern void xglStudioGetCamera(StudioCamera **camera, int camera_index);
-extern void ppInit(ParticleState *particle);
-
 static int mode_004DB9D8 = 0;
 
 static int hit = 0;
@@ -93,19 +72,19 @@ static StudioCamera * pCamera_004DC65C;
 
 static float radius;
 
-static ParticleState pos1;
+static CollisionParticle pos1;
 
-static ParticleState pos2;
+static CollisionParticle pos2;
 
-static CollisionPoint box1;
+static Vector4 box1;
 
-static CollisionPoint box2;
+static Vector4 box2;
 
-static CollisionPoint hitpos;
+static Vector4 hitpos;
 
-static CollisionPoint box3;
+static Vector4 box3;
 
-static CollisionPoint box4;
+static Vector4 box4;
 
 static void swapf(float *left, float *right)
 {
@@ -115,8 +94,8 @@ static void swapf(float *left, float *right)
     *right = value;
 }
 
-static int CheckIntersect(CollisionPoint *line_start, CollisionPoint *line_end,
-                          CollisionPoint *lower, CollisionPoint *upper)
+static int CheckIntersect(Vector4 *line_start, Vector4 *line_end,
+                          Vector4 *lower, Vector4 *upper)
 {
     float determinant;
     float line_dz;
@@ -198,8 +177,8 @@ static int GetIntersectionPointLineZ(float *intersection, const float *line_star
     return 1;
 }
 
-static int CheckSlope(const CollisionPoint *p0, const CollisionPoint *p1,
-                      const CollisionPoint *p2, const CollisionPoint *p3)
+static int CheckSlope(const Vector4 *p0, const Vector4 *p1,
+                      const Vector4 *p2, const Vector4 *p3)
 {
     float cross = (p1->x - p0->x) * (p3->z - p2->z)
                 - (p1->z - p0->z) * (p3->x - p2->x);
@@ -211,8 +190,8 @@ static int CheckSlope(const CollisionPoint *p0, const CollisionPoint *p1,
     return -1;
 }
 
-static int CheckInBox(const CollisionPoint *point, const CollisionPoint *lower,
-                      const CollisionPoint *upper)
+static int CheckInBox(const Vector4 *point, const Vector4 *lower,
+                      const Vector4 *upper)
 {
     if (point->x < upper->x && lower->x < point->x
             && point->z < upper->z && lower->z < point->z)
@@ -220,14 +199,14 @@ static int CheckInBox(const CollisionPoint *point, const CollisionPoint *lower,
     return 0;
 }
 
-static int CheckBallBoxCollision(CollisionPoint *hit_position,
+static int CheckBallBoxCollision(Vector4 *hit_position,
                                  const BallBoxCollisionArgs *args, int mode)
 {
     CollisionBoundsFrame frame;
     FractionCell fraction_cell;
-    CollisionPoint *line_start = args->line_start;
-    CollisionPoint *corner_a = args->box_corner_a;
-    CollisionPoint *corner_b = args->box_corner_b;
+    Vector4 *line_start = args->line_start;
+    Vector4 *corner_a = args->box_corner_a;
+    Vector4 *corner_b = args->box_corner_b;
     int side;
     int slope;
     int intersection;
@@ -415,7 +394,7 @@ static const char collisionHitLabel[24] = "\013\014\200\000\000CollisionHit!!";
 /* Text: {reset}CollisionTest */
 static const char collisionTestLabel[16] = "\013CollisionTest";
 
-static inline void SetPlanarPoint(CollisionPoint *point, float x, float z)
+static inline void SetPlanarPoint(Vector4 *point, float x, float z)
 {
     point->x = x;
     point->z = z;
@@ -429,25 +408,25 @@ static int InitTest(void)
     xglStudioMainCameraInit();
     xglStudioGetCamera(&pCamera_004DC65C, 0);
 
-    pCamera_004DC65C->position.y = 16.0f;
-    pCamera_004DC65C->rotation.x = 4.712389f;
-    pCamera_004DC65C->position.x = 0.0f;
-    pCamera_004DC65C->position.z = 0.0f;
-    pCamera_004DC65C->rotation.y = 0.0f;
-    pCamera_004DC65C->rotation.z = 0.0f;
+    pCamera_004DC65C->position.vector.y = 16.0f;
+    pCamera_004DC65C->rotation.vector.x = 4.712389f;
+    pCamera_004DC65C->position.vector.x = 0.0f;
+    pCamera_004DC65C->position.vector.z = 0.0f;
+    pCamera_004DC65C->rotation.vector.y = 0.0f;
+    pCamera_004DC65C->rotation.vector.z = 0.0f;
     SetPlanarPoint(&box1, -2.45f, -0.401f);
     SetPlanarPoint(&box2, 1.7f, 2.2f);
     SetPlanarPoint(&box3, -3.0f, -3.2f);
     SetPlanarPoint(&box4, 1.7f, -1.41f);
 
-    ppInit(&pos1);
-    ppInit(&pos2);
-    ppSetPos(&pos1, 0.0f, 0.0f, 3.0f);
+    ppInit(&pos1.particle);
+    ppInit(&pos2.particle);
+    ppSetPos(&pos1.particle, 0.0f, 0.0f, 3.0f);
     radius = 0.5f;
-    ppSetPos(&pos2, 0.0f, 0.0f, 3.0f);
+    ppSetPos(&pos2.particle, 0.0f, 0.0f, 3.0f);
 
-    pos2.gravity = pos1.gravity = 0.0f;
-    pos2.damping = pos1.damping = 0.8f;
+    pos2.particle.gravity = pos1.particle.gravity = 0.0f;
+    pos2.particle.damping = pos1.particle.damping = 0.8f;
     hitpos.y = hitpos.z = hitpos.x = 0.0f;
     hitpos.w = radius;
     mode_004DB9D8 = 0;
@@ -459,8 +438,9 @@ void ColliTest(void)
 {
     BallBoxCollisionArgs collision;
     BallBoxCollisionArgs opposing_collision;
-    ParticleState *particle;
+    PpParticle *particle;
     float move_step;
+    Vector4 *position;
 
     xglRenderClearFrame();
     if (!InitTest())
@@ -475,22 +455,23 @@ void ColliTest(void)
         switch (mode_004DB9D8) {
         case 0:
         default:
-            particle = &pos1;
+            particle = &pos1.particle;
             break;
         case 1:
-            particle = &pos2;
+            particle = &pos2.particle;
             break;
         }
         ppNextStart(particle);
 
+        position = &particle->position;
         if (PadData.movement & 0x1000)
-            particle->position.z -= move_step;
+            position->z -= move_step;
         if (PadData.movement & 0x4000)
-            particle->position.z += move_step;
+            position->z += move_step;
         if (PadData.movement & 0x8000)
-            particle->position.x -= move_step;
+            position->x -= move_step;
         if (PadData.movement & 0x2000)
-            particle->position.x += move_step;
+            position->x += move_step;
 
         switch (mode_004DB9D8) {
         case 0:
@@ -499,33 +480,36 @@ void ColliTest(void)
                 collision.box_corner_a = &box1;
                 collision.box_corner_b = &box2;
                 collision.line_start = &particle->previous_position;
-                collision.line_end = &particle->position;
-                particle->previous_position.w = radius;
-                particle->position.w = radius;
+                collision.line_end = position;
+                /* previous_position is the vector right after position. */
+                position[1].w = radius;
+                position->w = radius;
                 hit = CheckBallBoxCollision(&hitpos, &collision, 1);
                 if (hit) {
-                    particle->position.x = hitpos.x;
-                    particle->position.y = hitpos.y;
-                    particle->position.z = hitpos.z;
+                    position->x = hitpos.x;
+                    position->y = hitpos.y;
+                    position->z = hitpos.z;
                 }
                 collision.box_corner_a = &box3;
                 collision.box_corner_b = &box4;
                 hit = CheckBallBoxCollision(&hitpos, &collision, 1);
                 if (hit) {
-                    particle->position.x = hitpos.x;
-                    particle->position.y = hitpos.y;
-                    particle->position.z = hitpos.z;
+                    position->x = hitpos.x;
+                    position->y = hitpos.y;
+                    position->z = hitpos.z;
                 }
             }
-            ppSetPos(&pos2, pos1.position.x, pos1.position.y, pos1.position.z);
+            ppSetPos(&pos2.particle, pos1.particle.position.x,
+                     pos1.particle.position.y,
+                     pos1.particle.position.z);
             break;
         case 1:
             opposing_collision.box_corner_a = &box1;
             opposing_collision.box_corner_b = &box2;
-            opposing_collision.line_start = &pos1.position;
-            opposing_collision.line_end = &pos2.position;
-            pos2.position.w = radius;
-            pos1.position.w = radius;
+            opposing_collision.line_start = &pos1.particle.position;
+            opposing_collision.line_end = &pos2.particle.position;
+            pos2.particle.position.w = radius;
+            pos1.particle.position.w = radius;
             hit = CheckBallBoxCollision(&hitpos, &opposing_collision, 0);
             opposing_collision.box_corner_a = &box3;
             opposing_collision.box_corner_b = &box4;
@@ -539,19 +523,21 @@ void ColliTest(void)
             case 0:
             default:
                 mode_004DB9D8 = 1;
-                ppSetPos(&pos2, pos1.position.x, pos1.position.y,
-                         pos1.position.z);
+                ppSetPos(&pos2.particle, pos1.particle.position.x,
+                         pos1.particle.position.y,
+                         pos1.particle.position.z);
                 break;
             case 1:
                 mode_004DB9D8 = 2;
-                ppSetPos(&pos1, pos2.position.x, pos2.position.y,
-                         pos2.position.z);
+                ppSetPos(&pos1.particle, pos2.particle.position.x,
+                         pos2.particle.position.y,
+                         pos2.particle.position.z);
                 break;
             }
         }
         if (mode_004DB9D8 == 1)
-            pos2.position.w = radius;
-        pos1.position.w = radius;
+            pos2.particle.position.w = radius;
+        pos1.particle.position.w = radius;
         if (hit)
             xglFontDebugPrintf(0, 8, collisionHitLabel);
         xglFontDebugPrintf(0, 0, collisionTestLabel);

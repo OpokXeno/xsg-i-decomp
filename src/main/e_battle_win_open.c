@@ -1,6 +1,8 @@
 #include "common.h"
 #include "shared.h"
+#include "main/e_battle_win_open.h"
 #include "e_battle_win_open.h"
+#include "main/end_print.h"
 
 /* Parameter words at +0, +4, +8, +0xc and +0x10, read by eBattleWinOpen4. */
 typedef struct BattleWinOpenParam4 {
@@ -57,7 +59,7 @@ typedef struct BattleWinOpenParams {
 extern const char analysisTagText[];
 extern const char hpText[];
 extern const BattleWinConditionLabelTable conditionLabelTable;
-extern BattleWinItem *BW_item;
+extern MenuListEntry *BW_item;
 extern const char informationTagText[];
 extern const char weaknessPrefixText[16];
 extern const char rareItemPrefixText[16];
@@ -81,14 +83,11 @@ extern const char conditionHtText[8];
 extern const char conditionArText[8];
 extern const char conditionCuText[8];
 
-int eMessageNextGyouMaxGet(const char *text);
 extern int MenuCursorKeepCheck(WindowSPKeepBuffer keep);
 const char **func_A2C5F8(int id);
 const char **func_A2C698(int id);
 const char **func_A2C6E8(int id);
 const char **func_A2C738(int id);
-extern void endPrintInit(void);
-
 int BW3BattleOrDataBase = 0;
 
 BattleWindow *BW = 0;
@@ -135,7 +134,7 @@ const char tPtsText[8] = "\001T.Pts";
 /* Text: \x01Hp */
 const char hpText[4] = "\001Hp";
 
-BattleWinItem * BW_item = 0;
+MenuListEntry * BW_item = 0;
 
 const char MenuFileFormatText[8] = "Format";
 
@@ -173,10 +172,10 @@ const char MenuFileHardDiskDriveText[16] = "Hard Disk Drive";
 void eBattleWinOpen(BattleWinOpenParams *params)
 {
     BattleWindow *window = BW;
-    BattleWinItem *items = BW_item;
+    MenuListEntry *items = BW_item;
     BattleWindow *information;
     BattleWinCommand *command;
-    BattleWinItem *item;
+    MenuListEntry *item;
     const char *text;
     const char *next_text;
 
@@ -188,11 +187,11 @@ void eBattleWinOpen(BattleWinOpenParams *params)
         do {
             unsigned char flags;
 
-            item->text = text;
-            item->icon = command->icon;
+            item->name = text;
+            item->amount = command->icon;
             flags = command->flags;
             command++;
-            item->flags = flags;
+            item->flag = flags;
             item++;
             next_text = command->text;
             text = next_text;
@@ -200,8 +199,8 @@ void eBattleWinOpen(BattleWinOpenParams *params)
         window = BW;
         items = BW_item;
     }
-    item[1].text = 0;
-    item->text = &text_0;
+    item[1].name = 0;
+    item->name = &text_0;
     {
         unsigned short x = params->x;
         unsigned short y = params->y;
@@ -237,7 +236,7 @@ void eBattleWinOpen(BattleWinOpenParams *params)
     BW->message.mode = 0x20;
     BW->message.x = BW->window.x + 3;
     BW->message.y = BW->window.y + 3;
-    BW->message.extent = BW->window.style + 2;
+    BW->message.draw_parameter = BW->window.style + 2;
 }
 
 void eBattleWinClose(void *window)
@@ -321,7 +320,7 @@ void eBattleWinOpen2(BattleWinOpen2Params *param)
     message_window = BW2;
     message_window->message.mode = 32;
     message_window->message.y = message_window->window.y + 3;
-    message_window->message.extent = message_window->window.style + 2;
+    message_window->message.draw_parameter = message_window->window.style + 2;
     message_window->message.x = message_window->window.x + message_window->text_offset + 3;
     BW2->window.state = 1;
     WindowDXMain(&BW2->window);
@@ -336,7 +335,7 @@ int eBattleWinMain2(void)
     }
     endPrintExtFunc(0xffffff, 100, 0);
     WindowDXMain(&BW2->window);
-    switch ((signed char)BW2->window.state) {
+    switch (BW2->window.state) {
     case 0:
         BW2->active = 0;
         return 0;
@@ -371,7 +370,7 @@ void eBattleWinOpen3(void *data)
     int points_digit_count;
     int entry_index;
     BattleWindow3 **analysis_window_slot;
-    const unsigned int *database_mode = &BW3BattleOrDataBase;
+    const int *database_mode = &BW3BattleOrDataBase;
 
     WindowDXSet(&BW3->window);
     analysis_window_slot = &BW3;
@@ -408,7 +407,7 @@ void eBattleWinOpen3(void *data)
 
         message_window->messages[0].mode = 32;
         message_window->messages[0].y = y + 3;
-        message_window->messages[0].extent = depth + 2;
+        message_window->messages[0].draw_parameter = depth + 2;
         message_window->messages[0].x = x + 3;
     }
     eMessageSet(&(*analysis_window_slot)->messages[1], msg00_1_0036D600[0]);
@@ -423,7 +422,7 @@ void eBattleWinOpen3(void *data)
         y += 27;
         message_window->messages[1].x = x;
         message_window->messages[1].y = y;
-        message_window->messages[1].extent = depth + 2;
+        message_window->messages[1].draw_parameter = depth + 2;
         message_window->messages[1].mode = 32;
         display_index = 0;
     }
@@ -457,13 +456,13 @@ void eBattleWinOpen3(void *data)
 
         message_window->messages[2].mode = 32;
         message_window->messages[2].y = y + 27;
-        message_window->messages[2].extent = depth + 2;
+        message_window->messages[2].draw_parameter = depth + 2;
         message_window->messages[2].x = x + 123;
     }
     eTagFontSet(&(*analysis_window_slot)->tag_font, hpText);
     (*analysis_window_slot)->tag_font.x = (*analysis_window_slot)->window.x + 191;
     (*analysis_window_slot)->tag_font.y = (*analysis_window_slot)->window.y + 16;
-    (*analysis_window_slot)->tag_font.style = (*analysis_window_slot)->window.style + 2;
+    (*analysis_window_slot)->tag_font.work = (*analysis_window_slot)->window.style + 2;
     eNumberSet(&(*analysis_window_slot)->number, 0);
     {
         BattleWindow3 *number_window = (*analysis_window_slot);
@@ -471,12 +470,12 @@ void eBattleWinOpen3(void *data)
         unsigned short x = number_window->window.x;
         unsigned short y = number_window->window.y;
 
-        number_window->number.option = 3;
-        number_window->number.style = depth + 2;
+        number_window->number.format = 3;
+        number_window->number.work = depth + 2;
         number_window->number.y = y + 16;
         number_window->number.x = x + 250;
     }
-    (*analysis_window_slot)->number.places = 5;
+    (*analysis_window_slot)->number.digits = 5;
     (*analysis_window_slot)->number.value =
         ((unsigned int)param->display_value_high << 16) +
         param->display_value_low;
@@ -504,7 +503,7 @@ void eBattleWinOpen3(void *data)
             window = (*analysis_window_slot);
             window->tag_fonts[entry_index].x = window->window2.x + (entry_index / 3) * 120 + 54;
             window->tag_fonts[entry_index].y = window->window2.y + (entry_index % 3) * 24 + 7;
-            window->tag_fonts[entry_index].style = window->window2.style + 2;
+            window->tag_fonts[entry_index].work = window->window2.style + 2;
             entry_index++;
         } while (entry_index < 5);
         entry_index = 0;
@@ -513,12 +512,12 @@ initialize_next_number:
         points_digit_count = 4;
         BW3->numbers[entry_index].x = BW3->window2.x + (entry_index / 3) * 120 + 58;
         BW3->numbers[entry_index].y = BW3->window2.y + (entry_index % 3) * 24 + 7;
-        BW3->numbers[entry_index].style = BW3->window2.style + 2;
-        BW3->numbers[entry_index].option = 0;
+        BW3->numbers[entry_index].work = BW3->window2.style + 2;
+        BW3->numbers[entry_index].format = 0;
         if (entry_index < 3) {
-            BW3->numbers[entry_index].places = points_digit_count;
+            BW3->numbers[entry_index].digits = points_digit_count;
         } else {
-            BW3->numbers[entry_index].places = 10;
+            BW3->numbers[entry_index].digits = 10;
         }
         entry_index++;
         window = BW3;
@@ -550,7 +549,7 @@ initialize_next_number:
             message_window = (*analysis_window_slot);
             message_window->messages2[entry_index].x = message_window->window2.x + entry_index * 40 + 3;
             message_window->messages2[entry_index].y = message_window->window2.y + entry_index * 24 + 75;
-            message_window->messages2[entry_index].extent = message_window->window2.style + 2;
+            message_window->messages2[entry_index].draw_parameter = message_window->window2.style + 2;
             message_window->messages2[entry_index].mode = 32;
             entry_index++;
         } while (entry_index < 2);
@@ -592,7 +591,7 @@ initialize_next_number:
 
             message_window->messages2[entry_index + 2].x = message_window->window2.x + 143;
             message_window->messages2[entry_index + 2].y = message_window->window2.y + entry_index * 24 + 75;
-            message_window->messages2[entry_index + 2].extent = message_window->window2.style + 2;
+            message_window->messages2[entry_index + 2].draw_parameter = message_window->window2.style + 2;
             message_window->messages2[entry_index + 2].mode = 32;
         }
         entry_index++;
@@ -612,7 +611,7 @@ int eBattleWinMain3(void)
     endPrintExtFunc(0xffffff, 100, 0);
     WindowDXMain(&BW3->window);
     WindowDXMain(&BW3->window2);
-    switch ((signed char)BW3->window.state) {
+    switch (BW3->window.state) {
     case 3:
         for (i = 0; i < 3; i++) {
             eMessageMain(&BW3->messages[i]);
@@ -655,9 +654,9 @@ void eBattleWinOpen4(BattleWinOpenParam4 *param)
     BW4->window.tag_id = param->title;
     BW4->window.ribbon_initialized = 1;
     eMessageSet(&BW4->message, param->text);
-    BW4->message.paged = 1;
+    BW4->message.page_available = 1;
     eMessageTextChange(&BW4->message, param->text);
-    BW4->message.extent = BW4->window.style + 2;
+    BW4->message.draw_parameter = BW4->window.style + 2;
     BW4->message.x = BW4->window.x + 3;
     BW4->message.y = BW4->window.y + 3;
     BW4->message.mode = 34;
@@ -673,7 +672,7 @@ int eBattleWinMain4(void)
     }
     endPrintExtFunc(0xffffff, 100, 0);
     WindowDXMain(&BW4->window);
-    switch ((signed char)BW4->window.state) {
+    switch (BW4->window.state) {
     case 3:
         if (PadData.half_2a & 0x20) {
             if (eMessageNextPage(&BW4->message, 0) == 0) {
@@ -756,7 +755,7 @@ void WindowDXFlagChange(WindowDX *window, int flag)
     switch (flag) {
     case 1:
         current_state = window->state;
-        next_state = (unsigned char)(current_state + 1);
+        next_state = current_state + 1;
         if (next_state < 2 || (signed char)current_state == 4 ||
             (signed char)current_state == 5) {
             window->state = 1;
@@ -768,7 +767,7 @@ void WindowDXFlagChange(WindowDX *window, int flag)
         return;
 
     case 4:
-        if ((signed char)window->state == 3) {
+        if (window->state == 3) {
             window->state = flag;
         }
         return;
@@ -811,7 +810,7 @@ void WindowDXMain(WindowDX *window)
         state = window->state;
         window->state = 0;
         if (window->close_callback != 0) {
-            window->close_callback(window, window->close_callback_arg);
+            ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
         window->frame.x = window->x;
         window->frame.y = window->y;
@@ -826,32 +825,32 @@ void WindowDXMain(WindowDX *window)
         eTagFontSet(&window->title_font, window->tag_id);
         eRibbonSet(&window->ribbon_top, 1);
         eRibbonSet(&window->ribbon_bottom, 1);
-        window->ribbon_bottom.cells[3].r = 32;
-        window->ribbon_bottom.cells[2].r = 32;
-        window->ribbon_bottom.cells[1].r = 32;
-        window->ribbon_bottom.cells[0].r = 32;
-        window->ribbon_bottom.cells[5].r = 32;
-        window->ribbon_bottom.cells[4].r = 32;
-        window->ribbon_bottom.cells[3].g = 15;
-        window->ribbon_bottom.cells[2].g = 15;
-        window->ribbon_bottom.cells[1].g = 15;
-        window->ribbon_bottom.cells[0].g = 15;
-        window->ribbon_bottom.cells[5].g = 52;
-        window->ribbon_bottom.cells[4].g = 52;
-        window->ribbon_bottom.cells[3].b = 10;
-        window->ribbon_bottom.cells[2].b = 10;
-        window->ribbon_bottom.cells[1].b = 10;
-        window->ribbon_bottom.cells[0].b = 10;
-        window->ribbon_bottom.cells[5].b = 64;
-        window->ribbon_bottom.cells[4].b = 64;
-        window->ribbon_bottom.cells[2].a = 48;
-        window->ribbon_bottom.cells[3].a = 0;
-        window->ribbon_bottom.cells[1].a = 0;
-        window->ribbon_bottom.cells[0].a = 48;
-        window->ribbon_bottom.cells[5].a = 96;
-        window->ribbon_bottom.cells[4].a = 96;
+        window->ribbon_bottom.points[3].red = 32;
+        window->ribbon_bottom.points[2].red = 32;
+        window->ribbon_bottom.points[1].red = 32;
+        window->ribbon_bottom.points[0].red = 32;
+        window->ribbon_bottom.points[5].red = 32;
+        window->ribbon_bottom.points[4].red = 32;
+        window->ribbon_bottom.points[3].green = 15;
+        window->ribbon_bottom.points[2].green = 15;
+        window->ribbon_bottom.points[1].green = 15;
+        window->ribbon_bottom.points[0].green = 15;
+        window->ribbon_bottom.points[5].green = 52;
+        window->ribbon_bottom.points[4].green = 52;
+        window->ribbon_bottom.points[3].blue = 10;
+        window->ribbon_bottom.points[2].blue = 10;
+        window->ribbon_bottom.points[1].blue = 10;
+        window->ribbon_bottom.points[0].blue = 10;
+        window->ribbon_bottom.points[5].blue = 64;
+        window->ribbon_bottom.points[4].blue = 64;
+        window->ribbon_bottom.points[2].alpha = 48;
+        window->ribbon_bottom.points[3].alpha = 0;
+        window->ribbon_bottom.points[1].alpha = 0;
+        window->ribbon_bottom.points[0].alpha = 48;
+        window->ribbon_bottom.points[5].alpha = 96;
+        window->ribbon_bottom.points[4].alpha = 96;
         if (window->close_callback != 0) {
-            window->close_callback(window, window->close_callback_arg);
+            ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
         window->state = 2;
     case 2:
@@ -866,33 +865,33 @@ void WindowDXMain(WindowDX *window)
         window->rect.style = window->style;
         window->rect.width = window->width;
         window->rect.height = window->height;
-        endPrintExtFunc((int)window->style, 1, &window->rect);
+        endPrintExtFunc(window->style, 1, &window->rect);
         if (window->tag_id != 0) {
             window->ribbon_top.x = window->x;
             window->ribbon_top.y = window->y - 13;
-            window->ribbon_top.style = window->style;
+            window->ribbon_top.work = window->style;
             window->ribbon_top.width = window->width - 2;
             window->ribbon_top.height = 14;
             eRibbonMain(&window->ribbon_top);
             window->title_font.x = window->x + 8;
             window->title_font.y = window->y - 14;
-            window->title_font.style = window->style + 2;
-            window->title_font.color_a = 0x80;
-            window->title_font.color_g = 0x80;
-            window->title_font.color_b = 0x80;
-            window->title_font.color_r = 0x80;
+            window->title_font.work = window->style + 2;
+            window->title_font.color[3] = 0x80;
+            window->title_font.color[1] = 0x80;
+            window->title_font.color[2] = 0x80;
+            window->title_font.color[0] = 0x80;
             eTagFontMain(&window->title_font);
         }
         if (window->ribbon_initialized == 0) {
             window->ribbon_bottom.x = window->rect.x + 3;
             window->ribbon_bottom.y = window->rect.y + 3;
-            window->ribbon_bottom.style = window->rect.style;
+            window->ribbon_bottom.work = window->rect.style;
             window->ribbon_bottom.width = window->rect.width - 6;
             window->ribbon_bottom.height = window->rect.height - 6;
             eRibbonMain(&window->ribbon_bottom);
         }
         if (window->close_callback != 0) {
-            window->close_callback(window, window->close_callback_arg);
+            ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
         break;
     case 4:
@@ -904,7 +903,7 @@ void WindowDXMain(WindowDX *window)
         window->frame.height = window->height;
         window->frame.progress = 0;
         if (window->close_callback != 0) {
-            window->close_callback(window, window->close_callback_arg);
+            ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
         window->state = 5;
     case 5:
@@ -921,7 +920,7 @@ void subMWModeExSet(WindowSPCursor *list)
     int i;
     int j;
     int first = list->current_row * list->visible_cols;
-    BattleWinItem *item = list->items + first;
+    MenuListEntry *item = list->items + first;
     int shown;
     unsigned char hidden_mode;
 
@@ -934,13 +933,13 @@ void subMWModeExSet(WindowSPCursor *list)
             shown = list->item_count - first;
         }
         for (i = 0; i < shown; i++) {
-            list->messages[i].text = item->text;
+            list->messages[i].text = item->name;
             list->messages[i].mode = 32;
-            list->numbers[i].option = 0;
-            list->numbers[i].places = list->mode;
-            list->numbers[i].value = item->icon;
-            list->numbers[i].font = 3;
-            if (item->flags == 0) {
+            list->numbers[i].format = 0;
+            list->numbers[i].digits = list->mode;
+            list->numbers[i].value = item->amount;
+            list->numbers[i].mode = 3;
+            if (item->flag == 0) {
                 list->messages[i].color_b = 0x80;
                 list->messages[i].color_g = 0x80;
                 list->messages[i].color_r = 0x80;
@@ -959,41 +958,41 @@ void subMWModeExSet(WindowSPCursor *list)
         }
         for (; i < 24; i++) {
             list->messages[i].mode = 112;
-            list->numbers[i].font = 0;
+            list->numbers[i].mode = 0;
         }
-        list->numbers[24].places = 3;
+        list->numbers[24].digits = 3;
         list->numbers[24].value = list->selected_index + 1;
-        list->numbers[25].places = 3;
+        list->numbers[25].digits = 3;
         list->numbers[25].value = list->item_count;
-        list->cursors[0].shown = 1;
+        list->cursors[0].active = 1;
         eCursolModeChange(&list->cursors[0], 80);
         if (list->max_scroll != 0) {
             if (list->current_row != 0) {
                 eCursolModeChange(&list->cursors[1], 80);
             } else {
-                list->cursors[1].mode = 112;
+                list->cursors[1].state = 112;
             }
             if (list->current_row == list->max_scroll) {
-                list->cursors[2].mode = 112;
+                list->cursors[2].state = 112;
             } else if (list->current_row < list->max_scroll) {
                 eCursolModeChange(&list->cursors[2], 80);
             } else {
-                list->cursors[2].mode = 112;
+                list->cursors[2].state = 112;
             }
         } else {
-            list->cursors[1].mode = 112;
-            list->cursors[2].mode = 112;
+            list->cursors[1].state = 112;
+            list->cursors[2].state = 112;
         }
     } else {
         hidden_mode = 112;
         for (j = 2; j >= 0; j--) {
-            list->cursors[j].mode = hidden_mode;
+            list->cursors[j].state = hidden_mode;
         }
-        list->messages[0].text = item->text;
+        list->messages[0].text = item->name;
         list->messages[0].mode = 32;
         for (j = 1; j < 24; j++) {
             list->messages[j].mode = 112;
-            list->numbers[j].font = 0;
+            list->numbers[j].mode = 0;
         }
     }
 }
@@ -1021,24 +1020,24 @@ void subMWPosSet(WindowSPCursor *list)
     list->rect.style = list->style;
     list->numbers[24].y = list->y - 13;
     list->numbers[25].y = list->y - 13;
-    list->numbers[24].style = list->style + 2;
-    list->numbers[25].style = list->style + 2;
+    list->numbers[24].work = list->style + 2;
+    list->numbers[25].work = list->style + 2;
     if (list->item_count != 0) {
         list->cursors[0].x = list->x + list->visible_top * (list->width / 2) + 3;
         list->cursors[1].y = list->y + 4;
         list->cursors[0].y = list->y + list->visible_bottom * 24 + 7;
-        list->cursors[0].style = list->style + 2;
+        list->cursors[0].work = list->style + 2;
         list->cursors[1].x = list->x + list->width - 17;
         list->cursors[2].x = list->x + list->width - 17;
         list->cursors[2].y = list->y + list->height - 19;
-        list->cursors[1].style = list->style + 2;
-        list->cursors[2].style = list->style + 2;
+        list->cursors[1].work = list->style + 2;
+        list->cursors[2].work = list->style + 2;
         i = 0;
         for (row = 0; row < list->visible_rows; row++) {
             for (col = 0; col < list->visible_cols; col++) {
                 list->messages[i].x = list->x + (list->width / 2) * col + 19;
                 list->messages[i].y = list->y + row * 24 + 3;
-                list->messages[i].extent = list->style + 2;
+                list->messages[i].draw_parameter = list->style + 2;
                 i++;
                 if (i >= 24) {
                     break;
@@ -1051,7 +1050,7 @@ void subMWPosSet(WindowSPCursor *list)
                 for (col = 0; col < list->visible_cols; col++) {
                     list->numbers[i].x = list->x + col * (list->width / 2) + 195;
                     list->numbers[i].y = list->y + row * 24 + 8;
-                    list->numbers[i].style = list->style + 2;
+                    list->numbers[i].work = list->style + 2;
                     i++;
                     if (i >= 24) {
                         break;
@@ -1064,7 +1063,7 @@ void subMWPosSet(WindowSPCursor *list)
                 for (col = 0; col < list->visible_cols; col++) {
                     list->numbers[i].x = list->x + list->width - list->mode * 11 - 19;
                     list->numbers[i].y = list->y + row * 24 + 8;
-                    list->numbers[i].style = list->style + 2;
+                    list->numbers[i].work = list->style + 2;
                     i++;
                     if (i >= 24) {
                         break;
@@ -1078,12 +1077,12 @@ void subMWPosSet(WindowSPCursor *list)
             text_width += 10;
         }
         for (i = 23; i >= 0; i--) {
-            list->numbers[i].style = 0;
+            list->numbers[i].work = 0;
         }
         width = list->width;
         list->messages[0].x = list->x + (width - text_width) / 2;
         list->messages[0].y = list->y + (list->height - 24) / 2;
-        list->messages[0].extent = list->style + 2;
+        list->messages[0].draw_parameter = list->style + 2;
         list->messages[0].color_b = 0x80;
         list->messages[0].color_g = 0x80;
         list->messages[0].color_r = 0x80;
@@ -1101,7 +1100,7 @@ void subMWDraw(WindowSPCursor *list)
             eCursolMain(&list->cursors[i]);
         }
     }
-    endPrintExtFunc((int)list->rect.style, 5, &list->rect);
+    endPrintExtFunc(list->rect.style, 5, &list->rect);
     if (flags & 2) {
         for (i = 0; i < 24; i++) {
             eMessageMain(&list->messages[i]);
@@ -1114,7 +1113,7 @@ void subMWDraw(WindowSPCursor *list)
             }
         }
     }
-    endPrintExtFunc((int)list->rect.style, 6, 0);
+    endPrintExtFunc(list->rect.style, 6, 0);
 }
 
 void subMWControlType00(WindowSPCursor *list)
@@ -1319,7 +1318,7 @@ int WindowSPSelect(WindowSPCursor *cursor, int button_flags)
 
 void WindowSPSet(WindowSPCursor *list)
 {
-    BattleWinItem *item = list->items;
+    MenuListEntry *item = list->items;
     int count = 0;
 
     if (item == 0) {
@@ -1334,7 +1333,7 @@ void WindowSPSet(WindowSPCursor *list)
     list->mode = 2;
     list->selected_index = -1;
     list->buttons = 0;
-    while ((item++)->text != 0) {
+    while ((item++)->name != 0) {
         count++;
     }
     count--;
@@ -1371,7 +1370,7 @@ void WindowSPSet(WindowSPCursor *list)
 
 void WindowSPItemChange(WindowSPCursor *list)
 {
-    BattleWinItem *item;
+    MenuListEntry *item;
     int count = 0;
 
     if (list->items == 0) {
@@ -1379,7 +1378,7 @@ void WindowSPItemChange(WindowSPCursor *list)
     }
     list->mode = 2;
     item = list->items;
-    while ((item++)->text != 0) {
+    while ((item++)->name != 0) {
         count++;
     }
     count--;
@@ -1518,14 +1517,14 @@ void WindowSPMain(WindowSPCursor *list)
         list->state = 2;
     case 2:
         WindowDXMain(&list->window);
-        if ((signed char)list->window.state != 3) {
+        if (list->window.state != 3) {
             break;
         }
         list->state = 3;
-        list->cursors[0].mode = 32;
+        list->cursors[0].state = 32;
         for (i = 0; i < 24; i++) {
             list->messages[i].mode = 32;
-            list->numbers[i].font = 3;
+            list->numbers[i].mode = 3;
         }
         list->anim = 0;
     case 3:
@@ -1546,7 +1545,7 @@ void WindowSPMain(WindowSPCursor *list)
         list->window.close_callback = 0;
     case 5:
         WindowDXMain(&list->window);
-        if ((signed char)list->window.state == 0) {
+        if (list->window.state == 0) {
             list->state = 0;
         }
         break;

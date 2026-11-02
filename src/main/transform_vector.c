@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "transform_vector.h"
+#include "main/transform_vector.h"
 
 void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
                      TransformParams *params)

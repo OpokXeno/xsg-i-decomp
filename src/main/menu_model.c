@@ -1,26 +1,18 @@
 #include "common.h"
+#include "main/menu_model.h"
+#include "main/xgl_light.h"
 #include "main/xgl_studio.h"
 #include "shared.h"
 #include "main/xgl_task.h"
 #include "main/act_1.h"
 #include "main/xgl_2.h"
 #include "main/xgl_pad.h"
-
-#define MENU_MODEL_ACTOR_DRAW_STATE_OFFSET 0xc0
-
-#define MENU_MODEL_ACTOR_DRAW_STATE(actor) \
-    ((unsigned char *)(actor) + MENU_MODEL_ACTOR_DRAW_STATE_OFFSET)
-
-#define MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET 0x60
-#define MENU_MODEL_DRAW_STATE_FUNC_OFFSET     0x64
-
-#define MENU_MODEL_DRAW_STATE_PROGRESS(state) \
-    ((float *)((state) + MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET))
-
-#define MENU_MODEL_DRAW_STATE_FUNC(state) \
-    ((void (**)(MenuModelActor *))((state) + MENU_MODEL_DRAW_STATE_FUNC_OFFSET))
-
-typedef struct Actor Actor;
+#include "main/act_2.h"
+#include "main/menu_1.h"
+#include "main/nml_model_set.h"
+#include "main/window_tex_load.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_font.h"
 
 typedef struct MenuModelScaleLimits {
     float value[2];
@@ -33,30 +25,6 @@ typedef struct MenuModelPadRecord {
     unsigned char unmodeled_32[0x36];
 } MenuModelPadRecord;
 
-/*
- * The model actor MenuModelDrawTypeSet (0x00280dd0) configures: it takes the
- * actor in a0 and the draw type (0..4, a jump table) in a1 and writes the
- * actor's +0x60/+0x64 fields. Only pointers to it are used here.
- */
-typedef struct MenuModelActor MenuModelActor;
-
-typedef struct MenuModelDrawTypeState {
-    unsigned char unmodeled_00[0x60];
-    float progress; /* actor +0x120; MenuModelAlphaDraw reads this as transparency */
-    void (*drawTypeFunction)(MenuModelActor *actor); /* actor +0x124 */
-} MenuModelDrawTypeState;
-
-/*
- * +0x1: MenuModelSubWindowBreak forces this to -1 immediately before tail-
- * calling MenuModelSubWindowMainSub (0x0027fc88), which loads the same
- * pointer from MenuModelUnit.subWindow and reads this byte to decide how to
- * tear the subwindow down.
- */
-typedef struct MenuModelSubWindowState {
-    unsigned char unmodeled_00[1];
-    signed char closeFlag;
-} MenuModelSubWindowState;
-
 /* The external unit-resource record fields consulted while naming a weapon motion. */
 typedef struct MenuModelUnitResourceData {
     unsigned char unmodeled_00[0x5A];
@@ -65,49 +33,9 @@ typedef struct MenuModelUnitResourceData {
     short weaponResource[3];             /* +0x5E */
 } MenuModelUnitResourceData;
 
-/*
- * Partial layout of the menu model "unit" object (main/tu165), recovered from
- * this allocation's own field accesses: MenuModelUnitOpen (+0x20),
- * MenuModelExtFuncSet (+0x13, +0x40, +0x44) and MenuModelWeaponActorGet's
- * dereferenced weapon slot array (+0x34). Only these offsets are evidenced;
- * the unmodeled_XX spans are untouched by this allocation.
- */
-/*
- * +0x24/+0x2C: a second (actor, resource) pair, recovered from
- * MenuModelUnitDispose, which passes &actor2/&resource2 to
- * ActorAndResourceDispose with mode 1, alongside the existing +0x20/+0x28
- * pair passed with mode 0. MenuModelUnitActorSet (main:0x002800b0) stores a
- * second ACT_create(-2) result at +0x24 (the first, ACT_create(-1), goes to
- * +0x20) and loads a pointer from +0x28. +0x11, +0x14, +0x1C/+0x1D, +0x30
- * and +0x48 are recovered only as bytes CreateInit clears; no other function
- * in this allocation reads or writes them.
- */
-typedef struct MenuModelUnit {
-    unsigned char unmodeled_00[0x10];
-    signed char taskPhase;                /* +0x10: forced to -1 by MenuModelUnitBreak once its pending resource request is cancelled */
-    unsigned char unusedByCreateInit0;    /* +0x11 */
-    unsigned char unmodeled_12[1];
-    unsigned char extFuncFlag;            /* +0x13: cleared whenever the ext functions below are (re)installed */
-    struct MenuModelUnitResourceData *unusedByCreateInit1; /* +0x14: resource-data pointer read by MenuModelResourceLoad */
-    unsigned short modelId;               /* +0x18 */
-    unsigned short resourceId;            /* +0x1A */
-    unsigned char unusedByCreateInit2[2]; /* +0x1C/+0x1D */
-    unsigned char unmodeled_1E[2];
-    MenuModelActor *actor;                /* +0x20: the unit's own model, passed to MenuModelDrawTypeSet */
-    MenuModelActor *actor2;               /* +0x24: second model, disposed with mode 1 by MenuModelUnitDispose */
-    void *resource;                       /* +0x28: actor's resource slot, disposed with mode 0 by MenuModelUnitDispose */
-    void *resource2;                      /* +0x2C: actor2's resource slot, disposed with mode 1 by MenuModelUnitDispose */
-    int skipWeaponRegionCleanup;              /* +0x30 */
-    struct MenuModelWeapon *weapon[3];           /* +0x34: one slot per MenuModelUnitOpen weapon loop iteration */
-    void *extFunc1;                       /* +0x40: MenuModelExtFuncSet's second argument */
-    void *extFunc2;                       /* +0x44: MenuModelExtFuncSet's third argument */
-    int *unusedByCreateInit4;             /* +0x48: address of the caller's output handle */
-    struct MenuModelSubWindowState *subWindow;   /* +0x4C: tested/forced by MenuModelSubWindowMain/Break, processed by MenuModelSubWindowMainSub */
-} MenuModelUnit;
-
 typedef struct MenuModelWeapon {
     unsigned char unmodeled_00[0x10];
-    signed char taskPhase;                /* +0x10: cancellation and failed creation */
+    unsigned char taskPhase;              /* +0x10: cancellation and failed creation */
     unsigned char active;                 /* +0x11: task has opened its actor */
     unsigned char unmodeled_12;
     unsigned char extFuncFlag;            /* +0x13: cleared on task startup */
@@ -117,15 +45,10 @@ typedef struct MenuModelWeapon {
     unsigned char weaponIndex;            /* +0x1C */
     unsigned char resourceLoaded;         /* +0x1D */
     short characterId;                    /* +0x1E: sign-extended resource byte */
-    MenuModelActor *actor; /* +0x20: returned by MenuModelWeaponActorGet; MenuModelWeaponOpen hands it to MenuModelDrawTypeSet */
+    Actor *actor; /* +0x20: returned by MenuModelWeaponActorGet; MenuModelWeaponOpen hands it to MenuModelDrawTypeSet */
     unsigned char unmodeled_24[4];
-    /*
-     * +0x28: MenuModelWeaponDispose passes the address of this field to
-     * ActorAndResourceDispose as the second (resource) slot, alongside
-     * &actor; that callee clears whatever pointer it finds there, but nothing
-     * recovered so far dereferences it, so its pointee type stays unproven.
-     */
-    void *resource;
+    /* +0x28: the weapon's menu resource; MenuModelWeaponDispose passes its address to ActorAndResourceDispose as the resource slot. */
+    struct MenuModelResourceAccess *resource;
     unsigned char unmodeled_2C[4];
     struct MenuModelUnit *unit;           /* +0x30: owning menu unit */
     unsigned char unmodeled_34[0xC];
@@ -141,7 +64,7 @@ typedef struct MenuModelWeaponLoadTask {
     unsigned char unmodeled_1A[2];         /* +0x1A */
     unsigned char weaponIndex;            /* +0x1C */
     unsigned char resourceLoaded;         /* +0x1D */
-    unsigned char characterId;            /* +0x1E */
+    signed char characterId;              /* +0x1E: copied into the signed UnitResourceData.weaponCharacter table */
     unsigned char unmodeled_1F[0x11];
     struct MenuModelUnit *unit;                  /* +0x30 */
 } MenuModelWeaponLoadTask;
@@ -152,113 +75,17 @@ typedef struct MenuModelWeaponLoadTask {
  */
 typedef struct MenuModelDrawContext {
     unsigned char unmodeled_00[0x20];
-    struct MenuModelDrawable *drawable; /* +0x20 */
+    Actor *actor; /* +0x20 */
 } MenuModelDrawContext;
 
 /*
- * The object MenuModelDrawTypeMain calls through, recovered from that
- * function's own access. Only +0x124 is evidenced.
+ * +0x1: MenuModelSubWindowBreak forces this to -1 (0xFF) immediately before
+ * tail-calling MenuModelSubWindowMainSub, which reads the byte as unsigned
+ * (lbu) to decide how to tear the subwindow down.
  */
-typedef struct MenuModelDrawable {
-    unsigned char unmodeled_00[0x124];
-    void (*drawFunc)(struct MenuModelDrawable *self); /* +0x124 */
-} MenuModelDrawable;
-
-typedef union MenuModelTransformVector {
-    struct {
-        float x;
-        float y;
-        float z;
-        float w;
-    } value;
-    unsigned long long words[2];
-} MenuModelTransformVector;
-
-typedef struct MenuModelTransformControl {
-    MenuModelTransformVector offset;
-    MenuModelTransformVector rotation;
-    MenuModelTransformVector scale;
-    int enabled;
-    unsigned char unmodeled_34[0xC];
-    MenuModelTransformVector position;
-    unsigned char unmodeled_50[0x10];
-    float transparency; /* +0x60: menu draw progress */
-    void (*drawTypeFunction)(MenuModelActor *actor); /* +0x64 */
-    int initialMotionId; /* +0x68: selected before opening the unit actor */
-    unsigned char unmodeled_6C[4];
-} MenuModelTransformControl;
-
-typedef unsigned int XglLightQuadword __attribute__((mode(TI)));
-
-typedef struct {
-    XglLightQuadword intensity;
-    XglLightQuadword direction;
-} XglPackedParallelLight;
-
-typedef struct {
-    XglLightQuadword ambientIntensity;
-    XglPackedParallelLight parallel[3];
-} XglPackedLightSet;
-
-typedef struct MenuModelActorLight {
-    XglPackedLightSet source;
-    Matrix4 directionMatrix;
-    Matrix4 intensityMatrix;
-} MenuModelActorLight;
-
-/*
- * Body for the actor tag this TU's own prelude only forward-declares above.
- * MenuModelAlphaDraw reads the float at +0x120 (mtc1 0x3f800000 compared with
- * c.lt.s against it at 0x00280018) before adjusting the model's transparency;
- * no other offset of this type is evidenced by this allocation.
- */
-/*
- * +0x86: nonzero gates ACT_dispose in ActorAndResourceDispose, which clears
- * it afterward. MenuModelUnitActorSet (main:0x002800e0) also reads/writes
- * this halfword and extracts its top nibble as a type selector, so it packs
- * more than a plain boolean; only the zero/nonzero state is evidenced here.
- */
-struct MenuModelActor {
-    unsigned int actorFlags; /* +0x00: update/draw state flags */
-    void (*update)(MenuModelActor *actor); /* +0x04 */
-    void (*draw)(MenuModelActor *actor);   /* +0x08 */
-    unsigned char unmodeled_0C[4];
-    MenuModelTransformVector position;
-    unsigned char unmodeled_20[0x30];
-    MenuModelTransformVector rotation;
-    MenuModelTransformVector scale;
-    MenuModelTransformVector navel; /* +0x70: captured after motion and draw */
-    unsigned char unmodeled_80[6];
-    short flags; /* +0x86 */
-    unsigned char unmodeled_88[0x38];
-    MenuModelTransformControl menu;
-    unsigned char unmodeled_130[0x3e0];
-    MenuModelActorLight light; /* +0x510 */
-    unsigned char unmodeled_600[0xf0];
-    unsigned int motionFlags; /* +0x6F0: weapon 19 enables bit 3 */
-    unsigned char unmodeled_6F4[0x1DC];
-    void *modelResource;       /* +0x8D0 */
-    void *matrixResource;      /* +0x8D4 */
-    void *move;                /* +0x8D8 */
-    void *animationPackages[8]; /* +0x8DC */
-    unsigned char unmodeled_8FC[0xA4];
-    unsigned int drawEnvironmentFlags; /* +0x9A0: ACT_setDrawEnv flags */
-    unsigned int renderLevel;  /* +0x9A4: nmlModelSetRenderLevel */
-    int pixelAlpha;            /* +0x9A8: nmlModelSetPixelAlpha */
-    int partsPixelAlphaCount;  /* +0x9AC */
-    unsigned char unmodeled_9B0[0x20];
-    float distanceClipThreshold; /* +0x9D0: ACT_modelDrawSub camera-distance test */
-};
-
-/* A partial actor view used only to form the recovered draw-state address. */
-typedef struct MenuModelActorDrawTypeView {
-    unsigned char unmodeled_00[0xC0];
-    MenuModelDrawTypeState drawTypeState;
-} MenuModelActorDrawTypeView;
-
 typedef struct MenuModelSubWindowAccess {
     unsigned char unmodeled_00[1];
-    signed char closeFlag;
+    unsigned char closeFlag;   /* +0x1 */
     unsigned char studioId;    /* +0x2 */
     unsigned char mode;        /* +0x3 */
     short x;                   /* +0x4 */
@@ -268,16 +95,10 @@ typedef struct MenuModelSubWindowAccess {
     StudioCamera *camera;      /* +0xC */
 } MenuModelSubWindowAccess;
 
-typedef struct MenuModelActorSubWindowAccess {
-    unsigned char unmodeled_00[0x676];
-    short subWindowId;
-} MenuModelActorSubWindowAccess;
-
-typedef MenuModelActor MenuModelMotionActor;
 
 typedef struct MenuModelMotionTarget {
     unsigned char unmodeled_00[0x20];
-    MenuModelMotionActor *actor;
+    Actor *actor;
 } MenuModelMotionTarget;
 
 /* One 0x1C-byte memory region returned by MenuModelMemoryGet. */
@@ -306,7 +127,7 @@ typedef struct MenuModelMemoryStateBuffer {
  */
 typedef struct MenuModelResourceRequestRecord {
     unsigned short resourceId;
-    unsigned char *result; /* Output object representation for the resource pointer. */
+    unsigned int *result; /* Caller output word: receives an int failure code or a resource pointer by memcpy. */
     void *loadParam;
 } MenuModelResourceRequestRecord;
 
@@ -314,14 +135,8 @@ typedef struct MenuModelResourceStateBuffer {
     unsigned int resetWord;
     struct MenuModelResourceAccess *resource;
     MenuModelResourceRequestRecord requests[16];
-    int motionHandle;
+    MenuModelResourceAccess *motionHandle;
 } MenuModelResourceStateBuffer;
-
-typedef struct MenuModelResource {
-    unsigned char status; /* +0x0 */
-    unsigned char unmodeled_01[1];
-    short handle; /* +0x2 */
-} MenuModelResource;
 
 typedef struct MenuModelTaskWork {
     unsigned char unmodeled_00[0x10];
@@ -333,8 +148,8 @@ typedef struct MenuModelTaskWork {
     unsigned char weaponIndex;
     unsigned char resourceLoaded;
     short characterId;
-    MenuModelActor *actor;
-    MenuModelActor *actor2;
+    Actor *actor;
+    Actor *actor2;
     void *resource;
     void *resource2;
     struct MenuModelTaskWork *owner;
@@ -342,7 +157,7 @@ typedef struct MenuModelTaskWork {
     void *extFunc;
     void *extContext;
     int *result;
-    struct MenuModelSubWindowState *subWindow;
+    struct MenuModelSubWindowAccess *subWindow;
 } MenuModelTaskWork;
 
 typedef struct MenuModelZClearVertex {
@@ -351,21 +166,6 @@ typedef struct MenuModelZClearVertex {
     unsigned int z;
     unsigned int fog;
 } MenuModelZClearVertex;
-
-typedef union {
-    XglLightQuadword quadword;
-    Vector4 value;
-} XglLightVector;
-
-typedef struct {
-    Vector4 intensity;
-    Vector4 direction;
-} XglParallelLight;
-
-typedef struct {
-    Vector4 ambientIntensity;
-    XglParallelLight parallel[3];
-} XglLightSet;
 
 extern MenuModelPadRecord PadData[2];
 extern const MenuModelScaleLimits minimumScaleTable[];
@@ -376,59 +176,40 @@ extern const char navelRotationZFormat[16];
 extern const char navelScaleXFormat[16];
 
 void *func_A1C910(void *packed_file);
-void ACT_modelDraw(Actor *actor);
-void ACT_updateDefault(MenuModelActor *actor);
+void ACT_updateDefault(Actor *actor);
 void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loadParam);
 void MenuModelUnitActorSet(MenuModelUnit *unit);
 void nmlModelUseSubWindow(unsigned int studioId, int enabled);
-void nmlModelSetWindow(unsigned int studioId);
-void xglCameraInit(StudioCamera *camera);
 void xglCameraSetWindow(StudioCamera *camera, int x, int y, int width, int height);
-void xglStudioChange(int studioId);
-void ACT_setMotion(MenuModelMotionActor *actor, unsigned int dataId);
 extern char *MenuFileNameGet(short resourceId, int fileType);
 extern void MenuLoadFile(const char *name, void *buffer);
 
 /* With OV01 loaded, this import resolves to dataMotNameGetMenu. */
 extern int func_A1ADC8(char *name, int modelId, int weaponIndex);
 
-static void MenuModelDrawTypeSet(MenuModelActor *actor, int drawType);
+static void MenuModelDrawTypeSet(Actor *actor, int drawType);
 void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex);
 void MenuModelResourceMain(void);
 void MenuModelResourceInit(void);
 void MenuModelSubWindowinit(void);
 void MenuModelResourceCancel(void);
 void MenuModelResourceCancel3(MenuModelUnit *unit);
-int MenuLoadSync(void);
-void MenuLoadCancel(void);
 static void MenuModelSubWindowMainSub(MenuModelUnit *unit);
-static void ActorAndResourceDispose(MenuModelActor **actorSlot, void **resourceSlot, int mode);
+static void ActorAndResourceDispose(Actor **actorSlot, MenuModelResourceAccess **resourceSlot, int mode);
 
 /* Builds a task list of `capacity` 0x80-byte tasks at `pool` and returns the
  * first byte after them (0 when capacity is 0), see 0x0021c528. */
 void *xglTaskInitial(void *pool, int capacity, int flags);
 
-/* nml_model_set.c (main); no header is published for it yet. */
-extern void nmlModelSetToumei(int enabled);
-
-extern void nmlModelSetTransparency(float transparency);
-extern void nmlModelSetZwrite(int enabled);
-void ACT_dispose(MenuModelActor *actor);
+void ACT_dispose(Actor *actor);
 extern int MenuRWeaponCheck(int weaponId, long equipType);
 extern int func_A1A330(int weaponId);
-extern void nmlModelDirectSend(int mode, unsigned char *data, int count);
-void ACT_setModelWrapper(MenuModelActor *actor, int mode);
-void ACT_initMotion(MenuModelActor *actor);
-int ACT_setFace(MenuModelActor *face, MenuModelActor *parent, int mode);
-void ACT_setHand(MenuModelActor *actor, int mask);
-void xglLightIntensityAmbient(XglPackedLightSet *lightSet, const XglLightQuadword *intensity);
-void xglLightIntensityParallel(XglPackedLightSet *lightSet, unsigned int index, const XglLightQuadword *intensity);
-void xglLightDirection(XglLightSet *lightSet, unsigned int index, const Vector4 *source);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+void ACT_setHand(Actor *actor, int mask);
+void xglLightIntensityAmbient(StudioLight *lightSet, const XglLightQuadword *intensity);
+void xglLightIntensityParallel(StudioLight *lightSet, unsigned int index, const XglLightQuadword *intensity);
+void xglLightDirection(StudioLight *lightSet, unsigned int index, const Vector4 *source);
 static void CreateInit(MenuModelUnit *unit);
 void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon);
-void ACT_updateMotion(MenuModelActor *actor);
-int MenuScenarioNoGet(void);
 int func_A1A2E8(int modelId);
 MenuModelUnitResourceData *func_A191C0(int modelId);
 
@@ -657,8 +438,8 @@ int MenuModelMenuMotionCheck(void) {
     return 0;
 }
 
-int MenuModelMenuMotionGet(void) {
-    int handle;
+MenuModelResourceAccess *MenuModelMenuMotionGet(void) {
+    MenuModelResourceAccess *handle;
 
     handle = 0;
     if ((MenuModelMenuMotionCheck() == 1) && (MenuModelFlag & 2)) {
@@ -754,7 +535,7 @@ void MenuModelResourceLoad(int resourceId, MenuModelResourceAccess *buffers,
     unsigned int motionPackageOffset;
 
     if ((resourceId & 0x8000U) != 0) {
-        MenuLoadFile(MenuFileNameGet((short)(resourceId & 0x7FFFU), 3), buffers->file[3]);
+        MenuLoadFile(MenuFileNameGet(resourceId & 0x7FFFU, 3), buffers->file[3]);
         return;
     }
 
@@ -810,7 +591,7 @@ void MenuModelResourceLoad(int resourceId, MenuModelResourceAccess *buffers,
         savedCharacter = unitData->weaponCharacter[weaponIndex];
         savedWeaponResource = unitData->weaponResource[weaponIndex];
         unitData->weaponResource[weaponIndex] = weaponTask->resourceId;
-        unitData->weaponCharacter[weaponIndex] = (signed char)weaponTask->characterId;
+        unitData->weaponCharacter[weaponIndex] = weaponTask->characterId;
         hasMotionName = func_A1ADC8(fileName, modelId, weaponIndex);
         unitData->weaponResource[weaponIndex] = savedWeaponResource;
         unitData->weaponCharacter[weaponIndex] = savedCharacter;
@@ -849,7 +630,7 @@ void MenuModelResourceMain(void)
         if (completedResourceId & 0x8000) {
             MenuModelFlag |= 2;
         }
-        result = (void *)MenuModelResourceState.requests[0].result;
+        result = MenuModelResourceState.requests[0].result;
         MenuModelResourceState.requests[0].result = 0;
         __builtin_memcpy(result, &resource, sizeof(resource));
         MenuModelResourceState.resource = 0;
@@ -881,8 +662,8 @@ void MenuModelResourceMain(void)
     if (MenuModelResourceState.resource == 0) {
         int failure = -1;
         unsigned short *requestId = &MenuModelResourceState.requests[0].resourceId;
-        unsigned int *result = (void *)MenuModelResourceState.requests[0].result;
-        unsigned char **resultSlot = &MenuModelResourceState.requests[0].result;
+        unsigned int *result = MenuModelResourceState.requests[0].result;
+        unsigned int **resultSlot = &MenuModelResourceState.requests[0].result;
         *requestId = 0;
         __builtin_memcpy(result, &failure, sizeof(failure));
         *resultSlot = 0;
@@ -914,7 +695,7 @@ void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loa
 
 void MenuModelMenuMotionLoad(void)
 {
-    int *motionHandle;
+    MenuModelResourceAccess **motionHandle;
     unsigned short motionId;
 
     motionHandle = &MenuModelResourceState.motionHandle;
@@ -945,15 +726,15 @@ void MenuModelMenuMotionLoad(void)
 static void MenuModelSubWindowMainSub(MenuModelUnit *unit)
 {
     MenuModelSubWindowAccess *subWindow;
-    MenuModelActorSubWindowAccess *actor;
+    Actor *actor;
 
-    subWindow = (MenuModelSubWindowAccess *) unit->subWindow;
-    actor = (MenuModelActorSubWindowAccess *) unit->actor;
+    subWindow = unit->subWindow;
+    actor = unit->actor;
     if (MenuModelFlag & 1) {
         subWindow->closeFlag = -1;
     }
-    if ((unsigned char) subWindow->closeFlag != 0) {
-        if ((unsigned char) subWindow->closeFlag == 0xFFU) {
+    if (subWindow->closeFlag != 0) {
+        if (subWindow->closeFlag == 0xFFU) {
             nmlModelUseSubWindow(subWindow->studioId, 0);
             unit->subWindow = 0;
             return;
@@ -963,9 +744,9 @@ static void MenuModelSubWindowMainSub(MenuModelUnit *unit)
                        subWindow->height);
     nmlModelUseSubWindow(subWindow->studioId, subWindow->mode);
     if (subWindow->mode == 1) {
-        actor->subWindowId = subWindow->studioId;
+        actor->windowId = subWindow->studioId;
     } else {
-        actor->subWindowId = 0;
+        actor->windowId = 0;
     }
 }
 
@@ -978,7 +759,7 @@ void MenuModelSubWindowMain(MenuModelUnit *unit)
 
 void MenuModelSubWindowBreak(MenuModelUnit *unit)
 {
-    MenuModelSubWindowState *subWindow;
+    MenuModelSubWindowAccess *subWindow;
 
     subWindow = unit->subWindow;
     if (subWindow != 0) {
@@ -991,7 +772,7 @@ void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
 {
     MenuModelSubWindowAccess *subWindow;
     StudioCamera *camera;
-    MenuModelActor *actor;
+    Actor *actor;
 
     actor = unit->actor;
     if (studioId == 0) {
@@ -1000,8 +781,8 @@ void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
     if (actor == 0) {
         return;
     }
-    subWindow = &((MenuModelSubWindowAccess *) MenuModelSubWindow)[studioId - 1];
-    unit->subWindow = (MenuModelSubWindowState *) subWindow;
+    subWindow = &MenuModelSubWindow[studioId - 1];
+    unit->subWindow = subWindow;
     subWindow->closeFlag = 0;
     subWindow->studioId = studioId;
     subWindow->mode = mode;
@@ -1022,20 +803,20 @@ void MenuModelSubWindowinit(void) {
     memset(MenuModelSubWindow, 0, 0x30U);
 }
 
-static void ActorAndResourceDispose(MenuModelActor **actorSlot, void **resourceSlot, int mode)
+static void ActorAndResourceDispose(Actor **actorSlot, MenuModelResourceAccess **resourceSlot, int mode)
 {
-    MenuModelActor *actor;
-    MenuModelActor *disposedActor;
-    MenuModelResource *resource;
-    MenuModelResource *clearedResource;
+    Actor *actor;
+    Actor *disposedActor;
+    MenuModelResourceAccess *resource;
+    MenuModelResourceAccess *clearedResource;
 
     actor = *actorSlot;
     if (actor != 0) {
-        if (actor->flags != 0) {
+        if (actor->inUseId != 0) {
             ACT_dispose(actor);
             disposedActor = *actorSlot;
             *actorSlot = 0;
-            disposedActor->flags = 0;
+            disposedActor->inUseId = 0;
         } else {
             return;
         }
@@ -1046,7 +827,7 @@ static void ActorAndResourceDispose(MenuModelActor **actorSlot, void **resourceS
             resource->status = 0;
             clearedResource = *resourceSlot;
             *resourceSlot = 0;
-            clearedResource->handle = 0;
+            clearedResource->resourceId = 0;
         }
     }
 }
@@ -1063,8 +844,8 @@ void MenuModelUnitDispose(MenuModelUnit *unit)
     MenuModelUnit *self;
     MenuModelWeapon **weaponSlot;
     int weaponIndex;
-    MenuModelActor **actorSlot;
-    void **resourceSlot;
+    Actor **actorSlot;
+    MenuModelResourceAccess **resourceSlot;
 
     self = unit;
     if (self != 0) {
@@ -1082,7 +863,7 @@ void MenuModelUnitDispose(MenuModelUnit *unit)
     }
 }
 
-void MenuModelAlphaDraw(MenuModelActor *actor)
+void MenuModelAlphaDraw(Actor *actor)
 {
     if (actor->menu.transparency < 1.0f) {
         nmlModelSetTransparency(actor->menu.transparency);
@@ -1093,59 +874,59 @@ void MenuModelAlphaDraw(MenuModelActor *actor)
 
 void MenuModelUnitActorSet(MenuModelUnit *unit)
 {
-    MenuModelActor *actor;
-    MenuModelActor *face;
+    Actor *actor;
+    Actor *face;
     MenuModelResourceAccess *resource;
     MenuModelResourceAccess *motionResource;
     int motion;
     int handMask;
     short actorKind;
     short motionActorKind;
-    MenuModelTransformControl *control;
+    ActorMenuControl *control;
 
-    unit->actor = (MenuModelActor *)ACT_create(-1, unit->resourceId);
+    unit->actor = ACT_create(-1, unit->resourceId);
     if (unit->actor == 0) return;
     actor = unit->actor;
-    resource = (MenuModelResourceAccess *)unit->resource;
+    resource = unit->resource;
     control = &actor->menu;
     memset(control, 0, sizeof(*control));
-    actor->drawEnvironmentFlags = 0;
-    actorKind = actor->flags;
+    actor->drawEnv.flags = 0;
+    actorKind = actor->inUseId;
     actor->modelResource = resource->file[0];
-    actor->pixelAlpha = 0x75;
+    actor->drawEnv.pixelAlpha = 0x75;
     actor->matrixResource = resource->file[1];
     actor->update = ACT_updateDefault;
     actor->draw = MenuModelAlphaDraw;
     actor->move = resource->file[2];
-    actor->renderLevel = 0;
-    actor->partsPixelAlphaCount = 0;
-    actor->distanceClipThreshold = 0.0f;
-    actor->actorFlags = 0;
+    actor->drawEnv.renderLevel = 0;
+    actor->drawEnv.partAlphaCount = 0;
+    actor->drawEnv.cameraCullDistance = 0.0f;
+    actor->flags = 0;
     switch ((actorKind >> 12) & 0xF) {
     case 0:
-        motionResource = (MenuModelResourceAccess *)MenuModelMenuMotionGet();
-        actor->animationPackages[0] = motionResource != 0 ?
+        motionResource = MenuModelMenuMotionGet();
+        actor->animPackTables[0] = motionResource != 0 ?
             motionResource->file[3] : resource->file[3];
         break;
     case 2:
         if (actorKind == 0x2201) {
-            actor->animationPackages[0] = resource->file[3];
+            actor->animPackTables[0] = resource->file[3];
         } else {
-            motionResource = (MenuModelResourceAccess *)MenuModelMenuMotionGet();
-            actor->animationPackages[0] = motionResource != 0 ?
+            motionResource = MenuModelMenuMotionGet();
+            actor->animPackTables[0] = motionResource != 0 ?
                 motionResource->file[3] : resource->file[3];
         }
         break;
     case 4:
-        actor->animationPackages[0] = func_A1C910(resource->file[3]);
+        actor->animPackTables[0] = func_A1C910(resource->file[3]);
         break;
     }
     motion = 0;
     resource->status |= 2;
-    ACT_allocMatrix((ActRecord *)actor, -1);
+    ACT_allocMatrix(actor, -1);
     ACT_setModelWrapper(actor, 0);
     ACT_initMotion(actor);
-    motionActorKind = actor->flags;
+    motionActorKind = actor->inUseId;
     switch ((motionActorKind >> 12) & 0xF) {
     case 0:
         if (MenuModelMenuMotionGet() != 0 &&
@@ -1170,32 +951,32 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     }
     ACT_setMotion(actor, motion);
     control->initialMotionId = motion;
-    if (actor->flags < 0x2000) {
-        face = (MenuModelActor *)ACT_create(-2, actor->flags + 0x10000);
+    if (actor->inUseId < 0x2000) {
+        face = ACT_create(-2, actor->inUseId + 0x10000);
         unit->actor2 = face;
         if (face == 0) {
             MenuModelUnitDispose(unit);
             return;
         }
-        face->pixelAlpha = 0x75;
+        face->drawEnv.pixelAlpha = 0x75;
         face->modelResource = resource->file[4];
-        face->drawEnvironmentFlags = 0;
-        face->renderLevel = 0;
+        face->drawEnv.flags = 0;
+        face->drawEnv.renderLevel = 0;
         face->move = resource->file[5];
-        face->partsPixelAlphaCount = 0;
-        face->distanceClipThreshold = 0.0f;
+        face->drawEnv.partAlphaCount = 0;
+        face->drawEnv.cameraCullDistance = 0.0f;
         face->matrixResource = actor->matrixResource;
-        face->animationPackages[0] = actor->animationPackages[0];
-        ACT_allocMatrix((ActRecord *)face, -1);
+        face->animPackTables[0] = actor->animPackTables[0];
+        ACT_allocMatrix(face, -1);
         ACT_setModelWrapper(face, 0);
         ACT_initMotion(face);
         face->update = ACT_updateDefault;
-        face->actorFlags &= ~8;
+        face->flags &= ~8;
         ACT_setFace(face, actor, 0);
     }
-    if ((actor->flags & 0xF000) == 0) {
+    if ((actor->inUseId & 0xF000) == 0) {
         handMask = 0;
-        switch (actor->flags) {
+        switch (actor->inUseId) {
         case 1: handMask = 33; break;
         case 4: handMask = 1; break;
         }
@@ -1211,60 +992,60 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
             { .value = {-0.562f, 0.23f, -0.795f, 1.0f} },
             { .value = {0.725f, -0.001f, 0.688f, 1.0f} }
         };
-        xglLightIntensityAmbient(&actor->light.source, &lighting[0].quadword);
-        xglLightIntensityParallel(&actor->light.source, 0, &lighting[1].quadword);
-        xglLightDirection((XglLightSet *)(void *)&actor->light.source, 0, &lighting[4].value);
-        xglLightIntensityParallel(&actor->light.source, 1, &lighting[2].quadword);
-        xglLightDirection((XglLightSet *)(void *)&actor->light.source, 1, &lighting[5].value);
-        xglLightIntensityParallel(&actor->light.source, 2, &lighting[3].quadword);
-        xglLightDirection((XglLightSet *)(void *)&actor->light.source, 2, &lighting[6].value);
+        xglLightIntensityAmbient(&actor->light, &lighting[0].quadword);
+        xglLightIntensityParallel(&actor->light, 0, &lighting[1].quadword);
+        xglLightDirection(&actor->light, 0, &lighting[4].value);
+        xglLightIntensityParallel(&actor->light, 1, &lighting[2].quadword);
+        xglLightDirection(&actor->light, 1, &lighting[5].value);
+        xglLightIntensityParallel(&actor->light, 2, &lighting[3].quadword);
+        xglLightDirection(&actor->light, 2, &lighting[6].value);
     }
     {
-        unsigned int actorFlags = actor->actorFlags;
-        actor->motionFlags |= 0x100008;
-        actor->actorFlags = actorFlags | 0x8000;
-        actor->motionFlags |= 0x400000;
+        unsigned int actorFlags = actor->flags;
+        actor->animation.slot.flags |= 0x100008;
+        actor->flags = actorFlags | 0x8000;
+        actor->animation.slot.flags |= 0x400000;
     }
 }
 
 void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
 {
-    MenuModelActor *actor;
-    MenuModelActor *parent;
+    Actor *actor;
+    Actor *parent;
     MenuModelResourceAccess *resource;
 
     if (unit == 0) return;
     parent = unit->actor;
     if (parent == 0) return;
-    actor = (MenuModelActor *)ACT_create(-1, weapon->resourceId);
+    actor = ACT_create(-1, weapon->resourceId);
     weapon->actor = actor;
     if (unit->modelId == 7 && weapon->weaponIndex == 1) {
-        resource = (MenuModelResourceAccess *)weapon->unit->weapon[0]->resource;
+        resource = weapon->unit->weapon[0]->resource;
     } else {
-        resource = (MenuModelResourceAccess *)weapon->resource;
+        resource = weapon->resource;
     }
     memset(&actor->menu, 0, 0x70);
-    actor->drawEnvironmentFlags = 0;
+    actor->drawEnv.flags = 0;
     actor->modelResource = resource->file[0];
     actor->matrixResource = resource->file[1];
-    actor->pixelAlpha = 0x75;
-    actor->actorFlags = 8;
+    actor->drawEnv.pixelAlpha = 0x75;
+    actor->flags = 8;
     actor->update = ACT_updateDefault;
     actor->draw = MenuModelAlphaDraw;
     actor->move = resource->file[2];
-    actor->renderLevel = 0;
-    actor->partsPixelAlphaCount = 0;
-    actor->distanceClipThreshold = 0.0f;
-    if ((unsigned int)((unsigned short)actor->flags - 0x3007) < 4) {
-        actor->animationPackages[0] = resource->file[3];
+    actor->drawEnv.renderLevel = 0;
+    actor->drawEnv.partAlphaCount = 0;
+    actor->drawEnv.cameraCullDistance = 0.0f;
+    if ((unsigned int)((unsigned short)actor->inUseId - 0x3007) < 4) {
+        actor->animPackTables[0] = resource->file[3];
     } else if ((unsigned short)(unit->modelId - 17) < 12 &&
                (unsigned short)(weapon->weaponId - 70) < 45) {
-        actor->animationPackages[0] = func_A1C910(resource->file[3]);
+        actor->animPackTables[0] = func_A1C910(resource->file[3]);
     } else {
-        actor->animationPackages[0] = 0;
+        actor->animPackTables[0] = 0;
     }
     resource->status |= 2;
-    ACT_allocMatrix((ActRecord *)actor, -1);
+    ACT_allocMatrix(actor, -1);
     ACT_setModelWrapper(actor, 0);
     ACT_initMotion(actor);
     if (unit->modelId == 2 && (unsigned short)(weapon->weaponId - 18) < 5) {
@@ -1273,7 +1054,7 @@ void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
         int parentMotion = weaponId - 17;
         ACT_setMotion(actor, weaponMotion[weaponId - 18]);
         ACT_setMotion(parent, parentMotion);
-        parent->motionFlags |= 8;
+        parent->animation.slot.flags |= 8;
     }
     if ((unsigned short)(unit->modelId - 17) < 12 &&
         (unsigned short)(weapon->weaponId - 70) < 45) {
@@ -1286,45 +1067,45 @@ void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
     } else {
         ACT_setArms(actor, parent, (unsigned short)weapon->characterId, 0);
     }
-    actor->actorFlags &= ~8;
+    actor->flags &= ~8;
 }
 
 void MenuModelControl(MenuModelUnit *unit)
 {
-    MenuModelActor *actor = unit->actor;
-    MenuModelTransformVector *rotation = &actor->menu.rotation;
-    MenuModelTransformVector *scale = &actor->menu.scale;
+    Actor *actor = unit->actor;
+    AlignedVector4 *rotation = &actor->menu.rotation;
+    AlignedVector4 *scale = &actor->menu.scale;
     unsigned short buttons;
 
     if (actor->menu.enabled) {
         buttons = PadData[0].buttons;
         if (buttons & 0x1000)
-            rotation->value.x -= 0.1f;
+            rotation->x -= 0.1f;
         if (buttons & 0x4000)
-            rotation->value.x += 0.1f;
+            rotation->x += 0.1f;
         if (buttons & 0x8000)
-            rotation->value.y -= 0.1f;
+            rotation->y -= 0.1f;
         if (buttons & 0x2000)
-            rotation->value.y += 0.1f;
+            rotation->y += 0.1f;
         if (buttons & 1) {
-            scale->value.x -= 0.02f;
-            if (actor->scale.value.x <= 0.25f)
-                scale->value.x = 0.25f;
+            scale->x -= 0.02f;
+            if (actor->scale.x <= 0.25f)
+                scale->x = 0.25f;
         }
         if (PadData[0].buttons & 2) {
-            scale->value.x += 0.02f;
-            if (actor->scale.value.x >= 0.9799995f)
-                scale->value.x = 0.9799995f;
+            scale->x += 0.02f;
+            if (actor->scale.x >= 0.9799995f)
+                scale->x = 0.9799995f;
         }
-        scale->value.y = scale->value.z = scale->value.x;
+        scale->y = scale->z = scale->x;
     }
 }
 
 void MenuModelControl2(MenuModelUnit *unit, int preset)
 {
-    MenuModelActor *actor = unit->actor;
-    MenuModelTransformVector *rotation = &actor->menu.rotation;
-    MenuModelTransformVector *scale = &actor->menu.scale;
+    Actor *actor = unit->actor;
+    AlignedVector4 *rotation = &actor->menu.rotation;
+    AlignedVector4 *scale = &actor->menu.scale;
     MenuModelScaleLimits minimum;
     MenuModelScaleLimits maximum;
 
@@ -1332,44 +1113,44 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
         if ((PadData[0].buttons & 2) || (PadData[1].buttons & 2)) {
             if ((PadData[0].buttons & 0x1000) ||
                 (PadData[1].buttons & 0x1000)) {
-                if (rotation->value.x >= -0.499999f)
-                    rotation->value.x -= 0.1f;
+                if (rotation->x >= -0.499999f)
+                    rotation->x -= 0.1f;
             }
             if ((PadData[0].buttons & 0x4000) ||
                 (PadData[1].buttons & 0x4000)) {
-                if (rotation->value.x <= 1.0f)
-                    rotation->value.x += 0.1f;
+                if (rotation->x <= 1.0f)
+                    rotation->x += 0.1f;
             }
             if ((PadData[0].buttons & 0x8000) ||
                 (PadData[1].buttons & 0x8000))
-                rotation->value.y -= 0.1f;
+                rotation->y -= 0.1f;
             if ((PadData[0].buttons & 0x2000) ||
                 (PadData[1].buttons & 0x2000))
-                rotation->value.y += 0.1f;
-            if (rotation->value.x > 3.1415927f)
-                rotation->value.x = rotation->value.x - 3.1415927f + -3.1415927f;
-            else if (rotation->value.x < -3.1415927f)
-                rotation->value.x = rotation->value.x + 3.1415927f + 3.1415927f;
-            if (rotation->value.y > 3.1415927f)
-                rotation->value.y = rotation->value.y - 3.1415927f + -3.1415927f;
-            else if (rotation->value.y < -3.1415927f)
-                rotation->value.y = rotation->value.y + 3.1415927f + 3.1415927f;
+                rotation->y += 0.1f;
+            if (rotation->x > 3.1415927f)
+                rotation->x = rotation->x - 3.1415927f + -3.1415927f;
+            else if (rotation->x < -3.1415927f)
+                rotation->x = rotation->x + 3.1415927f + 3.1415927f;
+            if (rotation->y > 3.1415927f)
+                rotation->y = rotation->y - 3.1415927f + -3.1415927f;
+            else if (rotation->y < -3.1415927f)
+                rotation->y = rotation->y + 3.1415927f + 3.1415927f;
         } else if ((PadData[0].buttons & 1) || (PadData[1].buttons & 1)) {
             if ((PadData[0].buttons & 0x1000) ||
                 (PadData[1].buttons & 0x1000)) {
                 minimum = minimumScaleTable[0];
-                scale->value.x -= 0.02f;
-                if (actor->scale.value.x <= minimum.value[preset])
-                    scale->value.x = minimum.value[preset];
+                scale->x -= 0.02f;
+                if (actor->scale.x <= minimum.value[preset])
+                    scale->x = minimum.value[preset];
             }
             if ((PadData[0].buttons & 0x4000) ||
                 (PadData[1].buttons & 0x4000)) {
                 maximum = maximumScaleTable[0];
-                scale->value.x += 0.02f;
-                if (actor->scale.value.x >= maximum.value[preset])
-                    scale->value.x = maximum.value[preset];
+                scale->x += 0.02f;
+                if (actor->scale.x >= maximum.value[preset])
+                    scale->x = maximum.value[preset];
             }
-            scale->value.y = scale->value.z = scale->value.x;
+            scale->y = scale->z = scale->x;
         }
     }
 }
@@ -1377,21 +1158,21 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
 void MenuModelNavelMove(MenuModelUnit *unit)
 {
     Matrix4 matrix;
-    MenuModelActor *actor = unit->actor;
-    MenuModelTransformControl *control = &actor->menu;
+    Actor *actor = unit->actor;
+    ActorMenuControl *control = &actor->menu;
 
     actor->rotation = control->rotation;
     actor->scale = control->scale;
     xglMatrixStackUnit();
-    xglMatrixStackRotX(actor->rotation.value.x);
-    xglMatrixStackRotY(actor->rotation.value.y);
-    xglMatrixStackScale(&actor->scale.value.x);
-    xglMatrixStackTrans(&control->position.value.x);
+    xglMatrixStackRotX(actor->rotation.x);
+    xglMatrixStackRotY(actor->rotation.y);
+    xglMatrixStackScale(&actor->scale.x);
+    xglMatrixStackTrans(&control->position.x);
     xglMatrixStackSave(matrix);
-    actor->position.value.x = control->position.value.x - matrix[3][0];
-    actor->position.value.y = control->position.value.y - matrix[3][1];
-    actor->position.value.z = control->position.value.z - matrix[3][2];
-    actor->position.value.w = 1.0f;
+    actor->position.x = control->position.x - matrix[3][0];
+    actor->position.y = control->position.y - matrix[3][1];
+    actor->position.z = control->position.z - matrix[3][2];
+    actor->position.w = 1.0f;
     /* VF2 retains position.w; VF2/VF3 and arithmetic flags are scratch here. */
     __asm__ __volatile__(
         "lqc2 vf3,0(%0)\n\t"
@@ -1399,96 +1180,94 @@ void MenuModelNavelMove(MenuModelUnit *unit)
         "vadd.xyz vf2,vf2,vf3\n\t"
         "sqc2 vf2,0(%1)\n\t"
         : : "r"(&control->offset), "r"(&actor->position) : "memory");
-    xglFontDebugPrintf(98, 32, navelRotationXFormat, (double)actor->rotation.value.x);
-    xglFontDebugPrintf(98, 40, navelRotationYFormat, (double)actor->rotation.value.y);
-    xglFontDebugPrintf(98, 48, navelRotationZFormat, (double)actor->rotation.value.z);
-    xglFontDebugPrintf(98, 56, navelScaleXFormat, (double)actor->scale.value.x);
+    xglFontDebugPrintf(98, 32, navelRotationXFormat, (double)actor->rotation.x);
+    xglFontDebugPrintf(98, 40, navelRotationYFormat, (double)actor->rotation.y);
+    xglFontDebugPrintf(98, 48, navelRotationZFormat, (double)actor->rotation.z);
+    xglFontDebugPrintf(98, 56, navelScaleXFormat, (double)actor->scale.x);
 }
 
 void MenuModelMotionSet(MenuModelMotionTarget *target, unsigned int dataId)
 {
-    MenuModelMotionActor *actor;
+    Actor *actor;
 
     actor = target->actor;
     ACT_setMotion(actor, dataId);
-    actor->motionFlags |= 8;
+    actor->animation.slot.flags |= 8;
 }
 
-void ModelDrawTypeOpen01(MenuModelActor *actor)
+void ModelDrawTypeOpen01(Actor *actor)
 {
-    unsigned char *state;
+    ActorMenuControl *control;
     float progress;
 
-    state = MENU_MODEL_ACTOR_DRAW_STATE(actor);
-    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) + modelDrawOpen01Step;
-    *MENU_MODEL_DRAW_STATE_PROGRESS(state) = progress;
+    control = &actor->menu;
+    progress = control->transparency + modelDrawOpen01Step;
+    control->transparency = progress;
     if (progress >= 1.0f) {
-        *MENU_MODEL_DRAW_STATE_PROGRESS(state) = 1.0f;
-        *MENU_MODEL_DRAW_STATE_FUNC(state) = 0;
+        control->transparency = 1.0f;
+        control->drawTypeFunction = 0;
     }
 }
 
-void ModelDrawTypeClose01(MenuModelActor *actor)
+void ModelDrawTypeClose01(Actor *actor)
 {
-    unsigned char *state;
+    ActorMenuControl *control;
     float progress;
 
-    state = MENU_MODEL_ACTOR_DRAW_STATE(actor);
-    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) - modelDrawClose01Step;
-    *MENU_MODEL_DRAW_STATE_PROGRESS(state) = progress;
+    control = &actor->menu;
+    progress = control->transparency - modelDrawClose01Step;
+    control->transparency = progress;
     if (progress <= 0.0f) {
-        *MENU_MODEL_DRAW_STATE_PROGRESS(state) = 0.0f;
-        *MENU_MODEL_DRAW_STATE_FUNC(state) = 0;
+        control->transparency = 0.0f;
+        control->drawTypeFunction = 0;
     }
 }
 
-void ModelDrawTypeClose02(MenuModelActor *actor)
+void ModelDrawTypeClose02(Actor *actor)
 {
-    unsigned char *state;
+    ActorMenuControl *control;
     float minProgress;
     float progress;
 
-    state = MENU_MODEL_ACTOR_DRAW_STATE(actor);
+    control = &actor->menu;
     minProgress = modelDrawClose02MinProgress;
-    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) - modelDrawClose02Step;
-    *MENU_MODEL_DRAW_STATE_PROGRESS(state) = progress;
+    progress = control->transparency - modelDrawClose02Step;
+    control->transparency = progress;
     if (progress <= minProgress) {
-        *MENU_MODEL_DRAW_STATE_PROGRESS(state) = minProgress;
-        *MENU_MODEL_DRAW_STATE_FUNC(state) = 0;
+        control->transparency = minProgress;
+        control->drawTypeFunction = 0;
     }
 }
 
-static void MenuModelDrawTypeSet(MenuModelActor *actor, int drawType)
+static void MenuModelDrawTypeSet(Actor *actor, int drawType)
 {
-    MenuModelActorDrawTypeView *actorView;
-    MenuModelDrawTypeState *state;
+    ActorMenuControl *control;
 
     if (actor == 0) {
         return;
     }
-    actorView = (MenuModelActorDrawTypeView *) actor;
-    state = &actorView->drawTypeState;
+    control = &actor->menu;
     switch (drawType) {
     case 0:
-        state->progress = 1.0f;
+        control->transparency = 1.0f;
         break;
     case 1:
-        state->progress = 0.0f;
+        control->transparency = 0.0f;
         break;
     case 2:
-        state->drawTypeFunction = ModelDrawTypeOpen01;
+        control->drawTypeFunction = ModelDrawTypeOpen01;
         break;
     case 3:
-        state->drawTypeFunction = ModelDrawTypeClose01;
+        control->drawTypeFunction = ModelDrawTypeClose01;
         break;
     case 4:
-        state->drawTypeFunction = ModelDrawTypeClose02;
+        control->drawTypeFunction = ModelDrawTypeClose02;
         break;
     }
 }
 
 void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex) {
-    MenuModelActor *actor;
+    Actor *actor;
     MenuModelWeapon *weapon;
 
     if (unit != 0) {
@@ -1514,12 +1293,12 @@ void MenuModelUnitOpen(MenuModelUnit *unit, int drawType)
 
 void MenuModelDrawTypeMain(MenuModelDrawContext *context)
 {
-    MenuModelDrawable *drawable;
+    Actor *actor;
 
-    drawable = context->drawable;
-    if (drawable != 0) {
-        if (drawable->drawFunc != 0) {
-            drawable->drawFunc(drawable);
+    actor = context->actor;
+    if (actor != 0) {
+        if (actor->menu.drawTypeFunction != 0) {
+            actor->menu.drawTypeFunction(actor);
         }
     }
 }
@@ -1527,7 +1306,7 @@ void MenuModelDrawTypeMain(MenuModelDrawContext *context)
 static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
 {
     MenuModelWeapon *weapon;
-    MenuModelActor *actor;
+    Actor *actor;
     MenuModelUnit *unit;
     void *resource;
 
@@ -1547,7 +1326,7 @@ static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
             resource = unit->weapon[0]->resource;
         }
     }
-    switch ((unsigned char)weapon->taskPhase) {
+    switch (weapon->taskPhase) {
     case 0:
         weapon->extFuncFlag = 0;
         weapon->taskPhase = 1;
@@ -1593,10 +1372,10 @@ static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
 static void tskMenuModelTaskMain(XglTaskPrefix *task)
 {
     MenuModelUnit *unit;
-    MenuModelActor *actor;
-    MenuModelTransformControl *control;
+    Actor *actor;
+    ActorMenuControl *control;
     MenuModelWeapon **weaponSlot;
-    MenuModelTransformVector zero;
+    DoublewordAlignedVector4 zero;
     int remainingWeapons;
     int terminatingPhase;
     void *resource;
@@ -1607,7 +1386,7 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
     if (MenuModelFlag & 1) {
         unit->taskPhase = -1;
     }
-    switch ((unsigned char)unit->taskPhase) {
+    switch (unit->taskPhase) {
     case 0:
         unit->extFuncFlag = 0;
         unit->taskPhase = 1;
@@ -1648,7 +1427,7 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
         return;
     }
     if (unit->extFunc1 != 0) {
-        ((void (*)(MenuModelUnit *, void *))unit->extFunc1)(unit, unit->extFunc2);
+        unit->extFunc1(unit, unit->extFunc2);
     }
     if (actor != 0) {
         control = &actor->menu;
@@ -1656,9 +1435,9 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
         xglStudioGetCamera2(0)->active = 1;
         if (control->enabled == 0) {
             memset(&zero, 0, sizeof(zero));
-            zero.value.w = 1.0f;
+            zero.w = 1.0f;
             {
-                MenuModelTransformVector one = {{1.0f, 1.0f, 1.0f, 1.0f}};
+                DoublewordAlignedVector4 one = {1.0f, 1.0f, 1.0f, 1.0f};
                 actor->position = zero;
                 actor->rotation = zero;
                 actor->scale = one;
@@ -1674,11 +1453,11 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
             MenuModelDrawTypeMain((MenuModelDrawContext *)unit);
         }
         ACT_updateMotion(actor);
-        ACT_modelDraw((Actor *)actor);
+        ACT_modelDraw(actor);
         if (control->enabled == 0) {
             control->enabled = 1;
-            control->position = actor->navel;
-            unit->unusedByCreateInit0 = 1;
+            control->position = actor->globalPosition;
+            unit->active = 1;
         }
     }
 }
@@ -1695,7 +1474,7 @@ static void CreateInit(MenuModelUnit *unit)
     int weaponIndex;
 
     unit->taskPhase = 0;
-    unit->unusedByCreateInit0 = 0;
+    unit->active = 0;
     unit->extFunc1 = 0;
     unit->extFunc2 = 0;
     unit->unusedByCreateInit1 = 0;
@@ -1749,10 +1528,10 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
     }
 
     if (unit->unitData->weaponResource[weaponIndex] == 0x13) {
-        MenuModelActor *actor = unit->actor;
+        Actor *actor = unit->actor;
 
         ACT_setMotion(actor, 2);
-        actor->motionFlags |= 8;
+        actor->animation.slot.flags |= 8;
         return 0;
     }
 
@@ -1799,7 +1578,7 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
     return (XglTaskPrefix *)weapon;
 }
 
-void MenuModelCreate(int *result, int modelId)
+void MenuModelCreate(void **result, int modelId)
 {
     MenuModelUnit *unit;
 
@@ -1842,12 +1621,12 @@ void MenuModelCreate(int *result, int modelId)
         unit->unusedByCreateInit1 = func_A191C0(modelId);
     if (result != 0) {
         unit->unusedByCreateInit4 = result;
-        *result = (int)unit;
+        *result = unit;
     }
     MenuModelResourceRequest(&unit->resource, unit->resourceId, 0);
 }
 
-void MenuModelExtFuncSet(MenuModelUnit *unit, void *extFunc1, void *extFunc2)
+void MenuModelExtFuncSet(MenuModelUnit *unit, void (*extFunc1)(MenuModelUnit *, void *), void *extFunc2)
 {
     if (unit != 0) {
         unit->extFunc2 = extFunc2;
@@ -1856,9 +1635,9 @@ void MenuModelExtFuncSet(MenuModelUnit *unit, void *extFunc1, void *extFunc2)
     }
 }
 
-MenuModelActor *MenuModelWeaponActorGet(MenuModelUnit *unit, int weaponIndex)
+Actor *MenuModelWeaponActorGet(MenuModelUnit *unit, int weaponIndex)
 {
-    MenuModelActor *actor;
+    Actor *actor;
     MenuModelWeapon *weapon;
 
     actor = 0;

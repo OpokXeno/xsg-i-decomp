@@ -1,25 +1,24 @@
 #include "common.h"
 #include "shared.h"
+#include "main/window_tex_load.h"
 #include "window_tex_load.h"
+#include "main/file.h"
 
 /* The defining headers supply the flags and renderer callback layouts. */
 #define GAME_LOOP_FLAG_UMN 0x04000000
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
-typedef struct {
-    unsigned char menu_state[4];
-    unsigned char item_selection;
-    signed char sub_selection;
-    unsigned char unmodeled_06[10];
-    Quadword reset_work[7];
-} MenuWorkState;
-
-typedef struct {
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char unmodeled_03;
+/* The background colour as the four bytes endBackTexDraw reads (red, green,
+ * blue, alpha) and as the named channels MenuBgTaskMain writes. */
+typedef union {
+    struct {
+        unsigned char r;
+        unsigned char g;
+        unsigned char b;
+        unsigned char a;
+    };
+    unsigned char rgba[4];
 } MenuBgColor;
 
 typedef struct {
@@ -44,19 +43,15 @@ typedef union {
     unsigned long long words[14];
 } MenuLightConfig;
 
-typedef struct MenuBgCameraSnapshot {
-    u64 words[0x5f0 / 8];
-} MenuBgCameraSnapshot;
-
 extern MenuWorkState MenuWork;
 extern unsigned char MenuKeepSelect[0x64];
 extern MenuBgColor MenuBgRgba;
 extern XglTaskScheduler *MenuBgTask;
-extern int MenuModelOut[4];
+extern void *MenuModelOut[4];
 extern int UmnSimulationNo;
 extern int MenuScenarioNo;
-extern int MenuModelWorkTop;
-extern void *UmnGunoDataBaseTop;
+extern unsigned char *MenuModelWorkTop;
+extern UmnGunoRecord *UmnGunoDataBaseTop;
 extern short UmnKosmosSpecialBox[4];
 extern XglTaskScheduler *MenuTask_XMX;
 extern unsigned char *MainMenuWorkEnd;
@@ -78,9 +73,8 @@ extern XglTaskScheduler * MenuTask;
 extern unsigned char * MenuWinAddr;
 extern MenuBgTaskParameters * MenuBgParam;
 extern int MenuBgCameraId;
-extern u64 * MenuBgKeepCamera;
+extern StudioCamera *MenuBgKeepCamera;
 extern const MenuModelPath tairetuTexturePath;
-extern const UmnTextPageMap menuTextPageTable;
 extern int MenuHddCheck;
 extern int debug_flag;
 extern const char OpenCloseCfwinPath[32];
@@ -92,8 +86,6 @@ extern unsigned char model_work[4];
 extern unsigned char MenuBackRgba[4];
 
 extern void MenuModelDirectSendZClear(void);
-extern void endBackTexDraw(MenuBgColor *color);
-
 /*
  * The second argument here is not a real parameter of dataUnitOrgGet (which
  * takes only the character index): it is whatever value the loop-continue
@@ -117,7 +109,7 @@ MenuWorkState MenuWork = { 0 };
 /* Twelve consecutive five-byte saved menu-selection records. */
 unsigned char MenuKeepSelect[0x64] = { 0 };
 
-int MenuModelOut[4] = { 0 };
+void *MenuModelOut[4] = { 0 };
 
 XglRenderFadeCallback MenuCfTaiki[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
@@ -213,15 +205,15 @@ int MenuSelectMove(int selection, int count, int wrap)
     if (count < 2)
         return selection;
 
-    if (PadData[0].repeat == 0x1000) {
+    if (PadData[0].direction_repeated == 0x1000) {
         if (selection != 0 || wrap ||
-            PadData[0].trigger == PadData[0].repeat) {
+            PadData[0].direction_pressed == PadData[0].direction_repeated) {
             movement = -1;
         }
     }
-    if (PadData[0].repeat == 0x4000) {
+    if (PadData[0].direction_repeated == 0x4000) {
         if (selection != count - 1 || wrap ||
-            PadData[0].trigger == PadData[0].repeat)
+            PadData[0].direction_pressed == PadData[0].direction_repeated)
             movement = 1;
     }
     if (movement) {
@@ -242,7 +234,7 @@ int MenuSelectMove2(int selection, int count)
     if (count < 2)
         return selection;
 
-    switch (PadData[0].repeat) {
+    switch (PadData[0].direction_repeated) {
     case 0x1000:
         movement = -2;
         break;
@@ -434,10 +426,10 @@ unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
     float camera_rotation_x;
     float camera_rotation_z;
     float camera_position_z;
-    u64 *saved_end;
+    StudioCamera *saved_end;
     StudioCamera *camera;
-    u64 *camera_words;
-    u64 *saved_words;
+    StudioCamera *live_camera;
+    StudioCamera *saved_camera;
     u32 align_mask;
     MenuBgTaskParameters *param_base;
     unsigned char *color;
@@ -446,15 +438,15 @@ unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
 
     align_mask = ~15U;
     MenuBgTask = (XglTaskScheduler *)(((u32)(work + 15)) & align_mask);
-    work = (unsigned char *)xglTaskInitial(MenuBgTask, 16, 0);
+    work = xglTaskInitial(MenuBgTask, 16, 0);
     param_base = (MenuBgTaskParameters *)(((u32)(work + 127)) & ~127U);
     MenuBgParam = param_base;
-    camera_words = (u64 *)xglStudioGetCamera2(camera_id);
+    live_camera = xglStudioGetCamera2(camera_id);
     MenuBgKeepCamera =
-        (u64 *)(((u32)((unsigned char *)param_base + 0x84f)) & align_mask);
-    saved_words = MenuBgKeepCamera;
-    saved_end = saved_words + 0xbe;
-    *(MenuBgCameraSnapshot *)saved_words = *(MenuBgCameraSnapshot *)camera_words;
+        (StudioCamera *)(((u32)param_base + 0x84f) & align_mask);
+    saved_camera = MenuBgKeepCamera;
+    saved_end = saved_camera + 1;
+    *saved_camera = *live_camera;
     MenuBgCameraId = camera_id;
     camera = xglStudioGetCamera2(camera_id);
     xglCameraInit(camera);
@@ -476,7 +468,7 @@ unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
     tyaMenuBgEntry(MenuBgTask, MenuBgParam);
 
     color_value = -128;
-    color = (unsigned char *)&MenuBgRgba;
+    color = MenuBgRgba.rgba;
     for (color_index = 2; color_index >= 0; --color_index)
         color[color_index] = color_value;
     return (unsigned char *)saved_end;
@@ -491,21 +483,21 @@ void MenuBgTaskMain(void)
         MenuBgRgba.g = level;
         MenuBgRgba.b = level;
     }
-    endBackTexDraw(&MenuBgRgba);
+    endBackTexDraw(MenuBgRgba.rgba);
     xglTaskExecute(MenuBgTask);
     MenuModelDirectSendZClear();
 }
 
 void MenuBgTaskBreak(void)
 {
-    u64 *saved_words;
-    u64 *camera_words;
+    StudioCamera *saved_camera;
+    StudioCamera *live_camera;
 
     MenuBgParam->tasks_finished = -1;
     MenuBgTaskMain();
-    camera_words = (u64 *)xglStudioGetCamera2(MenuBgCameraId);
-    saved_words = MenuBgKeepCamera;
-    *(MenuBgCameraSnapshot *)camera_words = *(MenuBgCameraSnapshot *)saved_words;
+    live_camera = xglStudioGetCamera2(MenuBgCameraId);
+    saved_camera = MenuBgKeepCamera;
+    *live_camera = *saved_camera;
 }
 
 unsigned char *MenuTairetuLoad(unsigned char *buffer, int load_flags)
@@ -546,7 +538,7 @@ void MainMenu(void)
 {
     MenuLightConfig lighting;
     void *light;
-    int *out;
+    void **out;
     int index;
 
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.width << 5,
@@ -573,10 +565,10 @@ void MainMenu(void)
     xglLightDirection(light, 1, lighting.light.direction[1]);
     xglLightIntensityParallel(light, 2, lighting.light.parallel[2]);
     xglLightDirection(light, 2, lighting.light.direction[2]);
-    MenuModelWorkTop = (int)GameResourceWorkAlloc(0x500000);
-    MainMenuWorkEnd = (unsigned char *)MenuModelWorkTop + 0x480000;
-    MainMenuWorkEnd = (unsigned char *)MenuModelInit((int)MainMenuWorkEnd);
-    MenuModelMemoryInit((void *)MenuModelWorkTop, 0x480000);
+    MenuModelWorkTop = GameResourceWorkAlloc(0x500000);
+    MainMenuWorkEnd = MenuModelWorkTop + 0x480000;
+    MainMenuWorkEnd = MenuModelInit(MainMenuWorkEnd);
+    MenuModelMemoryInit(MenuModelWorkTop, 0x480000);
     MenuModelMemorySet(10);
     out = MenuModelOut;
     index = 3;
@@ -595,7 +587,7 @@ void MainMenu(void)
     MainMenuWorkEnd = (unsigned char *)UmnGunoDataBaseTop + 0xd00;
     MainMenuWorkEnd = MenuBackModelSet(MainMenuWorkEnd);
     memset(&MenuWork, 0, 0x80);
-    endBackTexDraw((MenuBgColor *)-1);
+    endBackTexDraw((unsigned char *)-1);
     xglSleep();
     MainMenuWorkEnd = MenuMapExTextLoad(MainMenuWorkEnd, 1);
     MenuFontLoad(1, 1);
@@ -784,7 +776,7 @@ void UmnInterface(void)
     for (unit_id = 0x22; unit_id < 0x3f; ++unit_id, ++record) {
         UmnUnitInitRecord *unit_init;
         UmnUnitTextRecord *unit_text;
-        UmnTextLookup *text;
+        MenuTextEntry *text;
         short page;
         int text_id;
 
@@ -806,7 +798,7 @@ void UmnInterface(void)
             page = text_pages.menu_page[unit_text->name_page];
             text_id = unit_text->name_id + ((int)page << 16);
             text = MenuTextGet(text_id);
-            strcpy(record->name, text->text);
+            strcpy(record->name, text->name);
         } else {
             record->name[0] = default_character;
         }
@@ -815,7 +807,7 @@ void UmnInterface(void)
             page = text_pages.menu_page[unit_text->description_page];
             text_id = unit_text->description_id + ((int)page << 16);
             text = MenuTextGet(text_id);
-            strcpy(record->description, text->text);
+            strcpy(record->description, text->name);
         } else {
             record->description[0] = default_character;
         }
@@ -825,7 +817,7 @@ void UmnInterface(void)
     MenuModelAllBreak();
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.height << 5,
                             sRender.flip_base << 5);
-    endBackTexDraw((MenuBgColor *)-1);
+    endBackTexDraw((unsigned char *)-1);
     xglSleep();
     xglSleep();
     xglCdLoadOverlay(2);
@@ -835,7 +827,7 @@ void UmnInterface(void)
     xglCdLoadOverlay(1);
     xglSleep();
     UmnkosmosSpecialSet();
-    MenuModelMemoryInit((void *)MenuModelWorkTop, 0x480000);
+    MenuModelMemoryInit(MenuModelWorkTop, 0x480000);
 }
 
 void UmnMailMain(int menuId)
@@ -880,7 +872,7 @@ unsigned char *UmnMailDataGet(int box_id)
 
 void UmnDataBaseMonsterSet(int monster_id)
 {
-    UmnDataBase *state = (UmnDataBase *)UmnDataBaseStateData;
+    UmnDataBase *state = UmnDataBaseStateData;
     int bit_number = monster_id - 0x22;
 
     if ((unsigned int)bit_number < 0x1d) {
@@ -891,7 +883,7 @@ void UmnDataBaseMonsterSet(int monster_id)
 
 int UmnDataBaseMonsterCheck(int monster_id)
 {
-    UmnDataBase *state = (UmnDataBase *)UmnDataBaseStateData;
+    UmnDataBase *state = UmnDataBaseStateData;
     int bit_number = monster_id - 0x22;
     int result = 0;
 
@@ -905,7 +897,7 @@ int UmnDataBaseMonsterCheck(int monster_id)
 
 void UmnDataBaseAnalisisSet(int monster_id)
 {
-    UmnDataBase *state = (UmnDataBase *)UmnDataBaseStateData;
+    UmnDataBase *state = UmnDataBaseStateData;
     int bit_number = monster_id - 0x22;
 
     if ((unsigned int)bit_number < 0x1d) {
@@ -916,7 +908,7 @@ void UmnDataBaseAnalisisSet(int monster_id)
 
 int UmnDataBaseAnalisisCheck(int monster_id)
 {
-    UmnDataBase *state = (UmnDataBase *)UmnDataBaseStateData;
+    UmnDataBase *state = UmnDataBaseStateData;
     int bit_number = monster_id - 0x22;
     int result = 0;
 
@@ -928,7 +920,7 @@ int UmnDataBaseAnalisisCheck(int monster_id)
     return result;
 }
 
-int hen(void)
+void *hen(void)
 {
     return MenuModelInit(0);
 }
@@ -953,13 +945,13 @@ unsigned char MenuTask_BG[4] = { 0 };
 
 int MenuScenarioNo = 0;
 
-int MenuModelWorkTop = 0;
+unsigned char *MenuModelWorkTop = 0;
 
 int mini_game_no = 0;
 
 int MenuHddCheck = 0;
 
-void *UmnGunoDataBaseTop = 0;
+UmnGunoRecord *UmnGunoDataBaseTop = 0;
 
 short UmnKosmosSpecialBox[4] = { 0 };
 
@@ -1003,6 +995,6 @@ MenuBgTaskParameters * MenuBgParam = 0;
 
 int MenuBgCameraId = 0;
 
-u64 * MenuBgKeepCamera = 0;
+StudioCamera *MenuBgKeepCamera = 0;
 
 MenuBgColor MenuBgRgba = { 0 };

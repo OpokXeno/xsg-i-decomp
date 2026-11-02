@@ -1,5 +1,6 @@
 #include "common.h"
 #include "ssd_3.h"
+#include "main/ssd_3.h"
 
 enum {
     RSSD_CMD_INIT_PCM_STREAM              = 0xa0,

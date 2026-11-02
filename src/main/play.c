@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/play.h"
 #include "play.h"
 #include "main/jni.h"
 
@@ -18,7 +19,7 @@ void PLAY_setupDefault(Play *play)
     play->cameraIndex = -1;
     play->endTime = 3.3333335f;
     play->frameStep = 0.033333335f;
-    play->state = 0;
+    play->signal = 0;
     play->startTime = 0.0f;
     play->currentTime = 0.0f;
     play->flags = 0;
@@ -53,7 +54,7 @@ void PLAY_setup(Play *play)
         camera->mode[2] = 0x10;
     }
 
-    play->state = 0;
+    play->signal = 0;
     if (play->source != 0) {
         start_time = (float)play->source->startFrame * 0.033333335f;
         end_time = (float)play->source->endFrame * 0.033333335f;
@@ -69,7 +70,7 @@ void PLAY_setTimeChart(Play *play, void *timeChart)
 }
 
 void PLAY_setObserver(Play *play, int chart_index, int key_index,
-                      SceneObject argument, SceneMethod *method)
+                      SceneObject argument, JavaMethod *method)
 {
     PlayObserver *observer;
     int i;
@@ -172,7 +173,7 @@ void PLAY_ctrl(void)
         current_time = play->currentTime;
         end_time = play->endTime;
         if (end_time < current_time) {
-            play->state = 0xFF;
+            play->signal = 0xFF;
             if (play->flags & PLAY_FLAG_LOOP) {
                 current_time = play->startTime;
                 play->currentTime = current_time;
@@ -219,7 +220,7 @@ void PLAY_ctrl(void)
 
 TCHParams *PLAY_getCallBackParams(Play *play)
 {
-    play->callbackParams.class_ref = classJava_xeno_util_TCHParams->instance_class_ref;
+    play->callbackParams.class_ref = classJava_xeno_util_TCHParams->classPointer;
     return &play->callbackParams;
 }
 

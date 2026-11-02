@@ -5,15 +5,10 @@
 #ifndef SRC_MAIN_UNDULATE_H
 #define SRC_MAIN_UNDULATE_H
 
-typedef struct LayoutHeader LayoutHeader;
+#include "main/Undulate.h"
 
 struct UnduDataHeader;
 
-/* Collision mode in the wall-attribute header. */
-typedef struct UnduWallAttrHeader {
-    unsigned char unmodeled_00[8];
-    unsigned short flags;
-} UnduWallAttrHeader;
 
 /* Each wall-attribute table entry consists of two words. */
 typedef union UnduWallAttributes {
@@ -80,28 +75,8 @@ typedef struct UnduColiHead {
     UnduColiRecord *records;
 } UnduColiHead;
 
-typedef struct UnduDataHeaderGroup {
-    unsigned short firstIdentifier;
-    unsigned short headerCount;
-    float (*headers)[4];
-} UnduDataHeaderGroup;
 
-typedef struct UnduDataHeaderSubList {
-    short headerCount;
-    unsigned char unmodeled_02[2];
-    struct UnduDataHeader *headers;
-} UnduDataHeaderSubList;
 
-typedef struct UnduDataHeaderIndex {
-    unsigned char type;
-    unsigned char firstCount;
-    unsigned char secondCount;
-    unsigned char groupCount;
-    struct UnduDataHeader *firstHeaders;
-    struct UnduDataHeader *secondHeaders;
-    UnduDataHeaderGroup *groups;
-    UnduDataHeaderSubList *subLists;
-} UnduDataHeaderIndex;
 
 typedef struct UnduGameLoopState {
     unsigned char unmodeled_00[0x5c];
@@ -111,7 +86,7 @@ typedef struct UnduGameLoopState {
 /* Per-map undulation (terrain height) work data. */
 typedef struct UnduWork {
     unsigned char unmodeled_00[0x50];
-    UnduWallAttrHeader *wallAttrHeader;
+    struct UnduQueryParameters *wallAttrHeader;
     int subCount;           /* 0x54: number of collision sub-primitives to test */
     unsigned char *vertexData;
     unsigned char *normalData;

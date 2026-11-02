@@ -3,28 +3,33 @@
 
 #include "shared.h"
 #include "main/find_native_method.h"
-
-typedef union VMSlot {
-    int i;
-    float f;
-    void *ref;
-    unsigned char b;
-    short s;
-    unsigned short c;
-} VMSlot;
-
-struct VMClass {
-    unsigned char unmodeled_00[4];
-    SceneString *name;
-    unsigned char unmodeled_08[2];
-    unsigned short type_flags;
-    unsigned char unmodeled_0c[0x2d];
-    signed char type_code;
-    unsigned char element_size;
-};
+#include "main/jni.h"
 
 extern JavaClass *classClass;
 extern JavaClass *classObject;
-extern SceneClass *classString;
+extern JavaClass *classString;
+
+/* Functions and data used by other translation units. */
+extern SceneString *TYPE_Void;
+extern JavaClass *classBoolean;
+extern JavaClass *classChar;
+extern JavaClass *classShort;
+extern JavaClass *classInt;
+extern JavaClass *classLong;
+extern JavaClass *classFloat;
+extern JavaClass *classDouble;
+extern SceneString *NAME_Constructor;
+extern SceneString *NAME_Init;
+extern void *initVMThread;
+extern SceneString *ATTR_Code;
+extern SceneString *ATTR_Exceptions;
+extern SceneString *ATTR_LineNumberTable;
+extern SceneString *ATTR_ConstantValue;
+extern void (*jthreadResetFunc)(void);
+/* Never dereferenced here: initVM only clears the list head. */
+extern void *jthreadTop;
+/* The whole 8-byte record (config/symbols/main.txt), cleared a halfword at
+ * a time; no instruction in initVM reads any of it back. */
+extern unsigned short XTK_peerGroup[4];
 
 #endif /* INCLUDE_MAIN_INIT_VM_H */

@@ -491,17 +491,17 @@ char *STR_tokenGetNext(char *text, const char *delimiters) {
 static char *STR_getLine(char *destination, char *source, char *limit) {
     int character;
 
-    while ((character = (signed char)*source) < 0x21 && character != 0) {
+    while ((character = *source) < 0x21 && character != 0) {
         source++;
     }
 
     if (source < limit) {
-        character = (signed char)*source++;
+        character = *source++;
         if (character != ';') {
             do {
                 if (character == '/' && *source == '/') {
                     for (;;) {
-                        character = (signed char)*source++;
+                        character = *source++;
                         if (character >= 128) {
                             source++;
                         } else if (character == '\n' || character == 0) {
@@ -510,7 +510,7 @@ static char *STR_getLine(char *destination, char *source, char *limit) {
                     }
                 } else if (character == '#') {
                     for (;;) {
-                        character = (signed char)*source++;
+                        character = *source++;
                         if (character >= 128) {
                             source++;
                         } else if (character == '\n' || character == 0) {
@@ -524,7 +524,7 @@ static char *STR_getLine(char *destination, char *source, char *limit) {
                 if (source >= limit) {
                     break;
                 }
-                character = (signed char)*source++;
+                character = *source++;
             } while (character != ';');
         }
     }

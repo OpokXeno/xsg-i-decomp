@@ -51,12 +51,6 @@ typedef struct DoorParams {
     unsigned int initialization_state; /* +0x44: cleared by InitMapDoor */
 } DoorParams;
 
-typedef union DoorPosition {
-    Vector4 values;
-    float lanes[4]; /* scalar view of values; the stores into the linked unit index this */
-    u64 words[2];
-} DoorPosition;
-
 /*
  * A map door's runtime state. InitMapDoor and MAP_updateUnitDoor (main:
  * 0x002c4760, 0x002c4a18, this TU, still assembly) construct and drive it;
@@ -67,46 +61,41 @@ typedef struct DoorUnit {
     unsigned int flags; /* +0x00: InitMapDoor sets the initialized bit */
     void (*update_func)(struct DoorUnit *); /* +0x04 */
     unsigned char unmodeled_008[8];
-    float model_x; /* +0x10: position copied from the model after movement */
-    float model_y; /* +0x14 */
-    float model_z; /* +0x18 */
-    float model_w; /* +0x1c */
+    union {
+        AlignedVector4 model_position; /* +0x10: position copied from the model after movement (GetPartsPos for linked units) */
+        float model_lanes[4]; /* +0x10: scalar view of model_position; MAP_updateUnitDoor's stores into the linked unit index it */
+        struct {
+            float model_x; /* +0x10 */
+            float model_y; /* +0x14 */
+            float model_z; /* +0x18 */
+            float model_w; /* +0x1c */
+        };
+    };
     unsigned char unmodeled_020[0x60];
     DoorModel *model; /* +0x80 */
     unsigned char unmodeled_084[0x1c];
     unsigned char sound_channel; /* +0xa0: xglSoundEffect*ID channel base (calls add 1) */
     unsigned char unmodeled_0a1;
-    signed char open_phase; /* +0xa2: 1 opening, 2 open, 3 closing (this allocation's assigned values) */
+    unsigned char open_phase; /* +0xa2: 1 opening, 2 open, 3 closing (this allocation's assigned values); loaded with lbu */
     unsigned char unmodeled_0a3;
     short door_number; /* +0xa4: printed by the event-door debug logs */
     unsigned char unmodeled_0a6[2];
     unsigned short open_timer; /* +0xa8 */
     short close_delay; /* +0xaa */
     unsigned char unmodeled_0ac[4];
-    DoorPosition resting_position; /* +0xb0: original ld/sd copies */
-    float x; /* +0xc0 */
-    float y; /* +0xc4 */
-    float z; /* +0xc8 */
-    float w; /* +0xcc */
+    AlignedVector4 resting_position; /* +0xb0: original ld/sd copies */
+    union {
+        AlignedVector4 position; /* +0xc0: original ld/sd copy from model_position */
+        struct {
+            float x; /* +0xc0 */
+            float y; /* +0xc4 */
+            float z; /* +0xc8 */
+            float w; /* +0xcc */
+        };
+    };
     unsigned char unmodeled_0d0[0xd0];
     DoorParams params; /* +0x1a0 */
+    unsigned char unmodeled_1e8[0x118]; /* the MapUnit[] entry is 0x300 bytes; a linked door is that entry */
 } DoorUnit;
-
-/* MapUnit records use the same 0x300-byte stride as the map data. */
-typedef struct DoorMapUnit {
-    unsigned char unmodeled_000[0x10];
-    DoorPosition model_position; /* +0x10: position written by GetPartsPos */
-    unsigned char unmodeled_020[0x60];
-    DoorModel *model; /* +0x80 */
-    unsigned char unmodeled_084[0x1e];
-    signed char open_phase; /* +0xa2: linked doors are marked complete */
-    unsigned char unmodeled_0a3[5];
-    unsigned short open_timer; /* +0xa8 */
-    unsigned char unmodeled_0aa[0x16];
-    DoorPosition position; /* +0xc0: original ld/sd copy from model_position */
-    unsigned char unmodeled_0d0[0xd0];
-    DoorParams params; /* +0x1a0 */
-    unsigned char unmodeled_1e8[0x118];
-} DoorMapUnit;
 
 #endif /* SRC_MAIN_INIT_MAP_DOOR_H */

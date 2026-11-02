@@ -2,11 +2,15 @@
 #include "shared.h"
 #include "jthread.h"
 #include "main/jni.h"
+#include "main/jthread.h"
+#include "main/init_vm.h"
+#include "main/act_1.h"
+#include "main/twsys_init.h"
+#include "main/scene_1.h"
 
 /*
- * This TU's own view of the VM thread list node that src/main/chr.h (main's
- * chr TU) defines in full as `JThread`; only the fields the functions below
- * read are named here (chr.h's `previous` at +0x04 stays unmodeled):
+ * The VM thread list node, `JThread` in include/main/jni.h. The functions
+ * below read these members of it (its `previous` at +0x04 is not read here):
  *
  *   +0x08 next           JTHREAD_info, JTHREAD_get (lw a1,8(a1) at
  *                        0x00305970) and JTHREAD_cntl (lw s0,8(s0) at
@@ -30,46 +34,7 @@
  *   +0x34 wait_parameter the wait's second operand: a frame count or a
  *                        motion number (lw at 0x00305764/0x00305804).
  */
-typedef struct JThreadNode {
-    unsigned char unmodeled_00[8];
-    struct JThreadNode *next;           /* +0x08 */
-    unsigned char kind;                 /* +0x0c */
-    unsigned char wait_kind;             /* +0x0d */
-    unsigned char unmodeled_0e[0x10 - 0x0e];
-    SceneObject object;                 /* +0x10 */
-    void (*reset)(struct JThreadNode *thread); /* +0x14 */
-    unsigned char unmodeled_18[0x24 - 0x18];
-    unsigned int flags;                 /* +0x24 */
-    unsigned char unmodeled_28[0x30 - 0x28];
-    void *wait_target;                  /* +0x30 */
-    int wait_parameter;                 /* +0x34 */
-} JThreadNode;
 
-/*
- * The actor JTHREAD_waitFor's wait_target points at when wait_kind is 4 or
- * 6. src/main/chr.h (main's chr TU) completes the whole record as `Actor`;
- * only the two words this function reads are restated here, under this
- * TU's own tag: `flags` bit 1 (0x2) gates cases 4/6 (andi 0x2 at
- * 0x003057e8/0x003057fc) and the byte at +0x81 is the motion value case 5
- * compares against wait_parameter (lbu v1,129(v0) at 0x00305808).
- */
-typedef struct JThreadActorRef {
-    unsigned int flags; /* +0x00 */
-    unsigned char unmodeled_04[0x81 - 0x04];
-    unsigned char motion; /* +0x81 */
-} JThreadActorRef;
-
-/*
- * The menu or window object JTHREAD_waitFor's wait_target points at when
- * wait_kind is 3. Several TUs complete this family of objects in full
- * (e.g. src/main/tslider_create.h's own `state` at the same +0x14); only
- * that one halfword is restated here, under this TU's own tag (lhu
- * v1,20(v0) at 0x00305790, compared against 2).
- */
-typedef struct JThreadWindowRef {
-    unsigned char unmodeled_00[0x14];
-    unsigned short state; /* +0x14 */
-} JThreadWindowRef;
 
 /*
  * One entry of a thread's symbol chain: JTHREAD_getSymbol scans a flat
@@ -80,17 +45,6 @@ typedef struct JThreadSymbol {
     int id;    /* +0x00 */
     int valid; /* +0x04, zero terminates the chain */
 } JThreadSymbol;
-
-extern JThreadNode *jthreadTop;
-
-/*
- * The thread-list reset hook: jthreadResetFunc collects a pending
- * whole-runtime reset request that a node's own reset hook may raise. This
- * runs the reset hook of every active (kind != 0), pending-work (flags &
- * 0x10) node in turn, stopping early the moment that happens, then runs the
- * collected runtime reset once and clears it.
- */
-extern void (*jthreadResetFunc)(void);
 
 const char jthreadPeerName[] = "peer";
 
@@ -176,7 +130,7 @@ void JTHREAD_defaultChr(JThreadHandle *thread)
 void JTHREAD_default(JThreadHandle *thread)
 {
     SceneObject object;
-    SceneMethod *method;
+    JavaMethod *method;
     SceneObject arguments[4];
     unsigned int flags;
     int result;
@@ -202,7 +156,7 @@ void JTHREAD_default(JThreadHandle *thread)
 void JTHREAD_defaultScene(JThreadHandle *thread)
 {
     SceneObject object;
-    SceneMethod *method;
+    JavaMethod *method;
     SceneObject arguments[4];
     unsigned int flags;
     int result;
@@ -232,30 +186,20 @@ void JTHREAD_defaultStage(JThreadHandle *thread)
 {
     JThreadStageObject *object;
     SceneObject stage_object;
-    SceneClass *scene_class;
-    SceneMethod *method;
-    /*
-     * The method's own name-and-signature record: the same shape as
-     * SceneClassName (an unmodeled span, then a string at +8), read
-     * through this TU's own cast since src/main/init_class_db.c owns
-     * SceneMethod's completed body (lw 0(s0) at 0x003056d8).
-     */
-    SceneClassName **method_name_slot;
-    SceneClassName *method_name;
+    JavaClass *scene_class;
+    JavaMethod *method;
     SceneObject arguments[4];
     int output;
 
-    object = (JThreadStageObject *)thread->object;
+    object = thread->object;
     stage_object = object->stage;
     if (stage_object != 0) {
-        scene_class = ((SceneObjectHeader *)stage_object)->class_ref->scene_class;
+        scene_class = ((ObjectHeader *)stage_object)->classPointer->clazz;
         method = thread->method;
         if (method != 0) {
-            method_name_slot = (SceneClassName **)method;
-            method_name = *method_name_slot;
             xglFontDebugPrintf(0, 8, jthreadDottedNameFormat,
-                scene_class->name->binary_name,
-                method_name->binary_name);
+                scene_class->name->bytes,
+                method->name->bytes);
             arguments[0] = stage_object;
             JNI_callMethod(thread, method, arguments, &output);
         }
@@ -272,25 +216,25 @@ void JTHREAD_init(void)
  * waits, 0x1 too) and sets flag 0x2 on it. Out-of-range wait_kind values do
  * nothing.
  */
-void JTHREAD_waitFor(JThreadNode *thread)
+void JTHREAD_waitFor(JThread *thread)
 {
     switch (thread->wait_kind & 0xf) {
     case 1:
-        thread->wait_target = (void *)((int)thread->wait_target + 1);
-        if ((int)thread->wait_target >= thread->wait_parameter) {
+        thread->wait_target.elapsed_frames = thread->wait_target.elapsed_frames + 1;
+        if (thread->wait_target.elapsed_frames >= thread->wait_parameter) {
             thread->flags = (thread->flags & ~0x4) | 0x2;
         }
         break;
 
     case 3:
-        if (((JThreadWindowRef *)thread->wait_target)->state == 2) {
+        if (((TComponent *)thread->wait_target.object)->state == 2) {
             thread->flags = (thread->flags & ~0x4) | 0x2;
         }
         break;
 
     case 2:
     {
-        JThreadNode *other = (JThreadNode *)thread->wait_target;
+        JThread *other = thread->wait_target.thread;
         if (other->flags & 0x8) {
             other->flags &= ~0x8;
             thread->flags = (thread->flags & ~0x4) | 0x2;
@@ -299,19 +243,19 @@ void JTHREAD_waitFor(JThreadNode *thread)
     }
 
     case 4:
-        if (!(((JThreadActorRef *)thread->wait_target)->flags & 0x2)) {
+        if (!(((Actor *)thread->wait_target.object)->flags & 0x2)) {
             thread->flags = (thread->flags & ~0x5) | 0x2;
         }
         break;
 
     case 6:
-        if (!(((JThreadActorRef *)thread->wait_target)->flags & 0x2)) {
+        if (!(((Actor *)thread->wait_target.object)->flags & 0x2)) {
             thread->flags = (thread->flags & ~0x5) | 0x2;
         }
         break;
 
     case 5:
-        if (((JThreadActorRef *)thread->wait_target)->motion ==
+        if (((Actor *)thread->wait_target.object)->signal ==
             thread->wait_parameter) {
             thread->flags = (thread->flags & ~0x4) | 0x2;
         }
@@ -327,7 +271,7 @@ void JTHREAD_waitFor(JThreadNode *thread)
 
 void JTHREAD_info(void)
 {
-    JThreadNode *thread = jthreadTop;
+    JThread *thread = jthreadTop;
 
     if (thread != 0) {
         do {
@@ -354,7 +298,7 @@ JThreadSymbol *JTHREAD_getSymbol(JThreadSymbol *symbols, int id)
 
 void JTHREAD_cntl(void)
 {
-    JThreadNode *node = jthreadTop;
+    JThread *node = jthreadTop;
 
     while (node != 0) {
         if ((node->flags & 0x10) != 0 && node->kind != 0) {
@@ -377,9 +321,9 @@ void JTHREAD_cntl(void)
  * Searches the active thread list from jthreadTop for the node whose
  * object matches, returning it or 0 when none does.
  */
-JThreadNode *JTHREAD_get(SceneObject object)
+JThread *JTHREAD_get(SceneObject object)
 {
-    JThreadNode *node = jthreadTop;
+    JThread *node = jthreadTop;
 
     if (node != 0) {
         do {

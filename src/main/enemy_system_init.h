@@ -2,16 +2,12 @@
 #define ENEMY_SYSTEM_INIT_H
 
 #include "shared.h"
-
-/* GameLoopState is opaque here; only this scalar offset is evidenced
- * (sw zero at 0x002d3e44, absolute-addressed through a lui/sw pair rather
- * than gp-relative). */
-typedef unsigned int GameLoopStateWords[];
+#include "main/enemy_1.h"
 
 /* The enemy record ACT_createEnemy builds: one 0xa70-byte slot of `actor`
  * and its 0x38b0-byte `enepc` entry, modelled only as far as this TU writes
  * them. Member names come from the readers:
- *   - EnemyInitParams (actor + 0xc0): Enemy_Init copies a preset record into
+ *   - params (EnemyParamsInitView, actor + 0xc0): Enemy_Init copies a preset record into
  *     it when preset_index is not -1 and otherwise copies locator_distance,
  *     move_kind, body_radius and event_type into the work entry; it divides
  *     route_value_count by 3 and homing_value_count by 4 for the point counts;
@@ -36,46 +32,49 @@ typedef unsigned int GameLoopStateWords[];
  *     (Actor_LookAt_Init writes 0 and -1, as here); effects holds the
  *     sefCreateEffectCf results, effect_next the ring index into it and
  *     effect_interval the frame count between them.
- * The value_<actor offset> members have no identified reader yet; only their
- * offsets, widths and the values written here are evidenced. */
-typedef struct EnemyInitParams {
+ * Member names are the canonical EnemyParams names (include/main/enemy_1.h).
+ * Partial view of EnemyParams: the same bytes, but the full type changes this
+ * object. ACT_createEnemy stores move_kind as a halfword (sh at +0x2a, the
+ * big-endian high byte is +0x2a), while enemy_1.c loads the byte at +0x2a; the
+ * canonical unsigned char keeps enemy_1.c's object, this view keeps this one. */
+typedef struct EnemyParamsInitView {
     float route_step_length;
     float chase_distance;
-    float value_c8;
+    float move_speed;
     float chase_speed;
     float sight_angle;
     float sight_distance;
-    short value_d8;
+    short stiff_duration;
     short pause_interval;
-    short value_dc;
+    short threat_duration;
     short threat_interval;
-    short value_e0;
+    short turn_duration;
     short gravity_mode;
     float locator_distance;
     short wall_attribute;
     short move_kind;
     int preset_index;
-    unsigned char unmodeled_30[0x4];
+    float *route_values;
     int route_value_count;
-    unsigned char unmodeled_38[0x4];
+    Vector4 *homing_values;
     int homing_value_count;
     float body_radius;
     int ex_motion_resource;
     float value_108;
     int event_type;
-    short value_110[8];
+    short monster_set_numbers[8];
     int value_120;
     int locator_flags;
     float hearing_distance;
-    short value_12c;
+    short encounter_event_flags;
     short light_level;
     short default_motion_table[7];
     unsigned char unmodeled_7e[0x182];
     int value_2c0;
     int value_2c4;
     unsigned char unmodeled_208[0x18];
-    short value_2e0[4];
-} EnemyInitParams;
+    short linked_actors[4];
+} EnemyParamsInitView;
 
 typedef struct EnemyInitWork {
     unsigned char unmodeled_00[0x4];
@@ -88,7 +87,7 @@ typedef struct EnemyInitWork {
     unsigned char unmodeled_44[0x4];
     signed char action;
     unsigned char unmodeled_49[0x1f];
-    signed char marker_68;
+    signed char encounter_side;
     unsigned char unmodeled_69[0x1];
     unsigned char effect_state;
     unsigned char unmodeled_6b[0x1];
@@ -109,7 +108,7 @@ typedef struct EnemyInitWork {
     short route_value[64][4];
     short route_state[64];
     unsigned char unmodeled_3720[0x80];
-    short state_37a0;
+    short homing_point_count;
     unsigned char freeze_state;
     unsigned char turn_lock;
     short target_number;
@@ -122,8 +121,8 @@ typedef struct EnemyInitWork {
     unsigned char unmodeled_37de[0x2];
     int turn_flags;
     unsigned char unmodeled_37e4[0x3c];
-    short turn_state_3820;
-    short turn_state_3822;
+    short movement_step;
+    short movement_duration;
     unsigned char unmodeled_3824[0x8];
     short turn_frame;
     short turn_duration;
@@ -137,15 +136,17 @@ typedef struct EnemyInitWork {
     unsigned char unmodeled_38ae[0x2];
 } EnemyInitWork;
 
-typedef struct EnemyInitActor {
+/* Partial view of Actor (include/main/act_1.h): params (EnemyParamsInitView) at +0xc0 and the
+ * undulation array at +0x4c8 are TU-local sub-records the canonical record does not carry. */
+typedef struct ActorEnemyInitView {
     unsigned int flags;
-    void (*update)(struct EnemyInitActor *actor);
+    void (*update)(struct ActorEnemyInitView *actor);
     unsigned char unmodeled_08[0x78];
     unsigned char number;
     unsigned char unmodeled_81[0x5];
     short id;
     unsigned char unmodeled_88[0x38];
-    EnemyInitParams params;
+    EnemyParamsInitView params;
     unsigned char unmodeled_2e8[0x1e0];
     unsigned char undulation[0x524];
     short lookat_timer;
@@ -155,28 +156,20 @@ typedef struct EnemyInitActor {
     short effect_interval;
     short effect_next;
     unsigned char unmodeled_a34[0x3c];
-} EnemyInitActor;
+} ActorEnemyInitView;
 
-/* GameLoopState[1] is the player's actor: ACT_createEnemy reads its number
- * through it (lw at 0x002d4280, lbu 0x80 at 0x002d4284). */
-extern GameLoopStateWords GameLoopState;
-
-/* Buffer addresses Enemy_SystemInit fills with xglCdReadFile, one per
- * enemy resource file (data\matumoto\enemy.dat, spline.dat, bikkuri.lex,
- * hatena.lex, maru.lex and sikaku.lex in that order). res_get_path.c reads
- * AdrsEnemyPreset back as the buffer Enemy_LoadPreset fills; this TU only
- * ever writes the six, so their pointee type stays unmodelled. */
-extern void *AdrsEnemyPreset;
+/* GameLoopState is opaque here; its entries are the pointers this TU
+ * evidences: entry 1 is the player's actor, which ACT_createEnemy reads its
+ * number through (lw at 0x002d4280, lbu 0x80 at 0x002d4284), and the word at
+ * +0x1c is zeroed by Enemy_SystemInit (sw zero at 0x002d3e44, absolute-addressed
+ * through a lui/sw pair rather than gp-relative). */
+extern ActorEnemyInitView *GameLoopState[];
 
 extern void *AdrsEnemySpline;
-extern void *AdrsEnemyExclamation;
-extern void *AdrsEnemyQuestion;
-extern void *AdrsEnemySphere;
-extern void *AdrsEnemySquare;
-extern EnemyInitActor actor[64];
+extern ActorEnemyInitView actor[64];
 
 extern EnemyInitWork enepc[16];
 
-EnemyInitActor *ACT_createEnemy(int number, int id);
+ActorEnemyInitView *ACT_createEnemy(int number, int id);
 
 #endif

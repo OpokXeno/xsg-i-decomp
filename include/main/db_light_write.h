@@ -3,23 +3,57 @@
 
 #include "shared.h"
 
+typedef struct Matrix4Block {
+    Matrix4 value;
+} Matrix4Block;
+
+enum CursorMode {
+    CURSOR_MODE_NONE = -1,
+    CURSOR_MODE_0,
+    CURSOR_MODE_1,
+    CURSOR_MODE_2,
+    CURSOR_MODE_3,
+    CURSOR_MODE_4
+};
+
+/* Callback registered on the visualizer cursor by VW_setCursorFunc, invoked
+ * with the caller argument stored alongside it. */
+typedef void (*CursorCallback)(void *argument);
+
 /*
- * VW_getCursor copies the three floats stored at cursor+0x10/+0x14/+0x18
- * into a homogeneous output vector and forces w to 1.0f.
- *
- * Bounded users prove discrete facts only: VW_setCursorMode writes a mode
- * word at cursor+0, VW_setCursor writes the XYZ floats at
- * cursor+0x10/+0x14/+0x18, drawCursor reads cursor+0x10 as a translation
- * vector and writes 1.0f at cursor+0x1c, VW_setCursorFunc writes two words
- * at cursor+0x50/+0x54, and updateCursorMode2 copies an actor position into
- * cursor+0x10..+0x18. The complete 96-byte cursor object declaration,
- * its historical type name, its source file and its original TU are not
- * proven, so this header makes no size, member or layout claim beyond the
- * access below: the extern array is incomplete (no element count), and
- * index 1 selects the evidenced 16-byte position slot at +0x10 using only
- * the demonstrated HomogeneousVector type. Slot 0, slots 2..N and the
- * bytes at +0x04..+0x0F, +0x1C..+0x4F and +0x58..+0x5F are unclaimed here.
+ * The visualizer cursor: the retail ELF has a GLOBAL OBJECT named cursor at
+ * 0x0099C7F0 with size 0x60. VW_setCursorMode writes the mode word at +0,
+ * VW_setCursor, VW_getCursor and drawCursor use the position at +0x10, and
+ * VW_setCursorFunc stores the callback pair at +0x50/+0x54.
  */
-extern HomogeneousVector cursor[];
+typedef struct CursorState {
+    enum CursorMode mode;
+    union { int flag_04; int submode; };
+    int actor_index;
+    int step;
+    HomogeneousVector position;
+    unsigned char unmodeled_20[0x10];
+    int attach_state;
+    union { int flag_34; struct Actor *attached_actor; };
+    union {
+        struct {
+            unsigned char unmodeled_38[0x0c];
+            float offset_44;
+            unsigned char unmodeled_48[8];
+        };
+        struct {
+            unsigned char unmodeled_38_to_40[8];
+            HomogeneousVector attach_offset;
+        };
+    };
+    CursorCallback callback;
+    void *callback_argument;
+    unsigned char unmodeled_58[8];
+} CursorState;
+
+extern CursorState cursor;
+
+/* Functions and data used by other translation units. */
+void EvtTools(void);
 
 #endif /* INCLUDE_MAIN_DB_LIGHT_WRITE_H */

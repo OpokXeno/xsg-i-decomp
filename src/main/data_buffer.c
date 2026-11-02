@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/data_buffer.h"
 #include "data_buffer.h"
 
 void DataBuffer_init(DataBuffer *buffer, DataBufferByte *base, int length, int big_endian)

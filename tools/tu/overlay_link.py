@@ -10,6 +10,7 @@ by the allocation step.
 import argparse
 import hashlib
 import json
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,12 @@ def sha(path):
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def gp_value(elf):
+    """ri_gp_value of the object's SHT_MIPS_REGINFO, or None without one."""
+    reg = next((s for s in elf.sections if s.type == 0x70000006 and s.size >= 24), None)
+    return struct.unpack_from("<i", elf.data, reg.offset + 20)[0] if reg else None
 
 
 def alloc_symbols(elf):
@@ -288,15 +295,43 @@ def allocate(root, record, tu, raw, out, report):
             raise SystemExit(f"allocation refused: {name} owner address is not pinned")
 
     tc = Toolchain(root)
-    ld = tc.dir("ps2dev-binutils") / "mips64r5900el-ps2-elf-ld"
+    binutils = tc.dir("ps2dev-binutils")
+    ld = binutils / "mips64r5900el-ps2-elf-ld"
+    objcopy = binutils / "mips64r5900el-ps2-elf-objcopy"
     out.parent.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run(["timeout", "-k", "5", "30", str(ld), "-r", "-d", "-EL",
-                           "-m", "elf32lr5900", "-o", str(out), str(raw)],
+    # GNU ld's relocatable MIPS link writes its own REGINFO ri_gp_value: `_gp`
+    # when defined, otherwise the lowest SHF_MIPS_GPREL section VMA + 0x7ff0,
+    # which for a -G0 object without small data is (bfd_vma)-1 + 0x7ff0 =
+    # 0x7fef. Pin it to the compiler object's own GP0 so allocation keeps the
+    # compiler's GP relocation context (and leaves GPREL addends as assembled),
+    # then drop the temporary absolute `_gp` again: it is not the TU's symbol.
+    gp0 = gp_value(source)
+    names_gp = any(s.name == "_gp" for s in source.symbols)
+    linked = out.with_name(out.name + ".gp.o") if gp0 is not None and not names_gp else out
+    ld_argv = [str(ld), "-r", "-d", "-EL", "-m", "elf32lr5900"]
+    if linked != out:
+        ld_argv += ["--defsym", f"_gp=0x{gp0 & 0xffffffff:x}"]
+    proc = subprocess.run(["timeout", "-k", "5", "30", *ld_argv, "-o", str(linked), str(raw)],
                           cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           text=True, check=False)
     if proc.returncode:
         raise SystemExit(f"ld -r -d failed ({proc.returncode}): {proc.stderr.strip()}")
+    commands = [ld_argv]
+    if linked != out:
+        objcopy_argv = [str(objcopy), "--strip-symbol=_gp"]
+        strip = subprocess.run(["timeout", "-k", "5", "30", *objcopy_argv, str(linked), str(out)],
+                               cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, check=False)
+        linked.unlink(missing_ok=True)
+        if strip.returncode:
+            raise SystemExit(f"objcopy --strip-symbol=_gp failed ({strip.returncode}): "
+                             f"{strip.stderr.strip()}")
+        commands.append(objcopy_argv)
     allocated = Elf(out.read_bytes())
+    if any(s.name == "_gp" for s in allocated.symbols) and not names_gp:
+        raise SystemExit("allocated output defines a temporary _gp symbol")
+    if gp0 is not None and gp_value(allocated) != gp0:
+        raise SystemExit(f"allocated output GP0 {gp_value(allocated)} != compiler GP0 {gp0}")
     allocated_sections = {s.name: s for s in allocated.sections}
     if not all((".scommon" in allocated_sections if s.shndx == SHN_SCOMMON
                 else (".bss" in allocated_sections or ".scommon" in allocated_sections))
@@ -346,7 +381,8 @@ def allocate(root, record, tu, raw, out, report):
                            size=s.size, alignment=s.value, bind=s.bind, type=s.type)
                       for s in common]),
                   output=allocation_evidence,
-                  command=[str(ld), "-r", "-d", "-EL", "-m", "elf32lr5900"],
+                  command=commands[0], commands=commands,
+                  gp0=dict(input=gp0, output=gp_value(allocated)),
                   stderr=proc.stderr,
                   final_link=rec.get("final_link", dict(status="pending")))
     report.parent.mkdir(parents=True, exist_ok=True)

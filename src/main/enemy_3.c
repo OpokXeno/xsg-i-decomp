@@ -1,5 +1,10 @@
 #include "common.h"
 #include "shared.h"
+#include "main/act_1.h"
+#include "main/get.h"
+#include "main/sef.h"
+#include "main/vibration.h"
+#include "main/xgl_2.h"
 
 #define ENEMY_RANDOM_DIRECTION_SCALE 0.0625f
 #define ENEMY_FULL_TURN (6.2831855f)
@@ -47,78 +52,36 @@ enum {
     ENEMY_ACTION_SPECIAL_SOUND_ID = 0x2201
 };
 
-typedef struct EnemyActionMotion {
-    unsigned char unmodeled_00[0x18];
-    u16 idle_motion_id;
-    unsigned char unmodeled_1a[2];
-    u16 reaction_motion_id;
-    unsigned char unmodeled_1e[2];
-} EnemyActionMotion;
-
-typedef struct EnemyActionActor {
-    u32 flags;
-    unsigned char unmodeled_04[0x0c];
-    float position[4];
-    unsigned char unmodeled_20[0x60];
-    u8 number;
-    unsigned char unmodeled_81[5];
-    short sound_effect_id;
-    unsigned char unmodeled_88[0x38];
-    EnemyActionMotion motion;
-    unsigned char unmodeled_e0[0x618];
-    float speed;
-    unsigned char unmodeled_6fc[0x2e8];
-    float target_angle;
-    float wall_check_parameter;
-} EnemyActionActor;
-
-typedef struct EnemyActionEffect {
-    unsigned char unmodeled_00[0x6bc];
-    EnemyActionActor *owner;
-    unsigned char unmodeled_6c0[0x3cc];
-    u32 flags;
-} EnemyActionEffect;
-
 typedef struct EnemyActionGameLoopState {
     unsigned char unmodeled_00[0x2a014];
-    EnemyActionEffect *shared_effect;
+    SchedulerState *shared_effect;
     unsigned char unmodeled_2a018[0x18];
 } EnemyActionGameLoopState;
 
 extern EnemyActionGameLoopState GameLoopState;
 
-extern short Get_DefaultMotion(EnemyActionActor *actor, short motion_number);
-extern void Set_Motion(EnemyActionActor *actor, short motion_id, short blend);
+extern short Get_DefaultMotion(Actor *actor, short motion_number);
+extern void Set_Motion(Actor *actor, short motion_id, short blend);
 
-extern void EnemySound(EnemyActionActor *actor, short sound_index,
+extern void EnemySound(Actor *actor, short sound_index,
                        signed char play, signed char ignore_type);
 
-extern void EnemySoundEnd(EnemyActionActor *actor, short sound_offset);
+extern void EnemySoundEnd(Actor *actor, short sound_offset);
 
-extern void Check_Wall(float distance_scale, float wall_parameter,
-                       float *position, signed char wall_status[16],
-                       int status_count, int wall_mask, u8 actor_number, int mode);
-
-extern float xglFRand(void);
-
-extern EnemyActionEffect *sefCreateEffectCf(int effect_id, int effect_number,
-                                             int value);
-
-extern void sefDeleteEffectCf(EnemyActionEffect *effect);
-extern void Vibration_Set_Weak(int duration);
-
+extern void sefDeleteEffectCf(SchedulerState *effect);
 /* Declared here, not at the top: moving it up changes the original code. */
 #include "enemy_3.h"
+#include "main/enemy_3.h"
 
-void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
+void Enemy_ActionReady(Actor *actor, signed char action)
 {
     EnemyReadyWork *work;
-    EnemyActionMotion *motion;
-    EnemyActionEffect *effect;
+    ActorJavaArgs *motion;
+    SchedulerState *effect;
     int action_index;
 
     work = &enepc[actor->number];
-    motion = &actor->motion;
+    motion = &actor->args;
 
     if ((actor->flags & ENEMY_ACTION_ENABLED) != 0) {
         work->action = action;
@@ -162,8 +125,8 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                 short available_count;
                 int random_direction;
 
-                Check_Wall(1.0f, actor->wall_check_parameter,
-                           actor->position, wall_directions,
+                Check_Wall(1.0f, actor->body_radius,
+                           &actor->position.x, wall_directions,
                            ENEMY_RANDOM_DIRECTION_COUNT, 772, actor->number, 0);
 
                 available_count = 0;
@@ -196,12 +159,12 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                         sefCreateEffectCf(ENEMY_EFFECT_WALL_REACTION, 0, 0);
                     Vibration_Set_Weak(30);
                 }
-                if (actor->sound_effect_id == ENEMY_ACTION_SPECIAL_SOUND_ID) {
+                if (actor->inUseId == ENEMY_ACTION_SPECIAL_SOUND_ID) {
                     work->effect = sefCreateEffectCf(
                         ENEMY_EFFECT_SPECIAL_REACTION, 0, 0);
                     if (work->effect != 0) {
                         effect = work->effect;
-                        effect->owner = actor;
+                        effect->caster = actor;
                         effect->flags &= ~ENEMY_EFFECT_DETACHED_FLAG;
                     }
                 }
@@ -231,7 +194,7 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                 break;
 
             case ENEMY_ACTION_REPLACE_EFFECT: {
-                EnemyActionEffect *replacement_effect;
+                SchedulerState *replacement_effect;
 
                 work->motion_id = work->initial_motion_id;
                 Set_Motion(actor, 30, ENEMY_MOTION_BLEND);
@@ -243,7 +206,7 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                 work->effect = sefCreateEffectCf(ENEMY_EFFECT_REPLACE, 0, 0);
                 if (work->effect != 0) {
                     replacement_effect = work->effect;
-                    replacement_effect->owner = actor;
+                    replacement_effect->caster = actor;
                     replacement_effect->flags &= ~ENEMY_EFFECT_DETACHED_FLAG;
                     if ((work->reaction_flags & ENEMY_REACTION_CREATE_EFFECT) != 0 &&
                         GameLoopState.shared_effect == 0) {
@@ -256,7 +219,7 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
             }
 
             case ENEMY_ACTION_EFFECT_SEQUENCE_A: {
-                EnemyActionEffect *prior_effect;
+                SchedulerState *prior_effect;
 
                 work->effect_state |= 1;
                 work->action_timer_a += ENEMY_ACTION_TIMER_STEP;
@@ -273,14 +236,14 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                     ENEMY_EFFECT_SEQUENCE_A_SECOND, 0, 0);
                 if (work->effect != 0) {
                     effect = work->effect;
-                    effect->owner = actor;
+                    effect->caster = actor;
                     effect->flags &= ~ENEMY_EFFECT_DETACHED_FLAG;
                 }
                 break;
             }
 
             case ENEMY_ACTION_EFFECT_SEQUENCE_B: {
-                EnemyActionEffect *prior_effect;
+                SchedulerState *prior_effect;
 
                 Set_Motion(actor, 29, ENEMY_MOTION_BLEND);
                 work->effect_state |= 2;
@@ -298,14 +261,14 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                     ENEMY_EFFECT_SEQUENCE_B_SECOND, 0, 0);
                 if (work->effect != 0) {
                     effect = work->effect;
-                    effect->owner = actor;
+                    effect->caster = actor;
                     effect->flags &= ~ENEMY_EFFECT_DETACHED_FLAG;
                 }
                 break;
             }
 
             case ENEMY_ACTION_EFFECT_SEQUENCE_C: {
-                EnemyActionEffect *prior_effect;
+                SchedulerState *prior_effect;
 
                 Set_Motion(actor, 28, ENEMY_MOTION_BLEND);
                 work->effect_state |= 4;
@@ -323,15 +286,15 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
                     ENEMY_EFFECT_SEQUENCE_C_FINAL, 0, 0);
                 if (work->effect != 0) {
                     effect = work->effect;
-                    effect->owner = actor;
+                    effect->caster = actor;
                     effect->flags &= ~ENEMY_EFFECT_DETACHED_FLAG;
                 }
                 break;
             }
 
             case ENEMY_ACTION_STOP_MOVEMENT:
-                work->saved_actor_speed = actor->speed;
-                actor->speed = 0.0f;
+                work->saved_actor_speed = actor->animation.slot.speed;
+                actor->animation.slot.speed = 0.0f;
                 break;
 
             }

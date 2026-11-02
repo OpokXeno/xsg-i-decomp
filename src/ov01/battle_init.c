@@ -759,16 +759,6 @@ void thinkNoSet(int thinkNo)
 }
 
 /*
- * The party's per-slot attack assignment (src/main/party.h
- * PartyAttackPosition: that TU-local header cannot be included from here).
- * Only the 4-byte stride and the two fields plUnitTblGet copies are modeled.
- */
-typedef struct PartyAttackSlot {
-    unsigned short partyId;      /* +0x0 */
-    signed char attackPosition;  /* +0x2 */
-} PartyAttackSlot;
-
-/*
  * plTbl (data still asm-owned; original ELF symbol name): three 8-byte
  * entries. plUnitTblGet and plUnitTblSet write only the first two fields of
  * each; nothing in this TU's C touches the remaining four bytes.
@@ -781,42 +771,33 @@ typedef struct PlUnitEntry {
 static PlUnitEntry plTbl[3];
 
 PlUnitEntry *plUnitTblGet(void) {
-    PartyAttackSlot *slot;
+    PartyAttackPosition *slot;
     PlUnitEntry *entry;
     int i;
 
-    slot = (PartyAttackSlot *)(PartyDataGet() + 0x30);
+    slot = PartyDataGet()->attack_slots;
     entry = plTbl;
     for (i = 0; i < 3; i++) {
-        entry->partyId = (short)slot->partyId;
-        entry->attackPosition = (short)slot->attackPosition;
+        entry->partyId = (short)slot->party_id;
+        entry->attackPosition = (short)slot->attack_position;
         slot++;
         entry++;
     }
     return plTbl;
 }
 
-/*
- * The party record's attack-slot table (src/main/party.h PartyDataPrefix:
- * attack_slots at +0x30), viewed with the offset inside the struct so that
- * index*4 + 0x30 is added before the record base (`addiu $4,$4,0x30` at
- * 0x00a0b6b8, `addu $2,$2,$4` at 0x00a0b6c0); partyId is stored first (`sb`
- * at 0x00a0b6cc ahead of the `sh`).
- */
-typedef struct PartyAttackView {
-    unsigned char unmodeled_00[0x30];
-    PartyAttackSlot attackSlots[3]; /* +0x30 */
-} PartyAttackView;
-
 /* Assign a party member and its attack position to slot `index`, both in the
- * party record and in plTbl. */
+ * party record (attack_slots at +0x30, so index*4 + 0x30 is added before the
+ * record base: `addiu $4,$4,0x30` at 0x00a0b6b8, `addu $2,$2,$4` at
+ * 0x00a0b6c0; partyId is stored first, `sb` at 0x00a0b6cc ahead of the `sh`)
+ * and in plTbl. */
 void plUnitTblSet(int index, int partyId, int attackPosition)
 {
-    PartyAttackView *party;
+    PartyDataPrefix *party;
 
-    party = (PartyAttackView *)PartyDataGet();
-    party->attackSlots[index].partyId = partyId;
-    party->attackSlots[index].attackPosition = attackPosition;
+    party = PartyDataGet();
+    party->attack_slots[index].party_id = partyId;
+    party->attack_slots[index].attack_position = attackPosition;
     plTbl[index].partyId = partyId;
     plTbl[index].attackPosition = attackPosition;
 }

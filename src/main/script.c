@@ -4,18 +4,41 @@
 #include "map_2.h"
 #include "unit.h"
 #include "shared.h"
+#include "main/act_1.h"
 #include "main/jni.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_thread.h"
 #include "main/xgl_2.h"
+#include "main/Undulate.h"
+#include "main/act_2.h"
+#include "main/exm_2.h"
+#include "main/find_native_method.h"
+#include "main/fx_screen_mask.h"
+#include "main/game.h"
+#include "main/game_debug_menu.h"
+#include "main/game_init_camera.h"
+#include "main/game_movie.h"
+#include "main/game_pause_disp.h"
+#include "main/jthread.h"
+#include "main/map_1.h"
+#include "main/map_2.h"
+#include "main/msg_init.h"
+#include "main/near_dir.h"
+#include "main/nml_model_set.h"
+#include "main/party.h"
+#include "main/res_get_path.h"
+#include "main/scene_1.h"
+#include "main/sef_print.h"
+#include "main/string_utf_get_hash.h"
+#include "main/tcamera.h"
+#include "main/twsys_init.h"
+#include "main/xgl_font.h"
+#include "main/xgl_pad.h"
+#include "main/xgl_sound.h"
 
 #define call_method_signature_void sig_2
 #define call_method_signature_int sig_3
 #define call_method_signature_int_int sig_4
-
-/* PadData (0x00490d90, 0xd0 bytes) read as one doubleword at +0x28, the
- * shared half_28/half_2a pair (original: lui 0x49; ld 3512). */
-#define PAD_DATA_DOUBLEWORD_AT_28 (PadData[0].packed_input)
 
 #define SCRIPT_FADE_COLOR(red, green, blue)                                    \
     (0x7F000000 + ((int)((red) * 127.0f) << 16) +                              \
@@ -26,13 +49,6 @@ typedef unsigned int Quadword __attribute__((mode(TI)));
 
 typedef void (*JSNativeMethod)(void);
 
-/* Only the halfword at GameLoopState+0xC is evidenced by
- * SCRIPT_sendMovieSkipSignal; the rest of the game-state record remains
- * scaffold-owned. */
-typedef struct GameLoopMovieStatePrefix {
-    u8 unmodeled_00[0xC];
-    unsigned short movie_state;
-} GameLoopMovieStatePrefix;
 
 /* TU-local observer and CallMethod declarations. */
 /* Proposal: the script table indexed by currentScriptDB. Only the two fields
@@ -53,38 +69,6 @@ typedef struct ScriptPdbFile {
     u8 unmodeled_00[8];
     int data;
 } ScriptPdbFile;
-
-/*
- * TU-local partial view of the engine's actor record (the 0xa70-strided
- * `actor` array at main 0x0043c1e0; other units keep their own scoped views
- * of the same record, e.g. src/main/near_dir.h). SCRIPT_execTalkto and
- * SCRIPT_execTouchto are handed one entry and read only the three members
- * below; every other byte of the record is untouched by this allocation and
- * stays an unmodeled span.
- *
- *   +0x4c0 script_object      the native actor peer passed to the talk
- *                             method as its first actor argument; the
- *                             talk and touch entry points check its
- *                             xeno/Chr class before queuing a task.
- *   +0x9f4 talk_method_name   the JNI method name of the actor's talk
- *                             script method, null when it has none. Both
- *                             entry points gate on it before queuing a talk
- *                             task, and SCRIPT_execTalkto passes it straight
- *                             through as the method to call. createTalkTask
- *                             (0x00261620, still assembler) passes its own
- *                             second argument to loadConstString(bytes,
- *                             length) (0x00261698), so the field is a name
- *                             string, not an integer flag.
- *   +0x9f8 touch_method_name  the method SCRIPT_execTouchto passes instead,
- *                             once the same +0x9f4 gate lets it through.
- */
-typedef struct ScriptActorMethods {
-    u8 unmodeled_00[0x4c0];
-    SceneObject script_object;      /* +0x4c0 */
-    u8 unmodeled_4c4[0x9f4 - 0x4c4];
-    const char *talk_method_name;   /* +0x9f4 */
-    const char *touch_method_name;  /* +0x9f8 */
-} ScriptActorMethods;
 
 typedef struct ScriptEventDebugState {
     int mode;
@@ -108,24 +92,12 @@ enum ScriptDebugWord {
     SCRIPT_DEBUG_SELECTION
 };
 
-struct ScriptWindParams {
-    char mode;
-    unsigned char unmodeled_01[7];
-    unsigned long long unmodeled_08;
-    Vector4 direction;
-    float shake_power;
-    float shake_time;
-    float shake_rad;
-    unsigned char unmodeled_2c[4];
-};
-
 extern const char debugBaseDirPath[];
 extern const char lightClassName[];
 extern const char systemEvtPath[];
 extern const char baseEvtPath[];
-extern const unsigned char memoryUsageFormat[];
+extern const char memoryUsageFormat[];
 extern unsigned char scriptSceneStartName[];
-extern int DebugMenuResourceSizeAdd;
 extern const char sceneStageClassPath[];
 extern char fpkExtension[];
 extern char arcExtension[];
@@ -142,7 +114,6 @@ extern char moveLabel[];
 extern char separatorLabel[];
 extern const char evtFrameFormat[];
 extern char classMethodFormat[];
-extern int vmDebugMask;
 extern const char fileOffText[24];
 extern const char execOffText[24];
 extern const char execOnText[24];
@@ -159,48 +130,20 @@ extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                        XglTaskPrefix *entry);
 
 extern int xglTaskRemove(XglTaskPrefix *task);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern SceneString *loadConstString(const char *bytes, int length);
 extern void *PLAY_getCurrent(void);
 extern void PLAY_setupDefault(void *play);
-extern void TCAMERA_init(void);
-extern void *newObject(SceneClass *scene_class);
-extern SceneClass *loadClass(SceneString *name, int initialize);
+extern JavaClass *loadClass(SceneString *name, int initialize);
 extern void STAGE_instance(SceneVm *vm, SceneObject stage_object);
-extern void SCENE_instance(SceneVm *vm, SceneObject scene_object);
-
-extern void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
-                        const char *method_name);
-
-extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+extern JavaMethod *findMethod(JavaClass *clazz, SceneString *name,
                                void *signature_or_type);
 
-extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
-                           SceneObject *arguments, int *output);
-
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 extern void JNI_initThread(SceneVm *vm);
 extern void JNI_catchException(void);
-extern int getScriptFlag(SceneObject object);
-void XTK_setWindowOwner(int owner);
 extern void actTalkAfter(SceneObject object);
 extern void initVM(void);
 extern void nmlModelSetFadeOut(int frames, int option);
-extern void nmlModelSetFadeIn(int frames, int option);
-extern void FX_ScreenMask(int unused, int color, int frames, int mode);
-extern void nmlModelSetBackBufferToBattle(int owner_index);
-extern void nmlModelSetFadeInCancel(int frames);
-extern void nmlModelSetFadeOutCancel(int frames);
-extern void nmlModelSetEffectWrite(int enabled);
 extern void nmlModelSendSignalEventFinish(void);
-extern void nmlModelSetGlobalPointLightReset(void);
-extern void MAP_initUnit(void);
-extern void ACT_initScene(void);
-extern void ACT_initMTNResource(void);
-extern void TWSYS_init(void);
-extern void MSG_init(void);
 extern void xglRenderClearColor(u32 color);
-extern void SCENE_cleanup(SceneVm *vm, SceneObject scene_object);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 extern void xglCameraClipRangeDefault(StudioCamera *camera);
 
@@ -211,7 +154,6 @@ extern void JNI_pushFrame(void);
 extern void JNI_loadNativeClass(void);
 void createTalkTask(void *actor, const char *method_name);
 extern void TWIN_initCF(void *window);
-extern SceneWindow *TWIN_create2(int component_id);
 extern void JS_init(int state, int class_capacity, int method_capacity);
 extern int JS_loadClass(const char *class_name);
 extern void JS_classSetup(int class_id, JSNativeMethod get_peer);
@@ -227,68 +169,44 @@ extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
 int loadScriptCD(ScriptDbEntry *entry, const char *path);
 
 int loadScriptCD2(ScriptDbEntry *entry, const char *path);
-void SCRIPT_load_DBG(const char *path);
 static int PauseSkipCheck(void);
 extern char *strcpy(char *destination, const char *source);
 extern unsigned int strlen(const char *string);
 extern void TWSYS_setGRPStatus(int group, int status);
 extern void initCursor(void);
 extern int sprintf(char *buffer, const char *format, ...);
-extern void DB_reset(int x, int y);
-extern void DB_println(const char *format, ...);
 extern void DB_lightWrite(int descriptor);
 extern void RSRC_init(int rc);
 extern char *RSRC_loadFile2(int rc, const char *directory, const char *name);
 extern int *RSRC_getItem(int rc, char *handle);
 extern void JS_exec(char *begin, char *end);
 extern int strncmp(const char *a, const char *b, unsigned int length);
-extern int MapGetNo(void);
-extern char *MapGetName(int map_no);
 extern void LoadMap2(int map_no, int entrance);
-ScriptDbEntry *SCRIPT_exec(void);
 static char *getStrIndex(char *string, unsigned int length, int ch);
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceClose(int descriptor);
 extern char *strrchr(const char *string, int ch);
 extern unsigned char xglFontLoad(int font_id, int flags);
 const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *path);
-extern void GamePauseDispEvent(void);
-extern void PartyTimePauseEnd(void);
 extern void PartyTimePauseStart(void);
 extern void xglRenderCopyDisp2Draw(void);
-extern void xglSoundStreamMute(void);
-extern void xglSoundStreamStop(int stream);
-extern void xglSoundEffectNormalDirect(int effect_id);
 extern u32 xheap_info(u8 *heap_info);
 extern void drawBox2(Matrix4 *matrix, int color);
 extern void drawRect2(Matrix4 *matrix, int color);
-extern int ACT_initMotion(void *actor);
-extern void ACT_matrixInit(void);
-extern void InitCfSystem(void);
-extern void UnduInit(unsigned char *state);
 extern void ACT_init(void);
 extern void nmlModelInit(void);
-extern void GameResourceReset(int mode);
 void sceneObserver(XglTaskPrefix *task_prefix);
-extern void GameMovieStop(void);
 extern void GameDefocusSet(int a, int b, int c);
-extern void MapChange2(int map_no);
 extern void initLight2(void);
 extern void initLight3(void);
 extern int updateLight(int mode);
-extern char *MAP_getPath(void);
-extern void ACT_initExMotion(int, int, void *);
 extern const char *JNI_searchClasses(void *, const char *, int, int *);
 extern void *RES_loadFile(int, int, const char *, int);
 extern int sceRead(int descriptor, void *buffer, unsigned int size);
 extern int sceLseek(int descriptor, int offset, int whence);
 extern void DB_cmode(int mode);
-extern void RES_GetMdlFileName(char *path, int resource_id);
-extern SceneThread *JTHREAD_get(SceneObject object);
 extern void JNI_initSystem(void *heap_base, int heap_size);
 extern void JNI_loadClassDB(int slot, void *image);
-extern void EXM_ClearWindStruct(void);
-
 const char lightSetColorMethodName[] = "setColor";
 
 const char lightSetDirection2MethodName[] = "setDirection2";
@@ -336,7 +254,7 @@ static const char sig_3[5] = "(I)V";
 /* "(II)V"  @ 0x004da478, ELF name "sig.4" */
 static const char sig_4[6] = "(II)V";
 
-static int windowOwner = 0;
+static void *windowOwner = 0;
 
 static const char * vmSwitchStr[12];
 
@@ -372,6 +290,7 @@ static int lightActFlags[4];
 
 /* Declared here, not at the top: moving it up changes the original code. */
 #include "script.h"
+#include "main/script.h"
 
 void talkCancel(ScriptObserverTask *task);
 void sceneObserver2(ScriptSceneTask *task);
@@ -380,7 +299,7 @@ void talktoObserver(ScriptObserverTask *task);
 void funcObserver(ScriptObserverTask *task);
 int getEmptyVM(ScriptObserverTask *observer);
 
-extern ScriptPadRecord PadData[2];
+extern XglPadRecord PadData[2];
 
 /* Reused TU-local declaration (src/core/main-0025a9c0/private.h and every
  * other GameLoopState-family accepted source in this unit). */
@@ -390,20 +309,16 @@ extern ScriptRenderState sRender;
 
 static ScriptFileSelect * fileSelect;
 
-extern ScriptActorRecord actor[64];
+extern Actor actor[64];
 
-extern ScriptWindow *TMENU_create(int component_id);
-extern ScriptWindow *TSLIDER_create(int component_id);
-extern void TMENU_addItem(ScriptWindow *menu, const char *text);
+extern MenuNativeScriptView *TMENU_create(int component_id);
+extern MenuNativeScriptView *TSLIDER_create(int component_id);
+extern void TMENU_addItem(MenuNativeScriptView *menu, const char *text);
 extern int xglCdFileSelect(ScriptFileSelect *state);
 extern void TWIN_dispose(TComponent *window);
 void attrObserver(ScriptObserverTask *task);
 
 static u32 heapUsed;
-
-extern ScriptActorRecord *ACT_create(int resource_id, int flags);
-extern int ACT_loadMotion(ScriptActorRecord *actor, int resource_id, int flags);
-extern void ACT_loadResource(ScriptActorRecord *actor, int resource_id);
 
 static int lightSave;
 
@@ -418,7 +333,7 @@ static void initJS(int state)
     JS_classAddMethod(class_id, lightSetDirection2MethodName, JS_classLight_setDirection2);
 }
 
-void SCRIPT_test(SceneObject argument, SceneMethod *method)
+void SCRIPT_test(SceneObject argument, JavaMethod *method)
 {
     JNI_initThread(stageVM);
     if (method != 0) {
@@ -469,9 +384,9 @@ void SCRIPT_sceneChangeTimeDec(void)
 
 void SCRIPT_sendMovieSkipSignal(void)
 {
-    GameLoopMovieStatePrefix *game_state = (GameLoopMovieStatePrefix *)&GameLoopState;
+    ScriptGameLoopState *game_state = &GameLoopState;
 
-    if (game_state->movie_state == 3)
+    if (game_state->kind == 3)
         s_nScriptEventFin = 1;
 }
 
@@ -620,36 +535,36 @@ void *SCRIPT_init(void *heap_base)
 
 void SCRIPT_execTalkto(void *actor)
 {
-    ScriptActorMethods *methods = (ScriptActorMethods *)actor;
+    Actor *record = (Actor *)actor;
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
 
-    if (methods->talk_method_name != 0 && entry->active != 0 &&
+    if (record->talk_method_name != 0 && entry->active != 0 &&
         s_nScriptTalkLock == 0 &&
-        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0) {
+        JNI_isInstanceOf(record->java_object, classJava_xeno_Chr) != 0) {
         do {
             JThread *thread = entry->thread;
 
             if (!JNI_isInstanceOf(thread->object, classJava_xeno_Stage))
                 break;
-            createTalkTask(actor, methods->talk_method_name);
+            createTalkTask(actor, record->talk_method_name);
         } while (0);
     }
 }
 
 void SCRIPT_execTouchto(void *actor)
 {
-    ScriptActorMethods *methods = (ScriptActorMethods *)actor;
+    Actor *record = (Actor *)actor;
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
 
-    if (methods->talk_method_name != 0 && entry->active != 0 &&
+    if (record->talk_method_name != 0 && entry->active != 0 &&
         s_nScriptTalkLock == 0 &&
-        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0) {
+        JNI_isInstanceOf(record->java_object, classJava_xeno_Chr) != 0) {
         do {
             JThread *thread = entry->thread;
 
             if (!JNI_isInstanceOf(thread->object, classJava_xeno_Stage))
                 break;
-            createTalkTask(actor, methods->touch_method_name);
+            createTalkTask(actor, record->touch_method_name);
         } while (0);
     }
 }
@@ -658,8 +573,8 @@ void createTalkTask(void *actor, const char *method_name)
 {
     JThread *thread;
     SceneObject receiver;
-    SceneClass *scene_class;
-    SceneMethod *method;
+    JavaClass *scene_class;
+    JavaMethod *method;
     ScriptObserverTask *task;
     XglTaskScheduler *scheduler;
 
@@ -667,7 +582,7 @@ void createTalkTask(void *actor, const char *method_name)
         return;
     thread = scriptDB[currentScriptDB].thread;
     receiver = thread->object;
-    scene_class = ((SceneObjectHeader *)receiver)->class_ref->scene_class;
+    scene_class = ((ObjectHeader *)receiver)->classPointer->clazz;
     method = findMethod(scene_class, loadConstString(method_name, -1),
                         loadConstString(sig0_0, -1));
     if (method != 0) {
@@ -699,8 +614,8 @@ void createTalkTask(void *actor, const char *method_name)
             task->object = 0;
         }
         task->method_signature = sig1_1;
-        window = (TComponent *)TWIN_create2(-1);
-        window->class_ref = classJava_xeno_util_Window->instance_class_ref;
+        window = TWIN_create2(-1);
+        window->class_ref = classJava_xeno_util_Window->classPointer;
         TWIN_initCF(window);
         window->flags &= ~0x40;
         window->flags &= ~0x80;
@@ -712,7 +627,7 @@ void createTalkTask(void *actor, const char *method_name)
     task->object = actor;
     Before_Talk(actor);
     GameLoopState.flags |= 0x9000;
-    XTK_setWindowOwner((int)actor);
+    XTK_setWindowOwner(actor);
     JNI_initThread(stageVM);
     talktoObserver(task);
 }
@@ -721,8 +636,8 @@ void talktoObserver(ScriptObserverTask *task)
 {
     unsigned int owner_flags = task->owner->flags;
     SceneObject receiver;
-    SceneObject object;
-    SceneMethod *method;
+    void *object;
+    JavaMethod *method;
     int script_flags;
     SceneObject arguments[3];
 
@@ -737,8 +652,8 @@ void talktoObserver(ScriptObserverTask *task)
 
     receiver = task->receiver;
     {
-        SceneObjectHeader *header = (SceneObjectHeader *)receiver;
-        SceneClass *scene_class = header->class_ref->scene_class;
+        ObjectHeader *header = (ObjectHeader *)receiver;
+        JavaClass *scene_class = header->classPointer->clazz;
         SceneString *name = loadConstString(task->method_name, -1);
         SceneString *signature = loadConstString(task->method_signature, -1);
 
@@ -752,7 +667,7 @@ void talktoObserver(ScriptObserverTask *task)
     object = task->object;
     script_flags = getScriptFlag(object);
     if (task->argument2 != 0 && (script_flags & 8)) {
-        if (UseVMFlag != 0 || (PAD_DATA_DOUBLEWORD_AT_28 & 0x600000) == 0x400000) {
+        if (UseVMFlag != 0 || (PadData[0].button_state & 0x600000) == 0x400000) {
             XTK_setWindowOwner(0);
             talkCancel(task);
             return;
@@ -768,7 +683,7 @@ void talktoObserver(ScriptObserverTask *task)
      */
     method = task->method;
     arguments[0] = receiver;
-    arguments[1] = ((ScriptActorMethods *)object)->script_object;
+    arguments[1] = ((Actor *)object)->java_object;
     if (task->argument2 != 0)
         arguments[2] = (SceneObject)task->argument2;
     JNI_callMethod(stageVM, method, arguments, 0);
@@ -983,11 +898,11 @@ void funcObserver(ScriptObserverTask *task)
         while (0);
 
     {
-        SceneObjectHeader *header = (SceneObjectHeader *)task->object;
-        SceneClass *scene_class = header->class_ref->scene_class;
+        ObjectHeader *header = (ObjectHeader *)task->object;
+        JavaClass *scene_class = header->classPointer->clazz;
         SceneString *name = loadConstString(task->method_name, -1);
         SceneString *signature = loadConstString(task->method_signature, -1);
-        SceneMethod *method = findMethod(scene_class, name, signature);
+        JavaMethod *method = findMethod(scene_class, name, signature);
         SceneObject arguments[3];
 
         task->method = method;
@@ -1081,7 +996,7 @@ static char *replacePathExt(char *path, const char *ext)
 void attrObserver(ScriptObserverTask *task)
 {
     SceneObject object = task->object;
-    SceneMethod *method;
+    JavaMethod *method;
     int vm_slot;
     ScriptMethodArgument arguments[2];
 
@@ -1098,8 +1013,8 @@ void attrObserver(ScriptObserverTask *task)
         task->state_flags |= 1;
     }
     {
-        SceneObjectHeader *header = (SceneObjectHeader *)object;
-        SceneClass *scene_class = header->class_ref->scene_class;
+        ObjectHeader *header = (ObjectHeader *)object;
+        JavaClass *scene_class = header->classPointer->clazz;
         SceneString *name = loadConstString("entered", -1);
         SceneString *signature = loadConstString("(I)V", -1);
 
@@ -1128,7 +1043,7 @@ static int PauseSkipCheck(void)
     if ((GameLoopState.flags & 0x90000000) != 0)
         return 1;
     if (GameLoopState.input_delay != 0 ||
-        (((ScriptPadButtons *)PadData)->pressed & 0x800) == 0)
+        (PadData[0].pressed & 0x800) == 0)
         return 0;
 
     GameLoopState.input_delay = 0x20;
@@ -1142,15 +1057,15 @@ static int PauseSkipCheck(void)
     xglSleep();
     PartyTimePauseStart();
 
-    if (!(((ScriptPadButtons *)PadData)->pressed & 0x10)) {
+    if (!(PadData[0].pressed & 0x10)) {
         for (;;) {
             if (GameLoopState.input_delay != 0) {
                 GameLoopState.input_delay--;
-            } else if ((((ScriptPadButtons *)PadData)->pressed & 0x800) != 0) {
+            } else if ((PadData[0].pressed & 0x800) != 0) {
                 break;
             }
             xglSleep();
-            if (((ScriptPadButtons *)PadData)->pressed & 0x10)
+            if (PadData[0].pressed & 0x10)
                 break;
         }
     }
@@ -1159,7 +1074,7 @@ static int PauseSkipCheck(void)
     xglSoundEffectNormalDirect(4);
     sRender.scene_disabled = 0;
     GameLoopState.input_delay = 0x20;
-    if (((ScriptPadButtons *)PadData)->pressed & 0x10) {
+    if (PadData[0].pressed & 0x10) {
         GameLoopState.input_delay = 0x40;
         if (s_nScriptFrameLockEntry == 0)
             s_nScriptEventSkipEntry = 1;
@@ -1172,7 +1087,7 @@ static int PauseSkipCheck(void)
 
 void sceneObserver2(ScriptSceneTask *task)
 {
-    SceneThread *thread;
+    JThread *thread;
     StudioCamera *camera;
     int camera_index;
 
@@ -1181,7 +1096,7 @@ void sceneObserver2(ScriptSceneTask *task)
         task->fade_started = 0;
         task->elapsed_frames = 0;
     }
-    thread = (SceneThread *)task->thread;
+    thread = task->thread;
     if (PauseSkipCheck() != 0 || s_nScriptEventFin != 0) {
         thread->flags = (thread->flags & ~0x10) | SCENE_THREAD_CALL_PENDING;
         s_nScriptEventFin = 0;
@@ -1269,7 +1184,7 @@ void sceneObserver(XglTaskPrefix *task_prefix)
         task->fade_started = 0;
         task->elapsed_frames = 0;
         entry = &scriptDB[currentScriptDB];
-        object = newObject(loadClass(loadConstString((const char *)entry->active,
+        object = newObject(loadClass(loadConstString(entry->active,
                                                      -1), 0));
         thread = JNI_createThread(2, 6, 0x46);
         {
@@ -1280,7 +1195,7 @@ void sceneObserver(XglTaskPrefix *task_prefix)
             task->thread = entry->thread;
             SCENE_instance(instance_vm, thread->object);
             SCENE_start(defaultVM, thread->object, 8,
-                        (const char *)scriptSceneStartName);
+                        scriptSceneStartName);
         }
     }
 
@@ -1388,22 +1303,23 @@ void sceneObserver(XglTaskPrefix *task_prefix)
 }
 
 /* Declared here, not at the top: moving it up changes the original code. */
-extern void TMENU_setItem(ScriptWindow *menu, int index, const char *text);
+extern void TMENU_setItem(MenuNativeScriptView *menu, int index, const char *text);
 
 int DB_lightSave(ScriptFileSelect *state);
 void DB_evtMonitor(ScriptMenuTask *task);
 
 static void DB_light(ScriptMenuTask *task)
 {
-    ScriptPadButtons *pad = (ScriptPadButtons *)PadData;
+    XglPadRecord *pad = PadData;
     unsigned int state_flags;
 
     state_flags = task->state_flags;
     if (!(state_flags & 1)) {
         int i;
+        unsigned short buttons = pad->buttons;
 
         task->state_flags = state_flags | 1;
-        if (pad->held & 0x80)
+        if (buttons & 0x80)
             initLight3();
         else
             initLight2();
@@ -1446,7 +1362,7 @@ static void DB_light(ScriptMenuTask *task)
 
 static void DB_vmSwitch(ScriptMenuTask *task)
 {
-    ScriptWindow *menu = task->window;
+    MenuNativeScriptView *menu = task->window;
     int item;
     int on;
     int i;
@@ -1504,7 +1420,7 @@ static void DB_vmSwitch(ScriptMenuTask *task)
 
 static int DB_stageSelect(ScriptMenuTask *task)
 {
-    ScriptWindow *slider;
+    MenuNativeScriptView *slider;
     const char *map_name;
     int value;
 
@@ -1563,7 +1479,7 @@ static int DB_stageSelect(ScriptMenuTask *task)
 
 void DB_memory(ScriptMenuTask *task)
 {
-    ScriptPadButtons *pad = (ScriptPadButtons *)PadData;
+    XglPadRecord *pad = PadData;
     char text[0x100];
     float matrix[4][4];
     float scale[4];
@@ -1575,7 +1491,7 @@ void DB_memory(ScriptMenuTask *task)
         heapUsed = xheap_info(heapInfo);
     }
 
-    sprintf(text, (const char *)memoryUsageFormat, heapUsed >> 10, 0x100);
+    sprintf(text, memoryUsageFormat, heapUsed >> 10, 0x100);
     xglFontDebugPrintf(0x10, 0x40, text);
     heap_bytes = (float)heapUsed;
     scale[0] = heap_bytes * 128.0f * 0.0000038146973f;
@@ -1623,7 +1539,7 @@ int DB_lightSave(ScriptFileSelect *state)
     int result;
     char *handle;
     int file;
-    ScriptPadButtons *pad = (ScriptPadButtons *)PadData;
+    XglPadRecord *pad = PadData;
 
     result = xglCdFileSelect(state);
     switch (result) {
@@ -1637,9 +1553,9 @@ int DB_lightSave(ScriptFileSelect *state)
     case 2:
         return 1;
     }
-    if (pad->repeat & 0x8000)
+    if (pad->repeated & 0x8000)
         lightFileNum--;
-    if (pad->repeat & 0x2000)
+    if (pad->repeated & 0x2000)
         lightFileNum++;
     if (lightFileNum < 0)
         lightFileNum = 99;
@@ -1706,16 +1622,16 @@ static int DB_scriptFileSelect(ScriptMenuTask *task)
 }
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
-static ScriptWindParams dbgWind;
+static EXM_WindState dbgWind;
 
-extern void updateWind(ScriptWindParams *params);
-extern void EXM_GetWindPara(ScriptWindParams *params);
-extern void EXM_SetWindStruct(ScriptWindParams *params);
-extern void EXM_SetWindPara(ScriptWindParams *params);
+extern void updateWind(EXM_WindState *params);
+extern void EXM_GetWindPara(EXM_WindState *params);
+extern void EXM_SetWindStruct(EXM_WindState *params);
+extern void EXM_SetWindPara(EXM_WindState *params);
 
 static int DB_wind(ScriptMenuTask *task)
 {
-    ScriptPadButtons *pad = (ScriptPadButtons *)&PadData[1];
+    XglPadRecord *pad = &PadData[1];
 
     if (!(task->state_flags & 1)) {
         task->state_flags |= 1;
@@ -1740,7 +1656,7 @@ static int DB_wind(ScriptMenuTask *task)
  * window, the way every debug entry point does. */
 void SCRIPT_debugMenu(ScriptMenuTask *task)
 {
-    ScriptWindow *menu = task->window;
+    MenuNativeScriptView *menu = task->window;
     ScriptMenuTask *created;
 
     if (!(task->state_flags & 1)) {
@@ -2012,8 +1928,9 @@ void DB_evtMonitor(ScriptMenuTask *task)
 {
     char model_path[256];
     ScriptEventDebugState *debug = &evtDebug;
-    ScriptPadButtons *pad;
-    SceneThread *thread;
+    XglPadRecord *pad;
+    unsigned short repeated;
+    JThread *thread;
     int mode;
     int selected;
 
@@ -2035,28 +1952,28 @@ void DB_evtMonitor(ScriptMenuTask *task)
     DB_println(evtMonitorLabel);
     thread = scriptDB[currentScriptDB].thread;
     {
-    SceneThread *debug_thread = ((thread));
+    JThread *debug_thread = ((thread));
     if (debug_thread != 0 && debug_thread->object != 0) {
         {
-        SceneClass *debug_class =
-            ((SceneObjectHeader *)((debug_thread->object)))->class_ref->scene_class;
-        SceneMethod *debug_method = ((debug_thread))->method;
+        JavaClass *debug_class =
+            ((ObjectHeader *)((debug_thread->object)))->classPointer->clazz;
+        JavaMethod *debug_method = ((debug_thread))->method;
         if ((((debug_thread))->flags & 0x10) && debug_method != 0) {
-            DB_println(classMethodFormat, debug_class->name->binary_name,
-                       ((ConstString *)debug_method->name)->bytes);
+            DB_println(classMethodFormat, debug_class->name->bytes,
+                       debug_method->name->bytes);
             if (((debug_thread))->frame_depth > 0) {
                 int frame_index;
                 for (frame_index = (((0)));
                      frame_index < ((debug_thread))->frame_depth;
                      ++frame_index) {
-                    ScriptCallFrame *frame =
+                    VMFrame *frame =
                         &((debug_thread))->frames[frame_index];
-                    DB_println(evtFrameFormat, frame->program_counter,
-                               ((ConstString *)frame->method->name)->bytes);
+                    DB_println(evtFrameFormat, frame->pc,
+                               frame->callee->name->bytes);
                 }
             } else {
-                DB_println(classMethodFormat, debug_class->name->binary_name,
-                           ((ConstString *)debug_method->name)->bytes);
+                DB_println(classMethodFormat, debug_class->name->bytes,
+                           debug_method->name->bytes);
             }
         }
 };
@@ -2066,17 +1983,18 @@ void DB_evtMonitor(ScriptMenuTask *task)
     mode = debug->mode;
     switch (mode) {
     case 0: {
-        ScriptActorRecord *actor_record;
+        Actor *actor_record;
         const char *base_name;
         float half_turn;
         SceneObject object;
 
-        pad = (ScriptPadButtons *)PadData;
+        pad = PadData;
         if (pad->pressed & 2)
             debug->mode = 1;
-        if (pad->repeat & 0x8000)
+        repeated = pad->repeated;
+        if (repeated & 0x8000)
             --debug->selected;
-        if (pad->repeat & 0x2000)
+        if (repeated & 0x2000)
             ++debug->selected;
         if (debug->selected < 0)
             debug->selected = 63;
@@ -2084,48 +2002,48 @@ void DB_evtMonitor(ScriptMenuTask *task)
             debug->selected = 0;
         selected = debug->selected;
         actor_record = &actor[selected];
-        RES_GetMdlFileName(model_path, actor_record->in_use_id);
+        RES_GetMdlFileName(model_path, actor_record->inUseId);
         base_name = strrchr(model_path, '\\');
         if (base_name == 0)
             base_name = unknownBaseName;
         ++base_name;
         DB_reset(0, 10);
-        DB_println(evtActorFormat, debug->selected, actor_record->in_use_id,
+        DB_println(evtActorFormat, debug->selected, actor_record->inUseId,
                    base_name);
         half_turn = 3.1415927f;
         DB_println(evtFlagsFormat, actor_record->flags);
-        DB_println(evtPositionFormat, actor_record->position[0],
-                   actor_record->position[1], actor_record->position[2]);
+        DB_println(evtPositionFormat, actor_record->position.x,
+                   actor_record->position.y, actor_record->position.z);
         DB_println(evtRotationFormat,
-                   actor_record->rotation[0] / half_turn * 180.0f,
-                   actor_record->rotation[1] / half_turn * 180.0f,
-                   actor_record->rotation[2] / half_turn * 180.0f);
-        object = actor_record->script_object;
+                   actor_record->rotation.x / half_turn * 180.0f,
+                   actor_record->rotation.y / half_turn * 180.0f,
+                   actor_record->rotation.z / half_turn * 180.0f);
+        object = actor_record->java_object;
         if (object != 0) {
             thread = JTHREAD_get(object);
             if (thread != 0) {
                 object = thread->object;
                 if (object != 0) {
                     {
-        SceneClass *debug_class =
-            ((SceneObjectHeader *)((object)))->class_ref->scene_class;
-        SceneMethod *debug_method = ((thread))->method;
+        JavaClass *debug_class =
+            ((ObjectHeader *)((object)))->classPointer->clazz;
+        JavaMethod *debug_method = ((thread))->method;
         if ((((thread))->flags & 0x10) && debug_method != 0) {
-            DB_println(classMethodFormat, debug_class->name->binary_name,
-                       ((ConstString *)debug_method->name)->bytes);
+            DB_println(classMethodFormat, debug_class->name->bytes,
+                       debug_method->name->bytes);
             if (((thread))->frame_depth > 0) {
                 int frame_index;
                 for (frame_index = ((mode));
                      frame_index < ((thread))->frame_depth;
                      ++frame_index) {
-                    ScriptCallFrame *frame =
+                    VMFrame *frame =
                         &((thread))->frames[frame_index];
-                    DB_println(evtFrameFormat, frame->program_counter,
-                               ((ConstString *)frame->method->name)->bytes);
+                    DB_println(evtFrameFormat, frame->pc,
+                               frame->callee->name->bytes);
                 }
             } else {
-                DB_println(classMethodFormat, debug_class->name->binary_name,
-                           ((ConstString *)debug_method->name)->bytes);
+                DB_println(classMethodFormat, debug_class->name->bytes,
+                           debug_method->name->bytes);
             }
         }
 };
@@ -2135,17 +2053,18 @@ void DB_evtMonitor(ScriptMenuTask *task)
         break;
     }
     default: {
-        MapUnitSlot *unit;
+        MapUnitRecord *unit;
         UnitSequenceEntry *sequence;
         SceneObject object;
         float half_turn;
 
-        pad = (ScriptPadButtons *)PadData;
+        pad = PadData;
         if (pad->pressed & 2)
             debug->mode = (mode + 1) & 1;
-        if (pad->repeat & 0x8000)
+        repeated = pad->repeated;
+        if (repeated & 0x8000)
             --debug->selected;
-        if (pad->repeat & 0x2000)
+        if (repeated & 0x2000)
             ++debug->selected;
         if (debug->selected < 0)
             debug->selected = 63;
@@ -2163,10 +2082,10 @@ void DB_evtMonitor(ScriptMenuTask *task)
         else
             DB_println(separatorLabel);
         half_turn = 3.1415927f;
-        DB_println(evtPositionFormat, unit->position[0], unit->position[1], unit->position[2]);
-        DB_println(evtRotationFormat, unit->rotation[0] / half_turn * 180.0f,
-                   unit->rotation[1] / half_turn * 180.0f,
-                   unit->rotation[2] / half_turn * 180.0f);
+        DB_println(evtPositionFormat, unit->position.x, unit->position.y, unit->position.z);
+        DB_println(evtRotationFormat, unit->rotation.x / half_turn * 180.0f,
+                   unit->rotation.y / half_turn * 180.0f,
+                   unit->rotation.z / half_turn * 180.0f);
         object = unit->sequence;
         if (object != 0) {
             thread = JTHREAD_get(object);
@@ -2174,25 +2093,25 @@ void DB_evtMonitor(ScriptMenuTask *task)
                 object = thread->object;
                 if (object != 0) {
                     {
-        SceneClass *debug_class =
-            ((SceneObjectHeader *)((object)))->class_ref->scene_class;
-        SceneMethod *debug_method = ((thread))->method;
+        JavaClass *debug_class =
+            ((ObjectHeader *)((object)))->classPointer->clazz;
+        JavaMethod *debug_method = ((thread))->method;
         if ((((thread))->flags & 0x10) && debug_method != 0) {
-            DB_println(classMethodFormat, debug_class->name->binary_name,
-                       ((ConstString *)debug_method->name)->bytes);
+            DB_println(classMethodFormat, debug_class->name->bytes,
+                       debug_method->name->bytes);
             if (((thread))->frame_depth > 0) {
                 int frame_index;
                 for (frame_index = ((0));
                      frame_index < ((thread))->frame_depth;
                      ++frame_index) {
-                    ScriptCallFrame *frame =
+                    VMFrame *frame =
                         &((thread))->frames[frame_index];
-                    DB_println(evtFrameFormat, frame->program_counter,
-                               ((ConstString *)frame->method->name)->bytes);
+                    DB_println(evtFrameFormat, frame->pc,
+                               frame->callee->name->bytes);
                 }
             } else {
-                DB_println(classMethodFormat, debug_class->name->binary_name,
-                           ((ConstString *)debug_method->name)->bytes);
+                DB_println(classMethodFormat, debug_class->name->bytes,
+                           debug_method->name->bytes);
             }
         }
 };
@@ -2224,7 +2143,7 @@ ScriptDbEntry *SCRIPT_exec(void)
     entry = &scriptDB[currentScriptDB];
     PLAY_setupDefault(PLAY_getCurrent());
     if (entry->active == 0) {
-        ScriptActorRecord *actor;
+        Actor *actor;
 
         JNI_popFrame();
         XTK_setResourceID(1);
@@ -2239,8 +2158,8 @@ ScriptDbEntry *SCRIPT_exec(void)
         InitCfSystem();
         actor = ACT_create(0, 1);
         ACT_initMotion(actor);
-        ACT_loadMotion(actor, actor->in_use_id, 1);
-        ACT_loadResource(actor, actor->in_use_id);
+        ACT_loadMotion(actor, actor->inUseId, 1);
+        ACT_loadResource(actor, actor->inUseId);
         GameLoopState.main_actor = actor;
         entry->skip_count = 1;
         entry->thread = 0;
@@ -2261,7 +2180,7 @@ ScriptDbEntry *SCRIPT_exec(void)
     }
     if (entry->skip_count != 0) {
         if (entry->skip_count == 1) {
-            ScriptActorRecord *actor;
+            Actor *actor;
             int camera_index;
 
             camera_index = 0;
@@ -2283,12 +2202,12 @@ ScriptDbEntry *SCRIPT_exec(void)
                     configured_camera->active = 0;
                 }
                 ++camera_index;
-                configured_camera->position.z = 1000000.0f;
-                configured_camera->position.y = 1000000.0f;
-                configured_camera->position.x = 1000000.0f;
-                configured_camera->rotation.y = 1.5707964f;
-                configured_camera->rotation.x = 0.0f;
-                configured_camera->rotation.z = 0.0f;
+                configured_camera->position.vector.z = 1000000.0f;
+                configured_camera->position.vector.y = 1000000.0f;
+                configured_camera->position.vector.x = 1000000.0f;
+                configured_camera->rotation.vector.y = 1.5707964f;
+                configured_camera->rotation.vector.x = 0.0f;
+                configured_camera->rotation.vector.z = 0.0f;
             }
             s_nScriptTalkLock = 0;
             TCAMERA_init();
@@ -2302,16 +2221,16 @@ ScriptDbEntry *SCRIPT_exec(void)
             xglRenderClearColor(0x80000000);
             actor = ACT_create(0, 1);
             ACT_initMotion(actor);
-            ACT_loadMotion(actor, actor->in_use_id, 1);
-            ACT_loadResource(actor, actor->in_use_id);
+            ACT_loadMotion(actor, actor->inUseId, 1);
+            ACT_loadResource(actor, actor->inUseId);
             GameLoopState.main_actor = actor;
             JNI_pushFrame();
             JNI_loadNativeClass();
             JNI_loadClassDB(entry->class_slot, entry->class_image);
             object = newObject(loadClass(
-                loadConstString((const char *)entry->active, -1), 0));
+                loadConstString(entry->active, -1), 0));
             thread = JNI_createThread(2, 6, 0x46);
-            *(void **)&thread->object = object;
+            *&thread->object = object;
             vm = defaultVM;
             entry->thread = thread;
             STAGE_instance(vm, object);
@@ -2343,12 +2262,12 @@ ScriptDbEntry *SCRIPT_exec(void)
                 configured_camera->active = 0;
             }
             ++camera_index;
-            configured_camera->position.z = 1000000.0f;
-            configured_camera->position.y = 1000000.0f;
-            configured_camera->position.x = 1000000.0f;
-            configured_camera->rotation.y = 1.5707964f;
-            configured_camera->rotation.x = 0.0f;
-            configured_camera->rotation.z = 0.0f;
+            configured_camera->position.vector.z = 1000000.0f;
+            configured_camera->position.vector.y = 1000000.0f;
+            configured_camera->position.vector.x = 1000000.0f;
+            configured_camera->rotation.vector.y = 1.5707964f;
+            configured_camera->rotation.vector.x = 0.0f;
+            configured_camera->rotation.vector.z = 0.0f;
         }
     }
     s_nScriptTalkLock = 0;
@@ -2390,13 +2309,13 @@ ScriptDbEntry *SCRIPT_exec2(void)
 {
     ScriptDbEntry *entry;
     SceneObject object;
-    SceneThread *thread;
+    JThread *thread;
     ScriptSceneTask *task;
     XglTaskScheduler *scheduler;
     StudioCamera *camera;
     StudioCamera *target;
     int camera_index;
-    SceneThread *vm;
+    JThread *vm;
     int (*callback)(XglTaskPrefix *);
 
     XTK_setWindowOwner(0);
@@ -2456,10 +2375,10 @@ ScriptDbEntry *SCRIPT_exec2(void)
             JNI_loadNativeClass();
             JNI_loadClassDB(entry->class_slot, entry->class_image);
             object = newObject(
-                loadClass(loadConstString((const char *)entry->active, -1), 0));
+                loadClass(loadConstString(entry->active, -1), 0));
             thread = JNI_createThread(2, 6, 0x46);
-            entry->thread = thread;
             thread->object = object;
+            entry->thread = thread;
             STAGE_instance(defaultVM, object);
         }
         return entry;
@@ -2485,7 +2404,7 @@ ScriptDbEntry *SCRIPT_exec2(void)
     JNI_loadNativeClass();
     JNI_loadClassDB(entry->class_slot, entry->class_image);
     object = newObject(
-        loadClass(loadConstString((const char *)entry->active, -1), 0));
+        loadClass(loadConstString(entry->active, -1), 0));
     thread = JNI_createThread(2, 6, 0x46);
     callback = (int (*)(XglTaskPrefix *))sceneObserver2;
     scheduler = GameLoopState.task_scheduler;
@@ -2516,12 +2435,12 @@ int XTK_getResourceID(void)
     return resourceID;
 }
 
-void XTK_setWindowOwner(int owner)
+void XTK_setWindowOwner(void *owner)
 {
     windowOwner = owner;
 }
 
-int XTK_getWindowOwner(void)
+void *XTK_getWindowOwner(void)
 {
     return windowOwner;
 }
@@ -2581,7 +2500,7 @@ const char memoryOnText[24] = "\243\315\243\305\243\315\243\317\243\322\243\331\
  * EN: MEMORY  OFF */
 const char memoryOffText[24] = "\243\315\243\305\243\315\243\317\243\322\243\331\241\241\241\241\243\317\243\306\243\306";
 
-const unsigned char memoryUsageFormat[16] = "MEM %3d / %d K\n";
+const char memoryUsageFormat[16] = "MEM %3d / %d K\n";
 
 const char sceneStageClassPath[24] = "xeno/Scene:xeno/Stage";
 

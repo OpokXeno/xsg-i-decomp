@@ -1,7 +1,10 @@
 #include "common.h"
 #include "shared.h"
 #include "main/jni.h"
+#include "main/toolkit.h"
 #include "toolkit.h"
+#include "main/init_vm.h"
+#include "main/near_dir.h"
 
 /* Used by getPeer_Stage for its short-valued Java id field. */
 #define JAVA_USHORT_FIELD(object, field) \
@@ -46,7 +49,7 @@
     (rz) = JAVA_FLOAT_FIELD((java_object), component_field); \
 }
 
-typedef struct ToolkitPeerCall { void *object; } ToolkitPeerCall;
+typedef struct ToolkitPeerCall { SceneObject object; } ToolkitPeerCall;
 
 typedef struct ToolkitUnitTransform { float m[4][4]; } ToolkitUnitTransform;
 
@@ -65,7 +68,7 @@ typedef struct ToolkitMapUnitPeer {
     unsigned char unmodeled_a1[3];
     short serial;
     unsigned char unmodeled_a6[0xd0 - 0xa6];
-    void *java_object;
+    SceneObject java_object;
 } ToolkitMapUnitPeer;
 
 typedef struct ToolkitUnitSequenceEntry {
@@ -91,39 +94,21 @@ typedef struct ToolkitGameLoopState {
     ToolkitMapDisplay *map_display;
 } ToolkitGameLoopState;
 
-typedef struct ToolkitActorSequenceEntry {
-    unsigned char unmodeled_00[0x240];
-    float pivot[3];
-    unsigned char unmodeled_24c[0x260 - 0x24c];
-} ToolkitActorSequenceEntry;
-
 typedef struct ToolkitPeerGroupCall {
     int group;
     /* The operand stack transports the Java int as one raw 32-bit word. */
     unsigned int valueBits;
 } ToolkitPeerGroupCall;
 
-/* The CF helper copies one complete 16-byte record. Its x/y/z prefix is
- * modeled by the imported interface; the original leaves the fourth word
- * unspecified, so it remains raw representation rather than a float value. */
-typedef struct ToolkitEffectVectorStorage {
-    ToolkitEffectVector xyz;
-    unsigned char unmodeled_0c[4];
-} ToolkitEffectVectorStorage;
-
 extern ToolkitGameLoopState GameLoopState;
 extern ToolkitUnitSequenceEntry unitSequence[];
-extern ToolkitActorSequenceEntry actSequence[64];
-extern unsigned short XTK_peerGroup[4];
-
 extern ToolkitMapUnitPeer *MAP_createUnitPeer(int identifier, int unit_id);
-extern ToolkitChrPeer *ACT_createChr(int identifier, int character_id);
-extern void ACT_updateNPC(ToolkitChrPeer *peer);
-static void *getPeer_Unit(void *java_unit);
-extern void *getPeer_Enepc(void *java_character);
-extern void *getPeer_Chr(void *java_character);
-static void *getPeer_Effect(void *java_effect);
-static void *getPeer_Stage(void *java_stage);
+extern Actor *ACT_createChr(int identifier, int character_id);
+extern void ACT_updateNPC(Actor *peer);
+static void *getPeer_Unit(SceneObject java_unit);
+extern void *getPeer_Enepc(SceneObject java_character);
+static void *getPeer_Effect(SceneObject java_effect);
+static void *getPeer_Stage(SceneObject java_stage);
 
 /* Referenced original data recovered from this translation unit. */
 const char unit_field_algorithm[16] = "algorithm";
@@ -146,7 +131,7 @@ const char unit_field_peer[8] = "peer";
 
 const char lightPeerClassName[8] = "light";
 
-static inline void writeUnitPosition(void *java_unit, void *unit_class,
+static inline void writeUnitPosition(SceneObject java_unit, void *unit_class,
                                      ToolkitMapUnitPeer *peer)
 {
     JavaField *field;
@@ -165,7 +150,7 @@ static inline void writeUnitPosition(void *java_unit, void *unit_class,
 void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_(
     JThread *thread, ToolkitPeerCall *arguments, void **result)
 {
-    void *object;
+    SceneObject object;
 
     object = arguments->object;
     if (JNI_isInstanceOf(object, classJava_xeno_Chr) == 1) {
@@ -187,7 +172,7 @@ void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_(
     }
 }
 
-static void *getPeer_Unit(void *java_unit)
+static void *getPeer_Unit(SceneObject java_unit)
 {
     void *unit_class;
     JavaField *field;
@@ -299,11 +284,11 @@ static void *getPeer_Unit(void *java_unit)
     return peer;
 }
 
-void *getPeer_Enepc(void *java_character)
+void *getPeer_Enepc(SceneObject java_character)
 {
     void *character_class;
     JavaField *field;
-    ToolkitEnemyPeer *peer;
+    Actor *peer;
     JavaThread *thread;
     SceneObject light_object;
     int enemy_id;
@@ -324,29 +309,29 @@ void *getPeer_Enepc(void *java_character)
 
     field = lookupClassField(character_class,
                              loadConstString(unit_field_px, -1), 0);
-    peer->position_x = JAVA_FLOAT_FIELD(java_character, field);
+    peer->position.x = JAVA_FLOAT_FIELD(java_character, field);
     field = lookupClassField(character_class,
                              loadConstString(unit_field_py, -1), 0);
-    peer->position_y = JAVA_FLOAT_FIELD(java_character, field);
+    peer->position.y = JAVA_FLOAT_FIELD(java_character, field);
     field = lookupClassField(character_class,
                              loadConstString(unit_field_pz, -1), 0);
-    peer->position_z = JAVA_FLOAT_FIELD(java_character, field);
+    peer->position.z = JAVA_FLOAT_FIELD(java_character, field);
     field = lookupClassField(character_class,
                              loadConstString(unit_field_rx, -1), 0);
-    peer->rotation_x = JAVA_FLOAT_FIELD(java_character, field);
+    peer->rotation.x = JAVA_FLOAT_FIELD(java_character, field);
     field = lookupClassField(character_class,
                              loadConstString(unit_field_ry, -1), 0);
-    peer->rotation_y = JAVA_FLOAT_FIELD(java_character, field);
+    peer->rotation.y = JAVA_FLOAT_FIELD(java_character, field);
     field = lookupClassField(character_class,
                              loadConstString(unit_field_rz, -1), 0);
-    peer->rotation_z = JAVA_FLOAT_FIELD(java_character, field);
+    peer->rotation.z = JAVA_FLOAT_FIELD(java_character, field);
     field = lookupClassField(character_class,
                              loadConstString(unit_field_peer, -1), 0);
     JAVA_OBJECT_FIELD(java_character, field) = peer;
 
-    peer->rotation_x = peer->rotation_x / 180.0f * 3.1415927f;
-    peer->rotation_y = peer->rotation_y / 180.0f * 3.1415927f;
-    peer->rotation_z = peer->rotation_z / 180.0f * 3.1415927f;
+    peer->rotation.x = peer->rotation.x / 180.0f * 3.1415927f;
+    peer->rotation.y = peer->rotation.y / 180.0f * 3.1415927f;
+    peer->rotation.z = peer->rotation.z / 180.0f * 3.1415927f;
 
     field = lookupClassField(character_class,
                              loadConstString(lightPeerClassName, -1), 0);
@@ -354,7 +339,7 @@ void *getPeer_Enepc(void *java_character)
     JAVA_OBJECT_FIELD(java_character, field) = light_object;
     field = lookupClassField(classJava_xeno_Light,
                              loadConstString(unit_field_peer, -1), 0);
-    JAVA_OBJECT_FIELD(light_object, field) = &peer->light_peer;
+    JAVA_OBJECT_FIELD(light_object, field) = &peer->light;
     return peer;
 }
 
@@ -365,7 +350,7 @@ void *getPeer_Enepc(void *java_character)
  * into the peer, normalizes rotations from degrees to radians, and stores
  * the peer back into the Java peer field.
  */
-void *getPeer_Uwamono(void *java_unit)
+void *getPeer_Uwamono(SceneObject java_unit)
 {
     NativeUnitPeer *peer;
     void *unit_class = classJava_xeno_Unit;
@@ -420,16 +405,16 @@ void *getPeer_Uwamono(void *java_unit)
     return peer;
 }
 
-void *getPeer_Chr(void *java_character)
+void *getPeer_Chr(SceneObject java_character)
 {
     void *character_class;
     JavaField *field;
-    ToolkitChrPeer *peer;
+    Actor *peer;
     JavaThread *thread;
     SceneObject light_object;
     int character_id;
     int algorithm;
-    ToolkitActorSequenceEntry *sequence;
+    ActSequenceEntry *sequence;
     /* The original keeps the 180.0 divisor in $f4. */
     register float half_turn;
     float rotation_x;
@@ -463,10 +448,10 @@ void *getPeer_Chr(void *java_character)
 
     if ((algorithm & 0xF00) != 0) {
         peer->update = ACT_updateNPC;
-        sequence = &actSequence[peer->slot_number];
-        sequence->pivot[0] = peer->position.x;
-        sequence->pivot[1] = peer->position.y;
-        sequence->pivot[2] = peer->position.z;
+        sequence = &actSequence[peer->number];
+        sequence->anchor.x = peer->position.x;
+        sequence->anchor.y = peer->position.y;
+        sequence->anchor.z = peer->position.z;
     }
 
     field = lookupClassField(character_class,
@@ -475,17 +460,17 @@ void *getPeer_Chr(void *java_character)
     JAVA_OBJECT_FIELD(java_character, field) = light_object;
     field = lookupClassField(classJava_xeno_Light,
                              loadConstString(unit_field_peer, -1), 0);
-    JAVA_OBJECT_FIELD(light_object, field) = &peer->light_peer;
+    JAVA_OBJECT_FIELD(light_object, field) = &peer->light;
     return peer;
 }
 
-static void *getPeer_Effect(void *java_effect)
+static void *getPeer_Effect(SceneObject java_effect)
 {
-    SceneClass *effect_class;
+    JavaClass *effect_class;
     JavaField *field;
-    ToolkitEffectPeer *peer;
-    ToolkitEffectVectorStorage position;
-    ToolkitEffectVectorStorage orientation;
+    SchedulerState *peer;
+    Vector4 position;
+    Vector4 orientation;
     int effect_id;
 
     effect_class = classJava_xeno_Effect;
@@ -495,21 +480,21 @@ static void *getPeer_Effect(void *java_effect)
     field = lookupClassField(effect_class,
                              loadConstString(unit_field_px, -1), 0);
     sefLoadEffectCf(0, effect_id);
-    position.xyz.x = JAVA_FLOAT_FIELD(java_effect, field);
+    position.x = JAVA_FLOAT_FIELD(java_effect, field);
 
     field = lookupClassField(effect_class,
                              loadConstString(unit_field_py, -1), 0);
-    position.xyz.y = JAVA_FLOAT_FIELD(java_effect, field);
+    position.y = JAVA_FLOAT_FIELD(java_effect, field);
     field = lookupClassField(effect_class,
                              loadConstString(unit_field_pz, -1), 0);
-    position.xyz.z = JAVA_FLOAT_FIELD(java_effect, field);
+    position.z = JAVA_FLOAT_FIELD(java_effect, field);
 
     field = lookupClassField(effect_class,
                              loadConstString(unit_field_ry, -1), 0);
-    orientation.xyz.x = 0.0f;
-    orientation.xyz.z = 0.0f;
-    orientation.xyz.y = JAVA_FLOAT_FIELD(java_effect, field);
-    peer = sefCreateEffectCf(effect_id, &position.xyz, &orientation.xyz);
+    orientation.x = 0.0f;
+    orientation.z = 0.0f;
+    orientation.y = JAVA_FLOAT_FIELD(java_effect, field);
+    peer = sefCreateEffectCf(effect_id, &position, &orientation);
 
     if (peer == 0) {
         field = lookupClassField(effect_class,
@@ -518,16 +503,16 @@ static void *getPeer_Effect(void *java_effect)
         return 0;
     }
 
-    peer->java_object = java_effect;
+    peer->savedActive = java_effect;
     field = lookupClassField(effect_class,
                              loadConstString(unit_field_peer, -1), 0);
     JAVA_OBJECT_FIELD(java_effect, field) = peer;
     return peer;
 }
 
-static void *getPeer_Stage(void *java_stage)
+static void *getPeer_Stage(SceneObject java_stage)
 {
-    SceneClass *stage_class;
+    JavaClass *stage_class;
     JavaField *field;
     ToolkitStagePeer *peer;
     JavaThread *thread;
@@ -559,7 +544,7 @@ int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I(
     JavaField *field;
     Actor *chr_peer;
     ToolkitUnitPeer *unit_peer;
-    u8 *object;
+    SceneObject object;
     int id;
     int resource_id;
     int result;
@@ -600,9 +585,9 @@ void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I(
     JavaThread *thread, ToolkitResourceIndexCall *arguments)
 {
     JavaField *field;
-    ToolkitChrPeer *character_peer;
+    Actor *character_peer;
     ToolkitUnitResourcePeerView *unit_peer;
-    u8 *java_object;
+    SceneObject java_object;
     int resource_value;
     int resource_index;
 
@@ -614,8 +599,8 @@ void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I(
         field = lookupClassField(classJava_xeno_Chr,
                                  loadConstString(unit_field_peer, -1), 0);
         character_peer = JAVA_OBJECT_FIELD(java_object, field);
-        if (resource_index < 11)
-            character_peer->resource_handles[resource_index] = resource_value;
+        if (resource_index < ACTOR_RESOURCE_COUNT)
+            ACTOR_RESOURCES(character_peer)[resource_index] = (void *)resource_value;
     } else if (JNI_isInstanceOf(java_object, classJava_xeno_Unit) != 0) {
         field = lookupClassField(classJava_xeno_Unit,
                                  loadConstString(unit_field_peer, -1), 0);
@@ -640,7 +625,7 @@ int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II(
     JavaField *field;
     Actor *chr_peer;
     ToolkitUnitPeer *unit_peer;
-    u8 *object;
+    SceneObject object;
     int id;
     int resource_id;
     int result;

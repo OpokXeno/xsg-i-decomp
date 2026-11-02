@@ -2,6 +2,7 @@
 #define INCLUDE_MAIN_XGL_STUDIO_H
 
 #include "shared.h"
+#include "main/xgl_light.h"
 
 /*
  * The light block of a studio record (0xf0 bytes). This TU owns the
@@ -20,25 +21,26 @@
  *        JS_classLight_setDirection2 writes
  *        lights[light_type - 1].direction at byte offset light_type*0x20
  *        from that same base (0x10 further into the same pair).
- *  +0x70 unmodeled_70[0x80]: no accessor in either TU indexes past +0x70,
- *        so the remainder to the full 0xf0 span stays opaque.
+ *  +0x70 normal_matrix and +0xb0 color_modifier_matrix: the two 4x4 float
+ *        matrices map_1.c's MapDrawLight view and the asm copies in
+ *        pause_menu_page_enemy.c / sv_get_image_item.c read through their
+ *        addresses (the full 0xf0 span).
  */
-typedef struct StudioLightEntry {
-    Vector4 color;
-    Vector4 direction;
-} StudioLightEntry;
-
-typedef struct StudioLight {
-    Vector4 ambient_color;
-    StudioLightEntry lights[3];
-    unsigned char unmodeled_70[0x80];
-} StudioLight;
+/* StudioLight (the light block this record starts with) is defined in
+ * include/main/xgl_light.h next to the light API that fills it. */
 
 extern StudioCamera *xglStudioGetCamera2(int camera_id);
 extern void xglStudioGetLight(StudioLight **light_out);
 extern void xglStudioChange(int studio_index);
 extern StudioCamera *xglStudioSelectGetActiveCamera(int studio_index);
+extern StudioCamera *xglStudioGetActiveCamera(void);
 extern StudioCamera *xglStudioMainCameraMove(void);
 extern void xglStudioMove(void);
+
+/* Functions and data used by other translation units. */
+extern void xglStudioFlushActiveCamera(void);
+extern void xglStudioInit(void);
+extern void xglStudioMainCameraInit(void);
+extern void xglStudioEntry(void *argument);
 
 #endif /* INCLUDE_MAIN_XGL_STUDIO_H */

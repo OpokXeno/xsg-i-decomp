@@ -4,6 +4,11 @@
 
 #ifndef SRC_MAIN_GAME_PAUSE_DISP_H
 #define SRC_MAIN_GAME_PAUSE_DISP_H
+#include "main/game.h"
+#include "main/game_pause_disp.h"
+#include "main/game_snap_shot.h"
+#include "main/xgl_font.h"
+#include "main/xgl_render.h"
 
 typedef union GifCommandData {
     u64 value;
@@ -38,25 +43,6 @@ typedef struct PauseShadowCommand {
     GifAdCommand set_shadow_color;
 } PauseShadowCommand;
 
-/* DrawCredit writes the 128-byte direct-data payload beginning at +0x30. */
-typedef struct PauseCreditData {
-    unsigned int initial_words[4];
-    unsigned long long wide_words[3];
-    unsigned char unmodeled_28[8];
-    int body_words[20];
-} PauseCreditData;
-
-/*
- * Only the packet handle at +0x00 is evidenced (DrawShadow). The rest of the
- * structure is populated by DrawCredit, which is still unresolved; this is
- * an explicit partial type and does not claim the layout beyond +0x00.
- */
-typedef struct PauseDrawContext {
-    void *packet;
-    unsigned char unmodeled_04[0x2C];
-    PauseCreditData credit_data;
-} PauseDrawContext;
-
 /* The pause menu reads these fields from the game loop's global state. */
 typedef struct PauseGameLoopState {
     unsigned char unmodeled_00[0xD0];
@@ -69,22 +55,8 @@ typedef struct PauseGameLoopState {
 } PauseGameLoopState;
 
 extern PauseGameLoopState GameLoopState;
-extern unsigned char SnapDrawCreditFlag;
-extern int ScanLineInterpolate;
-
-extern void PauseMenu(void);
-extern void GamePauseDispBG(void);
 extern void sceVif1PkAddDirectDataN(void *packet, const void *data, int count);
 extern void GamePauseDispCf(void);
-extern int xglFontGetStringWidth(const char *text);
-void GamePauseDispEvent(void);
-extern int GameSnapShotSave(signed char slot, int work);
-extern int GameSnapShotSaveFile(int slot, int work, int size);
-
-extern void xglFontPrintExtFunc(unsigned int flags,
-                                void (*draw)(PauseDrawContext *context),
-                                void *context);
-
-extern void xglFontSetFlags(int flags);
+extern int GameSnapShotSave(signed char slot, unsigned char *work);
 
 #endif /* SRC_MAIN_GAME_PAUSE_DISP_H */

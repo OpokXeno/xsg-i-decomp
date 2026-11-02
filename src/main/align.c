@@ -1,16 +1,12 @@
 #include "common.h"
 #include "shared.h"
 #include "align.h"
+#include "main/matrix_print.h"
 
 /* These matrix helpers are defined in the matrix_print translation unit.
  * Their angle arguments are pointers to the float bit patterns consumed by
  * the VU0 trigonometric path. */
 extern void CUR_MATRIX_Unit(void);
-extern void CUR_MATRIX_Get(Matrix4 matrix);
-extern void CUR_MATRIX_Rx4s(const float *angle);
-extern void CUR_MATRIX_Ry4s(const float *angle);
-extern void CUR_MATRIX_Rz4s(const float *angle);
-
 void alignXYAxis(void) {
 
 }
@@ -70,11 +66,18 @@ void alignXAxisEuler(const Vector4 *direction, Vector4 *euler) {
     euler->y = pitch;
 }
 
+/* Each angle is written as a float (atan2) and read back as its bit pattern
+ * by the CUR_MATRIX_R*4s helpers. */
+typedef union {
+    float value[3];
+    int bits[3];
+} AlignRotationAngles;
+
 /* The VU0 block builds the component ratios used for the two rotations that
  * place the current matrix's X axis along direction.  The scalar atan2 calls
  * and the persistent matrix operations remain ordinary C. */
 void alignXAxis(const Vector4 *direction, Matrix4 matrix) {
-    float rotation_angles[3];
+    AlignRotationAngles rotation_angles;
     Vector4 components;
 
     __asm__ __volatile__(
@@ -111,19 +114,19 @@ void alignXAxis(const Vector4 *direction, Matrix4 matrix) {
         : "r"(&components), "r"(direction)
         : "memory");
 
-    rotation_angles[0] = 0.0f;
-    rotation_angles[1] = xglAtan2(components.z, components.w);
-    rotation_angles[2] = xglAtan2(components.y, components.x);
+    rotation_angles.value[0] = 0.0f;
+    rotation_angles.value[1] = xglAtan2(components.z, components.w);
+    rotation_angles.value[2] = xglAtan2(components.y, components.x);
     CUR_MATRIX_Unit();
-    CUR_MATRIX_Ry4s(&rotation_angles[1]);
-    CUR_MATRIX_Rz4s(&rotation_angles[2]);
+    CUR_MATRIX_Ry4s(&rotation_angles.bits[1]);
+    CUR_MATRIX_Rz4s(&rotation_angles.bits[2]);
     CUR_MATRIX_Get(matrix);
 }
 
 /* The VU0 block derives the two angles for the X-then-Z rotations that align
  * the current matrix's Y axis with direction. */
 void alignYAxis(const Vector4 *direction, Matrix4 matrix) {
-    float rotation_angles[3];
+    AlignRotationAngles rotation_angles;
     Vector4 components;
 
     __asm__ __volatile__(
@@ -160,19 +163,19 @@ void alignYAxis(const Vector4 *direction, Matrix4 matrix) {
         : "r"(&components), "r"(direction)
         : "memory");
 
-    rotation_angles[0] = xglAtan2(components.z, components.y);
-    rotation_angles[1] = 0.0f;
-    rotation_angles[2] = xglAtan2(components.x, components.w);
+    rotation_angles.value[0] = xglAtan2(components.z, components.y);
+    rotation_angles.value[1] = 0.0f;
+    rotation_angles.value[2] = xglAtan2(components.x, components.w);
     CUR_MATRIX_Unit();
-    CUR_MATRIX_Rx4s(&rotation_angles[0]);
-    CUR_MATRIX_Rz4s(&rotation_angles[2]);
+    CUR_MATRIX_Rx4s(&rotation_angles.bits[0]);
+    CUR_MATRIX_Rz4s(&rotation_angles.bits[2]);
     CUR_MATRIX_Get(matrix);
 }
 
 /* The VU0 block derives the two angles for the X-then-Y rotations that align
  * the current matrix's Z axis with direction. */
 void alignZAxis(const Vector4 *direction, Matrix4 matrix) {
-    float rotation_angles[3];
+    AlignRotationAngles rotation_angles;
     Vector4 components;
 
     __asm__ __volatile__(
@@ -209,11 +212,11 @@ void alignZAxis(const Vector4 *direction, Matrix4 matrix) {
         : "r"(&components), "r"(direction)
         : "memory");
 
-    rotation_angles[0] = xglAtan2(components.y, components.z);
-    rotation_angles[1] = xglAtan2(components.x, components.w);
-    rotation_angles[2] = 0.0f;
+    rotation_angles.value[0] = xglAtan2(components.y, components.z);
+    rotation_angles.value[1] = xglAtan2(components.x, components.w);
+    rotation_angles.value[2] = 0.0f;
     CUR_MATRIX_Unit();
-    CUR_MATRIX_Rx4s(&rotation_angles[0]);
-    CUR_MATRIX_Ry4s(&rotation_angles[1]);
+    CUR_MATRIX_Rx4s(&rotation_angles.bits[0]);
+    CUR_MATRIX_Ry4s(&rotation_angles.bits[1]);
     CUR_MATRIX_Get(matrix);
 }

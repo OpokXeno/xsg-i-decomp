@@ -5,8 +5,11 @@
 #include "main/xgl_jpeg.h"
 #include "main/xgl_thread.h"
 #include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
-typedef struct TyaDisplayEnvironment {
+/* Partial view of GsDispEnv; the full type changes this object (xgl_render.c's own GsDispEnv definition keeps its GS register types .c-local). */
+typedef struct GsDispEnvDisplayView {
     u64 flags;
     unsigned char unmodeled_08[0x10];
     struct {
@@ -20,7 +23,7 @@ typedef struct TyaDisplayEnvironment {
         unsigned int unmodeled_55 : 9;
     } display;
     unsigned char unmodeled_20[0x30];
-} TyaDisplayEnvironment;
+} GsDispEnvDisplayView;
 
 typedef struct TyaSaveDataRecord {
     unsigned char unmodeled_00[0x30];
@@ -34,15 +37,13 @@ typedef struct TyaJpegRequest {
     unsigned char unmodeled_08[0x18];
 } TyaJpegRequest;
 
-extern TyaDisplayEnvironment DispEnv;
+extern GsDispEnvDisplayView DispEnv;
 extern const char displaySettingImagePath[];
 extern const char displayHalfwordFormat[];
 
-extern void sceGsSetDefDispEnv(TyaDisplayEnvironment *environment,
+extern void sceGsSetDefDispEnv(GsDispEnvDisplayView *environment,
     int psm, int width, int height, int x_offset, int y_offset);
 
-extern void xglSoundEffectNormalDirect(int effect_id);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void tyaDisplaySetting(u8 *framebuffer_or_mode);
 
 #endif

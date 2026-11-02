@@ -1,5 +1,6 @@
 #include "common.h"
 #include "check.h"
+#include "main/check.h"
 
 int Check_Actor(const Vector4 *position, short number)
 {
@@ -24,9 +25,9 @@ int Check_Actor(const Vector4 *position, short number)
             continue;
         if (number == i)
             continue;
-        if (__builtin_fabsf(actor[i].position.vector.y - position->y) >= 1.0f)
+        if (__builtin_fabsf(actor[i].position.y - position->y) >= 1.0f)
             continue;
-        distance = Get_Distance(position, &actor[i].position.vector);
+        distance = Get_Distance(position, &actor[i].position);
         if (distance <= actor[number].body.radius + actor[i].body.radius)
             break;
     }

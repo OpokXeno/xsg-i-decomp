@@ -6,6 +6,13 @@
 #include "main/window_tex_load.h"
 #include "main/menu_top_command_check.h"
 #include "main/xgl_thread.h"
+#include "main/menu_system.h"
+#include "main/end_print.h"
+#include "main/menu_model.h"
+#include "main/open_close_main.h"
+#include "main/ssd_set.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
 
 /* Existing option names designate entries in the contiguous option array. */
 #define soundOutput options[0]
@@ -42,32 +49,19 @@ typedef struct MenuSystemPad {
     unsigned char vibrationStatus;
 } MenuSystemPad;
 
-typedef struct MenuSystemPartyDataPrefix {
-    unsigned char unmodeled_00[0x2e];
-    unsigned char radar_disp;
-} MenuSystemPartyDataPrefix;
 
 typedef struct MenuSystemInfoBlock {
     unsigned char state;
     unsigned char active;
     unsigned char unmodeled_02[2];
     int color;
-    short x;
-    short y;
-    int previousColor;
-    short width;
-    short height;
-    unsigned char unmodeled_14[4];
-    unsigned char transition;
-    unsigned char unmodeled_19[3];
-    void (*window)(void);
-    void *subwindow;
-    unsigned char unmodeled_24[0x1a0 - 0x24];
+    WindowDX window;
+    unsigned char unmodeled_19c[0x1a0 - 0x19c];
     short cursorX;
     short cursorY;
     unsigned char unmodeled_1a4[4];
     int visible;
-    unsigned char *message;
+    char *message;
     unsigned char unmodeled_1b0[0x350 - 0x1b0];
     char text[128];
 } MenuSystemInfoBlock;
@@ -88,26 +82,6 @@ enum {
     SAVE_DATA_BYTE_40 = 0x40
 };
 
-typedef struct MenuSystemPanelWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[4];
-    signed char transition;
-    unsigned char unmodeled_11[0x194 - 0x11];
-} MenuSystemPanelWindow;
-
-typedef struct MenuSystemPanelMessage {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x44 - 0x0c];
-} MenuSystemPanelMessage;
 
 typedef struct MenuSystemPanelBox {
     short x;
@@ -121,8 +95,8 @@ typedef struct MenuSystemPasBlock {
     unsigned char state;
     unsigned char unmodeled_01[3];
     int color;
-    MenuSystemPanelWindow window;
-    MenuSystemPanelMessage message[1];
+    WindowDX window;
+    EMessageParam message[1];
     unsigned char unmodeled_1e0[0x334 - 0x1e0];
     MenuSystemPanelBox box;
 } MenuSystemPasBlock;
@@ -141,29 +115,6 @@ typedef struct MenuSystemWindow {
     unsigned char unmodeled_1c[0x194 - 0x1c];
 } MenuSystemWindow;
 
-typedef struct MenuSystemMessage {
-    unsigned char unmodeled_00;
-    unsigned char flag;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[4];
-    unsigned char rgb[3];
-    unsigned char unmodeled_13[5];
-    const char *text;
-    unsigned char unmodeled_1c[0x44 - 0x1c];
-} MenuSystemMessage;
-
-typedef struct MenuSystemCursor {
-    unsigned char flag;
-    unsigned char unmodeled_01[3];
-    short x;
-    short y;
-    int color;
-    unsigned char unmodeled_0c[0x24 - 0x0c];
-} MenuSystemCursor;
-
 typedef struct MenuSystemChoice {
     unsigned char unmodeled_00[2];
     short enabled;
@@ -177,19 +128,19 @@ typedef struct MenuSystemMenuBlock {
     unsigned char unmodeled_01[3];
     int color;
     WindowDX titleWindow;
-    MenuSystemMessage label[8];
-    MenuSystemMessage value[8];
-    MenuSystemCursor labelCursor;
+    EMessageParam label[8];
+    EMessageParam value[8];
+    ECursolMainData labelCursor;
     WindowDX choiceWindow;
-    MenuSystemMessage choiceLabel[3];
-    MenuSystemCursor choiceCursor;
+    EMessageParam choiceLabel[3];
+    ECursolMainData choiceCursor;
     WindowDX confirmWindow;
     MenuSystemChoice confirm;
 } MenuSystemMenuBlock;
 
 typedef const char *MenuSystemOptionNames[2];
 
-extern int MainMenuWorkEnd;
+extern unsigned char *MainMenuWorkEnd;
 
 /* The original stores the HDD mount result through this four-byte object. */
 extern int MenuHddCheck;
@@ -197,7 +148,6 @@ extern int MenuHddCheck;
 extern MenuSystemWork MenuWork;
 extern MenuSystemPad PadData;
 extern MenuSystemInfoBlock *MenuSystemInfo;
-extern XglClock _CountTime;
 extern MenuSystemPasBlock *MenuSystemPas;
 extern const char MenuSystemOptionHelpText[];
 extern MenuSystemMenuBlock *MenuSystemMenu;
@@ -207,7 +157,7 @@ static const char * msg01_2_0036DD20[] ;
 static const char * msg02_3_0036DD28[] ;
 static const char * msg03_4_0036DD30[] ;
 extern MenuSystemOptionNames *const settingLabelNames[];
-extern int MenuModelWorkTop;
+extern unsigned char *MenuModelWorkTop;
 extern unsigned char optionStateTable[];
 extern int outputModeTable[];
 extern int displayModeTable[];
@@ -216,7 +166,6 @@ extern int padModeTable[];
 extern int hddModeTable[];
 extern char systemText[];
 extern char messageDelayFormat[];
-extern const char MenuSkillTitleText[8];
 extern const char MenuSystemDefaultText[8];
 extern const char MenuSystemHddText[8];
 extern const char MenuSystemStereoText[8];
@@ -224,33 +173,14 @@ extern const char MenuSystemMonoText[8];
 extern const char MenuSystemOffText[8];
 extern const char MenuSystemOnText[8];
 extern const char MenuSystemYesNoText[8];
-extern const char MenuSkillSetSuffixText[8];
-
 extern void subMenuSystemInit(int workEnd);
 extern void subMenuSystemMain(void);
-extern void ChangeTopLevel(int level);
-void SsdSetOutputMode(int mode);
-void PartyRadarDispSet(int enabled);
 void tyaDisplaySetting(int mode);
-extern void eMessageCpy(char *message, char *text);
-extern void MoveSlide(short *value, short *destination, float speed);
 extern void *memset(void *destination, int value, unsigned int count);
-extern void endPrintInit(void);
-extern void endPrintExtFunc(int kind, int id, void *data);
-extern void eMessageSet(void *message, const char *text);
-extern void eMessageMain(void *message);
-extern void eCursolSet(void *cursor, signed char width);
-extern void eCursolMain(void *cursor);
-extern int MenuSelectMove(int selection, int count, int wrap);
-extern void MenuModelMemorySet(int mode);
-
 extern void MenuBibrationSet(unsigned char pad, unsigned char mode,
                              unsigned char strength, unsigned char duration);
 
 extern void MenuSystemMenuMain(void);
-extern void xglSoundEffectNormalID(int id, int mode);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 const MenuSystemMessageStorage messageTexts = {
     .words = {0x004C9338, 0x004C9380, 0x004C93A8, 0x004C93D0,
               0x004C93F8, 0x004C9428, 0x004C9460, 0}
@@ -301,21 +231,21 @@ void MenuSystemPasMain(void)
             return;
     } else {
         panel->color = 0xfffff0;
-        WindowDXSet((WindowDX *)&panel->window);
+        WindowDXSet(&panel->window);
         panel->window.x = -288;
-        panel->window.color = panel->color;
+        panel->window.style = panel->color;
         panel->window.y = 8;
         panel->window.width = 272;
         panel->window.height = 30;
-        panel->window.transition = 1;
-        WindowDXMain((WindowDX *)&panel->window);
-        panel->window.transition = 3;
+        panel->window.state = 1;
+        WindowDXMain(&panel->window);
+        panel->window.state = 3;
         for (row = 0; row < 1; row++) {
             eMessageSet(&panel->message[row], msg00_0_0036DCF8[row]);
             panel->message[row].mode = 32;
             panel->message[row].x = 288;
             panel->message[row].y = 11;
-            panel->message[row].color = panel->color + 2;
+            panel->message[row].draw_parameter = panel->color + 2;
         }
         panel->state = 2;
     }
@@ -336,8 +266,8 @@ void MenuSystemPasMain(void)
         break;
     }
     MoveSlide(&panel->window.x, windowTarget, 3.0f);
-    WindowDXMain((WindowDX *)&panel->window);
-    if (panel->window.transition == 3) {
+    WindowDXMain(&panel->window);
+    if (panel->window.state == 3) {
         panel->box.x = panel->window.x + 3;
         panel->box.y = panel->window.y + 3;
         panel->box.width = panel->window.width - 6;
@@ -362,22 +292,22 @@ void MenuSystemInfoMain(void)
             return;
     } else {
         info->color = 0xFFFFF0;
-        WindowDXSet((WindowDX *)&info->x);
-        info->x = -16;
-        info->y = 480;
-        info->width = 544;
-        info->height = 78;
-        info->previousColor = info->color;
-        info->subwindow = &info->cursorX;
+        WindowDXSet(&info->window);
+        info->window.x = -16;
+        info->window.y = 480;
+        info->window.width = 544;
+        info->window.height = 78;
+        info->window.style = info->color;
+        info->window.close_callback_arg = &info->cursorX;
         info->cursorX = 0;
-        info->window = (void (*)(void))MenuInfoWindow;
-        info->transition = 1;
+        info->window.close_callback = MenuInfoWindow;
+        info->window.state = 1;
         info->cursorY = 0;
         info->message = 0;
-        WindowDXMain((WindowDX *)&info->x);
-        info->transition = 3;
+        WindowDXMain(&info->window);
+        info->window.state = 3;
         info->visible = 1;
-        info->active = (info->transition == 3);
+        info->active = (info->window.state == 3);
         memset(info->text, 0, sizeof(info->text));
         info->state = 2;
     }
@@ -397,9 +327,9 @@ void MenuSystemInfoMain(void)
         targetY = 512;
         break;
     }
-    MoveSlide(&info->y, &targetY, 3.0f);
+    MoveSlide(&info->window.y, &targetY, 3.0f);
     info->message = info->text;
-    WindowDXMain((WindowDX *)&info->x);
+    WindowDXMain(&info->window);
 }
 
 void MenuSystemMenuMain(void)
@@ -409,10 +339,10 @@ void MenuSystemMenuMain(void)
     short choiceTarget;
     short confirmTarget;
     int row;
-    MenuSystemCursor *labelCursor;
+    ECursolMainData *labelCursor;
     WindowDX *confirmWindow;
     WindowDX *choiceWindow;
-    MenuSystemCursor *choiceCursor;
+    ECursolMainData *choiceCursor;
 
     switch (menu->state) {
     case 0:
@@ -429,25 +359,25 @@ void MenuSystemMenuMain(void)
         menu->titleWindow.state = 3;
         for (row = 0; row < 7; row++) {
             eMessageSet(&menu->label[row], 0);
-            menu->label[row].flag = 0x20;
-            menu->label[row].color = menu->color + 2;
+            menu->label[row].mode = 0x20;
+            menu->label[row].draw_parameter = menu->color + 2;
             eMessageSet(&menu->value[row], 0);
-            menu->value[row].flag = 0x20;
-            menu->value[row].color = menu->color + 2;
+            menu->value[row].mode = 0x20;
+            menu->value[row].draw_parameter = menu->color + 2;
         }
         if (MenuWork.hddMounted == 0) {
-            menu->label[5].rgb[2] = 64;
-            menu->label[5].rgb[1] = 64;
-            menu->label[5].rgb[0] = 64;
-            menu->value[5].rgb[2] = 64;
-            menu->value[5].rgb[1] = 64;
-            menu->value[5].rgb[0] = 64;
+            menu->label[5].color_b = 64;
+            menu->label[5].color_g = 64;
+            menu->label[5].color_r = 64;
+            menu->value[5].color_b = 64;
+            menu->value[5].color_g = 64;
+            menu->value[5].color_r = 64;
         }
         labelCursor = &menu->labelCursor;
         choiceWindow = &menu->choiceWindow;
         eCursolSet(labelCursor, 0);
-        menu->labelCursor.color = menu->color + 2;
-        labelCursor->flag = 0x20;
+        menu->labelCursor.work = menu->color + 2;
+        labelCursor->state = 0x20;
         WindowDXSet(choiceWindow);
         choiceWindow->x = 528;
         menu->choiceWindow.y = 116;
@@ -460,14 +390,14 @@ void MenuSystemMenuMain(void)
         menu->choiceWindow.state = 3;
         for (row = 0; row < 3; row++) {
             eMessageSet(&menu->choiceLabel[row], msg01_2_0036DD20[0]);
-            menu->choiceLabel[row].flag = 0x20;
-            menu->choiceLabel[row].color = menu->color + 2;
+            menu->choiceLabel[row].mode = 0x20;
+            menu->choiceLabel[row].draw_parameter = menu->color + 2;
         }
         choiceCursor = &menu->choiceCursor;
         confirmWindow = &menu->confirmWindow;
         eCursolSet(choiceCursor, 0);
-        menu->choiceCursor.color = menu->color + 2;
-        choiceCursor->flag = 0x20;
+        menu->choiceCursor.work = menu->color + 2;
+        choiceCursor->state = 0x20;
         WindowDXSet(confirmWindow);
         confirmWindow->x = 544;
         menu->confirmWindow.y = 116;
@@ -476,7 +406,7 @@ void MenuSystemMenuMain(void)
         menu->confirmWindow.height = 102;
         menu->confirmWindow.tag_id = selectionText;
         menu->confirm.choices = msg03_4_0036DD30[1];
-        menu->confirmWindow.close_callback = (void (*)(WindowDX *, void *))MenuSelectWindow;
+        menu->confirmWindow.close_callback = MenuSelectWindow;
         menu->confirmWindow.close_callback_arg = &menu->confirm;
         menu->confirm.question = msg03_4_0036DD30[0];
         menu->confirm.cursor = 0;
@@ -531,7 +461,7 @@ void MenuSystemMenuMain(void)
         break;
     }
     for (row = 0; row < 1; row++) {
-        WindowDX *titleWindow = (WindowDX *)((unsigned char *)menu + row + 8);
+        WindowDX *titleWindow = &menu->titleWindow + row;
         MoveSlide(&titleWindow->x, &titleTarget, 3.0f);
         WindowDXMain(titleWindow);
     }
@@ -576,7 +506,7 @@ void MenuSystemMenuMain(void)
 
 void MenuSystemInitSet(void)
 {
-    MenuSystemPartyDataPrefix *party;
+    PartyDataPrefix *party;
 
     SsdSetOutputMode(1);
     SaveData[SAVE_DATA_BYTE_28] = 1;
@@ -588,7 +518,7 @@ void MenuSystemInitSet(void)
     PadData.vibrationStatus = 0;
     MenuWork.radarMode = 0;
     PartyRadarDispSet(1);
-    party = (MenuSystemPartyDataPrefix *)PartyDataGet();
+    party = PartyDataGet();
     MenuWork.displayMode = party->radar_disp ^ 1;
     tyaDisplaySetting(1);
     if (MenuWork.hddMounted != 0) {
@@ -630,7 +560,7 @@ void subMenuSystemMain(void)
                     xglSoundEffectNormalID(1, 0);
                     MenuModelMemorySet(0);
                     xglSleep();
-                    tyaDisplaySetting(MenuModelWorkTop);
+                    tyaDisplaySetting((int)MenuModelWorkTop);
                 } else if (MenuWork.messageIndex == 5 && MenuWork.hddMounted == 0) {
                     xglSoundEffectNormalID(5, 0);
                 } else if (optionStates[MenuWork.messageIndex] != 0) {
@@ -676,10 +606,10 @@ void subMenuSystemMain(void)
         {
             MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
             if (PadData.pressed & 0x20) {
-                MenuSystemPartyDataPrefix *party;
+                PartyDataPrefix *party;
                 __builtin_memcpy(displayModes, displayModeTable, sizeof(displayModes));
                 PartyRadarDispSet(displayModes[MenuWork.choiceIndex]);
-                party = (MenuSystemPartyDataPrefix *)PartyDataGet();
+                party = PartyDataGet();
                 MenuWork.displayMode = party->radar_disp ^ 1;
                 MenuWork.nextState = 0x10;
                 MenuWork.inputDelay = 8;
@@ -805,16 +735,16 @@ void subMenuSystemMain(void)
 
 void subMenuSystemInit(int workEnd)
 {
-    MenuSystemPartyDataPrefix *party;
-    unsigned char *cursor = (unsigned char *)((workEnd + 127) & -128);
+    PartyDataPrefix *party;
+    void *cursor = (void *)((workEnd + 127) & -128);
 
-    MenuSystemPas = (MenuSystemPasBlock *)cursor;
+    MenuSystemPas = cursor;
     cursor += sizeof(*MenuSystemPas);
     MenuSystemPas->state = 0;
-    MenuSystemInfo = (MenuSystemInfoBlock *)cursor;
+    MenuSystemInfo = cursor;
     cursor += sizeof(*MenuSystemInfo);
     MenuSystemInfo->state = 0;
-    MenuSystemMenu = (MenuSystemMenuBlock *)cursor;
+    MenuSystemMenu = cursor;
     cursor += sizeof(*MenuSystemMenu);
     MenuSystemMenu->state = 0;
     MenuWork.nextState = 0x10;
@@ -823,7 +753,7 @@ void subMenuSystemInit(int workEnd)
     MenuWork.inputDelay = 12;
     MenuWork.padMode = SaveData[68];
     MenuWork.radarMode = SaveData[60];
-    party = (MenuSystemPartyDataPrefix *)PartyDataGet();
+    party = PartyDataGet();
     MenuWork.displayMode = party->radar_disp ^ 1;
     MenuHddCheck = xglHddMount();
     if (MenuHddCheck == 1 && xglHddActivate(-1) != 0) {
@@ -841,7 +771,7 @@ void MenuSystem(void)
         /* Keep both completion paths in this single dispatch scope. */
         do {
         case 0:
-            subMenuSystemInit(MainMenuWorkEnd);
+            subMenuSystemInit((int)MainMenuWorkEnd);
             MenuWork.menuState = 2;
             /* fall through */
         case 2:
@@ -859,7 +789,7 @@ void MenuSystem(void)
 
 void MenuSystem2Init(void) {
     endPrintInit();
-    subMenuSystemInit(MainMenuWorkEnd);
+    subMenuSystemInit((int)MainMenuWorkEnd);
 }
 
 int MenuSystem2(void)

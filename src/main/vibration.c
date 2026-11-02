@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/vibration.h"
 
 typedef struct VibrationGameLoopState {
     unsigned char unmodeled_00[0x2a000];

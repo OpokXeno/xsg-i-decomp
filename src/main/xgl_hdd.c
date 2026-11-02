@@ -3,32 +3,6 @@
 #include "main/xgl_hdd.h"
 #include "xgl_hdd.h"
 
-struct HddFolderStat {
-    unsigned int mode;
-    unsigned char unmodeled_04_27[0x24];
-    unsigned int privateData[6];
-};
-
-struct HddFolderDirectoryEntry {
-    struct HddFolderStat stat;
-    char name[256];
-    unsigned char unmodeled_140[16];
-};
-
-struct HddSavedataStat {
-    unsigned int mode;
-    unsigned int flags;
-    unsigned char unmodeled_08_27[0x20];
-    unsigned int privateData[2];
-    unsigned char unmodeled_30_3f[0x10];
-};
-
-struct HddSavedataDirectoryEntry {
-    struct HddSavedataStat stat;
-    char name[256];
-    unsigned char unmodeled_140[16];
-};
-
 /* The saved image begins with the transfer header. icon.sys occupies +0x40
  * through +0x403; the game payload starts at +0x440. The gaps remain unknown. */
 struct HddSaveImage {
@@ -53,14 +27,9 @@ struct HddInstallImage {
 static char partitionname[];
 
 static char hddname[];
-static u8 hddcheck[];
+static char hddcheck[];
 static char commonname[];
 static char yoursaves[];
-extern const unsigned char hddLoadErrorText[];
-extern const char cd_filename[16];
-extern char xgl_hdd_device[];
-extern char hdd_mc_path[];
-extern u8 mount_device[];
 extern HddInstallCBParam *HddInstallCBparam;
 extern char pfs1RootPath[];
 extern char currentDirEntryName[];
@@ -74,7 +43,7 @@ extern int strcmp(const char *left, const char *right);
  * Preserve the embedded font controls and line breaks from the original. */
 /* JP: ハードディスクドライブにあるゼノサーガの\n\nアプリケーションデータが読み込めません。\n\nこれ以降はＤＶＤから読み込みを行います。\n\n\n\n○ボタン：続行
  * EN: Cannot load the Xenosaga\n\napplication data on the hard disk drive.\n\nData will be loaded from the DVD from now on.\n\n\n\nCircle button: Continue */
-const unsigned char hddLoadErrorText[] =
+const char hddLoadErrorText[] =
     "\x0b\x0e\x01\x01\x00\x00\x00\x0d\x03\xa5\xcf\xa1\xbc\xa5\xc9\xa5\xc7\xa5\xa3\xa5"
     "\xb9\xa5\xaf\xa5\xc9\xa5\xe9\xa5\xa4\xa5\xd6\xa4\xcb\xa4\xa2\xa4\xeb\xa5\xbc\xa5"
     "\xce\xa5\xb5\xa1\xbc\xa5\xac\xa4\xce\x0a\x0a\xa5\xa2\xa5\xd7\xa5\xea\xa5\xb1\xa1"
@@ -86,7 +55,7 @@ const unsigned char hddLoadErrorText[] =
 
 static HddErrorPacket TestEnv_0_004A8A80[1];
 
-static unsigned char dvdname_2[12];
+static char dvdname_2[12];
 
 static char partitionname[] = {
     'h' ^ 0x80, 'd' ^ 0x80, 'd' ^ 0x80, '0' ^ 0x80, ':' ^ 0x80,
@@ -104,7 +73,7 @@ static char partitionname[] = {
 
 static char hddname[] = "pfs0:/xenosaga.00";
 
-static u8 hddcheck[] = "pfs0:/xenosaga.hdd";
+static char hddcheck[] = "pfs0:/xenosaga.hdd";
 
 static char commonname[] = "hdd0:__common";
 
@@ -125,7 +94,7 @@ static HddErrorPacket TestEnv_0_004A8A80[1] = {{
 
 static unsigned char tbl_1_004A8AE0[] = { 14, 9, 13, 15 };
 
-static unsigned char dvdname_2[12] = "xenosaga.00";
+static char dvdname_2[12] = "xenosaga.00";
 
 char xgl_hdd_device[] = "hdd0:";
 
@@ -214,7 +183,7 @@ void xglHddErrorScreen(void)
 
     sRender.errorScreenActive = 1;
     for (;;) {
-        xglDmaDirectNormal(2, TestEnv_0_004A8A80, 6);
+        xglDmaDirectNormal(2, (u32)TestEnv_0_004A8A80, 6);
         xglFontPrint(48, 64, 0xffffff, hddLoadErrorText);
         if (waitFrames > 0) {
             waitFrames--;
@@ -234,7 +203,7 @@ int xglHddMcLoadMount(void)
     if (xglHddCheck2() != 0)
         return -1;
 
-    result = sceMount((char *)hdd_mc_path, (char *)commonname, 5, 0, 0);
+    result = sceMount(hdd_mc_path, commonname, 5, 0, 0);
     if (result < 0 && result != -16)
         return -1;
     return 0;
@@ -278,7 +247,7 @@ int xglHddMcExist(struct HddExistRequest *request)
     unsigned int newestTime;
     unsigned int time;
     unsigned char *found;
-    unsigned char *source;
+    char *source;
     char *destination;
     unsigned char *clearPosition;
 
@@ -389,7 +358,7 @@ int xglHddMcLoad(void *save)
 
 static int Judge_MakeNewFolder(void)
 {
-    struct HddFolderDirectoryEntry entry;
+    struct HddDirectoryEntry entry;
     int directoryCount;
     int entriesRead;
     int result;
@@ -404,7 +373,7 @@ static int Judge_MakeNewFolder(void)
     descriptor = result;
 
     for (entriesRead = 0; entriesRead < 1024; entriesRead++) {
-        result = sceDread(descriptor, (struct HddDirectoryEntry *)&entry);
+        result = sceDread(descriptor, &entry);
         if (result <= 0)
             break;
 
@@ -433,7 +402,7 @@ int Judge_MakeNewSavedata(int descriptor, int card)
 {
     extern unsigned int strlen(const char *string);
     extern char *strchr(const char *string, int character);
-    struct HddSavedataDirectoryEntry entry;
+    struct HddDirectoryEntry entry;
     int directoryCount;
     int entriesRead;
     int result;
@@ -444,7 +413,7 @@ int Judge_MakeNewSavedata(int descriptor, int card)
 
     directoryCount = 0;
     result = 0;
-    path = (char *)xglMcSetFullPath(card, -1) + 1;
+    path = xglMcSetFullPath(card, -1) + 1;
     if (card < 0) {
         char *end = path;
 
@@ -458,7 +427,7 @@ int Judge_MakeNewSavedata(int descriptor, int card)
     pathLength = strlen(path);
 
     for (entriesRead = 0; entriesRead < 1024; entriesRead++) {
-        result = sceDread(descriptor, (struct HddDirectoryEntry *)&entry);
+        result = sceDread(descriptor, &entry);
         if (result <= 0)
             break;
 
@@ -514,14 +483,14 @@ static int xglHddMcCheckCore(struct HddCheckState *state)
         int dataClusters = (state->dataSize + clusterSize - 1) / clusterSize;
         int reserveClusters = ((unsigned int)clusterSize + 963) / (unsigned int)clusterSize;
         int transferClusters =
-            ((unsigned int)(state->transfer->end - state->transfer->begin) + clusterSize - 1)
+            ((unsigned int)(state->transfer.info->end - state->transfer.info->begin) + clusterSize - 1)
             / (unsigned int)clusterSize;
 
         dataClusters += reserveClusters;
         if (freeClusters < dataClusters + transferClusters + 7) {
             int capacity;
 
-            if (sceDevctl((char *)xgl_hdd_device, 0x480a, 0, 0, &capacity, 4) < 0)
+            if (sceDevctl(xgl_hdd_device, 0x480a, 0, 0, &capacity, 4) < 0)
                 return -1;
             return capacity <= 0x1fffff ? -4 : 1;
         }
@@ -696,7 +665,7 @@ int xglHddMcCreate(struct HddCheckState *state)
     }
 
     result = -0x16;
-    transfer = (struct HddSaveImage *)state->transfer;
+    transfer = state->transfer.image;
     xglMcWriteMapName(transfer->iconSystem, state->status);
     if (create_file(state->status, 1, transfer->iconSystem, 0x3c4) >= 0) {
         result = -0x17;
@@ -771,16 +740,11 @@ int xglHddInstall(int (*callback)(), int param)
     extern int sceIoctl2(int descriptor, int command, const void *input,
                          unsigned int input_size, void *output,
                          unsigned int output_size);
-    extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-    extern int xglCdGetFileSize(const char *name);
-    extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
-                                 int (*progress)(int, int), int offset,
-                                 int size);
     extern char hddResourcePath[];
     extern char partitionSpecFormat[];
     extern char hddPartitionSize256M[];
     extern char pfsDevicePath[];
-    extern unsigned char dvdname_2[];
+    extern char dvdname_2[];
     struct HddInstallImage *image = (struct HddInstallImage *)0x1000000;
     HddInstallCBParam context;
     char path[256];
@@ -878,8 +842,12 @@ int xglHddInstall(int (*callback)(), int param)
             if (length > 0x1000000)
                 length = 0x1000000;
             context.base = archives++;
-            xglCdReadFilePart(dvdname_2, image, 2, xglHddInstallReadCB, offset,
-                              length);
+            /* The CD layer types completion callbacks as void; this one
+             * returns a status (the original does too), so the pointer type
+             * is converted. */
+            xglCdReadFilePart(dvdname_2, image, 2,
+                              (CdCompletionCallback *)xglHddInstallReadCB,
+                              offset, length);
             offset += length;
             if (context.status != 0) {
                 sceClose(descriptor);
@@ -1001,18 +969,18 @@ int xglHddMount(void)
     if (readiness != 0)
         return readiness == -5 ? -1 : readiness;
 
-    mount_result = sceMount((char *)mount_device, partitionname, 5, 0, 0);
+    mount_result = sceMount(mount_device, partitionname, 5, 0, 0);
     if (mount_result == -5)
         return mount_result;
     if (mount_result < 0 && mount_result != -16) {
         if (mount_result == -2) {
-            device_result = sceDevctl((char *)xgl_hdd_device, 0x480a, 0, 0,
+            device_result = sceDevctl(xgl_hdd_device, 0x480a, 0, 0,
                                       &capacity, 4);
             if (device_result < 0)
                 return -2;
             if (capacity <= 0x37ffff)
                 return -4;
-            device_result = sceDevctl((char *)xgl_hdd_device, 0x4801, 0, 0, 0, 0);
+            device_result = sceDevctl(xgl_hdd_device, 0x4801, 0, 0, 0, 0);
             if (device_result <= 0x7ffff)
                 return -4;
             return 0;
@@ -1020,7 +988,7 @@ int xglHddMount(void)
         return -2;
     }
 
-    descriptor = sceOpen((char *)hddcheck, 1, 0x16d);
+    descriptor = sceOpen(hddcheck, 1, 0x16d);
     if (descriptor < 0)
         return -5;
 
@@ -1032,7 +1000,7 @@ int xglHddMount(void)
     if (sceRead(descriptor, buffer, 512) < 0) {
         mismatch = 1;
     } else {
-        xglCdGetFileData((char *)cd_filename, reference);
+        xglCdGetFileData(cd_filename, reference);
         for (index = 0; index < 36; index++) {
             if (buffer[index] != reference[index]) {
                 mismatch = 1;
@@ -1063,7 +1031,7 @@ const char cd_filename[16] = "xenosaga.00";
 
 unsigned char mcPartitionSize1G[8] = "1G";
 
-u8 mount_device[] = "pfs0:";
+char mount_device[] = "pfs0:";
 
 char hddPartitionSize256M[8] = "256M";
 

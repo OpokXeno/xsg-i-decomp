@@ -1,6 +1,8 @@
 #include "common.h"
 #include "game_snap_shot.h"
 #include "main/xgl_cd.h"
+#include "main/game_snap_shot.h"
+#include "main/xgl_dma.h"
 
 enum {
     SNAPSHOT_OPEN_FLAGS = 0x602,
@@ -72,14 +74,11 @@ extern GameSnapShotRenderState sRender;
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceClose(int descriptor);
 extern int sceWrite(int descriptor, const void *buffer, unsigned int size);
-extern void xglClockUInt2DayTime(XglClock *clock, unsigned int seconds);
 extern int xglJpegEncode(GameSnapShotJpegParams *params);
 extern void *memset(void *destination, int value, unsigned int size);
 extern int printf(const char *format, ...);
 extern void SyncDCache(void *start, void *end);
 extern int sceGsSyncPath(int mode, int timeout);
-extern void xglDmaDirectNormal(int channel, const void *packet, int quadwords);
-
 static char snapname[40];
 
 /* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
@@ -137,7 +136,7 @@ void GameSnapShotExecute(int quality, int flags) {
     display_origin = DrawEnv.display_origin;
     source_x = display_origin & 0x1ff;
     params.source_x = source_x << 5;
-    params.source_y = (short) ((display_origin >> 16) & 0x3f);
+    params.source_y = (display_origin >> 16) & 0x3f;
     params.width = SNAPSHOT_WIDTH;
     params.height = SNAPSHOT_HEIGHT;
     params.destination_x = 0;
@@ -206,7 +205,7 @@ unsigned int GameSnapShotSaveThumbnail(int quality, unsigned int output_buffer) 
     TestPrim_0_00366EA0.words[8] = 0x801C0;
     SyncDCache(TestPrim_0_00366EA0.words, TestPrim_0_00366EA0.words + 24);
     sceGsSyncPath(0, 0);
-    xglDmaDirectNormal(2, TestPrim_0_00366EA0.words, 12);
+    xglDmaDirectNormal(2, (u32)TestPrim_0_00366EA0.words, 12);
     sceGsSyncPath(0, 0);
 
     memset(&params, 0, 0x20);
@@ -264,7 +263,7 @@ int GameSnapShotSave(int quality, unsigned char *image) {
     display_origin = DrawEnv.display_origin;
     source_x = display_origin & 0x1ff;
     params.source_x = source_x << 5;
-    params.source_y = (short) ((display_origin >> 16) & 0x3f);
+    params.source_y = (display_origin >> 16) & 0x3f;
     params.width = SNAPSHOT_WIDTH;
     params.height = SNAPSHOT_HEIGHT;
     params.destination_x = 0;

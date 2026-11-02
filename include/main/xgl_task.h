@@ -15,10 +15,16 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
  */
 int xglTaskWaitRemove(XglTaskPrefix *task);
 
+/* Returns the address just past the caller-allocated task pool. */
+void *xglTaskInitial(void *manager, int capacity, int flags);
+
 /*
  * next_to_visit is the cursor the scheduler advances during callbacks, rather
  * than the task whose callback is currently running.
  */
 void xglTaskExecute(XglTaskScheduler *scheduler);
+
+/* Functions and data used by other translation units. */
+int xglTaskRemove(XglTaskPrefix *task);
 
 #endif /* INCLUDE_MAIN_XGL_TASK_H */

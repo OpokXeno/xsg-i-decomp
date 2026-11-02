@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "main/xgl_cd.h"
 #include "enemy_system_init.h"
+#include "main/enemy_system_init.h"
 
 typedef struct EnemyPresetPathPrefix {
     char bytes[15];
@@ -17,63 +18,6 @@ typedef union EnemyPresetPathStorage {
     char bytes[256];
 } EnemyPresetPathStorage;
 
-/* The enemy-parameter prefix shared by patrol, chase and action setup.
- * PauseMenuPageEnemy labels +0x08 as movement speed and +0x00 as movement
- * distance. Its stiffness and threat rows display the durations at
- * +0x18/+0x1c with their intervals at +0x1a/+0x1e. Enemy_ActionReady copies
- * those durations into the counter limit used by Enemy_Pause/Enemy_Threat.
- * The remaining
- * parameter record is outside this partial type. */
-typedef struct EnemyBehaviorDefaults {
-    float route_step_length;
-    float chase_distance;
-    float movement_speed;
-    float chase_speed;
-    float sight_angle;
-    float sight_distance;
-    short pause_duration;
-    short pause_interval;
-    short threat_duration;
-    short threat_interval;
-} EnemyBehaviorDefaults;
-
-/* Encounter configuration shares the enemy's parameter record.
- * Check_Encount randomly selects one of the eight nonnegative monster-set
- * numbers at +0x50 for monsSetNo. It copies the low byte of +0x6c to
- * cfEvent, whose bit 0x40 GameModeCfMain tests after battle. The halfword
- * remains the original initialization width; its high byte is not yet
- * interpreted. Untouched gaps are outside the recovered field semantics. */
-typedef struct EnemyEncounterParameters {
-    EnemyBehaviorDefaults behavior;
-    unsigned char unmodeled_20[0x50 - 0x20];
-    short monster_set_numbers[8];
-    unsigned char unmodeled_60[4];
-    int locator_flags;
-    float hearing_distance;
-    short encounter_event_flags;
-    short light_level;
-} EnemyEncounterParameters;
-
-/* Navigation state inside one enemy-work entry. Check_Encount stores
- * the facing-derived encounter side at +0x68. Homing_Add appends positions
- * at +0x30a0 and increments +0x37a0; Homing_Search walks those positions
- * using that count. Script_Action interpolates between the two movement
- * points using the step/duration pair at +0x3820/+0x3822. The gaps remain
- * uninterpreted storage, not inferred padding or new recovered fields. */
-typedef struct EnemyNavigationWork {
-    unsigned char unmodeled_00[0x68];
-    signed char encounter_side;
-    unsigned char unmodeled_69[0x30a0 - 0x69];
-    float homing_points[64][4];
-    short neighbours[64][4];
-    short neighbour_count[64];
-    short linked_target[64];
-    short homing_point_count;
-    unsigned char unmodeled_37a2[0x3800 - 0x37a2];
-    float movement_points[2][4];
-    short movement_step;
-    short movement_duration;
-} EnemyNavigationWork;
 
 extern const char enemyDatSuffix[];
 
@@ -83,7 +27,7 @@ extern void *DataSpline[1];
 extern void *AdrsEnemy;
 
 extern char *strcat(char *destination, const char *source);
-extern void ACT_updateEnemy(EnemyInitActor *actor);
+extern void ACT_updateEnemy(ActorEnemyInitView *actor);
 extern void UnduParamInit(void *undulation);
 
 const char enemyDataPath[24] = "data\\matumoto\\enemy.dat";
@@ -146,7 +90,7 @@ const char PauseMenuPageEnemyPursueRouteText[15] = "\245\353\241\274\245\310\276
 
 void Enemy_SystemInit(void) {
     AdrsEnemyPreset = WorkEnd;
-    GameLoopState[0x1c / sizeof(unsigned int)] = 0;
+    GameLoopState[0x1c / sizeof(ActorEnemyInitView *)] = 0;
     WorkEnd += xglCdReadFile(enemyDataPath, WorkEnd, 0, 0);
 
     AdrsEnemySpline = WorkEnd;
@@ -188,19 +132,14 @@ void TM_Script_Spline_Add(int number, float x, float y, float z)
     enepc[number].spline_points[point][3] = 1.0f;
 }
 
-EnemyInitActor *ACT_createEnemy(int number, int id)
+ActorEnemyInitView *ACT_createEnemy(int number, int id)
 {
-    EnemyInitActor *enemy;
-    EnemyInitParams *params;
-    EnemyBehaviorDefaults *behavior;
-    EnemyEncounterParameters *encounter;
+    ActorEnemyInitView *enemy;
+    EnemyParamsInitView *params;
     EnemyInitWork *work;
-    EnemyNavigationWork *navigation;
     short i;
     short j;
     short k;
-    EnemyInitActor **loop_state;
-
     if (number < 0) {
         for (i = 0; i < 64; i++) {
             if (actor[i].id == 0) {
@@ -215,36 +154,33 @@ EnemyInitActor *ACT_createEnemy(int number, int id)
 
     enemy = &actor[number];
     params = &enemy->params;
-    behavior = (void *)params;
-    encounter = (void *)params;
 
     enemy->number = number;
     enemy->id = id;
     work = &enepc[enemy->number];
-    navigation = (void *)work;
-    behavior->route_step_length = 15.0f;
+    params->route_step_length = 15.0f;
     params->preset_index = -1;
     params->route_value_count = 0;
-    behavior->threat_duration = 20;
-    behavior->pause_duration = 30;
-    behavior->pause_interval = 4;
-    behavior->chase_distance = 10.0f;
-    behavior->sight_distance = 4.0f;
-    behavior->movement_speed = 0.15f;
-    behavior->chase_speed = 0.07f;
-    params->value_e0 = 25;
-    behavior->threat_interval = 4;
+    params->threat_duration = 20;
+    params->stiff_duration = 30;
+    params->pause_interval = 4;
+    params->chase_distance = 10.0f;
+    params->sight_distance = 4.0f;
+    params->move_speed = 0.15f;
+    params->chase_speed = 0.07f;
+    params->turn_duration = 25;
+    params->threat_interval = 4;
     params->wall_attribute = 0;
     work->route_point_count = 0;
-    behavior->sight_angle = 90.0f;
+    params->sight_angle = 90.0f;
     params->move_kind = 1;
     work->initial_motion_id = 30;
     work->locator_start_frame = 5;
-    encounter->hearing_distance = 10.0f;
+    params->hearing_distance = 10.0f;
     params->homing_value_count = 0;
     params->locator_distance = 4.0f;
     params->body_radius = 0.35f;
-    navigation->homing_point_count = 0;
+    work->homing_point_count = 0;
     params->value_108 = 1.0f;
     work->locator_end_frame = 25;
     params->ex_motion_resource = -1;
@@ -258,19 +194,18 @@ EnemyInitActor *ACT_createEnemy(int number, int id)
             work->route_value[i][k] = -1;
         }
     }
-    navigation->homing_point_count = 0;
-    navigation->encounter_side = -1;
+    work->homing_point_count = 0;
+    work->encounter_side = -1;
     work->spline_parameter = 0;
     work->fast_point_count = 0;
     work->chase_frame = 0;
     work->chase_frame_limit = 0;
-    loop_state = (EnemyInitActor **)GameLoopState;
     enemy->flags |= 0x10000;
     work->mark = 0;
     work->mark_timer = 0;
     enemy->flags |= 0x20000;
     enemy->flags |= 0x40000000;
-    work->target_number = loop_state[1]->number;
+    work->target_number = GameLoopState[1]->number;
     enemy->lookat_timer = 0;
     enemy->lookat_target = -1;
     params->default_motion_table[1] = 1;
@@ -281,7 +216,7 @@ EnemyInitActor *ACT_createEnemy(int number, int id)
     params->default_motion_table[5] = 0;
     params->default_motion_table[3] = 9;
     params->default_motion_table[6] = 0;
-    encounter->encounter_event_flags = 0;
+    params->encounter_event_flags = 0;
     work->state_37b4 = 0;
     work->turn_flags = 0;
     work->turn_lock = 0;
@@ -289,22 +224,22 @@ EnemyInitActor *ACT_createEnemy(int number, int id)
     params->value_2c4 = 0;
     work->encount_lock = 0;
     params->value_2c0 = 0;
-    encounter->locator_flags = 0;
+    params->locator_flags = 0;
     if ((unsigned short)enemy->id - 0x4000 >= 0x806U) {
-        encounter->locator_flags = 0x1001b;
+        params->locator_flags = 0x1001b;
     }
     work->turn_frame = -1;
-    navigation->movement_step = -1;
+    work->movement_step = -1;
     work->turn_duration = 0;
-    navigation->movement_duration = 0;
+    work->movement_duration = 0;
     UnduParamInit(enemy->undulation);
     work->applied_light_level = 1000;
     params->gravity_mode = 0;
     enemy->update = ACT_updateEnemy;
     enemy->flags |= 0x20;
-    encounter->light_level = 1000;
+    params->light_level = 1000;
     for (i = 0; i < 4; i++) {
-        params->value_2e0[i] = -1;
+        params->linked_actors[i] = -1;
     }
     work->effect = 0;
     for (i = 0; i < 8; i++) {
@@ -321,7 +256,7 @@ EnemyInitActor *ACT_createEnemy(int number, int id)
         }
     }
     for (i = 0; i < 8; i++) {
-        encounter->monster_set_numbers[i] = -1;
+        params->monster_set_numbers[i] = -1;
     }
     work->sense_block_timer = 0;
     work->action = 0;

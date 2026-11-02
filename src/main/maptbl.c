@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/maptbl.h"
 #include "maptbl.h"
 
 /* MapFileNameGet indexes group.names by map ID and reads group.count. */
@@ -758,6 +759,5 @@ MapNameGroup maptbl[20] = {
  * Both zero-initialized objects are genuine retail .data OBJECTs, not BSS. */
 CfCameraDefinition CfCameraDefine[33] = {{0}};
 
-/* GameCameraStateSave/Restore copies the complete 0x5f0-byte camera image.
- * The eight-byte word view follows its existing CameraImage declaration. */
-CameraImage save_cam = {{0}};
+/* GameCameraStateSave/Restore copies the whole studio camera 0 here. */
+StudioCamera save_cam = {0};

@@ -3,6 +3,7 @@
 
 #include "shared.h"
 #include "main/enemy_1.h"
+#include "main/get.h"
 
 typedef struct CheckActorBody {
     float sort_offset;
@@ -12,13 +13,13 @@ typedef struct CheckActorBody {
     unsigned char unmodeled_0e[2];
     short encount_lock;
     unsigned char unmodeled_12[0xe];
-    EnemyVector4 saved_position;
+    AlignedVector4 saved_position;
 } CheckActorBody;
 
 typedef struct CheckActorRecord {
     u32 flags;
     unsigned char unmodeled_04[0x0c];
-    EnemyVector4 position;
+    AlignedVector4 position;
     unsigned char unmodeled_20[0x62];
     unsigned char kind;
     unsigned char unmodeled_83[3];
@@ -37,7 +38,5 @@ typedef struct CheckActorGameLoopState {
 extern CheckActorRecord actor[64];
 extern EnemyWorkEntry enepc[16];
 extern CheckActorGameLoopState GameLoopState;
-
-float Get_Distance(const Vector4 *from, const Vector4 *to);
 
 #endif
