@@ -1,6 +1,9 @@
 #include "common.h"
 #include "main/xgl_sound.h"
 
+/* streamPlay converts the script's sample rate into the driver's 4.12 pitch (1.0 at 48 kHz). */
+#define SOUND_STREAM_SAMPLE_RATE 48000
+
 /*
  * The script VM's per-thread context, recovered as `JThread` in
  * src/main/chr.h (main's chr TU). Every Java native receives
@@ -128,7 +131,7 @@ void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
         xglSoundStreamStop(0);
         xglSoundStreamOpenVagMultiParam(
             0, path,
-            (arguments->pitch << 12) / 48000,
+            (arguments->pitch << 12) / SOUND_STREAM_SAMPLE_RATE,
             arguments->volume, arguments->pan);
         return;
     }
@@ -138,6 +141,6 @@ void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
     xglSoundStreamStop(0);
     xglSoundStreamOpenVagStereoParam(
         0, path,
-        (arguments->pitch << 12) / 48000,
+        (arguments->pitch << 12) / SOUND_STREAM_SAMPLE_RATE,
         arguments->volume);
 }

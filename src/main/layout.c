@@ -2,6 +2,15 @@
 #include "layout.h"
 #include "main/jni.h"
 
+/* UnduDataGetHeader keys: the layout map id is offset into the Undu map index space and the unit id is flagged as a by-index lookup. */
+#define LAYOUT_UNDU_MAP_BASE 0x200
+#define LAYOUT_UNDU_UNIT_FLAG 0x8000
+
+/* Byte offsets inside a unit / character peer object. */
+#define LAYOUT_PEER_POSITION_OFFSET 16
+#define LAYOUT_UNIT_PEER_ROTATION_OFFSET 32
+#define LAYOUT_CHR_PEER_ROTATION_OFFSET 80
+
 static int defaultLayout;
 
 int layoutManagerId;
@@ -14,15 +23,15 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
     float *position;
     float *rotation;
 
-    header = UnduDataGetHeader(map_id + 0x200, unit_id + 0x8000);
+    header = UnduDataGetHeader(map_id + LAYOUT_UNDU_MAP_BASE, unit_id + LAYOUT_UNDU_UNIT_FLAG);
     if (header == 0)
         return;
 
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString("peer", -1), 0);
     peer = *(u8 **)(layout + field->offset);
-    position = (float *)(peer + 16);
-    rotation = (float *)(peer + 32);
+    position = (float *)(peer + LAYOUT_PEER_POSITION_OFFSET);
+    rotation = (float *)(peer + LAYOUT_UNIT_PEER_ROTATION_OFFSET);
     position[0] = header->locator.x;
     position[1] = header->locator.y;
     position[2] = header->locator.z;
@@ -52,15 +61,15 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
     float *rotation;
     float angle;
 
-    header = UnduDataGetHeader(map_id + 0x200, unit_id + 0x8000);
+    header = UnduDataGetHeader(map_id + LAYOUT_UNDU_MAP_BASE, unit_id + LAYOUT_UNDU_UNIT_FLAG);
     if (header == 0)
         return;
 
     field = lookupClassField(classJava_xeno_Chr,
                              loadConstString("peer", -1), 0);
     peer = *(u8 **)(layout + field->offset);
-    position = (float *)(peer + 16);
-    rotation = (float *)(peer + 80);
+    position = (float *)(peer + LAYOUT_PEER_POSITION_OFFSET);
+    rotation = (float *)(peer + LAYOUT_CHR_PEER_ROTATION_OFFSET);
     position[0] = header->locator.x;
     *(u16 *)(peer + 1232) |= 0x1000;
     position[1] = header->locator.y;
@@ -90,7 +99,7 @@ void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
     JavaField *field;
     LayoutEffectPeer *peer;
 
-    header = UnduDataGetHeader(map_id + 0x200, unit_id + 0x8000);
+    header = UnduDataGetHeader(map_id + LAYOUT_UNDU_MAP_BASE, unit_id + LAYOUT_UNDU_UNIT_FLAG);
     if (header == 0)
         return;
 

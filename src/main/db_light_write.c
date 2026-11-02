@@ -327,7 +327,7 @@ void DB_lightWrite(int descriptor)
 void drawRect2(Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
-    DebugRectScratch *scratch = (DebugRectScratch *)0x70000000;
+    DebugRectScratch *scratch = (DebugRectScratch *)SCRATCHPAD_BASE;
     Vector4 *position;
     unsigned int *write;
     const unsigned char *red;
@@ -382,7 +382,7 @@ void drawRect2(Matrix4 *matrix, int color_index)
 void drawBox2(Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
-    DebugRectScratch *scratch = (DebugRectScratch *)0x70000000;
+    DebugRectScratch *scratch = (DebugRectScratch *)SCRATCHPAD_BASE;
     int vertex_count = 5;
     Vector4 *position;
     unsigned int (*write)[4];
@@ -443,7 +443,7 @@ void drawCircle2(Matrix4 *matrix, float radius, int color_index)
     const unsigned char *alpha_column;
     const unsigned char *red;
     StudioCamera *camera;
-    DebugLineScratch *scratch = (DebugLineScratch *)0x70000000;
+    DebugLineScratch *scratch = (DebugLineScratch *)SCRATCHPAD_BASE;
     unsigned int *write;
     float angle;
     float scale;
@@ -501,7 +501,7 @@ void drawCircle2(Matrix4 *matrix, float radius, int color_index)
 void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
-    DebugLineScratch *scratch = (DebugLineScratch *)0x70000000;
+    DebugLineScratch *scratch = (DebugLineScratch *)SCRATCHPAD_BASE;
     Vector4 *position;
     unsigned int (*write)[4];
     int vertex_index;
@@ -606,7 +606,7 @@ void drawGrid(Matrix4 matrix, float scale)
     Matrix4 *local_matrix_pointer;
     StudioCamera *camera;
     StudioCamera *source_camera;
-    TransformParams *params = (TransformParams *)0x70000400;
+    TransformParams *params = (TransformParams *)(SCRATCHPAD_BASE + 0x400);
     Vector4 *position;
     unsigned int (*write)[4];
     int vertex_index;
@@ -626,8 +626,8 @@ void drawGrid(Matrix4 matrix, float scale)
     xglMatrixStackLoad(matrix);
     xglMatrixStackScale(&scale_vector.x);
     xglMatrixStackSave(local_matrix);
-    transformVector((Vector4 *)0x700004e0, vGridXZ, 5, params);
-    position = (Vector4 *)0x700004e0;
+    transformVector((Vector4 *)(SCRATCHPAD_BASE + 0x4e0), vGridXZ, 5, params);
+    position = (Vector4 *)(SCRATCHPAD_BASE + 0x4e0);
     for (vertex_index = 0; vertex_index < 5; vertex_index++, position++) {
         if (position->x > 2560.0f)
             return;
@@ -640,12 +640,12 @@ void drawGrid(Matrix4 matrix, float scale)
         if (position->z < 0.0f)
             return;
     }
-    position = (Vector4 *)0x700004e0;
-    write = (unsigned int (*)[4])0x70000010;
-    ((unsigned int *)0x70000000)[0] = 0x8005;
-    ((unsigned int *)0x70000000)[1] = 0x20054000;
-    ((unsigned int *)0x70000000)[2] = 0xffffff51;
-    ((unsigned int *)0x70000000)[3] = 0;
+    position = (Vector4 *)(SCRATCHPAD_BASE + 0x4e0);
+    write = (unsigned int (*)[4])(SCRATCHPAD_BASE + 0x10);
+    ((unsigned int *)SCRATCHPAD_BASE)[0] = 0x8005;
+    ((unsigned int *)SCRATCHPAD_BASE)[1] = 0x20054000;
+    ((unsigned int *)SCRATCHPAD_BASE)[2] = 0xffffff51;
+    ((unsigned int *)SCRATCHPAD_BASE)[3] = 0;
     for (vertex_index = 0; vertex_index < 5; vertex_index++, position++) {
         (*write)[0] = cCursor[0].red;
         (*write)[1] = cCursor[0].green;
@@ -658,7 +658,7 @@ void drawGrid(Matrix4 matrix, float scale)
         (*write)[3] = 0;
         write++;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 11);
+    xglPrimAddGifTagDirect(0, (const void *)SCRATCHPAD_BASE, 11);
 }
 
 static StudioCamera *getCurrentCamera(void)
@@ -683,7 +683,7 @@ void drawAxis(Matrix4 matrix, float scale)
     Matrix4 local_matrix;
     Matrix4 *local_matrix_pointer;
     StudioCamera *camera;
-    TransformParams *params = (TransformParams *)0x70000400;
+    TransformParams *params = (TransformParams *)(SCRATCHPAD_BASE + 0x400);
     Vector4 *position;
     unsigned int (*write)[4];
     int vertex_index;
@@ -702,8 +702,8 @@ void drawAxis(Matrix4 matrix, float scale)
     xglMatrixStackLoad(matrix);
     xglMatrixStackScale(&scale_vector.x);
     xglMatrixStackSave(local_matrix);
-    transformVector((Vector4 *)0x700004e0, vCursor, 6, params);
-    position = (Vector4 *)0x700004e0;
+    transformVector((Vector4 *)(SCRATCHPAD_BASE + 0x4e0), vCursor, 6, params);
+    position = (Vector4 *)(SCRATCHPAD_BASE + 0x4e0);
     if (position->x > 2560.0f)
         return;
     if (position->x < 1536.0f)
@@ -714,11 +714,11 @@ void drawAxis(Matrix4 matrix, float scale)
         return;
     if (position->z < 0.0f)
         return;
-    ((unsigned int *)0x70000000)[0] = 0x8006;
-    ((unsigned int *)0x70000000)[1] = 0x2004c000;
-    ((unsigned int *)0x70000000)[2] = 0xffffff51;
-    ((unsigned int *)0x70000000)[3] = 0;
-    write = (unsigned int (*)[4])0x70000010;
+    ((unsigned int *)SCRATCHPAD_BASE)[0] = 0x8006;
+    ((unsigned int *)SCRATCHPAD_BASE)[1] = 0x2004c000;
+    ((unsigned int *)SCRATCHPAD_BASE)[2] = 0xffffff51;
+    ((unsigned int *)SCRATCHPAD_BASE)[3] = 0;
+    write = (unsigned int (*)[4])(SCRATCHPAD_BASE + 0x10);
     for (vertex_index = 0; vertex_index < 6; vertex_index++, position++) {
         (*write)[0] = cCursor[vertex_index].red;
         (*write)[1] = cCursor[vertex_index].green;
@@ -731,7 +731,7 @@ void drawAxis(Matrix4 matrix, float scale)
         (*write)[3] = 0;
         write++;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 13);
+    xglPrimAddGifTagDirect(0, (const void *)SCRATCHPAD_BASE, 13);
 }
 
 void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
@@ -759,35 +759,35 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
 
     color_index *= 2;
     xglStudioGetCamera(camera, 0);
-    ((DebugLineScratch *)0x70000000)->transform.screenOffset = (*camera)->screenOffset;
-    *(Matrix4Block *)((DebugLineScratch *)0x70000000)->transform.world = *(Matrix4Block *)(*camera)->viewMatrix;
-    ((DebugLineScratch *)0x70000000)->transform.screenScale = (*camera)->screenScale;
-    ((DebugLineScratch *)0x70000000)->transform.local = matrix;
-    ((DebugLineScratch *)0x70000000)->input[0].x = position->x;
-    ((DebugLineScratch *)0x70000000)->input[0].y = position->y;
-    ((DebugLineScratch *)0x70000000)->input[0].z = position->z;
-    ((DebugLineScratch *)0x70000000)->input[0].w = 1.0f;
-    transformVector(((DebugLineScratch *)0x70000000)->output, ((DebugLineScratch *)0x70000000)->input, 1, &((DebugLineScratch *)0x70000000)->transform);
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->transform.screenOffset = (*camera)->screenOffset;
+    *(Matrix4Block *)((DebugLineScratch *)SCRATCHPAD_BASE)->transform.world = *(Matrix4Block *)(*camera)->viewMatrix;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->transform.screenScale = (*camera)->screenScale;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->transform.local = matrix;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].x = position->x;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].y = position->y;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].z = position->z;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].w = 1.0f;
+    transformVector(((DebugLineScratch *)SCRATCHPAD_BASE)->output, ((DebugLineScratch *)SCRATCHPAD_BASE)->input, 1, &((DebugLineScratch *)SCRATCHPAD_BASE)->transform);
     QuadwordCopyMatrix(&rotation, (*camera)->cameraToWorldMatrix);
     rotation.elements[12] = 0.0f;
     rotation.elements[13] = 0.0f;
     rotation.elements[14] = 0.0f;
     MATRIX_transpose3((float (*)[4])rotation.elements);
-    ((DebugLineScratch *)0x70000000)->transform.local = (Matrix4 *)rotation.elements;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->transform.local = (Matrix4 *)rotation.elements;
     xglMatrixMul(*matrix, (float (*)[4])rotation.elements, *matrix);
-    ((DebugLineScratch *)0x70000000)->input[0].x = position->w;
-    ((DebugLineScratch *)0x70000000)->input[0].y = 0.0f;
-    ((DebugLineScratch *)0x70000000)->input[0].z = 0.0f;
-    ((DebugLineScratch *)0x70000000)->input[0].w = 1.0f;
-    write = (unsigned int *)0x70000000;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].x = position->w;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].y = 0.0f;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].z = 0.0f;
+    ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].w = 1.0f;
+    write = (unsigned int *)SCRATCHPAD_BASE;
     zero = 0.0;
-    transformVector(&((DebugLineScratch *)0x70000000)->output[1], ((DebugLineScratch *)0x70000000)->input, 1, &((DebugLineScratch *)0x70000000)->transform);
+    transformVector(&((DebugLineScratch *)SCRATCHPAD_BASE)->output[1], ((DebugLineScratch *)SCRATCHPAD_BASE)->input, 1, &((DebugLineScratch *)SCRATCHPAD_BASE)->transform);
     write[0] = 0x8011;
     write[1] = 0x20054000;
     write[2] = 0xffffff51;
     write[3] = 0;
     write += 4;
-    magnitude = fptodp(((Vector4 *)0x700004f0)->x - 2048.0f);
+    magnitude = fptodp(((Vector4 *)(SCRATCHPAD_BASE + 0x4f0))->x - 2048.0f);
     if (magnitude < zero)
         magnitude = zero - magnitude;
     radius = dptofp(magnitude);
@@ -800,7 +800,7 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
     blue = blue_column + colour;
     alpha = alpha_column + colour;
     red = red_column + colour;
-    centre = (Vector4 *)0x700004e0;
+    centre = (Vector4 *)(SCRATCHPAD_BASE + 0x4e0);
     angle = 0.0f;
     for (segment = 16; segment >= 0; segment--) {
         write[0] = *red;
@@ -815,7 +815,7 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
         write[3] = 0;
         write += 4;
     }
-    xglPrimAddGifTagDirect(0, (const void *)0x70000000, 35);
+    xglPrimAddGifTagDirect(0, (const void *)SCRATCHPAD_BASE, 35);
 }
 
 void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
@@ -823,7 +823,7 @@ void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
     Vector4 *output;
     StudioCamera *camera;
     StudioCamera *camera_slot;
-    DebugLineScratch *scratch = (DebugLineScratch *)0x70000000;
+    DebugLineScratch *scratch = (DebugLineScratch *)SCRATCHPAD_BASE;
 
     xglStudioGetCamera(&camera_slot, 0);
     camera = camera_slot;
@@ -854,7 +854,7 @@ void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
 void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
-    DebugLineScratch *scratch = (DebugLineScratch *)0x70000000;
+    DebugLineScratch *scratch = (DebugLineScratch *)SCRATCHPAD_BASE;
     Vector4 *position;
     unsigned int (*write)[4];
     int vertex_index;
@@ -954,7 +954,7 @@ void updateCursorMode1(void)
 
     xglStudioGetCamera(&camera, 0);
     cursor_position = &cursor.position;
-    if (keys->pressed & 2) {
+    if (keys->pressed & PAD_R2) {
         CursorState *cursor_base = &cursor;
         cursor_base->submode++;
         if (cursor_base->submode >= 3)
@@ -1016,7 +1016,7 @@ void updateCursorMode2(void)
     xglStudioGetCamera(&camera, 0);
     cursor_position = &cursor.position;
 
-    if (pad->pressed & 8) {
+    if (pad->pressed & PAD_R1) {
         state = &cursor;
         selected_actor = nextActor(state->actor_index);
         if (selected_actor == 0) {
@@ -1025,7 +1025,7 @@ void updateCursorMode2(void)
             state->actor_index = selected_actor->number + 1;
         }
     }
-    if (pad->pressed & 2) {
+    if (pad->pressed & PAD_R2) {
         state = &cursor;
         selected_actor = prevActor(state->actor_index);
         if (selected_actor == 0) {
@@ -1045,16 +1045,16 @@ void updateCursorMode2(void)
         if (cursor.attach_state == 0) {
             keys = pad->held;
             actor_position = &cursor.attached_actor->rotation;
-            if (keys & 0x1000) {
+            if (keys & PAD_UP) {
                 cursor.attach_offset.y += 1.0f / 30.0f;
             }
-            if (keys & 0x4000) {
+            if (keys & PAD_DOWN) {
                 cursor.attach_offset.y -= 1.0f / 30.0f;
             }
-            if (keys & 0x2000) {
+            if (keys & PAD_RIGHT) {
                 actor_position->y += 3.14159265f / 120.0f;
             }
-            if (keys & 0x8000) {
+            if (keys & PAD_LEFT) {
                 actor_position->y -= 3.14159265f / 120.0f;
             }
         }
@@ -1063,7 +1063,7 @@ void updateCursorMode2(void)
     pad = &PadData[0];
     candidate = cursor.attached_actor;
     if (candidate != 0) {
-        if (pad->pressed & 0x10) {
+        if (pad->pressed & PAD_TRIANGLE) {
             selected_actor = candidate;
             cursor.attached_actor = 0;
             selected_actor->velocity.x = 0.0f;
@@ -1079,7 +1079,7 @@ void updateCursorMode2(void)
                 ACT_updateSequence(selected_actor);
             }
         }
-    } else if (pad->pressed & 0x10) {
+    } else if (pad->pressed & PAD_TRIANGLE) {
         float threshold;
 
         cursor.attach_offset.x = 0.0f;
@@ -1211,24 +1211,24 @@ void updateCursorModePlane(void)
             break;
         }
     }
-    if (keys->held & 0x2000) {
+    if (keys->held & PAD_RIGHT) {
         (&camera->rotation.vector)->z -= cursorPlaneRotateDecrement;
     }
-    if (keys->held & 0x8000) {
+    if (keys->held & PAD_LEFT) {
         (&camera->rotation.vector)->z += cursorPlaneRotateIncrement;
     }
     length = cursorSpeed[cursor.step];
-    if (keys->held & 4) {
+    if (keys->held & PAD_L1) {
         position->y += length;
         (&camera->position.vector)->y += length;
     }
-    if ((unsigned short)(keys->held & 1)) {
+    if ((unsigned short)(keys->held & PAD_L2)) {
         position->y -= length;
         (&camera->position.vector)->y -= length;
     }
-    if (keys->held & 0x40) {
+    if (keys->held & PAD_CROSS) {
         height = UnduGet(position->x, position->z);
-        if (height != -1000.0f) {
+        if (height != GROUND_HEIGHT_NONE) {
             height_format = mapHeightFormat;
             position->y = height;
             xglFontDebugPrintf(4, 0xC4, height_format, fptodp(height));
@@ -1357,24 +1357,24 @@ void updateCursorMode0(void)
             break;
         }
     }
-    if (keys->held & 0x2000) {
+    if (keys->held & PAD_RIGHT) {
         (&camera->rotation.vector)->z -= cursorMode0RotateDecrement;
     }
-    if (keys->held & 0x8000) {
+    if (keys->held & PAD_LEFT) {
         (&camera->rotation.vector)->z += cursorMode0RotateIncrement;
     }
     length = cursorSpeed[cursor.step];
-    if (keys->held & 4) {
+    if (keys->held & PAD_L1) {
         position->y += length;
         (&camera->position.vector)->y += length;
     }
-    if ((unsigned short)(keys->held & 1)) {
+    if ((unsigned short)(keys->held & PAD_L2)) {
         position->y -= length;
         (&camera->position.vector)->y -= length;
     }
-    if (keys->held & 0x40) {
+    if (keys->held & PAD_CROSS) {
         height = UnduGet(position->x, position->z);
-        if (height != -1000.0f) {
+        if (height != GROUND_HEIGHT_NONE) {
             height_format = mapHeightFormat;
             position->y = height;
             xglFontDebugPrintf(4, 0xC4, height_format, fptodp(height));
@@ -1493,14 +1493,14 @@ void updateCursor(int mode)
         PAD_getKey(keys, 0, 0x57BF);
         break;
     }
-    if ((keys->held & 0xA0) != 0) {
+    if ((keys->held & (PAD_CIRCLE | PAD_SQUARE)) != 0) {
         if (cursorMode < 0) {
             cursorMode = cursor.mode;
         }
-        if (keys->pressed & 0x1000) {
+        if (keys->pressed & PAD_UP) {
             cursorMode += 1;
         }
-        if (keys->pressed & 0x4000) {
+        if (keys->pressed & PAD_DOWN) {
             cursorMode -= 1;
         }
         if (cursorMode < 0) {
@@ -1515,31 +1515,31 @@ void updateCursor(int mode)
             changeCameraMode();
             cursorMode = -1;
         }
-        if (keys->pressed & 0x1000) {
+        if (keys->pressed & PAD_UP) {
             cursor.step += 1;
         }
-        if (keys->pressed & 0x4000) {
+        if (keys->pressed & PAD_DOWN) {
             cursor.step -= 1;
         }
         cursor.step = cursor.step & 7;
     }
     position = &cursor.position;
     xglStudioGetCamera(&camera, 0);
-    if ((keys->pressed & 0x200) != 0) {
+    if ((keys->pressed & PAD_L3) != 0) {
         position->x = 0.0f;
         position->y = 0.0f;
         position->z = 0.0f;
     }
-    if (keys->pressed & 0x400) {
+    if (keys->pressed & PAD_R3) {
         reset_camera = camera;
         (&reset_camera->position.vector)->y = 0.0f;
         (&reset_camera->position.vector)->z = 4.0f;
         (&reset_camera->position.vector)->x = 0.0f;
     }
-    if (keys->pressed & 8) {
+    if (keys->pressed & PAD_R1) {
         cursor.flag_04 -= 1;
     }
-    if (keys->pressed & 2) {
+    if (keys->pressed & PAD_R2) {
         cursor.flag_04 += 1;
     }
     plane = cursor.flag_04;
@@ -1675,13 +1675,13 @@ void MAP_serach(void)
         if (parts != 0) {
             matrix_base = (unsigned char *)parts +
                           parts->matrix_data_offset;
-            if (mapPad->repeat & 0x4000) {
+            if (mapPad->repeat & PAD_DOWN) {
                 nmlModelSetPartsVisible(parts, partsIndex, 1);
                 visible_0 = 0;
                 partsIndex--;
             }
 
-            if (mapPad->repeat & 0x1000) {
+            if (mapPad->repeat & PAD_UP) {
                 nmlModelSetPartsVisible(model->parts,
                                         partsIndex, 1);
                 visible_0 = 0;
@@ -1702,7 +1702,7 @@ void MAP_serach(void)
 
 void EvtTools(void)
 {
-    if ((PadData[0].pressed & 0x10) && (PadData[0].held & 0x100)) {
+    if ((PadData[0].pressed & PAD_TRIANGLE) && (PadData[0].held & PAD_SELECT)) {
         mode_004DC5A8 = (mode_004DC5A8 + 1) & 1;
     }
     MAP_serach();
@@ -1904,25 +1904,25 @@ void updateLight(int mode)
         break;
     }
 
-    if ((keys->held & 0xa0) == 0) {
+    if ((keys->held & (PAD_CIRCLE | PAD_SQUARE)) == 0) {
         float limit;
 
         limit = 1.0f;
 
-        if ((keys->pressed & 2) != 0) {
+        if ((keys->pressed & PAD_R2) != 0) {
             lightColIndex = 3;
             lightIndex++;
         }
-        if ((keys->pressed & 8) != 0) {
+        if ((keys->pressed & PAD_R1) != 0) {
             lightColIndex = 3;
             lightIndex--;
         }
         if (lightIndex < 0)
             lightIndex = 5;
         lightIndex = lightIndex >= 6 ? 0 : lightIndex;
-        if (keys->pressed & 0x1000)
+        if (keys->pressed & PAD_UP)
             lightColIndex -= 1;
-        if (keys->pressed & 0x4000)
+        if (keys->pressed & PAD_DOWN)
             lightColIndex++;
         if (lightColIndex < 0)
             lightColIndex = 3;
@@ -1937,9 +1937,9 @@ void updateLight(int mode)
             for (i = 0; i < 3; i++) {
                 float *value = lightCol[lightIndex].components + i;
 
-                if (keys->held & 0x2000)
+                if (keys->held & PAD_RIGHT)
                     *value += 0.01f;
-                if (keys->held & 0x8000)
+                if (keys->held & PAD_LEFT)
                     *value -= 0.01f;
                 level = *value;
                 if (level < 0.0f) {
@@ -1956,9 +1956,9 @@ void updateLight(int mode)
         } else {
             float total;
 
-            if (keys->held & 0x2000)
+            if (keys->held & PAD_RIGHT)
                 *component += 0.01f;
-            if (keys->held & 0x8000)
+            if (keys->held & PAD_LEFT)
                 *component -= 0.01f;
             level = *component;
             if (level < 0.0f) {
@@ -1973,21 +1973,21 @@ void updateLight(int mode)
                 total += lightCol[lightIndex].components[i];
             lightCol[lightIndex].components[3] = total / 3.0f;
         }
-    } else if (keys->held & 0x20) {
-        if (keys->pressed & 8)
+    } else if (keys->held & PAD_CIRCLE) {
+        if (keys->pressed & PAD_R1)
             if (lightStateOffset != 0)
                 lightStateOffset = 0;
             else
                 lightStateOffset = -380;
-        if (keys->pressed & 0x4000)
+        if (keys->pressed & PAD_DOWN)
             lightSpeed -= 1;
-        if (keys->pressed & 0x1000)
+        if (keys->pressed & PAD_UP)
             lightSpeed += 1;
         lightSpeed &= 3;
     }
 
     source = &lightDir[lightIndex];
-    if ((keys->pressed & 0x200) != 0)
+    if ((keys->pressed & PAD_L3) != 0)
         source->y = -source->y;
 
     stick.x = (float)keys->flags[2];
@@ -2158,7 +2158,7 @@ void updateLight(int mode)
         direction.y -= 51.0f;
     }
 
-    if (keys->pressed & 0x100) {
+    if (keys->pressed & PAD_SELECT) {
         MapGameLoopStateView *state;
 
         i = 0;
@@ -2205,42 +2205,42 @@ void updateWind(WindRecord *wind)
     pad = &PadData[1];
     camera = xglStudioGetActiveCamera();
     buttons = pad->repeat;
-    if (buttons & 0x1000) {
+    if (buttons & PAD_UP) {
         selection = csr_1;
         selection += 4;
         selection %= 5;
         csr_1 = selection;
     }
-    if (buttons & 0x4000) {
+    if (buttons & PAD_DOWN) {
         selection = csr_1;
         selection += 1;
         selection %= 5;
         csr_1 = selection;
     }
     selection = csr_1;
-    if ((pad->pressed & 0x20) && selection < 3) {
+    if ((pad->pressed & PAD_CIRCLE) && selection < 3) {
         wind->mode = csr_1;
         selection = csr_1;
     }
     stick = pad->held;
     buttons = stick;
-    step = (buttons & 0x80) ? 0.001f : 0.01f;
+    step = (buttons & PAD_SQUARE) ? 0.001f : 0.01f;
 
     if (selection == 3) {
-        if (buttons & 0x8000) {
+        if (buttons & PAD_LEFT) {
             wind->offset_a -= step;
         }
-        if (buttons & 0x2000) {
+        if (buttons & PAD_RIGHT) {
             wind->offset_a += step;
         }
     }
     if (selection == 4) {
         float offset_clamp;
 
-        if (buttons & 0x8000) {
+        if (buttons & PAD_LEFT) {
             wind->offset_b -= step;
         }
-        if (buttons & 0x2000) {
+        if (buttons & PAD_RIGHT) {
             wind->offset_b += step;
         }
         offset_clamp = wind->offset_b;
@@ -2277,7 +2277,7 @@ void updateWind(WindRecord *wind)
     wind->x = wind->x + (cos_angle * stick_x - sin_angle * stick_y);
     wind->z = wind->z + (cos_angle * stick_y + sin_angle * stick_x);
 
-    if (pad->pressed & 0x10) {
+    if (pad->pressed & PAD_TRIANGLE) {
         mode = wind->mode;
         EXM_ResetWind();
         wind->mode = mode;
@@ -2341,7 +2341,7 @@ void updateWind(WindRecord *wind)
     } else {
         xglFontDebugPrintf(150, dispy_2 + csr_1 * 12 + 12, cursorMarkerText);
     }
-    if (pad->pressed & 0x100) {
+    if (pad->pressed & PAD_SELECT) {
         wide_text = text_wide;
         format7 = windShakeCommandFormat;
         sprintf(wide_text, format7, fptodp(wind->offset_a), fptodp(wind->offset_b));

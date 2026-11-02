@@ -31,6 +31,42 @@
  */
 typedef struct WindowDX WindowDX;
 
+/* WindowDX.state values (WindowDXFlagChange argument; WindowDXMain switches
+ * on the low nibble). */
+#define WINDOWDX_STATE_CLOSED 0
+#define WINDOWDX_STATE_OPEN 1    /* request: initialise and open */
+#define WINDOWDX_STATE_OPENING 2 /* frame animation running */
+#define WINDOWDX_STATE_READY 3   /* fully open */
+#define WINDOWDX_STATE_CLOSE 4   /* request: start closing (only from READY) */
+#define WINDOWDX_STATE_CLOSING 5
+#define WINDOWDX_STATE_FINISHED (-1) /* closing finished */
+
+/* WindowSPCursor.state: the low nibble is the phase; for the OPEN phase the
+ * high nibble selects fresh (0) or skip-the-animation (1). */
+#define WINDOWSP_STATE_CLOSED 0
+#define WINDOWSP_STATE_OPEN 1
+#define WINDOWSP_STATE_OPEN_WAIT 2 /* wait for the window to be READY */
+#define WINDOWSP_STATE_ACTIVE 3
+#define WINDOWSP_STATE_CLOSE 4
+#define WINDOWSP_STATE_CLOSING 5
+#define WINDOWSP_OPEN_FRESH 0
+#define WINDOWSP_OPEN_NO_ANIMATION 1
+
+/* WindowSPCursor capacity: visible item rows (a message and a number each),
+ * the two page counters after them in numbers[], and the cursor sprites
+ * (selection, scroll up, scroll down). ROW_HEIGHT is one item row. */
+#define WINDOWSP_ITEM_SLOTS 24
+#define WINDOWSP_NUMBER_INDEX 24 /* numbers[]: selected index + 1 */
+#define WINDOWSP_NUMBER_COUNT 25 /* numbers[]: item count */
+#define WINDOWSP_NUMBER_SLOTS 26
+#define WINDOWSP_CURSOR_COUNT 3
+#define WINDOWSP_ROW_HEIGHT 24
+
+/* WindowSPCursor.draw_flags: which parts subMWDraw draws. */
+#define WINDOWSP_DRAW_CURSORS 1
+#define WINDOWSP_DRAW_MESSAGES 2
+#define WINDOWSP_DRAW_NUMBERS 4
+
 /* What WindowDXMain calls through WindowDX.close_callback. */
 typedef void (*WindowDXCallback)(WindowDX *window, void *arg);
 
@@ -126,9 +162,9 @@ typedef struct WindowSPCursor {
     short selected_index;
     short item_count;
     WindowDX window;
-    ECursolMainData cursors[3];
-    EMessageParam messages[24];
-    ENumberMainData numbers[26];
+    ECursolMainData cursors[WINDOWSP_CURSOR_COUNT];
+    EMessageParam messages[WINDOWSP_ITEM_SLOTS];
+    ENumberMainData numbers[WINDOWSP_NUMBER_SLOTS];
     WindowDXRect rect;
 } WindowSPCursor;
 

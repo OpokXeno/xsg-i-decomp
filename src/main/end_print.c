@@ -14,7 +14,93 @@
 /* EE scratchpad RAM base (src/ov01/gr_gp_init.c's grPacketSend and
  * src/ov01/m_gs.c's MGsGPTerm build the same VIF1 direct-mode packet at the
  * same address). */
-#define SCRATCHPAD_BASE ((void *)0x70000000)
+#define END_PRINT_SCRATCHPAD ((void *)SCRATCHPAD_BASE)
+
+/* Size of the screen the print routines clip to. */
+#define END_PRINT_SCREEN_WIDTH 512
+#define END_PRINT_SCREEN_HEIGHT 448
+
+/* GS primitive coordinates are 12.4 fixed point; screen (0, 0) sits at
+ * (0x700, 0x720) minus half a pixel. */
+#define END_PRINT_GS_ORIGIN_X 0x700
+#define END_PRINT_GS_ORIGIN_Y 0x720
+#define END_PRINT_GS_OFFSET_X (END_PRINT_GS_ORIGIN_X * 16 - 8)
+#define END_PRINT_GS_OFFSET_Y (END_PRINT_GS_ORIGIN_Y * 16 - 8)
+
+/* GS Z buffer values are 24 bits. */
+#define END_PRINT_DEPTH_MASK 0xFFFFFF
+
+/* Window frame: 3 pixel border pieces (win_uv[0..7]) around interior tiles of
+ * up to 128 pixels (win_uv[8]). */
+#define WINDOW_BORDER 3
+#define WINDOW_BORDER_BOTH_SIDES (WINDOW_BORDER * 2)
+#define WINDOW_TILE_SIZE 128
+#define WINDOW_BORDER_PIECES 8
+#define WINDOW_INTERIOR_UV 8
+
+/* GIF tag: low word is NLOOP | EOP, high word is NREG | PRIM | PRE; the third
+ * word lists the registers (4 bits each). */
+#define GIF_NREG_1 0x10000000
+/* PRE set, PRIM = type | IIP/TME/ABE/AA/FST bits as noted. */
+#define GIF_HI_SPRITE_TEX_NREG5 0x50AB4000 /* sprite, TME, ABE, FST */
+#define GIF_HI_SPRITE_TEX_NREG4 0x40AB4000
+#define GIF_HI_SPRITE_PLAIN_NREG4 0x40834000 /* sprite, FST */
+#define GIF_HI_TRISTRIP_TEX_NREG3 0x30AE4000 /* tristrip, IIP, TME, ABE, FST */
+#define GIF_HI_TRISTRIP_ST_NREG3 0x302A4000 /* tristrip, TME, ABE (ST coordinates) */
+#define GIF_HI_TRISTRIP_RIBBON 0x20A64000 /* tristrip, IIP, ABE, FST */
+#define GIF_HI_LINESTRIP 0x20654000 /* linestrip, IIP, ABE, AA */
+#define GIF_HI_POINT 0x20204000 /* point, ABE */
+#define GIF_HI_TRIFAN 0x2026C000 /* trifan, IIP, ABE */
+#define GIF_REGS_RGBAQ_XYZ2 0x51
+#define GIF_REGS_RGBAQ_UV_XYZ2 0x531
+#define GIF_REGS_RGBAQ_ST_XYZ2 0x521
+#define GIF_REGS_UV_XYZ2_X2 0x5353
+#define GIF_REGS_RGBAQ_UV_XYZ2_UV_XYZ2 0x53531
+#define GIF_REGS_AD_RGBAQ_XYZ2_X2 0x551E
+
+/* SCE_GS_FRAME_1 / BITBLTBUF buffer-width field = 8 (512 pixels). */
+#define GS_BUFFER_WIDTH_512 0x80000
+/* SCE_GS_ZBUF_1: ZMSK, Z buffer writes disabled. */
+#define GS_ZBUF_ZMSK (1ULL << 32)
+
+/* SCE_GS_ALPHA_1 value:(Cs - Cd) * As + Cd. */
+#define GS_ALPHA_BLEND 0x44
+/* SCE_GS_TEST_1 values. */
+#define GS_TEST_ANEQ_ZGEQUAL 0x5000D /* alpha test NOTEQUAL, Z test GEQUAL */
+#define GS_TEST_ANEQ_ZGEQUAL_AFAIL_ZB 0x5200D /* same, failed pixels still write Z */
+#define GS_TEST_ANEQ_ZALWAYS 0x3000D /* alpha test NOTEQUAL, Z test ALWAYS */
+#define GS_TEST_ZALWAYS 0x30000 /* alpha test off, Z test ALWAYS */
+#define GS_TEST_COLOR_ONLY 0x31001 /* ATST NEVER, failed pixels write color only */
+#define GS_TEST_Z_ONLY 0x32001 /* ATST NEVER, failed pixels write Z only */
+#define GS_CLAMP_PRINT 0x3FFFF0
+#define GS_CLAMP_PRINT_BACK 0x7FDFF0
+
+/* UV-table high byte already shifted: base values of the packed uv word. */
+#define TAG_UV_UPPER_A ((END_PRINT_UV_TAG << 8) + 0)
+#define TAG_UV_LOWER_A ((END_PRINT_UV_TAG << 8) + 26)
+#define NUM_UV_DIGIT_0 ((END_PRINT_UV_NUM << 8) + 0)
+#define NUM_UV_SLASH ((END_PRINT_UV_NUM << 8) + 3)
+#define NUM_UV_COLON ((END_PRINT_UV_NUM << 8) + 4)
+#define NUM_UV_MINUS ((END_PRINT_UV_NUM << 8) + 6)
+#define NUM_UV_PERIOD ((END_PRINT_UV_NUM << 8) + 9)
+
+/* PrintNumberInfo.flags: low nibble selects the digit style (added to the
+ * NUM table entry), bit 4 right-aligns the number. */
+#define PRINT_NUMBER_STYLE_MASK 0xF
+#define PRINT_NUMBER_RIGHT_ALIGN 0x10
+
+/* CLUT addresses (uv_clut) passed to endPrintInfoSet by the text/number and window printers. */
+#define CLUT_TAG_NUM 0xFDB00
+#define CLUT_WINDOW 0xFDE00
+
+/* GS VRAM offset added to a window texture entry's vramAddress. */
+#define WINDOW_TEX_VRAM_BASE 0xF0000
+
+/* Tag text: a leading byte 1 right-aligns the string (the loop first measures
+ * it), byte 3 is followed by a custom advance in pixels, a space advances 8. */
+#define TAG_TEXT_RIGHT_ALIGN 1
+#define TAG_TEXT_ADVANCE_CODE 3
+#define TAG_TEXT_SPACE_WIDTH 8
 
 typedef struct EndPrintRenderState {
     unsigned char unmodeled_00[4];
@@ -173,6 +259,10 @@ typedef struct PrintJpegInfo {
 } PrintJpegInfo;
 
 enum { QUAD_X, QUAD_Y, QUAD_DEPTH };
+
+/* PrintSpriteQuad.coordinateMode: vertex 0 plus the UV entry's size, or all four corners given. */
+enum { QUAD_MODE_ORIGIN_SIZE, QUAD_MODE_CORNERS };
+#define QUAD_FLAG_DEFAULT_COLOR 1
 
 typedef struct PrintSpriteVertex {
     int position[3];
@@ -654,7 +744,8 @@ static UvClutEntry uv_clut[26] = {
 
 /* 511 callback entries plus the adjacent terminal/overflow entry. The
  * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
-static PrintFuncEntry PrintFunc[512];
+#define PRINT_FUNC_MAX 511
+static PrintFuncEntry PrintFunc[PRINT_FUNC_MAX + 1];
 
 static PrintFuncEntry *pPrintFuncTop;
 
@@ -706,7 +797,7 @@ void endPrintWinTexLoad(XglPacket *packet)
     for (; i < directory->entryCount; i++, entry++) {
         image = entry->bufferWidthAndFormat;
         imageLow = image & 0xFFFF;
-        ePrintEnv_0[4] = ((u64)((entry->vramAddress + 0xF0000) >> 6) << 32) |
+        ePrintEnv_0[4] = ((u64)((entry->vramAddress + WINDOW_TEX_VRAM_BASE) >> 6) << 32) |
                          ((u64)(image >> 16) << 48);
         ePrintEnv_0[8] = imageLow | ((u64)entry->clutAddress << 32);
         sceVif1PkCnt(packet, 0);
@@ -745,7 +836,7 @@ void endPrintExtFuncPack(void (*func)(FontDrawCursor *context, int param), int p
     entry->param = param;
     entry++;
     pPrintFuncTop = entry;
-    if ((PrintFunc + 511) < entry) {
+    if ((PrintFunc + PRINT_FUNC_MAX) < entry) {
         endPrintInit();
         entry = pPrintFuncTop;
     }
@@ -759,14 +850,14 @@ static void endPrintInfoSet(FontDrawCursor *context, int clut, int flag)
     unsigned short useClut;
 
     command = context->work.qwords + 2;
-    command[1] = 0x3F;
+    command[1] = SCE_GS_TEXFLUSH;
     command[0] = 0;
     command = context->work.qwords + 4;
-    command[0] = 0x44;
-    command[1] = 0x42;
+    command[0] = GS_ALPHA_BLEND;
+    command[1] = SCE_GS_ALPHA_1;
     command = context->work.qwords + 6;
-    command[0] = 0x3FFFF0;
-    command[1] = 8;
+    command[0] = GS_CLAMP_PRINT;
+    command[1] = SCE_GS_CLAMP_1;
     command = context->work.qwords + 8;
     count = 3;
     useClut = flag & 1;
@@ -776,16 +867,16 @@ static void endPrintInfoSet(FontDrawCursor *context, int clut, int flag)
         } else {
             command[0] = 0x00000005DC00BC00ULL;
         }
-        command[1] = 6;
+        command[1] = SCE_GS_TEX0_1;
         count = 4;
         command += 2;
     }
-    command[0] = 0x5000D;
+    command[0] = GS_TEST_ANEQ_ZGEQUAL;
     count++;
-    command[1] = 0x47;
+    command[1] = SCE_GS_TEST_1;
     command = context->work.qwords;
-    command[0] = count + ((u64)0x8000 << 45);
-    command[1] = 0xE;
+    command[0] = count + ((u64)GIF_NREG_1 << 32);
+    command[1] = GIF_REG_AD;
     xglPrimAddGifTagDirect(context->packet, command, count + 1);
 }
 
@@ -796,14 +887,14 @@ void endSpriteSet(PrintSpriteInfo *sprite, int flags)
 
     entry = ((const unsigned char *)&sprite->uv)[0];
     table = uv_clut[((const unsigned char *)&sprite->uv)[1]].uv;
-    if (flags & 1) {
+    if (flags & END_SPRITE_SET_SIZE) {
         sprite->width = table[entry].width;
         sprite->height = table[entry].height;
     }
-    if (flags & 2) {
-        sprite->color[0] = sprite->color[1] = sprite->color[2] = sprite->color[3] = 128;
+    if (flags & END_SPRITE_SET_COLOR) {
+        sprite->color[0] = sprite->color[1] = sprite->color[2] = sprite->color[3] = END_PRINT_COLOR_NEUTRAL;
     }
-    if (flags & 4) {
+    if (flags & END_SPRITE_SET_CELL) {
         sprite->row = sprite->column = 0;
     }
 }
@@ -820,9 +911,9 @@ static void subPrintSprite(FontDrawCursor *context, PrintSpriteInfo *sprite)
     int top;
 
     words = context->work.words;
-    words[0] = 0x8001;
-    words[1] = 0x50AB4000;
-    words[2] = 0x53531;
+    words[0] = GIF_TAG_EOP | 1;
+    words[1] = GIF_HI_SPRITE_TEX_NREG5;
+    words[2] = GIF_REGS_RGBAQ_UV_XYZ2_UV_XYZ2;
     words[3] = 0;
     table = uv_clut[(sprite->uv >> 8) & 0xFF].uv;
     uvLeft = table[sprite->uv & 0xFF].u;
@@ -835,15 +926,15 @@ static void subPrintSprite(FontDrawCursor *context, PrintSpriteInfo *sprite)
     words[2] = sprite->color[2];
     words[3] = sprite->color[3];
     words = context->work.words + 8;
-    left = sprite->x * 16 + 0x6FF8;
-    top = sprite->y * 16 + 0x71F8;
+    left = sprite->x * 16 + END_PRINT_GS_OFFSET_X;
+    top = sprite->y * 16 + END_PRINT_GS_OFFSET_Y;
     words[0] = (uvLeft + width * sprite->column) * 16;
     words[1] = (uvTop + height * sprite->row) * 16;
     words[2] = 0;
     words[3] = 0;
     words[4] = left;
     words[5] = top;
-    words[6] = sprite->depth & 0xFFFFFF;
+    words[6] = sprite->depth & END_PRINT_DEPTH_MASK;
     words[7] = 0;
     words[8] = words[0] + width * 16;
     words[9] = words[1] + height * 16;
@@ -877,7 +968,7 @@ static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
     table = uv_clut[sprite->uv >> 8].uv;
     endPrintInfoSet(context, uv_clut[sprite->uv >> 8].clut, 1);
     switch (sprite->coordinateMode) {
-    case 0: {
+    case QUAD_MODE_ORIGIN_SIZE: {
         const int left = sprite->vertices[0].position[QUAD_X];
         const int top = sprite->vertices[0].position[QUAD_Y];
         const int quadDepth = sprite->vertices[0].position[QUAD_DEPTH];
@@ -891,17 +982,17 @@ static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
         sprite->vertices[2].position[QUAD_X] = left + table[entry].width;
         sprite->vertices[1].position[QUAD_DEPTH] = quadDepth;
     }
-    case 1:
-        useDefaultColor = sprite->flags & 1;
+    case QUAD_MODE_CORNERS:
+        useDefaultColor = sprite->flags & QUAD_FLAG_DEFAULT_COLOR;
         if (useDefaultColor) {
             for (i = 0; i < 4; i++) {
                 sprite->colors[i].red = sprite->colors[i].green =
-                    sprite->colors[i].blue = sprite->colors[i].alpha = 128;
+                    sprite->colors[i].blue = sprite->colors[i].alpha = END_PRINT_COLOR_NEUTRAL;
             }
         }
         for (i = 0; i < 4; i++) {
-            sprite->vertices[i].position[QUAD_X] = sprite->vertices[i].position[QUAD_X] * 16 + 0x6ff8;
-            sprite->vertices[i].position[QUAD_Y] = sprite->vertices[i].position[QUAD_Y] * 16 + 0x71f8;
+            sprite->vertices[i].position[QUAD_X] = sprite->vertices[i].position[QUAD_X] * 16 + END_PRINT_GS_OFFSET_X;
+            sprite->vertices[i].position[QUAD_Y] = sprite->vertices[i].position[QUAD_Y] * 16 + END_PRINT_GS_OFFSET_Y;
         }
         break;
     }
@@ -914,9 +1005,9 @@ static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
     cornerV[3] = (table[entry].v + table[entry].height) * 16;
     cornerV[1] = cornerV[3];
     words = context->work.words;
-    words[0] = 0x8004;
-    words[1] = 0x30ae4000;
-    words[2] = 0x531;
+    words[0] = GIF_TAG_EOP | 4;
+    words[1] = GIF_HI_TRISTRIP_TEX_NREG3;
+    words[2] = GIF_REGS_RGBAQ_UV_XYZ2;
     words[3] = 0;
     words += 4;
     for (i = 0; i < 4; i++) {
@@ -946,12 +1037,12 @@ static void PrintPoint(FontDrawCursor *context, PrintPointInfo *point)
     int tagLow;
 
     endPrintInfoSet(context, 0, 0);
-    tagLow = 0x8001;
-    tagHigh = 0x20204000;
+    tagLow = GIF_TAG_EOP | 1;
+    tagHigh = GIF_HI_POINT;
     words = context->work.words;
     words[0] = tagLow;
     words[1] = tagHigh;
-    words[2] = 0x51;
+    words[2] = GIF_REGS_RGBAQ_XYZ2;
     words[3] = 0;
     words = context->work.words + 4;
     words[0] = point->color[0];
@@ -959,9 +1050,9 @@ static void PrintPoint(FontDrawCursor *context, PrintPointInfo *point)
     words[2] = point->color[2];
     words[3] = point->color[3];
     words = context->work.words + 8;
-    words[0] = point->x * 16 + 0x6FF8;
-    words[1] = point->y * 16 + 0x71F8;
-    words[2] = point->depth & 0xFFFFFF;
+    words[0] = point->x * 16 + END_PRINT_GS_OFFSET_X;
+    words[1] = point->y * 16 + END_PRINT_GS_OFFSET_Y;
+    words[2] = point->depth & END_PRINT_DEPTH_MASK;
     words[3] = 0;
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 3);
 }
@@ -982,10 +1073,10 @@ static void subPrintLine(FontDrawCursor *context, PrintPointInfo *line)
             count++;
         } while ((scan++)->depth != 0);
     }
-    words[0] = 0x8000 + count;
-    words[1] = 0x20654000;
+    words[0] = GIF_TAG_EOP + count;
+    words[1] = GIF_HI_LINESTRIP;
     qwords = 1;
-    words[2] = 0x51;
+    words[2] = GIF_REGS_RGBAQ_XYZ2;
     words[3] = 0;
     point = line;
     words += 4;
@@ -997,9 +1088,9 @@ static void subPrintLine(FontDrawCursor *context, PrintPointInfo *line)
         words[2] = point->color[2];
         words[3] = point->color[3];
         words += 4;
-        words[0] = point->x * 16 + 0x6FF8;
-        words[1] = point->y * 16 + 0x71F8;
-        words[2] = line->depth & 0xFFFFFF;
+        words[0] = point->x * 16 + END_PRINT_GS_OFFSET_X;
+        words[1] = point->y * 16 + END_PRINT_GS_OFFSET_Y;
+        words[2] = line->depth & END_PRINT_DEPTH_MASK;
         words[3] = 0;
         words += 4;
         point++;
@@ -1031,10 +1122,10 @@ static void PrintLine2(FontDrawCursor *context, PrintLinePoint *line)
             count++;
         } while ((scan++)->terminator != 0);
     }
-    words[0] = 0x8000 + count;
-    words[1] = 0x20654000;
+    words[0] = GIF_TAG_EOP + count;
+    words[1] = GIF_HI_LINESTRIP;
     qwords = 1;
-    words[2] = 0x51;
+    words[2] = GIF_REGS_RGBAQ_XYZ2;
     words[3] = 0;
     point = line;
     words += 4;
@@ -1068,16 +1159,16 @@ void endPrintDirectRibbon(PrintPointInfo *ribbon)
     packet = xglPacketGetCurrent();
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
-    header = SCRATCHPAD_BASE;
-    header[0] = ((u64)0x10000000 << 32) | 3;
-    header[1] = 14;
+    header = END_PRINT_SCRATCHPAD;
+    header[0] = ((u64)GIF_NREG_1 << 32) | 3;
+    header[1] = GIF_REG_AD;
     header[2] = 0;
-    header[3] = 0x3F;
-    header[4] = 0x44;
-    header[5] = 0x42;
-    header[6] = 0x31001;
-    header[7] = 0x47;
-    sceVif1PkAddDirectDataN(packet, SCRATCHPAD_BASE, 4);
+    header[3] = SCE_GS_TEXFLUSH;
+    header[4] = GS_ALPHA_BLEND;
+    header[5] = SCE_GS_ALPHA_1;
+    header[6] = GS_TEST_COLOR_ONLY;
+    header[7] = SCE_GS_TEST_1;
+    sceVif1PkAddDirectDataN(packet, END_PRINT_SCRATCHPAD, 4);
     point = ribbon;
     count = 0;
     if ((point++)->depth != 0) {
@@ -1085,12 +1176,12 @@ void endPrintDirectRibbon(PrintPointInfo *ribbon)
             count++;
         } while ((point++)->depth != 0);
     }
-    ((int *)SCRATCHPAD_BASE)[0] = 0x8000 + count;
-    ((int *)SCRATCHPAD_BASE)[1] = 0x20A64000;
-    ((int *)SCRATCHPAD_BASE)[2] = 0x51;
-    ((int *)SCRATCHPAD_BASE)[3] = 0;
+    ((int *)END_PRINT_SCRATCHPAD)[0] = GIF_TAG_EOP + count;
+    ((int *)END_PRINT_SCRATCHPAD)[1] = GIF_HI_TRISTRIP_RIBBON;
+    ((int *)END_PRINT_SCRATCHPAD)[2] = GIF_REGS_RGBAQ_XYZ2;
+    ((int *)END_PRINT_SCRATCHPAD)[3] = 0;
     point = ribbon;
-    words = (int *)SCRATCHPAD_BASE + 4;
+    words = (int *)END_PRINT_SCRATCHPAD + 4;
     qwords = 1;
     while (count > 0) {
         count--;
@@ -1100,14 +1191,14 @@ void endPrintDirectRibbon(PrintPointInfo *ribbon)
         words[2] = point->color[2];
         words[3] = point->color[3];
         words += 4;
-        words[0] = point->x * 16 + 0x6FF8;
-        words[1] = point->y * 16 + 0x71F8;
-        words[2] = ribbon->depth & 0xFFFFFF;
+        words[0] = point->x * 16 + END_PRINT_GS_OFFSET_X;
+        words[1] = point->y * 16 + END_PRINT_GS_OFFSET_Y;
+        words[2] = ribbon->depth & END_PRINT_DEPTH_MASK;
         words[3] = 0;
         words += 4;
         point++;
     }
-    sceVif1PkAddDirectDataN(packet, SCRATCHPAD_BASE, qwords);
+    sceVif1PkAddDirectDataN(packet, END_PRINT_SCRATCHPAD, qwords);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
@@ -1127,10 +1218,10 @@ static void subPrintRibbon(FontDrawCursor *context, PrintPointInfo *ribbon)
             count++;
         } while ((scan++)->depth != 0);
     }
-    words[0] = 0x8000 + count;
-    words[1] = 0x20A64000;
+    words[0] = GIF_TAG_EOP + count;
+    words[1] = GIF_HI_TRISTRIP_RIBBON;
     qwords = 1;
-    words[2] = 0x51;
+    words[2] = GIF_REGS_RGBAQ_XYZ2;
     words[3] = 0;
     point = ribbon;
     words += 4;
@@ -1142,9 +1233,9 @@ static void subPrintRibbon(FontDrawCursor *context, PrintPointInfo *ribbon)
         words[2] = point->color[2];
         words[3] = point->color[3];
         words += 4;
-        words[0] = point->x * 16 + 0x6FF8;
-        words[1] = point->y * 16 + 0x71F8;
-        words[2] = ribbon->depth & 0xFFFFFF;
+        words[0] = point->x * 16 + END_PRINT_GS_OFFSET_X;
+        words[1] = point->y * 16 + END_PRINT_GS_OFFSET_Y;
+        words[2] = ribbon->depth & END_PRINT_DEPTH_MASK;
         words[3] = 0;
         words += 4;
         point++;
@@ -1173,32 +1264,32 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
     shift = 0;
     text = tag->text;
     x = tag->x;
-    endPrintInfoSet(context, 0xFDB00, 1);
-    if (*text == 1) {
+    endPrintInfoSet(context, CLUT_TAG_NUM, 1);
+    if (*text == TAG_TEXT_RIGHT_ALIGN) {
         start = text + 1;
         measure = start;
         while ((character = *measure) != 0) {
             if ((unsigned char)(character - 'A') < 26) {
-                sprite.uv = *measure - 'A' + 0x500;
+                sprite.uv = *measure - 'A' + TAG_UV_UPPER_A;
             } else if ((unsigned char)(character - 'a') < 26) {
-                sprite.uv = *measure - 'a' + 0x51A;
+                sprite.uv = *measure - 'a' + TAG_UV_LOWER_A;
             } else {
                 symbol = (unsigned char)character;
                 if ((unsigned char)(character - '0') < 10) {
-                    sprite.uv = 0x700;
+                    sprite.uv = NUM_UV_DIGIT_0;
                 } else if (symbol == ':') {
-                    sprite.uv = 0x704;
+                    sprite.uv = NUM_UV_COLON;
                 } else if (symbol == '/') {
-                    sprite.uv = 0x703;
+                    sprite.uv = NUM_UV_SLASH;
                 } else if (symbol == '.') {
-                    sprite.uv = 0x709;
+                    sprite.uv = NUM_UV_PERIOD;
                 } else if (symbol == '-') {
-                    sprite.uv = 0x706;
+                    sprite.uv = NUM_UV_MINUS;
                 } else if (symbol == ' ') {
-                    shift += 8;
+                    shift += TAG_TEXT_SPACE_WIDTH;
                     measure++;
                     continue;
-                } else if (symbol == 3) {
+                } else if (symbol == TAG_TEXT_ADVANCE_CODE) {
                     measure++;
                     shift += *measure;
                     measure++;
@@ -1211,8 +1302,8 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
         }
         text = start;
     }
-    sprite.uv = 0x500;
-    endSpriteSet(&sprite, 255);
+    sprite.uv = TAG_UV_UPPER_A;
+    endSpriteSet(&sprite, END_SPRITE_SET_ALL);
     sprite.color[0] = tag->color[0];
     sprite.color[1] = tag->color[1];
     sprite.color[2] = tag->color[2];
@@ -1220,13 +1311,13 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
     baseHeight = sprite.height;
     while ((character = *text) != 0) {
         if ((unsigned char)(character - 'A') < 26) {
-            sprite.uv = *text - 'A' + 0x500;
+            sprite.uv = *text - 'A' + TAG_UV_UPPER_A;
         } else if ((unsigned char)(character - 'a') < 26) {
-            sprite.uv = *text - 'a' + 0x51A;
+            sprite.uv = *text - 'a' + TAG_UV_LOWER_A;
         } else {
             symbol = (unsigned char)character;
             if ((unsigned char)(character - '0') < 10) {
-                sprite.uv = 0x700;
+                sprite.uv = NUM_UV_DIGIT_0;
                 endSpriteSet(&sprite, 1);
                 sprite.column = *text - '0';
                 sprite.x = x - shift;
@@ -1235,18 +1326,18 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
                 subPrintSprite(context, &sprite);
                 return;
             } else if (symbol == ':') {
-                sprite.uv = 0x704;
+                sprite.uv = NUM_UV_COLON;
             } else if (symbol == '/') {
-                sprite.uv = 0x703;
+                sprite.uv = NUM_UV_SLASH;
             } else if (symbol == '.') {
-                sprite.uv = 0x709;
+                sprite.uv = NUM_UV_PERIOD;
             } else if (symbol == '-') {
-                sprite.uv = 0x706;
+                sprite.uv = NUM_UV_MINUS;
             } else if (symbol == ' ') {
-                x += 8;
+                x += TAG_TEXT_SPACE_WIDTH;
                 text++;
                 continue;
-            } else if (symbol == 3) {
+            } else if (symbol == TAG_TEXT_ADVANCE_CODE) {
                 text++;
                 x += *text;
                 text++;
@@ -1272,8 +1363,8 @@ static void ScissorSet(FontDrawCursor *context, PrintRect *rect)
     int height;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x10000000 << 32) | 0x8001;
-    scratch[1] = 14;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | GIF_TAG_EOP | 1;
+    scratch[1] = GIF_REG_AD;
     x = rect->x;
     y = rect->y;
     width = rect->width;
@@ -1284,11 +1375,11 @@ static void ScissorSet(FontDrawCursor *context, PrintRect *rect)
             width = 1;
         }
         x = 0;
-    } else if (x + width >= 512) {
-        if (x >= 512) {
+    } else if (x + width >= END_PRINT_SCREEN_WIDTH) {
+        if (x >= END_PRINT_SCREEN_WIDTH) {
             return;
         }
-        width -= x + width - 512;
+        width -= x + width - END_PRINT_SCREEN_WIDTH;
     }
     if (y < 0) {
         height += y;
@@ -1296,15 +1387,15 @@ static void ScissorSet(FontDrawCursor *context, PrintRect *rect)
             height = 1;
         }
         y = 0;
-    } else if (y + height >= 448) {
-        if (y >= 448) {
+    } else if (y + height >= END_PRINT_SCREEN_HEIGHT) {
+        if (y >= END_PRINT_SCREEN_HEIGHT) {
             return;
         }
-        height -= y + height - 448;
+        height -= y + height - END_PRINT_SCREEN_HEIGHT;
     }
     scratch[2] = x | ((u64)(x + width - 1) << 16) | ((u64)y << 32) |
                  ((u64)(y + height - 1) << 48);
-    scratch[3] = 64;
+    scratch[3] = SCE_GS_SCISSOR_1;
     sceVif1PkAddDirectDataN(context->packet, scratch, 2);
 }
 
@@ -1313,11 +1404,11 @@ static void ScissorReset(FontDrawCursor *context)
     u64 *scratch;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x10000000 << 32) | 0x8001;
-    scratch[1] = 14;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | GIF_TAG_EOP | 1;
+    scratch[1] = GIF_REG_AD;
     scratch[2] = ((u64)(sRender.scissor_width - 1) << 16) |
                  ((u64)(sRender.scissor_height - 1) << 48);
-    scratch[3] = 64;
+    scratch[3] = SCE_GS_SCISSOR_1;
     sceVif1PkAddDirectDataN(context->packet, scratch, 2);
 }
 
@@ -1331,10 +1422,10 @@ static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
     int leadingDigit;
 
     offset = 0;
-    endPrintInfoSet(context, 0xFDB00, 1);
+    endPrintInfoSet(context, CLUT_TAG_NUM, 1);
     if (number->value < 0) {
-        sprite.uv = 0x706;
-        endSpriteSet(&sprite, 255);
+        sprite.uv = NUM_UV_MINUS;
+        endSpriteSet(&sprite, END_SPRITE_SET_ALL);
         sprite.color[0] = number->color[0];
         sprite.color[1] = number->color[1];
         sprite.color[2] = number->color[2];
@@ -1342,7 +1433,7 @@ static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
         sprite.y = number->y;
         sprite.depth = number->depth;
         x = number->x;
-        if (number->flags & 0x10) {
+        if (number->flags & PRINT_NUMBER_RIGHT_ALIGN) {
             offset = -(sprite.width * number->digits);
         }
         for (i = 0; i < number->digits; i++) {
@@ -1351,8 +1442,8 @@ static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
             x += sprite.width;
         }
     } else {
-        sprite.uv = (number->flags & 0xF) + 0x700;
-        endSpriteSet(&sprite, 255);
+        sprite.uv = (number->flags & PRINT_NUMBER_STYLE_MASK) + NUM_UV_DIGIT_0;
+        endSpriteSet(&sprite, END_SPRITE_SET_ALL);
         value = number->value;
         if (value < 0) {
             value = 0;
@@ -1360,7 +1451,7 @@ static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
         sprite.y = number->y;
         sprite.depth = number->depth;
         x = number->x + sprite.width * (number->digits - 1);
-        if (number->flags & 0x10) {
+        if (number->flags & PRINT_NUMBER_RIGHT_ALIGN) {
             offset = -(sprite.width * number->digits);
         }
         /* The original routine reduces a copy to its leading decimal digit. */
@@ -1407,9 +1498,9 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
     int strip;
 
     command = context->work.words;
-    endPrintInfoSet(context, 0xfde00, 1);
+    endPrintInfoSet(context, CLUT_WINDOW, 1);
     words = command;
-    words[1] = 0x10000000;
+    words[1] = GIF_NREG_1;
     words[2] = words[0] = 1;
     count = 2;
     words[3] = 0;
@@ -1421,14 +1512,14 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
     words[2] = frame->color[1];
     words[3] = frame->color[3];
     words += 4;
-    if (windowHeight >= 7) {
-        int remaining = windowHeight - 6;
+    if (windowHeight >= WINDOW_BORDER_BOTH_SIDES + 1) {
+        int remaining = windowHeight - WINDOW_BORDER_BOTH_SIDES;
         int strips;
 
-        strips = remaining / 128 + 1;
+        strips = remaining / WINDOW_TILE_SIZE + 1;
         words[0] = strips;
-        words[1] = 0x40ab4000;
-        words[2] = 0x5353;
+        words[1] = GIF_HI_SPRITE_TEX_NREG4;
+        words[2] = GIF_REGS_UV_XYZ2_X2;
         words[3] = 0;
         words += 4;
         for (strip = 0; strip < strips; strip++) {
@@ -1440,29 +1531,29 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
             unsigned short windowY = frame->y;
             unsigned short windowWidth = frame->width;
 
-            words[0] = interiorUv[8].u * 16;
-            textureV = interiorUv[8].v * 16;
-            words[4] = ((short)windowX + 3) * 16 + 0x6ff8;
+            words[0] = interiorUv[WINDOW_INTERIOR_UV].u * 16;
+            textureV = interiorUv[WINDOW_INTERIOR_UV].v * 16;
+            words[4] = ((short)windowX + WINDOW_BORDER) * 16 + END_PRINT_GS_OFFSET_X;
             words[1] = textureV;
             words[2] = 0;
             words[3] = 0;
-            words[5] = ((short)windowY + 3 + strip * 128) * 16 + 0x71f8;
+            words[5] = ((short)windowY + WINDOW_BORDER + strip * WINDOW_TILE_SIZE) * 16 + END_PRINT_GS_OFFSET_Y;
             depthWord = frame->depth;
             words[7] = 0;
-            words[6] = depthWord & 0xffffff;
-            if (remaining > 128) {
-                words[13] = words[5] + 0x800;
-                words[9] = words[1] + interiorUv[8].height * 16;
+            words[6] = depthWord & END_PRINT_DEPTH_MASK;
+            if (remaining > WINDOW_TILE_SIZE) {
+                words[13] = words[5] + WINDOW_TILE_SIZE * 16;
+                words[9] = words[1] + interiorUv[WINDOW_INTERIOR_UV].height * 16;
             } else {
                 words[9] = textureV + remaining * 16;
                 words[13] = words[5] + remaining * 16;
             }
-            remaining -= 128;
+            remaining -= WINDOW_TILE_SIZE;
             words[10] = 0;
             words[11] = 0;
             words[15] = 0;
-            words[8] = words[0] + interiorUv[8].width * 16;
-            stripWidth = ((short)windowWidth - 6) * 16;
+            words[8] = words[0] + interiorUv[WINDOW_INTERIOR_UV].width * 16;
+            stripWidth = ((short)windowWidth - WINDOW_BORDER_BOTH_SIDES) * 16;
             words[12] = words[4] + stripWidth;
             words[14] = words[6];
             words += 16;
@@ -1472,43 +1563,43 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
     frameX = frame->x;
     frameY = frame->y;
     frameWidth = frame->width;
-    words[0] = 0x8008;
+    words[0] = GIF_TAG_EOP | WINDOW_BORDER_PIECES;
     left[5] = left[3] = left[0] = frameX;
-    innerX = frameX + 3;
+    innerX = frameX + WINDOW_BORDER;
     left[6] = left[1] = innerX;
-    right = innerX + frameWidth - 6;
+    right = innerX + frameWidth - WINDOW_BORDER_BOTH_SIDES;
     left[2] = right;
     left[4] = right;
-    innerWidth = frameWidth - 6;
+    innerWidth = frameWidth - WINDOW_BORDER_BOTH_SIDES;
     top[2] = top[1] = top[0] = frameY;
-    innerY = frameY + 3;
+    innerY = frameY + WINDOW_BORDER;
     top[3] = innerY;
     left[7] = right;
     top[4] = innerY;
-    bottom = innerY + frameHeight - 6;
+    bottom = innerY + frameHeight - WINDOW_BORDER_BOTH_SIDES;
     top[5] = bottom;
-    innerHeight = frameHeight - 6;
+    innerHeight = frameHeight - WINDOW_BORDER_BOTH_SIDES;
     top[6] = bottom;
     top[7] = bottom;
-    width[0] = 3;
-    width[2] = 3;
-    width[7] = width[5] = width[4] = width[3] = 3;
+    width[0] = WINDOW_BORDER;
+    width[2] = WINDOW_BORDER;
+    width[7] = width[5] = width[4] = width[3] = WINDOW_BORDER;
     width[6] = width[1] = innerWidth;
-    height[6] = height[5] = height[2] = height[1] = height[0] = 3;
-    height[7] = 3;
+    height[6] = height[5] = height[2] = height[1] = height[0] = WINDOW_BORDER;
+    height[7] = WINDOW_BORDER;
     height[4] = height[3] = innerHeight;
-    words[1] = 0x40ab4000;
-    words[2] = 0x5353;
+    words[1] = GIF_HI_SPRITE_TEX_NREG4;
+    words[2] = GIF_REGS_UV_XYZ2_X2;
     words[3] = 0;
     words += 4;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < WINDOW_BORDER_PIECES; i++) {
         words[0] = win_uv[i].u * 16;
         words[1] = win_uv[i].v * 16;
-        words[4] = left[i] * 16 + 0x6ff8;
-        words[5] = top[i] * 16 + 0x71f8;
+        words[4] = left[i] * 16 + END_PRINT_GS_OFFSET_X;
+        words[5] = top[i] * 16 + END_PRINT_GS_OFFSET_Y;
         words[2] = 0;
         words[3] = 0;
-        depth = frame->depth & 0xffffff;
+        depth = frame->depth & END_PRINT_DEPTH_MASK;
         words[8] = words[0] + win_uv[i].width * 16;
         words[9] = words[1] + win_uv[i].height * 16;
         words[12] = words[4] + width[i] * 16;
@@ -1547,9 +1638,9 @@ static void PrintFrame(FontDrawCursor *context, int param)
 
     frame = (const PrintUnsignedFrameInfo *)param;
     command = context->work.words;
-    endPrintInfoSet(context, 0xfde00, 1);
+    endPrintInfoSet(context, CLUT_WINDOW, 1);
     words = command;
-    words[1] = 0x10000000;
+    words[1] = GIF_NREG_1;
     words[2] = words[0] = 1;
     words[3] = 0;
     words += 4;
@@ -1561,44 +1652,44 @@ static void PrintFrame(FontDrawCursor *context, int param)
     frameWidth = frame->width;
     frameY = frame->y;
     left[5] = left[3] = left[0] = frameX;
-    innerX = frameX + 3;
+    innerX = frameX + WINDOW_BORDER;
     left[6] = left[1] = innerX;
-    right = innerX + frameWidth - 6;
+    right = innerX + frameWidth - WINDOW_BORDER_BOTH_SIDES;
     left[2] = right;
     left[4] = right;
-    innerWidth = frameWidth - 6;
+    innerWidth = frameWidth - WINDOW_BORDER_BOTH_SIDES;
     top[2] = top[1] = top[0] = frameY;
     frameHeight = frame->height;
-    innerY = frameY + 3;
+    innerY = frameY + WINDOW_BORDER;
     top[3] = innerY;
     left[7] = right;
     top[4] = innerY;
-    bottom = innerY + frameHeight - 6;
+    bottom = innerY + frameHeight - WINDOW_BORDER_BOTH_SIDES;
     top[5] = bottom;
-    innerHeight = frameHeight - 6;
+    innerHeight = frameHeight - WINDOW_BORDER_BOTH_SIDES;
     top[6] = bottom;
     top[7] = bottom;
-    width[0] = 3;
-    width[2] = 3;
-    width[7] = width[5] = width[4] = width[3] = 3;
+    width[0] = WINDOW_BORDER;
+    width[2] = WINDOW_BORDER;
+    width[7] = width[5] = width[4] = width[3] = WINDOW_BORDER;
     width[6] = width[1] = innerWidth;
-    height[6] = height[5] = height[2] = height[1] = height[0] = 3;
-    height[7] = 3;
+    height[6] = height[5] = height[2] = height[1] = height[0] = WINDOW_BORDER;
+    height[7] = WINDOW_BORDER;
     height[4] = height[3] = innerHeight;
     words += 4;
-    words[0] = 0x8008;
-    words[1] = 0x40ab4000;
-    words[2] = 0x5353;
+    words[0] = GIF_TAG_EOP | WINDOW_BORDER_PIECES;
+    words[1] = GIF_HI_SPRITE_TEX_NREG4;
+    words[2] = GIF_REGS_UV_XYZ2_X2;
     words[3] = 0;
     words += 4;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < WINDOW_BORDER_PIECES; i++) {
         words[0] = win_uv[i].u * 16;
         words[1] = win_uv[i].v * 16;
-        words[4] = left[i] * 16 + 0x6ff8;
-        words[5] = top[i] * 16 + 0x71f8;
+        words[4] = left[i] * 16 + END_PRINT_GS_OFFSET_X;
+        words[5] = top[i] * 16 + END_PRINT_GS_OFFSET_Y;
         words[2] = 0;
         words[3] = 0;
-        depth = frame->depth & 0xffffff;
+        depth = frame->depth & END_PRINT_DEPTH_MASK;
         words[8] = words[0] + win_uv[i].width * 16;
         words[9] = words[1] + win_uv[i].height * 16;
         words[12] = words[4] + width[i] * 16;
@@ -1623,8 +1714,8 @@ static void PrintThumbnail(FontDrawCursor *context, PrintThumbnailInfo *thumbnai
     sceVif1PkCnt(context->packet, 0);
     sceVif1PkOpenDirectHLCode(context->packet, 0);
     words = (int *)ThumDrawEnv_2;
-    words[36] = thumbnail->x * 16 + 0x6FF8;
-    words[37] = thumbnail->y * 16 + 0x71F8;
+    words[36] = thumbnail->x * 16 + END_PRINT_GS_OFFSET_X;
+    words[37] = thumbnail->y * 16 + END_PRINT_GS_OFFSET_Y;
     words[38] = thumbnail->depth;
     words[44] = thumbnail->x * 16 + 0x77F8;
     words[45] = thumbnail->y * 16 + 0x77D8;
@@ -1641,12 +1732,12 @@ static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *ci
     float angle;
 
     header = buffer;
-    header[0] = ((u64)0x10000000 << 32) | 2;
-    header[1] = 14;
-    header[2] = 68;
-    header[3] = 66;
-    header[4] = 0x5200D;
-    header[5] = 71;
+    header[0] = ((u64)GIF_NREG_1 << 32) | 2;
+    header[1] = GIF_REG_AD;
+    header[2] = GS_ALPHA_BLEND;
+    header[3] = SCE_GS_ALPHA_1;
+    header[4] = GS_TEST_ANEQ_ZGEQUAL_AFAIL_ZB;
+    header[5] = SCE_GS_TEST_1;
     sceVif1PkAddDirectDataN(packet, buffer, 3);
     words = (int *)buffer + 4;
     words[0] = circle->color[0];
@@ -1654,8 +1745,8 @@ static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *ci
     words[2] = circle->color[2];
     words[3] = circle->color[3];
     words = (int *)buffer + 8;
-    words[0] = circle->x * 16 + 0x6FF8;
-    words[1] = circle->y * 16 + 0x71F8;
+    words[0] = circle->x * 16 + END_PRINT_GS_OFFSET_X;
+    words[1] = circle->y * 16 + END_PRINT_GS_OFFSET_Y;
     words[2] = circle->depth;
     words[3] = 0;
     words = (int *)buffer + 12;
@@ -1668,17 +1759,17 @@ static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *ci
         words[3] = circle->pointColor[3];
         words += 4;
         count++;
-        words[0] = (unsigned int)(((float)(circle->x + 0x700) + xglSin(angle) * (float)circle->radius) * 16.0f - 8.0f);
-        words[1] = (unsigned int)(((float)(circle->y + 0x720) + xglCos(angle) * (float)circle->radius) * 16.0f - 8.0f);
+        words[0] = (unsigned int)(((float)(circle->x + END_PRINT_GS_ORIGIN_X) + xglSin(angle) * (float)circle->radius) * 16.0f - 8.0f);
+        words[1] = (unsigned int)(((float)(circle->y + END_PRINT_GS_ORIGIN_Y) + xglCos(angle) * (float)circle->radius) * 16.0f - 8.0f);
         words[2] = circle->depth;
         words[3] = 0;
         words += 4;
         count++;
     }
     words = (int *)buffer;
-    words[0] = 0x8000 + count / 2;
-    words[1] = 0x2026C000;
-    words[2] = 0x51;
+    words[0] = GIF_TAG_EOP + count / 2;
+    words[1] = GIF_HI_TRIFAN;
+    words[2] = GIF_REGS_RGBAQ_XYZ2;
     words[3] = 0;
     sceVif1PkAddDirectDataN(packet, buffer, count + 1);
 }
@@ -1689,7 +1780,7 @@ void endPrintDirectCircle(int circleAddress) {
     vif1Packet = xglPacketGetCurrent();
     sceVif1PkCnt(vif1Packet, 0);
     sceVif1PkOpenDirectHLCode(vif1Packet, 0);
-    PrintCircleCore(vif1Packet, SCRATCHPAD_BASE, (PrintCircleInfo *)circleAddress);
+    PrintCircleCore(vif1Packet, END_PRINT_SCRATCHPAD, (PrintCircleInfo *)circleAddress);
     sceVif1PkCloseDirectHLCode(vif1Packet);
 }
 
@@ -1703,9 +1794,9 @@ static void FontTexReload(FontDrawCursor *context)
     u64 *scratch;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64) 0x10000000 << 32) | 0x8000;
-    scratch[1] = 0xE;
-    scratch[3] = 0x3F;
+    scratch[0] = ((u64) GIF_NREG_1 << 32) | GIF_TAG_EOP;
+    scratch[1] = GIF_REG_AD;
+    scratch[3] = SCE_GS_TEXFLUSH;
     scratch[2] = 0;
     sceVif1PkAddDirectDataN(context->packet, scratch, 1);
     xglFontReloadTexture(context, 2);
@@ -1722,9 +1813,9 @@ static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
 
     i = 0;
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x10000000 << 32) | 0x8000;
-    scratch[1] = 0xE;
-    scratch[3] = 0x3F;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | GIF_TAG_EOP;
+    scratch[1] = GIF_REG_AD;
+    scratch[3] = SCE_GS_TEXFLUSH;
     scratch[2] = 0;
     sceVif1PkAddDirectDataN(context->packet, scratch, 1);
     sceVif1PkCloseDirectHLCode(context->packet);
@@ -1733,7 +1824,7 @@ static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
     for (; i < directory->entryCount; i++, entry++) {
         image = entry->bufferWidthAndFormat;
         imageLow = image & 0xFFFF;
-        Env_3[4] = ((u64)((entry->vramAddress + 0xF0000) >> 6) << 32) |
+        Env_3[4] = ((u64)((entry->vramAddress + WINDOW_TEX_VRAM_BASE) >> 6) << 32) |
                    ((u64)(image >> 16) << 48);
         Env_3[8] = imageLow | ((u64)entry->clutAddress << 32);
         sceVif1PkCnt(context->packet, 0);
@@ -1751,14 +1842,14 @@ static void DrawBackSet(FontDrawCursor *context)
 
     scratch = context->work.qwords;
     draw_back_control = sRender.draw_back_value;
-    draw_back_control |= 0x80000;
-    scratch[0] = ((u64)0x10000000 << 32) | 0x8003;
-    scratch[1] = 14;
-    scratch[3] = 63;
-    scratch[4] = (u64)0x8000 << 17;
-    scratch[5] = 78;
+    draw_back_control |= GS_BUFFER_WIDTH_512;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | GIF_TAG_EOP | 3;
+    scratch[1] = GIF_REG_AD;
+    scratch[3] = SCE_GS_TEXFLUSH;
+    scratch[4] = GS_ZBUF_ZMSK;
+    scratch[5] = SCE_GS_ZBUF_1;
     scratch[6] = draw_back_control;
-    scratch[7] = 76;
+    scratch[7] = SCE_GS_FRAME_1;
     scratch[2] = 0;
     sceVif1PkAddDirectDataN(context->packet, scratch, 4);
 }
@@ -1770,14 +1861,14 @@ static void DrawBackReset(FontDrawCursor *context)
 
     scratch = context->work.qwords;
     draw_back_control = sRender.draw_back_reset_value;
-    draw_back_control |= 0x80000;
-    scratch[0] = ((u64)0x10000000 << 32) | 0x8003;
-    scratch[1] = 14;
-    scratch[3] = 63;
+    draw_back_control |= GS_BUFFER_WIDTH_512;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | GIF_TAG_EOP | 3;
+    scratch[1] = GIF_REG_AD;
+    scratch[3] = SCE_GS_TEXFLUSH;
     scratch[4] = (u64)0x3100 << 16;
-    scratch[5] = 78;
+    scratch[5] = SCE_GS_ZBUF_1;
     scratch[6] = draw_back_control;
-    scratch[7] = 76;
+    scratch[7] = SCE_GS_FRAME_1;
     scratch[2] = 0;
     sceVif1PkAddDirectDataN(context->packet, scratch, 4);
 }
@@ -1787,19 +1878,19 @@ static void ScreenClear(FontDrawCursor *context)
     u64 *scratch;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x40AB4000 << 32) | 0x8001;
-    scratch[1] = 0x551E;
-    scratch[2] = 0x31001;
-    scratch[3] = 0x47;
+    scratch[0] = ((u64)GIF_HI_SPRITE_TEX_NREG4 << 32) | GIF_TAG_EOP | 1;
+    scratch[1] = GIF_REGS_AD_RGBAQ_XYZ2_X2;
+    scratch[2] = GS_TEST_COLOR_ONLY;
+    scratch[3] = SCE_GS_TEST_1;
     scratch[4] = 0;
     scratch[5] = 0;
     scratch = context->work.qwords + 6;
-    ((int *)scratch)[0] = 0x6FF8;
-    ((int *)scratch)[1] = 0x71F8;
+    ((int *)scratch)[0] = END_PRINT_GS_OFFSET_X;
+    ((int *)scratch)[1] = END_PRINT_GS_OFFSET_Y;
     ((int *)scratch)[2] = 0;
     ((int *)scratch)[3] = 0;
-    ((int *)scratch)[4] = 0x8FF8;
-    ((int *)scratch)[5] = 0x8DF8;
+    ((int *)scratch)[4] = END_PRINT_GS_OFFSET_X + END_PRINT_SCREEN_WIDTH * 16;
+    ((int *)scratch)[5] = END_PRINT_GS_OFFSET_Y + END_PRINT_SCREEN_HEIGHT * 16;
     ((int *)scratch)[6] = 0;
     ((int *)scratch)[7] = 0;
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 5);
@@ -1810,19 +1901,19 @@ static void ZScissor(FontDrawCursor *context, PrintRect *rect)
     u64 *scratch;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x40834000 << 32) | 0x8001;
-    scratch[1] = 0x551E;
-    scratch[2] = 0x32001;
-    scratch[3] = 0x47;
+    scratch[0] = ((u64)GIF_HI_SPRITE_PLAIN_NREG4 << 32) | GIF_TAG_EOP | 1;
+    scratch[1] = GIF_REGS_AD_RGBAQ_XYZ2_X2;
+    scratch[2] = GS_TEST_Z_ONLY;
+    scratch[3] = SCE_GS_TEST_1;
     scratch[4] = 0;
     scratch[5] = 0;
     scratch = context->work.qwords + 6;
-    ((int *)scratch)[0] = rect->x * 16 + 0x6FF8;
-    ((int *)scratch)[1] = rect->y * 16 + 0x71F8;
+    ((int *)scratch)[0] = rect->x * 16 + END_PRINT_GS_OFFSET_X;
+    ((int *)scratch)[1] = rect->y * 16 + END_PRINT_GS_OFFSET_Y;
     ((int *)scratch)[2] = rect->depth;
     ((int *)scratch)[3] = 0;
-    ((int *)scratch)[4] = (rect->x + rect->width) * 16 + 0x6FF8;
-    ((int *)scratch)[5] = (rect->y + rect->height) * 16 + 0x71F8;
+    ((int *)scratch)[4] = (rect->x + rect->width) * 16 + END_PRINT_GS_OFFSET_X;
+    ((int *)scratch)[5] = (rect->y + rect->height) * 16 + END_PRINT_GS_OFFSET_Y;
     ((int *)scratch)[6] = rect->depth;
     ((int *)scratch)[7] = 0;
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 5);
@@ -1833,18 +1924,18 @@ static void PrintBackSprite(FontDrawCursor *context, PrintBackQuad *quad)
     u64 *scratch;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x10000000 << 32) | 5;
-    scratch[1] = 14;
-    scratch[2] = 68;
-    scratch[3] = 66;
-    scratch[4] = 0x7FDFF0;
-    scratch[5] = 8;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | 5;
+    scratch[1] = GIF_REG_AD;
+    scratch[2] = GS_ALPHA_BLEND;
+    scratch[3] = SCE_GS_ALPHA_1;
+    scratch[4] = GS_CLAMP_PRINT_BACK;
+    scratch[5] = SCE_GS_CLAMP_1;
     scratch[6] = 96;
-    scratch[7] = 20;
+    scratch[7] = SCE_GS_TEX1_1;
     scratch[8] = (0x24020000 | (sRender.draw_back_value << 5)) | (((u64)0x20000006 << 32) | 0x40000000);
-    scratch[9] = 6;
-    scratch[10] = 0x30000;
-    scratch[11] = 71;
+    scratch[9] = SCE_GS_TEX0_1;
+    scratch[10] = GS_TEST_ZALWAYS;
+    scratch[11] = SCE_GS_TEST_1;
     sceVif1PkAddDirectDataN(context->packet, scratch, 6);
     {
         short order[8] = { 0, 1, 0, 3, 2, 1, 2, 3 };
@@ -1854,12 +1945,12 @@ static void PrintBackSprite(FontDrawCursor *context, PrintBackQuad *quad)
         int i;
         int gray;
 
-        ((int *)scratch)[0] = 0x8004;
-        ((int *)scratch)[1] = 0x302A4000;
-        ((int *)scratch)[2] = 0x521;
+        ((int *)scratch)[0] = GIF_TAG_EOP | 4;
+        ((int *)scratch)[1] = GIF_HI_TRISTRIP_ST_NREG3;
+        ((int *)scratch)[2] = GIF_REGS_RGBAQ_ST_XYZ2;
         ((int *)scratch)[3] = 0;
         words = context->work.words + 4;
-        gray = 128;
+        gray = END_PRINT_COLOR_NEUTRAL;
         vertex = quad->vertex;
         for (i = 0; i < 4; i++) {
             words[3] = gray;
@@ -1890,22 +1981,22 @@ static void PrintBackSprite2(FontDrawCursor *context, PrintBackSpriteInfo *sprit
     int *words;
 
     scratch = context->work.qwords;
-    scratch[0] = ((u64)0x10000000 << 32) | 5;
-    scratch[1] = 14;
-    scratch[2] = 68;
-    scratch[3] = 66;
-    scratch[4] = 0x7FDFF0;
-    scratch[5] = 8;
+    scratch[0] = ((u64)GIF_NREG_1 << 32) | 5;
+    scratch[1] = GIF_REG_AD;
+    scratch[2] = GS_ALPHA_BLEND;
+    scratch[3] = SCE_GS_ALPHA_1;
+    scratch[4] = GS_CLAMP_PRINT_BACK;
+    scratch[5] = SCE_GS_CLAMP_1;
     scratch[6] = 96;
-    scratch[7] = 20;
+    scratch[7] = SCE_GS_TEX1_1;
     scratch[8] = (0x24020000 | (sRender.draw_back_value << 5)) | (((u64)0x20000006 << 32) | 0x40000000);
-    scratch[9] = 6;
-    scratch[10] = 0x3000D;
-    scratch[11] = 71;
+    scratch[9] = SCE_GS_TEX0_1;
+    scratch[10] = GS_TEST_ANEQ_ZALWAYS;
+    scratch[11] = SCE_GS_TEST_1;
     sceVif1PkAddDirectDataN(context->packet, scratch, 6);
-    ((int *)scratch)[0] = 0x8001;
-    ((int *)scratch)[1] = 0x50AB4000;
-    ((int *)scratch)[2] = 0x53531;
+    ((int *)scratch)[0] = GIF_TAG_EOP | 1;
+    ((int *)scratch)[1] = GIF_HI_SPRITE_TEX_NREG5;
+    ((int *)scratch)[2] = GIF_REGS_RGBAQ_UV_XYZ2_UV_XYZ2;
     ((int *)scratch)[3] = 0;
     words = context->work.words + 4;
     words[0] = sprite->color[0];
@@ -1918,8 +2009,8 @@ static void PrintBackSprite2(FontDrawCursor *context, PrintBackSpriteInfo *sprit
     words[2] = 0;
     words[3] = 0;
     words = context->work.words + 12;
-    words[0] = sprite->x * 16 + 0x6FF8;
-    words[1] = sprite->y * 16 + 0x71F8;
+    words[0] = sprite->x * 16 + END_PRINT_GS_OFFSET_X;
+    words[1] = sprite->y * 16 + END_PRINT_GS_OFFSET_Y;
     words[2] = sprite->depth;
     words[3] = 0;
     words = context->work.words + 16;
@@ -1928,12 +2019,15 @@ static void PrintBackSprite2(FontDrawCursor *context, PrintBackSpriteInfo *sprit
     words[2] = 0;
     words[3] = 0;
     words = context->work.words + 20;
-    words[0] = (sprite->x + sprite->width) * 16 + 0x6FF8;
-    words[1] = (sprite->y + sprite->height) * 16 + 0x71F8;
+    words[0] = (sprite->x + sprite->width) * 16 + END_PRINT_GS_OFFSET_X;
+    words[1] = (sprite->y + sprite->height) * 16 + END_PRINT_GS_OFFSET_Y;
     words[2] = sprite->depth;
     words[3] = 0;
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 6);
 }
+
+/* Glow ribbons drawn around an ether line, each half as opaque as the last. */
+#define ETHER_LINE_GLOW_STEPS 8
 
 static void PrintEtherLine(FontDrawCursor *context, int param)
 {
@@ -1946,12 +2040,12 @@ static void PrintEtherLine(FontDrawCursor *context, int param)
 
     endpoints = (const EtherLineEndpoint *)param;
     command = context->work.qwords;
-    command[0] = ((u64)0x10000000 << 32) | 2;
-    command[1] = 14;
-    command[2] = 68;
-    command[3] = 66;
-    command[4] = 0x5000d;
-    command[5] = 71;
+    command[0] = ((u64)GIF_NREG_1 << 32) | 2;
+    command[1] = GIF_REG_AD;
+    command[2] = GS_ALPHA_BLEND;
+    command[3] = SCE_GS_ALPHA_1;
+    command[4] = GS_TEST_ANEQ_ZGEQUAL;
+    command[5] = SCE_GS_TEST_1;
     sceVif1PkAddDirectDataN(context->packet, command, 3);
     line[0].color[0] = endpoints[0].color[0];
     line[0].color[1] = endpoints[0].color[1];
@@ -1982,7 +2076,7 @@ static void PrintEtherLine(FontDrawCursor *context, int param)
     ribbon[2].color[2] = ribbon[3].color[2] = endpoints[1].color[2];
     ribbon[2].color[3] = ribbon[3].color[3] = endpoints[1].color[3];
     if (endpoints[0].y == endpoints[1].y) {
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < ETHER_LINE_GLOW_STEPS; i++) {
             unsigned int startAlpha;
             unsigned int endAlpha;
 
@@ -2002,7 +2096,7 @@ static void PrintEtherLine(FontDrawCursor *context, int param)
             subPrintRibbon(context, ribbon);
         }
     } else {
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < ETHER_LINE_GLOW_STEPS; i++) {
             unsigned int startAlpha;
             unsigned int endAlpha;
 
@@ -2026,17 +2120,17 @@ static void PrintEtherLine(FontDrawCursor *context, int param)
 
 void endPrintExtFunc(int order, int command, void *param)
 {
-    if (command < 100)
+    if (command < END_PRINT_CMD_EXT_BASE)
         goto standard_command;
     goto extended_command;
     do {
 standard_command:
-        if (command < 18)
+        if (command < END_PRINT_CMD_STANDARD_COUNT)
             endPrintExtFuncPack(func_tbl_4[command], (int)param);
         break;
 extended_command:
-        command -= 100;
-        if (command < 7)
+        command -= END_PRINT_CMD_EXT_BASE;
+        if (command < END_PRINT_EXT_CMD_LIMIT)
             xglFontPrintExtFunc(order, func_tbl2_5[command], param);
     } while (0);
 }
@@ -2061,9 +2155,9 @@ void endPrintDirectFrameCopy(XglPacket *packet, int tagLow, int tagHigh)
     };
 
     if (packet != NULL) {
-        FrameCopyEnv[4] = (u64) (u32) (tagLow | 0x80000) |
+        FrameCopyEnv[4] = (u64) (u32) (tagLow | GS_BUFFER_WIDTH_512) |
                           ((u64) tagHigh << 0x20) |
-                          ((u64) 0x8000 << 0x24);
+                          ((u64) GS_BUFFER_WIDTH_512 << 32);
         sceVif1PkRef(packet, FrameCopyEnv, 6, 0, 0, 0);
     }
 }
@@ -2080,16 +2174,16 @@ void endPrintDirectLine(PrintLinePoint *line)
     packet = xglPacketGetCurrent();
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
-    header = SCRATCHPAD_BASE;
-    header[0] = ((u64)0x10000000 << 32) | 3;
-    header[1] = 14;
+    header = END_PRINT_SCRATCHPAD;
+    header[0] = ((u64)GIF_NREG_1 << 32) | 3;
+    header[1] = GIF_REG_AD;
     header[2] = 0;
-    header[3] = 0x3F;
-    header[4] = 0x44;
-    header[5] = 0x42;
-    header[6] = 0x31001;
-    header[7] = 0x47;
-    sceVif1PkAddDirectDataN(packet, SCRATCHPAD_BASE, 4);
+    header[3] = SCE_GS_TEXFLUSH;
+    header[4] = GS_ALPHA_BLEND;
+    header[5] = SCE_GS_ALPHA_1;
+    header[6] = GS_TEST_COLOR_ONLY;
+    header[7] = SCE_GS_TEST_1;
+    sceVif1PkAddDirectDataN(packet, END_PRINT_SCRATCHPAD, 4);
     point = line;
     count = 0;
     if ((point++)->z != 0) {
@@ -2097,12 +2191,12 @@ void endPrintDirectLine(PrintLinePoint *line)
             count++;
         } while ((point++)->z != 0);
     }
-    ((int *)SCRATCHPAD_BASE)[0] = 0x8000 + count;
-    ((int *)SCRATCHPAD_BASE)[1] = 0x20654000;
-    ((int *)SCRATCHPAD_BASE)[2] = 0x51;
-    ((int *)SCRATCHPAD_BASE)[3] = 0;
+    ((int *)END_PRINT_SCRATCHPAD)[0] = GIF_TAG_EOP + count;
+    ((int *)END_PRINT_SCRATCHPAD)[1] = GIF_HI_LINESTRIP;
+    ((int *)END_PRINT_SCRATCHPAD)[2] = GIF_REGS_RGBAQ_XYZ2;
+    ((int *)END_PRINT_SCRATCHPAD)[3] = 0;
     point = line;
-    words = (int *)SCRATCHPAD_BASE + 4;
+    words = (int *)END_PRINT_SCRATCHPAD + 4;
     qwords = 1;
     while (count > 0) {
         count--;
@@ -2119,7 +2213,7 @@ void endPrintDirectLine(PrintLinePoint *line)
         words += 4;
         point++;
     }
-    sceVif1PkAddDirectDataN(packet, SCRATCHPAD_BASE, qwords);
+    sceVif1PkAddDirectDataN(packet, END_PRINT_SCRATCHPAD, qwords);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
@@ -2129,8 +2223,8 @@ void endDecodeJpeg(EndDecodeJpegContext *context) {
 
     source = context->source;
     destination = context->destination;
-    context->width = 0x200;
-    context->height = 0x1C0;
+    context->width = END_PRINT_SCREEN_WIDTH;
+    context->height = END_PRINT_SCREEN_HEIGHT;
     context->decodeSource = source;
     context->decodeDestination = destination;
     context->decodeParam[0] = 0;
@@ -2140,6 +2234,9 @@ void endDecodeJpeg(EndDecodeJpegContext *context) {
     xglJpegDecode(&context->decodeSource);
 }
 
+/* A decoded 512x448 image is sent in two halves of this many quadwords. */
+#define JPEG_HALF_QWORDS 28672
+
 void endPrintJpeg(PrintJpegInfo *jpeg)
 {
     XglPacket *packet;
@@ -2148,28 +2245,28 @@ void endPrintJpeg(PrintJpegInfo *jpeg)
 
     packet = xglPacketGetCurrent();
     sceVif1PkRef(packet, sJpegEnv00_7, 8, 0, 0, 0);
-    sceVif1PkRef(packet, jpeg->image, 28672, 0, 0, 0);
+    sceVif1PkRef(packet, jpeg->image, JPEG_HALF_QWORDS, 0, 0, 0);
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     topWords = (int *)JpegEnv01_8;
-    topWords[28] = (jpeg->x + jpeg->offsetX) * 16 + 0x6FF8;
-    topWords[29] = (jpeg->y + jpeg->offsetY) * 16 + 0x71F8;
+    topWords[28] = (jpeg->x + jpeg->offsetX) * 16 + END_PRINT_GS_OFFSET_X;
+    topWords[29] = (jpeg->y + jpeg->offsetY) * 16 + END_PRINT_GS_OFFSET_Y;
     topWords[30] = jpeg->depth;
-    topWords[36] = (jpeg->x + jpeg->width + jpeg->offsetX) * 16 + 0x6FF8;
-    topWords[37] = (jpeg->y + jpeg->height / 2 + jpeg->offsetY) * 16 + 0x71F8;
+    topWords[36] = (jpeg->x + jpeg->width + jpeg->offsetX) * 16 + END_PRINT_GS_OFFSET_X;
+    topWords[37] = (jpeg->y + jpeg->height / 2 + jpeg->offsetY) * 16 + END_PRINT_GS_OFFSET_Y;
     topWords[38] = jpeg->depth;
     sceVif1PkAddDirectDataN(packet, JpegEnv01_8, 10);
     sceVif1PkCloseDirectHLCode(packet);
     sceVif1PkRef(packet, JpegEnv10_9, 8, 0, 0, 0);
-    sceVif1PkRef(packet, jpeg->image + 0x70000, 28672, 0, 0, 0);
+    sceVif1PkRef(packet, jpeg->image + JPEG_HALF_QWORDS * 16, JPEG_HALF_QWORDS, 0, 0, 0);
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     bottomWords = (int *)JpegEnv11_10;
-    bottomWords[28] = (jpeg->x + jpeg->offsetX) * 16 + 0x6FF8;
-    bottomWords[29] = (jpeg->y + jpeg->height / 2 + jpeg->offsetY) * 16 + 0x71F8;
+    bottomWords[28] = (jpeg->x + jpeg->offsetX) * 16 + END_PRINT_GS_OFFSET_X;
+    bottomWords[29] = (jpeg->y + jpeg->height / 2 + jpeg->offsetY) * 16 + END_PRINT_GS_OFFSET_Y;
     bottomWords[30] = jpeg->depth;
-    bottomWords[36] = (jpeg->x + jpeg->width + jpeg->offsetX) * 16 + 0x6FF8;
-    bottomWords[37] = (jpeg->y + jpeg->height + jpeg->offsetY) * 16 + 0x71F8;
+    bottomWords[36] = (jpeg->x + jpeg->width + jpeg->offsetX) * 16 + END_PRINT_GS_OFFSET_X;
+    bottomWords[37] = (jpeg->y + jpeg->height + jpeg->offsetY) * 16 + END_PRINT_GS_OFFSET_Y;
     bottomWords[38] = jpeg->depth;
     sceVif1PkAddDirectDataN(packet, JpegEnv11_10, 10);
     sceVif1PkCloseDirectHLCode(packet);

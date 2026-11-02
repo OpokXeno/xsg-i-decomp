@@ -216,9 +216,9 @@ void eBattleWinOpen(BattleWinOpenParams *params)
         window->list.columns = 2;
     }
     BW->list.rows = 4;
-    BW->list.draw_flags = 7;
+    BW->list.draw_flags = WINDOWSP_DRAW_CURSORS | WINDOWSP_DRAW_MESSAGES | WINDOWSP_DRAW_NUMBERS;
     WindowSPSet(&BW->list);
-    BW->list.state = 1;
+    BW->list.state = WINDOWSP_STATE_OPEN;
     BW->list.window.alpha = 64;
     WindowDXSet(&BW->window);
     information = BW;
@@ -231,9 +231,9 @@ void eBattleWinOpen(BattleWinOpenParams *params)
         information->window.tag_id = informationTagText;
         information->window.ribbon_initialized = 1;
     }
-    BW->window.state = 1;
+    BW->window.state = WINDOWDX_STATE_OPEN;
     eMessageSet(&BW->message, 0);
-    BW->message.mode = 0x20;
+    BW->message.mode = E_MODE_SHOW_START;
     BW->message.x = BW->window.x + 3;
     BW->message.y = BW->window.y + 3;
     BW->message.draw_parameter = BW->window.style + 2;
@@ -241,8 +241,8 @@ void eBattleWinOpen(BattleWinOpenParams *params)
 
 void eBattleWinClose(void *window)
 {
-    BW->list.state = 4;
-    BW->window.state = 4;
+    BW->list.state = WINDOWSP_STATE_CLOSE;
+    BW->window.state = WINDOWDX_STATE_CLOSE;
     BW->message.mode = 0;
 }
 
@@ -265,7 +265,7 @@ void eBattleWinMain(BattleWinTask *task)
         }
         task->selection = selection;
         task->buttons = PadData.half_2a;
-        endPrintExtFunc(0, 100, 0);
+        endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
         WindowSPMain(&BW->list);
         BW->list.window.ribbon_initialized = 1;
         WindowDXMain(&BW->window);
@@ -318,13 +318,13 @@ void eBattleWinOpen2(BattleWinOpen2Params *param)
     BW2->window.tag_id = param->title;
     eMessageSet(&BW2->message, param->text);
     message_window = BW2;
-    message_window->message.mode = 32;
+    message_window->message.mode = E_MODE_SHOW_START;
     message_window->message.y = message_window->window.y + 3;
     message_window->message.draw_parameter = message_window->window.style + 2;
     message_window->message.x = message_window->window.x + message_window->text_offset + 3;
-    BW2->window.state = 1;
+    BW2->window.state = WINDOWDX_STATE_OPEN;
     WindowDXMain(&BW2->window);
-    BW2->window.state = 3;
+    BW2->window.state = WINDOWDX_STATE_READY;
     BW2->active = 1;
 }
 
@@ -333,19 +333,19 @@ int eBattleWinMain2(void)
     if (BW2->active == 0) {
         return 0;
     }
-    endPrintExtFunc(0xffffff, 100, 0);
+    endPrintExtFunc(0xffffff, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
     WindowDXMain(&BW2->window);
     switch (BW2->window.state) {
-    case 0:
+    case WINDOWDX_STATE_CLOSED:
         BW2->active = 0;
         return 0;
-    case 3:
+    case WINDOWDX_STATE_READY:
         eMessageMain(&BW2->message);
         return 2;
-    case 1:
-    case 2:
-    case 4:
-    case 5:
+    case WINDOWDX_STATE_OPEN:
+    case WINDOWDX_STATE_OPENING:
+    case WINDOWDX_STATE_CLOSE:
+    case WINDOWDX_STATE_CLOSING:
         return 1;
     }
     return 0;
@@ -353,7 +353,7 @@ int eBattleWinMain2(void)
 
 void eBattleWinClose2(void)
 {
-    BW2->window.state = 0;
+    BW2->window.state = WINDOWDX_STATE_CLOSED;
 }
 
 void eBattleWinOpen3(void *data)
@@ -405,7 +405,7 @@ void eBattleWinOpen3(void *data)
         unsigned short y = message_window->window.y;
         int depth = message_window->window.style;
 
-        message_window->messages[0].mode = 32;
+        message_window->messages[0].mode = E_MODE_SHOW_START;
         message_window->messages[0].y = y + 3;
         message_window->messages[0].draw_parameter = depth + 2;
         message_window->messages[0].x = x + 3;
@@ -423,7 +423,7 @@ void eBattleWinOpen3(void *data)
         message_window->messages[1].x = x;
         message_window->messages[1].y = y;
         message_window->messages[1].draw_parameter = depth + 2;
-        message_window->messages[1].mode = 32;
+        message_window->messages[1].mode = E_MODE_SHOW_START;
         display_index = 0;
     }
     {
@@ -454,7 +454,7 @@ void eBattleWinOpen3(void *data)
         unsigned short y = message_window->window.y;
         int depth = message_window->window.style;
 
-        message_window->messages[2].mode = 32;
+        message_window->messages[2].mode = E_MODE_SHOW_START;
         message_window->messages[2].y = y + 27;
         message_window->messages[2].draw_parameter = depth + 2;
         message_window->messages[2].x = x + 123;
@@ -550,7 +550,7 @@ initialize_next_number:
             message_window->messages2[entry_index].x = message_window->window2.x + entry_index * 40 + 3;
             message_window->messages2[entry_index].y = message_window->window2.y + entry_index * 24 + 75;
             message_window->messages2[entry_index].draw_parameter = message_window->window2.style + 2;
-            message_window->messages2[entry_index].mode = 32;
+            message_window->messages2[entry_index].mode = E_MODE_SHOW_START;
             entry_index++;
         } while (entry_index < 2);
     }
@@ -592,12 +592,12 @@ initialize_next_number:
             message_window->messages2[entry_index + 2].x = message_window->window2.x + 143;
             message_window->messages2[entry_index + 2].y = message_window->window2.y + entry_index * 24 + 75;
             message_window->messages2[entry_index + 2].draw_parameter = message_window->window2.style + 2;
-            message_window->messages2[entry_index + 2].mode = 32;
+            message_window->messages2[entry_index + 2].mode = E_MODE_SHOW_START;
         }
         entry_index++;
     } while (entry_index < 2);
-    (*analysis_window_slot)->window.state = 1;
-    (*analysis_window_slot)->window2.state = 1;
+    (*analysis_window_slot)->window.state = WINDOWDX_STATE_OPEN;
+    (*analysis_window_slot)->window2.state = WINDOWDX_STATE_OPEN;
     (*analysis_window_slot)->active = 1;
 }
 
@@ -608,11 +608,11 @@ int eBattleWinMain3(void)
     if (BW3->active == 0) {
         return 0;
     }
-    endPrintExtFunc(0xffffff, 100, 0);
+    endPrintExtFunc(0xffffff, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
     WindowDXMain(&BW3->window);
     WindowDXMain(&BW3->window2);
     switch (BW3->window.state) {
-    case 3:
+    case WINDOWDX_STATE_READY:
         for (i = 0; i < 3; i++) {
             eMessageMain(&BW3->messages[i]);
         }
@@ -628,10 +628,10 @@ int eBattleWinMain3(void)
             eNumberMain(&BW3->numbers[i]);
         }
         return 2;
-    case 1:
-    case 2:
-    case 4:
-    case 5:
+    case WINDOWDX_STATE_OPEN:
+    case WINDOWDX_STATE_OPENING:
+    case WINDOWDX_STATE_CLOSE:
+    case WINDOWDX_STATE_CLOSING:
         return 1;
     }
     return 0;
@@ -639,8 +639,8 @@ int eBattleWinMain3(void)
 
 void eBattleWinClose3(void)
 {
-    BW3->window.state = 4;
-    BW3->window2.state = 4;
+    BW3->window.state = WINDOWDX_STATE_CLOSE;
+    BW3->window2.state = WINDOWDX_STATE_CLOSE;
 }
 
 void eBattleWinOpen4(BattleWinOpenParam4 *param)
@@ -660,7 +660,7 @@ void eBattleWinOpen4(BattleWinOpenParam4 *param)
     BW4->message.x = BW4->window.x + 3;
     BW4->message.y = BW4->window.y + 3;
     BW4->message.mode = 34;
-    BW4->window.state = 1;
+    BW4->window.state = WINDOWDX_STATE_OPEN;
     BW4->active = 1;
     BW4->page = 0;
 }
@@ -670,11 +670,11 @@ int eBattleWinMain4(void)
     if (BW4->active == 0) {
         return 0;
     }
-    endPrintExtFunc(0xffffff, 100, 0);
+    endPrintExtFunc(0xffffff, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
     WindowDXMain(&BW4->window);
     switch (BW4->window.state) {
-    case 3:
-        if (PadData.half_2a & 0x20) {
+    case WINDOWDX_STATE_READY:
+        if (PadData.half_2a & PAD_CIRCLE) {
             if (eMessageNextPage(&BW4->message, 0) == 0) {
                 BW4->page = 1;
                 eMessageMain(&BW4->message);
@@ -683,10 +683,10 @@ int eBattleWinMain4(void)
         }
         eMessageMain(&BW4->message);
         return 2;
-    case 1:
-    case 2:
-    case 4:
-    case 5:
+    case WINDOWDX_STATE_OPEN:
+    case WINDOWDX_STATE_OPENING:
+    case WINDOWDX_STATE_CLOSE:
+    case WINDOWDX_STATE_CLOSING:
         return 1;
     }
     return 0;
@@ -694,7 +694,7 @@ int eBattleWinMain4(void)
 
 void eBattleWinClose4(void)
 {
-    BW4->window.state = 4;
+    BW4->window.state = WINDOWDX_STATE_CLOSE;
 }
 
 int eBattleWinPageCheck4(void)
@@ -753,21 +753,21 @@ void WindowDXFlagChange(WindowDX *window, int flag)
     unsigned char next_state;
 
     switch (flag) {
-    case 1:
+    case WINDOWDX_STATE_OPEN:
         current_state = window->state;
         next_state = current_state + 1;
-        if (next_state < 2 || (signed char)current_state == 4 ||
-            (signed char)current_state == 5) {
-            window->state = 1;
+        if (next_state < 2 || (signed char)current_state == WINDOWDX_STATE_CLOSE ||
+            (signed char)current_state == WINDOWDX_STATE_CLOSING) {
+            window->state = WINDOWDX_STATE_OPEN;
         }
         return;
 
-    case 3:
+    case WINDOWDX_STATE_READY:
         window->state = flag;
         return;
 
-    case 4:
-        if (window->state == 3) {
+    case WINDOWDX_STATE_CLOSE:
+        if (window->state == WINDOWDX_STATE_READY) {
             window->state = flag;
         }
         return;
@@ -791,7 +791,7 @@ void WindowDXSet(WindowDX *window)
     window->tag_id = 0;
     window->close_callback = 0;
     window->close_callback_arg = 0;
-    window->state = 0;
+    window->state = WINDOWDX_STATE_CLOSED;
     window->ribbon_initialized = 0;
     window->color_g = 0x80;
     window->color_b = 0x80;
@@ -803,12 +803,12 @@ void WindowDXMain(WindowDX *window)
     char state;
 
     switch (window->state & 0xf) {
-    case 0:
+    case WINDOWDX_STATE_CLOSED:
         break;
-    case 1:
+    case WINDOWDX_STATE_OPEN:
     case 17:
         state = window->state;
-        window->state = 0;
+        window->state = WINDOWDX_STATE_CLOSED;
         if (window->close_callback != 0) {
             ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
@@ -852,20 +852,20 @@ void WindowDXMain(WindowDX *window)
         if (window->close_callback != 0) {
             ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
-        window->state = 2;
-    case 2:
+        window->state = WINDOWDX_STATE_OPENING;
+    case WINDOWDX_STATE_OPENING:
         OpenCloseMain(&window->frame);
         if (window->frame.progress >= 0) {
             break;
         }
-        window->state = 3;
-    case 3:
+        window->state = WINDOWDX_STATE_READY;
+    case WINDOWDX_STATE_READY:
         window->rect.x = window->x;
         window->rect.y = window->y;
         window->rect.style = window->style;
         window->rect.width = window->width;
         window->rect.height = window->height;
-        endPrintExtFunc(window->style, 1, &window->rect);
+        endPrintExtFunc(window->style, END_PRINT_CMD_WINDOW,&window->rect);
         if (window->tag_id != 0) {
             window->ribbon_top.x = window->x;
             window->ribbon_top.y = window->y - 13;
@@ -894,7 +894,7 @@ void WindowDXMain(WindowDX *window)
             ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
         break;
-    case 4:
+    case WINDOWDX_STATE_CLOSE:
         window->frame.mode = 16;
         window->frame.x = window->x;
         window->frame.y = window->y;
@@ -905,11 +905,11 @@ void WindowDXMain(WindowDX *window)
         if (window->close_callback != 0) {
             ((WindowDXCallback)window->close_callback)(window, window->close_callback_arg);
         }
-        window->state = 5;
-    case 5:
+        window->state = WINDOWDX_STATE_CLOSING;
+    case WINDOWDX_STATE_CLOSING:
         OpenCloseMain(&window->frame);
         if (window->frame.progress < 0) {
-            window->state = -1;
+            window->state = WINDOWDX_STATE_FINISHED;
         }
         break;
     }
@@ -926,15 +926,15 @@ void subMWModeExSet(WindowSPCursor *list)
 
     if (list->item_count != 0) {
         shown = list->visible_rows * list->visible_cols;
-        if (shown > 24) {
-            shown = 24;
+        if (shown > WINDOWSP_ITEM_SLOTS) {
+            shown = WINDOWSP_ITEM_SLOTS;
         }
         if (list->item_count - first < shown) {
             shown = list->item_count - first;
         }
         for (i = 0; i < shown; i++) {
             list->messages[i].text = item->name;
-            list->messages[i].mode = 32;
+            list->messages[i].mode = E_MODE_SHOW_START;
             list->numbers[i].format = 0;
             list->numbers[i].digits = list->mode;
             list->numbers[i].value = item->amount;
@@ -956,42 +956,42 @@ void subMWModeExSet(WindowSPCursor *list)
             }
             item++;
         }
-        for (; i < 24; i++) {
-            list->messages[i].mode = 112;
+        for (; i < WINDOWSP_ITEM_SLOTS; i++) {
+            list->messages[i].mode = E_MODE_HIDE_START;
             list->numbers[i].mode = 0;
         }
-        list->numbers[24].digits = 3;
-        list->numbers[24].value = list->selected_index + 1;
-        list->numbers[25].digits = 3;
-        list->numbers[25].value = list->item_count;
+        list->numbers[WINDOWSP_NUMBER_INDEX].digits = 3;
+        list->numbers[WINDOWSP_NUMBER_INDEX].value = list->selected_index + 1;
+        list->numbers[WINDOWSP_NUMBER_COUNT].digits = 3;
+        list->numbers[WINDOWSP_NUMBER_COUNT].value = list->item_count;
         list->cursors[0].active = 1;
-        eCursolModeChange(&list->cursors[0], 80);
+        eCursolModeChange(&list->cursors[0], E_MODE_RUN_START);
         if (list->max_scroll != 0) {
             if (list->current_row != 0) {
-                eCursolModeChange(&list->cursors[1], 80);
+                eCursolModeChange(&list->cursors[1], E_MODE_RUN_START);
             } else {
-                list->cursors[1].state = 112;
+                list->cursors[1].state = E_MODE_HIDE_START;
             }
             if (list->current_row == list->max_scroll) {
-                list->cursors[2].state = 112;
+                list->cursors[2].state = E_MODE_HIDE_START;
             } else if (list->current_row < list->max_scroll) {
-                eCursolModeChange(&list->cursors[2], 80);
+                eCursolModeChange(&list->cursors[2], E_MODE_RUN_START);
             } else {
-                list->cursors[2].state = 112;
+                list->cursors[2].state = E_MODE_HIDE_START;
             }
         } else {
-            list->cursors[1].state = 112;
-            list->cursors[2].state = 112;
+            list->cursors[1].state = E_MODE_HIDE_START;
+            list->cursors[2].state = E_MODE_HIDE_START;
         }
     } else {
-        hidden_mode = 112;
+        hidden_mode = E_MODE_HIDE_START;
         for (j = 2; j >= 0; j--) {
             list->cursors[j].state = hidden_mode;
         }
         list->messages[0].text = item->name;
-        list->messages[0].mode = 32;
-        for (j = 1; j < 24; j++) {
-            list->messages[j].mode = 112;
+        list->messages[0].mode = E_MODE_SHOW_START;
+        for (j = 1; j < WINDOWSP_ITEM_SLOTS; j++) {
+            list->messages[j].mode = E_MODE_HIDE_START;
             list->numbers[j].mode = 0;
         }
     }
@@ -1010,18 +1010,18 @@ void subMWPosSet(WindowSPCursor *list)
     list->rect.y = list->y + 3;
     list->rect.width = list->width - 6;
     list->rect.height = list->height - 6;
-    list->numbers[24].x = list->x + list->width - 142;
-    list->numbers[25].x = list->x + list->width - 78;
+    list->numbers[WINDOWSP_NUMBER_INDEX].x = list->x + list->width - 142;
+    list->numbers[WINDOWSP_NUMBER_COUNT].x = list->x + list->width - 78;
     list->window.x = list->x;
     list->window.y = list->y;
     list->window.style = list->style;
     list->window.width = list->width;
     list->window.height = list->height;
     list->rect.style = list->style;
-    list->numbers[24].y = list->y - 13;
-    list->numbers[25].y = list->y - 13;
-    list->numbers[24].work = list->style + 2;
-    list->numbers[25].work = list->style + 2;
+    list->numbers[WINDOWSP_NUMBER_INDEX].y = list->y - 13;
+    list->numbers[WINDOWSP_NUMBER_COUNT].y = list->y - 13;
+    list->numbers[WINDOWSP_NUMBER_INDEX].work = list->style + 2;
+    list->numbers[WINDOWSP_NUMBER_COUNT].work = list->style + 2;
     if (list->item_count != 0) {
         list->cursors[0].x = list->x + list->visible_top * (list->width / 2) + 3;
         list->cursors[1].y = list->y + 4;
@@ -1036,10 +1036,10 @@ void subMWPosSet(WindowSPCursor *list)
         for (row = 0; row < list->visible_rows; row++) {
             for (col = 0; col < list->visible_cols; col++) {
                 list->messages[i].x = list->x + (list->width / 2) * col + 19;
-                list->messages[i].y = list->y + row * 24 + 3;
+                list->messages[i].y = list->y + row * WINDOWSP_ROW_HEIGHT +3;
                 list->messages[i].draw_parameter = list->style + 2;
                 i++;
-                if (i >= 24) {
+                if (i >= WINDOWSP_ITEM_SLOTS) {
                     break;
                 }
             }
@@ -1049,10 +1049,10 @@ void subMWPosSet(WindowSPCursor *list)
             for (row = 0; row < list->visible_rows; row++) {
                 for (col = 0; col < list->visible_cols; col++) {
                     list->numbers[i].x = list->x + col * (list->width / 2) + 195;
-                    list->numbers[i].y = list->y + row * 24 + 8;
+                    list->numbers[i].y = list->y + row * WINDOWSP_ROW_HEIGHT +8;
                     list->numbers[i].work = list->style + 2;
                     i++;
-                    if (i >= 24) {
+                    if (i >= WINDOWSP_ITEM_SLOTS) {
                         break;
                     }
                 }
@@ -1062,10 +1062,10 @@ void subMWPosSet(WindowSPCursor *list)
             for (row = 0; row < list->visible_rows; row++) {
                 for (col = 0; col < list->visible_cols; col++) {
                     list->numbers[i].x = list->x + list->width - list->mode * 11 - 19;
-                    list->numbers[i].y = list->y + row * 24 + 8;
+                    list->numbers[i].y = list->y + row * WINDOWSP_ROW_HEIGHT +8;
                     list->numbers[i].work = list->style + 2;
                     i++;
-                    if (i >= 24) {
+                    if (i >= WINDOWSP_ITEM_SLOTS) {
                         break;
                     }
                 }
@@ -1095,25 +1095,25 @@ void subMWDraw(WindowSPCursor *list)
     unsigned char flags = list->draw_flags;
 
     WindowDXMain(&list->window);
-    if (flags & 1) {
-        for (i = 0; i < 3; i++) {
+    if (flags & WINDOWSP_DRAW_CURSORS) {
+        for (i = 0; i < WINDOWSP_CURSOR_COUNT; i++) {
             eCursolMain(&list->cursors[i]);
         }
     }
-    endPrintExtFunc(list->rect.style, 5, &list->rect);
-    if (flags & 2) {
-        for (i = 0; i < 24; i++) {
+    endPrintExtFunc(list->rect.style, END_PRINT_CMD_SCISSOR_SET,&list->rect);
+    if (flags & WINDOWSP_DRAW_MESSAGES) {
+        for (i = 0; i < WINDOWSP_ITEM_SLOTS; i++) {
             eMessageMain(&list->messages[i]);
         }
     }
     if (list->item_count != 0) {
-        if (flags & 4) {
-            for (i = 0; i < 24; i++) {
+        if (flags & WINDOWSP_DRAW_NUMBERS) {
+            for (i = 0; i < WINDOWSP_ITEM_SLOTS; i++) {
                 eNumberMain(&list->numbers[i]);
             }
         }
     }
-    endPrintExtFunc(list->rect.style, 6, 0);
+    endPrintExtFunc(list->rect.style, END_PRINT_CMD_SCISSOR_RESET, 0);
 }
 
 void subMWControlType00(WindowSPCursor *list)
@@ -1121,14 +1121,14 @@ void subMWControlType00(WindowSPCursor *list)
     if (list->item_count < 2) {
         return;
     }
-    if (list->buttons & 0x1000) {
+    if (list->buttons & PAD_UP) {
         list->selected_index--;
         if (list->selected_index < 0) {
-            if (PadData.half_32 & 0x1000) {
+            if (PadData.half_32 & PAD_UP) {
                 list->selected_index = list->item_count - 1;
                 list->visible_bottom = list->visible_rows - 1;
                 list->current_row = list->max_scroll;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             } else {
                 list->selected_index++;
             }
@@ -1138,17 +1138,17 @@ void subMWControlType00(WindowSPCursor *list)
             } else {
                 list->visible_bottom--;
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
     }
-    if (list->buttons & 0x4000) {
+    if (list->buttons & PAD_DOWN) {
         list->selected_index++;
         if (list->item_count - 1 < list->selected_index) {
-            if (PadData.half_32 & 0x4000) {
+            if (PadData.half_32 & PAD_DOWN) {
                 list->selected_index = 0;
                 list->visible_bottom = 0;
                 list->current_row = 0;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             } else {
                 list->selected_index--;
             }
@@ -1158,7 +1158,7 @@ void subMWControlType00(WindowSPCursor *list)
             } else {
                 list->visible_bottom++;
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
     }
 }
@@ -1168,14 +1168,14 @@ void subMWControlType01(WindowSPCursor *list)
     if (list->item_count < 2) {
         return;
     }
-    if (list->buttons & 0x8000) {
+    if (list->buttons & PAD_LEFT) {
         list->selected_index--;
         if (list->selected_index < 0) {
-            if (PadData.half_32 & 0x8000) {
+            if (PadData.half_32 & PAD_LEFT) {
                 list->selected_index = list->item_count - 1;
                 list->current_row = list->max_scroll;
                 list->visible_bottom = list->visible_rows - 1;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             } else {
                 list->selected_index++;
             }
@@ -1189,18 +1189,18 @@ void subMWControlType01(WindowSPCursor *list)
                     list->visible_bottom--;
                 }
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
         list->visible_top = list->selected_index % list->visible_cols;
     }
-    if (list->buttons & 0x2000) {
+    if (list->buttons & PAD_RIGHT) {
         list->selected_index++;
         if (list->item_count - 1 < list->selected_index) {
-            if (PadData.half_32 & 0x2000) {
+            if (PadData.half_32 & PAD_RIGHT) {
                 list->selected_index = 0;
                 list->current_row = 0;
                 list->visible_bottom = 0;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             } else {
                 list->selected_index--;
             }
@@ -1214,17 +1214,17 @@ void subMWControlType01(WindowSPCursor *list)
                     list->visible_bottom++;
                 }
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
         list->visible_top = list->selected_index % list->visible_cols;
     }
     if (list->item_count == 2) {
         return;
     }
-    if (list->buttons & 0x1000) {
+    if (list->buttons & PAD_UP) {
         list->selected_index -= list->visible_cols;
         if (list->selected_index < 0) {
-            if (PadData.half_32 & 0x1000) {
+            if (PadData.half_32 & PAD_UP) {
                 if ((list->item_count - 1) % 2 != 0) {
                     list->selected_index = list->item_count + list->selected_index;
                 } else {
@@ -1232,7 +1232,7 @@ void subMWControlType01(WindowSPCursor *list)
                 }
                 list->visible_bottom = list->visible_rows - 1;
                 list->current_row = list->max_scroll;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             } else {
                 list->selected_index += list->visible_cols;
             }
@@ -1242,28 +1242,28 @@ void subMWControlType01(WindowSPCursor *list)
             } else {
                 list->visible_bottom--;
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
         list->visible_top = list->selected_index % list->visible_cols;
     }
-    if (list->buttons & 0x4000) {
+    if (list->buttons & PAD_DOWN) {
         list->selected_index += list->visible_cols;
         if (list->item_count - 1 < list->selected_index) {
             if ((list->item_count - 1) % 2 != 0) {
-                if (PadData.half_32 & 0x4000) {
+                if (PadData.half_32 & PAD_DOWN) {
                     list->visible_bottom = 0;
                     list->selected_index -= list->item_count;
                     list->current_row = 0;
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 } else {
                     list->selected_index -= list->visible_cols;
                 }
             } else if (list->item_count != list->selected_index) {
-                if (PadData.half_32 & 0x4000) {
+                if (PadData.half_32 & PAD_DOWN) {
                     list->selected_index = 0;
                     list->visible_bottom = 0;
                     list->current_row = 0;
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 } else {
                     list->selected_index -= list->visible_cols;
                 }
@@ -1271,7 +1271,7 @@ void subMWControlType01(WindowSPCursor *list)
                 list->selected_index = list->item_count - 1;
                 list->visible_bottom = list->visible_rows - 1;
                 list->current_row = list->max_scroll;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             }
         } else {
             if (list->visible_bottom == list->visible_rows - 1) {
@@ -1279,7 +1279,7 @@ void subMWControlType01(WindowSPCursor *list)
             } else {
                 list->visible_bottom++;
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
         list->visible_top = list->selected_index % list->visible_cols;
     }
@@ -1468,30 +1468,30 @@ void WindowSPMain(WindowSPCursor *list)
         return;
     }
     switch (list->state & 0xf) {
-    case 1:
+    case WINDOWSP_STATE_OPEN:
         sub = list->state >> 4;
         switch (sub) {
-        case 0:
+        case WINDOWSP_OPEN_FRESH:
             WindowDXSet(&list->window);
             list->window.x = list->x;
             list->window.y = list->y;
             list->window.style = list->style;
             list->window.width = list->width;
             list->window.height = list->height;
-            list->window.state = 1;
+            list->window.state = WINDOWDX_STATE_OPEN;
             list->window.tag_id = list->title;
-            for (i = 0; i < 3; i++) {
+            for (i = 0; i < WINDOWSP_CURSOR_COUNT; i++) {
                 eCursolSet(&list->cursors[i], i);
             }
-            for (i = 0; i < 24; i++) {
+            for (i = 0; i < WINDOWSP_ITEM_SLOTS; i++) {
                 eMessageSet(&list->messages[i], 0);
             }
-            for (i = 0; i < 26; i++) {
+            for (i = 0; i < WINDOWSP_NUMBER_SLOTS; i++) {
                 eNumberSet(&list->numbers[i], 0);
             }
             subMWModeExSet(list);
             break;
-        case 1:
+        case WINDOWSP_OPEN_NO_ANIMATION:
             WindowDXSet(&list->window);
             list->window.x = list->x;
             list->window.y = list->y;
@@ -1501,52 +1501,52 @@ void WindowSPMain(WindowSPCursor *list)
             list->window.tag_id = list->title;
             list->window.state = sub;
             WindowDXMain(&list->window);
-            list->window.state = 3;
-            for (i = 0; i < 3; i++) {
+            list->window.state = WINDOWDX_STATE_READY;
+            for (i = 0; i < WINDOWSP_CURSOR_COUNT; i++) {
                 eCursolSet(&list->cursors[i], i);
             }
-            for (i = 0; i < 24; i++) {
+            for (i = 0; i < WINDOWSP_ITEM_SLOTS; i++) {
                 eMessageSet(&list->messages[i], 0);
             }
-            for (i = 0; i < 26; i++) {
+            for (i = 0; i < WINDOWSP_NUMBER_SLOTS; i++) {
                 eNumberSet(&list->numbers[i], 0);
             }
             subMWModeExSet(list);
             break;
         }
-        list->state = 2;
-    case 2:
+        list->state = WINDOWSP_STATE_OPEN_WAIT;
+    case WINDOWSP_STATE_OPEN_WAIT:
         WindowDXMain(&list->window);
-        if (list->window.state != 3) {
+        if (list->window.state != WINDOWDX_STATE_READY) {
             break;
         }
-        list->state = 3;
-        list->cursors[0].state = 32;
-        for (i = 0; i < 24; i++) {
-            list->messages[i].mode = 32;
+        list->state = WINDOWSP_STATE_ACTIVE;
+        list->cursors[0].state = E_MODE_SHOW_START;
+        for (i = 0; i < WINDOWSP_ITEM_SLOTS; i++) {
+            list->messages[i].mode = E_MODE_SHOW_START;
             list->numbers[i].mode = 3;
         }
         list->anim = 0;
-    case 3:
+    case WINDOWSP_STATE_ACTIVE:
         subMWModeExSet(list);
         subMWPosSet(list);
         subMWDraw(list);
         break;
-    case 4:
+    case WINDOWSP_STATE_CLOSE:
         list->window.x = list->x;
         list->window.y = list->y;
         list->window.style = list->style;
         list->window.width = list->width;
         list->window.height = list->height;
-        list->window.state = 4;
+        list->window.state = WINDOWDX_STATE_CLOSE;
         list->window.tag_id = list->title;
-        list->state = 5;
+        list->state = WINDOWSP_STATE_CLOSING;
         list->window.close_callback_arg = 0;
         list->window.close_callback = 0;
-    case 5:
+    case WINDOWSP_STATE_CLOSING:
         WindowDXMain(&list->window);
-        if (list->window.state == 0) {
-            list->state = 0;
+        if (list->window.state == WINDOWDX_STATE_CLOSED) {
+            list->state = WINDOWSP_STATE_CLOSED;
         }
         break;
     }

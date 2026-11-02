@@ -4,6 +4,20 @@
 #include "main/end_print.h"
 #include "main/xgl_2.h"
 
+/* OpenCloseController.phase: 0 starts the transition, 1 runs it, -1 when done. */
+#define OPEN_CLOSE_PHASE_START 0
+#define OPEN_CLOSE_PHASE_RUNNING 1
+#define OPEN_CLOSE_PHASE_DONE (-1)
+
+/* Frames of the grow/shrink transition (frame counts up to this); the cross
+ * transition (subtype 01) runs for OPEN_CLOSE_FADE_FRAMES. */
+#define OPEN_CLOSE_FRAMES 11
+#define OPEN_CLOSE_FADE_FRAMES 7.0
+/* Alpha of the first transition segment. */
+#define OPEN_CLOSE_ALPHA 0x40
+/* Segments (translucent rectangles) drawn per transition frame. */
+#define OPEN_CLOSE_SEGMENTS 3
+
 /* The transition primitives in this TU set red, blue, then green. */
 #define E_WIDGET_SET_RGB(widget_value, red_value, green_value, blue_value) do { \
     (widget_value)->color.red = (red_value); \
@@ -110,11 +124,11 @@ const char OpenCloseCfwinPath[32] = "data\\endou\\cfwin.xtx";
 
 static void OpenSubType00(OpenCloseController *controller)
 {
-    int frames_remaining = 11 - controller->frame;
+    int frames_remaining = OPEN_CLOSE_FRAMES - controller->frame;
     int segment_parameter = frames_remaining * 5 + 10;
     int segment;
 
-    for (segment = 0; segment < 3; segment++) {
+    for (segment = 0; segment < OPEN_CLOSE_SEGMENTS; segment++) {
         float angle = (float)frames_remaining * 0.1308997f;
         float cosine;
         float sine;
@@ -179,26 +193,26 @@ static void OpenSubType00(OpenCloseController *controller)
         primitive->color[1] = -128;
         primitive->height = bottom_y - top_y;
         if (segment == 0)
-            primitive->color[3] = 0x40;
+            primitive->color[3] = OPEN_CLOSE_ALPHA;
         else
             primitive->color[3] = segment_parameter;
 
-        endPrintExtFunc(primitive->work, 9, primitive);
+        endPrintExtFunc(primitive->work, END_PRINT_CMD_FRAME, primitive);
     }
 
     if (frames_remaining == 0)
-        controller->phase = -1;
+        controller->phase = OPEN_CLOSE_PHASE_DONE;
     else
         controller->frame++;
 }
 
 static void CloseSubType00(OpenCloseController *controller)
 {
-    int frames_remaining = 11 - controller->frame;
+    int frames_remaining = OPEN_CLOSE_FRAMES - controller->frame;
     int segment_parameter = frames_remaining * 5 + 10;
     int segment;
 
-    for (segment = 0; segment < 3; segment++) {
+    for (segment = 0; segment < OPEN_CLOSE_SEGMENTS; segment++) {
         float angle = (float)frames_remaining * 0.1308997f;
         float cosine;
         float sine;
@@ -267,15 +281,15 @@ static void CloseSubType00(OpenCloseController *controller)
         primitive->color[1] = -128;
         primitive->height = bottom_y - top_y;
         if (segment == 0)
-            primitive->color[3] = 0x40;
+            primitive->color[3] = OPEN_CLOSE_ALPHA;
         else
             primitive->color[3] = segment_parameter;
 
-        endPrintExtFunc(primitive->work, 9, primitive);
+        endPrintExtFunc(primitive->work, END_PRINT_CMD_FRAME, primitive);
     }
 
     if (frames_remaining == 0)
-        controller->phase = -1;
+        controller->phase = OPEN_CLOSE_PHASE_DONE;
     else
         controller->frame++;
 }
@@ -285,7 +299,7 @@ static void OpenSubType01(OpenCloseController *controller)
     int draw_count;
     int dark_channel = -128;
     OpenCloseDrawPrimitive *primitive = controller->primitive;
-    double total_frames = 7.0;
+    double total_frames = OPEN_CLOSE_FADE_FRAMES;
     double final_duration;
 
     draw_count = 0;
@@ -311,16 +325,16 @@ static void OpenSubType01(OpenCloseController *controller)
         primitive->y = top;
         primitive->work = controller->work;
         primitive->height = draw_height;
-        primitive->color[3] = 0x40;
+        primitive->color[3] = OPEN_CLOSE_ALPHA;
         primitive->color[0] = dark_channel;
         primitive->color[2] = dark_channel;
         primitive->color[1] = dark_channel;
-        endPrintExtFunc(primitive->work, 9, primitive);
+        endPrintExtFunc(primitive->work, END_PRINT_CMD_FRAME, primitive);
         ++primitive;
     } while (draw_count >= 0);
 
     if (controller->frame == (int)final_duration)
-        controller->phase = -1;
+        controller->phase = OPEN_CLOSE_PHASE_DONE;
     else
         controller->frame++;
 }
@@ -329,14 +343,14 @@ void OpenCloseMain(OpenCloseController *controller)
 {
     OpenCloseCallbacks callbacks;
 
-    if (controller->phase != 0) {
+    if (controller->phase != OPEN_CLOSE_PHASE_START) {
         if (controller->phase <= 0)
             return;
-        if (controller->phase != 1)
+        if (controller->phase != OPEN_CLOSE_PHASE_RUNNING)
             return;
     } else {
         controller->frame = 0;
-        controller->phase = 1;
+        controller->phase = OPEN_CLOSE_PHASE_RUNNING;
     }
 
     callbacks = openCloseHandlers;
@@ -349,13 +363,13 @@ void eWindowMain(EWindowMainData *window)
     unsigned char mode = window->mode;
 
     switch (mode) {
-    case 0:
-        window->mode = 1;
+    case E_MODE_INIT:
+        window->mode = E_MODE_IDLE;
         window->visible = 0;
         break;
-    case 1:
+    case E_MODE_IDLE:
         break;
-    case 0x20:
+    case E_MODE_SHOW_START:
         window->primitive.x = (unsigned short)window->x;
         window->primitive.y = (unsigned short)window->y;
         window->primitive.work = window->work;
@@ -364,33 +378,33 @@ void eWindowMain(EWindowMainData *window)
         window->primitive.color.red = -128;
         window->primitive.color.blue = -128;
         window->primitive.color.green = -128;
-        window->primitive.color.alpha = 64;
+        window->primitive.color.alpha = OPEN_CLOSE_ALPHA;
         window->visible = 1;
         window->mode = mode;
         /* fall through */
-    case 0x21:
-        window->mode = 0x50;
+    case E_MODE_SHOW_STEP:
+        window->mode = E_MODE_RUN_START;
         break;
-    case 0x22:
+    case E_MODE_OPEN_START:
         window->controller.x = (unsigned short)window->x;
         window->controller.y = (unsigned short)window->y;
         window->controller.work = window->work;
         window->controller.width = (unsigned short)window->width;
         window->controller.height = (unsigned short)window->height;
-        window->mode = 0x23;
-        window->controller.phase = 0;
+        window->mode = E_MODE_OPEN_STEP;
+        window->controller.phase = OPEN_CLOSE_PHASE_START;
         window->controller.subtype = 0;
         /* fall through */
-    case 0x23:
+    case E_MODE_OPEN_STEP:
         OpenCloseMain(&window->controller);
         if (window->controller.phase < 0)
-            window->mode = 0x20;
+            window->mode = E_MODE_SHOW_START;
         break;
-    case 0x50:
-        window->mode = 0x51;
+    case E_MODE_RUN_START:
+        window->mode = E_MODE_RUN_STEP;
         window->visible = 1;
         /* fall through */
-    case 0x51:
+    case E_MODE_RUN_STEP:
         window->primitive.x = (unsigned short)window->x;
         window->primitive.y = (unsigned short)window->y;
         window->primitive.work = window->work;
@@ -399,7 +413,7 @@ void eWindowMain(EWindowMainData *window)
         window->primitive.color.red = -128;
         window->primitive.color.blue = -128;
         window->primitive.color.green = -128;
-        window->primitive.color.alpha = 64;
+        window->primitive.color.alpha = OPEN_CLOSE_ALPHA;
         break;
     case 0xa0:
         window->mode = -95;
@@ -408,7 +422,7 @@ void eWindowMain(EWindowMainData *window)
         break;
     }
     if (window->visible)
-        endPrintExtFunc(window->primitive.work, 1, &window->primitive);
+        endPrintExtFunc(window->primitive.work, END_PRINT_CMD_WINDOW,&window->primitive);
 }
 
 void eWindowSet(EWindow *window)
@@ -428,57 +442,57 @@ void eWindowSet(EWindow *window)
 void eCursolMain(ECursolMainData *cursol)
 {
     switch (cursol->state) {
-    case 0:
+    case E_MODE_INIT:
         cursol->active = 0;
-        cursol->state = 0;
+        cursol->state = E_MODE_INIT;
         break;
-    case 1:
+    case E_MODE_IDLE:
     case 0x10:
     case 0x30:
     case 0x40:
     case 0x60:
         break;
-    case 0x20:
+    case E_MODE_SHOW_START:
         cursol->active = 1;
-        cursol->state = 0x21;
+        cursol->state = E_MODE_SHOW_STEP;
         /* fall through */
-    case 0x21:
+    case E_MODE_SHOW_STEP:
         cursol->sprite.x = cursol->x;
         cursol->sprite.y = cursol->y;
         cursol->sprite.style = cursol->width;
-        cursol->state = 0x50;
+        cursol->state = E_MODE_RUN_START;
         break;
-    case 0x22:
+    case E_MODE_OPEN_START:
         cursol->active = 1;
         cursol->timer = -4;
-        cursol->state = 0x23;
+        cursol->state = E_MODE_OPEN_STEP;
         /* fall through */
-    case 0x23:
+    case E_MODE_OPEN_STEP:
         cursol->sprite.x = cursol->x;
         cursol->sprite.y = cursol->y - (signed char)cursol->timer + 8;
         cursol->sprite.width = 24 - (signed char)cursol->timer;
         cursol->sprite.height = (signed char)cursol->timer * 2;
         cursol->sprite.style = cursol->width;
         if ((signed char)cursol->timer == 8)
-            cursol->state = 0x50;
+            cursol->state = E_MODE_RUN_START;
         else
             cursol->timer = cursol->timer + 1;
         break;
-    case 0x50:
+    case E_MODE_RUN_START:
         cursol->active = 1;
-        cursol->state = 0x51;
+        cursol->state = E_MODE_RUN_STEP;
         cursol->timer = 0;
         /* fall through */
-    case 0x51:
+    case E_MODE_RUN_STEP:
         cursol->sprite.x = cursol->x;
         cursol->sprite.y = cursol->y;
         cursol->sprite.style = cursol->width;
         break;
-    case 0x70:
+    case E_MODE_HIDE_START:
         cursol->active = 0;
-        cursol->state = 0x71;
+        cursol->state = E_MODE_HIDE_STEP;
         break;
-    case 0x71:
+    case E_MODE_HIDE_STEP:
         break;
     }
     if (cursol->active) {
@@ -501,7 +515,7 @@ void eCursolMain(ECursolMainData *cursol)
         }
         cursol->sprite.work = cursol->work;
         endSpriteSet(&cursol->sprite, 1);
-        endPrintExtFunc(cursol->sprite.work, 2, &cursol->sprite);
+        endPrintExtFunc(cursol->sprite.work, END_PRINT_CMD_SPRITE,&cursol->sprite);
     }
 }
 
@@ -511,17 +525,17 @@ void eCursolModeChange(ECursolMainData *cursol, unsigned int mode)
     case 0 ... 31:
         /* Modes below 32 are always accepted. */
         break;
-    case 32:
-    case 33:
-        if (cursol->state == 'P') return;
-        if (cursol->state == 'Q') return;
-        if (cursol->state == ' ') return;
-        if (cursol->state == '!') return;
+    case E_MODE_SHOW_START:
+    case E_MODE_SHOW_STEP:
+        if (cursol->state == E_MODE_RUN_START) return;
+        if (cursol->state == E_MODE_RUN_STEP) return;
+        if (cursol->state == E_MODE_SHOW_START) return;
+        if (cursol->state == E_MODE_SHOW_STEP) return;
         break;
-    case 80:
-    case 81:
-        if (cursol->state == 'P') return;
-        if (cursol->state == 'Q') return;
+    case E_MODE_RUN_START:
+    case E_MODE_RUN_STEP:
+        if (cursol->state == E_MODE_RUN_START) return;
+        if (cursol->state == E_MODE_RUN_STEP) return;
         break;
     }
     cursol->state = mode;

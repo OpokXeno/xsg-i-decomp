@@ -19,7 +19,41 @@ typedef struct DoorGameLoopState {
     unsigned char unmodeled_08[0x2a028];
 } DoorGameLoopState;
 
-extern DoorUnit MapUnit[64];
+/* DoorParams.door_type */
+enum DoorType {
+    DOOR_TYPE_AUTO = 1,
+    DOOR_TYPE_EVENT = 2,
+    DOOR_TYPE_DOUBLE = 3,
+    DOOR_TYPE_MJ = 4,
+    DOOR_TYPE_HALF_AUTO = 5
+};
+
+/* DoorUnit.open_phase */
+enum DoorPhase {
+    DOOR_PHASE_CLOSED = 0,
+    DOOR_PHASE_OPENING = 1,
+    DOOR_PHASE_OPEN = 2,
+    DOOR_PHASE_CLOSING = 3,
+    DOOR_PHASE_LINKED = 4 /* follows the door that links to it, runs no phase logic */
+};
+
+/* DoorParams.motion_axis */
+enum DoorMotion {
+    DOOR_MOTION_NONE = 0,
+    DOOR_MOTION_SLIDE_FORWARD = 1, /* slides along the model direction */
+    DOOR_MOTION_SLIDE_BACK = 2,
+    DOOR_MOTION_RISE = 3,
+    DOOR_MOTION_SINK = 4
+};
+
+#define DOOR_FLAG_INITIALIZED 0x80000000U
+#define DOOR_FAR_DISTANCE 65535.0f      /* CheckDoorDist result when the player is on another floor */
+#define DOOR_FLOOR_TOLERANCE 2.0f       /* largest height difference that still counts as near */
+#define DOOR_SWITCH_ANGLE 1.04719758f   /* facing cone (60 degrees) of the door switch */
+#define DOOR_AUTO_HOLD_FRAMES 0x10      /* frames an auto door stays open after the player leaves */
+#define DOOR_HALF_AUTO_HOLD_FRAMES 0xC
+
+extern DoorUnit MapUnit[MAP_UNIT_COUNT];
 extern DoorGameLoopState GameLoopState;
 int printf(const char *, ...);
 
@@ -85,8 +119,8 @@ void InitMapDoor(DoorUnit *door)
                                  door->resting_position.x;
     }
     door->update_func = MAP_updateUnitDoor;
-    if (door->open_phase != 4) {
-        door->open_phase = 0;
+    if (door->open_phase != DOOR_PHASE_LINKED) {
+        door->open_phase = DOOR_PHASE_CLOSED;
     }
     linked_index = params->linked_unit;
     if (linked_index != -1) {
@@ -100,20 +134,20 @@ void InitMapDoor(DoorUnit *door)
         linked_params->part_offset_z = params->part_offset_z;
         linked_params->travel_distance = params->travel_distance;
         linked_params->trigger_distance = params->trigger_distance;
-        MapUnit[linked_index].open_phase = 4;
+        MapUnit[linked_index].open_phase = DOOR_PHASE_LINKED;
         GetPartsPos(&MapUnit[linked_index]);
         MapUnit[linked_index].position = MapUnit[linked_index].model_position;
     }
     door_type = params->door_type;
-    if (door_type == 1 && CheckDoorDist(door) < params->trigger_distance) {
+    if (door_type == DOOR_TYPE_AUTO && CheckDoorDist(door) < params->trigger_distance) {
         params->event_signal = door_type;
-        door->open_phase = 2;
+        door->open_phase = DOOR_PHASE_OPEN;
     }
     if (params->event_signal == 1) {
-        door->open_phase = 2;
+        door->open_phase = DOOR_PHASE_OPEN;
     }
     params->initialization_state = 0;
-    door->flags |= 0x80000000U;
+    door->flags |= DOOR_FLAG_INITIALIZED;
     if (!printflg) {
         return;
     }
@@ -132,19 +166,19 @@ void MAP_updateUnitDoor(DoorUnit *door)
 
     /* Case 5 is written before case 4: the original emitted the HalfAutoDoorFunc block first. */
     switch (params->door_type) {
-    case 1:
+    case DOOR_TYPE_AUTO:
         AutoDoorFunc(door);
         break;
-    case 2:
+    case DOOR_TYPE_EVENT:
         EventDoorFunc(door);
         break;
-    case 3:
+    case DOOR_TYPE_DOUBLE:
         DoubleDoorFunc(door);
         break;
-    case 5:
+    case DOOR_TYPE_HALF_AUTO:
         HalfAutoDoorFunc(door);
         break;
-    case 4:
+    case DOOR_TYPE_MJ:
         MjDoorFunc(door);
         break;
     }
@@ -167,19 +201,19 @@ void MAP_updateUnitDoor(DoorUnit *door)
 void AutoDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
-    case 0:
+    case DOOR_PHASE_CLOSED:
         AutoDoorStanbyFunc(door);
         return;
-    case 1:
+    case DOOR_PHASE_OPENING:
         AutoDoorOpenOpeFunc(door);
         return;
-    case 2:
+    case DOOR_PHASE_OPEN:
         AutoDoorOpenNowFunc(door);
         return;
-    case 3:
+    case DOOR_PHASE_CLOSING:
         AutoDoorCloseOpeFunc(door);
         break;
-    case 4:
+    case DOOR_PHASE_LINKED:
         break;
     default:
         return;
@@ -189,19 +223,19 @@ void AutoDoorFunc(DoorUnit *door)
 int EventDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
-    case 0:
+    case DOOR_PHASE_CLOSED:
         EventDoorStanbyFunc(door);
         return;
-    case 1:
+    case DOOR_PHASE_OPENING:
         EventDoorOpenOpeFunc(door);
         return;
-    case 2:
+    case DOOR_PHASE_OPEN:
         EventDoorOpenNowFunc(door);
         return;
-    case 3:
+    case DOOR_PHASE_CLOSING:
         EventDoorCloseOpeFunc(door);
         /* fall through */
-    case 4:
+    case DOOR_PHASE_LINKED:
         return;
     default:
         return;
@@ -211,19 +245,19 @@ int EventDoorFunc(DoorUnit *door)
 int HalfAutoDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
-    case 0:
+    case DOOR_PHASE_CLOSED:
         EventDoorStanbyFunc(door);
         return;
-    case 1:
+    case DOOR_PHASE_OPENING:
         AutoDoorOpenOpeFunc(door);
         return;
-    case 2:
+    case DOOR_PHASE_OPEN:
         HalfAutoDoorOpenNowFunc(door);
         return;
-    case 3:
+    case DOOR_PHASE_CLOSING:
         AutoDoorCloseOpeFunc(door);
         /* fall through */
-    case 4:
+    case DOOR_PHASE_LINKED:
         return;
     default:
         return;
@@ -233,19 +267,19 @@ int HalfAutoDoorFunc(DoorUnit *door)
 int MjDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
-    case 0:
+    case DOOR_PHASE_CLOSED:
         MjDoorStanbyFunc(door);
         return;
-    case 1:
+    case DOOR_PHASE_OPENING:
         AutoDoorOpenOpeFunc(door);
         return;
-    case 2:
+    case DOOR_PHASE_OPEN:
         AutoDoorOpenNowFunc(door);
         return;
-    case 3:
+    case DOOR_PHASE_CLOSING:
         AutoDoorCloseOpeFunc(door);
         /* fall through */
-    case 4:
+    case DOOR_PHASE_LINKED:
         return;
     default:
         return;
@@ -268,7 +302,7 @@ void AutoDoorStanbyFunc(DoorUnit *door)
     model->y = door->y;
     model->z = door->z;
     if (CheckDoorDist() < params->trigger_distance) {
-        door->open_phase = 1;
+        door->open_phase = DOOR_PHASE_OPENING;
         if (xglSoundEffectCheckID(params->move_sound_channel, door->sound_channel + 1) != 0) {
             xglSoundEffectStopID(params->move_sound_channel, door->sound_channel + 1);
         }
@@ -288,7 +322,7 @@ void AutoDoorOpenOpeFunc(DoorUnit *door)
     xglSoundEffectPosID(params->move_sound_channel, &position, 1, door->sound_channel + 1);
     DoorCommonFunc(door);
     if ((short) door->open_timer >= params->open_limit) {
-        door->open_phase = 2;
+        door->open_phase = DOOR_PHASE_OPEN;
     }
 }
 
@@ -297,9 +331,9 @@ void AutoDoorOpenFuncSub(DoorUnit *door)
     signed char direction;
 
     direction = door->params.motion_axis;
-    if (direction != 2) {
-        if (direction < 3) {
-            if (direction == 1) {
+    if (direction != DOOR_MOTION_SLIDE_BACK) {
+        if (direction < DOOR_MOTION_RISE) {
+            if (direction == DOOR_MOTION_SLIDE_FORWARD) {
                 door->model->x = door->model->x + door->model->direction_x;
                 door->model->z = door->model->z + door->model->direction_z;
             }
@@ -321,7 +355,7 @@ void AutoDoorOpenNowFunc(DoorUnit *door)
     door->open_timer = params->open_limit;
     /* separate load: the compiler reloads close_delay for the increment below instead of reusing the compare's value */
     next_close_delay = (unsigned short) door->close_delay;
-    if (door->close_delay < 0x10) {
+    if (door->close_delay < DOOR_AUTO_HOLD_FRAMES) {
         door->close_delay = next_close_delay + 1;
         return;
     }
@@ -331,7 +365,7 @@ void AutoDoorOpenNowFunc(DoorUnit *door)
         }
         CheckDoorPos(door, position);
         xglSoundEffectPosID(params->close_sound_channel, position, 1, door->sound_channel + 1);
-        door->open_phase = 3;
+        door->open_phase = DOOR_PHASE_CLOSING;
         door->close_delay = 0;
     }
 }
@@ -354,12 +388,12 @@ int AutoDoorCloseOpeFunc(DoorUnit *door)
         }
         CheckDoorPos(door, &opening_position);
         xglSoundEffectPosID(params->move_sound_channel, &opening_position, 1, door->sound_channel + 1);
-        door->open_phase = 1;
+        door->open_phase = DOOR_PHASE_OPENING;
     } else {
         CheckDoorPos(door, &closing_position);
         xglSoundEffectPosID(params->close_sound_channel, &closing_position, 1, door->sound_channel + 1);
         if ((short) door->open_timer <= 0) {
-            door->open_phase = 0;
+            door->open_phase = DOOR_PHASE_CLOSED;
         }
     }
 }
@@ -407,7 +441,7 @@ void EventDoorOpenOpeFunc(DoorUnit *door)
     xglSoundEffectPosID(params->move_sound_channel, &position, 1, door->sound_channel + 1);
     DoorCommonFunc(door);
     if ((short) door->open_timer >= params->open_limit) {
-        door->open_phase = 2;
+        door->open_phase = DOOR_PHASE_OPEN;
     }
 }
 
@@ -423,7 +457,7 @@ void EventDoorOpenNowFunc(DoorUnit *door)
         if (printflg != 0) {
             printf(doorCloseFormat, door->door_number);
         }
-        door->open_phase = 3;
+        door->open_phase = DOOR_PHASE_CLOSING;
         door->open_timer = params->open_limit;
         if (xglSoundEffectCheckID(params->move_sound_channel, door->sound_channel + 1) != 0) {
             xglSoundEffectStopID(params->move_sound_channel, door->sound_channel + 1);
@@ -443,7 +477,7 @@ void EventDoorCloseOpeFunc(DoorUnit *door)
     xglSoundEffectPosID(params->close_sound_channel, &position, 1, door->sound_channel + 1);
     DoorCommonFunc(door);
     if ((short) door->open_timer <= 0) {
-        door->open_phase = 0;
+        door->open_phase = DOOR_PHASE_CLOSED;
     }
 }
 
@@ -459,7 +493,7 @@ void MjDoorStanbyFunc(DoorUnit *door)
     model->y = door->y;
     model->z = door->z;
     if (CheckDoorDist() < params->trigger_distance && CheckDoorSwitch(door) != 0) {
-        door->open_phase = 1;
+        door->open_phase = DOOR_PHASE_OPENING;
         if (xglSoundEffectCheckID(params->move_sound_channel, door->sound_channel + 1) != 0) {
             xglSoundEffectStopID(params->move_sound_channel, door->sound_channel + 1);
         }
@@ -481,7 +515,7 @@ void HalfAutoDoorOpenNowFunc(DoorUnit *door)
     door->open_timer = params->open_limit;
     /* separate load: the compiler reloads close_delay for the increment below instead of reusing the compare's value */
     next_close_delay = (unsigned short) door->close_delay;
-    if (door->close_delay < 0xC) {
+    if (door->close_delay < DOOR_HALF_AUTO_HOLD_FRAMES) {
         door->close_delay = next_close_delay + 1;
         return;
     }
@@ -492,7 +526,7 @@ void HalfAutoDoorOpenNowFunc(DoorUnit *door)
     }
     if (trigger_distance < distance && params->event_signal == 0) {
         door->close_delay = 0;
-        door->open_phase = 3;
+        door->open_phase = DOOR_PHASE_CLOSING;
         CheckDoorPos(door, position);
         xglSoundEffectPosID(params->close_sound_channel, position, 1, door->sound_channel + 1);
     }
@@ -514,9 +548,9 @@ void DoorCommonFunc(DoorUnit *door)
     float closing_limit;
 
     switch (params->motion_axis) {
-    case 0:
+    case DOOR_MOTION_NONE:
         break;
-    case 1:
+    case DOOR_MOTION_SLIDE_FORWARD:
         opening_model = door->model;
         opening_x_distance = opening_model->direction_x * params->travel_distance;
         opening_frame = (short) door->open_timer;
@@ -525,7 +559,7 @@ void DoorCommonFunc(DoorUnit *door)
         opening_model->x = door->x + opening_x_distance * opening_progress / opening_limit;
         opening_model->z = door->z + opening_model->direction_z * params->travel_distance * opening_progress / opening_limit;
         break;
-    case 2:
+    case DOOR_MOTION_SLIDE_BACK:
         closing_model = door->model;
         closing_x_distance = closing_model->direction_x * params->travel_distance;
         closing_frame = (short) door->open_timer;
@@ -534,10 +568,10 @@ void DoorCommonFunc(DoorUnit *door)
         closing_model->x = door->x - closing_x_distance * closing_progress / closing_limit;
         closing_model->z = door->z - closing_model->direction_z * params->travel_distance * closing_progress / closing_limit;
         break;
-    case 3:
+    case DOOR_MOTION_RISE:
         door->model->y = door->y + resting.y * (float) (short) door->open_timer / (float) params->open_limit;
         break;
-    case 4:
+    case DOOR_MOTION_SINK:
         door->model->y = door->y - resting.y * (float) (short) door->open_timer / (float) params->open_limit;
         break;
     }
@@ -553,21 +587,21 @@ void DoorOpenStanbyFunc(DoorUnit *door)
     DoorModel *model;
 
     switch (params->motion_axis) {
-    case 1:
+    case DOOR_MOTION_SLIDE_FORWARD:
         model = door->model;
         model->x = door->x + model->direction_x * params->travel_distance;
         model->z = door->z + model->direction_z * params->travel_distance;
         break;
-    case 2:
+    case DOOR_MOTION_SLIDE_BACK:
         model = door->model;
         model->x = door->x - model->direction_x * params->travel_distance;
         model->z = door->z - model->direction_z * params->travel_distance;
         break;
-    case 3:
+    case DOOR_MOTION_RISE:
         model = door->model;
         model->y = door->y + resting.y;
         break;
-    case 4:
+    case DOOR_MOTION_SINK:
         model = door->model;
         model->y = door->y - resting.y;
         break;
@@ -577,9 +611,9 @@ void DoorOpenStanbyFunc(DoorUnit *door)
 float CheckDoorDist(DoorUnit *door)
 {
     DoorPlayerState *player = GameLoopState.player;
-    float distance = 65535.0f;
+    float distance = DOOR_FAR_DISTANCE;
 
-    if (__builtin_fabsf(player->position.y - door->y) > 2.0f) {
+    if (__builtin_fabsf(player->position.y - door->y) > DOOR_FLOOR_TOLERANCE) {
         return distance;
     }
 
@@ -597,10 +631,10 @@ int CheckDoorSwitch(DoorUnit *door)
     float angle;
 
     CheckDoorPos(door, &position);
-    if ((PadData.half_2a & 0x20) != 0) {
+    if ((PadData.half_2a & PAD_CIRCLE) != 0) {
         angle = atan2f(position.x - player->position.x, position.z - player->position.z);
         angle = nearDir(angle, player->facing_angle);
-        if (__builtin_fabsf(angle) < 1.04719758f) {
+        if (__builtin_fabsf(angle) < DOOR_SWITCH_ANGLE) {
             return 1;
         }
     }

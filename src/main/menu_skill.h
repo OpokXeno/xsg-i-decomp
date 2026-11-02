@@ -21,11 +21,6 @@
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
 
-#define PAD_L1 0x0004
-#define PAD_R1 0x0008
-#define PAD_RIGHT 0x2000
-#define PAD_LEFT 0x8000
-#define MENU_FLAG_ENTER 0x01
 #define MENU_FLAG_DRAW 0x02
 #define SKILL_DATA_SIZE      0x800
 #define SKILL_PAS_SIZE       0x330
@@ -37,20 +32,7 @@
 #define SKILL_SET_LIST_SIZE  0x2AC
 #define SKILL_CATEGORY_SIZE  0xDC
 #define KEEP_EQUIP 4
-#define SE_DECIDE 1
-#define SE_CANCEL 2
-#define SE_CURSOR 3
-#define SE_BUZZER 5
 #define SE_LEARN  22
-#define PAD_L1     0x0004
-#define PAD_R1     0x0008
-#define PAD_CIRCLE 0x0020
-#define PAD_CROSS  0x0040
-#define PAD_SQUARE 0x0080
-#define PAD_UP     0x1000
-#define PAD_RIGHT  0x2000
-#define PAD_DOWN   0x4000
-#define PAD_LEFT   0x8000
 #define SKILL_CHARACTER 0x10
 #define SKILL_COMMAND   0x20
 #define SKILL_LEARN     0x30
@@ -59,6 +41,75 @@
 #define SKILL_EQUIP     0x40
 #define SKILL_LEAVE     0xF0
 #define SKILL_EXIT      0xFF
+
+/* Skill record limits. */
+#define SKILL_CHARACTER_ID_END 9 /* first character id that has no skill data */
+#define SKILL_LEVEL_MAX 5        /* a character's skill level is 0..4 until it reaches 5 */
+#define SKILL_ALIGN 0x800        /* alignment of the skill data block */
+
+/* Screen layout. */
+#define SKILL_PARTY_MAX 8        /* party member slots of the status panels */
+#define SKILL_PAS_MESSAGE_COUNT 3 /* title, extract and set captions */
+#define SKILL_MENU_PANEL_COUNT 2 /* command window and extract confirmation */
+#define SKILL_LIST_ROWS 8        /* visible rows of the skill list */
+#define SKILL_ROW_HEIGHT 24
+#define SKILL_COMMAND_COUNT 3    /* learn, equip, back */
+#define SKILL_CONFIRM_CHOICE_COUNT 2 /* yes, no */
+#define SKILL_LIST_TAB_COUNT 3   /* tabs of the learn list (MenuWork.mode) */
+#define SKILL_KEEP_SLOT_SIZE 5   /* bytes of MenuKeepSelect per list */
+#define SKILL_OFFSCREEN_RIGHT 528 /* slide target that hides a window at the right */
+#define SKILL_OFFSCREEN_BOTTOM 512 /* slide target that hides the info window */
+
+/* MenuWork.wait frames. */
+#define SKILL_WAIT_CHOICE 8      /* between command, list and confirmation */
+#define SKILL_WAIT_OPEN 12       /* after the screen opens or returns to the character pick */
+#define SKILL_WAIT_LEAVE 16
+#define SKILL_WAIT_COMMAND 24    /* character picked: command window slides in */
+
+/* Draw order keys (window style / work fields). */
+#define SKILL_STYLE_WINDOW 0x00fffff0
+#define SKILL_STYLE_STATUS 0x00FFF000
+#define SKILL_STYLE_LIST 0x00fffff8
+#define SKILL_STYLE_STATUS_SELECTED 0x7F00
+#define SKILL_STYLE_STATUS_IDLE 0x7E00
+#define SKILL_STYLE_SPRITE 0x00FFFFFF
+#define SKILL_STYLE_ICON 0x00FFFFFE
+#define SKILL_STYLE_LEVEL_NUMBER 0x00fffffa
+
+/* Colour channels of sprites and text. */
+#define SKILL_TINT_DIM 64
+#define SKILL_TINT_BRIGHT (-128) /* 0x80 stored in a signed char */
+
+/* Text id: type 7 (skill) in the high halfword, skill id in the low one. */
+#define SKILL_TEXT_TYPE 0x80000
+
+/* MenuSkillListWork.state besides SKILL_BLOCK_INIT / SKILL_BLOCK_RUN (idle). */
+#define SKILL_LIST_LEARN_OPEN 10
+#define SKILL_LIST_LEARN_IN 11   /* learn list sliding in */
+#define SKILL_LIST_SHOWN 12      /* list on screen until the command menu returns */
+#define SKILL_LIST_OUT 13        /* list sliding out */
+#define SKILL_LIST_EQUIP_OPEN 20
+#define SKILL_LIST_EQUIP_IN 21   /* equip list sliding in */
+
+/* MenuSkillListWork.displayMode. */
+#define SKILL_LIST_DISPLAY_NONE 0
+#define SKILL_LIST_DISPLAY_LEARN 1 /* level numbers */
+#define SKILL_LIST_DISPLAY_EQUIP 2 /* equipped marks */
+
+/* Category icons: two arrows (L/R) and three category marks. */
+#define SKILL_CATEGORY_ICON_COUNT 5
+#define SKILL_CATEGORY_ARROW_COUNT 2
+#define SKILL_ARROW_KICK 6        /* slide offset set when a shoulder or direction key is pressed */
+#define SKILL_PULSE_MAX 8         /* pulseCounter when the icons are hidden */
+#define SKILL_FLASH_MAX 11
+
+/* MenuSkillStatusWork.flags */
+#define SKILL_STATUS_FLAG_SLID 0x01 /* the selected panel finished sliding */
+
+/* Block states shared by every skill-menu part. */
+#define SKILL_BLOCK_INIT 0
+#define SKILL_BLOCK_RUN 2
+
 
 /*
  * The player character's persistent record, recovered head
@@ -121,7 +172,7 @@ typedef struct PlayerCharacter {
 struct MenuSkillData {
     unsigned char level_cap_by_skill_id[0x7e];
     unsigned short point_cost_by_skill_id[0x80];
-    unsigned short next_level_points[5];  /* +0x17e: indexed by skill level 0..4 */
+    unsigned short next_level_points[SKILL_LEVEL_MAX];  /* +0x17e: indexed by skill level 0..4 */
 };
 
 /* Skill-menu screen records and controller fields read by this TU. */
@@ -138,7 +189,7 @@ typedef struct SkillPasWork {
     unsigned char unmodeled_01[3];
     int color;
     WindowDX window;
-    EMessageParam message[3];
+    EMessageParam message[SKILL_PAS_MESSAGE_COUNT];
     unsigned char unmodeled_268[0x2ac - 0x268];
     SkillPasBox box;
     unsigned char unmodeled_2b8[8];
@@ -211,8 +262,8 @@ typedef struct MenuSkillStatusWork {
     unsigned char subState;             /* +0x0006 */
     signed char lastCursor;             /* +0x0007 */
     int color;                          /* +0x0008 */
-    WindowDX window[8];                 /* +0x000C */
-    MenuStatusPanel panel[8];           /* +0x0CAC */
+    WindowDX window[SKILL_PARTY_MAX];                 /* +0x000C */
+    MenuStatusPanel panel[SKILL_PARTY_MAX];           /* +0x0CAC */
     ECursolMainData cursor[2];          /* +0x4EAC */
 } MenuSkillStatusWork;
 
@@ -221,8 +272,8 @@ typedef struct MenuSkillMenuWork {
     unsigned char unmodeled_01[0x02];
     unsigned char subState;             /* +0x003 */
     int color;                          /* +0x004 */
-    WindowDX window[2];                 /* +0x008 */
-    SkillMenuList list[2];              /* +0x330 */
+    WindowDX window[SKILL_MENU_PANEL_COUNT];                 /* +0x008 */
+    SkillMenuList list[SKILL_MENU_PANEL_COUNT];              /* +0x330 */
 } MenuSkillMenuWork;
 
 typedef struct SkillL1R1Sprite {
@@ -282,11 +333,11 @@ typedef struct MenuSkillCategoryWork {
     signed char edgeDelta[2];         /* +0x08 */
     unsigned char unmodeled_0a[0x0C - 0x0A];
     int iconResetWork;                /* +0x0C */
-    SkillCategoryIcon icons[5];       /* +0x10 */
+    SkillCategoryIcon icons[SKILL_CATEGORY_ICON_COUNT];       /* +0x10 */
 } MenuSkillCategoryWork;
 
 typedef struct SkillCategoryIconIds {
-    short id[5];
+    short id[SKILL_CATEGORY_ICON_COUNT];
 } SkillCategoryIconIds;
 
 typedef struct SkillCategoryEdgeStep {
@@ -315,7 +366,7 @@ typedef struct MenuSkillListWork {
     unsigned char unmodeled_1744[0x5cec - 0x1744];
     SkillL1R1Sprite equipped[3];
     unsigned char unmodeled_5d64[0x5e2c - 0x5d64];
-    ENumberMainData levelNumber[8];
+    ENumberMainData levelNumber[SKILL_LIST_ROWS];
 } MenuSkillListWork;
 
 
@@ -375,7 +426,7 @@ extern const char skillDataPath[];
 extern unsigned char *MainMenuWorkEnd;
 extern MenuSkillInfoWork *MenuSkillInfo;
 extern MenuSkillExWork *MenuSkillEx;
-extern short MenuSkillParty[8];
+extern short MenuSkillParty[SKILL_PARTY_MAX];
 
 unsigned int SkillCharSkillLvGet(int character_id);
 int SkillCharPointPlus(int character_id, int point_delta);

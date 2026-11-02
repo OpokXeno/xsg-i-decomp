@@ -4,6 +4,7 @@
 #include "main/act_2.h"
 #include "main/exm_2.h"
 #include "main/pp_init.h"
+#include "main/res_get_path.h"
 #include "main/xgl_font.h"
 #include "main/xgl_render.h"
 #include "main/xgl_studio.h"
@@ -72,6 +73,15 @@ static const u64 directionalRecordPayloadTable[2] = {
     0x00000050000000ffULL,
 };
 
+/* wtype: which wind the test places and edits. */
+enum {
+    WIND_TYPE_DIRECTIONAL = 1,
+    WIND_TYPE_POINT = 2
+};
+
+/* PadData[0].buttons.packed: SELECT held with START pressed ends the test. */
+#define WIND_TEST_EXIT_PADS 0x08000100ULL
+
 static signed char wtype;
 
 static StudioCamera *pCamera;
@@ -108,7 +118,7 @@ static int InitTest(void)
     float initialPower;
     DoublewordVector4 *localBlock = &local;
 
-    GameResourceInit(0x07000000, 0x06000000);
+    GameResourceInit(GAME_RESOURCE_BASE_ADDRESS, GAME_RESOURCE_BUFFER_SIZE);
     xglStudioInit();
     xglStudioChange(0);
     xglStudioMainCameraInit();
@@ -138,7 +148,7 @@ static int InitTest(void)
     local.vector.w = 1.0f;
     actor = pAct;
     ((DoublewordVector4 *)&actor->position)->words[0] = localBlock->words[0];
-    wtype = 2;
+    wtype = WIND_TYPE_POINT;
     {
         float value = wpos.particle.gravity;
 
@@ -179,10 +189,10 @@ static void MoveCamera(void)
     double verticalMove;
     double rotatedMove;
 
-    if (PadData[0].buttons.input.held & 2) {
+    if (PadData[0].buttons.input.held & PAD_R2) {
         crvx -= 0.01f;
     }
-    if (PadData[0].buttons.input.held & 8) {
+    if (PadData[0].buttons.input.held & PAD_R1) {
         crvx += 0.01f;
     }
     crvy -= (float)PadData[0].axis[0] * 0.0001f;
@@ -201,12 +211,12 @@ static void MoveCamera(void)
     }
     crvy *= 0.8f;
     crvx *= 0.8f;
-    if ((PadData[0].buttons.input.pressed & 0x400) != 0 ||
-        ((PadData[0].buttons.input.held & 1) != 0 &&
-         (PadData[0].buttons.input.held & 2) != 0)) {
+    if ((PadData[0].buttons.input.pressed & PAD_R3) != 0 ||
+        ((PadData[0].buttons.input.held & PAD_L2) != 0 &&
+         (PadData[0].buttons.input.held & PAD_R2) != 0)) {
         crx = crvx = 0.0f;
     }
-    if ((PadData[0].buttons.input.held & 0x40) != 0) {
+    if ((PadData[0].buttons.input.held & PAD_CROSS) != 0) {
         lookX = -cpos.particle.position.x;
         lookZ = -cpos.particle.position.z;
         lookHeight = 1.0f - cpos.particle.position.y;
@@ -215,10 +225,10 @@ static void MoveCamera(void)
         crvx = crvy = 0.0f;
     }
     ppNextStart(&cpos.particle);
-    if (PadData[0].buttons.input.held & 1) {
+    if (PadData[0].buttons.input.held & PAD_L2) {
         cpos.particle.position.y -= 0.01f;
     }
-    if (PadData[0].buttons.input.held & 4) {
+    if (PadData[0].buttons.input.held & PAD_L1) {
         cpos.particle.position.y += 0.01f;
     }
     moveX = (float)PadData[0].axis[2] * 0.0001f;
@@ -254,10 +264,10 @@ static void MoveWind(void)
     ppNextStart(&wpos.particle);
     movementScale = 0.00005f;
     buttons = PadData[0].buttons.input.held;
-    if (buttons & 1) {
+    if (buttons & PAD_L2) {
         wpos.particle.position.y -= 0.05f;
     }
-    if (buttons & 4) {
+    if (buttons & PAD_L1) {
         wpos.particle.position.y += 0.05f;
     }
     movementX = (float)PadData[0].axis[2] * movementScale;
@@ -291,10 +301,10 @@ static void MoveWind2(void)
     ppNextStart(&wvec.particle);
     movementScale = 0.00001f;
     buttons = PadData[0].buttons.input.held;
-    if (buttons & 1) {
+    if (buttons & PAD_L2) {
         wvec.particle.position.y -= 0.001f;
     }
-    if (buttons & 4) {
+    if (buttons & PAD_L1) {
         wvec.particle.position.y += 0.001f;
     }
     movementX = (float)PadData[0].axis[2] * movementScale;
@@ -318,7 +328,7 @@ static void PrintDisp(void)
 
     /* Text: {reset}WindTest */
     xglFontDebugPrintf(0, 0, "\013WindTest");
-    if (wtype == 2) {
+    if (wtype == WIND_TYPE_POINT) {
         /* Text: {reset}point */
         xglFontDebugPrintf(8, 8, "\013point");
     } else {
@@ -345,21 +355,21 @@ void WindTest(void)
     xglSleep();
 
     if (InitTest() != 0) {
-        if ((PadData[0].buttons.packed & 0x08000100ULL) != 0x08000100ULL) {
+        if ((PadData[0].buttons.packed & WIND_TEST_EXIT_PADS) != WIND_TEST_EXIT_PADS) {
             do {
                 WindTestDirectionalRecord directional_record;
-                if ((PadData[0].buttons.input.pressed & 0x0100) != 0) {
-                    if (wtype == 2) {
-                        wtype = 1;
+                if ((PadData[0].buttons.input.pressed & PAD_SELECT) != 0) {
+                    if (wtype == WIND_TYPE_POINT) {
+                        wtype = WIND_TYPE_DIRECTIONAL;
                     } else {
-                        wtype = 2;
+                        wtype = WIND_TYPE_POINT;
                     }
                 }
 
                 EXM_StepShakeWind();
 
-                if ((PadData[0].buttons.input.held & 0x0080) != 0) {
-                    if (wtype == 2) {
+                if ((PadData[0].buttons.input.held & PAD_SQUARE) != 0) {
+                    if (wtype == WIND_TYPE_POINT) {
                         MoveWind();
                     } else {
                         MoveWind2();
@@ -368,25 +378,25 @@ void WindTest(void)
                     MoveCamera();
                 }
 
-                if ((PadData[0].buttons.input.repeat & 0x1000) != 0) {
+                if ((PadData[0].buttons.input.repeat & PAD_UP) != 0) {
                     wpos.particle.position.w += step;
-                } else if ((PadData[0].buttons.input.repeat & 0x4000) != 0) {
+                } else if ((PadData[0].buttons.input.repeat & PAD_DOWN) != 0) {
                     wpos.particle.position.w -= step;
                     if (wpos.particle.position.w < minimum) {
                         wpos.particle.position.w = minimum;
                     }
                 }
 
-                if ((PadData[0].buttons.input.repeat & 0x2000) != 0) {
+                if ((PadData[0].buttons.input.repeat & PAD_RIGHT) != 0) {
                     shake += step;
-                } else if ((PadData[0].buttons.input.repeat & 0x8000) != 0) {
+                } else if ((PadData[0].buttons.input.repeat & PAD_LEFT) != 0) {
                     shake -= step;
                     if (shake < minimum) {
                         shake = minimum;
                     }
                 }
 
-                if (wtype == 2) {
+                if (wtype == WIND_TYPE_POINT) {
                     EXM_SetPointWind(&wpos.particle.position);
                 } else {
                     EXM_SetDirectionalWind(&wvec.particle.position);
@@ -410,7 +420,7 @@ void WindTest(void)
                 ACT_modelDraw(pAct);
                 PrintDisp();
                 xglSleep();
-            } while ((PadData[0].buttons.packed & 0x08000100ULL) != 0x08000100ULL);
+            } while ((PadData[0].buttons.packed & WIND_TEST_EXIT_PADS) != WIND_TEST_EXIT_PADS);
         }
 
         EXM_InitWind();

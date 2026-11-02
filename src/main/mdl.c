@@ -6,6 +6,10 @@
     ((((u32)(x) >> 24) | (((x) >> 8) & 0xff00)) | \
      ((((u32)(x) << 8) & 0xff0000) | ((u32)(x) << 24)))
 
+/* A model tracks the visibility of up to 128 parts, one bit each, in four 32-bit words. */
+#define MDL_MAX_PARTS 128
+#define MDL_VISIBLE_WORDS 4
+
 int MDL_setGroupVisible(MdlHandle *model, int group, int visible)
 {
     MdlResource *resource = (MdlResource *)model->entry;
@@ -107,7 +111,7 @@ void MDL_create(MdlHandle *model, const MdlResource *resource)
     }
     model->entry = (int)resource;
     model->parts = 0;
-    for (wordIndex = 3; wordIndex >= 0; wordIndex--) {
+    for (wordIndex = MDL_VISIBLE_WORDS - 1; wordIndex >= 0; wordIndex--) {
         model->visibleParts[wordIndex] = 0xffffffffu;
     }
 }
@@ -125,8 +129,8 @@ void MDL_partsSetVisible(MdlHandle *model)
     }
 
     partCount = resource->partCount;
-    if (partCount > 128) {
-        partCount = 128;
+    if (partCount > MDL_MAX_PARTS) {
+        partCount = MDL_MAX_PARTS;
     }
 
     /* The low five index bits select a flag within each 32-part word. */

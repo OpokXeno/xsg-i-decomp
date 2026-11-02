@@ -13,6 +13,12 @@
  */
 typedef struct JThread JThread;
 
+/* Positions of the movie number's digits in "data\\movie\\full\\mv0000.ipu". */
+#define MOVIE_PATH_DIGIT_ONES 21
+#define MOVIE_PATH_DIGIT_TENS 20
+#define MOVIE_PATH_DIGIT_HUNDREDS 19
+#define MOVIE_PATH_DIGIT_THOUSANDS 18
+
 /* Native argument block: the Movie update method reads its object pointer. */
 typedef struct MovieObjectCall {
     unsigned char *object;
@@ -35,13 +41,13 @@ void Java_xeno_Movie_start__I(JThread *thread, int *arguments,
     static char name[] = "data\\movie\\full\\mv0000.ipu";
     int movie_id = arguments[1];
 
-    name[21] = movie_id % 10 + '0';
+    name[MOVIE_PATH_DIGIT_ONES] = movie_id % 10 + '0';
     movie_id /= 10;
-    name[20] = movie_id % 10 + '0';
+    name[MOVIE_PATH_DIGIT_TENS] = movie_id % 10 + '0';
     movie_id /= 10;
-    name[19] = movie_id % 10 + '0';
+    name[MOVIE_PATH_DIGIT_HUNDREDS] = movie_id % 10 + '0';
     movie_id /= 10;
-    name[18] = movie_id % 10 + '0';
+    name[MOVIE_PATH_DIGIT_THOUSANDS] = movie_id % 10 + '0';
 
     GameMoviePlay(name);
 }

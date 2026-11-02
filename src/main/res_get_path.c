@@ -14,11 +14,55 @@
 #include "main/ssd_init.h"
 #include "main/xgl_2.h"
 #include "main/xgl_cd.h"
+#include "main/game.h"
 
+
+/* Scene resource script. */
+#define SCENE_PATH_COUNT 20           /* tbl_0_00366420 directories */
+#define RES_PATH_MAX 0x100            /* path and name buffers */
+#define SCENE_TXT_SIZE 0x800          /* scene script buffer */
+#define SCENE_TXT_SIGNATURE 0x6E637323 /* "#scn" */
+#define SCENE_TXT_EMPTY_FILL 0xCDCDCDCD /* signature value before the script is read */
+#define ARX_SIGNATURE 0x00585241      /* "ARX\0" compressed resource */
+#define ARC_HEADER_WORDS 0x40
+#define RES_WORK_BASE 0x0112A000      /* first resource work address */
+
+/* Resource id layout: scene (0x0fffffff), model slot (0x1000 per root entry),
+ * alias group (0x100 per child) and the face flag. */
+#define RES_SCENE_ID_MASK 0x0fffffff
+#define RES_ID_MODEL_STEP 0x1000
+#define RES_ID_GROUP_STEP 0x100
+#define RES_ID_FACE 0x10000
+#define RES_ID_FACE_MASK 0xFFFF0000
+#define RES_ID_MOTION_BASE_MAX 0x02FFFFFF /* motion ids up to here are mapped to a base pack */
+#define RES_ID_MOTION_NAMED_TAG 0x03000000
+
+/* Sound banks written by the resource script. */
+#define SOUND_BANK_FOOT 2         /* leader foot-step effects (loadse) */
+#define SOUND_BANK_ENV 3          /* map environment effects (loadse) */
+#define SOUND_BANK_ENEMY_BASE 4   /* enemy/NPC effect banks 4 .. 11 */
+#define ENEMY_SE_BANK_COUNT 8
+#define ENEMY_SE_BANK_STRIDE 0x10000
+#define ENEMY_SE_BANK_ADDRESS_BASE 0x40000
+
+/* EnemySeBank.type, selected by the command name. */
+enum EnemySeKind {
+    ENEMY_SE_ENEMY = 0,
+    ENEMY_SE_NPC = 1
+};
+
+/* GameMpeg2Play mode. */
+enum Mpeg2Mode {
+    MPEG2_MODE_BATTLE = 1,
+    MPEG2_MODE_NORMAL = 2,
+    MPEG2_MODE_NOFADE = 5
+};
+
+#define MOTION_ID_MAX 14
 
 typedef struct {
     const char *name;
-    u16 ids[14];
+    u16 ids[MOTION_ID_MAX];
 } MotionEntry;
 
 typedef struct {
@@ -302,14 +346,14 @@ static ResourceKeyEntry model[9] = {
     {0, 0, 0},
 };
 
-static const char *tbl_0_00366420[20] = {
+static const char *tbl_0_00366420[SCENE_PATH_COUNT] = {
     ResDataScenePath, ResDataSceneTestPath, ResDataSceneCheckPath, ResDataSceneCfPath, ResDataSceneEventPath,
     ResDataSceneGashPath, ResDataSceneFujiPath, ResDataSceneKojimaPath, ResDataSceneSakisakoPath, ResDataSceneKonishiPath,
     ResDataSceneKojiPath, ResDataSceneNvYonePath, ResDataSceneNakaharaPath, ResDataSceneYajimaPath, ResDataSceneKuramotoPath,
     ResDataSceneKeiichiPath, ResDataSceneSatoPath, ResDataSceneSugisawaPath, ResDataSceneYagiPath, ResDataSceneItaiPath
 };
 
-GameResourceEntry GameResource[128] = {0};
+GameResourceEntry GameResource[GAME_RESOURCE_COUNT] = {0};
 
 static const char * CID0[54] = { ResShionShion4Name, ResKosmosName, ResChaosName, ResMomoName, ResJrName, ResZiggyName, ResShitanName, ResShionChName, ResShion1Shion5Name, ResShion2Name, ResShion3Name, ResShionName, ResShion5Shion1Name, ResKosmos1Name, ResKosmos2Name, ResKosmos3Name, ResKosmos5Name, ResChaos1Name, ResChaos2Name, ResMomo1Name, ResMomo2Name, ResMomo3Name, ResMomo4Name, ResJr1Name, ResJr2Name, ResJr3Name, ResZiggy1Name, ResShitan1Name, ResShitan2Name, ResShionHShion4HName, ResKosmosHName, ResChaosHName, ResMomoHName, ResJrHName, ResZiggyHName, ResShitanHName, ResKosmosH1Name, ResKosmosH2Name, ResKosmosH3Name, ResKosmosH4Name, ResKosmosH5Name, ResKosmosH6Name, ResShion1HShion5HName, ResJr1HName, ResShion2HName, ResShion3HName, ResJr4Name, ResShion4HShionHName, ResShion5HShion1HName, ResMomo5Name, ResMomo5HName, ResMomo6Name, ResShion6HName, 0 };
 
@@ -480,7 +524,7 @@ static u32 *arcfileaddr;
 
 static int arcfilepreload;
 
-static EnemySeEntry EnemySeBank[8];
+static EnemySeEntry EnemySeBank[ENEMY_SE_BANK_COUNT];
 
 static char foot_name[16];
 
@@ -492,12 +536,12 @@ typedef struct {
 
 typedef union {
     SceneTextHeader header;
-    u8 text[0x800];
+    u8 text[SCENE_TXT_SIZE];
 } SceneTextBuffer;
 
 static SceneTextBuffer scene_txt_buffer;
 
-static u32 archeader[0x40];
+static u32 archeader[ARC_HEADER_WORDS];
 
 static u8 GameResourceWorkReloadTable[0x80];
 
@@ -510,7 +554,7 @@ static void default_callback(void)
 
 const char *RES_getPath(void)
 {
-    if (ScenePath >= 20)
+    if (ScenePath >= SCENE_PATH_COUNT)
         ScenePath = 0;
     return tbl_0_00366420[ScenePath];
 }
@@ -525,7 +569,7 @@ static char *RES_getScenePath(char *path, int resource_id)
         scene_path++;
     }
 
-    if (resource_id <= 0x0fffffff) {
+    if (resource_id <= RES_SCENE_ID_MASK) {
         path[0] = 'c';
         path[1] = 'f';
     } else {
@@ -533,7 +577,7 @@ static char *RES_getScenePath(char *path, int resource_id)
         path[1] = 'v';
     }
 
-    scene_id = resource_id & 0x0fffffff;
+    scene_id = resource_id & RES_SCENE_ID_MASK;
 
     path[5] = '0' + scene_id % 10;
     scene_id /= 10;
@@ -554,12 +598,12 @@ static char *RES_getScenePath(char *path, int resource_id)
 int RES_GetEnemySeBank(int sound_id)
 {
     int index = 0;
-    int bank = 0x40000;
+    int bank = ENEMY_SE_BANK_ADDRESS_BASE;
 
-    for (; index < 8; index++) {
+    for (; index < ENEMY_SE_BANK_COUNT; index++) {
         if (EnemySeBank[index].id == sound_id)
             return bank;
-        bank += 0x10000;
+        bank += ENEMY_SE_BANK_STRIDE;
     }
     return -1;
 }
@@ -568,7 +612,7 @@ int RES_GetEnemySeType(int sound_id)
 {
     int index;
 
-    for (index = 0; index < 8; index++) {
+    for (index = 0; index < ENEMY_SE_BANK_COUNT; index++) {
         if (EnemySeBank[index].id == sound_id)
             return EnemySeBank[index].type;
     }
@@ -579,7 +623,7 @@ int RES_GetEnemySeFoot(int sound_id)
 {
     int index;
 
-    for (index = 0; index < 8; index++) {
+    for (index = 0; index < ENEMY_SE_BANK_COUNT; index++) {
         if (EnemySeBank[index].id == sound_id)
             return EnemySeBank[index].foot;
     }
@@ -588,7 +632,7 @@ int RES_GetEnemySeFoot(int sound_id)
 
 const char *RES_GetEnemySeName(int index)
 {
-    if (index < 8)
+    if (index < ENEMY_SE_BANK_COUNT)
         return EnemySeBank[index].name;
     return 0;
 }
@@ -637,23 +681,23 @@ static int convert_face(int value)
 static int resource_typeid_translate(int index, int *type, int *key)
 {
     switch ((unsigned short)*type) {
-    case 0:
-        if ((*key & 0xFFFF0000) == 0x10000) {
-            *key = convert_face(*key & 0xFFFF) + 0x10000;
+    case RES_TYPE_MODEL:
+        if ((*key & RES_ID_FACE_MASK) == RES_ID_FACE) {
+            *key = convert_face(*key & 0xFFFF) + RES_ID_FACE;
             return 1;
         }
         return 0;
-    case 2:
-        if (*key <= 0x02FFFFFF) {
+    case RES_TYPE_MOTION:
+        if (*key <= RES_ID_MOTION_BASE_MAX) {
             *key = RES_GetMotBaseID(*key);
             return 1;
         }
         return 0;
-    case 3:
-        *type = 2;
-        *key = index | 0x03000000;
+    case RES_TYPE_MOTION_NAMED:
+        *type = RES_TYPE_MOTION;
+        *key = index | RES_ID_MOTION_NAMED_TAG;
         return 1;
-    case 5:
+    case RES_TYPE_FILE:
         *key = index;
         return 1;
     default:
@@ -667,10 +711,10 @@ int GameResourceSearch(int type, int key)
     int resource_type;
     int resource_key;
 
-    if (type == 5)
+    if (type == RES_TYPE_FILE)
         return -1;
     index = 0;
-    while (index < 0x80) {
+    while (index < GAME_RESOURCE_COUNT) {
         resource_type = type;
         resource_key = key;
         resource_typeid_translate(index, &resource_type, &resource_key);
@@ -686,8 +730,8 @@ static int resource_get_free(void)
 {
     int index;
 
-    for (index = 0; index < 0x80; index++) {
-        if (GameResource[index].state == -1)
+    for (index = 0; index < GAME_RESOURCE_COUNT; index++) {
+        if (GameResource[index].state == GAME_RESOURCE_FREE)
             return index;
     }
     return -1;
@@ -698,8 +742,8 @@ void *GameResourceGetFreeAddr(void)
     unsigned char *free_address = GameResource[resource_get_free()].address;
 
     /* Fixed EE RAM addresses, like the resource buffers of GameResourceInit. */
-    if (free_address <= (unsigned char *)0x01129FFF)
-        return (void *)0x0112A000;
+    if (free_address <= (unsigned char *)(RES_WORK_BASE - 1))
+        return (void *)RES_WORK_BASE;
     return free_address;
 }
 
@@ -713,16 +757,16 @@ unsigned char *GameResourceWorkAlloc(int size)
     GameResourceWorkReloadTable[0] = 0;
     index = 0;
     do {
-        if (entry->state == -1) {
+        if (entry->state == GAME_RESOURCE_FREE) {
             if (entry->size > size)
                 return entry->address;
             break;
         }
         index++;
         entry++;
-    } while (index < 0x80);
+    } while (index < GAME_RESOURCE_COUNT);
     GameResourceWorkReloadTable[0] = 1;
-    return (unsigned char *)0x0112A000;
+    return (unsigned char *)RES_WORK_BASE;
 }
 
 void GameResourceWorkReload(void)
@@ -747,7 +791,7 @@ void *GameResourceAlloc(int size)
     GameResource[index + 1].address = GameResource[index].address + size;
     GameResource[index + 1].size = GameResource[index].size - size;
     GameResource[index].size = size;
-    GameResource[index].state = 9;
+    GameResource[index].state = RES_TYPE_ALLOC;
     GameResource[index].handle = xglSRand();
     return GameResource[index].address;
 }
@@ -761,7 +805,7 @@ void *GameResourceRealloc(void *address, int size)
     index = GameResourceGetIndex(address);
     if (index < 0)
         return 0;
-    if (GameResource[index + 1].state == -1) {
+    if (GameResource[index + 1].state == GAME_RESOURCE_FREE) {
         combined_size = GameResource[index].size + GameResource[index + 1].size;
         size = (size + 63) & ~63;
         old_address = GameResource[index].address;
@@ -799,7 +843,7 @@ static int next_arc_size(void *address)
     }
     arcno++;
     if (size > 0) {
-        if (*(u32 *)source == 0x00585241)
+        if (*(u32 *)source == ARX_SIGNATURE)
             size = xglArxExtract((u32 *)address, (u32 *)source);
         else
             memcpy(address, source, size);
@@ -974,14 +1018,14 @@ static char *command_loadmap(int command, char *cursor)
             }
             name_entry++;
         }
-        group_id += 100;
+        group_id += MAP_GROUP_SIZE;
     }
 
-    if (group_id >= 0x71e)
+    if (group_id >= MAP_ID_LIMIT)
         group_id = 0;
 
 map_name_found:
-    load_result = RES_loadFile(command, 1, group_id, 0);
+    load_result = RES_loadFile(command, RES_TYPE_MAP, group_id, 0);
     if (no_load == 0) {
         GameLoopState.map_id = (s16)group_id;
         GameLoopState.map_load_result = load_result;
@@ -996,7 +1040,7 @@ static char *command_loadact(int command, char *cursor, int mode)
     int resource_id = 0;
     char *next_cursor = search_key(cursor, model, &resource_id);
 
-    RES_loadFile(command, 0, resource_id, 0);
+    RES_loadFile(command, RES_TYPE_MODEL, resource_id, 0);
     return next_cursor;
 }
 
@@ -1005,7 +1049,7 @@ static char *command_loadface(int command, char *cursor, int mode)
     int resource_id = 0;
     char *next_cursor = search_key(cursor, model, &resource_id);
 
-    RES_loadFile(command, 0, resource_id + 0x10000, 0);
+    RES_loadFile(command, RES_TYPE_MODEL, resource_id + RES_ID_FACE, 0);
     return next_cursor;
 }
 
@@ -1058,7 +1102,7 @@ static char *command_loadmot(int command, char *cursor)
     foot_step = motion_id;
     motion_id = 0;
     {
-        ActorResource *resource = RES_loadFile(command, 3, (int)name, 0);
+        ActorResource *resource = RES_loadFile(command, RES_TYPE_MOTION_NAMED, (int)name, 0);
 
         resource->foot_step_no = foot_step;
     }
@@ -1093,7 +1137,7 @@ static char *command_loadtex(int command, char *cursor, int mode)
             resource_id = parsed_id - '0';
         } while ((unsigned char)((unsigned char)cursor[0] + 0xD0) < 10);
     }
-    RES_loadFile(command, 0xB, resource_id, 0);
+    RES_loadFile(command, RES_TYPE_TEXTURE, resource_id, 0);
     return cursor;
 }
 
@@ -1114,7 +1158,7 @@ static char *command_loadmovie(int command, char *cursor, int mode)
             resource_id = parsed_id - '0';
         } while ((unsigned char)((unsigned char)cursor[0] + 0xD0) < 10);
     }
-    RES_loadFile(command, 0xA, resource_id, 0);
+    RES_loadFile(command, RES_TYPE_MOVIE, resource_id, 0);
     return cursor;
 }
 
@@ -1144,7 +1188,7 @@ static char *command_loadeffect(int command, char *cursor, int mode)
         } while ((u8)character != ' ' && (u8)character != '\t' && (u8)character != '\n' && (u8)character != '\r');
     }
     *dst = 0;
-    RES_loadFile(command, 6, (int)effect_name, (int)command_loadeffect_sub);
+    RES_loadFile(command, RES_TYPE_EFFECT, (int)effect_name, (int)command_loadeffect_sub);
     return cursor;
 }
 
@@ -1174,7 +1218,7 @@ static char *command_loadene(int command, char *cursor, int mode)
         }
     }
     *dst = 0;
-    RES_loadFile(command, 8, (int)name, (int)&command_loadene_sub);
+    RES_loadFile(command, RES_TYPE_ENEMY_PRESET, (int)name, (int)&command_loadene_sub);
     return cursor;
 }
 
@@ -1342,7 +1386,7 @@ environment_name_done:
     *sequence_end = 0;
 
     if (sound_name[0] == 0) {
-        xglSoundLoadEffect(0, 0, 2);
+        xglSoundLoadEffect(0, 0, SOUND_BANK_FOOT);
     } else {
         const char *src;
         char *dst = foot_name;
@@ -1357,9 +1401,9 @@ environment_name_done:
     }
 
     if (env_name[0] == 0) {
-        xglSoundLoadEffect(0, 0, 3);
+        xglSoundLoadEffect(0, 0, SOUND_BANK_ENV);
     } else {
-        file_id = SoundWork.effect_banks[3].handle;
+        file_id = SoundWork.effect_banks[SOUND_BANK_ENV].handle;
         ((SoundLoadBuffer *)address)->sequence_id = file_id;
         if (arcfileaddr != 0) {
             first_size = next_arc_size((void *)address);
@@ -1388,7 +1432,7 @@ environment_name_done:
             }
         }
         if (!keep_current && first_size > 0 && second_size > 0)
-            xglSoundSendEffect(address, second_address, 3);
+            xglSoundSendEffect(address, second_address, SOUND_BANK_ENV);
     }
 
     if (sequence_name[0] != 0) {
@@ -1405,7 +1449,7 @@ environment_name_done:
             if (size != 0) {
                 xglSoundSendSmd(address);
                 if (set_normal)
-                    xglSoundSequenceNormal(0x7F);
+                    xglSoundSequenceNormal(SOUND_VOLUME_MAX);
             }
         }
     }
@@ -1487,7 +1531,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
             if (!stop_current && file_size > 0) {
                 xglSoundSendSmd2(address, sequence_index);
                 if (set_normal)
-                    xglSoundSequenceNormal2(sequence_index, 0x7F);
+                    xglSoundSequenceNormal2(sequence_index, SOUND_VOLUME_MAX);
             }
 
             for (;;) {
@@ -1541,18 +1585,18 @@ static char *command_mpeg2_core(int command, char *cursor, int mode)
 
 static char *command_mpeg2(int command, char *cursor)
 {
-    return command_mpeg2_core(command, cursor, 2);
+    return command_mpeg2_core(command, cursor, MPEG2_MODE_NORMAL);
 }
 
 static char *command_mpeg2battle(int command, char *cursor, int mode)
 {
     SCRIPT_fade(2);
-    return command_mpeg2_core(command, cursor, 1);
+    return command_mpeg2_core(command, cursor, MPEG2_MODE_BATTLE);
 }
 
 static char *command_mpeg2nofade(int command, char *cursor)
 {
-    return command_mpeg2_core(command, cursor, 5);
+    return command_mpeg2_core(command, cursor, MPEG2_MODE_NOFADE);
 }
 
 static char *command_event2battle(int command, char *cursor, int mode)
@@ -1563,7 +1607,7 @@ static char *command_event2battle(int command, char *cursor, int mode)
 
 static char *command_player_lock(int command, char *cursor, int mode)
 {
-    GameLoopState.flags |= 0x8000;
+    GameLoopState.flags |= GAME_LOOP_FLAG_PLAYER_LOCK;
     return cursor;
 }
 
@@ -1619,7 +1663,7 @@ static char *command_enenpcse(int command, char *cursor, int mode)
     }
 
     address = GameResourceGetFreeAddr();
-    for (slot = 0; slot < 7; slot++) {
+    for (slot = 0; slot < ENEMY_SE_BANK_COUNT - 1; slot++) {
         if (EnemySeBank[slot].id == 0)
             break;
     }
@@ -1633,21 +1677,21 @@ static char *command_enenpcse(int command, char *cursor, int mode)
         second_address = address + first_size;
         second_size = next_arc_size(second_address);
         if (first_size != 0 && second_size != 0)
-            xglSoundSendEffect(address, second_address, slot + 4);
+            xglSoundSendEffect(address, second_address, slot + SOUND_BANK_ENEMY_BASE);
     } else {
-        xglSoundLoadEffect(name, address, slot + 4);
+        xglSoundLoadEffect(name, address, slot + SOUND_BANK_ENEMY_BASE);
     }
     return next;
 }
 
 static char *command_enese(int command, char *cursor, int mode)
 {
-    return command_enenpcse(command, cursor, 0);
+    return command_enenpcse(command, cursor, ENEMY_SE_ENEMY);
 }
 
 static char *command_npcse(int command, char *cursor, int mode)
 {
-    return command_enenpcse(command, cursor, 1);
+    return command_enenpcse(command, cursor, ENEMY_SE_NPC);
 }
 
 static char *command_disk(int command, char *cursor, int mode)
@@ -1691,7 +1735,7 @@ void GameResourcePreLoad(int scene_number)
         archive_path[1] = '\0';
         archive_size = xglCdGetFileSize(path);
         if (archive_size > 0) {
-            arcfilepreload = 0x02000000 - ((archive_size + 2047) & -2048);
+            arcfilepreload = EE_RAM_END - ((archive_size + 2047) & -2048);
             xglCdReadFile(path, (void *)arcfilepreload, 1, 1);
         }
     }
@@ -1714,7 +1758,7 @@ void GameResourceLoad(int scene_id)
     if (arcfilepreload != 0) {
         arcfileaddr = (u32 *)arcfilepreload;
     } else {
-        scene_txt_buffer.header.signature = 0xCDCDCDCD;
+        scene_txt_buffer.header.signature = SCENE_TXT_EMPTY_FILL;
         arcfileaddr = 0;
         extension = RES_getScenePath(path, scene_id);
         readreq(path, scene_txt_buffer.text);
@@ -1722,13 +1766,13 @@ void GameResourceLoad(int scene_id)
         *extension = '\0';
         file_size = xglCdGetFileSize(path);
         if (file_size > 0) {
-            arcfileaddr = (u32 *)(0x02000000 - ((file_size + 0x7FF) & ~0x7FF));
+            arcfileaddr = (u32 *)(EE_RAM_END - ((file_size + 0x7FF) & ~0x7FF));
             xglCdReadFile(path, arcfileaddr, 0, 1);
         }
     }
 
     cursor = scene_txt_buffer.text;
-    if (scene_txt_buffer.header.signature == 0x6E637323) {
+    if (scene_txt_buffer.header.signature == SCENE_TXT_SIGNATURE) {
         int resource_id;
 
         cursor = next_line(cursor);
@@ -1912,7 +1956,7 @@ const char *RES_GetMotBaseName(int id)
 
 static int RES_GetMdlFileNameSub(char *dst, int selector)
 {
-    int face_mode = (((u32)selector & 0xFFFF0000) == 0x00010000);
+    int face_mode = (((u32)selector & RES_ID_FACE_MASK) == RES_ID_FACE);
     int model_index;
     int alias_group;
     int alias_index;
@@ -2075,7 +2119,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
     int quotient;
 
     switch (type) {
-    case 7: {
+    case RES_TYPE_JOINTS: {
         char *single_end;
 
         RES_GetMdlFileName(single_path, resource_id);
@@ -2092,8 +2136,8 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             readreq(single_path, address);
         break;
     }
-    case 0:
-    case 4: {
+    case RES_TYPE_MODEL:
+    case RES_TYPE_MODEL_NO_JOINTS: {
         char *model_end;
         u8 *next;
         ResourceFileSet *files;
@@ -2120,7 +2164,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         }
         files->first_file = next;
         next += (size + 15) & ~15;
-        if ((resource_id & 0xffff0000) == 0) {
+        if ((resource_id & RES_ID_FACE_MASK) == 0) {
             if (arcfileaddr != 0) {
                 size = next_arc_size(next);
             } else {
@@ -2134,7 +2178,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
                 next += (size + 15) & ~15;
             }
         }
-        if (type == 0) {
+        if (type == RES_TYPE_MODEL) {
             if (arcfileaddr != 0) {
                 size = next_arc_size(next);
             } else {
@@ -2151,10 +2195,10 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         size = (u32)next - (u32)address;
         break;
     }
-    case 1:
+    case RES_TYPE_MAP:
         size = RES_loadFileSubMap(address, resource_id);
         break;
-    case 2:
+    case RES_TYPE_MOTION:
         if (arcfileaddr != 0) {
             size = next_arc_size(address);
             break;
@@ -2166,7 +2210,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             readreq(motion_path, address);
         }
         break;
-    case 3: {
+    case RES_TYPE_MOTION_NAMED: {
         int append_suffix;
         char *named_end;
         const char *named_source;
@@ -2209,7 +2253,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         }
         break;
     }
-    case 10:
+    case RES_TYPE_MOVIE:
         if (arcfileaddr != 0) {
             size = next_arc_size(address);
             break;
@@ -2233,7 +2277,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         if (size > 0)
             readreq(path, address);
         break;
-    case 11:
+    case RES_TYPE_TEXTURE:
         if (arcfileaddr != 0) {
             size = next_arc_size(address);
             break;
@@ -2257,7 +2301,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
         if (size > 0)
             readreq(path, address);
         break;
-    case 5: {
+    case RES_TYPE_FILE: {
         char *texture_end;
         const char *texture_source;
 
@@ -2296,19 +2340,19 @@ void *RES_loadFile(int command, int callback, int resource_id, int flags)
     int loaded_size;
     int old_span;
 
-    if (command == -1) {
+    if (command == RES_LOAD_ANY_BLOCK) {
         command = GameResourceSearch(callback, resource_id);
-        if (command < 0 && callback == 4) {
-            command = GameResourceSearch(0, resource_id);
-        } else if (command < 0 && callback == 0) {
-            command = GameResourceSearch(4, resource_id);
+        if (command < 0 && callback == RES_TYPE_MODEL_NO_JOINTS) {
+            command = GameResourceSearch(RES_TYPE_MODEL, resource_id);
+        } else if (command < 0 && callback == RES_TYPE_MODEL) {
+            command = GameResourceSearch(RES_TYPE_MODEL_NO_JOINTS, resource_id);
             if (command >= 0) {
                 ResourceFileSet *resource_info = (ResourceFileSet *)GameResource[command].address;
 
                 if (resource_info->third_file == 0) {
                     slot = resource_get_free();
                     resource_info->third_file = GameResource[slot].address;
-                    RES_loadFile(slot, 7, resource_id, flags);
+                    RES_loadFile(slot, RES_TYPE_JOINTS, resource_id, flags);
                 }
             }
         }
@@ -2319,7 +2363,7 @@ void *RES_loadFile(int command, int callback, int resource_id, int flags)
             if (command != -1)
                 result = RES_loadFile(command, callback, resource_id, flags);
         }
-    } else if (command < 0x80) {
+    } else if (command < GAME_RESOURCE_COUNT) {
         result = GameResource[command].address;
         if (flags == 0)
             flags = (int)RES_loadFileSub;
@@ -2331,7 +2375,7 @@ void *RES_loadFile(int command, int callback, int resource_id, int flags)
             old_span = GameResource[command].size;
             if (loaded_size > old_span)
                 loaded_size = old_span;
-            if (command < 0x7F && GameResource[command + 1].address == 0) {
+            if (command < GAME_RESOURCE_COUNT - 1 && GameResource[command + 1].address == 0) {
                 GameResource[command + 1].size = old_span - loaded_size;
                 GameResource[command + 1].address = result + loaded_size;
                 GameResource[command].size = loaded_size;
@@ -2352,7 +2396,7 @@ int GameResourceGetIndex(void *address)
     int result;
 
     do {
-        if (index >= 0x80)
+        if (index >= GAME_RESOURCE_COUNT)
             break;
         resourceAddress = entry->address;
         entry++;
@@ -2370,7 +2414,7 @@ void GameResourceDump(int dump)
     int row;
 
     if (dump != 0) {
-        index = 127;
+        index = GAME_RESOURCE_COUNT - 1;
         if (GameResource[index].address == 0) {
             entry = &GameResource[index];
             do {
@@ -2398,27 +2442,27 @@ void GameResourceReset(int slot)
 
     total = 0;
     index = slot;
-    if (index < 0x80) {
-        for (; index < 0x80; index++)
+    if (index < GAME_RESOURCE_COUNT) {
+        for (; index < GAME_RESOURCE_COUNT; index++)
             total += GameResource[index].size;
     }
     GameResource[slot].size = total;
-    GameResource[slot].state = -1;
+    GameResource[slot].state = GAME_RESOURCE_FREE;
     GameResource[slot].handle = 0;
-    for (index = slot + 1; index < 0x80; index++) {
+    for (index = slot + 1; index < GAME_RESOURCE_COUNT; index++) {
         GameResource[index].address = 0;
         GameResource[index].size = 0;
         GameResource[index].handle = 0;
-        GameResource[index].state = -1;
+        GameResource[index].state = GAME_RESOURCE_FREE;
     }
     index = 0;
     do {
         EnemySeBank[index].id = 0;
         EnemySeBank[index].type = 0;
         EnemySeBank[index].name[0] = 0;
-        xglSoundSendEffect(0, 0, index + 4);
+        xglSoundSendEffect(0, 0, index + SOUND_BANK_ENEMY_BASE);
         index++;
-    } while (index < 8);
+    } while (index < ENEMY_SE_BANK_COUNT);
     GameResourceDump(0);
     arcfilepreload = 0;
 }
@@ -2426,8 +2470,8 @@ void GameResourceReset(int slot)
 void GameResourceInit(unsigned char *address, int size)
 {
     u32 *resource_buffer;
-    int remaining = 0x7F;
-    int free_state = -1;
+    int remaining = GAME_RESOURCE_COUNT - 1;
+    int free_state = GAME_RESOURCE_FREE;
     GameResourceEntry *entry = GameResource;
 
     do {

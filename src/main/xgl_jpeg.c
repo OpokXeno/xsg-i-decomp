@@ -1,6 +1,110 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/xgl_packet.h"
+
+/* JPEG block geometry: 8x8 coefficient blocks, six per MCU (up to four Y, then Cb, Cr). */
+#define JPEG_BLOCK_DIM 8
+#define JPEG_BLOCK_COEFFS (JPEG_BLOCK_DIM * JPEG_BLOCK_DIM)
+#define JPEG_MCU_BLOCKS 6
+#define JPEG_BLOCK_CB 4
+#define JPEG_BLOCK_CR 5
+#define JPEG_MCU_PIXELS 16
+/* One decoded pixel is a float Y/Cb/Cr triple; a 16-pixel MCU row holds 48 floats. */
+#define JPEG_YUV_ROW_FLOATS (JPEG_MCU_PIXELS * 3)
+#define JPEG_LEVEL_SHIFT 128.0f
+#define JPEG_IDCT_SCALE 0.125f
+
+/* Chroma subsampling of the first component (JPEG SOF sampling factors, H << 4 | V). */
+typedef enum JpegSamplingMode {
+    JPEG_SAMPLING_444,
+    JPEG_SAMPLING_422,
+    JPEG_SAMPLING_420
+} JpegSamplingMode;
+/* Component order in the scan and in the DC predictor array. */
+typedef enum JpegComponent {
+    JPEG_COMPONENT_Y,
+    JPEG_COMPONENT_CB,
+    JPEG_COMPONENT_CR
+} JpegComponent;
+#define JPEG_SAMPLING_FACTORS_444 0x11
+#define JPEG_SAMPLING_FACTORS_422 0x21
+#define JPEG_SAMPLING_FACTORS_420 0x22
+
+/* Marker bytes that follow the 0xFF prefix. */
+#define JPEG_MARKER_PREFIX 0xFF
+#define JPEG_MARKER_SOF0 0xC0
+#define JPEG_MARKER_DHT 0xC4
+#define JPEG_MARKER_RST0 0xD0
+#define JPEG_MARKER_SOI 0xD8
+#define JPEG_MARKER_EOI 0xD9
+#define JPEG_MARKER_SOS 0xDA
+#define JPEG_MARKER_DQT 0xDB
+#define JPEG_MARKER_DRI 0xDD
+
+/* Huffman tables: 16 code lengths; decoder tables use 0xFE/0xFF boundary entries. */
+#define JPEG_HUFF_LENGTHS 16
+#define JPEG_HUFF_DC_SYMBOLS 16
+#define JPEG_HUFF_AC_SYMBOLS 256
+#define JPEG_HUFF_LENGTH_END 0xFE
+#define JPEG_HUFF_TABLE_END 0xFF
+#define JPEG_DHT_DC_LUMA 0x00
+#define JPEG_DHT_DC_CHROMA 0x01
+#define JPEG_DHT_AC_LUMA 0x10
+#define JPEG_AC_ZRL 0xF0 /* 16 zeros in a row */
+#define JPEG_ZRL_RUN 16
+
+/* Layout of headerALL, the canned JFIF/DQT/SOF0/DHT/SOS header written by the encoder. */
+#define JPEG_HEADER_SIZE 0x26F
+#define JPEG_HEADER_DENSITY_OFFSET 14
+#define JPEG_HEADER_DQT_LUMA_OFFSET 25
+#define JPEG_HEADER_DQT_CHROMA_OFFSET 94
+#define JPEG_HEADER_SOF_SIZE_OFFSET 163 /* height, width, then component sampling at +6 */
+#define JPEG_HEADER_DHT_DC_LUMA_OFFSET 0xB6
+#define JPEG_HEADER_DHT_AC_LUMA_OFFSET 0xD7
+#define JPEG_HEADER_DHT_DC_CHROMA_OFFSET 0x18E
+#define JPEG_HEADER_DHT_AC_CHROMA_OFFSET 0x1AF
+/* Pixel density written into the header is 100 per display pixel over the encoded size. */
+#define JPEG_DENSITY_HEIGHT_NUMERATOR 0xAF00
+#define JPEG_DENSITY_WIDTH_NUMERATOR 0xFA00
+
+/* The decoder and encoder work area lives in the scratchpad; decoded RGBA texels are staged after it. */
+#define JPEG_WORK_ADDRESS SCRATCHPAD_BASE
+#define JPEG_STAGING_ADDRESS (SCRATCHPAD_BASE + 0x3000)
+
+/* Offset of the GS store/load image packet inside the work area. */
+#define JPEG_STORE_IMAGE_OFFSET 0x60
+
+/* JFIF RGB -> YCbCr matrix. */
+#define JPEG_Y_FROM_R 0.299f
+#define JPEG_Y_FROM_G 0.587f
+#define JPEG_Y_FROM_B 0.114f
+#define JPEG_CB_FROM_R -0.16874f
+#define JPEG_CB_FROM_G -0.33126f
+#define JPEG_CB_FROM_B 0.5f
+#define JPEG_CR_FROM_R 0.5f
+#define JPEG_CR_FROM_G -0.41869f
+#define JPEG_CR_FROM_B -0.08131f
+
+/* IJG-style quality to quantizer scaling. */
+#define JPEG_QUALITY_MAX 100.0f
+#define JPEG_QUALITY_KNEE 50.0f
+#define JPEG_QUALITY_LOW_NUMERATOR 5000.0f
+#define JPEG_QUALITY_HIGH_BASE 200.0f
+#define JPEG_QUANT_ROUNDING 50.0f
+#define JPEG_PERCENT_SCALE 0.01f
+/* JpegDecodeControl.scaleMode: which colour scale percentages apply. */
+#define JPEG_SCALE_NONE 0
+#define JPEG_SCALE_YUV 1
+#define JPEG_SCALE_RGB 2
+/* JpegDecodeControl.pixelFormat bit 0: 16-bit RGB555 destination instead of 32-bit RGBA. */
+#define JPEG_PIXEL_FORMAT_RGB555 1
+/* Bytes per staged RGBA texel / RGB555 pixel. */
+#define JPEG_RGBA_BYTES 4
+#define JPEG_RGB555_BYTES 2
+/* Unbounded crop limit. */
+#define JPEG_NO_LIMIT 0x7FFF
+#define JPEG_QUANT_MAX 255
 
 typedef struct JpegYuvPixel {
     float luminance;
@@ -28,15 +132,15 @@ typedef union JpegHuffAcTable {
 
 /* Six 8x8 float blocks of MCU coefficients, addressed flat or block by block. */
 typedef union JpegMcuPlanes {
-    float planes[6 * 64];
-    float blocks[6][8][8];
+    float planes[JPEG_MCU_BLOCKS * JPEG_BLOCK_COEFFS];
+    float blocks[JPEG_MCU_BLOCKS][JPEG_BLOCK_DIM][JPEG_BLOCK_DIM];
 } JpegMcuPlanes;
 
 /* One 4 KiB buffer read as YUV pixels, as float planes, and as quantized int blocks. */
 typedef union JpegDecodedYuv {
-    JpegYuvPixel pixels[16 * 16];
-    float floats[16 * 16 * 3];
-    int blocks[16][64];
+    JpegYuvPixel pixels[JPEG_MCU_PIXELS * JPEG_MCU_PIXELS];
+    float floats[JPEG_MCU_PIXELS * JPEG_MCU_PIXELS * 3];
+    int blocks[16][JPEG_BLOCK_COEFFS];
 } JpegDecodedYuv;
 
 typedef struct JpegImageDimensions {
@@ -85,8 +189,8 @@ typedef struct JpegEncodeRequest {
  * spans. */
 typedef struct JpegWork {
     u8 unmodeled_0000[0xD0];
-    float luminanceQuantization[64];    /* +0xD0 */
-    float chrominanceQuantization[64];  /* +0x1D0 */
+    float luminanceQuantization[JPEG_BLOCK_COEFFS];    /* +0xD0 */
+    float chrominanceQuantization[JPEG_BLOCK_COEFFS];  /* +0x1D0 */
     u8 unmodeled_02d0[0x350 - 0x2D0];
     u8 *buffer;
     int outputPosition;
@@ -103,8 +207,8 @@ typedef struct JpegWork {
     JpegHuffDcTable chrominanceDcCodes; /* +0x3f0 */
     JpegHuffAcTable luminanceAcCodes; /* +0x470 */
     JpegHuffAcTable chrominanceAcCodes; /* +0xc70 */
-    float idct_block[8][8];
-    float idct_stage[8];
+    float idct_block[JPEG_BLOCK_DIM][JPEG_BLOCK_DIM];
+    float idct_stage[JPEG_BLOCK_DIM];
     int dcPredictors[3]; /* +0x1590 */
     unsigned char unmodeled_159c[0x15a0 - 0x159c];
     JpegDecodedYuv decodedYuvPixels; /* +0x15a0 */
@@ -146,11 +250,11 @@ extern void *memcpy(void *dest, const void *src, unsigned int size);
 static void PutBits(u16 code, int length);
 static int GetBit(void);
 
-static u8 headerALL[0x26F];
+static u8 headerALL[JPEG_HEADER_SIZE];
 
-static u8 LQTableOrg_1[64];
+static u8 LQTableOrg_1[JPEG_BLOCK_COEFFS];
 
-static u8 CQTableOrg_2[64];
+static u8 CQTableOrg_2[JPEG_BLOCK_COEFFS];
 
 static float ffdct_0[8][8];
 
@@ -158,11 +262,11 @@ static float imm0_3[32];
 
 static u32 imm1_4[24];
 
-static JpegWork *sw = (JpegWork *)0x70000000;
+static JpegWork *sw = (JpegWork *)JPEG_WORK_ADDRESS;
 
-static u8 ZigZag[64];
+static u8 ZigZag[JPEG_BLOCK_COEFFS];
 
-static u8 ZigZag[64] = { 0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63 };
+static u8 ZigZag[JPEG_BLOCK_COEFFS] = { 0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63 };
 
 static float ffdct_0[8][8] = { { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }, { 1.3870400190353394f, 1.175879955291748f, 0.78569501638412476f, 0.27589899301528931f, -0.27589899301528931f, -0.78569501638412476f, -1.175879955291748f, -1.3870400190353394f }, { 1.3065600395202637f, 0.54119598865509033f, -0.54119598865509033f, -1.3065600395202637f, -1.3065600395202637f, -0.54119598865509033f, 0.54119598865509033f, 1.3065600395202637f }, { 1.175879955291748f, -0.27589899301528931f, -1.3870400190353394f, -0.78569501638412476f, 0.78569501638412476f, 1.3870400190353394f, 0.27589899301528931f, -1.175879955291748f }, { 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f }, { 0.78569501638412476f, -1.3870400190353394f, 0.27589899301528931f, 1.175879955291748f, -1.175879955291748f, -0.27590000629425049f, 1.3870400190353394f, -0.78569400310516357f }, { 0.54119598865509033f, -1.3065600395202637f, 1.3065600395202637f, -0.54119598865509033f, -0.54119598865509033f, 1.3065600395202637f, -1.3065600395202637f, 0.54119598865509033f }, { 0.27589899301528931f, -0.78569501638412476f, 1.175879955291748f, -1.3870400190353394f, 1.3870400190353394f, -1.175879955291748f, 0.78569400310516357f, -0.27589800953865051f } };
 
@@ -170,11 +274,11 @@ static float imm0_3[32] = { 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.30656003952026
 
 static u32 imm1_4[24] = { 1065353216U, 1065353216U, 1065353216U, 0U, 0U, 3199218462U, 1071829221U, 0U, 1068725436U, 3208040929U, 0U, 0U, 1124073472U, 1124073472U, 1124073472U, 0U, 0U, 0U, 0U, 0U, 255U, 255U, 255U, 255U };
 
-static u8 LQTableOrg_1[64] = { 16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55, 14, 13, 16, 24, 40, 57, 69, 56, 14, 17, 22, 29, 51, 87, 80, 62, 18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92, 49, 64, 78, 87, 103, 121, 120, 101, 72, 92, 95, 98, 112, 100, 103, 99 };
+static u8 LQTableOrg_1[JPEG_BLOCK_COEFFS] = { 16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55, 14, 13, 16, 24, 40, 57, 69, 56, 14, 17, 22, 29, 51, 87, 80, 62, 18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92, 49, 64, 78, 87, 103, 121, 120, 101, 72, 92, 95, 98, 112, 100, 103, 99 };
 
-static u8 CQTableOrg_2[64] = { 17, 18, 24, 47, 99, 99, 99, 99, 18, 21, 26, 66, 99, 99, 99, 99, 24, 26, 56, 99, 99, 99, 99, 99, 47, 66, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99 };
+static u8 CQTableOrg_2[JPEG_BLOCK_COEFFS] = { 17, 18, 24, 47, 99, 99, 99, 99, 18, 21, 26, 66, 99, 99, 99, 99, 24, 26, 56, 99, 99, 99, 99, 99, 47, 66, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99 };
 
-static u8 headerALL[0x26F] = {
+static u8 headerALL[JPEG_HEADER_SIZE] = {
     0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x64,
     0x00, 0x7D, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -223,43 +327,43 @@ static void ConvertYUV2MCU(float *planes, const float *pixels, int samplingMode)
     int column;
 
     switch (samplingMode) {
-    case 0:
-        for (row = 0; row < 8; row++) {
-            for (column = 0; column < 8; column++) {
-                planes[row * 8 + column] = pixels[row * 48 + column * 3] - 128.0f;
-                planes[4 * 64 + row * 8 + column] = pixels[row * 48 + column * 3 + 1];
-                planes[5 * 64 + row * 8 + column] = pixels[row * 48 + column * 3 + 2];
+    case JPEG_SAMPLING_444:
+        for (row = 0; row < JPEG_BLOCK_DIM; row++) {
+            for (column = 0; column < JPEG_BLOCK_DIM; column++) {
+                planes[row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3] - JPEG_LEVEL_SHIFT;
+                planes[JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3 + 1];
+                planes[JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3 + 2];
             }
         }
         return;
-    case 1:
-        for (row = 0; row < 8; row++) {
-            for (column = 0; column < 8; column++) {
-                planes[row * 8 + column] = pixels[row * 48 + column * 3] - 128.0f;
-                planes[64 + row * 8 + column] = pixels[row * 48 + column * 3 + 24] - 128.0f;
-                planes[4 * 64 + row * 8 + column] =
-                    (pixels[row * 48 + column * 6 + 1] +
-                     pixels[row * 48 + column * 6 + 4]) * 0.5f;
-                planes[5 * 64 + row * 8 + column] =
-                    (pixels[row * 48 + column * 6 + 2] +
-                     pixels[row * 48 + column * 6 + 5]) * 0.5f;
+    case JPEG_SAMPLING_422:
+        for (row = 0; row < JPEG_BLOCK_DIM; row++) {
+            for (column = 0; column < JPEG_BLOCK_DIM; column++) {
+                planes[row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3] - JPEG_LEVEL_SHIFT;
+                planes[JPEG_BLOCK_COEFFS + row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3 + 24] - JPEG_LEVEL_SHIFT;
+                planes[JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] =
+                    (pixels[row * JPEG_YUV_ROW_FLOATS+ column * 6 + 1] +
+                     pixels[row * JPEG_YUV_ROW_FLOATS+ column * 6 + 4]) * 0.5f;
+                planes[JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] =
+                    (pixels[row * JPEG_YUV_ROW_FLOATS+ column * 6 + 2] +
+                     pixels[row * JPEG_YUV_ROW_FLOATS+ column * 6 + 5]) * 0.5f;
             }
         }
         return;
-    case 2:
+    case JPEG_SAMPLING_420:
     default:
-        for (row = 0; row < 8; row++) {
-            for (column = 0; column < 8; column++) {
-                planes[row * 8 + column] = pixels[row * 48 + column * 3] - 128.0f;
-                planes[64 + row * 8 + column] = pixels[row * 48 + column * 3 + 24] - 128.0f;
-                planes[2 * 64 + row * 8 + column] = pixels[row * 48 + column * 3 + 384] - 128.0f;
-                planes[3 * 64 + row * 8 + column] = pixels[row * 48 + column * 3 + 408] - 128.0f;
-                planes[4 * 64 + row * 8 + column] =
+        for (row = 0; row < JPEG_BLOCK_DIM; row++) {
+            for (column = 0; column < JPEG_BLOCK_DIM; column++) {
+                planes[row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3] - JPEG_LEVEL_SHIFT;
+                planes[JPEG_BLOCK_COEFFS + row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3 + 24] - JPEG_LEVEL_SHIFT;
+                planes[2 * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3 + 384] - JPEG_LEVEL_SHIFT;
+                planes[3 * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] = pixels[row * JPEG_YUV_ROW_FLOATS+ column * 3 + 408] - JPEG_LEVEL_SHIFT;
+                planes[JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] =
                     (pixels[row * 96 + column * 6 + 1] +
                      pixels[row * 96 + column * 6 + 4] +
                      pixels[row * 96 + column * 6 + 49] +
                      pixels[row * 96 + column * 6 + 52]) * 0.25f;
-                planes[5 * 64 + row * 8 + column] =
+                planes[JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column] =
                     (pixels[row * 96 + column * 6 + 2] +
                      pixels[row * 96 + column * 6 + 5] +
                      pixels[row * 96 + column * 6 + 50] +
@@ -351,7 +455,7 @@ static void Quantize(int *quantized, const float *coefficients, const float *rec
     float scaled;
     int index;
 
-    for (index = 63; index >= 0; index--) {
+    for (index = JPEG_BLOCK_COEFFS - 1; index >= 0; index--) {
         coefficient = *coefficients;
         coefficients++;
         reciprocal = *reciprocals;
@@ -385,22 +489,22 @@ static void RebuildQuantizeTable(u8 *quantizers, float *reciprocals,
     if (scale <= 0.0f) {
         scale = 1.0f;
     }
-    if (scale > 100.0f) {
-        scale = 100.0f;
+    if (scale > JPEG_QUALITY_MAX) {
+        scale = JPEG_QUALITY_MAX;
     }
-    if (scale < 50.0f) {
-        scale = 5000.0f / scale;
+    if (scale < JPEG_QUALITY_KNEE) {
+        scale = JPEG_QUALITY_LOW_NUMERATOR / scale;
     } else {
-        scale = 200.0f - 2.0f * scale;
+        scale = JPEG_QUALITY_HIGH_BASE - 2.0f * scale;
     }
     reciprocalDest = reciprocals;
-    for (index = 0; index < 64; index++) {
-        value = F2I(((float) original[index] * scale + 50.0f) * 0.01f);
+    for (index = 0; index < JPEG_BLOCK_COEFFS; index++) {
+        value = F2I(((float) original[index] * scale + JPEG_QUANT_ROUNDING) * JPEG_PERCENT_SCALE);
         if (value <= 0) {
             value = 1;
         }
-        if (value >= 256) {
-            value = 255;
+        if (value >= JPEG_QUANT_MAX + 1) {
+            value = JPEG_QUANT_MAX;
         }
         quantizers[index] = value;
         *reciprocalDest++ = 1.0f / I2F(value);
@@ -419,7 +523,7 @@ static void PutBits(u16 code, int length)
         while (length + sw->bitsRemaining >= 8) {
             sw->bufferedByte |= bits >> (length + sw->bitsRemaining - 8);
             output[sw->outputPosition] = sw->bufferedByte;
-            if (sw->bufferedByte == 0xFF) {
+            if (sw->bufferedByte == JPEG_MARKER_PREFIX) {
                 sw->outputPosition++;
                 output[sw->outputPosition] = 0;
             }
@@ -525,18 +629,18 @@ static void HuffmanEncode(int *coefficients, JpegHuffCode *dcCodes,
         value = (short) coefficients[ZigZag[index]];
         index++;
         if (value == 0) {
-            if (index >= 64) {
+            if (index >= JPEG_BLOCK_COEFFS) {
                 EncodeAc(0, 0, acCodes);
                 break;
             }
             zeroRun++;
         } else {
-            while (zeroRun >= 16) {
-                EncodeAc(0, 0xF0, acCodes);
-                zeroRun -= 16;
+            while (zeroRun >= JPEG_ZRL_RUN) {
+                EncodeAc(0, JPEG_AC_ZRL, acCodes);
+                zeroRun -= JPEG_ZRL_RUN;
             }
             EncodeAc(value, zeroRun * 16, acCodes);
-            if (index >= 64) {
+            if (index >= JPEG_BLOCK_COEFFS) {
                 break;
             }
             zeroRun = 0;
@@ -557,8 +661,8 @@ static void ExtractHuffmanTableSub(JpegHuffCode *table, const u8 *symbols, int t
     counts = symbols;
     code = 0;
     length = 1;
-    symbols += 16;
-    for (lengthsRemaining = 15; lengthsRemaining >= 0; lengthsRemaining--) {
+    symbols += JPEG_HUFF_LENGTHS;
+    for (lengthsRemaining = JPEG_HUFF_LENGTHS - 1; lengthsRemaining >= 0; lengthsRemaining--) {
         symbolsRemaining = *counts++;
         while (symbolsRemaining-- > 0) {
             entry = &table[*symbols++];
@@ -586,94 +690,94 @@ int xglJpegEncode(JpegEncodeRequest *request)
 
     sw->rowBytes = request->width * 3;
     RebuildQuantizeTable(sw->unmodeled_02d0, sw->luminanceQuantization, 0, request->luminanceQuality);
-    RebuildQuantizeTable(&sw->unmodeled_02d0[0x40], sw->chrominanceQuantization, 1, request->chrominanceQuality);
-    ExtractHuffmanTableSub(sw->luminanceDcCodes.encode, headerALL + 0xB6, 16);
-    ExtractHuffmanTableSub(sw->chrominanceDcCodes.encode, headerALL + 0x18E, 16);
-    ExtractHuffmanTableSub(sw->luminanceAcCodes.encode, headerALL + 0xD7, 256);
-    ExtractHuffmanTableSub(sw->chrominanceAcCodes.encode, headerALL + 0x1AF, 256);
+    RebuildQuantizeTable(&sw->unmodeled_02d0[JPEG_BLOCK_COEFFS], sw->chrominanceQuantization, 1, request->chrominanceQuality);
+    ExtractHuffmanTableSub(sw->luminanceDcCodes.encode, headerALL + JPEG_HEADER_DHT_DC_LUMA_OFFSET, JPEG_HUFF_DC_SYMBOLS);
+    ExtractHuffmanTableSub(sw->chrominanceDcCodes.encode, headerALL + JPEG_HEADER_DHT_DC_CHROMA_OFFSET, JPEG_HUFF_DC_SYMBOLS);
+    ExtractHuffmanTableSub(sw->luminanceAcCodes.encode, headerALL + JPEG_HEADER_DHT_AC_LUMA_OFFSET, JPEG_HUFF_AC_SYMBOLS);
+    ExtractHuffmanTableSub(sw->chrominanceAcCodes.encode, headerALL + JPEG_HEADER_DHT_AC_CHROMA_OFFSET, JPEG_HUFF_AC_SYMBOLS);
 
     sw->buffer = request->outputBuffer;
     sw->bitsRemaining = 0;
     sw->bufferedByte = 0;
-    __builtin_memcpy(sw->buffer, headerALL, 623);
+    __builtin_memcpy(sw->buffer, headerALL, JPEG_HEADER_SIZE);
 
-    sw->outputPosition = 623;
-    header = sw->buffer + 14;
-    quotient = 0xAF00 / request->height;
+    sw->outputPosition = JPEG_HEADER_SIZE;
+    header = sw->buffer + JPEG_HEADER_DENSITY_OFFSET;
+    quotient = JPEG_DENSITY_HEIGHT_NUMERATOR / request->height;
     header[1] = quotient;
     header[0] = quotient >> 8;
-    quotient = 0xFA00 / request->width;
+    quotient = JPEG_DENSITY_WIDTH_NUMERATOR / request->width;
     header[3] = quotient;
     header[2] = quotient >> 8;
 
-    header = sw->buffer + 25;
-    for (i = 0; i < 64; i++) {
+    header = sw->buffer + JPEG_HEADER_DQT_LUMA_OFFSET;
+    for (i = 0; i < JPEG_BLOCK_COEFFS; i++) {
         *header = sw->unmodeled_02d0[ZigZag[i]];
         header++;
     }
-    header = sw->buffer + 94;
-    for (i = 0; i < 64; i++) {
-        *header = sw->unmodeled_02d0[0x40 + ZigZag[i]];
+    header = sw->buffer + JPEG_HEADER_DQT_CHROMA_OFFSET;
+    for (i = 0; i < JPEG_BLOCK_COEFFS; i++) {
+        *header = sw->unmodeled_02d0[JPEG_BLOCK_COEFFS + ZigZag[i]];
         header++;
     }
 
     switch (request->samplingMode) {
-    case 0:
-        i = 0x11;
+    case JPEG_SAMPLING_444:
+        i = JPEG_SAMPLING_FACTORS_444;
         break;
-    case 1:
-        i = 0x21;
+    case JPEG_SAMPLING_422:
+        i = JPEG_SAMPLING_FACTORS_422;
         break;
-    case 2:
+    case JPEG_SAMPLING_420:
     default:
-        i = 0x22;
+        i = JPEG_SAMPLING_FACTORS_420;
         break;
     }
-    header = sw->buffer + 163;
+    header = sw->buffer + JPEG_HEADER_SOF_SIZE_OFFSET;
     header[0] = request->height >> 8;
     header[1] = request->height;
     header[2] = request->width >> 8;
     header[3] = request->width;
     header[6] = i;
 
-    sw->dcPredictors[2] = 0;
-    sw->dcPredictors[1] = 0;
-    sw->dcPredictors[0] = 0;
+    sw->dcPredictors[JPEG_COMPONENT_CR] = 0;
+    sw->dcPredictors[JPEG_COMPONENT_CB] = 0;
+    sw->dcPredictors[JPEG_COMPONENT_Y] = 0;
 
     switch (request->samplingMode) {
-    case 0:
-        mcuWidth = 8;
+    case JPEG_SAMPLING_444:
+        mcuWidth = JPEG_BLOCK_DIM;
         mcuHeight = mcuWidth;
         break;
-    case 1:
-        mcuWidth = 16;
-        mcuHeight = 8;
+    case JPEG_SAMPLING_422:
+        mcuWidth = JPEG_MCU_PIXELS;
+        mcuHeight = JPEG_BLOCK_DIM;
         break;
-    case 2:
+    case JPEG_SAMPLING_420:
     default:
-        mcuWidth = 16;
+        mcuWidth = JPEG_MCU_PIXELS;
         mcuHeight = mcuWidth;
         break;
     }
 
     for (y = 0; y < request->height; y += mcuHeight) {
         for (x = 0; x < request->width; x += mcuWidth) {
-            sceGsSetDefStoreImage(&sw->unmodeled_0000[0x60], request->sourceX, request->sourceY, 1,
+            sceGsSetDefStoreImage(&sw->unmodeled_0000[JPEG_STORE_IMAGE_OFFSET], request->sourceX, request->sourceY, SCE_GS_PSMCT24,
                                   request->destinationX + x, request->destinationY + y,
                                   ((unsigned) mcuWidth << 16) >> 16, ((unsigned) mcuHeight << 16) >> 16);
-            sceGsExecStoreImage(&sw->unmodeled_0000[0x60], (void *) 0x70003000);
+            sceGsExecStoreImage(&sw->unmodeled_0000[JPEG_STORE_IMAGE_OFFSET], (void *) JPEG_STAGING_ADDRESS);
 
             for (row = 0; row < mcuHeight; row++) {
-                u8 *rgb = (u8 *) 0x70003000 + row * mcuWidth * 3;
-                float *pixel = sw->decodedYuvPixels.floats + row * 48;
+                u8 *rgb = (u8 *) JPEG_STAGING_ADDRESS + row * mcuWidth * 3;
+                float *pixel = sw->decodedYuvPixels.floats + row * JPEG_YUV_ROW_FLOATS;
                 for (column = 0; column < mcuWidth; column++) {
                     float red = I2F(rgb[0]);
                     float green = I2F(rgb[1]);
                     float blue = I2F(rgb[2]);
 
-                    pixel[0] = red * 0.299f + green * 0.587f + blue * 0.114f;
-                    pixel[1] = red * -0.16874f + green * -0.33126f + blue * 0.5f;
-                    pixel[2] = red * 0.5f + green * -0.41869f + blue * -0.08131f;
+                    pixel[0] = red * JPEG_Y_FROM_R + green * JPEG_Y_FROM_G + blue * JPEG_Y_FROM_B;
+                    pixel[1] = red * JPEG_CB_FROM_R + green * JPEG_CB_FROM_G + blue * JPEG_CB_FROM_B;
+                    pixel[2] = red * JPEG_CR_FROM_R + green * JPEG_CR_FROM_G + blue * JPEG_CR_FROM_B;
                     rgb += 3;
                     pixel += 3;
                 }
@@ -682,64 +786,64 @@ int xglJpegEncode(JpegEncodeRequest *request)
             ConvertYUV2MCU(sw->decodedMcuPlanes.planes, sw->decodedYuvPixels.floats, request->samplingMode);
 
             switch (request->samplingMode) {
-        case 0:
+        case JPEG_SAMPLING_444:
             FFDCT(sw->decodedMcuPlanes.planes + 0);
-            FFDCT(sw->decodedMcuPlanes.planes + 256);
-            FFDCT(sw->decodedMcuPlanes.planes + 320);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS);
             Quantize(sw->decodedYuvPixels.blocks[0], sw->decodedMcuPlanes.planes + 0, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[4], sw->decodedMcuPlanes.planes + 256, sw->chrominanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[5], sw->decodedMcuPlanes.planes + 320, sw->chrominanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CB], sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS, sw->chrominanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CR], sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS, sw->chrominanceQuantization);
             HuffmanEncode(sw->decodedYuvPixels.blocks[0], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
-            HuffmanEncode(sw->decodedYuvPixels.blocks[4], sw->chrominanceDcCodes.encode,
-                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[1]);
-            HuffmanEncode(sw->decodedYuvPixels.blocks[5], sw->chrominanceDcCodes.encode,
-                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[2]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
+            HuffmanEncode(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CB], sw->chrominanceDcCodes.encode,
+                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_CB]);
+            HuffmanEncode(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CR], sw->chrominanceDcCodes.encode,
+                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_CR]);
             break;
-        case 1:
+        case JPEG_SAMPLING_422:
             FFDCT(sw->decodedMcuPlanes.planes + 0);
-            FFDCT(sw->decodedMcuPlanes.planes + 64);
-            FFDCT(sw->decodedMcuPlanes.planes + 256);
-            FFDCT(sw->decodedMcuPlanes.planes + 320);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS);
             Quantize(sw->decodedYuvPixels.blocks[0], sw->decodedMcuPlanes.planes + 0, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[1], sw->decodedMcuPlanes.planes + 64, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[4], sw->decodedMcuPlanes.planes + 256, sw->chrominanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[5], sw->decodedMcuPlanes.planes + 320, sw->chrominanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[1], sw->decodedMcuPlanes.planes + JPEG_BLOCK_COEFFS, sw->luminanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CB], sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS, sw->chrominanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CR], sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS, sw->chrominanceQuantization);
             HuffmanEncode(sw->decodedYuvPixels.blocks[0], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
             HuffmanEncode(sw->decodedYuvPixels.blocks[1], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
-            HuffmanEncode(sw->decodedYuvPixels.blocks[4], sw->chrominanceDcCodes.encode,
-                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[1]);
-            HuffmanEncode(sw->decodedYuvPixels.blocks[5], sw->chrominanceDcCodes.encode,
-                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[2]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
+            HuffmanEncode(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CB], sw->chrominanceDcCodes.encode,
+                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_CB]);
+            HuffmanEncode(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CR], sw->chrominanceDcCodes.encode,
+                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_CR]);
             break;
-        case 2:
+        case JPEG_SAMPLING_420:
         default:
             FFDCT(sw->decodedMcuPlanes.planes + 0);
-            FFDCT(sw->decodedMcuPlanes.planes + 64);
-            FFDCT(sw->decodedMcuPlanes.planes + 128);
-            FFDCT(sw->decodedMcuPlanes.planes + 192);
-            FFDCT(sw->decodedMcuPlanes.planes + 256);
-            FFDCT(sw->decodedMcuPlanes.planes + 320);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + 2 * JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + 3 * JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS);
+            FFDCT(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS);
             Quantize(sw->decodedYuvPixels.blocks[0], sw->decodedMcuPlanes.planes + 0, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[1], sw->decodedMcuPlanes.planes + 64, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[2], sw->decodedMcuPlanes.planes + 128, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[3], sw->decodedMcuPlanes.planes + 192, sw->luminanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[4], sw->decodedMcuPlanes.planes + 256, sw->chrominanceQuantization);
-            Quantize(sw->decodedYuvPixels.blocks[5], sw->decodedMcuPlanes.planes + 320, sw->chrominanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[1], sw->decodedMcuPlanes.planes + JPEG_BLOCK_COEFFS, sw->luminanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[2], sw->decodedMcuPlanes.planes + 2 * JPEG_BLOCK_COEFFS, sw->luminanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[3], sw->decodedMcuPlanes.planes + 3 * JPEG_BLOCK_COEFFS, sw->luminanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CB], sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS, sw->chrominanceQuantization);
+            Quantize(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CR], sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS, sw->chrominanceQuantization);
             HuffmanEncode(sw->decodedYuvPixels.blocks[0], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
             HuffmanEncode(sw->decodedYuvPixels.blocks[1], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
             HuffmanEncode(sw->decodedYuvPixels.blocks[2], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
             HuffmanEncode(sw->decodedYuvPixels.blocks[3], sw->luminanceDcCodes.encode,
-                          sw->luminanceAcCodes.encode, &sw->dcPredictors[0]);
-            HuffmanEncode(sw->decodedYuvPixels.blocks[4], sw->chrominanceDcCodes.encode,
-                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[1]);
-            HuffmanEncode(sw->decodedYuvPixels.blocks[5], sw->chrominanceDcCodes.encode,
-                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[2]);
+                          sw->luminanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_Y]);
+            HuffmanEncode(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CB], sw->chrominanceDcCodes.encode,
+                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_CB]);
+            HuffmanEncode(sw->decodedYuvPixels.blocks[JPEG_BLOCK_CR], sw->chrominanceDcCodes.encode,
+                          sw->chrominanceAcCodes.encode, &sw->dcPredictors[JPEG_COMPONENT_CR]);
             break;
             }
         }
@@ -749,8 +853,8 @@ int xglJpegEncode(JpegEncodeRequest *request)
         sw->buffer[sw->outputPosition] = sw->bufferedByte;
         sw->outputPosition++;
     }
-    sw->buffer[sw->outputPosition] = 0xFF;
-    sw->buffer[sw->outputPosition + 1] = 0xD9;
+    sw->buffer[sw->outputPosition] = JPEG_MARKER_PREFIX;
+    sw->buffer[sw->outputPosition + 1] = JPEG_MARKER_EOI;
     sw->outputPosition += 2;
     request->outputSize = sw->outputPosition;
     return 0;
@@ -810,15 +914,15 @@ static u8 *StartOfFrame(u8 *segment)
     work->imageWidth = width;
     work->rowBytes = (short) width * 3;
     switch (segment[9]) {
-    case 0x11:
-        work->samplingMode = 0;
+    case JPEG_SAMPLING_FACTORS_444:
+        work->samplingMode = JPEG_SAMPLING_444;
         break;
-    case 0x21:
-        work->samplingMode = 1;
+    case JPEG_SAMPLING_FACTORS_422:
+        work->samplingMode = JPEG_SAMPLING_422;
         break;
-    case 0x22:
+    case JPEG_SAMPLING_FACTORS_420:
     default:
-        work->samplingMode = 2;
+        work->samplingMode = JPEG_SAMPLING_420;
         break;
     }
     return segment + ((segment[0] << 8) + segment[1]);
@@ -840,13 +944,13 @@ static u8 *DefineHuffmanTable(u8 *segment)
         work = sw;
         do {
             switch (*cursor) {
-            case 0:
+            case JPEG_DHT_DC_LUMA:
                 entry = work->luminanceDcCodes.decode;
                 break;
-            case 1:
+            case JPEG_DHT_DC_CHROMA:
                 entry = work->chrominanceDcCodes.decode;
                 break;
-            case 0x10:
+            case JPEG_DHT_AC_LUMA:
                 entry = work->luminanceAcCodes.decode;
                 break;
             default:
@@ -856,8 +960,8 @@ static u8 *DefineHuffmanTable(u8 *segment)
             cursor++;
             code = 0;
             counts = cursor;
-            cursor += 16;
-            for (length = 0; length < 16; length++) {
+            cursor += JPEG_HUFF_LENGTHS;
+            for (length = 0; length < JPEG_HUFF_LENGTHS; length++) {
                 count = *counts++;
                 while (count-- > 0) {
                     entry[0] = code;
@@ -866,11 +970,11 @@ static u8 *DefineHuffmanTable(u8 *segment)
                     entry += 2;
                 }
                 /* The decoder recognizes 0xFE as a code-length boundary. */
-                entry[1] = 0xFE;
+                entry[1] = JPEG_HUFF_LENGTH_END;
                 entry += 2;
                 code = (code * 2) & 0xFFFE;
             }
-            entry[1] = 0xFF;
+            entry[1] = JPEG_HUFF_TABLE_END;
         } while (cursor < end);
     }
     return cursor;
@@ -886,7 +990,7 @@ static int GetBit(void)
         work = sw;
         buffer = work->buffer;
         value = *buffer;
-        if (value == 0xFF) {
+        if (value == JPEG_MARKER_PREFIX) {
             work->buffer = buffer + 1;
         }
         work->bufferedByte = value;
@@ -901,7 +1005,7 @@ static int GetBit(void)
 static s16 decode_sub(s16 *codes)
 {
     u32 code = 0;
-    s16 terminator = 0xFE;
+    s16 terminator = JPEG_HUFF_LENGTH_END;
 
     for (;;) {
         code = code * 2 + GetBit();
@@ -931,15 +1035,15 @@ static void HuffmanDecode(float *coefficients, int component)
     int position;
 
     switch (component) {
-    case 0:
+    case JPEG_COMPONENT_Y:
     default:
         work = sw;
         dcCodes = work->luminanceDcCodes.decode;
         acCodes = work->luminanceAcCodes.decode;
         quantization = work->luminanceQuantization;
         break;
-    case 1:
-    case 2:
+    case JPEG_COMPONENT_CB:
+    case JPEG_COMPONENT_CR:
         work = sw;
         dcCodes = work->chrominanceDcCodes.decode;
         acCodes = work->chrominanceAcCodes.decode;
@@ -973,9 +1077,9 @@ static void HuffmanDecode(float *coefficients, int component)
         value = 0;
         bits = decode_sub(acCodes);
         if (bits != 0) {
-            while (bits >= 16) {
+            while (bits >= JPEG_ZRL_RUN) {
                 coefficients[ZigZag[position++]] = 0.0f;
-                bits -= 16;
+                bits -= JPEG_ZRL_RUN;
             }
             if (bits != 0) {
                 if (GetBit() == 0) {
@@ -994,11 +1098,11 @@ static void HuffmanDecode(float *coefficients, int component)
             }
             coefficients[ZigZag[position]] = I2F(value) * quantization[position];
         } else {
-            while (position < 64)
+            while (position < JPEG_BLOCK_COEFFS)
                 coefficients[ZigZag[position++]] = 0.0f;
         }
         position++;
-    } while (position < 64);
+    } while (position < JPEG_BLOCK_COEFFS);
 }
 
 /*
@@ -1112,47 +1216,47 @@ static void ConvertMCU2YUV(void)
     int column;
 
     switch (work->samplingMode) {
-    case 0:
-        for (row = 0; row < 8; row++) {
-            for (column = 0; column < 8; column++) {
-                pixels[row * 16 + column].luminance = planes[row * 8 + column];
-                pixels[row * 16 + column].firstChroma = planes[4 * 64 + row * 8 + column];
-                pixels[row * 16 + column].secondChroma = planes[5 * 64 + row * 8 + column];
+    case JPEG_SAMPLING_444:
+        for (row = 0; row < JPEG_BLOCK_DIM; row++) {
+            for (column = 0; column < JPEG_BLOCK_DIM; column++) {
+                pixels[row * JPEG_MCU_PIXELS +column].luminance = planes[row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column].firstChroma = planes[JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column].secondChroma = planes[JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
             }
         }
         return;
-    case 1:
-        for (row = 0; row < 8; row++) {
-            for (column = 0; column < 8; column++) {
-                pixels[row * 16 + column].luminance = planes[row * 8 + column];
-                pixels[row * 16 + column + 8].luminance = planes[64 + row * 8 + column];
-                pixels[row * 16 + column * 2].firstChroma =
-                    pixels[row * 16 + column * 2 + 1].firstChroma =
-                    planes[4 * 64 + row * 8 + column];
-                pixels[row * 16 + column * 2].secondChroma =
-                    pixels[row * 16 + column * 2 + 1].secondChroma =
-                    planes[5 * 64 + row * 8 + column];
+    case JPEG_SAMPLING_422:
+        for (row = 0; row < JPEG_BLOCK_DIM; row++) {
+            for (column = 0; column < JPEG_BLOCK_DIM; column++) {
+                pixels[row * JPEG_MCU_PIXELS +column].luminance = planes[row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column + 8].luminance = planes[JPEG_BLOCK_COEFFS + row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column * 2].firstChroma =
+                    pixels[row * JPEG_MCU_PIXELS +column * 2 + 1].firstChroma =
+                    planes[JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column * 2].secondChroma =
+                    pixels[row * JPEG_MCU_PIXELS +column * 2 + 1].secondChroma =
+                    planes[JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
             }
         }
         return;
-    case 2:
+    case JPEG_SAMPLING_420:
     default:
-        for (row = 0; row < 8; row++) {
-            for (column = 0; column < 8; column++) {
-                pixels[row * 16 + column].luminance = planes[row * 8 + column];
-                pixels[row * 16 + column + 8].luminance = planes[64 + row * 8 + column];
-                pixels[row * 16 + column + 128].luminance = planes[2 * 64 + row * 8 + column];
-                pixels[row * 16 + column + 136].luminance = planes[3 * 64 + row * 8 + column];
+        for (row = 0; row < JPEG_BLOCK_DIM; row++) {
+            for (column = 0; column < JPEG_BLOCK_DIM; column++) {
+                pixels[row * JPEG_MCU_PIXELS +column].luminance = planes[row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column + 8].luminance = planes[JPEG_BLOCK_COEFFS + row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column + 128].luminance = planes[2 * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
+                pixels[row * JPEG_MCU_PIXELS +column + 136].luminance = planes[3 * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
                 pixels[row * 32 + column * 2].firstChroma =
                     pixels[row * 32 + column * 2 + 1].firstChroma =
                     pixels[row * 32 + column * 2 + 16].firstChroma =
                     pixels[row * 32 + column * 2 + 17].firstChroma =
-                    planes[4 * 64 + row * 8 + column];
+                    planes[JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
                 pixels[row * 32 + column * 2].secondChroma =
                     pixels[row * 32 + column * 2 + 1].secondChroma =
                     pixels[row * 32 + column * 2 + 16].secondChroma =
                     pixels[row * 32 + column * 2 + 17].secondChroma =
-                    planes[5 * 64 + row * 8 + column];
+                    planes[JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS +row * JPEG_BLOCK_DIM + column];
             }
         }
         break;
@@ -1162,12 +1266,12 @@ static void ConvertMCU2YUV(void)
 static void ConvertYUV2RGB(int width, int height)
 {
     int row = 0;
-    u32 *rgb = (u32 *)0x70003000;
+    u32 *rgb = (u32 *)JPEG_STAGING_ADDRESS;
 
     if (height > 0) {
         do {
             JpegWork *work = sw;
-            JpegYuvPixel *pixel = work->decodedYuvPixels.pixels + row * 16;
+            JpegYuvPixel *pixel = work->decodedYuvPixels.pixels + row * JPEG_MCU_PIXELS;
 
             if (width > 0) {
                 int remaining = width;
@@ -1253,24 +1357,24 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
     sw->buffer = segment; /* cursor into the entropy-coded data */
     sw->bitsRemaining = 0; /* bit reader starts byte-aligned */
     sw->bufferedByte = 0; /* nothing buffered from the stream yet */
-    sw->dcPredictors[2] = 0;
-    sw->dcPredictors[1] = 0;
-    sw->dcPredictors[0] = 0;
+    sw->dcPredictors[JPEG_COMPONENT_CR] = 0;
+    sw->dcPredictors[JPEG_COMPONENT_CB] = 0;
+    sw->dcPredictors[JPEG_COMPONENT_Y] = 0;
 
     /* MCU size: 8x8 (mode 0), 16x8 (mode 1) or 16x16 (mode 2). */
     switch (sw->samplingMode) {
-    case 0:
-        mcuWidth = 8;
-        mcuHeight = 8;
+    case JPEG_SAMPLING_444:
+        mcuWidth = JPEG_BLOCK_DIM;
+        mcuHeight = JPEG_BLOCK_DIM;
         break;
-    case 1:
-        mcuWidth = 16;
-        mcuHeight = 8;
+    case JPEG_SAMPLING_422:
+        mcuWidth = JPEG_MCU_PIXELS;
+        mcuHeight = JPEG_BLOCK_DIM;
         break;
-    case 2:
+    case JPEG_SAMPLING_420:
     default:
-        mcuWidth = 16;
-        mcuHeight = 16;
+        mcuWidth = JPEG_MCU_PIXELS;
+        mcuHeight = JPEG_MCU_PIXELS;
         break;
     }
 
@@ -1283,22 +1387,22 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
                 sw->restart_interval_plus_one = restartPeriod; /* restart the interval countdown */
                 sw->buffer += 2; /* step over the RSTn marker */
                 sw->bitsRemaining = 0; /* no bits left in the current byte */
-                sw->dcPredictors[2] = 0;
-                sw->dcPredictors[1] = 0;
-                sw->dcPredictors[0] = 0;
+                sw->dcPredictors[JPEG_COMPONENT_CR] = 0;
+                sw->dcPredictors[JPEG_COMPONENT_CB] = 0;
+                sw->dcPredictors[JPEG_COMPONENT_Y] = 0;
             }
 
             /* Block order: component 0 (1, 2 or 4 blocks), then components 1 and 2. */
-            HuffmanDecode(sw->decodedMcuPlanes.planes, 0);
+            HuffmanDecode(sw->decodedMcuPlanes.planes, JPEG_COMPONENT_Y);
             if (sw->samplingMode > 0) {
-                HuffmanDecode(sw->decodedMcuPlanes.planes + 64, 0);
+                HuffmanDecode(sw->decodedMcuPlanes.planes + JPEG_BLOCK_COEFFS, JPEG_COMPONENT_Y);
             }
-            if (sw->samplingMode == 2) {
-                HuffmanDecode(sw->decodedMcuPlanes.planes + 128, 0);
-                HuffmanDecode(sw->decodedMcuPlanes.planes + 192, 0);
+            if (sw->samplingMode == JPEG_SAMPLING_420) {
+                HuffmanDecode(sw->decodedMcuPlanes.planes + 2 * JPEG_BLOCK_COEFFS, JPEG_COMPONENT_Y);
+                HuffmanDecode(sw->decodedMcuPlanes.planes + 3 * JPEG_BLOCK_COEFFS, JPEG_COMPONENT_Y);
             }
-            HuffmanDecode(sw->decodedMcuPlanes.planes + 256, 1);
-            HuffmanDecode(sw->decodedMcuPlanes.planes + 320, 2);
+            HuffmanDecode(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS, JPEG_COMPONENT_CB);
+            HuffmanDecode(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS, JPEG_COMPONENT_CR);
 
             /* MCUs outside the requested crop window are decoded but not converted or stored. */
             if (mcuX <= sw->maximumX && mcuY <= sw->maximumY) {
@@ -1307,12 +1411,12 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
                 if (sw->samplingMode > 0) {
                     FFIDCT(sw->decodedMcuPlanes.blocks[1]);
                 }
-                if (sw->samplingMode == 2) {
+                if (sw->samplingMode == JPEG_SAMPLING_420) {
                     FFIDCT(sw->decodedMcuPlanes.blocks[2]);
                     FFIDCT(sw->decodedMcuPlanes.blocks[3]);
                 }
-                FFIDCT(sw->decodedMcuPlanes.blocks[4]);
-                FFIDCT(sw->decodedMcuPlanes.blocks[5]);
+                FFIDCT(sw->decodedMcuPlanes.blocks[JPEG_BLOCK_CB]);
+                FFIDCT(sw->decodedMcuPlanes.blocks[JPEG_BLOCK_CR]);
                 /* Gather the IDCT output into per-pixel YUV, then convert to RGBA at 0x70003000. */
                 ConvertMCU2YUV();
                 ConvertYUV2RGB(mcuWidth, mcuHeight);
@@ -1320,42 +1424,42 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
                 /* No destination buffer: upload the MCU to the GS (frame buffer base and width come from the request). */
                 if (request->destination == 0) {
                     /* The load-image packet lives in the work area; the MCU is read from 0x70003000. */
-                    sceGsSetDefLoadImage(sw, request->frameBufferBase, request->frameBufferWidth, 0,
+                    sceGsSetDefLoadImage(sw, request->frameBufferBase, request->frameBufferWidth, SCE_GS_PSMCT32,
                                          (short)(request->originX + mcuX), /* GS x */
                                          (short)(request->originY + mcuY), /* GS y */
                                          (short)mcuWidth, (short)mcuHeight); /* upload size: one MCU */
-                    sceGsExecLoadImage(sw, (void *)0x70003000);
-                } else if (request->pixelFormat & 1) {
+                    sceGsExecLoadImage(sw, (void *)JPEG_STAGING_ADDRESS);
+                } else if (request->pixelFormat & JPEG_PIXEL_FORMAT_RGB555) {
                 /* 16-bit RGB555 destination: pack each RGBA texel. */
                     for (texelRow = 0; texelRow < mcuHeight; texelRow++) {
                         int texelsLeft;
 
-                        stagedRgba = (u8 *)0x70003000 + texelRow * (mcuWidth * 4);
-                        destCursor = request->destination + ((mcuY + texelRow) * sw->imageWidth + mcuX) * 2;
+                        stagedRgba = (u8 *)JPEG_STAGING_ADDRESS + texelRow * (mcuWidth * JPEG_RGBA_BYTES);
+                        destCursor = request->destination + ((mcuY + texelRow) * sw->imageWidth + mcuX) * JPEG_RGB555_BYTES;
                         texelsLeft = sw->imageWidth < mcuX + mcuWidth ? sw->imageWidth - mcuX : mcuWidth;
                         for (; texelsLeft > 0; texelsLeft--) {
                             int green555 = (stagedRgba[1] >> 3) << 5;
                             int blue555 = (stagedRgba[2] >> 3) << 10;
 
                             *(u16 *)destCursor = (u16)((stagedRgba[0] >> 3) + (blue555 + green555));
-                            destCursor += 2; /* advance one RGB555 pixel (2 bytes) */
-                            stagedRgba += 4; /* advance one RGBA texel (4 bytes) */
+                            destCursor += JPEG_RGB555_BYTES; /* advance one RGB555 pixel */
+                            stagedRgba += JPEG_RGBA_BYTES; /* advance one RGBA texel */
                         }
                     }
                 } else {
                     /* 32-bit destination: copy each MCU row with memcpy. */
-                    destCursor = request->destination + (mcuY * sw->imageWidth + mcuX) * 4;
-                    stagedRgba = (u8 *)0x70003000;
+                    destCursor = request->destination + (mcuY * sw->imageWidth + mcuX) * JPEG_RGBA_BYTES;
+                    stagedRgba = (u8 *)JPEG_STAGING_ADDRESS;
 
                     for (texelRow = 0; texelRow < mcuHeight; texelRow++) {
                         if (sw->imageWidth < mcuX + mcuWidth) {
                             /* Clip the last MCU mcuX to the image width. */
-                            memcpy(destCursor, stagedRgba, (sw->imageWidth - mcuX) * 4);
+                            memcpy(destCursor, stagedRgba, (sw->imageWidth - mcuX) * JPEG_RGBA_BYTES);
                         } else {
-                            memcpy(destCursor, stagedRgba, mcuWidth * 4);
+                            memcpy(destCursor, stagedRgba, mcuWidth * JPEG_RGBA_BYTES);
                         }
-                        destCursor += sw->imageWidth * 4; /* advance one destination row (imageWidth texels) */
-                        stagedRgba += mcuWidth * 4; /* advance one staged row (mcuWidth texels) */
+                        destCursor += sw->imageWidth * JPEG_RGBA_BYTES; /* advance one destination row (imageWidth texels) */
+                        stagedRgba += mcuWidth * JPEG_RGBA_BYTES; /* advance one staged row (mcuWidth texels) */
                     }
                 }
             }
@@ -1365,7 +1469,7 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
     /* Scan for the next marker: a 0xFF that is not a stuffed 0x00 byte. The
      * returned pointer addresses that 0xFF. */
     for (;;) {
-        while (*segment++ != 0xFF) {
+        while (*segment++ != JPEG_MARKER_PREFIX) {
         }
         if (*segment != 0) {
             return segment - 1; /* return the address of the marker byte */
@@ -1388,7 +1492,7 @@ int xglJpegDecode(void *requestAddress)
     __builtin_memcpy(&extentBits, &request->imageLimits, sizeof(extentBits));
     if (extentBits == 0) {
         work = sw;
-        work->maximumY = work->maximumX = 0x7FFF;
+        work->maximumY = work->maximumX = JPEG_NO_LIMIT;
     } else {
         work = sw;
         work->maximumX = request->imageLimits.width - 1;
@@ -1401,14 +1505,14 @@ int xglJpegDecode(void *requestAddress)
         work->luminanceScale = 1.0f;
 
     switch (request->scaleMode) {
-    case 1:
-        yuvPercentScale = 0.01f;
+    case JPEG_SCALE_YUV:
+        yuvPercentScale = JPEG_PERCENT_SCALE;
         sw->luminanceScale = I2F(request->luminancePercent) * yuvPercentScale;
         chrominanceScale = I2F(request->chrominancePercent) * yuvPercentScale;
         sw->firstChromaScale = sw->secondChromaScale = chrominanceScale;
         break;
-    case 2:
-        rgbPercentScale = 0.01f;
+    case JPEG_SCALE_RGB:
+        rgbPercentScale = JPEG_PERCENT_SCALE;
         sw->redScale = I2F(request->redPercent) * rgbPercentScale;
         sw->greenScale = I2F(request->greenPercent) * rgbPercentScale;
         sw->blueScale = I2F(request->bluePercent) * rgbPercentScale;
@@ -1418,28 +1522,28 @@ int xglJpegDecode(void *requestAddress)
     }
     cursor = request->source;
     for (;;) {
-        while (*cursor++ != 0xFF) {
+        while (*cursor++ != JPEG_MARKER_PREFIX) {
         }
         marker = *cursor;
-        if (marker == 0xD0 || marker == 0xD9)
+        if (marker == JPEG_MARKER_RST0 || marker == JPEG_MARKER_EOI)
             break;
         cursor++;
         switch (marker) {
-        case 0xD8:
+        case JPEG_MARKER_SOI:
             break;
-        case 0xDD:
+        case JPEG_MARKER_DRI:
             cursor = DefineRestartInterval(cursor);
             break;
-        case 0xDB:
+        case JPEG_MARKER_DQT:
             cursor = DefineQuantizeTable(cursor);
             break;
-        case 0xC0:
+        case JPEG_MARKER_SOF0:
             cursor = StartOfFrame(cursor);
             break;
-        case 0xC4:
+        case JPEG_MARKER_DHT:
             cursor = DefineHuffmanTable(cursor);
             break;
-        case 0xDA:
+        case JPEG_MARKER_SOS:
             cursor = StartOfScan(cursor, requestAddress);
             break;
         default:

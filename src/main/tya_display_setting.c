@@ -10,6 +10,17 @@
     } while (0)
 
 
+/* Display adjustment screen: each step moves the picture by one scanline
+ * vertically or HORIZONTAL_STEP dot-clock units sideways, up to LIMIT steps
+ * either way. The test image is two halves of IMAGE_HALF_QWORDS quadwords. */
+#define TYA_DISPLAY_WIDTH 512
+#define TYA_DISPLAY_HEIGHT 448
+#define TYA_DISPLAY_OFFSET_LIMIT 20
+#define TYA_DISPLAY_HORIZONTAL_STEP 5
+#define TYA_IMAGE_HALF_QWORDS 0x7000
+#define TYA_IMAGE_HALF_BYTES 0x70000
+#define TYA_PAD_ANY_DIRECTION (PAD_UP | PAD_RIGHT | PAD_DOWN | PAD_LEFT)
+
 typedef union {
     u64 value;
     struct {
@@ -103,9 +114,9 @@ static void DrawImage(u8 *framebuffer)
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, &TestEnv_0_0036ABC0, 0x18);
     sceVif1PkRef(packet, &TransEnv_1_0036AC20, 2, 0, 0, 0);
-    sceVif1PkRef(packet, framebuffer, 0x7000, 0, 0x51007000, 0);
+    sceVif1PkRef(packet, framebuffer, TYA_IMAGE_HALF_QWORDS, 0, 0x51007000, 0);
     sceVif1PkRef(packet, &TransEnv_1_0036AC20, 2, 0, 0, 0);
-    sceVif1PkRef(packet, framebuffer + 0x70000, 0x7000, 0, 0x51007000, 0);
+    sceVif1PkRef(packet, framebuffer + TYA_IMAGE_HALF_BYTES, TYA_IMAGE_HALF_QWORDS, 0, 0x51007000, 0);
     sceVif1PkRef(packet, &FlushEnv_2_0036AC40, 3, 0, 0, 0);
 }
 
@@ -115,12 +126,12 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
     short saved_y;
     GsDispEnvDisplayView environment;
 
-    sceGsSetDefDispEnv(&environment, 0, 512, 448, 0, 0);
+    sceGsSetDefDispEnv(&environment, 0, TYA_DISPLAY_WIDTH, TYA_DISPLAY_HEIGHT, 0, 0);
     saved_x = ((TyaSaveDataRecord *)SaveData)->horizontal_display_offset;
     saved_y = ((TyaSaveDataRecord *)SaveData)->vertical_display_offset;
 
     if (framebuffer_or_mode == (u8 *)0) {
-        DispEnv.display.dx = environment.display.dx + saved_x * 5;
+        DispEnv.display.dx = environment.display.dx + saved_x * TYA_DISPLAY_HORIZONTAL_STEP;
         DispEnv.display.dy = environment.display.dy + saved_y;
         return;
     }
@@ -156,23 +167,23 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
                 vertical = ((TyaSaveDataRecord *)SaveData)->vertical_display_offset;
                 directions = PadData.mappedRepeat;
 
-                if (directions & 0xf000) {
-                    xglSoundEffectNormalDirect(3);
+                if (directions & TYA_PAD_ANY_DIRECTION) {
+                    xglSoundEffectNormalDirect(SE_CURSOR);
                     directions = PadData.mappedRepeat;
                 }
-                if (directions & 0x2000)
+                if (directions & PAD_RIGHT)
                 {
                     horizontal++;
                 }
-                if (directions & 0x8000)
+                if (directions & PAD_LEFT)
                 {
                     horizontal--;
                 }
-                if (directions & 0x4000)
+                if (directions & PAD_DOWN)
                 {
                     vertical++;
                 }
-                if (directions & 0x1000)
+                if (directions & PAD_UP)
                 {
                     vertical--;
                 }
@@ -180,39 +191,39 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
                 {
                     /* The halfword event snapshot is refreshed after the sound call. */
                     int input_event = PadData.half_2a;
-                    if (input_event & 0x80) {
+                    if (input_event & PAD_SQUARE) {
                         PLAY_RESET_SOUND_EFFECT();
                         input_event = PadData.half_2a;
                         horizontal = 0;
                         vertical = 0;
                     }
                     {
-                        if (input_event & 0x40) {
+                        if (input_event & PAD_CROSS) {
                             horizontal = saved_x;
                             vertical = saved_y;
                         }
-                        if (horizontal < -20) {
-                            horizontal = -20;
+                        if (horizontal < -TYA_DISPLAY_OFFSET_LIMIT) {
+                            horizontal = -TYA_DISPLAY_OFFSET_LIMIT;
                         }
-                        if (vertical < -20) {
-                            vertical = -20;
+                        if (vertical < -TYA_DISPLAY_OFFSET_LIMIT) {
+                            vertical = -TYA_DISPLAY_OFFSET_LIMIT;
                         }
-                        if (horizontal > 20) {
-                            horizontal = 20;
+                        if (horizontal > TYA_DISPLAY_OFFSET_LIMIT) {
+                            horizontal = TYA_DISPLAY_OFFSET_LIMIT;
                         }
-                        if (vertical > 20) {
-                            vertical = 20;
+                        if (vertical > TYA_DISPLAY_OFFSET_LIMIT) {
+                            vertical = TYA_DISPLAY_OFFSET_LIMIT;
                         }
 
                         ((TyaSaveDataRecord *)SaveData)->horizontal_display_offset = horizontal;
-                        DispEnv.display.dx = environment.display.dx + horizontal * 5;
+                        DispEnv.display.dx = environment.display.dx + horizontal * TYA_DISPLAY_HORIZONTAL_STEP;
                         DispEnv.display.dy = environment.display.dy + vertical;
                         ((TyaSaveDataRecord *)SaveData)->vertical_display_offset = vertical;
 
-                        if (input_event & 0x20) {
-                            xglSoundEffectNormalDirect(1);
-                        } else if (input_event & 0x40) {
-                            xglSoundEffectNormalDirect(2);
+                        if (input_event & PAD_CIRCLE) {
+                            xglSoundEffectNormalDirect(SE_DECIDE);
+                        } else if (input_event & PAD_CROSS) {
+                            xglSoundEffectNormalDirect(SE_CANCEL);
                         } else {
                             xglFontDebugPrintf(8, 8, displayHalfwordFormat,
                                 DispEnv.display.dx,

@@ -4,6 +4,109 @@
 #include "common.h"
 #include "shared.h"
 
+/* Number of enemy work records (enepc) and of the actor slots they drive. */
+#define ENEMY_COUNT 16
+
+/* Size of the homing graph an enemy follows back to its route: positions and
+ * the neighbours each one links to. */
+#define ENEMY_HOMING_MAX 64
+#define ENEMY_HOMING_NEIGHBOURS 4
+
+/* map_index values of EnemyWorkEntry: ACT_updateEnemy picks the enemy one for
+ * inUseId 0x4000..0x4f22 and the other for the remaining actors. */
+#define ENEMY_MAP_INDEX_ENEMY 772
+#define ENEMY_MAP_INDEX_NPC 768
+
+/* EnemyWorkEntry.action: the behaviour ACT_updateEnemy dispatches each frame
+ * (Enemy_ActionReady switches to one). */
+#define ENEMY_ACT_INIT 0
+#define ENEMY_ACT_PAUSE 1
+#define ENEMY_ACT_THREAT 2
+#define ENEMY_ACT_ROUTE 4
+#define ENEMY_ACT_FOUND 5
+#define ENEMY_ACT_CHASE 6
+#define ENEMY_ACT_STIFF 7
+#define ENEMY_ACT_UNIQUE 9
+#define ENEMY_ACT_TENTACLE 10
+#define ENEMY_ACT_DAMAGE_EXPLOSION 11
+#define ENEMY_ACT_DAMAGE_ELECTRIC 12
+#define ENEMY_ACT_DAMAGE_SEAL 13
+#define ENEMY_ACT_ESCAPE 14
+#define ENEMY_ACT_ROUTE_CHASE 15
+#define ENEMY_ACT_READY 16 /* Enemy_Init's request, resolves to ENEMY_ACT_PAUSE */
+
+/* EnemyWorkEntry.pause_kind (EnemyParams.move_kind): how the enemy moves
+ * between pauses. */
+#define ENEMY_MOVE_WANDER_A 1
+#define ENEMY_MOVE_WANDER_B 2
+#define ENEMY_MOVE_ROUTE_A 3
+#define ENEMY_MOVE_ROUTE_BACK_AND_FORTH_A 4 /* becomes ENEMY_MOVE_ROUTE_A with a mirrored route */
+#define ENEMY_MOVE_STAND_A 5
+#define ENEMY_MOVE_STAND_B 6 /* both stand and may face the player */
+#define ENEMY_MOVE_ROUTE_B 8
+#define ENEMY_MOVE_ROUTE_BACK_AND_FORTH_B 9 /* becomes ENEMY_MOVE_ROUTE_B */
+#define ENEMY_MOVE_ROUTE_THEN_ESCAPE 12     /* pause ends in ENEMY_ACT_ESCAPE */
+#define ENEMY_MOVE_ROUTE_THEN_ROUTE_CHASE 13 /* pause ends in ENEMY_ACT_ROUTE_CHASE */
+
+/* EnemyWorkEntry.freeze_state (Enemy_Command_Freeze). */
+#define ENEMY_FREEZE_RELEASE 0 /* normal behaviour */
+#define ENEMY_FREEZE_SCRIPTED 1 /* script drives the enemy, animation keeps its speed */
+#define ENEMY_FREEZE_STOP 2    /* animation halted */
+#define ENEMY_FREEZE_SLOW 3    /* animation at a fixed slow speed, sequence only */
+
+/* EnemyWorkEntry.move_result: why TM_Check_Move refused a step. Values below
+ * ACTOR_COUNT are the number of the actor in the way. */
+#define ENEMY_MOVE_RESULT_FREE 99
+#define ENEMY_MOVE_RESULT_NO_GROUND 0x40
+#define ENEMY_MOVE_RESULT_TERRITORY_A 0x50 /* left the wall_attribute territory (state flag 8) */
+#define ENEMY_MOVE_RESULT_TERRITORY_B 0x58
+#define ENEMY_MOVE_RESULT_MAP_UNIT 0x60
+
+/* Arguments of Enemy_Command_Target / Enemy_Command_LookAt: the player, or
+ * (look-at only) no target. */
+#define ENEMY_TARGET_PLAYER 100
+#define ENEMY_LOOK_AT_RELEASE (-1)
+
+/* Default motion kinds Get_DefaultMotion maps to an enemy's motion ids. */
+#define ENEMY_DEFAULT_MOTION_IDLE 0
+#define ENEMY_DEFAULT_MOTION_WALK 1
+#define ENEMY_DEFAULT_MOTION_RUN 2
+#define ENEMY_DEFAULT_MOTION_TALK 3 /* Before_Talk's motion */
+
+/* EnemyWorkEntry.stiff_flag bits; Check_Encount turns them into the battle's
+ * trigger flags. */
+#define ENEMY_STIFF_ACTIVE_BIT 0x01
+#define ENEMY_STIFF_ELECTRIC 0x2
+#define ENEMY_STIFF_SEAL 0x4
+
+/* EnemyWorkEntry.state_flags bits. */
+#define ENEMY_STATE_FLAG_ENCOUNTER 0x1 /* touching the enemy can start a battle */
+#define ENEMY_STATE_FLAG_BELT 0x4      /* carried by belt conveyors */
+#define ENEMY_STATE_FLAG_TERRITORY_LOCK 0x8 /* chasing is the only way out of wall_attribute's territory */
+#define ENEMY_STATE_FLAG_ALERT_RAISE 0x10   /* walks the route faster while alerted */
+#define ENEMY_STATE_FLAG_AIRBORNE 0x20      /* follows the route's height instead of the ground */
+#define ENEMY_STATE_FLAG_CUSTOM_BLEND 0x100 /* Set_Motion applies value_3858 as blend work */
+#define ENEMY_STATE_FLAG_SCRIPT_ACTIVE 0x10000 /* a scripted move or turn is running */
+
+/* Offsets added to RES_GetEnemySeBank(): the enemy's own sound effects. The
+ * walk and run offsets also play as the looping sound of ENEMY_ACT_ROUTE and
+ * ENEMY_ACT_CHASE; the _ALT ones are the second footstep of a stride. */
+#define ENEMY_SE_IDLE 1
+#define ENEMY_SE_WALK 2
+#define ENEMY_SE_WALK_ALT 3
+#define ENEMY_SE_RUN 4
+#define ENEMY_SE_RUN_ALT 5
+
+/* Looping sound effects of the ENEMY_ACT_DAMAGE_* states. */
+#define SE_ID_DAMAGE_ELECTRIC 0x10008
+#define SE_ID_DAMAGE_EXPLOSION 0x10009
+#define SE_ID_DAMAGE_SEAL 0x1000b
+
+#define ENEMY_LIGHT_LEVEL_FULL 1000 /* params->light_level of an opaque enemy */
+
+/* Motion blend length Set_Motion / ACT_setMotion2 take for a normal change. */
+#define MOTION_BLEND_DEFAULT 9
+
 /* The doubleword-copied vectors of an enepc entry are DoublewordVector4, not
  * AlignedVector4: enepc and EnemyTarget (enemy_1.c) live in an 8-aligned .data
  * section, so their vectors are only 8-aligned, and the two-ld/sd copy comes
@@ -140,10 +243,10 @@ typedef struct EnemyWorkEntry {
     unsigned char unmodeled_3096[0xa];
     /* The homing graph Homing_Search walks (set_motion.c): positions,
      * up to four neighbours per position, their count and a linked target. */
-    HomingPosition homing_positions[64];    /* +0x30a0 */
-    short homing_neighbours[64][4];         /* +0x34a0 */
-    short homing_neighbour_count[64];       /* +0x36a0 */
-    short homing_linked_target[64];         /* +0x3720 */
+    HomingPosition homing_positions[ENEMY_HOMING_MAX];    /* +0x30a0 */
+    short homing_neighbours[ENEMY_HOMING_MAX][ENEMY_HOMING_NEIGHBOURS]; /* +0x34a0 */
+    short homing_neighbour_count[ENEMY_HOMING_MAX];       /* +0x36a0 */
+    short homing_linked_target[ENEMY_HOMING_MAX];         /* +0x3720 */
     short homing_count;
     signed char freeze_state;
     signed char turn_lock;

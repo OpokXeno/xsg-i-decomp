@@ -14,6 +14,22 @@
 #define ACTOR_ANGLE_MAX (6.2831854820251465f)
 #define ACTOR_ANGLE_MIN (-6.2831854820251465f)
 
+/* Radar: markers for the first RADAR_ACTOR_COUNT actors are placed with
+ * RADAR_WORLD_SCALE units per world unit, and only shown within
+ * RADAR_RANGE_X / RADAR_RANGE_Z of the player. radarRate is the fade-in
+ * alpha, 0..RADAR_RATE_MAX; the ping ring is drawn as RADAR_PING_SEGMENTS
+ * quads and grows RADAR_PING_RING_WIDTH wide. */
+#define RADAR_ACTOR_COUNT 64
+#define RADAR_ENEMY_COUNT 16
+#define RADAR_RATE_MAX 128
+#define RADAR_WORLD_SCALE 64.0f
+#define RADAR_RANGE_X 0x380
+#define RADAR_RANGE_Z 0x300
+#define RADAR_PING_SEGMENTS 24
+#define RADAR_PING_RING_WIDTH 16
+#define RADAR_MARKER_ALPHA 0x80
+#define RADAR_SPRITE_QWORDS 9
+
 typedef unsigned int GameLoopStateWords[];
 
 typedef struct RadarPoint {
@@ -77,8 +93,8 @@ typedef union RadarPacket {
 extern u8 *image_004DC554;
 extern u8 rate;
 extern GameLoopStateWords GameLoopState;
-extern EnemyWork enepc[16];
-extern Actor actor[64];
+extern EnemyWork enepc[RADAR_ENEMY_COUNT];
+extern Actor actor[RADAR_ACTOR_COUNT];
 
 static void DrawActorPoint(float angle, int *position, u32 *color);
 static void DrawRadarPing(int *);
@@ -95,7 +111,7 @@ static u8 ping;
 
 static inline void RadarSpritePacketInit(RadarSpritePacket **packet)
 {
-    *packet = (RadarSpritePacket *)0x70000000;
+    *packet = (RadarSpritePacket *)SCRATCHPAD_BASE;
 }
 
 void GameRadarDraw(RadarOrigin *origin)
@@ -108,7 +124,7 @@ void GameRadarDraw(RadarOrigin *origin)
         if (!rate) return;
         rate >>= 1;
     } else {
-        int difference = 128 - rate;
+        int difference = RADAR_RATE_MAX - rate;
         if (difference >= 8) difference >>= 1;
         rate += difference;
     }
@@ -164,16 +180,16 @@ void GameRadarDraw(RadarOrigin *origin)
     packet->uv1.u = 0x800; packet->uv1.v = 0x800;
     packet->xyz1.y = bottom; packet->xyz1.x = right;
     secondSpritePrimitive = 0x2007678621343800ULL;
-    nmlModelDirectSend(5, packet, 9);
+    nmlModelDirectSend(5, packet, RADAR_SPRITE_QWORDS);
     packet->uv0.u = 0x800;
     packet->primitive = secondSpritePrimitive;
     packet->uv1.u = 0x880; packet->uv1.v = 0x900;
     packet->xyz0.x = outerLeft; packet->xyz0.y = outerTop;
     packet->xyz1.x = innerLeft; packet->xyz1.y = outerBottom;
-    nmlModelDirectSend(5, packet, 9);
+    nmlModelDirectSend(5, packet, RADAR_SPRITE_QWORDS);
     packet->uv0.u = 0x880; packet->uv1.u = 0x900; packet->xyz0.x = right;
     packet->xyz1.x = outerRight;
-    nmlModelDirectSend(5, packet, 9);
+    nmlModelDirectSend(5, packet, RADAR_SPRITE_QWORDS);
     }
     DrawRadarPing(&origin->x);
     DrawRadarInfo(&origin->x);
@@ -190,7 +206,7 @@ static void DrawRadarPing(int *origin)
     int yOrigin;
     nmlModelDirectSend(6, TestEnv, 4);
     {
-    RadarPingHeader *header = (RadarPingHeader *)0x70000000;
+    RadarPingHeader *header = (RadarPingHeader *)SCRATCHPAD_BASE;
     u64 scissor;
     header->dma[0] = 0; header->dma[1] = 0; header->dma[2] = 0;
     header->dma[3] = 0x51000069;
@@ -208,7 +224,7 @@ static void DrawRadarPing(int *origin)
     }
     do {
         float innerRadius = I2F(ping) * 0.5f;
-        float outerRadius = I2F(ping + 16) * 0.5f;
+        float outerRadius = I2F(ping + RADAR_PING_RING_WIDTH) * 0.5f;
         float angle = I2F(segment) * TWO_PI / 24.0f;
         float sine;
         float cosine;
@@ -231,12 +247,12 @@ static void DrawRadarPing(int *origin)
         packet[1].vertex.position[1] = yOrigin + F2I(cosine * outerRadius);
         packet[1].vertex.position[2] = origin[2] + 1; packet[1].vertex.position[3] = 0;
         packet += 2;
-    } while (segment < 25);
+    } while (segment < RADAR_PING_SEGMENTS + 1);
     end = &packet->end;
     end->tag[0] = 0x8001;
     end->tag[1] = 0x10000000; end->tag[2] = 14;
     end->scissor = 0x01bf000001ff0000ULL; end->tag[3] = 0; end->scissorRegister = 0x40;
-    nmlModelDirectSend(5, (u8 *)0x70000000, 106);
+    nmlModelDirectSend(5, (u8 *)SCRATCHPAD_BASE, 106);
     if (!(GameLoopState[4] & 1)) ping += 8;
 }
 
@@ -259,16 +275,16 @@ static void DrawRadarInfo(int *origin)
 
     xOrigin = origin[0] * 16 + 0x7498;
     yOrigin = origin[1] * 16 + 0x7680;
-    for (actorIndex = 0; actorIndex < 64; actorIndex++) {
+    for (actorIndex = 0; actorIndex < RADAR_ACTOR_COUNT; actorIndex++) {
         if (CheckActorExist(&actor[actorIndex]) != 0 && actorIndex != player->number) {
             current = &actor[actorIndex];
-            xDistance = (int)((current->position.x - player->position.x) * 64.0f);
-            yDistance = (int)((current->position.z - player->position.z) * 64.0f);
+            xDistance = (int)((current->position.x - player->position.x) * RADAR_WORLD_SCALE);
+            yDistance = (int)((current->position.z - player->position.z) * RADAR_WORLD_SCALE);
             if (!(current->flags & 0x80)) {
                 absX = xDistance < 0 ? -xDistance : xDistance;
-                if (absX < 0x381) {
+                if (absX < RADAR_RANGE_X + 1) {
                     absY = yDistance < 0 ? -yDistance : yDistance;
-                    if (absY < 0x301) {
+                    if (absY < RADAR_RANGE_Z + 1) {
                         if (enepc[current->number].state_flags & 1) {
                             if (current->translate_y == -1000.0f) {
                                 continue;
@@ -288,7 +304,7 @@ static void DrawRadarInfo(int *origin)
                             color.green = 255;
                             color.blue = 0;
                         }
-                        color.alpha = 0x80;
+                        color.alpha = RADAR_MARKER_ALPHA;
                         point.x = xOrigin + xDistance;
                         point.y = yOrigin + yDistance;
                         point.depth = origin[2] + 2;
@@ -303,7 +319,7 @@ static void DrawRadarInfo(int *origin)
     color.red = 0xFF;
     color.green = 0;
     color.blue = 0;
-    color.alpha = 0x80;
+    color.alpha = RADAR_MARKER_ALPHA;
     point.x = xOrigin;
     point.y = yOrigin;
     point.depth = origin[2] + 3;

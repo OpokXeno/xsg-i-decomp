@@ -3,6 +3,9 @@
 #include "main/xgl_task.h"
 #include "xgl_task.h"
 
+/* Every task slot of the pool reserves this many bytes. */
+#define XGL_TASK_SLOT_SIZE 0x80
+
 extern int sceGsResetGraph(int interlace, int omode, int ffmode, int errorjump);
 
 /*
@@ -35,7 +38,7 @@ void *xglTaskInitial(void *manager, int capacity, int flags)
         {
             do
             {
-                next = (XglTaskPrefix *)((char *) task + 0x80);
+                next = (XglTaskPrefix *)((char *) task + XGL_TASK_SLOT_SIZE);
                 remaining -= 1;
                 task->next = next;
                 task = next;
@@ -43,7 +46,7 @@ void *xglTaskInitial(void *manager, int capacity, int flags)
             while (remaining != 0);
         }
         task->next = 0;
-        afterPool = (char *) task + 0x80;
+        afterPool = (char *) task + XGL_TASK_SLOT_SIZE;
         scheduler->active_head = 0;
         scheduler->active_tail = 0;
     }

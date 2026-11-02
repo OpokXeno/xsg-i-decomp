@@ -8,9 +8,6 @@
 #include "main/ssd_init.h"
 #include "main/nml_packet_add.h"
 
-/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
 struct SsdMemoryBlock;
 
 /*

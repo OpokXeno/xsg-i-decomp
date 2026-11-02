@@ -23,6 +23,14 @@ typedef struct {
     const void *think_data;
 } MapResource;
 
+/* Map change fade (taskMapChange): fade level 0x80 counts down by 4 per frame. */
+#define MAP_FADE_START 0x80
+#define MAP_FADE_STEP 4
+
+/* Locator data of the map entrances (UnduDataGetHeader). */
+#define MAP_ENTRANCE_DATA_KIND 0x201
+#define MAP_ENTRANCE_ID_BASE 0x8000
+
 typedef struct MapPlayerActorState MapPlayerActorState;
 
 typedef struct {
@@ -750,11 +758,11 @@ const char *MAP_getPath(void)
 {
     int test_path = UseTestPath;
 
-    if (test_path != 1) {
-        if (test_path < 2) {
+    if (test_path != MAP_PATH_TEST) {
+        if (test_path < MAP_PATH_CHECK) {
             return mapDefaultPath;
         }
-        if (test_path != 2) {
+        if (test_path != MAP_PATH_CHECK) {
             return mapDefaultPath;
         }
         return mapCheckPath;
@@ -773,7 +781,7 @@ static void taskMapChange(void *task)
     sceVif1PkCnt(task, 0);
     sceVif1PkAddDataN(task, &TestPrim, 0x2c);
     nmlModelSendBackBufferSignal();
-    tsk.state -= 4;
+    tsk.state -= MAP_FADE_STEP;
     if (tsk.state == 0) {
         sRender.callback = 0;
     }
@@ -783,7 +791,7 @@ void MapChangeFadeSet(void)
 {
     if (GameLoopState.fade_countdown <= 0) {
         xglRenderDrawFlipPk(xglPacketGetCurrent());
-        tsk.state = 0x80;
+        tsk.state = MAP_FADE_START;
         sRender.callback = taskMapChange;
         nmlModelSetFadeInCancel(5);
         nmlModelSetFadeOutCancel(5);
@@ -808,7 +816,7 @@ void MapReset(void)
 
 void MapChangeResource(int map_id, int entrance_id)
 {
-    if (GameResource[map_id].state == 1) {
+    if (GameResource[map_id].state == RES_TYPE_MAP) {
         GameLoopState.map_no = GameResource[map_id].handle;
         GameLoopState.map_resource = (MapResource *)GameResource[map_id].address;
         if (map_id < 1000) {
@@ -817,7 +825,7 @@ void MapChangeResource(int map_id, int entrance_id)
         MapReset();
         GameLoopState.entrance_no = (short)entrance_id;
         {
-            LayoutHeader *header = UnduDataGetHeader(0x201, entrance_id + 0x8000);
+            LayoutHeader *header = UnduDataGetHeader(MAP_ENTRANCE_DATA_KIND, entrance_id + MAP_ENTRANCE_ID_BASE);
 
             if (header != 0) {
                 float last_component;
@@ -841,8 +849,8 @@ void MapChange(int map_id)
 
 void MapChange2(int map_id)
 {
-    if ((unsigned int)map_id < 0x71e) {
-        GameLoopState.map_resource = RES_loadFile(-1, 1, map_id, 0);
+    if ((unsigned int)map_id < MAP_ID_LIMIT) {
+        GameLoopState.map_resource = RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_MAP, map_id, 0);
         GameLoopState.map_no = map_id;
         MapReset();
     }
@@ -859,10 +867,10 @@ char *MapGetName(int map_no)
     }
     map_name = 0;
     if (map_no < 0x71F) {
-        table_index = map_no / 100;
+        table_index = map_no / MAP_GROUP_SIZE;
         entry_count = maptbl[table_index].count;
-        if ((map_no % 100) < entry_count) {
-            map_name = maptbl[table_index].names[map_no % 100];
+        if ((map_no % MAP_GROUP_SIZE) < entry_count) {
+            map_name = maptbl[table_index].names[map_no % MAP_GROUP_SIZE];
         }
     }
     return map_name;

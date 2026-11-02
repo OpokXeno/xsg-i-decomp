@@ -9,7 +9,7 @@ const char skillExtractCommandText[9] = "/Extract";
 
 static const char * msg_0_0036DD58[3] = { MenuSkillTitleText, skillExtractCommandText, MenuSkillSetSuffixText };
 
-static short MenuSkillParty[8];
+static short MenuSkillParty[SKILL_PARTY_MAX];
 
 unsigned int SkillSetLvGet(int skill_id)
 {
@@ -44,7 +44,7 @@ unsigned int SkillCharSkillLvGet(int character_id)
 
     if (character_index == 0)
         return 0;
-    if (character_index >= 9)
+    if (character_index >= SKILL_CHARACTER_ID_END)
         return 0;
     return skill_levels->level_by_character[character_id - 1];
 }
@@ -61,7 +61,7 @@ int SkillCharPointPlus(int character_id, int point_delta)
     int remaining_points;
     PartySkillPoints next_level_points;
 
-    if (character_index == 0 || character_index >= 9)
+    if (character_index == 0 || character_index >= SKILL_CHARACTER_ID_END)
         return 0;
 
     character = dataPlChaGet(character_index);
@@ -72,17 +72,17 @@ int SkillCharPointPlus(int character_id, int point_delta)
     character->skill_points = character_points;
 
     level_by_character = &party->skill_levels.level_by_character[character_id - 1];
-    if (*level_by_character >= 5)
+    if (*level_by_character >= SKILL_LEVEL_MAX)
         return 1;
 
     points_to_next_level = (PartySkillPoints *)((unsigned int)(character_id - 1) * 8 + (unsigned int)party->next_level_points);
     remaining_points = *points_to_next_level;
     remaining_points -= point_delta;
     if (remaining_points <= 0) {
-        xglSoundEffectNormalID(1, 0);
+        xglSoundEffectNormalID(SE_DECIDE, 0);
         level = *level_by_character + 1;
         *level_by_character = level;
-        if ((unsigned char)level < 5) {
+        if ((unsigned char)level < SKILL_LEVEL_MAX) {
             next_level_points = SkillNextLvGet(*level_by_character);
             *points_to_next_level = next_level_points;
             if (remaining_points < 0)
@@ -99,17 +99,17 @@ int SkillCharPointPlus(int character_id, int point_delta)
 void MenuSkillPasMain(void)
 {
     SkillPasWork *work = MenuSkillPas;
-    int length[3];
-    short target[3];
+    int length[SKILL_PAS_MESSAGE_COUNT];
+    short target[SKILL_PAS_MESSAGE_COUNT];
     short windowTarget;
     int i;
 
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < SKILL_PAS_MESSAGE_COUNT; i++)
         length[i] = MenuPasLengthGet(msg_0_0036DD58[i]);
 
     switch (work->state) {
-    case 0:
-        work->color = 0x00fffff0;
+    case SKILL_BLOCK_INIT:
+        work->color = SKILL_STYLE_WINDOW;
         WindowDXSet(&work->window);
         work->window.x = -288;
         work->window.y = 8;
@@ -118,26 +118,26 @@ void MenuSkillPasMain(void)
         work->window.height = 30;
         work->window.close_callback = MenuPasWindow;
         work->window.close_callback_arg = work->callbackWork;
-        work->window.state = 1;
+        work->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&work->window);
-        work->window.state = 3;
-        for (i = 0; i < 3; i++) {
+        work->window.state = WINDOWDX_STATE_READY;
+        for (i = 0; i < SKILL_PAS_MESSAGE_COUNT; i++) {
             eMessageSet(&work->message[i], msg_0_0036DD58[i]);
-            work->message[i].mode = 32;
+            work->message[i].mode = E_MODE_SHOW_START;
             work->message[i].x = 288;
             work->message[i].y = 11;
             work->message[i].draw_parameter = work->color + 2;
         }
-        work->state = 2;
+        work->state = SKILL_BLOCK_RUN;
         /* fallthrough */
-    case 2:
+    case SKILL_BLOCK_RUN:
         break;
     default:
         return;
     }
 
     windowTarget = -16;
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < SKILL_PAS_MESSAGE_COUNT; i++)
         target[i] = 288;
     switch (MenuWork.state) {
     case SKILL_CHARACTER:
@@ -160,19 +160,19 @@ void MenuSkillPasMain(void)
     }
     MoveSlide(&work->window.x, &windowTarget, 3.0f);
     WindowDXMain(&work->window);
-    if (work->window.state == 3) {
+    if (work->window.state == WINDOWDX_STATE_READY) {
         work->box.x = work->window.x + 3;
         work->box.y = work->window.y + 3;
         work->box.color = work->color;
         work->box.width = work->window.width - 6;
         work->box.height = work->window.height - 6;
-        endPrintExtFunc(work->color, 101, &work->box);
-        for (i = 0; i < 3; i++) {
+        endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&work->box);
+        for (i = 0; i < SKILL_PAS_MESSAGE_COUNT; i++) {
             MoveSlide(&work->message[i].x, &target[i], 5.0f);
             if (work->message[i].x < 256)
                 eMessageMain(&work->message[i]);
         }
-        endPrintExtFunc(work->color, 102, 0);
+        endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
     }
 }
 
@@ -202,8 +202,8 @@ void MenuSkillInfoMain(void)
     short target;
 
     switch (work->state) {
-    case 0:
-        work->color = 0x00fffff0;
+    case SKILL_BLOCK_INIT:
+        work->color = SKILL_STYLE_WINDOW;
         WindowDXSet(&work->window);
         work->window.x = -16;
         work->window.style = work->color;
@@ -215,16 +215,16 @@ void MenuSkillInfoMain(void)
         work->info.x = 0;
         work->info.y = 0;
         work->info.text = 0;
-        work->window.state = 1;
+        work->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOWDX_STATE_READY;
         work->selected = -1;
         work->opened = 1;
         work->reasonShown = 0;
         memset(work->message, 0, sizeof(work->message));
-        work->state = 2;
+        work->state = SKILL_BLOCK_RUN;
         /* fallthrough */
-    case 2:
+    case SKILL_BLOCK_RUN:
         break;
     default:
         return;
@@ -290,7 +290,7 @@ void MenuSkillInfoMain(void)
             eMessageCpy(work->message, skillEmptyText);
         break;
     default:
-        target = 512;
+        target = SKILL_OFFSCREEN_BOTTOM;
         break;
     }
     work->info.text = work->message;
@@ -301,16 +301,16 @@ void MenuSkillInfoMain(void)
 void MenuSkillStatusMain(void)
 {
     MenuSkillStatusWork *status = MenuSkillStatus;
-    short targetX[8];
-    short targetY[8];
-    short targetWidth[8];
-    short targetHeight[8];
-    short targetOffset[8];
+    short targetX[SKILL_PARTY_MAX];
+    short targetY[SKILL_PARTY_MAX];
+    short targetWidth[SKILL_PARTY_MAX];
+    short targetHeight[SKILL_PARTY_MAX];
+    short targetOffset[SKILL_PARTY_MAX];
     int i;
 
     switch (status->state) {
-    case 0:
-        status->color = 0x00FFF000;
+    case SKILL_BLOCK_INIT:
+        status->color = SKILL_STYLE_STATUS;
         for (i = 0; i < MenuWork.partyCount; i++) {
             short chrNo = MenuSkillParty[i];
 
@@ -332,23 +332,23 @@ void MenuSkillStatusMain(void)
             status->panel[i].chrNo = chrNo;
             status->panel[i].enabled = 0;
             status->panel[i].offsetY = 0;
-            status->window[i].state = 1;
+            status->window[i].state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&status->window[i]);
-            status->window[i].state = 3;
+            status->window[i].state = WINDOWDX_STATE_READY;
         }
         for (i = 0; i < 1; i++) {
             eCursolSet(&status->cursor[i], 0);
             status->cursor[i].state = 0;
-            status->cursor[i].work = 0x00FFFFFF;
+            status->cursor[i].work = SKILL_STYLE_SPRITE;
         }
         status->cursorOn = 0;
         status->flags = 0;
         status->subState = 0;
         status->moveVert = 0;
         status->lastCursor = MenuWork.partyCursor;
-        status->state = 2;
+        status->state = SKILL_BLOCK_RUN;
         /* fall through */
-    case 2:
+    case SKILL_BLOCK_RUN:
         for (i = 0; i < MenuWork.partyCount; i++) {
             targetX[i] = (i & 1) * 816 - 272;
             targetY[i] = (i / 2) * 104 + 64;
@@ -359,15 +359,15 @@ void MenuSkillStatusMain(void)
         switch (MenuWork.state) {
         case SKILL_CHARACTER:
             if (MenuWork.flags & MENU_FLAG_ENTER) {
-                status->cursor[0].state = 32;
+                status->cursor[0].state = E_MODE_SHOW_START;
                 status->cursorOn = 1;
                 status->moveVert = 1;
-                if ((status->flags & 1) != 0) {
+                if ((status->flags & SKILL_STATUS_FLAG_SLID) != 0) {
                     if (i != MenuWork.partyCursor) {
                         status->window[i].x = (i & 1) * 816 - 272;
                         status->window[i].y = 24;
                     }
-                    status->flags &= ~1;
+                    status->flags &= ~SKILL_STATUS_FLAG_SLID;
                 }
             }
             for (i = 0; i < MenuWork.partyCount; i++) {
@@ -389,7 +389,7 @@ void MenuSkillStatusMain(void)
                 status->window[MenuWork.partyCursor].y = 32;
                 status->lastCursor = MenuWork.partyCursor;
             }
-            if ((status->flags & 1) != 0) {
+            if ((status->flags & SKILL_STATUS_FLAG_SLID) != 0) {
                 for (i = 0; i < MenuWork.partyCount; i++) {
                     if (i == MenuWork.partyCursor) {
                         targetX[i] = 264;
@@ -407,7 +407,7 @@ void MenuSkillStatusMain(void)
                     }
                 }
                 if (targetY[MenuWork.partyCursor] == status->window[MenuWork.partyCursor].y) {
-                    status->flags |= 1;
+                    status->flags |= SKILL_STATUS_FLAG_SLID;
                 }
             }
             status->cursorOn = 0;
@@ -432,16 +432,16 @@ void MenuSkillStatusMain(void)
                 }
             }
             if (i == MenuWork.partyCursor) {
-                status->window[i].style = 0x7F00;
+                status->window[i].style = SKILL_STYLE_STATUS_SELECTED;
             } else {
-                status->window[i].style = 0x7E00;
+                status->window[i].style = SKILL_STYLE_STATUS_IDLE;
             }
             WindowDXMain(&status->window[i]);
         }
         status->cursor[0].x = status->window[MenuWork.partyCursor].x + 3;
         status->cursor[0].y = status->window[MenuWork.partyCursor].y
                                      + status->window[MenuWork.partyCursor].height / 2 - 4;
-        status->cursor[0].work = 0x00FFFFFF;
+        status->cursor[0].work = SKILL_STYLE_SPRITE;
         eCursolMain(&status->cursor[0]);
         break;
     }
@@ -455,15 +455,15 @@ const char skillExtractQuestionText[16] = " Extract skill\?";
 void MenuSkillMenuMain(void)
 {
     MenuSkillMenuWork *self = MenuSkillMenu;
-    short target[2];
+    short target[SKILL_MENU_PANEL_COUNT];
     int i;
 
     switch (self->state) {
-    case 0:
-        self->color = 0x00FFFFF0;
-        for (i = 0; i < 2; i++) {
+    case SKILL_BLOCK_INIT:
+        self->color = SKILL_STYLE_WINDOW;
+        for (i = 0; i < SKILL_MENU_PANEL_COUNT; i++) {
             WindowDXSet(&self->window[i]);
-            self->window[i].x = 528;
+            self->window[i].x = SKILL_OFFSCREEN_RIGHT;
             self->window[i].width = 129;
             self->window[i].height = 78;
             self->window[i].style = self->color;
@@ -482,17 +482,17 @@ void MenuSkillMenuMain(void)
                 self->list[i].items = msg01_2_0036DD70[0];
                 self->list[i].prompt = msg01_2_0036DD70[1];
             }
-            self->window[i].state = 1;
+            self->window[i].state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&self->window[i]);
-            self->window[i].state = 3;
+            self->window[i].state = WINDOWDX_STATE_READY;
         }
         self->window[0].y = 176;
         self->window[1].y = 160;
-        self->state = 2;
+        self->state = SKILL_BLOCK_RUN;
         self->subState = 0;
         /* fall through */
-    case 2:
-        target[0] = 528;
+    case SKILL_BLOCK_RUN:
+        target[0] = SKILL_OFFSCREEN_RIGHT;
         target[1] = -182;
         switch (MenuWork.state) {
         case SKILL_COMMAND:
@@ -504,7 +504,7 @@ void MenuSkillMenuMain(void)
             self->list[1].cursor = MenuWork.itemCursor;
             break;
         }
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < SKILL_MENU_PANEL_COUNT; i++) {
             MoveSlide(&self->window[i].x, &target[i], 3.0f);
             WindowDXMain(&self->window[i]);
         }
@@ -526,8 +526,8 @@ void MenuSkillExMain(void)
     char *messageColor;
 
     switch (work->state) {
-    case 0:
-        work->color = 0x00fffff0;
+    case SKILL_BLOCK_INIT:
+        work->color = SKILL_STYLE_WINDOW;
         for (i = 0; i < 2; i++) {
             eRibbonSet(&work->ribbon[i], 3);
             work->ribbon[i].x = -272;
@@ -541,20 +541,20 @@ void MenuSkillExMain(void)
             work->number[i].work = work->color + 2;
         }
         eMessageSet(&work->message, msg00_3_0036DD78[2]);
-        work->message.mode = 32;
-        work->message.x = 528;
+        work->message.mode = E_MODE_SHOW_START;
+        work->message.x = SKILL_OFFSCREEN_RIGHT;
         work->message.y = 120;
         work->message.draw_parameter = work->color + 2;
-        work->state = 2;
+        work->state = SKILL_BLOCK_RUN;
         /* fallthrough */
-    case 2:
+    case SKILL_BLOCK_RUN:
         break;
     default:
         return;
     }
     ribbonTarget[1] = -272;
     ribbonTarget[0] = -272;
-    messageTarget = 528;
+    messageTarget = SKILL_OFFSCREEN_RIGHT;
     switch (MenuWork.state) {
     case SKILL_EQUIP:
         messageTarget = 288;
@@ -592,13 +592,13 @@ void MenuSkillExMain(void)
     messageColor = (char *)msg00_3_0036DD78[2] + 1;
     unit = func_A191C0(MenuWork.characterNo);
     if (MenuWork.list_select < 0 || unit->setSkill[0] + unit->setSkill[1] + unit->setSkill[2] == 0) {
-        messageColor[2] = 64;
-        messageColor[1] = 64;
-        messageColor[0] = 64;
+        messageColor[2] = SKILL_TINT_DIM;
+        messageColor[1] = SKILL_TINT_DIM;
+        messageColor[0] = SKILL_TINT_DIM;
     } else {
-        messageColor[2] = -128;
-        messageColor[1] = -128;
-        messageColor[0] = -128;
+        messageColor[2] = SKILL_TINT_BRIGHT;
+        messageColor[1] = SKILL_TINT_BRIGHT;
+        messageColor[0] = SKILL_TINT_BRIGHT;
     }
     MoveSlide(&work->message.x, &messageTarget, 3.0f);
     eMessageMain(&work->message);
@@ -612,26 +612,26 @@ void MenuSkillL1R1Main(void)
     int side_index;
 
     switch (self->state) {
-    case 0: {
+    case SKILL_BLOCK_INIT: {
         SkillL1R1SpriteIdPair spriteIds = skillL1R1SpriteTable[0];
 
-        self->spriteWork = 0x00FFFFFF;
+        self->spriteWork = SKILL_STYLE_SPRITE;
         for (side_index = 0; side_index < 2; side_index++) {
             eSpriteSet(&self->sprite[side_index], spriteIds.id[side_index]);
             self->sprite[side_index].work = self->spriteWork;
             self->sprite[side_index].y = 214;
         }
         self->sprite[0].x = -45;
-        self->sprite[1].x = 528;
+        self->sprite[1].x = SKILL_OFFSCREEN_RIGHT;
         slide_offset_reference = self->slideOffset;
         self->slideOffset[1] = 0;
         self->slideOffset[0] = 0;
         /* separate load keeps the active screen state in the loop index register */
-        side_index = 2;
+        side_index = SKILL_BLOCK_RUN;
         self->state = side_index;
         break;
     }
-    case 2:
+    case SKILL_BLOCK_RUN:
         slide_offset_reference = self->slideOffset;
         break;
     default:
@@ -643,14 +643,14 @@ void MenuSkillL1R1Main(void)
         int menuState = MenuWork.state;
 
         target[0] = -45;
-        target[1] = 528;
+        target[1] = SKILL_OFFSCREEN_RIGHT;
         if (menuState == SKILL_COMMAND) {
             target[0] = 8;
             target[1] = 475;
             if (PadData.pressed & PAD_L1) {
-                self->slideOffset[0] = -6;
+                self->slideOffset[0] = -SKILL_ARROW_KICK;
             } else if (PadData.pressed & PAD_R1) {
-                self->slideOffset[1] = 6;
+                self->slideOffset[1] = SKILL_ARROW_KICK;
             }
         }
 
@@ -687,8 +687,8 @@ void MenuSkillSetListMain(void)
     int i;
 
     switch (self->state) {
-    case 0:
-        self->color = 0x00FFFFF0;
+    case SKILL_BLOCK_INIT:
+        self->color = SKILL_STYLE_WINDOW;
         WindowDXSet(&self->window);
         self->window.x = -222;
         self->window.style = self->color;
@@ -696,18 +696,18 @@ void MenuSkillSetListMain(void)
         self->window.width = 209;
         self->window.height = 78;
         self->window.tag_id = skillSetListText;
-        self->window.state = 1;
+        self->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&self->window);
-        self->window.state = 3;
+        self->window.state = WINDOWDX_STATE_READY;
         for (i = 0; i < 4; i++) {
             eMessageSet(&self->message[i], 0);
-            self->message[i].mode = 32;
+            self->message[i].mode = E_MODE_SHOW_START;
             self->message[i].draw_parameter = self->color + 2;
         }
         self->message[3].text = msg00_4_0036DD88[0];
-        self->state = 2;
+        self->state = SKILL_BLOCK_RUN;
         /* fall through */
-    case 2:
+    case SKILL_BLOCK_RUN:
         targetX = -222;
         if (MenuWork.state == SKILL_COMMAND || MenuWork.state == SKILL_EQUIP)
             targetX = 16;
@@ -717,8 +717,8 @@ void MenuSkillSetListMain(void)
         for (i = 0; i < 3; i++) {
             if (unit->setSkill[i] != 0) {
                 self->message[i].x = self->window.x + 43;
-                self->message[i].y = self->window.y + i * 24 + 3;
-                self->message[i].text = MenuTextGet(0x80000 + (unsigned short)unit->setSkill[i])->name;
+                self->message[i].y = self->window.y + i * SKILL_ROW_HEIGHT + 3;
+                self->message[i].text = MenuTextGet(SKILL_TEXT_TYPE +(unsigned short)unit->setSkill[i])->name;
                 eMessageMain(&self->message[i]);
             }
         }
@@ -740,15 +740,15 @@ void MenuSkillCategoryMain(void)
     int icon_index;
 
     switch (work->state) {
-    case 0: {
+    case SKILL_BLOCK_INIT: {
         SkillCategoryIconIds ids = skillCategoryIconTable;
 
-        work->iconResetWork = 0x00FFFFFE;
-        for (icon_index = 0; icon_index < 5; icon_index++) {
+        work->iconResetWork = SKILL_STYLE_ICON;
+        for (icon_index = 0; icon_index < SKILL_CATEGORY_ICON_COUNT; icon_index++) {
             eSpriteSet(&work->icons[icon_index].sprite, ids.id[icon_index]);
             work->icons[icon_index].sprite.work = work->iconResetWork;
         }
-        work->pulseCounter = 8;
+        work->pulseCounter = SKILL_PULSE_MAX;
         work->icons[0].flashStep = 1;
         work->phase = 0;
         work->tickCounter = 0;
@@ -758,11 +758,11 @@ void MenuSkillCategoryMain(void)
         work->edgeDelta[1] = 0;
         edge_delta_reference[0] = 0;
         /* separate load keeps the active screen state in the loop index register */
-        icon_index = 2;
+        icon_index = SKILL_BLOCK_RUN;
         work->state = icon_index;
     }
     break;
-    case 2:
+    case SKILL_BLOCK_RUN:
         edge_delta_reference = work->edgeDelta;
         break;
     default:
@@ -770,27 +770,27 @@ void MenuSkillCategoryMain(void)
     }
 
     {
-        for (icon_index = 0; icon_index < 2; icon_index++) {
+        for (icon_index = 0; icon_index < SKILL_CATEGORY_ARROW_COUNT; icon_index++) {
             SkillCategoryIcon *icon = &work->icons[icon_index];
 
-            icon->sprite.color[2] = 0x40;
-            icon->sprite.color[1] = 0x40;
-            icon->sprite.color[0] = 0x40;
+            icon->sprite.color[2] = SKILL_TINT_DIM;
+            icon->sprite.color[1] = SKILL_TINT_DIM;
+            icon->sprite.color[0] = SKILL_TINT_DIM;
         }
 
         switch (MenuWork.state) {
         case SKILL_LEARN:
-            for (icon_index = 0; icon_index < 2; icon_index++) {
+            for (icon_index = 0; icon_index < SKILL_CATEGORY_ARROW_COUNT; icon_index++) {
                 SkillCategoryIcon *icon = &work->icons[icon_index];
 
-                icon->sprite.color[2] = -0x80;
-                icon->sprite.color[1] = -0x80;
-                icon->sprite.color[0] = -0x80;
+                icon->sprite.color[2] = SKILL_TINT_BRIGHT;
+                icon->sprite.color[1] = SKILL_TINT_BRIGHT;
+                icon->sprite.color[0] = SKILL_TINT_BRIGHT;
             }
             if (PadData.repeat & PAD_LEFT) {
-                work->edgeDelta[0] = -6;
+                work->edgeDelta[0] = -SKILL_ARROW_KICK;
             } else if (PadData.repeat & PAD_RIGHT) {
-                work->edgeDelta[1] = 6;
+                work->edgeDelta[1] = SKILL_ARROW_KICK;
             }
             /* fall through */
         case SKILL_CONFIRM:
@@ -801,7 +801,7 @@ void MenuSkillCategoryMain(void)
             work->icons[0].flashStep = 1;
             break;
         default:
-            if (work->pulseCounter != 8) {
+            if (work->pulseCounter != SKILL_PULSE_MAX) {
                 work->pulseCounter++;
             }
             work->icons[0].flashStep = 0;
@@ -811,7 +811,7 @@ void MenuSkillCategoryMain(void)
         {
             SkillCategoryEdgeStep step = skillCategoryEdgeStep[0];
 
-            for (icon_index = 0; icon_index < 2; icon_index++) {
+            for (icon_index = 0; icon_index < SKILL_CATEGORY_ARROW_COUNT; icon_index++) {
                 if (work->edgeDelta[icon_index] != 0) {
                     work->edgeDelta[icon_index] = work->edgeDelta[icon_index] + step.side[icon_index];
                 }
@@ -820,13 +820,13 @@ void MenuSkillCategoryMain(void)
 
         if (work->tickCounter & 1) {
             work->icons[0].flashLevel += work->icons[0].flashStep;
-            if (work->icons[0].flashLevel >= 11) {
+            if (work->icons[0].flashLevel >= SKILL_FLASH_MAX) {
                 work->icons[0].flashStep = -work->icons[0].flashStep;
             }
         }
         work->tickCounter++;
 
-        for (icon_index = 0; icon_index < 2; icon_index++) {
+        for (icon_index = 0; icon_index < SKILL_CATEGORY_ARROW_COUNT; icon_index++) {
             float cosVal;
             int negTwicePulse;
             unsigned char edge;
@@ -841,7 +841,7 @@ void MenuSkillCategoryMain(void)
             work->icons[icon_index].sprite.alpha = (unsigned char)(128.0f - (float)work->pulseCounter * 0.125f * 128.0f);
         }
 
-        for (icon_index = 2; icon_index < 5; icon_index++) {
+        for (icon_index = SKILL_CATEGORY_ARROW_COUNT; icon_index < SKILL_CATEGORY_ICON_COUNT; icon_index++) {
             float cosVal;
             int negTwicePulse;
             short x;
@@ -857,18 +857,18 @@ void MenuSkillCategoryMain(void)
                 SkillCategoryIcon *icon = &work->icons[icon_index];
 
                 if (icon_index - 2 == MenuWork.mode) {
-                    icon->sprite.color[2] = -0x80;
-                    icon->sprite.color[1] = -0x80;
-                    icon->sprite.color[0] = -0x80;
+                    icon->sprite.color[2] = SKILL_TINT_BRIGHT;
+                    icon->sprite.color[1] = SKILL_TINT_BRIGHT;
+                    icon->sprite.color[0] = SKILL_TINT_BRIGHT;
                 } else {
-                    icon->sprite.color[2] = 0x40;
-                    icon->sprite.color[1] = 0x40;
-                    icon->sprite.color[0] = 0x40;
+                    icon->sprite.color[2] = SKILL_TINT_DIM;
+                    icon->sprite.color[1] = SKILL_TINT_DIM;
+                    icon->sprite.color[0] = SKILL_TINT_DIM;
                 }
             }
         }
 
-        for (icon_index = 0; icon_index < 5; icon_index++) {
+        for (icon_index = 0; icon_index < SKILL_CATEGORY_ICON_COUNT; icon_index++) {
             eSpriteMain(&work->icons[icon_index].sprite);
         }
     }
@@ -911,12 +911,12 @@ static int MenuSkillListChange00(void)
     window->title = skillListHeaderText;
     window->draw_flags = 7;
     window->columns = 1;
-    window->rows = 8;
+    window->rows = SKILL_LIST_ROWS;
     window->width = 276;
     window->height = 198;
     window->items = MenuListGet(0);
     WindowSPItemChange(window);
-    WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.mode * 5]);
+    WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.mode * SKILL_KEEP_SLOT_SIZE]);
     window->mode = 4;
     return WindowSPSelect(window, 0);
 }
@@ -942,12 +942,12 @@ static int MenuSkillListChange01(void)
     window->title = skillSetText;
     window->draw_flags = 3;
     window->columns = 1;
-    window->rows = 8;
+    window->rows = SKILL_LIST_ROWS;
     window->width = 256;
     window->height = 198;
     window->items = MenuListGet(0);
     WindowSPItemChange(window);
-    WindowSPSetSelect(window, &MenuKeepSelect[20]);
+    WindowSPSetSelect(window, &MenuKeepSelect[KEEP_EQUIP * SKILL_KEEP_SLOT_SIZE]);
     return WindowSPSelect(window, 0);
 }
 
@@ -959,12 +959,12 @@ void MenuSkillListMain(void)
     int i;
 
     switch (work->state) {
-    case 0:
+    case SKILL_BLOCK_INIT:
     {
-        work->window.x = 528;
+        work->window.x = SKILL_OFFSCREEN_RIGHT;
         work->window.y = 64;
-        work->color = 0x00fffff8;
-        work->window.style = 0x00fffff8;
+        work->color = SKILL_STYLE_LIST;
+        work->window.style = SKILL_STYLE_LIST;
         work->window.draw_flags = 7;
         work->window.title = skillEmptyText;
         work->window.rows = 11;
@@ -975,104 +975,104 @@ void MenuSkillListMain(void)
         work->window.state = 17;
         for (equippedCount = 0; equippedCount < 3; equippedCount++) {
             eSpriteSet(&work->equipped[equippedCount], 1546);
-            work->equipped[equippedCount].work = 0x00ffffff;
+            work->equipped[equippedCount].work = SKILL_STYLE_SPRITE;
         }
-        for (equippedCount = 0; equippedCount < 8; equippedCount++) {
+        for (equippedCount = 0; equippedCount < SKILL_LIST_ROWS; equippedCount++) {
             eNumberSet(&work->levelNumber[equippedCount], 0);
-            work->levelNumber[equippedCount].work = 0x00fffffa;
+            work->levelNumber[equippedCount].work = SKILL_STYLE_LEVEL_NUMBER;
         }
         work->resetPending = 0;
-        work->state = 2;
+        work->state = SKILL_BLOCK_RUN;
         work->visible = 0;
-        work->displayMode = 0;
+        work->displayMode = SKILL_LIST_DISPLAY_NONE;
         /* fallthrough */
     }
-    case 2:
+    case SKILL_BLOCK_RUN:
         work->visible = 0;
-        work->displayMode = 0;
+        work->displayMode = SKILL_LIST_DISPLAY_NONE;
         switch (MenuWork.state) {
         case SKILL_LEARN:
-            work->state = 10;
+            work->state = SKILL_LIST_LEARN_OPEN;
             break;
         case SKILL_EQUIP:
-            work->state = 20;
+            work->state = SKILL_LIST_EQUIP_OPEN;
             break;
         }
         break;
-    case 10:
-    case 20:
-        work->window.x = 528;
+    case SKILL_LIST_LEARN_OPEN:
+    case SKILL_LIST_EQUIP_OPEN:
+        work->window.x = SKILL_OFFSCREEN_RIGHT;
         work->window.y = 160;
         work->visible = 1;
-        if (work->state == 10) {
+        if (work->state == SKILL_LIST_LEARN_OPEN) {
             MenuSkillListChange00();
-            work->displayMode = 1;
-            work->state = 11;
+            work->displayMode = SKILL_LIST_DISPLAY_LEARN;
+            work->state = SKILL_LIST_LEARN_IN;
         } else {
             MenuSkillListChange01();
-            work->displayMode = 2;
-            work->state = 21;
+            work->displayMode = SKILL_LIST_DISPLAY_EQUIP;
+            work->state = SKILL_LIST_EQUIP_IN;
         }
         work->window.state = 17;
         /* fallthrough */
-    case 11:
-    case 13:
-    case 21:
-        target = 528;
+    case SKILL_LIST_LEARN_IN:
+    case SKILL_LIST_OUT:
+    case SKILL_LIST_EQUIP_IN:
+        target = SKILL_OFFSCREEN_RIGHT;
         switch (work->state) {
-        case 11:
+        case SKILL_LIST_LEARN_IN:
             target = 220;
             break;
-        case 21:
+        case SKILL_LIST_EQUIP_IN:
             target = 240;
             break;
         }
         MoveSlide(&work->window.x, &target, 3.0f);
         if (work->window.x == target) {
             switch (work->state) {
-            case 11:
-            case 21:
-                work->state = 12;
+            case SKILL_LIST_LEARN_IN:
+            case SKILL_LIST_EQUIP_IN:
+                work->state = SKILL_LIST_SHOWN;
                 break;
-            case 13:
-                work->state = 2;
+            case SKILL_LIST_OUT:
+                work->state = SKILL_BLOCK_RUN;
                 break;
             }
         }
         break;
-    case 12:
+    case SKILL_LIST_SHOWN:
         if (MenuWork.state == SKILL_COMMAND)
-            work->state = 13;
+            work->state = SKILL_LIST_OUT;
         break;
     }
     if (work->visible == 0)
         return;
     WindowSPMain(&work->window);
-    if (work->displayMode != 0) {
+    if (work->displayMode != SKILL_LIST_DISPLAY_NONE) {
         equippedCount = 0;
         if (work->window.item_count > 0) {
-            for (i = 0; i < 8; i++) {
+            for (i = 0; i < SKILL_LIST_ROWS; i++) {
                 int row = work->window.current_row + i;
                 if (row < work->window.item_count) {
-                    if (work->displayMode == 1) {
+                    if (work->displayMode == SKILL_LIST_DISPLAY_LEARN) {
                         work->levelNumber[i].x = work->window.x + work->window.width - 85;
-                        work->levelNumber[i].y = work->window.y + i * 24 + 8;
+                        work->levelNumber[i].y = work->window.y + i * SKILL_ROW_HEIGHT + 8;
                         work->levelNumber[i].digits = 1;
                         work->levelNumber[i].format = 0;
                         work->levelNumber[i].value = work->window.items[row].status;
                         if (work->window.items[row].flag == 0) {
-                            work->levelNumber[i].color_b = -128;
-                            work->levelNumber[i].color_g = -128;
-                            work->levelNumber[i].color_r = -128;
+                            work->levelNumber[i].color_b = SKILL_TINT_BRIGHT;
+                            work->levelNumber[i].color_g = SKILL_TINT_BRIGHT;
+                            work->levelNumber[i].color_r = SKILL_TINT_BRIGHT;
                         } else {
-                            work->levelNumber[i].color_b = 64;
-                            work->levelNumber[i].color_g = 64;
-                            work->levelNumber[i].color_r = 64;
+                            work->levelNumber[i].color_b = SKILL_TINT_DIM;
+                            work->levelNumber[i].color_g = SKILL_TINT_DIM;
+                            work->levelNumber[i].color_r = SKILL_TINT_DIM;
                         }
                         eNumberMain(&work->levelNumber[i]);
                     } else if (work->window.items[row].status != 0) {
                         work->equipped[equippedCount].x = work->window.x + work->window.width - 39;
-                        work->equipped[equippedCount].y = work->window.y + i * 24 + 3;
+                        work->equipped[equippedCount].y = work->window.y + i * SKILL_ROW_HEIGHT + 3;
                         eSpriteMain(&work->equipped[equippedCount]);
                         equippedCount++;
                     }
@@ -1114,37 +1114,37 @@ void MenuSkill(void)
         int id;
 
         heap = MainMenuWorkEnd;
-        SkillDataBuf = (MenuSkillData *)(((int)heap + 0x7FF) & ~0x7FF);
+        SkillDataBuf = (MenuSkillData *)(((int)heap + (SKILL_ALIGN - 1)) & ~(SKILL_ALIGN - 1));
         xglCdReadFile(skillDataPath, SkillDataBuf, 0, 1);
         heap = (unsigned char *)SkillDataBuf + SKILL_DATA_SIZE;
         MenuSkillPas = heap;
         heap = (unsigned char *)MenuSkillPas + SKILL_PAS_SIZE;
-        MenuSkillPas->state = 0;
+        MenuSkillPas->state = SKILL_BLOCK_INIT;
         MenuSkillInfo = heap;
         heap = (unsigned char *)MenuSkillInfo + SKILL_INFO_SIZE;
-        MenuSkillInfo->state = 0;
+        MenuSkillInfo->state = SKILL_BLOCK_INIT;
         MenuSkillStatus = heap;
         heap = (unsigned char *)MenuSkillStatus + SKILL_STATUS_SIZE;
-        MenuSkillStatus->state = 0;
+        MenuSkillStatus->state = SKILL_BLOCK_INIT;
         MenuSkillMenu = heap;
         heap = (unsigned char *)MenuSkillMenu + SKILL_MENU_SIZE;
-        MenuSkillMenu->state = 0;
+        MenuSkillMenu->state = SKILL_BLOCK_INIT;
         MenuSkillEx = heap;
         heap = (unsigned char *)MenuSkillEx + SKILL_EX_SIZE;
-        MenuSkillEx->state = 0;
+        MenuSkillEx->state = SKILL_BLOCK_INIT;
         MenuSkillL1R1 = heap;
         heap = (unsigned char *)MenuSkillL1R1 + SKILL_L1R1_SIZE;
-        MenuSkillL1R1->state = 0;
+        MenuSkillL1R1->state = SKILL_BLOCK_INIT;
         MenuSkillSetList = heap;
         heap = (unsigned char *)MenuSkillSetList + SKILL_SET_LIST_SIZE;
-        MenuSkillSetList->state = 0;
+        MenuSkillSetList->state = SKILL_BLOCK_INIT;
         MenuSkillCategory = heap;
         heap = (unsigned char *)MenuSkillCategory + SKILL_CATEGORY_SIZE;
-        MenuSkillCategory->state = 0;
+        MenuSkillCategory->state = SKILL_BLOCK_INIT;
         MenuSkillList = heap;
-        MenuSkillList->state = 0;
+        MenuSkillList->state = SKILL_BLOCK_INIT;
         MenuWork.next_state = SKILL_CHARACTER;
-        MenuWork.wait = 12;
+        MenuWork.wait = SKILL_WAIT_OPEN;
         MenuWork.flags = 0;
         MenuWork.partyCursor = 0;
         MenuWork.partyCount = 0;
@@ -1214,7 +1214,7 @@ void MenuSkill(void)
         } else if (PadData.pressed == PAD_CIRCLE) {
             if (MenuMainCharCheck(MenuWork.characterNo) != 0) {
                 MenuWork.next_state = SKILL_COMMAND;
-                MenuWork.wait = 24;
+                MenuWork.wait = SKILL_WAIT_COMMAND;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
                 MenuWork.char_denied = 0;
             } else {
@@ -1266,24 +1266,24 @@ void MenuSkill(void)
             xglSoundEffectNormalID(SE_CURSOR, 0);
             MenuKeepSelectReset();
         }
-        MenuWork.commandCursor = MenuSelectMove(MenuWork.commandCursor, 3, 0);
+        MenuWork.commandCursor = MenuSelectMove(MenuWork.commandCursor, SKILL_COMMAND_COUNT, 0);
         if (PadData.pressed == PAD_CIRCLE) {
-            unsigned char command_state[3] = { SKILL_LEARN, SKILL_EQUIP, SKILL_CHARACTER };
+            unsigned char command_state[SKILL_COMMAND_COUNT] = { SKILL_LEARN, SKILL_EQUIP, SKILL_CHARACTER };
 
             MenuWork.list_select = -1;
             MenuWork.next_state = command_state[MenuWork.commandCursor];
             if (MenuWork.next_state == SKILL_CHARACTER) {
-                MenuWork.wait = 12;
+                MenuWork.wait = SKILL_WAIT_OPEN;
                 MenuKeepSelectReset();
                 xglSoundEffectNormalID(SE_CANCEL, 0);
             } else {
-                MenuWork.wait = 8;
+                MenuWork.wait = SKILL_WAIT_CHOICE;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
             }
         }
         if (PadData.pressed == PAD_CROSS) {
             MenuWork.next_state = SKILL_CHARACTER;
-            MenuWork.wait = 12;
+            MenuWork.wait = SKILL_WAIT_OPEN;
             MenuKeepSelectReset();
             xglSoundEffectNormalID(SE_CANCEL, 0);
         }
@@ -1298,26 +1298,26 @@ void MenuSkill(void)
         if (MenuWork.wait == 0) {
             MenuWork.list_select = WindowSPSelect(&MenuSkillList->window, PadData.repeat);
             if (MenuWork.list_select >= 0) {
-                WindowSPKeepSelect(&MenuSkillList->window, &MenuKeepSelect[MenuWork.mode * 5]);
+                WindowSPKeepSelect(&MenuSkillList->window, &MenuKeepSelect[MenuWork.mode * SKILL_KEEP_SLOT_SIZE]);
                 MenuWork.list_accessory = MenuSortGet(0, MenuWork.list_select);
             }
             if (PadData.repeat == PAD_LEFT) {
                 if (MenuWork.mode == 0) {
-                    MenuWork.mode = 2;
+                    MenuWork.mode = SKILL_LIST_TAB_COUNT - 1;
                 } else {
                     MenuWork.mode--;
                 }
-                WindowSPKeepSelectCheck(&MenuKeepSelect[MenuWork.mode * 5]);
+                WindowSPKeepSelectCheck(&MenuKeepSelect[MenuWork.mode * SKILL_KEEP_SLOT_SIZE]);
                 MenuWork.list_select = MenuSkillListChange00();
                 xglSoundEffectNormalID(SE_CURSOR, 0);
             }
             if (PadData.repeat == PAD_RIGHT) {
-                if (MenuWork.mode == 2) {
+                if (MenuWork.mode == SKILL_LIST_TAB_COUNT - 1) {
                     MenuWork.mode = 0;
                 } else {
                     MenuWork.mode++;
                 }
-                WindowSPKeepSelectCheck(&MenuKeepSelect[MenuWork.mode * 5]);
+                WindowSPKeepSelectCheck(&MenuKeepSelect[MenuWork.mode * SKILL_KEEP_SLOT_SIZE]);
                 MenuWork.list_select = MenuSkillListChange00();
                 xglSoundEffectNormalID(SE_CURSOR, 0);
             }
@@ -1334,7 +1334,7 @@ void MenuSkill(void)
                     && character->skill_points >= cost) {
                     xglSoundEffectNormalID(SE_DECIDE, 0);
                     MenuWork.next_state = SKILL_CONFIRM;
-                    MenuWork.wait = 8;
+                    MenuWork.wait = SKILL_WAIT_CHOICE;
                 } else {
                     xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
@@ -1342,7 +1342,7 @@ void MenuSkill(void)
             }
             if (PadData.pressed == PAD_CROSS) {
                 MenuWork.next_state = SKILL_COMMAND;
-                MenuWork.wait = 8;
+                MenuWork.wait = SKILL_WAIT_CHOICE;
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.commandCursor = 0;
                 }
@@ -1362,7 +1362,7 @@ void MenuSkill(void)
         if (MenuWork.wait != 0) {
             break;
         }
-        MenuWork.itemCursor = MenuSelectMove(MenuWork.itemCursor, 2, 0);
+        MenuWork.itemCursor = MenuSelectMove(MenuWork.itemCursor, SKILL_CONFIRM_CHOICE_COUNT, 0);
         if (PadData.pressed == PAD_CIRCLE) {
             if (MenuWork.itemCursor == 0) {
                 xglSoundEffectNormalID(SE_DECIDE, 0);
@@ -1405,7 +1405,7 @@ void MenuSkill(void)
         }
         MenuWork.list_select = WindowSPSelect(&MenuSkillList->window, PadData.repeat);
         if (MenuWork.list_select >= 0) {
-            WindowSPKeepSelect(&MenuSkillList->window, &MenuKeepSelect[KEEP_EQUIP * 5]);
+            WindowSPKeepSelect(&MenuSkillList->window, &MenuKeepSelect[KEEP_EQUIP * SKILL_KEEP_SLOT_SIZE]);
         }
         if (PadData.repeat == PAD_SQUARE && MenuWork.list_select >= 0) {
             int start = MenuWork.list_select + 1;
@@ -1439,8 +1439,8 @@ void MenuSkill(void)
         if (PadData.pressed == PAD_CROSS) {
             xglSoundEffectNormalID(SE_CANCEL, 0);
             MenuWork.next_state = SKILL_COMMAND;
-            MenuWork.wait = 8;
-            WindowSPKeepSelectCheck(&MenuKeepSelect[KEEP_EQUIP * 5]);
+            MenuWork.wait = SKILL_WAIT_CHOICE;
+            WindowSPKeepSelectCheck(&MenuKeepSelect[KEEP_EQUIP * SKILL_KEEP_SLOT_SIZE]);
             if (MenuCursorKeepCheck() == 0) {
                 MenuWork.commandCursor = 0;
             }
@@ -1450,7 +1450,7 @@ void MenuSkill(void)
     /* Leaving the menu. */
     case SKILL_LEAVE:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
-            MenuWork.wait = 16;
+            MenuWork.wait = SKILL_WAIT_LEAVE;
         }
         if (MenuWork.wait == 0) {
             MenuWork.next_state = SKILL_EXIT;

@@ -23,6 +23,171 @@
 #define SCE_CST_ATTR 0x0002
 #define SCE_STAT_ATTRIBUTE_WORD 1
 
+/* Byte offsets inside PadData (XglPadRecord of pad 1; pad 2 is 0x68 further). */
+#define PAD_OFS_HELD 40
+#define PAD_OFS_PRESSED 42
+#define PAD_OFS_REPEATED 44
+#define PAD2_OFS_REPEATED 148
+#define PAD_OFS_HORIZONTAL_DEAD_ZONE 0x4E
+#define PAD_OFS_VERTICAL_DEAD_ZONE 0x4F
+
+/* Stick dead zone the test menu sets on pad 1. */
+#define YAJIMA_PAD_DEAD_ZONE 0x40
+
+/* Colours handed to xglRenderClearColor and the font printer. */
+#define CLEAR_COLOR_BLACK 0x80000000
+#define CLEAR_COLOR_MENU 0x80004000
+#define FONT_COLOR_WHITE 0xFFFFFF
+
+/* Free EE RAM the tests use as scratch (to the end of the 32 MB). */
+#define DEBUG_BUFFER_BASE 0x01000000
+#define DEBUG_BUFFER_SIZE 0x1000000
+#define DEBUG_FONT_TEXT_BUFFER 0x01000100
+#define DEBUG_UML_WINDOW_TEX_1 0x1100000
+#define DEBUG_UML_WINDOW_TEX_2 0x1200000
+#define MC_CARDDATA_BUFFER 0x01002000
+#define OVERLAY_OV02 2
+
+#define SCE_CREAT 0x200
+#define SCE_TRUNC 0x400
+#define SCE_DIR_MODE_RWX 0x1ff
+
+/* sceDevctl commands: hdd0 (HDIOC_STATUS is spelled by its printf) and pfs. */
+#define HDIOC_DEV9OFF 0x4806
+#define HDIOC_STATUS 0x4807
+#define PDIOC_ZONESZ 0x5001
+#define PDIOC_ZONEFREE 0x5002
+#define PDIOC_CLOSEALL 0x5003
+/* sceIoctl2 on a partition: add a sub-partition of the size string. */
+#define HIOCADDSUB 0x6801
+/* Zone size sceFormat gives the pfs "__common" partition. */
+#define PFS_ZONE_SIZE 0x2000
+/* Zones left unwritten by the dummy fill. */
+#define HDD_DUMMY_RESERVED_ZONES 3
+#define HDD_TEST_SAVE_FOLDER_COUNT 1024
+#define HDD_TEST_DUMMY_FOLDER_COUNT 256
+/* The 1024-folder test prints every 32nd mkdir. */
+#define HDD_TEST_PRINT_INTERVAL_MASK 31
+
+/* Memory-card test: xglMcRequest operations. */
+#define MC_REQ_FREE_SPACE 1
+#define MC_REQ_EXIST 2
+#define MC_REQ_LOAD 4
+#define MC_REQ_SAVE 6
+#define MC_REQ_CREATE 8
+#define MC_REQ_FORMAT 9
+#define MC_REQ_UNFORMAT 10
+
+/* xglMcMain per-port status halfwords. */
+#define MC_PORT_READY 1
+#define MC_PORT_BUSY 0xFF
+
+/* Ports 0 and 1 are the memory-card slots; the HDD is listed as port 2. */
+#define MC_PORT_HDD 2
+#define MC_PORT_COUNT 3
+#define MC_SAVE_FILE_COUNT 100
+/* Load/Save/Format/Unformat and, for the HDD, Load/Save. */
+#define MC_MENU_ITEM_COUNT 4
+#define MC_HDD_MENU_ITEM_COUNT 2
+#define SAVE_DATA_SIZE 0x163B0
+#define SCE_MC_ICON_SYS_SIZE 964
+#define MC_EASY_SAVE_DUMMY_SIZE 0x77D800
+#define MC_CREATE_PROGRESS_STEPS 14
+#define SAVE_FLAGS_COUNT 128
+
+/* MemcardTest state machine: the high nibble selects the screen family. */
+enum MemcardTestState {
+    MCTEST_STATE_INIT = 0x00,
+    MCTEST_STATE_SELECT_PORT = 0x01,
+    MCTEST_STATE_MENU_INIT = 0x10,
+    MCTEST_STATE_MENU = 0x11,
+    MCTEST_STATE_LOAD_LIST = 0x20,
+    MCTEST_STATE_LOAD_CHECKING = 0x21,
+    MCTEST_STATE_LOAD_NO_FILE = 0x22,
+    MCTEST_STATE_LOAD_SELECT = 0x23,
+    MCTEST_STATE_LOAD_READING = 0x24,
+    MCTEST_STATE_SAVE_QUERY_FREE = 0x30,
+    MCTEST_STATE_SAVE_CHECKING_FREE = 0x31,
+    MCTEST_STATE_SAVE_SELECT_FILE = 0x32,
+    MCTEST_STATE_SAVE_CREATE_CONFIRM = 0x33,
+    MCTEST_STATE_SAVE_CREATING = 0x34,
+    MCTEST_STATE_SAVE_CHECKING_FILE = 0x35,
+    MCTEST_STATE_SAVE_OVERWRITE_CONFIRM = 0x36,
+    MCTEST_STATE_SAVE_START = 0x37,
+    MCTEST_STATE_SAVE_WRITING = 0x38,
+    MCTEST_STATE_FORMAT_INIT = 0x40,
+    MCTEST_STATE_FORMAT_CONFIRM = 0x41,
+    MCTEST_STATE_FORMATTING = 0x42,
+    MCTEST_STATE_FORMAT_DONE = 0x43,
+    MCTEST_STATE_UNFORMAT_INIT = 0x50,
+    MCTEST_STATE_UNFORMAT_CONFIRM = 0x51,
+    MCTEST_STATE_UNFORMATTING = 0x52,
+    MCTEST_STATE_UNFORMAT_DONE = 0x53,
+    MCTEST_STATE_HDD_MENU_INIT = 0x60,
+    MCTEST_STATE_HDD_MENU = 0x61,
+    MCTEST_STATE_HDD_LOAD_LIST = 0x70,
+    MCTEST_STATE_HDD_LOAD_NO_FILE = 0x71,
+    MCTEST_STATE_HDD_LOAD_SELECT = 0x72,
+    MCTEST_STATE_HDD_SAVE_INIT = 0x80,
+    MCTEST_STATE_HDD_SAVE_SELECT_FILE = 0x81,
+    MCTEST_STATE_HDD_SAVE_CREATE_CONFIRM = 0x82,
+    MCTEST_STATE_HDD_SAVE_OVERWRITE_CONFIRM = 0x83,
+    MCTEST_STATE_HDD_SAVE_WRITE = 0x84
+};
+
+/* Top-level test menu: row i dispatches func_51[i - 1]. */
+enum YajimaMenuAction {
+    YAJIMA_MENU_FONT = 1,
+    YAJIMA_MENU_UMLDISP,
+    YAJIMA_MENU_HDD,
+    YAJIMA_MENU_MEMCARD,
+    YAJIMA_MENU_DATABASE,
+    YAJIMA_MENU_MOVIE,
+    YAJIMA_MENU_XTXDECODE,
+    YAJIMA_MENU_COUNT = 7
+};
+
+/* Movie player list length (name_43). */
+#define MOVIE_NAME_COUNT 103
+
+/* umn_flags bit that suppresses the UMN text shake effect (ov02 tya_uml.c reads it). */
+#define UMN_FLAG_SHAKE_OFF 0x10
+#define UML_FILE_COUNT 10000
+#define UML_FILE_FAST_STEP 100
+#define UML_SCROLL_STEP 8
+
+/* XTX decode: "#TEX" "UTL1" header magic as two little-endian words. */
+#define XTX_MAGIC_0 0x58455423
+#define XTX_MAGIC_1 0x314C5455
+#define XTX_LIST_BUFFER 0x01000000
+#define XTX_LIST_BUFFER_SIZE 0x10000
+#define XTX_IMAGE_BUFFER 0x01010000
+#define XTX_IMAGE_BUFFER_SIZE 0x400000
+#define XTX_IMAGE_HEADER_CLEAR_SIZE 256
+#define XTX_IMAGE_DATA_OFFSET 0x20
+#define XTX_BMP_BUFFER 0x01410000
+#define XTX_SCRATCH_BUFFER 0x01810000
+/* GS VRAM the XTX textures are loaded to (0xE0000 bytes = block 0x3800). */
+#define XTX_GS_VRAM_OFFSET 0xE0000
+#define XTX_GS_VRAM_BLOCK 0x3800
+
+/* BMP file written for each XTX entry: header field offsets from the file start. */
+#define BMP_OFS_FILE_SIZE 2
+#define BMP_OFS_RESERVED 6
+#define BMP_OFS_PIXEL_OFFSET 10
+#define BMP_OFS_INFO_HEADER 0x0E
+#define BMP_OFS_WIDTH 0x12
+#define BMP_OFS_HEIGHT 0x16
+#define BMP_OFS_COMPRESSION 0x1E
+#define BMP_OFS_IMAGE_SIZE 0x22
+#define BMP_OFS_X_PIXELS_PER_METER 0x26
+#define BMP_OFS_Y_PIXELS_PER_METER 0x2A
+#define BMP_OFS_COLORS_USED 0x2E
+#define BMP_OFS_COLORS_IMPORTANT 0x32
+#define BMP_OFS_PALETTE 0x36
+#define BMP_INFO_HEADER_SIZE 40
+#define BMP_HEADERS_SIZE 54
+
 /* Leaf rows encode the action ID in the menu next-node slot. */
 #define XGL_MENU_ACTION(id) ((XglMenuNode *)(id))
 
@@ -270,10 +435,10 @@ typedef struct UmlDispVertex {
 
 typedef struct SaveDataDebug {
     unsigned char unmodeled_00[0x74];
-    unsigned char flags[128];
+    unsigned char flags[SAVE_FLAGS_COUNT];
     unsigned char unmodeled_f4[0x102e2 - 0xf4];
     unsigned short umn_flags;
-    unsigned char unmodeled_102e4[0x163b0 - 0x102e4];
+    unsigned char unmodeled_102e4[SAVE_DATA_SIZE - 0x102e4];
 } SaveDataDebug;
 
 typedef struct UmlHeaderRecord {
@@ -747,7 +912,7 @@ const char port1Label[16] = "\245\335\241\274\245\310\243\261";
 
 static YajimaMenuState m_54;
 
-static void (*func_51[7])(void);
+static void (*func_51[YAJIMA_MENU_COUNT])(void);
 
 static XglMenuNode l1_53;
 
@@ -833,7 +998,7 @@ static char test_25[26];
 
 static UmlDispVertex TestEnv_42[6];
 
-static char * name_43[103];
+static char * name_43[MOVIE_NAME_COUNT];
 
 static unsigned char TestEnv_0_0036A030[0x90] = {
     0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x8B, 0x80, 0xEE, 0x1E, 0x53, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0xB8, 0x42, 0xA9, 0x06, 0x00, 0x07, 0x20, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7A, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8A, 0x00, 0x00, 0x00, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
@@ -959,7 +1124,7 @@ static char test4_41[35] = "\031\003`abcdefghijklmnopqrstuvwxyz{|}~\n";
 
 static UmlDispVertex TestEnv_42[6] __attribute__((aligned(16))) = { { .x = 32769, .y = 1342390272, .z = 348654, .w = 0 }, { .x = 458752, .y = 0, .z = 71, .w = 0 }, { .x = 68, .y = 0, .z = 66, .w = 0 }, { .x = 0, .y = 0, .z = 0, .w = 0 }, { .x = 0, .y = 0, .z = 0, .w = 0 }, { .x = 0, .y = 0, .z = 0, .w = 0 } };
 
-static char * name_43[103] = { (char *)prologueMovieName, (char *)resource10OpName, (char *)resource1001AltName, (char *)resource10B01AltName, (char *)resource1003B2Name, (char *)resource1004AltName, (char *)resource1005Name, (char *)resource1006Name, (char *)resource1008AltName, (char *)resource1010AltName, (char *)resource1011AltName, (char *)resource1017Name, (char *)resource1019AltName, (char *)resource1020AltName, (char *)resource1022Name, (char *)resource1028Name, (char *)resource1032Name, (char *)resource1033Name, (char *)resource1035Name, (char *)resource1038BName, (char *)movie1039Name, (char *)movie1039BName, (char *)movie1040Name, (char *)movie1041_1Name, (char *)movie1043_1Name, (char *)movie1044BName, (char *)movie2000_1Name, (char *)movie2001A_1Name, (char *)movie2002B_1Name, (char *)movie2004C_1Name, (char *)movie2004D_2Name, (char *)movie2006_1Name, (char *)movie2007Name, (char *)movie2007BName, (char *)movie2007C_1Name, (char *)movie2007C_2Name, (char *)movie2010Name, (char *)movie2012BName, (char *)movie2015Name, (char *)movie2017Name, (char *)movie2018Name, (char *)movie2031_1Name, (char *)movie2031_2Name, (char *)movie2032Name, (char *)movie2033AName, (char *)movie2033BName, (char *)movie2034Name, (char *)movie2044AName, (char *)movie2046Name, (char *)movie2048Name, (char *)movie2051Name, (char *)movie2053Name, (char *)movie2055Name, (char *)movie2056AName, (char *)movie2057Name, (char *)movie2058AName, (char *)movie2064_1Name, (char *)movie2064_2Name, (char *)movie3000Name, (char *)movie3003AName, (char *)movie3003EName, (char *)movie3007Name, (char *)movie3008AName, (char *)movie3008BName, (char *)movie3009DName, (char *)movie3010Name, (char *)movie3011Name, (char *)movie3014_1Name, (char *)movie3015Name, (char *)movie3016_1Name, (char *)movie3017_1Name, (char *)movie3020Name, (char *)movie3021_1Name, (char *)movie3022Name, (char *)movie3026AName, (char *)movie3027_1Name, (char *)movie3028BName, (char *)movie3035Name, (char *)movie3036IName, (char *)movie3037Name, (char *)movie3039AName, (char *)movie3039B_1Name, (char *)movie3039CName, (char *)movie3040Name, (char *)movie3042Name, (char *)movie3045Name, (char *)movie3046AName, (char *)movie3046BName, (char *)movie3047BName, (char *)movie3047CName, (char *)movie3047DName, (char *)movie3048Name, (char *)movie3050C1_9Name, (char *)movie3050C2Name, (char *)movie3052Name, (char *)movie3054B2Name, (char *)movie3055_1Name, (char *)movie3056AName, (char *)movie3056BName, (char *)movie3056CName, (char *)movie3058AName, (char *)movie3058BName, (char *)movie3058DName };
+static char * name_43[MOVIE_NAME_COUNT] = { (char *)prologueMovieName, (char *)resource10OpName, (char *)resource1001AltName, (char *)resource10B01AltName, (char *)resource1003B2Name, (char *)resource1004AltName, (char *)resource1005Name, (char *)resource1006Name, (char *)resource1008AltName, (char *)resource1010AltName, (char *)resource1011AltName, (char *)resource1017Name, (char *)resource1019AltName, (char *)resource1020AltName, (char *)resource1022Name, (char *)resource1028Name, (char *)resource1032Name, (char *)resource1033Name, (char *)resource1035Name, (char *)resource1038BName, (char *)movie1039Name, (char *)movie1039BName, (char *)movie1040Name, (char *)movie1041_1Name, (char *)movie1043_1Name, (char *)movie1044BName, (char *)movie2000_1Name, (char *)movie2001A_1Name, (char *)movie2002B_1Name, (char *)movie2004C_1Name, (char *)movie2004D_2Name, (char *)movie2006_1Name, (char *)movie2007Name, (char *)movie2007BName, (char *)movie2007C_1Name, (char *)movie2007C_2Name, (char *)movie2010Name, (char *)movie2012BName, (char *)movie2015Name, (char *)movie2017Name, (char *)movie2018Name, (char *)movie2031_1Name, (char *)movie2031_2Name, (char *)movie2032Name, (char *)movie2033AName, (char *)movie2033BName, (char *)movie2034Name, (char *)movie2044AName, (char *)movie2046Name, (char *)movie2048Name, (char *)movie2051Name, (char *)movie2053Name, (char *)movie2055Name, (char *)movie2056AName, (char *)movie2057Name, (char *)movie2058AName, (char *)movie2064_1Name, (char *)movie2064_2Name, (char *)movie3000Name, (char *)movie3003AName, (char *)movie3003EName, (char *)movie3007Name, (char *)movie3008AName, (char *)movie3008BName, (char *)movie3009DName, (char *)movie3010Name, (char *)movie3011Name, (char *)movie3014_1Name, (char *)movie3015Name, (char *)movie3016_1Name, (char *)movie3017_1Name, (char *)movie3020Name, (char *)movie3021_1Name, (char *)movie3022Name, (char *)movie3026AName, (char *)movie3027_1Name, (char *)movie3028BName, (char *)movie3035Name, (char *)movie3036IName, (char *)movie3037Name, (char *)movie3039AName, (char *)movie3039B_1Name, (char *)movie3039CName, (char *)movie3040Name, (char *)movie3042Name, (char *)movie3045Name, (char *)movie3046AName, (char *)movie3046BName, (char *)movie3047BName, (char *)movie3047CName, (char *)movie3047DName, (char *)movie3048Name, (char *)movie3050C1_9Name, (char *)movie3050C2Name, (char *)movie3052Name, (char *)movie3054B2Name, (char *)movie3055_1Name, (char *)movie3056AName, (char *)movie3056BName, (char *)movie3056CName, (char *)movie3058AName, (char *)movie3058BName, (char *)movie3058DName };
 
 static char hdd_1024_directory_name[22] = "pfs1:/Your Saves/0000";
 
@@ -978,22 +1143,22 @@ static HddTestMenuEntry hdd_test_menu[8] = {
 
 static const char *name_47[3] = { port1Label, port2Label, hddText };
 
-static void (*func_51[7])(void) = {
+static void (*func_51[YAJIMA_MENU_COUNT])(void) = {
     FontTest, UmlDispTest, HddTest, MemcardTest,
     DatabaseTest, XenoMovieCheck, XtxDecode,
 };
 
-static XglMenuRow i1_52[7] = {
-    { fontLabel, XGL_MENU_ACTION(1) },
-    { umlDispLabel, XGL_MENU_ACTION(2) },
-    { hddLabel, XGL_MENU_ACTION(3) },
-    { memcardLabel, XGL_MENU_ACTION(4) },
-    { databaseLabel, XGL_MENU_ACTION(5) },
-    { movieLabel, XGL_MENU_ACTION(6) },
-    { xtxDecodeLabel, XGL_MENU_ACTION(7) }
+static XglMenuRow i1_52[YAJIMA_MENU_COUNT] = {
+    { fontLabel, XGL_MENU_ACTION(YAJIMA_MENU_FONT) },
+    { umlDispLabel, XGL_MENU_ACTION(YAJIMA_MENU_UMLDISP) },
+    { hddLabel, XGL_MENU_ACTION(YAJIMA_MENU_HDD) },
+    { memcardLabel, XGL_MENU_ACTION(YAJIMA_MENU_MEMCARD) },
+    { databaseLabel, XGL_MENU_ACTION(YAJIMA_MENU_DATABASE) },
+    { movieLabel, XGL_MENU_ACTION(YAJIMA_MENU_MOVIE) },
+    { xtxDecodeLabel, XGL_MENU_ACTION(YAJIMA_MENU_XTXDECODE) }
 };
 
-static XglMenuNode l1_53 = { 7, { 255, 1, 8 }, 0, { 0, 0, 0 }, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }, i1_52 };
+static XglMenuNode l1_53 = { YAJIMA_MENU_COUNT, { 255, 1, 8 }, 0, { 0, 0, 0 }, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }, i1_52 };
 
 static YajimaMenuState m_54 = {
     { 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF },
@@ -1262,7 +1427,7 @@ static void testfunc(XglPacket **packet) {
 
 static void FontTestSub(void)
 {
-    unsigned char *table = (unsigned char *)0x01000000;
+    unsigned char *table = (unsigned char *)DEBUG_BUFFER_BASE;
     unsigned char *text;
     unsigned char *entry;
     unsigned char lead;
@@ -1271,7 +1436,7 @@ static void FontTestSub(void)
     int handle;
 
     if (xglCdReadFile(nisuiFontPath, table, 0, 0) > 0) {
-        text = (unsigned char *)0x01000100;
+        text = (unsigned char *)DEBUG_FONT_TEXT_BUFFER;
         size = xglCdGetFileSize(scenarioTextPath);
         xglCdReadFile(scenarioTextPath, text, 0, 0);
         text[size] = 0;
@@ -1297,7 +1462,7 @@ static void FontTestSub(void)
         entry = table;
         while (*entry != 0)
             ++entry;
-        handle = sceOpen(nisuiHostPath, 0x602);
+        handle = sceOpen(nisuiHostPath, SCE_WRONLY | SCE_TRUNC | SCE_CREAT);
         sceWrite(handle, table, entry - table);
         sceClose(handle);
     }
@@ -1309,13 +1474,13 @@ static void FontTestP0(void)
     int offset;
     unsigned char *table;
 
-    if (PAD_U16_AT(42) & 0x20) {
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
         xglFontLoad(0, 0);
     }
-    if (PAD_U16_AT(42) & 0x40) {
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
         xglFontLoad(1, 0);
     }
-    if (PAD_U16_AT(42) & 0x10) {
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_TRIANGLE) {
         FontTestSub();
     }
     xglFontDebugPrintf(16, 16, smallCharacterTestText);
@@ -1338,37 +1503,37 @@ static void FontTestP0(void)
     xglFontDebugPrintf(16, 80, test_5);
     xglFontDebugPrintf(20, 96, test1_6);
     xglFontDebugPrintf(16, 99, test2_7);
-    xglFontPrint(0, 0, 0xFFFFFF, test_10);
+    xglFontPrint(0, 0, FONT_COLOR_WHITE,test_10);
     txt_11[1] = 32;
     txt_11[3] = 0;
-    xglFontPrint(0, 0, 0xFFFFFF, (char *)txt_11);
+    xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
     table = xy3_12;
     for (i = 0, offset = 2; i < table[0]; i++, offset += 2) {
         txt_11[1] = table[offset] + 32;
         txt_11[3] = table[offset + 1] + 32;
         FlushCache(0);
-        xglFontPrint(0, 0, 0xFFFFFF, (char *)txt_11);
+        xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
     }
     table = xy5_13;
     for (i = 0, offset = 2; i < table[0]; i++, offset += 2) {
         txt_11[1] = table[offset] + 32;
         txt_11[3] = table[offset + 1] + 64;
         FlushCache(0);
-        xglFontPrint(0, 0, 0xFFFFFF, (char *)txt_11);
+        xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
     }
     table = xy7_14;
     for (i = 0, offset = 2; i < table[0]; i++, offset += 2) {
         txt_11[1] = table[offset] + 32;
         txt_11[3] = table[offset + 1] + 96;
         FlushCache(0);
-        xglFontPrint(0, 0, 0xFFFFFF, (char *)txt_11);
+        xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
     }
     table = xy9_15;
     for (i = 0, offset = 2; i < table[0]; i++, offset += 2) {
         txt_11[1] = table[offset] + 32;
         txt_11[3] = table[offset + 1] + 128;
         FlushCache(0);
-        xglFontPrint(0, 0, 0xFFFFFF, (char *)txt_11);
+        xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
     }
     rate_8 += dir_9;
     if (rate_8 < 2) {
@@ -1393,13 +1558,13 @@ static void FontTestP0(void)
 
 static void FontTestP1(void)
 {
-    if (PAD_U16_AT(42) & 0x20) {
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
         xglFontLoad(0, 0);
     }
-    if (PAD_U16_AT(42) & 0x40) {
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
         xglFontLoad(1, 0);
     }
-    if (PAD_U16_AT(42) & 0x10) {
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_TRIANGLE) {
         FontTestSub();
     }
     xglFontDebugPrintf(16, 16, test00_26);
@@ -1432,29 +1597,29 @@ static void FontTestP2(void)
     int character;
 
     xglFontDebugPrintf(8, 8, fontTestWidthFormat, width_35);
-    if (PAD_U16_AT(148) & 0x2000) {
+    if (PAD_U16_AT(PAD2_OFS_REPEATED) & PAD_RIGHT) {
         width_35++;
     }
-    if (PAD_U16_AT(148) & 0x8000) {
+    if (PAD_U16_AT(PAD2_OFS_REPEATED) & PAD_LEFT) {
         width_35--;
     }
-    xglFontPrint(64, 96, 0xFFFFFF, fontTestEffectControl);
+    xglFontPrint(64, 96, FONT_COLOR_WHITE,fontTestEffectControl);
     test_36[3] = width_35 >> 8;
     test_36[4] = width_35;
     xglFontPrintDirect(test_36);
     FontTestLine(64, 94, width_35);
-    xglFontPrint(64, 96, 0xFFFFFF, test0_37);
+    xglFontPrint(64, 96, FONT_COLOR_WHITE,test0_37);
     FontTestLine(64, 96, xglFontGetStringWidth(test0_37));
-    xglFontPrint(64, 256, 0xFFFFFF, test1_38);
+    xglFontPrint(64, 256, FONT_COLOR_WHITE, test1_38);
     FontTestLine(64, 256, xglFontGetStringWidth(test1_38));
-    xglFontPrint(64, 288, 0xFFFFFF, test2_39);
+    xglFontPrint(64, 288, FONT_COLOR_WHITE, test2_39);
     FontTestLine(64, 288, xglFontGetStringWidth(test2_39));
-    xglFontPrint(64, 320, 0xFFFFFF, test3_40);
+    xglFontPrint(64, 320, FONT_COLOR_WHITE, test3_40);
     FontTestLine(64, 320, xglFontGetStringWidth(test3_40));
-    xglFontPrint(64, 352, 0xFFFFFF, test4_41);
+    xglFontPrint(64, 352, FONT_COLOR_WHITE, test4_41);
     FontTestLine(64, 352, xglFontGetStringWidth(test4_41));
-    xglFontPrint(64, 96, 0xFFFFFF, fontTestSpacingControl);
-    if (PAD_U16_AT(42) & 0x20) {
+    xglFontPrint(64, 96, FONT_COLOR_WHITE,fontTestSpacingControl);
+    if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
         for (character = 0; character < 64; character++) {
             printf(characterSizeFormat, character, xglFontGetProportionalSize(character));
         }
@@ -1466,11 +1631,11 @@ static void FontTest(void)
     int page = 0;
 
     GameSnapShotNumber(1);
-    while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
-        if (PAD_U16_AT(42) & 0x2000) {
+    while ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
+        if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_RIGHT) {
             ++page;
         }
-        if (PAD_U16_AT(42) & 0x8000) {
+        if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_LEFT) {
             --page;
         }
         switch (page) {
@@ -1529,8 +1694,8 @@ static void UmlDispTest(void)
     int delta;
     short step;
 
-    xglCdLoadOverlay(2);
-    tyaUmlDispInit2((unsigned char *)0x1000000);
+    xglCdLoadOverlay(OVERLAY_OV02);
+    tyaUmlDispInit2((unsigned char *)DEBUG_BUFFER_BASE);
     xglFontLoad(1, 0);
     first = (SaveDataDebug *)SaveData;
     first->umn_flags = 0;
@@ -1541,12 +1706,12 @@ static void UmlDispTest(void)
     param.width = 480;
     param.height = 400;
     xglSleep();
-    while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
+    while ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         save = (SaveDataDebug *)SaveData;
         xglFontDebugPrintf(0, 0, umlDispFormat, number);
         if (detail == 0) {
-            if (PAD_U16_AT(42) & 0x10) {
-                record = (UmlHeaderRecord *)0x1000000;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_TRIANGLE) {
+                record = (UmlHeaderRecord *)DEBUG_BUFFER_BASE;
                 xglCdReadFile(umnHeaderPath, record, 0, 0);
                 size = record->size;
                 if (size != 0) {
@@ -1565,56 +1730,56 @@ static void UmlDispTest(void)
                     } while (size != 0);
                 }
             }
-            if (PAD_U16_AT(42) & 0x8) {
-                save->umn_flags ^= 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_R1) {
+                save->umn_flags ^= UMN_FLAG_SHAKE_OFF;
             }
-            if (PAD_U16_AT(42) & 0x2) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_R2) {
                 save->umn_flags ^= 0x20;
             }
             xglFontDebugPrintf(16, 40, umlBitsFormat, (save->umn_flags >> 4) & 1,
                                (save->umn_flags >> 5) & 1);
             xglFontDebugPrintf(16, 16, fileSelectFormat, number);
             delta = 0;
-            if (PAD_U16_AT(44) & 0x1000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_UP) {
                 delta = -1;
             }
-            if (PAD_U16_AT(44) & 0x8000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_LEFT) {
                 delta = -1;
             }
-            if (PAD_U16_AT(44) & 0x4000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_DOWN) {
                 delta = 1;
             }
-            if (PAD_U16_AT(44) & 0x2000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_RIGHT) {
                 delta = 1;
             }
-            if (PAD_U16_AT(40) & 0x80) {
-                delta *= 100;
+            if (PAD_U16_AT(PAD_OFS_HELD) & PAD_SQUARE) {
+                delta *= UML_FILE_FAST_STEP;
             }
-            number = (number + delta + 10000) % 10000;
-            if (PAD_U16_AT(42) & 0x20) {
+            number = (number + delta + UML_FILE_COUNT) % UML_FILE_COUNT;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 param.file_number = number;
                 detail = 1;
                 param.scroll_x = 0;
                 param.scroll_y = 0;
             }
         } else {
-            if (PAD_U16_AT(44) & 0x1000) {
-                param.scroll_y -= 8;
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_UP) {
+                param.scroll_y -= UML_SCROLL_STEP;
             }
-            if (PAD_U16_AT(44) & 0x4000) {
-                param.scroll_y += 8;
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_DOWN) {
+                param.scroll_y += UML_SCROLL_STEP;
             }
-            if (PAD_U16_AT(44) & 0x8000) {
-                param.scroll_x -= 8;
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_LEFT) {
+                param.scroll_x -= UML_SCROLL_STEP;
             }
-            if (PAD_U16_AT(44) & 0x2000) {
-                param.scroll_x += 8;
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_RIGHT) {
+                param.scroll_x += UML_SCROLL_STEP;
             }
-            if (PAD_U16_AT(42) & 0x40) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
                 detail = 0;
             }
             if (param.scroll_enable != 0) {
-                if (PAD_U16_AT(42) & 0x80) {
+                if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_SQUARE) {
                     param.scrolling = 1;
                 }
                 if (param.scrolling != 0) {
@@ -1646,10 +1811,10 @@ static void DatabaseTest(void)
     UmlDatabaseParam param;
     int flag;
 
-    xglCdLoadOverlay(2);
-    tyaUmlDispInit2((unsigned char *)0x1000000);
-    WindowTexLoad((unsigned char *)0x1100000, 1);
-    WindowTexLoad((unsigned char *)0x1200000, 2);
+    xglCdLoadOverlay(OVERLAY_OV02);
+    tyaUmlDispInit2((unsigned char *)DEBUG_BUFFER_BASE);
+    WindowTexLoad((unsigned char *)DEBUG_UML_WINDOW_TEX_1, 1);
+    WindowTexLoad((unsigned char *)DEBUG_UML_WINDOW_TEX_2, 2);
     xglFontLoad(1, 0);
     xglFlagsInitial();
     tyaUmlDispParamReset(&param.disp, 0);
@@ -1663,7 +1828,7 @@ static void DatabaseTest(void)
     param.work[0] = work0;
     param.cursor = 0;
     for (flag = 0; flag < 500; flag++) {
-        if (PAD_U16_AT(40) & 0x8) {
+        if (PAD_U16_AT(PAD_OFS_HELD) & PAD_R1) {
             if (xglSRand() & 1) {
                 xglFlagsSet(flag, 1, 1);
             }
@@ -1671,15 +1836,15 @@ static void DatabaseTest(void)
             xglFlagsSet(flag, 1, 1);
         }
     }
-    xglSoundLoadRequestSmd(umnModeSoundName, (void *)0x1000000);
+    xglSoundLoadRequestSmd(umnModeSoundName, (void *)DEBUG_BUFFER_BASE);
     xglSleep();
-    while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
+    while ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         xglFontDebugPrintf(0, 0, databaseLabel);
         if (tyaUmlDatabaseMain(&param) != 0) {
             break;
         }
         xglFontDebugPrintf(80, 0, databaseIndexFormat, param.index, param.total);
-        endPrintExtFunc(0, 100, 0);
+        endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
         xglSleep();
     }
     xglSoundLoadRequestSmd(0, 0);
@@ -1690,34 +1855,34 @@ static void XenoMovieCheck(void)
     char path[256];
     int index = 0;
 
-    GameResourceInit(0x1000000, 0x1000000);
+    GameResourceInit(DEBUG_BUFFER_BASE, DEBUG_BUFFER_SIZE);
     xglFontLoad(0, 0);
-    while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
+    while ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         xglFontDebugPrintf(0, 0, moviePlaybackHelpText, name_43[index]);
-        if (PAD_U16_AT(44) & 0x1000) {
+        if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_UP) {
             --index;
         }
-        if (PAD_U16_AT(44) & 0x4000) {
+        if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_DOWN) {
             ++index;
         }
         if (index < 0) {
-            index = 102;
+            index = MOVIE_NAME_COUNT - 1;
         }
-        if (index >= 103) {
+        if (index >= MOVIE_NAME_COUNT) {
             index = 0;
         }
-        if (PAD_U16_AT(42) & 0x20) {
-            xglRenderClearColor(0x80000000);
+        if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+            xglRenderClearColor(CLEAR_COLOR_BLACK);
             do {
                 xglSleep();
-            } while (!(PAD_U16_AT(42) & 0x20));
+            } while (!(PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE));
             sprintf(path, movieFilePathFormat, name_43[index]);
             GameMpeg2Play(path, 0);
             xglRenderClearFrame();
             do {
                 xglSleep();
-            } while (!(PAD_U16_AT(42) & 0x20));
-            xglRenderClearColor(0x80004000);
+            } while (!(PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE));
+            xglRenderClearColor(CLEAR_COLOR_MENU);
         }
         xglSleep();
     }
@@ -1732,7 +1897,7 @@ static void HddTestFormat(void)
     printf(hdd_format_start_message);
     status = sceFormat(hdd_device, 0, 0, 0);
     printf(hdd_format_result_format, status);
-    format_size = 0x2000;
+    format_size = PFS_ZONE_SIZE;
     status = sceFormat(pfs_device_name, hdd_common_device, &format_size, 4);
     printf(hdd_pfs_format_result_format, status);
 }
@@ -1740,8 +1905,8 @@ static void HddTestFormat(void)
 static void HddTestShutdown(void)
 {
     printf(hdd_shutdown_message);
-    sceDevctl(pfs_device_name, 0x5003, 0, 0, 0, 0);
-    sceDevctl(hdd_device_name, 0x4806, 0, 0, 0, 0);
+    sceDevctl(pfs_device_name, PDIOC_CLOSEALL, 0, 0, 0, 0);
+    sceDevctl(hdd_device_name, HDIOC_DEV9OFF, 0, 0, 0, 0);
 }
 
 static void HddTestHddFull(void)
@@ -1750,10 +1915,10 @@ static void HddTestHddFull(void)
     int status;
     int subcommand;
 
-    handle = sceOpen(hdd_full_path, 0x203);
+    handle = sceOpen(hdd_full_path, SCE_RDWR | SCE_CREAT);
     printf(hdd_create_partition_format, handle);
     for (subcommand = 0;; subcommand++) {
-        status = sceIoctl2(handle, 0x6801, hdd_partition_size, 3, 0, 0);
+        status = sceIoctl2(handle, HIOCADDSUB, hdd_partition_size, 3, 0, 0);
         printf(hdd_subcommand_format, subcommand, status);
         if (status < 0) {
             break;
@@ -1784,10 +1949,10 @@ static void HddTestMakeYourSaves(void)
     int zone_size;
     int zone_free;
 
-    zone_size = sceMkdir(hdd_your_saves_directory, 0x1ff);
+    zone_size = sceMkdir(hdd_your_saves_directory, SCE_DIR_MODE_RWX);
     printf(hdd_mkdir_result_format, zone_size);
-    zone_size = sceDevctl(hdd_mount_point, 0x5001, 0, 0, 0, 0);
-    zone_free = sceDevctl(hdd_mount_point, 0x5002, 0, 0, 0, 0);
+    zone_size = sceDevctl(hdd_mount_point, PDIOC_ZONESZ, 0, 0, 0, 0);
+    zone_free = sceDevctl(hdd_mount_point, PDIOC_ZONEFREE, 0, 0, 0, 0);
     printf(hdd_zone_size_format, zone_size);
     printf(hdd_zone_free_format, zone_free);
 }
@@ -1803,7 +1968,7 @@ static void HddTest1024Save(void)
 
     HddTestMountCommon();
     HddTestMakeYourSaves();
-    for (folder_number = 0; folder_number < 1024;) {
+    for (folder_number = 0; folder_number < HDD_TEST_SAVE_FOLDER_COUNT;) {
         tens = folder_number / 10;
         hdd_1024_directory_name[20] = (folder_number % 10) + '0';
         hundreds = tens / 10;
@@ -1811,8 +1976,8 @@ static void HddTest1024Save(void)
         thousands = hundreds / 10;
         hdd_1024_directory_name[18] = (hundreds % 10) + '0';
         hdd_1024_directory_name[17] = (thousands % 10) + '0';
-        status = sceMkdir(hdd_1024_directory_name, 0x1ff);
-        if ((folder_number++ & 31) == 0) {
+        status = sceMkdir(hdd_1024_directory_name, SCE_DIR_MODE_RWX);
+        if ((folder_number++ & HDD_TEST_PRINT_INTERVAL_MASK) == 0) {
             printf(hdd_mkdir_status_format, hdd_1024_directory_name, status);
         }
         if (status < 0) {
@@ -1839,13 +2004,13 @@ static void HddTestDummyFolder(void)
     int mkdir_status;
 
     HddTestMountCommon();
-    for (folder_number = 0; folder_number < 256; ++folder_number) {
+    for (folder_number = 0; folder_number < HDD_TEST_DUMMY_FOLDER_COUNT; ++folder_number) {
         tens = folder_number / 10;
         hdd_dummy_folder_name[8] = (folder_number % 10) + '0';
         hundreds = tens / 10;
         hdd_dummy_folder_name[7] = (tens % 10) + '0';
         hdd_dummy_folder_name[6] = (hundreds % 10) + '0';
-        mkdir_status = sceMkdir(hdd_dummy_folder_name, 0x1ff);
+        mkdir_status = sceMkdir(hdd_dummy_folder_name, SCE_DIR_MODE_RWX);
         printf(hdd_mkdir_status_format, hdd_dummy_folder_name, mkdir_status);
         if (mkdir_status < 0) {
             break;
@@ -1867,14 +2032,14 @@ static void HddTestDummySave(void)
     int close_status;
 
     HddTestMountCommon();
-    zone_size = sceDevctl(hdd_mount_point, 0x5001, 0, 0, 0, 0);
-    remaining = sceDevctl(hdd_mount_point, 0x5002, 0, 0, 0, 0) - 3;
-    chunk_size = 0x1000000 / zone_size;
+    zone_size = sceDevctl(hdd_mount_point, PDIOC_ZONESZ, 0, 0, 0, 0);
+    remaining = sceDevctl(hdd_mount_point, PDIOC_ZONEFREE, 0, 0, 0, 0) - HDD_DUMMY_RESERVED_ZONES;
+    chunk_size = DEBUG_BUFFER_SIZE / zone_size;
     printf(zoneStatusFormat, remaining, zone_size);
     printf(chunkStepFormat, chunk_size);
-    mkdir_status = sceMkdir(dummySaveFolderPath, 0x1ff);
+    mkdir_status = sceMkdir(dummySaveFolderPath, SCE_DIR_MODE_RWX);
     printf(mkdirStatusFormat, mkdir_status);
-    handle = sceOpen(dummySaveFilePath, 0x602, 0x1ff);
+    handle = sceOpen(dummySaveFilePath, SCE_WRONLY | SCE_TRUNC | SCE_CREAT, SCE_DIR_MODE_RWX);
     printf(openHandleFormat, handle);
 
     counter = 0;
@@ -1889,7 +2054,7 @@ static void HddTestDummySave(void)
             write_size = remaining * zone_size;
             remaining = 0;
         }
-        wrote = sceWrite(handle, (void *) 0x1000000, write_size);
+        wrote = sceWrite(handle, (void *) DEBUG_BUFFER_BASE, write_size);
         printf(counterWroteFormat, counter, wrote);
         counter++;
         if (wrote < 0) {
@@ -1917,7 +2082,7 @@ static void HddTest(void)
     int row;
     const char *use_title;
 
-    status = sceDevctl(hdd_device, 0x4807, 0, 0, 0, 0);
+    status = sceDevctl(hdd_device, HDIOC_STATUS, 0, 0, 0, 0);
     printf(hdd_status_format, status);
     if ((unsigned int)status >= 2) {
         printf(hdd_status_error_format, status);
@@ -1929,14 +2094,14 @@ static void HddTest(void)
     selection = 0;
     printf(hdd_free_format, xglHddMcGetFree());
 
-    while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
+    while ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         int item;
 
         xglFontDebugPrintf(0, 0, hdd_test_title);
-        if (PAD_U16_AT(44) & 0x1000) {
+        if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_UP) {
             selection--;
         }
-        if (PAD_U16_AT(44) & 0x4000) {
+        if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_DOWN) {
             selection++;
         }
         if (selection < 0) {
@@ -1945,7 +2110,7 @@ static void HddTest(void)
         if (selection >= menu_count) {
             selection = 0;
         }
-        if ((PAD_U16_AT(42) & 0x20) &&
+        if ((PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) &&
             hdd_test_menu[selection].action != 0) {
             hdd_test_menu[selection].action();
         }
@@ -1991,8 +2156,8 @@ static void MemcardTest(void)
     struct HddSaveRequest hdd_save_request;
     int sync_command;
     int sync_result;
-    struct HddTransferInfo *carddata = (struct HddTransferInfo *)0x01002000;
-    unsigned char *found = (unsigned char *)0x01000000;
+    struct HddTransferInfo *carddata = (struct HddTransferInfo *)MC_CARDDATA_BUFFER;
+    unsigned char *found = (unsigned char *)DEBUG_BUFFER_BASE;
     const char *name;
     char *bar;
     unsigned char *flags;
@@ -2010,42 +2175,42 @@ static void MemcardTest(void)
 
     port = -1;
     hdd = -99;
-    state = 0;
+    state = MCTEST_STATE_INIT;
     printf("carddata:%08x\n", carddata);
     xglCdReadFile("data\\carddata.new", carddata, 0, 0);
     xglMcSetMapName(MC_MAP_NAME_ENCEPHALON, MC_MAP_NAME_SIMULATOR);
-    printf("sizeof(sceMcIconSys):%d\n", 964);
-    printf("sizeof(sSaveData):%d\n", 0x163B0);
+    printf("sizeof(sceMcIconSys):%d\n", SCE_MC_ICON_SYS_SIZE);
+    printf("sizeof(sSaveData):%d\n", SAVE_DATA_SIZE);
     printf("sizeof(carddata):%d\n", carddata->end - carddata->begin);
 
-    while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
+    while ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         xglFontDebugPrintf(0, 0, MC_TEXT_TITLE);
         /* xglMcMain returns both ports' status halfwords as one word. */
         *(unsigned int *)port_status = xglMcMain();
         xglFontDebugPrintf(64, 0, "%4x %4x", port_status[0], port_status[1]);
-        if (port >= 0 && port < 2) {
-            if (port_status[port] != 1 && port_status[port] != 0xFF) {
-                state = 0;
+        if (port >= 0 && port < MC_PORT_HDD) {
+            if (port_status[port] != MC_PORT_READY && port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_INIT;
             }
         }
         xglFontDebugPrintf(0, 16, "%2x", state);
 
         switch (state) {
-        case 0x00:
-            state = 0x01;
+        case MCTEST_STATE_INIT:
+            state = MCTEST_STATE_SELECT_PORT;
             hdd = xglHddCheck();
             /* fall through */
-        case 0x01:
+        case MCTEST_STATE_SELECT_PORT:
             xglFontDebugPrintf(0, 32, MC_TEXT_SELECT_PORT);
             name = mt_GetPortName(0);
-            if (port_status[0] == 1) {
+            if (port_status[0] == MC_PORT_READY) {
                 xglFontDebugPrintf(16, 48, "%s", name);
             } else {
                 /* Text: {color #202020}%s */
                 xglFontDebugPrintf(16, 48, "\x0C   %s", name);
             }
             name = mt_GetPortName(1);
-            if (port_status[1] == 1) {
+            if (port_status[1] == MC_PORT_READY) {
                 xglFontDebugPrintf(16, 64, "%s", name);
             } else {
                 /* Text: {color #202020}%s */
@@ -2058,12 +2223,13 @@ static void MemcardTest(void)
                 /* Text: {color #202020}%s */
                 xglFontDebugPrintf(16, 80, "\x0C   %s", name);
             }
-            if (port_status[0] == 1 || port_status[1] == 1 || hdd == 0) {
+            if (port_status[0] == MC_PORT_READY || port_status[1] == MC_PORT_READY ||
+                hdd == 0) {
                 dir = 0;
-                if (PAD_U16_AT(42) & 0x1000) {
+                if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_UP) {
                     dir = -1;
                 }
-                if (PAD_U16_AT(42) & 0x4000) {
+                if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_DOWN) {
                     dir = 1;
                 }
                 if (dir != 0) {
@@ -2072,10 +2238,10 @@ static void MemcardTest(void)
                     dir = 1;
                 }
                 for (;;) {
-                    work.result = (work.result + 3) % 3;
-                    if ((port_status[0] != 1 && work.result == 0) ||
-                        (port_status[1] != 1 && work.result == 1) ||
-                        (hdd < 0 && work.result == 2)) {
+                    work.result = (work.result + MC_PORT_COUNT) % MC_PORT_COUNT;
+                    if ((port_status[0] != MC_PORT_READY && work.result == 0) ||
+                        (port_status[1] != MC_PORT_READY && work.result == 1) ||
+                        (hdd < 0 && work.result == MC_PORT_HDD)) {
                         work.result += dir;
                     } else {
                         break;
@@ -2084,89 +2250,93 @@ static void MemcardTest(void)
             } else {
                 work.result = -1;
             }
-            if (work.result != -1 && (PAD_U16_AT(42) & 0x20)) {
-                if (work.result == 2) {
-                    port = 2;
-                    state = 0x60;
+            if (work.result != -1 && (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE)) {
+                if (work.result == MC_PORT_HDD) {
+                    port = MC_PORT_HDD;
+                    state = MCTEST_STATE_HDD_MENU_INIT;
                 } else {
                     port = work.result;
-                    state = 0x10;
+                    state = MCTEST_STATE_MENU_INIT;
                 }
             }
             xglFontDebugPrintf(8, work.result * 16 + 48, menu_cursor);
             break;
 
-        case 0x10:
+        case MCTEST_STATE_MENU_INIT:
             work.result = 0;
-            state = 0x11;
+            state = MCTEST_STATE_MENU;
             /* fall through */
-        case 0x11:
+        case MCTEST_STATE_MENU:
             xglFontDebugPrintf(0, 32, "%s", mt_GetPortName(port));
             xglFontDebugPrintf(16, 48, MC_TEXT_LOAD);
             xglFontDebugPrintf(16, 64, MC_TEXT_SAVE);
             xglFontDebugPrintf(16, 80, MC_TEXT_FORMAT);
             xglFontDebugPrintf(16, 96, MC_TEXT_UNFORMAT);
-            menu_step = (PAD_U16_AT(42) & 0x1000) ? -1 : 0;
-            if (PAD_U16_AT(42) & 0x4000) {
+            menu_step = (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_UP) ? -1 : 0;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_DOWN) {
                 menu_step = 1;
             }
             if (menu_step != 0) {
-                work.result = (work.result + menu_step + 4) % 4;
+                work.result = (work.result + menu_step + MC_MENU_ITEM_COUNT) % MC_MENU_ITEM_COUNT;
             }
             xglFontDebugPrintf(8, work.result * 16 + 48, menu_cursor);
-            if (PAD_U16_AT(42) & 0x20) {
-                static unsigned char tbl_48[4] = { 32, 48, 64, 80 };
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                static unsigned char tbl_48[4] = {
+                    MCTEST_STATE_LOAD_LIST, MCTEST_STATE_SAVE_QUERY_FREE,
+                    MCTEST_STATE_FORMAT_INIT, MCTEST_STATE_UNFORMAT_INIT
+                };
 
-                if (PAD_U16_AT(40) & 0x8) {
-                    state = 0;
+                if (PAD_U16_AT(PAD_OFS_HELD) & PAD_R1) {
+                    state = MCTEST_STATE_INIT;
                     sceMcSync(0, &sync_command, &sync_result);
                     printf("%d %d\n", sync_command, sync_result);
-                    xglMcEasySave("/BISLPS-99999Dummy", (void *)0x01000000, 0x77D800);
+                    xglMcEasySave("/BISLPS-99999Dummy", (void *)DEBUG_BUFFER_BASE,
+                                  MC_EASY_SAVE_DUMMY_SIZE);
                 } else {
                     state = tbl_48[work.result];
                 }
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_INIT;
             }
             break;
 
-        case 0x20:
+        case MCTEST_STATE_LOAD_LIST:
             list_request.file = -1;
             list_request.data = found;
-            xglMcRequest(port, 2, &list_request, &work.result);
-            state = 0x21;
+            xglMcRequest(port, MC_REQ_EXIST, &list_request, &work.result);
+            state = MCTEST_STATE_LOAD_CHECKING;
             break;
 
-        case 0x21:
+        case MCTEST_STATE_LOAD_CHECKING:
             xglFontDebugPrintf(0, 32, MC_TEXT_LOAD_CHECKING);
-            if (port_status[port] != 0xFF) {
-                state = 0x22;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_LOAD_NO_FILE;
                 if (work.result >= 0) {
                     work.file = 0;
-                    state = 0x23;
+                    state = MCTEST_STATE_LOAD_SELECT;
                 }
             }
             break;
 
-        case 0x22:
+        case MCTEST_STATE_LOAD_NO_FILE:
             xglFontDebugPrintf(0, 32, MC_TEXT_LOAD_NO_FILE, work.file);
-            if (PAD_U16_AT(42) & 0x20) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x23:
+        case MCTEST_STATE_LOAD_SELECT:
             xglFontDebugPrintf(0, 32, MC_TEXT_LOAD);
             dir = 0;
-            if (PAD_U16_AT(44) & 0x8000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_LEFT) {
                 dir = -1;
             }
-            if (PAD_U16_AT(44) & 0x2000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_RIGHT) {
                 dir = 1;
             }
             if (dir != 0) {
-                work.file = (work.file + dir + 100) % 100;
+                work.file = (work.file + dir + MC_SAVE_FILE_COUNT) % MC_SAVE_FILE_COUNT;
             }
             xglFontDebugPrintf(16, 48, MC_TEXT_FILE_OF_99, work.file);
             if (found[work.file] == 0) {
@@ -2174,230 +2344,232 @@ static void MemcardTest(void)
             } else {
                 xglFontDebugPrintf(16, 64, MC_TEXT_FILE_PRESENT);
             }
-            if ((PAD_U16_AT(42) & 0x20) && found[work.file] != 0) {
+            if ((PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) && found[work.file] != 0) {
                 load_request.file = work.file;
                 load_request.data = SaveData;
-                load_request.size = 0x163B0;
-                state = 0x24;
-                xglMcRequest(port, 4, &load_request, &work.result);
+                load_request.size = SAVE_DATA_SIZE;
+                state = MCTEST_STATE_LOAD_READING;
+                xglMcRequest(port, MC_REQ_LOAD, &load_request, &work.result);
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x24:
+        case MCTEST_STATE_LOAD_READING:
             xglFontDebugPrintf(0, 32, MC_TEXT_LOAD_READING, work.file);
-            if (port_status[port] != 0xFF) {
-                state = 0x10;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x30:
-            xglMcRequest(port, 1, 0, &work.result);
-            state = 0x31;
+        case MCTEST_STATE_SAVE_QUERY_FREE:
+            xglMcRequest(port, MC_REQ_FREE_SPACE, 0, &work.result);
+            state = MCTEST_STATE_SAVE_CHECKING_FREE;
             work.check = 0;
             break;
 
-        case 0x31:
+        case MCTEST_STATE_SAVE_CHECKING_FREE:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_CHECKING_FREE);
-            if (port_status[port] != 0xFF) {
+            if (port_status[port] != MC_PORT_BUSY) {
                 work.file = 0;
-                state = 0x32;
+                state = MCTEST_STATE_SAVE_SELECT_FILE;
             }
             break;
 
-        case 0x32:
+        case MCTEST_STATE_SAVE_SELECT_FILE:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_FREE, work.result);
-            save_file_step = (PAD_U16_AT(44) & 0x8000) ? -1 : 0;
-            if (PAD_U16_AT(44) & 0x2000) {
+            save_file_step = (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_LEFT) ? -1 : 0;
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_RIGHT) {
                 save_file_step = 1;
             }
             if (save_file_step != 0) {
-                work.file = (work.file + save_file_step + 100) % 100;
+                work.file = (work.file + save_file_step + MC_SAVE_FILE_COUNT) %
+                            MC_SAVE_FILE_COUNT;
             }
             xglFontDebugPrintf(16, 48, MC_TEXT_FILE_NUMBER, work.file);
-            if (PAD_U16_AT(42) & 0x20) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 check_request.file = work.file;
-                xglMcRequest(port, 2, &check_request, &work.check);
-                state = 0x35;
+                xglMcRequest(port, MC_REQ_EXIST, &check_request, &work.check);
+                state = MCTEST_STATE_SAVE_CHECKING_FILE;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x33:
+        case MCTEST_STATE_SAVE_CREATE_CONFIRM:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_FREE, work.result);
             xglFontDebugPrintf(16, 48, MC_TEXT_CREATE_CONFIRM);
-            if (PAD_U16_AT(42) & 0x20) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 create_request.file = work.file;
                 create_request.data = carddata;
-                xglMcRequest(port, 8, &create_request, &work.result);
-                state = 0x34;
+                xglMcRequest(port, MC_REQ_CREATE, &create_request, &work.result);
+                state = MCTEST_STATE_SAVE_CREATING;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x34:
+        case MCTEST_STATE_SAVE_CREATING:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_CREATING);
             bar = progress;
             for (done = 0; done < work.result; done++) {
                 *bar++ = '*';
             }
-            for (; done < 14; done++) {
+            for (; done < MC_CREATE_PROGRESS_STEPS; done++) {
                 *bar++ = '.';
             }
             *bar = '\0';
             xglFontDebugPrintf(16, 48, progress);
-            if (port_status[port] != 0xFF) {
-                state = 0x37;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_SAVE_START;
             }
             break;
 
-        case 0x35:
+        case MCTEST_STATE_SAVE_CHECKING_FILE:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_CHECKING_FILE, work.file);
-            if (port_status[port] != 0xFF) {
-                state = 0x33;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_SAVE_CREATE_CONFIRM;
             }
             break;
 
-        case 0x36:
+        case MCTEST_STATE_SAVE_OVERWRITE_CONFIRM:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_FILE, work.file);
             xglFontDebugPrintf(16, 48, MC_TEXT_OVERWRITE_CONFIRM);
-            if (PAD_U16_AT(42) & 0x20) {
-                state = 0x37;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                state = MCTEST_STATE_SAVE_START;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x37:
+        case MCTEST_STATE_SAVE_START:
             save_request.file = work.file;
             save_request.data = SaveData;
-            save_request.size = 0x163B0;
-            state = 0x38;
-            xglMcRequest(port, 6, &save_request, &work.result);
+            save_request.size = SAVE_DATA_SIZE;
+            state = MCTEST_STATE_SAVE_WRITING;
+            xglMcRequest(port, MC_REQ_SAVE, &save_request, &work.result);
             break;
 
-        case 0x38:
+        case MCTEST_STATE_SAVE_WRITING:
             xglFontDebugPrintf(0, 32, MC_TEXT_SAVE_WRITING, work.file);
-            if (port_status[port] != 0xFF) {
-                state = 0x10;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x40:
-            state = 0x41;
+        case MCTEST_STATE_FORMAT_INIT:
+            state = MCTEST_STATE_FORMAT_CONFIRM;
             /* fall through */
-        case 0x41:
+        case MCTEST_STATE_FORMAT_CONFIRM:
             xglFontDebugPrintf(0, 32, MC_TEXT_FORMAT_CONFIRM);
-            if (PAD_U16_AT(42) & 0x20) {
-                xglMcRequest(port, 9, 0, &work.result);
-                state = 0x42;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                xglMcRequest(port, MC_REQ_FORMAT, 0, &work.result);
+                state = MCTEST_STATE_FORMATTING;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x42:
+        case MCTEST_STATE_FORMATTING:
             xglFontDebugPrintf(0, 32, MC_TEXT_FORMATTING);
-            if (port_status[port] != 0xFF) {
-                state = 0x43;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_FORMAT_DONE;
             }
             break;
 
-        case 0x43:
+        case MCTEST_STATE_FORMAT_DONE:
             xglFontDebugPrintf(0, 32, MC_TEXT_FORMAT_DONE);
-            if (PAD_U16_AT(42) & 0x20) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x50:
-            state = 0x51;
+        case MCTEST_STATE_UNFORMAT_INIT:
+            state = MCTEST_STATE_UNFORMAT_CONFIRM;
             /* fall through */
-        case 0x51:
+        case MCTEST_STATE_UNFORMAT_CONFIRM:
             xglFontDebugPrintf(0, 32, MC_TEXT_UNFORMAT_CONFIRM);
-            if (PAD_U16_AT(42) & 0x20) {
-                xglMcRequest(port, 10, 0, &work.result);
-                state = 0x52;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                xglMcRequest(port, MC_REQ_UNFORMAT, 0, &work.result);
+                state = MCTEST_STATE_UNFORMATTING;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x52:
+        case MCTEST_STATE_UNFORMATTING:
             xglFontDebugPrintf(0, 32, MC_TEXT_UNFORMATTING);
-            if (port_status[port] != 0xFF) {
-                state = 0x53;
+            if (port_status[port] != MC_PORT_BUSY) {
+                state = MCTEST_STATE_UNFORMAT_DONE;
             }
             break;
 
-        case 0x53:
+        case MCTEST_STATE_UNFORMAT_DONE:
             xglFontDebugPrintf(0, 32, MC_TEXT_UNFORMAT_DONE);
-            if (PAD_U16_AT(42) & 0x20) {
-                state = 0x10;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                state = MCTEST_STATE_MENU_INIT;
             }
             break;
 
-        case 0x60:
+        case MCTEST_STATE_HDD_MENU_INIT:
             work.result = 0;
-            state = 0x61;
+            state = MCTEST_STATE_HDD_MENU;
             /* fall through */
-        case 0x61:
+        case MCTEST_STATE_HDD_MENU:
             xglFontDebugPrintf(0, 32, "%s", mt_GetPortName(port));
             xglFontDebugPrintf(16, 48, MC_TEXT_LOAD);
             xglFontDebugPrintf(16, 64, MC_TEXT_SAVE);
-            hdd_menu_step = (PAD_U16_AT(42) & 0x1000) ? -1 : 0;
-            if (PAD_U16_AT(42) & 0x4000) {
+            hdd_menu_step = (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_UP) ? -1 : 0;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_DOWN) {
                 hdd_menu_step = 1;
             }
             if (hdd_menu_step != 0) {
-                work.result = (work.result + hdd_menu_step + 2) % 2;
+                work.result = (work.result + hdd_menu_step + MC_HDD_MENU_ITEM_COUNT) %
+                              MC_HDD_MENU_ITEM_COUNT;
             }
             xglFontDebugPrintf(8, work.result * 16 + 48, menu_cursor);
-            if (PAD_U16_AT(42) & 0x20) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 state = tbl_49[work.result];
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_INIT;
             }
             break;
 
-        case 0x70:
+        case MCTEST_STATE_HDD_LOAD_LIST:
             hdd_list_request.card = -1;
             hdd_list_request.found = found;
             if (xglHddMcExist(&hdd_list_request) < 0) {
-                state = 0x71;
+                state = MCTEST_STATE_HDD_LOAD_NO_FILE;
             } else {
-                state = 0x72;
+                state = MCTEST_STATE_HDD_LOAD_SELECT;
             }
             break;
 
-        case 0x71:
+        case MCTEST_STATE_HDD_LOAD_NO_FILE:
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_LOAD_NO_FILE, work.file);
-            if (PAD_U16_AT(42) & 0x20) {
-                state = 0x60;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                state = MCTEST_STATE_HDD_MENU_INIT;
             }
             break;
 
-        case 0x72:
+        case MCTEST_STATE_HDD_LOAD_SELECT:
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_LOAD);
             dir = 0;
-            if (PAD_U16_AT(44) & 0x8000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_LEFT) {
                 dir = -1;
             }
-            if (PAD_U16_AT(44) & 0x2000) {
+            if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_RIGHT) {
                 dir = 1;
             }
             if (dir != 0) {
-                work.file = (work.file + dir + 100) % 100;
+                work.file = (work.file + dir + MC_SAVE_FILE_COUNT) % MC_SAVE_FILE_COUNT;
             }
             xglFontDebugPrintf(16, 48, MC_TEXT_FILE_OF_99, work.file);
             if (found[work.file] == 0) {
@@ -2405,88 +2577,89 @@ static void MemcardTest(void)
             } else {
                 xglFontDebugPrintf(16, 64, MC_TEXT_FILE_PRESENT);
             }
-            if (PAD_U16_AT(42) & 0x20) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 if (found[work.file] != 0) {
                     hdd_load_request.card = work.file;
                     hdd_load_request.data = SaveData;
-                    hdd_load_request.size = 0x163B0;
+                    hdd_load_request.size = SAVE_DATA_SIZE;
                     printf("xglHddMcLoad():%d\n", xglHddMcLoad(&hdd_load_request));
-                    state = 0x60;
+                    state = MCTEST_STATE_HDD_MENU_INIT;
                 }
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x60;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_HDD_MENU_INIT;
             }
             break;
 
-        case 0x80:
+        case MCTEST_STATE_HDD_SAVE_INIT:
             work.result = 0;
-            state = 0x81;
+            state = MCTEST_STATE_HDD_SAVE_SELECT_FILE;
             /* fall through */
-        case 0x81:
+        case MCTEST_STATE_HDD_SAVE_SELECT_FILE:
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_SAVE_FREE, work.result);
-            hdd_file_step = (PAD_U16_AT(42) & 0x8000) ? -1 : 0;
-            if (PAD_U16_AT(42) & 0x2000) {
+            hdd_file_step = (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_LEFT) ? -1 : 0;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_RIGHT) {
                 hdd_file_step = 1;
             }
             if (hdd_file_step != 0) {
-                work.file = (work.file + hdd_file_step + 100) % 100;
+                work.file = (work.file + hdd_file_step + MC_SAVE_FILE_COUNT) %
+                            MC_SAVE_FILE_COUNT;
             }
             xglFontDebugPrintf(16, 48, MC_TEXT_FILE_NUMBER, work.file);
-            if (PAD_U16_AT(42) & 0x20) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 int exist;
 
                 hdd_check_request.card = work.file;
-                state = 0x82;
+                state = MCTEST_STATE_HDD_SAVE_CREATE_CONFIRM;
                 exist = xglHddMcExist(&hdd_check_request);
                 printf("xglHddMcExist():%d\n", exist);
                 if (exist < 0) {
-                    state = 0x60;
+                    state = MCTEST_STATE_HDD_MENU_INIT;
                 }
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x60;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_HDD_MENU_INIT;
             }
             break;
 
-        case 0x82:
+        case MCTEST_STATE_HDD_SAVE_CREATE_CONFIRM:
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_SAVE_FREE, work.result);
             xglFontDebugPrintf(16, 48, MC_TEXT_CREATE_CONFIRM);
-            if (PAD_U16_AT(42) & 0x20) {
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
                 hdd_create_request.status = work.file;
                 hdd_create_request.transfer.info = carddata;
-                hdd_create_request.dataSize = 0x163B0;
+                hdd_create_request.dataSize = SAVE_DATA_SIZE;
                 printf("xglHddMcCreate():%d\n", xglHddMcCreate(&hdd_create_request));
-                state = 0x84;
+                state = MCTEST_STATE_HDD_SAVE_WRITE;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x60;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_HDD_MENU_INIT;
             }
             break;
 
-        case 0x83:
+        case MCTEST_STATE_HDD_SAVE_OVERWRITE_CONFIRM:
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_SAVE_FREE, work.result);
             xglFontDebugPrintf(16, 48, MC_TEXT_OVERWRITE_CONFIRM);
-            if (PAD_U16_AT(42) & 0x20) {
-                state = 0x84;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
+                state = MCTEST_STATE_HDD_SAVE_WRITE;
             }
-            if (PAD_U16_AT(42) & 0x40) {
-                state = 0x60;
+            if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CROSS) {
+                state = MCTEST_STATE_HDD_MENU_INIT;
             }
             break;
 
-        case 0x84:
+        case MCTEST_STATE_HDD_SAVE_WRITE:
             hdd_save_request.card = work.file;
             hdd_save_request.data = SaveData;
-            hdd_save_request.size = 0x163B0;
+            hdd_save_request.size = SAVE_DATA_SIZE;
             printf("xglHddMcSave():%d\n", xglHddMcSave(&hdd_save_request));
-            state = 0x60;
+            state = MCTEST_STATE_HDD_MENU_INIT;
             break;
         }
 
-        if (PAD_U16_AT(42) & 0x10) {
+        if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_TRIANGLE) {
             flags = SAVE_FLAGS;
-            for (i = 0; i < 128; i++) {
+            for (i = 0; i < SAVE_FLAGS_COUNT; i++) {
                 *flags++ = xglSRand();
             }
         }
@@ -2509,7 +2682,7 @@ const char xtxTbwFormat[16] = "tbw:%d:%08x\n";
 
 const char xtxEntryFormat[40] = "[%s],%d,(%d,%d)-(%d,%d),(%d,%d)\n";
 
-static unsigned char tbl_49[4] = { 112, 128, 0, 0 };
+static unsigned char tbl_49[4] = { MCTEST_STATE_HDD_LOAD_LIST, MCTEST_STATE_HDD_SAVE_INIT, 0, 0 };
 
 static char h_50[7] = "host0:";
 
@@ -2597,32 +2770,32 @@ static int xtxdec_sub(char *filename)
     int status;
 
     tbw = 64;
-    bmp = (unsigned char *)0x01410000;
+    bmp = (unsigned char *)XTX_BMP_BUFFER;
     sprintf(path, xtxListPathFormat, filename);
-    memset((void *)0x01000000, 0, 0x10000);
-    fd = sceOpen(path, 1);
-    read_size = sceRead(fd, (void *)0x01000000, 0x10000);
+    memset((void *)XTX_LIST_BUFFER, 0, XTX_LIST_BUFFER_SIZE);
+    fd = sceOpen(path, SCE_RDONLY);
+    read_size = sceRead(fd, (void *)XTX_LIST_BUFFER, XTX_LIST_BUFFER_SIZE);
     printf(xtxReadFormat, fd, path, read_size);
     sceClose(fd);
-    if (((XtxHeader *)0x01000000)->magic[0] != 0x58455423 ||
-        ((XtxHeader *)0x01000000)->magic[1] != 0x314C5455)
+    if (((XtxHeader *)XTX_LIST_BUFFER)->magic[0] != XTX_MAGIC_0 ||
+        ((XtxHeader *)XTX_LIST_BUFFER)->magic[1] != XTX_MAGIC_1)
         return -1;
-    line = xtxdec_nextline((char *)0x01000000);
+    line = xtxdec_nextline((char *)XTX_LIST_BUFFER);
     if (line == 0)
         return -1;
     line = xtxdec_nextline(line);
     if (line == 0)
         return -1;
     sprintf(path, xtxFilePathFormat, filename);
-    memset((void *)0x01010000, 0, 256);
-    fd = sceOpen(path, 1);
+    memset((void *)XTX_IMAGE_BUFFER, 0, XTX_IMAGE_HEADER_CLEAR_SIZE);
+    fd = sceOpen(path, SCE_RDONLY);
     count = 0;
-    read_size = sceRead(fd, (void *)0x01010000, 0x400000);
+    read_size = sceRead(fd, (void *)XTX_IMAGE_BUFFER, XTX_IMAGE_BUFFER_SIZE);
     printf(xtxReadFormat, fd, path, read_size);
     sceClose(fd);
     xglSleep();
     sceGsSyncPath(0, 0);
-    header = (XtxHeader *)0x01010000;
+    header = (XtxHeader *)XTX_IMAGE_BUFFER;
     entry = (XtxImageEntry *)((char *)header + header->table_offset);
     for (; count < header->image_count; count++) {
         dimensions = entry->dimensions;
@@ -2632,10 +2805,11 @@ static int xtxdec_sub(char *filename)
         else
             tbw = dimensions >> 16;
         printf(xtxTbwFormat, tbw, entry->vram_address);
-        sceGsSetDefLoadImage(load_image, (entry->vram_address + 0xE0000) >> 6, tbw, 0, 0, 0,
-                             pixel_width, entry->height);
+        sceGsSetDefLoadImage(load_image, (entry->vram_address + XTX_GS_VRAM_OFFSET) >> 6, tbw,
+                             SCE_GS_PSMCT32, 0, 0, pixel_width, entry->height);
         FlushCache(0);
-        sceGsExecLoadImage(load_image, (void *)(0x01010020 + entry->data_offset));
+        sceGsExecLoadImage(load_image,
+                           (void *)(XTX_IMAGE_BUFFER + XTX_IMAGE_DATA_OFFSET + entry->data_offset));
         entry++;
     }
     while (line != 0) {
@@ -2653,7 +2827,7 @@ static int xtxdec_sub(char *filename)
             line++;
         }
         *dst = 0;
-        out = (unsigned char *)0x01410036;
+        out = (unsigned char *)(XTX_BMP_BUFFER + BMP_OFS_PALETTE);
         status = 0;
         line = xtxdec_getdec(line + 2, 0);
         line = xtxdec_getdec(line, &bits_per_pixel);
@@ -2671,17 +2845,18 @@ static int xtxdec_sub(char *filename)
             palette_size = 0;
             break;
         case 4:
-            sceGsSetDefStoreImage(store_image, 0x3800, tbw, 0, origin_x, origin_y, 8, 2);
+            sceGsSetDefStoreImage(store_image, XTX_GS_VRAM_BLOCK, tbw, SCE_GS_PSMCT32, origin_x,
+                                  origin_y, 8, 2);
             FlushCache(0);
-            sceGsExecStoreImage(store_image, (void *)0x01810000);
+            sceGsExecStoreImage(store_image, (void *)XTX_SCRATCH_BUFFER);
             palette_size = 64;
             break;
         case 8:
-            vram_dst = (unsigned char *)0x01810000;
+            vram_dst = (unsigned char *)XTX_SCRATCH_BUFFER;
             for (i = 0; i < 16; i += 2) {
                 for (j = 0; j < 16; j += 8) {
-                    sceGsSetDefStoreImage(store_image, 0x3800, tbw, 0, origin_x + j,
-                                          origin_y + i, 8, 2);
+                    sceGsSetDefStoreImage(store_image, XTX_GS_VRAM_BLOCK, tbw, SCE_GS_PSMCT32,
+                                          origin_x + j, origin_y + i, 8, 2);
                     FlushCache(0);
                     sceGsExecStoreImage(store_image, vram_dst);
                     vram_dst += 64;
@@ -2690,7 +2865,7 @@ static int xtxdec_sub(char *filename)
             palette_size = 1024;
             break;
         }
-        palette = (unsigned char *)0x01810000;
+        palette = (unsigned char *)XTX_SCRATCH_BUFFER;
         for (i = 0; i < palette_size; i += 4) {
             out[0] = palette[i + 2];
             out[1] = palette[i + 1];
@@ -2703,41 +2878,43 @@ static int xtxdec_sub(char *filename)
             switch (bits_per_pixel) {
             case 4: break;
             case 8:
-                sceGsSetDefStoreImage(store_image, 0x3800, tbw * 2, 19, left, top + i, width, 1);
+                sceGsSetDefStoreImage(store_image, XTX_GS_VRAM_BLOCK, tbw * 2, SCE_GS_PSMT8, left,
+                                      top + i, width, 1);
                 j = width;
                 break;
             case 16: case 24: case 32: break;
             }
             if (out != 0) {
                 FlushCache(0);
-                sceGsExecStoreImage(store_image, (void *)0x01810000);
-                memcpy(out, (void *)0x01810000, j);
+                sceGsExecStoreImage(store_image, (void *)XTX_SCRATCH_BUFFER);
+                memcpy(out, (void *)XTX_SCRATCH_BUFFER, j);
                 out += j;
             }
         }
         i = out - bmp;
-        out = (unsigned char *)0x0141000E;
-        vram_dst = (unsigned char *)0x01410000;
+        out = (unsigned char *)(XTX_BMP_BUFFER + BMP_OFS_INFO_HEADER);
+        vram_dst = (unsigned char *)XTX_BMP_BUFFER;
         *vram_dst++ = 'B';
         *vram_dst++ = 'M';
-        xtxdec_put4byte((LittleEndianWord *)0x01410002, i);
-        xtxdec_put4byte((LittleEndianWord *)0x01410006, 0);
-        xtxdec_put4byte((LittleEndianWord *)0x0141000A, palette_size + 54);
-        xtxdec_put4byte((LittleEndianWord *)out, 40);
-        xtxdec_put4byte((LittleEndianWord *)0x01410012, width);
-        xtxdec_put4byte((LittleEndianWord *)0x01410016, height);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_FILE_SIZE), i);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_RESERVED), 0);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_PIXEL_OFFSET),
+                        palette_size + BMP_HEADERS_SIZE);
+        xtxdec_put4byte((LittleEndianWord *)out, BMP_INFO_HEADER_SIZE);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_WIDTH), width);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_HEIGHT), height);
         out[12] = 1;
         out[13] = 0;
         out[14] = bits_per_pixel;
         out[15] = 0;
-        xtxdec_put4byte((LittleEndianWord *)0x0141001E, 0);
-        xtxdec_put4byte((LittleEndianWord *)0x01410022, 0);
-        xtxdec_put4byte((LittleEndianWord *)0x01410026, 0);
-        xtxdec_put4byte((LittleEndianWord *)0x0141002A, 0);
-        xtxdec_put4byte((LittleEndianWord *)0x0141002E, 0);
-        xtxdec_put4byte((LittleEndianWord *)0x01410032, 0);
-        fd = sceOpen(path, 0x602);
-        sceWrite(fd, (void *)0x01410000, i);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_COMPRESSION), 0);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_IMAGE_SIZE), 0);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_X_PIXELS_PER_METER), 0);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_Y_PIXELS_PER_METER), 0);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_COLORS_USED), 0);
+        xtxdec_put4byte((LittleEndianWord *)(XTX_BMP_BUFFER + BMP_OFS_COLORS_IMPORTANT), 0);
+        fd = sceOpen(path, SCE_WRONLY | SCE_TRUNC | SCE_CREAT);
+        sceWrite(fd, (void *)XTX_BMP_BUFFER, i);
         sceClose(fd);
         line = xtxdec_nextline(line);
     }
@@ -2746,7 +2923,7 @@ static int xtxdec_sub(char *filename)
 
 static int xtxdec_sleep(void)
 {
-    if ((PAD_U64_AT(40) & 0x08000100ULL) == 0x08000100ULL) {
+    if ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) == PAD_EXIT_COMBO) {
         return 1;
     }
     xglFontDebugPrintf(0, 0, xtxDecodeText);
@@ -2758,7 +2935,7 @@ static void xtxdec_error(int y, const char *message)
 {
     while (xtxdec_sleep() == 0) {
         xglFontDebugPrintf(0, y, message);
-        if (PAD_U16_AT(42) & 0x20) {
+        if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
             break;
         }
     }
@@ -2815,10 +2992,10 @@ void YajimaTest(void)
     int selection;
     XglClock clock;
 
-    PadData.bytes[0x4E] = 0x40;
-    PadData.bytes[0x4F] = 0x40;
+    PadData.bytes[PAD_OFS_HORIZONTAL_DEAD_ZONE] = YAJIMA_PAD_DEAD_ZONE;
+    PadData.bytes[PAD_OFS_VERTICAL_DEAD_ZONE] = YAJIMA_PAD_DEAD_ZONE;
     xglRenderClearFrame();
-    xglRenderClearColor(0x80004000);
+    xglRenderClearColor(CLEAR_COLOR_MENU);
 
     for (;;) {
         xglMenuInitial();

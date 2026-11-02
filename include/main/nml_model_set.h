@@ -5,11 +5,80 @@
 #include "main/xgl_2.h"
 #include "main/nml_packet_add.h"
 
+#define NML_MAP_SHADOW_PARTS_MAX 8
+
 /* Slot of a render layout store: one 32-bit word read as float or int. */
 typedef union {
     float f;
     int i;
 } LayoutSlot;
+
+/*
+ * Request bits of the layout store's render-status word (LayoutStore +0x250).
+ * Each nmlModelSet* setter ORs its own bit; the render entries set the
+ * microcode-family bit around nmlPacketAddTransMicrocode.
+ */
+enum NmlRenderStatus {
+    NML_RENDER_PLACE = 0x1,           /* nmlModelSetPlace */
+    NML_RENDER_FOG = 0x2,             /* nmlModelSetFogCol / SetFogDist */
+    NML_RENDER_STENCIL = 0x4,
+    NML_RENDER_ZWRITE = 0x8,
+    NML_RENDER_LIGHT = 0x10,          /* nmlModelSetLight */
+    NML_RENDER_TOUMEI = 0x20,         /* see-through (toumei) parts */
+    NML_RENDER_HUMAN_MODEL = 0x40,
+    NML_RENDER_PROREAL = 0x800,       /* nmlModelSetTexProreal / RenderProreal */
+    NML_RENDER_POINT_LIGHT = 0x1000,  /* nmlModelSetPointLight */
+    NML_RENDER_FOG_CANCEL = 0x2000,
+    NML_RENDER_TEXMAP_TEXTURE = 0x4000, /* nmlModelSetTexMap, plain texture kind */
+    NML_RENDER_TEXTURE_PASS = 0x8000, /* set while nmlModelRenderTexture runs */
+    NML_RENDER_MAP_ENTRY = 0x10000,   /* nmlModelSetMapEntry / SetShadowMapEntry */
+    NML_RENDER_CULLED = 0x20000,      /* nmlModelCalcSample: clipped out of every active window */
+    NML_RENDER_TEXMAP_DROP = 0x40000, /* nmlModelSetTexMap, drop kind */
+    NML_RENDER_DROP_PASS = 0x80000,   /* set while nmlModelRenderDrop runs */
+    NML_RENDER_FACE_MODEL = 0x100000, /* nmlModelSetFaceModel */
+    NML_RENDER_TEXMAP_CIRCLE = 0x200000,
+    NML_RENDER_TEXMAP_DROP_CIRCLE = 0x400000,
+    NML_RENDER_BACK_CLEAR = 0x800000, /* group becomes NML_GROUP_BACK_CLEAR */
+    NML_RENDER_GLOBAL_FOG = 0x1000000, /* nmlModelSetGlobalFogCol / Dist */
+    NML_RENDER_GLOBAL_POINT_LIGHT = 0x2000000
+};
+
+/*
+ * Kind flags of one NmlBlockGroup (alpha and non-alpha groups alike), built
+ * by set_group_status from the render-status bits above.
+ */
+enum NmlGroupFlag {
+    NML_GROUP_TEXTURE = 0x1,
+    NML_GROUP_STENCIL = 0x2,
+    NML_GROUP_FOG = 0x4,
+    NML_GROUP_PROREAL = 0x8,
+    NML_GROUP_MAP = 0x10,
+    NML_GROUP_TOUMEI = 0x20,
+    NML_GROUP_CULLED = 0x40,
+    NML_GROUP_DROP = 0x80,
+    NML_GROUP_CIRCLE = 0x100,
+    NML_GROUP_DROP_CIRCLE = 0x200,
+    NML_GROUP_ZWRITE = 0x400,
+    NML_GROUP_BACK_CLEAR = 0x800
+};
+
+/*
+ * Block material flags (NmlModelBlock.materialFlags).  The blend bits pick the
+ * GS ALPHA register the alpha-group pass loads (additive 0x48, subtractive
+ * 0x42); the reflect bit gates nmlPacketAddReflRot / nmlPacketAddReflectParam.
+ */
+#define NML_BLOCK_MATERIAL_NAMED_PARTS 0x10u
+enum NmlMaterialFlag {
+    NML_MATERIAL_BLEND_ADD = 0x20,
+    NML_MATERIAL_BLEND_SUB = 0x40,
+    NML_MATERIAL_REFLECT = 0x1000,
+    NML_MATERIAL_LIGHT_PARA = 0x20000 /* lit by the single light parameter set */
+};
+
+/* Render-level word (LayoutStore +0x2b0) bits. */
+enum NmlRenderLevel {
+    NML_LEVEL_NO_SPECULAR = 0x2
+};
 
 /*
  * A loaded model resource.  Its block count is +0x44 and the table at +0xb0
@@ -315,7 +384,7 @@ union LayoutStore {
         int stealthEntryCount; /* +0x2c8 */
         unsigned char unmodeled_2cc[4];
         NmlPartPixelAlpha partPixelAlpha[4]; /* +0x2d0 */
-        unsigned short mapShadowParts[8];    /* +0x2e0 */
+        unsigned short mapShadowParts[NML_MAP_SHADOW_PARTS_MAX]; /* +0x2e0 */
         float fogIntensity[4]; /* +0x2f0; one fog intensity multiplier per viewport */
         float viewportAlpha[4];
         int viewportFlags[4];

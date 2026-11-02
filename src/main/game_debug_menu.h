@@ -20,34 +20,61 @@
 #include "main/xgl_font.h"
 #include "main/xgl_render.h"
 
-/*
- * PadData's pressed-button halfword (include/shared.h PadPrefix.half_2a).
- * PauseMenuPage0 and GameDebugMenu both test bit 0x40 of it; other TUs name
- * the same bit PAD_CANCEL (src/main/game_over.c) or PAD_BATU
- * (src/ov12/xrg_pad.c) for their own contexts. This TU's uses cycle/dismiss
- * the debug pages, so it keeps the physical button name.
- */
-#define PAD_CROSS 0x0040
+/* GameDebugMenu pages (GameLoopState.debugPage), cycled with L1/R1. */
+enum DebugMenuPage {
+    DEBUG_PAGE_MENU,
+    DEBUG_PAGE_RESOURCES,
+    DEBUG_PAGE_FLAGS,
+    DEBUG_PAGE_UWAMONO,
+    DEBUG_PAGE_ENEMY,
+    DEBUG_PAGE_PARTY,
+    DEBUG_PAGE_COUNT
+};
 
-#define PAD_L1 0x0004
-#define PAD_R1 0x0008
-#define PAD_UP 0x1000
-#define PAD_RIGHT 0x2000
-#define PAD_DOWN 0x4000
-#define PAD_LEFT 0x8000
-#define PAD_CIRCLE 0x0020
+/* Rows of the menu page (tbl_1_00367A70). */
+enum DebugMenuRow {
+    DEBUG_ROW_CHANGE_MAP,
+    DEBUG_ROW_CHANGE_LEADER,
+    DEBUG_ROW_RUN_BATTLE,
+    DEBUG_ROW_SNAP,
+    DEBUG_ROW_MODEL_FOLDER,
+    DEBUG_ROW_MAP_FOLDER,
+    DEBUG_ROW_SCENE_FOLDER,
+    DEBUG_ROW_RUN_CF,
+    DEBUG_ROW_RUN_EVENT,
+    DEBUG_ROW_SCANLINE_INTERPOLATION,
+    DEBUG_ROW_COUNT
+};
 
-#define ACTOR_COUNT 64
+/* Rows of the debug-flags page (tbl_0_00367A50). */
+enum DebugFlagRow {
+    DEBUG_FLAG_ROW_CF_CAMERA_SWITCH,
+    DEBUG_FLAG_ROW_MODEL_NUMBER_TAG,
+    DEBUG_FLAG_ROW_SNAP_CREDIT,
+    DEBUG_FLAG_ROW_SNAP_QUALITY,
+    DEBUG_FLAG_ROW_MODEL_NUMBER_CHECK,
+    DEBUG_FLAG_ROW_ALPHA_ON_CAPTURE,
+    DEBUG_FLAG_ROW_DISC_CHECK
+};
 
-
-#define DEBUG_ROW_COUNT 10
+/* Left/right step of the menu page, multiplied while the cross button is held. */
+#define DEBUG_FAST_STEP 100
+#define SNAP_QUALITY_MIN (-5)
+#define SNAP_QUALITY_MAX 100
+/* Snapshot file names are "game<digit>000". */
+#define SNAPSHOT_NUMBER_COUNT 10
+/* Selectable variants: debug map path sets, scene paths, scanline modes. */
+#define DEBUG_MAP_PATH_COUNT 3
+#define DEBUG_SCENE_PATH_COUNT 20
+#define SCANLINE_MODE_COUNT 3
+/* Script ids of the run-CF and run-event rows wrap at this value. */
+#define SCRIPT_JUMP_ID_COUNT 10000
 
 #define MAP_COUNT 2000
 #define SCRIPT_ID_EVENT_BASE 0x10000000
 
 /* GameResource: 128 resource blocks of 16 bytes (address, size, handle,
  * state); the page-3 usage line walks address and size. */
-#define GAME_RESOURCE_COUNT 128
 
 #define CF_CAMERA_SWITCH 0x02
 #define RUNTIME_MODEL_NUMBER_TAG 0x4
@@ -56,8 +83,12 @@
 #define MAP_UNIT_CHECK_HIDDEN 0x4
 #define MODEL_CHECK_ACTOR 0x200
 #define MODEL_CHECK_MAP_UNIT 0x300
+/* modelNumberCheck = kind (high byte) | slot index (low byte). */
+#define MODEL_CHECK_KIND_MASK 0xff00
+#define MODEL_CHECK_INDEX_MASK 0xff
+/* Cross flips the kind between actor (0x200) and map unit (0x300). */
+#define MODEL_CHECK_KIND_FLIP 0x100
 #define DEBUG_FLAG_COUNT 7
-#define MAP_UNIT_COUNT 64
 
 /* PadData through +0x2e: the PadPrefix halfwords plus the two this TU's
  * pages also read. */

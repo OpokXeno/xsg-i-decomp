@@ -48,22 +48,6 @@ typedef struct StringInstance {
     StringValue *value;  /* +0x4 */
 } StringInstance;
 
-enum {
-    CLASS_STATE_MEMBERS_RESOLVED = 4,
-    CLASS_STATE_BEFORE_CONSTANTS = 5,
-    CLASS_STATE_CONSTANTS_RESOLVED = 6,
-    CLASS_STATE_PREPARED = 8,
-    CLASS_STATE_INITIALIZED = 11,
-    CLASS_ACCESS_INTERFACE = 0x0200,
-    METHOD_ACCESS_STATIC = 0x0008,
-    FIELD_FLAG_HAS_CONSTANT_VALUE = 0x4000,
-    CONSTANT_POOL_TAG_INTEGER = 3,
-    CONSTANT_POOL_TAG_FLOAT = 4,
-    CONSTANT_POOL_TAG_LONG = 5,
-    CONSTANT_POOL_TAG_DOUBLE = 6,
-    CONSTANT_POOL_TAG_STRING = 8,
-    CONSTANT_POOL_TAG_RESOLVED_STRING = 0x18
-};
 
 struct ClassCacheEntry {
     SceneString *name;
@@ -189,7 +173,7 @@ StringInstance *Const2JavaString(StringConstant *constant)
     int length;
     char *bytes;
 
-    value = xmalloc(sizeof(StringValue), 0xE);
+    value = xmalloc(sizeof(StringValue), VM_HEAP_OBJECT);
     length = constant->length;
     bytes = constant->bytes;
     value->length = length;
@@ -201,7 +185,7 @@ StringInstance *Const2JavaString(StringConstant *constant)
 
 void *newObject(JavaClass *clazz)
 {
-    ObjectHeader *instance = xmalloc(clazz->instanceSize, 0xE);
+    ObjectHeader *instance = xmalloc(clazz->instanceSize, VM_HEAP_OBJECT);
 
     instance->classPointer = clazz->classPointer;
     return instance;
@@ -211,7 +195,7 @@ void *newClass(void)
 {
     JavaClass *clazz;
 
-    clazz = xmalloc(0x40, 0xE);
+    clazz = xmalloc(sizeof(JavaClass), VM_HEAP_OBJECT);
     clazz->instanceSize = 0;
     clazz->staticFieldCount = 0;
     clazz->classPointer = (void *)*(int *)&classClass->classPointer;
@@ -223,10 +207,10 @@ void *newArray(JavaClass *elementType, int length)
     ArrayHeader *array;
     void *classPointer;
 
-    if (elementType->flags & 0x100) {
-        array = xmalloc(elementType->elementSize * length + 0xC, 0xE);
+    if (elementType->flags & VM_CLASS_FLAG_PRIMITIVE) {
+        array = xmalloc(elementType->elementSize * length + sizeof(ArrayHeader), VM_HEAP_OBJECT);
     } else {
-        array = xmalloc(length * 4 + 0xC, 0xE);
+        array = xmalloc(length * 4 + sizeof(ArrayHeader), VM_HEAP_OBJECT);
     }
     classPointer = lookupArray(elementType)->classPointer;
     array->length = length;
@@ -260,7 +244,7 @@ int processClass(JavaClass *clazz, int targetState)
         super = clazz->superClass;
         interfaceCount = clazz->declaredInterfaceCount;
         if (super != 0 && super != classObject) {
-            if (clazz->accessFlags & CLASS_ACCESS_INTERFACE) {
+            if (clazz->accessFlags & JVM_ACC_INTERFACE) {
                 interfaceCount++;
             }
             interfaceCount += super->interfaceCount;
@@ -277,7 +261,7 @@ int processClass(JavaClass *clazz, int targetState)
         clazz->header.classPointer = classClass->classPointer;
         resolveInstanceField(clazz);
         resolveStaticField(clazz);
-        if (!(clazz->accessFlags & CLASS_ACCESS_INTERFACE)) {
+        if (!(clazz->accessFlags & JVM_ACC_INTERFACE)) {
             buildDispatchMethodTable(clazz);
         }
         clazz->state = CLASS_STATE_MEMBERS_RESOLVED;
@@ -350,7 +334,7 @@ static void buildDispatchMethodTable(JavaClass *clazz)
     }
     method = clazz->methods;
     for (i = clazz->methodCount; --i >= 0;) {
-        if ((method->accessFlags & METHOD_ACCESS_STATIC) ||
+        if ((method->accessFlags & JVM_ACC_STATIC) ||
             method->name == *constructorName) {
             method->dispatchIndex = -1;
         } else {
@@ -362,7 +346,7 @@ static void buildDispatchMethodTable(JavaClass *clazz)
             }
         }
     }
-    table = xmalloc(clazz->dispatchSize * 4 + 8, 15);
+    table = xmalloc(clazz->dispatchSize * 4 + 8, VM_HEAP_DISPATCH_TABLE);
     table->clazz = clazz;
     slots = table->methods;
     clazz->classPointer = table;
@@ -394,13 +378,13 @@ static void resolveStaticField(JavaClass *clazz)
     for (; --i >= 0; field++) {
         int index;
 
-        if (!(field->flags & FIELD_FLAG_HAS_CONSTANT_VALUE)) {
+        if (!(field->flags & VM_FIELD_FLAG_HAS_CONSTANT_VALUE)) {
             continue;
         }
         index = field->payload.constant_index;
         address = field->location.address;
         switch (constants[0].tags[index]) {
-        case CONSTANT_POOL_TAG_INTEGER:
+        case JVM_CONSTANT_INTEGER:
             if (field->type.resolved == classBoolean || field->type.resolved == classByte) {
                 address->byteValue = constants[index].byteValue;
                 field->payload.constant_index = classByte->elementSize;
@@ -416,21 +400,21 @@ static void resolveStaticField(JavaClass *clazz)
                 }
             }
             break;
-        case CONSTANT_POOL_TAG_FLOAT:
+        case JVM_CONSTANT_FLOAT:
             address->floatValue = constants[index].floatValue;
             field->payload.constant_index = classFloat->elementSize;
             break;
-        case CONSTANT_POOL_TAG_LONG:
-        case CONSTANT_POOL_TAG_DOUBLE:
+        case JVM_CONSTANT_LONG:
+        case JVM_CONSTANT_DOUBLE:
             address[0].intValue = constants[index].intValue;
             address[1].intValue = constants[index + 1].intValue;
             field->payload.constant_index = classLong->elementSize;
             break;
-        case CONSTANT_POOL_TAG_STRING:
-            constants[0].tags[index] = CONSTANT_POOL_TAG_RESOLVED_STRING;
+        case JVM_CONSTANT_STRING:
+            constants[0].tags[index] = VM_CONSTANT_RESOLVED_STRING;
             constants[index].object = Const2JavaString(constants[index].object);
             /* fall through: the slot now holds the String instance */
-        case CONSTANT_POOL_TAG_RESOLVED_STRING:
+        case VM_CONSTANT_RESOLVED_STRING:
             address->object = constants[index].object;
             field->payload.constant_index = 4;
             break;
@@ -465,8 +449,8 @@ static int resolveConstants(JavaClass *classEntry)
     ConstantPoolEntry *constantPool = classEntry->constants;
 
     if (constantCount != 0) {
-        u8 stringConstantTag = CONSTANT_POOL_TAG_STRING;
-        u8 resolvedStringTag = CONSTANT_POOL_TAG_RESOLVED_STRING;
+        u8 stringConstantTag = JVM_CONSTANT_STRING;
+        u8 resolvedStringTag = VM_CONSTANT_RESOLVED_STRING;
         ConstantPoolEntry *constant = constantPool;
 
         do {
@@ -517,7 +501,7 @@ JavaClass *loadClass(SceneString *classKey, void *classLoader)
     if (resolved == 0) {
         result = 0;
     } else {
-        result = (processClass(resolved, 0xB) == 0) ? 0 : resolved;
+        result = (processClass(resolved, CLASS_STATE_INITIALIZED) == 0) ? 0 : resolved;
     }
     return result;
 }
@@ -543,7 +527,7 @@ void loadStaticClass(void *class_slot, const char *name)
 void reloadClassEntry(void *heapBoundary)
 {
     ClassCacheEntry **bucket = classEntryPool;
-    int bucketsRemaining = 511;
+    int bucketsRemaining = VM_HASH_LAST_BUCKET;
 
     do {
         ClassCacheEntry *entry = *bucket;
@@ -572,18 +556,18 @@ ClassCacheEntry *lookupClassEntry(SceneString *name, void *classLoader)
     unsigned int bucket;
 
     if (pool == 0) {
-        int remaining = 511;
+        int remaining = VM_HASH_LAST_BUCKET;
 
-        pool = xmalloc(0x800, 2);
+        pool = xmalloc(VM_HASH_BUCKETS * sizeof(ClassCacheEntry *), VM_HEAP_LOOKUP_TABLE);
         classEntryPool = pool;
-        slot = pool + 511;
+        slot = pool + VM_HASH_LAST_BUCKET;
         do {
             remaining--;
             *slot = 0;
             slot--;
         } while (remaining >= 0);
     }
-    bucket = name->hash & 0x1FF;
+    bucket = name->hash & VM_HASH_MASK;
     entry = pool[bucket];
     while (entry != 0 && (name != entry->name || classLoader != entry->classLoader)) {
         entry = entry->next;
@@ -591,7 +575,7 @@ ClassCacheEntry *lookupClassEntry(SceneString *name, void *classLoader)
     if (entry != 0) {
         return entry;
     }
-    entry = xmalloc(0x10, 2);
+    entry = xmalloc(sizeof(ClassCacheEntry), VM_HEAP_LOOKUP_TABLE);
     entry->name = name;
     entry->classLoader = classLoader;
     entry->next = classEntryPool[bucket];
@@ -609,7 +593,7 @@ JavaClass *lookupArray(JavaClass *elementType)
     ClassCacheEntry *entry;
     SceneString *key;
 
-    if (elementType->flags & 0x100) {
+    if (elementType->flags & VM_CLASS_FLAG_PRIMITIVE) {
         sprintf(name, primitiveArrayDescriptorFormat, elementType->typeCode);
     } else {
         const char *typeName = elementType->name->bytes;
@@ -627,7 +611,7 @@ JavaClass *lookupArray(JavaClass *elementType)
         void *classLoader = elementType->classLoader;
         JavaClass *parentClass = classObject;
 
-        clazz->accessFlags = 0x411;
+        clazz->accessFlags = JVM_ACC_PUBLIC | JVM_ACC_FINAL | JVM_ACC_ABSTRACT;
         entry->resolvedClass = clazz;
         clazz->name = key;
         clazz->classLoader = classLoader;
@@ -703,7 +687,7 @@ static void allocStaticField(JavaClass *classEntry)
             field++;
         }
         {
-            unsigned char *storage = xmalloc(storageOffset, 10);
+            unsigned char *storage = xmalloc(storageOffset, VM_HEAP_FIELDS);
 
             field = classEntry->fields;
             remaining = classEntry->staticFieldCount;
@@ -755,13 +739,13 @@ static inline u8 arrayInstanceOf(JavaClass *source, JavaClass *target)
     if (source->name->bytes[0] == '[') {
         return 0;
     }
-    if (source->flags & 0x100) {
+    if (source->flags & VM_CLASS_FLAG_PRIMITIVE) {
         return source == target;
     }
     if (target->name->bytes[0] == '[') {
         return source == classObject;
     }
-    if (target->flags & 0x100) {
+    if (target->flags & VM_CLASS_FLAG_PRIMITIVE) {
         return 0;
     }
     return instanceOf(source, target);
@@ -800,7 +784,7 @@ int instanceOf(JavaClass *from, JavaClass *to)
     if (to->name->bytes[0] == '[') {
         return arrayInstanceOf(from, to);
     }
-    if (to->accessFlags & 0x200) {
+    if (to->accessFlags & JVM_ACC_INTERFACE) {
         return implementsInterface(from, to);
     }
     return inheritsFrom(from, to);

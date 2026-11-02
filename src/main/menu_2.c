@@ -12,6 +12,12 @@ typedef struct JThread JThread;
 
 typedef struct MenuStringData MenuStringData;
 
+/* Most query strings Menu.addQuery(String[], int) forwards to the menu. */
+#define MENU_QUERY_MAX 32
+
+/* MenuNative.flags: the menu must refresh its cursor (set by Menu.setCursor). */
+#define MENU_NATIVE_FLAG_REFRESH 0x200
+
 /*
  * A java.lang.String argument, as the natives below read it: +0x00 (the
  * class word every object reference begins with) is untouched by this TU,
@@ -116,7 +122,7 @@ void Java_xeno_util_Menu_addQuery__aLjava_lang_String_I(JThread *thread,
                                                          MenuStringArrayCall *arguments,
                                                          unsigned int *result)
 {
-    char *texts[32];
+    char *texts[MENU_QUERY_MAX];
     MenuStringArray *array;
     MenuNative *menu;
     int count;
@@ -124,8 +130,8 @@ void Java_xeno_util_Menu_addQuery__aLjava_lang_String_I(JThread *thread,
 
     array = arguments->array;
     count = array->length;
-    if (count > 32) {
-        count = 32;
+    if (count > MENU_QUERY_MAX) {
+        count = MENU_QUERY_MAX;
     }
     menu = arguments->menu;
     for (index = 0; index < count; index++) {
@@ -195,6 +201,6 @@ void Java_xeno_util_Menu_setCursor__I(JThread *thread, MenuCursorCall *arguments
     cursor = arguments->cursor;
     if (menu->selected != cursor) {
         menu->cursor = cursor;
-        menu->flags |= 0x200;
+        menu->flags |= MENU_NATIVE_FLAG_REFRESH;
     }
 }

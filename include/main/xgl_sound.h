@@ -3,6 +3,23 @@
 
 #include "main/xgl_cd.h"
 
+/* Sequence (SMD) channels and sound effect (SED) banks held by SoundWork. */
+#define SOUND_SEQUENCE_CHANNELS 8
+#define SOUND_EFFECT_BANKS 16
+/* The SE queue is 0x800 bytes of 32-byte packets. */
+#define SOUND_SE_PACKET_COUNT 64
+#define SOUND_SE_QUEUE_BYTES 0x800U
+/* A bank, sequence or effect handle that holds no data. */
+#define SOUND_HANDLE_NONE 0xFFFF
+/* MIDI-style volume 0..127. */
+#define SOUND_VOLUME_RANGE 0x80
+#define SOUND_VOLUME_MAX 0x7F
+/* SoundStream.playback.type. */
+#define SOUND_STREAM_NONE 0
+#define SOUND_STREAM_PCM 1
+#define SOUND_STREAM_VAG_STEREO 2
+#define SOUND_STREAM_VAG_MULTI 3
+
 typedef struct SoundChannelEntry {
     unsigned short _unmodeled_00;
     unsigned short sequence;
@@ -36,13 +53,13 @@ typedef union SoundStream {
 } SoundStream;
 
 struct SoundWork {
-    SoundChannelEntry channels[8];
-    /* xglSoundInitial resets exactly these 16 banks. */
-    SoundEffectBankEntry effect_banks[16];
+    SoundChannelEntry channels[SOUND_SEQUENCE_CHANNELS];
+    /* xglSoundInitial resets exactly these banks. */
+    SoundEffectBankEntry effect_banks[SOUND_EFFECT_BANKS];
     SoundStream stream;
     int packet_count;
     /* The 0x800-byte SE queue: 64 fixed-size packets. */
-    SePacket packets[64];
+    SePacket packets[SOUND_SE_PACKET_COUNT];
 };
 
 extern int xglSoundStreamMain(void);

@@ -3,6 +3,12 @@
 
 #include "shared.h"
 
+/* MenuTextGet ids: the text kind in the high halfword, the item id below it. */
+#define MENU_TEXT_WEAPON    0x30000
+#define MENU_TEXT_BULLET    0x40000
+#define MENU_TEXT_ACCESSORY 0x50000
+#define MENU_TEXT_CHARACTER 0x60000
+
 /* Functions and data used by other translation units. */
 extern const char MenuAgwsUnequipCommandLabel[];
 extern const char MenuAgwsNameLabel[];

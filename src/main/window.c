@@ -4,6 +4,11 @@
 #include "main/runtime.h"
 #include "main/twsys_init.h"
 
+/* Window.create(kind): which text-window layout TWIN_create2 sets up. */
+#define WINDOW_KIND_CF 0
+#define WINDOW_KIND_SCENE 1
+#define WINDOW_BUFFER_SIZE 0x40 /* command string built for MSG_print2 */
+
 /*
  * The script VM's per-thread context, recovered as `JThread` in
  * src/main/chr.h (main's chr TU). Every Java native receives
@@ -159,7 +164,7 @@ void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
                                       void *result)
 {
     TComponent *window;
-    char buffer[0x40];
+    char buffer[WINDOW_BUFFER_SIZE];
 
     window = arguments->window;
     sprintf(buffer, windowWaitKeyCommandFormat, arguments->value);
@@ -170,7 +175,7 @@ void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
                                    void *result)
 {
     TComponent *window;
-    char buffer[0x40];
+    char buffer[WINDOW_BUFFER_SIZE];
 
     window = arguments->window;
     sprintf(buffer, windowWaitCommandFormat, arguments->value);
@@ -187,10 +192,10 @@ void Java_xeno_util_Window_create__I(JThread *thread, WindowCreateCall *argument
     window = TWIN_create2(-1);
     window->class_word = (int)window_class->classPointer;
     switch (arguments->kind) {
-    case 0:
+    case WINDOW_KIND_CF:
         TWIN_initCF(window);
         break;
-    case 1:
+    case WINDOW_KIND_SCENE:
         TWIN_initScene(window);
         break;
     }
@@ -216,7 +221,7 @@ void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *
     TComponent *window;
 
     window = arguments->window;
-    window->flags &= ~0x40;
+    window->flags &= ~TCOMP_FLAG_FOLLOW_OWNER;
     /* x's store stays in its own do/while(0) block: inlined into the
        statements around it, cc1 hoists the y load/convert ahead of it and
        defers x's own store next to the branch delay slot instead of right

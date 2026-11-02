@@ -8,13 +8,6 @@
 #include "shared.h"
 #include "main/twsys_init.h"
 
-#define PAD_CIRCLE 0x0020
-#define PAD_CROSS  0x0040
-#define PAD_UP     0x1000
-#define PAD_RIGHT  0x2000
-#define PAD_DOWN   0x4000
-#define PAD_LEFT   0x8000
-
 /* This TU reads two consecutive PadData halfwords at +0x2a and +0x2c. */
 typedef struct TSliderPadData {
     unsigned char unmodeled_00[0x2a];

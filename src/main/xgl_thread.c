@@ -39,11 +39,25 @@ extern void xglRenderEntry(void *argument);
 extern void xglCdControlThread(void *argument);
 extern void ControlEntry(void *argument);
 
-static system_thread_entry_t asSystemThreadList[4] = {
-    { xglRenderEntry, 0, 0x1000, 9, 0 },
-    { xglCdControlThread, 0, 0x1000, 10, 0 },
-    { xglStudioEntry, 0, 0x1000, 12, 0 },
-    { ControlEntry, 0, 0x10000, 11, 0 },
+/* The four system threads: the renderer, the CD control thread, the studio
+ * and the main control thread. xglSleep() hands control from one to the next
+ * in this order. */
+#define XGL_THREAD_COUNT 4
+#define XGL_THREAD_STACK_SIZE 0x1000
+#define XGL_CONTROL_THREAD_STACK_SIZE 0x10000
+#define XGL_THREAD_PRIORITY_RENDER 9
+#define XGL_THREAD_PRIORITY_CD 10
+#define XGL_THREAD_PRIORITY_CONTROL 11
+#define XGL_THREAD_PRIORITY_STUDIO 12
+/* The threads' stacks are carved downward from the top of main memory's
+ * reserved area. */
+#define XGL_THREAD_STACK_TOP 0x1f8000
+
+static system_thread_entry_t asSystemThreadList[XGL_THREAD_COUNT] = {
+    { xglRenderEntry, 0, XGL_THREAD_STACK_SIZE, XGL_THREAD_PRIORITY_RENDER, 0 },
+    { xglCdControlThread, 0, XGL_THREAD_STACK_SIZE, XGL_THREAD_PRIORITY_CD, 0 },
+    { xglStudioEntry, 0, XGL_THREAD_STACK_SIZE, XGL_THREAD_PRIORITY_STUDIO, 0 },
+    { ControlEntry, 0, XGL_CONTROL_THREAD_STACK_SIZE, XGL_THREAD_PRIORITY_CONTROL, 0 },
 };
 
 static int iRotateSignal;
@@ -76,7 +90,7 @@ void xglThreadRotate(void)
         WakeupThread(asActiveThreadList[iCurrentThread].id);
         WaitSema(iRotateSignal);
         iCurrentThread++;
-        if (iCurrentThread >= 4)
+        if (iCurrentThread >= XGL_THREAD_COUNT)
             iCurrentThread = 0;
     }
 }
@@ -96,7 +110,7 @@ void xglThreadInitial(void)
     active_thread_t *active = asActiveThreadList;
     ee_thread_t *thread = &sThreadParam;
     unsigned int count = 0;
-    int stack = 0x1f8000;
+    int stack = XGL_THREAD_STACK_TOP;
 
     do {
         int stack_size = asSystemThreadList[count].stack_size;
@@ -119,7 +133,7 @@ void xglThreadInitial(void)
         stack -= asSystemThreadList[count].stack_size;
         count++;
         active++;
-    } while (count < 4);
+    } while (count < XGL_THREAD_COUNT);
 
     iCurrentThread = 0;
 }

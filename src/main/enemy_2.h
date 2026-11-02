@@ -58,7 +58,7 @@
 #define ENEMY_SAC_MOVE(work) (&(work)->sac_move)
 
 /* The bit this function sets in ENEMY_TURN_FLAGS to ask for a timed turn. */
-#define ENEMY_TURN_REQUEST 0x10000
+#define ENEMY_TURN_REQUEST ENEMY_STATE_FLAG_SCRIPT_ACTIVE
 
 /* Enemy_Command_Freeze's own state inside the entry: a one-byte freeze
  * command (lb/sb at 0x002d2eac/0x002d2ef4/0x002d2f00) and, 14 bytes later,

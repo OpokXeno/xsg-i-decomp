@@ -13,6 +13,35 @@
 #define MIF2_CLOSE_BYTE 0x84u
 #define MIF2_WAITKEY_BYTE 0x80u
 #define MIF2_WAIT_BYTE 0x83u
+#define MIF2_SIGNAL_BYTE 0x82u
+/* Control opcodes (< 0x20) written by the ruby handler: a callback record
+ * (callback address + 4-byte parameter) and a ruby-text on/off switch. */
+#define MIF2_CALLBACK_BYTE 0x17u
+#define MIF2_RUBY_BYTE 0x18u
+
+/* Message byte classes (EUC-JP text with /[...] tags). */
+#define MSG_TAG_BYTE_MIN 0x80   /* first byte of a tag code inside /[ ] */
+#define MSG_LEAD_BYTE_MIN 0x8e  /* first lead byte of a two-byte character */
+#define MSG_KANJI_BYTE_MIN 0xa0 /* below this a byte is converted from ASCII */
+#define MSG_GAIJI_LEAD_BYTE (-83) /* 0xad: custom glyph lead byte */
+#define MSG_GAIJI_BASE 160
+#define MSG_GLYPH_WIDTH_WIDE 20   /* advance of a two-byte glyph */
+#define MSG_GLYPH_WIDTH_NARROW 8  /* advance of an ASCII glyph */
+#define MSG_TEXT_MAX 0x400        /* converted message buffer */
+#define MIF2_ARGUMENT_MAX 8
+
+/* Mif2Argument.type */
+enum Mif2ArgumentType {
+    MIF2_ARG_NUMBER = 0,
+    MIF2_ARG_TEXT = 1
+};
+
+/* rubyFont command: phase in the top nibble. */
+#define RUBY_PHASE_MASK 0xf0000000
+#define RUBY_PHASE_BEGIN 0
+#define RUBY_PHASE_BODY 0x10000000
+#define RUBY_PHASE_END 0x20000000
+#define RUBY_Y_OFFSET 4 /* ruby text is drawn this far above the base text */
 #define MSG_QUEUE_RESET_CONTROL_CODE_FLAG 0x100u
 #define MSG_QUEUE_RESET_MODE_MASK 0xffu
 #define MSG_QUEUE_RESET_CLEAR_ALL 0u
@@ -143,7 +172,7 @@ static unsigned int cnvCH;
  * cursor at the workspace. MBUF_create also uses the header's table pointer
  * for the per-entry pointers stored inside that workspace.
  */
-MsgBuffer msg_buffer[8];
+MsgBuffer msg_buffer[MSG_BUFFER_COUNT];
 
 static int rubyX1;
 
@@ -159,16 +188,16 @@ void MSG_init(void)
 void MSG_print2(void *window, const char *text, int length)
 {
     struct MsgPrintContext *context = window;
-    unsigned char message[0x400];
+    unsigned char message[MSG_TEXT_MAX];
 
     if (context->render_mode == 4) {
         message[0] = MIF2_FONT_ESCAPE_BYTE;
         message[1] = MIF2_FONT_BEGIN_BYTE;
-        MSG_convert(&message[2], 0x3FE, text, length);
+        MSG_convert(&message[2], MSG_TEXT_MAX - 2, text, length);
     } else {
-        MSG_convert(message, 0x400, text, length);
+        MSG_convert(message, MSG_TEXT_MAX, text, length);
     }
-    MSG_queuePush(&context->queue, message, 0x400, -1);
+    MSG_queuePush(&context->queue, message, MSG_TEXT_MAX, -1);
 }
 
 void MSG_send(void)
@@ -196,8 +225,8 @@ int MSG_getSize(const unsigned char *message)
                     case 0x04:
                     case 0x05:
                     case 0x0d:
-                    case 0x18:
-                    case 0x19:
+                    case MIF2_RUBY_BYTE:
+                    case MIF2_FONT_ESCAPE_BYTE:
                         bracketCursor++;
                         break;
                     case 0x07:
@@ -225,14 +254,14 @@ int MSG_getSize(const unsigned char *message)
                         }
                         /* The optional color has the same three-byte extent. */
                     case 0x06:
-                    case 0x0c:
+                    case MIF2_COLOR_BYTE:
                     case 0x0f:
                         bracketCursor += 3;
                         break;
                     case 0x0e:
                         bracketCursor += 5;
                         break;
-                    case 0x17:
+                    case MIF2_CALLBACK_BYTE:
                         bracketCursor += 7;
                         break;
                     default:
@@ -262,8 +291,8 @@ int MSG_getSize(const unsigned char *message)
             case 0x04:
             case 0x05:
             case 0x0d:
-            case 0x18:
-            case 0x19:
+            case MIF2_RUBY_BYTE:
+            case MIF2_FONT_ESCAPE_BYTE:
                 cursor++;
                 break;
             case 0x07:
@@ -290,20 +319,20 @@ int MSG_getSize(const unsigned char *message)
                 }
                 /* The optional color has the same three-byte extent. */
             case 0x06:
-            case 0x0c:
+            case MIF2_COLOR_BYTE:
             case 0x0f:
                 cursor += 3;
                 break;
             case 0x0e:
                 cursor += 5;
                 break;
-            case 0x17:
+            case MIF2_CALLBACK_BYTE:
                 cursor += 7;
                 break;
             default:
                 break;
             }
-        } else if (code >= 0x8e) {
+        } else if (code >= MSG_LEAD_BYTE_MIN) {
             cursor++;
         }
     }
@@ -366,19 +395,19 @@ void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor
         if (code == '/' && *cursor == '[') {
             cursor++;
             code = *cursor++;
-            if (code >= 0x80) {
+            if (code >= MSG_TAG_BYTE_MIN) {
                 switch (code) {
                 case ']':
-                case 0x81:
-                case 0x84:
+                case MIF2_CLEAR_BYTE:
+                case MIF2_CLOSE_BYTE:
                     break;
-                case 0x85:
+                case MIF2_LABEL_BYTE:
                     while (*cursor++ != 0) {
                     }
                     break;
-                case 0x80:
-                case 0x82:
-                case 0x83:
+                case MIF2_WAITKEY_BYTE:
+                case MIF2_SIGNAL_BYTE:
+                case MIF2_WAIT_BYTE:
                     cursor++;
                     break;
                 }
@@ -393,7 +422,7 @@ void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor
                     _skipCTRLCode(&cursor);
                 } else if (code == ']') {
                     break;
-                } else if (code >= 0x8e) {
+                } else if (code >= MSG_LEAD_BYTE_MIN) {
                     cursor++;
                 }
             }
@@ -408,11 +437,11 @@ void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor
             _skipCTRLCode(&cursor);
         } else {
             count++;
-            if (code >= 0xa0) {
+            if (code >= MSG_KANJI_BYTE_MIN) {
                 int glyph = xglFontCheckProportional(code, *cursor);
 
                 if (!(ctrlCodeFlags & 1) || glyph < 0) {
-                    width = width + 20;
+                    width = width + MSG_GLYPH_WIDTH_WIDE;
                     cursor++;
                 } else {
                     unsigned int bounds;
@@ -422,7 +451,7 @@ void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor
                     width += ((bounds >> 8) & 0xff) - (bounds & 0xff) + 1;
                 }
             } else {
-                width += 8;
+                width += MSG_GLYPH_WIDTH_NARROW;
             }
         }
     }
@@ -472,21 +501,21 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
         if ('/' == code && '[' == *input.bytes) {
             input.bytes++;
             code = *input.bytes++;
-            if (128 <= code) {
+            if (MSG_TAG_BYTE_MIN <= code) {
                 queue->last = code;
                 switch (code) {
                 case ']':
-                case 0x81:
-                case 0x84:
+                case MIF2_CLEAR_BYTE:
+                case MIF2_CLOSE_BYTE:
                     break;
-                case 0x85:
+                case MIF2_LABEL_BYTE:
                     queue->label.text = input.bytes;
                     while (0 != *input.bytes++)
                         ;
                     break;
-                case 0x80:
-                case 0x82:
-                case 0x83:
+                case MIF2_WAITKEY_BYTE:
+                case MIF2_SIGNAL_BYTE:
+                case MIF2_WAIT_BYTE:
                     queue->label.value = *input.bytes++;
                     break;
                 }
@@ -503,7 +532,7 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
                     break;
                 } else {
                     *output++ = code;
-                    if (code >= 142)
+                    if (code >= MSG_LEAD_BYTE_MIN)
                         *output++ = *input.bytes++;
                 }
             }
@@ -531,7 +560,7 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
         {
             unsigned int low = *input.bytes;
             int proportional = 0;
-            if (code < 160) {
+            if (code < MSG_KANJI_BYTE_MIN) {
                 unsigned int encoded;
                 input.bytes--;
                 input.font = (signed char *)input.bytes;
@@ -555,7 +584,7 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
                 *output++ = (unsigned char)low;
                 if (!proportional || glyph < 0) {
                     active = limit > count;
-                    queue->width += 20;
+                    queue->width += MSG_GLYPH_WIDTH_WIDE;
                 } else {
                     unsigned int bounds = xglFontGetProportionalSize(glyph);
 
@@ -564,7 +593,7 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
                 }
             } else {
                 active = limit > count;
-                queue->width += 8;
+                queue->width += MSG_GLYPH_WIDTH_NARROW;
             }
         }
     }
@@ -615,16 +644,16 @@ int MSG_copyln(unsigned char **destination, unsigned char **source, int flags, u
                     *output++ = code;
                     switch (code) {
                     case ']':
-                    case 0x81:
-                    case 0x84:
+                    case MIF2_CLEAR_BYTE:
+                    case MIF2_CLOSE_BYTE:
                         break;
-                    case 0x85:
+                    case MIF2_LABEL_BYTE:
                         while ((*output++ = *input++) != 0) {
                         }
                         break;
-                    case 0x80:
-                    case 0x82:
-                    case 0x83:
+                    case MIF2_WAITKEY_BYTE:
+                    case MIF2_SIGNAL_BYTE:
+                    case MIF2_WAIT_BYTE:
                         *output++ = *input++;
                         break;
                     }
@@ -657,7 +686,7 @@ int MSG_copyln(unsigned char **destination, unsigned char **source, int flags, u
             input = input - 1;
             _copyCTRLCode(&output, &input);
         } else {
-            int isAscii = (code < 0xa0);
+            int isAscii = (code < MSG_KANJI_BYTE_MIN);
             unsigned char low = *input;
             int proportional;
 
@@ -684,10 +713,10 @@ int MSG_copyln(unsigned char **destination, unsigned char **source, int flags, u
 
                     width += ((bounds >> 8) & 0xff) - (bounds & 0xff) + 1;
                 } else {
-                    width += 20;
+                    width += MSG_GLYPH_WIDTH_WIDE;
                 }
             } else {
-                width = width + 8;
+                width = width + MSG_GLYPH_WIDTH_NARROW;
             }
         }
     }
@@ -735,14 +764,14 @@ int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int 
                     *output++ = bracketCode;
                     input++;
                     bracketCode = *input++;
-                    if (bracketCode >= 0x80) {
+                    if (bracketCode >= MSG_TAG_BYTE_MIN) {
                         *output++ = bracketCode;
                         switch (bracketCode) {
                         case ']':
-                        case 0x81:
-                        case 0x84:
+                        case MIF2_CLEAR_BYTE:
+                        case MIF2_CLOSE_BYTE:
                             break;
-                        case 0x85: {
+                        case MIF2_LABEL_BYTE: {
                             int payloadCode;
 
                             do {
@@ -754,9 +783,9 @@ int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int 
                             } while (payloadCode != 0);
                             break;
                         }
-                        case 0x80:
-                        case 0x82:
-                        case 0x83:
+                        case MIF2_WAITKEY_BYTE:
+                        case MIF2_SIGNAL_BYTE:
+                        case MIF2_WAIT_BYTE:
                             *output++ = *input++;
                             break;
                         default:
@@ -777,7 +806,7 @@ int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int 
                                 break;
                             } else {
                                 *output++ = bracketCode;
-                                if (bracketCode >= 0x8e) {
+                                if (bracketCode >= MSG_LEAD_BYTE_MIN) {
                                     *output++ = *input++;
                                 }
                             }
@@ -793,7 +822,7 @@ int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int 
             } else {
                 *currentOutput++ = code;
                 output = currentOutput;
-                if (code >= 0xa0) {
+                if (code >= MSG_KANJI_BYTE_MIN) {
                     *currentOutput++ = *input++;
                     output = currentOutput;
                 }
@@ -876,7 +905,7 @@ void MSG_setArgs(Mif2Argument *args, int argc, const char **strs)
             continue;
         }
         if ((unsigned)(ch - '0') < 10 || (ch == '-' && (unsigned)(c1 - '0') < 10)) {
-            args[i].type = 0;
+            args[i].type = MIF2_ARG_NUMBER;
             if (ch == '0' && c1 == 'x') {
                 args[i].value.number = PARSE_int((const char *)str + 2, -1, 16);
             } else {
@@ -884,33 +913,33 @@ void MSG_setArgs(Mif2Argument *args, int argc, const char **strs)
             }
         } else {
             args[i].value.text = (const char *)str;
-            args[i].type = 1;
+            args[i].type = MIF2_ARG_TEXT;
         }
     }
 }
 
 static void rubyFont(RubyFontContext *context, unsigned int command)
 {
-    unsigned int mode = command & 0xf0000000;
+    unsigned int mode = command & RUBY_PHASE_MASK;
 
     context->flags |= 0x40;
     switch (mode) {
-    case 0:
+    case RUBY_PHASE_BEGIN:
         rubyX1 = context->x;
         rubyY = context->y;
         return;
-    case 0x10000000: {
+    case RUBY_PHASE_BODY: {
         int x = context->x;
         int delta = x - rubyX1;
 
         rubyX2 = x;
-        context->y -= 4;
+        context->y -= RUBY_Y_OFFSET;
         context->x -= (short)(delta / 2 + (short)((command & 0xff) << 2));
         return;
     }
-    case 0x20000000:
+    case RUBY_PHASE_END:
         context->x = (short)rubyX2;
-        context->y += 4;
+        context->y += RUBY_Y_OFFSET;
         break;
     default:
         return;
@@ -925,7 +954,7 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
     int ch;
     int width;
 
-    *out++ = 0x17;
+    *out++ = MIF2_CALLBACK_BYTE;
     *out++ = callback >> 16;
     *out++ = callback >> 8;
     *out++ = callback;
@@ -963,9 +992,9 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
                 }
             }
         }
-        width = ruby_width + 0x10000000;
+        width = ruby_width + RUBY_PHASE_BODY;
     }
-    *out++ = 0x17;
+    *out++ = MIF2_CALLBACK_BYTE;
     *out++ = callback >> 16;
     *out++ = callback >> 8;
     *out++ = callback;
@@ -973,14 +1002,14 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
     *out++ = width >> 16;
     *out++ = width >> 8;
     *out++ = width;
-    *out++ = 0x18;
+    *out++ = MIF2_RUBY_BYTE;
     *out++ = 1;
     while ((ch = (unsigned char)*text++) != '/' && ch != 0) {
         *out++ = ch;
     }
-    *out++ = 0x18;
+    *out++ = MIF2_RUBY_BYTE;
     *out++ = 0;
-    *out++ = 0x17;
+    *out++ = MIF2_CALLBACK_BYTE;
     *out++ = callback >> 16;
     *out++ = callback >> 8;
     *out++ = callback;
@@ -1096,10 +1125,10 @@ char *MIF2_wait(char *out, int argc, const Mif2Argument *args)
 
 char *MIF2_gaiji(char *out, int argc, const Mif2Argument *args)
 {
-    int glyph = args[0].value.number + 160;
+    int glyph = args[0].value.number + MSG_GAIJI_BASE;
     char *end = &out[2];
 
-    out[0] = -83;
+    out[0] = MSG_GAIJI_LEAD_BYTE;
     out[1] = glyph;
     *end = '\0';
     return end;
@@ -1137,8 +1166,8 @@ static MsgFuncEntry *findMsgFunc(const char *name)
 unsigned int MSG_convert(unsigned char *destination, int capacity, const char *text, int length)
 {
     char bracket[256];
-    const char *tokens[8];
-    Mif2Argument args[8];
+    const char *tokens[MIF2_ARGUMENT_MAX];
+    Mif2Argument args[MIF2_ARGUMENT_MAX];
     unsigned char *output;
     unsigned char *input;
     unsigned char *end;
@@ -1214,7 +1243,7 @@ unsigned int MSG_convert(unsigned char *destination, int capacity, const char *t
             _copyCTRLCode(&output, &input);
         } else {
             *output++ = code;
-            if (code >= 142)
+            if (code >= MSG_LEAD_BYTE_MIN)
                 *output++ = *input++;
             width++;
         }
@@ -1227,7 +1256,7 @@ void MBUF_init(void)
 {
     int slot;
 
-    slot = 7;
+    slot = MSG_BUFFER_COUNT - 1;
     do {
         msg_buffer[slot].active = 0;
         slot--;
@@ -1240,7 +1269,7 @@ MsgBuffer *MBUF_create2(void)
     int i;
     MsgBuffer *buffer;
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MSG_BUFFER_COUNT; i++) {
         buffer = &msg_buffer[i];
         if (!(buffer->active & 1)) {
             slot = i;
@@ -1252,7 +1281,7 @@ MsgBuffer *MBUF_create2(void)
     }
     buffer = &msg_buffer[slot];
     buffer->active = 1;
-    buffer->capacity = 2048;
+    buffer->capacity = MSG_BUFFER_WORKSPACE_SIZE;
     buffer->cursor = buffer->workspace;
     return buffer;
 }
@@ -1264,7 +1293,7 @@ MsgBuffer *MBUF_create(int entry_size, int entry_count)
     MsgBuffer *buffer;
     unsigned char *workspace;
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MSG_BUFFER_COUNT; i++) {
         buffer = &msg_buffer[i];
         if (!(buffer->active & 1)) {
             slot = i;
@@ -1303,7 +1332,7 @@ static void _copyCTRLCode(unsigned char **destination, unsigned char **source)
     *output++ = code;
     switch (code) {
     case 6:
-    case 12:
+    case MIF2_COLOR_BYTE:
     case 15:
         *output++ = *input++;
         /* fall through */
@@ -1316,7 +1345,7 @@ static void _copyCTRLCode(unsigned char **destination, unsigned char **source)
     case 4:
     case 5:
     case 13:
-    case 24:
+    case MIF2_RUBY_BYTE:
         *output++ = *input++;
         break;
     case 8:
@@ -1342,7 +1371,7 @@ static void _copyCTRLCode(unsigned char **destination, unsigned char **source)
         *output++ = *input++;
         *output++ = *input++;
         break;
-    case 23:
+    case MIF2_CALLBACK_BYTE:
         *output++ = *input++;
         *output++ = *input++;
         *output++ = *input++;
@@ -1351,7 +1380,7 @@ static void _copyCTRLCode(unsigned char **destination, unsigned char **source)
         *output++ = *input++;
         *output++ = *input++;
         break;
-    case 25:
+    case MIF2_FONT_ESCAPE_BYTE:
         if (*input) {
             ctrlCodeFlags |= 1;
         } else {
@@ -1383,7 +1412,7 @@ static void _skipCTRLCode(unsigned char **source)
         }
         /* fall through */
     case 6:
-    case 12:
+    case MIF2_COLOR_BYTE:
     case 15:
         cursor += 3;
         break;
@@ -1393,10 +1422,10 @@ static void _skipCTRLCode(unsigned char **source)
     case 18:
         cursor += 2;
         break;
-    case 23:
+    case MIF2_CALLBACK_BYTE:
         cursor += 9;
         break;
-    case 25:
+    case MIF2_FONT_ESCAPE_BYTE:
         if (*cursor) {
             ctrlCodeFlags |= 1;
         } else {
@@ -1409,7 +1438,7 @@ static void _skipCTRLCode(unsigned char **source)
     case 4:
     case 5:
     case 13:
-    case 24:
+    case MIF2_RUBY_BYTE:
         cursor++;
         break;
     }

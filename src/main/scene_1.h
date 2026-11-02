@@ -10,7 +10,6 @@
 #include "main/scene_1.h"
 #include "main/find_native_method.h"
 
-#define SCENE_THREAD_HAS_METHOD 0x10u
 
 #include "main/twsys_init.h"
 #include "main/init_vm.h"

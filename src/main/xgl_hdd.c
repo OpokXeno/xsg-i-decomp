@@ -1,14 +1,103 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_hdd.h"
+#include "main/xgl_mc.h"
 #include "xgl_hdd.h"
+
+/* sceOpen flags and permission modes (0666, 0555, 0777). */
+#define HDD_OPEN_READ 1
+#define HDD_OPEN_READ_WRITE 3
+#define HDD_OPEN_READ_WRITE_CREATE 0x203
+#define HDD_OPEN_WRITE_CREATE_TRUNC 0x602
+#define HDD_MODE_RW 438
+#define HDD_MODE_RW_FILE 0x1b6
+#define HDD_MODE_READ_ONLY 0x16d
+#define HDD_MODE_DIRECTORY 0x1ff
+
+/* sceMount flags, and the errors the layer tests for. */
+#define HDD_MOUNT_READ_WRITE 4
+#define HDD_MOUNT_READ_ONLY 5
+#define HDD_ERR_NOENT (-2)
+#define HDD_ERR_BUSY (-16)
+#define HDD_ERR_NODEV (-19)
+
+/* Results of xglHddCheckCore() beyond 0 (ready). */
+#define HDD_NOT_READY (-5)
+#define HDD_RESET_REQUIRED (-6)
+
+#define HDD_PATH_MAX 256
+#define HDD_ERROR_WAIT_FRAMES 30
+#define HDD_ERROR_SE_DECIDE 1
+#define HDD_DIR_SCAN_LIMIT 1024
+#define HDD_MAX_FOLDERS 256
+#define HDD_FOLDER_ENTRY_LIMIT 0x3FE
+#define HDD_SLACK_ZONES 7
+/* Total free sectors above which the save area can be grown, and the free
+ * sectors (total, and the largest free block) the game installation needs. */
+#define HDD_LARGE_DISK_SECTORS 0x1fffff
+#define HDD_INSTALL_MIN_SECTORS 0x37ffff
+#define HDD_INSTALL_MIN_FREE_SECTORS 0x7ffff
+#define HDD_LARGE_DISK_FREE_KB 0x100000
+
+#define HDD_SYSTEM_CNF_SIZE 80
+#define HDD_SECTOR_SIZE 512
+#define HDD_INSTALL_IMAGE_ADDRESS 0x1000000
+#define HDD_INSTALL_ARCHIVE_SIZE 0x1000000
+#define HDD_INSTALL_PARTITION_STEP 0x80000
+
+/* Failure codes of xglHddMcCreate(), per step (the four HDD_CREATE_* causes in
+ * main/xgl_hdd.h are its capacity checks). */
+#define HDD_CREATE_ERR_MKDIR_ROOT (-10)
+#define HDD_CREATE_ERR_CLOSE_ROOT (-0x0c)
+#define HDD_CREATE_ERR_OPEN_DEVICE (-0x10)
+#define HDD_CREATE_ERR_ADD_PARTITION (-0x11)
+#define HDD_CREATE_ERR_CLOSE_DEVICE (-0x12)
+#define HDD_CREATE_ERR_OPEN_SAVE_DIR (-0x13)
+#define HDD_CREATE_ERR_MKDIR_SAVE (-0x14)
+#define HDD_CREATE_ERR_SAVE_DIR_CLOSE (-0x15)
+#define HDD_CREATE_ERR_WRITE_ICON (-0x16)
+#define HDD_CREATE_ERR_WRITE_PAYLOAD (-0x17)
+#define HDD_CREATE_ERR_CHSTAT_SAVE (-0x18)
+#define HDD_CREATE_ERR_UNMOUNT (-0x19)
+#define HDD_SAVE_ERR_WRITE (-24)
+/* xglHddMcLoadCore() */
+#define HDD_LOAD_ERR_OPEN (-6)
+#define HDD_LOAD_ERR_READ (-7)
+#define HDD_LOAD_ERR_CLOSE (-8)
+
+/* xglHddInstall() reports its progress to the callback as these stages (the
+ * second argument counts within a stage) and each failure as a negative code. */
+#define HDD_INSTALL_STAGE_BEGIN 0
+#define HDD_INSTALL_STAGE_RESOURCE_READ 1
+#define HDD_INSTALL_STAGE_PARTITION_OPEN 2
+#define HDD_INSTALL_STAGE_EXTEND 3
+#define HDD_INSTALL_STAGE_FORMAT 4
+#define HDD_INSTALL_STAGE_MOUNT 5
+#define HDD_INSTALL_STAGE_COPY 6
+#define HDD_INSTALL_STAGE_FINISH 7
+#define HDD_INSTALL_STAGE_DONE 8
+#define HDD_INSTALL_FAIL_RESOURCE (-1)
+#define HDD_INSTALL_FAIL_PARTITION_OPEN (-2)
+#define HDD_INSTALL_FAIL_WRITE_HEADER (-3)
+#define HDD_INSTALL_FAIL_EXTEND (-4)
+#define HDD_INSTALL_FAIL_PARTITION_CLOSE (-5)
+#define HDD_INSTALL_FAIL_FORMAT (-6)
+#define HDD_INSTALL_FAIL_MOUNT (-7)
+#define HDD_INSTALL_FAIL_DATA_OPEN (-8)
+#define HDD_INSTALL_FAIL_DATA_WRITE (-9)
+#define HDD_INSTALL_FAIL_DATA_CLOSE (-10)
+#define HDD_INSTALL_FAIL_CHECK_OPEN (-11)
+#define HDD_INSTALL_FAIL_CHECK_WRITE (-12)
+#define HDD_INSTALL_FAIL_CHECK_CLOSE (-13)
+#define HDD_INSTALL_FAIL_UNMOUNT (-14)
+#define HDD_INSTALL_FAIL_REMOUNT (-15)
 
 /* The saved image begins with the transfer header. icon.sys occupies +0x40
  * through +0x403; the game payload starts at +0x440. The gaps remain unknown. */
 struct HddSaveImage {
     struct HddTransferInfo header;
     unsigned char unmodeled_0c[0x40 - 0x0c];
-    char iconSystem[0x3c4];
+    char iconSystem[MC_ICON_SYS_SIZE];
     unsigned char unmodeled_404[0x440 - 0x404];
     unsigned char payloadStart; /* First byte; the transfer header gives size. */
 };
@@ -20,7 +109,7 @@ struct HddInstallImage {
     int bodySize;
     int tableSize;
     unsigned char unmodeled_30[0x1d0];
-    unsigned char systemCnf[80];
+    unsigned char systemCnf[HDD_SYSTEM_CNF_SIZE];
 };
 
 /* xglHddMount removes the high bit from this stored volume identifier. */
@@ -120,9 +209,9 @@ static int xglHddCheckCore(void)
     int result;
 
     if (HddActive >= 2)
-        return -5;
+        return HDD_NOT_READY;
 
-    status = sceDevctl(xgl_hdd_device, 0x4807, 0, 0, 0, 0);
+    status = sceDevctl(xgl_hdd_device, HDD_DEVCTL_STATUS, 0, 0, 0, 0);
     if (status != 0) {
         if (status == 2)
             return -2;
@@ -136,12 +225,12 @@ static int xglHddCheckCore(void)
         if (status != expectedStatus)
             return -99;
     } else {
-        if (sceDevctl(xgl_hdd_device, 0x4804, 0, 0, 0, 0) >= 0)
+        if (sceDevctl(xgl_hdd_device, HDD_DEVCTL_FLUSH, 0, 0, 0, 0) >= 0)
             return 0;
         if (HddActive == 1)
-            return -6;
+            return HDD_RESET_REQUIRED;
         xglHddActivate(0x102);
-        return -5;
+        return HDD_NOT_READY;
     }
     return result;
 }
@@ -150,9 +239,9 @@ int xglHddCheck2(void)
 {
     int result = xglHddCheckCore();
 
-    if (result == -6) {
+    if (result == HDD_RESET_REQUIRED) {
         xglHddActivate(0x103);
-        return -5;
+        return HDD_NOT_READY;
     }
     return result;
 }
@@ -168,18 +257,18 @@ int xglHddCheck(void)
     }
 
     result = xglHddCheckCore();
-    if (result != -6)
+    if (result != HDD_RESET_REQUIRED)
         return result;
 
     xglHddErrorScreen();
     xglHddActivate(0);
     xglHddActivate(0x102);
-    return -5;
+    return HDD_NOT_READY;
 }
 
 void xglHddErrorScreen(void)
 {
-    int waitFrames = 30;
+    int waitFrames = HDD_ERROR_WAIT_FRAMES;
 
     sRender.errorScreenActive = 1;
     for (;;) {
@@ -187,12 +276,12 @@ void xglHddErrorScreen(void)
         xglFontPrint(48, 64, 0xffffff, hddLoadErrorText);
         if (waitFrames > 0) {
             waitFrames--;
-        } else if (PadData.half_2a & 0x20) {
+        } else if (PadData.half_2a & PAD_CIRCLE) {
             break;
         }
         xglSleep();
     }
-    xglSoundEffectNormalDirect(1);
+    xglSoundEffectNormalDirect(HDD_ERROR_SE_DECIDE);
     sRender.errorScreenActive = 0;
 }
 
@@ -203,8 +292,8 @@ int xglHddMcLoadMount(void)
     if (xglHddCheck2() != 0)
         return -1;
 
-    result = sceMount(hdd_mc_path, commonname, 5, 0, 0);
-    if (result < 0 && result != -16)
+    result = sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_ONLY, 0, 0);
+    if (result < 0 && result != HDD_ERR_BUSY)
         return -1;
     return 0;
 }
@@ -234,10 +323,10 @@ static char *make_fullpath(char *destination, int card, int slot)
 
 int xglHddMcExist(struct HddExistRequest *request)
 {
-    char filePath[256];
-    char name[256];
+    char filePath[HDD_PATH_MAX];
+    char name[HDD_PATH_MAX];
     struct HddDirectoryEntry entry;
-    char savePath[256];
+    char savePath[HDD_PATH_MAX];
     XglClock timestamp;
     int result;
     int descriptor;
@@ -257,7 +346,7 @@ int xglHddMcExist(struct HddExistRequest *request)
 
     if (request->card >= 0) {
         make_fullpath(filePath, request->card, 0);
-        descriptor = sceOpen(filePath, 1, 438);
+        descriptor = sceOpen(filePath, HDD_OPEN_READ, HDD_MODE_RW);
         if (descriptor >= 0) {
             result = sceClose(descriptor) < 0 ? -3 : 1;
         } else {
@@ -325,20 +414,20 @@ int xglHddMcExist(struct HddExistRequest *request)
 int xglHddMcLoadCore(void *save)
 {
     struct HddLoadRequest *request = save;
-    char path[256];
+    char path[HDD_PATH_MAX];
     int descriptor;
     int result;
 
     make_fullpath(path, request->card, 0);
-    descriptor = sceOpen(path, 1, 438);
+    descriptor = sceOpen(path, HDD_OPEN_READ, HDD_MODE_RW);
     if (descriptor < 0) {
-        result = descriptor == -2 ? 1 : -6;
+        result = descriptor == HDD_ERR_NOENT ? 1 : HDD_LOAD_ERR_OPEN;
     } else {
         result = 0;
         if (sceRead(descriptor, request->data, request->size) < 0)
-            result = -7;
+            result = HDD_LOAD_ERR_READ;
         if (sceClose(descriptor) < 0)
-            result = -8;
+            result = HDD_LOAD_ERR_CLOSE;
     }
     return result;
 }
@@ -372,7 +461,7 @@ static int Judge_MakeNewFolder(void)
         return result;
     descriptor = result;
 
-    for (entriesRead = 0; entriesRead < 1024; entriesRead++) {
+    for (entriesRead = 0; entriesRead < HDD_DIR_SCAN_LIMIT; entriesRead++) {
         result = sceDread(descriptor, &entry);
         if (result <= 0)
             break;
@@ -384,7 +473,7 @@ static int Judge_MakeNewFolder(void)
             entry.stat.privateData[0] == 0xFFFF &&
             entry.stat.privateData[1] == 0xFFFF) {
             directoryCount++;
-            if (directoryCount >= 256)
+            if (directoryCount >= HDD_MAX_FOLDERS)
                 break;
         }
     }
@@ -395,7 +484,7 @@ static int Judge_MakeNewFolder(void)
 
     if (result < 0)
         return result;
-    return directoryCount < 256;
+    return directoryCount < HDD_MAX_FOLDERS;
 }
 
 int Judge_MakeNewSavedata(int descriptor, int card)
@@ -426,7 +515,7 @@ int Judge_MakeNewSavedata(int descriptor, int card)
     }
     pathLength = strlen(path);
 
-    for (entriesRead = 0; entriesRead < 1024; entriesRead++) {
+    for (entriesRead = 0; entriesRead < HDD_DIR_SCAN_LIMIT; entriesRead++) {
         result = sceDread(descriptor, &entry);
         if (result <= 0)
             break;
@@ -459,7 +548,7 @@ int Judge_MakeNewSavedata(int descriptor, int card)
 
     if (result < 0)
         return result;
-    return directoryCount < 0x3FE;
+    return directoryCount < HDD_FOLDER_ENTRY_LIMIT;
 }
 
 static int xglHddMcCheckYourSaves(int card)
@@ -467,8 +556,8 @@ static int xglHddMcCheckYourSaves(int card)
     int descriptor = sceDopen(yoursaves);
 
     if (descriptor < 0)
-        return Judge_MakeNewFolder() == 1 ? 1 : -2;
-    return Judge_MakeNewSavedata(descriptor, card) == 1 ? 0 : -3;
+        return Judge_MakeNewFolder() == 1 ? 1 : HDD_CHECK_TOO_MANY_FOLDERS;
+    return Judge_MakeNewSavedata(descriptor, card) == 1 ? 0 : HDD_CHECK_TOO_MANY_SAVES;
 }
 
 static int xglHddMcCheckCore(struct HddCheckState *state)
@@ -478,21 +567,21 @@ static int xglHddMcCheckCore(struct HddCheckState *state)
     if (result < 0)
         return result;
     {
-        int clusterSize = sceDevctl(hdd_mc_path, 0x5001, 0, 0, 0, 0);
-        int freeClusters = sceDevctl(hdd_mc_path, 0x5002, 0, 0, 0, 0);
+        int clusterSize = sceDevctl(hdd_mc_path, HDD_DEVCTL_ZONE_SIZE, 0, 0, 0, 0);
+        int freeClusters = sceDevctl(hdd_mc_path, HDD_DEVCTL_FREE_ZONES, 0, 0, 0, 0);
         int dataClusters = (state->dataSize + clusterSize - 1) / clusterSize;
-        int reserveClusters = ((unsigned int)clusterSize + 963) / (unsigned int)clusterSize;
+        int reserveClusters = ((unsigned int)clusterSize + MC_ICON_SYS_SIZE - 1) / (unsigned int)clusterSize;
         int transferClusters =
             ((unsigned int)(state->transfer.info->end - state->transfer.info->begin) + clusterSize - 1)
             / (unsigned int)clusterSize;
 
         dataClusters += reserveClusters;
-        if (freeClusters < dataClusters + transferClusters + 7) {
+        if (freeClusters < dataClusters + transferClusters + HDD_SLACK_ZONES) {
             int capacity;
 
-            if (sceDevctl(xgl_hdd_device, 0x480a, 0, 0, &capacity, 4) < 0)
+            if (sceDevctl(xgl_hdd_device, HDD_DEVCTL_FREE_SECTORS_TOTAL, 0, 0, &capacity, 4) < 0)
                 return -1;
-            return capacity <= 0x1fffff ? -4 : 1;
+            return capacity <= HDD_LARGE_DISK_SECTORS ? HDD_CHECK_NO_SPACE : 1;
         }
     }
     return 0;
@@ -507,7 +596,7 @@ int xglHddMcCheck(struct HddCheckState *state)
         return -1;
 
     xglHddMcUmount();
-    if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+    if (sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_WRITE, 0, 0) < 0)
         return -1;
 
     previous = state->status;
@@ -530,12 +619,12 @@ int xglHddMcGetFree(void)
     if (result >= 0) {
         freeSpace = xglHddMcCheckYourSaves(-1);
         if (freeSpace >= 0) {
-            if (sceDevctl(xgl_hdd_device, 0x480A, 0, 0, &capacity, 4) == 0
-                && capacity > 0x1FFFFF) {
-                freeSpace = 0x100000;
+            if (sceDevctl(xgl_hdd_device, HDD_DEVCTL_FREE_SECTORS_TOTAL, 0, 0, &capacity, 4) == 0
+                && capacity > HDD_LARGE_DISK_SECTORS) {
+                freeSpace = HDD_LARGE_DISK_FREE_KB;
             } else {
-                clusterSize = sceDevctl(hdd_mc_path, 0x5001, 0, 0, 0, 0);
-                freeClusters = sceDevctl(hdd_mc_path, 0x5002, 0, 0, 0, 0);
+                clusterSize = sceDevctl(hdd_mc_path, HDD_DEVCTL_ZONE_SIZE, 0, 0, 0, 0);
+                freeClusters = sceDevctl(hdd_mc_path, HDD_DEVCTL_FREE_ZONES, 0, 0, 0, 0);
                 freeSpace = (freeClusters < 0 ? 0 : freeClusters) * (clusterSize / 1024);
             }
         }
@@ -547,13 +636,13 @@ int xglHddMcGetFree(void)
 
 static int create_file(int card, int slot, const void *data, int size)
 {
-    char path[256];
+    char path[HDD_PATH_MAX];
     struct HddIoStat stat;
     int descriptor;
     int result;
 
     make_fullpath(path, card, slot);
-    descriptor = sceOpen(path, 0x602, 438);
+    descriptor = sceOpen(path, HDD_OPEN_WRITE_CREATE_TRUNC, HDD_MODE_RW);
     if (descriptor < 0)
         return -1;
 
@@ -578,7 +667,7 @@ int xglHddMcCreate(struct HddCheckState *state)
     extern unsigned char mcPartitionSize1G[];
     extern unsigned char tbl_1_004A8AE0[];
     char *deviceName;
-    char path[256];
+    char path[HDD_PATH_MAX];
     struct HddIoStat stat;
     int result;
     int descriptor;
@@ -588,13 +677,13 @@ int xglHddMcCreate(struct HddCheckState *state)
 
     result = -1;
     xglHddMcUmount();
-    if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+    if (sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_WRITE, 0, 0) < 0)
         return -1;
 
     make_fullpath(path, state->status, -1);
     if (state->status >= 0 && (descriptor = sceDopen(path)) >= 0) {
         if (sceDclose(descriptor) < 0) {
-            result = -0x15;
+            result = HDD_CREATE_ERR_SAVE_DIR_CLOSE;
             goto unmount_card;
         }
     } else {
@@ -606,33 +695,33 @@ int xglHddMcCreate(struct HddCheckState *state)
         }
         if (checkResult == 1) {
             if (xglHddMcUmount() < 0)
-                return -0x19;
+                return HDD_CREATE_ERR_UNMOUNT;
             remountFailure = -1;
             deviceName = commonname;
-            descriptor = sceOpen(deviceName, 3);
+            descriptor = sceOpen(deviceName, HDD_OPEN_READ_WRITE);
             if (descriptor < 0)
-                return -0x10;
+                return HDD_CREATE_ERR_OPEN_DEVICE;
 
             result = 0;
-            if (sceIoctl2(descriptor, 0x6801, mcPartitionSize1G, 3, 0, 0) < 0)
-                result = -0x11;
+            if (sceIoctl2(descriptor, HDD_IOCTL2_ADD_SUBPARTITION, mcPartitionSize1G, 3, 0, 0) < 0)
+                result = HDD_CREATE_ERR_ADD_PARTITION;
             if (sceClose(descriptor) < 0)
-                result = -0x12;
+                result = HDD_CREATE_ERR_CLOSE_DEVICE;
             if (result != 0)
                 return result;
-            if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+            if (sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_WRITE, 0, 0) < 0)
                 return remountFailure;
             result = 0;
         }
 
         descriptor = sceDopen(yoursaves);
         if (descriptor < 0) {
-            if (sceMkdir(yoursaves, 0x1ff) < 0) {
-                result = -10;
+            if (sceMkdir(yoursaves, HDD_MODE_DIRECTORY) < 0) {
+                result = HDD_CREATE_ERR_MKDIR_ROOT;
                 goto unmount_card;
             }
         } else if (sceDclose(descriptor) < 0) {
-            result = -0x0c;
+            result = HDD_CREATE_ERR_CLOSE_ROOT;
             goto unmount_card;
         }
 
@@ -642,33 +731,33 @@ int xglHddMcCreate(struct HddCheckState *state)
         }
 
         descriptor = sceDopen(path);
-        if (descriptor < 0 && descriptor != -2) {
-            result = -0x13;
+        if (descriptor < 0 && descriptor != HDD_ERR_NOENT) {
+            result = HDD_CREATE_ERR_OPEN_SAVE_DIR;
             goto unmount_card;
         }
 
-        if (descriptor == -2) {
-            if (sceMkdir(path, 0x1ff) < 0) {
-                result = -0x14;
+        if (descriptor == HDD_ERR_NOENT) {
+            if (sceMkdir(path, HDD_MODE_DIRECTORY) < 0) {
+                result = HDD_CREATE_ERR_MKDIR_SAVE;
                 goto unmount_card;
             }
             stat.attributes = 0xc4a7;
             if (sceChstat(path, &stat, 2) < 0) {
-                result = -0x18;
+                result = HDD_CREATE_ERR_CHSTAT_SAVE;
                 goto unmount_card;
             }
         } else {
-            result = -0x15;
+            result = HDD_CREATE_ERR_SAVE_DIR_CLOSE;
             if (sceDclose(descriptor) < 0)
                 goto unmount_card;
         }
     }
 
-    result = -0x16;
+    result = HDD_CREATE_ERR_WRITE_ICON;
     transfer = state->transfer.image;
     xglMcWriteMapName(transfer->iconSystem, state->status);
-    if (create_file(state->status, 1, transfer->iconSystem, 0x3c4) >= 0) {
-        result = -0x17;
+    if (create_file(state->status, 1, transfer->iconSystem, MC_ICON_SYS_SIZE) >= 0) {
+        result = HDD_CREATE_ERR_WRITE_PAYLOAD;
         if (create_file(state->status, 2, &transfer->payloadStart,
                         transfer->header.end - transfer->header.begin) >= 0)
             result = 0;
@@ -685,10 +774,10 @@ int xglHddMcSave(const struct HddSaveRequest *save)
 
     if (xglHddCheck2() != 0)
         return -1;
-    if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+    if (sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_WRITE, 0, 0) < 0)
         return -1;
 
-    result = create_file(save->card, 0, save->data, save->size) < 0 ? -24 : 0;
+    result = create_file(save->card, 0, save->data, save->size) < 0 ? HDD_SAVE_ERR_WRITE : 0;
     xglHddMcUmount();
     return result;
 }
@@ -699,7 +788,7 @@ int xglHddUninstall(void)
 
     xglHddActivate(0);
     result = sceUmount(mount_device);
-    if (result < 0 && result != -19)
+    if (result < 0 && result != HDD_ERR_NODEV)
         return -1;
     result = sceRemove(partitionname);
     return result < 0 ? -5 : 0;
@@ -724,7 +813,7 @@ static int xglHddInstallReadCB(int event, int value)
         total = cb->total;
         scaledValue = value * 0x10;
         offset = cb->base * 0x10 + scaledValue / total;
-        result = cb->callback(6, offset, cb->param);
+        result = cb->callback(HDD_INSTALL_STAGE_COPY, offset, cb->param);
         cb->status = result;
         if (result != 0) {
             return xglCdReadCancel();
@@ -745,9 +834,9 @@ int xglHddInstall(int (*callback)(), int param)
     extern char hddPartitionSize256M[];
     extern char pfsDevicePath[];
     extern char dvdname_2[];
-    struct HddInstallImage *image = (struct HddInstallImage *)0x1000000;
+    struct HddInstallImage *image = (struct HddInstallImage *)HDD_INSTALL_IMAGE_ADDRESS;
     HddInstallCBParam context;
-    char path[256];
+    char path[HDD_PATH_MAX];
     int formatSize;
     int partition;
     int descriptor;
@@ -766,63 +855,63 @@ int xglHddInstall(int (*callback)(), int param)
     context.callback = callback;
     context.param = param;
     context.status = 0;
-    callback(0, 0, param);
+    callback(HDD_INSTALL_STAGE_BEGIN, 0, param);
 
     if (xglCdReadFile(hddResourcePath, image, 0, 1) < 0) {
-        callback(-1, 0, param);
+        callback(HDD_INSTALL_FAIL_RESOURCE, 0, param);
         return -1;
     }
     source = system_cnf;
-    for (i = 0; i < 80; i++)
+    for (i = 0; i < HDD_SYSTEM_CNF_SIZE; i++)
         image->systemCnf[i] = source[i];
-    size = (image->bodySize + image->tableSize + 511) & -512;
+    size = (image->bodySize + image->tableSize + HDD_SECTOR_SIZE - 1) & -HDD_SECTOR_SIZE;
 
-    callback(1, 0, param);
+    callback(HDD_INSTALL_STAGE_RESOURCE_READ, 0, param);
     sprintf(path, partitionSpecFormat, partitionname);
-    partition = sceOpen(path, 0x203);
+    partition = sceOpen(path, HDD_OPEN_READ_WRITE_CREATE);
     if (partition < 0) {
-        callback(-2, partition, param);
+        callback(HDD_INSTALL_FAIL_PARTITION_OPEN, partition, param);
         return -1;
     }
-    callback(2, 0, param);
+    callback(HDD_INSTALL_STAGE_PARTITION_OPEN, 0, param);
     if ((result = sceWrite(partition, image, size)) < 0) {
-        callback(-3, result, param);
+        callback(HDD_INSTALL_FAIL_WRITE_HEADER, result, param);
         xglHddUninstall();
         return -1;
     }
 
-    for (size = 0x80000, chunk = 1; size <= 0x37ffff; size += 0x80000) {
-        callback(3, chunk++, param);
-        result = sceIoctl2(partition, 0x6801, hddPartitionSize256M, 5, 0, 0);
+    for (size = HDD_INSTALL_PARTITION_STEP, chunk = 1; size <= HDD_INSTALL_MIN_SECTORS; size += HDD_INSTALL_PARTITION_STEP) {
+        callback(HDD_INSTALL_STAGE_EXTEND, chunk++, param);
+        result = sceIoctl2(partition, HDD_IOCTL2_ADD_SUBPARTITION, hddPartitionSize256M, 5, 0, 0);
         if (result < 0) {
-            callback(-4, result, param);
+            callback(HDD_INSTALL_FAIL_EXTEND, result, param);
             xglHddUninstall();
             return -1;
         }
     }
     if ((result = sceClose(partition)) < 0) {
-        callback(-5, result, param);
+        callback(HDD_INSTALL_FAIL_PARTITION_CLOSE, result, param);
         return -1;
     }
 
-    callback(4, 0, param);
+    callback(HDD_INSTALL_STAGE_FORMAT, 0, param);
     formatSize = 0x2000;
     if ((result = sceFormat(pfsDevicePath, partitionname, &formatSize, 4)) < 0) {
-        callback(-6, result, param);
+        callback(HDD_INSTALL_FAIL_FORMAT, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(5, 0, param);
-    if ((result = sceMount(mount_device, partitionname, 4, 0, 0)) < 0) {
-        callback(-7, result, param);
+    callback(HDD_INSTALL_STAGE_MOUNT, 0, param);
+    if ((result = sceMount(mount_device, partitionname, HDD_MOUNT_READ_WRITE, 0, 0)) < 0) {
+        callback(HDD_INSTALL_FAIL_MOUNT, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(6, 0, param);
-    descriptor = sceOpen(hddname, 0x602, 0x1b6);
+    callback(HDD_INSTALL_STAGE_COPY, 0, param);
+    descriptor = sceOpen(hddname, HDD_OPEN_WRITE_CREATE_TRUNC, HDD_MODE_RW_FILE);
     if (descriptor < 0) {
         result = descriptor;
-        callback(-8, result, param);
+        callback(HDD_INSTALL_FAIL_DATA_OPEN, result, param);
         xglHddUninstall();
         return -1;
     }
@@ -830,7 +919,7 @@ int xglHddInstall(int (*callback)(), int param)
     archives = 0;
     dvdname_2[10] = '0';
     while ((size = xglCdGetFileSize(dvdname_2)) >= 0) {
-        archives += (size + 0xffffff) / 0x1000000;
+        archives += (size + HDD_INSTALL_ARCHIVE_SIZE - 1) / HDD_INSTALL_ARCHIVE_SIZE;
         dvdname_2[10]++;
     }
     archives <<= 16;
@@ -839,8 +928,8 @@ int xglHddInstall(int (*callback)(), int param)
     while ((size = xglCdGetFileSize(dvdname_2)) >= 0) {
         for (offset = 0; offset < size;) {
             length = size - offset;
-            if (length > 0x1000000)
-                length = 0x1000000;
+            if (length > HDD_INSTALL_ARCHIVE_SIZE)
+                length = HDD_INSTALL_ARCHIVE_SIZE;
             context.base = archives++;
             /* The CD layer types completion callbacks as void; this one
              * returns a status (the original does too), so the pointer type
@@ -859,7 +948,7 @@ int xglHddInstall(int (*callback)(), int param)
             }
             result = sceWrite(descriptor, image, length);
             if (result != length) {
-                callback(-9, result, param);
+                callback(HDD_INSTALL_FAIL_DATA_WRITE, result, param);
                 sceClose(descriptor);
                 if (xglHddCheck() == 0)
                     xglHddUninstall();
@@ -870,46 +959,46 @@ int xglHddInstall(int (*callback)(), int param)
     }
 
     if ((result = sceClose(descriptor)) < 0) {
-        callback(-10, result, param);
+        callback(HDD_INSTALL_FAIL_DATA_CLOSE, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(7, 0, param);
-    descriptor = sceOpen(hddcheck, 0x602, 0x1b6);
+    callback(HDD_INSTALL_STAGE_FINISH, 0, param);
+    descriptor = sceOpen(hddcheck, HDD_OPEN_WRITE_CREATE_TRUNC, HDD_MODE_RW_FILE);
     if (descriptor < 0) {
         result = descriptor;
-        callback(-11, result, param);
+        callback(HDD_INSTALL_FAIL_CHECK_OPEN, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(7, 1, param);
+    callback(HDD_INSTALL_STAGE_FINISH, 1, param);
     xglCdGetFileData(cd_filename, image);
-    result = sceWrite(descriptor, image, 512);
-    if (result != 512) {
-        callback(-12, result, param);
+    result = sceWrite(descriptor, image, HDD_SECTOR_SIZE);
+    if (result != HDD_SECTOR_SIZE) {
+        callback(HDD_INSTALL_FAIL_CHECK_WRITE, result, param);
         sceClose(descriptor);
         xglHddUninstall();
         return -1;
     }
-    callback(7, 2, param);
+    callback(HDD_INSTALL_STAGE_FINISH, 2, param);
     if ((result = sceClose(descriptor)) < 0) {
-        callback(-13, result, param);
+        callback(HDD_INSTALL_FAIL_CHECK_CLOSE, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(7, 3, param);
+    callback(HDD_INSTALL_STAGE_FINISH, 3, param);
     if ((result = sceUmount(mount_device)) < 0) {
-        callback(-14, result, param);
+        callback(HDD_INSTALL_FAIL_UNMOUNT, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(7, 4, param);
-    if ((result = sceMount(mount_device, partitionname, 5, 0, 0)) < 0) {
-        callback(-15, result, param);
+    callback(HDD_INSTALL_STAGE_FINISH, 4, param);
+    if ((result = sceMount(mount_device, partitionname, HDD_MOUNT_READ_ONLY, 0, 0)) < 0) {
+        callback(HDD_INSTALL_FAIL_REMOUNT, result, param);
         xglHddUninstall();
         return -1;
     }
-    callback(8, 0, param);
+    callback(HDD_INSTALL_STAGE_DONE, 0, param);
     return 0;
 }
 
@@ -967,37 +1056,37 @@ int xglHddMount(void)
     HddActive = 0;
     readiness = xglHddCheck();
     if (readiness != 0)
-        return readiness == -5 ? -1 : readiness;
+        return readiness == HDD_NOT_READY ? -1 : readiness;
 
-    mount_result = sceMount(mount_device, partitionname, 5, 0, 0);
+    mount_result = sceMount(mount_device, partitionname, HDD_MOUNT_READ_ONLY, 0, 0);
     if (mount_result == -5)
         return mount_result;
-    if (mount_result < 0 && mount_result != -16) {
-        if (mount_result == -2) {
-            device_result = sceDevctl(xgl_hdd_device, 0x480a, 0, 0,
+    if (mount_result < 0 && mount_result != HDD_ERR_BUSY) {
+        if (mount_result == HDD_ERR_NOENT) {
+            device_result = sceDevctl(xgl_hdd_device, HDD_DEVCTL_FREE_SECTORS_TOTAL, 0, 0,
                                       &capacity, 4);
             if (device_result < 0)
                 return -2;
-            if (capacity <= 0x37ffff)
+            if (capacity <= HDD_INSTALL_MIN_SECTORS)
                 return -4;
-            device_result = sceDevctl(xgl_hdd_device, 0x4801, 0, 0, 0, 0);
-            if (device_result <= 0x7ffff)
+            device_result = sceDevctl(xgl_hdd_device, HDD_DEVCTL_MAX_SECTORS, 0, 0, 0, 0);
+            if (device_result <= HDD_INSTALL_MIN_FREE_SECTORS)
                 return -4;
             return 0;
         }
         return -2;
     }
 
-    descriptor = sceOpen(hddcheck, 1, 0x16d);
+    descriptor = sceOpen(hddcheck, HDD_OPEN_READ, HDD_MODE_READ_ONLY);
     if (descriptor < 0)
         return -5;
 
     buffer = (u8 *)(((u32)WorkEnd + 63) & (u32)-64);
-    reference = buffer + 512;
+    reference = buffer + HDD_SECTOR_SIZE;
     buffer[0] = 1;
     reference[0] = 2;
     mismatch = 0;
-    if (sceRead(descriptor, buffer, 512) < 0) {
+    if (sceRead(descriptor, buffer, HDD_SECTOR_SIZE) < 0) {
         mismatch = 1;
     } else {
         xglCdGetFileData(cd_filename, reference);

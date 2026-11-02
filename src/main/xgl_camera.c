@@ -3,6 +3,38 @@
 #include "quadword.h"
 #include "vu0_macro.h"
 
+/* Studio camera states handled by xglCameraControl. */
+#define CAMERA_STATE_TRAVEL_MANUAL 2 /* pad-flown free camera */
+#define CAMERA_STATE_TRAVEL_CHASE 3 /* follows chase_reference at chase_distance */
+
+/* The camera draws into the GS 4096x4096 primitive space centred on 2048. */
+#define CAMERA_GS_COORD_SIZE 4096.0f
+#define CAMERA_GS_COORD_CENTER 2048.0f
+/* 24-bit depth buffer. */
+#define CAMERA_DEPTH_MAX 0xffffff
+
+/* Free-camera tuning: focus steps between the limits and 5.0f is the neutral focus. */
+#define CAMERA_FOCUS_DEFAULT 5.0f
+#define CAMERA_FOCUS_MAX 9.0f
+#define CAMERA_FOCUS_MIN 1.0f
+#define CAMERA_FOV_DEFAULT 0.69813174f
+#define CAMERA_FOV_STEP 0.0011170107f
+#define CAMERA_BOOST_SCALE 4.0f
+#define CAMERA_TURN_STEP_PITCH_YAW 6.981317e-05f
+#define CAMERA_TURN_STEP_ROLL 0.0022340214f
+#define CAMERA_MOVE_STEP_STICK 0.0002f
+#define CAMERA_MOVE_STEP_HEIGHT 0.0064f
+#define CAMERA_VELOCITY_DAMPING 0.8f
+/* Chase camera distance and height limits. */
+#define CAMERA_CHASE_DISTANCE_MIN 0.4f
+#define CAMERA_CHASE_DISTANCE_MAX 100.0f
+#define CAMERA_CHASE_HEIGHT_MIN 0.4f
+#define CAMERA_CHASE_HEIGHT_MAX 100.0f
+#define CAMERA_CHASE_FOLLOW_RATE 0.2f
+/* Default clip planes. */
+#define CAMERA_NEAR_CLIP_DEFAULT 0.01f
+#define CAMERA_FAR_CLIP_DEFAULT 99000.0f
+
 typedef struct XglCamera XglCamera;
 
 typedef struct XglCameraScreen XglCameraScreen;
@@ -152,7 +184,7 @@ static void xglCameraScreenInit(StudioCamera *studio)
     XglCamera *camera = (XglCamera *)studio;
     XglCameraScreen *screen = &camera->screen;
 
-    screen->depthMax = 0xffffff;
+    screen->depthMax = CAMERA_DEPTH_MAX;
     screen->depthMin = 0;
     QuadwordCopy(&screen->clipRange, &sClipRange_0);
     QuadwordCopy(&screen->portEffect, &sPortEffect_1);
@@ -171,8 +203,8 @@ static void xglCameraTravelInit(StudioCamera *studio)
     XglCamera *camera = (XglCamera *)studio;
     CameraTravel *travel = &camera->travel;
 
-    travel->focus = 5.0f;
-    travel->fov = 0.69813174f;
+    travel->focus = CAMERA_FOCUS_DEFAULT;
+    travel->fov = CAMERA_FOV_DEFAULT;
     travel->fov_velocity = 0.0f;
     travel->scale = 0.0f;
     QuadwordCopy(&travel->rotation, &sShootAngleR_2);
@@ -196,21 +228,21 @@ static void xglCameraTravelReset(CameraTravel *travel)
 
 static void xglCameraTravelFocus(CameraTravel *travel)
 {
-    if (PadData[1].pressed_buttons & 0x20) {
-        if (travel->focus < 9.0f) {
+    if (PadData[1].pressed_buttons & PAD_CIRCLE) {
+        if (travel->focus < CAMERA_FOCUS_MAX) {
             travel->focus += 1.0f;
         }
     }
-    if (PadData[1].pressed_buttons & 0x80) {
-        if (travel->focus > 1.0f) {
+    if (PadData[1].pressed_buttons & PAD_SQUARE) {
+        if (travel->focus > CAMERA_FOCUS_MIN) {
             travel->focus -= 1.0f;
         }
     }
-    if (PadData[1].held_buttons & 0x8) {
-        travel->scale = 0.0011170107f;
+    if (PadData[1].held_buttons & PAD_R1) {
+        travel->scale = CAMERA_FOV_STEP;
     }
-    if (PadData[1].held_buttons & 0x2) {
-        travel->scale = -0.0011170107f;
+    if (PadData[1].held_buttons & PAD_R2) {
+        travel->scale = -CAMERA_FOV_STEP;
     }
 }
 
@@ -219,16 +251,16 @@ static void xglCameraTravelScale(CameraTravel *travel)
     float angle_scale;
     Vector4 *angle = &travel->angle_delta;
 
-    if (PadData[1].held_buttons & 0x40) {
-        travel->scale *= 4.0f;
-        xglVectorScaleXYZ(angle, angle, 4.0f);
-        xglVectorScaleXYZ(&travel->place_delta, &travel->place_delta, 4.0f);
+    if (PadData[1].held_buttons & PAD_CROSS) {
+        travel->scale *= CAMERA_BOOST_SCALE;
+        xglVectorScaleXYZ(angle, angle, CAMERA_BOOST_SCALE);
+        xglVectorScaleXYZ(&travel->place_delta, &travel->place_delta, CAMERA_BOOST_SCALE);
     }
-    angle_scale = (travel->focus - 5.0f) * 0.08f + 1.0f;
+    angle_scale = (travel->focus - CAMERA_FOCUS_DEFAULT) * 0.08f + 1.0f;
     travel->scale *= angle_scale;
     xglVectorScaleXYZ(angle, angle, angle_scale);
     xglVectorScaleXYZ(&travel->place_delta, &travel->place_delta,
-                      (travel->focus - 5.0f) * 0.24f + 1.0f);
+                      (travel->focus - CAMERA_FOCUS_DEFAULT) * 0.24f + 1.0f);
 }
 
 static void xglCameraTravelManual(XglCamera *camera)
@@ -240,42 +272,42 @@ static void xglCameraTravelManual(XglCamera *camera)
     xglCameraTravelReset(travel);
     xglCameraTravelFocus(travel);
     if (PadData[1].analog_signed[1] < 0) {
-        travel->angle_delta.x = (PadData[1].analog_signed[1] + PadData[1].analog_magnitude[1]) * -6.981317e-05f;
+        travel->angle_delta.x = (PadData[1].analog_signed[1] + PadData[1].analog_magnitude[1]) * -CAMERA_TURN_STEP_PITCH_YAW;
     }
     if (PadData[1].analog_signed[1] > 0) {
-        travel->angle_delta.x = (PadData[1].analog_signed[1] - PadData[1].analog_magnitude[1]) * -6.981317e-05f;
+        travel->angle_delta.x = (PadData[1].analog_signed[1] - PadData[1].analog_magnitude[1]) * -CAMERA_TURN_STEP_PITCH_YAW;
     }
     if (PadData[1].analog_signed[0] < 0) {
-        travel->angle_delta.y = (PadData[1].analog_signed[0] + PadData[1].analog_magnitude[0]) * -6.981317e-05f;
+        travel->angle_delta.y = (PadData[1].analog_signed[0] + PadData[1].analog_magnitude[0]) * -CAMERA_TURN_STEP_PITCH_YAW;
     }
     if (PadData[1].analog_signed[0] > 0) {
-        travel->angle_delta.y = (PadData[1].analog_signed[0] - PadData[1].analog_magnitude[0]) * -6.981317e-05f;
+        travel->angle_delta.y = (PadData[1].analog_signed[0] - PadData[1].analog_magnitude[0]) * -CAMERA_TURN_STEP_PITCH_YAW;
     }
-    if (PadData[1].held_buttons & 0x8000) {
-        travel->angle_delta.z = 0.0022340214f;
+    if (PadData[1].held_buttons & PAD_LEFT) {
+        travel->angle_delta.z = CAMERA_TURN_STEP_ROLL;
     }
-    if (PadData[1].held_buttons & 0x2000) {
-        travel->angle_delta.z = -0.0022340214f;
+    if (PadData[1].held_buttons & PAD_RIGHT) {
+        travel->angle_delta.z = -CAMERA_TURN_STEP_ROLL;
     }
     if (PadData[1].analog_signed[2] < 0) {
-        travel->place_delta.x = (PadData[1].analog_signed[2] + PadData[1].analog_magnitude[2]) * 0.0002f;
+        travel->place_delta.x = (PadData[1].analog_signed[2] + PadData[1].analog_magnitude[2]) * CAMERA_MOVE_STEP_STICK;
     }
     if (PadData[1].analog_signed[2] > 0) {
-        travel->place_delta.x = (PadData[1].analog_signed[2] - PadData[1].analog_magnitude[2]) * 0.0002f;
+        travel->place_delta.x = (PadData[1].analog_signed[2] - PadData[1].analog_magnitude[2]) * CAMERA_MOVE_STEP_STICK;
     }
-    if (PadData[1].held_buttons & 1) {
-        travel->place_delta.y = -0.0064f;
+    if (PadData[1].held_buttons & PAD_L2) {
+        travel->place_delta.y = -CAMERA_MOVE_STEP_HEIGHT;
     }
-    if (PadData[1].held_buttons & 4) {
-        travel->place_delta.y = 0.0064f;
+    if (PadData[1].held_buttons & PAD_L1) {
+        travel->place_delta.y = CAMERA_MOVE_STEP_HEIGHT;
     }
     if (PadData[1].analog_signed[3] < 0) {
-        travel->place_delta.z = (PadData[1].analog_signed[3] + PadData[1].analog_magnitude[3]) * 0.0002f;
+        travel->place_delta.z = (PadData[1].analog_signed[3] + PadData[1].analog_magnitude[3]) * CAMERA_MOVE_STEP_STICK;
     }
     if (PadData[1].analog_signed[3] > 0) {
-        travel->place_delta.z = (PadData[1].analog_signed[3] - PadData[1].analog_magnitude[3]) * 0.0002f;
+        travel->place_delta.z = (PadData[1].analog_signed[3] - PadData[1].analog_magnitude[3]) * CAMERA_MOVE_STEP_STICK;
     }
-    damping = 0.8f;
+    damping = CAMERA_VELOCITY_DAMPING;
     xglCameraTravelScale(travel);
     travel->fov_velocity = travel->fov_velocity * damping + travel->scale;
     travel->fov += travel->fov_velocity;
@@ -303,24 +335,24 @@ static void xglCameraTravelChase(XglCamera *camera)
     xglCameraTravelReset(travel);
     xglCameraTravelFocus(travel);
     if (PadData[1].analog_signed[2] < 0) {
-        travel->angle_delta.y = (PadData[1].analog_signed[2] + PadData[1].analog_magnitude[2]) * 6.981317e-05f;
+        travel->angle_delta.y = (PadData[1].analog_signed[2] + PadData[1].analog_magnitude[2]) * CAMERA_TURN_STEP_PITCH_YAW;
     }
     if (PadData[1].analog_signed[2] > 0) {
-        travel->angle_delta.y = (PadData[1].analog_signed[2] - PadData[1].analog_magnitude[2]) * 6.981317e-05f;
+        travel->angle_delta.y = (PadData[1].analog_signed[2] - PadData[1].analog_magnitude[2]) * CAMERA_TURN_STEP_PITCH_YAW;
     }
-    if (PadData[1].held_buttons & 1) {
-        travel->place_delta.y = -0.0064f;
+    if (PadData[1].held_buttons & PAD_L2) {
+        travel->place_delta.y = -CAMERA_MOVE_STEP_HEIGHT;
     }
-    if (PadData[1].held_buttons & 4) {
-        travel->place_delta.y = 0.0064f;
+    if (PadData[1].held_buttons & PAD_L1) {
+        travel->place_delta.y = CAMERA_MOVE_STEP_HEIGHT;
     }
     if (PadData[1].analog_signed[3] < 0) {
-        travel->place_delta.z = (PadData[1].analog_signed[3] + PadData[1].analog_magnitude[3]) * 0.0002f;
+        travel->place_delta.z = (PadData[1].analog_signed[3] + PadData[1].analog_magnitude[3]) * CAMERA_MOVE_STEP_STICK;
     }
     if (PadData[1].analog_signed[3] > 0) {
-        travel->place_delta.z = (PadData[1].analog_signed[3] - PadData[1].analog_magnitude[3]) * 0.0002f;
+        travel->place_delta.z = (PadData[1].analog_signed[3] - PadData[1].analog_magnitude[3]) * CAMERA_MOVE_STEP_STICK;
     }
-    damping = 0.8f;
+    damping = CAMERA_VELOCITY_DAMPING;
     xglCameraTravelScale(travel);
     travel->fov_velocity = travel->fov_velocity * damping + travel->scale;
     travel->fov += travel->fov_velocity;
@@ -330,16 +362,16 @@ static void xglCameraTravelChase(XglCamera *camera)
     Vu0AddVectorXYZ(&travel->place_velocity, &travel->place_velocity, &travel->place_delta);
     travel->chase_distance += travel->place_velocity.z;
     travel->chase_yaw += travel->angle_velocity.y;
-    if (travel->chase_distance < 0.4f) {
-        travel->chase_distance = 0.4f;
+    if (travel->chase_distance < CAMERA_CHASE_DISTANCE_MIN) {
+        travel->chase_distance = CAMERA_CHASE_DISTANCE_MIN;
     }
-    if (travel->chase_distance > 100.0f) {
-        travel->chase_distance = 100.0f;
+    if (travel->chase_distance > CAMERA_CHASE_DISTANCE_MAX) {
+        travel->chase_distance = CAMERA_CHASE_DISTANCE_MAX;
     }
     Vu0SubVectorXYZ(&offset, &travel->chase_reference, &travel->chase_position);
     xglVectorLength(&offset.w, &offset);
     if (offset.w < 1.0f) {
-        xglVectorScaleAddXYZ(&travel->chase_position, &offset, &travel->chase_position, 0.2f);
+        xglVectorScaleAddXYZ(&travel->chase_position, &offset, &travel->chase_position, CAMERA_CHASE_FOLLOW_RATE);
     } else {
         QuadwordCopy(&travel->chase_position, &travel->chase_reference);
     }
@@ -355,11 +387,11 @@ static void xglCameraTravelChase(XglCamera *camera)
     travel->position.y += travel->place_velocity.y;
     travel->position.x = placement[3].x;
     travel->position.z = placement[3].z;
-    if (travel->position.y < 0.4f) {
-        travel->position.y = 0.4f;
+    if (travel->position.y < CAMERA_CHASE_HEIGHT_MIN) {
+        travel->position.y = CAMERA_CHASE_HEIGHT_MIN;
     }
-    if (travel->position.y > 100.0f) {
-        travel->position.y = 100.0f;
+    if (travel->position.y > CAMERA_CHASE_HEIGHT_MAX) {
+        travel->position.y = CAMERA_CHASE_HEIGHT_MAX;
     }
     Vu0SubVectorXYZ(&offset, &travel->chase_position, &travel->position);
     xglVectorNormal(&offset, &offset);
@@ -380,18 +412,18 @@ int xglCameraTravelProc(StudioCamera *studio)
     case 4:
     default:
         break;
-    case 2:
-        if (!(PadData[1].held_buttons & 0x100)) {
+    case CAMERA_STATE_TRAVEL_MANUAL:
+        if (!(PadData[1].held_buttons & PAD_SELECT)) {
             xglCameraTravelManual(camera);
             break;
         }
-        if (PadData[1].pressed_buttons & 0x10) {
+        if (PadData[1].pressed_buttons & PAD_TRIANGLE) {
             xglCameraTravelInit(studio);
         }
         break;
-    case 3:
-        if (PadData[1].held_buttons & 0x100) {
-            if (PadData[1].pressed_buttons & 0x10) {
+    case CAMERA_STATE_TRAVEL_CHASE:
+        if (PadData[1].held_buttons & PAD_SELECT) {
+            if (PadData[1].pressed_buttons & PAD_TRIANGLE) {
                 xglCameraTravelInit(studio);
             }
             break;
@@ -433,18 +465,18 @@ static void xglCameraViewScreen(StudioCamera *studio, const Vector4 *offset)
     }
     if (screen->resolution.z > screen->resolution.w) {
         xglVectorScale(&scaled, &screen->resolution,
-                       (4096.0f - __builtin_fabsf(2.0f * centerX)) / screen->resolution.z);
+                       (CAMERA_GS_COORD_SIZE - __builtin_fabsf(2.0f * centerX)) / screen->resolution.z);
     } else {
         xglVectorScale(&scaled, &screen->resolution,
-                       (4096.0f - __builtin_fabsf(2.0f * centerY)) / screen->resolution.w);
+                       (CAMERA_GS_COORD_SIZE - __builtin_fabsf(2.0f * centerY)) / screen->resolution.w);
     }
     screen->clipRange.z = screen->projection.x * (scaled.z / screen->resolution.z);
     screen->clipRange.w = screen->projection.y * (scaled.w / screen->resolution.w);
     QuadwordCopy(&screen->projection, &screen->resolution);
     screen->projection.x *= aspect;
-    screen->screenOffset.x = centerX + 2048.0f;
+    screen->screenOffset.x = centerX + CAMERA_GS_COORD_CENTER;
     screen->projection.z *= aspect;
-    screen->screenOffset.y = centerY + 2048.0f;
+    screen->screenOffset.y = centerY + CAMERA_GS_COORD_CENTER;
     screen->screenOffset.z = depth[0] + depth[1] * 0.5f;
     screen->screenOffset.w = (1.0f - screen->portEffect.z) * 255.0f;
     screen->screenScale.x = scaled.x * screen->portEffect.x * 0.5f;
@@ -615,6 +647,6 @@ void xglCameraSetWindow(CameraWindowData *camera, int left, int top, int right, 
 
 void xglCameraClipRangeDefault(StudioCamera *camera)
 {
-    camera->nearClip = 0.01f;
-    camera->farClip = 99000.0f;
+    camera->nearClip = CAMERA_NEAR_CLIP_DEFAULT;
+    camera->farClip = CAMERA_FAR_CLIP_DEFAULT;
 }

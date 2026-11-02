@@ -31,6 +31,18 @@ typedef struct BallBoxCollisionArgs {
     Vector4 *line_end;
 } BallBoxCollisionArgs;
 
+/* Where the segment start lies relative to the box (CheckBallBoxCollision's side). */
+enum {
+    COLLI_SIDE_Z_LOW = 1,       /* start at or below the near z face */
+    COLLI_SIDE_Z_HIGH = 2,      /* start at or beyond the far z face */
+    COLLI_SIDE_X_LOW = 4,
+    COLLI_SIDE_X_HIGH = 8,
+    COLLI_SIDE_HIT_Z = 16       /* the hit lies on a z face, not an x face */
+};
+
+/* PadData.state.bits: SELECT held with START pressed ends the test. */
+#define COLLI_TEST_EXIT_PADS 0x08000100ULL
+
 typedef union CollisionPadButtons {
     u64 bits;
     struct {
@@ -250,40 +262,40 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
     line_start = args->line_start;
     side = 0;
     if (line_start->z <= frame.bounds[0].z)
-        side = 1;
+        side = COLLI_SIDE_Z_LOW;
     else if (frame.bounds[1].z <= line_start->z)
-        side = 2;
+        side = COLLI_SIDE_Z_HIGH;
     if (line_start->x <= frame.bounds[0].x)
-        side |= 4;
+        side |= COLLI_SIDE_X_LOW;
     else if (frame.bounds[1].x <= line_start->x)
-        side |= 8;
+        side |= COLLI_SIDE_X_HIGH;
 
     switch (side) {
-    case 1:
+    case COLLI_SIDE_Z_LOW:
         intersection = GetIntersectionPointLineZ(&fraction_cell.value, &args->line_start->x,
                                                 &args->line_end->x, frame.bounds[0].z);
         if (!intersection)
             return intersection;
-        side |= 16;
+        side |= COLLI_SIDE_HIT_Z;
         break;
-    case 2:
+    case COLLI_SIDE_Z_HIGH:
         intersection = GetIntersectionPointLineZ(&fraction_cell.value, &args->line_start->x,
                                                 &args->line_end->x, frame.bounds[1].z);
         if (!intersection)
             return intersection;
-        side |= 16;
+        side |= COLLI_SIDE_HIT_Z;
         break;
-    case 4:
+    case COLLI_SIDE_X_LOW:
         if (!GetIntersectionPointLineX(&fraction_cell.value, &args->line_start->x,
                                        &args->line_end->x, frame.bounds[0].x))
             return 0;
         break;
-    case 8:
+    case COLLI_SIDE_X_HIGH:
         if (!GetIntersectionPointLineX(&fraction_cell.value, &args->line_start->x,
                                        &args->line_end->x, frame.bounds[1].x))
             return 0;
         break;
-    case 5:
+    case COLLI_SIDE_X_LOW | COLLI_SIDE_Z_LOW:
         slope = CheckSlope(line_start, args->line_end, line_start, &frame.bounds[0]);
         if (slope != -1) {
             if (slope != 1)
@@ -292,14 +304,14 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
                 &args->line_start->x, &args->line_end->x, frame.bounds[0].z);
             if (!intersection)
                 return intersection;
-            side |= 16;
+            side |= COLLI_SIDE_HIT_Z;
         } else {
             if (!GetIntersectionPointLineX(&fraction_cell.value, &args->line_start->x,
                                            &args->line_end->x, frame.bounds[0].x))
                 return 0;
         }
         break;
-    case 6:
+    case COLLI_SIDE_X_LOW | COLLI_SIDE_Z_HIGH:
         swapf(&frame.bounds[0].z, &frame.bounds[1].z);
         slope = CheckSlope(args->line_start, args->line_end,
                            args->line_start, &frame.bounds[1]);
@@ -314,11 +326,11 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
                 &args->line_start->x, &args->line_end->x, frame.bounds[0].z);
             if (!intersection)
                 return intersection;
-            side |= 16;
+            side |= COLLI_SIDE_HIT_Z;
         }
         swapf(&frame.bounds[0].z, &frame.bounds[1].z);
         break;
-    case 9:
+    case COLLI_SIDE_X_HIGH | COLLI_SIDE_Z_LOW:
         swapf(&frame.bounds[0].x, &frame.bounds[1].x);
         slope = CheckSlope(args->line_start, args->line_end,
                            args->line_start, &frame.bounds[0]);
@@ -333,11 +345,11 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
                 &args->line_start->x, &args->line_end->x, frame.bounds[0].z);
             if (!intersection)
                 return intersection;
-            side |= 16;
+            side |= COLLI_SIDE_HIT_Z;
         }
         swapf(&frame.bounds[0].x, &frame.bounds[1].x);
         break;
-    case 10:
+    case COLLI_SIDE_X_HIGH | COLLI_SIDE_Z_HIGH:
         slope = CheckSlope(line_start, args->line_end, line_start, &frame.bounds[1]);
         if (slope != -1) {
             if (slope != 1)
@@ -346,7 +358,7 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
                 &args->line_start->x, &args->line_end->x, frame.bounds[1].z);
             if (!intersection)
                 return intersection;
-            side |= 16;
+            side |= COLLI_SIDE_HIT_Z;
         } else {
             if (!GetIntersectionPointLineX(&fraction_cell.value, &args->line_start->x,
                                            &args->line_end->x, frame.bounds[1].x))
@@ -369,7 +381,7 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
                 + args->line_start->z;
             break;
         case 1:
-            if (side & 16) {
+            if (side & COLLI_SIDE_HIT_Z) {
                 hit_position->x = args->line_end->x;
                 hit_position->z = (args->line_end->z - args->line_start->z) * fraction_cell.value
                     + args->line_start->z;
@@ -445,9 +457,9 @@ void ColliTest(void)
     xglRenderClearFrame();
     if (!InitTest())
         return;
-    while (PadData.state.halves.pressed & 0x20)
+    while (PadData.state.halves.pressed & PAD_CIRCLE)
         xglSleep();
-    if ((PadData.state.bits & 0x08000100ULL) == 0x08000100ULL)
+    if ((PadData.state.bits & COLLI_TEST_EXIT_PADS) == COLLI_TEST_EXIT_PADS)
         return;
 
     move_step = 0.1f;
@@ -464,19 +476,19 @@ void ColliTest(void)
         ppNextStart(particle);
 
         position = &particle->position;
-        if (PadData.movement & 0x1000)
+        if (PadData.movement & PAD_UP)
             position->z -= move_step;
-        if (PadData.movement & 0x4000)
+        if (PadData.movement & PAD_DOWN)
             position->z += move_step;
-        if (PadData.movement & 0x8000)
+        if (PadData.movement & PAD_LEFT)
             position->x -= move_step;
-        if (PadData.movement & 0x2000)
+        if (PadData.movement & PAD_RIGHT)
             position->x += move_step;
 
         switch (mode_004DB9D8) {
         case 0:
         default:
-            if (!(PadData.state.halves.held & 0x40)) {
+            if (!(PadData.state.halves.held & PAD_CROSS)) {
                 collision.box_corner_a = &box1;
                 collision.box_corner_b = &box2;
                 collision.line_start = &particle->previous_position;
@@ -518,7 +530,7 @@ void ColliTest(void)
         }
         ppNextEnd(particle);
 
-        if (PadData.state.halves.pressed & 0x20) {
+        if (PadData.state.halves.pressed & PAD_CIRCLE) {
             switch (mode_004DB9D8) {
             case 0:
             default:
@@ -542,7 +554,7 @@ void ColliTest(void)
             xglFontDebugPrintf(0, 8, collisionHitLabel);
         xglFontDebugPrintf(0, 0, collisionTestLabel);
         xglSleep();
-    } while ((PadData.state.bits & 0x08000100ULL) != 0x08000100ULL);
+    } while ((PadData.state.bits & COLLI_TEST_EXIT_PADS) != COLLI_TEST_EXIT_PADS);
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */

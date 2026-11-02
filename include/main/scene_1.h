@@ -5,6 +5,9 @@
 #include "main/find_native_method.h"
 #include "main/jni.h"
 
+/* JThread.flags bit 4: there is a method to run. */
+#define SCENE_THREAD_HAS_METHOD 0x10u
+
 /* Functions and data used by other translation units. */
 void SCENE_instance(SceneVm *vm, SceneObject scene_object);
 void SCENE_cleanup(SceneVm *vm, SceneObject scene_object);

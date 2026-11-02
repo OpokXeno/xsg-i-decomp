@@ -27,6 +27,312 @@
 
 #define NULL ((void *)0)
 
+/* Shop state machine (MenuShopWorkData.state / nextState). */
+enum {
+    SHOP_STATE_MODE_SELECT = 0x20,    /* Buy / Sell / Tune A.G.W.S. / Quit */
+    SHOP_STATE_BUY_LIST = 0x30,       /* item list, buy mode */
+    SHOP_STATE_SELL_LIST = 0x90,      /* item list, sell mode */
+    SHOP_STATE_QUANTITY = 0xA0,       /* choose how many */
+    SHOP_STATE_CONFIRM = 0xA2,        /* "Buy it?" / "Sell it?" */
+    SHOP_STATE_RESULT = 0xA4,         /* "purchased." / "sold." */
+    SHOP_STATE_AGWS_MENU = 0xC0,      /* Buy Frame / Buy Generator / Restore FHP / Quit */
+    SHOP_STATE_RESTORE_UNIT = 0xC2,   /* pick the A.G.W.S. to restore */
+    SHOP_STATE_RESTORE_CONFIRM = 0xC4,
+    SHOP_STATE_RESTORE_DONE = 0xC6,
+    SHOP_STATE_AGWS_BUY_LIST = 0xD0,  /* frame / generator price list */
+    SHOP_STATE_AGWS_BUY_UNIT = 0xD2,  /* pick the A.G.W.S. to fit it to */
+    SHOP_STATE_AGWS_BUY_CONFIRM = 0xD4,
+    SHOP_STATE_AGWS_BUY_DONE = 0xD6,
+    SHOP_STATE_EXIT = 0xF0,
+    SHOP_STATE_END = 0xFF
+};
+
+/* High nibble of the A.G.W.S. tuning states. */
+#define SHOP_STATE_GROUP_AGWS_MENU 0xC
+#define SHOP_STATE_GROUP_AGWS_BUY 0xD
+
+/* MenuShopWorkData.stateFlags */
+#define SHOP_FLAG_STATE_ENTERED 0x01
+
+/* MenuShopWorkData.mode: the command chosen in SHOP_STATE_MODE_SELECT. */
+enum {
+    SHOP_MODE_BUY = 0,
+    SHOP_MODE_SELL = 1,
+    SHOP_MODE_TUNE_AGWS = 2,
+    SHOP_MODE_QUIT = 3
+};
+
+/* MenuShopWorkData.category: list category (also the bit index in categoryMask). */
+enum {
+    SHOP_CAT_ITEM = 0,
+    SHOP_CAT_CHAR_WEAPON = 1,
+    SHOP_CAT_CHAR_ACCESSORY = 2,
+    SHOP_CAT_CHAR_AMMO = 3,
+    SHOP_CAT_AGWS_WEAPON = 4,
+    SHOP_CAT_AGWS_ACCESSORY = 5,
+    SHOP_CAT_AGWS_AMMO = 6,
+    SHOP_CAT_AGWS = 7,
+    SHOP_CAT_CARD = 8,
+    SHOP_CAT_COUNT = 9
+};
+
+/* High word of an item key (key >> 16): what kind of record the key names. */
+enum {
+    ITEM_KIND_ITEM = 1,
+    ITEM_KIND_EVENT = 2,
+    ITEM_KIND_WEAPON = 3,
+    ITEM_KIND_BULLET = 4,
+    ITEM_KIND_ACCESSORY = 5,
+    ITEM_KIND_AGWS = 7,
+    ITEM_KIND_FRAME = 11,
+    ITEM_KIND_ENGINE = 12
+};
+#define ITEM_KEY_FRAME 0xB0000
+#define ITEM_KEY_ENGINE 0xC0000
+
+/* MenuSortSet category masks and filters (the sell lists). */
+#define SHOP_SORT_ITEM 1
+#define SHOP_SORT_EVENT 2
+#define SHOP_SORT_WEAPON 4
+#define SHOP_SORT_BULLET 8
+#define SHOP_SORT_ACCESSORY 16
+#define SHOP_SORT_FILTER_CHARACTER (-1)
+#define SHOP_SORT_FILTER_AGWS (-2)
+
+/* WindowDX.state: set to OPEN_REQUEST, WindowDXMain runs the open animation, then OPEN. */
+#define WINDOW_STATE_OPEN_REQUEST 1
+#define WINDOW_STATE_OPEN 3
+
+/* MenuShopModelDisp: MenuModelUnit.extFuncFlag. */
+enum {
+    SHOP_MODEL_OPEN = 0,
+    SHOP_MODEL_SHOWN = 10,
+    SHOP_MODEL_SWAP = 0x1E,
+    SHOP_MODEL_FADE_OUT = 0x1F
+};
+
+/* Draw-order keys of the shop's UI tasks. */
+#define SHOP_DEPTH_TOP 0x00FFFFF0
+#define SHOP_DEPTH_LIST 0x000FFFF0
+#define SHOP_DEPTH_SELECT 0x00FFFFF4
+#define SHOP_DEPTH_PARAMETER 0x00FFFF00
+
+/* MoveSlide rate of every sliding panel. */
+#define SHOP_SLIDE_RATE 3.0f
+
+/* Help caption bar (MenuShopPas). */
+#define SHOP_PAS_LABEL_COUNT 16
+#define SHOP_PAS_WINDOW_WIDTH 272
+#define SHOP_PAS_WINDOW_HIDDEN_X (-272)
+#define SHOP_PAS_WINDOW_SHOWN_X (-16)
+#define SHOP_PAS_LABEL_HIDDEN_X 288
+#define SHOP_PAS_LABEL_SHOWN_X 16
+/* Caption index (msg00_0_0036DAF0): 0 "Store", 3..11 the categories, then the A.G.W.S. commands. */
+#define SHOP_PAS_LABEL_STORE 0
+#define SHOP_PAS_LABEL_CATEGORY_FIRST 3
+#define SHOP_PAS_LABEL_AGWS_TUNING 12
+#define SHOP_PAS_LABEL_FHP_RESTORATION 13
+#define SHOP_PAS_LABEL_BUY_FRAME 14
+#define SHOP_PAS_LABEL_BUY_GENERATOR 15
+
+/* Bit of MenuShopWorkData.categoryMask: category n is available. */
+enum {
+    SHOP_CAT_MASK_ITEM = 1 << SHOP_CAT_ITEM,
+    SHOP_CAT_MASK_CHAR_WEAPON = 1 << SHOP_CAT_CHAR_WEAPON,
+    SHOP_CAT_MASK_CHAR_ACCESSORY = 1 << SHOP_CAT_CHAR_ACCESSORY,
+    SHOP_CAT_MASK_CHAR_AMMO = 1 << SHOP_CAT_CHAR_AMMO,
+    SHOP_CAT_MASK_AGWS_WEAPON = 1 << SHOP_CAT_AGWS_WEAPON,
+    SHOP_CAT_MASK_AGWS_ACCESSORY = 1 << SHOP_CAT_AGWS_ACCESSORY,
+    SHOP_CAT_MASK_AGWS_AMMO = 1 << SHOP_CAT_AGWS_AMMO,
+    SHOP_CAT_MASK_AGWS = 1 << SHOP_CAT_AGWS,
+    SHOP_CAT_MASK_CARD = 1 << SHOP_CAT_CARD
+};
+
+/* Item key of an event (key) item, and the three card items sold in the Cards category. */
+#define ITEM_KEY_EVENT 0x20000
+#define SHOP_CARD_EVENT_1 0x35
+#define SHOP_CARD_EVENT_2 0x36
+#define SHOP_CARD_EVENT_3 0x37
+/* MenuScenarioNo from which the first two cards, then the third, are for sale. */
+#define SHOP_CARD_SCENARIO_FIRST 0x73
+#define SHOP_CARD_SCENARIO_THIRD 0x12D
+
+/* MenuShopSortSet types above the category range, and their menuShopRecordSortTable rows. */
+#define SHOP_SORT_TYPE_FRAME 0x12
+#define SHOP_SORT_TYPE_ENGINE 0x13
+#define SHOP_TABLE_FRAME 9
+#define SHOP_TABLE_ENGINE 10
+
+/* MenuKeepSelect holds one entry per list; each entry is this many bytes. */
+#define MENU_KEEP_ENTRY_SIZE 5
+
+/* Item list window (MenuShopList, MenuShopListChange00/01). */
+#define SHOP_LIST_WIDTH 272
+#define SHOP_LIST_ROW_HEIGHT 24
+#define SHOP_LIST_Y 0x50
+#define SHOP_LIST_SHOWN_X 0x10
+#define SHOP_LIST_ENTER_X (-0x120)
+#define SHOP_LIST_HIDDEN_X (-0x110)
+/* MenuShopList.state */
+enum {
+    SHOP_LIST_CLOSED = 0,
+    SHOP_LIST_IDLE = 1,
+    SHOP_LIST_ITEMS_OPEN = 10,
+    SHOP_LIST_ITEMS_SHOWN = 11,
+    SHOP_LIST_CLOSING = 12,
+    SHOP_LIST_AGWS_OPEN = 30,   /* frame / generator price list */
+    SHOP_LIST_AGWS_SHOWN = 31
+};
+
+/* Right-hand panels: x of the off-screen (hidden) slot, x when shown beside the list, width. */
+#define SHOP_PANEL_HIDDEN_X 528
+#define SHOP_PANEL_SHOWN_X 0x130
+#define SHOP_PANEL_WIDTH 0x100
+
+/* Sprite tint of a usable (lit) and an unusable (dim) party portrait. */
+#define SHOP_SPRITE_LIT 0x80
+#define SHOP_SPRITE_DIM 0x40
+
+/* Price of restoring an A.G.W.S.'s FHP. */
+#define SHOP_RESTORE_COST 100
+
+/* Most copies of one item the player can hold. */
+#define SHOP_STOCK_MAX 99
+
+/* Flags of the item / weapon / bullet / accessory records. */
+#define SHOP_ITEM_FLAG_NO_SALE 0x1000
+#define SHOP_WEAPON_FLAG_BULLET 0x100
+
+/* MenuShopPay (MenuShopSeisan02): which price is shown. */
+enum {
+    SHOP_PAY_KIND_RESTORE = 1,
+    SHOP_PAY_KIND_BUY = 2
+};
+/* MenuShopSeisan02Work.state */
+enum {
+    SHOP_PAY_CLOSED = 0,
+    SHOP_PAY_IDLE = 1,
+    SHOP_PAY_RESTORE_OPEN = 10,
+    SHOP_PAY_RESTORE_SHOWN = 11,
+    SHOP_PAY_RESTORE_CLOSING = 12,
+    SHOP_PAY_BUY_OPEN = 20,
+    SHOP_PAY_BUY_SHOWN = 21,
+    SHOP_PAY_BUY_CLOSING = 22
+};
+
+/* A.G.W.S. target panel (MenuShopEx02) state. */
+enum {
+    SHOP_UNITS_CLOSED = 0,
+    SHOP_UNITS_IDLE = 1,
+    SHOP_UNITS_RESTORE_OPEN = 10,
+    SHOP_UNITS_RESTORE_SHOWN = 11,
+    SHOP_UNITS_CLOSING = 12,
+    SHOP_UNITS_BUY_OPEN = 20,
+    SHOP_UNITS_BUY_SHOWN = 21
+};
+
+/* Category icon strip (MenuShopIcon): two frame sprites, then one icon per category. */
+#define SHOP_ICON_CATEGORY_FIRST 2
+#define SHOP_ICON_COUNT (SHOP_ICON_CATEGORY_FIRST + SHOP_CAT_COUNT)
+#define SHOP_ICON_SPACING 21
+#define SHOP_ICON_SLIDE_MAX 16
+#define SHOP_ICON_LIFT_MAX 6
+
+/* Category underline (MenuShopLine). */
+#define SHOP_LINE_END_X 512
+#define SHOP_LINE_ALPHA_MAX 120
+#define SHOP_LINE_ALPHA_STEP 8
+
+/* MenuShopParaSet modes: which stat comparison to build. */
+enum {
+    SHOP_PARA_FRAME = 0,         /* stats of the frame being bought */
+    SHOP_PARA_ENGINE = 1,        /* stats of the generator being bought */
+    SHOP_PARA_RESTORE = 2,       /* current FHP of the unit to restore */
+    SHOP_PARA_FRAME_FIT = 3,     /* unit stats before / after fitting the frame */
+    SHOP_PARA_ENGINE_FIT = 4,    /* unit stats before / after fitting the generator */
+    SHOP_PARA_CHAR_WEAPON = 10,
+    SHOP_PARA_CHAR_ACCESSORY = 11,
+    SHOP_PARA_CHAR_AMMO = 12,
+    SHOP_PARA_AGWS_WEAPON = 13,
+    SHOP_PARA_AGWS_ACCESSORY = 14,
+    SHOP_PARA_AGWS_AMMO = 15,
+    SHOP_PARA_AGWS = 16
+};
+/* Rows of the stat panel: character gear shows 7, A.G.W.S. gear 6. */
+#define SHOP_PARA_CHAR_COUNT 7
+#define SHOP_PARA_AGWS_COUNT 6
+
+/* Command menus and the confirmation popup (MenuShopSelect). */
+#define SHOP_MENU_MAIN 0
+#define SHOP_MENU_AGWS 1
+#define SHOP_MENU_COMMAND_COUNT 4
+/* MenuShopSelectWork.popupFlags */
+#define SHOP_POPUP_SLIDES_LEFT 1
+
+/* Description bar at the bottom (MenuShopInfo). */
+#define SHOP_INFO_MESSAGE_SIZE 128
+#define SHOP_INFO_HEIGHT 54
+#define SHOP_INFO_SHOWN_Y 386
+#define SHOP_INFO_HIDDEN_Y 480
+
+/* A.G.W.S. unit ids of the VX series; lower ids are the Hyams AG series. */
+#define SHOP_AGWS_VX_FIRST_ID 23
+
+/* A.G.W.S. unit ids run from the first up to (not including) the end id. */
+#define SHOP_AGWS_UNIT_FIRST 0x11
+#define SHOP_AGWS_UNIT_END 0x21
+
+/* MenuShopWorkData.waitFrames: input lockout after entering a state, after a choice, etc. */
+#define SHOP_WAIT_SHORT 2
+#define SHOP_WAIT_ENTER 8
+#define SHOP_WAIT_TRANSITION 0xC
+#define SHOP_WAIT_EXIT 0x10
+
+/* Items bought at once move 1 per press, a whole page of this many per left/right press. */
+#define SHOP_QUANTITY_PAGE_STEP 10
+
+/* Commands of the A.G.W.S. menu (SHOP_STATE_AGWS_MENU), in sortOption order. */
+#define SHOP_AGWS_CMD_FRAME 0
+#define SHOP_AGWS_CMD_GENERATOR 1
+#define SHOP_AGWS_CMD_RESTORE 2
+#define SHOP_AGWS_CMD_QUIT 3
+#define SHOP_AGWS_CMD_COUNT 4
+
+/* MenuKeepSelect offsets of the frame and generator price lists. */
+#define SHOP_KEEP_FRAME_LIST (SHOP_SORT_TYPE_FRAME * MENU_KEEP_ENTRY_SIZE)
+#define SHOP_KEEP_ENGINE_LIST (SHOP_SORT_TYPE_ENGINE * MENU_KEEP_ENTRY_SIZE)
+
+/* ShopData.records[] row holding the A.G.W.S. frames on sale. */
+#define SHOP_RECORD_FRAME 7
+
+/* MenuShopMain(shopType): the shop that only buys from the player. */
+#define SHOP_TYPE_SELL_ONLY 20
+
+/* MenuShopMain layout of the shop's work memory. */
+#define SHOP_DATA_BUFFER_SIZE 8192
+#define SHOP_WORK_SIZE 128
+#define SHOP_TASK_COUNT 16
+#define SHOP_MODEL_MEMORY_SIZE 0x180000
+#define SHOP_PAS_SIZE 1516
+#define SHOP_INFO_SIZE 976
+#define SHOP_LIST_SIZE 5956
+#define SHOP_SELECT_SIZE 7928
+#define SHOP_EX_SIZE 1728
+#define SHOP_EX2_SIZE 480
+#define SHOP_EX02_SIZE 472
+#define SHOP_SEISAN_SIZE 1668
+#define SHOP_SEISAN02_SIZE 984
+#define SHOP_ICON_SIZE 508
+#define SHOP_PARAMETER_SIZE 1996
+#define SHOP_LINE_SIZE 80
+
+/* GameLoopState[4]: set while a menu screen is open. */
+#define GAME_LOOP_FLAG_MENU_OPEN 0x04000000
+
+/* Offsets of the equipped engine / frame ids in the unit record. */
+#define SHOP_UNIT_ENGINE_ID_OFFSET 86
+#define SHOP_UNIT_FRAME_ID_OFFSET 88
+
 /* Each list selection updates the item and its signed model key together. */
 #define MENU_SHOP_PREVIEW_ITEM(listIndex) \
     { \
@@ -284,7 +590,7 @@ typedef struct MenuShopInfoWork {
     WindowDX window;
     MenuShopInfoPanel panel;
     unsigned char unmodeled_1b0[416];
-    char message[128];
+    char message[SHOP_INFO_MESSAGE_SIZE];
 } MenuShopInfoWork;
 
 typedef struct MenuShopInfoT0 { const char *p[4]; } MenuShopInfoT0;
@@ -338,7 +644,7 @@ struct MenuShopUnitPanel {
 };
 
 struct MenuShopIconIds {
-    short ids[11];
+    short ids[SHOP_ICON_COUNT];
 };
 
 struct MenuShopIconSprite {
@@ -362,11 +668,11 @@ struct MenuShopIconDisplay {
     unsigned char phase;
     short animation;
     short active;
-    signed char categoryLift[9];
+    signed char categoryLift[SHOP_CAT_COUNT];
     unsigned char unmodeled_11[3];
     int depth;
     float scale;
-    struct MenuShopIconSprite sprites[11];
+    struct MenuShopIconSprite sprites[SHOP_ICON_COUNT];
 };
 
 struct MenuShopParameterDisplay {
@@ -896,7 +1202,7 @@ static void tskTskMain3(TskObject *task)
 {
     TskObjectWorker worker = task->worker;
 
-    if (MenuShopWork->state == 0xff) {
+    if (MenuShopWork->state == SHOP_STATE_END) {
         xglTaskWaitRemove(&task->base);
         return;
     }
@@ -928,24 +1234,24 @@ void MenuShopModelDisp(MenuModelUnit *unit)
     if (unit->active != 0) {
         transform = &actor->menu;
         if (MenuShopWork->modelPending != 0) {
-            unit->extFuncFlag = 0x1e;
+            unit->extFuncFlag = SHOP_MODEL_SWAP;
             MenuShopWork->modelPending = 0;
         }
 
         state = unit->extFuncFlag;
         switch (state) {
-        case 10:
+        case SHOP_MODEL_SHOWN:
             break;
-        case 0:
+        case SHOP_MODEL_OPEN:
             transform->rotation.y = -0.2f;
             MenuModelUnitOpen(unit, 2);
-            unit->extFuncFlag = 10;
+            unit->extFuncFlag = SHOP_MODEL_SHOWN;
             return;
-        case 0x1e:
+        case SHOP_MODEL_SWAP:
             MenuModelUnitOpen(unit, 1);
-            unit->extFuncFlag = 0x1f;
+            unit->extFuncFlag = SHOP_MODEL_FADE_OUT;
             /* fall through */
-        case 0x1f:
+        case SHOP_MODEL_FADE_OUT:
             if (transform->transparency == 0.0f)
                 unit->taskPhase = -1;
             break;
@@ -993,12 +1299,12 @@ static void MenuShopModelMain(TskObject *task, void *data)
         if (MenuShopWork->mode != 0)
             break;
         switch (MenuShopWork->state) {
-        case 0x30:
-        case 0xA0:
-        case 0xA2:
-        case 0xA4:
+        case SHOP_STATE_BUY_LIST:
+        case SHOP_STATE_QUANTITY:
+        case SHOP_STATE_CONFIRM:
+        case SHOP_STATE_RESULT:
             category = MenuShopWork->category;
-            if (category == 7) {
+            if (category == SHOP_CAT_AGWS) {
                 if ((MenuShopWork->itemId >> 16) != category)
                     break;
                 if (*modelId != MenuShopWork->modelId) {
@@ -1037,80 +1343,80 @@ static void MenuShopPas(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->x = -272;
+        work->x = SHOP_PAS_WINDOW_HIDDEN_X;
         work->y = 8;
-        work->depth = 0xfffff0;
+        work->depth = SHOP_DEPTH_TOP;
         window = &work->window;
         WindowDXSet(window);
         window->x = work->x;
         work->window.style = work->depth;
-        work->window.width = 272;
+        work->window.width = SHOP_PAS_WINDOW_WIDTH;
         work->window.y = work->y;
         work->window.height = 32;
-        work->window.state = 1;
+        work->window.state = WINDOW_STATE_OPEN_REQUEST;
         WindowDXMain(window);
-        work->window.state = 3;
+        work->window.state = WINDOW_STATE_OPEN;
         text = msg00_0_0036DAF0;
-        for (i = 0; i < 16; i++, text++) {
+        for (i = 0; i < SHOP_PAS_LABEL_COUNT; i++, text++) {
             eMessageSet(&work->messages[i], *text);
             work->messages[i].mode = 32;
-            work->messages[i].x = 288;
+            work->messages[i].x = SHOP_PAS_LABEL_HIDDEN_X;
             work->messages[i].draw_parameter = work->depth + 2;
             work->messages[i].y = work->y + 3;
         }
         break;
     case 2:
-        windowX = -16;
-        for (i = 0; i < 16; i++)
-            messageX[i] = 288;
+        windowX = SHOP_PAS_WINDOW_SHOWN_X;
+        for (i = 0; i < SHOP_PAS_LABEL_COUNT; i++)
+            messageX[i] = SHOP_PAS_LABEL_HIDDEN_X;
         switch (MenuShopWork->state) {
-        case 0x20:
-            messageX[0] = 16;
+        case SHOP_STATE_MODE_SELECT:
+            messageX[SHOP_PAS_LABEL_STORE] = SHOP_PAS_LABEL_SHOWN_X;
             break;
-        case 0x30:
-        case 0x90:
-        case 0xa0:
-        case 0xa2:
-        case 0xa4:
-            messageX[MenuShopWork->category + 3] = 16;
+        case SHOP_STATE_BUY_LIST:
+        case SHOP_STATE_SELL_LIST:
+        case SHOP_STATE_QUANTITY:
+        case SHOP_STATE_CONFIRM:
+        case SHOP_STATE_RESULT:
+            messageX[MenuShopWork->category + SHOP_PAS_LABEL_CATEGORY_FIRST] = SHOP_PAS_LABEL_SHOWN_X;
             break;
-        case 0xc0:
-            messageX[12] = 16;
+        case SHOP_STATE_AGWS_MENU:
+            messageX[SHOP_PAS_LABEL_AGWS_TUNING] = SHOP_PAS_LABEL_SHOWN_X;
             break;
-        case 0xc2:
-        case 0xc4:
-        case 0xc6:
-            messageX[13] = 16;
+        case SHOP_STATE_RESTORE_UNIT:
+        case SHOP_STATE_RESTORE_CONFIRM:
+        case SHOP_STATE_RESTORE_DONE:
+            messageX[SHOP_PAS_LABEL_FHP_RESTORATION] = SHOP_PAS_LABEL_SHOWN_X;
             break;
-        case 0xd0:
-        case 0xd2:
-        case 0xd4:
-        case 0xd6:
+        case SHOP_STATE_AGWS_BUY_LIST:
+        case SHOP_STATE_AGWS_BUY_UNIT:
+        case SHOP_STATE_AGWS_BUY_CONFIRM:
+        case SHOP_STATE_AGWS_BUY_DONE:
             if (MenuShopWork->sort_mode_selector != 0)
-                messageX[14] = 16;
+                messageX[SHOP_PAS_LABEL_BUY_FRAME] = SHOP_PAS_LABEL_SHOWN_X;
             else
-                messageX[15] = 16;
+                messageX[SHOP_PAS_LABEL_BUY_GENERATOR] = SHOP_PAS_LABEL_SHOWN_X;
             break;
         default:
-            windowX = -272;
+            windowX = SHOP_PAS_WINDOW_HIDDEN_X;
             break;
         }
         window = &work->window;
-        MoveSlide(&window->x, &windowX, 3.0f);
+        MoveSlide(&window->x, &windowX, SHOP_SLIDE_RATE);
         WindowDXMain(window);
         work->bounds.x1 = window->x + 3;
         work->bounds.y1 = work->window.y + 3;
         work->bounds.x2 = work->window.width - 6;
         work->bounds.y2 = work->window.height - 6;
         work->bounds.color = work->depth;
-        endPrintExtFunc(work->depth, 101, &work->bounds);
+        endPrintExtFunc(work->depth, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&work->bounds);
         target = messageX;
         for (i = 0; i < 16; i++, target++) {
-            MoveSlide(&work->messages[i].x, target, 3.0f);
+            MoveSlide(&work->messages[i].x, target, SHOP_SLIDE_RATE);
             if (work->messages[i].x < 256)
                 eMessageMain(&work->messages[i]);
         }
-        endPrintExtFunc(work->depth, 102, 0);
+        endPrintExtFunc(work->depth, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
         break;
     }
 }
@@ -1141,25 +1447,25 @@ static void MenuShopInfo(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->ticker = 0x00fffff0;
+        work->ticker = SHOP_DEPTH_TOP;
         WindowDXSet(&work->window);
         work->window.x = -16;
-        work->window.y = 480;
+        work->window.y = SHOP_INFO_HIDDEN_Y;
         work->window.width = 544;
-        work->window.height = 54;
+        work->window.height = SHOP_INFO_HEIGHT;
         work->window.style = work->ticker;
         work->window.close_callback = MenuInfoWindow;
-        work->window.state = 1;
+        work->window.state = WINDOW_STATE_OPEN_REQUEST;
         panel = &work->panel;
         work->window.close_callback_arg = panel;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOW_STATE_OPEN;
         panel->textOffset[0] = 0;
         work->panel.textOffset[1] = 0;
         work->panel.text = 0;
         work->flag = 0;
         work->unmodeled_04 = 0;
-        memset(work->message, 0, 128);
+        memset(work->message, 0, SHOP_INFO_MESSAGE_SIZE);
         return;
     case 2:
         break;
@@ -1167,18 +1473,18 @@ static void MenuShopInfo(TskObject *task, void *data)
         return;
     }
 
-    targetY = 386;
-    targetH = 54;
+    targetY = SHOP_INFO_SHOWN_Y;
+    targetH = SHOP_INFO_HEIGHT;
     switch (MenuShopWork->state) {
-    case 32:
+    case SHOP_STATE_MODE_SELECT:
         eMessageCpy(work->message, tab0.p[MenuShopWork->mode]);
         break;
-    case 48:
-    case 144:
+    case SHOP_STATE_BUY_LIST:
+    case SHOP_STATE_SELL_LIST:
         if (MenuShopWork->itemId == 0) {
             eMessageCpy(work->message, menuShopBlankText);
-        } else if ((MenuShopWork->itemId >> 16) == 7) {
-            if (MenuShopWork->modelId >= 23)
+        } else if ((MenuShopWork->itemId >> 16) == ITEM_KIND_AGWS) {
+            if (MenuShopWork->modelId >= SHOP_AGWS_VX_FIRST_ID)
                 eMessageCpy(work->message, tab112.p[0]);
             else
                 eMessageCpy(work->message, tab112.p[1]);
@@ -1186,13 +1492,13 @@ static void MenuShopInfo(TskObject *task, void *data)
             eMessageCpy(work->message, MenuTextGet(MenuShopWork->itemId)->auxiliary);
         }
         break;
-    case 160:
+    case SHOP_STATE_QUANTITY:
         if (MenuShopWork->itemId != 0) {
             eMessageCpy(work->message, tab16.p[2]);
             eMessageCat(tab16.p[3]);
         }
         break;
-    case 162:
+    case SHOP_STATE_CONFIRM:
         if (MenuShopWork->itemId != 0) {
             long money;
 
@@ -1201,7 +1507,7 @@ static void MenuShopInfo(TskObject *task, void *data)
             eMessageCat(MenuTextGet(MenuShopWork->itemId)->name);
             eMessageCat(tab32.p[0]);
             switch (MenuShopWork->mode) {
-            case 0:
+            case SHOP_MODE_BUY:
                 money = MenuBoxMoneyGet(MenuShopWork->itemId, 0) * MenuShopWork->quantity;
                 break;
             default:
@@ -1212,7 +1518,7 @@ static void MenuShopInfo(TskObject *task, void *data)
             eMessageCat(tab32.p[1]);
         }
         break;
-    case 164:
+    case SHOP_STATE_RESULT:
         if (MenuShopWork->itemId != 0) {
             eMessageCpy(work->message, MenuNumberTextGet(MenuShopWork->quantity, 2, 0));
             eMessageCat(tab64.p[0]);
@@ -1221,33 +1527,33 @@ static void MenuShopInfo(TskObject *task, void *data)
             eMessageCat(tab64.p[MenuShopWork->mode + 1]);
         }
         break;
-    case 192:
+    case SHOP_STATE_AGWS_MENU:
         eMessageCpy(work->message, tab48.p[MenuShopWork->sortOption]);
         break;
-    case 194:
-    case 196:
+    case SHOP_STATE_RESTORE_UNIT:
+    case SHOP_STATE_RESTORE_CONFIRM:
         eMessageCpy(work->message, MenuCharNameGet(MenuShopWork->unitId));
         eMessageCat(tab80.p[0]);
         break;
-    case 198:
+    case SHOP_STATE_RESTORE_DONE:
         eMessageCpy(work->message, MenuCharNameGet(MenuShopWork->unitId));
         eMessageCat(tab80.p[7]);
         break;
-    case 208:
+    case SHOP_STATE_AGWS_BUY_LIST:
         if (MenuShopWork->listIndex < 0 || MenuShopWork->equipmentId == 0) {
             eMessageCpy(work->message, menuShopBlankText);
         } else {
             eMessageCpy(work->message, func_A2C968(MenuShopWork->equipmentId)->auxiliary);
         }
         break;
-    case 210:
-    case 212:
+    case SHOP_STATE_AGWS_BUY_UNIT:
+    case SHOP_STATE_AGWS_BUY_CONFIRM:
         if (MenuShopWork->listIndex >= 0) {
             unit = func_A191C0(MenuShopWork->unitId);
             eMessageCpy(work->message, MenuCharNameGet(MenuShopWork->unitId));
             eMessageCat(tab80.p[1]);
             if (MenuShopWork->sort_mode_selector != 0) {
-                value = *(short *)(unit + 88);
+                value = *(short *)(unit + SHOP_UNIT_FRAME_ID_OFFSET);
                 if (value != 0)
                     eMessageCat(func_A2C968(value)->name);
                 eMessageCat(tab80.p[2]);
@@ -1255,7 +1561,7 @@ static void MenuShopInfo(TskObject *task, void *data)
                 if (MenuShopWork->equipmentId != 0)
                     eMessageCat(func_A2C968(MenuShopWork->equipmentId)->name);
             } else {
-                value = *(short *)(unit + 86);
+                value = *(short *)(unit + SHOP_UNIT_ENGINE_ID_OFFSET);
                 if (value != 0)
                     eMessageCat(func_A2C918(value)->name);
                 eMessageCat(tab80.p[2]);
@@ -1268,7 +1574,7 @@ static void MenuShopInfo(TskObject *task, void *data)
             eMessageCpy(work->message, menuShopBlankText);
         }
         break;
-    case 214:
+    case SHOP_STATE_AGWS_BUY_DONE:
         eMessageCpy(work->message, MenuCharNameGet(MenuShopWork->unitId));
         if (MenuShopWork->sort_mode_selector != 0) {
             eMessageCat(tab80.p[4]);
@@ -1284,11 +1590,11 @@ static void MenuShopInfo(TskObject *task, void *data)
         eMessageCat(menuShopPeriodEndText);
         break;
     default:
-        targetY = 480;
+        targetY = SHOP_INFO_HIDDEN_Y;
         break;
     }
-    MoveSlide(&work->window.y, &targetY, 3.0f);
-    MoveSlide(&work->window.height, &targetH, 3.0f);
+    MoveSlide(&work->window.y, &targetY, SHOP_SLIDE_RATE);
+    MoveSlide(&work->window.height, &targetH, SHOP_SLIDE_RATE);
     work->panel.text = work->message;
     WindowDXMain(&work->window);
 }
@@ -1305,18 +1611,18 @@ static void MenuShopSelect(TskObject *task, void *data)
         {
             int commandIndex;
 
-            for (commandIndex = 0; commandIndex < 4; commandIndex++) {
+            for (commandIndex = 0; commandIndex < SHOP_MENU_COMMAND_COUNT; commandIndex++) {
                 work->menus[menuIndex].commands[commandIndex].name =
-                    msg00_1_0036DB30[menuIndex * 4 + commandIndex];
+                    msg00_1_0036DB30[menuIndex * SHOP_MENU_COMMAND_COUNT + commandIndex];
                 work->menus[menuIndex].commands[commandIndex].locked = 0;
             }
             work->menus[menuIndex].commands[commandIndex].name = 0;
         }
-        if (menuIndex == 0) {
+        if (menuIndex == SHOP_MENU_MAIN) {
             if (MenuShopWork->noCategories != 0)
-                work->menus[menuIndex].commands[0].locked = 1;
+                work->menus[menuIndex].commands[SHOP_MODE_BUY].locked = 1;
             if (MenuShopWork->equipmentStatus == 0)
-                work->menus[menuIndex].commands[2].locked = 1;
+                work->menus[menuIndex].commands[SHOP_MODE_TUNE_AGWS].locked = 1;
         }
         return work->menus[menuIndex].commands;
     }
@@ -1325,12 +1631,12 @@ static void MenuShopSelect(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->depth = 0xfffff4;
+        work->depth = SHOP_DEPTH_SELECT;
         for (i = 0; i < 2; i++) {
             WindowDXSet(&work->menus[i].window);
-            work->menus[i].window.x = 528;
+            work->menus[i].window.x = SHOP_PANEL_HIDDEN_X;
             work->menus[i].window.style = work->depth;
-            if (i == 0)
+            if (i == SHOP_MENU_MAIN)
                 work->menus[0].window.width = 205;
             else
                 work->menus[i].window.width = 205;
@@ -1341,13 +1647,13 @@ static void MenuShopSelect(TskObject *task, void *data)
             work->menus[i].panel.cursor = 0;
             work->menus[i].panel.commands = ListMake(i);
             work->menus[i].panel.rows = 2;
-            work->menus[i].window.state = 1;
+            work->menus[i].window.state = WINDOW_STATE_OPEN_REQUEST;
             WindowDXMain(&work->menus[i].window);
-            work->menus[i].window.state = 3;
+            work->menus[i].window.state = WINDOW_STATE_OPEN;
         }
         for (i = 0; i < 1; i++) {
             WindowDXSet(&work->choices[i].window);
-            work->choices[i].window.x = 528;
+            work->choices[i].window.x = SHOP_PANEL_HIDDEN_X;
             work->choices[i].window.width = 169;
             work->choices[i].window.height = 102;
             work->choices[i].window.style = work->depth;
@@ -1358,9 +1664,9 @@ static void MenuShopSelect(TskObject *task, void *data)
             work->choices[i].window.close_callback = MenuSelectWindow;
             work->choices[i].panel.cursor = 0;
             work->choices[i].panel.rows = 1;
-            work->choices[i].window.state = 1;
+            work->choices[i].window.state = WINDOW_STATE_OPEN_REQUEST;
             WindowDXMain(&work->choices[i].window);
-            work->choices[i].window.state = 3;
+            work->choices[i].window.state = WINDOW_STATE_OPEN;
         }
         work->popupFlags = 0;
         break;
@@ -1372,103 +1678,103 @@ static void MenuShopSelect(TskObject *task, void *data)
         for (i = 0; i < 2; i++) {
             unsigned char popupVisible;
 
-            menuX[i] = 528;
-            popupVisible = work->popupFlags & 1;
+            menuX[i] = SHOP_PANEL_HIDDEN_X;
+            popupVisible = work->popupFlags & SHOP_POPUP_SLIDES_LEFT;
             if (popupVisible)
                 choiceX[i] = -176;
             else
-                choiceX[i] = 528;
+                choiceX[i] = SHOP_PANEL_HIDDEN_X;
         }
         shop = MenuShopWork;
         switch (shop->state) {
-        case 0x20:
-            if (shop->stateFlags & 1) {
-                work->menus[0].window.x = 528;
-                work->menus[0].window.y = 192;
+        case SHOP_STATE_MODE_SELECT:
+            if (shop->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+                work->menus[SHOP_MENU_MAIN].window.x = SHOP_PANEL_HIDDEN_X;
+                work->menus[SHOP_MENU_MAIN].window.y = 192;
             }
-            menuX[0] = 152;
-            work->menus[0].panel.cursor = shop->mode;
+            menuX[SHOP_MENU_MAIN] = 152;
+            work->menus[SHOP_MENU_MAIN].panel.cursor = shop->mode;
             break;
-        case 0xc0:
-            if (shop->stateFlags & 1) {
-                work->menus[1].window.x = 528;
-                work->menus[1].window.y = 192;
+        case SHOP_STATE_AGWS_MENU:
+            if (shop->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+                work->menus[SHOP_MENU_AGWS].window.x = SHOP_PANEL_HIDDEN_X;
+                work->menus[SHOP_MENU_AGWS].window.y = 192;
             }
-            menuX[1] = 160;
-            work->menus[1].panel.cursor = shop->sortOption;
+            menuX[SHOP_MENU_AGWS] = 160;
+            work->menus[SHOP_MENU_AGWS].panel.cursor = shop->sortOption;
             break;
-        case 0xa2: {
+        case SHOP_STATE_CONFIRM: {
             unsigned char *mode = &shop->mode;
             unsigned char updatePopup;
 
-            updatePopup = shop->stateFlags & 1;
+            updatePopup = shop->stateFlags & SHOP_FLAG_STATE_ENTERED;
 
             if (updatePopup) {
                 switch (*mode) {
-                case 0:
+                case SHOP_MODE_BUY:
                     work->choices[0].panel.heading = msg01_2_0036DB50[0];
                     switch (mode[1]) {
-                    case 0:
-                        work->choices[0].window.x = 528;
+                    case SHOP_CAT_ITEM:
+                        work->choices[0].window.x = SHOP_PANEL_HIDDEN_X;
                         work->choices[0].window.y = 256;
-                        work->popupFlags &= ~1;
+                        work->popupFlags &= ~SHOP_POPUP_SLIDES_LEFT;
                         break;
-                    case 7:
+                    case SHOP_CAT_AGWS:
                         work->choices[0].window.x = -136;
                         work->choices[0].window.y = 208;
-                        work->popupFlags |= 1;
+                        work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
                         break;
-                    case 8:
-                        work->choices[0].window.x = 528;
+                    case SHOP_CAT_CARD:
+                        work->choices[0].window.x = SHOP_PANEL_HIDDEN_X;
                         work->choices[0].window.y = 256;
-                        work->popupFlags &= ~1;
+                        work->popupFlags &= ~SHOP_POPUP_SLIDES_LEFT;
                         break;
                     default:
                         work->choices[0].window.x = -136;
                         work->choices[0].window.y = 80;
-                        work->popupFlags |= 1;
+                        work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
                         break;
                     }
                     break;
                 default:
                     work->choices[0].panel.heading = msg01_2_0036DB50[1];
                     switch (mode[1]) {
-                    case 0:
-                    case 8:
-                        work->choices[0].window.x = 528;
+                    case SHOP_CAT_ITEM:
+                    case SHOP_CAT_CARD:
+                        work->choices[0].window.x = SHOP_PANEL_HIDDEN_X;
                         work->choices[0].window.y = 256;
-                        work->popupFlags &= ~1;
+                        work->popupFlags &= ~SHOP_POPUP_SLIDES_LEFT;
                         break;
-                    case 1:
+                    case SHOP_CAT_CHAR_WEAPON:
                         work->choices[0].window.x = -136;
                         work->choices[0].window.y = 272;
-                        work->popupFlags |= 1;
+                        work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
                         break;
-                    case 4:
+                    case SHOP_CAT_AGWS_WEAPON:
                         work->choices[0].window.x = -136;
                         work->choices[0].window.y = 272;
-                        work->popupFlags |= 1;
+                        work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
                         break;
-                    case 7:
+                    case SHOP_CAT_AGWS:
                         work->choices[0].window.x = -136;
                         work->choices[0].window.y = 192;
-                        work->popupFlags |= 1;
+                        work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
                         break;
                     default:
                         work->choices[0].window.x = -136;
                         work->choices[0].window.y = 80;
-                        work->popupFlags |= 1;
+                        work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
                         break;
                     }
                     break;
                 }
             }
             switch (MenuShopWork->category) {
-            case 0:
-            case 8:
+            case SHOP_CAT_ITEM:
+            case SHOP_CAT_CARD:
                 choiceX[0] = 304;
                 break;
-            case 7:
+            case SHOP_CAT_AGWS:
                 choiceX[0] = 48;
                 break;
             default:
@@ -1478,32 +1784,32 @@ static void MenuShopSelect(TskObject *task, void *data)
             work->choices[0].panel.cursor = MenuShopWork->quantityAction;
             break;
         }
-        case 0xc4:
-            if (shop->stateFlags & 1) {
+        case SHOP_STATE_RESTORE_CONFIRM:
+            if (shop->stateFlags & SHOP_FLAG_STATE_ENTERED) {
                 work->choices[0].panel.heading = msg01_2_0036DB50[2];
                 work->choices[0].window.x = -136;
                 work->choices[0].window.y = 192;
-                work->popupFlags |= 1;
+                work->popupFlags |= SHOP_POPUP_SLIDES_LEFT;
             }
             choiceX[0] = 88;
             work->choices[0].panel.cursor = MenuShopWork->quantityAction;
             break;
-        case 0xd4:
-            if (shop->stateFlags & 1) {
+        case SHOP_STATE_AGWS_BUY_CONFIRM:
+            if (shop->stateFlags & SHOP_FLAG_STATE_ENTERED) {
                 work->choices[0].panel.heading = msg01_2_0036DB50[0];
-                work->choices[0].window.x = 528;
+                work->choices[0].window.x = SHOP_PANEL_HIDDEN_X;
                 work->choices[0].window.y = 176;
-                work->popupFlags &= ~1;
+                work->popupFlags &= ~SHOP_POPUP_SLIDES_LEFT;
             }
             choiceX[0] = 304;
             work->choices[0].panel.cursor = MenuShopWork->quantityAction;
             break;
         }
         for (i = 0; i < 2; i++) {
-            MoveSlide(&work->menus[i].window.x, &menuX[i], 3.0f);
+            MoveSlide(&work->menus[i].window.x, &menuX[i], SHOP_SLIDE_RATE);
             WindowDXMain(&work->menus[i].window);
         }
-        MoveSlide(&work->choices[0].window.x, &choiceX[0], 3.0f);
+        MoveSlide(&work->choices[0].window.x, &choiceX[0], SHOP_SLIDE_RATE);
         WindowDXMain(&work->choices[0].window);
         break;
     }
@@ -1517,18 +1823,18 @@ void MenuShopSortSet(int list, int type, int order, int option)
 
     table = menuShopRecordSortTable;
 
-    if (type == 0x12)
-        type = 9;
-    if (type == 0x13)
-        type = 10;
+    if (type == SHOP_SORT_TYPE_FRAME)
+        type = SHOP_TABLE_FRAME;
+    if (type == SHOP_SORT_TYPE_ENGINE)
+        type = SHOP_TABLE_ENGINE;
 
-    if (type == 8) {
-        if (MenuScenarioNo >= 0x73) {
-            *output++ = 0x20035;
-            *output++ = 0x20036;
+    if (type == SHOP_CAT_CARD) {
+        if (MenuScenarioNo >= SHOP_CARD_SCENARIO_FIRST) {
+            *output++ = ITEM_KEY_EVENT + SHOP_CARD_EVENT_1;
+            *output++ = ITEM_KEY_EVENT + SHOP_CARD_EVENT_2;
         }
-        if (MenuScenarioNo >= 0x12D)
-            *output++ = 0x20037;
+        if (MenuScenarioNo >= SHOP_CARD_SCENARIO_THIRD)
+            *output++ = ITEM_KEY_EVENT + SHOP_CARD_EVENT_3;
     } else {
         int i = 0;
 
@@ -1566,21 +1872,21 @@ int subMenuShopEquipCheck(int item, int category)
     selectedSlot[1] = 1;
     selectedSlot[4] = 1;
     switch (MenuShopWork->category) {
-    case 1:
-    case 2:
-    case 3:
+    case SHOP_CAT_CHAR_WEAPON:
+    case SHOP_CAT_CHAR_ACCESSORY:
+    case SHOP_CAT_CHAR_AMMO:
         partyCount = PartyAllPartyGet(partyIds, 0);
         break;
-    case 4:
-    case 5:
-    case 6:
+    case SHOP_CAT_AGWS_WEAPON:
+    case SHOP_CAT_AGWS_ACCESSORY:
+    case SHOP_CAT_AGWS_AMMO:
         partyCount = PartyAgwsGet(partyIds);
         break;
     }
     if (partyCount == 0)
         return 0;
     switch (MenuShopWork->category) {
-    case 1:
+    case SHOP_CAT_CHAR_WEAPON:
         for (party = 0; party < partyCount; party++) {
             unit = func_A191C0(partyIds[party]);
             if (unit == NULL)
@@ -1589,7 +1895,7 @@ int subMenuShopEquipCheck(int item, int category)
                 matches++;
         }
         break;
-    case 3:
+    case SHOP_CAT_CHAR_AMMO:
         for (party = 0; party < partyCount; party++) {
             unit = func_A191C0(partyIds[party]);
             if (unit == NULL)
@@ -1598,7 +1904,7 @@ int subMenuShopEquipCheck(int item, int category)
                 matches++;
         }
         break;
-    case 2:
+    case SHOP_CAT_CHAR_ACCESSORY:
         for (party = 0; party < partyCount; party++) {
             unit = func_A191C0(partyIds[party]);
             if (unit == NULL)
@@ -1610,7 +1916,7 @@ int subMenuShopEquipCheck(int item, int category)
             }
         }
         break;
-    case 4:
+    case SHOP_CAT_AGWS_WEAPON:
         for (party = 0; party < partyCount; party++) {
             unit = func_A191C0(partyIds[party]);
             if (unit == NULL)
@@ -1622,7 +1928,7 @@ int subMenuShopEquipCheck(int item, int category)
             }
         }
         break;
-    case 6:
+    case SHOP_CAT_AGWS_AMMO:
         for (party = 0; party < partyCount; party++) {
             unit = func_A191C0(partyIds[party]);
             if (unit == NULL)
@@ -1634,7 +1940,7 @@ int subMenuShopEquipCheck(int item, int category)
             }
         }
         break;
-    case 5:
+    case SHOP_CAT_AGWS_ACCESSORY:
         for (party = 0; party < partyCount; party++) {
             unit = func_A191C0(partyIds[party]);
             if (unit == NULL)
@@ -1664,21 +1970,21 @@ int MenuShopNoSaleCheck(int item)
         return 0;
 
     switch (category) {
-    case 1:
+    case ITEM_KIND_ITEM:
         flags = func_A1A4E8(itemId)->flags;
         break;
-    case 3:
+    case ITEM_KIND_WEAPON:
         flags = dataWpnGet(itemId)->flags;
         break;
-    case 4:
+    case ITEM_KIND_BULLET:
         flags = dataAttGet(itemId)->flags;
         break;
-    case 5:
+    case ITEM_KIND_ACCESSORY:
         flags = func_A1A548(itemId)->flags;
         break;
     }
 
-    if ((flags & 0x1000) != 0)
+    if ((flags & SHOP_ITEM_FLAG_NO_SALE) != 0)
         return 1;
     return 0;
 }
@@ -1690,7 +1996,7 @@ void MenuShopListColorChange(int list, int kind)
     MenuListEntry *entry = MenuListGet(list);
     int i;
 
-    if (MenuShopWork->mode == 0 || kind == 2) {
+    if (MenuShopWork->mode == SHOP_MODE_BUY || kind == 2) {
         for (i = 0; i < count; i++) {
             if (MenuBoxMoneyGet(MenuSortGet(list, i), 0) > dataMoneyBoxChk())
                 entry[i].flag = 1;
@@ -1718,7 +2024,7 @@ int MenuShopListChange00(int list)
     unsigned int columns;
     unsigned int drawFlags;
 
-    if (MenuShopWork->mode == 0) {
+    if (MenuShopWork->mode == SHOP_MODE_BUY) {
         MenuShopSortSet(0, MenuShopWork->category, 0, 0);
         MenuListMake(0, -10);
         MenuShopListColorChange(0, 0);
@@ -1733,33 +2039,33 @@ int MenuShopListChange00(int list)
     shop = MenuShopWorkRead();
     columns = 1;
     drawFlags = 7;
-    width = 272 - shop->mode * 32;
+    width = SHOP_LIST_WIDTH - shop->mode * 32;
     window = MenuShopWinSPRead();
     window->width = width;
     window->height =
-        rowCounts.values[shop->category + shop->mode * 9] * 24 + 6;
+        rowCounts.values[shop->category + shop->mode * SHOP_CAT_COUNT] * SHOP_LIST_ROW_HEIGHT + 6;
     window->rows =
-        rowCounts.values[shop->category + shop->mode * 9];
+        rowCounts.values[shop->category + shop->mode * SHOP_CAT_COUNT];
     MenuShopWinSP->columns = columns;
     MenuShopWinSP->title = msg00_4_0036DB60[MenuShopWork->mode];
     MenuShopWinSP->draw_flags = drawFlags;
     MenuShopWinSP->items = MenuListGet(0);
     WindowSPItemChange(MenuShopWinSP);
     WindowSPSetSelect(MenuShopWinSP,
-        &MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * 9) * 5]);
-    if (MenuShopWork->mode == 0)
+        &MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * SHOP_CAT_COUNT) * MENU_KEEP_ENTRY_SIZE]);
+    if (MenuShopWork->mode == SHOP_MODE_BUY)
         MenuShopWinSP->mode = 6;
     return WindowSPSelect(MenuShopWinSP, 0);
 }
 
 int MenuShopListChange01(int list)
 {
-    int type = 18;
+    int type = SHOP_SORT_TYPE_FRAME;
     WindowSPCursor *window;
     short window_width;
 
     if (MenuShopWork->sort_mode_selector == 0)
-        type = 19;
+        type = SHOP_SORT_TYPE_ENGINE;
 
     MenuShopSortSet(0, type, 0, 0);
     MenuListMake(0, -10);
@@ -1767,7 +2073,7 @@ int MenuShopListChange01(int list)
 
     window = MenuShopWinSP;
     MenuShopWinSP->rows = 9;
-    window_width = 272;
+    window_width = SHOP_LIST_WIDTH;
     window->height = 222;
     window->width = window_width;
     MenuShopWinSP->columns = 1;
@@ -1775,7 +2081,7 @@ int MenuShopListChange01(int list)
     MenuShopWinSP->draw_flags = 7;
     MenuShopWinSP->items = MenuListGet(0);
     WindowSPItemChange(MenuShopWinSP);
-    WindowSPSetSelect(MenuShopWinSP, &MenuKeepSelect[type * 5]);
+    WindowSPSetSelect(MenuShopWinSP, &MenuKeepSelect[type * MENU_KEEP_ENTRY_SIZE]);
 
     MenuShopWinSP->mode = 6;
     return WindowSPSelect(MenuShopWinSP, 0);
@@ -1790,10 +2096,10 @@ static void MenuShopList(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->window.x = -0x110;
-        work->window.y = 0x50;
-        work->color = 0xffff0;
-        work->window.style = 0xffff0;
+        work->window.x = SHOP_LIST_HIDDEN_X;
+        work->window.y = SHOP_LIST_Y;
+        work->color = SHOP_DEPTH_LIST;
+        work->window.style = SHOP_DEPTH_LIST;
         work->window.draw_flags = 7;
         work->window.title = menuShopBlankText;
         work->window.rows = 0xb;
@@ -1803,80 +2109,80 @@ static void MenuShopList(TskObject *task, void *data)
         WindowSPSet(&work->window);
         work->initialFlags[0] = 0;
         work->initialFlags[1] = 0;
-        work->state = 0;
+        work->state = SHOP_LIST_CLOSED;
         work->active = 0;
         return;
     case 2:
         switch (work->state) {
-        case 0:
+        case SHOP_LIST_CLOSED:
             work->active = 0;
-            work->state = 1;
+            work->state = SHOP_LIST_IDLE;
             /* fall through */
-        case 1:
+        case SHOP_LIST_IDLE:
             switch (MenuShopWork->state) {
-            case 0x30:
-            case 0x90:
-                work->state = 0xa;
+            case SHOP_STATE_BUY_LIST:
+            case SHOP_STATE_SELL_LIST:
+                work->state = SHOP_LIST_ITEMS_OPEN;
                 break;
-            case 0xd0:
-                work->state = 0x1e;
+            case SHOP_STATE_AGWS_BUY_LIST:
+                work->state = SHOP_LIST_AGWS_OPEN;
                 break;
             }
             break;
-        case 10:
-            work->window.x = -0x120;
-            work->window.y = 0x50;
+        case SHOP_LIST_ITEMS_OPEN:
+            work->window.x = SHOP_LIST_ENTER_X;
+            work->window.y = SHOP_LIST_Y;
             MenuShopListChange00(0);
             work->window.state = 0x11;
-            work->state = 0xb;
+            work->state = SHOP_LIST_ITEMS_SHOWN;
             work->active = 1;
             selection = MenuShopWork;
             work->category = selection->category;
             goto update_open_window;
-        case 11:
+        case SHOP_LIST_ITEMS_SHOWN:
             selection = MenuShopWork;
         update_open_window:
         {
-            short targetX = 0x10;
-            if (selection->state == 0xa2) {
+            short targetX = SHOP_LIST_SHOWN_X;
+            if (selection->state == SHOP_STATE_CONFIRM) {
                 unsigned char category = selection->category;
 
-                if (selection->mode == 0) {
-                    if (category != 0 && category != 8 && category != 7)
-                        targetX = -0x120;
-                } else if (category != 0 && category != 8 && category != 1 && category != 4) {
-                    targetX = -0x120;
+                if (selection->mode == SHOP_MODE_BUY) {
+                    if (category != SHOP_CAT_ITEM && category != SHOP_CAT_CARD && category != SHOP_CAT_AGWS)
+                        targetX = SHOP_LIST_ENTER_X;
+                } else if (category != SHOP_CAT_ITEM && category != SHOP_CAT_CARD && category != SHOP_CAT_CHAR_WEAPON && category != SHOP_CAT_AGWS_WEAPON) {
+                    targetX = SHOP_LIST_ENTER_X;
                 }
             }
-            MoveSlide(&work->window.x, &targetX, 3.0f);
+            MoveSlide(&work->window.x, &targetX, SHOP_SLIDE_RATE);
             selection = MenuShopWork;
-            if (selection->state == 0x20) {
-                work->state = 0xc;
+            if (selection->state == SHOP_STATE_MODE_SELECT) {
+                work->state = SHOP_LIST_CLOSING;
                 selection = MenuShopWork;
             }
             if (work->category != selection->category)
-                work->state = 0xa;
+                work->state = SHOP_LIST_ITEMS_OPEN;
             break;
         }
-        case 12:
+        case SHOP_LIST_CLOSING:
             closeX = -((unsigned short)work->window.width + 0x10);
-            MoveSlide(&work->window.x, &closeX, 3.0f);
+            MoveSlide(&work->window.x, &closeX, SHOP_SLIDE_RATE);
             if (work->window.x == closeX)
-                work->state = 0;
+                work->state = SHOP_LIST_CLOSED;
             break;
-        case 30:
-            work->window.x = -0x120;
-            work->window.y = 0x50;
+        case SHOP_LIST_AGWS_OPEN:
+            work->window.x = SHOP_LIST_ENTER_X;
+            work->window.y = SHOP_LIST_Y;
             MenuShopListChange01(0);
             work->window.state = 0x11;
-            work->state = 0x1f;
+            work->state = SHOP_LIST_AGWS_SHOWN;
             work->active = 1;
             /* fall through */
-        case 31:
-            secondTargetX = 0x10;
-            MoveSlide(&work->window.x, &secondTargetX, 3.0f);
-            if (MenuShopWork->state == 0xc0)
-                work->state = 0xc;
+        case SHOP_LIST_AGWS_SHOWN:
+            secondTargetX = SHOP_LIST_SHOWN_X;
+            MoveSlide(&work->window.x, &secondTargetX, SHOP_SLIDE_RATE);
+            if (MenuShopWork->state == SHOP_STATE_AGWS_MENU)
+                work->state = SHOP_LIST_CLOSING;
             break;
         }
         if (work->active != 0)
@@ -1903,12 +2209,12 @@ static void MenuShopEx(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->depth = 0x00fffff0;
+        work->depth = SHOP_DEPTH_TOP;
         for (i = 0; i < 2; i++) {
             eRibbonSet(&work->headers[i].ribbon, 3);
-            work->headers[i].ribbon.x = 0x210;
+            work->headers[i].ribbon.x = SHOP_PANEL_HIDDEN_X;
             work->headers[i].ribbon.y = 0;
-            work->headers[i].ribbon.width = 0x100;
+            work->headers[i].ribbon.width = SHOP_PANEL_WIDTH;
             work->headers[i].ribbon.height = 0x18;
             work->headers[i].ribbon.x = 0x220;
             work->headers[i].ribbon.y = 0x53 + 0x20 * i;
@@ -1920,7 +2226,7 @@ static void MenuShopEx(TskObject *task, void *data)
         }
         for (i = 0; i < 2; i++) {
             eRibbonSet(&work->parties[i].ribbon, 3);
-            work->parties[i].ribbon.width = 0x100;
+            work->parties[i].ribbon.width = SHOP_PANEL_WIDTH;
             work->parties[i].ribbon.work = work->depth;
             work->parties[i].ribbon.x = 0x220;
             work->parties[i].ribbon.y = 0x93;
@@ -1943,7 +2249,7 @@ static void MenuShopEx(TskObject *task, void *data)
             short width, height, left, top;
             int style;
 
-            left = 0x210;
+            left = SHOP_PANEL_HIDDEN_X;
             {
                 const char *head = *(const char **)(void *)&work->equipment.ribbon;
 
@@ -1953,7 +2259,7 @@ static void MenuShopEx(TskObject *task, void *data)
             labels = msg00_5_0036DB68;
             top = 0x93;
             height = 0x18;
-            width = 0x100;
+            width = SHOP_PANEL_WIDTH;
             work->equipment.ribbon.x = left;
             work->equipment.ribbon.width = width;
             work->equipment.ribbon.work = style;
@@ -1972,43 +2278,44 @@ static void MenuShopEx(TskObject *task, void *data)
     case 2:
 
         for (i = 0; i < 2; i++) {
-            ribbonX[i] = 0x210;
+            ribbonX[i] = SHOP_PANEL_HIDDEN_X;
             ribbonY[i] = 0x53 + 0x20 * i;
         }
         rosterY[0] = 0x93;
         rosterY[1] = 0x43;
-        rosterX[0] = 0x210;
-        rosterX[1] = 0x210;
-        totalX[0] = 0x210;
+        rosterX[0] = SHOP_PANEL_HIDDEN_X;
+        rosterX[1] = SHOP_PANEL_HIDDEN_X;
+        totalX[0] = SHOP_PANEL_HIDDEN_X;
         totalY[0] = 0xcb;
 
         switch ((*shop)->state) {
-        case 0x30:
-        case 0x90:
-        case 0xa4:
-            if ((unsigned char)((*shop)->stateFlags & 1)) {
-                if ((*shop)->mode == 0)
+        case SHOP_STATE_BUY_LIST:
+        case SHOP_STATE_SELL_LIST:
+        case SHOP_STATE_RESULT:
+            if ((unsigned char)((*shop)->stateFlags & SHOP_FLAG_STATE_ENTERED)) {
+                if ((*shop)->mode == SHOP_MODE_BUY)
                     eTagFontSet(&work->headers[0].label, msg00_5_0036DB68[0]);
                 else
                     eTagFontSet(&work->headers[0].label, msg00_5_0036DB68[4]);
                 work->slideFlags |= 2;
             }
             for (i = 0; i < 2; i++) {
-                ribbonX[i] = 0x130;
+                ribbonX[i] = SHOP_PANEL_SHOWN_X;
                 ribbonY[i] = 0x53 + 0x20 * i;
                 if (work->slideFlags & 2) {
                     work->headers[i].ribbon.y = 0x53 + 0x20 * i;
                     work->slideFlags &= ~2;
                 }
             }
+            /* category - 1: 0..2 character gear, 3..5 A.G.W.S. gear, 6 A.G.W.S. */
             switch ((*shop)->category - 1) {
             case 0:
             case 1:
             case 2:
                 work->equipment.ribbon.y = totalY[0] = 0xcb;
-                totalX[0] = 0x130;
+                totalX[0] = SHOP_PANEL_SHOWN_X;
                 eTagFontSet(&work->parties[0].label, msg00_5_0036DB68[2]);
-                rosterX[0] = 0x130;
+                rosterX[0] = SHOP_PANEL_SHOWN_X;
                 rosterY[0] = 0x93;
                 work->parties[0].ribbon.y = 0x93;
                 work->slideFlags |= 2;
@@ -2017,37 +2324,37 @@ static void MenuShopEx(TskObject *task, void *data)
             case 4:
             case 5:
                 work->equipment.ribbon.y = totalY[0] = 0xfb;
-                totalX[0] = 0x130;
+                totalX[0] = SHOP_PANEL_SHOWN_X;
                 eTagFontSet(&work->parties[1].label, msg00_5_0036DB68[2]);
-                rosterX[1] = 0x130;
+                rosterX[1] = SHOP_PANEL_SHOWN_X;
                 rosterY[1] = 0x93;
                 work->parties[1].ribbon.y = 0x93;
                 work->slideFlags |= 2;
                 break;
             case 6:
-                ribbonX[0] = 0x210;
-                ribbonX[1] = 0x130;
+                ribbonX[0] = SHOP_PANEL_HIDDEN_X;
+                ribbonX[1] = SHOP_PANEL_SHOWN_X;
                 ribbonY[1] = 0x118;
                 break;
             }
             break;
-        case 0xa0:
-        case 0xa2:
+        case SHOP_STATE_QUANTITY:
+        case SHOP_STATE_CONFIRM:
             switch ((*shop)->category - 1) {
             case 0:
             case 1:
             case 2:
-                rosterX[0] = 0x130;
+                rosterX[0] = SHOP_PANEL_SHOWN_X;
                 rosterY[0] = 0xf0;
                 break;
             case 3:
             case 4:
             case 5:
-                rosterX[1] = 0x130;
+                rosterX[1] = SHOP_PANEL_SHOWN_X;
                 rosterY[1] = 0xe8;
                 break;
             case 6:
-                ribbonX[1] = 0x130;
+                ribbonX[1] = SHOP_PANEL_SHOWN_X;
                 ribbonY[1] = 0x118;
                 break;
             }
@@ -2055,15 +2362,15 @@ static void MenuShopEx(TskObject *task, void *data)
         }
 
         for (i = 0; i < 2; i++) {
-            MoveSlide(&work->headers[i].ribbon.x, &ribbonX[i], 3.0f);
+            MoveSlide(&work->headers[i].ribbon.x, &ribbonX[i], SHOP_SLIDE_RATE);
             if (work->headers[i].ribbon.x == ribbonX[i])
-                MoveSlide(&work->headers[i].ribbon.y, &ribbonY[i], 3.0f);
+                MoveSlide(&work->headers[i].ribbon.y, &ribbonY[i], SHOP_SLIDE_RATE);
             eRibbonMain(&work->headers[i].ribbon);
             work->headers[i].number.x = work->headers[i].ribbon.x + 0x40;
             work->headers[i].number.y = work->headers[i].ribbon.y + 4;
             work->headers[i].number.format = 0;
             if (i == 0) {
-                if ((*shop)->mode == 0) {
+                if ((*shop)->mode == SHOP_MODE_BUY) {
                     work->headers[i].number.digits = 2;
                     if ((*shop)->listIndex >= 0)
                         work->headers[0].number.value = MenuBoxChk(MenuSortGet(0, (*shop)->listIndex));
@@ -2090,9 +2397,9 @@ static void MenuShopEx(TskObject *task, void *data)
         }
 
         for (i = 0; i < 2; i++) {
-            MoveSlide(&work->parties[i].ribbon.x, &rosterX[i], 3.0f);
+            MoveSlide(&work->parties[i].ribbon.x, &rosterX[i], SHOP_SLIDE_RATE);
             if (work->parties[i].ribbon.x == rosterX[i])
-                MoveSlide(&work->parties[i].ribbon.y, &rosterY[i], 3.0f);
+                MoveSlide(&work->parties[i].ribbon.y, &rosterY[i], SHOP_SLIDE_RATE);
             eRibbonMain(&work->parties[i].ribbon);
             if (i == 0) {
                 for (j = 0; j < (*shop)->partyCount; j++) {
@@ -2101,27 +2408,27 @@ static void MenuShopEx(TskObject *task, void *data)
                     usable = 0;
                     if ((*shop)->modelId != 0) {
                         switch (((short *)&(*shop)->itemId)[1]) {
-                        case 3:
+                        case ITEM_KIND_WEAPON:
                             if (MenuWeaponEquipCheck(*(short *)((char *)(*shop)->partyIds + (j << 1)), (*shop)->modelId, 0))
                                 usable = 1;
                             break;
-                        case 5:
+                        case ITEM_KIND_ACCESSORY:
                             if (MenuAccessoryEquipCheck(*(short *)((char *)(*shop)->partyIds + (j << 1)), (*shop)->modelId, -1))
                                 usable = 1;
                             break;
-                        case 4:
+                        case ITEM_KIND_BULLET:
                             usable = MenuWeaponEquipCheck(*(short *)((char *)(*shop)->partyIds + (j + j)), ((short *)func_A1A428((*shop)->modelId))[6], 0) != 0;
                             break;
                         }
                     }
                     if (usable == 1) {
-                        work->parties[i].sprites[j].blue = 0x80;
-                        work->parties[i].sprites[j].green = 0x80;
-                        work->parties[i].sprites[j].red = 0x80;
+                        work->parties[i].sprites[j].blue = SHOP_SPRITE_LIT;
+                        work->parties[i].sprites[j].green = SHOP_SPRITE_LIT;
+                        work->parties[i].sprites[j].red = SHOP_SPRITE_LIT;
                     } else {
-                        work->parties[i].sprites[j].blue = 0x40;
-                        work->parties[i].sprites[j].green = 0x40;
-                        work->parties[i].sprites[j].red = 0x40;
+                        work->parties[i].sprites[j].blue = SHOP_SPRITE_DIM;
+                        work->parties[i].sprites[j].green = SHOP_SPRITE_DIM;
+                        work->parties[i].sprites[j].red = SHOP_SPRITE_DIM;
                     }
                     work->parties[i].sprites[j].x = work->parties[i].ribbon.x + (j % 4) * 20 + 0x40;
                     work->parties[i].sprites[j].y = work->parties[i].ribbon.y + (j / 4) * 24;
@@ -2135,27 +2442,27 @@ static void MenuShopEx(TskObject *task, void *data)
                     eSpriteSet(&work->parties[i].sprites[j], MenuFaceEpidGet(*(short *)((char *)(*shop)->unitIds + (j << 1)), 1));
                     if ((*shop)->modelId != 0) {
                         switch (((short *)&(*shop)->itemId)[1]) {
-                        case 3:
+                        case ITEM_KIND_WEAPON:
                             if (MenuWeaponEquipCheck(*(short *)((char *)(*shop)->unitIds + (j << 1)), (*shop)->modelId, 0))
                                 usable = 1;
                             break;
-                        case 5:
+                        case ITEM_KIND_ACCESSORY:
                             if (MenuAccessoryEquipCheck(*(short *)((char *)(*shop)->unitIds + (j << 1)), (*shop)->modelId, -1))
                                 usable = 1;
                             break;
-                        case 4:
+                        case ITEM_KIND_BULLET:
                             usable = MenuWeaponEquipCheck(*(short *)((char *)(*shop)->unitIds + (j << 1)), ((short *)func_A1A428((*shop)->modelId))[6], 0) != 0;
                             break;
                         }
                     }
                     if (usable == 1) {
-                        work->parties[i].sprites[j].blue = 0x80;
-                        work->parties[i].sprites[j].green = 0x80;
-                        work->parties[i].sprites[j].red = 0x80;
+                        work->parties[i].sprites[j].blue = SHOP_SPRITE_LIT;
+                        work->parties[i].sprites[j].green = SHOP_SPRITE_LIT;
+                        work->parties[i].sprites[j].red = SHOP_SPRITE_LIT;
                     } else {
-                        work->parties[i].sprites[j].blue = 0x40;
-                        work->parties[i].sprites[j].green = 0x40;
-                        work->parties[i].sprites[j].red = 0x40;
+                        work->parties[i].sprites[j].blue = SHOP_SPRITE_DIM;
+                        work->parties[i].sprites[j].green = SHOP_SPRITE_DIM;
+                        work->parties[i].sprites[j].red = SHOP_SPRITE_DIM;
                     }
                     work->parties[i].sprites[j].x = work->parties[i].ribbon.x + (j & 1) * 64 + 0x40;
                     work->parties[i].sprites[j].depth = work->parties[i].ribbon.work + 2;
@@ -2167,9 +2474,9 @@ static void MenuShopEx(TskObject *task, void *data)
             work->parties[i].label.y = work->parties[i].ribbon.y + i * 28 + 16;
             eTagFontMain(&work->parties[i].label);
         }
-        MoveSlide(&work->equipment.ribbon.x, &totalX[0], 3.0f);
+        MoveSlide(&work->equipment.ribbon.x, &totalX[0], SHOP_SLIDE_RATE);
         if ((&work->equipment)[i].ribbon.x == totalX[i])
-            MoveSlide(&work->equipment.ribbon.y, &totalY[0], 3.0f);
+            MoveSlide(&work->equipment.ribbon.y, &totalY[0], SHOP_SLIDE_RATE);
         eRibbonMain(&work->equipment.ribbon);
         work->equipment.number.x = work->equipment.ribbon.x + 0x40;
         work->equipment.number.y = work->equipment.ribbon.y + 4;
@@ -2190,17 +2497,17 @@ static void MenuShopSeisan(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->depth = 0xfffff0;
+        work->depth = SHOP_DEPTH_TOP;
         WindowDXSet(&work->window);
-        work->window.x = 0x210;
+        work->window.x = SHOP_PANEL_HIDDEN_X;
         work->window.style = work->depth;
         work->window.y = 0x50;
         work->window.width = 0xc0;
         work->window.height = 0x98;
         work->window.tag_id = msg00_6[0];
-        work->window.state = 1;
+        work->window.state = WINDOW_STATE_OPEN_REQUEST;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOW_STATE_OPEN;
         for (i = 0; i < 4; i++) {
             eTagFontSet(&work->labels[i], msg01_7[i]);
             work->labels[i].work = work->depth + 2;
@@ -2252,10 +2559,10 @@ static void MenuShopSeisan(TskObject *task, void *data)
         work->selectionFlags = 0;
         break;
     case 2:
-        targetX[0] = 0x210;
-        if (MenuShopWork->state == 0xa0 || MenuShopWork->state == 0xa2)
-            targetX[0] = 0x130;
-        MoveSlide(&work->window.x, targetX, 3.0f);
+        targetX[0] = SHOP_PANEL_HIDDEN_X;
+        if (MenuShopWork->state == SHOP_STATE_QUANTITY || MenuShopWork->state == SHOP_STATE_CONFIRM)
+            targetX[0] = SHOP_PANEL_SHOWN_X;
+        MoveSlide(&work->window.x, targetX, SHOP_SLIDE_RATE);
         work->window.title_font.render.text = msg00_6[MenuShopWork->mode & 1];
         WindowDXMain(&work->window);
         for (i = 0; i < 4; i++) {
@@ -2265,7 +2572,7 @@ static void MenuShopSeisan(TskObject *task, void *data)
             eTagFontMain(&work->labels[i]);
         }
         for (i = 0; i < 2; i++) {
-            if (MenuShopWork->mode == 0)
+            if (MenuShopWork->mode == SHOP_MODE_BUY)
                 work->sprites[i].spriteId = i + 0x705;
             else
                 work->sprites[i].spriteId = 0x706 - i;
@@ -2292,7 +2599,7 @@ static void MenuShopSeisan(TskObject *task, void *data)
             work->numbers[0].value = quantityLimit;
             quantity = MenuShopWork->quantity;
             work->numbers[1].value = quantity;
-            if (MenuShopWork->mode == 0) {
+            if (MenuShopWork->mode == SHOP_MODE_BUY) {
                 work->numbers[2].value = quantityLimit + quantity;
                 work->numbers[3].value = MenuShopWork->availableMoney;
                 unitPrice = MenuBoxMoneyGet(MenuSortGet(0, MenuShopWork->listIndex), 0);
@@ -2328,8 +2635,8 @@ static void MenuShopSeisan(TskObject *task, void *data)
         work->moneyDivider[1].x = (unsigned short)work->window.x + 0xaa;
         work->moneyDivider[1].y = (unsigned short)work->window.y + 0x7c;
         work->moneyDivider[0].y = (unsigned short)work->window.y + 0x7c;
-        endPrintExtFunc(work->depth, 0, work->quantityDivider);
-        endPrintExtFunc(work->depth, 0, work->moneyDivider);
+        endPrintExtFunc(work->depth, END_PRINT_CMD_LINE, work->quantityDivider);
+        endPrintExtFunc(work->depth, END_PRINT_CMD_LINE, work->moneyDivider);
         break;
     }
 }
@@ -2348,18 +2655,18 @@ static void MenuShopSeisan02(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->ticker = 0x00fffff0;
+        work->ticker = SHOP_DEPTH_TOP;
         WindowDXSet(&work->window);
-        work->window.x = 528;
+        work->window.x = SHOP_PANEL_HIDDEN_X;
         work->window.y = 80;
         work->window.style = work->ticker;
         work->window.width = 208;
         work->window.height = 80;
         work->window.tag_id = menuShopPayText;
         tagSlot = &work->window.tag_id;
-        work->window.state = 1;
+        work->window.state = WINDOW_STATE_OPEN_REQUEST;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOW_STATE_OPEN;
         for (i = 0; i < 2; i++) {
             eTagFontSet(&work->tags[i], msg01_8_0036DBA0[i]);
             work->tags[i].work = work->ticker + 2;
@@ -2389,62 +2696,62 @@ static void MenuShopSeisan02(TskObject *task, void *data)
         break;
     case 2:
         switch (work->state) {
-        case 0:
+        case SHOP_PAY_CLOSED:
             work->flag = 0;
-            work->state = 1;
+            work->state = SHOP_PAY_IDLE;
             /* fall through */
-        case 1:
+        case SHOP_PAY_IDLE:
             switch (MenuShopWork->state) {
-            case 0xC2:
-                work->state = 10;
+            case SHOP_STATE_RESTORE_UNIT:
+                work->state = SHOP_PAY_RESTORE_OPEN;
                 break;
-            case 0xD4:
-                work->state = 20;
+            case SHOP_STATE_AGWS_BUY_CONFIRM:
+                work->state = SHOP_PAY_BUY_OPEN;
                 break;
             }
             break;
-        case 10:
+        case SHOP_PAY_RESTORE_OPEN:
             work->window.x = -224;
             work->window.y = 80;
-            work->state = 11;
-            work->kind = 1;
+            work->state = SHOP_PAY_RESTORE_SHOWN;
+            work->kind = SHOP_PAY_KIND_RESTORE;
             work->flag = 1;
             /* fall through */
-        case 11:
+        case SHOP_PAY_RESTORE_SHOWN:
             slideTarget48 = 48;
-            MoveSlide(&work->window.x, &slideTarget48, 3.0f);
-            if (MenuShopWork->state == 0xC0)
-                work->state = 12;
+            MoveSlide(&work->window.x, &slideTarget48, SHOP_SLIDE_RATE);
+            if (MenuShopWork->state == SHOP_STATE_AGWS_MENU)
+                work->state = SHOP_PAY_RESTORE_CLOSING;
             break;
-        case 12:
+        case SHOP_PAY_RESTORE_CLOSING:
             slideTargetBack = -224;
-            MoveSlide(&work->window.x, &slideTargetBack, 3.0f);
+            MoveSlide(&work->window.x, &slideTargetBack, SHOP_SLIDE_RATE);
             if (work->window.x == slideTargetBack)
-                work->state = 0;
+                work->state = SHOP_PAY_CLOSED;
             break;
-        case 20:
-            work->window.x = 528;
+        case SHOP_PAY_BUY_OPEN:
+            work->window.x = SHOP_PANEL_HIDDEN_X;
             work->window.y = 64;
-            work->kind = 2;
-            work->state = 21;
+            work->kind = SHOP_PAY_KIND_BUY;
+            work->state = SHOP_PAY_BUY_SHOWN;
             work->flag = 1;
             /* fall through */
-        case 21:
+        case SHOP_PAY_BUY_SHOWN:
             slideTarget288 = 288;
-            MoveSlide(&work->window.x, &slideTarget288, 3.0f);
+            MoveSlide(&work->window.x, &slideTarget288, SHOP_SLIDE_RATE);
             switch (MenuShopWork->state) {
-            case 0xC0:
-            case 0xD0:
-            case 0xD2:
-                work->state = 22;
+            case SHOP_STATE_AGWS_MENU:
+            case SHOP_STATE_AGWS_BUY_LIST:
+            case SHOP_STATE_AGWS_BUY_UNIT:
+                work->state = SHOP_PAY_BUY_CLOSING;
                 break;
             }
             break;
-        case 22:
-            slideTarget528 = 528;
-            MoveSlide(&work->window.x, &slideTarget528, 3.0f);
+        case SHOP_PAY_BUY_CLOSING:
+            slideTarget528 = SHOP_PANEL_HIDDEN_X;
+            MoveSlide(&work->window.x, &slideTarget528, SHOP_SLIDE_RATE);
             if (work->window.x == slideTarget528)
-                work->state = 0;
+                work->state = SHOP_PAY_CLOSED;
             break;
         }
 
@@ -2463,14 +2770,14 @@ static void MenuShopSeisan02(TskObject *task, void *data)
         eSpriteMain(&work->sprite);
         work->numbers[0].value = dataMoneyBoxChk();
         if (work->kind == i) {
-            work->numbers[1].value = 100;
+            work->numbers[1].value = SHOP_RESTORE_COST;
         } else {
             int item;
 
             if (MenuShopWork->sort_mode_selector != 0)
-                item = 0xB0000 + (unsigned short)MenuShopWork->equipmentId;
+                item = ITEM_KEY_FRAME + (unsigned short)MenuShopWork->equipmentId;
             else
-                item = 0xC0000 + (unsigned short)MenuShopWork->equipmentId;
+                item = ITEM_KEY_ENGINE + (unsigned short)MenuShopWork->equipmentId;
             work->numbers[1].value = MenuBoxMoneyGet(item, 0);
         }
         work->numbers[2].value = work->numbers[0].value - work->numbers[1].value;
@@ -2485,7 +2792,7 @@ static void MenuShopSeisan02(TskObject *task, void *data)
         work->points[1].x = work->window.x + 181;
         work->points[1].y = work->window.y + 51;
         work->points[0].y = work->window.y + 51;
-        endPrintExtFunc(work->ticker, 0, &work->points[0]);
+        endPrintExtFunc(work->ticker, END_PRINT_CMD_LINE,&work->points[0]);
         break;
     }
 }
@@ -2501,12 +2808,12 @@ static void MenuShopEx02(TskObject *task, void *data)
     case 0:
     {
         short *unitIds;
-        work->depth = 0xffff0;
+        work->depth = SHOP_DEPTH_LIST;
         eRibbonSet(&work->ribbon, 3);
-        work->ribbon.x = 0x210;
+        work->ribbon.x = SHOP_PANEL_HIDDEN_X;
         work->ribbon.y = 0x40;
         work->ribbon.work = work->depth;
-        work->ribbon.width = 0x100;
+        work->ribbon.width = SHOP_PANEL_WIDTH;
         work->ribbon.height = 0x90;
         eTagFontSet(&work->label, menuShopTargetTagText);
         work->label.work = work->depth + 2;
@@ -2524,46 +2831,46 @@ static void MenuShopEx02(TskObject *task, void *data)
     }
     case 2:
         switch (work->state) {
-        case 0:
+        case SHOP_UNITS_CLOSED:
             work->active = 0;
-            work->state = 1;
+            work->state = SHOP_UNITS_IDLE;
             /* fall through */
-        case 1:
+        case SHOP_UNITS_IDLE:
             switch (MenuShopWork->state) {
-            case 0xd0:
-            case 0xd2:
-                work->state = 20;
+            case SHOP_STATE_AGWS_BUY_LIST:
+            case SHOP_STATE_AGWS_BUY_UNIT:
+                work->state = SHOP_UNITS_BUY_OPEN;
                 break;
-            case 0xc2:
-                work->state = 10;
+            case SHOP_STATE_RESTORE_UNIT:
+                work->state = SHOP_UNITS_RESTORE_OPEN;
                 break;
             }
             break;
-        case 10:
-        case 20:
-            work->ribbon.x = 0x210;
+        case SHOP_UNITS_RESTORE_OPEN:
+        case SHOP_UNITS_BUY_OPEN:
+            work->ribbon.x = SHOP_PANEL_HIDDEN_X;
             work->active = 1;
-            if (work->state == 10) {
-                work->state = 11;
+            if (work->state == SHOP_UNITS_RESTORE_OPEN) {
+                work->state = SHOP_UNITS_RESTORE_SHOWN;
                 work->cursor.state = 0x20;
             } else {
-                work->state = 21;
+                work->state = SHOP_UNITS_BUY_SHOWN;
             }
             /* fall through */
-        case 11:
-        case 21:
+        case SHOP_UNITS_RESTORE_SHOWN:
+        case SHOP_UNITS_BUY_SHOWN:
         {
             unsigned char shopState;
-            openX = 0x130;
-            MoveSlide(&work->ribbon.x, &openX, 3.0f);
+            openX = SHOP_PANEL_SHOWN_X;
+            MoveSlide(&work->ribbon.x, &openX, SHOP_SLIDE_RATE);
             shopState = MenuShopWork->state;
-            if (shopState == 0xc0) {
-                work->state = 12;
+            if (shopState == SHOP_STATE_AGWS_MENU) {
+                work->state = SHOP_UNITS_CLOSING;
             }
-            if (MenuShopWork->state == 0xd4) {
-                work->state = 12;
+            if (MenuShopWork->state == SHOP_STATE_AGWS_BUY_CONFIRM) {
+                work->state = SHOP_UNITS_CLOSING;
             }
-            if (work->state == 21) {
+            if (work->state == SHOP_UNITS_BUY_SHOWN) {
                 for (i = 0; i < MenuShopWork->unitCount; i++) {
                     int canEquip = 0;
                     short *unitIds = MenuShopWork->unitIds;
@@ -2577,18 +2884,18 @@ static void MenuShopEx02(TskObject *task, void *data)
                         canEquip = MenuEngineEquipCheck(currentIds[i], MenuShopWork->equipmentId) != 0;
                     }
                     if (canEquip == 0) {
-                        work->portraits[i].blue = 0x40;
-                        work->portraits[i].green = 0x40;
-                        work->portraits[i].red = 0x40;
+                        work->portraits[i].blue = SHOP_SPRITE_DIM;
+                        work->portraits[i].green = SHOP_SPRITE_DIM;
+                        work->portraits[i].red = SHOP_SPRITE_DIM;
                     } else {
                         work->portraits[i].blue = -0x80;
                         work->portraits[i].green = -0x80;
                         work->portraits[i].red = -0x80;
                     }
                 }
-                if (MenuShopWork->state == 0xd2 && work->cursor.state == 0)
+                if (MenuShopWork->state == SHOP_STATE_AGWS_BUY_UNIT && work->cursor.state == 0)
                     work->cursor.state = 0x20;
-                if (MenuShopWork->state == 0xd0)
+                if (MenuShopWork->state == SHOP_STATE_AGWS_BUY_LIST)
                     work->cursor.state = 0;
             } else {
                 for (i = 0; i < MenuShopWork->unitCount; i++) {
@@ -2596,9 +2903,9 @@ static void MenuShopEx02(TskObject *task, void *data)
                     eSpriteSet(&work->portraits[i], MenuFaceEpidGet(unitIds[i], 0));
                     unitIds = MenuShopWork->unitIds;
                     if (MenuCharHpCheck(unitIds[i]) != 0) {
-                        work->portraits[i].blue = 0x40;
-                        work->portraits[i].green = 0x40;
-                        work->portraits[i].red = 0x40;
+                        work->portraits[i].blue = SHOP_SPRITE_DIM;
+                        work->portraits[i].green = SHOP_SPRITE_DIM;
+                        work->portraits[i].red = SHOP_SPRITE_DIM;
                     } else {
                         work->portraits[i].blue = -0x80;
                         work->portraits[i].green = -0x80;
@@ -2608,11 +2915,11 @@ static void MenuShopEx02(TskObject *task, void *data)
             }
             break;
         }
-        case 12:
-            closeX = 0x210;
-            MoveSlide(&work->ribbon.x, &closeX, 3.0f);
+        case SHOP_UNITS_CLOSING:
+            closeX = SHOP_PANEL_HIDDEN_X;
+            MoveSlide(&work->ribbon.x, &closeX, SHOP_SLIDE_RATE);
             if (work->ribbon.x == closeX)
-                work->state = 0;
+                work->state = SHOP_UNITS_CLOSED;
             work->cursor.state = 0;
             break;
         }
@@ -2645,8 +2952,8 @@ static void MenuShopIcon(TskObject *task, void *data)
     case 0:
         {
             struct MenuShopIconIds spriteIds = menuShopIconSpriteTable;
-            work->depth = 0xfffff0;
-            for (i = 0; i < 11; i++) {
+            work->depth = SHOP_DEPTH_TOP;
+            for (i = 0; i < SHOP_ICON_COUNT; i++) {
                 eSpriteSet(&work->sprites[i], spriteIds.ids[i]);
                 work->sprites[i].depth = work->depth;
             }
@@ -2656,28 +2963,28 @@ static void MenuShopIcon(TskObject *task, void *data)
             for (i = 1; i >= 0; i--)
                 work->sprites[i].y = topY;
         }
-        for (i = 2; i < 11; i++) {
+        for (i = SHOP_ICON_CATEGORY_FIRST; i < SHOP_ICON_COUNT; i++) {
             work->sprites[i].y = 12;
-            if (((MenuShopWork->categoryMask >> (i - 2)) & 1) == 0) {
-                work->sprites[i].blue = 0x40;
-                work->sprites[i].green = 0x40;
-                work->sprites[i].red = 0x40;
+            if (((MenuShopWork->categoryMask >> (i - SHOP_ICON_CATEGORY_FIRST)) & 1) == 0) {
+                work->sprites[i].blue = SHOP_SPRITE_DIM;
+                work->sprites[i].green = SHOP_SPRITE_DIM;
+                work->sprites[i].red = SHOP_SPRITE_DIM;
             }
         }
         work->active = 1;
-        work->slide = 16;
+        work->slide = SHOP_ICON_SLIDE_MAX;
         work->scale = 1.0f;
         work->animation = 0;
         work->phase = 0;
-        for (i = 0; i < 9; i++)
+        for (i = 0; i < SHOP_CAT_COUNT; i++)
             work->categoryLift[i] = 0;
         work->state = 2;
         return;
     case 2:
         switch (MenuShopWork->state) {
-        case 0x20:
-            if (MenuShopWork->stateFlags & 1) {
-                for (i = 2; i < 11; i++) {
+        case SHOP_STATE_MODE_SELECT:
+            if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+                for (i = SHOP_ICON_CATEGORY_FIRST; i < SHOP_ICON_COUNT; i++) {
                     work->sprites[i].blue = -0x80;
                     work->sprites[i].green = -0x80;
                     work->sprites[i].red = -0x80;
@@ -2688,17 +2995,17 @@ static void MenuShopIcon(TskObject *task, void *data)
             if (work->scale != 1.0f)
                 work->scale += 0.2;
             break;
-        case 0xa0:
-        case 0xa4:
-        case 0xa2:
-        case 0x30:
-        case 0x90:
-            if (MenuShopWork->stateFlags & 1) {
-                for (i = 2; i < 11; i++) {
-                    if (((MenuShopWork->categoryMask >> (i - 2)) & 1) == 0) {
-                        work->sprites[i].blue = 0x40;
-                        work->sprites[i].green = 0x40;
-                        work->sprites[i].red = 0x40;
+        case SHOP_STATE_QUANTITY:
+        case SHOP_STATE_RESULT:
+        case SHOP_STATE_CONFIRM:
+        case SHOP_STATE_BUY_LIST:
+        case SHOP_STATE_SELL_LIST:
+            if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+                for (i = SHOP_ICON_CATEGORY_FIRST; i < SHOP_ICON_COUNT; i++) {
+                    if (((MenuShopWork->categoryMask >> (i - SHOP_ICON_CATEGORY_FIRST)) & 1) == 0) {
+                        work->sprites[i].blue = SHOP_SPRITE_DIM;
+                        work->sprites[i].green = SHOP_SPRITE_DIM;
+                        work->sprites[i].red = SHOP_SPRITE_DIM;
                     } else {
                         work->sprites[i].blue = -0x80;
                         work->sprites[i].green = -0x80;
@@ -2712,11 +3019,11 @@ static void MenuShopIcon(TskObject *task, void *data)
             if (work->scale > 1.0f)
                 work->scale = 1.0f;
             break;
-        case 0xf0:
+        case SHOP_STATE_EXIT:
             work->active = 0;
             /* fall through */
-        case 0xff:
-            if (work->slide != 16)
+        case SHOP_STATE_END:
+            if (work->slide != SHOP_ICON_SLIDE_MAX)
                 work->slide++;
             break;
         default:
@@ -2727,12 +3034,12 @@ static void MenuShopIcon(TskObject *task, void *data)
                 work->scale = 0.0f;
             break;
         }
-        for (i = 0; i < 9; i++) {
+        for (i = 0; i < SHOP_CAT_COUNT; i++) {
             if (i == MenuShopWork->category) {
                 unsigned char state = MenuShopWork->state;
-                if (state != 0x20 && state != 0xf0 &&
-                    (state >> 4) != 0xc && (state >> 4) != 0xd) {
-                    if (work->categoryLift[i] != 6)
+                if (state != SHOP_STATE_MODE_SELECT && state != SHOP_STATE_EXIT &&
+                    (state >> 4) != SHOP_STATE_GROUP_AGWS_MENU && (state >> 4) != SHOP_STATE_GROUP_AGWS_BUY) {
+                    if (work->categoryLift[i] != SHOP_ICON_LIFT_MAX)
                         work->categoryLift[i]++;
                     continue;
                 }
@@ -2754,17 +3061,17 @@ static void MenuShopIcon(TskObject *task, void *data)
         }
         }
         {
-        for (i = 2; i < 11; i++) {
+        for (i = SHOP_ICON_CATEGORY_FIRST; i < SHOP_ICON_COUNT; i++) {
             float alpha;
-            work->sprites[i].x = 0x121 + (i - 2) * 0x15;
+            work->sprites[i].x = 0x121 + (i - SHOP_ICON_CATEGORY_FIRST) * SHOP_ICON_SPACING;
             work->sprites[i].x = (int)((float)work->sprites[i].x +
-                xglCos((float)(i - 2) * 0.448798954f) * (float)-(work->slide * 2));
-            work->sprites[i].y = work->categoryLift[i - 2] + 12;
+                xglCos((float)(i - SHOP_ICON_CATEGORY_FIRST) * 0.448798954f) * (float)-(work->slide * 2));
+            work->sprites[i].y = work->categoryLift[i - SHOP_ICON_CATEGORY_FIRST] + 12;
             alpha = (128.0f - (float)work->slide * 0.0625f * 128.0f) * work->scale;
             work->sprites[i].alpha = alpha;
         }
         }
-        for (i = 0; i < 11; i++)
+        for (i = 0; i < SHOP_ICON_COUNT; i++)
             eSpriteMain(&work->sprites[i]);
         break;
     }
@@ -2833,7 +3140,7 @@ void MenuShopParaSet(unsigned int mode)
     memset(&MenuShopPara, 0, sizeof(MenuShopPara));
     memset(&MenuShopPara2, 0, sizeof(MenuShopPara2));
     switch (mode) {
-    case 0:
+    case SHOP_PARA_FRAME:
         if (MenuShopWork->equipmentId != 0) {
             frame = func_A1A598(MenuShopWork->equipmentId);
             MenuShopPara.value[0] = frame->value[0];
@@ -2842,13 +3149,13 @@ void MenuShopParaSet(unsigned int mode)
             MenuShopPara.value[4] = frame->value[3];
         }
         break;
-    case 1:
+    case SHOP_PARA_ENGINE:
         if (MenuShopWork->equipmentId != 0) {
             engine = func_A1A5E8(MenuShopWork->equipmentId);
             MenuShopPara.value[1] = engine->value;
         }
         break;
-    case 2:
+    case SHOP_PARA_RESTORE:
         if (MenuShopWork->unitId != 0) {
             calculated = func_00A11108(MenuShopWork->unitId, attack, defense);
             MenuAgwsParaSet(MenuShopWork->unitId, 0);
@@ -2859,13 +3166,13 @@ void MenuShopParaSet(unsigned int mode)
             MenuShopPara.value[0] = calculated->currentHp;
         }
         break;
-    case 3:
-    case 4:
+    case SHOP_PARA_FRAME_FIT:
+    case SHOP_PARA_ENGINE_FIT:
         unit = func_A191C0(MenuShopWork->unitId);
         MenuAgwsParaSet(MenuShopWork->unitId, 10);
         for (i = 0; i < 6; i++)
             MenuShopPara.value[i] = MenuAgwsPara.value[i];
-        if (mode == 3) {
+        if (mode == SHOP_PARA_FRAME_FIT) {
             if (MenuFrameEquipCheck(MenuShopWork->unitId,
                                    MenuShopWork->equipmentId)) {
                 selection = MenuShopWork;
@@ -2891,46 +3198,46 @@ void MenuShopParaSet(unsigned int mode)
         MenuAgwsParaSet(selection->unitId, 10);
         for (i = 0; i < 6; i++)
             MenuShopPara2.value[i] = MenuAgwsPara.value[i];
-        if (mode == 3)
+        if (mode == SHOP_PARA_FRAME_FIT)
             unit->frameId = oldEquipment;
         else
             unit->engineId = oldEquipment;
         break;
-    case 10:
-        if ((short)(MenuShopWork->itemId >> 16) != 3)
+    case SHOP_PARA_CHAR_WEAPON:
+        if ((short)(MenuShopWork->itemId >> 16) != ITEM_KIND_WEAPON)
             return;
         MenuShopParaSet2(MenuShopWork->modelId, 0);
         return;
-    case 11:
-        if ((short)(MenuShopWork->itemId >> 16) != 5)
+    case SHOP_PARA_CHAR_ACCESSORY:
+        if ((short)(MenuShopWork->itemId >> 16) != ITEM_KIND_ACCESSORY)
             return;
         MenuShopParaSet2(MenuShopWork->modelId, 1);
         return;
-    case 12:
-        if ((short)(MenuShopWork->itemId >> 16) == 4)
+    case SHOP_PARA_CHAR_AMMO:
+        if ((short)(MenuShopWork->itemId >> 16) == ITEM_KIND_BULLET)
             MenuShopPara.value[0] = *func_A1A428(MenuShopWork->modelId);
         break;
-    case 13:
-        if ((short)(MenuShopWork->itemId >> 16) == 3) {
+    case SHOP_PARA_AGWS_WEAPON:
+        if ((short)(MenuShopWork->itemId >> 16) == ITEM_KIND_WEAPON) {
             weapon = func_A1A3D8(MenuShopWork->modelId);
             MenuShopPara.value[1] = weapon->shopParameter1;
             MenuShopPara.value[2] = weapon->shopParameter2;
             MenuShopPara.value[5] = weapon->wagl;
         }
         break;
-    case 14:
-        if ((short)(MenuShopWork->itemId >> 16) == 5) {
+    case SHOP_PARA_AGWS_ACCESSORY:
+        if ((short)(MenuShopWork->itemId >> 16) == ITEM_KIND_ACCESSORY) {
             accessory = func_A1A548(MenuShopWork->modelId);
             MenuShopPara.value[2] = accessory->shopParameter2;
             MenuShopPara.value[3] = accessory->shopParameter3;
         }
         break;
-    case 15:
-        if ((short)(MenuShopWork->itemId >> 16) == 4)
+    case SHOP_PARA_AGWS_AMMO:
+        if ((short)(MenuShopWork->itemId >> 16) == ITEM_KIND_BULLET)
             MenuShopPara.value[1] = *func_A1A428(MenuShopWork->modelId);
         break;
-    case 16:
-        if ((short)(MenuShopWork->itemId >> 16) == 7) {
+    case SHOP_PARA_AGWS:
+        if ((short)(MenuShopWork->itemId >> 16) == ITEM_KIND_AGWS) {
             MenuAgwsParaSet(MenuShopWork->modelId, 0);
             for (i = 0; i < 6; i++)
                 MenuShopPara.value[i] = MenuAgwsPara.value[i];
@@ -2949,16 +3256,16 @@ static void MenuShopParameter(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->depth = 0xffff00;
+        work->depth = SHOP_DEPTH_PARAMETER;
         WindowDXSet(&work->window);
         work->window.x = -0x1f0;
         work->window.style = work->depth;
         work->window.y = 0x149;
         work->window.width = 0x1e0;
         work->window.height = 0x36;
-        work->window.state = 1;
+        work->window.state = WINDOW_STATE_OPEN_REQUEST;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOW_STATE_OPEN;
         for (i = 0; i < 9; i++) {
             eTagFontSet(&work->labels[i], 0);
             work->labels[i].work = work->depth + 2;
@@ -2975,20 +3282,20 @@ static void MenuShopParameter(TskObject *task, void *data)
     case 2:
         targetX = -0x1f0;
         switch (MenuShopWork->state) {
-        case 0x30:
+        case SHOP_STATE_BUY_LIST:
         {
             int category = MenuShopWork->category;
             switch (category) {
-            case 1:
-            case 2:
-            case 3:
+            case SHOP_CAT_CHAR_WEAPON:
+            case SHOP_CAT_CHAR_ACCESSORY:
+            case SHOP_CAT_CHAR_AMMO:
                     switch (category) {
-                    case 1: MenuShopParaSet(10); break;
-                    case 2: MenuShopParaSet(11); break;
-                    case 3: MenuShopParaSet(12); break;
+                    case SHOP_CAT_CHAR_WEAPON: MenuShopParaSet(SHOP_PARA_CHAR_WEAPON); break;
+                    case SHOP_CAT_CHAR_ACCESSORY: MenuShopParaSet(SHOP_PARA_CHAR_ACCESSORY); break;
+                    case SHOP_CAT_CHAR_AMMO: MenuShopParaSet(SHOP_PARA_CHAR_AMMO); break;
                     }
                     work->twoColumns = 0;
-                    work->count = 7;
+                    work->count = SHOP_PARA_CHAR_COUNT;
                     for (i = 0; i < work->count; i++)
                         work->labels[i].render.text = msg00_9[i];
                     for (i = 0; i < work->count; i++) {
@@ -2999,17 +3306,17 @@ static void MenuShopParameter(TskObject *task, void *data)
                         work->numbers[i].value = MenuShopPara.value[i];
                     }
                 break;
-            case 4:
-            case 5:
-            case 6:
-            case 7:
+            case SHOP_CAT_AGWS_WEAPON:
+            case SHOP_CAT_AGWS_ACCESSORY:
+            case SHOP_CAT_AGWS_AMMO:
+            case SHOP_CAT_AGWS:
                     switch (category) {
-                    case 4: MenuShopParaSet(13); break;
-                    case 5: MenuShopParaSet(14); break;
-                    case 6: MenuShopParaSet(15); break;
-                    case 7: MenuShopParaSet(16); break;
+                    case SHOP_CAT_AGWS_WEAPON: MenuShopParaSet(SHOP_PARA_AGWS_WEAPON); break;
+                    case SHOP_CAT_AGWS_ACCESSORY: MenuShopParaSet(SHOP_PARA_AGWS_ACCESSORY); break;
+                    case SHOP_CAT_AGWS_AMMO: MenuShopParaSet(SHOP_PARA_AGWS_AMMO); break;
+                    case SHOP_CAT_AGWS: MenuShopParaSet(SHOP_PARA_AGWS); break;
                     }
-                    work->count = 6;
+                    work->count = SHOP_PARA_AGWS_COUNT;
                     work->twoColumns = 1;
                     for (i = 0; i < work->count; i++)
                         work->labels[i].render.text = msg01_10[i];
@@ -3024,21 +3331,21 @@ static void MenuShopParameter(TskObject *task, void *data)
             }
         }
             /* fall through */
-        case 0xa0:
-        case 0xa2:
-        case 0xa4:
-            if (MenuShopWork->mode == 0 && MenuShopWork->category != 0 && MenuShopWork->category != 8)
+        case SHOP_STATE_QUANTITY:
+        case SHOP_STATE_CONFIRM:
+        case SHOP_STATE_RESULT:
+            if (MenuShopWork->mode == SHOP_MODE_BUY && MenuShopWork->category != SHOP_CAT_ITEM && MenuShopWork->category != SHOP_CAT_CARD)
                 targetX = 0x10;
             break;
-        case 0xd0:
-        case 0xd2:
-        case 0xd4:
-        case 0xd6:
+        case SHOP_STATE_AGWS_BUY_LIST:
+        case SHOP_STATE_AGWS_BUY_UNIT:
+        case SHOP_STATE_AGWS_BUY_CONFIRM:
+        case SHOP_STATE_AGWS_BUY_DONE:
             if (MenuShopWork->sort_mode_selector != 0)
-                MenuShopParaSet(3);
+                MenuShopParaSet(SHOP_PARA_FRAME_FIT);
             else
-                MenuShopParaSet(4);
-            work->count = 6;
+                MenuShopParaSet(SHOP_PARA_ENGINE_FIT);
+            work->count = SHOP_PARA_AGWS_COUNT;
             work->twoColumns = 1;
             for (i = 0; i < work->count; i++)
                 work->labels[i].render.text = msg01_10[i];
@@ -3059,11 +3366,11 @@ static void MenuShopParameter(TskObject *task, void *data)
             }
             targetX = 0x10;
             break;
-        case 0xc2:
-        case 0xc4:
-        case 0xc6:
-            MenuShopParaSet(2);
-            work->count = 6;
+        case SHOP_STATE_RESTORE_UNIT:
+        case SHOP_STATE_RESTORE_CONFIRM:
+        case SHOP_STATE_RESTORE_DONE:
+            MenuShopParaSet(SHOP_PARA_RESTORE);
+            work->count = SHOP_PARA_AGWS_COUNT;
             work->twoColumns = 1;
             for (i = 0; i < work->count; i++)
                 work->labels[i].render.text = msg01_10[i];
@@ -3081,7 +3388,7 @@ static void MenuShopParameter(TskObject *task, void *data)
             targetX = 0x10;
             break;
         }
-        MoveSlide(&work->window.x, &targetX, 3.0f);
+        MoveSlide(&work->window.x, &targetX, SHOP_SLIDE_RATE);
         if (work->twoColumns == 0) {
             work->window.y = 0x139;
             work->window.height = 0x36;
@@ -3122,7 +3429,7 @@ static void MenuShopEx2(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->color = 0xFFFF00;
+        work->color = SHOP_DEPTH_PARAMETER;
         WindowDXSet(&work->window);
         work->window.x = -0xB6;
         work->window.style = work->color;
@@ -3130,9 +3437,9 @@ static void MenuShopEx2(TskObject *task, void *data)
         work->window.width = 0xA6;
         work->window.height = 0x1E;
         work->window.tag_id = menuShopBulletTitleText;
-        work->window.state = 1;
+        work->window.state = WINDOW_STATE_OPEN_REQUEST;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOW_STATE_OPEN;
         eMessageSet(&work->message, 0);
         work->message.mode = 0x20;
         work->message.draw_parameter = work->color + 2;
@@ -3140,14 +3447,14 @@ static void MenuShopEx2(TskObject *task, void *data)
 
     case 2:
         x = -0xB6;
-        if (MenuShopWork->state == 0x30 && MenuShopWork->category == 4 && MenuShopWork->listIndex >= 0) {
+        if (MenuShopWork->state == SHOP_STATE_BUY_LIST && MenuShopWork->category == SHOP_CAT_AGWS_WEAPON && MenuShopWork->listIndex >= 0) {
             weapon = func_A1A3D8((short)MenuSortGet(0, MenuShopWork->listIndex));
-            if (weapon != 0 && (weapon->flags & 0x100) && weapon->bullet != 0) {
+            if (weapon != 0 && (weapon->flags & SHOP_WEAPON_FLAG_BULLET) && weapon->bullet != 0) {
                 work->message.text = *func_A2C738(weapon->bullet);
                 x = 0x10;
             }
         }
-        MoveSlide(&work->window.x, &x, 3.0f);
+        MoveSlide(&work->window.x, &x, SHOP_SLIDE_RATE);
         WindowDXMain(&work->window);
         work->message.x = work->window.x + 3;
         work->message.y = work->window.y + 3;
@@ -3170,7 +3477,7 @@ static void MenuShopLine(TskObject *task, void *data)
 
     switch (task->state) {
     case 0:
-        work->depth = 0xfffff0;
+        work->depth = SHOP_DEPTH_TOP;
         for (i = 0; i < 5; i++) {
             work->vertices[i].rgba.r = work->vertices[i].rgba.g =
                 work->vertices[i].rgba.b = 96;
@@ -3183,36 +3490,36 @@ static void MenuShopLine(TskObject *task, void *data)
         break;
     case 2:
         verticalTarget[0] = 48;
-        targets[0] = MenuShopWork->category * 21 + 294;
-        targets[1] = MenuShopWork->category * 21 + 298;
-        targets[2] = MenuShopWork->category * 21 + 302;
-        targets[3] = 512;
+        targets[0] = MenuShopWork->category * SHOP_ICON_SPACING + 294;
+        targets[1] = MenuShopWork->category * SHOP_ICON_SPACING + 298;
+        targets[2] = MenuShopWork->category * SHOP_ICON_SPACING + 302;
+        targets[3] = SHOP_LINE_END_X;
         switch (MenuShopWork->state) {
-        case 0x30:
-        case 0x90:
-        case 0xa0:
-        case 0xa2:
-        case 0xa4:
+        case SHOP_STATE_BUY_LIST:
+        case SHOP_STATE_SELL_LIST:
+        case SHOP_STATE_QUANTITY:
+        case SHOP_STATE_CONFIRM:
+        case SHOP_STATE_RESULT:
             if (targets[0] == work->vertices[1].x)
                 verticalTarget[0] = 40;
-            if (work->alpha != 120)
-                work->alpha += 8;
+            if (work->alpha != SHOP_LINE_ALPHA_MAX)
+                work->alpha += SHOP_LINE_ALPHA_STEP;
             break;
         default:
             if (work->alpha != 0)
-                work->alpha -= 8;
+                work->alpha -= SHOP_LINE_ALPHA_STEP;
             break;
         }
         work->vertices[0].x = 0;
-        work->vertices[5].x = 512;
+        work->vertices[5].x = SHOP_LINE_END_X;
         target = targets;
         for (i = 1; i < 5; i++, target++) {
-            MoveSlide(&work->vertices[i].x, target, 3.0f);
+            MoveSlide(&work->vertices[i].x, target, SHOP_SLIDE_RATE);
             work->vertices[i].rgba.a = work->alpha;
         }
         work->vertices[0].rgba.a = work->alpha;
         MoveSlide(&work->vertices[2].y, verticalTarget, 8.0f);
-        endPrintExtFunc(work->depth, 0, work->vertices);
+        endPrintExtFunc(work->depth, END_PRINT_CMD_LINE, work->vertices);
         break;
     }
 }
@@ -3221,51 +3528,51 @@ void MenuShopInfoSet(void)
 {
     MenuShopWork->categoryMask = 0;
 
-    if (MenuShopWork->mode == 0) {
+    if (MenuShopWork->mode == SHOP_MODE_BUY) {
         if (MenuShopWork->noCategories != 0)
             return;
-        if (ShopData.records[0].count != 0)
-            MenuShopWork->categoryMask = 1;
-        if (ShopData.records[1].count != 0)
-            MenuShopWork->categoryMask |= 0x2;
-        if (ShopData.records[2].count != 0)
-            MenuShopWork->categoryMask |= 0x4;
-        if (ShopData.records[3].count != 0)
-            MenuShopWork->categoryMask |= 0x8;
-        if (ShopData.records[4].count != 0)
-            MenuShopWork->categoryMask |= 0x10;
-        if (ShopData.records[5].count != 0)
-            MenuShopWork->categoryMask |= 0x20;
-        if (ShopData.records[6].count != 0)
-            MenuShopWork->categoryMask |= 0x40;
+        if (ShopData.records[SHOP_CAT_ITEM].count != 0)
+            MenuShopWork->categoryMask = SHOP_CAT_MASK_ITEM;
+        if (ShopData.records[SHOP_CAT_CHAR_WEAPON].count != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_WEAPON;
+        if (ShopData.records[SHOP_CAT_CHAR_ACCESSORY].count != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_ACCESSORY;
+        if (ShopData.records[SHOP_CAT_CHAR_AMMO].count != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_AMMO;
+        if (ShopData.records[SHOP_CAT_AGWS_WEAPON].count != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_WEAPON;
+        if (ShopData.records[SHOP_CAT_AGWS_ACCESSORY].count != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_ACCESSORY;
+        if (ShopData.records[SHOP_CAT_AGWS_AMMO].count != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_AMMO;
         if (ShopData.tail.count != 0)
-            MenuShopWork->categoryMask |= 0x80;
-        if (MenuScenarioNo >= 115)
-            MenuShopWork->categoryMask |= 0x100;
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS;
+        if (MenuScenarioNo >= SHOP_CARD_SCENARIO_FIRST)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CARD;
     } else {
-        MenuSortSet(0, 1, 0);
+        MenuSortSet(0, SHOP_SORT_ITEM, 0);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x1;
-        MenuSortSet(0, 4, -1);
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_ITEM;
+        MenuSortSet(0, SHOP_SORT_WEAPON, SHOP_SORT_FILTER_CHARACTER);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x2;
-        MenuSortSet(0, 16, -1);
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_WEAPON;
+        MenuSortSet(0, SHOP_SORT_ACCESSORY, SHOP_SORT_FILTER_CHARACTER);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x4;
-        MenuSortSet(0, 8, -1);
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_ACCESSORY;
+        MenuSortSet(0, SHOP_SORT_BULLET, SHOP_SORT_FILTER_CHARACTER);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x8;
-        MenuSortSet(0, 4, -2);
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_AMMO;
+        MenuSortSet(0, SHOP_SORT_WEAPON, SHOP_SORT_FILTER_AGWS);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x10;
-        MenuSortSet(0, 16, -2);
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_WEAPON;
+        MenuSortSet(0, SHOP_SORT_ACCESSORY, SHOP_SORT_FILTER_AGWS);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x20;
-        MenuSortSet(0, 8, -2);
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_ACCESSORY;
+        MenuSortSet(0, SHOP_SORT_BULLET, SHOP_SORT_FILTER_AGWS);
         if (MenuSortCheck(0) != 0)
-            MenuShopWork->categoryMask |= 0x40;
-        if (dataEvtBoxChk(53) != 0 || dataEvtBoxChk(54) != 0 || dataEvtBoxChk(55) != 0)
-            MenuShopWork->categoryMask |= 0x100;
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_AMMO;
+        if (dataEvtBoxChk(SHOP_CARD_EVENT_1) != 0 || dataEvtBoxChk(SHOP_CARD_EVENT_2) != 0 || dataEvtBoxChk(SHOP_CARD_EVENT_3) != 0)
+            MenuShopWork->categoryMask |= SHOP_CAT_MASK_CARD;
     }
 }
 
@@ -3292,7 +3599,7 @@ static inline MenuShopParty *MenuShopPartyGet(void)
 void MenuShopCore(void) {
     if (MenuShopWork->state != MenuShopWork->nextState) {
         MenuShopWork->state = MenuShopWork->nextState;
-        MenuShopWork->stateFlags |= 1;
+        MenuShopWork->stateFlags |= SHOP_FLAG_STATE_ENTERED;
     } else {
         MenuShopWork->stateFlags &= 0xFE;
     }
@@ -3301,27 +3608,27 @@ void MenuShopCore(void) {
     }
 
     switch (MenuShopWork->state) {
-    case 0x20:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_MODE_SELECT:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             MenuShopWork->stateFlags |= 0x10;
-            MenuShopWork->waitFrames = 8;
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
             break;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
         MenuShopWork->mode = MenuSelectMove(MenuShopWork->mode, 4, 0);
-        if (PadData.half_2a == 0x20)
+        if (PadData.half_2a == PAD_CIRCLE)
             switch (MenuShopWork->mode) {
-            case 0:
-            case 1: {
-                u8 listStates[2] = { 0x30, 0x90 };
+            case SHOP_MODE_BUY:
+            case SHOP_MODE_SELL: {
+                u8 listStates[2] = { SHOP_STATE_BUY_LIST, SHOP_STATE_SELL_LIST };
                 u8 *nextStates = listStates;
                 int categoryIndex;
 
                 MenuShopInfoSet();
                 if (MenuShopWork->categoryMask != 0) {
-                    for (categoryIndex = 0; categoryIndex < 8; categoryIndex++) {
+                    for (categoryIndex = 0; categoryIndex < SHOP_CAT_CARD; categoryIndex++) {
                         if ((MenuShopWork->categoryMask >> categoryIndex) & 1) {
                             MenuShopWork->category = categoryIndex;
                             break;
@@ -3329,42 +3636,42 @@ void MenuShopCore(void) {
                     }
                     MenuShopWork->nextState = nextStates[MenuShopWork->mode];
                     MenuShopWork->stateFlags |= 0xC;
-                    xglSoundEffectNormalID(1, 0);
-                    MenuShopWork->waitFrames = 0xC;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
+                    MenuShopWork->waitFrames = SHOP_WAIT_TRANSITION;
                 } else {
-                    xglSoundEffectNormalID(5, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
                 break;
             }
-            case 2:
+            case SHOP_MODE_TUNE_AGWS:
                 if (MenuShopWork->equipmentStatus != 0) {
-                    xglSoundEffectNormalID(1, 0);
-                    MenuShopWork->nextState = 0xC0;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
+                    MenuShopWork->nextState = SHOP_STATE_AGWS_MENU;
                 } else {
-                    xglSoundEffectNormalID(5, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
                 break;
-            case 3:
-                xglSoundEffectNormalID(2, 0);
-                MenuShopWork->nextState = 0xF0;
+            case SHOP_MODE_QUIT:
+                xglSoundEffectNormalID(SE_CANCEL, 0);
+                MenuShopWork->nextState = SHOP_STATE_EXIT;
                 break;
             }
-        if (PadData.half_2a & 0x40) {
-            MenuShopWork->nextState = 0xF0;
-            xglSoundEffectNormalID(2, 0);
+        if (PadData.half_2a & PAD_CROSS) {
+            MenuShopWork->nextState = SHOP_STATE_EXIT;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
-    case 0x30:
-    case 0x90:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_BUY_LIST:
+    case SHOP_STATE_SELL_LIST:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             MenuShopWork->listIndex = MenuShopListChange00(1);
             MenuShopWork->itemId = MenuShopWork->modelId = 0;
             MenuShopWork->availableMoney = dataMoneyBoxChk();
         }
         if (MenuShopWork->waitFrames == 0) {
             MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,PadData.mappedRepeat);
-            WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * 9) * 5]);
+            WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[(MenuShopWork->category + MenuShopWork->mode * SHOP_CAT_COUNT) * MENU_KEEP_ENTRY_SIZE]);
             if (MenuShopWork->listIndex >= 0) {
                 MenuShopWork->canEquip = subMenuShopEquipCheck(MenuSortGet(0, MenuShopWork->listIndex), MenuShopWork->category);
             } else {
@@ -3375,23 +3682,23 @@ void MenuShopCore(void) {
             } else {
                 MenuShopWork->itemId = MenuShopWork->modelId = 0;
             }
-            if (PadData.mappedRepeat & 0xA000) {
+            if (PadData.mappedRepeat & (PAD_LEFT | PAD_RIGHT)) {
                 u8 previousCategory;
                 int categoryStep;
                 int category;
                 int count;
 
                 previousCategory = MenuShopWork->category;
-                WindowSPKeepSelectCheck(&MenuKeepSelect[(previousCategory + MenuShopWork->mode * 9) * 5]);
-                categoryStep = (PadData.mappedRepeat & 0x2000) ? 1 : -1;
+                WindowSPKeepSelectCheck(&MenuKeepSelect[(previousCategory + MenuShopWork->mode * SHOP_CAT_COUNT) * MENU_KEEP_ENTRY_SIZE]);
+                categoryStep = (PadData.mappedRepeat & PAD_RIGHT) ? 1 : -1;
                 category = MenuShopWork->category;
-                for (count = 0; count < 9; count += categoryStep) {
+                for (count = 0; count < SHOP_CAT_COUNT; count += categoryStep) {
                     category += categoryStep;
                     if (category < 0) {
-                        category = 8;
+                        category = SHOP_CAT_CARD;
                     }
-                    if (category >= 9) {
-                        category = 0;
+                    if (category >= SHOP_CAT_COUNT) {
+                        category = SHOP_CAT_ITEM;
                     }
                     if ((MenuShopWork->categoryMask >> category) & 1) {
                         MenuShopWork->category = category;
@@ -3399,48 +3706,48 @@ void MenuShopCore(void) {
                     }
                 }
                 if (previousCategory != MenuShopWork->category) {
-                    xglSoundEffectNormalID(1, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     MenuShopWork->listIndex = MenuShopListChange00(0);
                     if (MenuShopWork->listIndex >= 0) {
                         MenuShopWork->canEquip = subMenuShopEquipCheck(MenuSortGet(0, MenuShopWork->listIndex), MenuShopWork->category);
                         MENU_SHOP_PREVIEW_ITEM(MenuShopWork->listIndex);
                     }
-                    MenuShopWork->waitFrames = 8;
+                    MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
                 }
-            } else if (PadData.half_2a & 0x20) {
+            } else if (PadData.half_2a & PAD_CIRCLE) {
                 if (MenuSortCheck(0) != 0) {
-                    if (MenuShopWork->mode == 0) {
+                    if (MenuShopWork->mode == SHOP_MODE_BUY) {
                         if (MenuBoxMoneyGet(MenuShopWork->itemId, 0) > MenuShopWork->availableMoney
-                            || MenuBoxChk(MenuShopWork->itemId) >= 99) {
-                            xglSoundEffectNormalID(5, 0);
+                            || MenuBoxChk(MenuShopWork->itemId) >= SHOP_STOCK_MAX) {
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                         } else {
-                            MenuShopWork->nextState = 0xA0;
+                            MenuShopWork->nextState = SHOP_STATE_QUANTITY;
                             MenuShopWork->quantity = 1;
                             MenuShopWork->quantityLimit = MenuBoxChk(MenuShopWork->itemId);
-                            xglSoundEffectNormalID(1, 0);
+                            xglSoundEffectNormalID(SE_DECIDE, 0);
                         }
                     } else if (MenuShopNoSaleCheck(MenuShopWork->itemId) != 0) {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     } else {
-                        MenuShopWork->nextState = 0xA0;
+                        MenuShopWork->nextState = SHOP_STATE_QUANTITY;
                         MenuShopWork->quantity = 1;
                         MenuShopWork->quantityLimit = MenuBoxChk(MenuShopWork->itemId);
-                        xglSoundEffectNormalID(1, 0);
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
                     }
                 }
-            } else if (PadData.half_2a & 0x40) {
+            } else if (PadData.half_2a & PAD_CROSS) {
                 if (MenuCursorKeepCheck() == 0) {
-                    MenuShopWork->mode = 0;
+                    MenuShopWork->mode = SHOP_MODE_BUY;
                 }
-                MenuShopWork->nextState = 0x20;
-                xglSoundEffectNormalID(2, 0);
+                MenuShopWork->nextState = SHOP_STATE_MODE_SELECT;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         } else {
             MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,0);
         }
         break;
 
-    case 0xA0: {
+    case SHOP_STATE_QUANTITY: {
         struct MenuShopQuantityChangeState {
             int maximumQuantity;
             int calculatedTotal;
@@ -3459,7 +3766,7 @@ void MenuShopCore(void) {
                 if (MenuShopWork->availableMoney >= quantityState.calculatedTotal) {
                     MenuShopWork->quantity++;
                     if (quantityState.playChangeSound != 0) {
-                        xglSoundEffectNormalID(3, 0);
+                        xglSoundEffectNormalID(SE_CURSOR, 0);
                         quantityState.playChangeSound = 0;
                     }
                 }
@@ -3471,41 +3778,41 @@ void MenuShopCore(void) {
             if (quantityState.minimumQuantity < MenuShopWork->quantity) {
                 MenuShopWork->quantity = MenuShopWork->quantity - 1;
                 if (quantityState.playChangeSound != 0) {
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     quantityState.playChangeSound = 0;
                 }
             }
         }
 
-        if (MenuShopWork->stateFlags & 1) {
-            if (MenuShopWork->category == 7) {
-                MenuShopWork->nextState = 0xA2;
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+            if (MenuShopWork->category == SHOP_CAT_AGWS) {
+                MenuShopWork->nextState = SHOP_STATE_CONFIRM;
                 MenuShopWork->waitFrames = 1;
             } else {
-                MenuShopWork->waitFrames = 8;
+                MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
             }
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
-        if (MenuShopWork->mode == 0) {
-            quantityState.maximumQuantity = 99 - MenuShopWork->quantityLimit;
+        if (MenuShopWork->mode == SHOP_MODE_BUY) {
+            quantityState.maximumQuantity = SHOP_STOCK_MAX - MenuShopWork->quantityLimit;
             quantityState.minimumQuantity = 1;
             quantityState.playChangeSound = 1;
             quantityState.calculatedTotal = 0;
-            if (PadData.mappedRepeat & 0x4000) {
+            if (PadData.mappedRepeat & PAD_DOWN) {
                 subMenuShopNumerDec();
             }
-            if (PadData.mappedRepeat & 0x1000) {
+            if (PadData.mappedRepeat & PAD_UP) {
                 subMenuShopNumerInc();
             }
-            if (PadData.mappedRepeat & 0x2000) {
-                for (i = 0; i < 10; i++) {
+            if (PadData.mappedRepeat & PAD_RIGHT) {
+                for (i = 0; i < SHOP_QUANTITY_PAGE_STEP; i++) {
                     subMenuShopNumerInc();
                 }
             }
-            if (PadData.mappedRepeat & 0x8000) {
-                for (i = 0; i < 10; i++) {
+            if (PadData.mappedRepeat & PAD_LEFT) {
+                for (i = 0; i < SHOP_QUANTITY_PAGE_STEP; i++) {
                     subMenuShopNumerDec();
                 }
             }
@@ -3514,58 +3821,58 @@ void MenuShopCore(void) {
             u8 quantityLimit;
 
             quantityLimit = MenuShopSelectionGet()->quantityLimit;
-            if ((PadData.mappedRepeat & 0x4000) && MenuShopSelectionGet()->quantity != minimumQuantity) {
+            if ((PadData.mappedRepeat & PAD_DOWN) && MenuShopSelectionGet()->quantity != minimumQuantity) {
                 MenuShopSelectionGet()->quantity--;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             }
-            if ((PadData.mappedRepeat & 0x1000) && MenuShopSelectionGet()->quantity != quantityLimit) {
+            if ((PadData.mappedRepeat & PAD_UP) && MenuShopSelectionGet()->quantity != quantityLimit) {
                 MenuShopSelectionGet()->quantity++;
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             }
-            if ((PadData.mappedRepeat & 0x2000) && MenuShopSelectionGet()->quantity != quantityLimit) {
-                MenuShopSelectionGet()->quantity += 10;
+            if ((PadData.mappedRepeat & PAD_RIGHT) && MenuShopSelectionGet()->quantity != quantityLimit) {
+                MenuShopSelectionGet()->quantity += SHOP_QUANTITY_PAGE_STEP;
                 if (MenuShopSelectionGet()->quantity > quantityLimit) {
                     MenuShopSelectionGet()->quantity = quantityLimit;
                 }
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             }
-            if ((PadData.mappedRepeat & 0x8000) && MenuShopSelectionGet()->quantity != minimumQuantity) {
-                MenuShopSelectionGet()->quantity -= 10;
+            if ((PadData.mappedRepeat & PAD_LEFT) && MenuShopSelectionGet()->quantity != minimumQuantity) {
+                MenuShopSelectionGet()->quantity -= SHOP_QUANTITY_PAGE_STEP;
                 if (MenuShopSelectionGet()->quantity < minimumQuantity) {
                     MenuShopSelectionGet()->quantity = minimumQuantity;
                 }
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             }
         }
-        if (PadData.half_2a & 0x20) {
-            MenuShopWork->nextState = 0xA2;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.half_2a & PAD_CIRCLE) {
+            MenuShopWork->nextState = SHOP_STATE_CONFIRM;
+            xglSoundEffectNormalID(SE_DECIDE, 0);
         }
-        if (PadData.half_2a & 0x40) {
-            if (MenuShopWork->mode == 0) {
-                MenuShopWork->nextState = 0x30;
+        if (PadData.half_2a & PAD_CROSS) {
+            if (MenuShopWork->mode == SHOP_MODE_BUY) {
+                MenuShopWork->nextState = SHOP_STATE_BUY_LIST;
             } else {
-                MenuShopWork->nextState = 0x90;
+                MenuShopWork->nextState = SHOP_STATE_SELL_LIST;
             }
-            xglSoundEffectNormalID(2, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
     }
 
-    case 0xA2:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_CONFIRM:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             MenuShopWork->quantityAction = 0;
-            MenuShopWork->waitFrames = 8;
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
         MenuShopWork->quantityAction = MenuSelectMove(MenuShopWork->quantityAction, 2, 0);
-        if (PadData.half_2a & 0x20) {
+        if (PadData.half_2a & PAD_CIRCLE) {
             if (MenuShopSelectionGet()->quantityAction == 0) {
                 int i;
 
-                if (MenuShopSelectionGet()->mode == 0) {
+                if (MenuShopSelectionGet()->mode == SHOP_MODE_BUY) {
                     for (i = 0; i < MenuShopSelectionGet()->quantity; i++) {
                         MenuBoxInc(MenuSortGet(0, MenuShopWork->listIndex));
                     }
@@ -3577,31 +3884,31 @@ void MenuShopCore(void) {
                     dataMoneyBoxInc(MenuBoxMoneyGet(MenuShopWork->itemId, 1) * MenuShopWork->quantity);
                     MenuShopWork->stateFlags |= 0x10;
                 }
-                MenuShopWork->nextState = 0xA4;
-            } else if (MenuShopSelectionGet()->category == 7) {
-                u8 listStates[2] = { 0x30, 0x90 };
+                MenuShopWork->nextState = SHOP_STATE_RESULT;
+            } else if (MenuShopSelectionGet()->category == SHOP_CAT_AGWS) {
+                u8 listStates[2] = { SHOP_STATE_BUY_LIST, SHOP_STATE_SELL_LIST };
 
                 MenuShopWork->nextState = *(listStates + MenuShopSelectionGet()->mode);
             } else {
-                MenuShopWork->nextState = 0xA0;
+                MenuShopWork->nextState = SHOP_STATE_QUANTITY;
             }
-            xglSoundEffectNormalID(1, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
         }
-        if (PadData.half_2a & 0x40) {
-            if (MenuShopSelectionGet()->category == 7) {
-                u8 listStates[2] = { 0x30, 0x90 };
+        if (PadData.half_2a & PAD_CROSS) {
+            if (MenuShopSelectionGet()->category == SHOP_CAT_AGWS) {
+                u8 listStates[2] = { SHOP_STATE_BUY_LIST, SHOP_STATE_SELL_LIST };
 
                 MenuShopWork->nextState = *(listStates + MenuShopSelectionGet()->mode);
             } else {
-                MenuShopWork->nextState = 0xA0;
+                MenuShopWork->nextState = SHOP_STATE_QUANTITY;
             }
-            xglSoundEffectNormalID(2, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
-    case 0xA4:
-        if (MenuShopWork->stateFlags & 1) {
-            if (MenuShopWork->mode == 0 && MenuShopWork->category == 7) {
+    case SHOP_STATE_RESULT:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+            if (MenuShopWork->mode == SHOP_MODE_BUY && MenuShopWork->category == SHOP_CAT_AGWS) {
                 int partyUnitIds[16];
                 int i;
 
@@ -3612,125 +3919,125 @@ void MenuShopCore(void) {
                 MenuShopAgwsListChange();
             }
             MenuShopWork->listIndex = MenuShopListChange00(1);
-            MenuShopWork->waitFrames = 8;
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
-        if (PadData.half_2a & 0x20) {
-            u8 listStates[2] = { 0x30, 0x90 };
+        if (PadData.half_2a & PAD_CIRCLE) {
+            u8 listStates[2] = { SHOP_STATE_BUY_LIST, SHOP_STATE_SELL_LIST };
 
             MenuShopWork->nextState = *(listStates + MenuShopWork->mode);
-            if (MenuShopWork->mode == 0) {
+            if (MenuShopWork->mode == SHOP_MODE_BUY) {
                 MenuShopListColorChange(0, 0);
             }
-            xglSoundEffectNormalID(1, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
         }
         break;
 
-    case 0xC0:
-        if (MenuShopWork->stateFlags & 1) {
-            MenuShopWork->waitFrames = 8;
+    case SHOP_STATE_AGWS_MENU:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
-        MenuShopWork->sortOption = MenuSelectMove(MenuShopWork->sortOption, 4, 0);
-        if (PadData.mappedPressed == 0x20) {
+        MenuShopWork->sortOption = MenuSelectMove(MenuShopWork->sortOption, SHOP_AGWS_CMD_COUNT, 0);
+        if (PadData.mappedPressed == PAD_CIRCLE) {
             switch (MenuShopWork->sortOption) {
-            case 0:
-            case 1:
-                if (MenuShopWork->sortOption == 0) {
+            case SHOP_AGWS_CMD_FRAME:
+            case SHOP_AGWS_CMD_GENERATOR:
+                if (MenuShopWork->sortOption == SHOP_AGWS_CMD_FRAME) {
                     MenuShopWork->sort_mode_selector = 1;
                 } else {
                     MenuShopWork->sort_mode_selector = 0;
                 }
-                xglSoundEffectNormalID(1, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 if (MenuShopWork->sort_mode_selector != 0) {
-                    WindowSPKeepSelectCheck(&MenuKeepSelect[0x5A]);
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[SHOP_KEEP_FRAME_LIST]);
                 } else {
-                    WindowSPKeepSelectCheck(&MenuKeepSelect[0x5F]);
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[SHOP_KEEP_ENGINE_LIST]);
                 }
                 MenuShopWork->listIndex = MenuShopListChange01(0);
-                MenuShopWork->nextState = 0xD0;
-                MenuShopWork->waitFrames = 0xC;
+                MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_LIST;
+                MenuShopWork->waitFrames = SHOP_WAIT_TRANSITION;
                 break;
-            case 2:
-                if (dataMoneyBoxChk() >= 100) {
-                    xglSoundEffectNormalID(1, 0);
-                    MenuShopWork->nextState = 0xC2;
+            case SHOP_AGWS_CMD_RESTORE:
+                if (dataMoneyBoxChk() >= SHOP_RESTORE_COST) {
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
+                    MenuShopWork->nextState = SHOP_STATE_RESTORE_UNIT;
                 } else {
-                    xglSoundEffectNormalID(5, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
-                MenuShopWork->waitFrames = 0xC;
+                MenuShopWork->waitFrames = SHOP_WAIT_TRANSITION;
                 break;
-            case 3:
-                xglSoundEffectNormalID(2, 0);
-                MenuShopWork->nextState = 0x20;
+            case SHOP_AGWS_CMD_QUIT:
+                xglSoundEffectNormalID(SE_CANCEL, 0);
+                MenuShopWork->nextState = SHOP_STATE_MODE_SELECT;
                 break;
             }
         }
-        if (PadData.mappedPressed == 0x40) {
+        if (PadData.mappedPressed == PAD_CROSS) {
             if (MenuCursorKeepCheck() == 0) {
-                MenuShopWork->mode = 0;
+                MenuShopWork->mode = SHOP_MODE_BUY;
             }
-            MenuShopWork->nextState = 0x20;
-            xglSoundEffectNormalID(2, 0);
+            MenuShopWork->nextState = SHOP_STATE_MODE_SELECT;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
-    case 0xC2:
-        if (MenuShopWork->stateFlags & 1) {
-            MenuShopWork->waitFrames = 0xC;
+    case SHOP_STATE_RESTORE_UNIT:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+            MenuShopWork->waitFrames = SHOP_WAIT_TRANSITION;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
         MenuShopWork->unitSelection = MenuSelectMove2(MenuShopAgwsGet()->unitSelection, MenuShopAgwsGet()->unitCount, 0);
         MenuShopAgwsGet()->unitId = MenuShopPartyGet()->unitIds[MenuShopAgwsGet()->unitSelection];
-        if (PadData.mappedPressed == 0x20) {
-            if (dataMoneyBoxChk() >= 100 && MenuCharHpCheck(MenuShopWork->unitId) == 0) {
-                MenuShopWork->nextState = 0xC4;
-                xglSoundEffectNormalID(1, 0);
+        if (PadData.mappedPressed == PAD_CIRCLE) {
+            if (dataMoneyBoxChk() >= SHOP_RESTORE_COST && MenuCharHpCheck(MenuShopWork->unitId) == 0) {
+                MenuShopWork->nextState = SHOP_STATE_RESTORE_CONFIRM;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             } else {
-                xglSoundEffectNormalID(5, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
         }
-        if (PadData.mappedPressed == 0x40) {
+        if (PadData.mappedPressed == PAD_CROSS) {
             if (MenuCursorKeepCheck() == 0) {
                 MenuShopWork->sortOption = 0;
             }
-            MenuShopWork->nextState = 0xC0;
-            xglSoundEffectNormalID(2, 0);
+            MenuShopWork->nextState = SHOP_STATE_AGWS_MENU;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
-    case 0xC4:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_RESTORE_CONFIRM:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             MenuShopWork->quantityAction = 0;
-            MenuShopWork->waitFrames = 8;
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
         MenuShopWork->quantityAction = MenuSelectMove(MenuShopWork->quantityAction, 2, 0);
-        if (PadData.mappedPressed == 0x20) {
+        if (PadData.mappedPressed == PAD_CIRCLE) {
             if (MenuShopWork->quantityAction == 0) {
-                MenuShopWork->nextState = 0xC6;
-                xglSoundEffectNormalID(1, 0);
+                MenuShopWork->nextState = SHOP_STATE_RESTORE_DONE;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             } else {
-                MenuShopWork->nextState = 0xC2;
-                xglSoundEffectNormalID(2, 0);
+                MenuShopWork->nextState = SHOP_STATE_RESTORE_UNIT;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
-        if (PadData.mappedPressed == 0x40) {
-            MenuShopWork->nextState = 0xC2;
-            xglSoundEffectNormalID(2, 0);
+        if (PadData.mappedPressed == PAD_CROSS) {
+            MenuShopWork->nextState = SHOP_STATE_RESTORE_UNIT;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
-    case 0xC6:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_RESTORE_DONE:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             int repairAttack[4];
             int repairDefense[4];
             MenuShopUnitData *unit;
@@ -3739,29 +4046,29 @@ void MenuShopCore(void) {
             unit = func_A191C0(MenuShopPartyGet()->unitIds[MenuShopWork->unitSelection]);
             para = func_00A11108(MenuShopPartyGet()->unitIds[MenuShopWork->unitSelection], repairAttack, repairDefense);
             unit->hitPoints = para->maxHp;
-            dataMoneyBoxDec(100);
-            MenuShopWork->waitFrames = 2;
+            dataMoneyBoxDec(SHOP_RESTORE_COST);
+            MenuShopWork->waitFrames = SHOP_WAIT_SHORT;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
-        if (PadData.mappedPressed == 0x20) {
-            if (dataMoneyBoxChk() >= 100) {
-                MenuShopWork->nextState = 0xC2;
+        if (PadData.mappedPressed == PAD_CIRCLE) {
+            if (dataMoneyBoxChk() >= SHOP_RESTORE_COST) {
+                MenuShopWork->nextState = SHOP_STATE_RESTORE_UNIT;
             } else {
-                MenuShopWork->nextState = 0xC0;
+                MenuShopWork->nextState = SHOP_STATE_AGWS_MENU;
             }
-            xglSoundEffectNormalID(1, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
         }
         break;
 
-    case 0xD0:
+    case SHOP_STATE_AGWS_BUY_LIST:
         if (MenuShopWork->waitFrames == 0) {
             MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,PadData.mappedRepeat);
             if (MenuShopWork->sort_mode_selector != 0) {
-                WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[0x5A]);
+                WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[SHOP_KEEP_FRAME_LIST]);
             } else {
-                WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[0x5F]);
+                WindowSPKeepSelect(MenuShopWinSP,&MenuKeepSelect[SHOP_KEEP_ENGINE_LIST]);
             }
             if (MenuShopWork->listIndex >= 0) {
                 int itemId;
@@ -3772,38 +4079,38 @@ void MenuShopCore(void) {
                 MenuShopItemGet()->modelId = (s16)MenuShopItemGet()->itemId;
                 if (MenuShopItemGet()->listIndex >= 0) {
                     MenuShopAgwsGet()->equipmentId = MenuShopItemGet()->modelId;
-                    MenuShopAgwsGet()->unitId = 0x11;
-                    for (unitId = 0x11; unitId < 0x21; unitId++) {
+                    MenuShopAgwsGet()->unitId = SHOP_AGWS_UNIT_FIRST;
+                    for (unitId = SHOP_AGWS_UNIT_FIRST; unitId < SHOP_AGWS_UNIT_END; unitId++) {
                         if (MenuFrameEquipCheck(unitId, MenuShopWork->equipmentId) != 0) {
                             MenuShopWork->unitId = unitId;
                             break;
                         }
                     }
-                    if (PadData.mappedPressed == 0x20) {
+                    if (PadData.mappedPressed == PAD_CIRCLE) {
                         int money;
 
                         money = dataMoneyBoxChk();
                         if (money >= MenuBoxMoneyGet(MenuShopWork->itemId, 0)) {
-                            MenuShopWork->nextState = 0xD4;
-                            xglSoundEffectNormalID(1, 0);
-                            MenuShopWork->waitFrames = 2;
+                            MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_CONFIRM;
+                            xglSoundEffectNormalID(SE_DECIDE, 0);
+                            MenuShopWork->waitFrames = SHOP_WAIT_SHORT;
                             if (MenuCursorKeepCheck() == 0) {
                                 MenuShopWork->unitSelection = 0;
                             }
                         } else {
-                            xglSoundEffectNormalID(5, 0);
-                            MenuShopWork->waitFrames = 2;
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
+                            MenuShopWork->waitFrames = SHOP_WAIT_SHORT;
                         }
                     }
                 }
             }
-            if (PadData.mappedPressed == 0x40) {
+            if (PadData.mappedPressed == PAD_CROSS) {
                 if (MenuCursorKeepCheck() == 0) {
                     MenuShopWork->sortOption = 0;
                 }
-                MenuShopWork->nextState = 0xC0;
-                MenuShopWork->waitFrames = 2;
-                xglSoundEffectNormalID(2, 0);
+                MenuShopWork->nextState = SHOP_STATE_AGWS_MENU;
+                MenuShopWork->waitFrames = SHOP_WAIT_SHORT;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         } else {
             MenuShopWork->listIndex = WindowSPSelect(MenuShopWinSP,0);
@@ -3818,7 +4125,7 @@ void MenuShopCore(void) {
         }
         break;
 
-    case 0xD2: {
+    case SHOP_STATE_AGWS_BUY_UNIT: {
         MenuShopUnitData *unit;
         int unitSelection;
         int canEquip;
@@ -3833,22 +4140,22 @@ void MenuShopCore(void) {
         }
         MenuShopWork->unitSelection = unitSelection;
         MenuShopAgwsGet()->unitId = MenuShopPartyGet()->unitIds[MenuShopAgwsGet()->unitSelection];
-        if (PadData.mappedPressed == 0x20) {
+        if (PadData.mappedPressed == PAD_CIRCLE) {
             if (MenuShopAgwsGet()->sort_mode_selector != 0) {
                 canEquip = MenuFrameEquipCheck(MenuShopAgwsGet()->unitId, MenuShopAgwsGet()->equipmentId);
             } else {
                 canEquip = MenuEngineEquipCheck(MenuShopAgwsGet()->unitId, MenuShopAgwsGet()->equipmentId);
             }
             if (canEquip != 0) {
-                MenuShopWork->nextState = 0xD4;
-                xglSoundEffectNormalID(1, 0);
+                MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_CONFIRM;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             } else {
-                xglSoundEffectNormalID(5, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
         }
-        if (PadData.mappedPressed == 0x40) {
-            MenuShopWork->nextState = 0xD0;
-            xglSoundEffectNormalID(2, 0);
+        if (PadData.mappedPressed == PAD_CROSS) {
+            MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_LIST;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         unit = func_A191C0(MenuShopWork->unitId);
         if (MenuShopAgwsGet()->sort_mode_selector != 0) {
@@ -3867,32 +4174,32 @@ void MenuShopCore(void) {
         break;
     }
 
-    case 0xD4:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_AGWS_BUY_CONFIRM:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             MenuShopWork->quantityAction = 0;
-            MenuShopWork->waitFrames = 8;
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
         MenuShopWork->quantityAction = MenuSelectMove(MenuShopWork->quantityAction, 2, 0);
-        if (PadData.mappedPressed == 0x20) {
+        if (PadData.mappedPressed == PAD_CIRCLE) {
             if (MenuShopWork->quantityAction == 0) {
-                MenuShopWork->nextState = 0xD6;
-                xglSoundEffectNormalID(1, 0);
+                MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_DONE;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             } else {
-                MenuShopWork->nextState = 0xD0;
-                xglSoundEffectNormalID(2, 0);
+                MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_LIST;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
-        if (PadData.mappedPressed == 0x40) {
-            MenuShopWork->nextState = 0xD0;
-            xglSoundEffectNormalID(2, 0);
+        if (PadData.mappedPressed == PAD_CROSS) {
+            MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_LIST;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
-    case 0xD6:
-        if (MenuShopWork->stateFlags & 1) {
+    case SHOP_STATE_AGWS_BUY_DONE:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
             MenuShopUnitData *unit;
             int equipmentKey;
 
@@ -3904,31 +4211,31 @@ void MenuShopCore(void) {
             }
             MenuAgwsParaSet(MenuShopWork->unitId, 0);
             if (MenuShopAgwsGet()->sort_mode_selector != 0) {
-                equipmentKey = (u16)MenuShopAgwsGet()->equipmentId + 0xB0000;
+                equipmentKey = (u16)MenuShopAgwsGet()->equipmentId + ITEM_KEY_FRAME;
             } else {
-                equipmentKey = (u16)MenuShopAgwsGet()->equipmentId + 0xC0000;
+                equipmentKey = (u16)MenuShopAgwsGet()->equipmentId + ITEM_KEY_ENGINE;
             }
             dataMoneyBoxDec(MenuBoxMoneyGet(equipmentKey, 0));
             MenuShopListColorChange(0, 2);
-            MenuShopWork->waitFrames = 8;
+            MenuShopWork->waitFrames = SHOP_WAIT_ENTER;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
-        if (PadData.mappedPressed == 0x20) {
-            MenuShopWork->nextState = 0xD0;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.mappedPressed == PAD_CIRCLE) {
+            MenuShopWork->nextState = SHOP_STATE_AGWS_BUY_LIST;
+            xglSoundEffectNormalID(SE_DECIDE, 0);
         }
         break;
 
-    case 0xF0:
-        if (MenuShopWork->stateFlags & 1) {
-            MenuShopWork->waitFrames = 0x10;
+    case SHOP_STATE_EXIT:
+        if (MenuShopWork->stateFlags & SHOP_FLAG_STATE_ENTERED) {
+            MenuShopWork->waitFrames = SHOP_WAIT_EXIT;
         }
         if (MenuShopWork->waitFrames != 0) {
             break;
         }
-        MenuShopWork->nextState = 0xFF;
+        MenuShopWork->nextState = SHOP_STATE_END;
         break;
     }
     MenuShopWork->stateFlags &= 0xFD;
@@ -3988,10 +4295,10 @@ void MenuShopMain(int shopType)
 
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.width << 5,
         sRender.height << 5);
-    GameLoopState[4] |= 0x04000000;
+    GameLoopState[4] |= GAME_LOOP_FLAG_MENU_OPEN;
     xglSleep();
     endPrintInit();
-    GameLoopState[4] |= 0x04000000;
+    GameLoopState[4] |= GAME_LOOP_FLAG_MENU_OPEN;
     MenuCfTaikiPush();
     MenuGameDataPush();
     xglStudioChange(0);
@@ -4002,85 +4309,85 @@ void MenuShopMain(int shopType)
     ShopDataBufTop = workspace;
     {
         MenuShopWorkData *initialWork =
-            MenuShopAlignBuffer(workspace + 8192, 2048);
+            MenuShopAlignBuffer(workspace + SHOP_DATA_BUFFER_SIZE, 2048);
         MenuShopWork = initialWork;
-        workspace = (unsigned char *)initialWork + 128;
-        memset(initialWork, 0, 128);
+        workspace = (unsigned char *)initialWork + SHOP_WORK_SIZE;
+        memset(initialWork, 0, SHOP_WORK_SIZE);
     }
     workspace = MenuBgTaskInit(workspace, 3);
     MenuShopTask = (XglTaskScheduler *)workspace;
-    workspace = xglTaskInitial(workspace, 16, 0);
+    workspace = xglTaskInitial(workspace, SHOP_TASK_COUNT, 0);
 
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopPas, workspace);
-    workspace += 1516;
+    workspace += SHOP_PAS_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopInfo, workspace);
-    workspace += 976;
+    workspace += SHOP_INFO_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopList, workspace);
     MenuShopWinSP = (WindowSPCursor *)(workspace + 12);
-    workspace += 5956;
+    workspace += SHOP_LIST_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopSelect, workspace);
-    workspace += 7928;
+    workspace += SHOP_SELECT_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopEx, workspace);
-    workspace += 1728;
+    workspace += SHOP_EX_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopEx2, workspace);
-    workspace += 480;
+    workspace += SHOP_EX2_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopEx02, workspace);
-    workspace += 472;
+    workspace += SHOP_EX02_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopSeisan, workspace);
-    workspace += 1668;
+    workspace += SHOP_SEISAN_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopSeisan02, workspace);
-    workspace += 984;
+    workspace += SHOP_SEISAN02_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopIcon, workspace);
-    workspace += 508;
+    workspace += SHOP_ICON_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopParameter, workspace);
-    workspace += 1996;
+    workspace += SHOP_PARAMETER_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopLine, workspace);
-    workspace += 80;
+    workspace += SHOP_LINE_SIZE;
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),
         MenuShopModelMain, 0);
     workspace = MenuModelInit(workspace);
 
-    modelMemory = GameResourceWorkAlloc(0x180000);
+    modelMemory = GameResourceWorkAlloc(SHOP_MODEL_MEMORY_SIZE);
     xglStudioChange(0);
-    MenuModelMemoryInit(modelMemory, 0x180000);
+    MenuModelMemoryInit(modelMemory, SHOP_MODEL_MEMORY_SIZE);
     MenuModelMemorySet(20);
     MenuModelMenuMotionLoad();
     MenuWorkEndCheck(workspace);
@@ -4091,7 +4398,7 @@ void MenuShopMain(int shopType)
     WindowTexLoad(0, 0x10001);
     WindowTexLoad(0, 0x10002);
     MenuLoadFile(menuShopDataPath, ShopDataBufTop);
-    xglSoundEffectNormalID(1, 0);
+    xglSoundEffectNormalID(SE_DECIDE, 0);
 
     while (MenuLoadSync() != 0) {
         MenuBgTaskMain();
@@ -4099,12 +4406,12 @@ void MenuShopMain(int shopType)
     }
 
     ShopData = ((const MenuShopData *)ShopDataBufTop)[shopType - 1];
-    if (shopType == 20)
+    if (shopType == SHOP_TYPE_SELL_ONLY)
         MenuShopWork->noCategories = 1;
     if (shopType == 6 && MenuEquipStealMaskCheck() == 1)
         MenuShopWork->noCategories = 1;
     MenuShopAgwsListChange();
-    MenuShopWork->nextState = 32;
+    MenuShopWork->nextState = SHOP_STATE_MODE_SELECT;
     MenuKeepSelectReset();
     MenuShopWork->partyCount = PartyAllPartyGet(partyIds, 1);
     {
@@ -4129,7 +4436,7 @@ void MenuShopMain(int shopType)
         unitCount = MenuShopWork->unitCount;
     }
 
-    if (unitCount != 0 && ShopData.records[7].count != 0)
+    if (unitCount != 0 && ShopData.records[SHOP_RECORD_FRAME].count != 0)
         MenuShopWork->equipmentStatus = 1;
     else
         MenuShopWork->equipmentStatus = 0;
@@ -4139,9 +4446,9 @@ void MenuShopMain(int shopType)
         MenuShopWork->modelBreakPending = 0;
     MenuScenarioNo = MenuScenarioNoGet();
 
-    while ((GameSnapShotCheck(), MenuShopWork->state != 0xff) &&
+    while ((GameSnapShotCheck(), MenuShopWork->state != SHOP_STATE_END) &&
         (MenuShopCore(), 1)) {
-        endPrintExtFunc(0, 100, 0);
+        endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
         MenuBgTaskMain();
         nmlModelFlush();
         xglTaskExecute(MenuShopTask);
@@ -4151,7 +4458,7 @@ void MenuShopMain(int shopType)
 
     MenuLoadCancel();
     MenuBgTaskBreak();
-    MenuShopWork->state = 0xff;
+    MenuShopWork->state = SHOP_STATE_END;
     xglTaskExecute(MenuShopTask);
     if (MenuShopWork->modelBreakPending != 0)
         MenuModelAllBreak();
@@ -4161,7 +4468,7 @@ void MenuShopMain(int shopType)
     GameResourceWorkReload();
     GameCfPlayerLoadResource(1);
     MenuGameDataPop();
-    GameLoopState[4] &= ~0x04000000;
+    GameLoopState[4] &= ~GAME_LOOP_FLAG_MENU_OPEN;
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */

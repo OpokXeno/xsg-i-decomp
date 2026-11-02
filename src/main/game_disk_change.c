@@ -7,6 +7,12 @@
 #include "main/xgl_font.h"
 #include "main/xgl_thread.h"
 
+#define DISK_CHANGE_DISC_COUNT 3
+#define DISK_CHANGE_TEXT_WHITE 0xFFFFFF
+#define DISK_CHANGE_TEXT_X 0x40
+#define DISK_CHANGE_TEXT_Y 0x40
+#define DISK_CHANGE_PROMPT_Y 0x100
+
 typedef struct GifAdData {
     u64 value;
     u64 register_address;
@@ -149,23 +155,23 @@ int GameDiskChange(int disk_number)
 
     printf(diskChangeFormat, disk_number, GameDiskChangeT10K);
 
-    if (disk_number < 1 || disk_number > 3) {
+    if (disk_number < 1 || disk_number > DISK_CHANGE_DISC_COUNT) {
         return -1;
     }
 
     disk_check = xglCdDiskCheck();
     switch (disk_check) {
-    case 1:
+    case CD_DISC_FLAG_DISC1:
         /* Low byte of the Shift-JIS fullwidth digit (0xA3 0xB1) naming the disc in the drive. */
         mes00_1[9] = 0xB1;
         break;
-    case 2:
+    case CD_DISC_FLAG_DISC2:
         mes00_1[9] = 0xB2;
         break;
-    case 4:
+    case CD_DISC_FLAG_DISC3:
         mes00_1[9] = 0xB3;
         break;
-    case 0x7F:
+    case CD_DISC_FLAGS_DUAL_LAYER:
         return 0;
     default:
         break;
@@ -179,18 +185,18 @@ int GameDiskChange(int disk_number)
     /* From here on the requested disc is held as its bit in the drive's disc mask. */
     disk_number = 1 << (disk_number - 1);
     while ((disk_check = xglCdDiskCheck()) <= 0 || !(disk_check & disk_number)) {
-        if (disk_check == -2) {
+        if (disk_check == CD_CHECK_SHELL_OPEN) {
             retry = 1;
         }
         drawbg();
-        xglFontPrintDirectOT(0xFFFFFF, diskChangeEffectControl);
+        xglFontPrintDirectOT(DISK_CHANGE_TEXT_WHITE, diskChangeEffectControl);
         if (retry == 0) {
-            xglFontPrint(0x40, 0x40, 0xFFFFFF, (const char *)mes00_1);
+            xglFontPrint(DISK_CHANGE_TEXT_X, DISK_CHANGE_TEXT_Y, DISK_CHANGE_TEXT_WHITE, (const char *)mes00_1);
         } else {
-            xglFontPrint(0x40, 0x40, 0xFFFFFF, tbl_4[disk_check + 3]);
+            xglFontPrint(DISK_CHANGE_TEXT_X, DISK_CHANGE_TEXT_Y, DISK_CHANGE_TEXT_WHITE, tbl_4[disk_check + 3]);
         }
-        xglFontPrint(0x40, 0x100, 0xFFFFFF, pressStartForceContinueText);
-        if (PadData.half_2a & 0x800) {
+        xglFontPrint(DISK_CHANGE_TEXT_X, DISK_CHANGE_PROMPT_Y, DISK_CHANGE_TEXT_WHITE, pressStartForceContinueText);
+        if (PadData.half_2a & PAD_START) {
             break;
         }
         xglSleep();

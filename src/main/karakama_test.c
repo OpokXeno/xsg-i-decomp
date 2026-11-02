@@ -4,6 +4,8 @@
 #include "main/xgl_studio.h"
 #include "main/control_entry.h"
 #include "main/xgl_cd.h"
+#include "main/res_get_path.h"
+#include "main/xgl_packet.h"
 #include "main/act_1.h"
 #include "main/karakama_test.h"
 #include "main/act_2.h"
@@ -20,6 +22,51 @@
 #include "main/xgl_font.h"
 #include "main/xgl_light.h"
 #include "main/xgl_render.h"
+
+/* Held SELECT in the low half and pressed START in the high half of the pad
+ * snapshot (PadData +0x28) leave a test screen. */
+#define KARAKAMA_EXIT_BUTTONS 0x8000100ULL
+
+/* Scene id the CF test stores in the game loop flags. */
+#define KARAKAMA_CF_SCENE_ID 770
+#define KARAKAMA_CF_MAP_NO 19
+
+/* sizeof() values printed by the entry screen, in the order of the formats. */
+#define KARAKAMA_SAVE_DATA_SIZE 0x163B0
+#define KARAKAMA_ACTOR_SIZE 0xA70
+#define KARAKAMA_MAP_UNIT_SIZE 0x300
+#define KARAKAMA_ENEPC_SIZE 0x38B0
+#define KARAKAMA_SEF_SCHEDULER_SIZE 0xAB0
+
+
+/* Actor flag set by InitCf. */
+#define KARAKAMA_ACTOR_FLAG_TEST 0x10000
+
+/* Sound test defaults: volume 0..127, pan centred at 64; the effect id
+ * carries the bank in its high halfword. */
+#define KARAKAMA_SE_VOLUME_DEFAULT 127
+#define KARAKAMA_SE_PAN_CENTER 64
+#define KARAKAMA_SE_BANK_STEP 0x10000
+#define KARAKAMA_SE_TEST_BUFFER_ADDRESS 0x1000000
+
+/* Scratchpad primitive packet: header at the base, vertex array after it. */
+#define KARAKAMA_PRIM_VERTICES_OFFSET 0x40
+
+/* Texture base (TBP0) and the CLUT base the offset is added to. */
+#define KARAKAMA_TEX_BASE_PAGE 0x3800
+
+/* TexTest modes: GS pixel format of the displayed texture. */
+enum {
+    TEXTEST_MODE_CLUT4,
+    TEXTEST_MODE_CLUT8,
+    TEXTEST_MODE_CT16,
+    TEXTEST_MODE_CT32
+};
+
+/* DMA channel 2 (GIF) and the qword sizes of the two test packets. */
+#define DMA_CHANNEL_GIF 2
+#define TEXTEST_SPRITE_QWORDS 9
+#define TEXTEST_ENV_QWORDS 5
 
 typedef struct CfCamera {
     u32 active;
@@ -256,18 +303,18 @@ static Actor *tActor;
 void KarakamaTest(void)
 {
     SePacketPad *pad;
-    u64 exit_buttons = 0x8000100ULL;
+    u64 exit_buttons = KARAKAMA_EXIT_BUTTONS;
 
     xglRenderClearFrame();
     ClearEnv.alpha = 255;
     ClearEnv.red = 0;
     ClearEnv.green = 0;
     ClearEnv.blue = 0;
-    printf(saveDataSizeFormat, 0x163B0);
-    printf(actorSizeFormat, 0xA70);
-    printf(mapUnitSizeFormat, 0x300);
-    printf(enepcSizeFormat, 0x38B0);
-    printf(sefSchedulerSizeFormat, 0xAB0);
+    printf(saveDataSizeFormat, KARAKAMA_SAVE_DATA_SIZE);
+    printf(actorSizeFormat, KARAKAMA_ACTOR_SIZE);
+    printf(mapUnitSizeFormat, KARAKAMA_MAP_UNIT_SIZE);
+    printf(enepcSizeFormat, KARAKAMA_ENEPC_SIZE);
+    printf(sefSchedulerSizeFormat, KARAKAMA_SEF_SCHEDULER_SIZE);
     pad = &PadData;
 
     for (;;) {
@@ -279,16 +326,16 @@ void KarakamaTest(void)
         xglFontDebugPrintf(0, 64, returnText);
 
         if ((pad->input.snapshot & exit_buttons) != exit_buttons) {
-            if (pad->input.buttons.pressed & 0x20) {
+            if (pad->input.buttons.pressed & PAD_CIRCLE) {
                 CfTest();
             }
-            if (pad->input.buttons.pressed & 0x10) {
+            if (pad->input.buttons.pressed & PAD_TRIANGLE) {
                 TexTest();
             }
-            if (pad->input.buttons.pressed & 0x80) {
+            if (pad->input.buttons.pressed & PAD_SQUARE) {
                 SePacketTest();
             }
-            if ((pad->input.buttons.pressed & 0x40) == 0) {
+            if ((pad->input.buttons.pressed & PAD_CROSS) == 0) {
                 xglRenderClearFrame();
                 ClearEnv.red = 0;
                 ClearEnv.green = 0;
@@ -328,13 +375,13 @@ static void CfTest(void)
     camera->distance = 5.0f;
     GameCameraReset();
     game = &GameLoopState;
-    scene_id = 770;
-    if (scene_id == 770) {
+    scene_id = KARAKAMA_CF_SCENE_ID;
+    if (scene_id == KARAKAMA_CF_SCENE_ID) {
         game->flags = scene_id;
     } else {
         game->flags = 1;
     }
-    if (scene_id == 770) {
+    if (scene_id == KARAKAMA_CF_SCENE_ID) {
         game->unmodeled_c0 = 1;
     }
     game->camera_callback = GameCamera;
@@ -351,50 +398,50 @@ static void CfTest(void)
     game->model = 0;
     game->frame_hook = 0;
     game->kind = 0;
-    MapNo = 19;
+    MapNo = KARAKAMA_CF_MAP_NO;
     UseTestPath = scene_id;
-    MapChange(19);
+    MapChange(KARAKAMA_CF_MAP_NO);
     SetMapUnitTest();
     printf(initCompleteFormat);
-    while ((PadData.input.snapshot & 0x8000100ULL) != 0x8000100ULL) {
+    while ((PadData.input.snapshot & KARAKAMA_EXIT_BUTTONS) != KARAKAMA_EXIT_BUTTONS) {
         held = PadData.input.buttons.held;
         actor = tActor;
-        if (held & 0x8000) {
+        if (held & PAD_LEFT) {
             actor->position.x -= 0.1f;
         }
-        if (held & 0x2000) {
+        if (held & PAD_RIGHT) {
             actor->position.x += 0.1f;
         }
-        if (held & 0x10) {
+        if (held & PAD_TRIANGLE) {
             actor->position.y += 0.1f;
         }
-        if (held & 0x40) {
+        if (held & PAD_CROSS) {
             actor->position.y -= 0.1f;
         }
-        if (held & 0x1000) {
+        if (held & PAD_UP) {
             actor->position.z -= 0.1f;
         }
-        if (held & 0x4000) {
+        if (held & PAD_DOWN) {
             actor->position.z += 0.1f;
         }
         view = camera;
         view->target_x = actor->position.x;
         view->target_y = actor->position.y + 1.0f;
         view->target_z = actor->position.z;
-        if (held & 0x10) {
+        if (held & PAD_TRIANGLE) {
             view->distance -= 0.1f;
         }
-        if (held & 0x40) {
+        if (held & PAD_CROSS) {
             view->distance += 0.1f;
         }
-        if (held & 1) {
+        if (held & PAD_L2) {
             view->position_y += 0.1f;
         }
-        if (held & 2) {
+        if (held & PAD_R2) {
             view->position_y -= 0.1f;
         }
         GameCfPlayerMove();
-        if (PadData.input.buttons.held & 0x20) {
+        if (PadData.input.buttons.held & PAD_CIRCLE) {
             /* JP: アイテム
              * EN: Item */
             char name[12] = "\xA5\xA2\xA5\xA4\xA5\xC6\xA5\xE0";
@@ -442,18 +489,18 @@ void SePacketTest(void)
 {
     int sound_id = 0;
     int pitch = 0;
-    int volume = 127;
-    int pan = 64;
+    int volume = KARAKAMA_SE_VOLUME_DEFAULT;
+    int pan = KARAKAMA_SE_PAN_CENTER;
     u16 pressed;
     u16 repeat;
     u16 held;
     int lower_volume;
 
-    printf(bufferAddressFormat, 0x1000000);
-    xglSoundLoadEffect(registCfEffectName, 0x1000000, 1);
-    xglSoundLoadEffect(soVok05EffectName, 0x1000000, 2);
-    xglSoundLoadEffect(envVokEffectName, 0x1000000, 3);
-    if ((PadData.input.snapshot & 0x8000100ULL) == 0x8000100ULL) {
+    printf(bufferAddressFormat, KARAKAMA_SE_TEST_BUFFER_ADDRESS);
+    xglSoundLoadEffect(registCfEffectName, KARAKAMA_SE_TEST_BUFFER_ADDRESS, 1);
+    xglSoundLoadEffect(soVok05EffectName, KARAKAMA_SE_TEST_BUFFER_ADDRESS, 2);
+    xglSoundLoadEffect(envVokEffectName, KARAKAMA_SE_TEST_BUFFER_ADDRESS, 3);
+    if ((PadData.input.snapshot & KARAKAMA_EXIT_BUTTONS) == KARAKAMA_EXIT_BUTTONS) {
         return;
     }
 
@@ -462,57 +509,57 @@ void SePacketTest(void)
         xglFontDebugPrintf(0, 16, soundIdFormat, sound_id);
         xglFontDebugPrintf(0, 32, soundPitchVolumePanFormat, pitch, volume, pan);
         pressed = PadData.input.buttons.pressed;
-        if (pressed & 0x20) {
+        if (pressed & PAD_CIRCLE) {
             xglMakeSePacket(124,
                             (SoundWork.effect_banks[sound_id >> 16].handle << 16) +
                                 (sound_id & 0xffff), volume, pan, pitch);
         }
         pressed = PadData.input.buttons.pressed;
-        if (pressed & 0x40) {
+        if (pressed & PAD_CROSS) {
             xglMakeSePacket(126,
                             (SoundWork.effect_banks[sound_id >> 16].handle << 16) +
                                 (sound_id & 0xffff), 500, pitch);
         }
         pressed = PadData.input.buttons.pressed;
         repeat = PadData.input.buttons.repeat;
-        if (repeat & 0x2000) {
+        if (repeat & PAD_RIGHT) {
             sound_id++;
         }
-        if (repeat & 0x8000 && --sound_id < 0) {
+        if (repeat & PAD_LEFT && --sound_id < 0) {
             sound_id = 0;
         }
-        if (repeat & 0x1000) {
+        if (repeat & PAD_UP) {
             pitch++;
         }
-        if (repeat & 0x4000 && --pitch < 0) {
+        if (repeat & PAD_DOWN && --pitch < 0) {
             pitch = 0;
         }
-        if (pressed & 0x10) {
-            sound_id += 0x10000;
+        if (pressed & PAD_TRIANGLE) {
+            sound_id += KARAKAMA_SE_BANK_STEP;
         }
-        if (pressed & 0x80) {
-            sound_id -= 0x10000;
+        if (pressed & PAD_SQUARE) {
+            sound_id -= KARAKAMA_SE_BANK_STEP;
         }
         held = PadData.input.buttons.held;
-        lower_volume = held & 2;
-        if (held & 8) {
+        lower_volume = held & PAD_R2;
+        if (held & PAD_R1) {
             volume++;
         }
-        if (held & 4) {
+        if (held & PAD_L1) {
             pan++;
         }
-        pan -= held & 1;
+        pan -= held & PAD_L2;
         if (lower_volume) {
             volume--;
         }
         xglSleep();
-    } while ((PadData.input.snapshot & 0x8000100ULL) != 0x8000100ULL);
+    } while ((PadData.input.snapshot & KARAKAMA_EXIT_BUTTONS) != KARAKAMA_EXIT_BUTTONS);
 }
 
 void PrimTest(void)
 {
-    ScratchpadPrimitiveVertex *vertices = (ScratchpadPrimitiveVertex *)0x70000040;
-    ScratchpadPrimitiveBuffer *packet = (ScratchpadPrimitiveBuffer *)0x70000000;
+    ScratchpadPrimitiveVertex *vertices = (ScratchpadPrimitiveVertex *)(SCRATCHPAD_BASE + KARAKAMA_PRIM_VERTICES_OFFSET);
+    ScratchpadPrimitiveBuffer *packet = (ScratchpadPrimitiveBuffer *)SCRATCHPAD_BASE;
     float frame_position;
     float second_frame_position;
 
@@ -572,7 +619,7 @@ void InitCf(void)
     xglCdInitial();
     xglCdReset();
     xglCdSetCallback(0);
-    GameResourceInit(0x07000000, 0x06000000);
+    GameResourceInit(GAME_RESOURCE_BASE_ADDRESS, GAME_RESOURCE_BUFFER_SIZE);
     ACT_init();
     ACT_DrawShadowInit();
     MSG_init();
@@ -590,7 +637,7 @@ void InitCf(void)
     GameLoopState.current_actor = tActor;
     tActor->position.x = -14.0f;
     tActor->position.z = 18.0f;
-    tActor->flags |= 0x10000;
+    tActor->flags |= KARAKAMA_ACTOR_FLAG_TEST;
 }
 
 static void TexTest(void)
@@ -623,37 +670,37 @@ static void TexTest(void)
 
     width = texture->width;
     height = texture->height;
-    while ((PadData.input.snapshot & 0x8000100ULL) != 0x8000100ULL) {
+    while ((PadData.input.snapshot & KARAKAMA_EXIT_BUTTONS) != KARAKAMA_EXIT_BUTTONS) {
         pressed = PadData.input.buttons.pressed;
-        if (pressed & 0x20) {
+        if (pressed & PAD_CIRCLE) {
             mode = (mode + 1) & 3;
         }
         repeat = PadData.input.buttons.repeat;
-        if (repeat & 8) {
+        if (repeat & PAD_R1) {
             clut_offset += 4;
         }
-        if (repeat & 4) {
+        if (repeat & PAD_L1) {
             clut_offset -= 4;
         }
-        if (repeat & 2) {
+        if (repeat & PAD_R2) {
             clut_offset += 32;
         }
-        if (repeat & 1) {
+        if (repeat & PAD_L2) {
             clut_offset -= 32;
         }
-        if (repeat & 0x2000) {
+        if (repeat & PAD_RIGHT) {
             scroll_x += 8;
         }
-        if (repeat & 0x8000) {
+        if (repeat & PAD_LEFT) {
             scroll_x -= 8;
         }
-        if (repeat & 0x4000) {
+        if (repeat & PAD_DOWN) {
             scroll_y += 8;
         }
-        if (repeat & 0x1000) {
+        if (repeat & PAD_UP) {
             scroll_y -= 8;
         }
-        if (pressed & 0x100) {
+        if (pressed & PAD_SELECT) {
             flip ^= 1;
         }
         sceGsSyncPath(0, 0);
@@ -662,27 +709,37 @@ static void TexTest(void)
         for (tw = 0; (1 << tw) < width; tw++) {
         }
         switch (mode) {
-        case 0:
+        case TEXTEST_MODE_CLUT4:
             TestEnv_1_0036DDB0.tex0.value =
-                0x3800ULL | ((u64)(width / 64 * 2) << 14) | ((u64)0x14 << 20) |
-                ((u64)(tw + 1) << 26) | ((u64)9 << 30) | ((u64)1 << 34) |
-                ((u64)(clut_offset + 0x3800) << 37) | ((u64)1 << 61);
+                (u64)KARAKAMA_TEX_BASE_PAGE | ((u64)(width / 64 * 2) << GS_TEX0_TBW_SHIFT) |
+                ((u64)SCE_GS_PSMT4 << GS_TEX0_PSM_SHIFT) |
+                ((u64)(tw + 1) << GS_TEX0_TW_SHIFT) | ((u64)9 << GS_TEX0_TH_SHIFT) |
+                ((u64)1 << GS_TEX0_TCC_SHIFT) |
+                ((u64)(clut_offset + KARAKAMA_TEX_BASE_PAGE) << GS_TEX0_CBP_SHIFT) |
+                ((u64)1 << GS_TEX0_CLD_SHIFT);
             break;
-        case 1:
+        case TEXTEST_MODE_CLUT8:
             TestEnv_1_0036DDB0.tex0.value =
-                0x3800ULL | ((u64)(width / 64 * 2) << 14) | ((u64)0x13 << 20) |
-                ((u64)(tw + 1) << 26) | ((u64)9 << 30) | ((u64)1 << 34) |
-                ((u64)(clut_offset + 0x3800) << 37) | ((u64)1 << 61);
+                (u64)KARAKAMA_TEX_BASE_PAGE | ((u64)(width / 64 * 2) << GS_TEX0_TBW_SHIFT) |
+                ((u64)SCE_GS_PSMT8 << GS_TEX0_PSM_SHIFT) |
+                ((u64)(tw + 1) << GS_TEX0_TW_SHIFT) | ((u64)9 << GS_TEX0_TH_SHIFT) |
+                ((u64)1 << GS_TEX0_TCC_SHIFT) |
+                ((u64)(clut_offset + KARAKAMA_TEX_BASE_PAGE) << GS_TEX0_CBP_SHIFT) |
+                ((u64)1 << GS_TEX0_CLD_SHIFT);
             break;
-        case 2:
+        case TEXTEST_MODE_CT16:
             TestEnv_1_0036DDB0.tex0.value =
-                0x3800ULL | ((u64)(width / 64) << 14) | ((u64)2 << 20) |
-                ((u64)tw << 26) | ((u64)8 << 30) | ((u64)1 << 34) | ((u64)1 << 61);
+                (u64)KARAKAMA_TEX_BASE_PAGE | ((u64)(width / 64) << GS_TEX0_TBW_SHIFT) |
+                ((u64)SCE_GS_PSMCT16 << GS_TEX0_PSM_SHIFT) |
+                ((u64)tw << GS_TEX0_TW_SHIFT) | ((u64)8 << GS_TEX0_TH_SHIFT) |
+                ((u64)1 << GS_TEX0_TCC_SHIFT) | ((u64)1 << GS_TEX0_CLD_SHIFT);
             break;
-        case 3:
+        case TEXTEST_MODE_CT32:
             TestEnv_1_0036DDB0.tex0.value =
-                0x3800ULL | ((u64)(width / 64) << 14) | ((u64)0 << 20) |
-                ((u64)tw << 26) | ((u64)8 << 30) | ((u64)1 << 34) | ((u64)1 << 61);
+                (u64)KARAKAMA_TEX_BASE_PAGE | ((u64)(width / 64) << GS_TEX0_TBW_SHIFT) |
+                ((u64)SCE_GS_PSMCT32 << GS_TEX0_PSM_SHIFT) |
+                ((u64)tw << GS_TEX0_TW_SHIFT) | ((u64)8 << GS_TEX0_TH_SHIFT) |
+                ((u64)1 << GS_TEX0_TCC_SHIFT) | ((u64)1 << GS_TEX0_CLD_SHIFT);
             break;
         }
         if (flip == 0) {
@@ -701,7 +758,7 @@ static void TexTest(void)
         TestEnv_1_0036DDB0.xyz0.y = 0x7800;
         TestEnv_1_0036DDB0.xyz1.y = 0x8800;
         FlushCache(0);
-        xglDmaDirectNormal(2, (u32)&TestEnv_1_0036DDB0, 9);
+        xglDmaDirectNormal(DMA_CHANNEL_GIF, (u32)&TestEnv_1_0036DDB0, TEXTEST_SPRITE_QWORDS);
         xglFontDebugHex(0, 16, width, 3);
         xglFontDebugHex(24, 16, height, 3);
         xglFontDebugHex(0, 24, mode, 1);
@@ -727,11 +784,11 @@ void TexTrans(TextureTransferHeader *texture)
     }
     TestEnv_2_0036DE40.registers[2].value = (u64)width | ((u64)height << 32);
     TestEnv_2_0036DE40.registers[0].value =
-        ((u64)(width_in_blocks >> 6) << 48) | ((u64)0xE000 << 30);
+        ((u64)(width_in_blocks >> 6) << GS_BITBLTBUF_DBW_SHIFT) | ((u64)0xE000 << 30);
     FlushCache(0);
-    xglDmaDirectNormal(2, (u32)&TestEnv_2_0036DE40, 5);
+    xglDmaDirectNormal(DMA_CHANNEL_GIF, (u32)&TestEnv_2_0036DE40, TEXTEST_ENV_QWORDS);
     width *= height;
-    xglDmaDirectNormal(2, (u32)texture->payload, width / 4 + 1);
+    xglDmaDirectNormal(DMA_CHANNEL_GIF, (u32)texture->payload, width / 4 + 1);
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */

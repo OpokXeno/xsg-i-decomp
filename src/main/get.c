@@ -7,6 +7,17 @@
 #include "main/outer_product.h"
 #include "main/xgl_font.h"
 
+/* UnduDataGetHeader selects by identifier unless this bit is set: then the low bits index the map's header table (here always entry 0). */
+#define GET_UNDU_HEADER_BY_INDEX 0x8000
+
+/* Directions Check_Octpus samples at most. */
+#define GET_OCTPUS_DIRECTIONS 16
+
+/* GetBSplineLoop: DataSpline holds the weight table (byte offset) at 2048 phases per control-point period; the sum is divided by 6 * 4096. */
+#define GET_BSPLINE_PHASES 2048
+#define GET_BSPLINE_WEIGHTS_OFFSET 4304
+#define GET_BSPLINE_WEIGHT_SCALE 24576.0f
+
 /* Query layout and floating return follow the original UnduCheck accesses. */
 typedef struct SplineMotionParameters {
     unsigned char unmodeled_00[8];
@@ -289,10 +300,10 @@ void Check_Octpus(float length, float radius, const Vector4 *origin,
 {
     short count = (short)count_argument;
     Vector4 sample;
-    Vector4 checked[16];
-    float distance[16];
-    signed char used[16];
-    short ranked[16];
+    Vector4 checked[GET_OCTPUS_DIRECTIONS];
+    float distance[GET_OCTPUS_DIRECTIONS];
+    signed char used[GET_OCTPUS_DIRECTIONS];
+    short ranked[GET_OCTPUS_DIRECTIONS];
     short iteration;
 
     iteration = 0;
@@ -429,7 +440,7 @@ int Check_Straight_ID(const Vector4 *start, const Vector4 *end,
     short checked = 0;
     int signed_count = count;
 
-    UnduTemp.header = UnduDataGetHeader(map_index, 0x8000);
+    UnduTemp.header = UnduDataGetHeader(map_index, GET_UNDU_HEADER_BY_INDEX);
     previous.x = start->x;
     previous.y = start->y;
     previous.z = start->z;
@@ -440,7 +451,7 @@ int Check_Straight_ID(const Vector4 *start, const Vector4 *end,
             current.x = start->x + (end->x - start->x) * step / count_as_float;
             current.y = start->y + (end->y - start->y) * step / count_as_float;
             current.z = start->z + (end->z - start->z) * step / count_as_float;
-            if (UnduCheck(&current, 0, &UnduTemp) == -1000.0f
+            if (UnduCheck(&current, 0, &UnduTemp) == GROUND_HEIGHT_NONE
                 || HitCheckMapUnitPos(&current) != -1) {
                 destination->x = previous.x;
                 destination->y = previous.y;
@@ -620,8 +631,8 @@ void Get_EnemyIDPos(const Vector4 *origin, Vector4 *destination)
     debugColor[1] = 127;
     debugColor[2] = 0;
     debugColor[3] = 128;
-    UnduTemp.header = UnduDataGetHeader(772, 32768);
-    if (UnduCheck(origin, 0, &UnduTemp) != -1000.0f) {
+    UnduTemp.header = UnduDataGetHeader(772, GET_UNDU_HEADER_BY_INDEX);
+    if (UnduCheck(origin, 0, &UnduTemp) != GROUND_HEIGHT_NONE) {
         destination->x = origin->x;
         destination->y = origin->y;
         destination->z = origin->z;
@@ -670,7 +681,7 @@ float Get_HeightAttr(const Vector4 *position, int mapIndex, int attrMask,
     if (mapIndex == 0) {
         param->header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
     } else {
-        param->header = UnduDataGetHeader(mapIndex, 0x8000);
+        param->header = UnduDataGetHeader(mapIndex, GET_UNDU_HEADER_BY_INDEX);
     }
     return UnduCheck(position, 0, param);
 }
@@ -683,7 +694,7 @@ void Get_Height(const Vector4 *position, int mapIndex, int attrMask)
     if (mapIndex == 0) {
         UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
     } else {
-        UnduTest.header = UnduDataGetHeader(mapIndex, 0x8000);
+        UnduTest.header = UnduDataGetHeader(mapIndex, GET_UNDU_HEADER_BY_INDEX);
     }
     UnduCheck(position, 0, &UnduTest);
 }
@@ -696,7 +707,7 @@ int Get_Attr(const Vector4 *position, int mapIndex, int attrMask)
     if (mapIndex == 0) {
         UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
     } else {
-        UnduTest.header = UnduDataGetHeader(mapIndex, 0x8000);
+        UnduTest.header = UnduDataGetHeader(mapIndex, GET_UNDU_HEADER_BY_INDEX);
     }
     UnduCheck(position, 0, &UnduTest);
     return (int)UnduTest.attribute;
@@ -710,7 +721,7 @@ int Get_Attr_NU(const Vector4 *position, int mapIndex, int attrMask)
     if (mapIndex == 0) {
         UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
     } else {
-        UnduTest.header = UnduDataGetHeader(mapIndex, 0x8000);
+        UnduTest.header = UnduDataGetHeader(mapIndex, GET_UNDU_HEADER_BY_INDEX);
     }
     UnduCheck(position, 0, &UnduTest);
     return (int)UnduTest.attribute;
@@ -728,7 +739,7 @@ int Check_Undu(const Vector4 *start, const Vector4 *end, int map_index,
     if (map_index == 0) {
         UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
     } else {
-        UnduTest.header = UnduDataGetHeader(map_index, 0x8000);
+        UnduTest.header = UnduDataGetHeader(map_index, GET_UNDU_HEADER_BY_INDEX);
     }
     delta.x = end->x - start->x;
     delta.y = end->y - start->y;
@@ -775,24 +786,24 @@ void GetBSplineLoop(short frame, short count, int period_value,
 {
     short period = period_value;
     unsigned short index = (frame / period) % count;
-    unsigned short phase = (frame % period) * (2048 / period);
-    float first_weight = DataSpline[(phase + 4304) / 2];
-    float second_weight = DataSpline[(phase + 4306) / 2];
-    float third_weight = DataSpline[(phase + 4308) / 2];
-    float fourth_weight = DataSpline[(phase + 4310) / 2];
+    unsigned short phase = (frame % period) * (GET_BSPLINE_PHASES / period);
+    float first_weight = DataSpline[(phase + GET_BSPLINE_WEIGHTS_OFFSET) / 2];
+    float second_weight = DataSpline[(phase + GET_BSPLINE_WEIGHTS_OFFSET + 2) / 2];
+    float third_weight = DataSpline[(phase + GET_BSPLINE_WEIGHTS_OFFSET + 4) / 2];
+    float fourth_weight = DataSpline[(phase + GET_BSPLINE_WEIGHTS_OFFSET + 6) / 2];
     unsigned short second_index = (index + 1) % count;
     unsigned short third_index = (index + 2) % count;
     unsigned short fourth_index = (index + 3) % count;
 
     destination->x = (first_weight * points[index].x + second_weight * points[second_index].x
                       + third_weight * points[third_index].x + fourth_weight * points[fourth_index].x)
-                     / 24576.0f;
+                     / GET_BSPLINE_WEIGHT_SCALE;
     destination->y = (first_weight * points[index].y + second_weight * points[second_index].y
                       + third_weight * points[third_index].y + fourth_weight * points[fourth_index].y)
-                     / 24576.0f;
+                     / GET_BSPLINE_WEIGHT_SCALE;
     destination->z = (first_weight * points[index].z + second_weight * points[second_index].z
                       + third_weight * points[third_index].z + fourth_weight * points[fourth_index].z)
-                     / 24576.0f;
+                     / GET_BSPLINE_WEIGHT_SCALE;
 }
 
 void GetBSplineLoopDummy(short frame, short count, short period,

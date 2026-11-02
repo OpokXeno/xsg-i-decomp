@@ -21,7 +21,7 @@ int StringUtf_getHash(const char *bytes, int length)
         do {
             byte = *current;
             current++;
-            hash = hash * 31 + byte;
+            hash = hash * JAVA_HASH_MULTIPLIER + byte;
         } while (current < end);
     }
 
@@ -30,12 +30,12 @@ int StringUtf_getHash(const char *bytes, int length)
 
 void *StringUtf_create(int length)
 {
-    return xmalloc(length + 13, 20);
+    return xmalloc(length + VM_CONST_STRING_HEADER_SIZE + 1, VM_HEAP_STRING);
 }
 
 ConstString *findConstString(const char *bytes, int length)
 {
-    int bucket_index = StringUtf_getHash(bytes, length) & 0x1ff;
+    int bucket_index = StringUtf_getHash(bytes, length) & VM_HASH_MASK;
     ConstString *entry = constStringTable[bucket_index];
 
     while (entry != 0) {
@@ -52,7 +52,7 @@ ConstString *findConstString(const char *bytes, int length)
 void reloadConstString(void *heap_boundary)
 {
     ConstString **bucket = constStringTable;
-    int remaining = 511;
+    int remaining = VM_HASH_LAST_BUCKET;
 
     do {
         ConstString *entry = *bucket;
@@ -82,10 +82,10 @@ SceneString *loadConstString(const char *bytes, int length)
 
     if (constStringTable == 0) {
         ConstString **bucket;
-        int remaining = 511;
+        int remaining = VM_HASH_LAST_BUCKET;
 
-        constStringTable = xmalloc(2048, 2);
-        bucket = &constStringTable[511];
+        constStringTable = xmalloc(VM_HASH_BUCKETS * sizeof(ConstString *), VM_HEAP_LOOKUP_TABLE);
+        bucket = &constStringTable[VM_HASH_LAST_BUCKET];
         do {
             *bucket = 0;
             bucket--;
@@ -98,7 +98,7 @@ SceneString *loadConstString(const char *bytes, int length)
     if (length < 0)
         length = strlen(bytes);
 
-    hash = StringUtf_getHash(bytes, length) & 0x1ff;
+    hash = StringUtf_getHash(bytes, length) & VM_HASH_MASK;
     entry = constStringTable[hash];
     while (entry != 0) {
         if (entry->length == length &&
@@ -110,7 +110,7 @@ SceneString *loadConstString(const char *bytes, int length)
         return (SceneString *)entry;
     }
 
-    entry = xmalloc(12, 20);
+    entry = xmalloc(VM_CONST_STRING_HEADER_SIZE, VM_HEAP_STRING);
     entry->next = constStringTable[hash];
 
     count = constStringCount;
@@ -130,10 +130,10 @@ SceneString *loadConstString2(const char *bytes, int length)
 
     if (constStringTable == 0) {
         ConstString **bucket;
-        int remaining = 511;
+        int remaining = VM_HASH_LAST_BUCKET;
 
-        constStringTable = xmalloc(2048, 2);
-        bucket = &constStringTable[511];
+        constStringTable = xmalloc(VM_HASH_BUCKETS * sizeof(ConstString *), VM_HEAP_LOOKUP_TABLE);
+        bucket = &constStringTable[VM_HASH_LAST_BUCKET];
         do {
             *bucket = 0;
             bucket--;
@@ -146,7 +146,7 @@ SceneString *loadConstString2(const char *bytes, int length)
     if (length < 0)
         length = strlen(bytes);
 
-    bucket_index = StringUtf_getHash(bytes, length) & 0x1ff;
+    bucket_index = StringUtf_getHash(bytes, length) & VM_HASH_MASK;
     entry = constStringTable[bucket_index];
     while (entry != 0) {
         if (entry->length == length &&
@@ -157,7 +157,7 @@ SceneString *loadConstString2(const char *bytes, int length)
     if (entry != 0)
         return (SceneString *)entry;
 
-    entry = xmalloc(length + 13, 20);
+    entry = xmalloc(length + VM_CONST_STRING_HEADER_SIZE + 1, VM_HEAP_STRING);
     entry->bytes = entry->data;
     memcpy(entry->bytes, bytes, length);
     entry->bytes[length] = '\0';

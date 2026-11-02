@@ -9,6 +9,154 @@
 #include "main/res_get_path.h"
 #include "main/xgl_mc.h"
 
+/* Event flags tested through xglFlagsGet. */
+#define MENU_FLAG_SHION_MWS 0x3FF
+#define MENU_FLAG_EQUIP_STEAL_MASK 0x3F9
+
+/* Scenario numbers that gate menu behaviour (MenuScenarioNoGet). */
+#define MENU_SCENARIO_RANGE_COUNT 5
+#define MENU_SCENARIO_MWS_GATE 10
+#define MENU_SCENARIO_ZIGGY_NAMED 108
+
+/* The MWS key event item and Shion's MWS weapon (weapon range index 2). */
+#define MENU_EVENT_ITEM_SHION_MWS 10
+#define MENU_WEAPON_SHION_MWS 0x45
+
+/* SaveData: option byte read by MenuCursorKeepCheck (menu_system sets it) and
+ * the five shop discount levels, one per price rate class. */
+#define SAVE_MENU_CURSOR_KEEP 0x44
+#define SAVE_MENU_DISCOUNT_LEVELS 0x102DC
+
+/* mapex.bin: info texts, then item names at +0x3C0, then map names at +0x540. */
+#define MAPEX_ITEM_NAME_OFFSET 0x3C0
+#define MAPEX_MAP_NAME_OFFSET 0x540
+#define MAPEX_BUFFER_SIZE 0x2000
+#define SAVEMAP_BUFFER_SIZE 0x1000
+#define SAVEMAP_ENTRY_COUNT 0x25
+#define SAVEMAP_NAME_SIZE 0x21
+
+/* MenuNumberTextGet output: at most ten digits plus the terminator and fill. */
+#define MENU_NUMBER_TEXT_SIZE 0x18
+#define MENU_NUMBER_MAX_DIGITS 10
+
+/* Face tables: the first 12 characters have both sizes, AGWS faces start at
+ * MENU_CHAR_AGWS_FIRST; the small table has 16 character entries. */
+#define MENU_FACE_CHAR_COUNT 12
+#define MENU_FACE_SMALL_COUNT 16
+#define MENU_FACE_KOSMOS_SMALL 0x401
+#define MENU_FACE_KOSMOS_LARGE 0xC01
+
+/* Name tables. */
+#define MENU_CHAR_NAME_COUNT 30
+#define MENU_TAG_COUNT 9
+#define MENU_PARA_COUNT 8
+
+/* Equipment slots per character record. */
+/* WeaponStatus.flags: the weapon is a gun that consumes bullets. */
+#define WEAPON_FLAG_NEEDS_BULLETS 0x100
+
+#define MENU_WEAPON_SLOT_COUNT 3
+#define MENU_ACCESSORY_SLOT_COUNT 3
+#define MENU_SKILL_SLOT_COUNT 3
+#define MENU_ETHER_SLOT_COUNT 12
+
+/* Total equipWeight the equipped weapons may add up to. */
+#define MENU_EQUIP_WEIGHT_LIMIT 3
+#define MENU_EQUIP_WEIGHT_LIMIT_AG_05 2
+
+/*
+ * Mount codes of opt_mnt_tbl: the code of equip-mask bit N of a weapon record
+ * (bits 0-3 are 0x20-0x23, bits 4-7 are 0x18-0x1B).
+ */
+#define MENU_MOUNT_BIT_COUNT 8
+/* Equip-mask (mountMask) bits; the bit pairs 0/1 and 4/5 are alternatives. */
+enum MenuMountMask {
+    MENU_MOUNT_MASK_BIT0 = 0x1,
+    MENU_MOUNT_MASK_BIT1 = 0x2,
+    MENU_MOUNT_MASK_BIT3 = 0x8,
+    MENU_MOUNT_MASK_BIT4 = 0x10,
+    MENU_MOUNT_MASK_BIT5 = 0x20,
+    MENU_MOUNT_MASK_BIT7 = 0x80,
+    MENU_MOUNT_MASK_LOW = 0x0F,
+    MENU_MOUNT_MASK_HIGH = 0xF0,
+    MENU_MOUNT_MASK_PAIR_LOW = MENU_MOUNT_MASK_BIT0 | MENU_MOUNT_MASK_BIT1,
+    MENU_MOUNT_MASK_PAIR_HIGH = MENU_MOUNT_MASK_BIT4 | MENU_MOUNT_MASK_BIT5
+};
+
+enum MenuMountCode {
+    MENU_MOUNT_CODE_BIT0 = 0x20,
+    MENU_MOUNT_CODE_BIT1 = 0x21,
+    MENU_MOUNT_CODE_BIT2 = 0x22,
+    MENU_MOUNT_CODE_BIT3 = 0x23,
+    MENU_MOUNT_CODE_BIT4 = 0x18,
+    MENU_MOUNT_CODE_BIT5 = 0x19,
+    MENU_MOUNT_CODE_BIT6 = 0x1A,
+    MENU_MOUNT_CODE_BIT7 = 0x1B
+};
+
+/* Price rate classes: rate[] holds one multiplier per class. */
+#define MENU_PRICE_RATE_COUNT 5
+#define MENU_RATE_ITEM 0
+#define MENU_RATE_AGWS 1
+#define MENU_RATE_AGWS_WEAPON 2
+#define MENU_RATE_AGWS_ACCESSORY 3
+#define MENU_RATE_CHARACTER_GEAR 4
+
+/* Id ranges. Event items 53-55 are the purchasable ones (boxPriceTable). */
+#define MENU_ITEM_ID_END 73
+#define MENU_EVENT_ITEM_LAST 254
+#define MENU_EVENT_ITEM_SHOP_FIRST 53
+#define MENU_EVENT_ITEM_SHOP_LAST 55
+#define MENU_EVENT_ITEM_SHOP_COUNT 3
+#define MENU_WEAPON_ID_COUNT 115
+#define MENU_BULLET_ID_CHARACTER_LAST 63
+#define MENU_BULLET_ID_AGWS_FIRST 64
+#define MENU_BULLET_ID_LAST 178
+#define MENU_ACCESSORY_AGWS_FIRST 129
+#define MENU_ACCESSORY_ID_END 181
+#define MENU_SKILL_ID_END 91
+#define MENU_ETHER_ID_END 80
+
+/* MenuSortSet buffers: two lists of up to 255 entries plus the terminator. */
+#define MENU_LIST_COUNT 2
+#define MENU_LIST_CAPACITY 0x100
+#define MENU_LIST_NO_DATA_AMOUNT (-1)
+#define MENU_LIST_MODE_SHOP (-0xA)
+
+/* weaponRanges rows: one per character id - 1, then the AGWS and all-character
+ * ranges that MenuSortSet picks for the AGWS / character filter. */
+#define MENU_WEAPON_RANGE_COUNT 9
+#define MENU_WEAPON_RANGE_AGWS 7
+#define MENU_WEAPON_RANGE_ALL_CHARACTERS 8
+
+/* MenuFileNameGet: resource kinds, extension, base path and motion name
+ * indices, and model id layout (kind in the top nibble). */
+#define MENU_FILE_NAME_SIZE 0x80
+#define MENU_FILE_MODEL_LEX 0
+#define MENU_FILE_MODEL_XTX 1
+#define MENU_FILE_MODEL_JNT 2
+#define MENU_FILE_MOTION 3
+#define MENU_FILE_MODEL2_LEX 4
+#define MENU_FILE_MODEL2_JNT 5
+#define MENU_EXT_LEX 0
+#define MENU_EXT_JNT 2
+#define MENU_EXT_FPK 3
+#define MENU_EXT_BIN 4
+#define MENU_PATH_MOTION 0
+#define MENU_PATH_YAMAMOTO_MOT 1
+#define MENU_PATH_ROBO_ETC 2
+#define MENU_CHARMOT_MEQP 0
+#define MENU_CHARMOT_UKN_G 1
+#define MENU_CHARMOT_AGWS 2
+#define MENU_MODEL_KIND_CHARACTER 0
+#define MENU_MODEL_KIND_AGWS 2
+#define MENU_MODEL_KIND_MONSTER 4
+#define MENU_MODEL_ID_UKN_AGWS 0x2201
+#define MENU_MODEL_ID_MONSTER_BASE 0x4000
+#define MENU_MODEL_ID_MONSTER_ALIAS 0x4037
+#define MENU_MONSTER_ALIAS_MOTION_ID 114
+#define MENU_MODEL2_ID_OFFSET 0x10000
+
 typedef struct MenuNumberDigits {
     const char *text[10];
 } MenuNumberDigits;
@@ -52,13 +200,13 @@ typedef struct {
     unsigned char unmodeled_00[0x54];
     short agwsId; /* +0x54 */
     unsigned char unmodeled_056[0x5a - 0x56];
-    signed char weaponMount[3]; /* +0x5a */
+    signed char weaponMount[MENU_WEAPON_SLOT_COUNT]; /* +0x5a */
     unsigned char unmodeled_05d[0x5e - 0x5d];
-    short weapon[3]; /* +0x5E */
-    short accessoryId[3]; /* +0x64 */
+    short weapon[MENU_WEAPON_SLOT_COUNT]; /* +0x5E */
+    short accessoryId[MENU_ACCESSORY_SLOT_COUNT]; /* +0x64 */
     unsigned char unmodeled_06a[0x8e - 0x6a];
-    short etherId[12]; /* +0x8e */
-    short skillId[3]; /* +0xa6 */
+    short etherId[MENU_ETHER_SLOT_COUNT]; /* +0x8e */
+    short skillId[MENU_SKILL_SLOT_COUNT]; /* +0xa6 */
 } UnitOrgWeapons;
 
 /*
@@ -75,7 +223,7 @@ struct MenuScenarioRange {
 };
 
 struct MenuScenarioRangeSet {
-    struct MenuScenarioRange ranges[5];
+    struct MenuScenarioRange ranges[MENU_SCENARIO_RANGE_COUNT];
 };
 
 struct MenuScenarioTable {
@@ -85,10 +233,10 @@ struct MenuScenarioTable {
 
 extern const MenuNumberDigits numberDigitTexts;
 extern const char numberEmptyText[];
-extern const unsigned short largeFaceTable[12];
-extern const unsigned short largeAgwsFaceTable[12];
-extern const unsigned short smallFaceTable[16];
-extern const unsigned short smallAgwsFaceTable[12];
+extern const unsigned short largeFaceTable[MENU_FACE_CHAR_COUNT];
+extern const unsigned short largeAgwsFaceTable[MENU_FACE_CHAR_COUNT];
+extern const unsigned short smallFaceTable[MENU_FACE_SMALL_COUNT];
+extern const unsigned short smallAgwsFaceTable[MENU_FACE_CHAR_COUNT];
 static void (*f_11[])();
 static const char *f_base_14[];
 static const char *f_exten_15[];
@@ -100,7 +248,7 @@ extern const unsigned char blankText[1];
 
 extern const int wpnMountIdTable[8];
 
-extern const int boxPriceTable[3];
+extern const int boxPriceTable[MENU_EVENT_ITEM_SHOP_COUNT];
 extern const char MenuDigit0Text[8];
 extern const char MenuDigit1Text[8];
 extern const char MenuDigit2Text[8];
@@ -172,7 +320,7 @@ extern const char ukunBName[6];
 extern const char ukunSName[6];
 extern const char uknGName[6];
 typedef struct SaveMapNameEntry {
-    unsigned char names[2][0x21];
+    unsigned char names[2][SAVEMAP_NAME_SIZE];
     short map_id;
     unsigned char unknown[2];
 } SaveMapNameEntry;
@@ -246,22 +394,22 @@ static char f_name_0_0036D6C8[21] = "data\\endou\\mapex.bin";
 
 static char f_name_1[23] = "data\\endou\\savemap.bin";
 
-static const char *tag_name_3[9] = {
+static const char *tag_name_3[MENU_TAG_COUNT] = {
     0, combatantText, menu1ReserveText, registeredCombatantText, registeredReserveText,
     userText, fromText, targetText, toText
 };
 
-static const char *para_name_4[8] = {
+static const char *para_name_4[MENU_PARA_COUNT] = {
     menu1HpText, epText, strengthText, vitalityText,
     etherAttackText, etherDefenseText, dexterityText, evasionText
 };
 
-static const char *para_name2_5[8] = {
+static const char *para_name2_5[MENU_PARA_COUNT] = {
     menu1HpText, epText, strText, vitText,
     eatkText, edefText, dexText, evaText
 };
 
-static const char *char_name_6[30] = { noneName, chaosName, kosMosName, shionName, blankNameText, menu1ZiggyName, momoName, jrName, cassiriaText, catalinaText, virgilName, maryName, soldierName, bic13Name, bic14Name, bic15Name, bic16Name, vx10000Name, vx7000Name, vx9000Name, vx20000Name, vx05Name, vx4000Name, ag01Name, ag02Name, ag03Name, ag04Name, ag05Name, ag06Name, bunnieName };
+static const char *char_name_6[MENU_CHAR_NAME_COUNT] = { noneName, chaosName, kosMosName, shionName, blankNameText, menu1ZiggyName, momoName, jrName, cassiriaText, catalinaText, virgilName, maryName, soldierName, bic13Name, bic14Name, bic15Name, bic16Name, vx10000Name, vx7000Name, vx9000Name, vx20000Name, vx05Name, vx4000Name, ag01Name, ag02Name, ag03Name, ag04Name, ag05Name, ag06Name, bunnieName };
 
 static const char *char_name2_7[] = { ziggurat8Name };
 
@@ -305,34 +453,34 @@ unsigned char ParaDataChangeTbl[] = {
 };
 
 /* MenuNumberTextGet's same-TU assembly writes and returns this buffer. */
-static char msg_2_00532A78[0x18];
+static char msg_2_00532A78[MENU_NUMBER_TEXT_SIZE];
 
 /* MenuFileNameGet builds names into this same-TU filename buffer. */
-static char fname_13[0x80];
+static char fname_13[MENU_FILE_NAME_SIZE];
 
-static int sort[2][0x100];
+static int sort[MENU_LIST_COUNT][MENU_LIST_CAPACITY];
 
-static MenuListEntry mw_list[2][256];
+static MenuListEntry mw_list[MENU_LIST_COUNT][MENU_LIST_CAPACITY];
 
 unsigned char *MenuSaveDataGet(void)
 {
-    return SaveData + 0x10254;
+    return SaveData + SAVE_MENU_SAVE_DATA;
 }
 
 int MenuShionMwsCheck(void)
 {
-    if (MenuScenarioNoGet() < 0xA) {
+    if (MenuScenarioNoGet() < MENU_SCENARIO_MWS_GATE) {
         return 1;
     }
-    if (xglFlagsGet(0x3FF, 1) != 0) {
+    if (xglFlagsGet(MENU_FLAG_SHION_MWS, 1) != 0) {
         return 1;
     }
-    return dataEvtBoxChk(0xA) != 0;
+    return dataEvtBoxChk(MENU_EVENT_ITEM_SHION_MWS) != 0;
 }
 
 int MenuEquipStealMaskCheck(void)
 {
-    return xglFlagsGet(0x3F9, 1) != 0;
+    return xglFlagsGet(MENU_FLAG_EQUIP_STEAL_MASK, 1) != 0;
 }
 
 int MenuScenarioNoGet(void)
@@ -355,13 +503,13 @@ int MenuScenarioNoGet(void)
             } while (flag >= ranges.ranges[group].minimumFlag);
         }
         group++;
-    } while (group < 5);
+    } while (group < MENU_SCENARIO_RANGE_COUNT);
     return scenario;
 }
 
 int MenuCursorKeepCheck(void)
 {
-    return SaveData[0x44] == 0;
+    return SaveData[SAVE_MENU_CURSOR_KEEP] == 0;
 }
 
 char *MenuSegmentInfoTextGet(int segment)
@@ -378,7 +526,7 @@ char *MenuSegmentInfoTextGet(int segment)
 
 char *MenuSegmentMapNameGet(int segment)
 {
-    unsigned char *text = map_ex_text + 0x540;
+    unsigned char *text = map_ex_text + MAPEX_MAP_NAME_OFFSET;
 
     while (segment >= 2) {
         while (*text++ != 0) {
@@ -391,7 +539,7 @@ char *MenuSegmentMapNameGet(int segment)
 
 char *MenuSegmentItemNameGet(int segment)
 {
-    unsigned char *text = map_ex_text + 0x3C0;
+    unsigned char *text = map_ex_text + MAPEX_ITEM_NAME_OFFSET;
 
     while (segment >= 2) {
         while (*text++ != 0) {
@@ -405,7 +553,7 @@ char *MenuSegmentItemNameGet(int segment)
 unsigned char *MenuMapExTextLoad(unsigned char *work, int mode)
 {
     unsigned char *aligned = (unsigned char *)(((u32)work + 0xF) & ~0xF);
-    unsigned char *next = aligned + 0x2000;
+    unsigned char *next = aligned + MAPEX_BUFFER_SIZE;
 
     map_ex_text = aligned;
     if (mode == 0) {
@@ -428,7 +576,7 @@ const unsigned char *MenuSaveMapNameGet(int mapId)
         }
         entry++;
         count++;
-    } while (count < 0x25);
+    } while (count < SAVEMAP_ENTRY_COUNT);
 
     return first->names[0];
 }
@@ -436,7 +584,7 @@ const unsigned char *MenuSaveMapNameGet(int mapId)
 void *MenuSaveMapTextLoad(void *work, int mode)
 {
     unsigned char *aligned = (unsigned char *)(((u32)work + 0xF) & ~0xF);
-    unsigned char *next = aligned + 0x1000;
+    unsigned char *next = aligned + SAVEMAP_BUFFER_SIZE;
 
     save_map_text = (SaveMapNameEntry *)aligned;
     if (mode == 0) {
@@ -456,7 +604,7 @@ int MenuCharHpCheck(int charId)
     int count;
     struct MenuCharParameters *parameters;
 
-    if (charId == 0) {
+    if (charId == MENU_CHAR_NONE) {
         return 0;
     }
     if (charId < 0) {
@@ -489,7 +637,7 @@ int MenuCharEpCheck(int charId)
     int count;
     struct MenuCharParameters *parameters;
 
-    if (charId == 0) {
+    if (charId == MENU_CHAR_NONE) {
         return 0;
     }
     if (charId < 0) {
@@ -514,28 +662,28 @@ int MenuCharEpCheck(int charId)
 
 int MenuMaryIdChange(int characterId)
 {
-    if (characterId == 20) {
-        return 11;
+    if (characterId == MENU_CHAR_VX_20000) {
+        return MENU_CHAR_MARY;
     }
-    if (characterId == 19) {
-        return 12;
+    if (characterId == MENU_CHAR_VX_9000) {
+        return MENU_CHAR_SOLDIER;
     }
-    if (characterId < 17) {
+    if (characterId < MENU_CHAR_AGWS_FIRST) {
         return characterId;
     }
-    return 3;
+    return MENU_CHAR_SHION;
 }
 
 int MenuMainCharCheck(int charId)
 {
-    return (unsigned int)(charId - 1) < 7U;
+    return (unsigned int)(charId - MENU_CHAR_CHAOS) < 7U;
 }
 
 int MenuMainAgwsCheck(int charId)
 {
     unsigned int isMainAgws;
 
-    isMainAgws = (unsigned int)(charId - 0x13) < 2U;
+    isMainAgws = (unsigned int)(charId - MENU_CHAR_VX_9000) < 2U;
     if (isMainAgws) {
         return 0;
     }
@@ -561,10 +709,10 @@ char *MenuNumberTextGet(long long number, int digitsBeforeUnits, int leadingZero
         }
         digitsBeforeUnits = digitCount;
     }
-    if (digitsBeforeUnits < 11) {
+    if (digitsBeforeUnits < MENU_NUMBER_MAX_DIGITS + 1) {
         places = digitsBeforeUnits;
     } else {
-        places = 10;
+        places = MENU_NUMBER_MAX_DIGITS;
     }
     started = leadingZeroes == 1;
     remaining = number;
@@ -695,34 +843,34 @@ const char *MenuTagTextGet(int index)
 
 unsigned short MenuFaceEpidGet(int charId, int smallPortrait)
 {
-    unsigned short largeFaces[12];
-    unsigned short largeAgwsFaces[12];
-    unsigned short smallFaces[16];
-    unsigned short smallAgwsFaces[12];
+    unsigned short largeFaces[MENU_FACE_CHAR_COUNT];
+    unsigned short largeAgwsFaces[MENU_FACE_CHAR_COUNT];
+    unsigned short smallFaces[MENU_FACE_SMALL_COUNT];
+    unsigned short smallAgwsFaces[MENU_FACE_CHAR_COUNT];
 
-    if (charId == 2) {
-        unsigned short epid = 0x401;
+    if (charId == MENU_CHAR_KOSMOS) {
+        unsigned short epid = MENU_FACE_KOSMOS_SMALL;
         if (smallPortrait == 0) {
-            epid = 0xC01;
+            epid = MENU_FACE_KOSMOS_LARGE;
         }
         return epid;
     }
     if (smallPortrait == 0) {
-        if ((unsigned int)(charId - 1) < 12U) {
+        if ((unsigned int)(charId - MENU_CHAR_CHAOS) < MENU_FACE_CHAR_COUNT) {
             __builtin_memcpy(largeFaces, largeFaceTable, sizeof(largeFaces));
-            return largeFaces[charId - 1];
+            return largeFaces[charId - MENU_CHAR_CHAOS];
         }
-        if ((unsigned int)(charId - 17) < 12U) {
+        if ((unsigned int)(charId - MENU_CHAR_AGWS_FIRST) < MENU_FACE_CHAR_COUNT) {
             __builtin_memcpy(largeAgwsFaces, largeAgwsFaceTable, sizeof(largeAgwsFaces));
-            return largeAgwsFaces[charId - 17];
+            return largeAgwsFaces[charId - MENU_CHAR_AGWS_FIRST];
         }
     } else {
-        if ((unsigned int)(charId - 1) < 12U) {
+        if ((unsigned int)(charId - MENU_CHAR_CHAOS) < MENU_FACE_CHAR_COUNT) {
             __builtin_memcpy(smallFaces, smallFaceTable, sizeof(smallFaces));
-            return smallFaces[charId - 1];
+            return smallFaces[charId - MENU_CHAR_CHAOS];
         }
         __builtin_memcpy(smallAgwsFaces, smallAgwsFaceTable, sizeof(smallAgwsFaces));
-        return smallAgwsFaces[charId - 17];
+        return smallAgwsFaces[charId - MENU_CHAR_AGWS_FIRST];
     }
     return 0;
 }
@@ -778,8 +926,8 @@ const char *MenuCharNameGet(unsigned int charId)
 {
     const char *name = char_name_6[charId];
 
-    if (charId == 5) {
-        if (MenuScenarioNoGet() < 108) {
+    if (charId == MENU_CHAR_ZIGGY) {
+        if (MenuScenarioNoGet() < MENU_SCENARIO_ZIGGY_NAMED) {
             name = char_name2_7[0];
         }
     }
@@ -789,8 +937,8 @@ const char *MenuCharNameGet(unsigned int charId)
 MenuTextEntry *MenuTextGet(int index)
 {
     unsigned int encodedIndex = (unsigned int)index;
-    unsigned int itemId = encodedIndex & 0xFFFF;
-    unsigned int highIndex = encodedIndex >> 16;
+    unsigned int itemId = encodedIndex & MENU_ENTRY_ID_MASK;
+    unsigned int highIndex = encodedIndex >> MENU_ENTRY_CATEGORY_SHIFT;
     MenuTextEntry *result = 0;
 
     if (itemId == 0) {
@@ -799,10 +947,10 @@ MenuTextEntry *MenuTextGet(int index)
         unsigned int textType = highIndex - 1;
 
         switch (textType) {
-        case 0:
+        case MENU_CATEGORY_ITEM - 1:
             result = func_A2C5F8(itemId);
             break;
-        case 1: {
+        case MENU_CATEGORY_EVENT_ITEM - 1: {
             const char *itemName = dataEvtItmNameGet(itemId);
             const char *end = itemName;
 
@@ -814,50 +962,50 @@ MenuTextEntry *MenuTextGet(int index)
             result = &dumm2_10;
             break;
         }
-        case 2:
+        case MENU_CATEGORY_WEAPON - 1:
             result = &dumm_msg_8;
             if (MenuEquipStealMaskCheck() == 0) {
-                if (itemId == 0x45) {
+                if (itemId == MENU_WEAPON_SHION_MWS) {
                     if (MenuShionMwsCheck() != 0) {
-                        result = func_A2C6E8(0x45);
+                        result = func_A2C6E8(MENU_WEAPON_SHION_MWS);
                     }
                 } else {
                     result = func_A2C6E8(itemId);
                 }
             }
             break;
-        case 3:
+        case MENU_CATEGORY_BULLET - 1:
             if (MenuEquipStealMaskCheck() != 0) {
                 result = &dumm_msg_8;
             } else {
                 result = func_A2C738(itemId);
             }
             break;
-        case 4:
+        case MENU_CATEGORY_ACCESSORY - 1:
             if (MenuEquipStealMaskCheck() == 0) {
                 result = func_A2C698(itemId);
             } else {
                 result = &dumm_msg_8;
             }
             break;
-        case 5:
-        case 6:
+        case MENU_CATEGORY_CHARACTER - 1:
+        case MENU_CATEGORY_AGWS - 1:
             dumm_9.name = MenuCharNameGet(itemId);
             result = &dumm_9;
             break;
-        case 7:
+        case MENU_CATEGORY_SKILL - 1:
             result = func_A2C648(itemId);
             break;
-        case 8:
+        case MENU_CATEGORY_ETHER - 1:
             result = func_A2C5A8(itemId);
             break;
-        case 9:
+        case MENU_CATEGORY_ABILITY - 1:
             result = func_A2C7D8(itemId);
             break;
-        case 10:
+        case MENU_CATEGORY_FRAME - 1:
             result = func_A2C968(itemId);
             break;
-        case 11:
+        case MENU_CATEGORY_ENGINE - 1:
             result = func_A2C918(itemId);
             break;
         default:
@@ -869,27 +1017,27 @@ MenuTextEntry *MenuTextGet(int index)
 
 int MenuBoxChk(int index)
 {
-    unsigned int category = (unsigned int)index >> 16;
-    int id = index & 0xFFFF;
+    unsigned int category = (unsigned int)index >> MENU_ENTRY_CATEGORY_SHIFT;
+    int id = index & MENU_ENTRY_ID_MASK;
     int result = 0;
 
     switch (category) {
-    case 1:
+    case MENU_CATEGORY_ITEM:
         result = dataItmBoxChk(id);
         break;
-    case 2:
+    case MENU_CATEGORY_EVENT_ITEM:
         result = dataEvtBoxChk(id);
         break;
-    case 3:
+    case MENU_CATEGORY_WEAPON:
         result = dataWpnBoxChk(id);
         break;
-    case 4:
+    case MENU_CATEGORY_BULLET:
         result = dataBltBoxChk(id);
         break;
-    case 5:
+    case MENU_CATEGORY_ACCESSORY:
         result = dataAccBoxChk(id);
         break;
-    case 6:
+    case MENU_CATEGORY_CHARACTER:
         result = 0;
         break;
     }
@@ -898,30 +1046,30 @@ int MenuBoxChk(int index)
 
 int MenuBoxInc(unsigned int index)
 {
-    unsigned int category = index >> 16;
-    int id = index & 0xFFFF;
+    unsigned int category = index >> MENU_ENTRY_CATEGORY_SHIFT;
+    int id = index & MENU_ENTRY_ID_MASK;
     int result = 0;
 
     switch (category) {
-    case 1:
+    case MENU_CATEGORY_ITEM:
         dataItmBoxInc(id);
         break;
-    case 2:
+    case MENU_CATEGORY_EVENT_ITEM:
         dataEvtBoxInc(id);
         break;
-    case 3:
+    case MENU_CATEGORY_WEAPON:
         dataWpnBoxInc(id);
         break;
-    case 4:
+    case MENU_CATEGORY_BULLET:
         dataBltBoxInc(id);
         break;
-    case 5:
+    case MENU_CATEGORY_ACCESSORY:
         dataAccBoxInc(id);
         break;
-    case 6:
+    case MENU_CATEGORY_CHARACTER:
         result = -1;
         break;
-    case 7:
+    case MENU_CATEGORY_AGWS:
         PartyTakeAgwsOn(id);
         break;
     }
@@ -930,27 +1078,27 @@ int MenuBoxInc(unsigned int index)
 
 int MenuBoxDec(unsigned int index)
 {
-    unsigned int category = index >> 16;
-    int id = index & 0xFFFF;
+    unsigned int category = index >> MENU_ENTRY_CATEGORY_SHIFT;
+    int id = index & MENU_ENTRY_ID_MASK;
     int result = 0;
 
     switch (category) {
-    case 1:
+    case MENU_CATEGORY_ITEM:
         dataItmBoxDec(id);
         break;
-    case 2:
+    case MENU_CATEGORY_EVENT_ITEM:
         dataEvtBoxDec(id);
         break;
-    case 3:
+    case MENU_CATEGORY_WEAPON:
         dataWpnBoxDec(id);
         break;
-    case 4:
+    case MENU_CATEGORY_BULLET:
         dataBltBoxDec(id);
         break;
-    case 5:
+    case MENU_CATEGORY_ACCESSORY:
         dataAccBoxDec(id);
         break;
-    case 6:
+    case MENU_CATEGORY_CHARACTER:
         result = -1;
         break;
     }
@@ -959,12 +1107,12 @@ int MenuBoxDec(unsigned int index)
 
 int MenuBoxMoneyGet(int index, int priceMode)
 {
-    float rate[5];
-    int priceValues[3];
+    float rate[MENU_PRICE_RATE_COUNT];
+    int priceValues[MENU_EVENT_ITEM_SHOP_COUNT];
     int agwsPrices[12];
-    int itemId = index & 0xffff;
+    int itemId = index & MENU_ENTRY_ID_MASK;
     int price = 0;
-    int category = (unsigned int)index >> 16;
+    int category = (unsigned int)index >> MENU_ENTRY_CATEGORY_SHIFT;
     int rateIndex;
     short weaponId;
 
@@ -972,71 +1120,71 @@ int MenuBoxMoneyGet(int index, int priceMode)
         return 0;
     }
     if (priceMode == 0) {
-        const unsigned char *discountLevel = &SaveData[0x102dc];
-        for (rateIndex = 0; rateIndex < 5; rateIndex++) {
+        const unsigned char *discountLevel = &SaveData[SAVE_MENU_DISCOUNT_LEVELS];
+        for (rateIndex = 0; rateIndex < MENU_PRICE_RATE_COUNT; rateIndex++) {
             rate[rateIndex] = 1.0f - discountLevel[rateIndex] * 0.1f;
             if (rate[rateIndex] < 0.5f) {
                 rate[rateIndex] = 0.5f;
             }
         }
     } else {
-        for (rateIndex = 4; rateIndex >= 0; rateIndex--) {
+        for (rateIndex = MENU_PRICE_RATE_COUNT - 1; rateIndex >= 0; rateIndex--) {
             rate[rateIndex] = 1.0f;
         }
     }
     if ((unsigned int)(category - 1) < 12U) {
     switch (category) {
-    case 1:
+    case MENU_CATEGORY_ITEM:
         {
             int rawPrice = func_A1A4E8(itemId)->price.value;
-            price = (int)(rawPrice * rate[0]);
+            price = (int)(rawPrice * rate[MENU_RATE_ITEM]);
         }
         break;
-    case 2:
-        if ((unsigned int)(itemId - 53) < 3U) {
+    case MENU_CATEGORY_EVENT_ITEM:
+        if ((unsigned int)(itemId - MENU_EVENT_ITEM_SHOP_FIRST) < MENU_EVENT_ITEM_SHOP_COUNT) {
             __builtin_memcpy(priceValues, boxPriceTable, sizeof(priceValues));
-            price = priceValues[itemId - 53];
+            price = priceValues[itemId - MENU_EVENT_ITEM_SHOP_FIRST];
         }
         break;
-    case 3:
+    case MENU_CATEGORY_WEAPON:
         price = func_A1A3D8(itemId)->price.value;
-        if (func_A1A3D8(itemId)->categoryMask & 0x4000) {
-            price = (int)(price * rate[4]);
+        if (func_A1A3D8(itemId)->categoryMask & MENU_EQUIP_CLASS_CHARACTER) {
+            price = (int)(price * rate[MENU_RATE_CHARACTER_GEAR]);
         } else {
-            price = (int)(price * rate[2]);
+            price = (int)(price * rate[MENU_RATE_AGWS_WEAPON]);
         }
         break;
-    case 4:
+    case MENU_CATEGORY_BULLET:
         price = func_A1A428(itemId)->price.value;
         weaponId = func_A1A428(itemId)->weaponId;
         if (weaponId != 0) {
-            if (func_A1A3D8(weaponId)->categoryMask & 0x4000) {
-                price = (int)(price * rate[4]);
+            if (func_A1A3D8(weaponId)->categoryMask & MENU_EQUIP_CLASS_CHARACTER) {
+                price = (int)(price * rate[MENU_RATE_CHARACTER_GEAR]);
             } else {
-                price = (int)(price * rate[2]);
+                price = (int)(price * rate[MENU_RATE_AGWS_WEAPON]);
             }
         }
         break;
-    case 5:
+    case MENU_CATEGORY_ACCESSORY:
         price = func_A1A548(itemId)->price.value;
-        if (itemId < 129) {
-            price = (int)(price * rate[4]);
+        if (itemId < MENU_ACCESSORY_AGWS_FIRST) {
+            price = (int)(price * rate[MENU_RATE_CHARACTER_GEAR]);
         } else {
-            price = (int)(price * rate[3]);
+            price = (int)(price * rate[MENU_RATE_AGWS_ACCESSORY]);
         }
         break;
-    case 11:
+    case MENU_CATEGORY_FRAME:
         price = func_A1A598(itemId)->price.value;
         break;
-    case 12:
+    case MENU_CATEGORY_ENGINE:
         price = func_A1A5E8(itemId)->price.value;
         break;
-    case 7:
+    case MENU_CATEGORY_AGWS:
         memset(agwsPrices, 0, sizeof(agwsPrices));
         agwsPrices[5] = 50000;
         agwsPrices[9] = 80000;
         agwsPrices[10] = 300000;
-        price = (int)(agwsPrices[itemId - 17] * rate[1]);
+        price = (int)(agwsPrices[itemId - MENU_CHAR_AGWS_FIRST] * rate[MENU_RATE_AGWS]);
         break;
     }
     }
@@ -1047,14 +1195,14 @@ int MenuBoxMoneyGet(int index, int priceMode)
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-const int boxPriceTable[3] = { 400, 100, 100 };
+const int boxPriceTable[MENU_EVENT_ITEM_SHOP_COUNT] = { 400, 100, 100 };
 
 int MenuSkillEquipCheck(short charId, short skillId)
 {
     UnitOrgWeapons *unitWeapons = func_A191C0(charId);
     int slot;
 
-    for (slot = 0; slot < 3; slot++) {
+    for (slot = 0; slot < MENU_SKILL_SLOT_COUNT; slot++) {
         if (unitWeapons->skillId[slot] == skillId) {
             return slot + 1;
         }
@@ -1071,7 +1219,7 @@ void MenuSkillEquip(short charId, short skillId, int slot)
     } else {
         int index;
 
-        for (index = 0; index < 3; index++) {
+        for (index = 0; index < MENU_SKILL_SLOT_COUNT; index++) {
             if (unitWeapons->skillId[index] != 0) {
                 continue;
             }
@@ -1121,7 +1269,7 @@ unsigned char PosEquipToOptMnt(int posEquip)
 {
     int bit;
 
-    for (bit = 0; bit < 8; bit++) {
+    for (bit = 0; bit < MENU_MOUNT_BIT_COUNT; bit++) {
         if (((posEquip & 0xFF) >> bit) & 1) {
             return opt_mnt_tbl[bit];
         }
@@ -1141,10 +1289,10 @@ int OptMntToPosEquip(int mountCode)
     do {
 advance_position:
         position++;
-        if (position >= 8)
+        if (position >= MENU_MOUNT_BIT_COUNT)
             break;
     } while (opt_mnt_tbl[position] != mountCode);
-    if (position < 8)
+    if (position < MENU_MOUNT_BIT_COUNT)
         equipmentPosition = (1 << position) & 0xff;
     else
         equipmentPosition = 0;
@@ -1176,24 +1324,24 @@ int OptMntToWpnPos(int mountCode)
     int weaponPos = 0;
 
     switch (mountCode) {
-    case 32:
-    case 33:
+    case MENU_MOUNT_CODE_BIT0:
+    case MENU_MOUNT_CODE_BIT1:
         weaponPos = 1;
         break;
-    case 24:
-    case 25:
+    case MENU_MOUNT_CODE_BIT4:
+    case MENU_MOUNT_CODE_BIT5:
         weaponPos = 2;
         break;
-    case 34:
+    case MENU_MOUNT_CODE_BIT2:
         weaponPos = 3;
         break;
-    case 26:
+    case MENU_MOUNT_CODE_BIT6:
         weaponPos = 4;
         break;
-    case 35:
+    case MENU_MOUNT_CODE_BIT3:
         weaponPos = 5;
         break;
-    case 27:
+    case MENU_MOUNT_CODE_BIT7:
         weaponPos = 6;
         break;
     }
@@ -1212,25 +1360,25 @@ int WpnPosToOptMnt(int mountId, int weaponId)
     switch (mountId) {
     case 1:
         if (weapon != 0) {
-            result = (weapon->mountMask & 1) != 0 ? 0x20 : 0x21;
+            result = (weapon->mountMask & MENU_MOUNT_MASK_BIT0) != 0 ? MENU_MOUNT_CODE_BIT0 : MENU_MOUNT_CODE_BIT1;
         }
         break;
     case 2:
         if (weapon != 0) {
-            result = (weapon->mountMask & 0x10) != 0 ? 0x18 : 0x19;
+            result = (weapon->mountMask & MENU_MOUNT_MASK_BIT4) != 0 ? MENU_MOUNT_CODE_BIT4 : MENU_MOUNT_CODE_BIT5;
         }
         break;
     case 3:
-        result = 0x22;
+        result = MENU_MOUNT_CODE_BIT2;
         break;
     case 4:
-        result = 0x1A;
+        result = MENU_MOUNT_CODE_BIT6;
         break;
     case 5:
-        result = 0x23;
+        result = MENU_MOUNT_CODE_BIT3;
         break;
     case 6:
-        result = 0x1B;
+        result = MENU_MOUNT_CODE_BIT7;
         break;
     }
 
@@ -1239,7 +1387,7 @@ int WpnPosToOptMnt(int mountId, int weaponId)
 
 int MenuWpnMountIdChange(int unused, int mountIndex)
 {
-    int mountIds[8];
+    int mountIds[MENU_MOUNT_BIT_COUNT];
 
     __builtin_memcpy(mountIds, wpnMountIdTable, sizeof(mountIds));
     (void)unused;
@@ -1259,15 +1407,15 @@ const int wpnMountIdTable[8] = {32, 24, 34, 26, 35, 27, 33, 25};
 
 static unsigned short chrEquipGet(int charId)
 {
-    if (charId < 0x11) {
+    if (charId < MENU_CHAR_AGWS_FIRST) {
         return 0x8000 >> (charId - 1);
     }
-    return 0x8000 >> (charId - 0x11);
+    return 0x8000 >> (charId - MENU_CHAR_AGWS_FIRST);
 }
 
 static int wpnInfoGet(int weaponType)
 {
-    return (weaponType < 0x11) ? 0x4000 : 0x2000;
+    return (weaponType < MENU_CHAR_AGWS_FIRST) ? MENU_EQUIP_CLASS_CHARACTER : MENU_EQUIP_CLASS_AGWS;
 }
 
 int MenuWeaponEquipCheck(int charId, int weaponId)
@@ -1312,7 +1460,7 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     unsigned char mountMask;
 
     character = func_A191C0(charId);
-    if ((unsigned int)(weaponId - 1) >= 115U) {
+    if ((unsigned int)(weaponId - 1) >= MENU_WEAPON_ID_COUNT) {
         return 0;
     }
     weapon = func_A1A3D8(weaponId);
@@ -1320,12 +1468,12 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     if (!(weapon->characterEquipMask & chrEquipGet(charId))) {
         return 0;
     }
-    capacity = 3;
-    if (charId == 0x1b) {
-        capacity = 2;
+    capacity = MENU_EQUIP_WEIGHT_LIMIT;
+    if (charId == MENU_CHAR_AG_05) {
+        capacity = MENU_EQUIP_WEIGHT_LIMIT_AG_05;
     }
     weight = 0;
-    for (equipmentIndex = 0; equipmentIndex < 3; equipmentIndex++) {
+    for (equipmentIndex = 0; equipmentIndex < MENU_WEAPON_SLOT_COUNT; equipmentIndex++) {
         if (character->weapon[equipmentIndex] != 0 && equipmentIndex != replacementSlot) {
             weight += func_A1A3D8(character->weapon[equipmentIndex])->equipWeight;
         }
@@ -1335,15 +1483,15 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     }
     requestedPosition = OptMntToPosEquip(WpnPosToOptMnt(weaponPosition, weaponId) & 0xff);
     OptMntToPosEquip2(WpnPosToOptMnt(weaponPosition, weaponId) & 0xff);
-    for (equipmentIndex = 0; equipmentIndex < 3; equipmentIndex++) {
+    for (equipmentIndex = 0; equipmentIndex < MENU_WEAPON_SLOT_COUNT; equipmentIndex++) {
         if (equipmentIndex != replacementSlot) {
             occupiedPositions = (occupiedPositions | OptMntToPosEquip(character->weaponMount[equipmentIndex] & 0xff)) & 0xff;
         }
     }
-    for (equipmentIndex = 0; equipmentIndex < 8; equipmentIndex++) {
+    for (equipmentIndex = 0; equipmentIndex < MENU_MOUNT_BIT_COUNT; equipmentIndex++) {
         if ((occupiedPositions >> equipmentIndex) & 1) {
             mountCode = PosEquipToOptMnt((1 << equipmentIndex) & 0xff);
-            for (slot = 0; slot < 3; slot++) {
+            for (slot = 0; slot < MENU_WEAPON_SLOT_COUNT; slot++) {
                 if (character->weaponMount[slot] == mountCode && character->weapon[slot] != 0) {
                     int existingBit;
 
@@ -1351,37 +1499,37 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
                     mountMask = weapon->mountMask;
                     for (bitIndex = 0; bitIndex < 2; bitIndex++) {
                         unsigned short alternatives;
-                        existingBit = 0x80 >> bitIndex;
-                        alternatives = mountMask & ~existingBit & 0xf0;
+                        existingBit = MENU_MOUNT_MASK_BIT7 >> bitIndex;
+                        alternatives = mountMask & ~existingBit & MENU_MOUNT_MASK_HIGH;
                         if (weapon->mountMask & existingBit) {
-                            if (alternatives & 0x10) {
-                                alternatives |= 0x20;
+                            if (alternatives & MENU_MOUNT_MASK_BIT4) {
+                                alternatives |= MENU_MOUNT_MASK_BIT5;
                             }
-                            if (alternatives & 0x20) {
-                                alternatives |= 0x10;
+                            if (alternatives & MENU_MOUNT_MASK_BIT5) {
+                                alternatives |= MENU_MOUNT_MASK_BIT4;
                             }
                             blockedPositions |= alternatives;
                         }
                     }
                     for (bitIndex = 0; bitIndex < 2; bitIndex++) {
                         unsigned char lowMountMask = weapon->mountMask;
-                        existingBit = 8 >> bitIndex;
-                        alternatives = mountMask & ~existingBit & 0x0f;
+                        existingBit = MENU_MOUNT_MASK_BIT3 >> bitIndex;
+                        alternatives = mountMask & ~existingBit & MENU_MOUNT_MASK_LOW;
                         if (lowMountMask & existingBit) {
-                            if (alternatives & 1) {
-                                alternatives |= 2;
+                            if (alternatives & MENU_MOUNT_MASK_BIT0) {
+                                alternatives |= MENU_MOUNT_MASK_BIT1;
                             }
-                            if (alternatives & 2) {
-                                alternatives |= 1;
+                            if (alternatives & MENU_MOUNT_MASK_BIT1) {
+                                alternatives |= MENU_MOUNT_MASK_BIT0;
                             }
                             blockedPositions |= alternatives;
                         }
                     }
                 }
             }
-            for (slot = 0; slot < 3; slot++) {
+            for (slot = 0; slot < MENU_WEAPON_SLOT_COUNT; slot++) {
                 if (character->weapon[slot] == 0x4f || character->weapon[slot] == 0x54) {
-                    blockedPositions |= 0x30;
+                    blockedPositions |= MENU_MOUNT_MASK_PAIR_HIGH;
                 }
             }
         }
@@ -1390,14 +1538,14 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     mountMask = weapon->mountMask;
     for (bitIndex = 0; bitIndex < 2; bitIndex++) {
         unsigned short alternatives;
-        bit = 0x80 >> bitIndex;
-        alternatives = mountMask & ~bit & 0xf0;
+        bit = MENU_MOUNT_MASK_BIT7 >> bitIndex;
+        alternatives = mountMask & ~bit & MENU_MOUNT_MASK_HIGH;
         if (weapon->mountMask & bit) {
-            if (alternatives & 0x10) {
-                alternatives |= 0x20;
+            if (alternatives & MENU_MOUNT_MASK_BIT4) {
+                alternatives |= MENU_MOUNT_MASK_BIT5;
             }
-            if (alternatives & 0x20) {
-                alternatives |= 0x10;
+            if (alternatives & MENU_MOUNT_MASK_BIT5) {
+                alternatives |= MENU_MOUNT_MASK_BIT4;
             }
             if (occupiedPositions & alternatives) {
                 blockedPositions = (blockedPositions | bit) & 0xff;
@@ -1406,22 +1554,22 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     }
     for (bitIndex = 0; bitIndex < 2; bitIndex++) {
         unsigned char lowMountMask = weapon->mountMask;
-        bit = 8 >> bitIndex;
-        alternatives = mountMask & ~bit & 0x0f;
+        bit = MENU_MOUNT_MASK_BIT3 >> bitIndex;
+        alternatives = mountMask & ~bit & MENU_MOUNT_MASK_LOW;
         if (lowMountMask & bit) {
-            if (alternatives & 1) {
-                alternatives |= 2;
+            if (alternatives & MENU_MOUNT_MASK_BIT0) {
+                alternatives |= MENU_MOUNT_MASK_BIT1;
             }
-            if (alternatives & 2) {
-                alternatives |= 1;
+            if (alternatives & MENU_MOUNT_MASK_BIT1) {
+                alternatives |= MENU_MOUNT_MASK_BIT0;
             }
             if (occupiedPositions & alternatives) {
                 blockedPositions = (blockedPositions | bit) & 0xff;
             }
         }
     }
-    if ((weaponId == 0x4f || weaponId == 0x54) && (occupiedPositions & 0x30)) {
-        blockedPositions |= 3;
+    if ((weaponId == 0x4f || weaponId == 0x54) && (occupiedPositions & MENU_MOUNT_MASK_PAIR_HIGH)) {
+        blockedPositions |= MENU_MOUNT_MASK_PAIR_LOW;
     }
     if ((requestedPosition & supportedPositions) && (requestedPosition & ~blockedPositions)) {
         result = WpnPosToOptMnt(weaponPosition, weaponId) & 0xff;
@@ -1472,16 +1620,16 @@ int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex)
     }
 
     categoryToScan =
-        charId < 0x11 ? accessory->category : 2;
+        charId < MENU_CHAR_AGWS_FIRST ? accessory->category : 2;
 
     if (categoryToScan == 2) {
-        for (index = 0; index < 3; index++) {
+        for (index = 0; index < MENU_ACCESSORY_SLOT_COUNT; index++) {
             if (characterWeapons->accessoryId[index] == accessoryId) {
                 return 0;
             }
         }
     } else if (accessory->category != 2) {
-        for (index = 0; index < 3; index++) {
+        for (index = 0; index < MENU_ACCESSORY_SLOT_COUNT; index++) {
             short equippedId = characterWeapons->accessoryId[index];
 
             if (equippedId != 0) {
@@ -1502,7 +1650,7 @@ int MenuBulletCheck(int weaponId, int ammoId)
     if (weaponId == 0) {
         return 0;
     }
-    if ((dataWpnGet(weaponId)->flags & 0x100) == 0) {
+    if ((dataWpnGet(weaponId)->flags & WEAPON_FLAG_NEEDS_BULLETS) == 0) {
         return 0;
     }
     if (ammoId < 0) {
@@ -1517,11 +1665,11 @@ int MenuBulletCheck(int weaponId, int ammoId)
 int MenuBulletCheck2(int weaponId, int charNo)
 {
     switch (charNo) {
-    case 1:
-    case 6:
+    case MENU_CHAR_CHAOS:
+    case MENU_CHAR_MOMO:
         return 0;
-    case 3:
-        return func_A197E8(3, 0x3E) != 0;
+    case MENU_CHAR_SHION:
+        return func_A197E8(MENU_CHAR_SHION, 0x3E) != 0;
     default:
         return MenuBulletCheck(weaponId, -1);
     }
@@ -1552,7 +1700,7 @@ int MenuAgwsPilotCheck(int agwsId)
             return charId;
         }
         charId++;
-    } while (charId < 13);
+    } while (charId < MENU_CHAR_BIC_13);
     return 0;
 }
 
@@ -1568,7 +1716,7 @@ int MenuAgwsWaglGet(int chrNo)
     total = 0;
     if (chrNo != 0) {
         org = func_A191C0(chrNo);
-        for (slot = 0; slot < 3; slot++) {
+        for (slot = 0; slot < MENU_WEAPON_SLOT_COUNT; slot++) {
             weaponId = org->weapon[slot];
             if (weaponId != 0) {
                 total += func_A1A3D8(weaponId)->wagl;
@@ -1715,7 +1863,7 @@ void MenuSortSet(int bufferIndex, int categoryMask, int filter)
     struct MenuWeaponRangePair {
         unsigned char first;
         unsigned char last;
-    } weaponRanges[9];
+    } weaponRanges[MENU_WEAPON_RANGE_COUNT];
     int party[8];
     int *entry = sort[bufferIndex];
     int id;
@@ -1740,61 +1888,61 @@ void MenuSortSet(int bufferIndex, int categoryMask, int filter)
     int currentEtherId;
 
     memset(entry, 0, sizeof(sort[bufferIndex]));
-    if (categoryMask & 1) {
-        if (filter == -10) {
-            for (id = 1; id < 73; id++) {
-                *entry++ = MenuIdChange((short)id, 1);
+    if (categoryMask & MENU_SORT_ITEM) {
+        if (filter == MENU_SORT_FILTER_SHOP) {
+            for (id = 1; id < MENU_ITEM_ID_END; id++) {
+                *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ITEM);
             }
         } else {
             id = 1;
             goto inventory_bound;
             do {
                 if (dataItmBoxChk(id) > 0) {
-                    *entry++ = MenuIdChange((short)id, 1);
+                    *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ITEM);
                 }
                 id++;
 inventory_bound:
                 ;
-            } while (id < 73);
+            } while (id < MENU_ITEM_ID_END);
         }
     }
-    if (categoryMask & 2) {
+    if (categoryMask & MENU_SORT_EVENT_ITEM) {
         first = 1;
-        last = 254;
-        if (filter == -1) {
-            first = 53;
-            last = 55;
+        last = MENU_EVENT_ITEM_LAST;
+        if (filter == MENU_SORT_FILTER_EVENT_SHOP) {
+            first = MENU_EVENT_ITEM_SHOP_FIRST;
+            last = MENU_EVENT_ITEM_SHOP_LAST;
         }
         for (id = first; id <= last; id++) {
             if (dataEvtBoxChk(id) > 0) {
-                if (id != 10 || MenuEquipStealMaskCheck() != 1) {
-                    *entry++ = (id & 0xffff) + 0x20000;
+                if (id != MENU_EVENT_ITEM_SHION_MWS || MenuEquipStealMaskCheck() != 1) {
+                    *entry++ = (id & MENU_ENTRY_ID_MASK) + MENU_ENTRY_EVENT_ITEM_BASE;
                 }
             }
         }
     }
-    if ((categoryMask & 4) && MenuEquipStealMaskCheck() == 0) {
+    if ((categoryMask & MENU_SORT_WEAPON) && MenuEquipStealMaskCheck() == 0) {
         __builtin_memcpy(weaponRanges, (const struct MenuWeaponRangePair[9]) {
             { 1, 11 }, { 12, 23 }, { 69, 69 }, { 0, 0 }, { 41, 45 },
             { 24, 40 }, { 46, 56 }, { 70, 114 }, { 1, 69 }
         }, sizeof(weaponRanges));
         weaponPosition = 0;
         switch (filter) {
-        case -2:
-            range = 7;
-            weaponCategory = 0x2000;
+        case MENU_SORT_FILTER_AGWS:
+            range = MENU_WEAPON_RANGE_AGWS;
+            weaponCategory = MENU_EQUIP_CLASS_AGWS;
             break;
-        case -1:
-            weaponCategory = 0x4000;
-            range = 8;
+        case MENU_SORT_FILTER_CHARACTER:
+            weaponCategory = MENU_EQUIP_CLASS_CHARACTER;
+            range = MENU_WEAPON_RANGE_ALL_CHARACTERS;
             break;
         default:
-            if (filter & 0x2000) {
-                weaponCategory = 0x2000;
-                weaponPosition = filter & ~0x2000;
-                range = 7;
+            if (filter & MENU_EQUIP_CLASS_AGWS) {
+                weaponCategory = MENU_EQUIP_CLASS_AGWS;
+                weaponPosition = filter & ~MENU_EQUIP_CLASS_AGWS;
+                range = MENU_WEAPON_RANGE_AGWS;
             } else {
-                weaponCategory = 0x4000;
+                weaponCategory = MENU_EQUIP_CLASS_CHARACTER;
                 range = filter - 1;
             }
             break;
@@ -1819,31 +1967,31 @@ inventory_bound:
                         continue;
                     }
                 }
-                *entry++ = MenuIdChange((short)id, 3);
+                *entry++ = MenuIdChange((short)id, MENU_CATEGORY_WEAPON);
             }
         }
     }
-    if (categoryMask & 8) {
+    if (categoryMask & MENU_SORT_BULLET) {
         id = 0;
         last = 0;
         if (MenuEquipStealMaskCheck() == 0) {
             switch (filter) {
-            case 3: id = 1; last = 15; break;
-            case 2: id = 16; last = 30; break;
-            case 5: id = 31; last = 45; break;
-            case 7: id = 46; last = 63; break;
-            case -1: id = 1; last = 63; break;
-            case -2: id = 64; last = 178; break;
-            case -3: id = 1; last = 178; break;
+            case MENU_CHAR_SHION: id = 1; last = 15; break;
+            case MENU_CHAR_KOSMOS: id = 16; last = 30; break;
+            case MENU_CHAR_ZIGGY: id = 31; last = 45; break;
+            case MENU_CHAR_JR: id = 46; last = MENU_BULLET_ID_CHARACTER_LAST; break;
+            case MENU_SORT_FILTER_CHARACTER: id = 1; last = MENU_BULLET_ID_CHARACTER_LAST; break;
+            case MENU_SORT_FILTER_AGWS: id = MENU_BULLET_ID_AGWS_FIRST; last = MENU_BULLET_ID_LAST; break;
+            case MENU_SORT_FILTER_BOTH: id = 1; last = MENU_BULLET_ID_LAST; break;
             }
             for (; id <= last; id++) {
                 if (dataBltBoxChk(id) > 0) {
-                    *entry++ = MenuIdChange((short)id, 4);
+                    *entry++ = MenuIdChange((short)id, MENU_CATEGORY_BULLET);
                 }
             }
         }
     }
-    if ((categoryMask & 0x10) && MenuEquipStealMaskCheck() == 0) {
+    if ((categoryMask & MENU_SORT_ACCESSORY) && MenuEquipStealMaskCheck() == 0) {
         accessoryCategory = filter;
         requiresAssociatedId = 0;
         if (filter > 0) {
@@ -1851,24 +1999,24 @@ inventory_bound:
             requiresAssociatedId = filter >> 8;
         }
         switch (accessoryCategory) {
-        case -1:
-            for (id = 1; id < 129; id++) {
+        case MENU_SORT_FILTER_CHARACTER:
+            for (id = 1; id < MENU_ACCESSORY_AGWS_FIRST; id++) {
                 if (dataAccBoxChk(id) > 0) {
-                    *entry++ = MenuIdChange((short)id, 5);
+                    *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ACCESSORY);
                 }
             }
             break;
-        case -2:
-            for (id = 129; id < 181; id++) {
+        case MENU_SORT_FILTER_AGWS:
+            for (id = MENU_ACCESSORY_AGWS_FIRST; id < MENU_ACCESSORY_ID_END; id++) {
                 if (dataAccBoxChk(id) > 0) {
-                    *entry++ = MenuIdChange((short)id, 5);
+                    *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ACCESSORY);
                 }
             }
             break;
         case 0:
         case 1:
         case 2:
-            for (id = 1; id < 129; id++) {
+            for (id = 1; id < MENU_ACCESSORY_AGWS_FIRST; id++) {
                 if (dataAccBoxChk(id) <= 0) {
                     continue;
                 }
@@ -1879,17 +2027,17 @@ inventory_bound:
                 switch (accessoryCategory) {
                 case 0:
                     if (accessory->category == 1) {
-                        *entry++ = MenuIdChange((short)id, 5);
+                        *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ACCESSORY);
                     }
                     break;
                 case 1:
                     if (accessory->category == 0) {
-                        *entry++ = MenuIdChange((short)id, 5);
+                        *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ACCESSORY);
                     }
                     break;
                 case 2:
                     if (accessory->category == 2) {
-                        *entry++ = MenuIdChange((short)id, 5);
+                        *entry++ = MenuIdChange((short)id, MENU_CATEGORY_ACCESSORY);
                     }
                     break;
                 }
@@ -1897,7 +2045,7 @@ inventory_bound:
             break;
         }
     }
-    if ((categoryMask & 0x20) && filter == 1) {
+    if ((categoryMask & MENU_SORT_CHARACTER) && filter == 1) {
         partyMember = party;
         partyCount = PartyAllPartyGet(partyMember, 1);
         id = 0;
@@ -1907,28 +2055,28 @@ inventory_bound:
                 if (currentMember == 0) {
                     break;
                 }
-                if (currentMember != 2 && currentMember != 5) {
-                    *entry++ = MenuIdChange((short)*partyMember, 6);
+                if (currentMember != MENU_CHAR_KOSMOS && currentMember != MENU_CHAR_ZIGGY) {
+                    *entry++ = MenuIdChange((short)*partyMember, MENU_CATEGORY_CHARACTER);
                 }
                 id++;
                 partyMember++;
             } while (id < partyCount);
         }
     }
-    if (categoryMask & 0x40) {
+    if (categoryMask & MENU_SORT_SKILL) {
         selectedCharId = filter;
-        for (id = 1; id < 91; id++) {
+        for (id = 1; id < MENU_SKILL_ID_END; id++) {
             if (func_A19698(selectedCharId, id) != 0) {
-                *entry++ = (id & 0xffff) + 0x80000;
+                *entry++ = (id & MENU_ENTRY_ID_MASK) + MENU_ENTRY_SKILL_BASE;
             }
         }
     }
-    if (categoryMask & 0x80) {
+    if (categoryMask & MENU_SORT_ETHER) {
         selectedCharId = filter;
         if (((unsigned int)filter >> 16) == 0) {
-            for (id = 1; id < 80; id++) {
+            for (id = 1; id < MENU_ETHER_ID_END; id++) {
                 if (func_A19578(selectedCharId, id) != 0) {
-                    *entry++ = (id & 0xffff) + 0x90000;
+                    *entry++ = (id & MENU_ENTRY_ID_MASK) + MENU_ENTRY_ETHER_BASE;
                 }
             }
         } else {
@@ -1937,19 +2085,19 @@ inventory_bound:
             etherId = character->etherId;
             currentEtherId = *etherId;
             if (currentEtherId != 0) {
-                currentEtherId = (currentEtherId & 0xffff) + 0x90000;
+                currentEtherId = (currentEtherId & MENU_ENTRY_ID_MASK) + MENU_ENTRY_ETHER_BASE;
                 do {
                     do {
                         *entry++ = currentEtherId;
                         ++id;
                         ++etherId;
                     } while (0);
-                    if (id < 12) {
+                    if (id < MENU_ETHER_SLOT_COUNT) {
                         currentEtherId = *etherId;
                         if (currentEtherId == 0) {
                             break;
                         }
-                        currentEtherId = (currentEtherId & 0xffff) + 0x90000;
+                        currentEtherId = (currentEtherId & MENU_ENTRY_ID_MASK) + MENU_ENTRY_ETHER_BASE;
                         continue;
                     }
                     break;
@@ -1972,7 +2120,7 @@ int MenuSortGet(int listIndex, int entryIndex)
 
 int MenuIdChange(short id, int highPart)
 {
-    return id + (highPart << 16);
+    return id + (highPart << MENU_ENTRY_CATEGORY_SHIFT);
 }
 
 void subListMake00(MenuListEntry *entry, int index)
@@ -1998,7 +2146,7 @@ MenuListEntry *MenuListMake(int listIndex, int mode)
     int index;
     int next;
 
-    fill = (mode == -0xA) ? subListMake01 : subListMake00;
+    fill = (mode == MENU_LIST_MODE_SHOP) ? subListMake01 : subListMake00;
 
     index = *row;
     if (index != 0) {
@@ -2010,7 +2158,7 @@ MenuListEntry *MenuListMake(int listIndex, int mode)
             index = next;
         } while (next != 0);
     }
-    entry->amount = -1;
+    entry->amount = MENU_LIST_NO_DATA_AMOUNT;
     entry->name = msg_12;
     entry->flag = 0;
     entry[1].name = 0;
@@ -2040,59 +2188,59 @@ char *MenuFileNameGet(int id, unsigned int resourceKind)
     short modelId = id;
 
     switch (resourceKind) {
-    case 0:
-    case 1:
-    case 2:
-        if (modelId == 0x2201) {
-            strcpy(fname_13, f_base_14[2]);
+    case MENU_FILE_MODEL_LEX:
+    case MENU_FILE_MODEL_XTX:
+    case MENU_FILE_MODEL_JNT:
+        if (modelId == MENU_MODEL_ID_UKN_AGWS) {
+            strcpy(fname_13, f_base_14[MENU_PATH_ROBO_ETC]);
             strcat(fname_13, f_ukn_name_16[0]);
         } else {
             RES_GetMdlFileName(fname_13, modelId);
         }
         strcat(fname_13, f_exten_15[resourceKind]);
         break;
-    case 3:
+    case MENU_FILE_MOTION:
         switch ((modelId >> 12) & 15) {
-        case 0:
-            strcpy(fname_13, f_base_14[0]);
-            strcat(fname_13, f_char_mot_17[0]);
-            strcat(fname_13, f_exten_15[3]);
+        case MENU_MODEL_KIND_CHARACTER:
+            strcpy(fname_13, f_base_14[MENU_PATH_MOTION]);
+            strcat(fname_13, f_char_mot_17[MENU_CHARMOT_MEQP]);
+            strcat(fname_13, f_exten_15[MENU_EXT_FPK]);
             break;
-        case 2:
-            if (modelId == 0x2201) {
-                strcpy(fname_13, f_base_14[0]);
-                strcat(fname_13, f_char_mot_17[1]);
-                strcat(fname_13, f_exten_15[3]);
+        case MENU_MODEL_KIND_AGWS:
+            if (modelId == MENU_MODEL_ID_UKN_AGWS) {
+                strcpy(fname_13, f_base_14[MENU_PATH_MOTION]);
+                strcat(fname_13, f_char_mot_17[MENU_CHARMOT_UKN_G]);
+                strcat(fname_13, f_exten_15[MENU_EXT_FPK]);
             } else {
-                strcpy(fname_13, f_base_14[0]);
-                strcat(fname_13, f_char_mot_17[2]);
-                strcat(fname_13, f_exten_15[3]);
+                strcpy(fname_13, f_base_14[MENU_PATH_MOTION]);
+                strcat(fname_13, f_char_mot_17[MENU_CHARMOT_AGWS]);
+                strcat(fname_13, f_exten_15[MENU_EXT_FPK]);
             }
             break;
-        case 4:
+        case MENU_MODEL_KIND_MONSTER:
             {
-                int monsterId = modelId == 0x4037 ? 114 : modelId - 0x4000;
+                int monsterId = modelId == MENU_MODEL_ID_MONSTER_ALIAS ? MENU_MONSTER_ALIAS_MOTION_ID : modelId - MENU_MODEL_ID_MONSTER_BASE;
                 char *motionName = f_mons_mot_18[0];
 
-                strcpy(fname_13, f_base_14[1]);
+                strcpy(fname_13, f_base_14[MENU_PATH_YAMAMOTO_MOT]);
                 motionName[7] = monsterId % 10 + '0';
                 monsterId /= 10;
                 motionName[6] = monsterId % 10 + '0';
                 monsterId /= 10;
                 motionName[5] = monsterId % 10 + '0';
                 strcat(fname_13, motionName);
-                strcat(fname_13, f_exten_15[4]);
+                strcat(fname_13, f_exten_15[MENU_EXT_BIN]);
             }
             break;
         }
         break;
-    case 4:
-    case 5:
-        RES_GetMdlFileName(fname_13, modelId + 0x10000);
-        if (resourceKind == 4) {
-            strcat(fname_13, f_exten_15[0]);
+    case MENU_FILE_MODEL2_LEX:
+    case MENU_FILE_MODEL2_JNT:
+        RES_GetMdlFileName(fname_13, modelId + MENU_MODEL2_ID_OFFSET);
+        if (resourceKind == MENU_FILE_MODEL2_LEX) {
+            strcat(fname_13, f_exten_15[MENU_EXT_LEX]);
         } else {
-            strcat(fname_13, f_exten_15[2]);
+            strcat(fname_13, f_exten_15[MENU_EXT_JNT]);
         }
         break;
     }

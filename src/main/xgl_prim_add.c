@@ -10,6 +10,16 @@
 #define XGL_PRIM_ADD_FLAG_POSITION_OFFSET 0x10
 #define XGL_PRIM_ADD_FLAG_FLUSH_DIRECT 0x20
 #define XGL_PRIM_ADD_POSITION_Z_MASK 0x00ffffffu
+#define XGL_PRIM_ADD_MODE_MASK 0x0f
+/* GIF tag high words: NREG 2, PRE and a Gouraud triangle strip PRIM (regs RGBAQ, XYZ2). */
+#define XGL_PRIM_ADD_STRIP_TAG_HIGH 0x20064000u
+/* NREG 1, PRE and a line strip PRIM; its one register is RGBAQ. */
+#define XGL_PRIM_ADD_LINE_PRIM_TAG_HIGH 0x10014000u
+/* tag_control supplies PRIM bits 3 and up (IIP, TME, FGE, ABE, ...): the tag's PRIM field
+ * starts at bit 15 of the high word. */
+#define XGL_PRIM_ADD_TAG_CONTROL_SHIFT 18
+/* Strip vertices alternate the registers RGBAQ and XYZ2. */
+#define XGL_PRIM_ADD_REGS_RGBAQ_XYZ2 (GIF_REG_RGBAQ | (GIF_REG_XYZ2 << 4))
 
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
@@ -28,7 +38,7 @@ void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count) {
     }
 
     sceVif1PkCnt(packet, 0);
-    sceVif1PkAddCode(packet, 0x11000000);
+    sceVif1PkAddCode(packet, VIF_CODE_FLUSHE);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDirectDataN(packet, data, count);
     sceVif1PkCloseDirectHLCode(packet);
@@ -55,9 +65,9 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
         output_buffer = prim->output_buffer;
     }
 
-    output[0] = (u32)vertex_count + 0x8000u;
-    output[1] = (prim->tag_control << 18) ^ 0x20064000u;
-    output[2] = 81;
+    output[0] = (u32)vertex_count + GIF_TAG_EOP;
+    output[1] = (prim->tag_control << XGL_PRIM_ADD_TAG_CONTROL_SHIFT) ^ XGL_PRIM_ADD_STRIP_TAG_HIGH;
+    output[2] = XGL_PRIM_ADD_REGS_RGBAQ_XYZ2;
     output[3] = 0;
     output += 4;
 
@@ -76,7 +86,7 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
         position_offset.component[3] = 0;
     }
 
-    mode = prim->flags & 0x0f;
+    mode = prim->flags & XGL_PRIM_ADD_MODE_MASK;
     switch (mode) {
     case XGL_PRIM_ADD_MODE_INDEX8: {
         const u8 *position_index = prim->position_indices;
@@ -176,8 +186,8 @@ void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
     colors = prim->colors;
 
     output[0] = 1;
-    output[1] = (prim->tag_control << 18) ^ 0x10014000u;
-    output[2] = 1;
+    output[1] = (prim->tag_control << XGL_PRIM_ADD_TAG_CONTROL_SHIFT) ^ XGL_PRIM_ADD_LINE_PRIM_TAG_HIGH;
+    output[2] = GIF_REG_RGBAQ;
     output[3] = 0;
 
     output[4] = colors[0].channel[0];
@@ -186,9 +196,9 @@ void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
     output[7] = colors[0].channel[3];
     output += 8;
 
-    output[0] = (u32)vertex_count + 0x8000u;
-    output[1] = 0x10000000u;
-    output[2] = 5;
+    output[0] = (u32)vertex_count + GIF_TAG_EOP;
+    output[1] = GIF_TAG_HIGH_NREG_1;
+    output[2] = GIF_REG_XYZ2;
     output[3] = 0;
     output += 4;
 
@@ -204,7 +214,7 @@ void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
         position_offset.component[3] = 0;
     }
 
-    mode = prim->flags & 0x0f;
+    mode = prim->flags & XGL_PRIM_ADD_MODE_MASK;
     switch (mode) {
     case XGL_PRIM_ADD_MODE_INDEX8: {
         const u8 *position_index = prim->position_indices;

@@ -3,6 +3,10 @@
 #include "main/xgl_cd.h"
 #include "enemy_system_init.h"
 #include "main/enemy_system_init.h"
+#include "main/act_1.h"
+#include "main/enemy_1.h"
+
+#define ENEMY_INITIAL_MOTION_ID 30
 
 typedef struct EnemyPresetPathPrefix {
     char bytes[15];
@@ -141,7 +145,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     short j;
     short k;
     if (number < 0) {
-        for (i = 0; i < 64; i++) {
+        for (i = 0; i < ACTOR_COUNT; i++) {
             if (actor[i].id == 0) {
                 number = i;
                 break;
@@ -174,7 +178,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     work->route_point_count = 0;
     params->sight_angle = 90.0f;
     params->move_kind = 1;
-    work->initial_motion_id = 30;
+    work->initial_motion_id = ENEMY_INITIAL_MOTION_ID;
     work->locator_start_frame = 5;
     params->hearing_distance = 10.0f;
     params->homing_value_count = 0;
@@ -188,7 +192,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     params->event_type = -1;
     work->scale_frame = -1;
     work->scale = 1.0f;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < ENEMY_HOMING_MAX; i++) {
         work->route_state[i] = 0;
         for (k = 0; k < 4; k++) {
             work->route_value[i][k] = -1;
@@ -200,7 +204,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     work->fast_point_count = 0;
     work->chase_frame = 0;
     work->chase_frame_limit = 0;
-    enemy->flags |= 0x10000;
+    enemy->flags |= ACTOR_FLAG_COLLIDABLE;
     work->mark = 0;
     work->mark_timer = 0;
     enemy->flags |= 0x20000;
@@ -208,13 +212,13 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     work->target_number = GameLoopState[1]->number;
     enemy->lookat_timer = 0;
     enemy->lookat_target = -1;
-    params->default_motion_table[1] = 1;
-    params->default_motion_table[2] = 3;
-    params->default_motion_table[0] = 0;
-    work->freeze_state = 0;
+    params->default_motion_table[1] = MOTION_ID_WALK;
+    params->default_motion_table[2] = MOTION_ID_RUN;
+    params->default_motion_table[0] = MOTION_ID_IDLE;
+    work->freeze_state = ENEMY_FREEZE_RELEASE;
     params->default_motion_table[4] = 0;
     params->default_motion_table[5] = 0;
-    params->default_motion_table[3] = 9;
+    params->default_motion_table[3] = MOTION_BLEND_DEFAULT;
     params->default_motion_table[6] = 0;
     params->encounter_event_flags = 0;
     work->state_37b4 = 0;
@@ -233,16 +237,16 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     work->turn_duration = 0;
     work->movement_duration = 0;
     UnduParamInit(enemy->undulation);
-    work->applied_light_level = 1000;
+    work->applied_light_level = ENEMY_LIGHT_LEVEL_FULL;
     params->gravity_mode = 0;
     enemy->update = ACT_updateEnemy;
     enemy->flags |= 0x20;
-    params->light_level = 1000;
+    params->light_level = ENEMY_LIGHT_LEVEL_FULL;
     for (i = 0; i < 4; i++) {
         params->linked_actors[i] = -1;
     }
     work->effect = 0;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < ACTOR_EFFECT_SLOT_COUNT; i++) {
         enemy->effects[i] = 0;
     }
     enemy->effect_interval = -1;
@@ -259,7 +263,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
         params->monster_set_numbers[i] = -1;
     }
     work->sense_block_timer = 0;
-    work->action = 0;
+    work->action = ENEMY_ACT_INIT;
     AdrsEnemy = (char *)AdrsEnemyPreset + 4;
     return enemy;
 }

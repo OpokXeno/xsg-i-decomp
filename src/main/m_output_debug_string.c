@@ -14,7 +14,9 @@ const char debugMessageInfoFormat[] = "\033[1;36mMDMSG:\033[m %s\n";
 /* Text: ESC[1;35mMDMSG:ESC[m %s\n */
 const char debugMessageWarnFormat[] = "\033[1;35mMDMSG:\033[m %s\n";
 
-static char dstr[0x100];
+#define DEBUG_STRING_BUFFER_SIZE 0x100
+
+static char dstr[DEBUG_STRING_BUFFER_SIZE];
 
 void MOutputDebugString(const char *format, ...)
 {

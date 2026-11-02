@@ -4,7 +4,13 @@
 #include "xgl_packet.h"
 #include "main/xgl_dma.h"
 
-#define XGL_SCRATCH ((u64 *)0x70000000)
+#define XGL_SCRATCH ((u64 *)SCRATCHPAD_BASE)
+
+/* The two VIF1 packet buffers: each is 2 MiB of main memory, filled forwards from its
+ * base and, for the user-visible cursor, backwards from its limit. */
+#define XGL_PACKET_BUFFER_0 0x00c00000
+#define XGL_PACKET_BUFFER_1 0x00e00000
+#define XGL_PACKET_BUFFER_END 0x01000000
 
 extern struct XglPacketRenderState sRender;
 
@@ -57,7 +63,7 @@ void xglPacketTextureTrans(XglTextureTransSet *set)
         int address;
 
         sceVif1PkCnt(pCurrentPacket, 0);
-        sceVif1PkAddCode(pCurrentPacket, 0x11000000);
+        sceVif1PkAddCode(pCurrentPacket, VIF_CODE_FLUSHE);
         address = (sRender.textureBufferBase << 11) + entry->vramOffset;
         packed = entry->size;
         w = packed;
@@ -68,8 +74,8 @@ void xglPacketTextureTrans(XglTextureTransSet *set)
         }
         sceGsSetDefLoadImage(&image,
                              address >> 6,
-                             width, 0, 0, 0, (short)w, entry->height);
-        image.giftag |= 0x8000;
+                             width, SCE_GS_PSMCT32, 0, 0, (short)w, entry->height);
+        image.giftag |= GIF_TAG_EOP;
         sceVif1PkOpenDirectCode(pCurrentPacket, 0);
         sceVif1PkAddDirectDataN(pCurrentPacket, &image, 5);
         sceVif1PkCloseDirectCode(pCurrentPacket);
@@ -84,12 +90,12 @@ void xglPacketInterpolate(void)
     u64 *scratch;
 
     sceVif1PkCnt(packet, 0);
-    sceVif1PkAddCode(packet, 0x11000000);
+    sceVif1PkAddCode(packet, VIF_CODE_FLUSHE);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDirectDataN(packet, TestPrim_0_004A8D00, 4);
     scratch = XGL_SCRATCH;
     scratch[0] = 0x24020000 | (sRender.displayBufferBase << 5) | ((u64)0xc800 << 19);
-    scratch[1] = 6;
+    scratch[1] = SCE_GS_TEX0_1;
     sceVif1PkAddDirectDataN(packet, XGL_SCRATCH, 1);
     sceVif1PkAddDirectDataN(packet, &TestPrim_0_004A8D00[10], 7);
     sceVif1PkCloseDirectCode(packet);
@@ -102,13 +108,13 @@ XglPacket *xglPacketGetCurrent(void)
 
 void xglPacketInit(void)
 {
-    sceVif1PkInit(&asPacketSource[0], 0x00c00000);
-    sceVif1PkInit(&asPacketSource[1], 0x00e00000);
+    sceVif1PkInit(&asPacketSource[0], XGL_PACKET_BUFFER_0);
+    sceVif1PkInit(&asPacketSource[1], XGL_PACKET_BUFFER_1);
 
-    asPacketSource[0].limit = 0x00e00000;
-    asPacketSource[1].limit = 0x01000000;
-    asPacketSource[0].cursor = (u8 *)0x00e00000;
-    asPacketSource[1].cursor = (u8 *)0x01000000;
+    asPacketSource[0].limit = XGL_PACKET_BUFFER_1;
+    asPacketSource[1].limit = XGL_PACKET_BUFFER_END;
+    asPacketSource[0].cursor = (u8 *)XGL_PACKET_BUFFER_1;
+    asPacketSource[1].cursor = (u8 *)XGL_PACKET_BUFFER_END;
     pCurrentPacket = &asPacketSource[0];
     pSendPacket = 0;
 }
@@ -136,6 +142,6 @@ void xglPacketMove(void)
 void xglPacketSend(void)
 {
     if (pSendPacket != 0) {
-        xglDmaDirectSrcChain(1, pSendPacket->start);
+        xglDmaDirectSrcChain(XGL_DMA_CHANNEL_VIF1, pSendPacket->start);
     }
 }

@@ -2,6 +2,13 @@
 #include "shared.h"
 #include "main/xgl_studio.h"
 
+/* JsClassLight.light_type: 0 selects the ambient colour, 1..3 the directional lights. */
+#define JS_LIGHT_AMBIENT 0
+#define JS_LIGHT_COUNT 3
+
+/* JsClassLight.color_mode: the script passed integer components (0..255). */
+#define JS_LIGHT_COLOR_INTEGER 3
+
 typedef union {
     int integer;
     float real;
@@ -45,14 +52,14 @@ int JS_classLight_setColor(void *peer)
     light = peer;
     xglStudioGetLight(&studio);
     light_type = light->light_type;
-    if (light_type == 0)
+    if (light_type == JS_LIGHT_AMBIENT)
         destination = &studio->ambient_color;
-    else if ((unsigned int)(light_type - 1) < 3)
+    else if ((unsigned int)(light_type - 1) < JS_LIGHT_COUNT)
         destination = &studio->lights[light_type - 1].color;
     else
         return 1;
 
-    if (light->color_mode == 3) {
+    if (light->color_mode == JS_LIGHT_COLOR_INTEGER) {
         destination->x = (float)light->color[0].integer / 255.0f;
         destination->y = (float)light->color[1].integer / 255.0f;
         destination->z = (float)light->color[2].integer / 255.0f;
@@ -75,7 +82,7 @@ int JS_classLight_setDirection2(void *peer)
     light = peer;
     xglStudioGetLight(&studio);
     light_type = light->light_type;
-    if ((unsigned int)(light_type - 1) < 3)
+    if ((unsigned int)(light_type - 1) < JS_LIGHT_COUNT)
         destination = &studio->lights[light_type - 1].direction;
     else
         return 1;

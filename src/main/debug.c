@@ -52,7 +52,10 @@ static ShadowDefinitionToken human_default[30] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug0[80] = {
+/* Token capacity of each debug shadow stream (all entries are end markers). */
+#define SHADOW_DEBUG_STREAM_CAPACITY 80
+
+static ShadowDefinitionToken debug0[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -135,7 +138,7 @@ static ShadowDefinitionToken debug0[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug1[80] = {
+static ShadowDefinitionToken debug1[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -218,7 +221,7 @@ static ShadowDefinitionToken debug1[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug2[80] = {
+static ShadowDefinitionToken debug2[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -301,7 +304,7 @@ static ShadowDefinitionToken debug2[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug3[80] = {
+static ShadowDefinitionToken debug3[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -384,7 +387,7 @@ static ShadowDefinitionToken debug3[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug4[80] = {
+static ShadowDefinitionToken debug4[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -467,7 +470,7 @@ static ShadowDefinitionToken debug4[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug5[80] = {
+static ShadowDefinitionToken debug5[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -550,7 +553,7 @@ static ShadowDefinitionToken debug5[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug6[80] = {
+static ShadowDefinitionToken debug6[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},
@@ -633,7 +636,7 @@ static ShadowDefinitionToken debug6[80] = {
     {255, 0, 0}
 };
 
-static ShadowDefinitionToken debug7[80] = {
+static ShadowDefinitionToken debug7[SHADOW_DEBUG_STREAM_CAPACITY] = {
     {255, 0, 0},
     {255, 0, 0},
     {255, 0, 0},

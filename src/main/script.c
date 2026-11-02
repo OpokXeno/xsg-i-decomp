@@ -15,6 +15,7 @@
 #include "main/find_native_method.h"
 #include "main/fx_screen_mask.h"
 #include "main/game.h"
+#include "main/game_camera.h"
 #include "main/game_debug_menu.h"
 #include "main/game_init_camera.h"
 #include "main/game_movie.h"
@@ -43,6 +44,92 @@
 #define SCRIPT_FADE_COLOR(red, green, blue)                                    \
     (0x7F000000 + ((int)((red) * 127.0f) << 16) +                              \
      ((int)((green) * 127.0f) << 8) + (int)((blue) * 127.0f))
+
+/* GameLoopState.flags bits tested or toggled by the script, talk and debug code. */
+#define GAME_LOOP_FLAG_DEBUG_MENU 0x1        /* a debug menu task owns the screen */
+#define GAME_LOOP_FLAG_TALK_BLOCKED 0x20     /* no talk task starts, running ones abort */
+#define GAME_LOOP_FLAG_ENTERED_RUNNING 0x400 /* the "entered" handler is executing */
+#define GAME_LOOP_FLAG_EVENT_SCENE 0x800     /* an event scene is playing */
+#define GAME_LOOP_FLAG_TALKING 0x1000        /* an actor talk command is running */
+#define GAME_LOOP_FLAG_ENTERED_PENDING 0x100000 /* "entered" call queued by SCRIPT_execEntered */
+#define GAME_LOOP_FLAG_FUNC_CALLED 0x200000  /* funcObserver finished a script call */
+
+/* GameLoopState.kind values set by the script system. */
+enum GameLoopKind {
+    GAME_MODE_FIELD = 2,      /* free-roaming field/map play */
+    GAME_MODE_EVENT = 3,      /* an event scene is running */
+    GAME_MODE_DEBUG_TOOL = 7  /* "Tool" debug menu entry (cursor tool) */
+};
+
+/* Debug menu entries, in the order of the SCRIPT_debugMenu item text. */
+enum ScriptDebugMenuItem {
+    DEBUG_MENU_SCRIPT_EXEC,
+    DEBUG_MENU_BG_CHANGE,
+    DEBUG_MENU_VIRTUAL_M,
+    DEBUG_MENU_TOOL,
+    DEBUG_MENU_LIGHT,
+    DEBUG_MENU_MEMORY_INFO,
+    DEBUG_MENU_WIND
+};
+
+/* VirtualM debug switches (vmSwitchStr pairs); item 4 is the event monitor. */
+#define VM_DEBUG_ITEM_MONITOR 4
+#define VM_DEBUG_MASK_MONITOR 0x10
+
+/* Scene system memory layout. */
+#define SCRIPT_JNI_HEAP_SIZE 0x40000     /* heap handed to JNI_initSystem */
+#define SCRIPT_EVT_FILE_BUFFER_SIZE 0x8000 /* system.evt and base.evt buffers */
+#define SCRIPT_CLASS_IMAGE_SIZE 0x2D000  /* class database image of one script */
+#define SCRIPT_DB0_MOTION_ADDR 0x05000000
+#define SCRIPT_DB0_PDB_ADDR 0x06100000
+#define SCRIPT_DB1_MOTION_ADDR 0x06500000
+#define SCRIPT_DB1_PDB_ADDR 0x06900000
+/* JNI class database slots. */
+#define JNI_CLASS_SLOT_SYSTEM 0
+#define JNI_CLASS_SLOT_BASE 1
+#define JNI_CLASS_SLOT_SCRIPT0 2
+#define JNI_CLASS_SLOT_SCRIPT1 3
+/* JNI_createThread frame sizes and VM counts. */
+#define SCRIPT_VM_STACK_WORDS 8
+#define SCRIPT_DEFAULT_VM_FRAME_WORDS 0x80
+#define SCRIPT_STAGE_VM_FRAME_WORDS 0x46
+#define SCRIPT_EVENT_VM_FRAME_WORDS 0x40
+#define SCRIPT_EVENT_VM_COUNT 2
+#define SCRIPT_JS_CLASS_CAPACITY 0x40
+#define SCRIPT_JS_METHOD_CAPACITY 8
+
+/* Scene change timing (frames). */
+#define SCRIPT_DEFAULT_FADE_FRAMES 30
+#define SCRIPT_SCENE_CHANGE_FRAMES 25
+#define SCRIPT_CAMERA_PARK_POSITION 1000000.0f /* stage camera moved far away */
+#define RENDER_CLEAR_COLOR_BLACK 0x80000000    /* opaque black, alpha 0x80 */
+
+/* Talk cancel test on PadData.button_state: the "pressed" halfword sits at bits
+ * 16-31, so the mask is PAD_CIRCLE | PAD_CROSS and the value PAD_CROSS alone. */
+#define SCRIPT_TALK_CANCEL_MASK 0x600000
+#define SCRIPT_TALK_CANCEL_CROSS 0x400000
+
+/* Pause screen (START pauses, TRIANGLE skips the event): frames before the
+ * pause button is read again. */
+#define PAUSE_INPUT_DELAY 0x20
+#define PAUSE_SKIP_INPUT_DELAY 0x40
+
+/* Window/task state: set once the debug window has been answered. */
+#define SCRIPT_WINDOW_STATE_DONE 2
+
+/* Debug tool layout and limits. */
+#define SCRIPT_PATH_MAX 0x100
+#define DEBUG_MAP_NO_MAX 2000
+#define DEBUG_SLIDER_X 256.0f
+#define DEBUG_SLIDER_Y 224.0f
+#define DEBUG_MEMORY_TOTAL_KB 0x100
+#define LIGHT_FILE_COUNT 100
+#define LIGHT_FILE_LAST 99
+
+/* PS2 sceOpen/sceLseek arguments. */
+#define SCE_WRONLY_CREAT_TRUNC 0x0602 /* SCE_WRONLY | SCE_CREAT | SCE_TRUNC */
+#define SCE_SEEK_SET 0
+#define SCE_SEEK_END 2
 
 /* GNU EE native TI storage type: one 16-byte store clears the debug menu storage. */
 typedef unsigned int Quadword __attribute__((mode(TI)));
@@ -82,8 +169,8 @@ typedef union ScriptPathPrefix {
 } ScriptPathPrefix;
 
 typedef union ScriptPathBuffer {
-    char bytes[0x100];
-    unsigned long long words[0x100 / 8];
+    char bytes[SCRIPT_PATH_MAX];
+    unsigned long long words[SCRIPT_PATH_MAX / 8];
 } ScriptPathBuffer;
 
 enum ScriptDebugWord {
@@ -222,7 +309,7 @@ static char sig1_1[34] ;
 
 static const char *debugBasePath = debugBaseDirPath;
 
-static unsigned int s_nScriptFadeOutTime = 30;
+static unsigned int s_nScriptFadeOutTime = SCRIPT_DEFAULT_FADE_FRAMES;
 
 static unsigned int s_nScriptFadeRequest = 0;
 
@@ -270,7 +357,7 @@ int UseVMFlag;
 
 JThread *stageVM;
 
-JThread *evtVM[2];
+JThread *evtVM[SCRIPT_EVENT_VM_COUNT];
 
 static int currentScriptDB;
 
@@ -309,7 +396,7 @@ extern ScriptRenderState sRender;
 
 static ScriptFileSelect * fileSelect;
 
-extern Actor actor[64];
+extern Actor actor[ACTOR_COUNT];
 
 extern MenuNativeScriptView *TMENU_create(int component_id);
 extern MenuNativeScriptView *TSLIDER_create(int component_id);
@@ -326,7 +413,7 @@ static void initJS(int state)
 {
     int class_id;
 
-    JS_init(state, 0x40, 8);
+    JS_init(state, SCRIPT_JS_CLASS_CAPACITY, SCRIPT_JS_METHOD_CAPACITY);
     class_id = JS_loadClass(lightClassName);
     JS_classSetup(class_id, JS_classLight_getPeer);
     JS_classAddMethod(class_id, lightSetColorMethodName, JS_classLight_setColor);
@@ -386,7 +473,7 @@ void SCRIPT_sendMovieSkipSignal(void)
 {
     ScriptGameLoopState *game_state = &GameLoopState;
 
-    if (game_state->kind == 3)
+    if (game_state->kind == GAME_MODE_EVENT)
         s_nScriptEventFin = 1;
 }
 
@@ -463,11 +550,11 @@ void SCRIPT_reset(void)
     event_vm = evtVM;
     remaining_vms = 1;
     initVM();
-    defaultVM = JNI_createThread(0, 8, 0x80);
-    stageVM = JNI_createThread(0, 8, 0x46);
+    defaultVM = JNI_createThread(0, SCRIPT_VM_STACK_WORDS, SCRIPT_DEFAULT_VM_FRAME_WORDS);
+    stageVM = JNI_createThread(0, SCRIPT_VM_STACK_WORDS, SCRIPT_STAGE_VM_FRAME_WORDS);
     do {
         --remaining_vms;
-        *event_vm = JNI_createThread(0, 8, 0x40);
+        *event_vm = JNI_createThread(0, SCRIPT_VM_STACK_WORDS, SCRIPT_EVENT_VM_FRAME_WORDS);
         ++event_vm;
     } while (remaining_vms >= 0);
     UseVMFlag = 0;
@@ -486,17 +573,17 @@ void *SCRIPT_init(void *heap_base)
     int remaining_vms = 1;
 
     evtDebug.flags = 0;
-    cursor += 0x40000;
+    cursor += SCRIPT_JNI_HEAP_SIZE;
     system_file_buffer = cursor;
-    cursor += 0x8000;
+    cursor += SCRIPT_EVT_FILE_BUFFER_SIZE;
     base_file_buffer = cursor;
-    cursor += 0x8000;
-    entry->motion_data = (void *)0x05000000;
-    entry->pdb = (void *)0x06100000;
-    entry->class_slot = 2;
+    cursor += SCRIPT_EVT_FILE_BUFFER_SIZE;
+    entry->motion_data = (void *)SCRIPT_DB0_MOTION_ADDR;
+    entry->pdb = (void *)SCRIPT_DB0_PDB_ADDR;
+    entry->class_slot = JNI_CLASS_SLOT_SCRIPT0;
     entry->skip_count = 0;
     entry->class_image = cursor;
-    cursor += 0x2D000;
+    cursor += SCRIPT_CLASS_IMAGE_SIZE;
     entry->active = 0;
     entry->thread = 0;
     ++entry;
@@ -508,22 +595,22 @@ void *SCRIPT_init(void *heap_base)
     entry->thread = 0;
     entry->skip_count = 0;
     entry->class_image = cursor;
-    cursor += 0x2D000;
-    entry->motion_data = (void *)0x06500000;
-    entry->pdb = (void *)0x06900000;
-    entry->class_slot = 3;
+    cursor += SCRIPT_CLASS_IMAGE_SIZE;
+    entry->motion_data = (void *)SCRIPT_DB1_MOTION_ADDR;
+    entry->pdb = (void *)SCRIPT_DB1_PDB_ADDR;
+    entry->class_slot = JNI_CLASS_SLOT_SCRIPT1;
 
     xglCdReadFile(systemEvtPath, system_file_buffer, 0, 0);
     xglCdReadFile(baseEvtPath, base_file_buffer, 0, 0);
-    JNI_initSystem(heap_base, 0x40000);
-    JNI_loadClassDB(0, system_file_buffer);
-    JNI_loadClassDB(1, base_file_buffer);
+    JNI_initSystem(heap_base, SCRIPT_JNI_HEAP_SIZE);
+    JNI_loadClassDB(JNI_CLASS_SLOT_SYSTEM, system_file_buffer);
+    JNI_loadClassDB(JNI_CLASS_SLOT_BASE, base_file_buffer);
     initVM();
-    defaultVM = JNI_createThread(0, 8, 0x80);
-    stageVM = JNI_createThread(0, 8, 0x46);
+    defaultVM = JNI_createThread(0, SCRIPT_VM_STACK_WORDS, SCRIPT_DEFAULT_VM_FRAME_WORDS);
+    stageVM = JNI_createThread(0, SCRIPT_VM_STACK_WORDS, SCRIPT_STAGE_VM_FRAME_WORDS);
     while (remaining_vms >= 0) {
         --remaining_vms;
-        event_thread[0] = JNI_createThread(0, 8, 0x40);
+        event_thread[0] = JNI_createThread(0, SCRIPT_VM_STACK_WORDS, SCRIPT_EVENT_VM_FRAME_WORDS);
         ++event_thread;
     }
     UseVMFlag = 0;
@@ -578,7 +665,7 @@ void createTalkTask(void *actor, const char *method_name)
     ScriptObserverTask *task;
     XglTaskScheduler *scheduler;
 
-    if (GameLoopState.flags & 0x20)
+    if (GameLoopState.flags & GAME_LOOP_FLAG_TALK_BLOCKED)
         return;
     thread = scriptDB[currentScriptDB].thread;
     receiver = thread->object;
@@ -626,7 +713,7 @@ void createTalkTask(void *actor, const char *method_name)
     task->method = method;
     task->object = actor;
     Before_Talk(actor);
-    GameLoopState.flags |= 0x9000;
+    GameLoopState.flags |= GAME_LOOP_FLAG_TALKING | GAME_LOOP_FLAG_PLAYER_LOCK;
     XTK_setWindowOwner(actor);
     JNI_initThread(stageVM);
     talktoObserver(task);
@@ -641,11 +728,11 @@ void talktoObserver(ScriptObserverTask *task)
     int script_flags;
     SceneObject arguments[3];
 
-    if (owner_flags & 0x800) {
+    if (owner_flags & GAME_LOOP_FLAG_EVENT_SCENE) {
         xglTaskRemove(&task->task);
         return;
     }
-    if (owner_flags & 0x20) {
+    if (owner_flags & GAME_LOOP_FLAG_TALK_BLOCKED) {
         xglTaskRemove(&task->task);
         return;
     }
@@ -667,7 +754,7 @@ void talktoObserver(ScriptObserverTask *task)
     object = task->object;
     script_flags = getScriptFlag(object);
     if (task->argument2 != 0 && (script_flags & 8)) {
-        if (UseVMFlag != 0 || (PadData[0].button_state & 0x600000) == 0x400000) {
+        if (UseVMFlag != 0 || (PadData[0].button_state & SCRIPT_TALK_CANCEL_MASK) == SCRIPT_TALK_CANCEL_CROSS) {
             XTK_setWindowOwner(0);
             talkCancel(task);
             return;
@@ -690,8 +777,8 @@ void talktoObserver(ScriptObserverTask *task)
     if (stageVM->flags & SCENE_THREAD_CALL_PENDING) {
         XTK_setWindowOwner(0);
         actTalkAfter(object);
-        GameLoopState.flags &= ~0x1000;
-        GameLoopState.flags &= ~0x8000;
+        GameLoopState.flags &= ~GAME_LOOP_FLAG_TALKING;
+        GameLoopState.flags &= ~GAME_LOOP_FLAG_PLAYER_LOCK;
         GameLoopState.flags &= ~0x10000;
         xglTaskRemove(&task->task);
     }
@@ -707,8 +794,8 @@ void talkCancel(ScriptObserverTask *task)
     game_state = &GameLoopState;
     window->flags |= 0x80;
     window->flags &= ~2;
-    game_state->flags &= ~0x1000;
-    game_state->flags &= ~0x8000;
+    game_state->flags &= ~GAME_LOOP_FLAG_TALKING;
+    game_state->flags &= ~GAME_LOOP_FLAG_PLAYER_LOCK;
     game_state->flags &= ~0x10000;
     if (window != 0)
         window->state = 2;
@@ -724,7 +811,7 @@ void SCRIPT_execEntered(int attribute)
         JThread *thread = entry->thread;
         SceneObject object = thread->object;
 
-        if (!(GameLoopState.flags & 0x400) &&
+        if (!(GameLoopState.flags & GAME_LOOP_FLAG_ENTERED_RUNNING) &&
             JNI_isInstanceOf(object, classJava_xeno_Stage)) {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
             ScriptObserverTask *task = (ScriptObserverTask *)xglTaskEntryNext(
@@ -738,7 +825,7 @@ void SCRIPT_execEntered(int attribute)
             }
             task->object = object;
             task->argument1 = attribute;
-            GameLoopState.flags |= 0x100000;
+            GameLoopState.flags |= GAME_LOOP_FLAG_ENTERED_PENDING;
         }
     }
 }
@@ -856,7 +943,7 @@ void funcObserver(ScriptObserverTask *task)
     xglFontDebugPrintf(8, 24, func_observer_debug_text);
 
     owner_flags = task->owner->flags;
-    if (owner_flags & 0x800)
+    if (owner_flags & GAME_LOOP_FLAG_EVENT_SCENE)
         do
         {
             xglTaskRemove(&(task)->task);
@@ -864,7 +951,7 @@ void funcObserver(ScriptObserverTask *task)
         }
         while (0);
     if ((task->state_flags & 1) == 0) {
-        if (owner_flags & 0x400)
+        if (owner_flags & GAME_LOOP_FLAG_ENTERED_RUNNING)
             do
             {
                 xglTaskRemove(&(task)->task);
@@ -923,7 +1010,7 @@ void funcObserver(ScriptObserverTask *task)
             return;
         }
     }
-    GameLoopState.flags |= 0x200000;
+    GameLoopState.flags |= GAME_LOOP_FLAG_FUNC_CALLED;
 }
 
 int getEmptyVM(ScriptObserverTask *observer)
@@ -931,7 +1018,7 @@ int getEmptyVM(ScriptObserverTask *observer)
     int slot;
 
     observer->vm_slot = -1;
-    for (slot = 0; slot < 2; ++slot) {
+    for (slot = 0; slot < SCRIPT_EVENT_VM_COUNT; ++slot) {
         if (((UseVMFlag >> slot) & 1) == 0) {
             JNI_initThread(evtVM[slot]);
             observer->state_flags |= 1;
@@ -963,11 +1050,11 @@ void SCRIPT_load_DBG(const char *path)
     xglFontLoad(0, 0);
     path_slot = &debugBasePath;
     entry = &scriptDB[0];
-    entry->motion_data = (void *)0x05000000;
-    entry->pdb = (void *)0x06100000;
+    entry->motion_data = (void *)SCRIPT_DB0_MOTION_ADDR;
+    entry->pdb = (void *)SCRIPT_DB0_PDB_ADDR;
     entry = scriptDB + 1;
-    entry->motion_data = (void *)0x06500000;
-    entry->pdb = (void *)0x06900000;
+    entry->motion_data = (void *)SCRIPT_DB1_MOTION_ADDR;
+    entry->pdb = (void *)SCRIPT_DB1_PDB_ADDR;
     nextEntry = &scriptDB[(currentScriptDB + 1) & 1];
     base = *path_slot;
     loadScript(nextEntry, base, path);
@@ -1001,11 +1088,11 @@ void attrObserver(ScriptObserverTask *task)
     ScriptMethodArgument arguments[2];
 
     if ((task->state_flags & 1) == 0) {
-        if (task->owner->flags & 0x400) {
+        if (task->owner->flags & GAME_LOOP_FLAG_ENTERED_RUNNING) {
             xglTaskRemove(&task->task);
             return;
         }
-        task->owner->flags |= 0x400;
+        task->owner->flags |= GAME_LOOP_FLAG_ENTERED_RUNNING;
         if (getEmptyVM(task) == 0) {
             xglTaskRemove(&task->task);
             return;
@@ -1021,7 +1108,7 @@ void attrObserver(ScriptObserverTask *task)
         method = findMethod(scene_class, name, signature);
     }
     if (method == 0) {
-        task->owner->flags &= ~0x400;
+        task->owner->flags &= ~GAME_LOOP_FLAG_ENTERED_RUNNING;
         xglTaskRemove(&task->task);
         return;
     }
@@ -1031,10 +1118,10 @@ void attrObserver(ScriptObserverTask *task)
     JNI_callMethod(evtVM[vm_slot], method, (SceneObject *)arguments, 0);
     if (evtVM[vm_slot]->flags & SCENE_THREAD_CALL_PENDING) {
         JNI_catchException();
-        task->owner->flags &= ~0x400;
+        task->owner->flags &= ~GAME_LOOP_FLAG_ENTERED_RUNNING;
         UseVMFlag &= ~(1 << vm_slot);
         xglTaskRemove(&task->task);
-        GameLoopState.flags &= ~0x100000;
+        GameLoopState.flags &= ~GAME_LOOP_FLAG_ENTERED_PENDING;
     }
 }
 
@@ -1043,10 +1130,10 @@ static int PauseSkipCheck(void)
     if ((GameLoopState.flags & 0x90000000) != 0)
         return 1;
     if (GameLoopState.input_delay != 0 ||
-        (PadData[0].pressed & 0x800) == 0)
+        (PadData[0].pressed & PAD_START) == 0)
         return 0;
 
-    GameLoopState.input_delay = 0x20;
+    GameLoopState.input_delay = PAUSE_INPUT_DELAY;
     xglSoundEffectNormalDirect(4);
     sRender.scene_disabled = 1;
     xglSleep();
@@ -1057,15 +1144,15 @@ static int PauseSkipCheck(void)
     xglSleep();
     PartyTimePauseStart();
 
-    if (!(PadData[0].pressed & 0x10)) {
+    if (!(PadData[0].pressed & PAD_TRIANGLE)) {
         for (;;) {
             if (GameLoopState.input_delay != 0) {
                 GameLoopState.input_delay--;
-            } else if ((PadData[0].pressed & 0x800) != 0) {
+            } else if ((PadData[0].pressed & PAD_START) != 0) {
                 break;
             }
             xglSleep();
-            if (PadData[0].pressed & 0x10)
+            if (PadData[0].pressed & PAD_TRIANGLE)
                 break;
         }
     }
@@ -1073,9 +1160,9 @@ static int PauseSkipCheck(void)
     PartyTimePauseEnd();
     xglSoundEffectNormalDirect(4);
     sRender.scene_disabled = 0;
-    GameLoopState.input_delay = 0x20;
-    if (PadData[0].pressed & 0x10) {
-        GameLoopState.input_delay = 0x40;
+    GameLoopState.input_delay = PAUSE_INPUT_DELAY;
+    if (PadData[0].pressed & PAD_TRIANGLE) {
+        GameLoopState.input_delay = PAUSE_SKIP_INPUT_DELAY;
         if (s_nScriptFrameLockEntry == 0)
             s_nScriptEventSkipEntry = 1;
         xglSoundStreamStop(0);
@@ -1098,7 +1185,7 @@ void sceneObserver2(ScriptSceneTask *task)
     }
     thread = task->thread;
     if (PauseSkipCheck() != 0 || s_nScriptEventFin != 0) {
-        thread->flags = (thread->flags & ~0x10) | SCENE_THREAD_CALL_PENDING;
+        thread->flags = (thread->flags & ~SCENE_THREAD_HAS_METHOD) | SCENE_THREAD_CALL_PENDING;
         s_nScriptEventFin = 0;
     }
     if (!(thread->flags & SCENE_THREAD_CALL_PENDING))
@@ -1133,8 +1220,8 @@ void sceneObserver2(ScriptSceneTask *task)
         nmlModelSendSignalEventFinish();
         s_nScriptEventSkipEntry = 0;
     }
-    s_nScriptFadeOutTime = 30;
-    s_nScriptChangeTime = 25;
+    s_nScriptFadeOutTime = SCRIPT_DEFAULT_FADE_FRAMES;
+    s_nScriptChangeTime = SCRIPT_SCENE_CHANGE_FRAMES;
     camera_index = 0;
     s_nScriptEventActive = 0;
     s_nScriptFrameLockEntry = 0;
@@ -1146,18 +1233,18 @@ void sceneObserver2(ScriptSceneTask *task)
     TWSYS_init();
     MSG_init();
     s_nScriptSequenceReset = 0;
-    xglRenderClearColor(0x80000000);
-    GameLoopState.kind = 2;
+    xglRenderClearColor(RENDER_CLEAR_COLOR_BLACK);
+    GameLoopState.kind = GAME_MODE_FIELD;
     s_nScriptCfTime = 0;
     nmlModelSetGlobalPointLightReset();
     SCENE_cleanup(stageVM, thread->object);
     JNI_catchException();
-    task->owner->flags &= ~0x800;
+    task->owner->flags &= ~GAME_LOOP_FLAG_EVENT_SCENE;
     do {
         xglStudioGetCamera(&camera, camera_index);
         camera_index++;
         xglCameraClipRangeDefault(camera);
-    } while (camera_index < 8);
+    } while (camera_index < STUDIO_CAMERA_COUNT);
     nmlModelSetGlobalPointLightReset();
     nmlModelSetEffectWrite(1);
     nmlModelSetFadeIn((int)GameLoopState.fade_frames, 0);
@@ -1186,7 +1273,7 @@ void sceneObserver(XglTaskPrefix *task_prefix)
         entry = &scriptDB[currentScriptDB];
         object = newObject(loadClass(loadConstString(entry->active,
                                                      -1), 0));
-        thread = JNI_createThread(2, 6, 0x46);
+        thread = JNI_createThread(2, 6, SCRIPT_STAGE_VM_FRAME_WORDS);
         {
             SceneVm *instance_vm = defaultVM;
 
@@ -1203,7 +1290,7 @@ void sceneObserver(XglTaskPrefix *task_prefix)
     if (thread->stack == 0)
         xglTaskRemove(task_prefix);
     if (PauseSkipCheck() != 0 || s_nScriptEventFin != 0) {
-        thread->flags = (thread->flags & ~0x10) | SCENE_THREAD_CALL_PENDING;
+        thread->flags = (thread->flags & ~SCENE_THREAD_HAS_METHOD) | SCENE_THREAD_CALL_PENDING;
         s_nScriptEventFin = 0;
     }
     if (!(thread->flags & SCENE_THREAD_CALL_PENDING))
@@ -1240,8 +1327,8 @@ void sceneObserver(XglTaskPrefix *task_prefix)
         nmlModelSendSignalEventFinish();
         s_nScriptEventSkipEntry = 0;
     }
-    s_nScriptFadeOutTime = 30;
-    s_nScriptChangeTime = 25;
+    s_nScriptFadeOutTime = SCRIPT_DEFAULT_FADE_FRAMES;
+    s_nScriptChangeTime = SCRIPT_SCENE_CHANGE_FRAMES;
     s_nScriptFrameLockEntry = 0;
     s_nScriptFadeRequest = 0;
     s_nScriptEventActive = 0;
@@ -1256,18 +1343,18 @@ void sceneObserver(XglTaskPrefix *task_prefix)
     MSG_init();
     sefInitEffectCf();
     JNI_popFrame();
-    GameLoopState.kind = 2;
+    GameLoopState.kind = GAME_MODE_FIELD;
     entry = &scriptDB[currentScriptDB ^ 1];
     currentScriptDB ^= 1;
     nmlModelSetGlobalPointLightReset();
     s_nScriptCfTime = 0;
     s_nScriptSequenceReset = 0;
-    xglRenderClearColor(0x80000000U);
+    xglRenderClearColor(RENDER_CLEAR_COLOR_BLACK);
     nmlModelInit();
     GameResourceReset(0);
     GameLoopState.scene_reset_counter = 0;
     MapChange2(MapGetNo());
-    for (camera_index = 0; camera_index < 8; camera_index++) {
+    for (camera_index = 0; camera_index < STUDIO_CAMERA_COUNT; camera_index++) {
         StudioCamera *configured_camera;
 
         xglStudioGetCamera(&camera, camera_index);
@@ -1281,13 +1368,13 @@ void sceneObserver(XglTaskPrefix *task_prefix)
         }
     }
     if (entry->thread == 0) {
-        task->owner->flags &= ~0x800;
+        task->owner->flags &= ~GAME_LOOP_FLAG_EVENT_SCENE;
         JNI_loadClassDB(entry->class_slot, 0);
         entry = &scriptDB[(currentScriptDB + 1) & 1];
         entry->thread = 0;
     } else {
         JNI_loadClassDB(entry->class_slot, entry->class_image);
-        task->owner->flags &= ~0x800;
+        task->owner->flags &= ~GAME_LOOP_FLAG_EVENT_SCENE;
         entry = &scriptDB[(currentScriptDB + 1) & 1];
         JNI_loadClassDB(entry->class_slot, 0);
     }
@@ -1319,12 +1406,12 @@ static void DB_light(ScriptMenuTask *task)
         unsigned short buttons = pad->buttons;
 
         task->state_flags = state_flags | 1;
-        if (buttons & 0x80)
+        if (buttons & PAD_SQUARE)
             initLight3();
         else
             initLight2();
 
-        for (i = 0; i < 64; i++) {
+        for (i = 0; i < ACTOR_COUNT; i++) {
             int word = i >> 5;
             int shift = i & 31;
             if (actor[i].flags & 0x8000)
@@ -1341,15 +1428,15 @@ static void DB_light(ScriptMenuTask *task)
         lightSave = result != 0 ? 0 : lightSave;
         pad->pressed = 0;
     } else {
-        if (pad->pressed & 0x10)
+        if (pad->pressed & PAD_TRIANGLE)
             lightSave = 1;
         updateLight(0);
     }
 
-    if (pad->pressed & 0x40) {
+    if (pad->pressed & PAD_CROSS) {
         int i;
 
-        for (i = 0; i < 64; i++) {
+        for (i = 0; i < ACTOR_COUNT; i++) {
             if ((lightActFlags[i >> 5] >> (i & 31)) & 1)
                 actor[i].flags |= 0x8000;
         }
@@ -1401,7 +1488,7 @@ static void DB_vmSwitch(ScriptMenuTask *task)
     }
     TMENU_setItem(menu, item, vmSwitchStr[item * 2 + on]);
     menu->state = 0xe;
-    if (item == 4) {
+    if (item == VM_DEBUG_ITEM_MONITOR) {
         ScriptMenuTask *monitor;
 
         do {
@@ -1427,10 +1514,10 @@ static int DB_stageSelect(ScriptMenuTask *task)
     if (!(task->state_flags & 1)) {
         task->state_flags |= 1;
         slider = TSLIDER_create(-1);
-        slider->max_value = 2000;
+        slider->max_value = DEBUG_MAP_NO_MAX;
         slider->mode |= 0x10;
-        slider->x = 256.0f;
-        slider->y = 224.0f;
+        slider->x = DEBUG_SLIDER_X;
+        slider->y = DEBUG_SLIDER_Y;
         slider->value = MapGetNo();
         task->window = slider;
         task->phase = 0;
@@ -1444,14 +1531,14 @@ static int DB_stageSelect(ScriptMenuTask *task)
             if (map_name != 0)
                 xglFontDebugPrintf(8, 32, map_name);
         }
-        if (slider->state == 2) {
+        if (slider->state == SCRIPT_WINDOW_STATE_DONE) {
             if (slider->value >= 0) {
                 task->phase = 1;
                 task->map_no = slider->value;
                 slider = TSLIDER_create(-1);
                 task->window = slider;
-                slider->x = 256.0f;
-                slider->y = 224.0f;
+                slider->x = DEBUG_SLIDER_X;
+                slider->y = DEBUG_SLIDER_Y;
                 slider->mode |= 0x10;
                 break;
             }
@@ -1463,7 +1550,7 @@ static int DB_stageSelect(ScriptMenuTask *task)
         break;
     case 1:
         xglFontDebugPrintf(8, 32, "Entrance:");
-        if (slider->state == 2) {
+        if (slider->state == SCRIPT_WINDOW_STATE_DONE) {
             value = slider->value;
             if (value >= 0) {
                 task->loaded_map = value;
@@ -1491,7 +1578,7 @@ void DB_memory(ScriptMenuTask *task)
         heapUsed = xheap_info(heapInfo);
     }
 
-    sprintf(text, memoryUsageFormat, heapUsed >> 10, 0x100);
+    sprintf(text, memoryUsageFormat, heapUsed >> 10, DEBUG_MEMORY_TOTAL_KB);
     xglFontDebugPrintf(0x10, 0x40, text);
     heap_bytes = (float)heapUsed;
     scale[0] = heap_bytes * 128.0f * 0.0000038146973f;
@@ -1525,7 +1612,7 @@ void DB_memory(ScriptMenuTask *task)
     xglMatrixStackSave(matrix);
     drawBox2(&matrix, 6);
 
-    if (pad->pressed & 0x40) {
+    if (pad->pressed & PAD_CROSS) {
         task->owner->flags &= ~1;
         task->owner->kind = task->owner->saved_kind;
         TWSYS_setGRPStatus(0, 0);
@@ -1553,13 +1640,13 @@ int DB_lightSave(ScriptFileSelect *state)
     case 2:
         return 1;
     }
-    if (pad->repeated & 0x8000)
+    if (pad->repeated & PAD_LEFT)
         lightFileNum--;
-    if (pad->repeated & 0x2000)
+    if (pad->repeated & PAD_RIGHT)
         lightFileNum++;
     if (lightFileNum < 0)
-        lightFileNum = 99;
-    if (lightFileNum >= 100)
+        lightFileNum = LIGHT_FILE_LAST;
+    if (lightFileNum >= LIGHT_FILE_COUNT)
         lightFileNum = 0;
     DB_reset(32, 160);
     /* Circle button: load.
@@ -1569,9 +1656,9 @@ int DB_lightSave(ScriptFileSelect *state)
      * EN: Filled square button: Save */
     DB_println("\xa2\xa3\xa5\xdc\xa5\xbf\xa5\xf3\xa1\xa7\xa5\xbb\xa1\xbc\xa5\xd6");
     DB_println("lgt%02d.rc", lightFileNum);
-    if (pad->pressed & 0x80) {
+    if (pad->pressed & PAD_SQUARE) {
         sprintf(path, "%s%slgt%02d.rc", state->directory, state->file_path, lightFileNum);
-        file = sceOpen(path, 0x602);
+        file = sceOpen(path, SCE_WRONLY_CREAT_TRUNC);
         if (file >= 0) {
             DB_lightWrite(file);
             sceClose(file);
@@ -1642,7 +1729,7 @@ static int DB_wind(ScriptMenuTask *task)
         GameLoopState.kind = GameLoopState.saved_kind;
     }
     updateWind(&dbgWind);
-    if (pad->pressed & 0x40) {
+    if (pad->pressed & PAD_CROSS) {
         EXM_ClearWindStruct();
         EXM_SetWindPara(&dbgWind);
         task->owner->flags &= ~1;
@@ -1673,7 +1760,7 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
         return;
     menu->state = 2;
     switch (menu->selected_item) {
-    case 0:
+    case DEBUG_MENU_SCRIPT_EXEC:
         do
         {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -1688,7 +1775,7 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
         }
         while (0);
         break;
-    case 1:
+    case DEBUG_MENU_BG_CHANGE:
         do
         {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -1703,7 +1790,7 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
         }
         while (0);
         break;
-    case 2:
+    case DEBUG_MENU_VIRTUAL_M:
         do
         {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -1718,11 +1805,11 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
         }
         while (0);
         break;
-    case 3:
+    case DEBUG_MENU_TOOL:
         initCursor();
-        task->owner->kind = 7;
+        task->owner->kind = GAME_MODE_DEBUG_TOOL;
         break;
-    case 4:
+    case DEBUG_MENU_LIGHT:
         do
         {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -1737,7 +1824,7 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
         }
         while (0);
         break;
-    case 5:
+    case DEBUG_MENU_MEMORY_INFO:
         do
         {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -1753,7 +1840,7 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
         while (0);
         created->owner->saved_kind = task->owner->saved_kind;
         break;
-    case 6:
+    case DEBUG_MENU_WIND:
         do
         {
             XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -1781,7 +1868,7 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
 
 int loadScriptCD(ScriptDbEntry *entry, const char *path)
 {
-    char full_path[0x100];
+    char full_path[SCRIPT_PATH_MAX];
     int result;
     int resource_read_size;
     const char *active;
@@ -1841,10 +1928,10 @@ int loadScriptCD2(ScriptDbEntry *entry, const char *path)
     if (base_name != 0)
         strcat(resource_path.bytes, base_name + 1);
     replacePathExt(resource_path.bytes, fpkExtension);
-    entry->motion_data = RES_loadFile(-1, 5, resource_path.bytes, 0);
+    entry->motion_data = RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_FILE, resource_path.bytes, 0);
     ACT_initExMotion(0, 1, entry->motion_data);
     replacePathExt(resource_path.bytes, arcExtension);
-    entry->pdb = RES_loadFile(-1, 5, resource_path.bytes, 0);
+    entry->pdb = RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_FILE, resource_path.bytes, 0);
     entry->active = active;
     entry->skip_count = skip_count;
     return (int)entry->pdb;
@@ -1862,7 +1949,7 @@ const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *
         } fields;
         struct ScriptImageHeaderBytes raw;
     };
-    char full_path[0x100];
+    char full_path[SCRIPT_PATH_MAX];
     union ScriptClassImageHeader header_storage;
     int fd;
     int resource_fd;
@@ -1874,7 +1961,7 @@ const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *
     if (path_base != 0) {
         strcpy(full_path, path_base);
         strcat(full_path, path);
-        fd = sceOpen(full_path, 1);
+        fd = sceOpen(full_path, SCE_RDONLY);
         if (fd < 0)
             return 0;
         {
@@ -1892,11 +1979,11 @@ const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *
         }
         sceClose(fd);
         replacePathExt(full_path, fpkExtension);
-        resource_fd = sceOpen(full_path, 1);
+        resource_fd = sceOpen(full_path, SCE_RDONLY);
         if (resource_fd >= 0) {
-            int file_size = sceLseek(resource_fd, 0, 2);
+            int file_size = sceLseek(resource_fd, 0, SCE_SEEK_END);
 
-            sceLseek(resource_fd, 0, 0);
+            sceLseek(resource_fd, 0, SCE_SEEK_SET);
             sceRead(resource_fd, entry->motion_data, (unsigned int)file_size);
             sceClose(resource_fd);
             ACT_initExMotion(0, 1, entry->motion_data);
@@ -1905,11 +1992,11 @@ const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *
             ACT_initExMotion(0, 1, 0);
         }
         replacePathExt(full_path, arcExtension);
-        resource_fd = sceOpen(full_path, 1);
+        resource_fd = sceOpen(full_path, SCE_RDONLY);
         if (resource_fd >= 0) {
-            int file_size = sceLseek(resource_fd, 0, 2);
+            int file_size = sceLseek(resource_fd, 0, SCE_SEEK_END);
 
-            sceLseek(resource_fd, 0, 0);
+            sceLseek(resource_fd, 0, SCE_SEEK_SET);
             sceRead(resource_fd, entry->pdb, (unsigned int)file_size);
             sceClose(resource_fd);
             DebugMenuResourceSizeAdd += file_size;
@@ -1935,7 +2022,7 @@ void DB_evtMonitor(ScriptMenuTask *task)
     int selected;
 
     DB_cmode(1);
-    if (!(vmDebugMask & 0x10)) {
+    if (!(vmDebugMask & VM_DEBUG_MASK_MONITOR)) {
         debug->flags &= ~1;
         xglTaskRemove(&task->task);
         return;
@@ -1958,7 +2045,7 @@ void DB_evtMonitor(ScriptMenuTask *task)
         JavaClass *debug_class =
             ((ObjectHeader *)((debug_thread->object)))->classPointer->clazz;
         JavaMethod *debug_method = ((debug_thread))->method;
-        if ((((debug_thread))->flags & 0x10) && debug_method != 0) {
+        if ((((debug_thread))->flags & SCENE_THREAD_HAS_METHOD) && debug_method != 0) {
             DB_println(classMethodFormat, debug_class->name->bytes,
                        debug_method->name->bytes);
             if (((debug_thread))->frame_depth > 0) {
@@ -1989,16 +2076,16 @@ void DB_evtMonitor(ScriptMenuTask *task)
         SceneObject object;
 
         pad = PadData;
-        if (pad->pressed & 2)
+        if (pad->pressed & PAD_R2)
             debug->mode = 1;
         repeated = pad->repeated;
-        if (repeated & 0x8000)
+        if (repeated & PAD_LEFT)
             --debug->selected;
-        if (repeated & 0x2000)
+        if (repeated & PAD_RIGHT)
             ++debug->selected;
         if (debug->selected < 0)
-            debug->selected = 63;
-        if (debug->selected >= 64)
+            debug->selected = ACTOR_COUNT - 1;
+        if (debug->selected >= ACTOR_COUNT)
             debug->selected = 0;
         selected = debug->selected;
         actor_record = &actor[selected];
@@ -2028,7 +2115,7 @@ void DB_evtMonitor(ScriptMenuTask *task)
         JavaClass *debug_class =
             ((ObjectHeader *)((object)))->classPointer->clazz;
         JavaMethod *debug_method = ((thread))->method;
-        if ((((thread))->flags & 0x10) && debug_method != 0) {
+        if ((((thread))->flags & SCENE_THREAD_HAS_METHOD) && debug_method != 0) {
             DB_println(classMethodFormat, debug_class->name->bytes,
                        debug_method->name->bytes);
             if (((thread))->frame_depth > 0) {
@@ -2059,16 +2146,16 @@ void DB_evtMonitor(ScriptMenuTask *task)
         float half_turn;
 
         pad = PadData;
-        if (pad->pressed & 2)
+        if (pad->pressed & PAD_R2)
             debug->mode = (mode + 1) & 1;
         repeated = pad->repeated;
-        if (repeated & 0x8000)
+        if (repeated & PAD_LEFT)
             --debug->selected;
-        if (repeated & 0x2000)
+        if (repeated & PAD_RIGHT)
             ++debug->selected;
         if (debug->selected < 0)
-            debug->selected = 63;
-        if (debug->selected >= 64)
+            debug->selected = MAP_UNIT_COUNT - 1;
+        if (debug->selected >= MAP_UNIT_COUNT)
             debug->selected = 0;
         selected = debug->selected;
         unit = &MapUnit[selected];
@@ -2096,7 +2183,7 @@ void DB_evtMonitor(ScriptMenuTask *task)
         JavaClass *debug_class =
             ((ObjectHeader *)((object)))->classPointer->clazz;
         JavaMethod *debug_method = ((thread))->method;
-        if ((((thread))->flags & 0x10) && debug_method != 0) {
+        if ((((thread))->flags & SCENE_THREAD_HAS_METHOD) && debug_method != 0) {
             DB_println(classMethodFormat, debug_class->name->bytes,
                        debug_method->name->bytes);
             if (((thread))->frame_depth > 0) {
@@ -2147,7 +2234,7 @@ ScriptDbEntry *SCRIPT_exec(void)
 
         JNI_popFrame();
         XTK_setResourceID(1);
-        GameLoopState.kind = 2;
+        GameLoopState.kind = GAME_MODE_FIELD;
         nmlModelSetGlobalPointLightReset();
         s_nScriptCfTime = 0;
         TCAMERA_init();
@@ -2168,7 +2255,7 @@ ScriptDbEntry *SCRIPT_exec(void)
         JNI_loadNativeClass();
         return 0;
     }
-    if (GameLoopState.flags & 0x800) {
+    if (GameLoopState.flags & GAME_LOOP_FLAG_EVENT_SCENE) {
         JNI_popFrame();
         TCAMERA_init();
         TWSYS_init();
@@ -2186,10 +2273,10 @@ ScriptDbEntry *SCRIPT_exec(void)
             camera_index = 0;
             JNI_popFrame();
             XTK_setResourceID(1);
-            GameLoopState.kind = 2;
+            GameLoopState.kind = GAME_MODE_FIELD;
             nmlModelSetGlobalPointLightReset();
             s_nScriptCfTime = 0;
-            while (camera_index < 8) {
+            while (camera_index < STUDIO_CAMERA_COUNT) {
                 StudioCamera *configured_camera;
 
                 xglStudioGetCamera(&stage_camera, camera_index);
@@ -2202,9 +2289,9 @@ ScriptDbEntry *SCRIPT_exec(void)
                     configured_camera->active = 0;
                 }
                 ++camera_index;
-                configured_camera->position.vector.z = 1000000.0f;
-                configured_camera->position.vector.y = 1000000.0f;
-                configured_camera->position.vector.x = 1000000.0f;
+                configured_camera->position.vector.z = SCRIPT_CAMERA_PARK_POSITION;
+                configured_camera->position.vector.y = SCRIPT_CAMERA_PARK_POSITION;
+                configured_camera->position.vector.x = SCRIPT_CAMERA_PARK_POSITION;
                 configured_camera->rotation.vector.y = 1.5707964f;
                 configured_camera->rotation.vector.x = 0.0f;
                 configured_camera->rotation.vector.z = 0.0f;
@@ -2218,7 +2305,7 @@ ScriptDbEntry *SCRIPT_exec(void)
             MAP_initUnit();
             InitCfSystem();
             s_nScriptSequenceReset = 0;
-            xglRenderClearColor(0x80000000);
+            xglRenderClearColor(RENDER_CLEAR_COLOR_BLACK);
             actor = ACT_create(0, 1);
             ACT_initMotion(actor);
             ACT_loadMotion(actor, actor->inUseId, 1);
@@ -2229,7 +2316,7 @@ ScriptDbEntry *SCRIPT_exec(void)
             JNI_loadClassDB(entry->class_slot, entry->class_image);
             object = newObject(loadClass(
                 loadConstString(entry->active, -1), 0));
-            thread = JNI_createThread(2, 6, 0x46);
+            thread = JNI_createThread(2, 6, SCRIPT_STAGE_VM_FRAME_WORDS);
             *&thread->object = object;
             vm = defaultVM;
             entry->thread = thread;
@@ -2249,7 +2336,7 @@ ScriptDbEntry *SCRIPT_exec(void)
     {
         int camera_index = 0;
 
-        while (camera_index < 8) {
+        while (camera_index < STUDIO_CAMERA_COUNT) {
             StudioCamera *configured_camera;
 
             xglStudioGetCamera(&scene_camera, camera_index);
@@ -2262,9 +2349,9 @@ ScriptDbEntry *SCRIPT_exec(void)
                 configured_camera->active = 0;
             }
             ++camera_index;
-            configured_camera->position.vector.z = 1000000.0f;
-            configured_camera->position.vector.y = 1000000.0f;
-            configured_camera->position.vector.x = 1000000.0f;
+            configured_camera->position.vector.z = SCRIPT_CAMERA_PARK_POSITION;
+            configured_camera->position.vector.y = SCRIPT_CAMERA_PARK_POSITION;
+            configured_camera->position.vector.x = SCRIPT_CAMERA_PARK_POSITION;
             configured_camera->rotation.vector.y = 1.5707964f;
             configured_camera->rotation.vector.x = 0.0f;
             configured_camera->rotation.vector.z = 0.0f;
@@ -2277,12 +2364,12 @@ ScriptDbEntry *SCRIPT_exec(void)
     {
     unsigned int *event_active = &s_nScriptEventActive;
     unsigned int *sequence_reset = &s_nScriptSequenceReset;
-    GameLoopState.kind = 3;
+    GameLoopState.kind = GAME_MODE_EVENT;
     *event_active = 1;
-    GameLoopState.flags |= 0x800;
+    GameLoopState.flags |= GAME_LOOP_FLAG_EVENT_SCENE;
     *sequence_reset = 0;
     }
-    xglRenderClearColor(0x80000000);
+    xglRenderClearColor(RENDER_CLEAR_COLOR_BLACK);
     nmlModelInit();
     GameResourceReset(0);
     GameLoopState.scene_reset_counter = 0;
@@ -2325,10 +2412,10 @@ ScriptDbEntry *SCRIPT_exec2(void)
     entry = &scriptDB[currentScriptDB];
     PLAY_setupDefault(PLAY_getCurrent());
     if (entry->active == 0) {
-        s_nScriptChangeTime = 0x19;
+        s_nScriptChangeTime = SCRIPT_SCENE_CHANGE_FRAMES;
         JNI_popFrame();
         XTK_setResourceID(1);
-        GameLoopState.kind = 2;
+        GameLoopState.kind = GAME_MODE_FIELD;
         nmlModelSetGlobalPointLightReset();
         s_nScriptCfTime = 0;
         s_nScriptTalkLock = 0;
@@ -2341,7 +2428,7 @@ ScriptDbEntry *SCRIPT_exec2(void)
         JNI_loadNativeClass();
         return entry;
     }
-    if (GameLoopState.flags & 0x800) {
+    if (GameLoopState.flags & GAME_LOOP_FLAG_EVENT_SCENE) {
         s_nScriptTalkLock = 0;
         TCAMERA_init();
         TWSYS_init();
@@ -2352,7 +2439,7 @@ ScriptDbEntry *SCRIPT_exec2(void)
             camera_index = 0;
             JNI_popFrame();
             XTK_setResourceID(1);
-            GameLoopState.kind = 2;
+            GameLoopState.kind = GAME_MODE_FIELD;
             nmlModelSetGlobalPointLightReset();
             s_nScriptCfTime = 0;
             do {
@@ -2365,18 +2452,18 @@ ScriptDbEntry *SCRIPT_exec2(void)
                     target->active = 0;
                 }
                 camera_index++;
-            } while (camera_index < 8);
+            } while (camera_index < STUDIO_CAMERA_COUNT);
             s_nScriptTalkLock = 0;
             TCAMERA_init();
             TWSYS_init();
             MSG_init();
-            s_nScriptChangeTime = 0x19;
+            s_nScriptChangeTime = SCRIPT_SCENE_CHANGE_FRAMES;
             JNI_pushFrame();
             JNI_loadNativeClass();
             JNI_loadClassDB(entry->class_slot, entry->class_image);
             object = newObject(
                 loadClass(loadConstString(entry->active, -1), 0));
-            thread = JNI_createThread(2, 6, 0x46);
+            thread = JNI_createThread(2, 6, SCRIPT_STAGE_VM_FRAME_WORDS);
             thread->object = object;
             entry->thread = thread;
             STAGE_instance(defaultVM, object);
@@ -2384,8 +2471,8 @@ ScriptDbEntry *SCRIPT_exec2(void)
         return entry;
     }
     XTK_setResourceID(2);
-    GameLoopState.kind = 3;
-    GameLoopState.flags |= 0x800;
+    GameLoopState.kind = GAME_MODE_EVENT;
+    GameLoopState.flags |= GAME_LOOP_FLAG_EVENT_SCENE;
     s_nScriptEventActive = 1;
     nmlModelSetGlobalPointLightReset();
     nmlModelSetFadeIn((int)GameLoopState.fade_frames, 0);
@@ -2394,7 +2481,7 @@ ScriptDbEntry *SCRIPT_exec2(void)
                                     GameLoopState.fade_green,
                                     GameLoopState.fade_blue),
                   (int)GameLoopState.fade_frames, 3);
-    s_nScriptChangeTime = 0x19;
+    s_nScriptChangeTime = SCRIPT_SCENE_CHANGE_FRAMES;
     s_nScriptTalkLock = 0;
     TCAMERA_init();
     TWSYS_init();
@@ -2405,7 +2492,7 @@ ScriptDbEntry *SCRIPT_exec2(void)
     JNI_loadClassDB(entry->class_slot, entry->class_image);
     object = newObject(
         loadClass(loadConstString(entry->active, -1), 0));
-    thread = JNI_createThread(2, 6, 0x46);
+    thread = JNI_createThread(2, 6, SCRIPT_STAGE_VM_FRAME_WORDS);
     callback = (int (*)(XglTaskPrefix *))sceneObserver2;
     scheduler = GameLoopState.task_scheduler;
     thread->object = object;

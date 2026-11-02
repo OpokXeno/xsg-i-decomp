@@ -9,6 +9,11 @@
 
 typedef int s32;
 
+#define CULLING_VOLUME_MAX 10           /* volumes one culling map can register */
+#define CULLING_LAST_ENTRY_MAX 12       /* source[] last-entry indices, ended by a negative one */
+#define SUB_WINDOW_COUNT 4              /* studio sub windows / cameras */
+#define CLIP_ALL_VIEWS_CLIPPED 0x80     /* nmlModelCalcClipStudio: every active window clips the model */
+
 /*
  * One registered culling volume: the three vectors xglCullingMapSet and
  * xglCullingMapCreate fill in from a 9-float box record, followed by the
@@ -45,7 +50,7 @@ typedef struct CullingMap {
         u8 active;
         char name[32];
     };
-    CullingVolume volumes[10];
+    CullingVolume volumes[CULLING_VOLUME_MAX];
     s32 count;
     const s32 *source;
     s32 cullingMap;
@@ -74,7 +79,7 @@ typedef struct CullingMapNameSource {
  */
 extern s32 cullingExistFlag[];
 
-extern int g_aSubWindow[4];
+extern int g_aSubWindow[SUB_WINDOW_COUNT];
 extern const char cullingMapVok03Name[16];
 extern const char cullingMapVok04Name[16];
 extern const char cullingMapVok07Name[16];
@@ -799,7 +804,7 @@ void xglCullingMapLastCheck(void)
     s32 i;
 
     if (s_inCulling.source != 0) {
-        for (i = 0; i < 12; i++) {
+        for (i = 0; i < CULLING_LAST_ENTRY_MAX; i++) {
             entry = s_inCulling.source[i];
             if (entry >= 0) {
                 nmlModelSetMapLastEntry(s_inCulling.cullingMap, entry);
@@ -858,7 +863,7 @@ void xglCullingMapSet(s32 cullingMap)
             while (1) {
                 record = &s_aCullingMap[index].entryCount[recordIndex++ * 9];
                 volume = &s_inCulling.volumes[s_inCulling.count];
-                if (s_inCulling.count >= 10) {
+                if (s_inCulling.count >= CULLING_VOLUME_MAX) {
                     break;
                 }
                 if (record[6] < 0.0f) {
@@ -887,7 +892,7 @@ void xglCullingMapCreate(void)
     CullingVolume *volume = &s_inCulling.volumes[s_inCulling.count];
     const float *record = s_aCullingBase;
 
-    if (s_inCulling.count < 10) {
+    if (s_inCulling.count < CULLING_VOLUME_MAX) {
         volume->position.x = record[0];
         volume->position.y = record[1];
         volume->position.z = record[2];
@@ -1299,7 +1304,7 @@ s32 nmlModelCalcClipMat1AllCam(const Vector4 *model, const Matrix4 *matrix)
     s32 clip;
     s32 i;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < SUB_WINDOW_COUNT; i++) {
         camera = xglStudioSelectGetActiveCamera(i);
         if (camera == 0) {
             return 0;
@@ -1344,7 +1349,7 @@ s32 nmlModelCalcClipMat2AllCam(const Vector4 *model, const Matrix4 *matrix1, con
     }
     if (tested != 0) {
         if (total == tested) {
-            clipMask |= 0x80;
+            clipMask |= CLIP_ALL_VIEWS_CLIPPED;
         }
     }
     return clipMask;

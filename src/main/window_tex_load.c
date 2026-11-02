@@ -3,9 +3,17 @@
 #include "main/window_tex_load.h"
 #include "window_tex_load.h"
 #include "main/file.h"
+#include "main/party.h"
 
 /* The defining headers supply the flags and renderer callback layouts. */
 #define GAME_LOOP_FLAG_UMN 0x04000000
+
+#define MENU_WORK_SIZE 0x500000       /* GameResourceWorkAlloc request */
+#define MENU_MODEL_WORK_SIZE 0x480000 /* leading part given to the model pool */
+#define MENU_WORK_END_SIZE 0x10000U
+#define MENU_UMN_DATABASE_SIZE 0xd00
+#define MENU_TEX_ASYNC_FLAG 0x10000   /* WindowTexLoad request: load asynchronously */
+#define MENU_TEX_SLOT_MASK 0xffff
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -118,13 +126,13 @@ XglRenderFadeCallback MenuCfTaiki[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 static unsigned char Menu02Tex[0x40800];
 
 /* MenuWorkEndGet clears and returns this entire 64 KiB work region. */
-static unsigned char MenuWorkEndTop[0x10000];
+static unsigned char MenuWorkEndTop[MENU_WORK_END_SIZE];
 
 static int original_font_no_1;
 
 int WindowTexLoad(unsigned char *buffer, unsigned int request)
 {
-    int texture_slot = request & 0xffff;
+    int texture_slot = request & MENU_TEX_SLOT_MASK;
     unsigned int asynchronous = request >> 16;
     int result = 0;
 
@@ -166,7 +174,7 @@ unsigned char *WindowTexAddrGet(int texture_slot)
 }
 
 void *MenuWorkEndGet(void) {
-    memset(MenuWorkEndTop, 0, 0x10000U);
+    memset(MenuWorkEndTop, 0, MENU_WORK_END_SIZE);
     return MenuWorkEndTop;
 }
 
@@ -205,13 +213,13 @@ int MenuSelectMove(int selection, int count, int wrap)
     if (count < 2)
         return selection;
 
-    if (PadData[0].direction_repeated == 0x1000) {
+    if (PadData[0].direction_repeated == PAD_UP) {
         if (selection != 0 || wrap ||
             PadData[0].direction_pressed == PadData[0].direction_repeated) {
             movement = -1;
         }
     }
-    if (PadData[0].direction_repeated == 0x4000) {
+    if (PadData[0].direction_repeated == PAD_DOWN) {
         if (selection != count - 1 || wrap ||
             PadData[0].direction_pressed == PadData[0].direction_repeated)
             movement = 1;
@@ -222,7 +230,7 @@ int MenuSelectMove(int selection, int count, int wrap)
             selection = count - 1;
         if (selection > count - 1)
             selection = 0;
-        xglSoundEffectNormalID(3, 0);
+        xglSoundEffectNormalID(SE_CURSOR, 0);
     }
     return selection;
 }
@@ -235,16 +243,16 @@ int MenuSelectMove2(int selection, int count)
         return selection;
 
     switch (PadData[0].direction_repeated) {
-    case 0x1000:
+    case PAD_UP:
         movement = -2;
         break;
-    case 0x8000:
+    case PAD_LEFT:
         movement = -1;
         break;
-    case 0x4000:
+    case PAD_DOWN:
         movement = 2;
         break;
-    case 0x2000:
+    case PAD_RIGHT:
         movement = 1;
         break;
     }
@@ -254,7 +262,7 @@ int MenuSelectMove2(int selection, int count)
             selection = count - 1;
         if (selection > count - 1)
             selection = 0;
-        xglSoundEffectNormalID(3, 0);
+        xglSoundEffectNormalID(SE_CURSOR, 0);
     }
     return selection;
 }
@@ -543,14 +551,14 @@ void MainMenu(void)
 
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.width << 5,
                            sRender.height << 5);
-    GameLoopState.flags |= 0x04000000;
+    GameLoopState.flags |= GAME_LOOP_FLAG_UMN;
     xglSleep();
     mini_game_no = 0;
     UmnSimulationNo = 0;
     MenuDrillCall = 0;
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.height << 5,
                            sRender.flip_base << 5);
-    GameLoopState.flags |= 0x04000000;
+    GameLoopState.flags |= GAME_LOOP_FLAG_UMN;
     MenuGameDataPush();
     GameCFSoundMenuPurge(0);
     MenuLoadInit();
@@ -565,10 +573,10 @@ void MainMenu(void)
     xglLightDirection(light, 1, lighting.light.direction[1]);
     xglLightIntensityParallel(light, 2, lighting.light.parallel[2]);
     xglLightDirection(light, 2, lighting.light.direction[2]);
-    MenuModelWorkTop = GameResourceWorkAlloc(0x500000);
-    MainMenuWorkEnd = MenuModelWorkTop + 0x480000;
+    MenuModelWorkTop = GameResourceWorkAlloc(MENU_WORK_SIZE);
+    MainMenuWorkEnd = MenuModelWorkTop + MENU_MODEL_WORK_SIZE;
     MainMenuWorkEnd = MenuModelInit(MainMenuWorkEnd);
-    MenuModelMemoryInit(MenuModelWorkTop, 0x480000);
+    MenuModelMemoryInit(MenuModelWorkTop, MENU_MODEL_WORK_SIZE);
     MenuModelMemorySet(10);
     out = MenuModelOut;
     index = 3;
@@ -584,15 +592,15 @@ void MainMenu(void)
     MainMenuWorkEnd = xglTaskInitial(MainMenuWorkEnd, 0x20, 0);
     MenuTask_XMX = (XglTaskScheduler *)MainMenuWorkEnd;
     UmnGunoDataBaseTop = xglTaskInitial(MainMenuWorkEnd, 0x10, 0);
-    MainMenuWorkEnd = (unsigned char *)UmnGunoDataBaseTop + 0xd00;
+    MainMenuWorkEnd = (unsigned char *)UmnGunoDataBaseTop + MENU_UMN_DATABASE_SIZE;
     MainMenuWorkEnd = MenuBackModelSet(MainMenuWorkEnd);
     memset(&MenuWork, 0, 0x80);
     endBackTexDraw((unsigned char *)-1);
     xglSleep();
     MainMenuWorkEnd = MenuMapExTextLoad(MainMenuWorkEnd, 1);
     MenuFontLoad(1, 1);
-    WindowTexLoad(0, 0x10001);
-    WindowTexLoad(0, 0x10002);
+    WindowTexLoad(0, MENU_TEX_ASYNC_FLAG | 1);
+    WindowTexLoad(0, MENU_TEX_ASYNC_FLAG | 2);
     MainMenuWorkEnd = MenuTairetuLoad(MainMenuWorkEnd, 1);
     xglSoundEffectNormalID(1, 0);
     while (MenuLoadSync()) {
@@ -601,31 +609,31 @@ void MainMenu(void)
     }
     MenuScenarioNo = MenuScenarioNoGet();
     MenuEquipStealMaskCheck();
-    while (MenuWork.menu_state[1] != 0xff) {
+    while (MenuWork.menu_state[1] != MENU_LEVEL_QUIT) {
         GameSnapShotCheck();
         switch (MenuWork.menu_state[1]) {
-        case 0: TopMenu(); break;
-        case 1:
+        case MENU_LEVEL_TOP: TopMenu(); break;
+        case MENU_LEVEL_ITEM:
             mini_game_no = MenuItem();
             if (mini_game_no)
-                ChangeTopLevel(0xff);
+                ChangeTopLevel(MENU_LEVEL_QUIT);
             break;
-        case 2: MenuEther(); break;
-        case 3: MenuCharactor(0); break;
-        case 9: MenuTec(); break;
-        case 10: MenuSkill(); break;
-        case 4: MenuAgws(); break;
-        case 5: MenuCharactor(1); break;
-        case 6: UmnInterface(); ChangeTopLevel(0); break;
-        case 7: MenuSystem(); break;
-        case 12: ChangeTopLevel(0xff); break;
-        default: ChangeTopLevel(0); break;
+        case MENU_LEVEL_ETHER: MenuEther(); break;
+        case MENU_LEVEL_CHARACTER: MenuCharactor(0); break;
+        case MENU_LEVEL_TEC: MenuTec(); break;
+        case MENU_LEVEL_SKILL: MenuSkill(); break;
+        case MENU_LEVEL_AGWS: MenuAgws(); break;
+        case MENU_LEVEL_FORMATION: MenuCharactor(1); break;
+        case MENU_LEVEL_UMN: UmnInterface(); ChangeTopLevel(MENU_LEVEL_TOP); break;
+        case MENU_LEVEL_SYSTEM: MenuSystem(); break;
+        case MENU_LEVEL_EXIT_REQUEST: ChangeTopLevel(MENU_LEVEL_QUIT); break;
+        default: ChangeTopLevel(MENU_LEVEL_TOP); break;
         }
         if (UmnSimulationNo) {
-            ChangeTopLevel(0xff);
+            ChangeTopLevel(MENU_LEVEL_QUIT);
             break;
         }
-        endPrintExtFunc(0, 100, 0);
+        endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
         MenuBgTaskMain();
         nmlModelFlush();
         xglTaskExecute(MenuTask_XMX);
@@ -688,7 +696,7 @@ void MainMenu(void)
             GameLoopState.flags &= ~0x40;
         }
     }
-    GameLoopState.flags &= 0xfbffffff;
+    GameLoopState.flags &= ~GAME_LOOP_FLAG_UMN;
 }
 
 void CharactorAllRecovery(int unused, int continueFlag) {
@@ -761,7 +769,7 @@ void UmnInterface(void)
     unsigned char default_character;
     int unit_id;
 
-    endPrintExtFunc(0, 100, 0);
+    endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
     MenuBgTaskMain();
     nmlModelFlush();
     xglTaskExecute(MenuTask_XMX);

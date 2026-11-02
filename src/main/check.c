@@ -1,12 +1,13 @@
 #include "common.h"
 #include "check.h"
 #include "main/check.h"
+#include "main/act_1.h"
 
 int Check_Actor(const Vector4 *position, short number)
 {
     short i;
 
-    for (i = 0; i < 64; ++i) {
+    for (i = 0; i < ACTOR_COUNT; ++i) {
         float distance;
 
         if (actor[i].sound_effect_id <= 0)
@@ -32,5 +33,5 @@ int Check_Actor(const Vector4 *position, short number)
             break;
     }
 
-    return i != 64 ? i : -1;
+    return i != ACTOR_COUNT ? i : -1;
 }

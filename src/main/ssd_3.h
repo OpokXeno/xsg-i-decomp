@@ -9,9 +9,6 @@
 #include "main/nml_packet_add.h"
 
 /* RssdWork and its complete owner type are declared by main/ssd_init.h. */
-/* RssdWorkArea.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
 /*
  * RssdStrWork is the RSSD background-stream cache, main:0x004aa280, ELF
  * symbol size 0x20 bytes. SsdInitPcmStream stores its `channel` argument at

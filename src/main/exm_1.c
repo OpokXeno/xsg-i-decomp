@@ -3,7 +3,67 @@
 #include "exm_1.h"
 #include "vu0_macro.h"
 
-#define EXM_SET_JOINT_POSITION(joint, pos)     do {         (joint)->elements[12] = (pos)[0];         (joint)->elements[13] = (pos)[1];         (joint)->elements[14] = (pos)[2];     } while (0)
+/* Motion channel types handled by EXM_CalcExMotion (hair chains). */
+#define EX_CHANNEL_CHAIN_JOINT 2 /* queues one joint's translation/rotation */
+#define EX_CHANNEL_CHAIN_BEGIN 3 /* sets the chain's base matrix */
+#define EX_CHANNEL_CHAIN_SOLVE 4 /* simulates the queued chain */
+
+/* htypebuf[0].kind sentinels; other values index hairpara[]. */
+#define EX_HAIR_TYPE_NONE 999
+#define EX_HAIR_TYPE_AUTO 1000 /* pick the type from the joint name */
+#define EX_HAIR_PARAM_SKIRT 16 /* hairpara[] entry used by the skirt types */
+
+/* ExCollisionPrimitive.kind (0 terminates a table). */
+#define EX_COLLISION_END 0
+#define EX_COLLISION_SPHERE 1
+#define EX_COLLISION_CAPSULE 2
+#define EX_COLLISION_SPHERE_INSIDE 3 /* keeps the point inside the sphere */
+#define EX_COLLISION_SPHERE_FLAG1 4  /* sphere active only with EX_HAIR_FLAG_ALT_SHAPES */
+#define EX_COLLISION_SPHERE_FLAG2 5  /* sphere active only with EX_HAIR_FLAG_KIND5 */
+#define EX_COLLISION_SPHERE_FLAG8 6  /* sphere active only with EX_HAIR_FLAG_KIND6_ONLY */
+#define EX_COLLISION_SPHERE_FLAG16 7 /* sphere active only with EX_HAIR_FLAG_KIND7_ONLY */
+
+/* Per-type flags (ExHairTypeSelection.flags / ExCollisionRequest.flags). */
+#define EX_HAIR_FLAG_ALT_SHAPES 0x1  /* collide against kind-4 shapes only; also bends the chain */
+#define EX_HAIR_FLAG_KIND5 0x2
+#define EX_HAIR_FLAG_KIND6_ONLY 0x8  /* only kind-6 shapes collide */
+#define EX_HAIR_FLAG_KIND7_ONLY 0x10 /* only kind-7 shapes collide */
+#define EX_HAIR_FLAG_COAT_WIDTH 0x20 /* AdjustJrCoatWidth on every joint */
+#define EX_HAIR_FLAG_SKIRT_SPLIT_A 0x80  /* skirt checked in two halves, joints 16/29 */
+#define EX_HAIR_FLAG_SKIRT_SPLIT_B 0x100 /* skirt checked in two halves from the rear basis */
+#define EX_HAIR_FLAG_SKIRT 0x400     /* skirt collision instead of primitive tables */
+#define EX_SKIRT_FLAG_ANGLE_180 0x800 /* profile angle selectors: 180 deg alone, */
+#define EX_SKIRT_FLAG_ANGLE_90 0x1000 /* 90 deg alone, 270 deg alone, 0 deg alone, */
+#define EX_SKIRT_FLAG_ANGLE_270 0x2000 /* with a pair giving the diagonal between */
+#define EX_SKIRT_FLAG_ANGLE_0 0x4000
+#define EX_SKIRT_FLAG_LONG 0x8000    /* two more sections (joints 54..72) */
+#define EX_SKIRT_FLAG_HEM_LIFT_A 0x10000 /* keep the hem above the leg ends (sections 0 and 6) */
+#define EX_SKIRT_FLAG_HEM_LIFT_B 0x20000 /* same for section 1 */
+
+/* Skirt hair types: EX_HAIR_FLAG_SKIRT plus the profile angle in degrees. */
+#define EX_HAIR_SKIRT_0 (EX_HAIR_FLAG_SKIRT | EX_SKIRT_FLAG_ANGLE_0)
+#define EX_HAIR_SKIRT_45 (EX_HAIR_SKIRT_0 | EX_SKIRT_FLAG_ANGLE_90)
+#define EX_HAIR_SKIRT_315 (EX_HAIR_SKIRT_0 | EX_SKIRT_FLAG_ANGLE_270)
+#define EX_HAIR_SKIRT_90 (EX_HAIR_FLAG_SKIRT | EX_SKIRT_FLAG_ANGLE_90)
+#define EX_HAIR_SKIRT_270 (EX_HAIR_FLAG_SKIRT | EX_SKIRT_FLAG_ANGLE_270)
+#define EX_HAIR_SKIRT_180 (EX_HAIR_FLAG_SKIRT | EX_SKIRT_FLAG_ANGLE_180)
+#define EX_HAIR_SKIRT_135 (EX_HAIR_SKIRT_180 | EX_SKIRT_FLAG_ANGLE_90)
+#define EX_HAIR_SKIRT_225 (EX_HAIR_SKIRT_180 | EX_SKIRT_FLAG_ANGLE_270)
+
+/* Skeleton joints used as origins by the skirt collision. */
+#define EX_JOINT_ROOT 11 /* x/z origin */
+#define EX_JOINT_HIP 13  /* height origin */
+
+/* work->animation_flags bits read by EXM_CalcExMotion. */
+#define EX_ANIM_FLAG_RELATIVE_PREVIOUS 0x10000 /* previous pose relative to its group base */
+#define EX_ANIM_FLAG_NO_WIND 0x100000
+#define EX_ANIM_FLAG_NO_GRAVITY 0x200000
+#define EX_ANIM_FLAG_NO_GROUND 0x400000
+#define EX_ANIM_FLAG_HOLD_PREVIOUS 0x80000 /* copy the previous joint instead of simulating */
+
+#define EX_START_JOINT_DEFAULT 74 /* default first joint of the hair buffer */
+
+#define EXM_SET_JOINT_POSITION(joint, pos)    do {         (joint)->elements[12] = (pos)[0];         (joint)->elements[13] = (pos)[1];         (joint)->elements[14] = (pos)[2];     } while (0)
 
 
 typedef float ExMatrixRow[4];
@@ -57,138 +117,138 @@ static float skirtColliFootRad = 0.05f;
 static int rootBorn = 0;
 
 static ExCollisionPrimitive shioncol[5] = {
-    { .joint = 48, .kind = 1, .start = { 0.029999999329447746f, -0.10000000149011612f, 0.0f, 0.10999999940395355f } },
-    { .joint = 51, .kind = 2, .start = { -0.05000000074505806f, 0.0099999997764825821f, 0.0099999997764825821f, 0.075000002980232239f }, .end = { 0.14000000059604645f, -0.0099999997764825821f, -0.0099999997764825821f, 0.059999998658895493f } },
-    { .joint = 45, .kind = 4, .start = { 0.0f, 0.47999998927116394f, 0.0f, 0.60000002384185791f } },
-    { .joint = 42, .kind = 6, .start = { 0.0f, 0.25999999046325684f, 0.0f, 0.40000000596046448f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.029999999329447746f, -0.10000000149011612f, 0.0f, 0.10999999940395355f } },
+    { .joint = 51, .kind = EX_COLLISION_CAPSULE, .start = { -0.05000000074505806f, 0.0099999997764825821f, 0.0099999997764825821f, 0.075000002980232239f }, .end = { 0.14000000059604645f, -0.0099999997764825821f, -0.0099999997764825821f, 0.059999998658895493f } },
+    { .joint = 45, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.0f, 0.47999998927116394f, 0.0f, 0.60000002384185791f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG8, .start = { 0.0f, 0.25999999046325684f, 0.0f, 0.40000000596046448f } },
     { 0 }
 };
 
 static ExCollisionPrimitive chaoscol[2] = {
-    { .joint = 48, .kind = 1, .start = { 0.0099999997764825821f, -0.090000003576278687f, 0.0f, 0.11500000208616257f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.0099999997764825821f, -0.090000003576278687f, 0.0f, 0.11500000208616257f } },
     { 0 }
 };
 
 static ExCollisionPrimitive momocol[4] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
-    { .joint = 51, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
-    { .joint = 63, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
+    { .joint = 51, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
+    { .joint = 63, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
     { 0 }
 };
 
 static ExCollisionPrimitive momo1col[8] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
-    { .joint = 51, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
-    { .joint = 63, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
-    { .joint = 16, .kind = 2, .start = { 0.0f, 0.0f, -0.0f, 0.12999999523162842f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
-    { .joint = 26, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.12999999523162842f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
-    { .joint = 17, .kind = 2, .start = { 0.0f, 0.0f, -0.0f, 0.10000000149011612f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
-    { .joint = 27, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.10000000149011612f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
+    { .joint = 51, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
+    { .joint = 63, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
+    { .joint = 16, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, -0.0f, 0.12999999523162842f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
+    { .joint = 26, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.12999999523162842f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
+    { .joint = 17, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, -0.0f, 0.10000000149011612f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
+    { .joint = 27, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.10000000149011612f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.12999999523162842f } },
     { 0 }
 };
 
 static ExCollisionPrimitive momo4col[5] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
-    { .joint = 51, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
-    { .joint = 63, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
-    { .joint = 39, .kind = 4, .start = { 0.11999999731779099f, 0.40000000596046448f, 0.0f, 0.55000001192092896f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
+    { .joint = 51, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
+    { .joint = 63, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.090000003576278687f }, .end = { 0.10000000149011612f, 0.0f, 0.0f, 0.070000000298023224f } },
+    { .joint = 39, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.11999999731779099f, 0.40000000596046448f, 0.0f, 0.55000001192092896f } },
     { 0 }
 };
 
 static ExCollisionPrimitive hyakucol[4] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
-    { .joint = 51, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.05000000074505806f, 0.0f, 0.0f, 0.059999998658895493f } },
-    { .joint = 63, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.05000000074505806f, 0.0f, 0.0f, 0.059999998658895493f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
+    { .joint = 51, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.05000000074505806f, 0.0f, 0.0f, 0.059999998658895493f } },
+    { .joint = 63, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.05000000074505806f, 0.0f, 0.0f, 0.059999998658895493f } },
     { 0 }
 };
 
 static ExCollisionPrimitive shitancol[4] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.05000000074505806f, 0.0f, 0.070000000298023224f } },
-    { .joint = 42, .kind = 4, .start = { -0.10000000149011612f, 0.62999999523162842f, 0.0f, 0.80000001192092896f } },
-    { .joint = 42, .kind = 1, .start = { 0.05000000074505806f, -0.15000000596046448f, 0.0f, 0.30000001192092896f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.05000000074505806f, 0.0f, 0.070000000298023224f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { -0.10000000149011612f, 0.62999999523162842f, 0.0f, 0.80000001192092896f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE, .start = { 0.05000000074505806f, -0.15000000596046448f, 0.0f, 0.30000001192092896f } },
     { 0 }
 };
 
 static ExCollisionPrimitive ellycol[5] = {
-    { .joint = 48, .kind = 1, .start = { 0.0099999997764825821f, -0.079999998211860657f, 0.0f, 0.10000000149011612f } },
-    { .joint = 51, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.079999998211860657f, 0.0f, 0.0f, 0.059999998658895493f } },
-    { .joint = 63, .kind = 2, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.079999998211860657f, 0.0f, 0.0f, 0.059999998658895493f } },
-    { .joint = 42, .kind = 4, .start = { -0.079999998211860657f, 0.30000001192092896f, 0.0f, 0.40000000596046448f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.0099999997764825821f, -0.079999998211860657f, 0.0f, 0.10000000149011612f } },
+    { .joint = 51, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.079999998211860657f, 0.0f, 0.0f, 0.059999998658895493f } },
+    { .joint = 63, .kind = EX_COLLISION_CAPSULE, .start = { 0.0f, 0.0f, 0.0f, 0.079999998211860657f }, .end = { 0.079999998211860657f, 0.0f, 0.0f, 0.059999998658895493f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { -0.079999998211860657f, 0.30000001192092896f, 0.0f, 0.40000000596046448f } },
     { 0 }
 };
 
 static ExCollisionPrimitive tonnycol[4] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
-    { .joint = 16, .kind = 2, .start = { -0.10000000149011612f, 0.0f, -0.019999999552965164f, 0.15000000596046448f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.14000000059604645f } },
-    { .joint = 26, .kind = 2, .start = { -0.10000000149011612f, 0.0f, 0.019999999552965164f, 0.15000000596046448f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.14000000059604645f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
+    { .joint = 16, .kind = EX_COLLISION_CAPSULE, .start = { -0.10000000149011612f, 0.0f, -0.019999999552965164f, 0.15000000596046448f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.14000000059604645f } },
+    { .joint = 26, .kind = EX_COLLISION_CAPSULE, .start = { -0.10000000149011612f, 0.0f, 0.019999999552965164f, 0.15000000596046448f }, .end = { 0.40000000596046448f, 0.0f, 0.0f, 0.14000000059604645f } },
     { 0 }
 };
 
 static ExCollisionPrimitive albeltcol[3] = {
-    { .joint = 48, .kind = 1, .start = { 0.05000000074505806f, -0.079999998211860657f, 0.0f, 0.079999998211860657f } },
-    { .joint = 36, .kind = 4, .start = { -0.05000000074505806f, 0.20000000298023224f, 0.0f, 0.40000000596046448f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.05000000074505806f, -0.079999998211860657f, 0.0f, 0.079999998211860657f } },
+    { .joint = 36, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { -0.05000000074505806f, 0.20000000298023224f, 0.0f, 0.40000000596046448f } },
     { 0 }
 };
 
 static ExCollisionPrimitive kebincol[3] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.059999998658895493f, 0.0f, 0.10000000149011612f } },
-    { .joint = 48, .kind = 3, .start = { 0.041999999433755875f, -0.059999998658895493f, 0.0f, 0.10999999940395355f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.059999998658895493f, 0.0f, 0.10000000149011612f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE_INSIDE, .start = { 0.041999999433755875f, -0.059999998658895493f, 0.0f, 0.10999999940395355f } },
     { 0 }
 };
 
 static ExCollisionPrimitive kebinhcol[2] = {
-    { .joint = 48, .kind = 1, .start = { 0.014999999664723873f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.014999999664723873f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
     { 0 }
 };
 
 static ExCollisionPrimitive shionchcol[3] = {
-    { .joint = 48, .kind = 1, .start = { 0.0099999997764825821f, -0.079999998211860657f, 0.0f, 0.10000000149011612f } },
-    { .joint = 42, .kind = 4, .start = { -0.079999998211860657f, 0.30000001192092896f, 0.0f, 0.40000000596046448f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.0099999997764825821f, -0.079999998211860657f, 0.0f, 0.10000000149011612f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { -0.079999998211860657f, 0.30000001192092896f, 0.0f, 0.40000000596046448f } },
     { 0 }
 };
 
 static ExCollisionPrimitive helmercol[3] = {
-    { .joint = 55, .kind = 6, .start = { 0.34999999403953552f, 0.0f, -0.2199999988079071f, 0.30000001192092896f } },
-    { .joint = 67, .kind = 7, .start = { 0.34999999403953552f, 0.0f, 0.2199999988079071f, 0.30000001192092896f } },
+    { .joint = 55, .kind = EX_COLLISION_SPHERE_FLAG8, .start = { 0.34999999403953552f, 0.0f, -0.2199999988079071f, 0.30000001192092896f } },
+    { .joint = 67, .kind = EX_COLLISION_SPHERE_FLAG16, .start = { 0.34999999403953552f, 0.0f, 0.2199999988079071f, 0.30000001192092896f } },
     { 0 }
 };
 
 static ExCollisionPrimitive allencol[2] = {
-    { .joint = 48, .kind = 1, .start = { 0.029999999329447746f, -0.090000003576278687f, 0.0f, 0.090000003576278687f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.029999999329447746f, -0.090000003576278687f, 0.0f, 0.090000003576278687f } },
     { 0 }
 };
 
 static ExCollisionPrimitive abelcol[3] = {
-    { .joint = 48, .kind = 1, .start = { 0.0099999997764825821f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
-    { .joint = 42, .kind = 4, .start = { 0.0f, 0.20000000298023224f, 0.0f, 0.30000001192092896f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.0099999997764825821f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.0f, 0.20000000298023224f, 0.0f, 0.30000001192092896f } },
     { 0 }
 };
 
 static ExCollisionPrimitive mamcol[4] = {
-    { .joint = 48, .kind = 1, .start = { 0.0099999997764825821f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
-    { .joint = 42, .kind = 4, .start = { 0.05000000074505806f, 0.15000000596046448f, 0.0f, 0.2800000011920929f } },
-    { .joint = 42, .kind = 6, .start = { 0.05000000074505806f, -0.15000000596046448f, 0.0f, 0.2800000011920929f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.0099999997764825821f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.05000000074505806f, 0.15000000596046448f, 0.0f, 0.2800000011920929f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG8, .start = { 0.05000000074505806f, -0.15000000596046448f, 0.0f, 0.2800000011920929f } },
     { 0 }
 };
 
 static ExCollisionPrimitive gaignuncol[2] = {
-    { .joint = 48, .kind = 6, .start = { 0.0099999997764825821f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE_FLAG8, .start = { 0.0099999997764825821f, -0.070000000298023224f, 0.0f, 0.10000000149011612f } },
     { 0 }
 };
 
 static ExCollisionPrimitive offcol[2] = {
-    { .joint = 42, .kind = 4, .start = { 0.05000000074505806f, 0.18000000715255737f, 0.0f, 0.30000001192092896f } },
+    { .joint = 42, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.05000000074505806f, 0.18000000715255737f, 0.0f, 0.30000001192092896f } },
     { 0 }
 };
 
 static ExCollisionPrimitive miyukicol[3] = {
-    { .joint = 48, .kind = 1, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
-    { .joint = 39, .kind = 4, .start = { 0.11999999731779099f, 0.30000001192092896f, 0.0f, 0.40000000596046448f } },
+    { .joint = 48, .kind = EX_COLLISION_SPHERE, .start = { 0.039999999105930328f, -0.10000000149011612f, 0.0f, 0.090000003576278687f } },
+    { .joint = 39, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.11999999731779099f, 0.30000001192092896f, 0.0f, 0.40000000596046448f } },
     { 0 }
 };
 
 static ExCollisionPrimitive robotcol[2] = {
-    { .joint = 39, .kind = 4, .start = { 0.079999998211860657f, -0.20000000298023224f, 0.0f, 0.40000000596046448f } },
+    { .joint = 39, .kind = EX_COLLISION_SPHERE_FLAG1, .start = { 0.079999998211860657f, -0.20000000298023224f, 0.0f, 0.40000000596046448f } },
     { 0 }
 };
 
@@ -295,8 +355,8 @@ void EXM_PresetHair(ExMotionJointWork *work)
 
     ibuf = 0;
     name = work->hair_joint_name;
-    htypebuf[0].kind = 999;
-    startjnt = 74;
+    htypebuf[0].kind = EX_HAIR_TYPE_NONE;
+    startjnt = EX_START_JOINT_DEFAULT;
     collibuf[0] = 0;
     if (name == 0) {
         return;
@@ -311,7 +371,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 if (lastLetter == 'H') {
                     htypebuf[0].flags = htypebuf[1].flags = htypebuf[2].flags =
                         htypebuf[3].flags = htypebuf[4].flags = htypebuf[5].flags =
-                        htypebuf[6].flags = 1;
+                        htypebuf[6].flags = EX_HAIR_FLAG_ALT_SHAPES;
                     htypebuf[0].kind = htypebuf[1].kind = htypebuf[2].kind =
                         htypebuf[3].kind = htypebuf[4].kind = htypebuf[5].kind =
                         htypebuf[6].kind = 18;
@@ -325,7 +385,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
                     htypebuf[11].kind = htypebuf[12].kind = htypebuf[13].kind = 8;
                 } else {
                     htypebuf[0].flags = htypebuf[1].flags = htypebuf[2].flags =
-                        htypebuf[3].flags = htypebuf[4].flags = 1;
+                        htypebuf[3].flags = htypebuf[4].flags = EX_HAIR_FLAG_ALT_SHAPES;
                     htypebuf[0].kind = htypebuf[1].kind = htypebuf[2].kind =
                         htypebuf[3].kind = htypebuf[4].kind = 18;
                 }
@@ -350,9 +410,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 skirtColliSizeB = skirtColliSize = size;
                 skirtColliSizeS = unitSize;
                 skirtColliFootRad = footRadius;
-                htypebuf[0].flags = 0x4400;
-                htypebuf[1].flags = 0xc00;
-                htypebuf[1].kind = htypebuf[0].kind = 16;
+                htypebuf[0].flags = EX_HAIR_SKIRT_0;
+                htypebuf[1].flags = EX_HAIR_SKIRT_180;
+                htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
                 return;
             }
             case 'D': {
@@ -363,11 +423,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 skirtColliSizeB = skirtColliSize = size;
                 skirtColliSizeS = unitSize;
                 skirtColliFootRad = footRadius;
-                htypebuf[0].flags = 0x25400;
-                htypebuf[1].flags = 0x26400;
-                htypebuf[2].flags = 0x11c00;
-                htypebuf[3].flags = 0x12c00;
-                htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+                htypebuf[0].flags = EX_HAIR_SKIRT_45 | EX_SKIRT_FLAG_HEM_LIFT_B;
+                htypebuf[1].flags = EX_HAIR_SKIRT_315 | EX_SKIRT_FLAG_HEM_LIFT_B;
+                htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+                htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+                htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
                 htypebuf[4].flags = htypebuf[5].flags = 0;
                 htypebuf[4].kind = htypebuf[5].kind = 7;
                 htypebuf[6].flags = 0;
@@ -381,12 +441,12 @@ void EXM_PresetHair(ExMotionJointWork *work)
             collibuf[0] = abelcol;
             skirtColliSizeS = skirtColliSizeB = skirtColliSize = 1.0f;
             skirtColliFootRad = footRadius;
-            htypebuf[0].flags = 0x5400;
-            htypebuf[1].flags = 0x6400;
-            htypebuf[2].flags = 0x1c00;
-            htypebuf[3].flags = 0x2c00;
-            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
-            htypebuf[4].flags = 1;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225;
+            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
+            htypebuf[4].flags = EX_HAIR_FLAG_ALT_SHAPES;
             htypebuf[4].kind = 4;
             htypebuf[5].flags = htypebuf[6].flags = 0;
             htypebuf[5].kind = htypebuf[6].kind = 8;
@@ -399,11 +459,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSizeB = backSize;
             skirtColliSizeS = skirtColliSize = unitSize;
             skirtColliFootRad = footRadius;
-            htypebuf[0].flags = 0x5400;
-            htypebuf[1].flags = 0x6400;
-            htypebuf[2].flags = 0x1c00;
-            htypebuf[3].flags = 0x2c00;
-            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225;
+            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             break;
         }
         }
@@ -415,8 +475,8 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 skirtColliSize = exmHairBrDSkirtColliSize;
                 skirtColliSizeS = skirtColliSizeB = 1.0f;
                 skirtColliFootRad = exmHairBrDSkirtColliFootRad;
-                htypebuf[0].flags = 0x10c00;
-                htypebuf[0].kind = 16;
+                htypebuf[0].flags = EX_HAIR_SKIRT_180 | EX_SKIRT_FLAG_HEM_LIFT_A;
+                htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
                 break;
             }
             htypebuf[0].kind = 4;
@@ -425,7 +485,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
             break;
         case 'A':
             collibuf[0] = humancol;
-            htypebuf[0].flags = 1;
+            htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
             htypebuf[0].kind = 4;
             break;
         case 'O':
@@ -435,16 +495,16 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 startjnt = 136;
                 skirtColliSizeS = skirtColliSizeB = 1.0f;
                 skirtColliFootRad = exmHairBo2SkirtColliFootRad;
-                htypebuf[0].flags = 0x1480;
-                htypebuf[1].flags = 0x2480;
-                htypebuf[2].flags = 0x4480;
-                htypebuf[3].flags = 0x5480;
-                htypebuf[4].flags = 0x6480;
+                htypebuf[0].flags = EX_HAIR_SKIRT_90 | EX_HAIR_FLAG_SKIRT_SPLIT_A;
+                htypebuf[1].flags = EX_HAIR_SKIRT_270 | EX_HAIR_FLAG_SKIRT_SPLIT_A;
+                htypebuf[2].flags = EX_HAIR_SKIRT_0 | EX_HAIR_FLAG_SKIRT_SPLIT_A;
+                htypebuf[3].flags = EX_HAIR_SKIRT_45 | EX_HAIR_FLAG_SKIRT_SPLIT_A;
+                htypebuf[4].flags = EX_HAIR_SKIRT_315 | EX_HAIR_FLAG_SKIRT_SPLIT_A;
                 htypebuf[4].kind = htypebuf[3].kind = htypebuf[2].kind =
                     htypebuf[1].kind = htypebuf[0].kind = 13;
                 break;
             case '3':
-                htypebuf[0].kind = 1000;
+                htypebuf[0].kind = EX_HAIR_TYPE_AUTO;
                 break;
             }
             break;
@@ -497,9 +557,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSizeB = skirtColliSize = size;
             skirtColliSizeS = unitSize;
             skirtColliFootRad = footRadius;
-            htypebuf[0].flags = 0x4400;
-            htypebuf[1].flags = 0xc00;
-            htypebuf[1].kind = htypebuf[0].kind = 16;
+            htypebuf[0].flags = EX_HAIR_SKIRT_0;
+            htypebuf[1].flags = EX_HAIR_SKIRT_180;
+            htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             break;
         }
         }
@@ -512,12 +572,12 @@ void EXM_PresetHair(ExMotionJointWork *work)
         skirtColliSizeB = skirtColliSize = size;
         skirtColliSizeS = unitSize;
         skirtColliFootRad = footRadius;
-        htypebuf[0].flags = 0x5400;
-        htypebuf[1].flags = 0x6400;
-        htypebuf[2].flags = 0x11c00;
-        htypebuf[3].flags = 0x12c00;
-        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
-        htypebuf[4].flags = 1;
+        htypebuf[0].flags = EX_HAIR_SKIRT_45;
+        htypebuf[1].flags = EX_HAIR_SKIRT_315;
+        htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+        htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
+        htypebuf[4].flags = EX_HAIR_FLAG_ALT_SHAPES;
         htypebuf[4].kind = 2;
         htypebuf[5].flags = htypebuf[6].flags = 0;
         htypebuf[5].kind = htypebuf[6].kind = 5;
@@ -537,11 +597,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSizeB = exmHairFrSkirtColliSizeB;
             skirtColliSizeS = 1.0f;
             skirtColliFootRad = exmHairFrSkirtColliFootRad;
-            htypebuf[0].flags = 0x5400;
-            htypebuf[1].flags = 0x6400;
-            htypebuf[2].flags = 0x11c00;
-            htypebuf[3].flags = 0x12c00;
-            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             htypebuf[4].flags = 0;
             htypebuf[4].kind = 7;
             htypebuf[5].flags = htypebuf[6].flags = 0;
@@ -553,9 +613,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
         switch (name[1]) {
         case 'A':
             collibuf[0] = gaignuncol;
-            htypebuf[0].flags = htypebuf[2].flags = 8;
+            htypebuf[0].flags = htypebuf[2].flags = EX_HAIR_FLAG_KIND6_ONLY;
             htypebuf[0].kind = htypebuf[2].kind = 7;
-            htypebuf[1].flags = 8;
+            htypebuf[1].flags = EX_HAIR_FLAG_KIND6_ONLY;
             htypebuf[1].kind = 5;
             htypebuf[3].flags = htypebuf[4].flags = 0;
             htypebuf[3].kind = htypebuf[4].kind = 7;
@@ -566,11 +626,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSize = exmHairGiSkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
             skirtColliFootRad = exmHairGiSkirtColliFootRad;
-            htypebuf[0].flags = 0x25400;
-            htypebuf[1].flags = 0x26400;
-            htypebuf[2].flags = 0x11c00;
-            htypebuf[3].flags = 0x12c00;
-            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45 | EX_SKIRT_FLAG_HEM_LIFT_B;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315 | EX_SKIRT_FLAG_HEM_LIFT_B;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             break;
         }
         break;
@@ -586,16 +646,16 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSizeB = exmHairHeSkirtColliSizeB;
             skirtColliSizeS = 1.0f;
             skirtColliFootRad = exmHairHeSkirtColliFootRad;
-            htypebuf[0].flags = 0x5400;
-            htypebuf[1].flags = 0x6400;
-            htypebuf[2].flags = 0x11c00;
-            htypebuf[3].flags = 0x12c00;
-            htypebuf[4].flags = 0x1400;
-            htypebuf[5].flags = 0x2400;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+            htypebuf[4].flags = EX_HAIR_SKIRT_90;
+            htypebuf[5].flags = EX_HAIR_SKIRT_270;
             htypebuf[5].kind = htypebuf[4].kind = htypebuf[3].kind =
-                htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
-            htypebuf[6].flags = 0x1008;
-            htypebuf[7].flags = 0x2010;
+                htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
+            htypebuf[6].flags = EX_SKIRT_FLAG_ANGLE_90 | EX_HAIR_FLAG_KIND6_ONLY;
+            htypebuf[7].flags = EX_SKIRT_FLAG_ANGLE_270 | EX_HAIR_FLAG_KIND7_ONLY;
             htypebuf[7].kind = htypebuf[6].kind = 18;
             break;
         case 'Y':
@@ -614,11 +674,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
         skirtColliSizeB = exmHairISkirtColliSizeB;
         skirtColliSizeS = 1.0f;
         skirtColliFootRad = exmHairISkirtColliFootRad;
-        htypebuf[0].flags = 0x25400;
-        htypebuf[1].flags = 0x26400;
-        htypebuf[2].flags = 0x11c00;
-        htypebuf[3].flags = 0x12c00;
-        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+        htypebuf[0].flags = EX_HAIR_SKIRT_45 | EX_SKIRT_FLAG_HEM_LIFT_B;
+        htypebuf[1].flags = EX_HAIR_SKIRT_315 | EX_SKIRT_FLAG_HEM_LIFT_B;
+        htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+        htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
         break;
     case 'J':
         switch (name[1]) {
@@ -631,11 +691,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSize = exmHairJr1SkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
             skirtColliFootRad = exmHairJr1SkirtColliFootRad;
-            htypebuf[0].flags = 0x4400;
-            htypebuf[1].flags = 0x1400;
-            htypebuf[2].flags = 0x2400;
-            htypebuf[3].flags = 0x5420;
-            htypebuf[4].flags = 0x6420;
+            htypebuf[0].flags = EX_HAIR_SKIRT_0;
+            htypebuf[1].flags = EX_HAIR_SKIRT_90;
+            htypebuf[2].flags = EX_HAIR_SKIRT_270;
+            htypebuf[3].flags = EX_HAIR_SKIRT_45 | EX_HAIR_FLAG_COAT_WIDTH;
+            htypebuf[4].flags = EX_HAIR_SKIRT_315 | EX_HAIR_FLAG_COAT_WIDTH;
             htypebuf[4].kind = htypebuf[3].kind = htypebuf[2].kind =
                     htypebuf[1].kind = htypebuf[0].kind = 13;
             htypebuf[5].flags = 0;
@@ -653,27 +713,27 @@ void EXM_PresetHair(ExMotionJointWork *work)
         case 'O':
             collibuf[0] = kosmoscol;
             if (lastLetter == 'H') {
-                htypebuf[0].flags = 1;
+                htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
                 htypebuf[0].kind = 3;
                 htypebuf[1].flags = htypebuf[2].flags = htypebuf[3].flags = 0;
                 htypebuf[1].kind = htypebuf[2].kind = htypebuf[3].kind = 5;
-                htypebuf[4].flags = htypebuf[5].flags = 2;
+                htypebuf[4].flags = htypebuf[5].flags = EX_HAIR_FLAG_KIND5;
                 htypebuf[4].kind = htypebuf[5].kind = 4;
                 htypebuf[6].flags = htypebuf[7].flags = 0;
                 htypebuf[6].kind = htypebuf[7].kind = 8;
                 return;
             }
             if (lastLetter != '2') {
-                htypebuf[0].flags = 1;
+                htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
                 htypebuf[0].kind = 3;
                 htypebuf[1].flags = htypebuf[2].flags = 0;
                 htypebuf[1].kind = htypebuf[2].kind = 5;
-                htypebuf[3].flags = htypebuf[4].flags = 2;
+                htypebuf[3].flags = htypebuf[4].flags = EX_HAIR_FLAG_KIND5;
                 htypebuf[3].kind = htypebuf[4].kind = 6;
                 htypebuf[5].flags = 0;
                 htypebuf[5].kind = 8;
             } else {
-                htypebuf[0].kind = 1000;
+                htypebuf[0].kind = EX_HAIR_TYPE_AUTO;
             }
             break;
         case 'E': {
@@ -693,11 +753,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
                     skirtColliSizeB = exmHairKeNSkirtColliSizeB;
                     skirtColliSizeS = exmHairKeNSkirtColliSizeS;
                     skirtColliFootRad = exmHairKeNSkirtColliFootRad;
-                    htypebuf[0].flags = 0x4400;
-                    htypebuf[1].flags = 0x9400;
-                    htypebuf[2].flags = 0xa400;
-                    htypebuf[3].flags = 0xd400;
-                    htypebuf[4].flags = 0xe400;
+                    htypebuf[0].flags = EX_HAIR_SKIRT_0;
+                    htypebuf[1].flags = EX_HAIR_SKIRT_90 | EX_SKIRT_FLAG_LONG;
+                    htypebuf[2].flags = EX_HAIR_SKIRT_270 | EX_SKIRT_FLAG_LONG;
+                    htypebuf[3].flags = EX_HAIR_SKIRT_45 | EX_SKIRT_FLAG_LONG;
+                    htypebuf[4].flags = EX_HAIR_SKIRT_315 | EX_SKIRT_FLAG_LONG;
                     htypebuf[4].kind = htypebuf[3].kind = htypebuf[2].kind =
                     htypebuf[1].kind = htypebuf[0].kind = 13;
                     htypebuf[5].flags = htypebuf[6].flags = 0;
@@ -739,9 +799,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 skirtColliSize = exmHairMoHmSkirtColliSize;
                 skirtColliSizeS = skirtColliSizeB = 1.0f;
                 skirtColliFootRad = exmHairMoHmSkirtColliFootRad;
-                htypebuf[0].flags = 0x4400;
-                htypebuf[1].flags = 0xc00;
-                htypebuf[1].kind = htypebuf[0].kind = 16;
+                htypebuf[0].flags = EX_HAIR_SKIRT_0;
+                htypebuf[1].flags = EX_HAIR_SKIRT_180;
+                htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             } else if (lastLetter == '1') {
                 collibuf[0] = momo1col;
                 htypebuf[0].flags = htypebuf[1].flags = 0;
@@ -760,11 +820,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 skirtColliSizeB = 0.8f;
                 skirtColliSizeS = 1.0f;
                 skirtColliFootRad = 0.05f;
-                htypebuf[0].flags = 0x5400;
-                htypebuf[1].flags = 0x6400;
-                htypebuf[2].flags = 0x11c00;
-                htypebuf[3].flags = 0x12c00;
-                htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+                htypebuf[0].flags = EX_HAIR_SKIRT_45;
+                htypebuf[1].flags = EX_HAIR_SKIRT_315;
+                htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+                htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+                htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
                 htypebuf[4].flags = htypebuf[5].flags = htypebuf[6].flags = htypebuf[7].flags = 0;
                 htypebuf[4].kind = htypebuf[5].kind = htypebuf[6].kind = htypebuf[7].kind = 17;
                 htypebuf[8].flags = 0;
@@ -777,7 +837,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 htypebuf[13].kind = 8;
             } else if (lastLetter == '4') {
                 collibuf[0] = momo4col;
-                htypebuf[0].flags = 1;
+                htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
                 htypebuf[0].kind = 4;
                 htypebuf[1].flags = htypebuf[2].flags = 0;
                 htypebuf[1].kind = htypebuf[2].kind = 5;
@@ -804,7 +864,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
             collibuf[0] = miyukicol;
             htypebuf[0].flags = htypebuf[2].flags = 0;
             htypebuf[0].kind = htypebuf[2].kind = 4;
-            htypebuf[1].flags = 1;
+            htypebuf[1].flags = EX_HAIR_FLAG_ALT_SHAPES;
             htypebuf[1].kind = 2;
             htypebuf[3].flags = htypebuf[4].flags = htypebuf[5].flags = 0;
             htypebuf[3].kind = htypebuf[4].kind = htypebuf[5].kind = 7;
@@ -817,11 +877,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSize = exmHairObSkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
             skirtColliFootRad = exmHairObSkirtColliFootRad;
-            htypebuf[0].flags = 0x5400;
-            htypebuf[1].flags = 0x6400;
-            htypebuf[2].flags = 0x1c00;
-            htypebuf[3].flags = 0x2c00;
-            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225;
+            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             break;
         case 'F': {
             const u32 channelFlags = 1;
@@ -834,7 +894,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
         }
         break;
     case 'P':
-        htypebuf[0].kind = 1000;
+        htypebuf[0].kind = EX_HAIR_TYPE_AUTO;
         break;
     case 'R': {
         float unitSize = 1.0f;
@@ -844,15 +904,15 @@ void EXM_PresetHair(ExMotionJointWork *work)
         skirtColliSize = size;
         skirtColliSizeS = skirtColliSizeB = unitSize;
         skirtColliFootRad = footRadius;
-        htypebuf[0].flags = 0x4400;
-        htypebuf[0].kind = 16;
-        htypebuf[1].flags = 0x4400;
-        htypebuf[1].kind = 16;
-        htypebuf[2].flags = 0xc00;
-        htypebuf[2].kind = 16;
-        htypebuf[3].flags = 0xc00;
-        htypebuf[3].kind = 16;
-        htypebuf[4].flags = 1;
+        htypebuf[0].flags = EX_HAIR_SKIRT_0;
+        htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
+        htypebuf[1].flags = EX_HAIR_SKIRT_0;
+        htypebuf[1].kind = EX_HAIR_PARAM_SKIRT;
+        htypebuf[2].flags = EX_HAIR_SKIRT_180;
+        htypebuf[2].kind = EX_HAIR_PARAM_SKIRT;
+        htypebuf[3].flags = EX_HAIR_SKIRT_180;
+        htypebuf[3].kind = EX_HAIR_PARAM_SKIRT;
+        htypebuf[4].flags = EX_HAIR_FLAG_ALT_SHAPES;
         htypebuf[4].kind = 14;
         break;
     }
@@ -870,19 +930,19 @@ void EXM_PresetHair(ExMotionJointWork *work)
                             skirtColliSize = exmHairShioCSkirtColliSize;
                             skirtColliSizeS = skirtColliSizeB = 1.0f;
                             skirtColliFootRad = exmHairShioCSkirtColliFootRad;
-                            htypebuf[0].flags = 0x5400;
-                            htypebuf[1].flags = 0x6400;
-                            htypebuf[2].flags = 0x11c00;
-                            htypebuf[3].flags = 0x12c00;
+                            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+                            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+                            htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+                            htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
                             htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 15;
-                            htypebuf[4].flags = 1;
+                            htypebuf[4].flags = EX_HAIR_FLAG_ALT_SHAPES;
                             htypebuf[4].kind = 2;
                             htypebuf[5].flags = htypebuf[6].flags = htypebuf[7].flags = 0;
                             htypebuf[5].kind = htypebuf[6].kind = htypebuf[7].kind = 7;
                         } else {
-                            htypebuf[0].flags = 1;
+                            htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
                             htypebuf[0].kind = 2;
-                            htypebuf[8].flags = 8;
+                            htypebuf[8].flags = EX_HAIR_FLAG_KIND6_ONLY;
                             htypebuf[8].kind = 4;
                             htypebuf[1].flags = htypebuf[2].flags = htypebuf[7].flags = 0;
                             htypebuf[1].kind = htypebuf[2].kind = htypebuf[7].kind = 8;
@@ -896,7 +956,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
                         htypebuf[0].kind = 6;
                         htypebuf[1].flags = htypebuf[4].flags = 0;
                         htypebuf[1].kind = htypebuf[4].kind = 8;
-                        htypebuf[2].flags = 1;
+                        htypebuf[2].flags = EX_HAIR_FLAG_ALT_SHAPES;
                         htypebuf[2].kind = 2;
                         htypebuf[3].flags = 0;
                         htypebuf[3].kind = 4;
@@ -906,12 +966,12 @@ void EXM_PresetHair(ExMotionJointWork *work)
                     collibuf[0] = shitancol;
                     if (lastLetter == 'H') {
                         htypebuf[0].kind = 10;
-                        htypebuf[1].flags = htypebuf[0].flags = 1;
+                        htypebuf[1].flags = htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
                         htypebuf[1].kind = 4;
                         htypebuf[2].flags = htypebuf[3].flags = 0;
                         htypebuf[2].kind = htypebuf[3].kind = 4;
                     } else {
-                        htypebuf[0].flags = 1;
+                        htypebuf[0].flags = EX_HAIR_FLAG_ALT_SHAPES;
                         htypebuf[0].kind = 4;
                         htypebuf[1].flags = htypebuf[2].flags = 0;
                         htypebuf[1].kind = htypebuf[2].kind = 4;
@@ -929,9 +989,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                     case 'M':
                         collibuf[0] = mamcol;
                         htypebuf[0].kind = 7;
-                        htypebuf[1].flags = 1;
+                        htypebuf[1].flags = EX_HAIR_FLAG_ALT_SHAPES;
                         htypebuf[1].kind = 2;
-                        htypebuf[0].flags = 8;
+                        htypebuf[0].flags = EX_HAIR_FLAG_KIND6_ONLY;
                         htypebuf[2].flags = htypebuf[3].flags = htypebuf[4].flags = 0;
                         htypebuf[2].kind = htypebuf[3].kind = htypebuf[4].kind = 8;
                         break;
@@ -940,7 +1000,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 }
                 break;
             case 'E':
-                htypebuf[0].kind = 1000;
+                htypebuf[0].kind = EX_HAIR_TYPE_AUTO;
                 break;
             }
             break;
@@ -948,11 +1008,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
             skirtColliSize = exmHairSeSkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
             skirtColliFootRad = exmHairSeSkirtColliFootRad;
-            htypebuf[0].flags = 0x5400;
-            htypebuf[1].flags = 0x6400;
-            htypebuf[2].flags = 0x1c00;
-            htypebuf[3].flags = 0x2c00;
-            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+            htypebuf[0].flags = EX_HAIR_SKIRT_45;
+            htypebuf[1].flags = EX_HAIR_SKIRT_315;
+            htypebuf[2].flags = EX_HAIR_SKIRT_135;
+            htypebuf[3].flags = EX_HAIR_SKIRT_225;
+            htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
             htypebuf[4].flags = htypebuf[5].flags = 0;
             htypebuf[4].kind = htypebuf[5].kind = 5;
             break;
@@ -984,11 +1044,11 @@ void EXM_PresetHair(ExMotionJointWork *work)
         skirtColliSizeB = exmHairVSkirtColliSizeB;
         skirtColliSizeS = exmHairVSkirtColliSizeS;
         skirtColliFootRad = exmHairVSkirtColliFootRad;
-        htypebuf[0].flags = 0x4400;
-        htypebuf[1].flags = 0x9400;
-        htypebuf[2].flags = 0xa400;
-        htypebuf[3].flags = 0xd400;
-        htypebuf[4].flags = 0xe400;
+        htypebuf[0].flags = EX_HAIR_SKIRT_0;
+        htypebuf[1].flags = EX_HAIR_SKIRT_90 | EX_SKIRT_FLAG_LONG;
+        htypebuf[2].flags = EX_HAIR_SKIRT_270 | EX_SKIRT_FLAG_LONG;
+        htypebuf[3].flags = EX_HAIR_SKIRT_45 | EX_SKIRT_FLAG_LONG;
+        htypebuf[4].flags = EX_HAIR_SKIRT_315 | EX_SKIRT_FLAG_LONG;
         htypebuf[4].kind = htypebuf[3].kind = htypebuf[2].kind =
                     htypebuf[1].kind = htypebuf[0].kind = 13;
         break;
@@ -997,20 +1057,20 @@ void EXM_PresetHair(ExMotionJointWork *work)
         skirtColliSizeB = exmHairWSkirtColliSizeB;
         skirtColliSizeS = 1.0f;
         skirtColliFootRad = exmHairWSkirtColliFootRad;
-        htypebuf[0].flags = 0x5400;
-        htypebuf[1].flags = 0x6400;
-        htypebuf[2].flags = 0x11c00;
-        htypebuf[3].flags = 0x12c00;
-        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+        htypebuf[0].flags = EX_HAIR_SKIRT_45;
+        htypebuf[1].flags = EX_HAIR_SKIRT_315;
+        htypebuf[2].flags = EX_HAIR_SKIRT_135 | EX_SKIRT_FLAG_HEM_LIFT_A;
+        htypebuf[3].flags = EX_HAIR_SKIRT_225 | EX_SKIRT_FLAG_HEM_LIFT_A;
+        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
         break;
     case 'Y':
         skirtColliSizeS = skirtColliSizeB = skirtColliSize = 1.0f;
         skirtColliFootRad = exmHairYSkirtColliFootRad;
-        htypebuf[0].flags = 0x5400;
-        htypebuf[1].flags = 0x6400;
-        htypebuf[2].flags = 0x1c00;
-        htypebuf[3].flags = 0x2c00;
-        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = 16;
+        htypebuf[0].flags = EX_HAIR_SKIRT_45;
+        htypebuf[1].flags = EX_HAIR_SKIRT_315;
+        htypebuf[2].flags = EX_HAIR_SKIRT_135;
+        htypebuf[3].flags = EX_HAIR_SKIRT_225;
+        htypebuf[3].kind = htypebuf[2].kind = htypebuf[1].kind = htypebuf[0].kind = EX_HAIR_PARAM_SKIRT;
         htypebuf[4].flags = htypebuf[5].flags = 0;
         htypebuf[4].kind = htypebuf[5].kind = 7;
         break;
@@ -1046,12 +1106,12 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
                 skirtColliFootRad = footRadius;
                 switch (hairTypeCode) {
                 case 'J':
-                    *flags = 0x4400;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_0;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 'O':
-                    *flags = 0x0c00;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_180;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 'T':
                     result = 8;
@@ -1081,15 +1141,15 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
                 skirtColliFootRad = 0.05f;
                 switch (hairTypeCode) {
                 case 'J':
-                    *flags = 0x4400;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_0;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 'M':
-                    *flags = 0x0c00;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_180;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 'P':
-                    *flags = 1;
+                    *flags = EX_HAIR_FLAG_ALT_SHAPES;
                     result = 2;
                     break;
                 case 'V':
@@ -1116,24 +1176,24 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
                 skirtColliSizeS = unitSize;
                 switch (hairTypeCode) {
                 case 'q':
-                    *flags = 0x5500;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_45 | EX_HAIR_FLAG_SKIRT_SPLIT_B;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 'u':
-                    *flags = 0x4500;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_0 | EX_HAIR_FLAG_SKIRT_SPLIT_B;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 'y':
-                    *flags = 0x6500;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_315 | EX_HAIR_FLAG_SKIRT_SPLIT_B;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 0x7d:
-                    *flags = 0x11d00;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_135 | EX_HAIR_FLAG_SKIRT_SPLIT_B | EX_SKIRT_FLAG_HEM_LIFT_A;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 0x80:
-                    *flags = 0x12d00;
-                    result = 16;
+                    *flags = EX_HAIR_SKIRT_225 | EX_HAIR_FLAG_SKIRT_SPLIT_B | EX_SKIRT_FLAG_HEM_LIFT_A;
+                    result = EX_HAIR_PARAM_SKIRT;
                     break;
                 case 0x83:
                 case 0x87:
@@ -1164,7 +1224,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
                     result = 12;
                     break;
                 case 'V':
-                    *flags |= 1;
+                    *flags |= EX_HAIR_FLAG_ALT_SHAPES;
                     result = 3;
                     break;
                 case 0x5c:
@@ -1173,7 +1233,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
                     break;
                 case 'b':
                 case 'g':
-                    *flags |= 2;
+                    *flags |= EX_HAIR_FLAG_KIND5;
                     result = 4;
                     break;
                 case 'l':
@@ -1202,15 +1262,15 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
 
     vel_0[0] = vel_0[1] = vel_0[2] = 0.0f;
     index = 0;
-    while (request->primitives[index].kind != 0) {
+    while (request->primitives[index].kind != EX_COLLISION_END) {
         const ExCollisionPrimitive *primitive = &request->primitives[index];
         u32 filterFlags = request->flags;
 
-        if ((filterFlags & 8) && primitive->kind != 6) {
+        if ((filterFlags & EX_HAIR_FLAG_KIND6_ONLY) && primitive->kind != EX_COLLISION_SPHERE_FLAG8) {
             index++;
             continue;
         }
-        if ((filterFlags & 16) && primitive->kind != 7) {
+        if ((filterFlags & EX_HAIR_FLAG_KIND7_ONLY) && primitive->kind != EX_COLLISION_SPHERE_FLAG16) {
             index++;
             continue;
         }
@@ -1219,27 +1279,27 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
         MATRIX_translate4s(startMatrix.elements, primitive->start.x,
                            primitive->start.y, primitive->start.z);
         switch (primitive->kind) {
-        case 5:
-            if (!(request->flags & 2)) {
+        case EX_COLLISION_SPHERE_FLAG2:
+            if (!(request->flags & EX_HAIR_FLAG_KIND5)) {
                 break;
             }
             goto check_sphere;
-        case 7:
-            if (!(request->flags & 16)) {
+        case EX_COLLISION_SPHERE_FLAG16:
+            if (!(request->flags & EX_HAIR_FLAG_KIND7_ONLY)) {
                 break;
             }
             goto check_sphere;
-        case 6:
-            if (!(request->flags & 8)) {
+        case EX_COLLISION_SPHERE_FLAG8:
+            if (!(request->flags & EX_HAIR_FLAG_KIND6_ONLY)) {
                 break;
             }
-        case 1:
-        case 3:
+        case EX_COLLISION_SPHERE:
+        case EX_COLLISION_SPHERE_INSIDE:
         check_sphere:
         {
             float radiusSquared;
             float separationMeasure;
-            if (request->flags & 1) {
+            if (request->flags & EX_HAIR_FLAG_ALT_SHAPES) {
                 break;
             }
             difference.x = position[0] - startMatrix.elements[3][0];
@@ -1253,7 +1313,7 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
                 break;
             }
             radiusSquared = correctionScale * correctionScale;
-            if (primitive->kind == 3) {
+            if (primitive->kind == EX_COLLISION_SPHERE_INSIDE) {
                 if (radiusSquared < separationMeasure) {
                     float correctedX;
                     float correctedY;
@@ -1284,8 +1344,8 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
             }
             break;
         }
-        case 4:
-            if (request->flags & 1) {
+        case EX_COLLISION_SPHERE_FLAG1:
+            if (request->flags & EX_HAIR_FLAG_ALT_SHAPES) {
                 float radiusSquared;
                 float separationMeasure;
                 difference.x = position[0] - startMatrix.elements[3][0];
@@ -1313,8 +1373,8 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
                 }
             }
             break;
-        case 2:
-            if (!(request->flags & 1)) {
+        case EX_COLLISION_CAPSULE:
+            if (!(request->flags & EX_HAIR_FLAG_ALT_SHAPES)) {
                 JntMatrix endMatrix;
                 Vector4 axis;
                 float projection;
@@ -1429,14 +1489,14 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
         float profileAngle = 0.0f;
         profileFlags = flags;
 
-        if (profileFlags & 0x800) {
-            if (profileFlags & 0x1000) {
+        if (profileFlags & EX_SKIRT_FLAG_ANGLE_180) {
+            if (profileFlags & EX_SKIRT_FLAG_ANGLE_90) {
                 const float selectedProfileResponse = 0.7f;
                 const float selectedProfileAngle = 2.3561945f;
                 horizontalResponse = selectedProfileResponse;
                 profileAngle = selectedProfileAngle;
                 depthResponse = selectedProfileResponse;
-            } else if (profileFlags & 0x2000) {
+            } else if (profileFlags & EX_SKIRT_FLAG_ANGLE_270) {
                 const float selectedProfileResponse = 0.7f;
                 const float selectedProfileAngle = 3.926991f;
                 horizontalResponse = selectedProfileResponse;
@@ -1447,19 +1507,19 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                 horizontalResponse = 1.0f;
                 profileAngle = selectedProfileAngle;
             }
-        } else if (profileFlags & 0x4000) {
-            if (profileFlags & 0x1000) {
+        } else if (profileFlags & EX_SKIRT_FLAG_ANGLE_0) {
+            if (profileFlags & EX_SKIRT_FLAG_ANGLE_90) {
                 horizontalResponse = 0.7f;
                 profileAngle = 0.7853982f;
                 depthResponse = horizontalResponse;
-            } else if (profileFlags & 0x2000) {
+            } else if (profileFlags & EX_SKIRT_FLAG_ANGLE_270) {
                 horizontalResponse = 0.7f;
                 profileAngle = 5.4977875f;
                 depthResponse = horizontalResponse;
             } else {
                 horizontalResponse = 1.0f;
             }
-        } else if (profileFlags & 0x1000) {
+        } else if (profileFlags & EX_SKIRT_FLAG_ANGLE_90) {
             depthResponse = 1.0f;
             profileAngle = 1.5707964f;
         } else {
@@ -1467,7 +1527,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
             profileAngle = 4.712389f;
         }
         {
-            const int reverseSide = flags & 0x100;
+            const int reverseSide = flags & EX_HAIR_FLAG_SKIRT_SPLIT_B;
             JntMatrix basis;
             JntMatrix *joints;
             float (*originRow)[4];
@@ -1485,7 +1545,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                 orientationSin = -basis.elements[3][2];
             }
             joints = work->matrix_buffer;
-            originRow = &joints[13].elements[3];
+            originRow = &joints[EX_JOINT_HIP].elements[3];
             switch (rootBorn) {
             case 0:
                 firstStart = &joints[16].elements[3];
@@ -1555,7 +1615,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                     float sine;
                     responseZ = xglCos(profileAngle);
                     sine = xglSin(profileAngle);
-                    __builtin_memcpy(basis.elements, work->matrix_buffer[13].elements, sizeof(basis.elements));
+                    __builtin_memcpy(basis.elements, work->matrix_buffer[EX_JOINT_HIP].elements, sizeof(basis.elements));
                     MATRIX_translate4s(basis.elements, 0.0f, responseZ, sine);
                     {
                         float (*translatedOrigin)[4] = &basis.elements[3];
@@ -1569,16 +1629,16 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
         }
         {
             JntMatrix *motionMatrices = work->matrix_buffer;
-            position[0] -= motionMatrices[11].elements[3][0];
-            position[2] -= motionMatrices[11].elements[3][2];
-            (*firstStart)[0] -= motionMatrices[11].elements[3][0];
-            (*firstStart)[2] -= motionMatrices[11].elements[3][2];
-            (*secondStart)[0] -= motionMatrices[11].elements[3][0];
-            (*secondStart)[2] -= motionMatrices[11].elements[3][2];
-            (*firstEnd)[0] -= motionMatrices[11].elements[3][0];
-            (*firstEnd)[2] -= motionMatrices[11].elements[3][2];
-            (*secondEnd)[0] -= motionMatrices[11].elements[3][0];
-            (*secondEnd)[2] -= motionMatrices[11].elements[3][2];
+            position[0] -= motionMatrices[EX_JOINT_ROOT].elements[3][0];
+            position[2] -= motionMatrices[EX_JOINT_ROOT].elements[3][2];
+            (*firstStart)[0] -= motionMatrices[EX_JOINT_ROOT].elements[3][0];
+            (*firstStart)[2] -= motionMatrices[EX_JOINT_ROOT].elements[3][2];
+            (*secondStart)[0] -= motionMatrices[EX_JOINT_ROOT].elements[3][0];
+            (*secondStart)[2] -= motionMatrices[EX_JOINT_ROOT].elements[3][2];
+            (*firstEnd)[0] -= motionMatrices[EX_JOINT_ROOT].elements[3][0];
+            (*firstEnd)[2] -= motionMatrices[EX_JOINT_ROOT].elements[3][2];
+            (*secondEnd)[0] -= motionMatrices[EX_JOINT_ROOT].elements[3][0];
+            (*secondEnd)[2] -= motionMatrices[EX_JOINT_ROOT].elements[3][2];
         }
         {
             Vector4 normalizedPosition;
@@ -1714,15 +1774,15 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
             }
         }
     }
-    if (flags & 0x10000) {
+    if (flags & EX_SKIRT_FLAG_HEM_LIFT_A) {
         if (rootBorn == 0) {
             float (*endpoint)[4] = 0;
-            position[1] -= work->matrix_buffer[13].elements[3][1];
-            (*firstEnd)[1] -= work->matrix_buffer[13].elements[3][1];
-            (*secondEnd)[1] -= work->matrix_buffer[13].elements[3][1];
-            referencePosition[0] -= work->matrix_buffer[11].elements[3][0];
-            referencePosition[1] -= work->matrix_buffer[13].elements[3][1];
-            referencePosition[2] -= work->matrix_buffer[11].elements[3][2];
+            position[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*firstEnd)[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*secondEnd)[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            referencePosition[0] -= work->matrix_buffer[EX_JOINT_ROOT].elements[3][0];
+            referencePosition[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            referencePosition[2] -= work->matrix_buffer[EX_JOINT_ROOT].elements[3][2];
             for (; endpoint != secondEnd;) {
                 if (endpoint == 0) {
                     endpoint = firstEnd;
@@ -1759,17 +1819,17 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                     }
                 }
             }
-            position[1] += work->matrix_buffer[13].elements[3][1];
-            (*firstEnd)[1] += work->matrix_buffer[13].elements[3][1];
-            (*secondEnd)[1] += work->matrix_buffer[13].elements[3][1];
-            referencePosition[0] += work->matrix_buffer[11].elements[3][0];
-            referencePosition[1] += work->matrix_buffer[13].elements[3][1];
-            referencePosition[2] += work->matrix_buffer[11].elements[3][2];
+            position[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*firstEnd)[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*secondEnd)[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            referencePosition[0] += work->matrix_buffer[EX_JOINT_ROOT].elements[3][0];
+            referencePosition[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            referencePosition[2] += work->matrix_buffer[EX_JOINT_ROOT].elements[3][2];
         } else if (rootBorn == 6) {
             float (*endpoint)[4] = 0;
-            position[1] -= work->matrix_buffer[13].elements[3][1];
-            (*firstEnd)[1] -= work->matrix_buffer[13].elements[3][1];
-            (*secondEnd)[1] -= work->matrix_buffer[13].elements[3][1];
+            position[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*firstEnd)[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*secondEnd)[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
             while (endpoint != secondEnd) {
                 if (endpoint == 0) {
                     endpoint = firstEnd;
@@ -1795,19 +1855,19 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                         }
                     }
             }
-            position[1] += work->matrix_buffer[13].elements[3][1];
-            (*firstEnd)[1] += work->matrix_buffer[13].elements[3][1];
-            (*secondEnd)[1] += work->matrix_buffer[13].elements[3][1];
+            position[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*firstEnd)[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+            (*secondEnd)[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
         }
     }
-    if ((flags & 0x20000) && rootBorn == 1) {
+    if ((flags & EX_SKIRT_FLAG_HEM_LIFT_B) && rootBorn == 1) {
         float (*endpoint)[4] = 0;
-        position[1] -= work->matrix_buffer[13].elements[3][1];
-        (*firstEnd)[1] -= work->matrix_buffer[13].elements[3][1];
-        (*secondEnd)[1] -= work->matrix_buffer[13].elements[3][1];
-        referencePosition[0] -= work->matrix_buffer[11].elements[3][0];
-        referencePosition[1] -= work->matrix_buffer[13].elements[3][1];
-        referencePosition[2] -= work->matrix_buffer[11].elements[3][2];
+        position[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        (*firstEnd)[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        (*secondEnd)[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        referencePosition[0] -= work->matrix_buffer[EX_JOINT_ROOT].elements[3][0];
+        referencePosition[1] -= work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        referencePosition[2] -= work->matrix_buffer[EX_JOINT_ROOT].elements[3][2];
         for (; endpoint != secondEnd;) {
             if (endpoint == 0) {
                 endpoint = firstEnd;
@@ -1844,38 +1904,38 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                 }
             }
         }
-        position[1] += work->matrix_buffer[13].elements[3][1];
-        (*firstEnd)[1] += work->matrix_buffer[13].elements[3][1];
-        (*secondEnd)[1] += work->matrix_buffer[13].elements[3][1];
-        referencePosition[0] += work->matrix_buffer[11].elements[3][0];
-        referencePosition[1] += work->matrix_buffer[13].elements[3][1];
-        referencePosition[2] += work->matrix_buffer[11].elements[3][2];
+        position[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        (*firstEnd)[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        (*secondEnd)[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        referencePosition[0] += work->matrix_buffer[EX_JOINT_ROOT].elements[3][0];
+        referencePosition[1] += work->matrix_buffer[EX_JOINT_HIP].elements[3][1];
+        referencePosition[2] += work->matrix_buffer[EX_JOINT_ROOT].elements[3][2];
     }
     {
         JntMatrix *motionMatrices = work->matrix_buffer;
-        position[0] += motionMatrices[11].elements[3][0];
-        position[2] += motionMatrices[11].elements[3][2];
-        (*firstStart)[0] += motionMatrices[11].elements[3][0];
-        (*firstStart)[2] += motionMatrices[11].elements[3][2];
-        (*secondStart)[0] += motionMatrices[11].elements[3][0];
-        (*secondStart)[2] += motionMatrices[11].elements[3][2];
-        (*firstEnd)[0] += motionMatrices[11].elements[3][0];
-        (*firstEnd)[2] += motionMatrices[11].elements[3][2];
-        (*secondEnd)[0] += motionMatrices[11].elements[3][0];
-        (*secondEnd)[2] += motionMatrices[11].elements[3][2];
+        position[0] += motionMatrices[EX_JOINT_ROOT].elements[3][0];
+        position[2] += motionMatrices[EX_JOINT_ROOT].elements[3][2];
+        (*firstStart)[0] += motionMatrices[EX_JOINT_ROOT].elements[3][0];
+        (*firstStart)[2] += motionMatrices[EX_JOINT_ROOT].elements[3][2];
+        (*secondStart)[0] += motionMatrices[EX_JOINT_ROOT].elements[3][0];
+        (*secondStart)[2] += motionMatrices[EX_JOINT_ROOT].elements[3][2];
+        (*firstEnd)[0] += motionMatrices[EX_JOINT_ROOT].elements[3][0];
+        (*firstEnd)[2] += motionMatrices[EX_JOINT_ROOT].elements[3][2];
+        (*secondEnd)[0] += motionMatrices[EX_JOINT_ROOT].elements[3][0];
+        (*secondEnd)[2] += motionMatrices[EX_JOINT_ROOT].elements[3][2];
     }
 }
 
 static void EXM_CheckSkirtCollision(ExMotionJointWork *work, float *position, float *matrix, u32 flags)
 {
-    if (flags & 0x80) {
+    if (flags & EX_HAIR_FLAG_SKIRT_SPLIT_A) {
         rootBorn = 4;
         CheckSkirtCollisionSub(work, position, matrix, flags);
         rootBorn = 5;
         CheckSkirtCollisionSub(work, position, matrix, flags);
         return;
     }
-    if (flags & 0x100) {
+    if (flags & EX_HAIR_FLAG_SKIRT_SPLIT_B) {
         rootBorn = 6;
         CheckSkirtCollisionSub(work, position, matrix, flags);
         rootBorn = 7;
@@ -1886,7 +1946,7 @@ static void EXM_CheckSkirtCollision(ExMotionJointWork *work, float *position, fl
     CheckSkirtCollisionSub(work, position, matrix, flags);
     rootBorn = 1;
     CheckSkirtCollisionSub(work, position, matrix, flags);
-    if (flags & 0x8000) {
+    if (flags & EX_SKIRT_FLAG_LONG) {
         rootBorn = 2;
         CheckSkirtCollisionSub(work, position, matrix, flags);
         rootBorn = 3;
@@ -1955,7 +2015,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
     unsigned short groupStart;
 
     switch (channel->type) {
-    case 3:
+    case EX_CHANNEL_CHAIN_BEGIN:
         groupStart = work->current_index;
         baseMatrixIndex = channel->matrix_index;
         work->saved_index = groupStart;
@@ -1969,7 +2029,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         currentMatrix = CopyExMatrixObject(&ExMotionMatrices(work)[jointIndex], &matrix);
         CopyExMatrix(work->saved_matrix.elements, currentMatrix->elements);
         break;
-    case 4:
+    case EX_CHANNEL_CHAIN_SOLVE:
         state = &work->channels[work->matrix_index];
         work->matrix_index++;
         state->translation = *translation;
@@ -1977,12 +2037,12 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         state->rotation = *rotation;
         flags = 0;
         switch (htypebuf[0].kind) {
-        case 999:
+        case EX_HAIR_TYPE_NONE:
             kind = 0;
             flags = 0;
             collisionTable = 0;
             break;
-        case 1000:
+        case EX_HAIR_TYPE_AUTO:
             kind = GetHairTypeSelection(&flags, &collisionTable,
                                         work);
             break;
@@ -1995,11 +2055,11 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         }
         parameters = &hairpara[kind];
         if (owner != 0 && (owner->moved_hair_mode & 1) && owner->moved_hair_sway.w > 0.0f) {
-            CopyExMatrix(matrix.elements, ExMotionMatrices(work)[13].elements);
+            CopyExMatrix(matrix.elements, ExMotionMatrices(work)[EX_JOINT_HIP].elements);
             MATRIX_translate4s(ExMatrixRows(&matrix), 0.0f, 1.0f, 0.0f);
-            sway.x = (matrix.elements[12] - ExMotionMatrices(work)[13].elements[12]) * owner->moved_hair_sway.w;
-            sway.y = (matrix.elements[13] - ExMotionMatrices(work)[13].elements[13]) * owner->moved_hair_sway.w;
-            sway.z = (matrix.elements[14] - ExMotionMatrices(work)[13].elements[14]) * owner->moved_hair_sway.w;
+            sway.x = (matrix.elements[12] - ExMotionMatrices(work)[EX_JOINT_HIP].elements[12]) * owner->moved_hair_sway.w;
+            sway.y = (matrix.elements[13] - ExMotionMatrices(work)[EX_JOINT_HIP].elements[13]) * owner->moved_hair_sway.w;
+            sway.z = (matrix.elements[14] - ExMotionMatrices(work)[EX_JOINT_HIP].elements[14]) * owner->moved_hair_sway.w;
         } else {
             sway.x = 0.0f;
             sway.y = 0.0f;
@@ -2030,7 +2090,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             float amount;
             float distance;
             state = &work->channels[index];
-            if (work->animation_flags & 0x10000) {
+            if (work->animation_flags & EX_ANIM_FLAG_RELATIVE_PREVIOUS) {
                 int matrixIndex = work->saved_index;
                 Matrix *previousGroup = &previousMatrices[matrixIndex];
                 xglMatrixInverse(ExMatrixRows(&inverse),
@@ -2046,7 +2106,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                 position[1] = previousPosition[1] = previousMatrices[work->saved_index + index + 1].elements[13];
                 position[2] = previousPosition[2] = previousMatrices[work->saved_index + index + 1].elements[14];
             }
-            if (work->animation_flags & 0x80000) {
+            if (work->animation_flags & EX_ANIM_FLAG_HOLD_PREVIOUS) {
                 CopyExMatrix(ExMatrixData(current),
                     ExMatrixData(&previousMatrices[work->saved_index + index]));
             } else {
@@ -2056,10 +2116,10 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                 MATRIX_rotZ4s(current->rows, state->rotation.x);
                 MATRIX_rotY4s(current->rows, state->rotation.y);
                 MATRIX_rotX4s(current->rows, state->rotation.z);
-                if (!(work->animation_flags & 0x200000)) {
+                if (!(work->animation_flags & EX_ANIM_FLAG_NO_GRAVITY)) {
                     position[1] -= parameters->gravity;
                 }
-                if (!(work->animation_flags & 0x100000)) {
+                if (!(work->animation_flags & EX_ANIM_FLAG_NO_WIND)) {
                     EXM_GetWindPower(position, work, position, &parent->elements[12]);
                 }
                 amount = (float)index * 0.3f + 0.4f;
@@ -2070,7 +2130,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                 position[0] += (current->elements[12] - position[0]) * parameters->response[0] * response;
                 position[1] += (current->elements[13] - position[1]) * parameters->response[1] * response;
                 position[2] += (current->elements[14] - position[2]) * parameters->response[2] * response;
-                if (flags & 0x20) {
+                if (flags & EX_HAIR_FLAG_COAT_WIDTH) {
                     int coatIndex;
                     AdjustJrCoatWidth(0.25f, (Vector4 *)position,
                                       (Vector4 *)&ExMotionMatrices(work)[index + 74].elements[12]);
@@ -2095,8 +2155,8 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                                           (Vector4 *)position);
                     }
                 }
-                if (!(work->animation_flags & 0x400000)) {
-                    if (owner != 0 && owner->translate_y != -1000.0f) {
+                if (!(work->animation_flags & EX_ANIM_FLAG_NO_GROUND)) {
+                    if (owner != 0 && owner->translate_y != GROUND_HEIGHT_NONE) {
                         response = owner->translate_y - owner->position.y + 0.07f;
                     } else {
                         UnduParamInit(&ground);
@@ -2125,7 +2185,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
                 } else {
                     position[1] -= parameters->gravity;
                 }
-                if (flags & 0x400) {
+                if (flags & EX_HAIR_FLAG_SKIRT) {
                     EXM_CheckSkirtCollision(work, position,
                                             &ExMotionMatrices(work)[work->saved_index + index].elements[12], flags);
                 } else if (collisionTable != 0) {
@@ -2175,7 +2235,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         }
         jointIndex = work->current_index;
         break;
-    case 2:
+    case EX_CHANNEL_CHAIN_JOINT:
         jointIndex = work->current_index;
         state = &work->channels[work->matrix_index];
         work->matrix_index++;
@@ -2319,4 +2379,4 @@ static void * collibuf[1] = { 0 };
 
 static int ibuf = 0;
 
-static int startjnt = 74;
+static int startjnt = EX_START_JOINT_DEFAULT;

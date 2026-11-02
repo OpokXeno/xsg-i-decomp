@@ -21,7 +21,10 @@
  */
 #define TCAMERA_FOV(camera)         (((TCamera *)(camera))->fieldOfView)
 
-#define TCAMERA_MPACK_SCRATCH ((void *)0x70000000)
+#define TCAMERA_MPACK_SCRATCH ((void *)SCRATCHPAD_BASE)
+
+/* Offset of the translation vector inside a StudioCamera. */
+#define TCAMERA_TRANSLATION_OFFSET 0xd0
 
 typedef unsigned int CameraVectorStorage __attribute__((mode(TI)));
 
@@ -322,7 +325,7 @@ void TCAMERA_viewCNS(TCamera *camera, Vector4 **reference_position, Vector4 *off
         point[1] = (*reference_position)[1].y;
         point[2] = (*reference_position)[1].z;
     }
-    camera = (TCamera *)((u8 *)camera + 0xd0);
+    camera = (TCamera *)((u8 *)camera + TCAMERA_TRANSLATION_OFFSET);
     Vu0AddVectorXYZ(point, point, offset);
     Vu0SubVectorXYZ(&direction, camera, point);
     yaw = xglAtan2(direction.x, direction.z);
@@ -356,12 +359,12 @@ void TCAMERA_update(void)
     int cameraIndex;
     float radiansPerHalfTurn;
 
-    if ((PadData[0].half_2a & 4) != 0 && (PadData[0].half_28 & 0x100) != 0) {
+    if ((PadData[0].half_2a & PAD_L1) != 0 && (PadData[0].half_28 & PAD_SELECT) != 0) {
         camDisp = (camDisp + 1) & 1;
     }
 
     radiansPerHalfTurn = 3.1415927f;
-    for (cameraIndex = 0; cameraIndex < 8; cameraIndex++) {
+    for (cameraIndex = 0; cameraIndex < STUDIO_CAMERA_COUNT; cameraIndex++) {
         StudioCamera *studioCamera = xglStudioGetCamera2(cameraIndex);
         TCamera *camera = (TCamera *)studioCamera;
         Vector4 *position = &studioCamera->position.vector;
@@ -379,85 +382,85 @@ void TCAMERA_update(void)
                                         radiansPerHalfTurn * 180.0f));
         }
 
-        if (studioCamera->state != 2) {
+        if (studioCamera->state != STUDIO_CAMERA_STATE_EXTERNAL) {
             CameraWork *work = &tcamera[cameraIndex];
 
-            switch (work->mode[0]) {
-            case 0x15:
+            switch (work->mode[CAMERA_CHANNEL_TRANSLATE]) {
+            case CAMERA_MODE_MOTION_PACK2:
                 TCAMERA_transMPack2(camera, work->translate.packed.source,
                                     work->translate.packed.frame);
-                work->frame[0]++;
+                work->frame[CAMERA_CHANNEL_TRANSLATE]++;
                 break;
-            case 0x11:
+            case CAMERA_MODE_MOTION_PACK:
                 TCAMERA_transMPack(camera, work->translate.packed.source,
-                                   (float)work->frame[0]);
-                work->frame[0]++;
+                                   (float)work->frame[CAMERA_CHANNEL_TRANSLATE]);
+                work->frame[CAMERA_CHANNEL_TRANSLATE]++;
                 break;
-            case 0x12:
+            case CAMERA_MODE_SPLINE:
                 TCAMERA_transSPL(camera, &work->translate.spline,
-                                 (float)work->frame[0]);
+                                 (float)work->frame[CAMERA_CHANNEL_TRANSLATE]);
                 if (work->translate.spline.first_key >= 0) {
-                    work->frame[0]++;
-                    if (work->translate.spline.last_key < work->frame[0]) {
-                        work->frame[0] = work->translate.spline.last_key;
+                    work->frame[CAMERA_CHANNEL_TRANSLATE]++;
+                    if (work->translate.spline.last_key < work->frame[CAMERA_CHANNEL_TRANSLATE]) {
+                        work->frame[CAMERA_CHANNEL_TRANSLATE] = work->translate.spline.last_key;
                     }
                 } else {
-                    work->frame[0]++;
+                    work->frame[CAMERA_CHANNEL_TRANSLATE]++;
                 }
                 break;
-            case 0x14:
+            case CAMERA_MODE_CONSTANT:
                 TCAMERA_transCNS(camera, &work->translate.constant.reference_position,
                                  &work->translate.constant.offset,
                                  work->translate.constant.reference_mode);
                 break;
             }
 
-            switch (work->mode[1]) {
-            case 0x11:
+            switch (work->mode[CAMERA_CHANNEL_VIEW]) {
+            case CAMERA_MODE_MOTION_PACK:
                 TCAMERA_viewMPack(camera, work->view.packed.source,
-                                  (float)work->frame[1]);
-                work->frame[1]++;
+                                  (float)work->frame[CAMERA_CHANNEL_VIEW]);
+                work->frame[CAMERA_CHANNEL_VIEW]++;
                 break;
-            case 0x12:
+            case CAMERA_MODE_SPLINE:
                 TCAMERA_viewSPL(camera, &work->view.spline,
-                                (float)work->frame[1]);
+                                (float)work->frame[CAMERA_CHANNEL_VIEW]);
                 if (work->view.spline.first_key >= 0) {
-                    work->frame[1]++;
-                    if (work->view.spline.last_key < work->frame[1]) {
-                        work->frame[1] = work->view.spline.last_key;
+                    work->frame[CAMERA_CHANNEL_VIEW]++;
+                    if (work->view.spline.last_key < work->frame[CAMERA_CHANNEL_VIEW]) {
+                        work->frame[CAMERA_CHANNEL_VIEW] = work->view.spline.last_key;
                     }
                 } else {
-                    work->frame[1]++;
+                    work->frame[CAMERA_CHANNEL_VIEW]++;
                 }
                 break;
-            case 0x13:
+            case CAMERA_MODE_ROTATE_SPLINE:
                 TCAMERA_rotateSPL(camera, &work->view.spline,
-                                  (float)work->frame[1]);
+                                  (float)work->frame[CAMERA_CHANNEL_VIEW]);
                 if (work->view.spline.first_key >= 0) {
-                    work->frame[1]++;
-                    if (work->view.spline.last_key < work->frame[1]) {
-                        work->frame[1] = work->view.spline.last_key;
+                    work->frame[CAMERA_CHANNEL_VIEW]++;
+                    if (work->view.spline.last_key < work->frame[CAMERA_CHANNEL_VIEW]) {
+                        work->frame[CAMERA_CHANNEL_VIEW] = work->view.spline.last_key;
                     }
                 } else {
-                    work->frame[1]++;
+                    work->frame[CAMERA_CHANNEL_VIEW]++;
                 }
                 break;
-            case 0x14:
+            case CAMERA_MODE_CONSTANT:
                 TCAMERA_viewCNS(camera, &work->view.constant.reference_position,
                                 &work->view.constant.offset,
                                 work->view.constant.reference_mode);
                 break;
             }
 
-            if (work->mode[2] == 0x12) {
+            if (work->mode[CAMERA_CHANNEL_ROLL] == CAMERA_MODE_SPLINE) {
                 TCAMERA_rollSPL(camera, &work->roll.spline,
-                                (float)work->frame[2]);
-                work->frame[2]++;
+                                (float)work->frame[CAMERA_CHANNEL_ROLL]);
+                work->frame[CAMERA_CHANNEL_ROLL]++;
             }
-            if (work->mode[3] == 0x12) {
+            if (work->mode[CAMERA_CHANNEL_FOV] == CAMERA_MODE_SPLINE) {
                 TCAMERA_fovSPL(camera, &work->fov.spline,
-                               (float)work->frame[3]);
-                work->frame[3]++;
+                               (float)work->frame[CAMERA_CHANNEL_FOV]);
+                work->frame[CAMERA_CHANNEL_FOV]++;
             }
         }
 
@@ -478,10 +481,10 @@ void TCAMERA_init(void)
     int cameraIndex;
     int modeIndex;
 
-    for (cameraIndex = 0; cameraIndex < 8; cameraIndex++) {
+    for (cameraIndex = 0; cameraIndex < STUDIO_CAMERA_COUNT; cameraIndex++) {
         int *modes = cameras[cameraIndex].mode;
         for (modeIndex = 3; modeIndex >= 0; modeIndex--) {
-            modes[modeIndex] = 16;
+            modes[modeIndex] = CAMERA_MODE_IDLE;
         }
     }
 }

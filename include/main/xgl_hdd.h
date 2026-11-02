@@ -1,6 +1,31 @@
 #ifndef INCLUDE_MAIN_XGL_HDD_H
 #define INCLUDE_MAIN_XGL_HDD_H
 
+/* Why the HDD save area cannot take another save: xglHddMcGetFree() returns
+ * these in place of a free-space count, and xglHddMcCreate() reports the same
+ * four causes as the codes below. */
+#define HDD_CHECK_ACCESS (-1)
+#define HDD_CHECK_TOO_MANY_FOLDERS (-2)
+#define HDD_CHECK_TOO_MANY_SAVES (-3)
+#define HDD_CHECK_NO_SPACE (-4)
+
+#define HDD_CREATE_ACCESS (-14)
+#define HDD_CREATE_TOO_MANY_FOLDERS (-9)
+#define HDD_CREATE_TOO_MANY_SAVES (-13)
+#define HDD_CREATE_NO_SPACE (-15)
+
+/* sceDevctl commands on the hdd0: device (HDIOC_*) and on a mounted pfs
+ * partition (PDIOC_*), and the sceIoctl2 command that adds a sub-partition. */
+#define HDD_DEVCTL_MAX_SECTORS 0x4801
+#define HDD_DEVCTL_FLUSH 0x4804
+#define HDD_DEVCTL_DEV9_OFF 0x4806
+#define HDD_DEVCTL_STATUS 0x4807
+#define HDD_DEVCTL_FREE_SECTORS_TOTAL 0x480a
+#define HDD_DEVCTL_ZONE_SIZE 0x5001
+#define HDD_DEVCTL_FREE_ZONES 0x5002
+#define HDD_DEVCTL_CLOSE_ALL 0x5003
+#define HDD_IOCTL2_ADD_SUBPARTITION 0x6801
+
 /* The header of the card data image: the begin and end of the transferred
  * payload (carddata.new). */
 struct HddTransferInfo {

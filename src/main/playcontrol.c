@@ -193,13 +193,13 @@ void Java_xeno_PlayControl_loadTimeChart__Ljava_lang_Object_(
 void Java_xeno_PlayControl_start__(JThread *thread,
                                    Play **arguments)
 {
-    (*arguments)->flags |= 1;
+    (*arguments)->flags |= PLAY_FLAG_ENABLED;
 }
 
 void Java_xeno_PlayControl_stop__(JThread *thread,
                                   Play **arguments)
 {
-    (*arguments)->flags &= ~1;
+    (*arguments)->flags &= ~PLAY_FLAG_ENABLED;
 }
 
 void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_(

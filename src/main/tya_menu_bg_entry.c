@@ -13,12 +13,36 @@
 #define MENU_BG_HORIZONTAL_DECAY MENUBG_HORIZONTAL_SCALE_DECAY
 #define MENU_BG_MIN_HORIZONTAL_LIMIT MENUBG_MIN_HORIZONTAL_SCALE
 
+/* The menu background is a strip of 16 tasks (one per row), each drawing a
+ * wall of 4 shaded quads between 8 projected points; the shared work block
+ * holds one random shade per pixel of the 512-entry palette. */
+#define MENU_BG_TASK_COUNT 16
+#define MENU_BG_QUAD_COUNT 4
+#define MENU_BG_POINT_COUNT 8
+#define MENU_BG_COLOR_COUNT 512
+
+/* Quadword counts handed to nmlModelDirectSend. */
+#define MENU_BG_WORK_QWORDS 130    /* packet header words plus the palette */
+#define MENU_BG_PALETTE_ENV_QWORDS 11
+#define MENU_BG_ENTRY_ENV_QWORDS 7
+#define MENU_BG_QUAD_QWORDS 0xb
+
+/* MenuBgTask.state */
+enum {
+    MENU_BG_STATE_INIT = 0,   /* pick the random offsets and start delay */
+    MENU_BG_STATE_DELAY = 1,  /* wait remaining_frames */
+    MENU_BG_STATE_SHRINK = 2, /* decay horizontal_scale until it vanishes */
+    MENU_BG_STATE_DONE = 3
+};
+
+#define MENU_BG_START_DELAY_MASK 7 /* random start delay, 0..7 frames */
+
 typedef struct MenuBgWork {
     u64 initial_word;
     u64 palette_packet;
     u64 color_packet;
     u64 trailing_word;
-    u32 colors[512];
+    u32 colors[MENU_BG_COLOR_COUNT];
     int camera_id;
     u32 unmodeled_824;
     u32 tasks_finished;
@@ -91,8 +115,8 @@ typedef struct MenuBgDirectPacket {
 typedef struct MenuBgScratch {
     Matrix4 saved_matrix;
     u8 unmodeled_040[0xc0];
-    Vector4 points[8];
-    MenuBgProjectedPoint projected_points[8];
+    Vector4 points[MENU_BG_POINT_COUNT];
+    MenuBgProjectedPoint projected_points[MENU_BG_POINT_COUNT];
     MenuBgDirectPacket packet;
 } MenuBgScratch;
 
@@ -137,20 +161,20 @@ static u8 TestEnv_3_0036AB50[112];
 
 static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
 {
-    static Vector4 model[8] = {
+    static Vector4 model[MENU_BG_POINT_COUNT] = {
         {0.0f, 0.4f, -0.8f, 1.0f}, {7.0f, 0.4f, -0.8f, 1.0f},
         {0.0f, 0.4f,  0.0f, 1.0f}, {7.0f, 0.4f,  0.0f, 1.0f},
         {0.0f,-0.4f,  0.0f, 1.0f}, {7.0f,-0.4f,  0.0f, 1.0f},
         {0.0f,-0.4f, -0.8f, 1.0f}, {7.0f,-0.4f, -0.8f, 1.0f},
     };
-    static MenuBgQuad index[4] = {
+    static MenuBgQuad index[MENU_BG_QUAD_COUNT] = {
         {0xb0, 0xb0, 0xb0, 0x80, 1, 3, 0, 2},
         {0x80, 0x80, 0x80, 0x80, 3, 5, 2, 4},
         {0x50, 0x50, 0x50, 0x80, 5, 7, 4, 6},
         {0x40, 0x40, 0x40, 0x80, 0, 2, 6, 4},
     };
     MenuBgTask *task = (MenuBgTask *)task_prefix;
-    MenuBgScratch *scratch = (MenuBgScratch *)0x70000000;
+    MenuBgScratch *scratch = (MenuBgScratch *)SCRATCHPAD_BASE;
     MenuBgProjectedPoint *screen_points = scratch->projected_points;
     int i;
     int texture_x;
@@ -161,9 +185,9 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     float depth_adjustment;
     float base_depth;
     /* The scratchpad x word is the zero scale sentinel. */
-    ((volatile MenuBgScratch *)0x70000000)->points[0].x = 0.0f;
+    ((volatile MenuBgScratch *)SCRATCHPAD_BASE)->points[0].x = 0.0f;
     scratch->points[0].y = task->vertical_offset;
-    depth_adjustment = ((volatile MenuBgScratch *)0x70000000)->points[0].x;
+    depth_adjustment = ((volatile MenuBgScratch *)SCRATCHPAD_BASE)->points[0].x;
     base_depth = task->depth_offset;
 
     if (scale < depth_adjustment) {
@@ -179,7 +203,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     xglMatrixStackTrans(&scratch->points[0].x);
     xglMatrixStackSave(scratch->saved_matrix);
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MENU_BG_POINT_COUNT; i++) {
         if (model[i].x == 0.0f) {
             scratch->points[i].x =
                 task->horizontal_offset + task->horizontal_scale * scale;
@@ -192,9 +216,9 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
         scratch->points[i].w = 1.0f;
     }
 
-    xglRotTransPersN(screen_points, &scratch->saved_matrix, scratch->points, 8,
+    xglRotTransPersN(screen_points, &scratch->saved_matrix, scratch->points, MENU_BG_POINT_COUNT,
                      task->work->camera_id);
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MENU_BG_POINT_COUNT; i++) {
         int *screen_vertex = screen_points[i] + 2;
 
         if (((u32)screen_vertex[-2] & 0xffff0000u) != 0 ||
@@ -219,7 +243,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     scratch->packet.gif_tag = 0x908a400000008001ULL;
     scratch->packet.gif_registers = 0x0000000535353531ULL;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < MENU_BG_QUAD_COUNT; i++) {
         MenuBgProjectedPoint *screen_vertex;
         u8 alpha;
 
@@ -265,7 +289,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
         scratch->packet.vertices[3].projected[2] = (*screen_vertex)[2];
         scratch->packet.vertices[3].projected[3] = 0;
 
-        nmlModelDirectSend(1, &scratch->packet, 0xb);
+        nmlModelDirectSend(1, &scratch->packet, MENU_BG_QUAD_QWORDS);
     }
 }
 
@@ -275,28 +299,28 @@ static int task_menubg(XglTaskPrefix *task_prefix)
     int frame_delay;
 
     switch (task->state) {
-    case 0:
+    case MENU_BG_STATE_INIT:
         task->horizontal_offset = 2.0f * (xglFRand() - 1.5f);
         task->vertical_offset = I2F((8 - task->index) * 2) * MENU_BG_VERTICAL_OFFSET_FACTOR;
         task->depth_offset = (xglFRand() - 1.5f) * 0.5f;
         task->horizontal_scale = 2.0f * xglFRand() + 7.0f;
         task->mirrored_depth_offset = (xglFRand() - 1.5f) * 0.5f;
-        frame_delay = xglSRand() & 7;
-        task->state = 1;
+        frame_delay = xglSRand() & MENU_BG_START_DELAY_MASK;
+        task->state = MENU_BG_STATE_DELAY;
         task->remaining_frames = frame_delay;
         /* fall through */
-    case 1:
+    case MENU_BG_STATE_DELAY:
         if (task->remaining_frames != 0) {
             task->remaining_frames--;
             break;
         }
-        task->state = 2;
+        task->state = MENU_BG_STATE_SHRINK;
         /* fall through */
-    case 2:
+    case MENU_BG_STATE_SHRINK:
         task->horizontal_scale *= MENU_BG_HORIZONTAL_DECAY;
         if (task->horizontal_scale < MENU_BG_MIN_HORIZONTAL_LIMIT) {
             task->horizontal_scale = 0.0f;
-            task->state = 3;
+            task->state = MENU_BG_STATE_DONE;
         }
         break;
     }
@@ -304,8 +328,8 @@ static int task_menubg(XglTaskPrefix *task_prefix)
     if (task->index == 0) {
         StudioCamera *camera;
 
-        nmlModelDirectSend(2, TestEnv_2_0036AAA0, 11);
-        nmlModelDirectSend(1, task->work, 130);
+        nmlModelDirectSend(2, TestEnv_2_0036AAA0, MENU_BG_PALETTE_ENV_QWORDS);
+        nmlModelDirectSend(1, task->work, MENU_BG_WORK_QWORDS);
         camera = xglStudioGetCamera2(task->work->camera_id);
         (&camera->position.vector)->x = 0.0f;
         (&camera->position.vector)->y = 0.0f;
@@ -318,7 +342,7 @@ static int task_menubg(XglTaskPrefix *task_prefix)
         xglCameraMove(camera);
     }
 
-    nmlModelDirectSend(2, TestEnv_3_0036AB50, 7);
+    nmlModelDirectSend(2, TestEnv_3_0036AB50, MENU_BG_ENTRY_ENV_QWORDS);
     task_menubg_sub(task_prefix, 1.0f);
     task_menubg_sub(task_prefix, -1.0f);
     if (task->work->tasks_finished == 0) {
@@ -339,7 +363,7 @@ void tyaMenuBgEntry(XglTaskScheduler *scheduler, MenuBgWork *work)
     work->palette_packet = 0x5100008100000000ULL;
     work->color_packet = 0x0800000000008080ULL;
     work->trailing_word = 0;
-    for (color_index = 511; color_index >= 0; color_index--) {
+    for (color_index = MENU_BG_COLOR_COUNT - 1; color_index >= 0; color_index--) {
         u32 shade = xglSRand() & 0x30;
 
         *color_cursor = shade * 0x010101 + 0x80808080;
@@ -347,7 +371,7 @@ void tyaMenuBgEntry(XglTaskScheduler *scheduler, MenuBgWork *work)
     }
 
     task_callback = task_menubg;
-    for (task_index = 0; task_index < 16; task_index++) {
+    for (task_index = 0; task_index < MENU_BG_TASK_COUNT; task_index++) {
         XglTaskPrefix *entry = 0;
         MenuBgTask *task;
         u32 randomized_y;

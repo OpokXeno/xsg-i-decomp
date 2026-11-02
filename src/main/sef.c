@@ -22,6 +22,82 @@
 
 #define effect_scale_literal_0_1 (0.10000000149011612f)
 #define SEF_ACTOR_LIGHT_FLAG 0x00008000u
+/* The effect random generator: the ANSI C linear congruential step
+ * seed = seed * 1103515245 + 12345, taking bits 16..30 as a 15-bit sample. */
+/* SchedulerState.flags bit 0x40: finished (sefCheckFinish), or created
+ * detached (sefCreateEffect2); sefIsFinishEffect skips such schedulers. */
+#define SEF_SCHED_FINISHED 0x40
+
+#define SEF_RAND_MULTIPLIER 0x41C64E6Du
+#define SEF_RAND_INCREMENT 0x3039u
+#define SEF_RAND_MASK 0x7FFF
+
+/* Particle allocator (_ptAlloc): 1024 particle records of
+ * SEF_PT_ALLOC_RECORD_SIZE bytes, then a 1024-entry ring of free handles. */
+#define SEF_PT_ALLOC_COUNT 0x400
+#define SEF_PT_ALLOC_CLEAR_SIZE 0xA0810  /* records, free ring, head and tail */
+#define SEF_PT_ALLOC_LAST_SLOT 0xA07FE   /* byte offset of the ring's last entry */
+
+/* Particles per line-data record. */
+#define SEF_LINE_PARTICLE_COUNT 0x100
+#define SEF_GS_PSMT8 19
+#define SEF_GS_PSMT4 20
+
+/* Sizes of the cleared battle blocks. */
+#define SEF_BATTLE_DATA_SIZE 0x230
+#define SEF_BATTLE_PRM_SIZE 0x34
+#define SEF_BATTLE_ACTOR_TBL_SIZE 0xda0
+
+/* Effect memory pool and the battle image buffer, in bytes. */
+#define SEF_EFFECT_BUFFER_SIZE 0xD4800
+#define SEF_BATTLE_IMAGE_SIZE 0x40000
+
+/* Boss character ids [0x97, 0xba]. */
+#define SEF_BOSS_ID_FIRST 0x97
+#define SEF_BOSS_ID_COUNT 0x24
+
+/* Position-source codes of sefGetPoint / sefCalcLocalMatrix / sefMoveParticle. */
+#define SEF_POINT_PARENT 4              /* the parent particle */
+#define SEF_POINT_VECTOR 5              /* pointSourceVector */
+#define SEF_POINT_CASTER 256
+#define SEF_POINT_CASTER_NULL 257       /* + null index, SEF_POINT_NULL_COUNT of them */
+#define SEF_POINT_TARGET 512
+#define SEF_POINT_TARGET_NULL 513       /* + null index */
+#define SEF_POINT_WEAPON 1024           /* + weapon null index */
+#define SEF_POINT_CASTER_ALT 2048
+#define SEF_POINT_CASTER_NULL_ALT 2049  /* caster null while battle flag 2 is set */
+#define SEF_POINT_DAMAGE_NULL 529       /* picks SEF_TARGET_DAMAGE_NULL_A or _B */
+#define SEF_POINT_NULL_COUNT 16
+#define SEF_POINT_NULL_ALT_OFFSET 1792  /* SEF_POINT_CASTER_NULL_ALT - SEF_POINT_CASTER_NULL */
+#define SEF_POINT_CASTER_BIT 0x100
+#define SEF_POINT_TARGET_BIT 0x200
+#define SEF_POINT_WEAPON_BIT 0x400
+#define SEF_POINT_ALT_BIT 0x800
+#define SEF_POINT_FLAG_MASK 0xe000      /* loop-mode flags above the point code */
+
+/* EffectData.category: low 10 bits are the start frame, the rest are flags. */
+#define SEF_CATEGORY_FRAME_MASK 0x3ff
+#define SEF_CATEGORY_SE_SIGNAL 0x800
+#define SEF_CATEGORY_WAIT_SPECIAL 0x1000
+#define SEF_CATEGORY_HIT_SIGNAL 0x2000
+#define SEF_CATEGORY_FINISH 0x4000
+
+/* Frame counter limit (line data and script binding), and the command start-time / key markers. */
+#define SEF_LINE_FRAME_LIMIT 0x3FF
+#define SEF_START_TIME_END_OF_LIST 0x400
+#define SEF_START_TIME_FINAL 0x1000
+#define SEF_KEY_END_CONSTANT 0x400      /* single static key, evaluated once */
+
+/* Effect-number placeholders resolved by sefCnvDeathEffectNo / sefCnvWaitEffectNo,
+ * and the base of the generic death effects (+ kind * 3 + size offset). */
+#define SEF_EFFECT_NO_DEATH 0x4000
+#define SEF_EFFECT_NO_WAIT 0x4001
+#define SEF_DEATH_EFFECT_BASE 2603
+
+/* Effect-number blocks bound to a character (sefSearchMapperIndex2). */
+#define SEF_WEAPON_EFFECT_FIRST 0xAF0
+#define SEF_WEAPON_EFFECT_COUNT 0xC8
+#define SEF_EFFECT_SLOT_COUNT 24
 #define SEF_BATTLE_ACTOR_MAX 24
 #define SEF_LINE_DATA_RECORD_SIZE 0x820
 #define SEF_LINE_DATA_COUNT 0x80
@@ -242,7 +318,7 @@ typedef struct SefLocalData {
     short *color_keys;                               /* +0x1e0 */
     short *uniform_scale_keys;                       /* +0x1e4 */
     unsigned char unmodeled_1e8[SEF_LOCAL_DATA_PT_TABLE - 0x1e8];
-    short pointHandles[0x100];                         /* +0x600 */
+    short pointHandles[SEF_LINE_PARTICLE_COUNT];                         /* +0x600 */
     unsigned char unmodeled_800[0x80e - 0x800];
     short cursor;                                      /* +0x80e */
 } SefLocalData;
@@ -303,8 +379,8 @@ typedef struct {
 } SefRenderState;
 
 typedef struct SefPtAllocatorState {
-    unsigned char records[0xA0000];
-    short freeSlots[0x400];
+    unsigned char records[SEF_PT_ALLOC_COUNT * SEF_PT_ALLOC_RECORD_SIZE];
+    short freeSlots[SEF_PT_ALLOC_COUNT];
     unsigned int head;
     unsigned int tail;
     unsigned char unmodeled_a0808[8];
@@ -430,7 +506,7 @@ typedef struct SefLineData {
     unsigned char unmodeled_1F8[0x400];
     float gravity;
     float height;
-    short local_point_handles[0x100];                 /* +0x600 */
+    short local_point_handles[SEF_LINE_PARTICLE_COUNT];                 /* +0x600 */
     unsigned char unmodeled_800[2];
     short global_result;
     short timer;
@@ -522,8 +598,8 @@ typedef struct {
 typedef union SefBattleBlock {
     SefBattleStatus status;
     SefEffectRequest request;
-    unsigned long long words[0x230 / 8];
-    unsigned char bytes[0x230];
+    unsigned long long words[SEF_BATTLE_DATA_SIZE / 8];
+    unsigned char bytes[SEF_BATTLE_DATA_SIZE];
 } SefBattleBlock;
 
 typedef struct {
@@ -780,14 +856,14 @@ static SefBattleBlock _battleData;
 
 static unsigned char _ptAlloc[0xA0810];
 
-static unsigned char _eftBuffer[0xD4800];
+static unsigned char _eftBuffer[SEF_EFFECT_BUFFER_SIZE];
 
 static SefBattleParameters _battlePrm;
 
 /* Original TU-local scheduler storage, kept named for its recovered users. */
-static SchedulerState _scheduler[128];
+static SchedulerState _scheduler[SEF_SCHEDULER_COUNT];
 
-static SefSavePrm _savePrm[128];
+static SefSavePrm _savePrm[SEF_SAVE_PRM_COUNT];
 
 static int _nowScriptAdr;
 
@@ -1087,10 +1163,10 @@ static float sefRandf(void)
     unsigned int next_seed;
     int sample;
 
-    next_seed = seed * 0x41C64E6Du;
-    next_seed += 0x3039u;
+    next_seed = seed * SEF_RAND_MULTIPLIER;
+    next_seed += SEF_RAND_INCREMENT;
     sefRandSeed = next_seed;
-    sample = (next_seed >> 16) & 0x7FFFu;
+    sample = (next_seed >> 16) & SEF_RAND_MASK;
     return (float)sample * sef_rand_unit_scale_literal;
 }
 
@@ -1100,7 +1176,7 @@ static float sefRandf(void)
  */
 static int sefIsBossID(int character_id)
 {
-    return (unsigned int)(character_id - 0x97) < 0x24;
+    return (unsigned int)(character_id - SEF_BOSS_ID_FIRST) < SEF_BOSS_ID_COUNT;
 }
 
 void sefMemZero(void *dest, int size)
@@ -1146,23 +1222,23 @@ int sefSearchMapperIndex2(int effect_id, int number, int category) {
     int column;
     int weapon_id;
 
-    if (category == 14) {
-        return 14;
+    if (category == SRS_RES_BATTLE_IMAGE) {
+        return SRS_RES_BATTLE_IMAGE;
     }
-    if (category == 15) {
-        return 15;
+    if (category == SRS_RES_CF_IMAGE) {
+        return SRS_RES_CF_IMAGE;
     }
-    if ((unsigned int)(category - 16) < 24U) {
-        for (index = 0; index < 24; index++) {
+    if ((unsigned int)(category - SRS_RES_EFFECT) < SEF_EFFECT_SLOT_COUNT) {
+        for (index = 0; index < SEF_EFFECT_SLOT_COUNT; index++) {
             if (_srsMemRes.effectData[index] != 0 &&
-                _srsMemRes.no[16 + index] == effect_id) {
-                return index + 16;
+                _srsMemRes.no[SRS_RES_EFFECT + index] == effect_id) {
+                return index + SRS_RES_EFFECT;
             }
         }
         return 0;
     }
 
-    if ((unsigned int)(effect_id - 0xAF0) < 0xC8U) {
+    if ((unsigned int)(effect_id - SEF_WEAPON_EFFECT_FIRST) < SEF_WEAPON_EFFECT_COUNT) {
         weapon_id = srsEftNoWeaponEffectID(effect_id);
         if (weapon_id <= 0) {
             return 0;
@@ -1170,8 +1246,8 @@ int sefSearchMapperIndex2(int effect_id, int number, int category) {
         for (index = 0; index < 3; index++) {
             for (column = 0; column < 3; column++) {
                 if (_srsMemRes.weaponData[index][column] != 0 &&
-                    _srsMemRes.no[index * 3 + column + 2] == weapon_id) {
-                    return index * 3 + column + 2;
+                    _srsMemRes.no[index * 3 + column + SRS_RES_WEAPON] == weapon_id) {
+                    return index * 3 + column + SRS_RES_WEAPON;
                 }
             }
         }
@@ -1185,14 +1261,14 @@ int sefSearchMapperIndex2(int effect_id, int number, int category) {
         {
             for (index = 0; index < 3; index++) {
                 if (mapperSearchCharacterId[0] != 0 && _battlePrm.player_character_ids[index] == mapperSearchCharacterId[0]) {
-                    return index * 3 + 2;
+                    return index * 3 + SRS_RES_WEAPON;
                 }
             }
         }
         {
             for (index = 0; index < 3; index++) {
                 if (mapperSearchCharacterId[0] != 0 && _battlePrm.enemy_character_ids[index] == mapperSearchCharacterId[0]) {
-                    return index + 11;
+                    return index + SRS_RES_COMBO;
                 }
             }
         }
@@ -1219,10 +1295,10 @@ static void sevInitPtAllocator(void)
     short *slot;
     int index;
 
-    memset(_ptAlloc, 0, 0xA0810);
-    slot = (short *)(_ptAlloc + 0xA07FE);
-    memset(_battleData.bytes, 0, 0x230);
-    index = 0x3FF;
+    memset(_ptAlloc, 0, SEF_PT_ALLOC_CLEAR_SIZE);
+    slot = (short *)(_ptAlloc + SEF_PT_ALLOC_LAST_SLOT);
+    memset(_battleData.bytes, 0, SEF_BATTLE_DATA_SIZE);
+    index = SEF_PT_ALLOC_COUNT - 1;
     do {
         *slot = (short)index;
         index--;
@@ -1233,7 +1309,7 @@ static void sevInitPtAllocator(void)
 static int sevAllocPtAllocator(void)
 {
     unsigned int head = SEF_PT_ALLOCATOR->head;
-    unsigned int next_head = (head + 1) & 0x3ff;
+    unsigned int next_head = (head + 1) & (SEF_PT_ALLOC_COUNT - 1);
 
     if (next_head == SEF_PT_ALLOCATOR->tail)
         return -1;
@@ -1247,9 +1323,9 @@ static void sevFreePtAllocator(unsigned int handle)
     unsigned int tail = SEF_PT_ALLOCATOR->tail;
     unsigned int next_tail;
 
-    if (handle < 0x400u && SEF_PT_ALLOCATOR->head != tail) {
+    if (handle < SEF_PT_ALLOC_COUNT && SEF_PT_ALLOCATOR->head != tail) {
         SEF_PT_ALLOCATOR->freeSlots[tail] = (short)handle;
-        next_tail = (tail + 1u) & 0x3ffu;
+        next_tail = (tail + 1u) & (SEF_PT_ALLOC_COUNT - 1);
         SEF_PT_ALLOCATOR->tail = next_tail;
     }
 }
@@ -1599,45 +1675,45 @@ void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
     battle = &_battleData.status;
 
     if ((battle->flags & 2) != 0) {
-        if ((unsigned int)(part - 257) < 16) {
-            part += 1792;
+        if ((unsigned int)(part - SEF_POINT_CASTER_NULL) < SEF_POINT_NULL_COUNT) {
+            part += SEF_POINT_NULL_ALT_OFFSET;
         }
     }
-    if (part == 529) {
-        part = (battle->phase >= 2) ? 527 : 528;
+    if (part == SEF_POINT_DAMAGE_NULL) {
+        part = (battle->phase >= 2) ? SEF_TARGET_DAMAGE_NULL_A : SEF_TARGET_DAMAGE_NULL_B;
     }
 
-    if (part < 4 || part == 2048) {
-    } else if (part == 256) {
+    if (part < 4 || part == SEF_POINT_CASTER_ALT) {
+    } else if (part == SEF_POINT_CASTER) {
         if (battle->caster != 0) {
             point_block = &battle->casterMatrix;
         }
-    } else if (part == 512) {
+    } else if (part == SEF_POINT_TARGET) {
         if (battle->target != 0) {
             point_block = &battle->targetMatrix;
         }
-    } else if ((part & 0x100) != 0) {
-        sefGetNullPosition(position, battle->caster, part - 257, 1);
+    } else if ((part & SEF_POINT_CASTER_BIT) != 0) {
+        sefGetNullPosition(position, battle->caster, part - SEF_POINT_CASTER_NULL, 1);
         copy_base = &battle->casterMatrix;
         goto copy_site;
-    } else if ((part & 0x200) != 0) {
-        sefGetNullPosition(position, battle->target, part - 513, 0);
+    } else if ((part & SEF_POINT_TARGET_BIT) != 0) {
+        sefGetNullPosition(position, battle->target, part - SEF_POINT_TARGET_NULL, 0);
         copy_base = &battle->targetMatrix;
         goto copy_site;
     } else if ((part & 0x1000) != 0) {
-    } else if (part == 4) {
+    } else if (part == SEF_POINT_PARENT) {
         unsigned char *parent;
 
         if (_parentLine >= 0 && _nowParentLocal >= 0) {
-            parent = _ptAlloc + _nowParentLocal * 640;
+            parent = _ptAlloc + _nowParentLocal * SEF_PT_ALLOC_RECORD_SIZE;
         } else {
             parent = 0;
         }
         if (parent != 0) {
             QuadwordCopyT0(position, parent + 192);
         }
-    } else if ((part & 0x400) != 0) {
-        sefGetWeaponPosition(position, battle->weaponActor, part - 1024);
+    } else if ((part & SEF_POINT_WEAPON_BIT) != 0) {
+        sefGetWeaponPosition(position, battle->weaponActor, part - SEF_POINT_WEAPON);
         copy_base = &battle->casterMatrix;
 copy_site:
         __asm__ __volatile__(
@@ -1651,10 +1727,10 @@ copy_site:
             "sq $11, 48(%0)"
             : : "r"(point_copy), "r"(copy_base), "r"(position), "r"(point_block) : "$8", "$9", "$10", "$11", "memory");
         point_block = &point_copy;
-    } else if (part == 5) {
+    } else if (part == SEF_POINT_VECTOR) {
         QuadwordCopyT0(position, pointSourceVector);
-    } else if ((part & 0x800) != 0) {
-        sefGetNullPosition(position, battle->caster, part - 2049, 1);
+    } else if ((part & SEF_POINT_ALT_BIT) != 0) {
+        sefGetNullPosition(position, battle->caster, part - SEF_POINT_CASTER_NULL_ALT, 1);
         MMathApplyMatrix(position, battle->casterMatrix, position);
     }
 
@@ -1709,15 +1785,15 @@ static void sefGetSpherePos(Vector4 *position, float radius)
 
     do {
         component_center = 16384.0f;
-        seed_1 = sefRandSeed * 0x41C64E6Du + 0x3039u;
-        seed_2 = seed_1 * 0x41C64E6Du + 0x3039u;
-        seed_3 = seed_2 * 0x41C64E6Du + 0x3039u;
+        seed_1 = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+        seed_2 = seed_1 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+        seed_3 = seed_2 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
         sefRandSeed = seed_3;
-        random_x = (seed_1 >> 16) & 0x7FFF;
-        random_y = (seed_2 >> 16) & 0x7FFF;
+        random_x = (seed_1 >> 16) & SEF_RAND_MASK;
+        random_y = (seed_2 >> 16) & SEF_RAND_MASK;
         random_vector[0] = random_x;
         random_vector[1] = random_y;
-        random_z = (seed_3 >> 16) & 0x7FFF;
+        random_z = (seed_3 >> 16) & SEF_RAND_MASK;
         random_vector[2] = random_z;
     } while (0);
 
@@ -1765,13 +1841,13 @@ void sefGetCubePosBtm(Vector4 *pos, const int *extent)
     random_position = &random_vector;
 
     random_scale = 3.051851e-05f;
-    seed_1 = sefRandSeed * 0x41C64E6Du + 0x3039u;
-    seed_2 = seed_1 * 0x41C64E6Du + 0x3039u;
-    seed_3 = seed_2 * 0x41C64E6Du + 0x3039u;
+    seed_1 = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+    seed_2 = seed_1 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+    seed_3 = seed_2 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
     sefRandSeed = seed_3;
-    random_x = (seed_1 >> 16) & 0x7FFF;
-    random_y = (seed_2 >> 16) & 0x7FFF;
-    random_z = (seed_3 >> 16) & 0x7FFF;
+    random_x = (seed_1 >> 16) & SEF_RAND_MASK;
+    random_y = (seed_2 >> 16) & SEF_RAND_MASK;
+    random_z = (seed_3 >> 16) & SEF_RAND_MASK;
     random_vector.x = (float)random_x * random_scale;
     random_vector.y = (float)random_y * random_scale;
     random_vector.z = (float)random_z * random_scale;
@@ -1812,13 +1888,13 @@ static void sefGetCubePos(Vector4 *pos, const int *extent)
     random_vector.w = 0.0f;
 
     random_scale = 3.051851e-05f;
-    seed_1 = sefRandSeed * 0x41C64E6Du + 0x3039u;
-    seed_2 = seed_1 * 0x41C64E6Du + 0x3039u;
-    seed_3 = seed_2 * 0x41C64E6Du + 0x3039u;
+    seed_1 = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+    seed_2 = seed_1 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+    seed_3 = seed_2 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
     sefRandSeed = seed_3;
-    random_x = (seed_1 >> 16) & 0x7FFF;
-    random_y = (seed_2 >> 16) & 0x7FFF;
-    random_z = (seed_3 >> 16) & 0x7FFF;
+    random_x = (seed_1 >> 16) & SEF_RAND_MASK;
+    random_y = (seed_2 >> 16) & SEF_RAND_MASK;
+    random_z = (seed_3 >> 16) & SEF_RAND_MASK;
     random_vector.x = (float)random_x * random_scale;
     random_vector.y = (float)random_y * random_scale;
     random_vector.z = (float)random_z * random_scale;
@@ -1886,12 +1962,12 @@ static void sefGetOfsRange(Vector4 *position, const void *offset_table, int inde
         return;
     }
     if (index == 6) {
-        unsigned int seed = sefRandSeed * 0x41C64E6Du;
+        unsigned int seed = sefRandSeed * SEF_RAND_MULTIPLIER;
         float range = (float)offsets[0];
         int sample;
 
-        seed += 0x3039u;
-        sample = (seed >> 16) & 0x7FFFu;
+        seed += SEF_RAND_INCREMENT;
+        sample = (seed >> 16) & SEF_RAND_MASK;
         sefRandSeed = seed;
         sefGetCirclePos(position,
                         (float)sample * invShortMax * range * offsetYScale);
@@ -2011,7 +2087,7 @@ static void sefGetSpeed(Vector4 *position, void *particle, int mode, int option)
     } else {
         if (mode == 4) {
             if (_parentLine >= 0 && _nowParentLocal >= 0) {
-                parent = &_ptAlloc[_nowParentLocal * 640];
+                parent = &_ptAlloc[_nowParentLocal * SEF_PT_ALLOC_RECORD_SIZE];
             } else {
                 parent = 0;
             }
@@ -2046,12 +2122,12 @@ void sefMoveParticle(void *arg0, void *arg1, int arg2) {
     int target;
 
     target = *(short *)*(void **)((unsigned char *)arg1 + 16);
-    if (target == 529) {
-        target = (_battleData.status.phase >= 2) ? 527 : 528;
+    if (target == SEF_POINT_DAMAGE_NULL) {
+        target = (_battleData.status.phase >= 2) ? SEF_TARGET_DAMAGE_NULL_A : SEF_TARGET_DAMAGE_NULL_B;
     }
     if (_battleData.status.running != 0) {
-        if ((unsigned int)(target - 257) < 16U) {
-            target += 1792;
+        if ((unsigned int)(target - SEF_POINT_CASTER_NULL) < SEF_POINT_NULL_COUNT) {
+            target += SEF_POINT_NULL_ALT_OFFSET;
         }
         if ((_nowScheduler->flags & 0x1400) == 0x1000) {
             QuadwordCopyMatrixT0(particle + 0x40, _battleData.status.particleTransform);
@@ -2114,19 +2190,19 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
     SefLocalOffset *local = (SefLocalOffset *)record;
     int in_battle = battle->running;
 
-    target &= ~0xe000;
-    if (in_battle != 0 && (unsigned int)(target - 257) < 16) {
-        target += 1792;
+    target &= ~SEF_POINT_FLAG_MASK;
+    if (in_battle != 0 && (unsigned int)(target - SEF_POINT_CASTER_NULL) < SEF_POINT_NULL_COUNT) {
+        target += SEF_POINT_NULL_ALT_OFFSET;
     }
-    if (target == 529) {
-        target = (battle->phase >= 2) ? 527 : 528;
+    if (target == SEF_POINT_DAMAGE_NULL) {
+        target = (battle->phase >= 2) ? SEF_TARGET_DAMAGE_NULL_A : SEF_TARGET_DAMAGE_NULL_B;
     }
 
-    if (target == 4) {
+    if (target == SEF_POINT_PARENT) {
         unsigned char *parent;
 
         if (_parentLine >= 0 && _nowParentLocal >= 0) {
-            parent = &_ptAlloc[_nowParentLocal * 640];
+            parent = &_ptAlloc[_nowParentLocal * SEF_PT_ALLOC_RECORD_SIZE];
         } else {
             parent = 0;
         }
@@ -2138,12 +2214,12 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
          * original performs inline through the EE's own scratch GPRs. */
         QuadwordCopyMatrixT0(&record->local_matrix, &record->base_matrix);
         return;
-    } else if (in_battle != 0 && (target & 0x200) != 0) {
+    } else if (in_battle != 0 && (target & SEF_POINT_TARGET_BIT) != 0) {
         Vector4 direction;
 
         Vu0SefAddVectorXYZ(&direction, &record->start_position, &_nowScheduler->position);
         sefGetVecMatrix(&record->local_matrix, &battle->matrixSource, &direction);
-    } else if (target >= 5) {
+    } else if (target >= SEF_POINT_VECTOR) {
         sefGetVecMatrix(&record->local_matrix, (Vector4 *)localPointVector,
                         &record->start_position);
     } else {
@@ -2288,18 +2364,18 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
                     (line_data->line_flags & 0x400) == 0;
     update_scaled_size = line_data->key_1E0->mode != 3 && line_data->size_vector_keys != 0;
     reverse_direction = _revDirZ;
-    point_part = loop_mode & ~0xe000;
-    if (point_part >= 5) {
+    point_part = loop_mode & ~SEF_POINT_FLAG_MASK;
+    if (point_part >= SEF_POINT_VECTOR) {
         sefGetPoint((Vector4 *)localPointVector, _zeroPos_004CBF00, point_part);
     }
 
     index = 0;
     handle_pointer = line_data->local_point_handles;
     loop_mode = previous_mode != 0 ? loop_mode | 0x8000 : loop_mode;
-    for (; index < 256; index++, handle_pointer++) {
+    for (; index < SEF_LINE_PARTICLE_COUNT; index++, handle_pointer++) {
         short handle = *handle_pointer;
         if (handle >= 0) {
-            particle = (SefParticle *)&_ptAlloc[handle * 0x280];
+            particle = (SefParticle *)&_ptAlloc[handle * SEF_PT_ALLOC_RECORD_SIZE];
             if (particle != 0) {
                 particle->state++;
                 if (particle->state >= 1024) {
@@ -2408,7 +2484,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
 }
 
 static int sefFreeLocalData(unsigned char *line_data, unsigned int index) {
-    int valid = index < 0x100;
+    int valid = index < SEF_LINE_PARTICLE_COUNT;
     int offset = (int)(index * 2) + SEF_LOCAL_DATA_PT_TABLE;
 
     if (valid) {
@@ -2428,8 +2504,8 @@ static int sefAllocLocalData(SefLocalData *data)
     int handle;
 
     index = data->cursor;
-    end = (index - 1) & 0xff;
-    for (; index != end; index = (index + 1) & 0xff) {
+    end = (index - 1) & (SEF_LINE_PARTICLE_COUNT - 1);
+    for (; index != end; index = (index + 1) & (SEF_LINE_PARTICLE_COUNT - 1)) {
         if (data->pointHandles[index] < 0) {
             break;
         }
@@ -2442,7 +2518,7 @@ static int sefAllocLocalData(SefLocalData *data)
         return -1;
     }
     data->pointHandles[index] = handle;
-    data->cursor = (index + 1) & 0xff;
+    data->cursor = (index + 1) & (SEF_LINE_PARTICLE_COUNT - 1);
     return index;
 }
 
@@ -2450,7 +2526,7 @@ static void sefDestroyLocalData(SefLocalData *data)
 {
     int index;
 
-    for (index = 0; index < 0x100; index++) {
+    for (index = 0; index < SEF_LINE_PARTICLE_COUNT; index++) {
         if (data->pointHandles[index] >= 0) {
             sefFreeLocalData((unsigned char *)data, index);
         }
@@ -2464,9 +2540,9 @@ static __inline__ float sefLineRandomOffset(short *range_word)
     int sample;
 
     if (range != 0) {
-        seed = sefRandSeed * 0x41C64E6Du + 0x3039u;
+        seed = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
         sefRandSeed = seed;
-        sample = (seed >> 16) & 0x7fff;
+        sample = (seed >> 16) & SEF_RAND_MASK;
         return (float)(sample % range - range / 2);
     }
     return 0.0f;
@@ -2493,10 +2569,10 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
     collision_input = line_script->collision;
     height_input = line_script->height;
 
-    sefMemZero(line_data, 0x820);
+    sefMemZero(line_data, SEF_LINE_DATA_RECORD_SIZE);
     memset(line_data->local_point_handles, -1, 0x200);
 
-    if (start_time == 0x1000) {
+    if (start_time == SEF_START_TIME_FINAL) {
         start_time = 0;
     }
     if (has_line_flag != 0) {
@@ -2517,7 +2593,7 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
     line_data->local_result = 0;
     line_data->frame = 0;
 
-    if ((*current_scheduler)->flags & 0x400) {
+    if ((*current_scheduler)->flags & SEF_SCHED_NO_ATTACH) {
         line_data->line_flags |= 0x400;
     }
 
@@ -2538,27 +2614,27 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
     line_data->origin_offset.z = sefLineRandomOffset(&scale_words[3]);
 
     if (line_data->first_vector_keys != 0 &&
-        line_data->first_vector_keys->keys[1].end_frame == 0x400) {
+        line_data->first_vector_keys->keys[1].end_frame == SEF_KEY_END_CONSTANT) {
         sefLerpIVectorA(line_data->first_vector_keys->keys[0].vector,
                         &line_data->first_vector_progress.vector.floats);
     }
     if (line_data->second_vector_keys != 0 &&
-        line_data->second_vector_keys->keys[1].end_frame == 0x400) {
+        line_data->second_vector_keys->keys[1].end_frame == SEF_KEY_END_CONSTANT) {
         sefLerpIVectorA(line_data->second_vector_keys->keys[0].vector,
                         &line_data->second_vector_progress.vector.floats);
     }
 
-    if (line_data->scale_keys != 0 && line_data->scale_keys[9] == 0x400) {
+    if (line_data->scale_keys != 0 && line_data->scale_keys[9] == SEF_KEY_END_CONSTANT) {
         sefLerpVectorA(line_data->scale_keys + 4, &line_data->global_position_source);
         vector_scale = globalPositionScale;
         Vu0SefScaleVectorXYZNI(&line_data->global_position_source, &line_data->global_position_source, vector_scale);
     }
-    if (line_data->rotation_keys != 0 && line_data->rotation_keys[9] == 0x400) {
+    if (line_data->rotation_keys != 0 && line_data->rotation_keys[9] == SEF_KEY_END_CONSTANT) {
         sefLerpVectorA(line_data->rotation_keys + 4, &line_data->parent_position_source);
         vector_scale = parentPositionScale;
         Vu0SefScaleVectorXYZNI(&line_data->parent_position_source, &line_data->parent_position_source, vector_scale);
     }
-    if (line_data->position_keys != 0 && line_data->position_keys[9] == 0x400) {
+    if (line_data->position_keys != 0 && line_data->position_keys[9] == SEF_KEY_END_CONSTANT) {
         sefLerpVectorA(line_data->position_keys + 4, line_data->position_source);
         vector_scale = positionSourceScale;
         Vu0SefScaleVectorXYZNI(line_data->position_source, line_data->position_source, vector_scale);
@@ -2646,7 +2722,7 @@ static void sefAnalyzeAnim(unsigned char *object)
                 *(float *)(dest + 8) = (float)item_a->u24 * scale;
                 *(float *)(dest + 12) = (float)item_a->u26 * scale;
                 *(short *)(dest + 16) = (short)item_a->u12;
-                psm = (item_a->u20 == 8) ? 19 : 20;
+                psm = (item_a->u20 == 8) ? SEF_GS_PSMT8 : SEF_GS_PSMT4;
                 ((void **)dest)[-2] = item_a->data;
                 ((void **)dest)[-1] = item_b->data;
                 tex0 = item_a->u18 | ((unsigned long long)(item_a->u22 >> 6) << 14) | ((unsigned long long)psm << 20) | ((unsigned long long)item_a->u28 << 26) | ((unsigned long long)item_a->u30 << 30) | (1ULL << 34) | ((unsigned long long)item_b->u18 << 37) | (1ULL << 61);
@@ -2772,17 +2848,17 @@ int sefCreateParticle(SefLocalData *data, int kind)
     result = -1;
     if (index >= 0) {
         handle = data->pointHandles[index];
-        particle = (SefParticle *)(_ptAlloc + handle * 640);
+        particle = (SefParticle *)(_ptAlloc + handle * SEF_PT_ALLOC_RECORD_SIZE);
         if (particle != 0) {
-            sefMemZero(particle, 640);
+            sefMemZero(particle, SEF_PT_ALLOC_RECORD_SIZE);
             sefGetStartPos(&particle->start_position, (SefParticleOffset *)data);
             sefGetTargetPos(&particle->target_position, (SefParticleOffset *)data);
             particle->state = 0;
             particle->frame = data->initial_frame;
             count = data->frame_count;
             if (count > 0) {
-                sefRandSeed = sefRandSeed * 0x41C64E6Du + 0x3039u;
-                particle->frame += (short)((int)((sefRandSeed >> 16) & 0x7FFF) % count);
+                sefRandSeed = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+                particle->frame += (short)((int)((sefRandSeed >> 16) & SEF_RAND_MASK) % count);
             }
             sefAnimate(params, (unsigned char *)particle, -1);
 
@@ -2880,12 +2956,12 @@ int sefCreateParticle(SefLocalData *data, int kind)
                     range_y = *(short *)(data->position_keys + 2);
                     range_z = *(short *)(data->position_keys + 4);
                     scale_k = INV_32768;
-                    seed_1 = sefRandSeed * 0x41C64E6Du + 0x3039u;
-                    random_x = (float)(int)((seed_1 >> 16) & 0x7FFFu);
-                    seed_2 = seed_1 * 0x41C64E6Du + 0x3039u;
-                    random_y = (float)(int)((seed_2 >> 16) & 0x7FFFu);
-                    seed_3 = seed_2 * 0x41C64E6Du + 0x3039u;
-                    random_z = (float)(int)((seed_3 >> 16) & 0x7FFFu);
+                    seed_1 = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+                    random_x = (float)(int)((seed_1 >> 16) & SEF_RAND_MASK);
+                    seed_2 = seed_1 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+                    random_y = (float)(int)((seed_2 >> 16) & SEF_RAND_MASK);
+                    seed_3 = seed_2 * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
+                    random_z = (float)(int)((seed_3 >> 16) & SEF_RAND_MASK);
                     sefRandSeed = seed_3;
                     particle->random_translation.x = random_x * (float)range_x * scale_k * 0.015625f;
                     particle->random_translation.y = random_y * (float)range_y * scale_k * 0.015625f;
@@ -2896,9 +2972,9 @@ int sefCreateParticle(SefLocalData *data, int kind)
                     unsigned int seed;
 
                     range = *(short *)(data->position_keys + 0);
-                    seed = sefRandSeed * 0x41C64E6Du + 0x3039u;
+                    seed = sefRandSeed * SEF_RAND_MULTIPLIER + SEF_RAND_INCREMENT;
                     sefRandSeed = seed;
-                    rand_value = (float)(int)((seed >> 16) & 0x7FFFu);
+                    rand_value = (float)(int)((seed >> 16) & SEF_RAND_MASK);
                     uniform_jitter = rand_value * (float)range * RANDOM_JITTER_SCALE * 0.015625f;
                     particle->random_translation.x = uniform_jitter;
                     particle->random_translation.y = uniform_jitter;
@@ -2969,7 +3045,7 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
                 Vu0SetOrigin(&global->position_delta);
                 return 1;
             }
-            for (parent_line = 0; parent_line < 0x100; parent_line++) {
+            for (parent_line = 0; parent_line < SEF_LINE_PARTICLE_COUNT; parent_line++) {
                 point_handle = parent_data->pointHandles[parent_line];
                 if (point_handle >= 0) {
                     _nowParentLocal = point_handle;
@@ -3042,14 +3118,14 @@ static int sefExecLineData(SefLineData *line_data)
     if (line_data->timer < 0 || sefExecLineGlobalData(line_data, frame) != 0) {
         line_data->local_result = sefExecLineLocalData(line_data, frame);
         line_data->frame++;
-        if (line_data->frame == 0x3FF) {
+        if (line_data->frame == SEF_LINE_FRAME_LIMIT) {
             if (line_data->loop_mode == 0) {
                 line_data->frame -= line_data->second_integer_progress.value;
                 if (line_data->frame == 0) {
                     line_data->frame = 1;
                 }
             } else {
-                line_data->frame = 0x3FE;
+                line_data->frame = SEF_LINE_FRAME_LIMIT - 1;
             }
         }
     }
@@ -3058,7 +3134,7 @@ static int sefExecLineData(SefLineData *line_data)
 
 static void sefInitEffectData(EffectData *effect, int owner, int effect_no, int category)
 {
-    memset(effect, -1, 0x20);
+    memset(effect, -1, SEF_EFFECT_LINE_COUNT);
     effect->owner = owner;
     effect->effect_no = (short)effect_no;
     effect->category = (short)category;
@@ -3071,7 +3147,7 @@ static void sefDestroyEffectData(EffectData *effect)
     int index;
 
     if (effect->owner != 0) {
-        for (index = 0; index < 0x20; index++) {
+        for (index = 0; index < SEF_EFFECT_LINE_COUNT; index++) {
             sefFreeEffectData(effect, index);
         }
     }
@@ -3084,7 +3160,7 @@ static SefLineData *sefAllocEffectData(EffectData *effect)
     signed char *slot;
     int line_index;
 
-    if ((unsigned int)index >= 0x20) {
+    if ((unsigned int)index >= SEF_EFFECT_LINE_COUNT) {
         return 0;
     }
     slot = effect->lineHandles + index;
@@ -3103,7 +3179,7 @@ static SefLineData *sefAllocEffectData(EffectData *effect)
 
 static void sefFreeEffectData(EffectData *effect, unsigned int index)
 {
-    if (index < 0x20) {
+    if (index < SEF_EFFECT_LINE_COUNT) {
         signed char *handle = &effect->lineHandles[index];
 
         if (*handle >= 0) {
@@ -3114,8 +3190,8 @@ static void sefFreeEffectData(EffectData *effect, unsigned int index)
 }
 
 static void sefCheckFinish(int effect_no, int condition) {
-    if (condition & 0x4000) {
-        _nowScheduler->flags |= 0x40;
+    if (condition & SEF_CATEGORY_FINISH) {
+        _nowScheduler->flags |= SEF_SCHED_FINISHED;
     }
 }
 
@@ -3138,7 +3214,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
         return 0;
     }
 
-    if (frame == (effect->category & 0x3ff)) {
+    if (frame == (effect->category & SEF_CATEGORY_FRAME_MASK)) {
         if ((effect->active & 0x10) != 0) {
             func_A2C408(0);
         } else if ((effect->active & 0x20) != 0) {
@@ -3147,7 +3223,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
         }
     }
 
-    if ((effect->category & 0x1000) != 0) {
+    if ((effect->category & SEF_CATEGORY_WAIT_SPECIAL) != 0) {
         if ((unsigned char)_battleData.request.special == 0) {
             sefDestroyEffectData(effect);
             effect->frame = 1;
@@ -3162,15 +3238,15 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
 
     category = effect->category;
     finish_condition = category;
-    if ((effect->category & 0x2800) != 0 && frame >= (category & 0x3ff)) {
+    if ((effect->category & (SEF_CATEGORY_HIT_SIGNAL | SEF_CATEGORY_SE_SIGNAL)) != 0 && frame >= (category & SEF_CATEGORY_FRAME_MASK)) {
         battle = &_battleData.request;
         battle_active = (unsigned char)battle->special;
         sefCheckFinish(frame, finish_condition);
-        if ((effect->category & 0x2000) != 0) {
+        if ((effect->category & SEF_CATEGORY_HIT_SIGNAL) != 0) {
             _hitSignal = 1;
             sefSetHitSignal(battle->target);
         }
-        if ((effect->category & 0x800) != 0) {
+        if ((effect->category & SEF_CATEGORY_SE_SIGNAL) != 0) {
             _seSignal = 1;
             sefSetSeSignal(battle->target);
         }
@@ -3184,9 +3260,9 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
     }
 
     category_word = *(unsigned int *)&effect->category;
-    if ((category_word & 0x7000) == 0x4000 && frame == (effect->category & 0x3ff)) {
+    if ((category_word & (SEF_CATEGORY_HIT_SIGNAL | SEF_CATEGORY_WAIT_SPECIAL | SEF_CATEGORY_FINISH)) == SEF_CATEGORY_FINISH && frame == (effect->category & SEF_CATEGORY_FRAME_MASK)) {
         effect->category = (short)frame;
-        _nowScheduler->flags |= 0x40;
+        _nowScheduler->flags |= SEF_SCHED_FINISHED;
     }
     if (frame >= effect->category) {
         frame -= effect->category;
@@ -3216,7 +3292,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
 
             if (start_time < 1024) {
                 if (frame >= start_time) {
-                    if (script_index < 32) {
+                    if (script_index < SEF_EFFECT_LINE_COUNT) {
                         line_script = (SefLineScriptHeader *)scGetImmAdrImmIdx2(_nowScriptAdr,
                             (unsigned short *)effect->owner, script_index * 6 + 2);
                         if (line_script != 0) {
@@ -3224,7 +3300,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
                             if (line != 0) {
                                 sefInitLineData(line, start_time, command_frame, line_script,
                                                 link_index, count, command_flags);
-                                if (start_time != 0x1000) {
+                                if (start_time != SEF_START_TIME_FINAL) {
                                     continue;
                                 }
                             } else {
@@ -3232,7 +3308,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
                             }
                         }
                     }
-                } else if (start_time != 0x400) {
+                } else if (start_time != SEF_START_TIME_END_OF_LIST) {
                     running = 1;
                 }
             }
@@ -3240,7 +3316,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
         }
 
         effect->frame = 1;
-        for (index = 0; index < 32; index++) {
+        for (index = 0; index < SEF_EFFECT_LINE_COUNT; index++) {
             int handle;
 
             handle = effect->lineHandles[index];
@@ -3261,7 +3337,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
             if (line->global_data_count != 0) {
                 continue;
             }
-            for (j = 0; j < 32; j++) {
+            for (j = 0; j < SEF_EFFECT_LINE_COUNT; j++) {
                 int handle;
 
                 if (j == index) {
@@ -3298,14 +3374,14 @@ void sefInitScheduler(void)
     int index;
     int count;
 
-    sefMemZero(scheduler, 0x55800);
+    sefMemZero(scheduler, SEF_SCHEDULER_COUNT * SEF_SCHEDULER_RECORD_SIZE);
     for (index = 0; index < SEF_SCHEDULER_COUNT; index++) {
         binding = &scheduler[index].scriptBinding;
         binding->script_id = invalid;
         binding->task_id = invalid;
         binding->link_id = invalid;
         effect = (EffectData *)(index * SEF_SCHEDULER_RECORD_SIZE + (int)effects);
-        for (count = 0; count < 0x20; count++) {
+        for (count = 0; count < SEF_EFFECT_COUNT; count++) {
             sefInitEffectData(effect, 0, -1, 0);
             effect++;
         }
@@ -3325,7 +3401,7 @@ static int sefAllocScheduler(void *table)
             int *inUse;
             ScriptBinding *binding;
 
-            index %= 128;
+            index %= SEF_SCHEDULER_COUNT;
             record_offset = index * SEF_SCHEDULER_RECORD_SIZE;
             marker_offset = record_offset + offsetof(SchedulerState, inUse);
             inUse = (int *)(marker_offset + (int)_scheduler);
@@ -3358,7 +3434,7 @@ void sefFreeSchedulerCf(SchedulerState *scheduler)
       xglSoundEffectStopID(soundId, 0);
       scheduler->soundId = 0;
     }
-    for (i = 0; i < 32; i++)
+    for (i = 0; i < SEF_EFFECT_COUNT; i++)
     {
       sefDestroyEffectData(&scheduler->effects[i]);
     }
@@ -3384,7 +3460,7 @@ void sefFreeScheduler(unsigned int scheduler_index)
     SchedulerState *scheduler;
     SchedulerState *entry;
 
-    if (scheduler_index >= 128) {
+    if (scheduler_index >= SEF_SCHEDULER_COUNT) {
         return;
     }
     if (_scheduler[scheduler_index].inUse == 0) {
@@ -3396,7 +3472,7 @@ void sefFreeScheduler(unsigned int scheduler_index)
         return;
     }
     effect = _scheduler[scheduler_index].effects;
-    for (i = 31; i >= 0; i--, effect++) {
+    for (i = SEF_EFFECT_COUNT - 1; i >= 0; i--, effect++) {
         sefDestroyEffectData(effect);
     }
     byte_offset = scheduler_index * scheduler_stride;
@@ -3424,7 +3500,7 @@ void sefDestroyScriptScheduler(int script_index)
             sefFreeScheduler(index);
         }
         index++;
-    } while (index < 0x80);
+    } while (index < SEF_SCHEDULER_COUNT);
 }
 
 void sefDestroyScriptScheduler2(int script_index, int task_index)
@@ -3438,7 +3514,7 @@ void sefDestroyScriptScheduler2(int script_index, int task_index)
             sefFreeScheduler(index);
         }
         index++;
-    } while (index < 0x80);
+    } while (index < SEF_SCHEDULER_COUNT);
 }
 
 static inline void sefInitializeDescriptorEffect(EffectData *effect,
@@ -3492,18 +3568,18 @@ process_descriptor:
             entry++;
             cursor++;
             next_category = entry->category;
-            has_capacity = ++index < 32;
+            has_capacity = ++index < SEF_EFFECT_COUNT;
             effect = cursor;
             if (next_category >= 0 && has_capacity) {
                 goto process_descriptor;
             }
         }
     }
-    if (index < 32) {
+    if (index < SEF_EFFECT_COUNT) {
         do {
             effects[index].owner = 0;
             index++;
-        } while (index < 32);
+        } while (index < SEF_EFFECT_COUNT);
     }
 }
 
@@ -3791,7 +3867,7 @@ int sefExecScheduler(void)
 
     scheduler = table;
     control_address = (unsigned int)table + 0xa80;
-    for (index = 0; index < 128; control_address += sizeof(SchedulerState), record_offset += sizeof(SchedulerState), scheduler++, index++) {
+    for (index = 0; index < SEF_SCHEDULER_COUNT; control_address += sizeof(SchedulerState), record_offset += sizeof(SchedulerState), scheduler++, index++) {
         int effect_alive = 0;
         int running;
         int k;
@@ -3868,7 +3944,7 @@ int sefExecScheduler(void)
 
             BATTLE->effectSpeed = SLOT(effectSpeed);
             sefSetReverseDir(SLOT(effectNo), (short)SLOT(requestParam));
-            for (k = 0; k < 32; k++) {
+            for (k = 0; k < SEF_EFFECT_COUNT; k++) {
                 exec_binding = (ScriptBinding *)((unsigned int)_scheduler + binding_offset);
                 if (sefExecEffectData((EffectData *)(schedulerStates + index * sizeof(SchedulerState) + k * sizeof(scheduler->effects[0])),
                                       exec_binding->state, &hit_flag) != 0) {
@@ -3912,7 +3988,7 @@ int sefExecScheduler(void)
                         continue;
                     }
                 }
-                for (k = 0; k < 32; k++) {
+                for (k = 0; k < SEF_EFFECT_COUNT; k++) {
                     sefDestroyEffectData((EffectData *)(schedulerStates + index * sizeof(SchedulerState) + k * sizeof(scheduler->effects[0])));
                 }
                 record_offset -= sizeof(SchedulerState);
@@ -3935,11 +4011,11 @@ int sefExecScheduler(void)
                 binding = (ScriptBinding *)(state_offset + (unsigned int)_scheduler);
 
                 binding->state++;
-                if (binding->state == 0x3ff) {
-                    binding->state = 0x3fe;
+                if (binding->state == SEF_LINE_FRAME_LIMIT) {
+                    binding->state = SEF_LINE_FRAME_LIMIT - 1;
                 }
                 state = (SchedulerState *)(record_offset + (unsigned int)_scheduler);
-                if ((state->flags & 0x40) == 0) {
+                if ((state->flags & SEF_SCHED_FINISHED) == 0) {
                     active_count += 1;
                 }
             }
@@ -3957,7 +4033,7 @@ int sefExecScheduler(void)
 int sefIsDeadSchduler(unsigned int scheduler_index)
 {
 
-    if (scheduler_index >= 0x80) {
+    if (scheduler_index >= SEF_SCHEDULER_COUNT) {
         return 1;
     }
     return _scheduler[scheduler_index].inUse == 0;
@@ -3996,8 +4072,8 @@ void sefCreateBattleActorTbl(int effect_no)
         return;
     }
 
-    memset(_battleActor, 0, 0xda0);
-    for (scheduler_index = 0; scheduler_index < 0x80; scheduler_index++) {
+    memset(_battleActor, 0, SEF_BATTLE_ACTOR_TBL_SIZE);
+    for (scheduler_index = 0; scheduler_index < SEF_SCHEDULER_COUNT; scheduler_index++) {
         scheduler = &_scheduler[scheduler_index];
         if (scheduler->inUse == 0) {
             continue;
@@ -4015,7 +4091,7 @@ void sefCreateBattleActorTbl(int effect_no)
                  && _battleActor->actors[actor_index].actor != scheduler->caster;
                  actor_index++) {
             }
-            if (actor_index == _battleActor->count && actor_index < 24) {
+            if (actor_index == _battleActor->count && actor_index < SEF_BATTLE_ACTOR_MAX) {
                 _battleActor->actors[actor_index].actor = scheduler->caster;
                 _battleActor->actors[actor_index].schedulerLightCount = scheduler->targetLightCount;
                 _battleActor->actors[actor_index].excluded = 1;
@@ -4029,7 +4105,7 @@ void sefCreateBattleActorTbl(int effect_no)
                  && _battleActor->actors[actor_index].actor != scheduler->target;
                  actor_index++) {
             }
-            if (actor_index == _battleActor->count && actor_index < 24) {
+            if (actor_index == _battleActor->count && actor_index < SEF_BATTLE_ACTOR_MAX) {
                 _battleActor->actors[actor_index].schedulerLightCount = scheduler->sourceLightCount;
                 _battleActor->actors[actor_index].actor = scheduler->target;
                 _battleActor->actors[actor_index].excluded = 0;
@@ -4233,15 +4309,15 @@ static void sefAddLightActor(const Vector4 *position, const SefLightInput *light
 
 void sefInitEffect(void)
 {
-    smInitilize(_eftBuffer, 0xD4800);
+    smInitilize(_eftBuffer, SEF_EFFECT_BUFFER_SIZE);
     sresInitMemoryRes();
     srsInitCdRead();
     sevInitPtAllocator();
     svInitImageMapper();
     sefInitScheduler();
     scInitScript();
-    memset(&_battlePrm, 0, 0x34);
-    memset(_battleData.bytes, 0, 0x230);
+    memset(&_battlePrm, 0, SEF_BATTLE_PRM_SIZE);
+    memset(_battleData.bytes, 0, SEF_BATTLE_DATA_SIZE);
     sdvInitSpecialWork();
     sdvInitAmbient();
     sresLoadCommonMemory();
@@ -4259,7 +4335,7 @@ void sefInitEffectBattle(void)
     sRender.cfDrawCallback = 0;
     if (_srsMemRes.battleImage == 0) {
         _srsMemRes.no[SRS_RES_BATTLE_IMAGE] = -1;
-        _srsMemRes.battleImage = smAlloc(0x40000);
+        _srsMemRes.battleImage = smAlloc(SEF_BATTLE_IMAGE_SIZE);
     }
 }
 
@@ -4383,9 +4459,9 @@ void sefDestroyEffect(void)
     sdvInitAmbient();
     scDestroyScriptAll();
     sresFreeReloaderMemory(1);
-    memset(&_battlePrm, 0, 0x34);
-    memset(_battleData.bytes, 0, 0x230);
-    memset(_battleActor, 0, 0xDA0);
+    memset(&_battlePrm, 0, SEF_BATTLE_PRM_SIZE);
+    memset(_battleData.bytes, 0, SEF_BATTLE_DATA_SIZE);
+    memset(_battleActor, 0, SEF_BATTLE_ACTOR_TBL_SIZE);
     sdvDestroyAlters();
 }
 
@@ -4396,9 +4472,9 @@ void sefDestroyEffectCf(void)
     sdvInitAmbient();
     scDestroyScriptAll();
     sresFreeReloaderMemory(0);
-    memset(&_battlePrm, 0, 0x34);
-    memset(_battleData.bytes, 0, 0x230);
-    memset(_battleActor, 0, 0xDA0);
+    memset(&_battlePrm, 0, SEF_BATTLE_PRM_SIZE);
+    memset(_battleData.bytes, 0, SEF_BATTLE_DATA_SIZE);
+    memset(_battleActor, 0, SEF_BATTLE_ACTOR_TBL_SIZE);
     sdvDestroyAlters();
 }
 
@@ -4471,11 +4547,11 @@ static void sefCnvDeathEffectNo(SefEffectRequest *request)
     int kind;
     unsigned int i;
 
-    if (request->effect_no == 0x4000) {
+    if (request->effect_no == SEF_EFFECT_NO_DEATH) {
         character_id = request->character_id;
         kind = 0;
         if (sefIsBossID(character_id)) {
-            for (i = 0; i < 36; i++) {
+            for (i = 0; i < SEF_BOSS_ID_COUNT; i++) {
                 if (request->character_id == _sefBossDeathPrm_4[i].character_id) {
                     request->effect_no = _sefBossDeathPrm_4[i].effect_no;
                     return;
@@ -4490,7 +4566,7 @@ static void sefCnvDeathEffectNo(SefEffectRequest *request)
                 kind = 0;
             }
         }
-        request->effect_no = kind * 3 + sefGetSizeOffset(request->size) + 2603;
+        request->effect_no = kind * 3 + sefGetSizeOffset(request->size) + SEF_DEATH_EFFECT_BASE;
         request->target = request->source;
         request->character_id_copy = request->character_id;
         request->size_copy = request->size;
@@ -4501,12 +4577,12 @@ static void sefCnvWaitEffectNo(SefEffectRequest *request)
 {
     int character_id;
 
-    if (request->effect_no == 0x4001) {
+    if (request->effect_no == SEF_EFFECT_NO_WAIT) {
         character_id = (unsigned short)request->character_id;
         if ((unsigned int)(character_id - 1) < 16) {
             character_id = (short)character_id;
             request->effect_no = steftTbl[character_id];
-        } else if ((unsigned short)(character_id - 151) < 36) {
+        } else if ((unsigned short)(character_id - SEF_BOSS_ID_FIRST) < SEF_BOSS_ID_COUNT) {
             character_id = (short)character_id;
             request->effect_no = srsGetBossWaitEftNo(character_id);
         } else {
@@ -4522,7 +4598,7 @@ void sefDeleteEffectWait(int character_id)
 
     memset(&request, 0, sizeof(request));
     request.character_id = character_id;
-    request.effect_no = 0x4001;
+    request.effect_no = SEF_EFFECT_NO_WAIT;
     sefCnvWaitEffectNo(&request);
     if (request.effect_no > 0) {
         index = 0;
@@ -4599,7 +4675,7 @@ SchedulerState *sefCreateEffect2(SefEffectRequest *request)
                                          (int)script_data, -1);
     if (scheduler_index >= 0) {
         result = (SchedulerState *)_scheduler + scheduler_index;
-        result->flags |= 0x240;
+        result->flags |= 0x200 | SEF_SCHED_FINISHED;
         if ((unsigned int)((unsigned short)request->effect_no - 2630) < 7) {
             result->caster = request->target;
             result->flags = (result->flags & ~0x400) | 2;
@@ -4706,9 +4782,9 @@ void sefClearEffectCf(SchedulerState *scheduler)
 
     if (scheduler != 0) {
         effect = scheduler->effects;
-        for (i = 0; i < 0x20; i++) {
+        for (i = 0; i < SEF_EFFECT_COUNT; i++) {
             if (effect->owner != 0) {
-                for (j = 0, lines = _lineData; j < 0x20; j++) {
+                for (j = 0, lines = _lineData; j < SEF_EFFECT_LINE_COUNT; j++) {
                     handle = effect->lineHandles[j];
                     if (handle >= 0) {
                         line = (SefLocalData *)(handle * SEF_LINE_DATA_RECORD_SIZE + (int)lines);
@@ -4734,19 +4810,19 @@ int sefIsFinishEffect(int effect_no)
         return 0;
     }
 
-    scheduler_index = 0x7f;
+    scheduler_index = SEF_SCHEDULER_COUNT - 1;
     scheduler_address = (unsigned int)_scheduler;
     scheduler_cursor = (int *)(scheduler_address + 0xa70);
     do {
         if (scheduler_cursor[-0xf0] != 0) {
-            if ((scheduler_cursor[7] & 0x40) == 0) {
+            if ((scheduler_cursor[7] & SEF_SCHED_FINISHED) == 0) {
                 if (effect_no == 0 || ((short *)scheduler_cursor)[4] == effect_no) {
                     active_count++;
                 }
             }
         }
         scheduler_index--;
-        scheduler_cursor += 0x2ac;
+        scheduler_cursor += SEF_SCHEDULER_RECORD_SIZE / 4;
     } while (scheduler_index >= 0);
 
     return active_count == 0;
@@ -4811,7 +4887,7 @@ void sefKillEffect(int effect_no)
         if (index < SEF_SCHEDULER_COUNT) {
             control = &schedulers[index].effect;
         }
-    } while (index < 0x80);
+    } while (index < SEF_SCHEDULER_COUNT);
 }
 
 void sefHitEffect(void) {

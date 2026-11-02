@@ -11,6 +11,7 @@
 
 #define T0_MODE  ((volatile u32 *)0x10000010)
 #define T0_MODE_CUE 128
+#define T0_COUNT_MASK 0xffff
 
 /*
  * ARX stream layout, in words: magic "ARX\0", decoded size in bytes, packed
@@ -29,6 +30,7 @@
 #define ARX_TABLE_COUNT 30
 #define ARX_TABLE_SLOTS 32
 #define ARX_DATA_WORD 34
+#define ARX_TABLE_ALIGN 64
 
 /*
  * One output word: a clear flag bit takes the next stream word as is; a set
@@ -65,7 +67,7 @@ void xglTimer0Reset(int mode)
 
 int xglTimer0Get(void)
 {
-    return *T0_COUNT & 0xffff;
+    return *T0_COUNT & T0_COUNT_MASK;
 }
 
 static u32 getbit1(ArxBitReader *reader)
@@ -118,7 +120,7 @@ int xglArxExtract(u32 *dest, u32 *src)
     }
     size = src[ARX_SIZE_WORD];
     payloadSize = src[ARX_PAYLOAD_SIZE_WORD];
-    table = (u32 *)(((u32)WorkEnd + 63) & ~63);
+    table = (u32 *)(((u32)WorkEnd + ARX_TABLE_ALIGN - 1) & ~(ARX_TABLE_ALIGN - 1));
     for (i = 0; i < ARX_TABLE_COUNT; i++) {
         table[i] = src[ARX_TABLE_WORD + i];
     }

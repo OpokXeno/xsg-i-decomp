@@ -5,6 +5,9 @@
 #include "spline.h"
 #include "main/spl.h"
 
+#define SPLINE_OBJECT_SIZE 0x494      /* xeno.util.Spline native instance */
+#define SPLINE_HEAP_CATEGORY 0xE      /* xmalloc category shared with Java class objects */
+
 struct SplineFloatArray {
     void *class_pointer;
     unsigned int byte_length;
@@ -47,7 +50,7 @@ void Java_xeno_util_Spline_create__(void *environment, void *arguments,
     Spline *spline;
 
     spline_class = classJava_xeno_util_Spline;
-    spline = xmalloc(0x494, 0xE);
+    spline = xmalloc(SPLINE_OBJECT_SIZE, SPLINE_HEAP_CATEGORY);
     class_pointer = spline_class->classPointer;
     spline->class_pointer = class_pointer;
     *result = spline;

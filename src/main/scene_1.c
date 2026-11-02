@@ -4,6 +4,10 @@
 #include "scene_1.h"
 #include "main/jni.h"
 
+/* JThread.flags set when start is called on the running thread itself. */
+#define SCENE_THREAD_START_SELF 0x21
+#define SCENE_SIGNATURE_SIZE 256
+
 const char scene_window_class_name[24] = "xeno/util/Window";
 
 const char scene_constructor_format[8] = "(L%s;)V";
@@ -21,7 +25,7 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
     SceneObject arguments[2];
     SceneObject primary_object;
     SceneObject parent_object;
-    char constructor_signature[256];
+    char constructor_signature[SCENE_SIGNATURE_SIZE];
     JavaClass *scene_class;
     JavaMethod *constructor;
     SceneString *constructor_signature_object;
@@ -75,7 +79,7 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
         JavaMethod *ctor_method;
         SceneObject field_object;
 
-        if (field->flags & 0x8000) {
+        if (field->flags & JAVA_FIELD_UNRESOLVED) {
             JavaClass *resolved = getClassFromSignature(
                 field->type.descriptor->bytes, scene_class->classLoader);
             if (resolved == 0) {
@@ -84,7 +88,7 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
                 continue;
             }
             field->type.resolved = resolved;
-            field->flags &= 0x7fff;
+            field->flags &= JAVA_FIELD_FLAGS_MASK;
         }
 
         if (instanceOf(field->type.resolved,
@@ -122,11 +126,11 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
                     nested = component_class->fields +
                              component_class->staticFieldCount;
                     while (nested_remaining >= 0) {
-                        if (nested->flags & 0x8000) {
+                        if (nested->flags & JAVA_FIELD_UNRESOLVED) {
                             nested->type.resolved = getClassFromSignature(
                                     nested->type.descriptor->bytes,
                                     scene_class->classLoader);
-                            nested->flags &= 0x7fff;
+                            nested->flags &= JAVA_FIELD_FLAGS_MASK;
                         }
                         if (nested->type.resolved == scene_class) {
                             *(SceneObject *)(field_object +
@@ -173,11 +177,11 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
                     nested = component_class->fields +
                              component_class->staticFieldCount;
                     while (nested_remaining >= 0) {
-                        if (nested->flags & 0x8000) {
+                        if (nested->flags & JAVA_FIELD_UNRESOLVED) {
                             nested->type.resolved = getClassFromSignature(
                                     nested->type.descriptor->bytes,
                                     scene_class->classLoader);
-                            nested->flags &= 0x7fff;
+                            nested->flags &= JAVA_FIELD_FLAGS_MASK;
                         }
                         if (nested->type.resolved == scene_class) {
                             *(SceneObject *)(field_object +
@@ -266,7 +270,7 @@ void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
             thread8->reset = JTHREAD_defaultScene;
             thread8->flags |= SCENE_THREAD_HAS_METHOD;
             if (thread8 == vm)
-                thread8->flags |= 0x21;
+                thread8->flags |= SCENE_THREAD_START_SELF;
         }
     } else {
         SceneStringStorage *storage;
@@ -286,6 +290,6 @@ void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
         }
         if (thread1 != vm)
             return;
-        thread1->flags |= 0x21;
+        thread1->flags |= SCENE_THREAD_START_SELF;
     }
 }

@@ -3,9 +3,6 @@
 
 #include "main/play.h"
 
-/* The timing chart uses thirty frame ticks per second. */
-#define PLAY_SECONDS_PER_FRAME 0.033333335f
-
 typedef struct PlayControlInitArguments {
     Play *control;
     unsigned short cameraIndex;

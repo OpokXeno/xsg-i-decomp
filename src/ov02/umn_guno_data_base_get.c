@@ -769,8 +769,6 @@ void tskUmnDataBaseMenu(UmnDataBaseTask *task, UmnDataBaseMenuWork *work)
 }
 
 #define PAD_SQUARE 0x0080
-#define PAD_LEFT   0x0004
-#define PAD_RIGHT  0x0008
 typedef struct UmnDataBaseExWinLine {
     short x;                                /* +0x00 */
     short y;                                /* +0x02 */
@@ -866,10 +864,10 @@ void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
             pressed = buttons & 0xFFFF;
             arrowTarget[0] = 8;
             arrowTarget[1] = 0x1DB;
-            if (pressed == PAD_LEFT) {
+            if (pressed == PAD_L1) {
                 work->drift[0] = -6;
             }
-            if (pressed == PAD_RIGHT) {
+            if (pressed == PAD_R1) {
                 work->drift[1] = 6;
             }
         } else {
@@ -1372,7 +1370,7 @@ void UmnDataBase(void)
     case 0x31:
         if (UmnWork.waitOrMoving == 0) {
             if (UmnWork.count >= 2) {
-                if (PadData.half_2a == PAD_LEFT) {
+                if (PadData.half_2a == PAD_L1) {
                     if (UmnWork.listCursor == 0) {
                         UmnWork.listCursor = UmnWork.count - 1;
                         UmnWork.column = UmnWork.listCursor & 1;
@@ -1395,7 +1393,7 @@ void UmnDataBase(void)
                     UmnWork.modelFlag = 1;
                     xglSoundEffectNormalID(3, 0);
                 }
-                if (PadData.half_2a == PAD_RIGHT) {
+                if (PadData.half_2a == PAD_R1) {
                     if (UmnWork.listCursor == UmnWork.count - 1) {
                         UmnWork.listCursor = 0;
                         UmnWork.column = 0;

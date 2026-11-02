@@ -192,7 +192,7 @@ static void camera_change(int camera_id)
     StudioCamera *studio_camera;
     int index;
 
-    for (index = 0; index < 8; index++) {
+    for (index = 0; index < STUDIO_CAMERA_COUNT; index++) {
         studio_camera = xglStudioGetCamera2(index);
         if (camera_id == index) {
             studio_camera->active = 1;
@@ -603,7 +603,7 @@ void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
     (void)environment;
     (void)result;
     xglStudioGetCamera2(camera->camera_id)->state = state;
-    if (state == 3) {
+    if (state == STUDIO_CAMERA_STATE_PEER) {
         if (peer != 0) {
             if (JNI_isInstanceOf(peer, classJava_xeno_Chr) != 0) {
                 peer_field = lookupClassField(classJava_xeno_Chr,
@@ -635,7 +635,7 @@ void Java_xeno_Camera_setCFAngle__IFFFF(JavaEnvironment *environment,
     (void)environment;
     if (arguments->camera_index < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments->camera_index;
         last = index + 1;
@@ -672,7 +672,7 @@ void Java_xeno_Camera_setCFAngle__IFFFF(JavaEnvironment *environment,
         definition->current_yaw = definition->angles.values[1];
         definition++;
     }
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
 void Java_xeno_Camera_setCFAnglePers__IFFFFF(JavaEnvironment *environment,
@@ -688,7 +688,7 @@ void Java_xeno_Camera_setCFAnglePers__IFFFFF(JavaEnvironment *environment,
     (void)environment;
     if (arguments->camera_index < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments->camera_index;
         last = index + 1;
@@ -727,7 +727,7 @@ void Java_xeno_Camera_setCFAnglePers__IFFFFF(JavaEnvironment *environment,
         definition->current_yaw = definition->angles.values[1];
         definition++;
     }
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
 void Java_xeno_Camera_setCFHokan__IFF(JavaEnvironment *environment,
@@ -742,7 +742,7 @@ void Java_xeno_Camera_setCFHokan__IFF(JavaEnvironment *environment,
     (void)environment;
     if (arguments->camera_index < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments->camera_index;
         last = index + 1;
@@ -755,7 +755,7 @@ void Java_xeno_Camera_setCFHokan__IFF(JavaEnvironment *environment,
         definition->interpolation[1] = pitch_frames;
         definition++;
     }
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
 void Java_xeno_Camera_setCFLock__IIFFF(JavaEnvironment *environment,
@@ -772,7 +772,7 @@ void Java_xeno_Camera_setCFLock__IIFFF(JavaEnvironment *environment,
     (void)environment;
     if (arguments->camera_index < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments->camera_index;
         last = index + 1;
@@ -789,7 +789,7 @@ void Java_xeno_Camera_setCFLock__IIFFF(JavaEnvironment *environment,
         definition->lock_position[2] = z;
         definition++;
     }
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
 void Java_xeno_Camera_setCFOffset__IFFFIFIF(JThread *thread,
@@ -808,7 +808,7 @@ void Java_xeno_Camera_setCFOffset__IFFFIFIF(JThread *thread,
     (void)result;
     if (arguments[1].i < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments[1].i;
         last = index + 1;
@@ -832,7 +832,7 @@ void Java_xeno_Camera_setCFOffset__IFFFIFIF(JThread *thread,
         definition->parameters.offset.second_value = second_value;
         definition++;
     }
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
 void Java_xeno_Camera_setMode__I(JavaEnvironment *environment,
@@ -840,7 +840,7 @@ void Java_xeno_Camera_setMode__I(JavaEnvironment *environment,
 {
     (void)environment;
     GameLoopState.cameraMode = arguments->mode;
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
     camera_change(0);
 }
 
@@ -864,7 +864,7 @@ void Java_xeno_Camera_setCFPedestal__IFFFFFFFF(JavaEnvironment *environment,
     (void)environment;
     if ((selector & 0xff) == 0xff) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
         mode = (selector + 1) >> 28;
     } else {
         mode = selector >> 28;
@@ -897,7 +897,7 @@ void Java_xeno_Camera_setCFPedestal__IFFFFFFFF(JavaEnvironment *environment,
         }
         definition++;
     }
-    GameLoopState.hokanFlags |= 0x40;
+    GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
 void Java_xeno_Camera_setCFPedestalHokan__II(JavaEnvironment *environment,
@@ -911,7 +911,7 @@ void Java_xeno_Camera_setCFPedestalHokan__II(JavaEnvironment *environment,
     (void)environment;
     if (arguments->camera_index < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments->camera_index;
         last = index + 1;
@@ -947,7 +947,7 @@ void Java_xeno_Camera_setFog__IFFFFIIII(JThread *thread,
     (void)result;
     if (arguments[1].i < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments[1].i;
         last = index + 1;
@@ -981,7 +981,7 @@ void Java_xeno_Camera_resetFog__I(JThread *thread, VMSlot *arguments, VMSlot *re
     (void)result;
     if (arguments[1].i < 0) {
         index = 0;
-        last = 33;
+        last = CF_CAMERA_COUNT;
     } else {
         index = arguments[1].i;
         last = index + 1;

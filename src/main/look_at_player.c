@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "debug_break.h"
 #include "main/near_dir.h"
+#include "main/get_ladder.h"
 #include "main/get.h"
 #include "main/look_at_player.h"
 #include "main/act_2.h"
@@ -22,6 +23,32 @@
 
 #define HIT_CHECK_MAX_HEIGHT_DIFFERENCE (1.8999999761581421f)
 #define NYURU_REACH_MARGIN (0.0099999997764825821f)
+
+#define ACTOR_ATTR_WALK_ONLY 0x10 /* running is capped to walking speed */
+
+/* GameLoopState.flags bits read by the player movement. */
+#define GAME_LOOP_FLAG_MOTION_FROZEN 0x4000  /* keep the current motion */
+#define GAME_LOOP_FLAG_INPUT_DISABLED 0x8000 /* ignore the pad, no locator check */
+#define GAME_LOOP_FLAG_REUSE_STICK 0x100000  /* repeat the stick values of the last frame */
+
+#define STICK_DIGITAL_MAGNITUDE 127
+#define STICK_RANGE 128.0f
+#define WALK_THRESHOLD_DEFAULT 32
+#define RUN_THRESHOLD_DEFAULT 96
+
+/* GameCfPlayerLoadResource: the player's model files are read to fixed
+ * addresses and the cached copy is recognised by each file's leading tag. */
+#define PLAYER_RESOURCE_SIZE 0x12a000
+#define PLAYER_LEX_ADDR 0x01000000
+#define PLAYER_XTX_ADDR 0x01070800
+#define PLAYER_JNT_ADDR 0x010B1000
+#define PLAYER_ALT_LEX_ADDR 0x010B4000
+#define PLAYER_ALT_JNT_ADDR 0x010E6000
+#define PLAYER_FPK_ADDR 0x010E7000
+#define TAG_LEX 0x78656c
+#define TAG_XTX 0x585458
+#define TAG_JNT 0x544e4a
+#define TAG_FPK 0x4b5046
 
 /* The locator flags Player_System_Init gives the player actor. */
 enum { LOCATOR_FLAGS_PLAYER_INIT = 0x70000 };
@@ -45,9 +72,9 @@ typedef struct PlayerLookAtState {
     u8 unmodeled_c1[0x29e80];
     signed char look_at_target;
     unsigned char unmodeled_29f42[0x29fa0 - 0x29f42];
-    signed char ladder_direction[16]; /* +0x29fa0 */
-    unsigned char ladder_bottom_exit[16]; /* +0x29fb0 */
-    float ladder_height[16]; /* +0x29fc0 */
+    signed char ladder_direction[LADDER_COUNT]; /* +0x29fa0 */
+    unsigned char ladder_bottom_exit[LADDER_COUNT]; /* +0x29fb0 */
+    float ladder_height[LADDER_COUNT]; /* +0x29fc0 */
     unsigned char unmodeled_2a000[0x2a014 - 0x2a000];
     void *effect;
 } PlayerLookAtState;
@@ -88,7 +115,7 @@ typedef struct CfCameraDefinitionYawView {
 extern PlayerEnemyWork enepc[16];
 extern PlayerLookAtState GameLoopState;
 extern LookAtGameResource GameResource[128];
-extern Actor actor[64];
+extern Actor actor[ACTOR_COUNT];
 extern PlayerAimMapUnit MapUnit[64];
 extern PlayerPadView PadData;
 extern CfCameraDefinitionYawView CfCameraDefine;
@@ -154,7 +181,7 @@ void LookAt_Player(Actor *player_actor)
         Actor_LookAt(player_actor);
         return;
     }
-    if (GameLoopState.flags & 0x8000) {
+    if (GameLoopState.flags & GAME_LOOP_FLAG_INPUT_DISABLED) {
         Actor_LookAt_Release(player_actor, 0);
         return;
     }
@@ -166,7 +193,7 @@ void LookAt_Player(Actor *player_actor)
 
     Actor_LookAt_Release(player_actor, 0);
     if (nearest_actor_index != look_at_target &&
-        !(actor[nearest_actor_index].flags & 8)) {
+        !(actor[nearest_actor_index].flags & ACTOR_FLAG_HIDDEN)) {
         actor[player_actor->number].look_at_target = nearest_actor_index;
         Actor_LookAt_Set(player_actor, 1, &actor[nearest_actor_index].position);
         Actor_LookAt(player_actor);
@@ -205,7 +232,7 @@ void Player_System_Init(Actor *player_actor)
     sequence->handler[3] = 0;
     UnduParamInit(player_actor->undulation);
     player_actor->status_flags = 0x1910;
-    for (i = 7; i >= 0; i--) {
+    for (i = ACTOR_EFFECT_SLOT_COUNT - 1; i >= 0; i--) {
         player_actor->effects[i] = 0;
     }
     player_actor->effect_timer = -1;
@@ -217,7 +244,7 @@ void Player_System_Init(Actor *player_actor)
     player = GameLoopState.player_actor;
     player->flash_timer = 0;
     enemy_work->encount_lock = 0;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < LADDER_COUNT; i++) {
         GameLoopState.ladder_direction[i] = 0;
         GameLoopState.ladder_height[i] = 0;
         GameLoopState.ladder_bottom_exit[i] = 1;
@@ -241,9 +268,9 @@ void GameCfPlayerMoveParamSet(float walkThreshold, float runThreshold, float vec
 
 void GameCfPlayerMoveInit(void)
 {
-    WALK_THRESHOLD_I = 32;
+    WALK_THRESHOLD_I = WALK_THRESHOLD_DEFAULT;
     WALK_THRESHOLD_F = 32.0f;
-    RUN_THRESHOLD_I = 96;
+    RUN_THRESHOLD_I = RUN_THRESHOLD_DEFAULT;
     RUN_THRESHOLD_F = 96.0f;
     VECTOR_RATE = DEFAULT_VECTOR_RATE;
 }
@@ -260,11 +287,11 @@ void GameCfPlayerMove(void)
     AlignedVector4 position_before_move;
     const Vector4 *before_move;
 
-    if (Check_EnemyBurn() == 0 && xglSoundEffectCheckID(0x10009, 0) != 0) {
-        xglSoundEffectStopID(0x10009, 0);
+    if (Check_EnemyBurn() == 0 && xglSoundEffectCheckID(SE_ID_DAMAGE_EXPLOSION, 0) != 0) {
+        xglSoundEffectStopID(SE_ID_DAMAGE_EXPLOSION, 0);
     }
-    if (Check_EnemyElec() == 0 && xglSoundEffectCheckID(0x10008, 0) != 0) {
-        xglSoundEffectStopID(0x10008, 0);
+    if (Check_EnemyElec() == 0 && xglSoundEffectCheckID(SE_ID_DAMAGE_ELECTRIC, 0) != 0) {
+        xglSoundEffectStopID(SE_ID_DAMAGE_ELECTRIC, 0);
     }
     if (Check_EnemyFound() == 0) {
         if (GameLoopState.effect != 0) {
@@ -275,17 +302,17 @@ void GameCfPlayerMove(void)
     if (player->flash_timer != 0) {
         if (--player->flash_timer <= 0) {
             player->flash_timer = 0;
-            player->flags &= ~0x800;
+            player->flags &= ~ACTOR_FLAG_TRANSLUCENT;
         } else {
             unsigned short phase = player->flash_timer;
 
             if (!(phase & 1) || (short)phase >= 19) {
-                player->flags |= 0x800;
+                player->flags |= ACTOR_FLAG_TRANSLUCENT;
                 player->drawEnv.flags |= 3;
-                player->drawEnv.alpha = 0x48;
+                player->drawEnv.alpha = ACTOR_TRANSLUCENT_ALPHA;
                 player->drawEnv.transparency = 0.5f;
             } else {
-                player->flags &= ~0x800;
+                player->flags &= ~ACTOR_FLAG_TRANSLUCENT;
             }
         }
     }
@@ -304,19 +331,19 @@ void GameCfPlayerMove(void)
     player->velocity.z = 0.0f;
     player->acceleration.x = 0.0f;
     player->acceleration.z = 0.0f;
-    if (!(GameLoopState.flags & 0x8000) && SCRIPT_getCfTime() >= 3) {
+    if (!(GameLoopState.flags & GAME_LOOP_FLAG_INPUT_DISABLED) && SCRIPT_getCfTime() >= 3) {
         signed char stick_x = PadData.stick_x;
         signed char stick_y = PadData.stick_y;
         float length;
         float angle;
 
-        if (PadData.held & 0xa000) {
-            stick_x = (PadData.held & 0x8000) ? -127 : 127;
+        if (PadData.held & (PAD_LEFT | PAD_RIGHT)) {
+            stick_x = (PadData.held & PAD_LEFT) ? -STICK_DIGITAL_MAGNITUDE : STICK_DIGITAL_MAGNITUDE;
         }
-        if (PadData.held & 0x5000) {
-            stick_y = (PadData.held & 0x1000) ? -127 : 127;
+        if (PadData.held & (PAD_UP | PAD_DOWN)) {
+            stick_y = (PadData.held & PAD_UP) ? -STICK_DIGITAL_MAGNITUDE : STICK_DIGITAL_MAGNITUDE;
         }
-        if (GameLoopState.flags & 0x100000) {
+        if (GameLoopState.flags & GAME_LOOP_FLAG_REUSE_STICK) {
             stick_x = player->stick_x;
             stick_y = player->stick_y;
         } else {
@@ -334,26 +361,26 @@ void GameCfPlayerMove(void)
             length = -I2F(stick_y);
             angle = player->rotation.y - I2F(stick_x) * 0.001f;
         }
-        if (128.0f <= length) {
-            length = 128.0f;
+        if (STICK_RANGE <= length) {
+            length = STICK_RANGE;
         }
         if (WALK_THRESHOLD_F <= length) {
             player->target_angle = angle;
-            if (player->attribute_flags & 0x10) {
+            if (player->attribute_flags & ACTOR_ATTR_WALK_ONLY) {
                 if (RUN_THRESHOLD_F <= length) {
                     length = RUN_THRESHOLD_F - 0.1f;
                 }
             }
-            if (PadData.held & 2) {
+            if (PadData.held & PAD_R2) {
                 length = (RUN_THRESHOLD_F - 0.1f) / 1.5f;
             }
             stick_speed = F2I(length);
             speed = length * VECTOR_RATE;
-            terrain_bits = player->attribute_flags & 0x3f000000;
-            if (!(terrain_bits & 0x0f000000)) {
+            terrain_bits = player->attribute_flags & ACTOR_ATTR_FLOOR_MASK;
+            if (!(terrain_bits & ACTOR_ATTR_FLOOR_DIR_MASK)) {
                 static float rate[4] = { 1.0f, 2.0f, 0.5f, 3.0f };
 
-                speed *= rate[(u32)terrain_bits >> 28];
+                speed *= rate[(u32)terrain_bits >> ACTOR_ATTR_FLOOR_SPEED_SHIFT];
             }
         } else {
             stick_speed = 0;
@@ -372,18 +399,18 @@ void GameCfPlayerMove(void)
                 { -1.0f, -1.0f }, { -1.0f, 0.0f }, { -1.0f, 1.0f },
             };
 
-            terrain_bits = player->attribute_flags & 0x3f000000;
-            if (terrain_bits & 0x0f000000) {
-                float scale = VECTOR_RATE * 128.0f * rate[(u32)terrain_bits >> 28];
-                float *direction = vec[idx[((u32)terrain_bits & 0x0f000000) >> 24]];
+            terrain_bits = player->attribute_flags & ACTOR_ATTR_FLOOR_MASK;
+            if (terrain_bits & ACTOR_ATTR_FLOOR_DIR_MASK) {
+                float scale = VECTOR_RATE * STICK_RANGE * rate[(u32)terrain_bits >> ACTOR_ATTR_FLOOR_SPEED_SHIFT];
+                float *direction = vec[idx[((u32)terrain_bits & ACTOR_ATTR_FLOOR_DIR_MASK) >> ACTOR_ATTR_FLOOR_DIR_SHIFT]];
 
                 player->velocity.x += scale * direction[0];
                 player->velocity.z += scale * direction[1];
             }
-            run_scale = rate[(u32)terrain_bits >> 28];
+            run_scale = rate[(u32)terrain_bits >> ACTOR_ATTR_FLOOR_SPEED_SHIFT];
         }
     }
-    if (!(GameLoopState.flags & 0x4000)) {
+    if (!(GameLoopState.flags & GAME_LOOP_FLAG_MOTION_FROZEN)) {
         int abs_speed = stick_speed;
 
         if (abs_speed < 0) {
@@ -392,14 +419,14 @@ void GameCfPlayerMove(void)
 
         if (abs_speed < WALK_THRESHOLD_I) {
             if (player->animation.slot.currentDataId != 0x1b) {
-                ACT_setMotion2(player, 0, 9);
+                ACT_setMotion2(player, MOTION_ID_IDLE, MOTION_BLEND_DEFAULT);
             }
             player->animation.slot.speed = 0.033333335f;
         } else if (abs_speed < RUN_THRESHOLD_I) {
-            ACT_setMotion2(player, 1, 9);
+            ACT_setMotion2(player, MOTION_ID_WALK, MOTION_BLEND_DEFAULT);
             player->animation.slot.speed = speed * 0.5f / run_scale;
         } else {
-            ACT_setMotion2(player, 3, 9);
+            ACT_setMotion2(player, MOTION_ID_RUN, MOTION_BLEND_DEFAULT);
             player->animation.slot.speed = speed * 0.23333335f / run_scale;
             Enemy_FindByEar(player, &player->position);
         }
@@ -419,7 +446,7 @@ void GameCfPlayerMove(void)
                 if (effect != 0) {
                     effect->caster = player; /* look_at_player.c's player record is its view of the Actor */
                     player->effect_timer = 0;
-                    player->effect_slot = (player->effect_slot + 1) % 8;
+                    player->effect_slot = (player->effect_slot + 1) % ACTOR_EFFECT_SLOT_COUNT;
                 }
             }
         } else {
@@ -446,7 +473,7 @@ void GameCfPlayerMove(void)
     {
         float floor_height = UnduCheck(&player->position, &player->velocity, player->undulation);
 
-        if (floor_height != -1000.0f && player->position.y < floor_height) {
+        if (floor_height != GROUND_HEIGHT_NONE && player->position.y < floor_height) {
             player->position.y = floor_height;
             player->velocity.y = 0.0f;
         }
@@ -468,7 +495,7 @@ void GameCfPlayerMove(void)
     GameIdLightSet(player, 0);
     Set_Shadow(player);
     Get_EnemyIDPos(&player->position, &EnemyTarget.vector);
-    if (!(GameLoopState.flags & 0x8000)) {
+    if (!(GameLoopState.flags & GAME_LOOP_FLAG_INPUT_DISABLED)) {
         Check_Locater(player);
     }
 }
@@ -485,7 +512,7 @@ static short HitCheckActor(Actor *player_actor)
 
     minimum_body_radius = HIT_CHECK_MIN_BODY_RADIUS;
     maximum_height_difference = HIT_CHECK_MAX_HEIGHT_DIFFERENCE;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < ACTOR_COUNT; i++) {
         if (!CheckActorExist(&actor[i])) {
             continue;
         }
@@ -570,8 +597,8 @@ void GameCfPlayerLoadResource(int use_cache)
     curry = 0;
     player = GameLoopState.player_actor;
     if (GameResource[1].address == 0) {
-        GameResourceAlloc(0x12a000);
-    } else if (GameResource[0].size != 0x12a000) {
+        GameResourceAlloc(PLAYER_RESOURCE_SIZE);
+    } else if (GameResource[0].size != PLAYER_RESOURCE_SIZE) {
         DEBUG_BREAK();
     }
     if (GameResource[2].address == 0) {
@@ -592,14 +619,14 @@ void GameCfPlayerLoadResource(int use_cache)
     xglSoundLoadEffect(leader_se_name, GameResourceGetFreeAddr(), 2);
 
     if (use_cache == 0) {
-        header_0 = *(int *)0x01000000;
-        if (header_0 == 0x78656c) {
-            if (*(int *)0x01070800 == 0x585458) {
-                header_2 = *(int *)0x010B1000;
-                if (header_2 == 0x544e4a) {
-                    if (*(int *)0x010B4000 == header_0) {
-                        if (*(int *)0x010E6000 == header_2 &&
-                            (*(int *)0x010E7000 & 0xffffff) == 0x4b5046 &&
+        header_0 = *(int *)PLAYER_LEX_ADDR;
+        if (header_0 == TAG_LEX) {
+            if (*(int *)PLAYER_XTX_ADDR == TAG_XTX) {
+                header_2 = *(int *)PLAYER_JNT_ADDR;
+                if (header_2 == TAG_JNT) {
+                    if (*(int *)PLAYER_ALT_LEX_ADDR == header_0) {
+                        if (*(int *)PLAYER_ALT_JNT_ADDR == header_2 &&
+                            (*(int *)PLAYER_FPK_ADDR & 0xffffff) == TAG_FPK &&
                             GameCfPlayerLoadResource_preCID == player_id) {
                             if (GameCfPlayerLoadResource_preCurry == curry) {
                                 return;
@@ -621,11 +648,11 @@ void GameCfPlayerLoadResource(int use_cache)
         } while (*name_end != 0);
     }
     __builtin_strcpy(name_end, ".lex");
-    xglCdReadFile(path, (void *)0x01000000, 0, 1);
+    xglCdReadFile(path, (void *)PLAYER_LEX_ADDR, 0, 1);
     __builtin_strcpy(name_end, ".xtx");
-    xglCdReadFile(path, (void *)0x01070800, 0, 1);
+    xglCdReadFile(path, (void *)PLAYER_XTX_ADDR, 0, 1);
     __builtin_strcpy(name_end, ".jnt");
-    xglCdReadFile(path, (void *)0x010B1000, 0, 1);
+    xglCdReadFile(path, (void *)PLAYER_JNT_ADDR, 0, 1);
     RES_GetMdlFileName(path, player_id | 0x10000);
     name_end = path;
     if (path[0] != 0) {
@@ -634,15 +661,15 @@ void GameCfPlayerLoadResource(int use_cache)
         } while (*name_end != 0);
     }
     __builtin_strcpy(name_end, ".lex");
-    xglCdReadFile(path, (void *)0x010B4000, 0, 1);
+    xglCdReadFile(path, (void *)PLAYER_ALT_LEX_ADDR, 0, 1);
     __builtin_strcpy(name_end, ".jnt");
-    xglCdReadFile(path, (void *)0x010E6000, 0, 1);
+    xglCdReadFile(path, (void *)PLAYER_ALT_JNT_ADDR, 0, 1);
     if (curry == 0) {
         sprintf(path, "data\\motion\\%s.fpk", RES_GetMotBaseName(player_id));
     } else {
         __builtin_strcpy(path, "data\\motion\\shion_curry.fpk");
     }
-    xglCdReadFile(path, (void *)0x010E7000, 0, 1);
+    xglCdReadFile(path, (void *)PLAYER_FPK_ADDR, 0, 1);
     ACT_setMotion2(player, 0, 8);
     ACT_setModelWrapper(player, 0);
     ACT_setHumanHand(player, 0);

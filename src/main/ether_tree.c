@@ -3,9 +3,44 @@
 #include "main/xgl_dma.h"
 #include "ov01/data_unit_org_get.h"
 #include "main/end_print.h"
-
 /* Only a .lit4 literal in the original (0x004D7E7C); no storage object. */
 #define ETHER_TREE_NODE_Z 65535.0f
+
+/* Table counts and byte sizes of the arena carved by EtherTreeInit. */
+#define ETHER_TREE_OBJECT_COUNT 80
+#define ETHER_TREE_LEARNED_BYTES 16
+#define ETHER_TREE_SYSTEM_SIZE 0x80
+#define ETHER_TREE_OBJECT_TABLE_SIZE 0x2300
+#define ETHER_TREE_LINE_TABLE_SIZE 0x1900
+#define ETHER_TREE_LINE2_TABLE_SIZE 0x140
+#define ETHER_TREE_RIGHT_TABLE_SIZE 0x80
+#define ETHER_TREE_BLACK_SIZE 0x40
+
+/* Object flag bits (EtherTreeObjectData.flags). */
+#define ETHER_TREE_OBJECT_CHILD 0x04
+#define ETHER_TREE_OBJECT_DIMMED 0x10
+#define ETHER_TREE_OBJECT_ROOT 0x20
+
+/* Sprite uv codes of the lamp and the cursor. */
+#define ETHER_TREE_UV_LAMP 0x1203
+#define ETHER_TREE_UV_CURSOR 0x1204
+
+/* Panel animation modes shared by the right panels, black fade and line2. */
+#define ETHER_TREE_MODE_OPEN 1
+#define ETHER_TREE_MODE_CLOSE 3
+#define ETHER_TREE_FADE_MAX 80
+
+
+/* MenuWork.state values the tree reacts to (same as the ether menu's). */
+#define ETHER_TREE_STATE_EQUIP 0x50
+#define ETHER_TREE_STATE_EPTS_LIST 0x70
+#define ETHER_TREE_STATE_EPTS_ACTION 0x72
+#define ETHER_TREE_STATE_EVOLVE_SLOT 0x74
+#define ETHER_TREE_STATE_EVOLVE_CONFIRM 0x76
+#define ETHER_TREE_STATE_EVOLVE_DONE 0x78
+#define ETHER_TREE_STATE_TRANSFER_TARGET 0x82
+#define ETHER_TREE_STATE_TRANSFER_CONFIRM 0x84
+#define ETHER_TREE_STATE_TRANSFER_DONE 0x86
 
 /*
  * EtherTreeObject points at a table of 80 tree-object records of 0x70 bytes
@@ -333,7 +368,7 @@ EtherTreeObjectData *EtherTreeObjectGet(int id)
 {
     int i;
 
-    for (i = 0; i < 80; i++) {
+    for (i = 0; i < ETHER_TREE_OBJECT_COUNT; i++) {
         if (EtherTreeObject[i].id == id)
             return &EtherTreeObject[i];
     }
@@ -389,7 +424,7 @@ void subParentChildSet(void)
     int i;
 
     root->childCount = 0;
-    root->flags = 0x20;
+    root->flags = ETHER_TREE_OBJECT_ROOT;
 
     for (i = 0; i < 3; i++) {
         unsigned char id = ids[i];
@@ -456,7 +491,7 @@ int subPosSet(EtherTreeObjectData *object)
     else if (object->position.y > 0.0f)
         object->position.y += (float) (total - 1) * 36.0f;
 
-    if (EtherTreeSystem->firstDataIndex == 6 && (object->flags & 0x20))
+    if (EtherTreeSystem->firstDataIndex == 6 && (object->flags & ETHER_TREE_OBJECT_ROOT))
         object->children[2]->position.y += 36.0f;
 
     return total;
@@ -488,7 +523,7 @@ void subPosSet3(void)
     EtherTreeObjectData *object = EtherTreeObject;
     int index;
 
-    for (index = 0; index < 80; index++) {
+    for (index = 0; index < ETHER_TREE_OBJECT_COUNT; index++) {
         switch (object->childCount) {
         case 2: {
             EtherTreeObjectData *first = object->children[0];
@@ -549,7 +584,7 @@ void subJoutoPosSet(void)
                 object++;
             }
         }
-    } while (++id < 80);
+    } while (++id < ETHER_TREE_OBJECT_COUNT);
     root->childCount = count;
 }
 
@@ -573,9 +608,9 @@ void EtherTreeParaSet(EtherTreeObjectData *object)
     }
 
     if (func_A19578(firstDataIndex, object->id) != 0) {
-        object->flags = (object->flags | 9) & ~0x10;
-    } else if (object->flags & 4) {
-        object->flags |= 0x10;
+        object->flags = (object->flags | 9) & ~ETHER_TREE_OBJECT_DIMMED;
+    } else if (object->flags & ETHER_TREE_OBJECT_CHILD) {
+        object->flags |= ETHER_TREE_OBJECT_DIMMED;
     }
 
     type = MenuEtherTypeGet(object->id);
@@ -604,7 +639,7 @@ void EtherTreeLineSet(void)
         return;
 
     object = EtherTreeObject;
-    count = 79;
+    count = ETHER_TREE_OBJECT_COUNT - 1;
     do {
         if ((object->flags & 4) && object->id != 0) {
             line->object = object;
@@ -638,11 +673,11 @@ void EtherTreeTargetChange(int id, int mode)
 
 void EtherTreeWorkClear(void)
 {
-    memset(EtherTreeSystem, 0, 0x80);
-    memset(EtherTreeObject, 0, 0x2300);
-    memset(EtherTreeLine, 0, 0x1900);
-    memset(EtherTreeLine2, 0, 0x140);
-    memset(EtherTreeRight, 0, 0x80);
+    memset(EtherTreeSystem, 0, ETHER_TREE_SYSTEM_SIZE);
+    memset(EtherTreeObject, 0, ETHER_TREE_OBJECT_TABLE_SIZE);
+    memset(EtherTreeLine, 0, ETHER_TREE_LINE_TABLE_SIZE);
+    memset(EtherTreeLine2, 0, ETHER_TREE_LINE2_TABLE_SIZE);
+    memset(EtherTreeRight, 0, ETHER_TREE_RIGHT_TABLE_SIZE);
 }
 
 void EtherTreeObjectSet(int firstDataIndex)
@@ -653,9 +688,9 @@ void EtherTreeObjectSet(int firstDataIndex)
     int zeroCount;
     int i;
 
-    memset(EtherTreeObject, 0, 0x2300);
-    memset(EtherTreeLine, 0, 0x1900);
-    memset(EtherTreeLine2, 0, 0x140);
+    memset(EtherTreeObject, 0, ETHER_TREE_OBJECT_TABLE_SIZE);
+    memset(EtherTreeLine, 0, ETHER_TREE_LINE_TABLE_SIZE);
+    memset(EtherTreeLine2, 0, ETHER_TREE_LINE2_TABLE_SIZE);
 
     etherData = func_A19210(firstDataIndex);
     zeroRun = etherData->learnedEther;
@@ -663,10 +698,10 @@ void EtherTreeObjectSet(int firstDataIndex)
     if (zeroRun[0] == 0) {
         do {
             zeroCount++;
-        } while ((++zeroRun, zeroCount < 0x10 && zeroRun[0] == 0));
+        } while ((++zeroRun, zeroCount < ETHER_TREE_LEARNED_BYTES && zeroRun[0] == 0));
     }
 
-    if (zeroCount == 0x10)
+    if (zeroCount == ETHER_TREE_LEARNED_BYTES)
         return;
 
     EtherTreeSystem->flags |= 1;
@@ -677,7 +712,7 @@ void EtherTreeObjectSet(int firstDataIndex)
     subPosSet2(EtherTreeObject, 0);
     subPosSet3();
     subJoutoPosSet();
-    for (i = 0; i < 80; i++)
+    for (i = 0; i < ETHER_TREE_OBJECT_COUNT; i++)
         EtherTreeParaSet(&EtherTreeObject[i]);
     EtherTreeLineSet();
     firstDataIds = EtherTreeFirstDataGet();
@@ -872,7 +907,7 @@ void subRightDraw(EtherTreeRightData *record)
     record->screenX = screenX;
     record->screenY = screenY;
     record->depth = depth;
-    endPrintExtFunc(0, 17, &record->screenX);
+    endPrintExtFunc(0, END_PRINT_CMD_CIRCLE,&record->screenX);
 }
 
 void EtherTreeRightDraw(void)
@@ -953,7 +988,7 @@ void EtherTreeBlackDraw(void)
             points[0].color[0] = points[1].color[0] = points[2].color[0] = points[3].color[0] = 0;
             points[0].color[3] = points[1].color[3] = points[2].color[3] = points[3].color[3] = record->counter;
             points[4].depth = 0;
-            endPrintExtFunc(0, 3, points);
+            endPrintExtFunc(0, END_PRINT_CMD_RIBBON, points);
         }
     }
 }
@@ -968,12 +1003,12 @@ void EtherTreeBlackMain(void)
             break;
         case 1:
             record->counter += 8;
-            if (record->counter < 80)
+            if (record->counter < ETHER_TREE_FADE_MAX)
                 break;
             record->mode = 2;
             /* fall through */
         case 2:
-            record->counter = 80;
+            record->counter = ETHER_TREE_FADE_MAX;
             break;
         case 3:
             record->counter -= 8;
@@ -1067,7 +1102,7 @@ static inline float *line2EndpointY(EtherTreeLine2Data *line2, unsigned int inde
  * lines: each one runs from a corner of from[] to the matching corner of
  * to[], both offset by the tree node and the screen centre and scaled by
  * EtherTreeSystem, and both vertices of the pair take line colour 3 before
- * the pair goes to endPrintExtFunc(0, 0x10, ...). The bytes it leaves alone
+ * the pair goes to endPrintExtFunc(0, END_PRINT_CMD_ETHER_LINE, ...). The bytes it leaves alone
  * stay unmodeled.
  */
 void subLine2_DrawType_1(EtherTreeLine2Data *line2)
@@ -1090,7 +1125,7 @@ void subLine2_DrawType_1(EtherTreeLine2Data *line2)
         EtherTreeLineColorGet(line->from.color, 3);
         EtherTreeLineColorGet(line->to.color, 3);
         index += 1;
-        endPrintExtFunc(0, 0x10, line);
+        endPrintExtFunc(0, END_PRINT_CMD_ETHER_LINE, line);
     } while (index < 3);
 }
 
@@ -1261,7 +1296,7 @@ void sub2ObjectLampDraw(EtherTreeObjectData *object)
         object->lampBrightness = 128;
         object->setValue = -object->setValue;
     }
-    object->lamp.uv = 0x1203;
+    object->lamp.uv = ETHER_TREE_UV_LAMP;
     endSpriteSet(lamp, 255);
     lampWidth = object->lamp.width;
     sizeScale = node->scale;
@@ -1274,7 +1309,7 @@ void sub2ObjectLampDraw(EtherTreeObjectData *object)
     object->lamp.depth = object->sprite.depth + 1;
     lamp->x = (originX + positionScale * 27.0f) - 2.0f;
     object->lamp.y = (object->sprite.y + positionScale) - 3.0f;
-    endPrintExtFunc(0, 2, lamp);
+    endPrintExtFunc(0, END_PRINT_CMD_SPRITE,lamp);
 }
 
 void EtherTreeObjectDraw(void)
@@ -1319,7 +1354,7 @@ void EtherTreeObjectDraw(void)
                     objects[i].sprite.color[2] = (unsigned int)(object->sprite.color[2] * fade);
                 }
             }
-            endPrintExtFunc(0, 2, &objects[i].sprite.x);
+            endPrintExtFunc(0, END_PRINT_CMD_SPRITE,&objects[i].sprite.x);
             if (object->flags & 2)
                 sub2ObjectLampDraw(&objects[i]);
         }
@@ -1347,7 +1382,7 @@ void subTreeLineDraw(EtherTreeLineData *line, const int *colorIndices)
             segment->to.z = node->z - 2.0f;
             EtherTreeLineColorGet(segment->fromColor, colorIndices[segmentIndex]);
             EtherTreeLineColorGet(segment->toColor, colorIndices[segmentIndex]);
-            endPrintExtFunc(0, 0x10, &segment->from.x);
+            endPrintExtFunc(0, END_PRINT_CMD_ETHER_LINE, &segment->from.x);
 
             segmentIndex++;
         } while (segmentIndex < segmentsByChildCount[line->object->childCount]);
@@ -1508,7 +1543,7 @@ void EtherTreeCursolDraw(void)
     EtherTreeCoordinates *center = &system->center;
     Vector4 *position;
 
-    cursor->uv = 0x1204;
+    cursor->uv = ETHER_TREE_UV_CURSOR;
     endSpriteSet(cursor, 255);
     node = &system->node;
     position = &target->position;
@@ -1519,7 +1554,7 @@ void EtherTreeCursolDraw(void)
     cursor->x = cursor->x * node->scale;
     cursor->y = cursor->y * node->scale;
     cursor->depth = (unsigned int)(node->z + 2.0f);
-    endPrintExtFunc(0, 2, cursor);
+    endPrintExtFunc(0, END_PRINT_CMD_SPRITE,cursor);
 }
 
 /*
@@ -1534,14 +1569,14 @@ void EtherTreeDraw(void)
         return;
 
     EtherTreeSystem->windowTexAddr = WindowTexAddrGet(2);
-    endPrintExtFunc(0, 0xE, &EtherTreeSystem->windowTexAddr);
+    endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_CHANGE, &EtherTreeSystem->windowTexAddr);
     EtherTreeObjectDraw();
     EtherTreeLineDraw();
     EtherTreeLine2Draw();
     EtherTreeCursolDraw();
     EtherTreeRightDraw();
     EtherTreeBlackDraw();
-    endPrintExtFunc(0, 0xF, 0);
+    endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_RELOAD, 0);
 }
 
 unsigned char *EtherTreeInit(int arenaBase)
@@ -1549,17 +1584,17 @@ unsigned char *EtherTreeInit(int arenaBase)
     unsigned char *addr = (unsigned char *)((arenaBase + 0xf) & ~0xf);
 
     EtherTreeSystem = (EtherTreeSystemData *) addr;
-    addr += 0x80;
+    addr += ETHER_TREE_SYSTEM_SIZE;
     EtherTreeObject = (EtherTreeObjectData *) addr;
-    addr += 0x2300;
+    addr += ETHER_TREE_OBJECT_TABLE_SIZE;
     EtherTreeLine = (EtherTreeLineData *) addr;
-    addr += 0x1900;
+    addr += ETHER_TREE_LINE_TABLE_SIZE;
     EtherTreeLine2 = (EtherTreeLine2Data *) addr;
-    addr += 0x140;
+    addr += ETHER_TREE_LINE2_TABLE_SIZE;
     EtherTreeRight = (EtherTreeRightData *) addr;
-    addr += 0x80;
+    addr += ETHER_TREE_RIGHT_TABLE_SIZE;
     EtherTreeBlack = (EtherTreeBlackData *) addr;
-    addr += 0x40;
+    addr += ETHER_TREE_BLACK_SIZE;
     EtherTreeWorkClear();
     EtherTreeBlackSet();
     return addr;
@@ -1575,10 +1610,10 @@ void EtherTreeMain(void)
     unsigned char *modeFlag = &EtherTreeSystem->unmodeled_01;
 
     switch (MenuWork.state) {
-    case 0x50:
-    case 0x70:
+    case ETHER_TREE_STATE_EQUIP:
+    case ETHER_TREE_STATE_EPTS_LIST:
     {
-        if (MenuWork.flags & 1) {
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             int centerYPixels = 224;
             float centerY = centerYPixels;
 
@@ -1587,14 +1622,14 @@ void EtherTreeMain(void)
             EtherTreeToCenterSet(384.0f, centerY, 0);
             EtherTreeTargetChange(MenuWork.etherId, 1);
             *modeFlag &= (unsigned char)~1;
-            if (MenuWork.state == 0x50) {
-                EtherTreeBlackModeChange(1);
+            if (MenuWork.state == ETHER_TREE_STATE_EQUIP) {
+                EtherTreeBlackModeChange(ETHER_TREE_MODE_OPEN);
                 EtherTreeRightSet(MenuWork.etherId, 0);
-                EtherTreeRightModeChange(1, 0);
+                EtherTreeRightModeChange(ETHER_TREE_MODE_OPEN,0);
             } else {
-                EtherTreeBlackModeChange(3);
-                EtherTreeRightModeChange(3, 0);
-                EtherTreeRightModeChange(3, 1);
+                EtherTreeBlackModeChange(ETHER_TREE_MODE_CLOSE);
+                EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,0);
+                EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,1);
             }
         }
         {
@@ -1608,65 +1643,65 @@ void EtherTreeMain(void)
                 }
                 if (activeMenu->listSelect >= 0)
                     EtherTreeTargetChange(activeMenu->etherId, 0);
-                if (activeMenu->state == 0x50) {
+                if (activeMenu->state == ETHER_TREE_STATE_EQUIP) {
                     EtherTreeRightTargetChange(activeMenu->etherId, 0);
-                    if (PadData.half_2a & 0x20)
+                    if (PadData.half_2a & PAD_CIRCLE)
                         EtherTreeParaSet(EtherTreeObjectGet(activeMenu->etherId));
                 }
             }
         }
         break;
     }
-    case 0x74:
-        if (MenuWork.flags & 1) {
+    case ETHER_TREE_STATE_EVOLVE_SLOT:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             EtherTreeLine2Set(MenuWork.etherId, 0);
             EtherTreeLine2SelectChange(MenuWork.slotCursor);
             EtherTreeRightSet(MenuWork.etherId, 0);
-            EtherTreeRightModeChange(1, 0);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_OPEN,0);
             EtherTreeRightSet(MenuWork.slotEther, 1);
-            EtherTreeRightModeChange(1, 1);
-            EtherTreeBlackModeChange(1);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_OPEN,1);
+            EtherTreeBlackModeChange(ETHER_TREE_MODE_OPEN);
         }
         EtherTreeLine2SelectChange(MenuWork.slotCursor);
         EtherTreeTargetChange(MenuWork.slotEther, 0);
         EtherTreeRightTargetChange(MenuWork.slotEther, 1);
         break;
-    case 0x72:
-        if (!(MenuWork.flags & 1))
+    case ETHER_TREE_STATE_EPTS_ACTION:
+        if (!(MenuWork.flags & MENU_FLAG_ENTER))
             break;
         EtherTreeTargetChange(MenuWork.etherId, 0);
         /* Fall through: both states close the tree panels. */
-    case 0x78:
-        if (MenuWork.flags & 1) {
+    case ETHER_TREE_STATE_EVOLVE_DONE:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             *modeFlag |= 1;
-            EtherTreeBlackModeChange(3);
-            EtherTreeRightModeChange(3, 0);
-            EtherTreeRightModeChange(3, 1);
-            EtherTreeLine2ModeChange(3);
-            if (MenuWork.state == 0x78) {
+            EtherTreeBlackModeChange(ETHER_TREE_MODE_CLOSE);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,0);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,1);
+            EtherTreeLine2ModeChange(ETHER_TREE_MODE_CLOSE);
+            if (MenuWork.state == ETHER_TREE_STATE_EVOLVE_DONE) {
                 int i;
 
-                for (i = 0; i < 80; ++i)
+                for (i = 0; i < ETHER_TREE_OBJECT_COUNT; ++i)
                     EtherTreeParaSet(&EtherTreeObject[i]);
                 EtherTreeLineSet();
             }
         }
         break;
-    case 0x82:
-        if (MenuWork.flags & 1) {
+    case ETHER_TREE_STATE_TRANSFER_TARGET:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             if (EtherTreeSystem->firstDataIndex != MenuWork.chrNo) {
                 EtherTreeObjectSet(MenuWork.chrNo);
                 EtherTreeCenterSet(768.0f, 224.0f, 0);
                 EtherTreeToCenterSet(384.0f, 224.0f, 0);
                 EtherTreeTargetChange(MenuWork.etherId, 1);
             }
-            EtherTreeBlackModeChange(1);
+            EtherTreeBlackModeChange(ETHER_TREE_MODE_OPEN);
             EtherTreeRightSet(MenuWork.etherId, 0);
-            EtherTreeRightModeChange(1, 0);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_OPEN,0);
         }
         break;
-    case 0x84:
-        if (MenuWork.flags & 1) {
+    case ETHER_TREE_STATE_TRANSFER_CONFIRM:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             EtherTreeCharacterRecord *character;
             int bitIndex;
             int byteIndex;
@@ -1685,21 +1720,21 @@ void EtherTreeMain(void)
             EtherTreeToCenterSet(384.0f, 224.0f, 0);
             EtherTreeTargetChange(MenuWork.etherId, 1);
             EtherTreeRightSet(MenuWork.etherId, 0);
-            EtherTreeRightModeChange(1, 0);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_OPEN,0);
         }
         break;
-    case 0x86:
-        if (MenuWork.flags & 1) {
-            EtherTreeBlackModeChange(3);
-            EtherTreeRightModeChange(3, 0);
+    case ETHER_TREE_STATE_TRANSFER_DONE:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
+            EtherTreeBlackModeChange(ETHER_TREE_MODE_CLOSE);
+            EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,0);
         }
         break;
-    case 0x76:
+    case ETHER_TREE_STATE_EVOLVE_CONFIRM:
         break;
     default:
-        EtherTreeRightModeChange(3, 0);
-        EtherTreeRightModeChange(3, 1);
-        EtherTreeBlackModeChange(3);
+        EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,0);
+        EtherTreeRightModeChange(ETHER_TREE_MODE_CLOSE,1);
+        EtherTreeBlackModeChange(ETHER_TREE_MODE_CLOSE);
         EtherTreeToCenterSet(768.0f, 224.0f, 0);
         break;
     }

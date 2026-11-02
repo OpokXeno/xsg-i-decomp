@@ -30,6 +30,7 @@ extern void (*jthreadResetFunc)(void);
 extern void *jthreadTop;
 /* The whole 8-byte record (config/symbols/main.txt), cleared a halfword at
  * a time; no instruction in initVM reads any of it back. */
-extern unsigned short XTK_peerGroup[4];
+#define XTK_PEER_GROUP_COUNT 4
+extern unsigned short XTK_peerGroup[XTK_PEER_GROUP_COUNT];
 
 #endif /* INCLUDE_MAIN_INIT_VM_H */

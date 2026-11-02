@@ -40,9 +40,7 @@
  */
 #define SAVE_PARTY_STATE      0x10078
 
-#define SAVE_MENU_SAVE_DATA   0x10254
 #define SAVE_UMN_WORK         0x1025C
-#define SAVE_UMN_MAIL_DATA    0x10304
 #define SAVE_INIT_BLOCKS      0x15090
 #define UMN_MAIL_BOX_SLOTS    128
 #define UMN_MAIL_DATA_COUNT   128

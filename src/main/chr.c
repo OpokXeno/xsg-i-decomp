@@ -50,6 +50,89 @@
 } while (0)
 
 
+/* Script rates are per second; the sequences step once per frame. */
+#define CHR_FRAMES_PER_SECOND 30.0f
+
+/* ActSequence channel bits (state_flags and channel_mask): one per animated channel. */
+enum {
+    CHR_CHANNEL_MOVE = 0x1,
+    CHR_CHANNEL_ROT_X = 0x2,
+    CHR_CHANNEL_ROT_Y = 0x4,
+    CHR_CHANNEL_ROT_Z = 0x8,
+    CHR_CHANNEL_ROT_ALL = 0xe,
+    CHR_CHANNEL_MOTION = 0x10,
+    CHR_CHANNEL_SCALE_X = 0x20,
+    CHR_CHANNEL_SCALE_Y = 0x40,
+    CHR_CHANNEL_SCALE_Z = 0x80,
+    CHR_CHANNEL_SCALE_ALL = 0xe0
+};
+
+/* Rotation record face_flags: the axes that are being driven. */
+enum {
+    CHR_FACE_AXIS_X = 0x1,
+    CHR_FACE_AXIS_Y = 0x2,
+    CHR_FACE_AXIS_Z = 0x4
+};
+
+/* Actor.flags bits the natives of this class set and clear. */
+enum {
+    CHR_ACTOR_BUSY = 0x2,               /* a sequence or script wait is running on the actor */
+    CHR_ACTOR_HIDDEN = 0x8,             /* setVisible(false) */
+    CHR_ACTOR_COLLISION = 0x40,         /* setCollision(true) */
+    CHR_ACTOR_NO_RADAR = 0x80,          /* dispRadar(false) */
+    CHR_ACTOR_MOTION_NO_UPDATE = 0x400, /* setMotNoUpdate(1) */
+    CHR_ACTOR_POINT_LIGHT = 0x800       /* set by the point light setters, cleared by setFilter */
+};
+
+/* Actor.status_flags bits. */
+enum {
+    CHR_STATUS_EDGE_FALL = 0x8,         /* setEdgeFall */
+    CHR_STATUS_ELEVATOR = 0x20          /* setElevatorMode */
+};
+
+/* Actor.drawEnv.flags bits. */
+enum {
+    CHR_DRAW_SYMMETRY_Y = 0x10,         /* setSymmetryY */
+    CHR_DRAW_POINT_LIGHT = 0x20,        /* point light colours/positions are set */
+    CHR_DRAW_MOTION_NO_UPDATE = 0x100,  /* setMotNoUpdate(2) */
+    CHR_DRAW_CLIP = 0x200,              /* setClip */
+    CHR_DRAW_IGNORE_SHAPE = 0x400       /* ignoreShape */
+};
+
+/* Actor.look_mode, set by the look_* natives. */
+enum {
+    CHR_LOOK_DEFAULT = 1,
+    CHR_LOOK_CAMERA = 2,
+    CHR_LOOK_POINT = 3,
+    CHR_LOOK_CHAR = 4,
+    CHR_LOOK_UNIT = 5
+};
+
+/* setFilter selectors with a draw handler. */
+enum {
+    CHR_FILTER_GUNO = 2,
+    CHR_FILTER_STEALTH = 3
+};
+
+/* setParent: a joint with this bit set names a relation rather than a model joint. */
+#define CHR_JOINT_RELATION 0x8000
+/* ACT_setArms accessory id of the right-hand weapon. */
+#define CHR_ARMS_WEAPON_R 0x108
+
+#define CHR_POINT_LIGHT_COUNT 3
+#define CHR_POINT_LIGHT_COUNT_UNSIGNED 3U
+#define CHR_MAP_SHADOW_PART_MAX 8
+#define CHR_PART_ALPHA_MAX 4
+/* Motion numbers with a bit in the top byte are absolute ids; others are 1-based. */
+#define CHR_MOTION_ABSOLUTE_MASK 0xff000000
+#define CHR_MOTION_DEFAULT_BLEND 8
+
+/* setPlayer: the player model's fixed resource layout (GameResource[0]) and matrix counts. */
+#define CHR_PLAYER_RESOURCE_SIZE 0x12a000
+#define CHR_PLAYER_MATRIX_COUNT 0xaa
+#define CHR_PLAYER_SUB_MATRIX_COUNT 0x33
+#define CHR_PLAYER_SUB_ID_BASE 0x10000
+
 /* Runtime Java fields occupy one EE VM value word. The descriptor
  * supplies its byte offset; its declared Java/native kind selects
  * the integer, floating or reference representation below. No fixed
@@ -315,7 +398,7 @@ void Java_xeno_Chr_setPlayer__(JThread *thread, ChrScaleCall *arguments)
     object = arguments->object;
     player_id = ((ChrSavedPartyPrefix *)SaveData)->player_character_id;
 
-    if ((GameResource[0].size == 0x12a000) &&
+    if ((GameResource[0].size == CHR_PLAYER_RESOURCE_SIZE) &&
         (GameResource[1].state == 9)) {
         field = lookupClassField(
             classJava_xeno_Chr, loadConstString(chrIdKey, -1), 0);
@@ -326,19 +409,19 @@ void Java_xeno_Chr_setPlayer__(JThread *thread, ChrScaleCall *arguments)
         ACTOR_RESOURCES(player)[1] = (void *)0x01070800;
         ACTOR_RESOURCES(player)[2] = (void *)0x010b1000;
         ACTOR_RESOURCES(player)[3] = (void *)0x010e7000;
-        ACT_allocMatrix(player, 0xaa);
+        ACT_allocMatrix(player, CHR_PLAYER_MATRIX_COUNT);
         ACT_setModelWrapper(player, 0);
 
-        created_actor = ACT_create(-2, player_id + 0x10000);
+        created_actor = ACT_create(-2, player_id + CHR_PLAYER_SUB_ID_BASE);
         ACTOR_RESOURCES(created_actor)[0] = (void *)0x010b4000;
         ACTOR_RESOURCES(created_actor)[2] = (void *)0x010e6000;
         ACTOR_RESOURCES(created_actor)[1] = (void *)0;
-        ACT_allocMatrix(created_actor, 0x33);
+        ACT_allocMatrix(created_actor, CHR_PLAYER_SUB_MATRIX_COUNT);
         ACT_setModelWrapper(created_actor, 0);
         created_actor->shadow_kind = 0;
         created_actor->flags &= ~0x20;
         ACT_initMotion(created_actor);
-        ACT_setRelation(created_actor, player, 0x8200, 1);
+        ACT_setRelation(created_actor, player, CHR_JOINT_RELATION | 0x200, 1);
         ACT_setHumanHand(player, 0);
         ACT_setMotion(player, 0x8000);
     } else {
@@ -379,8 +462,8 @@ static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     move = &entry->move_channel.move;
-    sequence->channel_mask = 1;
-    sequence->state_flags |= 1;
+    sequence->channel_mask = CHR_CHANNEL_MOVE;
+    sequence->state_flags |= CHR_CHANNEL_MOVE;
 
     algorithm_field = lookupClassField(
         classJava_xeno_Chr, loadConstString(chr_algorithm_string, -1), 0);
@@ -402,7 +485,7 @@ static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
         move->frames = -1;
         move->target.x = arguments->argument[0].floating + source[0];
         move->target.z = arguments->argument[1].floating + source[2];
-        move->target.w = arguments->argument[2].floating / 30.0f;
+        move->target.w = arguments->argument[2].floating / CHR_FRAMES_PER_SECOND;
         sequence->handler[0] = SEQ_moveXZ;
         wait = arguments->wait;
         break;
@@ -422,14 +505,14 @@ static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
         move->frames = -1;
         chr_peer = target_field->actor;
         move->target_actor = chr_peer;
-        move->target.w = arguments->argument[1].floating / 30.0f;
+        move->target.w = arguments->argument[1].floating / CHR_FRAMES_PER_SECOND;
         sequence->handler[0] = SEQ_moveChr;
         wait = arguments->argument[2].byte;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0) {
             return;
         }
@@ -492,8 +575,8 @@ void Java_xeno_Chr_move__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *ar
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     track = &entry->move_channel.spline;
-    sequence->channel_mask = 1;
-    sequence->state_flags |= 1;
+    sequence->channel_mask = CHR_CHANNEL_MOVE;
+    sequence->state_flags |= CHR_CHANNEL_MOVE;
     lookupClassField(classJava_xeno_Chr,
                      loadConstString(chr_algorithm_string, -1), 0);
     spline = arguments->spline;
@@ -504,7 +587,7 @@ void Java_xeno_Chr_move__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *ar
     track->spline = spline;
     track->last_frame = spline->last_frame;
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -544,8 +627,8 @@ void Java_xeno_Chr_rotate__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     track = &entry->rotation_channel.spline;
-    sequence->channel_mask = 14;
-    sequence->state_flags |= 0xe;
+    sequence->channel_mask = CHR_CHANNEL_ROT_ALL;
+    sequence->state_flags |= CHR_CHANNEL_ROT_ALL;
     lookupClassField(classJava_xeno_Chr,
                      loadConstString(chr_algorithm_string, -1), 0);
     spline = arguments->spline;
@@ -556,7 +639,7 @@ void Java_xeno_Chr_rotate__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *
     track->spline = spline;
     track->last_frame = spline->last_frame;
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -607,13 +690,13 @@ static void CHR_rotX(int mode, JThread *thread, void *call_block,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     SEQUENCE_ROTATION_HANDLER(sequence) = SEQ_rotate;
-    sequence->state_flags |= 2;
+    sequence->state_flags |= CHR_CHANNEL_ROT_X;
     rotation = &entry->rotation_channel.rotation;
 
     switch (mode) {
     case 0:
         rotation->duration[0] = arguments->first.integer;
-        rotation->face_flags &= ~1;
+        rotation->face_flags &= ~CHR_FACE_AXIS_X;
         rotation->goal[0] =
             ((arguments->second.floating + rotation_source[0]) / 180.0f) *
             chrRotXFramesDegToRad;
@@ -621,19 +704,19 @@ static void CHR_rotX(int mode, JThread *thread, void *call_block,
         break;
     case 1:
         rotation->duration[0] = -1;
-        rotation->face_flags &= ~1;
+        rotation->face_flags &= ~CHR_FACE_AXIS_X;
         rotation->goal[0] =
             ((arguments->first.floating + rotation_source[0]) / 180.0f) *
             chrRotXRateDegToRad;
         rotation->step[0] =
-            ((arguments->second.floating / 180.0f) * chrRotXRateDegToRad) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotXRateDegToRad) / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     case 2: {
         u32 updated_axis_flags;
 
         target_peer = *(Actor **)(arguments->second.object + algorithm_field->offset);
-        updated_axis_flags = rotation->face_flags | 1;
+        updated_axis_flags = rotation->face_flags | CHR_FACE_AXIS_X;
         rotation->duration[0] = arguments->first.integer;
         CHR_SET_FOLLOW_TARGET(rotation, target_peer, updated_axis_flags);
         wait = arguments->wait;
@@ -641,17 +724,17 @@ static void CHR_rotX(int mode, JThread *thread, void *call_block,
     }
     case 3:
         target_peer = *(Actor **)(rate_follow->target + algorithm_field->offset);
-        rotation->face_flags |= 1;
+        rotation->face_flags |= CHR_FACE_AXIS_X;
         rotation->duration[0] = -1;
         rotation->target = target_peer;
         rotation->step[0] =
-            ((arguments->second.floating / 180.0f) * chrRotXStepDegToRad) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotXStepDegToRad) / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -700,13 +783,13 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     SEQUENCE_ROTATION_HANDLER(sequence) = SEQ_rotate;
-    sequence->state_flags |= 4;
+    sequence->state_flags |= CHR_CHANNEL_ROT_Y;
     rotation = &entry->rotation_channel.rotation;
 
     switch (mode) {
     case 0:
         rotation->duration[1] = arguments->first.integer;
-        rotation->face_flags &= ~2;
+        rotation->face_flags &= ~CHR_FACE_AXIS_Y;
         rotation->goal[1] =
             ((arguments->second.floating + rotation_source[1]) / 180.0f) *
             chrRotYFramesDegToRad;
@@ -714,12 +797,12 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
         break;
     case 1:
         rotation->duration[1] = -1;
-        rotation->face_flags &= ~2;
+        rotation->face_flags &= ~CHR_FACE_AXIS_Y;
         rotation->goal[1] =
             ((arguments->first.floating + rotation_source[1]) / 180.0f) *
             chrRotYRateDegToRad;
         rotation->step[1] =
-            ((arguments->second.floating / 180.0f) * chrRotYRateDegToRad) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotYRateDegToRad) / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     case 2: {
@@ -728,7 +811,7 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
         peer_field = lookupClassField(
             classJava_xeno_Chr, loadConstString(chr_peer_string, -1), 0);
         target_peer = *(Actor **)(arguments->second.object + peer_field->offset);
-        updated_axis_flags = rotation->face_flags | 2;
+        updated_axis_flags = rotation->face_flags | CHR_FACE_AXIS_Y;
         rotation->duration[1] = arguments->first.integer;
         CHR_SET_FOLLOW_TARGET(rotation, target_peer, updated_axis_flags);
         wait = arguments->wait;
@@ -739,16 +822,16 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
             classJava_xeno_Chr, loadConstString(chr_peer_string, -1), 0);
         target_peer = *(Actor **)(arguments->first.object + peer_field->offset);
         rotation->duration[1] = -1;
-        rotation->face_flags |= 2;
+        rotation->face_flags |= CHR_FACE_AXIS_Y;
         rotation->target = target_peer;
         rotation->step[1] =
-            ((arguments->second.floating / 180.0f) * chrRotYStepDegToRad) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotYStepDegToRad) / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -799,13 +882,13 @@ static void CHR_rotZ(int mode, JThread *thread, void *call_block,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     SEQUENCE_ROTATION_HANDLER(sequence) = SEQ_rotate;
-    sequence->state_flags |= 8;
+    sequence->state_flags |= CHR_CHANNEL_ROT_Z;
     rotation = &entry->rotation_channel.rotation;
 
     switch (mode) {
     case 0:
         rotation->duration[2] = arguments->first.integer;
-        rotation->face_flags &= ~4;
+        rotation->face_flags &= ~CHR_FACE_AXIS_Z;
         rotation->goal[2] =
             ((arguments->second.floating + rotation_source[2]) / 180.0f) *
             chrRotZFramesDegToRad;
@@ -813,19 +896,19 @@ static void CHR_rotZ(int mode, JThread *thread, void *call_block,
         break;
     case 1:
         rotation->duration[2] = -1;
-        rotation->face_flags &= ~4;
+        rotation->face_flags &= ~CHR_FACE_AXIS_Z;
         rotation->goal[2] =
             ((arguments->first.floating + rotation_source[2]) / 180.0f) *
             chrRotZRateDegToRad;
         rotation->step[2] =
-            ((arguments->second.floating / 180.0f) * chrRotZRateDegToRad) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotZRateDegToRad) / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     case 2: {
         u32 updated_axis_flags;
 
         target_peer = *(Actor **)(arguments->second.object + algorithm_field->offset);
-        updated_axis_flags = rotation->face_flags | 4;
+        updated_axis_flags = rotation->face_flags | CHR_FACE_AXIS_Z;
         rotation->duration[2] = arguments->first.integer;
         CHR_SET_FOLLOW_TARGET(rotation, target_peer, updated_axis_flags);
         wait = arguments->wait;
@@ -837,13 +920,13 @@ static void CHR_rotZ(int mode, JThread *thread, void *call_block,
         rotation->duration[2] = -1;
         rotation->target = target_peer;
         rotation->step[2] =
-            ((arguments->second.floating / 180.0f) * chrRotZStepDegToRad) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotZStepDegToRad) / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -982,7 +1065,7 @@ void Java_xeno_Chr_start__ILjava_lang_Object_(JThread *thread,
         if (SCRIPT_methodClearGet() != 0) {
             state->handler[0] = 0;
             state->handler[1] = 0;
-            peer->flags &= ~2;
+            peer->flags &= ~CHR_ACTOR_BUSY;
             state->handler[2] = 0;
             state->flags = 0;
             state->handler[3] = 0;
@@ -1087,13 +1170,13 @@ static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     sequence->handler[2] = SEQ_motion;
-    sequence->state_flags |= 0x10;
+    sequence->state_flags |= CHR_CHANNEL_MOTION;
     track = &entry->motion;
 
     switch (mode) {
     case 0:
         number = arguments->argument[0].integer;
-        if (number & 0xff000000)
+        if (number & CHR_MOTION_ABSOLUTE_MASK)
             track->motion = number;
         else
             track->motion = number - 1;
@@ -1102,11 +1185,11 @@ static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
         wait = arguments->argument[3].byte;
         track->loop_start = -1;
         track->loop_end = -1;
-        track->blend = 8;
+        track->blend = CHR_MOTION_DEFAULT_BLEND;
         break;
     case 1:
         number = arguments->argument[0].integer;
-        if (number & 0xff000000)
+        if (number & CHR_MOTION_ABSOLUTE_MASK)
             track->motion = number;
         else
             track->motion = number - 1;
@@ -1120,7 +1203,7 @@ static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -1306,9 +1389,9 @@ void Java_xeno_Chr_setVisible__Z(JThread *thread, ChrBoolCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->flag != 0) {
-        peer->flags &= ~8;
+        peer->flags &= ~CHR_ACTOR_HIDDEN;
     } else {
-        peer->flags |= 8;
+        peer->flags |= CHR_ACTOR_HIDDEN;
     }
 }
 
@@ -1340,9 +1423,9 @@ void Java_xeno_Chr_setCollision__Z(JThread *thread, ChrBoolCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->flag != 0) {
-        peer->flags |= 0x40;
+        peer->flags |= CHR_ACTOR_COLLISION;
     } else {
-        peer->flags &= ~0x40;
+        peer->flags &= ~CHR_ACTOR_COLLISION;
     }
 }
 
@@ -1552,8 +1635,8 @@ void Java_xeno_Chr_scale__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *a
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     track = &entry->scale_channel.spline;
-    sequence->channel_mask = 224;
-    sequence->state_flags |= 0xe0;
+    sequence->channel_mask = CHR_CHANNEL_SCALE_ALL;
+    sequence->state_flags |= CHR_CHANNEL_SCALE_ALL;
     lookupClassField(classJava_xeno_Chr,
                      loadConstString(chr_algorithm_string, -1), 0);
     spline = arguments->spline;
@@ -1562,7 +1645,7 @@ void Java_xeno_Chr_scale__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *a
     track->spline = spline;
     track->last_frame = spline->last_frame;
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
         if ((thread->flags & 0x40) != 0) {
@@ -1615,7 +1698,7 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     SEQUENCE_SCALE_HANDLER(sequence) = SEQ_scale;
-    sequence->state_flags |= 0x20;
+    sequence->state_flags |= CHR_CHANNEL_SCALE_X;
     scale = &entry->scale_channel.scale;
 
     switch (mode) {
@@ -1627,13 +1710,13 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
     case 1:
         scale->duration[0] = -1;
         scale->goal[0] = arguments->first.floating + scale_source[0];
-        scale->step[0] = arguments->second.floating / 30.0f;
+        scale->step[0] = arguments->second.floating / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         /*
          * `wait` is 1 here, and kind 1 is the thread getPeer_Chr creates for a
          * character (0x002f96e0): a blocking sclX only suspends the
@@ -1704,7 +1787,7 @@ static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     SEQUENCE_SCALE_HANDLER(sequence) = SEQ_scale;
-    sequence->state_flags |= 0x40;
+    sequence->state_flags |= CHR_CHANNEL_SCALE_Y;
     scale = &entry->scale_channel.scale;
 
     switch (mode) {
@@ -1716,13 +1799,13 @@ static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
     case 1:
         scale->duration[1] = -1;
         scale->goal[1] = arguments->first.floating + scale_source[1];
-        scale->step[1] = arguments->second.floating / 30.0f;
+        scale->step[1] = arguments->second.floating / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         /*
          * `wait` is 1 here, and kind 1 is the thread getPeer_Chr creates for a
          * character (0x002f96e0): a blocking sclY only suspends the
@@ -1793,7 +1876,7 @@ static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
     entry = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]];
     sequence = &entry->state;
     SEQUENCE_SCALE_HANDLER(sequence) = SEQ_scale;
-    sequence->state_flags |= 0x80;
+    sequence->state_flags |= CHR_CHANNEL_SCALE_Z;
     scale = &entry->scale_channel.scale;
 
     switch (mode) {
@@ -1805,13 +1888,13 @@ static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
     case 1:
         scale->duration[2] = -1;
         scale->goal[2] = arguments->first.floating + scale_source[2];
-        scale->step[2] = arguments->second.floating / 30.0f;
+        scale->step[2] = arguments->second.floating / CHR_FRAMES_PER_SECOND;
         wait = arguments->wait;
         break;
     }
 
     if (wait == 1) {
-        peer->flags |= 2;
+        peer->flags |= CHR_ACTOR_BUSY;
         /*
          * `wait` is 1 here, and kind 1 is the thread getPeer_Chr creates for a
          * character (0x002f96e0): a blocking sclZ only suspends the
@@ -1929,9 +2012,9 @@ void Java_xeno_Chr_setEdgeFall__I(JThread *thread, ChrIntCall *arguments)
     if (arguments->value == 0) {
         /* Also clears every other status_flags bit: andi v0,v0,8 at
          * 0x002ffe48, not a mask of ~8. */
-        peer->status_flags &= 8;
+        peer->status_flags &= CHR_STATUS_EDGE_FALL;
     } else {
-        peer->status_flags |= 8;
+        peer->status_flags |= CHR_STATUS_EDGE_FALL;
     }
 }
 
@@ -2030,9 +2113,9 @@ void Java_xeno_Chr_setElevatorMode__I(JThread *thread, ChrIntCall *arguments)
     if (arguments->value == 0) {
         /* Also clears every other status_flags bit: andi v0,v0,0x20 at
          * 0x003000f8, not a mask of ~0x20. */
-        peer->status_flags &= 0x20;
+        peer->status_flags &= CHR_STATUS_ELEVATOR;
     } else {
-        peer->status_flags |= 0x20;
+        peer->status_flags |= CHR_STATUS_ELEVATOR;
     }
 }
 
@@ -2056,7 +2139,7 @@ void Java_xeno_Chr_setParent__Lxeno_Chr_III(JThread *thread,
     type = arguments->type;
     object = arguments->other;
     other = *(Actor **)(object + peer_field->offset);
-    if (joint & 0x8000) {
+    if (joint & CHR_JOINT_RELATION) {
         ACT_setRelation(peer, other, joint, id);
     } else {
         ACT_setParent(peer, type, other, joint, id);
@@ -2101,20 +2184,20 @@ void Java_xeno_Chr_setFilter__I(JThread *thread, ChrIntCall *arguments,
     switch (arguments->value) {
     case 0:
         peer->draw = 0;
-        peer->flags &= ~0x800;
+        peer->flags &= ~CHR_ACTOR_POINT_LIGHT;
         result->word = -1;
         break;
     case 1:
-        peer->flags &= ~0x800;
+        peer->flags &= ~CHR_ACTOR_POINT_LIGHT;
         result->word = -1;
         break;
-    case 2:
-        peer->flags &= ~0x800;
+    case CHR_FILTER_GUNO:
+        peer->flags &= ~CHR_ACTOR_POINT_LIGHT;
         peer->draw = ACT_filterGuno;
         result->word = 4;
         break;
-    case 3:
-        peer->flags &= ~0x800;
+    case CHR_FILTER_STEALTH:
+        peer->flags &= ~CHR_ACTOR_POINT_LIGHT;
         peer->draw = ACT_filterStealth;
         result->word = 4;
         break;
@@ -2155,9 +2238,9 @@ void Java_xeno_Chr_setClip__I(JThread *thread, ChrIntCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->value != 0) {
-        peer->drawEnv.flags |= 0x200;
+        peer->drawEnv.flags |= CHR_DRAW_CLIP;
     } else {
-        peer->drawEnv.flags &= ~0x200;
+        peer->drawEnv.flags &= ~CHR_DRAW_CLIP;
     }
 }
 
@@ -2174,9 +2257,9 @@ void Java_xeno_Chr_setSymmetryY__I(JThread *thread, ChrIntCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->value != 0) {
-        peer->drawEnv.flags |= 0x10;
+        peer->drawEnv.flags |= CHR_DRAW_SYMMETRY_Y;
     } else {
-        peer->drawEnv.flags &= ~0x10;
+        peer->drawEnv.flags &= ~CHR_DRAW_SYMMETRY_Y;
     }
 }
 
@@ -2208,18 +2291,18 @@ void Java_xeno_Chr_setPointLightCol__IFFF(
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    if ((unsigned int)arguments->index.integer < 3U) {
+    if ((unsigned int)arguments->index.integer < CHR_POINT_LIGHT_COUNT_UNSIGNED) {
         u32 actor_flags;
         int blue_index;
         float blue_value;
 
         actor_flags = peer->flags;
-        peer->flags = actor_flags | 0x800;
+        peer->flags = actor_flags | CHR_ACTOR_POINT_LIGHT;
         peer->drawEnv.lightColor[arguments->index.integer][0] = arguments->x.floating;
         peer->drawEnv.lightColor[arguments->index.integer][1] = arguments->y.floating;
         blue_index = arguments->index.integer;
         blue_value = arguments->z.floating;
-        peer->drawEnv.flags |= 0x20;
+        peer->drawEnv.flags |= CHR_DRAW_POINT_LIGHT;
         peer->drawEnv.lightColor[blue_index][2] = blue_value;
     }
 }
@@ -2239,18 +2322,18 @@ void Java_xeno_Chr_setPointLightPos__IFFF(
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    if ((unsigned int)arguments->index.integer < 3U) {
+    if ((unsigned int)arguments->index.integer < CHR_POINT_LIGHT_COUNT_UNSIGNED) {
         u32 actor_flags;
         int blue_index;
         float blue_value;
 
         actor_flags = peer->flags;
-        peer->flags = actor_flags | 0x800;
+        peer->flags = actor_flags | CHR_ACTOR_POINT_LIGHT;
         peer->drawEnv.lightPosition[arguments->index.integer][0] = arguments->x.floating;
         peer->drawEnv.lightPosition[arguments->index.integer][1] = arguments->y.floating;
         blue_index = arguments->index.integer;
         blue_value = arguments->z.floating;
-        peer->drawEnv.flags |= 0x20;
+        peer->drawEnv.flags |= CHR_DRAW_POINT_LIGHT;
         peer->drawEnv.lightPosition[blue_index][2] = blue_value;
     }
 }
@@ -2268,10 +2351,10 @@ void Java_xeno_Chr_setPointLightReset__(JThread *thread, ChrObjectCall *argument
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    for (index = 0; index < 3; index++) {
+    for (index = 0; index < CHR_POINT_LIGHT_COUNT; index++) {
         QuadwordZero(&peer->drawEnv.lightColor[index]);
     }
-    peer->drawEnv.flags &= ~0x20;
+    peer->drawEnv.flags &= ~CHR_DRAW_POINT_LIGHT;
 }
 
 void Java_xeno_Chr_talkto__Ljava_lang_String_(JThread *thread,
@@ -2381,9 +2464,9 @@ void Java_xeno_Chr_dispRadar__Z(JThread *thread, ChrBoolCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->flag != 0) {
-        peer->flags &= ~0x80;
+        peer->flags &= ~CHR_ACTOR_NO_RADAR;
     } else {
-        peer->flags |= 0x80;
+        peer->flags |= CHR_ACTOR_NO_RADAR;
     }
 }
 
@@ -2399,7 +2482,7 @@ void Java_xeno_Chr_look_camera__(JThread *thread, ChrScaleCall *arguments)
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    peer->look_mode = 2;
+    peer->look_mode = CHR_LOOK_CAMERA;
 }
 
 void Java_xeno_Chr_look_char__Ljava_lang_Object_(JThread *thread,
@@ -2415,7 +2498,7 @@ void Java_xeno_Chr_look_char__Ljava_lang_Object_(JThread *thread,
                                   loadConstString(chr_peer_string, -1), 0);
     peer = *(Actor **)(object + peer_field->offset);
     target = *(Actor **)(arguments->other.object + peer_field->offset);
-    peer->look_mode = 4;
+    peer->look_mode = CHR_LOOK_CHAR;
     peer->look_target = target;
 }
 
@@ -2435,7 +2518,7 @@ void Java_xeno_Chr_look_unit__Ljava_lang_Object_(JThread *thread,
     unit_peer_field = lookupClassField(classJava_xeno_Unit,
                                        loadConstString(chr_peer_string, -1), 0);
     target = *(void **)(arguments->other.object + unit_peer_field->offset);
-    peer->look_mode = 5;
+    peer->look_mode = CHR_LOOK_UNIT;
     peer->look_target = target;
 }
 
@@ -2451,7 +2534,7 @@ void Java_xeno_Chr_look_default__(JThread *thread, ChrObjectCall *arguments)
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    peer->look_mode = 1;
+    peer->look_mode = CHR_LOOK_DEFAULT;
     peer->look_eye_control = 0;
     peer->look_target = 0;
     QuadwordZero(&peer->look_clear_600[0]);
@@ -2479,7 +2562,7 @@ void Java_xeno_Chr_look_point__FFF(JThread *thread, ChrVmArgumentSlot *arguments
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    peer->look_mode = 3;
+    peer->look_mode = CHR_LOOK_POINT;
     __builtin_memcpy(&x, &arguments[1].bits, sizeof(x));
     peer->look_point[0] = x;
     __builtin_memcpy(&y, &arguments[2].bits, sizeof(y));
@@ -2595,7 +2678,7 @@ void Java_xeno_Chr_shadow_map_id__I(JThread *thread,
                                   loadConstString(chr_peer_string, -1), 0);
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
-    if (peer->mapShadowPartCount < 8) {
+    if (peer->mapShadowPartCount < CHR_MAP_SHADOW_PART_MAX) {
         count = &peer->mapShadowPartCount;
         index = *count;
         *count = index + 1;
@@ -2663,7 +2746,7 @@ void Java_xeno_Chr_pixelAlphaParts__II(JThread *thread, ChrScaleCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     count = peer->drawEnv.partAlphaCount;
-    if (count < 4) {
+    if (count < CHR_PART_ALPHA_MAX) {
         peer->drawEnv.partAlpha[count][0] = arguments->second.integer;
         peer->drawEnv.partAlpha[count][1] = arguments->first.integer;
         peer->drawEnv.partAlphaCount = count + 1;
@@ -2699,16 +2782,16 @@ void Java_xeno_Chr_setMotNoUpdate__I(JThread *thread, ChrIntCall *arguments)
     peer = field_value->actor;
     switch (arguments->value) {
     case 0:
-        peer->flags &= ~0x400;
-        peer->drawEnv.flags &= ~0x100;
+        peer->flags &= ~CHR_ACTOR_MOTION_NO_UPDATE;
+        peer->drawEnv.flags &= ~CHR_DRAW_MOTION_NO_UPDATE;
         break;
     case 1:
-        peer->flags |= 0x400;
-        peer->drawEnv.flags &= ~0x100;
+        peer->flags |= CHR_ACTOR_MOTION_NO_UPDATE;
+        peer->drawEnv.flags &= ~CHR_DRAW_MOTION_NO_UPDATE;
         break;
     case 2:
-        peer->flags &= ~0x400;
-        peer->drawEnv.flags |= 0x100;
+        peer->flags &= ~CHR_ACTOR_MOTION_NO_UPDATE;
+        peer->drawEnv.flags |= CHR_DRAW_MOTION_NO_UPDATE;
         break;
     }
 }
@@ -2726,7 +2809,7 @@ void Java_xeno_Chr_setWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *argume
     peer = *(Actor **)(object + peer_field->offset);
     object = arguments->other.object;
     other_peer = *(Actor **)(object + peer_field->offset);
-    ACT_setArms(peer, other_peer, 0x108, 2);
+    ACT_setArms(peer, other_peer, CHR_ARMS_WEAPON_R, 2);
 }
 
 void Java_xeno_Chr_resetWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *arguments)
@@ -2742,7 +2825,7 @@ void Java_xeno_Chr_resetWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *argu
     peer = *(Actor **)(object + peer_field->offset);
     object = arguments->other.object;
     other_peer = *(Actor **)(object + peer_field->offset);
-    ACT_resetArms(peer, other_peer, 0x108);
+    ACT_resetArms(peer, other_peer, CHR_ARMS_WEAPON_R);
 }
 
 void Java_xeno_Chr_resetHand__(void)
@@ -2766,8 +2849,8 @@ void Java_xeno_Chr_ignoreShape__I(JThread *thread, ChrIntCall *arguments)
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->value != 0) {
-        peer->drawEnv.flags |= 0x400;
+        peer->drawEnv.flags |= CHR_DRAW_IGNORE_SHAPE;
     } else {
-        peer->drawEnv.flags &= ~0x400;
+        peer->drawEnv.flags &= ~CHR_DRAW_IGNORE_SHAPE;
     }
 }

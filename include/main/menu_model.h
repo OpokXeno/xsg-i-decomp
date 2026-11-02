@@ -32,6 +32,9 @@
  * and +0x48 are recovered only as bytes CreateInit clears; no other function
  * in this allocation reads or writes them.
  */
+/* Weapons a menu model unit can hold (one per MenuModelUnitOpen loop pass). */
+#define MENU_MODEL_WEAPON_COUNT 3
+
 typedef struct MenuModelUnit {
     unsigned char unmodeled_00[0x10];
     unsigned char taskPhase;              /* +0x10: forced to -1 by MenuModelUnitBreak once its pending resource request is cancelled */
@@ -55,7 +58,7 @@ typedef struct MenuModelUnit {
     struct MenuModelResourceAccess *resource;   /* +0x28: actor's resource slot, disposed with mode 0 by MenuModelUnitDispose */
     struct MenuModelResourceAccess *resource2;  /* +0x2C: actor2's resource slot, disposed with mode 1 by MenuModelUnitDispose */
     int skipWeaponRegionCleanup;              /* +0x30 */
-    struct MenuModelWeapon *weapon[3];           /* +0x34: one slot per MenuModelUnitOpen weapon loop iteration */
+    struct MenuModelWeapon *weapon[MENU_MODEL_WEAPON_COUNT];          /* +0x34: one slot per MenuModelUnitOpen weapon loop iteration */
     void (*extFunc1)(struct MenuModelUnit *unit, void *context); /* +0x40: MenuModelExtFuncSet's second argument */
     void *extFunc2;                       /* +0x44: MenuModelExtFuncSet's third argument */
     void **unusedByCreateInit4;           /* +0x48: address of the caller's output handle */

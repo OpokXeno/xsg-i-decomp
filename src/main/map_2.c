@@ -4,9 +4,23 @@
 #include "main/map_2.h"
 #include "main/mdl.h"
 #include "main/nml_model_set.h"
+#include "main/res_get_path.h"
 #include "quadword.h"
 
 #define NULL ((void *)0)
+
+#define MAP_UNIT_RESOURCE_GROUP_MASK 0x7F00 /* fallback: the group's first resource */
+#define MAP_UNIT_SERIAL_UNIT6003 0x6025     /* gets unit6003_update as typeUpdate */
+#define MAP_UNIT_TEXMAP_SIZE_DEFAULT 16
+
+/* MapUnitRecord.flags */
+#define MAP_UNIT_FLAG_SUSPENDED 0x10 /* update is skipped */
+#define MAP_UNIT_FLAG_SHADOW_MAP 0x20
+#define MAP_UNIT_FLAG_CLIP 0x40
+
+/* parentMatrixIndex: bit 15 marks a joint matrix, the low 15 bits index it. */
+#define MAP_PARENT_MATRIX_JOINT 0x8000
+#define MAP_PARENT_MATRIX_MASK 0x7FFF
 
 struct MdlHandle;
 
@@ -18,12 +32,12 @@ extern void nmlModelSetShadowMapEntry(void);
 extern void nmlModelEntry(int entry);
 int MAP_loadUnitResource(MapUnitRecord *unit, int resource_id)
 {
-    MapUnitResource *resource = RES_loadFile(-1, 4, resource_id, 0);
+    MapUnitResource *resource = RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_MODEL_NO_JOINTS, resource_id, 0);
     void *model;
     const char *status;
 
     if (resource == 0) {
-        resource = RES_loadFile(-1, 4, resource_id & 0x7F00, 0);
+        resource = RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_MODEL_NO_JOINTS, resource_id & MAP_UNIT_RESOURCE_GROUP_MASK, 0);
     }
 
     if (resource != 0) {
@@ -53,7 +67,7 @@ void MAP_initUnit(void)
     int i;
     int j;
 
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         unit->flags = 0;
         unit->serial = -1;
         unit->update = 0;
@@ -76,7 +90,7 @@ void MAP_initUnit(void)
         unit->render_command = 0;
         unit->filter_mode = 0;
         unit->texMapMode = 0;
-        unit->texMapSize = 16;
+        unit->texMapSize = MAP_UNIT_TEXMAP_SIZE_DEFAULT;
         unit->shadow_map_count = 0;
         unit->texMapWeight = 0.5f;
         unit->sort_offset = 0;
@@ -103,7 +117,7 @@ MapUnitRecord *MAP_createUnit(int slot, int serial)
     void (*typeUpdate)(MapUnitRecord *);
 
     if (slot < 0) {
-        for (i = 0; i < 64; i++) {
+        for (i = 0; i < MAP_UNIT_COUNT; i++) {
             if (MapUnit[i].serial < 0) {
                 slot = i;
                 break;
@@ -125,7 +139,7 @@ MapUnitRecord *MAP_createUnit(int slot, int serial)
     unit->modelPosition[2] = 0;
     unit->modelPosition[3] = 1.0f;
     unit->sequence = 0;
-    if (serial == 0x6025) {
+    if (serial == MAP_UNIT_SERIAL_UNIT6003) {
         typeUpdate = unit6003_update;
     } else {
         typeUpdate = 0;
@@ -145,8 +159,8 @@ void MAP_updateUnit(void)
     MapUnitRecord *unit = MapUnit;
     int i;
 
-    for (i = 0; i < 64; i++) {
-        if (unit->serial >= 0 && !(unit->flags & 0x10)) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
+        if (unit->serial >= 0 && !(unit->flags & MAP_UNIT_FLAG_SUSPENDED)) {
             if (unit->update != NULL) {
                 unit->update(unit);
             }
@@ -184,8 +198,8 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
         matrices = unit->parent->matrices;
         if (matrixIndex >= 0) {
             /* Aligned matrix copies use the SDK's scratch-register quartet. */
-            if (matrixIndex & 0x8000) {
-                QuadwordCopyMatrix(joint, (matrixIndex & 0x7FFF) * sizeof(Matrix4) + (unsigned int)matrices);
+            if (matrixIndex & MAP_PARENT_MATRIX_JOINT) {
+                QuadwordCopyMatrix(joint, (matrixIndex & MAP_PARENT_MATRIX_MASK) * sizeof(Matrix4) + (unsigned int)matrices);
                 homogeneousZero = 0.0f;
                 joint[2][3] = homogeneousZero;
                 joint[1][3] = homogeneousZero;
@@ -193,7 +207,7 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
                 xglMatrixStackLoad(joint);
             } else {
                 QuadwordCopyMatrix(root, matrices[0]);
-                QuadwordCopyMatrix(joint, (unit->parentMatrixIndex & 0x7FFF) * sizeof(Matrix4) + (unsigned int)matrices);
+                QuadwordCopyMatrix(joint, (unit->parentMatrixIndex & MAP_PARENT_MATRIX_MASK) * sizeof(Matrix4) + (unsigned int)matrices);
                 homogeneousZero = 0.0f;
                 joint[2][3] = homogeneousZero;
                 joint[1][3] = homogeneousZero;
@@ -219,7 +233,7 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
             nmlModelSetPlace(&place);
             nmlModelSetRenderLevel(unit->render_command);
             nmlModelSetSortOffset((float)unit->sort_offset);
-            if (unit->flags & 0x40) {
+            if (unit->flags & MAP_UNIT_FLAG_CLIP) {
                 nmlModelSetClip(1);
             }
             i = 0;
@@ -258,7 +272,7 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
                 nmlModelSetTransparency(unit->transparency);
                 nmlModelSetReflTransparency(unit->reflTransparency);
             }
-            if (unit->flags & 0x20) {
+            if (unit->flags & MAP_UNIT_FLAG_SHADOW_MAP) {
                 nmlModelSetShadowMapEntry();
             }
             nmlModelEntry(model);
@@ -278,7 +292,7 @@ void MAP_drawUnit(void)
     MapUnitRecord *unit = MapUnit;
     int i;
 
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         if (unit->serial >= 0) {
             MAP_drawUnitAt(unit);
         }
@@ -291,7 +305,7 @@ void MAP_getHeight(MapPosition *position)
     float height = UnduGet(position->x, position->z);
     int found = 1;
 
-    if (height == -1000.0f) {
+    if (height == GROUND_HEIGHT_NONE) {
         found = 0;
     }
     if (found) {

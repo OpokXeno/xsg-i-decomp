@@ -33,7 +33,7 @@ typedef struct MapUnitResource {
     const char *status;
 } MapUnitResource;
 
-extern MapUnitRecord MapUnit[64];
+extern MapUnitRecord MapUnit[MAP_UNIT_COUNT];
 
 void MAP_getHeight(MapPosition *position);
 #endif

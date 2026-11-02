@@ -2,6 +2,28 @@
 
 typedef struct JSClassRecord JSClassRecord;
 
+/* JSLookupEntry.type: what a primitive, class or method entry stands for. */
+enum {
+    JS_ENTRY_CONSTANT_INTEGER = 1,
+    JS_ENTRY_CONSTANT_FLOAT = 2,
+    JS_ENTRY_INTEGER = 3,
+    JS_ENTRY_FLOAT = 4,
+    JS_ENTRY_STRING = 5,
+    JS_ENTRY_CLASS = 7,
+    JS_ENTRY_METHOD = 8
+};
+
+/* JSCallArguments.type[]: the kind of each argument handed to a native method. */
+enum {
+    JS_ARGUMENT_INTEGER = 3,
+    JS_ARGUMENT_FLOAT = 4,
+    JS_ARGUMENT_STRING = 5,
+    JS_ARGUMENT_OBJECT = 6
+};
+
+#define JS_PRIMITIVE_SIZE 0xC
+#define JS_CLASS_RECORD_SIZE 0x6C
+
 typedef struct JSLookupEntry JSLookupEntry;
 
 typedef void *(*JSGetPeer)(int index);
@@ -92,11 +114,11 @@ extern int atoi(const char *text);
 extern int JS_checkArgs(struct JSCallArguments *arguments,
                         int argument_count, char **argument_names);
 
-static JSPrimitive js_type_int = {3, {0}, {0}};
+static JSPrimitive js_type_int = {JS_ENTRY_INTEGER, {0}, {0}};
 
-static JSPrimitive js_type_float = {4, {0}, {0}};
+static JSPrimitive js_type_float = {JS_ENTRY_FLOAT, {0}, {0}};
 
-static JSPrimitive js_type_string = {5, {0}, {0}};
+static JSPrimitive js_type_string = {JS_ENTRY_STRING, {0}, {0}};
 
 char jsTokenDelimiters[8] = ".[](),";
 
@@ -124,8 +146,8 @@ static int tokenType;
 void JS_init(int heap, int primitiveCapacity, int classCapacity) {
     numClass = 0;
     numPrimitive = 0;
-    primitive = RSRC_alloc(heap, primitiveCapacity * 0xC, 0);
-    classes = RSRC_alloc(heap, classCapacity * 0x6C, 0);
+    primitive = RSRC_alloc(heap, primitiveCapacity * JS_PRIMITIVE_SIZE, 0);
+    classes = RSRC_alloc(heap, classCapacity * JS_CLASS_RECORD_SIZE, 0);
 }
 
 JSClassRecord *JS_loadClass(const char *class_name) {
@@ -142,7 +164,7 @@ JSClassRecord *JS_loadClass(const char *class_name) {
     *primitive_count = primitive_index + 1;
 
     class_record->name = class_name;
-    primitive_entry->type = 7;
+    primitive_entry->type = JS_ENTRY_CLASS;
     primitive_entry->key = (JSLookupKey){ .name = class_name };
     primitive_entry->data.class_record = class_record;
     return class_record;
@@ -152,7 +174,7 @@ int JS_loadConstInteger(int value, int auxiliary) {
     JSPrimitive *primitive_table = primitive;
     JSPrimitive *primitive_entry = &primitive_table[numPrimitive++];
 
-    primitive_entry->type = 1;
+    primitive_entry->type = JS_ENTRY_CONSTANT_INTEGER;
     primitive_entry->key.integer = value;
     primitive_entry->data.auxiliary = auxiliary;
     return 0;
@@ -167,7 +189,7 @@ void JS_classAddMethod(JSClassRecord *js_class, const char *method_name,
                        JSMethodCallback callback) {
     JSMethodEntry *method_entry = &js_class->methods[js_class->method_count++];
 
-    method_entry->type = 8;
+    method_entry->type = JS_ENTRY_METHOD;
     method_entry->key.name = method_name;
     method_entry->data.callback = callback;
 }
@@ -220,7 +242,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
         entry = JS_findObject(token, primitive, numPrimitive);
         if (entry != 0) {
             if (parsed_token_type == ']') {
-                if (entry->type == 3) {
+                if (entry->type == JS_ENTRY_INTEGER) {
                     peer_index = atoi(token);
                 } else {
                     return 0;
@@ -299,24 +321,24 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
             entry = JS_findObject(argument, primitive_table, *primitive_count);
             if (entry != 0) {
                 switch (entry->type) {
-                case 1:
-                    argument_types[index] = 3;
+                case JS_ENTRY_CONSTANT_INTEGER:
+                    argument_types[index] = JS_ARGUMENT_INTEGER;
                     argument_values[index].integer = entry->data.auxiliary;
                     break;
-                case 2:
-                    argument_types[index] = 4;
+                case JS_ENTRY_CONSTANT_FLOAT:
+                    argument_types[index] = JS_ARGUMENT_FLOAT;
                     argument_values[index].floating = entry->data.floating;
                     break;
-                case 3:
-                    argument_types[index] = 3;
+                case JS_ENTRY_INTEGER:
+                    argument_types[index] = JS_ARGUMENT_INTEGER;
                     argument_values[index].integer = atoi(argument);
                     break;
-                case 4:
-                    argument_types[index] = 4;
+                case JS_ENTRY_FLOAT:
+                    argument_types[index] = JS_ARGUMENT_FLOAT;
                     argument_values[index].floating = (float)atof(argument);
                     break;
-                case 5:
-                    argument_types[index] = 5;
+                case JS_ENTRY_STRING:
+                    argument_types[index] = JS_ARGUMENT_STRING;
                     argument_values[index].string = STR_trim2(argument, '"');
                     break;
                 default:
@@ -329,7 +351,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                 token_type = STR_tokenGetType();
                 entry = JS_findObject(argument, primitive, numPrimitive);
                 if (entry != 0) {
-                    if (entry->type == 7) {
+                    if (entry->type == JS_ENTRY_CLASS) {
                         class_record = entry->data.class_record;
                         peer_index = -1;
                         if (token_type == '[') {
@@ -340,7 +362,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                             entry = JS_findObject(argument, primitive,
                                                   numPrimitive);
                             if (entry != 0 && token_type == ']') {
-                                if (entry->type == 3) {
+                                if (entry->type == JS_ENTRY_INTEGER) {
                                     peer_index = atoi(argument);
                                 }
                             } else {
@@ -348,7 +370,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                                 argument_values[index].integer = 0;
                             }
                         }
-                        argument_types[index] = 6;
+                        argument_types[index] = JS_ARGUMENT_OBJECT;
                         argument_values[index].object =
                             class_record->get_peer(peer_index);
                     }
@@ -389,7 +411,7 @@ void JS_exec(char *source, char *limit) {
             strcpy(object_name, token);
             entry = JS_findObject(STR_trim(object_name), primitive,
                                   numPrimitive);
-            if (entry != 0 && entry->type == 7 &&
+            if (entry != 0 && entry->type == JS_ENTRY_CLASS &&
                 entry->data.class_record != 0) {
                 JS_callMethod(entry->data.class_record, token_type);
             }

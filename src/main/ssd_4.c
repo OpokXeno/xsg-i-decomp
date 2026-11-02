@@ -4,9 +4,6 @@
 #include "ssd_4.h"
 #include "main/nml_packet_add.h"
 
-/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
 /* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
 /*
  * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
@@ -18,6 +15,16 @@
  * stay explicit unmodeled spans.
  */
 struct SsdMemoryBlock;
+
+/* Sound memory blocks start on 64-byte boundaries and their header is one such unit. */
+#define SSD_MEMORY_ALIGN 64
+#define SSD_MEMORY_ALIGN_MASK 0x3f
+/* SsdMemoryBlock.state: the arena's first node, a block placed at the start of a free gap, one placed at its end. */
+#define SSD_MEMORY_STATE_HEAD 0x81
+#define SSD_MEMORY_STATE_ALLOC 2
+#define SSD_MEMORY_STATE_ALLOC_HIGH 18
+/* "MTOP" read as a little-endian word, the tag of the first node. */
+#define SSD_MEMORY_HEAD_TAG 0x504f544d
 
 /*
  * View of the sentinel node SsdInitMemoryManager writes at the arena start:
@@ -88,18 +95,18 @@ void SsdInitMemoryManager(int address, int size)
     int start;
 
     start = address;
-    size &= ~0x3f;
-    if (start & 0x3f) {
-        start = (start + 63) & ~0x3f;
-        size -= 64;
+    size &= ~SSD_MEMORY_ALIGN_MASK;
+    if (start & SSD_MEMORY_ALIGN_MASK) {
+        start = (start + SSD_MEMORY_ALIGN - 1) & ~SSD_MEMORY_ALIGN_MASK;
+        size -= SSD_MEMORY_ALIGN;
     }
     head = (SsdMemoryNode *)start;
     RssdWork.first_block = (SsdMemoryBlock *)head;
     RssdWork.memory_end = start + size;
     RssdWork.memory_size = size;
-    head->state = 0x81;
+    head->state = SSD_MEMORY_STATE_HEAD;
     head->flags = 0;
-    head->tag = 0x504f544d;
+    head->tag = SSD_MEMORY_HEAD_TAG;
     head->end = (SsdMemoryBlock *)(head + 1);
     head->next = 0;
 }
@@ -124,7 +131,7 @@ void *iSsdNewMemoryPtr(int size, int tag)
     int start;
     int gap;
 
-    needed = ((size + 63) & ~0x3f) + 64;
+    needed = ((size + SSD_MEMORY_ALIGN - 1) & ~SSD_MEMORY_ALIGN_MASK) + SSD_MEMORY_ALIGN;
     previous = RssdWork.first_block;
     do {
         next = previous->next;
@@ -146,10 +153,10 @@ void *iSsdNewMemoryPtr(int size, int tag)
         }
     }
 
-    block = (SsdMemoryBlock *)((start + 63) & ~0x3f);
+    block = (SsdMemoryBlock *)((start + SSD_MEMORY_ALIGN - 1) & ~SSD_MEMORY_ALIGN_MASK);
     payload = block + 1;
     block->tag = tag;
-    block->state = 2;
+    block->state = SSD_MEMORY_STATE_ALLOC;
     block->end = (int)payload + size;
     block->next = 0;
     block->flags = 0;
@@ -184,7 +191,7 @@ void *iSsdNewMemoryPtr2(int size, int tag)
 
     bestEnd = 0;
     bestPrevious = 0;
-    needed = ((size + 63) & ~0x3f) + 64;
+    needed = ((size + SSD_MEMORY_ALIGN - 1) & ~SSD_MEMORY_ALIGN_MASK) + SSD_MEMORY_ALIGN;
     current = RssdWork.first_block;
     do {
         next = current->next;
@@ -210,9 +217,9 @@ void *iSsdNewMemoryPtr2(int size, int tag)
         return 0;
     }
     bestEnd -= needed;
-    block = (SsdMemoryBlock *)((bestEnd + 63) & ~0x3f);
+    block = (SsdMemoryBlock *)((bestEnd + SSD_MEMORY_ALIGN - 1) & ~SSD_MEMORY_ALIGN_MASK);
     payload = block + 1;
-    block->state = 18;
+    block->state = SSD_MEMORY_STATE_ALLOC_HIGH;
     block->tag = tag;
     block->end = (int)payload + size;
     block->next = 0;
@@ -277,7 +284,7 @@ int SsdGetMemoryFreeSize(void)
     nextBlock = block->next;
     if (nextBlock != 0) {
         do {
-            gap = ((int)nextBlock - block->end) & ~0x3f;
+            gap = ((int)nextBlock - block->end) & ~SSD_MEMORY_ALIGN_MASK;
             block = nextBlock;
             following = block->next;
             if (largest < gap) {
@@ -286,7 +293,7 @@ int SsdGetMemoryFreeSize(void)
             nextBlock = following;
         } while (following != 0);
     }
-    gap = (RssdWork.memory_end - block->end) & ~0x3f;
+    gap = (RssdWork.memory_end - block->end) & ~SSD_MEMORY_ALIGN_MASK;
     if (largest < gap) {
         largest = gap;
     }

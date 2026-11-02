@@ -39,6 +39,23 @@ typedef struct UmnDataBase {
     unsigned char monster_analysed[4];      /* +0x98: one bit per monster id */
 } UmnDataBase;
 
+/* Top-level screens: MenuWork.menu_state[1] and the argument of ChangeTopLevel
+ * (the TopMenu command table maps its rows onto these). */
+enum {
+    MENU_LEVEL_TOP = 0,
+    MENU_LEVEL_ITEM = 1,
+    MENU_LEVEL_ETHER = 2,
+    MENU_LEVEL_CHARACTER = 3,
+    MENU_LEVEL_AGWS = 4,
+    MENU_LEVEL_FORMATION = 5,
+    MENU_LEVEL_UMN = 6,
+    MENU_LEVEL_SYSTEM = 7,
+    MENU_LEVEL_TEC = 9,
+    MENU_LEVEL_SKILL = 10,
+    MENU_LEVEL_EXIT_REQUEST = 12, /* leave the menu with no screen to run */
+    MENU_LEVEL_QUIT = 0xFF        /* MainMenu's loop ends */
+};
+
 void *MenuWorkEndGet(void);
 void UmnMailBoxSet(int box_id);
 unsigned char *UmnMailDataGet(int box_id);

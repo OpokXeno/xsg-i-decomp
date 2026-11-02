@@ -5,6 +5,7 @@
 #include "main/game_init_camera.h"
 #include "main/xgl_font.h"
 #include "main/xgl_light.h"
+#include "camera.h"
 
 #define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
 #define va_end(ap) ((void)0)
@@ -41,9 +42,18 @@ static int dbCX = 0;
 
 static int dbCY = 0;
 
-static int dbCZ = 0x00FFFFFF;
+/* Debug text printer: depth (the 24-bit maximum), default line height, the
+ * buffer a formatted line is built in, and the font flags that mean debug
+ * text is on. */
+#define DB_DEPTH 0x00FFFFFF
+#define DB_LINE_HEIGHT 24
+#define DB_LINE_BUFFER_SIZE 0x100
+#define DB_PATH_PREFIX_SIZE 0x80
+#define DB_FONT_FLAGS_ON 3
 
-static int dbCH = 24;
+static int dbCZ = DB_DEPTH;
+
+static int dbCH = DB_LINE_HEIGHT;
 
 static int dbMODE = 0;
 
@@ -61,8 +71,8 @@ void GAME_initCamera(void)
     tcamera[0].view_offset.y = view_height;
     tcamera[0].translation_offset.z = translation_z;
     tcamera[0].translation_offset.y = translation_y;
-    tcamera[0].channel_mode[0] = 0x14;
-    tcamera[0].channel_mode[1] = 0x14;
+    tcamera[0].channel_mode[0] = CAMERA_MODE_CONSTANT;
+    tcamera[0].channel_mode[1] = CAMERA_MODE_CONSTANT;
     tcamera[0].translation_constraint = &actor;
     tcamera[0].view_constraint = &actor;
     tcamera[0].view_offset.x = 0.0f;
@@ -129,7 +139,7 @@ void DB_reset(int x, int y)
 {
     dbCX = x << 1;
     dbCY = y << 1;
-    dbCH = 24;
+    dbCH = DB_LINE_HEIGHT;
 }
 
 void DB_reset2(int x, int y, int line_height)
@@ -147,7 +157,7 @@ void DB_incPos(int x, int y)
 
 void DB_params(const char *text)
 {
-    if ((xglFontGetFlags() & 3) == 3) {
+    if ((xglFontGetFlags() & DB_FONT_FLAGS_ON) == DB_FONT_FLAGS_ON) {
         xglFontPrint(dbCX, dbCY, dbCZ, text);
     }
 }
@@ -155,9 +165,9 @@ void DB_params(const char *text)
 void DB_println(const char *format, ...)
 {
     va_list args;
-    char buffer[0x100];
+    char buffer[DB_LINE_BUFFER_SIZE];
 
-    if ((xglFontGetFlags() & 3) == 3) {
+    if ((xglFontGetFlags() & DB_FONT_FLAGS_ON) == DB_FONT_FLAGS_ON) {
         va_start(args, format);
         vsprintf(buffer, format, args);
         va_end(args);
@@ -171,9 +181,9 @@ void DB_println(const char *format, ...)
 int DB_printf(const char *format, ...)
 {
     va_list args;
-    char buffer[0x100];
+    char buffer[DB_LINE_BUFFER_SIZE];
 
-    if ((xglFontGetFlags() & 3) != 3) {
+    if ((xglFontGetFlags() & DB_FONT_FLAGS_ON) != DB_FONT_FLAGS_ON) {
         return 0;
     }
     va_start(args, format);
@@ -187,7 +197,7 @@ int DB_printf(const char *format, ...)
 void DB_pathGetShortPath(char *destination, const char *path, int max_width)
 {
     extern char *strrchr(const char *string, int character);
-    char prefix[0x80];
+    char prefix[DB_PATH_PREFIX_SIZE];
     char *first_slash;
     const char *last_slash;
     int prefix_length;

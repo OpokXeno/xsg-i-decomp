@@ -17,6 +17,48 @@
 #define SCAM_TAKE_DEFAULT_RATE 0.1f
 #define SCAM_TAKE_DEFAULT_RANGE 2.6f
 
+/* Effect viewer exit chord on PadData.buttons.packed: SELECT held (bit 8 of
+ * the held halfword) while START is pressed (bit 11 of the pressed halfword). */
+#define EFFECT_VIEWER_EXIT_CHORD 0x08000100
+
+/* Fixed EE RAM areas of the effect viewer. */
+#define EFFECT_VIEWER_FILE_LIST_ADDR 0x1000000
+#define EFFECT_VIEWER_FILE_LIST_SIZE 0x160000
+#define EFFECT_VIEWER_GRIDLEX_ADDR 0x1160000
+#define EFFECT_VIEWER_GRIDXTX_ADDR 0x1167200
+#define EFFECT_VIEWER_HAMALEX_ADDR 0x1168700
+#define EFFECT_VIEWER_HAMAXTX_ADDR 0x116AA00
+#define EFFECT_VIEWER_CF_SCRIPT_ADDR 0x1172F00
+
+/* File browser layout (rows on screen, margins). */
+#define EFFECT_VIEWER_FILE_ROWS 20
+#define EFFECT_VIEWER_FILE_TOP 20
+#define EFFECT_VIEWER_FILE_LEFT 8
+
+/* Effect number steps: L1/R1 move by 10, L2/R2 by 50, LEFT/RIGHT by 1. */
+#define EFFECT_SELECT_STEP_MEDIUM 10
+#define EFFECT_SELECT_STEP_COARSE 50
+
+/* Effect id ranges. */
+#define DB_EFFECT_BASE 3041       /* debug "db" effects are numbered from here */
+#define DB_EFFECT_MIN 1
+#define DB_EFFECT_MAX 30
+#define CF_EFFECT_FIRST 601       /* CF effect numbers: 601 .. CF_EFFECT_END - 1 */
+#define CF_EFFECT_END 2000
+#define EFFECT_WEAPON_BASE 2800   /* weapon effects: 200 ids from here */
+#define EFFECT_WEAPON_COUNT 200
+#define PLAYER_CHARA_COUNT 32     /* effect charaId 1..32 are player characters */
+
+/* Menu entries returned by debugEffectConfig, in menu_3 order (the
+ * ColliTest*Label strings). */
+enum EffectViewerMode {
+    EFFECT_VIEWER_BATTLE = 0,       /* ColliTestBattleLabel */
+    EFFECT_VIEWER_BATTLE_DEBUG = 1, /* ColliTestBattleDebugLabel */
+    EFFECT_VIEWER_CF_DEBUG = 2,     /* ColliTestCfDebugLabel */
+    EFFECT_VIEWER_DEBUG = 3,        /* ColliTestDebugLabel */
+    EFFECT_VIEWER_TITLE = 4         /* ColliTestTitleLabel */
+};
+
 /* The effect request block sefCreateEffect reads: the debug viewers fill the
  * actor links with zero and select the effect and its variant. */
 typedef struct SetPathEffectParams {
@@ -300,27 +342,27 @@ void initFileSelect(void)
     {
         CfSelectState *selector = &cfs;
         int *visibleRowLimit = &selector->visibleRows;
-        char *gridxtxStart = (char *) 0x1167200;
-        unsigned int gridlexAddress = 0x1160000;
+        char *gridxtxStart = (char *) EFFECT_VIEWER_GRIDXTX_ADDR;
+        unsigned int gridlexAddress = EFFECT_VIEWER_GRIDLEX_ADDR;
         char **resourceSlot = &gridlexTop;
 
-        selector->verticalOrigin = 20;
+        selector->verticalOrigin = EFFECT_VIEWER_FILE_TOP;
         selector->phase = 0;
         *resourceSlot = (char *) gridlexAddress;
         resourceSlot = &gridxtxTop;
         *resourceSlot = gridxtxStart;
         resourceSlot = &hamalexTop;
-        *resourceSlot = (char *) 0x1168700;
+        *resourceSlot = (char *) EFFECT_VIEWER_HAMALEX_ADDR;
         resourceSlot = &hamaxtxTop;
-        *resourceSlot = (char *) 0x116AA00;
+        *resourceSlot = (char *) EFFECT_VIEWER_HAMAXTX_ADDR;
         resourceSlot = &cfScript;
-        *resourceSlot = (char *) 0x1172F00;
-        *directorySlot = (char *) 0x1000000;
-        selector->horizontalOrigin = 8;
-        *visibleRowLimit = 20;
+        *resourceSlot = (char *) EFFECT_VIEWER_CF_SCRIPT_ADDR;
+        *directorySlot = (char *) EFFECT_VIEWER_FILE_LIST_ADDR;
+        selector->horizontalOrigin = EFFECT_VIEWER_FILE_LEFT;
+        *visibleRowLimit = EFFECT_VIEWER_FILE_ROWS;
         strcpy(selector->basePath, basepath);
         selector->listBuffer = *directorySlot;
-        selector->listSize = 0x160000;
+        selector->listSize = EFFECT_VIEWER_FILE_LIST_SIZE;
         selector->printFunc = xglFontDebugPrintf;
     }
 }
@@ -352,7 +394,7 @@ static void sdbExecEffect(void)
     u16 toggled;
     u16 debugPaused;
 
-    if (pad->buttons.halfwords.pressed & 0x800) {
+    if (pad->buttons.halfwords.pressed & PAD_START) {
         toggled = (_debugPause == 0);
         _debugPause = toggled;
         debugPaused = toggled;
@@ -360,7 +402,7 @@ static void sdbExecEffect(void)
         debugPaused = _debugPause;
     }
 
-    if (debugPaused == 0 || (pad->buttons.halfwords.repeat & 0x100)) {
+    if (debugPaused == 0 || (pad->buttons.halfwords.repeat & PAD_SELECT)) {
         sefExecEffect();
     } else {
         xglFontDebugPrintf(0x10, 0x18, pauseText);
@@ -415,16 +457,16 @@ static int debugEffectConfig(void)
         xglFontDebugPrintf(0x10, cur_2 * lineSpacing + 0x1c, setPathDebugCursorText);
         sdebufPrintMenu(0x10, 0x10, 0x10, menu_3, menumax_4);
 
-        if ((pad->buttons.packed & 0x08000100) == 0x08000100) {
+        if ((pad->buttons.packed & EFFECT_VIEWER_EXIT_CHORD) == EFFECT_VIEWER_EXIT_CHORD) {
             cur_2 = -1;
             break;
         }
 
         pressed = pad->buttons.halfwords.pressed;
-        if (pressed & 0x1000) {
+        if (pressed & PAD_UP) {
             cur_2 = cur_2 - 1;
         }
-        if (pressed & 0x4000) {
+        if (pressed & PAD_DOWN) {
             cur_2++;
         }
         if (cur_2 < 0) {
@@ -433,7 +475,7 @@ static int debugEffectConfig(void)
         if (cur_2 >= menumax_4) {
             cur_2 = 0;
         }
-        if (pressed & 0x20) {
+        if (pressed & PAD_CIRCLE) {
             break;
         }
         xglSleep();
@@ -454,20 +496,20 @@ static int debugEffectSelect(void)
         sprintf(text, debugDbSelectFormat, cur_5 / 10, cur_5 % 10, cur_5);
         xglFontDebugPrintf(0x10, 0x10, effectSelectionText);
         xglFontDebugPrintf(0x10, 0x20, text);
-        if ((PadData[0].buttons.packed & 0x08000100) == 0x08000100) {
+        if ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) == EFFECT_VIEWER_EXIT_CHORD) {
             cur_5 = -1;
             break;
         }
         repeat = PadData[0].buttons.halfwords.repeat;
-        if (repeat & 0x4) cur_5 -= 10;
-        if (repeat & 0x1) cur_5 -= 50;
-        if (repeat & 0x8000) cur_5--;
-        if (repeat & 0x2) cur_5 += 50;
-        if (repeat & 0x8) cur_5 += 10;
-        if (repeat & 0x2000) cur_5++;
-        if (cur_5 < 1) cur_5 = 30;
-        if (cur_5 >= 31) cur_5 = 1;
-        if (PadData[0].buttons.halfwords.pressed & 0x20) break;
+        if (repeat & PAD_L1) cur_5 -= EFFECT_SELECT_STEP_MEDIUM;
+        if (repeat & PAD_L2) cur_5 -= EFFECT_SELECT_STEP_COARSE;
+        if (repeat & PAD_LEFT) cur_5--;
+        if (repeat & PAD_R2) cur_5 += EFFECT_SELECT_STEP_COARSE;
+        if (repeat & PAD_R1) cur_5 += EFFECT_SELECT_STEP_MEDIUM;
+        if (repeat & PAD_RIGHT) cur_5++;
+        if (cur_5 < DB_EFFECT_MIN) cur_5 = DB_EFFECT_MAX;
+        if (cur_5 >= DB_EFFECT_MAX + 1) cur_5 = DB_EFFECT_MIN;
+        if (PadData[0].buttons.halfwords.pressed & PAD_CIRCLE) break;
         xglSleep();
     }
     xglSleep();
@@ -497,18 +539,18 @@ static int debugEnemySelect(void)
         }
         xglFontDebugPrintf(0x10, 0x10, comboEnemyEffectSelectText);
         xglFontDebugPrintf(0x10, 0x20, text);
-        if ((PadData[0].buttons.packed & 0x08000100) == 0x08000100) {
+        if ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) == EFFECT_VIEWER_EXIT_CHORD) {
             cur_6 = -1;
             break;
         }
         previous = cur_6;
         repeat = PadData[0].buttons.halfwords.repeat;
-        if (repeat & 0x4) cur_6 -= 10;
-        if (repeat & 0x1) cur_6 -= 50;
-        if (repeat & 0x8000) cur_6--;
-        if (repeat & 0x2) cur_6 += 50;
-        if (repeat & 0x8) cur_6 += 10;
-        if (repeat & 0x2000) cur_6++;
+        if (repeat & PAD_L1) cur_6 -= EFFECT_SELECT_STEP_MEDIUM;
+        if (repeat & PAD_L2) cur_6 -= EFFECT_SELECT_STEP_COARSE;
+        if (repeat & PAD_LEFT) cur_6--;
+        if (repeat & PAD_R2) cur_6 += EFFECT_SELECT_STEP_COARSE;
+        if (repeat & PAD_R1) cur_6 += EFFECT_SELECT_STEP_MEDIUM;
+        if (repeat & PAD_RIGHT) cur_6++;
         if (cur_6 <= 0) {
             cur_6 = 2998;
         } else if (cur_6 >= 600 && cur_6 <= 2000) {
@@ -520,7 +562,7 @@ static int debugEnemySelect(void)
         } else if (cur_6 >= 2999) {
             cur_6 = 1;
         }
-        if (PadData[0].buttons.halfwords.pressed & 0x20) break;
+        if (PadData[0].buttons.halfwords.pressed & PAD_CIRCLE) break;
         xglSleep();
     }
     xglSleep();
@@ -540,20 +582,20 @@ static int debugCfSelect(void)
         sprintf(text, enemySelectFormat, esd, cur_7);
         xglFontDebugPrintf(0x10, 0x10, cfEffectSelectText);
         xglFontDebugPrintf(0x10, 0x20, text);
-        if ((PadData[0].buttons.packed & 0x08000100) == 0x08000100) {
+        if ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) == EFFECT_VIEWER_EXIT_CHORD) {
             cur_7 = -1;
             break;
         }
         repeat = PadData[0].buttons.halfwords.repeat;
-        if (repeat & 0x4) cur_7 -= 10;
-        if (repeat & 0x1) cur_7 -= 50;
-        if (repeat & 0x8000) cur_7--;
-        if (repeat & 0x2) cur_7 += 50;
-        if (repeat & 0x8) cur_7 += 10;
-        if (repeat & 0x2000) cur_7++;
-        if (cur_7 < 601) cur_7 = 1999;
-        if (cur_7 >= 2000) cur_7 = 601;
-        if (PadData[0].buttons.halfwords.pressed & 0x20) break;
+        if (repeat & PAD_L1) cur_7 -= EFFECT_SELECT_STEP_MEDIUM;
+        if (repeat & PAD_L2) cur_7 -= EFFECT_SELECT_STEP_COARSE;
+        if (repeat & PAD_LEFT) cur_7--;
+        if (repeat & PAD_R2) cur_7 += EFFECT_SELECT_STEP_COARSE;
+        if (repeat & PAD_R1) cur_7 += EFFECT_SELECT_STEP_MEDIUM;
+        if (repeat & PAD_RIGHT) cur_7++;
+        if (cur_7 < CF_EFFECT_FIRST) cur_7 = CF_EFFECT_END - 1;
+        if (cur_7 >= CF_EFFECT_END) cur_7 = CF_EFFECT_FIRST;
+        if (PadData[0].buttons.halfwords.pressed & PAD_CIRCLE) break;
         xglSleep();
     }
     xglSleep();
@@ -648,25 +690,25 @@ static void seffectDebugDb(void)
     }
 
     sefInitEffectBattle();
-    effect += 3041;
+    effect += DB_EFFECT_BASE;
     dummyMapLoad();
     sefLoadEffect(effect, 1);
     prm_8.actor = 0;
     prm_8.target = 0;
     prm_8.effectId = effect;
 
-    while ((PadData[0].buttons.packed & 0x08000100) != 0x08000100) {
+    while ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) != EFFECT_VIEWER_EXIT_CHORD) {
         xglRenderClearFrame();
         if (sefCheckLoad() == 0) {
             xglFontDebugPrintf(8, 8, pressConfirmToStartText);
-            if (PadData[0].buttons.halfwords.pressed & 0x20) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_CIRCLE) {
                 sefCreateEffect(&prm_8);
             }
             _sdrawFloor = 1;
-            if (PadData[0].buttons.halfwords.pressed & 0x4) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_L1) {
                 casdisp = (casdisp == 0);
             }
-            if (PadData[0].buttons.halfwords.pressed & 0x1) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_L2) {
                 tgtdisp = (tgtdisp == 0);
             }
             dummyMapDraw();
@@ -708,29 +750,29 @@ static void seffectDebugCf(void)
     dummyMapLoad();
     sefLoadEffectCf((int)cfScript, effect);
 
-    while ((PadData[0].buttons.packed & 0x08000100) != 0x08000100) {
+    while ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) != EFFECT_VIEWER_EXIT_CHORD) {
         xglRenderClearFrame();
         if (sefCheckLoad() == 0) {
             xglFontDebugPrintf(8, 8, pressConfirmToStartText);
-            if (PadData[0].buttons.halfwords.pressed & 0x20) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_CIRCLE) {
                 handle_9 = sefCreateEffectCf(
                     effect, &point_10, &angle_11);
             }
-            if (PadData[0].buttons.halfwords.pressed & 0x80) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_SQUARE) {
                 sefKillEffect(effect);
             }
-            if (PadData[0].buttons.halfwords.pressed & 0x8) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_R1) {
                 mapdisp = (mapdisp == 0);
             }
-            if (PadData[0].buttons.halfwords.repeat & 0x2) {
+            if (PadData[0].buttons.halfwords.repeat & PAD_R2) {
                 if (handle_9 != 0) {
                     handle_9->display = (handle_9->display == 0);
                 }
             }
-            if (PadData[0].buttons.halfwords.pressed & 0x4) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_L1) {
                 casdisp = (casdisp == 0);
             }
-            if (PadData[0].buttons.halfwords.pressed & 0x1) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_L2) {
                 tgtdisp = (tgtdisp == 0);
             }
             _sdrawFloor = 1;
@@ -772,13 +814,13 @@ static void seffectDebugBattle(void)
     srsAnalyzeEftNo(effect, &eftInfo.kind, &eftInfo.variant);
     if (eftInfo.kind > 0) {
         weapon = 0;
-        if ((unsigned int) (effect - 2800) < 200) {
+        if ((unsigned int) (effect - EFFECT_WEAPON_BASE) < EFFECT_WEAPON_COUNT) {
             weapon = srsEftNo2WeaponID(effect);
             eftInfo.kind = 17;
         }
-        if ((unsigned int) (eftInfo.kind - 1) < 32) {
+        if ((unsigned int) (eftInfo.kind - 1) < PLAYER_CHARA_COUNT) {
             sefSetupPlayer(eftInfo.kind, weapon, 0, 0);
-        } else if (eftInfo.kind > 32) {
+        } else if (eftInfo.kind > PLAYER_CHARA_COUNT) {
             sefSetupEnemy(eftInfo.kind);
         }
         sefSetupEffect();
@@ -804,30 +846,30 @@ static void seffectDebugBattle(void)
     }
     sefLoadEffect(effect, prm_13.charaId);
 
-    while ((PadData[0].buttons.packed & 0x08000100) != 0x08000100) {
-        if (PadData[0].buttons.halfwords.pressed & 0x8) {
+    while ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) != EFFECT_VIEWER_EXIT_CHORD) {
+        if (PadData[0].buttons.halfwords.pressed & PAD_R1) {
             mapdisp = (mapdisp == 0);
         }
-        if (PadData[0].buttons.halfwords.pressed & 0x4) {
+        if (PadData[0].buttons.halfwords.pressed & PAD_L1) {
             casdisp = (casdisp == 0);
         }
-        if (PadData[0].buttons.halfwords.pressed & 0x1) {
+        if (PadData[0].buttons.halfwords.pressed & PAD_L2) {
             tgtdisp = (tgtdisp == 0);
         }
-        if (PadData[0].buttons.halfwords.pressed & 0x10) {
+        if (PadData[0].buttons.halfwords.pressed & PAD_TRIANGLE) {
             SCamTake();
         }
-        if (PadData[0].buttons.halfwords.pressed & 0x80) {
+        if (PadData[0].buttons.halfwords.pressed & PAD_SQUARE) {
             func_A31840();
         }
         xglRenderClearFrame();
         _sdrawFloor = 1;
         if (sefCheckLoad() == 0) {
             xglFontDebugPrintf(8, 8, pressConfirmToStartText);
-            if (PadData[0].buttons.halfwords.pressed & 0x20) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_CIRCLE) {
                 sefCreateEffect(&prm_13);
             }
-            if (PadData[0].buttons.halfwords.pressed & 0x40) {
+            if (PadData[0].buttons.halfwords.pressed & PAD_CROSS) {
                 sefHitEffect();
             }
             dummyMapDraw();
@@ -938,19 +980,19 @@ void SimajiriTest(void)
         }
         xglSleep();
         xglRenderClearFrame();
-        if (sftMode == 0) {
+        if (sftMode == EFFECT_VIEWER_BATTLE) {
             sbattleDebug();
-        } else if (sftMode == 1) {
+        } else if (sftMode == EFFECT_VIEWER_BATTLE_DEBUG) {
             seffectDebugBattle();
-        } else if (sftMode == 2) {
+        } else if (sftMode == EFFECT_VIEWER_CF_DEBUG) {
             seffectDebugCf();
-        } else if (sftMode == 3) {
+        } else if (sftMode == EFFECT_VIEWER_DEBUG) {
             seffectDebugDb();
         }
         func_A31840();
         sefDestroyEffect();
         xglRenderClearFrame();
-        if (sftMode == 4) return;
+        if (sftMode == EFFECT_VIEWER_TITLE) return;
     }
 }
 
@@ -1035,7 +1077,7 @@ static int cur_6 = 1;
 
 char enemySelectFormat[8] = "%s : %d";
 
-static int cur_7 = 0x259;
+static int cur_7 = CF_EFFECT_FIRST;
 
 static SchedulerState *handle_9 = 0;
 

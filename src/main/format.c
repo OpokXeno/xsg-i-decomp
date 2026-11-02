@@ -11,6 +11,9 @@
  */
 typedef struct JThread JThread;
 
+/* Byte capacity of the buffer each Format.toString native formats into. */
+#define FORMAT_STRING_CAPACITY 255
+
 extern unsigned int strlen(const char *string);
 
 FormatString *JAVA_tmpString = 0;
@@ -43,7 +46,7 @@ void Java_xeno_util_Format_toString__C(JThread *thread, VMSlot *arguments,
     int character;
 
     string = newObject(classString);
-    allocated_array = newArray(classByte, 255);
+    allocated_array = newArray(classByte, FORMAT_STRING_CAPACITY);
     string->value = allocated_array;
     character = arguments[0].s;
     sprintf((char *)allocated_array->data, integerFormat, character);
@@ -60,7 +63,7 @@ void Java_xeno_util_Format_toString__F(JThread *thread, float *arguments,
 
     if (JAVA_tmpString == 0) {
         JAVA_tmpString = newObject(classString);
-        JAVA_tmpString->value = newArray(classByte, 255);
+        JAVA_tmpString->value = newArray(classByte, FORMAT_STRING_CAPACITY);
     }
 
     sprintf((char *)JAVA_tmpString->value->data, floatFormat, (double)arguments[0]);
@@ -79,7 +82,7 @@ void Java_xeno_util_Format_toString__I(JThread *thread, int *arguments,
 
     if (JAVA_tmpString == 0) {
         JAVA_tmpString = newObject(classString);
-        JAVA_tmpString->value = newArray(classByte, 255);
+        JAVA_tmpString->value = newArray(classByte, FORMAT_STRING_CAPACITY);
     }
 
     source_array = JAVA_tmpString->value;
@@ -101,7 +104,7 @@ void Java_xeno_util_Format_toString__Z(JThread *thread,
     string = JAVA_tmpString;
     if (string == 0) {
         JAVA_tmpString = newObject(classString);
-        JAVA_tmpString->value = newArray(classByte, 255);
+        JAVA_tmpString->value = newArray(classByte, FORMAT_STRING_CAPACITY);
         string = JAVA_tmpString;
     }
 

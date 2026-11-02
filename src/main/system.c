@@ -84,8 +84,8 @@ void *Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II(
         element_class = element_class->element_class;
     }
 
-    element_width = 4;
-    if (element_class->flags & 0x100) {
+    element_width = sizeof(int);
+    if (element_class->flags & VM_CLASS_FLAG_PRIMITIVE) {
         element_width = element_class->element_width;
     }
 
@@ -108,13 +108,13 @@ void Java_xeno_vm_System_sleep__I(SceneVm *vm, const VMSlot *arguments,
     int frames;
     struct JThread *thread = vm;
 
-    if ((thread->flags & 4) == 0) {
+    if ((thread->flags & JTHREAD_FLAG_CALL_RUNNING) == 0) {
         u16 suspendedFrame;
 
-        thread->wait_kind = 1;
+        thread->wait_kind = JTHREAD_WAIT_FRAMES;
         suspendedFrame = thread->frame_depth;
 
-        thread->flags |= 4;
+        thread->flags |= JTHREAD_FLAG_CALL_RUNNING;
         thread->resume_frames = suspendedFrame;
         thread->wait_target.elapsed_frames = 0;
         frames = arguments[0].i;
@@ -224,14 +224,14 @@ static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
     } else if (JNI_isInstanceOf(wait_target, classJava_xeno_Stage) == 1) {
         waitClass = classJava_xeno_Stage;
     } else if (JNI_isInstanceOf(wait_target, classJava_xeno_util_Menu) == 1) {
-        int suspendedKind = 3;
-        unsigned int suspendedFlags = thread->flags | 4;
+        int suspendedKind = JTHREAD_WAIT_COMPONENT;
+        unsigned int suspendedFlags = thread->flags | JTHREAD_FLAG_CALL_RUNNING;
         unsigned short resumeFrames = thread->frame_depth;
         SYSTEM_COMMIT_WAIT_STATE(thread, wait_target, suspendedKind, resumeFrames, suspendedFlags);
         return;
     } else if (JNI_isInstanceOf(wait_target, classJava_xeno_util_Window) == 1) {
-        int suspendedKind = 3;
-        unsigned int suspendedFlags = thread->flags | 4;
+        int suspendedKind = JTHREAD_WAIT_COMPONENT;
+        unsigned int suspendedFlags = thread->flags | JTHREAD_FLAG_CALL_RUNNING;
         unsigned short resumeFrames = thread->frame_depth;
         SYSTEM_COMMIT_WAIT_STATE(thread, wait_target, suspendedKind, resumeFrames, suspendedFlags);
         return;
@@ -250,14 +250,14 @@ static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
             if (targetThread == thread) {
                 break;
             }
-            suspendedFlags = thread->flags | 4;
+            suspendedFlags = thread->flags | JTHREAD_FLAG_CALL_RUNNING;
             resumeFrames = thread->frame_depth;
-            SYSTEM_COMMIT_WAIT_STATE(thread, targetThread, 2, resumeFrames, suspendedFlags);
+            SYSTEM_COMMIT_WAIT_STATE(thread, targetThread, JTHREAD_WAIT_THREAD, resumeFrames, suspendedFlags);
             break;
             }
-        case 5:
+        case JTHREAD_WAIT_SIGNAL:
             {
-                unsigned int suspendedFlags = thread->flags | 4;
+                unsigned int suspendedFlags = thread->flags | JTHREAD_FLAG_CALL_RUNNING;
                 thread->wait_parameter = wait_parameter;
                 thread->wait_kind = wait_kind;
                 thread->resume_frames = thread->frame_depth;

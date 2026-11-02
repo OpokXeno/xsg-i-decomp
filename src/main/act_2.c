@@ -13,6 +13,34 @@
 #include "main/xgl_studio.h"
 #include "quadword.h"
 
+/* Animation slot constants. */
+#define ANIM_MOTION_CLEAR 0x80000000U /* ACT_setMotion id that drops the current motion */
+#define ANIM_DATA_ID_MASK 0x7ff
+#define ANIM_DATA_ID_NONE 0xffff /* currentDataId / nextDataId with nothing queued */
+#define ANIM_SPEED_DEFAULT 0.033333335f /* one frame per 1/30 s tick */
+#define ANIM_BLEND_DURATION_DEFAULT 0.26666668f /* 8 ticks */
+
+/* Accessory and relation ids understood by ACT_setArms / ACT_setRelation. */
+#define ACT_ACCESSORY_COUNT 0x29
+#define ACT_ACCESSORY_ARMS 0x108
+#define ACT_RELATION_JOINT_FLAG 0x8000 /* relation is an accessory selector */
+#define ACT_RELATION_KIND_MASK 0x7f00
+#define ACT_RELATION_KIND_ARMS 0x100
+#define ACT_RELATION_KIND_FACE 0x200
+#define ACT_RELATION_INDEX_MASK 0x7fff
+#define ACT_JOINT_SEBO 36
+#define ACT_JOINT_HEAD 48 /* the face model hangs off the head joint */
+#define ACT_JOINT_HAND 0x42
+#define ACT_PART_FACE 0x46414345 /* "FACE" */
+
+/* ACT_setHumanHand: each half of `hand` selects a hand model, 0x80 means none. */
+#define HAND_SELECT_MASK 0x87
+#define HAND_SELECT_NONE 0x80
+#define HAND_SUFFIX_LEFT 0x5f4c0000 /* "_L" */
+#define HAND_SUFFIX_RIGHT 0x5f520000 /* "_R" */
+#define HAND_FULL_NAME_MASK 0xffffffff
+#define HAND_SUFFIX_ONLY_MASK 0xffff0000
+
 /* Partial shape binding: original lhu loads +2 for the 0x40-byte joint
  * matrix index and +4 for the shape identifier passed to the model renderer. */
 typedef struct ActorShapeBinding {
@@ -355,7 +383,7 @@ int ACT_jointGetAccessories(Actor *actor, unsigned int accessoryId)
         accessories = actor->jointProducer.accessory_joints;
     }
     emptyTable = 0;
-    if (accessories != emptyTable && accessoryId < 0x29) {
+    if (accessories != emptyTable && accessoryId < ACT_ACCESSORY_COUNT) {
         result = accessories->jointId[accessoryId];
     }
     return result;
@@ -363,7 +391,7 @@ int ACT_jointGetAccessories(Actor *actor, unsigned int accessoryId)
 
 void ACT_resetArms(Actor *actor, Actor *other, int acc_id)
 {
-    if (acc_id == 0x108) {
+    if (acc_id == ACT_ACCESSORY_ARMS) {
         ACT_resetParent(actor, other);
         ACT_setHumanHand(other, 0);
     }
@@ -380,8 +408,8 @@ Actor *ACT_setArms(Actor *actor, Actor *parent, unsigned int accessoryId, int fl
         } else {
             actor = 0;
         }
-    } else if (accessoryId == 0x108) {
-        actor = ACT_setParent(actor, 2, parent, 0x42, flags | 2);
+    } else if (accessoryId == ACT_ACCESSORY_ARMS) {
+        actor = ACT_setParent(actor, 2, parent, ACT_JOINT_HAND, flags | 2);
         ACT_setHumanHand(parent, 0x8007);
     }
     return actor;
@@ -393,24 +421,24 @@ Actor *ACT_setRelation(Actor *actor, Actor *parent, int relation, int flags)
     int type;
     void (*filter)(void *work, void *parameter, int flags);
 
-    if ((relation & 0x8000) != 0) {
-        switch (relation & 0x7f00) {
+    if ((relation & ACT_RELATION_JOINT_FLAG) != 0) {
+        switch (relation & ACT_RELATION_KIND_MASK) {
         case 0:
-            joint = ACT_jointGetAccessories(parent, relation & 0x7fff);
+            joint = ACT_jointGetAccessories(parent, relation & ACT_RELATION_INDEX_MASK);
             type = 0;
             filter = JC_setParent;
             break;
-        case 0x100:
+        case ACT_RELATION_KIND_ARMS:
             filter = (void (*)(void *, void *, int))JC_copyChain;
-            joint = 0x42;
+            joint = ACT_JOINT_HAND;
             type = 2;
             ACT_setHumanHand(parent, 0x8007);
             break;
-        case 0x200:
+        case ACT_RELATION_KIND_FACE:
             filter = JC_face;
-            joint = 0x30;
+            joint = ACT_JOINT_HEAD;
             type = 2;
-            ACT_setVisible(parent, 0x46414345, 0);
+            ACT_setVisible(parent, ACT_PART_FACE, 0);
             break;
         default:
             joint = 0;
@@ -419,7 +447,7 @@ Actor *ACT_setRelation(Actor *actor, Actor *parent, int relation, int flags)
             break;
         }
     } else {
-        joint = relation & 0x7fff;
+        joint = relation & ACT_RELATION_INDEX_MASK;
         type = 0;
         filter = JC_setParent;
     }
@@ -437,9 +465,9 @@ Actor *ACT_setFace(Actor *actor, Actor *parent, int faceId)
 {
     Actor *result;
 
-    result = ACT_setParent(actor, 2, parent, 0x30, faceId);
+    result = ACT_setParent(actor, 2, parent, ACT_JOINT_HEAD, faceId);
     if (result != 0) {
-        ACT_setVisible(parent, 0x46414345, 0);
+        ACT_setVisible(parent, ACT_PART_FACE, 0);
     }
     return result;
 }
@@ -490,7 +518,7 @@ void ACT_updateMotionPause(Actor *actor)
 
 static inline void ACT_runQueuedMotion(Actor *actor, ActorAnimSlot *queue)
 {
-    if ((queue->flags & 0x1000) && queue->nextDataId != 0xffff) {
+    if ((queue->flags & 0x1000) && queue->nextDataId != ANIM_DATA_ID_NONE) {
         if ((unsigned int)actor != GameLoopState[1] || enepc[0].encount_lock == 0) {
             ACT_setMotion2(actor, queue->nextDataId, queue->animQueuedFlags);
         }
@@ -735,7 +763,7 @@ static void ACT_modelDrawSub(Actor *actor)
     drawHook = actor->draw;
     flagsNow = actor->flags;
     parent = actor->parent;
-    if ((flagsNow & 0x800) == 0) {
+    if ((flagsNow & ACTOR_FLAG_TRANSLUCENT) == 0) {
         if (((unsigned int)drawHook - 0x1f0000 < 0x1e10000) && (((unsigned int)drawHook & 3) == 0)) {
             drawHook(actor);
             flagsNow = actor->flags;
@@ -747,7 +775,7 @@ static void ACT_modelDrawSub(Actor *actor)
                 parentFlags = parent->flags;
             }
             drawHook = parent->draw;
-            if ((parentFlags & 0x800) != 0) {
+            if ((parentFlags & ACTOR_FLAG_TRANSLUCENT) != 0) {
                 ACT_setDrawEnv(parent);
             } else {
                 if (((unsigned int)drawHook - 0x1f0000 < 0x1e10000) && (((unsigned int)drawHook & 3) == 0)) {
@@ -963,12 +991,12 @@ void ACT_initMotion(Actor *actor)
     unsigned short channelMask = 0x1ff;
     int flags = 8;
 
-    slot->currentDataId = 0xffff;
-    slot->nextDataId = 0xffff;
+    slot->currentDataId = ANIM_DATA_ID_NONE;
+    slot->nextDataId = ANIM_DATA_ID_NONE;
     slot->flags = flags;
     slot->channelMask = channelMask;
-    slot->speed = 0.033333335f;
-    animation->blendDuration = 0.26666668f;
+    slot->speed = ANIM_SPEED_DEFAULT;
+    animation->blendDuration = ANIM_BLEND_DURATION_DEFAULT;
     animation->blendWork[2] = 0;
     animation->blendWork[0] = 0;
     animation->blendWork[1] = 0;
@@ -988,7 +1016,7 @@ void ACT_initMotion(Actor *actor)
         }
 
         enemyIndex = actor->number;
-        if (enemyIndex < 16) {
+        if (enemyIndex < ENEMY_COUNT) {
             enepc[enemyIndex].look_target.lookat_point = 0;
             enepc[enemyIndex].look_target.control = 0;
             enepc[enemyIndex].look_angles.x = enepc[enemyIndex].look_angles.y = enepc[enemyIndex].look_angles.z = 0.0f;
@@ -1000,8 +1028,8 @@ void ACT_initMotion(Actor *actor)
             max[1] = 1.39626348f;
             max[2] = 1.91986215f;
         }
-        JNT_addConsumer(&actor->jointProducer, 36, LOOK_sebo_cont, (int)actor);
-        JNT_addConsumer(&actor->jointProducer, 48, LOOK_head_cont, (int)actor);
+        JNT_addConsumer(&actor->jointProducer, ACT_JOINT_SEBO, LOOK_sebo_cont, (int)actor);
+        JNT_addConsumer(&actor->jointProducer, ACT_JOINT_HEAD, LOOK_head_cont, (int)actor);
     } while (0);
 }
 
@@ -1010,7 +1038,7 @@ void ACT_setMotion(Actor *actor, int motionId)
     ActorAnimationState *animation = &actor->animation;
     ActorAnimSlot *slot = &animation->slot;
 
-    if (motionId == 0x80000000U) {
+    if (motionId == ANIM_MOTION_CLEAR) {
         void *move;
         void *model;
 
@@ -1019,7 +1047,7 @@ void ACT_setMotion(Actor *actor, int motionId)
         animation->animData = 0;
         animation->animUserData = 0;
         animation->slot.flags &= 0xdfffeff6;
-        animation->slot.speed = 0.033333335f;
+        animation->slot.speed = ANIM_SPEED_DEFAULT;
         animation->slot.currentDataId = 0;
         animation->slot.frame = 0;
         animation->slot.reverseLimit = 0;
@@ -1035,8 +1063,8 @@ void ACT_setMotion(Actor *actor, int motionId)
     if (slot->currentDataId == motionId && (slot->flags & 0x20000000) == 0) {
         return;
     }
-    slot->currentDataId = motionId & 0x7ff;
-    slot->nextDataId = 0xffff;
+    slot->currentDataId = motionId & ANIM_DATA_ID_MASK;
+    slot->nextDataId = ANIM_DATA_ID_NONE;
     slot->animQueuedFlags = 0;
     ANM_reset(slot, actor->animPackTables[(motionId >> 8) & 7]);
     slot->flags = (slot->flags & 0xdffffff6) | 0x10000;
@@ -1049,7 +1077,7 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
     unsigned int slotFlags;
     unsigned int bank;
 
-    if (motionId == 0x80000000U) {
+    if (motionId == ANIM_MOTION_CLEAR) {
         void *move;
         void *model;
 
@@ -1060,7 +1088,7 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
         animation->animUserData = 0u;
         slot->flags &= 0xdfffeff6u;
         slot->frame = 0.0f;
-        slot->speed = 0.033333335f;
+        slot->speed = ANIM_SPEED_DEFAULT;
         slot->reverseLimit = 0.0f;
         slot->forwardLimit = 0.0f;
         move = actor->move;
@@ -1077,7 +1105,7 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
                 slotFlags = slot->flags;
                 if (0 == (slotFlags & 0x2)) {
                     flags |= 0x10000;
-                } else if (slot->nextDataId == 0xffff) {
+                } else if (slot->nextDataId == ANIM_DATA_ID_NONE) {
                     void *swapTmp;
                     void *valueTmp;
 
@@ -1097,8 +1125,8 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
                     actor->valueRecords = swapTmp;
                     QuadwordCopyMatrix(actor->jointMatrices, actor->previousJointMatrices);
                     animation->previousDataId = slot->currentDataId;
-                    slot->nextDataId = 0xffff;
-                    slot->currentDataId = motionId & 0x7ff;
+                    slot->nextDataId = ANIM_DATA_ID_NONE;
+                    slot->currentDataId = motionId & ANIM_DATA_ID_MASK;
                     flags &= 0xdfffffff;
                     slot->flags = (slot->flags & 0xdffffff7) | flags;
                     slot->animQueuedFlags = 0;
@@ -1108,8 +1136,8 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
                 }
             }
             animation->previousDataId = slot->currentDataId;
-            slot->nextDataId = 0xffff;
-            slot->currentDataId = motionId & 0x7ff;
+            slot->nextDataId = ANIM_DATA_ID_NONE;
+            slot->currentDataId = motionId & ANIM_DATA_ID_MASK;
             flags &= 0xdfffffff;
             slot->flags = (slotFlags & 0xdffffff6) | flags;
             slot->animQueuedFlags = 0;
@@ -1124,7 +1152,7 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
 
 void *ACT_animGetData(Actor *actor, unsigned int dataId)
 {
-    dataId &= 0x7ff;
+    dataId &= ANIM_DATA_ID_MASK;
     return PACK_getEntry(actor->animPackTables[dataId >> 8], dataId & 0xff);
 }
 
@@ -1174,7 +1202,7 @@ void ACT_initExMotion(Actor *target, unsigned int slot, void *motion)
     int i;
 
     if (target == 0) {
-        for (i = 0; i < 64; i++) {
+        for (i = 0; i < ACTOR_COUNT; i++) {
             actor[i].animPackTables[slot] = motion;
         }
         return;
@@ -1200,48 +1228,48 @@ void ACT_setHumanHand(Actor *actor, int hand)
     unsigned int pattern[4];
 
     if ((actor->flags & 0x4000) != 0) {
-        right = hand & 0x87;
-        left = (hand >> 8) & 0x87;
+        right = hand & HAND_SELECT_MASK;
+        left = (hand >> 8) & HAND_SELECT_MASK;
         if (left != right) {
-            if (left != 0x80) {
+            if (left != HAND_SELECT_NONE) {
                 for (handNameIndex = 0; tblHand[handNameIndex] != 0; handNameIndex++) {
-                    pattern[HAND_SUFFIX] = 0x5f4c0000;
-                    pattern[HAND_NAME_MASK] = 0xffffffff;
-                    pattern[HAND_SUFFIX_MASK] = 0xffff0000;
+                    pattern[HAND_SUFFIX] = HAND_SUFFIX_LEFT;
+                    pattern[HAND_NAME_MASK] = HAND_FULL_NAME_MASK;
+                    pattern[HAND_SUFFIX_MASK] = HAND_SUFFIX_ONLY_MASK;
                     pattern[HAND_NAME] = tblHand[handNameIndex];
                     MDL_setNameVisible(actor->model, &pattern, 0);
                 }
                 pattern[HAND_NAME] = tblHand[left];
-                pattern[HAND_SUFFIX] = 0x5f4c0000;
-                pattern[HAND_NAME_MASK] = 0xffffffff;
-                pattern[HAND_SUFFIX_MASK] = 0xffff0000;
+                pattern[HAND_SUFFIX] = HAND_SUFFIX_LEFT;
+                pattern[HAND_NAME_MASK] = HAND_FULL_NAME_MASK;
+                pattern[HAND_SUFFIX_MASK] = HAND_SUFFIX_ONLY_MASK;
                 MDL_setNameVisible(actor->model, &pattern, 1);
             }
-            if (right != 0x80) {
+            if (right != HAND_SELECT_NONE) {
                 for (handNameIndex = 0; tblHand[handNameIndex] != 0; handNameIndex++) {
-                    pattern[HAND_SUFFIX] = 0x5f520000;
-                    pattern[HAND_NAME_MASK] = 0xffffffff;
-                    pattern[HAND_SUFFIX_MASK] = 0xffff0000;
+                    pattern[HAND_SUFFIX] = HAND_SUFFIX_RIGHT;
+                    pattern[HAND_NAME_MASK] = HAND_FULL_NAME_MASK;
+                    pattern[HAND_SUFFIX_MASK] = HAND_SUFFIX_ONLY_MASK;
                     pattern[HAND_NAME] = tblHand[handNameIndex];
                     MDL_setNameVisible(actor->model, &pattern, 0);
                 }
                 pattern[HAND_NAME] = tblHand[right];
-                pattern[HAND_SUFFIX] = 0x5f520000;
-                pattern[HAND_NAME_MASK] = 0xffffffff;
-                pattern[HAND_SUFFIX_MASK] = 0xffff0000;
+                pattern[HAND_SUFFIX] = HAND_SUFFIX_RIGHT;
+                pattern[HAND_NAME_MASK] = HAND_FULL_NAME_MASK;
+                pattern[HAND_SUFFIX_MASK] = HAND_SUFFIX_ONLY_MASK;
                 MDL_setNameVisible(actor->model, &pattern, 1);
             }
-        } else if (left != 0x80) {
+        } else if (left != HAND_SELECT_NONE) {
             for (handNameIndex = 0; tblHand[handNameIndex] != 0; handNameIndex++) {
                 pattern[HAND_SUFFIX] = 0;
-                pattern[HAND_NAME_MASK] = 0xffffffff;
+                pattern[HAND_NAME_MASK] = HAND_FULL_NAME_MASK;
                 pattern[HAND_SUFFIX_MASK] = 0;
                 pattern[HAND_NAME] = tblHand[handNameIndex];
                 MDL_setNameVisible(actor->model, &pattern, 0);
             }
             pattern[HAND_NAME] = tblHand[left];
             pattern[HAND_SUFFIX] = 0;
-            pattern[HAND_NAME_MASK] = 0xffffffff;
+            pattern[HAND_NAME_MASK] = HAND_FULL_NAME_MASK;
             pattern[HAND_SUFFIX_MASK] = 0;
             MDL_setNameVisible(actor->model, &pattern, 1);
         }

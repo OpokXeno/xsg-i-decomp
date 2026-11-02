@@ -15,6 +15,53 @@
 #include "main/xgl_font.h"
 #include "vu0_macro.h"
 
+/* Resource regions: the memory pool is cut into MENU_MODEL_REGION_COUNT
+ * regions and resource requests queue in MENU_MODEL_REGION_COUNT records. */
+#define MENU_MODEL_REGION_COUNT 16
+#define MENU_MODEL_SUBWINDOW_COUNT 3
+
+/* MenuModelFlag */
+#define MENU_MODEL_FLAG_BREAK 1        /* cancel everything (MenuModelAllBreak) */
+#define MENU_MODEL_FLAG_MOTION_LOADED 2 /* menu motion pack is resident */
+
+/* Resource ids with this bit select the shared menu motion pack. */
+#define MENU_MODEL_MOTION_ID_FLAG 0x8000
+#define MENU_MODEL_MEMORY_TYPE_MOTION 4
+
+/* MenuModelMemorySet layouts, named for the screen that selects them. */
+enum {
+    MENU_MODEL_MEMORY_NONE = -1, /* set by MenuModelMemoryInit */
+    MENU_MODEL_MEMORY_MAIN_MENU = 10,
+    MENU_MODEL_MEMORY_AGWS = 11,
+    MENU_MODEL_MEMORY_TRIPLE_UNIT = 12, /* three full unit regions */
+    MENU_MODEL_MEMORY_SHOP = 20
+};
+
+/* Unit and weapon task phases (taskPhase). */
+enum {
+    MENU_MODEL_PHASE_INIT = 0,
+    MENU_MODEL_PHASE_WAIT_RESOURCE = 1,
+    MENU_MODEL_PHASE_SPAWN = 2,
+    MENU_MODEL_PHASE_RUN = 10,
+    MENU_MODEL_PHASE_END = 255
+};
+
+/* Draw types MenuModelUnitOpen / MenuModelWeaponOpen apply to an actor. */
+enum {
+    MENU_MODEL_DRAW_SHOW = 0,    /* fully opaque */
+    MENU_MODEL_DRAW_HIDE = 1,    /* fully transparent */
+    MENU_MODEL_DRAW_FADE_IN = 2,
+    MENU_MODEL_DRAW_FADE_OUT = 3,
+    MENU_MODEL_DRAW_FADE_OUT_PARTIAL = 4 /* stops at a minimum opacity */
+};
+
+/* Unit model ids: characters 1..11, AGWS units 17..28. */
+#define MENU_MODEL_CHARACTER_COUNT 11
+#define MENU_MODEL_AGWS_ID_BASE 17
+#define MENU_MODEL_AGWS_COUNT 12
+
+#define MENU_MODEL_PIXEL_ALPHA 0x75
+
 typedef struct MenuModelScaleLimits {
     float value[2];
 } MenuModelScaleLimits;
@@ -120,7 +167,7 @@ typedef struct MenuModelMemoryStateBuffer {
     int state; /* +0x0: memory-state code; 10-12 or 20 support menu motion */
     void *base; /* +0x4 */
     int size; /* +0x8 */
-    MenuModelResourceAccess regions[16]; /* +0xC */
+    MenuModelResourceAccess regions[MENU_MODEL_REGION_COUNT]; /* +0xC */
 } MenuModelMemoryStateBuffer;
 
 /* Record zero is the active request; the remaining fifteen records are queued.
@@ -135,7 +182,7 @@ typedef struct MenuModelResourceRequestRecord {
 typedef struct MenuModelResourceStateBuffer {
     unsigned int resetWord;
     struct MenuModelResourceAccess *resource;
-    MenuModelResourceRequestRecord requests[16];
+    MenuModelResourceRequestRecord requests[MENU_MODEL_REGION_COUNT];
     MenuModelResourceAccess *motionHandle;
 } MenuModelResourceStateBuffer;
 
@@ -154,7 +201,7 @@ typedef struct MenuModelTaskWork {
     void *resource;
     void *resource2;
     struct MenuModelTaskWork *owner;
-    struct MenuModelTaskWork *weapon[3];
+    struct MenuModelTaskWork *weapon[MENU_MODEL_WEAPON_COUNT];
     void *extFunc;
     void *extContext;
     int *result;
@@ -233,7 +280,7 @@ MenuModelMemoryStateBuffer MenuModelMemoryState = {0};
 
 MenuModelResourceStateBuffer MenuModelResourceState = {0};
 
-MenuModelSubWindowAccess MenuModelSubWindow[3] = {{0}};
+MenuModelSubWindowAccess MenuModelSubWindow[MENU_MODEL_SUBWINDOW_COUNT] = {{0}};
 
 /* Shared fade-step values used by the draw-type routines below. */
 float modelDrawOpen01Step
@@ -260,7 +307,7 @@ void MenuModelMemorySet(int state)
 
     MenuModelFlag = 0;
     MenuModelMemoryState.state = state;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < MENU_MODEL_REGION_COUNT; i++) {
         MenuModelMemoryState.regions[i].status = 0;
         MenuModelMemoryState.regions[i].memoryType = 0;
         MenuModelMemoryState.regions[i].resourceId = 0;
@@ -307,7 +354,7 @@ void MenuModelMemorySet(int state)
             region->memoryType = 2;
         }
         break;
-    case 10: {
+    case MENU_MODEL_MEMORY_MAIN_MENU: {
         region->file[0] = memory;
         memory += 0xA4800;
         region->file[1] = memory;
@@ -336,7 +383,7 @@ void MenuModelMemorySet(int state)
         region->memoryType = 4;
         break;
     }
-    case 11:
+    case MENU_MODEL_MEMORY_AGWS:
         for (i = 0; i < 10; i++) {
             unsigned char *nextMemory;
             region->file[0] = memory;
@@ -362,7 +409,7 @@ void MenuModelMemorySet(int state)
         region->file[3] = memory;
         region->memoryType = 4;
         break;
-    case 12:
+    case MENU_MODEL_MEMORY_TRIPLE_UNIT:
         for (i = 0; i < 3; i++) {
             region->file[0] = memory;
             memory += 0xA4800;
@@ -380,7 +427,7 @@ void MenuModelMemorySet(int state)
         region->file[3] = memory;
         region->memoryType = 4;
         break;
-    case 20:
+    case MENU_MODEL_MEMORY_SHOP:
         region->file[0] = memory;
         memory += 0xA0000;
         region->file[1] = memory;
@@ -400,7 +447,7 @@ MenuModelResourceAccess *MenuModelMemoryGet(unsigned short resourceId, int memor
     int i;
 
     (void)resourceId;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < MENU_MODEL_REGION_COUNT; i++) {
         if ((MenuModelMemoryState.regions[i].status == 0) &&
             (MenuModelMemoryState.regions[i].memoryType == memoryType)) {
             return &MenuModelMemoryState.regions[i];
@@ -413,7 +460,7 @@ void MenuModelMemoryInit(void *base, int size) {
     memset(&MenuModelMemoryState, 0, sizeof(MenuModelMemoryState));
     MenuModelMemoryState.base = base;
     MenuModelMemoryState.size = size;
-    MenuModelMemoryState.state = -1;
+    MenuModelMemoryState.state = MENU_MODEL_MEMORY_NONE;
 }
 
 void MenuModelResourceInit(void)
@@ -422,7 +469,7 @@ void MenuModelResourceInit(void)
     MenuModelResourceStateBuffer *state;
 
     state = &MenuModelResourceState;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < MENU_MODEL_REGION_COUNT; i++) {
         state->requests[i].result = 0;
         state->requests[i].resourceId = 0;
         state->requests[i].loadParam = 0;
@@ -433,7 +480,9 @@ void MenuModelResourceInit(void)
 }
 
 int MenuModelMenuMotionCheck(void) {
-    if ((MenuModelMemoryState.state >= 10) && ((MenuModelMemoryState.state < 13) || (MenuModelMemoryState.state == 20))) {
+    if ((MenuModelMemoryState.state >= MENU_MODEL_MEMORY_MAIN_MENU) &&
+        ((MenuModelMemoryState.state < MENU_MODEL_MEMORY_TRIPLE_UNIT + 1) ||
+         (MenuModelMemoryState.state == MENU_MODEL_MEMORY_SHOP))) {
         return 1;
     }
     return 0;
@@ -443,7 +492,7 @@ MenuModelResourceAccess *MenuModelMenuMotionGet(void) {
     MenuModelResourceAccess *handle;
 
     handle = 0;
-    if ((MenuModelMenuMotionCheck() == 1) && (MenuModelFlag & 2)) {
+    if ((MenuModelMenuMotionCheck() == 1) && (MenuModelFlag & MENU_MODEL_FLAG_MOTION_LOADED)) {
         handle = MenuModelResourceState.motionHandle;
     }
     return handle;
@@ -535,7 +584,7 @@ void MenuModelResourceLoad(int resourceId, MenuModelResourceAccess *buffers,
     char fileName[0x80];
     unsigned int motionPackageOffset;
 
-    if ((resourceId & 0x8000U) != 0) {
+    if ((resourceId & MENU_MODEL_MOTION_ID_FLAG) != 0) {
         MenuLoadFile(MenuFileNameGet(resourceId & 0x7FFFU, 3), buffers->file[3]);
         return;
     }
@@ -612,7 +661,7 @@ void MenuModelResourceMain(void)
     unsigned short resourceId;
     int i;
 
-    if (MenuModelFlag & 1) {
+    if (MenuModelFlag & MENU_MODEL_FLAG_BREAK) {
         MenuModelResourceCancel();
         MenuModelResourceInit();
         return;
@@ -628,8 +677,8 @@ void MenuModelResourceMain(void)
         resource = MenuModelResourceState.resource;
         completedResourceId = MenuModelResourceState.requests[0].resourceId;
         resource->resourceId = completedResourceId;
-        if (completedResourceId & 0x8000) {
-            MenuModelFlag |= 2;
+        if (completedResourceId & MENU_MODEL_MOTION_ID_FLAG) {
+            MenuModelFlag |= MENU_MODEL_FLAG_MOTION_LOADED;
         }
         result = MenuModelResourceState.requests[0].result;
         MenuModelResourceState.requests[0].result = 0;
@@ -637,7 +686,7 @@ void MenuModelResourceMain(void)
         MenuModelResourceState.resource = 0;
     }
     if (MenuModelResourceState.requests[0].result == 0) {
-        for (i = 1; i < 16; i++) {
+        for (i = 1; i < MENU_MODEL_REGION_COUNT; i++) {
             if (MenuModelResourceState.requests[i].result != 0) {
                 MenuModelResourceState.requests[0].result = MenuModelResourceState.requests[i].result;
                 MenuModelResourceState.requests[0].loadParam = MenuModelResourceState.requests[i].loadParam;
@@ -654,8 +703,8 @@ void MenuModelResourceMain(void)
     }
     activeState = &MenuModelResourceState;
     resourceId = MenuModelResourceState.requests[0].resourceId;
-    if (resourceId & 0x8000) {
-        activeState->resource = MenuModelMemoryGet(resourceId, 4);
+    if (resourceId & MENU_MODEL_MOTION_ID_FLAG) {
+        activeState->resource = MenuModelMemoryGet(resourceId, MENU_MODEL_MEMORY_TYPE_MOTION);
     } else {
         resourceClass = resourceId >> 12;
         activeState->resource = MenuModelMemoryGet(resourceId, memoryTypes[resourceClass]);
@@ -684,7 +733,7 @@ void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loa
 {
     int i;
 
-    for (i = 1; i < 16; i++) {
+    for (i = 1; i < MENU_MODEL_REGION_COUNT; i++) {
         if (MenuModelResourceState.requests[i].result == 0) {
             MenuModelResourceState.requests[i].result = result;
             MenuModelResourceState.requests[i].resourceId = resourceId;
@@ -701,20 +750,20 @@ void MenuModelMenuMotionLoad(void)
 
     motionHandle = &MenuModelResourceState.motionHandle;
     motionId = 0;
-    if (MenuModelFlag & 2) {
+    if (MenuModelFlag & MENU_MODEL_FLAG_MOTION_LOADED) {
         return;
     }
     switch (MenuModelMemoryState.state) {
-    case 10:
+    case MENU_MODEL_MEMORY_MAIN_MENU:
         motionId = 0x8001;
         break;
-    case 11:
+    case MENU_MODEL_MEMORY_AGWS:
         motionId = 0xA100;
         break;
-    case 12:
+    case MENU_MODEL_MEMORY_TRIPLE_UNIT:
         motionId = 0x8001;
         break;
-    case 20:
+    case MENU_MODEL_MEMORY_SHOP:
         motionId = 0xA100;
         break;
     }
@@ -731,7 +780,7 @@ static void MenuModelSubWindowMainSub(MenuModelUnit *unit)
 
     subWindow = unit->subWindow;
     actor = unit->actor;
-    if (MenuModelFlag & 1) {
+    if (MenuModelFlag & MENU_MODEL_FLAG_BREAK) {
         subWindow->closeFlag = -1;
     }
     if (subWindow->closeFlag != 0) {
@@ -801,7 +850,7 @@ void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
 }
 
 void MenuModelSubWindowinit(void) {
-    memset(MenuModelSubWindow, 0, 0x30U);
+    memset(MenuModelSubWindow, 0, MENU_MODEL_SUBWINDOW_COUNT * 0x10U);
 }
 
 static void ActorAndResourceDispose(Actor **actorSlot, MenuModelResourceAccess **resourceSlot, int mode)
@@ -851,7 +900,7 @@ void MenuModelUnitDispose(MenuModelUnit *unit)
     self = unit;
     if (self != 0) {
         weaponSlot = &self->weapon[0];
-        weaponIndex = 2;
+        weaponIndex = MENU_MODEL_WEAPON_COUNT - 1;
         do {
             MenuModelWeaponDispose(*weaponSlot);
             weaponSlot++;
@@ -894,7 +943,7 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     actor->drawEnv.flags = 0;
     actorKind = actor->inUseId;
     actor->modelResource = resource->file[0];
-    actor->drawEnv.pixelAlpha = 0x75;
+    actor->drawEnv.pixelAlpha = MENU_MODEL_PIXEL_ALPHA;
     actor->matrixResource = resource->file[1];
     actor->update = ACT_updateDefault;
     actor->draw = MenuModelAlphaDraw;
@@ -931,10 +980,10 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     switch ((motionActorKind >> 12) & 0xF) {
     case 0:
         if (MenuModelMenuMotionGet() != 0 &&
-            (unsigned short)(unit->modelId - 1) < 11) {
-            signed char characterMotion[11] = {6, 2, 0, 0, 9, 7, 8, 0, 0, 10, 11};
+            (unsigned short)(unit->modelId - 1) < MENU_MODEL_CHARACTER_COUNT) {
+            signed char characterMotion[MENU_MODEL_CHARACTER_COUNT] = {6, 2, 0, 0, 9, 7, 8, 0, 0, 10, 11};
             motion = characterMotion[unit->modelId - 1];
-            if (unit->modelId == 2 && MenuModelMemoryState.state == 10) {
+            if (unit->modelId == 2 && MenuModelMemoryState.state == MENU_MODEL_MEMORY_MAIN_MENU) {
                 if (unit->unusedByCreateInit1->weaponResource[1] != 0) {
                     motion = unit->unusedByCreateInit1->weaponResource[1] - 17;
                 }
@@ -943,8 +992,8 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
         break;
     case 2:
         if (motionActorKind != 0x2201) {
-            signed char agwsMotion[12] = {0, 1, 2, 3, 0, 4, 0, 5, 0, 6, 7, 0};
-            motion = agwsMotion[unit->modelId - 17];
+            signed char agwsMotion[MENU_MODEL_AGWS_COUNT] = {0, 1, 2, 3, 0, 4, 0, 5, 0, 6, 7, 0};
+            motion = agwsMotion[unit->modelId - MENU_MODEL_AGWS_ID_BASE];
         }
         break;
     case 4:
@@ -959,7 +1008,7 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
             MenuModelUnitDispose(unit);
             return;
         }
-        face->drawEnv.pixelAlpha = 0x75;
+        face->drawEnv.pixelAlpha = MENU_MODEL_PIXEL_ALPHA;
         face->modelResource = resource->file[4];
         face->drawEnv.flags = 0;
         face->drawEnv.renderLevel = 0;
@@ -1029,7 +1078,7 @@ void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
     actor->drawEnv.flags = 0;
     actor->modelResource = resource->file[0];
     actor->matrixResource = resource->file[1];
-    actor->drawEnv.pixelAlpha = 0x75;
+    actor->drawEnv.pixelAlpha = MENU_MODEL_PIXEL_ALPHA;
     actor->flags = 8;
     actor->update = ACT_updateDefault;
     actor->draw = MenuModelAlphaDraw;
@@ -1039,7 +1088,7 @@ void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
     actor->drawEnv.cameraCullDistance = 0.0f;
     if ((unsigned int)((unsigned short)actor->inUseId - 0x3007) < 4) {
         actor->animPackTables[0] = resource->file[3];
-    } else if ((unsigned short)(unit->modelId - 17) < 12 &&
+    } else if ((unsigned short)(unit->modelId - MENU_MODEL_AGWS_ID_BASE) < MENU_MODEL_AGWS_COUNT &&
                (unsigned short)(weapon->weaponId - 70) < 45) {
         actor->animPackTables[0] = func_A1C910(resource->file[3]);
     } else {
@@ -1057,7 +1106,7 @@ void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
         ACT_setMotion(parent, parentMotion);
         parent->animation.slot.flags |= 8;
     }
-    if ((unsigned short)(unit->modelId - 17) < 12 &&
+    if ((unsigned short)(unit->modelId - MENU_MODEL_AGWS_ID_BASE) < MENU_MODEL_AGWS_COUNT &&
         (unsigned short)(weapon->weaponId - 70) < 45) {
         if (ACT_animGetData(actor, 4) != 0) {
             ACT_setMotion(actor, 4);
@@ -1080,20 +1129,20 @@ void MenuModelControl(MenuModelUnit *unit)
 
     if (actor->menu.enabled) {
         buttons = PadData[0].buttons;
-        if (buttons & 0x1000)
+        if (buttons & PAD_UP)
             rotation->x -= 0.1f;
-        if (buttons & 0x4000)
+        if (buttons & PAD_DOWN)
             rotation->x += 0.1f;
-        if (buttons & 0x8000)
+        if (buttons & PAD_LEFT)
             rotation->y -= 0.1f;
-        if (buttons & 0x2000)
+        if (buttons & PAD_RIGHT)
             rotation->y += 0.1f;
-        if (buttons & 1) {
+        if (buttons & PAD_L2) {
             scale->x -= 0.02f;
             if (actor->scale.x <= 0.25f)
                 scale->x = 0.25f;
         }
-        if (PadData[0].buttons & 2) {
+        if (PadData[0].buttons & PAD_R2) {
             scale->x += 0.02f;
             if (actor->scale.x >= 0.9799995f)
                 scale->x = 0.9799995f;
@@ -1111,22 +1160,22 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
     MenuModelScaleLimits maximum;
 
     if (actor->menu.enabled) {
-        if ((PadData[0].buttons & 2) || (PadData[1].buttons & 2)) {
-            if ((PadData[0].buttons & 0x1000) ||
-                (PadData[1].buttons & 0x1000)) {
+        if ((PadData[0].buttons & PAD_R2) || (PadData[1].buttons & PAD_R2)) {
+            if ((PadData[0].buttons & PAD_UP) ||
+                (PadData[1].buttons & PAD_UP)) {
                 if (rotation->x >= -0.499999f)
                     rotation->x -= 0.1f;
             }
-            if ((PadData[0].buttons & 0x4000) ||
-                (PadData[1].buttons & 0x4000)) {
+            if ((PadData[0].buttons & PAD_DOWN) ||
+                (PadData[1].buttons & PAD_DOWN)) {
                 if (rotation->x <= 1.0f)
                     rotation->x += 0.1f;
             }
-            if ((PadData[0].buttons & 0x8000) ||
-                (PadData[1].buttons & 0x8000))
+            if ((PadData[0].buttons & PAD_LEFT) ||
+                (PadData[1].buttons & PAD_LEFT))
                 rotation->y -= 0.1f;
-            if ((PadData[0].buttons & 0x2000) ||
-                (PadData[1].buttons & 0x2000))
+            if ((PadData[0].buttons & PAD_RIGHT) ||
+                (PadData[1].buttons & PAD_RIGHT))
                 rotation->y += 0.1f;
             if (rotation->x > 3.1415927f)
                 rotation->x = rotation->x - 3.1415927f + -3.1415927f;
@@ -1136,16 +1185,16 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
                 rotation->y = rotation->y - 3.1415927f + -3.1415927f;
             else if (rotation->y < -3.1415927f)
                 rotation->y = rotation->y + 3.1415927f + 3.1415927f;
-        } else if ((PadData[0].buttons & 1) || (PadData[1].buttons & 1)) {
-            if ((PadData[0].buttons & 0x1000) ||
-                (PadData[1].buttons & 0x1000)) {
+        } else if ((PadData[0].buttons & PAD_L2) || (PadData[1].buttons & PAD_L2)) {
+            if ((PadData[0].buttons & PAD_UP) ||
+                (PadData[1].buttons & PAD_UP)) {
                 minimum = minimumScaleTable[0];
                 scale->x -= 0.02f;
                 if (actor->scale.x <= minimum.value[preset])
                     scale->x = minimum.value[preset];
             }
-            if ((PadData[0].buttons & 0x4000) ||
-                (PadData[1].buttons & 0x4000)) {
+            if ((PadData[0].buttons & PAD_DOWN) ||
+                (PadData[1].buttons & PAD_DOWN)) {
                 maximum = maximumScaleTable[0];
                 scale->x += 0.02f;
                 if (actor->scale.x >= maximum.value[preset])
@@ -1244,19 +1293,19 @@ static void MenuModelDrawTypeSet(Actor *actor, int drawType)
     }
     control = &actor->menu;
     switch (drawType) {
-    case 0:
+    case MENU_MODEL_DRAW_SHOW:
         control->transparency = 1.0f;
         break;
-    case 1:
+    case MENU_MODEL_DRAW_HIDE:
         control->transparency = 0.0f;
         break;
-    case 2:
+    case MENU_MODEL_DRAW_FADE_IN:
         control->drawTypeFunction = ModelDrawTypeOpen01;
         break;
-    case 3:
+    case MENU_MODEL_DRAW_FADE_OUT:
         control->drawTypeFunction = ModelDrawTypeClose01;
         break;
-    case 4:
+    case MENU_MODEL_DRAW_FADE_OUT_PARTIAL:
         control->drawTypeFunction = ModelDrawTypeClose02;
         break;
     }
@@ -1282,7 +1331,7 @@ void MenuModelUnitOpen(MenuModelUnit *unit, int drawType)
     int weaponIndex;
 
     MenuModelDrawTypeSet(unit->actor, drawType);
-    for (weaponIndex = 0; weaponIndex < 3; weaponIndex++) {
+    for (weaponIndex = 0; weaponIndex < MENU_MODEL_WEAPON_COUNT; weaponIndex++) {
         MenuModelWeaponOpen(unit, drawType, weaponIndex);
     }
 }
@@ -1309,42 +1358,42 @@ static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
     weapon = (MenuModelWeapon *)task;
     actor = weapon->actor;
     resource = weapon->resource;
-    if (MenuModelFlag & 1) {
-        weapon->taskPhase = -1;
+    if (MenuModelFlag & MENU_MODEL_FLAG_BREAK) {
+        weapon->taskPhase = MENU_MODEL_PHASE_END;
     }
     unit = weapon->unit;
     if (unit == 0) {
-        weapon->taskPhase = -1;
+        weapon->taskPhase = MENU_MODEL_PHASE_END;
     } else if (unit->modelId == 7 && weapon->weaponIndex == 1) {
         if (unit->weapon[0] == 0) {
-            weapon->taskPhase = -1;
+            weapon->taskPhase = MENU_MODEL_PHASE_END;
         } else {
             resource = unit->weapon[0]->resource;
         }
     }
     switch (weapon->taskPhase) {
-    case 0:
+    case MENU_MODEL_PHASE_INIT:
         weapon->extFuncFlag = 0;
-        weapon->taskPhase = 1;
+        weapon->taskPhase = MENU_MODEL_PHASE_WAIT_RESOURCE;
         /* fall through */
-    case 1:
+    case MENU_MODEL_PHASE_WAIT_RESOURCE:
         if (resource != 0) {
             if ((int)resource < 0) {
-                weapon->taskPhase = -1;
+                weapon->taskPhase = MENU_MODEL_PHASE_END;
             } else if (unit->actor != 0 && unit->actor->menu.transparency == 1.0f) {
-                weapon->taskPhase = 2;
+                weapon->taskPhase = MENU_MODEL_PHASE_SPAWN;
             }
         }
         break;
-    case 2:
+    case MENU_MODEL_PHASE_SPAWN:
         MenuModelWeaponActorSet(unit, weapon);
-        MenuModelWeaponOpen(weapon->unit, 2, weapon->weaponIndex);
-        weapon->taskPhase = 10;
+        MenuModelWeaponOpen(weapon->unit, MENU_MODEL_DRAW_FADE_IN, weapon->weaponIndex);
+        weapon->taskPhase = MENU_MODEL_PHASE_RUN;
         weapon->active = 1;
         break;
-    case 10:
+    case MENU_MODEL_PHASE_RUN:
         break;
-    case 255:
+    case MENU_MODEL_PHASE_END:
         MenuModelResourceCancel3((MenuModelUnit *)weapon);
         MenuModelWeaponDispose(weapon);
         if (weapon->result != 0) {
@@ -1379,30 +1428,30 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
     unit = (MenuModelUnit *)task;
     actor = unit->actor;
     resource = unit->resource;
-    if (MenuModelFlag & 1) {
-        unit->taskPhase = -1;
+    if (MenuModelFlag & MENU_MODEL_FLAG_BREAK) {
+        unit->taskPhase = MENU_MODEL_PHASE_END;
     }
     switch (unit->taskPhase) {
-    case 0:
+    case MENU_MODEL_PHASE_INIT:
         unit->extFuncFlag = 0;
-        unit->taskPhase = 1;
+        unit->taskPhase = MENU_MODEL_PHASE_WAIT_RESOURCE;
         /* fall through */
-    case 1:
+    case MENU_MODEL_PHASE_WAIT_RESOURCE:
         if (resource != 0) {
             if ((int)resource < 0) {
-                unit->taskPhase = -1;
+                unit->taskPhase = MENU_MODEL_PHASE_END;
             } else {
-                unit->taskPhase = 2;
+                unit->taskPhase = MENU_MODEL_PHASE_SPAWN;
             }
         }
         break;
-    case 2:
+    case MENU_MODEL_PHASE_SPAWN:
         MenuModelUnitActorSet(unit);
-        unit->taskPhase = 10;
+        unit->taskPhase = MENU_MODEL_PHASE_RUN;
         break;
-    case 10:
+    case MENU_MODEL_PHASE_RUN:
         break;
-    case 255:
+    case MENU_MODEL_PHASE_END:
         MenuModelSubWindowBreak(unit);
         MenuModelResourceCancel3(unit);
         MenuModelUnitDispose(unit);
@@ -1411,7 +1460,7 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
         }
         terminatingPhase = -1;
         weaponSlot = unit->weapon;
-        for (remainingWeapons = 2; remainingWeapons >= 0; remainingWeapons--) {
+        for (remainingWeapons = MENU_MODEL_WEAPON_COUNT - 1; remainingWeapons >= 0; remainingWeapons--) {
             if (*weaponSlot != 0) {
                 (*weaponSlot)->taskPhase = terminatingPhase;
                 tskMenuModelWeaponTaskMain((XglTaskPrefix *)*weaponSlot);
@@ -1461,7 +1510,7 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
 void MenuModelUnitBreak(MenuModelUnit *unit) {
     if (unit != 0) {
         MenuModelResourceCancel2(unit);
-        unit->taskPhase = -1;
+        unit->taskPhase = MENU_MODEL_PHASE_END;
     }
 }
 
@@ -1469,7 +1518,7 @@ static void CreateInit(MenuModelUnit *unit)
 {
     int weaponIndex;
 
-    unit->taskPhase = 0;
+    unit->taskPhase = MENU_MODEL_PHASE_INIT;
     unit->active = 0;
     unit->extFunc1 = 0;
     unit->extFunc2 = 0;
@@ -1483,7 +1532,7 @@ static void CreateInit(MenuModelUnit *unit)
     unit->unusedByCreateInit2[0] = 0;
     unit->unusedByCreateInit2[1] = 0;
     unit->unusedByCreateInit4 = 0;
-    for (weaponIndex = 2; weaponIndex >= 0; weaponIndex--) {
+    for (weaponIndex = MENU_MODEL_WEAPON_COUNT - 1; weaponIndex >= 0; weaponIndex--) {
         unit->weapon[weaponIndex] = 0;
     }
 }
@@ -1500,7 +1549,7 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
     if (unit->unitData == 0) {
         return 0;
     }
-    if ((unsigned int)weaponIndex >= 3) {
+    if ((unsigned int)weaponIndex >= MENU_MODEL_WEAPON_COUNT) {
         return 0;
     }
     if (unit->weapon[weaponIndex] != 0) {
@@ -1512,7 +1561,7 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
         }
         MenuModelResourceCancel2((MenuModelUnit *)(void *)oldWeapon);
         MenuModelWeaponDispose((MenuModelWeapon *)unit->weapon[weaponIndex]);
-        unit->weapon[weaponIndex]->taskPhase = -1;
+        unit->weapon[weaponIndex]->taskPhase = MENU_MODEL_PHASE_END;
         unit->weapon[weaponIndex] = 0;
         if (unit->unitData->weaponResource[weaponIndex] == 0) {
             return 0;
@@ -1547,7 +1596,7 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
                          (unsigned short)weapon->characterId);
     weapon->resourceId = func_A1A330(weapon->objectId);
     if ((weapon->resourceId & 0xFF) == 0) {
-        weapon->taskPhase = -1;
+        weapon->taskPhase = MENU_MODEL_PHASE_END;
         return 0;
     }
 
@@ -1597,7 +1646,7 @@ void MenuModelCreate(void **result, int modelId)
             unit->resourceId = modelId;
         break;
     default:
-        if (MenuModelMemoryState.state >= 10) {
+        if (MenuModelMemoryState.state >= MENU_MODEL_MEMORY_MAIN_MENU) {
             unit->resourceId = func_A1A2E8(modelId);
         } else if ((unsigned int)(modelId - 34) < 29) {
             unit->resourceId = guno_eid_tbl[modelId - 34];
@@ -1613,7 +1662,7 @@ void MenuModelCreate(void **result, int modelId)
         }
         break;
     }
-    if (MenuModelMemoryState.state >= 10 && modelId < 33)
+    if (MenuModelMemoryState.state >= MENU_MODEL_MEMORY_MAIN_MENU && modelId < 33)
         unit->unusedByCreateInit1 = func_A191C0(modelId);
     if (result != 0) {
         unit->unusedByCreateInit4 = result;
@@ -1653,9 +1702,9 @@ void MenuModelMain(void)
 }
 
 void MenuModelAllBreak(void) {
-    MenuModelFlag |= 1;
+    MenuModelFlag |= MENU_MODEL_FLAG_BREAK;
     MenuModelMain();
-    MenuModelFlag &= ~1;
+    MenuModelFlag &= ~MENU_MODEL_FLAG_BREAK;
     MenuModelResourceInit();
     MenuModelSubWindowinit();
 }

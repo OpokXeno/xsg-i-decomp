@@ -3,6 +3,13 @@
 #include "play.h"
 #include "main/jni.h"
 
+#define PLAY_CAMERA_COUNT 8
+#define PLAY_CAMERA_MODE_DEFAULT 0x10
+#define PLAY_SIGNAL_FINISHED 0xFF
+#define PLAY_DEFAULT_END_TIME 3.3333335f
+#define PLAY_FAST_STEP_MULTIPLIER 10.0f
+#define PLAY_STICK_THRESHOLD 40.0f
+
 const char playFrameFormat[24] = "FRAME %6d (%6d, %6d)\n";
 
 Play playControl;
@@ -17,15 +24,15 @@ void PLAY_setupDefault(Play *play)
     int i;
 
     play->cameraIndex = -1;
-    play->endTime = 3.3333335f;
-    play->frameStep = 0.033333335f;
+    play->endTime = PLAY_DEFAULT_END_TIME;
+    play->frameStep = PLAY_SECONDS_PER_FRAME;
     play->signal = 0;
     play->startTime = 0.0f;
     play->currentTime = 0.0f;
     play->flags = 0;
     play->source = 0;
 
-    for (i = 0; i < 32; i++) {
+    for (i = 0; i < PLAY_OBSERVER_COUNT; i++) {
         play->observers[i].argument = 0;
         play->observers[i].method = 0;
     }
@@ -40,7 +47,7 @@ void PLAY_setup(Play *play)
     int camera_index;
 
     if (play->cameraIndex >= 0) {
-        for (camera_index = 0; camera_index < 8; camera_index++) {
+        for (camera_index = 0; camera_index < PLAY_CAMERA_COUNT; camera_index++) {
             xglStudioGetCamera(&studio_camera, camera_index);
             studio_camera->active = 0;
         }
@@ -49,15 +56,15 @@ void PLAY_setup(Play *play)
         studio_camera->active = 1;
 
         camera = TCAMERA_get(play->cameraIndex);
-        camera->mode[0] = 0x10;
-        camera->mode[1] = 0x10;
-        camera->mode[2] = 0x10;
+        camera->mode[0] = PLAY_CAMERA_MODE_DEFAULT;
+        camera->mode[1] = PLAY_CAMERA_MODE_DEFAULT;
+        camera->mode[2] = PLAY_CAMERA_MODE_DEFAULT;
     }
 
     play->signal = 0;
     if (play->source != 0) {
-        start_time = (float)play->source->startFrame * 0.033333335f;
-        end_time = (float)play->source->endFrame * 0.033333335f;
+        start_time = (float)play->source->startFrame * PLAY_SECONDS_PER_FRAME;
+        end_time = (float)play->source->endFrame * PLAY_SECONDS_PER_FRAME;
         play->endTime = end_time;
         play->startTime = start_time;
         play->currentTime = start_time;
@@ -76,7 +83,7 @@ void PLAY_setObserver(Play *play, int chart_index, int key_index,
     int i;
 
     observer = 0;
-    for (i = 0; i < 32; i++) {
+    for (i = 0; i < PLAY_OBSERVER_COUNT; i++) {
         if (play->observers[i].argument == 0) {
             observer = &play->observers[i];
             break;
@@ -139,7 +146,7 @@ void PLAY_ctrl(void)
         if (play->flags & PLAY_FLAG_MANUAL_TIME) {
             frame_step = play->frameStep;
             if (pad_data->buttons.half_28 & PLAY_PAD_FAST) {
-                frame_step *= 10.0f;
+                frame_step *= PLAY_FAST_STEP_MULTIPLIER;
             }
 
             stick.z = 0.0f;
@@ -148,7 +155,7 @@ void PLAY_ctrl(void)
             stick.y = (float)(-pad_data->axisY);
             xglVectorLength(&stick.w, &stick);
 
-            if (stick.w > 40.0f) {
+            if (stick.w > PLAY_STICK_THRESHOLD) {
                 if (stick.x > 0.0f) {
                     play->currentTime = play->currentTime + frame_step;
                 }
@@ -157,9 +164,9 @@ void PLAY_ctrl(void)
                 }
             }
 
-            if (stick.w > 40.0f ||
+            if (stick.w > PLAY_STICK_THRESHOLD ||
                 (pad_data->buttons.half_28 & PLAY_PAD_SHOW_FRAME)) {
-                debug_frame_step = 0.033333335f;
+                debug_frame_step = PLAY_SECONDS_PER_FRAME;
                 current_frame = (int)(play->currentTime / debug_frame_step);
                 start_frame = (int)(play->startTime / debug_frame_step);
                 end_frame = (int)(play->endTime / debug_frame_step);
@@ -173,7 +180,7 @@ void PLAY_ctrl(void)
         current_time = play->currentTime;
         end_time = play->endTime;
         if (end_time < current_time) {
-            play->signal = 0xFF;
+            play->signal = PLAY_SIGNAL_FINISHED;
             if (play->flags & PLAY_FLAG_LOOP) {
                 current_time = play->startTime;
                 play->currentTime = current_time;
@@ -192,7 +199,7 @@ void PLAY_ctrl(void)
             }
         }
 
-        observer_frame_step = 0.033333335f;
+        observer_frame_step = PLAY_SECONDS_PER_FRAME;
         for (observer = play->observers, observer_index = 31;
              observer_index >= 0; observer_index--, observer++) {
             if (observer->argument != 0) {

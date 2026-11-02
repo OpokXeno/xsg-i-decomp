@@ -267,8 +267,6 @@ enum {
 #define AGWS_PAS_TAB_SLOT 5
 #define AGWS_PAS_TAB_AMMO 11
 #define AGWS_PAS_TAB_ACCESSORY 12
-#define PAD_L1 0x0004
-#define PAD_R1 0x0008
 
 typedef struct AgwsListCursor {
     unsigned char unmodeled_00[4];

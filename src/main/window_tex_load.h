@@ -21,13 +21,7 @@
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
 
-/*
- * Save-record offset of the UMN mail table: one 2-byte entry per mail box,
- * addressed directly as SaveData + 0x10304 (the same region src/main/party.h
- * documents as SAVE_UMN_MAIL_DATA).
- */
-#define SAVE_UMN_MAIL_DATA 0x10304
-
+/* SAVE_UMN_MAIL_DATA (main/party.h) addresses the UMN mail table. */
 /* The saved mailbox table begins at the UMN database-state window. */
 #define SAVE_UMN_MAIL_BOXES 0x1025c
 

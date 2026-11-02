@@ -250,16 +250,16 @@ static inline int printEnemySplinePoint(int y, int row,
 
 static inline void printEnemyPageHeader(const EnemyWork *enemy)
 {
-    if (FLAG_FRAME_60 == 1)
+    if (FLAG_FRAME_60 == FRAME_60_MODE_60)
         xglFontDebugPrintf(8, 0x18, DEBUG_WELCOME_60FRAME_TEXT);
-    if (FLAG_FRAME_60 == 2)
+    if (FLAG_FRAME_60 == FRAME_60_MODE_30_DEBUG)
         xglFontDebugPrintf(8, 0x18, DEBUG_MODE_30FRAME_TEXT);
     xglFontDebugPrintf(0, 0, PAGE_HEADER_FORMAT, Page_0, DebugActor, enemy->entry_id);
 }
 
 static inline int wrappedEnemyDebugPage(int page, int increment)
 {
-    return (page + increment) % 15;
+    return (page + increment) % ENEMY_PAGE_COUNT;
 }
 
 void PauseMenuPageEnemy(void)
@@ -304,32 +304,32 @@ void PauseMenuPageEnemy(void)
     };
     DoublewordAlignedVector4 final_target;
 
-    if (PadData.half_2a & 0x1000)
-        Page_0 = wrappedEnemyDebugPage(Page_0, 14);
-    if (PadData.half_2a & 0x4000)
+    if (PadData.half_2a & PAD_UP)
+        Page_0 = wrappedEnemyDebugPage(Page_0, ENEMY_PAGE_COUNT - 1);
+    if (PadData.half_2a & PAD_DOWN)
         Page_0 = wrappedEnemyDebugPage(Page_0, 1);
     line_spacing = 12;
-    if (PadData.half_2a & 0x8000) {
-        for (column = 63; column > 0; --column) {
-            short actor_index = (DebugActor + column) % 64;
+    if (PadData.half_2a & PAD_LEFT) {
+        for (column = ACTOR_COUNT - 1; column > 0; --column) {
+            short actor_index = (DebugActor + column) % ACTOR_COUNT;
             if (actor[actor_index].in_use_id > 0) {
                 DebugActor = actor_index;
                 break;
             }
         }
     }
-    if (PadData.half_2a & 0x2000) {
-        for (column = 1; column < 64; ++column) {
-            short actor_index = (DebugActor + column) % 64;
+    if (PadData.half_2a & PAD_RIGHT) {
+        for (column = 1; column < ACTOR_COUNT; ++column) {
+            short actor_index = (DebugActor + column) % ACTOR_COUNT;
             if (actor[actor_index].in_use_id > 0) {
                 DebugActor = actor_index;
                 break;
             }
         }
     }
-    if (PadData.half_2a & 0x0800) {
-        FLAG_FRAME_60 = (FLAG_FRAME_60 + 1) % 3;
-        Vibration_Set_Strong(0xff, 0, 0x3c);
+    if (PadData.half_2a & PAD_START) {
+        FLAG_FRAME_60 = (FLAG_FRAME_60 + 1) % FRAME_60_MODE_COUNT;
+        Vibration_Set_Strong(DEBUG_VIBRATION_STRENGTH, 0, DEBUG_VIBRATION_FRAMES);
     }
     printEnemyPageHeader(enemy);
     y = line_spacing;
@@ -337,7 +337,7 @@ void PauseMenuPageEnemy(void)
         y = printEnemyHeading(0x60, y, ENEMY_SUSPECTED_FACE_TEXT);
     } else {
         switch (Page_0) {
-        case 0: {
+        case ENEMY_PAGE_MOVE: {
             const Vector4 *position = &selected->position;
             UnduParamInit((UnduParam *)&UnduTemp);
             UnduTemp.header = UnduDataGetHeader(enemy->map_index, 0x8000);
@@ -394,13 +394,13 @@ void PauseMenuPageEnemy(void)
                     EneTerritoryID[territory_index]);
             }
             id = selected->in_use_id;
-            if ((unsigned int)id - 0x4000u < 0x806u)
+            if ((unsigned int)id - ENEMY_IN_USE_ID_BASE < ENEMY_IN_USE_ID_COUNT)
                 xglFontDebugPrintf(0xc0, 0xa4, ENEMY_TITLE_TEXT);
             else
                 xglFontDebugPrintf(0xc0, 0xa4, ENEMY_NPC_LABEL);
             break;
         }
-        case 1:
+        case ENEMY_PAGE_STATE:
             y = printEnemyHeading(0x60, y, ENEMY_STATE_HEADING_TEXT);
             if (selected->number != 0) {
                 int pause_kind = enemy->pause_kind;
@@ -435,38 +435,38 @@ void PauseMenuPageEnemy(void)
             xglFontDebugPrintf(8, y, ENEMY_SIGHT_POSITION_FORMAT, enemy->sight_position[0], enemy->sight_position[1], enemy->sight_position[2]);
             y += 12;
             break;
-        case 2:
+        case ENEMY_PAGE_FLAGS:
             y = printEnemyHeading(0x60, y, ENEMY_FLAGS_HEADING_TEXT);
             {
                 const char *locator_label = boolean_labels[
-                    (unsigned short)parameters->locator_flags & 1];
-                y = printEnemyFlag(y, ENEMY_MOTION_FLAG_FORMAT, parameters->locator_flags & 1,
+                    (unsigned short)parameters->locator_flags & ENEMY_LOCATOR_FLAG_MOTION];
+                y = printEnemyFlag(y, ENEMY_MOTION_FLAG_FORMAT, parameters->locator_flags & ENEMY_LOCATOR_FLAG_MOTION,
                     locator_label);
             }
             {
                 int flags = parameters->locator_flags;
                 y = printEnemyFlag(y, ENEMY_TURN_FLAG_FORMAT, (flags >> 1) & 1,
-                    boolean_labels[(flags & 2) != 0]);
+                    boolean_labels[(flags & ENEMY_LOCATOR_FLAG_TURN) != 0]);
             }
             xglFontDebugPrintf(8, y, ENEMY_HEAD_SWING_FLAG_FORMAT, (parameters->locator_flags >> 2) & 1,
-                boolean_labels[(parameters->locator_flags & 4) != 0]);
+                boolean_labels[(parameters->locator_flags & ENEMY_LOCATOR_FLAG_HEAD_SWING) != 0]);
             y += line_spacing;
             xglFontDebugPrintf(8, y, ENEMY_CANCELABLE_FLAG_FORMAT, (parameters->locator_flags >> 3) & 1,
-                boolean_labels[(parameters->locator_flags & 8) != 0]);
+                boolean_labels[(parameters->locator_flags & ENEMY_LOCATOR_FLAG_CANCELABLE) != 0]);
             y += line_spacing;
             xglFontDebugPrintf(8, y, ENEMY_FREEZE_FLAG_FORMAT, (parameters->locator_flags >> 4) & 1,
-                boolean_labels[(parameters->locator_flags & 0x10) != 0]);
+                boolean_labels[(parameters->locator_flags & ENEMY_LOCATOR_FLAG_FREEZE) != 0]);
             y += line_spacing;
             xglFontDebugPrintf(8, y, ENEMY_JAVA_TALK_FLAG_FORMAT, (parameters->locator_flags >> 16) & 1,
-                boolean_labels[(parameters->locator_flags & 0x10000) != 0]);
+                boolean_labels[(parameters->locator_flags & ENEMY_LOCATOR_FLAG_JAVA_TALK) != 0]);
             y += line_spacing;
             y = printEnemyFlag(y, ENEMY_TOUCH_FLAG_FORMAT, (parameters->locator_flags >> 17) & 1,
-                boolean_labels[(parameters->locator_flags & 0x20000) != 0]);
+                boolean_labels[(parameters->locator_flags & ENEMY_LOCATOR_FLAG_TOUCH) != 0]);
             xglFontDebugPrintf(8, y, ENEMY_LOCATOR_FLAG_FORMAT, (parameters->locator_flags >> 18) & 1,
-                boolean_labels[(parameters->locator_flags & 0x40000) != 0]);
+                boolean_labels[(parameters->locator_flags & ENEMY_LOCATOR_FLAG_LOCATOR) != 0]);
             y += line_spacing;
             break;
-        case 3:
+        case ENEMY_PAGE_TENTACLE:
             y = printEnemyHeading(0x60, y, ENEMY_TENTACLE_HEADING_TEXT);
             xglFontDebugPrintf(8, y, ENEMY_TENTACLE_RANGE_FORMAT, enemy->tentacle_range);
             y += 12;
@@ -474,7 +474,7 @@ void PauseMenuPageEnemy(void)
             printEnemyFinalCounters(y, ENEMY_CHECK_START_END_FORMAT, enemy->locator_start_frame, enemy->locator_end_frame);
             y += line_spacing;
             break;
-        case 4:
+        case ENEMY_PAGE_SCALE:
             y = printEnemyHeading(0x60, y, ENEMY_SCALE_HEADING_TEXT);
             xglFontDebugPrintf(8, y, ENEMY_CURRENT_SCALE_FORMAT, enemy->scale.current);
             y += 12;
@@ -491,31 +491,31 @@ void PauseMenuPageEnemy(void)
             printEnemyFinalCounters(y, ENEMY_ALPHA_TRANSITION_FORMAT, parameters->light_level, enemy->applied_light_level);
             y += line_spacing;
             break;
-        case 5:
+        case ENEMY_PAGE_TRAITS:
             y = printEnemyHeading(0x60, y, ENEMY_TRAITS_HEADING_TEXT);
-            xglFontDebugPrintf(8, y, ENEMY_ENCOUNTER_FORMAT, enemy->state_flags & 1,
-                boolean_labels[(unsigned short)enemy->state_flags & 1]);
+            xglFontDebugPrintf(8, y, ENEMY_ENCOUNTER_FORMAT, enemy->state_flags & ENEMY_STATE_ENCOUNTER,
+                boolean_labels[(unsigned short)enemy->state_flags & ENEMY_STATE_ENCOUNTER]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, ENEMY_CONVEYOR_FORMAT, (enemy->state_flags >> 2) & 1, boolean_labels[(enemy->state_flags & 4) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_CONVEYOR_FORMAT, (enemy->state_flags >> 2) & 1, boolean_labels[(enemy->state_flags & ENEMY_STATE_CONVEYOR) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, ENEMY_OUTING_FORMAT, (enemy->state_flags >> 3) & 1, boolean_labels[(enemy->state_flags & 8) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_OUTING_FORMAT, (enemy->state_flags >> 3) & 1, boolean_labels[(enemy->state_flags & ENEMY_STATE_OUTING) != 0]);
             y += line_spacing;
             {
                 int state_flags = enemy->state_flags;
-                const char *route_label = route_labels[(state_flags & 0x10) != 0];
+                const char *route_label = route_labels[(state_flags & ENEMY_STATE_SPLINE_MOVE) != 0];
                 xglFontDebugPrintf(8, y, ENEMY_MOVE_TYPE_FORMAT, (state_flags >> 4) & 1,
                     route_label);
             }
             y += line_spacing;
-            xglFontDebugPrintf(8, y, ENEMY_FLIGHT_FORMAT, (enemy->state_flags >> 5) & 1, boolean_labels[(enemy->state_flags & 0x20) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_FLIGHT_FORMAT, (enemy->state_flags >> 5) & 1, boolean_labels[(enemy->state_flags & ENEMY_STATE_FLIGHT) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, ENEMY_DESTROY_FORMAT, (enemy->state_flags >> 6) & 1, boolean_labels[(enemy->state_flags & 0x40) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_DESTROY_FORMAT, (enemy->state_flags >> 6) & 1, boolean_labels[(enemy->state_flags & ENEMY_STATE_DESTROY) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, ENEMY_DEFORM_FORMAT, (enemy->state_flags >> 7) & 1, boolean_labels[(enemy->state_flags & 0x80) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_DEFORM_FORMAT, (enemy->state_flags >> 7) & 1, boolean_labels[(enemy->state_flags & ENEMY_STATE_DEFORM) != 0]);
             y += line_spacing;
             {
                 int freeze_flags = enemy->state_flags;
-                const char *freeze_label = boolean_labels[(freeze_flags & 0x100) != 0];
+                const char *freeze_label = boolean_labels[(freeze_flags & ENEMY_STATE_CLIPPING) != 0];
                 xglFontDebugPrintf(8, y, ENEMY_CLIPPING_FORMAT, (freeze_flags >> 8) & 1,
                     freeze_label, enemy->freeze_saved_speed);
             }
@@ -553,7 +553,7 @@ void PauseMenuPageEnemy(void)
                 }
                 y += line_spacing;
                 {
-                    const char *high_flag_label = boolean_labels[(*actor_flags & 0x80000000u) != 0];
+                    const char *high_flag_label = boolean_labels[(*actor_flags & ACTOR_FLAG_RETURN_HOME) != 0];
                     xglFontDebugPrintf(8, y, ENEMY_RETURN_HOME_FORMAT, *actor_flags >> 31, high_flag_label);
                 }
             }
@@ -561,10 +561,10 @@ void PauseMenuPageEnemy(void)
             /* Leave a blank row before the footer. */
             y += line_spacing;
             break;
-        case 6: {
+        case ENEMY_PAGE_LOCATOR: {
             y = printEnemyHeading(0x60, y, ENEMY_LOCATOR_HEADING_TEXT);
-            for (column = 0; column < 16; ++column) {
-                LayoutHeader *entry = UnduDataGetHeader(0x207, column);
+            for (column = 0; column < ENEMY_LOCATOR_ROW_COUNT; ++column) {
+                LayoutHeader *entry = UnduDataGetHeader(ENEMY_LOCATOR_LIST_HEADER_ID, column);
                 if (entry == 0)
                     break;
                 {
@@ -576,7 +576,7 @@ void PauseMenuPageEnemy(void)
             }
             break;
         }
-        case 7: {
+        case ENEMY_PAGE_LADDER: {
             y = printEnemyHeading(0x60, y, ENEMY_LADDER_HEADING_TEXT);
             {
                 const GameLoopStateRecord *runtime = &GameLoopState;
@@ -590,25 +590,25 @@ void PauseMenuPageEnemy(void)
             }
             break;
         }
-        case 8: {
+        case ENEMY_PAGE_CIRCLE: {
             const short *sound_effect;
             y = printEnemyHeading(0x60, y, ENEMY_CIRCLE_HEADING_TEXT);
             sound_effect = parameters->monster_set_numbers;
-            for (column = 0; column < 8; ++column, ++sound_effect) {
+            for (column = 0; column < ENEMY_MONSTER_SET_COUNT; ++column, ++sound_effect) {
                 y = printEnemySound(y, column, *sound_effect);
             }
             break;
         }
-        case 9: {
+        case ENEMY_PAGE_SATELLITE: {
             int mark;
             y = printEnemyHeading(0x60, y, ENEMY_SATELLITE_HEADING_TEXT);
             mark = enemy->mark;
             y = printEnemyMark(y, mark, mark_labels[mark]);
-            printEnemyFinalCounters(y, ENEMY_COUNTER_RANGE_FORMAT, enemy->mark_timer, 0x40);
+            printEnemyFinalCounters(y, ENEMY_COUNTER_RANGE_FORMAT, enemy->mark_timer, ENEMY_MARK_TIMER_MAX);
             y += line_spacing;
             break;
         }
-        case 10: {
+        case ENEMY_PAGE_SPLINE_FIRST: {
             y = printEnemyHeading(0x60, y, ENEMY_SPLINE_FIRST_HEADING_TEXT);
             y = printEnemySplineSummary(y, enemy->spline_parameter,
                 enemy->spline_point_count);
@@ -624,7 +624,7 @@ void PauseMenuPageEnemy(void)
             }
             break;
         }
-        case 11: {
+        case ENEMY_PAGE_SPLINE_PLAN: {
             y = printEnemyHeading(0x60, y, ENEMY_SPLINE_PLAN_HEADING_TEXT);
             y = printEnemySplineSummary(y, enemy->spline_parameter,
                 enemy->spline_point_count);
@@ -642,10 +642,10 @@ void PauseMenuPageEnemy(void)
             }
             break;
         }
-        case 12:
-        case 13: {
+        case ENEMY_PAGE_PAUSE_EVENT:
+        case ENEMY_PAGE_THREAT_EVENT: {
             short count;
-            if (Page_0 == 12) {
+            if (Page_0 == ENEMY_PAGE_PAUSE_EVENT) {
                 y = printEnemyHeading(0x60, y, ENEMY_PAUSE_EVENT_HEADING_TEXT);
                 count = parameters->pause_interval;
             } else {
@@ -653,7 +653,7 @@ void PauseMenuPageEnemy(void)
                 count = parameters->threat_interval;
             }
             {
-                short page = Page_0 - 12;
+                short page = Page_0 - ENEMY_PAGE_PAUSE_EVENT;
                 y = printEnemyCounters(y, ENEMY_COUNTER_RANGE_FORMAT, enemy->page_count[page], count);
                 for (row = 0; row < count; ++row) {
                     int status = enemy->page_status[page][row];
@@ -664,7 +664,7 @@ void PauseMenuPageEnemy(void)
             }
             break;
         }
-        case 14: {
+        case ENEMY_PAGE_RETURN_TOOL: {
             y = printEnemyHeading(8, y, DEBUG_RETURN_TOOL_TITLE_TEXT);
             {
                 short spline_count = enemy->spline_point_count;
@@ -678,9 +678,9 @@ void PauseMenuPageEnemy(void)
                     const float *point_z = &enemy->route_coordinates[row * 4 + 2];
                     xglFontDebugPrintf(8, y, ENEMY_ROW_POINT_FORMAT, row,
                         point_z[-2], *point_z);
-                    if (enemy->route_metadata[64 + row] != -1)
+                    if (enemy->route_metadata[ENEMY_HOMING_POSITION_COUNT + row] != -1)
                         xglFontDebugPrintf(0xb0, y, ENEMY_ROW_INDEX_FORMAT,
-                            enemy->route_metadata[64 + row]);
+                            enemy->route_metadata[ENEMY_HOMING_POSITION_COUNT + row]);
                     else
                         xglFontDebugPrintf(0xb0, y, ENEMY_NONE_LABEL);
                     for (column = 0; column < enemy->route_metadata[row]; ++column) {
@@ -691,9 +691,9 @@ void PauseMenuPageEnemy(void)
             }
             {
                 unsigned short route_buttons = PadData.half_2a;
-                if (route_buttons & 1)
+                if (route_buttons & PAD_L2)
                     SelNum = (SelNum + enemy->route_point_count - 1) % enemy->route_point_count;
-                if (route_buttons & 2)
+                if (route_buttons & PAD_R2)
                     SelNum = (SelNum + 1) % enemy->route_point_count;
                 xglFontDebugPrintf(0, SelNum * 10 + 48, selectCursorText);
             }

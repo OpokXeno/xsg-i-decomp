@@ -7,6 +7,20 @@
 #include "main/near_dir.h"
 #include "quadword.h"
 
+/*
+ * The Java "algorithm" field of xeno.Unit/xeno.Chr: its 0xF00 nibble selects
+ * how the peer is positioned (0: the Java position fields; Chr: nonzero is an
+ * NPC that follows its own motion).
+ */
+#define TOOLKIT_ALGORITHM_MASK 0xF00
+#define TOOLKIT_ALGORITHM_PART_POSITION 0x100   /* position of the map model part */
+#define TOOLKIT_ALGORITHM_PART_TRANSFORM 0x300  /* full part transform and pivot */
+
+/* JNI_createThread sizes of the peers' script threads: call frames and stack words. */
+#define TOOLKIT_PEER_THREAD_FRAMES 4
+#define TOOLKIT_STAGE_THREAD_FRAMES 8
+#define TOOLKIT_PEER_THREAD_STACK_WORDS 48
+
 /* Used by getPeer_Stage for its short-valued Java id field. */
 #define JAVA_USHORT_FIELD(object, field) \
     (*(unsigned short *)((char *)(object) + (field)->offset))
@@ -194,12 +208,12 @@ static void *getPeer_Unit(SceneObject java_unit)
     peer = MAP_createUnitPeer(-1, unit_id);
     sequence = &unitSequence[peer->slot_number];
     sequence->group = XTK_peerGroup[1];
-    thread = JNI_createThread(5, 4, 48);
+    thread = JNI_createThread(JTHREAD_KIND_UNIT, TOOLKIT_PEER_THREAD_FRAMES, TOOLKIT_PEER_THREAD_STACK_WORDS);
     thread->java_object = java_unit;
     peer->java_object = java_unit;
 
-    switch (algorithm & 0xF00) {
-    case 0x300: {
+    switch (algorithm & TOOLKIT_ALGORITHM_MASK) {
+    case TOOLKIT_ALGORITHM_PART_TRANSFORM: {
         ToolkitMapDisplay *display;
         ToolkitMapModel *model;
         ToolkitUnitTransform *table;
@@ -223,7 +237,7 @@ static void *getPeer_Unit(SceneObject java_unit)
         writeUnitPosition(java_unit, unit_class, peer);
         break;
     }
-    case 0x100: {
+    case TOOLKIT_ALGORITHM_PART_POSITION: {
         ToolkitMapDisplay *display;
         ToolkitMapModel *model;
         ToolkitUnitTransform *table;
@@ -295,7 +309,7 @@ void *getPeer_Enepc(SceneObject java_character)
 
     peer = ACT_createEnemy(-1, enemy_id);
     ACT_initMotion(peer);
-    thread = JNI_createThread(1, 4, 48);
+    thread = JNI_createThread(JTHREAD_KIND_CHR, TOOLKIT_PEER_THREAD_FRAMES, TOOLKIT_PEER_THREAD_STACK_WORDS);
     thread->java_object = java_character;
     peer->java_object = java_character;
 
@@ -366,7 +380,7 @@ void *getPeer_Uwamono(SceneObject java_unit)
                                                        -1), 0);
     (void)algorithm_field;
     peer = Unit_CreateUwamono(-1, unit_id);
-    thread = JNI_createThread(5, 4, 48);
+    thread = JNI_createThread(JTHREAD_KIND_UNIT, TOOLKIT_PEER_THREAD_FRAMES, TOOLKIT_PEER_THREAD_STACK_WORDS);
     thread->java_object = java_unit;
     peer->java_object = java_unit;
 
@@ -421,7 +435,7 @@ void *getPeer_Chr(SceneObject java_character)
 
     peer = ACT_createChr(-1, character_id);
     ACT_initMotion(peer);
-    thread = JNI_createThread(1, 4, 48);
+    thread = JNI_createThread(JTHREAD_KIND_CHR, TOOLKIT_PEER_THREAD_FRAMES, TOOLKIT_PEER_THREAD_STACK_WORDS);
     thread->java_object = java_character;
     peer->java_object = java_character;
 
@@ -438,7 +452,7 @@ void *getPeer_Chr(SceneObject java_character)
     peer->rotation.y = peer->rotation.y / half_turn * 3.1415927f;
     peer->rotation.z = peer->rotation.z / half_turn * 3.1415927f;
 
-    if ((algorithm & 0xF00) != 0) {
+    if ((algorithm & TOOLKIT_ALGORITHM_MASK) != 0) {
         peer->update = ACT_updateNPC;
         sequence = &actSequence[peer->number];
         sequence->anchor.x = peer->position.x;
@@ -516,7 +530,7 @@ static void *getPeer_Stage(SceneObject java_stage)
     field = lookupClassField(stage_class,
                              loadConstString(unit_field_id, -1), 0);
     peer = STAGE_create(JAVA_USHORT_FIELD(java_stage, field));
-    thread = JNI_createThread(2, 8, 48);
+    thread = JNI_createThread(JTHREAD_KIND_STAGE, TOOLKIT_STAGE_THREAD_FRAMES, TOOLKIT_PEER_THREAD_STACK_WORDS);
     thread->java_object = java_stage;
     peer->java_object = java_stage;
 
@@ -560,7 +574,7 @@ int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I(
         unit_peer = JAVA_OBJECT_FIELD(object, field);
         field = lookupClassField(classJava_xeno_Unit,
                                  loadConstString(unit_field_algorithm, -1), 0);
-        result = JAVA_INT_FIELD(object, field) & 0xF00;
+        result = JAVA_INT_FIELD(object, field) & TOOLKIT_ALGORITHM_MASK;
         if (result == 0)
             return MAP_loadUnitResource(unit_peer, id);
     }
@@ -642,7 +656,7 @@ int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II(
         unit_peer = JAVA_OBJECT_FIELD(object, field);
         field = lookupClassField(classJava_xeno_Unit,
                                  loadConstString(unit_field_algorithm, -1), 0);
-        result = JAVA_INT_FIELD(object, field) & 0xF00;
+        result = JAVA_INT_FIELD(object, field) & TOOLKIT_ALGORITHM_MASK;
         if (result == 0) {
             MAP_loadUnitResource(unit_peer, id);
             result = RES_loadFile(-1, 2, resource_id + 0x03000000, 0);
@@ -659,5 +673,5 @@ void Java_xeno_util_Toolkit_peerSetGroup__II(JThread *thread,
 
     /* Decode the signed Java integer before the peer table narrows it. */
     __builtin_memcpy(&value, &arguments->valueBits, sizeof(value));
-    XTK_peerGroup[arguments->group & 3] = value;
+    XTK_peerGroup[arguments->group & (XTK_PEER_GROUP_COUNT - 1)] = value;
 }

@@ -352,6 +352,45 @@ void ACT_draw(void);
  * gap above locator_flags and up to java_object). */
 #define ACTOR_ARGS(actor) ((unsigned char *)(actor) + 0xc0)
 
+/* Number of entries of the global `actor` array. */
+#define ACTOR_COUNT 64
+
+/* Flags every actor slot is reset to. */
+#define ACTOR_FLAGS_INITIAL 0x20
+
+/* Actor byte offsets past the recovered head of Actor. */
+#define ACTOR_SLOT_NUMBER_OFFSET 0x80 /* byte: the actor's own slot in actor[] */
+#define ACTOR_IN_USE_ID_OFFSET 0x86
+
+/* Number of scheduler effects an actor owns (effects[], effect_slot wraps). */
+#define ACTOR_EFFECT_SLOT_COUNT 8
+
+/* Actor.flags bits. */
+#define ACTOR_FLAG_HIDDEN 0x8 /* skipped by target selection */
+#define ACTOR_FLAG_TRANSLUCENT 0x800 /* drawn with the translucent draw environment */
+#define ACTOR_FLAG_COLLIDABLE 0x00010000
+#define ACTOR_FLAG_FACE_PLAYER 0x00400000
+#define ACTOR_FLAG_AILMENT_ACTIVE 0x00800000 /* one of the ailment flags below is set */
+#define ACTOR_FLAG_STIFF_ACTIVE 0x01000000 /* explosion damage / stiff */
+#define ACTOR_FLAG_ELECTRIC_ACTIVE 0x02000000
+#define ACTOR_FLAG_SEAL_ACTIVE 0x08000000
+#define ACTOR_FLAG_HOMING 0x80000000 /* the enemy follows the homing graph */
+
+/* Floor attribute bits (attribute word of a map surface) that move whatever
+ * stands on it: a conveyor direction index and a speed class index. */
+#define ACTOR_ATTR_FLOOR_MASK 0x3f000000
+#define ACTOR_ATTR_FLOOR_DIR_MASK 0x0f000000 /* direction index, bits 24..27 */
+#define ACTOR_ATTR_FLOOR_DIR_SHIFT 24
+#define ACTOR_ATTR_FLOOR_SPEED_SHIFT 28 /* speed class index, bits 28..29 */
+
+/* Motion data ids every character has (animation.slot.currentDataId). */
+#define MOTION_ID_IDLE 0
+#define MOTION_ID_WALK 1
+#define MOTION_ID_RUN 3
+
+/* drawEnv.alpha of a translucent actor (ACTOR_FLAG_TRANSLUCENT). */
+#define ACTOR_TRANSLUCENT_ALPHA 0x48
+
 /* Functions and data used by other translation units. */
 void ACT_matrixInit(void);
 void ACT_update(void);

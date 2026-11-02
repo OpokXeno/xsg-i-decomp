@@ -158,7 +158,7 @@ int JNI_loadClassDB(int class_id, int value)
     int slot;
 
     if (class_id < 0) {
-        for (slot = 0; slot < 8; slot++) {
+        for (slot = 0; slot < VM_CLASS_DB_SLOTS; slot++) {
             if (classDB[slot] == 0) {
                 class_id = slot;
                 break;
@@ -169,8 +169,8 @@ int JNI_loadClassDB(int class_id, int value)
         }
     }
 
-    if (class_id >= 0x100) {
-        value = classDB[class_id & 0xFF];
+    if (class_id >= VM_CLASS_DB_READ) {
+        value = classDB[class_id & VM_CLASS_DB_SLOT_MASK];
     } else {
         classDB[class_id] = value;
     }
@@ -194,19 +194,19 @@ void JNI_callMethod(SceneVm *vm, JavaMethod *method, SceneObject *arguments,
      * (0x5) are the same "still busy" check taken again just before the
      * call would run.
      */
-    if (flags & 0x20) {
+    if (flags & JTHREAD_FLAG_STALE_CALL) {
         thread->frame_depth = 0;
         thread->stack_offset = 0;
-        thread->flags &= ~0x23;
+        thread->flags &= ~(JTHREAD_FLAG_STALE_CALL | JTHREAD_FLAG_WOKEN | JTHREAD_FLAG_WAITING);
         flags = thread->flags;
     }
-    if (flags & 4) {
+    if (flags & JTHREAD_FLAG_CALL_RUNNING) {
         JTHREAD_waitFor();
         flags = thread->flags;
-        if (flags & 4)
+        if (flags & JTHREAD_FLAG_CALL_RUNNING)
             return;
     }
-    if (flags & 5)
+    if (flags & JTHREAD_FLAGS_BUSY)
         return;
     virtualMachine(vm, method, arguments, output);
 }
@@ -224,7 +224,7 @@ JThread *JNI_createThread(int kind, int stack_words, int frame_words)
     JThread *thread;
     VMFrame *frames;
     VMFrame *stack_end;
-    int frames_size = stack_words * 24;
+    int frames_size = stack_words * sizeof(VMFrame);
 
     thread = xmalloc(frame_words * 4 + frames_size + sizeof(JThread), 8);
     thread->flags = 0;
@@ -279,26 +279,26 @@ static int skipConstantPool(DataBuffer *buffer, int bound)
     while (index < pool_count) {
         tag = DataBuffer_getUByteAt(buffer);
         switch (tag) {
-        case 1:
+        case JVM_CONSTANT_UTF8:
             DataBuffer_seek(buffer, DataBuffer_getUShortAt(buffer));
             break;
-        case 7:
-        case 8:
+        case JVM_CONSTANT_CLASS:
+        case JVM_CONSTANT_STRING:
             DataBuffer_getUShortAt(buffer);
             break;
-        case 9:
-        case 10:
-        case 11:
-        case 12:
+        case JVM_CONSTANT_FIELDREF:
+        case JVM_CONSTANT_METHODREF:
+        case JVM_CONSTANT_INTERFACE_METHODREF:
+        case JVM_CONSTANT_NAME_AND_TYPE:
             DataBuffer_getUShortAt(buffer);
             DataBuffer_getUShortAt(buffer);
             break;
-        case 3:
-        case 4:
+        case JVM_CONSTANT_INTEGER:
+        case JVM_CONSTANT_FLOAT:
             DataBuffer_getUIntAt(buffer);
             break;
-        case 5:
-        case 6:
+        case JVM_CONSTANT_LONG:
+        case JVM_CONSTANT_DOUBLE:
             DataBuffer_getUIntAt(buffer);
             DataBuffer_getUIntAt(buffer);
             index++;
@@ -318,7 +318,7 @@ static const char *checkClass(void *buffer, const char *name, int target)
     const char *class_name;
     int name_length;
 
-    if (DataBuffer_getUIntAt(data) != 0xCAFEBABE)
+    if (DataBuffer_getUIntAt(data) != JVM_CLASS_MAGIC)
         return 0;
     name_length = 0;
     DataBuffer_getUShortAt(data);
@@ -333,14 +333,14 @@ static const char *checkClass(void *buffer, const char *name, int target)
     if (index != 0) {
         DataBuffer_setPos(data, class_start);
         skipConstantPool(data, index);
-        if (DataBuffer_getUByteAt(data) == 7)
+        if (DataBuffer_getUByteAt(data) == JVM_CONSTANT_CLASS)
             index = DataBuffer_getUShortAt(data);
         else
             index = 0xFFFF;
         DataBuffer_setPos(data, class_start);
         if (index != 0) {
             skipConstantPool(data, index);
-            if (DataBuffer_getUByteAt(data) == 1) {
+            if (DataBuffer_getUByteAt(data) == JVM_CONSTANT_UTF8) {
                 name_length = DataBuffer_getUShortAt(data);
                 class_name = (const char *)data->position;
             }
@@ -358,14 +358,14 @@ static const char *checkClass(void *buffer, const char *name, int target)
     if (super_class != 0) {
         DataBuffer_setPos(data, class_start);
         skipConstantPool(data, super_class);
-        if (DataBuffer_getUByteAt(data) == 7)
+        if (DataBuffer_getUByteAt(data) == JVM_CONSTANT_CLASS)
             index = DataBuffer_getUShortAt(data);
         else
             index = 0xFFFF;
         DataBuffer_setPos(data, class_start);
         if (index != 0) {
             skipConstantPool(data, index);
-            if (DataBuffer_getUByteAt(data) == 1) {
+            if (DataBuffer_getUByteAt(data) == JVM_CONSTANT_UTF8) {
                 if (memcmp(data->position, name, DataBuffer_getUShortAt(data) - 1) == 0)
                     return class_name;
             }
@@ -474,7 +474,7 @@ void JNI_loadClassLibrary(int class_id)
 
 int JNI_getRegister(int register_index)
 {
-    return VMRegister[register_index & 0x1f];
+    return VMRegister[register_index & VM_REGISTER_MASK];
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */

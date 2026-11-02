@@ -13,8 +13,8 @@
  * which ACT_create writes there (sb a2,0x80(s0) at 0x00305de0) and ACT_info
  * prints as "ACT[%02x]". It selects this actor's actSequence entry. It lies
  * past the recovered head of Actor, so it keeps the byte view, exactly as
- * src/main/near_dir.c and src/main/set_motion.c keep it. */
-#define ACTOR_SLOT_NUMBER_OFFSET 0x80
+ * src/main/near_dir.c and src/main/set_motion.c keep it
+ * (ACTOR_SLOT_NUMBER_OFFSET, main/act_1.h). */
 
 /*
  * The VM thread. This is the first argument of every `Java_xeno_*` native

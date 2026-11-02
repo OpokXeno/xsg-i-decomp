@@ -1,6 +1,7 @@
 #ifndef PAUSE_MENU_PAGE_ENEMY_H
 #define PAUSE_MENU_PAGE_ENEMY_H
 
+#include "main/act_1.h"
 #include "main/enemy_1.h"
 #include "main/enemy_2.h"
 #include "main/xgl_2.h"
@@ -122,6 +123,71 @@
 #define ENEMY_ROW_INDEX_FORMAT ("%2d:")
 #define ENEMY_NONE_LABEL ("--")
 
+
+/* Pages of the enemy debug screen (Page_0), named by their heading text. */
+enum EnemyDebugPage {
+    ENEMY_PAGE_MOVE,
+    ENEMY_PAGE_STATE,
+    ENEMY_PAGE_FLAGS,
+    ENEMY_PAGE_TENTACLE,
+    ENEMY_PAGE_SCALE,
+    ENEMY_PAGE_TRAITS,
+    ENEMY_PAGE_LOCATOR,
+    ENEMY_PAGE_LADDER,
+    ENEMY_PAGE_CIRCLE,
+    ENEMY_PAGE_SATELLITE,
+    ENEMY_PAGE_SPLINE_FIRST,
+    ENEMY_PAGE_SPLINE_PLAN,
+    ENEMY_PAGE_PAUSE_EVENT,
+    ENEMY_PAGE_THREAT_EVENT,
+    ENEMY_PAGE_RETURN_TOOL,
+    ENEMY_PAGE_COUNT
+};
+
+/* FLAG_FRAME_60 values the START button cycles through; the first two have banner texts. */
+#define FRAME_60_MODE_60 1
+#define FRAME_60_MODE_30_DEBUG 2
+#define FRAME_60_MODE_COUNT 3
+
+/* EnemyParams.locator_flags bits, as listed on the flags page. */
+#define ENEMY_LOCATOR_FLAG_MOTION 0x1
+#define ENEMY_LOCATOR_FLAG_TURN 0x2
+#define ENEMY_LOCATOR_FLAG_HEAD_SWING 0x4
+#define ENEMY_LOCATOR_FLAG_CANCELABLE 0x8
+#define ENEMY_LOCATOR_FLAG_FREEZE 0x10
+#define ENEMY_LOCATOR_FLAG_JAVA_TALK 0x10000
+#define ENEMY_LOCATOR_FLAG_TOUCH 0x20000
+#define ENEMY_LOCATOR_FLAG_LOCATOR 0x40000
+
+/* EnemyWork.state_flags bits, as listed on the traits page. */
+#define ENEMY_STATE_ENCOUNTER 0x1
+#define ENEMY_STATE_CONVEYOR 0x4
+#define ENEMY_STATE_OUTING 0x8
+#define ENEMY_STATE_SPLINE_MOVE 0x10
+#define ENEMY_STATE_FLIGHT 0x20
+#define ENEMY_STATE_DESTROY 0x40
+#define ENEMY_STATE_DEFORM 0x80
+#define ENEMY_STATE_CLIPPING 0x100
+
+/* Actor flag bit 31 is listed as "returning home". */
+#define ACTOR_FLAG_RETURN_HOME 0x80000000u
+
+/* Actor in_use_id range 0x4000..0x4805 is titled "Enemy", anything else "NPC". */
+#define ENEMY_IN_USE_ID_BASE 0x4000u
+#define ENEMY_IN_USE_ID_COUNT 0x806u
+
+/* Locator header list (UnduDataGetHeader id) and the page's row count. */
+#define ENEMY_LOCATOR_LIST_HEADER_ID 0x207
+#define ENEMY_LOCATOR_ROW_COUNT 16
+#define ENEMY_MONSTER_SET_COUNT 8
+/* Positions of the homing graph; route_metadata[2 * 64] holds their neighbour counts, then link targets. */
+#define ENEMY_HOMING_POSITION_COUNT 64
+/* Upper limit shown for the satellite mark timer. */
+#define ENEMY_MARK_TIMER_MAX 0x40
+/* START toggles the frame mode with this controller feedback. */
+#define DEBUG_VIBRATION_STRENGTH 0xff
+#define DEBUG_VIBRATION_FRAMES 0x3c
+
 /* Partial view of Actor; the full type changes this object (the body_radius and motion_number fields and the Vector4 scale have no matching Actor fields yet). Its EnemyParams record at +0xc0 is the canonical one from include/main/enemy_1.h. */
 typedef struct ActorPauseView {
     unsigned int flags;
@@ -161,8 +227,8 @@ typedef struct GameLoopStateRecord {
     unsigned char unmodeled_2a000[0x30];
 } GameLoopStateRecord;
 
-extern ActorPauseView actor[64];
-extern EnemyWork enepc[16];
+extern ActorPauseView actor[ACTOR_COUNT];
+extern EnemyWork enepc[ENEMY_COUNT];
 extern short Page_0;
 extern unsigned long long EneTerritoryID[];
 extern const char PauseMenuPageEnemyNotInitializedText[];

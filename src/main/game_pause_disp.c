@@ -4,6 +4,21 @@
 #include "main/xgl_packet.h"
 #include "main/game_pause_disp.h"
 
+/* GameLoopState.pause_mode: 0 shows the pause screen; once the credit
+ * overlay has been drawn for two frames, 102 saves the snapshot and returns
+ * to 0. */
+#define PAUSE_MODE_SCREEN 0
+#define PAUSE_MODE_CREDIT_FIRST 100
+#define PAUSE_MODE_CREDIT_SECOND 101
+#define PAUSE_MODE_SNAPSHOT 102
+
+/* Font draw orders of the pause screen layers, and the quadword counts of the
+ * packets DrawShadow / DrawCredit send. */
+#define PAUSE_TEXT_ORDER 0x00FFFFFF
+#define PAUSE_CREDIT_ORDER 0xFFFFFFFF
+#define PAUSE_SHADOW_QWORDS 7
+#define PAUSE_CREDIT_QWORDS 8
+
 static PauseShadowCommand ShadowEnv = {
     .dma_tag = 0,
     .vif_nop = 0,
@@ -28,7 +43,7 @@ static char msg2_2[35] = "\013\015\003\031\003START Button : Cancel PAUSE\031\00
 
 static void DrawShadow(FontDrawCursor *cursor, void *argument)
 {
-    sceVif1PkAddDirectDataN(cursor->packet, &ShadowEnv, 7);
+    sceVif1PkAddDirectDataN(cursor->packet, &ShadowEnv, PAUSE_SHADOW_QWORDS);
 }
 
 static void DrawCredit(FontDrawCursor *cursor, void *argument)
@@ -62,7 +77,7 @@ static void DrawCredit(FontDrawCursor *cursor, void *argument)
     data->body_words[9] = first_vertex_y;
     data->body_words[18] = vertex_depth;
 
-    sceVif1PkAddDirectDataN(cursor->packet, &cursor->work.credit_data, 8);
+    sceVif1PkAddDirectDataN(cursor->packet, &cursor->work.credit_data, PAUSE_CREDIT_QWORDS);
 }
 
 void PauseMenu(void)
@@ -73,18 +88,18 @@ void PauseMenu(void)
     int scanline_value;
 
     switch (pause_mode) {
-    case 0:
-        xglFontPrintExtFunc(0x00FFFFFF, DrawShadow, 0);
+    case PAUSE_MODE_SCREEN:
+        xglFontPrintExtFunc(PAUSE_TEXT_ORDER, DrawShadow, 0);
         GamePauseDispCf();
         return;
-    case 100:
-    case 101:
+    case PAUSE_MODE_CREDIT_FIRST:
+    case PAUSE_MODE_CREDIT_SECOND:
         if (SnapDrawCreditFlag != 0) {
-            xglFontPrintExtFunc(0xFFFFFFFF, DrawCredit, 0);
+            xglFontPrintExtFunc(PAUSE_CREDIT_ORDER, DrawCredit, 0);
         }
         GameLoopState.pause_mode = GameLoopState.pause_mode + 1;
         return;
-    case 102:
+    case PAUSE_MODE_SNAPSHOT:
         break;
     default:
         return;
@@ -94,19 +109,19 @@ void PauseMenu(void)
     GameSnapShotSaveFile(-1, snapshot_work, snapshot_size);
     xglFontSetFlags(GameLoopState.snapshot_flags);
     scanline_value = GameLoopState.scanline_value;
-    GameLoopState.pause_mode = 0;
+    GameLoopState.pause_mode = PAUSE_MODE_SCREEN;
     ScanLineInterpolate = scanline_value;
 }
 
 void GamePauseDispBG(void)
 {
-    sceVif1PkRef(xglPacketGetCurrent(), &ShadowEnv, 7, 0, 0, 0);
+    sceVif1PkRef(xglPacketGetCurrent(), &ShadowEnv, PAUSE_SHADOW_QWORDS, 0, 0, 0);
 }
 
 void GamePauseDispCf(void)
 {
     xglFontPrint(256 - xglFontGetStringWidth(pause_0) / 2,
-                 200, 0x00ffffff, pause_0);
+                 200, PAUSE_TEXT_ORDER, pause_0);
     GamePauseDispBG();
 }
 
@@ -114,7 +129,7 @@ void GamePauseDispEvent(void)
 {
     GamePauseDispCf();
     xglFontPrint(256 - xglFontGetStringWidth(msg1_1) / 2,
-                 256, 0x00ffffff, msg1_1);
+                 256, PAUSE_TEXT_ORDER, msg1_1);
     xglFontPrint(256 - xglFontGetStringWidth(msg2_2) / 2,
-                 288, 0x00ffffff, msg2_2);
+                 288, PAUSE_TEXT_ORDER, msg2_2);
 }

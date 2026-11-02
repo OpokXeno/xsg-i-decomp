@@ -14,9 +14,28 @@ typedef struct LookEnemyWorkEntry {
     unsigned char unmodeled_3870[0x40];
 } LookEnemyWorkEntry;
 
+/* actor->lookMode: which point the head and eyes aim at. */
+enum LookMode {
+    LOOK_MODE_ENEMY_PLACE = 1,
+    LOOK_MODE_CAMERA = 2,
+    LOOK_MODE_SELF = 3,
+    LOOK_MODE_TARGET_HEAD = 4,
+    LOOK_MODE_TARGET_EYE = 5
+};
+
+/* actor->eyeMode: 1 plays the idle table, 14 tracks eyeYaw/eyePitch, 2..12 index s_aEyeControl. */
+enum LookEyeMode {
+    EYE_MODE_DEFAULT = 0,
+    EYE_MODE_IDLING = 1,
+    EYE_MODE_FIXED = 13,
+    EYE_MODE_TRACK = 14
+};
+
+#define LOOK_ENEMY_COUNT 16
+
 enum LookEyeComponent { EYE_YAW, EYE_PITCH, EYE_DURATION, EYE_STEP };
 
-extern LookEnemyWorkEntry enepc[16];
+extern LookEnemyWorkEntry enepc[LOOK_ENEMY_COUNT];
 extern const char eyeTargetShionName[];
 extern const char eyeTargetKosmosName[];
 extern const char eyeTargetMomoName[];
@@ -105,11 +124,11 @@ static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place)
     LookEnemyTargetSlot *enemyEntry = 0;
     unsigned short mode = actor->lookMode;
 
-    if (actor->number < 16)
+    if (actor->number < LOOK_ENEMY_COUNT)
         enemyEntry = &enepc[actor->number].targetSlot;
 
     switch (mode) {
-    case 1: {
+    case LOOK_MODE_ENEMY_PLACE: {
         LookAlignedVector4 *enemyPlace;
 
         if (enemyEntry != 0) {
@@ -121,15 +140,15 @@ static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place)
         }
         break;
     }
-    case 2:
+    case LOOK_MODE_CAMERA:
         look_copy_place(place, &xglStudioGetActiveCamera()->position.vector);
         result = 0;
         break;
-    case 3:
+    case LOOK_MODE_SELF:
         look_copy_place(place, &actor->worldPosition);
         result = 0;
         break;
-    case 4: {
+    case LOOK_MODE_TARGET_HEAD: {
         LookModelRecord *model;
 
         target = actor->lookTarget;
@@ -145,7 +164,7 @@ static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place)
         result = 0;
         break;
     }
-    case 5:
+    case LOOK_MODE_TARGET_EYE:
         target = actor->lookTarget;
         if (target == 0)
             break;
@@ -354,7 +373,7 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
     }
     mode = actor->eyeMode;
     switch (mode) {
-    case 1:
+    case EYE_MODE_IDLING:
         look_limit_add(&eyes[side].yaw, s_aEyeIdling[eyes[side].frame][EYE_YAW],
                        s_aEyeIdling[eyes[side].frame][EYE_STEP]);
         look_limit_add(&eyes[side].pitch, s_aEyeIdling[eyes[side].frame][EYE_PITCH],
@@ -372,7 +391,7 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
         }
         controlled = 1;
         break;
-    case 14:
+    case EYE_MODE_TRACK:
         yawScale = LOOK_EYE_TRACK_STEP;
         yawScale = eyeWeight * yawScale;
         look_limit_add(&eyes[side].yaw, actor->eyeYaw, yawScale);
@@ -401,10 +420,10 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
                        s_aEyeControl[actor->eyeMode][EYE_STEP]);
         controlled = 1;
         break;
-    case 13:
+    case EYE_MODE_FIXED:
         controlled = 1;
         break;
-    case 0:
+    case EYE_MODE_DEFAULT:
         break;
     }
     if (!controlled) {

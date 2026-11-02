@@ -3,6 +3,23 @@
 
 #include "main/open_close_main.h"
 
+/*
+ * EMessageParam.flags. Low nibble is kept across eMessageMain's page starts;
+ * TYPEWRITER reveals one glyph per frame, LINE_TIMING (set with it) restarts
+ * the reveal counter on each line; PAGE_DONE is set once the whole page has
+ * been output.
+ */
+#define EMESSAGE_FLAG_HEADER 0x01
+#define EMESSAGE_FLAG_KEEP_MASK 0x0F
+#define EMESSAGE_FLAG_TYPEWRITER 0x10
+#define EMESSAGE_FLAG_LINE_TIMING 0x20
+#define EMESSAGE_FLAG_PAGE_DONE 0x80
+
+/* Modes beyond the shared E_MODE_* set: SHOW (0x20/0x21) prints at once,
+ * OPEN (0x22/0x23) types the page glyph by glyph, LINE (0x24/0x25) line by line. */
+#define EMESSAGE_MODE_LINE_START 0x24
+#define EMESSAGE_MODE_LINE_STEP 0x25
+
 typedef struct EMessageParam {
     unsigned char flags;
     unsigned char mode;

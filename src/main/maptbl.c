@@ -731,7 +731,7 @@ static char *maptbl1800[22] = {
     (char *)MapModelUdo22Name
 };
 
-MapNameGroup maptbl[20] = {
+MapNameGroup maptbl[MAP_GROUP_COUNT] = {
     {maptbl0000, 58},
     {maptbl0100, 32},
     {maptbl0200, 0},

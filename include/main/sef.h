@@ -3,6 +3,16 @@
 
 #include "shared.h"
 
+/* Effects per scheduler, and line-data slots per effect. */
+#define SEF_EFFECT_COUNT 32
+
+/* SchedulerState.flags bits set from Effect.setClip/setForceLoop/setMotion/noAttach. */
+#define SEF_SCHED_CLIP 0x10
+#define SEF_SCHED_FORCE_LOOP 0x20
+#define SEF_SCHED_MOTION 0x80
+#define SEF_SCHED_NO_ATTACH 0x400
+#define SEF_EFFECT_LINE_COUNT 32
+
 /* The 0x24-byte effect request block sefCreateEffect hands to the script creator. */
 typedef struct SefEffectRequest {
     struct Actor *source;            /* +0x00 */
@@ -49,7 +59,7 @@ typedef struct ScriptBinding {
  * parameters, flags and frame are reset to 0.
  */
 typedef struct EffectData {
-    signed char lineHandles[0x20];
+    signed char lineHandles[SEF_EFFECT_LINE_COUNT];
     int owner;
     short category;
     short effect_no;
@@ -78,7 +88,7 @@ struct SchedulerState {
     AlignedVector4 position;         /* +0x80 */
     AlignedVector4 rotation;         /* +0x90, radians */
     AlignedVector4 scale;            /* +0xa0 */
-    EffectData effects[32];          /* +0xb0 */
+    EffectData effects[SEF_EFFECT_COUNT]; /* +0xb0 */
     int inUse;                       /* +0x6b0 */
     unsigned char *scriptAddress;    /* +0x6b4 */
     SceneObject savedActive;         /* +0x6b8, also getPeer_Effect's Java Effect */

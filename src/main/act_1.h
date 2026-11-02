@@ -8,8 +8,6 @@
 #include "shared.h"
 #include "main/act_1.h"
 
-#define ACTOR_COUNT 64
-
 #define ACTOR_LINKED_BLOCK_END_OFFSET 0x8f8
 
 typedef struct MatrixHeap {

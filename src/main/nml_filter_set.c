@@ -105,10 +105,10 @@ static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
 } while (0)
 
 #define NML_FILTER_VERTEX(point) do { \
-    NML_FILTER_EMIT(3, (u64)(point)->displaced.u | \
+    NML_FILTER_EMIT(NML_GS_REG_UV, (u64)(point)->displaced.u | \
         ((u64)(point)->displaced.v << 16)); \
-    NML_FILTER_EMIT(4, (u64)(point)->displaced.x | \
-        ((u64)(point)->displaced.y << 16) | 0x7fffffff00000000ULL); \
+    NML_FILTER_EMIT(NML_GS_REG_XYZF2, (u64)(point)->displaced.x | \
+        ((u64)(point)->displaced.y << 16) | NML_GS_XYZF_FAR_Z); \
 } while (0)
 
 static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int count)
@@ -116,7 +116,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
     int entryCount = 0;
     const LayoutStore *model = modelArg;
     struct NmlFilterGridPoint grid[4][5];
-    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)0x70000000;
+    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)SCRATCHPAD_BASE;
     struct NmlFilterGsPair *alphaEntry;
     struct NmlFilterGsPair *clampEntry;
     struct NmlFilterGsPair *entry;
@@ -124,7 +124,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
     int column;
     int remaining;
 
-    packet[0].registerSlot.value = 0x3f;
+    packet[0].registerSlot.value = NML_GS_REG_TEXFLUSH;
     packet[0].payload.value = 0;
     entryCount = 1;
     if (model->fields.packetFilterFlags & 4) {
@@ -134,23 +134,23 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
         packet[entryCount].payload.value = (u64)(0x24020000 | (sRender.opaqueTexturePage << 5)) |
             0x2000000640000000ULL;
     }
-    packet[entryCount].registerSlot.value = 6;
+    packet[entryCount].registerSlot.value = NML_GS_REG_TEX0_1;
     ++entryCount;
-    alphaEntry = (struct NmlFilterGsPair *)0x70000020;
+    alphaEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x20);
     entryCount += 2;
-    alphaEntry->payload.value = ((u64)(int)model->fields.filterAlpha << 32) | 100;
-    alphaEntry->registerSlot.value = 0x42;
-    clampEntry = (struct NmlFilterGsPair *)0x70000030;
-    clampEntry->registerSlot.value = 8;
+    alphaEntry->payload.value = ((u64)(int)model->fields.filterAlpha << 32) | NML_GS_ALPHA_BLEND_FIXED;
+    alphaEntry->registerSlot.value = NML_GS_REG_ALPHA_1;
+    clampEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x30);
+    clampEntry->registerSlot.value = NML_GS_REG_CLAMP_1;
     clampEntry->payload.value = 0;
     if (flags) {
-        packet[entryCount].payload.value = 0x5f001;
+        packet[entryCount].payload.value = NML_GS_TEST_ZGEQUAL | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_RGB_ONLY | NML_GS_TEST_DATE | NML_GS_TEST_DATM;
     } else {
-        packet[entryCount].payload.value = 0x5d001;
+        packet[entryCount].payload.value = NML_GS_TEST_ZGEQUAL | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY | NML_GS_TEST_DATE | NML_GS_TEST_DATM;
     }
-    packet[entryCount++].registerSlot.value = 0x47;
-    packet[entryCount].payload.value = 0x3f80000000808080ULL;
-    packet[entryCount].registerSlot.value = 1;
+    packet[entryCount++].registerSlot.value = NML_GS_REG_TEST_1;
+    packet[entryCount].payload.value = NML_GS_RGBAQ_Q_ONE | 0x808080;
+    packet[entryCount].registerSlot.value = NML_GS_REG_RGBAQ;
     ++entryCount;
 
     {
@@ -159,9 +159,9 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
             for (column = 0; column < 5; ++column) {
                 struct NmlFilterGridPoint *point = &grid[row][column];
                 point->original[NML_GRID_X] = ((column * 128) + 1792) << 4;
-                point->original[NML_GRID_Y] = ((row * 448 / 3) + 1824) << 4;
+                point->original[NML_GRID_Y] = ((row * NML_SCREEN_HEIGHT / 3) + 1824) << 4;
                 point->original[NML_GRID_U] = (column * 128) << 4;
-                point->original[NML_GRID_V] = (row * 448 / 3) << 4;
+                point->original[NML_GRID_V] = (row * NML_SCREEN_HEIGHT / 3) << 4;
             }
         }
     }
@@ -183,41 +183,41 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
         }
     }
     for (row = 0; row < 3; ++row) {
-        packet[entryCount].payload.value = 0x154;
-        packet[entryCount].registerSlot.value = 0;
+        packet[entryCount].payload.value = NML_GS_PRIM_TRISTRIP | NML_GS_PRIM_TME | NML_GS_PRIM_ABE | NML_GS_PRIM_FST;
+        packet[entryCount].registerSlot.value = NML_GS_REG_PRIM;
         ++entryCount;
         packet[entryCount].payload.value = (u64)grid[row][0].displaced[NML_GRID_U] |
             ((u64)grid[row][0].displaced[NML_GRID_V] << 16);
-        packet[entryCount].registerSlot.value = 3;
+        packet[entryCount].registerSlot.value = NML_GS_REG_UV;
         ++entryCount;
-        packet[entryCount].payload.value = 0x7fffffff00000000ULL | (u64)grid[row][0].displaced[NML_GRID_X] |
+        packet[entryCount].payload.value = NML_GS_XYZF_FAR_Z | (u64)grid[row][0].displaced[NML_GRID_X] |
             ((u64)grid[row][0].displaced[NML_GRID_Y] << 16);
-        packet[entryCount].registerSlot.value = 4;
+        packet[entryCount].registerSlot.value = NML_GS_REG_XYZF2;
         ++entryCount;
         packet[entryCount].payload.value = (u64)grid[row + 1][0].displaced[NML_GRID_U] |
             ((u64)grid[row + 1][0].displaced[NML_GRID_V] << 16);
-        packet[entryCount].registerSlot.value = 3;
+        packet[entryCount].registerSlot.value = NML_GS_REG_UV;
         ++entryCount;
         packet[entryCount].payload.value = (u64)grid[row + 1][0].displaced[NML_GRID_X] |
-            0x7fffffff00000000ULL | ((u64)grid[row + 1][0].displaced[NML_GRID_Y] << 16);
-        packet[entryCount].registerSlot.value = 4;
+            NML_GS_XYZF_FAR_Z | ((u64)grid[row + 1][0].displaced[NML_GRID_Y] << 16);
+        packet[entryCount].registerSlot.value = NML_GS_REG_XYZF2;
         ++entryCount;
         for (column = 1; column < 5; ++column) {
             packet[entryCount].payload.value = (u64)grid[row][column].displaced[NML_GRID_U] |
                 ((u64)grid[row][column].displaced[NML_GRID_V] << 16);
-            packet[entryCount].registerSlot.value = 3;
+            packet[entryCount].registerSlot.value = NML_GS_REG_UV;
             ++entryCount;
-            packet[entryCount].payload.value = 0x7fffffff00000000ULL | (u64)grid[row][column].displaced[NML_GRID_X] |
+            packet[entryCount].payload.value = NML_GS_XYZF_FAR_Z | (u64)grid[row][column].displaced[NML_GRID_X] |
                 ((u64)grid[row][column].displaced[NML_GRID_Y] << 16);
-            packet[entryCount].registerSlot.value = 4;
+            packet[entryCount].registerSlot.value = NML_GS_REG_XYZF2;
             ++entryCount;
             packet[entryCount].payload.value = (u64)grid[row + 1][column].displaced[NML_GRID_U] |
                 ((u64)grid[row + 1][column].displaced[NML_GRID_V] << 16);
-            packet[entryCount].registerSlot.value = 3;
+            packet[entryCount].registerSlot.value = NML_GS_REG_UV;
             ++entryCount;
             packet[entryCount].payload.value = (u64)grid[row + 1][column].displaced[NML_GRID_X] |
-                0x7fffffff00000000ULL | ((u64)grid[row + 1][column].displaced[NML_GRID_Y] << 16);
-            packet[entryCount].registerSlot.value = 4;
+                NML_GS_XYZF_FAR_Z | ((u64)grid[row + 1][column].displaced[NML_GRID_Y] << 16);
+            packet[entryCount].registerSlot.value = NML_GS_REG_XYZF2;
             ++entryCount;
         }
     }
@@ -246,7 +246,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
     struct NmlFilterGsPair *uvEntry = &packet[entryIndex]; \
     uvEntry->payload.value = (u64)geometry->uv[vertex].u | \
         ((u64)geometry->uv[vertex].v << 16); \
-    uvEntry->registerSlot.value = 3; \
+    uvEntry->registerSlot.value = NML_GS_REG_UV; \
     { \
         u64 positionX = geometry->xyz[vertex].x; \
         u64 positionY = geometry->xyz[vertex].y; \
@@ -263,39 +263,39 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
 {
     struct NmlStealthTint baseTint = { { 0.5f, 1.0f, 0.8f, 1.0f } };
     float outlineColor[3];
-    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)0x70000000;
+    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)SCRATCHPAD_BASE;
     struct NmlFilterGsPair *entry;
     const struct NmlStealthGeometry *geometry;
     int remaining;
     int part;
 
     packet[0].payload.value = 0;
-    packet[0].registerSlot.value = 0x3f;
+    packet[0].registerSlot.value = NML_GS_REG_TEXFLUSH;
     {
         struct NmlFilterGsPair *textureEntry = &packet[1];
         textureEntry->payload.value = (u64)(0x24020000 | (sRender.framebufferPage << 5)) |
             0x2000000640000000ULL;
-        textureEntry->registerSlot.value = 6;
+        textureEntry->registerSlot.value = NML_GS_REG_TEX0_1;
     }
     {
         struct NmlFilterGsPair *alphaEntry = &packet[2];
-        alphaEntry->payload.value = ((u64)(int)model->fields.filterAlpha << 32) | 100;
-        alphaEntry->registerSlot.value = 0x42;
+        alphaEntry->payload.value = ((u64)(int)model->fields.filterAlpha << 32) | NML_GS_ALPHA_BLEND_FIXED;
+        alphaEntry->registerSlot.value = NML_GS_REG_ALPHA_1;
     }
     {
         struct NmlFilterGsPair *clampEntry = &packet[3];
         clampEntry->payload.value = 0;
-        clampEntry->registerSlot.value = 8;
+        clampEntry->registerSlot.value = NML_GS_REG_CLAMP_1;
     }
     {
         struct NmlFilterGsPair *testEntry = &packet[4];
-        testEntry->payload.value = 0x3f001;
-        testEntry->registerSlot.value = 0x47;
+        testEntry->payload.value = NML_GS_TEST_ZALWAYS | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_RGB_ONLY | NML_GS_TEST_DATE | NML_GS_TEST_DATM;
+        testEntry->registerSlot.value = NML_GS_REG_TEST_1;
     }
     {
         struct NmlFilterGsPair *colorEntry = &packet[5];
-        colorEntry->payload.value = 0x3f80000000808080ULL;
-        colorEntry->registerSlot.value = 1;
+        colorEntry->payload.value = NML_GS_RGBAQ_Q_ONE | 0x808080;
+        colorEntry->registerSlot.value = NML_GS_REG_RGBAQ;
     }
     nmlPacketGsInit();
     nmlPacketAddGsFrame(sRender.displayBufferBase, 0);
@@ -308,8 +308,8 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
 
     for (part = 0; part < model->fields.stealthEntryCount; part++) {
         geometry = model->fields.stealthParts[part];
-        packet[0].payload.value = 0x154;
-        packet[0].registerSlot.value = 0;
+        packet[0].payload.value = NML_GS_PRIM_TRISTRIP | NML_GS_PRIM_TME | NML_GS_PRIM_ABE | NML_GS_PRIM_FST;
+        packet[0].registerSlot.value = NML_GS_REG_PRIM;
         NML_STEALTH_VERTEX(13, 1, NML_STEALTH_CLIP(13));
         NML_STEALTH_VERTEX(12, 3,
             NML_STEALTH_CLIP(12) | NML_STEALTH_CLIP(13));
@@ -348,33 +348,33 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
     outlineColor[0] = baseTint.channels[0] * 128.0f;
     outlineColor[1] = baseTint.channels[1] * 128.0f;
     outlineColor[2] = baseTint.channels[2] * 128.0f;
-    packet[0].payload.value = 0x3d001;
-    packet[0].registerSlot.value = 0x47;
+    packet[0].payload.value = NML_GS_TEST_ZALWAYS | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY | NML_GS_TEST_DATE | NML_GS_TEST_DATM;
+    packet[0].registerSlot.value = NML_GS_REG_TEST_1;
     {
         struct NmlFilterGsPair *alphaEntry = &packet[1];
-        alphaEntry->payload.value = ((u64)(int)model->fields.filterAmplitude << 32) | 100;
-        alphaEntry->registerSlot.value = 0x42;
+        alphaEntry->payload.value = ((u64)(int)model->fields.filterAmplitude << 32) | NML_GS_ALPHA_BLEND_FIXED;
+        alphaEntry->registerSlot.value = NML_GS_REG_ALPHA_1;
     }
     {
         struct NmlFilterGsPair *colorEntry = &packet[2];
         colorEntry->payload.value = (u64)(int)outlineColor[0] |
-            ((u64)(int)outlineColor[1] << 8) | ((u64)(int)outlineColor[2] << 16) | 0x3f80000000000000ULL;
-        colorEntry->registerSlot.value = 1;
+            ((u64)(int)outlineColor[1] << 8) | ((u64)(int)outlineColor[2] << 16) | NML_GS_RGBAQ_Q_ONE;
+        colorEntry->registerSlot.value = NML_GS_REG_RGBAQ;
     }
     {
         struct NmlFilterGsPair *primEntry = &packet[3];
-        primEntry->payload.value = 0x46;
-        primEntry->registerSlot.value = 0;
+        primEntry->payload.value = NML_GS_PRIM_SPRITE | NML_GS_PRIM_ABE;
+        primEntry->registerSlot.value = NML_GS_REG_PRIM;
     }
     {
         struct NmlFilterGsPair *topCornerEntry = &packet[4];
-        topCornerEntry->payload.value = 0x72007000;
-        topCornerEntry->registerSlot.value = 4;
+        topCornerEntry->payload.value = NML_GS_XY_TOP_LEFT;
+        topCornerEntry->registerSlot.value = NML_GS_REG_XYZF2;
     }
     {
         struct NmlFilterGsPair *bottomCornerEntry = &packet[5];
-        bottomCornerEntry->payload.value = 0x8e009000;
-        bottomCornerEntry->registerSlot.value = 4;
+        bottomCornerEntry->payload.value = NML_GS_XY_BOTTOM_RIGHT;
+        bottomCornerEntry->registerSlot.value = NML_GS_REG_XYZF2;
     }
     entry = packet;
     for (remaining = 6 - 1; remaining >= 0; remaining--, entry++) {
@@ -777,22 +777,22 @@ void nmlFilterSetFrameToBuffer(int displayBufferBase)
     sourceBuffer = ((u64)sRender.framebufferPage << 37) | ((u64)0x8000 << 36);
     bitbltBuffer = 0x80000 | ((displayBufferBase & 0xffff) << 5) |
         (pixelStorageMode << 56) | sourceBuffer | (pixelStorageMode << 24);
-    gsEntry50 = (struct NmlFilterGsRegisterEntry *)0x70000010;
-    gsEntry51 = (struct NmlFilterGsRegisterEntry *)0x70000020;
-    gsEntry52 = (struct NmlFilterGsRegisterEntry *)0x70000030;
-    gsEntry53 = (struct NmlFilterGsRegisterEntry *)0x70000040;
-    gsEntry3f = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry50 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10);
+    gsEntry51 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20);
+    gsEntry52 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30);
+    gsEntry53 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40);
+    gsEntry3f = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
     gsEntry3f->value = 0;
-    gsEntry3f->registerId = 0x3f;
+    gsEntry3f->registerId = NML_GS_REG_TEXFLUSH;
     gsEntry50->value = bitbltBuffer;
-    gsEntry50->registerId = 0x50;
+    gsEntry50->registerId = NML_GS_REG_BITBLTBUF;
     gsEntry51->value = 0;
-    gsEntry51->registerId = 0x51;
-    gsEntry52->value = ((u64)0x1c0 << 32) | 0x200;
-    gsEntry52->registerId = 0x52;
+    gsEntry51->registerId = NML_GS_REG_TRXPOS;
+    gsEntry52->value = ((u64)NML_SCREEN_HEIGHT << 32) | NML_SCREEN_WIDTH;
+    gsEntry52->registerId = NML_GS_REG_TRXREG;
     gsEntry53->value = 2;
-    gsEntry53->registerId = 0x53;
-    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry53->registerId = NML_GS_REG_TRXDIR;
+    entry = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
     nmlPacketGsInit();
     for (; remaining >= 0; remaining--, entry++) {
         packet_gs_entry64((int)entry->registerId, &entry->value);
@@ -818,22 +818,22 @@ void nmlFilterSetBufferToFrame(int frameBufferBase)
     sourceBuffer = ((u64)(frameBufferBase & 0xffff) << 37) | ((u64)0x8000 << 36);
     bitbltBuffer = 0x80000 | (sRender.framebufferPage << 5) |
         (pixelStorageMode << 56) | sourceBuffer | (pixelStorageMode << 24);
-    gsEntry50 = (struct NmlFilterGsRegisterEntry *)0x70000010;
-    gsEntry51 = (struct NmlFilterGsRegisterEntry *)0x70000020;
-    gsEntry52 = (struct NmlFilterGsRegisterEntry *)0x70000030;
-    gsEntry53 = (struct NmlFilterGsRegisterEntry *)0x70000040;
-    gsEntry3f = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry50 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10);
+    gsEntry51 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20);
+    gsEntry52 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30);
+    gsEntry53 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40);
+    gsEntry3f = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
     gsEntry3f->value = 0;
-    gsEntry3f->registerId = 0x3f;
+    gsEntry3f->registerId = NML_GS_REG_TEXFLUSH;
     gsEntry50->value = bitbltBuffer;
-    gsEntry50->registerId = 0x50;
+    gsEntry50->registerId = NML_GS_REG_BITBLTBUF;
     gsEntry51->value = 0;
-    gsEntry51->registerId = 0x51;
-    gsEntry52->value = ((u64)0x1c0 << 32) | 0x200;
-    gsEntry52->registerId = 0x52;
+    gsEntry51->registerId = NML_GS_REG_TRXPOS;
+    gsEntry52->value = ((u64)NML_SCREEN_HEIGHT << 32) | NML_SCREEN_WIDTH;
+    gsEntry52->registerId = NML_GS_REG_TRXREG;
     gsEntry53->value = 2;
-    gsEntry53->registerId = 0x53;
-    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry53->registerId = NML_GS_REG_TRXDIR;
+    entry = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
     nmlPacketGsInit();
     for (; remaining >= 0; remaining--, entry++) {
         packet_gs_entry64((int)entry->registerId, &entry->value);
@@ -846,39 +846,39 @@ void nmlFilterSetBufferRender(float opacity)
     struct NmlFilterGsRegisterEntry *entry;
     int remaining;
 
-    ((struct NmlFilterGsRegisterEntry *)0x70000000)->registerId = 0x3f;
-    ((struct NmlFilterGsRegisterEntry *)0x70000000)->value = 0;
-    ((struct NmlFilterGsRegisterEntry *)0x70000010)->value =
+    ((struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE)->registerId = NML_GS_REG_TEXFLUSH;
+    ((struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE)->value = 0;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10))->value =
         0x24020000 | ((u64)(sRender.framebufferPage << 5)) |
         ((u64)0x20000006 << 32) | ((u64)0x4000 << 16);
-    ((struct NmlFilterGsRegisterEntry *)0x70000010)->registerId = 6;
-    ((struct NmlFilterGsRegisterEntry *)0x70000020)->value = 0;
-    ((struct NmlFilterGsRegisterEntry *)0x70000020)->registerId = 0x14;
-    ((struct NmlFilterGsRegisterEntry *)0x70000030)->value = 0;
-    ((struct NmlFilterGsRegisterEntry *)0x70000030)->registerId = 8;
-    ((struct NmlFilterGsRegisterEntry *)0x70000040)->value = 0x31001;
-    ((struct NmlFilterGsRegisterEntry *)0x70000040)->registerId = 0x47;
-    ((struct NmlFilterGsRegisterEntry *)0x70000050)->value =
-        ((u64)(int)(opacity * 128.0f) << 32) | 0x64;
-    ((struct NmlFilterGsRegisterEntry *)0x70000050)->registerId = 0x42;
-    ((struct NmlFilterGsRegisterEntry *)0x70000060)->value =
-        0x3f80000080808080ULL;
-    ((struct NmlFilterGsRegisterEntry *)0x70000060)->registerId = 1;
-    ((struct NmlFilterGsRegisterEntry *)0x70000070)->value = 0x116;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10))->registerId = NML_GS_REG_TEX0_1;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20))->value = 0;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20))->registerId = NML_GS_REG_TEX1_1;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30))->value = 0;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30))->registerId = NML_GS_REG_CLAMP_1;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40))->value = NML_GS_TEST_COLOR_ONLY;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40))->registerId = NML_GS_REG_TEST_1;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x50))->value =
+        ((u64)(int)(opacity * 128.0f) << 32) | NML_GS_ALPHA_BLEND_FIXED;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x50))->registerId = NML_GS_REG_ALPHA_1;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x60))->value =
+        NML_GS_RGBAQ_Q_ONE | NML_GS_RGBA_NEUTRAL;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x60))->registerId = NML_GS_REG_RGBAQ;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x70))->value = NML_GS_PRIM_SPRITE | NML_GS_PRIM_TME | NML_GS_PRIM_FST;
     if (opacity < 1.0f) {
-        ((struct NmlFilterGsRegisterEntry *)0x70000070)->value = 0x156;
+        ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x70))->value = NML_GS_PRIM_SPRITE | NML_GS_PRIM_TME | NML_GS_PRIM_ABE | NML_GS_PRIM_FST;
     }
-    ((struct NmlFilterGsRegisterEntry *)0x70000070)->registerId = 0;
-    ((struct NmlFilterGsRegisterEntry *)0x70000080)->value = 0;
-    ((struct NmlFilterGsRegisterEntry *)0x70000080)->registerId = 3;
-    ((struct NmlFilterGsRegisterEntry *)0x70000090)->value = 0x72007000;
-    ((struct NmlFilterGsRegisterEntry *)0x70000090)->registerId = 4;
-    ((struct NmlFilterGsRegisterEntry *)0x700000A0)->value = 0x1C102000;
-    ((struct NmlFilterGsRegisterEntry *)0x700000A0)->registerId = 3;
-    ((struct NmlFilterGsRegisterEntry *)0x700000B0)->value = 0x8E009000;
-    ((struct NmlFilterGsRegisterEntry *)0x700000B0)->registerId = 4;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x70))->registerId = NML_GS_REG_PRIM;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x80))->value = 0;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x80))->registerId = NML_GS_REG_UV;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x90))->value = NML_GS_XY_TOP_LEFT;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x90))->registerId = NML_GS_REG_XYZF2;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0xA0))->value = 0x1C102000;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0xA0))->registerId = NML_GS_REG_UV;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0xB0))->value = NML_GS_XY_BOTTOM_RIGHT;
+    ((struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0xB0))->registerId = NML_GS_REG_XYZF2;
 
-    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    entry = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
     nmlPacketGsInit();
     for (remaining = 11; remaining >= 0; remaining--, entry++) {
         packet_gs_entry64((u32)entry->registerId, &entry->value);
@@ -897,25 +897,25 @@ void nmlFilterSetFrameAlphaClear(void)
     struct NmlFilterGsRegisterEntry *entry;
     int remaining;
 
-    gsEntry42 = (struct NmlFilterGsRegisterEntry *)0x70000000;
-    gsEntry47 = (struct NmlFilterGsRegisterEntry *)0x70000010;
-    gsEntry1 = (struct NmlFilterGsRegisterEntry *)0x70000020;
-    gsEntry46 = (struct NmlFilterGsRegisterEntry *)0x70000030;
-    gsEntry4First = (struct NmlFilterGsRegisterEntry *)0x70000040;
-    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)0x70000050;
-    gsEntry42->value = 0x68;
-    gsEntry42->registerId = 0x42;
-    gsEntry47->value = 0x31001;
-    gsEntry47->registerId = 0x47;
+    gsEntry42 = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
+    gsEntry47 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10);
+    gsEntry1 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20);
+    gsEntry46 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30);
+    gsEntry4First = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40);
+    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x50);
+    gsEntry42->value = NML_GS_ALPHA_FIXED;
+    gsEntry42->registerId = NML_GS_REG_ALPHA_1;
+    gsEntry47->value = NML_GS_TEST_COLOR_ONLY;
+    gsEntry47->registerId = NML_GS_REG_TEST_1;
     gsEntry1->value = 0x3f80000001000000;
-    gsEntry1->registerId = 1;
-    gsEntry46->value = 0x46;
-    gsEntry46->registerId = 0;
-    gsEntry4First->value = 0x72007000;
-    gsEntry4First->registerId = 4;
-    gsEntry4Last->value = 0x8e009000;
-    gsEntry4Last->registerId = 4;
-    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry1->registerId = NML_GS_REG_RGBAQ;
+    gsEntry46->value = NML_GS_PRIM_SPRITE | NML_GS_PRIM_ABE;
+    gsEntry46->registerId = NML_GS_REG_PRIM;
+    gsEntry4First->value = NML_GS_XY_TOP_LEFT;
+    gsEntry4First->registerId = NML_GS_REG_XYZF2;
+    gsEntry4Last->value = NML_GS_XY_BOTTOM_RIGHT;
+    gsEntry4Last->registerId = NML_GS_REG_XYZF2;
+    entry = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
 
     nmlPacketGsInit();
     nmlPacketAddGsFrame(sRender.displayBufferBase, 0);
@@ -937,25 +937,25 @@ void nmlFilterSetTexClear(int frameBase)
     struct NmlFilterGsRegisterEntry *entry;
     int remaining;
 
-    gsEntry42 = (struct NmlFilterGsRegisterEntry *)0x70000000;
-    gsEntry47 = (struct NmlFilterGsRegisterEntry *)0x70000010;
-    gsEntry1 = (struct NmlFilterGsRegisterEntry *)0x70000020;
-    gsEntry46 = (struct NmlFilterGsRegisterEntry *)0x70000030;
-    gsEntry4First = (struct NmlFilterGsRegisterEntry *)0x70000040;
-    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)0x70000050;
+    gsEntry42 = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
+    gsEntry47 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10);
+    gsEntry1 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20);
+    gsEntry46 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30);
+    gsEntry4First = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40);
+    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x50);
     gsEntry42->value = 0x8a;
-    gsEntry42->registerId = 0x42;
-    gsEntry47->value = 0x31001;
-    gsEntry47->registerId = 0x47;
+    gsEntry42->registerId = NML_GS_REG_ALPHA_1;
+    gsEntry47->value = NML_GS_TEST_COLOR_ONLY;
+    gsEntry47->registerId = NML_GS_REG_TEST_1;
     gsEntry1->value = 0x3f80000080000000;
-    gsEntry1->registerId = 1;
-    gsEntry46->value = 0x46;
-    gsEntry46->registerId = 0;
-    gsEntry4First->value = 0x72007000;
-    gsEntry4First->registerId = 4;
+    gsEntry1->registerId = NML_GS_REG_RGBAQ;
+    gsEntry46->value = NML_GS_PRIM_SPRITE | NML_GS_PRIM_ABE;
+    gsEntry46->registerId = NML_GS_REG_PRIM;
+    gsEntry4First->value = NML_GS_XY_TOP_LEFT;
+    gsEntry4First->registerId = NML_GS_REG_XYZF2;
     gsEntry4Last->value = 0x7ff09000;
-    gsEntry4Last->registerId = 4;
-    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry4Last->registerId = NML_GS_REG_XYZF2;
+    entry = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
 
     nmlPacketGsInit();
     for (remaining = 5; remaining >= 0; remaining--, entry++) {
@@ -974,22 +974,22 @@ void nmlFilterBackClear(void)
     struct NmlFilterGsRegisterEntry *entry;
     int remaining;
 
-    gsEntry47 = (struct NmlFilterGsRegisterEntry *)0x70000000;
-    gsEntry1 = (struct NmlFilterGsRegisterEntry *)0x70000010;
-    gsEntry0 = (struct NmlFilterGsRegisterEntry *)0x70000020;
-    gsEntry4First = (struct NmlFilterGsRegisterEntry *)0x70000030;
-    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)0x70000040;
-    gsEntry47->value = 0x30000;
-    gsEntry47->registerId = 0x47;
+    gsEntry47 = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
+    gsEntry1 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x10);
+    gsEntry0 = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x20);
+    gsEntry4First = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x30);
+    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)(SCRATCHPAD_BASE + 0x40);
+    gsEntry47->value = NML_GS_TEST_ZALWAYS;
+    gsEntry47->registerId = NML_GS_REG_TEST_1;
     gsEntry1->value = (u64)0xfe00 << 46;
-    gsEntry1->registerId = 1;
+    gsEntry1->registerId = NML_GS_REG_RGBAQ;
     gsEntry0->value = 6;
-    gsEntry0->registerId = 0;
-    gsEntry4First->value = 0x72007000;
-    gsEntry4First->registerId = 4;
-    gsEntry4Last->value = 0x8e009000;
-    gsEntry4Last->registerId = 4;
-    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry0->registerId = NML_GS_REG_PRIM;
+    gsEntry4First->value = NML_GS_XY_TOP_LEFT;
+    gsEntry4First->registerId = NML_GS_REG_XYZF2;
+    gsEntry4Last->value = NML_GS_XY_BOTTOM_RIGHT;
+    gsEntry4Last->registerId = NML_GS_REG_XYZF2;
+    entry = (struct NmlFilterGsRegisterEntry *)SCRATCHPAD_BASE;
 
     nmlPacketGsInit();
     nmlPacketAddGsZbuf(1);
@@ -1029,47 +1029,47 @@ void nmlFilterSetFlatRender(LayoutStore *model)
         render = &sRender;
         texture = (u64)(0x24020000 | (render->framebufferPage << 5)) |
             0x2000000640000000ULL;
-        gsEntry6 = (GsTag *)0x70000010;
-        gsEntry14 = (GsTag *)0x70000020;
-        gsEntry8 = (GsTag *)0x70000030;
-        gsEntry3f = (GsTag *)0x70000000;
+        gsEntry6 = (GsTag *)(SCRATCHPAD_BASE + 0x10);
+        gsEntry14 = (GsTag *)(SCRATCHPAD_BASE + 0x20);
+        gsEntry8 = (GsTag *)(SCRATCHPAD_BASE + 0x30);
+        gsEntry3f = (GsTag *)SCRATCHPAD_BASE;
         gsEntry3f[0].value = 0;
-        gsEntry3f[1].value = 0x3f;
+        gsEntry3f[1].value = NML_GS_REG_TEXFLUSH;
         gsEntry6[0].value = texture;
-        gsEntry6[1].value = 6;
+        gsEntry6[1].value = NML_GS_REG_TEX0_1;
         gsEntry14[0].value = 0x60;
-        gsEntry14[1].value = 0x14;
+        gsEntry14[1].value = NML_GS_REG_TEX1_1;
         gsEntry8[0].value = 0;
         gsEntry8[1].value = clampRegisterId;
-        alphaPayload.value = ((u64)(int)(model->fields.circleShadowScale * 128.0f) << 32) | 0x68;
-        gsEntry42 = (GsTag *)0x70000040;
-        gsEntry47First = (GsTag *)0x70000050;
-        gsEntry1 = (GsTag *)0x70000060;
-        gsEntry0 = (GsTag *)0x70000070;
-        gsEntry3First = (GsTag *)0x70000080;
-        gsEntry4First = (GsTag *)0x70000090;
-        gsEntry3Last = (GsTag *)0x700000a0;
-        gsEntry4Last = (GsTag *)0x700000b0;
-        gsEntry47Last = (GsTag *)0x700000c0;
+        alphaPayload.value = ((u64)(int)(model->fields.circleShadowScale * 128.0f) << 32) | NML_GS_ALPHA_FIXED;
+        gsEntry42 = (GsTag *)(SCRATCHPAD_BASE + 0x40);
+        gsEntry47First = (GsTag *)(SCRATCHPAD_BASE + 0x50);
+        gsEntry1 = (GsTag *)(SCRATCHPAD_BASE + 0x60);
+        gsEntry0 = (GsTag *)(SCRATCHPAD_BASE + 0x70);
+        gsEntry3First = (GsTag *)(SCRATCHPAD_BASE + 0x80);
+        gsEntry4First = (GsTag *)(SCRATCHPAD_BASE + 0x90);
+        gsEntry3Last = (GsTag *)(SCRATCHPAD_BASE + 0xa0);
+        gsEntry4Last = (GsTag *)(SCRATCHPAD_BASE + 0xb0);
+        gsEntry47Last = (GsTag *)(SCRATCHPAD_BASE + 0xc0);
         gsEntry42[0] = alphaPayload;
-        gsEntry42[1].value = 0x42;
-        gsEntry47First[0].value = 0x30000;
-        gsEntry47First[1].value = 0x47;
-        gsEntry1[0].value = 0x3f80000080808080ULL;
-        gsEntry1[1].value = 1;
-        gsEntry0[0].value = 0x156;
-        gsEntry0[1].value = 0;
+        gsEntry42[1].value = NML_GS_REG_ALPHA_1;
+        gsEntry47First[0].value = NML_GS_TEST_ZALWAYS;
+        gsEntry47First[1].value = NML_GS_REG_TEST_1;
+        gsEntry1[0].value = NML_GS_RGBAQ_Q_ONE | NML_GS_RGBA_NEUTRAL;
+        gsEntry1[1].value = NML_GS_REG_RGBAQ;
+        gsEntry0[0].value = NML_GS_PRIM_SPRITE | NML_GS_PRIM_TME | NML_GS_PRIM_ABE | NML_GS_PRIM_FST;
+        gsEntry0[1].value = NML_GS_REG_PRIM;
         gsEntry3First[0].value = 0;
-        gsEntry3First[1].value = 3;
-        gsEntry4First[0].value = 0x72007000;
-        gsEntry4First[1].value = 4;
+        gsEntry3First[1].value = NML_GS_REG_UV;
+        gsEntry4First[0].value = NML_GS_XY_TOP_LEFT;
+        gsEntry4First[1].value = NML_GS_REG_XYZF2;
         gsEntry3Last[0].value = 0x1c002000;
-        gsEntry3Last[1].value = 3;
-        gsEntry4Last[0].value = 0x8e009000ULL;
-        gsEntry4Last[1].value = 4;
-        gsEntry47Last[0].value = 0x50000;
-        gsEntry47Last[1].value = 0x47;
-        entry = (GsTag *)0x70000000;
+        gsEntry3Last[1].value = NML_GS_REG_UV;
+        gsEntry4Last[0].value = NML_GS_XY_BOTTOM_RIGHT;
+        gsEntry4Last[1].value = NML_GS_REG_XYZF2;
+        gsEntry47Last[0].value = NML_GS_TEST_ZGEQUAL;
+        gsEntry47Last[1].value = NML_GS_REG_TEST_1;
+        entry = (GsTag *)SCRATCHPAD_BASE;
         remaining = 12;
         nmlPacketGsInit();
         nmlPacketAddGsZbuf(1);
@@ -1084,11 +1084,11 @@ void nmlFilterSetFlatRender(LayoutStore *model)
 
 void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
 {
-    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)0x70000000;
+    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)SCRATCHPAD_BASE;
     unsigned short frame = frameBase;
     int remaining;
     float fillScale = 128.0f;
-    struct NmlFilterGsPair *alphaEntry = (struct NmlFilterGsPair *)0x70000010;
+    struct NmlFilterGsPair *alphaEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x10);
     u64 alphaBits;
     float mapAlpha;
     float fillWeight;
@@ -1097,22 +1097,22 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     remaining = 4;
     mapAlpha = (float)model->fields.texMapSize;
     fillWeight = model->fields.textureTransparency;
-    packet[0].payload.value = 0x35001;
-    packet[0].registerSlot.value = 0x47;
+    packet[0].payload.value = NML_GS_TEST_ZALWAYS | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY | NML_GS_TEST_DATE;
+    packet[0].registerSlot.value = NML_GS_REG_TEST_1;
     alphaBits = ((u64)(fillScale - ((fillScale - (fillScale - mapAlpha)) * fillWeight)) << 24);
-    alphaEntry->payload.value = alphaBits | 0x3F80000000808080ULL;
-    alphaEntry->registerSlot.value = 1;
+    alphaEntry->payload.value = alphaBits | NML_GS_RGBAQ_Q_ONE | 0x808080;
+    alphaEntry->registerSlot.value = NML_GS_REG_RGBAQ;
     {
-        struct NmlFilterGsPair *modeEntry = (struct NmlFilterGsPair *)0x70000020;
-        struct NmlFilterGsPair *clampEntry = (struct NmlFilterGsPair *)0x70000030;
-        struct NmlFilterGsPair *colorEntry = (struct NmlFilterGsPair *)0x70000040;
+        struct NmlFilterGsPair *modeEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x20);
+        struct NmlFilterGsPair *clampEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x30);
+        struct NmlFilterGsPair *colorEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x40);
 
         modeEntry->payload.value = 6;
-        modeEntry->registerSlot.value = 0;
-        clampEntry->payload.value = 0x72007000;
-        clampEntry->registerSlot.value = 4;
+        modeEntry->registerSlot.value = NML_GS_REG_PRIM;
+        clampEntry->payload.value = NML_GS_XY_TOP_LEFT;
+        clampEntry->registerSlot.value = NML_GS_REG_XYZF2;
         colorEntry->payload.value = 0x7FF08000;
-        colorEntry->registerSlot.value = 4;
+        colorEntry->registerSlot.value = NML_GS_REG_XYZF2;
     }
     nmlPacketGsInit();
     {
@@ -1127,21 +1127,21 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     nmlPacketAddGsFlush();
 
     packet[0].payload.value = 0x24020000 | (frame << 5) | 0x2000000640000000ULL;
-    packet[0].registerSlot.value = 6;
+    packet[0].registerSlot.value = NML_GS_REG_TEX0_1;
     {
-        struct NmlFilterGsPair *scissorEntry = (struct NmlFilterGsPair *)0x70000010;
-        struct NmlFilterGsPair *modeEntry = (struct NmlFilterGsPair *)0x70000020;
-        struct NmlFilterGsPair *clampEntry = (struct NmlFilterGsPair *)0x70000030;
-        struct NmlFilterGsPair *colorEntry = (struct NmlFilterGsPair *)0x70000040;
+        struct NmlFilterGsPair *scissorEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x10);
+        struct NmlFilterGsPair *modeEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x20);
+        struct NmlFilterGsPair *clampEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x30);
+        struct NmlFilterGsPair *colorEntry = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x40);
 
         scissorEntry->payload.value = 0x60;
-        scissorEntry->registerSlot.value = 0x14;
-        modeEntry->payload.value = 0x31001;
-        modeEntry->registerSlot.value = 0x47;
+        scissorEntry->registerSlot.value = NML_GS_REG_TEX1_1;
+        modeEntry->payload.value = NML_GS_TEST_COLOR_ONLY;
+        modeEntry->registerSlot.value = NML_GS_REG_TEST_1;
         clampEntry->payload.value = 0;
-        clampEntry->registerSlot.value = 8;
-        colorEntry->payload.value = 0x3F80000080808080ULL;
-        colorEntry->registerSlot.value = 1;
+        clampEntry->registerSlot.value = NML_GS_REG_CLAMP_1;
+        colorEntry->payload.value = NML_GS_RGBAQ_Q_ONE | NML_GS_RGBA_NEUTRAL;
+        colorEntry->registerSlot.value = NML_GS_REG_RGBAQ;
     }
     nmlPacketGsInit();
     nmlPacketAddGsFrame(frame, 0);
@@ -1179,23 +1179,23 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
         struct NmlFilterGsPair *gsEntry11;
 
         do {
-            textureFlush = 0x3F;
-            gsEntry1 = (struct NmlFilterGsPair *)0x70000010;
-            gsEntry2 = (struct NmlFilterGsPair *)0x70000020;
-            gsEntry3 = (struct NmlFilterGsPair *)0x70000030;
-            gsEntry4 = (struct NmlFilterGsPair *)0x70000040;
-            gsEntry5 = (struct NmlFilterGsPair *)0x70000050;
-            gsEntry8 = (struct NmlFilterGsPair *)0x70000080;
-            gsEntry9 = (struct NmlFilterGsPair *)0x70000090;
-            gsEntry10 = (struct NmlFilterGsPair *)0x700000A0;
-            gsEntry6 = (struct NmlFilterGsPair *)0x70000060;
-            gsEntry7 = (struct NmlFilterGsPair *)0x70000070;
-            gsEntry11 = (struct NmlFilterGsPair *)0x700000B0;
+            textureFlush = NML_GS_REG_TEXFLUSH;
+            gsEntry1 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x10);
+            gsEntry2 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x20);
+            gsEntry3 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x30);
+            gsEntry4 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x40);
+            gsEntry5 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x50);
+            gsEntry8 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x80);
+            gsEntry9 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x90);
+            gsEntry10 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0xA0);
+            gsEntry6 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x60);
+            gsEntry7 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x70);
+            gsEntry11 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0xB0);
         } while (0);
         do {
-            spritePrimitive = 0x116;
-            uvSlot = 3;
-            xyzSlot = 4;
+            spritePrimitive = NML_GS_PRIM_SPRITE | NML_GS_PRIM_TME | NML_GS_PRIM_FST;
+            uvSlot = NML_GS_REG_UV;
+            xyzSlot = NML_GS_REG_XYZF2;
             firstUv = 0x100010;
             firstXyz = 0x72108010;
             secondUv = 0x0DF00FF0;
@@ -1204,7 +1204,7 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
         packet[0].payload.value = 0;
         packet[0].registerSlot.value = textureFlush;
         gsEntry1->payload.value = spritePrimitive;
-        gsEntry1->registerSlot.value = 0;
+        gsEntry1->registerSlot.value = NML_GS_REG_PRIM;
         gsEntry2->payload.value = firstUv;
         gsEntry2->registerSlot.value = uvSlot;
         gsEntry3->payload.value = firstXyz;
@@ -1214,17 +1214,17 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
         gsEntry5->payload.value = secondXyz;
         gsEntry5->registerSlot.value = xyzSlot;
         gsEntry6->payload.value = 0;
-        gsEntry6->registerSlot.value = 0x3F;
+        gsEntry6->registerSlot.value = NML_GS_REG_TEXFLUSH;
         gsEntry7->payload.value = spritePrimitive;
-        gsEntry7->registerSlot.value = 0;
+        gsEntry7->registerSlot.value = NML_GS_REG_PRIM;
         gsEntry8->payload.value = 0x101010;
-        gsEntry8->registerSlot.value = 3;
+        gsEntry8->registerSlot.value = NML_GS_REG_UV;
         gsEntry9->payload.value = 0x72107010;
-        gsEntry9->registerSlot.value = 4;
+        gsEntry9->registerSlot.value = NML_GS_REG_XYZF2;
         gsEntry10->payload.value = 0x0DF01FF0;
-        gsEntry10->registerSlot.value = 3;
+        gsEntry10->registerSlot.value = NML_GS_REG_UV;
         gsEntry11->payload.value = 0x7FF07FF0;
-        gsEntry11->registerSlot.value = 4;
+        gsEntry11->registerSlot.value = NML_GS_REG_XYZF2;
     }
     nmlPacketGsInit();
     {
@@ -1240,32 +1240,32 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     nmlPacketAddGsFlush();
 
     do {
-        testRegister = 0x47;
-        packet[0].payload.value = 0x31001;
+        testRegister = NML_GS_REG_TEST_1;
+        packet[0].payload.value = NML_GS_TEST_COLOR_ONLY;
         packet[0].registerSlot.value = testRegister;
         {
-            struct NmlFilterGsPair *gsEntry1 = (struct NmlFilterGsPair *)0x70000010;
-            struct NmlFilterGsPair *gsEntry2 = (struct NmlFilterGsPair *)0x70000020;
-            struct NmlFilterGsPair *gsEntry3 = (struct NmlFilterGsPair *)0x70000030;
-            struct NmlFilterGsPair *gsEntry4 = (struct NmlFilterGsPair *)0x70000040;
-            struct NmlFilterGsPair *gsEntry5 = (struct NmlFilterGsPair *)0x70000050;
-            struct NmlFilterGsPair *gsEntry6 = (struct NmlFilterGsPair *)0x70000060;
-            struct NmlFilterGsPair *gsEntry7 = (struct NmlFilterGsPair *)0x70000070;
+            struct NmlFilterGsPair *gsEntry1 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x10);
+            struct NmlFilterGsPair *gsEntry2 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x20);
+            struct NmlFilterGsPair *gsEntry3 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x30);
+            struct NmlFilterGsPair *gsEntry4 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x40);
+            struct NmlFilterGsPair *gsEntry5 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x50);
+            struct NmlFilterGsPair *gsEntry6 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x60);
+            struct NmlFilterGsPair *gsEntry7 = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x70);
 
             gsEntry1->payload.value = 0x3F80000080000000ULL;
-            gsEntry1->registerSlot.value = 1;
+            gsEntry1->registerSlot.value = NML_GS_REG_RGBAQ;
             gsEntry2->payload.value = 2;
-            gsEntry2->registerSlot.value = 0;
+            gsEntry2->registerSlot.value = NML_GS_REG_PRIM;
             gsEntry3->payload.value = 0x72007FF0;
-            gsEntry3->registerSlot.value = 4;
-            gsEntry4->payload.value = 0x72007000;
-            gsEntry4->registerSlot.value = 4;
+            gsEntry3->registerSlot.value = NML_GS_REG_XYZF2;
+            gsEntry4->payload.value = NML_GS_XY_TOP_LEFT;
+            gsEntry4->registerSlot.value = NML_GS_REG_XYZF2;
             gsEntry5->payload.value = 0x7FF07000;
-            gsEntry5->registerSlot.value = 4;
+            gsEntry5->registerSlot.value = NML_GS_REG_XYZF2;
             gsEntry6->payload.value = 0x7FF07FF0;
-            gsEntry6->registerSlot.value = 4;
+            gsEntry6->registerSlot.value = NML_GS_REG_XYZF2;
             gsEntry7->payload.value = 0x72007FF0;
-            gsEntry7->registerSlot.value = 4;
+            gsEntry7->registerSlot.value = NML_GS_REG_XYZF2;
         }
         nmlPacketGsInit();
         {
@@ -1296,7 +1296,7 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     /* Genuine union: StudioCamera.position is shared.h's DoublewordVector4, and the
      * original reloads camera->position across the facingCamera stores (alias set 0). */
     DoublewordVector4 *cameraPosition;
-    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)0x70000000;
+    struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)SCRATCHPAD_BASE;
     int iteration;
 
     camera = xglStudioGetActiveCamera();
@@ -1346,36 +1346,36 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     packet->payload.value = ((u64)sRender.displayBufferBase |
         ((u64)sRender.pixelStorageMode << 24 |
          (u64)(sRender.frameWidth / 64) << 16)) | 0x00ffffff00000000ULL;
-    packet->registerSlot.value = 0x4c;
+    packet->registerSlot.value = NML_GS_REG_FRAME_1;
     {
         struct NmlFilterGsPair *alphaCorrection = &packet[1];
-        alphaCorrection->registerSlot.value = 0x4a;
+        alphaCorrection->registerSlot.value = NML_GS_REG_FBA_1;
         alphaCorrection->payload.value = 0;
     }
     {
         struct NmlFilterGsPair *color = &packet[2];
-        color->payload.value = 0x3f80000000000000ULL;
-        color->registerSlot.value = 1;
+        color->payload.value = NML_GS_RGBAQ_Q_ONE;
+        color->registerSlot.value = NML_GS_REG_RGBAQ;
     }
     {
         struct NmlFilterGsPair *test = &packet[3];
-        test->payload.value = 0x31001;
-        test->registerSlot.value = 0x47;
+        test->payload.value = NML_GS_TEST_COLOR_ONLY;
+        test->registerSlot.value = NML_GS_REG_TEST_1;
     }
     {
         struct NmlFilterGsPair *primitive = &packet[4];
         primitive->payload.value = 6;
-        primitive->registerSlot.value = 0;
+        primitive->registerSlot.value = NML_GS_REG_PRIM;
     }
     {
         struct NmlFilterGsPair *firstVertex = &packet[5];
-        firstVertex->payload.value = 0x72007000;
-        firstVertex->registerSlot.value = 4;
+        firstVertex->payload.value = NML_GS_XY_TOP_LEFT;
+        firstVertex->registerSlot.value = NML_GS_REG_XYZF2;
     }
     {
         struct NmlFilterGsPair *lastVertex = &packet[6];
-        lastVertex->payload.value = 0x8e009000ULL;
-        lastVertex->registerSlot.value = 4;
+        lastVertex->payload.value = NML_GS_XY_BOTTOM_RIGHT;
+        lastVertex->registerSlot.value = NML_GS_REG_XYZF2;
     }
     {
         struct NmlFilterGsPair *entry = packet;
@@ -1384,15 +1384,15 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     }
     nmlPacketAddGsFlush();
 
-    packet->payload.value = 0x51001;
-    packet->registerSlot.value = 0x47;
+    packet->payload.value = NML_GS_TEST_ZGEQUAL | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY;
+    packet->registerSlot.value = NML_GS_REG_TEST_1;
     {
-        struct NmlFilterGsPair *alphaCorrection = (struct NmlFilterGsPair *)0x70000010;
-        struct NmlFilterGsPair *color = (struct NmlFilterGsPair *)0x70000020;
-        alphaCorrection->registerSlot.value = 0x4a;
+        struct NmlFilterGsPair *alphaCorrection = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x10);
+        struct NmlFilterGsPair *color = (struct NmlFilterGsPair *)(SCRATCHPAD_BASE + 0x20);
+        alphaCorrection->registerSlot.value = NML_GS_REG_FBA_1;
         alphaCorrection->payload.value = 1;
-        color->payload.value = 0x3f80000000000000ULL;
-        color->registerSlot.value = 1;
+        color->payload.value = NML_GS_RGBAQ_Q_ONE;
+        color->registerSlot.value = NML_GS_REG_RGBAQ;
     }
     nmlPacketGsInit();
     {
@@ -1408,12 +1408,12 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     u64 coordinates = (u64)projected[vertexIndex].coords[0] | \
         ((u64)projected[vertexIndex].coords[1] << 16) | \
         ((u64)projected[vertexIndex].coords[2] << 32); \
-    corner->registerSlot.value = 4; \
+    corner->registerSlot.value = NML_GS_REG_XYZF2; \
     corner->payload.value = coordinates; \
 }
 #define NML_CUBE_FACE(indices) { \
     packet->payload.value = 4; \
-    packet->registerSlot.value = 0; \
+    packet->registerSlot.value = NML_GS_REG_PRIM; \
     NML_CUBE_CORNER(indices, 0); \
     NML_CUBE_CORNER(indices, 1); \
     NML_CUBE_CORNER(indices, 2); \
@@ -1437,7 +1437,7 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
             }
         }
     }
-    packet->registerSlot.value = 0x4a;
+    packet->registerSlot.value = NML_GS_REG_FBA_1;
     packet->payload.value = 0;
     packet_gs_entry64(packet->registerSlot.words[0], &packet->payload.value);
     nmlPacketAddGsFlush();

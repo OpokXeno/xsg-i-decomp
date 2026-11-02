@@ -16,6 +16,53 @@
 #define UWAMONO_SELF_BREAK 0x1
 #define UWAMONO_ENEMY_BREAK 0x2
 
+/* MapUnit serials below this are map parts; from it up they are models. */
+#define UWAMONO_SERIAL_MODEL_BASE 0x1000
+/* MapUnit flags: unit is loaded; unit is hidden by a hide trigger. */
+#define UWAMONO_UNIT_LOADED 0x10000
+#define UWAMONO_UNIT_HIDDEN 0x100000
+/* GameLoopState.flags bit toggled by the "shooting flag" row. */
+#define UWAMONO_GAME_SHOOTING_FLAG 0x1
+
+/* Field-object page (PauseMenuPageUwamono): submode shown instead of the menu. */
+enum {
+    UWAMONO_DEBUG_MENU,
+    UWAMONO_DEBUG_EVENT_ITEMS,
+    UWAMONO_DEBUG_TREASURE
+};
+
+/* Rows of the field-object page, in display order. */
+enum {
+    UWAMONO_ROW_SHOT_TRAJECTORY,
+    UWAMONO_ROW_OBJECT_INFO,
+    UWAMONO_ROW_OBJECT_OUTPUT,
+    UWAMONO_ROW_COLLISION,
+    UWAMONO_ROW_SHOOTING_FLAG,
+    UWAMONO_ROW_EVENT_ITEM_LIST,
+    UWAMONO_ROW_TREASURE_LIST,
+    UWAMONO_ROW_COUNT
+};
+
+/* DebDispEvtItem lists EvtItemTbl entries four to a page. */
+#define EVENT_ITEM_COUNT 255
+#define EVENT_ITEM_ENTRY_SIZE 0x80
+#define EVENT_ITEM_PAGE_ROWS 4
+#define EVENT_ITEM_PAGE_COUNT 64
+/* DebDispItemBox lists ItemBoxTbl entries eight to a page. */
+#define ITEM_BOX_PAGE_ROWS 8
+#define ITEM_BOX_PAGE_COUNT 76
+/* Event flag of treasure chest id: base + id (set once the chest was opened). */
+#define ITEM_BOX_OBTAINED_FLAG_BASE 0x79EC7
+
+/* Field-object markers are drawn only inside this GS-space window, relative to this origin. */
+#define UWAMONO_SCREEN_X_MIN 0x7000
+#define UWAMONO_SCREEN_X_MAX 0x9000
+#define UWAMONO_SCREEN_Y_MIN 0x6E01
+#define UWAMONO_SCREEN_Y_MAX 0x8DFF
+#define UWAMONO_SCREEN_ORIGIN_X 0x700
+#define UWAMONO_SCREEN_ORIGIN_Y 0x720
+
+
 typedef struct ItemBoxEntry {
     signed char category;
     unsigned char index;
@@ -80,10 +127,10 @@ enum {
 
 /* PadData's +0x28/+0x2a/+0x2c fields match the local input view in input.c. */
 extern UwamonoPadEntry PadData[2];
-extern char EvtItemTbl[255 * 0x80];
-extern ItemBoxEntry ItemBoxTbl[601];
+extern char EvtItemTbl[EVENT_ITEM_COUNT * EVENT_ITEM_ENTRY_SIZE];
+extern ItemBoxEntry ItemBoxTbl[ITEM_BOX_COUNT];
 extern UwamonoGameStatePrefix GameLoopState;
-extern UwamonoDebugUnit MapUnit[64];
+extern UwamonoDebugUnit MapUnit[MAP_UNIT_COUNT];
 extern const char PauseMenuFieldObjectLabel[];
 char pauseMenuPageUwamonoCursorMarkerText[];
 const char eventItemNameFormat[];
@@ -168,11 +215,11 @@ const char treasureChestListText[16] = "\xCA\xF5\xC8\xA2\xC3\xE6\xBF\xC8\xB0\xEC
 void PauseMenuPageUwamono(void)
 {
     static int cursol = 0;
-    if (debmode == 1) {
+    if (debmode == UWAMONO_DEBUG_EVENT_ITEMS) {
         DebDispEvtItem();
         return;
     }
-    if (debmode == 2) {
+    if (debmode == UWAMONO_DEBUG_TREASURE) {
         DebDispItemBox();
         return;
     }
@@ -186,38 +233,38 @@ void PauseMenuPageUwamono(void)
     else xglFontDebugPrintf(64, 64, fieldObjectOutputOffText);
     if (collflg != 0) xglFontDebugPrintf(64, 80, collisionDisplayOnText);
     else xglFontDebugPrintf(64, 80, collisionDisplayOffText);
-    if (GameLoopState.flags & 1) xglFontDebugPrintf(64, 96, shootingFlagOnText);
+    if (GameLoopState.flags & UWAMONO_GAME_SHOOTING_FLAG) xglFontDebugPrintf(64, 96, shootingFlagOnText);
     else xglFontDebugPrintf(64, 96, shootingFlagOffText);
     xglFontDebugPrintf(64, 112, eventItemListText);
     xglFontDebugPrintf(64, 128, treasureChestListText);
-    if (PadData[0].pressed & 0x1000) {
+    if (PadData[0].pressed & PAD_UP) {
         cursol--;
-        if (cursol < 0) cursol = 6;
+        if (cursol < 0) cursol = UWAMONO_ROW_COUNT - 1;
     }
-    if (PadData[0].pressed & 0x4000) {
+    if (PadData[0].pressed & PAD_DOWN) {
         cursol++;
-        cursol %= 7;
+        cursol %= UWAMONO_ROW_COUNT;
     }
-    if ((cursol == 5) && (PadData[0].pressed & 0x20)) debmode = 1;
-    if ((cursol == 6) && (PadData[0].pressed & 0x20)) debmode = 2;
-    if (PadData[0].pressed & 0x2000) {
+    if ((cursol == UWAMONO_ROW_EVENT_ITEM_LIST) && (PadData[0].pressed & PAD_CIRCLE)) debmode = UWAMONO_DEBUG_EVENT_ITEMS;
+    if ((cursol == UWAMONO_ROW_TREASURE_LIST) && (PadData[0].pressed & PAD_CIRCLE)) debmode = UWAMONO_DEBUG_TREASURE;
+    if (PadData[0].pressed & PAD_RIGHT) {
         switch (cursol) {
-        case 0: lineflg = 1; break;
-        case 1: dispflg = 1; break;
-        case 2: printflg = 1; break;
-        case 3: collflg = 1; break;
-        case 4: GameLoopState.flags |= 1; break;
+        case UWAMONO_ROW_SHOT_TRAJECTORY: lineflg = 1; break;
+        case UWAMONO_ROW_OBJECT_INFO: dispflg = 1; break;
+        case UWAMONO_ROW_OBJECT_OUTPUT: printflg = 1; break;
+        case UWAMONO_ROW_COLLISION: collflg = 1; break;
+        case UWAMONO_ROW_SHOOTING_FLAG: GameLoopState.flags |= UWAMONO_GAME_SHOOTING_FLAG; break;
         }
     }
-    if (PadData[0].pressed & 0x8000) {
+    if (PadData[0].pressed & PAD_LEFT) {
         switch (cursol) {
-        case 0: lineflg = 0; return;
-        case 1: dispflg = 0; return;
-        case 2: printflg = 0; return;
-        case 3: collflg = 0; return;
-        case 4:
+        case UWAMONO_ROW_SHOT_TRAJECTORY: lineflg = 0; return;
+        case UWAMONO_ROW_OBJECT_INFO: dispflg = 0; return;
+        case UWAMONO_ROW_OBJECT_OUTPUT: printflg = 0; return;
+        case UWAMONO_ROW_COLLISION: collflg = 0; return;
+        case UWAMONO_ROW_SHOOTING_FLAG:
             UnlockMapUnit();
-            GameLoopState.flags &= ~1u;
+            GameLoopState.flags &= ~UWAMONO_GAME_SHOOTING_FLAG;
             break;
         }
     }
@@ -243,28 +290,28 @@ void DebDispEvtItem(void)
 
     xglFontDebugPrintf(16, 16, eventItemListText);
     xglFontDebugPrintf(16, 32, pressCrossToReturnText);
-    for (row = 0; row < 4; row++) {
-        item_index = row + page * 4;
-        if (item_index >= 255) {
+    for (row = 0; row < EVENT_ITEM_PAGE_ROWS; row++) {
+        item_index = row + page * EVENT_ITEM_PAGE_ROWS;
+        if (item_index >= EVENT_ITEM_COUNT) {
             break;
         }
-        event_item = &EvtItemTbl[item_index * 0x80];
+        event_item = &EvtItemTbl[item_index * EVENT_ITEM_ENTRY_SIZE];
         xglFontDebugPrintf(4, 60 + row * 34, eventItemRowFormat,
                            item_index + 1, event_item, event_item[0]);
         while (*event_item++ != 0) {
         }
         xglFontDebugPrintf(16, 72 + row * 34, eventItemNameFormat, event_item);
     }
-    if (PadData[0].repeat & 0x1000) {
+    if (PadData[0].repeat & PAD_UP) {
         page--;
         if (page < 0) {
-            page = 63;
+            page = EVENT_ITEM_PAGE_COUNT - 1;
         }
     }
-    if (PadData[0].repeat & 0x4000) {
-        page = (page + 1) % 64;
+    if (PadData[0].repeat & PAD_DOWN) {
+        page = (page + 1) % EVENT_ITEM_PAGE_COUNT;
     }
-    debmode = (PadData[0].pressed & 0x40) ? 0 : debmode;
+    debmode = (PadData[0].pressed & PAD_CROSS) ? UWAMONO_DEBUG_MENU : debmode;
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
@@ -279,7 +326,7 @@ void DebDispItemBox(void)
 
     xglFontDebugPrintf(16, 16, treasureChestListText);
     xglFontDebugPrintf(16, 32, pressCrossToReturnText);
-    for (row = 0; row < 8; row++) {
+    for (row = 0; row < ITEM_BOX_PAGE_ROWS; row++) {
         char amount_text[16];
         char chance_text[16];
         int id;
@@ -291,8 +338,8 @@ void DebDispItemBox(void)
 
         memset(amount_text, 0, sizeof(amount_text));
         memset(chance_text, 0, sizeof(chance_text));
-        id = row + page_2 * 8;
-        if (id > 600)
+        id = row + page_2 * ITEM_BOX_PAGE_ROWS;
+        if (id > ITEM_BOX_COUNT - 1)
             break;
         category = ItemBoxTbl[id].category;
         money = ItemBoxTbl[id].money;
@@ -313,7 +360,7 @@ void DebDispItemBox(void)
              * EN: %3d Money %sG */
             xglFontDebugPrintf(4, y, "%3d \244\252\266\342 %s\243\307", id, amount_text);
         }
-        if (xglFlagsGet1(id + 0x79EC7) == 1)
+        if (xglFlagsGet1(id + ITEM_BOX_OBTAINED_FLAG_BASE) == 1)
             /* JP: 取得済
              * EN: Already obtained */
             xglFontDebugPrintf(152, y, "\274\350\306\300\272\321");
@@ -325,15 +372,15 @@ void DebDispItemBox(void)
         }
         y += 16;
     }
-    if (PadData[0].repeat & 0x1000) {
+    if (PadData[0].repeat & PAD_UP) {
         page_2--;
         if (page_2 < 0)
-            page_2 = 75;
+            page_2 = ITEM_BOX_PAGE_COUNT - 1;
     }
-    if (PadData[0].repeat & 0x4000)
-        page_2 = (page_2 + 1) % 76;
-    if (PadData[0].pressed & 0x40)
-        debmode = 0;
+    if (PadData[0].repeat & PAD_DOWN)
+        page_2 = (page_2 + 1) % ITEM_BOX_PAGE_COUNT;
+    if (PadData[0].pressed & PAD_CROSS)
+        debmode = UWAMONO_DEBUG_MENU;
 }
 
 void DispDebugUwamono(void)
@@ -346,7 +393,7 @@ void DispDebugUwamono(void)
     offset.y = 2.0f;
     offset.w = 1.0f;
     offset.z = 0.0f;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         UwamonoDebugUnit *unit = &MapUnit[i];
         UwamonoInfo *info = &unit->info;
         int screen_col;
@@ -357,25 +404,25 @@ void DispDebugUwamono(void)
         int category;
         int index;
 
-        if (!(unit->flags & 0x10000))
+        if (!(unit->flags & UWAMONO_UNIT_LOADED))
             continue;
         if (unit->matrix == 0)
             continue;
         if (unit->serial == -1)
             continue;
         xglRotTransPers(screen, unit->matrix, &offset, 0);
-        if (screen[0] <= 0x7000 || screen[0] >= 0x9000)
+        if (screen[0] <= UWAMONO_SCREEN_X_MIN || screen[0] >= UWAMONO_SCREEN_X_MAX)
             continue;
-        if (screen[1] < 0x6E01)
+        if (screen[1] < UWAMONO_SCREEN_Y_MIN)
             continue;
-        if (screen[1] > 0x8DFF)
+        if (screen[1] > UWAMONO_SCREEN_Y_MAX)
             continue;
         if (screen[2] <= 0)
             continue;
-        screen_col = ((screen[0] >> 4) - 0x700) >> 1;
-        y = ((screen[1] >> 4) - 0x720) >> 1;
+        screen_col = ((screen[0] >> 4) - UWAMONO_SCREEN_ORIGIN_X) >> 1;
+        y = ((screen[1] >> 4) - UWAMONO_SCREEN_ORIGIN_Y) >> 1;
         y += 32;
-        if (unit->serial < 0x1000) {
+        if (unit->serial < UWAMONO_SERIAL_MODEL_BASE) {
             x = screen_col - 32;
             /* JP: パーツ%4d
              * EN: Part %4d */
@@ -526,14 +573,14 @@ void DispCollUwamono(void)
     colors[7] = 128;
     position_w = COLL_POSITION_W;
     corner_w = COLL_CORNER_W;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         UwamonoInfo *info = &MapUnit[i].info;
         UwamonoDebugUnit *unit;
         float (*rotation)[4];
 
         if (MapUnit[i].serial == -1)
             continue;
-        if (MapUnit[i].flags & 0x100000)
+        if (MapUnit[i].flags & UWAMONO_UNIT_HIDDEN)
             continue;
         if (MapUnit[i].serial == MAP_UNIT_SOUND) {
             unit = &MapUnit[i];
@@ -551,12 +598,12 @@ void DispCollUwamono(void)
                 bottom[1].vector.z = position.z + rotation[0][2];
                 bottom[1].vector.w = 0.0f;
             }
-        } else if (info->shape != 0 && (MapUnit[i].flags & 0x10000)) {
+        } else if (info->shape != 0 && (MapUnit[i].flags & UWAMONO_UNIT_LOADED)) {
             unit = &MapUnit[i];
             rotation = unit->matrix;
             position = unit->position;
             size = unit->size;
-            if (info->shape == 2) {
+            if (info->shape == UWAMONO_SHAPE_BOX) {
                 bottom[0].vector.x = position.x + (size.x * rotation[0][0] + size.z * rotation[2][0]);
                 bottom[0].vector.y = position.y;
                 bottom[0].vector.z = position.z + (size.x * rotation[0][2] + size.z * rotation[2][2]);
@@ -581,7 +628,7 @@ void DispCollUwamono(void)
                 top[1].vector.y += size.y;
                 top[2].vector.y += size.y;
                 top[3].vector.y += size.y;
-            } else if (info->shape == 1) {
+            } else if (info->shape == UWAMONO_SHAPE_CIRCLE) {
                 DispPillar(&unit->position, &unit->size, colors);
             }
             if (info->sound > 0) {

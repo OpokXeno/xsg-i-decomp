@@ -14,13 +14,67 @@
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
 
-/* Existing option names designate entries in the contiguous option array. */
-#define soundOutput options[0]
+/* Rows of the system-options list; also the index into MenuWork.options. */
+enum {
+    MENU_SYSTEM_OPTION_SOUND_OUTPUT,
+    MENU_SYSTEM_OPTION_CURSOR_MEMORY,
+    MENU_SYSTEM_OPTION_VIBRATION,
+    MENU_SYSTEM_OPTION_RADAR,
+    MENU_SYSTEM_OPTION_MONITOR,
+    MENU_SYSTEM_OPTION_HDD,
+    MENU_SYSTEM_OPTION_DEFAULT,
+    MENU_SYSTEM_OPTION_COUNT
+};
 
-#define padMode options[1]
-#define radarMode options[2]
-#define displayMode options[3]
-#define hddActive options[5]
+/* MenuWork.state of the system-options screen: the list and one sub-state per
+ * option (optionStateTable maps a row to its sub-state). */
+enum {
+    MENU_SYSTEM_STATE_LIST = 0x10,
+    MENU_SYSTEM_STATE_SOUND_OUTPUT = 0x20,
+    MENU_SYSTEM_STATE_RADAR = 0x30,
+    MENU_SYSTEM_STATE_VIBRATION = 0x40,
+    MENU_SYSTEM_STATE_CURSOR_MEMORY = 0x50,
+    MENU_SYSTEM_STATE_DEFAULT = 0x60,
+    MENU_SYSTEM_STATE_HDD = 0x70,
+    MENU_SYSTEM_STATE_CLOSE = 0xf0,
+    MENU_SYSTEM_STATE_DONE = 0xff
+};
+
+/* MenuWork.menuState steps of MenuSystem. */
+enum {
+    MENU_SYSTEM_TASK_INIT = 0,
+    MENU_SYSTEM_TASK_RUN = 2,
+    MENU_SYSTEM_TASK_EXIT = 4
+};
+
+/* MenuWork.inputDelay frames. */
+enum {
+    MENU_SYSTEM_DELAY_CHOICE = 8,
+    MENU_SYSTEM_DELAY_OPEN = 12,
+    MENU_SYSTEM_DELAY_CLOSE = 16
+};
+
+/* State of the panel, info and menu blocks drawn by the options screen. */
+enum {
+    MENU_SYSTEM_BLOCK_INIT = 0,
+    MENU_SYSTEM_BLOCK_RUN = 2
+};
+
+#define MENU_SYSTEM_WINDOW_STYLE 0xfffff0
+#define MENU_SYSTEM_CHOICE_COUNT 2 /* entries of every choice window */
+#define MENU_SYSTEM_CHOICE_ROWS 3  /* text rows of the choice window */
+#define MENU_SYSTEM_ROW_HEIGHT 24
+#define MENU_SYSTEM_DISABLED_GRAY 64 /* dimmed HDD row without a mounted HDD */
+#define MENU_SYSTEM_VIBRATION_TEST_STRENGTH 128
+#define MENU_SYSTEM_VIBRATION_TEST_DURATION 32
+
+/* Existing option names designate entries in the contiguous option array. */
+#define soundOutput options[MENU_SYSTEM_OPTION_SOUND_OUTPUT]
+
+#define padMode options[MENU_SYSTEM_OPTION_CURSOR_MEMORY]
+#define radarMode options[MENU_SYSTEM_OPTION_VIBRATION]
+#define displayMode options[MENU_SYSTEM_OPTION_RADAR]
+#define hddActive options[MENU_SYSTEM_OPTION_HDD]
 
 /* Offsets named here are touched by MenuSystemInfoMain, MenuSystemInitSet,
  * and the existing MenuSystem2 completion poll. */
@@ -37,7 +91,7 @@ typedef struct MenuSystemWork {
     signed char choiceIndex;
     signed long long hddMounted : 8;
     unsigned char unmodeled_23[0x0d];
-    unsigned char options[7];
+    unsigned char options[MENU_SYSTEM_OPTION_COUNT];
 } MenuSystemWork;
 
 typedef struct MenuSystemPad {
@@ -67,20 +121,13 @@ typedef struct MenuSystemInfoBlock {
 } MenuSystemInfoBlock;
 
 typedef struct MenuSystemMessageTable {
-    char *messages[7];
+    char *messages[MENU_SYSTEM_OPTION_COUNT];
 } MenuSystemMessageTable;
 
 typedef union MenuSystemMessageStorage {
     MenuSystemMessageTable table;
     unsigned int words[8];
 } MenuSystemMessageStorage;
-
-enum {
-    SAVE_DATA_BYTE_28 = 0x28,
-    SAVE_DATA_BYTE_44 = 0x44,
-    SAVE_DATA_BYTE_3C = 0x3c,
-    SAVE_DATA_BYTE_40 = 0x40
-};
 
 
 typedef struct MenuSystemPanelBox {
@@ -132,7 +179,7 @@ typedef struct MenuSystemMenuBlock {
     EMessageParam value[8];
     ECursolMainData labelCursor;
     WindowDX choiceWindow;
-    EMessageParam choiceLabel[3];
+    EMessageParam choiceLabel[MENU_SYSTEM_CHOICE_ROWS];
     ECursolMainData choiceCursor;
     WindowDX confirmWindow;
     MenuSystemChoice confirm;
@@ -204,9 +251,9 @@ const char selectionText[16] = "Selection";
 
 static const char *msg00_0_0036DCF8[] = {MenuSystemOptionHelpText};
 
-static const char * msg00_1_0036DD00[7];
+static const char * msg00_1_0036DD00[MENU_SYSTEM_OPTION_COUNT];
 
-static const char * msg00_1_0036DD00[7] = { soundOutputText, cursorLocationMemoryText, vibrationText, radarDisplayText, monitorSettingsText, MenuSystemHddText, MenuSystemDefaultText };
+static const char * msg00_1_0036DD00[MENU_SYSTEM_OPTION_COUNT] = { soundOutputText, cursorLocationMemoryText, vibrationText, radarDisplayText, monitorSettingsText, MenuSystemHddText, MenuSystemDefaultText };
 
 static const char * msg01_2_0036DD20[] = { MenuSystemStereoText, MenuSystemMonoText };
 
@@ -226,39 +273,39 @@ void MenuSystemPasMain(void)
     short windowTarget[8];
     int row;
 
-    if (panel->state != 0) {
-        if (panel->state != 2)
+    if (panel->state != MENU_SYSTEM_BLOCK_INIT) {
+        if (panel->state != MENU_SYSTEM_BLOCK_RUN)
             return;
     } else {
-        panel->color = 0xfffff0;
+        panel->color = MENU_SYSTEM_WINDOW_STYLE;
         WindowDXSet(&panel->window);
         panel->window.x = -288;
         panel->window.style = panel->color;
         panel->window.y = 8;
         panel->window.width = 272;
         panel->window.height = 30;
-        panel->window.state = 1;
+        panel->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&panel->window);
-        panel->window.state = 3;
+        panel->window.state = WINDOWDX_STATE_READY;
         for (row = 0; row < 1; row++) {
             eMessageSet(&panel->message[row], msg00_0_0036DCF8[row]);
-            panel->message[row].mode = 32;
+            panel->message[row].mode = E_MODE_SHOW_START;
             panel->message[row].x = 288;
             panel->message[row].y = 11;
             panel->message[row].draw_parameter = panel->color + 2;
         }
-        panel->state = 2;
+        panel->state = MENU_SYSTEM_BLOCK_RUN;
     }
     windowTarget[0] = -16;
     messageTarget[0] = 288;
     switch (MenuWork.state) {
-    case 0x10:
-    case 0x20:
-    case 0x30:
-    case 0x40:
-    case 0x50:
-    case 0x60:
-    case 0x70:
+    case MENU_SYSTEM_STATE_LIST:
+    case MENU_SYSTEM_STATE_SOUND_OUTPUT:
+    case MENU_SYSTEM_STATE_RADAR:
+    case MENU_SYSTEM_STATE_VIBRATION:
+    case MENU_SYSTEM_STATE_CURSOR_MEMORY:
+    case MENU_SYSTEM_STATE_DEFAULT:
+    case MENU_SYSTEM_STATE_HDD:
         messageTarget[0] = 16;
         break;
     default:
@@ -267,17 +314,17 @@ void MenuSystemPasMain(void)
     }
     MoveSlide(&panel->window.x, windowTarget, 3.0f);
     WindowDXMain(&panel->window);
-    if (panel->window.state == 3) {
+    if (panel->window.state == WINDOWDX_STATE_READY) {
         panel->box.x = panel->window.x + 3;
         panel->box.y = panel->window.y + 3;
         panel->box.width = panel->window.width - 6;
         panel->box.height = panel->window.height - 6;
         panel->box.color = panel->color;
-        endPrintExtFunc(panel->color, 101, &panel->box);
+        endPrintExtFunc(panel->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&panel->box);
         MoveSlide(&panel->message[0].x, messageTarget, 5.0f);
         if (panel->message[0].x < 256)
             eMessageMain(&panel->message[0]);
-        endPrintExtFunc(panel->color, 102, 0);
+        endPrintExtFunc(panel->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
     }
 }
 
@@ -287,11 +334,11 @@ void MenuSystemInfoMain(void)
     MenuSystemMessageTable messageTable = messageTexts.table;
     short targetY;
 
-    if (info->state != 0) {
-        if (info->state != 2)
+    if (info->state != MENU_SYSTEM_BLOCK_INIT) {
+        if (info->state != MENU_SYSTEM_BLOCK_RUN)
             return;
     } else {
-        info->color = 0xFFFFF0;
+        info->color = MENU_SYSTEM_WINDOW_STYLE;
         WindowDXSet(&info->window);
         info->window.x = -16;
         info->window.y = 480;
@@ -301,26 +348,26 @@ void MenuSystemInfoMain(void)
         info->window.close_callback_arg = &info->cursorX;
         info->cursorX = 0;
         info->window.close_callback = MenuInfoWindow;
-        info->window.state = 1;
+        info->window.state = WINDOWDX_STATE_OPEN;
         info->cursorY = 0;
         info->message = 0;
         WindowDXMain(&info->window);
-        info->window.state = 3;
+        info->window.state = WINDOWDX_STATE_READY;
         info->visible = 1;
-        info->active = (info->window.state == 3);
+        info->active = (info->window.state == WINDOWDX_STATE_READY);
         memset(info->text, 0, sizeof(info->text));
-        info->state = 2;
+        info->state = MENU_SYSTEM_BLOCK_RUN;
     }
 
     targetY = 362;
     switch (MenuWork.state) {
-    case 0x10:
-    case 0x20:
-    case 0x30:
-    case 0x40:
-    case 0x50:
-    case 0x60:
-    case 0x70:
+    case MENU_SYSTEM_STATE_LIST:
+    case MENU_SYSTEM_STATE_SOUND_OUTPUT:
+    case MENU_SYSTEM_STATE_RADAR:
+    case MENU_SYSTEM_STATE_VIBRATION:
+    case MENU_SYSTEM_STATE_CURSOR_MEMORY:
+    case MENU_SYSTEM_STATE_DEFAULT:
+    case MENU_SYSTEM_STATE_HDD:
         eMessageCpy(info->text, messageTable.messages[MenuWork.messageIndex]);
         break;
     default:
@@ -345,8 +392,8 @@ void MenuSystemMenuMain(void)
     ECursolMainData *choiceCursor;
 
     switch (menu->state) {
-    case 0:
-        menu->color = 0xfffff0;
+    case MENU_SYSTEM_BLOCK_INIT:
+        menu->color = MENU_SYSTEM_WINDOW_STYLE;
         WindowDXSet(&menu->titleWindow);
         menu->titleWindow.x = 528;
         menu->titleWindow.y = 116;
@@ -354,30 +401,30 @@ void MenuSystemMenuMain(void)
         menu->titleWindow.width = 397;
         menu->titleWindow.height = 174;
         menu->titleWindow.tag_id = configurationText;
-        menu->titleWindow.state = 1;
+        menu->titleWindow.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&menu->titleWindow);
-        menu->titleWindow.state = 3;
-        for (row = 0; row < 7; row++) {
+        menu->titleWindow.state = WINDOWDX_STATE_READY;
+        for (row = 0; row < MENU_SYSTEM_OPTION_COUNT; row++) {
             eMessageSet(&menu->label[row], 0);
-            menu->label[row].mode = 0x20;
+            menu->label[row].mode = E_MODE_SHOW_START;
             menu->label[row].draw_parameter = menu->color + 2;
             eMessageSet(&menu->value[row], 0);
-            menu->value[row].mode = 0x20;
+            menu->value[row].mode = E_MODE_SHOW_START;
             menu->value[row].draw_parameter = menu->color + 2;
         }
         if (MenuWork.hddMounted == 0) {
-            menu->label[5].color_b = 64;
-            menu->label[5].color_g = 64;
-            menu->label[5].color_r = 64;
-            menu->value[5].color_b = 64;
-            menu->value[5].color_g = 64;
-            menu->value[5].color_r = 64;
+            menu->label[MENU_SYSTEM_OPTION_HDD].color_b = MENU_SYSTEM_DISABLED_GRAY;
+            menu->label[MENU_SYSTEM_OPTION_HDD].color_g = MENU_SYSTEM_DISABLED_GRAY;
+            menu->label[MENU_SYSTEM_OPTION_HDD].color_r = MENU_SYSTEM_DISABLED_GRAY;
+            menu->value[MENU_SYSTEM_OPTION_HDD].color_b = MENU_SYSTEM_DISABLED_GRAY;
+            menu->value[MENU_SYSTEM_OPTION_HDD].color_g = MENU_SYSTEM_DISABLED_GRAY;
+            menu->value[MENU_SYSTEM_OPTION_HDD].color_r = MENU_SYSTEM_DISABLED_GRAY;
         }
         labelCursor = &menu->labelCursor;
         choiceWindow = &menu->choiceWindow;
         eCursolSet(labelCursor, 0);
         menu->labelCursor.work = menu->color + 2;
-        labelCursor->state = 0x20;
+        labelCursor->state = E_MODE_SHOW_START;
         WindowDXSet(choiceWindow);
         choiceWindow->x = 528;
         menu->choiceWindow.y = 116;
@@ -385,19 +432,19 @@ void MenuSystemMenuMain(void)
         menu->choiceWindow.width = 113;
         menu->choiceWindow.height = 70;
         menu->choiceWindow.tag_id = selectionText;
-        menu->choiceWindow.state = 1;
+        menu->choiceWindow.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(choiceWindow);
-        menu->choiceWindow.state = 3;
-        for (row = 0; row < 3; row++) {
+        menu->choiceWindow.state = WINDOWDX_STATE_READY;
+        for (row = 0; row < MENU_SYSTEM_CHOICE_ROWS; row++) {
             eMessageSet(&menu->choiceLabel[row], msg01_2_0036DD20[0]);
-            menu->choiceLabel[row].mode = 0x20;
+            menu->choiceLabel[row].mode = E_MODE_SHOW_START;
             menu->choiceLabel[row].draw_parameter = menu->color + 2;
         }
         choiceCursor = &menu->choiceCursor;
         confirmWindow = &menu->confirmWindow;
         eCursolSet(choiceCursor, 0);
         menu->choiceCursor.work = menu->color + 2;
-        choiceCursor->state = 0x20;
+        choiceCursor->state = E_MODE_SHOW_START;
         WindowDXSet(confirmWindow);
         confirmWindow->x = 544;
         menu->confirmWindow.y = 116;
@@ -412,10 +459,10 @@ void MenuSystemMenuMain(void)
         menu->confirm.cursor = 0;
         menu->confirmWindow.state = menu->confirm.enabled = 1;
         WindowDXMain(confirmWindow);
-        menu->confirmWindow.state = 3;
-        menu->state = 2;
+        menu->confirmWindow.state = WINDOWDX_STATE_READY;
+        menu->state = MENU_SYSTEM_BLOCK_RUN;
         break;
-    case 2:
+    case MENU_SYSTEM_BLOCK_RUN:
         labelCursor = &menu->labelCursor;
         choiceWindow = &menu->choiceWindow;
         choiceCursor = &menu->choiceCursor;
@@ -429,11 +476,11 @@ void MenuSystemMenuMain(void)
     choiceTarget = 528;
     confirmTarget = 528;
     switch (MenuWork.state) {
-    case 0x10:
+    case MENU_SYSTEM_STATE_LIST:
         titleTarget = 48;
         break;
-    case 0x20:
-        if ((unsigned char)(MenuWork.flags & 1)) {
+    case MENU_SYSTEM_STATE_SOUND_OUTPUT:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
             menu->choiceWindow.height = 54;
             menu->choiceLabel[0].text = msg01_2_0036DD20[0];
             menu->choiceLabel[1].text = msg01_2_0036DD20[1];
@@ -442,11 +489,11 @@ void MenuSystemMenuMain(void)
         titleTarget = 0;
         choiceTarget = 400;
         break;
-    case 0x30:
-    case 0x40:
-    case 0x50:
-    case 0x70:
-        if ((unsigned char)(MenuWork.flags & 1)) {
+    case MENU_SYSTEM_STATE_RADAR:
+    case MENU_SYSTEM_STATE_VIBRATION:
+    case MENU_SYSTEM_STATE_CURSOR_MEMORY:
+    case MENU_SYSTEM_STATE_HDD:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
             menu->choiceWindow.height = 54;
             menu->choiceLabel[0].text = msg02_3_0036DD28[0];
             menu->choiceLabel[1].text = msg02_3_0036DD28[1];
@@ -455,7 +502,7 @@ void MenuSystemMenuMain(void)
         titleTarget = 0;
         choiceTarget = 400;
         break;
-    case 0x60:
+    case MENU_SYSTEM_STATE_DEFAULT:
         titleTarget = -56;
         confirmTarget = 344;
         break;
@@ -466,38 +513,38 @@ void MenuSystemMenuMain(void)
         WindowDXMain(titleWindow);
     }
     {
-        MenuSystemOptionNames *settingLabels[7];
+        MenuSystemOptionNames *settingLabels[MENU_SYSTEM_OPTION_COUNT];
         __builtin_memcpy(settingLabels, settingLabelNames, sizeof(settingLabels));
-        for (row = 0; row < 7; row++) {
-            if (row == 5)
+        for (row = 0; row < MENU_SYSTEM_OPTION_COUNT; row++) {
+            if (row == MENU_SYSTEM_OPTION_HDD)
                 continue;
             menu->label[row].x = menu->titleWindow.x + 19;
             menu->label[row].text = msg00_1_0036DD00[row];
-            menu->label[row].y = menu->titleWindow.y + row * 24 + 3;
+            menu->label[row].y = menu->titleWindow.y + row * MENU_SYSTEM_ROW_HEIGHT + 3;
             eMessageMain(&menu->label[row]);
-            if (row != 4 && row != 6) {
-                if (row == 5 && MenuWork.hddMounted == 0)
-                    menu->value[5].text = msg02_3_0036DD28[1];
+            if (row != MENU_SYSTEM_OPTION_MONITOR && row != MENU_SYSTEM_OPTION_DEFAULT) {
+                if (row == MENU_SYSTEM_OPTION_HDD && MenuWork.hddMounted == 0)
+                    menu->value[MENU_SYSTEM_OPTION_HDD].text = msg02_3_0036DD28[1];
                 else
                     menu->value[row].text = (*settingLabels[row])[MenuWork.options[row]];
                 menu->value[row].x = menu->titleWindow.x + 303;
-                menu->value[row].y = menu->titleWindow.y + row * 24 + 3;
+                menu->value[row].y = menu->titleWindow.y + row * MENU_SYSTEM_ROW_HEIGHT + 3;
                 eMessageMain(&menu->value[row]);
             }
         }
     }
     menu->labelCursor.x = menu->titleWindow.x + 3;
-    menu->labelCursor.y = menu->titleWindow.y + MenuWork.messageIndex * 24 + 7;
+    menu->labelCursor.y = menu->titleWindow.y + MenuWork.messageIndex * MENU_SYSTEM_ROW_HEIGHT + 7;
     eCursolMain(labelCursor);
     MoveSlide(&choiceWindow->x, &choiceTarget, 3.0f);
     WindowDXMain(choiceWindow);
-    for (row = 0; row < 3; row++) {
+    for (row = 0; row < MENU_SYSTEM_CHOICE_ROWS; row++) {
         menu->choiceLabel[row].x = menu->choiceWindow.x + 19;
-        menu->choiceLabel[row].y = menu->choiceWindow.y + row * 24 + 3;
+        menu->choiceLabel[row].y = menu->choiceWindow.y + row * MENU_SYSTEM_ROW_HEIGHT + 3;
         eMessageMain(&menu->choiceLabel[row]);
     }
     menu->choiceCursor.x = menu->choiceWindow.x + 3;
-    menu->choiceCursor.y = menu->choiceWindow.y + MenuWork.choiceIndex * 24 + 7;
+    menu->choiceCursor.y = menu->choiceWindow.y + MenuWork.choiceIndex * MENU_SYSTEM_ROW_HEIGHT + 7;
     eCursolMain(choiceCursor);
     MoveSlide(&confirmWindow->x, &confirmTarget, 3.0f);
     menu->confirm.cursor = MenuWork.choiceIndex;
@@ -509,11 +556,11 @@ void MenuSystemInitSet(void)
     PartyDataPrefix *party;
 
     SsdSetOutputMode(1);
-    SaveData[SAVE_DATA_BYTE_28] = 1;
+    SaveData[SAVE_DATA_SOUND_OUTPUT] = 1;
     MenuWork.soundOutput = 0;
-    SaveData[SAVE_DATA_BYTE_44] = 0;
+    SaveData[SAVE_DATA_CURSOR_MEMORY] = 0;
     MenuWork.padMode = 0;
-    SaveData[SAVE_DATA_BYTE_3C] = 0;
+    SaveData[SAVE_DATA_VIBRATION] = 0;
     PadData.vibrationReset = 0;
     PadData.vibrationStatus = 0;
     MenuWork.radarMode = 0;
@@ -522,9 +569,9 @@ void MenuSystemInitSet(void)
     MenuWork.displayMode = party->radar_disp ^ 1;
     tyaDisplaySetting(1);
     if (MenuWork.hddMounted != 0) {
-        SaveData[SAVE_DATA_BYTE_40] = 0;
+        SaveData[SAVE_DATA_HDD] = 0;
         xglHddActivate(1);
-        MenuWork.hddActive = SaveData[SAVE_DATA_BYTE_40];
+        MenuWork.hddActive = SaveData[SAVE_DATA_HDD];
     }
 }
 
@@ -539,191 +586,192 @@ void subMenuSystemMain(void)
 
     if (MenuWork.state != MenuWork.nextState) {
         MenuWork.state = MenuWork.nextState;
-        MenuWork.flags |= 1;
+        MenuWork.flags |= MENU_FLAG_ENTER;
     } else {
-        MenuWork.flags &= 0xfe;
+        MenuWork.flags &= ~MENU_FLAG_ENTER;
     }
     if (MenuWork.inputDelay != 0)
         MenuWork.inputDelay--;
 
     switch (MenuWork.state) {
-    case 0x10:
+    case MENU_SYSTEM_STATE_LIST:
         if (MenuWork.inputDelay == 0) {
             signed char previousSelection = MenuWork.messageIndex;
-            int selection = MenuSelectMove(previousSelection, 7, 0);
+            int selection = MenuSelectMove(previousSelection, MENU_SYSTEM_OPTION_COUNT, 0);
             MenuWork.messageIndex = selection;
-            if (MenuWork.messageIndex == 5)
+            if (MenuWork.messageIndex == MENU_SYSTEM_OPTION_HDD)
                 MenuWork.messageIndex = selection + (selection - previousSelection);
-            if (PadData.pressed & 0x20) {
+            if (PadData.pressed & PAD_CIRCLE) {
                 __builtin_memcpy(optionStates, optionStateTable, sizeof(optionStates));
-                if (MenuWork.messageIndex == 4) {
-                    xglSoundEffectNormalID(1, 0);
+                if (MenuWork.messageIndex == MENU_SYSTEM_OPTION_MONITOR) {
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     MenuModelMemorySet(0);
                     xglSleep();
                     tyaDisplaySetting((int)MenuModelWorkTop);
-                } else if (MenuWork.messageIndex == 5 && MenuWork.hddMounted == 0) {
-                    xglSoundEffectNormalID(5, 0);
+                } else if (MenuWork.messageIndex == MENU_SYSTEM_OPTION_HDD && MenuWork.hddMounted == 0) {
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 } else if (optionStates[MenuWork.messageIndex] != 0) {
                     MenuWork.nextState = optionStates[MenuWork.messageIndex];
-                    MenuWork.inputDelay = 8;
-                    xglSoundEffectNormalID(1, 0);
+                    MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0xf0;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_CLOSE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x20:
-        if ((unsigned char)(MenuWork.flags & 1))
+    case MENU_SYSTEM_STATE_SOUND_OUTPUT:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.choiceIndex = 0;
         if (MenuWork.inputDelay != 0)
             break;
         {
-            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
-            if (PadData.pressed & 0x20) {
+            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, MENU_SYSTEM_CHOICE_COUNT, 0);
+            if (PadData.pressed & PAD_CIRCLE) {
                 __builtin_memcpy(outputModes, outputModeTable, sizeof(outputModes));
                 SsdSetOutputMode(outputModes[MenuWork.choiceIndex]);
-                SaveData[0x28] = outputModes[MenuWork.choiceIndex];
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                MenuWork.soundOutput = SaveData[0x28] ^ 1;
-                xglSoundEffectNormalID(1, 0);
+                SaveData[SAVE_DATA_SOUND_OUTPUT] = outputModes[MenuWork.choiceIndex];
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                MenuWork.soundOutput = SaveData[SAVE_DATA_SOUND_OUTPUT] ^ 1;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x30:
-        if ((unsigned char)(MenuWork.flags & 1))
+    case MENU_SYSTEM_STATE_RADAR:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.choiceIndex = 0;
         if (MenuWork.inputDelay != 0)
             break;
         {
-            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
-            if (PadData.pressed & 0x20) {
+            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, MENU_SYSTEM_CHOICE_COUNT, 0);
+            if (PadData.pressed & PAD_CIRCLE) {
                 PartyDataPrefix *party;
                 __builtin_memcpy(displayModes, displayModeTable, sizeof(displayModes));
                 PartyRadarDispSet(displayModes[MenuWork.choiceIndex]);
                 party = PartyDataGet();
                 MenuWork.displayMode = party->radar_disp ^ 1;
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(1, 0);
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x40:
-        if ((unsigned char)(MenuWork.flags & 1))
+    case MENU_SYSTEM_STATE_VIBRATION:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.choiceIndex = 0;
         if (MenuWork.inputDelay != 0)
             break;
         {
-            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
-            if (PadData.pressed & 0x20) {
+            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, MENU_SYSTEM_CHOICE_COUNT, 0);
+            if (PadData.pressed & PAD_CIRCLE) {
                 __builtin_memcpy(vibrationModes, vibrationModeTable, sizeof(vibrationModes));
                 PadData.vibrationReset = vibrationModes[MenuWork.choiceIndex];
-                SaveData[0x3c] = vibrationModes[MenuWork.choiceIndex];
+                SaveData[SAVE_DATA_VIBRATION] = vibrationModes[MenuWork.choiceIndex];
                 PadData.vibrationStatus = vibrationModes[MenuWork.choiceIndex];
                 MenuWork.radarMode = vibrationModes[MenuWork.choiceIndex];
                 if (vibrationModes[MenuWork.choiceIndex] == 0)
-                    MenuBibrationSet(0, 1, 128, 32);
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(1, 0);
+                    MenuBibrationSet(0, 1, MENU_SYSTEM_VIBRATION_TEST_STRENGTH,
+                                     MENU_SYSTEM_VIBRATION_TEST_DURATION);
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x50:
-        if ((unsigned char)(MenuWork.flags & 1))
+    case MENU_SYSTEM_STATE_CURSOR_MEMORY:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.choiceIndex = 0;
         if (MenuWork.inputDelay != 0)
             break;
         {
-            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
-            if (PadData.pressed & 0x20) {
+            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, MENU_SYSTEM_CHOICE_COUNT, 0);
+            if (PadData.pressed & PAD_CIRCLE) {
                 __builtin_memcpy(padModes, padModeTable, sizeof(padModes));
-                SaveData[0x44] = padModes[MenuWork.choiceIndex];
+                SaveData[SAVE_DATA_CURSOR_MEMORY] = padModes[MenuWork.choiceIndex];
                 MenuWork.padMode = padModes[MenuWork.choiceIndex];
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(1, 0);
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x60:
-        if ((unsigned char)(MenuWork.flags & 1))
+    case MENU_SYSTEM_STATE_DEFAULT:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.choiceIndex = 0;
         if (MenuWork.inputDelay != 0)
             break;
         {
-            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
-            if (PadData.pressed & 0x20) {
+            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, MENU_SYSTEM_CHOICE_COUNT, 0);
+            if (PadData.pressed & PAD_CIRCLE) {
                 if (MenuWork.choiceIndex == 0) {
                     MenuSystemInitSet();
-                    MenuWork.nextState = 0x10;
-                    MenuWork.inputDelay = 8;
-                    xglSoundEffectNormalID(1, 0);
+                    MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                    MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 } else {
-                    MenuWork.nextState = 0x10;
-                    MenuWork.inputDelay = 8;
-                    xglSoundEffectNormalID(2, 0);
+                    MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                    MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x70:
-        if ((unsigned char)(MenuWork.flags & 1))
+    case MENU_SYSTEM_STATE_HDD:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.choiceIndex = 0;
         if (MenuWork.inputDelay != 0)
             break;
         {
-            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
-            if (PadData.pressed & 0x20) {
+            MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, MENU_SYSTEM_CHOICE_COUNT, 0);
+            if (PadData.pressed & PAD_CIRCLE) {
                 __builtin_memcpy(hddModes, hddModeTable, sizeof(hddModes));
-                SaveData[0x40] = hddModes[MenuWork.choiceIndex] ^ 1;
+                SaveData[SAVE_DATA_HDD] = hddModes[MenuWork.choiceIndex] ^ 1;
                 xglHddActivate(hddModes[MenuWork.choiceIndex]);
-                MenuWork.hddActive = SaveData[0x40];
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(1, 0);
+                MenuWork.hddActive = SaveData[SAVE_DATA_HDD];
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
-            if (PadData.pressed & 0x40) {
-                MenuWork.nextState = 0x10;
-                MenuWork.inputDelay = 8;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed & PAD_CROSS) {
+                MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
+                MenuWork.inputDelay = MENU_SYSTEM_DELAY_CHOICE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0xf0:
-        if ((unsigned char)(MenuWork.flags & 1))
-            MenuWork.inputDelay = 16;
+    case MENU_SYSTEM_STATE_CLOSE:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
+            MenuWork.inputDelay = MENU_SYSTEM_DELAY_CLOSE;
         if (MenuWork.inputDelay == 0)
-            MenuWork.nextState = 0xff;
+            MenuWork.nextState = MENU_SYSTEM_STATE_DONE;
         break;
     }
     MenuSystemPasMain();
@@ -740,25 +788,25 @@ void subMenuSystemInit(int workEnd)
 
     MenuSystemPas = cursor;
     cursor += sizeof(*MenuSystemPas);
-    MenuSystemPas->state = 0;
+    MenuSystemPas->state = MENU_SYSTEM_BLOCK_INIT;
     MenuSystemInfo = cursor;
     cursor += sizeof(*MenuSystemInfo);
-    MenuSystemInfo->state = 0;
+    MenuSystemInfo->state = MENU_SYSTEM_BLOCK_INIT;
     MenuSystemMenu = cursor;
     cursor += sizeof(*MenuSystemMenu);
-    MenuSystemMenu->state = 0;
-    MenuWork.nextState = 0x10;
+    MenuSystemMenu->state = MENU_SYSTEM_BLOCK_INIT;
+    MenuWork.nextState = MENU_SYSTEM_STATE_LIST;
     MenuWork.flags = 0;
-    MenuWork.soundOutput = SaveData[40] ^ 1;
-    MenuWork.inputDelay = 12;
-    MenuWork.padMode = SaveData[68];
-    MenuWork.radarMode = SaveData[60];
+    MenuWork.soundOutput = SaveData[SAVE_DATA_SOUND_OUTPUT] ^ 1;
+    MenuWork.inputDelay = MENU_SYSTEM_DELAY_OPEN;
+    MenuWork.padMode = SaveData[SAVE_DATA_CURSOR_MEMORY];
+    MenuWork.radarMode = SaveData[SAVE_DATA_VIBRATION];
     party = PartyDataGet();
     MenuWork.displayMode = party->radar_disp ^ 1;
     MenuHddCheck = xglHddMount();
     if (MenuHddCheck == 1 && xglHddActivate(-1) != 0) {
         MenuWork.hddMounted = 1;
-        MenuWork.hddActive = SaveData[64];
+        MenuWork.hddActive = SaveData[SAVE_DATA_HDD];
     } else {
         MenuWork.hddActive = 1;
         MenuWork.hddMounted = 0;
@@ -770,17 +818,17 @@ void MenuSystem(void)
     switch (MenuWork.menuState) {
         /* Keep both completion paths in this single dispatch scope. */
         do {
-        case 0:
+        case MENU_SYSTEM_TASK_INIT:
             subMenuSystemInit((int)MainMenuWorkEnd);
-            MenuWork.menuState = 2;
+            MenuWork.menuState = MENU_SYSTEM_TASK_RUN;
             /* fall through */
-        case 2:
+        case MENU_SYSTEM_TASK_RUN:
             subMenuSystemMain();
-            if (MenuWork.state != 0xFF)
+            if (MenuWork.state != MENU_SYSTEM_STATE_DONE)
                 break;
-            MenuWork.menuState = 4;
+            MenuWork.menuState = MENU_SYSTEM_TASK_EXIT;
             /* fall through */
-        case 4:
+        case MENU_SYSTEM_TASK_EXIT:
             ChangeTopLevel(0);
             break;
         } while (0);
@@ -795,12 +843,12 @@ void MenuSystem2Init(void) {
 int MenuSystem2(void)
 {
     subMenuSystemMain();
-    endPrintExtFunc(0, 100, 0);
-    return MenuWork.state != 0xFF;
+    endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
+    return MenuWork.state != MENU_SYSTEM_STATE_DONE;
 }
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
-MenuSystemOptionNames *const settingLabelNames[7] = { &msg01_2_0036DD20, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28 };
+MenuSystemOptionNames *const settingLabelNames[MENU_SYSTEM_OPTION_COUNT] = { &msg01_2_0036DD20, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28 };
 
 unsigned char optionStateTable[8] = { 0x20, 0x50, 0x40, 0x30, 0x00, 0x70, 0x60, 0x00 };
 

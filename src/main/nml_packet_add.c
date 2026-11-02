@@ -16,6 +16,28 @@
 
 #define VIF_CODE_MSCNT 0x17000000
 
+/* VIF UNPACK command V4-32 (0x60 | 0xc): four 32-bit words per quadword. */
+#define VIF_UNPACK_V4_32 0x6c
+
+/* VU1 data-memory quadword addresses the packets upload to. */
+#define NML_VU1_BONE_MATRICES 0x2dc    /* 4 quadwords per skinned bone */
+#define NML_BONE_CACHE_BYTES 0x3e      /* the 31 bone indices of s_pMatrixCache */
+#define NML_VU1_WIDE_GS_TAGS 0x2dc     /* GS tag list of the wide flush */
+#define NML_VU1_NORMAL_TABLE 0x350     /* s_aNormalTbl */
+#define NML_VU1_SCREEN_SCALE 966       /* camera screenScale */
+#define NML_VU1_SCREEN_OFFSET 967      /* camera screenOffset */
+#define NML_VU1_GS_TAGS 0x3d5          /* g_aGsTag list the microcode kicks */
+#define NML_VU1_GIFTAG 0x3f3           /* block GIF tag */
+#define NML_VU1_REFLECT_ALPHA 0x3f1
+
+/* The packet buffer is 0x200000 bytes; a block needs 0x10000 bytes of slack. */
+#define NML_PACKET_SIZE_LIMIT 0x200000u
+#define NML_PACKET_SLACK 0x10000u
+
+
+/* Scratchpad: the circle renderer's GS record list follows its work area. */
+#define NML_SCRATCH_GS_RECORDS (SCRATCHPAD_BASE + 0x1000)
+
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
 typedef union NmlPacketData128 {
@@ -333,7 +355,7 @@ static inline void nmlPacketSelectLighting(LayoutStore *model,
                                            const u32 *material_flags)
 {
     s_pLightLayout = model;
-    s_nLightPara = 0x20000 & *material_flags;
+    s_nLightPara = NML_MATERIAL_LIGHT_PARA & *material_flags;
 }
 
 static inline void nmlPacketAppendGsWords(u32 address, u32 high, u32 low)
@@ -359,7 +381,7 @@ static inline void nmlPacketAppendGsFields(u32 address, u32 high,
 
 static inline NmlCircleGsRecord *nmlCircleGsRecord(unsigned int index)
 {
-    return (NmlCircleGsRecord *)(0x70001000u +
+    return (NmlCircleGsRecord *)(NML_SCRATCH_GS_RECORDS +
                                  index * sizeof(NmlCircleGsRecord));
 }
 
@@ -423,7 +445,7 @@ static inline u64 nmlPacketMakeGsTest(int alpha_test_enabled, int alpha_test,
 
 static inline u64 nmlPacketMakeGsFixedAlpha(int alpha_value)
 {
-    return ((u64)alpha_value << 32) | 0x68;
+    return ((u64)alpha_value << 32) | NML_GS_ALPHA_FIXED;
 }
 
 static inline void nmlPacketSetPixelBlend(LayoutStore *model,
@@ -435,20 +457,20 @@ static inline void nmlPacketSetPixelBlend(LayoutStore *model,
     if (s_nPixelTestType != pixel_type) {
         int alpha_value =
             (int)(model->fields.transparency * 128.0f * alpha);
-        u64 test_value = 0x50000;
+        u64 test_value = NML_GS_TEST_ZGEQUAL;
         u64 blend_value;
 
         if (reflect_alpha < 2.0f)
             alpha_value = (int)(reflect_alpha * 128.0f * alpha);
         if (use_alpha_reference)
-            test_value = nmlPacketMakeGsTest(1, 3, alpha_reference,
-                                             0, 0, 0, 1, 2);
+            test_value = nmlPacketMakeGsTest(1, NML_GS_ATST_LEQUAL, alpha_reference,
+                                             0, 0, 0, 1, NML_GS_ZTST_GEQUAL);
         blend_value = nmlPacketMakeGsFixedAlpha(alpha_value);
         s_nPixelTestType = pixel_type;
-        nmlPacketAppendGsWords(0x47, 0, (u32)test_value);
-        nmlPacketAppendGsValue(0x43, &blend_value);
-        nmlPacketAddPixelTestPacket(0x47, test_value, 0x50000,
-                                    0x42, *(u64 *)&model->fields.alpha,
+        nmlPacketAppendGsWords(NML_GS_REG_TEST_1, 0, (u32)test_value);
+        nmlPacketAppendGsValue(NML_GS_REG_ALPHA_2, &blend_value);
+        nmlPacketAddPixelTestPacket(NML_GS_REG_TEST_1, test_value, NML_GS_TEST_ZGEQUAL,
+                                    NML_GS_REG_ALPHA_1, *(u64 *)&model->fields.alpha,
                                     blend_value);
     }
 }
@@ -645,40 +667,40 @@ void nmlPacketAddGsFlush(void)
     packet = xglPacketGetCurrent();
     s_pPacket.sdk = packet;
     if (g_nGsEntry > 0) {
-        g_aGsTag[0].words[1] = 0x10000000;
-        g_aGsTag[1].words[0] = 0xE;
-        g_aGsTag[0].words[0] = g_nGsEntry + 0x8000;
+        g_aGsTag[0].words[1] = NML_GIF_NREG_1;
+        g_aGsTag[1].words[0] = NML_GIF_REG_AD;
+        g_aGsTag[0].words[0] = g_nGsEntry + NML_GIF_EOP;
         g_aGsTag[1].words[1] = 0;
         sceVif1PkCnt(s_pPacket.sdk, 0);
-        sceVif1PkOpenUpkCode(s_pPacket.sdk, 0x3D5, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(s_pPacket.sdk, NML_VU1_GS_TAGS, VIF_UNPACK_V4_32, 1, 1);
         sceVif1PkAddUpkData128N(s_pPacket.sdk, g_aGsTag, g_nGsEntry + 1);
         sceVif1PkCloseUpkCode(s_pPacket.sdk);
         switch (s_nProgType) {
-        case 7:
+        case NML_UCODE_DROP:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1DropGsKick >> 3) | VIF_CODE_MSCAL);
             break;
-        case 1:
+        case NML_UCODE_ENV:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1EnvGsKick >> 3) | VIF_CODE_MSCAL);
             break;
-        case 2:
+        case NML_UCODE_PLAIN:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1GsKick >> 3) | VIF_CODE_MSCAL);
             break;
-        case 3:
+        case NML_UCODE_PROREAL:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1ProGsKick >> 3) | VIF_CODE_MSCAL);
             break;
-        case 4:
+        case NML_UCODE_ADD_ENV:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1AddEnvGsKick >> 3) | VIF_CODE_MSCAL);
             break;
-        case 5:
+        case NML_UCODE_ADD:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1AddGsKick >> 3) | VIF_CODE_MSCAL);
             break;
-        case 6:
+        case NML_UCODE_TEX_ENV:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1TexEnvGsKick >> 3) | VIF_CODE_MSCAL);
             break;
@@ -695,41 +717,41 @@ void nmlPacketAddGsFlushWide(void)
 
     s_pPacket.sdk = packet;
     if (g_nGsEntry > 0) {
-        g_aGsTag[0].words[1] = 0x10000000;
-        g_aGsTag[1].words[0] = 0xE;
-        g_aGsTag[0].words[0] = g_nGsEntry + 0x8000;
+        g_aGsTag[0].words[1] = NML_GIF_NREG_1;
+        g_aGsTag[1].words[0] = NML_GIF_REG_AD;
+        g_aGsTag[0].words[0] = g_nGsEntry + NML_GIF_EOP;
         g_aGsTag[1].words[1] = 0;
         sceVif1PkCnt(s_pPacket.sdk, 0);
         nmlPacketAddWaitMicrocode();
-        sceVif1PkOpenUpkCode(s_pPacket.sdk, 0x2DC, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(s_pPacket.sdk, NML_VU1_WIDE_GS_TAGS, VIF_UNPACK_V4_32, 1, 1);
         sceVif1PkAddUpkData128N(s_pPacket.sdk, g_aGsTag, g_nGsEntry + 1);
         sceVif1PkCloseUpkCode(s_pPacket.sdk);
         switch (s_nProgType) {
-        case 7:
+        case NML_UCODE_DROP:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1DropGsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
-        case 1:
+        case NML_UCODE_ENV:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1EnvGsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
-        case 2:
+        case NML_UCODE_PLAIN:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1GsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
-        case 3:
+        case NML_UCODE_PROREAL:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1ProGsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
-        case 4:
+        case NML_UCODE_ADD_ENV:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1AddEnvGsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
-        case 5:
+        case NML_UCODE_ADD:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1AddGsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
-        case 6:
+        case NML_UCODE_TEX_ENV:
             sceVif1PkAddCode(s_pPacket.sdk,
                              ((u32)NewVu1TexEnvGsKickWide >> 3) | VIF_CODE_MSCAL);
             break;
@@ -749,29 +771,29 @@ void nmlPacketAddReflectParam(const NmlModelBlock *material,
 
     s_pPacket.sdk = xglPacketGetCurrent();
     reflection_alpha = model->fields.reflTransparency;
-    if ((model->fields.render_status & 0x100000) &&
+    if ((model->fields.render_status & NML_RENDER_FACE_MODEL) &&
         (strstr(material->name, eye_name) != 0))
         reflection_alpha = 2.0f;
     sceVif1PkCnt(current_packet->sdk, 0);
 
-    tags[0].words[0] = 0x8004;
-    tags[0].words[1] = 0x10000000;
-    tags[0].words[2] = 0xE;
+    tags[0].words[0] = NML_GIF_EOP + 4;
+    tags[0].words[1] = NML_GIF_NREG_1;
+    tags[0].words[2] = NML_GIF_REG_AD;
     tags[0].words[3] = 0;
     tags[1].halves[0] = 0;
-    tags[1].halves[1] = 0x3F;
+    tags[1].halves[1] = NML_GS_REG_TEXFLUSH;
     tags[2].words[0] = material->textureParameters[0].buffer +
                        (sRender.texture_buffer_base << 5);
     tags[2].words[1] = material->textureParameters[0].width +
                        (sRender.texture_buffer_base << 10);
-    tags[2].halves[1] = 6;
+    tags[2].halves[1] = NML_GS_REG_TEX0_1;
     tags[3].words[0] = material->textureParameters[1].buffer;
     tags[3].words[1] = material->textureParameters[1].width;
-    tags[3].halves[1] = 0x14;
+    tags[3].halves[1] = NML_GS_REG_TEX1_1;
     tags[4].words[0] = material->textureParameters[2].buffer;
     tags[4].words[1] = material->textureParameters[2].width;
-    tags[4].halves[1] = 8;
-    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3D5, 0x6C, 1, 1);
+    tags[4].halves[1] = NML_GS_REG_CLAMP_1;
+    sceVif1PkOpenUpkCode(current_packet->sdk, NML_VU1_GS_TAGS, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128N(current_packet->sdk, tags, 5);
     sceVif1PkCloseUpkCode(current_packet->sdk);
 
@@ -783,7 +805,7 @@ void nmlPacketAddReflectParam(const NmlModelBlock *material,
     tags[3].words[1] = material->textureParameters[4].width;
     tags[4].words[0] = material->textureParameters[5].buffer;
     tags[4].words[1] = material->textureParameters[5].width;
-    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3DA, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3DA, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128N(current_packet->sdk, tags, 5);
     sceVif1PkCloseUpkCode(current_packet->sdk);
 
@@ -796,7 +818,7 @@ void nmlPacketAddReflectParam(const NmlModelBlock *material,
         alpha[1] = alpha[0];
         alpha[2] = alpha[0];
         alpha[3] = alpha[0];
-        sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F1, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(current_packet->sdk, NML_VU1_REFLECT_ALPHA, VIF_UNPACK_V4_32, 1, 1);
         sceVif1PkAddUpkData128N(current_packet->sdk, alpha, 1);
         sceVif1PkCloseUpkCode(current_packet->sdk);
     }
@@ -811,7 +833,7 @@ void nmlPacketAddTransMicrocodeInit(void)
     selected.sdk = packet;
     s_pPacket = selected;
     sceVif1PkRef(packet, D_004AE5B0, D_004AE5A0[0], 0, 0, 0);
-    s_nProgType = 2;
+    s_nProgType = NML_UCODE_PLAIN;
     s_nPixelTestType = -1;
     s_pCacheTexture = 0;
     s_pMatrixCache = 0;
@@ -825,7 +847,7 @@ void nmlPacketAddTransMicrocodeInit(void)
     selected = s_pPacket;
     sceVif1PkCnt(selected.sdk, 0);
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 1004, 108, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 1004, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk, matrix, 3);
     selected = s_pPacket;
@@ -847,91 +869,91 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
     status = model->fields.render_status;
-    program_type = 2;
-    if (status & 0x8000) {
-        program_type = 6;
-    } else if (status & 0x800) {
-        program_type = 3;
-    } else if (status & 0x80000) {
-        program_type = 7;
+    program_type = NML_UCODE_PLAIN;
+    if (status & NML_RENDER_TEXTURE_PASS) {
+        program_type = NML_UCODE_TEX_ENV;
+    } else if (status & NML_RENDER_PROREAL) {
+        program_type = NML_UCODE_PROREAL;
+    } else if (status & NML_RENDER_DROP_PASS) {
+        program_type = NML_UCODE_DROP;
     } else {
-        if (status & 0x02001000) {
-            program_type = 5;
+        if (status & (NML_RENDER_GLOBAL_POINT_LIGHT | NML_RENDER_POINT_LIGHT)) {
+            program_type = NML_UCODE_ADD;
             if (material->flags & 1) {
-                program_type = 4;
+                program_type = NML_UCODE_ADD_ENV;
             } else if ((material->materialFlagsQword & 0x10010) == 0x10) {
-                program_type = 2;
+                program_type = NML_UCODE_PLAIN;
             }
         } else {
-            program_type = (material->flags & 1) ? 1 : 2;
+            program_type = (material->flags & 1) ? NML_UCODE_ENV : NML_UCODE_PLAIN;
         }
     }
 
     switch (program_type) {
-    case 3:
-        if (s_nProgType == 3)
+    case NML_UCODE_PROREAL:
+        if (s_nProgType == NML_UCODE_PROREAL)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004B54B0, D_004B54A0[0], 0, 0, 0);
-        s_nProgType = 3;
+        s_nProgType = NML_UCODE_PROREAL;
         selected = s_pPacket;
         sceVif1PkCnt(selected.sdk, 0);
         selected = s_pPacket;
-        sceVif1PkOpenUpkCode(selected.sdk, 0x350, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(selected.sdk, NML_VU1_NORMAL_TABLE, VIF_UNPACK_V4_32, 1, 1);
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, s_aNormalTbl, 0x72);
         selected = s_pPacket;
         sceVif1PkCloseUpkCode(selected.sdk);
         return;
-    case 4:
-        if (s_nProgType == 4)
+    case NML_UCODE_ADD_ENV:
+        if (s_nProgType == NML_UCODE_ADD_ENV)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004B9710, D_004B9700[0], 0, 0, 0);
-        s_nProgType = 4;
+        s_nProgType = NML_UCODE_ADD_ENV;
         return;
-    case 5:
-        if (s_nProgType == 5)
+    case NML_UCODE_ADD:
+        if (s_nProgType == NML_UCODE_ADD)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004B6F80, D_004B6F70[0], 0, 0, 0);
-        s_nProgType = 5;
+        s_nProgType = NML_UCODE_ADD;
         selected = s_pPacket;
         sceVif1PkCnt(selected.sdk, 0);
         selected = s_pPacket;
-        sceVif1PkOpenUpkCode(selected.sdk, 0x350, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(selected.sdk, NML_VU1_NORMAL_TABLE, VIF_UNPACK_V4_32, 1, 1);
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, s_aNormalTbl, 0x72);
         selected = s_pPacket;
         sceVif1PkCloseUpkCode(selected.sdk);
         return;
-    case 6:
-        if (s_nProgType == 6)
+    case NML_UCODE_TEX_ENV:
+        if (s_nProgType == NML_UCODE_TEX_ENV)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004B0A50, D_004B0A40[0], 0, 0, 0);
-        s_nProgType = 6;
+        s_nProgType = NML_UCODE_TEX_ENV;
         return;
-    case 7:
-        if (s_nProgType == 7)
+    case NML_UCODE_DROP:
+        if (s_nProgType == NML_UCODE_DROP)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004BD4A0, D_004BD490[0], 0, 0, 0);
-        s_nProgType = 7;
+        s_nProgType = NML_UCODE_DROP;
         return;
-    case 1:
-        if (s_nProgType == 1)
+    case NML_UCODE_ENV:
+        if (s_nProgType == NML_UCODE_ENV)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004B19F0, D_004B19E0[0], 0, 0, 0);
-        s_nProgType = 1;
+        s_nProgType = NML_UCODE_ENV;
         return;
-    case 2:
-        if (s_nProgType == 2)
+    case NML_UCODE_PLAIN:
+        if (s_nProgType == NML_UCODE_PLAIN)
             return;
         selected = s_pPacket;
         sceVif1PkRef(selected.sdk, D_004AE5B0, D_004AE5A0[0], 0, 0, 0);
-        s_nProgType = 2;
+        s_nProgType = NML_UCODE_PLAIN;
         return;
     default:
         return;
@@ -952,10 +974,10 @@ void nmlPacketAddScreen(const StudioCamera *camera)
     translation.lanes[3] = 0.0f;
     if ((sRender.texture_buffer_base << 5) != 0x3800)
         translation.lanes[3] = 3.1415927f;
-    sceVif1PkOpenUpkCode(s_pPacket.sdk, 967, 108, 1, 1);
+    sceVif1PkOpenUpkCode(s_pPacket.sdk, NML_VU1_SCREEN_OFFSET, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128(s_pPacket.sdk, translation.quad);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
-    sceVif1PkOpenUpkCode(s_pPacket.sdk, 966, 108, 1, 1);
+    sceVif1PkOpenUpkCode(s_pPacket.sdk, NML_VU1_SCREEN_SCALE, VIF_UNPACK_V4_32, 1, 1);
     /* The scale vector is sent as one native quadword; StudioCamera has no
      * quadword view of it yet. */
     sceVif1PkAddUpkData128(s_pPacket.sdk, *(const Quadword *)&camera->screenScale);
@@ -975,12 +997,12 @@ void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
     packet.second_value = second_test;
     packet.first_address = first_address;
     packet.second_address = second_address;
-    packet.loops = 0x8002;
-    packet.format = 0x10000000;
-    packet.registers = 14;
+    packet.loops = NML_GIF_EOP + 2;
+    packet.format = NML_GIF_NREG_1;
+    packet.registers = NML_GIF_REG_AD;
     packet.register_high = 0;
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3fa, 0x6c, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3fa, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk, &packet, 3);
     selected = s_pPacket;
@@ -990,7 +1012,7 @@ void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
     packet.second_address = second_address;
     packet.second_value = second_value;
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3fd, 0x6c, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3fd, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk, &packet, 3);
     selected = s_pPacket;
@@ -1048,7 +1070,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     }
 
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3C8, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3C8, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk,
                             &material->materialParameters, 5);
@@ -1059,7 +1081,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     material_tag_data = &material_tag;
     if (view_index != model->fields.window)
         material_alpha = model->fields.viewportAlpha[view_index];
-    if ((model->fields.render_status & 0x100000) &&
+    if ((model->fields.render_status & NML_RENDER_FACE_MODEL) &&
         ((strstr(material->name, lenz_name) != 0) ||
          (strstr(material->name, eye_name) != 0)))
         material_alpha = model->fields.specialBlockAlpha;
@@ -1088,7 +1110,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
 
     material_tag_data->words[3] = material->alphaMode;
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3F0, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3F0, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk, &material_tag, 1);
     selected = s_pPacket;
@@ -1098,15 +1120,15 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     if (model->fields.alphaOptions & 1)
         alpha_options.lanes[2] = model->fields.alphaOptionsValue;
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3F9, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3F9, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk, &alpha_options, 1);
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
-    if (model->fields.render_status & 0x800) {
+    if (model->fields.render_status & NML_RENDER_PROREAL) {
         selected = s_pPacket;
-        sceVif1PkOpenUpkCode(selected.sdk, 0x3C9, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(selected.sdk, 0x3C9, VIF_UNPACK_V4_32, 1, 1);
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, proreal->unmodeled_140, 1);
         selected = s_pPacket;
@@ -1117,11 +1139,11 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     selected = s_pPacket;
     sceVif1PkCnt(selected.sdk, 0);
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, 0x6C, 1, 1);
-    if (model->fields.render_status & 0x800) {
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, VIF_UNPACK_V4_32, 1, 1);
+    if (model->fields.render_status & NML_RENDER_PROREAL) {
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, proreal->block_material_data, 4);
-    } else if (model->fields.render_status & 0x80000) {
+    } else if (model->fields.render_status & NML_RENDER_DROP_PASS) {
         model->fields.lightDirection[3][3] = (float)(0x80 - (int)(
             model->fields.texMapSize * model->fields.transparency *
             model->fields.fogIntensity[view_index]));
@@ -1134,9 +1156,9 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
-    if (material->materialFlags & 0x20000) {
+    if (material->materialFlags & NML_MATERIAL_LIGHT_PARA) {
         selected = s_pPacket;
-        sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, 0x6C, 1, 1);
+        sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, VIF_UNPACK_V4_32, 1, 1);
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, s_inLc0, 4);
         selected = s_pPacket;
@@ -1147,8 +1169,8 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
 void nmlPacketMakeCircleTexture(LayoutStore *model,
                                 StudioCamera *camera)
 {
-    NmlCircleScratchpad *scratch = (NmlCircleScratchpad *)0x70000000;
-    NmlCircleVector *transform = (NmlCircleVector *)0x70000040;
+    NmlCircleScratchpad *scratch = (NmlCircleScratchpad *)SCRATCHPAD_BASE;
+    NmlCircleVector *transform = (NmlCircleVector *)(SCRATCHPAD_BASE + 0x40);
     float radius_scale;
     float height_offset;
     float *matrix;
@@ -1211,18 +1233,18 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
             projected->words[3] = 4;
     }
 
-    nmlCircleSetGsRecord(nmlCircleGsRecord(0), 0x3f, 0);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(0), NML_GS_REG_TEXFLUSH, 0);
     texture_base = sRender.texture_buffer_base << 5;
-    nmlCircleSetGsRecord(nmlCircleGsRecord(1), 6,
+    nmlCircleSetGsRecord(nmlCircleGsRecord(1), NML_GS_REG_TEX0_1,
                          nmlCircleMakeTextureParameter(texture_base));
-    nmlCircleSetGsRecord(nmlCircleGsRecord(2), 0x14, 0x60);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(3), 0x47, 0x71001);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(4), 8, 0);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(5), 0x42, 0x89);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(6), 0, 0x54);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(7), 1,
-        ((u64)scratch->perspective[0].unsigned_words[2] << 32) | 0x80808080);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(8), 2,
+    nmlCircleSetGsRecord(nmlCircleGsRecord(2), NML_GS_REG_TEX1_1, 0x60);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(3), NML_GS_REG_TEST_1, 0x71001);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(4), NML_GS_REG_CLAMP_1, 0);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(5), NML_GS_REG_ALPHA_1, NML_GS_ALPHA_DEST_BY_SRC);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(6), NML_GS_REG_PRIM, 0x54);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(7), NML_GS_REG_RGBAQ,
+        ((u64)scratch->perspective[0].unsigned_words[2] << 32) | NML_GS_RGBA_NEUTRAL);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(8), NML_GS_REG_ST,
         scratch->perspective[0].unsigned_words[0] |
         ((u64)scratch->perspective[0].unsigned_words[1] << 32));
     first_clip_flags = nmlCircleSetPositionRecord(nmlCircleGsRecord(9),
@@ -1231,9 +1253,9 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
         ((u64)scratch->projected[0].words[2] << 32),
         &scratch->projected[0].words[3], 0, 0);
 
-    nmlCircleSetGsRecord(nmlCircleGsRecord(10), 1,
-        ((u64)scratch->perspective[1].unsigned_words[2] << 32) | 0x80808080);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(11), 2,
+    nmlCircleSetGsRecord(nmlCircleGsRecord(10), NML_GS_REG_RGBAQ,
+        ((u64)scratch->perspective[1].unsigned_words[2] << 32) | NML_GS_RGBA_NEUTRAL);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(11), NML_GS_REG_ST,
         scratch->perspective[1].unsigned_words[0] |
         ((u64)scratch->perspective[1].unsigned_words[1] << 32));
     second_clip_flags = nmlCircleSetPositionRecord(nmlCircleGsRecord(12),
@@ -1242,9 +1264,9 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
         ((u64)scratch->projected[1].words[2] << 32),
         &scratch->projected[1].words[3], first_clip_flags, 0);
 
-    nmlCircleSetGsRecord(nmlCircleGsRecord(13), 1,
-        ((u64)scratch->perspective[2].unsigned_words[2] << 32) | 0x80808080);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(14), 2,
+    nmlCircleSetGsRecord(nmlCircleGsRecord(13), NML_GS_REG_RGBAQ,
+        ((u64)scratch->perspective[2].unsigned_words[2] << 32) | NML_GS_RGBA_NEUTRAL);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(14), NML_GS_REG_ST,
         scratch->perspective[2].unsigned_words[0] |
         ((u64)scratch->perspective[2].unsigned_words[1] << 32));
     third_clip_flags = nmlCircleSetPositionRecord(nmlCircleGsRecord(15),
@@ -1253,9 +1275,9 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
         ((u64)scratch->projected[2].words[2] << 32),
         &scratch->projected[2].words[3], second_clip_flags, first_clip_flags);
 
-    nmlCircleSetGsRecord(nmlCircleGsRecord(16), 1,
-        ((u64)scratch->perspective[3].unsigned_words[2] << 32) | 0x80808080);
-    nmlCircleSetGsRecord(nmlCircleGsRecord(17), 2,
+    nmlCircleSetGsRecord(nmlCircleGsRecord(16), NML_GS_REG_RGBAQ,
+        ((u64)scratch->perspective[3].unsigned_words[2] << 32) | NML_GS_RGBA_NEUTRAL);
+    nmlCircleSetGsRecord(nmlCircleGsRecord(17), NML_GS_REG_ST,
         scratch->perspective[3].unsigned_words[0] |
         ((u64)scratch->perspective[3].unsigned_words[1] << 32));
     nmlCircleSetPositionRecord(nmlCircleGsRecord(18),
@@ -1267,7 +1289,7 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
     g_nGsEntry = 0;
     {
         int remaining;
-        NmlCircleGsRecord *cursor = (NmlCircleGsRecord *)0x70001000;
+        NmlCircleGsRecord *cursor = (NmlCircleGsRecord *)NML_SCRATCH_GS_RECORDS;
 
         for (remaining = 18; remaining >= 0; remaining--) {
             nmlPacketAppendGsValue(cursor->address.words[0],
@@ -1291,8 +1313,8 @@ void nmlPacketSendCircleTexture(const void *indices, const void *palette)
     selected = s_pPacket;
     sceVif1PkAddCode(selected.sdk, VIF_CODE_FLUSH);
     sceGsSetDefLoadImage(&image, sRender.texture_buffer_base << 5,
-                         1, 19, 0, 0, 64, 64);
-    image.giftag |= 0x8000;
+                         1, NML_GS_PSMT8, 0, 0, 64, 64);
+    image.giftag |= NML_GIF_EOP;
     selected = s_pPacket;
     sceVif1PkOpenDirectCode(selected.sdk, 0);
     selected = s_pPacket;
@@ -1304,8 +1326,8 @@ void nmlPacketSendCircleTexture(const void *indices, const void *palette)
     selected = s_pPacket;
     sceVif1PkCnt(selected.sdk, 0);
     sceGsSetDefLoadImage(&image, (sRender.texture_buffer_base << 5) + 128,
-                         1, 0, 0, 0, 16, 16);
-    image.giftag |= 0x8000;
+                         1, NML_GS_PSMCT32, 0, 0, 16, 16);
+    image.giftag |= NML_GIF_EOP;
     selected = s_pPacket;
     sceVif1PkOpenDirectCode(selected.sdk, 0);
     selected = s_pPacket;
@@ -1352,7 +1374,7 @@ static void nmlPacketTextureTrans(LayoutStore *model)
         sceGsSetDefLoadImage(&image, (short)address,
                             entry->buffer_width, entry->psm, 0, 0,
                             entry->width, entry->height);
-        image.giftag |= 0x8000;
+        image.giftag |= NML_GIF_EOP;
         selected = s_pPacket;
         sceVif1PkOpenDirectCode(selected.sdk, 0);
         selected = s_pPacket;
@@ -1397,11 +1419,11 @@ int nmlPacketAddTexture(LayoutStore *model)
     selected = s_pPacket;
     packet = selected.sdk;
     if (size * 0x10u +
-            (packet->limit - (u32)packet->cursor) + 0x10000u >
-        0x200000u)
+            (packet->limit - (u32)packet->cursor) + NML_PACKET_SLACK >
+        NML_PACKET_SIZE_LIMIT)
         return 1;
 
-    if (model->fields.render_status & 0x800u) {
+    if (model->fields.render_status & NML_RENDER_PROREAL) {
         const void *cached_texture;
         texture = proreal->texture;
         cached_texture = s_pCacheTexture;
@@ -1437,7 +1459,7 @@ int nmlPacketAddTexture(LayoutStore *model)
 
         return size * 0x10u +
                 (finished_packet->limit - (u32)finished_packet->cursor) +
-                0x10000u > 0x200000u;
+                NML_PACKET_SLACK > NML_PACKET_SIZE_LIMIT;
     }
 }
 
@@ -1471,7 +1493,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
     sceVif1PkCnt(packet, 0);
     size = sceVif1PkSize(s_pPacket.sdk);
     if (size * 0x10u + (s_pPacket.sdk->limit - (u32)s_pPacket.sdk->cursor) +
-        0x10000u > 0x200000u)
+        NML_PACKET_SLACK > NML_PACKET_SIZE_LIMIT)
         return 1;
     {
         if (block->flags & 0x10) {
@@ -1484,7 +1506,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             for (i = 0; i < block->vertexIndexCount; i++) {
                 u16 code_index = block->vertexIndexBase + i * 2;
                 selected = s_pPacket;
-                sceVif1PkOpenUpkCode(selected.sdk, code_index, 0x6c, 1, 1);
+                sceVif1PkOpenUpkCode(selected.sdk, code_index, VIF_UNPACK_V4_32, 1, 1);
                 selected = s_pPacket;
                 sceVif1PkAddUpkData128N(
                     selected.sdk,
@@ -1503,7 +1525,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             s_pMatrixCache = 0;
         }
         if (s_pMatrixCache != 0 &&
-            memcmp(s_pMatrixCache, bone_indices, 0x3e) != 0)
+            memcmp(s_pMatrixCache, bone_indices, NML_BONE_CACHE_BYTES) != 0)
             s_pMatrixCache = 0;
         matrix_changed = s_pMatrixCache == 0;
         s_pMatrixCache = bone_indices;
@@ -1511,7 +1533,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
         {
             geometry_rows = model->fields.weightedMatrices->rows;
             if (*bone_indices != 0) {
-                code = 0x2dc;
+                code = NML_VU1_BONE_MATRICES;
                 do {
                     u16 bone_index = *bone_indices++;
 
@@ -1520,7 +1542,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
 
                     selected = s_pPacket;
                     sceVif1PkOpenUpkCode(selected.sdk, code & 0xffff,
-                                         0x6c, 1, 1);
+                                         VIF_UNPACK_V4_32, 1, 1);
                     selected = s_pPacket;
                     sceVif1PkAddUpkData128N(selected.sdk,
                                             geometry_rows, 4);
@@ -1543,7 +1565,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             nmlPartsSetRowW(&matrices.part, homogeneous_w);
 
             if (!(block->flags & 1) &&
-                !(block->materialFlags & 0x10)) {
+                !(block->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS)) {
                 xglMatrixInverse(matrices.inverse_part.values,
                                  matrices.part.values);
             } else {
@@ -1558,7 +1580,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
 
             _CurMatrixSet(matrices.inverse_part.values);
             _CurMatrixMul(model->fields.inversePlace);
-            if (model->fields.render_status & 0x800) {
+            if (model->fields.render_status & NML_RENDER_PROREAL) {
                 _CurMatrixMul33norm(matrices.normal.rows,
                     proreal->normal_transform);
             } else {
@@ -1568,7 +1590,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             _CurApplyMatrix(&matrices.reference_point.vector,
                             &camera->position.vector);
 
-            if (model->fields.render_status & 0x02001000) {
+            if (model->fields.render_status & (NML_RENDER_GLOBAL_POINT_LIGHT | NML_RENDER_POINT_LIGHT)) {
                 NmlPartsLightPayload *light_payload = &matrices.light_payload;
                 const Vector4 *source_points = model->fields.pointPosition;
                 _CurApplyMatrix(&matrices.light_payload.current_point,
@@ -1587,14 +1609,14 @@ int nmlPacketAddParts(const NmlModelBlock *block,
                 matrices.light_payload.rows[1].z = matrices.light_payload.current_point.y;
                 matrices.light_payload.rows[2].z = matrices.light_payload.current_point.z;
                 selected = s_pPacket;
-                sceVif1PkOpenUpkCode(selected.sdk, 0x3f5, 0x6c, 1, 1);
+                sceVif1PkOpenUpkCode(selected.sdk, 0x3f5, VIF_UNPACK_V4_32, 1, 1);
                 selected = s_pPacket;
                 sceVif1PkAddUpkData128N(selected.sdk,
                                         light_payload, 4);
                 selected = s_pPacket;
                 sceVif1PkCloseUpkCode(selected.sdk);
                 selected = s_pPacket;
-                sceVif1PkOpenUpkCode(selected.sdk, 0x3e9, 0x6c, 1, 1);
+                sceVif1PkOpenUpkCode(selected.sdk, 0x3e9, VIF_UNPACK_V4_32, 1, 1);
                 selected = s_pPacket;
                 sceVif1PkAddUpkData128N(selected.sdk,
                                         model->fields.pointColor, 3);
@@ -1602,12 +1624,12 @@ int nmlPacketAddParts(const NmlModelBlock *block,
                 sceVif1PkCloseUpkCode(selected.sdk);
             }
 
-            if (model->fields.render_status & 0x800) {
+            if (model->fields.render_status & NML_RENDER_PROREAL) {
                 xglMatrixMul(&matrices.projected_placement.xgl_matrix,
                     &proreal->projection_transform,
                     &model->fields.place);
                 selected = s_pPacket;
-                sceVif1PkOpenUpkCode(selected.sdk, 0x3ec, 0x6c, 1, 1);
+                sceVif1PkOpenUpkCode(selected.sdk, 0x3ec, VIF_UNPACK_V4_32, 1, 1);
                 selected = s_pPacket;
                 sceVif1PkAddUpkData128N(selected.sdk,
                                         matrices.projected_placement.values, 4);
@@ -1619,7 +1641,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
 
             nmlPartsSetNormalTranslation(&matrices.normal,
                                          &matrices.reference_point, 3);
-            if (model->fields.render_status & 0x800) {
+            if (model->fields.render_status & NML_RENDER_PROREAL) {
                 const NmlScreenQuadword *source_row = &proreal->final_normal_row;
                 NmlScreenQuadword *destination_row = &matrices.normal.quadwords[3];
 
@@ -1627,7 +1649,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             }
 
             selected = s_pPacket;
-            sceVif1PkOpenUpkCode(selected.sdk, 0x3cd, 0x6c, 1, 1);
+            sceVif1PkOpenUpkCode(selected.sdk, 0x3cd, VIF_UNPACK_V4_32, 1, 1);
             selected = s_pPacket;
             sceVif1PkAddUpkData128N(selected.sdk,
                                     matrices.normal.values, 4);
@@ -1636,14 +1658,14 @@ int nmlPacketAddParts(const NmlModelBlock *block,
 
         }
         if (matrix_changed) {
-            if (model->fields.render_status & 0x8000) {
+            if (model->fields.render_status & NML_RENDER_TEXTURE_PASS) {
                 _CurMatrixSet(model->fields.projectionMatrix);
             } else {
                 _CurMatrixSet(camera->viewMatrix);
-                if (model->fields.render_status & 0x80000)
+                if (model->fields.render_status & NML_RENDER_DROP_PASS)
                     _CurMatrixMul(model->fields.projectionMatrix);
             }
-            if (model->fields.render_status & 1) {
+            if (model->fields.render_status & NML_RENDER_PLACE) {
                 _CurMatrixMul(model->fields.place);
                 _CurMatrixMul(matrices.part.values);
             } else {
@@ -1651,7 +1673,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             }
             _CurMatrixGet(matrices.clip.values);
             selected = s_pPacket;
-            sceVif1PkOpenUpkCode(selected.sdk, 0x3c2, 0x6c, 1, 1);
+            sceVif1PkOpenUpkCode(selected.sdk, 0x3c2, VIF_UNPACK_V4_32, 1, 1);
             selected = s_pPacket;
             sceVif1PkAddUpkData128N(selected.sdk,
                                     matrices.clip.values, 4);
@@ -1661,8 +1683,8 @@ int nmlPacketAddParts(const NmlModelBlock *block,
     }
     size = sceVif1PkSize(s_pPacket.sdk);
     return size * 0x10u +
-           (s_pPacket.sdk->limit - (u32)s_pPacket.sdk->cursor) + 0x10000u >
-           0x200000u;
+           (s_pPacket.sdk->limit - (u32)s_pPacket.sdk->cursor) + NML_PACKET_SLACK >
+           NML_PACKET_SIZE_LIMIT;
 }
 
 void nmlPacketAddTextureParam(NmlModelBlock *material,
@@ -1674,12 +1696,12 @@ void nmlPacketAddTextureParam(NmlModelBlock *material,
     if (model->fields.prorealOverride != 0)
         proreal = model->fields.prorealOverride;
     s_pPacket.sdk = xglPacketGetCurrent();
-    if (model->fields.render_status & 0x800) {
+    if (model->fields.render_status & NML_RENDER_PROREAL) {
         u64 texture_filter = 0x60;
 
-        nmlPacketAppendGsWords(0x3f, 0, 0);
+        nmlPacketAppendGsWords(NML_GS_REG_TEXFLUSH, 0, 0);
         nmlPacketAppendGsValue(6, &proreal->texture_gs_parameters[0].value);
-        nmlPacketAppendGsValue(0x14, &texture_filter);
+        nmlPacketAppendGsValue(NML_GS_REG_TEX1_1, &texture_filter);
         nmlPacketAppendGsValue(8, &proreal->texture_gs_parameters[1].value);
     } else if (material->materialFlags & 1) {
         u32 tex0_low = material->textureParameters[0].buffer +
@@ -1687,9 +1709,9 @@ void nmlPacketAddTextureParam(NmlModelBlock *material,
         u32 tex0_high = material->textureParameters[0].width +
                         (sRender.texture_buffer_base << 10);
 
-        nmlPacketAppendGsWords(0x3f, 0, 0);
+        nmlPacketAppendGsWords(NML_GS_REG_TEXFLUSH, 0, 0);
         nmlPacketAppendGsWords(6, tex0_high, tex0_low);
-        nmlPacketAppendGsWords(0x14, *&material->textureParameters[1].width,
+        nmlPacketAppendGsWords(NML_GS_REG_TEX1_1, *&material->textureParameters[1].width,
                                *&material->textureParameters[1].buffer);
         nmlPacketAppendGsFields(8, material->textureParameters[2].width,
                                 &material->textureParameters[2].buffer);
@@ -1724,7 +1746,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
     if (model->fields.prorealOverride != 0)
         proreal = model->fields.prorealOverride;
 
-    if ((model->fields.render_status & 0x100000) != 0 &&
+    if ((model->fields.render_status & NML_RENDER_FACE_MODEL) != 0 &&
         (strstr(material->name, lenz_name) != 0 ||
          strstr(material->name, eye_name) != 0))
         eye_material = 1;
@@ -1733,10 +1755,10 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
     sceVif1PkCnt(s_pPacket.sdk, 0);
 
     switch (s_nProgType) {
-    case 7: {
+    case NML_UCODE_DROP: {
         int slot = 0;
 
-        if (material->materialFlags & 0x10)
+        if (material->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS)
             slot = 1;
         else if (material->flags & 1) {
             slot = 2;
@@ -1753,7 +1775,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
         break;
     }
 
-    case 6: {
+    case NML_UCODE_TEX_ENV: {
         int slot;
 
         if (material->flags & 1) {
@@ -1763,7 +1785,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
             else if (material->flags & 4)
                 slot = 4;
         }
-        else if (material->materialFlags & 0x10)
+        else if (material->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS)
             slot = 1;
         else
             slot = 0;
@@ -1775,12 +1797,12 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
         break;
     }
 
-    case 5: {
+    case NML_UCODE_ADD: {
         int slot = 0;
 
-        if ((material->materialFlags & 0x10) == 0) {
+        if ((material->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) == 0) {
             slot = 1;
-            if ((material->materialFlags & 0x1000) &&
+            if ((material->materialFlags & NML_MATERIAL_REFLECT) &&
                 (!(model->fields.renderLevel & 0x10) || eye_material))
                 slot = 4;
             else if ((material->materialFlags & 8) &&
@@ -1800,7 +1822,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
         break;
     }
 
-    case 4: {
+    case NML_UCODE_ADD_ENV: {
         int slot;
 
         if (material->flags & 2)
@@ -1809,7 +1831,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
             slot = 8;
         else
             slot = 0;
-        if ((material->materialFlags & 0x1000) &&
+        if ((material->materialFlags & NML_MATERIAL_REFLECT) &&
             (!(model->fields.renderLevel & 0x10) || eye_material))
             slot += 3;
         else if ((material->materialFlags & 8) &&
@@ -1828,10 +1850,10 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
         break;
     }
 
-    case 3: {
+    case NML_UCODE_PROREAL: {
         int slot;
 
-        if (material->materialFlags & 0x10) {
+        if (material->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) {
             slot = 3;
             if (proreal->projection_entry)
                 slot = 4;
@@ -1854,7 +1876,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
         break;
     }
 
-    case 1: {
+    case NML_UCODE_ENV: {
         int slot;
 
         if (material->flags & 2)
@@ -1863,7 +1885,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
             slot = 8;
         else
             slot = 0;
-        if ((material->materialFlags & 0x1000) &&
+        if ((material->materialFlags & NML_MATERIAL_REFLECT) &&
             (!(model->fields.renderLevel & 0x10) || eye_material))
             slot += 3;
         else if ((material->materialFlags & 8) &&
@@ -1882,12 +1904,12 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
         break;
     }
 
-    case 2: {
+    case NML_UCODE_PLAIN: {
         int slot;
 
-        if ((material->materialFlags & 0x10) == 0) {
+        if ((material->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) == 0) {
             slot = 2;
-            if ((material->materialFlags & 0x1000) &&
+            if ((material->materialFlags & NML_MATERIAL_REFLECT) &&
                 (!(model->fields.renderLevel & 0x10) || eye_material))
                 slot = 5;
             else if ((material->materialFlags & 8) &&
@@ -1958,7 +1980,7 @@ void nmlPacketAddExecProg(NmlModelBlock *material,
 
     if (allow_extended_programs
         && !(material->flags & 0x400)
-        && !(model->fields.render_status & 0x8)) {
+        && !(model->fields.render_status & NML_RENDER_ZWRITE)) {
         if (model->fields.renderLevel & 0x4) {
             if (!add_exec_prog(material, model, 3))
                 return;
@@ -2092,9 +2114,9 @@ void nmlPacketAddGifTag(NmlModelBlock *material,
     NmlPacketData128 giftag;
     NmlCurrentPacket *current_packet = &s_pPacket;
     u32 flags = model->fields.render_status;
-    u32 end_of_packet = (flags & 0x01000002) != 0;
+    u32 end_of_packet = (flags & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG)) != 0;
 
-    if (flags & 0x2000)
+    if (flags & NML_RENDER_FOG_CANCEL)
         end_of_packet = 0;
 
     current_packet->sdk = xglPacketGetCurrent();
@@ -2106,21 +2128,21 @@ void nmlPacketAddGifTag(NmlModelBlock *material,
     } else {
         giftag.words[1] &= ~0x00080000;
     }
-    if (model->fields.render_status & 0x8000) {
+    if (model->fields.render_status & NML_RENDER_TEXTURE_PASS) {
         giftag.words[1] &= ~((count << 21) | 0x00080000);
     }
-    if (model->fields.render_status & 0x800) {
+    if (model->fields.render_status & NML_RENDER_PROREAL) {
         giftag.words[1] |= 0x00080000;
     }
-    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F3, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(current_packet->sdk, NML_VU1_GIFTAG, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128(current_packet->sdk, giftag.quad);
     sceVif1PkCloseUpkCode(current_packet->sdk);
     giftag.words[1] = (giftag.words[1] & ~0x00080000) | 0x01200000;
-    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F4, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F4, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128(current_packet->sdk, giftag.quad);
     sceVif1PkCloseUpkCode(current_packet->sdk);
     giftag.words[1] = (giftag.words[1] | 0x00080000) & 0xFEFFFFFF;
-    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F2, 0x6C, 1, 1);
+    sceVif1PkOpenUpkCode(current_packet->sdk, 0x3F2, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128(current_packet->sdk, giftag.quad);
     sceVif1PkCloseUpkCode(current_packet->sdk);
 }
@@ -2134,12 +2156,12 @@ void nmlPacketAddGifTagStandard(int eop, int count)
     s_pPacket = selected;
     sceVif1PkCnt(selected.sdk, 0);
 
-    gif_tag.words[0] = 0x8000;
+    gif_tag.words[0] = NML_GIF_EOP;
     gif_tag.words[1] = ((u32)eop << 0x13) | ((u32)count << 0x15) | 0x30064000;
     gif_tag.words[2] = 0x412;
     gif_tag.words[3] = 0;
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 0x3f3, 0x6c, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, NML_VU1_GIFTAG, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128(selected.sdk, gif_tag.quad);
     selected = s_pPacket;
@@ -2154,10 +2176,10 @@ void nmlPacketAddFog(LayoutStore *model, int viewport_index)
     if (g_aSubWindow[viewport_index] != 0)
         model->fields.fogColor.intensity = ((int)(model->fields.fogIntensity[viewport_index] * 255.0f)) << 4;
 
-    sceVif1PkOpenUpkCode(s_pPacket.sdk, 998, 108, 1, 1);
+    sceVif1PkOpenUpkCode(s_pPacket.sdk, 998, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128N(s_pPacket.sdk, &model->fields.fogColor, 1);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
-    sceVif1PkOpenUpkCode(s_pPacket.sdk, 1007, 108, 1, 1);
+    sceVif1PkOpenUpkCode(s_pPacket.sdk, 1007, VIF_UNPACK_V4_32, 1, 1);
     sceVif1PkAddUpkData128N(s_pPacket.sdk, &model->fields.fogPara, 1);
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
 }
@@ -2179,7 +2201,7 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
     alpha = model->fields.defaultBlockAlpha;
     if (viewport != model->fields.window)
         alpha = model->fields.viewportAlpha[viewport];
-    if (model->fields.render_status & 0x100000) {
+    if (model->fields.render_status & NML_RENDER_FACE_MODEL) {
         if (strstr(material->name, lenz_name) != 0 ||
             strstr(material->name, eye_name) != 0) {
             alpha = model->fields.specialBlockAlpha;
@@ -2201,7 +2223,7 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
     material_flags = material->materialFlags;
-    if (material_flags & 0x10)
+    if (material_flags & NML_BLOCK_MATERIAL_NAMED_PARTS)
         pixel_reference = 0x7F;
     if (s_pModelCache != model->fields.model) {
         material_flags = nmlPacketInvalidatePixelModel(
@@ -2212,19 +2234,19 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
         if (material_flags & 4) {
             if (pixel_control_flags & 0x20000) {
                 if (s_nPixelTestType != 1) {
-                    u64 blend_mode = 0x68;
+                    u64 blend_mode = NML_GS_ALPHA_FIXED;
 
                     s_nPixelTestType = 1;
                     if (*&material->materialFlags & 0x8000) {
-                        nmlPacketAppendGsWords(0x47, 0, 0x50000);
+                        nmlPacketAppendGsWords(NML_GS_REG_TEST_1, 0, NML_GS_TEST_ZGEQUAL);
                     } else {
                         nmlPacketAppendGsWords(0x47, 0,
-                            (u32)nmlPacketMakeGsTest(1, 5, pixel_reference,
-                                                    0, 0, 0, 1, 2));
+                            (u32)nmlPacketMakeGsTest(1, NML_GS_ATST_GEQUAL, pixel_reference,
+                                                    0, 0, 0, 1, NML_GS_ZTST_GEQUAL));
                     }
-                    nmlPacketAppendGsValue(0x42, &blend_mode);
+                    nmlPacketAppendGsValue(NML_GS_REG_ALPHA_1, &blend_mode);
                 }
-            } else if (model->fields.render_status & 0x20) {
+            } else if (model->fields.render_status & NML_RENDER_TOUMEI) {
                 nmlPacketSetPixelBlend(model, 2, alpha, reflect_alpha,
                                        pixel_reference, 0);
             } else {
@@ -2236,11 +2258,11 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
 
             if (s_nPixelTestType != 4) {
                 s_nPixelTestType = 4;
-                nmlPacketAppendGsWords(0x47, 0, 0x50000);
-                blend_mode = 0x68;
-                nmlPacketAppendGsValue(0x42, &blend_mode);
-                nmlPacketAddPixelTestPacket(0x47, 0x50000, 0x50000,
-                                            0x42, *&model->fields.alpha,
+                nmlPacketAppendGsWords(NML_GS_REG_TEST_1, 0, NML_GS_TEST_ZGEQUAL);
+                blend_mode = NML_GS_ALPHA_FIXED;
+                nmlPacketAppendGsValue(NML_GS_REG_ALPHA_1, &blend_mode);
+                nmlPacketAddPixelTestPacket(NML_GS_REG_TEST_1, NML_GS_TEST_ZGEQUAL, NML_GS_TEST_ZGEQUAL,
+                                            NML_GS_REG_ALPHA_1, *&model->fields.alpha,
                                             blend_mode);
             }
         } else {
@@ -2254,14 +2276,14 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
 
             pixel_reference =
                 (int)(model->fields.transparency * (float)pixel_reference);
-            test_value = nmlPacketMakeGsTest(1, 5, pixel_reference,
-                                             0, 0, 0, 1, 2);
+            test_value = nmlPacketMakeGsTest(1, NML_GS_ATST_GEQUAL, pixel_reference,
+                                             0, 0, 0, 1, NML_GS_ZTST_GEQUAL);
             depth_base = sRender.depth_buffer_base;
 
-            nmlPacketAppendGsWords(0x47, 0, (u32)test_value);
+            nmlPacketAppendGsWords(NML_GS_REG_TEST_1, 0, (u32)test_value);
             s_nPixelTestType = 6;
-            nmlPacketAddPixelTestPacket(0x47, test_value, 0x50001, 0x4E,
-                                        depth_base | 0x01000000,
+            nmlPacketAddPixelTestPacket(NML_GS_REG_TEST_1, test_value, NML_GS_TEST_ZGEQUAL + 1, NML_GS_REG_ZBUF_1,
+                                        depth_base | NML_GS_ZBUF_PSMZ24,
                                         depth_base | (0x8080ULL << 0x11));
         }
     } else if (s_nPixelTestType != 7) {
@@ -2269,10 +2291,10 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
 
         packed_alpha = nmlPacketMakeGsFixedAlpha((int)(alpha * 128.0f));
         s_nPixelTestType = 7;
-        nmlPacketAppendGsWords(0x47, 0, 0x50000);
-        nmlPacketAppendGsValue(0x43, &packed_alpha);
-        nmlPacketAddPixelTestPacket(0x47, 0x50000, 0x50000, 0x4E,
-                                    depth_base | 0x01000000,
+        nmlPacketAppendGsWords(NML_GS_REG_TEST_1, 0, NML_GS_TEST_ZGEQUAL);
+        nmlPacketAppendGsValue(NML_GS_REG_ALPHA_2, &packed_alpha);
+        nmlPacketAddPixelTestPacket(NML_GS_REG_TEST_1, NML_GS_TEST_ZGEQUAL, NML_GS_TEST_ZGEQUAL, NML_GS_REG_ZBUF_1,
+                                    depth_base | NML_GS_ZBUF_PSMZ24,
                                     depth_base | (0x8080ULL << 0x11));
     }
 
@@ -2284,8 +2306,8 @@ int nmlPacketDirectData(const void *data, int size)
 {
     s_pPacket.sdk = xglPacketGetCurrent();
     if (sceVif1PkSize(s_pPacket.sdk) * 0x10u +
-            (s_pPacket.sdk->limit - (u32)s_pPacket.sdk->cursor) + 0x10000u >
-        0x200000u)
+            (s_pPacket.sdk->limit - (u32)s_pPacket.sdk->cursor) + NML_PACKET_SLACK >
+        NML_PACKET_SIZE_LIMIT)
         return 1;
 
     sceVif1PkRef(s_pPacket.sdk, data, size, 0, 0, 0);
@@ -2328,7 +2350,7 @@ void nmlPacketAddReflRot(const NmlModelBlock *material,
     selected = s_pPacket;
     sceVif1PkCnt(selected.sdk, 0);
     selected = s_pPacket;
-    sceVif1PkOpenUpkCode(selected.sdk, 1004, 108, 1, 1);
+    sceVif1PkOpenUpkCode(selected.sdk, 1004, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
     sceVif1PkAddUpkData128N(selected.sdk, matrix, 3);
     selected = s_pPacket;
@@ -2352,43 +2374,43 @@ static inline void nmlScreenClearAppendGs(u32 address, const u64 *value)
 
 void nmlPacketAddScreenClear(void)
 {
-    u64 depth_format = 0x01000000;
+    u64 depth_format = NML_GS_ZBUF_PSMZ24;
     NmlScreenGsScratchEntry *scratch;
-    NmlScreenGsScratchEntry *alpha_override = (NmlScreenGsScratchEntry *)0x70000000;
-    NmlScreenGsScratchEntry *depth_buffer = (NmlScreenGsScratchEntry *)0x70000010;
-    NmlScreenGsScratchEntry *pixel_test = (NmlScreenGsScratchEntry *)0x70000020;
-    NmlScreenGsScratchEntry *frame_buffer = (NmlScreenGsScratchEntry *)0x70000030;
-    NmlScreenGsScratchEntry *rgba = (NmlScreenGsScratchEntry *)0x70000040;
-    NmlScreenGsScratchEntry *primitive = (NmlScreenGsScratchEntry *)0x70000050;
-    NmlScreenGsScratchEntry *first_corner = (NmlScreenGsScratchEntry *)0x70000060;
-    NmlScreenGsScratchEntry *last_corner = (NmlScreenGsScratchEntry *)0x70000070;
+    NmlScreenGsScratchEntry *alpha_override = (NmlScreenGsScratchEntry *)SCRATCHPAD_BASE;
+    NmlScreenGsScratchEntry *depth_buffer = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x10);
+    NmlScreenGsScratchEntry *pixel_test = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x20);
+    NmlScreenGsScratchEntry *frame_buffer = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x30);
+    NmlScreenGsScratchEntry *rgba = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x40);
+    NmlScreenGsScratchEntry *primitive = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x50);
+    NmlScreenGsScratchEntry *first_corner = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x60);
+    NmlScreenGsScratchEntry *last_corner = (NmlScreenGsScratchEntry *)(SCRATCHPAD_BASE + 0x70);
     int remaining;
     int frame_width;
     int frame_height;
     u64 rgba_value;
 
-    rgba_value = 0x3f80000000000000ULL;
+    rgba_value = NML_GS_RGBAQ_Q_ONE;
 
-    nmlScreenClearSetScratch(alpha_override, 74, 0);
-    nmlScreenClearSetScratch(depth_buffer, 78,
+    nmlScreenClearSetScratch(alpha_override, NML_GS_REG_FBA_1, 0);
+    nmlScreenClearSetScratch(depth_buffer, NML_GS_REG_ZBUF_1,
         sRender.depth_buffer_base | depth_format);
-    nmlScreenClearSetScratch(pixel_test, 71, 0x30000);
+    nmlScreenClearSetScratch(pixel_test, NML_GS_REG_TEST_1, NML_GS_TEST_ZTE | NML_GS_TEST_ZTST_ALWAYS);
     frame_width = sRender.frame_width;
-    nmlScreenClearSetScratch(frame_buffer, 76,
+    nmlScreenClearSetScratch(frame_buffer, NML_GS_REG_FRAME_1,
         sRender.display_buffer_base |
         (u64)((frame_width / 64) * 0x10000) |
         ((u64)sRender.frame_psm << 24));
-    nmlScreenClearSetScratch(rgba, 1, rgba_value);
-    primitive->payload.value = 6;
-    primitive->address.value = 0;
+    nmlScreenClearSetScratch(rgba, NML_GS_REG_RGBAQ, rgba_value);
+    primitive->payload.value = NML_GS_PRIM_SPRITE;
+    primitive->address.value = NML_GS_REG_PRIM;
     frame_height = sRender.frame_height;
-    nmlScreenClearSetScratch(first_corner, 4,
+    nmlScreenClearSetScratch(first_corner, NML_GS_REG_XYZF2,
         ((u64)(2048 - frame_width) << 4) |
         ((u64)(2048 - frame_height) << 20));
-    nmlScreenClearSetScratch(last_corner, 4,
+    nmlScreenClearSetScratch(last_corner, NML_GS_REG_XYZF2,
         ((u64)(2048 + frame_width) << 4) |
         ((u64)(2048 + frame_height) << 20));
-    scratch = (NmlScreenGsScratchEntry *)0x70000000;
+    scratch = (NmlScreenGsScratchEntry *)SCRATCHPAD_BASE;
     g_nGsEntry = 0;
     for (remaining = 7; remaining >= 0; remaining--) {
         nmlScreenClearAppendGs(scratch[0].address.words[0], &scratch[0].payload.value);
@@ -2413,7 +2435,7 @@ void nmlPacketAddGsPixeltest(u32 pixeltest)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].words[0] = pixeltest;
     g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 71;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_TEST_1;
     g_nGsEntry++;
 }
 
@@ -2421,23 +2443,23 @@ void nmlPacketAddGsPixeltest1(u32 pixeltest)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].words[0] = pixeltest;
     g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 72;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_TEST_2;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsZbuf(u32 zbuf)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value =
-        sRender.depth_buffer_base | ((u64)zbuf << 32) | 0x1000000;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 78;
+        sRender.depth_buffer_base | ((u64)zbuf << 32) | NML_GS_ZBUF_PSMZ24;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_ZBUF_1;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsZbuf1(u32 zbuf)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value =
-        sRender.depth_buffer_base | ((u64)zbuf << 32) | 0x1000000;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 79;
+        sRender.depth_buffer_base | ((u64)zbuf << 32) | NML_GS_ZBUF_PSMZ24;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_ZBUF_2;
     g_nGsEntry++;
 }
 
@@ -2445,35 +2467,35 @@ void nmlPacketAddGsTexture(void)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].words[0] = 0;
     g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 63;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_TEXFLUSH;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsAlpha(u64 alpha)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value = alpha;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 66;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_ALPHA_1;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsAlpha1(u64 alpha)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value = alpha;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 67;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_ALPHA_2;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsScissor(u64 scissor)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value = scissor;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 64;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_SCISSOR_1;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsScissor1(u64 scissor)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value = scissor;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 65;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_SCISSOR_2;
     g_nGsEntry++;
 }
 
@@ -2481,7 +2503,7 @@ void nmlPacketAddGsFBA(u32 fba)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].words[0] = fba != 0;
     g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 74;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_FBA_1;
     g_nGsEntry++;
 }
 
@@ -2489,7 +2511,7 @@ void nmlPacketAddGsFBA1(u32 fba)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].words[0] = fba != 0;
     g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 75;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_FBA_2;
     g_nGsEntry++;
 }
 
@@ -2503,7 +2525,7 @@ void nmlPacketAddGsFogCol(const float color[3])
     g_aGsTag[entry + 2].words[0] = red | green | blue;
     g_nGsEntry++;
     g_aGsTag[entry + 2].words[1] = 0;
-    g_aGsTag[entry + 3].value = 61;
+    g_aGsTag[entry + 3].value = NML_GS_REG_FOGCOL;
 }
 
 void nmlPacketAddGsFrame(int frame_base, int frame_mask)
@@ -2511,7 +2533,7 @@ void nmlPacketAddGsFrame(int frame_base, int frame_mask)
     g_aGsTag[g_nGsEntry * 2 + 2].value =
         (frame_base & 0xffff) | ((u64)(sRender.frame_width / 64) << 16) |
         ((u64)sRender.frame_psm << 24) | ((u64)frame_mask << 32);
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 76;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_FRAME_1;
     g_nGsEntry++;
 }
 
@@ -2520,14 +2542,14 @@ void nmlPacketAddGsFrame1(int frame_base, int frame_mask)
     g_aGsTag[g_nGsEntry * 2 + 2].value =
         (frame_base & 0xffff) | ((u64)(sRender.frame_width / 64) << 16) |
         ((u64)sRender.frame_psm << 24) | ((u64)frame_mask << 32);
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 77;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_FRAME_2;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsPAbe(u64 pabe)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value = pabe;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 73;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_PABE;
     g_nGsEntry++;
 }
 
@@ -2568,7 +2590,7 @@ void packet_gs_entry64(u32 reg, const u64 *value)
 void nmlPacketAddGsFba(u64 fba)
 {
     g_aGsTag[g_nGsEntry * 2 + 2].value = fba;
-    g_aGsTag[g_nGsEntry * 2 + 3].value = 74;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = NML_GS_REG_FBA_1;
     g_nGsEntry++;
 }
 

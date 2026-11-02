@@ -33,6 +33,49 @@
             UNDU_RELOCATE_HEADER(header, base); \
     } while (0)
 
+/* UnduColiBlob.tables.type: the kind in the low bits, set once the offsets are relocated. */
+#define UNDU_COLI_RELOCATED 0x80
+#define UNDU_COLI_KIND_MASK 0x7f
+#define UNDU_COLI_KIND_HEAD 2
+
+/* UnduDataGetHeader map_index: kind of header list in bits 8..15, selector in the low byte. */
+#define UNDU_MAP_KIND_MASK 0xff00
+#define UNDU_MAP_INDEX_MASK 0xff
+enum {
+    UNDU_MAP_KIND_DIRECT = 0x000,   /* directHeaders */
+    UNDU_MAP_KIND_SECOND = 0x100,   /* secondHeaders */
+    UNDU_MAP_KIND_GROUP = 0x200,    /* groups[low byte] */
+    UNDU_MAP_KIND_RECORD = 0x300    /* records[low byte] */
+};
+
+/* UnduParamInit defaults: collision samples per axis. */
+#define UNDU_CROSS_CHECK_COUNT 16
+
+/* Collision triangles are 0x18 bytes apart in a header's sub-primitive list. */
+#define UNDU_TRIANGLE_STRIDE 0x18
+
+/* Wall attribute word: kind in the top bits, height-table slot in bits 8..12. */
+#define UNDU_ATTR_KIND_MASK 0xe000
+#define UNDU_ATTR_KIND_HEIGHT_TABLE 0x4000
+#define UNDU_ATTR_HEIGHT_SLOT_MASK 0x1f00
+
+/* UnduCheckSubCrossCheck status: which triangle edge the move crossed. */
+enum {
+    UNDU_EDGE_AB = 1,
+    UNDU_EDGE_BC = 2,
+    UNDU_EDGE_CA = 3,
+    UNDU_CROSS_DONE = 4,          /* the move was resolved on this triangle */
+    UNDU_EDGE_NEIGHBOR = 0x100    /* with an edge: the neighbouring triangle passes CheckWallAttr */
+};
+#define UNDU_EDGE_MASK 0xff
+#define UNDU_EDGE_NEIGHBOR_MASK 0xff00
+
+/* UnduQuery.output component meaning "no move vector". */
+#define UNDU_NO_MOVE 0x7fffffff
+
+/* IEEE bit pattern of -0.0f, compared by the slope solver. */
+#define UNDU_NEGATIVE_ZERO_BITS 0x80000000
+
 extern const float unduInitialSlopeTable[];
 extern const char unduParamErrorMessage[];
 extern const char unduAssertFormat[];
@@ -238,7 +281,7 @@ void UnduInit(union UnduColiBlob *data)
     CurrentColiHead = data;
     if (data == 0)
         return;
-    if (data->tables.type & 0x80)
+    if (data->tables.type & UNDU_COLI_RELOCATED)
         return;
     switch (data->tables.type) {
     case 0:
@@ -283,7 +326,7 @@ void UnduInit(union UnduColiBlob *data)
     default:
         break;
     }
-    data->tables.type |= 0x80;
+    data->tables.type |= UNDU_COLI_RELOCATED;
 }
 
 static LayoutHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
@@ -293,8 +336,8 @@ static LayoutHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
     unsigned int index;
     UnduDataHeader *header;
 
-    if (identifier & 0x8000) {
-        identifier &= 0x7fff;
+    if (identifier & UNDU_HEADER_DIRECT) {
+        identifier &= UNDU_HEADER_INDEX_MASK;
         if (identifier < count)
             return (LayoutHeader *)&headers[identifier];
     } else {
@@ -322,26 +365,26 @@ LayoutHeader *UnduDataGetHeader(int map_index, unsigned int unit_index)
     if (headerIndex == 0) {
         return 0;
     }
-    if (headerIndex->type != 0x82) {
+    if (headerIndex->type != (UNDU_COLI_RELOCATED | UNDU_COLI_KIND_HEAD)) {
         return 0;
     }
 
-    switch ((unsigned int)map_index & 0xff00) {
-    case 0:
+    switch ((unsigned int)map_index & UNDU_MAP_KIND_MASK) {
+    case UNDU_MAP_KIND_DIRECT:
         return UnduDataGetHeaderSub(
             headerIndex->directHeaders, headerIndex->directCount,
             unit_index);
-    case 0x100:
+    case UNDU_MAP_KIND_SECOND:
         return UnduDataGetHeaderSub(
             headerIndex->secondHeaders, headerIndex->secondCount,
             unit_index);
-    case 0x200:
-        group_index = (unsigned int)map_index & 0xff;
+    case UNDU_MAP_KIND_GROUP:
+        group_index = (unsigned int)map_index & UNDU_MAP_INDEX_MASK;
         group = headerIndex->groups;
         if (group_index < headerIndex->groupCount) {
             group = &group[group_index];
-            if ((unit_index & 0x8000) != 0) {
-                header_index = unit_index & 0x7fff;
+            if ((unit_index & UNDU_HEADER_DIRECT) != 0) {
+                header_index = unit_index & UNDU_HEADER_INDEX_MASK;
                 if (header_index < group->count) {
                     return (LayoutHeader *)&group->headers[header_index];
                 }
@@ -357,11 +400,11 @@ LayoutHeader *UnduDataGetHeader(int map_index, unsigned int unit_index)
             }
         }
         break;
-    case 0x300:
+    case UNDU_MAP_KIND_RECORD:
         if ((void *)&headerIndex->records != (void *)headerIndex->directHeaders) {
             subList = headerIndex->records;
             for (; subList->count >= 0; subList++) {
-                if (((unsigned int)map_index & 0xff) == 0) {
+                if (((unsigned int)map_index & UNDU_MAP_INDEX_MASK) == 0) {
                     return UnduDataGetHeaderSub(
                         subList->headers,
                         subList->count,
@@ -379,8 +422,8 @@ LayoutHeader *UnduDataGetHeader(int map_index, unsigned int unit_index)
 
 void UnduParamInit(UnduQuery *query)
 {
-    unsigned char crossCheckCount = 16;
-    UnduWork *scratchpad = (UnduWork *)0x70000000;
+    unsigned char crossCheckCount = UNDU_CROSS_CHECK_COUNT;
+    UnduWork *scratchpad = (UnduWork *)SCRATCHPAD_BASE;
 
     query->prefix.result.attribute = 0;
     query->prefix.result.previousAttribute = 0;
@@ -389,7 +432,7 @@ void UnduParamInit(UnduQuery *query)
     query->prefix.parameters.crossCheckCountX = crossCheckCount;
     query->prefix.parameters.crossCheckCountZ = crossCheckCount;
     query->prefix.parameters.heightLimit = 1.0f;
-    query->prefix.result.height = -1000.0f;
+    query->prefix.result.height = UNDU_NO_HEIGHT;
     query->prefix.parameters.header = 0;
     query->prefix.parameters.scratchpad = scratchpad;
     query->prefix.result.attributes.bits = 0;
@@ -427,7 +470,7 @@ static float UnduCheckSub(UnduWork *work, int subOffset)
         normal = (UnduVertex *)(work->normalData + triangle->normalOffset);
         height = (triangle->planeOffset - normal->x * point[0] - normal->z * point[2]) / normal->y;
         flags = work->wallAttrHeader->flags;
-        if (flags & 0x400) {
+        if (flags & UNDU_QUERY_VERTEX_RANGE) {
             inside = 0;
             low = vertexA->y;
             high = vertexA->y;
@@ -443,25 +486,25 @@ static float UnduCheckSub(UnduWork *work, int subOffset)
                 high = vertexC->y;
             highLimit = high - margin;
             py = point[1];
-            if (flags & 0x10) {
+            if (flags & UNDU_QUERY_SAME_LEVEL) {
                 if (highLimit < py) {
-                    if (flags & 0x800)
+                    if (flags & UNDU_QUERY_FLOOR_BELOW)
                         inside = 1;
                     else if (py < low)
                         inside = 1;
                 }
             } else {
-                if (!(flags & 0x800))
+                if (!(flags & UNDU_QUERY_FLOOR_BELOW))
                     inside = 1;
                 else if (highLimit < py)
                     inside = 1;
             }
             if (inside == 0)
-                return -1000.0f;
+                return UNDU_NO_HEIGHT;
         }
         return height;
     }
-    return -1000.0f;
+    return UNDU_NO_HEIGHT;
 }
 
 static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height)
@@ -481,10 +524,10 @@ static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height)
         attributes = work->wallAttributeTable[triangle->wallAttributeIndex].words[0];
     else
         attributes = triangle->wallAttributeIndex;
-    if ((flags & 0x20) && (attributes & 0xe000) == 0x4000)
-        height = GameLoopState.attributeHeights[(attributes & 0x1f00) >> 8];
+    if ((flags & UNDU_QUERY_HEIGHT_TABLE) && (attributes & UNDU_ATTR_KIND_MASK) == UNDU_ATTR_KIND_HEIGHT_TABLE)
+        height = GameLoopState.attributeHeights[(attributes & UNDU_ATTR_HEIGHT_SLOT_MASK) >> 8];
     status = 0;
-    if (flags & 0x10) {
+    if (flags & UNDU_QUERY_SAME_LEVEL) {
         sampleHeight = work->hitPoint[1];
         tolerance = work->heightTolerance;
         if (sampleHeight - tolerance < height && height < sampleHeight + tolerance) {
@@ -492,19 +535,19 @@ static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height)
             status = 1;
             if (upperHeight < work->collisionHeight)
                 status = 2;
-        } else if (flags & 0x800) {
+        } else if (flags & UNDU_QUERY_FLOOR_BELOW) {
             boundedPreviousHeight = work->collisionHeight;
-            if (boundedPreviousHeight == -1000.0f || height < sampleHeight + tolerance)
+            if (boundedPreviousHeight == UNDU_NO_HEIGHT || height < sampleHeight + tolerance)
                 status = 1;
             else if (height < boundedPreviousHeight)
                 status = 1;
         }
-    } else if (flags & 0x800) {
+    } else if (flags & UNDU_QUERY_FLOOR_BELOW) {
         if (height <= work->hitPoint[1] + work->heightTolerance)
             status = 1;
     } else {
         previousHeight = work->collisionHeight;
-        if (previousHeight == -1000.0f || height < work->hitPoint[1] + work->heightTolerance)
+        if (previousHeight == UNDU_NO_HEIGHT || height < work->hitPoint[1] + work->heightTolerance)
             status = 1;
         else if (height < previousHeight)
             status = 2;
@@ -529,8 +572,8 @@ static void UnduCheckSubCheckAll(UnduWork *work) {
     for (i = 0; i < work->subCount; i++) {
         height = UnduCheckSub(work, subOffset);
         entryOffset = subOffset;
-        subOffset += 0x18;
-        if (height != -1000.0f) {
+        subOffset += UNDU_TRIANGLE_STRIDE;
+        if (height != UNDU_NO_HEIGHT) {
             UnduCheckSubHeightCheck(work, entryOffset, height);
         }
     }
@@ -664,7 +707,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                     if (edgeAB <= 0.0f && edgeBC <= 0.0f && edgeCA <= 0.0f) {
                         flags = parameters->flags;
                         inside = 0;
-                        if (flags & 0x400) {
+                        if (flags & UNDU_QUERY_VERTEX_RANGE) {
                             low = vertexA->y;
                             high = vertexA->y;
                             if (vertexA->y > vertexB->y)
@@ -679,15 +722,15 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                                 high = vertexC->y;
                             py = hitPoint[1];
                             highLimit = high - margin;
-                            if (flags & 0x10) {
+                            if (flags & UNDU_QUERY_SAME_LEVEL) {
                                 if (highLimit < py) {
-                                    if (flags & 0x800)
+                                    if (flags & UNDU_QUERY_FLOOR_BELOW)
                                         inside = 1;
                                     else if (low > py)
                                         inside = 1;
                                 }
                             } else {
-                                if (!(flags & 0x800) || highLimit < py)
+                                if (!(flags & UNDU_QUERY_FLOOR_BELOW) || highLimit < py)
                                     inside = 1;
                             }
                         } else {
@@ -695,7 +738,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                         }
                         if (inside == 1) {
                             normal = (UnduVertex *)(work->normalData + triangle->normalOffset);
-                            status = 4;
+                            status = UNDU_CROSS_DONE;
                             UnduCheckSubHeightCheck(work, (int)triangle,
                                 (triangle->planeOffset - normal->x * work->hitPoint[0]
                                     - normal->z * work->hitPoint[2]) / normal->y);
@@ -710,12 +753,12 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                                               hitPoint[0], hitPoint[2]);
                         if ((sideStart <= 0.0f && sideEnd >= 0.0f) || (sideStart >= 0.0f && sideEnd <= 0.0f)) {
                             if (triangle->neighbor[0] == -1) {
-                                status = 1;
+                                status = UNDU_EDGE_AB;
                                 break;
                             }
                             neighbor = (UnduTriangle *)(work->subListOffset + triangle->neighbor[0]);
                             if (CheckWallAttr(work, &neighbor->wallAttributeIndex) != 0) {
-                                status = 0x101;
+                                status = UNDU_EDGE_NEIGHBOR | UNDU_EDGE_AB;
                                 break;
                             }
                             triangle = neighbor;
@@ -730,12 +773,12 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                                               hitPoint[0], hitPoint[2]);
                         if ((sideStart <= 0.0f && sideEnd >= 0.0f) || (sideStart >= 0.0f && sideEnd <= 0.0f)) {
                             if (triangle->neighbor[1] == -1) {
-                                status = 2;
+                                status = UNDU_EDGE_BC;
                                 break;
                             }
                             neighbor = (UnduTriangle *)(work->subListOffset + triangle->neighbor[1]);
                             if (CheckWallAttr(work, &neighbor->wallAttributeIndex) != 0) {
-                                status = 0x102;
+                                status = UNDU_EDGE_NEIGHBOR | UNDU_EDGE_BC;
                                 break;
                             }
                             triangle = neighbor;
@@ -750,12 +793,12 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                                               hitPoint[0], hitPoint[2]);
                         if ((sideStart <= 0.0f && sideEnd >= 0.0f) || (sideStart >= 0.0f && sideEnd <= 0.0f)) {
                             if (triangle->neighbor[2] == -1) {
-                                status = 3;
+                                status = UNDU_EDGE_CA;
                                 break;
                             }
                             neighbor = (UnduTriangle *)(work->subListOffset + triangle->neighbor[2]);
                             if (CheckWallAttr(work, &neighbor->wallAttributeIndex) != 0) {
-                                status = 0x103;
+                                status = UNDU_EDGE_NEIGHBOR | UNDU_EDGE_CA;
                                 break;
                             }
                             triangle = neighbor;
@@ -765,10 +808,10 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                     break;
                 } while (--work->crossCheckCountZ != 0);
             }
-            if (status == 0 || status == 4)
+            if (status == 0 || status == UNDU_CROSS_DONE)
                 break;
             work->collisionType = status;
-            if ((status & 0xff00) == 0) {
+            if ((status & UNDU_EDGE_NEIGHBOR_MASK) == 0) {
                 if (parameters->flags & 0x28) {
                     UnduCheckSubCheckAll(work);
                     if (work->collisionAttribute != 0) {
@@ -782,14 +825,14 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                             }
                         }
                         work->collisionAttribute = 0;
-                        work->collisionHeight = -1000.0f;
+                        work->collisionHeight = UNDU_NO_HEIGHT;
                     }
                 }
             }
-            mode = parameters->flags & 7;
-            status &= 0xff;
+            mode = parameters->flags & UNDU_QUERY_MODE_MASK;
+            status &= UNDU_EDGE_MASK;
             switch (mode) {
-            case 2:
+            case UNDU_QUERY_MODE_SLIDE:
                 moveDistance = 0.0f;
                 moveAngle = 0.0f;
                 angle = 0.0f;
@@ -799,13 +842,13 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                     moveDistance = __builtin_sqrtf(move[0] * move[0] + move[2] * move[2]);
                 }
                 switch (status) {
-                case 1:
+                case UNDU_EDGE_AB:
                     angle = atan2f(vertexB->x - vertexA->x, vertexB->z - vertexA->z);
                     break;
-                case 2:
+                case UNDU_EDGE_BC:
                     angle = atan2f(vertexC->x - vertexB->x, vertexC->z - vertexB->z);
                     break;
-                case 3:
+                case UNDU_EDGE_CA:
                     angle = atan2f(vertexA->x - vertexC->x, vertexA->z - vertexC->z);
                     break;
                 }
@@ -829,19 +872,19 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 triangle = (UnduTriangle *)subOffset;
                 status = 0;
                 break;
-            case 3:
+            case UNDU_QUERY_MODE_CLIP:
                 edgeStart = 0;
                 edgeEnd = 0;
                 switch (status) {
-                case 1:
+                case UNDU_EDGE_AB:
                     edgeStart = vertexA;
                     edgeEnd = vertexB;
                     break;
-                case 2:
+                case UNDU_EDGE_BC:
                     edgeStart = vertexB;
                     edgeEnd = vertexC;
                     break;
-                case 3:
+                case UNDU_EDGE_CA:
                     edgeStart = vertexC;
                     edgeEnd = vertexA;
                     break;
@@ -888,8 +931,8 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 } else if (unduSlopeBits(&edgeSlope) == 0) {
                     crossX = startX;
                     crossZ = moveSlope * (startX - collisionPoint[0]) + collisionPoint[2];
-                } else if (unduSlopeBits(&moveSlope) == 0x80000000) {
-                    if (unduSlopeBits(&edgeSlope) == 0x80000000) {
+                } else if (unduSlopeBits(&moveSlope) == UNDU_NEGATIVE_ZERO_BITS) {
+                    if (unduSlopeBits(&edgeSlope) == UNDU_NEGATIVE_ZERO_BITS) {
                         highX = startX;
                         lowX = hitPoint[0];
                         if (startX < hitPoint[0]) {
@@ -906,7 +949,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                         crossX = (collisionPoint[2] - startZ) / edgeSlope + startX;
                         crossZ = collisionPoint[2];
                     }
-                } else if (unduSlopeBits(&edgeSlope) == 0x80000000) {
+                } else if (unduSlopeBits(&edgeSlope) == UNDU_NEGATIVE_ZERO_BITS) {
                     crossX = (startZ - collisionPoint[2]) / moveSlope + collisionPoint[0];
                     crossZ = startZ;
                 } else {
@@ -921,7 +964,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 dx = hitPoint[0] - collisionPoint[0];
                 dz = hitPoint[2] - collisionPoint[2];
                 scale = (crossLength - 0.001f) / __builtin_sqrtf(dx * dx + dz * dz);
-                status = 4;
+                status = UNDU_CROSS_DONE;
                 work->collisionAttribute = &triangle->wallAttributeIndex;
                 normal = (UnduVertex *)(work->normalData + triangle->normalOffset);
                 crossX = collisionPoint[0] + dx * scale;
@@ -931,12 +974,12 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 work->hitPoint[1] = work->collisionHeight = (triangle->planeOffset - normal->x * work->hitPoint[0]
                                      - normal->z * work->hitPoint[2]) / normal->y;
                 break;
-            case 1:
+            case UNDU_QUERY_MODE_BLOCK:
             default:
-                status = 4;
+                status = UNDU_CROSS_DONE;
                 break;
             }
-            if (status == 4)
+            if (status == UNDU_CROSS_DONE)
                 break;
         } while (--work->crossCheckCountX != 0);
     }
@@ -973,7 +1016,7 @@ static float UnduCheckResultCheck(UnduWork *work, UnduResult *result, float *poi
     } else {
         result->attribute = 0;
         result->attributes.bits = 0;
-        if ((result->flags & 7) == 1 && work->output != 0) {
+        if ((result->flags & UNDU_QUERY_MODE_MASK) == 1 && work->output != 0) {
             point[0] = work->hitPoint[0];
             point[1] = work->hitPoint[1];
             point[2] = work->hitPoint[2];
@@ -999,17 +1042,17 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
 
     __asm__ __volatile__("sw $31,%0" : "=m"(caller));
     if (work == 0)
-        work = (UnduWork *)0x70000000;
+        work = (UnduWork *)SCRATCHPAD_BASE;
     if (CurrentColiHead == 0)
         return 0.0f;
     header = query->prefix.parameters.header;
     if (header == 0) {
-        if ((CurrentColiHead->tables.type & 0x7f) != 2)
+        if ((CurrentColiHead->tables.type & UNDU_COLI_KIND_MASK) != UNDU_COLI_KIND_HEAD)
             return 0.0f;
         header = CurrentColiHead->head.directHeaders;
     }
     work->heightTolerance = query->prefix.parameters.heightLimit;
-    work->collisionHeight = -1000.0f;
+    work->collisionHeight = UNDU_NO_HEIGHT;
     work->vertexData = header->vertexData;
     work->collisionPoint[0] = sample[0];
     work->collisionPoint[1] = sample[1];
@@ -1026,8 +1069,8 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     work->collisionAttribute = 0;
     work->output = output;
     if (output != 0
-        && (((int *)output)[0] == 0x7fffffff || ((int *)output)[1] == 0x7fffffff
-            || ((int *)output)[2] == 0x7fffffff))
+        && (((int *)output)[0] == UNDU_NO_MOVE || ((int *)output)[1] == UNDU_NO_MOVE
+            || ((int *)output)[2] == UNDU_NO_MOVE))
         work->output = 0;
     if (query->prefix.parameters.previousAttribute == 0
         || (*(long long *)&query->prefix.result.flags & 0x5000)
@@ -1037,9 +1080,9 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
         work->hitPoint[2] = work->collisionPoint[2];
         UnduCheckSubCheckAll(work);
         height = UnduCheckResultCheck(work, &query->prefix.result, sample);
-        if (height == -1000.0f || work->output == 0)
+        if (height == UNDU_NO_HEIGHT || work->output == 0)
             return height;
-        work->collisionHeight = -1000.0f;
+        work->collisionHeight = UNDU_NO_HEIGHT;
         work->collisionAttribute = 0;
     }
     if (query->prefix.parameters.attribute != 0)
@@ -1047,7 +1090,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     else
         attribute = query->prefix.parameters.previousAttribute;
     if ((unsigned int)attribute < work->subListOffset
-        && (unsigned int)attribute >= work->subListOffset + work->subCount * 0x18) {
+        && (unsigned int)attribute >= work->subListOffset + work->subCount * UNDU_TRIANGLE_STRIDE) {
         printf("\nUnduCheck() call from %08x\n", caller);
         if (unduParamErrorMessage != 0) {
             printf(unduAssertFormat, unduAssertExpression, unduSourcePath, 1269);
@@ -1067,7 +1110,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     work->hitPoint[1] = y;
     work->hitPoint[2] = z;
     height = UnduCheckSub(work, (int)attribute);
-    if (height != -1000.0f)
+    if (height != UNDU_NO_HEIGHT)
         UnduCheckSubHeightCheck(work, (int)attribute, height);
     else if (work->output == 0)
         UnduCheckSubCheckAll(work);
@@ -1087,14 +1130,14 @@ float UnduGet2(void *queryAddress, float x, float z)
     if (CurrentColiHead == 0)
         return 0.0f;
     if (queryAddress == 0) {
-        UnduParamInit((UnduQuery *)0x70000000);
-        queryAddress = (void *)0x70000000;
+        UnduParamInit((UnduQuery *)SCRATCHPAD_BASE);
+        queryAddress = (void *)SCRATCHPAD_BASE;
     }
     query = queryAddress;
     work = query->prefix.parameters.scratchpad;
-    type = CurrentColiHead->tables.type & 0x7f;
+    type = CurrentColiHead->tables.type & UNDU_COLI_KIND_MASK;
     if (work == 0)
-        work = (UnduWork *)0x70000000;
+        work = (UnduWork *)SCRATCHPAD_BASE;
     if (type < 3) {
         hasCollisionData = type != 0;
         if (hasCollisionData) {

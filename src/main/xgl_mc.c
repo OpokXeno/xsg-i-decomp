@@ -5,6 +5,32 @@
 #include "main/xgl_mc.h"
 #include "main/xgl_2.h"
 
+/* McRequestState.phase: what the next sceMcSync completion belongs to. */
+#define MC_PHASE_IDLE 0
+#define MC_PHASE_POLL_INFO 1  /* sceMcGetInfo of the polled card */
+#define MC_PHASE_OPEN_CLOSE 2 /* open, then close, a file */
+#define MC_PHASE_WRITE 3
+#define MC_PHASE_READ 4
+#define MC_PHASE_CREATE 5     /* create_sub2 steps */
+#define MC_PHASE_DIRECTORY 6  /* sceMcGetDir listing */
+
+/* Pending requests: a ring of eight entries. */
+#define MC_QUEUE_SIZE 8
+#define MC_QUEUE_MASK (MC_QUEUE_SIZE - 1)
+
+/* Longest request path copied into a queue entry. */
+#define MC_PATH_MAX 108
+
+/* Map names are 16 double-byte characters plus a double-byte terminator. */
+#define MC_MAP_NAME_CHARS 16
+
+/* sceMcGetDir entry limit for the save directory scan. */
+#define MC_DIRECTORY_MAX_ENTRIES 100
+
+/* sceMcOpen modes (SCE_RDONLY, SCE_WRONLY | SCE_CREAT). */
+#define MC_OPEN_READ 1
+#define MC_OPEN_WRITE_CREATE 0x202
+
 /* The state machine uses both a word and per-slot halfwords at offset 4. */
 typedef struct McRequestState {
     unsigned char phase;
@@ -30,7 +56,7 @@ typedef struct McRequestStorage {
 
 typedef union McRequestPath {
     int empty;
-    char bytes[108];
+    char bytes[MC_PATH_MAX];
 } McRequestPath;
 
 /* The caller's request parameters: file slot, name, data and size. */
@@ -114,7 +140,7 @@ void FlushCache(int mode);
 int sceMcDelete(int port, int slot, const char *path);
 
 /* The request routines zero and use this complete memory-card save workspace. */
-unsigned char SaveData[0x163B0] = { 0 };
+unsigned char SaveData[MC_SAVE_DATA_SIZE] = { 0 };
 
 static char base_0_00491770[18];
 
@@ -134,9 +160,9 @@ static unsigned char queue_top;
 
 static unsigned char queue_end;
 
-static unsigned char mapNameBuffer[17 * 2];
+static unsigned char mapNameBuffer[(MC_MAP_NAME_CHARS + 1) * 2];
 
-static McRequestEntry queue[8];
+static McRequestEntry queue[MC_QUEUE_SIZE];
 
 static McRequestEntry savedMcRequest;
 
@@ -157,21 +183,21 @@ int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
     entry->operation = operation;
     switch (operation)
     {
-    case 1:
-    case 9:
-    case 10:
+    case MC_REQUEST_FREE_SPACE:
+    case MC_REQUEST_FORMAT:
+    case MC_REQUEST_UNFORMAT:
         break;
-    case 2:
-    case 4:
-    case 6:
-    case 8:
+    case MC_REQUEST_DIRECTORY:
+    case MC_REQUEST_LOAD:
+    case MC_REQUEST_SAVE:
+    case MC_REQUEST_CREATE:
         entry->slot = arguments->slot;
         entry->buffer = (int)arguments->buffer;
         entry->size = arguments->size;
         break;
-    case 3:
-    case 5:
-    case 7:
+    case MC_REQUEST_PATH_EXISTS:
+    case MC_REQUEST_LOAD_PATH:
+    case MC_REQUEST_SAVE_PATH:
         entry->slot = arguments->slot;
         entry->buffer = (int)arguments->buffer;
         entry->size = arguments->size;
@@ -192,14 +218,14 @@ int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
                     copied++;
                     source++;
                     destination++;
-                    if (copied >= 108)
+                    if (copied >= MC_PATH_MAX)
                         break;
                 } while ((*destination = *source) != 0);
             }
         }
         break;
     }
-    queue_end = (entry_index + 1) & 7;
+    queue_end = (entry_index + 1) & MC_QUEUE_MASK;
     return 0;
 }
 
@@ -213,7 +239,7 @@ void xglMcReset(void)
     queue_top = 0;
     queue_end = 0;
     xglMcSetMapName(0, 0);
-    mw.state.phase = 0;
+    mw.state.phase = MC_PHASE_IDLE;
 }
 
 /*
@@ -287,7 +313,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
                 destination[0] = lead;
                 destination[1] = trail;
                 destination += 2;
-                if (character_count >= 16)
+                if (character_count >= MC_MAP_NAME_CHARS)
                 {
                     break;
                 }
@@ -295,7 +321,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
             } while (lead != 0);
         }
 
-        if ((character_count < 16) && (secondary_euc_name != 0) &&
+        if ((character_count < MC_MAP_NAME_CHARS) && (secondary_euc_name != 0) &&
             (((const signed char *)secondary_euc_name)[0] != 0))
         {
             destination[0] = 0x81;
@@ -305,7 +331,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
         }
     }
 
-    if ((secondary_euc_name != 0) && (character_count < 16))
+    if ((secondary_euc_name != 0) && (character_count < MC_MAP_NAME_CHARS))
     {
         lead = secondary_euc_name[0];
         if (lead != 0)
@@ -319,7 +345,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
                 destination[0] = lead;
                 destination[1] = trail;
                 destination += 2;
-                if (character_count >= 16)
+                if (character_count >= MC_MAP_NAME_CHARS)
                 {
                     break;
                 }
@@ -328,7 +354,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
         }
     }
 
-    while (character_count < 17)
+    while (character_count < MC_MAP_NAME_CHARS + 1)
     {
         destination[0] = 0;
         destination[1] = 0;
@@ -427,64 +453,65 @@ static void execute(McRequestEntry *request)
 
     switch (command)
     {
-    case 1:
+    case MC_REQUEST_FREE_SPACE:
         sceMcGetInfo(request->card, 0, 0, request->result, 0);
         return;
-    case 2:
+    case MC_REQUEST_DIRECTORY:
         if (request->slot == -1)
         {
             xglMcSetFullPath(-1, -1);
-            sceMcGetDir(request->card, 0, mw.fullPath, 0, 100,
+            sceMcGetDir(request->card, 0, mw.fullPath, 0,
+                        MC_DIRECTORY_MAX_ENTRIES,
                         (request->buffer + 0xA3) & ~0x3F);
-            mw.state.phase = 6;
+            mw.state.phase = MC_PHASE_DIRECTORY;
             return;
         }
         xglMcSetFullPath(request->slot, 0);
-        sceMcOpen(request->card, 0, mw.fullPath, 1);
-        mw.state.phase = 2;
+        sceMcOpen(request->card, 0, mw.fullPath, MC_OPEN_READ);
+        mw.state.phase = MC_PHASE_OPEN_CLOSE;
         return;
-    case 3:
+    case MC_REQUEST_PATH_EXISTS:
         xglMcSetFullPath(0, (int)&request->path.empty);
-        sceMcOpen(request->card, 0, mw.fullPath, 1);
-        mw.state.phase = 2;
+        sceMcOpen(request->card, 0, mw.fullPath, MC_OPEN_READ);
+        mw.state.phase = MC_PHASE_OPEN_CLOSE;
         return;
-    case 5:
-    case 7:
+    case MC_REQUEST_LOAD_PATH:
+    case MC_REQUEST_SAVE_PATH:
         xglMcSetFullPath(0, (int)&request->path.empty);
-        if (request->operation == 7)
+        if (request->operation == MC_REQUEST_SAVE_PATH)
         {
-            sceMcOpen(request->card, 0, mw.fullPath, 0x202);
-            mw.state.phase = 3;
+            sceMcOpen(request->card, 0, mw.fullPath, MC_OPEN_WRITE_CREATE);
+            mw.state.phase = MC_PHASE_WRITE;
         }
         else
         {
-            sceMcOpen(request->card, 0, mw.fullPath, 1);
-            mw.state.phase = 4;
+            sceMcOpen(request->card, 0, mw.fullPath, MC_OPEN_READ);
+            mw.state.phase = MC_PHASE_READ;
         }
         mw.state.subphase = 0;
         return;
-    case 8:
+    case MC_REQUEST_CREATE:
         xglMcSetFullPath(request->slot, -1);
         sceMcMkdir(request->card, 0, mw.fullPath);
         mw.state.subphase = 0;
-        mw.state.phase = 5;
+        mw.state.phase = MC_PHASE_CREATE;
         return;
-    case 6:
+    case MC_REQUEST_SAVE:
         xglMcSetFullPath(request->slot, 0);
-        sceMcOpen(request->card, 0, mw.fullPath, 0x202);
+        sceMcOpen(request->card, 0, mw.fullPath, MC_OPEN_WRITE_CREATE);
         mw.state.subphase = 0;
-        mw.state.phase = 3;
+        mw.state.phase = MC_PHASE_WRITE;
         return;
-    case 4:
+    case MC_REQUEST_LOAD:
         xglMcSetFullPath(request->slot, 0);
-        sceMcOpen(request->card, 0, mw.fullPath, 1);
+        sceMcOpen(request->card, 0, mw.fullPath, MC_OPEN_READ);
         mw.state.subphase = 0;
-        mw.state.phase = 4;
+        mw.state.phase = MC_PHASE_READ;
         return;
-    case 9:
+    case MC_REQUEST_FORMAT:
         sceMcFormat(request->card, 0);
         return;
-    case 10:
+    case MC_REQUEST_UNFORMAT:
         if (1)
         {
             sceMcUnformat(request->card, 0);
@@ -518,7 +545,7 @@ static int create_sub2(int result)
             sceMcDelete(((McWorkspaceView *)&mw)->request.card, 0, ((McWorkspaceView *)&mw)->full_path);
         } else {
             xglMcSetFullPath(slot, 1);
-            sceMcOpen(((McWorkspaceView *)&mw)->request.card, 0, (char *)&mw + 32, 0x202);
+            sceMcOpen(((McWorkspaceView *)&mw)->request.card, 0, (char *)&mw + 32, MC_OPEN_WRITE_CREATE);
         }
     } else {
         if (result < 0)
@@ -531,7 +558,7 @@ static int create_sub2(int result)
             mw.state.descriptor = result;
             write_data = save->icon_header;
             xglMcWriteMapName(write_data, slot);
-            sceMcWrite(mw.state.descriptor, write_data, 964);
+            sceMcWrite(mw.state.descriptor, write_data, MC_ICON_SYS_SIZE);
             break;
         case 3:
             sceMcClose(mw.state.descriptor);
@@ -540,7 +567,7 @@ static int create_sub2(int result)
             xglMcSetFullPath(slot, 2);
             {
                 McWorkspaceView *view = (McWorkspaceView *)&mw;
-                sceMcOpen(view->request.card, 0, (char *)&mw + 32, 0x202);
+                sceMcOpen(view->request.card, 0, (char *)&mw + 32, MC_OPEN_WRITE_CREATE);
             }
             break;
         case 5:
@@ -596,60 +623,60 @@ int xglMcMain(void)
 
     sync = sceMcSync(1, &command, &result);
     if (sync == 0) {
-        if (mw.state.phase == 1 && queue_end == queue_top)
+        if (mw.state.phase == MC_PHASE_POLL_INFO && queue_end == queue_top)
             return mw.state.status.combined;
-        return 0xFF00FF;
+        return MC_STATUS_BUSY_BOTH;
     }
     if (sync == -1) {
         result = 0;
         command = 0;
     }
     switch (mw.state.phase) {
-    case 1:
+    case MC_PHASE_POLL_INFO:
         if (queue_end == queue_top) {
             status = &mw.state.status.slots[mw.state.descriptor];
             switch (mw.state.card_type) {
-            case 1: *status = 0x81; break;
-            case 2: *status = 1; break;
-            case 3: *status = 0x82; break;
-            default: *status = 0; break;
+            case MC_TYPE_PS1: *status = MC_STATUS_PS1_CARD; break;
+            case MC_TYPE_PS2: *status = MC_STATUS_READY; break;
+            case MC_TYPE_POCKETSTATION: *status = MC_STATUS_POCKETSTATION; break;
+            default: *status = MC_STATUS_NONE; break;
             }
             if (result == -1 || result == -2) {
-                *status = 0x80;
+                *status = MC_STATUS_ERROR;
             } else {
                 card_type = mw.state.card_type;
-                if (card_type == 2 && result == 0 && mw.state.formatted == 0)
+                if (card_type == MC_TYPE_PS2 && result == 0 && mw.state.formatted == 0)
                     *status = card_type;
             }
         }
-        mw.state.phase = 0;
-    case 0:
+        mw.state.phase = MC_PHASE_IDLE;
+    case MC_PHASE_IDLE:
         if (queue_end != queue_top) {
             request = &queue[queue_top];
             savedMcRequest = *request;
             execute(request);
-            queue_top = (queue_top + 1) & 7;
-            return 0xFF00FF;
+            queue_top = (queue_top + 1) & MC_QUEUE_MASK;
+            return MC_STATUS_BUSY_BOTH;
         }
         card = mw.state.next_card & 1;
         mw.state.descriptor = card;
         sceMcGetInfo(card, 0, &mw.state.card_type, 0, &mw.state.formatted);
-        mw.state.phase = 1;
+        mw.state.phase = MC_PHASE_POLL_INFO;
         mw.state.next_card ^= 1;
         break;
-    case 2:
+    case MC_PHASE_OPEN_CLOSE:
         *((McWorkspaceView *)&mw)->request.result = result;
-        mw.state.phase = 0;
+        mw.state.phase = MC_PHASE_IDLE;
         if (result < 0)
             break;
         sceMcClose(result);
-        return 0xFF00FF;
-    case 6:
+        return MC_STATUS_BUSY_BOTH;
+    case MC_PHASE_DIRECTORY:
         stored_result = result;
         *((McWorkspaceView *)&mw)->request.result = stored_result;
         slots = (unsigned char *)((McWorkspaceView *)&mw)->request.buffer;
-        clear_slot = &slots[100];
-        index = 100;
+        clear_slot = &slots[MC_LATEST_SLOT_INDEX];
+        index = MC_LATEST_SLOT_INDEX;
         do {
             index--;
             *clear_slot = 0;
@@ -678,20 +705,20 @@ int xglMcMain(void)
                     index++;
                     directory++;
             }
-            slots[100] = latest_slot;
+            slots[MC_LATEST_SLOT_INDEX] = latest_slot;
         }
-        mw.state.phase = 0;
+        mw.state.phase = MC_PHASE_IDLE;
         break;
-    case 5:
+    case MC_PHASE_CREATE:
         created = create_sub2(result);
         if (created == 0)
-            return 0xFF00FF;
-        mw.state.phase = 0;
+            return MC_STATUS_BUSY_BOTH;
+        mw.state.phase = MC_PHASE_IDLE;
         if (created < 0)
-            mw.state.status.combined = 0xFF00FF;
+            mw.state.status.combined = MC_STATUS_BUSY_BOTH;
         break;
-    case 3:
-    case 4:
+    case MC_PHASE_WRITE:
+    case MC_PHASE_READ:
         if (result >= 0) {
             if (mw.state.subphase == 0) {
                 mw.state.descriptor = result;
@@ -699,22 +726,22 @@ int xglMcMain(void)
                 size = ((McWorkspaceView *)&mw)->request.size;
                 buffer = (void *)((McWorkspaceView *)&mw)->request.buffer;
                 switch (phase) {
-                case 3:
+                case MC_PHASE_WRITE:
                     sceMcWrite(result, buffer, size);
                     break;
-                case 4:
+                case MC_PHASE_READ:
                     sceMcRead(result, buffer, size);
                     break;
                 }
                 mw.state.subphase = 1;
-                return 0xFF00FF;
+                return MC_STATUS_BUSY_BOTH;
             }
             sceMcClose(mw.state.descriptor);
         } else {
             *((McWorkspaceView *)&mw)->request.result = result;
-            mw.state.status.combined = 0xFF00FF;
+            mw.state.status.combined = MC_STATUS_BUSY_BOTH;
         }
-        mw.state.phase = 0;
+        mw.state.phase = MC_PHASE_IDLE;
         break;
     }
     return mcMainStatus[0];
@@ -739,7 +766,7 @@ int xglMcEasyLoad(const char *path, void *buffer, int size)
         return result;
     }
 
-    sceMcOpen(0, 0, path, 1);
+    sceMcOpen(0, 0, path, MC_OPEN_READ);
     sceMcSync(0, &command, &result);
     descriptor = result;
     if (descriptor < 0)
@@ -778,7 +805,7 @@ int xglMcEasySave(const char *path, const void *buffer, int size)
         return -1;
     }
 
-    sceMcOpen(0, 0, path, 0x202);
+    sceMcOpen(0, 0, path, MC_OPEN_WRITE_CREATE);
     sceMcSync(0, &command, &result);
     descriptor = result;
     if (descriptor < 0)

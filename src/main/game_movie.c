@@ -13,10 +13,30 @@
 #include "main/xgl_sound.h"
 
 #define MOVIE_FLAG_SKIP_ALL 0x10000000
-#define PAD_BUTTON_SKIP 0x10
-#define PAD_BUTTON_REPLAY 0x20
-#define PAD_BUTTON_START 0x800
-#define PAD_COMBO_ABORT 0x10c
+#define PAD_BUTTON_SKIP PAD_TRIANGLE
+#define PAD_BUTTON_REPLAY PAD_CIRCLE
+#define PAD_BUTTON_START PAD_START
+/* SELECT + L1 + R1 held while pressing START aborts all further movies. */
+#define PAD_COMBO_ABORT (PAD_SELECT | PAD_L1 | PAD_R1)
+
+/* GameLoopState.input_delay frames before a pad press is honoured again. */
+#define MOVIE_INPUT_DELAY 32
+#define MOVIE_INPUT_DELAY_AFTER_SKIP 64
+
+/* xglSoundEffectNormalDirect id played when the movie pause opens/closes. */
+#define MOVIE_SE_PAUSE 4
+
+/* Caption and seek-error text: white, at fixed screen positions. */
+#define MOVIE_TEXT_WHITE 0xFFFFFF
+#define MOVIE_CAPTION_X 64
+#define MOVIE_CAPTION_Y 317
+#define MOVIE_SEEK_ERROR_X 96
+#define MOVIE_SEEK_ERROR_Y 200
+
+/* Audio buffer handed to xglMpeg2InfoInit2, and the display buffer that
+ * follows the source data in GameMovieInit's allocation. */
+#define MOVIE_MPEG_AUDIO_BUFFER_SIZE 0x40000
+#define MOVIE_DISPLAY_BUFFER_SIZE 0x8000
 
 /* Byte-sized settings the Java class xeno.Movie writes through its
  * "transparent" and "alpha" fields. */
@@ -306,12 +326,12 @@ void GameMpeg2Play(char *name, int mode)
             } else {
                 caption_convert(text);
             }
-            xglMpeg2InfoInit2(&mpeg, text + ((size + 63) & ~63), 0x40000);
+            xglMpeg2InfoInit2(&mpeg, text + ((size + 63) & ~63), MOVIE_MPEG_AUDIO_BUFFER_SIZE);
             if (size == 0) {
                 text = 0;
             }
             if (xglMpeg2Open(&mpeg, name) >= 0) {
-                GameLoopState.input_delay = 32;
+                GameLoopState.input_delay = MOVIE_INPUT_DELAY;
                 for (;;) {
                     status = xglMpeg2Play(&mpeg);
                     if (text != 0) {
@@ -322,13 +342,15 @@ void GameMpeg2Play(char *name, int mode)
                         if (time >= 0 && mpeg.frame >= time) {
                             text = (char *)(cursor + 2);
                         }
-                        xglFontPrint(64, 317, 0xFFFFFF, movieCaptionControl);
+                        xglFontPrint(MOVIE_CAPTION_X, MOVIE_CAPTION_Y, MOVIE_TEXT_WHITE,
+                                     movieCaptionControl);
                         xglFontPrintDirect(text);
                     }
                     if (status < 0) {
                         xglRenderCopyDisp2Draw();
                         for (pass = 0; pass < 2; pass++) {
-                            xglFontPrint(96, 200, 0xFFFFFF, movieSeekErrorText);
+                            xglFontPrint(MOVIE_SEEK_ERROR_X, MOVIE_SEEK_ERROR_Y,
+                                         MOVIE_TEXT_WHITE, movieSeekErrorText);
                             GamePauseDispBG();
                             xglSleep();
                         }
@@ -353,12 +375,12 @@ void GameMpeg2Play(char *name, int mode)
                     if (GameLoopState.input_delay != 0) {
                         GameLoopState.input_delay--;
                     } else if (PadData.half_2a & PAD_BUTTON_START) {
-                        GameLoopState.input_delay = 32;
+                        GameLoopState.input_delay = MOVIE_INPUT_DELAY;
                         if ((PadData.half_28 & PAD_COMBO_ABORT) == PAD_COMBO_ABORT) {
                             GameLoopState.flags |= MOVIE_FLAG_SKIP_ALL;
                             break;
                         }
-                        xglSoundEffectNormalDirect(4);
+                        xglSoundEffectNormalDirect(MOVIE_SE_PAUSE);
                         sRender.scene_disabled = 1;
                         xglRenderCopyDisp2Draw();
                         GamePauseDispEvent();
@@ -382,11 +404,11 @@ void GameMpeg2Play(char *name, int mode)
                         }
 finish_movie_pause:
                         PartyTimePauseEnd();
-                        xglSoundEffectNormalDirect(4);
+                        xglSoundEffectNormalDirect(MOVIE_SE_PAUSE);
                         sRender.scene_disabled = 0;
-                        GameLoopState.input_delay = 32;
+                        GameLoopState.input_delay = MOVIE_INPUT_DELAY;
                         if (PadData.half_2a & PAD_BUTTON_SKIP) {
-                            GameLoopState.input_delay = 64;
+                            GameLoopState.input_delay = MOVIE_INPUT_DELAY_AFTER_SKIP;
                             break;
                         }
                         xglSoundStreamMute();
@@ -415,7 +437,7 @@ void GameMovieInit(int size)
     mi.source_data = buffer;
     buffer += span;
     mi.display_base = buffer;
-    buffer += 0x8000;
+    buffer += MOVIE_DISPLAY_BUFFER_SIZE;
     mi.opened = 1;
     mi.source_size = size;
     mi.display_end = buffer;

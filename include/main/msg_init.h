@@ -1,12 +1,17 @@
 #ifndef INCLUDE_MAIN_MSG_INIT_H
 #define INCLUDE_MAIN_MSG_INIT_H
 
+/* Message buffers: MSG_BUFFER_COUNT slots, each with a workspace of
+ * MSG_BUFFER_WORKSPACE_SIZE bytes. */
+#define MSG_BUFFER_COUNT 8
+#define MSG_BUFFER_WORKSPACE_SIZE 0x800
+
 typedef struct MsgBuffer {
     int active;
     unsigned int capacity;
     unsigned char **entry_table;
     unsigned char *cursor;
-    unsigned char workspace[0x800];
+    unsigned char workspace[MSG_BUFFER_WORKSPACE_SIZE];
 } MsgBuffer;
 
 /* The one word MSG_queuePop stores for a control code: the argument value for

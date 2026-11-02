@@ -7,6 +7,7 @@
 
 #include "shared.h"
 #include "main/xgl_task.h"
+#include "main/xgl_mc.h"
 
 typedef struct SaveDataHeader {
     u64 version;
@@ -16,7 +17,7 @@ typedef struct SaveDataHeader {
 typedef unsigned char byte;
 
 typedef union {
-    byte data[0x163b0];
+    byte data[MC_SAVE_DATA_SIZE];
     struct {
         byte header[8];
         long long stored_checksum;

@@ -8,6 +8,26 @@
 #include "quadword.h"
 #include "vu0_macro.h"
 
+/*
+ * MapUnitGroupSequenceEntry.flags (a track was started) and .state (a track is
+ * still running) share one bit layout: one bit per animated channel.
+ */
+#define MAP_SEQ_MOVE 0x01
+#define MAP_SEQ_ROTATE_X 0x02
+#define MAP_SEQ_ROTATE_Y 0x04
+#define MAP_SEQ_ROTATE_Z 0x08
+#define MAP_SEQ_ROTATE (MAP_SEQ_ROTATE_X | MAP_SEQ_ROTATE_Y | MAP_SEQ_ROTATE_Z)
+#define MAP_SEQ_MOTION 0x10
+#define MAP_SEQ_SCALE_X 0x20
+#define MAP_SEQ_SCALE_Y 0x40
+#define MAP_SEQ_SCALE_Z 0x80
+#define MAP_SEQ_SCALE (MAP_SEQ_SCALE_X | MAP_SEQ_SCALE_Y | MAP_SEQ_SCALE_Z)
+
+/* MapUnitTurnTrack.faceFlags: the axis whose goal is the direction to the target unit. */
+#define MAP_FACE_X 0x1
+#define MAP_FACE_Y 0x2
+#define MAP_FACE_Z 0x4
+
 /* One component of `goal` carried through a bone matrix: the three
  * rotation/scale rows, then the translation row. */
 #define MAP_BONE_TRANSFORM(bone, column) \
@@ -125,8 +145,8 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
     MapUnitRecord *target = track->target;
     float distance[3];
 
-    if ((sequence->flags & 0x2) == 0) {
-        if (sequence->state & 0x2) {
+    if ((sequence->flags & MAP_SEQ_ROTATE_X) == 0) {
+        if (sequence->state & MAP_SEQ_ROTATE_X) {
             start[0] = rotation->x;
             if (track->faceFlags & 0x1)
                 goal[1] = xglAtan2(target->position.y - position->y, target->position.z - position->z);
@@ -136,14 +156,14 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
                 step[0] = nearDir(start[0], goal[0]) * inverse;
             }
             sequence->frameCounter = 0;
-            sequence->flags |= 0x2;
+            sequence->flags |= MAP_SEQ_ROTATE_X;
         } else {
             step[0] = 0.0f;
-            sequence->flags |= 0x2;
+            sequence->flags |= MAP_SEQ_ROTATE_X;
         }
     }
-    if ((sequence->flags & 0x4) == 0) {
-        if (sequence->state & 0x4) {
+    if ((sequence->flags & MAP_SEQ_ROTATE_Y) == 0) {
+        if (sequence->state & MAP_SEQ_ROTATE_Y) {
             start[1] = rotation->y;
             if (track->faceFlags & 0x2)
                 goal[1] = xglAtan2(target->position.x - position->x, target->position.z - position->z);
@@ -153,14 +173,14 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
                 step[1] = nearDir(start[1], goal[1]) * inverse;
             }
             sequence->frameCounter = 0;
-            sequence->flags |= 0x4;
+            sequence->flags |= MAP_SEQ_ROTATE_Y;
         } else {
             step[1] = 0.0f;
-            sequence->flags |= 0x4;
+            sequence->flags |= MAP_SEQ_ROTATE_Y;
         }
     }
-    if ((sequence->flags & 0x8) == 0) {
-        if (sequence->state & 0x8) {
+    if ((sequence->flags & MAP_SEQ_ROTATE_Z) == 0) {
+        if (sequence->state & MAP_SEQ_ROTATE_Z) {
             start[2] = rotation->z;
             if (track->faceFlags & 0x4)
                 goal[1] = xglAtan2(unit->position.x - position->x, unit->position.y - position->y);
@@ -170,42 +190,42 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
                 step[2] = nearDir(start[2], goal[2]) * inverse;
             }
             sequence->frameCounter = 0;
-            sequence->flags |= 0x8;
+            sequence->flags |= MAP_SEQ_ROTATE_Z;
         } else {
             step[2] = 0.0f;
-            sequence->flags |= 0x8;
+            sequence->flags |= MAP_SEQ_ROTATE_Z;
         }
     }
 
-    if (sequence->state & 0x2) {
+    if (sequence->state & MAP_SEQ_ROTATE_X) {
         if (track->faceFlags & 0x1)
             goal[1] = xglAtan2(unit->position.y - position->y, unit->position.z - position->z);
         distance[0] = __builtin_fabsf(nearDir(goal[0], rotation->x));
         if (distance[0] <= __builtin_fabsf(step[0])) {
-            sequence->state &= ~0x2;
+            sequence->state &= ~MAP_SEQ_ROTATE_X;
             rotation->x = goal[0];
         } else {
             rotation->x += step[0];
         }
     }
-    if (sequence->state & 0x4) {
+    if (sequence->state & MAP_SEQ_ROTATE_Y) {
         if (track->faceFlags & 0x2)
             goal[1] = xglAtan2(unit->position.x - position->x, unit->position.z - position->z);
         distance[1] = __builtin_fabsf(nearDir(goal[1], rotation->y));
         if (distance[1] <= __builtin_fabsf(step[1])) {
-            sequence->state &= ~0x4;
+            sequence->state &= ~MAP_SEQ_ROTATE_Y;
             rotation->y = goal[1];
         } else {
             rotation->y += step[1];
         }
     }
-    if (sequence->state & 0x8) {
+    if (sequence->state & MAP_SEQ_ROTATE_Z) {
         if (track->faceFlags & 0x4)
             goal[1] = xglAtan2(unit->position.x - position->x, unit->position.y - position->y);
         distance[2] = __builtin_fabsf(nearDir(goal[2], rotation->z));
         if (distance[2] <= __builtin_fabsf(step[2])) {
             rotation->z = goal[2];
-            sequence->state &= ~0x8;
+            sequence->state &= ~MAP_SEQ_ROTATE_Z;
         } else {
             rotation->z += step[2];
         }
@@ -348,7 +368,7 @@ void SEQ_moveUnitSPL(MapUnitRecord *unit)
 
     SPL_getValueXYZ(sample, spline, (float)track->frame);
 
-    if ((sequence->state & 0x4) == 0) {
+    if ((sequence->state & MAP_SEQ_ROTATE_Y) == 0) {
         if (track->flags & 0x10)
             unit->rotation.y = xglAtan2(sample[0] - unit->position.x, sample[2] - unit->position.z);
     }
@@ -392,7 +412,7 @@ void SEQ_moveUnitChr(MapUnitRecord *unit)
     }
 
     yaw = xglAtan2(target->x - position->x, target->z - position->z);
-    if ((sequence->state & 0x4) == 0)
+    if ((sequence->state & MAP_SEQ_ROTATE_Y) == 0)
         rotation->y = yaw;
 
     delta.x = target->x - position->x;
@@ -441,7 +461,7 @@ void SEQ_moveUnitXZ(MapUnitRecord *unit)
     }
 
     yaw = xglAtan2(target->x - position->x, target->z - position->z);
-    if ((sequence->state & 0x4) == 0)
+    if ((sequence->state & MAP_SEQ_ROTATE_Y) == 0)
         rotation->y = yaw;
 
     delta.x = target->x - position->x;
@@ -546,7 +566,7 @@ void MAP_updateUnitSequence(MapUnitRecord *unit)
     if (unit->flags & MAP_UNIT_FOLLOW_GROUND) {
         float ground_height = UnduGet(unit->position.x, unit->position.z);
 
-        if (ground_height != -1000.0f) {
+        if (ground_height != GROUND_HEIGHT_NONE) {
             unit->position.y = ground_height;
         }
     }
@@ -559,7 +579,7 @@ void MAP_updateUnitDefault(MapUnitRecord *unit)
     if (unit->flags & MAP_UNIT_FOLLOW_GROUND) {
         float undulation = UnduGet(unit->position.x, unit->position.z);
 
-        if (undulation != -1000.0f)
+        if (undulation != GROUND_HEIGHT_NONE)
             unit->position.y = undulation;
     }
 

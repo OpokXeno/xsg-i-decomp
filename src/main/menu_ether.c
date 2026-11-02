@@ -12,21 +12,6 @@
 #include "main/xgl_cd.h"
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
-
-#define PAD_L1 0x0004
-#define PAD_R1 0x0008
-#define MENU_STATE_CHANGED 0x01
-#define PAD_CIRCLE   0x0020
-#define PAD_CROSS    0x0040
-#define PAD_SQUARE   0x0080
-#define PAD_UP       0x1000
-#define PAD_RIGHT    0x2000
-#define PAD_DOWN     0x4000
-#define PAD_LEFT     0x8000
-#define SE_DECIDE 1
-#define SE_CANCEL 2
-#define SE_CURSOR 3
-#define SE_BUZZER 5
 #define ETHER_DATA_SIZE    0x800
 #define ETHER_PAS_SIZE     0x3B0
 #define ETHER_INFO_SIZE    0x450
@@ -37,6 +22,99 @@
 #define ETHER_LIST2_SIZE   0x43C
 #define ETHER_EX_SIZE      0x28C
 #define ETHER_L1R1_SIZE    0x58
+#define ETHER_ALIGN        0x800 /* alignment of the etree data block */
+
+/* MenuWork.state of the ether menu (E.Pts: spend ether points to evolve an
+ * ether or transfer it to another character). */
+enum {
+    ETHER_STATE_CHARACTER = 0x10,
+    ETHER_STATE_COMMAND = 0x20,
+    ETHER_STATE_USE_LIST = 0x30,
+    ETHER_STATE_USE_TARGET = 0x32,
+    ETHER_STATE_EQUIP = 0x50,
+    ETHER_STATE_EPTS_LIST = 0x70,
+    ETHER_STATE_EPTS_ACTION = 0x72,
+    ETHER_STATE_EVOLVE_SLOT = 0x74,
+    ETHER_STATE_EVOLVE_CONFIRM = 0x76,
+    ETHER_STATE_EVOLVE_DONE = 0x78,
+    ETHER_STATE_TRANSFER_ENTRY = 0x80, /* listed by the sub-screens, never entered */
+    ETHER_STATE_TRANSFER_TARGET = 0x82,
+    ETHER_STATE_TRANSFER_CONFIRM = 0x84,
+    ETHER_STATE_TRANSFER_DONE = 0x86,
+    ETHER_STATE_LEAVE = 0xF0,
+    ETHER_STATE_EXIT = 0xFF
+};
+
+/* Command menu rows (commandCursor): "Use / Set / Use E.Pts / Cancel". */
+enum {
+    ETHER_COMMAND_USE,
+    ETHER_COMMAND_SET,
+    ETHER_COMMAND_EPTS,
+    ETHER_COMMAND_CANCEL,
+    ETHER_COMMAND_COUNT
+};
+
+/* E.Pts menu rows (menuCursor): "Evolve / Transfer / Cancel". */
+enum {
+    ETHER_ACTION_EVOLVE,
+    ETHER_ACTION_TRANSFER,
+    ETHER_ACTION_CANCEL,
+    ETHER_ACTION_COUNT
+};
+
+/* MenuWork.useType, from MenuEtherUseCheck. */
+enum {
+    ETHER_USE_NONE,
+    ETHER_USE_SINGLE, /* one living party member */
+    ETHER_USE_PARTY,  /* the whole party */
+    ETHER_USE_SELF    /* the user only */
+};
+
+/* Row status of the "Use" list (MenuEtherListMake00). */
+enum {
+    ETHER_USE_ROW_OK,
+    ETHER_USE_ROW_EP_SHORT,
+    ETHER_USE_ROW_BATTLE_ONLY
+};
+
+#define ETHER_COUNT 80          /* ether ids are 1..80 */
+#define ETHER_SLOT_COUNT 12     /* ethers a character can have set */
+#define ETHER_CAP_MAX 12        /* total cap cost of the set ethers */
+#define ETHER_FLAG_NO_TRANSFER 0x4000 /* EtherStatus.flags: cannot be transferred */
+#define ETHER_ROW_HEIGHT 24
+#define ETHER_CONFIRM_CHOICE_COUNT 2 /* yes, no */
+
+/* MenuWork.wait frames. */
+#define ETHER_WAIT_BACK 4        /* back to the E.Pts list */
+#define ETHER_WAIT_CHOICE 8
+#define ETHER_WAIT_OPEN 12       /* a screen opens or the menu steps back */
+#define ETHER_WAIT_LEAVE 16
+#define ETHER_WAIT_COMMAND 24    /* character picked: command window slides in */
+#define ETHER_WAIT_SCROLL 32     /* target list scrolls one row */
+#define ETHER_STATUS_FLAG_SLID 0x01 /* header.collapsed: the selected panel finished sliding */
+#define ETHER_ARROW_KICK 6      /* slide offset set when L1 or R1 is pressed */
+#define ETHER_SORT_KIND 0x80    /* MenuSortSet kind that lists ethers */
+#define ETHER_KEEP_SLOT_SIZE 5  /* bytes of MenuKeepSelect per list */
+#define ETHER_STYLE_WINDOW 0x00FFFFF0
+#define ETHER_STYLE_LIST 0x00FFFFF8
+#define ETHER_STYLE_STATUS 0x00F00000
+#define ETHER_STYLE_STATUS_SELECTED 0x00F07F00
+#define ETHER_STYLE_STATUS_IDLE 0x00F07E00
+#define ETHER_STYLE_TARGET 0x00FFF000
+#define ETHER_STYLE_SPRITE 0x00FFFFFF
+#define ETHER_STYLE_NUMBER 0x00FFFFFA
+#define ETHER_OFFSCREEN_RIGHT 528 /* slide target that hides a window at the right */
+#define ETHER_OFFSCREEN_BOTTOM 512 /* slide target that hides the info window */
+#define ETHER_TINT_DIM 64
+#define ETHER_TINT_BRIGHT (-128) /* 0x80 stored in a signed char */
+#define MENU_TEXT_TYPE_CHARACTER 0x60000 /* text id: type in the high halfword */
+
+/* WindowDX.state, EMessageParam.mode and ECursolMainData.state values. */
+
+
+/* Block states shared by every ether-menu part. */
+#define ETHER_BLOCK_INIT 0
+#define ETHER_BLOCK_RUN 2
 
 typedef struct EtherStatus {
     unsigned char unmodeled_00[2];
@@ -59,7 +137,7 @@ typedef struct EtherUnitRecord {
     unsigned char unmodeled_18[0x1E];
     short ep; /* +0x36 */
     unsigned char unmodeled_38[0x56];
-    short etherId[12]; /* +0x8E */
+    short etherId[ETHER_SLOT_COUNT]; /* +0x8E */
 } EtherUnitRecord;
 
 typedef struct EtherCharRecord {
@@ -501,7 +579,7 @@ unsigned char *MenuEtherDataGet(int etherId)
     unsigned char (*records)[4] = MenuEtherDataBuf;
 
     etherId &= 0xFFFF;
-    if (etherId - 1U >= 80) {
+    if (etherId - 1U >= ETHER_COUNT) {
         return 0;
     }
     return records[etherId - 1];
@@ -509,10 +587,10 @@ unsigned char *MenuEtherDataGet(int etherId)
 
 int MenuEtherJoutoCheck(int etherId) {
     etherId &= 0xFFFF;
-    if ((unsigned int)(etherId - 1) >= 0x50U) {
+    if ((unsigned int)(etherId - 1) >= ETHER_COUNT) {
         return 0;
     }
-    return (func_A1A488(etherId)->flags & 0x4000) < 1;
+    return (func_A1A488(etherId)->flags & ETHER_FLAG_NO_TRANSFER) < 1;
 }
 
 int MenuEtherCharPointCheck(unsigned short chrNo, unsigned short etherId) {
@@ -555,7 +633,7 @@ int MenuEtherSetCheck(unsigned short chrNo, unsigned short etherId) {
     EtherUnitRecord *character = func_A191C0(chrNo);
     int i;
 
-    for (i = 0; i < 12; i++) {
+    for (i = 0; i < ETHER_SLOT_COUNT; i++) {
         if (character->etherId[i] == etherId) {
             return 1;
         }
@@ -572,14 +650,14 @@ int MenuEtherUseCheck(short etherId) {
     case 1:
     case 8:
     case 0x25:
-        return 1;
+        return ETHER_USE_SINGLE;
     case 4:
     case 0x1C:
-        return 2;
+        return ETHER_USE_PARTY;
     case 0x4A:
-        return 3;
+        return ETHER_USE_SELF;
     default:
-        return 0;
+        return ETHER_USE_NONE;
     }
 }
 
@@ -590,7 +668,7 @@ void MenuEtherCapSet(void) {
         short *equippedEther = unit->etherId;
         int slot;
         unit->capUsed = 0;
-        for (slot = 0; slot < 12; slot++) {
+        for (slot = 0; slot < ETHER_SLOT_COUNT; slot++) {
             int etherId = *equippedEther++;
             if (etherId != 0) {
                 unit->capUsed = unit->capUsed +
@@ -614,8 +692,8 @@ void MenuEtherPasMain(void) {
     }
 
     switch (pas->state) {
-    case 0:
-        pas->kind = 0x00FFFFF0;
+    case ETHER_BLOCK_INIT:
+        pas->kind = ETHER_STYLE_WINDOW;
         WindowDXSet(&pas->window);
         pas->window.x = -288;
         pas->window.y = 8;
@@ -624,19 +702,19 @@ void MenuEtherPasMain(void) {
         pas->window.height = 30;
         pas->window.close_callback = MenuPasWindow;
         pas->window.close_callback_arg = pas->callbackWork;
-        pas->window.state = 1;
+        pas->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&pas->window);
-        pas->window.state = 3;
+        pas->window.state = WINDOWDX_STATE_READY;
         for (i = 0; i < 6; i++) {
             eMessageSet(&pas->messages[i], msg_0_0036DC00[i]);
-            pas->messages[i].mode = 0x20;
+            pas->messages[i].mode = E_MODE_SHOW_START;
             pas->messages[i].x = 288;
             pas->messages[i].y = 11;
             pas->messages[i].draw_parameter = pas->kind + 2;
         }
-        pas->state = 2;
+        pas->state = ETHER_BLOCK_RUN;
         break;
-    case 2:
+    case ETHER_BLOCK_RUN:
         break;
     default:
         return;
@@ -648,25 +726,25 @@ void MenuEtherPasMain(void) {
     }
 
     switch (MenuWork.state) {
-    case 16:
-    case 32:
+    case ETHER_STATE_CHARACTER:
+    case ETHER_STATE_COMMAND:
         tabTarget[0] = 16;
         break;
-    case 48:
-    case 50:
-    case 80:
-    case 112:
-    case 114:
+    case ETHER_STATE_USE_LIST:
+    case ETHER_STATE_USE_TARGET:
+    case ETHER_STATE_EQUIP:
+    case ETHER_STATE_EPTS_LIST:
+    case ETHER_STATE_EPTS_ACTION:
         tabTarget[0] = 16;
         tabTarget[MenuWork.commandCursor + 1] = tabLength[0] + 16;
         break;
-    case 116:
-    case 118:
-    case 120:
-    case 128:
-    case 130:
-    case 132:
-    case 134:
+    case ETHER_STATE_EVOLVE_SLOT:
+    case ETHER_STATE_EVOLVE_CONFIRM:
+    case ETHER_STATE_EVOLVE_DONE:
+    case ETHER_STATE_TRANSFER_ENTRY:
+    case ETHER_STATE_TRANSFER_TARGET:
+    case ETHER_STATE_TRANSFER_CONFIRM:
+    case ETHER_STATE_TRANSFER_DONE:
         tabTarget[0] = -(tabLength[0] + 16);
         tabTarget[MenuWork.commandCursor + 1] = 16;
         tabTarget[MenuWork.menuCursor + 4] = tabLength[MenuWork.commandCursor + 1] + 16;
@@ -678,20 +756,20 @@ void MenuEtherPasMain(void) {
 
     MoveSlide(&pas->window.x, &slideTarget, 3.0f);
     WindowDXMain(&pas->window);
-    if (pas->window.state == 3) {
+    if (pas->window.state == WINDOWDX_STATE_READY) {
         pas->box.x = pas->window.x + 3;
         pas->box.y = pas->window.y + 3;
         pas->box.kind = pas->kind;
         pas->box.width = pas->window.width - 6;
         pas->box.height = pas->window.height - 6;
-        endPrintExtFunc(pas->kind, 101, &pas->box);
+        endPrintExtFunc(pas->kind, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&pas->box);
         for (i = 0; i < 6; i++) {
             MoveSlide(&pas->messages[i].x, &tabTarget[i], 5.0f);
             if (pas->messages[i].x < 256) {
                 eMessageMain(&pas->messages[i]);
             }
         }
-        endPrintExtFunc(pas->kind, 102, 0);
+        endPrintExtFunc(pas->kind, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
     }
 }
 
@@ -791,8 +869,8 @@ void MenuEtherInfoMain(void) {
     char *text;
 
     switch (screen->state) {
-    case 0:
-        screen->work = 0x00FFFFF0;
+    case ETHER_BLOCK_INIT:
+        screen->work = ETHER_STYLE_WINDOW;
         window = &screen->window;
         text = screen->text;
         WindowDXSet(window);
@@ -810,16 +888,16 @@ void MenuEtherInfoMain(void) {
         }
         screen->message.y = 0;
         __builtin_memset(&screen->message.text, 0, sizeof(screen->message.text));
-        screen->window.state = 1;
+        screen->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(window);
-        screen->window.state = 3;
+        screen->window.state = WINDOWDX_STATE_READY;
         screen->previous = -1;
         screen->active = 1;
         screen->helpHeld = 0;
         memset(text, 0, 256);
-        screen->state = 2;
+        screen->state = ETHER_BLOCK_RUN;
         break;
-    case 2:
+    case ETHER_BLOCK_RUN:
         window = &screen->window;
         text = screen->text;
         break;
@@ -828,11 +906,11 @@ void MenuEtherInfoMain(void) {
     }
 
     targetY = 386;
-    if ((unsigned char)(MenuWork.flags & 1)) {
+    if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
         screen->helpHeld = 0;
     }
     if (screen->helpHeld == 0) {
-        if (PadData.pressed & 0x20) {
+        if (PadData.pressed & PAD_CIRCLE) {
             screen->helpHeld = 1;
         }
     } else if (PadData.repeat != 0) {
@@ -840,45 +918,45 @@ void MenuEtherInfoMain(void) {
     }
 
     switch (MenuWork.state) {
-    case 16:
+    case ETHER_STATE_CHARACTER:
         eMessageCpy(text, characterHelp.text[0]);
         if (screen->helpHeld != 0 && MenuWork.charDenied != 0) {
             eMessageCpy(text, MenuCharNameGet(MenuWork.chrNo));
             eMessageCat(characterHelp.text[1]);
         }
         break;
-    case 32:
-        if (MenuWork.commandCursor == 0) {
+    case ETHER_STATE_COMMAND:
+        if (MenuWork.commandCursor == ETHER_COMMAND_USE) {
             eMessageCpy(text, commandHelp.text[0]);
-            eMessageCat(MenuTextGet((MenuWork.chrNo & 0xFFFF) + 0x60000)->name);
+            eMessageCat(MenuTextGet((MenuWork.chrNo & 0xFFFF) + MENU_TEXT_TYPE_CHARACTER)->name);
             eMessageCat(commandHelp.text[4]);
         } else {
             eMessageCpy(text, commandHelp.text[MenuWork.commandCursor]);
         }
         break;
-    case 48:
+    case ETHER_STATE_USE_LIST:
         if (MenuWork.listSelect < 0) {
             eMessageCpy(text, etherEmptyText);
         } else {
             eMessageCpy(text, MenuTextGet(MenuSortGet(0, MenuWork.listSelect))->auxiliary);
             if (screen->helpHeld == 1) {
                 int status = MenuListGet(0)[MenuWork.listSelect].status;
-                if (status == 1) {
+                if (status == ETHER_USE_ROW_EP_SHORT) {
                     eMessageCpy(text, acquireHelp.text[5]);
-                } else if (status == 2) {
+                } else if (status == ETHER_USE_ROW_BATTLE_ONLY) {
                     eMessageCpy(text, acquireHelp.text[7]);
                 }
             }
         }
         break;
-    case 50:
+    case ETHER_STATE_USE_TARGET:
         if (MenuWork.listSelect < 0) {
             eMessageCpy(text, etherEmptyText);
         } else {
             eMessageCpy(text, MenuTextGet(MenuSortGet(0, MenuWork.listSelect))->auxiliary);
         }
         break;
-    case 80:
+    case ETHER_STATE_EQUIP:
         if (MenuWork.listSelect < 0) {
             eMessageCpy(text, etherEmptyText);
         } else {
@@ -892,7 +970,7 @@ void MenuEtherInfoMain(void) {
             }
         }
         break;
-    case 112:
+    case ETHER_STATE_EPTS_LIST:
         if (MenuWork.listSelect >= 0) {
             eMessageCpy(text, MenuTextGet(MenuSortGet(0, MenuWork.listSelect))->auxiliary);
             if (screen->helpHeld == 1 &&
@@ -904,23 +982,23 @@ void MenuEtherInfoMain(void) {
             eMessageCpy(text, etherEmptyText);
         }
         break;
-    case 114:
+    case ETHER_STATE_EPTS_ACTION:
         eMessageCpy(text, actionHelp.text[MenuWork.menuCursor]);
         if (screen->helpHeld == 1) {
             short cost = func_A1A488(MenuWork.etherId)->pointCost;
             int points = func_A19210(MenuWork.chrNo)->points;
-            if (MenuWork.menuCursor == 1) {
+            if (MenuWork.menuCursor == ETHER_ACTION_TRANSFER) {
                 cost /= 2;
             }
             if (cost < points) {
                 if (MenuEtherJoutoCheck(MenuWork.etherId) == 0) {
-                    if (MenuWork.menuCursor == 0) {
+                    if (MenuWork.menuCursor == ETHER_ACTION_EVOLVE) {
                         eMessageCpy(text, acquireHelp.text[3]);
                     } else {
                         eMessageCpy(text, acquireHelp.text[8]);
                     }
                 } else if (MenuWork.slotCount == 0) {
-                    if (MenuWork.menuCursor == 0) {
+                    if (MenuWork.menuCursor == ETHER_ACTION_EVOLVE) {
                         eMessageCpy(text, acquireHelp.text[3]);
                     } else {
                         eMessageCpy(text, acquireHelp.text[8]);
@@ -931,7 +1009,7 @@ void MenuEtherInfoMain(void) {
             }
         }
         break;
-    case 116:
+    case ETHER_STATE_EVOLVE_SLOT:
         eMessageCpy(text, acquireHelp.text[0]);
         eMessageCat(func_A2C5A8(MenuWork.slotEther)->name);
         eMessageCat(etherPeriodNewlineText);
@@ -942,21 +1020,21 @@ void MenuEtherInfoMain(void) {
             eMessageCat(etherPeriodText);
         }
         break;
-    case 118:
-    case 120:
-        if (MenuWork.state == 118) {
+    case ETHER_STATE_EVOLVE_CONFIRM:
+    case ETHER_STATE_EVOLVE_DONE:
+        if (MenuWork.state == ETHER_STATE_EVOLVE_CONFIRM) {
             eMessageCpy(text, acquireHelp.text[0]);
         } else {
             eMessageCpy(text, acquireHelp.text[1]);
         }
         eMessageCat(func_A2C5A8(MenuWork.slotEther)->name);
-        if (MenuWork.state == 118) {
+        if (MenuWork.state == ETHER_STATE_EVOLVE_CONFIRM) {
             eMessageCat(etherPeriodText);
         } else {
             eMessageCat(etherPeriodEndText);
         }
         break;
-    case 130:
+    case ETHER_STATE_TRANSFER_TARGET:
         eMessageCpy(text, transferHelp.text[0]);
         eMessageCat(func_A2C5A8(MenuWork.etherId)->name);
         eMessageCat(etherPeriodText);
@@ -966,24 +1044,24 @@ void MenuEtherInfoMain(void) {
             eMessageCat(etherPeriodText);
         }
         break;
-    case 132:
-    case 134:
+    case ETHER_STATE_TRANSFER_CONFIRM:
+    case ETHER_STATE_TRANSFER_DONE:
         {
             short chrNo = MenuEtherParty[MenuWork.targetList[MenuWork.targetCursor]];
             eMessageCpy(text, transferHelp.text[1]);
-            if (MenuWork.state == 132) {
+            if (MenuWork.state == ETHER_STATE_TRANSFER_CONFIRM) {
                 eMessageCat(etherEmptyText);
             } else {
                 eMessageCat(etherOfText);
             }
             eMessageCat(func_A2C5A8(MenuWork.etherId)->name);
-            if (MenuWork.state == 132) {
+            if (MenuWork.state == ETHER_STATE_TRANSFER_CONFIRM) {
                 eMessageCat(transferHelp.text[2]);
             } else {
                 eMessageCat(transferHelp.text[3]);
             }
             eMessageCat(MenuCharNameGet(chrNo));
-            if (MenuWork.state == 132) {
+            if (MenuWork.state == ETHER_STATE_TRANSFER_CONFIRM) {
                 eMessageCat(etherQuestionText);
             } else {
                 eMessageCat(etherCompleteText);
@@ -991,7 +1069,7 @@ void MenuEtherInfoMain(void) {
         }
         break;
     default:
-        targetY = 512;
+        targetY = ETHER_OFFSCREEN_BOTTOM;
         break;
     }
     screen->message.text = text;
@@ -1018,25 +1096,25 @@ void MenuEtherMenuMain(void) {
     int i;
 
     switch (work->state) {
-    case 0:
-        work->color = 0x00FFFFF0;
+    case ETHER_BLOCK_INIT:
+        work->color = ETHER_STYLE_WINDOW;
         WindowDXSet(&work->window[0]);
-        work->window[0].x = 528;
+        work->window[0].x = ETHER_OFFSCREEN_RIGHT;
         work->window[0].tag_id = etherMenuTitleText;
         work->window[0].style = work->color;
         work->window[0].width = 145;
         work->window[0].close_callback_arg = &work->list[0];
         work->list[0].items = msg00_1_0036DC18[0];
-        work->window[0].state = 1;
+        work->window[0].state = WINDOWDX_STATE_OPEN;
         work->window[0].y = 192;
         work->window[0].height = 102;
         work->window[0].close_callback = MenuSelectWindow;
         work->list[0].cursor = 0;
         work->list[0].hasPrompt = 0;
         WindowDXMain(&work->window[0]);
-        work->window[0].state = 3;
+        work->window[0].state = WINDOWDX_STATE_READY;
         WindowDXSet(&work->window[1]);
-        work->window[1].x = 528;
+        work->window[1].x = ETHER_OFFSCREEN_RIGHT;
         work->window[1].tag_id = etherSelectTitleText;
         work->window[1].y = 192;
         work->window[1].style = work->color;
@@ -1050,17 +1128,17 @@ void MenuEtherMenuMain(void) {
         work->list[1].cursor = 0;
         work->window[1].state = work->list[1].hasPrompt = 1;
         WindowDXMain(&work->window[1]);
-        work->window[1].state = 3;
-        work->state = 2;
+        work->window[1].state = WINDOWDX_STATE_READY;
+        work->state = ETHER_BLOCK_RUN;
 	    /* fallthrough */
-    case 2:
-        target[1] = 528;
-        target[0] = 528;
+    case ETHER_BLOCK_RUN:
+        target[1] = ETHER_OFFSCREEN_RIGHT;
+        target[0] = ETHER_OFFSCREEN_RIGHT;
         switch (MenuWork.state) {
-        case 32:
-            if ((unsigned char)(MenuWork.flags & 1)) {
+        case ETHER_STATE_COMMAND:
+            if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
                 work->window[0].y = 192;
-                work->window[0].x = 528;
+                work->window[0].x = ETHER_OFFSCREEN_RIGHT;
                 work->window[0].width = 145;
                 work->window[0].height = 102;
                 work->list[0].items = msg00_1_0036DC18[0];
@@ -1069,9 +1147,9 @@ void MenuEtherMenuMain(void) {
             target[0] = 192;
             work->list[0].cursor = MenuWork.commandCursor;
             break;
-        case 114:
-            if ((unsigned char)(MenuWork.flags & 1)) {
-                work->window[0].x = 528;
+        case ETHER_STATE_EPTS_ACTION:
+            if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
+                work->window[0].x = ETHER_OFFSCREEN_RIGHT;
                 work->window[0].y = 288;
                 work->window[0].width = 125;
                 work->window[0].height = 78;
@@ -1081,16 +1159,16 @@ void MenuEtherMenuMain(void) {
             target[0] = 131;
             work->list[0].cursor = MenuWork.menuCursor;
             break;
-        case 118:
-        case 132:
-            if ((unsigned char)(MenuWork.flags & 1)) {
-                if (MenuWork.state == 118) {
+        case ETHER_STATE_EVOLVE_CONFIRM:
+        case ETHER_STATE_TRANSFER_CONFIRM:
+            if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
+                if (MenuWork.state == ETHER_STATE_EVOLVE_CONFIRM) {
                     work->window[1].y = 128;
                 } else {
                     work->window[1].y = 240;
                 }
                 work->list[1].cursor = 0;
-                work->window[1].x = 528;
+                work->window[1].x = ETHER_OFFSCREEN_RIGHT;
             }
             target[1] = 285;
             work->list[1].cursor = MenuWork.confirmCursor;
@@ -1126,8 +1204,8 @@ void MenuEtherExMain(void)
   char *messageColor;
   switch (screen->state)
   {
-    case 0:
-      screen->work = 0x00FFFFF0;
+    case ETHER_BLOCK_INIT:
+      screen->work = ETHER_STYLE_WINDOW;
       for (i = 0; i < 2; i++)
     {
       eRibbonSet(&screen->rows[i].ribbon, 3);
@@ -1143,13 +1221,13 @@ void MenuEtherExMain(void)
     }
 
       eMessageSet(&screen->message, msg01_4_0036DC30[0]);
-      screen->message.mode = 32;
-      screen->message.x = 528;
+      screen->message.mode = E_MODE_SHOW_START;
+      screen->message.x = ETHER_OFFSCREEN_RIGHT;
       screen->message.y = 120;
       screen->message.draw_parameter = screen->work;
-      screen->state = 2;
+      screen->state = ETHER_BLOCK_RUN;
 
-    case 2:
+    case ETHER_BLOCK_RUN:
       break;
 
     default:
@@ -1157,35 +1235,35 @@ void MenuEtherExMain(void)
 
   }
 
-  messageTarget = 528;
+  messageTarget = ETHER_OFFSCREEN_RIGHT;
   rowTargets[1] = -256;
   rowTargets[0] = -256;
   switch (MenuWork.state)
   {
-    case 80:
+    case ETHER_STATE_EQUIP:
       rowTargets[1] = 0;
       messageTarget = 48;
       break;
 
-    case 32:
+    case ETHER_STATE_COMMAND:
 
-    case 112:
+    case ETHER_STATE_EPTS_LIST:
 
-    case 114:
+    case ETHER_STATE_EPTS_ACTION:
 
-    case 116:
+    case ETHER_STATE_EVOLVE_SLOT:
 
-    case 118:
+    case ETHER_STATE_EVOLVE_CONFIRM:
 
-    case 120:
+    case ETHER_STATE_EVOLVE_DONE:
 
-    case 128:
+    case ETHER_STATE_TRANSFER_ENTRY:
 
-    case 130:
+    case ETHER_STATE_TRANSFER_TARGET:
 
-    case 132:
+    case ETHER_STATE_TRANSFER_CONFIRM:
 
-    case 134:
+    case ETHER_STATE_TRANSFER_DONE:
       rowTargets[0] = 0;
       break;
 
@@ -1222,7 +1300,7 @@ void MenuEtherExMain(void)
       renderWork->rows[i].number.x = (screen->rows[i].ribbon.x + renderWork->rows[i].ribbon.width) - 48;
       screen->rows[i].number.digits = 2;
       screen->rows[i].number.format = 3;
-      screen->rows[i].number.value = 0x000C0000 + unit->capUsed;
+      screen->rows[i].number.value = (ETHER_CAP_MAX << 16) + unit->capUsed;
     }
     eNumberMain(&renderWork->rows[i].number);
   }
@@ -1230,22 +1308,22 @@ void MenuEtherExMain(void)
   equippedSum = 0;
   messageColor = &msg01_4_0036DC30[0][1];
   unit = func_A191C0(MenuWork.chrNo);
-  for (i = 0; i < 12; i++)
+  for (i = 0; i < ETHER_SLOT_COUNT; i++)
   {
     equippedSum += unit->etherId[i];
   }
 
   if (equippedSum == 0)
   {
-    messageColor[2] = 64;
-    messageColor[1] = 64;
-    messageColor[0] = 64;
+    messageColor[2] = ETHER_TINT_DIM;
+    messageColor[1] = ETHER_TINT_DIM;
+    messageColor[0] = ETHER_TINT_DIM;
   }
   else
   {
-    messageColor[2] = -128;
-    messageColor[1] = -128;
-    messageColor[0] = -128;
+    messageColor[2] = ETHER_TINT_BRIGHT;
+    messageColor[1] = ETHER_TINT_BRIGHT;
+    messageColor[0] = ETHER_TINT_BRIGHT;
   }
   MoveSlide(&screen->message.x, &messageTarget, 3.0f);
   eMessageMain(&screen->message);
@@ -1263,23 +1341,23 @@ void MenuEtherL1R1Main(void) {
     int i;
 
     switch (self->state) {
-    case 0:
+    case ETHER_BLOCK_INIT:
         spriteIds = etherL1R1SpriteTable[0];
-        self->spriteWork = 0x00FFFFFF;
+        self->spriteWork = ETHER_STYLE_SPRITE;
         for (i = 0; i < 2; i++) {
             eSpriteSet(&self->sprite[i], spriteIds.id[i]);
             self->sprite[i].work = self->spriteWork;
             self->sprite[i].y = 214;
         }
         self->sprite[0].x = -45;
-        self->sprite[1].x = 528;
+        self->sprite[1].x = ETHER_OFFSCREEN_RIGHT;
         slideOffset = self->slideOffset;
         self->slideOffset[1] = 0;
         self->slideOffset[0] = 0;
-        i = 2;
+        i = ETHER_BLOCK_RUN;
         self->state = i;
         break;
-    case 2:
+    case ETHER_BLOCK_RUN:
         slideOffset = self->slideOffset;
         break;
     default:
@@ -1291,14 +1369,14 @@ void MenuEtherL1R1Main(void) {
         int menuState = MenuWork.state;
 
         target[0] = -45;
-        target[1] = 528;
-        if (menuState == 32) {
+        target[1] = ETHER_OFFSCREEN_RIGHT;
+        if (menuState == ETHER_STATE_COMMAND) {
             target[0] = 8;
             target[1] = 475;
             if (PadData.pressed & PAD_L1) {
-                self->slideOffset[0] = -6;
+                self->slideOffset[0] = -ETHER_ARROW_KICK;
             } else if (PadData.pressed & PAD_R1) {
-                self->slideOffset[1] = 6;
+                self->slideOffset[1] = ETHER_ARROW_KICK;
             }
         }
 
@@ -1330,8 +1408,8 @@ void MenuEtherStatusMain(void) {
     int i;
 
     switch (screen->header.state) {
-    case 0:
-        screen->header.color = 0x00F00000;
+    case ETHER_BLOCK_INIT:
+        screen->header.color = ETHER_STYLE_STATUS;
         {
         for (i = 0; i < MenuWork.partyCount; i++) {
             short chrNo = MenuEtherParty[i];
@@ -1345,9 +1423,9 @@ void MenuEtherStatusMain(void) {
             screen->window[i].height = 82;
             screen->window[i].enabled = 1;
             if (PartyAttackerCheck(chrNo)) {
-                screen->window[i].title = MenuTagTextGet(1);
+                screen->window[i].title = MenuTagTextGet(MENU_TAG_COMBATANT);
             } else {
-                screen->window[i].title = MenuTagTextGet(2);
+                screen->window[i].title = MenuTagTextGet(MENU_TAG_RESERVE);
             }
             screen->window[i].callback = (void *)MenuStatusDisp;
             screen->window[i].callbackArg = screen->panel + i;
@@ -1355,15 +1433,15 @@ void MenuEtherStatusMain(void) {
             screen->panel[i].chrNo = chrNo;
             screen->panel[i].enabled = 0;
             screen->panel[i].offsetY = 0;
-            screen->window[i].state = 1;
+            screen->window[i].state = WINDOWDX_STATE_OPEN;
             WindowDXMain((WindowDX *)&screen->window[i]);
-            screen->window[i].state = 3;
+            screen->window[i].state = WINDOWDX_STATE_READY;
         }
         }
         for (i = 0; i < 1; i++) {
             eCursolSet(&screen->cursor[i], 0);
             screen->cursor[i].state = 0;
-            screen->cursor[i].work = 0x00FFFFFF;
+            screen->cursor[i].work = ETHER_STYLE_SPRITE;
         }
         screen->header.active = 0;
         screen->header.collapsed = 0;
@@ -1372,11 +1450,11 @@ void MenuEtherStatusMain(void) {
         {
             unsigned char initialParty = MenuWork.partyCursor;
 
-            screen->header.state = 2;
+            screen->header.state = ETHER_BLOCK_RUN;
             screen->header.previousParty = initialParty;
         }
         /* fall through */
-    case 2:
+    case ETHER_BLOCK_RUN:
     for (i = 0; i < MenuWork.partyCount; i++) {
         targetX[i] = (i & 1) * 816 - 272;
         targetY[i] = (i / 2) * 104 + 64;
@@ -1386,62 +1464,62 @@ void MenuEtherStatusMain(void) {
     }
 
     switch (MenuWork.state) {
-    case 16:
-        if ((unsigned char)(MenuWork.flags & 1)) {
+    case ETHER_STATE_CHARACTER:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
             screen->header.active = 1;
-            screen->cursor[0].state = 32;
+            screen->cursor[0].state = E_MODE_SHOW_START;
             screen->header.verticalFirst = 1;
-            if ((unsigned char)(screen->header.collapsed & 1)) {
+            if ((unsigned char)(screen->header.collapsed & ETHER_STATUS_FLAG_SLID)) {
                 if (i != MenuWork.partyCursor) {
                     screen->window[i].y = 24;
                     screen->window[i].x = (i & 1) * 816 - 272;
                 }
-                screen->header.collapsed &= 0xFE;
+                screen->header.collapsed &= ~ETHER_STATUS_FLAG_SLID;
             }
         }
         for (i = 0; i < MenuWork.partyCount; i++) {
             targetX[i] = (i & 1) * 240 + 16;
         }
         break;
-    case 32:
-    case 48:
-    case 50:
-    case 80:
-    case 112:
-    case 114:
-    case 116:
-    case 118:
-    case 120:
-    case 128:
-    case 130:
-    case 132:
-    case 134:
-        if ((unsigned char)(MenuWork.flags & 1)) {
+    case ETHER_STATE_COMMAND:
+    case ETHER_STATE_USE_LIST:
+    case ETHER_STATE_USE_TARGET:
+    case ETHER_STATE_EQUIP:
+    case ETHER_STATE_EPTS_LIST:
+    case ETHER_STATE_EPTS_ACTION:
+    case ETHER_STATE_EVOLVE_SLOT:
+    case ETHER_STATE_EVOLVE_CONFIRM:
+    case ETHER_STATE_EVOLVE_DONE:
+    case ETHER_STATE_TRANSFER_ENTRY:
+    case ETHER_STATE_TRANSFER_TARGET:
+    case ETHER_STATE_TRANSFER_CONFIRM:
+    case ETHER_STATE_TRANSFER_DONE:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
             switch (MenuWork.state) {
-            case 32:
+            case ETHER_STATE_COMMAND:
                 screen->cursor[0].state = 0;
                 screen->header.previousParty = MenuWork.partyCursor;
                 /* The character selection also refreshes the attacker tags. */
-            case 112:
-            case 114:
+            case ETHER_STATE_EPTS_LIST:
+            case ETHER_STATE_EPTS_ACTION:
                 for (i = 0; i < MenuWork.partyCount; i++) {
                     short chrNo = MenuEtherParty[i];
                     PartyAttackerCheck(chrNo);
                     if (PartyAttackerCheck(chrNo) != 0) {
-                        screen->window[i].renderTitle = MenuTagTextGet(1);
+                        screen->window[i].renderTitle = MenuTagTextGet(MENU_TAG_COMBATANT);
                     } else {
-                        screen->window[i].renderTitle = MenuTagTextGet(2);
+                        screen->window[i].renderTitle = MenuTagTextGet(MENU_TAG_RESERVE);
                     }
                 }
                 break;
-            case 48:
+            case ETHER_STATE_USE_LIST:
                 for (i = 0; i < MenuWork.partyCount; i++) {
-                    screen->window[i].renderTitle = MenuTagTextGet(5);
+                    screen->window[i].renderTitle = MenuTagTextGet(MENU_TAG_USER);
                 }
                 break;
-            case 130:
+            case ETHER_STATE_TRANSFER_TARGET:
                 for (i = 0; i < MenuWork.partyCount; i++) {
-                    screen->window[i].renderTitle = MenuTagTextGet(6);
+                    screen->window[i].renderTitle = MenuTagTextGet(MENU_TAG_FROM);
                 }
                 break;
             }
@@ -1451,7 +1529,7 @@ void MenuEtherStatusMain(void) {
             screen->window[MenuWork.partyCursor].y = 32;
             screen->header.previousParty = MenuWork.partyCursor;
         }
-        if ((unsigned char)(screen->header.collapsed & 1)) {
+        if ((unsigned char)(screen->header.collapsed & ETHER_STATUS_FLAG_SLID)) {
             for (i = 0; i < MenuWork.partyCount; i++) {
                 if (i == MenuWork.partyCursor) {
                     targetX[i] = 264;
@@ -1469,7 +1547,7 @@ void MenuEtherStatusMain(void) {
                 }
             }
             if (targetY[MenuWork.partyCursor] == screen->window[MenuWork.partyCursor].y) {
-                screen->header.collapsed |= 1;
+                screen->header.collapsed |= ETHER_STATUS_FLAG_SLID;
             }
         }
         screen->header.active = 0;
@@ -1495,9 +1573,9 @@ void MenuEtherStatusMain(void) {
             }
         }
         if (i == MenuWork.partyCursor) {
-            screen->window[i].color = 0x00F07F00;
+            screen->window[i].color = ETHER_STYLE_STATUS_SELECTED;
         } else {
-            screen->window[i].color = 0x00F07E00;
+            screen->window[i].color = ETHER_STYLE_STATUS_IDLE;
         }
         WindowDXMain((WindowDX *)&screen->window[i]);
     }
@@ -1505,7 +1583,7 @@ void MenuEtherStatusMain(void) {
     {
         signed char yParty = MenuWork.partyCursor;
 
-        screen->cursor[0].work = 0x00FFFFFF;
+        screen->cursor[0].work = ETHER_STYLE_SPRITE;
         screen->cursor[0].y = screen->window[yParty].y + screen->window[yParty].height / 2 - 4;
     }
     eCursolMain(&screen->cursor[0]);
@@ -1518,12 +1596,12 @@ void MenuEtherStatusMain2(void)
     EtherTargetStatusWork *screen = MenuEtherStatus2;
     int i;
 
-    if (MenuWork.state == 255) {
+    if (MenuWork.state == ETHER_STATE_EXIT) {
         return;
     }
     switch (screen->state) {
-    case 0:
-        screen->color = 0x00FFF000;
+    case ETHER_BLOCK_INIT:
+        screen->color = ETHER_STYLE_TARGET;
         for (i = 0; i < MenuWork.partyCount; i++) {
             WindowDXSet((WindowDX *)&screen->window[i]);
             screen->window[i].x = -272;
@@ -1532,24 +1610,24 @@ void MenuEtherStatusMain2(void)
             screen->window[i].color = screen->color;
             screen->window[i].y = i * 104 + 64;
             screen->window[i].enabled = 1;
-            screen->window[i].title = MenuTagTextGet(7);
+            screen->window[i].title = MenuTagTextGet(MENU_TAG_TARGET);
             screen->window[i].callback =
                 MenuStatusDisp;
             screen->window[i].callbackArg = &screen->panel[i];
             screen->panel[i].chrNo = MenuEtherParty[i];
             screen->panel[i].x = 0;
             screen->panel[i].y = 0;
-            screen->window[i].state = 1;
+            screen->window[i].state = WINDOWDX_STATE_OPEN;
             WindowDXMain((WindowDX *)&screen->window[i]);
-            screen->window[i].state = 3;
+            screen->window[i].state = WINDOWDX_STATE_READY;
         }
         for (i = 0; i < 3; i++) {
             eCursolSet(&screen->cursor[i], i);
-            screen->cursor[i].state = 32;
+            screen->cursor[i].state = E_MODE_SHOW_START;
             screen->cursor[i].work = screen->color + 16;
         }
         for (i = 0; i < 2; i++) {
-            screen->frame[0][i].kind = 0x00FFFFFF;
+            screen->frame[0][i].kind = ETHER_STYLE_SPRITE;
             screen->frame[1][i].kind = 0;
         }
         screen->scrollOffset = 0;
@@ -1557,7 +1635,7 @@ void MenuEtherStatusMain2(void)
         {
             unsigned char initialTargetCursor = MenuWork.targetCursor;
 
-            screen->state = 2;
+            screen->state = ETHER_BLOCK_RUN;
             screen->previousCursor = initialTargetCursor;
         }
         screen->targetInitialized = 0;
@@ -1568,7 +1646,7 @@ void MenuEtherStatusMain2(void)
         screen->visibleCount = 0;
         screen->active = 0;
         break;
-    case 2:
+    case ETHER_BLOCK_RUN:
         break;
     default:
         return;
@@ -1583,21 +1661,21 @@ void MenuEtherStatusMain2(void)
             targetY[i] = i * 104 + 64;
         }
         switch (MenuWork.state) {
-        case 48:
+        case ETHER_STATE_USE_LIST:
             screen->active = 1;
             screen->drawFrame = 1;
             screen->visibleCount = MenuWork.partyCount;
             /* fall through */
-        case 50:
-            if (MenuWork.flags & 1) {
+        case ETHER_STATE_USE_TARGET:
+            if (MenuWork.flags & MENU_FLAG_ENTER) {
                 for (i = 0; i < MenuWork.partyCount; i++) {
                     screen->panel[i].chrNo = MenuEtherParty[i];
-                    screen->window[i].renderTitle = MenuTagTextGet(7);
+                    screen->window[i].renderTitle = MenuTagTextGet(MENU_TAG_TARGET);
                 }
-                if (MenuWork.state == 48) {
+                if (MenuWork.state == ETHER_STATE_USE_LIST) {
                     screen->cursor[0].state = 0;
                 } else {
-                    screen->cursor[0].state = 32;
+                    screen->cursor[0].state = E_MODE_SHOW_START;
                 }
                 {
                     int viewportWidth = 256;
@@ -1619,14 +1697,14 @@ void MenuEtherStatusMain2(void)
                 if (MenuWork.targetCursor < screen->previousCursor) {
                     if (screen->visibleRow == 0) {
                         screen->scrollOffset--;
-                        MenuWork.wait = 32;
+                        MenuWork.wait = ETHER_WAIT_SCROLL;
                     } else {
                         screen->visibleRow--;
                     }
                 } else {
                     if (screen->visibleRow == 2) {
                         screen->scrollOffset++;
-                        MenuWork.wait = 32;
+                        MenuWork.wait = ETHER_WAIT_SCROLL;
                     } else {
                         screen->visibleRow++;
                     }
@@ -1641,14 +1719,14 @@ void MenuEtherStatusMain2(void)
                 screen->listMode = 1;
             }
             if (screen->window[MenuWork.targetCursor].y == targetY[MenuWork.targetCursor]) {
-                if (MenuWork.state == 50 && screen->cursor[0].state == 0) {
-                    screen->cursor[0].state = 32;
+                if (MenuWork.state == ETHER_STATE_USE_TARGET && screen->cursor[0].state == 0) {
+                    screen->cursor[0].state = E_MODE_SHOW_START;
                 }
                 MenuWork.wait = 0;
             }
             break;
-        case 130:
-            if (MenuWork.flags & 1) {
+        case ETHER_STATE_TRANSFER_TARGET:
+            if (MenuWork.flags & MENU_FLAG_ENTER) {
                 unsigned char targetsInitialized = screen->targetInitialized;
 
                 screen->drawFrame = 1;
@@ -1657,11 +1735,11 @@ void MenuEtherStatusMain2(void)
                 if (targetsInitialized == 0) {
                     for (i = 0; i < MenuWork.targetCount; i++) {
                         screen->panel[i].chrNo = MenuEtherParty[MenuWork.targetList[i]];
-                        screen->window[i].renderTitle = MenuTagTextGet(8);
+                        screen->window[i].renderTitle = MenuTagTextGet(MENU_TAG_TO);
                         screen->window[i].x = -272;
                         screen->window[i].y = i * 100 + 96;
                     }
-                    screen->cursor[0].state = 32;
+                    screen->cursor[0].state = E_MODE_SHOW_START;
                     {
                         unsigned char targetCursor = MenuWork.targetCursor;
 
@@ -1682,14 +1760,14 @@ void MenuEtherStatusMain2(void)
                 if (MenuWork.targetCursor < screen->previousCursor) {
                     if (screen->visibleRow == 0) {
                         screen->scrollOffset--;
-                        MenuWork.wait = 32;
+                        MenuWork.wait = ETHER_WAIT_SCROLL;
                     } else {
                         screen->visibleRow--;
                     }
                 } else {
                     if (screen->visibleRow == 2) {
                         screen->scrollOffset++;
-                        MenuWork.wait = 32;
+                        MenuWork.wait = ETHER_WAIT_SCROLL;
                     } else {
                         screen->visibleRow++;
                     }
@@ -1704,15 +1782,15 @@ void MenuEtherStatusMain2(void)
                 screen->listMode = 2;
             }
             if (screen->window[MenuWork.targetCursor].y == targetY[MenuWork.targetCursor]) {
-                eCursolModeChange(&screen->cursor[0], 32);
+                eCursolModeChange(&screen->cursor[0], E_MODE_SHOW_START);
                 MenuWork.wait = 0;
             }
             break;
-        case 132:
+        case ETHER_STATE_TRANSFER_CONFIRM:
             screen->listMode = 0;
             screen->drawFrame = 1;
             /* fall through */
-        case 134:
+        case ETHER_STATE_TRANSFER_DONE:
             for (i = 0; i < MenuWork.partyCount; i++) {
                 targetY[i] = (i - screen->scrollOffset) * 100 + 96;
             }
@@ -1735,7 +1813,7 @@ void MenuEtherStatusMain2(void)
         }
         if (screen->drawFrame != 0) {
             for (i = 0; i < 2; i++) {
-                endPrintExtFunc(screen->color, 12, &screen->frame[0][i]);
+                endPrintExtFunc(screen->color, END_PRINT_CMD_Z_SCISSOR,&screen->frame[0][i]);
             }
             screen->scrollBar.width = 256;
             screen->scrollBar.y = 48;
@@ -1744,7 +1822,7 @@ void MenuEtherStatusMain2(void)
                 screen->scrollBar.y = 80;
             }
             screen->scrollBar.height = 354 - screen->scrollBar.y;
-            endPrintExtFunc(screen->color, 101, &screen->scrollBar);
+            endPrintExtFunc(screen->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&screen->scrollBar);
         }
         for (i = 0; i < screen->visibleCount; i++) {
             short *xTarget = &targetX[i];
@@ -1761,7 +1839,7 @@ void MenuEtherStatusMain2(void)
                 }
             }
         }
-        if (MenuWork.useType == 1 || MenuWork.useType == 3 || MenuWork.state == 130) {
+        if (MenuWork.useType == ETHER_USE_SINGLE || MenuWork.useType == ETHER_USE_SELF || MenuWork.state == ETHER_STATE_TRANSFER_TARGET) {
             screen->cursor[0].x = screen->window[MenuWork.targetCursor].x + 3;
             screen->cursor[0].y = screen->window[MenuWork.targetCursor].y +
                                 screen->window[MenuWork.targetCursor].height / 2 - 4;
@@ -1786,7 +1864,7 @@ void MenuEtherStatusMain2(void)
                     eCursolMain(&screen->cursor[2]);
                 }
             }
-        } else if (MenuWork.useType == 2) {
+        } else if (MenuWork.useType == ETHER_USE_PARTY) {
             int count = MenuWork.partyCount;
             if (count >= 4) {
                 count = 3;
@@ -1812,9 +1890,9 @@ void MenuEtherStatusMain2(void)
                 screen->frame[1][i].y = screen->frame[0][i].y;
                 screen->frame[1][i].height = screen->frame[0][i].height;
                 nextFrame++;
-                endPrintExtFunc(screen->color, 12, callFrame);
+                endPrintExtFunc(screen->color, END_PRINT_CMD_Z_SCISSOR,callFrame);
             }
-            endPrintExtFunc(screen->color, 102, 0);
+            endPrintExtFunc(screen->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
         }
     }
 }
@@ -1839,47 +1917,47 @@ void MenuEtherListMain(void)
     int i;
 
     switch (screen->state) {
-    case 0:
-        screen->work = 0x00FFFFF8;
+    case ETHER_BLOCK_INIT:
+        screen->work = ETHER_STYLE_LIST;
         for (i = 0; i < 2; i++) {
             screen->window[i].style = screen->work;
             screen->window[i].items = 0;
-            screen->window[i].x = 528;
+            screen->window[i].x = ETHER_OFFSCREEN_RIGHT;
             screen->window[i].y = 64;
             WindowSPSet(&screen->window[i]);
         }
         for (i = 0; i < 8; i++) {
             eSpriteSet(&screen->sprite[i], 1546);
-            screen->sprite[i].work = 0x00FFFFFF;
+            screen->sprite[i].work = ETHER_STYLE_SPRITE;
         }
         for (i = 0; i < 8; i++) {
             eNumberSet(&screen->number[i], 0);
-            screen->number[i].work = 0x00FFFFFA;
+            screen->number[i].work = ETHER_STYLE_NUMBER;
         }
         screen->configured = 0;
-        screen->state = 2;
+        screen->state = ETHER_BLOCK_RUN;
         screen->acquireLayout = 0;
         screen->showNumbers = 0;
         break;
-    case 2:
+    case ETHER_BLOCK_RUN:
         break;
     default:
         return;
     }
 
     if (screen->acquireLayout == 0) {
-        targetX[0] = 528;
+        targetX[0] = ETHER_OFFSCREEN_RIGHT;
         targetX[1] = -262;
     } else {
         targetX[1] = -262;
         targetX[0] = -262;
     }
     switch (MenuWork.state) {
-    case 48:
-        if ((MenuWork.flags & 1) && screen->configured == 0) {
+    case ETHER_STATE_USE_LIST:
+        if ((MenuWork.flags & MENU_FLAG_ENTER) && screen->configured == 0) {
             WindowSPCursor *window = &screen->window[0];
 
-            screen->window[0].x = 528;
+            screen->window[0].x = ETHER_OFFSCREEN_RIGHT;
             screen->window[0].y = 144;
             screen->window[0].height = 222;
             screen->window[0].rows = 9;
@@ -1897,14 +1975,14 @@ void MenuEtherListMain(void)
             screen->showNumbers = 0;
         }
         /* fall through */
-    case 50:
+    case ETHER_STATE_USE_TARGET:
         targetX[0] = 272;
         break;
-    case 80:
-        if (MenuWork.flags & 1) {
+    case ETHER_STATE_EQUIP:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             WindowSPCursor *window = &screen->window[0];
 
-            screen->window[0].x = 528;
+            screen->window[0].x = ETHER_OFFSCREEN_RIGHT;
             screen->window[0].y = 160;
             screen->window[0].height = 198;
             screen->window[0].rows = 8;
@@ -1914,7 +1992,7 @@ void MenuEtherListMain(void)
             screen->window[0].items = MenuListGet(0);
             screen->window[0].draw_flags = 3;
             WindowSPItemChange(window);
-            WindowSPSetSelect(window, &MenuKeepSelect[5]);
+            WindowSPSetSelect(window, &MenuKeepSelect[ETHER_KEEP_SLOT_SIZE]);
             screen->window[0].state = 17;
             WindowSPMain(window);
             screen->acquireLayout = 0;
@@ -1922,8 +2000,8 @@ void MenuEtherListMain(void)
         }
         targetX[0] = 16;
         break;
-    case 112:
-        if ((MenuWork.flags & 1) && screen->configured == 0) {
+    case ETHER_STATE_EPTS_LIST:
+        if ((MenuWork.flags & MENU_FLAG_ENTER) && screen->configured == 0) {
             WindowSPCursor *window = &screen->window[0];
 
             screen->window[0].x = -262;
@@ -1936,7 +2014,7 @@ void MenuEtherListMain(void)
             screen->window[0].items = MenuListGet(0);
             screen->window[0].draw_flags = 7;
             WindowSPItemChange(window);
-            WindowSPSetSelect(window, &MenuKeepSelect[10]);
+            WindowSPSetSelect(window, &MenuKeepSelect[2 * ETHER_KEEP_SLOT_SIZE]);
             screen->window[0].mode = 4;
             screen->window[0].state = 17;
             WindowSPMain(window);
@@ -1945,15 +2023,15 @@ void MenuEtherListMain(void)
             screen->acquireLayout = 1;
         }
         /* fall through */
-    case 114:
-    case 116:
-    case 118:
-    case 120:
-    case 128:
+    case ETHER_STATE_EPTS_ACTION:
+    case ETHER_STATE_EVOLVE_SLOT:
+    case ETHER_STATE_EVOLVE_CONFIRM:
+    case ETHER_STATE_EVOLVE_DONE:
+    case ETHER_STATE_TRANSFER_ENTRY:
         targetX[0] = 10;
         break;
-    case 132: {
-        unsigned char initializeList = MenuWork.flags & 1;
+    case ETHER_STATE_TRANSFER_CONFIRM: {
+        unsigned char initializeList = MenuWork.flags & MENU_FLAG_ENTER;
 
         if (initializeList) {
             WindowSPCursor *window = &screen->window[1];
@@ -1991,7 +2069,7 @@ void MenuEtherListMain(void)
         }
     }
         /* fall through */
-    case 134:
+    case ETHER_STATE_TRANSFER_DONE:
         targetX[1] = 10;
         break;
     default:
@@ -2014,7 +2092,7 @@ void MenuEtherListMain(void)
                     screen->sprite[iconIndex].x =
                         (screen->window[0].x + screen->window[0].width) - 39;
                     screen->sprite[iconIndex].y =
-                        (screen->window[0].y + displayRow * 24) + 3;
+                        (screen->window[0].y + displayRow * ETHER_ROW_HEIGHT) + 3;
                     eSpriteMain(&screen->sprite[iconIndex]);
                     iconIndex++;
                 }
@@ -2025,7 +2103,7 @@ void MenuEtherListMain(void)
 
                     screen->number[displayRow].digits = 2;
                     screen->number[displayRow].format = 0;
-                    screen->number[displayRow].y = (numberWindowY + displayRow * 24) + 7;
+                    screen->number[displayRow].y = (numberWindowY + displayRow * ETHER_ROW_HEIGHT) + 7;
                 }
                 screen->number[displayRow].value = screen->window[0].items[row].amount;
                 eNumberMain(&screen->number[displayRow]);
@@ -2047,8 +2125,8 @@ void MenuEtherListMain2(void) {
     int i;
 
     switch (screen->state) {
-    case 0:
-        screen->work = 0x00FFFFF8;
+    case ETHER_BLOCK_INIT:
+        screen->work = ETHER_STYLE_LIST;
         window = &screen->window;
         WindowDXSet(window);
         screen->window.x = -240;
@@ -2057,12 +2135,12 @@ void MenuEtherListMain2(void) {
         screen->window.height = 78;
         screen->window.style = screen->work;
         screen->window.tag_id = etherResultTitleText;
-        screen->window.state = 1;
+        screen->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&screen->window);
-        screen->window.state = 3;
+        screen->window.state = WINDOWDX_STATE_READY;
         for (i = 0; i < 3; i++) {
             eMessageSet(&screen->messages[i], 0);
-            screen->messages[i].mode = 32;
+            screen->messages[i].mode = E_MODE_SHOW_START;
             screen->messages[i].draw_parameter = screen->work + 2;
         }
         for (i = 0; i < 3; i++) {
@@ -2075,10 +2153,10 @@ void MenuEtherListMain2(void) {
         eCursolSet(&screen->cursor, 0);
         screen->cursor.state = 0;
         screen->rightPanel = 0;
-        screen->state = 2;
+        screen->state = ETHER_BLOCK_RUN;
         screen->cursor.work = screen->work + 2;
         break;
-    case 2:
+    case ETHER_BLOCK_RUN:
         window = &screen->window;
         break;
     default:
@@ -2089,14 +2167,14 @@ void MenuEtherListMain2(void) {
         targetX = -243;
         targetY = 288;
     } else {
-        targetX = 528;
+        targetX = ETHER_OFFSCREEN_RIGHT;
         targetY = 144;
     }
     switch (MenuWork.state) {
-    case 116:
-        if ((unsigned char)(MenuWork.flags & 1)) {
+    case ETHER_STATE_EVOLVE_SLOT:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
             unsigned char *slotEthers;
-            screen->cursor.state = 32;
+            screen->cursor.state = E_MODE_SHOW_START;
             screen->window.x = -240;
             screen->window.y = 288;
             screen->window.height = 78;
@@ -2108,9 +2186,9 @@ void MenuEtherListMain2(void) {
                     screen->messages[i].text = func_A2C5A8(slotEthers[i])->name;
                     screen->numbers[i].value = func_A1A488(slotEthers[i])->pointCost;
                     if (func_A19578(MenuWork.chrNo, slotEthers[i]) != 0) {
-                        screen->messages[i].color_b = 64;
-                        screen->messages[i].color_g = 64;
-                        screen->messages[i].color_r = 64;
+                        screen->messages[i].color_b = ETHER_TINT_DIM;
+                        screen->messages[i].color_g = ETHER_TINT_DIM;
+                        screen->messages[i].color_r = ETHER_TINT_DIM;
                     } else {
                         screen->messages[i].color_b = 0x80;
                         screen->messages[i].color_g = 0x80;
@@ -2122,20 +2200,20 @@ void MenuEtherListMain2(void) {
                 }
             }
         }
-    case 118:
+    case ETHER_STATE_EVOLVE_CONFIRM:
         targetX = 71;
         break;
-    case 130:
-        if ((unsigned char)(MenuWork.flags & 1)) {
+    case ETHER_STATE_TRANSFER_TARGET:
+        if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
             screen->rightPanel = 1;
-            screen->window.x = 528;
+            screen->window.x = ETHER_OFFSCREEN_RIGHT;
             screen->window.y = 144;
             screen->window.height = 30;
             screen->window.title_font.render.text =etherTransferRenderTitle;
             {
                 EtherTextEntry *entry;
                 int next;
-                signed char normalShade = -128;
+                signed char normalShade = ETHER_TINT_BRIGHT;
                 int *firstValue = &screen->numbers[0].value;
 
                 i = 0;
@@ -2152,8 +2230,8 @@ void MenuEtherListMain2(void) {
                 }
             }
         }
-    case 132:
-    case 134:
+    case ETHER_STATE_TRANSFER_CONFIRM:
+    case ETHER_STATE_TRANSFER_DONE:
         targetX = 272;
         targetY = 144;
         break;
@@ -2169,11 +2247,11 @@ void MenuEtherListMain2(void) {
     WindowDXMain(window);
     for (i = 0; i < 3; i++) {
         screen->messages[i].x = screen->window.x + 19;
-        screen->messages[i].y = screen->window.y + 24 * i + 3;
+        screen->messages[i].y = screen->window.y + ETHER_ROW_HEIGHT * i + 3;
         eMessageMain(&screen->messages[i]);
     }
     screen->cursor.x = screen->window.x + 3;
-    screen->cursor.y = screen->window.y + MenuWork.slotCursor * 24 + 7;
+    screen->cursor.y = screen->window.y + MenuWork.slotCursor * ETHER_ROW_HEIGHT + 7;
     eCursolMain(&screen->cursor);
 }
 
@@ -2191,14 +2269,14 @@ void MenuEtherListMake00(void) {
         rows[i].amount = func_00A11220(MenuWork.chrNo, (short)sortRow[i]);
         if (unit->ep >= rows[i].amount) {
             rows[i].flag = 0;
-            rows[i].status = 0;
+            rows[i].status = ETHER_USE_ROW_OK;
         } else {
             rows[i].flag = 1;
-            rows[i].status = 1;
+            rows[i].status = ETHER_USE_ROW_EP_SHORT;
         }
-        if (MenuEtherUseCheck((short)sortRow[i]) == 0) {
+        if (MenuEtherUseCheck((short)sortRow[i]) == ETHER_USE_NONE) {
             rows[i].flag = 1;
-            rows[i].status = 2;
+            rows[i].status = ETHER_USE_ROW_BATTLE_ONLY;
         }
     }
 }
@@ -2218,17 +2296,17 @@ void MenuEtherListMake01(void) {
         func_A1A378(ether->tecId);
         rows[i].name = MenuTextGet(sortRow[i])->name;
         rows[i].amount = ether->capCost;
-        if (unit->capUsed + rows[i].amount < 13) {
+        if (unit->capUsed + rows[i].amount < ETHER_CAP_MAX + 1) {
             rows[i].flag = 0;
         } else {
             rows[i].flag = 1;
         }
-        for (j = 0; j < 12; j++) {
+        for (j = 0; j < ETHER_SLOT_COUNT; j++) {
             if (unit->etherId[j] == (short)sortRow[i]) {
                 break;
             }
         }
-        if (j != 12) {
+        if (j != ETHER_SLOT_COUNT) {
             rows[i].status = 1;
         } else {
             rows[i].status = 0;
@@ -2271,7 +2349,7 @@ void MenuEtherListMake03(int listIndex) {
     int i;
 
     character->etherMask[maskByte] |= 1 << ((MenuWork.etherId - 1) % 8);
-    MenuSortSet(listIndex, 128, MenuWork.targetChrNo);
+    MenuSortSet(listIndex, ETHER_SORT_KIND, MenuWork.targetChrNo);
     character->etherMask[maskByte] &= ~(1 << ((MenuWork.etherId - 1) % 8));
     MenuListMake(listIndex, 0);
     count = MenuSortCheck(listIndex);
@@ -2295,7 +2373,7 @@ int MenuEtherEquip(void) {
         return 0;
     }
     if (rows[MenuWork.listSelect].status != 0) {
-        for (slot = 0; slot < 12; slot++) {
+        for (slot = 0; slot < ETHER_SLOT_COUNT; slot++) {
             if (unit->etherId[slot] == (short)sortRow[MenuWork.listSelect]) {
                 unit->etherId[slot] = 0;
                 unit->capUsed = unit->capUsed -
@@ -2310,7 +2388,7 @@ int MenuEtherEquip(void) {
         {
             short *slotId;
             slotId = unit->etherId;
-            for (slot = 0; slot < 12; slot++, slotId++) {
+            for (slot = 0; slot < ETHER_SLOT_COUNT; slot++, slotId++) {
                 if (unit->etherId[slot] == 0) {
                     __builtin_memcpy(slotId, &sortRow[MenuWork.listSelect],
                                      sizeof(unit->etherId[slot]));
@@ -2321,17 +2399,17 @@ int MenuEtherEquip(void) {
             }
         }
     }
-    for (slot = 0; slot < 11; slot++) {
+    for (slot = 0; slot < ETHER_SLOT_COUNT - 1; slot++) {
         if (unit->etherId[slot] == 0) {
             int nextSlot;
-            for (nextSlot = slot + 1; nextSlot < 12; nextSlot++) {
+            for (nextSlot = slot + 1; nextSlot < ETHER_SLOT_COUNT; nextSlot++) {
                 if (unit->etherId[nextSlot] != 0) {
                     unit->etherId[slot] = unit->etherId[nextSlot];
                     unit->etherId[nextSlot] = 0;
                     break;
                 }
             }
-            if (nextSlot == 12) {
+            if (nextSlot == ETHER_SLOT_COUNT) {
                 break;
             }
         }
@@ -2356,39 +2434,39 @@ void MenuEther(void)
         int id;
 
         heap = (int)MainMenuWorkEnd;
-        MenuEtherDataBuf = (unsigned char (*)[4])((heap + 0x7FF) & ~0x7FF);
+        MenuEtherDataBuf = (unsigned char (*)[4])((heap + (ETHER_ALIGN - 1)) & ~(ETHER_ALIGN - 1));
         xglCdReadFile(etherTreePath, MenuEtherDataBuf, 0, 1);
         heap = (int)MenuEtherDataBuf + ETHER_DATA_SIZE;
         MenuEtherPas = (EtherPasWork *)heap;
         heap = (int)MenuEtherPas + ETHER_PAS_SIZE;
-        MenuEtherPas->state = 0;
+        MenuEtherPas->state = ETHER_BLOCK_INIT;
         MenuEtherInfo = (EtherInfoWork *)heap;
         heap = (int)MenuEtherInfo + ETHER_INFO_SIZE;
-        MenuEtherInfo->state = 0;
+        MenuEtherInfo->state = ETHER_BLOCK_INIT;
         MenuEtherStatus = (EtherPartyStatusWorkEarly *)heap;
         heap = (int)MenuEtherStatus + ETHER_STATUS_SIZE;
-        MenuEtherStatus->header.state = 0;
+        MenuEtherStatus->header.state = ETHER_BLOCK_INIT;
         MenuEtherStatus2 = (EtherTargetStatusWork *)heap;
         heap = (int)MenuEtherStatus2 + ETHER_STATUS2_SIZE;
-        MenuEtherStatus2->state = 0;
+        MenuEtherStatus2->state = ETHER_BLOCK_INIT;
         MenuEtherMenu = (EtherMenuScreen *)heap;
         heap = (int)MenuEtherMenu + ETHER_MENU_SIZE;
-        MenuEtherMenu->state = 0;
+        MenuEtherMenu->state = ETHER_BLOCK_INIT;
         MenuEtherList = (EtherMenuListsWork *)heap;
         heap = (int)MenuEtherList + ETHER_LIST_SIZE;
-        MenuEtherList->state = 0;
+        MenuEtherList->state = ETHER_BLOCK_INIT;
         MenuEtherList2 = (EtherResultWork *)heap;
         heap = (int)MenuEtherList2 + ETHER_LIST2_SIZE;
-        MenuEtherList2->state = 0;
+        MenuEtherList2->state = ETHER_BLOCK_INIT;
         MenuEtherEx = (EtherDetailWork *)heap;
         heap = (int)MenuEtherEx + ETHER_EX_SIZE;
-        MenuEtherEx->state = 0;
+        MenuEtherEx->state = ETHER_BLOCK_INIT;
         MenuEtherL1R1 = (EtherL1R1Work *)heap;
         heap = (int)MenuEtherL1R1 + ETHER_L1R1_SIZE;
-        MenuEtherL1R1->state = 0;
+        MenuEtherL1R1->state = ETHER_BLOCK_INIT;
         MenuWorkEndCheck(EtherTreeInit(heap, MenuEtherDataBuf));
-        MenuWork.nextState = 0x10;
-        MenuWork.wait = 12;
+        MenuWork.nextState = ETHER_STATE_CHARACTER;
+        MenuWork.wait = ETHER_WAIT_OPEN;
         MenuWork.flags = 0;
         MenuWork.partyCursor = 0;
         MenuWork.partyCount = 0;
@@ -2411,17 +2489,17 @@ void MenuEther(void)
     }
     if (MenuWork.state != MenuWork.nextState) {
         MenuWork.state = MenuWork.nextState;
-        MenuWork.flags |= MENU_STATE_CHANGED;
+        MenuWork.flags |= MENU_FLAG_ENTER;
     } else {
-        MenuWork.flags &= ~MENU_STATE_CHANGED;
+        MenuWork.flags &= ~MENU_FLAG_ENTER;
     }
     if (MenuWork.wait != 0) {
         MenuWork.wait--;
     }
     switch (MenuWork.state) {
     /* Pick the character. */
-    case 0x10:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
+    case ETHER_STATE_CHARACTER:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuWork.commandCursor = 0;
             MenuWork.chrNo = MenuEtherParty[MenuWork.partyCursor];
         }
@@ -2456,8 +2534,8 @@ void MenuEther(void)
             xglSoundEffectNormalID(SE_CURSOR, 0);
         } else if (PadData.pressed & PAD_CIRCLE) {
             if (MenuMainCharCheck(MenuWork.chrNo) != 0) {
-                MenuWork.nextState = 0x20;
-                MenuWork.wait = 24;
+                MenuWork.nextState = ETHER_STATE_COMMAND;
+                MenuWork.wait = ETHER_WAIT_COMMAND;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
                 MenuWork.charDenied = 0;
             } else {
@@ -2465,14 +2543,14 @@ void MenuEther(void)
                 MenuWork.charDenied = 1;
             }
         } else if (PadData.pressed & PAD_CROSS) {
-            MenuWork.nextState = 0xF0;
+            MenuWork.nextState = ETHER_STATE_LEAVE;
             xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
     /* The command menu: use, equip, transfer or back. */
-    case 0x20:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
+    case ETHER_STATE_COMMAND:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuWork.targetCursor = 0;
         }
         if (MenuWork.wait != 0) {
@@ -2514,17 +2592,19 @@ void MenuEther(void)
         {
             int cursor = MenuWork.commandCursor;
 
-            MenuWork.commandCursor = MenuSelectMove(cursor, 4, 0);
+            MenuWork.commandCursor = MenuSelectMove(cursor, ETHER_COMMAND_COUNT, 0);
             if (cursor != MenuWork.commandCursor) {
                 break;
             }
             if (PadData.pressed & PAD_CIRCLE) {
-                unsigned char commandState[4] = { 0x30, 0x50, 0x70, 0x10 };
+                unsigned char commandState[ETHER_COMMAND_COUNT] = {
+                    ETHER_STATE_USE_LIST, ETHER_STATE_EQUIP, ETHER_STATE_EPTS_LIST, ETHER_STATE_CHARACTER
+                };
 
                 MenuWork.nextState = commandState[cursor];
                 MenuWork.targetChrNo = MenuEtherParty[0];
-                MenuWork.wait = 12;
-                if (cursor == 3) {
+                MenuWork.wait = ETHER_WAIT_OPEN;
+                if (cursor == ETHER_COMMAND_CANCEL) {
                     MenuKeepSelectReset();
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 } else {
@@ -2532,8 +2612,8 @@ void MenuEther(void)
                 }
             }
             if (PadData.pressed & PAD_CROSS) {
-                MenuWork.nextState = 0x10;
-                MenuWork.wait = 12;
+                MenuWork.nextState = ETHER_STATE_CHARACTER;
+                MenuWork.wait = ETHER_WAIT_OPEN;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
                 MenuKeepSelectReset();
             }
@@ -2541,9 +2621,9 @@ void MenuEther(void)
         break;
 
     /* Use: pick the ether. */
-    case 0x30:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
-            MenuSortSet(0, 0x80, MenuWork.chrNo + 0x10000);
+    case ETHER_STATE_USE_LIST:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
+            MenuSortSet(0, ETHER_SORT_KIND, MenuWork.chrNo + 0x10000);
             MenuEtherListMake00();
         }
         if (MenuWork.wait != 0) {
@@ -2562,7 +2642,7 @@ void MenuEther(void)
                     etherId = MenuSortGet(0, MenuWork.listSelect);
                     unit = func_A191C0(MenuWork.chrNo);
                     if (func_00A11220(MenuWork.chrNo, etherId) <= unit->ep) {
-                        MenuWork.nextState = 0x32;
+                        MenuWork.nextState = ETHER_STATE_USE_TARGET;
                         xglSoundEffectNormalID(SE_DECIDE, 0);
                     } else {
                         xglSoundEffectNormalID(SE_BUZZER, 0);
@@ -2576,18 +2656,18 @@ void MenuEther(void)
                 MenuWork.commandCursor = 0;
             }
             WindowSPKeepSelectCheck(&MenuKeepSelect[0]);
-            MenuWork.nextState = 0x20;
-            MenuWork.wait = 12;
+            MenuWork.nextState = ETHER_STATE_COMMAND;
+            MenuWork.wait = ETHER_WAIT_OPEN;
             xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
     /* Use: pick who the ether is used on. */
-    case 0x32:
+    case ETHER_STATE_USE_TARGET:
         if (MenuWork.wait != 0) {
             break;
         }
-        if (MenuWork.useType == 1 || MenuWork.useType == 3) {
+        if (MenuWork.useType == ETHER_USE_SINGLE || MenuWork.useType == ETHER_USE_SELF) {
             if (PadData.repeat & PAD_UP) {
                 if (MenuWork.targetCursor != 0) {
                     xglSoundEffectNormalID(SE_CURSOR, 0);
@@ -2609,14 +2689,14 @@ void MenuEther(void)
             short etherId = MenuSortGet(0, MenuWork.listSelect);
             EtherUnitRecord *unit;
 
-            if (MenuWork.useType == 1) {
+            if (MenuWork.useType == ETHER_USE_SINGLE) {
                 if (MenuCharHpCheck(MenuWork.targetChrNo) == 0) {
                     func_00A11270(user, MenuWork.targetChrNo, etherId);
                     xglSoundEffectNormalID(SE_DECIDE, 0);
                 } else {
                     xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
-            } else if (MenuWork.useType == 3) {
+            } else if (MenuWork.useType == ETHER_USE_SELF) {
                 if (MenuWork.chrNo == MenuWork.targetChrNo && MenuCharHpCheck(MenuWork.chrNo) == 0) {
                     func_00A11270(user, MenuWork.targetChrNo, etherId);
                     xglSoundEffectNormalID(SE_DECIDE, 0);
@@ -2638,25 +2718,25 @@ void MenuEther(void)
             unit = func_A191C0(MenuWork.chrNo);
             etherId = MenuSortGet(0, MenuWork.listSelect);
             if (unit->ep < func_A1A378(func_A1A488(etherId)->tecId)->epCost) {
-                MenuWork.nextState = 0x30;
+                MenuWork.nextState = ETHER_STATE_USE_LIST;
             }
             MenuEtherListMake00();
         }
         if (PadData.pressed & PAD_CROSS) {
             xglSoundEffectNormalID(SE_CANCEL, 0);
-            MenuWork.nextState = 0x30;
+            MenuWork.nextState = ETHER_STATE_USE_LIST;
         }
         break;
 
     /* Equip: pick the ether to equip or remove. */
-    case 0x50:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
-            MenuSortSet(0, 0x80, MenuWork.chrNo);
+    case ETHER_STATE_EQUIP:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
+            MenuSortSet(0, ETHER_SORT_KIND, MenuWork.chrNo);
             MenuEtherListMake01();
         }
         if (MenuWork.wait == 0) {
             MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], PadData.repeat);
-            WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[5]);
+            WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[ETHER_KEEP_SLOT_SIZE]);
             if ((PadData.pressed & PAD_SQUARE) && MenuWork.listSelect >= 0) {
                 int start = MenuWork.listSelect + 1;
                 int count = MenuSortCheck(0);
@@ -2681,12 +2761,12 @@ void MenuEther(void)
             }
             if (PadData.pressed & PAD_CROSS) {
                 xglSoundEffectNormalID(SE_CANCEL, 0);
-                MenuWork.nextState = 0x20;
-                MenuWork.wait = 12;
+                MenuWork.nextState = ETHER_STATE_COMMAND;
+                MenuWork.wait = ETHER_WAIT_OPEN;
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.commandCursor = 0;
                 }
-                WindowSPKeepSelectCheck(&MenuKeepSelect[5]);
+                WindowSPKeepSelectCheck(&MenuKeepSelect[ETHER_KEEP_SLOT_SIZE]);
             }
         }
         MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], 0);
@@ -2696,9 +2776,9 @@ void MenuEther(void)
         break;
 
     /* Transfer: pick the ether. */
-    case 0x70:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
-            MenuSortSet(0, 0x80, MenuWork.chrNo);
+    case ETHER_STATE_EPTS_LIST:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
+            MenuSortSet(0, ETHER_SORT_KIND, MenuWork.chrNo);
             MenuEtherListMake02(0);
             MenuWork.menuCursor = 0;
             MenuWork.slotCount = 0;
@@ -2706,7 +2786,7 @@ void MenuEther(void)
         }
         if (MenuWork.wait == 0) {
             MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], PadData.repeat);
-            WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[10]);
+            WindowSPKeepSelect(&MenuEtherList->window[0], &MenuKeepSelect[2 * ETHER_KEEP_SLOT_SIZE]);
             if (MenuWork.listSelect >= 0) {
                 unsigned char *slots = MenuEtherDataGet(MenuSortGet(0, MenuWork.listSelect));
                 int i;
@@ -2724,8 +2804,8 @@ void MenuEther(void)
                     int owner = MenuEtherWhoCheck(MenuWork.etherId);
 
                     if (MenuWork.chrNo == owner) {
-                        MenuWork.nextState = 0x72;
-                        MenuWork.wait = 8;
+                        MenuWork.nextState = ETHER_STATE_EPTS_ACTION;
+                        MenuWork.wait = ETHER_WAIT_CHOICE;
                         xglSoundEffectNormalID(SE_DECIDE, 0);
                     } else {
                         xglSoundEffectNormalID(SE_BUZZER, 0);
@@ -2734,12 +2814,12 @@ void MenuEther(void)
             }
             if (PadData.pressed & PAD_CROSS) {
                 xglSoundEffectNormalID(SE_CANCEL, 0);
-                MenuWork.nextState = 0x20;
-                MenuWork.wait = 12;
+                MenuWork.nextState = ETHER_STATE_COMMAND;
+                MenuWork.wait = ETHER_WAIT_OPEN;
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.commandCursor = 0;
                 }
-                WindowSPKeepSelectCheck(&MenuKeepSelect[10]);
+                WindowSPKeepSelectCheck(&MenuKeepSelect[2 * ETHER_KEEP_SLOT_SIZE]);
             }
         }
         MenuWork.listSelect = WindowSPSelect(&MenuEtherList->window[0], 0);
@@ -2749,38 +2829,38 @@ void MenuEther(void)
         break;
 
     /* Transfer: the command for the ether (slot, give, back). */
-    case 0x72:
+    case ETHER_STATE_EPTS_ACTION:
         if (MenuWork.wait != 0) {
             break;
         }
-        MenuWork.menuCursor = MenuSelectMove(MenuWork.menuCursor, 3, 0);
+        MenuWork.menuCursor = MenuSelectMove(MenuWork.menuCursor, ETHER_ACTION_COUNT, 0);
         if (PadData.pressed & PAD_CIRCLE) {
             short cost = func_A1A488(MenuWork.etherId)->pointCost;
             int points = func_A19210(MenuWork.chrNo)->points;
             int owner = MenuEtherWhoCheck(MenuWork.etherId);
 
             switch (MenuWork.menuCursor) {
-            case 0:
-            case 1:
+            case ETHER_ACTION_EVOLVE:
+            case ETHER_ACTION_TRANSFER:
                 if (MenuWork.chrNo != owner) {
                     xglSoundEffectNormalID(SE_BUZZER, 0);
                 } else {
                     switch (MenuWork.menuCursor) {
-                    case 0:
+                    case ETHER_ACTION_EVOLVE:
                         if (points >= cost && MenuWork.slotCount > 0) {
-                            MenuWork.nextState = 0x74;
-                            MenuWork.wait = 8;
+                            MenuWork.nextState = ETHER_STATE_EVOLVE_SLOT;
+                            MenuWork.wait = ETHER_WAIT_CHOICE;
                             xglSoundEffectNormalID(SE_DECIDE, 0);
                         } else {
                             xglSoundEffectNormalID(SE_BUZZER, 0);
                         }
                         break;
-                    case 1:
+                    case ETHER_ACTION_TRANSFER:
                         if (points >= cost / 2 && MenuEtherJoutoCheck(MenuWork.etherId) != 0
                             && MenuWork.partyCount >= 2) {
-                            MenuWork.nextState = 0x82;
+                            MenuWork.nextState = ETHER_STATE_TRANSFER_TARGET;
                             MenuWork.targetCursor = 0;
-                            MenuWork.wait = 12;
+                            MenuWork.wait = ETHER_WAIT_OPEN;
                             xglSoundEffectNormalID(SE_DECIDE, 0);
                         } else {
                             xglSoundEffectNormalID(SE_BUZZER, 0);
@@ -2789,23 +2869,23 @@ void MenuEther(void)
                     }
                 }
                 break;
-            case 2:
-                MenuWork.nextState = 0x70;
-                MenuWork.wait = 4;
+            case ETHER_ACTION_CANCEL:
+                MenuWork.nextState = ETHER_STATE_EPTS_LIST;
+                MenuWork.wait = ETHER_WAIT_BACK;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
                 break;
             }
         }
         if (PadData.pressed & PAD_CROSS) {
             xglSoundEffectNormalID(SE_CANCEL, 0);
-            MenuWork.nextState = 0x70;
-            MenuWork.wait = 4;
+            MenuWork.nextState = ETHER_STATE_EPTS_LIST;
+            MenuWork.wait = ETHER_WAIT_BACK;
         }
         break;
 
     /* Transfer to a slot: pick the slot. */
-    case 0x74:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
+    case ETHER_STATE_EVOLVE_SLOT:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             unsigned char *slots = MenuEtherDataGet(MenuWork.etherId);
 
             MenuWork.slotEther = slots[0];
@@ -2825,7 +2905,7 @@ void MenuEther(void)
                 short cost = func_A1A488(MenuWork.etherId)->pointCost;
 
                 if (func_A19210(MenuWork.chrNo)->points >= cost) {
-                    MenuWork.nextState = 0x76;
+                    MenuWork.nextState = ETHER_STATE_EVOLVE_CONFIRM;
                     xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             } else {
@@ -2836,20 +2916,20 @@ void MenuEther(void)
             if (MenuCursorKeepCheck() == 0) {
                 MenuWork.menuCursor = 0;
             }
-            MenuWork.nextState = 0x72;
+            MenuWork.nextState = ETHER_STATE_EPTS_ACTION;
             xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
 
     /* Transfer to a slot: confirm. */
-    case 0x76:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
+    case ETHER_STATE_EVOLVE_CONFIRM:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuWork.confirmCursor = 0;
         }
         if (MenuWork.wait != 0) {
             break;
         }
-        MenuWork.confirmCursor = MenuSelectMove(MenuWork.confirmCursor, 2, 0);
+        MenuWork.confirmCursor = MenuSelectMove(MenuWork.confirmCursor, ETHER_CONFIRM_CHOICE_COUNT, 0);
         if (PadData.pressed & PAD_CIRCLE) {
             if (MenuWork.confirmCursor == 0) {
                 EtherCharRecord *character;
@@ -2857,32 +2937,32 @@ void MenuEther(void)
                 func_A194E0(MenuWork.chrNo, MenuEtherDataGet(MenuWork.etherId)[MenuWork.slotCursor]);
                 character = func_A19210(MenuWork.chrNo);
                 character->points -= func_A1A488(MenuWork.etherId)->pointCost;
-                MenuSortSet(0, 0x80, MenuWork.chrNo);
+                MenuSortSet(0, ETHER_SORT_KIND, MenuWork.chrNo);
                 MenuEtherListMake02(0);
                 WindowSPItemChange(&MenuEtherList->window[0]);
                 MenuEtherList->window[0].mode = 4;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
-                MenuWork.nextState = 0x78;
+                MenuWork.nextState = ETHER_STATE_EVOLVE_DONE;
             } else {
                 xglSoundEffectNormalID(SE_CANCEL, 0);
-                MenuWork.nextState = 0x74;
+                MenuWork.nextState = ETHER_STATE_EVOLVE_SLOT;
             }
         }
         if (PadData.pressed & PAD_CROSS) {
             xglSoundEffectNormalID(SE_CANCEL, 0);
-            MenuWork.nextState = 0x74;
+            MenuWork.nextState = ETHER_STATE_EVOLVE_SLOT;
         }
         break;
 
-    case 0x78:
+    case ETHER_STATE_EVOLVE_DONE:
         if (MenuWork.wait == 0 && (PadData.pressed & PAD_CIRCLE)) {
-            MenuWork.nextState = 0x70;
+            MenuWork.nextState = ETHER_STATE_EPTS_LIST;
         }
         break;
 
     /* Give to a party member: pick who. */
-    case 0x82:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
+    case ETHER_STATE_TRANSFER_TARGET:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             unsigned char *target = MenuWork.targetList;
             int i;
 
@@ -2908,8 +2988,8 @@ void MenuEther(void)
         MenuWork.targetChrNo = MenuEtherParty[MenuWork.targetList[MenuWork.targetCursor]];
         if (PadData.pressed & PAD_CIRCLE) {
             if (func_A19578(MenuWork.targetChrNo, MenuWork.etherId) == 0) {
-                MenuWork.nextState = 0x84;
-                MenuWork.wait = 8;
+                MenuWork.nextState = ETHER_STATE_TRANSFER_CONFIRM;
+                MenuWork.wait = ETHER_WAIT_CHOICE;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
             } else {
                 xglSoundEffectNormalID(SE_BUZZER, 0);
@@ -2920,20 +3000,20 @@ void MenuEther(void)
                 MenuWork.menuCursor = 0;
             }
             xglSoundEffectNormalID(SE_CANCEL, 0);
-            MenuWork.nextState = 0x72;
+            MenuWork.nextState = ETHER_STATE_EPTS_ACTION;
         }
         break;
 
     /* Give to a party member: confirm. */
-    case 0x84:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
+    case ETHER_STATE_TRANSFER_CONFIRM:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuEtherListMake03(1);
             MenuWork.confirmCursor = 0;
         }
         if (MenuWork.wait != 0) {
             break;
         }
-        MenuWork.confirmCursor = MenuSelectMove(MenuWork.confirmCursor, 2, 0);
+        MenuWork.confirmCursor = MenuSelectMove(MenuWork.confirmCursor, ETHER_CONFIRM_CHOICE_COUNT, 0);
         if (PadData.pressed & PAD_CIRCLE) {
             if (MenuWork.confirmCursor == 0) {
                 EtherCharRecord *character;
@@ -2950,36 +3030,36 @@ void MenuEther(void)
                     rows[i].flag = 0;
                 }
                 xglSoundEffectNormalID(SE_DECIDE, 0);
-                MenuWork.nextState = 0x86;
+                MenuWork.nextState = ETHER_STATE_TRANSFER_DONE;
             } else {
                 xglSoundEffectNormalID(SE_CANCEL, 0);
-                MenuWork.nextState = 0x82;
+                MenuWork.nextState = ETHER_STATE_TRANSFER_TARGET;
             }
         }
         if (PadData.pressed & PAD_CROSS) {
             xglSoundEffectNormalID(SE_CANCEL, 0);
-            MenuWork.nextState = 0x82;
+            MenuWork.nextState = ETHER_STATE_TRANSFER_TARGET;
         }
         break;
 
-    case 0x86:
+    case ETHER_STATE_TRANSFER_DONE:
         if (MenuWork.wait == 0 && (PadData.pressed & PAD_CIRCLE)) {
-            MenuWork.nextState = 0x70;
-            MenuWork.wait = 12;
+            MenuWork.nextState = ETHER_STATE_EPTS_LIST;
+            MenuWork.wait = ETHER_WAIT_OPEN;
         }
         break;
 
     /* Leave the menu. */
-    case 0xF0:
-        if (MenuWork.flags & MENU_STATE_CHANGED) {
-            MenuWork.wait = 16;
+    case ETHER_STATE_LEAVE:
+        if (MenuWork.flags & MENU_FLAG_ENTER) {
+            MenuWork.wait = ETHER_WAIT_LEAVE;
         }
         if (MenuWork.wait == 0) {
-            MenuWork.nextState = 0xFF;
+            MenuWork.nextState = ETHER_STATE_EXIT;
         }
         break;
 
-    case 0xFF:
+    case ETHER_STATE_EXIT:
         ChangeTopLevel(0);
         break;
     }

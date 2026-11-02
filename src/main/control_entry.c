@@ -12,6 +12,20 @@
  * and SWD bank name ControlEntry loads before the boot logo. Still owned by
  * asm data.
  */
+/* Overlay index of the boot logo / title screen (ov02). */
+#define OVERLAY_TITLE 2
+
+/* The title screen returns the chosen screen's entry address in the low 24
+ * bits and the overlay index to load in the top byte. */
+#define TITLE_ENTRY_MASK 0x00ffffff
+#define TITLE_OVERLAY_SHIFT 24
+
+/* First address of the work heap WorkEnd tracks. */
+#define WORK_HEAP_START 0xA80000
+
+/* sceCdMmode media: DVD. */
+#define SCECdDVD 2
+
 extern char soundEffectBankName[];
 extern char sio2manModuleName[];
 extern char mcmanModuleName[];
@@ -113,20 +127,20 @@ void ControlEntry(void)
     while (SsdSpuDmaCompleted(0) != 0) {
     }
     xglRenderDispOn();
-    xglCdLoadOverlay(2);
+    xglCdLoadOverlay(OVERLAY_TITLE);
     LogoFirst();
 
     for (;;) {
-        xglCdLoadOverlay(2);
+        xglCdLoadOverlay(OVERLAY_TITLE);
         selection = Title();
         if (selection == 0) {
             continue;
         }
-        entry = (int (*)(void))(selection & 0x00ffffff);
+        entry = (int (*)(void))(selection & TITLE_ENTRY_MASK);
         if (entry == Title) {
             continue;
         }
-        xglCdLoadOverlay(selection >> 24);
+        xglCdLoadOverlay(selection >> TITLE_OVERLAY_SHIFT);
         entry();
     }
 }
@@ -143,7 +157,7 @@ static void InitializeSystem(void)
     sceSifInitIopHeap();
     sceSifLoadFileReset();
     sceCdInit(0);
-    sceCdMmode(2);
+    sceCdMmode(SCECdDVD);
     sceFsReset();
     xglCdSifLoadModule(sio2manModuleName, 0);
     xglCdSifLoadModule(mcmanModuleName, 0);
@@ -153,7 +167,7 @@ static void InitializeSystem(void)
     xglCdSifLoadModule(ssdModuleName, 0);
     xglCdSifLoadModule(rssdModuleName, 0);
     sceCdPOffCallback(xglCdPowerOffCB, 0);
-    WorkEnd = (u8 *)0xA80000;
+    WorkEnd = (u8 *)WORK_HEAP_START;
     xglSoundInitial();
     xglCdInitial();
     xglPadInitial();

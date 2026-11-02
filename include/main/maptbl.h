@@ -3,6 +3,19 @@
 
 #include "shared.h"
 
+/* Map ids are group * MAP_GROUP_SIZE + index in the group; maptbl holds
+ * MAP_GROUP_COUNT entries (the last one is the terminator). */
+#define MAP_GROUP_SIZE 100
+#define MAP_GROUP_COUNT 20
+#define MAP_ID_LIMIT 0x71e /* first invalid map id */
+
+/* UseTestPath: which directory MAP_getPath returns. */
+enum MapPathMode {
+    MAP_PATH_DEFAULT = 0, /* data\map\ */
+    MAP_PATH_TEST = 1,    /* data\map\test\ */
+    MAP_PATH_CHECK = 2    /* data\map\check\ */
+};
+
 typedef struct {
     char **names;
     int count;
@@ -45,7 +58,7 @@ typedef struct CfCameraDefinition {
     } defocus[3];                         /* +0x88 */
 } CfCameraDefinition;
 
-extern MapNameGroup maptbl[20];
+extern MapNameGroup maptbl[MAP_GROUP_COUNT];
 extern CfCameraDefinition CfCameraDefine[33];
 extern StudioCamera save_cam;
 

@@ -43,7 +43,7 @@ void setFieldValue(SceneField *field, unsigned int value);
 
 ConstString **constStringTable;
 
-int classDB[8];
+int classDB[VM_CLASS_DB_SLOTS];
 
 #ifndef MAIN_INIT_CLASS_DB_PRIVATE_H
 #define MAIN_INIT_CLASS_DB_PRIVATE_H
@@ -61,7 +61,7 @@ void initClassDB(void)
 {
     int i;
 
-    for (i = 7; i >= 0; i--) {
+    for (i = VM_CLASS_DB_SLOTS - 1; i >= 0; i--) {
         classDB[i] = 0;
     }
 }
@@ -77,7 +77,7 @@ JavaClass *findClass(ClassFileEntry *entry)
     filename[entry->path->length] = '\0';
     strcat(filename, classFileExtension);
 
-    for (index = 0; index < 8; index++) {
+    for (index = 0; index < VM_CLASS_DB_SLOTS; index++) {
         volume = classDB[index];
         if (volume != 0) {
             ClassFile *file = PDB_findFile(volume, filename);
@@ -99,7 +99,7 @@ JavaClass *readClass(DataBuffer *buffer, JavaClass *class_info,
     u32 this_class_index;
     u32 super_class_index;
 
-    if (DataBuffer_getUIntAt(buffer) != 0xCAFEBABE) {
+    if (DataBuffer_getUIntAt(buffer) != JVM_CLASS_MAGIC) {
         return 0;
     }
     DataBuffer_getUShortAt(buffer); /* minor_version, unused */
@@ -172,7 +172,7 @@ SceneField *addField(JavaClass *class_info,
     if ((signature[0] == 'L') || (signature[0] == '[')) {
         field->type.descriptor = descriptor;
         field->payload.size = 4;
-        field->flags |= 0x8000;
+        field->flags |= VM_FIELD_FLAG_UNRESOLVED_TYPE;
     } else {
         resolved_type = getClassFromSignature(signature, 0);
         field->type.resolved = resolved_type;
@@ -211,7 +211,7 @@ JavaMethod *addMethod(JavaClass *class_info,
     method->maxStack = 0;
     method->maxLocals = 0;
     if (method->name == NAME_Constructor) {
-        method->accessFlags |= 0x800;
+        method->accessFlags |= VM_ACC_CONSTRUCTOR;
     }
     methodDescripter((u8 *)method->descriptor->bytes,
                      &method->parameterSize, &method->returnSize,
@@ -229,7 +229,7 @@ static void readFields(DataBuffer *buffer, JavaClass *class_info)
     class_info->staticFieldCount = 0;
     class_info->fieldCount = field_count;
     if (field_count != 0) {
-        class_info->fields = xmalloc(field_count * 20, 10);
+        class_info->fields = xmalloc(field_count * sizeof(SceneField), VM_HEAP_FIELDS);
         field_index = 0;
     } else {
         class_info->fields = 0;
@@ -257,7 +257,7 @@ static void readMethods(DataBuffer *buffer, JavaClass *class_info)
     method_count = DataBuffer_getUShortAt(buffer);
     class_info->methodCount = 0;
     if (method_count != 0) {
-        class_info->methods = xmalloc(method_count * 32, 11);
+        class_info->methods = xmalloc(method_count * sizeof(JavaMethod), VM_HEAP_METHODS);
         method_index = 0;
     } else {
         class_info->methods = 0;
@@ -283,7 +283,7 @@ static void readInterfaces(DataBuffer *buffer, JavaClass *class_info)
     interface_count = DataBuffer_getUShortAt(buffer);
     class_info->declaredInterfaceCount = interface_count;
     if (interface_count != 0) {
-        class_info->interfaces = xmalloc(interface_count * 4, 12);
+        class_info->interfaces = xmalloc(interface_count * sizeof(JavaClass *), VM_HEAP_INTERFACES);
         interface_index = 0;
     } else {
         class_info->interfaces = 0;
@@ -323,7 +323,7 @@ static void readAttributes(DataBuffer *buffer, JavaClass *class_info,
         name_index = DataBuffer_getUShortAt(buffer);
         attribute_length = DataBuffer_getUIntAt(buffer);
         switch (tag_vector.tags[name_index]) {
-        case 1:
+        case JVM_CONSTANT_UTF8:
             constant_pool_value = constant_pool[name_index];
             attribute_name = constant_pool_value.object;
             if (attribute_name == ATTR_Code) {
@@ -362,7 +362,7 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
         return;
     }
 
-    constant_pool = xmalloc(count * sizeof(*constant_pool) + count, 14);
+    constant_pool = xmalloc(count * sizeof(*constant_pool) + count, VM_HEAP_OBJECT);
     class_info->constantCount = count;
     class_info->constants = constant_pool;
     /* The tag bytes follow the four-byte entries in the same allocation.
@@ -378,7 +378,7 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
         tag_slot = &tags[index];
         *tag_slot = current_tag;
         switch (current_tag) {
-        case 1: {
+        case JVM_CONSTANT_UTF8: {
             unsigned int length = DataBuffer_getUShortAt(buffer);
             const char *bytes = (const char *)buffer->position;
 
@@ -386,25 +386,25 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
             DataBuffer_seek(buffer, length);
             break;
         }
-        case 7:
-        case 8:
+        case JVM_CONSTANT_CLASS:
+        case JVM_CONSTANT_STRING:
             constant_pool[index].halfValue = DataBuffer_getUShortAt(buffer);
             break;
-        case 9:
-        case 10:
-        case 11:
-        case 12: {
+        case JVM_CONSTANT_FIELDREF:
+        case JVM_CONSTANT_METHODREF:
+        case JVM_CONSTANT_INTERFACE_METHODREF:
+        case JVM_CONSTANT_NAME_AND_TYPE: {
             unsigned int first_index = DataBuffer_getUShortAt(buffer);
             unsigned int second_index = DataBuffer_getUShortAt(buffer);
 
             constant_pool[index].intValue =(second_index << 16) | first_index;
             break;
         }
-        case 3:
-        case 4:
+        case JVM_CONSTANT_INTEGER:
+        case JVM_CONSTANT_FLOAT:
             constant_pool[index].intValue =DataBuffer_getUIntAt(buffer);
             break;
-        case 5: {
+        case JVM_CONSTANT_LONG: {
             /* Long entries reserve the following pool slot. */
             unsigned int high_word = DataBuffer_getUIntAt(buffer);
             unsigned int low_word = DataBuffer_getUIntAt(buffer);
@@ -415,7 +415,7 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
             constant_pool[index].intValue =low_word;
             break;
         }
-        case 6: {
+        case JVM_CONSTANT_DOUBLE: {
             /* Double entries use the same two-slot representation. */
             unsigned int high_word = DataBuffer_getUIntAt(buffer);
             unsigned int low_word = DataBuffer_getUIntAt(buffer);
@@ -434,11 +434,11 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
 
     for (index = 1; index < count; index++) {
         tag = tags[index];
-        is_non_member_tag = tag < 9;
-        if (is_non_member_tag && tag >= 7) {
+        is_non_member_tag = tag < JVM_CONSTANT_FIELDREF;
+        if (is_non_member_tag && tag >= JVM_CONSTANT_CLASS) {
             unsigned short reference_index = constant_pool[index].halfValue;
 
-            if (tags[reference_index] == 1) {
+            if (tags[reference_index] == JVM_CONSTANT_UTF8) {
                 constant_pool[index].object = constant_pool[reference_index].object;
             } else {
                 tags[index] = 0;
@@ -450,7 +450,7 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
 void setFieldValue(SceneField *field, unsigned int value)
 {
     field->location.offset = value;
-    field->flags |= 0x4000;
+    field->flags |= VM_FIELD_FLAG_HAS_CONSTANT_VALUE;
 }
 
 void setupClass(JavaClass *class_info, u32 this_class_index,
@@ -461,7 +461,7 @@ void setupClass(JavaClass *class_info, u32 this_class_index,
     access_flags = (u16)access_flags;
 
     if (constant_pool != 0 &&
-        constant_pool[0].tags[this_class_index] == 7) {
+        constant_pool[0].tags[this_class_index] == JVM_CONSTANT_CLASS) {
         SceneString *class_name = constant_pool[this_class_index].object;
 
         class_info->superClassIndex = super_class_index;

@@ -3,6 +3,33 @@
 
 #include "shared.h"
 
+/* Script VM layout: SCRIPT_COUNT script records of SCRIPT_TASK_COUNT task
+ * slots (SCRIPT_TASK_SIZE bytes each); a script has SCRIPT_REGISTER_COUNT
+ * registers and each task a SCRIPT_BRANCH_STACK_SIZE-entry branch stack. */
+#define SCRIPT_COUNT 16
+#define SCRIPT_TASK_COUNT 8
+#define SCRIPT_TASK_SIZE 0x80
+#define SCRIPT_REGISTER_COUNT 16
+#define SCRIPT_BRANCH_STACK_SIZE 6
+
+/* ScriptTask.flags */
+#define SCRIPT_TASK_ACTIVE 0x1
+#define SCRIPT_TASK_PAUSED 0x4
+#define SCRIPT_TASK_WAITING 0x10
+#define SCRIPT_TASK_MISSILE 0x20
+#define SCRIPT_TASK_FADE_ON 0x100
+
+/* ScriptTask.wait_mode: why the task yielded (0 is not waiting). */
+enum ScriptWaitMode {
+    SCRIPT_WAIT_NONE = 0,
+    SCRIPT_WAIT_FRAMES = 1,
+    SCRIPT_WAIT_EVENT = 2,
+    SCRIPT_WAIT_EFFECT = 3,
+    SCRIPT_WAIT_MOVIE = 4,
+    SCRIPT_WAIT_MISSILE = 5,
+    SCRIPT_WAIT_MODE_COUNT = 6
+};
+
 typedef struct ScriptTaskParameters {
     unsigned char unmodeled_00[4];
     int scheduler_word;
@@ -92,7 +119,7 @@ struct ScriptTask {
     unsigned char unmodeled_02[2];    /* +0x02 */
     short task_no;                    /* +0x04 */
     short script_no;                  /* +0x06 */
-    int script_pc[6];                 /* +0x08 */
+    int script_pc[SCRIPT_BRANCH_STACK_SIZE]; /* +0x08 */
     DoublewordAlignedVector4 initial_position; /* +0x20..+0x2F */
     union {
         ScriptTaskParameters parameters;  /* +0x30..+0x53, copied as one call block */

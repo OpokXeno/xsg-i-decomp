@@ -41,6 +41,36 @@ typedef struct GameResourceEntry {
     int state;                      /* +0xC, -1 = free */
 } GameResourceEntry;
 
+/* Number of GameResource[] blocks. */
+#define GAME_RESOURCE_COUNT 0x80
+
+/* GameResourceInit arguments used by the test screens (also in wind_test and
+ * hair_test). */
+#define GAME_RESOURCE_BASE_ADDRESS 0x07000000
+#define GAME_RESOURCE_BUFFER_SIZE 0x06000000
+/* GameResourceEntry.state of a free block. */
+#define GAME_RESOURCE_FREE (-1)
+
+/* Resource kinds: the second argument of RES_loadFile, stored in
+ * GameResourceEntry.state once the block is loaded (see RES_loadFileSub). */
+enum ResourceType {
+    RES_TYPE_MODEL = 0,          /* actor model: .lex, .xtx and .jnt */
+    RES_TYPE_MAP = 1,            /* map: .lex, .xtx, .id and think file */
+    RES_TYPE_MOTION = 2,         /* motion pack by id: data\motion\<base>.fpk */
+    RES_TYPE_MOTION_NAMED = 3,   /* motion pack by file name */
+    RES_TYPE_MODEL_NO_JOINTS = 4, /* actor model without the .jnt file */
+    RES_TYPE_FILE = 5,           /* plain file under data\ */
+    RES_TYPE_EFFECT = 6,         /* effect, read through a callback */
+    RES_TYPE_JOINTS = 7,         /* .jnt file only */
+    RES_TYPE_ENEMY_PRESET = 8,   /* enemy preset, read through a callback */
+    RES_TYPE_ALLOC = 9,          /* raw block taken by GameResourceAlloc */
+    RES_TYPE_MOVIE = 10,         /* small movie (mvsNNNN.ipu) */
+    RES_TYPE_TEXTURE = 11        /* texture (fmNNNN.xtx) */
+};
+
+/* RES_loadFile command: pick the existing block or the first free one. */
+#define RES_LOAD_ANY_BLOCK (-1)
+
 unsigned char *GameResourceWorkAlloc(int size);
 void GameResourceWorkReload(void);
 

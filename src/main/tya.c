@@ -18,13 +18,8 @@
  * ACT_create writes and ACT_update skips a slot on when it is zero; the
  * offsets between them are not evidenced by this TU and stay unmodeled.
  */
-#define ACTOR_COUNT 64
-
-#define ACTOR_IN_USE_ID_OFFSET 0x86
-
 /* MapUnit[] entries are MapUnitRecord (include/main/exm_2.h); tyaCaptureUnit
  * reads its +0xA4 serial and tyaCaptureUnit2 its parent_peer owner. */
-#define MAP_UNIT_COUNT 64
 
 #define SCRATCHPAD ((u8 *)0x70000000)
 #define SPR_COLOR ((u32 *)0x70000070)
@@ -39,6 +34,43 @@
 
 #define CAPTURE_WIDTH 512
 #define CAPTURE_HEIGHT 448
+
+/* Scratchpad layout of one captured row: colour pixels at +0x70, depth pixels
+ * at +0x870, the run-length encoded output from +0x1070; the depth word
+ * converted for the Z file lives at +0x16B0. */
+#define SPR_DEPTH_OFFSET 0x870
+#define SPR_RLE_OFFSET 0x1070
+#define CAPTURE_DEPTH_RESULT_OFFSET 0x16B0
+
+/* sceOpen flags: write only, create, truncate. */
+#define TYA_OPEN_WRITE_NEW 0x602
+
+/* GS store-image parameters: framebuffer width in 64-pixel units (512 px)
+ * and the pixel formats read back. */
+#define TYA_BUFFER_WIDTH 8
+#define TYA_PSM_CT32 0
+#define TYA_PSM_CT24 1
+#define TYA_PSM_Z32 0x30
+
+/* Run-length coding of the SiPic rows: a literal block holds up to MAX_RUN
+ * values behind a count byte; a run of up to MAX_RUN values is one byte
+ * (length + MAX_RUN - 1), longer runs are LONG_RUN_TAG plus a 16-bit length. */
+#define TYA_RLE_MAX_RUN 128
+#define TYA_RLE_LONG_RUN_TAG 0x80
+
+/* tyaCaptureMain commands (the capture-task protocol of GameLoopState). */
+#define TYA_CAPTURE_START 0
+#define TYA_CAPTURE_END 1
+#define TYA_CAPTURE_FRAME 5
+
+/* tyaCaptureStart mode: low bits select the layer, bit 15 asks for a depth
+ * picture. Layers 0x200+n draw actor n, 0x300+n map unit n. */
+#define TYA_CAPTURE_LAYER_MASK 0x7FFF
+#define TYA_CAPTURE_ZPIC_FLAG 0x8000
+#define TYA_LAYER_ACTOR_BASE 0x200
+#define TYA_LAYER_MAP_UNIT_BASE 0x300
+
+#define GS_CSR_FINISH 0x10
 
 /* Partial view of GsDispEnv; the full type changes this object (xgl_render.c's own GsDispEnv definition keeps its GS register types .c-local). */
 typedef struct {
@@ -68,7 +100,7 @@ typedef struct TyaGameLoop {
 enum { CAPTURE_SCRATCHPAD_SIZE = 0x16C0 };
 
 typedef struct {
-    u8 unmodeled_00[0x16B0];
+    u8 unmodeled_00[CAPTURE_DEPTH_RESULT_OFFSET];
     float depth_result;
 } TyaScratchpadDepthResult;
 
@@ -164,7 +196,7 @@ int tyaBmpOutput(char *path, u8 *pixels)
     unsigned long image; /* 64-bit holder of the scratchpad GS image address */
 
     sceGsSyncPath(0, 0);
-    fd = sceOpen(path, 0x602);
+    fd = sceOpen(path, TYA_OPEN_WRITE_NEW);
     if (fd < 0) {
         return 1;
     }
@@ -174,7 +206,7 @@ int tyaBmpOutput(char *path, u8 *pixels)
     image = 0x70000070;
     dst = pixels;
     for (y = 0; y < CAPTURE_HEIGHT; y++) {
-        sceGsSetDefStoreImage(SCRATCHPAD, fbp, 8, 1, 0, CAPTURE_HEIGHT - 1 - y,
+        sceGsSetDefStoreImage(SCRATCHPAD, fbp, TYA_BUFFER_WIDTH, TYA_PSM_CT24, 0, CAPTURE_HEIGHT - 1 - y,
                               CAPTURE_WIDTH, 1);
         sceGsExecStoreImage(SCRATCHPAD, (void *)(u32)image);
         src = (u8 *)(u32)image;
@@ -231,22 +263,22 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
     zmin = 0xFFFFFF;
     zmax = 0;
     sceGsSyncPath(0, 0);
-    fd = sceOpen(path, 0x602);
+    fd = sceOpen(path, TYA_OPEN_WRITE_NEW);
     if (fd < 0) {
         return 1;
     }
-    zfd = (zpath != 0 && *zpath != '\0') ? sceOpen(zpath, 0x602) : 0;
+    zfd = (zpath != 0 && *zpath != '\0') ? sceOpen(zpath, TYA_OPEN_WRITE_NEW) : 0;
     sceWrite(fd, SiPicHeader, sizeof(SiPicHeader));
     __builtin_memcpy(WorkEnd, spr, CAPTURE_SCRATCHPAD_SIZE);
     fbp = getfbp();
     dst = pixels;
     image = 0x70000070;
     for (y = 0; y < CAPTURE_HEIGHT; y++) {
-        sceGsSetDefStoreImage(spr, fbp, 8, 0, 0, y, CAPTURE_WIDTH, 1);
+        sceGsSetDefStoreImage(spr, fbp, TYA_BUFFER_WIDTH, TYA_PSM_CT32, 0, y, CAPTURE_WIDTH, 1);
         sceGsExecStoreImage(spr, (void *)(u32)image);
-        sceGsSetDefStoreImage(spr, sRender.depth_base_page << 5, 8, 0x30, 0, y,
+        sceGsSetDefStoreImage(spr, sRender.depth_base_page << 5, TYA_BUFFER_WIDTH, TYA_PSM_Z32, 0, y,
                               CAPTURE_WIDTH, 1);
-        end = (u32 *)(spr + 0x870);
+        end = (u32 *)(spr + SPR_DEPTH_OFFSET);
         sceGsExecStoreImage(spr, end);
         out = SPR_RLE;
 
@@ -266,13 +298,13 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
                     p++;
                     length++;
                 }
-                if (length > 128) {
-                    out[0] = 0x80;
+                if (length > TYA_RLE_MAX_RUN) {
+                    out[0] = TYA_RLE_LONG_RUN_TAG;
                     out[1] = length >> 8;
                     out[2] = length;
                     out += 3;
                 } else {
-                    *out = length + 127;
+                    *out = length + (TYA_RLE_MAX_RUN - 1);
                     out++;
                 }
                 colorBytes = (u8 *)&color;
@@ -281,8 +313,8 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
                 out[2] = colorBytes[2];
                 out += 3;
             } else {
-                if (count == 128) {
-                    *header = 127;
+                if (count == TYA_RLE_MAX_RUN) {
+                    *header = TYA_RLE_MAX_RUN - 1;
                     count = 0;
                 }
                 if (count == 0) {
@@ -340,20 +372,20 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
                     p++;
                     length++;
                 }
-                if (length > 128) {
-                    out[0] = 0x80;
+                if (length > TYA_RLE_MAX_RUN) {
+                    out[0] = TYA_RLE_LONG_RUN_TAG;
                     out[1] = length >> 8;
                     out[2] = length;
                     out += 3;
                 } else {
-                    *out = length + 127;
+                    *out = length + (TYA_RLE_MAX_RUN - 1);
                     out++;
                 }
                 *out = alphaRun >> 24;
                 out++;
             } else {
-                if (count == 128) {
-                    *header = 127;
+                if (count == TYA_RLE_MAX_RUN) {
+                    *header = TYA_RLE_MAX_RUN - 1;
                     count = 0;
                 }
                 if (count == 0) {
@@ -371,8 +403,8 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
             *header = count - 1;
         }
 
-        memcpy(dst, SPR_RLE, out - spr - 0x1070);
-        dst = dst + (out - spr) - 0x1070;
+        memcpy(dst, SPR_RLE, out - spr - SPR_RLE_OFFSET);
+        dst = dst + (out - spr) - SPR_RLE_OFFSET;
 
         if (zfd != 0) {
             zp = SPR_DEPTH;
@@ -388,10 +420,10 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
                     }
                 }
                 depth_result->depth_result = I2F(z);
-                zout[0] = spr[0x16B3];
-                zout[1] = spr[0x16B2];
-                zout[2] = spr[0x16B1];
-                zout[3] = spr[0x16B0];
+                zout[0] = spr[CAPTURE_DEPTH_RESULT_OFFSET + 3];
+                zout[1] = spr[CAPTURE_DEPTH_RESULT_OFFSET + 2];
+                zout[2] = spr[CAPTURE_DEPTH_RESULT_OFFSET + 1];
+                zout[3] = spr[CAPTURE_DEPTH_RESULT_OFFSET];
                 zout += 4;
             }
             sceWrite(zfd, zbuffer, sizeof(zbuffer));
@@ -421,14 +453,14 @@ static int tyaCaptureMain(int command)
     int selector;
 
     switch (command) {
-    case 0:
+    case TYA_CAPTURE_START:
         if (GameLoopState.captureTask != tyaCaptureMain) {
             *savedCapture = GameLoopState.captureTask;
             GameLoopState.captureTask = tyaCaptureMain;
         }
         flag = 1;
         break;
-    case 5:
+    case TYA_CAPTURE_FRAME:
         if (flag == 0) {
             flag = 1;
             break;
@@ -436,7 +468,7 @@ static int tyaCaptureMain(int command)
         shifted_mode = (long long)(DispEnv.buffer_select << 7);
         selector = shifted_mode >> 32;
         if ((selector & 3) == 1) {
-            while (!(*(volatile u64 *)GS_CSR_ADDRESS & 0x10)) {
+            while (!(*(volatile u64 *)GS_CSR_ADDRESS & GS_CSR_FINISH)) {
                 for (i = 0; i < 0x100000; i++) {
                 }
             }
@@ -481,7 +513,7 @@ static int tyaCaptureMain(int command)
         if (flag != 2) {
             break;
         }
-    case 1:
+    case TYA_CAPTURE_END:
         GameLoopState.hook[1] = 0;
         GameLoopState.hook[0] = 0;
         GameLoopState.hook[2] = 0;
@@ -514,8 +546,8 @@ static void tyaCaptureActor(void)
         if (unit->inUseId == 0 || (unit->flags & 8)) {
             continue;
         }
-        if (layer != i + 0x200) {
-            if (unit->parent == 0 || layer != unit->parent->number + 0x200) {
+        if (layer != i + TYA_LAYER_ACTOR_BASE) {
+            if (unit->parent == 0 || layer != unit->parent->number + TYA_LAYER_ACTOR_BASE) {
                 continue;
             }
         }
@@ -546,7 +578,7 @@ static void tyaCaptureShadow(void)
     ACT_DrawShadowBegin();
     for (; i < ACTOR_COUNT; i++, unit++) {
         if (unit->inUseId != 0 && !(unit->flags & 8) &&
-            layer == i + 0x200 && (unit->flags & 0x20)) {
+            layer == i + TYA_LAYER_ACTOR_BASE && (unit->flags & 0x20)) {
             ACT_DrawShadow(unit);
         }
     }
@@ -559,7 +591,7 @@ static void tyaCaptureUnit(void)
     MapUnitRecord *unit;
 
     for (i = 0, unit = MapUnit; i < MAP_UNIT_COUNT; i++, unit++) {
-        if (unit->serial >= 0 && layer == i + 0x300) {
+        if (unit->serial >= 0 && layer == i + TYA_LAYER_MAP_UNIT_BASE) {
             MAP_drawUnitAt(unit);
         }
     }
@@ -574,7 +606,7 @@ static void tyaCaptureUnit2(void)
 
     selected = (Actor *)-1;
     for (i = 0, unit = actor; i < ACTOR_COUNT; i++, unit++) {
-        if (unit->inUseId != 0 && !(unit->flags & 8) && layer == i + 0x200) {
+        if (unit->inUseId != 0 && !(unit->flags & 8) && layer == i + TYA_LAYER_ACTOR_BASE) {
             selected = unit;
             break;
         }
@@ -594,8 +626,8 @@ void tyaCaptureStart(const char *name, int mode)
 
     TmpBuffer = GameResourceGetFreeAddr();
     printf("CaptureBuffer:%08x\n", TmpBuffer);
-    layer = mode & 0x7FFF;
-    zpicf = mode & 0x8000;
+    layer = mode & TYA_CAPTURE_LAYER_MASK;
+    zpicf = mode & TYA_CAPTURE_ZPIC_FLAG;
     alpha = 0;
     dst = outpath;
     for (src = head; *src != '\0'; src++) {
@@ -637,7 +669,7 @@ void tyaCaptureStart(const char *name, int mode)
         dst[2] = 'c';
     }
     dst[3] = '\0';
-    tyaCaptureMain(0);
+    tyaCaptureMain(TYA_CAPTURE_START);
     GameLoopState.hook[0] = tyaCaptureNull;
     GameLoopState.hook[1] = tyaCaptureNull;
     GameLoopState.hook[2] = tyaCaptureNull;
@@ -690,7 +722,7 @@ void tyaCaptureStart(const char *name, int mode)
 
 void tyaCaptureEnd(void)
 {
-    tyaCaptureMain(1);
+    tyaCaptureMain(TYA_CAPTURE_END);
     xglFontSetFlags(xglFontGetFlags() | 3);
     GameLoopState.flags &= 0xFAFFFFFF;
 }

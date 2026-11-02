@@ -2,6 +2,13 @@
 #include "main/enemy_1.h"
 #include "enemy_1.h"
 
+/* Floor attribute bits that select an entry of EfTab_* (footstep effects). */
+#define GROUND_EFFECT_COUNT 15
+#define GROUND_EFFECT_ATTR_MASK 0x8f00
+
+#define ENEMY_ROUTE_MARK_COUNT 8
+#define ENEMY_WALL_DIRECTION_COUNT 16 /* compass directions Check_Wall reports */
+#define ENEMY_RANGE_CIRCLE_SEGMENTS 64
 #define ENEMY_CONTACT_PADDING 0.3f
 
 #define ENEMY_CONTACT_HEIGHT 1.9f
@@ -89,14 +96,14 @@ u32 MostNear = 0;
 
 int Get_EffectCode(int attr)
 {
-    int effect[15] = {
+    int effect[GROUND_EFFECT_COUNT] = {
         0x8100, 0x8200, 0x8300, 0x8400, 0x8500, 0x8600, 0x8700, 0x8800,
         0x8900, 0x8a00, 0x8b00, 0x8c00, 0x8d00, 0x8e00, 0x8f00,
     };
     short i;
 
-    attr &= 0x8f00;
-    for (i = 0; i < 15; i++) {
+    attr &= GROUND_EFFECT_ATTR_MASK;
+    for (i = 0; i < GROUND_EFFECT_COUNT; i++) {
         if (attr == effect[i]) {
             return i;
         }
@@ -165,7 +172,8 @@ void Enemy_Init(Actor *self)
             dest[0] = params->route_values[i * 3 + 2];
         }
     }
-    if (work->pause_kind == 9 || work->pause_kind == 4) {
+    if (work->pause_kind == ENEMY_MOVE_ROUTE_BACK_AND_FORTH_B ||
+        work->pause_kind == ENEMY_MOVE_ROUTE_BACK_AND_FORTH_A) {
         for (i = 0; i < work->route_point_count - 2; i++) {
             work->route_points[work->route_point_count + i].x =
                 work->route_points[work->route_point_count - i - 2].x;
@@ -173,10 +181,10 @@ void Enemy_Init(Actor *self)
                 *(&work->route_points[work->route_point_count - i - 2].z);
         }
         work->route_point_count = work->route_point_count * 2 - 2;
-        if (work->pause_kind == 9)
-            work->pause_kind = 8;
-        if (work->pause_kind == 4)
-            work->pause_kind = 3;
+        if (work->pause_kind == ENEMY_MOVE_ROUTE_BACK_AND_FORTH_B)
+            work->pause_kind = ENEMY_MOVE_ROUTE_B;
+        if (work->pause_kind == ENEMY_MOVE_ROUTE_BACK_AND_FORTH_A)
+            work->pause_kind = ENEMY_MOVE_ROUTE_A;
     }
     for (j = 0; j < work->route_point_count; j++) {
         for (i = 0; i < 4; i++) {
@@ -196,20 +204,21 @@ void Enemy_Init(Actor *self)
         }
     }
     kind = work->pause_kind;
-    if (kind != 8 && kind != 3 && kind != 12 && kind != 13)
+    if (kind != ENEMY_MOVE_ROUTE_B && kind != ENEMY_MOVE_ROUTE_A &&
+        kind != ENEMY_MOVE_ROUTE_THEN_ESCAPE && kind != ENEMY_MOVE_ROUTE_THEN_ROUTE_CHASE)
         Set_Spline_By_Random(self);
     else
         Set_Spline_By_Route(self, 0);
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < ENEMY_ROUTE_MARK_COUNT; i++) {
         work->route_marks[1][i] = 0;
         work->route_marks[0][i] = 0;
     }
     work->route_cursor[0] = 0;
     work->route_cursor[1] = 0;
     if (params->pause_interval != 0)
-        work->route_marks[0][Get_Rnd(0, params->pause_interval) % 8] = 1;
+        work->route_marks[0][Get_Rnd(0, params->pause_interval) % ENEMY_ROUTE_MARK_COUNT] = 1;
     if (params->threat_interval != 0)
-        work->route_marks[1][Get_Rnd(0, params->threat_interval) % 8] = 1;
+        work->route_marks[1][Get_Rnd(0, params->threat_interval) % ENEMY_ROUTE_MARK_COUNT] = 1;
     if (self->inUseId >= 0x4000 && self->inUseId <= 0x4f22)
         work->map_index = 772;
     else
@@ -218,7 +227,7 @@ void Enemy_Init(Actor *self)
         ACT_initExMotion(self, 0,
                          GameResource[params->ex_motion_resource].motion);
     }
-    Enemy_ActionReady(self, 16);
+    Enemy_ActionReady(self, ENEMY_ACT_READY);
     work->hit_limit = 0;
     if (GameLoopState.player == self)
         CallMethod_I(finalInitMethodName, 100);
@@ -250,9 +259,9 @@ void Enemy_Damage_Explosion(Actor *actor)
         actor->flags &= ~ACTOR_FLAG_AILMENT_ACTIVE;
         stiff = work->stiff_flag;
         if (stiff & ENEMY_STIFF_ACTIVE_BIT)
-            Enemy_ActionReady(actor, 7);
+            Enemy_ActionReady(actor, ENEMY_ACT_STIFF);
         else
-            Enemy_ActionReady(actor, 6);
+            Enemy_ActionReady(actor, ENEMY_ACT_CHASE);
     }
 }
 
@@ -269,7 +278,7 @@ void Enemy_Damage_Electric(Actor *actor)
         work->spline_parameter = 0;
         actor->flags = flags & ~ACTOR_FLAG_AILMENT_ACTIVE;
         Homing_Search(actor);
-        Enemy_ActionReady(actor, 2);
+        Enemy_ActionReady(actor, ENEMY_ACT_THREAT);
     }
 }
 
@@ -286,7 +295,7 @@ void Enemy_Damage_Seal(Actor *actor)
         work->spline_parameter = 0;
         actor->flags = flags & ~ACTOR_FLAG_AILMENT_ACTIVE;
         Homing_Search(actor);
-        Enemy_ActionReady(actor, 1);
+        Enemy_ActionReady(actor, ENEMY_ACT_PAUSE);
     }
 }
 
@@ -304,7 +313,7 @@ void Enemy_Stiff(Actor *actor)
         sefDeleteEffectCf(work->stiff_effect);
         work->stiff_effect = 0;
         Homing_Search(actor);
-        Enemy_ActionReady(actor, 2);
+        Enemy_ActionReady(actor, ENEMY_ACT_THREAT);
     } else {
         actor->animation.slot.speed = 0.0f;
     }
@@ -317,7 +326,7 @@ void Enemy_Found(Actor *actor)
 
     work->hit_count = count + 1;
     if ((short)count >= work->hit_limit)
-        Enemy_ActionReady(actor, 6);
+        Enemy_ActionReady(actor, ENEMY_ACT_CHASE);
 
     if (actor->inUseId != 0x2201) {
         Actor *player = GameLoopState.player;
@@ -347,7 +356,7 @@ void Enemy_Tentacle(Actor *self)
             Get_Angle(&self->position, &GameLoopState.player->position);
 
         if (FLAG_FRAME_60) {
-            for (i = 0; i < 64; i++) {
+            for (i = 0; i < ENEMY_RANGE_CIRCLE_SEGMENTS; i++) {
                 float angle = i * 6.2831855f * 0.015625f;
 
                 mark.x = self->position.x + sinf(angle) * radius;
@@ -391,10 +400,10 @@ void Enemy_Chase(Actor *self)
     distance = Get_Distance(&self->position, &work->escape_target.position);
     if (ENEMY_CHASE_MIN_DISTANCE <= distance && !(work->stiff_flag & 2)) {
         speed = params->chase_speed;
-        Set_Motion(self, Get_DefaultMotion(self, 2), 9);
+        Set_Motion(self, Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_RUN), MOTION_BLEND_DEFAULT);
     } else {
         speed = params->chase_speed / 1.5f;
-        Set_Motion(self, Get_DefaultMotion(self, 1), 9);
+        Set_Motion(self, Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_WALK), MOTION_BLEND_DEFAULT);
     }
 
     start = self->position;
@@ -425,12 +434,12 @@ void Enemy_Chase(Actor *self)
     color[2] = 255;
     color[3] = 128;
     TM_Enemy_Move_Step(self->number, &work->last_player_position.vector, speed);
-    if ((work->state_flags & 0x20) != 0) {
+    if ((work->state_flags & ENEMY_STATE_FLAG_AIRBORNE) != 0) {
         self->position.y += (work->escape_target.position.y - self->position.y) *
                             ESCAPE_HEIGHT_FOLLOW_RATE;
     }
 
-    if (work->move_result == 0x60) {
+    if (work->move_result == ENEMY_MOVE_RESULT_MAP_UNIT) {
         if (Check_MoveSquare(self->body_radius, &cross_point, &self->position,
                              &square.vector, work->map_index) == 1) {
             work->last_player_position = square;
@@ -441,16 +450,16 @@ void Enemy_Chase(Actor *self)
         }
     }
 
-    if (distance >= params->chase_distance || work->move_result == 0x58 ||
+    if (distance >= params->chase_distance || work->move_result == ENEMY_MOVE_RESULT_TERRITORY_B ||
         (work->chase_frame++ >=
              (work->chase_frame_limit < 0 ? -work->chase_frame_limit : work->chase_frame_limit) &&
          work->chase_frame_limit != 0) ||
         (Get_Distance(&self->position, &work->last_player_position.vector) <
              CHASE_LOST_DISTANCE &&
-         work->move_result != 0x60 && work->move_result != 99)) {
+         work->move_result != ENEMY_MOVE_RESULT_MAP_UNIT && work->move_result != ENEMY_MOVE_RESULT_FREE)) {
         work->spline_parameter = 0;
         Homing_Search(self);
-        Enemy_ActionReady(self, 2);
+        Enemy_ActionReady(self, ENEMY_ACT_THREAT);
     } else if (Get_Distance(&self->position,
                             &work->last_player_position.vector) < LAST_PLAYER_REACHED_DISTANCE) {
         if (Check_MoveSquare(self->body_radius, &work->escape_target.position,
@@ -474,7 +483,7 @@ void Enemy_Route(Actor *self)
     Vector4 origin;
     Vector4 target;
     Vector4 hit;
-    signed char directions[16];
+    signed char directions[ENEMY_WALL_DIRECTION_COUNT];
     int saved_parameter = work->spline_parameter;
     short length = 0;
     short i;
@@ -490,8 +499,8 @@ void Enemy_Route(Actor *self)
 
     work->unique_pattern = saved_parameter / 128;
     if (work->spline_point_count * 128 - 384 <= saved_parameter &&
-        (self->flags & 0x80000000) != 0) {
-        if (work->pause_kind != 8) {
+        (self->flags & ACTOR_FLAG_HOMING) != 0) {
+        if (work->pause_kind != ENEMY_MOVE_ROUTE_B) {
             Set_Spline_By_Random();
         } else {
             Set_Spline_By_Route(self, 0);
@@ -500,11 +509,11 @@ void Enemy_Route(Actor *self)
     }
 
     if ((work->spline_parameter % 128) == 0 &&
-        (self->flags & 0x80000000) == 0) {
+        (self->flags & ACTOR_FLAG_HOMING) == 0) {
         for (i = 0; i < 2; i++) {
             if (work->action_motion_table[work->spline_parameter / 128][0] != -1) {
                 work->unique_step = 0;
-                Enemy_ActionReady(self, 9);
+                Enemy_ActionReady(self, ENEMY_ACT_UNIQUE);
                 return;
             }
             if ((i != 0 || params->pause_interval != 0) &&
@@ -521,10 +530,10 @@ void Enemy_Route(Actor *self)
                 if (work->route_marks[i][work->route_cursor[i]] == 1) {
                     switch (i) {
                     case 0:
-                        Enemy_ActionReady(self, 1);
+                        Enemy_ActionReady(self, ENEMY_ACT_PAUSE);
                         break;
                     case 1:
-                        Enemy_ActionReady(self, 2);
+                        Enemy_ActionReady(self, ENEMY_ACT_THREAT);
                         break;
                     }
                     work->route_marks[0][work->route_cursor[i]] = work->route_marks[1][work->route_cursor[i]] = 0;
@@ -541,7 +550,7 @@ void Enemy_Route(Actor *self)
         }
     }
 
-    if (work->state_flags & ENEMY_ALERT_RAISE_FLAG) {
+    if (work->state_flags & ENEMY_STATE_FLAG_ALERT_RAISE) {
         GetBSplineLoop(work->spline_parameter, work->spline_point_count, 128,
                        work->spline_points, &point);
         if (work->fast_point_count == 0)
@@ -562,7 +571,7 @@ void Enemy_Route(Actor *self)
         self->target_angle = Get_Angle(&self->position, &point);
 
     {
-        int airborne = work->state_flags & ENEMY_AIRBORNE_FLAG;
+        int airborne = work->state_flags & ENEMY_STATE_FLAG_AIRBORNE;
 
         work->goback_x = point.x - self->position.x;
         work->goback_z = point.z - self->position.z;
@@ -576,13 +585,13 @@ void Enemy_Route(Actor *self)
     if (!moved) {
         if ((int)self->flags < 0) {
             Homing_Search(self);
-        } else if (work->pause_kind == 8 || work->pause_kind == 3) {
+        } else if (work->pause_kind == ENEMY_MOVE_ROUTE_B || work->pause_kind == ENEMY_MOVE_ROUTE_A) {
             work->spline_parameter = saved_parameter;
         } else {
             available = 0;
             Check_Wall(1.0f, self->body_radius, &origin, directions, -16,
                        work->map_index, self->number, work->wall_attribute);
-            for (i = 0; i < 16; i++) {
+            for (i = 0; i < ENEMY_WALL_DIRECTION_COUNT; i++) {
                 if (directions[i] == 0)
                     directions[available++] = i;
             }
@@ -594,16 +603,16 @@ void Enemy_Route(Actor *self)
             BSpline_Init(work->spline_points, &self->position, angle);
             work->spline_parameter = 0;
         }
-        Set_Motion(self, Get_DefaultMotion(self, 0), 9);
+        Set_Motion(self, Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_IDLE), MOTION_BLEND_DEFAULT);
     } else {
         if (ROUTE_FAR_LOOKBACK_DISTANCE <= distance)
-            motion = Get_DefaultMotion(self, 2);
+            motion = Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_RUN);
         else
-            motion = Get_DefaultMotion(self, 1);
-        Set_Motion(self, motion, 9);
+            motion = Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_WALK);
+        Set_Motion(self, motion, MOTION_BLEND_DEFAULT);
     }
 
-    if ((work->pause_kind == 1 || work->pause_kind == 2) &&
+    if ((work->pause_kind == ENEMY_MOVE_WANDER_A || work->pause_kind == ENEMY_MOVE_WANDER_B) &&
         (int)self->flags >= 0 && (work->spline_parameter % 128) == 0) {
         if (work->fast_point_count > 0)
             work->fast_point_count--;
@@ -615,7 +624,7 @@ void Enemy_Route(Actor *self)
         available = 0;
         Check_Wall(1.0f, self->body_radius, &origin, directions, -16,
                    work->map_index, self->number, work->wall_attribute);
-        for (i = 0; i < 16; i++) {
+        for (i = 0; i < ENEMY_WALL_DIRECTION_COUNT; i++) {
             if (directions[i] == 0)
                 directions[available++] = i;
         }
@@ -629,7 +638,7 @@ void Enemy_Route(Actor *self)
         target.w = 1.0f;
         Check_Straight(self->body_radius, &origin, &target, 16, &hit,
                        work->map_index, self->number, work->wall_attribute);
-        if (work->state_flags & ENEMY_AIRBORNE_FLAG)
+        if (work->state_flags & ENEMY_STATE_FLAG_AIRBORNE)
             hit.y = Get_Height(&hit, work->map_index, 0) +
                     Get_Rnd(30, 50) / 10.0f;
         BSpline_Add(work->spline_parameter, work->spline_point_count,
@@ -681,11 +690,11 @@ void Enemy_Escape(Actor *actor)
 
     if (ESCAPE_RESET_DISTANCE <= Get_Distance(&actor->position, &point) ||
         (short)CoolDown_0 > 0) {
-        motion = Get_DefaultMotion(actor, 2);
+        motion = Get_DefaultMotion(actor, ENEMY_DEFAULT_MOTION_RUN);
     } else {
-        motion = Get_DefaultMotion(actor, 1);
+        motion = Get_DefaultMotion(actor, ENEMY_DEFAULT_MOTION_WALK);
     }
-    Set_Motion(actor, motion, 9);
+    Set_Motion(actor, motion, MOTION_BLEND_DEFAULT);
 
     actor->animation.slot.speed = ESCAPE_SPEED;
     work->goback_x = point.x - actor->position.x;
@@ -738,11 +747,11 @@ void Enemy_Route_Chase(Actor *self)
 
     if (ROUTE_CHASE_RESET_DISTANCE <= Get_Distance(&self->position, &point) ||
         (short)CoolDown_1 > 0) {
-        motion = Get_DefaultMotion(self, 2);
+        motion = Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_RUN);
     } else {
-        motion = Get_DefaultMotion(self, 1);
+        motion = Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_WALK);
     }
-    Set_Motion(self, motion, 9);
+    Set_Motion(self, motion, MOTION_BLEND_DEFAULT);
 
     self->animation.slot.speed = ROUTE_CHASE_SPEED;
     work->goback_x = point.x - self->position.x;
@@ -757,7 +766,7 @@ void Enemy_Pause(Actor *actor)
     unsigned short count;
     int limit;
 
-    if (work->pause_kind == 5 || work->pause_kind == 6) {
+    if (work->pause_kind == ENEMY_MOVE_STAND_A || work->pause_kind == ENEMY_MOVE_STAND_B) {
         if (actor->flags & ACTOR_FLAG_FACE_PLAYER) {
             actor->target_angle =
                 Get_Angle(&actor->position, &GameLoopState.player->position);
@@ -769,34 +778,34 @@ void Enemy_Pause(Actor *actor)
     work->hit_count = count + 1;
     if ((short)count >= limit) {
         switch (work->pause_kind) {
-        case 5:
-        case 6:
-            Enemy_ActionReady(actor, 1);
+        case ENEMY_MOVE_STAND_A:
+        case ENEMY_MOVE_STAND_B:
+            Enemy_ActionReady(actor, ENEMY_ACT_PAUSE);
             break;
-        case 1:
-        case 2:
-        case 3:
-        case 8:
-        case 9:
-            Enemy_ActionReady(actor, 4);
-            if (work->state_flags & ENEMY_ALERT_RAISE_FLAG)
+        case ENEMY_MOVE_WANDER_A:
+        case ENEMY_MOVE_WANDER_B:
+        case ENEMY_MOVE_ROUTE_A:
+        case ENEMY_MOVE_ROUTE_B:
+        case ENEMY_MOVE_ROUTE_BACK_AND_FORTH_B:
+            Enemy_ActionReady(actor, ENEMY_ACT_ROUTE);
+            if (work->state_flags & ENEMY_STATE_FLAG_ALERT_RAISE)
                 work->spline_parameter += 2;
             break;
-        case 12:
-            Enemy_ActionReady(actor, 14);
+        case ENEMY_MOVE_ROUTE_THEN_ESCAPE:
+            Enemy_ActionReady(actor, ENEMY_ACT_ESCAPE);
             break;
-        case 13:
-            Enemy_ActionReady(actor, 15);
+        case ENEMY_MOVE_ROUTE_THEN_ROUTE_CHASE:
+            Enemy_ActionReady(actor, ENEMY_ACT_ROUTE_CHASE);
             break;
         default: {
             unsigned short direction = xglSRand() & 1;
 
             switch (direction) {
             case 0:
-                Enemy_ActionReady(actor, 4);
+                Enemy_ActionReady(actor, ENEMY_ACT_ROUTE);
                 break;
             case 1:
-                Enemy_ActionReady(actor, 2);
+                Enemy_ActionReady(actor, ENEMY_ACT_THREAT);
                 break;
             }
             break;
@@ -813,8 +822,8 @@ void Enemy_Threat(Actor *actor)
 
     work->hit_count = count + 1;
     if ((short)count >= limit) {
-        Enemy_ActionReady(actor, 4);
-        if (work->state_flags & ENEMY_ALERT_RAISE_FLAG)
+        Enemy_ActionReady(actor, ENEMY_ACT_ROUTE);
+        if (work->state_flags & ENEMY_STATE_FLAG_ALERT_RAISE)
             work->spline_parameter += 2;
     }
 }
@@ -831,10 +840,10 @@ void Enemy_Unique(Actor *actor)
 
         work->unique_step = step;
         if (work->action_motion_table[work->unique_pattern][(short)step] != -1) {
-            Enemy_ActionReady(actor, 9);
+            Enemy_ActionReady(actor, ENEMY_ACT_UNIQUE);
         } else {
-            Enemy_ActionReady(actor, 4);
-            if (work->state_flags & ENEMY_ALERT_RAISE_FLAG)
+            Enemy_ActionReady(actor, ENEMY_ACT_ROUTE);
+            if (work->state_flags & ENEMY_STATE_FLAG_ALERT_RAISE)
                 work->spline_parameter += 2;
         }
     }
@@ -897,9 +906,9 @@ void ACT_updateEnemy(Actor *self)
         pillar.y = 0.0f;
         DispPillar(&self->position, &pillar, color);
     }
-    work->move_result = 99;
+    work->move_result = ENEMY_MOVE_RESULT_FREE;
     if (params->gravity_mode != 1) {
-        if (Get_Height(&self->position, work->map_index, 16) != -1000.0f)
+        if (Get_Height(&self->position, work->map_index, 16) != GROUND_HEIGHT_NONE)
             self->saved_position = self->position;
     }
     if (work->sense_block_timer > 0)
@@ -909,12 +918,12 @@ void ACT_updateEnemy(Actor *self)
         return;
 
     if (work->applied_light_level != params->light_level) {
-        if (params->light_level == 1000) {
-            self->flags &= ~0x800;
-        } else if (work->applied_light_level == 1000) {
-            self->flags |= 0x800;
+        if (params->light_level == ENEMY_LIGHT_LEVEL_FULL) {
+            self->flags &= ~ACTOR_FLAG_TRANSLUCENT;
+        } else if (work->applied_light_level == ENEMY_LIGHT_LEVEL_FULL) {
+            self->flags |= ACTOR_FLAG_TRANSLUCENT;
             self->drawEnv.flags |= 3;
-            self->drawEnv.alpha = 72;
+            self->drawEnv.alpha = ACTOR_TRANSLUCENT_ALPHA;
         }
         self->drawEnv.transparency = (float)params->light_level / 1000.0f;
     }
@@ -923,9 +932,9 @@ void ACT_updateEnemy(Actor *self)
 
     if (self->inUseId != 16646 && self->inUseId != 20594) {
         effect_code = Get_EffectCode(Get_Attr(&self->position, 0, 0));
-        if (work->action == 6 || work->action == 3 || work->action == 4 ||
-            work->action == 8 || work->action == 10 || work->action == 14 ||
-            work->action == 15 || EfTab_Code[effect_code] == 1) {
+        if (work->action == ENEMY_ACT_CHASE || work->action == 3 || work->action == ENEMY_ACT_ROUTE ||
+            work->action == 8 || work->action == ENEMY_ACT_TENTACLE || work->action == ENEMY_ACT_ESCAPE ||
+            work->action == ENEMY_ACT_ROUTE_CHASE || EfTab_Code[effect_code] == 1) {
             if (effect_code != -1) {
                 SchedulerState *effect;
 
@@ -941,14 +950,14 @@ void ACT_updateEnemy(Actor *self)
 
                         effect->caster = self;
                         self->effect_timer = 0;
-                        self->effect_slot = (self->effect_slot + 1) % 8;
+                        self->effect_slot = (self->effect_slot + 1) % ACTOR_EFFECT_SLOT_COUNT;
                         effect->scale.z = size;
                         effect->scale.y = size;
                         effect->scale.x = size;
                     }
                 }
             } else {
-                for (i = 0; i < 8; i++) {
+                for (i = 0; i < ACTOR_EFFECT_SLOT_COUNT; i++) {
                     if (self->effects[i])
                         sefDeleteEffectCf(self->effects[i]);
                 }
@@ -963,12 +972,12 @@ void ACT_updateEnemy(Actor *self)
         Get_EnemyIDPos(&actor[work->target_number].position,
                        &work->escape_target.position);
     Start_Enemy_Command(self);
-    if (work->freeze_state == 3) {
+    if (work->freeze_state == ENEMY_FREEZE_SLOW) {
         ACT_updateSequence(self);
         return;
     }
     if (work->escape_target.scale_frame != -1 &&
-        (unsigned char)work->freeze_state < 2) {
+        (unsigned char)work->freeze_state < ENEMY_FREEZE_STOP) {
         short frame = work->escape_target.scale_frame;
         short count = work->escape_target.scale_frame_count;
         float scale;
@@ -990,8 +999,8 @@ void ACT_updateEnemy(Actor *self)
     if (self->inUseId == 8705)
         Check_Locater(self);
 
-    if (work->freeze_state != 0) {
-        if (work->freeze_state < 2)
+    if (work->freeze_state != ENEMY_FREEZE_RELEASE) {
+        if (work->freeze_state < ENEMY_FREEZE_STOP)
             Script_Action(self);
         if (Get_Distance(&self->position, &GameLoopState.player->position) <=
                 self->body_radius + GameLoopState.player->body_radius + ENEMY_CONTACT_PADDING &&
@@ -1008,7 +1017,7 @@ void ACT_updateEnemy(Actor *self)
             self->scale.w = 1.0f;
         }
         ACT_updateMotion(self);
-        if (work->freeze_state == 1 && params->gravity_mode == 0) {
+        if (work->freeze_state == ENEMY_FREEZE_SCRIPTED && params->gravity_mode == 0) {
             float height;
 
             self->data_header = UnduDataGetHeader(work->map_index, 0x8000);
@@ -1030,51 +1039,51 @@ void ACT_updateEnemy(Actor *self)
     if (self->inUseId != 8705)
         Check_Locater(self);
     switch (work->action) {
-    case 0:
+    case ENEMY_ACT_INIT:
         Enemy_Init(self);
-    case 1:
+    case ENEMY_ACT_PAUSE:
         Enemy_Pause(self);
         break;
-    case 2:
+    case ENEMY_ACT_THREAT:
         Enemy_Threat(self);
         break;
-    case 4:
+    case ENEMY_ACT_ROUTE:
         Enemy_Route(self);
         break;
-    case 5:
+    case ENEMY_ACT_FOUND:
         Enemy_Found(self);
         break;
-    case 6:
+    case ENEMY_ACT_CHASE:
         Enemy_Chase(self);
         break;
-    case 10:
+    case ENEMY_ACT_TENTACLE:
         Enemy_Tentacle(self);
         break;
-    case 7:
+    case ENEMY_ACT_STIFF:
         Enemy_Stiff(self);
         break;
-    case 9:
+    case ENEMY_ACT_UNIQUE:
         Enemy_Unique(self);
         break;
-    case 11:
+    case ENEMY_ACT_DAMAGE_EXPLOSION:
         Enemy_Damage_Explosion(self);
         break;
-    case 12:
+    case ENEMY_ACT_DAMAGE_ELECTRIC:
         Enemy_Damage_Electric(self);
         break;
-    case 13:
+    case ENEMY_ACT_DAMAGE_SEAL:
         Enemy_Damage_Seal(self);
         break;
-    case 14:
+    case ENEMY_ACT_ESCAPE:
         Enemy_Escape(self);
         break;
-    case 15:
+    case ENEMY_ACT_ROUTE_CHASE:
         Enemy_Route_Chase(self);
         break;
     }
 
     if (params->sight_distance != 0.0f) {
-        if (!(self->flags & 8) && work->sense_block_timer <= 0 &&
+        if (!(self->flags & ACTOR_FLAG_HIDDEN) && work->sense_block_timer <= 0 &&
             enepc[0].encount_lock == 0) {
             if (params->sight_angle < 0.0f) {
                 if (self->inUseId == 8705 || self->inUseId == 16646) {
@@ -1115,23 +1124,23 @@ void ACT_updateEnemy(Actor *self)
         angle = self->target_angle;
         work->spline_parameter = 0;
         BSpline_Init(work->spline_points, &self->position, angle);
-        Enemy_ActionReady(self, 2);
+        Enemy_ActionReady(self, ENEMY_ACT_THREAT);
         Homing_Search(self);
     }
 
     if ((unsigned short)self->inUseId - 0x4000 < 0xf23u) {
         if (self->flags & ACTOR_FLAG_AILMENT_ACTIVE) {
             if (self->flags & ACTOR_FLAG_STIFF_ACTIVE) {
-                if (work->action != 11 && work->action != 7)
-                    Enemy_ActionReady(self, 11);
+                if (work->action != ENEMY_ACT_DAMAGE_EXPLOSION && work->action != ENEMY_ACT_STIFF)
+                    Enemy_ActionReady(self, ENEMY_ACT_DAMAGE_EXPLOSION);
             }
-            if (self->flags & 0x02000000) {
-                if (work->action != 12)
-                    Enemy_ActionReady(self, 12);
+            if (self->flags & ACTOR_FLAG_ELECTRIC_ACTIVE) {
+                if (work->action != ENEMY_ACT_DAMAGE_ELECTRIC)
+                    Enemy_ActionReady(self, ENEMY_ACT_DAMAGE_ELECTRIC);
             }
-            if (self->flags & 0x08000000) {
-                if (work->action != 13)
-                    Enemy_ActionReady(self, 13);
+            if (self->flags & ACTOR_FLAG_SEAL_ACTIVE) {
+                if (work->action != ENEMY_ACT_DAMAGE_SEAL)
+                    Enemy_ActionReady(self, ENEMY_ACT_DAMAGE_SEAL);
             }
         }
     }
@@ -1141,14 +1150,14 @@ void ACT_updateEnemy(Actor *self)
         if (self->animation.slot.currentDataId == 1 || self->animation.slot.currentDataId == 3)
             Sound_FootStep(self);
     } else {
-        if (work->action != 4) {
+        if (work->action != ENEMY_ACT_ROUTE) {
             xglSoundEffectStopID(RES_GetEnemySeBank(self->inUseId) + 2,
                                  self->number + 1);
         } else if (SCRIPT_getCfTime() >= 3) {
             xglSoundEffectPosID(RES_GetEnemySeBank(self->inUseId) + 2,
                                 &self->position.x, 1, self->number + 1);
         }
-        if (work->action != 6) {
+        if (work->action != ENEMY_ACT_CHASE) {
             xglSoundEffectStopID(RES_GetEnemySeBank(self->inUseId) + 4,
                                  self->number + 1);
         } else {
@@ -1159,16 +1168,16 @@ void ACT_updateEnemy(Actor *self)
     if (work->elec_timer > 0) {
         if (--work->elec_timer <= 0) {
             work->elec_timer = 0;
-            work->stiff_flag &= ~2;
+            work->stiff_flag &= ~ENEMY_STIFF_ELECTRIC;
             sefDeleteEffectCf(work->stiff_effect);
             work->stiff_effect = 0;
-            xglSoundEffectStopID(0x10008, 0);
+            xglSoundEffectStopID(SE_ID_DAMAGE_ELECTRIC, 0);
         }
     }
     if (work->status_4_timer > 0) {
         if (--work->status_4_timer == 0) {
-            work->stiff_flag &= ~4;
-            xglSoundEffectStopID(0x1000b, 0);
+            work->stiff_flag &= ~ENEMY_STIFF_SEAL;
+            xglSoundEffectStopID(SE_ID_DAMAGE_SEAL, 0);
         }
     }
     if (FLAG_FRAME_60) {
@@ -1186,10 +1195,10 @@ void ACT_updateEnemy(Actor *self)
         FLAG_FRAME_60 == 0)
         Check_Encount(self, 0, 0);
     Script_Action(self);
-    if (work->state_flags & 4)
+    if (work->state_flags & ENEMY_STATE_FLAG_BELT)
         Move_BeltConveyer(self);
-    if (work->turn_lock != 1 && work->action != 7) {
-        if (work->stiff_flag & 2)
+    if (work->turn_lock != 1 && work->action != ENEMY_ACT_STIFF) {
+        if (work->stiff_flag & ENEMY_STIFF_ELECTRIC)
             self->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(self->rotation.y, self->target_angle, 36.0f);
         else
             self->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(self->rotation.y, self->target_angle, 6.0f);
@@ -1201,7 +1210,7 @@ void ACT_updateEnemy(Actor *self)
         self->scale.w = 1.0f;
     }
     if (params->gravity_mode != 1) {
-        if (Get_Height(&self->position, work->map_index, 16) == -1000.0f)
+        if (Get_Height(&self->position, work->map_index, 16) == GROUND_HEIGHT_NONE)
             self->position = self->saved_position;
     }
     ACT_updateMotion(self);
@@ -1210,7 +1219,7 @@ void ACT_updateEnemy(Actor *self)
 
         self->translate_y = height;
         work->fall_speed += ENEMY_AIR_FALL_ACCEL;
-        if (!(work->state_flags & ENEMY_AIRBORNE_FLAG))
+        if (!(work->state_flags & ENEMY_STATE_FLAG_AIRBORNE))
             self->position.y += work->fall_speed;
         if (self->position.y < height) {
             self->position.y = height;
@@ -1268,9 +1277,9 @@ int TM_Check_Move(Actor *self)
     Vector4 hit;
     signed char blocker;
 
-    if (height == -1000.0f) {
+    if (height == GROUND_HEIGHT_NONE) {
         TM_Check_Move_at_GoBack(self);
-        work->move_result = 0x40;
+        work->move_result = ENEMY_MOVE_RESULT_NO_GROUND;
         return 0;
     }
 
@@ -1282,21 +1291,21 @@ int TM_Check_Move(Actor *self)
     if (!Check_Undu(&start, &end, work->map_index, &hit, 1, 0,
                     0x10)) {
         TM_Check_Move_at_GoBack(self);
-        work->move_result = 0x40;
+        work->move_result = ENEMY_MOVE_RESULT_NO_GROUND;
         return 0;
     }
 
     if (attr != EneTerritoryID[work->wall_attribute] && work->wall_attribute != 0 &&
         work->action != 8 && (int)self->flags >= 0) {
-        if (work->state_flags & 8) {
-            if (work->action != 6) {
+        if (work->state_flags & ENEMY_STATE_FLAG_TERRITORY_LOCK) {
+            if (work->action != ENEMY_ACT_CHASE) {
                 TM_Check_Move_at_GoBack(self);
-                work->move_result = 0x50;
+                work->move_result = ENEMY_MOVE_RESULT_TERRITORY_A;
                 return 0;
             }
         } else {
             TM_Check_Move_at_GoBack(self);
-            work->move_result = 0x58;
+            work->move_result = ENEMY_MOVE_RESULT_TERRITORY_B;
             return 0;
         }
     }
@@ -1316,11 +1325,11 @@ int TM_Check_Move(Actor *self)
                 &self->position, self->body_radius)]);
         }
         TM_Check_Move_at_GoBack(self);
-        work->move_result = 0x60;
+        work->move_result = ENEMY_MOVE_RESULT_MAP_UNIT;
         return 0;
     }
 
-    work->move_result = 99;
+    work->move_result = ENEMY_MOVE_RESULT_FREE;
     return 1;
 }
 
@@ -1332,7 +1341,7 @@ char TM_Check_Before_Eyes(Actor *self, float length)
 
     Get_Point_By_AngleLength(&self->position, &point, self->rotation.y, length);
 
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < ACTOR_COUNT; i++) {
         if (actor[i].inUseId <= 0)
             continue;
         if (actor[i].kind == 1)
@@ -1347,9 +1356,9 @@ char TM_Check_Before_Eyes(Actor *self, float length)
         }
     }
 
-    if (Get_Height(&self->position, work->map_index, 0) == -1000.0f)
-        return 64;
-    return 99;
+    if (Get_Height(&self->position, work->map_index, 0) == GROUND_HEIGHT_NONE)
+        return ENEMY_MOVE_RESULT_NO_GROUND;
+    return ENEMY_MOVE_RESULT_FREE;
 }
 
 void Set_EnemyMark(Actor *actor, short mark)

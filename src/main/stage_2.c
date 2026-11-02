@@ -5,6 +5,11 @@
 
 void nmlModelSetBackBufferClear(void);
 
+/* JThread.flags set when start is called on the running thread itself. */
+#define STAGE_THREAD_START_SELF 0x21
+#define STAGE_FADE_CANCEL_FRAMES 60
+#define STAGE_COLOR_MAX 255.0f /* channel scale of setBgColor's 0..1 floats */
+
 const char stagePeerFieldName[8] = "peer";
 
 void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
@@ -41,10 +46,10 @@ void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
             if (peer_thread != 0) {
                 peer_thread->reset = JTHREAD_defaultStage;
                 peer_thread->method = method;
-                peer_thread->flags |= 0x10;
+                peer_thread->flags |= STAGE_THREAD_RUNNING;
             }
             if (peer_thread == thread) {
-                peer_thread->flags |= 0x21;
+                peer_thread->flags |= STAGE_THREAD_START_SELF;
             }
         }
     }
@@ -163,14 +168,14 @@ void Java_xeno_Stage_setFadeCancel__I(JThread *thread, StageIntCall *arguments)
 {
     switch (arguments->value) {
     case 0:
-        nmlModelSetFadeInCancel(60);
-        nmlModelSetFadeOutCancel(60);
+        nmlModelSetFadeInCancel(STAGE_FADE_CANCEL_FRAMES);
+        nmlModelSetFadeOutCancel(STAGE_FADE_CANCEL_FRAMES);
         break;
     case 1:
-        nmlModelSetFadeOutCancel(60);
+        nmlModelSetFadeOutCancel(STAGE_FADE_CANCEL_FRAMES);
         break;
     case 2:
-        nmlModelSetFadeInCancel(60);
+        nmlModelSetFadeInCancel(STAGE_FADE_CANCEL_FRAMES);
         break;
     }
 }
@@ -226,9 +231,9 @@ void Java_xeno_Stage_renderCommand__I(JThread *thread, StageIntCall *arguments)
 void Java_xeno_Stage_setBgColor__FFF(JThread *thread, StageBgColorCall *arguments)
 {
     xglRenderClearColor(
-        (((unsigned int)(arguments->blue * 255.0f) & 0xffu) << 16) +
-        (((unsigned int)(arguments->green * 255.0f) & 0xffu) << 8) +
-        ((unsigned int)(arguments->red * 255.0f) & 0xffu));
+        (((unsigned int)(arguments->blue * STAGE_COLOR_MAX) & 0xffu) << 16) +
+        (((unsigned int)(arguments->green * STAGE_COLOR_MAX) & 0xffu) << 8) +
+        ((unsigned int)(arguments->red * STAGE_COLOR_MAX) & 0xffu));
 }
 
 void Java_xeno_Stage_setBgClip__I(JThread *thread, StageIntCall *arguments)

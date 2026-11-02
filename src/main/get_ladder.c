@@ -12,12 +12,40 @@
 #define FLY_TO_LADDER_RISE_STEP (0.69999998807907104f)
 #define GET_OFF_LADDER_SPEED (0.033333335071802139f)
 
+#define ARRIVAL_COUNT 4       /* ladder arrival attribute ids */
+#define LADDER_DIRECTION_COUNT 4
+
+/* LadderStep[]: ground height of each rung around the current one. */
+#define LADDER_STEP_COUNT 127
+#define LADDER_STEP_MIDDLE 63 /* rung the actor starts on */
+
+#define LADDER_ID_SEARCH_MAX 1024 /* map probes along a ladder */
+#define ARRIVAL_SEARCH_MAX 256
+#define LADDER_FLY_FRAMES 13      /* frames to fly on or off the ladder */
+#define LADDER_STEP_FRAMES 15     /* frames of one rung step */
+#define LADDER_STEP_FRAMES_F 15.0f
+#define LADDER_STICK_DEADZONE 32.0f
+#define LADDER_STEP_WAIT_FRAMES 20
+#define LADDER_CLIMB_SE 0x20011   /* sound while climbing */
+
+/* LadderWork.state */
+enum LadderState {
+    LADDER_STATE_IDLE = 0,
+    LADDER_STATE_APPROACH = 1,  /* waiting before turning to the ladder */
+    LADDER_STATE_FLY_ON = 3,    /* flying onto the ladder */
+    LADDER_STATE_HANG = 4,      /* on the ladder, not moving */
+    LADDER_STATE_STEP_UP = 5,
+    LADDER_STATE_STEP_DOWN = 6,
+    LADDER_STATE_GET_OFF = 7,
+    LADDER_STATE_AT_EXIT = 8
+};
+
 struct LadderAttributeTable {
-    int attributes[16];
+    int attributes[LADDER_COUNT];
 };
 
 struct ArrivalAttributeTable {
-    int attributes[4];
+    int attributes[ARRIVAL_COUNT];
 };
 
 typedef struct LadderWork {
@@ -59,9 +87,9 @@ typedef struct LadderGameState {
     unsigned char unmodeled_14[0xc1 - 0x14];
     unsigned char map_flags;
     unsigned char unmodeled_c2[0x29fa0 - 0xc2];
-    signed char ladder_direction[16];
-    unsigned char ladder_bottom_exit[16];
-    float ladder_height[16];
+    signed char ladder_direction[LADDER_COUNT];
+    unsigned char ladder_bottom_exit[LADDER_COUNT];
+    float ladder_height[LADDER_COUNT];
     unsigned char unmodeled_2a000[0x30];
 } LadderGameState;
 
@@ -115,11 +143,11 @@ const struct ArrivalAttributeTable arrivalAttributeTable = {{
     0x00200000, 0x00210000, 0x00220000, 0x00230000
 }};
 
-float AdjTable_X[4] = {0.0f, 0.41f, 0.0f, -0.41f};
+float AdjTable_X[LADDER_DIRECTION_COUNT] = {0.0f, 0.41f, 0.0f, -0.41f};
 
-float AdjTable_Z[4] = {-0.41f, 0.0f, 0.41f, 0.0f};
+float AdjTable_Z[LADDER_DIRECTION_COUNT] = {-0.41f, 0.0f, 0.41f, 0.0f};
 
-float LadderStep[127] = {0.0f};
+float LadderStep[LADDER_STEP_COUNT] = {0.0f};
 
 short Get_Ladder(int attribute)
 {
@@ -132,7 +160,7 @@ short Get_Ladder(int attribute)
         }
 
         index++;
-    } while (index < 16);
+    } while (index < LADDER_COUNT);
 
     return -1;
 }
@@ -148,7 +176,7 @@ short Get_Arrival(int attribute)
         }
 
         index++;
-    } while (index < 4);
+    } while (index < ARRIVAL_COUNT);
 
     return -1;
 }
@@ -166,7 +194,7 @@ void Get_LadderID_Limit(const float *start, float *position,
     position[3] = start[3];
 
     for (;;) {
-        if (index >= 1024) {
+        if (index >= LADDER_ID_SEARCH_MAX) {
             break;
         }
         attribute = Get_Attr_NU(position, 0, 0);
@@ -181,7 +209,7 @@ void Get_LadderID_Limit(const float *start, float *position,
         position[2] += zStep;
     }
 
-    if (index == 1024) {
+    if (index == LADDER_ID_SEARCH_MAX) {
         position[0] = start[0];
         position[2] = start[2];
     } else {
@@ -202,7 +230,7 @@ int Get_ArrivalID_First(const float *start, float *position,
     position[3] = start[3];
 
     for (;;) {
-        if (index >= 256) {
+        if (index >= ARRIVAL_SEARCH_MAX) {
             break;
         }
 
@@ -217,7 +245,7 @@ int Get_ArrivalID_First(const float *start, float *position,
         index++;
     }
 
-    return index != 256;
+    return index != ARRIVAL_SEARCH_MAX;
 }
 
 void Fly_to_Ladder(Actor *actor)
@@ -228,9 +256,9 @@ void Fly_to_Ladder(Actor *actor)
     short i;
     short state = work->state;
 
-    if (state == 1) {
+    if (state == LADDER_STATE_APPROACH) {
         work->fly_frame++;
-        if (work->fly_frame < 13) {
+        if (work->fly_frame < LADDER_FLY_FRAMES) {
             return;
         }
 
@@ -255,7 +283,7 @@ void Fly_to_Ladder(Actor *actor)
         } else {
             ACT_setMotion2(actor, 28, 8);
         }
-        work->state = 3;
+        work->state = LADDER_STATE_FLY_ON;
     }
 
     Get_MiddlePoint_Parabora(&work->from, &work->to,
@@ -267,8 +295,8 @@ void Fly_to_Ladder(Actor *actor)
     }
 
     work->fly_frame = -1;
-    work->state = 4;
-    work->step_wait = 20;
+    work->state = LADDER_STATE_HANG;
+    work->step_wait = LADDER_STEP_WAIT_FRAMES;
     ACT_setMotion2(actor, 20, 8);
     actor->animation.slot.speed = FLY_TO_LADDER_SPEED;
 
@@ -277,18 +305,18 @@ void Fly_to_Ladder(Actor *actor)
     point.z -= AdjTable_Z[GameLoopState.ladder_direction[work->ladder_id]];
     height = Get_Height(&point, 0, 0);
 
-    NowLadderStep = 63;
+    NowLadderStep = LADDER_STEP_MIDDLE;
     if (actor->position.y < height || work->from_top == 1) {
         actor->position.y = height;
     }
-    LadderStep[63] = actor->position.y;
+    LadderStep[LADDER_STEP_MIDDLE] = actor->position.y;
 
-    for (i = 1; i < 63; i++) {
+    for (i = 1; i < LADDER_STEP_MIDDLE; i++) {
         float rise = i * FLY_TO_LADDER_RISE_STEP;
         float base = actor->position.y;
 
-        LadderStep[63 + i] = base + rise;
-        LadderStep[63 - i] = base - rise;
+        LadderStep[LADDER_STEP_MIDDLE + i] = base + rise;
+        LadderStep[LADDER_STEP_MIDDLE - i] = base - rise;
     }
 }
 
@@ -303,7 +331,7 @@ void Get_Off_Ladder(Actor *actor)
 
     if (work->fly_frame >= work->fly_frames) {
         work->fly_frame = -1;
-        work->state = 0;
+        work->state = LADDER_STATE_IDLE;
         ACT_setMotion2(actor, 0, 8);
         GameLoopState.player->flags |= 0x1000;
         GameLoopState.map_flags |= 0x20;
@@ -341,7 +369,7 @@ short Ready_Ladder(Actor *actor)
         direction = GameLoopState.ladder_direction[ladder];
         work->to = actor->position;
         work->from_top = 1;
-        work->fly_frames = 13;
+        work->fly_frames = LADDER_FLY_FRAMES;
         lift = 0.0f;
     } else {
         actor->target_angle = facing[Get_Arrival(attribute)];
@@ -353,14 +381,14 @@ short Ready_Ladder(Actor *actor)
             return 0;
         }
         work->to = point;
-        work->fly_frames = 13;
+        work->fly_frames = LADDER_FLY_FRAMES;
         work->from_top = 0;
         direction = GameLoopState.ladder_direction[ladder];
     }
 
     work->facing_angle = facing[direction];
     actor->target_angle = work->facing_angle;
-    work->state = 1;
+    work->state = LADDER_STATE_APPROACH;
     ACT_setMotion2(actor, 0, 9);
 
     point = work->to;
@@ -472,35 +500,35 @@ void On_Ladder(register Actor * const actor)
         stick_x = PadData[0].axis[2];
         stick_y = PadData[0].axis[3];
 
-        if (stick_x >= 32.0f || stick_x <= -32.0f) {
+        if (stick_x >= LADDER_STICK_DEADZONE || stick_x <= -LADDER_STICK_DEADZONE) {
             speed_x = stick_x * 0.0004f * 1.5f;
         } else {
             speed_x = 0.0f;
         }
 
-        if (stick_y >= 32.0f || stick_y <= -32.0f) {
+        if (stick_y >= LADDER_STICK_DEADZONE || stick_y <= -LADDER_STICK_DEADZONE) {
             speed_y = stick_y * 0.0004f * 1.5f;
         } else {
             speed_y = 0.0f;
         }
 
         if (speed_x == 0.0f && speed_y == 0.0f) {
-            if (PadData[0].buttons & 0x1000) {
+            if (PadData[0].buttons & PAD_UP) {
                 move_x = up_step[direction][0];
                 move_y = up_step[direction][1];
                 move_z = up_step[direction][2];
             }
-            if (PadData[0].buttons & 0x4000) {
+            if (PadData[0].buttons & PAD_DOWN) {
                 move_x = down_step[direction][0];
                 move_y = down_step[direction][1];
                 move_z = down_step[direction][2];
             }
-            if (PadData[0].buttons & 0x8000) {
+            if (PadData[0].buttons & PAD_LEFT) {
                 move_x = left_step[direction][0];
                 move_y = left_step[direction][1];
                 move_z = left_step[direction][2];
             }
-            if (PadData[0].buttons & 0x2000) {
+            if (PadData[0].buttons & PAD_RIGHT) {
                 move_x = right_step[direction][0];
                 move_y = right_step[direction][1];
                 move_z = right_step[direction][2];
@@ -538,50 +566,50 @@ void On_Ladder(register Actor * const actor)
                        actor->position.x,
                        work->limit_high);
 
-    for (step = 0; step < 127; step++) {
-        rung = 63 + step;
-        if (LadderStep[rung] != -1000.0f) {
+    for (step = 0; step < LADDER_STEP_COUNT; step++) {
+        rung = LADDER_STEP_MIDDLE + step;
+        if (LadderStep[rung] != GROUND_HEIGHT_NONE) {
             xglFontDebugPrintf(176, 120 - step * 8, "%3d:%8f", rung,
                                LadderStep[rung]);
         }
-        if (LadderStep[63 - step] != -1000.0f) {
-            xglFontDebugPrintf(176, 120 + step * 8, "%3d:%8f", 63 - step,
-                               LadderStep[63 - step]);
+        if (LadderStep[LADDER_STEP_MIDDLE - step] != GROUND_HEIGHT_NONE) {
+            xglFontDebugPrintf(176, 120 + step * 8, "%3d:%8f", LADDER_STEP_MIDDLE - step,
+                               LadderStep[LADDER_STEP_MIDDLE - step]);
         }
     }
 
     switch (work->state) {
-    case 5:
+    case LADDER_STATE_STEP_UP:
         work->step_frame++;
-        if (work->step_frame >= 15) {
-            work->state = 4;
+        if (work->step_frame >= LADDER_STEP_FRAMES) {
+            work->state = LADDER_STATE_HANG;
         }
         move_y = work->step_from +
-                 (work->step_to - work->step_from) * work->step_frame / 15.0f -
+                 (work->step_to - work->step_from) * work->step_frame / LADDER_STEP_FRAMES_F -
                  actor->position.y;
         work->lookat_point = &work->lookat_target.x;
         work->lookat_target.x = actor->position.x - AdjTable_X[direction];
         work->lookat_target.y = actor->position.y + 2.0f;
         work->lookat_target.z = actor->position.z - AdjTable_Z[direction];
         break;
-    case 6:
+    case LADDER_STATE_STEP_DOWN:
         work->step_frame++;
-        if (work->step_frame >= 15) {
-            work->state = 4;
+        if (work->step_frame >= LADDER_STEP_FRAMES) {
+            work->state = LADDER_STATE_HANG;
         }
         move_y = work->step_from +
-                 (work->step_to - work->step_from) * work->step_frame / 15.0f -
+                 (work->step_to - work->step_from) * work->step_frame / LADDER_STEP_FRAMES_F -
                  actor->position.y;
         work->lookat_point = &work->lookat_target.x;
         work->lookat_target.x = actor->position.x - AdjTable_X[direction];
         work->lookat_target.y = actor->position.y - 2.0f;
         work->lookat_target.z = actor->position.z - AdjTable_Z[direction];
         break;
-    case 4:
+    case LADDER_STATE_HANG:
         work->step_frame = 0;
         work->lookat_point = 0;
         if (move_y == 0.0f) {
-            xglSoundEffectStopID(0x20011, 0);
+            xglSoundEffectStopID(LADDER_CLIMB_SE, 0);
         }
         if (work->step_wait >= 18) {
             move_y = 0.0f;
@@ -591,32 +619,32 @@ void On_Ladder(register Actor * const actor)
                 GameLoopState.ladder_bottom_exit[ladder_id] == 0) {
                 return;
             }
-            xglSoundEffectNormalID(0x20011, 0);
+            xglSoundEffectNormalID(LADDER_CLIMB_SE, 0);
             work->step_frame = 0;
             work->step_from = actor->position.y;
-            work->state = 6;
+            work->state = LADDER_STATE_STEP_DOWN;
             work->step_to = LadderStep[NowLadderStep-- - 1];
             ACT_setMotion(actor, 20);
             move_y = work->step_from +
-                     (work->step_to - work->step_from) * work->step_frame / 15.0f -
+                     (work->step_to - work->step_from) * work->step_frame / LADDER_STEP_FRAMES_F -
                      actor->position.y;
         }
         if (move_y > 0.0f) {
             if (top <= actor->position.y + 0.7f) {
                 CallMethod_I("HashigoTop", work->ladder_id);
                 if (GameLoopState.ladder_flags & 0x20) {
-                    work->state = 8;
+                    work->state = LADDER_STATE_AT_EXIT;
                 }
                 return;
             }
-            xglSoundEffectNormalID(0x20011, 0);
+            xglSoundEffectNormalID(LADDER_CLIMB_SE, 0);
             work->step_frame = 0;
             work->step_from = actor->position.y;
-            work->state = 5;
+            work->state = LADDER_STATE_STEP_UP;
             work->step_to = LadderStep[NowLadderStep++ + 1];
             ACT_setMotion(actor, 16);
             move_y = work->step_from +
-                     (work->step_to - work->step_from) * work->step_frame / 15.0f -
+                     (work->step_to - work->step_from) * work->step_frame / LADDER_STEP_FRAMES_F -
                      actor->position.y;
         }
         break;
@@ -634,13 +662,13 @@ void On_Ladder(register Actor * const actor)
     actor->animation.slot.speed = 0.0f;
     actor->animation.slot.frame =
         (actor->animation.slot.forwardLimit - actor->animation.slot.reverseLimit) *
-        work->step_frame / 15.0f;
+        work->step_frame / LADDER_STEP_FRAMES_F;
 
     if (actor->position.y + move_y < ground &&
         GameLoopState.ladder_bottom_exit[ladder_id] == 1) {
         CallMethod_I(hashigoBottomName, work->ladder_id);
         if (GameLoopState.ladder_flags & 0x20) {
-            work->state = 8;
+            work->state = LADDER_STATE_AT_EXIT;
             return;
         }
         actor->position.y = ground;
@@ -754,10 +782,10 @@ void On_Ladder(register Actor * const actor)
         work->from = actor->position;
         work->to = destination;
         work->to.y = ground;
-        work->fly_frames = 13;
+        work->fly_frames = LADDER_FLY_FRAMES;
         work->fly_frame = 0;
-        work->state = 7;
-        xglSoundEffectStopID(0x20011, 0);
+        work->state = LADDER_STATE_GET_OFF;
+        xglSoundEffectStopID(LADDER_CLIMB_SE, 0);
         actor->animation.slot.speed = 0.033333335f;
     }
 }
@@ -773,16 +801,16 @@ int Ladder_Main(Actor *actor)
         actor->rotation.y, actor->target_angle, 6.0f);
 
     switch (work->state) {
-    case 1:
-    case 3:
+    case LADDER_STATE_APPROACH:
+    case LADDER_STATE_FLY_ON:
         Fly_to_Ladder(actor);
         break;
-    case 4:
-    case 5:
-    case 6:
+    case LADDER_STATE_HANG:
+    case LADDER_STATE_STEP_UP:
+    case LADDER_STATE_STEP_DOWN:
         On_Ladder(actor);
         break;
-    case 7:
+    case LADDER_STATE_GET_OFF:
         Get_Off_Ladder(actor);
         break;
     default:

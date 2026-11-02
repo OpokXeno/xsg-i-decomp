@@ -6,6 +6,30 @@
 #include "shared.h"
 #include "main/xgl_font.h"
 #include "main/xgl_prim_add.h"
+#include "main/xgl_packet.h"
+
+/* GIF tag words: EOP bit of word 0 (NLOOP in the low bits) and the A+D
+ * register descriptor (NREG = 1, REGS = 0xE) of words 1 and 2. */
+#define GIF_TAG_NREG_AD    0x10000000
+#define GIF_TAG_REGS_AD    (-2)
+
+/* The widgets sit in a 512x448 screen (EW_SCREEN_WIDTH/HEIGHT) whose origin is
+ * at this offset in GS primitive coordinates (2048 - 256, 2048 - 224). */
+#define EW_GS_ORIGIN_X      1792
+#define EW_GS_ORIGIN_Y      1824
+
+/* Draw passes: the packet pass (EW_sendPacket) and the text pass (EW_draw). */
+#define EW_PASS_PACKET 1
+#define EW_PASS_TEXT   2
+
+/* Default line pitch of a new label. */
+#define EW_LABEL_LINE_HEIGHT 24
+/* Default alpha of a new frame (GS alpha range 0..0x80). */
+#define EW_FRAME_ALPHA_DEFAULT 0x60
+/* Border pieces of the frame (rows of frameUV) drawn by frame_put/label_put. */
+#define EW_FRAME_PIECE_COUNT 8
+/* label_put draws every border piece but the bottom edge (bit i = piece i). */
+#define EW_LABEL_PIECE_MASK 0x3D
 
 typedef struct EwFrameState {
     /* +0x00: cleared by frame_init; no reader found among this TU's own
@@ -117,7 +141,7 @@ static unsigned int frameUV[8][4] = {
 
 /* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
  * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
-EwWidget ewComponent[64];
+EwWidget ewComponent[EW_SLOT_COUNT];
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const unsigned char labelFontStyleTable[0x20] = {
@@ -163,7 +187,7 @@ void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell)
 static void frame_init(EwFrameState *frame)
 {
     frame->flags = 0;
-    frame->alpha = 0x60;
+    frame->alpha = EW_FRAME_ALPHA_DEFAULT;
 }
 
 static void sprt_init(EwSpriteState *sprite)
@@ -185,29 +209,29 @@ static void EW_setDrawEnv(FontDrawCursor *cursor)
     EwGifRegister *entry;
 
     env = (EwDrawEnvPacket *) (((unsigned int)&cursor->work + 15) & ~15);
-    env->tag[0] = 0x8006;
-    env->tag[1] = 0x10000000;
-    env->tag[2] = -2;
+    env->tag[0] = GIF_TAG_EOP | 6;
+    env->tag[1] = GIF_TAG_NREG_AD;
+    env->tag[2] = GIF_TAG_REGS_AD;
     env->tag[3] = 0;
     regs = env->regs;
     entry = regs + 0;
     entry->data = 68;
-    entry->reg = 66;
+    entry->reg = SCE_GS_ALPHA_1;
     entry = regs + 1;
     entry->data = 0;
-    entry->reg = 63;
+    entry->reg = SCE_GS_TEXFLUSH;
     entry = regs + 2;
     entry->data = 0;
-    entry->reg = 59;
+    entry->reg = SCE_GS_TEXA;
     entry = regs + 3;
     entry->data = 65;
-    entry->reg = 20;
+    entry->reg = SCE_GS_TEX1_1;
     entry = regs + 4;
     entry->data = sprt_base_register[0];
-    entry->reg = 6;
+    entry->reg = SCE_GS_TEX0_1;
     entry = regs + 5;
     entry->data = 0x31001;
-    entry->reg = 71;
+    entry->reg = SCE_GS_TEST_1;
     xglPrimAddGifTagDirect(cursor->packet, env, 7);
 }
 
@@ -227,38 +251,38 @@ EwWidget *EW_create(int index, int type)
 
     widget = 0;
     if (index < 0) {
-        for (i = 0; i < 64; i++) {
-            if ((ewComponent[i].flags & 0x8000) == 0) {
+        for (i = 0; i < EW_SLOT_COUNT; i++) {
+            if ((ewComponent[i].flags & EW_FLAG_ALLOCATED) == 0) {
                 index = i;
                 break;
             }
         }
     }
-    if ((unsigned int) index < 64) {
+    if ((unsigned int) index < EW_SLOT_COUNT) {
         widget = &ewComponent[index];
         widget->type = type;
-        widget->flags = 0x8000;
+        widget->flags = EW_FLAG_ALLOCATED;
         switch (widget->type) {
-        case 1:
+        case EW_TYPE_FRAME:
             frame_init(&((EwFrameWidget *) widget)->frame);
             break;
-        case 5:
+        case EW_TYPE_SPRITE:
             sprt_init(&((EwSpriteWidget *) widget)->sprite);
             break;
-        case 4:
+        case EW_TYPE_CONTAINER:
             container_init(&((EwContainerWidget *) widget)->container);
             break;
-        case 8:
-        case 10:
+        case EW_TYPE_MASK:
+        case EW_TYPE_MASK_TEXT_PASS:
             mask_init(&((EwMaskWidget *) widget)->mask);
             break;
-        case 7: {
+        case EW_TYPE_LABEL: {
             EwTextWidget *label = (EwTextWidget *) widget;
 
             label->text.lineCount = -1;
-            label->text.lineHeight = 24;
+            label->text.lineHeight = EW_LABEL_LINE_HEIGHT;
             label->text.fontStyle = labelFontStyleTable;
-            label->text.colorScale = 128;
+            label->text.colorScale = EW_COLOR_SCALE_NEUTRAL;
             label->text.lines = 0;
             label->text.firstLine = 0;
             label->text.lineWidths = 0;
@@ -277,7 +301,7 @@ void EW_dispose(EwContainerWidget *widget)
     int capacity;
     int remaining;
 
-    if (widget->type == 4)
+    if (widget->type == EW_TYPE_CONTAINER)
     {
         firstChild = widget->container.children;
         if (firstChild != 0)
@@ -309,7 +333,7 @@ int EW_addComponent(EwContainerWidget *widget, int index, EwWidget *child)
     int capacity;
     int i;
 
-    if (widget->type != 4 || (children = widget->container.children) == 0) {
+    if (widget->type != EW_TYPE_CONTAINER || (children = widget->container.children) == 0) {
         return -1;
     }
     if (child == 0) {
@@ -334,7 +358,7 @@ int EW_addComponent(EwContainerWidget *widget, int index, EwWidget *child)
         }
     }
     if (index >= 0 && index < capacity) {
-        child->flags |= 0x2000;
+        child->flags |= EW_FLAG_CHILD;
         children[index] = child;
     } else {
         index = -1;
@@ -362,7 +386,7 @@ void EW_drawContainer(FontDrawCursor *cursor, EwContainerState *container)
             {
                 child = *children;
                 children++;
-                if (child != 0 && (child->flags & 0x4000))
+                if (child != 0 && (child->flags & EW_FLAG_VISIBLE))
                 {
                     EW_drawComoponent(cursor, child);
                 }
@@ -376,52 +400,52 @@ void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
 {
     switch (widget->type)
     {
-    case 0:
-        if (ew_send_mode & 1)
+    case EW_TYPE_PANEL:
+        if (ew_send_mode & EW_PASS_PACKET)
         {
             label_put(cursor, (EwLabelWidget *) widget);
         }
         break;
-    case 1:
-        if (ew_send_mode & 1)
+    case EW_TYPE_FRAME:
+        if (ew_send_mode & EW_PASS_PACKET)
         {
             frame_put(cursor, widget);
         }
         break;
-    case 4:
+    case EW_TYPE_CONTAINER:
         EW_drawContainer(cursor, &((EwContainerWidget *) widget)->container);
         break;
-    case 5:
-        if (ew_send_mode & 1)
+    case EW_TYPE_SPRITE:
+        if (ew_send_mode & EW_PASS_PACKET)
         {
             sprt_put(cursor, (EwSpriteWidget *) widget);
         }
         break;
-    case 6:
-        if (ew_send_mode & 1)
+    case EW_TYPE_CLIP:
+        if (ew_send_mode & EW_PASS_PACKET)
         {
             set_clip(cursor, widget);
         }
         break;
-    case 8:
-        if (ew_send_mode & 1)
+    case EW_TYPE_MASK:
+        if (ew_send_mode & EW_PASS_PACKET)
         {
             mask_put(cursor, widget);
         }
         break;
-    case 9:
-        if (ew_send_mode & 2)
+    case EW_TYPE_CLIP_TEXT_PASS:
+        if (ew_send_mode & EW_PASS_TEXT)
         {
             xglFontPrintExtFunc(widget->drawValue, set_clip, widget);
         }
         break;
-    case 10:
-        if (ew_send_mode & 2)
+    case EW_TYPE_MASK_TEXT_PASS:
+        if (ew_send_mode & EW_PASS_TEXT)
         {
             xglFontPrintExtFunc(widget->drawValue, mask_put, widget);
         }
         break;
-    case 7:
+    case EW_TYPE_LABEL:
     {
         typedef struct EwTextHeaderLocal
         {
@@ -463,7 +487,7 @@ void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
         int i;
         int centeredX;
 
-        if ((ew_send_mode & 2) == 0)
+        if ((ew_send_mode & EW_PASS_TEXT) == 0)
         {
             return;
         }
@@ -496,7 +520,7 @@ void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
         }
         xglFontPrint(x, y, textWidget->header.drawValue,
                      (const char *) fontStyle);
-        if (colorScale != 128)
+        if (colorScale != EW_COLOR_SCALE_NEUTRAL)
         {
             tmp_0[1] = 0x11;
             xglFontPrint(0, 0, textWidget->header.drawValue, tmp_0);
@@ -533,7 +557,7 @@ void EW_init(void)
 {
     int i;
 
-    for (i = 63; i >= 0; i--)
+    for (i = EW_SLOT_COUNT - 1; i >= 0; i--)
     {
         ewComponent[i].flags = 0;
     }
@@ -544,11 +568,11 @@ void EW_sendPacket(FontDrawCursor *cursor, void *argument)
     int i;
 
     xglFontReloadTexture(cursor, 2);
-    ew_send_mode = 1;
+    ew_send_mode = EW_PASS_PACKET;
     EW_setDrawEnv(cursor);
-    for (i = 0; i < 64; i++)
+    for (i = 0; i < EW_SLOT_COUNT; i++)
     {
-        if ((ewComponent[i].flags & 0xE000) == 0xC000)
+        if ((ewComponent[i].flags & EW_FLAG_STATE_MASK) == EW_FLAG_TOP_LEVEL_VISIBLE)
         {
             EW_drawComoponent(cursor, &ewComponent[i]);
         }
@@ -561,11 +585,11 @@ void EW_draw(void)
 {
     int i;
 
-    xglFontPrintExtFunc(0x00FFFFF0, EW_sendPacket, 0);
-    ew_send_mode = 2;
-    for (i = 0; i < 64; i++)
+    xglFontPrintExtFunc(EW_ORDER_FRAME,EW_sendPacket, 0);
+    ew_send_mode = EW_PASS_TEXT;
+    for (i = 0; i < EW_SLOT_COUNT; i++)
     {
-        if ((ewComponent[i].flags & 0xE000) == 0xC000)
+        if ((ewComponent[i].flags & EW_FLAG_STATE_MASK) == EW_FLAG_TOP_LEVEL_VISIBLE)
         {
             EW_drawComoponent(0, &ewComponent[i]);
         }
@@ -606,25 +630,25 @@ static void mask_put(FontDrawCursor *cursor, void *arg)
     gif = (unsigned int *) (((unsigned int)&cursor->work + 15) & ~15);
     qword = gif;
     qword[0] = 1;
-    qword[1] = 0x10000000;
-    qword[2] = -2;
+    qword[1] = GIF_TAG_NREG_AD;
+    qword[2] = GIF_TAG_REGS_AD;
     qword[3] = 0;
     qword += 4;
     qword[0] = mask->blend;
     qword[1] = mask->fix;
-    qword[2] = 66;
+    qword[2] = SCE_GS_ALPHA_1;
     qword += 4;
-    qword[0] = 0x8004;
+    qword[0] = GIF_TAG_EOP | 4;
     qword[1] = 0x20264000;
     qword[2] = -175;
     qword[3] = 0;
     qword += 4;
     width = widget->width << 4;
     height = widget->height << 4;
-    left = (widget->x + 1792) << 4;
-    top = (widget->y + 1824) << 4;
+    left = (widget->x + EW_GS_ORIGIN_X) << 4;
+    top = (widget->y + EW_GS_ORIGIN_Y) << 4;
     z = widget->z;
-    if ((mask->blend & 0x100) == 0) {
+    if ((mask->blend & EW_MASK_GRADIENT_HORIZONTAL) == 0) {
         color = (unsigned char) (mask->fix >> 16);
         qword[0] = color;
         qword[1] = color;
@@ -736,20 +760,20 @@ static void sprt_put(FontDrawCursor *cursor, EwSpriteWidget *widget)
     quad[3] = 0;
     quad = packet + 4;
     ((u64 *) quad)[0] = 0x7F1FC200;
-    ((u64 *) quad)[1] = 8;
+    ((u64 *) quad)[1] = SCE_GS_CLAMP_1;
     setup = packet + 8;
     ((u64 *) setup)[0] = 68;
-    ((u64 *) setup)[1] = 66;
+    ((u64 *) setup)[1] = SCE_GS_ALPHA_1;
     setup = packet + 12;
-    setup[0] = 0x8001;
+    setup[0] = GIF_TAG_EOP | 1;
     setup[1] = 0x50AB4000;
     setup[2] = 0xFFF53531;
     setup[3] = 0;
     sprite = &widget->sprite;
     texU = sprite->u << 4;
     texV = sprite->v << 4;
-    screenX = (widget->x + 1792) << 4;
-    screenY = (widget->y + 1824) << 4;
+    screenX = (widget->x + EW_GS_ORIGIN_X) << 4;
+    screenY = (widget->y + EW_GS_ORIGIN_Y) << 4;
     width = widget->width << 4;
     height = widget->height << 4;
     z = widget->z;
@@ -799,19 +823,19 @@ static void set_clip(FontDrawCursor *cursor, void *arg)
     if (left < 0) {
         left = 0;
     }
-    if (right > 511) {
-        right = 511;
+    if (right > EW_SCREEN_WIDTH - 1) {
+        right = EW_SCREEN_WIDTH - 1;
     }
-    if (bottom > 447) {
-        bottom = 447;
+    if (bottom > EW_SCREEN_HEIGHT - 1) {
+        bottom = EW_SCREEN_HEIGHT - 1;
     }
-    env->tag[0] = 0x8001;
-    env->tag[1] = 0x10000000;
-    env->tag[2] = -2;
+    env->tag[0] = GIF_TAG_EOP | 1;
+    env->tag[1] = GIF_TAG_NREG_AD;
+    env->tag[2] = GIF_TAG_REGS_AD;
     env->tag[3] = 0;
     entry = &env->regs[0];
     entry->data = (u64) left | (u64) right << 16 | (u64) top << 32 | (u64) (bottom - 2) << 48;
-    entry->reg = 64;
+    entry->reg = SCE_GS_SCISSOR_1;
     xglPrimAddGifTagDirect(cursor->packet, env, 2);
 }
 
@@ -857,16 +881,16 @@ static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
     gif = (EwGifQuad *) (((unsigned int)&cursor->work + 15) & ~15);
     qword = gif->words;
     qword[0] = 2;
-    qword[1] = 0x10000000;
-    qword[2] = -2;
+    qword[1] = GIF_TAG_NREG_AD;
+    qword[2] = GIF_TAG_REGS_AD;
     qword[3] = 0;
     qword += 4;
     reg = &gif[1].reg;
     reg->data = 0x7F0007FF;
-    reg->reg = 8;
+    reg->reg = SCE_GS_CLAMP_1;
     reg = &gif[2].reg;
     reg->data = 68;
-    reg->reg = 66;
+    reg->reg = SCE_GS_ALPHA_1;
     qword += 8;
     qword[0] = 1;
     qword[1] = 0x50AB4000;
@@ -882,8 +906,8 @@ static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
         width += 16;
     }
     heightIsPow2 = checkN2(rawHeight);
-    left = (widget->x + 1792) << 4;
-    top = (widget->y + 1824) << 4;
+    left = (widget->x + EW_GS_ORIGIN_X) << 4;
+    top = (widget->y + EW_GS_ORIGIN_Y) << 4;
     z = widget->drawValue;
     height = rawHeight << 4;
     if (heightIsPow2 != 0) {
@@ -913,15 +937,15 @@ static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
     qword += 4;
 
     qword[0] = 1;
-    qword[1] = 0x10000000;
-    qword[2] = -2;
+    qword[1] = GIF_TAG_NREG_AD;
+    qword[2] = GIF_TAG_REGS_AD;
     qword[3] = 0;
     qword += 4;
     reg = &gif[10].reg;
     reg->data = 5;
-    reg->reg = 8;
+    reg->reg = SCE_GS_CLAMP_1;
     qword += 4;
-    qword[0] = 0x8008;
+    qword[0] = GIF_TAG_EOP | 8;
     qword[1] = 0x50AB4000;
     qword[2] = 0xFFF53531;
     qword[3] = 0;
@@ -966,7 +990,7 @@ static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
     ys[12] = bottom;
     ys[13] = bottom + 256;
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < EW_FRAME_PIECE_COUNT; i++) {
         qword[0] = 128;
         qword[1] = 128;
         qword[2] = 128;
@@ -1021,16 +1045,16 @@ static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget)
     gif = (EwGifQuad *) (((unsigned int)&cursor->work + 15) & ~15);
     qword = gif->words;
     qword[0] = 2;
-    qword[1] = 0x10000000;
-    qword[2] = -2;
+    qword[1] = GIF_TAG_NREG_AD;
+    qword[2] = GIF_TAG_REGS_AD;
     qword[3] = 0;
     qword += 4;
     reg = &gif[1].reg;
     reg->data = 0x7F0007FF;
-    reg->reg = 8;
+    reg->reg = SCE_GS_CLAMP_1;
     reg = &gif[2].reg;
     reg->data = 68;
-    reg->reg = 66;
+    reg->reg = SCE_GS_ALPHA_1;
     qword += 8;
     qword[0] = 4;
     qword[1] = 0x30A64000;
@@ -1048,8 +1072,8 @@ static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget)
     if (checkN2(rawHeight) != 0) {
         height += 16;
     }
-    left = (widget->x + 1792) << 4;
-    top = (widget->y + 1824) << 4;
+    left = (widget->x + EW_GS_ORIGIN_X) << 4;
+    top = (widget->y + EW_GS_ORIGIN_Y) << 4;
     z = widget->z;
 
     qword[0] = 80;
@@ -1106,15 +1130,15 @@ static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget)
     qword += 4;
 
     qword[0] = 1;
-    qword[1] = 0x10000000;
-    qword[2] = -2;
+    qword[1] = GIF_TAG_NREG_AD;
+    qword[2] = GIF_TAG_REGS_AD;
     qword[3] = 0;
     qword += 4;
     reg = &gif[17].reg;
     reg->data = 5;
-    reg->reg = 8;
+    reg->reg = SCE_GS_CLAMP_1;
     qword += 4;
-    qword[0] = 0x8005;
+    qword[0] = GIF_TAG_EOP | 5;
     qword[1] = 0x50AB4000;
     qword[2] = 0xFFF53531;
     qword[3] = 0;
@@ -1153,8 +1177,8 @@ static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget)
     ys[12] = bottom;
     ys[13] = bottom + 256;
 
-    pieces = 0x3D;
-    for (i = 0; i < 8; i++) {
+    pieces = EW_LABEL_PIECE_MASK;
+    for (i = 0; i < EW_FRAME_PIECE_COUNT; i++) {
         if (pieces & 1) {
             qword[0] = 128;
             qword[1] = 128;

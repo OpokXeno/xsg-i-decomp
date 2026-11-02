@@ -4,6 +4,86 @@
 #include "main/ssd_3.h"
 #include "main/ssd_init.h"
 #include "main/xgl_dma.h"
+#include "main/xgl_packet.h"
+
+/* D_ENABLEW bit 16 (CPND): holds all DMA transfers while a channel register is written. */
+#define D_ENABLE_HOLD 0x10000
+
+/* Dn_CHCR values of the IPU DMA channels (D3 = IPU_from, D4 = IPU_to). */
+#define MOVIE_D4_CHCR_CHAIN_STOP (DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
+#define MOVIE_D4_CHCR_CHAIN_START (DMA_CHCR_STR | DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
+#define MOVIE_D4_CHCR_CHAIN_START_REF (DMA_TAG_ID_REF | MOVIE_D4_CHCR_CHAIN_START)
+#define MOVIE_D4_CHCR_NORMAL_START (DMA_CHCR_STR | DMA_CHCR_DIR)
+
+/* IPU registers: IPU_CTRL.RST and the IPU commands (opcode in bits 28..31). */
+#define IPU_CTRL_RESET 0x40000000
+#define IPU_CMD_BCLR 0
+#define IPU_CMD_IDEC 0x10000000
+#define IPU_CMD_FDEC 0x40000000
+#define IPU_CMD_SETTH 0x90000000
+#define IPU_IDEC_QSC_1 0x10000 /* quantiser step code 1 */
+/* sceIpuSync timeout, and the busy-poll bound used throughout the movie code. */
+#define IPU_SYNC_TIMEOUT 0x40
+#define MOVIE_POLL_LIMIT 0xFFFFFF
+
+/* XTX texture header written by xglMovieMakeXtxHeader: "XTX" signature word and the offset of the pixel data. */
+#define XTX_HEADER_IDENTITY 0x5000585458
+#define XTX_DATA_OFFSET 0x30
+
+/* The "ipum" signature of the movie source header. */
+#define MOVIE_SIGNATURE_IPUM 0x6d757069
+/* checkdma: the DMA is finished once decodeState reaches this value. */
+#define MOVIE_DECODE_DONE 99
+/* transMode values: which GS buffer a decoded strip is uploaded to, or memory only. */
+#define MOVIE_TRANS_BUFFER_0 0
+#define MOVIE_TRANS_BUFFER_1 1
+#define MOVIE_TRANS_BITBLTBUF 2
+#define MOVIE_TRANS_MEMORY 0xff
+/* A strip is one 16-pixel-high row of macroblocks, each macroblock 16x16 RGBA32 pixels. */
+#define MOVIE_MACROBLOCK 16
+#define MOVIE_MACROBLOCK_BYTES 0x400
+#define MOVIE_MACROBLOCK_QWORDS 0x40
+#define MOVIE_DMA_QWORD 16
+#define MOVIE_DMA_MAX_QWORDS 0xffff
+/* GIF packets of the strip upload: A+D settings, then one IMAGE tag per macroblock. */
+#define MOVIE_GIF_TAG_AD_2 (GIF_TAG_NREG_1 | GIF_TAG_EOP | 2)
+#define MOVIE_GIF_TAG_IMAGE_BLOCK (GIF_TAG_FLG_IMAGE | GIF_TAG_EOP | MOVIE_MACROBLOCK_QWORDS)
+#define MOVIE_BITBLTBUF_DBW_512 0x8000000000000
+#define MOVIE_BITBLTBUF_DBW_896 (0xe000L << 36)
+#define MOVIE_TRXREG_MACROBLOCK 0x1000000010
+/* Scratchpad staging areas. */
+#define MOVIE_PACKET_ADDRESS_0 (SCRATCHPAD_BASE + 0x40)
+#define MOVIE_PACKET_ADDRESS_1 (SCRATCHPAD_BASE + 0x1000)
+
+/* MPEG2 stream: callback and stream identifiers of the sceMpeg API. */
+#define SCE_MPEG_CB_ERROR 0
+#define SCE_MPEG_CB_NODATA 1
+#define SCE_MPEG_STR_M2V 0
+#define SCE_MPEG_STR_ADPCM 3
+#define MPEG_PICTURE_TYPE_MASK 7
+#define MPEG_PICTURE_TYPE_I 1
+/* nodataCallback gives up feeding after this many consecutive misses. */
+#define MPEG_MISS_LIMIT 0x41
+#define MPEG_NODATA_DECODE_STATE 0x10
+/* Sound handed to the SSD VAG stream in 4 KiB chunks. */
+#define MPEG_AUDIO_CHUNK_BYTES 0x1000
+#define MPEG_AUDIO_VOLUME_MAX 0x7f
+#define MPEG_AUDIO_BASE_RATE 48000
+/* PSS audio packet: first packet carries a 0x2C-byte header with the little-endian sample rate at +0x10. */
+#define MPEG_AUDIO_HEADER_BYTES 0x2C
+#define MPEG_AUDIO_HEADER_RATE_OFFSET 0x10
+#define MPEG_AUDIO_PACKET_HEADER_BYTES 4
+/* Sizes of the buffers carved out of the movie arena. */
+#define MPEG_WORK_SIZE 0xFD768
+#define MPEG_VIDEO_BUFFER_SIZE 0xE0000
+#define MPEG_PACKET_BUFFER_SIZE 0x15040
+#define MPEG_READ_BUFFER_SIZE 0x4000
+#define MPEG_DMA_BUFFER_SIZE 0x80000
+#define MPEG_SOUND_BUFFER_SIZE 0x20000
+#define MPEG_RING_BUFFER_SIZE 0x100000
+#define MPEG_DMA_START_OFFSET 0x10
+/* nodataCallback feeds the IPU in chunks of this many bytes. */
+#define MPEG_DMA_CHUNK_BYTES 0x1000
 
 #define D_ENABLEW ((volatile u32 *) 0x1000f590)
 #define D3_CHCR   ((volatile u32 *) 0x1000b000)
@@ -259,25 +339,25 @@ const char errorMessageFormat[] = "%s\n";
 
 static int myDmaDirectFromIPU(u32 address, u32 count)
 {
-    if ((address >> 16) != 0x7000)
+    if ((address >> 16) != DMA_SPR_ADDRESS_HIGH)
         *D3_MADR = address;
     else
-        *D3_MADR = (address & 0x3fff) + 0x80000000;
+        *D3_MADR = (address & DMA_SPR_OFFSET_MASK) + DMA_SPR_FLAG;
     *D3_QWC = count;
 
     DIntr();
-    *D_ENABLEW = *D_ENABLEW | 0x10000;
-    *D3_CHCR = 0x100;
-    *D_ENABLEW = *D_ENABLEW & 0xfffeffff;
+    *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
+    *D3_CHCR = DMA_CHCR_STR;
+    *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
     return EIntr();
 }
 
 static void setD4_CHCR(u32 value)
 {
     DIntr();
-    *D_ENABLEW = *D_ENABLEW | 0x10000;
+    *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
     *D4_CHCR = value;
-    *D_ENABLEW = *D_ENABLEW & 0xfffeffff;
+    *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
     EIntr();
 }
 
@@ -288,45 +368,45 @@ static unsigned long *make_gstrans(XglMovieWork *info, int y)
     unsigned int image = info->imageAddress[info->bufferIndex];
     int x;
 
-    packet[0] = 0x10000003;
-    packet[2] = 0x1000000000008002;
-    packet[3] = 0xe;
+    packet[0] = DMA_TAG_ID_CNT | 3;
+    packet[2] = MOVIE_GIF_TAG_AD_2;
+    packet[3] = GIF_REG_AD;
     packet[1] = 0;
     switch (info->transMode) {
-    case 0:
+    case MOVIE_TRANS_BUFFER_0:
     default:
-        packet[4] = ((unsigned long) sRender.bufferBase0 << 37) | 0x8000000000000;
+        packet[4] = ((unsigned long) sRender.bufferBase0 << 37) | MOVIE_BITBLTBUF_DBW_512;
         break;
-    case 1:
-        packet[4] = ((unsigned long) sRender.bufferBase1 << 37) | 0x8000000000000;
+    case MOVIE_TRANS_BUFFER_1:
+        packet[4] = ((unsigned long) sRender.bufferBase1 << 37) | MOVIE_BITBLTBUF_DBW_512;
         break;
-    case 2:
+    case MOVIE_TRANS_BITBLTBUF:
         packet[4] = info->bitbltbuf;
         break;
     }
-    packet[5] = 0x50;
-    packet[6] = 0x1000000010;
-    packet[7] = 0x52;
+    packet[5] = SCE_GS_BITBLTBUF;
+    packet[6] = MOVIE_TRXREG_MACROBLOCK;
+    packet[7] = SCE_GS_TRXREG;
     packet += 8;
-    for (x = 0; x < width; x += 16) {
+    for (x = 0; x < width; x += MOVIE_MACROBLOCK) {
         packet[1] = 0;
         packet[4] = ((unsigned long) x << 32) | ((unsigned long) y << 48);
-        packet[0] = 0x10000004;
-        packet[2] = 0x1000000000008002;
-        packet[3] = 0xe;
-        packet[5] = 0x51;
+        packet[0] = DMA_TAG_ID_CNT | 4;
+        packet[2] = MOVIE_GIF_TAG_AD_2;
+        packet[3] = GIF_REG_AD;
+        packet[5] = SCE_GS_TRXPOS;
         packet[6] = 0;
-        packet[7] = 0x53;
-        packet[8] = 0x0800000000008040;
+        packet[7] = SCE_GS_TRXDIR;
+        packet[8] = MOVIE_GIF_TAG_IMAGE_BLOCK;
         packet[9] = 0;
         packet += 10;
         ((XglDmaRefTag *) packet)->address = image;
-        image += 0x400;
-        ((XglDmaRefTag *) packet)->tag = 0x30000040;
+        image += MOVIE_MACROBLOCK_BYTES;
+        ((XglDmaRefTag *) packet)->tag = DMA_TAG_ID_REF | MOVIE_MACROBLOCK_QWORDS;
         ((XglDmaRefTag *) packet)->upperQword = 0;
         packet += 2;
     }
-    ((XglDmaRefTag *) packet)[-1].tag &= 0x0fffffff;
+    ((XglDmaRefTag *) packet)[-1].tag &= DMA_TAG_ID_CLEAR_MASK;
     return packet;
 }
 
@@ -335,9 +415,9 @@ static int checkdma(XglMovieWork *info)
     int wait = 0;
     unsigned int consumed;
 
-    if (info->decodeState == 99)
+    if (info->decodeState == MOVIE_DECODE_DONE)
         return 0;
-    setD4_CHCR(5);
+    setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
     consumed = *D4_MADR - (unsigned int)info->source;
     switch (info->decodeState) {
     case 0:
@@ -382,17 +462,17 @@ static int checkdma(XglMovieWork *info)
         break;
     case 2:
         if ((unsigned int)info->sourceSize < consumed)
-            info->decodeState = 99;
+            info->decodeState = MOVIE_DECODE_DONE;
         break;
     case 3:
         if (consumed < (unsigned int)info->sourceSize)
-            info->decodeState = 99;
+            info->decodeState = MOVIE_DECODE_DONE;
         break;
     }
-    if (info->decodeState != 99)
-        setD4_CHCR(0x30000105);
+    if (info->decodeState != MOVIE_DECODE_DONE)
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_START_REF);
     else
-        setD4_CHCR(0x105);
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_START);
     return wait;
 }
 
@@ -407,37 +487,37 @@ int xglMovieOpen(XglMovieWork *info, int stream)
         info->streamOpen = 1;
         xglCdStreamOpen((struct CdStreamParam *) info, stream);
         chain = info->chain;
-        chain[0].tag = info->sourceSize / 16 - 1;
+        chain[0].tag = info->sourceSize / MOVIE_DMA_QWORD - 1;
         chain[0].address = (unsigned int) (info->source + 1);
         chain[0].upperQword = 0;
-        chain[1].tag = info->sourceSize / 16;
+        chain[1].tag = info->sourceSize / MOVIE_DMA_QWORD;
         chain[1].address = (unsigned int) info->source;
         chain[1].upperQword = 0;
-        chain[2].tag = info->sourceSize / 16;
+        chain[2].tag = info->sourceSize / MOVIE_DMA_QWORD;
         chain[2].address = (unsigned int) info->source + info->sourceSize;
         chain[2].upperQword = 0;
-        chain[3].tag = (info->sourceLength % info->sourceSize + 15) / 16;
+        chain[3].tag = (info->sourceLength % info->sourceSize + 15) / MOVIE_DMA_QWORD;
         chain[3].address = (unsigned int) info->source
                                  + info->sourceSize * (info->sourceLength / info->sourceSize & 1);
         chain[3].upperQword = 0;
         xglCdStreamReadRing((struct CdStreamParam *) info, info->sourceSize);
         info->ringRead = 0;
-        info->dmaControl = 0x105;
+        info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
         info->dmaTag = chain;
         info->decodeState = 0;
         info->dmaAddress = 0;
         info->dmaQwords = 0;
         info->bitPosition = 0;
     } else {
-        info->dmaControl = 0x105;
+        info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
         info->dmaAddress = (unsigned int) (info->source + 1);
-        info->dmaQwords = (info->sourceSize - 1) / 16;
+        info->dmaQwords = (info->sourceSize - 1) / MOVIE_DMA_QWORD;
         info->streamOpen = 0;
         info->dmaTag = 0;
         info->bitPosition = 0;
     }
     source = info->source;
-    if (source->signature != 0x6d757069) {
+    if (source->signature != MOVIE_SIGNATURE_IPUM) {
         xglMovieClose((XglMovieInfo *) info);
         return 1;
     }
@@ -463,22 +543,22 @@ int xglMoviePlay(XglMovieWork *info)
     Quadword *source;
     Quadword *destination;
 
-    if ((*D4_CHCR & 0x100) == 0) {
-        *IPU_CTRL = 0x40000000;
-        if (sceIpuSync(0, 0x40) < 0) {
+    if ((*D4_CHCR & DMA_CHCR_STR) == 0) {
+        *IPU_CTRL = IPU_CTRL_RESET;
+        if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
             return -1;
         }
-        *IPU_CMD = 0x90000000 | (info->threshold1 << 16) | info->threshold0;
-        if (sceIpuSync(0, 0x40) < 0) {
+        *IPU_CMD = IPU_CMD_SETTH | (info->threshold1 << 16) | info->threshold0;
+        if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
             return -1;
         }
         *IPU_CMD = info->bitPosition;
-        if (sceIpuSync(0, 0x40) < 0) {
+        if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
             return -1;
         }
         *D4_MADR = info->dmaAddress;
-        if (info->dmaQwords > 0xffff) {
-            *D4_QWC = 0xffff;
+        if (info->dmaQwords > MOVIE_DMA_MAX_QWORDS) {
+            *D4_QWC = MOVIE_DMA_MAX_QWORDS;
         } else {
             *D4_QWC = info->dmaQwords;
         }
@@ -491,59 +571,59 @@ int xglMoviePlay(XglMovieWork *info)
             return -1;
         }
     }
-    if (info->transMode != 0xff) {
+    if (info->transMode != MOVIE_TRANS_MEMORY) {
         sceGsSyncPath(0, 0);
-        for (strip = 0; strip < info->height; strip += 16) {
+        for (strip = 0; strip < info->height; strip += MOVIE_MACROBLOCK) {
             myDmaDirectFromIPU(info->imageAddress[info->bufferIndex], info->stripQwords);
             if (strip == 0) {
-                *IPU_CMD = 0x40000000;
-                if (sceIpuSync(0, 0x40) < 0) {
+                *IPU_CMD = IPU_CMD_FDEC;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
                     return -1;
                 }
                 header = *IPU_CMD >> 24;
-                *IPU_CMD = 0x40000008;
-                if (sceIpuSync(0, 0x40) < 0) {
+                *IPU_CMD = IPU_CMD_FDEC | 8;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
                     return -1;
                 }
                 *IPU_CTRL = (header & 0xfb) << 16;
-                *IPU_CMD = (((header & 4) >> 2) << 24) | 0x10010000;
+                *IPU_CMD = (((header & 4) >> 2) << 24) | (IPU_CMD_IDEC | IPU_IDEC_QSC_1);
             }
             make_gstrans(info, strip);
-            for (retry = 0; retry <= 0xFFFFFF; retry++) {
-                if ((*D3_CHCR & 0x100) == 0) {
+            for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
+                if ((*D3_CHCR & DMA_CHCR_STR) == 0) {
                     break;
                 }
             }
-            xglDmaDirectSrcChain(2, info->packetAddress[info->bufferIndex]);
+            xglDmaDirectSrcChain(XGL_DMA_CHANNEL_GIF, info->packetAddress[info->bufferIndex]);
             info->bufferIndex ^= 1;
         }
         sceGsSyncPath(0, 0);
     } else {
-        for (strip = 0; strip < info->height; strip += 16) {
-            myDmaDirectFromIPU(0x70000000, info->stripQwords);
+        for (strip = 0; strip < info->height; strip += MOVIE_MACROBLOCK) {
+            myDmaDirectFromIPU(SCRATCHPAD_BASE, info->stripQwords);
             if (strip == 0) {
-                *IPU_CMD = 0x40000000;
-                if (sceIpuSync(0, 0x40) < 0) {
+                *IPU_CMD = IPU_CMD_FDEC;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
                     return -1;
                 }
                 header = *IPU_CMD >> 24;
-                *IPU_CMD = 0x40000008;
-                if (sceIpuSync(0, 0x40) < 0) {
+                *IPU_CMD = IPU_CMD_FDEC | 8;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
                     return -1;
                 }
                 *IPU_CTRL = (header & 0xfb) << 16;
-                *IPU_CMD = (((header & 4) >> 2) << 24) | 0x10010000;
+                *IPU_CMD = (((header & 4) >> 2) << 24) | (IPU_CMD_IDEC | IPU_IDEC_QSC_1);
             }
-            for (retry = 0; retry <= 0xFFFFFF; retry++) {
-                if ((*D3_CHCR & 0x100) == 0) {
+            for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
+                if ((*D3_CHCR & DMA_CHCR_STR) == 0) {
                     break;
                 }
             }
             pitch = info->width / 4;
-            source = (Quadword *) 0x70000000;
+            source = (Quadword *) SCRATCHPAD_BASE;
             destination = (Quadword *) (info->imageAddress[info->bufferIndex] + info->width * strip * 4);
-            for (x = 0; x < info->width; x += 16) {
-                for (row = 15; row >= 0; row--) {
+            for (x = 0; x < info->width; x += MOVIE_MACROBLOCK) {
+                for (row = MOVIE_MACROBLOCK - 1; row >= 0; row--) {
                     destination[0] = source[0];
                     destination[1] = source[1];
                     destination[2] = source[2];
@@ -551,16 +631,16 @@ int xglMoviePlay(XglMovieWork *info)
                     source += 4;
                     destination += pitch;
                 }
-                destination = destination - pitch * 16 + 4;
+                destination = destination - pitch * MOVIE_MACROBLOCK + 4;
             }
         }
         info->bufferIndex ^= 1;
     }
-    if (sceIpuSync(0, 0x40) < 0) {
+    if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
         return -1;
     }
-    *IPU_CMD = 0x40000020;
-    if (sceIpuSync(0, 0x40) < 0) {
+    *IPU_CMD = IPU_CMD_FDEC | 0x20;
+    if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
         return -1;
     }
     info->currentFrame++;
@@ -569,11 +649,11 @@ int xglMoviePlay(XglMovieWork *info)
             info->currentFrame = info->frameCount;
         } else {
             info->currentFrame = 0;
-            setD4_CHCR(5);
+            setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
             DIntr();
-            *D_ENABLEW = *D_ENABLEW | 0x10000;
+            *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
             *D3_CHCR = 0;
-            *D_ENABLEW = *D_ENABLEW & 0xfffeffff;
+            *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
             EIntr();
             if (info->streamOpen) {
                 xglCdStreamRewind((struct CdStreamParam *) info);
@@ -581,16 +661,16 @@ int xglMoviePlay(XglMovieWork *info)
                 info->ringRead = 0;
                 xglCdStreamReadRing((struct CdStreamParam *) info, info->sourceSize);
                 info->ringRead = 0;
-                info->dmaControl = 0x105;
+                info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
                 info->dmaTag = info->chain;
                 info->decodeState = 0;
                 info->dmaAddress = 0;
                 info->dmaQwords = 0;
                 info->bitPosition = 0;
             } else {
-                info->dmaControl = 0x105;
+                info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
                 info->dmaAddress = (unsigned int) (info->source + 1);
-                info->dmaQwords = (info->sourceSize - 1) / 16;
+                info->dmaQwords = (info->sourceSize - 1) / MOVIE_DMA_QWORD;
                 info->dmaTag = 0;
                 info->bitPosition = 0;
             }
@@ -602,7 +682,7 @@ int xglMoviePlay(XglMovieWork *info)
         unsigned int bitstream;
 
         info->dmaControl = *D4_CHCR;
-        setD4_CHCR(5);
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
         bitstream = *IPU_BP;
         info->dmaAddress = *D4_MADR - (((bitstream >> 16) & 3) + ((bitstream >> 8) & 0xf)) * 16;
         info->dmaQwords = *D4_QWC + (((bitstream >> 16) & 3) + ((bitstream >> 8) & 0xf));
@@ -613,11 +693,11 @@ int xglMoviePlay(XglMovieWork *info)
         unsigned int consumed;
 
         info->dmaControl = *D4_CHCR;
-        setD4_CHCR(5);
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
         bitstream = *IPU_BP;
         consumed = *D4_MADR - info->dmaAddress - (((bitstream >> 16) & 3) + ((bitstream >> 8) & 0xf)) * 16;
         info->dmaAddress += consumed;
-        info->dmaQwords -= consumed / 16;
+        info->dmaQwords -= consumed / MOVIE_DMA_QWORD;
         info->dmaTag = (XglDmaRefTag *) *D4_TADR;
         info->bitPosition = bitstream & 0x7f;
     }
@@ -630,19 +710,19 @@ int xglMovieClose(XglMovieInfo *info)
         xglCdStreamClose((struct CdStreamParam *) info);
     }
     setD4_CHCR(0);
-    *IPU_CTRL = 0x40000000;
-    if (sceIpuSync(0, 0x40) < 0) {
+    *IPU_CTRL = IPU_CTRL_RESET;
+    if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
         return -1;
     }
-    *IPU_CMD = 0;
-    return sceIpuSync(0, 0x40) < 0 ? -1 : 0;
+    *IPU_CMD = IPU_CMD_BCLR;
+    return sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0 ? -1 : 0;
 }
 
 void xglMovieInfoInit(XglMovieInitInfo *info)
 {
     xglCdStreamParamInit((struct CdStreamParam *) info);
-    info->packetAddress[0] = 0x70000040;
-    info->packetAddress[1] = 0x70001000;
+    info->packetAddress[0] = MOVIE_PACKET_ADDRESS_0;
+    info->packetAddress[1] = MOVIE_PACKET_ADDRESS_1;
     info->transMode = info->currentFrame = -1;
     info->missCount = 0;
     info->threshold1 = 0;
@@ -654,13 +734,13 @@ XglXtxHeader *xglMovieMakeXtxHeader(XglMovieWork *info, XglXtxHeader *header)
     unsigned int base = info->imageQwords;
     XglXtxEntry *entry = &header->image;
 
-    header->identity = 0x5000585458;
+    header->identity = XTX_HEADER_IDENTITY;
     header->imageCount = 0x1000000001;
     entry->imageWidth = 0x40000 + info->width;
     entry->imageHeight = info->height;
     entry->imageReserved = 0;
     entry->imageQwordOffset = base + 2;
-    header->dataOffset = 0x30;
+    header->dataOffset = XTX_DATA_OFFSET;
     header->zero28 = 0;
     header->zero30 = 0;
     entry = &header->texture;
@@ -681,9 +761,9 @@ static int fileRead(XglMovieInfo *info)
     int tail;
 
     available = 0;
-    length = 0x4000;
+    length = MPEG_READ_BUFFER_SIZE;
     destination = info->readBuffer;
-    for (retry = 0; retry <= 0xFFFFFF; retry++) {
+    for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
         xglCdStreamReadRingCore((struct CdStreamParam *) info);
         available = (info->ringWrite - info->ringRead + info->ringCapacity) %
                     info->ringCapacity;
@@ -720,9 +800,9 @@ static int fillBuff(XglMovieInfo *info, int wait)
 
     remaining = info->pendingBytes;
     if (remaining != 0) {
-        position = info->readBuffer + 0x4000 - remaining;
+        position = info->readBuffer + MPEG_READ_BUFFER_SIZE - remaining;
     } else {
-        for (retry = 0; retry <= 0xFFFFFF; retry++) {
+        for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
             count = fileRead(info);
             info->pendingBytes = count;
             if (count == 0) {
@@ -780,13 +860,13 @@ static int audioCallback(int event, MpegStreamData *data, XglMovieInfo *info)
     source = data->buffer;
     length = data->length;
     if (info->audioHeaderRead == 0) {
-        info->audioSampleRate = (source[0x13] << 24) + (source[0x12] << 16) + (source[0x11] << 8) + source[0x10];
+        info->audioSampleRate = (source[MPEG_AUDIO_HEADER_RATE_OFFSET + 3] << 24) + (source[MPEG_AUDIO_HEADER_RATE_OFFSET + 2] << 16) + (source[MPEG_AUDIO_HEADER_RATE_OFFSET + 1] << 8) + source[MPEG_AUDIO_HEADER_RATE_OFFSET];
         info->audioHeaderRead = 1;
-        length -= 0x2C;
-        source += 0x2C;
+        length -= MPEG_AUDIO_HEADER_BYTES;
+        source += MPEG_AUDIO_HEADER_BYTES;
     } else {
-        source += 4;
-        length -= 4;
+        source += MPEG_AUDIO_PACKET_HEADER_BYTES;
+        length -= MPEG_AUDIO_PACKET_HEADER_BYTES;
     }
     free = info->soundRead - info->soundWrite;
     if (free <= 0) {
@@ -818,8 +898,8 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
     /* DMA channel 4 is programmed in QWC, MADR, then CHCR order. */
     volatile u32 *qwc_register;
 
-    if (++info->missCount >= 0x41) {
-        info->decodeState = 0x10;
+    if (++info->missCount >= MPEG_MISS_LIMIT) {
+        info->decodeState = MPEG_NODATA_DECODE_STATE;
         pattern = (unsigned int *) info->dmaBuffer;
         for (i = 0x1000 - 4; i >= 0; i -= 4) {
             *pattern = 0x100;
@@ -831,7 +911,7 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
         qwc = 0x1000;
         *qwc_register = qwc;
         *D4_MADR = dma_address;
-        *D4_CHCR = 0x101;
+        *D4_CHCR = MOVIE_D4_CHCR_NORMAL_START;
         return 1;
     }
 
@@ -840,8 +920,8 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
     if (available < 0) {
         available += info->dmaSize;
     }
-    for (retry = 0; retry <= 0xFFFFFF; retry++) {
-        if (available >= 0x1000) {
+    for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
+        if (available >= MPEG_DMA_CHUNK_BYTES) {
             break;
         }
         if (fillBuff(info, 1) == 0) {
@@ -854,15 +934,15 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
         }
     }
     length = available & ~0xF;
-    if (length > 0x1000) {
-        length = 0x1000;
+    if (length > MPEG_DMA_CHUNK_BYTES) {
+        length = MPEG_DMA_CHUNK_BYTES;
     }
     if (info->dmaSize < info->dmaRead + length) {
         length = info->dmaSize - info->dmaRead;
     }
-    *D4_QWC = length / 16;
+    *D4_QWC = length / MOVIE_DMA_QWORD;
     *D4_MADR = (unsigned int) info->dmaBuffer + info->dmaRead;
-    *D4_CHCR = 0x101;
+    *D4_CHCR = MOVIE_D4_CHCR_NORMAL_START;
     info->dmaNextRead = (info->dmaRead + length) % info->dmaSize;
     return 1;
 }
@@ -894,10 +974,10 @@ int xglMpeg2Open(XglMovieInfo *info)
     info->ringRead = 0;
     sceMpegInit();
     sceMpegCreate(&info->mpeg, info->arena, info->reservedSize);
-    sceMpegAddStrCallback(&info->mpeg, 0, 0, videoCallback, info);
-    sceMpegAddStrCallback(&info->mpeg, 3, 0, audioCallback, info);
-    sceMpegAddCallback(&info->mpeg, 1, nodataCallback, info);
-    sceMpegAddCallback(&info->mpeg, 0, errorCallback, info);
+    sceMpegAddStrCallback(&info->mpeg, SCE_MPEG_STR_M2V, 0, videoCallback, info);
+    sceMpegAddStrCallback(&info->mpeg, SCE_MPEG_STR_ADPCM, 0, audioCallback, info);
+    sceMpegAddCallback(&info->mpeg, SCE_MPEG_CB_NODATA, nodataCallback, info);
+    sceMpegAddCallback(&info->mpeg, SCE_MPEG_CB_ERROR, errorCallback, info);
     info->pendingBytes = 0;
     info->audioHeaderRead = 0;
     info->audioSampleRate = 0;
@@ -905,12 +985,12 @@ int xglMpeg2Open(XglMovieInfo *info)
     info->streamOpen = 0;
     info->missCount = 0;
     info->videoCount = 0;
-    for (retry = 0; retry <= 0xFFFFFF; retry++) {
+    for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
         if (fillBuff(info, 1) == 0) {
             break;
         }
     }
-    SsdInitVagStreamStereo(0x1000, 4);
+    SsdInitVagStreamStereo(MPEG_AUDIO_CHUNK_BYTES, 4);
     do {
     } while (SsdGetResultValue(&result) < 0);
     return 0;
@@ -922,36 +1002,36 @@ static void setLoadImageTags(unsigned int destination, unsigned int image, int w
     int x;
     int y;
 
-    packet[0] = 0x10000003;
-    packet[2] = 0x1000000000008002;
-    packet[3] = 0xe;
-    packet[4] = 0xe000L << 36;
-    packet[5] = 0x50;
-    packet[6] = 0x1000000010;
-    packet[7] = 0x52;
+    packet[0] = DMA_TAG_ID_CNT | 3;
+    packet[2] = MOVIE_GIF_TAG_AD_2;
+    packet[3] = GIF_REG_AD;
+    packet[4] = MOVIE_BITBLTBUF_DBW_896;
+    packet[5] = SCE_GS_BITBLTBUF;
+    packet[6] = MOVIE_TRXREG_MACROBLOCK;
+    packet[7] = SCE_GS_TRXREG;
     packet[1] = 0;
     packet += 8;
-    for (x = 0; x < width; x += 16) {
-        for (y = 0; y < height; y += 16) {
+    for (x = 0; x < width; x += MOVIE_MACROBLOCK) {
+        for (y = 0; y < height; y += MOVIE_MACROBLOCK) {
             packet[1] = 0;
-            packet[0] = 0x10000004;
-            packet[2] = 0x1000000000008002;
-            packet[3] = 0xe;
+            packet[0] = DMA_TAG_ID_CNT | 4;
+            packet[2] = MOVIE_GIF_TAG_AD_2;
+            packet[3] = GIF_REG_AD;
             packet[4] = ((long) x << 32) | ((long) y << 48);
-            packet[5] = 0x51;
+            packet[5] = SCE_GS_TRXPOS;
             packet[6] = 0;
-            packet[7] = 0x53;
-            packet[8] = 0x0800000000008040;
+            packet[7] = SCE_GS_TRXDIR;
+            packet[8] = MOVIE_GIF_TAG_IMAGE_BLOCK;
             packet[9] = 0;
             packet += 10;
             ((XglDmaRefTag *) packet)->address = image;
-            image += 0x400;
-            ((XglDmaRefTag *) packet)->tag = 0x30000040;
+            image += MOVIE_MACROBLOCK_BYTES;
+            ((XglDmaRefTag *) packet)->tag = DMA_TAG_ID_REF | MOVIE_MACROBLOCK_QWORDS;
             ((XglDmaRefTag *) packet)->upperQword = 0;
             packet += 2;
         }
     }
-    ((XglDmaRefTag *) packet)[-1].tag &= 0x0fffffff;
+    ((XglDmaRefTag *) packet)[-1].tag &= DMA_TAG_ID_CLEAR_MASK;
 }
 
 int xglMpeg2Play(XglMovieInfo *info)
@@ -976,7 +1056,7 @@ int xglMpeg2Play(XglMovieInfo *info)
         return -1;
     }
     info->missCount = 0;
-    if ((info->mpeg.pictureType & 7) == 1) {
+    if ((info->mpeg.pictureType & MPEG_PICTURE_TYPE_MASK) == MPEG_PICTURE_TYPE_I) {
         if (info->videoCount == 0) {
             info->decodeState++;
         }
@@ -992,7 +1072,7 @@ int xglMpeg2Play(XglMovieInfo *info)
                          info->mpeg.width, info->mpeg.height);
     }
     if (info->mpeg.frameCount == 0) {
-        SsdPlayVagStream(0x7f, 0, (info->audioSampleRate << 12) / 48000);
+        SsdPlayVagStream(MPEG_AUDIO_VOLUME_MAX, 0, (info->audioSampleRate << 12) / MPEG_AUDIO_BASE_RATE);
         do {
         } while (SsdGetResultValue(&result) < 0);
     }
@@ -1000,13 +1080,13 @@ int xglMpeg2Play(XglMovieInfo *info)
     if (free <= 0) {
         free += info->soundBufferSize;
     }
-    if (free > 0x1000) {
+    if (free > MPEG_AUDIO_CHUNK_BYTES) {
         SsdGetVagStreamStatusStereo();
         do {
         } while (SsdGetResultValue(&status) < 0);
         if (status >> 8 != 0) {
-            SsdSetVagStreamDataStereo(0, (int) (info->soundBuffer + info->soundRead), 0x1000);
-            info->soundRead = (info->soundRead + 0x1000) % info->soundBufferSize;
+            SsdSetVagStreamDataStereo(0, (int) (info->soundBuffer + info->soundRead), MPEG_AUDIO_CHUNK_BYTES);
+            info->soundRead = (info->soundRead + MPEG_AUDIO_CHUNK_BYTES) % info->soundBufferSize;
         }
     }
     for (i = 15; i >= 0; i--) {
@@ -1014,8 +1094,8 @@ int xglMpeg2Play(XglMovieInfo *info)
     }
     sceGsSyncPath(0, 0);
     packet = UNCACHED(info->mpegBuffer);
-    packet[4] = ((unsigned long) sRender.bufferBase0 << 37) | 0x8000000000000;
-    xglDmaDirectSrcChain(2, (unsigned int) info->mpegBuffer);
+    packet[4] = ((unsigned long) sRender.bufferBase0 << 37) | MOVIE_BITBLTBUF_DBW_512;
+    xglDmaDirectSrcChain(XGL_DMA_CHANNEL_GIF, (unsigned int) info->mpegBuffer);
     sceGsSyncPath(0, 0);
     env = TestEnv;
     env[8] = (0x24020000 | sRender.bufferBase0 << 5) | 0x2000000640000000;
@@ -1048,22 +1128,22 @@ void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size)
 
     movie = info;
     movie->arena = arena;
-    next = (unsigned char *) (((unsigned int) arena + 0xFD768 + 0x3F) & ~0x3F);
+    next = (unsigned char *) (((unsigned int) arena + MPEG_WORK_SIZE + 0x3F) & ~0x3F);
     movie->videoBuffer = next;
-    next = (unsigned char *) (((unsigned int) next + 0xE0000 + 0x3F) & ~0x3F);
+    next = (unsigned char *) (((unsigned int) next + MPEG_VIDEO_BUFFER_SIZE + 0x3F) & ~0x3F);
     movie->mpegBuffer = next;
-    next = (unsigned char *) (((unsigned int) next + 0x15040 + 0x3F) & ~0x3F);
+    next = (unsigned char *) (((unsigned int) next + MPEG_PACKET_BUFFER_SIZE + 0x3F) & ~0x3F);
     movie->readBuffer = next;
-    next = (unsigned char *) (((unsigned int) next + 0x4000 + 0x3F) & ~0x3F);
+    next = (unsigned char *) (((unsigned int) next + MPEG_READ_BUFFER_SIZE + 0x3F) & ~0x3F);
     movie->dmaBuffer = next;
-    next = (unsigned char *) (((unsigned int) next + 0x80000 + 0x3F) & ~0x3F);
-    movie->reservedSize = 0xFD768;
-    movie->dmaSize = 0x80000;
-    movie->dmaWrite = 0x10;
-    movie->dmaNextRead = 0x10;
+    next = (unsigned char *) (((unsigned int) next + MPEG_DMA_BUFFER_SIZE + 0x3F) & ~0x3F);
+    movie->reservedSize = MPEG_WORK_SIZE;
+    movie->dmaSize = MPEG_DMA_BUFFER_SIZE;
+    movie->dmaWrite = MPEG_DMA_START_OFFSET;
+    movie->dmaNextRead = MPEG_DMA_START_OFFSET;
     movie->soundBuffer = next;
-    next = (unsigned char *) (((unsigned int) next + 0x20000 + 0x3F) & ~0x3F);
-    movie->soundBufferSize = 0x20000;
+    next = (unsigned char *) (((unsigned int) next + MPEG_SOUND_BUFFER_SIZE + 0x3F) & ~0x3F);
+    movie->soundBufferSize = MPEG_SOUND_BUFFER_SIZE;
     movie->dmaRead = 0;
     movie->soundWrite = 0;
     movie->soundRead = 0;
@@ -1075,7 +1155,7 @@ void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size)
 
 void xglMpeg2InfoInit(void *info, void *arena)
 {
-    xglMpeg2InfoInit2(info, arena, 0x100000);
+    xglMpeg2InfoInit2(info, arena, MPEG_RING_BUFFER_SIZE);
 }
 
 int xglMovieInit(void)

@@ -112,22 +112,22 @@ static void PauseMenuPage2(void)
     }
 
     switch (GameLoopState.debugCursor) {
-    case 0:
+    case DEBUG_FLAG_ROW_CF_CAMERA_SWITCH:
         if (PadData.half_2c & (PAD_LEFT | PAD_RIGHT | PAD_CIRCLE)) {
             GameLoopState.cfCameraFlags ^= CF_CAMERA_SWITCH;
         }
         break;
-    case 1:
+    case DEBUG_FLAG_ROW_MODEL_NUMBER_TAG:
         if (PadData.half_2c & (PAD_LEFT | PAD_RIGHT | PAD_CIRCLE)) {
             GameLoopState.runtimeFlags ^= RUNTIME_MODEL_NUMBER_TAG;
         }
         break;
-    case 2:
+    case DEBUG_FLAG_ROW_SNAP_CREDIT:
         if (PadData.half_2c & (PAD_LEFT | PAD_RIGHT | PAD_CIRCLE)) {
             SnapDrawCreditFlag ^= 1;
         }
         break;
-    case 3: {
+    case DEBUG_FLAG_ROW_SNAP_QUALITY: {
         int step;
         int quality;
         unsigned int right;
@@ -141,24 +141,24 @@ static void PauseMenuPage2(void)
             step = -stepMagnitude;
         }
         quality = step + GameLoopState.snapQuality;
-        if (quality < -5) {
-            quality = -5;
+        if (quality < SNAP_QUALITY_MIN) {
+            quality = SNAP_QUALITY_MIN;
         }
-        if (quality > 100) {
-            quality = 100;
+        if (quality > SNAP_QUALITY_MAX) {
+            quality = SNAP_QUALITY_MAX;
         }
         GameLoopState.snapQuality = quality;
         break;
     }
-    case 4:
+    case DEBUG_FLAG_ROW_MODEL_NUMBER_CHECK:
         right = PadData.half_2c & PAD_RIGHT;
         left = PadData.half_2c & PAD_LEFT;
         step = right != 0;
         if (left) {
             step = -1;
         }
-        if (PadData.half_2a & 0x40) {
-            GameLoopState.target.modelNumberCheck ^= 0x100;
+        if (PadData.half_2a & PAD_CROSS) {
+            GameLoopState.target.modelNumberCheck ^= MODEL_CHECK_KIND_FLIP;
         }
         GameLoopState.target.modelNumberCheck += step;
         if (PadData.half_28 & PAD_CIRCLE) {
@@ -171,8 +171,8 @@ static void PauseMenuPage2(void)
             for (slot = 0; slot < MAP_UNIT_COUNT; slot++) {
                 MapUnit[slot].flags |= MAP_UNIT_CHECK_HIDDEN;
             }
-            kind = GameLoopState.target.modelNumberCheck & 0xff00;
-            slot = GameLoopState.target.modelNumberCheck & 0xff;
+            kind = GameLoopState.target.modelNumberCheck & MODEL_CHECK_KIND_MASK;
+            slot = GameLoopState.target.modelNumberCheck & MODEL_CHECK_INDEX_MASK;
             switch (kind) {
             case MODEL_CHECK_ACTOR:
                 actor[slot].flags &= ~ACTOR_CHECK_HIDDEN;
@@ -209,12 +209,12 @@ static void PauseMenuPage2(void)
             }
         }
         break;
-    case 5:
+    case DEBUG_FLAG_ROW_ALPHA_ON_CAPTURE:
         if (PadData.half_2c & (PAD_LEFT | PAD_RIGHT | PAD_CIRCLE)) {
             GameLoopState.runtimeFlags ^= RUNTIME_CAPTURE_ALPHA;
         }
         break;
-    case 6:
+    case DEBUG_FLAG_ROW_DISC_CHECK:
         if (PadData.half_2c & (PAD_LEFT | PAD_RIGHT | PAD_CIRCLE)) {
             GameDiskChangeT10K ^= 1;
         }
@@ -229,28 +229,28 @@ static void PauseMenuPage2(void)
         }
         xglFontDebugPrintf(32, y, tbl_0_00367A50[i]);
         switch (i) {
-        case 0:
+        case DEBUG_FLAG_ROW_CF_CAMERA_SWITCH:
             xglFontDebugPrintf(128, y + 3, hexDigitFormat,
                                (GameLoopState.cfCameraFlags >> 1) & 1);
             break;
-        case 1:
+        case DEBUG_FLAG_ROW_MODEL_NUMBER_TAG:
             xglFontDebugPrintf(128, y + 3, hexDigitFormat,
                                (GameLoopState.runtimeFlags >> 2) & 1);
             break;
-        case 2:
+        case DEBUG_FLAG_ROW_SNAP_CREDIT:
             xglFontDebugPrintf(128, y + 3, hexDigitFormat, SnapDrawCreditFlag);
             break;
-        case 3:
+        case DEBUG_FLAG_ROW_SNAP_QUALITY:
             xglFontDebugPrintf(128, y + 3, snapQualityFormat, GameLoopState.snapQuality);
             break;
-        case 4:
+        case DEBUG_FLAG_ROW_MODEL_NUMBER_CHECK:
             xglFontDebugPrintf(128, y + 3, hexIdFormat, GameLoopState.target.modelNumberCheck);
             break;
-        case 5:
+        case DEBUG_FLAG_ROW_ALPHA_ON_CAPTURE:
             xglFontDebugPrintf(128, y + 3, hexDigitFormat,
                                (GameLoopState.runtimeFlags >> 25) & 1);
             break;
-        case 6:
+        case DEBUG_FLAG_ROW_DISC_CHECK:
             xglFontDebugPrintf(128, y + 3, hexDigitFormat, GameDiskChangeT10K);
             break;
         }
@@ -390,11 +390,11 @@ static void PauseMenuPage3(void)
         dir = 1;
     }
     if (PadData.half_28 & PAD_CROSS) {
-        dir *= 100;
+        dir *= DEBUG_FAST_STEP;
     }
     if (dir != 0) {
         switch (GameLoopState.debugCursor) {
-        case 0:
+        case DEBUG_ROW_CHANGE_MAP:
             for (;;) {
                 GameLoopState.target.mapChangeId += dir;
                 if (GameLoopState.target.mapChangeId < 0) {
@@ -410,42 +410,45 @@ static void PauseMenuPage3(void)
                 break;
             }
             break;
-        case 1:
+        case DEBUG_ROW_CHANGE_LEADER:
             GameLoopState.leaderBattleId += dir;
             break;
-        case 3:
+        case DEBUG_ROW_SNAP:
             number = GameSnapShotNumber(-1) + dir;
             if (number < 0) {
                 number = 0;
             }
-            GameSnapShotNumber(number < 10 ? number : 9);
+            GameSnapShotNumber(number < SNAPSHOT_NUMBER_COUNT ? number : SNAPSHOT_NUMBER_COUNT - 1);
             break;
-        case 4:
+        case DEBUG_ROW_MODEL_FOLDER:
             ModelPath = (ModelPath + dir) & 1;
             break;
-        case 5:
-            UseTestPath = (UseTestPath + dir + 3) % 3;
+        case DEBUG_ROW_MAP_FOLDER:
+            UseTestPath = (UseTestPath + dir + DEBUG_MAP_PATH_COUNT) % DEBUG_MAP_PATH_COUNT;
             break;
-        case 6:
-            ScenePath = (ScenePath + dir + 20) % 20;
+        case DEBUG_ROW_SCENE_FOLDER:
+            ScenePath = (ScenePath + dir + DEBUG_SCENE_PATH_COUNT) % DEBUG_SCENE_PATH_COUNT;
             break;
-        case 7:
+        case DEBUG_ROW_RUN_CF:
             GameLoopState.scratch.scriptJump.cfId =
-                (GameLoopState.scratch.scriptJump.cfId + dir + 10000) % 10000;
+                (GameLoopState.scratch.scriptJump.cfId + dir + SCRIPT_JUMP_ID_COUNT) %
+                SCRIPT_JUMP_ID_COUNT;
             break;
-        case 8:
+        case DEBUG_ROW_RUN_EVENT:
             GameLoopState.scratch.scriptJump.eventId =
-                (GameLoopState.scratch.scriptJump.eventId + dir + 10000) % 10000;
+                (GameLoopState.scratch.scriptJump.eventId + dir + SCRIPT_JUMP_ID_COUNT) %
+                SCRIPT_JUMP_ID_COUNT;
             break;
-        case 9:
-            ScanLineInterpolate = (ScanLineInterpolate + dir + 3) % 3;
+        case DEBUG_ROW_SCANLINE_INTERPOLATION:
+            ScanLineInterpolate = (ScanLineInterpolate + dir + SCANLINE_MODE_COUNT) %
+                                  SCANLINE_MODE_COUNT;
             break;
         }
     }
 
     if (PadData.half_2a & PAD_CIRCLE) {
         switch (GameLoopState.debugCursor) {
-        case 0: {
+        case DEBUG_ROW_CHANGE_MAP: {
             DebugPlayerUnit *leader;
 
             MapChange(GameLoopState.target.mapChangeId);
@@ -463,21 +466,21 @@ static void PauseMenuPage3(void)
             }
             break;
         }
-        case 1:
+        case DEBUG_ROW_CHANGE_LEADER:
             ((DebugSavedParty *)SaveData)->leaderBattleId = GameLoopState.leaderBattleId;
             GameCfPlayerLoadResource(0);
             break;
-        case 2:
+        case DEBUG_ROW_RUN_BATTLE:
             GameStateSave();
             GameLoopState.mode = 5;
             func_A22668();
             GameStateRestore();
             GameLoopState.debugPageInitialized = 0;
             break;
-        case 7:
+        case DEBUG_ROW_RUN_CF:
             Java_xeno_util_Runtime_jump_sub(GameLoopState.scratch.scriptJump.cfId, -1);
             break;
-        case 8:
+        case DEBUG_ROW_RUN_EVENT:
             Java_xeno_util_Runtime_jump_sub(
                 SCRIPT_ID_EVENT_BASE + GameLoopState.scratch.scriptJump.eventId, -1);
             GameLoopState.runtimeFlags &= ~1;
@@ -509,39 +512,39 @@ static void PauseMenuPage3(void)
         }
         xglFontDebugPrintf(16, y, tbl_1_00367A70[i]);
         switch (i) {
-        case 0:
+        case DEBUG_ROW_CHANGE_MAP:
             xglFontDebugPrintf(80, y + 3, mapChangeIdNameFormat, GameLoopState.target.mapChangeId,
                                MapGetName(GameLoopState.target.mapChangeId));
             break;
-        case 1:
+        case DEBUG_ROW_CHANGE_LEADER:
             xglFontDebugPrintf(80, y + 3, hexIdFormat, GameLoopState.leaderBattleId);
             break;
-        case 3:
+        case DEBUG_ROW_SNAP:
             xglFontDebugPrintf(72, y + 3, snapShotFileNameFormat, GameSnapShotNumber(-1) + '0');
             break;
-        case 4:
+        case DEBUG_ROW_MODEL_FOLDER:
             if (ModelPath == 0) {
                 xglFontDebugPrintf(92, y + 3, dataDirectoryPath);
             } else {
                 xglFontDebugPrintf(92, y + 3, dataTestDirectoryPath);
             }
             break;
-        case 5:
+        case DEBUG_ROW_MAP_FOLDER:
             xglFontDebugPrintf(92, y + 3, debugPathFormat, MAP_getPath());
             break;
-        case 6:
+        case DEBUG_ROW_SCENE_FOLDER:
             xglFontDebugPrintf(92, y + 3, debugPathFormat, RES_getPath());
             break;
-        case 7:
+        case DEBUG_ROW_RUN_CF:
             xglFontDebugPrintf(88, y + 3, scriptJumpIdFormat, GameLoopState.scratch.scriptJump.cfId);
             break;
-        case 8:
+        case DEBUG_ROW_RUN_EVENT:
             xglFontDebugPrintf(88, y + 3, scriptJumpIdFormat, GameLoopState.scratch.scriptJump.eventId);
             {
                 char fileName[7] = "cf0000";
                 int scriptId = GameLoopState.scriptId;
 
-                if (scriptId <= 0x0fffffff) {
+                if (scriptId <= SCRIPT_ID_EVENT_BASE - 1) {
                     fileName[0] = 'c';
                     fileName[1] = 'f';
                 } else {
@@ -559,7 +562,7 @@ static void PauseMenuPage3(void)
                 xglFontDebugPrintf(120, y - 3, fileName);
             }
             break;
-        case 9:
+        case DEBUG_ROW_SCANLINE_INTERPOLATION:
             switch (ScanLineInterpolate) {
             case 0:
             default:
@@ -603,27 +606,27 @@ void GameDebugMenu(void)
     }
     if (pageStep) {
         unsigned int nextPage =
-            (GameLoopState.debugPage + pageStep + 6) % 6;
+            (GameLoopState.debugPage + pageStep + DEBUG_PAGE_COUNT) % DEBUG_PAGE_COUNT;
         GameLoopState.debugPageInitialized = 0;
         GameLoopState.debugPage = nextPage;
     }
     switch (GameLoopState.debugPage) {
-    case 0:
+    case DEBUG_PAGE_MENU:
         PauseMenuPage3();
         return;
-    case 1:
+    case DEBUG_PAGE_RESOURCES:
         PauseMenuPage0();
         return;
-    case 2:
+    case DEBUG_PAGE_FLAGS:
         PauseMenuPage2();
         return;
-    case 3:
+    case DEBUG_PAGE_UWAMONO:
         PauseMenuPageUwamono();
         return;
-    case 4:
+    case DEBUG_PAGE_ENEMY:
         PauseMenuPageEnemy();
         return;
-    case 5:
+    case DEBUG_PAGE_PARTY:
         PauseMenuPagePartyDebug();
         break;
     }

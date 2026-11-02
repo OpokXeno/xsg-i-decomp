@@ -13,6 +13,15 @@ enum {
     SNAPSHOT_CHANNEL_LUMA = 0,
     SNAPSHOT_CHANNEL_CB = 1,
     SNAPSHOT_CHANNEL_CR = 2,
+    SNAPSHOT_THUMBNAIL_WIDTH = 128,
+    SNAPSHOT_THUMBNAIL_HEIGHT = 112,
+    SNAPSHOT_THUMBNAIL_SOURCE_X = 0x3800,
+    SNAPSHOT_THUMBNAIL_SOURCE_Y = 8,
+    SNAPSHOT_THUMBNAIL_QUALITY = 50,
+    SNAPSHOT_SEGMENT_OVERHEAD = 4,
+    SNAPSHOT_MARKER_PREFIX = 0xFF,
+    SNAPSHOT_MARKER_SOI = 0xD8,
+    SNAPSHOT_MARKER_APP14 = 0xEE,
 };
 
 typedef struct {
@@ -208,12 +217,12 @@ unsigned int GameSnapShotSaveThumbnail(int quality, unsigned int output_buffer) 
     xglDmaDirectNormal(2, (u32)TestPrim_0_00366EA0.words, 12);
     sceGsSyncPath(0, 0);
 
-    memset(&params, 0, 0x20);
+    memset(&params, 0, sizeof(params));
     params.output_buffer = output_buffer;
-    params.source_x = 0x3800;
-    params.source_y = 8;
-    params.width = 128;
-    params.height = 112;
+    params.source_x = SNAPSHOT_THUMBNAIL_SOURCE_X;
+    params.source_y = SNAPSHOT_THUMBNAIL_SOURCE_Y;
+    params.width = SNAPSHOT_THUMBNAIL_WIDTH;
+    params.height = SNAPSHOT_THUMBNAIL_HEIGHT;
     params.destination_x = 0;
     params.destination_y = 0;
     if (quality < 0) {
@@ -239,10 +248,10 @@ int GameSnapShotSave(int quality, unsigned char *image) {
     unsigned int source_x;
 
     header = image;
-    header[0] = 0xFF;
-    header[1] = 0xD8;
-    header[2] = 0xFF;
-    header[3] = 0xEE;
+    header[0] = SNAPSHOT_MARKER_PREFIX;
+    header[1] = SNAPSHOT_MARKER_SOI;
+    header[2] = SNAPSHOT_MARKER_PREFIX;
+    header[3] = SNAPSHOT_MARKER_APP14;
     image += 6;
     memset(&metadata, 0, SNAPSHOT_METADATA_SIZE);
     xglClockRead(&metadata.clock_reading);
@@ -251,14 +260,14 @@ int GameSnapShotSave(int quality, unsigned char *image) {
     *(GameSnapShotMetadata *)image = metadata;
     image += SNAPSHOT_METADATA_SIZE;
 
-    thumbnail_size = GameSnapShotSaveThumbnail(50, (unsigned int) image);
-    segment_length = thumbnail_size + 0xA4;
+    thumbnail_size = GameSnapShotSaveThumbnail(SNAPSHOT_THUMBNAIL_QUALITY, (unsigned int) image);
+    segment_length = thumbnail_size + SNAPSHOT_METADATA_SIZE + SNAPSHOT_SEGMENT_OVERHEAD;
     header[4] = segment_length >> 8;
     header[5] = segment_length;
     image += thumbnail_size;
     thumbnail_size += SNAPSHOT_METADATA_SIZE + 6;
 
-    memset(&params, 0, 0x20);
+    memset(&params, 0, sizeof(params));
     params.output_buffer = (unsigned int) image;
     display_origin = DrawEnv.display_origin;
     source_x = display_origin & 0x1ff;

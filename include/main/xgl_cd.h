@@ -3,6 +3,23 @@
 
 #include "shared.h"
 
+/* Where a file is read from (CdFilePosition.source, CdStreamParam.mode). */
+#define CD_SOURCE_DISC 0
+#define CD_SOURCE_HOST 1
+#define CD_SOURCE_HDD 2
+
+/* xglCdDiskCheck() failures; success is the mask of discs found. */
+#define CD_CHECK_UNSUPPORTED (-1)
+#define CD_CHECK_SHELL_OPEN (-2)
+#define CD_CHECK_NOT_READY (-3)
+
+/* xglCdDiskCheck() success mask: which disc is in the drive (disc N has the
+ * xenosaga.N0 archive). A dual-layer disc reports all of them. */
+#define CD_DISC_FLAG_DISC1 1
+#define CD_DISC_FLAG_DISC2 2
+#define CD_DISC_FLAG_DISC3 4
+#define CD_DISC_FLAGS_DUAL_LAYER 127
+
 typedef void CdCompletionCallback(int event, int value);
 
 typedef struct CdStreamParam CdStreamParam;
@@ -85,6 +102,15 @@ extern int xglCdGetFileSize(const char *name);
 
 extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
                              CdCompletionCallback *callback, int offset, int length);
+
+/* Events passed to a completion callback (int event, int value). */
+#define CD_EVENT_LOOKUP 0 /* value: the path being looked up */
+#define CD_EVENT_SIZE 1
+#define CD_EVENT_PROGRESS 2
+#define CD_EVENT_PROGRESS_ASYNC 3
+#define CD_EVENT_DONE 4
+#define CD_EVENT_NOT_FOUND (-1)
+#define CD_EVENT_READ_ERROR (-2)
 
 /* Functions and data used by other translation units. */
 void xglCdPowerOffCB(void);

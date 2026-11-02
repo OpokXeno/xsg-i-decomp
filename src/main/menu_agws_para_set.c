@@ -8,9 +8,49 @@
 #include "main/party.h"
 #include "main/xgl_font.h"
 #include "main/menu_para_pt_rate_get.h"
+#include "main/end_print.h"
+/* MenuWork.agws.state / pendingState values (high nibble = screen, low = step). */
+#define AGWS_STATE_SELECT 0x10         /* pick the AGWS unit */
+#define AGWS_STATE_COMMAND 0x22        /* command list of the chosen unit */
+#define AGWS_STATE_EQUIP 0x40          /* equipment slots */
+#define AGWS_STATE_WEAPON_MOUNT 0x42   /* choose the mount position */
+#define AGWS_STATE_WEAPON_LIST 0x44
+#define AGWS_STATE_AMMO_LIST 0x46
+#define AGWS_STATE_ACCESSORY_LIST 0x62
+#define AGWS_STATE_PILOT_LIST 0xC2
+#define AGWS_STATE_CLOSE 0xF0
+#define AGWS_STATE_CLOSE_WAIT 0xF1
+#define AGWS_STATE_EXIT 0xFF
 
-#define MENU_TEXT_WEAPON 0x30000
-#define MENU_TEXT_BULLET 0x40000
+/* Frame waits loaded into MenuWork.agws.transitionTicks. */
+#define AGWS_WAIT_SCROLL 4
+#define AGWS_WAIT_LEAVE 12
+#define AGWS_WAIT_SWITCH 16
+#define AGWS_WAIT_COMMAND 24
+
+#define AGWS_SE_EQUIP 0x10
+#define AGWS_SE_REMOVE 0x11
+#define AGWS_SE_PILOT_SET 0x12
+#define AGWS_SE_PILOT_REMOVE 0x13
+
+/* Work buffers carved from MainMenuWorkEnd by MenuAgws. */
+#define AGWS_PAS_WORK_SIZE 1904
+#define AGWS_INFO_WORK_SIZE 1104
+#define AGWS_SELECT_WORK_SIZE 7736
+#define AGWS_LIST_WORK_SIZE 0x5E10
+#define AGWS_STATUS_WORK_SIZE 0x71C
+#define AGWS_SWITCH_WORK_SIZE 0x1B8
+#define AGWS_FACE_WORK_SIZE 0x1C4
+
+#define AGWS_FIRST_UNIT_ID 0x11        /* PartyTakeAgwsCheck range start */
+#define AGWS_UNIT_ID_END 0x21
+#define AGWS_UNIT_MAX 0x10
+#define AGWS_LIST_WINDOW_COUNT 4
+#define AGWS_KEEP_SLOT_SIZE 5          /* MenuKeepSelect entries per list */
+#define AGWS_WEAPON_HAND_ACCESSORY 3   /* weaponHand value for the accessory row */
+#define AGWS_MODEL_MEMORY_ID 0xB
+
+
 #define AGWS_WEAPON2_SETUP 0
 #define AGWS_WEAPON2_MAIN  2
 #define M2C_FIELD(expr, type_ptr, offset) (*(type_ptr)((s8 *)(expr) + (offset)))
@@ -396,12 +436,12 @@ void AgwsPasMain(void)
         pas->window.height = 0x20;
         pas->window.close_callback = MenuPasWindow;
         pas->window.close_callback_arg = pas->callbackWork;
-        pas->window.state = 1;
+        pas->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&pas->window);
-        pas->window.state = 3;
+        pas->window.state = WINDOWDX_STATE_READY;
         for (i = 0; i < 17; i++) {
             eMessageSet(&pas->message[i], msg00_0_0036D940[i]);
-            pas->message[i].mode = 0x20;
+            pas->message[i].mode = E_MODE_SHOW_START;
             pas->message[i].x = AGWS_PAS_TAB_PARKED;
             pas->message[i].y = 0xB;
             pas->message[i].draw_parameter = pas->color + 2;
@@ -424,18 +464,18 @@ void AgwsPasMain(void)
         AgwsMenuWork *menu = &MenuWork.agws;
 
         switch (menu->state) {
-        case 0x10:
+        case AGWS_STATE_SELECT:
         case 0x20:
-        case 0x22:
+        case AGWS_STATE_COMMAND:
             tabTarget[0] = 0x10;
             break;
-        case 0x44:
+        case AGWS_STATE_WEAPON_LIST:
             tabTarget[0] = -(tabLength[0] + AGWS_PAS_TAB_GAP);
             tabTarget[menu->reserveCursor + 1] = 0x10;
             tabTarget[menu->selectedIndex + AGWS_PAS_TAB_SLOT] =
                 tabLength[menu->reserveCursor + 1] + 0x10;
             break;
-        case 0x46:
+        case AGWS_STATE_AMMO_LIST:
             tabTarget[0] = -(tabLength[0] +
                              tabLength[menu->reserveCursor + 1] +
                              AGWS_PAS_TAB_GAP);
@@ -445,15 +485,15 @@ void AgwsPasMain(void)
             tabTarget[AGWS_PAS_TAB_AMMO] =
                 tabLength[menu->selectedIndex + AGWS_PAS_TAB_SLOT] + 0x10;
             break;
-        case 0x62:
+        case AGWS_STATE_ACCESSORY_LIST:
             tabTarget[0] = -(tabLength[0] + AGWS_PAS_TAB_GAP);
             tabTarget[menu->reserveCursor + 1] = 0x10;
             tabTarget[AGWS_PAS_TAB_ACCESSORY] =
                 tabLength[menu->reserveCursor + 1] + 0x10;
             break;
-        case 0x40:
-        case 0x42:
-        case 0xC2:
+        case AGWS_STATE_EQUIP:
+        case AGWS_STATE_WEAPON_MOUNT:
+        case AGWS_STATE_PILOT_LIST:
             tabTarget[0] = 0x10;
             tabTarget[menu->reserveCursor + 1] = tabLength[0] + 0x10;
             break;
@@ -465,19 +505,19 @@ void AgwsPasMain(void)
 
     MoveSlide(&pas->window.x, &slideTarget, 3.0f);
     WindowDXMain(&pas->window);
-    if (pas->window.state == 3) {
+    if (pas->window.state == WINDOWDX_STATE_READY) {
         pas->box.x = pas->window.x + 3;
         pas->box.y = pas->window.y + 3;
         pas->box.color = pas->color;
         pas->box.width = pas->window.width - 6;
         pas->box.height = pas->window.height - 6;
-        endPrintExtFunc(pas->color, 0x65, &pas->box);
+        endPrintExtFunc(pas->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&pas->box);
         for (i = 0; i < 17; i++) {
             MoveSlide(&pas->message[i].x, &tabTarget[i], 3.0f);
             if (pas->message[i].x < AGWS_PAS_TAB_LIMIT)
                 eMessageMain(&pas->message[i]);
         }
-        endPrintExtFunc(pas->color, 0x66, 0);
+        endPrintExtFunc(pas->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
     }
 }
 
@@ -504,11 +544,11 @@ void AgwsInfoMain(void)
         info->window.close_callback_arg = &info->contents;
         info->contents.textOffset[0] = 0;
         info->window.style = info->color;
-        info->window.state = 1;
+        info->window.state = WINDOWDX_STATE_OPEN;
         info->contents.textOffset[1] = 0;
         info->contents.text = 0;
         WindowDXMain(&info->window);
-        info->window.state = 3;
+        info->window.state = WINDOWDX_STATE_READY;
         info->state = 2;
         info->detail = 0;
         memset(info->text, 0, sizeof(info->text));
@@ -517,19 +557,19 @@ void AgwsInfoMain(void)
         org = func_A191C0(MenuWork.agws.chrNo);
         targetY = 386;
         if (info->detail == 0) {
-            if (PadData.half_2a & 0x20)
+            if (PadData.half_2a & PAD_CIRCLE)
                 info->detail = 1;
         } else if (PadData.mappedRepeat != 0) {
             info->detail = 0;
         }
         switch (MenuWork.agws.state) {
-        case 0x10:
+        case AGWS_STATE_SELECT:
             eMessageCpy(info->text, msg00_1_0036D988[0]);
             break;
-        case 0x22:
+        case AGWS_STATE_COMMAND:
             eMessageCpy(info->text, msg01_2_0036D990[MenuWork.agws.reserveCursor]);
             break;
-        case 0x40:
+        case AGWS_STATE_EQUIP:
             if (MenuWork.agws.weaponHand != 3) {
                 if (MenuWork.agws.equipSlot == 0) {
                     if (org->weaponId[MenuWork.agws.weaponHand] != 0) {
@@ -562,7 +602,7 @@ void AgwsInfoMain(void)
                 }
             }
             break;
-        case 0x42: {
+        case AGWS_STATE_WEAPON_MOUNT: {
             const char *mountingMessage;
 
             position = OptMntToWpnPos(org->hand[MenuWork.agws.weaponHand]) - 1;
@@ -586,14 +626,14 @@ void AgwsInfoMain(void)
             eMessageCat(menuAgwsParaSetPeriodText);
             break;
         }
-        case 0x44:
+        case AGWS_STATE_WEAPON_LIST:
             selectedRow = MenuWork.agws.selectedWeapon;
             if (selectedRow >= 0)
                 eMessageCpy(info->text, MenuTextGet(MenuSortGet(0, selectedRow))->auxiliary);
             else
                 eMessageCpy(info->text, infoClearText);
             break;
-        case 0x46:
+        case AGWS_STATE_AMMO_LIST:
             selectedRow = MenuWork.agws.selectedAmmo;
             if (selectedRow >= 0)
                 eMessageCpy(info->text, MenuTextGet(MenuSortGet(0, selectedRow))->auxiliary);
@@ -611,14 +651,14 @@ void AgwsInfoMain(void)
             }
             break;
         }
-        case 0x62:
+        case AGWS_STATE_ACCESSORY_LIST:
             selectedRow = MenuWork.agws.selectedAccessory;
             if (selectedRow >= 0)
                 eMessageCpy(info->text, MenuTextGet(MenuSortGet(0, selectedRow))->auxiliary);
             else
                 eMessageCpy(info->text, infoClearText);
             break;
-        case 0xC2:
+        case AGWS_STATE_PILOT_LIST:
             if (MenuWork.agws.listSelect >= 0) {
                 row = &MenuListGet(0)[MenuWork.agws.listSelect];
                 if (row->flag == 1) {
@@ -696,9 +736,9 @@ void AgwsSelectMain(void)
         select->contents[3].mode = 1;
         select->contents[3].annotation = msg01_8_0036DA40[1];
         for (i = 0; i < 4; i++) {
-            select->window[i].state = 1;
+            select->window[i].state = WINDOWDX_STATE_OPEN;
             WindowDXMain((WindowDX *)(&select->window[i]));
-            select->window[i].state = 3;
+            select->window[i].state = WINDOWDX_STATE_READY;
         }
         select->visible = 1;
         select->selectNo = -1;
@@ -715,11 +755,11 @@ void AgwsSelectMain(void)
         targetX[3] = 544;
         targetY[3] = 128;
         switch (MenuWork.agws.state) {
-        case 0x22:
+        case AGWS_STATE_COMMAND:
             targetX[0] = 272;
             select->contents[0].selectedIndex = MenuWork.agws.reserveCursor;
             break;
-        case 0x42:
+        case AGWS_STATE_WEAPON_MOUNT:
             mmsg_9[0] = emptyMessageText[0];
             i = 0;
             while (MenuWork.agws.weaponSlot[i] != 0) {
@@ -895,10 +935,10 @@ void AgwsListMain(void)
     case 2:
         list->visible = 0;
         switch (MenuWork.agws.state) {
-        case 0x44: list->state = 10; break;
-        case 0x46: list->state = 20; break;
-        case 0x62: list->state = 30; break;
-        case 0xC2: list->state = 40; break;
+        case AGWS_STATE_WEAPON_LIST: list->state = 10; break;
+        case AGWS_STATE_AMMO_LIST: list->state = 20; break;
+        case AGWS_STATE_ACCESSORY_LIST: list->state = 30; break;
+        case AGWS_STATE_PILOT_LIST: list->state = 40; break;
         }
         break;
     case 10:
@@ -957,10 +997,10 @@ void AgwsListMain(void)
     case 12:
     case 22:
         switch (MenuWork.agws.state) {
-        case 0x42: list->state = 13; break;
-        case 0x22: list->state = 43; break;
-        case 0x40: list->state = 13; break;
-        case 0x46:
+        case AGWS_STATE_WEAPON_MOUNT: list->state = 13; break;
+        case AGWS_STATE_COMMAND: list->state = 43; break;
+        case AGWS_STATE_EQUIP: list->state = 13; break;
+        case AGWS_STATE_AMMO_LIST:
             if (list->state != 12) break;
             list->state = 20;
             break;
@@ -975,9 +1015,9 @@ void AgwsListMain(void)
             for (i = 0; i < count; i++) {
                 short chrNo = MenuSortGet(0, i);
                 if (PartyAttackerCheck(chrNo)) {
-                    eTagFontSet(&list->tag[i], MenuTagTextGet(1));
+                    eTagFontSet(&list->tag[i], MenuTagTextGet(MENU_TAG_COMBATANT));
                 } else {
-                    eTagFontSet(&list->tag[i], MenuTagTextGet(2));
+                    eTagFontSet(&list->tag[i], MenuTagTextGet(MENU_TAG_RESERVE));
                 }
                 if (rows[i].flag == 1) {
                     list->tag[i].color[1] = 64;
@@ -1018,9 +1058,9 @@ void AgwsStatusMain(void)
         status->window.style = status->color;
         status->window.width = 480;
         status->window.height = 64;
-        status->window.state = 1;
+        status->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&status->window);
-        status->window.state = 3;
+        status->window.state = WINDOWDX_STATE_READY;
         for (i = 0; i < 7; i++) {
             eTagFontSet(&status->label[i], msg_10[i]);
             status->label[i].work = status->color + 2;
@@ -1045,7 +1085,7 @@ void AgwsStatusMain(void)
         short slideTarget = AGWS_STATUS_X_OUT;
 
         switch (MenuWork.agws.state) {
-        case 0x40:
+        case AGWS_STATE_EQUIP:
             slideTarget = AGWS_STATUS_X_IN;
             if (MenuWork.agws.reserveCursor == 1) {
                 status->mask = 1;
@@ -1053,21 +1093,21 @@ void AgwsStatusMain(void)
                 status->mask = 0;
             }
             break;
-        case 0x22:
+        case AGWS_STATE_COMMAND:
             slideTarget = AGWS_STATUS_X_IN;
             break;
-        case 0x42:
-        case 0x44:
-        case 0x46:
-        case 0x62:
-        case 0xC2:
+        case AGWS_STATE_WEAPON_MOUNT:
+        case AGWS_STATE_WEAPON_LIST:
+        case AGWS_STATE_AMMO_LIST:
+        case AGWS_STATE_ACCESSORY_LIST:
+        case AGWS_STATE_PILOT_LIST:
             status->mask = 0;
             slideTarget = AGWS_STATUS_X_IN;
             break;
         }
         MoveSlide(&status->window.x, &slideTarget, 3.0f);
         WindowDXMain(&status->window);
-        if (status->window.state == 3) {
+        if (status->window.state == WINDOWDX_STATE_READY) {
             for (i = 0; i < 6; i++) {
                 int rows = 3;
 
@@ -1149,9 +1189,9 @@ void AgwsWeapon2Main(void)
             } else {
                 work->row[i].window.height = 0x36;
             }
-            work->row[i].window.state = 1;
+            work->row[i].window.state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&work->row[i].window);
-            work->row[i].window.state = 3;
+            work->row[i].window.state = WINDOWDX_STATE_READY;
         }
         eCursolSet((ECursolMainData *)&storage->cursor.cursol, 0);
         work->mode = 0;
@@ -1164,25 +1204,25 @@ void AgwsWeapon2Main(void)
             y[i] = 0x30 + i * 0x36;
         }
         switch (MenuWork.agws.state) {
-        case 0x40:
+        case AGWS_STATE_EQUIP:
             for (i = 0; i < 4; i++)
                 x[i] = 0x10;
-            storage->cursor.cursol.control.state = 0x20;
+            storage->cursor.cursol.control.state = E_MODE_SHOW_START;
             break;
-        case 0x22:
+        case AGWS_STATE_COMMAND:
             storage->cursor.cursol.control.state = 0;
             break;
-        case 0x42:
-        case 0x44:
-        case 0x46:
+        case AGWS_STATE_WEAPON_MOUNT:
+        case AGWS_STATE_WEAPON_LIST:
+        case AGWS_STATE_AMMO_LIST:
             x[MenuWork.agws.weaponHand] = 0x10;
             y[MenuWork.agws.weaponHand] = 0x30;
             break;
-        case 0x62:
+        case AGWS_STATE_ACCESSORY_LIST:
             x[3] = 0x10;
             y[3] = 0x30;
             break;
-        case 0xC2:
+        case AGWS_STATE_PILOT_LIST:
             break;
         }
         for (i = 0; i < 4; i++) {
@@ -1207,7 +1247,7 @@ void AgwsWeapon2Main(void)
             }
             for (textIndex = 0; textIndex < lines; textIndex++) {
                 eMessageSet(&work->row[i].message[textIndex], text[textIndex]);
-                work->row[i].message[textIndex].mode = 0x20;
+                work->row[i].message[textIndex].mode = E_MODE_SHOW_START;
                 work->row[i].message[textIndex].draw_parameter = work->row[i].window.style + 2;
                 work->row[i].message[textIndex].x = work->row[i].window.x + 39;
                 work->row[i].message[textIndex].y = work->row[i].window.y + ((lines & 1) * 12 + textIndex * 24) + 3;
@@ -1254,7 +1294,7 @@ void AgwsWeapon2Main(void)
             eSpriteMain(&work->row[3].sprite[i]);
             eMessageSet(&work->row[3].message[i],
                         MenuTextGet(MenuIdChange(para->accessoryId[i], 5))->name);
-            work->row[3].message[i].mode = 0x20;
+            work->row[3].message[i].mode = E_MODE_SHOW_START;
             work->row[3].message[i].x = work->row[3].window.x + 39;
             work->row[3].message[i].draw_parameter = work->row[3].window.style + 2;
             work->row[3].message[i].y = work->row[3].window.y + i * 24 + 3;
@@ -1332,21 +1372,21 @@ void AgwsNameMain(void) {
             name->window[rowIndex].width = 0xE0;
             name->window[rowIndex].height = 0x36;
             if (pilot == 0)
-                name->window[rowIndex].tag_id = MenuTagTextGet(2);
+                name->window[rowIndex].tag_id = MenuTagTextGet(MENU_TAG_RESERVE);
             else if (PartyAttackerCheck(pilot) != 0)
-                name->window[rowIndex].tag_id = MenuTagTextGet(3);
+                name->window[rowIndex].tag_id = MenuTagTextGet(MENU_TAG_REGISTERED_COMBATANT);
             else
-                name->window[rowIndex].tag_id = MenuTagTextGet(4);
+                name->window[rowIndex].tag_id = MenuTagTextGet(MENU_TAG_REGISTERED_RESERVE);
             name->window[rowIndex].ribbon_initialized = 1;
-            name->window[rowIndex].state = 1;
+            name->window[rowIndex].state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&name->window[rowIndex]);
-            name->window[rowIndex].state = 3;
+            name->window[rowIndex].state = WINDOWDX_STATE_READY;
             eMessageSet(&name->message[rowIndex][0], MenuCharNameGet(character));
             name->message[rowIndex][0].draw_parameter = name->color + 2;
-            name->message[rowIndex][0].mode = 0x20;
+            name->message[rowIndex][0].mode = E_MODE_SHOW_START;
             eMessageSet(&name->message[rowIndex][1], MenuCharNameGet(pilot));
             name->message[rowIndex][1].draw_parameter = name->color + 4;
-            name->message[rowIndex][1].mode = 0x20;
+            name->message[rowIndex][1].mode = E_MODE_SHOW_START;
             for (band = 0; band < 4; band++) {
                 AgwsNamePoint *ribbonColors;
                 ribbonColors = &name->ribbon[rowIndex][band * 5 + 3];
@@ -1390,7 +1430,7 @@ void AgwsNameMain(void) {
             name->window[rowIndex].y = rowIndex / 2 * 0x60 + 0x40;
             name->window[rowIndex].x = (rowIndex & 1) * 0x320 - 0x100;
         }
-        name->cursol.state = 0x20;
+        name->cursol.state = E_MODE_SHOW_START;
         name->state = 0xB;
         /* fallthrough */
     case 0xB:
@@ -1415,10 +1455,10 @@ void AgwsNameMain(void) {
         break;
     case 0xC:
         switch (MenuWork.agws.state) {
-        case 0x22:
+        case AGWS_STATE_COMMAND:
             name->state = 0x14;
             break;
-        case 0xF1:
+        case AGWS_STATE_CLOSE_WAIT:
             name->state = 0x33;
             break;
         }
@@ -1467,11 +1507,11 @@ void AgwsNameMain(void) {
         break;
     case 0x16:
         switch (MenuWork.agws.state) {
-        case 0x10:
-            name->cursol.state = 0x20;
+        case AGWS_STATE_SELECT:
+            name->cursol.state = E_MODE_SHOW_START;
             name->state = 0x3D;
             break;
-        case 0x40:
+        case AGWS_STATE_EQUIP:
             name->state = 0x1E;
             break;
         }
@@ -1515,11 +1555,11 @@ void AgwsNameMain(void) {
             }
             pilot = MenuAgwsPilotCheck(AgwsNo[rowIndex]);
             if (pilot == 0) {
-                name->window[rowIndex].title_font.render.text =MenuTagTextGet(2);
+                name->window[rowIndex].title_font.render.text =MenuTagTextGet(MENU_TAG_RESERVE);
             } else if (PartyAttackerCheck(pilot) != 0) {
-                name->window[rowIndex].title_font.render.text =MenuTagTextGet(3);
+                name->window[rowIndex].title_font.render.text =MenuTagTextGet(MENU_TAG_REGISTERED_COMBATANT);
             } else {
-                name->window[rowIndex].title_font.render.text =MenuTagTextGet(4);
+                name->window[rowIndex].title_font.render.text =MenuTagTextGet(MENU_TAG_REGISTERED_RESERVE);
             }
             WindowDXMain(&name->window[rowIndex]);
             portraitRibbon = &name->ribbon[rowIndex][0];
@@ -1540,7 +1580,7 @@ void AgwsNameMain(void) {
             portraitBottom = ((unsigned short)name->window[rowIndex].y + (unsigned short)name->window[rowIndex].height) - 3;
             name->ribbon[rowIndex][3].y = (short) portraitBottom;
             name->ribbon[rowIndex][1].y = (short) portraitBottom;
-            endPrintExtFunc(name->color, 3, portraitRibbon);
+            endPrintExtFunc(name->color, END_PRINT_CMD_RIBBON,portraitRibbon);
             pilotRibbon = &name->ribbon[rowIndex][5];
             pilotLeft = ((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 0x8E;
             pilotDepth = name->window[rowIndex].style;
@@ -1559,7 +1599,7 @@ void AgwsNameMain(void) {
             pilotBottom = ((unsigned short)name->window[rowIndex].y + (unsigned short)name->window[rowIndex].height) - 3;
             name->ribbon[rowIndex][8].y = (short) pilotBottom;
             name->ribbon[rowIndex][6].y = (short) pilotBottom;
-            endPrintExtFunc(name->color, 3, pilotRibbon);
+            endPrintExtFunc(name->color, END_PRINT_CMD_RIBBON,pilotRibbon);
             titleRibbon = &name->ribbon[rowIndex][10];
             titleRight = ((unsigned short)name->window[rowIndex].x + (unsigned short)name->window[rowIndex].width) - 3;
             titleDepth = name->window[rowIndex].style;
@@ -1578,7 +1618,7 @@ void AgwsNameMain(void) {
             titleBottom = (unsigned short)name->window[rowIndex].y + 0x1B;
             name->ribbon[rowIndex][13].y = (short) titleBottom;
             name->ribbon[rowIndex][11].y = (short) titleBottom;
-            endPrintExtFunc(name->color, 3, titleRibbon);
+            endPrintExtFunc(name->color, END_PRINT_CMD_RIBBON,titleRibbon);
             name->portrait[rowIndex].x = (short) ((unsigned short)name->window[rowIndex].x + 0x13);
             name->portrait[rowIndex].color = name->window[rowIndex].style;
             name->portrait[rowIndex].y = (unsigned short)name->window[rowIndex].y + 3;
@@ -1601,7 +1641,7 @@ void AgwsNameMain(void) {
             nameBottom = ((unsigned short)name->window[rowIndex].y + (unsigned short)name->window[rowIndex].height) - 3;
             name->ribbon[rowIndex][18].y = (short) nameBottom;
             name->ribbon[rowIndex][16].y = (short) nameBottom;
-            endPrintExtFunc(name->color, 3, nameRibbon);
+            endPrintExtFunc(name->color, END_PRINT_CMD_RIBBON,nameRibbon);
             name->message[rowIndex][0].x = (short) ((unsigned short)name->window[rowIndex].x + 0x3C);
             name->message[rowIndex][0].draw_parameter = name->window[rowIndex].style + 2;
             name->message[rowIndex][0].y = (unsigned short)name->window[rowIndex].y + 0x1B;
@@ -1621,7 +1661,7 @@ void AgwsNameMain(void) {
     name->cursol.color = name->color + 3;
     name->cursol.y = cursorY;
     eCursolMain((ECursolMainData *)cursor);
-    endPrintExtFunc(name->color, 6, NULL);
+    endPrintExtFunc(name->color, END_PRINT_CMD_SCISSOR_RESET, NULL);
 }
 
 void AgwsFaceMain(void)
@@ -1638,9 +1678,9 @@ void AgwsFaceMain(void)
         self->window.y = 128;
         self->window.width = 71;
         self->window.height = 100;
-        self->window.state = 1;
+        self->window.state = WINDOWDX_STATE_OPEN;
         WindowDXMain(&self->window);
-        self->window.state = 3;
+        self->window.state = WINDOWDX_STATE_READY;
         eSpriteSet(&self->face, 0);
         self->visible = 0;
         self->state = 2;
@@ -1754,9 +1794,9 @@ void MenuAgwsCameraMove(void)
     int target;
 
     switch (MenuWork.agws.state) {
-    case 0x10:
-    case 0x22:
-    case 0xC2:
+    case AGWS_STATE_SELECT:
+    case AGWS_STATE_COMMAND:
+    case AGWS_STATE_PILOT_LIST:
         target = 0;
         break;
     default:
@@ -1794,9 +1834,9 @@ void MenuAgwsModelMain(MenuModelUnitAgwsView *self)
         Vector4 *from = &positions.position[0];
 
         switch (MenuWork.agws.state) {
-        case 0x42:
-        case 0x44:
-        case 0x46:
+        case AGWS_STATE_WEAPON_MOUNT:
+        case AGWS_STATE_WEAPON_LIST:
+        case AGWS_STATE_AMMO_LIST:
             from = &positions.position[MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex]];
             break;
         }
@@ -1903,24 +1943,24 @@ void MenuAgws(void) {
         s32 var_16;
         s32 var_17;
 
-        windowIndex = 3;
+        windowIndex = AGWS_LIST_WINDOW_COUNT - 1;
         workCursor = MainMenuWorkEnd;
         pas = workCursor;
         AgwsPas = pas;
         blockBase = workCursor;
-        workCursor += 1904;
+        workCursor += AGWS_PAS_WORK_SIZE;
         pas->state = 0;
         AgwsInfo = workCursor;
         blockBase = workCursor;
-        workCursor += 1104;
+        workCursor += AGWS_INFO_WORK_SIZE;
         *blockBase = 0;
         AgwsSelect = workCursor;
         blockBase = workCursor;
-        workCursor += 7736;
+        workCursor += AGWS_SELECT_WORK_SIZE;
         *blockBase = 0;
         AgwsList = workCursor;
         blockBase = workCursor;
-        workCursor += 0x5E10;
+        workCursor += AGWS_LIST_WORK_SIZE;
         *blockBase = 0;
         do {
             AgwsWinSP[windowIndex] = &AgwsList->window[windowIndex];
@@ -1928,7 +1968,7 @@ void MenuAgws(void) {
         } while (windowIndex >= 0);
         AgwsStatus = workCursor;
         blockBase = workCursor;
-        workCursor += 0x71C;
+        workCursor += AGWS_STATUS_WORK_SIZE;
         *blockBase = 0;
         AgwsWeapon2 = workCursor;
         blockBase = workCursor;
@@ -1936,11 +1976,11 @@ void MenuAgws(void) {
         *blockBase = 0;
         AgwsSwitch = workCursor;
         blockBase = workCursor;
-        workCursor += 0x1B8;
+        workCursor += AGWS_SWITCH_WORK_SIZE;
         *blockBase = 0;
         AgwsFace = workCursor;
         blockBase = workCursor;
-        workCursor += 0x1C4;
+        workCursor += AGWS_FACE_WORK_SIZE;
         *blockBase = 0;
         AgwsName = workCursor;
         name = AgwsName;
@@ -1949,56 +1989,56 @@ void MenuAgws(void) {
         MenuWorkEndCheck(workCursor);
         var_17 = 0;
         MenuWork.agws.agwsCount = 0;
-        var_16 = 0x11;
+        var_16 = AGWS_FIRST_UNIT_ID;
         acceptedAgws = AgwsNo;
-        for (; var_16 < 0x21; var_16++) {
+        for (; var_16 < AGWS_UNIT_ID_END; var_16++) {
             if (PartyTakeAgwsCheck(var_16) != 0) {
                 var_17 += 1;
                 *acceptedAgws++ = (unsigned short) var_16;
                 MenuWork.agws.agwsCount++;
             }
         }
-        for (; var_17 < 0x10; var_17++)
+        for (; var_17 < AGWS_UNIT_MAX; var_17++)
             AgwsNo[var_17] = 0;
         MenuWork.agws.chrNo = (s16)AgwsNo[0];
         MenuAgwsParaSet((s32) (s16) AgwsNo[0], 0);
         MenuAgwsCameraSet();
-        MenuModelMemorySet(0xB);
+        MenuModelMemorySet(AGWS_MODEL_MEMORY_ID);
         MenuModelMenuMotionLoad();
         MenuModelOut[0] = 0;
         MenuKeepSelectReset();
         menu = &MenuWork.agws;
         menu->state = 0;
         menu->flags = 0;
-        menu->pendingState = 0x10;
-        menu->transitionTicks = 0x10;
+        menu->pendingState = AGWS_STATE_SELECT;
+        menu->transitionTicks = AGWS_WAIT_SWITCH;
     }
     if (MenuWork.agws.state != MenuWork.agws.pendingState) {
         MenuWork.agws.state = MenuWork.agws.pendingState;
-        MenuWork.agws.flags |= 1;
+        MenuWork.agws.flags |= MENU_FLAG_ENTER;
         MenuWork.agws.commandState = MenuWork.agws.pendingState;
     } else {
-        MenuWork.agws.flags &= 0xFE;
+        MenuWork.agws.flags &= ~MENU_FLAG_ENTER;
     }
     if (MenuWork.agws.transitionTicks != 0) {
         MenuWork.agws.transitionTicks = MenuWork.agws.transitionTicks + 0xFF;
     }
     MenuAgwsCameraMove();
     switch (MenuWork.agws.state) {                       /* switch 1; irregular */
-    case 0x10:                                      /* switch 1 */
+    case AGWS_STATE_SELECT:                                      /* switch 1 */
         if (MenuWork.agws.transitionTicks == 0) {
-            if (PadData.mappedRepeat & 0xF000) {
+            if (PadData.mappedRepeat & (PAD_UP | PAD_RIGHT | PAD_DOWN | PAD_LEFT)) {
                 switch (PadData.mappedRepeat) {     /* switch 2; irregular */
-                case 0x1000:                        /* switch 2 */
+                case PAD_UP:                        /* switch 2 */
                     MenuWork.agws.selectedAgws -= 2;
                     break;
-                case 0x4000:                        /* switch 2 */
+                case PAD_DOWN:                      /* switch 2 */
                     MenuWork.agws.selectedAgws += 2;
                     break;
-                case 0x8000:                        /* switch 2 */
+                case PAD_LEFT:                      /* switch 2 */
                     MenuWork.agws.selectedAgws--;
                     break;
-                case 0x2000:                        /* switch 2 */
+                case PAD_RIGHT:                     /* switch 2 */
                     MenuWork.agws.selectedAgws++;
                     break;
                 }
@@ -2013,36 +2053,36 @@ void MenuAgws(void) {
                     }
                     selectionMenu->chrNo = AgwsNo[selectionMenu->selectedAgws];
                 }
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             }
-            if (PadData.half_2a & 0x20) {
-                MenuWork.agws.pendingState = 0x22;
-                MenuWork.agws.transitionTicks = 0x18;
+            if (PadData.half_2a & PAD_CIRCLE) {
+                MenuWork.agws.pendingState = AGWS_STATE_COMMAND;
+                MenuWork.agws.transitionTicks = AGWS_WAIT_COMMAND;
                 MenuWork.agws.weaponHand = 0;
                 MenuWork.agws.equipSlot = 0;
                 MenuWork.agws.selectedIndex = 0;
-                xglSoundEffectNormalID(1, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 MenuModelCreate(MenuModelOut, MenuWork.agws.chrNo);
                 MenuModelExtFuncSet(MenuModelOut[0], MenuAgwsModelMain, 0);
                 MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
             }
-            if (PadData.half_2a & 0x40) {
-                MenuWork.agws.pendingState = (u8) -0x10;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.half_2a & PAD_CROSS) {
+                MenuWork.agws.pendingState = (u8) AGWS_STATE_CLOSE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x22:
+    case AGWS_STATE_COMMAND:
         if (MenuWork.agws.transitionTicks == 0) {
-            if (PadData.half_28 & 3)
+            if (PadData.half_28 & (PAD_L2 | PAD_R2))
                 break;
-            if (PadData.half_2a & 0xC) {
+            if (PadData.half_2a & (PAD_L1 | PAD_R1)) {
                 unsigned short character;
                 switch (PadData.half_2a) {
-                case 4:
+                case PAD_L1:
                     MenuWork.agws.selectedAgws--;
                     break;
-                case 8:
+                case PAD_R1:
                     MenuWork.agws.selectedAgws++;
                     break;
                 }
@@ -2059,39 +2099,39 @@ void MenuAgws(void) {
                 MenuWork.agws.chrNo = character;
                 MenuWork.agws.selectedIndex = 0;
                 MenuAgwsParaSet((short)character, 0);
-                xglSoundEffectNormalID(3, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 MenuKeepSelectReset();
-                MenuWork.agws.transitionTicks = 4;
+                MenuWork.agws.transitionTicks = AGWS_WAIT_SCROLL;
             } else {
                 int nextCursor = MenuSelectMove(MenuWork.agws.reserveCursor, 3, 0);
                 if (MenuWork.agws.reserveCursor != nextCursor) {
                     MenuWork.agws.reserveCursor = nextCursor;
                 } else if (MenuModelOut[0] != 0) {
-                    if (PadData.half_2a & 0x20) {
+                    if (PadData.half_2a & PAD_CIRCLE) {
                         if (MenuMainAgwsCheck(MenuWork.agws.chrNo) != 0) {
                             int reserve = MenuWork.agws.reserveCursor;
                             if (reserve != 2) {
                                 if (reserve < 3) {
                                     if (reserve >= 0)
-                                        MenuWork.agws.pendingState = 0x40;
+                                        MenuWork.agws.pendingState = AGWS_STATE_EQUIP;
                                 }
                             } else {
-                                MenuWork.agws.pendingState = 0xC2;
+                                MenuWork.agws.pendingState = AGWS_STATE_PILOT_LIST;
                             }
-                            MenuWork.agws.transitionTicks = 0x10;
+                            MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
                             if (MenuCursorKeepCheck() == 0) {
                                 MenuWork.agws.weaponHand = 0;
                                 MenuWork.agws.equipSlot = 0;
                             }
-                            xglSoundEffectNormalID(1, 0);
+                            xglSoundEffectNormalID(SE_DECIDE, 0);
                         } else {
-                            xglSoundEffectNormalID(5, 0);
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                         }
-                    } else if (PadData.half_2a & 0x40) {
-                        MenuWork.agws.pendingState = 0x10;
-                        MenuWork.agws.transitionTicks = 0x10;
+                    } else if (PadData.half_2a & PAD_CROSS) {
+                        MenuWork.agws.pendingState = AGWS_STATE_SELECT;
+                        MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
                         MenuKeepSelectReset();
-                        xglSoundEffectNormalID(2, 0);
+                        xglSoundEffectNormalID(SE_CANCEL, 0);
                     }
                 }
             }
@@ -2102,7 +2142,7 @@ void MenuAgws(void) {
         }
         MenuWork.agws.menuSelection = 1;
         break;
-    case 0x40:                                      /* switch 1 */
+    case AGWS_STATE_EQUIP:                                      /* switch 1 */
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuWork.agws.weaponId = 0;
             MenuWork.agws.ammoId = 0;
@@ -2110,7 +2150,7 @@ void MenuAgws(void) {
         }
         if (MenuWork.agws.transitionTicks == 0) {
             temp_16_3 = PadData.mappedRepeat;
-            if (temp_16_3 == 0x1000) {
+            if (temp_16_3 == PAD_UP) {
                 temp_6_2 = func_A191C0(MenuWork.agws.chrNo);
                 previousWeaponHand = MenuWork.agws.weaponHand;
                 if (MenuWork.agws.weaponHand == 3) {
@@ -2124,10 +2164,10 @@ void MenuAgws(void) {
                     } else {
                         MenuWork.agws.equipSlot--;
                     }
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 } else if (MenuWork.agws.equipSlot == 1) {
                     MenuWork.agws.equipSlot = 0;
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 } else if (MenuWork.agws.weaponHand == 0) {
                     if (PadData.mappedPressed == temp_16_3) {
                         MenuWork.agws.weaponHand = 3;
@@ -2139,11 +2179,11 @@ void MenuAgws(void) {
                     if (MenuBulletCheck(temp_6_2->weaponId[MenuWork.agws.weaponHand], -1) != 0) {
                         MenuWork.agws.equipSlot = (s8) 1;
                     }
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
             }
             temp_17_4 = PadData.mappedRepeat;
-            if (temp_17_4 == 0x4000) {
+            if (temp_17_4 == PAD_DOWN) {
                 temp_4_2 = func_A191C0(MenuWork.agws.chrNo);
                 if (MenuWork.agws.weaponHand == 3) {
                     if (MenuWork.agws.equipSlot == 2) {
@@ -2153,7 +2193,7 @@ void MenuAgws(void) {
                         }
                     } else {
                         MenuWork.agws.equipSlot = MenuWork.agws.equipSlot + 1;
-                        xglSoundEffectNormalID(3, 0);
+                        xglSoundEffectNormalID(SE_CURSOR, 0);
                     }
                 } else {
                     if (MenuWork.agws.equipSlot == 0
@@ -2163,10 +2203,10 @@ void MenuAgws(void) {
                         MenuWork.agws.equipSlot = (s8) 0;
                         MenuWork.agws.weaponHand = (s8) (MenuWork.agws.weaponHand + 1);
                     }
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
             }
-            if (PadData.half_2a == 0x20) {
+            if (PadData.half_2a == PAD_CIRCLE) {
                 if (MenuWork.agws.reserveCursor == 0) {
                     if (MenuWork.agws.weaponHand != 3) {
                         if (MenuWork.agws.equipSlot == 0) {
@@ -2176,15 +2216,15 @@ void MenuAgws(void) {
                             selectionMenu->pendingState = nextState;
                             selectionMenu->selectedIndex = 0;
                         } else {
-                            MenuWork.agws.pendingState = 0x46;
+                            MenuWork.agws.pendingState = AGWS_STATE_AMMO_LIST;
                             MenuWork.agws.selectedAmmo = -1;
                         }
                     } else {
-                        MenuWork.agws.pendingState = 0x62;
+                        MenuWork.agws.pendingState = AGWS_STATE_ACCESSORY_LIST;
                         MenuWork.agws.selectedAccessory = -1;
                     }
-                    MenuWork.agws.transitionTicks = 0x10;
-                    xglSoundEffectNormalID(1, 0);
+                    MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 } else {
                     temp_3_4 = func_A191C0(MenuWork.agws.chrNo);
                     if (MenuWork.agws.weaponHand != 3) {
@@ -2213,19 +2253,19 @@ void MenuAgws(void) {
                         }
                     }
                     MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
-                    xglSoundEffectNormalID(0x11, 0);
+                    xglSoundEffectNormalID(AGWS_SE_REMOVE, 0);
                 }
             }
-            if (PadData.half_2a == 0x40) {
+            if (PadData.half_2a == PAD_CROSS) {
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.agws.reserveCursor = 0;
                 }
-                    MenuWork.agws.pendingState = 0x22;
-                xglSoundEffectNormalID(2, 0);
+                    MenuWork.agws.pendingState = AGWS_STATE_COMMAND;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x42:                                      /* switch 1 */
+    case AGWS_STATE_WEAPON_MOUNT:                                      /* switch 1 */
         if (MenuWork.agws.flags & 1 & 0xFF) {
             AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
             int hand;
@@ -2252,19 +2292,19 @@ void MenuAgws(void) {
         }
         if (MenuWork.agws.transitionTicks == 0) {
             MenuWork.agws.selectedIndex = (s8) MenuSelectMove(MenuWork.agws.selectedIndex, MenuWork.agws.nameRow, 0);
-            if (PadData.half_2a & 0x40) {
-                MenuWork.agws.pendingState = (u8) 0x40;
-                MenuWork.agws.transitionTicks = (u8) 0x10;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.half_2a & PAD_CROSS) {
+                MenuWork.agws.pendingState = (u8) AGWS_STATE_EQUIP;
+                MenuWork.agws.transitionTicks = (u8) AGWS_WAIT_SWITCH;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
-            if (PadData.half_2a & 0x20) {
-                MenuWork.agws.pendingState = 0x44;
-                MenuWork.agws.transitionTicks = 0x10;
-                xglSoundEffectNormalID(1, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                MenuWork.agws.pendingState = AGWS_STATE_WEAPON_LIST;
+                MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
         }
         break;
-    case 0x44:                                      /* switch 1 */
+    case AGWS_STATE_WEAPON_LIST:                                      /* switch 1 */
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Wpn();
             MenuWork.agws.selectedWeapon = -1;
@@ -2301,7 +2341,7 @@ void MenuAgws(void) {
                     }
                     MenuWork.agws.selectedWeapon = (s8) temp_19;
                 }
-                if ((PadData.half_2a == 0x20) && (MenuWork.agws.selectedWeapon >= 0)) {
+                if ((PadData.half_2a == PAD_CIRCLE) && (MenuWork.agws.selectedWeapon >= 0)) {
                     temp_2_7 = MenuWeaponEquipPosCheck(MenuWork.agws.chrNo, MenuWork.agws.weaponId, (s32) MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex], MenuWork.agws.weaponHand);
                     if (temp_2_7 != 0) {
                         temp_2_8 = func_A191C0(MenuWork.agws.chrNo);
@@ -2326,19 +2366,19 @@ void MenuAgws(void) {
                             }
                         }
                         MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
-                        MenuWork.agws.pendingState = 0x40;
-                        MenuWork.agws.transitionTicks = 0x10;
-                        xglSoundEffectNormalID(0x10, 0);
+                        MenuWork.agws.pendingState = AGWS_STATE_EQUIP;
+                        MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                        xglSoundEffectNormalID(AGWS_SE_EQUIP, 0);
                     } else {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 }
-                if (PadData.half_2a == 0x40) {
+                if (PadData.half_2a == PAD_CROSS) {
                     MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
-                    MenuWork.agws.pendingState = 0x42;
+                    MenuWork.agws.pendingState = AGWS_STATE_WEAPON_MOUNT;
                     MenuWork.agws.weaponChange = 2;
-                    MenuWork.agws.transitionTicks = 0x10;
-                    xglSoundEffectNormalID(2, 0);
+                    MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                     if (MenuCursorKeepCheck() == 0) {
                         MenuWork.agws.selectedIndex = 0;
                     }
@@ -2350,7 +2390,7 @@ void MenuAgws(void) {
                 }
         }
         break;
-    case 0x46:
+    case AGWS_STATE_AMMO_LIST:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
             MenuWork.agws.weaponId = org->weaponId[MenuWork.agws.weaponHand];
@@ -2372,7 +2412,7 @@ void MenuAgws(void) {
                         MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     }
                 }
-                if (PadData.half_2a & 0x20) {
+                if (PadData.half_2a & PAD_CIRCLE) {
                     if (MenuBulletCheck(MenuWork.agws.weaponId, MenuWork.agws.ammoId) != 0) {
                         AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
                         short previousAmmo = org->ammoId[MenuWork.agws.weaponHand];
@@ -2395,23 +2435,23 @@ void MenuAgws(void) {
                                     && func_A1A3D8(weapon)->defaultAmmoId != MenuWork.agws.ammoId)
                                 dataBltBoxDec(MenuWork.agws.ammoId);
                         }
-                        MenuWork.agws.pendingState = 0x40;
-                        MenuWork.agws.transitionTicks = 0x10;
-                        xglSoundEffectNormalID(0x10, 0);
+                        MenuWork.agws.pendingState = AGWS_STATE_EQUIP;
+                        MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                        xglSoundEffectNormalID(AGWS_SE_EQUIP, 0);
                     } else {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 }
-                if (PadData.half_2a & 0x40) {
+                if (PadData.half_2a & PAD_CROSS) {
                     MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
-                    MenuWork.agws.pendingState = 0x40;
-                    MenuWork.agws.transitionTicks = 0x10;
-                    xglSoundEffectNormalID(2, 0);
+                    MenuWork.agws.pendingState = AGWS_STATE_EQUIP;
+                    MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                     WindowSPKeepSelectCheck(&MenuKeepSelect[0x1E]);
                 }
         }
         break;
-    case 0x62:
+    case AGWS_STATE_ACCESSORY_LIST:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Acc();
             MenuWork.agws.selectedAccessory = -1;
@@ -2434,7 +2474,7 @@ void MenuAgws(void) {
                         MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     }
                 }
-                if (MenuWork.agws.selectedAccessory >= 0 && PadData.half_2a == 0x20) {
+                if (MenuWork.agws.selectedAccessory >= 0 && PadData.half_2a == PAD_CIRCLE) {
                     if (MenuAccessoryEquipCheck(MenuWork.agws.chrNo,
                                                MenuWork.agws.accessoryId,
                                                MenuWork.agws.equipSlot) != 0) {
@@ -2445,22 +2485,22 @@ void MenuAgws(void) {
                         if (previousAccessory != 0)
                             dataAccBoxInc(previousAccessory);
                         dataAccBoxDec(MenuWork.agws.accessoryId);
-                        MenuWork.agws.pendingState = 0x40;
-                        xglSoundEffectNormalID(0x10, 0);
+                        MenuWork.agws.pendingState = AGWS_STATE_EQUIP;
+                        xglSoundEffectNormalID(AGWS_SE_EQUIP, 0);
                     } else {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 }
                 buttons = PadData.half_2a;
-                if (buttons == 0x40) {
+                if (buttons == PAD_CROSS) {
                     MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     MenuWork.agws.pendingState = buttons;
-                    xglSoundEffectNormalID(2, 0);
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                     WindowSPKeepSelectCheck(&MenuKeepSelect[0x23]);
                 }
         }
         break;
-    case 0xC2:                                      /* switch 1 */
+    case AGWS_STATE_PILOT_LIST:                                      /* switch 1 */
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Pilot();
         } else {
@@ -2478,36 +2518,36 @@ void MenuAgws(void) {
                 MenuAgwsParaSet(MenuWork.agws.chrNo, 1);
                 temp_19_3->agwsId = temp_16_2;
                 temp_21_3->agwsId = temp_17_3;
-                if (PadData.half_2a & 0x20) {
+                if (PadData.half_2a & PAD_CIRCLE) {
                     if (temp_22_2 == 0) {
                         if (temp_19_3->agwsId == 0) {
                             temp_19_3->agwsId = MenuWork.agws.chrNo;
-                            xglSoundEffectNormalID(0x12, 0);
+                            xglSoundEffectNormalID(AGWS_SE_PILOT_SET, 0);
                             MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                         } else {
-                            xglSoundEffectNormalID(5, 0);
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                         }
                     } else if (temp_22_2 == temp_23_2) {
                         temp_19_3->agwsId = 0;
-                        xglSoundEffectNormalID(0x13, 0);
+                        xglSoundEffectNormalID(AGWS_SE_PILOT_REMOVE, 0);
                         MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                     } else {
                         if (temp_19_3->agwsId == 0) {
                             temp_19_3->agwsId = MenuWork.agws.chrNo;
                             temp_21_3->agwsId = 0;
-                            xglSoundEffectNormalID(0x12, 0);
+                            xglSoundEffectNormalID(AGWS_SE_PILOT_SET, 0);
                             MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
                         } else {
-                            xglSoundEffectNormalID(5, 0);
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                         }
                     }
                     MenuAgwsListMake_Pilot();
                 }
-                if (PadData.half_2a & 0x40) {
+                if (PadData.half_2a & PAD_CROSS) {
                     MenuAgwsParaSet(MenuWork.agws.chrNo, 0);
-                    MenuWork.agws.pendingState = 0x22;
-                    MenuWork.agws.transitionTicks = 0x10;
-                    xglSoundEffectNormalID(2, 0);
+                    MenuWork.agws.pendingState = AGWS_STATE_COMMAND;
+                    MenuWork.agws.transitionTicks = AGWS_WAIT_SWITCH;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                     if (MenuCursorKeepCheck() == 0) {
                         MenuWork.agws.reserveCursor = 0;
                     }
@@ -2519,17 +2559,17 @@ void MenuAgws(void) {
             }
         }
         break;
-    case 0xF0:                                      /* switch 1 */
-        MenuWork.agws.state = (u8) -0xF;
-        MenuWork.agws.pendingState = (u8) -0xF;
-        MenuWork.agws.transitionTicks = (u8) 0xC;
+    case AGWS_STATE_CLOSE:                                      /* switch 1 */
+        MenuWork.agws.state = (u8) AGWS_STATE_CLOSE_WAIT;
+        MenuWork.agws.pendingState = (u8) AGWS_STATE_CLOSE_WAIT;
+        MenuWork.agws.transitionTicks = (u8) AGWS_WAIT_LEAVE;
         /* fallthrough */
-    case 0xF1:                                      /* switch 1 */
+    case AGWS_STATE_CLOSE_WAIT:                                      /* switch 1 */
         if (MenuWork.agws.transitionTicks != 0)
             break;
-        MenuWork.agws.state = (u8) -1;
+        MenuWork.agws.state = (u8) AGWS_STATE_EXIT;
         /* fallthrough */
-    case 0xFF:
+    case AGWS_STATE_EXIT:
         ChangeTopLevel(0);
         MenuModelAllBreak();
         break;

@@ -17,6 +17,9 @@ typedef struct YosikawaPadInputPrefix {
     } input;
 } YosikawaPadInputPrefix;
 
+/* Number of test entries (funclist). */
+#define YOSIKAWA_TEST_COUNT 3
+
 extern YosikawaPadInputPrefix PadData;
 extern const char yosikawaTestCursorControl[];
 extern const char CallJavaMethodYosikawaTestText[];
@@ -29,14 +32,14 @@ extern void WindTest(void);
 extern void ColliTest(void);
 static int csr;
 
-static void (*funclist[3])(void);
+static void (*funclist[YOSIKAWA_TEST_COUNT])(void);
 
 static int csr = 0;
 
 /* Text: {reset}{glyph 28} */
 const char yosikawaTestCursorControl[8] = "\013\033\034";
 
-static void (*funclist[3])(void) = { HairTest, WindTest, ColliTest };
+static void (*funclist[YOSIKAWA_TEST_COUNT])(void) = { HairTest, WindTest, ColliTest };
 
 void YosikawaTest(void)
 {
@@ -48,16 +51,16 @@ void YosikawaTest(void)
     xglRenderClearFrame();
     xglSleep();
 
-    while ((PadData.input.snapshot & 0x08000100ULL) != 0x08000100ULL) {
+    while ((PadData.input.snapshot & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         shoulder_buttons = PadData.input.buttons.shoulder_buttons;
-        if (shoulder_buttons & 0x4000) {
+        if (shoulder_buttons & PAD_DOWN) {
             selection = csr;
             selection++;
             csr = selection;
         } else {
             selection = csr;
         }
-        if (shoulder_buttons & 0x1000) {
+        if (shoulder_buttons & PAD_UP) {
             selection--;
             csr = selection;
         }
@@ -65,7 +68,7 @@ void YosikawaTest(void)
         loop_cursor = selection;
         if (selection < 0) {
             do {
-                wrapped_selection = loop_cursor + 3;
+                wrapped_selection = loop_cursor + YOSIKAWA_TEST_COUNT;
                 loop_cursor = wrapped_selection;
             } while (wrapped_selection < 0);
             csr = wrapped_selection;
@@ -73,7 +76,7 @@ void YosikawaTest(void)
         }
 
         {
-            int function_count = 3;
+            int function_count = YOSIKAWA_TEST_COUNT;
 
             if (selection >= function_count) {
                 do {
@@ -84,7 +87,7 @@ void YosikawaTest(void)
             }
         }
 
-        if (PadData.input.buttons.pressed & 0x0020) {
+        if (PadData.input.buttons.pressed & PAD_CIRCLE) {
             funclist[csr]();
             return;
         }

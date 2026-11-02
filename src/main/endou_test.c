@@ -28,6 +28,94 @@
 #define NULL ((void *)0)
 #define ENDOU_MODEL_PAD ((EndouModelPadState *)&PadData)
 
+/* Held SELECT in the low half and pressed START in the high half of the pad
+ * snapshot (PadData +0x28) leave a test screen. One spelling per literal type
+ * the code compares with. */
+#define ENDOU_EXIT_CHORD 0x08000100
+#define ENDOU_EXIT_CHORD_U 0x08000100U
+#define ENDOU_EXIT_CHORD_ULL 0x08000100ULL
+
+/* Analog stick axes read as signed bytes: pushed past this is a deflection. */
+#define ENDOU_STICK_DEADZONE 0x40
+
+/* eLineMain states: draw the segments one after another or all at once. */
+enum {
+    ELINE_STATE_DRAW_SEQUENTIAL = 0x10,
+    ELINE_STATE_DRAW_ALL = 0x20
+};
+
+/* ShopTest: shopdata.bin holds 20 shop records of 0xb8 halfwords, laid out as
+ * nine columns of 20 slots plus four trailing values. */
+#define ENDOU_SHOP_COUNT 20
+#define ENDOU_SHOP_RECORD_WORDS 0xb8
+#define ENDOU_SHOP_SLOT_COUNT 20
+#define ENDOU_SHOP_TEST_MONEY_SMALL 100
+#define ENDOU_SHOP_TEST_MONEY_LARGE 1000000
+
+/* Party debug menu: the pages of PauseMenuPagePartyDebug, and the party id
+ * ranges the pages walk (friends 1..7, twelve characters per toggle page,
+ * AGWS ids from 0x11). */
+enum {
+    PARTY_DEBUG_PAGE_FRIEND,
+    PARTY_DEBUG_PAGE_ATTACKER,
+    PARTY_DEBUG_PAGE_OUT_FRIEND,
+    PARTY_DEBUG_PAGE_LOCK_PARTY,
+    PARTY_DEBUG_PAGE_TAKE_AGWS
+};
+#define PARTY_DEBUG_FRIEND_COUNT 7
+#define PARTY_DEBUG_ROSTER_COUNT 12
+#define PARTY_DEBUG_AGWS_FIRST_ID 0x11
+#define PARTY_DEBUG_ID_MAX 0x1d
+#define PARTY_DEBUG_ATTACK_SLOT_COUNT 3
+#define PARTY_DEBUG_ATTACK_POSITION_COUNT 10
+#define PARTY_DEBUG_ATTACK_POSITION_MAX (PARTY_DEBUG_ATTACK_POSITION_COUNT - 1)
+#define PARTY_DEBUG_ATTACKER_ROW_LAST 5
+
+/* Battle window test: 19 commands and a terminator. */
+#define ENDOU_BATTLE_COMMAND_COUNT 20
+
+/* Message test: four model-test strings cycled every 0x40 frames; five
+ * message-test strings (the last is a terminator). */
+#define ENDOU_MODEL_MESSAGE_COUNT 4
+#define ENDOU_MODEL_MESSAGE_FRAMES 0x40
+#define ENDOU_MESSAGE_TEST_COUNT 5
+
+/* ModelTest floor grid: ENDOU_GRID_ROWS x ENDOU_GRID_COLUMNS projected points. */
+#define ENDOU_GRID_ROWS 5
+#define ENDOU_GRID_COLUMNS 6
+#define ENDOU_GRID_POINT_COUNT (ENDOU_GRID_ROWS * ENDOU_GRID_COLUMNS)
+
+/* eModelTest: menu model pool and its separate memory block. */
+#define ENDOU_MENU_MODEL_POOL 0x01000000
+#define ENDOU_MENU_MODEL_MEMORY_BASE 0x01100000
+#define ENDOU_MENU_MODEL_MEMORY_SIZE 0x00500000
+
+/* Work buffers of the file, JPEG and UML tests. */
+#define ENDOU_FILE_LOAD_BUFFER_SIZE 0x100000
+#define ENDOU_JPEG_BUFFER_SIZE 0x80000
+#define ENDOU_UML_BUFFER_SIZE 0x20000
+#define ENDOU_UML_CLEAR_SIZE 0x10000
+
+/* Texture (.xtx) tests: 0x30-byte file header, then the image upload. */
+#define ENDOU_XTX_HEADER_SIZE 0x30
+#define ENDOU_XTX_PAYLOAD_QWORDS 0x4002
+
+/* Quadword counts of the GIF packets the tests reference. */
+#define ENDOU_BG_ENV_QWORDS 10
+#define ENDOU_UPLOAD_ENV_QWORDS 6
+#define ENDOU_TEX_DRAW_ENV_QWORDS 12
+#define ENDOU_FILE_DRAW_ENV_QWORDS 10
+#define ENDOU_WINTEX_ENV_QWORDS 7
+#define ENDOU_RELOAD_ENV_QWORDS 8
+
+/* VRAM byte offsets where the .xtx test images are uploaded (shifted right by
+ * 6 into the GS word address). */
+#define ENDOU_TEX_VRAM_BASE 0xe0000U
+#define ENDOU_FILE_VRAM_BASE 0xf0000U
+
+/* GS register field positions of the packets the tests build. */
+#define GS_TRXREG_RRH_SHIFT 32
+
 
 typedef struct EndouBattleWindowParams {
     int x;
@@ -644,11 +732,11 @@ static int Select_82;
 
 static int TopMode_86;
 
-static const char * text00_83[10];
+static const char * text00_83[PARTY_DEBUG_ATTACK_POSITION_COUNT];
 
-static const char * text01_84[3];
+static const char * text01_84[PARTY_DEBUG_ATTACK_SLOT_COUNT];
 
-static BattleWinCommand data_15[20];
+static BattleWinCommand data_15[ENDOU_BATTLE_COMMAND_COUNT];
 
 static char text_17[171] ;
 
@@ -693,7 +781,7 @@ static WinTexEnvironment WinTexEnv_65 = {
     { 0x0000000000000000ULL, 0x0000000000000053ULL },
 };
 
-static const char * msg_45[5];
+static const char * msg_45[ENDOU_MESSAGE_TEST_COUNT];
 
 static char text00_46[176];
 
@@ -715,7 +803,7 @@ static int x_71;
 
 static float ang_0[4];
 
-static const char * msg00_14[4];
+static const char * msg00_14[ENDOU_MODEL_MESSAGE_COUNT];
 
 static s32 no_13;
 
@@ -747,7 +835,7 @@ static float ang_0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 static float pos_1[4] = { 0.0f, 0.0f, 4.0f, 1.0f };
 
-static const char * msg00_14[4] = { modelTestKatakanaText, modelTestHiraganaKatakanaText, modelTestKatakanaHiraganaText, modelTestHiraganaText };
+static const char * msg00_14[ENDOU_MODEL_MESSAGE_COUNT] = { modelTestKatakanaText, modelTestHiraganaKatakanaText, modelTestKatakanaHiraganaText, modelTestHiraganaText };
 
 static const char * tag_16[] = { gradeOneTagText };
 
@@ -775,9 +863,9 @@ static const char * text00_79[] = { offText, onText };
 
 static const char * text00_81[] = { absentText, presentText };
 
-static const char * text00_83[10] = { nullText, p1Text, p2Text, p3Text, p4Text, p5Text, p6Text, a1Text, a2Text, a3Text };
+static const char * text00_83[PARTY_DEBUG_ATTACK_POSITION_COUNT] = { nullText, p1Text, p2Text, p3Text, p4Text, p5Text, p6Text, a1Text, a2Text, a3Text };
 
-static const char * text01_84[3] = { number1Text, number2Text, number3Text };
+static const char * text01_84[PARTY_DEBUG_ATTACK_SLOT_COUNT] = { number1Text, number2Text, number3Text };
 
 static const char * text02_85[] = { characterText, positionText };
 
@@ -926,7 +1014,7 @@ static int x_57;
 
 static int xx_62;
 
-static const char * msg_45[5] = { deviceListText, winningRaceListText, vowelKanaListText, horseNameListText, 0 };
+static const char * msg_45[ENDOU_MESSAGE_TEST_COUNT] = { deviceListText, winningRaceListText, vowelKanaListText, horseNameListText, 0 };
 
 static BgTestEnvironment TestEnv_54 = { .vif_nop = { 0U, 0U, 0U }, .vif_directhl_nine_quadwords = 1358954505U, .tag = { .loop_count_and_eop = 32769U, .primitive_flags_and_register_count = 2156609536U, .register_descriptors = 1397956334ULL }, .texture_setup = { .value = 68ULL, .register_id = 66ULL }, .packet_write = { .value = 2308076694620355584ULL, .register_id = 6ULL }, .primitive_setup = { .value = 327680ULL, .register_id = 71ULL }, .color = { .red = 128U, .green = 128U, .blue = 128U, .alpha = 128U }, .first_uv = { .u = 4096U, .v = 0U, .q = 0U, .reserved = 0U }, .first_vertex = { .x = 32760U, .y = 32760U, .z = 262144U, .fog = 0U }, .second_uv = { .u = 8192U, .v = 4096U, .q = 0U, .reserved = 0U }, .second_vertex = { .x = 36856U, .y = 36344U, .z = 262144U, .fog = 0U } };
 
@@ -966,7 +1054,7 @@ static int xx_62 = 0;
 
 static FileLoadState files = { .state = -1, .buffer = 0, .unmodeled_08 = { 100, 97, 116, 97, 92, 101, 110, 100, 111, 117, 92, 109, 101, 110, 117, 48, 48, 46, 120, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
 
-static BattleWinCommand data_15[20] = {
+static BattleWinCommand data_15[ENDOU_BATTLE_COMMAND_COUNT] = {
     { februaryStakesText, dirtChampionshipText, 1, 2 },
     { takamatsunomiyaKinenText, springSprintChampionshipText, 1, 3 },
     { okaShoText, filliesClassicsFirstLegText, 1, 4 },
@@ -1239,68 +1327,68 @@ void EndouTest(void)
 
     for (;;) {
         xglRenderClearFrame();
-        if ((PadData.buttons.button_state & 0x08000100ULL) == 0x08000100ULL) {
+        if ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_ULL) == ENDOU_EXIT_CHORD_ULL) {
             break;
         }
 
         xglFontDebugPrintf(0, 0, GameEndouTestTitleText);
         xglFontDebugPrintf(0, 0x10, settlementScreenTestLabel);
-        if ((PadData.buttons.input.pressed & 0x10) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_TRIANGLE) != 0) {
             SeisanTest();
         }
 
         xglFontDebugPrintf(0, 0x20, textTestSquareLabel);
-        if ((PadData.buttons.input.held & 0x80) != 0) {
+        if ((PadData.buttons.input.held & PAD_SQUARE) != 0) {
             TextTest();
         }
 
         xglFontDebugPrintf(0, 0x30, messageTestCrossLabel);
-        if ((PadData.buttons.input.pressed & 0x40) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_CROSS) != 0) {
             eMessageTest();
         }
 
         xglFontDebugPrintf(0, 0x40, miscTestCircleLabel);
-        if ((PadData.buttons.input.pressed & 0x20) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_CIRCLE) != 0) {
             eNumberTest();
         }
 
         xglFontDebugPrintf(0, 0x50, modelTestL1Label);
-        if ((PadData.buttons.input.pressed & 0x4) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_L1) != 0) {
             eModelTest();
         }
 
         xglFontDebugPrintf(0, 0x60, loadTestL2Label);
-        if ((PadData.buttons.input.pressed & 0x1) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_L2) != 0) {
             MenuFileMain(1);
         }
 
         xglFontDebugPrintf(0, 0x70, textureTestR1Label);
-        if ((PadData.buttons.input.pressed & 0x8) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_R1) != 0) {
             TexturTest();
         }
 
         xglFontDebugPrintf(0, 0x80, jpegTestR2Label);
-        if ((PadData.buttons.input.pressed & 0x2) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_R2) != 0) {
             JpegTest();
         }
 
         xglFontDebugPrintf(0, 0x90, battleWindowTestUpLabel);
-        if ((PadData.buttons.input.pressed & 0x1000) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_UP) != 0) {
             BattleWindowTest();
         }
 
         xglFontDebugPrintf(0, 0xa0, saveTestDownLabel);
-        if ((PadData.buttons.input.pressed & 0x4000) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_DOWN) != 0) {
             MenuFileMain(0);
         }
 
         xglFontDebugPrintf(0, 0xb0, modelTestRightLabel);
-        if ((PadData.buttons.input.pressed & 0x2000) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_RIGHT) != 0) {
             ModelTest();
         }
 
         xglFontDebugPrintf(0, 0xc0, shopTestLeftLabel);
-        if ((PadData.buttons.input.pressed & 0x8000) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_LEFT) != 0) {
             ShopTest();
         }
 
@@ -1329,22 +1417,22 @@ void TextTest(void)
     message.y = 0x40;
     message.draw_parameter = 0x00fffff0;
     message.page_available = 2;
-    eMessageModeChange(&message, 0x22);
+    eMessageModeChange(&message, E_MODE_OPEN_START);
 
     while (xglFontDebugPrintf(0, 0x10, textTestLabel),
-           (PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+           (PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         eMessageMain(&message);
-        if ((PadData.buttons.input.pressed & 8U) != 0 &&
+        if ((PadData.buttons.input.pressed & PAD_R1) != 0 &&
             eMessageNextPage(&message, 0) == 0) {
             record = UmnEventTextNextGet(1);
             if (record == 0) {
                 return;
             }
             eMessageTextChange(&message, record->message_text);
-            eMessageModeChange(&message, 0x22);
+            eMessageModeChange(&message, E_MODE_OPEN_START);
         }
 
-        endPrintExtFunc(0, 100, 0);
+        endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
         xglSleep();
     }
 }
@@ -1353,7 +1441,7 @@ void ShopTest(void)
 {
     unsigned int ab_column_offset;
     typedef struct ShopFile {
-        u16 records[20][0xb8];
+        u16 records[ENDOU_SHOP_COUNT][ENDOU_SHOP_RECORD_WORDS];
     } ShopFile;
     int row_index;
     int menu_open;
@@ -1371,43 +1459,43 @@ void ShopTest(void)
     PartyFriendOn(2);
     menu_open = 0;
     PartyFriendOn(7);
-    PartyTakeAgwsOn(0x11);
+    PartyTakeAgwsOn(PARTY_DEBUG_AGWS_FIRST_ID);
     PartyTakeAgwsOn(0x18);
-    if ((PadData.buttons.input.held & 0x100U) != 0)
-        dataMoneyBoxInc(0x64);
+    if ((PadData.buttons.input.held & PAD_SELECT) != 0)
+        dataMoneyBoxInc(ENDOU_SHOP_TEST_MONEY_SMALL);
     else
-        dataMoneyBoxInc(0xf4240);
+        dataMoneyBoxInc(ENDOU_SHOP_TEST_MONEY_LARGE);
     xglRenderClearFrame();
 
     for (;;) {
         xglFontDebugPrintf(0, 0x10, shopTestLabel);
-        if ((PadData.buttons.button_state & 0x08000100U) == 0x08000100U)
+        if ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) == ENDOU_EXIT_CHORD_U)
             break;
         pressed = PadData.buttons.input.pressed;
-        if ((pressed & 0x40) != 0)
+        if ((pressed & PAD_CROSS) != 0)
             break;
 
         switch (menu_open) {
         case 0: {
             u16 repeated;
-            u16 (*selected_page)[0xb8];
+            u16 (*selected_page)[ENDOU_SHOP_RECORD_WORDS];
             const u16 *entry_values;
             const u16 *neighbor_values;
             const u16 *extra_values;
 
             repeated = PadData.buttons.input.repeat;
-            if ((repeated & 0x1000U) != 0)
-                menu_selection = menu_selection == 1 ? 0x14 : menu_selection - 1;
-            if ((repeated & 0x4000U) != 0)
-                menu_selection = menu_selection == 0x14 ? 1 : menu_selection + 1;
-            if ((pressed & 0x20) != 0)
+            if ((repeated & PAD_UP) != 0)
+                menu_selection = menu_selection == 1 ? ENDOU_SHOP_COUNT : menu_selection - 1;
+            if ((repeated & PAD_DOWN) != 0)
+                menu_selection = menu_selection == ENDOU_SHOP_COUNT ? 1 : menu_selection + 1;
+            if ((pressed & PAD_CIRCLE) != 0)
                 menu_open = 1;
             xglFontDebugPrintf(0, 0x20, shopNumberChangeLabel);
             xglFontDebugPrintf(0x80, 0x20, shopRunQuitLabel);
             endouShopHeading(0x30, shopNoFormat, menu_selection);
 
             {
-            u16 (*const page)[0xb8] =
+            u16 (*const page)[ENDOU_SHOP_RECORD_WORDS] =
                 &shop_file->records[menu_selection];
 
             endouShopHeading(0x40, shopHeadingIText, menu_selection);
@@ -1446,7 +1534,7 @@ void ShopTest(void)
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
                                    (row_index / 10) * 8 + 0x90, shopRowNumberFormat,
                                    neighbor_values[-0x28]);
-                ab_column_offset = 6 * 20;
+                ab_column_offset = 6 * ENDOU_SHOP_SLOT_COUNT;
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
                                    (row_index / 10) * 8 + 0xa0, shopRowNumberFormat,
                                    entry_values[ab_column_offset]);
@@ -1456,7 +1544,7 @@ void ShopTest(void)
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
                                    (row_index / 10) * 8 + 0xc0, shopRowNumberFormat,
                                    (entry_values++)[0xa0]);
-            } while (++row_index < 0x14);
+            } while (++row_index < ENDOU_SHOP_SLOT_COUNT);
             for (row_index = 0; row_index < 4; row_index++) {
                 int x = (row_index % 10) * 0x18 + 0x10;
                 int y = (row_index / 10) * 8;
@@ -1479,7 +1567,7 @@ void ShopTest(void)
 
 void SeisanTest(void)
 {
-    const int exit_chord = 0x08000100;
+    const int exit_chord = ENDOU_EXIT_CHORD;
 
     xglCdLoadOverlay(1);
     SeisanInit();
@@ -1561,7 +1649,7 @@ void ModelTest(void) {
     temp_2_2->rotation.vector.z = 0.0f;
     temp_2_2->active = 0;
     temp_2_2->rotation.vector.x = 0.0f;
-    GameResourceInit(0x07000000U, 0x06000000);
+    GameResourceInit(GAME_RESOURCE_BASE_ADDRESS, GAME_RESOURCE_BUFFER_SIZE);
     ACT_init();
     temp_2_3 = ACT_create(-1, 0x2101);
     ACT_initMotion(temp_2_3);
@@ -1674,17 +1762,17 @@ void ModelTest(void) {
     ACT_setModelWrapper(temp_23_9, 0);
     ACT_setArms(temp_23_9, temp_2_3, 0x108U, 0);
     {
-        while ((PadData.buttons.button_state & 0x08000100) != 0x08000100) {
+        while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD) != ENDOU_EXIT_CHORD) {
             var_3_2 = ENDOU_MODEL_PAD->pressed;
-            if (var_3_2 & 8) {
+            if (var_3_2 & PAD_R1) {
                 ACT_setMotion(temp_2_3, ++motion);
                 var_3_2 = ENDOU_MODEL_PAD->pressed;
             }
-            if (var_3_2 & 2) {
+            if (var_3_2 & PAD_R2) {
                 ACT_setMotion(temp_2_3, --motion);
             }
             temp_4 = ENDOU_MODEL_PAD->held;
-            if (temp_4 & 0x100) {
+            if (temp_4 & PAD_SELECT) {
                 AlignedVector4 reset_position = {0.0f, 0.0f, 0.0f, 1.0f};
                 AlignedVector4 reset_rotation = {0.0f, 0.0f, 0.0f, 1.0f};
                 AlignedVector4 reset_scale = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -1695,74 +1783,74 @@ void ModelTest(void) {
             }
             {
             Matrix4 camera_matrix;
-            float world_points[5][6][4];
-            EndouModelLineVertex screen_points[5][6];
+            float world_points[ENDOU_GRID_ROWS][ENDOU_GRID_COLUMNS][4];
+            EndouModelLineVertex screen_points[ENDOU_GRID_ROWS][ENDOU_GRID_COLUMNS];
             Matrix4 projection_matrix;
-            unsigned char column_alphas[5];
-            unsigned char row_alphas[6];
+            unsigned char column_alphas[ENDOU_GRID_ROWS];
+            unsigned char row_alphas[ENDOU_GRID_COLUMNS];
             DoublewordAlignedVector4 quad_words[4];
-            if (temp_4 & 0x10) {
-                if (temp_4 & 0x2000) {
+            if (temp_4 & PAD_TRIANGLE) {
+                if (temp_4 & PAD_RIGHT) {
                     temp_2_3->scale.x += 0.1f;
                 }
-                if (temp_4 & 0x8000) {
+                if (temp_4 & PAD_LEFT) {
                     temp_2_3->scale.x -= 0.1f;
                 }
-                if (temp_4 & 0x1000) {
+                if (temp_4 & PAD_UP) {
                     temp_2_3->scale.y += 0.1f;
                 }
-                if (temp_4 & 0x4000) {
+                if (temp_4 & PAD_DOWN) {
                     temp_2_3->scale.y -= 0.1f;
                 }
-                if (temp_4 & 4) {
+                if (temp_4 & PAD_L1) {
                     temp_2_3->scale.z += 0.1f;
                 }
-                if ((unsigned short)(temp_4 & 1)) {
+                if ((unsigned short)(temp_4 & PAD_L2)) {
                     temp_2_3->scale.z -= 0.1f;
                 }
             } else {
-                if (temp_4 & 0x2000) {
+                if (temp_4 & PAD_RIGHT) {
                     temp_2_3->position.x += 0.1f;
                 }
-                if (temp_4 & 0x8000) {
+                if (temp_4 & PAD_LEFT) {
                     temp_2_3->position.x -= 0.1f;
                 }
-                if (temp_4 & 0x1000) {
+                if (temp_4 & PAD_UP) {
                     temp_2_3->position.y += 0.1f;
                 }
-                if (temp_4 & 0x4000) {
+                if (temp_4 & PAD_DOWN) {
                     temp_2_3->position.y -= 0.1f;
                 }
-                if (temp_4 & 4) {
+                if (temp_4 & PAD_L1) {
                     temp_2_3->position.z += 0.1f;
                 }
-                if ((unsigned short)(temp_4 & 1)) {
+                if ((unsigned short)(temp_4 & PAD_L2)) {
                     temp_2_3->position.z -= 0.1f;
                 }
             }
-            if (ENDOU_MODEL_PAD->stick_axis[0] < -0x40) {
+            if (ENDOU_MODEL_PAD->stick_axis[0] < -ENDOU_STICK_DEADZONE) {
                 temp_2_3->rotation.y += 0.04f;
             }
-            if (ENDOU_MODEL_PAD->stick_axis[0] >= 0x41) {
+            if (ENDOU_MODEL_PAD->stick_axis[0] >= ENDOU_STICK_DEADZONE + 1) {
                 temp_2_3->rotation.y -= 0.04f;
             }
-            if (ENDOU_MODEL_PAD->stick_axis[1] < -0x40) {
+            if (ENDOU_MODEL_PAD->stick_axis[1] < -ENDOU_STICK_DEADZONE) {
                 temp_2_3->rotation.x += 0.04f;
             }
-            if (ENDOU_MODEL_PAD->stick_axis[1] >= 0x41) {
+            if (ENDOU_MODEL_PAD->stick_axis[1] >= ENDOU_STICK_DEADZONE + 1) {
                 temp_2_3->rotation.x -= 0.04f;
             }
             temp_17_4 = xglStudioGetCamera2(0);
-            if (ENDOU_MODEL_PAD->stick_axis[2] < -0x40) {
+            if (ENDOU_MODEL_PAD->stick_axis[2] < -ENDOU_STICK_DEADZONE) {
                 ang_0[1] += 0.04f;
             }
-            if (ENDOU_MODEL_PAD->stick_axis[2] >= 0x41) {
+            if (ENDOU_MODEL_PAD->stick_axis[2] >= ENDOU_STICK_DEADZONE + 1) {
                 ang_0[1] -= 0.04f;
             }
-            if (ENDOU_MODEL_PAD->stick_axis[3] < -0x40) {
+            if (ENDOU_MODEL_PAD->stick_axis[3] < -ENDOU_STICK_DEADZONE) {
                 ang_0[0] += 0.04f;
             }
-            if (ENDOU_MODEL_PAD->stick_axis[3] >= 0x41) {
+            if (ENDOU_MODEL_PAD->stick_axis[3] >= ENDOU_STICK_DEADZONE + 1) {
                 ang_0[0] -= 0.04f;
             }
             xglMatrixStackUnit();
@@ -1784,11 +1872,11 @@ void ModelTest(void) {
             temp_17_4->position.vector.y = temp_f0_23;
             temp_f20 = camera_matrix[3][2];
             temp_17_4->position.vector.z = temp_f20;
-            if (temp_16 & 8) {
+            if (temp_16 & PAD_R1) {
                 temp_f0_24 = pipo_2 + 0.2;
                 pipo_2 = temp_f0_24;
             }
-            if (temp_16 & 2) {
+            if (temp_16 & PAD_R2) {
                 temp_f0_26 = pipo_2 - 0.2;
                 pipo_2 = temp_f0_26;
             }
@@ -1811,10 +1899,10 @@ void ModelTest(void) {
             {
                 int row;
 
-                for (point_index = 0; point_index < 6; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_COLUMNS; point_index++) {
                     float x = point_index * 0.5f + -1.25f;
 
-                    for (row = 0; row < 5; row++) {
+                    for (row = 0; row < ENDOU_GRID_ROWS; row++) {
                         world_points[row][point_index][0] = x;
                         world_points[row][point_index][1] = 0.0f;
                         world_points[row][point_index][3] = 1.0f;
@@ -1822,11 +1910,11 @@ void ModelTest(void) {
                     }
                 }
                 {
-                    for (point_index = 0; point_index < 6; point_index++) {
+                    for (point_index = 0; point_index < ENDOU_GRID_COLUMNS; point_index++) {
                         world_points[0][point_index][2] -= 0.5f;
                         world_points[4][point_index][2] += 0.5f;
                     }
-                    for (point_index = 0; point_index < 5; point_index++) {
+                    for (point_index = 0; point_index < ENDOU_GRID_ROWS; point_index++) {
                         world_points[point_index][0][0] -= 0.5f;
                         world_points[point_index][5][0] += 0.5f;
                     }
@@ -1837,9 +1925,9 @@ void ModelTest(void) {
             __builtin_memcpy(row_alphas, modelTestRowAlphaTable, sizeof(row_alphas));
             xglMatrixStackUnit();
             xglMatrixStackSave(projection_matrix);
-            xglRotTransPersN(screen_points, &projection_matrix, world_points, 30, 0);
+            xglRotTransPersN(screen_points, &projection_matrix, world_points, ENDOU_GRID_POINT_COUNT, 0);
             {
-                for (point_index = 0; point_index < 5; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_ROWS; point_index++) {
                     unsigned char *color;
                     line00_3[point_index].vertex = screen_points[point_index][1];
                     color = line00_3[point_index].color;
@@ -1852,7 +1940,7 @@ void ModelTest(void) {
                 line00_3[5].vertex.terminator = 0;
 
                 {
-                for (point_index = 0; point_index < 5; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_ROWS; point_index++) {
                     unsigned char *color;
                     line01_4[point_index].vertex = screen_points[point_index][2];
                     color = line01_4[point_index].color;
@@ -1866,7 +1954,7 @@ void ModelTest(void) {
                 }
 
                 {
-                for (point_index = 0; point_index < 5; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_ROWS; point_index++) {
                     unsigned char *color;
                     line02_5[point_index].vertex = screen_points[point_index][3];
                     color = line02_5[point_index].color;
@@ -1880,7 +1968,7 @@ void ModelTest(void) {
                 }
 
                 {
-                for (point_index = 0; point_index < 5; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_ROWS; point_index++) {
                     unsigned char *color;
                     line03_6[point_index].vertex = screen_points[point_index][4];
                     color = line03_6[point_index].color;
@@ -1894,7 +1982,7 @@ void ModelTest(void) {
                 }
 
                 {
-                for (point_index = 0; point_index < 6; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_COLUMNS; point_index++) {
                     unsigned char *color;
                     line10_7[point_index].vertex = screen_points[1][point_index];
                     color = line10_7[point_index].color;
@@ -1908,7 +1996,7 @@ void ModelTest(void) {
                 }
 
                 {
-                for (point_index = 0; point_index < 6; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_COLUMNS; point_index++) {
                     unsigned char *color;
                     line11_8[point_index].vertex = screen_points[2][point_index];
                     color = line11_8[point_index].color;
@@ -1922,7 +2010,7 @@ void ModelTest(void) {
                 }
 
                 {
-                for (point_index = 0; point_index < 6; point_index++) {
+                for (point_index = 0; point_index < ENDOU_GRID_COLUMNS; point_index++) {
                     unsigned char *color;
                     line12_9[point_index].vertex = screen_points[3][point_index];
                     color = line12_9[point_index].color;
@@ -1935,20 +2023,20 @@ void ModelTest(void) {
                 (line12_9 + point_index)->vertex.terminator = 0;
                 }
             }
-            endPrintExtFunc(0xFFFFF0, 0xB, line00_3);
-            endPrintExtFunc(0xFFFFF1, 0xB, line01_4);
-            endPrintExtFunc(0xFFFFF2, 0xB, line02_5);
-            endPrintExtFunc(0xFFFFF3, 0xB, line03_6);
-            endPrintExtFunc(0xFFFFF4, 0xB, line10_7);
-            endPrintExtFunc(0xFFFFF5, 0xB, line11_8);
-            endPrintExtFunc(0xFFFFF6, 0xB, line12_9);
+            endPrintExtFunc(0xFFFFF0, END_PRINT_CMD_LINE_RAW, line00_3);
+            endPrintExtFunc(0xFFFFF1, END_PRINT_CMD_LINE_RAW, line01_4);
+            endPrintExtFunc(0xFFFFF2, END_PRINT_CMD_LINE_RAW, line02_5);
+            endPrintExtFunc(0xFFFFF3, END_PRINT_CMD_LINE_RAW, line03_6);
+            endPrintExtFunc(0xFFFFF4, END_PRINT_CMD_LINE_RAW, line10_7);
+            endPrintExtFunc(0xFFFFF5, END_PRINT_CMD_LINE_RAW, line11_8);
+            endPrintExtFunc(0xFFFFF6, END_PRINT_CMD_LINE_RAW, line12_9);
             __builtin_memcpy(quad_words, modelTestQuadWordTable, sizeof(quad_words));
             endPrintExtFunc(0, 0x6A, NULL);
             endPrintExtFunc(0, 0x6C, NULL);
             if (*message_time == 0) {
                 eMessageSet(&msg_11.message, msg00_14[no_13]);
-                msg_11.message.mode = 0x24;
-                *message_time = 0x40;
+                msg_11.message.mode = EMESSAGE_MODE_LINE_START;
+                *message_time = ENDOU_MODEL_MESSAGE_FRAMES;
                 no_13 = (no_13 + 1) & 3;
             }
             (*message_time)--;
@@ -1989,10 +2077,10 @@ void BattleWindowTest(void)
     xglCdLoadOverlay(1);
     eBattleWinInit();
 
-    if ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    if ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
     do {
         xglFontDebugPrintf(0, 0, battleWindowTestLabel);
-        if ((PadData.buttons.input.pressed & 0x10U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_TRIANGLE) != 0) {
             message.x = 16;
             message.y = 32;
             message.title = battleWindowTitleText;
@@ -2000,11 +2088,11 @@ void BattleWindowTest(void)
             message.text = text_17;
             eBattleWinOpen4(&message);
         }
-        if ((PadData.buttons.input.pressed & 0x80U) != 0 &&
+        if ((PadData.buttons.input.pressed & PAD_SQUARE) != 0 &&
             eBattleWinPageCheck4() != 0)
             eBattleWinClose4();
         eBattleWinMain4();
-        if ((PadData.buttons.input.pressed & 0x10U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_TRIANGLE) != 0) {
             analysis.x = 64;
             analysis.experience = 0x2107a;
             analysis.y = 256;
@@ -2021,10 +2109,10 @@ void BattleWindowTest(void)
             analysis.name = condorPasaName;
             eBattleWinOpen3(&analysis);
         }
-        if ((PadData.buttons.input.pressed & 0x80U) != 0)
+        if ((PadData.buttons.input.pressed & PAD_SQUARE) != 0)
             eBattleWinClose3();
         eBattleWinMain3();
-        if ((PadData.buttons.input.pressed & 4U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_L1) != 0) {
             reward.width = 0x800000b4;
             reward.x = 16;
             reward.y = 32;
@@ -2034,18 +2122,18 @@ void BattleWindowTest(void)
             eBattleWinOpen2(&reward);
             count_18 ^= 1;
         }
-        if ((PadData.buttons.input.pressed & 1U) != 0)
+        if ((PadData.buttons.input.pressed & PAD_L2) != 0)
             eBattleWinClose2();
         eBattleWinMain2();
-        if ((PadData.buttons.input.pressed & 8U) != 0)
+        if ((PadData.buttons.input.pressed & PAD_R1) != 0)
             eBattleWinOpen(&window);
-        if ((PadData.buttons.input.pressed & 2U) != 0)
+        if ((PadData.buttons.input.pressed & PAD_R2) != 0)
             eBattleWinClose(&window);
         window.repeat = PadData.buttons.input.repeat;
         xglFontDebugPrintf(0, 32, padRepeatFormat, PadData.buttons.input.repeat);
         eBattleWinMain(&window);
         xglSleep();
-    } while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U);
+    } while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U);
     }
 }
 
@@ -2102,7 +2190,7 @@ void eNumberTest(void) {
     second_camera->active = 1;
     second_camera->state = 1;
     WindowTexLoad(NULL, 1U);
-    if ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    if ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         primary_order = 0xFFFFFF;
         number_order = 0xFFFFFE;
         sprite_order = 0x02FFFFF0;
@@ -2114,7 +2202,7 @@ void eNumberTest(void) {
             d_28.vertices[0].depth = primary_order;
             d_28.coordinate_mode = 0;
             d_28.flags = 1;
-            endPrintExtFunc(0, 8, &d_28);
+            endPrintExtFunc(0, END_PRINT_CMD_SPRITE_QUAD, &d_28);
             line[0].x = 0x70F8;
             line[0].y = 0x84B8;
             line[1].x = 0x8F38;
@@ -2175,8 +2263,8 @@ void eNumberTest(void) {
             d_33.x = 0x64;
             d_33.y = 0x60;
             d_33.work = sprite_order;
-            endPrintExtFunc(d_33.work, 2, &d_33);
-            endPrintExtFunc(0xFFFFFF, 0, line_34);
+            endPrintExtFunc(d_33.work, END_PRINT_CMD_SPRITE, &d_33);
+            endPrintExtFunc(0xFFFFFF, END_PRINT_CMD_LINE, line_34);
             d_35[0].spriteId = 0x31C;
             d_35[1].spriteId = 0x31F;
             endSpriteSet(&d_35[0], 0xFF);
@@ -2190,8 +2278,8 @@ void eNumberTest(void) {
             d_35[1].color[0] = 0xFF;
             d_35[1].color[1] = 0x20;
             d_35[1].color[2] = d_35[1].color[1];
-            endPrintExtFunc(d_35[0].work, 2, &d_35[0]);
-            endPrintExtFunc(d_35[1].work, 2, &d_35[1]);
+            endPrintExtFunc(d_35[0].work, END_PRINT_CMD_SPRITE, &d_35[0]);
+            endPrintExtFunc(d_35[1].work, END_PRINT_CMD_SPRITE, &d_35[1]);
             sprite_tick = time_37++;
             blink_sprite_id = ((sprite_tick >> 4) & 1) + 0x10D;
             d_36.spriteId = blink_sprite_id;
@@ -2199,13 +2287,13 @@ void eNumberTest(void) {
             d_36.x = 0x108;
             d_36.y = 0x60;
             d_36.work = sprite_order;
-            endPrintExtFunc(d_36.work, 2, &d_36);
+            endPrintExtFunc(d_36.work, END_PRINT_CMD_SPRITE, &d_36);
             d_38.spriteId = 0x609;
             endSpriteSet(&d_38, 0xFF);
             d_38.x = 0x108;
             d_38.y = 0x80;
             d_38.work = sprite_order;
-            endPrintExtFunc(d_38.work, 2, &d_38);
+            endPrintExtFunc(d_38.work, END_PRINT_CMD_SPRITE, &d_38);
             rbn_21[0].work = 0xFFFFF0;
             rbn_21[0].x = 0x40;
             rbn_21[0].y = 0x80;
@@ -2222,7 +2310,7 @@ void eNumberTest(void) {
             d_39.payload.number.blue = -0x80;
             d_39.payload.number.green = -0x80;
             d_39.payload.number.red = -0x80;
-            endPrintExtFunc(d_39.work, 0xA, &d_39);
+            endPrintExtFunc(d_39.work, END_PRINT_CMD_NUMBER, &d_39);
             {
             short c5 = 5, c1 = 1, c80 = 0x50;
             d_40.x = 0xA;
@@ -2235,34 +2323,34 @@ void eNumberTest(void) {
             d_40.payload.number.blue = -0x80;
             d_40.payload.number.green = -0x80;
             d_40.payload.number.red = -0x80;
-            endPrintExtFunc(d_40.work, 0xA, &d_40);
+            endPrintExtFunc(d_40.work, END_PRINT_CMD_NUMBER, &d_40);
             }
             d_41.spriteId = 258;
             d_41.x = 0xA;
             d_41.y = 0x60;
             d_41.work = primary_order;
-            endPrintExtFunc(d_41.work, 2, &d_41);
-            cursor_pressed = PadData.buttons.input.pressed & 0x20;
+            endPrintExtFunc(d_41.work, END_PRINT_CMD_SPRITE, &d_41);
+            cursor_pressed = PadData.buttons.input.pressed & PAD_CIRCLE;
             cur_25.x = 0x10;
             cur_25.y = 0xC8;
             cur_25.work = 0xFFFFF4;
             if (cursor_pressed) {
-                cur_25.state = 0x20;
+                cur_25.state = E_MODE_SHOW_START;
             }
             eCursolMain(&cur_25);
-            endPrintExtFunc(0x01000000, 3, d_42);
-            if ((PadData.buttons.input.held & 0x1000U) != 0) {
+            endPrintExtFunc(0x01000000, END_PRINT_CMD_RIBBON, d_42);
+            if ((PadData.buttons.input.held & PAD_UP) != 0) {
                 int cursor_y = cursor->y;
 
                 cursor->y = cursor_y - 2;
             }
-            if ((PadData.buttons.input.held & 0x4000U) != 0) {
+            if ((PadData.buttons.input.held & PAD_DOWN) != 0) {
                 int cursor_y = cursor->y;
 
                 cursor->y = cursor_y + 2;
             }
-            endPrintExtFunc(cursor->depth, 4, cursor);
-            if (PadData.buttons.input.pressed & 0x20) {
+            endPrintExtFunc(cursor->depth, END_PRINT_CMD_POINT, cursor);
+            if (PadData.buttons.input.pressed & PAD_CIRCLE) {
                 spr_22[0].state = 0x22;
                 spr_22[1].state = 0x22;
                 spr_22[2].state = 0x22;
@@ -2350,11 +2438,11 @@ void eNumberTest(void) {
             line_23[1].points[3].green = -1;
             line_23[1].points[3].blue = -1;
             line_23[1].points[3].alpha = -0x80;
-            if (PadData.buttons.input.pressed & 0x800) {
-                line_23[1].state = 0x20;
+            if (PadData.buttons.input.pressed & PAD_START) {
+                line_23[1].state = ELINE_STATE_DRAW_ALL;
             }
-            if (PadData.buttons.input.pressed & 0x100) {
-                line_23[1].state = 0x10;
+            if (PadData.buttons.input.pressed & PAD_SELECT) {
+                line_23[1].state = ELINE_STATE_DRAW_SEQUENTIAL;
             }
             eLineMain(&line_23[1]);
             line_23[2].count = 4;
@@ -2386,11 +2474,11 @@ void eNumberTest(void) {
             line_23[2].points[3].green = -1;
             line_23[2].points[3].blue = -1;
             line_23[2].points[3].alpha = -0x80;
-            if (ENDOU_MODEL_PAD->pressed & 0x800) {
-                line_23[2].state = 0x20;
+            if (ENDOU_MODEL_PAD->pressed & PAD_START) {
+                line_23[2].state = ELINE_STATE_DRAW_ALL;
             }
-            if (ENDOU_MODEL_PAD->pressed & 0x100) {
-                line_23[2].state = 0x10;
+            if (ENDOU_MODEL_PAD->pressed & PAD_SELECT) {
+                line_23[2].state = ELINE_STATE_DRAW_SEQUENTIAL;
             }
             eLineMain(&line_23[2]);
             line_23[3].count = 4;
@@ -2422,16 +2510,16 @@ void eNumberTest(void) {
             line_23[3].points[3].green = -1;
             line_23[3].points[3].blue = -1;
             line_23[3].points[3].alpha = -0x80;
-            if (ENDOU_MODEL_PAD->pressed & 0x800) {
-                line_23[3].state = 0x20;
+            if (ENDOU_MODEL_PAD->pressed & PAD_START) {
+                line_23[3].state = ELINE_STATE_DRAW_ALL;
             }
-            if (ENDOU_MODEL_PAD->pressed & 0x100) {
-                line_23[3].state = 0x10;
+            if (ENDOU_MODEL_PAD->pressed & PAD_SELECT) {
+                line_23[3].state = ELINE_STATE_DRAW_SEQUENTIAL;
             }
             eLineMain(&line_23[3]);
-            endPrintExtFunc(0xFFFFFF, 0x64, NULL);
+            endPrintExtFunc(0xFFFFFF, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, NULL);
             xglSleep();
-        } while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U);
+        } while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U);
     }
 }
 
@@ -2458,13 +2546,13 @@ void eModelTest(void)
     xglRenderClearFrame();
     xglSleep();
     MenuLoadInit();
-    MenuModelInit((void *)0x01000000);
-    MenuModelMemoryInit((void *)0x01100000, 0x00500000);
+    MenuModelInit((void *)ENDOU_MENU_MODEL_POOL);
+    MenuModelMemoryInit((void *)ENDOU_MENU_MODEL_MEMORY_BASE, ENDOU_MENU_MODEL_MEMORY_SIZE);
     MenuModelMemorySet(0);
     MenuModelCreate(&model_id, 29);
     MenuModelExtFuncSet(model_id, eModelTestMain, 0);
 
-    while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         xglFontDebugPrintf(0, 0, eModelTestLabel);
         MenuModelMain();
         xglSleep();
@@ -2485,7 +2573,7 @@ void eMessageTest(void)
     endPrintInit();
     eMessageSet(&windows[0].message, msg_45[0]);
     eMessageSet(&windows[1].message, msg_45[0]);
-    windows[1].message.mode = 0x20;
+    windows[1].message.mode = E_MODE_SHOW_START;
     eMessageSet(&current.message, text00_46);
     current.message.page_available = 1;
     eMessageTextChange(&current.message, text00_46);
@@ -2494,46 +2582,46 @@ void eMessageTest(void)
     current.message.x = 0x40;
     current.message.y = 300;
     current.message.draw_parameter = 0x00fffff0;
-    current.message.mode = 0x24;
+    current.message.mode = EMESSAGE_MODE_LINE_START;
     ClearEnv.color_g = 0x40;
     ClearEnv.color_r = 0;
     ClearEnv.color_b = 0;
     ClearEnv.color_a = 0;
 
-    if ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    if ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         do {
             xglFontDebugPrintf(0, 0, eMessageTestLabel);
-            if ((PadData.buttons.input.pressed & 0x20U) != 0) {
+            if ((PadData.buttons.input.pressed & PAD_CIRCLE) != 0) {
                 eMessageNextPage(&current.message, 0);
             }
-            if ((PadData.buttons.input.pressed & 0x100U) != 0) {
+            if ((PadData.buttons.input.pressed & PAD_SELECT) != 0) {
                 message_index += 1;
-                if (message_index >= 5) {
+                if (message_index >= ENDOU_MESSAGE_TEST_COUNT) {
                     message_index = 0;
                 }
                 windows[0].message.text = msg_45[message_index];
             }
-            if ((PadData.buttons.input.pressed & 8U) != 0) {
-                windows[0].message.mode = 0x22;
-                windows[1].message.mode = 0x22;
+            if ((PadData.buttons.input.pressed & PAD_R1) != 0) {
+                windows[0].message.mode = E_MODE_OPEN_START;
+                windows[1].message.mode = E_MODE_OPEN_START;
                 eMessageNextPage(&current.message, 1);
-                current.message.mode = 0x22;
+                current.message.mode = E_MODE_OPEN_START;
             }
-            if ((PadData.buttons.input.pressed & 2U) != 0) {
-                windows[0].message.mode = 0x70;
-                windows[1].message.mode = 0x70;
-                current.message.mode = 0x70;
+            if ((PadData.buttons.input.pressed & PAD_R2) != 0) {
+                windows[0].message.mode = E_MODE_HIDE_START;
+                windows[1].message.mode = E_MODE_HIDE_START;
+                current.message.mode = E_MODE_HIDE_START;
             }
-            if ((PadData.buttons.input.held & 4U) != 0) {
+            if ((PadData.buttons.input.held & PAD_L1) != 0) {
                 windows[0].message.text_y_offset -= 1;
             }
-            if ((PadData.buttons.input.held & 1U) != 0) {
+            if ((PadData.buttons.input.held & PAD_L2) != 0) {
                 windows[0].message.text_y_offset += 1;
             }
-            if ((PadData.buttons.input.held & 0x1000U) != 0) {
+            if ((PadData.buttons.input.held & PAD_UP) != 0) {
                 windows[0].message.color_a -= 1;
             }
-            if ((PadData.buttons.input.held & 0x4000U) != 0) {
+            if ((PadData.buttons.input.held & PAD_DOWN) != 0) {
                 windows[0].message.color_a += 1;
             }
 
@@ -2546,9 +2634,9 @@ void eMessageTest(void)
             windows[1].message.y = 0xa4;
             eMessageDraw(&windows[1].message);
             eMessageMain(&current.message);
-            endPrintExtFunc(0x00ffffff, 100, 0);
+            endPrintExtFunc(0x00ffffff, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
             xglSleep();
-        } while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U);
+        } while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U);
     }
 }
 
@@ -2561,7 +2649,7 @@ void BgTest(void)
     TestEnv_47.packet_write.value = packet_command |
         ((u64)BG_TEST_COMMAND_HIGH << BG_TEST_COMMAND_HIGH_SHIFT);
     packet = xglPacketGetCurrent();
-    sceVif1PkRef(packet, &TestEnv_47, 10, 0, 0, 0);
+    sceVif1PkRef(packet, &TestEnv_47, ENDOU_BG_ENV_QWORDS, 0, 0, 0);
 }
 
 void TexturTest(void)
@@ -2593,7 +2681,7 @@ void TexturTest(void)
 
         BgTest();
         xglFontDebugPrintf(0, 0, textureTestLabel);
-        if ((PadData.buttons.button_state & 0x08000100U) == 0x08000100U)
+        if ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) == ENDOU_EXIT_CHORD_U)
             break;
         index = 0;
         packet = xglPacketGetCurrent();
@@ -2609,12 +2697,12 @@ void TexturTest(void)
                 if (entry->width_and_pitch == width)
                     pitch = (width + 63) >> 6;
                 upload_environment->transfer_dimensions =
-                    (u32)width | ((u64)entry->height << 32);
+                    (u32)width | ((u64)entry->height << GS_TRXREG_RRH_SHIFT);
                 upload_environment->destination_parameters =
-                    ((u64)((entry->vram_offset + 0xe0000U) >> 6) << 32) |
-                    ((u64)pitch << 48);
+                    ((u64)((entry->vram_offset + ENDOU_TEX_VRAM_BASE) >> 6) << GS_BITBLTBUF_DBP_SHIFT) |
+                    ((u64)pitch << GS_BITBLTBUF_DBW_SHIFT);
                 FlushCache(0);
-                sceVif1PkRef(packet, upload_environment, 6, 0, 0, 0);
+                sceVif1PkRef(packet, upload_environment, ENDOU_UPLOAD_ENV_QWORDS, 0, 0, 0);
                 {
                     u8 *transfer_data = (u8 *)texture_file + entry->data_offset;
                     int transfer_quadwords = entry->data_quadwords;
@@ -2628,14 +2716,14 @@ void TexturTest(void)
         }
         xglFontDebugHex(0, 0x20, x_53, 5);
         repeated = PadData.buttons.input.repeat;
-        if ((repeated & 0x2000U) != 0)
+        if ((repeated & PAD_RIGHT) != 0)
             x_53 += 0x100;
-        if ((repeated & 0x8000U) != 0)
+        if ((repeated & PAD_LEFT) != 0)
             x_53 -= 0x100;
         TestEnv_52.texture_parameters =
-            ((u64)(((u32)x_53 + 0xe0000U) >> 6) << 37) |
+            ((u64)(((u32)x_53 + ENDOU_TEX_VRAM_BASE) >> 6) << GS_TEX0_CBP_SHIFT) |
             0x2000000629343800ULL;
-        sceVif1PkRef(packet, &TestEnv_52, 12, 0, 0, 0);
+        sceVif1PkRef(packet, &TestEnv_52, ENDOU_TEX_DRAW_ENV_QWORDS, 0, 0, 0);
         xglSleep();
     }
     xglRenderClearFrame();
@@ -2671,36 +2759,36 @@ void UmnMailDispTest(void)
     windows[1].view_width = 0x1e0;
     windows[1].view_height = 0x180;
 
-    while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         xglFontDebugPrintf(0, 0, umnMailDispTestLabel);
-        if ((PadData.buttons.input.repeat & 0x1000U) != 0) {
+        if ((PadData.buttons.input.repeat & PAD_UP) != 0) {
             windows[0].scroll_y -= 8;
         }
-        if ((PadData.buttons.input.repeat & 0x4000U) != 0) {
+        if ((PadData.buttons.input.repeat & PAD_DOWN) != 0) {
             windows[0].scroll_y += 8;
         }
-        if ((PadData.buttons.input.repeat & 0x8000U) != 0) {
+        if ((PadData.buttons.input.repeat & PAD_LEFT) != 0) {
             windows[0].scroll_x -= 8;
         }
-        if ((PadData.buttons.input.repeat & 0x2000U) != 0) {
+        if ((PadData.buttons.input.repeat & PAD_RIGHT) != 0) {
             windows[0].scroll_x += 8;
         }
-        if ((PadData.buttons.input.pressed & 8U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_R1) != 0) {
             windows[0].mode = 0;
         }
-        if ((PadData.buttons.input.pressed & 2U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_R2) != 0) {
             windows[0].mode = 1;
         }
-        if ((PadData.buttons.input.pressed & 0x10U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_TRIANGLE) != 0) {
             windows[0].mode = 2;
         }
-        if ((PadData.buttons.input.pressed & 0x20U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_CIRCLE) != 0) {
             windows[0].mode = 3;
         }
-        if ((PadData.buttons.input.pressed & 0x80U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_SQUARE) != 0) {
             windows[0].mode = 4;
         }
-        if ((PadData.buttons.input.pressed & 0x40U) != 0) {
+        if ((PadData.buttons.input.pressed & PAD_CROSS) != 0) {
             windows[0].mode = 5;
         }
         tyaUmlDispMain(&windows[0]);
@@ -2713,11 +2801,11 @@ static void e_test(FontDrawCursor *cursor, void *argument)
 {
     sceVif1PkCloseDirectHLCode(cursor->packet);
     sceVif1PkRef(cursor->packet, &WinTexEnv_65,
-                 7, 0, 0, 0);
-    sceVif1PkRef(cursor->packet, test_data + 0x30, 0x4002, 0, 0, 0);
+                 ENDOU_WINTEX_ENV_QWORDS, 0, 0, 0);
+    sceVif1PkRef(cursor->packet, test_data + ENDOU_XTX_HEADER_SIZE, ENDOU_XTX_PAYLOAD_QWORDS, 0, 0, 0);
     sceVif1PkCnt(cursor->packet, 0);
     sceVif1PkOpenDirectHLCode(cursor->packet, 0);
-    sceVif1PkAddDirectDataN(cursor->packet, TestEnv_66, 8);
+    sceVif1PkAddDirectDataN(cursor->packet, TestEnv_66, ENDOU_RELOAD_ENV_QWORDS);
     xglFontReloadTexture(cursor, 0);
 }
 
@@ -2729,7 +2817,7 @@ void ReLoadTest(void)
     WorkEnd = test_data +
         xglCdReadFile(reLoadTestFloorPath, test_data, 0, 0);
 
-    while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         xglFontDebugPrintf(0, 0, reLoadTestLabel);
         xglFontPrint(0x40, 0x28, 0x00ffffff, kanjiTestText);
         xglFontPrintExtFunc(0x01ffffffU, e_test, 0);
@@ -2741,7 +2829,7 @@ void ReLoadTest(void)
 static void endCallback(int result, int amount)
 {
     switch (result) {
-    case 0: {
+    case CD_EVENT_LOOKUP: {
         const char *source = (const char *)amount;
         char *destination = fname_67;
         do {
@@ -2749,27 +2837,27 @@ static void endCallback(int result, int amount)
         } while (((unsigned int)*destination++ << 24) != 0);
         break;
     }
-    case 1:
+    case CD_EVENT_SIZE:
         size_68 = I2F(amount) * progress_percent;
         break;
-    case 2:
-    case 3:
-        if (result != 3)
+    case CD_EVENT_PROGRESS:
+    case CD_EVENT_PROGRESS_ASYNC:
+        if (result != CD_EVENT_PROGRESS_ASYNC)
             xglSleep();
         break;
-    case -1: {
+    case CD_EVENT_NOT_FOUND: {
         for (;;) {
             xglFontDebugPrintf(8, 216, not_found_format, fname_67);
             xglSleep();
         }
     }
-    case -2: {
+    case CD_EVENT_READ_ERROR: {
         for (;;) {
             xglFontDebugPrintf(8, 216, read_error_format, fname_67);
             xglSleep();
         }
     }
-    case 4:
+    case CD_EVENT_DONE:
         break;
     default:
         break;
@@ -2786,12 +2874,12 @@ void FileLoadTest(void)
     xglRenderClearFrame();
     xglSleep();
     files.buffer = (u8 *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
-    WorkEnd = files.buffer + 0x100000;
+    WorkEnd = files.buffer + ENDOU_FILE_LOAD_BUFFER_SIZE;
     previous_callback = xglCdSetCallback(endCallback);
     xglCdReadFile(fileLoadTestMenuPath, files.buffer, 0, 0);
     files.state = 1U;
     pad_words = (u64 *)&PadData;
-    pad_mask = 0x08000100U;
+    pad_mask = ENDOU_EXIT_CHORD_U;
     pad_state = pad_words[5];
 
     if ((pad_state & pad_mask) != pad_mask)
@@ -2800,17 +2888,17 @@ void FileLoadTest(void)
         if (files.state == 1) {
             XglPacket *packet = xglPacketGetCurrent();
 
-            sceVif1PkRef(packet, eNumberTexEnv_69, 6, 0, 0, 0);
-            sceVif1PkRef(packet, files.buffer + 0x30, 0x4002, 0, 0, 0);
+            sceVif1PkRef(packet, eNumberTexEnv_69, ENDOU_UPLOAD_ENV_QWORDS, 0, 0, 0);
+            sceVif1PkRef(packet, files.buffer + ENDOU_XTX_HEADER_SIZE, ENDOU_XTX_PAYLOAD_QWORDS, 0, 0, 0);
             xglFontDebugHex(0, 0x20, x_71, 5);
-            if ((PadData.buttons.input.repeat & 0x2000U) != 0) {
+            if ((PadData.buttons.input.repeat & PAD_RIGHT) != 0) {
                 x_71 += 0x100;
             }
-            if ((PadData.buttons.input.repeat & 0x8000U) != 0) {
+            if ((PadData.buttons.input.repeat & PAD_LEFT) != 0) {
                 x_71 -= 0x100;
             }
-            TestEnv_70[6] = ((u64)((x_71 + 0xf0000U) >> 6) << 37) | 0x2000000669343c00ULL;
-            sceVif1PkRef(packet, TestEnv_70, 10, 0, 0, 0);
+            TestEnv_70[6] = ((u64)((x_71 + ENDOU_FILE_VRAM_BASE) >> 6) << GS_TEX0_CBP_SHIFT) | 0x2000000669343c00ULL;
+            sceVif1PkRef(packet, TestEnv_70, ENDOU_FILE_DRAW_ENV_QWORDS, 0, 0, 0);
         }
         xglSleep();
     } while ((PadData.buttons.button_state & pad_mask) != pad_mask);
@@ -2825,12 +2913,12 @@ void JpegTest(void)
     u8 *destination_buffer;
 
     source_buffer = (u8 *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
-    WorkEnd = source_buffer + 0x80000;
-    memset(source_buffer, 0, 0x80000);
+    WorkEnd = source_buffer + ENDOU_JPEG_BUFFER_SIZE;
+    memset(source_buffer, 0, ENDOU_JPEG_BUFFER_SIZE);
 
     destination_buffer = (u8 *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
-    WorkEnd = destination_buffer + 0x80000;
-    memset(destination_buffer, 0, 0x80000);
+    WorkEnd = destination_buffer + ENDOU_JPEG_BUFFER_SIZE;
+    memset(destination_buffer, 0, ENDOU_JPEG_BUFFER_SIZE);
 
     GameSnapShotSaveThumbnail(100, (unsigned int)source_buffer);
 
@@ -2852,9 +2940,9 @@ void JpegTest(void)
     display.red = -0x80;
     display.image_data = destination_buffer;
 
-    while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         xglFontDebugPrintf(0, 0, jpegTestLabel);
-        endPrintExtFunc(0, 0x0d, &display);
+        endPrintExtFunc(0, END_PRINT_CMD_THUMBNAIL, &display);
         xglSleep();
     }
 }
@@ -2872,9 +2960,9 @@ void UmlTest(void)
     xglRenderClearFrame();
     xglSleep();
     file_buffer = (unsigned char *)(((unsigned int)WorkEnd + 127) ^ 127);
-    WorkEnd = file_buffer + 0x20000;
+    WorkEnd = file_buffer + ENDOU_UML_BUFFER_SIZE;
     buffer_72 = file_buffer;
-    memset(file_buffer, 0, 0x10000);
+    memset(file_buffer, 0, ENDOU_UML_CLEAR_SIZE);
     file_name = umlTestFilePath;
     read_buffer = file_buffer;
     xglCdReadFile(file_name, read_buffer, 0, 0);
@@ -2944,7 +3032,7 @@ test_character:
         character = source_byte;
     } while (character != 0);
     *output = 0;
-    while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
+    while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD_U) != ENDOU_EXIT_CHORD_U) {
         xglFontDebugPrintf(0, 0, umlTestLabel);
         xglFontPrint(0, 64, 0x00fffff0, umlTestColorControl);
         xglFontPrint(0, 64, 0x00ffffff, mm_73);
@@ -2957,16 +3045,16 @@ void PauseMenuPagePartyDebugTakeAgws(void)
     int i;
 
     switch (PadData.buttons.input.repeat) {
-    case 0x8000:
+    case PAD_LEFT:
         Select_74 -= 1;
         break;
-    case 0x2000:
+    case PAD_RIGHT:
         Select_74 += 1;
         break;
-    case 0x1000:
+    case PAD_UP:
         Select_74 -= 2;
         break;
-    case 0x4000:
+    case PAD_DOWN:
         Select_74 += 2;
         break;
     default:
@@ -2974,23 +3062,23 @@ void PauseMenuPagePartyDebugTakeAgws(void)
     }
 
     if (Select_74 < 0) {
-        Select_74 += 0xc;
+        Select_74 += PARTY_DEBUG_ROSTER_COUNT;
     }
-    Select_74 %= 0xc;
+    Select_74 %= PARTY_DEBUG_ROSTER_COUNT;
 
-    if (PadData.buttons.input.pressed & 0x20) {
-        if (PartyTakeAgwsCheck(Select_74 + 0x11) != 0) {
-            PartyTakeAgwsOff(Select_74 + 0x11);
+    if (PadData.buttons.input.pressed & PAD_CIRCLE) {
+        if (PartyTakeAgwsCheck(Select_74 + PARTY_DEBUG_AGWS_FIRST_ID) != 0) {
+            PartyTakeAgwsOff(Select_74 + PARTY_DEBUG_AGWS_FIRST_ID);
         } else {
-            PartyTakeAgwsOn(Select_74 + 0x11);
+            PartyTakeAgwsOn(Select_74 + PARTY_DEBUG_AGWS_FIRST_ID);
         }
     }
 
     xglFontDebugPrintf(8, 0x20, takeAgwsHeadingLabel);
     xglFontDebugPrintf((Select_74 % 2) * 0x80 + 8, (Select_74 / 2) * 0x10 + 0x30, menuCursorText);
-    for (i = 0; i < 0xc; i++) {
-        xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 0x11));
-        xglFontDebugPrintf((i % 2) * 0x80 + 0x68, (i / 2) * 0x10 + 0x30, text00_75[PartyTakeAgwsCheck(i + 0x11)]);
+    for (i = 0; i < PARTY_DEBUG_ROSTER_COUNT; i++) {
+        xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + PARTY_DEBUG_AGWS_FIRST_ID));
+        xglFontDebugPrintf((i % 2) * 0x80 + 0x68, (i / 2) * 0x10 + 0x30, text00_75[PartyTakeAgwsCheck(i + PARTY_DEBUG_AGWS_FIRST_ID)]);
     }
     xglFontDebugPrintf(8, 0xc0, takeAgwsControlsLabel);
 }
@@ -3000,16 +3088,16 @@ void PauseMenuPagePartyDebugLockParty(void)
     int i;
 
     switch (PadData.buttons.input.repeat) {
-    case 0x8000:
+    case PAD_LEFT:
         Select_76 -= 1;
         break;
-    case 0x2000:
+    case PAD_RIGHT:
         Select_76 += 1;
         break;
-    case 0x1000:
+    case PAD_UP:
         Select_76 -= 2;
         break;
-    case 0x4000:
+    case PAD_DOWN:
         Select_76 += 2;
         break;
     default:
@@ -3017,11 +3105,11 @@ void PauseMenuPagePartyDebugLockParty(void)
     }
 
     if (Select_76 < 0) {
-        Select_76 += 0xc;
+        Select_76 += PARTY_DEBUG_ROSTER_COUNT;
     }
-    Select_76 %= 0xc;
+    Select_76 %= PARTY_DEBUG_ROSTER_COUNT;
 
-    if (PadData.buttons.input.pressed & 0x20) {
+    if (PadData.buttons.input.pressed & PAD_CIRCLE) {
         if (PartyLockPartyCheck(Select_76 + 1) != 0) {
             PartyLockPartyOff(Select_76 + 1);
         } else {
@@ -3031,7 +3119,7 @@ void PauseMenuPagePartyDebugLockParty(void)
 
     xglFontDebugPrintf(8, 0x20, lockPartyHeadingLabel);
     xglFontDebugPrintf((Select_76 % 2) * 0x80 + 8, (Select_76 / 2) * 0x10 + 0x30, menuCursorText);
-    for (i = 0; i < 0xc; i++) {
+    for (i = 0; i < PARTY_DEBUG_ROSTER_COUNT; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 1));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x58, (i / 2) * 0x10 + 0x30, text00_77[PartyLockPartyCheck(i + 1)]);
     }
@@ -3043,16 +3131,16 @@ void PauseMenuPagePartyDebugOutFriend(void)
     int i;
 
     switch (PadData.buttons.input.repeat) {
-    case 0x8000:
+    case PAD_LEFT:
         Select_78 -= 1;
         break;
-    case 0x2000:
+    case PAD_RIGHT:
         Select_78 += 1;
         break;
-    case 0x1000:
+    case PAD_UP:
         Select_78 -= 2;
         break;
-    case 0x4000:
+    case PAD_DOWN:
         Select_78 += 2;
         break;
     default:
@@ -3060,11 +3148,11 @@ void PauseMenuPagePartyDebugOutFriend(void)
     }
 
     if (Select_78 < 0) {
-        Select_78 += 0xc;
+        Select_78 += PARTY_DEBUG_ROSTER_COUNT;
     }
-    Select_78 %= 0xc;
+    Select_78 %= PARTY_DEBUG_ROSTER_COUNT;
 
-    if (PadData.buttons.input.pressed & 0x20) {
+    if (PadData.buttons.input.pressed & PAD_CIRCLE) {
         if (PartyOutFriendCheck(Select_78 + 1) != 0) {
             PartyOutFriendOff(Select_78 + 1);
         } else {
@@ -3074,7 +3162,7 @@ void PauseMenuPagePartyDebugOutFriend(void)
 
     xglFontDebugPrintf(8, 0x20, outFriendHeadingLabel);
     xglFontDebugPrintf((Select_78 % 2) * 0x80 + 8, (Select_78 / 2) * 0x10 + 0x30, menuCursorText);
-    for (i = 0; i < 0xc; i++) {
+    for (i = 0; i < PARTY_DEBUG_ROSTER_COUNT; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 1));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x58, (i / 2) * 0x10 + 0x30, text00_79[PartyOutFriendCheck(i + 1)]);
     }
@@ -3086,16 +3174,16 @@ void PauseMenuPagePartyDebugFriend(void)
     int i;
 
     switch (PadData.buttons.input.repeat) {
-    case 0x8000:
+    case PAD_LEFT:
         Select_80 -= 1;
         break;
-    case 0x2000:
+    case PAD_RIGHT:
         Select_80 += 1;
         break;
-    case 0x1000:
+    case PAD_UP:
         Select_80 -= 2;
         break;
-    case 0x4000:
+    case PAD_DOWN:
         Select_80 += 2;
         break;
     default:
@@ -3103,11 +3191,11 @@ void PauseMenuPagePartyDebugFriend(void)
     }
 
     if (Select_80 < 0) {
-        Select_80 += 7;
+        Select_80 += PARTY_DEBUG_FRIEND_COUNT;
     }
-    Select_80 %= 7;
+    Select_80 %= PARTY_DEBUG_FRIEND_COUNT;
 
-    if (PadData.buttons.input.pressed & 0x20) {
+    if (PadData.buttons.input.pressed & PAD_CIRCLE) {
         if (PartyFriendCheck(Select_80 + 1) != 0) {
             PartyFriendOff(Select_80 + 1);
         } else {
@@ -3117,7 +3205,7 @@ void PauseMenuPagePartyDebugFriend(void)
 
     xglFontDebugPrintf(8, 0x20, friendHeadingLabel);
     xglFontDebugPrintf((Select_80 % 2) * 0x80 + 8, (Select_80 / 2) * 0x10 + 0x30, menuCursorText);
-    for (i = 0; i < 7; i++) {
+    for (i = 0; i < PARTY_DEBUG_FRIEND_COUNT; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 1));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x58, (i / 2) * 0x10 + 0x30, text00_81[PartyFriendCheck(i + 1)]);
     }
@@ -3131,54 +3219,54 @@ void PauseMenuPagePartyDebugAttacker(void)
     int position;
     int i;
 
-    if (PadData.buttons.input.repeat & 0x1000) {
+    if (PadData.buttons.input.repeat & PAD_UP) {
         if (Select_82 == 0) {
-            Select_82 = 5;
+            Select_82 = PARTY_DEBUG_ATTACKER_ROW_LAST;
         } else {
             Select_82 -= 1;
         }
     }
-    if (PadData.buttons.input.repeat & 0x4000) {
-        if (Select_82 == 5) {
+    if (PadData.buttons.input.repeat & PAD_DOWN) {
+        if (Select_82 == PARTY_DEBUG_ATTACKER_ROW_LAST) {
             Select_82 = 0;
         } else {
             Select_82 += 1;
         }
     }
 
-    if (Select_82 < 3) {
+    if (Select_82 < PARTY_DEBUG_ATTACK_SLOT_COUNT) {
         party = PartyDataGet();
         character = party->attack_slots[Select_82].party_id;
-        if (PadData.buttons.input.repeat & 0x8000) {
-            character = (character != 0) ? character - 1 : 0x1d;
+        if (PadData.buttons.input.repeat & PAD_LEFT) {
+            character = (character != 0) ? character - 1 : PARTY_DEBUG_ID_MAX;
         }
-        if (PadData.buttons.input.repeat & 0x2000) {
-            character = (character != 0x1d) ? character + 1 : 0;
+        if (PadData.buttons.input.repeat & PAD_RIGHT) {
+            character = (character != PARTY_DEBUG_ID_MAX) ? character + 1 : 0;
         }
         party = PartyDataGet();
         party->attack_slots[Select_82].party_id = character;
     } else {
         party = PartyDataGet();
-        position = party->attack_slots[Select_82 - 3].attack_position;
-        if (PadData.buttons.input.repeat & 0x8000) {
-            position = (position != 0) ? position - 1 : 9;
+        position = party->attack_slots[Select_82 - PARTY_DEBUG_ATTACK_SLOT_COUNT].attack_position;
+        if (PadData.buttons.input.repeat & PAD_LEFT) {
+            position = (position != 0) ? position - 1 : PARTY_DEBUG_ATTACK_POSITION_MAX;
         }
-        if (PadData.buttons.input.repeat & 0x2000) {
-            position = (position != 9) ? position + 1 : 0;
+        if (PadData.buttons.input.repeat & PAD_RIGHT) {
+            position = (position != PARTY_DEBUG_ATTACK_POSITION_MAX) ? position + 1 : 0;
         }
         party = PartyDataGet();
-        party->attack_slots[Select_82 - 3].attack_position = position;
+        party->attack_slots[Select_82 - PARTY_DEBUG_ATTACK_SLOT_COUNT].attack_position = position;
     }
 
     party = PartyDataGet();
     xglFontDebugPrintf(8, 0x20, attackerHeadingLabel);
     xglFontDebugPrintf(8, Select_82 * 0x10 + 0x30, menuCursorText);
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < PARTY_DEBUG_ATTACK_SLOT_COUNT; i++) {
         xglFontDebugPrintf(0x10, i * 0x10 + 0x30, text01_84[i]);
         xglFontDebugPrintf(0x30, i * 0x10 + 0x30, text02_85[0]);
         xglFontDebugPrintf(0x70, i * 0x10 + 0x30, MenuCharNameGet(party->attack_slots[i].party_id));
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < PARTY_DEBUG_ATTACK_SLOT_COUNT; i++) {
         xglFontDebugPrintf(0x10, i * 0x10 + 0x60, text01_84[i]);
         xglFontDebugPrintf(0x30, i * 0x10 + 0x60, text02_85[1]);
         xglFontDebugPrintf(0x70, i * 0x10 + 0x60, text00_83[party->attack_slots[i].attack_position]);
@@ -3191,28 +3279,28 @@ void PauseMenuPagePartyDebug(void)
     xglFontDebugPrintf(8, 0x10, partyDebugTitleLabel);
     xglFontDebugPrintf(8, 0xb0, partyDebugToggleLabel);
 
-    if (PadData.buttons.input.repeat & 0x80) {
-        if (TopMode_86 == 4) {
-            TopMode_86 = 0;
+    if (PadData.buttons.input.repeat & PAD_SQUARE) {
+        if (TopMode_86 == PARTY_DEBUG_PAGE_TAKE_AGWS) {
+            TopMode_86 = PARTY_DEBUG_PAGE_FRIEND;
         } else {
             TopMode_86 += 1;
         }
     }
 
     switch (TopMode_86) {
-    case 0:
+    case PARTY_DEBUG_PAGE_FRIEND:
         PauseMenuPagePartyDebugFriend();
         return;
-    case 1:
+    case PARTY_DEBUG_PAGE_ATTACKER:
         PauseMenuPagePartyDebugAttacker();
         return;
-    case 2:
+    case PARTY_DEBUG_PAGE_OUT_FRIEND:
         PauseMenuPagePartyDebugOutFriend();
         return;
-    case 3:
+    case PARTY_DEBUG_PAGE_LOCK_PARTY:
         PauseMenuPagePartyDebugLockParty();
         return;
-    case 4:
+    case PARTY_DEBUG_PAGE_TAKE_AGWS:
         PauseMenuPagePartyDebugTakeAgws();
         break;
     }

@@ -77,7 +77,7 @@ extern const char xenoMovieClassName[24]; /* "xeno/Movie" */
  * The 32-entry virtual-machine register bank JNI_getRegister reads by
  * (index & 0x1f).
  */
-extern int VMRegister[32];
+extern int VMRegister[VM_REGISTER_COUNT];
 
 extern void xheap_init(int keep_heap, xheap_block *heap, int size);
 extern void *xheap_push(void);

@@ -10,11 +10,12 @@
 #include "vu0_macro.h"
 
 #define GIF_TAG_NLOOP_1 1u
-#define GIF_TAG_EOP (1u << 15)
-#define GIF_TAG_PRE (1u << 14)
+/* GIF tag fields as unsigned bits of the tag's 32-bit words (word 0: NLOOP/EOP, word 1: PRE/PRIM/NREG). */
+#define GIF_TAG_WORD0_EOP (1u << 15)
+#define GIF_TAG_WORD1_PRE (1u << 14)
 #define GIF_TAG_PRIM_SPRITE (6u << 15)
 #define GIF_TAG_NREG_8 (8u << 28)
-#define GIF_TAG_NREG_1 (1u << 28)
+#define GIF_TAG_WORD1_NREG_1 (1u << 28)
 #define GIF_REG_A_D 0xEu
 #define GIF_REG_RGBAQ 0x1u
 #define GIF_REG_XYZ2 0x5u
@@ -35,6 +36,23 @@
     ((u64)GS_CLAMP_REGION_REPEAT | ((u64)GS_CLAMP_REGION_REPEAT << 2) | \
      ((u64)GS_CLAMP_MIN_U << 4) | ((u64)GS_CLAMP_MAX_U << 14) | \
      ((u64)GS_CLAMP_MIN_V << 24) | ((u64)GS_CLAMP_MAX_V << 34))
+
+/* Footstep gaits (the FOOT_STEP_* sound ids are in shared.h). */
+#define FOOT_MOTION_WALK 1
+#define FOOT_MOTION_RUN 3
+#define FOOT_MOTION_FLAG_NO_STEP 2
+#define FOOT_ACTOR_KIND_COUNT 6
+#define FOOT_PREVIOUS_FRAME_NONE 99
+
+#define SHADOW_GROUND_LIFT 0.02f /* shadow plane sits just above the ground */
+#define SHADOW_DROP_CONTACT_DEPTH 0.5f
+#define SHADOW_CONTACT_END 255 /* matrix_index sentinel ending a contact list */
+#define SHADOW_VERTEX_COUNT 16
+#define SHADOW_CIRCLE_QUAD_COUNT 14 /* quads in dropCircleIndexTable */
+#define SCREEN_CLIP_MASK 0xffff0000u /* coordinates outside the GS 16-bit window */
+#define GS_REG_TEST_1 71
+#define GS_REG_SHADOW_CONTEXT 76
+#define SHADOW_RENDER_STATE_FLAG 0x80000
 
 #define DROP_SHADOW_TEXTURE_U_ORIGIN 0x6ff8
 
@@ -585,8 +603,8 @@ static ActShadowCommand Head_9 = {
         .vif_nop = 0,
         .vif_direct = 0x51000009,
         .gif_tag = {
-            GIF_TAG_NLOOP_1 | GIF_TAG_EOP,
-            GIF_TAG_NREG_8 | GIF_TAG_PRE | GIF_TAG_PRIM_SPRITE,
+            GIF_TAG_NLOOP_1 | GIF_TAG_WORD0_EOP,
+            GIF_TAG_NREG_8 | GIF_TAG_WORD1_PRE | GIF_TAG_PRIM_SPRITE,
             SHADOW_GIF_REGISTERS,
             0
         },
@@ -605,8 +623,8 @@ static ActShadowEndPacket Tail_10 = {
     .vif_nop = 0,
     .vif_direct = 0x51000002,
     .gif_tag = {
-        GIF_TAG_NLOOP_1 | GIF_TAG_EOP,
-        GIF_TAG_NREG_1,
+        GIF_TAG_NLOOP_1 | GIF_TAG_WORD0_EOP,
+        GIF_TAG_WORD1_NREG_1,
         GIF_REG_A_D,
         0
     },
@@ -631,29 +649,29 @@ static void Footstep(ActShadowActor *actor)
     int before_second;
     u8 contact_frame;
 
-    if (kind_index < 6 &&
+    if (kind_index < FOOT_ACTOR_KIND_COUNT &&
         (actor == GameLoopState.controlled_actor ||
          enepc[actor->slot].footstep_enabled)) {
         motion = actor->motion;
-        actor->previous_frame = 99;
-        if ((motion == 1 || motion == 3) && !(actor->motion_flags & 2)) {
+        actor->previous_frame = FOOT_PREVIOUS_FRAME_NONE;
+        if ((motion == FOOT_MOTION_WALK || motion == FOOT_MOTION_RUN) && !(actor->motion_flags & FOOT_MOTION_FLAG_NO_STEP)) {
             sound = 0;
             contacts = foot_tbl[((ActFootstepSaveData *)SaveData)->language - 1];
-            if (motion == 3) contacts += 2;
+            if (motion == FOOT_MOTION_RUN) contacts += 2;
             frame = F2I(actor->motion_frame / footstepFrameTime);
             contact_frame = contacts[0];
             before_first = previous < contact_frame;
             if ((before_first != 0 && frame >= contact_frame) ||
                 (frame < previous && before_first != 0)) {
-                sound = 0x20001;
-                if (actor->motion == 3) sound = 0x20003;
+                sound = FOOT_STEP_WALK_A;
+                if (actor->motion == FOOT_MOTION_RUN) sound = FOOT_STEP_RUN_A;
             }
             contact_frame = contacts[1];
             before_second = previous < contact_frame;
             if ((before_second != 0 && frame >= contact_frame) ||
                 (frame < previous && before_second != 0)) {
-                sound = 0x20002;
-                if (actor->motion == 3) sound = 0x20004;
+                sound = FOOT_STEP_WALK_B;
+                if (actor->motion == FOOT_MOTION_RUN) sound = FOOT_STEP_RUN_B;
             }
             actor->previous_frame = frame;
             if (sound != 0) {
@@ -692,7 +710,7 @@ static void DrawCircleShadow(void *actor_pointer)
 {
     float zero_coordinate;
     ActShadowActor *actor = actor_pointer;
-    CircleShadowMatrixScratchpad *scratchpad = (CircleShadowMatrixScratchpad *)0x70000000;
+    CircleShadowMatrixScratchpad *scratchpad = (CircleShadowMatrixScratchpad *)SCRATCHPAD_BASE;
     float radius;
     float corner;
     int camera_index;
@@ -705,10 +723,10 @@ static void DrawCircleShadow(void *actor_pointer)
     xglMatrixUnit(ActShadowMatrixRows(&scratchpad->model));
     scratchpad->model.elements[3][0] = actor->position[0];
     scratchpad->model.elements[3][2] = actor->position[2];
-    if (actor->height_override == -1000.0f) {
-        scratchpad->model.elements[3][1] = actor->position[1] + 0.02f;
+    if (actor->height_override == GROUND_HEIGHT_NONE) {
+        scratchpad->model.elements[3][1] = actor->position[1] + SHADOW_GROUND_LIFT;
     } else {
-        scratchpad->model.elements[3][1] = actor->height_override + 0.02f;
+        scratchpad->model.elements[3][1] = actor->height_override + SHADOW_GROUND_LIFT;
     }
     xglMatrixRotY(ActShadowMatrixRows(&scratchpad->transform),
                   ActShadowMatrixRows(&scratchpad->model), actor->yaw);
@@ -767,8 +785,8 @@ static void DrawCircleShadow(void *actor_pointer)
         DropShadowPacketPoint *clip = scratchpad->projected;
         int clip_index;
         for (clip_index = 0; clip_index < 16; clip_index++, clip++) {
-            if ((clip->x & 0xffff0000) ||
-                (clip->y & 0xffff0000) || clip->z < 0) {
+            if ((clip->x & SCREEN_CLIP_MASK) ||
+                (clip->y & SCREEN_CLIP_MASK) || clip->z < 0) {
                 return;
             }
         }
@@ -835,10 +853,10 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
     xglRotTransPersN(scratchpad->projected, 0, scratchpad->vertices, 5,
                      scratchpad->camera_index);
     for (point = scratchpad->projected, i = 0; i < 5; i++, point++) {
-        if (point->value.x & 0xffff0000U) {
+        if (point->value.x & SCREEN_CLIP_MASK) {
             return;
         }
-        if (point->value.y & 0xffff0000U) {
+        if (point->value.y & SCREEN_CLIP_MASK) {
             return;
         }
         if (point->value.z < 0) {
@@ -909,14 +927,14 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
 static void DrawZeldaShadow(void *actor_pointer)
 {
     ActZeldaShadowActor *actor = actor_pointer;
-    ActShadowScratchpad *scratchpad = (ActShadowScratchpad *)0x70000000;
+    ActShadowScratchpad *scratchpad = (ActShadowScratchpad *)SCRATCHPAD_BASE;
     int camera_index;
     float *direction;
 
-    if (actor->height_override == -1000.0f) {
-        scratchpad->height = actor->base_height + 0.02f;
+    if (actor->height_override == GROUND_HEIGHT_NONE) {
+        scratchpad->height = actor->base_height + SHADOW_GROUND_LIFT;
     } else {
-        scratchpad->height = actor->height_override + 0.02f;
+        scratchpad->height = actor->height_override + SHADOW_GROUND_LIFT;
     }
     for (camera_index = 0; camera_index < 8; camera_index++) {
         if (xglStudioGetCamera2(camera_index)->active == 1) {
@@ -1132,13 +1150,13 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
     Vector4 *points = work->vertices;
     DropShadowSourceVertex *projected;
 
-    if (actor->height_override == -1000.0f) {
-        ground_height = actor->position[1] - 0.5f;
+    if (actor->height_override == GROUND_HEIGHT_NONE) {
+        ground_height = actor->position[1] - SHADOW_DROP_CONTACT_DEPTH;
     } else {
-        ground_height = actor->height_override - 0.5f;
+        ground_height = actor->height_override - SHADOW_DROP_CONTACT_DEPTH;
     }
     segments = 0;
-    if (contacts[0].matrix_index != 255) {
+    if (contacts[0].matrix_index != SHADOW_CONTACT_END) {
         float *first_position;
         float *second_position;
 
@@ -1158,7 +1176,7 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             DropShadowContactRecord *contact = &contacts[segments];
             DropShadowContactRecord *next_contact = &contacts[segments + 1];
 
-            if (next_contact->matrix_index != 255) {
+            if (next_contact->matrix_index != SHADOW_CONTACT_END) {
                 second = &actor->shadow_matrices[next_contact->matrix_index];
             } else {
                 work->temporary.values[0] = 0.0f;
@@ -1238,9 +1256,9 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             points[15].w = 1.0f;
             points += 16;
             segments++;
-        } while (contacts[segments].matrix_index != 255);
+        } while (contacts[segments].matrix_index != SHADOW_CONTACT_END);
     }
-    vertex_count = segments * 16;
+    vertex_count = segments * SHADOW_VERTEX_COUNT;
     xglRotTransPersN(work->source_vertices, 0, work->vertices,
                       vertex_count, work->camera_index);
     visible = 0;
@@ -1248,8 +1266,8 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
     if (vertex_count > 0) {
         int remaining = vertex_count;
         do {
-            if ((projected->point.x & 0xffff0000) ||
-                (projected->point.y & 0xffff0000) || projected->point.z < 0) {
+            if ((projected->point.x & SCREEN_CLIP_MASK) ||
+                (projected->point.y & SCREEN_CLIP_MASK) || projected->point.z < 0) {
                 projected->valid = 0;
             } else {
                 visible = 1;
@@ -1262,19 +1280,19 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
     }
     work->alpha = actor->shadow_alpha;
     work->packet.gif_tag.control_low = 0x8001;
-    work->packet.test_environment_register = 71;
-    work->packet.render_state_register = sRender.shadow_state | 0x80000;
-    work->packet.shadow_context_register = 76;
+    work->packet.test_environment_register = GS_REG_TEST_1;
+    work->packet.render_state_register = sRender.shadow_state | SHADOW_RENDER_STATE_FLAG;
+    work->packet.shadow_context_register = GS_REG_SHADOW_CONTEXT;
     work->packet.dma_tag.words.low = 0;
     work->packet.dma_tag.words.high = 0;
     work->packet.vif_nop = 0;
     for (i = 0; i < segments; i++) {
         DrawDropCircleIndexTable indices = dropShadowIndexTable;
-        if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], i * 16, 14)) {
-            DrawDropShadowSubBack(work, 14, 0);
+        if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], i * SHADOW_VERTEX_COUNT, SHADOW_CIRCLE_QUAD_COUNT)) {
+            DrawDropShadowSubBack(work, SHADOW_CIRCLE_QUAD_COUNT, 0);
             nmlModelDirectSend(2, TestEnv_3_00478D80, 3);
-            DrawDropShadowSubFront(work, 14);
-            DrawDropShadowSubBack(work, 14, 128);
+            DrawDropShadowSubFront(work, SHADOW_CIRCLE_QUAD_COUNT);
+            DrawDropShadowSubBack(work, SHADOW_CIRCLE_QUAD_COUNT, 128);
         }
     }
     return contacts + segments + 1;
@@ -1283,7 +1301,7 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
 static void DrawDropShadow(void *actor_pointer)
 {
     ActShadowActor *actor = actor_pointer;
-    ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)0x70000000;
+    ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)SCRATCHPAD_BASE;
     DropShadowContactDefinition *entry;
     DropShadowContactRecord *contacts;
     u16 actor_kind;
@@ -1335,7 +1353,7 @@ static void DrawDropShadow(void *actor_pointer)
     for (entry = DropShadowDefineTable; entry->contacts; entry++) {
         if ((entry->kind_mask & actor_kind) == entry->kind_value) {
             contacts = entry->contacts;
-            while (contacts->matrix_index != 255) {
+            while (contacts->matrix_index != SHADOW_CONTACT_END) {
                 /* Keep the separately authored partial workspace interface. */
                 contacts = DrawDropShadowSub(actor, work, contacts);
             }
@@ -1343,7 +1361,7 @@ static void DrawDropShadow(void *actor_pointer)
         }
     }
     {
-        u64 shadow_register = (u64)sRender.shadow_state | 0x80000;
+        u64 shadow_register = (u64)sRender.shadow_state | SHADOW_RENDER_STATE_FLAG;
         Tail_5.set_shadow_register.data.value = shadow_register;
     }
     nmlModelDirectSend(1, &Tail_5, 3);
@@ -1351,7 +1369,7 @@ static void DrawDropShadow(void *actor_pointer)
 
 static void DrawDropCircle(ActShadowActor *actor)
 {
-    ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)0x70000000;
+    ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)SCRATCHPAD_BASE;
     const float *center = work->temporary.values;
     Vector4 *vertices = work->vertices;
     float radius;
@@ -1381,10 +1399,10 @@ static void DrawDropCircle(ActShadowActor *actor)
     work->camera_index = camera_index;
     work->temporary.values[0] = actor->position[0];
     work->temporary.values[2] = actor->position[2];
-    if (actor->height_override == -1000.0f) {
-        work->temporary.values[1] = actor->position[1] + 0.02f;
+    if (actor->height_override == GROUND_HEIGHT_NONE) {
+        work->temporary.values[1] = actor->position[1] + SHADOW_GROUND_LIFT;
     } else {
-        work->temporary.values[1] = actor->height_override + 0.02f;
+        work->temporary.values[1] = actor->height_override + SHADOW_GROUND_LIFT;
     }
     radius = actor->shadow_radius;
     corner = radius * dropCircleCornerScale;
@@ -1422,14 +1440,14 @@ static void DrawDropCircle(ActShadowActor *actor)
     vertices[15].z = vertices[7].z;
     vertices[8].y = vertices[9].y = vertices[10].y =
         vertices[11].y = vertices[12].y = vertices[13].y =
-        vertices[14].y = vertices[15].y = center[1] - 0.5f;
+        vertices[14].y = vertices[15].y = center[1] - SHADOW_DROP_CONTACT_DEPTH;
     vertices[8].w = vertices[9].w = vertices[10].w =
         vertices[11].w = vertices[12].w = vertices[13].w =
         vertices[14].w = vertices[15].w = 1.0f;
     xglRotTransPersN(work->source_vertices, 0, vertices, 16, work->camera_index);
     projected = work->source_vertices;
     visible = 0;
-    clip_mask = 0xffff0000;
+    clip_mask = SCREEN_CLIP_MASK;
     for (i = 15; i >= 0; i--, projected++) {
         if ((projected->point.x & clip_mask) ||
             (projected->point.y & clip_mask) || projected->point.z < 0) {
@@ -1442,19 +1460,19 @@ static void DrawDropCircle(ActShadowActor *actor)
         DrawDropCircleIndexTable indices;
         work->alpha = actor->shadow_alpha;
         work->packet.gif_tag.control_low = 0x8001;
-        work->packet.test_environment_register = 71;
-        work->packet.render_state_register = sRender.shadow_state | 0x80000;
-        work->packet.shadow_context_register = 76;
+        work->packet.test_environment_register = GS_REG_TEST_1;
+        work->packet.render_state_register = sRender.shadow_state | SHADOW_RENDER_STATE_FLAG;
+        work->packet.shadow_context_register = GS_REG_SHADOW_CONTEXT;
         indices = dropCircleIndexTable;
         work->packet.dma_tag.words.low = 0;
         work->packet.dma_tag.words.high = 0;
         work->packet.vif_nop = 0;
-        if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], 0, 14)) {
-            DrawDropShadowSubBack(work, 14, 0);
+        if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], 0, SHADOW_CIRCLE_QUAD_COUNT)) {
+            DrawDropShadowSubBack(work, SHADOW_CIRCLE_QUAD_COUNT, 0);
             nmlModelDirectSend(2, TestEnv_7, 3);
-            DrawDropShadowSubFront(work, 14);
-            DrawDropShadowSubBack(work, 14, 128);
-            Tail_8.set_shadow_register.data.value = (u64)sRender.shadow_state | 0x80000;
+            DrawDropShadowSubFront(work, SHADOW_CIRCLE_QUAD_COUNT);
+            DrawDropShadowSubBack(work, SHADOW_CIRCLE_QUAD_COUNT, 128);
+            Tail_8.set_shadow_register.data.value = (u64)sRender.shadow_state | SHADOW_RENDER_STATE_FLAG;
             nmlModelDirectSend(1, &Tail_8, 3);
         }
     }

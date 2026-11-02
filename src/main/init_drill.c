@@ -18,6 +18,91 @@
     (((DrillMatrix *)((u8 *)GameLoopState.sceneRoot->block                  \
         + GameLoopState.sceneRoot->block->matrixOffset))[index])
 
+#define DRILL_ACTOR_COUNT 64
+#define DRILL_ACTOR_HIDDEN 0x8             /* Actor.flags: inactive, skipped by hit checks */
+#define DRILL_ENEMY_WORK_COUNT 16
+
+/* Map unit flag set on the U-kun ball containers when they are placed. */
+#define DRILL_UNIT_CONTAINER 0x200000
+
+/* Container unit ids: 20 consecutive ids, in three groups that react to a hit with a different effect. */
+#define DRILL_CONTAINER_FIRST 0x7014
+#define DRILL_CONTAINER_COUNT 0x14
+#define DRILL_CONTAINER_COUNT_UNSIGNED 20U
+#define DRILL_CONTAINER_GROUP0_COUNT 4           /* 0x7014..0x7017, effect 1752 */
+#define DRILL_CONTAINER_GROUP1_FIRST 0x7018      /* 12 ids, effect 1753 */
+#define DRILL_CONTAINER_GROUP1_COUNT 12
+#define DRILL_CONTAINER_GROUP2_FIRST 0x7024      /* 4 ids, effect 1754 */
+#define DRILL_CONTAINER_GROUP2_COUNT 4
+#define DRILL_RARE_CONTAINER_FIRST 0x701C        /* 4 containers that may hold a rare item */
+#define DRILL_RARE_CONTAINER_COUNT 4
+#define DRILL_PLACE_TRIES 255
+
+/* Item ids 501..540 are the U-kun ball items; 541..545 are the rare ones. */
+#define DRILL_ITEM_FIRST 501
+#define DRILL_RARE_ITEM_FIRST 0x21D
+#define DRILL_RARE_ITEM_COUNT 5
+#define DRILL_ITEM_RESET_COUNT 50
+/* Event flag of an item: DRILL_ITEM_FLAG_BASE + item id. */
+#define DRILL_ITEM_FLAG_BASE 0x79ec7
+#define DRILL_RARE_ITEM_FLAG_FIRST (DRILL_ITEM_FLAG_BASE + DRILL_RARE_ITEM_FIRST)
+
+/* DrillSave.flags */
+enum {
+    DRILL_FLAG_TIMER_SHOWN = 0x1,        /* the timer is displayed */
+    DRILL_FLAG_COUNT_UP = 0x2,           /* elapsed time instead of time remaining */
+    DRILL_FLAG_RARE_PLACED_FIRST = 0x10, /* one bit per rare item already placed (5 bits) */
+    DRILL_FLAG_RARE_PLACED_MASK = 0x1F0
+};
+#define DRILL_FLAG_TIME_OVER 0x80000000
+
+/* GameLoopState.flags while the drill minigame runs. */
+enum {
+    DRILL_GAME_RUNNING = 0x10000,
+    DRILL_GAME_ENDED = 0x80000
+};
+
+/* Drill.phase */
+enum {
+    DRILL_PHASE_POWER_OFF = 0,
+    DRILL_PHASE_STANDBY = 1,
+    DRILL_PHASE_Z_MOVE = 2,
+    DRILL_PHASE_Z_STOP = 3,
+    DRILL_PHASE_X_MOVE = 4,
+    DRILL_PHASE_CRASH = 5,
+    DRILL_PHASE_RETURN = 6
+};
+
+/* DrillSave.command */
+enum {
+    DRILL_COMMAND_END = 1,
+    DRILL_COMMAND_STOP = 2
+};
+
+/* Sound effects, started when the matching phase begins. */
+enum {
+    DRILL_SE_Z_MOVE = 0x30096,
+    DRILL_SE_Z_STOP = 0x30097,
+    DRILL_SE_X_MOVE = 0x30098,
+    DRILL_SE_CRASH = 0x30099,
+    DRILL_SE_ENEMY_HIT = 0x10003
+};
+
+/* Rest position of the drill and the limits of its two sweeps. */
+#define DRILL_HOME_X (-2.9f)
+#define DRILL_HOME_Y 4.5f
+#define DRILL_HOME_Z (-12.5f)
+#define DRILL_Z_LIMIT (-23.3f)
+#define DRILL_X_LIMIT 4.3f
+
+#define DRILL_FRAMES_PER_SECOND 30.0f
+#define DRILL_TIME_DISPLAY_LIMIT 1000       /* the timer shows at most 999 */
+#define DRILL_TEXT_OT 0xFFF0
+#define DRILL_STOP_MIN_FRAMES 60            /* the stop command is refused below this much time left */
+#define DRILL_CRASH_SPIN_FRAMES 16
+#define DRILL_CRASH_BOUNCES 9
+#define DRILL_CAMERA_PRESET_COUNT 3
+
 typedef struct DrillMapUnitInfo {
     unsigned char unmodeled_00[2];
     u16 drill_reset_value;
@@ -247,11 +332,11 @@ typedef struct DrillMapUnitHitProbe {
     unsigned char unmodeled_9ec[0x84];
 } DrillMapUnitHitProbe;
 
-extern DrillMapUnit MapUnit[64];
+extern DrillMapUnit MapUnit[MAP_UNIT_COUNT];
 extern DrillPadLayout PadData;
 extern DrillItemBox ItemBoxTbl[];
-extern Actor actor[64];
-extern DrillEnemyWork enepc[16];
+extern Actor actor[DRILL_ACTOR_COUNT];
+extern DrillEnemyWork enepc[DRILL_ENEMY_WORK_COUNT];
 
 /* These unchanged data records are supplied by the original scaffolding. */
 extern const char initDrillDebugFormat[];
@@ -323,7 +408,7 @@ void InitDrill(Drill *drill)
     printf(initDrillDebugFormat, save->partIndexA, save->partIndexB, drill->serial);
     GetPartsPos(drill);
     save->runState = 0;
-    drill->phase = 0;
+    drill->phase = DRILL_PHASE_POWER_OFF;
     drill->update = MAP_updateUnitDrill;
     drill->crashTimer = 0;
     drill->bounceCount = 0;
@@ -341,7 +426,7 @@ void InitDrill(Drill *drill)
     drill->effect3 = effect;
     effect->position.x = -3.2f;
     effect->position.y = 6.67f;
-    effect->position.z = -12.5f;
+    effect->position.z = DRILL_HOME_Z;
     effect->display =0;
 
     effect = sefCreateEffectCf(1661, 0, 0);
@@ -349,7 +434,7 @@ void InitDrill(Drill *drill)
         effect = sefCreateEffectCf(1539, 0, 0);
     }
     drill->effect2 = effect;
-    effect->position.z = -12.5f;
+    effect->position.z = DRILL_HOME_Z;
     effect->position.x = -3.03f;
     effect->position.y = 6.23f;
     effect->display =0;
@@ -366,19 +451,19 @@ void SetContainer(int count)
     DrillClearContainer();
     if (count > 0) {
         do {
-            if (CreateContainer(-1, (xglSRand() % 20U) + 0x7014) == 0) {
+            if (CreateContainer(-1, (xglSRand() % DRILL_CONTAINER_COUNT_UNSIGNED) + DRILL_CONTAINER_FIRST) == 0) {
                 switch (xglSRand() & 3) {
                 case 0:
-                    CreateContainer(-1, 0x7014);
+                    CreateContainer(-1, DRILL_CONTAINER_FIRST);
                     break;
                 case 1:
-                    CreateContainer(-1, 0x7015);
+                    CreateContainer(-1, DRILL_CONTAINER_FIRST + 1);
                     break;
                 case 2:
-                    CreateContainer(-1, 0x7016);
+                    CreateContainer(-1, DRILL_CONTAINER_FIRST + 2);
                     break;
                 case 3:
-                    CreateContainer(-1, 0x7017);
+                    CreateContainer(-1, DRILL_CONTAINER_FIRST + 3);
                     break;
                 }
             }
@@ -409,26 +494,26 @@ int CreateContainer(int identifier, int unit_id)
         unit->serial = -1;
         return 0;
     }
-    if ((u16)(unit->serial - 0x701C) < 4 && (xglSRand() & 0xF) == 0) {
+    if ((u16)(unit->serial - DRILL_RARE_CONTAINER_FIRST) < DRILL_RARE_CONTAINER_COUNT && (xglSRand() & 0xF) == 0) {
         tries = 0;
         slot = xglSRand() % 5U;
         do {
-            pick = (slot + tries) % 5;
+            pick = (slot + tries) % DRILL_RARE_ITEM_COUNT;
             tries++;
             slot = pick;
-            if (!(*pDrillFlag & (0x10 << pick))) {
-                *pDrillFlag |= 0x10 << pick;
-                item = pick + 0x21D;
-                if (xglFlagsGet1(pick + 0x7A0E4) == 0) {
+            if (!(*pDrillFlag & (DRILL_FLAG_RARE_PLACED_FIRST << pick))) {
+                *pDrillFlag |= DRILL_FLAG_RARE_PLACED_FIRST << pick;
+                item = pick + DRILL_RARE_ITEM_FIRST;
+                if (xglFlagsGet1(pick + DRILL_RARE_ITEM_FLAG_FIRST) == 0) {
                     SetContainerItem(unit, item);
                     printf(rareItemPlacedFormat, item);
                     return (int)unit;
                 }
             }
-        } while (tries < 5);
+        } while (tries < DRILL_RARE_ITEM_COUNT);
     }
     table = ItemBoxTbl;
-    base = unit->serial - 0x7014;
+    base = unit->serial - DRILL_CONTAINER_FIRST;
     base = container[base].model.itemBase;
     weight = table[base].weight;
     roll = xglSRand() % 100U;
@@ -448,12 +533,12 @@ void DrillClearContainer(void)
 {
     int i;
 
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         DrillMapUnit *unit = &MapUnit[i];
 
-        if ((u16)(unit->serial - 0x7014) < 0x14) {
+        if ((u16)(unit->serial - DRILL_CONTAINER_FIRST) < DRILL_CONTAINER_COUNT) {
             unit->serial = -1;
-        } else if ((unit->flags & 0x100000) != 0) {
+        } else if ((unit->flags & MAP_UNIT_HIDDEN) != 0) {
             unit->serial = -1;
         } else {
             continue;
@@ -467,12 +552,12 @@ void SetContainerParam(MapUnitRecordDrillView *unit)
     DrillContainerInfo *info = &unit->info;
     int index;
 
-    unit->flags = (unit->flags & ~4) | 0x200000;
+    unit->flags = (unit->flags & ~MAP_UNIT_NO_DRAW) | DRILL_UNIT_CONTAINER;
     if (info->extraId == -1) {
         info->extraId = 0;
     }
     info->active = 1;
-    index = unit->serial - 0x7014;
+    index = unit->serial - DRILL_CONTAINER_FIRST;
     info->containerType = container[index].type;
     info->hitMode = container[index].model.hitMode;
     unit->size = container[index].size;
@@ -491,7 +576,7 @@ void SetContainerItem(MapUnitRecordDrillView *container, int value)
 {
     DrillItemUnit *item;
 
-    item = Unit_CreateUwamono(-1, 0x7000);
+    item = Unit_CreateUwamono(-1, UWAMONO_ID_SPECIAL_FIRST);
     if (item != 0) {
         DrillItemInfo *info = &item->info;
 
@@ -551,7 +636,7 @@ int CalcPosContainer(MapUnitRecordDrillView *unit)
             }
         }
         tries++;
-    } while (tries < 255);
+    } while (tries < DRILL_PLACE_TRIES);
     return 0;
 }
 
@@ -567,51 +652,51 @@ void MAP_updateUnitDrill(Drill *drill)
     int length;
 
     switch (drill->phase) {
-    case 0:
+    case DRILL_PHASE_POWER_OFF:
         DrillPowerOffFunc(drill);
         break;
-    case 1:
+    case DRILL_PHASE_STANDBY:
         DrillStandbyFunc(drill);
         break;
-    case 2:
+    case DRILL_PHASE_Z_MOVE:
         DrillZMoveFunc(drill);
         break;
-    case 3:
+    case DRILL_PHASE_Z_STOP:
         DrillZStopFunc(drill);
         break;
-    case 4:
+    case DRILL_PHASE_X_MOVE:
         DrillXMoveFunc(drill);
         break;
-    case 5:
+    case DRILL_PHASE_CRASH:
         DrillCrashFunc(drill);
         break;
-    case 6:
+    case DRILL_PHASE_RETURN:
         DrillReturnFunc(drill);
         break;
     }
 
-    if (drill->phase != 0) {
+    if (drill->phase != DRILL_PHASE_POWER_OFF) {
         memset(text, 0, sizeof(text));
         flags = save->flags;
-        if ((flags & 1) != 0) {
-            if ((flags & 2) != 0) {
-                seconds = (int)((float)save->frameCount / 30.0f);
-                seconds = seconds < 1000 ? seconds : 999;
+        if ((flags & DRILL_FLAG_TIMER_SHOWN) != 0) {
+            if ((flags & DRILL_FLAG_COUNT_UP) != 0) {
+                seconds = (int)((float)save->frameCount / DRILL_FRAMES_PER_SECOND);
+                seconds = seconds < DRILL_TIME_DISPLAY_LIMIT ? seconds : DRILL_TIME_DISPLAY_LIMIT - 1;
                 length = HexToStr(seconds, text);
-                xglFontPrint(336, 24, 0xFFF0, elapsedTimeText);
-                xglFontPrint(472 - length * 10, 24, 0xFFF0, text);
-                xglFontPrintDirectOT(0xFFF0, drillTextControl);
+                xglFontPrint(336, 24, DRILL_TEXT_OT, elapsedTimeText);
+                xglFontPrint(472 - length * 10, 24, DRILL_TEXT_OT, text);
+                xglFontPrintDirectOT(DRILL_TEXT_OT, drillTextControl);
             } else {
-                seconds = (int)((float)(save->frameLimit - save->frameCount) / 30.0f);
-                seconds = seconds < 1000 ? seconds : 999;
+                seconds = (int)((float)(save->frameLimit - save->frameCount) / DRILL_FRAMES_PER_SECOND);
+                seconds = seconds < DRILL_TIME_DISPLAY_LIMIT ? seconds : DRILL_TIME_DISPLAY_LIMIT - 1;
                 if (seconds <= 0) {
-                    if (!(flags & 0x80000000)) {
+                    if (!(flags & DRILL_FLAG_TIME_OVER)) {
                         CallMethod(drillTimeoverMethodName);
-                        save->flags |= 0x80000000;
-                        if (drill->phase != 5) {
+                        save->flags |= DRILL_FLAG_TIME_OVER;
+                        if (drill->phase != DRILL_PHASE_CRASH) {
                             SchedulerState *effect;
 
-                            drill->phase = 6;
+                            drill->phase = DRILL_PHASE_RETURN;
                             effect = drill->effect3;
                             effect->display =0;
                             effect = save->effect1;
@@ -621,12 +706,12 @@ void MAP_updateUnitDrill(Drill *drill)
                     seconds = 0;
                 }
                 length = HexToStr(seconds, text);
-                xglFontPrint(328, 24, 0xFFF0, timeRemainingText);
-                xglFontPrint(480 - length * 10, 24, 0xFFF0, text);
-                xglFontPrintDirectOT(0xFFF0, drillTextControl);
+                xglFontPrint(328, 24, DRILL_TEXT_OT, timeRemainingText);
+                xglFontPrint(480 - length * 10, 24, DRILL_TEXT_OT, text);
+                xglFontPrintDirectOT(DRILL_TEXT_OT, drillTextControl);
             }
         }
-        if (save->command != 2) {
+        if (save->command != DRILL_COMMAND_STOP) {
             save->frameCount++;
         }
     }
@@ -657,12 +742,12 @@ void MAP_updateUnitDrill(Drill *drill)
         DrillResetFlag(drill);
         SetContainer(save->containerCount);
         save->resetRequest = 0;
-    } else if (save->command == 1) {
+    } else if (save->command == DRILL_COMMAND_END) {
         camera = xglStudioGetActiveCamera();
-        GameLoopState.flags |= 0x80000;
+        GameLoopState.flags |= DRILL_GAME_ENDED;
         camera->state = 4;
-        GameLoopState.flags &= ~0x10000;
-        drill->phase = 0;
+        GameLoopState.flags &= ~DRILL_GAME_RUNNING;
+        drill->phase = DRILL_PHASE_POWER_OFF;
         save->hit = 0;
         save->command = 0;
     }
@@ -678,9 +763,9 @@ void DrillPowerOffFunc(Drill *drill)
     signed char hit;
 
     xglFontDebugPrintf(8, 16, drillPowerOffText);
-    drill->position.x = -2.9f;
-    drill->position.y = 4.5f;
-    drill->position.z = -12.5f;
+    drill->position.x = DRILL_HOME_X;
+    drill->position.y = DRILL_HOME_Y;
+    drill->position.z = DRILL_HOME_Z;
     save->returnCount = 0;
     save->startState = 0;
     save->hitCount = 0;
@@ -689,18 +774,18 @@ void DrillPowerOffFunc(Drill *drill)
     initialAngle = save->initialCameraAngle;
     save->cameraPreset = 0;
     camera->angles.baseAngle = initialAngle;
-    xglSoundEffectStopID(0x30096, 0);
-    xglSoundEffectStopID(0x30098, 0);
+    xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+    xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
     hit = save->hit;
     if (hit == 1) {
         drill->phase = hit;
-        GameLoopState.flags |= 0x10000;
+        GameLoopState.flags |= DRILL_GAME_RUNNING;
         ACT_setMotion2(actor, 0, 9);
         DrillResetCameraPos(drill, camera);
         save->returnCount = hit;
         save->frameCount = 0;
-        GameLoopState.flags &= ~0x80000;
-        save->flags &= 0x7fffffff;
+        GameLoopState.flags &= ~DRILL_GAME_ENDED;
+        save->flags &= ~DRILL_FLAG_TIME_OVER;
     }
     effect = drill->effect2;
     effect->display =0;
@@ -713,16 +798,16 @@ void DrillStandbyFunc(Drill *drill)
     DrillSave *save = &drill->save;
     DrillCamera *camera = xglStudioGetActiveCamera();
 
-    if (save->command == 2) {
+    if (save->command == DRILL_COMMAND_STOP) {
         save->cameraPreset = 1;
         xglFontDebugPrintf(8, 16, drillStopText);
         DrillResetCameraPos(drill, camera);
         return;
-    } else if (save->command == 1) {
-        GameLoopState.flags |= 0x80000;
+    } else if (save->command == DRILL_COMMAND_END) {
+        GameLoopState.flags |= DRILL_GAME_ENDED;
         camera->state = 4;
-        GameLoopState.flags &= ~0x10000;
-        drill->phase = 0;
+        GameLoopState.flags &= ~DRILL_GAME_RUNNING;
+        drill->phase = DRILL_PHASE_POWER_OFF;
         save->hit = 0;
         save->command = 0;
     } else {
@@ -731,26 +816,26 @@ void DrillStandbyFunc(Drill *drill)
             DrillCameraControlFunc(drill, camera);
             drill->crashTimer = 0;
             drill->bounceCount = 0;
-            if ((PadData.half_2a & 0x2) != 0) {
+            if ((PadData.half_2a & PAD_R2) != 0) {
                 DrillResetCameraPos(drill, camera);
                 save->cameraPreset++;
-                save->cameraPreset %= 3;
+                save->cameraPreset %= DRILL_CAMERA_PRESET_COUNT;
             }
-            if ((PadData.half_2a & 0x80) != 0) {
+            if ((PadData.half_2a & PAD_SQUARE) != 0) {
                 camera->angles.shakeVelocityX = 0.0f;
                 camera->angles.shakeVelocityY = 0.0f;
                 camera->angles.shakeVelocityZ = 0.0f;
                 camera->angles.shakeOffsetX = 0.0f;
                 camera->angles.shakeOffsetY = 0.0f;
                 camera->angles.shakeOffsetZ = 0.0f;
-                drill->phase = 2;
-                xglSoundEffectNormalID(0x30096, 0);
+                drill->phase = DRILL_PHASE_Z_MOVE;
+                xglSoundEffectNormalID(DRILL_SE_Z_MOVE, 0);
                 return;
             }
-            if ((PadData.half_2a & 0x40) != 0
-                && ((save->flags & 1) == 0 || save->frameLimit - save->frameCount >= 60)
-                && save->command != 1) {
-                save->command = 2;
+            if ((PadData.half_2a & PAD_CROSS) != 0
+                && ((save->flags & DRILL_FLAG_TIMER_SHOWN) == 0 || save->frameLimit - save->frameCount >= DRILL_STOP_MIN_FRAMES)
+                && save->command != DRILL_COMMAND_END) {
+                save->command = DRILL_COMMAND_STOP;
                 CallMethod(drillStopMethodName);
             }
         }
@@ -766,19 +851,19 @@ void DrillZMoveFunc(Drill *drill)
     Vibration_Set_Strong(128, 128, 2);
     save->cameraPreset = 1;
 
-    if ((PadData.half_28 & 0x80) != 0) {
+    if ((PadData.half_28 & PAD_SQUARE) != 0) {
         drill->position.z -= save->zSpeed;
     } else {
-        drill->phase = 3;
-        xglSoundEffectStopID(0x30096, 0);
-        xglSoundEffectNormalID(0x30097, 0);
+        drill->phase = DRILL_PHASE_Z_STOP;
+        xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+        xglSoundEffectNormalID(DRILL_SE_Z_STOP, 0);
     }
 
-    if (drill->position.z < -23.3f) {
-        drill->position.z = -23.3f;
-        drill->phase = 3;
-        xglSoundEffectStopID(0x30096, 0);
-        xglSoundEffectNormalID(0x30097, 0);
+    if (drill->position.z < DRILL_Z_LIMIT) {
+        drill->position.z = DRILL_Z_LIMIT;
+        drill->phase = DRILL_PHASE_Z_STOP;
+        xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+        xglSoundEffectNormalID(DRILL_SE_Z_STOP, 0);
     }
 
     effect = drill->effect2;
@@ -804,13 +889,13 @@ void DrillZStopFunc(Drill *drill)
     camera = xglStudioGetActiveCamera();
     DrillCameraControlFunc(drill, camera);
 
-    if ((PadData.half_2a & 0x2) != 0) {
+    if ((PadData.half_2a & PAD_R2) != 0) {
         DrillResetCameraPos(drill, camera);
         save->cameraPreset++;
-        save->cameraPreset %= 3;
+        save->cameraPreset %= DRILL_CAMERA_PRESET_COUNT;
     }
 
-    if ((PadData.half_2a & 0x80) != 0) {
+    if ((PadData.half_2a & PAD_SQUARE) != 0) {
         camera->angles.shakeVelocityX = 0.0f;
         camera->angles.shakeVelocityY = 0.0f;
         camera->angles.shakeVelocityZ = 0.0f;
@@ -818,8 +903,8 @@ void DrillZStopFunc(Drill *drill)
         camera->angles.shakeOffsetY = 0.0f;
         camera->angles.shakeOffsetZ = 0.0f;
         camera->state = 0;
-        drill->phase = 4;
-        xglSoundEffectNormalID(0x30098, 0);
+        drill->phase = DRILL_PHASE_X_MOVE;
+        xglSoundEffectNormalID(DRILL_SE_X_MOVE, 0);
     }
 
     effect = drill->effect2;
@@ -838,12 +923,12 @@ void DrillXMoveFunc(Drill *drill)
     xglFontDebugPrintf(8, 16, drillXMoveText);
     Vibration_Set_Strong(128, 128, 2);
 
-    if ((PadData.half_28 & 0x80) != 0) {
+    if ((PadData.half_28 & PAD_SQUARE) != 0) {
         drill->position.x += save->xSpeed;
     } else if (drill->position.x < -1.9000001f) {
         drill->position.x += save->xSpeed;
     } else {
-        drill->phase = 5;
+        drill->phase = DRILL_PHASE_CRASH;
 
         effect = sefCreateEffectCf(1594, 0, 0);
         effect->position = drill->position;
@@ -857,14 +942,14 @@ void DrillXMoveFunc(Drill *drill)
         drill->cameraYaw = camera->angles.yaw;
         drill->cameraPitch = camera->angles.pitch;
 
-        xglSoundEffectStopID(0x30098, 0);
-        xglSoundEffectNormalID(0x30099, 0);
+        xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
+        xglSoundEffectNormalID(DRILL_SE_CRASH, 0);
         return;
     }
 
-    if (drill->position.x > 4.3f) {
-        drill->position.x = 4.3f;
-        drill->phase = 5;
+    if (drill->position.x > DRILL_X_LIMIT) {
+        drill->position.x = DRILL_X_LIMIT;
+        drill->phase = DRILL_PHASE_CRASH;
 
         effect = sefCreateEffectCf(1594, 0, 0);
         effect->position = drill->position;
@@ -878,8 +963,8 @@ void DrillXMoveFunc(Drill *drill)
         drill->cameraYaw = camera->angles.yaw;
         drill->cameraPitch = camera->angles.pitch;
 
-        xglSoundEffectStopID(0x30098, 0);
-        xglSoundEffectNormalID(0x30099, 0);
+        xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
+        xglSoundEffectNormalID(DRILL_SE_CRASH, 0);
     }
 
     effect = drill->effect3;
@@ -924,8 +1009,8 @@ void DrillCrashFunc(Drill *drill)
     camera->angles.pitch = 2.3561945f;
     camera->angles.roll = 0.0f;
 
-    if (drill->crashTimer >= 16) {
-        drill->crashTimer = 16;
+    if (drill->crashTimer >= DRILL_CRASH_SPIN_FRAMES) {
+        drill->crashTimer = DRILL_CRASH_SPIN_FRAMES;
         drill->position.y -= save->fallSpeed;
         DrillHitCheck(drill);
         if (drill->position.y < 0.0f) {
@@ -934,11 +1019,11 @@ void DrillCrashFunc(Drill *drill)
             }
             drill->bounceCount++;
             drill->position.y = 0.0f;
-            if (drill->bounceCount >= 9) {
+            if (drill->bounceCount >= DRILL_CRASH_BOUNCES) {
                 camera->angles.yaw = drill->cameraYaw;
                 camera->angles.pitch = drill->cameraPitch;
                 DrillCalcCameraPos(camera);
-                drill->phase = 6;
+                drill->phase = DRILL_PHASE_RETURN;
             }
         }
     }
@@ -963,22 +1048,22 @@ void DrillReturnFunc(Drill *drill)
         return;
     }
 
-    if (drill->position.y < 4.5f) {
+    if (drill->position.y < DRILL_HOME_Y) {
         drill->position.y += save->riseSpeed;
-        if (drill->position.y >= 4.5f) {
-            drill->position.y = 4.5f;
-            xglSoundEffectNormalID(0x30098, 0);
+        if (drill->position.y >= DRILL_HOME_Y) {
+            drill->position.y = DRILL_HOME_Y;
+            xglSoundEffectNormalID(DRILL_SE_X_MOVE, 0);
         }
         return;
     }
 
-    drill->position.y = 4.5f;
-    if (drill->position.x > -2.9000001f) {
+    drill->position.y = DRILL_HOME_Y;
+    if (drill->position.x > DRILL_HOME_X) {
         drill->position.x -= save->xReturnSpeed;
-        if (drill->position.x <= -2.9000001f) {
-            drill->position.x = -2.9000001f;
-            xglSoundEffectStopID(0x30098, 0);
-            xglSoundEffectNormalID(0x30096, 0);
+        if (drill->position.x <= DRILL_HOME_X) {
+            drill->position.x = DRILL_HOME_X;
+            xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
+            xglSoundEffectNormalID(DRILL_SE_Z_MOVE, 0);
         }
         effect = drill->effect3;
         sefRewindEffectCf(effect);
@@ -994,15 +1079,15 @@ void DrillReturnFunc(Drill *drill)
         return;
     }
 
-    drill->position.x = -2.9000001f;
+    drill->position.x = DRILL_HOME_X;
     effect = drill->effect3;
     effect->display =0;
-    if (drill->position.z < -12.5f) {
+    if (drill->position.z < DRILL_HOME_Z) {
         drill->position.z += save->zReturnSpeed;
-        if (drill->position.z >= -12.5f) {
-            drill->position.z = -12.5f;
-            xglSoundEffectStopID(0x30096, 0);
-            xglSoundEffectNormalID(0x30097, 0);
+        if (drill->position.z >= DRILL_HOME_Z) {
+            drill->position.z = DRILL_HOME_Z;
+            xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+            xglSoundEffectNormalID(DRILL_SE_Z_STOP, 0);
         }
         effect = drill->effect2;
         sefRewindEffectCf(effect);
@@ -1015,32 +1100,32 @@ void DrillReturnFunc(Drill *drill)
         return;
     }
 
-    drill->phase = 1;
-    drill->position.z = -12.5f;
+    drill->phase = DRILL_PHASE_STANDBY;
+    drill->position.z = DRILL_HOME_Z;
     effect = drill->effect2;
     effect->display =0;
     effect = save->effect1;
     effect->display =0;
     save->returnCount++;
     if (save->returnLimit == -1) {
-        xglSoundEffectStopID(0x30096, 0);
-        xglSoundEffectStopID(0x30098, 0);
+        xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+        xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
         CallMethod(drillStandbyMethodName);
         return;
     }
     if (save->returnLimit < save->returnCount) {
         camera = xglStudioGetActiveCamera();
         camera->state = 4;
-        GameLoopState.flags &= ~0x10000;
-        drill->phase = 0;
-        GameLoopState.flags |= 0x80000;
+        GameLoopState.flags &= ~DRILL_GAME_RUNNING;
+        drill->phase = DRILL_PHASE_POWER_OFF;
+        GameLoopState.flags |= DRILL_GAME_ENDED;
         save->hit = 0;
-        xglSoundEffectStopID(0x30096, 0);
-        xglSoundEffectStopID(0x30098, 0);
+        xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+        xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
         CallMethod(drillEndMethodName);
     } else {
-        xglSoundEffectStopID(0x30096, 0);
-        xglSoundEffectStopID(0x30098, 0);
+        xglSoundEffectStopID(DRILL_SE_Z_MOVE, 0);
+        xglSoundEffectStopID(DRILL_SE_X_MOVE, 0);
         CallMethod(drillStandbyMethodName);
     }
 }
@@ -1151,17 +1236,17 @@ void DrillResetFlag(Drill *drill)
     DrillSave *save = &drill->save;
     int i;
 
-    save->flags &= ~0x1F0;
+    save->flags &= ~DRILL_FLAG_RARE_PLACED_MASK;
 
-    for (i = 501; i < 541; i++) {
-        xglFlagsSet1(0x79ec7 + i, 0);
+    for (i = DRILL_ITEM_FIRST; i < DRILL_RARE_ITEM_FIRST; i++) {
+        xglFlagsSet1(DRILL_ITEM_FLAG_BASE + i, 0);
     }
 
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         DrillMapUnit *unit = &MapUnit[i];
 
-        if (unit->serial == 0x7000 || unit->serial == 0x7009) {
-            if ((u32)(unit->info.drill_reset_value - 501) < 50) {
+        if (unit->serial == UWAMONO_ID_SPECIAL_FIRST || unit->serial == 0x7009) {
+            if ((u32)(unit->info.drill_reset_value - DRILL_ITEM_FIRST) < DRILL_ITEM_RESET_COUNT) {
                 unit->serial = -1;
                 unit->update = 0;
             }
@@ -1181,11 +1266,11 @@ void DrillHitCheck(Drill *drill)
         container = &MapUnit[hit].info;
         container->hit = 1;
         save->hitCount++;
-        if ((u16)(MapUnit[hit].serial - 0x7014) < 4) {
+        if ((u16)(MapUnit[hit].serial - DRILL_CONTAINER_FIRST) < DRILL_CONTAINER_GROUP0_COUNT) {
             sefCreateEffectCf(1752, 0, 0);
-        } else if ((u16)(MapUnit[hit].serial - 0x7018) < 12) {
+        } else if ((u16)(MapUnit[hit].serial - DRILL_CONTAINER_GROUP1_FIRST) < DRILL_CONTAINER_GROUP1_COUNT) {
             sefCreateEffectCf(1753, 0, 0);
-        } else if ((u16)(MapUnit[hit].serial - 0x7024) < 4) {
+        } else if ((u16)(MapUnit[hit].serial - DRILL_CONTAINER_GROUP2_FIRST) < DRILL_CONTAINER_GROUP2_COUNT) {
             sefCreateEffectCf(1754, 0, 0);
         }
     } else {
@@ -1201,7 +1286,7 @@ int HitCheckContainerPosSize(Vector4 *position, int slot, float radius)
 
     probe.position = *position;
     probe.radius = radius;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < MAP_UNIT_COUNT; i++) {
         container = &MapUnit[i].info;
         if (MapUnit[i].serial == -1) {
             continue;
@@ -1215,7 +1300,7 @@ int HitCheckContainerPosSize(Vector4 *position, int slot, float radius)
         if (container->containerType == 0) {
             continue;
         }
-        if ((MapUnit[i].flags & 0x10000) == 0) {
+        if ((MapUnit[i].flags & MAP_UNIT_ACTIVE) == 0) {
             continue;
         }
         if (HitCheckMapUnitPosAt(&probe, &MapUnit[i]) != 0) {
@@ -1230,7 +1315,7 @@ int HitCheckEnemy(Vector4 *position, float radius)
     DrillEnemyWork *work;
     int i;
 
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < DRILL_ACTOR_COUNT; i++) {
         Actor *target = &actor[i];
 
         work = enepc;
@@ -1238,7 +1323,7 @@ int HitCheckEnemy(Vector4 *position, float radius)
         if (target->inUseId == 0) {
             continue;
         }
-        if ((target->flags & 8) != 0) {
+        if ((target->flags & DRILL_ACTOR_HIDDEN) != 0) {
             continue;
         }
         if (target->position.y + work[target->number].height < position->y) {
@@ -1248,9 +1333,9 @@ int HitCheckEnemy(Vector4 *position, float radius)
             continue;
         }
         if (CheckDist2D(position, &target->position) < radius + target->body_radius) {
-            target->flags |= 8;
+            target->flags |= DRILL_ACTOR_HIDDEN;
             sefCreateEffectCf(635, &target->position, 0);
-            xglSoundEffectNormalID(0x10003, 0);
+            xglSoundEffectNormalID(DRILL_SE_ENEMY_HIT, 0);
             Enemy_Command_Freeze(target, 1);
             CallMethod_I(enemyBrokenMethodName, target->args.methodArg);
             return i;

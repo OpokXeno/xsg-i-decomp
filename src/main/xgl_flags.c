@@ -10,6 +10,10 @@
 #include "main/xgl_flags.h"
 #include "xgl_flags.h"
 
+/* The packed script flags are the byte range of SaveData starting at +0x74. */
+#define XGL_FLAGS_OFFSET 0x74
+#define XGL_FLAGS_AREA_SIZE 0x10000
+
 int xglFlagsSet(int bit_offset, int bit_count, int value)
 {
     union XglPackedFlagWindow flag_window;
@@ -32,7 +36,7 @@ int xglFlagsSet(int bit_offset, int bit_count, int value)
 
     for (byte_index = 0; byte_index < byte_count; byte_index++) {
         flag_window.bytes[byte_index] =
-            SaveData[0x74 + byte_offset + byte_index];
+            SaveData[XGL_FLAGS_OFFSET + byte_offset + byte_index];
     }
 
     /* Like xglFlagsGet, the word load observes the byte window after only
@@ -46,7 +50,7 @@ int xglFlagsSet(int bit_offset, int bit_count, int value)
     flag_window.signed_value = replacement_word;
 
     for (byte_index = 0; byte_index < byte_count; byte_index++) {
-        SaveData[0x74 + byte_offset + byte_index] =
+        SaveData[XGL_FLAGS_OFFSET + byte_offset + byte_index] =
             flag_window.bytes[byte_index];
     }
 
@@ -108,7 +112,7 @@ int xglFlagsGet(int bit_offset, int bit_count)
          byte_index < ((bit_count + (bit_offset & 7) + 7) >> 3);
          byte_index++) {
         value.bytes[byte_index] =
-            SaveData[0x74 + (bit_offset >> 3) + byte_index];
+            SaveData[XGL_FLAGS_OFFSET + (bit_offset >> 3) + byte_index];
     }
     /*
      * Preserve the original EE SLLV/ADDIU sequence.  SLLV uses only the low
@@ -173,7 +177,7 @@ void xglFlagsInitial(void)
     unsigned int byte_index;
 
     /* The observed byte window is cleared exactly from 0x74 for 0x10000 bytes. */
-    for (byte_index = 0x10000; byte_index != 0; byte_index--) {
-        SaveData[0x74 + 0x10000 - byte_index] = 0;
+    for (byte_index = XGL_FLAGS_AREA_SIZE; byte_index != 0; byte_index--) {
+        SaveData[XGL_FLAGS_OFFSET + XGL_FLAGS_AREA_SIZE - byte_index] = 0;
     }
 }

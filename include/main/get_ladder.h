@@ -3,6 +3,9 @@
 
 #include "shared.h"
 
+/* Ladder attribute ids and per-ladder tables. */
+#define LADDER_COUNT 16
+
 /* Functions and data used by other translation units. */
 extern short PhCunt;
 extern short SelNum;

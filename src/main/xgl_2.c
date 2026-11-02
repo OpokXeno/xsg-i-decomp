@@ -14,6 +14,13 @@ extern const int nextAxisTable[3];
 
 static unsigned long long iRandSeed;
 
+/* xglAtan2 works in single precision: pi and pi / 2 as printed by the original constants. */
+#define XGL_ATAN2_PI 3.14159274f
+#define XGL_ATAN2_HALF_PI 1.57079637f
+/* VU0 data memory, and the offset of the frustum window the microprogram reads. */
+#define VU0_DATA_MEMORY 0x11004000
+#define VU0_FRUSTUM_WINDOW_OFFSET 0x800
+
 float xglAtan2(float y, float x)
 {
     int reciprocal = 0;
@@ -32,12 +39,12 @@ float xglAtan2(float y, float x)
     if (y == 0.0f) {
         if (x >= 0.0f) return 0.0f;
         __builtin_memcpy(&reciprocal, &y, sizeof reciprocal);
-        if (reciprocal < 0) return -3.14159274f;
-        return 3.14159274f;
+        if (reciprocal < 0) return -XGL_ATAN2_PI;
+        return XGL_ATAN2_PI;
     }
     if (x == 0.0f) {
-        if (y < 0.0f) return -1.57079637f;
-        return 1.57079637f;
+        if (y < 0.0f) return -XGL_ATAN2_HALF_PI;
+        return XGL_ATAN2_HALF_PI;
     }
     if (y >= 0.0f) {
         if (x >= 0.0f) quadrant = 0;
@@ -73,10 +80,10 @@ float xglAtan2(float y, float x)
     polynomial *= square;
     polynomial += unitCoefficient;
     polynomial *= y;
-    if (reciprocal) polynomial = 1.57079637f - polynomial;
-    if (quadrant == 1) polynomial = 3.14159274f - polynomial;
+    if (reciprocal) polynomial = XGL_ATAN2_HALF_PI - polynomial;
+    if (quadrant == 1) polynomial = XGL_ATAN2_PI - polynomial;
     if (quadrant == 2) polynomial = -polynomial;
-    if (quadrant == 3) polynomial = polynomial - 3.14159274f;
+    if (quadrant == 3) polynomial = polynomial - XGL_ATAN2_PI;
     return polynomial;
 }
 
@@ -1011,7 +1018,7 @@ void xglMatrixStackFrustum(float left, float right, float bottom, float top,
                            float nearPlane, float farPlane)
 {
     /* the quadword pair in VU0 data memory the microprogram reads */
-    volatile float *window = (volatile float *)0x11004800;
+    volatile float *window = (volatile float *)(VU0_DATA_MEMORY + VU0_FRUSTUM_WINDOW_OFFSET);
     unsigned int entry = (unsigned int)Vu0CallMatrixStackFrustum >> 3;
 
     __asm__ __volatile__("ctc2.i %0,$vi27" : : "r"(entry) : "memory");

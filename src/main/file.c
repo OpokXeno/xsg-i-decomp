@@ -15,6 +15,198 @@
 #include "main/menu_para_pt_rate_get.h"
 #include "main/xgl_mc.h"
 
+/* FileWork->text_index / MenuFileMain's mode: what the menu was opened for. */
+#define FILE_MODE_SAVE 0
+#define FILE_MODE_LOAD 1
+
+/* The file menu's state machine (FileWork->state, set from FileWork->command). */
+enum FileMenuState {
+    FILE_STATE_SELECT_DEVICE = 0x24,      /* memory card 1 / 2 / HDD / Cancel */
+    FILE_STATE_CHECK_DEVICE = 0x25,       /* free space and save directory */
+    FILE_STATE_LOAD_SLOTS = 0x27,         /* read every slot's header */
+    FILE_STATE_SLOT_LIST = 0x28,          /* browse the three-panel slot list */
+    FILE_STATE_SLOT_REJECTED = 0x29,      /* the chosen slot cannot be used */
+    FILE_STATE_CONFIRM_SLOT = 0x2a,       /* yes/no for the chosen slot */
+    FILE_STATE_SAVE_WRITE = 0x2c,
+    FILE_STATE_SAVE_CREATE = 0x2d,        /* create the save folder first */
+    FILE_STATE_SAVE_DONE = 0x2e,
+    FILE_STATE_LOAD_READ = 0x50,
+    FILE_STATE_LOAD_DONE = 0x52,
+    FILE_STATE_CARD_UNFORMATTED = 0x80,
+    FILE_STATE_FORMAT_CONFIRM = 0x82,
+    FILE_STATE_FORMAT = 0x84,
+    FILE_STATE_FORMAT_DONE = 0x86,
+    FILE_STATE_FORMAT_FAILED = 0x87,
+    FILE_STATE_ERROR_REQUEST_FAILED = 0x90, /* "Save failed." / "Load failed." */
+    FILE_STATE_ERROR_NO_CARD = 0x91,
+    FILE_STATE_ERROR_CANNOT_ACCESS = 0x92,
+    FILE_STATE_ERROR_HDD_TOO_MANY_SAVES = 0x94,
+    FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS = 0x95,
+    FILE_STATE_ERROR_HDD_NO_SPACE = 0x96,
+    FILE_STATE_CANCEL_CONFIRM = 0xa0,     /* "Cancel Save." / "Cancel load." */
+    FILE_STATE_INSERT_CARD = 0xa1,
+    FILE_STATE_NO_CARD_SPACE = 0xb0,      /* not enough free blocks */
+    FILE_STATE_NO_SAVE_DATA = 0xb8,
+    FILE_STATE_CLOSING = 0xf0,
+    FILE_STATE_DONE = 0xff                /* ends the file menu */
+};
+
+/* FileObjectDataSystem->state[slot]: what a save slot holds. */
+enum FileSlotState {
+    FILE_SLOT_EXISTING = 1,  /* a save exists */
+    FILE_SLOT_NEW = 2,       /* empty, room for a new save */
+    FILE_SLOT_FULL = 3,      /* empty, no room left */
+    FILE_SLOT_CORRUPT = 4
+};
+
+/* Save slots and the placeholder entries after them in FileObjectData. */
+#define FILE_SLOT_COUNT MC_SAVE_SLOT_COUNT
+#define FILE_ENTRY_NEW_DATA 99     /* thumbnail shown for FILE_SLOT_NEW */
+#define FILE_ENTRY_UNUSABLE 100    /* ... for FILE_SLOT_FULL */
+#define FILE_ENTRY_CORRUPT 101     /* ... for FILE_SLOT_CORRUPT */
+#define FILE_ENTRY_SNAPSHOT 102    /* the current game's snapshot */
+
+/* The map whose saves are counted in unit_map_count; the load list refuses
+ * such saves. Map names are two 33-byte lines. */
+#define FILE_UNIT_MAP_NO 10
+#define FILE_MAP_NAME_LINE_SIZE 33
+
+/* MenuScenarioNoGet() above these values saves scenario rank 3 / 2. */
+#define FILE_SCENARIO_RANK3_ABOVE 300
+#define FILE_SCENARIO_RANK2_ABOVE 100
+
+/* FileSaveRecord.version of the current save format. */
+#define FILE_SAVE_VERSION 3
+
+/* Save size per slot in kilobytes of free space. */
+#define FILE_CARD_SAVE_KB 165
+#define FILE_HDD_SAVE_KB 225
+
+/* Thumbnails are 4 KB JPEGs; five decoder buffers hold the slots around
+ * the cursor. */
+#define FILE_THUMBNAIL_SIZE 0x1000
+#define FILE_THUMBNAIL_QUALITY 30
+
+/* MenuFileMain stages its buffers from this fixed main-memory address on: the
+ * card data image, the system block, the JPEG decoder slots and the object
+ * table, each region starting 0x800-aligned. */
+#define FILE_STAGING_BASE 0x01000000
+#define FILE_STAGING_ALIGN 0x800
+#define FILE_CARD_DATA_BUF_SIZE 0x12000
+#define FILE_SYSTEM_BLOCK_SIZE 0x258
+#define FILE_JPEG_AREA_SIZE 0x46500
+#define FILE_OBJECT_AREA_SIZE 0x696a0
+#define FILE_EXIST_CHECK_SIZE 0x2000
+#define FILE_JPEG_BUFFERS 5
+#define FILE_JPEG_SLOT_SIZE 0xe100
+
+/* Party members stored per save, and the face icons a panel shows. */
+#define FILE_PARTY_IDS_MAX 16
+#define FILE_PARTY_FACES_MAX 6
+
+/* Slot panels: three visible plus one scrolling in. */
+#define FILE_PANELS_VISIBLE 3
+#define FILE_PANELS_MAX 4
+#define FILE_PANEL_TOP 64
+#define FILE_PANEL_PITCH 112
+#define FILE_PANEL_X 16
+#define FILE_PANEL_OFFSCREEN_X (-512)
+#define FILE_PANEL_ENTER_X 528
+#define FILE_SCROLL_SPEED 14
+#define FILE_SCROLL_SPEED_FAST 28
+
+/* tskFileData's own panel animation states (FileDataContext.state). */
+enum FilePanelState {
+    FILE_PANEL_HIDDEN = 0,
+    FILE_PANEL_WAIT = 1,
+    FILE_PANEL_OPEN = 10,
+    FILE_PANEL_SLIDE_IN = 12,
+    FILE_PANEL_SLIDE_OUT = 14,    /* all but the selected panel leave */
+    FILE_PANEL_EXPAND = 16,       /* selected panel moves to the middle */
+    FILE_PANEL_CLOSE = 18,
+    FILE_PANEL_BROWSE = 50,
+    FILE_PANEL_EXPANDED = 52,
+    FILE_PANEL_SCROLL = 60
+};
+
+/* xglSoundEffectNormalID ids. */
+#define FILE_SE_DECIDE 1
+#define FILE_SE_CANCEL 2
+#define FILE_SE_CURSOR 3
+#define FILE_SE_BUZZER 5
+#define FILE_SE_SAVE_DONE 0x19
+#define FILE_SE_LOAD_DONE 0x1a
+
+/* Slot list: the fast scroll repeats this many steps, and a pad press is
+ * accepted again after this many frames (FileWork->menu_substate). */
+#define FILE_FAST_SCROLL_STEPS 10
+
+/* Frames FileWork->menu_substate counts down before a state proceeds. */
+#define FILE_WAIT_FRAMES 16
+#define FILE_INPUT_REPEAT_DELAY 4
+
+/* Yes/No prompts (FileWork->action_selection). */
+#define FILE_CHOICE_YES 0
+#define FILE_CHOICE_NO 1
+#define FILE_CONFIRM_ROWS 2
+
+/* Device list: entries 0 and 1 are the memory card slots, entry 2 is the
+ * Cancel row. FileSlotNameGet() names devices instead: 0 and 1 are the card
+ * slots, 2 is the hard disk drive. */
+#define FILE_DEVICE_CANCEL 2
+#define FILE_DEVICE_HDD 2
+#define FILE_DEVICE_ROWS 3
+
+/* Frames MenuFile skips before running the state again
+ * (FileWork->dispatch_delay): after a state change, and before an HDD
+ * request or an error state. */
+#define FILE_DELAY_SHORT 12
+#define FILE_DELAY_LONG 16
+
+/* FileWork->input_flags bits. */
+#define FILE_INPUT_ENTER 1  /* the state was just entered */
+#define FILE_INPUT_SKIP 2   /* no pad input on the first frame */
+
+/* GameLoopState.runtime_flags: set while the file menu is up. */
+#define FILE_RUNTIME_FLAG_MENU_OPEN 0x04000000
+
+/* FileObjectSystem.load_state: FileObjectAllLoad's progress. */
+enum FileLoadState {
+    FILE_LOAD_START = 0,
+    FILE_LOAD_NEXT_SLOT = 2,
+    FILE_LOAD_REQUEST = 4,
+    FILE_LOAD_RESULT = 6,
+    FILE_LOAD_SLOT_DONE = 8,
+    FILE_LOAD_FAILED = 9
+};
+
+/* The top banner (MenuFilePas) slides in the names of the current action
+ * (Save / Load), the two memory card slots, the HDD and Format. The slot
+ * names are FILE_PAS_CARD + card number. */
+#define FILE_PAS_MESSAGES 6
+#define FILE_PAS_CARD 2
+#define FILE_PAS_HDD 4
+#define FILE_PAS_FORMAT 5
+#define FILE_PAS_X_SHOWN 16
+#define FILE_PAS_X_HIDDEN 288
+
+/* Windows and messages slide in from the right edge of the 512-wide screen
+ * (x = 544); the device/confirmation lists wait off the left edge. */
+#define FILE_SLIDE_IN_X 544
+#define FILE_SELECT_HIDDEN_X (-258)
+
+/* Load progress gauge. */
+#define FILE_GAUGE_Y 296
+#define FILE_GAUGE_WIDTH 256
+#define FILE_GAUGE_HEIGHT 8
+#define FILE_GAUGE_ALPHA 128
+#define FILE_GAUGE_FILLED_RED 161
+#define FILE_GAUGE_FILLED_GREEN 232
+#define FILE_GAUGE_FILLED_BLUE 205
+#define FILE_GAUGE_UNFILLED 64
+/* Steps of the card's save-folder creation (create_sub2's subphases). */
+#define FILE_CREATE_STEPS 7
+
 typedef struct FileThumbnailRequest {
     u32 source;
     u32 destination;
@@ -33,7 +225,7 @@ typedef struct FileWorkCurrentSlotView {
 } FileWorkCurrentSlotView;
 
 
-/* Five decoder buffers are 0xe100 bytes apart; their signed object number is +1. */
+/* Five decoder buffers are FILE_JPEG_SLOT_SIZE bytes apart; their signed object number is +1. */
 typedef struct FileJpegDecodeSlotView {
     unsigned char unmodeled_00;
     signed char number;
@@ -46,12 +238,12 @@ typedef struct FileJpegDecodeSlotView {
     unsigned int gif_tag_high;
     unsigned int gif_regs_low;
     unsigned int gif_regs_high;
-    unsigned char image[0xe100 - 0xa0];
+    unsigned char image[FILE_JPEG_SLOT_SIZE - 0xa0];
 } FileJpegDecodeSlotView;
 
 typedef struct FileObjectEntryView {
     struct FileJpegDecodeSlotView *jpeg;
-    unsigned char thumbnail[0x1000];
+    unsigned char thumbnail[FILE_THUMBNAIL_SIZE];
     unsigned char state;
     signed char number;
     unsigned char unmodeled_1006;
@@ -59,7 +251,7 @@ typedef struct FileObjectEntryView {
     signed char leader;
     unsigned char unmodeled_1009[3];
     int map_number;
-    int party_ids[16];
+    int party_ids[FILE_PARTY_IDS_MAX];
     u64 play_time;
     /* The packed time word is the first four bytes of the clock. */
     union {
@@ -115,7 +307,7 @@ struct FileThumbnailContext {
         EMessageParam messages[2];
         ENumberMainData numbers[5];
         unsigned char unmodeled_54c[0x62c - 0x54c];
-        struct FileFaceSprite faces[6];
+        struct FileFaceSprite faces[FILE_PARTY_FACES_MAX];
         unsigned char unmodeled_71c[0x76c - 0x71c];
     } body;
     /* The slot tab above the panel, one record at +0x778. */
@@ -135,7 +327,7 @@ struct FileDataContext {
     unsigned char initial_flags;
     int initial_value;
     int work;
-    struct FileThumbnailContext panels[4];
+    struct FileThumbnailContext panels[FILE_PANELS_MAX];
     ECursolMainData cursor;
     struct FilePassClip clip;
 };
@@ -146,7 +338,7 @@ typedef struct FilePasWork {
     short y;
     int color;
     WindowDX window;
-    EMessageParam messages[6];
+    EMessageParam messages[FILE_PAS_MESSAGES];
     unsigned char unmodeled_338[0x3c0 - 0x338];
     struct FilePassClip rect;
 } FilePasWork;
@@ -484,21 +676,21 @@ int FileObjectDataNoGet(int number, int offset)
 {
     number += offset;
     if (number < 0)
-        return number + 99;
-    if (number < 99)
+        return number + FILE_SLOT_COUNT;
+    if (number < FILE_SLOT_COUNT)
         return number;
-    return number - 99;
+    return number - FILE_SLOT_COUNT;
 }
 
 void FileObjectDataClear(void)
 {
     int i;
 
-    for (i = 0; i <= 100; ++i) {
+    for (i = 0; i <= FILE_ENTRY_UNUSABLE; ++i) {
         FileObjectData[i].state = 0;
         FileObjectData[i].number = -1;
     }
-    for (i = 0; i <= 4; ++i)
+    for (i = 0; i <= FILE_JPEG_BUFFERS - 1; ++i)
         FileJpegDec[i].number = -1;
 }
 
@@ -553,22 +745,22 @@ void FileObjectDataInput(int number, int state)
 
     memset(entry, 0, sizeof(*entry));
     switch (state) {
-    case 2:
-        *entry = FileObjectData[99];
+    case FILE_SLOT_NEW:
+        *entry = FileObjectData[FILE_ENTRY_NEW_DATA];
         break;
-    case 3:
-        *entry = FileObjectData[100];
+    case FILE_SLOT_FULL:
+        *entry = FileObjectData[FILE_ENTRY_UNUSABLE];
         break;
-    case 4:
-        *entry = FileObjectData[101];
+    case FILE_SLOT_CORRUPT:
+        *entry = FileObjectData[FILE_ENTRY_CORRUPT];
         break;
-    case 1:
-        if (FileSaveData->version != 3) {
-            *entry = FileObjectData[101];
-            FileObjectDataSystem->state[number] = 4;
+    case FILE_SLOT_EXISTING:
+        if (FileSaveData->version != FILE_SAVE_VERSION) {
+            *entry = FileObjectData[FILE_ENTRY_CORRUPT];
+            FileObjectDataSystem->state[number] = FILE_SLOT_CORRUPT;
         } else if (!FileCheckSumCheck((FileChecksumData *)FileSaveData)) {
-            *entry = FileObjectData[101];
-            FileObjectDataSystem->state[number] = 4;
+            *entry = FileObjectData[FILE_ENTRY_CORRUPT];
+            FileObjectDataSystem->state[number] = FILE_SLOT_CORRUPT;
         } else {
             party_ids = entry->party_ids;
             entry->chapter = FileSaveData->chapter;
@@ -583,7 +775,7 @@ void FileObjectDataInput(int number, int state)
             memset(party_ids, 0, sizeof(entry->party_ids));
             PartyAllPartyGet2(party_ids, party);
             thumbnail = FileSaveData->thumbnail;
-            for (i = 0; i < 0x1000; ++i)
+            for (i = 0; i < FILE_THUMBNAIL_SIZE; ++i)
                 entry->thumbnail[i] = thumbnail[i];
         }
         break;
@@ -593,7 +785,7 @@ void FileObjectDataInput(int number, int state)
 
 void FileJpegCheck(void)
 {
-    signed char valid_numbers[5];
+    signed char valid_numbers[FILE_JPEG_BUFFERS];
     FileJpegDecodeSlotView *slot;
     int i;
     int j;
@@ -602,15 +794,15 @@ void FileJpegCheck(void)
     do {
         valid_numbers[i + 1] = FileObjectDataNoGet(FileWork->current_slot, i);
         i = i + 1;
-    } while (i < 4);
+    } while (i < FILE_JPEG_BUFFERS - 1);
 
-    for (i = 0; i < 5; ++i) {
+    for (i = 0; i < FILE_JPEG_BUFFERS; ++i) {
         slot = FileJpegDec + i;
-        for (j = 0; j < 5; ++j) {
+        for (j = 0; j < FILE_JPEG_BUFFERS; ++j) {
             if (slot->number == valid_numbers[j])
                 break;
         }
-        if (j == 5)
+        if (j == FILE_JPEG_BUFFERS)
             slot->number = -1;
     }
 }
@@ -624,14 +816,14 @@ void FileJpegDecode(int number)
     int i;
 
     queued = jpeg;
-    for (i = 0; i < 5; ++i) {
+    for (i = 0; i < FILE_JPEG_BUFFERS; ++i) {
         if (queued->number == number)
             return;
         ++queued;
     }
 
     slot = jpeg;
-    for (i = 0; i < 5; ++i) {
+    for (i = 0; i < FILE_JPEG_BUFFERS; ++i) {
         if (slot->number < 0) {
             FileThumbnailDecode((u32)entry->thumbnail, (u32)slot->image);
             slot->dma_qwc = 0;
@@ -661,14 +853,14 @@ void FileObjectJpegSet(void)
         slot = FileObjectDataNoGet(FileWork->current_slot, offset);
         offset += 1;
         FileJpegDecode(slot);
-    } while (offset < 4);
+    } while (offset < FILE_JPEG_BUFFERS - 1);
 }
 
 void FileObjectJpegDecChange(int number)
 {
     int i;
 
-    for (i = 0; i < 5; ++i) {
+    for (i = 0; i < FILE_JPEG_BUFFERS; ++i) {
         /* The original adds the slot offset to the buffer address as integers
          * (addu offset, base); pointer arithmetic swaps the addu operands. */
         FileJpegDecodeSlotView *slot = (FileJpegDecodeSlotView *)(i * sizeof(FileJpegDecodeSlotView) + (u32)FileJpegDec);
@@ -699,32 +891,32 @@ int FileObjectAllLoad(void)
     unsigned char *load_index = &FileObjectDataSystem->load_index;
 
     switch (*load_state) {
-    case 0: {
+    case FILE_LOAD_START: {
         FileWorkBlock *initial_work = FileWork;
 
         gauge.x = 123;
-        gauge.y = 296;
+        gauge.y = FILE_GAUGE_Y;
         gauge.vertex_attribute = 0xffffffffU;
         loaded_count = 0;
-        gauge.width = 256;
+        gauge.width = FILE_GAUGE_WIDTH;
         index = 0;
-        gauge.height = 8;
+        gauge.height = FILE_GAUGE_HEIGHT;
         gauge.current = 0;
         gauge.maximum = 0;
-        gauge.filled_color.red = 161;
-        gauge.filled_color.green = 232;
-        gauge.filled_color.blue = 205;
-        gauge.filled_color.alpha = 128;
-        gauge.unfilled_color.red = 64;
-        gauge.unfilled_color.green = 64;
-        gauge.unfilled_color.blue = 64;
-        gauge.unfilled_color.alpha = 128;
+        gauge.filled_color.red = FILE_GAUGE_FILLED_RED;
+        gauge.filled_color.green = FILE_GAUGE_FILLED_GREEN;
+        gauge.filled_color.blue = FILE_GAUGE_FILLED_BLUE;
+        gauge.filled_color.alpha = FILE_GAUGE_ALPHA;
+        gauge.unfilled_color.red = FILE_GAUGE_UNFILLED;
+        gauge.unfilled_color.green = FILE_GAUGE_UNFILLED;
+        gauge.unfilled_color.blue = FILE_GAUGE_UNFILLED;
+        gauge.unfilled_color.alpha = FILE_GAUGE_ALPHA;
         __builtin_memset(&initial_work->hdd_result, 0,
                          sizeof(initial_work->hdd_result));
-        for (; index < 99; index++) {
+        for (; index < FILE_SLOT_COUNT; index++) {
             state = FileObjectDataSystem->state[index];
 
-            if (state != 1) {
+            if (state != FILE_SLOT_EXISTING) {
                 int empty = state <= 0;
 
                 if (empty) {
@@ -738,94 +930,94 @@ int FileObjectAllLoad(void)
                 gauge.maximum++;
             }
         }
-        *load_state = 2;
+        *load_state = FILE_LOAD_NEXT_SLOT;
         *load_index = 0;
-        if (loaded_count == 99) {
+        if (loaded_count == FILE_SLOT_COUNT) {
             FileWorkBlock *work = FileWork;
 
             work->hdd_result = 0;
             if (!work->use_hdd) {
                 unsigned short *card_status = work->card.status;
 
-                if (card_status[work->card_number] != 1) {
+                if (card_status[work->card_number] != MC_STATUS_READY) {
                     work->hdd_result = -1;
                 }
             }
-            *load_state = 0;
+            *load_state = FILE_LOAD_START;
             return 0;
         }
         if (FileWork->use_hdd) {
             FileWork->hdd_result = xglHddMcLoadMount();
         }
     }
-    case 2:
+    case FILE_LOAD_NEXT_SLOT:
         gauge.current++;
-        while (*load_index < 99) {
-            if (FileObjectDataSystem->state[*load_index] == 1) {
-                *load_state = 4;
+        while (*load_index < FILE_SLOT_COUNT) {
+            if (FileObjectDataSystem->state[*load_index] == FILE_SLOT_EXISTING) {
+                *load_state = FILE_LOAD_REQUEST;
                 break;
             }
             (*load_index)++;
         }
-        if (*load_index == 99) {
-            *load_state = 0;
+        if (*load_index == FILE_SLOT_COUNT) {
+            *load_state = FILE_LOAD_START;
             if (FileWork->use_hdd) {
                 FileWork->hdd_result = xglHddMcUmount();
             }
             return 0;
         }
-    case 4:
+    case FILE_LOAD_REQUEST:
         if (FileWork->use_hdd) {
             hdd_request.slot = *load_index;
             hdd_request.data = FileSaveData;
             hdd_request.size = sizeof(*FileSaveData);
             memset(FileSaveData, 0, sizeof(*FileSaveData));
             FileWork->hdd_result = xglHddMcLoadCore(&hdd_request);
-            *load_state = 6;
+            *load_state = FILE_LOAD_RESULT;
         } else {
             card_request.slot = *load_index;
             card_request.buffer = (int)FileSaveData;
             card_request.size = sizeof(*FileSaveData);
             memset(FileSaveData, 0, sizeof(*FileSaveData));
-            xglMcRequest(FileWork->card_number, 4, &card_request,
+            xglMcRequest(FileWork->card_number, MC_REQUEST_LOAD, &card_request,
                          &FileWork->request_result);
-            *load_state = 6;
+            *load_state = FILE_LOAD_RESULT;
             tyaDrawGauge(&gauge);
             return 1;
         }
-    case 6:
+    case FILE_LOAD_RESULT:
         if (FileWork->use_hdd) {
             if (FileWork->hdd_result != 0) {
-                FileObjectDataSystem->state[*load_index] = 4;
-                FileObjectDataInput(*load_index, 4);
-                *load_state = 9;
+                FileObjectDataSystem->state[*load_index] = FILE_SLOT_CORRUPT;
+                FileObjectDataInput(*load_index, FILE_SLOT_CORRUPT);
+                *load_state = FILE_LOAD_FAILED;
             } else {
-                FileObjectDataInput(*load_index, 1);
-                *load_state = 8;
+                FileObjectDataInput(*load_index, FILE_SLOT_EXISTING);
+                *load_state = FILE_LOAD_SLOT_DONE;
             }
         } else {
             FileWorkBlock *work = FileWork;
             unsigned short *card_status = work->card.status;
             int status = card_status[work->card_number];
 
-            if (status != 1) {
-                if (status != 255) {
-                    FileObjectDataSystem->state[*load_index] = 4;
-                    FileObjectDataInput(*load_index, 4);
+            if (status != MC_STATUS_READY) {
+                if (status != MC_STATUS_BUSY) {
+                    FileObjectDataSystem->state[*load_index] = FILE_SLOT_CORRUPT;
+                    FileObjectDataInput(*load_index, FILE_SLOT_CORRUPT);
                     FileWork->hdd_result = -1;
-                    *load_state = 9;
+                    *load_state = FILE_LOAD_FAILED;
                 }
             } else {
-                FileObjectDataInput(*load_index, 1);
-                *load_state = 8;
+                FileObjectDataInput(*load_index, FILE_SLOT_EXISTING);
+                *load_state = FILE_LOAD_SLOT_DONE;
             }
         }
-        if (*load_state == 8) {
-            *load_state = 2;
+        if (*load_state == FILE_LOAD_SLOT_DONE) {
+            *load_state = FILE_LOAD_NEXT_SLOT;
             (*load_index)++;
         }
-        if (*load_state == 9) {
-            *load_state = 0;
+        if (*load_state == FILE_LOAD_FAILED) {
+            *load_state = FILE_LOAD_START;
             if (FileWork->use_hdd) {
                 FileWork->hdd_result = xglHddMcUmount();
             }
@@ -851,22 +1043,22 @@ void FileSaveDataPush(void)
     short map_no;
 
     GamePushSaveDataUser();
-    for (i = 0; i < 0x1000; ++i)
-        ((FileSaveOutput *)SaveData)->thumbnail[i] = FileObjectData[102].thumbnail[i];
+    for (i = 0; i < FILE_THUMBNAIL_SIZE; ++i)
+        ((FileSaveOutput *)SaveData)->thumbnail[i] = FileObjectData[FILE_ENTRY_SNAPSHOT].thumbnail[i];
     map_no = GameLoopState.map_no;
     ((FileSaveOutput *)SaveData)->map_no = map_no;
     name = MenuSaveMapNameGet(map_no);
-    xglMcSetMapName(name, name + 33);
-    if (map_no == 10)
+    xglMcSetMapName(name, name + FILE_MAP_NAME_LINE_SIZE);
+    if (map_no == FILE_UNIT_MAP_NO)
         ((FileSaveOutput *)SaveData)->unit_map_count++;
     scenario = MenuScenarioNoGet();
-    if (scenario > 300)
+    if (scenario > FILE_SCENARIO_RANK3_ABOVE)
         rank = 3;
-    else if (scenario > 100)
+    else if (scenario > FILE_SCENARIO_RANK2_ABOVE)
         rank = 2;
     else
         rank = 1;
-    ((FileSaveOutput *)SaveData)->version = 3;
+    ((FileSaveOutput *)SaveData)->version = FILE_SAVE_VERSION;
     ((FileSaveOutput *)SaveData)->save_count++;
     ((FileSaveOutput *)SaveData)->scenario_rank = rank;
     PartyTimeUpDate();
@@ -891,7 +1083,7 @@ void tskTskMain(TskObject *task)
 {
     TskObjectWorker worker = task->worker;
 
-    if (FileWork->state == 0xff) {
+    if (FileWork->state == FILE_STATE_DONE) {
         xglTaskWaitRemove(&task->base);
         return;
     }
@@ -911,12 +1103,12 @@ static void MenuFilePas(TskObject *task, void *data)
 {
     FilePasWork *work = data;
     int i;
-    int lengths[6];
-    unsigned short targets[6];
+    int lengths[FILE_PAS_MESSAGES];
+    unsigned short targets[FILE_PAS_MESSAGES];
     short slide_target;
     int card_target;
 
-    for (i = 0; i < 6; ++i)
+    for (i = 0; i < FILE_PAS_MESSAGES; ++i)
         lengths[i] = MenuPasLengthGet(msg00_1_0036D638[i]);
 
     switch (task->state) {
@@ -933,61 +1125,61 @@ static void MenuFilePas(TskObject *task, void *data)
         work->window.state = 1;
         WindowDXMain(&work->window);
         work->window.state = 3;
-        for (i = 0; i < 6; ++i) {
+        for (i = 0; i < FILE_PAS_MESSAGES; ++i) {
             eMessageSet(&work->messages[i], msg00_1_0036D638[i]);
             work->messages[i].mode = 32;
-            work->messages[i].x = 288;
+            work->messages[i].x = FILE_PAS_X_HIDDEN;
             work->messages[i].draw_parameter = work->color + 2;
             work->messages[i].y = work->y + 3;
         }
         break;
     case 2:
         slide_target = -16;
-        for (i = 0; i < 6; ++i)
-            targets[i] = 288;
+        for (i = 0; i < FILE_PAS_MESSAGES; ++i)
+            targets[i] = FILE_PAS_X_HIDDEN;
         switch (FileWork->state) {
-        case 36:
-        case 128:
-        case 130:
-            targets[FileWork->text_index] = 16;
+        case FILE_STATE_SELECT_DEVICE:
+        case FILE_STATE_CARD_UNFORMATTED:
+        case FILE_STATE_FORMAT_CONFIRM:
+            targets[FileWork->text_index] = FILE_PAS_X_SHOWN;
             break;
-        case 37:
+        case FILE_STATE_CHECK_DEVICE:
         case 38:
-        case 39:
-        case 40:
-        case 41:
-        case 42:
-        case 44:
-        case 45:
-        case 46:
-        case 80:
-        case 82:
+        case FILE_STATE_LOAD_SLOTS:
+        case FILE_STATE_SLOT_LIST:
+        case FILE_STATE_SLOT_REJECTED:
+        case FILE_STATE_CONFIRM_SLOT:
+        case FILE_STATE_SAVE_WRITE:
+        case FILE_STATE_SAVE_CREATE:
+        case FILE_STATE_SAVE_DONE:
+        case FILE_STATE_LOAD_READ:
+        case FILE_STATE_LOAD_DONE:
         case 136:
-        case 144:
-        case 145:
-        case 146:
+        case FILE_STATE_ERROR_REQUEST_FAILED:
+        case FILE_STATE_ERROR_NO_CARD:
+        case FILE_STATE_ERROR_CANNOT_ACCESS:
         case 147:
-        case 148:
-        case 149:
-        case 150:
+        case FILE_STATE_ERROR_HDD_TOO_MANY_SAVES:
+        case FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS:
+        case FILE_STATE_ERROR_HDD_NO_SPACE:
         case 152:
-        case 160:
-        case 161:
-        case 176:
-        case 184:
-            targets[FileWork->text_index] = 16;
+        case FILE_STATE_CANCEL_CONFIRM:
+        case FILE_STATE_INSERT_CARD:
+        case FILE_STATE_NO_CARD_SPACE:
+        case FILE_STATE_NO_SAVE_DATA:
+            targets[FileWork->text_index] = FILE_PAS_X_SHOWN;
             if (FileWork->use_hdd)
-                targets[4] = targets[FileWork->text_index] + (unsigned short)lengths[FileWork->text_index];
+                targets[FILE_PAS_HDD] = targets[FileWork->text_index] + (unsigned short)lengths[FileWork->text_index];
             else
-                targets[2 + FileWork->card_number] = targets[FileWork->text_index] + (unsigned short)lengths[FileWork->text_index];
+                targets[FILE_PAS_CARD + FileWork->card_number] = targets[FileWork->text_index] + (unsigned short)lengths[FileWork->text_index];
             break;
-        case 132:
-        case 134:
-        case 135:
+        case FILE_STATE_FORMAT:
+        case FILE_STATE_FORMAT_DONE:
+        case FILE_STATE_FORMAT_FAILED:
             targets[FileWork->text_index] = -(unsigned short)lengths[FileWork->text_index];
-            targets[5] = 16;
-            card_target = (unsigned short)lengths[5] + 16;
-            targets[2 + ((FileCardNumber *)&FileWork->card_number)->number] = card_target;
+            targets[FILE_PAS_FORMAT] = FILE_PAS_X_SHOWN;
+            card_target = (unsigned short)lengths[FILE_PAS_FORMAT] + FILE_PAS_X_SHOWN;
+            targets[FILE_PAS_CARD + ((FileCardNumber *)&FileWork->card_number)->number] = card_target;
             break;
         default:
             slide_target = -352;
@@ -1000,13 +1192,13 @@ static void MenuFilePas(TskObject *task, void *data)
         work->rect.color = work->color;
         work->rect.width = work->window.width - 6;
         work->rect.height = work->window.height - 6;
-        endPrintExtFunc(work->color, 101, &work->rect);
-        for (i = 0; i < 6; ++i) {
+        endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET, &work->rect);
+        for (i = 0; i < FILE_PAS_MESSAGES; ++i) {
             MoveSlide(&work->messages[i].x, (short *)&targets[i], 3.0f);
             if (work->messages[i].x < 256)
                 eMessageMain(&work->messages[i]);
         }
-        endPrintExtFunc(work->color, 102, 0);
+        endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
         break;
     }
 }
@@ -1074,7 +1266,7 @@ static void MenuFileInfo(TskObject *task, void *data)
         target_y = 378;
         target_height = 54;
         switch (FileWork->state) {
-        case 36:
+        case FILE_STATE_SELECT_DEVICE:
             eMessageCpy(view->text, selection_text.text[FileWork->text_index]);
             switch (FileWork->device_selection) {
             case 0:
@@ -1082,9 +1274,9 @@ static void MenuFileInfo(TskObject *task, void *data)
                 unsigned short *card_statuses = FileWork->card.status;
 
                 switch (card_statuses[FileWork->device_selection]) {
-                case 0:
-                case 129:
-                case 130:
+                case MC_STATUS_NONE:
+                case MC_STATUS_PS1_CARD:
+                case MC_STATUS_POCKETSTATION:
                     eMessageCpy(view->text, selection_text.text[2]);
                     eMessageCat(FileSlotNameGet(FileWork->device_selection));
                     eMessageCat(periodText);
@@ -1092,20 +1284,20 @@ static void MenuFileInfo(TskObject *task, void *data)
                 }
                 break;
             }
-            case 2:
+            case FILE_DEVICE_CANCEL:
                 eMessageCpy(view->text, device_text.text[0]);
                 break;
             }
             break;
-        case 37:
+        case FILE_STATE_CHECK_DEVICE:
         case 38:
-        case 39: {
-            unsigned char update_text = FileWork->input_flags & 1;
+        case FILE_STATE_LOAD_SLOTS: {
+            unsigned char update_text = FileWork->input_flags & FILE_INPUT_ENTER;
 
             if (update_text) {
                 if (FileWork->use_hdd) {
                     eMessageCpy(view->text, operation_text.text[2]);
-                    eMessageCat(FileSlotNameGet(2));
+                    eMessageCat(FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(operation_text.text[1]);
                 } else {
                     eMessageCpy(view->text, operation_text.text[2]);
@@ -1117,38 +1309,38 @@ static void MenuFileInfo(TskObject *task, void *data)
             target_height = 78;
             break;
         }
-        case 40:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_SLOT_LIST:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, list_text.text[FileWork->text_index]);
             target_y = 404;
             target_height = 30;
             break;
-        case 41:
+        case FILE_STATE_SLOT_REJECTED:
             switch (FileObjectDataSystem->state[FileWork->selected_slot]) {
-            case 2:
+            case FILE_SLOT_NEW:
                 eMessageCpy(view->text, slot_state_text.text[FileWork->text_index][2]);
                 break;
-            case 3:
+            case FILE_SLOT_FULL:
                 eMessageCpy(view->text, slot_state_text.text[FileWork->text_index][0]);
                 break;
-            case 4:
+            case FILE_SLOT_CORRUPT:
                 eMessageCpy(view->text, slot_state_text.text[FileWork->text_index][1]);
                 break;
             }
             break;
-        case 42:
-            if (FileWork->input_flags & 1) {
-                if (FileWork->text_index == 0) {
+        case FILE_STATE_CONFIRM_SLOT:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
+                if (FileWork->text_index == FILE_MODE_SAVE) {
                     if (FileWork->use_hdd) {
-                        eMessageCpy(view->text, FileSlotNameGet(2));
-                        if (FileObjectDataSystem->state[FileWork->selected_slot] == 2)
+                        eMessageCpy(view->text, FileSlotNameGet(FILE_DEVICE_HDD));
+                        if (FileObjectDataSystem->state[FileWork->selected_slot] == FILE_SLOT_NEW)
                             eMessageCat(confirmation_text.text[10]);
                         else
                             eMessageCpy(view->text, confirmation_text.text[1]);
                     } else {
                         int card_slot = FileWork->selected_slot;
 
-                        if (FileObjectDataSystem->state[card_slot] == 2) {
+                        if (FileObjectDataSystem->state[card_slot] == FILE_SLOT_NEW) {
                             eMessageCpy(view->text, confirmation_text.text[0]);
                             eMessageCat(FileSlotNameGet(FileWork->card_number));
                             eMessageCat(periodText);
@@ -1159,7 +1351,7 @@ static void MenuFileInfo(TskObject *task, void *data)
                 } else {
                     if (FileWork->use_hdd) {
                         eMessageCpy(view->text, slot_text.text[2]);
-                        eMessageCat(FileSlotNameGet(2));
+                        eMessageCat(FileSlotNameGet(FILE_DEVICE_HDD));
                         eMessageCat(periodText);
                     } else {
                         eMessageCpy(view->text, slot_text.text[0]);
@@ -1169,19 +1361,19 @@ static void MenuFileInfo(TskObject *task, void *data)
                 }
             }
             break;
-        case 44:
-        case 45:
-        case 80:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_SAVE_WRITE:
+        case FILE_STATE_SAVE_CREATE:
+        case FILE_STATE_LOAD_READ:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (FileWork->use_hdd) {
-                    if (FileWork->text_index == 0)
+                    if (FileWork->text_index == FILE_MODE_SAVE)
                         eMessageCpy(view->text, confirmation_text.text[4]);
                     else
                         eMessageCpy(view->text, confirmation_text.text[5]);
-                    eMessageCat(FileSlotNameGet(2));
+                    eMessageCat(FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(confirmation_text.text[6]);
                 } else {
-                    if (FileWork->text_index == 0)
+                    if (FileWork->text_index == FILE_MODE_SAVE)
                         eMessageCpy(view->text, confirmation_text.text[7]);
                     else
                         eMessageCpy(view->text, confirmation_text.text[8]);
@@ -1192,8 +1384,8 @@ static void MenuFileInfo(TskObject *task, void *data)
             target_y = 336;
             target_height = 78;
             break;
-        case 132:
-            if ((FileWork->input_flags & 1) && !FileWork->use_hdd) {
+        case FILE_STATE_FORMAT:
+            if ((FileWork->input_flags & FILE_INPUT_ENTER) && !FileWork->use_hdd) {
                 eMessageCpy(view->text, confirmation_text.text[2]);
                 eMessageCat(FileSlotNameGet(FileWork->card_number));
                 eMessageCat(confirmation_text.text[11]);
@@ -1201,19 +1393,19 @@ static void MenuFileInfo(TskObject *task, void *data)
             target_y = 336;
             target_height = 78;
             break;
-        case 46:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_SAVE_DONE:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, confirmation_text.text[3]);
             break;
-        case 82:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_LOAD_DONE:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, slot_text.text[1]);
             break;
-        case 128:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_CARD_UNFORMATTED:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (FileWork->use_hdd) {
                     eMessageCpy(view->text, card_text.text[4]);
-                    eMessageCat(FileSlotNameGet(2));
+                    eMessageCat(FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(card_text.text[6]);
                 } else {
                     eMessageCpy(view->text, card_text.text[0]);
@@ -1222,37 +1414,37 @@ static void MenuFileInfo(TskObject *task, void *data)
                 }
             }
             break;
-        case 130:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_FORMAT_CONFIRM:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 eMessageCpy(view->text, card_text.text[1]);
                 eMessageCat(FileSlotNameGet(FileWork->card_number));
                 eMessageCat(periodText);
             }
             break;
-        case 134:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_FORMAT_DONE:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, card_text.text[2]);
             break;
-        case 135:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_FORMAT_FAILED:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, card_text.text[3]);
             break;
-        case 144:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_ERROR_REQUEST_FAILED:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, request_text.text[FileWork->text_index]);
             break;
-        case 145:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_ERROR_NO_CARD:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 eMessageCpy(view->text, request_text.text[4]);
                 eMessageCat(FileSlotNameGet(FileWork->card_number));
                 eMessageCat(periodEndText);
             }
             break;
-        case 146:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_ERROR_CANNOT_ACCESS:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (FileWork->use_hdd) {
                     eMessageCpy(view->text, request_text.text[6]);
-                    eMessageCat(FileSlotNameGet(2));
+                    eMessageCat(FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(request_text.text[8]);
                 } else {
                     eMessageCpy(view->text, request_text.text[5]);
@@ -1261,18 +1453,18 @@ static void MenuFileInfo(TskObject *task, void *data)
                 }
             }
             break;
-        case 148:
-        case 149:
-        case 150:
-            if (FileWork->input_flags & 1)
-                eMessageCpy(view->text, progress_text.text[FileWork->state - 148]);
+        case FILE_STATE_ERROR_HDD_TOO_MANY_SAVES:
+        case FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS:
+        case FILE_STATE_ERROR_HDD_NO_SPACE:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
+                eMessageCpy(view->text, progress_text.text[FileWork->state - FILE_STATE_ERROR_HDD_TOO_MANY_SAVES]);
             target_y = 336;
             target_height = 78;
             break;
         case 151:
-            if (FileWork->input_flags & 1) {
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (FileWork->use_hdd) {
-                    eMessageCpy(view->text, FileSlotNameGet(2));
+                    eMessageCpy(view->text, FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(request_text.text[6]);
                 } else {
                     char *card_message = view->text;
@@ -1282,20 +1474,20 @@ static void MenuFileInfo(TskObject *task, void *data)
                 }
             }
             break;
-        case 160:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_CANCEL_CONFIRM:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, request_text.text[FileWork->text_index + 2]);
             break;
-        case 161:
-            if (FileWork->input_flags & 1)
+        case FILE_STATE_INSERT_CARD:
+            if (FileWork->input_flags & FILE_INPUT_ENTER)
                 eMessageCpy(view->text, status_text);
             target_y = 336;
             target_height = 78;
             break;
-        case 176:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_NO_CARD_SPACE:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (FileWork->use_hdd) {
-                    eMessageCpy(view->text, FileSlotNameGet(2));
+                    eMessageCpy(view->text, FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(format_text.text[1]);
                 } else {
                     eMessageCpy(view->text, format_text.text[0]);
@@ -1311,11 +1503,11 @@ static void MenuFileInfo(TskObject *task, void *data)
                 target_height = 102;
             }
             break;
-        case 184:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_NO_SAVE_DATA:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (FileWork->use_hdd) {
                     eMessageCpy(view->text, finish_text.text[1]);
-                    eMessageCat(FileSlotNameGet(2));
+                    eMessageCat(FileSlotNameGet(FILE_DEVICE_HDD));
                     eMessageCat(periodEndText);
                 } else {
                     eMessageCpy(view->text, finish_text.text[0]);
@@ -1345,9 +1537,9 @@ static void tskFileSelect(TskObject *task, void *data)
             unsigned short *card_statuses = FileWork->card.status;
             int card_status = card_statuses[i];
             switch (card_status) {
-            case 0:
-            case 129:
-            case 130:
+            case MC_STATUS_NONE:
+            case MC_STATUS_PS1_CARD:
+            case MC_STATUS_POCKETSTATION:
                 view->entries[i].color_state = 1;
                 break;
             default:
@@ -1398,12 +1590,12 @@ static void tskFileSelect(TskObject *task, void *data)
             view->lists[i].layout_mode = 1;
         }
         for (i = 0; i < 4; ++i) {
-            view->windows[i].x = -258;
+            view->windows[i].x = FILE_SELECT_HIDDEN_X;
             view->windows[i].y = 0;
             view->windows[i].state = 1;
             WindowDXMain(&view->windows[i]);
             view->windows[i].state = 3;
-            view->targets[i] = -258;
+            view->targets[i] = FILE_SELECT_HIDDEN_X;
             view->animation_flags[i] = 0;
         }
         view->initial_flags = 0;
@@ -1414,40 +1606,40 @@ static void tskFileSelect(TskObject *task, void *data)
         short targets[4];
 
         for (i = 0; i < 4; ++i)
-            targets[i] = -258;
+            targets[i] = FILE_SELECT_HIDDEN_X;
         switch (FileWork->state) {
-        case 36:
-            if (FileWork->input_flags & 1) {
-                view->windows[0].x = 544;
+        case FILE_STATE_SELECT_DEVICE:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
+                view->windows[0].x = FILE_SLIDE_IN_X;
                 view->windows[0].y = 176;
             }
             view->lists[0].selected = FileWork->device_selection;
             ListColorChage();
-        case 37:
+        case FILE_STATE_CHECK_DEVICE:
         case 38:
-        case 39:
+        case FILE_STATE_LOAD_SLOTS:
             if (!FileWork->hide_selection)
                 targets[0] = 128;
             break;
-        case 42:
-            if (FileWork->input_flags & 1) {
-                view->windows[2].x = 544;
+        case FILE_STATE_CONFIRM_SLOT:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
+                view->windows[2].x = FILE_SLIDE_IN_X;
                 view->windows[2].y = 224;
             }
             view->lists[2].selected = FileWork->action_selection;
             targets[2] = 160;
             break;
-        case 130:
-            if (FileWork->input_flags & 1) {
-                view->windows[2].x = 544;
+        case FILE_STATE_FORMAT_CONFIRM:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
+                view->windows[2].x = FILE_SLIDE_IN_X;
                 view->windows[2].y = 160;
             }
             view->lists[2].selected = FileWork->action_selection;
             targets[2] = 160;
             break;
-        case 160:
-            if (FileWork->input_flags & 1) {
-                view->windows[3].x = 544;
+        case FILE_STATE_CANCEL_CONFIRM:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
+                view->windows[3].x = FILE_SLIDE_IN_X;
                 view->windows[3].y = 160;
             }
             view->lists[3].selected = FileWork->action_selection;
@@ -1477,14 +1669,14 @@ static void tskFileEx(TskObject *task, void *data)
         break;
     case 2:
         switch (FileWork->state) {
-        case 44:
-        case 45:
-        case 80:
-        case 132:
-            if (FileWork->input_flags & 1) {
+        case FILE_STATE_SAVE_WRITE:
+        case FILE_STATE_SAVE_CREATE:
+        case FILE_STATE_LOAD_READ:
+        case FILE_STATE_FORMAT:
+            if (FileWork->input_flags & FILE_INPUT_ENTER) {
                 if (!text->open) {
                     text->open = 1;
-                    text->message.x = 544;
+                    text->message.x = FILE_SLIDE_IN_X;
                     if (FileWork->state == 132) {
                         text->target_x = 192;
                         text->message.y = 192;
@@ -1606,16 +1798,16 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
             }
         }
         switch (FileObjectDataSystem->state[panel->slot]) {
-        case 2:
+        case FILE_SLOT_NEW:
             panel->body.messages[1].text = 0;
             panel->body.messages[0].text = newFileText;
             break;
-        case 4:
+        case FILE_SLOT_CORRUPT:
             panel->body.messages[1].text = 0;
             panel->body.messages[0].text = corruptDataText;
             break;
-        case 3:
-            if (FileWork->text_index == 0)
+        case FILE_SLOT_FULL:
+            if (FileWork->text_index == FILE_MODE_SAVE)
                 panel->body.messages[0].text = cannotSaveText;
             else
                 panel->body.messages[0].text = cannotLoadText;
@@ -1624,7 +1816,7 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
         default:
             map_name = MenuSaveMapNameGet(entry->map_number);
             panel->body.messages[0].text = (const char *)map_name;
-            panel->body.messages[1].text = (const char *)map_name + 33;
+            panel->body.messages[1].text = (const char *)map_name + FILE_MAP_NAME_LINE_SIZE;
             break;
         }
         {
@@ -1638,7 +1830,7 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
             }
         }
         panel->body.numbers[0].value = entry->elapsed.packed;
-        if (FileObjectDataSystem->state[panel->slot] == 1)
+        if (FileObjectDataSystem->state[panel->slot] == FILE_SLOT_EXISTING)
             panel->body.numbers[0].format = 2;
         else
             panel->body.numbers[0].format = 11;
@@ -1666,8 +1858,8 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
         party_index = 0;
         eNumberMain(&panel->body.numbers[3]);
         party_count = 0;
-        for (; party_index < 16 && entry->party_ids[party_index] != 0; ++party_index) {
-            if (++party_count == 6)
+        for (; party_index < FILE_PARTY_IDS_MAX && entry->party_ids[party_index] != 0; ++party_index) {
+            if (++party_count == FILE_PARTY_FACES_MAX)
                 break;
         }
 if (party_count > 0) {
@@ -1705,7 +1897,7 @@ if (party_count > 0) {
         panel->thumbnail.color = panel->color + 2;
         panel->thumbnail.channels[0] = panel->thumbnail.channels[1] =
             panel->thumbnail.channels[2] = panel->thumbnail.channels[3] = -128;
-        endPrintExtFunc(panel->thumbnail.color, 13, &panel->thumbnail);
+        endPrintExtFunc(panel->thumbnail.color, END_PRINT_CMD_THUMBNAIL,&panel->thumbnail);
         break;
         } while (0);
     }
@@ -1725,72 +1917,72 @@ static void tskFileData(TskObject *task, void *data)
 
     switch (task->state) {
     case 0: {
-        int offscreen_x = -512;
+        int offscreen_x = FILE_PANEL_OFFSCREEN_X;
 
         view->work = 0xffff00;
-        for (i = 0; i < 4; ++i) {
+        for (i = 0; i < FILE_PANELS_MAX; ++i) {
             view->panels[i].color = view->work;
-            view->panels[i].y = 64 + i * 112;
+            view->panels[i].y = FILE_PANEL_TOP + i * FILE_PANEL_PITCH;
             view->panels[i].x = offscreen_x;
             view->panels[i].slot = 0;
             view->panels[i].state = 0;
             view->panels[i].visible = 0;
         }
-        view->panels[3].x = 16;
+        view->panels[3].x = FILE_PANEL_X;
         eCursolSet(&view->cursor, 0);
         view->cursor.work = view->work + 2;
         view->cursor.state = 32;
         view->visible = 0;
         view->initial_value = 0;
         view->initial_flags = 0;
-        view->state = 0;
+        view->state = FILE_PANEL_HIDDEN;
         view->extra_panel = 0;
         return;
     }
     case 2:
         switch (view->state) {
-        case 0:
+        case FILE_PANEL_HIDDEN:
             view->visible = 0;
-            view->state = 1;
-        case 1:
-            if (FileWork->state == 40) {
+            view->state = FILE_PANEL_WAIT;
+        case FILE_PANEL_WAIT:
+            if (FileWork->state == FILE_STATE_SLOT_LIST) {
                 view->visible = 1;
-                view->state = 10;
+                view->state = FILE_PANEL_OPEN;
             }
             break;
-        case 10:
-            for (i = 0; i < 3; ++i) {
-                view->panels[i].y = 64 + i * 112;
-                view->panels[i].x = 528;
+        case FILE_PANEL_OPEN:
+            for (i = 0; i < FILE_PANELS_VISIBLE; ++i) {
+                view->panels[i].y = FILE_PANEL_TOP + i * FILE_PANEL_PITCH;
+                view->panels[i].x = FILE_PANEL_ENTER_X;
             }
             view->cursor.state = 32;
-            view->state = 12;
-        case 12: {
+            view->state = FILE_PANEL_SLIDE_IN;
+        case FILE_PANEL_SLIDE_IN: {
             int panel_index;
 
             complete = 0;
-            entrance_x = 16;
-            for (panel_index = 0; panel_index < 3; ++panel_index) {
+            entrance_x = FILE_PANEL_X;
+            for (panel_index = 0; panel_index < FILE_PANELS_VISIBLE; ++panel_index) {
                 MoveSlide(&view->panels[panel_index].x, &entrance_x, 3.0f);
                 if (view->panels[panel_index].x == entrance_x) {
-                    entrance_y = 64 + panel_index * 112;
+                    entrance_y = FILE_PANEL_TOP + panel_index * FILE_PANEL_PITCH;
                     MoveSlide(&view->panels[panel_index].y, &entrance_y, 3.0f);
                     if (view->panels[panel_index].y == entrance_y)
                         ++complete;
                 }
             }
-            if (complete == 3)
-                view->state = 50;
+            if (complete == FILE_PANELS_VISIBLE)
+                view->state = FILE_PANEL_BROWSE;
             break;
         }
-        case 14: {
+        case FILE_PANEL_SLIDE_OUT: {
             int exit_complete;
             int panel_index;
 
             exit_complete = 0;
-            exit_x = -512;
-            exit_y = 64;
-            for (panel_index = 0; panel_index < 3; ++panel_index) {
+            exit_x = FILE_PANEL_OFFSCREEN_X;
+            exit_y = FILE_PANEL_TOP;
+            for (panel_index = 0; panel_index < FILE_PANELS_VISIBLE; ++panel_index) {
                 if (FileWork->selected_panel != panel_index) {
                     MoveSlide(&view->panels[panel_index].x, &exit_x, 3.0f);
                     if (view->panels[panel_index].x == exit_x)
@@ -1801,118 +1993,118 @@ static void tskFileData(TskObject *task, void *data)
                         ++exit_complete;
                 }
             }
-            if (exit_complete == 3)
-                view->state = 52;
+            if (exit_complete == FILE_PANELS_VISIBLE)
+                view->state = FILE_PANEL_EXPANDED;
             break;
         }
-        case 16: {
+        case FILE_PANEL_EXPAND: {
 
             expanded_y = 112;
             MoveSlide(&view->panels[FileWork->selected_panel].y, &expanded_y, 3.0f);
             if (view->panels[FileWork->selected_panel].y == expanded_y)
-                view->state = 52;
+                view->state = FILE_PANEL_EXPANDED;
             break;
         }
-        case 18: {
+        case FILE_PANEL_CLOSE: {
             int exit_complete;
             int panel_index;
 
             exit_complete = 0;
-            closing_x = -512;
-            for (panel_index = 0; panel_index < 3; ++panel_index) {
+            closing_x = FILE_PANEL_OFFSCREEN_X;
+            for (panel_index = 0; panel_index < FILE_PANELS_VISIBLE; ++panel_index) {
                 MoveSlide(&view->panels[panel_index].x, &closing_x, 3.0f);
                 if (view->panels[panel_index].x == closing_x)
                     ++exit_complete;
             }
-            if (exit_complete == 3)
-                view->state = 0;
+            if (exit_complete == FILE_PANELS_VISIBLE)
+                view->state = FILE_PANEL_HIDDEN;
             break;
         }
-        case 50:
+        case FILE_PANEL_BROWSE:
             switch (FileWork->state) {
-            case 36:
-            case 144:
-            case 145:
-            case 146:
+            case FILE_STATE_SELECT_DEVICE:
+            case FILE_STATE_ERROR_REQUEST_FAILED:
+            case FILE_STATE_ERROR_NO_CARD:
+            case FILE_STATE_ERROR_CANNOT_ACCESS:
             case 147:
-            case 240:
-                view->state = 18;
+            case FILE_STATE_CLOSING:
+                view->state = FILE_PANEL_CLOSE;
                 break;
-            case 41:
-            case 42:
-                view->state = 14;
+            case FILE_STATE_SLOT_REJECTED:
+            case FILE_STATE_CONFIRM_SLOT:
+                view->state = FILE_PANEL_SLIDE_OUT;
                 break;
-            case 44:
-            case 45:
-            case 46:
-            case 80:
-                view->state = 16;
+            case FILE_STATE_SAVE_WRITE:
+            case FILE_STATE_SAVE_CREATE:
+            case FILE_STATE_SAVE_DONE:
+            case FILE_STATE_LOAD_READ:
+                view->state = FILE_PANEL_EXPAND;
                 break;
             }
             if (FileWork->scroll_direction) {
                 int scroll_speed;
                 int scroll_index;
 
-                for (scroll_index = 0; scroll_index < 3; ++scroll_index) {
+                for (scroll_index = 0; scroll_index < FILE_PANELS_VISIBLE; ++scroll_index) {
                     int direction = FileWork->scroll_direction;
 
-                    view->panels[scroll_index].y += direction * 112;
+                    view->panels[scroll_index].y += direction * FILE_PANEL_PITCH;
                 }
                 {
                     FileWorkBlock *scroll_work = FileWork;
 
-                    view->panels[3].x = 16;
+                    view->panels[3].x = FILE_PANEL_X;
                     if (scroll_work->scroll_direction < 0)
                         view->panels[3].y = 288;
                     else
-                        view->panels[3].y = 64;
-                    scroll_speed = 14;
+                        view->panels[3].y = FILE_PANEL_TOP;
+                    scroll_speed = FILE_SCROLL_SPEED;
                     if (scroll_work->fast_scroll)
-                        scroll_speed = 28;
-                    for (scroll_index = 0; scroll_index < 4; ++scroll_index)
+                        scroll_speed = FILE_SCROLL_SPEED_FAST;
+                    for (scroll_index = 0; scroll_index < FILE_PANELS_MAX; ++scroll_index)
                         view->panels[scroll_index].y += scroll_speed * -FileWork->scroll_direction;
                 }
                 view->extra_panel = 1;
-                view->state = 60;
+                view->state = FILE_PANEL_SCROLL;
             }
             break;
-        case 52:
+        case FILE_PANEL_EXPANDED:
             switch (FileWork->state) {
-            case 144:
-            case 145:
-            case 146:
+            case FILE_STATE_ERROR_REQUEST_FAILED:
+            case FILE_STATE_ERROR_NO_CARD:
+            case FILE_STATE_ERROR_CANNOT_ACCESS:
             case 147:
-            case 148:
-            case 149:
-            case 150:
+            case FILE_STATE_ERROR_HDD_TOO_MANY_SAVES:
+            case FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS:
+            case FILE_STATE_ERROR_HDD_NO_SPACE:
             case 151:
             case 152:
-                view->state = 18;
+                view->state = FILE_PANEL_CLOSE;
                 break;
-            case 240:
-                view->state = 18;
+            case FILE_STATE_CLOSING:
+                view->state = FILE_PANEL_CLOSE;
                 break;
-            case 44:
-            case 45:
-            case 46:
-                view->state = 16;
+            case FILE_STATE_SAVE_WRITE:
+            case FILE_STATE_SAVE_CREATE:
+            case FILE_STATE_SAVE_DONE:
+                view->state = FILE_PANEL_EXPAND;
                 break;
-            case 40:
-                view->state = 12;
+            case FILE_STATE_SLOT_LIST:
+                view->state = FILE_PANEL_SLIDE_IN;
                 break;
             }
             break;
-        case 60: {
-            int scroll_speed = 14;
+        case FILE_PANEL_SCROLL: {
+            int scroll_speed = FILE_SCROLL_SPEED;
 
             if (FileWork->fast_scroll)
-                scroll_speed = 28;
+                scroll_speed = FILE_SCROLL_SPEED_FAST;
 
-            for (i = 0; i < 4; ++i)
+            for (i = 0; i < FILE_PANELS_MAX; ++i)
                 view->panels[i].y += scroll_speed * -FileWork->scroll_direction;
-            if (view->panels[0].y == 64) {
+            if (view->panels[0].y == FILE_PANEL_TOP) {
                 view->extra_panel = 0;
-                view->state = 50;
+                view->state = FILE_PANEL_BROWSE;
                 FileWork->scroll_direction = 0;
             }
             break;
@@ -1921,7 +2113,7 @@ static void tskFileData(TskObject *task, void *data)
         if (view->visible) {
             FileWorkBlock *work;
 
-            for (i = 0; i < 3; ++i)
+            for (i = 0; i < FILE_PANELS_VISIBLE; ++i)
                 view->panels[i].slot = FileObjectDataNoGet(FileWork->current_slot, i);
             if (view->extra_panel) {
                 if (FileWork->scroll_direction < 0)
@@ -1934,9 +2126,9 @@ static void tskFileData(TskObject *task, void *data)
             view->clip.color = view->work;
             view->clip.width = 512;
             view->clip.height = 336;
-            endPrintExtFunc(view->work, 5, &view->clip);
-            endPrintExtFunc(view->work, 101, &view->clip);
-            for (i = 0; i < view->extra_panel + 3; ++i) {
+            endPrintExtFunc(view->work, END_PRINT_CMD_SCISSOR_SET,&view->clip);
+            endPrintExtFunc(view->work, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET, &view->clip);
+            for (i = 0; i < view->extra_panel + FILE_PANELS_VISIBLE; ++i) {
                 view->panels[i].visible = 1;
                 FileThumbnailDisp(&view->panels[i]);
             }
@@ -1944,8 +2136,8 @@ static void tskFileData(TskObject *task, void *data)
             view->cursor.x = view->panels[work->selected_panel].x;
             view->cursor.y = view->panels[work->selected_panel].y + 32;
             eCursolMain(&view->cursor);
-            endPrintExtFunc(view->work, 6, 0);
-            endPrintExtFunc(view->work, 102, 0);
+            endPrintExtFunc(view->work, END_PRINT_CMD_SCISSOR_RESET, 0);
+            endPrintExtFunc(view->work, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
         }
         break;
     }
@@ -1966,7 +2158,7 @@ void MenuFile(void) {
 
     if (FileWork->state != FileWork->command) {
         FileWork->state = FileWork->command;
-        FileWork->input_flags |= 1;
+        FileWork->input_flags |= FILE_INPUT_ENTER;
     } else {
         FileWork->input_flags &= 0xfe;
     }
@@ -1978,25 +2170,25 @@ void MenuFile(void) {
     }
     state = FileWork->state;
     switch (state) {
-    case 0x24: {
+    case FILE_STATE_SELECT_DEVICE: {
         signed char selection;
         unsigned char input_flags = FileWork->input_flags;
-        if (input_flags & 1) {
+        if (input_flags & FILE_INPUT_ENTER) {
             if (FileWork->use_hdd) {
-                FileWork->device_selection = 2;
+                FileWork->device_selection = FILE_DEVICE_CANCEL;
             } else {
                 FileWork->device_selection = FileWork->card_number;
             }
             FileWork->hdd_status = (unsigned short) xglHddCheck();
-            FileWork->dispatch_delay = 12;
+            FileWork->dispatch_delay = FILE_DELAY_SHORT;
             FileWork->hide_selection = 0;
             break;
         }
-        else if (input_flags & 2) {
+        else if (input_flags & FILE_INPUT_SKIP) {
             break;
         } else {
-            FileWork->device_selection = MenuSelectMove(FileWork->device_selection, 3, 0);
-            if (PadData.half_2a & 0x20) {
+            FileWork->device_selection = MenuSelectMove(FileWork->device_selection, FILE_DEVICE_ROWS, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
                 selection = FileWork->device_selection;
                 switch (selection) {
                     case 0:
@@ -2006,31 +2198,31 @@ void MenuFile(void) {
                         card = &FileWork->card;
                         card_status = card->status[FileWork->card_number];
                         switch (card_status) {
-                        case 0:
-                        case 0x81:
-                        case 0x82:
-                            xglSoundEffectNormalID(5, 0);
+                        case MC_STATUS_NONE:
+                        case MC_STATUS_PS1_CARD:
+                        case MC_STATUS_POCKETSTATION:
+                            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                             break;
-                        case 2:
-                            if (FileWork->text_index == 0) {
-                                FileWork->command = 0x80;
+                        case MC_STATUS_UNFORMATTED:
+                            if (FileWork->text_index == FILE_MODE_SAVE) {
+                                FileWork->command = FILE_STATE_CARD_UNFORMATTED;
                             } else {
-                                FileWork->command = 0xb8;
+                                FileWork->command = FILE_STATE_NO_SAVE_DATA;
                             }
-                            xglSoundEffectNormalID(5, 0);
+                            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                             break;
-                        case 0xff:
+                        case MC_STATUS_BUSY:
                             break;
                         default:
-                            FileWork->command = 0x25;
-                            xglSoundEffectNormalID(1, 0);
+                            FileWork->command = FILE_STATE_CHECK_DEVICE;
+                            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                             break;
                         }
                         break;
-                    case 2:
-                        xglSoundEffectNormalID(2, 0);
-                        FileWork->command = 0xf0;
-                        if (FileWork->text_index == 1) {
+                    case FILE_DEVICE_CANCEL:
+                        xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
+                        FileWork->command = FILE_STATE_CLOSING;
+                        if (FileWork->text_index == FILE_MODE_LOAD) {
                             FileWork->result = 1;
                         }
                         break;
@@ -2038,126 +2230,126 @@ void MenuFile(void) {
                         break;
                 }
             }
-            if (PadData.half_2a & 0x40) {
-                FileWork->command = 0xf0;
-                xglSoundEffectNormalID(2, 0);
-                if (FileWork->text_index == 1) {
+            if (PadData.half_2a & PAD_CROSS) {
+                FileWork->command = FILE_STATE_CLOSING;
+                xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
+                if (FileWork->text_index == FILE_MODE_LOAD) {
                     FileWork->result = 1;
                 }
             }
         }
         break;
     }
-    case 0x25:
+    case FILE_STATE_CHECK_DEVICE:
     {
         int hdd_slot;
         int card_slot;
-        if (FileWork->input_flags & 1) {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
             if (FileWork->use_hdd) {
-                FileWork->dispatch_delay = 12;
+                FileWork->dispatch_delay = FILE_DELAY_SHORT;
                 FileWork->available_blocks = xglHddMcGetFree();
             } else {
-                xglMcRequest(FileWork->card_number, 1, 0,
+                xglMcRequest(FileWork->card_number, MC_REQUEST_FREE_SPACE, 0,
                              &FileWork->available_blocks);
                 card_request.slot = -1;
                 card_request.buffer = (int)FileExistCheckWork;
-                xglMcRequest(FileWork->card_number, 2, &card_request,
+                xglMcRequest(FileWork->card_number, MC_REQUEST_DIRECTORY, &card_request,
                              &FileWork->directory_result);
                 FileWork->menu_substate = 0;
             }
         } else if (FileWork->use_hdd) {
             if (FileWork->available_blocks < 0) {
-                if (FileWork->text_index == 0) {
+                if (FileWork->text_index == FILE_MODE_SAVE) {
                     switch (FileWork->available_blocks) {
-                    case -1:
-                        FileWork->command = 0x92;
+                    case HDD_CHECK_ACCESS:
+                        FileWork->command = FILE_STATE_ERROR_CANNOT_ACCESS;
                         break;
-                    case -2:
-                        FileWork->command = 0x95;
+                    case HDD_CHECK_TOO_MANY_FOLDERS:
+                        FileWork->command = FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS;
                         break;
-                    case -3:
-                        FileWork->command = 0x94;
+                    case HDD_CHECK_TOO_MANY_SAVES:
+                        FileWork->command = FILE_STATE_ERROR_HDD_TOO_MANY_SAVES;
                         break;
-                    case -4:
-                        FileWork->command = 0x96;
+                    case HDD_CHECK_NO_SPACE:
+                        FileWork->command = FILE_STATE_ERROR_HDD_NO_SPACE;
                         break;
                     }
                 } else {
                     switch (FileWork->available_blocks) {
-                    case -1:
-                        FileWork->command = 0x92;
+                    case HDD_CHECK_ACCESS:
+                        FileWork->command = FILE_STATE_ERROR_CANNOT_ACCESS;
                         break;
-                    case -2:
-                    case -3:
-                    case -4:
-                        FileWork->command = 0xb8;
+                    case HDD_CHECK_TOO_MANY_FOLDERS:
+                    case HDD_CHECK_TOO_MANY_SAVES:
+                    case HDD_CHECK_NO_SPACE:
+                        FileWork->command = FILE_STATE_NO_SAVE_DATA;
                         break;
                     }
                 }
-                xglSoundEffectNormalID(5, 0);
-                FileWork->dispatch_delay = 16;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                FileWork->dispatch_delay = FILE_DELAY_LONG;
                 break;
             }
             hdd_request.exist.card = -1;
             hdd_request.exist.found = FileExistCheckWork;
             FileWork->directory_result = xglHddMcExist(&hdd_request.exist);
             if (FileWork->directory_result == 0) {
-                if (FileWork->text_index == 0) {
-                if (FileWork->available_blocks < 225) {
-                    FileWork->command = 0xb0;
-                    xglSoundEffectNormalID(5, 0);
+                if (FileWork->text_index == FILE_MODE_SAVE) {
+                if (FileWork->available_blocks < FILE_HDD_SAVE_KB) {
+                    FileWork->command = FILE_STATE_NO_CARD_SPACE;
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 } else {
-                    for (hdd_slot = 0; hdd_slot < 99; hdd_slot++) {
-                        if (FileWork->available_blocks >= 225) {
-                            FileObjectDataSystem->state[hdd_slot] = 2;
-                            FileWork->available_blocks -= 225;
+                    for (hdd_slot = 0; hdd_slot < FILE_SLOT_COUNT; hdd_slot++) {
+                        if (FileWork->available_blocks >= FILE_HDD_SAVE_KB) {
+                            FileObjectDataSystem->state[hdd_slot] = FILE_SLOT_NEW;
+                            FileWork->available_blocks -= FILE_HDD_SAVE_KB;
                         } else {
-                            FileObjectDataSystem->state[hdd_slot] = 3;
+                            FileObjectDataSystem->state[hdd_slot] = FILE_SLOT_FULL;
                         }
                     }
-                    FileExistCheckWork[100] = 0;
-                    FileWork->command = 0x27;
+                    FileExistCheckWork[MC_LATEST_SLOT_INDEX] = 0;
+                    FileWork->command = FILE_STATE_LOAD_SLOTS;
                 }
                 } else {
-                    FileWork->command = 0xb8;
-                    xglSoundEffectNormalID(5, 0);
+                    FileWork->command = FILE_STATE_NO_SAVE_DATA;
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 }
             } else if (FileWork->directory_result < 0) {
-                xglSoundEffectNormalID(5, 0);
-                FileWork->command = 0x92;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                FileWork->command = FILE_STATE_ERROR_CANNOT_ACCESS;
             } else {
                 FileWork->selected_slot = 0;
-                FileWork->slot_count = 99;
+                FileWork->slot_count = FILE_SLOT_COUNT;
                 if (FileWork->directory_result == 0 &&
-                    FileWork->available_blocks < 225) {
-                    if (FileWork->text_index == 0) {
-                        FileWork->command = 0xb0;
+                    FileWork->available_blocks < FILE_HDD_SAVE_KB) {
+                    if (FileWork->text_index == FILE_MODE_SAVE) {
+                        FileWork->command = FILE_STATE_NO_CARD_SPACE;
                     } else {
-                        FileWork->command = 0xb8;
+                        FileWork->command = FILE_STATE_NO_SAVE_DATA;
                     }
-                    xglSoundEffectNormalID(5, 0);
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                     break;
                 }
-                for (hdd_slot = 0; hdd_slot < 99; hdd_slot++) {
+                for (hdd_slot = 0; hdd_slot < FILE_SLOT_COUNT; hdd_slot++) {
                     if (FileExistCheckWork[hdd_slot] != 0) {
-                        FileObjectDataSystem->state[hdd_slot] = 1;
-                    } else if (FileWork->available_blocks >= 225) {
-                        FileObjectDataSystem->state[hdd_slot] = 2;
-                        FileWork->available_blocks -= 225;
+                        FileObjectDataSystem->state[hdd_slot] = FILE_SLOT_EXISTING;
+                    } else if (FileWork->available_blocks >= FILE_HDD_SAVE_KB) {
+                        FileObjectDataSystem->state[hdd_slot] = FILE_SLOT_NEW;
+                        FileWork->available_blocks -= FILE_HDD_SAVE_KB;
                     } else {
-                        FileObjectDataSystem->state[hdd_slot] = 3;
+                        FileObjectDataSystem->state[hdd_slot] = FILE_SLOT_FULL;
                     }
                 }
-                if (FileWork->text_index == 0) {
-                    FileWork->command = 0x27;
+                if (FileWork->text_index == FILE_MODE_SAVE) {
+                    FileWork->command = FILE_STATE_LOAD_SLOTS;
                 } else {
                     switch (FileWork->directory_result) {
                     default:
-                        FileWork->command = 0x27;
+                        FileWork->command = FILE_STATE_LOAD_SLOTS;
                         break;
                     case 0:
-                        FileWork->command = 0xb8;
-                        xglSoundEffectNormalID(5, 0);
+                        FileWork->command = FILE_STATE_NO_SAVE_DATA;
+                        xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                         break;
                     }
                 }
@@ -2166,44 +2358,44 @@ void MenuFile(void) {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 1:
+            case MC_STATUS_READY:
                 if (FileWork->menu_substate != 0) {
                     FileWork->selected_slot = 0;
-                    FileWork->slot_count = 99;
+                    FileWork->slot_count = FILE_SLOT_COUNT;
                     if (FileWork->directory_result == 0 &&
-                        FileWork->available_blocks < 165) {
-                        if (FileWork->text_index == 0) {
-                            FileWork->command = 0xb0;
+                        FileWork->available_blocks < FILE_CARD_SAVE_KB) {
+                        if (FileWork->text_index == FILE_MODE_SAVE) {
+                            FileWork->command = FILE_STATE_NO_CARD_SPACE;
                         } else {
-                            FileWork->command = 0xb8;
+                            FileWork->command = FILE_STATE_NO_SAVE_DATA;
                         }
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                         break;
                     } else {
-                        for (card_slot = 0; card_slot < 99; card_slot++) {
+                        for (card_slot = 0; card_slot < FILE_SLOT_COUNT; card_slot++) {
                             if (FileExistCheckWork[card_slot] != 0) {
-                                FileObjectDataSystem->state[card_slot] = 1;
-                            } else if (FileWork->available_blocks >= 165) {
-                                FileObjectDataSystem->state[card_slot] = 2;
-                                FileWork->available_blocks -= 165;
+                                FileObjectDataSystem->state[card_slot] = FILE_SLOT_EXISTING;
+                            } else if (FileWork->available_blocks >= FILE_CARD_SAVE_KB) {
+                                FileObjectDataSystem->state[card_slot] = FILE_SLOT_NEW;
+                                FileWork->available_blocks -= FILE_CARD_SAVE_KB;
                             } else {
-                                FileObjectDataSystem->state[card_slot] = 3;
+                                FileObjectDataSystem->state[card_slot] = FILE_SLOT_FULL;
                             }
                         }
                         if (FileWork->directory_result < 0) {
-                            FileWork->command = 0x91;
-                            xglSoundEffectNormalID(5, 0);
+                            FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                         } else {
-                            if (FileWork->text_index == 0) {
-                                FileWork->command = 0x27;
+                            if (FileWork->text_index == FILE_MODE_SAVE) {
+                                FileWork->command = FILE_STATE_LOAD_SLOTS;
                             } else {
                                 switch (FileWork->directory_result) {
                                 default:
-                                    FileWork->command = 0x27;
+                                    FileWork->command = FILE_STATE_LOAD_SLOTS;
                                     break;
                                 case 0:
-                                    FileWork->command = 0xb8;
-                                    xglSoundEffectNormalID(5, 0);
+                                    FileWork->command = FILE_STATE_NO_SAVE_DATA;
+                                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                                     break;
                                 }
                             }
@@ -2212,26 +2404,26 @@ void MenuFile(void) {
                 }
                 FileWork->menu_substate = 1;
                 break;
-            case 0:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+            case MC_STATUS_NONE:
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
             default:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
     }
-    case 0xff:
+    case FILE_STATE_DONE:
         break;
-    case 0x27:
-        if (FileWork->input_flags & 1) {
-            FileWork->selected_slot = FileExistCheckWork[100];
-            FileWork->panel_count = 3;
+    case FILE_STATE_LOAD_SLOTS:
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
+            FileWork->selected_slot = FileExistCheckWork[MC_LATEST_SLOT_INDEX];
+            FileWork->panel_count = FILE_PANELS_VISIBLE;
             FileWork->selected_panel = 0;
             FileWork->scroll_direction = 0;
             FileWork->current_slot = FileWork->selected_slot;
@@ -2241,25 +2433,25 @@ void MenuFile(void) {
             int load_result = FileObjectAllLoad();
             if (load_result == 0) {
                 if (FileWork->hdd_result >= 0) {
-                    FileWork->slot_count = 99;
+                    FileWork->slot_count = FILE_SLOT_COUNT;
                     FileObjectJpegSet();
-                    FileWork->command = 0x28;
-                    FileWork->dispatch_delay = 12;
+                    FileWork->command = FILE_STATE_SLOT_LIST;
+                    FileWork->dispatch_delay = FILE_DELAY_SHORT;
                 }
             }
             if (FileWork->hdd_result != 0) {
-                FileWork->command = 0x92;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_CANNOT_ACCESS;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
             }
         } else {
             unsigned short loaded_card_status;
             int load_result = FileObjectAllLoad();
             if (load_result == 0) {
                 if (FileWork->hdd_result >= 0) {
-                    FileWork->slot_count = 99;
+                    FileWork->slot_count = FILE_SLOT_COUNT;
                     FileObjectJpegSet();
-                    FileWork->command = 0x28;
-                    FileWork->dispatch_delay = 12;
+                    FileWork->command = FILE_STATE_SLOT_LIST;
+                    FileWork->dispatch_delay = FILE_DELAY_SHORT;
                 }
             }
             if (FileWork->hdd_result >= 0) {
@@ -2269,66 +2461,66 @@ void MenuFile(void) {
             loaded_card_status = card->status[FileWork->card_number];
             switch (loaded_card_status) {
             default:
-                FileWork->command = 0x92;
+                FileWork->command = FILE_STATE_ERROR_CANNOT_ACCESS;
                 FileWork->slot_count = 0;
-                xglSoundEffectNormalID(5, 0);
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
-            case 0:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+            case MC_STATUS_NONE:
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
-    case 0x28:
+    case FILE_STATE_SLOT_LIST:
     {
-        if (FileWork->input_flags & 1) {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
             FileWork->scroll_direction = 0;
         }
-        if ((FileWork->input_flags & 2) == 0) {
+        if ((FileWork->input_flags & FILE_INPUT_SKIP) == 0) {
             if (FileWork->scroll_direction == 0) {
                 unsigned short action = 0;
 
                 if (FileWork->fast_scroll != 0) {
-                    if (FileWork->scroll_repeat_count == 10) {
+                    if (FileWork->scroll_repeat_count == FILE_FAST_SCROLL_STEPS) {
                         FileWork->fast_scroll = 0;
                     } else {
                         FileWork->scroll_repeat_count++;
                         action = FileWork->scroll_repeat_direction < 0
-                                     ? 0x1000
-                                     : 0x4000;
+                                     ? PAD_UP
+                                     : PAD_DOWN;
                     }
                     FileWork->menu_substate = 0;
                 } else {
                     if (FileWork->menu_substate == 0) {
                         u16 menu_input = PadData.half_30;
 
-                        if (menu_input & 0x1000) {
+                        if (menu_input & PAD_UP) {
                             if (FileWork->selected_panel == 0 ||
-                                (PadData.mappedRepeat & 0x1000)) {
-                                action = 0x1000;
+                                (PadData.mappedRepeat & PAD_UP)) {
+                                action = PAD_UP;
                             }
-                        } else if (menu_input & 0x4000) {
-                            if (FileWork->selected_panel == 2 ||
-                                (PadData.mappedRepeat & 0x4000)) {
-                                action = 0x4000;
+                        } else if (menu_input & PAD_DOWN) {
+                            if (FileWork->selected_panel == FILE_PANELS_VISIBLE - 1 ||
+                                (PadData.mappedRepeat & PAD_DOWN)) {
+                                action = PAD_DOWN;
                             }
                         } else {
-                            action = 0x40;
-                            if ((menu_input & 0x40) == 0) {
-                                action = menu_input & 0x20;
+                            action = PAD_CROSS;
+                            if ((menu_input & PAD_CROSS) == 0) {
+                                action = menu_input & PAD_CIRCLE;
                             }
                         }
                         if (action != 0) {
-                            FileWork->menu_substate = 4;
+                            FileWork->menu_substate = FILE_INPUT_REPEAT_DELAY;
                         }
                     } else {
                         FileWork->menu_substate--;
                     }
                 }
-                if (action == 0x1000) {
+                if (action == PAD_UP) {
                     FileWork->selected_slot = FileObjectDataNoGet(
                         FileWork->selected_slot, -1);
                     if (FileWork->selected_panel == 0) {
@@ -2339,9 +2531,9 @@ void MenuFile(void) {
                     } else {
                         FileWork->selected_panel--;
                     }
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(FILE_SE_CURSOR, 0);
                 }
-                if (action == 0x4000) {
+                if (action == PAD_DOWN) {
                     FileWork->selected_slot = FileObjectDataNoGet(
                         FileWork->selected_slot, 1);
                     if (FileWork->selected_panel ==
@@ -2353,43 +2545,43 @@ void MenuFile(void) {
                     } else {
                         FileWork->selected_panel++;
                     }
-                    xglSoundEffectNormalID(3, 0);
+                    xglSoundEffectNormalID(FILE_SE_CURSOR, 0);
                 }
-                if (action == 0x40) {
-                    FileWork->command = 0x24;
-                    xglSoundEffectNormalID(2, 0);
+                if (action == PAD_CROSS) {
+                    FileWork->command = FILE_STATE_SELECT_DEVICE;
+                    xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
                 }
-                if (action == 0x20) {
+                if (action == PAD_CIRCLE) {
                     unsigned char object_status =
                         FileObjectDataSystem->state[FileWork->selected_slot];
                     switch (object_status) {
-                    case 2:
-                        if (FileWork->text_index == 0) {
-                            FileWork->command = 0x2a;
-                            xglSoundEffectNormalID(1, 0);
+                    case FILE_SLOT_NEW:
+                        if (FileWork->text_index == FILE_MODE_SAVE) {
+                            FileWork->command = FILE_STATE_CONFIRM_SLOT;
+                            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                         } else {
-                            FileWork->command = 0x29;
-                            xglSoundEffectNormalID(5, 0);
+                            FileWork->command = FILE_STATE_SLOT_REJECTED;
+                            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                         }
                         break;
-                    case 3:
-                    case 4:
-                        FileWork->command = 0x29;
-                        xglSoundEffectNormalID(5, 0);
+                    case FILE_SLOT_FULL:
+                    case FILE_SLOT_CORRUPT:
+                        FileWork->command = FILE_STATE_SLOT_REJECTED;
+                        xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                         break;
                     default:
-                        if (FileWork->text_index == 0) {
-                            FileWork->command = 0x2a;
-                            xglSoundEffectNormalID(1, 0);
+                        if (FileWork->text_index == FILE_MODE_SAVE) {
+                            FileWork->command = FILE_STATE_CONFIRM_SLOT;
+                            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                         } else {
                             signed char selected_slot = FileWork->selected_slot;
                             FileObjectEntryView *selected_entry =
                                 &FileObjectData[selected_slot];
-                            if (selected_entry->map_number == 10) {
-                                xglSoundEffectNormalID(5, 0);
+                            if (selected_entry->map_number == FILE_UNIT_MAP_NO) {
+                                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                             } else {
-                                FileWork->command = 0x2a;
-                                xglSoundEffectNormalID(1, 0);
+                                FileWork->command = FILE_STATE_CONFIRM_SLOT;
+                                xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                             }
                         }
                         break;
@@ -2403,151 +2595,151 @@ void MenuFile(void) {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 1:
-            case 0xff:
+            case MC_STATUS_READY:
+            case MC_STATUS_BUSY:
                 break;
-            case 0:
+            case MC_STATUS_NONE:
             default:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
     }
-    case 0x29: {
-        if (FileWork->input_flags & 1) {
-            FileWork->dispatch_delay = 12;
+    case FILE_STATE_SLOT_REJECTED: {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
+            FileWork->dispatch_delay = FILE_DELAY_SHORT;
         } else if (FileWork->use_hdd) {
-            if (PadData.half_2a & 0x20) {
-                FileWork->command = 0x28;
-                FileWork->dispatch_delay = 12;
-                xglSoundEffectNormalID(1, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                FileWork->command = FILE_STATE_SLOT_LIST;
+                FileWork->dispatch_delay = FILE_DELAY_SHORT;
+                xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
             }
         } else {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 1:
-                if (PadData.half_2a & 0x20) {
-                    FileWork->command = 0x28;
-                    FileWork->dispatch_delay = 12;
-                    xglSoundEffectNormalID(1, 0);
+            case MC_STATUS_READY:
+                if (PadData.half_2a & PAD_CIRCLE) {
+                    FileWork->command = FILE_STATE_SLOT_LIST;
+                    FileWork->dispatch_delay = FILE_DELAY_SHORT;
+                    xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                 }
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
-            case 0:
+            case MC_STATUS_NONE:
             default:
-                xglSoundEffectNormalID(5, 0);
-                FileWork->command = 0x91;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
                 break;
             }
         }
         break;
     }
-    case 0x2a: {
-        if (FileWork->input_flags & 1) {
+    case FILE_STATE_CONFIRM_SLOT: {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
             FileWork->dispatch_delay = 10;
-            if (FileWork->text_index == 0) {
-                FileWork->action_selection = 1;
+            if (FileWork->text_index == FILE_MODE_SAVE) {
+                FileWork->action_selection = FILE_CHOICE_NO;
             } else {
-                FileWork->action_selection = 0;
+                FileWork->action_selection = FILE_CHOICE_YES;
             }
             if (!FileWork->use_hdd) {
-                xglMcRequest(FileWork->card_number, 1, 0,
+                xglMcRequest(FileWork->card_number, MC_REQUEST_FREE_SPACE, 0,
                              &FileWork->available_blocks);
             }
         } else if (FileWork->use_hdd) {
-            if (!(FileWork->input_flags & 2)) {
+            if (!(FileWork->input_flags & FILE_INPUT_SKIP)) {
                 FileWork->action_selection =
-                    MenuSelectMove(FileWork->action_selection, 2, 0);
-                if (PadData.half_2a & 0x20) {
-                    if (FileWork->action_selection == 0) {
-                        if (FileWork->text_index != 0) {
-                            FileWork->command = 0x50;
+                    MenuSelectMove(FileWork->action_selection, FILE_CONFIRM_ROWS, 0);
+                if (PadData.half_2a & PAD_CIRCLE) {
+                    if (FileWork->action_selection == FILE_CHOICE_YES) {
+                        if (FileWork->text_index != FILE_MODE_SAVE) {
+                            FileWork->command = FILE_STATE_LOAD_READ;
                         } else {
                             switch (FileObjectDataSystem->state[FileWork->selected_slot]) {
-                            case 2:
-                                FileWork->command = 0x2d;
+                            case FILE_SLOT_NEW:
+                                FileWork->command = FILE_STATE_SAVE_CREATE;
                                 break;
                             default:
-                                FileWork->command = 0x2d;
+                                FileWork->command = FILE_STATE_SAVE_CREATE;
                                 break;
                             }
                         }
-                        xglSoundEffectNormalID(1, 0);
+                        xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                     } else {
-                        FileWork->command = 0x28;
-                        FileWork->dispatch_delay = 12;
-                        xglSoundEffectNormalID(2, 0);
+                        FileWork->command = FILE_STATE_SLOT_LIST;
+                        FileWork->dispatch_delay = FILE_DELAY_SHORT;
+                        xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
                     }
                 }
-                if (PadData.half_2a & 0x40) {
-                    FileWork->command = 0x28;
-                    FileWork->dispatch_delay = 12;
-                    xglSoundEffectNormalID(2, 0);
+                if (PadData.half_2a & PAD_CROSS) {
+                    FileWork->command = FILE_STATE_SLOT_LIST;
+                    FileWork->dispatch_delay = FILE_DELAY_SHORT;
+                    xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
                 }
             }
         } else {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 0:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+            case MC_STATUS_NONE:
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
-            case 1:
-            if (!(FileWork->input_flags & 2)) {
+            case MC_STATUS_READY:
+            if (!(FileWork->input_flags & FILE_INPUT_SKIP)) {
                 FileWork->action_selection =
-                    MenuSelectMove(FileWork->action_selection, 2, 0);
-                if (PadData.half_2a & 0x20) {
-                        if (FileWork->action_selection == 0) {
-                            if (FileWork->text_index != 0) {
-                                FileWork->command = 0x50;
-                            } else if (FileObjectDataSystem->state[FileWork->selected_slot] != 2 ||
-                                       FileWork->available_blocks >= 165) {
-                                FileWork->command = 0x2d;
+                    MenuSelectMove(FileWork->action_selection, FILE_CONFIRM_ROWS, 0);
+                if (PadData.half_2a & PAD_CIRCLE) {
+                        if (FileWork->action_selection == FILE_CHOICE_YES) {
+                            if (FileWork->text_index != FILE_MODE_SAVE) {
+                                FileWork->command = FILE_STATE_LOAD_READ;
+                            } else if (FileObjectDataSystem->state[FileWork->selected_slot] != FILE_SLOT_NEW ||
+                                       FileWork->available_blocks >= FILE_CARD_SAVE_KB) {
+                                FileWork->command = FILE_STATE_SAVE_CREATE;
                             } else {
-                                FileWork->command = 0xb0;
+                                FileWork->command = FILE_STATE_NO_CARD_SPACE;
                             }
-                        xglSoundEffectNormalID(1, 0);
+                        xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                     } else {
-                        FileWork->command = 0x28;
-                        FileWork->dispatch_delay = 12;
-                        xglSoundEffectNormalID(2, 0);
+                        FileWork->command = FILE_STATE_SLOT_LIST;
+                        FileWork->dispatch_delay = FILE_DELAY_SHORT;
+                        xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
                     }
                 }
-                if (PadData.half_2a & 0x40) {
-                    FileWork->dispatch_delay = 12;
-                    FileWork->command = 0x28;
-                    xglSoundEffectNormalID(2, 0);
+                if (PadData.half_2a & PAD_CROSS) {
+                    FileWork->dispatch_delay = FILE_DELAY_SHORT;
+                    FileWork->command = FILE_STATE_SLOT_LIST;
+                    xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
                 }
             }
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
             default:
-                FileWork->command = 0x90;
+                FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
                 break;
             }
         }
         break;
     }
-    case 0x2c:
+    case FILE_STATE_SAVE_WRITE:
     {
         int hdd_existing_slot;
         int card_existing_slot;
-        if (FileWork->input_flags & 1) {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
             if (FileWork->use_hdd) {
-                FileWork->dispatch_delay = 16;
+                FileWork->dispatch_delay = FILE_DELAY_LONG;
             } else {
                 card_request.slot = FileWork->selected_slot;
                 card_request.buffer = (int)SaveData;
-                card_request.size = 0x163b0;
-                xglMcRequest(FileWork->card_number, 6, &card_request,
+                card_request.size = MC_SAVE_DATA_SIZE;
+                xglMcRequest(FileWork->card_number, MC_REQUEST_SAVE, &card_request,
                              &FileWork->hdd_result);
-                xglMcRequest(FileWork->card_number, 1, 0,
+                xglMcRequest(FileWork->card_number, MC_REQUEST_FREE_SPACE, 0,
                              &FileWork->available_blocks);
                 FileWork->menu_substate = 0;
                 tyaDrawGauge(&gauge);
@@ -2555,99 +2747,99 @@ void MenuFile(void) {
         } else if (FileWork->use_hdd) {
             hdd_request.save.card = FileWork->selected_slot;
             hdd_request.save.data = SaveData;
-            hdd_request.save.size = 0x163b0;
+            hdd_request.save.size = MC_SAVE_DATA_SIZE;
             FileWork->directory_result = xglHddMcSave(&hdd_request.save);
             if (FileWork->directory_result != 0) {
-                FileWork->command = 0x90;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
             } else {
-                xglSoundEffectNormalID(0x19, 0);
+                xglSoundEffectNormalID(FILE_SE_SAVE_DONE, 0);
                 FileWork->available_blocks = xglHddMcGetFree();
                 *FileSaveData = *(FileSaveRecord *) SaveData;
                 hdd_existing_slot = 0;
-                FileObjectDataInput(FileWork->selected_slot, 1);
-                FileObjectDataSystem->state[FileWork->selected_slot] = 1;
+                FileObjectDataInput(FileWork->selected_slot, FILE_SLOT_EXISTING);
+                FileObjectDataSystem->state[FileWork->selected_slot] = FILE_SLOT_EXISTING;
                 FileObjectJpegDecChange(FileWork->selected_slot);
-                    for (; hdd_existing_slot < 99; hdd_existing_slot++) {
-                        if (FileObjectDataSystem->state[hdd_existing_slot] == 2) {
-                        FileWork->available_blocks -= 225;
+                    for (; hdd_existing_slot < FILE_SLOT_COUNT; hdd_existing_slot++) {
+                        if (FileObjectDataSystem->state[hdd_existing_slot] == FILE_SLOT_NEW) {
+                        FileWork->available_blocks -= FILE_HDD_SAVE_KB;
                     }
                 }
-                for (hdd_existing_slot = 0; hdd_existing_slot < 99; hdd_existing_slot++) {
-                    if (FileObjectDataSystem->state[hdd_existing_slot] == 3 &&
-                        FileWork->available_blocks >= 225) {
-                        FileObjectDataInput(hdd_existing_slot, 2);
-                        FileObjectDataSystem->state[hdd_existing_slot] = 2;
+                for (hdd_existing_slot = 0; hdd_existing_slot < FILE_SLOT_COUNT; hdd_existing_slot++) {
+                    if (FileObjectDataSystem->state[hdd_existing_slot] == FILE_SLOT_FULL &&
+                        FileWork->available_blocks >= FILE_HDD_SAVE_KB) {
+                        FileObjectDataInput(hdd_existing_slot, FILE_SLOT_NEW);
+                        FileObjectDataSystem->state[hdd_existing_slot] = FILE_SLOT_NEW;
                         FileObjectJpegDecChange(hdd_existing_slot);
-                        FileWork->available_blocks -= 225;
+                        FileWork->available_blocks -= FILE_HDD_SAVE_KB;
                     }
                 }
-                FileWork->command = 0x2e;
+                FileWork->command = FILE_STATE_SAVE_DONE;
             }
         } else {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
-            if (card_status != 1) {
-                if (card_status != 0xff) {
-                    FileWork->command = 0x90;
-                    xglSoundEffectNormalID(5, 0);
+            if (card_status != MC_STATUS_READY) {
+                if (card_status != MC_STATUS_BUSY) {
+                    FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 } else {
                     tyaDrawGauge(&gauge);
                 }
             } else if (FileWork->menu_substate == 0) {
-                xglSoundEffectNormalID(0x19, 0);
+                xglSoundEffectNormalID(FILE_SE_SAVE_DONE, 0);
                 *FileSaveData = *(FileSaveRecord *) SaveData;
-                FileObjectDataInput(FileWork->selected_slot, 1);
-                FileObjectDataSystem->state[FileWork->selected_slot] = 1;
+                FileObjectDataInput(FileWork->selected_slot, FILE_SLOT_EXISTING);
+                FileObjectDataSystem->state[FileWork->selected_slot] = FILE_SLOT_EXISTING;
                 FileObjectJpegDecChange(FileWork->selected_slot);
                 FileWork->menu_substate = 1;
                 tyaDrawGauge(&gauge);
             } else {
-                for (card_existing_slot = 0; card_existing_slot < 99; card_existing_slot++) {
-                    if (FileObjectDataSystem->state[card_existing_slot] == 2) {
-                        FileWork->available_blocks -= 165;
+                for (card_existing_slot = 0; card_existing_slot < FILE_SLOT_COUNT; card_existing_slot++) {
+                    if (FileObjectDataSystem->state[card_existing_slot] == FILE_SLOT_NEW) {
+                        FileWork->available_blocks -= FILE_CARD_SAVE_KB;
                     }
                 }
-                for (card_existing_slot = 0; card_existing_slot < 99; card_existing_slot++) {
-                    if (FileObjectDataSystem->state[card_existing_slot] == 3 &&
-                        FileWork->available_blocks >= 165) {
-                        FileObjectDataInput(card_existing_slot, 2);
-                        FileObjectDataSystem->state[card_existing_slot] = 2;
+                for (card_existing_slot = 0; card_existing_slot < FILE_SLOT_COUNT; card_existing_slot++) {
+                    if (FileObjectDataSystem->state[card_existing_slot] == FILE_SLOT_FULL &&
+                        FileWork->available_blocks >= FILE_CARD_SAVE_KB) {
+                        FileObjectDataInput(card_existing_slot, FILE_SLOT_NEW);
+                        FileObjectDataSystem->state[card_existing_slot] = FILE_SLOT_NEW;
                         FileObjectJpegDecChange(card_existing_slot);
-                        FileWork->available_blocks -= 165;
+                        FileWork->available_blocks -= FILE_CARD_SAVE_KB;
                     }
                 }
-                FileWork->command = 0x2e;
+                FileWork->command = FILE_STATE_SAVE_DONE;
             }
         }
         break;
     }
-    case 0x2d: {
+    case FILE_STATE_SAVE_CREATE: {
         int create_result;
 
-        if (FileWork->input_flags & 1) {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
             if (FileWork->use_hdd) {
-                FileWork->menu_substate = 16;
+                FileWork->menu_substate = FILE_WAIT_FRAMES;
             } else {
                 card_request.slot = FileWork->selected_slot;
                 card_request.buffer = (int)FileCardDataBuf;
                 FileSaveDataPush();
                 gauge.x = 128;
-                gauge.y = 296;
+                gauge.y = FILE_GAUGE_Y;
                 gauge.vertex_attribute = 0xffffffffU;
-                gauge.width = 256;
-                gauge.height = 8;
+                gauge.width = FILE_GAUGE_WIDTH;
+                gauge.height = FILE_GAUGE_HEIGHT;
                 gauge.current = 0;
-                gauge.maximum = 7;
-                gauge.filled_color.red = 161;
-                gauge.filled_color.green = 232;
-                gauge.filled_color.blue = 205;
-                gauge.filled_color.alpha = 128;
-                gauge.unfilled_color.red = 64;
-                gauge.unfilled_color.green = 64;
-                gauge.unfilled_color.blue = 64;
-                gauge.unfilled_color.alpha = 128;
-                xglMcRequest(((FileCardNumber *)&FileWork->card_number)->number, 8,
+                gauge.maximum = FILE_CREATE_STEPS;
+                gauge.filled_color.red = FILE_GAUGE_FILLED_RED;
+                gauge.filled_color.green = FILE_GAUGE_FILLED_GREEN;
+                gauge.filled_color.blue = FILE_GAUGE_FILLED_BLUE;
+                gauge.filled_color.alpha = FILE_GAUGE_ALPHA;
+                gauge.unfilled_color.red = FILE_GAUGE_UNFILLED;
+                gauge.unfilled_color.green = FILE_GAUGE_UNFILLED;
+                gauge.unfilled_color.blue = FILE_GAUGE_UNFILLED;
+                gauge.unfilled_color.alpha = FILE_GAUGE_ALPHA;
+                xglMcRequest(((FileCardNumber *)&FileWork->card_number)->number, MC_REQUEST_CREATE,
                              &card_request,
                              &FileWork->directory_result);
                 tyaDrawGauge(&gauge);
@@ -2658,33 +2850,33 @@ void MenuFile(void) {
             if (FileWork->menu_substate == 0) {
                 hdd_request.create.status = FileWork->selected_slot;
                 hdd_request.create.transfer.bytes = FileCardDataBuf;
-                hdd_request.create.dataSize = 0x163b0;
+                hdd_request.create.dataSize = MC_SAVE_DATA_SIZE;
                 FileSaveDataPush();
                 create_result = xglHddMcCreate(&hdd_request.create);
                 FileWork->directory_result = create_result;
                 switch (create_result) {
                 case 0:
-                    FileWork->command = 0x2c;
+                    FileWork->command = FILE_STATE_SAVE_WRITE;
                     break;
-                case -13:
-                    xglSoundEffectNormalID(5, 0);
-                    FileWork->command = 0x94;
-                    FileWork->dispatch_delay = 16;
+                case HDD_CREATE_TOO_MANY_SAVES:
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                    FileWork->command = FILE_STATE_ERROR_HDD_TOO_MANY_SAVES;
+                    FileWork->dispatch_delay = FILE_DELAY_LONG;
                     break;
-                case -9:
-                    xglSoundEffectNormalID(5, 0);
-                    FileWork->command = 0x95;
-                    FileWork->dispatch_delay = 16;
+                case HDD_CREATE_TOO_MANY_FOLDERS:
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                    FileWork->command = FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS;
+                    FileWork->dispatch_delay = FILE_DELAY_LONG;
                     break;
-                case -15:
-                    xglSoundEffectNormalID(5, 0);
-                    FileWork->command = 0x96;
-                    FileWork->dispatch_delay = 16;
+                case HDD_CREATE_NO_SPACE:
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                    FileWork->command = FILE_STATE_ERROR_HDD_NO_SPACE;
+                    FileWork->dispatch_delay = FILE_DELAY_LONG;
                     break;
                 default:
-                    xglSoundEffectNormalID(5, 0);
-                    FileWork->command = 0x90;
-                    FileWork->dispatch_delay = 16;
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
+                    FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                    FileWork->dispatch_delay = FILE_DELAY_LONG;
                     break;
                 }
             } else {
@@ -2695,319 +2887,319 @@ void MenuFile(void) {
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
             default:
-                FileWork->command = 0x90;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 gauge.current = FileWork->directory_result;
                 tyaDrawGauge(&gauge);
                 break;
-            case 1:
+            case MC_STATUS_READY:
                 if (FileWork->directory_result < 0) {
-                    FileWork->command = 0x90;
-                    xglSoundEffectNormalID(5, 0);
+                    FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 } else {
-                    FileWork->command = 0x2c;
+                    FileWork->command = FILE_STATE_SAVE_WRITE;
                 }
-                gauge.current = 7;
+                gauge.current = FILE_CREATE_STEPS;
                 tyaDrawGauge(&gauge);
                 break;
             }
         }
         break;
     }
-    case 0x2e: {
+    case FILE_STATE_SAVE_DONE: {
         if (FileWork->use_hdd) {
-            if (PadData.half_2a & 0x20) {
-                FileWork->command = 0x28;
-                xglSoundEffectNormalID(1, 0);
-                FileWork->menu_substate = 16;
+            if (PadData.half_2a & PAD_CIRCLE) {
+                FileWork->command = FILE_STATE_SLOT_LIST;
+                xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
+                FileWork->menu_substate = FILE_WAIT_FRAMES;
             }
         } else {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 1:
-                if (PadData.half_2a & 0x20) {
-                    FileWork->command = 0x28;
-                    xglSoundEffectNormalID(1, 0);
-                    FileWork->menu_substate = 16;
+            case MC_STATUS_READY:
+                if (PadData.half_2a & PAD_CIRCLE) {
+                    FileWork->command = FILE_STATE_SLOT_LIST;
+                    xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
+                    FileWork->menu_substate = FILE_WAIT_FRAMES;
                 }
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
-            case 0:
+            case MC_STATUS_NONE:
             default:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
     }
-    case 0x50:
+    case FILE_STATE_LOAD_READ:
     {
-        if (FileWork->input_flags & 1) {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
             if (FileWork->use_hdd) {
-                FileWork->dispatch_delay = 16;
+                FileWork->dispatch_delay = FILE_DELAY_LONG;
             } else {
                 card_request.slot = FileWork->selected_slot;
                 card_request.buffer = (int)FileSaveData;
-                card_request.size = 0x163b0;
-                memset(FileSaveData, 0, 0x163b0);
-                xglMcRequest(FileWork->card_number, 4, &card_request,
+                card_request.size = MC_SAVE_DATA_SIZE;
+                memset(FileSaveData, 0, MC_SAVE_DATA_SIZE);
+                xglMcRequest(FileWork->card_number, MC_REQUEST_LOAD, &card_request,
                              &FileWork->directory_result);
             }
         } else {
             if (FileWork->use_hdd) {
                 hdd_request.load.card = FileWork->selected_slot;
                 hdd_request.load.data = FileSaveData;
-                hdd_request.load.size = 0x163b0;
-                memset(FileSaveData, 0, 0x163b0);
+                hdd_request.load.size = MC_SAVE_DATA_SIZE;
+                memset(FileSaveData, 0, MC_SAVE_DATA_SIZE);
                 FileWork->directory_result = xglHddMcLoad(&hdd_request.load);
                 if (FileWork->directory_result != 0) {
-                    FileWork->command = 0x90;
-                    xglSoundEffectNormalID(5, 0);
+                    FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                    xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                     break;
                 }
                 *(FileSaveRecord *) SaveData = *FileSaveData;
                 FileVersionCheck((SaveDataHeader *) SaveData);
-                xglSoundEffectNormalID(0x1a, 0);
-                FileWork->command = 0x52;
+                xglSoundEffectNormalID(FILE_SE_LOAD_DONE, 0);
+                FileWork->command = FILE_STATE_LOAD_DONE;
             } else {
                 card = &FileWork->card;
                 card_status = card->status[FileWork->card_number];
-                if (card_status != 1) {
-                    if (card_status != 0xff) {
-                        FileWork->command = 0x90;
-                        xglSoundEffectNormalID(5, 0);
+                if (card_status != MC_STATUS_READY) {
+                    if (card_status != MC_STATUS_BUSY) {
+                        FileWork->command = FILE_STATE_ERROR_REQUEST_FAILED;
+                        xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                     }
                     break;
                 }
                 *(FileSaveRecord *) SaveData = *FileSaveData;
                 FileVersionCheck((SaveDataHeader *) SaveData);
-                xglSoundEffectNormalID(0x1a, 0);
-                FileWork->command = 0x52;
+                xglSoundEffectNormalID(FILE_SE_LOAD_DONE, 0);
+                FileWork->command = FILE_STATE_LOAD_DONE;
             }
         }
         break;
     }
-    case 0x52: {
+    case FILE_STATE_LOAD_DONE: {
         if (FileWork->use_hdd) {
-            if (PadData.half_2a & 0x20) {
-                FileWork->command = 0xf0;
-                xglSoundEffectNormalID(1, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                FileWork->command = FILE_STATE_CLOSING;
+                xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
             }
         } else {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 1:
-                if (PadData.half_2a & 0x20) {
-                    FileWork->command = 0xf0;
-                    xglSoundEffectNormalID(1, 0);
+            case MC_STATUS_READY:
+                if (PadData.half_2a & PAD_CIRCLE) {
+                    FileWork->command = FILE_STATE_CLOSING;
+                    xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                 }
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
-            case 0:
+            case MC_STATUS_NONE:
             default:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
     }
-    case 0x80: {
+    case FILE_STATE_CARD_UNFORMATTED: {
         if (FileWork->use_hdd) {
-            if (PadData.half_2a & 0x20) {
-                FileWork->command = 0xa0;
-                xglSoundEffectNormalID(1, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                FileWork->command = FILE_STATE_CANCEL_CONFIRM;
+                xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
             }
         } else {
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 2:
-                if (PadData.half_2a & 0x20) {
-                    xglSoundEffectNormalID(1, 0);
-                    FileWork->command = 0x82;
+            case MC_STATUS_UNFORMATTED:
+                if (PadData.half_2a & PAD_CIRCLE) {
+                    xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
+                    FileWork->command = FILE_STATE_FORMAT_CONFIRM;
                 }
                 break;
-            case 0:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+            case MC_STATUS_NONE:
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
-            case 0xff:
+            case MC_STATUS_BUSY:
                 break;
             default:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
     }
-    case 0x82: {
-        if (FileWork->input_flags & 1) {
-            FileWork->action_selection = 1;
+    case FILE_STATE_FORMAT_CONFIRM: {
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
+            FileWork->action_selection = FILE_CHOICE_NO;
         }
         card = &FileWork->card;
         card_status = card->status[FileWork->card_number];
         switch (card_status) {
-        case 2:
+        case MC_STATUS_UNFORMATTED:
             FileWork->action_selection =
-                MenuSelectMove(FileWork->action_selection, 2, 0);
-            if (PadData.half_2a & 0x20) {
-                if (FileWork->action_selection == 0) {
-                    xglMcRequest(FileWork->card_number, 9, 0,
+                MenuSelectMove(FileWork->action_selection, FILE_CONFIRM_ROWS, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                if (FileWork->action_selection == FILE_CHOICE_YES) {
+                    xglMcRequest(FileWork->card_number, MC_REQUEST_FORMAT, 0,
                                  &FileWork->available_blocks);
-                    FileWork->command = 0x84;
+                    FileWork->command = FILE_STATE_FORMAT;
                 } else {
-                    FileWork->command = 0xa0;
+                    FileWork->command = FILE_STATE_CANCEL_CONFIRM;
                 }
-                xglSoundEffectNormalID(1, 0);
+                xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
             }
-            if (PadData.half_2a & 0x40) {
-                FileWork->command = 0x24;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.half_2a & PAD_CROSS) {
+                FileWork->command = FILE_STATE_SELECT_DEVICE;
+                xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
             }
             break;
-        case 0:
-            FileWork->command = 0x91;
-            xglSoundEffectNormalID(5, 0);
+        case MC_STATUS_NONE:
+            FileWork->command = FILE_STATE_ERROR_NO_CARD;
+            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
             break;
-        case 0xff:
+        case MC_STATUS_BUSY:
             break;
         default:
-            FileWork->command = 0x91;
-            xglSoundEffectNormalID(5, 0);
+            FileWork->command = FILE_STATE_ERROR_NO_CARD;
+            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
             break;
         }
         break;
     }
-    case 0x84: {
+    case FILE_STATE_FORMAT: {
         card = &FileWork->card;
         card_status = card->status[FileWork->card_number];
         switch (card_status) {
-        case 1:
-            FileWork->command = 0x86;
-            xglSoundEffectNormalID(1, 0);
+        case MC_STATUS_READY:
+            FileWork->command = FILE_STATE_FORMAT_DONE;
+            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
             break;
-        case 2:
-        case 0xff:
+        case MC_STATUS_UNFORMATTED:
+        case MC_STATUS_BUSY:
             break;
         default:
-            FileWork->command = 0x87;
-            xglSoundEffectNormalID(5, 0);
+            FileWork->command = FILE_STATE_FORMAT_FAILED;
+            xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
             break;
         }
         break;
     }
-    case 0x86: {
+    case FILE_STATE_FORMAT_DONE: {
         if (FileWork->dispatch_delay == 0) {
-            if (PadData.half_2a & 0x20) {
-                FileWork->command = 0x25;
+            if (PadData.half_2a & PAD_CIRCLE) {
+                FileWork->command = FILE_STATE_CHECK_DEVICE;
                 FileWork->hide_selection = 1;
             }
             card = &FileWork->card;
             card_status = card->status[FileWork->card_number];
             switch (card_status) {
-            case 0:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+            case MC_STATUS_NONE:
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
-            case 1:
-            case 0xff:
+            case MC_STATUS_READY:
+            case MC_STATUS_BUSY:
                 break;
             default:
-                FileWork->command = 0x91;
-                xglSoundEffectNormalID(5, 0);
+                FileWork->command = FILE_STATE_ERROR_NO_CARD;
+                xglSoundEffectNormalID(FILE_SE_BUZZER, 0);
                 break;
             }
         }
         break;
     }
-    case 0x87:
+    case FILE_STATE_FORMAT_FAILED:
         if (FileWork->dispatch_delay != 0) {
             break;
         }
-        if (PadData.half_2a & 0x20) {
-            FileWork->command = 0xa0;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.half_2a & PAD_CIRCLE) {
+            FileWork->command = FILE_STATE_CANCEL_CONFIRM;
+            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
         }
         break;
-    case 0x90:
-    case 0x91:
-    case 0x92:
+    case FILE_STATE_ERROR_REQUEST_FAILED:
+    case FILE_STATE_ERROR_NO_CARD:
+    case FILE_STATE_ERROR_CANNOT_ACCESS:
     case 0x93:
-    case 0x94:
-    case 0x95:
-    case 0x96:
+    case FILE_STATE_ERROR_HDD_TOO_MANY_SAVES:
+    case FILE_STATE_ERROR_HDD_TOO_MANY_FOLDERS:
+    case FILE_STATE_ERROR_HDD_NO_SPACE:
     case 0x97:
         if (FileWork->dispatch_delay != 0) {
             break;
         }
-        if (PadData.half_2a & 0x20) {
-            FileWork->command = 0xa0;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.half_2a & PAD_CIRCLE) {
+            FileWork->command = FILE_STATE_CANCEL_CONFIRM;
+            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
         }
         break;
-    case 0xa0:
-        if (FileWork->input_flags & 1) {
-            FileWork->action_selection = 1;
+    case FILE_STATE_CANCEL_CONFIRM:
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
+            FileWork->action_selection = FILE_CHOICE_NO;
             FileWork->dispatch_delay = 8;
             xglHddCheck();
         }
         if (FileWork->dispatch_delay == 0) {
             FileWork->action_selection =
-                MenuSelectMove(FileWork->action_selection, 2, 0);
-            if (PadData.half_2a & 0x20) {
-                if (FileWork->action_selection == 0) {
+                MenuSelectMove(FileWork->action_selection, FILE_CONFIRM_ROWS, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                if (FileWork->action_selection == FILE_CHOICE_YES) {
                     FileWork->result = 1;
-                    FileWork->command = 0xf0;
-                    xglSoundEffectNormalID(2, 0);
+                    FileWork->command = FILE_STATE_CLOSING;
+                    xglSoundEffectNormalID(FILE_SE_CANCEL, 0);
                 } else {
-                    FileWork->command = 0x24;
-                    xglSoundEffectNormalID(1, 0);
+                    FileWork->command = FILE_STATE_SELECT_DEVICE;
+                    xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
                 }
             }
         }
         break;
-    case 0xa1:
+    case FILE_STATE_INSERT_CARD:
         if (FileWork->dispatch_delay != 0) {
             break;
         }
-        if (PadData.half_2a & 0x20) {
-            FileWork->command = 0x24;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.half_2a & PAD_CIRCLE) {
+            FileWork->command = FILE_STATE_SELECT_DEVICE;
+            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
         }
         break;
-    case 0xb0:
+    case FILE_STATE_NO_CARD_SPACE:
         if (FileWork->dispatch_delay != 0) {
             break;
         }
-        if (PadData.half_2a & 0x20) {
-            FileWork->command = 0xa0;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.half_2a & PAD_CIRCLE) {
+            FileWork->command = FILE_STATE_CANCEL_CONFIRM;
+            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
         }
         break;
-    case 0xb8:
+    case FILE_STATE_NO_SAVE_DATA:
         if (FileWork->dispatch_delay != 0) {
             break;
         }
-        if (PadData.half_2a & 0x20) {
-            FileWork->command = 0xa0;
-            xglSoundEffectNormalID(1, 0);
+        if (PadData.half_2a & PAD_CIRCLE) {
+            FileWork->command = FILE_STATE_CANCEL_CONFIRM;
+            xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
         }
         break;
-    case 0xf0:
-        if (FileWork->input_flags & 1) {
-            FileWork->menu_substate = 16;
+    case FILE_STATE_CLOSING:
+        if (FileWork->input_flags & FILE_INPUT_ENTER) {
+            FileWork->menu_substate = FILE_WAIT_FRAMES;
         }
         if (FileWork->menu_substate == 0) {
-            FileWork->command = 0xff;
+            FileWork->command = FILE_STATE_DONE;
         } else {
             FileWork->menu_substate--;
         }
@@ -3064,7 +3256,7 @@ void endBackTexDraw(unsigned char *color)
     signed char rgba[4];
     XglPacket *packet;
     int i;
-    FileBackTexturePacket *draw = (FileBackTexturePacket *)0x70000000;
+    FileBackTexturePacket *draw = (FileBackTexturePacket *)SCRATCHPAD_BASE;
 
     packet = xglPacketGetCurrent();
     if (color == (unsigned char *)-1) {
@@ -3117,10 +3309,10 @@ int MenuFileMain(int menu_mode)
 
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.copy_width << 5,
                            sRender.copy_height << 5);
-    GameLoopState.runtime_flags |= 0x04000000;
+    GameLoopState.runtime_flags |= FILE_RUNTIME_FLAG_MENU_OPEN;
     xglSleep();
     endPrintInit();
-    GameLoopState.runtime_flags |= 0x04000000;
+    GameLoopState.runtime_flags |= FILE_RUNTIME_FLAG_MENU_OPEN;
     MenuCfTaikiPush();
     endPrintDirectFrameCopy(xglPacketGetCurrent(), sRender.copy_height << 5,
                            sRender.draw_back_value << 5);
@@ -3152,13 +3344,13 @@ int MenuFileMain(int menu_mode)
     task_work += 0x50;
     entry = xglTaskEntryNext(FileTask, (int (*)(XglTaskPrefix *))tskTskMain,
                              FileTask ? FileTask->active_tail : 0);
-    buffer_end = 0x01000000;
+    buffer_end = FILE_STAGING_BASE;
     TskObjectSet((TskObject *)entry, tskFileData, task_work);
 
     FileCardDataBuf = (unsigned char *)buffer_end;
-    buffer_end += 0x12000;
+    buffer_end += FILE_CARD_DATA_BUF_SIZE;
     FileObjectDataSystem = (FileObjectSystem *)buffer_end;
-    memset(FileObjectDataSystem, 0, 0x258);
+    memset(FileObjectDataSystem, 0, FILE_SYSTEM_BLOCK_SIZE);
     task_work += 0x249c;
     {
         int card;
@@ -3167,11 +3359,11 @@ int MenuFileMain(int menu_mode)
             FileObjectDataSystem->card_status[card] = -1;
     }
 
-    FileJpegDec = (FileJpegDecodeSlotView *)(buffer_end + 0x800);
-    memset(FileJpegDec, 0, 0x46500);
-    FileObjectData = (struct FileObjectEntryView *)((buffer_end + 0x800 + 0x46500 + 0x7ff) & ~0x7ff);
-    memset(FileObjectData, 0, 0x696a0);
-    buffer_end = ((buffer_end + 0x800 + 0x46500 + 0x7ff) & ~0x7ff) + 0x696a0;
+    FileJpegDec = (FileJpegDecodeSlotView *)(buffer_end + FILE_STAGING_ALIGN);
+    memset(FileJpegDec, 0, FILE_JPEG_AREA_SIZE);
+    FileObjectData = (struct FileObjectEntryView *)((buffer_end + FILE_STAGING_ALIGN + FILE_JPEG_AREA_SIZE + FILE_STAGING_ALIGN - 1) & ~(FILE_STAGING_ALIGN - 1));
+    memset(FileObjectData, 0, FILE_OBJECT_AREA_SIZE);
+    buffer_end = ((buffer_end + FILE_STAGING_ALIGN + FILE_JPEG_AREA_SIZE + FILE_STAGING_ALIGN - 1) & ~(FILE_STAGING_ALIGN - 1)) + FILE_OBJECT_AREA_SIZE;
     images = FileObjectData;
     {
         int i;
@@ -3188,14 +3380,14 @@ int MenuFileMain(int menu_mode)
             images = next_images;
         }
     }
-    FileSaveData = (FileSaveRecord *)((buffer_end + 0x7ff) & ~0x7ff);
+    FileSaveData = (FileSaveRecord *)((buffer_end + FILE_STAGING_ALIGN - 1) & ~(FILE_STAGING_ALIGN - 1));
     FileExistCheckWork = (void *)(((unsigned int)FileSaveData + 0x16baf) & ~0x7ff);
-    memset(FileExistCheckWork, 0, 0x2000);
+    memset(FileExistCheckWork, 0, FILE_EXIST_CHECK_SIZE);
     if (menu_mode == 0) {
         unsigned char *thumbnail = FileObjectData[102].thumbnail;
 
         memset(thumbnail, 0, sizeof(FileObjectData[102].thumbnail));
-        if (GameSnapShotSaveThumbnail(30, FileObjectData[102].thumbnail) > 0x1000)
+        if (GameSnapShotSaveThumbnail(FILE_THUMBNAIL_QUALITY, FileObjectData[102].thumbnail) > FILE_THUMBNAIL_SIZE)
             exit(1);
     }
     MenuLoadInit();
@@ -3210,19 +3402,19 @@ int MenuFileMain(int menu_mode)
     MenuLoadFile(brokenDataThumbnailPath, FileObjectData[101].thumbnail);
     MenuWorkEndCheck(task_work);
     if (menu_mode == 0)
-        xglSoundEffectNormalID(1, 0);
+        xglSoundEffectNormalID(FILE_SE_DECIDE, 0);
     while (MenuLoadSync() != 0) {
         MenuBgTaskMain();
         xglSleep();
     }
     FileWork->text_index = menu_mode;
-    FileWork->command = 0x24;
-    FileWork->input_flags = 2;
+    FileWork->command = FILE_STATE_SELECT_DEVICE;
+    FileWork->input_flags = FILE_INPUT_SKIP;
     FileWork->result = 0;
-    for (;; endPrintExtFunc(0, 100, 0), MenuBgTaskMain(),
+    for (;; endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0), MenuBgTaskMain(),
             xglTaskExecute(FileTask), xglSleep()) {
         GameSnapShotCheck();
-        if (FileWork->state != 0xff) {
+        if (FileWork->state != FILE_STATE_DONE) {
             MenuFile();
         } else {
             break;
@@ -3236,7 +3428,7 @@ int MenuFileMain(int menu_mode)
     if (menu_mode == 0)
         GameCfPlayerLoadResource(0);
     MapChangeFadeSet();
-    GameLoopState.runtime_flags &= 0xfbffffff;
+    GameLoopState.runtime_flags &= ~FILE_RUNTIME_FLAG_MENU_OPEN;
     return FileWork->result == 0;
 }
 

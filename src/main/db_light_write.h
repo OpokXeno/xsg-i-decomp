@@ -13,8 +13,6 @@
 #include "main/play.h"
 #include "main/tcamera.h"
 
-#define ACTOR_COUNT 64
-
 struct CursorPadKeyResult {
     u16 held;
     u16 pressed;

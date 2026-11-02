@@ -1,8 +1,15 @@
 #ifndef INCLUDE_MAIN_SRS_H
 #define INCLUDE_MAIN_SRS_H
 
+/* Battle slots of the resource state. */
+#define SRS_CHARACTER_SLOTS 3        /* party members that own weapon data */
+#define SRS_WEAPONS_PER_CHARACTER 3  /* weapon effects loaded per party member */
+#define SRS_COMBO_SLOTS 3            /* enemy combo data slots */
+#define SRS_EFFECT_SLOTS 24          /* loaded cf effect slots */
+
 /* Image-mapper resource types: every slot of the resource state is indexed by
- * the type it registers with svAddImageMapper. */
+ * the type it registers with svAddImageMapper. srsAnalyzeEftNo reports the
+ * same numbers as the effect category. */
 typedef enum {
     SRS_RES_IMAGE = 0,
     SRS_RES_EFFECT_IMAGE = 1,
@@ -20,14 +27,14 @@ typedef enum {
 typedef struct SrsMemRes {
     void *image;
     void *effectImage;
-    void *weaponData[3][3];
-    void *comboData[3];
+    void *weaponData[SRS_CHARACTER_SLOTS][SRS_WEAPONS_PER_CHARACTER];
+    void *comboData[SRS_COMBO_SLOTS];
     void *battleImage;
     void *cfImage;
-    void *effectData[24];
+    void *effectData[SRS_EFFECT_SLOTS];
     short pending[SRS_RES_COUNT];
     short no[SRS_RES_COUNT];
-    void *effectExtra[24];
+    void *effectExtra[SRS_EFFECT_SLOTS];
 } SrsMemRes;
 
 extern SrsMemRes _srsMemRes;

@@ -13,6 +13,74 @@
 #define VIF0_ERR_ADDRESS 0x10003820
 
 #define VIF1_ERR_ADDRESS 0x10003C20
+#define VIF_ERR_MASK_ERROR_INTERRUPT 1
+/* GIF_STAT and VIF1_STAT, polled by the VSync callback. */
+#define GIF_STAT_ADDRESS 0x10003020
+#define VIF1_STAT_ADDRESS 0x10003C00
+#define GIF_STAT_APATH_MASK 0xC00 /* a GIF transfer path is active */
+#define VIF1_STAT_VPS_MASK 3 /* the VIF1 pipeline is not idle */
+/* CSR write that acknowledges the end-of-drawing-window interrupt (EDWINT). */
+#define GS_CSR_EDWINT 0x10
+
+/* Display resolution table rows (asDispReso / asVramBase). */
+#define RENDER_RESO_640 0
+#define RENDER_RESO_512 1
+#define RENDER_RESO_448 2
+#define RENDER_RESO_384 3
+#define RENDER_RESO_320 4
+#define RENDER_RESO_256 5
+#define RENDER_COUNT_RESO 6
+#define RENDER_HEIGHT 448
+#define RENDER_COPY_WIDTH 0x200 /* xglRenderCopyDisp2Draw copies a 512 x RENDER_HEIGHT frame */
+#define RENDER_COPY_BUFFER_WIDTH 8 /* the same width in 64-pixel units (BITBLTBUF SBW/DBW) */
+#define GS_COORD_CENTER 2048 /* primitive coordinate system origin */
+
+/* ScanLineInterpolate modes. */
+#define GS_PMODE_EN2 2 /* PMODE.EN2: xglRenderDispOn/Off toggle the display output */
+
+#define SCANLINE_INTERP_OFF 0
+#define SCANLINE_INTERP_CIRCUIT_BLEND 1 /* second display circuit shifted one line and blended */
+#define SCANLINE_INTERP_PACKET 2 /* interpolated by xglPacketInterpolate */
+/* PMODE.ALP of the blended circuit. */
+#define RENDER_CIRCUIT_BLEND_ALPHA 0x80
+
+/* s_nClearFrame: ClearOn arms the clear, which is drawn on the last frame of the countdown. */
+#define RENDER_CLEAR_OFF 0
+#define RENDER_CLEAR_DRAW 1
+#define RENDER_CLEAR_ON 2
+
+/* Vsyncs per frame: the render thread waits for two, and a third means the frame ran late. */
+#define RENDER_VSYNC_PER_FRAME 2
+#define RENDER_VSYNC_LATE 3
+/* The final-packet callback table. */
+#define RENDER_FINAL_CALLBACK_COUNT 8
+
+/* GS TEST_1 values: clear modes of ClearEnv and the depth-test state of the draw environment. */
+#define GS_ZTST_ALWAYS 1
+#define GS_ZTST_GEQUAL 2
+#define GS_TEST_ZTE_ALWAYS 0x30000
+#define GS_TEST_ZTE_GEQUAL 0x50000
+#define GS_TEST_CLEAR_DEPTH 0x00032001 /* alpha test never passes but writes Z only */
+#define GS_TEST_CLEAR_FRAME 0x00030003
+/* Default clear colour: black with GS alpha 0x80. */
+#define RENDER_CLEAR_COLOR_DEFAULT 0x80000000
+/* Fade ALPHA_1: (Cs - Cd) * FIX >> 7 + Cd with FIX in the upper word. */
+#define GS_ALPHA_FADE_BLEND 100
+/* Clear sprite GIF tag: PRE with a sprite PRIM, and the register list
+ * A+D (state), RGBAQ, XYZ2, XYZ2 (two corners), plus a closing A+D for the clear packet. */
+#define RENDER_CLEAR_GIF_REGS (GIF_REG_AD | (GIF_REG_RGBAQ << 4) | (GIF_REG_XYZ2 << 8) | (GIF_REG_XYZ2 << 12))
+/* Fade primitive: sprite with alpha blending. */
+#define GS_PRIM_SPRITE_ABE 70
+/* TRXDIR: local to local transfer. */
+#define GS_TRXDIR_LOCAL_TO_LOCAL 2
+/* Scale of the 0..1 fade components to GS bytes (alpha is 0..0x80). */
+#define RENDER_FADE_COLOR_SCALE 255.0f
+#define RENDER_FADE_ALPHA_SCALE 128.0f
+/* Quadword counts of the scratchpad GIF packets handed to DMA / VIF1. */
+#define RENDER_FLIP_QWORDS 3
+#define RENDER_COPY_QWORDS 6
+#define RENDER_FADE_QWORDS 8
+#define RENDER_CLEAR_QWORDS 6
 #define GS_DISPFB2 ((volatile u64 *)0x12000070)
 #define GS_DISPLAY2 ((volatile u64 *)0x12000080)
 #define GS_EXTBUF ((volatile u64 *)0x120000B0)
@@ -456,20 +524,20 @@ int ScanLineInterpolate = 0;
 
 static RenderTestPacket TestEnv_0_004A8E80;
 
-static XglRenderReso asDispReso[6];
+static XglRenderReso asDispReso[RENDER_COUNT_RESO];
 
-static XglRenderVram asVramBase[6];
+static XglRenderVram asVramBase[RENDER_COUNT_RESO];
 
-static XglRenderReso asDispReso[6] = {
-    { 0x31, 0, 640, 448 },
-    { 0x31, 0, 512, 448 },
-    { 0x31, 0, 448, 448 },
-    { 0x31, 0, 384, 448 },
-    { 0x31, 0, 320, 448 },
-    { 0x31, 0, 256, 448 },
+static XglRenderReso asDispReso[RENDER_COUNT_RESO] = {
+    { SCE_GS_PSMZ24, SCE_GS_PSMCT32, 640, RENDER_HEIGHT },
+    { SCE_GS_PSMZ24, SCE_GS_PSMCT32, 512, RENDER_HEIGHT },
+    { SCE_GS_PSMZ24, SCE_GS_PSMCT32, 448, RENDER_HEIGHT },
+    { SCE_GS_PSMZ24, SCE_GS_PSMCT32, 384, RENDER_HEIGHT },
+    { SCE_GS_PSMZ24, SCE_GS_PSMCT32, 320, RENDER_HEIGHT },
+    { SCE_GS_PSMZ24, SCE_GS_PSMCT32, 256, RENDER_HEIGHT },
 };
 
-static XglRenderVram asVramBase[6] = {
+static XglRenderVram asVramBase[RENDER_COUNT_RESO] = {
     { 0x0000, { 0x008C, 0x0118, 0x01A4 }, 0x008C, 0x0118, 0x01A4, { 0x0230, 0x02BC, 0x01A4, 0x01C4, 0x01E4 } },
     { 0x0000, { 0x0070, 0x00E0, 0x0150 }, 0x0070, 0x00E0, 0x0150, { 0x01C0, 0x0230, 0x01C0, 0x01E0, 0x0200 } },
     { 0x0000, { 0x0062, 0x00C4, 0x0126 }, 0x0062, 0x00C4, 0x0126, { 0x0188, 0x01EA, 0x0188, 0x01A8, 0x01C8 } },
@@ -482,9 +550,9 @@ static XglRenderVram asVramBase[6] = {
 static RenderTestPacket TestEnv_0_004A8E80 = { .value = {
     .dma_tag = 0,
     .vif_nop = 0,
-    .vif_direct = 0x51000005,
-    .gif_tag = { 1 | (1 << 15), 0x40034000, 0x551E, 0 },
-    .primitive = { { .value = 0x0000000000071001ULL }, 0x47, 0 },
+    .vif_direct = VIF_CODE_DIRECTHL | 5,
+    .gif_tag = { 1 | GIF_TAG_EOP, (4 << GIF_TAG_NREG_SHIFT) | (GS_PRIM_SPRITE << GIF_TAG_PRIM_SHIFT) | GIF_TAG_PRE, RENDER_CLEAR_GIF_REGS, 0 },
+    .primitive = { { .value = 0x0000000000071001ULL }, SCE_GS_TEST_1, 0 },
     .color = { { .value = 0 }, 0, 0 },
     .top_left = { 0x6FF8, 0, 0x71F7, 0, 0x40000000, 0 },
     .bottom_right = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
@@ -504,21 +572,21 @@ void xglRenderDrawFlip(void)
     u16 previous_base;
     u64 frame;
 
-    scratch = (u64 *)0x70000000;
+    scratch = (u64 *)SCRATCHPAD_BASE;
     previous_base = sRender.display_buffer_base;
     sRender.display_buffer_base = sRender.vram.row.flip_base;
-    frame = sRender.display_buffer_base | ((u64)(sRender.reso.row.frame_width / 64) << 16) |
-            ((u64)sRender.reso.row.frame_psm << 24);
-    scratch[0] = ((u64)0x10000000 << 32) | 0x8002;
-    scratch[1] = 14;
-    scratch[3] = 76;
+    frame = sRender.display_buffer_base | ((u64)(sRender.reso.row.frame_width / 64) << GS_FRAME_FBW_SHIFT) |
+            ((u64)sRender.reso.row.frame_psm << GS_FRAME_PSM_SHIFT);
+    scratch[0] = ((u64)GIF_TAG_HIGH_NREG_1 << 32) | (GIF_TAG_EOP | 2);
+    scratch[1] = GIF_REG_AD;
+    scratch[3] = SCE_GS_FRAME_1;
     scratch[2] = frame;
     scratch[4] = frame;
-    scratch[5] = 77;
+    scratch[5] = SCE_GS_FRAME_2;
     sRender.vram.row.flip_base = previous_base;
     __asm__ __volatile__("sync" : : : "memory");
     FlushCache(0);
-    xglDmaDirectNormal(2, 0x70000000, 3);
+    xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, SCRATCHPAD_BASE, RENDER_FLIP_QWORDS);
 }
 
 void xglRenderCopyDisp2Draw(void)
@@ -530,27 +598,27 @@ void xglRenderCopyDisp2Draw(void)
     ScratchpadQuad *trxreg;
     ScratchpadQuad *trxdir;
 
-    header = (ScratchpadQuad *)0x70000000;
-    texflush = (ScratchpadQuad *)0x70000010;
-    bitbltbuf = (ScratchpadQuad *)0x70000020;
-    trxpos = (ScratchpadQuad *)0x70000030;
-    trxreg = (ScratchpadQuad *)0x70000040;
-    trxdir = (ScratchpadQuad *)0x70000050;
-    header->dword[1] = 14;
+    header = (ScratchpadQuad *)SCRATCHPAD_BASE;
+    texflush = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x10);
+    bitbltbuf = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x20);
+    trxpos = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x30);
+    trxreg = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x40);
+    trxdir = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x50);
+    header->dword[1] = GIF_REG_AD;
     texflush->dword[0] = 0;
-    texflush->dword[1] = 63;
-    bitbltbuf->dword[0] = (u64)(sRender.display_buffer_base << 5) | ((u64)8 << 16) | ((u64)sRender.reso.row.frame_psm << 24) | ((u64)(sRender.draw_buffer_base << 5) << 32) | ((u64)8 << 48) | ((u64)sRender.reso.row.frame_psm << 56);
-    bitbltbuf->dword[1] = 80;
+    texflush->dword[1] = SCE_GS_TEXFLUSH;
+    bitbltbuf->dword[0] = (u64)(sRender.display_buffer_base << 5) | ((u64)RENDER_COPY_BUFFER_WIDTH << GS_BITBLTBUF_SBW_SHIFT) | ((u64)sRender.reso.row.frame_psm << GS_BITBLTBUF_SPSM_SHIFT) | ((u64)(sRender.draw_buffer_base << 5) << GS_BITBLTBUF_DBP_SHIFT) | ((u64)RENDER_COPY_BUFFER_WIDTH << GS_BITBLTBUF_DBW_SHIFT) | ((u64)sRender.reso.row.frame_psm << GS_BITBLTBUF_DPSM_SHIFT);
+    bitbltbuf->dword[1] = SCE_GS_BITBLTBUF;
     trxpos->dword[0] = 0;
-    trxpos->dword[1] = 81;
-    trxreg->dword[0] = ((u64)448 << 32) | 0x200;
-    trxreg->dword[1] = 82;
-    trxdir->dword[0] = 2;
-    trxdir->dword[1] = 83;
-    header->dword[0] = ((u64)0x10000000 << 32) | 0x8005;
+    trxpos->dword[1] = SCE_GS_TRXPOS;
+    trxreg->dword[0] = ((u64)RENDER_HEIGHT << 32) | RENDER_COPY_WIDTH;
+    trxreg->dword[1] = SCE_GS_TRXREG;
+    trxdir->dword[0] = GS_TRXDIR_LOCAL_TO_LOCAL;
+    trxdir->dword[1] = SCE_GS_TRXDIR;
+    header->dword[0] = ((u64)GIF_TAG_HIGH_NREG_1 << 32) | (GIF_TAG_EOP | 5);
     __asm__ __volatile__("sync" : : : "memory");
     FlushCache(0);
-    xglDmaDirectNormal(2, 0x70000000, 6);
+    xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, SCRATCHPAD_BASE, RENDER_COPY_QWORDS);
 }
 
 void xglRenderDrawFlipPk(XglPacket *packet)
@@ -562,40 +630,40 @@ void xglRenderDrawFlipPk(XglPacket *packet)
     ScratchpadQuad *trxreg;
     ScratchpadQuad *trxdir;
 
-    header = (ScratchpadQuad *)0x70000000;
-    texflush = (ScratchpadQuad *)0x70000010;
-    bitbltbuf = (ScratchpadQuad *)0x70000020;
-    trxpos = (ScratchpadQuad *)0x70000030;
-    trxreg = (ScratchpadQuad *)0x70000040;
-    trxdir = (ScratchpadQuad *)0x70000050;
-    header->dword[1] = 14;
+    header = (ScratchpadQuad *)SCRATCHPAD_BASE;
+    texflush = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x10);
+    bitbltbuf = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x20);
+    trxpos = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x30);
+    trxreg = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x40);
+    trxdir = (ScratchpadQuad *)(SCRATCHPAD_BASE + 0x50);
+    header->dword[1] = GIF_REG_AD;
     texflush->dword[0] = 0;
-    texflush->dword[1] = 63;
-    bitbltbuf->dword[0] = (u64)(sRender.draw_buffer_base << 5) | ((u64)8 << 16) | ((u64)sRender.reso.row.frame_psm << 24) | ((u64)(sRender.vram.row.flip_base << 5) << 32) | ((u64)8 << 48) | ((u64)sRender.reso.row.frame_psm << 56);
-    bitbltbuf->dword[1] = 80;
+    texflush->dword[1] = SCE_GS_TEXFLUSH;
+    bitbltbuf->dword[0] = (u64)(sRender.draw_buffer_base << 5) | ((u64)RENDER_COPY_BUFFER_WIDTH << GS_BITBLTBUF_SBW_SHIFT) | ((u64)sRender.reso.row.frame_psm << GS_BITBLTBUF_SPSM_SHIFT) | ((u64)(sRender.vram.row.flip_base << 5) << GS_BITBLTBUF_DBP_SHIFT) | ((u64)RENDER_COPY_BUFFER_WIDTH << GS_BITBLTBUF_DBW_SHIFT) | ((u64)sRender.reso.row.frame_psm << GS_BITBLTBUF_DPSM_SHIFT);
+    bitbltbuf->dword[1] = SCE_GS_BITBLTBUF;
     trxpos->dword[0] = 0;
-    trxpos->dword[1] = 81;
-    trxreg->dword[0] = ((u64)448 << 32) | 0x200;
-    trxreg->dword[1] = 82;
-    trxdir->dword[0] = 2;
-    trxdir->dword[1] = 83;
-    header->dword[0] = ((u64)0x10000000 << 32) | 0x8005;
+    trxpos->dword[1] = SCE_GS_TRXPOS;
+    trxreg->dword[0] = ((u64)RENDER_HEIGHT << 32) | RENDER_COPY_WIDTH;
+    trxreg->dword[1] = SCE_GS_TRXREG;
+    trxdir->dword[0] = GS_TRXDIR_LOCAL_TO_LOCAL;
+    trxdir->dword[1] = SCE_GS_TRXDIR;
+    header->dword[0] = ((u64)GIF_TAG_HIGH_NREG_1 << 32) | (GIF_TAG_EOP | 5);
     __asm__ __volatile__("sync" : : : "memory");
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
-    sceVif1PkAddDirectDataN(packet, (void *)0x70000000, 6);
+    sceVif1PkAddDirectDataN(packet, (void *)SCRATCHPAD_BASE, RENDER_COPY_QWORDS);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
 int xglRenderVSyncCallback(void)
 {
     /* GIF and VIF1 hardware status gate the frame callback update. */
-    volatile u32 *const gif_status = (volatile u32 *)0x10003020;
-    volatile u32 *const vif1_status = (volatile u32 *)0x10003C00;
+    volatile u32 *const gif_status = (volatile u32 *)GIF_STAT_ADDRESS;
+    volatile u32 *const vif1_status = (volatile u32 *)VIF1_STAT_ADDRESS;
 
     VSyncCount++;
-    if (VSyncCount == 2) {
-        if ((*gif_status & 0xC00) != 0 || (*vif1_status & 3) != 0) {
+    if (VSyncCount == RENDER_VSYNC_PER_FRAME) {
+        if ((*gif_status & GIF_STAT_APATH_MASK) != 0 || (*vif1_status & VIF1_STAT_VPS_MASK) != 0) {
             sRender.frame_status = 1;
         }
     }
@@ -617,10 +685,10 @@ static void xglRenderSyncMove(void)
 
     while (sceGsSyncV(0) != 0) {
     }
-    while (VSyncCount < 2U) {
+    while (VSyncCount < RENDER_VSYNC_PER_FRAME) {
     }
 
-    if (VSyncCount >= 3U) {
+    if (VSyncCount >= RENDER_VSYNC_LATE) {
         sRender.frame_delta = 1;
     }
     VSyncCount = 0;
@@ -634,24 +702,24 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.gif_tag.prim = 0;
     DrawEnv.value.gif_tag.flg = 0;
     DrawEnv.value.gif_tag.nreg = 1;
-    DrawEnv.value.gif_registers.regs0 = 14;
+    DrawEnv.value.gif_registers.regs0 = GIF_REG_AD;
     DrawEnv.value.frame1.fbp = sRender.vram.row.height;
     DrawEnv.value.frame1.fbw = sRender.reso.row.frame_width / 64;
     DrawEnv.value.frame1.psm = sRender.reso.row.frame_psm;
     DrawEnv.value.frame1.fbmsk = 0;
-    DrawEnv.value.frame1_address = 76;
+    DrawEnv.value.frame1_address = SCE_GS_FRAME_1;
     DrawEnv.value.zbuf1.zbp = sRender.vram.row.depth_base;
     DrawEnv.value.zbuf1.psm = sRender.reso.row.depth_psm;
     DrawEnv.value.zbuf1.zmsk = 0;
-    DrawEnv.value.zbuf1_address = 78;
-    DrawEnv.value.xyoffset1.ofx = (2048 - (sRender.reso.row.frame_width >> 1)) << 4;
-    DrawEnv.value.xyoffset1.ofy = (2048 - (sRender.reso.row.frame_height >> 1)) << 4;
-    DrawEnv.value.xyoffset1_address = 24;
+    DrawEnv.value.zbuf1_address = SCE_GS_ZBUF_1;
+    DrawEnv.value.xyoffset1.ofx = (GS_COORD_CENTER - (sRender.reso.row.frame_width >> 1)) << 4;
+    DrawEnv.value.xyoffset1.ofy = (GS_COORD_CENTER - (sRender.reso.row.frame_height >> 1)) << 4;
+    DrawEnv.value.xyoffset1_address = SCE_GS_XYOFFSET_1;
     DrawEnv.value.scissor1.scax0 = 0;
     DrawEnv.value.scissor1.scax1 = sRender.reso.row.frame_width - 1;
     DrawEnv.value.scissor1.scay0 = 0;
     DrawEnv.value.scissor1.scay1 = sRender.reso.row.frame_height - 1;
-    DrawEnv.value.scissor1_address = 64;
+    DrawEnv.value.scissor1_address = SCE_GS_SCISSOR_1;
     DrawEnv.value.test1.ate = 0;
     DrawEnv.value.test1.atst = 0;
     DrawEnv.value.test1.aref = 0;
@@ -659,25 +727,25 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.test1.date = 0;
     DrawEnv.value.test1.datm = 0;
     DrawEnv.value.test1.zte = 1;
-    DrawEnv.value.test1.ztst = 2;
-    DrawEnv.value.test1_address = 71;
+    DrawEnv.value.test1.ztst = GS_ZTST_GEQUAL;
+    DrawEnv.value.test1_address = SCE_GS_TEST_1;
     DrawEnv.value.frame2.fbp = sRender.vram.row.height;
     DrawEnv.value.frame2.fbw = sRender.reso.row.frame_width / 64;
     DrawEnv.value.frame2.psm = sRender.reso.row.frame_psm;
     DrawEnv.value.frame2.fbmsk = 0;
-    DrawEnv.value.frame2_address = 77;
+    DrawEnv.value.frame2_address = SCE_GS_FRAME_2;
     DrawEnv.value.zbuf2.zbp = sRender.vram.row.depth_base;
     DrawEnv.value.zbuf2.psm = sRender.reso.row.depth_psm;
     DrawEnv.value.zbuf2.zmsk = 0;
-    DrawEnv.value.zbuf2_address = 79;
-    DrawEnv.value.xyoffset2.ofx = (2048 - (sRender.reso.row.frame_width >> 1)) << 4;
-    DrawEnv.value.xyoffset2.ofy = (2048 - (sRender.reso.row.frame_height >> 1)) << 4;
-    DrawEnv.value.xyoffset2_address = 25;
+    DrawEnv.value.zbuf2_address = SCE_GS_ZBUF_2;
+    DrawEnv.value.xyoffset2.ofx = (GS_COORD_CENTER - (sRender.reso.row.frame_width >> 1)) << 4;
+    DrawEnv.value.xyoffset2.ofy = (GS_COORD_CENTER - (sRender.reso.row.frame_height >> 1)) << 4;
+    DrawEnv.value.xyoffset2_address = SCE_GS_XYOFFSET_2;
     DrawEnv.value.scissor2.scax0 = 0;
     DrawEnv.value.scissor2.scax1 = sRender.reso.row.frame_width - 1;
     DrawEnv.value.scissor2.scay0 = 0;
     DrawEnv.value.scissor2.scay1 = sRender.reso.row.frame_height - 1;
-    DrawEnv.value.scissor2_address = 65;
+    DrawEnv.value.scissor2_address = SCE_GS_SCISSOR_2;
     DrawEnv.value.test2.ate = 0;
     DrawEnv.value.test2.atst = 0;
     DrawEnv.value.test2.aref = 0;
@@ -685,18 +753,18 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.test2.date = 0;
     DrawEnv.value.test2.datm = 0;
     DrawEnv.value.test2.zte = 1;
-    DrawEnv.value.test2.ztst = 2;
-    DrawEnv.value.test2_address = 72;
+    DrawEnv.value.test2.ztst = GS_ZTST_GEQUAL;
+    DrawEnv.value.test2_address = SCE_GS_TEST_2;
     DrawEnv.value.prmodecont.ac = 1;
-    DrawEnv.value.prmodecont_address = 26;
-    DrawEnv.value.texa.ta0 = 0x80;
+    DrawEnv.value.prmodecont_address = SCE_GS_PRMODECONT;
+    DrawEnv.value.texa.ta0 = GS_ALPHA_OPAQUE;
     DrawEnv.value.texa.aem = 0;
-    DrawEnv.value.texa.ta1 = 0x80;
-    DrawEnv.value.texa_address = 59;
+    DrawEnv.value.texa.ta1 = GS_ALPHA_OPAQUE;
+    DrawEnv.value.texa_address = SCE_GS_TEXA;
     DrawEnv.value.colclamp.clamp = 1;
-    DrawEnv.value.colclamp_address = 70;
+    DrawEnv.value.colclamp_address = SCE_GS_COLCLAMP;
     DrawEnv.value.dthe.dthe = 0;
-    DrawEnv.value.dthe_address = 69;
+    DrawEnv.value.dthe_address = SCE_GS_DTHE;
     DrawEnv.value.dimx.dm00 = 4;
     DrawEnv.value.dimx.dm01 = 2;
     DrawEnv.value.dimx.dm02 = 5;
@@ -713,7 +781,7 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.dimx.dm31 = 7;
     DrawEnv.value.dimx.dm32 = 0;
     DrawEnv.value.dimx.dm33 = 6;
-    DrawEnv.value.dimx_address = 68;
+    DrawEnv.value.dimx_address = SCE_GS_DIMX;
 }
 
 void xglRenderDrawEnvMove(void)
@@ -742,17 +810,17 @@ void xglRenderDispEnvMove(void)
 {
     DispEnv.dispfb1.field.fbp = sRender.vram.row.width;
     switch (ScanLineInterpolate) {
-    case 0:
+    case SCANLINE_INTERP_OFF:
         DispEnv.pmode.en1 = 0;
         break;
-    case 1:
+    case SCANLINE_INTERP_CIRCUIT_BLEND:
         DispEnv.dispfb2.field.fbp = sRender.vram.row.width;
         DispEnv.pmode.en1 = DispEnv.pmode.en2;
-        DispEnv.pmode.alp = 0x80;
+        DispEnv.pmode.alp = RENDER_CIRCUIT_BLEND_ALPHA;
         DispEnv.display2.field.dx = DispEnv.display1.field.dx;
         DispEnv.display2.field.dy = DispEnv.display1.field.dy - 1;
         break;
-    case 2:
+    case SCANLINE_INTERP_PACKET:
         /* the field interpolation of mode 2 runs in xglRenderMove */
         break;
     }
@@ -763,17 +831,17 @@ void xglRenderDispEnvMove(void)
     *GS_EXTBUF = DispEnv.extbuf;
     *GS_EXTDATA = DispEnv.extdata;
     *GS_EXTWRITE = DispEnv.extwrite;
-    *GS_CSR = 16;
+    *GS_CSR = GS_CSR_EDWINT;
 }
 
 void xglRenderClearDepth(void)
 {
-    ClearEnv.value.target = 0x00032001;
+    ClearEnv.value.target = GS_TEST_CLEAR_DEPTH;
 }
 
 void xglRenderClearFrame(void)
 {
-    ClearEnv.value.target = 0x00030003;
+    ClearEnv.value.target = GS_TEST_CLEAR_FRAME;
 }
 
 void xglRenderClearColor(u32 color)
@@ -789,27 +857,27 @@ static void xglRenderClearEnvInit(void)
     int half_width;
     int half_height;
 
-    ClearEnv.value.gif_tag_high = 0x50034000;
-    ClearEnv.value.gif_registers_low = 0xE551E;
-    ClearEnv.value.gif_tag_low = 0x8001;
+    ClearEnv.value.gif_tag_high = (5 << GIF_TAG_NREG_SHIFT) | (GS_PRIM_SPRITE << GIF_TAG_PRIM_SHIFT) | GIF_TAG_PRE;
+    ClearEnv.value.gif_registers_low = RENDER_CLEAR_GIF_REGS | (GIF_REG_AD << 16);
+    ClearEnv.value.gif_tag_low = GIF_TAG_EOP | 1;
     ClearEnv.value.gif_registers_high = 0;
     xglRenderClearFrame();
-    ClearEnv.value.target_address = 71;
-    xglRenderClearColor(0x80000000);
+    ClearEnv.value.target_address = SCE_GS_TEST_1;
+    xglRenderClearColor(RENDER_CLEAR_COLOR_DEFAULT);
     half_width = sRender.reso.row.frame_width >> 1;
     half_height = sRender.reso.row.frame_height >> 1;
-    ClearEnv.value.left = (2048 - half_width) << 4;
-    ClearEnv.value.top = (2048 - half_height) << 4;
-    ClearEnv.value.right = (2048 + half_width) << 4;
-    ClearEnv.value.bottom = (2048 + half_height) << 4;
-    ClearEnv.value.restore_target = 0x50000;
-    ClearEnv.value.restore_target_address = 71;
+    ClearEnv.value.left = (GS_COORD_CENTER - half_width) << 4;
+    ClearEnv.value.top = (GS_COORD_CENTER - half_height) << 4;
+    ClearEnv.value.right = (GS_COORD_CENTER + half_width) << 4;
+    ClearEnv.value.bottom = (GS_COORD_CENTER + half_height) << 4;
+    ClearEnv.value.restore_target = GS_TEST_ZTE_GEQUAL;
+    ClearEnv.value.restore_target_address = SCE_GS_TEST_1;
 }
 
 void xglRenderClearEnvMove(void)
 {
     SyncDCache(&ClearEnv.value, &ClearEnv.value + 1);
-    xglDmaDirectNormal(2, (u32) &ClearEnv.value, 6);
+    xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, (u32) &ClearEnv.value, RENDER_CLEAR_QWORDS);
 }
 
 void xglRenderSetReso(int resolution)
@@ -849,12 +917,12 @@ void xglRenderSwapBase(void)
 
 void xglRenderDispOff(void)
 {
-    DispEnv.flags &= ~(u64) 2;
+    DispEnv.flags &= ~(u64) GS_PMODE_EN2;
 }
 
 void xglRenderDispOn(void)
 {
-    DispEnv.flags |= 2;
+    DispEnv.flags |= GS_PMODE_EN2;
 }
 
 void xglRenderInit(void)
@@ -868,21 +936,21 @@ void xglRenderInit(void)
     /* Read-modify-write the 32-bit VIF ERR MMIO registers to mask bit 0.
      * The two channels are independent hardware locations. */
     vif0_error = (volatile u32 *)VIF0_ERR_ADDRESS;
-    *vif0_error |= 1;
+    *vif0_error |= VIF_ERR_MASK_ERROR_INTERRUPT;
     vif1_error = (volatile u32 *)VIF1_ERR_ADDRESS;
-    *vif1_error |= 1;
+    *vif1_error |= VIF_ERR_MASK_ERROR_INTERRUPT;
     sceGsResetGraph(0, 1, 2, 0);
     xglRenderSyncInit();
-    xglRenderSetReso(1);
+    xglRenderSetReso(RENDER_RESO_512);
     FrameCount = 0;
-    ScanLineInterpolate = 1;
+    ScanLineInterpolate = SCANLINE_INTERP_CIRCUIT_BLEND;
     LoopCount = 0;
     sRender.render_status = 0;
     sRender.frame_count = 0;
     sRender.frame_delta = 0;
     sRender.frame_status = 0;
     sRender.scene_disabled = 0;
-    for (i = 7; i >= 0; i--) {
+    for (i = RENDER_FINAL_CALLBACK_COUNT - 1; i >= 0; i--) {
         sRender.final_packet_callback[i] = 0;
     }
     xglRenderGlobalFadeInit();
@@ -898,7 +966,7 @@ static void xglRenderFinalPacket(void)
 
     packet = xglPacketGetCurrent();
     if (nmlModelIsBackBufferRequest() == 0) {
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < RENDER_FINAL_CALLBACK_COUNT; i++) {
             function = sRender.final_packet_callback[i];
             if (function != 0) {
                 function(packet);
@@ -948,8 +1016,8 @@ void xglRenderGlobalFadeSet(float red, float green, float blue, float alpha)
     {
         alpha = 1.0f;
     }
-    s_nGblFade = (((int) (red * 255.0f)) & 0xFF) + (((int) (alpha * 128.0f)) << 0x18);
-    s_nGblFade = s_nGblFade + (((((int) (blue * 255.0f)) & 0xFF) << 0x10) + ((((int) (green * 255.0f)) & 0xFF) << 8));
+    s_nGblFade = (((int) (red * RENDER_FADE_COLOR_SCALE)) & 0xFF) + (((int) (alpha * RENDER_FADE_ALPHA_SCALE)) << 0x18);
+    s_nGblFade = s_nGblFade + (((((int) (blue * RENDER_FADE_COLOR_SCALE)) & 0xFF) << 0x10) + ((((int) (green * RENDER_FADE_COLOR_SCALE)) & 0xFF) << 8));
 }
 
 static void xglRenderGlobalFade(void)
@@ -971,45 +1039,45 @@ static void xglRenderGlobalFade(void)
         sRender.fade_callback(packet);
     }
     if (alpha != 0 && s_nGblFadeInit != 0) {
-        header = (u64 *)0x70000000;
-        header[1] = 14;
-        alpha_entry = (u64 *)0x70000010;
-        alpha_entry[0] = ((u64)alpha << 32) | 100;
-        alpha_entry[1] = 66;
-        test_entry = (u64 *)0x70000020;
-        test_entry[0] = 0x30000;
-        test_entry[1] = 71;
-        color_entry = (u64 *)0x70000030;
+        header = (u64 *)SCRATCHPAD_BASE;
+        header[1] = GIF_REG_AD;
+        alpha_entry = (u64 *)(SCRATCHPAD_BASE + 0x10);
+        alpha_entry[0] = ((u64)alpha << 32) | GS_ALPHA_FADE_BLEND;
+        alpha_entry[1] = SCE_GS_ALPHA_1;
+        test_entry = (u64 *)(SCRATCHPAD_BASE + 0x20);
+        test_entry[0] = GS_TEST_ZTE_ALWAYS;
+        test_entry[1] = SCE_GS_TEST_1;
+        color_entry = (u64 *)(SCRATCHPAD_BASE + 0x30);
         color_entry[0] = ((u64)(s_nGblFade & 0xFF)) | ((u64)(((unsigned int)s_nGblFade >> 8) & 0xFF) << 8) | ((u64)(((unsigned int)s_nGblFade >> 16) & 0xFF) << 16) | ((u64)0x3F800000 << 32);
-        color_entry[1] = 1;
-        prim_entry = (u64 *)0x70000040;
-        prim_entry[0] = 70;
-        prim_entry[1] = 0;
-        vertex0_entry = (u64 *)0x70000050;
+        color_entry[1] = SCE_GS_RGBAQ;
+        prim_entry = (u64 *)(SCRATCHPAD_BASE + 0x40);
+        prim_entry[0] = GS_PRIM_SPRITE_ABE;
+        prim_entry[1] = SCE_GS_PRIM;
+        vertex0_entry = (u64 *)(SCRATCHPAD_BASE + 0x50);
         vertex0_entry[0] = 0x72007000;
-        vertex0_entry[1] = 4;
-        vertex1_entry = (u64 *)0x70000060;
+        vertex0_entry[1] = SCE_GS_XYZF2;
+        vertex1_entry = (u64 *)(SCRATCHPAD_BASE + 0x60);
         vertex1_entry[0] = 0x8E009000;
-        vertex1_entry[1] = 4;
-        restore_entry = (u64 *)0x70000070;
-        restore_entry[0] = 0x50000;
-        restore_entry[1] = 71;
-        header[0] = ((u64)0x10000000 << 32) | 0x8007;
+        vertex1_entry[1] = SCE_GS_XYZF2;
+        restore_entry = (u64 *)(SCRATCHPAD_BASE + 0x70);
+        restore_entry[0] = GS_TEST_ZTE_GEQUAL;
+        restore_entry[1] = SCE_GS_TEST_1;
+        header[0] = ((u64)GIF_TAG_HIGH_NREG_1 << 32) | (GIF_TAG_EOP | 7);
         sceVif1PkCnt(packet, 0);
         sceVif1PkOpenDirectHLCode(packet, 0);
-        sceVif1PkAddDirectDataN(packet, header, 8);
+        sceVif1PkAddDirectDataN(packet, header, RENDER_FADE_QWORDS);
         sceVif1PkCloseDirectHLCode(packet);
     }
 }
 
 void xglRenderClearOn(void)
 {
-    s_nClearFrame = 2;
+    s_nClearFrame = RENDER_CLEAR_ON;
 }
 
 void xglRenderClearOff(void)
 {
-    s_nClearFrame = 0;
+    s_nClearFrame = RENDER_CLEAR_OFF;
 }
 
 static void xglRenderClear(void)
@@ -1017,15 +1085,15 @@ static void xglRenderClear(void)
     TestEnv_0_004A8E80.value.color.red_green.words.low = ClearEnv.value.color_r;
     TestEnv_0_004A8E80.value.color.red_green.words.high = ClearEnv.value.color_g;
     TestEnv_0_004A8E80.value.color.blue = ClearEnv.value.color_b;
-    TestEnv_0_004A8E80.value.color.alpha = 0x80;
+    TestEnv_0_004A8E80.value.color.alpha = GS_ALPHA_OPAQUE;
     sceVif1PkRef(xglPacketGetCurrent(), &TestEnv_0_004A8E80.value, 6, 0, 0, 0);
 }
 
 static void xglRenderMove(void)
 {
-    if (s_nClearFrame == 1 && sRender.scene_disabled == 0) {
+    if (s_nClearFrame == RENDER_CLEAR_DRAW && sRender.scene_disabled == 0) {
         xglRenderClear();
-    } else if (s_nClearFrame >= 2) {
+    } else if (s_nClearFrame >= RENDER_CLEAR_ON) {
         s_nClearFrame--;
     }
     if (sRender.scene_disabled == 0) {
@@ -1043,7 +1111,7 @@ static void xglRenderMove(void)
     if (sRender.scene_disabled == 0) {
         xglRenderGlobalFade();
     }
-    if (ScanLineInterpolate == 2 && sRender.scene_disabled == 0) {
+    if (ScanLineInterpolate == SCANLINE_INTERP_PACKET && sRender.scene_disabled == 0) {
         xglPacketInterpolate();
     }
     xglPacketMove();

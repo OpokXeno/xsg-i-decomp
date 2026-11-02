@@ -3,25 +3,40 @@
 #include "main/xgl_2.h"
 
 #define NULL ((void *)0)
-#define DEFOCUS_SCRATCH ((DefocusSolidPacket *)0x70000000)
+#define DEFOCUS_SCRATCH ((DefocusSolidPacket *)SCRATCHPAD_BASE)
 #define DEFOCUS_SOLID_GIF_TAG 0x51000004
-#define DEFOCUS_SOLID_VIF_COMMAND 0x8001
+#define DEFOCUS_PACKET_VIF_COMMAND 0x8001
 #define DEFOCUS_SOLID_GS_MODE 0x30234000
 #define DEFOCUS_SOLID_GS_REGISTERS 0x551
+/* GS XY offsets (12.4 fixed point) of the 512x448 screen: the left / top edge
+ * biased half a pixel, and the right / bottom edge one width / height later. */
 #define DEFOCUS_SCREEN_X_BIAS 28664
 #define DEFOCUS_SCREEN_Y_BIAS 29175
+#define DEFOCUS_SCREEN_WIDTH_FIXED 8192
+#define DEFOCUS_SCREEN_HEIGHT_FIXED 7168
+#define DEFOCUS_SCREEN_X_END (DEFOCUS_SCREEN_X_BIAS + DEFOCUS_SCREEN_WIDTH_FIXED)
+#define DEFOCUS_SCREEN_Y_END (DEFOCUS_SCREEN_Y_BIAS + DEFOCUS_SCREEN_HEIGHT_FIXED)
+#define DEFOCUS_LAYER_COUNT 16
+#define DEFOCUS_GROUP_LAYERS 4
+#define DEFOCUS_GROUP_COUNT (DEFOCUS_LAYER_COUNT / DEFOCUS_GROUP_LAYERS)
+#define DEFOCUS_SCREEN_WIDTH 512
+#define DEFOCUS_SCREEN_HEIGHT 448
+/* Vertex colours: neutral (0x80 per channel) with alpha 0x40 / 0x80. */
+#define DEFOCUS_COLOR_HALF_ALPHA 0x40808080
+#define DEFOCUS_COLOR_NEUTRAL 0x80808080
+#define DEFOCUS_LAYER_PARAMETERS 16
 #define DEFOCUS_HEAD_WORDS 16
 #define DEFOCUS_SOLID_WORDS 20
 #define DEFOCUS_VU_MEMORY_WORD ((u32 *)0x8001)
-#define DEFOCUS_TYPE05_PACKET ((DefocusTexturedPacket *)0x70000000)
-#define DEFOCUS_WAVE_HEADER ((DefocusWaveHeader *)0x70000000)
-#define DEFOCUS_WAVE_TABLE ((DefocusWaveTable *)0x70000000)
-#define DEFOCUS_WAVE_SPRITE ((DefocusWaveSprite *)0x70000080)
-#define DEFOCUS_RADIAL_VERTICES ((DefocusRadialVertex *)0x70000000)
-#define DEFOCUS_STAR_HEADER ((DefocusStarHeader *)0x70000318)
-#define DEFOCUS_STAR_STRIP ((DefocusStarVertex *)0x70000338)
-#define DEFOCUS_STAR_WORD(index) (((int *)0x70000318)[index])
-#define DEFOCUS_RING_TABLE ((DefocusRingTable *)0x70000000)
+#define DEFOCUS_TYPE05_PACKET ((DefocusTexturedPacket *)SCRATCHPAD_BASE)
+#define DEFOCUS_WAVE_HEADER ((DefocusWaveHeader *)SCRATCHPAD_BASE)
+#define DEFOCUS_WAVE_TABLE ((DefocusWaveTable *)SCRATCHPAD_BASE)
+#define DEFOCUS_WAVE_SPRITE ((DefocusWaveSprite *)(SCRATCHPAD_BASE + 0x80))
+#define DEFOCUS_RADIAL_VERTICES ((DefocusRadialVertex *)SCRATCHPAD_BASE)
+#define DEFOCUS_STAR_HEADER ((DefocusStarHeader *)(SCRATCHPAD_BASE + 0x318))
+#define DEFOCUS_STAR_STRIP ((DefocusStarVertex *)(SCRATCHPAD_BASE + 0x338))
+#define DEFOCUS_STAR_WORD(index) (((int *)(SCRATCHPAD_BASE + 0x318))[index])
+#define DEFOCUS_RING_TABLE ((DefocusRingTable *)SCRATCHPAD_BASE)
 
 typedef struct {
     u8 unmodeled_00[0x14];
@@ -41,7 +56,7 @@ typedef struct {
     u8 state;
     u8 index;
     u8 unmodeled_03;
-    int parameters[16];
+    int parameters[DEFOCUS_LAYER_PARAMETERS];
 } DefocusLayer;
 
 /* GS registers inside the display-environment block at DispEnv. */
@@ -309,7 +324,7 @@ typedef struct {
 } DefocusStarVertex;
 
 extern DefocusRenderState sRender;
-extern DefocusLayer GameDefocusParam[16];
+extern DefocusLayer GameDefocusParam[DEFOCUS_LAYER_COUNT];
 extern DefocusDispEnv DispEnv;
 extern int ScanLineInterpolate;
 extern void (*func_14[11])(DefocusLayer *layer, XglPacket *packet);
@@ -399,7 +414,7 @@ static u64 Tail_15[8] = { 0x0000000000000000ULL, 0x5100000300000000ULL, 0x200000
 
 /* Runtime writes the layer entries through DefocusSet; the original table is
  * sixteen 0x44-byte records whose initial bytes are all zero. */
-DefocusLayer GameDefocusParam[16] = { 0 };
+DefocusLayer GameDefocusParam[DEFOCUS_LAYER_COUNT] = { 0 };
 
 static u64 GetTex0(int type, int tex_cc)
 {
@@ -420,7 +435,7 @@ static u64 GetTex0(int type, int tex_cc)
 
 static void DefocusMainType01(DefocusLayer *layer, XglPacket *packet)
 {
-    DefocusTexturedPacket *draw = (DefocusTexturedPacket *)0x70000000;
+    DefocusTexturedPacket *draw = (DefocusTexturedPacket *)SCRATCHPAD_BASE;
     u8 *color;
     int right;
     int bottom;
@@ -429,7 +444,7 @@ static void DefocusMainType01(DefocusLayer *layer, XglPacket *packet)
 
     Head_0.texture = GetTex0(layer->parameters[0], 0);
     draw->gif_tag = 0x51000006;
-    draw->vif_command = 0x8001;
+    draw->vif_command = DEFOCUS_PACKET_VIF_COMMAND;
     draw->gs_mode = 0x50ab4000;
     draw->gs_registers = 0x53531;
     draw->header[0] = 0;
@@ -441,16 +456,16 @@ static void DefocusMainType01(DefocusLayer *layer, XglPacket *packet)
     draw->green = color[1];
     draw->blue = color[2];
     draw->alpha = color[3];
-    draw->second_u = 8192;
+    draw->second_u = DEFOCUS_SCREEN_WIDTH_FIXED;
     draw->first_u = 0;
-    draw->left = (layer->parameters[4] << 4) + 28664;
+    draw->left = (layer->parameters[4] << 4) + DEFOCUS_SCREEN_X_BIAS;
     right = layer->parameters[4] + layer->parameters[6];
-    draw->second_v = 7168;
+    draw->second_v = DEFOCUS_SCREEN_HEIGHT_FIXED;
     draw->first_v = 0;
-    draw->right = (right << 4) + 36856;
-    draw->top = (layer->parameters[5] << 4) + 29175;
+    draw->right = (right << 4) + DEFOCUS_SCREEN_X_END;
+    draw->top = (layer->parameters[5] << 4) + DEFOCUS_SCREEN_Y_BIAS;
     bottom = layer->parameters[5] + layer->parameters[7];
-    draw->bottom = (bottom << 4) + 36343;
+    draw->bottom = (bottom << 4) + DEFOCUS_SCREEN_Y_END;
     vertex_color = layer->parameters[2];
     draw->second_color = vertex_color;
     draw->color = vertex_color;
@@ -492,7 +507,7 @@ static void DefocusMainType02(DefocusLayer *layer, XglPacket *packet)
 
 static void DefocusMainType03(DefocusLayer *layer, XglPacket *packet)
 {
-    DefocusTexturedPacket *draw = (DefocusTexturedPacket *)0x70000000;
+    DefocusTexturedPacket *draw = (DefocusTexturedPacket *)SCRATCHPAD_BASE;
     u8 *color;
     int right;
     int bottom;
@@ -502,7 +517,7 @@ static void DefocusMainType03(DefocusLayer *layer, XglPacket *packet)
 
     Head_4_00367170.texture = GetTex0(2, 1);
     draw->gif_tag = 0x51000006;
-    draw->vif_command = 0x8001;
+    draw->vif_command = DEFOCUS_PACKET_VIF_COMMAND;
     draw->gs_mode = 0x50ab4000;
     draw->gs_registers = 0x53531;
     draw->header[0] = 0;
@@ -514,20 +529,20 @@ static void DefocusMainType03(DefocusLayer *layer, XglPacket *packet)
     draw->green = color[1];
     draw->blue = color[2];
     draw->alpha = color[3];
-    draw->second_u = 8192;
+    draw->second_u = DEFOCUS_SCREEN_WIDTH_FIXED;
     draw->first_u = 0;
-    draw->left = (layer->parameters[2] << 4) + 28664;
+    draw->left = (layer->parameters[2] << 4) + DEFOCUS_SCREEN_X_BIAS;
     right = layer->parameters[2] + layer->parameters[4];
-    draw->second_v = 7168;
+    draw->second_v = DEFOCUS_SCREEN_HEIGHT_FIXED;
     draw->first_v = 0;
-    draw->right = (right << 4) + 36856;
-    draw->top = (layer->parameters[3] << 4) + 29175;
+    draw->right = (right << 4) + DEFOCUS_SCREEN_X_END;
+    draw->top = (layer->parameters[3] << 4) + DEFOCUS_SCREEN_Y_BIAS;
     bottom_origin = layer->parameters[3];
     bottom_extent = layer->parameters[5];
     draw->second_color = 0xffffffff;
     draw->color = 0xffffffff;
     bottom = bottom_origin + bottom_extent;
-    draw->bottom = (bottom << 4) + 36343;
+    draw->bottom = (bottom << 4) + DEFOCUS_SCREEN_Y_END;
     draw->second_flags = 0;
     draw->flags = 0;
     sceVif1PkCnt(packet, 0);
@@ -562,7 +577,7 @@ static void DefocusMainType05(DefocusLayer *layer, XglPacket *packet)
     texture_dimensions = width_dimensions | height_dimensions;
     Head_5.texture_dimensions = texture_dimensions;
     DEFOCUS_TYPE05_PACKET->gif_tag = 0x51000006;
-    DEFOCUS_TYPE05_PACKET->vif_command = 0x8001;
+    DEFOCUS_TYPE05_PACKET->vif_command = DEFOCUS_PACKET_VIF_COMMAND;
     DEFOCUS_TYPE05_PACKET->header[0] = 0;
     DEFOCUS_TYPE05_PACKET->header[1] = 0;
     DEFOCUS_TYPE05_PACKET->header[2] = 0;
@@ -576,16 +591,16 @@ static void DefocusMainType05(DefocusLayer *layer, XglPacket *packet)
     DEFOCUS_TYPE05_PACKET->alpha = color[3];
     x = layer->parameters[2] << 4;
     DEFOCUS_TYPE05_PACKET->first_u = x;
-    DEFOCUS_TYPE05_PACKET->left = x + 28664;
+    DEFOCUS_TYPE05_PACKET->left = x + DEFOCUS_SCREEN_X_BIAS;
     y = layer->parameters[3] << 4;
     DEFOCUS_TYPE05_PACKET->first_v = y;
-    DEFOCUS_TYPE05_PACKET->top = y + 29175;
+    DEFOCUS_TYPE05_PACKET->top = y + DEFOCUS_SCREEN_Y_BIAS;
     right = (layer->parameters[2] + layer->parameters[4]) << 4;
     DEFOCUS_TYPE05_PACKET->second_u = right;
-    DEFOCUS_TYPE05_PACKET->right = right + 28664;
+    DEFOCUS_TYPE05_PACKET->right = right + DEFOCUS_SCREEN_X_BIAS;
     bottom = (layer->parameters[3] + layer->parameters[5]) << 4;
     DEFOCUS_TYPE05_PACKET->second_v = bottom;
-    DEFOCUS_TYPE05_PACKET->bottom = bottom + 29175;
+    DEFOCUS_TYPE05_PACKET->bottom = bottom + DEFOCUS_SCREEN_Y_BIAS;
     draw_color = layer->parameters[0];
     DEFOCUS_TYPE05_PACKET->second_flags = 0;
     DEFOCUS_TYPE05_PACKET->second_color = draw_color;
@@ -607,7 +622,7 @@ static void DefocusMainType06(DefocusLayer *layer, XglPacket *packet)
     draw = DEFOCUS_SCRATCH;
     color = (unsigned char *)&layer->parameters[1];
     draw->gif_tag = DEFOCUS_SOLID_GIF_TAG;
-    draw->vif_command = DEFOCUS_SOLID_VIF_COMMAND;
+    draw->vif_command = DEFOCUS_PACKET_VIF_COMMAND;
     draw->gs_registers = DEFOCUS_SOLID_GS_MODE;
     draw->register_count = DEFOCUS_SOLID_GS_REGISTERS;
     draw->header[0] = 0;
@@ -702,34 +717,34 @@ static void DefocusMainType07(DefocusLayer *layer, XglPacket *packet)
             offset_v = F2I(sin_angle * uv_radius_y);
             offset_x = F2I(cos_angle * screen_radius_x);
             offset_y = F2I(sin_angle * screen_radius_y);
-            ((int *)0x70000000)[0] = (layer->parameters[2] + offset_u) << 4;
-            ((int *)0x70000000)[1] = (layer->parameters[3] + offset_v) << 4;
-            ((int *)0x70000000)[4] =
-                ((layer->parameters[2] + offset_x) << 4) + 28664;
-            ((int *)0x70000000)[5] =
-                ((layer->parameters[3] + offset_y) << 4) + 29175;
-            ((int *)0x70000000)[6] = layer->parameters[0];
-            ((int *)0x70000000)[7] = flags;
+            ((int *)SCRATCHPAD_BASE)[0] = (layer->parameters[2] + offset_u) << 4;
+            ((int *)SCRATCHPAD_BASE)[1] = (layer->parameters[3] + offset_v) << 4;
+            ((int *)SCRATCHPAD_BASE)[4] =
+                ((layer->parameters[2] + offset_x) << 4) + DEFOCUS_SCREEN_X_BIAS;
+            ((int *)SCRATCHPAD_BASE)[5] =
+                ((layer->parameters[3] + offset_y) << 4) + DEFOCUS_SCREEN_Y_BIAS;
+            ((int *)SCRATCHPAD_BASE)[6] = layer->parameters[0];
+            ((int *)SCRATCHPAD_BASE)[7] = flags;
             offset_u = F2I(cos_next * uv_radius_x);
             offset_v = F2I(sin_next * uv_radius_y);
             offset_x = F2I(cos_next * screen_radius_x);
             offset_y = F2I(sin_next * screen_radius_y);
-            ((int *)0x70000000)[8] = (layer->parameters[2] + offset_u) << 4;
-            ((int *)0x70000000)[9] = (layer->parameters[3] + offset_v) << 4;
-            ((int *)0x70000000)[12] =
-                ((layer->parameters[2] + offset_x) << 4) + 28664;
-            ((int *)0x70000000)[13] =
-                ((layer->parameters[3] + offset_y) << 4) + 29175;
-            ((int *)0x70000000)[14] = layer->parameters[0];
-            ((int *)0x70000000)[15] = flags;
+            ((int *)SCRATCHPAD_BASE)[8] = (layer->parameters[2] + offset_u) << 4;
+            ((int *)SCRATCHPAD_BASE)[9] = (layer->parameters[3] + offset_v) << 4;
+            ((int *)SCRATCHPAD_BASE)[12] =
+                ((layer->parameters[2] + offset_x) << 4) + DEFOCUS_SCREEN_X_BIAS;
+            ((int *)SCRATCHPAD_BASE)[13] =
+                ((layer->parameters[3] + offset_y) << 4) + DEFOCUS_SCREEN_Y_BIAS;
+            ((int *)SCRATCHPAD_BASE)[14] = layer->parameters[0];
+            ((int *)SCRATCHPAD_BASE)[15] = flags;
             sceVif1PkAddDataN(packet, DEFOCUS_RADIAL_VERTICES, 16);
         }
-        ((int *)0x70000000)[0] = layer->parameters[2] << 4;
-        ((int *)0x70000000)[1] = layer->parameters[3] << 4;
-        ((int *)0x70000000)[4] = (layer->parameters[2] << 4) + 28664;
-        ((int *)0x70000000)[5] = (layer->parameters[3] << 4) + 29175;
-        ((int *)0x70000000)[6] = layer->parameters[0];
-        ((int *)0x70000000)[7] = 0;
+        ((int *)SCRATCHPAD_BASE)[0] = layer->parameters[2] << 4;
+        ((int *)SCRATCHPAD_BASE)[1] = layer->parameters[3] << 4;
+        ((int *)SCRATCHPAD_BASE)[4] = (layer->parameters[2] << 4) + DEFOCUS_SCREEN_X_BIAS;
+        ((int *)SCRATCHPAD_BASE)[5] = (layer->parameters[3] << 4) + DEFOCUS_SCREEN_Y_BIAS;
+        ((int *)SCRATCHPAD_BASE)[6] = layer->parameters[0];
+        ((int *)SCRATCHPAD_BASE)[7] = 0;
         sceVif1PkAddDataN(packet, DEFOCUS_RADIAL_VERTICES, 8);
     }
 }
@@ -775,7 +790,7 @@ static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet)
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, &Head_8, 16);
     header->gif_tag = 0x51000009;
-    header->vif_command = 0x8001;
+    header->vif_command = DEFOCUS_PACKET_VIF_COMMAND;
     header->gs_mode = 0x8026c000;
     header->gs_registers = 0x55555151;
     header->header[0] = 0;
@@ -988,7 +1003,7 @@ static void DefocusMainType09Final(DefocusLayer *layer)
 static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
 {
     extern void GameDefocusSet(int index, int type, const int *settings);
-    DefocusTexturedPacket *draw = (DefocusTexturedPacket *)0x70000000;
+    DefocusTexturedPacket *draw = (DefocusTexturedPacket *)SCRATCHPAD_BASE;
     u8 red;
     u8 green;
     u8 blue;
@@ -1007,7 +1022,7 @@ static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
                           (0x8000ULL << 36);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, &Copy_10, 28);
-        layer->parameters[5] = 0x80808080;
+        layer->parameters[5] = DEFOCUS_COLOR_NEUTRAL;
         layer->state = 1;
         layer->parameters[6] = 0;
         layer->parameters[7] = 0;
@@ -1040,7 +1055,7 @@ static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
         ((u8 *)&layer->parameters[5])[3] = alpha;
         draw->alpha = alpha;
         Head_11.texture = GetTex0(2, 0);
-        draw->vif_command = 0x8001;
+        draw->vif_command = DEFOCUS_PACKET_VIF_COMMAND;
         draw->gif_tag = 0x51000006;
         draw->gs_mode = 0x50ab4000;
         draw->gs_registers = 0x53531;
@@ -1052,15 +1067,15 @@ static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
         layer->parameters[7] += layer->parameters[2];
         layer->parameters[8] += layer->parameters[3];
         layer->parameters[9] += layer->parameters[4];
-        draw->second_u = 8192;
+        draw->second_u = DEFOCUS_SCREEN_WIDTH_FIXED;
         draw->first_u = 0;
-        draw->left = (layer->parameters[6] << 4) + 28664;
+        draw->left = (layer->parameters[6] << 4) + DEFOCUS_SCREEN_X_BIAS;
         right = layer->parameters[6] + layer->parameters[8];
-        draw->second_v = 7168;
+        draw->second_v = DEFOCUS_SCREEN_HEIGHT_FIXED;
         draw->first_v = 0;
-        draw->right = (right << 4) + 36856;
-        draw->top = (layer->parameters[7] << 4) + 29175;
-        draw->bottom = ((layer->parameters[7] + layer->parameters[9]) << 4) + 36343;
+        draw->right = (right << 4) + DEFOCUS_SCREEN_X_END;
+        draw->top = (layer->parameters[7] << 4) + DEFOCUS_SCREEN_Y_BIAS;
+        draw->bottom = ((layer->parameters[7] + layer->parameters[9]) << 4) + DEFOCUS_SCREEN_Y_END;
         vertex_color = 0xffffffff;
         draw->second_color = vertex_color;
         draw->color = vertex_color;
@@ -1124,31 +1139,31 @@ static void DefocusMainType11(DefocusLayer *layer, XglPacket *packet)
             F2I(xglSin(phase_y) * I2F(layer->parameters[5]));
         phase_y += I2F(layer->parameters[6]) * (1.0f / 4096.0f);
     }
-    ((int *)0x70000000)[16] = 0;
-    ((int *)0x70000000)[0] = 0;
-    ((int *)0x70000000)[31] = 0;
-    ((int *)0x70000000)[17] = 0;
+    ((int *)SCRATCHPAD_BASE)[16] = 0;
+    ((int *)SCRATCHPAD_BASE)[0] = 0;
+    ((int *)SCRATCHPAD_BASE)[31] = 0;
+    ((int *)SCRATCHPAD_BASE)[17] = 0;
     for (row = 0, wave_y = DEFOCUS_WAVE_TABLE->y, y = 0; row < 14; row++, y = row * 512) {
         column = 0;
-        sprite_y = y + 29175;
+        sprite_y = y + DEFOCUS_SCREEN_Y_BIAS;
         next_y = y + 512;
         sprite_next_y = y + 29687;
         wave_x = DEFOCUS_WAVE_TABLE->x;
         for (; column < 16; column++) {
             x = column * 512;
             next_x = x + 512;
-            ((int *)0x70000000)[32] = x + wave_x[0];
-            ((int *)0x70000000)[33] = y + wave_y[0];
-            ((int *)0x70000000)[36] = x + 28664;
-            ((int *)0x70000000)[37] = sprite_y;
-            ((int *)0x70000000)[38] = layer->parameters[0];
-            ((int *)0x70000000)[39] = 0;
-            ((int *)0x70000000)[40] = next_x + wave_x[1];
-            ((int *)0x70000000)[41] = next_y + wave_y[1];
-            ((int *)0x70000000)[44] = x + 29176;
-            ((int *)0x70000000)[45] = sprite_next_y;
-            ((int *)0x70000000)[46] = layer->parameters[0];
-            ((int *)0x70000000)[47] = 0;
+            ((int *)SCRATCHPAD_BASE)[32] = x + wave_x[0];
+            ((int *)SCRATCHPAD_BASE)[33] = y + wave_y[0];
+            ((int *)SCRATCHPAD_BASE)[36] = x + DEFOCUS_SCREEN_X_BIAS;
+            ((int *)SCRATCHPAD_BASE)[37] = sprite_y;
+            ((int *)SCRATCHPAD_BASE)[38] = layer->parameters[0];
+            ((int *)SCRATCHPAD_BASE)[39] = 0;
+            ((int *)SCRATCHPAD_BASE)[40] = next_x + wave_x[1];
+            ((int *)SCRATCHPAD_BASE)[41] = next_y + wave_y[1];
+            ((int *)SCRATCHPAD_BASE)[44] = x + 29176;
+            ((int *)SCRATCHPAD_BASE)[45] = sprite_next_y;
+            ((int *)SCRATCHPAD_BASE)[46] = layer->parameters[0];
+            ((int *)SCRATCHPAD_BASE)[47] = 0;
             sceVif1PkAddDataN(packet, DEFOCUS_WAVE_SPRITE, 16);
             wave_x++;
         }
@@ -1164,7 +1179,7 @@ static void DefocusMain(XglPacket *packet)
 
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, Head_13, 20);
-    remaining = 15;
+    remaining = DEFOCUS_LAYER_COUNT - 1;
     do {
         type = layer->type;
         switch (type) {
@@ -1189,7 +1204,7 @@ void GameDefocusCheck(void)
 
     active = 0;
     layer_index = 0;
-    while (layer_index < 16) {
+    while (layer_index < DEFOCUS_LAYER_COUNT) {
         if (GameDefocusParam[layer_index].type != 0) {
             active = 1;
             break;
@@ -1229,7 +1244,7 @@ void GameDefocusSet(int index, int type, const int *settings)
         return;
     }
     if (index < 0) {
-        for (clear_index = 0; clear_index < 16; clear_index++) {
+        for (clear_index = 0; clear_index < DEFOCUS_LAYER_PARAMETERS; clear_index++) {
             GameDefocusFinalize(clear_index);
         }
     } else {
@@ -1237,7 +1252,7 @@ void GameDefocusSet(int index, int type, const int *settings)
         GameDefocusFinalize(index);
         layer->type = type;
         if (type > 0) {
-            for (parameter_index = 0; parameter_index < 16; parameter_index++) {
+            for (parameter_index = 0; parameter_index < DEFOCUS_LAYER_PARAMETERS; parameter_index++) {
                 if (settings == NULL) {
                     layer->parameters[parameter_index] = 0;
                 } else {
@@ -1254,15 +1269,15 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
     DefocusLayer *layers;
     u32 first_index;
 
-    layers = &GameDefocusParam[group_index * 4];
-    if (group_index >= 4) {
+    layers = &GameDefocusParam[group_index * DEFOCUS_GROUP_LAYERS];
+    if (group_index >= DEFOCUS_GROUP_COUNT) {
         /* JP: GameDefocusQuickSet()の引数が異常です(%d)。\n
          * EN: Invalid argument to GameDefocusQuickSet() (%d).\n */
         printf("GameDefocusQuickSet()\xA4\xCE\xB0\xFA\xBF\xF4\xA4\xAC\xB0\xDB\xBE\xEF\xA4\xC7\xA4\xB9(%d)\xA1\xA3\n", group_index);
         return;
     }
 
-    first_index = (u32)group_index * 4u;
+    first_index = (u32)group_index * DEFOCUS_GROUP_LAYERS;
     GameDefocusFinalize(first_index);
     GameDefocusFinalize(first_index + 1);
     GameDefocusFinalize(first_index + 2);
@@ -1276,7 +1291,7 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
         layers[0].parameters[0] = 0;
         layers[0].parameters[1] = 1;
         layers[0].parameters[2] = color;
-        layers[0].parameters[3] = 0x40808080;
+        layers[0].parameters[3] = DEFOCUS_COLOR_HALF_ALPHA;
         layers[0].parameters[4] = intensity;
         layers[0].parameters[5] = 0;
         layers[0].parameters[6] = 0;
@@ -1285,7 +1300,7 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
         layers[1].parameters[0] = 0;
         layers[1].parameters[1] = 1;
         layers[1].parameters[2] = color;
-        layers[1].parameters[3] = 0x40808080;
+        layers[1].parameters[3] = DEFOCUS_COLOR_HALF_ALPHA;
         layers[1].parameters[4] = 0;
         layers[1].parameters[5] = intensity;
         layers[1].parameters[6] = 0;
@@ -1297,21 +1312,21 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
         layers[0].parameters[1] = color;
         layers[1].type = 3;
         layers[1].parameters[0] = 1;
-        layers[1].parameters[1] = 0x40808080;
+        layers[1].parameters[1] = DEFOCUS_COLOR_HALF_ALPHA;
         layers[1].parameters[2] = intensity;
         layers[1].parameters[3] = 0;
         layers[1].parameters[4] = 0;
         layers[1].parameters[5] = 0;
         layers[2].type = 3;
         layers[2].parameters[0] = 1;
-        layers[2].parameters[1] = 0x40808080;
+        layers[2].parameters[1] = DEFOCUS_COLOR_HALF_ALPHA;
         layers[2].parameters[2] = 0;
         layers[2].parameters[3] = intensity;
         layers[2].parameters[4] = 0;
         layers[2].parameters[5] = 0;
         layers[3].type = 3;
         layers[3].parameters[0] = 1;
-        layers[3].parameters[1] = 0x40808080;
+        layers[3].parameters[1] = DEFOCUS_COLOR_HALF_ALPHA;
         layers[3].parameters[2] = intensity;
         layers[3].parameters[3] = intensity;
         layers[3].parameters[4] = 0;
@@ -1331,9 +1346,9 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
     case 5:
         layers[0].type = 5;
         layers[0].parameters[0] = color;
-        layers[0].parameters[1] = 0x80808080;
-        layers[0].parameters[4] = 512;
-        layers[0].parameters[5] = 448;
+        layers[0].parameters[1] = DEFOCUS_COLOR_NEUTRAL;
+        layers[0].parameters[4] = DEFOCUS_SCREEN_WIDTH;
+        layers[0].parameters[5] = DEFOCUS_SCREEN_HEIGHT;
         layers[0].parameters[2] = 0;
         layers[0].parameters[3] = 0;
         layers[0].parameters[6] = intensity;
@@ -1345,8 +1360,8 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
         layers[0].parameters[1] = 0x80ffffff;
         layers[0].parameters[2] = 0;
         layers[0].parameters[3] = 0;
-        layers[0].parameters[4] = 512;
-        layers[0].parameters[5] = 448;
+        layers[0].parameters[4] = DEFOCUS_SCREEN_WIDTH;
+        layers[0].parameters[5] = DEFOCUS_SCREEN_HEIGHT;
         break;
     case 9:
         layers[0].type = 9;

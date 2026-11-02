@@ -4,6 +4,28 @@
 #include "common.h"
 #include "shared.h"
 
+/* UnduCheck / UnduParamInit height meaning "no collision surface found". */
+#define UNDU_NO_HEIGHT (-1000.0f)
+
+/*
+ * UnduDataGetHeader identifier: with this bit set the low 15 bits index the
+ * header array directly instead of being searched for in the identifiers.
+ */
+#define UNDU_HEADER_DIRECT 0x8000
+#define UNDU_HEADER_INDEX_MASK 0x7fff
+
+/* UnduParam.attrMask (the query flags UnduCheck reads) */
+enum {
+    UNDU_QUERY_MODE_MASK = 0x7,         /* what to do on a wall hit */
+    UNDU_QUERY_MODE_BLOCK = 1,          /* stop the move */
+    UNDU_QUERY_MODE_SLIDE = 2,          /* slide along the wall edge */
+    UNDU_QUERY_MODE_CLIP = 3,           /* clip the move to where it meets the edge */
+    UNDU_QUERY_SAME_LEVEL = 0x10,       /* only accept ground within the height tolerance of the sample */
+    UNDU_QUERY_HEIGHT_TABLE = 0x20,     /* surfaces of the height-table kind take GameLoopState.attributeHeights */
+    UNDU_QUERY_VERTEX_RANGE = 0x400,    /* reject ground outside the triangle's vertical extent */
+    UNDU_QUERY_FLOOR_BELOW = 0x800      /* only accept ground at or below the sample */
+};
+
 /*
  * UnduDataGetHeader's result (src/main/Undulate.c): the bounded four-component
  * result that layout.c, call_java_method.c, map_1.c and game_debug_menu.c read:

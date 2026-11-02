@@ -338,7 +338,7 @@ void Java_xeno_Effect_getForceLoop__(JThread *thread, EffectCall *arguments, sig
         field_value = (void *)(object + field->offset);
         peer = field_value->effect;
         if (peer != 0) {
-            *result = peer->flags & 0x20;
+            *result = peer->flags & SEF_SCHED_FORCE_LOOP;
         }
     }
 }
@@ -357,9 +357,9 @@ void Java_xeno_Effect_setForceLoop__Z(JThread *thread, EffectBooleanCall *argume
         peer = field_value->effect;
         if (peer != 0) {
             if (arguments->value == 1) {
-                peer->flags |= 0x20;
+                peer->flags |= SEF_SCHED_FORCE_LOOP;
             } else {
-                peer->flags &= ~0x20U;
+                peer->flags &= ~SEF_SCHED_FORCE_LOOP;
             }
         }
     }
@@ -378,7 +378,7 @@ void Java_xeno_Effect_getClip__(JThread *thread, EffectCall *arguments, signed c
         field_value = (void *)(object + field->offset);
         peer = field_value->effect;
         if (peer != 0) {
-            *result = peer->flags & 0x10;
+            *result = peer->flags & SEF_SCHED_CLIP;
         }
     }
 }
@@ -397,9 +397,9 @@ void Java_xeno_Effect_setClip__Z(JThread *thread, EffectBooleanCall *arguments)
         peer = field_value->effect;
         if (peer != 0) {
             if (arguments->value == 1) {
-                peer->flags |= 0x10;
+                peer->flags |= SEF_SCHED_CLIP;
             } else {
-                peer->flags &= ~0x10U;
+                peer->flags &= ~SEF_SCHED_CLIP;
             }
         }
     }
@@ -437,9 +437,9 @@ void Java_xeno_Effect_setMotion__Z(JThread *thread, EffectBooleanCall *arguments
         peer = field_value->effect;
         if (peer != 0) {
             if (arguments->value == 1) {
-                peer->flags |= 0x80;
+                peer->flags |= SEF_SCHED_MOTION;
             } else {
-                peer->flags &= ~0x80U;
+                peer->flags &= ~SEF_SCHED_MOTION;
             }
         }
     }
@@ -459,9 +459,9 @@ void Java_xeno_Effect_noAttach__Z(JThread *thread, EffectBooleanCall *arguments)
         peer = field_value->effect;
         if (peer != 0) {
             if (arguments->value == 1) {
-                peer->flags |= 0x400;
+                peer->flags |= SEF_SCHED_NO_ATTACH;
             } else {
-                peer->flags &= ~0x400U;
+                peer->flags &= ~SEF_SCHED_NO_ATTACH;
             }
         }
     }

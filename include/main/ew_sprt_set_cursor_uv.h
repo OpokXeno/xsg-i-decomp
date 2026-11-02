@@ -1,6 +1,51 @@
 #ifndef INCLUDE_MAIN_EW_SPRT_SET_CURSOR_UV_H
 #define INCLUDE_MAIN_EW_SPRT_SET_CURSOR_UV_H
 
+/* Screen the widgets are laid out in. */
+#define EW_SCREEN_WIDTH  512
+#define EW_SCREEN_HEIGHT 448
+
+/* Number of slots in the ewComponent widget table. */
+#define EW_SLOT_COUNT 64
+
+/* Widget kinds (EwWidget.type), as dispatched by EW_drawComoponent. The
+   *_TEXT_PASS kinds are drawn in the second (text) pass of EW_draw instead of
+   the packet pass. */
+enum {
+    EW_TYPE_PANEL = 0,          /* label_put: textured panel with a border */
+    EW_TYPE_FRAME = 1,          /* frame_put: nine-patch frame */
+    EW_TYPE_CONTAINER = 4,      /* owns a children[] array */
+    EW_TYPE_SPRITE = 5,         /* sprt_put */
+    EW_TYPE_CLIP = 6,           /* set_clip in the packet pass */
+    EW_TYPE_LABEL = 7,          /* lines of text */
+    EW_TYPE_MASK = 8,           /* mask_put in the packet pass */
+    EW_TYPE_CLIP_TEXT_PASS = 9, /* set_clip in the text pass */
+    EW_TYPE_MASK_TEXT_PASS = 10 /* mask_put in the text pass */
+};
+
+/* EwWidget.drawValue: depth/order key the widget is queued with. */
+#define EW_ORDER_FRAME 0x00FFFFF0 /* also the key of the EW_sendPacket pass */
+#define EW_ORDER_MASK  0x00FFFFF1
+#define EW_ORDER_TEXT  0x00FFFFFF
+
+/* Neutral colour scale of a label; other values print a second pass. */
+#define EW_COLOR_SCALE_NEUTRAL 128
+
+/* EwMaskState.blend bit: the gradient runs horizontally instead of vertically. */
+#define EW_MASK_GRADIENT_HORIZONTAL 0x100
+
+/* EwMaskState.fix: the two fill intensities (bits 8-15 and 16-23). */
+#define EW_MASK_FIX_FULL 0x00808000 /* both 0x80 */
+#define EW_MASK_FIX_NONE 0x00010100 /* both 1 */
+
+/* Widget flag bits (EwWidget.flags). Top-level widgets drawn by EW_draw have
+   ALLOCATED and VISIBLE set and CHILD clear. */
+#define EW_FLAG_CHILD     0x2000 /* owned by a container (EW_addComponent) */
+#define EW_FLAG_VISIBLE   0x4000
+#define EW_FLAG_ALLOCATED 0x8000 /* slot in use (EW_create) */
+#define EW_FLAG_STATE_MASK 0xE000
+#define EW_FLAG_TOP_LEVEL_VISIBLE (EW_FLAG_ALLOCATED | EW_FLAG_VISIBLE)
+
 typedef struct EwMaskState {
     /* +0x00: low 32 bits of the GS ALPHA_1 register value mask_put
        programs for this mask (main:0x0026c880 sends this word and the

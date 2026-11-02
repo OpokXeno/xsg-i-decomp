@@ -11,6 +11,67 @@
 
 #define MoveHokanStateFlag (GameLoopState.camera_flags)
 
+/* UnduCheck: height returned (and probe limit) when no floor is found. */
+#define UNDU_PROBE_LIMIT 1000.0f
+
+/* Player ground attribute (UnduParam.attribute) that selects a camera index:
+ * bits 27-29 equal 2, bits 20-26 hold the CF camera index minus one. */
+#define UNDU_ATTR_CAMERA_MASK 0x38000000
+#define UNDU_ATTR_CAMERA_SELECT 0x20000000
+#define UNDU_ATTR_CAMERA_SHIFT 20
+#define UNDU_ATTR_CAMERA_INDEX_MASK 0x7f
+
+/* While the player's enemy-work state is in [3, 3 + 5) the camera mode is frozen. */
+#define CAMERA_ENEMY_STATE_FIRST 3
+#define CAMERA_ENEMY_STATE_COUNT 5
+
+/* Height above the target's feet the camera looks at; actors with an id from
+ * CAMERA_LARGE_ACTOR_ID up get the larger offset. */
+#define CAMERA_CENTER_HEIGHT 1.2f
+#define CAMERA_CENTER_HEIGHT_LARGE 3.0f
+#define CAMERA_LARGE_ACTOR_ID 1618
+
+/* Pedestal camera sub-mode, stored in definition->parameters.pedestal[3]. */
+#define CAMERA_PEDESTAL_LOOK_AT_FIXED 0
+#define CAMERA_PEDESTAL_LOOK_AT_TARGET 1
+#define CAMERA_PEDESTAL_ROTATION_FIXED 2
+
+/* Most floor triangles CameraType0 walks following the line of sight. */
+#define CAMERA_EDGE_WALK_MAX 0x100
+
+/* Frames GameCamera waits at start (CameraScratchpad.initial_wait). */
+#define CAMERA_INITIAL_WAIT 40
+
+/* facing_angle stand-in when the target has no facing. */
+#define CAMERA_NO_FACING 100.0f
+
+/* MoveHokan snaps instead of interpolating beyond this distance. */
+#define CAMERA_HOKAN_MAX_DISTANCE 100.0f
+
+/* Closest the camera may sit to its look-at point (angles.values[3]). */
+#define CAMERA_MIN_DISTANCE 0.4f
+
+/* Defocus layer color: gray 0x80 with alpha 0x40. */
+#define CAMERA_DEFOCUS_COLOR 0x40808080
+
+/* UnduDataGetHeader map_index values: the header set holding the camera
+ * floor meshes, and the header group the player ground probe reads. */
+#define UNDU_HEADER_CAMERA_FLOOR 0x100
+#define UNDU_HEADER_CAMERA_GROUND 0x302
+
+/* The scratchpad address (just past struct CameraScratchpad) the Undu probes
+ * receive as their exclude pointer. */
+#define CAMERA_PROBE_EXCLUDE ((void *)(SCRATCHPAD_BASE + 0x1A0))
+
+/* Defaults GameCameraReset gives every CF camera definition. */
+#define CAMERA_DEFAULT_PERSPECTIVE 0.69813174f /* 40 degrees */
+#define CAMERA_DEFAULT_PITCH -0.3926991f       /* -22.5 degrees */
+#define CAMERA_DEFAULT_DISTANCE 3.0f
+#define CAMERA_DEFAULT_INTERPOLATION 0.03f
+#define CAMERA_DEFAULT_OFFSET_RATE 0.05f
+#define CAMERA_DEFAULT_OFFSET_FIRST_FRAMES 15
+#define CAMERA_DEFAULT_OFFSET_SECOND_FRAMES 60
+
 #define FLOOR_DETERMINANT(px, pz, qx, qz, rx, rz) \
     ((px) * (qz) + (qx) * (rz) + (rx) * (pz) - (px) * (rz) - (qx) * (pz) - (rx) * (qz))
 
@@ -247,29 +308,29 @@ void GameCameraReset(void)
     int i;
 
     camera = xglStudioGetCamera2(0);
-    camera->state = 4;
+    camera->state = STUDIO_CAMERA_STATE_GAME;
     camera->rotation.vector.z = 0.0f;
-    for (i = 0; i < 33; i++) {
+    for (i = 0; i < CF_CAMERA_COUNT; i++) {
         CfCameraDefine[i].pedestal_mode = 0;
         CfCameraDefine[i].current_yaw = 0.0f;
         CfCameraDefine[i].offset[0] = 0.0f;
         CfCameraDefine[i].offset[1] = 0.0f;
         CfCameraDefine[i].offset[2] = 0.0f;
-        CfCameraDefine[i].perspective = 0.69813174f;
-        CfCameraDefine[i].parameters.offset.first_mode = 15;
-        CfCameraDefine[i].parameters.offset.first_value = 0.05f;
-        CfCameraDefine[i].parameters.offset.second_mode = 60;
-        CfCameraDefine[i].parameters.offset.second_value = 0.05f;
-        CfCameraDefine[i].angles.values[0] = -0.3926991f;
+        CfCameraDefine[i].perspective = CAMERA_DEFAULT_PERSPECTIVE;
+        CfCameraDefine[i].parameters.offset.first_mode = CAMERA_DEFAULT_OFFSET_FIRST_FRAMES;
+        CfCameraDefine[i].parameters.offset.first_value = CAMERA_DEFAULT_OFFSET_RATE;
+        CfCameraDefine[i].parameters.offset.second_mode = CAMERA_DEFAULT_OFFSET_SECOND_FRAMES;
+        CfCameraDefine[i].parameters.offset.second_value = CAMERA_DEFAULT_OFFSET_RATE;
+        CfCameraDefine[i].angles.values[0] = CAMERA_DEFAULT_PITCH;
         CfCameraDefine[i].angles.values[1] = 0.0f;
         CfCameraDefine[i].angles.values[2] = 0.0f;
-        CfCameraDefine[i].angles.values[3] = 3.0f;
+        CfCameraDefine[i].angles.values[3] = CAMERA_DEFAULT_DISTANCE;
         CfCameraDefine[i].lock_position[0] = 0.0f;
         CfCameraDefine[i].lock_position[1] = 0.0f;
         CfCameraDefine[i].lock_position[2] = 0.0f;
         CfCameraDefine[i].lock_mode = 0;
-        CfCameraDefine[i].interpolation[0] = 0.03f;
-        CfCameraDefine[i].interpolation[1] = 0.03f;
+        CfCameraDefine[i].interpolation[0] = CAMERA_DEFAULT_INTERPOLATION;
+        CfCameraDefine[i].interpolation[1] = CAMERA_DEFAULT_INTERPOLATION;
         CfCameraDefine[i].fog_parameters[0] = 0.0f;
         CfCameraDefine[i].fog_parameters[1] = 0.0f;
         CfCameraDefine[i].defocus[0].depth = 0.0f;
@@ -285,9 +346,9 @@ void GameCameraReset(void)
     CfCameraOfsNow[0] = 0.0f;
     CfCameraOfsNow[1] = 0.0f;
     CfCameraOfsNow[2] = 0.0f;
-    GameLoopState.camera_mode = 1;
+    GameLoopState.camera_mode = GAME_CAMERA_MODE_TYPE1;
     GameLoopState.camera_callback = GameCamera;
-    GameLoopState.camera_flags |= 0x80;
+    GameLoopState.camera_flags |= GAME_CAMERA_FLAG_SNAP;
     GameCameraChangeID(0, 0, 0);
 }
 
@@ -308,7 +369,7 @@ void GameCameraStateRestore(void)
 
     camera = xglStudioGetCamera2(0);
     *camera = save_cam;
-    camera->state = 4;
+    camera->state = STUDIO_CAMERA_STATE_GAME;
     camera->rotation.vector.z = 0.0f;
     QuadwordCopy(CfCameraDefine[0].angles.values, GameLoopState.saved_camera_angles);
     GameLoopState.camera_callback = GameLoopState.saved_camera_callback;
@@ -330,12 +391,12 @@ void GameCameraChangeID(int id, int unused1, int unused2)
     LayoutHeader *header;
 
     if (GameLoopState.camera_id != id) {
-        header = UnduDataGetHeader(256, id);
+        header = UnduDataGetHeader(UNDU_HEADER_CAMERA_FLOOR, id);
         if (header == 0) {
-            id = 0x8000;
-            header = UnduDataGetHeader(256, 0x8000);
+            id = GAME_CAMERA_ID_DEFAULT;
+            header = UnduDataGetHeader(UNDU_HEADER_CAMERA_FLOOR, GAME_CAMERA_ID_DEFAULT);
         }
-        GameLoopState.camera_flags |= 0x40;
+        GameLoopState.camera_flags |= GAME_CAMERA_FLAG_MODE_CHANGED;
         GameLoopState.camera_id = id;
         CamLookAt.query_cursor = 0;
         CamLookAt.header = header;
@@ -367,7 +428,7 @@ static void MoveHokan(void *unused, const Vector4 *target, Vector4 *current,
     float distance;
 
     (void)unused;
-    if (*remaining == 0.0f || (MoveHokanStateFlag & 0x80) != 0) {
+    if (*remaining == 0.0f || (MoveHokanStateFlag & GAME_CAMERA_FLAG_SNAP) != 0) {
         *remaining = 0.0f;
         QuadwordCopy(current, target);
         return;
@@ -380,7 +441,7 @@ static void MoveHokan(void *unused, const Vector4 *target, Vector4 *current,
                                    + difference.z * difference.z);
 
     *remaining -= step;
-    if (distance < step || 100.0f < distance || *remaining < 0.0f)
+    if (distance < step || CAMERA_HOKAN_MAX_DISTANCE < distance || *remaining < 0.0f)
         *remaining = 0.0f;
 
     if (*remaining == 0.0f) {
@@ -394,9 +455,9 @@ static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
 {
     float vertical_offset;
 
-    vertical_offset = 1.2f;
-    if (source->type >= 1618) {
-        vertical_offset = 3.0f;
+    vertical_offset = CAMERA_CENTER_HEIGHT;
+    if (source->type >= CAMERA_LARGE_ACTOR_ID) {
+        vertical_offset = CAMERA_CENTER_HEIGHT_LARGE;
     }
 
     center->x = CfCameraOfsNow[0] + source->position.x;
@@ -408,7 +469,7 @@ static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
 static void GetCameraPos(float *destination, const float *position,
                          const float *angles)
 {
-    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+    struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
 
     scratchpad->translation[0] = 0.0f;
     scratchpad->translation[1] = 0.0f;
@@ -497,7 +558,7 @@ static void CalcLookAt(struct CameraScratchpad *scratchpad)
         Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->look_at, &CamLookAtPos);
         UnduCheck(&CamLookAtPos, &scratchpad->look_at_delta, &CamLookAt);
     }
-    if (CamLookAt.height == -1000.0f) {
+    if (CamLookAt.height == GROUND_HEIGHT_NONE) {
         GetNearestCenter(&CamLookAtPos, CamLookAt.header, &scratchpad->look_at);
         CamLookAt.query_cursor = 0;
         CamLookAt.query_flags = 0;
@@ -505,7 +566,7 @@ static void CalcLookAt(struct CameraScratchpad *scratchpad)
         Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->look_at, &CamLookAtPos);
         CamLookAt.attribute_mask = 3;
         UnduCheck(&CamLookAtPos, &scratchpad->look_at_delta, &CamLookAt);
-        if ((GameLoopState.camera_mode == 3) ||
+        if ((GameLoopState.camera_mode == GAME_CAMERA_MODE_FLOOR_FOLLOW) ||
             (CamLookAt.height < CamLookAtPos.y)) {
             CamLookAtPos.y = CamLookAt.height;
         }
@@ -542,8 +603,8 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
     Vu0SubVector(&scratchpad->probe_delta, &scratchpad->position, &CamPosPos);
     UnduCheck(&CamPosPos, &scratchpad->probe_delta, &CamPos);
     height = CamPos.height;
-    if (height != -1000.0f && (CamPos.result_flags & 3) == 0) {
-        if (GameLoopState.camera_mode == 3) {
+    if (height != GROUND_HEIGHT_NONE && (CamPos.result_flags & 3) == 0) {
+        if (GameLoopState.camera_mode == GAME_CAMERA_MODE_FLOOR_FOLLOW) {
             CamPosPos.y = height;
         } else if (height < CamPosPos.y) {
             CamPosPos.y = height;
@@ -563,7 +624,7 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
         CamPos.attribute_mask = 3;
         UnduCheck(&CamPosPos, &scratchpad->position_delta, &CamPos);
         CamPos.attribute_mask = 2;
-        if (GameLoopState.camera_mode != 3) {
+        if (GameLoopState.camera_mode != GAME_CAMERA_MODE_FLOOR_FOLLOW) {
             if (!(CamPos.height < CamPosPos.y)) {
                 return;
             }
@@ -574,7 +635,7 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
 
 static void CameraType0(void)
 {
-    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+    struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
     UnduParamCameraView ground;
     UnduParamCameraView edge_probe;
     Vector4 hit;
@@ -597,8 +658,8 @@ static void CameraType0(void)
     int crossed_edge;
     int step;
 
-    if (scratchpad->definition->angles.values[3] < 0.4f) {
-        scratchpad->definition->angles.values[3] = 0.4f;
+    if (scratchpad->definition->angles.values[3] < CAMERA_MIN_DISTANCE) {
+        scratchpad->definition->angles.values[3] = CAMERA_MIN_DISTANCE;
     }
     GetCenter(&scratchpad->look_at, scratchpad->target);
     look_at_out = &scratchpad->view->look_at;
@@ -607,11 +668,11 @@ static void CameraType0(void)
     GetCameraPos(&scratchpad->look_at_delta.x, &scratchpad->view->look_at.x,
                  scratchpad->definition->angles.values);
     UnduParamInit(&ground);
-    ground.exclude = (void *)0x700001A0;
+    ground.exclude = CAMERA_PROBE_EXCLUDE;
     ground.header = UnduDataGetHeader(0x100, GameLoopState.camera_id);
-    ground.limit = 1000.0f;
+    ground.limit = UNDU_PROBE_LIMIT;
     floor_height = UnduCheck(&scratchpad->look_at_delta, 0, &ground);
-    if (floor_height != -1000.0f) {
+    if (floor_height != GROUND_HEIGHT_NONE) {
         CamPosPos.x = scratchpad->look_at_delta.x;
         CamPosPos.z = scratchpad->look_at_delta.z;
         if (scratchpad->look_at_delta.y < floor_height) {
@@ -621,9 +682,9 @@ static void CameraType0(void)
         }
     } else {
         UnduParamInit(&edge_probe);
-        edge_probe.exclude = (void *)0x700001A0;
+        edge_probe.exclude = CAMERA_PROBE_EXCLUDE;
         edge_probe.header = UnduDataGetHeader(0x100, GameLoopState.camera_id);
-        edge_probe.limit = 1000.0f;
+        edge_probe.limit = UNDU_PROBE_LIMIT;
         UnduCheck(&scratchpad->look_at, 0, &edge_probe);
         if (edge_probe.query_cursor != 0) {
             triangle = (const struct CameraFloorTriangle *)edge_probe.query_cursor;
@@ -689,7 +750,7 @@ static void CameraType0(void)
                     }
                 }
                 break;
-            } while (++step < 0x100);
+            } while (++step < CAMERA_EDGE_WALK_MAX);
             if (crossed_edge > 0) {
                 edge_start = 0;
                 edge_end = 0;
@@ -733,7 +794,7 @@ static void CameraType0(void)
                 CamPosPos.z = scratchpad->look_at.z + run_z * along;
                 hit.z = CamPosPos.z;
             }
-        } else if (GameLoopState.camera_flags & 0x80) {
+        } else if (GameLoopState.camera_flags & GAME_CAMERA_FLAG_SNAP) {
             CamPosPos.x = scratchpad->look_at_delta.x;
             CamPosPos.y = scratchpad->look_at_delta.y;
             CamPosPos.z = scratchpad->look_at_delta.z;
@@ -751,7 +812,7 @@ static void CameraType0(void)
 
 static void CameraType1Core(void)
 {
-    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+    struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
 
     GetCenter(&scratchpad->look_at, scratchpad->target);
     if (scratchpad->definition->lock_mode != 0) {
@@ -790,15 +851,15 @@ static void CameraType1Core(void)
 
 static void CameraType1(void)
 {
-    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+    struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
     float previous_delta;
     float current_delta;
     float yaw_delta;
     float product;
     float yaw_period;
 
-    if (scratchpad->definition->angles.values[3] < 0.4f) {
-        scratchpad->definition->angles.values[3] = 0.4f;
+    if (scratchpad->definition->angles.values[3] < CAMERA_MIN_DISTANCE) {
+        scratchpad->definition->angles.values[3] = CAMERA_MIN_DISTANCE;
     }
     scratchpad->view->perspective = scratchpad->definition->perspective;
 
@@ -868,7 +929,7 @@ static void CameraType1(void)
 
 static void CameraType4(void)
 {
-    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+    struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
     const CfCameraDefinition *definition;
     int mode;
     float horizontal;
@@ -880,15 +941,15 @@ static void CameraType4(void)
     scratchpad->view->perspective = definition->perspective;
     mode = F2I(definition->parameters.pedestal[3]);
     switch (mode) {
-    case 0:
+    case CAMERA_PEDESTAL_LOOK_AT_FIXED:
         scratchpad->look_at.x = definition->parameters.pedestal[0];
         scratchpad->look_at.y = definition->parameters.pedestal[1];
         scratchpad->look_at.z = definition->parameters.pedestal[2];
         break;
-    case 1:
+    case CAMERA_PEDESTAL_LOOK_AT_TARGET:
         GetCenter(&scratchpad->look_at, scratchpad->target);
         break;
-    case 2:
+    case CAMERA_PEDESTAL_ROTATION_FIXED:
         scratchpad->view->rotation.x = definition->parameters.pedestal[0];
         scratchpad->view->rotation.y = definition->parameters.pedestal[1];
         scratchpad->view->rotation.z = definition->parameters.pedestal[2];
@@ -896,8 +957,8 @@ static void CameraType4(void)
     }
     MoveHokan(scratchpad, &CamPosPos, &scratchpad->view->position,
               HokanNow.position_step, &HokanNow.position_remaining);
-    if (mode >= 0) {
-        if (mode < 2) {
+    if (mode >= CAMERA_PEDESTAL_LOOK_AT_FIXED) {
+        if (mode < CAMERA_PEDESTAL_ROTATION_FIXED) {
             MoveHokan(scratchpad, &scratchpad->look_at, &scratchpad->view->look_at,
                       HokanNow.look_at_step, &HokanNow.look_at_remaining);
             Vu0SubVectorXYZ(&scratchpad->look_at_delta, &scratchpad->view->look_at, &scratchpad->view->position);
@@ -935,7 +996,7 @@ static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
         layers[4].parameters[1] = scratchpad->defocus[0].depth;
         layers[5].type = 3;
         layers[5].parameters[0] = 1;
-        layers[5].parameters[1] = 0x40808080;
+        layers[5].parameters[1] = CAMERA_DEFOCUS_COLOR;
         layers[5].parameters[2] = scratchpad->definition->defocus[0].width;
         layers[5].parameters[3] = scratchpad->definition->defocus[0].height;
         layers[5].parameters[4] = 0;
@@ -946,7 +1007,7 @@ static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
         layers[6].parameters[1] = 1;
         layers[6].parameters[0] = 0;
         layers[6].parameters[2] = scratchpad->defocus[1].depth;
-        layers[6].parameters[3] = 0x40808080;
+        layers[6].parameters[3] = CAMERA_DEFOCUS_COLOR;
         layers[6].parameters[4] = scratchpad->definition->defocus[1].width;
         layers[6].parameters[5] = scratchpad->definition->defocus[1].height;
         layers[6].parameters[6] = 0;
@@ -957,7 +1018,7 @@ static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
         layers[7].parameters[1] = 1;
         layers[7].parameters[0] = 0;
         layers[7].parameters[2] = scratchpad->defocus[2].depth;
-        layers[7].parameters[3] = 0x40808080;
+        layers[7].parameters[3] = CAMERA_DEFOCUS_COLOR;
         layers[7].parameters[4] = scratchpad->definition->defocus[2].width;
         layers[7].parameters[5] = scratchpad->definition->defocus[2].height;
         layers[7].parameters[6] = 0;
@@ -968,7 +1029,7 @@ static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
 
 void GameCamera(void)
 {
-    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+    struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
     const CfCameraDefinition *previous;
     unsigned char mode;
     int index;
@@ -981,66 +1042,66 @@ void GameCamera(void)
     if (GameLoopState.map == 0) {
         return;
     }
-    scratchpad->initial_wait = 40;
+    scratchpad->initial_wait = CAMERA_INITIAL_WAIT;
     scratchpad->reserved_1f = 0;
     scratchpad->studio = xglStudioGetCamera2(0);
     scratchpad->view = (struct CameraView *)((char *)scratchpad->studio + 0x90);
     scratchpad->look_at.w = 1.0f;
     scratchpad->target = GameLoopState.player;
-    if (GameLoopState.flags & 0x20) {
+    if (GameLoopState.flags & GAME_FLAG_RESCAN_GROUND) {
         LayoutHeader *header;
 
-        GameLoopState.camera_id = 0x8000;
-        GameLoopState.camera_flags |= 0xe0;
+        GameLoopState.camera_id = GAME_CAMERA_ID_DEFAULT;
+        GameLoopState.camera_flags |= GAME_CAMERA_FLAG_SNAP | GAME_CAMERA_FLAG_MODE_CHANGED | GAME_CAMERA_FLAG_TRACK_PLAYER;
         GameLoopState.camera_index = 0;
         UnduParamInit(&CamPlayer);
-        CamPlayer.exclude = (void *)0x700001a0;
-        CamPlayer.header = UnduDataGetHeader(0x302, 0x8000);
+        CamPlayer.exclude = CAMERA_PROBE_EXCLUDE;
+        CamPlayer.header = UnduDataGetHeader(UNDU_HEADER_CAMERA_GROUND, GAME_CAMERA_ID_DEFAULT);
         CamPlayer.attribute_mask = 0x810;
-        header = UnduDataGetHeader(0x100, 0x8000);
+        header = UnduDataGetHeader(UNDU_HEADER_CAMERA_FLOOR, GAME_CAMERA_ID_DEFAULT);
         UnduParamInit(&CamLookAt);
-        CamLookAt.exclude = (void *)0x700001a0;
+        CamLookAt.exclude = CAMERA_PROBE_EXCLUDE;
         CamLookAt.header = header;
-        CamLookAt.limit = 1000.0f;
+        CamLookAt.limit = UNDU_PROBE_LIMIT;
         CamLookAt.attribute_mask = 2;
         UnduParamInit(&CamPos);
-        CamPos.exclude = (void *)0x700001a0;
+        CamPos.exclude = CAMERA_PROBE_EXCLUDE;
         CamPos.header = header;
-        CamPos.limit = 1000.0f;
+        CamPos.limit = UNDU_PROBE_LIMIT;
         CamPos.attribute_mask = 2;
     }
-    if (GameLoopState.camera_flags & 0x20) {
+    if (GameLoopState.camera_flags & GAME_CAMERA_FLAG_TRACK_PLAYER) {
         QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
     }
-    if ((unsigned)(enepc[scratchpad->target->enemy_index].state - 3) >= 5) {
+    if ((unsigned)(enepc[scratchpad->target->enemy_index].state - CAMERA_ENEMY_STATE_FIRST) >= CAMERA_ENEMY_STATE_COUNT) {
         scratchpad->previous_mode = GameLoopState.camera_mode;
         scratchpad->previous_index = GameLoopState.camera_index;
-        if ((GameLoopState.camera_flags & 8) || GameLoopState.camera_mode == 0xff) {
+        if ((GameLoopState.camera_flags & GAME_CAMERA_FLAG_DISABLED) || GameLoopState.camera_mode == GAME_CAMERA_MODE_OFF) {
             GameLoopState.camera_index = 0;
-            GameLoopState.camera_id = 0x8000;
+            GameLoopState.camera_id = GAME_CAMERA_ID_DEFAULT;
         } else {
-            if (CamPlayer.header != 0 && !(GameLoopState.camera_flags & 2)) {
+            if (CamPlayer.header != 0 && !(GameLoopState.camera_flags & GAME_CAMERA_FLAG_NO_GROUND_PROBE)) {
                 Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->target->position, &CamPlyPosOld);
                 UnduCheck(&CamPlyPosOld, &scratchpad->look_at_delta, &CamPlayer);
-                if (CamPlayer.height == -1000.0f) {
+                if (CamPlayer.height == GROUND_HEIGHT_NONE) {
                     QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
                     CamPlayer.query_cursor = 0;
                     CamPlayer.query_flags = 0;
                     UnduCheck(&CamPlyPosOld, 0, &CamPlayer);
                 }
-                if ((CamPlayer.attribute & 0x38000000) == 0x20000000) {
-                    index = ((CamPlayer.attribute >> 20) & 0x7f) + 1;
+                if ((CamPlayer.attribute & UNDU_ATTR_CAMERA_MASK) == UNDU_ATTR_CAMERA_SELECT) {
+                    index = ((CamPlayer.attribute >> UNDU_ATTR_CAMERA_SHIFT) & UNDU_ATTR_CAMERA_INDEX_MASK) + 1;
                 } else {
                     index = GameLoopState.camera_index;
                 }
-                mode = CfCameraDefine[index].pedestal_mode == 0 ? 3 : 4;
+                mode = CfCameraDefine[index].pedestal_mode == 0 ? GAME_CAMERA_MODE_FLOOR_FOLLOW : GAME_CAMERA_MODE_PEDESTAL;
             } else {
                 index = 0;
-                mode = 0;
+                mode = GAME_CAMERA_MODE_TYPE0;
             }
             if (GameLoopState.camera_mode != mode) {
                 GameLoopState.camera_mode = mode;
-                GameLoopState.camera_flags |= 0x40;
+                GameLoopState.camera_flags |= GAME_CAMERA_FLAG_MODE_CHANGED;
             }
             if (GameLoopState.camera_index != index) {
                 GameLoopState.camera_index = index;
@@ -1055,10 +1116,10 @@ void GameCamera(void)
     if (HokanNow.look_at_remaining == 0.0f) {
         HokanNow.look_at_step = scratchpad->definition->interpolation[1];
     }
-    if (GameLoopState.camera_flags & 0x40) {
-        previous = &CfCameraDefine[scratchpad->previous_index];
-        if ((scratchpad->previous_mode == 4 && (previous->pedestal_interpolation & 1))
-            || (GameLoopState.camera_mode == 4 && (scratchpad->definition->pedestal_interpolation & 1))) {
+    if (GameLoopState.camera_flags & GAME_CAMERA_FLAG_MODE_CHANGED) {
+        previous =&CfCameraDefine[scratchpad->previous_index];
+        if ((scratchpad->previous_mode == GAME_CAMERA_MODE_PEDESTAL &&(previous->pedestal_interpolation & 1))
+            || (GameLoopState.camera_mode == GAME_CAMERA_MODE_PEDESTAL && (scratchpad->definition->pedestal_interpolation & 1))) {
             float yaw;
 
             HokanNow.position_remaining = 0.0f;
@@ -1071,8 +1132,8 @@ void GameCamera(void)
             HokanNow.previous_yaw = HokanNow.current_yaw;
             HokanNow.look_at_remaining = 1.0f;
             HokanNow.current_yaw = scratchpad->definition->current_yaw;
-            if (scratchpad->previous_mode == 3) {
-                if (GameLoopState.camera_mode == 3 && previous->current_yaw == scratchpad->definition->current_yaw) {
+            if (scratchpad->previous_mode == GAME_CAMERA_MODE_FLOOR_FOLLOW) {
+                if (GameLoopState.camera_mode == GAME_CAMERA_MODE_FLOOR_FOLLOW && previous->current_yaw == scratchpad->definition->current_yaw) {
                     saved_look_at = &scratchpad->saved_look_at;
                     saved_position = &scratchpad->saved_position;
                     *saved_look_at = CamLookAtPos;
@@ -1098,7 +1159,7 @@ void GameCamera(void)
             }
         }
     }
-    if (GameLoopState.camera_flags & 0x80) {
+    if (GameLoopState.camera_flags & GAME_CAMERA_FLAG_SNAP) {
         QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
         QuadwordCopy(&CamLookAtPos, &scratchpad->target->position);
         if (scratchpad->definition->pedestal_mode == 0) {
@@ -1106,16 +1167,16 @@ void GameCamera(void)
             GetCameraPos(&CamPosPos.x, &CamLookAtPos.x, scratchpad->definition->angles.values);
         }
     }
-    if ((GameLoopState.camera_flags & 8) || GameLoopState.camera_mode == 0xff) {
+    if ((GameLoopState.camera_flags & GAME_CAMERA_FLAG_DISABLED) || GameLoopState.camera_mode == GAME_CAMERA_MODE_OFF) {
         pre_mode = GameLoopState.camera_mode;
         return;
     }
-    if (pre_mode == 0xff) {
-        GameLoopState.camera_flags |= 0x80;
+    if (pre_mode == GAME_CAMERA_MODE_OFF) {
+        GameLoopState.camera_flags |= GAME_CAMERA_FLAG_SNAP;
     }
     pre_mode = GameLoopState.camera_mode;
     if (scratchpad->definition->pedestal_mode == 0) {
-        distance = scratchpad->target->facing_enabled != 0.0f ? scratchpad->target->facing_angle : 100.0f;
+        distance = scratchpad->target->facing_enabled != 0.0f ? scratchpad->target->facing_angle : CAMERA_NO_FACING;
         if (pa_0 != distance) {
             pa_0 = distance;
             t_1 = 0;
@@ -1125,7 +1186,7 @@ void GameCamera(void)
             count++;
             t_1 = count;
         }
-        if (distance == 100.0f) {
+        if (distance == CAMERA_NO_FACING) {
             if (scratchpad->definition->parameters.offset.second_mode < count) {
                 scratchpad->translation[0] = -CfCameraOfsNow[0];
                 scratchpad->translation[1] = -CfCameraOfsNow[1];
@@ -1173,7 +1234,7 @@ void GameCamera(void)
         nmlModelSetGlobalFogDist(fog[0], fog[1], fog[2], fog[3]);
         nmlModelSetGlobalFogCol(&scratchpad->definition->fog_color);
     }
-    GameLoopState.camera_flags &= 0x3f;
+    GameLoopState.camera_flags &= GAME_CAMERA_FLAGS_KEEP_MASK;
 }
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */

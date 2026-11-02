@@ -94,6 +94,45 @@ typedef struct JThread {
     short frame_limit;                  /* +0x40 */
 } JThread;
 
+/* JThread.kind (the index of tiAlgName, "JTHREAD_ALG_*"): the Java object kind a thread runs. */
+enum {
+    JTHREAD_KIND_SYSTEM = 0,
+    JTHREAD_KIND_CHR = 1,
+    JTHREAD_KIND_STAGE = 2,
+    JTHREAD_KIND_SCENE = 3,
+    JTHREAD_KIND_DEFAULT = 4,
+    JTHREAD_KIND_UNIT = 5
+};
+
+/* JThread.flags */
+enum {
+    JTHREAD_FLAG_WAITING = 0x01,        /* generic wait (set with DONE by the thread-exit natives) */
+    JTHREAD_FLAG_WOKEN = 0x02,          /* a wait was satisfied */
+    JTHREAD_FLAG_CALL_RUNNING = 0x04,   /* a call is already running on the thread */
+    JTHREAD_FLAG_DONE = 0x08,           /* the top-level method returned */
+    JTHREAD_FLAG_RUNNABLE = 0x10,       /* JTHREAD_cntl considers the thread */
+    JTHREAD_FLAG_STALE_CALL = 0x20,     /* a stale call JNI_callMethod resets */
+    JTHREAD_FLAG_FRAME_RETURNED = 0x80, /* the interpreter left a frame and reloads its state */
+    JTHREAD_FLAGS_BUSY = JTHREAD_FLAG_WAITING | JTHREAD_FLAG_CALL_RUNNING,
+    JTHREAD_FLAGS_LEAVE_FRAME = JTHREAD_FLAG_DONE | JTHREAD_FLAG_FRAME_RETURNED
+};
+
+/* JThread.wait_kind (low nibble): what JTHREAD_waitFor waits for. */
+#define JTHREAD_WAIT_KIND_MASK 0xf
+enum {
+    JTHREAD_WAIT_FRAMES = 1,       /* wait_parameter frames elapsed */
+    JTHREAD_WAIT_THREAD = 2,       /* another thread is done */
+    JTHREAD_WAIT_COMPONENT = 3,    /* a window component reached its state 2 */
+    JTHREAD_WAIT_ACTOR_IDLE = 4,   /* an actor's flag 0x2 is clear */
+    JTHREAD_WAIT_SIGNAL = 5,       /* an actor's signal equals wait_parameter */
+    JTHREAD_WAIT_ACTOR_IDLE_2 = 6, /* same test as JTHREAD_WAIT_ACTOR_IDLE */
+    JTHREAD_WAIT_GAME = 7          /* the game state's flag 0x800 is clear */
+};
+
+/* The virtual-machine register bank (VMRegister) and its index mask. */
+#define VM_REGISTER_COUNT 32
+#define VM_REGISTER_MASK (VM_REGISTER_COUNT - 1)
+
 extern JavaClass *classJava_xeno_Scene;
 
 /* Proposal: script "Stage" class handle, parallel to the already-shared

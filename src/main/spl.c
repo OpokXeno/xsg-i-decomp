@@ -3,6 +3,15 @@
 #include "spl.h"
 #include "main/spl.h"
 
+/* SplineState.first_key: low nibble is the key kind, high nibble how SPL_init2 weights the samples. */
+#define SPL_KEY_KIND_MASK 0x0f
+#define SPL_KEY_KIND_WEIGHTED 8       /* samples already carry their weights */
+#define SPL_KEY_SCHEME_MASK 0xf0
+#define SPL_KEY_SCHEME_LENGTH 0x00    /* cumulative chord length */
+#define SPL_KEY_SCHEME_LENGTH2 0x20   /* cumulative length, setWeightLen2 */
+#define SPL_KEY_SCHEME_INDEX 0x30     /* sample index */
+#define SPL_KEY_SCHEME_TIME 0x40      /* last_key frame time */
+
 float minCardinalInterval = 9.9999999747524271e-07f;
 
 void SPL_init(SplineState *spline, unsigned int weight_mode,
@@ -116,26 +125,26 @@ static void setWeightIndex(SplinePoint *points, int count)
 void SPL_init2(SplineState *spline, int interpolation_mode, float *samples,
                int sample_count, unsigned int component_count)
 {
-    if ((spline->first_key & 0x0f) != 8) {
-        unsigned short weight_scheme = spline->first_key & 0xf0;
+    if ((spline->first_key & SPL_KEY_KIND_MASK) != SPL_KEY_KIND_WEIGHTED) {
+        unsigned short weight_scheme = spline->first_key & SPL_KEY_SCHEME_MASK;
         interpolation_mode += 2;
         switch (weight_scheme) {
-        case 0:
+        case SPL_KEY_SCHEME_LENGTH:
             setWeightLen((SplinePoint *)samples, sample_count);
             break;
-        case 0x20:
+        case SPL_KEY_SCHEME_LENGTH2:
             setWeightLen2((SplinePoint *)samples, sample_count);
             break;
-        case 0x40:
+        case SPL_KEY_SCHEME_TIME:
             setWeightTime((SplinePoint *)samples, sample_count,
                           (float)(short)spline->last_key);
             break;
-        case 0x30:
+        case SPL_KEY_SCHEME_INDEX:
             setWeightIndex((SplinePoint *)samples, sample_count);
             break;
         }
     }
-    spline->first_key = spline->first_key & 0x0f;
+    spline->first_key = spline->first_key & SPL_KEY_KIND_MASK;
     spline->samples = samples;
     spline->sample_count = sample_count;
     spline->component_count = component_count;
@@ -153,7 +162,7 @@ void SPL_init2(SplineState *spline, int interpolation_mode, float *samples,
 
 static void SPL_cardinalInit(SplineState *spline)
 {
-    struct SplineWorkspace *workspace = (struct SplineWorkspace *)0x70000000;
+    struct SplineWorkspace *workspace = (struct SplineWorkspace *)SCRATCHPAD_BASE;
     float *next_curvature_cell;
     int component = 0;
     float *linear = spline->coefficients[SPL_LINEAR_TERM];

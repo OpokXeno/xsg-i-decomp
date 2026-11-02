@@ -4,22 +4,22 @@
 #include "main/data.h"
 #include "main/sdv.h"
 
-extern u16 accBox[255];
-extern u16 bltBox[255];
-extern u16 evtBox[255];
-extern u16 itmBox[255];
-extern u16 wpnBox[255];
+extern u16 accBox[DATA_BOX_SLOTS];
+extern u16 bltBox[DATA_BOX_SLOTS];
+extern u16 evtBox[DATA_BOX_SLOTS];
+extern u16 itmBox[DATA_BOX_SLOTS];
+extern u16 wpnBox[DATA_BOX_SLOTS];
 u16 *dataBoxPtrGet(int category) {
     switch (category) {
-    case 0:
+    case ITEM_CATEGORY_ITEM:
         return itmBox;
-    case 1:
+    case ITEM_CATEGORY_WEAPON:
         return wpnBox;
-    case 2:
+    case ITEM_CATEGORY_BULLET:
         return bltBox;
-    case 3:
+    case ITEM_CATEGORY_ACCESSORY:
         return accBox;
-    case 10:
+    case ITEM_CATEGORY_EVENT:
         return evtBox;
     default:
         return 0;
@@ -36,7 +36,7 @@ int dataBoxInc(int category, int id)
     unsigned short *quantity;
 
     quantity = dataBoxPtrGet(category) + id - 1;
-    if (*quantity < 99) {
+    if (*quantity < DATA_BOX_QUANTITY_MAX) {
         *quantity += 1;
         return 1;
     }
@@ -57,77 +57,77 @@ int dataBoxDec(int category, int id)
 
 int dataItmBoxChk(int id)
 {
-    return dataBoxChk(0, id);
+    return dataBoxChk(ITEM_CATEGORY_ITEM, id);
 }
 
 int dataItmBoxInc(int id)
 {
-    return dataBoxInc(0, id);
+    return dataBoxInc(ITEM_CATEGORY_ITEM, id);
 }
 
 void dataItmBoxDec(int id)
 {
-    dataBoxDec(0, id);
+    dataBoxDec(ITEM_CATEGORY_ITEM, id);
 }
 
 int dataWpnBoxChk(int weapon_id)
 {
-    return dataBoxChk(1, weapon_id);
+    return dataBoxChk(ITEM_CATEGORY_WEAPON, weapon_id);
 }
 
 void dataWpnBoxInc(int weapon_id)
 {
-    dataBoxInc(1, weapon_id);
+    dataBoxInc(ITEM_CATEGORY_WEAPON, weapon_id);
 }
 
 void dataWpnBoxDec(int weapon_id)
 {
-    dataBoxDec(1, weapon_id);
+    dataBoxDec(ITEM_CATEGORY_WEAPON, weapon_id);
 }
 
 int dataBltBoxChk(int bullet_id)
 {
-    return dataBoxChk(2, bullet_id);
+    return dataBoxChk(ITEM_CATEGORY_BULLET, bullet_id);
 }
 
 void dataBltBoxInc(int bullet_id)
 {
-    dataBoxInc(2, bullet_id);
+    dataBoxInc(ITEM_CATEGORY_BULLET, bullet_id);
 }
 
 void dataBltBoxDec(int bullet_id)
 {
-    dataBoxDec(2, bullet_id);
+    dataBoxDec(ITEM_CATEGORY_BULLET, bullet_id);
 }
 
 int dataAccBoxChk(int accessory_id)
 {
-    return dataBoxChk(3, accessory_id);
+    return dataBoxChk(ITEM_CATEGORY_ACCESSORY, accessory_id);
 }
 
 void dataAccBoxInc(int accessory_id)
 {
-    dataBoxInc(3, accessory_id);
+    dataBoxInc(ITEM_CATEGORY_ACCESSORY, accessory_id);
 }
 
 void dataAccBoxDec(int accessory_id)
 {
-    dataBoxDec(3, accessory_id);
+    dataBoxDec(ITEM_CATEGORY_ACCESSORY, accessory_id);
 }
 
 int dataEvtBoxChk(int event_id)
 {
-    return dataBoxChk(10, event_id);
+    return dataBoxChk(ITEM_CATEGORY_EVENT, event_id);
 }
 
 void dataEvtBoxInc(int event_id)
 {
-    dataBoxInc(10, event_id);
+    dataBoxInc(ITEM_CATEGORY_EVENT, event_id);
 }
 
 void dataEvtBoxDec(int event_id)
 {
-    dataBoxDec(10, event_id);
+    dataBoxDec(ITEM_CATEGORY_EVENT, event_id);
 }
 
 int dataMoneyBoxChk(void)
@@ -138,8 +138,8 @@ int dataMoneyBoxChk(void)
 int dataMoneyBoxInc(int amount)
 {
     moneyBox += amount;
-    if (moneyBox >= 1000000000ULL) {
-        moneyBox = 999999999;
+    if (moneyBox >= MONEY_BOX_LIMIT) {
+        moneyBox = MONEY_BOX_MAX;
         return 0;
     }
 

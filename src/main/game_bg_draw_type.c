@@ -6,7 +6,18 @@
 #include "main/xgl_2.h"
 #include "main/xgl_render.h"
 
-#define GAME_BG_DRAW_TYPE1_SCRATCH ((GameBgDrawType1Packet *)0x70000000)
+#define GAME_BG_DRAW_TYPE1_SCRATCH ((GameBgDrawType1Packet *)SCRATCHPAD_BASE)
+
+#define GAME_BG_PARTICLE_MAX 256
+#define GAME_BG_GIF_EOP_NREG_1_REG_AD 0x51000004
+#define GAME_BG_VIF_DIRECT_COMMAND 0x8001
+#define GAME_BG_CLEAR_COLOR 0x80000000
+/* Scrolling star texture: one 32-texel row per frame, 64 rows. */
+#define GAME_BG_STAR_TEXTURE_WIDTH 32
+#define GAME_BG_STAR_TEXTURE_HEIGHT 64
+#define GAME_BG_STAR_TEXTURE_PIXELS (GAME_BG_STAR_TEXTURE_WIDTH * GAME_BG_STAR_TEXTURE_HEIGHT)
+#define GAME_BG_STAR_COLOR_MASK 0xBFBFBF
+#define GAME_BG_STAR_COLOR_BASE 0x80404040
 
 /* Hardware-reserved bits are not C padding. */
 typedef struct GameBgSetupEnvironment {
@@ -143,7 +154,7 @@ typedef struct GameBgDrawType1Parameters {
     s16 spawn_x;
     s16 spawn_y;
     u16 entry_clear[2];
-    GameBgDrawType1Particle particles[256];
+    GameBgDrawType1Particle particles[GAME_BG_PARTICLE_MAX];
 } GameBgDrawType1Parameters;
 
 typedef struct GameLoopBackgroundCallbacks {
@@ -311,7 +322,7 @@ typedef struct GameBgBandParameters {
 
 struct GameBgBandTexture {
     unsigned int header[8];
-    unsigned int pixels[2048];
+    unsigned int pixels[GAME_BG_STAR_TEXTURE_PIXELS];
 };
 
 struct StageBackground;
@@ -394,7 +405,7 @@ void GameBgDrawType1(void)
 
     switch (param->initialized) {
     case 0:
-        for (i = 0; i < 256; i++) {
+        for (i = 0; i < GAME_BG_PARTICLE_MAX; i++) {
             param->particles[i].x = 0;
             param->particles[i].y = 0;
         }
@@ -419,8 +430,8 @@ void GameBgDrawType1(void)
         scratch->header.header_pad_00[0] = 0;
         scratch->header.header_pad_00[1] = 0;
         scratch->header.header_pad_00[2] = 0;
-        scratch->header.gif_tag = 0x51000004 + param->particle_count * 4;
-        scratch->header.vif_command = 0x8001;
+        scratch->header.gif_tag = GAME_BG_GIF_EOP_NREG_1_REG_AD + param->particle_count * 4;
+        scratch->header.vif_command = GAME_BG_VIF_DIRECT_COMMAND;
         scratch->header.packet_header_14 = 0x20000000;
         scratch->header.packet_header_18 = 0xEE;
         scratch->header.header_pad_1c = 0;
@@ -512,7 +523,7 @@ void GameBgDrawType2(void)
 
     switch (param->initialized) {
     case 0:
-        xglRenderClearColor(0x80000000);
+        xglRenderClearColor(GAME_BG_CLEAR_COLOR);
         param->texture_packet = (GameBgBandTexture *)(((unsigned int)WorkEnd + 15) & ~15);
         WorkEnd = (unsigned char *)(param->texture_packet + 1);
         param->texture_packet->header[3] = 0x51000201;
@@ -524,14 +535,14 @@ void GameBgDrawType2(void)
         param->texture_packet->header[6] = 0;
         param->texture_packet->header[7] = 0;
         row = param->texture_packet->pixels;
-        for (texture_row = 0; texture_row < 64; texture_row++) {
+        for (texture_row = 0; texture_row < GAME_BG_STAR_TEXTURE_HEIGHT; texture_row++) {
             for (j = 31; j >= 0; j--) {
                 row[j] = 0;
             }
             initial_star = xglSRand();
             color = xglLRand();
             initial_star &= 31;
-            row[initial_star] = (color & 0xBFBFBF) + 0x80404040;
+            row[initial_star] = (color & GAME_BG_STAR_COLOR_MASK) + GAME_BG_STAR_COLOR_BASE;
             row += 32;
         }
         param->initialized = 1;
@@ -576,21 +587,21 @@ void GameBgDrawType2(void)
         texture = param->texture_packet;
         source_pixel = &texture->pixels[32];
         destination_pixel = texture->pixels;
-        for (texture_pixel_index = 2015; texture_pixel_index >= 0; texture_pixel_index--) {
+        for (texture_pixel_index = GAME_BG_STAR_TEXTURE_PIXELS - GAME_BG_STAR_TEXTURE_WIDTH - 1; texture_pixel_index >= 0; texture_pixel_index--) {
             *destination_pixel++ = *source_pixel++;
         }
-        clear_color = 0x80000000;
+        clear_color = GAME_BG_CLEAR_COLOR;
         for (texture_pixel_index = 31; texture_pixel_index >= 0; texture_pixel_index--) {
             destination_pixel[texture_pixel_index] = clear_color;
         }
         star = xglSRand();
         color = xglLRand();
         star &= 31;
-        destination_pixel[star] = (color & 0xBFBFBF) + 0x80404040;
+        destination_pixel[star] = (color & GAME_BG_STAR_COLOR_MASK) + GAME_BG_STAR_COLOR_BASE;
         sceVif1PkRef(packet, TestEnv_1_00367B00, 11, 0, 0, 0);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, param->texture_packet, 2056);
-        scratch = (GameBgBandScratch *)0x70000000;
+        scratch = (GameBgBandScratch *)SCRATCHPAD_BASE;
         {
             vif_command = 0x5100000d00000000UL;
             {

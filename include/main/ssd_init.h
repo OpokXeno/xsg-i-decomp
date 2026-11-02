@@ -1,6 +1,29 @@
 #ifndef INCLUDE_MAIN_SSD_INIT_H
 #define INCLUDE_MAIN_SSD_INIT_H
 
+/* Client commands of the RSSD RPC shared by the SSD wrapper TUs. */
+enum {
+    RSSD_CMD_INIT    = 0x01,
+    RSSD_CMD_QUIT    = 0x02,
+    RSSD_CMD_RESUME  = 0x05,
+    RSSD_CMD_SUSPEND = 0x06,
+    RSSD_CMD_NEXT_WAVE_DATA = 0x21
+};
+
+/* RssdWork.flags bits. */
+#define RSSD_FLAG_SUCCESS 0x20 /* bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome */
+#define RSSD_FLAG_READY 0x1 /* the IOP side is bound and the RPC thread runs */
+#define RSSD_FLAG_BUSY 0x2 /* set by RssdBusy until SsdInit's wait finishes */
+#define RSSD_FLAG_SPU_DMA 0x4 /* a streamed SPU transfer is still in flight */
+#define RSSD_FLAG_CALL_PENDING 0x8 /* an RssdCallFunc RPC has not completed */
+#define RSSD_FLAG_SPU_DMA_SHIFT 2
+#define RSSD_FLAG_CALL_PENDING_SHIFT 3
+#define RSSD_FLAG_SUCCESS_SHIFT 5
+
+/* The SPU wave transfer chunk and the RPC packet capacity (chunk plus its 0x20-byte header). */
+#define RSSD_TRANSFER_MAX 0x10000
+#define RSSD_PACKET_MAX 0x10020
+
 /*
  * One argument word of an RSSD request. Most commands pass plain integers;
  * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence

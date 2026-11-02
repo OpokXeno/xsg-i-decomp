@@ -44,7 +44,16 @@ static MatrixHeap matrixHeap;
 
 static ActMatrixArena actMatrix;
 
-static unsigned char matrixHeapBlock[0x400];
+#define ACT_MATRIX_SIZE 64 /* one 4x4 float joint matrix */
+#define ACT_MATRIX_HEAP_BOUND 0xC0000
+#define ACT_MATRIX_HEAP_MAX 64
+#define ACT_MATRIX_HEAP_STORE_SIZE 0x400
+#define ACTOR_PIXEL_ALPHA_DEFAULT 117
+#define ACTOR_BODY_RADIUS_DEFAULT 0.35f
+#define ANIM_SLOT_FLAG_PAUSED 0x80000
+#define ACT_INFO_PAGE_COUNT 3
+
+static unsigned char matrixHeapBlock[ACT_MATRIX_HEAP_STORE_SIZE];
 
 static ActInfoState actInfo;
 
@@ -104,17 +113,17 @@ int ACT_allocMatrix(Actor *self, int count)
     if (count > 0) {
         extra = 0;
         if (self->kind == 1) {
-            extra = count * 64;
+            extra = count * ACT_MATRIX_SIZE;
         }
-        block = RSRC_alloc(actMatrixHeap, count * 128 + extra, (int)self);
+        block = RSRC_alloc(actMatrixHeap, count * (2 * ACT_MATRIX_SIZE) + extra, (int)self);
         if (block != 0) {
             self->jointMatrices = block;
-            self->previousJointMatrices = block + count * 64;
+            self->previousJointMatrices = block + count * ACT_MATRIX_SIZE;
             if (self->kind == 1) {
-                block += count * 128;
+                block += count * (2 * ACT_MATRIX_SIZE);
                 self->staticValueRecords = block;
                 self->valueRecords = block + count * 32;
-                memset(block, 0, count * 64);
+                memset(block, 0, count * ACT_MATRIX_SIZE);
             }
             ACT_resetMatrix(self);
         }
@@ -152,14 +161,14 @@ void *ACT_allocBlock(int tag, int blockCount)
  */
 void ACT_matrixInit(void)
 {
-    matrixHeap.heap_bound = 0xC0000;
-    matrixHeap.heap_max = 64;
+    matrixHeap.heap_bound = ACT_MATRIX_HEAP_BOUND;
+    matrixHeap.heap_max = ACT_MATRIX_HEAP_MAX;
     matrixHeap.heap_count = 0;
     actMatrixHeap = &matrixHeap;
     matrixHeap.heap_origin = actMatrix.bytes;
     matrixHeap.heap_store = matrixHeapBlock;
     matrixHeap.heap_cursor = actMatrix.bytes;
-    memset(matrixHeapBlock, 0, 0x400);
+    memset(matrixHeapBlock, 0, ACT_MATRIX_HEAP_STORE_SIZE);
 }
 
 void ACT_init(void)
@@ -175,8 +184,8 @@ void ACT_init(void)
     ACT_matrixInit();
     for (index = 0; index < ACTOR_COUNT; index++) {
         self = &actor[index];
-        self->flags = 0x20;
-        self->drawEnv.pixelAlpha = 117;
+        self->flags = ACTOR_FLAGS_INITIAL;
+        self->drawEnv.pixelAlpha = ACTOR_PIXEL_ALPHA_DEFAULT;
         self->state84 = 0;
         self->childCount = 0;
         self->inUseId = 0;
@@ -278,7 +287,7 @@ Actor *ACT_create(int slot, int id)
     }
     self = &actor[slot];
     self->kind = id >> 16;
-    self->flags = 0x20;
+    self->flags = ACTOR_FLAGS_INITIAL;
     self->number = slot;
     self->inUseId = id;
     self->childCount = 0;
@@ -296,7 +305,7 @@ Actor *ACT_create(int slot, int id)
         self->shadowSize = 80;
     }
     self->talk_message = 0;
-    self->body_radius = 0.35f;
+    self->body_radius = ACTOR_BODY_RADIUS_DEFAULT;
     self->touch_message = 0;
     EXM_InitMovedHair(self);
     self->statea60 = 0;
@@ -404,15 +413,15 @@ void ACT_pauseUpdate(void)
 
     xglStudioFlushActiveCamera();
     for (index = 0; index < ACTOR_COUNT; index++) {
-        actor[index].animation.slot.flags |= 0x80000;
+        actor[index].animation.slot.flags |= ANIM_SLOT_FLAG_PAUSED;
     }
     for (index = 0; index < ACTOR_COUNT; index++) {
-        if (actor[index].inUseId != 0 && (actor[index].flags & 8) == 0) {
+        if (actor[index].inUseId != 0 && (actor[index].flags & ACTOR_FLAG_HIDDEN) == 0) {
             ACT_updateMotionPause(&actor[index]);
         }
     }
     for (index = 0; index < ACTOR_COUNT; index++) {
-        actor[index].animation.slot.flags &= ~0x80000;
+        actor[index].animation.slot.flags &= ~ANIM_SLOT_FLAG_PAUSED;
     }
 }
 
@@ -435,35 +444,35 @@ static void ACT_info(void)
     unsigned int buttons;
     int index;
 
-    if ((pad->half_28 & 0x100) != 0 && (pad->half_2a & 1) != 0) {
+    if ((pad->half_28 & PAD_SELECT) != 0 && (pad->half_2a & PAD_L2) != 0) {
         info->visible ^= 1;
     }
     if ((info->visible & 1) == 0) {
         return;
     }
     buttons = pad->half_2c;
-    if ((buttons & 0x2000) != 0) {
+    if ((buttons & PAD_RIGHT) != 0) {
         info->actorIndex += 1;
     }
-    if ((buttons & 0x8000) != 0) {
+    if ((buttons & PAD_LEFT) != 0) {
         info->actorIndex -= 1;
     }
-    if ((buttons & 0x1000) != 0) {
+    if ((buttons & PAD_UP) != 0) {
         info->page += 1;
     }
-    if ((buttons & 0x4000) != 0) {
+    if ((buttons & PAD_DOWN) != 0) {
         info->page -= 1;
     }
     if (info->actorIndex < 0) {
-        info->actorIndex = 63;
+        info->actorIndex = ACTOR_COUNT - 1;
     }
-    if (info->actorIndex >= 64) {
+    if (info->actorIndex >= ACTOR_COUNT) {
         info->actorIndex = 0;
     }
     if (info->page < 0) {
-        info->page = 2;
+        info->page = ACT_INFO_PAGE_COUNT - 1;
     }
-    if (info->page >= 3) {
+    if (info->page >= ACT_INFO_PAGE_COUNT) {
         info->page = 0;
     }
     self = &actor[info->actorIndex];
@@ -490,7 +499,7 @@ static void ACT_info(void)
         DB_println(actorSpeedFormat, (double)(self->animation.slot.speed / (1.0f / 30.0f)));
         break;
     case 1:
-        for (index = 0; index < 11; index++) {
+        for (index = 0; index < ACTOR_RESOURCE_COUNT; index++) {
             if (ACTOR_RESOURCES(self)[index] != 0) {
                 DB_println(actorResourceFormat, index, ACTOR_RESOURCES(self)[index]);
             }

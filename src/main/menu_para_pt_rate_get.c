@@ -45,23 +45,54 @@
 #define ACCESSORY_KEEP_HP 95
 
 #define ACCESSORY_KEEP_EP 96
-#define PAD_L2       0x0001
-#define PAD_R2       0x0002
-#define PAD_L1       0x0004
-#define PAD_R1       0x0008
-#define PAD_CIRCLE   0x0020
-#define PAD_CROSS    0x0040
-#define PAD_SQUARE   0x0080
-#define PAD_UP       0x1000
-#define PAD_RIGHT    0x2000
-#define PAD_DOWN     0x4000
-#define PAD_LEFT     0x8000
+
+/* MenuWork.character.state, the MenuCharactor state machine. Every screen
+ * has an entry state that falls into its running state one higher (_RUN). */
+enum {
+    CHAR_STATE_STATUS = 0x10,           /* pick the character */
+    CHAR_STATE_STATUS_RUN = 0x11,
+    CHAR_STATE_COMMAND = 0x20,          /* the character's command menu */
+    CHAR_STATE_COMMAND_RUN = 0x21,
+    CHAR_STATE_EQUIP = 0x40,            /* equipment: pick the slot */
+    CHAR_STATE_EQUIP_RUN = 0x41,
+    CHAR_STATE_EQUIP_LIST = 0x52,       /* equipment: weapon or accessory list */
+    CHAR_STATE_EQUIP_LIST_RUN = 0x53,
+    CHAR_STATE_BULLET_LIST = 0x54,      /* equipment: bullet list */
+    CHAR_STATE_BULLET_LIST_RUN = 0x55,
+    CHAR_STATE_PARA = 0x80,             /* parameter points: pick the parameter */
+    CHAR_STATE_PARA_RUN = 0x81,
+    CHAR_STATE_PARA_AMOUNT = 0x82,      /* choose how many levels */
+    CHAR_STATE_PARA_AMOUNT_RUN = 0x83,
+    CHAR_STATE_PARA_CONFIRM = 0x84,
+    CHAR_STATE_PARA_CONFIRM_RUN = 0x85,
+    CHAR_STATE_PARA_DONE = 0x86,
+    CHAR_STATE_PARA_DENIED = 0x87,      /* not enough points / at the maximum */
+    CHAR_STATE_FORMATION = 0xA0,        /* formation (from battle): pick the attacker */
+    CHAR_STATE_FORMATION_RUN = 0xA1,
+    CHAR_STATE_FORMATION_MENU = 0xA2,   /* position / swap / back */
+    CHAR_STATE_FORMATION_MENU_RUN = 0xA3,
+    CHAR_STATE_FORMATION_MOVE = 0xB2,   /* move over the six positions */
+    CHAR_STATE_FORMATION_MOVE_RUN = 0xB3,
+    CHAR_STATE_FORMATION_EXCHANGE = 0xB4,   /* exchange with the occupant */
+    CHAR_STATE_FORMATION_EXCHANGE_RUN = 0xB5,
+    CHAR_STATE_FORMATION_PLACE = 0xB6,  /* move to the empty position */
+    CHAR_STATE_FORMATION_DONE = 0xBF,
+    CHAR_STATE_RESERVE_PICK = 0xC0,     /* only CharInfoMain handles these two */
+    CHAR_STATE_RESERVE_PICK_RUN = 0xC1,
+    CHAR_STATE_RESERVE = 0xC2,          /* swap with a reserve friend */
+    CHAR_STATE_RESERVE_RUN = 0xC3,
+    CHAR_STATE_RESERVE_MODEL = 0xC4,    /* rebuild the swapped-in model */
+    CHAR_STATE_RESERVE_MODEL_RUN = 0xC5,
+    CHAR_STATE_EXIT = 0xF0,
+    CHAR_STATE_EXIT_RUN = 0xF1
+};
+
+/* MenuWork.character.state >> 4 of the parameter-point and reserve-swap states. */
+#define CHAR_STATE_GROUP_PARA 8
+#define CHAR_STATE_GROUP_RESERVE 12
+
 #define CHAR_INFO_SETUP 0
 #define CHAR_INFO_MAIN  2
-#define MENU_TEXT_WEAPON    0x30000
-#define MENU_TEXT_BULLET    0x40000
-#define MENU_TEXT_ACCESSORY 0x50000
-#define MENU_TEXT_CHARACTER 0x60000
 
 /* The frame colour of every command window: opaque white with the lowest
  * intensity bits cleared. */
@@ -148,11 +179,6 @@
 #define CHAR_POINT_SIZE     0x3D8
 
 /* Sound effect ids. */
-#define SE_DECIDE 1
-
-#define SE_CANCEL 2
-#define SE_CURSOR 3
-#define SE_BUZZER 5
 #define SE_SLIDE  10
 #define SE_SWAP   23
 #define SE_PLACE  24
@@ -1624,14 +1650,14 @@ void CharPasMain(void)
         tabTarget[i] = 0x120;
 
     switch (MenuWork.character.state) {
-    case 0x40: case 0x41: {
+    case CHAR_STATE_EQUIP: case CHAR_STATE_EQUIP_RUN: {
         int curTab = MenuWork.character.menuCursor;
 
         tabTarget[0] = 0x10;
         tabTarget[curTab + 1] = tabLength[0] + 0x10;
         break;
     }
-    case 0x52: case 0x53: {
+    case CHAR_STATE_EQUIP_LIST: case CHAR_STATE_EQUIP_LIST_RUN: {
         int curTab = MenuWork.character.menuCursor;
 
         tabTarget[0] = -(tabLength[0] + 0x10);
@@ -1639,7 +1665,7 @@ void CharPasMain(void)
         tabTarget[MenuWork.character.equipKind + 5] = tabLength[curTab + 1] + 0x10;
         break;
     }
-    case 0x54: case 0x55: {
+    case CHAR_STATE_BULLET_LIST: case CHAR_STATE_BULLET_LIST_RUN: {
         int curTab = MenuWork.character.menuCursor;
 
         tabTarget[0] = -(tabLength[0] + 0x10);
@@ -1647,17 +1673,17 @@ void CharPasMain(void)
         tabTarget[7] = tabLength[curTab + 1] + 0x10;
         break;
     }
-    case 0x10: case 0x11: case 0x20: case 0x21:
-    case 0x80: case 0x81: case 0x82: case 0x83:
-    case 0x84: case 0x85: case 0x86: case 0x87:
-    case 0xA0: case 0xA1: case 0xA2: case 0xA3:
+    case CHAR_STATE_STATUS: case CHAR_STATE_STATUS_RUN: case CHAR_STATE_COMMAND: case CHAR_STATE_COMMAND_RUN:
+    case CHAR_STATE_PARA: case CHAR_STATE_PARA_RUN: case CHAR_STATE_PARA_AMOUNT: case CHAR_STATE_PARA_AMOUNT_RUN:
+    case CHAR_STATE_PARA_CONFIRM: case CHAR_STATE_PARA_CONFIRM_RUN: case CHAR_STATE_PARA_DONE: case CHAR_STATE_PARA_DENIED:
+    case CHAR_STATE_FORMATION: case CHAR_STATE_FORMATION_RUN: case CHAR_STATE_FORMATION_MENU: case CHAR_STATE_FORMATION_MENU_RUN:
         tabTarget[0] = 0x10;
         break;
-    case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xBF:
+    case CHAR_STATE_FORMATION_MOVE: case CHAR_STATE_FORMATION_MOVE_RUN: case CHAR_STATE_FORMATION_EXCHANGE: case CHAR_STATE_FORMATION_EXCHANGE_RUN: case CHAR_STATE_FORMATION_PLACE: case CHAR_STATE_FORMATION_DONE:
         tabTarget[0] = 0x10;
         tabTarget[1] = formTabLength[0] + 0x10;
         break;
-    case 0xC2: case 0xC3: case 0xC4: case 0xC5:
+    case CHAR_STATE_RESERVE: case CHAR_STATE_RESERVE_RUN: case CHAR_STATE_RESERVE_MODEL: case CHAR_STATE_RESERVE_MODEL_RUN:
         tabTarget[0] = 0x10;
         tabTarget[2] = formTabLength[0] + 0x10;
         break;
@@ -1673,13 +1699,13 @@ void CharPasMain(void)
     pas->box.kind = pas->kind;
     pas->box.width = pas->window.width - 6;
     pas->box.height = pas->window.height - 6;
-    endPrintExtFunc(pas->kind, 0x65, &pas->box);
+    endPrintExtFunc(pas->kind, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&pas->box);
     for (i = 0; i < pas->tabCount; i++) {
         MoveSlide(&pas->messages[i].x, &tabTarget[i], 5.0f);
         if (pas->messages[i].x < 0x100)
             eMessageMain(&pas->messages[i]);
     }
-    endPrintExtFunc(pas->kind, 0x66, 0);
+    endPrintExtFunc(pas->kind, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
 }
 
 /*
@@ -1847,8 +1873,8 @@ void CharInfoMain(void)
         para = func_00A11108(MenuWork.character.chrNo, totals, totals);
         slideTarget = 386;
         switch (MenuWork.character.state) {
-        case 0x10:
-        case 0x11:
+        case CHAR_STATE_STATUS:
+        case CHAR_STATE_STATUS_RUN:
             if (work->reasonShown == 0) {
                 eMessageCpy(work->message, leaderHelp[0]);
                 if (PadData.repeatFirst & PAD_SQUARE) {
@@ -1873,12 +1899,12 @@ void CharInfoMain(void)
                 work->reasonShown = 0;
             }
             break;
-        case 0x20:
-        case 0x21:
+        case CHAR_STATE_COMMAND:
+        case CHAR_STATE_COMMAND_RUN:
             eMessageCpy(work->message, menuHelp[MenuWork.character.menuCursor]);
             break;
-        case 0x40:
-        case 0x41:
+        case CHAR_STATE_EQUIP:
+        case CHAR_STATE_EQUIP_RUN:
             if (MenuWork.character.equipKind == 0) {
                 int slot = setSlotTbl[MenuWork.character.chrNo - 1];
                 short weapon = para->weapon[slot];
@@ -1906,10 +1932,10 @@ void CharInfoMain(void)
                 }
             }
             break;
-        case 0x52:
-        case 0x53:
-        case 0x54:
-        case 0x55:
+        case CHAR_STATE_EQUIP_LIST:
+        case CHAR_STATE_EQUIP_LIST_RUN:
+        case CHAR_STATE_BULLET_LIST:
+        case CHAR_STATE_BULLET_LIST_RUN:
             if (MenuWork.character.listSelect >= 0) {
                 eMessageCpy(work->message,
                             MenuTextGet(MenuSortGet(0, MenuWork.character.listSelect))->auxiliary);
@@ -1917,8 +1943,8 @@ void CharInfoMain(void)
                 eMessageCpy(work->message, "");
             }
             break;
-        case 0x80:
-        case 0x81:
+        case CHAR_STATE_PARA:
+        case CHAR_STATE_PARA_RUN:
             if (MenuWork.character.listSelect >= 0) {
                 eMessageCpy(work->message, improveHelp[0]);
                 eMessageCat(MenuParaNameGet(MenuWork.character.listSelect));
@@ -1927,8 +1953,8 @@ void CharInfoMain(void)
                 eMessageCpy(work->message, "");
             }
             break;
-        case 0x82:
-        case 0x83:
+        case CHAR_STATE_PARA_AMOUNT:
+        case CHAR_STATE_PARA_AMOUNT_RUN:
             {
                 int max = MenuCharEquipCalcPointGet(MenuWork.character.chrNo)
                           + MenuParaUpMaxGet(MenuWork.character.paraIndex);
@@ -1941,8 +1967,8 @@ void CharInfoMain(void)
                 eMessageCat(".");
             }
             break;
-        case 0x84:
-        case 0x85:
+        case CHAR_STATE_PARA_CONFIRM:
+        case CHAR_STATE_PARA_CONFIRM_RUN:
             {
                 int now = MenuParaPtNowGet(MenuWork.character.chrNo, MenuWork.character.paraIndex)
                           + MenuCharEquipCalcPointGet(MenuWork.character.chrNo);
@@ -1956,11 +1982,11 @@ void CharInfoMain(void)
                 eMessageCat(".");
             }
             break;
-        case 0x86:
+        case CHAR_STATE_PARA_DONE:
             eMessageCpy(work->message, MenuParaNameGet(MenuWork.character.listSelect));
             eMessageCat(improveHelp[7]);
             break;
-        case 0x87:
+        case CHAR_STATE_PARA_DENIED:
             if (MenuParaUpCheck(MenuWork.character.chrNo, MenuWork.character.paraIndex) == -1) {
                 eMessageCpy(work->message, improveHelp[8]);
             } else {
@@ -1969,41 +1995,41 @@ void CharInfoMain(void)
                 eMessageCat(".");
             }
             break;
-        case 0xA0:
+        case CHAR_STATE_FORMATION:
             eMessageCpy(work->message, charHelp[0]);
             WindowDXFlagChange(&work->window, 1);
             break;
-        case 0xA1:
+        case CHAR_STATE_FORMATION_RUN:
             break;
-        case 0xA2:
-        case 0xA3:
+        case CHAR_STATE_FORMATION_MENU:
+        case CHAR_STATE_FORMATION_MENU_RUN:
             eMessageCpy(work->message, partyHelp[MenuWork.character.commandCursor]);
             break;
-        case 0xB2:
+        case CHAR_STATE_FORMATION_MOVE:
             eMessageCpy(work->message, formationHelp[0]);
             break;
-        case 0xB3:
+        case CHAR_STATE_FORMATION_MOVE_RUN:
             break;
-        case 0xB4:
-        case 0xB5:
+        case CHAR_STATE_FORMATION_EXCHANGE:
+        case CHAR_STATE_FORMATION_EXCHANGE_RUN:
             eMessageCpy(work->message, formationHelp[1]);
             eMessageCat(MenuCharNameGet(PartyAttackPosCheck(MenuWork.character.formationSlot)));
             eMessageCat(formationHelp[4]);
             break;
-        case 0xB6:
+        case CHAR_STATE_FORMATION_PLACE:
             eMessageCpy(work->message, formationHelp[3]);
             eMessageCat(MenuCharNameGet(MenuWork.character.chrNo));
             eMessageCat(formationHelp[5]);
             break;
-        case 0xBF:
+        case CHAR_STATE_FORMATION_DONE:
             break;
-        case 0xC0:
+        case CHAR_STATE_RESERVE_PICK:
             eMessageCpy(work->message, formationHelp[2]);
             break;
-        case 0xC1:
+        case CHAR_STATE_RESERVE_PICK_RUN:
             break;
-        case 0xC2:
-        case 0xC3:
+        case CHAR_STATE_RESERVE:
+        case CHAR_STATE_RESERVE_RUN:
             {
                 int partyText = MENU_TEXT_CHARACTER + MenuCharParty[MenuWork.character.partyCursor];
                 int reserveText = MENU_TEXT_CHARACTER + MenuCharPartyReser[MenuWork.character.reserveCursor];
@@ -2020,8 +2046,8 @@ void CharInfoMain(void)
                 }
             }
             break;
-        case 0xC4:
-        case 0xC5:
+        case CHAR_STATE_RESERVE_MODEL:
+        case CHAR_STATE_RESERVE_MODEL_RUN:
             {
                 int partyText = MENU_TEXT_CHARACTER + MenuCharParty[MenuWork.character.partyCursor];
                 int reserveText = MENU_TEXT_CHARACTER + MenuCharPartyReser[MenuWork.character.reserveCursor];
@@ -2098,10 +2124,10 @@ void CharCategoryMain(void)
         }
 
         switch (MenuWork.character.state) {
-        case 0x52:
+        case CHAR_STATE_EQUIP_LIST:
             work->pendingReset = 0;
             /* fallthrough */
-        case 0x53: {
+        case CHAR_STATE_EQUIP_LIST_RUN: {
             int equipKind = MenuWork.character.equipKind;
 
             if (equipKind == 1) {
@@ -2321,11 +2347,11 @@ void CharExMain(void)
             slide[i] = CHAR_EX_X_OUT;
         }
         switch (MenuWork.character.state) {
-        case 0x21:
-        case 0x80:
-        case 0x81:
-        case 0x86:
-        case 0x87:
+        case CHAR_STATE_COMMAND_RUN:
+        case CHAR_STATE_PARA:
+        case CHAR_STATE_PARA_RUN:
+        case CHAR_STATE_PARA_DONE:
+        case CHAR_STATE_PARA_DENIED:
             slide[0] = slide[1] = slide[2] = CHAR_EX_X_IN;
             break;
         }
@@ -2556,7 +2582,7 @@ void CharStatusMain(void)
         status->panel[MenuWork.character.partyCursor].hpMark =
             status->panel[MenuWork.character.partyCursor].epMark = 0;
         switch (MenuWork.character.state) {
-        case 0x10:
+        case CHAR_STATE_STATUS:
             status->cursorOn = 1;
             status->cursor[0].state = CHAR_STATUS_CURSOR_STATE;
             status->moveVert = 1;
@@ -2568,27 +2594,27 @@ void CharStatusMain(void)
                 status->flags &= ~1;
             }
             /* fall through */
-        case 0x11:
+        case CHAR_STATE_STATUS_RUN:
             for (i = 0; i < MenuWork.character.partyCount; i++) {
                 targetX[i] = (i & 1) * STATUS_COLUMN_WIDTH + STATUS_COLUMN_LEFT;
             }
             break;
-        case 0x20:
+        case CHAR_STATE_COMMAND:
             status->lastCursor = MenuWork.character.partyCursor;
-            if (MenuWork.character.state != 0x20) {
+            if (MenuWork.character.state != CHAR_STATE_COMMAND) {
                 for (i = 0; i < MenuWork.character.partyCount; i++) {
                     targetHeight[i] = STATUS_WINDOW_HEIGHT;
                 }
             }
             /* fall through */
-        case 0x80:
-        case 0x81:
-        case 0x82:
-        case 0x83:
-        case 0x84:
-        case 0x85:
-        case 0x86:
-        case 0x87: {
+        case CHAR_STATE_PARA:
+        case CHAR_STATE_PARA_RUN:
+        case CHAR_STATE_PARA_AMOUNT:
+        case CHAR_STATE_PARA_AMOUNT_RUN:
+        case CHAR_STATE_PARA_CONFIRM:
+        case CHAR_STATE_PARA_CONFIRM_RUN:
+        case CHAR_STATE_PARA_DONE:
+        case CHAR_STATE_PARA_DENIED: {
             CharParaData *total;
             int menuState;
             int mark;
@@ -2613,7 +2639,7 @@ void CharStatusMain(void)
             }
         }
             /* fall through */
-        case 0x21:
+        case CHAR_STATE_COMMAND_RUN:
             if (status->lastCursor != MenuWork.character.partyCursor) {
                 status->window[MenuWork.character.partyCursor].x = 264;
                 status->window[MenuWork.character.partyCursor].y = 24;
@@ -2646,8 +2672,8 @@ void CharStatusMain(void)
             status->cursorOn = 0;
             status->moveVert = 0;
             break;
-        case 0x40:
-        case 0x41:
+        case CHAR_STATE_EQUIP:
+        case CHAR_STATE_EQUIP_RUN:
             for (i = 0; i < MenuWork.character.partyCount; i++) {
                 if (i == MenuWork.character.partyCursor) {
                     targetX[i] = 544;
@@ -2660,10 +2686,10 @@ void CharStatusMain(void)
                 }
             }
             break;
-        case 0x52:
-        case 0x53:
-        case 0x54:
-        case 0x55:
+        case CHAR_STATE_EQUIP_LIST:
+        case CHAR_STATE_EQUIP_LIST_RUN:
+        case CHAR_STATE_BULLET_LIST:
+        case CHAR_STATE_BULLET_LIST_RUN:
             status->moveVert = 0;
             status->flags &= ~1;
             for (i = 0; i < MenuWork.character.partyCount; i++) {
@@ -2677,25 +2703,25 @@ void CharStatusMain(void)
             }
             targetOffset[MenuWork.character.partyCursor] = -80;
             break;
-        case 0xA0:
-        case 0xA1:
-        case 0xA2:
-        case 0xA3:
-        case 0xB2:
-        case 0xB3:
-        case 0xB4:
-        case 0xB5:
-        case 0xB6:
-        case 0xBF:
+        case CHAR_STATE_FORMATION:
+        case CHAR_STATE_FORMATION_RUN:
+        case CHAR_STATE_FORMATION_MENU:
+        case CHAR_STATE_FORMATION_MENU_RUN:
+        case CHAR_STATE_FORMATION_MOVE:
+        case CHAR_STATE_FORMATION_MOVE_RUN:
+        case CHAR_STATE_FORMATION_EXCHANGE:
+        case CHAR_STATE_FORMATION_EXCHANGE_RUN:
+        case CHAR_STATE_FORMATION_PLACE:
+        case CHAR_STATE_FORMATION_DONE:
             status->cursor[0].state = CHAR_STATUS_CURSOR_STATE;
             for (i = 0; i < 3; i++) {
                 targetX[i] = STATUS_COLUMN_LEFT;
                 targetY[i] = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
             }
             break;
-        case 0xC2:
-        case 0xC5:
-            if (MenuWork.character.state == 0xC2) {
+        case CHAR_STATE_RESERVE:
+        case CHAR_STATE_RESERVE_MODEL_RUN:
+            if (MenuWork.character.state == CHAR_STATE_RESERVE) {
                 for (i = 0; i < MenuWork.character.reserveCount; i++) {
                     status->panel[3 + i].chrNo = MenuCharPartyReser[i];
                     status->window[3 + i].state = 1;
@@ -2709,19 +2735,19 @@ void CharStatusMain(void)
                 status->window[MenuWork.character.partyCursor].state = 3;
             }
             /* fall through */
-        case 0xC3:
+        case CHAR_STATE_RESERVE_RUN:
             for (i = 0; i < 3; i++) {
                 targetX[i] = STATUS_COLUMN_LEFT;
                 targetY[i] = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
             }
-            if (MenuWork.character.state == 0xC3) {
+            if (MenuWork.character.state == CHAR_STATE_RESERVE_RUN) {
                 for (i = 0; i < MenuWork.character.reserveCount; i++) {
                     targetX[3 + i] = 258;
                     targetY[3 + i] = i * STATUS_ROW_HEIGHT + STATUS_ROW_TOP;
                 }
             }
             break;
-        case 0xC4:
+        case CHAR_STATE_RESERVE_MODEL:
             for (i = 0; i < 3; i++) {
                 if (i != MenuWork.character.partyCursor) {
                     targetX[i] = STATUS_COLUMN_LEFT;
@@ -3055,24 +3081,24 @@ void CharWeaponMain(void)
             targetY[i] = i * 54 + 48;
         }
         switch (MenuWork.character.state) {
-        case 0x10:
-        case 0x11:
-        case 0x20:
-        case 0x21:
+        case CHAR_STATE_STATUS:
+        case CHAR_STATE_STATUS_RUN:
+        case CHAR_STATE_COMMAND:
+        case CHAR_STATE_COMMAND_RUN:
             work->cursor.state = 0;
             break;
-        case 0x40:
+        case CHAR_STATE_EQUIP:
             work->cursor.state = 32;
             /* fallthrough */
-        case 0x41:
+        case CHAR_STATE_EQUIP_RUN:
             for (i = 0; i < 2; i++) {
                 targetX[i] = 16;
             }
             break;
-        case 0x52:
-        case 0x53:
-        case 0x54:
-        case 0x55:
+        case CHAR_STATE_EQUIP_LIST:
+        case CHAR_STATE_EQUIP_LIST_RUN:
+        case CHAR_STATE_BULLET_LIST:
+        case CHAR_STATE_BULLET_LIST_RUN:
             targetX[MenuWork.character.equipKind] = 16;
             targetY[MenuWork.character.equipKind] = 48;
             break;
@@ -3378,7 +3404,7 @@ void CharListMain(void)
         break;
 
     case 22:
-        if (MenuWork.character.state == 65) {
+        if (MenuWork.character.state == CHAR_STATE_EQUIP_RUN) {
             list->state = 13;
         }
         break;
@@ -3416,8 +3442,8 @@ void CharSwitchMain(void)
         short target = 0x210;
 
         switch (MenuWork.character.state) {
-        case 0x10:
-        case 0x11:
+        case CHAR_STATE_STATUS:
+        case CHAR_STATE_STATUS_RUN:
             target = 0x110;
             break;
         }
@@ -3536,7 +3562,7 @@ void CharPointMain(void)
         work->panel.colors[0].extraX = work->panel.window.x + 115;
         work->panel.colors[0].extraY = work->panel.window.y + 48;
         work->panel.sprite.printY = work->panel.window.y + 48;
-        endPrintExtFunc(work->tagBase, 0, &work->panel.sprite.printX);
+        endPrintExtFunc(work->tagBase, END_PRINT_CMD_LINE,&work->panel.sprite.printX);
     }
 }
 
@@ -3622,7 +3648,7 @@ void MenuCharCameraMove(void)
         Vector4 *cameraPosition = &camera->position.vector;
         Vector4 *formationRotation = &TairetuRot;
         Vector4 *formationPosition = &TairetuPos;
-        int view = (MenuWork.character.state >> 4) == 11;
+        int view = (MenuWork.character.state >> 4) == MENU_STATE_GROUP_FORMATION;
         float x;
         float y;
         float z;
@@ -3707,8 +3733,8 @@ void MenuCharModelMain(MenuModelUnit *unit, void *argument)
     ActorMenuControl *transform;
     unsigned char slot;
 
-    if (actor == 0 && (MenuWork.character.swapOutId != 0 || MenuWork.character.state == 16 ||
-        MenuWork.character.state == 17 || MenuWork.character.state == 240 || unit != MenuModelOut[MenuWork.character.modelSlot])) {
+    if (actor == 0 && (MenuWork.character.swapOutId != 0 || MenuWork.character.state == CHAR_STATE_STATUS ||
+        MenuWork.character.state == CHAR_STATE_STATUS_RUN || MenuWork.character.state == CHAR_STATE_EXIT || unit != MenuModelOut[MenuWork.character.modelSlot])) {
         MenuModelUnitBreak(unit);
         MenuWork.character.swapOutId = 0;
     }
@@ -3717,7 +3743,7 @@ void MenuCharModelMain(MenuModelUnit *unit, void *argument)
     }
     slot = setSlotTbl[MenuWork.character.chrNo - 1];
     transform = &actor->menu;
-    if (MenuWork.character.swapOutId != 0 || MenuWork.character.state == 16 || MenuWork.character.state == 17 || MenuWork.character.state == 240) {
+    if (MenuWork.character.swapOutId != 0 || MenuWork.character.state == CHAR_STATE_STATUS || MenuWork.character.state == CHAR_STATE_STATUS_RUN || MenuWork.character.state == CHAR_STATE_EXIT) {
         unit->extFuncFlag = 30;
         MenuWork.character.swapOutId = 0;
     }
@@ -3754,7 +3780,7 @@ void MenuCharModelMain(MenuModelUnit *unit, void *argument)
         }
         break;
     }
-    if (MenuWork.character.state == 33 || (MenuWork.character.state >> 4) == 8) {
+    if (MenuWork.character.state == CHAR_STATE_COMMAND_RUN || (MenuWork.character.state >> 4) == CHAR_STATE_GROUP_PARA) {
         position = transform->position;
         position.y = -position.y;
         {
@@ -3766,7 +3792,7 @@ void MenuCharModelMain(MenuModelUnit *unit, void *argument)
             current->y = y + (position.y - y) * CHAR_MODEL_DEFAULT_MOVE_RATE;
             current->z = z + (position.z - z) * CHAR_MODEL_DEFAULT_MOVE_RATE;
         }
-        if (MenuWork.character.state == 33) {
+        if (MenuWork.character.state == CHAR_STATE_COMMAND_RUN) {
             MenuModelControl2(unit, 0);
         }
     } else {
@@ -3812,7 +3838,7 @@ void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
 {
     Actor *actor = unit->actor;
 
-    if (actor == 0 && MenuWork.character.state == 240) {
+    if (actor == 0 && MenuWork.character.state == CHAR_STATE_EXIT) {
         MenuModelUnitBreak(unit);
     }
     if (unit->active != 0) {
@@ -3843,23 +3869,23 @@ void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
             unit->extFuncFlag = 20;
             /* fallthrough */
         case 20:
-            if ((MenuWork.character.state >> 4) == 11 && unit->modelId != MenuWork.character.chrNo) {
+            if ((MenuWork.character.state >> 4) == MENU_STATE_GROUP_FORMATION && unit->modelId != MenuWork.character.chrNo) {
                 unit->extFuncFlag = 22;
                 MenuModelUnitOpen(unit, 4);
             }
-            if ((MenuWork.character.state >> 4) == 12) {
+            if ((MenuWork.character.state >> 4) == CHAR_STATE_GROUP_RESERVE) {
                 unit->extFuncFlag = 24;
                 MenuModelUnitOpen(unit, 3);
             }
             break;
         case 22:
-            if ((MenuWork.character.state >> 4) != 11) {
+            if ((MenuWork.character.state >> 4) != MENU_STATE_GROUP_FORMATION) {
                 MenuModelUnitOpen(unit, 2);
                 unit->extFuncFlag = 20;
             }
             break;
         case 24:
-            if ((MenuWork.character.state >> 4) != 12) {
+            if ((MenuWork.character.state >> 4) != CHAR_STATE_GROUP_RESERVE) {
                 MenuModelUnitOpen(unit, 2);
                 unit->extFuncFlag = 20;
             }
@@ -3874,7 +3900,7 @@ void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
             }
             break;
         }
-        if (MenuWork.character.state == 240) {
+        if (MenuWork.character.state == CHAR_STATE_EXIT) {
             unit->extFuncFlag = 30;
         }
         if (unit->modelId == MenuWork.character.swapOutId) {
@@ -3882,8 +3908,8 @@ void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
             unit->extFuncFlag = 30;
         }
         target = &positions.vector[formationSlot - 1];
-        if (MenuWork.character.state != 181) {
-            if (MenuWork.character.state == 182 && unit->modelId == MenuWork.character.chrNo) {
+        if (MenuWork.character.state != CHAR_STATE_FORMATION_EXCHANGE_RUN) {
+            if (MenuWork.character.state == CHAR_STATE_FORMATION_PLACE&& unit->modelId == MenuWork.character.chrNo) {
                 target = &positions.vector[MenuWork.character.formationSlot - 1];
             }
         } else {
@@ -3936,10 +3962,10 @@ static int tskCharLineField(XglTaskPrefix *task)
     int lineIndex;
     int vertexIndex;
 
-    if (MenuWork.character.state == 255 || MenuWork.character.partyMode == 0) {
+    if (MenuWork.character.state == MENU_WORK_END || MenuWork.character.partyMode == 0) {
         return xglTaskWaitRemove(task);
     }
-    if (MenuWork.character.state == 241) {
+    if (MenuWork.character.state == CHAR_STATE_EXIT_RUN) {
         line->state = 99;
     }
     switch (line->state) {
@@ -3980,13 +4006,13 @@ static int tskCharLineField(XglTaskPrefix *task)
         }
         break;
     case 20:
-        if ((MenuWork.character.state >> 4) == 12) {
+        if ((MenuWork.character.state >> 4) == CHAR_STATE_GROUP_RESERVE) {
             line->state = 30;
         }
         break;
     case 30:
     case 99:
-        if (line->state == 30 && (MenuWork.character.state >> 4) != 12) {
+        if (line->state == 30 && (MenuWork.character.state >> 4) != CHAR_STATE_GROUP_RESERVE) {
             line->state = 10;
         }
         {
@@ -4299,12 +4325,12 @@ void MenuCharactor(int partyMode)
         }
         MenuWork.character.chrNo = MenuCharParty[0];
         if (partyMode == 0) {
-            MenuWork.character.state = 0x10;
+            MenuWork.character.state = CHAR_STATE_STATUS;
             MenuModelMemorySet(10);
         } else {
             int n;
 
-            MenuWork.character.state = 0xA0;
+            MenuWork.character.state = CHAR_STATE_FORMATION;
             for (n = 0; n < 3; n++) {
                 MenuModelExtFuncSet(MenuModelOut[n], MenuBattleModelMain, 0);
             }
@@ -4321,9 +4347,9 @@ void MenuCharactor(int partyMode)
         MenuCharCameraMove();
         switch (MenuWork.character.state) {
         /* The status screen: pick the character. */
-        case 0x10:
-            MenuWork.character.state = 0x11;
-        case 0x11:
+        case CHAR_STATE_STATUS:
+            MenuWork.character.state = CHAR_STATE_STATUS_RUN;
+        case CHAR_STATE_STATUS_RUN:
             if (MenuWork.character.wait != 0) {
                 break;
             }
@@ -4368,7 +4394,7 @@ void MenuCharactor(int partyMode)
                     MenuWork.character.guestDenied = 1;
                     xglSoundEffectNormalID(SE_BUZZER, 0);
                 } else {
-                    MenuWork.character.state = 0x20;
+                    MenuWork.character.state = CHAR_STATE_COMMAND;
                     MenuWork.character.wait = 24;
                     MenuWork.character.guestDenied = 0;
                     MenuWork.character.equipKind = 0;
@@ -4377,17 +4403,17 @@ void MenuCharactor(int partyMode)
                 }
             }
             if (PadData.pressed & PAD_CROSS) {
-                MenuWork.character.state = 0xF0;
+                MenuWork.character.state = CHAR_STATE_EXIT;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
             }
             break;
 
         /* The command menu of the chosen character. */
-        case 0x20:
-            MenuWork.character.state = 0x21;
+        case CHAR_STATE_COMMAND:
+            MenuWork.character.state = CHAR_STATE_COMMAND_RUN;
             MenuWork.character.menuCount = 3;
             MenuCharParaSet(MenuWork.character.chrNo, 0);
-        case 0x21:
+        case CHAR_STATE_COMMAND_RUN:
             if (MenuWork.character.wait != 0 || (PadData.held & (PAD_L2 | PAD_R2))) {
                 break;
             }
@@ -4424,7 +4450,7 @@ void MenuCharactor(int partyMode)
                 MenuWork.character.equipSlot = 0;
                 MenuKeepSelectReset();
             } else if (PadData.pressed & PAD_CROSS) {
-                MenuWork.character.state = 0x10;
+                MenuWork.character.state = CHAR_STATE_STATUS;
                 MenuWork.character.wait = 12;
                 MenuKeepSelectReset();
                 xglSoundEffectNormalID(SE_CANCEL, 0);
@@ -4433,9 +4459,9 @@ void MenuCharactor(int partyMode)
                     /* Wait for the model; it is created below. */
                 } else if (MenuWork.character.chrNo >= 1 && MenuWork.character.chrNo <= 7) {
                     if (MenuWork.character.menuCursor < 2) {
-                        MenuWork.character.state = 0x40;
+                        MenuWork.character.state = CHAR_STATE_EQUIP;
                     } else {
-                        MenuWork.character.state = 0x80;
+                        MenuWork.character.state = CHAR_STATE_PARA;
                         MenuWork.character.listSelect = -1;
                     }
                     MenuWork.character.wait = 8;
@@ -4456,10 +4482,10 @@ void MenuCharactor(int partyMode)
             break;
 
         /* Equipment: pick the slot. */
-        case 0x40:
-            MenuWork.character.state = 0x41;
+        case CHAR_STATE_EQUIP:
+            MenuWork.character.state = CHAR_STATE_EQUIP_RUN;
             MenuWork.character.listSelect = -1;
-        case 0x41: {
+        case CHAR_STATE_EQUIP_RUN: {
             CharParaData *org;
 
             if (MenuWork.character.wait != 0) {
@@ -4532,18 +4558,18 @@ void MenuCharactor(int partyMode)
                     }
                 } else {
                     if (MenuWork.character.equipKind != 0) {
-                        MenuWork.character.state = 0x52;
+                        MenuWork.character.state = CHAR_STATE_EQUIP_LIST;
                     } else if (MenuWork.character.equipSlot == 1) {
-                        MenuWork.character.state = 0x54;
+                        MenuWork.character.state = CHAR_STATE_BULLET_LIST;
                     } else if (MenuWork.character.chrNo != CHR_FIXED_WEAPON) {
-                        MenuWork.character.state = 0x52;
+                        MenuWork.character.state = CHAR_STATE_EQUIP_LIST;
                     }
                     MenuWork.character.wait = 12;
                     xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             }
             if (PadData.repeat == PAD_CROSS) {
-                MenuWork.character.state = 0x20;
+                MenuWork.character.state = CHAR_STATE_COMMAND;
                 MenuWork.character.wait = 8;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
                 if (MenuCursorKeepCheck() == 0) {
@@ -4554,14 +4580,14 @@ void MenuCharactor(int partyMode)
         }
 
         /* Equipment: pick the weapon or accessory from the list. */
-        case 0x52:
-            MenuWork.character.state = 0x53;
+        case CHAR_STATE_EQUIP_LIST:
+            MenuWork.character.state = CHAR_STATE_EQUIP_LIST_RUN;
             MenuWork.character.listSelect = -1;
             MenuWork.character.flags |= 2;
             MenuWork.character.bulletFits = 0;
             MenuWork.character.weaponId = 0;
             MenuWork.character.accessoryId = 0;
-        case 0x53: {
+        case CHAR_STATE_EQUIP_LIST_RUN: {
             int selected;
             int n;
 
@@ -4596,10 +4622,10 @@ void MenuCharactor(int partyMode)
                         if (MenuWork.character.chrNo == CHR_DUAL_WEAPON) {
                             org->weapon[1] = MenuWork.character.weaponId;
                         }
-                        MenuWork.character.state = 0x40;
+                        MenuWork.character.state = CHAR_STATE_EQUIP;
                         MenuWork.character.wait = 12;
                     } else {
-                        MenuWork.character.state = 0x40;
+                        MenuWork.character.state = CHAR_STATE_EQUIP;
                         MenuWork.character.wait = 8;
                     }
                     xglSoundEffectNormalID(SE_DECIDE, 0);
@@ -4613,7 +4639,7 @@ void MenuCharactor(int partyMode)
                         if (old != 0) {
                             dataAccBoxInc(old);
                         }
-                        MenuWork.character.state = 0x40;
+                        MenuWork.character.state = CHAR_STATE_EQUIP;
                         MenuWork.character.wait = 8;
                         xglSoundEffectNormalID(SE_DECIDE, 0);
                     } else {
@@ -4664,7 +4690,7 @@ void MenuCharactor(int partyMode)
                     MenuWork.character.weaponChanged = 1;
                 }
                 xglSoundEffectNormalID(SE_CANCEL, 0);
-                MenuWork.character.state = 0x40;
+                MenuWork.character.state = CHAR_STATE_EQUIP;
                 MenuWork.character.wait = 8;
                 for (n = 0; n < 8; n++) {
                     WindowSPKeepSelectCheck(&MenuKeepSelect[n * 5]);
@@ -4700,14 +4726,14 @@ void MenuCharactor(int partyMode)
         }
 
         /* Equipment: pick the bullet for the weapon. */
-        case 0x54:
+        case CHAR_STATE_BULLET_LIST:
             MenuWork.character.equipSlot = 1;
             MenuWork.character.listSelect = -1;
             MenuWork.character.bulletFits = 0;
             MenuWork.character.bulletId = 0;
             MenuWork.character.weaponId = func_A191C0(MenuWork.character.chrNo)->weapon[setSlotTbl[MenuWork.character.chrNo - 1]];
-            MenuWork.character.state = 0x55;
-        case 0x55: {
+            MenuWork.character.state = CHAR_STATE_BULLET_LIST_RUN;
+        case CHAR_STATE_BULLET_LIST_RUN: {
             CharParaData *org;
             int selected;
 
@@ -4769,13 +4795,13 @@ void MenuCharactor(int partyMode)
                 if (MenuWork.character.chrNo == CHR_DUAL_WEAPON) {
                     org->bullet[1] = MenuWork.character.bulletId;
                 }
-                MenuWork.character.state = 0x40;
+                MenuWork.character.state = CHAR_STATE_EQUIP;
                 MenuWork.character.wait = 8;
                 xglSoundEffectNormalID(SE_DECIDE, 0);
             }
             if (PadData.pressed & PAD_CROSS) {
                 MenuCharParaSet(MenuWork.character.chrNo, 0);
-                MenuWork.character.state = 0x40;
+                MenuWork.character.state = CHAR_STATE_EQUIP;
                 MenuWork.character.wait = 8;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
                 WindowSPKeepSelectCheck(&MenuKeepSelect[KEEP_BULLET * 5]);
@@ -4784,9 +4810,9 @@ void MenuCharactor(int partyMode)
         }
 
         /* Parameter points: pick the parameter. */
-        case 0x80:
-            MenuWork.character.state = 0x81;
-        case 0x81:
+        case CHAR_STATE_PARA:
+            MenuWork.character.state = CHAR_STATE_PARA_RUN;
+        case CHAR_STATE_PARA_RUN:
             if (MenuWork.character.wait == 0) {
                 MenuWork.character.listSelect = WindowSPSelect(CharWinSP[0], PadData.repeat);
                 WindowSPKeepSelect(CharWinSP[0], &MenuKeepSelect[KEEP_PARAMETER * 5]);
@@ -4795,12 +4821,12 @@ void MenuCharactor(int partyMode)
                 }
                 if ((PadData.pressed & PAD_CIRCLE) && MenuWork.character.listSelect >= 0) {
                     if (MenuParaUpCheck(MenuWork.character.chrNo, MenuWork.character.paraIndex) == 0) {
-                        MenuWork.character.state = 0x82;
+                        MenuWork.character.state = CHAR_STATE_PARA_AMOUNT;
                         MenuWork.character.wait = 4;
                         xglSoundEffectNormalID(SE_DECIDE, 0);
                     } else {
                         xglSoundEffectNormalID(SE_BUZZER, 0);
-                        MenuWork.character.state = 0x87;
+                        MenuWork.character.state = CHAR_STATE_PARA_DENIED;
                     }
                 }
                 if (PadData.pressed & PAD_CROSS) {
@@ -4808,7 +4834,7 @@ void MenuCharactor(int partyMode)
                         MenuWork.character.menuCursor = 0;
                     }
                     WindowSPKeepSelectCheck(&MenuKeepSelect[KEEP_PARAMETER * 5]);
-                    MenuWork.character.state = 0x21;
+                    MenuWork.character.state = CHAR_STATE_COMMAND_RUN;
                     MenuWork.character.wait = 8;
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
@@ -4821,7 +4847,7 @@ void MenuCharactor(int partyMode)
             break;
 
         /* Parameter points: choose how many levels to add. */
-        case 0x82:
+        case CHAR_STATE_PARA_AMOUNT:
             memset(UpPara, 0, sizeof(UpPara));
             MenuWork.character.paraCost = MenuParaNextPointGet(MenuWork.character.chrNo, MenuWork.character.paraIndex, 0);
             MenuWork.character.paraUpCount = 1;
@@ -4831,8 +4857,8 @@ void MenuCharactor(int partyMode)
                 UpPara[MenuWork.character.paraIndex] = MenuParaUpMaxGet(MenuWork.character.paraIndex)
                                            - MenuParaPtNowGet(MenuWork.character.chrNo, MenuWork.character.paraIndex);
             }
-            MenuWork.character.state = 0x83;
-        case 0x83:
+            MenuWork.character.state = CHAR_STATE_PARA_AMOUNT_RUN;
+        case CHAR_STATE_PARA_AMOUNT_RUN:
             if (MenuWork.character.wait != 0) {
                 break;
             }
@@ -4871,22 +4897,22 @@ void MenuCharactor(int partyMode)
             }
             if (PadData.pressed & PAD_CIRCLE) {
                 xglSoundEffectNormalID(SE_DECIDE, 0);
-                MenuWork.character.state = 0x84;
+                MenuWork.character.state = CHAR_STATE_PARA_CONFIRM;
                 MenuWork.character.wait = 8;
             }
             if (PadData.pressed & PAD_CROSS) {
                 xglSoundEffectNormalID(SE_CANCEL, 0);
-                MenuWork.character.state = 0x81;
+                MenuWork.character.state = CHAR_STATE_PARA_RUN;
                 MenuWork.character.wait = 4;
                 memset(UpPara, 0, sizeof(UpPara));
             }
             break;
 
         /* Parameter points: confirm. */
-        case 0x84:
-            MenuWork.character.state = 0x85;
+        case CHAR_STATE_PARA_CONFIRM:
+            MenuWork.character.state = CHAR_STATE_PARA_CONFIRM_RUN;
             MenuWork.character.confirmCursor = 0;
-        case 0x85: {
+        case CHAR_STATE_PARA_CONFIRM_RUN: {
             int n;
 
             if (MenuWork.character.wait != 0) {
@@ -4900,46 +4926,46 @@ void MenuCharactor(int partyMode)
                     }
                     memset(UpPara, 0, sizeof(UpPara));
                     MenuCharParaSet(MenuWork.character.chrNo, 0);
-                    MenuWork.character.state = 0x86;
+                    MenuWork.character.state = CHAR_STATE_PARA_DONE;
                     xglSoundEffectNormalID(SE_DECIDE, 0);
                 } else {
-                    MenuWork.character.state = 0x83;
+                    MenuWork.character.state = CHAR_STATE_PARA_AMOUNT_RUN;
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
             }
             if (PadData.pressed & PAD_CROSS) {
-                MenuWork.character.state = 0x83;
+                MenuWork.character.state = CHAR_STATE_PARA_AMOUNT_RUN;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
             }
             break;
         }
 
-        case 0x86:
+        case CHAR_STATE_PARA_DONE:
             if (MenuWork.character.wait == 0 && (PadData.pressed & PAD_CIRCLE)) {
-                MenuWork.character.state = 0x81;
+                MenuWork.character.state = CHAR_STATE_PARA_RUN;
                 CharListMake_Para();
             }
             break;
 
-        case 0x87:
+        case CHAR_STATE_PARA_DENIED:
             if (MenuWork.character.wait == 0 && PadData.pressed != 0) {
-                MenuWork.character.state = 0x81;
+                MenuWork.character.state = CHAR_STATE_PARA_RUN;
             }
             break;
 
         /* Formation (from battle): pick the attacker. */
-        case 0xA0:
-            MenuWork.character.state = 0xA1;
+        case CHAR_STATE_FORMATION:
+            MenuWork.character.state = CHAR_STATE_FORMATION_RUN;
             MenuWork.character.chrNo = MenuCharParty[MenuWork.character.partyCursor];
-        case 0xA1:
+        case CHAR_STATE_FORMATION_RUN:
             if (MenuWork.character.wait == 0) {
                 if (PadData.repeat == PAD_CROSS) {
-                    MenuWork.character.state = 0xF0;
+                    MenuWork.character.state = CHAR_STATE_EXIT;
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
                 if (PadData.repeat == PAD_CIRCLE) {
                     if (MenuWork.character.chrNo != 11 && MenuWork.character.chrNo != CHR_GUEST) {
-                        MenuWork.character.state = 0xA2;
+                        MenuWork.character.state = CHAR_STATE_FORMATION_MENU;
                         MenuWork.character.wait = 8;
                         xglSoundEffectNormalID(SE_DECIDE, 0);
                     } else {
@@ -4952,14 +4978,14 @@ void MenuCharactor(int partyMode)
             break;
 
         /* Formation: position or swap. */
-        case 0xA2:
-            MenuWork.character.state = 0xA3;
+        case CHAR_STATE_FORMATION_MENU:
+            MenuWork.character.state = CHAR_STATE_FORMATION_MENU_RUN;
             MenuWork.character.chrNo = MenuCharParty[MenuWork.character.partyCursor];
-        case 0xA3:
+        case CHAR_STATE_FORMATION_MENU_RUN:
             if (MenuWork.character.wait == 0) {
                 MenuWork.character.commandCursor = MenuSelectMove(MenuWork.character.commandCursor, 3, 0);
                 if (PadData.pressed & PAD_CROSS) {
-                    MenuWork.character.state = 0xA0;
+                    MenuWork.character.state = CHAR_STATE_FORMATION;
                     MenuWork.character.wait = 8;
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
@@ -4974,14 +5000,14 @@ void MenuCharactor(int partyMode)
                         } else {
                             MenuWork.character.formationRow = 1;
                         }
-                        MenuWork.character.state = 0xB2;
+                        MenuWork.character.state = CHAR_STATE_FORMATION_MOVE;
                         MenuWork.character.wait = 16;
                         xglSoundEffectNormalID(SE_DECIDE, 0);
                         break;
                     case 1:
                         if (MenuWork.character.reserveCount != 0
                             && PartyFriendLockCheck(MenuWork.character.chrNo, 2) != 0) {
-                            MenuWork.character.state = 0xC2;
+                            MenuWork.character.state = CHAR_STATE_RESERVE;
                             MenuWork.character.wait = 8;
                             xglSoundEffectNormalID(SE_DECIDE, 0);
                         } else {
@@ -4989,7 +5015,7 @@ void MenuCharactor(int partyMode)
                         }
                         break;
                     case 2:
-                        MenuWork.character.state = 0xA0;
+                        MenuWork.character.state = CHAR_STATE_FORMATION;
                         MenuWork.character.wait = 8;
                         xglSoundEffectNormalID(SE_CANCEL, 0);
                         break;
@@ -4999,9 +5025,9 @@ void MenuCharactor(int partyMode)
             break;
 
         /* Formation: move the cursor over the six positions. */
-        case 0xB2:
-            MenuWork.character.state = 0xB3;
-        case 0xB3:
+        case CHAR_STATE_FORMATION_MOVE:
+            MenuWork.character.state = CHAR_STATE_FORMATION_MOVE_RUN;
+        case CHAR_STATE_FORMATION_MOVE_RUN:
             if (MenuWork.character.wait == 0) {
                 if (PadData.repeat & PAD_DOWN) {
                     if (MenuWork.character.formationColumn == 0) {
@@ -5028,11 +5054,11 @@ void MenuCharactor(int partyMode)
                     int occupant = PartyAttackPosCheck(MenuWork.character.formationSlot);
 
                     if (occupant == 0) {
-                        MenuWork.character.state = 0xB6;
+                        MenuWork.character.state = CHAR_STATE_FORMATION_PLACE;
                         MenuWork.character.wait = 4;
                         xglSoundEffectNormalID(SE_PLACE, 0);
                     } else if (occupant != MenuWork.character.chrNo) {
-                        MenuWork.character.state = 0xB4;
+                        MenuWork.character.state = CHAR_STATE_FORMATION_EXCHANGE;
                         MenuWork.character.wait = 4;
                         xglSoundEffectNormalID(SE_PLACE, 0);
                     } else {
@@ -5043,7 +5069,7 @@ void MenuCharactor(int partyMode)
                     if (MenuCursorKeepCheck() == 0) {
                         MenuWork.character.commandCursor = 0;
                     }
-                    MenuWork.character.state = 0xA0;
+                    MenuWork.character.state = CHAR_STATE_FORMATION;
                     MenuWork.character.wait = 4;
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
@@ -5051,18 +5077,18 @@ void MenuCharactor(int partyMode)
             break;
 
         /* Formation: exchange positions with the occupant. */
-        case 0xB4:
-            MenuWork.character.state = 0xB5;
-        case 0xB5:
+        case CHAR_STATE_FORMATION_EXCHANGE:
+            MenuWork.character.state = CHAR_STATE_FORMATION_EXCHANGE_RUN;
+        case CHAR_STATE_FORMATION_EXCHANGE_RUN:
             if (MenuWork.character.wait == 0) {
                 if (PadData.pressed & PAD_CIRCLE) {
                     PartyAttackPosChange(MenuWork.character.chrNo, PartyAttackPosCheck(MenuWork.character.formationSlot));
                     xglSoundEffectNormalID(SE_DECIDE, 0);
-                    MenuWork.character.state = 0xBF;
+                    MenuWork.character.state = CHAR_STATE_FORMATION_DONE;
                     MenuWork.character.wait = 8;
                 }
                 if (PadData.pressed & PAD_CROSS) {
-                    MenuWork.character.state = 0xB2;
+                    MenuWork.character.state = CHAR_STATE_FORMATION_MOVE;
                     MenuWork.character.wait = 4;
                     xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
@@ -5070,35 +5096,35 @@ void MenuCharactor(int partyMode)
             break;
 
         /* Formation: move to the empty position. */
-        case 0xB6:
+        case CHAR_STATE_FORMATION_PLACE:
             if (MenuWork.character.wait == 0) {
                 if (PadData.pressed & PAD_CIRCLE) {
                     PartyAttackPosSet(MenuWork.character.chrNo, MenuWork.character.formationSlot);
                     MenuWork.character.wait = 8;
                     xglSoundEffectNormalID(SE_DECIDE, 0);
-                    MenuWork.character.state = 0xBF;
+                    MenuWork.character.state = CHAR_STATE_FORMATION_DONE;
                 }
                 if (PadData.pressed & PAD_CROSS) {
                     xglSoundEffectNormalID(SE_CANCEL, 0);
-                    MenuWork.character.state = 0xB2;
+                    MenuWork.character.state = CHAR_STATE_FORMATION_MOVE;
                 }
             }
             break;
 
-        case 0xBF:
+        case CHAR_STATE_FORMATION_DONE:
             if (MenuWork.character.wait == 0) {
-                MenuWork.character.state = 0xA2;
+                MenuWork.character.state = CHAR_STATE_FORMATION_MENU;
                 MenuWork.character.wait = 8;
             }
             break;
 
         /* Formation: swap the attacker with a reserve friend. */
-        case 0xC2:
-            MenuWork.character.state = 0xC3;
+        case CHAR_STATE_RESERVE:
+            MenuWork.character.state = CHAR_STATE_RESERVE_RUN;
             if (MenuCursorKeepCheck() == 0) {
                 MenuWork.character.reserveCursor = 0;
             }
-        case 0xC3: {
+        case CHAR_STATE_RESERVE_RUN: {
             if (MenuWork.character.wait != 0) {
                 break;
             }
@@ -5122,7 +5148,7 @@ void MenuCharactor(int partyMode)
                 if (MenuCursorKeepCheck() == 0) {
                     MenuWork.character.commandCursor = 0;
                 }
-                MenuWork.character.state = 0xA2;
+                MenuWork.character.state = CHAR_STATE_FORMATION_MENU;
                 MenuWork.character.wait = 4;
                 xglSoundEffectNormalID(SE_CANCEL, 0);
             }
@@ -5156,32 +5182,32 @@ void MenuCharactor(int partyMode)
                     MenuCharParty[n] = attackers[n];
                 }
                 xglSoundEffectNormalID(SE_SWAP, 0);
-                MenuWork.character.state = 0xC4;
+                MenuWork.character.state = CHAR_STATE_RESERVE_MODEL;
                 MenuWork.character.wait = 8;
             }
             break;
         }
 
         /* Formation: rebuild the swapped-in character's model. */
-        case 0xC4:
+        case CHAR_STATE_RESERVE_MODEL:
             if (MenuWork.character.wait != 0 || MenuModelOut[MenuWork.character.partyCursor] != 0) {
                 break;
             }
             MenuModelCreate(&MenuModelOut[MenuWork.character.partyCursor], MenuWork.character.swapInId);
             MenuModelExtFuncSet(MenuModelOut[MenuWork.character.partyCursor], MenuBattleModelMain, 0);
             MenuWork.character.wait = 1;
-            MenuWork.character.state = 0xC5;
-        case 0xC5:
+            MenuWork.character.state = CHAR_STATE_RESERVE_MODEL_RUN;
+        case CHAR_STATE_RESERVE_MODEL_RUN:
             if (MenuWork.character.wait == 0) {
-                MenuWork.character.state = 0xA2;
+                MenuWork.character.state = CHAR_STATE_FORMATION_MENU;
                 MenuWork.character.wait = 4;
             }
             break;
 
-        case 0xF0:
-            MenuWork.character.state = 0xF1;
+        case CHAR_STATE_EXIT:
+            MenuWork.character.state = CHAR_STATE_EXIT_RUN;
             MenuWork.character.wait = 12;
-        case 0xF1:
+        case CHAR_STATE_EXIT_RUN:
             if (MenuWork.character.wait == 0) {
                 MenuWork.character.state = MENU_WORK_END;
             }

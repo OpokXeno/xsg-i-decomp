@@ -3,6 +3,26 @@
 
 #include "shared.h"
 #include "main/xgl_studio.h"
+#include "main/act_1.h"
+
+/*
+ * Channels of a sequence entry. SequenceState.flags marks the channels that
+ * have been started and state_flags the channels still running; both use
+ * these bits. Rotation and scale have one bit per axis.
+ */
+#define SEQ_CHANNEL_MOVE 0x1
+#define SEQ_CHANNEL_ROTATE_X 0x2
+#define SEQ_CHANNEL_ROTATE_Y 0x4
+#define SEQ_CHANNEL_ROTATE_Z 0x8
+#define SEQ_CHANNEL_ROTATE_ALL 0xe
+#define SEQ_CHANNEL_MOTION 0x10
+#define SEQ_CHANNEL_SCALE_X 0x20
+#define SEQ_CHANNEL_SCALE_Y 0x40
+#define SEQ_CHANNEL_SCALE_Z 0x80
+#define SEQ_CHANNEL_SCALE_ALL 0xe0
+/* SequenceState.flags: ACT_updateSequence trims handlers by channel_mask. */
+#define SEQ_USE_CHANNEL_MASK 0x100
+#define SEQ_HANDLER_COUNT 4
 
 /* Spline channel of a sequence entry (near_dir.c and chr.c read it at +0x38/+0xb8/+0x1b8). */
 typedef struct {
@@ -46,7 +66,7 @@ typedef struct SequenceState {
     u32 cleared_on_init;
     u32 unmodeled_10;
     void *cleared_on_init_run[4];
-    void *handler[4];
+    void *handler[SEQ_HANDLER_COUNT];
 } SequenceState;
 
 typedef struct MoveTrack {
@@ -126,7 +146,7 @@ typedef struct ActSequenceEntry {
 } ActSequenceEntry;
 
 /* The original array at 0x0046f460 has 64 records, totaling 0x9800 bytes. */
-extern ActSequenceEntry actSequence[64];
+extern ActSequenceEntry actSequence[ACTOR_COUNT];
 
 /* Functions and data used by other translation units. */
 extern float nearDir(float from, float to);

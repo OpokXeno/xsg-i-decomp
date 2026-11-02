@@ -2,6 +2,7 @@
 #define GET_METHOD_SIGNATURE_CLASS_RECOVERY_PRIVATE_H
 
 #include "shared.h"
+#include "main/find_native_method.h"
 
 typedef struct VMResolvedFieldRef VMResolvedFieldRef;
 

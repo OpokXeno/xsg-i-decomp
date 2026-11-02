@@ -5,6 +5,7 @@
 #include "main/xgl_2.h"
 #include "create_evt_item_get_task.h"
 #include "main/exm_2.h"
+#include "main/init_uwamono_sys.h"
 #include "main/data.h"
 #include "main/karakama_test.h"
 #include "main/nml_model_set.h"
@@ -15,6 +16,47 @@
 #define UNIT_ITEM_SPIN_STEP (0.05f)
 #define UNIT_ITEM_SYMBOL_SPIN_STEP (0.05f)
 #define UNIT_ITEM_PICKUP_DISTANCE (0.8f)
+
+/* GameLoopState->flags bit set while an item-get window is on screen. */
+#define GAME_LOOP_FLAG_ITEM_WINDOW 0x20000
+
+#define ITEM_COUNT_DISPLAY_MAX DATA_BOX_QUANTITY_MAX
+#define ITEM_MESSAGE_SIZE 64
+
+/* ItemBoxTbl is indexed by itemNo; itemNo values from ITEM_NO_LIMIT up are
+ * serial errors. Each item's collected flag is ITEM_COLLECTED_FLAG_BASE + itemNo. */
+#define ITEM_NO_LIMIT 602
+#define ITEM_COLLECTED_FLAG_BASE 0x79EC7
+
+/* EvtItemTbl: one fixed-size name record per event item, numbered from 1. */
+#define EVT_ITEM_COUNT 255
+#define EVT_ITEM_NAME_SIZE 0x80
+
+/* uwares_tbl/xtxres_tbl entries (model and texture) used by the field items. */
+#define UWARES_ITEM_BOX 4
+#define UWARES_MONEY_SYMBOL 8
+#define UWARES_EVENT_SYMBOL 13
+
+/* Serial numbers of the field item units. */
+#define ITEM_SERIAL_BOX 0x7005
+#define ITEM_SERIAL_BOX_SPECIAL 0x7008
+#define ITEM_SERIAL_SYMBOL_FROM_TABLE 0x7000 /* symbol whose model depends on ItemBoxTbl */
+#define ITEM_SERIAL_SYMBOL_MONEY 0x7009
+#define ITEM_SERIAL_SPECIAL_SYMBOL_FIRST 0x7033
+#define ITEM_SERIAL_SPECIAL_SYMBOL_COUNT 5
+
+#define ITEM_BOX_SE 6          /* opening sound of the default box */
+#define ITEM_BOX_SPECIAL_SE 57 /* opening sound of the 0x7008 box */
+#define ITEM_PICKUP_SE 6       /* pickup sound of the item symbol */
+
+/* Opening animation of an item box lasts until sequenceNo reaches ITEM_OPEN_SEQUENCE_END;
+ * boxes that were already opened start at the frame before. */
+#define ITEM_OPEN_SEQUENCE_END 17
+#define ITEM_OPENED_SEQUENCE (ITEM_OPEN_SEQUENCE_END - 1)
+
+#define ITEM_SYMBOL_RISE_STEP 0.03f
+#define ITEM_SYMBOL_SCALE_STEP 0.06
+#define ITEM_SYMBOL_PLAYER_HEIGHT 1.2f /* height above the player a collected symbol flies to */
 
 typedef struct ItemModelHeader {
     unsigned char unmodeled_00[0x50];
@@ -111,10 +153,10 @@ typedef struct ItemBoxRecord {
 } ItemBoxRecord;
 
 /* Event-item IDs index a 0x80-byte formatted name slot. */
-extern char EvtItemTbl[255 * 0x80];
-extern ItemOwnerUnit MapUnit[64];
-extern void *uwares_tbl[14];
-extern const char *xtxres_tbl[14];
+extern char EvtItemTbl[EVT_ITEM_COUNT * EVT_ITEM_NAME_SIZE];
+extern ItemOwnerUnit MapUnit[MAP_UNIT_COUNT];
+extern void *uwares_tbl[UWAMONO_RESIDENT_COUNT];
+extern const char *xtxres_tbl[UWAMONO_RESIDENT_COUNT];
 extern const char CreateEvtItemGetDigit9Text[];
 extern const char CreateEvtItemGetDigit8Text[];
 extern const char CreateEvtItemGetDigit7Text[];
@@ -125,7 +167,7 @@ extern const char CreateEvtItemGetDigit3Text[];
 extern const char CreateEvtItemGetDigit2Text[];
 extern const char CreateEvtItemGetDigit1Text[];
 extern const char CreateEvtItemGetDigit0Text[];
-extern ItemBoxRecord ItemBoxTbl[601];
+extern ItemBoxRecord ItemBoxTbl[ITEM_BOX_COUNT];
 
 extern const char *GetItemName(int category, int id);
 
@@ -187,9 +229,9 @@ static const char *strno[10] = {
     CreateEvtItemGetDigit5Text, CreateEvtItemGetDigit6Text, CreateEvtItemGetDigit7Text, CreateEvtItemGetDigit8Text, CreateEvtItemGetDigit9Text
 };
 
-ItemBoxRecord ItemBoxTbl[601] = {{0}};
+ItemBoxRecord ItemBoxTbl[ITEM_BOX_COUNT] = {{0}};
 
-char EvtItemTbl[255 * 0x80] = { 0 };
+char EvtItemTbl[EVT_ITEM_COUNT * EVT_ITEM_NAME_SIZE] = { 0 };
 
 /* Definitions follow their callers so references remain address-based. */
 static void taskItemGet(XglTaskPrefix *entry)
@@ -199,7 +241,7 @@ static void taskItemGet(XglTaskPrefix *entry)
     ItemBoxRecord *item;
     MapUnitRecordItemView *unit;
     ItemUnitInfo *info;
-    char message[64];
+    char message[ITEM_MESSAGE_SIZE];
     int item_id;
     int item_index;
     int count;
@@ -214,14 +256,14 @@ static void taskItemGet(XglTaskPrefix *entry)
         task->count = item->count;
         task->option = item->option;
         task->money = ItemBoxTbl[item_index].money;
-        xglFlagsSet1(item_index + 0x79EC7, 1);
+        xglFlagsSet1(item_index + ITEM_COLLECTED_FLAG_BASE, 1);
         task->window_created = 1;
         if (task->money != 0) {
             sprintf(message, obtainedMoneyFormat, task->money);
             dataMoneyBoxInc(task->money);
         } else if (task->count == 1) {
             task->item_name = GetItemName(task->category, item_id);
-            if (task->category == 10) {
+            if (task->category == ITEM_CATEGORY_EVENT) {
                 sprintf(message, evt_item_format_special, task->item_name);
             } else {
                 sprintf(message, evt_item_format_normal, task->item_name);
@@ -229,15 +271,15 @@ static void taskItemGet(XglTaskPrefix *entry)
             dataBoxInc(task->category, item_id);
         } else {
             count = task->count;
-            if (count > 99) count = 99;
+            if (count > ITEM_COUNT_DISPLAY_MAX) count = ITEM_COUNT_DISPLAY_MAX;
             task->item_name = GetItemName(task->category, item_id);
             if (task->count < 10) {
-                if (task->category == 10) {
+                if (task->category == ITEM_CATEGORY_EVENT) {
                     sprintf(message, obtainedColoredItemFormat, strno[count], task->item_name);
                 } else {
                     sprintf(message, obtainedItemFormat, strno[count], task->item_name);
                 }
-            } else if (task->category == 10) {
+            } else if (task->category == ITEM_CATEGORY_EVENT) {
                 sprintf(message, obtainedColoredCountItemFormat, strno[count / 10], strno[count % 10], task->item_name);
             } else {
                 sprintf(message, obtainedCountItemFormat, strno[count / 10], strno[count % 10], task->item_name);
@@ -250,12 +292,12 @@ static void taskItemGet(XglTaskPrefix *entry)
             }
         }
         task->window = createItemGetWin(message);
-        GameLoopState->flags |= 0x20000;
+        GameLoopState->flags |= GAME_LOOP_FLAG_ITEM_WINDOW;
     }
     if (task->window->state == 2) {
         unit = task->owner_unit;
         info = &unit->info;
-        GameLoopState->flags &= ~0x20000;
+        GameLoopState->flags &= ~GAME_LOOP_FLAG_ITEM_WINDOW;
         if (info->item_get_method != -1) {
             CallMethod_I("itemget", info->item_get_method);
         }
@@ -268,12 +310,12 @@ static void taskItemGet(XglTaskPrefix *entry)
 
 static void taskEvtItemGet(EventItemTask *task)
 {
-    char message[64];
+    char message[ITEM_MESSAGE_SIZE];
     GameLoopState->cleared_1c = 0;
     if (task->window_created == 0) {
-        memset(message, 0, 64);
+        memset(message, 0, ITEM_MESSAGE_SIZE);
         task->window_created = 1;
-        if (task->category == 10) {
+        if (task->category == ITEM_CATEGORY_EVENT) {
             sprintf(message, evt_item_format_special, task->item_name);
         } else {
             sprintf(message, evt_item_format_normal, task->item_name);
@@ -281,7 +323,7 @@ static void taskEvtItemGet(EventItemTask *task)
         task->window = createItemGetWin(message);
     }
     if (task->window->state == 2) {
-        GameLoopState->flags &= 0xfffdffffu;
+        GameLoopState->flags &= ~GAME_LOOP_FLAG_ITEM_WINDOW;
         xglTaskWaitRemove(&task->task);
     }
 }
@@ -303,7 +345,7 @@ int CreateEvtItemGetTask(int item, int count)
     task->category = item;
     task->window_created = 0;
     task->item_name = GetItemName(item, count);
-    GameLoopState->flags |= 0x20000;
+    GameLoopState->flags |= GAME_LOOP_FLAG_ITEM_WINDOW;
     return 1;
 }
 
@@ -337,7 +379,7 @@ const char *GetItemName(int category, int item)
         name = deb;
         if (record != 0) return record->name;
         return name;
-    case 10:
+    case ITEM_CATEGORY_EVENT:
         name = dataEvtItmNameGet(item);
         return name != 0 ? name : deb;
     default:
@@ -348,7 +390,7 @@ const char *GetItemName(int category, int item)
 
 char *dataEvtItmNameGet(int index)
 {
-    return EvtItemTbl + index * 0x80 - 0x80;
+    return EvtItemTbl + index * EVT_ITEM_NAME_SIZE - EVT_ITEM_NAME_SIZE;
 }
 
 static int Pow(int base, int exponent)
@@ -405,19 +447,19 @@ void InitItemBox(MapUnitRecordItemView *unit)
     int i;
 
     switch ((short)unit->serial) {
-    case 0x7005:
-        unit->model = uwares_tbl[4];
-        unit->texture = xtxres_tbl[4];
-        info->seId = 6;
+    case ITEM_SERIAL_BOX:
+        unit->model = uwares_tbl[UWARES_ITEM_BOX];
+        unit->texture = xtxres_tbl[UWARES_ITEM_BOX];
+        info->seId = ITEM_BOX_SE;
         break;
-    case 0x7008:
+    case ITEM_SERIAL_BOX_SPECIAL:
         unit->model = uwares_tbl[7];
         unit->texture = xtxres_tbl[7];
-        info->seId = 57;
+        info->seId = ITEM_BOX_SPECIAL_SE;
         break;
     default:
-        unit->model = uwares_tbl[4];
-        unit->texture = xtxres_tbl[4];
+        unit->model = uwares_tbl[UWARES_ITEM_BOX];
+        unit->texture = xtxres_tbl[UWARES_ITEM_BOX];
         break;
     }
     header = unit->model;
@@ -458,15 +500,15 @@ void InitItemBox(MapUnitRecordItemView *unit)
         owner->flags |= 4;
         owner->position = unit->position;
     }
-    if (info->itemNo >= 602) {
+    if (info->itemNo >= ITEM_NO_LIMIT) {
         unit->serial = (unsigned short) -1;
         unit->update = 0;
         unit->draw = 0;
         printf(itemBoxSerialErrorFormat, (short) info->itemNo);
         return;
     }
-    if (xglFlagsGet1(0x79EC7 + (short) info->itemNo) == 1) {
-        unit->sequenceNo = 16;
+    if (xglFlagsGet1(ITEM_COLLECTED_FLAG_BASE + (short) info->itemNo) == 1) {
+        unit->sequenceNo = ITEM_OPENED_SEQUENCE;
         unit->actionSub = 3;
         for (i = 0; i < 3; i++) {
             if (unit->effectCf[i] != 0) {
@@ -494,18 +536,18 @@ void InitItemSymbol(MapUnitRecordItemView *unit)
     unit->update = MAP_updateUnitItemSymbol;
     unit->flags |= 0x10000;
     unit->flags |= 0x10000000;
-    if ((unsigned int) unit->serial - 0x7033 < 5) {
+    if ((unsigned int) unit->serial - ITEM_SERIAL_SPECIAL_SYMBOL_FIRST < ITEM_SERIAL_SPECIAL_SYMBOL_COUNT) {
         unit->update = MAP_updateUnitSpecialSymbol;
         return;
     }
-    if (info->itemNo >= 602) {
+    if (info->itemNo >= ITEM_NO_LIMIT) {
         unit->draw = 0;
         unit->update = 0;
         unit->serial = (unsigned short) -1;
         printf(itemSymbolSerialErrorFormat, (short) info->itemNo);
         return;
     }
-    if (xglFlagsGet1(0x79EC7 + (short) info->itemNo) == 1) {
+    if (xglFlagsGet1(ITEM_COLLECTED_FLAG_BASE + (short) info->itemNo) == 1) {
         unit->serial = (unsigned short) -1;
         unit->update = 0;
         for (i = 0; i < 3; i++) {
@@ -545,11 +587,11 @@ void SetItemSymbolRsrc(MapUnitRecordItemView *unit)
     int count;
     ItemBoxRecord *item;
 
-    if ((short)unit->serial != 0x7000) {
+    if ((short)unit->serial != ITEM_SERIAL_SYMBOL_FROM_TABLE) {
         switch ((short)unit->serial) {
-        case 0x7009:
-            unit->model = uwares_tbl[8];
-            unit->texture = xtxres_tbl[8];
+        case ITEM_SERIAL_SYMBOL_MONEY:
+            unit->model = uwares_tbl[UWARES_MONEY_SYMBOL];
+            unit->texture = xtxres_tbl[UWARES_MONEY_SYMBOL];
             return;
         case 0x700a:
             unit->model = uwares_tbl[9];
@@ -580,10 +622,10 @@ void SetItemSymbolRsrc(MapUnitRecordItemView *unit)
         category = (signed char)ItemBoxTbl[(short)info->itemNo].category;
         count = (signed char)item->count;
         if (money != 0) {
-            void *model = uwares_tbl[8];
-            unit->serial = 0x7009;
+            void *model = uwares_tbl[UWARES_MONEY_SYMBOL];
+            unit->serial = ITEM_SERIAL_SYMBOL_MONEY;
             unit->model = model;
-            unit->texture = xtxres_tbl[8];
+            unit->texture = xtxres_tbl[UWARES_MONEY_SYMBOL];
             return;
         }
         switch (category) {
@@ -611,8 +653,8 @@ void SetItemSymbolRsrc(MapUnitRecordItemView *unit)
                 unit->model = uwares_tbl[12]; unit->texture = xtxres_tbl[12];
             }
             return;
-        case 10:
-            unit->model = uwares_tbl[13]; unit->texture = xtxres_tbl[13];
+        case ITEM_CATEGORY_EVENT:
+            unit->model = uwares_tbl[UWARES_EVENT_SYMBOL]; unit->texture = xtxres_tbl[UWARES_EVENT_SYMBOL];
             return;
         default:
             return;
@@ -662,7 +704,7 @@ void MAP_updateUnitItemBox(MapUnitRecordItemView *unit)
         owner->position = unit->position;
         return;
     case 2:
-        if (++unit->sequenceNo >= 17) {
+        if (++unit->sequenceNo >= ITEM_OPEN_SEQUENCE_END) {
             unit->actionSub = 3;
             return;
         }
@@ -703,7 +745,7 @@ void MAP_updateUnitItemSymbol(MapUnitRecordItemView *unit)
     case 0:
         if (CheckDist3D(&GameLoopState->player->position,
                         &unit->position) < UNIT_ITEM_PICKUP_DISTANCE &&
-            (GameLoopState->flags & 0x20000) == 0) {
+            (GameLoopState->flags & GAME_LOOP_FLAG_ITEM_WINDOW) == 0) {
             scheduler = GameLoopState->scheduler;
             callback = (int (*)(XglTaskPrefix *)) taskItemGet;
             entry = scheduler != 0 ? scheduler->active_tail : 0;
@@ -716,8 +758,8 @@ void MAP_updateUnitItemSymbol(MapUnitRecordItemView *unit)
             task->owner_unit = unit;
             unit->actionSub = 1;
             unit->flags |= 4;
-            xglSoundEffectNormalID(6, 0);
-            GameLoopState->flags |= 0x20000;
+            xglSoundEffectNormalID(ITEM_PICKUP_SE, 0);
+            GameLoopState->flags |= GAME_LOOP_FLAG_ITEM_WINDOW;
         }
         break;
     case 1:
@@ -743,10 +785,10 @@ void MAP_updateUnitSpecialSymbol(MapUnitRecordItemView *unit)
         }
         break;
     case 1:
-        unit->rotation.y += 0.05f;
-        unit->position.y += 0.03f;
+        unit->rotation.y += UNIT_ITEM_SYMBOL_SPIN_STEP;
+        unit->position.y += ITEM_SYMBOL_RISE_STEP;
         unit->sequenceNo++;
-        unit->scale.x = unit->scale.y = unit->scale.z = unit->sequenceNo * 0.06;
+        unit->scale.x = unit->scale.y = unit->scale.z = unit->sequenceNo * ITEM_SYMBOL_SCALE_STEP;
         unit->scale.w = 1.0f;
         if (unit->scale.x > 1.0f) {
             unit->scale.x = unit->scale.y = unit->scale.z = 1.0f;
@@ -756,16 +798,16 @@ void MAP_updateUnitSpecialSymbol(MapUnitRecordItemView *unit)
         }
         break;
     case 2:
-        unit->rotation.y += 0.05f;
+        unit->rotation.y += UNIT_ITEM_SYMBOL_SPIN_STEP;
         break;
     case 5:
         targetBlock = GameLoopState->player->position;
-        target->y += 1.2f;
+        target->y += ITEM_SYMBOL_PLAYER_HEIGHT;
         unit->position.x = target->x + (unit->translation.x - target->x) * unit->sequenceNo / unit->sequenceEnd;
         unit->position.y = target->y + (unit->translation.y - target->y) * unit->sequenceNo / unit->sequenceEnd;
         unit->position.z = target->z + (unit->translation.z - target->z) * unit->sequenceNo / unit->sequenceEnd;
-        unit->rotation.y += 0.05f;
-        unit->scale.x = unit->scale.y = unit->scale.z = --unit->sequenceNo * 0.06;
+        unit->rotation.y += UNIT_ITEM_SYMBOL_SPIN_STEP;
+        unit->scale.x = unit->scale.y = unit->scale.z = --unit->sequenceNo * ITEM_SYMBOL_SCALE_STEP;
         if (unit->scale.x < 0.0f) {
             unit->update = 0;
             unit->serial = (unsigned short) -1;
@@ -801,7 +843,7 @@ void MAP_updateUnitItem(MapUnitRecordItemView *unit)
         if (unit->sequenceNo < 4) {
             return;
         }
-        if (unit->sequenceNo < 17) {
+        if (unit->sequenceNo < ITEM_OPEN_SEQUENCE_END) {
             return;
         }
         nmlModelSetPartsVisible(GameLoopState->model_record->model, unit->serial, 0);

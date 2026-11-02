@@ -72,15 +72,15 @@ void JTHREAD_defaultUnit(JThreadHandle *thread)
     peer = *peer_slot;
     if (!(peer->flags & 0x2) && object != 0) {
         flags = thread->flags;
-        if (flags & 0x10) {
-            if (flags & 0x1) {
-                thread->flags = (flags & ~0x1) | 0x2;
+        if (flags & JTHREAD_FLAG_RUNNABLE) {
+            if (flags & JTHREAD_FLAG_WAITING) {
+                thread->flags = (flags & ~JTHREAD_FLAG_WAITING) | JTHREAD_FLAG_WOKEN;
             }
             arguments[0] = object;
             JNI_callMethod(thread, thread->method, arguments, 0);
             flags_after_call = thread->flags;
-            if (flags_after_call & 0x8) {
-                thread->flags = flags_after_call & ~0x10;
+            if (flags_after_call & JTHREAD_FLAG_DONE) {
+                thread->flags = flags_after_call & ~JTHREAD_FLAG_RUNNABLE;
             }
         }
     }
@@ -107,15 +107,15 @@ void JTHREAD_defaultChr(JThreadHandle *thread)
     peer = *peer_slot;
     if (!(peer->flags & 0x2) && object != 0) {
         flags = thread->flags;
-        if (flags & 0x10) {
-            if (flags & 0x1) {
-                thread->flags = (flags & ~0x1) | 0x2;
+        if (flags & JTHREAD_FLAG_RUNNABLE) {
+            if (flags & JTHREAD_FLAG_WAITING) {
+                thread->flags = (flags & ~JTHREAD_FLAG_WAITING) | JTHREAD_FLAG_WOKEN;
             }
             arguments[0] = object;
             JNI_callMethod(thread, thread->method, arguments, 0);
             flags_after_call = thread->flags;
-            if (flags_after_call & 0x8) {
-                thread->flags = flags_after_call & ~0x10;
+            if (flags_after_call & JTHREAD_FLAG_DONE) {
+                thread->flags = flags_after_call & ~JTHREAD_FLAG_RUNNABLE;
             }
         }
     }
@@ -142,8 +142,8 @@ void JTHREAD_default(JThreadHandle *thread)
             arguments[0] = object;
             JNI_callMethod(thread, method, arguments, &result);
             flags = thread->flags;
-            if (flags & 0x8) {
-                thread->flags = flags & ~0x10;
+            if (flags & JTHREAD_FLAG_DONE) {
+                thread->flags = flags & ~JTHREAD_FLAG_RUNNABLE;
             }
         }
     }
@@ -168,8 +168,8 @@ void JTHREAD_defaultScene(JThreadHandle *thread)
             arguments[0] = object;
             JNI_callMethod(thread, method, arguments, &result);
             flags = thread->flags;
-            if (flags & 0x8) {
-                thread->flags = flags & ~0x10;
+            if (flags & JTHREAD_FLAG_DONE) {
+                thread->flags = flags & ~JTHREAD_FLAG_RUNNABLE;
             }
         }
     }
@@ -218,52 +218,52 @@ void JTHREAD_init(void)
  */
 void JTHREAD_waitFor(JThread *thread)
 {
-    switch (thread->wait_kind & 0xf) {
-    case 1:
+    switch (thread->wait_kind & JTHREAD_WAIT_KIND_MASK) {
+    case JTHREAD_WAIT_FRAMES:
         thread->wait_target.elapsed_frames = thread->wait_target.elapsed_frames + 1;
         if (thread->wait_target.elapsed_frames >= thread->wait_parameter) {
-            thread->flags = (thread->flags & ~0x4) | 0x2;
+            thread->flags = (thread->flags & ~JTHREAD_FLAG_CALL_RUNNING) | JTHREAD_FLAG_WOKEN;
         }
         break;
 
-    case 3:
+    case JTHREAD_WAIT_COMPONENT:
         if (((TComponent *)thread->wait_target.object)->state == 2) {
-            thread->flags = (thread->flags & ~0x4) | 0x2;
+            thread->flags = (thread->flags & ~JTHREAD_FLAG_CALL_RUNNING) | JTHREAD_FLAG_WOKEN;
         }
         break;
 
-    case 2:
+    case JTHREAD_WAIT_THREAD:
     {
         JThread *other = thread->wait_target.thread;
-        if (other->flags & 0x8) {
-            other->flags &= ~0x8;
-            thread->flags = (thread->flags & ~0x4) | 0x2;
+        if (other->flags & JTHREAD_FLAG_DONE) {
+            other->flags &= ~JTHREAD_FLAG_DONE;
+            thread->flags = (thread->flags & ~JTHREAD_FLAG_CALL_RUNNING) | JTHREAD_FLAG_WOKEN;
         }
         break;
     }
 
-    case 4:
+    case JTHREAD_WAIT_ACTOR_IDLE:
         if (!(((Actor *)thread->wait_target.object)->flags & 0x2)) {
-            thread->flags = (thread->flags & ~0x5) | 0x2;
+            thread->flags = (thread->flags & ~JTHREAD_FLAGS_BUSY) | JTHREAD_FLAG_WOKEN;
         }
         break;
 
-    case 6:
+    case JTHREAD_WAIT_ACTOR_IDLE_2:
         if (!(((Actor *)thread->wait_target.object)->flags & 0x2)) {
-            thread->flags = (thread->flags & ~0x5) | 0x2;
+            thread->flags = (thread->flags & ~JTHREAD_FLAGS_BUSY) | JTHREAD_FLAG_WOKEN;
         }
         break;
 
-    case 5:
+    case JTHREAD_WAIT_SIGNAL:
         if (((Actor *)thread->wait_target.object)->signal ==
             thread->wait_parameter) {
-            thread->flags = (thread->flags & ~0x4) | 0x2;
+            thread->flags = (thread->flags & ~JTHREAD_FLAG_CALL_RUNNING) | JTHREAD_FLAG_WOKEN;
         }
         break;
 
-    case 7:
+    case JTHREAD_WAIT_GAME:
         if (!(GameLoopState[0x10 / sizeof(unsigned int)] & 0x800)) {
-            thread->flags = (thread->flags & ~0x5) | 0x2;
+            thread->flags = (thread->flags & ~JTHREAD_FLAGS_BUSY) | JTHREAD_FLAG_WOKEN;
         }
         break;
     }
@@ -301,7 +301,7 @@ void JTHREAD_cntl(void)
     JThread *node = jthreadTop;
 
     while (node != 0) {
-        if ((node->flags & 0x10) != 0 && node->kind != 0) {
+        if ((node->flags & JTHREAD_FLAG_RUNNABLE) != 0 && node->kind != 0) {
             if (node->reset != 0) {
                 node->reset(node);
             }

@@ -2,8 +2,35 @@
 #include "shared.h"
 #include "main/e_number_main.h"
 #include "main/end_print.h"
+#include "main/open_close_main.h"
 
 #define E_NUMBER_STORE_STRING(destination, string) (*(destination) = (string))
+
+/* ENumberMainData.format: how eNumberMain lays the value out. Formats 0, 1,
+ * 14 (plain digit run), 3-6 and 12-13 (two values side by side, 12/13 turning
+ * the first red when it falls under a fifth of the second) and 7-8 (signed)
+ * are left as numbers. */
+enum {
+    ENUMBER_FORMAT_TIME = 2,        /* three two-digit fields split by separators */
+    ENUMBER_FORMAT_TIME_BLANK = 11, /* the same layout with blank fields */
+    ENUMBER_FORMAT_DASHES = 9,      /* digits count of dash sprites */
+    ENUMBER_FORMAT_TEXT = 10        /* value is a string pointer */
+};
+
+/* Sprite ids eNumberMain draws between digits. */
+enum {
+    ENUMBER_SPRITE_TIME_SEPARATOR = 0x704,
+    ENUMBER_SPRITE_PLUS = 0x705,
+    ENUMBER_SPRITE_MINUS = 0x706
+};
+
+#define ENUMBER_PHASE_MASK 15 /* low nibble of ENumberMainData.mode */
+#define ENUMBER_PHASE_DRAW 3  /* the phase in which the value is drawn */
+#define ENUMBER_COLOR_NEUTRAL 128
+#define ENUMBER_DIGIT_WIDTH 11
+#define ENUMBER_TIME_FIELD_SPACING 32
+#define ENUMBER_TIME_FIELD_COUNT 3
+#define ENUMBER_TIME_SEPARATOR_OFFSET 22 /* from the field's left edge */
 
 typedef struct ELinePoint {
     int x;
@@ -66,7 +93,7 @@ void eNumberMain(ENumberMainData *number)
     const unsigned char tintLow = 80;
     const unsigned char alertLow = 64;
 
-    if ((number->mode & 15) != 3)
+    if ((number->mode & ENUMBER_PHASE_MASK) != ENUMBER_PHASE_DRAW)
         return;
 
     switch (number->format) {
@@ -86,25 +113,25 @@ void eNumberMain(ENumberMainData *number)
             number->render[0].argument2 = number->colorModeFirst * 16 + 1;
         else
             number->render[0].argument2 = number->colorModeFirst * 16;
-        endPrintExtFunc(number->work, 10, &number->render[0]);
+        endPrintExtFunc(number->work, END_PRINT_CMD_NUMBER,&number->render[0]);
         if (number->format == 14 && number->value >= 0) {
             number->separators[0].spriteId = 0x506;
             endSpriteSet(&number->separators[0], 255);
-            number->separators[0].x = number->x + number->digits * 11;
+            number->separators[0].x = number->x + number->digits * ENUMBER_DIGIT_WIDTH;
             number->separators[0].work = number->work;
             number->separators[0].color[0] = number->separators[0].color[1] =
-                number->separators[0].color[2] = number->separators[0].color[3] = 128;
+                number->separators[0].color[2] = number->separators[0].color[3] = ENUMBER_COLOR_NEUTRAL;
             number->separators[0].y = number->y;
-            endPrintExtFunc(number->work, 2, &number->separators[0]);
+            endPrintExtFunc(number->work, END_PRINT_CMD_SPRITE,&number->separators[0]);
         }
         break;
-    case 2:
+    case ENUMBER_FORMAT_TIME:
         /* This format interprets the stored word as three byte components. */
         __builtin_memcpy(byteValue, &number->value, sizeof byteValue);
-        for (component = 0; component < 3; component++) {
+        for (component = 0; component < ENUMBER_TIME_FIELD_COUNT; component++) {
             byteX = number->x;
             componentWork = number->work;
-            byteX += component * 32;
+            byteX += component * ENUMBER_TIME_FIELD_SPACING;
             number->render[component].x = byteX;
             {
                 unsigned short y = number->y;
@@ -119,27 +146,27 @@ void eNumberMain(ENumberMainData *number)
             number->render[component].argument1 = 2;
             number->render[component].payload.number.value = componentValue;
             number->render[component].argument2 = 0;
-            endPrintExtFunc(number->work, 10, &number->render[component]);
+            endPrintExtFunc(number->work, END_PRINT_CMD_NUMBER,&number->render[component]);
         }
         for (part = 0; part < 2; part++) {
             separatorSprite = &number->separators[part];
-            number->separators[part].spriteId = 0x704;
+            number->separators[part].spriteId = ENUMBER_SPRITE_TIME_SEPARATOR;
             endSpriteSet(separatorSprite, 255);
-            number->separators[part].x = number->x + part * 32 + 22;
+            number->separators[part].x = number->x + part * ENUMBER_TIME_FIELD_SPACING + ENUMBER_TIME_SEPARATOR_OFFSET;
             number->separators[part].work = number->work;
             number->separators[part].y = number->y + 2;
             number->separators[part].color[0] = number->color_r;
             number->separators[part].color[1] = number->color_g;
             number->separators[part].color[2] = number->color_b;
             number->separators[part].color[3] = number->color_a;
-            endPrintExtFunc(number->work, 2, separatorSprite);
+            endPrintExtFunc(number->work, END_PRINT_CMD_SPRITE,separatorSprite);
         }
         break;
-    case 11:
-        for (blankComponent = 0; blankComponent < 3; blankComponent++) {
+    case ENUMBER_FORMAT_TIME_BLANK:
+        for (blankComponent = 0; blankComponent < ENUMBER_TIME_FIELD_COUNT; blankComponent++) {
             componentX = number->x;
             blankWork = number->work;
-            componentX += blankComponent * 32;
+            componentX += blankComponent * ENUMBER_TIME_FIELD_SPACING;
             number->render[blankComponent].x = componentX;
             {
                 unsigned short y = number->y;
@@ -154,20 +181,20 @@ void eNumberMain(ENumberMainData *number)
             number->render[blankComponent].argument1 = 2;
             number->render[blankComponent].payload.number.value = blankValue;
             number->render[blankComponent].argument2 = 0;
-            endPrintExtFunc(number->work, 10, &number->render[blankComponent]);
+            endPrintExtFunc(number->work, END_PRINT_CMD_NUMBER,&number->render[blankComponent]);
         }
         for (part = 0; part < 2; part++) {
             separatorSprite = &number->separators[part];
-            number->separators[part].spriteId = 0x704;
+            number->separators[part].spriteId = ENUMBER_SPRITE_TIME_SEPARATOR;
             endSpriteSet(separatorSprite, 255);
-            number->separators[part].x = number->x + part * 32 + 22;
+            number->separators[part].x = number->x + part * ENUMBER_TIME_FIELD_SPACING + ENUMBER_TIME_SEPARATOR_OFFSET;
             number->separators[part].work = number->work;
             number->separators[part].y = number->y + 2;
             number->separators[part].color[0] = number->color_r;
             number->separators[part].color[1] = number->color_g;
             number->separators[part].color[2] = number->color_b;
             number->separators[part].color[3] = number->color_a;
-            endPrintExtFunc(number->work, 2, separatorSprite);
+            endPrintExtFunc(number->work, END_PRINT_CMD_SPRITE,separatorSprite);
         }
         break;
     case 3: case 4: case 5: case 6: case 12: case 13:
@@ -190,8 +217,8 @@ void eNumberMain(ENumberMainData *number)
                 number->separators[0].y = number->y;
             number->separators[0].work = number->work;
             number->separators[0].color[0] = number->separators[0].color[1] =
-                number->separators[0].color[2] = number->separators[0].color[3] = 128;
-            endPrintExtFunc(number->work, 2, &number->separators[0]);
+                number->separators[0].color[2] = number->separators[0].color[3] = ENUMBER_COLOR_NEUTRAL;
+            endPrintExtFunc(number->work, END_PRINT_CMD_SPRITE,&number->separators[0]);
         }
         if ((unsigned char)(number->format - 12) < 2) {
             int maximum = pairValue[1];
@@ -232,15 +259,15 @@ void eNumberMain(ENumberMainData *number)
             number->render[part].payload.number.value = pairValue[part];
             number->render[part].argument1 = number->digits;
             number->render[part].argument2 = number->alignment + (1 - part) * 16;
-            endPrintExtFunc(number->work, 10, &number->render[part]);
+            endPrintExtFunc(number->work, END_PRINT_CMD_NUMBER,&number->render[part]);
         }
         break;
     case 7: case 8:
         signX = number->x;
         if (number->value < 0)
-            number->separators[0].spriteId = 0x706;
+            number->separators[0].spriteId = ENUMBER_SPRITE_MINUS;
         else
-            number->separators[0].spriteId = 0x705;
+            number->separators[0].spriteId = ENUMBER_SPRITE_PLUS;
         endSpriteSet(&number->separators[0], 255);
         number->separators[0].x = signX;
         number->separators[0].y = number->y - number->format * 2 + 15;
@@ -249,7 +276,7 @@ void eNumberMain(ENumberMainData *number)
         number->separators[0].color[2] = number->color_b;
         number->separators[0].color[3] = number->color_a;
         number->separators[0].work = number->work;
-        endPrintExtFunc(number->work, 2, &number->separators[0]);
+        endPrintExtFunc(number->work, END_PRINT_CMD_SPRITE,&number->separators[0]);
         signX += number->separators[0].width;
         magnitude = number->value;
         if (magnitude < 0)
@@ -264,22 +291,22 @@ void eNumberMain(ENumberMainData *number)
         number->render[0].argument1 = number->digits;
         number->render[0].argument2 = number->format - 7;
         number->render[0].work = number->work;
-        endPrintExtFunc(number->work, 10, &number->render[0]);
+        endPrintExtFunc(number->work, END_PRINT_CMD_NUMBER,&number->render[0]);
         break;
-    case 9:
+    case ENUMBER_FORMAT_DASHES:
         dashX = number->x;
         sprite = &number->render[0];
         for (dash = 0; dash < number->digits; dash++, sprite++) {
-            sprite->argument1 = 0x706;
+            sprite->argument1 = ENUMBER_SPRITE_MINUS;
             endSpriteSet(sprite, 255);
             sprite->x = dashX;
             sprite->work = number->work;
             sprite->y = number->y - 2;
-            endPrintExtFunc(number->work, 2, sprite);
+            endPrintExtFunc(number->work, END_PRINT_CMD_SPRITE,sprite);
             dashX += sprite->payload.sprite.width;
         }
         break;
-    case 10:
+    case ENUMBER_FORMAT_TEXT:
         text = &number->render[0];
         text->x = number->x;
         text->work = number->work;
@@ -289,7 +316,7 @@ void eNumberMain(ENumberMainData *number)
         text->payload.text.color[2] = number->color_b;
         text->payload.text.color[3] = number->color_a;
         E_NUMBER_STORE_STRING(&text->payload.text.text, (const char *)number->value);
-        endPrintExtFunc(number->work, 7, text);
+        endPrintExtFunc(number->work, END_PRINT_CMD_TAG_FONT,text);
         break;
     }
 }
@@ -301,8 +328,8 @@ void eNumberNumberChange(void)
 /* Callers pass a second argument, which this initializer does not read. */
 void eNumberSet(ENumberMainData *number, int unused)
 {
-    number->color_r = number->color_g = number->color_b = number->color_a = 128;
-    number->mode = 3;
+    number->color_r = number->color_g = number->color_b = number->color_a = ENUMBER_COLOR_NEUTRAL;
+    number->mode = ENUMBER_PHASE_DRAW;
     number->colorModeFirst = number->colorModeSecond = number->alignment = number->firstOnly = 0;
 }
 
@@ -316,7 +343,7 @@ void eSpriteMain(ESpriteMainData *sprite)
     sprite->renderColor[1] = sprite->color[1];
     sprite->renderColor[2] = sprite->color[2];
     sprite->renderColor[3] = sprite->color[3];
-    endPrintExtFunc(sprite->work, 2, &sprite->renderX);
+    endPrintExtFunc(sprite->work, END_PRINT_CMD_SPRITE,&sprite->renderX);
 }
 
 void eSpriteSet(ESprite *sprite, short spriteId)
@@ -337,15 +364,15 @@ void eRibbonMain(ERibbonMainData *ribbon)
     int right;
 
     switch (ribbon->mode) {
-    case 0x20:
+    case E_MODE_SHOW_START:
         ribbon->points[1].x = ribbon->points[0].x = ribbon->x;
         ribbon->points[2].y = ribbon->points[0].y = ribbon->y;
         ribbon->points[3].y = ribbon->points[1].y = ribbon->y + ribbon->height;
         ribbon->points[3].work = ribbon->points[2].work = ribbon->points[0].work = ribbon->work;
         ribbon->visible = 1;
-        ribbon->mode = 0x21;
+        ribbon->mode = E_MODE_SHOW_STEP;
         ribbon->progress = 0;
-    case 0x21:
+    case E_MODE_SHOW_STEP:
         right = (int)((float)ribbon->x + (float)ribbon->width * ((float)ribbon->progress * 0.125f));
         ribbon->progress++;
         ribbon->points[3].x = ribbon->points[2].x = right;
@@ -354,14 +381,14 @@ void eRibbonMain(ERibbonMainData *ribbon)
         break;
     case 0x2E:
         ribbon->mode = 0x2F;
-    case 0:
+    case E_MODE_INIT:
     case 0x2F:
-        ribbon->mode = 0x50;
+        ribbon->mode = E_MODE_RUN_START;
         break;
-    case 0x50:
-        ribbon->mode = 0x51;
+    case E_MODE_RUN_START:
+        ribbon->mode = E_MODE_RUN_STEP;
         ribbon->visible = 1;
-    case 0x51:
+    case E_MODE_RUN_STEP:
         if (ribbon->style == 0) {
             ribbon->points[0].x = ribbon->points[1].x = ribbon->x;
             ribbon->points[2].x = ribbon->points[3].x = ribbon->x + ribbon->width / 2;
@@ -377,12 +404,12 @@ void eRibbonMain(ERibbonMainData *ribbon)
         ribbon->renderCount = 0;
         break;
     case 0x0F:
-    case 0xF0:
-    case 0xF1:
+    case E_MODE_END_START:
+    case E_MODE_END_STEP:
         break;
     }
     if (ribbon->visible)
-        endPrintExtFunc(ribbon->points[0].work, 3, &ribbon->points[0]);
+        endPrintExtFunc(ribbon->points[0].work, END_PRINT_CMD_RIBBON,&ribbon->points[0]);
 }
 
 void eRibbonModeChange(ERibbonMainData *ribbon, signed char mode)
@@ -394,7 +421,7 @@ void eRibbonSet(ERibbonMainData *ribbon, int style)
 {
     int point;
 
-    ribbon->mode = 0x50;
+    ribbon->mode = E_MODE_RUN_START;
     ribbon->style = style;
     ribbon->x = 0;
     ribbon->y = 0;
@@ -462,10 +489,10 @@ void eLineMain(ELineEntry *line)
     ELinePoint *render;
 
     switch (line->state) {
-    case 0:
-        line->state = 0x50;
+    case E_MODE_INIT:
+        line->state = E_MODE_RUN_START;
         break;
-    case 1:
+    case E_MODE_IDLE:
         break;
     case 0x10:
         for (reset = 0; reset < line->count; reset++)
@@ -483,13 +510,13 @@ void eLineMain(ELineEntry *line)
         for (segment = 0; segment < line->count; segment++)
             remaining += line->progress[segment] - line->duration;
         if (remaining == 0)
-            line->state = 0x50;
+            line->state = E_MODE_RUN_START;
         break;
-    case 0x20:
+    case E_MODE_SHOW_START:
         for (reset = 0; reset < line->count; reset++)
             line->progress[reset] = 0;
-        line->state = 0x21;
-    case 0x21:
+        line->state = E_MODE_SHOW_STEP;
+    case E_MODE_SHOW_STEP:
         for (segment = 0; segment < line->count; segment++) {
             line->progress[segment]++;
             if (line->progress[segment] >= line->duration)
@@ -499,10 +526,10 @@ void eLineMain(ELineEntry *line)
         for (segment = 0; segment < line->count; segment++)
             remaining += line->progress[segment] - line->duration;
         if (remaining == 0)
-            line->state = 0x50;
+            line->state = E_MODE_RUN_START;
         break;
-    case 0x50:
-        line->state = 0x51;
+    case E_MODE_RUN_START:
+        line->state = E_MODE_RUN_STEP;
         break;
     }
     sourceX = &line->points[0].x;
@@ -553,7 +580,7 @@ void eTagFontMain(ETagFontMainData *tag)
         tag->render.color[2] = tag->color[1];
         tag->render.color[3] = tag->color[3];
         tag->render.work = tag->work;
-        endPrintExtFunc(tag->work, 7, &tag->render);
+        endPrintExtFunc(tag->work, END_PRINT_CMD_TAG_FONT,&tag->render);
     }
 }
 

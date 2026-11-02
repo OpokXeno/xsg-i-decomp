@@ -61,6 +61,15 @@ typedef struct PlayTCHCurveSet {
  * PLAY_getCallBackParams returns, ending exactly at the object's
  * 0x1dc-byte size (config/symbols/main.txt).
  */
+/* The timing chart uses thirty frame ticks per second. */
+#define PLAY_SECONDS_PER_FRAME 0.033333335f
+#define PLAY_OBSERVER_COUNT 32
+
+/* Play.flags */
+#define PLAY_FLAG_ENABLED 0x01
+#define PLAY_FLAG_MANUAL_TIME 0x02
+#define PLAY_FLAG_LOOP 0x04
+
 typedef struct Play {
     int class_ref;                   /* +0x00, copied as a VM object-header word (playcontrol.c) */
     unsigned int signal;             /* +0x04, getSignal__/signal__I (playcontrol.c); play.c's PLAY_setup reset writes it */
@@ -76,7 +85,7 @@ typedef struct Play {
     unsigned char unmodeled_40[4];   /* +0x40 */
     float currentTime;               /* +0x44 */
     unsigned char unmodeled_48[4];   /* +0x48 */
-    PlayObserver observers[32];      /* +0x4c */
+    PlayObserver observers[PLAY_OBSERVER_COUNT];      /* +0x4c */
     TCHParams callbackParams;        /* +0x1cc */
 } Play;
 

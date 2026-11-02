@@ -15,6 +15,9 @@ typedef struct StageCameraPrefix {
     int frame[4];
 } StageCameraPrefix;
 
+#define STAGE_PEER_HALFWORDS 24
+#define STAGE_PEER_ID_INDEX 2
+
 const char cameraClassName[12] = "xeno/Camera";
 
 const char cameraInstanceName[8] = "cam0";
@@ -24,11 +27,11 @@ const char initMethodName[8] = "init";
 const char initMethodSignature[8] = "()V";
 
 /* Twenty-four halfwords occupy the stage peer block returned by STAGE_create. */
-static u16 defaultStage[24];
+static u16 defaultStage[STAGE_PEER_HALFWORDS];
 
 void *STAGE_create(u16 stage_id)
 {
-    defaultStage[2] = stage_id;
+    defaultStage[STAGE_PEER_ID_INDEX] = stage_id;
     return defaultStage;
 }
 
@@ -73,13 +76,13 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
     remaining--;
     field = stage_class->fields + stage_class->staticFieldCount;
     for (; remaining >= 0; remaining--, field++) {
-        if (field->flags & 0x8000) {
+        if (field->flags & JAVA_FIELD_UNRESOLVED) {
             JavaClass *resolved = getClassFromSignature(
                 field->type.descriptor->bytes, stage_class->classLoader);
             if (resolved == 0)
                 continue;
             field->type.resolved = resolved;
-            field->flags &= 0x7fff;
+            field->flags &= JAVA_FIELD_FLAGS_MASK;
         }
         if (instanceOf(field->type.resolved, classJava_xeno_Chr)) {
             JavaMethod *init_method;
@@ -104,11 +107,11 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
                 nested_remaining--;
                 nested = child_class->fields + child_class->staticFieldCount;
                 for (; nested_remaining >= 0; nested_remaining--, nested++) {
-                    if (nested->flags & 0x8000) {
+                    if (nested->flags & JAVA_FIELD_UNRESOLVED) {
                         nested->type.resolved = getClassFromSignature(
                                 nested->type.descriptor->bytes,
                                 stage_class->classLoader);
-                        nested->flags &= 0x7fff;
+                        nested->flags &= JAVA_FIELD_FLAGS_MASK;
                     }
                     if (nested->type.resolved == stage_class) {
                         *(SceneObject *)(child + nested->location.offset) = parent_object;

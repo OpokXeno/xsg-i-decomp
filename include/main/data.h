@@ -3,6 +3,22 @@
 
 #include "shared.h"
 
+/* Inventory categories: the first argument of dataBoxInc/dataBoxChk/dataBoxDec. */
+#define ITEM_CATEGORY_ITEM 0
+#define ITEM_CATEGORY_WEAPON 1
+#define ITEM_CATEGORY_BULLET 2
+#define ITEM_CATEGORY_ACCESSORY 3
+#define ITEM_CATEGORY_EVENT 10 /* event items: names come from EvtItemTbl */
+
+/* Each category keeps DATA_BOX_SLOTS quantities of at most DATA_BOX_QUANTITY_MAX. */
+#define DATA_BOX_SLOTS 255
+#define DATA_BOX_QUANTITY_MAX 99
+
+/* Money: dataMoneyBoxInc caps the purse at MONEY_BOX_MAX and reports a total
+ * of MONEY_BOX_LIMIT or more as failure. */
+#define MONEY_BOX_LIMIT 1000000000ULL
+#define MONEY_BOX_MAX 999999999
+
 /* Functions and data used by other translation units. */
 extern int dataBoxInc(int category, int id);
 int dataMoneyBoxInc(int amount);

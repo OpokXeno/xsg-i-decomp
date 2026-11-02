@@ -18,6 +18,32 @@
  * value in a plain beq delay slot when those callees are defined earlier in
  * the same file; compiled alone the same source produces beql.
  */
+/*
+ * Party ids: friends are 1..7 and bits of friend_mask, the lock and out masks
+ * cover 1..12, and the sixteen AGWS units are 17..32. Id 4 has no member and
+ * no mask bit. Up to PARTY_LIST_MAX ids make a party line.
+ */
+#define PARTY_ID_UNUSED 4
+#define PARTY_FRIEND_ID_COUNT 7
+#define PARTY_MASK_ID_COUNT 12
+#define PARTY_AGWS_ID_BASE 17
+#define PARTY_AGWS_COUNT 16
+#define PARTY_ATTACK_SLOT_COUNT 3
+#define PARTY_LIST_MAX 6
+#define PARTY_CHARACTER_COUNT 8 /* technique records / skill levels */
+#define PARTY_INITIAL_MONEY 1000
+#define PARTY_INITIAL_WEAPON 19
+#define PARTY_INIT_BLOCK_SIZE 256
+
+/* Play-time record kept in the save data, and the longest time it can show
+ * (5 days 3:59:59). */
+#define SAVE_PLAY_TIME 0x68
+#define PARTY_TIME_MAX_DAY 5
+#define PARTY_TIME_MAX_HOUR 3
+#define PARTY_TIME_MAX_MINUTE 59
+#define PARTY_TIME_MAX_SECOND 59
+#define PARTY_HOURS_PER_DAY 24
+
 /* The party state is the 0x188-byte region embedded at SaveData + 0x10078. */
 PartyDataPrefix *PartyDataGet(void)
 {
@@ -56,7 +82,7 @@ void PartyDataInit(void)
     party = PartyDataGet();
     tec_init = MenuWorkEndGet();
     xglCdReadFile("data\\endou\\tec\\tecinit.bin", tec_init, 0, 1);
-    for (record = 0; record < 8; record++) {
+    for (record = 0; record < PARTY_CHARACTER_COUNT; record++) {
         party->tech_records[record] = tec_init[record];
     }
 
@@ -71,7 +97,7 @@ void PartyDataInit(void)
     initial_skill_level = 1;
     next_level_points = skill_party->next_level_points;
     skill_level = skill_party->skill_levels.level_by_character;
-    for (chr = 0; chr < 8; chr++) {
+    for (chr = 0; chr < PARTY_CHARACTER_COUNT; chr++) {
         *skill_level++ = initial_skill_level;
         *next_level_points++ = ((unsigned short *)(skill_data + SKILL_NEXT_LEVEL_TABLE))[1];
     }
@@ -121,15 +147,15 @@ void PartyDataInit(void)
     memset(accBox, 0, sizeof(accBox));
     memset(evtBox, 0, sizeof(evtBox));
 
-    moneyBox = 1000;
-    dataWpnBoxInc(19);
+    moneyBox = PARTY_INITIAL_MONEY;
+    dataWpnBoxInc(PARTY_INITIAL_WEAPON);
 
     block0 = SaveData + SAVE_INIT_BLOCKS;
-    block1 = block0 + 256;
-    block2 = block0 + 512;
-    memset(block0, 0, 256);
-    memset(block1, 0, 256);
-    memset(block2, 0, 256);
+    block1 = block0 + PARTY_INIT_BLOCK_SIZE;
+    block2 = block0 + PARTY_INIT_BLOCK_SIZE * 2;
+    memset(block0, 0, PARTY_INIT_BLOCK_SIZE);
+    memset(block1, 0, PARTY_INIT_BLOCK_SIZE);
+    memset(block2, 0, PARTY_INIT_BLOCK_SIZE);
 
     UmnSimulationNo = 0;
     PartyTimeInit();
@@ -153,7 +179,7 @@ void PartyFriendOn(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
-    if (index < 7 && id != 4) {
+    if (index < PARTY_FRIEND_ID_COUNT && id != PARTY_ID_UNUSED) {
         data->friend_mask |= (unsigned short)(1 << index);
     }
 }
@@ -162,7 +188,7 @@ void PartyFriendOff(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
-    if (index < 7 && id != 4) {
+    if (index < PARTY_FRIEND_ID_COUNT && id != PARTY_ID_UNUSED) {
         data->friend_mask &= (unsigned short)~(1 << index);
     }
 }
@@ -172,7 +198,7 @@ int PartyFriendCheck(int id)
     unsigned int index = (unsigned int)(id - 1);
     PartyDataPrefix *data = PartyDataGet();
     unsigned int mask;
-    if (index >= 7u || id == 4) {
+    if (index >= PARTY_FRIEND_ID_COUNT || id == PARTY_ID_UNUSED) {
         return 0;
     }
     mask = data->friend_mask;
@@ -183,7 +209,7 @@ void PartyLockPartyOn(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
-    if (index < 12 && id != 4) {
+    if (index < PARTY_MASK_ID_COUNT && id != PARTY_ID_UNUSED) {
         data->lock_party_mask |= (unsigned short)(1 << index);
     }
 }
@@ -192,7 +218,7 @@ void PartyLockPartyOff(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
-    if (index < 12 && id != 4) {
+    if (index < PARTY_MASK_ID_COUNT && id != PARTY_ID_UNUSED) {
         data->lock_party_mask &= (unsigned short)~(1 << index);
     }
 }
@@ -202,7 +228,7 @@ int PartyLockPartyCheck(int id)
     unsigned int index = (unsigned int)(id - 1);
     PartyDataPrefix *data = PartyDataGet();
     unsigned int mask;
-    if (index >= 12u || id == 4) {
+    if (index >= PARTY_MASK_ID_COUNT || id == PARTY_ID_UNUSED) {
         return 0;
     }
     mask = data->lock_party_mask;
@@ -213,7 +239,7 @@ void PartyOutFriendOn(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
-    if (index < 12 && id != 4) {
+    if (index < PARTY_MASK_ID_COUNT && id != PARTY_ID_UNUSED) {
         data->out_friend_mask |= (unsigned short)(1 << index);
     }
 }
@@ -222,7 +248,7 @@ void PartyOutFriendOff(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = id - 1;
-    if (index < 12 && id != 4) {
+    if (index < PARTY_MASK_ID_COUNT && id != PARTY_ID_UNUSED) {
         data->out_friend_mask &= (unsigned short)~(1 << index);
     }
 }
@@ -232,7 +258,7 @@ int PartyOutFriendCheck(int id)
     unsigned int index = (unsigned int)(id - 1);
     PartyDataPrefix *data = PartyDataGet();
     unsigned int mask;
-    if (index >= 12u || id == 4) {
+    if (index >= PARTY_MASK_ID_COUNT || id == PARTY_ID_UNUSED) {
         return 0;
     }
     mask = data->out_friend_mask;
@@ -242,8 +268,8 @@ int PartyOutFriendCheck(int id)
 void PartyTakeAgwsOn(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
-    unsigned int index = id - 17;
-    if (index < 16) {
+    unsigned int index = id - PARTY_AGWS_ID_BASE;
+    if (index < PARTY_AGWS_COUNT) {
         data->take_agws_mask |= (unsigned short)(1 << index);
     }
 }
@@ -251,8 +277,8 @@ void PartyTakeAgwsOn(int id)
 void PartyTakeAgwsOff(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
-    unsigned int index = id - 17;
-    if (index < 16) {
+    unsigned int index = id - PARTY_AGWS_ID_BASE;
+    if (index < PARTY_AGWS_COUNT) {
         data->take_agws_mask &= (unsigned short)~(1 << index);
     }
 }
@@ -260,10 +286,10 @@ void PartyTakeAgwsOff(int id)
 int PartyTakeAgwsCheck(int id)
 {
     PartyDataPrefix *data = PartyDataGet();
-    unsigned int index = (unsigned int)(id - 17);
+    unsigned int index = (unsigned int)(id - PARTY_AGWS_ID_BASE);
     unsigned int bit;
 
-    if (index >= 16u) {
+    if (index >= PARTY_AGWS_COUNT) {
         return 0;
     }
     bit = 1u << index;
@@ -304,7 +330,7 @@ void PartyBattleChange(int party_id)
 {
     PartyDataPrefix *data = PartyDataGet();
     PartyAttackPosition *slot;
-    int reserve_ids[6];
+    int reserve_ids[PARTY_LIST_MAX];
     int slot_index;
     int new_id;
 
@@ -312,7 +338,7 @@ void PartyBattleChange(int party_id)
         return;
     }
     slot = data->attack_slots;
-    for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
+    for (slot_index = 0; slot_index < PARTY_ATTACK_SLOT_COUNT; slot_index++, slot++) {
         if (slot->party_id == party_id) {
             if (PartyReserveGet(reserve_ids) != 0) {
                 new_id = reserve_ids[0];
@@ -385,13 +411,13 @@ int PartyFriendLockCheck(int id, int flag)
     PartyDataPrefix *data = PartyDataGet();
     unsigned int index = (unsigned int)(id - 1);
     unsigned int bits = data->friend_mask;
-    if (index >= 12u || id == 4) {
+    if (index >= PARTY_MASK_ID_COUNT || id == PARTY_ID_UNUSED) {
         return 0;
     }
-    if (flag & 1) {
+    if (flag & PARTY_CHECK_OUT_FRIEND) {
         bits &= ~data->out_friend_mask;
     }
-    if (flag & 2) {
+    if (flag & PARTY_CHECK_LOCK_PARTY) {
         bits &= ~data->lock_party_mask;
     }
     return (bits & (1 << index)) != 0;
@@ -412,22 +438,22 @@ int PartyAllPartyGet(int *out, int mode)
         count += PartyReserveGet(out + count);
         break;
     case 1:
-        for (id = 1; id < 8; id++) {
-            if (PartyFriendLockCheck(id, 1)) {
+        for (id = 1; id < PARTY_FRIEND_ID_COUNT + 1; id++) {
+            if (PartyFriendLockCheck(id, PARTY_CHECK_OUT_FRIEND)) {
                 *out++ = id;
                 count++;
-                if (count == 6) {
+                if (count == PARTY_LIST_MAX) {
                     break;
                 }
             }
         }
         break;
     case 2:
-        for (id = 1; id < 8; id++) {
+        for (id = 1; id < PARTY_FRIEND_ID_COUNT + 1; id++) {
             if (PartyFriendCheck(id)) {
                 *out++ = id;
                 count++;
-                if (count == 6) {
+                if (count == PARTY_LIST_MAX) {
                     break;
                 }
             }
@@ -455,7 +481,7 @@ int PartyAttackerGet(int *out)
     int slot_index = 0;
 
     do {
-        if (slot_index >= 3) {
+        if (slot_index >= PARTY_ATTACK_SLOT_COUNT) {
             break;
         }
         slot_index++;
@@ -478,8 +504,8 @@ int PartyReserveGet(int *reserve_ids)
     int count = 0;
     int id;
 
-    for (id = 1; id < 13; id++) {
-        if (!PartyFriendLockCheck(id, 1)) {
+    for (id = 1; id < PARTY_MASK_ID_COUNT + 1; id++) {
+        if (!PartyFriendLockCheck(id, PARTY_CHECK_OUT_FRIEND)) {
             continue;
         }
         if (PartyAttackerCheck(id)) {
@@ -487,7 +513,7 @@ int PartyReserveGet(int *reserve_ids)
         }
         *reserve_ids++ = id;
         count++;
-        if (attacker_count + count == 6) {
+        if (attacker_count + count == PARTY_LIST_MAX) {
             break;
         }
     }
@@ -519,11 +545,11 @@ int PartyAgwsGet(int *party_ids)
     party_count = 0;
     agws_index = 0;
 
-    while (agws_index < 16) {
+    while (agws_index < PARTY_AGWS_COUNT) {
         if ((owned_agws >> agws_index) & 1) {
-            *party_ids++ = agws_index + 17;
+            *party_ids++ = agws_index + PARTY_AGWS_ID_BASE;
             party_count++;
-            if (party_count == 6) {
+            if (party_count == PARTY_LIST_MAX) {
                 break;
             }
         }
@@ -588,7 +614,7 @@ int PartyAttackerCheck(int party_id)
     }
 
     slot = data->attack_slots;
-    for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
+    for (slot_index = 0; slot_index < PARTY_ATTACK_SLOT_COUNT; slot_index++, slot++) {
         if (slot->party_id == party_id) {
             return 1;
         }
@@ -601,7 +627,7 @@ int PartyAttackPosCheck(int attack_position)
     PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
 
-    for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
+    for (slot_index = 0; slot_index < PARTY_ATTACK_SLOT_COUNT; slot_index++, slot++) {
         if (slot->attack_position == attack_position) {
             return slot->party_id;
         }
@@ -614,7 +640,7 @@ int PartyAttackPosGet(int party_id)
     PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
 
-    for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
+    for (slot_index = 0; slot_index < PARTY_ATTACK_SLOT_COUNT; slot_index++, slot++) {
         if (slot->party_id == party_id) {
             return slot->attack_position;
         }
@@ -627,7 +653,7 @@ void PartyAttackPosSet(int party_id, int attack_position)
     PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
     int slot_index;
 
-    for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
+    for (slot_index = 0; slot_index < PARTY_ATTACK_SLOT_COUNT; slot_index++, slot++) {
         if (slot->party_id == party_id) {
             slot->attack_position = attack_position;
             return;
@@ -642,7 +668,7 @@ void PartyAttackPosChange(int first_party_id, int second_party_id)
     int first_attack_position = 0;
     int second_attack_position = 0;
 
-    for (slot_index = 0; slot_index < 3; slot_index++, slot++) {
+    for (slot_index = 0; slot_index < PARTY_ATTACK_SLOT_COUNT; slot_index++, slot++) {
         if (slot->party_id == first_party_id) {
             first_attack_position = slot->attack_position;
         } else if (slot->party_id == second_party_id) {
@@ -673,11 +699,12 @@ int PartyTimeLimitCheck(XglClock *elapsed)
 {
     unsigned int day = elapsed->day;
 
-    if (day >= 6u || (day >= 5u && elapsed->hour >= 4u)) {
-        elapsed->minute = 59;
-        elapsed->day = 5;
-        elapsed->hour = 3;
-        elapsed->second = 59;
+    if (day >= PARTY_TIME_MAX_DAY + 1u ||
+        (day >= PARTY_TIME_MAX_DAY && elapsed->hour >= PARTY_TIME_MAX_HOUR + 1u)) {
+        elapsed->minute = PARTY_TIME_MAX_MINUTE;
+        elapsed->day = PARTY_TIME_MAX_DAY;
+        elapsed->hour = PARTY_TIME_MAX_HOUR;
+        elapsed->second = PARTY_TIME_MAX_SECOND;
         return 1;
     }
     return 0;
@@ -685,7 +712,7 @@ int PartyTimeLimitCheck(XglClock *elapsed)
 
 void PartyTimeInit(void)
 {
-    xglClockUInt2DayTime((XglClock *)(SaveData + 0x68), 0);
+    xglClockUInt2DayTime((XglClock *)(SaveData + SAVE_PLAY_TIME), 0);
     xglClockRead(&_CountTime);
 }
 
@@ -699,7 +726,7 @@ void PartyTimeInit(void)
  */
 XglClock *PartyTimeUpDate(void)
 {
-    XglClock *play_time = (XglClock *)(SaveData + 0x68);
+    XglClock *play_time = (XglClock *)(SaveData + SAVE_PLAY_TIME);
     XglClock now;
     unsigned int base;
     unsigned int prev;
@@ -725,7 +752,7 @@ XglClock *PartyTimeUpDate(void)
 void PartyTimeDispChange(XglClock *elapsed)
 {
     if (elapsed->day != 0) {
-        elapsed->hour = elapsed->hour + elapsed->day * 24 - 24;
+        elapsed->hour = elapsed->hour + elapsed->day * PARTY_HOURS_PER_DAY - PARTY_HOURS_PER_DAY;
     }
 }
 

@@ -3,6 +3,26 @@
 #include "main/end_print.h"
 #include "main/xgl_font.h"
 
+/* Message string bytes: 1..25 start a font command (xglFontGetSPcodeSize
+ * gives its argument bytes), 30 is followed by an icon id, 31 ends a page
+ * (wait for a key), 32 is a space, 33..126 are single-byte glyphs. */
+#define EMESSAGE_FONT_CMD_LAST 25
+#define EMESSAGE_CODE_ICON 30
+#define EMESSAGE_CODE_WAITKEY 31
+#define EMESSAGE_FONT_CMD_NEWLINE 10
+#define EMESSAGE_FONT_CMD_COLOR 12
+#define EMESSAGE_FONT_CMD_ALPHA 15
+#define EMESSAGE_FONT_CMD_WIDTH 25 /* followed by the EMessageFontWidthMode */
+
+#define EMESSAGE_SPACE_WIDTH 4
+#define EMESSAGE_LINE_HEIGHT 24
+#define EMESSAGE_ICON_ADVANCE 20
+#define EMESSAGE_MAX_WRAPS 32
+#define EMESSAGE_SPRITE_COUNT 16
+#define EMESSAGE_TEXT_BUFFER_SIZE 4096
+#define EMESSAGE_COLOR_NEUTRAL 128
+#define EMESSAGE_WRAP_WIDTH_HALF_DEFAULT 240
+
 typedef struct EMessageSprite {
     short x, y;
     int draw_parameter;
@@ -57,9 +77,9 @@ static unsigned char otb[28] = {
 static char *MessageCpyEnd;
 
 /* Font command/text output buffer, ending where msg_spr begins. */
-static unsigned char moji[4096];
+static unsigned char moji[EMESSAGE_TEXT_BUFFER_SIZE];
 
-static EMessageSprite msg_spr[16];
+static EMessageSprite msg_spr[EMESSAGE_SPRITE_COUNT];
 
 static inline int eMessageScaleChannel(unsigned char component,
                                       unsigned char strength)
@@ -69,7 +89,7 @@ static inline int eMessageScaleChannel(unsigned char component,
 
 static inline int eMessageIsFontCommand(unsigned int code)
 {
-    return code >= 1 && code <= 25;
+    return code >= 1 && code <= EMESSAGE_FONT_CMD_LAST;
 }
 
 void eMessageSpriteReset(void)
@@ -99,16 +119,16 @@ const char *eMessageNextGyou(const char *text)
     int half_spaces;
 
     while (*text != 0 && *text != '\n') {
-        if ((unsigned int)(character - 1) < 25) {
+        if ((unsigned int)(character - 1) < EMESSAGE_FONT_CMD_LAST) {
             text += xglFontGetSPcodeSize((unsigned char)*text,
                                         (const unsigned char *)text) + 1;
         } else {
             switch ((signed char)character) {
-            case 30:
+            case EMESSAGE_CODE_ICON:
                 text += 2;
                 break;
             default:
-                if ((signed char)character == 31 ||
+                if ((signed char)character == EMESSAGE_CODE_WAITKEY ||
                     (character >= 32 && character < 127)) {
                     text++;
                 } else {
@@ -137,7 +157,7 @@ int eMessageNextGyouMaxGet(const char *text)
         if (character == '\0') {
             break;
         }
-        if (character == 31) {
+        if (character == EMESSAGE_CODE_WAITKEY) {
             break;
         }
         if (character == '\n') {
@@ -156,7 +176,7 @@ const char *eMessageNextWaitKeySearch(const char *text)
     while (sentinel != 0) {
         const char *command = text;
 
-        if (sentinel == 31) {
+        if (sentinel == EMESSAGE_CODE_WAITKEY) {
             text++;
             break;
         }
@@ -166,7 +186,7 @@ const char *eMessageNextWaitKeySearch(const char *text)
                                                   (const unsigned char *)command) + 1;
         } else {
             switch ((signed char)character) {
-            case 30:
+            case EMESSAGE_CODE_ICON:
                 text = command + 2;
                 break;
             default:
@@ -193,7 +213,7 @@ void eMessageDrawType01(EMessageParam *message)
 {
     struct EMessageColor color;
     struct EMessageColor initial_color;
-    union EMessageWrapSlot wraps[32];
+    union EMessageWrapSlot wraps[EMESSAGE_MAX_WRAPS];
     int max_width;
     unsigned char width_high;
     unsigned char width_low;
@@ -201,7 +221,7 @@ void eMessageDrawType01(EMessageParam *message)
     struct GlyphWidthText glyph;
     char *glyph_end = &glyph.terminator;
     const unsigned int flags = message->flags;
-    const unsigned char header_enabled = flags & 1;
+    const unsigned char header_enabled = flags & EMESSAGE_FLAG_HEADER;
     int line_timing;
     unsigned char incomplete;
     int font_style;
@@ -283,30 +303,30 @@ void eMessageDrawType01(EMessageParam *message)
     while (*scan != 0) {
         code = *scan & 255;
         if (eMessageIsFontCommand(code)) {
-            if ((signed char)code == 10) {
+            if ((signed char)code == EMESSAGE_FONT_CMD_NEWLINE) {
                 line_width = 0;
             }
             scan += xglFontGetSPcodeSize((unsigned char)*scan,
                                        (const unsigned char *)scan) + 1;
-        } else if ((signed char)code == 30) {
+        } else if ((signed char)code == EMESSAGE_CODE_ICON) {
             scan += 2;
-        } else if ((signed char)code == 31) {
+        } else if ((signed char)code == EMESSAGE_CODE_WAITKEY) {
             break;
-        } else if ((signed char)code == 32) {
-            line_width += 4;
+        } else if ((signed char)code == ' ') {
+            line_width += EMESSAGE_SPACE_WIDTH;
             scan++;
             if (max_width < line_width) {
                 (wrap_cursor++)->position = word_start;
                 scan = word_start;
                 line_width = 0;
-                if (wrap_cursor > &wraps[31]) {
+                if (wrap_cursor > &wraps[EMESSAGE_MAX_WRAPS - 1]) {
                     break;
                 }
             } else {
                 word_start = scan;
             }
         } else {
-            glyph.command = 25;
+            glyph.command = EMESSAGE_FONT_CMD_WIDTH;
             glyph.style = EMESSAGE_FONT_WIDTH_PROPORTIONAL;
             glyph.character[0] = *scan;
             if ((unsigned int)((unsigned char)scan[1] - 1) < 32 ||
@@ -327,21 +347,21 @@ void eMessageDrawType01(EMessageParam *message)
     wrap_cursor = wraps;
     code = *text & 255;
     if (code != 0) {
-        line_timing = flags & 32;
+        line_timing = flags & EMESSAGE_FLAG_LINE_TIMING;
         do {
             /* Exclude an exhausted list before forming its last-entry pointer. */
             /* The original fixed bound can inspect unwritten wrap slots. */
-            if (wrap_cursor <= &wraps[31] && text == wrap_cursor->position) {
+            if (wrap_cursor <= &wraps[EMESSAGE_MAX_WRAPS - 1] && text == wrap_cursor->position) {
                 wrap_cursor++;
                 x_offset = 0;
-                y_offset += 24;
+                y_offset += EMESSAGE_LINE_HEIGHT;
             }
             if (eMessageIsFontCommand(code)) {
                 int special_code = (signed char)code;
                 size = xglFontGetSPcodeSize((unsigned char)*text,
                                           (const unsigned char *)text) + 1;
                 switch (special_code) {
-                case 12:
+                case EMESSAGE_FONT_CMD_COLOR:
                     *output++ = *text++;
                     output[0] = eMessageScaleChannel((unsigned char)*text++,
                                                     message->color_r);
@@ -353,22 +373,22 @@ void eMessageDrawType01(EMessageParam *message)
                     color.channel[1] = *output++;
                     color.channel[2] = *output++;
                     break;
-                case 15:
+                case EMESSAGE_FONT_CMD_ALPHA:
                     *output++ = *text++;
                     *output++ = *text++;
                     *output++ = *text++;
                     color.channel[3] = *output++ =
                         eMessageScaleChannel((unsigned char)*text++, message->color_a);
                     break;
-                case 10:
+                case EMESSAGE_FONT_CMD_NEWLINE:
                     if (line_timing) {
                         remaining = message->frame;
                     }
                     *output++ = *text++;
                     x_offset = 0;
-                    y_offset += 24;
+                    y_offset += EMESSAGE_LINE_HEIGHT;
                     break;
-                case 25: {
+                case EMESSAGE_FONT_CMD_WIDTH: {
                     int style_code;
                     *output++ = *text++;
                     code = (unsigned char)*text;
@@ -386,9 +406,9 @@ void eMessageDrawType01(EMessageParam *message)
                     }
                     break;
                 }
-            } else if ((signed char)code == 30) {
+            } else if ((signed char)code == EMESSAGE_CODE_ICON) {
                 text++;
-                if (msg_spr_count < 16) {
+                if (msg_spr_count < EMESSAGE_SPRITE_COUNT) {
                     unsigned short icon_ids[4] = {513, 512, 514, 515};
                     unsigned char icon_text[3] = {161, 161, 0};
                     int next_sprite_count;
@@ -414,7 +434,7 @@ void eMessageDrawType01(EMessageParam *message)
                     sprite->y = message->y + (message->text_y_offset + y_offset) - sprite->height / 2 + 12;
                     sprite->draw_parameter = message->draw_parameter;
                     if (*text < 4) {
-                        if (color.channel[0] != 128 || color.channel[1] != color.channel[0] ||
+                        if (color.channel[0] != EMESSAGE_COLOR_NEUTRAL ||color.channel[1] != color.channel[0] ||
                             color.channel[2] != color.channel[1]) {
                             sprite->colorize = 1;
                         }
@@ -425,24 +445,24 @@ void eMessageDrawType01(EMessageParam *message)
                         sprite->color[2] = color.channel[2];
                         sprite->color[3] = color.channel[3];
                     }
-                    x_offset += 20;
-                    endPrintExtFunc(message->draw_parameter, 2, sprite);
+                    x_offset += EMESSAGE_ICON_ADVANCE;
+                    endPrintExtFunc(message->draw_parameter, END_PRINT_CMD_SPRITE, sprite);
                     next_sprite_count = msg_spr_count + 1;
-                    *output++ = 25;
+                    *output++ = EMESSAGE_FONT_CMD_WIDTH;
                     *output++ = 0;
                     *output++ = icon_text[0];
                     *output++ = icon_text[1];
                     msg_spr_count = next_sprite_count;
-                    *output++ = 25;
+                    *output++ = EMESSAGE_FONT_CMD_WIDTH;
                     *output++ = font_style;
                 }
                 text++;
-            } else if ((signed char)code == 31) {
+            } else if ((signed char)code == EMESSAGE_CODE_WAITKEY) {
                 waiting = 1;
                 break;
             } else {
                 unsigned char second_byte;
-                glyph.command = 25;
+                glyph.command = EMESSAGE_FONT_CMD_WIDTH;
                 glyph.style = font_style;
                 glyph.character[0] = *text;
                 second_byte = (unsigned char)text[1];
@@ -459,7 +479,7 @@ void eMessageDrawType01(EMessageParam *message)
                 }
                 *glyph_end = 0;
                 x_offset += xglFontGetStringWidth((const char *)&glyph);
-                if (flags & 16) {
+                if (flags & EMESSAGE_FLAG_TYPEWRITER) {
                     int next_remaining = remaining - 1;
 
                     if (remaining == 0) {
@@ -481,7 +501,7 @@ void eMessageDrawType01(EMessageParam *message)
     }
     *output = 0;
     if (incomplete == 0) {
-        message->flags |= 128;
+        message->flags |= EMESSAGE_FLAG_PAGE_DONE;
         if (message->page_available == 1) {
             waiting = 1;
         }
@@ -494,7 +514,7 @@ void eMessageDrawType01(EMessageParam *message)
             message->cursor.x = message->x + (message->text_x_offset + x_offset) + 2;
             message->cursor.y = message->y + (message->text_y_offset + y_offset) + 6;
             message->cursor.work = message->draw_parameter;
-            eCursolModeChange(&message->cursor, 32);
+            eCursolModeChange(&message->cursor, E_MODE_SHOW_START);
             eCursolMain(&message->cursor);
         } else {
             message->cursor.state = 0;
@@ -511,68 +531,69 @@ void eMessageDrawType01(EMessageParam *message)
 void eMessageMain(EMessageParam *message)
 {
     switch (message->mode) {
-    case 0:
+    case E_MODE_INIT:
         message->visible = 0;
-        message->mode = 1;
+        message->mode = E_MODE_IDLE;
         /* fall through */
-    case 1:
-        message->mode = 240;
+    case E_MODE_IDLE:
+        message->mode = E_MODE_END_START;
         break;
-    case 32:
+    case E_MODE_SHOW_START:
         message->visible = 1;
-        message->mode = 33;
-        message->flags &= 15;
+        message->mode = E_MODE_SHOW_STEP;
+        message->flags &= EMESSAGE_FLAG_KEEP_MASK;
         /* fall through */
-    case 33:
-        message->mode = 80;
+    case E_MODE_SHOW_STEP:
+        message->mode = E_MODE_RUN_START;
         break;
-    case 34:
+    case E_MODE_OPEN_START:
         message->visible = 1;
-        message->mode = 35;
+        message->mode = E_MODE_OPEN_STEP;
         message->text_timer = 0;
-        message->flags = (message->flags & 15) | 16;
+        message->flags = (message->flags & EMESSAGE_FLAG_KEEP_MASK) | EMESSAGE_FLAG_TYPEWRITER;
         message->frame = 0;
         /* fall through */
-    case 35:
-        if (message->flags & 128) {
-            message->mode = 80;
+    case E_MODE_OPEN_STEP:
+        if (message->flags & EMESSAGE_FLAG_PAGE_DONE) {
+            message->mode = E_MODE_RUN_START;
         } else {
             message->frame++;
             message->text_timer++;
         }
         break;
-    case 36:
+    case EMESSAGE_MODE_LINE_START:
         message->visible = 1;
-        message->mode = 37;
+        message->mode = EMESSAGE_MODE_LINE_STEP;
         message->text_timer = 0;
-        message->flags = (message->flags & 15) | 48;
+        message->flags = (message->flags & EMESSAGE_FLAG_KEEP_MASK) |
+                         (EMESSAGE_FLAG_TYPEWRITER | EMESSAGE_FLAG_LINE_TIMING);
         message->frame = 0;
         /* fall through */
-    case 37:
-        if (message->flags & 128) {
-            message->mode = 80;
+    case EMESSAGE_MODE_LINE_STEP:
+        if (message->flags & EMESSAGE_FLAG_PAGE_DONE) {
+            message->mode = E_MODE_RUN_START;
         } else {
             message->frame++;
             message->text_timer++;
         }
         break;
-    case 80:
-        message->mode = 81;
+    case E_MODE_RUN_START:
+        message->mode = E_MODE_RUN_STEP;
         break;
-    case 81:
+    case E_MODE_RUN_STEP:
         break;
-    case 112:
+    case E_MODE_HIDE_START:
         message->visible = 0;
-        message->mode = 113;
+        message->mode = E_MODE_HIDE_STEP;
         /* fall through */
-    case 113:
-        message->mode = 240;
+    case E_MODE_HIDE_STEP:
+        message->mode = E_MODE_END_START;
         break;
-    case 240:
+    case E_MODE_END_START:
         message->visible = 0;
-        message->mode = 241;
+        message->mode = E_MODE_END_STEP;
         break;
-    case 241:
+    case E_MODE_END_STEP:
         break;
     }
     if (message->text != 0 && message->visible != 0) {
@@ -592,11 +613,11 @@ void eMessageSet(EMessageParam *message, const char *text)
     message->x = 0;
     message->y = 0;
     message->draw_parameter = 0;
-    message->color_a = message->color_b = message->color_g = message->color_r = 128;
+    message->color_a = message->color_b = message->color_g = message->color_r = EMESSAGE_COLOR_NEUTRAL;
     message->text = text;
-    message->flags = 1;
-    message->wrap_width_half = 240;
-    message->mode = 0;
+    message->flags = EMESSAGE_FLAG_HEADER;
+    message->wrap_width_half = EMESSAGE_WRAP_WIDTH_HALF_DEFAULT;
+    message->mode = E_MODE_INIT;
     message->visible = 0;
     message->text_timer = 0;
     message->frame = 0;
@@ -627,7 +648,7 @@ int eMessageNextPage(EMessageParam *message, int reset_page)
 
     if (message->page_available != 0) {
         if (reset_page == 0) {
-            if ((message->flags & 0x80) != 0) {
+            if ((message->flags & EMESSAGE_FLAG_PAGE_DONE) != 0) {
                 next_page = message->page_index + 1;
                 wrapped_page = next_page;
                 message->page_index = next_page;
@@ -635,9 +656,9 @@ int eMessageNextPage(EMessageParam *message, int reset_page)
                     message->page_index = message->page_count;
                     return 0;
                 }
-                next_mode = 34;
+                next_mode = E_MODE_OPEN_START;
             } else {
-                next_mode = 32;
+                next_mode = E_MODE_SHOW_START;
             }
             message->mode = next_mode;
             return 1;
@@ -669,7 +690,7 @@ void eMessageCat(const char *src)
     if (src != 0) {
         encoded_byte = (unsigned char)*src;
         while (*src != 0) {
-            if ((unsigned int)(encoded_byte - 1) < 25) {
+            if ((unsigned int)(encoded_byte - 1) < EMESSAGE_FONT_CMD_LAST) {
                 char command_byte = *src;
                 count = xglFontGetSPcodeSize((unsigned char)command_byte,
                                            (const unsigned char *)src) + 1;
@@ -679,10 +700,10 @@ void eMessageCat(const char *src)
             } else {
                 int control = *src;
 
-                if (control == 30) {
+                if (control == EMESSAGE_CODE_ICON) {
                     *dst++ = *src++;
                     *dst++ = *src++;
-                } else if (control == 31 ||
+                } else if (control == EMESSAGE_CODE_WAITKEY ||
                            (unsigned char)(*src - 32) < 95) {
                     *dst++ = *src;
                     src++;

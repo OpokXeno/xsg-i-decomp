@@ -7,6 +7,28 @@
 #include "main/xgl_packet.h"
 #include "seisan_count_init1.h"
 
+/* SeisanWork->state values, one per settlement results page. */
+#define SEISAN_STATE_RESULTS 0x20 /* experience / level-up counters */
+#define SEISAN_STATE_SKILLS 0x50 /* newly learned skills */
+#define SEISAN_STATE_ETHERS 0x58 /* newly learned ethers */
+#define SEISAN_STATE_ITEMS 0x60 /* acquired items */
+#define SEISAN_STATE_HINT 0x80 /* closing hint page */
+#define SEISAN_FLAG_CLOSE_REQUESTED 4
+
+#define SEISAN_CHARACTER_COUNT 12
+#define SEISAN_LEVEL_MAX 99
+#define SEISAN_POINTS_MAX 9999 /* tech / skill / special point cap */
+#define SEISAN_EXPERIENCE_MAX 9999999
+#define SEISAN_MONEY_MAX 999999999
+#define SEISAN_TRANSITION_TICKS 16
+#define SEISAN_SLIDE_SPEED 3.0f
+#define SEISAN_SE_COUNT_UP 14
+#define SEISAN_DEPTH_PANEL 0xfffff0
+#define SEISAN_DEPTH_TOP 0xffffff
+#define SEISAN_SCREEN_WIDTH 512
+#define SEISAN_SCREEN_HEIGHT 448
+#define SEISAN_FRAMES_PER_SECOND 30
+
 typedef union SeisanNumberCoordinates {
     struct { short x, y; } axes;
     unsigned int packed;
@@ -134,7 +156,7 @@ void SeisanCountInit1(void)
     int chrNo;
 
     memset(&SeisanCN, 0, sizeof(SeisanCN));
-    for (chrNo = 1; chrNo < 13; chrNo++)
+    for (chrNo = 1; chrNo < SEISAN_CHARACTER_COUNT + 1; chrNo++)
     {
         SeisanCN.nextExp[chrNo - 1] = func_A19210(chrNo)->nextExp;
     }
@@ -160,7 +182,7 @@ void SeisanCountInit2(void)
     SeisanCN.state = 0;
     for (i = 0; i < 3; i++) {
         int characterNo = result[i].characterNo;
-        if ((unsigned int)(characterNo - 1) < 12) {
+        if ((unsigned int)(characterNo - 1) < SEISAN_CHARACTER_COUNT) {
             SeisanUnitRecord *unit = func_A191C0(characterNo);
             SeisanCharRecord *character = func_A19210(characterNo);
 
@@ -228,13 +250,13 @@ void SeisanCountMain(int mode)
     switch (SeisanCN.state) {
     case 0:
     case 3:
-        xglSoundEffectStopID(14, 0);
+        xglSoundEffectStopID(SEISAN_SE_COUNT_UP, 0);
         return;
     case 1:
         for (i = 0; i < 3; i++) {
             entries = SeisanResult->entries;
             characterNo = entries[i].characterNo;
-            if ((unsigned int)(characterNo - 1) < 12) {
+            if ((unsigned int)(characterNo - 1) < SEISAN_CHARACTER_COUNT) {
                 unit = func_A191C0(characterNo);
                 character = func_A19210(characterNo);
 
@@ -266,7 +288,7 @@ void SeisanCountMain(int mode)
             else
                 moving = 1;
         }
-        xglSoundEffectNormalID(14, 0);
+        xglSoundEffectNormalID(SEISAN_SE_COUNT_UP, 0);
         if (!moving)
             SeisanCN.state = 3;
         break;
@@ -274,7 +296,7 @@ void SeisanCountMain(int mode)
         for (i = 0; i < 3; i++) {
             entries = SeisanResult->entries;
             characterNo = entries[i].characterNo;
-            if ((unsigned int)(characterNo - 1) < 12 && entries[i].level != 0) {
+            if ((unsigned int)(characterNo - 1) < SEISAN_CHARACTER_COUNT && entries[i].level != 0) {
                 xglSoundEffectNormalID(4, 0);
                 break;
             }
@@ -282,7 +304,7 @@ void SeisanCountMain(int mode)
         for (i = 0; i < 3; i++) {
             entries = SeisanResult->entries;
             characterNo = entries[i].characterNo;
-            if ((unsigned int)(characterNo - 1) < 12) {
+            if ((unsigned int)(characterNo - 1) < SEISAN_CHARACTER_COUNT) {
                 unsigned short restoredHP;
                 unsigned short restoredEP;
                 unit = func_A191C0(characterNo);
@@ -301,7 +323,7 @@ void SeisanCountMain(int mode)
             }
         }
         SeisanCN.countedMoney = SeisanMg->money;
-        xglSoundEffectNormalID(14, 0);
+        xglSoundEffectNormalID(SEISAN_SE_COUNT_UP, 0);
         SeisanCN.state = 3;
         break;
     }
@@ -342,7 +364,7 @@ static void SeisanTimeEx(TskObject *task, SeisanTimePanel *panel)
 
     switch (task->state) {
     case 0:
-        panel->depth = 0xfffff0;
+        panel->depth = SEISAN_DEPTH_PANEL;
         WindowDXSet(&panel->window);
         panel->window.x = 16;
         panel->window.y = -64;
@@ -361,7 +383,7 @@ static void SeisanTimeEx(TskObject *task, SeisanTimePanel *panel)
             eNumberSet(&panel->numbers[i], 0);
             panel->numbers[i].work = panel->depth + 2;
         }
-        xglClockUInt2DayTime(&elapsed, func_A22908() / 30);
+        xglClockUInt2DayTime(&elapsed, func_A22908() / SEISAN_FRAMES_PER_SECOND);
         PartyTimeLimitCheck(&elapsed);
         PartyTimeDispChange(&elapsed);
         panel->numbers[0].format = 2;
@@ -386,7 +408,7 @@ static void SeisanTimeEx(TskObject *task, SeisanTimePanel *panel)
         targetY = 32;
         if (control->state == SEISAN_STATE_CLOSING)
             targetY = -64;
-        MoveSlide(&panel->window.y, &targetY, 3.0f);
+        MoveSlide(&panel->window.y, &targetY, SEISAN_SLIDE_SPEED);
         WindowDXMain(&panel->window);
         panel->numbers[0].x = panel->window.x + 91;
         panel->numbers[0].y = panel->window.y + 8;
@@ -423,7 +445,7 @@ static void tskSeisanButton(TskObject *task, void *data)
 
     switch (task->state) {
     case 0: {
-        button->color = 0xfffff0;
+        button->color = SEISAN_DEPTH_PANEL;
         eSpriteSet(&button->sprite, 0x200);
         button->sprite.x = -0x70;
         button->sprite.y = 0x1a4;
@@ -443,7 +465,7 @@ static void tskSeisanButton(TskObject *task, void *data)
             button->message.text = msg00_1_0036DAC8[1];
         if (control->state == SEISAN_STATE_CLOSING)
             targetY = 0x220;
-        MoveSlide(&button->sprite.x, &targetY, 3.0f);
+        MoveSlide(&button->sprite.x, &targetY, SEISAN_SLIDE_SPEED);
         eSpriteMain(&button->sprite);
         button->message.x = button->sprite.x + 0x14;
         button->message.y = button->sprite.y;
@@ -465,7 +487,7 @@ static void tskSeisanItem(TskObject *task, void *data)
     case 0:
         panel->active = 0;
         panel->itemCount = 0;
-        panel->depth = 0xfffff0;
+        panel->depth = SEISAN_DEPTH_PANEL;
         for (i = 0; i < SeisanMg->itemCount; i++) {
             if (SeisanItemBox[i].count != 0)
                 panel->itemCount++;
@@ -499,14 +521,14 @@ static void tskSeisanItem(TskObject *task, void *data)
         const unsigned char *screenState = &SeisanWork->state;
         targetX = 112;
         switch (*screenState) {
-        case 0x20:
+        case SEISAN_STATE_RESULTS:
         case 0x30:
-        case 0x50:
-        case 0x58:
-        case 0x60:
+        case SEISAN_STATE_SKILLS:
+        case SEISAN_STATE_ETHERS:
+        case SEISAN_STATE_ITEMS:
             targetX = 832;
             break;
-        case 0x80:
+        case SEISAN_STATE_HINT:
             panel->active = 1;
             break;
         case SEISAN_STATE_CLOSING:
@@ -514,7 +536,7 @@ static void tskSeisanItem(TskObject *task, void *data)
             break;
         }
         if (panel->active) {
-            MoveSlide(&panel->windows[0].x, &targetX, 3.0f);
+            MoveSlide(&panel->windows[0].x, &targetX, SEISAN_SLIDE_SPEED);
             WindowDXMain(&panel->windows[0]);
             panel->title.x = panel->windows[0].x + 64;
             panel->title.y = panel->windows[0].y + 3;
@@ -571,10 +593,10 @@ static void tskSeisanStatus(TskObject *task, void *data)
     case 0:
         panel->enabled = 0;
         panel->displayFlags = 1;
-        panel->depth = 0xfffff0;
+        panel->depth = SEISAN_DEPTH_PANEL;
         {
             SeisanHissatuEntry *initialEntries = SeisanResult->entries;
-            if ((unsigned int)(initialEntries[panel->partySlot].characterNo - 1) >= 12) {
+            if ((unsigned int)(initialEntries[panel->partySlot].characterNo - 1) >= SEISAN_CHARACTER_COUNT) {
                 panel->state = 3;
                 break;
             }
@@ -623,7 +645,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
         for (i = 0; i < 14; i++) {
             panel->sprites[i].uv = (i & 1) + 0x707;
             endSpriteSet(&panel->sprites[i], 255);
-            panel->sprites[i].depth = 0xffffff;
+            panel->sprites[i].depth = SEISAN_DEPTH_TOP;
         }
         panel->learnedVisible = 0;
         panel->levelFlashTimer = 0;
@@ -652,14 +674,14 @@ static void tskSeisanStatus(TskObject *task, void *data)
         if (panel->levelFlashTimer)
             panel->levelFlashTimer--;
         switch (SeisanWork->state) {
-        case 0x20:
+        case SEISAN_STATE_RESULTS:
             if (panel->previousLevel != unit->level) {
                 panel->previousLevel = unit->level;
                 panel->levelFlashTimer = 32;
             }
             break;
-        case 0x50:
-        case 0x58: {
+        case SEISAN_STATE_SKILLS:
+        case SEISAN_STATE_ETHERS: {
             if (SeisanLearnedCount(panel->partySlot) != 0) {
                 const char *learnedTitle = msg01_4_0036DAE8[0];
                 panel->profile.mode = -2;
@@ -677,18 +699,18 @@ static void tskSeisanStatus(TskObject *task, void *data)
             }
             break;
         }
-        case 0x60:
+        case SEISAN_STATE_ITEMS:
             panel->learnedTitle.text = msg01_4_0036DAE8[1];
             panel->displayFlags = 16;
             panel->profile.mode = 0;
             break;
-        case 0x80:
+        case SEISAN_STATE_HINT:
         case SEISAN_STATE_CLOSING:
             targetX = -512;
             break;
         }
         window = &panel->window;
-        MoveSlide(&window->x, &targetX, 3.0f);
+        MoveSlide(&window->x, &targetX, SEISAN_SLIDE_SPEED);
         WindowDXMain(window);
         if (panel->displayFlags & 1) {
             {
@@ -697,7 +719,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
                 panel->sprites[0].x = columnX - 11;
                 panel->sprites[0].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[0]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[0]);
                 panel->numbers[0].x = columnX;
                 ((SeisanNumberCoordinates *)(void *)&panel->numbers[0])->axes.y = baselineY + 1;
                 entries = SeisanResult->entries;
@@ -713,7 +735,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eNumberMain(&panel->numbers[0]);
                 panel->sprites[1].x = columnX + 54;
                 panel->sprites[1].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[1]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[1]);
             }
             {
                 columnX = panel->window.x + 228;
@@ -721,7 +743,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
                 panel->sprites[2].x = columnX - 11;
                 panel->sprites[2].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[2]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[2]);
                 panel->numbers[1].x = columnX;
                 panel->numbers[1].y = baselineY + 1;
                 entries = SeisanResult->entries;
@@ -737,7 +759,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eNumberMain(&panel->numbers[1]);
                 panel->sprites[3].x = columnX + 34;
                 panel->sprites[3].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[3]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[3]);
             }
             panel->tags[0].x = panel->window.x + 344;
             panel->tags[0].y = panel->window.y + 30;
@@ -772,7 +794,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
                 panel->sprites[4].x = columnX - 11;
                 panel->sprites[4].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[4]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[4]);
                 panel->numbers[5].x = columnX;
                 panel->numbers[5].y = baselineY + 1;
                 entries = SeisanResult->entries;
@@ -788,7 +810,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eNumberMain(&panel->numbers[5]);
                 panel->sprites[5].x = columnX + 54;
                 panel->sprites[5].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[5]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[5]);
             }
             {
                 columnX = panel->window.x + 409;
@@ -796,7 +818,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
                 panel->sprites[6].x = columnX - 11;
                 panel->sprites[6].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[6]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[6]);
                 panel->numbers[6].x = columnX;
                 panel->numbers[6].y = baselineY + 1;
                 entries = SeisanResult->entries;
@@ -812,7 +834,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eNumberMain(&panel->numbers[6]);
                 panel->sprites[7].x = columnX + 54;
                 panel->sprites[7].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[7]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[7]);
             }
             {
                 columnX = panel->window.x + 409;
@@ -820,7 +842,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
                 panel->sprites[8].x = columnX - 11;
                 panel->sprites[8].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[8]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[8]);
                 panel->numbers[7].x = columnX;
                 panel->numbers[7].y = baselineY + 1;
                 entries = SeisanResult->entries;
@@ -836,7 +858,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eNumberMain(&panel->numbers[7]);
                 panel->sprites[9].x = columnX + 54;
                 panel->sprites[9].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[9]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[9]);
             }
             {
                 columnX = panel->window.x + 228;
@@ -844,10 +866,10 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
                 panel->sprites[10].x = columnX - 11;
                 panel->sprites[10].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[10]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[10]);
                 panel->numbers[8].x = columnX;
                 panel->numbers[8].y = baselineY + 1;
-                if (unit->level == 99) {
+                if (unit->level == SEISAN_LEVEL_MAX) {
                     panel->numbers[8].value = -1;
                     panel->numbers[8].format = 1;
                     panel->numbers[8].digits = 6;
@@ -861,13 +883,13 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eNumberMain(&panel->numbers[8]);
                 panel->sprites[11].x = columnX + 64;
                 panel->sprites[11].y = baselineY - 1;
-                endPrintExtFunc(panel->depth, 2, &panel->sprites[11]);
+                endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[11]);
             }
             columnX = panel->window.x + 228;
             baselineY = panel->window.y + 80;
             panel->sprites[12].x = columnX - 11;
             panel->sprites[12].y = baselineY - 1;
-            endPrintExtFunc(panel->depth, 2, &panel->sprites[12]);
+            endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[12]);
             panel->numbers[9].x = columnX;
             panel->numbers[9].y = baselineY + 1;
             entries = SeisanResult->entries;
@@ -878,14 +900,14 @@ static void tskSeisanStatus(TskObject *task, void *data)
             eNumberMain(&panel->numbers[9]);
             panel->sprites[13].x = columnX + 64;
             panel->sprites[13].y = baselineY - 1;
-            endPrintExtFunc(panel->depth, 2, &panel->sprites[13]);
+            endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[13]);
             if (panel->levelFlashTimer) {
                 panel->tags[3].x = panel->window.x + 306;
                 panel->tags[3].y = panel->window.y + 7;
                 eTagFontMain(&panel->tags[3]);
             }
         }
-        if (SeisanWork->state == 0x20) {
+        if (SeisanWork->state == SEISAN_STATE_RESULTS) {
             panel->separator[0].y = panel->window.y + 28;
             panel->separator[0].x = panel->separator[1].x = panel->window.x + 304;
             panel->separator[1].y = panel->window.y + panel->window.height - 3;
@@ -899,7 +921,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
         panel->separator[0].red = panel->separator[0].green = panel->separator[0].blue = 192;
         panel->separator[1].red = panel->separator[1].green = panel->separator[1].blue = 192;
         panel->separator[2].depth = 0;
-        endPrintExtFunc(panel->depth, 0, panel->separator);
+        endPrintExtFunc(panel->depth, END_PRINT_CMD_LINE, panel->separator);
         if (panel->learnedVisible) {
             int topY;
             int rightX;
@@ -919,7 +941,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
             panel->highlight[2].x = panel->highlight[3].x = rightX;
             panel->highlight[1].y = panel->highlight[3].y = bottomY;
             panel->highlight[0].y = panel->highlight[2].y = topY;
-            endPrintExtFunc(panel->depth, 3, panel->highlight);
+            endPrintExtFunc(panel->depth, END_PRINT_CMD_RIBBON, panel->highlight);
         }
         if (panel->displayFlags & 16) {
             SeisanGlyphText firstLabels;
@@ -928,7 +950,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
             panel->learnedTitle.x = panel->window.x + 88;
             panel->learnedTitle.y = panel->window.y + 32;
             eMessageMain(&panel->learnedTitle);
-            if (SeisanWork->state == 0x50) {
+            if (SeisanWork->state == SEISAN_STATE_SKILLS) {
                 for (i = 0; i < 4; i++) {
                     panel->learned[i].x = panel->window.x + 288;
                     panel->learned[i].y = panel->window.y + i * 24 + 3;
@@ -969,7 +991,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
 
 static inline void SeisanDrawFade(SeisanFadeData *fade)
 {
-    endPrintExtFunc(0x02ffffff, 3, fade->vertices);
+    endPrintExtFunc(0x02ffffff, END_PRINT_CMD_RIBBON,fade->vertices);
 }
 
 void SeisanFadeMain(void)
@@ -985,16 +1007,16 @@ void SeisanFadeMain(void)
             fade->vertices[i].blue = 0;
             fade->vertices[i].green = 0;
             fade->vertices[i].red = 0;
-            fade->vertices[i].depth = 0xffffff;
+            fade->vertices[i].depth = SEISAN_DEPTH_TOP;
         }
         fade->vertices[0].x = 0;
         fade->vertices[0].y = 0;
         fade->vertices[1].x = 0;
-        fade->vertices[1].y = 448;
-        fade->vertices[2].x = 512;
+        fade->vertices[1].y = SEISAN_SCREEN_HEIGHT;
+        fade->vertices[2].x = SEISAN_SCREEN_WIDTH;
         fade->vertices[2].y = 0;
-        fade->vertices[3].x = 512;
-        fade->vertices[3].y = 448;
+        fade->vertices[3].x = SEISAN_SCREEN_WIDTH;
+        fade->vertices[3].y = SEISAN_SCREEN_HEIGHT;
         fade->state = 2;
         fade->terminatorDepth = 0;
     case 2:
@@ -1018,7 +1040,7 @@ int subSeisanHissatuCheck00(SeisanControlState *seisanWork)
     {
         if (SeisanResult->entries[i].count != 0)
         {
-            return 0x50;
+            return SEISAN_STATE_SKILLS;
         }
     }
     return 0;
@@ -1032,7 +1054,7 @@ int subSeisanHissatuCheck01(void)
     {
         if (SeisanResult->entries[i].count >= 5)
         {
-            return 0x58;
+            return SEISAN_STATE_ETHERS;
         }
     }
     return 0;
@@ -1045,36 +1067,36 @@ int subSeisanEtherCheck(void)
 
 int subSeisanItemCheck(void)
 {
-    return 0x80;
+    return SEISAN_STATE_HINT;
 }
 
 void subSeisanCheck(void)
 {
     switch (SeisanWork->state) {
-    case 0x20:
+    case SEISAN_STATE_RESULTS:
         SeisanWork->nextState =
             subSeisanHissatuCheck00(SeisanWork);
         if (SeisanWork->nextState != 0)
             break;
         /* fallthrough */
-    case 0x50:
+    case SEISAN_STATE_SKILLS:
         SeisanWork->nextState = subSeisanHissatuCheck01();
         if (SeisanWork->nextState != 0)
             break;
         /* fallthrough */
-    case 0x58:
+    case SEISAN_STATE_ETHERS:
         SeisanWork->nextState = subSeisanEtherCheck();
         if (SeisanWork->nextState != 0)
             break;
         /* fallthrough */
-    case 0x60:
+    case SEISAN_STATE_ITEMS:
         SeisanWork->nextState = subSeisanItemCheck();
         if (SeisanWork->nextState != 0)
             break;
         /* fallthrough */
-    case 0x80:
+    case SEISAN_STATE_HINT:
         SeisanWork->nextState = SEISAN_STATE_CLOSING;
-        SeisanWork->flags |= 4;
+        SeisanWork->flags |= SEISAN_FLAG_CLOSE_REQUESTED;
         break;
     }
 }
@@ -1091,14 +1113,14 @@ void subSeisanMain(void)
         SeisanWork->transitionTicks--;
 
     switch (SeisanWork->state) {
-    case 0x20:
+    case SEISAN_STATE_RESULTS:
         if ((unsigned char)(SeisanWork->flags & 1)) {
             SeisanWork->transitionTicks = 0x20;
             subSeisanCheck();
         }
         if (SeisanWork->transitionTicks == 0 && SeisanCN.state == 0)
             SeisanCN.state = 1;
-        if ((PadData.half_2a & 0x20) && SeisanWork->transitionTicks == 0) {
+        if ((PadData.half_2a & PAD_CIRCLE) && SeisanWork->transitionTicks == 0) {
             if (SeisanCN.state == 3)
                 SeisanWork->requestedState = SeisanWork->nextState;
             else
@@ -1108,41 +1130,41 @@ void subSeisanMain(void)
         break;
     case 0x30:
         break;
-    case 0x50:
+    case SEISAN_STATE_SKILLS:
         if ((unsigned char)(SeisanWork->flags & 1)) {
-            SeisanWork->transitionTicks = 16;
+            SeisanWork->transitionTicks = SEISAN_TRANSITION_TICKS;
             subSeisanCheck();
         }
-        if ((PadData.half_2a & 0x20) && SeisanWork->transitionTicks == 0)
+        if ((PadData.half_2a & PAD_CIRCLE) && SeisanWork->transitionTicks == 0)
             SeisanWork->requestedState = SeisanWork->nextState;
         break;
-    case 0x58:
+    case SEISAN_STATE_ETHERS:
         if ((unsigned char)(SeisanWork->flags & 1)) {
-            SeisanWork->transitionTicks = 16;
+            SeisanWork->transitionTicks = SEISAN_TRANSITION_TICKS;
             subSeisanCheck();
         }
-        if ((PadData.half_2a & 0x20) && SeisanWork->transitionTicks == 0)
+        if ((PadData.half_2a & PAD_CIRCLE) && SeisanWork->transitionTicks == 0)
             SeisanWork->requestedState = SeisanWork->nextState;
         break;
-    case 0x60:
+    case SEISAN_STATE_ITEMS:
         if ((unsigned char)(SeisanWork->flags & 1)) {
-            SeisanWork->transitionTicks = 16;
+            SeisanWork->transitionTicks = SEISAN_TRANSITION_TICKS;
             subSeisanCheck();
         }
-        if ((PadData.half_2a & 0x20) && SeisanWork->transitionTicks == 0)
+        if ((PadData.half_2a & PAD_CIRCLE) && SeisanWork->transitionTicks == 0)
             SeisanWork->requestedState = SeisanWork->nextState;
         break;
-    case 0x80:
+    case SEISAN_STATE_HINT:
         if ((unsigned char)(SeisanWork->flags & 1)) {
-            SeisanWork->transitionTicks = 16;
+            SeisanWork->transitionTicks = SEISAN_TRANSITION_TICKS;
             subSeisanCheck();
         }
-        if ((PadData.half_2a & 0x20) && SeisanWork->transitionTicks == 0)
+        if ((PadData.half_2a & PAD_CIRCLE) && SeisanWork->transitionTicks == 0)
             SeisanWork->requestedState = SeisanWork->nextState;
         break;
-    case 0xf0:
+    case SEISAN_STATE_CLOSING:
         if ((unsigned char)(SeisanWork->flags & 1))
-            SeisanWork->transitionTicks = 16;
+            SeisanWork->transitionTicks = SEISAN_TRANSITION_TICKS;
         if (SeisanWork->transitionTicks == 0) {
             SeisanControlState *control;
             MenuBgTaskBreak();
@@ -1169,7 +1191,7 @@ void SeisanDisp(void)
 
     ribbon = seisanRibbonTable;
     endPrintDirectRibbon(&ribbon);
-    endPrintExtFunc(0, 100, 0);
+    endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
     if (MenuLoadSync())
     {
         xglTaskExecute(SeisanBgTask);
@@ -1269,7 +1291,7 @@ void SeisanInit(void)
     SeisanMg = func_00A0F110();
     for (i = 0; i < 3; i++) {
         int characterNo = SeisanRewardCharacter(i);
-        withinCap = (unsigned int)(characterNo - 1) < 12;
+        withinCap = (unsigned int)(characterNo - 1) < SEISAN_CHARACTER_COUNT;
         if (withinCap) {
             func_A19210(characterNo);
             {
@@ -1277,33 +1299,33 @@ void SeisanInit(void)
             SeisanHissatuEntry *reward = SeisanRewardRow(i, SeisanResult);
             {
                 rewardTotal = before[rewardCharacter - 1].techPoints + reward->techPoints;
-                if (rewardTotal >= 10000)
-                    reward->techPoints = reward->techPoints - rewardTotal + 9999;
+                if (rewardTotal >= SEISAN_POINTS_MAX + 1)
+                    reward->techPoints = reward->techPoints - rewardTotal + SEISAN_POINTS_MAX;
             }
             {
                 int total = before[SeisanRewardCharacter(i) - 1].skillPoints + reward->skillPoints;
-                withinCap = total < 10000;
+                withinCap = total < SEISAN_POINTS_MAX + 1;
                 if (!withinCap)
-                    reward->skillPoints = reward->skillPoints - total + 9999;
+                    reward->skillPoints = reward->skillPoints - total + SEISAN_POINTS_MAX;
             }
             {
                 int total = before[SeisanRewardCharacter(i) - 1].specialPoints + reward->specialPoints;
-                withinCap = total < 10000;
+                withinCap = total < SEISAN_POINTS_MAX + 1;
                 if (!withinCap)
-                    reward->specialPoints = reward->specialPoints - total + 9999;
+                    reward->specialPoints = reward->specialPoints - total + SEISAN_POINTS_MAX;
             }
             {
                 int total = before[SeisanRewardCharacter(i) - 1].experience + reward->experience;
-                withinCap = total > 9999999;
+                withinCap = total > SEISAN_EXPERIENCE_MAX;
                 if (withinCap)
-                    reward->experience = reward->experience - total + 9999999;
+                    reward->experience = reward->experience - total + SEISAN_EXPERIENCE_MAX;
             }
             }
         }
     }
     rewardTotal = oldMoney + SeisanMg->money;
-    if (rewardTotal > 999999999)
-        SeisanMg->money = SeisanMg->money - rewardTotal + 999999999;
+    if (rewardTotal > SEISAN_MONEY_MAX)
+        SeisanMg->money = SeisanMg->money - rewardTotal + SEISAN_MONEY_MAX;
     SeisanCountInit2();
     itemGroups = seisanItemCategoryTable[0];
     {

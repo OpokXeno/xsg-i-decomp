@@ -18,6 +18,172 @@
 #define MENU_ITEM_USE_STATE_BIT 0x10
 #define MENU_ITEM_SPECIAL_ENABLED_BITS 0x20400000
 
+/* Sound effect ids (xglSoundEffectNormalID); see also SE_* in shared.h. */
+#define SE_SORT_SET 15
+
+/* MenuWork.mode: the item menu's state machine. */
+enum MenuItemMode {
+    MENU_ITEM_MODE_INIT = 0,
+    MENU_ITEM_MODE_LIST = 0x20,        /* browsing an item list */
+    MENU_ITEM_MODE_TARGET = 0x22,      /* choosing who uses the item */
+    MENU_ITEM_MODE_SEGMENT = 0x30,     /* the segment (robo parts) map */
+    MENU_ITEM_MODE_PICK = 0x40,        /* returns the selected item to the caller */
+    MENU_ITEM_MODE_SORT = 0x80,        /* choosing the sort method */
+    MENU_ITEM_MODE_CLOSE = 0xF0,       /* closing animation */
+    MENU_ITEM_MODE_DONE = 0xFF         /* back to the top menu */
+};
+
+/* MenuWork.flags bits. */
+#define MENU_ITEM_FLAG_MODE_ENTERED 0x1
+#define MENU_ITEM_FLAG_MODIFIED 0x4
+
+/*
+ * MenuItemUseCheck results (also MenuWork.selectionMode). SINGLE items are
+ * used on one chosen party member, ALL ones on the whole party; AGWS ones
+ * are used on an AGWS. UNUSABLE and BLOCKED_SPECIAL grey the list row.
+ */
+#define MENU_ITEM_USE_BLOCKED_SPECIAL (-1)
+#define MENU_ITEM_USE_UNUSABLE 0
+#define MENU_ITEM_USE_SINGLE 1
+#define MENU_ITEM_USE_ALL 2
+#define MENU_ITEM_USE_AGWS 10
+
+/* MenuListEntry.status of an item row: the help text shown for it. */
+#define MENU_ITEM_ROW_UNAVAILABLE 1
+#define MENU_ITEM_ROW_RESTRICTED 2
+
+/* Item attribute bits that decide what a consumable restores. */
+#define MENU_ITEM_ATTR_HEAL_HP 0x1
+#define MENU_ITEM_ATTR_HEAL_EP 0x2
+#define MENU_ITEM_ATTR_SKILL_POINTS 0x200
+#define MENU_ITEM_ATTR_ETHER_POINTS 0x400
+#define MENU_ITEM_ATTR_POINTS 0x800
+#define MENU_ITEM_POINTS_MAX 9999
+
+/* Event items 11-15 are selectable on the event item tab; 11 opens the map. */
+#define MENU_EVENT_ITEM_SEGMENT_MAP 11
+#define MENU_EVENT_ITEM_SELECTABLE_COUNT 5
+#define MENU_ITEM_GAME_FLAG_PICK 0x400000
+
+/* Tabs: items, event items, then three equipment kinds for characters and for AGWS. */
+#define MENU_ITEM_TAB_ITEMS 0
+#define MENU_ITEM_TAB_EVENT 1
+#define MENU_ITEM_TAB_EQUIPMENT_FIRST 2
+#define MENU_ITEM_TAB_COUNT 8
+/* The title bar has one message per tab plus one for the segment map. */
+#define MENU_ITEM_TAB_SEGMENT 8
+#define MENU_ITEM_PAS_MESSAGE_COUNT 9
+#define MENU_ITEM_KEEP_SELECT_SIZE 5
+/* Scenarios 0x90-0x98 (9 numbers) fix the AGWS list to three AGWS. */
+#define MENU_SCENARIO_AGWS_FIXED_FIRST 0x90U
+#define MENU_SCENARIO_AGWS_FIXED_COUNT 9U
+/* MenuWork.busy: frames during which input is ignored after a change. */
+#define MENU_ITEM_BUSY_NORMAL 12
+#define MENU_ITEM_BUSY_SHORT 8
+#define MENU_ITEM_BUSY_CLOSE 16
+#define MENU_ITEM_SORT_CHOICE_COUNT 4
+#define MENU_ITEM_SORT_CANCEL 3
+
+/* Widget state: every *Main routine builds its windows in INIT, then runs. */
+#define MENU_ITEM_STATE_INIT 0
+#define MENU_ITEM_STATE_RUN 2
+
+/* Item list window geometry. */
+#define MENU_ITEM_LIST_ROWS 11
+#define MENU_ITEM_LIST_ROW_HEIGHT 24
+#define MENU_ITEM_LIST_PADDING 6
+#define MENU_ITEM_LIST_HEIGHT 270
+#define MENU_ITEM_LIST_WIDTH_ITEMS 224
+#define MENU_ITEM_LIST_WIDTH_EQUIPMENT 468
+#define MENU_ITEM_LIST_Y 64
+#define MENU_ITEM_LIST_X_HIDDEN 528
+#define MENU_ITEM_LIST_X_BESIDE_STATUS 272
+#define MENU_ITEM_LIST_X_FULL 24
+
+/* MenuItemListMain motion states. */
+#define MENU_ITEM_LIST_MOTION_START 0
+#define MENU_ITEM_LIST_MOTION_REBUILD 1
+#define MENU_ITEM_LIST_MOTION_IDLE 2
+#define MENU_ITEM_LIST_MOTION_TARGET 3
+#define MENU_ITEM_LIST_MOTION_SORT 4
+#define MENU_ITEM_LIST_MOTION_HIDDEN 99
+
+/* MenuItemSegmentMain states. */
+#define MENU_SEGMENT_STATE_SLIDE_IN 3
+#define MENU_SEGMENT_STATE_BROWSE 4
+#define MENU_SEGMENT_STATE_SLIDE_OUT 5
+
+/* Info window (help text) heights and y positions per mode. */
+#define MENU_ITEM_INFO_HEIGHT 54
+#define MENU_ITEM_INFO_HEIGHT_SEGMENT 30
+#define MENU_ITEM_INFO_Y_HIDDEN 480
+#define MENU_ITEM_INFO_Y_LIST 384
+#define MENU_ITEM_INFO_Y_SEGMENT 408
+#define MENU_ITEM_INFO_Y_IDLE 464
+
+/* Tab icons are laid out 22 pixels apart; the separator line follows them. */
+#define MENU_ITEM_TAB_ICON_SPACING 22
+#define MENU_ITEM_TAB_ICON_X 296
+/* Header icons: two scroll arrows then one icon per tab. */
+#define MENU_ITEM_ICON_COUNT 10
+#define MENU_ITEM_ICON_ARROWS 2
+#define MENU_ITEM_ICON_SLIDE_START 16
+#define MENU_ITEM_ICON_SLIDE_MAX 15
+#define MENU_ITEM_ICON_SLIDE_MAX_F 15.0f
+#define MENU_ITEM_LINE_ALPHA_MAX 120
+#define MENU_ITEM_LINE_ALPHA_STEP 8
+
+/* The sort hint message ("Sort" header) slides in from the right edge. */
+#define MENU_ITEM_EX_X_HIDDEN 544
+#define MENU_ITEM_EX_X_SHOWN 400
+
+/* Layer base of each widget's draw ordering (+1, +2 for its sub layers). */
+#define MENU_ITEM_DRAW_KEY 0xFFFFF0
+#define MENU_ITEM_DRAW_KEY_STATUS 0xF000F0
+#define MENU_ITEM_DRAW_KEY_EX 0xFFFFF8
+#define MENU_ITEM_DRAW_KEY_SEGMENT 0x0FFFF8
+
+/* Common slide-in animation. */
+#define MENU_ITEM_SLIDE_RATE 3.0f
+#define MENU_ITEM_SLIDE_X_HIDDEN (-272)
+#define MENU_ITEM_SLIDE_X_SHOWN 16
+
+/* Party and AGWS status windows. */
+#define MENU_ITEM_STATUS_WINDOW_WIDTH 240
+#define MENU_ITEM_STATUS_WINDOW_HEIGHT 82
+#define MENU_ITEM_STATUS_ROW_PITCH 104
+#define MENU_ITEM_STATUS_TOP_Y 64
+#define MENU_ITEM_STATUS_SCROLL_PARTY 4
+#define MENU_ITEM_STATUS_VISIBLE_ROWS 3
+#define MENU_ITEM_AGWS_ROW_HEIGHT 50
+
+/* Segment map: 18 segments in three columns. */
+#define MENU_SEGMENT_COUNT 18
+#define MENU_SEGMENT_COLUMNS 3
+
+/*
+ * Event flag banks of the segments (one flag per segment, 18 each): the
+ * location was found, and the rare item was obtained. MenuItemSegmentRow
+ * .flags holds one bit per bank: LOCATION, RARE_ITEM and a bank at 3221.
+ */
+#define MENU_FLAG_SEGMENT_LOCATION_BASE 3201
+#define MENU_FLAG_SEGMENT_RARE_ITEM_BASE 3241
+#define MENU_SEGMENT_ROW_LOCATION 0x1
+#define MENU_SEGMENT_ROW_RARE_ITEM 0x4
+#define MENU_SEGMENT_ROW_COMPLETE 0x7
+
+/* Segment tile size and the top of the pulse animations (alpha). */
+#define MENU_SEGMENT_TILE_WIDTH 72
+#define MENU_SEGMENT_TILE_HEIGHT 58
+#define MENU_SEGMENT_PULSE_MAX 120
+
+/* Sprite ids of the segment tiles. */
+#define MENU_SEGMENT_SPRITE_TILE 4864
+#define MENU_SEGMENT_SPRITE_TILE_COMPLETE 4865
+#define MENU_SEGMENT_SPRITE_HIGHLIGHT 4867
+#define MENU_SEGMENT_SPRITE_COMPLETE_GLOW 4868
+#define MENU_SEGMENT_SPRITE_MARK_LOCATION 4870
+
 
 typedef struct MenuItemInfoText {
     unsigned short x;
@@ -114,7 +280,7 @@ typedef struct MenuItemPasWork {
     short y;
     int color;
     WindowDX window;
-    EMessageParam message[9];
+    EMessageParam message[MENU_ITEM_PAS_MESSAGE_COUNT];
     MenuItemPasBox box;
     u8 callbackWork[1];
 } MenuItemPasWork;
@@ -200,7 +366,7 @@ typedef struct MenuItemPartyStatusWork {
 } MenuItemPartyStatusWork;
 
 typedef struct MenuItemSpriteIds {
-    short ids[10];
+    short ids[MENU_ITEM_ICON_COUNT];
 } MenuItemSpriteIds;
 
 typedef struct MenuItemIconSprite {
@@ -223,9 +389,9 @@ typedef struct MenuItemIconWork {
     u8 pulsePhase;
     u8 pulse;
     u8 pulseDirection;
-    signed char displacement[10];
+    signed char displacement[MENU_ITEM_ICON_COUNT];
     int style;
-    MenuItemIconSprite sprites[10];
+    MenuItemIconSprite sprites[MENU_ITEM_ICON_COUNT];
 } MenuItemIconWork;
 
 typedef struct MenuItemSelectContent {
@@ -328,7 +494,7 @@ typedef struct MenuItemSegmentWork {
     WindowDX windows[2];
     MenuItemIconSprite labels[2];
     EMessageParam text[2];
-    MenuItemSegmentRow rows[18];
+    MenuItemSegmentRow rows[MENU_SEGMENT_COUNT];
     u8 unmodeled_1c88[4];
     unsigned short ownedParts;
     unsigned short selectedParts;
@@ -413,7 +579,7 @@ typedef struct MenuItemSegmentAlignedWork {
     WindowDX windows[2];
     MenuItemIconSprite labels[2];
     EMessageParam text[2];
-    MenuItemSegmentRow rows[18];
+    MenuItemSegmentRow rows[MENU_SEGMENT_COUNT];
     u8 unmodeled_1c88[4];
     unsigned short ownedParts;
     unsigned short selectedParts;
@@ -519,23 +685,23 @@ int MenuItemUseCheck(s16 itemId)
     u16 attributes;
     int result;
     /* A special item is unavailable when both game-loop bits are clear. */
-    int specialUnavailable = -1;
+    int specialUnavailable = MENU_ITEM_USE_BLOCKED_SPECIAL;
 
     if (itemId == 0) {
-        return 0;
+        return MENU_ITEM_USE_UNUSABLE;
     }
     item = func_A1A4E8(itemId);
     if ((item->use_flags & MENU_ITEM_USE_ALLOWED) == 0) {
-        return 0;
+        return MENU_ITEM_USE_UNUSABLE;
     }
     if (itemId == MENU_ITEM_SPECIAL_ID) {
-        result = (GameLoopState.flags & MENU_ITEM_SPECIAL_ENABLED_BITS) ? 2 : specialUnavailable;
+        result = (GameLoopState.flags & MENU_ITEM_SPECIAL_ENABLED_BITS) ? MENU_ITEM_USE_ALL : specialUnavailable;
     } else {
         attributes = item->attributes;
         if (attributes & MENU_ITEM_USE_CATEGORY_BITS) {
-            result = (item->use_state & MENU_ITEM_USE_STATE_BIT) ? 2 : 1;
+            result = (item->use_state & MENU_ITEM_USE_STATE_BIT) ? MENU_ITEM_USE_ALL : MENU_ITEM_USE_SINGLE;
         } else {
-            result = (attributes & MENU_ITEM_USE_SPECIAL_BIT) ? 10 : 0;
+            result = (attributes & MENU_ITEM_USE_SPECIAL_BIT) ? MENU_ITEM_USE_AGWS : MENU_ITEM_USE_UNUSABLE;
         }
     }
     return result;
@@ -543,7 +709,7 @@ int MenuItemUseCheck(s16 itemId)
 
 void MenuItemPasMain(void)
 {
-    static const char *msg00[9] = {
+    static const char *msg00[MENU_ITEM_PAS_MESSAGE_COUNT] = {
         (const char *)0x004DAAB8,
         (const char *)0x004C4E70,
         (const char *)0x004C4E58,
@@ -555,15 +721,15 @@ void MenuItemPasMain(void)
         (const char *)0x004C4DE0,
     };
     MenuItemPasWork *pas = MenuItemPas;
-    short tabTarget[9];
+    short tabTarget[MENU_ITEM_PAS_MESSAGE_COUNT];
     short slideTarget;
     int i;
 
     switch (pas->state) {
-    case 0:
-        pas->x = -272;
+    case MENU_ITEM_STATE_INIT:
+        pas->x = MENU_ITEM_SLIDE_X_HIDDEN;
         pas->y = 8;
-        pas->color = 0xFFFFF0;
+        pas->color = MENU_ITEM_DRAW_KEY;
         WindowDXSet(&pas->window);
         pas->window.x = pas->x;
         pas->window.y = pas->y;
@@ -575,54 +741,54 @@ void MenuItemPasMain(void)
         pas->window.state = 1;
         WindowDXMain(&pas->window);
         pas->window.state = 3;
-        for (i = 0; i < 9; i++) {
+        for (i = 0; i < MENU_ITEM_PAS_MESSAGE_COUNT; i++) {
             eMessageSet(&pas->message[i], msg00[i]);
             pas->message[i].mode = 32;
             pas->message[i].x = 288;
             pas->message[i].draw_parameter = pas->color + 2;
             pas->message[i].y = pas->y + 3;
         }
-        pas->state = 2;
+        pas->state = MENU_ITEM_STATE_RUN;
         /* fallthrough */
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         break;
     default:
         return;
     }
 
     slideTarget = -16;
-    for (i = 0; i < 9; i++)
+    for (i = 0; i < MENU_ITEM_PAS_MESSAGE_COUNT; i++)
         tabTarget[i] = 288;
 
     switch (MenuWork.mode) {
-    case 0x40:
-    case 0x80:
-    case 0x20:
-    case 0x22:
-        tabTarget[MenuWork.listTab] = 16;
+    case MENU_ITEM_MODE_PICK:
+    case MENU_ITEM_MODE_SORT:
+    case MENU_ITEM_MODE_LIST:
+    case MENU_ITEM_MODE_TARGET:
+        tabTarget[MenuWork.listTab] = MENU_ITEM_SLIDE_X_SHOWN;
         break;
-    case 0x30:
-        tabTarget[8] = 16;
+    case MENU_ITEM_MODE_SEGMENT:
+        tabTarget[MENU_ITEM_TAB_SEGMENT] = MENU_ITEM_SLIDE_X_SHOWN;
         break;
     default:
-        slideTarget = -272;
+        slideTarget = MENU_ITEM_SLIDE_X_HIDDEN;
         break;
     }
 
-    MoveSlide(&pas->window.x, &slideTarget, 3.0f);
+    MoveSlide(&pas->window.x, &slideTarget, MENU_ITEM_SLIDE_RATE);
     WindowDXMain(&pas->window);
     pas->box.x = pas->window.x + 3;
     pas->box.y = pas->window.y + 3;
     pas->box.color = pas->color;
     pas->box.width = pas->window.width - 6;
     pas->box.height = pas->window.height - 6;
-    endPrintExtFunc(pas->color, 0x65, &pas->box);
-    for (i = 0; i < 9; i++) {
-        MoveSlide(&pas->message[i].x, &tabTarget[i], 3.0f);
+    endPrintExtFunc(pas->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&pas->box);
+    for (i = 0; i < MENU_ITEM_PAS_MESSAGE_COUNT; i++) {
+        MoveSlide(&pas->message[i].x, &tabTarget[i], MENU_ITEM_SLIDE_RATE);
         if (pas->message[i].x < 256)
             eMessageMain(&pas->message[i]);
     }
-    endPrintExtFunc(pas->color, 0x66, 0);
+    endPrintExtFunc(pas->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
 }
 
 void MenuItemInfoMain(void)
@@ -634,16 +800,16 @@ void MenuItemInfoMain(void)
     short targetHeight;
 
     switch (info->state) {
-    case 0: {
+    case MENU_ITEM_STATE_INIT: {
         signed char windowState;
         unsigned short *textX;
 
-        info->color = 0xFFFFF0;
+        info->color = MENU_ITEM_DRAW_KEY;
         WindowDXSet(&info->window);
         info->window.x = -16;
-        info->window.y = 480;
+        info->window.y = MENU_ITEM_INFO_Y_HIDDEN;
         info->window.width = 544;
-        info->window.height = 54;
+        info->window.height = MENU_ITEM_INFO_HEIGHT;
         info->window.style = info->color;
         info->window.close_callback = MenuInfoWindow;
         windowState = 1;
@@ -657,22 +823,22 @@ void MenuItemInfoMain(void)
         info->window.state = 3;
         info->help = 0;
         memset(info->buffer, 0, sizeof(info->buffer));
-        info->state = 2;
+        info->state = MENU_ITEM_STATE_RUN;
     }
         /* fall through */
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         break;
     default:
         return;
     }
 
-    targetY = 384;
-    targetHeight = 54;
-    if (MenuWork.flags & 1) {
+    targetY = MENU_ITEM_INFO_Y_LIST;
+    targetHeight = MENU_ITEM_INFO_HEIGHT;
+    if (MenuWork.flags & MENU_ITEM_FLAG_MODE_ENTERED) {
         info->help = 0;
     }
     if (info->help == 0) {
-        if (PadData.pressed & 32) {
+        if (PadData.pressed & PAD_CIRCLE) {
             info->help = 1;
         }
     } else if (PadData.activity != 0) {
@@ -680,18 +846,18 @@ void MenuItemInfoMain(void)
     }
 
     switch (MenuWork.mode) {
-    case 32:
-    case 34:
-    case 64:
+    case MENU_ITEM_MODE_LIST:
+    case MENU_ITEM_MODE_TARGET:
+    case MENU_ITEM_MODE_PICK:
         if (MenuWork.busy == 0) {
             if (MenuWork.selectDir >= 0) {
                 strcpy(info->buffer, MenuTextGet(MenuSortGet(0, MenuWork.selectDir))->auxiliary);
-                if (MenuWork.listTab == 0 && info->help == 1) {
+                if (MenuWork.listTab == MENU_ITEM_TAB_ITEMS && info->help == 1) {
                     signed char use = MenuListGet(0)[MenuWork.selectDir].status;
 
-                    if (use == 1) {
+                    if (use == MENU_ITEM_ROW_UNAVAILABLE) {
                         strcpy(info->buffer, helpLabels.unavailable);
-                    } else if (use == 2) {
+                    } else if (use == MENU_ITEM_ROW_RESTRICTED) {
                         strcpy(info->buffer, helpLabels.restricted);
                     }
                 }
@@ -700,8 +866,8 @@ void MenuItemInfoMain(void)
             }
         }
         break;
-    case 128:
-        if (MenuWork.sortSelection == 3) {
+    case MENU_ITEM_MODE_SORT:
+        if (MenuWork.sortSelection == MENU_ITEM_SORT_CANCEL) {
             strcpy(info->buffer, labels.cancel);
         } else {
             strcpy(info->buffer, labels.sortPrefix);
@@ -709,18 +875,18 @@ void MenuItemInfoMain(void)
             strcat(info->buffer, menuItemPeriodText);
         }
         break;
-    case 48:
-        targetY = 408;
-        targetHeight = 30;
+    case MENU_ITEM_MODE_SEGMENT:
+        targetY = MENU_ITEM_INFO_Y_SEGMENT;
+        targetHeight = MENU_ITEM_INFO_HEIGHT_SEGMENT;
         break;
     default:
-        targetY = 464;
+        targetY = MENU_ITEM_INFO_Y_IDLE;
         break;
     }
 
     info->text.message = info->buffer;
-    MoveSlide(&info->window.y, &targetY, 3.0f);
-    MoveSlide(&info->window.height, &targetHeight, 3.0f);
+    MoveSlide(&info->window.y, &targetY, MENU_ITEM_SLIDE_RATE);
+    MoveSlide(&info->window.height, &targetHeight, MENU_ITEM_SLIDE_RATE);
     WindowDXMain(&info->window);
 }
 
@@ -730,8 +896,8 @@ void MenuItemLineMain(void)
     int i;
 
     switch (line->state) {
-    case 0:
-        line->color = 0xFFFFF0;
+    case MENU_ITEM_STATE_INIT:
+        line->color = MENU_ITEM_DRAW_KEY;
     {
         MenuItemLineStartX initialX = { { 0, 0x134, 0x138, 0x13c, 0x200 } };
 
@@ -745,11 +911,11 @@ void MenuItemLineMain(void)
             line->separators[i].color = line->color;
         }
         line->separators[5].color = 0;
-        line->state = 2;
+        line->state = MENU_ITEM_STATE_RUN;
         line->alpha = 0;
     }
         /* fall through */
-    case 2: {
+    case MENU_ITEM_STATE_RUN: {
     struct {
         short targetY[8];
         short centerLength;
@@ -763,7 +929,7 @@ void MenuItemLineMain(void)
         slide.targetY[i] = 0;
     } while (--i >= 0);
     menu = &MenuWork;
-    tabY = menu->listTab * 22;
+    tabY = menu->listTab * MENU_ITEM_TAB_ICON_SPACING;
     firstTargetY = tabY + 302;
     slide.targetY[0] = firstTargetY;
     slide.targetY[1] = tabY + 306;
@@ -775,29 +941,29 @@ void MenuItemLineMain(void)
     }
 
     switch (menu->mode) {
-    case 0x20:
-    case 0x22:
-    case 0x30:
-    case 0x40:
-    case 0x80:
-        if (line->alpha != 120) {
-            line->alpha += 8;
+    case MENU_ITEM_MODE_LIST:
+    case MENU_ITEM_MODE_TARGET:
+    case MENU_ITEM_MODE_SEGMENT:
+    case MENU_ITEM_MODE_PICK:
+    case MENU_ITEM_MODE_SORT:
+        if (line->alpha != MENU_ITEM_LINE_ALPHA_MAX) {
+            line->alpha += MENU_ITEM_LINE_ALPHA_STEP;
         }
         break;
     default:
         if (line->alpha != 0) {
-            line->alpha -= 8;
+            line->alpha -= MENU_ITEM_LINE_ALPHA_STEP;
         }
         break;
     }
 
     for (i = 1; i < 5; i++) {
-        MoveSlide(&line->separators[i].x, &slide.targetY[i - 1], 3.0f);
+        MoveSlide(&line->separators[i].x, &slide.targetY[i - 1], MENU_ITEM_SLIDE_RATE);
         line->separators[i].alpha = line->alpha;
     }
     line->separators[0].alpha = line->alpha;
     MoveSlide(&line->separators[2].y, &slide.centerLength, 8.0f);
-    endPrintExtFunc(line->color, 0, line->separators);
+    endPrintExtFunc(line->color, END_PRINT_CMD_LINE, line->separators);
         break;
     }
     }
@@ -811,8 +977,8 @@ void MenuItemStatusMain(void)
     int i;
 
     switch (status->state) {
-    case 0: {
-        status->style = 0xF000F0;
+    case MENU_ITEM_STATE_INIT: {
+        status->style = MENU_ITEM_DRAW_KEY_STATUS;
         i = 0;
         if (MenuWork.partyCount != 0) {
             short *party = MenuItemParty;
@@ -820,16 +986,16 @@ void MenuItemStatusMain(void)
             do {
                 WindowDXSet(&status->windows[i]);
                 status->windows[i].close_callback = MenuStatusDisp;
-                status->windows[i].x = -272;
-                status->windows[i].width = 240;
-                status->windows[i].height = 82;
-                status->windows[i].y = 64 + i * 104;
+                status->windows[i].x = MENU_ITEM_SLIDE_X_HIDDEN;
+                status->windows[i].width = MENU_ITEM_STATUS_WINDOW_WIDTH;
+                status->windows[i].height = MENU_ITEM_STATUS_WINDOW_HEIGHT;
+                status->windows[i].y = MENU_ITEM_STATUS_TOP_Y + i * MENU_ITEM_STATUS_ROW_PITCH;
                 status->windows[i].close_callback_arg = &status->contexts[i];
                 status->windows[i].style = status->style;
                 if (PartyAttackerCheck(*party)) {
-                    status->windows[i].tag_id = MenuTagTextGet(1);
+                    status->windows[i].tag_id = MenuTagTextGet(MENU_TAG_COMBATANT);
                 } else {
-                    status->windows[i].tag_id = MenuTagTextGet(2);
+                    status->windows[i].tag_id = MenuTagTextGet(MENU_TAG_RESERVE);
                 }
                 status->windows[i].ribbon_initialized = 1;
                 status->contexts[i].characterId = *party;
@@ -865,43 +1031,43 @@ void MenuItemStatusMain(void)
         status->scrollStart = 0;
         status->selectionRow = 0;
         status->visibleCount = MenuWork.partyCount;
-        if (status->visibleCount >= 4) {
-            status->visibleCount = 3;
+        if (status->visibleCount >= MENU_ITEM_STATUS_SCROLL_PARTY) {
+            status->visibleCount = MENU_ITEM_STATUS_VISIBLE_ROWS;
         }
-        status->state = 2;
+        status->state = MENU_ITEM_STATE_RUN;
     }
         /* fall through */
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         break;
     default:
         return;
     }
 
     for (i = 0; i < MenuWork.partyCount; i++) {
-        targetX[i] = -272;
-        targetY[i] = 64 + (i - status->scrollStart) * 104;
+        targetX[i] = MENU_ITEM_SLIDE_X_HIDDEN;
+        targetY[i] = MENU_ITEM_STATUS_TOP_Y + (i - status->scrollStart) * MENU_ITEM_STATUS_ROW_PITCH;
     }
     switch (MenuWork.mode) {
-    case 32:
-        if (MenuWork.flags & 1) {
+    case MENU_ITEM_MODE_LIST:
+        if (MenuWork.flags & MENU_ITEM_FLAG_MODE_ENTERED) {
             status->cursors[0].state = 0;
         }
-        if (MenuWork.listTab == 0 && MenuWork.agwsMode == 0) {
+        if (MenuWork.listTab == MENU_ITEM_TAB_ITEMS && MenuWork.agwsMode == 0) {
             for (i = 0; i < MenuWork.partyCount; i++) {
-                targetX[i] = 16;
+                targetX[i] = MENU_ITEM_SLIDE_X_SHOWN;
             }
         }
         break;
-    case 34:
-        if (MenuWork.flags & 1) {
+    case MENU_ITEM_MODE_TARGET:
+        if (MenuWork.flags & MENU_ITEM_FLAG_MODE_ENTERED) {
             status->cursors[0].state = 32;
         }
         if (MenuWork.agwsMode == 0) {
             for (i = 0; i < MenuWork.partyCount; i++) {
-                targetX[i] = 16;
+                targetX[i] = MENU_ITEM_SLIDE_X_SHOWN;
             }
-            if (MenuWork.selectionMode == 1) {
-                if (MenuWork.partyCount >= 4) {
+            if (MenuWork.selectionMode == MENU_ITEM_USE_SINGLE) {
+                if (MenuWork.partyCount >= MENU_ITEM_STATUS_SCROLL_PARTY) {
                     if (MenuWork.scrollDir == -1) {
                         if (status->scrollTick == 0) {
                             if (status->scrollStart != 0) {
@@ -913,7 +1079,7 @@ void MenuItemStatusMain(void)
                         MenuWork.scrollDir = 2;
                     } else if (MenuWork.scrollDir == 1) {
                         if (status->scrollTick == 2) {
-                            if (status->scrollStart != MenuWork.partyCount - 3) {
+                            if (status->scrollStart != MenuWork.partyCount - MENU_ITEM_STATUS_VISIBLE_ROWS) {
                                 status->scrollStart++;
                             }
                         } else {
@@ -922,14 +1088,14 @@ void MenuItemStatusMain(void)
                         MenuWork.scrollDir = 2;
                     }
                     for (i = 0; i < MenuWork.partyCount; i++) {
-                        targetY[i] = 64 + (i - status->scrollStart) * 104;
+                        targetY[i] = MENU_ITEM_STATUS_TOP_Y + (i - status->scrollStart) * MENU_ITEM_STATUS_ROW_PITCH;
                     }
                 }
             } else {
                 int rowCount = MenuWork.partyCount;
 
-                if (rowCount >= 4) {
-                    rowCount = 3;
+                if (rowCount >= MENU_ITEM_STATUS_SCROLL_PARTY) {
+                    rowCount = MENU_ITEM_STATUS_VISIBLE_ROWS;
                 }
                 if (status->selectionRow == rowCount - 1) {
                     status->selectionRow = 0;
@@ -942,40 +1108,40 @@ void MenuItemStatusMain(void)
     }
 
     for (i = 0; i < 2; i++) {
-        endPrintExtFunc(status->style, 12, &status->boxes[i]);
+        endPrintExtFunc(status->style, END_PRINT_CMD_Z_SCISSOR,&status->boxes[i]);
     }
     status->boxes[4].x = 0;
     status->boxes[4].width = 256;
     status->boxes[4].y = 64;
     status->boxes[4].height = 272;
-    endPrintExtFunc(status->style, 101, &status->boxes[4]);
+    endPrintExtFunc(status->style, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET,&status->boxes[4]);
     for (i = 0; i < MenuWork.partyCount; i++) {
-        MoveSlide(&status->windows[i].x, &targetX[i], 3.0f);
-        MoveSlide(&status->windows[i].y, &targetY[i], 3.0f);
+        MoveSlide(&status->windows[i].x, &targetX[i], MENU_ITEM_SLIDE_RATE);
+        MoveSlide(&status->windows[i].y, &targetY[i], MENU_ITEM_SLIDE_RATE);
         if (status->windows[i].y == targetY[i]) {
             MenuWork.scrollDir = 0;
         }
         WindowDXMain(&status->windows[i]);
     }
-    if (MenuWork.selectionMode == 1) {
+    if (MenuWork.selectionMode == MENU_ITEM_USE_SINGLE) {
         status->cursors[0].x = status->windows[MenuWork.selectedParty].x + 3;
         status->cursors[0].y = status->windows[MenuWork.selectedParty].y + status->windows[MenuWork.selectedParty].height / 2 - 4;
         eCursolMain(&status->cursors[0]);
-        if (MenuWork.partyCount >= 4 && status->cursors[0].state != 0) {
+        if (MenuWork.partyCount >= MENU_ITEM_STATUS_SCROLL_PARTY && status->cursors[0].state != 0) {
             if (status->scrollStart != 0) {
                 status->cursors[1].x = 240;
                 status->cursors[1].y = 50;
                 eCursolMain(&status->cursors[1]);
             }
-            if (status->scrollStart != MenuWork.partyCount - 3) {
+            if (status->scrollStart != MenuWork.partyCount - MENU_ITEM_STATUS_VISIBLE_ROWS) {
                 status->cursors[2].x = 240;
                 status->cursors[2].y = 338;
                 eCursolMain(&status->cursors[2]);
             }
         }
-    } else if (MenuWork.selectionMode == 2) {
+    } else if (MenuWork.selectionMode == MENU_ITEM_USE_ALL) {
         status->cursors[0].x = status->windows[MenuWork.selectedParty].x + 3;
-        status->cursors[0].y = status->selectionRow * 104 + status->windows[MenuWork.selectedParty].height / 2 + 60;
+        status->cursors[0].y = status->selectionRow * MENU_ITEM_STATUS_ROW_PITCH + status->windows[MenuWork.selectedParty].height / 2 + 60;
         eCursolMain(&status->cursors[0]);
     }
     for (i = 0; i < 2; i++) {
@@ -983,9 +1149,9 @@ void MenuItemStatusMain(void)
         status->boxes[i + 2].width = status->boxes[i].width;
         status->boxes[i + 2].y = status->boxes[i].y;
         status->boxes[i + 2].height = status->boxes[i].height;
-        endPrintExtFunc(status->style, 12, &status->boxes[i + 2]);
+        endPrintExtFunc(status->style, END_PRINT_CMD_Z_SCISSOR,&status->boxes[i + 2]);
     }
-    endPrintExtFunc(status->style, 102, 0);
+    endPrintExtFunc(status->style, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
 }
 
 void MenuItemStatusAgwsMain(void)
@@ -997,16 +1163,16 @@ void MenuItemStatusAgwsMain(void)
     register int i;
 
     switch (status->state) {
-    case 0: {
-        status->color = 0xF000F0;
+    case MENU_ITEM_STATE_INIT: {
+        status->color = MENU_ITEM_DRAW_KEY_STATUS;
         for (i = 0; i < MenuWork.agwsCount; i++) {
             WindowDXSet(&status->rows[i].window);
-            status->rows[i].window.width = 240;
-            status->rows[i].window.height = 50;
+            status->rows[i].window.width = MENU_ITEM_STATUS_WINDOW_WIDTH;
+            status->rows[i].window.height = MENU_ITEM_AGWS_ROW_HEIGHT;
             status->rows[i].window.style = status->color;
-            status->rows[i].window.x = -272;
+            status->rows[i].window.x = MENU_ITEM_SLIDE_X_HIDDEN;
             status->rows[i].window.state = 1;
-            status->rows[i].window.y = i * status->rows[i].window.height + 64;
+            status->rows[i].window.y = i * status->rows[i].window.height + MENU_ITEM_STATUS_TOP_Y;
             WindowDXMain(&status->rows[i].window);
             status->rows[i].window.state = 3;
             eMessageSet(&status->rows[i].name, MenuCharNameGet(MenuItemAgws[i]));
@@ -1022,22 +1188,22 @@ void MenuItemStatusAgwsMain(void)
         }
         eCursolSet(&status->cursor, 0);
         status->cursor.state = 32;
-        status->state = 2;
+        status->state = MENU_ITEM_STATE_RUN;
         status->cursor.work = status->color + 4;
     }
         /* fall through */
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         break;
     default:
         return;
     }
 
     for (i = 0; i < MenuWork.agwsCount; i++) {
-        targetX[i] = -272;
+        targetX[i] = MENU_ITEM_SLIDE_X_HIDDEN;
     }
-    if (MenuWork.mode == 32 || MenuWork.mode == 34) {
-        if (MenuWork.flags & 1) {
-            if (MenuWork.mode == 32) {
+    if (MenuWork.mode == MENU_ITEM_MODE_LIST || MenuWork.mode == MENU_ITEM_MODE_TARGET) {
+        if (MenuWork.flags & MENU_ITEM_FLAG_MODE_ENTERED) {
+            if (MenuWork.mode == MENU_ITEM_MODE_LIST) {
                 status->cursor.state = 0;
             } else {
                 status->cursor.state = 32;
@@ -1045,7 +1211,7 @@ void MenuItemStatusAgwsMain(void)
         }
         if (MenuWork.agwsMode == 1) {
             for (i = 0; i < MenuWork.agwsCount; i++) {
-                targetX[i] = 16;
+                targetX[i] = MENU_ITEM_SLIDE_X_SHOWN;
             }
         }
     }
@@ -1053,7 +1219,7 @@ void MenuItemStatusAgwsMain(void)
     while (i < MenuWork.agwsCount) {
         MenuItemHpParameters *parameters = func_00A11108(MenuItemAgws[i], attack, defense);
 
-        MoveSlide(&status->rows[i].window.x, &targetX[i], 3.0f);
+        MoveSlide(&status->rows[i].window.x, &targetX[i], MENU_ITEM_SLIDE_RATE);
         WindowDXMain(&status->rows[i].window);
         status->rows[i].name.x = status->rows[i].window.x + 19;
         status->rows[i].name.y = status->rows[i].window.y + 3;
@@ -1086,7 +1252,7 @@ void MenuItemListMake00(void)
     int count;
     int i;
 
-    MenuSortSet(0, 1, 0);
+    MenuSortSet(0, MENU_SORT_ITEM, 0);
     MenuSortChange(0, 0);
     MenuSortChange(0, MenuWork.sortChoices[0]);
     MenuListMake(0, 0);
@@ -1095,16 +1261,16 @@ void MenuItemListMake00(void)
         int use = MenuItemUseCheck((short) sortRow[i]);
 
         switch (use) {
-        case -1:
+        case MENU_ITEM_USE_BLOCKED_SPECIAL:
             rows[i].flag = 1;
-            rows[i].status = 2;
+            rows[i].status = MENU_ITEM_ROW_RESTRICTED;
             break;
-        case 0:
+        case MENU_ITEM_USE_UNUSABLE:
             rows[i].flag = 1;
-            rows[i].status = 1;
+            rows[i].status = MENU_ITEM_ROW_UNAVAILABLE;
             break;
-        case 1:
-        case 2:
+        case MENU_ITEM_USE_SINGLE:
+        case MENU_ITEM_USE_ALL:
         default:
             rows[i].flag = 0;
             rows[i].status = 0;
@@ -1115,9 +1281,9 @@ void MenuItemListMake00(void)
     work->window.draw_flags = 7;
     work->window.title = listNumText;
     MenuItemList->window.columns = 1;
-    MenuItemList->window.rows = 11;
-    MenuItemList->window.width = 224;
-    MenuItemList->window.height = MenuItemList->window.rows * 24 + 6;
+    MenuItemList->window.rows = MENU_ITEM_LIST_ROWS;
+    MenuItemList->window.width = MENU_ITEM_LIST_WIDTH_ITEMS;
+    MenuItemList->window.height = MenuItemList->window.rows * MENU_ITEM_LIST_ROW_HEIGHT + MENU_ITEM_LIST_PADDING;
     MenuItemList->window.items = MenuListGet(0);
     WindowSPItemChange(&MenuItemList->window);
     WindowSPSetSelect(&MenuItemList->window, MenuKeepSelect);
@@ -1137,16 +1303,16 @@ void MenuItemListMake00_1(void)
         int use = MenuItemUseCheck((short) sortRow[i]);
 
         switch (use) {
-        case -1:
+        case MENU_ITEM_USE_BLOCKED_SPECIAL:
             rows[i].flag = 1;
-            rows[i].status = 2;
+            rows[i].status = MENU_ITEM_ROW_RESTRICTED;
             break;
-        case 0:
+        case MENU_ITEM_USE_UNUSABLE:
             rows[i].flag = 1;
-            rows[i].status = 1;
+            rows[i].status = MENU_ITEM_ROW_UNAVAILABLE;
             break;
-        case 1:
-        case 2:
+        case MENU_ITEM_USE_SINGLE:
+        case MENU_ITEM_USE_ALL:
             rows[i].flag = 0;
             rows[i].status = 0;
             break;
@@ -1156,9 +1322,9 @@ void MenuItemListMake00_1(void)
     work->window.draw_flags = 7;
     work->window.title = listNumText;
     MenuItemList->window.columns = 1;
-    MenuItemList->window.rows = 11;
-    MenuItemList->window.width = 224;
-    MenuItemList->window.height = MenuItemList->window.rows * 24 + 6;
+    MenuItemList->window.rows = MENU_ITEM_LIST_ROWS;
+    MenuItemList->window.width = MENU_ITEM_LIST_WIDTH_ITEMS;
+    MenuItemList->window.height = MenuItemList->window.rows * MENU_ITEM_LIST_ROW_HEIGHT + MENU_ITEM_LIST_PADDING;
     MenuItemList->window.items = MenuListGet(0);
     WindowSPItemChange(&MenuItemList->window);
     WindowSPSetSelect(&MenuItemList->window, MenuKeepSelect);
@@ -1170,59 +1336,59 @@ void MenuItemListMake01(int category)
 
     switch (category) {
     case 0:
-        MenuSortSet(0, 4, -1);
+        MenuSortSet(0, MENU_SORT_WEAPON, MENU_SORT_FILTER_CHARACTER);
         break;
     case 1:
-        MenuSortSet(0, 16, -1);
+        MenuSortSet(0, MENU_SORT_ACCESSORY, MENU_SORT_FILTER_CHARACTER);
         break;
     case 2:
-        MenuSortSet(0, 8, -1);
+        MenuSortSet(0, MENU_SORT_BULLET, MENU_SORT_FILTER_CHARACTER);
         break;
     case 3:
-        MenuSortSet(0, 4, -2);
+        MenuSortSet(0, MENU_SORT_WEAPON, MENU_SORT_FILTER_AGWS);
         break;
     case 4:
-        MenuSortSet(0, 16, -2);
+        MenuSortSet(0, MENU_SORT_ACCESSORY, MENU_SORT_FILTER_AGWS);
         break;
     case 5:
-        MenuSortSet(0, 8, -2);
+        MenuSortSet(0, MENU_SORT_BULLET, MENU_SORT_FILTER_AGWS);
         break;
     }
     MenuSortChange(0, 0);
-    MenuSortChange(0, MenuWork.sortChoices[category + 2]);
+    MenuSortChange(0, MenuWork.sortChoices[category + MENU_ITEM_TAB_EQUIPMENT_FIRST]);
     MenuListMake(0, 0);
     work = MenuItemList;
     work->window.draw_flags = 7;
     work->window.title = listNum3NumText;
     MenuItemList->window.columns = 2;
-    MenuItemList->window.rows = 11;
-    MenuItemList->window.width = 468;
-    MenuItemList->window.height = MenuItemList->window.rows * 24 + 6;
+    MenuItemList->window.rows = MENU_ITEM_LIST_ROWS;
+    MenuItemList->window.width = MENU_ITEM_LIST_WIDTH_EQUIPMENT;
+    MenuItemList->window.height = MenuItemList->window.rows * MENU_ITEM_LIST_ROW_HEIGHT + MENU_ITEM_LIST_PADDING;
     MenuItemList->window.items = MenuListGet(0);
     WindowSPItemChange(&MenuItemList->window);
-    WindowSPSetSelect(&MenuItemList->window, &MenuKeepSelect[category * 5 + 10]);
+    WindowSPSetSelect(&MenuItemList->window, &MenuKeepSelect[category * MENU_ITEM_KEEP_SELECT_SIZE + 10]);
 }
 
 void MenuItemListMake02(void)
 {
     struct MenuItemListWork *list;
 
-    MenuSortSet(0, 2, 0);
+    MenuSortSet(0, MENU_SORT_EVENT_ITEM, 0);
     MenuSortChange(0, 0);
-    MenuSortChange(0, MenuWork.sortChoices[1]);
+    MenuSortChange(0, MenuWork.sortChoices[MENU_ITEM_TAB_EVENT]);
     MenuListMake(0, 0);
 
     list = MenuItemList;
     list->window.draw_flags = 7;
     list->window.title = listNum3NumText;
     MenuItemList->window.columns = 2;
-    MenuItemList->window.rows = 11;
-    MenuItemList->window.width = 0x1D4;
-    MenuItemList->window.height = MenuItemList->window.rows * 0x18 + 6;
+    MenuItemList->window.rows = MENU_ITEM_LIST_ROWS;
+    MenuItemList->window.width = MENU_ITEM_LIST_WIDTH_EQUIPMENT;
+    MenuItemList->window.height = MenuItemList->window.rows * MENU_ITEM_LIST_ROW_HEIGHT + MENU_ITEM_LIST_PADDING;
     MenuItemList->window.items = MenuListGet(0);
 
     WindowSPItemChange(&MenuItemList->window);
-    WindowSPSetSelect(&MenuItemList->window, &MenuKeepSelect[5]);
+    WindowSPSetSelect(&MenuItemList->window, &MenuKeepSelect[MENU_ITEM_KEEP_SELECT_SIZE]);
 }
 
 void MenuItemListMain(void)
@@ -1232,105 +1398,105 @@ void MenuItemListMain(void)
     int i;
 
     switch (list->state) {
-    case 0:
-        list->window.x = 528;
-        list->window.style = list->color = 0xFFFFF0;
+    case MENU_ITEM_STATE_INIT:
+        list->window.x = MENU_ITEM_LIST_X_HIDDEN;
+        list->window.style = list->color = MENU_ITEM_DRAW_KEY;
         list->window.title = msg00_1_0036D698;
-        list->window.y = 64;
+        list->window.y = MENU_ITEM_LIST_Y;
         list->window.draw_flags = 7;
-        list->window.rows = 11;
-        list->window.height = 270;
+        list->window.rows = MENU_ITEM_LIST_ROWS;
+        list->window.height = MENU_ITEM_LIST_HEIGHT;
         list->window.items = 0;
         WindowSPSet(&list->window);
         list->visible = 1;
         list->activeTab = -1;
-        list->state = 2;
-        list->motion = 0;
+        list->state = MENU_ITEM_STATE_RUN;
+        list->motion = MENU_ITEM_LIST_MOTION_START;
         /* fall through */
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         break;
     default:
         return;
     }
 
-    if (MenuWork.mode == 0xF0)
-        list->motion = 99;
+    if (MenuWork.mode == MENU_ITEM_MODE_CLOSE)
+        list->motion = MENU_ITEM_LIST_MOTION_HIDDEN;
 
     switch (list->motion) {
-    case 0:
-        list->motion = 1;
+    case MENU_ITEM_LIST_MOTION_START:
+        list->motion = MENU_ITEM_LIST_MOTION_REBUILD;
         /* fall through */
-    case 1:
-        list->window.x = 528;
+    case MENU_ITEM_LIST_MOTION_REBUILD:
+        list->window.x = MENU_ITEM_LIST_X_HIDDEN;
         switch (MenuWork.listTab) {
-        case 0:
+        case MENU_ITEM_TAB_ITEMS:
             MenuItemListMake00();
             break;
-        case 1:
+        case MENU_ITEM_TAB_EVENT:
             MenuItemListMake02();
             break;
         default:
-            MenuItemListMake01(MenuWork.listTab - 2);
+            MenuItemListMake01(MenuWork.listTab - MENU_ITEM_TAB_EQUIPMENT_FIRST);
             break;
         }
         list->window.state = 17;
         WindowSPMain(&list->window);
-        list->motion = 2;
+        list->motion = MENU_ITEM_LIST_MOTION_IDLE;
         /* fall through */
-    case 2:
+    case MENU_ITEM_LIST_MOTION_IDLE:
         if (list->activeTab != MenuWork.listTab) {
             list->activeTab = MenuWork.listTab;
-            list->motion = 1;
+            list->motion = MENU_ITEM_LIST_MOTION_REBUILD;
         }
-        if (MenuWork.listTab == 0)
-            targetX = 272;
-        else if (MenuWork.mode == 0x30)
-            targetX = 528;
+        if (MenuWork.listTab == MENU_ITEM_TAB_ITEMS)
+            targetX = MENU_ITEM_LIST_X_BESIDE_STATUS;
+        else if (MenuWork.mode == MENU_ITEM_MODE_SEGMENT)
+            targetX = MENU_ITEM_LIST_X_HIDDEN;
         else
-            targetX = 24;
+            targetX = MENU_ITEM_LIST_X_FULL;
         switch (MenuWork.mode) {
-        case 0x22:
-            list->motion = 3;
+        case MENU_ITEM_MODE_TARGET:
+            list->motion = MENU_ITEM_LIST_MOTION_TARGET;
             break;
-        case 0x80:
-            list->motion = 4;
+        case MENU_ITEM_MODE_SORT:
+            list->motion = MENU_ITEM_LIST_MOTION_SORT;
             break;
         }
         break;
-    case 3:
-        if (MenuWork.mode != 0x22)
-            list->motion = 2;
-        targetX = 272;
+    case MENU_ITEM_LIST_MOTION_TARGET:
+        if (MenuWork.mode != MENU_ITEM_MODE_TARGET)
+            list->motion = MENU_ITEM_LIST_MOTION_IDLE;
+        targetX = MENU_ITEM_LIST_X_BESIDE_STATUS;
         break;
-    case 4:
-        if (PadData.pressed & 0x20) {
+    case MENU_ITEM_LIST_MOTION_SORT:
+        if (PadData.pressed & PAD_CIRCLE) {
             switch (MenuWork.listTab) {
-            case 0:
+            case MENU_ITEM_TAB_ITEMS:
                 MenuItemListMake00();
                 break;
-            case 1:
+            case MENU_ITEM_TAB_EVENT:
                 MenuItemListMake02();
                 break;
             default:
-                MenuItemListMake01(MenuWork.listTab - 2);
+                MenuItemListMake01(MenuWork.listTab - MENU_ITEM_TAB_EQUIPMENT_FIRST);
                 break;
             }
         }
-        if (MenuWork.mode != 0x80)
-            list->motion = 2;
-        targetX = 272;
+        if (MenuWork.mode != MENU_ITEM_MODE_SORT)
+            list->motion = MENU_ITEM_LIST_MOTION_IDLE;
+        targetX = MENU_ITEM_LIST_X_BESIDE_STATUS;
         break;
-    case 99:
-        targetX = 528;
+    case MENU_ITEM_LIST_MOTION_HIDDEN:
+        targetX = MENU_ITEM_LIST_X_HIDDEN;
         break;
     default:
         break;
     }
     for (i = 0; i < 1; i++) {
         short *currentX = &list[i].window.x;
-        short slideEnd = 528;
+        short slideEnd = MENU_ITEM_LIST_X_HIDDEN;
 
-        MoveSlide(currentX, &targetX, 3.0f);
+        MoveSlide(currentX, &targetX, MENU_ITEM_SLIDE_RATE);
         if (*currentX != slideEnd)
             WindowSPMain(&list[i].window);
     }
@@ -1353,8 +1519,8 @@ void MenuItemSelectMain(void)
     short windowHeight;
 
     switch (select->state) {
-    case 0:
-        select->color = 0xFFFFF0;
+    case MENU_ITEM_STATE_INIT:
+        select->color = MENU_ITEM_DRAW_KEY;
         windowWidth = 176;
         windowHeight = 102;
         for (n = 0, m = 0; n < 1; n++, m++) {
@@ -1388,7 +1554,7 @@ void MenuItemSelectMain(void)
         select->sprite.color = spriteColor + 2;
     }
         /* fall through */
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         break;
     default:
         return;
@@ -1399,7 +1565,7 @@ void MenuItemSelectMain(void)
     slideTarget.x = -208;
     *targetY = 160;
     slideTarget.mode = 0;
-    if (menu->mode == 0x80) {
+    if (menu->mode == MENU_ITEM_MODE_SORT) {
         slideTarget.x = 80;
         slideTarget.mode = 1;
         select->content.selection = menu->sortSelection;
@@ -1408,8 +1574,8 @@ void MenuItemSelectMain(void)
         short *currentX = &select->window[0].x;
         signed char tab;
 
-        MoveSlide(currentX, &slideTarget.x, 3.0f);
-        MoveSlide(&select->window[0].y, targetY, 3.0f);
+        MoveSlide(currentX, &slideTarget.x, MENU_ITEM_SLIDE_RATE);
+        MoveSlide(&select->window[0].y, targetY, MENU_ITEM_SLIDE_RATE);
         WindowDXMain(&select->window[0]);
         select->sprite.x = (unsigned short)*currentX + 144;
 
@@ -1428,28 +1594,28 @@ void MenuItemIconMain(void)
     signed char *tabBounceIterator;
     int i;
 
-    if (MenuWork.mode == 0) {
+    if (MenuWork.mode == MENU_ITEM_MODE_INIT) {
         return;
     }
     switch (icon->state) {
-    case 0: {
+    case MENU_ITEM_STATE_INIT: {
         MenuItemSpriteIds spriteIds = iconSpriteTable;
         signed char *bounce;
 
-        icon->style = 0xFFFFF0;
-        for (i = 0; i < 10; i++) {
+        icon->style = MENU_ITEM_DRAW_KEY;
+        for (i = 0; i < MENU_ITEM_ICON_COUNT; i++) {
             eSpriteSet(&icon->sprites[i], spriteIds.ids[i]);
             icon->sprites[i].style = icon->style;
         }
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < MENU_ITEM_ICON_ARROWS; i++) {
             icon->sprites[i].red = icon->sprites[i].green = icon->sprites[i].blue = -128;
         }
-        for (; i < 10; i++) {
+        for (; i < MENU_ITEM_ICON_COUNT; i++) {
             icon->sprites[i].red = icon->sprites[i].green = icon->sprites[i].blue = -128;
         }
         icon->pulseDirection = 1;
         tabBounce = &icon->displacement[2];
-        icon->slide = 16;
+        icon->slide = MENU_ITEM_ICON_SLIDE_START;
         icon->pulse = 0;
         icon->pulsePhase = 0;
         icon->displacement[0] = 0;
@@ -1458,10 +1624,10 @@ void MenuItemIconMain(void)
         for (i = 7; i >= 0; i--) {
             *bounce-- = 0;
         }
-        icon->state = 2;
+        icon->state = MENU_ITEM_STATE_RUN;
         break;
     }
-    case 2:
+    case MENU_ITEM_STATE_RUN:
         tabBounce = &icon->displacement[2];
         break;
     default:
@@ -1469,11 +1635,11 @@ void MenuItemIconMain(void)
     }
 
     switch (MenuWork.mode) {
-    case 240:
+    case MENU_ITEM_MODE_CLOSE:
         icon->pulseDirection = 0;
         /* fall through */
-    case 255:
-        if (icon->slide != 15) {
+    case MENU_ITEM_MODE_DONE:
+        if (icon->slide != MENU_ITEM_ICON_SLIDE_MAX) {
             icon->slide++;
         }
         break;
@@ -1483,7 +1649,7 @@ void MenuItemIconMain(void)
         }
         break;
     }
-    if (MenuWork.mode == 32 && MenuWork.tabChangeDirection != 0) {
+    if (MenuWork.mode == MENU_ITEM_MODE_LIST && MenuWork.tabChangeDirection != 0) {
         if (MenuWork.tabChangeDirection < 0) {
             icon->displacement[0] = -6;
         } else {
@@ -1505,7 +1671,7 @@ void MenuItemIconMain(void)
     }
     icon->pulsePhase++;
 
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < MENU_ITEM_ICON_ARROWS; i++) {
         float cosine;
         int slideOffset;
 
@@ -1514,20 +1680,20 @@ void MenuItemIconMain(void)
         slideOffset = -2 * icon->slide;
         icon->sprites[i].y = 13;
         icon->sprites[i].x += cosine * slideOffset;
-        icon->sprites[i].alpha = 128.0f - (icon->slide / 15.0f) * 128.0f;
-        if (MenuWork.mode == 48) {
+        icon->sprites[i].alpha = 128.0f - (icon->slide / MENU_ITEM_ICON_SLIDE_MAX_F) * 128.0f;
+        if (MenuWork.mode == MENU_ITEM_MODE_SEGMENT) {
             icon->sprites[i].red = icon->sprites[i].green = icon->sprites[i].blue = 64;
         } else {
             icon->sprites[i].red = icon->sprites[i].green = icon->sprites[i].blue = -128;
         }
     }
     tabBounceIterator = tabBounce;
-    for (i = 2; i < 10; i++) {
-        int tab = i - 2;
+    for (i = MENU_ITEM_ICON_ARROWS; i < MENU_ITEM_ICON_COUNT; i++) {
+        int tab = i - MENU_ITEM_ICON_ARROWS;
         float cosine;
         int slideOffset;
 
-        icon->sprites[i].x = 296 + tab * 22;
+        icon->sprites[i].x = MENU_ITEM_TAB_ICON_X + tab * MENU_ITEM_TAB_ICON_SPACING;
         cosine = xglCos(tab * iconAngleStep);
         slideOffset = -2 * icon->slide;
         icon->sprites[i].y = 12;
@@ -1540,10 +1706,10 @@ void MenuItemIconMain(void)
         } else if (*tabBounceIterator != 0) {
             (*tabBounceIterator)--;
         }
-        icon->sprites[i].alpha = 128.0f - (icon->slide / 15.0f) * 128.0f;
+        icon->sprites[i].alpha = 128.0f - (icon->slide / MENU_ITEM_ICON_SLIDE_MAX_F) * 128.0f;
         tabBounceIterator++;
     }
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < MENU_ITEM_ICON_COUNT; i++) {
         eSpriteMain(&icon->sprites[i]);
     }
 }
@@ -1558,12 +1724,12 @@ void MenuItemExMain(void)
     int i;
 
     switch (ex->state) {
-    case 0: {
-        int initialX = 544;
+    case MENU_ITEM_STATE_INIT: {
+        int initialX = MENU_ITEM_EX_X_HIDDEN;
         int initialY = 345;
         int messageMode = 32;
 
-        ex->color = 0xFFFFF8;
+        ex->color = MENU_ITEM_DRAW_KEY_EX;
         eMessageSet((EMessageParam *)message, msg00_4_0036D6B8[0]);
         ex->message.x = initialX;
         {
@@ -1571,14 +1737,14 @@ void MenuItemExMain(void)
             ex->message.y = initialY;
             *messageColor = messageColorValue;
             ex->message.mode = messageMode;
-            ex->state = 2;
+            ex->state = MENU_ITEM_STATE_RUN;
         }
     }
         /* fall through */
-    case 2:
-        targetX = 544;
-        if (MenuWork.mode == 32) {
-            targetX = 400;
+    case MENU_ITEM_STATE_RUN:
+        targetX = MENU_ITEM_EX_X_HIDDEN;
+        if (MenuWork.mode == MENU_ITEM_MODE_LIST) {
+            targetX = MENU_ITEM_EX_X_SHOWN;
             textColor = msg00_4_0036D6B8[0] + 1;
             if (MenuWork.selectDir >= 0) {
                 textColor[0] = textColor[1] = textColor[2] = -128;
@@ -1587,7 +1753,7 @@ void MenuItemExMain(void)
             }
         }
         for (i = 0; i < 1; i++) {
-            MoveSlide(&ex[i].message.x, &targetX, 3.0f);
+            MoveSlide(&ex[i].message.x, &targetX, MENU_ITEM_SLIDE_RATE);
             eMessageMain((EMessageParam *)&ex[i].message);
         }
     }
@@ -1647,29 +1813,29 @@ void MenuItemSegmentMain(void)
     MenuItemSegmentAlignedWork *aligned = (MenuItemSegmentAlignedWork *)segment;
 
     switch (segment->state) {
-    case 0: {
+    case MENU_ITEM_STATE_INIT: {
         segment->x = -512;
         segment->y = 52;
-        segment->work = 0x0FFFF8;
+        segment->work = MENU_ITEM_DRAW_KEY_SEGMENT;
         segment->visible = 0;
         segment->selected = 0;
-        for (i = 0; i < 18; i++) {
+        for (i = 0; i < MENU_SEGMENT_COUNT; i++) {
             MenuItemSegmentRow *row = &segment->rows[i];
 
             row->flags = 0;
-            if (xglFlagsGet(i + 3201, 1)) {
-                row->flags |= 1;
+            if (xglFlagsGet(i + MENU_FLAG_SEGMENT_LOCATION_BASE, 1)) {
+                row->flags |= MENU_SEGMENT_ROW_LOCATION;
             }
             if (xglFlagsGet(i + 3221, 1)) {
                 row->flags |= 2;
             }
-            if (xglFlagsGet(i + 3241, 1)) {
-                row->flags |= 4;
+            if (xglFlagsGet(i + MENU_FLAG_SEGMENT_RARE_ITEM_BASE, 1)) {
+                row->flags |= MENU_SEGMENT_ROW_RARE_ITEM;
             }
         }
         segment->ownedParts = 0;
-        for (i = 0; i < 18; i++) {
-            if (segment->rows[i].flags & 4) {
+        for (i = 0; i < MENU_SEGMENT_COUNT; i++) {
+            if (segment->rows[i].flags & MENU_SEGMENT_ROW_RARE_ITEM) {
                 segment->ownedParts |= subRoboPartsCheck(i + 1);
             }
         }
@@ -1680,24 +1846,24 @@ void MenuItemSegmentMain(void)
         segment->outlines[1].pulse = 0;
         segment->outlines[1].pulseDirection = 0;
         segment->rows[0].pulse = 0;
-        for (i = 0; i < 18; i++) {
+        for (i = 0; i < MENU_SEGMENT_COUNT; i++) {
             int rowNumber = i + 1;
 
             eNumberSet((ENumberMainData *)&aligned->rows[i].number, 0);
             aligned->rows[i].number.format = 0;
             aligned->rows[i].number.value = rowNumber;
             aligned->rows[i].number.digitCount = 2;
-            if (segment->rows[i].flags == 7) {
-                eSpriteSet(&segment->rows[i].sprites[0], 4865);
+            if (segment->rows[i].flags == MENU_SEGMENT_ROW_COMPLETE) {
+                eSpriteSet(&segment->rows[i].sprites[0], MENU_SEGMENT_SPRITE_TILE_COMPLETE);
             } else {
-                eSpriteSet(&segment->rows[i].sprites[0], 4864);
+                eSpriteSet(&segment->rows[i].sprites[0], MENU_SEGMENT_SPRITE_TILE);
             }
-            eSpriteSet(&segment->rows[i].sprites[1], 4870);
+            eSpriteSet(&segment->rows[i].sprites[1], MENU_SEGMENT_SPRITE_MARK_LOCATION);
             eSpriteSet(&segment->rows[i].sprites[2], 4869);
             segment->rows[i].emphasis = 0;
             segment->rows[i].emphasisDirection = 0;
-            eSpriteSet(&segment->rows[i].sprites[3], 4868);
-            eSpriteSet(&segment->rows[i].sprites[4], 4867);
+            eSpriteSet(&segment->rows[i].sprites[3], MENU_SEGMENT_SPRITE_COMPLETE_GLOW);
+            eSpriteSet(&segment->rows[i].sprites[4], MENU_SEGMENT_SPRITE_HIGHLIGHT);
         }
         {
             short mapSpriteIds[19] = {
@@ -1729,67 +1895,67 @@ void MenuItemSegmentMain(void)
                 segment->text[i].mode = 32;
             }
         }
-        segment->state = 2;
+        segment->state = MENU_ITEM_STATE_RUN;
     }
         /* fall through */
-    case 2:
-        if (MenuWork.mode == 48) {
-            segment->state = 3;
+    case MENU_ITEM_STATE_RUN:
+        if (MenuWork.mode == MENU_ITEM_MODE_SEGMENT) {
+            segment->state = MENU_SEGMENT_STATE_SLIDE_IN;
             segment->visible = 1;
         }
         break;
-    case 3: {
-        short targetX = 16;
+    case MENU_SEGMENT_STATE_SLIDE_IN: {
+        short targetX = MENU_ITEM_SLIDE_X_SHOWN;
 
-        MoveSlide(&segment->x, &targetX, 3.0f);
+        MoveSlide(&segment->x, &targetX, MENU_ITEM_SLIDE_RATE);
         if (segment->x == targetX) {
-            segment->state = 4;
+            segment->state = MENU_SEGMENT_STATE_BROWSE;
         }
-        if (MenuWork.mode != 48) {
-            segment->state = 5;
+        if (MenuWork.mode != MENU_ITEM_MODE_SEGMENT) {
+            segment->state = MENU_SEGMENT_STATE_SLIDE_OUT;
         }
         break;
     }
-    case 4: {
+    case MENU_SEGMENT_STATE_BROWSE: {
         int movement = 0;
 
         switch (PadData.activity) {
-        case 0x1000:
-            movement = -3;
+        case PAD_UP:
+            movement = -MENU_SEGMENT_COLUMNS;
             break;
-        case 0x8000:
+        case PAD_LEFT:
             movement = -1;
             break;
-        case 0x4000:
-            movement = 3;
+        case PAD_DOWN:
+            movement = MENU_SEGMENT_COLUMNS;
             break;
-        case 0x2000:
+        case PAD_RIGHT:
             movement = 1;
             break;
         }
         if (movement != 0) {
             segment->selected += movement;
             if (segment->selected < 0) {
-                segment->selected += 18;
-            } else if (segment->selected >= 18) {
-                segment->selected -= 18;
+                segment->selected += MENU_SEGMENT_COUNT;
+            } else if (segment->selected >= MENU_SEGMENT_COUNT) {
+                segment->selected -= MENU_SEGMENT_COUNT;
             }
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
         segment->selectedParts = subRoboPartsCheck(segment->selected + 1);
-        if (MenuWork.mode != 48) {
-            segment->state = 5;
+        if (MenuWork.mode != MENU_ITEM_MODE_SEGMENT) {
+            segment->state = MENU_SEGMENT_STATE_SLIDE_OUT;
         }
         MenuWork.segmentSelection = segment->selected + 1;
         break;
     }
-    case 5: {
+    case MENU_SEGMENT_STATE_SLIDE_OUT: {
         short targetX = -512;
 
-        MoveSlide(&segment->x, &targetX, 3.0f);
+        MoveSlide(&segment->x, &targetX, MENU_ITEM_SLIDE_RATE);
         if (segment->x == targetX) {
             segment->visible = 0;
-            segment->state = 2;
+            segment->state = MENU_ITEM_STATE_RUN;
         }
         break;
     }
@@ -1803,7 +1969,7 @@ void MenuItemSegmentMain(void)
         segment->windows[i].y = aligned->y + i * 80 + 16;
         WindowDXMain(&segment->windows[i]);
     }
-    if (segment->rows[segment->selected].flags & 1) {
+    if (segment->rows[segment->selected].flags & MENU_SEGMENT_ROW_LOCATION) {
         segment->text[0].x = segment->windows[0].x + 7;
         segment->text[0].y = segment->windows[0].y + 3;
         segment->text[0].draw_parameter = segment->windows[0].style + 2;
@@ -1815,7 +1981,7 @@ void MenuItemSegmentMain(void)
         MenuItemInfoWork *info = MenuItemInfo;
         char *description = info->buffer;
 
-        if (segment->rows[segment->selected].flags & 4) {
+        if (segment->rows[segment->selected].flags & MENU_SEGMENT_ROW_RARE_ITEM) {
             switch (segment->selected) {
             case 0:
                 if (segment->ownedParts & 0x40) {
@@ -1886,17 +2052,17 @@ void MenuItemSegmentMain(void)
         }
     }
     segment->texture = WindowTexAddrGet(2);
-    endPrintExtFunc(0, 14, &segment->texture);
+    endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_CHANGE,&segment->texture);
     segment->rows[0].pulse += segment->rows[0].pulseDirection;
-    if (segment->rows[0].pulse == 120 || segment->rows[0].pulse == 0) {
+    if (segment->rows[0].pulse == MENU_SEGMENT_PULSE_MAX || segment->rows[0].pulse == 0) {
         segment->rows[0].pulseDirection = -segment->rows[0].pulseDirection;
     }
-    for (i = 0; i < 18; i++) {
-        segment->rows[i].sprites[0].x = segment->x + (i % 3) * 72;
-        segment->rows[i].sprites[0].y = segment->y + (i / 3) * 58;
+    for (i = 0; i < MENU_SEGMENT_COUNT; i++) {
+        segment->rows[i].sprites[0].x = segment->x + (i % MENU_SEGMENT_COLUMNS) * MENU_SEGMENT_TILE_WIDTH;
+        segment->rows[i].sprites[0].y = segment->y + (i / MENU_SEGMENT_COLUMNS) * MENU_SEGMENT_TILE_HEIGHT;
         segment->rows[i].sprites[0].style = segment->work;
         eSpriteMain(&segment->rows[i].sprites[0]);
-        if (segment->rows[i].flags & 1) {
+        if (segment->rows[i].flags & MENU_SEGMENT_ROW_LOCATION) {
             segment->rows[i].sprites[1].x = segment->rows[i].sprites[0].x + 10;
             segment->rows[i].sprites[1].style = segment->rows[i].sprites[0].style + 1;
             segment->rows[i].sprites[1].y = segment->rows[i].sprites[0].y + 29;
@@ -1908,7 +2074,7 @@ void MenuItemSegmentMain(void)
             segment->rows[i].sprites[2].y = segment->rows[i].sprites[0].y + 29;
             eSpriteMain(&segment->rows[i].sprites[2]);
         }
-        if (segment->rows[i].flags == 7) {
+        if (segment->rows[i].flags == MENU_SEGMENT_ROW_COMPLETE) {
             segment->rows[i].sprites[3].x = segment->rows[i].sprites[0].x + 39;
             segment->rows[i].sprites[3].style = segment->rows[i].sprites[0].style + 1;
             segment->rows[i].sprites[3].y = segment->rows[i].sprites[0].y;
@@ -1921,9 +2087,9 @@ void MenuItemSegmentMain(void)
             if (segment->selected == i) {
                 highlighted = 1;
             } else if (segment->selectedParts != 0 &&
-                       (segment->rows[segment->selected].flags & 4) &&
+                       (segment->rows[segment->selected].flags & MENU_SEGMENT_ROW_RARE_ITEM) &&
                        subRoboPartsCheck(i + 1) != 0) {
-                if (segment->rows[i].flags & 4) {
+                if (segment->rows[i].flags & MENU_SEGMENT_ROW_RARE_ITEM) {
                     highlighted = 1;
                 } else {
                     highlighted = 0;
@@ -1933,8 +2099,8 @@ void MenuItemSegmentMain(void)
                 segment->rows[i].emphasisDirection = 4;
             }
             segment->rows[i].emphasis += segment->rows[i].emphasisDirection;
-            if (segment->rows[i].emphasis >= 120) {
-                segment->rows[i].emphasis = 120;
+            if (segment->rows[i].emphasis >= MENU_SEGMENT_PULSE_MAX) {
+                segment->rows[i].emphasis = MENU_SEGMENT_PULSE_MAX;
                 segment->rows[i].emphasisDirection = -segment->rows[i].emphasisDirection;
             }
             if (segment->rows[i].emphasis == 0) {
@@ -1963,7 +2129,7 @@ void MenuItemSegmentMain(void)
             int border;
 
             segment->outlines[outline].pulse += segment->outlines[outline].pulseDirection;
-            if (segment->outlines[outline].pulse == 120 || segment->outlines[outline].pulse == 32) {
+            if (segment->outlines[outline].pulse == MENU_SEGMENT_PULSE_MAX || segment->outlines[outline].pulse == 32) {
                 segment->outlines[outline].pulseDirection = -segment->outlines[outline].pulseDirection;
             }
             for (border = 0; border < 2; border++) {
@@ -1992,7 +2158,7 @@ void MenuItemSegmentMain(void)
                         segment->outlines[outline].points[border * 6 + 3].work =
                         segment->outlines[outline].points[border * 6 + 4].work = segment->rows[segment->selected].sprites[0].style + 2;
                     segment->outlines[outline].points[border * 6 + 5].work = 0;
-                    endPrintExtFunc(0, 0, &segment->outlines[outline].points[border * 6]);
+                    endPrintExtFunc(0, END_PRINT_CMD_LINE, &segment->outlines[outline].points[border * 6]);
                 }
             }
         }
@@ -2062,7 +2228,7 @@ void MenuItemSegmentMain(void)
                     }
                     last = i * 4 + point;
                     aligned->vertices[last].work = 0;
-                    endPrintExtFunc(0, 0, &aligned->vertices[i * 4]);
+                    endPrintExtFunc(0, END_PRINT_CMD_LINE, &aligned->vertices[i * 4]);
                 }
                 aligned->mapSprites[i + 7].x = aligned->mapSprites[0].x + labelX[i];
                 aligned->mapSprites[i + 7].style = aligned->mapSprites[0].style + 2;
@@ -2080,8 +2246,8 @@ void MenuItemSegmentMain(void)
         segment->labels[i].y = segment->windows[i].y + 3;
         eSpriteMain(&segment->labels[i]);
     }
-    endPrintExtFunc(0, 15, 0);
-    for (i = 0; i < 18; i++) {
+    endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_RELOAD, 0);
+    for (i = 0; i < MENU_SEGMENT_COUNT; i++) {
 
         aligned->rows[i].number.x = segment->rows[i].sprites[0].x + 15;
         aligned->rows[i].number.work = segment->rows[i].sprites[0].style + 1;
@@ -2098,7 +2264,7 @@ int MenuItem(void)
     int i;
     int memberIndex;
 
-    if (MenuWork.mode == 0) {
+    if (MenuWork.mode == MENU_ITEM_MODE_INIT) {
         MenuItemArena *arena = MainMenuWorkEnd;
         void *cursor = MainMenuWorkEnd;
         void *allocation;
@@ -2119,66 +2285,66 @@ int MenuItem(void)
         pas = allocation;
         MenuItemPas = pas;
         cursor += sizeof(arena->pas) + sizeof(arena->unmodeled_0414);
-        pas->state = 0;
+        pas->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         info = allocation;
         MenuItemInfo = info;
         cursor += sizeof(arena->info);
-        info->state = 0;
+        info->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         status = allocation;
         MenuItemStatus = status;
         cursor += sizeof(arena->status) + sizeof(arena->unmodeled_57a4);
-        status->state = 0;
+        status->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         agws = allocation;
         MenuItemStatusAgws = agws;
         cursor += sizeof(arena->agws);
-        agws->state = 0;
+        agws->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         list = allocation;
         MenuItemList = list;
         cursor += sizeof(arena->list);
-        list->state = 0;
+        list->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         icon = allocation;
         MenuItemIcon = icon;
         cursor += sizeof(arena->icon) + sizeof(arena->unmodeled_7ff4);
-        icon->state = 0;
+        icon->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         select = allocation;
         MenuItemSelect = select;
         cursor += sizeof(arena->select) + sizeof(arena->unmodeled_8f70);
-        select->state = 0;
+        select->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         ex = allocation;
         MenuItemEx = ex;
         cursor += sizeof(arena->ex) + sizeof(arena->unmodeled_8fc8);
-        ex->state = 0;
+        ex->state = MENU_ITEM_STATE_INIT;
         allocation = cursor;
         line = allocation;
         MenuItemLine = line;
         cursor += sizeof(arena->line);
-        line->state = 0;
+        line->state = MENU_ITEM_STATE_INIT;
         MenuItemSegment = cursor;
         segment = cursor;
         cursor += sizeof(arena->segment);
-        segment->state = 0;
+        segment->state = MENU_ITEM_STATE_INIT;
         MenuWorkEndCheck(segment + 1);
 
-        MenuWork.nextMode = 0x20;
-        MenuWork.busy = 12;
+        MenuWork.nextMode = MENU_ITEM_MODE_LIST;
+        MenuWork.busy = MENU_ITEM_BUSY_NORMAL;
         MenuWork.partyCount = 0;
         MenuWork.flags = 0;
         savedSelection = MenuKeepSelect;
         do {
             unsigned char *entry = savedSelection;
 
-            savedSelection += 5;
+            savedSelection += MENU_ITEM_KEEP_SELECT_SIZE;
             remaining--;
-            memset(entry, 0, 5U);
+            memset(entry, 0, MENU_ITEM_KEEP_SELECT_SIZE);
         } while (remaining >= 0);
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < MENU_ITEM_TAB_COUNT; i++) {
             unsigned char choice = MenuSaveDataGet()[i];
 
             MenuWork.sortChoices[i] = choice;
@@ -2187,11 +2353,11 @@ int MenuItem(void)
         for (memberIndex = 0; memberIndex < MenuWork.partyCount; memberIndex++) {
             MenuItemParty[memberIndex] = (unsigned short)characters[memberIndex];
         }
-        if (MenuScenarioNo - 0x90U < 9U) {
+        if (MenuScenarioNo - MENU_SCENARIO_AGWS_FIXED_FIRST < MENU_SCENARIO_AGWS_FIXED_COUNT) {
             MenuWork.agwsCount = 3;
-            MenuItemAgws[0] = 18;
-            MenuItemAgws[1] = 19;
-            MenuItemAgws[2] = 20;
+            MenuItemAgws[0] = MENU_CHAR_VX_7000;
+            MenuItemAgws[1] = MENU_CHAR_VX_9000;
+            MenuItemAgws[2] = MENU_CHAR_VX_20000;
         } else {
             int agwsCount = PartyAgwsGet(characters);
 
@@ -2204,7 +2370,7 @@ int MenuItem(void)
 
     if (MenuWork.mode != MenuWork.nextMode) {
         MenuWork.mode = MenuWork.nextMode;
-        MenuWork.flags |= 1;
+        MenuWork.flags |= MENU_ITEM_FLAG_MODE_ENTERED;
     } else {
         MenuWork.flags &= 0xFE;
     }
@@ -2214,88 +2380,88 @@ int MenuItem(void)
     }
 
     switch (MenuWork.mode) {
-    case 0x40:
+    case MENU_ITEM_MODE_PICK:
         return menu->selectedItem;
 
-    case 0x20:
-        if ((menu->flags & 1) == 0) {
+    case MENU_ITEM_MODE_LIST:
+        if ((menu->flags & MENU_ITEM_FLAG_MODE_ENTERED) == 0) {
             if (menu->busy == 0) {
                 menu->selectDir = WindowSPSelect(&MenuItemList->window, PadData.activity);
-                WindowSPKeepSelect(&MenuItemList->window, &MenuKeepSelect[menu->listTab * 5]);
+                WindowSPKeepSelect(&MenuItemList->window, &MenuKeepSelect[menu->listTab * MENU_ITEM_KEEP_SELECT_SIZE]);
                 menu->tabChangeDirection = 0;
-                if (PadData.activity == 4) {
+                if (PadData.activity == PAD_L1) {
                     menu->tabChangeDirection = -1;
                 }
-                if (PadData.activity == 8) {
+                if (PadData.activity == PAD_R1) {
                     menu->tabChangeDirection = 1;
                 }
                 if (menu->tabChangeDirection != 0) {
-                    WindowSPKeepSelectCheck(&MenuKeepSelect[menu->listTab * 5]);
+                    WindowSPKeepSelectCheck(&MenuKeepSelect[menu->listTab * MENU_ITEM_KEEP_SELECT_SIZE]);
                     menu->listTab += menu->tabChangeDirection;
                     if (menu->listTab < 0) {
-                        menu->listTab = 7;
+                        menu->listTab = MENU_ITEM_TAB_COUNT - 1;
                     }
-                    if (menu->listTab >= 8) {
+                    if (menu->listTab >= MENU_ITEM_TAB_COUNT) {
                         menu->listTab = 0;
                     }
-                    xglSoundEffectNormalID(1, 0);
-                    menu->busy = 12;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
+                    menu->busy = MENU_ITEM_BUSY_NORMAL;
                 }
-                if (PadData.activity == 0x10) {
+                if (PadData.activity == PAD_TRIANGLE) {
                     if (MenuWork.selectDir >= 0) {
-                        xglSoundEffectNormalID(1, 0);
-                        MenuWork.nextMode = 0x80;
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
+                        MenuWork.nextMode = MENU_ITEM_MODE_SORT;
                     } else {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 }
                 if (MenuWork.selectDir >= 0) {
                     MenuWork.selectedItem = MenuSortGet(0, MenuWork.selectDir);
                     MenuWork.selectionMode = MenuItemUseCheck(MenuWork.selectedItem);
-                    if (PadData.pressed == 0x20) {
+                    if (PadData.pressed == PAD_CIRCLE) {
                         switch (MenuWork.listTab) {
-                        case 0:
+                        case MENU_ITEM_TAB_ITEMS:
                             switch (MenuWork.selectionMode) {
-                            case 1:
-                            case 2:
-                                xglSoundEffectNormalID(1, 0);
-                                MenuWork.nextMode = 0x22;
+                            case MENU_ITEM_USE_SINGLE:
+                            case MENU_ITEM_USE_ALL:
+                                xglSoundEffectNormalID(SE_DECIDE, 0);
+                                MenuWork.nextMode = MENU_ITEM_MODE_TARGET;
                                 MenuWork.agwsMode = 0;
                                 break;
-                            case 10:
+                            case MENU_ITEM_USE_AGWS:
                                 if (MenuWork.agwsCount != 0) {
-                                    xglSoundEffectNormalID(1, 0);
-                                    MenuWork.nextMode = 0x22;
+                                    xglSoundEffectNormalID(SE_DECIDE, 0);
+                                    MenuWork.nextMode = MENU_ITEM_MODE_TARGET;
                                     MenuWork.agwsMode = 1;
-                                    MenuWork.busy = 8;
+                                    MenuWork.busy = MENU_ITEM_BUSY_SHORT;
                                 } else {
-                                    xglSoundEffectNormalID(5, 0);
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                 }
                                 break;
                             default:
-                                xglSoundEffectNormalID(5, 0);
+                                xglSoundEffectNormalID(SE_BUZZER, 0);
                                 break;
                             }
                             break;
-                        case 1:
-                            if ((unsigned int)((unsigned short)MenuWork.selectedItem - 11) < 5U) {
-                                if (MenuWork.selectedItem == 11) {
-                                    MenuWork.nextMode = 0x30;
-                                    xglSoundEffectNormalID(1, 0);
-                                } else if ((unsigned int)GameLoopState.flags & 0x400000) {
-                                    MenuWork.nextMode = 0x40;
-                                    xglSoundEffectNormalID(1, 0);
+                        case MENU_ITEM_TAB_EVENT:
+                            if ((unsigned int)((unsigned short)MenuWork.selectedItem - MENU_EVENT_ITEM_SEGMENT_MAP) < MENU_EVENT_ITEM_SELECTABLE_COUNT) {
+                                if (MenuWork.selectedItem == MENU_EVENT_ITEM_SEGMENT_MAP) {
+                                    MenuWork.nextMode = MENU_ITEM_MODE_SEGMENT;
+                                    xglSoundEffectNormalID(SE_DECIDE, 0);
+                                } else if ((unsigned int)GameLoopState.flags & MENU_ITEM_GAME_FLAG_PICK) {
+                                    MenuWork.nextMode = MENU_ITEM_MODE_PICK;
+                                    xglSoundEffectNormalID(SE_DECIDE, 0);
                                 } else {
-                                    xglSoundEffectNormalID(5, 0);
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                 }
                             }
                             break;
                         }
                     }
                 }
-                if (PadData.pressed & 0x40) {
-                    xglSoundEffectNormalID(2, 0);
-                    MenuWork.nextMode = 0xF0;
+                if (PadData.pressed & PAD_CROSS) {
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
+                    MenuWork.nextMode = MENU_ITEM_MODE_CLOSE;
                 }
             } else {
                 menu->selectDir = WindowSPSelect(&MenuItemList->window, 0);
@@ -2303,76 +2469,76 @@ int MenuItem(void)
         }
         break;
 
-    case 0x22:
+    case MENU_ITEM_MODE_TARGET:
         if (menu->busy == 0) {
             if (menu->agwsMode != 0) {
                 int selection = MenuSelectMove(menu->selectedAgws, menu->agwsCount, 0);
                 unsigned short pressed = PadData.pressed;
 
                 menu->selectedAgws = selection;
-                if (pressed == 0x20) {
+                if (pressed == PAD_CIRCLE) {
                     int itemKey = MenuSortGet(0, menu->selectDir);
                     short itemId = itemKey;
 
-                    menu->flags |= 4;
+                    menu->flags |= MENU_ITEM_FLAG_MODIFIED;
                     func_A1A4E8(itemId);
                     if (MenuCharHpCheck(MenuItemAgws[menu->selectedAgws]) != 0) {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                         break;
                     }
                     MenuBoxDec(itemKey);
                     if (MenuBoxChk(itemKey) == 0) {
-                        WindowSPKeepSelect(&MenuItemList->window, &MenuKeepSelect[menu->listTab * 5]);
+                        WindowSPKeepSelect(&MenuItemList->window, &MenuKeepSelect[menu->listTab * MENU_ITEM_KEEP_SELECT_SIZE]);
                         MenuItemListMake00();
                         menu->nextMode = pressed;
                     }
                     func_00A114C0(MenuItemAgws[menu->selectedAgws], itemId);
-                    xglSoundEffectNormalID(1, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     MenuItemListMake00_1();
                 }
-                if (PadData.pressed == 0x40) {
+                if (PadData.pressed == PAD_CROSS) {
                     MenuItemListMake00();
-                    xglSoundEffectNormalID(2, 0);
-                    MenuWork.nextMode = 0x20;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
+                    MenuWork.nextMode = MENU_ITEM_MODE_LIST;
                 }
             } else if (menu->scrollDir == 0) {
                 signed char selectionMode = menu->selectionMode;
 
-                if (selectionMode == 1 && menu->partyCount >= 2) {
-                    if (PadData.activity == 0x1000) {
+                if (selectionMode == MENU_ITEM_USE_SINGLE && menu->partyCount >= 2) {
+                    if (PadData.activity == PAD_UP) {
                         menu->scrollDir = -1;
                     }
-                    if (PadData.activity == 0x4000) {
+                    if (PadData.activity == PAD_DOWN) {
                         menu->scrollDir = selectionMode;
                     }
                     if (menu->scrollDir != 0) {
                         if (menu->scrollDir == -1) {
                             if (menu->selectedParty != 0) {
                                 menu->selectedParty--;
-                                xglSoundEffectNormalID(3, 0);
+                                xglSoundEffectNormalID(SE_CURSOR, 0);
                             }
                         } else {
                             if (menu->selectedParty != menu->partyCount - 1) {
                                 menu->selectedParty++;
-                                xglSoundEffectNormalID(3, 0);
+                                xglSoundEffectNormalID(SE_CURSOR, 0);
                             }
                         }
                     }
                 }
-                if (PadData.pressed == 0x40) {
+                if (PadData.pressed == PAD_CROSS) {
                     MenuItemListMake00();
-                    xglSoundEffectNormalID(2, 0);
-                    MenuWork.nextMode = 0x20;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
+                    MenuWork.nextMode = MENU_ITEM_MODE_LIST;
                 }
-                if (PadData.pressed == 0x20) {
+                if (PadData.pressed == PAD_CIRCLE) {
                     int itemKey = MenuSortGet(0, MenuWork.selectDir);
                     short itemId = itemKey;
 
-                    MenuWork.flags |= 4;
+                    MenuWork.flags |= MENU_ITEM_FLAG_MODIFIED;
                     item = func_A1A4E8(itemId);
                     if (itemId == MENU_ITEM_SPECIAL_ID) {
-                        if (MenuCharHpCheck(-1) != 0 && MenuCharEpCheck(-1) != 0) {
-                            xglSoundEffectNormalID(5, 0);
+                        if (MenuCharHpCheck(MENU_CHAR_WHOLE_PARTY) != 0 && MenuCharEpCheck(MENU_CHAR_WHOLE_PARTY) != 0) {
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                             break;
                         }
                     } else {
@@ -2380,121 +2546,121 @@ int MenuItem(void)
                         MenuItemCharacterPoints *points = func_A19210(MenuItemParty[MenuWork.selectedParty]);
 
                         attributes = item->attributes;
-                        if (attributes & 1) {
-                            if (MenuWork.selectionMode == 1) {
+                        if (attributes & MENU_ITEM_ATTR_HEAL_HP) {
+                            if (MenuWork.selectionMode == MENU_ITEM_USE_SINGLE) {
                                 if (MenuCharHpCheck(MenuItemParty[MenuWork.selectedParty]) != 0) {
-                                    xglSoundEffectNormalID(5, 0);
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                     break;
                                 }
                             } else {
-                                if (MenuCharHpCheck(-1) != 0) {
-                                    xglSoundEffectNormalID(5, 0);
+                                if (MenuCharHpCheck(MENU_CHAR_WHOLE_PARTY) != 0) {
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                     break;
                                 }
                             }
-                        } else if (attributes & 2) {
-                            if (MenuWork.selectionMode == 1) {
+                        } else if (attributes & MENU_ITEM_ATTR_HEAL_EP) {
+                            if (MenuWork.selectionMode == MENU_ITEM_USE_SINGLE) {
                                 if (MenuCharEpCheck(MenuItemParty[MenuWork.selectedParty]) != 0) {
-                                    xglSoundEffectNormalID(5, 0);
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                     break;
                                 }
                             } else {
-                                if (MenuCharEpCheck(-1) != 0) {
-                                    xglSoundEffectNormalID(5, 0);
+                                if (MenuCharEpCheck(MENU_CHAR_WHOLE_PARTY) != 0) {
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                     break;
                                 }
                             }
-                        } else if (attributes & 0x800) {
-                            if (points->points >= 9999) {
-                                xglSoundEffectNormalID(5, 0);
+                        } else if (attributes & MENU_ITEM_ATTR_POINTS) {
+                            if (points->points >= MENU_ITEM_POINTS_MAX) {
+                                xglSoundEffectNormalID(SE_BUZZER, 0);
                                 break;
                             }
-                        } else if (attributes & 0x400) {
-                            if (points->etherPoints >= 9999) {
-                                xglSoundEffectNormalID(5, 0);
+                        } else if (attributes & MENU_ITEM_ATTR_ETHER_POINTS) {
+                            if (points->etherPoints >= MENU_ITEM_POINTS_MAX) {
+                                xglSoundEffectNormalID(SE_BUZZER, 0);
                                 break;
                             }
-                        } else if (attributes & 0x200) {
-                            if (points->skillPoints >= 9999) {
-                                xglSoundEffectNormalID(5, 0);
+                        } else if (attributes & MENU_ITEM_ATTR_SKILL_POINTS) {
+                            if (points->skillPoints >= MENU_ITEM_POINTS_MAX) {
+                                xglSoundEffectNormalID(SE_BUZZER, 0);
                                 break;
                             }
                         }
                     }
                     MenuBoxDec(itemKey);
                     if (MenuBoxChk(itemKey) == 0) {
-                        WindowSPKeepSelect(&MenuItemList->window, &MenuKeepSelect[MenuWork.listTab * 5]);
+                        WindowSPKeepSelect(&MenuItemList->window, &MenuKeepSelect[MenuWork.listTab * MENU_ITEM_KEEP_SELECT_SIZE]);
                         MenuItemListMake00();
-                        MenuWork.nextMode = 0x20;
+                        MenuWork.nextMode = MENU_ITEM_MODE_LIST;
                     }
                     func_00A114C0(MenuItemParty[MenuWork.selectedParty], itemId);
-                    xglSoundEffectNormalID(1, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     MenuItemListMake00_1();
                 }
             }
         }
         break;
 
-    case 0x30:
-        if (menu->flags & 1) {
+    case MENU_ITEM_MODE_SEGMENT:
+        if (menu->flags & MENU_ITEM_FLAG_MODE_ENTERED) {
             menu->segmentSelection = 0;
-            menu->busy = 12;
+            menu->busy = MENU_ITEM_BUSY_NORMAL;
         }
-        if (menu->busy == 0 && (PadData.pressed & 0x40)) {
-            xglSoundEffectNormalID(2, 0);
-            menu->nextMode = 0x20;
-            menu->busy = 12;
+        if (menu->busy == 0 && (PadData.pressed & PAD_CROSS)) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
+            menu->nextMode = MENU_ITEM_MODE_LIST;
+            menu->busy = MENU_ITEM_BUSY_NORMAL;
         }
         break;
 
-    case 0x80: {
-        if (MenuWork.flags & 1) {
+    case MENU_ITEM_MODE_SORT: {
+        if (MenuWork.flags & MENU_ITEM_FLAG_MODE_ENTERED) {
             signed char initialTab;
             unsigned char initialChoice;
 
             initialTab = MenuWork.listTab;
             initialChoice = menu->sortChoices[initialTab];
-            MenuWork.busy = 8;
+            MenuWork.busy = MENU_ITEM_BUSY_SHORT;
             MenuWork.sortSelection = (signed char)initialChoice / 2;
         }
         if (MenuWork.busy == 0) {
-            int selection = MenuSelectMove(MenuWork.sortSelection, 4, 0);
+            int selection = MenuSelectMove(MenuWork.sortSelection, MENU_ITEM_SORT_CHOICE_COUNT, 0);
             int pressed = PadData.pressed;
 
             MenuWork.sortSelection = selection;
-            if (pressed == 0x20) {
-                if (MenuWork.sortSelection != 3) {
+            if (pressed == PAD_CIRCLE) {
+                if (MenuWork.sortSelection != MENU_ITEM_SORT_CANCEL) {
                     unsigned char *saved;
 
                     *(menu->sortChoices + menu->listTab) = MenuWork.sortSelection * 2;
                     saved = MenuSaveDataGet();
                     saved[menu->listTab] = menu->sortChoices[menu->listTab];
-                    MenuWork.flags |= 4;
-                    xglSoundEffectNormalID(15, 0);
+                    MenuWork.flags |= MENU_ITEM_FLAG_MODIFIED;
+                    xglSoundEffectNormalID(SE_SORT_SET, 0);
                 } else {
                     MenuWork.nextMode = pressed;
-                    xglSoundEffectNormalID(2, 0);
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
             }
-            if (PadData.pressed == 0x40) {
-                MenuWork.nextMode = 0x20;
-                MenuWork.busy = 12;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.pressed == PAD_CROSS) {
+                MenuWork.nextMode = MENU_ITEM_MODE_LIST;
+                MenuWork.busy = MENU_ITEM_BUSY_NORMAL;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
     }
 
-    case 0xF0:
-        if (menu->flags & 1) {
-            menu->busy = 16;
+    case MENU_ITEM_MODE_CLOSE:
+        if (menu->flags & MENU_ITEM_FLAG_MODE_ENTERED) {
+            menu->busy = MENU_ITEM_BUSY_CLOSE;
         }
         if (menu->busy == 0) {
-            menu->nextMode = 0xFF;
+            menu->nextMode = MENU_ITEM_MODE_DONE;
         }
         break;
 
-    case 0xFF:
+    case MENU_ITEM_MODE_DONE:
         ChangeTopLevel(0);
         break;
     }

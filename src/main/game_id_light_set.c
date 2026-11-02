@@ -4,10 +4,33 @@
 #include "main/Undulate.h"
 #include "quadword.h"
 
+#define ID_LIGHT_COUNT 16
+
+/* UnduDataGetHeader group holding the light-id floor attributes, and the unit
+ * asked for (the map default). */
+#define UNDU_HEADER_ID_LIGHT 0x306
+#define UNDU_UNIT_DEFAULT 0x8000
+
+/* Scratchpad layout of the terrain query: the block, then its scratch area. */
+#define ID_LIGHT_QUERY_SCRATCH_OFFSET 0x40
+
+/* Ground attribute word: bits 13-15 are the attribute type (3 = light), bits
+ * 8-12 the light id. */
+#define ATTR_TYPE_MASK 0xE000
+#define ATTR_TYPE_LIGHT 0x6000
+#define ATTR_ID_MASK 0x1F00
+#define ATTR_ID_SHIFT 8
+
+/* IdLightActor.flags bit set whenever the actor's light changes. */
+#define ID_LIGHT_FLAG_CHANGED 0x8000
+
+/* Frames an actor's light blends towards a new light id. */
+#define ID_LIGHT_BLEND_STEPS 4
+
 /* The background parameter block ends in the light preset table's first slot. */
 typedef struct GameBgDrawType2 {
     unsigned char unmodeled_00[0x7F0];
-    IdLightSet lights[16];
+    IdLightSet lights[ID_LIGHT_COUNT];
 } GameBgDrawType2;
 
 extern GameBgDrawType2 GameBgDrawType2Param;
@@ -28,22 +51,22 @@ void GameIdLightSet(IdLightActor *actor, IdLightQuery *query) {
     float fraction;
 
     if (query == 0) {
-        query = (IdLightQuery *)0x70000000;
+        query = (IdLightQuery *)SCRATCHPAD_BASE;
         UnduParamInit(query);
-        query->header = UnduDataGetHeader(0x306, 0x8000);
-        query->scratch = (void *)0x70000040;
+        query->header = UnduDataGetHeader(UNDU_HEADER_ID_LIGHT, UNDU_UNIT_DEFAULT);
+        query->scratch = (void *)(SCRATCHPAD_BASE + ID_LIGHT_QUERY_SCRATCH_OFFSET);
         query->attrMask = 0x810;
-        UnduCheck(&actor->position, 0, (void *)0x70000000);
+        UnduCheck(&actor->position, 0, (void *)SCRATCHPAD_BASE);
     }
 
-    if ((query->attribute & 0xE000) == 0x6000) {
-        id = (query->attribute & 0x1F00) >> 8;
+    if ((query->attribute & ATTR_TYPE_MASK) == ATTR_TYPE_LIGHT) {
+        id = (query->attribute & ATTR_ID_MASK) >> ATTR_ID_SHIFT;
     } else {
         id = 0;
     }
 
     if (actor->lightId != id) {
-        actor->blendSteps = 4;
+        actor->blendSteps = ID_LIGHT_BLEND_STEPS;
         if (actor->lightId == 0) {
             studio = xglStudioGetLight2();
             actor->light = *studio;
@@ -53,11 +76,11 @@ void GameIdLightSet(IdLightActor *actor, IdLightQuery *query) {
 
     if (actor->blendSteps == 0) {
         if (id != 0) {
-            actor->flags |= 0x8000;
+            actor->flags |= ID_LIGHT_FLAG_CHANGED;
             actor->light = GameBgDrawType2Param.lights[id];
         }
     } else {
-        actor->flags |= 0x8000;
+        actor->flags |= ID_LIGHT_FLAG_CHANGED;
         if (id == 0) {
             target = xglStudioGetLight2();
         } else {

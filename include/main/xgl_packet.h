@@ -74,4 +74,88 @@ typedef struct XglTextureTransSet {
 
 extern XglPacket *xglPacketGetCurrent(void);
 
+/* VIFcodes. */
+#define VIF_CODE_FLUSHE 0x11000000
+#define VIF_CODE_DIRECTHL 0x51000000
+
+/* GIF tag fields. */
+#define GIF_TAG_EOP 0x8000
+#define GIF_TAG_PRE 0x4000
+#define GIF_TAG_PRIM_SHIFT 15
+#define GIF_TAG_NREG_SHIFT 28
+#define GIF_TAG_HIGH_NREG_1 0x10000000U
+#define GIF_TAG_NREG_1 0x1000000000000000
+#define GIF_TAG_FLG_IMAGE 0x0800000000000000
+#define GIF_REG_RGBAQ 1
+#define GIF_REG_UV 3
+#define GIF_REG_XYZ2 5
+#define GIF_REG_TEX0_1 6
+#define GIF_REG_AD 14
+
+/* GS PRIM types and attribute bits. */
+#define GS_PRIM_TRISTRIP 4
+#define GS_PRIM_SPRITE 6
+#define GS_PRIM_TME 0x10
+#define GS_PRIM_ABE 0x40
+#define GS_PRIM_FST 0x100
+
+/* GS register addresses as used in A+D data and by sceGs*. */
+#define SCE_GS_PRIM 0x00
+#define SCE_GS_RGBAQ 0x01
+#define SCE_GS_XYZF2 0x04
+#define SCE_GS_XYZ2 0x05
+#define SCE_GS_TEX0_1 0x06
+#define SCE_GS_TEX1_1 0x14
+#define SCE_GS_CLAMP_1 0x08
+#define SCE_GS_XYOFFSET_1 0x18
+#define SCE_GS_XYOFFSET_2 0x19
+#define SCE_GS_PRMODECONT 0x1A
+#define SCE_GS_TEXA 0x3B
+#define SCE_GS_TEXFLUSH 0x3F
+#define SCE_GS_SCISSOR_1 0x40
+#define SCE_GS_SCISSOR_2 0x41
+#define SCE_GS_ALPHA_1 0x42
+#define SCE_GS_DIMX 0x44
+#define SCE_GS_DTHE 0x45
+#define SCE_GS_COLCLAMP 0x46
+#define SCE_GS_TEST_1 0x47
+#define SCE_GS_TEST_2 0x48
+#define SCE_GS_FRAME_1 0x4C
+#define SCE_GS_FRAME_2 0x4D
+#define SCE_GS_ZBUF_1 0x4E
+#define SCE_GS_ZBUF_2 0x4F
+#define SCE_GS_BITBLTBUF 0x50
+#define SCE_GS_TRXPOS 0x51
+#define SCE_GS_TRXREG 0x52
+#define SCE_GS_TRXDIR 0x53
+
+/* Bit positions of the FRAME and BITBLTBUF fields. */
+#define GS_FRAME_FBW_SHIFT 16
+#define GS_FRAME_PSM_SHIFT 24
+#define GS_BITBLTBUF_SBW_SHIFT 16
+#define GS_BITBLTBUF_SPSM_SHIFT 24
+#define GS_BITBLTBUF_DBP_SHIFT 32
+#define GS_BITBLTBUF_DBW_SHIFT 48
+#define GS_BITBLTBUF_DPSM_SHIFT 56
+
+/* Bit positions of the TEX0 fields. */
+#define GS_TEX0_TBW_SHIFT 14
+#define GS_TEX0_PSM_SHIFT 20
+#define GS_TEX0_TW_SHIFT 26
+#define GS_TEX0_TH_SHIFT 30
+#define GS_TEX0_TCC_SHIFT 34
+#define GS_TEX0_CBP_SHIFT 37
+#define GS_TEX0_CLD_SHIFT 61
+
+/* GS alpha 0x80 is fully opaque. */
+#define GS_ALPHA_OPAQUE 0x80
+
+/* GS pixel storage modes. */
+#define SCE_GS_PSMCT32 0
+#define SCE_GS_PSMCT16 2
+#define SCE_GS_PSMT8 0x13
+#define SCE_GS_PSMT4 0x14
+#define SCE_GS_PSMCT24 1
+#define SCE_GS_PSMZ24 0x31
+
 #endif /* INCLUDE_MAIN_XGL_PACKET_H */

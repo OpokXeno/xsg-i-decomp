@@ -121,6 +121,13 @@ int PartyFriendCheck(int id);
 void PartyOutFriendOn(int id);
 void PartyOutFriendOff(int id);
 int PartyOutFriendCheck(int id);
+/* Save-record offsets (SaveData + offset) other TUs address directly. */
+#define SAVE_MENU_SAVE_DATA 0x10254
+#define SAVE_UMN_MAIL_DATA 0x10304 /* UMN mail table: one 2-byte entry per mail box */
+
+/* PartyFriendLockCheck flag bits: which masks are subtracted from friend_mask. */
+#define PARTY_CHECK_OUT_FRIEND 1 /* members out of the selectable party */
+#define PARTY_CHECK_LOCK_PARTY 2 /* members locked out */
 int PartyFriendLockCheck(int id, int flag);
 
 /* Collects party member ids into out[] and returns how many were stored.

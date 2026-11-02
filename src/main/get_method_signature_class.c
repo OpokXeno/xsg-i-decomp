@@ -12,7 +12,7 @@ JavaMethod *getMethodSignatureClass(int index, JavaClass *owner)
     JavaMethod *method;
 
     constant_pool = owner->constants;
-    if ((unsigned int)(constant_pool[0].tags[index] - 10) >= 2) {
+    if ((unsigned int)(constant_pool[0].tags[index] - JVM_CONSTANT_METHODREF) >= 2) {
         return 0;
     }
 
@@ -49,7 +49,7 @@ int getField(int index, JavaClass *owner, int is_static,
     constant_pool = owner->constants;
     entries = constant_pool;
     is_static &= 0xff;
-    if (constant_pool[0].tags[index] != 9) {
+    if (constant_pool[0].tags[index] != JVM_CONSTANT_FIELDREF) {
         return 0;
     }
 
@@ -81,10 +81,10 @@ JavaClass *getClass(int index, JavaClass *owner)
     constant_pool = owner->constants;
     entries = constant_pool;
     tag = constant_pool[0].tags[index];
-    if (tag == 23) {
+    if (tag == VM_CONSTANT_RESOLVED_CLASS) {
         return entries[index].object;
     }
-    if (tag != 7) {
+    if (tag != JVM_CONSTANT_CLASS) {
         return 0;
     }
 
@@ -99,7 +99,7 @@ JavaClass *getClass(int index, JavaClass *owner)
     }
 
     entries[index].object = class_obj;
-    constant_pool[0].tags[index] = 23;
+    constant_pool[0].tags[index] = VM_CONSTANT_RESOLVED_CLASS;
     return class_obj;
 }
 

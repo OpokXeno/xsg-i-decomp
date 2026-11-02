@@ -13,13 +13,9 @@
 #include "quadword.h"
 #include "vu0_macro.h"
 
-#define NML_RENDER_MAP_ENTRY 0x10000u
-
-/* ACT_modelDrawSub supplies alpha as a signed word from its actor at +0x9a8. */
-#define NML_RENDER_STENCIL 0x4u
-
-#define NML_RENDER_ZWRITE 0x8u
-#define NML_RENDER_TOUMEI 0x20u
+/* The render-status request bits (NML_RENDER_*) are in main/nml_model_set.h.
+ * ACT_modelDrawSub supplies the stencil alpha as a signed word from its actor
+ * at +0x9a8. */
 
 /*
  * Bounds and alignment a model texture pointer must satisfy: the pointer
@@ -32,7 +28,6 @@
 
 #define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
 #define NML_TEXTURE_ALIGN_MASK 0xfu
-#define NML_RENDER_FOG 0x2u
 #define NML_NAME_MATCH_PREFIX 1
 #define NML_NAME_MATCH_EXACT 2
 #define NML_NAME_MATCH_SUBSTRING 3
@@ -127,7 +122,7 @@ typedef struct NmlMaterialName {
 
 struct NmlShadowTexture {
     unsigned int uploadHeader[8];
-    unsigned char pixels[64][64];
+    unsigned char pixels[NML_CIRCLE_SHADOW_SIZE][NML_CIRCLE_SHADOW_SIZE];
 };
 
 typedef struct NmlDirectRecord {
@@ -364,7 +359,7 @@ void *nmlPacketSetAttributeData64N(const void *data, int count);
 unsigned char nmlModelCalcClipMat2AllCam(const void *a, const void *b, void *c);
 extern int nmlFilterSetVolumeCubeRender(Vector4 *, Vector4 *);
 
-int g_aSubWindow[4] = { 0 };
+int g_aSubWindow[NML_WINDOW_COUNT] = { 0 };
 
 LayoutStore s_inLayout = { 0 };
 
@@ -499,13 +494,13 @@ static int s_nAlphaGroup;
 
 static int s_nNonAlphaGroup;
 
-static int s_aToumeiId[16];
+static int s_aToumeiId[NML_TOUMEI_MAX];
 
-static LayoutSlot s_aToumei[16];
+static LayoutSlot s_aToumei[NML_TOUMEI_MAX];
 
-static int s_aShapeId[32];
+static int s_aShapeId[NML_SHAPE_MAX];
 
-static float s_aShapeWeight[32];
+static float s_aShapeWeight[NML_SHAPE_MAX];
 
 static int s_aMapLast[12];
 
@@ -554,21 +549,21 @@ static struct NmlShadowTexture s_aCircleShadow;
 
 static unsigned int s_aCircleShadowClut[8];
 
-static NmlDirectRecord s_aDirect[5500];
+static NmlDirectRecord s_aDirect[NML_DIRECT_MAX];
 
-static void * s_apBlock[4096];
+static void * s_apBlock[NML_BLOCK_POOL_SIZE];
 
-static unsigned short s_aBlockLayout[4096];
+static unsigned short s_aBlockLayout[NML_BLOCK_POOL_SIZE];
 
 static void * s_apBlockLast[32];
 
 static unsigned short s_aBlockLayoutLast[32];
 
-static LayoutStore * s_apModelLayout[512];
+static LayoutStore * s_apModelLayout[NML_MODEL_MAX];
 
 static Vector4 s_inMulColor;
 
-static NmlBlockGroup s_aNonAlphaGroup[512];
+static NmlBlockGroup s_aNonAlphaGroup[NML_GROUP_MAX];
 
 static unsigned short s_aBLsave[256];
 
@@ -578,7 +573,7 @@ static float s_aTexOffset[2];
 
 static Vector4 s_inScale;
 
-static NmlParentBuffer s_aParentBuf[512];
+static NmlParentBuffer s_aParentBuf[NML_PARENT_BUF_MAX];
 
 static Vector4 s_inGblPointC[4];
 
@@ -588,7 +583,7 @@ static Vector4 s_inMainCameraPos;
 
 static Vector4 s_inMainCameraAng;
 
-static NmlBlockGroup s_aAlphaGroup[512];
+static NmlBlockGroup s_aAlphaGroup[NML_GROUP_MAX];
 
 static NmlPointQuadword s_inGblPointP[4];
 
@@ -808,9 +803,9 @@ static void CONSTRUCT_CIRCLR_SHADOW(void)
     row = 0;
     shadow = &s_aCircleShadow;
 
-    for (; row < 64; row++) {
+    for (; row < NML_CIRCLE_SHADOW_SIZE; row++) {
         float y = (float)row - 32.0f;
-        for (column = 0; column < 64; column++) {
+        for (column = 0; column < NML_CIRCLE_SHADOW_SIZE; column++) {
             float x = (float)column - 32.0f;
             float distance = __builtin_sqrtf(x * x + y * y);
             if (distance <= 1.0f) {
@@ -1042,14 +1037,14 @@ void nmlModelSetBackBufferClear(void)
 void nmlModelSetFaceModel(int enabled)
 {
     if (enabled != 0) {
-        s_inLayout.slots[0x250 / 4].i |= 0x100000;
+        s_inLayout.slots[0x250 / 4].i |= NML_RENDER_FACE_MODEL;
     }
 }
 
 void nmlModelSetHumanModel(int enabled)
 {
     if (enabled != 0) {
-        s_inLayout.slots[0x250 / 4].i |= 0x40;
+        s_inLayout.slots[0x250 / 4].i |= NML_RENDER_HUMAN_MODEL;
     }
 }
 
@@ -1132,7 +1127,7 @@ void nmlModelSetMpeg2CrossFadeTime(int time)
 static inline void NmlMovieRestoreSavedBuffer(void)
 {
     nmlModelSetBackBuffer(nmlModelMpeg2CrossFadeTime[0], 1, sRender.draw_buffer_base, 1);
-    nmlModelSetFadeInCancel(30);
+    nmlModelSetFadeInCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
 }
 
 /*
@@ -1150,21 +1145,21 @@ void nmlModelSendSignalMovieFinish(int mode)
     switch (mode - 1) {
     case 0:
         nmlModelSetBackBufferToBattle(sRender.draw_buffer_base);
-        nmlModelSetFadeInCancel(30);
-        nmlModelSetFadeOutCancel(30);
+        nmlModelSetFadeInCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
+        nmlModelSetFadeOutCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
         break;
     case 1:
         nmlModelSetBackBuffer(0x26, 1, sRender.draw_buffer_base, 0);
-        nmlModelSetFadeInCancel(30);
+        nmlModelSetFadeInCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
         break;
     case 4:
         nmlModelSetBackBuffer(0x26, 1, sRender.draw_buffer_base, 0);
-        nmlModelSetFadeOutCancel(30);
-        nmlModelSetFadeInCancel(30);
+        nmlModelSetFadeOutCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
+        nmlModelSetFadeInCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
         break;
     case 2:
         nmlModelSetBackBuffer(3, 1, sRender.draw_buffer_base, 0);
-        nmlModelSetFadeInCancel(30);
+        nmlModelSetFadeInCancel(NML_MOVIE_FADE_CANCEL_FRAMES);
         break;
     case 3:
         NmlMovieRestoreSavedBuffer();
@@ -1210,33 +1205,33 @@ static void fade_render(XglPacket *packet, FadeControl *control)
                         (float)control->duration) * 128.0f);
                 }
                 if (mode == 0) {
-                    control->level = 128 - control->level;
+                    control->level = NML_FADE_LEVEL_MAX - control->level;
                 }
                 if (control->level < 0) {
                     control->level = 0;
                 }
-                if (control->level > 128) {
-                    control->level = 128;
+                if (control->level > NML_FADE_LEVEL_MAX) {
+                    control->level = NML_FADE_LEVEL_MAX;
                 }
                 if (control->skipRender == 0) {
                     GifCommandData gifData[32];
                     GifCommandData *write = fade_packet_begin(gifData,
-                        0x1000000000008000ULL, 14);
+                        0x1000000000008000ULL, NML_GIF_REG_AD);
                     u64 xyzControl = (u64)depthAndFog << 32;
                     u64 rgbaq;
                     int qwordCount;
 
-                    write = fade_packet_add_ad(write, 0x01bf000001ff0000ULL, 64);
-                    write = fade_packet_add_ad(write, 68, 66);
-                    write = fade_packet_add_ad(write, 0x30000, 71);
-                    write = fade_packet_add_ad(write, 70, 0);
-                    rgbaq = (u64)control->color[0] | 0x3f80000000000000ULL;
+                    write = fade_packet_add_ad(write, NML_GS_SCISSOR_FULL, NML_GS_REG_SCISSOR_1);
+                    write = fade_packet_add_ad(write, NML_GS_ALPHA_BLEND, NML_GS_REG_ALPHA_1);
+                    write = fade_packet_add_ad(write, NML_GS_TEST_ZTE | NML_GS_TEST_ZTST_ALWAYS, NML_GS_REG_TEST_1);
+                    write = fade_packet_add_ad(write, NML_GS_PRIM_SPRITE | NML_GS_PRIM_ABE, NML_GS_REG_PRIM);
+                    rgbaq = (u64)control->color[0] | NML_GS_RGBAQ_Q_ONE;
                     rgbaq |= ((u64)control->color[2] << 16) |
                         ((u64)control->color[1] << 8);
                     rgbaq |= (u64)control->level << 24;
-                    write = fade_packet_add_ad(write, rgbaq, 1);
-                    write = fade_packet_add_ad(write, xyzControl | 0x72007000, 4);
-                    write = fade_packet_add_ad(write, xyzControl | 0x8e009000, 4);
+                    write = fade_packet_add_ad(write, rgbaq, NML_GS_REG_RGBAQ);
+                    write = fade_packet_add_ad(write, xyzControl | 0x72007000, NML_GS_REG_XYZF2);
+                    write = fade_packet_add_ad(write, xyzControl | 0x8e009000, NML_GS_REG_XYZF2);
                     qwordCount = fade_packet_close(gifData, write);
 
                     sceVif1PkCnt(packet, 0);
@@ -1471,7 +1466,7 @@ void nmlModelGetGblPosition(Vector4 *position)
 void nmlModelSetBackBufferToBattle(int ownerIndex)
 {
     do {
-        s_inBackBuffer[6] = 0x28;
+        s_inBackBuffer[6] = NML_BACK_BUFFER_TIME;
         s_inBackBuffer[5] = 1;
         s_inBackBuffer[0] = 1;
         s_inBackBuffer[4] = ownerIndex;
@@ -1483,7 +1478,7 @@ void nmlModelSetBackBufferToBattle(int ownerIndex)
 void nmlModelSetBackBufferToEventSkip(int ownerIndex)
 {
     do {
-        s_inBackBuffer[6] = 0x28;
+        s_inBackBuffer[6] = NML_BACK_BUFFER_TIME;
         s_inBackBuffer[5] = 1;
         s_inBackBuffer[0] = 1;
         s_inBackBuffer[4] = ownerIndex;
@@ -1512,13 +1507,13 @@ void nmlModelSetEffectWrite(int enabled)
 }
 
 void nmlModelUseSubWindow(unsigned int index, int enabled) {
-    if (index < 4U) {
+    if (index < NML_WINDOW_COUNT) {
         g_aSubWindow[index] = enabled;
     }
 }
 
 void nmlModelSetWindow(u32 window) {
-    if (window < 4U) {
+    if (window < NML_WINDOW_COUNT) {
         s_inLayout.slots[0x27c / 4].i = window;
     }
 }
@@ -1530,35 +1525,35 @@ void nmlModelSetSortOffset(float offset)
 
 void nmlModelSetGlobalPointLight(int index, const Vector4 *position, const Vector4 *color)
 {
-    if (index < 3U) {
+    if (index < NML_POINT_LIGHT_MAX) {
         NmlPointQuadword *point = &s_inGblPointP[index];
 
         QuadwordCopy(point, position);
         xglVectorScaleXYZ(&s_inGblPointC[index], color, 128.0f);
-        s_inLayout.fields.render_status |= 0x02000000;
+        s_inLayout.fields.render_status |= NML_RENDER_GLOBAL_POINT_LIGHT;
     }
 }
 
 void nmlModelSetGlobalPointLightCol(int index, const Vector4 *color)
 {
-    if (index < 3U) {
+    if (index < NML_POINT_LIGHT_MAX) {
         xglVectorScaleXYZ(&s_inGblPointC[index], color, 128.0f);
-        s_inLayout.fields.render_status |= 0x02000000;
+        s_inLayout.fields.render_status |= NML_RENDER_GLOBAL_POINT_LIGHT;
     }
 }
 
 void nmlModelSetGlobalPointLightPos(unsigned int index, const Vector4 *position)
 {
-    if (index < 3) {
+    if (index < NML_POINT_LIGHT_MAX) {
         NmlPointQuadword *destination = &s_inGblPointP[index];
         QuadwordCopy(destination, position);
-        s_inLayout.fields.render_status |= 0x02000000;
+        s_inLayout.fields.render_status |= NML_RENDER_GLOBAL_POINT_LIGHT;
     }
 }
 
 void nmlModelSetGlobalPointLightReset(void)
 {
-    s_inLayout.fields.render_status &= 0xfdffffffu;
+    s_inLayout.fields.render_status &= ~NML_RENDER_GLOBAL_POINT_LIGHT;
     QuadwordZero(s_inGblPointC);
     __asm__ __volatile__("sq $0, 16(%0)" : : "r"(s_inGblPointC) : "memory");
     __asm__ __volatile__("sq $0, 32(%0)" : : "r"(s_inGblPointC) : "memory");
@@ -1567,16 +1562,16 @@ void nmlModelSetGlobalPointLightReset(void)
 
 void nmlModelSetPointLight(unsigned int index, const Vector4 *position, const Vector4 *color)
 {
-    if (index < 3) {
+    if (index < NML_POINT_LIGHT_MAX) {
         QuadwordCopy(&s_inLayout.fields.pointPosition[index], position);
         xglVectorScaleXYZ(&s_inLayout.fields.pointColor[index], color, 128.0f);
-        s_inLayout.fields.render_status |= 0x1000;
+        s_inLayout.fields.render_status |= NML_RENDER_POINT_LIGHT;
     }
 }
 
 void nmlModelSetSpecularOff(int disableSpecular) {
     if (disableSpecular != 0) {
-        s_inLayout.slots[0x2b0 / 4].i |= 2;
+        s_inLayout.slots[0x2b0 / 4].i |= NML_LEVEL_NO_SPECULAR;
     }
 }
 
@@ -1614,13 +1609,13 @@ void nmlModelSetTexMap(int mode, int size, float weight)
 
     texMapState = layout->qwords[0x268 / 8];
     if ((texMapState & 0x10001) == 0x10001) {
-        layout->slots[0x250 / 4].i |= 0x40000;
+        layout->slots[0x250 / 4].i |= NML_RENDER_TEXMAP_DROP;
     } else if ((texMapState & 0x20001) == 0x20001) {
-        layout->slots[0x250 / 4].i |= 0x200000;
+        layout->slots[0x250 / 4].i |= NML_RENDER_TEXMAP_CIRCLE;
     } else if ((texMapState & 0x30000) == 0x30000) {
-        layout->slots[0x250 / 4].i |= 0x400000;
+        layout->slots[0x250 / 4].i |= NML_RENDER_TEXMAP_DROP_CIRCLE;
     } else {
-        layout->slots[0x250 / 4].i |= 0x4000;
+        layout->slots[0x250 / 4].i |= NML_RENDER_TEXMAP_TEXTURE;
     }
 }
 
@@ -1657,7 +1652,7 @@ void nmlModelSetProreal(NmlProRealState *input)
 
     textureMode = input->fields.unmodeled_114;
     switch (textureMode) {
-    case 20: {
+    case NML_GS_PSMT4: {
         int textureBase = input->fields.unmodeled_116 << 5;
         input->fields.textureWord =
             (u64)(textureBase | 0x29440000) |
@@ -1665,7 +1660,7 @@ void nmlModelSetProreal(NmlProRealState *input)
             0x2000000640000000ULL;
         break;
     }
-    case 19: {
+    case NML_GS_PSMT8: {
         int textureBase = input->fields.unmodeled_116 << 5;
         input->fields.textureWord =
             (u64)(textureBase | 0x29340000) |
@@ -1673,7 +1668,7 @@ void nmlModelSetProreal(NmlProRealState *input)
             0x2000000640000000ULL;
         break;
     }
-    case 0:
+    case NML_GS_PSMCT32:
         screenWidth = 0x200;
         input->fields.textureWord = (u64)(input->fields.unmodeled_116 << 5) |
                                0x24020000ULL | 0x2000000640000000ULL;
@@ -1708,12 +1703,12 @@ void nmlModelSetProreal(NmlProRealState *input)
     QuadwordCopy(&input->fields.unmodeled_0c0[3], &s_inProReal[0].fields.unmodeled_170[1]);
     QuadwordCopy(&input->fields.unmodeled_080[0], &s_inProReal[0].fields.unmodeled_160);
     input->fields.unmodeled_11c = 0;
-    s_inLayout.fields.render_status |= 0x800;
+    s_inLayout.fields.render_status |= NML_RENDER_PROREAL;
     s_inProReal[0] = *input;
 }
 
 int nmlModelSetTexProreal(void) {
-    int renderStatus = s_inLayout.fields.render_status | 0x800;
+    int renderStatus = s_inLayout.fields.render_status | NML_RENDER_PROREAL;
     s_inLayout.fields.render_status = renderStatus;
     return renderStatus;
 }
@@ -1746,7 +1741,7 @@ void nmlModelSetShapeId(int shapeId, float weight)
     extern int s_aShapeId[];
     extern float s_aShapeWeight[];
 
-    if (s_nShapeNum < 32) {
+    if (s_nShapeNum < NML_SHAPE_MAX) {
         s_aShapeId[s_nShapeNum] = shapeId;
         s_aShapeWeight[s_nShapeNum++] = weight;
     }
@@ -1757,7 +1752,7 @@ void nmlModelSetToumeiParts(int partId, float alpha)
     extern int s_aToumeiId[];
     extern LayoutSlot s_aToumei[];
 
-    if (s_nToumeiNum < 16) {
+    if (s_nToumeiNum < NML_TOUMEI_MAX) {
         s_aToumeiId[s_nToumeiNum] = partId;
         s_aToumei[s_nToumeiNum++].f = alpha;
     }
@@ -1881,7 +1876,7 @@ void nmlModelSetLight(Matrix4 *direction, Matrix4 *color)
 {
     QuadwordCopyMatrix(&s_inLayout.fields.lightDirection, direction);
     QuadwordCopyMatrix(&s_inLayout.fields.lightColor, color);
-    s_inLayout.fields.render_status |= 0x10;
+    s_inLayout.fields.render_status |= NML_RENDER_LIGHT;
 }
 
 void nmlModelSetTexture(const char *texture)
@@ -1914,7 +1909,7 @@ void nmlModelSetPlace(Matrix4 *place)
 {
     QuadwordCopyMatrix(&s_inLayout.fields.place, place);
     xglMatrixInverse(s_inLayout.fields.inversePlace, *place);
-    s_inLayout.fields.render_status |= 1;
+    s_inLayout.fields.render_status |= NML_RENDER_PLACE;
 }
 
 void nmlModelSetTexOffset(const char *name, float offsetU, float offsetV)
@@ -1978,13 +1973,13 @@ void nmlModelSetFogDist(float fogNear, float fogFar, float fogMin, float fogMax)
 void nmlModelSetGlobalFogCol(const NmlPointQuadword *color)
 {
     QuadwordCopy(s_inGblFogCol, color);
-    s_inLayout.fields.render_status |= 0x01000000;
+    s_inLayout.fields.render_status |= NML_RENDER_GLOBAL_FOG;
 }
 
 void nmlModelSetGlobalFogDist(float fogNear, float fogFar, float fogMin, float fogMax)
 {
     nmlModelFogPara(&s_inGblFogPara, fogNear, fogFar, fogMin, fogMax);
-    s_inLayout.fields.render_status |= 0x01000000;
+    s_inLayout.fields.render_status |= NML_RENDER_GLOBAL_FOG;
 }
 
 unsigned int nmlModelGetFogPara(const Vector4 *position)
@@ -2017,7 +2012,7 @@ unsigned int nmlModelGetFogParaStudio(const Vector4 *position, int studio)
 
     result = 0xff;
     fog = &s_inGblFogPara;
-    if ((s_inLayout.fields.render_status & 2) != 0) {
+    if ((s_inLayout.fields.render_status & NML_RENDER_FOG) != 0) {
         fog = &s_inLayout.fields.fogPara;
     }
     camera = xglStudioSelectGetActiveCamera(studio);
@@ -2030,13 +2025,13 @@ unsigned int nmlModelGetFogParaStudio(const Vector4 *position, int studio)
 }
 
 int nmlModelSetGlobalFogReset(void) {
-    int renderStatus = s_inLayout.fields.render_status & 0xfeffffff;
+    int renderStatus = s_inLayout.fields.render_status & ~NML_RENDER_GLOBAL_FOG;
     s_inLayout.fields.render_status = renderStatus;
     return renderStatus;
 }
 
 void nmlModelSetFogCancel(void) {
-    int renderStatus = s_inLayout.fields.render_status | 0x2000;
+    int renderStatus = s_inLayout.fields.render_status | NML_RENDER_FOG_CANCEL;
     s_inLayout.fields.render_status = renderStatus;
 }
 
@@ -2070,13 +2065,13 @@ void nmlModelSetMapEntry(void)
 }
 
 void nmlModelSetShadowMapEntry(void) {
-    s_inLayout.fields.render_status |= 0x10000;
+    s_inLayout.fields.render_status |= NML_RENDER_MAP_ENTRY;
 }
 
 /* The map callers pass halfword part IDs; the layout has eight shadow slots. */
 void nmlModelSetMapShadowParts(int partId)
 {
-    if (s_nMapShadowParts < 8) {
+    if (s_nMapShadowParts < NML_MAP_SHADOW_PARTS_MAX) {
         s_inLayout.fields.mapShadowParts[s_nMapShadowParts++] = partId;
     }
 }
@@ -2189,7 +2184,7 @@ void nmlModelDirectSend(int mode, const void *data, int count)
         return;
     }
 
-    if (s_nDirect >= 5500) {
+    if (s_nDirect >= NML_DIRECT_MAX) {
         return;
     }
 
@@ -2294,40 +2289,40 @@ static void set_group_status(LayoutStore *layout, u32 *status)
 {
     *status = 0;
     if (layout->fields.render_status & NML_RENDER_FOG) {
-        *status = 0x4;
+        *status = NML_GROUP_FOG;
     }
     if (layout->fields.render_status & NML_RENDER_STENCIL) {
-        *status |= 0x2;
+        *status |= NML_GROUP_STENCIL;
     }
-    if (layout->fields.render_status & 0x4000) {
-        *status |= 0x1;
+    if (layout->fields.render_status & NML_RENDER_TEXMAP_TEXTURE) {
+        *status |= NML_GROUP_TEXTURE;
     }
-    if (layout->fields.render_status & 0x800) {
-        *status |= 0x8;
+    if (layout->fields.render_status & NML_RENDER_PROREAL) {
+        *status |= NML_GROUP_PROREAL;
     }
-    if (layout->fields.render_status & 0x10000) {
-        *status |= 0x10;
+    if (layout->fields.render_status & NML_RENDER_MAP_ENTRY) {
+        *status |= NML_GROUP_MAP;
     }
     if (layout->fields.render_status & NML_RENDER_TOUMEI) {
-        *status |= 0x20;
+        *status |= NML_GROUP_TOUMEI;
     }
-    if (layout->fields.render_status & 0x20000) {
-        *status |= 0x40;
+    if (layout->fields.render_status & NML_RENDER_CULLED) {
+        *status |= NML_GROUP_CULLED;
     }
-    if (layout->fields.render_status & 0x40000) {
-        *status |= 0x80;
+    if (layout->fields.render_status & NML_RENDER_TEXMAP_DROP) {
+        *status |= NML_GROUP_DROP;
     }
-    if (layout->fields.render_status & 0x200000) {
-        *status |= 0x100;
+    if (layout->fields.render_status & NML_RENDER_TEXMAP_CIRCLE) {
+        *status |= NML_GROUP_CIRCLE;
     }
-    if (layout->fields.render_status & 0x400000) {
-        *status |= 0x200;
+    if (layout->fields.render_status & NML_RENDER_TEXMAP_DROP_CIRCLE) {
+        *status |= NML_GROUP_DROP_CIRCLE;
     }
-    if (layout->fields.render_status & 0x800000) {
-        *status |= 0x800;
+    if (layout->fields.render_status & NML_RENDER_BACK_CLEAR) {
+        *status |= NML_GROUP_BACK_CLEAR;
     }
     if (layout->fields.render_status & NML_RENDER_ZWRITE) {
-        *status |= 0x400;
+        *status |= NML_GROUP_ZWRITE;
         s_nUseZwrite = 1;
     }
 }
@@ -2349,20 +2344,20 @@ static void AlphaGroupLastEntry(void)
     if (s_nBlocksAlphaLast > 0) {
         for (index = 0; index < s_nBlocksAlphaLast; ++index) {
             int capacityCount = s_nBlocksAlpha;
-            if (capacityCount + s_nBlocks < 0xFFF) {
+            if (capacityCount + s_nBlocks < NML_BLOCK_POOL_LAST) {
                 int groupIndex = s_nAlphaGroup;
-                if (groupIndex < 0x1FF) {
+                if (groupIndex < NML_GROUP_LIMIT) {
                     int *alphaBlockCount = &s_nBlocksAlpha;
                     LayoutStore *modelLayout;
                     int appendedBlockCount;
 
-                    __builtin_memcpy(&s_apBlock[0xFFF - capacityCount],
+                    __builtin_memcpy(&s_apBlock[NML_BLOCK_POOL_LAST - capacityCount],
                                      &s_apBlockLast[index], sizeof(s_apBlockLast[index]));
-                    s_aBlockLayout[0xFFF - *alphaBlockCount] = s_aBlockLayoutLast[index];
+                    s_aBlockLayout[NML_BLOCK_POOL_LAST - *alphaBlockCount] = s_aBlockLayoutLast[index];
                     __builtin_memcpy(&modelLayout,
                                      &s_apModelLayout[s_aBlockLayoutLast[index]],
                                      sizeof(modelLayout));
-                    s_aAlphaGroup[groupIndex].firstBlock = (short)(0xFFF - *alphaBlockCount);
+                    s_aAlphaGroup[groupIndex].firstBlock = (short)(NML_BLOCK_POOL_LAST - *alphaBlockCount);
                     s_aAlphaGroup[groupIndex].blockCount = 1;
                     appendedBlockCount = *alphaBlockCount + 1;
                     __builtin_memcpy(alphaBlockCount, &appendedBlockCount,
@@ -2466,7 +2461,7 @@ static int is_block_last_entry(const NmlModelBlock *block)
 NmlParentBuffer *parent_buf_entry(LayoutStore *inLayout)
 {
     NmlParentBuffer *entry = 0;
-    if (s_nParentBuf < 512) {
+    if (s_nParentBuf < NML_PARENT_BUF_MAX) {
         LayoutStore **layout;
         int index;
         entry = &s_aParentBuf[s_nParentBuf];
@@ -2589,7 +2584,7 @@ static void nmlModelLexBlockDoit(NmlModel *model)
                 }
             }
 
-            if (partId >= 0 && s_nShapeNum < 32) {
+            if (partId >= 0 && s_nShapeNum < NML_SHAPE_MAX) {
                 divisor = s_aShapeMathPara[(int)block->shapeMathParameter];
                 phase = s_nCount & (divisor - 1);
                 switch (block->shapeMode) {
@@ -2774,11 +2769,11 @@ static int nmlModelCalcEntryClip(NmlModel *model, StudioCamera *camera)
                     }
                 }
                 if (passed == active) {
-                    s_inLayout.slots[0x94].i |= 0x20000;
+                    s_inLayout.slots[0x94].i |= NML_RENDER_CULLED;
                 }
             } else if (nmlModelCalcClipStudio(&clip, 0) != 0) {
                 s_inLayout.slots[0xC4].i = 1;
-                s_inLayout.slots[0x94].i |= 0x20000;
+                s_inLayout.slots[0x94].i |= NML_RENDER_CULLED;
             }
         }
     }
@@ -2890,7 +2885,7 @@ static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
         s_inLayout.slots[0xC3].f = 0.0f;
         s_inLayout.slots[0x8A].f = 0.0f;
     }
-    if ((s_inLayout.slots[0x94].i & 0x100040) != 0) {
+    if ((s_inLayout.slots[0x94].i & (NML_RENDER_FACE_MODEL | NML_RENDER_HUMAN_MODEL)) != 0) {
         float clipDistance = __builtin_fabsf(depth);
         float clipLimit = 32582.0f;
         if (clipDistance < clipLimit) {
@@ -3028,7 +3023,7 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
 
     s_inProReal[0].fields.unmodeled_190[1].q = s_inProReal[0].fields.unmodeled_190[0].q;
     s_inProReal[0].fields.unmodeled_190[2].q = s_inProReal[0].fields.unmodeled_190[0].q;
-    s_inLayout.fields.render_status &= ~0x800;
+    s_inLayout.fields.render_status &= ~NML_RENDER_PROREAL;
     s_inProReal[0].fields.unmodeled_080[0].v.x = 0.0f;
     s_inProReal[0].fields.unmodeled_080[1].v.x = one;
     s_inProReal[0].fields.unmodeled_080[2].v.x = 0.0f;
@@ -3096,7 +3091,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     denom = model->entryTranslation.w;
     if (5.0f + camera->position.vector.y < s_inLayout.slots[0x7d].f) {
         if (5.0f + camera->position.vector.y < s_inLayout.slots[0x2d].f) {
-            s_inLayout.fields.render_status &= ~0x4000;
+            s_inLayout.fields.render_status &= ~NML_RENDER_TEXMAP_TEXTURE;
             return;
         }
     }
@@ -3176,7 +3171,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
                       &s_inProReal[0].fields.unmodeled_160, -1.0f);
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_080[0], &s_inProReal[0].fields.unmodeled_160);
 
-    s_inLayout.fields.render_status &= ~0x800;
+    s_inLayout.fields.render_status &= ~NML_RENDER_PROREAL;
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_190[1], &s_inProReal[0].fields.unmodeled_190[0]);
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_190[2], &s_inProReal[0].fields.unmodeled_190[0]);
 
@@ -3333,8 +3328,8 @@ void nmlModelEntry(NmlModel *model)
     int *blockOffsets;
 
     nmlPacketSetCurrent();
-    while (nmlModelLexDataCheck(model) == 0 && s_nModel < 0x200 &&
-           s_nBlocks + s_nBlocksAlpha + model->blockCount < 0xfff) {
+    while (nmlModelLexDataCheck(model) == 0 && s_nModel < NML_MODEL_MAX &&
+           s_nBlocks + s_nBlocksAlpha + model->blockCount < NML_BLOCK_POOL_LAST) {
         parentEntry = 0;
         parent = parent_buf_search(s_nParent);
         nonAlphaParentAdded = 0;
@@ -3347,25 +3342,25 @@ void nmlModelEntry(NmlModel *model)
             (&s_inLayout.fields.model)[0] = model;
             LAYOUT_S32(0x25c) = s_nModel;
             s_inLayout.fields.mapShadowPartCount = s_nMapShadowParts;
-            if ((s_inLayout.qwords[0x250 / 8] & 0x1000002) == 0x1000000) {
+            if ((s_inLayout.qwords[0x250 / 8] & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG)) == NML_RENDER_GLOBAL_FOG) {
                 QuadwordCopy(&s_inLayout.fields.fogPara, &s_inGblFogPara);
                 QuadwordCopy(&s_inLayout.fields.fogColor, s_inGblFogCol);
             }
-            if ((s_inLayout.qwords[0x250 / 8] & 0x2001000) == 0x2000000) {
+            if ((s_inLayout.qwords[0x250 / 8] & (NML_RENDER_GLOBAL_POINT_LIGHT | NML_RENDER_POINT_LIGHT)) == NML_RENDER_GLOBAL_POINT_LIGHT) {
                 QuadwordCopyMatrix(&s_inLayout.fields.pointPosition[0], &s_inGblPointP[0]);
                 QuadwordCopyMatrix(&s_inLayout.fields.pointColor[0], &s_inGblPointC[0]);
             }
             if (parent != 0) {
-                s_inLayout.fields.render_status |= parent->layout->fields.render_status & 0x204000;
+                s_inLayout.fields.render_status |= parent->layout->fields.render_status & (NML_RENDER_TEXMAP_CIRCLE | NML_RENDER_TEXMAP_TEXTURE);
             } else {
                 s_fSortOffset = s_fSortOffsetEntry;
             }
             nmlModelAskNonLinearCamera();
-            if (s_inLayout.fields.render_status & 0x800000) {
+            if (s_inLayout.fields.render_status & NML_RENDER_BACK_CLEAR) {
                 LAYOUT_W(0x220) = 1.0f;
             }
             if (strstr((char *)model + 0x11, faceNameSuffix) != 0) {
-                s_inLayout.fields.render_status |= 0x100000;
+                s_inLayout.fields.render_status |= NML_RENDER_FACE_MODEL;
             }
             xglCullingMapLastCheck();
             nmlModelLexBlockDoit(model);
@@ -3384,7 +3379,7 @@ void nmlModelEntry(NmlModel *model)
                     s_nUseGnosys = 1;
                     s_inLayout.fields.packetFilterFlags |= 4;
                 }
-                if (s_inLayout.fields.render_status & 0x1000002) {
+                if (s_inLayout.fields.render_status & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG)) {
                     fogColorWord = &s_inLayout.fields.fogColor.intensity;
                     fogValue = nmlModelGetFogParaStudio(&s_inLayout.fields.center.v,
                                                         LAYOUT_S32(0x27c));
@@ -3404,13 +3399,13 @@ void nmlModelEntry(NmlModel *model)
                 }
                 LAYOUT_W(0x26c) = 1.0f;
                 nmlModelCalcSpecularClip(model, (int)parent);
-                if ((s_inLayout.fields.render_status & 0x40000) != 0 && s_nParent == 0) {
+                if ((s_inLayout.fields.render_status & NML_RENDER_TEXMAP_DROP) != 0 && s_nParent == 0) {
                     nmlModelCalcDropShadow(model);
                 }
-                if ((s_inLayout.fields.render_status & 0x200000) != 0 && s_nParent == 0) {
+                if ((s_inLayout.fields.render_status & NML_RENDER_TEXMAP_CIRCLE) != 0 && s_nParent == 0) {
                     nmlModelCalcEntryProjectCircle(model);
                 }
-                if ((s_inLayout.fields.render_status & 0x4000) != 0 && s_nParent == 0) {
+                if ((s_inLayout.fields.render_status & NML_RENDER_TEXMAP_TEXTURE) != 0 && s_nParent == 0) {
                     nmlModelCalcEntryProjectMap(model, camera);
                 }
                 xglMatrixReverse(s_inLayout.fields.lightColor, s_inLayout.fields.lightColor);
@@ -3429,7 +3424,7 @@ void nmlModelEntry(NmlModel *model)
                 for (quadIndex = 0; quadIndex < quadCount / 16; quadIndex++) {
                     QuadwordZero(quadIndex * 16 + (int)s_inLayout.fields.clipMasks);
                 }
-                if ((s_inLayout.fields.render_status & 0x204800) != 0) {
+                if ((s_inLayout.fields.render_status & (NML_RENDER_TEXMAP_CIRCLE | NML_RENDER_TEXMAP_TEXTURE | NML_RENDER_PROREAL)) != 0) {
                     LAYOUT_S32(0x260) = (int)nmlPacketSetAttributeData16N(s_inProReal, 0x1e);
                 }
                 LAYOUT_S32(0x264) = 0;
@@ -3459,7 +3454,7 @@ void nmlModelEntry(NmlModel *model)
                     }
                 }
                 if (s_nClip != 1 && model->sampleCount != 0 &&
-                    (layout->fields.render_status & 0x100000) == 0 &&
+                    (layout->fields.render_status & NML_RENDER_FACE_MODEL) == 0 &&
                     (layout->fields.renderLevel & 0x200) != 0) {
                     nmlModelCalcEntryPartsClip(model, layout);
                 }
@@ -3470,15 +3465,15 @@ void nmlModelEntry(NmlModel *model)
                 parentAlphaCount = 0;
                 parentNonAlphaCount = 0;
                 blockOffsets = model->blockOffsets;
-                if (s_nAlphaGroup < 0x1ff) {
-                    alphaGroup->firstBlock = (short)(0xfff - s_nBlocksAlpha);
+                if (s_nAlphaGroup < NML_GROUP_LIMIT) {
+                    alphaGroup->firstBlock = (short)(NML_BLOCK_POOL_LAST - s_nBlocksAlpha);
                     alphaGroup->blockCount = 0;
                     __builtin_memset(&s_aAlphaGroup[s_nAlphaGroup].sortDistance, 0,
                                      sizeof(s_aAlphaGroup[s_nAlphaGroup].sortDistance));
                     s_aAlphaGroup[s_nAlphaGroup].owner.layout = layout;
                     set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].flags);
                 }
-                if (s_nNonAlphaGroup < 0x1ff) {
+                if (s_nNonAlphaGroup < NML_GROUP_LIMIT) {
                     s_aNonAlphaGroup[s_nNonAlphaGroup].firstBlock = (short)s_nBlocks;
                     s_aNonAlphaGroup[s_nNonAlphaGroup].blockCount = 0;
                     s_aNonAlphaGroup[s_nNonAlphaGroup].owner.layout = layout;
@@ -3491,7 +3486,7 @@ void nmlModelEntry(NmlModel *model)
                 for (index = 0; index < model->blockCount; index++) {
                     block = (NmlModelBlock *)((char *)model + blockOffsets[index]);
                     if (s_nClip != 1) {
-                        if ((block->materialFlags & 0x10) != 0 || s_nMapClip != 0) {
+                        if ((block->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) != 0 || s_nMapClip != 0) {
                             clipBits = nmlModelCalcClipMat2AllCam(&block->clipBounds, &layout->fields.place,
                                                                   layout->fields.weightedMatrices + block->matrixIndices[0] - 1);
                             layout->fields.clipMasks[index] |= clipBits;
@@ -3514,10 +3509,10 @@ void nmlModelEntry(NmlModel *model)
                             continue;
                         }
                     }
-                    if ((block->flags & 0x48) == 0 && s_nBlocksAlpha + s_nBlocks < 0xfff) {
-                        if (((layout->fields.renderLevel & 0x800) == 0 || (s_inLayout.fields.render_status & 0x20) != 0) &&
+                    if ((block->flags & 0x48) == 0 && s_nBlocksAlpha + s_nBlocks < NML_BLOCK_POOL_LAST) {
+                        if (((layout->fields.renderLevel & 0x800) == 0 || (s_inLayout.fields.render_status & NML_RENDER_TOUMEI) != 0) &&
                             !((block->materialFlags & 6) == 0 &&
-                                             (layout->fields.render_status & 0x20) == 0 &&
+                                             (layout->fields.render_status & NML_RENDER_TOUMEI) == 0 &&
                                              is_parts_transparency(block) == 0)) {
                             if (s_pMapLast == model && is_block_last_entry(block) != 0) {
                                 s_apBlockLast[s_nBlocksAlphaLast] = block;
@@ -3526,8 +3521,8 @@ void nmlModelEntry(NmlModel *model)
                                 alphaGroupDelta = (s_nParent != 0 && parent != 0 && parentAlphaCount != 0) ? -1 : 0;
                                 alphaAdded = 1;
                                 s_aAlphaGroup[s_nAlphaGroup + alphaGroupDelta].blockCount++;
-                                s_apBlock[0xfff - s_nBlocksAlpha] = block;
-                                s_aBlockLayout[0xfff - s_nBlocksAlpha++] = s_nModel;
+                                s_apBlock[NML_BLOCK_POOL_LAST - s_nBlocksAlpha] = block;
+                                s_aBlockLayout[NML_BLOCK_POOL_LAST - s_nBlocksAlpha++] = s_nModel;
                                 alphaBlockCount++;
                                 if (parentEntry != 0) {
                                     (&parentEntry->alphaCount)[0]++;
@@ -3538,7 +3533,7 @@ void nmlModelEntry(NmlModel *model)
                                 }
                             }
                         }
-                        if ((block->materialFlags & 2) == 0 && (layout->fields.render_status & 0x20) == 0 &&
+                        if ((block->materialFlags & 2) == 0 && (layout->fields.render_status & NML_RENDER_TOUMEI) == 0 &&
                             (block->materialFlagsQword & 0x40004) != 0x40004 && is_parts_transparency(block) == 0) {
                             nonAlphaGroupDelta = (s_nParent != 0 && parent != 0 && parentNonAlphaCount != 0) ? -1 : 0;
                             nonAlphaAdded = 1;
@@ -3560,16 +3555,16 @@ void nmlModelEntry(NmlModel *model)
                     alphaBlockCount > 0 &&
                     alphaBlockCount < s_aAlphaGroup[s_nAlphaGroup - 1].blockCount &&
                     s_nParent != 0 && parent != 0 && alphaParentAdded == 0 &&
-                    (layout->fields.render_status & 0x100000) != 0 && s_nAlphaGroup < 0x1ff) {
-                    xglMemCopy2(s_aBLsave, &s_aBlockLayout[0x1000 - s_nBlocksAlpha], alphaBlockCount);
-                    xglMemCopy4(s_aBPsave, &s_apBlock[0x1000 - s_nBlocksAlpha], alphaBlockCount);
+                    (layout->fields.render_status & NML_RENDER_FACE_MODEL) != 0 && s_nAlphaGroup < NML_GROUP_LIMIT) {
+                    xglMemCopy2(s_aBLsave, &s_aBlockLayout[NML_BLOCK_POOL_SIZE - s_nBlocksAlpha], alphaBlockCount);
+                    xglMemCopy4(s_aBPsave, &s_apBlock[NML_BLOCK_POOL_SIZE - s_nBlocksAlpha], alphaBlockCount);
                     copyCount = s_aAlphaGroup[s_nAlphaGroup - 1].blockCount - alphaBlockCount;
                     if (alphaParentAdded < copyCount) {
                         for (copyIndex = 0; copyIndex < copyCount; copyIndex++) {
-                            s_aBlockLayout[0x1000 - s_nBlocksAlpha + copyIndex] =
-                                s_aBlockLayout[0x1000 + alphaBlockCount - s_nBlocksAlpha + copyIndex];
-                            s_apBlock[0x1000 - s_nBlocksAlpha + copyIndex] =
-                                s_apBlock[0x1000 + alphaBlockCount - s_nBlocksAlpha + copyIndex];
+                            s_aBlockLayout[NML_BLOCK_POOL_SIZE - s_nBlocksAlpha + copyIndex] =
+                                s_aBlockLayout[NML_BLOCK_POOL_SIZE + alphaBlockCount - s_nBlocksAlpha + copyIndex];
+                            s_apBlock[NML_BLOCK_POOL_SIZE - s_nBlocksAlpha + copyIndex] =
+                                s_apBlock[NML_BLOCK_POOL_SIZE + alphaBlockCount - s_nBlocksAlpha + copyIndex];
                         }
                     }
                     xglMemCopy2(&s_aBlockLayout[1 + s_aAlphaGroup[s_nAlphaGroup - 1].firstBlock - alphaBlockCount],
@@ -3578,10 +3573,10 @@ void nmlModelEntry(NmlModel *model)
                                 s_aBPsave, alphaBlockCount);
                 }
                 if (alphaAdded != 0 && (s_nParent == 0 || alphaParentAdded != 0) &&
-                    s_nAlphaGroup < 0x1ff) {
+                    s_nAlphaGroup < NML_GROUP_LIMIT) {
                     QuadwordCopy(&sortPos, &layout->fields.center);
                     first = (NmlModelBlock *)((char *)model + blockOffsets[0]);
-                    if (first->materialFlags & 0x10) {
+                    if (first->materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) {
                         sortPos.z = 10000.0f;
                         sortPos.y = 10000.0f;
                         sortPos.x = 10000.0f;
@@ -3597,7 +3592,7 @@ void nmlModelEntry(NmlModel *model)
         break;
     }
     for (groupScan = 0; groupScan < s_nAlphaGroup; groupScan++) {
-        if (s_aAlphaGroup[groupScan].flags & 0x10) {
+        if (s_aAlphaGroup[groupScan].flags & NML_GROUP_MAP) {
             s_nMapAlphaEntry = 1;
         }
     }
@@ -3620,7 +3615,7 @@ void nmlModelEntryEffect(NmlModel *model)
     Vector4 sortPos;
 
     nmlPacketSetCurrent();
-    if (s_nModel < 0x200 && s_nBlocks + s_nBlocksAlpha + model->blockCount < 0xfff) {
+    if (s_nModel < NML_MODEL_MAX && s_nBlocks + s_nBlocksAlpha + model->blockCount < NML_BLOCK_POOL_LAST) {
         index = 0;
         blockTable = model->blockOffsets;
         LAYOUT_S32(0x25c) = s_nModel;
@@ -3649,14 +3644,14 @@ void nmlModelEntryEffect(NmlModel *model)
         alphaAdded = 0;
         nonAlphaAdded = 0;
         s_apModelLayout[s_nModel] = layout;
-        if (s_nAlphaGroup < 0x1ff) {
-            s_aAlphaGroup[s_nAlphaGroup].firstBlock = (short)(0xfff - s_nBlocksAlpha);
+        if (s_nAlphaGroup < NML_GROUP_LIMIT) {
+            s_aAlphaGroup[s_nAlphaGroup].firstBlock = (short)(NML_BLOCK_POOL_LAST - s_nBlocksAlpha);
             s_aAlphaGroup[s_nAlphaGroup].blockCount = 0;
             s_aAlphaGroup[s_nAlphaGroup].sortDistance = 0.0f;
             s_aAlphaGroup[s_nAlphaGroup].owner.layout = layout;
             set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].flags);
         }
-        if (s_nNonAlphaGroup < 0x1ff) {
+        if (s_nNonAlphaGroup < NML_GROUP_LIMIT) {
             s_aNonAlphaGroup[s_nNonAlphaGroup].firstBlock = (short)s_nBlocks;
             s_aNonAlphaGroup[s_nNonAlphaGroup].blockCount = 0;
             s_aNonAlphaGroup[s_nNonAlphaGroup].owner.layout = layout;
@@ -3667,17 +3662,17 @@ void nmlModelEntryEffect(NmlModel *model)
         blockOffsets = blockTable;
         do {
             block = (NmlModelBlock *)((char *)model + *blockOffsets);
-            if (s_nBlocksAlpha + s_nBlocks < 0xfff) {
+            if (s_nBlocksAlpha + s_nBlocks < NML_BLOCK_POOL_LAST) {
                 if ((block->materialFlags & 6) != 0 ||
-                    (layout->fields.render_status & 0x20) != 0 ||
+                    (layout->fields.render_status & NML_RENDER_TOUMEI) != 0 ||
                     is_parts_transparency(block) != 0) {
                     s_aAlphaGroup[s_nAlphaGroup].blockCount++;
                     alphaAdded = 1;
-                    __builtin_memcpy(&s_apBlock[0xfff - s_nBlocksAlpha], &block, sizeof(block));
-                    s_aBlockLayout[0xfff - s_nBlocksAlpha++] = s_nModel;
+                    __builtin_memcpy(&s_apBlock[NML_BLOCK_POOL_LAST - s_nBlocksAlpha], &block, sizeof(block));
+                    s_aBlockLayout[NML_BLOCK_POOL_LAST - s_nBlocksAlpha++] = s_nModel;
                 }
                 if ((block->materialFlags & 2) == 0 &&
-                    (layout->fields.render_status & 0x20) == 0 &&
+                    (layout->fields.render_status & NML_RENDER_TOUMEI) == 0 &&
                     (block->materialFlagsQword & 0x40004) != 0x40004 &&
                     is_parts_transparency(block) == 0) {
                     nonAlphaGroupDelta = (s_nParent != 0) ? -1 : 0;
@@ -3693,7 +3688,7 @@ void nmlModelEntryEffect(NmlModel *model)
         }
         nextModel = s_nModel + 1;
         __builtin_memcpy(&s_nModel, &nextModel, sizeof(nextModel));
-        if (alphaAdded != 0 && s_nAlphaGroup < 0x1ff) {
+        if (alphaAdded != 0 && s_nAlphaGroup < NML_GROUP_LIMIT) {
             QuadwordCopy(&sortPos, &layout->fields.center);
             AlphaGroupSortEntry(&sortPos);
             s_nAlphaGroup = s_nAlphaGroup + 1;
@@ -3720,7 +3715,7 @@ void nmlModelEntryCard(NmlModel *model)
     Vector4 sortPos;
 
     nmlPacketSetCurrent();
-    if (s_nModel < 0x200 && s_nBlocks + s_nBlocksAlpha + model->blockCount < 0xfff) {
+    if (s_nModel < NML_MODEL_MAX && s_nBlocks + s_nBlocksAlpha + model->blockCount < NML_BLOCK_POOL_LAST) {
         __builtin_memset(&index, 0, sizeof(index));
         blockTable = model->blockOffsets;
         LAYOUT_S32(0x25c) = s_nModel;
@@ -3751,14 +3746,14 @@ void nmlModelEntryCard(NmlModel *model)
         __builtin_memset(&alphaAdded, 0, sizeof(alphaAdded));
         __builtin_memset(&nonAlphaAdded, 0, sizeof(nonAlphaAdded));
         s_apModelLayout[s_nModel] = layout;
-        if (s_nAlphaGroup < 0x1ff) {
-            s_aAlphaGroup[s_nAlphaGroup].firstBlock = (short)(0xfff - s_nBlocksAlpha);
+        if (s_nAlphaGroup < NML_GROUP_LIMIT) {
+            s_aAlphaGroup[s_nAlphaGroup].firstBlock = (short)(NML_BLOCK_POOL_LAST - s_nBlocksAlpha);
             s_aAlphaGroup[s_nAlphaGroup].blockCount = 0;
             s_aAlphaGroup[s_nAlphaGroup].sortDistance = 0.0f;
             s_aAlphaGroup[s_nAlphaGroup].owner.layout = layout;
             set_group_status(layout, &s_aAlphaGroup[s_nAlphaGroup].flags);
         }
-        if (s_nNonAlphaGroup < 0x1ff) {
+        if (s_nNonAlphaGroup < NML_GROUP_LIMIT) {
             s_aNonAlphaGroup[s_nNonAlphaGroup].firstBlock = (short)s_nBlocks;
             s_aNonAlphaGroup[s_nNonAlphaGroup].blockCount = 0;
             s_aNonAlphaGroup[s_nNonAlphaGroup].owner.layout = layout;
@@ -3769,17 +3764,17 @@ void nmlModelEntryCard(NmlModel *model)
         blockOffsets = blockTable;
         do {
             block = (NmlModelBlock *)((char *)model + *blockOffsets);
-            if (s_nBlocksAlpha + s_nBlocks < 0xfff) {
+            if (s_nBlocksAlpha + s_nBlocks < NML_BLOCK_POOL_LAST) {
                 if ((block->materialFlags & 6) != 0 ||
-                    (layout->fields.render_status & 0x20) != 0 ||
+                    (layout->fields.render_status & NML_RENDER_TOUMEI) != 0 ||
                     is_parts_transparency(block) != 0) {
                     s_aAlphaGroup[s_nAlphaGroup].blockCount++;
                     alphaAdded = 1;
-                    __builtin_memcpy(&s_apBlock[0xfff - s_nBlocksAlpha], &block, sizeof(block));
-                    s_aBlockLayout[0xfff - s_nBlocksAlpha++] = s_nModel;
+                    __builtin_memcpy(&s_apBlock[NML_BLOCK_POOL_LAST - s_nBlocksAlpha], &block, sizeof(block));
+                    s_aBlockLayout[NML_BLOCK_POOL_LAST - s_nBlocksAlpha++] = s_nModel;
                 }
                 if ((block->materialFlags & 2) == 0 &&
-                    (layout->fields.render_status & 0x20) == 0 &&
+                    (layout->fields.render_status & NML_RENDER_TOUMEI) == 0 &&
                     (block->materialFlagsQword & 0x40004) != 0x40004 &&
                     is_parts_transparency(block) == 0) {
                     s_aNonAlphaGroup[s_nNonAlphaGroup].blockCount++;
@@ -3794,7 +3789,7 @@ void nmlModelEntryCard(NmlModel *model)
         }
         nextModel = s_nModel + 1;
         __builtin_memcpy(&s_nModel, &nextModel, sizeof(nextModel));
-        if (alphaAdded != 0 && s_nAlphaGroup < 0x1ff) {
+        if (alphaAdded != 0 && s_nAlphaGroup < NML_GROUP_LIMIT) {
             QuadwordCopy(&sortPos, &layout->fields.center);
             AlphaGroupSortEntry(&sortPos);
             s_nAlphaGroup = s_nAlphaGroup + 1;
@@ -3831,7 +3826,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
         int pass;
         int visible;
 
-        visible = (s_aNonAlphaGroup[groupIndex].flags & 0x10) ? (model->fields.texMapMode & 1) : (model->fields.texMapMode & 2);
+        visible = (s_aNonAlphaGroup[groupIndex].flags & NML_GROUP_MAP) ? (model->fields.texMapMode & 1) : (model->fields.texMapMode & 2);
         if (visible == 0) {
             continue;
         }
@@ -3840,7 +3835,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
         if (model == s_aNonAlphaGroup[groupIndex].owner.layout) {
             continue;
         }
-        if ((s_aNonAlphaGroup[groupIndex].flags & 0x10) == 0) {
+        if ((s_aNonAlphaGroup[groupIndex].flags & NML_GROUP_MAP) == 0) {
             Vector4 *bound = &s_aNonAlphaGroup[groupIndex].owner.layout->fields.center.v;
             if (model->fields.proreal->bounds_max.x < bound->x || bound->z > model->fields.proreal->bounds_max.z ||
                 bound->x < model->fields.proreal->bounds_min.x || bound->z < model->fields.proreal->bounds_min.z) {
@@ -3857,11 +3852,11 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
         nmlPacketAddGsZbuf(1);
         nmlPacketAddGsFrame(sRender.display_buffer_base, 0);
         if (pass != 0) {
-            nmlPacketAddGsPixeltest(0x51001);
+            nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY);
         } else {
-            nmlPacketAddGsPixeltest(0x5d001);
+            nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY | NML_GS_TEST_DATE | NML_GS_TEST_DATM);
         }
-        if (s_aNonAlphaGroup[groupIndex].flags & 0x10) {
+        if (s_aNonAlphaGroup[groupIndex].flags & NML_GROUP_MAP) {
             nmlPacketAddGsAlpha(model->fields.proreal->alpha);
         } else {
             nmlPacketAddGsAlpha(model->fields.proreal->alpha);
@@ -3877,15 +3872,15 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
 
             worldMax = &pointC;
             worldMin = &pointD;
-            if (layout->fields.render_status & 0x100000) {
+            if (layout->fields.render_status & NML_RENDER_FACE_MODEL) {
                 continue;
             }
-            if (s_aNonAlphaGroup[groupIndex].flags & 0x10) {
+            if (s_aNonAlphaGroup[groupIndex].flags & NML_GROUP_MAP) {
                 if ((int)layout == s_inMapHandle[1] && model->fields.mapShadowPartCount != 0) {
                     if (!is_shadow_map_parts(model, entry->block.partId)) {
                         continue;
                     }
-                } else if (entry->block.materialFlags & 0x10) {
+                } else if (entry->block.materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) {
                     Vector4 *minCorner = &pointB;
                     float *matrixRow = layout->fields.weightedMatrices[entry->block.matrixIndices[0] - 1].matrix[3];
 
@@ -3920,7 +3915,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                 }
             }
 
-            layout->fields.render_status |= 0x800;
+            layout->fields.render_status |= NML_RENDER_PROREAL;
             layout->fields.prorealOverride = model->fields.proreal;
             nmlPacketAddTransMicrocode(&entry->block,
                                        layout);
@@ -3936,7 +3931,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
             nmlPacketAddGsFlush();
             nmlPacketAddExecProg(&entry->block,
                                  layout, 1, 0);
-            layout->fields.render_status &= ~0x800u;
+            layout->fields.render_status &= ~NML_RENDER_PROREAL;
             layout->fields.prorealOverride = 0;
         }
         if (result != 0) {
@@ -3978,7 +3973,7 @@ render_body:
     nmlPacketAddGsFlush();
     nmlFilterSetTexClear(frameBase);
     nmlPacketGsInit();
-    nmlPacketAddGsPixeltest(0x31001);
+    nmlPacketAddGsPixeltest(NML_GS_TEST_ZTE | NML_GS_TEST_ZTST_ALWAYS | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY);
     nmlPacketAddGsScissor(0x00df000001ff0000ULL);
     nmlPacketAddGsFlush();
     nmlPacketAddGifTagStandard(0, 0);
@@ -3991,8 +3986,8 @@ render_body:
         index += step;
         material = s_apBlock[index];
         layout = s_apModelLayout[s_aBlockLayout[index]];
-        if ((layout->fields.render_status & 0x100000) == 0) {
-            layout->fields.render_status |= 0x8000;
+        if ((layout->fields.render_status & NML_RENDER_FACE_MODEL) == 0) {
+            layout->fields.render_status |= NML_RENDER_TEXTURE_PASS;
             if (firstLayout == 0) {
                 firstLayout = layout;
             }
@@ -4006,7 +4001,7 @@ render_body:
             }
             nmlPacketAddExecProg(material,
                                  layout, 0, 0);
-            layout->fields.render_status &= ~0x8000;
+            layout->fields.render_status &= ~NML_RENDER_TEXTURE_PASS;
         }
     }
 
@@ -4015,7 +4010,7 @@ render_body:
             nmlFilterSetTexFillDraw(frameBase, firstLayout);
         }
         nmlPacketGsInit();
-        nmlPacketAddGsScissor(0x01bf000001ff0000ULL);
+        nmlPacketAddGsScissor(NML_GS_SCISSOR_FULL);
         nmlPacketAddGsFlush();
         if (firstLayout != 0) {
             result = nmlModelRenderProreal(firstLayout, frame);
@@ -4036,7 +4031,7 @@ render_done:
 
 static int nmlModelRenderCircle(const NmlBlockGroup *group, int pitch, int frame)
 {
-    extern unsigned short s_aBlockLayout[4096];
+    extern unsigned short s_aBlockLayout[NML_BLOCK_POOL_SIZE];
     extern float circleViewLimitMin;
     LayoutStore *owner;
     LayoutStore *model;
@@ -4059,7 +4054,7 @@ static int nmlModelRenderCircle(const NmlBlockGroup *group, int pitch, int frame
             }
             index += pitch;
             model = s_apModelLayout[s_aBlockLayout[index]];
-            if ((model->fields.render_status & 0x100000u) != 0) {
+            if ((model->fields.render_status & NML_RENDER_FACE_MODEL) != 0) {
                 model = 0;
             } else {
                 break;
@@ -4087,7 +4082,7 @@ static int nmlModelRenderDropCircle(const NmlBlockGroup *group, int pitch, Studi
         while (index != end) {
             index += pitch;
             model = s_apModelLayout[s_aBlockLayout[index]];
-            if ((model->fields.render_status & 0x100000u) == 0)
+            if ((model->fields.render_status & NML_RENDER_FACE_MODEL) == 0)
                 break;
         }
     } while (0);
@@ -4110,8 +4105,8 @@ static int nmlModelRenderDrop(NmlBlockGroup *range,
     nmlPacketGsInit();
     nmlPacketAddGsFBA(1);
     nmlPacketAddGsZbuf(1);
-    nmlPacketAddGsAlpha(0x89);
-    nmlPacketAddGsPixeltest(0x54000);
+    nmlPacketAddGsAlpha(NML_GS_ALPHA_DEST_BY_SRC);
+    nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL | NML_GS_TEST_DATE);
     nmlPacketAddGifTagStandard(0, 1);
     nmlPacketAddGsFlush();
     if (s_nAnotherStudio) {
@@ -4123,8 +4118,8 @@ static int nmlModelRenderDrop(NmlBlockGroup *range,
             index += step;
             block = s_apBlock[index];
             layout = s_apModelLayout[s_aBlockLayout[index]];
-            if ((layout->slots[0x94].i & 0x100000) == 0) {
-                layout->slots[0x94].i |= 0x80000;
+            if ((layout->slots[0x94].i & NML_RENDER_FACE_MODEL) == 0) {
+                layout->slots[0x94].i |= NML_RENDER_DROP_PASS;
                 nmlPacketAddTransMicrocode(block, layout);
                 nmlPacketAddBlockMaterial(block, layout, 0, mode);
                 partsResult = nmlPacketAddParts(block, layout, screen);
@@ -4132,7 +4127,7 @@ static int nmlModelRenderDrop(NmlBlockGroup *range,
                     break;
                 }
                 nmlPacketAddExecProg(block, layout, 0, 0);
-                layout->slots[0x94].i &= ~0x80000u;
+                layout->slots[0x94].i &= ~NML_RENDER_DROP_PASS;
             }
         }
     } while (0);
@@ -4149,7 +4144,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
 
     nmlPacketClrModelCache();
     nmlPacketGsInit();
-    nmlPacketAddGsPixeltest(0x50000);
+    nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
     nmlPacketAddGsZbuf(0);
     nmlPacketAddGsFlush();
 
@@ -4161,13 +4156,13 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
 
         previous_tag = -1;
 
-        if (s_aNonAlphaGroup[group_index].flags & 0x48) {
+        if (s_aNonAlphaGroup[group_index].flags & (NML_GROUP_PROREAL | NML_GROUP_CULLED)) {
             continue;
         }
 
         nmlPacketAddGsFrame(sRender.display_buffer_base,
-                            ((s_aNonAlphaGroup[group_index].flags & 2) == 0) ? s_nStencilVal : 0);
-        nmlPacketAddGsFBA(s_aNonAlphaGroup[group_index].flags & 2);
+                            ((s_aNonAlphaGroup[group_index].flags & NML_GROUP_STENCIL) == 0) ? s_nStencilVal : 0);
+        nmlPacketAddGsFBA(s_aNonAlphaGroup[group_index].flags & NML_GROUP_STENCIL);
 
         layout = s_apModelLayout[s_aBlockLayout[s_aNonAlphaGroup[group_index].firstBlock]];
         {
@@ -4187,7 +4182,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
         nmlPacketAddGsFogCol(layout->fields.fogColor.color);
         {
             float viewportAlpha = layout->fields.viewportAlpha[viewport];
-            nmlPacketAddGsAlpha(((unsigned long long)(int)(viewportAlpha * 128.0f) << 32) | 104);
+            nmlPacketAddGsAlpha(((unsigned long long)(int)(viewportAlpha * 128.0f) << 32) | NML_GS_ALPHA_FIXED);
         }
         nmlPacketAddGsFlush();
 
@@ -4206,7 +4201,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
                 }
 
                 tag = (material->materialFlags & 1) |
-                      (layout->fields.render_status & 0x01004002);
+                      (layout->fields.render_status & (NML_RENDER_GLOBAL_FOG | NML_RENDER_TEXMAP_TEXTURE | NML_RENDER_FOG));
                 if (previous_tag != tag) {
                     previous_tag = tag;
                     nmlPacketAddGifTag(material, layout, 0);
@@ -4220,9 +4215,9 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
                 nmlPacketAddPixelControl(material, layout, viewport);
                 nmlPacketAddGsFlush();
 
-                if ((material->materialFlags & 0x1000) &&
+                if ((material->materialFlags & NML_MATERIAL_REFLECT) &&
                     (!(layout->fields.renderLevel & 0x10) ||
-                     ((layout->fields.render_status & 0x100000) &&
+                     ((layout->fields.render_status & NML_RENDER_FACE_MODEL) &&
                       strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflRot(material, layout);
                     nmlPacketAddReflectParam(material, layout);
@@ -4254,20 +4249,20 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         int block_index;
 
         filter_model = 0;
-        if (s_aAlphaGroup[group_index].flags & 0x48) {
+        if (s_aAlphaGroup[group_index].flags & (NML_GROUP_PROREAL | NML_GROUP_CULLED)) {
             continue;
         }
         if (result != 0) {
             break;
         }
         nmlPacketAddGsZbuf(0);
-        nmlPacketAddGsAlpha(0x68);
+        nmlPacketAddGsAlpha(NML_GS_ALPHA_FIXED);
         nmlPacketAddGsFrame(sRender.display_buffer_base,
-                            (s_aAlphaGroup[group_index].flags & 2) ? 0xffffff : s_nStencilVal);
+                            (s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL) ? 0xffffff : s_nStencilVal);
         nmlPacketAddGsFrame1(sRender.display_buffer_base,
-                             (s_aAlphaGroup[group_index].flags & 2) ? 0xffffff : s_nStencilVal);
-        nmlPacketAddGsFBA(s_aAlphaGroup[group_index].flags & 2);
-        nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].flags & 2);
+                             (s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL) ? 0xffffff : s_nStencilVal);
+        nmlPacketAddGsFBA(s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL);
+        nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL);
         nmlPacketAddGifTagStandard(1, 1);
         nmlPacketAddGsFlush();
         nmlPacketClrModelCache();
@@ -4301,7 +4296,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
             }
             if ((layout->fields.weightedMatrices[material->partId].part.flags & 1) == 0 &&
                 (material->materialFlags & 0x8000) == 0 &&
-                (layout->fields.render_status & 8) == 0) {
+                (layout->fields.render_status & NML_RENDER_ZWRITE) == 0) {
                 continue;
             }
             if (material->materialFlags & 2) {
@@ -4337,23 +4332,23 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         }
 
         {
-            if (s_aAlphaGroup[group_index].flags & 0x800) {
+            if (s_aAlphaGroup[group_index].flags & NML_GROUP_BACK_CLEAR) {
                 nmlFilterBackClear();
             }
             nmlPacketGsInit();
             nmlPacketAddGsZbuf(1);
-            nmlPacketAddGsPixeltest(0x50000);
+            nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
             display_base = sRender.display_buffer_base;
-            if (s_aAlphaGroup[group_index].flags & 0x800) {
+            if (s_aAlphaGroup[group_index].flags & NML_GROUP_BACK_CLEAR) {
                 display_base = sRender.flip_base;
             }
             previous_gif_flags = -1;
             nmlPacketAddGsFrame((unsigned short)display_base,
-                                (s_aAlphaGroup[group_index].flags & 2) ? 0 : s_nStencilVal);
+                                (s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL) ? 0 : s_nStencilVal);
             nmlPacketAddGsFrame1((unsigned short)display_base,
-                                 (s_aAlphaGroup[group_index].flags & 2) ? 0 : s_nStencilVal);
-            nmlPacketAddGsFBA(s_aAlphaGroup[group_index].flags & 2);
-            nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].flags & 2);
+                                 (s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL) ? 0 : s_nStencilVal);
+            nmlPacketAddGsFBA(s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL);
+            nmlPacketAddGsFBA1(s_aAlphaGroup[group_index].flags & NML_GROUP_STENCIL);
             nmlPacketAddGsFlush();
 
             for (block_index = s_aAlphaGroup[group_index].firstBlock;
@@ -4387,14 +4382,14 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                     filter_model = layout;
                 }
                 if (filter_model == 0 &&
-                    (s_aAlphaGroup[group_index].flags & 0x800) != 0) {
+                    (s_aAlphaGroup[group_index].flags & NML_GROUP_BACK_CLEAR) != 0) {
                     filter_model = layout;
                 }
 
                 render_status = layout->fields.render_status;
-                flags = (material->materialFlags & 1) | (render_status & 0x01004002);
-                if (render_status & 0x2000) {
-                    flags &= ~(render_status & 0x01000002);
+                flags = (material->materialFlags & 1) | (render_status & (NML_RENDER_GLOBAL_FOG | NML_RENDER_TEXMAP_TEXTURE | NML_RENDER_FOG));
+                if (render_status & NML_RENDER_FOG_CANCEL) {
+                    flags &= ~(render_status & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG));
                 }
                 nmlPacketAddTransMicrocode(material, layout);
                 if (previous_gif_flags != flags) {
@@ -4406,13 +4401,13 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                     break;
                 }
                 nmlPacketAddTextureParam(material, layout);
-                if (flags & 0x01000002) {
+                if (flags & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG)) {
                     nmlPacketAddFog(layout, viewport);
                     nmlPacketAddGsFogCol(layout->fields.fogColor.color);
                 }
-                if ((material->materialFlags & 0x1000) != 0 &&
+                if ((material->materialFlags & NML_MATERIAL_REFLECT) != 0 &&
                     ((layout->fields.renderLevel & 0x10) == 0 ||
-                     ((layout->fields.render_status & 0x100000) != 0 &&
+                     ((layout->fields.render_status & NML_RENDER_FACE_MODEL) != 0 &&
                       strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflRot(material, layout);
                 }
@@ -4422,17 +4417,17 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                     break;
                 }
                 nmlPacketAddPixelControl(material, layout, viewport | 0x10000);
-                if (material->materialFlags & 0x20) {
-                    nmlPacketAddGsAlpha(0x48);
-                } else if (material->materialFlags & 0x40) {
-                    nmlPacketAddGsAlpha(0x42);
+                if (material->materialFlags & NML_MATERIAL_BLEND_ADD) {
+                    nmlPacketAddGsAlpha(NML_GS_ALPHA_ADD);
+                } else if (material->materialFlags & NML_MATERIAL_BLEND_SUB) {
+                    nmlPacketAddGsAlpha(NML_GS_ALPHA_SUBTRACT);
                 } else {
                     nmlPacketAddGsAlpha(layout->fields.alpha);
                 }
                 nmlPacketAddGsFlush();
-                if ((material->materialFlags & 0x1000) != 0 &&
+                if ((material->materialFlags & NML_MATERIAL_REFLECT) != 0 &&
                     ((layout->fields.renderLevel & 0x10) == 0 ||
-                     ((layout->fields.render_status & 0x100000) != 0 &&
+                     ((layout->fields.render_status & NML_RENDER_FACE_MODEL) != 0 &&
                       strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflectParam(material, layout);
                 }
@@ -4441,7 +4436,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
 
         }
 
-        if (s_aAlphaGroup[group_index].flags & 0x800) {
+        if (s_aAlphaGroup[group_index].flags & NML_GROUP_BACK_CLEAR) {
             nmlFilterSetFlatRender(filter_model);
         }
         if (s_nUseStealth != 0) {
@@ -4453,7 +4448,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
         if (result != 0) {
             break;
         }
-        if ((s_aAlphaGroup[group_index].flags & 0x10) != 0 && viewport == 0 &&
+        if ((s_aAlphaGroup[group_index].flags & NML_GROUP_MAP) != 0 && viewport == 0 &&
             s_nUseStealth != 0 && s_nMapAlphaEntry != 0) {
             nmlFilterSetFrameToBuffer(sRender.display_buffer_base);
         }
@@ -4513,28 +4508,28 @@ static int nmlModelFlushSub(int viewport)
         index = result;
         for (; index < s_nNonAlphaGroup; index++) {
             unsigned int flags = s_aNonAlphaGroup[index].flags;
-            if (flags & 1) {
+            if (flags & NML_GROUP_TEXTURE) {
                 result = nmlModelRenderTexture(&s_aNonAlphaGroup[index], 1, viewport);
                 if (result != 0) {
                     break;
                 }
                 continue;
             }
-            if (flags & 0x100) {
+            if (flags & NML_GROUP_CIRCLE) {
                 result = nmlModelRenderCircle(&s_aNonAlphaGroup[index], 1, viewport);
                 if (result != 0) {
                     break;
                 }
                 continue;
             }
-            if (flags & 0x200) {
+            if (flags & NML_GROUP_DROP_CIRCLE) {
                 result = nmlModelRenderDropCircle(&s_aNonAlphaGroup[index], 1, camera);
                 if (result != 0) {
                     break;
                 }
                 continue;
             }
-            if (flags & 0x80) {
+            if (flags & NML_GROUP_DROP) {
                 result = nmlModelRenderDrop(&s_aNonAlphaGroup[index], 1, camera, viewport);
                 if (result != 0) {
                     break;
@@ -4547,26 +4542,26 @@ static int nmlModelFlushSub(int viewport)
         {
             int callback_mode = -1;
             for (index = 0; index < s_nAlphaGroup && result == 0; index++) {
-                if (s_aAlphaGroup[index].flags & 0x20) {
-                    if (s_aAlphaGroup[index].flags & 1) {
+                if (s_aAlphaGroup[index].flags & NML_GROUP_TOUMEI) {
+                    if (s_aAlphaGroup[index].flags & NML_GROUP_TEXTURE) {
                         result = nmlModelRenderTexture(&s_aAlphaGroup[index], callback_mode, viewport);
                         if (result != 0) {
                             break;
                         }
                         continue;
-                    } else if (s_aAlphaGroup[index].flags & 0x100) {
+                    } else if (s_aAlphaGroup[index].flags & NML_GROUP_CIRCLE) {
                         result = nmlModelRenderCircle(&s_aAlphaGroup[index], callback_mode, viewport);
                         if (result != 0) {
                             break;
                         }
                         continue;
-                    } else if (s_aAlphaGroup[index].flags & 0x200) {
+                    } else if (s_aAlphaGroup[index].flags & NML_GROUP_DROP_CIRCLE) {
                         result = nmlModelRenderDropCircle(&s_aAlphaGroup[index], callback_mode, camera);
                         if (result != 0) {
                             break;
                         }
                         continue;
-                    } else if ((s_aAlphaGroup[index].flags & 0x80) == 0) {
+                    } else if ((s_aAlphaGroup[index].flags & NML_GROUP_DROP) == 0) {
                         continue;
                     } else {
                         result = nmlModelRenderDrop(&s_aAlphaGroup[index], callback_mode, camera, viewport);
@@ -4582,7 +4577,7 @@ static int nmlModelFlushSub(int viewport)
             if (viewport == 0 && s_nEffectWrite == 0) {
                 nmlPacketGsInit();
                 nmlPacketAddGsZbuf(0);
-                nmlPacketAddGsPixeltest(0x50000);
+                nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
                 nmlPacketAddGsFrame(sRender.display_buffer_base, 0);
                 nmlPacketAddGsFlush();
                 sefDrawEffect();
@@ -4595,7 +4590,7 @@ static int nmlModelFlushSub(int viewport)
         }
         if (result == 0) {
             nmlPacketGsInit();
-            nmlPacketAddGsPixeltest(0x50000);
+            nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
             nmlPacketAddGsFlush();
             nmlFilterSetFrameAlphaClear();
             nmlPacketClrTextureCache();
@@ -4615,8 +4610,8 @@ static int nmlModelFlushSub(int viewport)
         }
     }
     nmlPacketGsInit();
-    nmlPacketAddGsScissor(((u64)0x01BF << 48) | ((u64)0x01FF << 16));
-    nmlPacketAddGsScissor1(((u64)0x01BF << 48) | ((u64)0x01FF << 16));
+    nmlPacketAddGsScissor(((u64)NML_SCISSOR_MAX_Y << 48) | ((u64)NML_SCISSOR_MAX_X << 16));
+    nmlPacketAddGsScissor1(((u64)NML_SCISSOR_MAX_Y << 48) | ((u64)NML_SCISSOR_MAX_X << 16));
     nmlPacketAddGsFlush();
     nmlPacketClrTextureCache();
     return result;
@@ -4686,8 +4681,8 @@ void nmlModelFlush(void)
     nmlPacketAddGsZbuf1(1);
     nmlPacketAddGsFBA(0);
     nmlPacketAddGsFBA1(0);
-    nmlPacketAddGsPixeltest(0x50000);
-    nmlPacketAddGsPixeltest1(0x50000);
+    nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
+    nmlPacketAddGsPixeltest1(NML_GS_TEST_ZGEQUAL);
     nmlPacketAddGsFrame(sRender.display_buffer_base, 0);
     nmlPacketAddGsFrame1(sRender.display_buffer_base, 0);
     nmlPacketAddGsAlpha1(0x0000008000000068ULL);
@@ -4714,7 +4709,7 @@ void nmlModelFlush(void)
     if (result == 0 && s_nEffectWrite == 1 && s_nRenderCancel == 0) {
         nmlPacketGsInit();
         nmlPacketAddGsZbuf(0);
-        nmlPacketAddGsPixeltest(0x50000);
+        nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
         nmlPacketAddGsFrame(sRender.display_buffer_base, 0);
         nmlPacketAddGsFlush();
         sefDrawEffect();
@@ -4779,7 +4774,7 @@ void nmlModelFlush(void)
     nmlPacketAddGsTexture();
     nmlPacketAddGsClamp(0);
     nmlPacketAddGsZbuf(0);
-    nmlPacketAddGsPixeltest(0x50000);
+    nmlPacketAddGsPixeltest(NML_GS_TEST_ZGEQUAL);
     nmlPacketAddGsAlpha(0x0000008000000044ULL);
     nmlPacketAddGsFrame(sRender.display_buffer_base, 0);
     nmlPacketAddGsFlush();

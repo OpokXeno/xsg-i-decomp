@@ -6,6 +6,27 @@
 #include "main/pause_menu_page_uwamono.h"
 #include "main/xgl_dma.h"
 
+/*
+ * Event locator kinds, named after their EventCheck_* handlers. The value is
+ * also the method id Call_JavaMethod receives, and Get_LocaterType returns it
+ * (or -1) for the locator's angle.
+ */
+enum {
+    EVENT_LOCATOR_LINE_BUTTON = 1,
+    EVENT_LOCATOR_LINE_TOUCH = 2,
+    EVENT_LOCATOR_CIRCLE_BUTTON = 3,
+    EVENT_LOCATOR_SQUARE_BUTTON_CENTER = 4,
+    EVENT_LOCATOR_SQUARE_BUTTON = 5,
+    EVENT_LOCATOR_SQUARE_TOUCH = 6
+};
+
+/* LocaterAngle holds one (min, max) angle pair per locator kind slot. */
+#define EVENT_LOCATOR_ANGLE_COUNT 8
+
+/* UnduDataGetHeader index of the locator points; each locator is a pair of consecutive headers. */
+#define EVENT_LOCATOR_DATA_INDEX 0x207
+#define EVENT_LOCATOR_HEADER_LIMIT 100
+
 typedef struct EventLocatorFunctionData {
     unsigned char unmodeled_00[0x64];
     u32 locator_flags;
@@ -102,34 +123,34 @@ void EventCheck_Line_Button(void *actor, LayoutHeader *first, LayoutHeader *seco
  * (whole-program argument liveness: all three are read on entry). */
 void EventCheck_Line_Touch(void *actor, LayoutHeader *first, LayoutHeader *second) {
     if (Check_InsideID(actor, first, second) != 0) {
-        Call_JavaMethod(actor, 2);
+        Call_JavaMethod(actor, EVENT_LOCATOR_LINE_TOUCH);
     }
 }
 
 void EventCheck_Circle_Button(void *actor, LayoutHeader *first, LayoutHeader *second) {
-    if ((PadData.half_2a & 0x20) && (Check_InsideID(actor, first, second) != 0)) {
-        Call_JavaMethod(actor, 3);
+    if ((PadData.half_2a & PAD_CIRCLE) && (Check_InsideID(actor, first, second) != 0)) {
+        Call_JavaMethod(actor, EVENT_LOCATOR_CIRCLE_BUTTON);
     }
 }
 
 void EventCheck_Square_Button_Center(EventLocatorFunctionActor *actor, LayoutHeader *first, LayoutHeader *second) {
-    if ((PadData.half_2a & 0x20)
+    if ((PadData.half_2a & PAD_CIRCLE)
         && (Check_InsideFan(&actor->position, first, -1, actor->rotation.y,
                              50.0f, 60.0f, actor->interaction_radius) != 0)
         && (Check_InsideID(actor, first, second) != 0)) {
-        Call_JavaMethod(actor, 4);
+        Call_JavaMethod(actor, EVENT_LOCATOR_SQUARE_BUTTON_CENTER);
     }
 }
 
 void EventCheck_Square_Button(void *actor, LayoutHeader *first, LayoutHeader *second) {
-    if ((PadData.half_2a & 0x20) && (Check_InsideID(actor, first, second) != 0)) {
-        Call_JavaMethod(actor, 5);
+    if ((PadData.half_2a & PAD_CIRCLE) && (Check_InsideID(actor, first, second) != 0)) {
+        Call_JavaMethod(actor, EVENT_LOCATOR_SQUARE_BUTTON);
     }
 }
 
 void EventCheck_Square_Touch(void *actor, LayoutHeader *first, LayoutHeader *second) {
     if (Check_InsideID(actor, first, second) != 0) {
-        Call_JavaMethod(actor, 6);
+        Call_JavaMethod(actor, EVENT_LOCATOR_SQUARE_TOUCH);
     }
 }
 
@@ -152,7 +173,7 @@ void Check_Locater(EventLocatorFunctionActor *actor)
     if ((GameLoopState->flags & 0x400) != 0) {
         return;
     }
-    if ((FLAG_FRAME_60 != 0) && ((PadData.half_28 & 0x200) != 0)) {
+    if ((FLAG_FRAME_60 != 0) && ((PadData.half_28 & PAD_L3) != 0)) {
         return;
     }
     if ((event_data->locator_flags & 0x40000) == 0) {
@@ -160,9 +181,9 @@ void Check_Locater(EventLocatorFunctionActor *actor)
     }
 
     pair_index = 0;
-    while (pair_index < 100) {
-        first_header = UnduDataGetHeader(519, pair_index);
-        second_header = UnduDataGetHeader(519, pair_index + 1);
+    while (pair_index < EVENT_LOCATOR_HEADER_LIMIT) {
+        first_header = UnduDataGetHeader(EVENT_LOCATOR_DATA_INDEX, pair_index);
+        second_header = UnduDataGetHeader(EVENT_LOCATOR_DATA_INDEX, pair_index + 1);
         if ((first_header == 0) || (second_header == 0)) {
             break;
         }
@@ -172,7 +193,7 @@ void Check_Locater(EventLocatorFunctionActor *actor)
         pair_index += 2;
     }
 
-    if ((pair_index == 100) || (first_header == 0) || (second_header == 0)) {
+    if ((pair_index == EVENT_LOCATOR_HEADER_LIMIT) || (first_header == 0) || (second_header == 0)) {
         enemy_work->active_locator_index = -1;
         return;
     }
@@ -183,24 +204,24 @@ void Check_Locater(EventLocatorFunctionActor *actor)
     locator_type = Get_LocaterType(pair_index);
 
     switch (locator_type) {
-    case 1:
+    case EVENT_LOCATOR_LINE_BUTTON:
         EventCheck_Line_Button(actor_record, first_header, second_header);
         break;
-    case 2:
+    case EVENT_LOCATOR_LINE_TOUCH:
         if (enemy_work->active_locator_index != EventID) {
             EventCheck_Line_Touch(actor_record, first_header, second_header);
         }
         break;
-    case 3:
+    case EVENT_LOCATOR_CIRCLE_BUTTON:
         EventCheck_Circle_Button(actor_record, first_header, second_header);
         break;
-    case 4:
+    case EVENT_LOCATOR_SQUARE_BUTTON_CENTER:
         EventCheck_Square_Button_Center(actor_record, first_header, second_header);
         break;
-    case 5:
+    case EVENT_LOCATOR_SQUARE_BUTTON:
         EventCheck_Square_Button(actor_record, first_header, second_header);
         break;
-    case 6:
+    case EVENT_LOCATOR_SQUARE_TOUCH:
         if (enemy_work->active_locator_index != EventID) {
             EventCheck_Square_Touch(actor_record, first_header, second_header);
         }
@@ -217,11 +238,11 @@ char Get_LocaterType(short locator_index)
     short type;
 
     offset = locator_index * 2;
-    locator_header = UnduDataGetHeader(0x207, offset);
-    UnduDataGetHeader(0x207, offset + 1);
+    locator_header = UnduDataGetHeader(EVENT_LOCATOR_DATA_INDEX, offset);
+    UnduDataGetHeader(EVENT_LOCATOR_DATA_INDEX, offset + 1);
     angle = locator_header->locator.w;
     type = 0;
-    while (type < 8) {
+    while (type < EVENT_LOCATOR_ANGLE_COUNT) {
         if (LocaterAngle[type * 2] < angle) {
             if (angle < LocaterAngle[type * 2 + 1]) {
                 break;
@@ -229,7 +250,7 @@ char Get_LocaterType(short locator_index)
         }
         type += 1;
     }
-    return type == 8 ? -1 : (char)type;
+    return type == EVENT_LOCATOR_ANGLE_COUNT ? -1 : (char)type;
 }
 
 char Get_LocaterType_Angle(float angle)
@@ -237,7 +258,7 @@ char Get_LocaterType_Angle(float angle)
     short type;
 
     type = 0;
-    while (type < 8) {
+    while (type < EVENT_LOCATOR_ANGLE_COUNT) {
         if (LocaterAngle[type * 2] < angle) {
             if (angle < LocaterAngle[type * 2 + 1]) {
                 break;
@@ -245,7 +266,7 @@ char Get_LocaterType_Angle(float angle)
         }
         type += 1;
     }
-    return type == 8 ? -1 : (char)type;
+    return type == EVENT_LOCATOR_ANGLE_COUNT ? -1 : (char)type;
 }
 
 int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
@@ -295,14 +316,14 @@ int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
     second_point.w = 1.0f;
 
     switch (locator_type - 1) {
-    case 0: {
+    case EVENT_LOCATOR_LINE_BUTTON - 1: {
         Vector4 *position = &origin[0];
         Get_Point_By_AngleLength(position, &bounds[0], actor->rotation.y, 1.0f);
         return Check_CrossingOver(&first->locator, &second->locator, &bounds[0], position);
     }
-    case 1:
+    case EVENT_LOCATOR_LINE_TOUCH - 1:
         return Check_CrossingOver(&first->locator, &second->locator, &actor->previous_position, &origin[0]);
-    case 2:
+    case EVENT_LOCATOR_CIRCLE_BUTTON - 1:
         radius = Get_Distance(&first->locator, &second->locator);
         second_point.y = 0.0f;
         second_point.x = radius;
@@ -311,9 +332,9 @@ int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
         }
         if (radius < Get_Distance(&first->locator, &origin[0])) return 0;
         return 1;
-    case 3:
-    case 4:
-    case 5:
+    case EVENT_LOCATOR_SQUARE_BUTTON_CENTER - 1:
+    case EVENT_LOCATOR_SQUARE_BUTTON - 1:
+    case EVENT_LOCATOR_SQUARE_TOUCH - 1:
         radius = Get_Distance(&first->locator, &second->locator);
         coordinates = &first->locator.x;
         origin_x = origin[0].x;

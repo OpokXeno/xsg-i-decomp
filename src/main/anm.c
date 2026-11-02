@@ -3,8 +3,6 @@
 #include "anm.h"
 #include "main/anm.h"
 
-#define FPK_MAGIC 0x004B5046
-#define FPK_MAGIC_MASK 0x00FFFFFF
 #define FPK_RELOCATED_MASK 0xFF000000
 #define FPK_RELOCATED 0x01000000
 #define FCV_MAGIC 0x00564346
@@ -24,6 +22,8 @@
 #define ANM_RESET_CLOCK_SPEED 0.033333335f
 #define ANM_ADVANCE_ENTRY 0x20000
 #define ANM_PAUSED 0x80000
+#define ANM_DATA_INDEX_MASK 0xFF   /* clock->current_data_id: entry index in the pack */
+#define ANM_DATA_BANK_MASK 0x700   /* clock->current_data_id: bank bits kept when the index advances */
 
 /* The shared FPK/FCV prefix used by the pack accessors. */
 typedef struct FpkFcvPack {
@@ -111,7 +111,7 @@ FpkAnimationEntry *ANM_getEntry(AnmClock *clock, FpkFcvPack *pack)
     FpkAnimationAttributeSlot *attribute_slots;
     u16 attribute_index;
 
-    data_index = clock->current_data_id & 0xFF;
+    data_index = clock->current_data_id & ANM_DATA_INDEX_MASK;
     if (pack != 0) {
         signature = pack->magic;
         if ((signature & FPK_MAGIC_MASK) == FPK_MAGIC) {
@@ -625,8 +625,8 @@ void ANM_update(AnmClock *clock)
             if (clock->flags & ANM_ADVANCE_ENTRY) {
                 int entry_count = PACK_getSize(clock->pack);
                 u16 current_data_id = clock->current_data_id;
-                int data_index = (current_data_id & 0xFF) + 1;
-                int data_bank = current_data_id & 0x700;
+                int data_index = (current_data_id & ANM_DATA_INDEX_MASK) + 1;
+                int data_bank = current_data_id & ANM_DATA_BANK_MASK;
                 if (data_index >= entry_count) {
                     data_index = 0;
                 }
@@ -651,8 +651,8 @@ void ANM_update(AnmClock *clock)
         if (clock->flags & ANM_ADVANCE_ENTRY) {
             int entry_count = PACK_getSize(clock->pack);
             u16 current_data_id = clock->current_data_id;
-            int data_index = (current_data_id & 0xFF) + 1;
-            int data_bank = current_data_id & 0x700;
+            int data_index = (current_data_id & ANM_DATA_INDEX_MASK) + 1;
+            int data_bank = current_data_id & ANM_DATA_BANK_MASK;
             if (data_index >= entry_count) {
                 data_index = 0;
             }

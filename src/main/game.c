@@ -56,9 +56,88 @@
  * zero; the offsets between them are not evidenced by this TU and stay
  * unmodeled.
  */
-#define ACTOR_COUNT 64
+/* NmlModelBlock.flags: the block's part starts hidden. */
+#define NML_BLOCK_FLAG_HIDDEN 8
+#define GAME_SOUND_CHANNEL_COUNT 8
+#define GAME_SOUND_BANK_COUNT 8
+#define SOUND_SEQUENCE_NONE 0xFFFF
+#define GAME_SOUND_VOLUME_MAX 0x7F
+#define GAME_ENEMY_WORK_COUNT 16
+#define GAME_PARAM_COUNT 8
+#define GAME_ORG_COUNT 33
+#define GAME_PLAYER_COUNT 16
+#define GAME_BOX_COUNT 255
+#define GAME_ID_LIGHT_COUNT 16
+#define GAME_HIDDEN_PART_WORDS 32
+#define GAME_HIDDEN_PART_BITS_PER_WORD 32
 
-#define ACTOR_IN_USE_ID_OFFSET 0x86
+/* SaveData offsets: the game's user state, and the system options (menu_system). */
+#define SAVE_OPTION_SOUND_OUTPUT 0x28
+#define SAVE_OPTION_VIBRATION 0x3c
+#define SAVE_OPTION_HDD 0x40
+#define SAVE_GAME_USER 0x50
+
+/* The debug pad combo: SELECT + L1 + R1 held. */
+#define GAME_PAD_COMBO (PAD_SELECT | PAD_L1 | PAD_R1)
+
+/* Battle results returned to GameModeCfMain. */
+#define BATTLE_RESULT_WIN 1
+#define BATTLE_RESULT_LOSE 2
+#define BATTLE_RESULT_ESCAPE 3
+
+/* MapUnit.flags. */
+#define MAPUNIT_FLAG_SYMBOL 0x10000
+#define MAPUNIT_FLAG_UWAMONO_EFFECT 0x20000
+#define MAPUNIT_FLAG_ITEM_BOX 0x08000000
+#define MAPUNIT_FLAG_SAVE_SYMBOL 0x20000000
+#define MAPUNIT_FLAG_SHOP_SYMBOL 0x40000000
+/* MapUnit.symbol_kind of event/return symbols. */
+#define SYMBOL_KIND_EVENT 8
+#define SYMBOL_KIND_RETURN 9
+#define SYMBOL_TRIGGER_RADIUS 0.7f
+#define SYMBOL_EFFECT_SAVE_EVENT 0x2d8
+#define SYMBOL_EFFECT_SHOP_RETURN 0x2d9
+#define GAME_SE_SYMBOL 12
+#define GAME_SE_PAUSE 4
+
+/* Script flags of an actor (getScriptFlag). */
+#define SCRIPT_FLAG_FACE_PLAYER 2
+#define SCRIPT_FLAG_TALK 0x10000
+#define SCRIPT_FLAG_TOUCH 0x20000
+/* Actor.attribute_flags: bits 8-12 hold the attribute id, bits 13-15 block it. */
+#define ACTOR_ATTR_ID_MASK 0x1f00
+#define ACTOR_ATTR_BLOCK_MASK 0xe000
+#define ACTOR_ATTR_ID_SHIFT 8
+/* Actor.flags */
+#define ACTOR_FLAG_NO_SHADOW 8
+#define ACTOR_FLAG_SHADOW 0x20
+/* Top nibble of an actor inUseId / MapUnit serial classifies the object. */
+#define ID_CLASS_MASK 0xf000
+
+#define GAME_SEARCH_DISTANCE_INIT 65535.0f
+#define GAME_TALK_FACING_LIMIT 1.0471976f /* 60 degrees */
+
+/* GS coordinates of the screen's top-left (12.4 fixed point >> 4) and the
+ * range GameDispTag accepts: 512x448 pixels. */
+#define GAME_GS_ORIGIN_X 0x700
+#define GAME_GS_ORIGIN_Y 0x720
+#define GAME_GS_X_MIN 0x7001u
+#define GAME_GS_X_RANGE 0x1fffu
+#define GAME_GS_Y_MIN 0x7201
+#define GAME_GS_Y_MAX 0x8dff
+
+/* Frames the controlled actor flashes after returning from a battle. */
+#define GAME_BATTLE_RETURN_FLASH_FRAMES 0x4B
+
+/* Alpha of the screen-clear sprite drawn when no clear callback is set. */
+#define GAME_CLEAR_ALPHA 0x80
+
+/* Radar position and colors given to GameRadarDraw. */
+#define GAME_RADAR_X 0x160
+#define GAME_RADAR_Y 0x120
+#define GAME_RADAR_COLOR 0xFFFF00
+#define GAME_RADAR_RGB 0x80
+#define GAME_RADAR_ALPHA 0x60
 
 /*
  * GNU EE native TI storage/copy type. Used only for the
@@ -453,7 +532,7 @@ static void GameCFSoundPurgeSub(void)
 
     xglSoundSendEffect(0, 0, 2);
     xglSoundSendEffect(0, 0, 3);
-    for (; index < 8; index++) {
+    for (; index < GAME_SOUND_BANK_COUNT; index++) {
         xglSoundSendEffect(0, 0, index + 4);
     }
 }
@@ -462,7 +541,7 @@ static void GameCFSoundPurge(void)
 {
     int bank;
 
-    for (bank = 0; bank < 8; bank++) {
+    for (bank = 0; bank < GAME_SOUND_BANK_COUNT; bank++) {
         xglSoundSendSwd(0, -1 - bank);
         xglSoundSendSmd2(0, bank);
     }
@@ -478,7 +557,7 @@ static void GameCFSoundReload(void)
     u8 *segment;
 
     segment = (u8 *) ((u32) (WorkEnd + 0x3F) & ~0x3F);
-    for (bank = 0; bank < 8; bank++) {
+    for (bank = 0; bank < GAME_SOUND_BANK_COUNT; bank++) {
         xglSoundSendSwd(0, -1 - bank);
         xglSoundSendSmd2(0, bank);
     }
@@ -497,9 +576,9 @@ void GameCFSoundMenuPurge(int mode)
     if (mode == 1) {
         GameCFSoundMenuPurgeFlag = 0;
         xglSoundSendEffect(0, 0, 3);
-        for (bank = 0; bank < 8; bank++) {
+        for (bank = 0; bank < GAME_SOUND_CHANNEL_COUNT; bank++) {
             sequence = SoundWork.channels[bank].sequence;
-            if (sequence == 0xFFFF) {
+            if (sequence == SOUND_SEQUENCE_NONE) {
                 continue;
             }
             SsdGetSeqPlayStatus(sequence);
@@ -512,7 +591,7 @@ void GameCFSoundMenuPurge(int mode)
         }
     }
     EnemySound_StopAll(1);
-    for (bank = 4; bank < 8; bank++) {
+    for (bank = 4; bank < GAME_SOUND_BANK_COUNT; bank++) {
         xglSoundSendEffect(0, 0, bank + 4);
     }
 }
@@ -531,10 +610,10 @@ void GameCFSoundMenuReload(void)
     RES_GetMapEnvSeName(environment_name);
     xglSoundLoadEffect(environment_name, free_address, 3);
 
-    for (channel = 0; channel < 8; channel++) {
+    for (channel = 0; channel < GAME_SOUND_CHANNEL_COUNT; channel++) {
         if (((GameCFSoundMenuPurgeFlag >> channel) & 1) != 0 &&
             UmnSimulationNo == 0 && MenuDrillCall == 0) {
-            xglSoundSequenceNormal2(channel, 0x7F);
+            xglSoundSequenceNormal2(channel, GAME_SOUND_VOLUME_MAX);
         }
     }
 
@@ -561,16 +640,16 @@ void Game_Data_Push(void)
     GameCFSoundPurge();
     GameStateSave();
     sefPushEffect();
-    for (index = 0; index < 32; index++) {
+    for (index = 0; index < GAME_HIDDEN_PART_WORDS; index++) {
         GameLoopState.hidden_parts[index] = 0;
     }
     model = GameLoopState.model->data;
     block_offsets = model->blockOffsets;
     for (index = 0; index < model->blockCount; index++) {
         block = (NmlModelBlock *)((u8 *)model + block_offsets[index]);
-        if ((block->flags & 8) != 0) {
+        if ((block->flags & NML_BLOCK_FLAG_HIDDEN) != 0) {
             int part_index = block->partId;
-            int word_index = part_index / 32;
+            int word_index = part_index / GAME_HIDDEN_PART_BITS_PER_WORD;
             GameLoopState.hidden_parts[word_index] |= 1 << part_index;
         }
     }
@@ -584,7 +663,7 @@ void Game_Data_Pop(void)
     NmlModel *model;
     int bit;
 
-    for (index = 0; index < 64; index++) {
+    for (index = 0; index < MAP_UNIT_COUNT; index++) {
         serials[index] = MapUnit[index].serial;
         MapUnit[index].serial = -1;
     }
@@ -593,7 +672,7 @@ void Game_Data_Pop(void)
     GameCFSoundReload();
     sefInitEffectCf();
     GameResourceLoad(GameLoopState.current_event_id);
-    for (index = 0; index < 64; index++)
+    for (index = 0; index < MAP_UNIT_COUNT; index++)
         MapUnit[index].serial = serials[index];
     GameStateRestore();
     GameLoopState.cleared_1c = 0;
@@ -634,13 +713,13 @@ void Game_Data_Pop(void)
         }
     }
     sefPopEffect();
-    GameLoopState.flags &= ~0x400000;
-    GameLoopState.flags &= ~0x800000;
-    GameLoopState.flags &= ~0x20000000;
-    GameLoopState.flags &= ~0x40000000;
+    GameLoopState.flags &= ~GAME_FLAG_ON_EVENT_SYMBOL;
+    GameLoopState.flags &= ~GAME_FLAG_ON_RETURN_SYMBOL;
+    GameLoopState.flags &= ~GAME_FLAG_ON_SAVE_SYMBOL;
+    GameLoopState.flags &= ~GAME_FLAG_ON_SHOP_SYMBOL;
     UnlockMapUnit();
-    for (index = 0; index < 64; index++) {
-        if (MapUnit[index].serial != -1 && (MapUnit[index].flags & 0x20000)) {
+    for (index = 0; index < MAP_UNIT_COUNT; index++) {
+        if (MapUnit[index].serial != -1 && (MapUnit[index].flags & MAPUNIT_FLAG_UWAMONO_EFFECT)) {
             MapUnitRecord *map_unit = &MapUnit[index];
             MapUnit[index].serial = -1;
             MapUnit[index].update = 0;
@@ -648,12 +727,12 @@ void Game_Data_Pop(void)
         }
     }
     model = GameLoopState.model->data;
-    for (index = 0; index < 32; index++) {
-        for (bit = 0; bit < 32; bit++) {
+    for (index = 0; index < GAME_HIDDEN_PART_WORDS; index++) {
+        for (bit = 0; bit < GAME_HIDDEN_PART_BITS_PER_WORD; bit++) {
             /* Original uses signed SRAV before selecting the one bit.
              * This scalar interpretation does not erase an interface. */
             if (((int)GameLoopState.hidden_parts[index] >> bit) & 1)
-                nmlModelSetPartsVisible(model, index * 32 + bit, 0);
+                nmlModelSetPartsVisible(model, index * GAME_HIDDEN_PART_BITS_PER_WORD + bit, 0);
         }
     }
     {
@@ -661,8 +740,8 @@ void Game_Data_Pop(void)
 
         GameLoopState.controlled_actor->status_flags |= 0x1000;
         flags &= ~0x4000;
-        flags &= ~0x8000;
-        flags &= ~0x40;
+        flags &= ~GAME_FLAG_NO_TALK_POINT;
+        flags &= ~GAME_FLAG_BATTLE;
         GameLoopState.flags = flags;
         GameLoopState.move_mode |= 0x20;
     }
@@ -781,22 +860,22 @@ void GamePushSaveDataUser(void)
     GameLoopStateLayout *state = &GameLoopState;
     int i;
 
-    save = (GameUserSave *)(SaveData + 0x50);
+    save = (GameUserSave *)(SaveData + SAVE_GAME_USER);
     save->event_id = state->current_event_id;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < GAME_PARAM_COUNT; i++) {
         save->params[i] = state->params[i];
     }
     QuadwordCopy(&save->actor_position, &state->saved_actor_position);
     QuadwordCopy(&save->actor_rotation, &state->saved_actor_rotation);
     org = save->org;
     players = save->players;
-    for (i = 0; i < 33; i++) {
+    for (i = 0; i < GAME_ORG_COUNT; i++) {
         org[i] = orgData[i];
     }
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < GAME_PLAYER_COUNT; i++) {
         players[i] = plChaData[i];
     }
-    for (i = 0; i < 255; i++) {
+    for (i = 0; i < GAME_BOX_COUNT; i++) {
         save->item_box[i] = itmBox[i];
         save->weapon_box[i] = wpnBox[i];
         save->bullet_box[i] = bltBox[i];
@@ -817,22 +896,22 @@ void GamePopSaveDataUser(void)
     GameLoopStateLayout *state = &GameLoopState;
     int i;
 
-    save = (GameUserSave *)(SaveData + 0x50);
+    save = (GameUserSave *)(SaveData + SAVE_GAME_USER);
     state->current_event_id = save->event_id;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < GAME_PARAM_COUNT; i++) {
         state->params[i] = save->params[i];
     }
     QuadwordCopy(&state->saved_actor_position, &save->actor_position);
     QuadwordCopy(&state->saved_actor_rotation, &save->actor_rotation);
     org = save->org;
     players = save->players;
-    for (i = 0; i < 33; i++) {
+    for (i = 0; i < GAME_ORG_COUNT; i++) {
         orgData[i] = org[i];
     }
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < GAME_PLAYER_COUNT; i++) {
         plChaData[i] = players[i];
     }
-    for (i = 0; i < 255; i++) {
+    for (i = 0; i < GAME_BOX_COUNT; i++) {
         itmBox[i] = save->item_box[i];
         wpnBox[i] = save->weapon_box[i];
         bltBox[i] = save->bullet_box[i];
@@ -843,11 +922,11 @@ void GamePopSaveDataUser(void)
     state->user_word = save->user_word;
     state->user_longs[0] = save->user_longs[0];
     state->user_longs[1] = save->user_longs[1];
-    SsdSetOutputMode(SaveData[0x28]);
-    PadData.vibrationReset = SaveData[0x3c];
-    PadData.vibrationStatus = SaveData[0x3c];
+    SsdSetOutputMode(SaveData[SAVE_OPTION_SOUND_OUTPUT]);
+    PadData.vibrationReset = SaveData[SAVE_OPTION_VIBRATION];
+    PadData.vibrationStatus = SaveData[SAVE_OPTION_VIBRATION];
     tyaDisplaySetting(0);
-    xglHddActivate(SaveData[0x40] ^ 1);
+    xglHddActivate(SaveData[SAVE_OPTION_HDD] ^ 1);
 }
 
 void InitCfSystem(void)
@@ -874,22 +953,22 @@ void InitCfSystem(void)
     range = 3.0f;
     GameLoopState.shoot_control = GameLoopState.shoot_control | 0xfu;
     flags = GameLoopState.flags;
-    flags &= ~0x10000u;
-    flags &= ~0x20000u;
+    flags &= ~GAME_FLAG_ACTOR_LOOK_AT;
+    flags &= ~GAME_FLAG_ACTOR_HOLD;
     flags &= ~0x4000u;
-    flags &= ~0x8000u;
-    flags &= ~0x40000u;
-    flags &= ~0x400000u;
-    flags &= ~0x800000u;
-    flags &= ~0x20000000u;
-    flags &= ~0x40000000u;
-    flags &= ~0x1000u;
+    flags &= ~GAME_FLAG_NO_TALK_POINT;
+    flags &= ~GAME_FLAG_ACTOR_PAUSE;
+    flags &= ~GAME_FLAG_ON_EVENT_SYMBOL;
+    flags &= ~GAME_FLAG_ON_RETURN_SYMBOL;
+    flags &= ~GAME_FLAG_ON_SAVE_SYMBOL;
+    flags &= ~GAME_FLAG_ON_SHOP_SYMBOL;
+    flags &= ~GAME_FLAG_TALKING;
     flags &= ~0x2000u;
-    flags &= ~0x100000u;
-    flags &= ~1u;
+    flags &= ~GAME_FLAG_ENTERED_SCRIPT;
+    flags &= ~GAME_FLAG_PAUSE;
     GameLoopState.base_flags = flags;
     GameLoopState.shoot_range = range;
-    GameLoopState.flags = flags | 0x80000u;
+    GameLoopState.flags = flags | GAME_FLAG_RADAR;
     vm_flag = &UseVMFlag;
     *vm_flag = 0;
     XTK_setWindowOwner(0u);
@@ -901,10 +980,10 @@ void InitCfSystem(void)
     retEffe = (void *)0;
     xglLightSetDefault(xglStudioGetLight2());
     Player_System_Init(GameLoopState.controlled_actor);
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < GAME_ID_LIGHT_COUNT; i++) {
         xglLightSetDefault(&GameIdLight[i]);
     }
-    for (i = 0; i < 32; i++) {
+    for (i = 0; i < GAME_HIDDEN_PART_WORDS; i++) {
         GameLoopState.hidden_parts[i] = 0;
     }
     xglRenderCopyDisp2Draw();
@@ -919,11 +998,11 @@ static int checkAttr(Actor *actor)
         return 0;
     }
     attributes = actor->attribute_flags;
-    selected_attributes = attributes & 0x1f00;
-    if (attributes & 0xe000) {
+    selected_attributes = attributes & ACTOR_ATTR_ID_MASK;
+    if (attributes & ACTOR_ATTR_BLOCK_MASK) {
         return 0;
     }
-    selected_attributes >>= 8;
+    selected_attributes >>= ACTOR_ATTR_ID_SHIFT;
     attrPrev = selected_attributes;
     return selected_attributes;
 }
@@ -950,15 +1029,15 @@ static Actor *checkTalk(Actor *player)
     origin.x = player->position.x;
     origin.y = player->position.y;
     origin.z = player->position.z;
-    best_distance = 65535.0f;
+    best_distance = GAME_SEARCH_DISTANCE_INIT;
     origin.w = 0.25f;
-    if (GameLoopState.flags & 0x400) {
+    if (GameLoopState.flags & GAME_FLAG_NO_TALK) {
         return 0;
     }
     if (GameLoopState.flags & 0x2000) {
         return 0;
     }
-    if (GameLoopState.flags & 0x1000) {
+    if (GameLoopState.flags & GAME_FLAG_TALKING) {
         return 0;
     }
     if (UseVMFlag != 0) {
@@ -971,7 +1050,7 @@ static Actor *checkTalk(Actor *player)
         target = &actor[index];
         reach_margin = 1.0f;
         if (!(__builtin_fabsf(target->position.y - player->position.y) > 2.0f)
-            && target->talk_message != 0 && (getScriptFlag(target) & 0x10000)
+            && target->talk_message != 0 && (getScriptFlag(target) & SCRIPT_FLAG_TALK)
             && target->inUseId != 0 && target->number != player->number) {
             delta_x = target->position.x - origin.x;
             delta_z = target->position.z - origin.z;
@@ -979,7 +1058,7 @@ static Actor *checkTalk(Actor *player)
             limit = __builtin_fabsf(origin.w + reach_margin);
             distance = __builtin_fabsf(distance);
             if (distance < limit
-                && __builtin_fabsf(nearDir(atan2f(delta_x, delta_z), player->rotation.y)) < 1.0471976f
+                && __builtin_fabsf(nearDir(atan2f(delta_x, delta_z), player->rotation.y)) < GAME_TALK_FACING_LIMIT
                 && distance < best_distance) {
                 best_distance = distance;
                 best_actor = target;
@@ -1004,12 +1083,12 @@ static Actor *checkTouch(Actor *player)
     origin.y = player->position.y;
     origin.z = player->position.z;
     origin.w = 0.25f;
-    best_distance = 65535.0f;
+    best_distance = GAME_SEARCH_DISTANCE_INIT;
     flags = GameLoopState.flags;
-    if (flags & 0x400) {
+    if (flags & GAME_FLAG_NO_TALK) {
         return 0;
     }
-    if (flags & 0x1000) {
+    if (flags & GAME_FLAG_TALKING) {
         return 0;
     }
     if (flags & 0x2000) {
@@ -1018,7 +1097,7 @@ static Actor *checkTouch(Actor *player)
     for (index = 0; index < ACTOR_COUNT; index++) {
         target = actor + index;
         if (!(__builtin_fabsf(target->position.y - player->position.y) > 2.0f)
-            && target->touch_message != 0 && (getScriptFlag(target) & 0x20000)
+            && target->touch_message != 0 && (getScriptFlag(target) & SCRIPT_FLAG_TOUCH)
             && target->inUseId != 0 && target->number != player->number) {
             float delta_x;
             float delta_z;
@@ -1075,15 +1154,15 @@ static GameMapUnit *checkItemBox(Actor *actor)
     float distance;
     float reach_margin;
 
-    best_distance = 65535.0f;
+    best_distance = GAME_SEARCH_DISTANCE_INIT;
     best_unit = 0;
     origin.x = actor->position.x;
     origin.y = actor->position.y;
     origin.z = actor->position.z;
-    for (index = 0; index < 64; index++) {
+    for (index = 0; index < MAP_UNIT_COUNT; index++) {
         unit = (GameMapUnit *)&MapUnit[index];
         if (!(__builtin_fabsf(actor->position.y - unit->position.y) > 1.8f) && unit->serial != -1
-            && (unit->flags & 0x08000000) && unit->action_sub == 0) {
+            && (unit->flags & MAPUNIT_FLAG_ITEM_BOX) && unit->action_sub == 0) {
             reach_margin = 1.0f;
             delta_x = unit->position.x - origin.x;
             delta_z = unit->position.z - origin.z;
@@ -1097,7 +1176,7 @@ static GameMapUnit *checkItemBox(Actor *actor)
             }
             distance = __builtin_fabsf(distance);
             if (distance < __builtin_fabsf(origin.w + reach_margin)
-                && __builtin_fabsf(nearDir(atan2f(delta_x, delta_z), actor->rotation.y)) < 1.0471976f
+                && __builtin_fabsf(nearDir(atan2f(delta_x, delta_z), actor->rotation.y)) < GAME_TALK_FACING_LIMIT
                 && distance < best_distance && checkItemBoxDir(actor, unit) != 0) {
                 best_distance = distance;
                 best_unit = unit;
@@ -1121,38 +1200,38 @@ void CheckGameSymbol(Actor *player)
     shop_unit = -1;
     event_unit = -1;
     return_unit = -1;
-    for (index = 0; index < 64; index++) {
+    for (index = 0; index < MAP_UNIT_COUNT; index++) {
         unit = &MapUnit[index];
-        if (unit->serial == -1 || (unit->flags & 0x10000) == 0)
+        if (unit->serial == -1 || (unit->flags & MAPUNIT_FLAG_SYMBOL) == 0)
             continue;
         {
             symbol_kind = GameSymbolKindAddress(index);
-            if ((unit->flags & 0x20000000) &&
-                CheckDist3D(&player->position, &MapUnit[index].position) < 0.7f)
+            if ((unit->flags & MAPUNIT_FLAG_SAVE_SYMBOL) &&
+                CheckDist3D(&player->position, &MapUnit[index].position) < SYMBOL_TRIGGER_RADIUS)
                 save_unit = index;
-            if ((MapUnit[index].flags & 0x40000000) &&
-                CheckDist3D(&player->position, &MapUnit[index].position) < 0.7f)
+            if ((MapUnit[index].flags & MAPUNIT_FLAG_SHOP_SYMBOL) &&
+                CheckDist3D(&player->position, &MapUnit[index].position) < SYMBOL_TRIGGER_RADIUS)
                 shop_unit = index;
-            if (*symbol_kind == 8 &&
-                CheckDist3D(&player->position, GameSymbolPosition(index)) < 0.7f)
+            if (*symbol_kind == SYMBOL_KIND_EVENT &&
+                CheckDist3D(&player->position, GameSymbolPosition(index)) < SYMBOL_TRIGGER_RADIUS)
                 event_unit = index;
-            if (*symbol_kind == 9 &&
-                CheckDist3D(&player->position, GameSymbolPosition(index)) < 0.7f)
+            if (*symbol_kind == SYMBOL_KIND_RETURN &&
+                CheckDist3D(&player->position, GameSymbolPosition(index)) < SYMBOL_TRIGGER_RADIUS)
                 return_unit = index;
         }
     }
 
     if (save_unit != -1) {
         MapUnitRecord *save_symbol = &MapUnit[save_unit];
-        if ((GameLoopState.flags & 0x20000000) == 0) {
+        if ((GameLoopState.flags & GAME_FLAG_ON_SAVE_SYMBOL) == 0) {
             if (saveEffe != 0)
                 sefDeleteEffectCf(saveEffe);
-            saveEffe = sefCreateEffectCf(0x2d8, &save_symbol->position, 0);
-            xglSoundEffectNormalID(12, 0);
+            saveEffe = sefCreateEffectCf(SYMBOL_EFFECT_SAVE_EVENT, &save_symbol->position, 0);
+            xglSoundEffectNormalID(GAME_SE_SYMBOL, 0);
         }
-        GameLoopState.flags |= 0x20000000;
+        GameLoopState.flags |= GAME_FLAG_ON_SAVE_SYMBOL;
     } else {
-        GameLoopState.flags &= ~0x20000000;
+        GameLoopState.flags &= ~GAME_FLAG_ON_SAVE_SYMBOL;
         if (saveEffe != 0) {
             sefDeleteEffectCf(saveEffe);
             saveEffe = 0;
@@ -1161,15 +1240,15 @@ void CheckGameSymbol(Actor *player)
     if (shop_unit != -1) {
         MapUnitRecord *shop_symbol = &MapUnit[shop_unit];
         shopNo = shop_symbol->shop_id;
-        if ((GameLoopState.flags & 0x40000000) == 0) {
+        if ((GameLoopState.flags & GAME_FLAG_ON_SHOP_SYMBOL) == 0) {
             if (shopEffe != 0)
                 sefDeleteEffectCf(shopEffe);
-            shopEffe = sefCreateEffectCf(0x2d9, &shop_symbol->position, 0);
-            xglSoundEffectNormalID(12, 0);
+            shopEffe = sefCreateEffectCf(SYMBOL_EFFECT_SHOP_RETURN, &shop_symbol->position, 0);
+            xglSoundEffectNormalID(GAME_SE_SYMBOL, 0);
         }
-        GameLoopState.flags |= 0x40000000;
+        GameLoopState.flags |= GAME_FLAG_ON_SHOP_SYMBOL;
     } else {
-        GameLoopState.flags &= ~0x40000000;
+        GameLoopState.flags &= ~GAME_FLAG_ON_SHOP_SYMBOL;
         if (shopEffe != 0) {
             sefDeleteEffectCf(shopEffe);
             shopEffe = 0;
@@ -1177,15 +1256,15 @@ void CheckGameSymbol(Actor *player)
     }
     if (event_unit != -1) {
         MapUnitRecord *event_symbol = &MapUnit[event_unit];
-        if ((GameLoopState.flags & 0x400000) == 0) {
+        if ((GameLoopState.flags & GAME_FLAG_ON_EVENT_SYMBOL) == 0) {
             if (evsEffe != 0)
                 sefDeleteEffectCf(evsEffe);
-            evsEffe = sefCreateEffectCf(0x2d8, &event_symbol->position, 0);
-            xglSoundEffectNormalID(12, 0);
+            evsEffe = sefCreateEffectCf(SYMBOL_EFFECT_SAVE_EVENT, &event_symbol->position, 0);
+            xglSoundEffectNormalID(GAME_SE_SYMBOL, 0);
         }
-        GameLoopState.flags |= 0x400000;
+        GameLoopState.flags |= GAME_FLAG_ON_EVENT_SYMBOL;
     } else {
-        GameLoopState.flags &= ~0x400000;
+        GameLoopState.flags &= ~GAME_FLAG_ON_EVENT_SYMBOL;
         if (evsEffe != 0) {
             sefDeleteEffectCf(evsEffe);
             evsEffe = 0;
@@ -1193,15 +1272,15 @@ void CheckGameSymbol(Actor *player)
     }
     if (return_unit != -1) {
         MapUnitRecord *return_symbol = &MapUnit[return_unit];
-        if ((GameLoopState.flags & 0x800000) == 0) {
+        if ((GameLoopState.flags & GAME_FLAG_ON_RETURN_SYMBOL) == 0) {
             if (retEffe != 0)
                 sefDeleteEffectCf(retEffe);
-            retEffe = sefCreateEffectCf(0x2d9, &return_symbol->position, 0);
-            xglSoundEffectNormalID(12, 0);
+            retEffe = sefCreateEffectCf(SYMBOL_EFFECT_SHOP_RETURN, &return_symbol->position, 0);
+            xglSoundEffectNormalID(GAME_SE_SYMBOL, 0);
         }
-        GameLoopState.flags |= 0x800000;
+        GameLoopState.flags |= GAME_FLAG_ON_RETURN_SYMBOL;
     } else {
-        GameLoopState.flags &= ~0x800000;
+        GameLoopState.flags &= ~GAME_FLAG_ON_RETURN_SYMBOL;
         if (retEffe != 0) {
             sefDeleteEffectCf(retEffe);
             retEffe = 0;
@@ -1227,7 +1306,7 @@ static void GameDispTag(void)
     origin.y = 0.0f;
     origin.z = 0.0f;
     origin.w = 1.0f;
-    for (camera_id = 0; camera_id < 8; camera_id++) {
+    for (camera_id = 0; camera_id < STUDIO_CAMERA_COUNT; camera_id++) {
         if (xglStudioGetCamera2(camera_id)->active == 1)
             break;
     }
@@ -1239,13 +1318,13 @@ static void GameDispTag(void)
         if (unit->inUseId == 0)
             continue;
         parent = unit->parent;
-        if ((unit->inUseId & 0xf000) == 0 && parent == 0) {
+        if ((unit->inUseId & ID_CLASS_MASK) == 0 && parent == 0) {
             Matrix4 *model_matrices = unit->jointMatrices;
             xglMatrixMul((Matrix *)matrix, (Matrix *)model_matrices[0], (Matrix *)model_matrices[45]);
             matrix[3][3] = 1.0f;
             xglRotTransPers((Vector4 *)&projected, 0, (Vector4 *)matrix[3], camera_id);
         } else {
-            if (parent != 0 && (parent->inUseId & 0xf000) == 0) {
+            if (parent != 0 && (parent->inUseId & ID_CLASS_MASK) == 0) {
                 Matrix4 *parent_matrices = parent->jointMatrices;
                 xglMatrixMul((Matrix *)matrix, (Matrix *)parent_matrices[0], (Matrix *)parent_matrices[45]);
             } else {
@@ -1261,8 +1340,8 @@ static void GameDispTag(void)
         screen_x = projected.x;
         /* Unsigned subtraction preserves the original SLTIU window
          * without signed overflow for arbitrary projected coordinates. */
-        if ((unsigned int)screen_x - 0x7001u >= 0x1fffu ||
-            projected.y < 0x7201 || projected.y > 0x8dff ||
+        if ((unsigned int)screen_x - GAME_GS_X_MIN >= GAME_GS_X_RANGE ||
+            projected.y < GAME_GS_Y_MIN || projected.y > GAME_GS_Y_MAX ||
             projected.z <= 0)
             continue;
         screen_y = projected.y;
@@ -1271,7 +1350,7 @@ static void GameDispTag(void)
         if (unit->kind == 1) {
             color = 0xff9933;
         } else {
-            switch (unit->inUseId & 0xf000) {
+            switch (unit->inUseId & ID_CLASS_MASK) {
             case 0: color = 0x3399ff; break;
             case 0x4000: color = 0x33ff33; break;
             case 0x2000: color = 0xff3333; break;
@@ -1280,12 +1359,12 @@ static void GameDispTag(void)
         format[1] = color >> 16;
         format[2] = color >> 8;
         format[3] = color;
-        xglFontDebugPrintf(((screen_x >> 4) - 0x700) >> 1,
-                           ((screen_y >> 4) - 0x720) >> 1,
+        xglFontDebugPrintf(((screen_x >> 4) - GAME_GS_ORIGIN_X) >> 1,
+                           ((screen_y >> 4) - GAME_GS_ORIGIN_Y) >> 1,
                            format, index + 0x200, depth);
     }
     map_format = str_1;
-    for (index = 0; index < 64; index++) {
+    for (index = 0; index < MAP_UNIT_COUNT; index++) {
         MapUnitRecord *unit = &MapUnit[index];
         if (unit->serial < 0)
             continue;
@@ -1298,14 +1377,14 @@ static void GameDispTag(void)
         xglMatrixStackSave(matrix);
         xglRotTransPers((Vector4 *)&projected, matrix, &origin, camera_id);
         screen_x = projected.x;
-        if ((unsigned int)screen_x - 0x7001u >= 0x1fffu ||
-            projected.y < 0x7201 || projected.y > 0x8dff ||
+        if ((unsigned int)screen_x - GAME_GS_X_MIN >= GAME_GS_X_RANGE ||
+            projected.y < GAME_GS_Y_MIN || projected.y > GAME_GS_Y_MAX ||
             projected.z <= 0)
             continue;
         screen_y = projected.y;
         depth = projected.z;
         color = 0xffffff;
-        switch (unit->serial & 0xf000) {
+        switch (unit->serial & ID_CLASS_MASK) {
         case 0x5000: color = 0x7f7f7f; break;
         case 0x6000: color = 0xcc66ff; break;
         case 0x3000: color = 0xffff00; break;
@@ -1313,8 +1392,8 @@ static void GameDispTag(void)
         map_format[1] = color >> 16;
         map_format[2] = color >> 8;
         map_format[3] = color;
-        xglFontDebugPrintf(((screen_x >> 4) - 0x700) >> 1,
-                           ((screen_y >> 4) - 0x720) >> 1,
+        xglFontDebugPrintf(((screen_x >> 4) - GAME_GS_ORIGIN_X) >> 1,
+                           ((screen_y >> 4) - GAME_GS_ORIGIN_Y) >> 1,
                            dispTagFormat, index + 0x300, depth);
     }
 }
@@ -1328,8 +1407,8 @@ void GameDrawShadow(void)
     ACT_DrawShadowBegin();
     for (i = ACTOR_COUNT - 1; i >= 0; i--, unit++) {
         if (unit->inUseId != 0) {
-            if (!(unit->flags & 8)) {
-                if (unit->flags & 0x20) {
+            if (!(unit->flags & ACTOR_FLAG_NO_SHADOW)) {
+                if (unit->flags & ACTOR_FLAG_SHADOW) {
                     ACT_DrawShadow(unit);
                 }
             }
@@ -1344,16 +1423,16 @@ void GameDrawSync(void)
     xglStudioMainCameraMove();
     xglStudioMove();
     if (GameLoopState.frame_hook != 0) {
-        GameLoopState.frame_hook(3);
+        GameLoopState.frame_hook(GAME_HOOK_DRAW_BEGIN);
     }
-    if (GameLoopState.flags & 0x2) {
+    if (GameLoopState.flags & GAME_FLAG_DRAW) {
         if (GameLoopState.clear_callback != 0) {
             GameLoopState.clear_callback();
         } else {
             TestEnv_2_00338620.red = ClearEnv.red;
             TestEnv_2_00338620.green = ClearEnv.green;
             TestEnv_2_00338620.blue = ClearEnv.blue;
-            TestEnv_2_00338620.alpha = 0x80;
+            TestEnv_2_00338620.alpha = GAME_CLEAR_ALPHA;
             sceVif1PkRef(xglPacketGetCurrent(), &TestEnv_2_00338620, 6, 0, 0, 0);
         }
         TWSYS_draw();
@@ -1377,17 +1456,17 @@ void GameDrawSync(void)
         } else {
             MAP_drawUnit();
         }
-        if (!(GameLoopState.flags_wide & 0x4000001)) {
+        if (!(GameLoopState.flags_wide & (GAME_FLAG_UMN | GAME_FLAG_PAUSE))) {
             sefExecEffect();
         }
         GameMovieMain();
         xglSoundStreamMain();
-        if (GameLoopState.flags & 0x4) {
+        if (GameLoopState.flags & GAME_FLAG_DISP_TAG) {
             GameDispTag();
         }
     }
     if (GameLoopState.frame_hook != 0) {
-        GameLoopState.frame_hook(4);
+        GameLoopState.frame_hook(GAME_HOOK_DRAW_END);
     }
     GameSnapShotCheck();
     StudioEntrySkip = 1;
@@ -1398,24 +1477,24 @@ void GameDrawSync(void)
         GameLoopState.frame_countdown--;
     }
     if (GameLoopState.frame_hook != 0) {
-        GameLoopState.frame_hook(5);
+        GameLoopState.frame_hook(GAME_HOOK_FRAME_END);
     }
 }
 
 static int GameModeEvtTools(void)
 {
     if (game_mode_status == 0) {
-        if ((PadData.pressed & 0x800) != 0) {
+        if ((PadData.pressed & PAD_START) != 0) {
             u16 buttons = PadData.held;
-            game_mode_status = 16;
+            game_mode_status = GAME_STATUS_LOCK_SHORT;
 
-            if ((buttons & 0x10c) == 0x10c) {
-                u32 flag_next = game_mode_flags | 0x80000000u;
+            if ((buttons & GAME_PAD_COMBO) == GAME_PAD_COMBO) {
+                u32 flag_next = game_mode_flags | GAME_FLAG_QUIT;
                 game_mode_flags = flag_next;
                 return 1;
             } else {
-                xglSoundEffectNormalDirect(4);
-                game_mode_flags &= 0xfffffffeu;
+                xglSoundEffectNormalDirect(GAME_SE_PAUSE);
+                game_mode_flags &= ~GAME_FLAG_PAUSE;
                 game_mode_debug_storage = 0;
                 game_mode_kind = game_mode_saved_kind;
             }
@@ -1426,7 +1505,7 @@ static int GameModeEvtTools(void)
     EvtTools();
     {
         StudioCamera *camera = xglStudioGetCamera2(0);
-        if (camera->state == 4 && game_mode_camera_callback != 0) {
+        if (camera->state == STUDIO_CAMERA_STATE_GAME && game_mode_camera_callback != 0) {
             game_mode_camera_callback();
         }
     }
@@ -1436,17 +1515,17 @@ static int GameModeEvtTools(void)
 static int GameModePause(void)
 {
     if (game_mode_status == 0) {
-        if ((PadData.pressed & 0x800) != 0) {
+        if ((PadData.pressed & PAD_START) != 0) {
             u16 buttons = PadData.held;
-            game_mode_status = 16;
+            game_mode_status = GAME_STATUS_LOCK_SHORT;
 
-            if ((buttons & 0x10c) == 0x10c) {
-                u32 flag_next = game_mode_flags | 0x80000000u;
+            if ((buttons & GAME_PAD_COMBO) == GAME_PAD_COMBO) {
+                u32 flag_next = game_mode_flags | GAME_FLAG_QUIT;
                 game_mode_flags = flag_next;
                 return 1;
             } else {
-                xglSoundEffectNormalDirect(4);
-                game_mode_flags &= 0xfffffffeu;
+                xglSoundEffectNormalDirect(GAME_SE_PAUSE);
+                game_mode_flags &= ~GAME_FLAG_PAUSE;
                 game_mode_debug_storage = 0;
                 game_mode_kind = game_mode_saved_kind;
                 PartyTimePauseEnd();
@@ -1456,12 +1535,12 @@ static int GameModePause(void)
 
     TWSYS_update();
     PauseMenu();
-    if (game_mode_saved_kind == 2 || game_mode_saved_kind == 3) {
+    if (game_mode_saved_kind == GAME_MODE_CF_MAIN || game_mode_saved_kind == GAME_MODE_CF_EVENT) {
         ACT_pauseUpdate();
     }
     {
         StudioCamera *camera = xglStudioGetCamera2(0);
-        if (camera->state == 4 && game_mode_camera_callback != 0) {
+        if (camera->state == STUDIO_CAMERA_STATE_GAME && game_mode_camera_callback != 0) {
             game_mode_camera_callback();
         }
     }
@@ -1471,17 +1550,17 @@ static int GameModePause(void)
 static int GameModeEvtDebug(void)
 {
     if (game_mode_status == 0) {
-        if ((PadData.pressed & 0x800) != 0) {
+        if ((PadData.pressed & PAD_START) != 0) {
             u16 buttons = PadData.held;
-            game_mode_status = 16;
+            game_mode_status = GAME_STATUS_LOCK_SHORT;
 
-            if ((buttons & 0x10c) == 0x10c) {
-                u32 flag_next = game_mode_flags | 0x80000000u;
+            if ((buttons & GAME_PAD_COMBO) == GAME_PAD_COMBO) {
+                u32 flag_next = game_mode_flags | GAME_FLAG_QUIT;
                 game_mode_flags = flag_next;
                 return 1;
             } else {
-                xglSoundEffectNormalDirect(4);
-                game_mode_flags &= 0xfffffffeu;
+                xglSoundEffectNormalDirect(GAME_SE_PAUSE);
+                game_mode_flags &= ~GAME_FLAG_PAUSE;
                 game_mode_debug_storage = 0;
                 game_mode_kind = game_mode_saved_kind;
             }
@@ -1491,7 +1570,7 @@ static int GameModeEvtDebug(void)
     TWSYS_update();
     {
         StudioCamera *camera = xglStudioGetCamera2(0);
-        if (camera->state == 4 && game_mode_camera_callback != 0) {
+        if (camera->state == STUDIO_CAMERA_STATE_GAME && game_mode_camera_callback != 0) {
             game_mode_camera_callback();
         }
     }
@@ -1514,36 +1593,38 @@ int GameModeCfMain(void)
     u32 flags;
     u16 previous_kind;
 
-    GameLoopState.flags &= ~1;
+    GameLoopState.flags &= ~GAME_FLAG_PAUSE;
     SCRIPT_incCfTime();
-    if (PadData.pressed & 0x810) {
+    if (PadData.pressed & (PAD_START | PAD_TRIANGLE)) {
         const u64 *button_words;
         u64 held_buttons;
 
         button_words = (const u64 *)&PadData.held;
         __builtin_memcpy(&held_buttons, button_words, sizeof(held_buttons));
-        if ((held_buttons & 0x0800010C) == 0x0800010C) {
-            GameLoopState.flags |= 0x80000000;
+        /* The 64-bit read spans held (+0x28) and pressed (+0x2a): the combo
+         * held while START is pressed. */
+        if ((held_buttons & ((PAD_START << 16) | GAME_PAD_COMBO)) == ((PAD_START << 16) | GAME_PAD_COMBO)) {
+            GameLoopState.flags |= GAME_FLAG_QUIT;
             return 1;
         }
-        if (!(GameLoopState.flags_wide & 0x238000) && WIN_checkActiveWindow() == 0
-            && SCRIPT_sceneChangeTimeGet() == 0 && !(GameLoopState.flags & 0x100000)
+        if (!(GameLoopState.flags_wide & (GAME_FLAG_NO_TALK_POINT | GAME_FLAG_ACTOR_LOOK_AT | GAME_FLAG_ACTOR_HOLD | GAME_FLAG_SCRIPT_END)) && WIN_checkActiveWindow() == 0
+            && SCRIPT_sceneChangeTimeGet() == 0 && !(GameLoopState.flags & GAME_FLAG_ENTERED_SCRIPT)
             && GameLoopState.controlled_actor != 0
             && (encounter_enemy = &enepc[GameLoopState.controlled_actor->number])->encount_lock == 0
             && xglCdSync() == 0 && SCRIPT_talkIgnoreGet() == 0 && GameLoopState.status == 0) {
-            if (PadData.pressed & 0x800) {
-                GameLoopState.status = 0x10;
-                xglSoundEffectNormalDirect(4);
+            if (PadData.pressed & PAD_START) {
+                GameLoopState.status = GAME_STATUS_LOCK_SHORT;
+                xglSoundEffectNormalDirect(GAME_SE_PAUSE);
                 previous_kind = GameLoopState.kind;
-                GameLoopState.flags |= 1;
-                GameLoopState.kind = 1;
+                GameLoopState.flags |= GAME_FLAG_PAUSE;
+                GameLoopState.kind = GAME_MODE_PAUSE;
                 GameLoopState.saved_kind = previous_kind;
                 GameLoopState.debug_menu.storage = 0;
                 PartyTimePauseStart();
                 return 0;
             }
-            else if (PadData.pressed & 0x10) {
-                GameLoopState.status = 0x20;
+            else if (PadData.pressed & PAD_TRIANGLE) {
+                GameLoopState.status = GAME_STATUS_LOCK_LONG;
                 GameStateSaveCameraLight();
                 nmlModelSendMenuStart();
                 xglCullingIgnore();
@@ -1551,7 +1632,7 @@ int GameModeCfMain(void)
                 xglCullingIgnoreOff();
                 nmlModelSendMenuEnd();
                 GameStateRestoreCameraLight();
-                if (GameLoopState.flags & 0x10000000) {
+                if (GameLoopState.flags & GAME_FLAG_EXIT) {
                     return 1;
                 }
                 if (UmnSimulationNo) {
@@ -1591,13 +1672,13 @@ int GameModeCfMain(void)
             }
         }
     }
-    GameLoopState.flags = GameLoopState.flags & ~0x200000;
+    GameLoopState.flags = GameLoopState.flags & ~GAME_FLAG_SCRIPT_END;
     if (GameLoopState.event_sub_id != 0) {
         const char *always_method;
         EnemyWorkPostTalk *battle_enemies;
 
         Game_Data_Push();
-        GameLoopState.kind = 5;
+        GameLoopState.kind = GAME_MODE_BATTLE;
         nmlModelSendSignalStartBattle();
         xglSoundStreamStop(0);
         Vibration_Stop();
@@ -1605,19 +1686,19 @@ int GameModeCfMain(void)
         PadData.actuator[0] = 0;
         func_A22668();
         GameLoopState.frame_countdown = 0;
-        GameLoopState.flags |= 0x40;
+        GameLoopState.flags |= GAME_FLAG_BATTLE;
         MSG_init();
         TWSYS_init();
         Vibration_Stop();
         GameLoopState.model = 0;
-        if (GameLoopState.flags & 0x10000000) {
+        if (GameLoopState.flags & GAME_FLAG_EXIT) {
             return 1;
         }
         battle_result = func_00A0B5F0();
-        if (battle_result == 2 && !(GameLoopState.battle_flags & 0x40)) {
+        if (battle_result == BATTLE_RESULT_LOSE && !(GameLoopState.battle_flags & 0x40)) {
             xglFontLoad(1, 0);
             WindowTexLoad(0, 0);
-            GameLoopState.flags |= 0x88000000;
+            GameLoopState.flags |= GAME_FLAG_QUIT | GAME_FLAG_GAME_OVER;
             return 1;
         }
         Game_Data_Pop();
@@ -1628,30 +1709,30 @@ int GameModeCfMain(void)
         CallMethod_I(always_method,
             battle_enemies[GameLoopState.battle_enemy->number].enemy_id);
         switch (battle_result) {
-        case 1:
-            Enemy_After_Battle(1);
+        case BATTLE_RESULT_WIN:
+            Enemy_After_Battle(BATTLE_RESULT_WIN);
             CallMethod_I(eobMethodName,
                 battle_enemies[GameLoopState.battle_enemy->number].enemy_id);
             break;
-        case 3:
-            Enemy_After_Battle(3);
+        case BATTLE_RESULT_ESCAPE:
+            Enemy_After_Battle(BATTLE_RESULT_ESCAPE);
             CallMethod_I(eobEscapeMethodName,
                 battle_enemies[GameLoopState.battle_enemy->number].enemy_id);
             break;
         default:
-            Enemy_After_Battle(1);
+            Enemy_After_Battle(BATTLE_RESULT_WIN);
             break;
         }
-        if (GameLoopState.kind == 3) {
+        if (GameLoopState.kind == GAME_MODE_CF_EVENT) {
             return 0;
         }
-        GameLoopState.controlled_actor->flash_timer = 0x4B;
+        GameLoopState.controlled_actor->flash_timer = GAME_BATTLE_RETURN_FLASH_FRAMES;
         Actor_LookAt_Init(actor);
         MAP_updateUnit();
         return 0;
     }
     if (FLAG_FRAME_60 != 0) {
-        if ((PadData.held & 1) && (PadData.pressed & 4)) {
+        if ((PadData.held & PAD_L2) && (PadData.pressed & PAD_L1)) {
             for (i = 1; i < ACTOR_COUNT; i++) {
                 index = (NowTester + i) % ACTOR_COUNT;
                 if (actor[index].inUseId > 0) {
@@ -1662,7 +1743,8 @@ int GameModeCfMain(void)
             }
         }
     }
-    if ((GameLoopState.flags_wide & 0x0001000000010000ULL) == 0x0001000000000000ULL) {
+    /* base_flags (the high word) still has LOOK_AT but flags no longer does. */
+    if ((GameLoopState.flags_wide & (((u64)GAME_FLAG_ACTOR_LOOK_AT << 32) | GAME_FLAG_ACTOR_LOOK_AT)) == ((u64)GAME_FLAG_ACTOR_LOOK_AT << 32)) {
         u32 previous_flags;
         u16 previous_status;
         float restored_facing;
@@ -1676,7 +1758,7 @@ int GameModeCfMain(void)
         player->status_flags = previous_status | 0x1000;
         player->target_angle = restored_facing;
     }
-    if ((GameLoopState.flags_wide & 0x0001000000010000ULL) == 0x10000) {
+    if ((GameLoopState.flags_wide & (((u64)GAME_FLAG_ACTOR_LOOK_AT << 32) | GAME_FLAG_ACTOR_LOOK_AT)) == GAME_FLAG_ACTOR_LOOK_AT) {
         Actor *motion_player;
 
         motion_player = GameLoopState.controlled_actor;
@@ -1686,10 +1768,10 @@ int GameModeCfMain(void)
     flags = GameLoopState.flags;
     player = GameLoopState.controlled_actor;
     GameLoopState.base_flags = flags;
-    if (!(flags & 0x20000)) {
-        if (!(flags & 0x10000)) {
+    if (!(flags & GAME_FLAG_ACTOR_HOLD)) {
+        if (!(flags & GAME_FLAG_ACTOR_LOOK_AT)) {
             GameCfPlayerMove();
-            if (!(GameLoopState.flags & 0x8000)) {
+            if (!(GameLoopState.flags & GAME_FLAG_NO_TALK_POINT)) {
                 checkTalkPoint();
             }
         } else {
@@ -1710,7 +1792,7 @@ int GameModeCfMain(void)
     }
     window_owner = XTK_getWindowOwner();
     if (window_owner != 0) {
-        if (getScriptFlag(window_owner) & 2) {
+        if (getScriptFlag(window_owner) & SCRIPT_FLAG_FACE_PLAYER) {
             window_owner->target_angle = Get_Angle(&window_owner->position, &GameLoopState.controlled_actor->position);
             window_owner->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(window_owner->rotation.y, window_owner->target_angle, 6.0f);
         }
@@ -1728,23 +1810,23 @@ int GameModeCfMain(void)
     TWSYS_update();
     JTHREAD_cntl();
     TCAMERA_update();
-    if (xglStudioGetCamera2(0)->state == 4 && GameLoopState.camera_callback != 0) {
+    if (xglStudioGetCamera2(0)->state == STUDIO_CAMERA_STATE_GAME &&GameLoopState.camera_callback != 0) {
         GameLoopState.camera_callback();
     }
-    if ((GameLoopState.flags_wide & 0x60000) == 0) {
+    if ((GameLoopState.flags_wide & (GAME_FLAG_ACTOR_HOLD | GAME_FLAG_ACTOR_PAUSE)) == 0) {
         ACT_update();
     } else {
-        for (countdown = 15u; countdown > -1; countdown--) {
-            int first_countdown = enepc[15 - countdown].stiff_timer;
-            int second_countdown = (u16)enepc[15 - countdown].effect_timer[0] - 1;
+        for (countdown = GAME_ENEMY_WORK_COUNT - 1; countdown > -1; countdown--) {
+            int first_countdown = enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].stiff_timer;
+            int second_countdown = (u16)enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].effect_timer[0] - 1;
             first_countdown -= 1;
-            enepc[15 - countdown].effect_timer[0] = second_countdown;
-            enepc[15 - countdown].stiff_timer = first_countdown;
+            enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].effect_timer[0] = second_countdown;
+            enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].stiff_timer = first_countdown;
             if ((short)first_countdown < 0) {
-                enepc[15 - countdown].stiff_timer = 0;
+                enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].stiff_timer = 0;
             }
-            if (enepc[15 - countdown].effect_timer[0] < 0) {
-                enepc[15 - countdown].effect_timer[0] = 0;
+            if (enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].effect_timer[0] < 0) {
+                enepc[GAME_ENEMY_WORK_COUNT - 1 - countdown].effect_timer[0] = 0;
             }
         }
         ACT_pauseUpdate();
@@ -1752,11 +1834,11 @@ int GameModeCfMain(void)
     MAP_updateUnit();
     {
     GameRadarParams radar;
-    radar.x = 0x160;
-    radar.color = 0xFFFF00;
-    radar.y = 0x120;
-    radar.red = radar.green = radar.blue = 0x80;
-    radar.alpha = 0x60;
+    radar.x = GAME_RADAR_X;
+    radar.color = GAME_RADAR_COLOR;
+    radar.y = GAME_RADAR_Y;
+    radar.red = radar.green = radar.blue = GAME_RADAR_RGB;
+    radar.alpha = GAME_RADAR_ALPHA;
     GameRadarDraw(&radar);
     }
     return 0;
@@ -1770,27 +1852,27 @@ void checkTalkPoint(void)
     Actor *talker;
     GameMapUnit *unit;
 
-    if (PadData.pressed & 0x20) {
+    if (PadData.pressed & PAD_CIRCLE) {
         if (GameLoopState.status == 0 && xglCdSync() == 0) {
-            if (GameLoopState.flags_wide & 0x20400000) {
+            if (GameLoopState.flags_wide & (GAME_FLAG_ON_SAVE_SYMBOL | GAME_FLAG_ON_EVENT_SYMBOL)) {
                 GameStateSave();
                 MenuFileMain(0);
-                GameLoopState.status = 0x20;
+                GameLoopState.status = GAME_STATUS_LOCK_LONG;
                 return;
             }
-            if (GameLoopState.flags & 0x800000) {
+            if (GameLoopState.flags & GAME_FLAG_ON_RETURN_SYMBOL) {
                 CallMethod("evsExit");
-                GameLoopState.status = 0x20;
+                GameLoopState.status = GAME_STATUS_LOCK_LONG;
                 return;
             }
-            if (GameLoopState.flags & 0x40000000) {
+            if (GameLoopState.flags & GAME_FLAG_ON_SHOP_SYMBOL) {
                 if (shopNo == -1) {
                     shopNo = 1;
                 }
                 GameStateSaveCameraLight();
                 MenuShopMain(shopNo);
                 GameStateRestoreCameraLight();
-                GameLoopState.status = 0x20;
+                GameLoopState.status = GAME_STATUS_LOCK_LONG;
                 return;
             }
         }
@@ -1833,7 +1915,7 @@ void actTalkAfter(SceneObject object)
     EnemyWorkPostTalk *enemy = &enepc[((Actor *)object)->number];
 
     After_Talk(object);
-    enemy->post_talk_flags = GameLoopState.flags & 0x400;
+    enemy->post_talk_flags = GameLoopState.flags & GAME_FLAG_NO_TALK;
 }
 
 static int GameModeCfEvent(void)
@@ -1842,9 +1924,9 @@ static int GameModeCfEvent(void)
     u8 event_active = GameLoopState.status;
 
     GameLoopState.flags = cleared;
-    if (event_active == 0 && (PadData.pressed & 0x800) != 0 &&
-        (PadData.held & 0x10c) == 268) {
-        GameLoopState.flags = cleared | 0x80000000;
+    if (event_active == 0 && (PadData.pressed & PAD_START) != 0 &&
+        (PadData.held & GAME_PAD_COMBO) == GAME_PAD_COMBO) {
+        GameLoopState.flags = cleared | GAME_FLAG_QUIT;
         return 1;
     }
 
@@ -1859,9 +1941,9 @@ static int GameModeCfEvent(void)
 
 int GameModeDebugMenu(void)
 {
-    if ((PadData.debug_buttons & 0x100) != 0) {
+    if ((PadData.debug_buttons & PAD_SELECT) != 0) {
         GameLoopState.debug_menu.storage = 0;
-        GameLoopState.flags &= 0xfffffffeu;
+        GameLoopState.flags &= ~GAME_FLAG_PAUSE;
         GameLoopState.kind = GameLoopState.saved_kind;
     }
 
@@ -1870,7 +1952,7 @@ int GameModeDebugMenu(void)
     GameDebugMenu();
     {
         StudioCamera *camera = xglStudioGetCamera2(0);
-        if (camera->state == 4 && GameLoopState.camera_callback != 0) {
+        if (camera->state == STUDIO_CAMERA_STATE_GAME && GameLoopState.camera_callback != 0) {
             GameLoopState.camera_callback();
         }
     }
@@ -1907,14 +1989,14 @@ void Game(void)
     GameLoopState.clear_callback = 0;
     GameLoopState.map_draw_callback = 0;
     *pause_flag = 0;
-    GameLoopState.kind = 0;
+    GameLoopState.kind = GAME_MODE_INIT;
     GameLoopState.stateC8 = 0;
     GameLoopState.actor_draw_callback = 0;
     GameLoopState.vector80[0] = one;
     GameLoopState.vectorA0[0] = zero;
     GameLoopState.vectorA0[3] = 30.0f;
     GameLoopState.stateD0 = -2;
-    GameLoopState.flags = 0x302;
+    GameLoopState.flags = GAME_FLAG_DRAW | 0x300;
     nmlModelSetFadeInCancel(30u);
     nmlModelSetEffectWrite(1);
     Enemy_SystemInit();
@@ -1935,7 +2017,7 @@ void Game(void)
     SCRIPT_clrEventActiveFlag();
     SCRIPT_talkIgnoreClr();
     ACT_init();
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < ACTOR_COUNT; i++) {
         actor[i].update = 0;
     }
     GameDefocusSet(-1, 0, 0);
@@ -1949,7 +2031,7 @@ void Game(void)
     GameCfPlayerMoveInit();
     GameLoopState.controlled_actor = ACT_create(0, 1);
     Player_System_Init(GameLoopState.controlled_actor);
-    GameLoopState.status = 0x10;
+    GameLoopState.status = GAME_STATUS_LOCK_SHORT;
     if (GameLoopState.kindDetail != 0) {
         Quadword *position_dst;
 
@@ -1964,38 +2046,38 @@ void Game(void)
     }
     while (1) {
         if (GameLoopState.frame_hook != 0) {
-            GameLoopState.frame_hook(2);
+            GameLoopState.frame_hook(GAME_HOOK_FRAME_START);
         }
-        nmlModelSendPauseSignal(GameLoopState.flags & 1);
+        nmlModelSendPauseSignal(GameLoopState.flags & GAME_FLAG_PAUSE);
         SCRIPT_sceneChangeTimeDec();
         Disp_Homing();
         if (GameLoopState.status != 0) {
             GameLoopState.status--;
         }
         switch (GameLoopState.kind) {
-        case 0:
-            GameLoopState.kind = 2;
+        case GAME_MODE_INIT:
+            GameLoopState.kind = GAME_MODE_CF_MAIN;
             break;
-        case 1:
+        case GAME_MODE_PAUSE:
             GameModePause();
             break;
-        case 2:
+        case GAME_MODE_CF_MAIN:
             GameModeCfMain();
             break;
-        case 3:
+        case GAME_MODE_CF_EVENT:
             GameModeCfEvent();
             break;
-        case 6:
+        case GAME_MODE_EVT_DEBUG:
             GameModeEvtDebug();
             break;
-        case 7:
+        case GAME_MODE_EVT_TOOLS:
             GameModeEvtTools();
             break;
-        case 8:
+        case GAME_MODE_DEBUG_MENU:
             GameModeDebugMenu();
             break;
         }
-        if (GameLoopState.flags & 0x90000000) {
+        if (GameLoopState.flags & GAME_FLAG_LEAVE_LOOP) {
             break;
         }
         xglTaskExecute(GameLoopState.scheduler);
@@ -2017,10 +2099,10 @@ void Game(void)
     nmlModelConstruct();
     xglRenderClearOff();
     WorkEnd = GameLoopState.saved_work_end;
-    if (GameLoopState.flags & 0x8000000) {
+    if (GameLoopState.flags & GAME_FLAG_GAME_OVER) {
         GameOver();
     }
-    GameLoopState.kind = 0;
+    GameLoopState.kind = GAME_MODE_INIT;
     xglSleep();
     xglSleep();
 }

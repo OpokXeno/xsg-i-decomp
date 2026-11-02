@@ -72,6 +72,27 @@ typedef struct Unit6003ResourceHeader {
     u32 signature;
 } Unit6003ResourceHeader;
 
+/* unit6003.frame_type: how the current frame is stored. */
+enum {
+    UNIT6003_FRAME_SHEET = 0, /* XTX texture sheet cut into frames */
+    UNIT6003_FRAME_MOVIE = 1, /* IPUM movie decoded into XTX headers */
+    UNIT6003_FRAME_NONE_LOADED = 0xff
+};
+
+/* Sheet frames are cut from a 512x448 texture, 128x112 per frame by default. */
+#define UNIT6003_SHEET_WIDTH 0x200
+#define UNIT6003_SHEET_HEIGHT 0x1c0
+#define UNIT6003_DEFAULT_FRAME_WIDTH 0x80
+#define UNIT6003_DEFAULT_FRAME_HEIGHT 0x70
+#define UNIT6003_FADE_FRAMES 0x0f
+#define UNIT6003_CAMERA_COUNT 8
+#define UNIT6003_RES_TYPE_MVS 10
+#define UNIT6003_RES_TYPE_FM 11
+#define UNIT6003_SCREEN_CLIP_MASK 0xffff0000u
+#define UNIT6003_COLOR_NEUTRAL 0x80
+#define UNIT6003_DRAW_MODE_MONITOR 5
+#define UNIT6003_DRAW_MODE_DEFAULT 1
+
 enum {
     UNIT6003_RESOURCE_GROUP_FM = 10000,
     UNIT6003_RESOURCE_GROUP_MVS = 20000,
@@ -182,19 +203,19 @@ static unsigned char clut_1[32] = {
 
 static void unit6003_draw(MapUnitRecord *unit)
 {
-    Unit6003Scratch *scratch = (Unit6003Scratch *)0x70000000;
+    Unit6003Scratch *scratch = (Unit6003Scratch *)SCRATCHPAD_BASE;
     Unit6003DrawVertex *vertex;
-    int draw_mode = unit->monitor_priority == 0 ? 5 : 1;
+    int draw_mode = unit->monitor_priority == 0 ? UNIT6003_DRAW_MODE_MONITOR : UNIT6003_DRAW_MODE_DEFAULT;
     int camera_index;
     int corner;
     int texture_page;
     float texture_scale;
 
     switch (unit->unit6003.frame_type) {
-    case 0:
+    case UNIT6003_FRAME_SHEET:
         nmlModelDirectSendXtx(draw_mode, unit->unit6003.movie_work.resource);
         break;
-    case 1: {
+    case UNIT6003_FRAME_MOVIE: {
         XglMovieWorkXtxView *movie = unit->unit6003.movie_work.movie;
         nmlModelDirectSendXtx(draw_mode,
                               movie->headers[movie->header_index]);
@@ -206,27 +227,27 @@ static void unit6003_draw(MapUnitRecord *unit)
     }
 
     switch (unit->unit6003.frame_type) {
-    case 0:
+    case UNIT6003_FRAME_SHEET:
         texture_page = sRender.texture_page << 5;
         TestEnv_0_00490520.texture =
             (0x25320000 | texture_page) |
             ((u64)(texture_page + clut_1[unit->unit6003.frame_index] + 0x380) << 37) |
             0x2000000640000000ULL;
         break;
-    case 1:
+    case UNIT6003_FRAME_MOVIE:
         TestEnv_0_00490520.texture =
             (0x20010000 | (sRender.texture_page << 5)) |
             0x2000000600000000ULL;
         break;
     }
     vertex = TestEnv_0_00490520.vertices;
-    for (camera_index = 0; camera_index < 8; ++camera_index) {
+    for (camera_index = 0; camera_index < UNIT6003_CAMERA_COUNT; ++camera_index) {
         if (xglStudioGetCamera2(camera_index)->active != 0)
             break;
     }
 
     switch (unit->unit6003.frame_type) {
-    case 0:
+    case UNIT6003_FRAME_SHEET:
         texture_scale = 1.0f / 512.0f;
         scratch->texture_left = I2F(
             (unit->unit6003.frame_index % unit->unit6003.frames_per_row) *
@@ -237,7 +258,7 @@ static void unit6003_draw(MapUnitRecord *unit)
         scratch->texture_width = I2F(unit->unit6003.texture_width) * texture_scale;
         scratch->texture_height = I2F(unit->unit6003.texture_height) * texture_scale;
         break;
-    case 1:
+    case UNIT6003_FRAME_MOVIE:
         scratch->texture_left = 0.0f;
         scratch->texture_top = 0.0f;
         texture_scale = 1.0f / 256.0f;
@@ -283,8 +304,8 @@ static void unit6003_draw(MapUnitRecord *unit)
             perspective = xglRotTransPers(&vertex->x, scratch->matrix,
                                            scratch->position, camera_index);
             vertex->flags = 0;
-            if ((vertex->x & 0xffff0000) != 0 ||
-                (vertex->y & 0xffff0000) != 0 || vertex->z < 0)
+            if ((vertex->x & UNIT6003_SCREEN_CLIP_MASK) != 0 ||
+                (vertex->y & UNIT6003_SCREEN_CLIP_MASK) != 0 || vertex->z < 0)
                 return;
         } else {
             vertex->x = scratch->screen_left +
@@ -299,9 +320,9 @@ static void unit6003_draw(MapUnitRecord *unit)
             (right != 0 ? scratch->texture_width : 0.0f)) * perspective;
         vertex->texture_t = (scratch->texture_top +
             ((corner & 2) != 0 ? scratch->texture_height : 0.0f)) * perspective;
-        vertex->red = 0x80;
-        vertex->green = 0x80;
-        vertex->blue = 0x80;
+        vertex->red = UNIT6003_COLOR_NEUTRAL;
+        vertex->green = UNIT6003_COLOR_NEUTRAL;
+        vertex->blue = UNIT6003_COLOR_NEUTRAL;
         vertex->texture_q = perspective;
         vertex->alpha = scratch->alpha;
     }
@@ -347,7 +368,7 @@ void unit6003_update(MapUnitRecord *unit)
                 resource_index % UNIT6003_RESOURCE_GROUP_SIZE;
             printf(UNIT6003_LOADING_FM_FORMAT, resource_file_id);
             resource_index = GameResourceGetIndex(
-                RES_loadFile(-1, 11, resource_file_id, 0));
+                RES_loadFile(-1, UNIT6003_RES_TYPE_FM, resource_file_id, 0));
             unit->unit6003.resource_id = resource_index;
         } else if (resource_index - UNIT6003_RESOURCE_GROUP_MVS <
                    UNIT6003_RESOURCE_GROUP_SIZE) {
@@ -355,7 +376,7 @@ void unit6003_update(MapUnitRecord *unit)
                 resource_index % UNIT6003_RESOURCE_GROUP_SIZE;
             printf(UNIT6003_LOADING_MVS_FORMAT, resource_file_id);
             resource_index = GameResourceGetIndex(
-                RES_loadFile(-1, 10, resource_file_id, 0));
+                RES_loadFile(-1, UNIT6003_RES_TYPE_MVS, resource_file_id, 0));
             unit->unit6003.resource_id = resource_index;
         }
 
@@ -370,16 +391,16 @@ void unit6003_update(MapUnitRecord *unit)
             unit->unit6003.frame_delay = unit->unit6003.playback_direction;
 
         source.resource = GameResource[unit->unit6003.resource_id].address;
-        unit->unit6003.frame_type = 0xff;
+        unit->unit6003.frame_type = UNIT6003_FRAME_NONE_LOADED;
         if (source.resource != 0) {
             if (source.resource->signature == UNIT6003_XTX_SIGNATURE) {
                 if (unit->unit6003.texture_width == 0)
-                    unit->unit6003.texture_width = 0x80;
+                    unit->unit6003.texture_width = UNIT6003_DEFAULT_FRAME_WIDTH;
                 if (unit->unit6003.texture_height == 0)
-                    unit->unit6003.texture_height = 0x70;
-                unit->unit6003.frames_per_row = 0x200 / unit->unit6003.texture_width;
-                unit->unit6003.frames_per_column = 0x1c0 / unit->unit6003.texture_height;
-                unit->unit6003.frame_type = 0;
+                    unit->unit6003.texture_height = UNIT6003_DEFAULT_FRAME_HEIGHT;
+                unit->unit6003.frames_per_row = UNIT6003_SHEET_WIDTH / unit->unit6003.texture_width;
+                unit->unit6003.frames_per_column = UNIT6003_SHEET_HEIGHT / unit->unit6003.texture_height;
+                unit->unit6003.frame_type = UNIT6003_FRAME_SHEET;
             } else if (source.resource->signature == UNIT6003_IPUM_SIGNATURE) {
                 u32 played;
                 XglMovieWorkXtxView *movie_work;
@@ -399,7 +420,7 @@ void unit6003_update(MapUnitRecord *unit)
                     const short *movie_frame_count_source = &movie_work->frame_count;
                     short movie_frame_count = *movie_frame_count_source;
 
-                    unit->unit6003.frame_type = 1;
+                    unit->unit6003.frame_type = UNIT6003_FRAME_MOVIE;
                     unit->unit6003.frame_count = movie_frame_count;
                 }
                 source.movie = movie_work;
@@ -411,7 +432,7 @@ void unit6003_update(MapUnitRecord *unit)
     case 1:
         if (unit->signal != 0) {
             unit->actionSub = 2;
-            unit->sequenceNo = 0x0f;
+            unit->sequenceNo = UNIT6003_FADE_FRAMES;
             unit->draw = unit6003_draw;
     case 2:
             if (unit->sequenceNo == 0) {
@@ -419,7 +440,7 @@ void unit6003_update(MapUnitRecord *unit)
     case 3:
                 if (unit->signal == 0) {
                     unit->actionSub = 4;
-                    unit->sequenceNo = 0x0f;
+                    unit->sequenceNo = UNIT6003_FADE_FRAMES;
                 }
             } else {
                 unit->sequenceNo =
@@ -437,7 +458,7 @@ void unit6003_update(MapUnitRecord *unit)
         break;
     }
 
-    if (unit->unit6003.frame_type == 1) {
+    if (unit->unit6003.frame_type == UNIT6003_FRAME_MOVIE) {
         XglMovieWorkXtxView *movie_work = unit->unit6003.movie_work.movie;
 
         if (GameResourceGetIndex((int)movie_work) == -1 ||
@@ -466,7 +487,7 @@ void unit6003_update(MapUnitRecord *unit)
         if ((u8)frame_timer >= unit->unit6003.frame_delay) {
             unit->unit6003.frame_timer = 0;
             switch (unit->unit6003.frame_type) {
-            case 0: {
+            case UNIT6003_FRAME_SHEET: {
                 unit->unit6003.frame_index++;
                 if (unit->unit6003.frame_index > unit->unit6003.frame_count) {
                     if (unit->unit6003.playback_direction < 0)
@@ -476,7 +497,7 @@ void unit6003_update(MapUnitRecord *unit)
                 }
                 break;
             }
-            case 1: {
+            case UNIT6003_FRAME_MOVIE: {
                 XglMovieWorkXtxView *movie_work = unit->unit6003.movie_work.movie;
 
                 if (unit->unit6003.movie_advance_count == 0) {

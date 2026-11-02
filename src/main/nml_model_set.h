@@ -9,8 +9,28 @@
 #include "main/nml_model_set.h"
 #include "main/xgl_2.h"
 
+/*
+ * Per-frame capacities.  s_apBlock / s_aBlockLayout hold the opaque blocks
+ * from the bottom and the alpha blocks from the top (NML_BLOCK_POOL_LAST
+ * downwards); both group lists keep their last slot free.
+ */
+#define NML_MODEL_MAX 512
+#define NML_GROUP_MAX 512
+#define NML_GROUP_LIMIT (NML_GROUP_MAX - 1)
+#define NML_BLOCK_POOL_SIZE 4096
+#define NML_BLOCK_POOL_LAST (NML_BLOCK_POOL_SIZE - 1)
+#define NML_PARENT_BUF_MAX 512
+#define NML_DIRECT_MAX 5500
+#define NML_SHAPE_MAX 32
+#define NML_TOUMEI_MAX 16
+#define NML_POINT_LIGHT_MAX 3U
+#define NML_WINDOW_COUNT 4
+#define NML_CIRCLE_SHADOW_SIZE 64  /* side of the circle shadow texture */
+#define NML_FADE_LEVEL_MAX 128     /* fade level 0..128 */
+#define NML_MOVIE_FADE_CANCEL_FRAMES 30
+#define NML_BACK_BUFFER_TIME 0x28  /* frames of the battle / event-skip back buffer */
+
 #define NML_BLOCK_HIDDEN 0x8u
-#define NML_BLOCK_MATERIAL_NAMED_PARTS 0x10u
 
 /*
  * One render group: a run of s_apBlock entries drawn together.  The alpha
@@ -111,7 +131,7 @@ extern int s_nUseStealth;
 extern int s_nUseGnosys;
 extern int s_nMapAlphaEntry;
 extern int s_nMainCameraWarp;
-extern NmlBlockGroup s_aAlphaGroup[512];
+extern NmlBlockGroup s_aAlphaGroup[NML_GROUP_MAX];
 extern float s_fSortOffset;
 
 /*

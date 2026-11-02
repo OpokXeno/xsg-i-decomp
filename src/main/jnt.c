@@ -20,7 +20,33 @@
  * absolute stores as separate li/sw pairs, four instructions in place of the
  * original's single shared `lui $2,0x7000` and two displaced stores.
  */
-#define JNT_SCRATCH_BASE ((void *)0x70000000)
+#define JNT_SCRATCH_BASE ((void *)SCRATCHPAD_BASE)
+
+/* Channel flags word of a packed FCV attribute (FcvPackAttribute.channel_flags). */
+#define JNT_CHANNEL_FLAGS_END 0xFFFF     /* end-of-pack marker */
+#define JNT_CHANNEL_FLAG_INHERIT 0x8000  /* carries its own translation/rotation/scale packs */
+
+/* Joint element key (the channel flags kept in JntInterruptElement.key). */
+#define JNT_KEY_LINK_PIVOT 2        /* pivot follows attribute->pivot_index */
+#define JNT_KEY_LINK_TRANSLATION 4  /* translation follows attribute->translation_index */
+#define JNT_KEY_LINK_ROTATION 8     /* rotation follows attribute->rotation_index */
+#define JNT_KEY_LINK_MASK 0xe
+
+/* JntWork.flags */
+#define JNT_WORK_PACK_ENDED 0x04U /* the FCV pack's end marker was read */
+#define JNT_WORK_NO_PACK 0x20     /* JNT_setFCurve got no pack: consumers do nothing */
+
+/* JntProducer.consumer_ids: bit marking a filter rather than an interrupt channel. */
+#define JNT_CONSUMER_ID_FILTER 0x8000
+
+/* Producer consumers must point into the program image (checked before every call). */
+#define JNT_CONSUMER_CODE_BASE 0x001F0000U
+#define JNT_CONSUMER_CODE_SPAN 0x01E0FFFFU
+
+/* Hair id tag (JntChannelTag.tag): high half selects the kind, low half is the offset. */
+#define JNT_TAG_KIND_MASK 0xFFFF0000
+#define JNT_TAG_KIND_HAIR_OFFSET 0x008A0000
+#define JNT_TAG_VALUE_MASK 0xFFFF
 
 #define jntChainAt(work, index) (&(work)->chain_slots[(index)])
 
@@ -418,7 +444,7 @@ JntStaticChannel *JNT_getVal(JntWork *work, JntStaticChannel *channel,
     unsigned int scale_mask;
 
     element->interrupt_channel = 0;
-    if (work->flags & 4) {
+    if (work->flags & JNT_WORK_PACK_ENDED) {
         value_mask = 0;
         attribute_data = dummyAttr;
         channel_flags = 0;
@@ -426,16 +452,16 @@ JntStaticChannel *JNT_getVal(JntWork *work, JntStaticChannel *channel,
         struct FcvPackAttribute *attribute = FCV2_getPackAttribute(&work->cursor);
 
         attribute_data = attribute;
-        if (attribute->channel_flags == 0xffff) {
+        if (attribute->channel_flags == JNT_CHANNEL_FLAGS_END) {
             element->key = 0;
             element->attribute_data = 0;
-            work->flags |= 4;
+            work->flags |= JNT_WORK_PACK_ENDED;
             return channel;
         }
         channel_flags = attribute->channel_flags;
         value_mask = attribute->value_mask;
     }
-    inherit_channels = channel_flags & 0x8000;
+    inherit_channels = channel_flags & JNT_CHANNEL_FLAG_INHERIT;
     element->attribute_data = attribute_data;
     element->key = channel_flags;
     next_channel = channel + 1;
@@ -606,7 +632,7 @@ JntStaticChannel *JNT_getVal_staticChain(JntWork *work,
     JntStaticChannel *next_channel;
 
     element->interrupt_channel = 0;
-    if (work->flags & 4) {
+    if (work->flags & JNT_WORK_PACK_ENDED) {
         value_mask = 0;
         attribute_data = dummyAttr;
         channel_flags = 0;
@@ -614,17 +640,17 @@ JntStaticChannel *JNT_getVal_staticChain(JntWork *work,
         struct FcvPackAttribute *attribute = FCV2_getPackAttribute(&work->cursor);
 
         attribute_data = attribute;
-        if (attribute->channel_flags == 0xffff) {
+        if (attribute->channel_flags == JNT_CHANNEL_FLAGS_END) {
             element->key = 0;
             element->attribute_data = 0;
-            work->flags |= 4;
+            work->flags |= JNT_WORK_PACK_ENDED;
             return channel;
         }
         channel_flags = attribute->channel_flags;
         value_mask = attribute->value_mask;
     }
     element->key = channel_flags;
-    inherit_channels = channel_flags & 0x8000;
+    inherit_channels = channel_flags & JNT_CHANNEL_FLAG_INHERIT;
     next_channel = channel + 1;
     element->attribute_data = attribute_data;
     if (inherit_channels) {
@@ -781,7 +807,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
             JntProductionConsumer consumer = producer->consumers[interrupt_channel];
             int argument = producer->consumer_arguments[interrupt_channel];
             unsigned int address = (unsigned int)consumer;
-            if (address - 0x001f0000U <= 0x01e0ffffU) {
+            if (address - JNT_CONSUMER_CODE_BASE <= JNT_CONSUMER_CODE_SPAN) {
                 if ((address & 3U) == 0) {
                     consumer(work, channel, argument);
                 }
@@ -792,8 +818,8 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
         case 1: {
             unsigned short link;
             CUR_MATRIX_Set(work->matrix_buffer[channel->matrix_index].elements);
-            if ((flags & 0xe) != 0) {
-                if ((flags & 4) != 0) {
+            if ((flags & JNT_KEY_LINK_MASK) != 0) {
+                if ((flags & JNT_KEY_LINK_TRANSLATION) != 0) {
                     link = attribute->translation_index;
                     if (link < work->current_index) {
                         CUR_MATRIX_SetT((const Vector4 *)work->matrix_buffer[link].elements[3]);
@@ -801,7 +827,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                 } else {
                     CUR_MATRIX_Txyz4s(&element->translation);
                 }
-                if ((flags & 8) != 0) {
+                if ((flags & JNT_KEY_LINK_ROTATION) != 0) {
                     link = attribute->rotation_index;
                     if (link < work->current_index) {
                         CUR_MATRIX_SetR(work->matrix_buffer[link].elements);
@@ -823,7 +849,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     int slot = producer->deferred_count++;
                     producer->deferred_limits[slot] = (struct ActorShapeBinding *)
                         ((unsigned char *)limit + limit->deferred_offset);
-                    if ((flags & 4) != 0) {
+                    if ((flags & JNT_KEY_LINK_TRANSLATION) != 0) {
                         if (attribute->translation_index < work->current_index) {
                             element = &work->elements[attribute->translation_index];
                             CUR_MATRIX_SetT(&element->translation);
@@ -891,7 +917,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
             float z_component;
             int index;
             int have_target = 0;
-            if ((flags & 0xe) != 0 && (flags & 4) != 0 &&
+            if ((flags & JNT_KEY_LINK_MASK) != 0 && (flags & JNT_KEY_LINK_TRANSLATION) != 0 &&
                 attribute->translation_index < work->current_index) {
                 float *translation = work->matrix_buffer[attribute->translation_index].elements[3];
                 float x;
@@ -923,7 +949,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     JntChainSlot *slot = &work->chain_slots[index];
                     slot->translation.x = __builtin_fabsf(slot->translation.x);
                     slot->translation.w = 1.0f;
-                    if ((slot->attribute->channel_flags & 8) != 0) {
+                    if ((slot->attribute->channel_flags & JNT_KEY_LINK_ROTATION) != 0) {
                         unsigned short rotation_index = slot->attribute->rotation_index;
                         if (rotation_index < work->current_index) {
                             JntMatrix *rotation_matrix = &work->matrix_buffer[rotation_index];
@@ -984,7 +1010,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     CUR_MATRIX_Set(basis);
                     CUR_MATRIX_4s3(alignment);
                     CUR_MATRIX_Get(basis);
-                    if ((work->chain_slots[1].attribute->channel_flags & 2) != 0) {
+                    if ((work->chain_slots[1].attribute->channel_flags & JNT_KEY_LINK_PIVOT) != 0) {
                         Vector4 *pivot = (Vector4 *)work->matrix_buffer[work->chain_slots[1].attribute->pivot_index].elements[3];
                         float radius;
                         float x;
@@ -1136,7 +1162,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     CUR_MATRIX_Set(work->transform_basis);
                     CUR_MATRIX_4s3(alignment);
                     CUR_MATRIX_Get(work->transform_basis);
-                    if ((chain_slot->attribute->channel_flags & 2) != 0) {
+                    if ((chain_slot->attribute->channel_flags & JNT_KEY_LINK_PIVOT) != 0) {
                         Vector4 *pivot = (Vector4 *)work->matrix_buffer[chain_slot->attribute->pivot_index].elements[3];
                         float radius;
                         float x;
@@ -1253,7 +1279,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
         case 6:
             break;
         }
-        if ((flags & 0x8000) != 0) {
+        if ((flags & JNT_CHANNEL_FLAG_INHERIT) != 0) {
             unsigned short channel_index;
             xglMatrixUnit(work->root_correction);
             channel_index = work->channel_index;
@@ -1351,20 +1377,20 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
     sums_pair[1].w = 1.0f;
     sums_pair[0].w = 1.0f;
 
-    if (work->flags & 4) {
+    if (work->flags & JNT_WORK_PACK_ENDED) {
         attribute = (struct FcvPackAttribute *)dummyAttr;
         value_mask = attribute->value_mask;
         channel_flags = attribute->channel_flags;
     } else {
         attribute = FCV2_getPackAttribute(&work->cursor);
-        if (attribute->channel_flags == 0xFFFF) {
-            work->flags |= 4;
+        if (attribute->channel_flags == JNT_CHANNEL_FLAGS_END) {
+            work->flags |= JNT_WORK_PACK_ENDED;
             return channel;
         }
         value_mask = attribute->value_mask;
         channel_flags = attribute->channel_flags;
     }
-    has_fcv = channel_flags & 0x8000;
+    has_fcv = channel_flags & JNT_CHANNEL_FLAG_INHERIT;
     next_channel = channel + 1;
     if (has_fcv != 0) {
         get_fcvpack(&work->channel_translation.x, &translation->x, work, value_mask, frame);
@@ -1408,8 +1434,8 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 }
             }
         }
-        if ((channel_flags & 0xe) != 0) {
-            if (channel_flags & 4) {
+        if ((channel_flags & JNT_KEY_LINK_MASK) != 0) {
+            if (channel_flags & JNT_KEY_LINK_TRANSLATION) {
                 link = attribute->translation_index;
                 if (link < work->current_index) {
                     CUR_MATRIX_SetT((const Vector4 *)(work->matrix_buffer + link)->elements[3]);
@@ -1417,7 +1443,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
             } else {
                 CUR_MATRIX_Txyz4s(&work->channel_translation);
             }
-            if (channel_flags & 8) {
+            if (channel_flags & JNT_KEY_LINK_ROTATION) {
                 link = attribute->rotation_index;
                 if (link < work->current_index) {
                     CUR_MATRIX_SetR((work->matrix_buffer + link)->elements);
@@ -1438,7 +1464,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 slot = (*slot_count)++;
                 work->producer->deferred_limits[slot] = (struct ActorShapeBinding *)
                     ((unsigned char *)limit + limit->deferred_offset);
-                if (channel_flags & 4) {
+                if (channel_flags & JNT_KEY_LINK_TRANSLATION) {
                     if (attribute->translation_index < work->current_index) {
                         CUR_MATRIX_SetT(&work->channel_translation);
                     }
@@ -1563,7 +1589,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 slot->translation.x = __builtin_fabsf(slot->translation.x);
                 slot->translation.w = 1.0f;
                 slot_attribute = slot->attribute;
-                if ((slot_attribute->channel_flags & 8) != 0) {
+                if ((slot_attribute->channel_flags & JNT_KEY_LINK_ROTATION) != 0) {
                     int rotation_index = slot_attribute->rotation_index;
 
                     if (rotation_index < work->current_index) {
@@ -1619,7 +1645,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 CUR_MATRIX_Set(work->transform_basis);
                 CUR_MATRIX_4s3(basis_frame);
                 CUR_MATRIX_Get(work->transform_basis);
-                if ((jntChainAt(work, 1)->attribute->channel_flags & 2) != 0) {
+                if ((jntChainAt(work, 1)->attribute->channel_flags & JNT_KEY_LINK_PIVOT) != 0) {
                     float *pivot;
                     float len;
                     float angle;
@@ -1766,7 +1792,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 CUR_MATRIX_4s3(basis_frame);
                 CUR_MATRIX_Get(work->transform_basis);
                 slot = jntChainAt(work, 1);
-                if ((slot->attribute->channel_flags & 2) != 0) {
+                if ((slot->attribute->channel_flags & JNT_KEY_LINK_PIVOT) != 0) {
                     float *pivot;
                     float len;
 
@@ -1877,8 +1903,8 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
         xglMatrixUnit(work->root_correction);
         value_mask = work->channel_index;
         if ((value_mask & 7) == 0) {
-            float *dest = (float *)(work->current_index * 64 + (int)work->matrix_buffer);
-            float *source = (float *)(channel->matrix_index * 64 + (int)work->matrix_buffer);
+            float *dest = (float *)(work->current_index * sizeof(JntMatrix) + (int)work->matrix_buffer);
+            float *source = (float *)(channel->matrix_index * sizeof(JntMatrix) + (int)work->matrix_buffer);
 
             work->root_correction[3][0] = -(dest[12] - source[12]);
             work->root_correction[3][1] = -(dest[13] - source[13]);
@@ -1907,7 +1933,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
     next_channel = channel + 1;
     attribute = FCV2_getPackAttribute(&work->cursor);
     value_mask = attribute->value_mask;
-    if ((attribute->channel_flags & 0x8000) != 0) {
+    if ((attribute->channel_flags & JNT_CHANNEL_FLAG_INHERIT) != 0) {
         decoded_translation = &work->channel_translation;
         get_fcvpack(&decoded_translation->x, translate, work, value_mask, frame);
         value_mask >>= 3;
@@ -1957,8 +1983,8 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
                 (&work->channel_scale.x)[index] = FCV2_getPackValue(&work->cursor, frame);
             }
         }
-        if ((attribute->channel_flags & 0xe) != 0) {
-            if (attribute->channel_flags & 4) {
+        if ((attribute->channel_flags & JNT_KEY_LINK_MASK) != 0) {
+            if (attribute->channel_flags & JNT_KEY_LINK_TRANSLATION) {
                 link = attribute->translation_index;
                 if (link < work->current_index) {
                     CUR_MATRIX_SetT((const Vector4 *)(work->matrix_buffer + link)->elements[3]);
@@ -1966,7 +1992,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
             } else {
                 CUR_MATRIX_Txyz4s(&work->channel_translation);
             }
-            if (attribute->channel_flags & 8) {
+            if (attribute->channel_flags & JNT_KEY_LINK_ROTATION) {
                 link = attribute->rotation_index;
                 if (link < work->current_index) {
                     CUR_MATRIX_SetR((work->matrix_buffer + link)->elements);
@@ -1988,7 +2014,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
                 slot = (*slot_count)++;
                 work->producer->deferred_limits[slot] = (struct ActorShapeBinding *)
                     ((unsigned char *)limit + limit->deferred_offset);
-                if (attribute->channel_flags & 4) {
+                if (attribute->channel_flags & JNT_KEY_LINK_TRANSLATION) {
                     if (attribute->translation_index < work->current_index) {
                         CUR_MATRIX_SetT(&work->channel_translation);
                     }
@@ -2091,7 +2117,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
         int computed = 0;
         float dz;
         float a_abs;
-        if ((attribute->channel_flags & 0xe) != 0 && (attribute->channel_flags & 4) != 0 &&
+        if ((attribute->channel_flags & JNT_KEY_LINK_MASK) != 0 && (attribute->channel_flags & JNT_KEY_LINK_TRANSLATION) != 0 &&
             attribute->translation_index < work->current_index) {
             float p0;
             float p1;
@@ -2130,7 +2156,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
                 slot->translation.x = __builtin_fabsf(slot->translation.x);
                 slot->translation.w = 1.0f;
                 slot_attribute = slot->attribute;
-                if ((slot_attribute->channel_flags & 8) != 0) {
+                if ((slot_attribute->channel_flags & JNT_KEY_LINK_ROTATION) != 0) {
                     int rotation_index = slot_attribute->rotation_index;
 
                     if (rotation_index < work->current_index) {
@@ -2182,7 +2208,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
                 CUR_MATRIX_Set(work->transform_basis);
                 CUR_MATRIX_4s3(basis_frame);
                 CUR_MATRIX_Get(work->transform_basis);
-                if ((jntChainAt(work, 1)->attribute->channel_flags & 2) != 0) {
+                if ((jntChainAt(work, 1)->attribute->channel_flags & JNT_KEY_LINK_PIVOT) != 0) {
                     float *pivot;
                     float len;
                     float angle;
@@ -2321,7 +2347,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
         CUR_MATRIX_Get((work->matrix_buffer + work->current_index)->elements);
         break;
     }
-    if ((attribute->channel_flags & 0x8000) != 0) {
+    if ((attribute->channel_flags & JNT_CHANNEL_FLAG_INHERIT) != 0) {
         JntMatrix *matrices;
         float (*dest)[4];
         float (*previous)[4];
@@ -2337,7 +2363,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
             ((previous_channel->translation.y + matrices[0].elements[3][1]) *
              (1.0f / previous[3][1]));
         if ((value_mask & 7) == 0) {
-            float (*source)[4] = ((JntMatrix *)(channel->matrix_index * 64 + (int)matrices))->elements;
+            float (*source)[4] = ((JntMatrix *)(channel->matrix_index * sizeof(JntMatrix) + (int)matrices))->elements;
             float previous_channel_y;
             float previous_matrix_y;
 
@@ -2784,7 +2810,7 @@ void JNT_setFCurve(void *pack, unsigned int channel_index)
     work->root_rotation.w = 1.0f;
     work->root_scale.w = 1.0f;
     if (pack == 0) {
-        work->flags |= 0x20;
+        work->flags |= JNT_WORK_NO_PACK;
     } else {
         FCV2_resetPack(&work->cursor, pack);
     }
@@ -2900,7 +2926,7 @@ int JNT_startProduction(float current_frame, JntProducer *producer, void *actor)
         consumer = producer->consumers[0];
         consumer_argument = producer->consumer_arguments[0];
         consumer_address = (unsigned int)consumer;
-        if (consumer_address - 0x001F0000 <= 0x01E0FFFF &&
+        if (consumer_address - JNT_CONSUMER_CODE_BASE <= JNT_CONSUMER_CODE_SPAN &&
             (consumer_address & 3) == 0) {
             consumer(JNT_SCRATCH_BASE, channels, consumer_argument);
             if (owner != 0) {
@@ -2937,7 +2963,7 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
     if (channel == 0) {
         return 0;
     }
-    if (work->flags & 0x20) {
+    if (work->flags & JNT_WORK_NO_PACK) {
         return 0;
     }
     work->flags |= 0x18;
@@ -2950,11 +2976,11 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
         count += work->hair_id_source->secondary_id;
         while (work->current_index < count) {
             cursor = JNT_getVal2(work, cursor, frame);
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 break;
             }
         }
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             if (work->flags & 0x40) {
                 return 0;
             }
@@ -2971,7 +2997,7 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
         }
         count += work->hair_id_source->additional_secondary_count;
         count += work->hair_id_source->additional_primary_count;
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -2979,12 +3005,12 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
         }
         while (work->current_index < count) {
             cursor = JNT_getVal2(work, cursor, frame);
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 break;
             }
         }
-        if (work->flags & 4) {
-            work->flags &= ~4U;
+        if (work->flags & JNT_WORK_PACK_ENDED) {
+            work->flags &= ~JNT_WORK_PACK_ENDED;
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -2993,11 +3019,11 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
         count = work->hair_id_source->primary_id;
         while (work->current_index < count) {
             cursor = JNT_getVal_HOGE2(work, cursor, frame);
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 break;
             }
         }
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -3050,8 +3076,8 @@ static int JNT_hairID(JntWork *work)
     if (tag->flag == 0) {
         id += source->secondary_id;
     }
-    if ((tag->tag & 0xFFFF0000) == 0x008A0000) {
-        id += tag->tag & 0xFFFF;
+    if ((tag->tag & JNT_TAG_KIND_MASK) == JNT_TAG_KIND_HAIR_OFFSET) {
+        id += tag->tag & JNT_TAG_VALUE_MASK;
     }
     return id;
 }
@@ -3067,7 +3093,7 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
     if (channel == 0) {
         return 0;
     }
-    if (work->flags & 0x20) {
+    if (work->flags & JNT_WORK_NO_PACK) {
         return 0;
     }
     work->flags |= 0x18;
@@ -3079,11 +3105,11 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
         count = JNT_hairID(work);
         while (work->current_index < count) {
             cursor = JNT_getVal2(work, cursor, frame);
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 break;
             }
         }
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -3093,7 +3119,7 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
                     work->hair_id_source->secondary_id;
             while (work->current_index < count) {
                 cursor = JNT_getVal2(work, cursor, frame);
-                if (work->flags & 4) {
+                if (work->flags & JNT_WORK_PACK_ENDED) {
                     break;
                 }
             }
@@ -3118,7 +3144,7 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
             }
         }
         count = work->hair_id_source->channel_limit;
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -3126,12 +3152,12 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
         }
         while (work->current_index < count) {
             cursor = JNT_getVal2(work, cursor, frame);
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 break;
             }
         }
-        if (work->flags & 4) {
-            work->flags &= ~4U;
+        if (work->flags & JNT_WORK_PACK_ENDED) {
+            work->flags &= ~JNT_WORK_PACK_ENDED;
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -3140,11 +3166,11 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
         count = work->hair_id_source->primary_id;
         while (work->current_index < count) {
             cursor = JNT_getVal_HOGE2(work, cursor, frame);
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 break;
             }
         }
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < count) {
                 cursor = JNT_getStaticVal2(work, cursor);
             }
@@ -3187,7 +3213,7 @@ int JNT_setInterrupt(JntWork *work, JntProducer *producer)
     work->elements[0].interrupt_channel = 0;
     for (channel = 1; channel < count; channel++) {
         int element = producer->consumer_ids[channel];
-        if (element != 0 && (element & 0x8000) == 0) {
+        if (element != 0 && (element & JNT_CONSUMER_ID_FILTER) == 0) {
             work->elements[element].interrupt_channel = channel;
             result++;
         }
@@ -3211,7 +3237,7 @@ JntProductionConsumer JNT_getFilter(void *work, JntProducer *producer)
         JntProductionConsumer *filter = &producer->consumers[1];
         int *flag = &producer->consumer_ids[1];
         for (;;) {
-            if ((*flag & 0x8000) != 0) {
+            if ((*flag & JNT_CONSUMER_ID_FILTER) != 0) {
                 return *filter;
             }
             count = remaining;
@@ -3307,7 +3333,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
     if (channel == 0) {
         return 0;
     }
-    if (work->flags & 0x20) {
+    if (work->flags & JNT_WORK_NO_PACK) {
         return 0;
     }
     work->flags |= 0x18;
@@ -3367,11 +3393,11 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
         end_index = JNT_hairID(work);
         while (work->current_index < end_index) {
             next_channel = JNT_getVal(work, next_channel, frame);
-            if ((work->flags & 4) || work->channel_start_index >= 0) {
+            if ((work->flags & JNT_WORK_PACK_ENDED) || work->channel_start_index >= 0) {
                 break;
             }
         }
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < end_index) {
                 next_channel = JNT_getStaticVal(work, next_channel);
             }
@@ -3415,11 +3441,11 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             end_index = JNT_hairID(work);
             while (work->current_index < end_index) {
                 next_channel = JNT_getVal(work, next_channel, frame);
-                if (work->flags & 4) {
+                if (work->flags & JNT_WORK_PACK_ENDED) {
                     break;
                 }
             }
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 while (work->current_index < end_index) {
                     next_channel = JNT_getStaticVal(work, next_channel);
                 }
@@ -3437,7 +3463,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             end_index = work->hair_id_source->primary_id + work->hair_id_source->secondary_id;
             while (work->current_index < end_index) {
                 next_channel = JNT_getVal2(work, next_channel, frame);
-                if (work->flags & 4) {
+                if (work->flags & JNT_WORK_PACK_ENDED) {
                     break;
                 }
             }
@@ -3486,19 +3512,19 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
         end_index = work->hair_id_source->primary_id;
         end_index += work->hair_id_source->secondary_id;
         end_index += work->hair_id_source->additional_primary_count;
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < end_index) {
                 next_channel = JNT_getStaticVal2(work, next_channel);
             }
         } else {
             while (work->current_index < end_index) {
                 next_channel = JNT_getVal2(work, next_channel, frame);
-                if (work->flags & 4) {
+                if (work->flags & JNT_WORK_PACK_ENDED) {
                     break;
                 }
             }
-            if (work->flags & 4) {
-                work->flags &= ~4U;
+            if (work->flags & JNT_WORK_PACK_ENDED) {
+                work->flags &= ~JNT_WORK_PACK_ENDED;
                 while (work->current_index < end_index) {
                     next_channel = JNT_getStaticVal2(work, next_channel);
                 }
@@ -3528,11 +3554,11 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
         end_index = JNT_hairID(work);
         while (work->current_index < end_index) {
             next_channel = JNT_getVal_staticChain(work, next_channel, frame);
-            if ((work->flags & 4) || work->channel_start_index >= 0) {
+            if ((work->flags & JNT_WORK_PACK_ENDED) || work->channel_start_index >= 0) {
                 break;
             }
         }
-        if (work->flags & 4) {
+        if (work->flags & JNT_WORK_PACK_ENDED) {
             while (work->current_index < end_index) {
                 next_channel = JNT_getStaticVal(work, next_channel);
             }
@@ -3572,11 +3598,11 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             end_index = JNT_hairID(work);
             while (work->current_index < end_index) {
                 next_channel = JNT_getVal_staticChain(work, next_channel, frame);
-                if (work->flags & 4) {
+                if (work->flags & JNT_WORK_PACK_ENDED) {
                     break;
                 }
             }
-            if (work->flags & 4) {
+            if (work->flags & JNT_WORK_PACK_ENDED) {
                 while (work->current_index < end_index) {
                     next_channel = JNT_getStaticVal(work, next_channel);
                 }

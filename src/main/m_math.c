@@ -6,6 +6,9 @@
 #include "main/sdv.h"
 #include "vu0_macro.h"
 
+#define MMATH_PI 3.1415927f
+#define MMATH_TWO_PI 6.283185f
+
 extern float srsAtan2(float deltaX, float deltaZ);
 
 float MMathMakeRandom(void)
@@ -20,26 +23,26 @@ float MMathMakeRandom2PI(void)
 
 float MMathCalcRotNear(float first, float second)
 {
-    float difference = fmodf(second, 6.283185f) - fmodf(first, 6.283185f);
+    float difference = fmodf(second, MMATH_TWO_PI) - fmodf(first, MMATH_TWO_PI);
 
-    if (__builtin_fabsf(difference) > 3.1415927f) {
+    if (__builtin_fabsf(difference) > MMATH_PI) {
         if (difference < 0.0f)
-            difference += 6.283185f;
+            difference += MMATH_TWO_PI;
         else
-            difference -= 6.283185f;
+            difference -= MMATH_TWO_PI;
     }
     return difference;
 }
 
 float MMathCalcRotFar(float first, float second)
 {
-    float difference = fmodf(second, 6.283185f) - fmodf(first, 6.283185f);
+    float difference = fmodf(second, MMATH_TWO_PI) - fmodf(first, MMATH_TWO_PI);
 
-    if (__builtin_fabsf(difference) < 3.1415927f) {
+    if (__builtin_fabsf(difference) < MMATH_PI) {
         if (difference < 0.0f)
-            difference += 6.283185f;
+            difference += MMATH_TWO_PI;
         else
-            difference -= 6.283185f;
+            difference -= MMATH_TWO_PI;
     }
     return difference;
 }

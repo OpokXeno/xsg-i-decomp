@@ -33,6 +33,44 @@
 
 #define RUNTIME_UMN_BOX_SLOTS 128
 
+/* GameLoopState.flags */
+#define RUNTIME_GAME_FLAG_PLAYER_CONTROL_OFF 0x8000  /* set by setPlayerControl(false) */
+#define RUNTIME_GAME_FLAG_MINIGAME 0x4000000         /* set while minigameExec runs */
+#define RUNTIME_PLAYER_FLAG_CONTROLLABLE 0x20        /* GameLoopState.player_flags */
+
+/* The thread blocks until the native call ends its script (see JThread.flags). */
+/* GameLoopState.shoot_control (Runtime.setShoot*) */
+#define RUNTIME_SHOOT_ENABLED 0x01
+#define RUNTIME_SHOOT_HEIGHT_CHECK 0x02
+#define RUNTIME_SHOOT_ID_CHECK 0x04
+#define RUNTIME_SHOOT_UWA_CHECK 0x08
+
+#define RUNTIME_THREAD_BLOCK_FLAGS (JTHREAD_FLAG_DONE | JTHREAD_FLAG_WAITING)
+
+/* Runtime.jump destination: bit 16 keeps the playing sound sequences, bits 16..19 carry flags. */
+#define RUNTIME_JUMP_KEEP_SEQUENCES 0x10000
+#define RUNTIME_JUMP_FLAGS_MASK 0xF0000
+#define RUNTIME_JUMP_EVENT_BASE 0x10000000
+#define RUNTIME_SEQUENCE_COUNT 8
+#define RUNTIME_SEQUENCE_FADE_OUT 1000
+
+/* Runtime.getPartyData/setPartyData selector: bits 24..31 pick the access width. */
+#define RUNTIME_PARTY_WIDTH_BYTE 0
+#define RUNTIME_PARTY_WIDTH_HALFWORD 1
+#define RUNTIME_PARTY_WIDTH_WORD 2
+#define RUNTIME_PARTY_WIDTH_DOUBLEWORD 3
+#define RUNTIME_PARTY_SELECTOR_IN_USE_ID 0x0100002C  /* halfword at +0x2C: the player's model id */
+
+/* Runtime.mailFlag: mail[0] bits. */
+#define RUNTIME_MAIL_RECEIVED 0x01
+#define RUNTIME_MAIL_READ 0x02
+#define RUNTIME_MAIL_RECEIVED_SE 36   /* sound effect when a mail arrives */
+#define RUNTIME_MAIL_RECEIVED_VIBRATION 30
+
+#define RUNTIME_MENU_LOCK_FRAMES 62
+#define RUNTIME_DEFOCUS_PARAM_STRIDE 17
+#define RUNTIME_ITEM_NAME_LENGTH 255
+
 /* Runtime native lookup pairs: method signature followed by its entry point. */
 typedef struct RuntimeNativeBinding {
     const char *signature;
@@ -1950,7 +1988,7 @@ void Java_xeno_util_Runtime_setLocation__III(RuntimeThreadState *thread,
     }
     LoadMapOnly(destination);
     thread->resume_frames = thread->frame_depth;
-    thread->flags |= 9;
+    thread->flags |= RUNTIME_THREAD_BLOCK_FLAGS;
 }
 
 void Java_xeno_util_Runtime_getLocation__(JThread *thread, void *arguments, int *result)
@@ -1961,12 +1999,12 @@ void Java_xeno_util_Runtime_getLocation__(JThread *thread, void *arguments, int 
 void Java_xeno_util_Runtime_setRegister__II(JThread *thread, IntPairCall *arguments,
                                             unsigned int *result)
 {
-    VMRegister[arguments->first & 0x1F] = arguments->second;
+    VMRegister[arguments->first & VM_REGISTER_MASK] = arguments->second;
 }
 
 void Java_xeno_util_Runtime_getRegister__I(JThread *thread, int *arguments, int *result)
 {
-    *result = VMRegister[*arguments & 0x1F];
+    *result = VMRegister[*arguments & VM_REGISTER_MASK];
 }
 
 void Java_xeno_util_Runtime_getEntrance__(JThread *thread, void *arguments, int *result)
@@ -1978,10 +2016,10 @@ void Java_xeno_util_Runtime_setPlayerControl__Z(JThread *thread, unsigned char *
                                                 unsigned int *result)
 {
     if (*arguments != 0) {
-        GameLoopState.flags &= ~0x8000;
-        GameLoopState.player_flags |= 0x20;
+        GameLoopState.flags &= ~RUNTIME_GAME_FLAG_PLAYER_CONTROL_OFF;
+        GameLoopState.player_flags |= RUNTIME_PLAYER_FLAG_CONTROLLABLE;
     } else {
-        GameLoopState.flags |= 0x8000;
+        GameLoopState.flags |= RUNTIME_GAME_FLAG_PLAYER_CONTROL_OFF;
     }
 }
 
@@ -2030,15 +2068,15 @@ void Java_xeno_util_Runtime_jump_sub(int destination, int entrance)
     xglSoundStreamStop(0);
     GameMovieStop();
     GameDefocusSet(-1, 0, 0);
-    if (!(destination & 0x10000)) {
-        for (sequence = 0; sequence < 8; sequence++) {
-            xglSoundSequenceFadeOut2(sequence, 1000);
+    if (!(destination & RUNTIME_JUMP_KEEP_SEQUENCES)) {
+        for (sequence = 0; sequence < RUNTIME_SEQUENCE_COUNT; sequence++) {
+            xglSoundSequenceFadeOut2(sequence, RUNTIME_SEQUENCE_FADE_OUT);
         }
     }
     if (entrance >= 0) {
         GameLoopState.entrance = entrance;
     }
-    GameLoopState.current_event_id = destination & 0xFFF0FFFF;
+    GameLoopState.current_event_id = destination & ~RUNTIME_JUMP_FLAGS_MASK;
     InitCfSystem();
     GameLoopState.scene_reset_counter = 0;
     UnduInit(0);
@@ -2077,7 +2115,7 @@ void Java_xeno_util_Runtime_jumpCF__II(RuntimeThreadState *thread, VMSlot *argum
     *reset_slot = scriptReset_jump;
     SCRIPT_talkIgnoreSet();
     thread->resume_frames = thread->frame_depth;
-    thread->flags |= 9;
+    thread->flags |= RUNTIME_THREAD_BLOCK_FLAGS;
 }
 
 void Java_xeno_util_Runtime_jumpEvent__I(RuntimeThreadState *thread, IntPairCall *arguments,
@@ -2086,12 +2124,12 @@ void Java_xeno_util_Runtime_jumpEvent__I(RuntimeThreadState *thread, IntPairCall
     int entrance;
     unsigned int flags;
 
-    args_jump.destination = arguments->first + 0x10000000;
+    args_jump.destination = arguments->first + RUNTIME_JUMP_EVENT_BASE;
     entrance = arguments->second;
     jthreadResetFunc = scriptReset_jump;
     args_jump.argument = entrance;
     SCRIPT_talkIgnoreSet();
-    flags = thread->flags | 9;
+    flags = thread->flags | RUNTIME_THREAD_BLOCK_FLAGS;
     thread->resume_frames = thread->frame_depth;
     thread->flags = flags;
 }
@@ -2116,7 +2154,7 @@ void Java_xeno_util_Runtime_setDefocus__IIaI(JThread *thread, DefocusCall *argum
 void Java_xeno_util_Runtime_setDefocusParam__III(JThread *thread, IntTripleCall *arguments,
                                                  unsigned int *result)
 {
-    GameDefocusParam[1 + arguments->first * 17 + arguments->second] = arguments->third;
+    GameDefocusParam[1 + arguments->first * RUNTIME_DEFOCUS_PARAM_STRIDE + arguments->second] = arguments->third;
 }
 
 void Java_xeno_util_Runtime_setEventTimer__Ljava_lang_String_I(JThread *thread,
@@ -2136,9 +2174,9 @@ void Java_xeno_util_Runtime_setShootFlag__Z(JThread *thread, unsigned char *argu
                                             unsigned int *result)
 {
     if (*arguments != 0) {
-        GameLoopState.shoot_control |= 1;
+        GameLoopState.shoot_control |= RUNTIME_SHOOT_ENABLED;
     } else {
-        GameLoopState.shoot_control &= ~1;
+        GameLoopState.shoot_control &= ~RUNTIME_SHOOT_ENABLED;
     }
 }
 
@@ -2146,9 +2184,9 @@ void Java_xeno_util_Runtime_setShootHeightCheck__Z(JThread *thread, unsigned cha
                                                     unsigned int *result)
 {
     if (*arguments != 0) {
-        GameLoopState.shoot_control |= 2;
+        GameLoopState.shoot_control |= RUNTIME_SHOOT_HEIGHT_CHECK;
     } else {
-        GameLoopState.shoot_control &= ~2;
+        GameLoopState.shoot_control &= ~RUNTIME_SHOOT_HEIGHT_CHECK;
     }
 }
 
@@ -2156,9 +2194,9 @@ void Java_xeno_util_Runtime_setShootIDCheck__Z(JThread *thread, unsigned char *a
                                                unsigned int *result)
 {
     if (*arguments != 0) {
-        GameLoopState.shoot_control |= 4;
+        GameLoopState.shoot_control |= RUNTIME_SHOOT_ID_CHECK;
     } else {
-        GameLoopState.shoot_control &= ~4;
+        GameLoopState.shoot_control &= ~RUNTIME_SHOOT_ID_CHECK;
     }
 }
 
@@ -2166,9 +2204,9 @@ void Java_xeno_util_Runtime_setShootUwaCheck__Z(JThread *thread, unsigned char *
                                                 unsigned int *result)
 {
     if (*arguments != 0) {
-        GameLoopState.shoot_control |= 8;
+        GameLoopState.shoot_control |= RUNTIME_SHOOT_UWA_CHECK;
     } else {
-        GameLoopState.shoot_control &= ~8;
+        GameLoopState.shoot_control &= ~RUNTIME_SHOOT_UWA_CHECK;
     }
 }
 
@@ -2209,7 +2247,7 @@ void Java_xeno_util_Runtime_getItemName__II(JThread *thread, int *arguments,
     struct InternedString *bytes;
     char *name = GetItemName(arguments[0], arguments[1]);
     string = newObject(classString);
-    bytes = newArray(classByte, 255);
+    bytes = newArray(classByte, RUNTIME_ITEM_NAME_LENGTH);
     string->value = bytes;
     bytes->bytes = name;
     bytes->length = strlen(name);
@@ -2278,17 +2316,17 @@ void Java_xeno_util_Runtime_getPartyData__I(JThread *thread, int *arguments, int
     long long *wide_words = data;
 
     switch (width) {
-    case 0:
+    case RUNTIME_PARTY_WIDTH_BYTE:
     default:
         *result = *bytes;
         break;
-    case 1:
+    case RUNTIME_PARTY_WIDTH_HALFWORD:
         *result = *halfwords;
         break;
-    case 2:
+    case RUNTIME_PARTY_WIDTH_WORD:
         *result = *words;
         break;
-    case 3:
+    case RUNTIME_PARTY_WIDTH_DOUBLEWORD:
         *result = *wide_words;
         break;
     }
@@ -2304,21 +2342,21 @@ void Java_xeno_util_Runtime_setPartyData__II(JThread *thread,
     int *words = data;
     long long *wide_words = data;
     switch (width) {
-    case 0:
+    case RUNTIME_PARTY_WIDTH_BYTE:
     default:
         *bytes = arguments->second;
         break;
-    case 1:
+    case RUNTIME_PARTY_WIDTH_HALFWORD:
         *halfwords = arguments->second;
         break;
-    case 2:
+    case RUNTIME_PARTY_WIDTH_WORD:
         *words = arguments->second;
         break;
-    case 3:
+    case RUNTIME_PARTY_WIDTH_DOUBLEWORD:
         *wide_words = arguments->second;
         break;
     }
-    if (arguments->first == 0x0100002C) {
+    if (arguments->first == RUNTIME_PARTY_SELECTOR_IN_USE_ID) {
         Actor *player = GameLoopState.player;
         void *model_resource = player->modelResource;
         if (player->inUseId != arguments->second) {
@@ -2553,7 +2591,7 @@ void Java_xeno_util_Runtime_mailFlag__I(JThread *thread, int *arguments, int *re
 
     switch (*arguments >> 24) {
     case 0:
-        value = mail[0] & 1;
+        value = mail[0] & RUNTIME_MAIL_RECEIVED;
         break;
     case 1: {
         unsigned int flags = mail[0];
@@ -2568,10 +2606,10 @@ void Java_xeno_util_Runtime_mailFlag__I(JThread *thread, int *arguments, int *re
         value = (mail[0] & 0x30) >> 4;
         break;
     case 4:
-        mail[0] |= 1;
+        mail[0] |= RUNTIME_MAIL_RECEIVED;
         UmnMailBoxSet(*arguments & 0xFFFFFF);
-        xglSoundEffectNormalID(36, 0);
-        Vibration_Set_Weak(30);
+        xglSoundEffectNormalID(RUNTIME_MAIL_RECEIVED_SE, 0);
+        Vibration_Set_Weak(RUNTIME_MAIL_RECEIVED_VIBRATION);
         break;
     case 5: {
         signed char *boxes = (signed char *)(SaveData + RUNTIME_UMN_BOX_OFFSET);
@@ -2594,7 +2632,7 @@ void Java_xeno_util_Runtime_mailFlag__I(JThread *thread, int *arguments, int *re
             value = 0;
             for (i = 0; i < count; i++) {
                 mail = UmnMailDataGet(boxes[i]);
-                if ((mail[0] & 2) == 0) {
+                if ((mail[0] & RUNTIME_MAIL_READ) == 0) {
                     value++;
                 }
             }
@@ -2618,7 +2656,7 @@ void Java_xeno_util_Runtime_mailExec__I(JThread *thread, int *arguments,
 
 void Java_xeno_util_Runtime_minigameExec__I(JThread *thread, int *arguments)
 {
-    GameLoopState.flags |= 0x4000000;
+    GameLoopState.flags |= RUNTIME_GAME_FLAG_MINIGAME;
     Vibration_Stop();
     xglPadRead();
     Game_Data_Push();
@@ -2642,7 +2680,7 @@ void Java_xeno_util_Runtime_minigameExec__I(JThread *thread, int *arguments)
     ACT_init();
     Game_Data_Pop();
     GameCfPlayerLoadResource(1);
-    GameLoopState.flags &= ~0x4000000;
+    GameLoopState.flags &= ~RUNTIME_GAME_FLAG_MINIGAME;
 }
 
 void Java_xeno_util_Runtime_setMenuLock__(JThread *thread, void *arguments,
@@ -2652,7 +2690,7 @@ void Java_xeno_util_Runtime_setMenuLock__(JThread *thread, void *arguments,
      * Arms the script scene-change timer, which SCRIPT_sceneChangeTimeDec
      * counts down once per game frame, with 62 frames.
      */
-    SCRIPT_sceneChangeTimeSet(62);
+    SCRIPT_sceneChangeTimeSet(RUNTIME_MENU_LOCK_FRAMES);
 }
 
 void Java_xeno_util_Runtime_evsSetRetPoint__(RuntimeThreadState *thread, void *arguments,
@@ -2677,7 +2715,7 @@ void Java_xeno_util_Runtime_evsExit__(RuntimeThreadState *thread, void *argument
     args_jump.destination = GameLoopState.active_event_id;
     args_jump.argument = -1;
     jthreadResetFunc = scriptReset_evsExit;
-    flags = thread->flags | 9;
+    flags = thread->flags | RUNTIME_THREAD_BLOCK_FLAGS;
     thread->resume_frames = thread->frame_depth;
     thread->flags = flags;
 }

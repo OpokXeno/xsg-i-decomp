@@ -28,6 +28,41 @@
  * +0x180. */
 enum { ENEMY_COMMAND_QUEUE_SIZE = 16 };
 
+/* Command types Start_Enemy_Command dispatches. */
+enum {
+    ENEMY_COMMAND_MOTION = 0,
+    ENEMY_COMMAND_MOTION_LOOP = 1,
+    ENEMY_COMMAND_MOTION_RANGE = 2,
+    ENEMY_COMMAND_MOTION_LOOP_RANGE = 3,
+    ENEMY_COMMAND_FREEZE = 4,
+    ENEMY_COMMAND_TURN = 5,
+    ENEMY_COMMAND_TYPE = 6,
+    ENEMY_COMMAND_CODE = 7,
+    ENEMY_COMMAND_TARGET = 8,
+    ENEMY_COMMAND_LOOK_AT = 9,
+    ENEMY_COMMAND_SCALE = 10,
+    ENEMY_COMMAND_ACTION = 11,
+    ENEMY_COMMAND_LIGHT = 12,
+    ENEMY_COMMAND_STOP_FREE_FALL = 13,
+    ENEMY_COMMAND_ENCOUNT = 14,
+    ENEMY_COMMAND_SAC_MOVE = 15,
+    ENEMY_COMMAND_SAC_TURN_X = 16,
+    ENEMY_COMMAND_SAC_TURN_Y = 17,
+    ENEMY_COMMAND_SAC_TURN_Z = 18,
+    ENEMY_COMMAND_MAP_LADDER = 19
+};
+
+/* Argument of the turn-lock and light commands. */
+enum {
+    ENEMY_SWITCH_SET = 0,
+    ENEMY_SWITCH_CLEAR = 1,
+    ENEMY_SWITCH_TOGGLE = 2
+};
+
+/* animation.slot.flags bits Enemy_Command_Stop_FreeFall sets / clears. */
+#define ANIM_SLOT_FLAG_STOP_FREE_FALL 0xc0000000u
+
+
 int Get_ActorNumber(int target)
 {
     EnemyWork *base;
@@ -36,7 +71,7 @@ int Get_ActorNumber(int target)
 
     base = enepc;
     id = &base->entry_id;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < ACTOR_COUNT; i++) {
         if (*id == target)
             return i;
         id += sizeof(EnemyWork) / sizeof(*id);
@@ -85,19 +120,19 @@ void Enemy_Command_Freeze(Actor *actor, int command)
 
     ENEMY_FREEZE_STATE(work) = command;
     switch (command) {
-    case 0:
+    case ENEMY_FREEZE_RELEASE:
         if (ENEMY_FREEZE_SAVED_SPEED(work) == ENEMY_FREEZE_NO_SAVED_SPEED)
             return;
         actor->animation.slot.speed = ENEMY_FREEZE_SAVED_SPEED(work);
         return;
-    case 1:
+    case ENEMY_FREEZE_SCRIPTED:
         ENEMY_FREEZE_SAVED_SPEED(work) = ENEMY_FREEZE_NO_SAVED_SPEED;
         return;
-    case 2:
+    case ENEMY_FREEZE_STOP:
         ENEMY_FREEZE_SAVED_SPEED(work) = actor->animation.slot.speed;
         actor->animation.slot.speed = 0.0f;
         return;
-    case 3:
+    case ENEMY_FREEZE_SLOW:
         ENEMY_FREEZE_SAVED_SPEED(work) = actor->animation.slot.speed;
         actor->animation.slot.speed = ENEMY_FREEZE_SPEED;
         return;
@@ -111,13 +146,13 @@ void Enemy_Command_Turn(Actor *actor, signed char command)
     work = enepc + actor->number;
 
     switch (command) {
-    case 0:
+    case ENEMY_SWITCH_SET:
         ENEMY_TURN_LOCK(work) = 1;
         break;
-    case 1:
+    case ENEMY_SWITCH_CLEAR:
         ENEMY_TURN_LOCK(work) = 0;
         break;
-    case 2:
+    case ENEMY_SWITCH_TOGGLE:
     {
         int current_mode;
 
@@ -135,13 +170,13 @@ void Enemy_Command_Light(Actor *actor, signed char light)
     work = enepc + actor->number;
 
     switch (light) {
-    case 0:
+    case ENEMY_SWITCH_SET:
         ENEMY_LIGHT(work) = 1;
         break;
-    case 1:
+    case ENEMY_SWITCH_CLEAR:
         ENEMY_LIGHT(work) = 0;
         break;
-    case 2:
+    case ENEMY_SWITCH_TOGGLE:
     {
         short current_light;
 
@@ -155,11 +190,11 @@ void Enemy_Command_Light(Actor *actor, signed char light)
 void Enemy_Command_Stop_FreeFall(Actor *actor, signed char command)
 {
     switch (command) {
-    case 0:
-        actor->animation.slot.flags |= 0xc0000000u;
+    case ENEMY_SWITCH_SET:
+        actor->animation.slot.flags |= ANIM_SLOT_FLAG_STOP_FREE_FALL;
         break;
-    case 1:
-        actor->animation.slot.flags &= 0x3fffffffu;
+    case ENEMY_SWITCH_CLEAR:
+        actor->animation.slot.flags &= ~ANIM_SLOT_FLAG_STOP_FREE_FALL;
         break;
     }
 }
@@ -180,7 +215,7 @@ void Enemy_Command_Target(Actor *actor, int target)
 
     work = &enepc[actor->number];
 
-    if (target == 100) {
+    if (target == ENEMY_TARGET_PLAYER) {
         ENEMY_TARGET(work) = ((Actor *)GameLoopState[1])->number;
         return;
     }
@@ -192,10 +227,10 @@ int Enemy_Command_LookAt(Actor *enemy_actor, int target)
     int target_number;
 
     switch (target) {
-    case -1:
+    case ENEMY_LOOK_AT_RELEASE:
         target_number = Actor_LookAt_Release(enemy_actor, 2);
         break;
-    case 100:
+    case ENEMY_TARGET_PLAYER:
         Actor_LookAt_Set(enemy_actor, 2,
                          &((Actor *)GameLoopState[1])->position);
         target_number = ((Actor *)GameLoopState[1])->number;
@@ -382,77 +417,77 @@ void Start_Enemy_Command(Actor *actor)
          * 0x002d3598) is scheduled after all six column loads, which the
          * statement-macro block reproduces. */
         do {
-            if (type == 15)
+            if (type == ENEMY_COMMAND_SAC_MOVE)
                 fifth = *(queue->command_parameter[4] + i);
         } while (0);
 
         switch (type) {
-        case 0:
+        case ENEMY_COMMAND_MOTION:
             Enemy_Command_Motion(actor, first, 0, -1, -1, 0, 100);
             break;
-        case 1:
+        case ENEMY_COMMAND_MOTION_LOOP:
             Enemy_Command_Motion(actor, first, 1, -1, -1, 0, 100);
             break;
-        case 2:
+        case ENEMY_COMMAND_MOTION_RANGE:
             Enemy_Command_Motion(actor, first, 0, second, third, fourth, fifth);
             break;
-        case 3:
+        case ENEMY_COMMAND_MOTION_LOOP_RANGE:
             Enemy_Command_Motion(actor, first, 1, second, third, fourth, fifth);
             break;
-        case 4:
+        case ENEMY_COMMAND_FREEZE:
             Enemy_Command_Freeze(actor, first);
             break;
-        case 5:
+        case ENEMY_COMMAND_TURN:
             Enemy_Command_Turn(actor, first);
             break;
-        case 6:
+        case ENEMY_COMMAND_TYPE:
             Enemy_Command_Type(actor, first);
             break;
-        case 7:
+        case ENEMY_COMMAND_CODE:
             Enemy_Command_Code(actor, first);
             break;
-        case 8:
+        case ENEMY_COMMAND_TARGET:
             Enemy_Command_Target(actor, first);
             break;
-        case 9:
+        case ENEMY_COMMAND_LOOK_AT:
             Enemy_Command_LookAt(actor, first);
             break;
-        case 10:
+        case ENEMY_COMMAND_SCALE:
             Enemy_Command_Scale(actor, first, second);
             break;
-        case 11:
+        case ENEMY_COMMAND_ACTION:
             Enemy_Command_Action(actor, first, second, third);
             break;
-        case 12:
+        case ENEMY_COMMAND_LIGHT:
             Enemy_Command_Light(actor, first);
             break;
-        case 13:
+        case ENEMY_COMMAND_STOP_FREE_FALL:
             Enemy_Command_Stop_FreeFall(actor, first);
             break;
-        case 14:
+        case ENEMY_COMMAND_ENCOUNT:
             Enemy_Command_Encount(actor, first);
             break;
-        case 15:
+        case ENEMY_COMMAND_SAC_MOVE:
             Enemy_Command_Sac_Move(actor, third,
                                    *(float *)&queue->command_parameter[0][i],
                                    *(float *)&queue->command_parameter[1][i]);
             break;
-        case 16:
+        case ENEMY_COMMAND_SAC_TURN_X:
             Enemy_Command_Sac_Turn(actor, third,
                                    *(float *)&queue->command_parameter[0][i],
                                    *(float *)&queue->command_parameter[1][i], 0);
             break;
-        case 17:
+        case ENEMY_COMMAND_SAC_TURN_Y:
             Enemy_Command_Sac_Turn(actor, third,
                                    *(float *)&queue->command_parameter[0][i],
                                    *(float *)&queue->command_parameter[1][i], 1);
             break;
-        case 18:
+        case ENEMY_COMMAND_SAC_TURN_Z:
             Enemy_Command_Sac_Turn(actor, third,
                                    *(float *)&queue->command_parameter[0][i],
                                    *(float *)&queue->command_parameter[1][i], 2);
             break;
-        case 19:
+        case ENEMY_COMMAND_MAP_LADDER:
             Map_Command_Ladder(first, second, third, fourth);
             break;
         }

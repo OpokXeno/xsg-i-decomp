@@ -6,6 +6,83 @@
 #include "main/sm_initilize.h"
 #include "main/xgl_cd.h"
 
+/* Table sizes. */
+#define SRS_BOSS_WAIT_ROWS 36        /* _srsChrEfTbl3 */
+#define SRS_WEAPON_ROWS 45           /* _weaponTbl */
+#define SRS_EFFECT2_INDEX_ROWS 117   /* _srsEffect2IndexTbl */
+#define SRS_EFFECT2_INDEX_FIRST 601  /* effect number of its first row */
+#define SRS_CHR_EF_ROWS 12           /* _srsChrEfTbl */
+#define SRS_CHR_EF2_ROWS 161         /* _srsChrEfTbl2 */
+#define SRS_COMBO_DATA_COUNT 195     /* _loadComboData */
+#define SRS_PATH_LENGTH 256          /* resolved file path and view path */
+#define SRS_NAME_LENGTH 128          /* "esd/NAME.esd" style file name buffers */
+
+/* The effect-name (.esd) table: one 16-byte name per effect number. */
+#define SRS_EFFECT_NO_COUNT 0xC00    /* effect numbers are below this */
+#define SRS_ESD_ENTRY_SIZE 0x10
+#define SRS_ESD_TABLE_SIZE 0xC800
+
+/* srsLoadMode values. */
+#define SRS_LOAD_MODE_CD 0
+#define SRS_LOAD_MODE_HOST 1
+#define SRS_LOAD_MODE_USB 2
+#define SRS_USB_PREFIX_LENGTH 5      /* "usb0:" */
+
+/* sceOpen flags and sceLseek origins used by the host loader. */
+#define SRS_OPEN_RDONLY 1
+#define SRS_SEEK_SET 0
+#define SRS_SEEK_END 2
+
+/* xglCdReadFile completion callback: the read finished. */
+#define SRS_CD_READ_COMPLETE 4
+
+/* Memory images (bytes). */
+#define SRS_COMMON_IMAGE_SIZE 0x25800   /* default.esp */
+#define SRS_CF_IMAGE_SIZE 0x3E000       /* cf_def.esp */
+#define SRS_WEAPON_IMAGE_SIZE 0x12800   /* one character's weapon effects */
+#define SRS_WEAPON_SLOT_STRIDE 0x6000   /* start of each weapon effect in that image */
+#define SRS_COMBO_IMAGE_SIZE 0x12000    /* one enemy combo */
+
+/* svAddImageMapper "height" (the fourth argument) registered for each resource. */
+#define SRS_MAPPER_HEIGHT_IMAGE 3000
+#define SRS_MAPPER_HEIGHT_EFFECT_IMAGE 3100
+#define SRS_MAPPER_HEIGHT_WEAPON 2000
+#define SRS_MAPPER_HEIGHT_COMBO 2100
+#define SRS_MAPPER_HEIGHT_BATTLE_IMAGE 3400
+#define SRS_MAPPER_HEIGHT_CF_IMAGE 3500
+#define SRS_MAPPER_HEIGHT_EFFECT 3600
+
+/*
+ * Character numbers (battle party and enemy slots): 17..32 own weapon effect
+ * data, boss numbers start at 151 (the effect numbers of _srsChrEfTbl3).
+ */
+#define SRS_CHAR_WEAPON_FIRST 17
+#define SRS_CHAR_WEAPON_END 33
+#define SRS_CHAR_BOSS_FIRST 151
+
+/*
+ * Effect number ranges (first number and count). Each range resolves to one
+ * of the SrsResourceType categories in srsAnalyzeEftNo/srsGetEffectType.
+ */
+#define SRS_EFFECT_COMMON_FIRST 2600       /* default.esp */
+#define SRS_EFFECT_COMMON_COUNT 62
+#define SRS_EFFECT_CF_COMMON_FIRST 600     /* cf_def.esp */
+#define SRS_EFFECT_CF_COMMON_COUNT 400
+#define SRS_EFFECT_CF_FIRST 1000           /* loaded cf effects */
+#define SRS_EFFECT_CF_COUNT 1000
+#define SRS_EFFECT_BATTLE_FIRST 2000       /* battle image */
+#define SRS_EFFECT_BATTLE_COUNT 219
+#define SRS_EFFECT_COMBO_FIRST 240         /* enemy combo data */
+#define SRS_EFFECT_COMBO_COUNT 157
+#define SRS_EFFECT_BATTLE2_FIRST 2300      /* battle image */
+#define SRS_EFFECT_BATTLE2_COUNT 182
+#define SRS_EFFECT_WEAPON_FIRST 2800       /* weapon effects of character 17 */
+#define SRS_EFFECT_WEAPON_COUNT 200
+/* Weapon effects 2900..2998 share the data of effects 100 lower. */
+#define SRS_EFFECT_WEAPON_ALT_FIRST 2900
+#define SRS_EFFECT_WEAPON_ALT_COUNT 99
+#define SRS_EFFECT_WEAPON_ALT_OFFSET 100
+
 /*
  * One _srsChrEfTbl3 row (6 bytes; the 0xD8-byte symbol holds 36 rows).
  * srsGetBossWaitEftNo scans effectNo and returns the matching bossWaitEftNo.
@@ -188,8 +265,8 @@ extern char virgilEffectName[];
 extern char maryEffectName[];
 extern char shelleyEffectName[];
 extern char emptyEffectName[];
-extern char _loadEsdData[0xC800];
-extern char *_loadComboData[195];
+extern char _loadEsdData[SRS_ESD_TABLE_SIZE];
+extern char *_loadComboData[SRS_COMBO_DATA_COUNT];
 extern char *_loadCfCommonData;
 
 extern char *strcpy(char *destination, const char *source);
@@ -221,17 +298,17 @@ static const char srsErrorCategoryFormat[32] = "-- err category(%d) eft(%d)";
 
 static const char srsEffectNotLoadedText[40] = "-- err : eftNo is not cf load";
 
-static SrsChrEfTbl3Entry _srsChrEfTbl3[36];
+static SrsChrEfTbl3Entry _srsChrEfTbl3[SRS_BOSS_WAIT_ROWS];
 
-static char srsViewPath[256];
+static char srsViewPath[SRS_PATH_LENGTH];
 
-static WeaponTblEntry _weaponTbl[45];
+static WeaponTblEntry _weaponTbl[SRS_WEAPON_ROWS];
 
-static signed char _srsEffect2IndexTbl[117];
+static signed char _srsEffect2IndexTbl[SRS_EFFECT2_INDEX_ROWS];
 
-static SrsChrEfTblEntry _srsChrEfTbl[12];
+static SrsChrEfTblEntry _srsChrEfTbl[SRS_CHR_EF_ROWS];
 
-static SrsChrEfTbl2Entry _srsChrEfTbl2[161];
+static SrsChrEfTbl2Entry _srsChrEfTbl2[SRS_CHR_EF2_ROWS];
 
 const void *_loadCommonData[1] = { defaultEffectName };
 
@@ -269,12 +346,12 @@ char chaosEffectName[8] = "chaos";
  * The original srs prefix is retained; its historical expansion is not
  * established by the available evidence. The mode word is local to this TU.
  */
-static char srsViewPath[256] = {0};
+static char srsViewPath[SRS_PATH_LENGTH] = {0};
 
 /*
  * 0x30C-byte table of 195 pointer-sized slots (config/symbols/main.txt).
  */
-char *_loadComboData[195] = {
+char *_loadComboData[SRS_COMBO_DATA_COUNT] = {
     defaultEffectName, chaosEffectName, kosmosEffectName, shionEffectName, shitanEffectName,
     ziggyEffectName, momoEffectName, jrEffectName, ceciliaEffectName, sefCatherinName,
     virgilEffectName, maryEffectName, shelleyEffectName, 0, 0,
@@ -316,7 +393,7 @@ char *_loadComboData[195] = {
     emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName,
 };
 
-static signed char _srsEffect2IndexTbl[117] = {
+static signed char _srsEffect2IndexTbl[SRS_EFFECT2_INDEX_ROWS] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3,
     4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7,
     8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
@@ -328,7 +405,7 @@ static signed char _srsEffect2IndexTbl[117] = {
     7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 };
 
-static SrsChrEfTblEntry _srsChrEfTbl[12] = {
+static SrsChrEfTblEntry _srsChrEfTbl[SRS_CHR_EF_ROWS] = {
     {1, 28, 33, 34, 41, 2030, 2041, 2509, 2512},
     {2, 15, 20, 21, 23, 2017, 2029, 2505, 2508},
     {3, 1, 6, 7, 14, 2001, 2016, 2501, 2504},
@@ -343,7 +420,7 @@ static SrsChrEfTblEntry _srsChrEfTbl[12] = {
     {12, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
-static SrsChrEfTbl2Entry _srsChrEfTbl2[161] = {
+static SrsChrEfTbl2Entry _srsChrEfTbl2[SRS_CHR_EF2_ROWS] = {
     {34, 267, 267},
     {35, 268, 269},
     {36, 270, 271},
@@ -507,7 +584,7 @@ static SrsChrEfTbl2Entry _srsChrEfTbl2[161] = {
     {150, 263, 263},
 };
 
-static SrsChrEfTbl3Entry _srsChrEfTbl3[36] = {
+static SrsChrEfTbl3Entry _srsChrEfTbl3[SRS_BOSS_WAIT_ROWS] = {
     {151, 2681, {0x7B, 0x0A}},
     {152, 2684, {0x7E, 0x0A}},
     {153, 2687, {0x81, 0x0A}},
@@ -546,7 +623,7 @@ static SrsChrEfTbl3Entry _srsChrEfTbl3[36] = {
     {186, 2738, {0xB4, 0x0A}},
 };
 
-static WeaponTblEntry _weaponTbl[45] = {
+static WeaponTblEntry _weaponTbl[SRS_WEAPON_ROWS] = {
     {70, 2801, 2802, 2801},
     {71, 2803, 2803, 2804},
     {72, 2805, 2806, 2807},
@@ -598,16 +675,16 @@ SrsMemRes _srsMemRes = {0};
 
 /* 0xC800-byte effect-name table. */
 /* 0xC800-byte table (config/symbols/main.txt) */
-char _loadEsdData[0xC800] = {0};
+char _loadEsdData[SRS_ESD_TABLE_SIZE] = {0};
 
 int srsGetEffect2Idx(int effectNo)
 {
     int idx;
 
-    if ((unsigned int) (effectNo - 601) < 117) {
-        idx = _srsEffect2IndexTbl[effectNo - 601];
-    } else if ((unsigned int) (effectNo - 2600) < 12) {
-        idx = effectNo - 2600;
+    if ((unsigned int) (effectNo - SRS_EFFECT2_INDEX_FIRST) < SRS_EFFECT2_INDEX_ROWS) {
+        idx = _srsEffect2IndexTbl[effectNo - SRS_EFFECT2_INDEX_FIRST];
+    } else if ((unsigned int) (effectNo - SRS_EFFECT_COMMON_FIRST) < 12) {
+        idx = effectNo - SRS_EFFECT_COMMON_FIRST;
     } else if ((unsigned int) (effectNo - 2612) < 9) {
         idx = effectNo - 2612;
     } else if ((unsigned int) (effectNo - 2651) < 10) {
@@ -617,7 +694,7 @@ int srsGetEffect2Idx(int effectNo)
     } else if ((unsigned int) (effectNo - 2630) < 7) {
         idx = effectNo - 2630;
     } else {
-        idx = ((unsigned int) (effectNo - 2900) < 99) ? 100 : 0;
+        idx = ((unsigned int) (effectNo - SRS_EFFECT_WEAPON_ALT_FIRST) < SRS_EFFECT_WEAPON_ALT_COUNT) ? SRS_EFFECT_WEAPON_ALT_OFFSET : 0;
     }
     return idx;
 }
@@ -626,27 +703,27 @@ char *srsGetEsdData(int index)
 {
     int idx;
 
-    if ((unsigned int) index >= 0xc00) {
+    if ((unsigned int) index >= SRS_EFFECT_NO_COUNT) {
         return 0;
     }
     idx = srsGetEffect2Idx(index);
-    return _loadEsdData + (index - idx) * 0x10;
+    return _loadEsdData + (index - idx) * SRS_ESD_ENTRY_SIZE;
 }
 
 char *srsGetEsdData2(int effectNo)
 {
-    if ((unsigned int) effectNo >= 0xc00) {
+    if ((unsigned int) effectNo >= SRS_EFFECT_NO_COUNT) {
         return 0;
     }
-    return _loadEsdData + effectNo * 0x10;
+    return _loadEsdData + effectNo * SRS_ESD_ENTRY_SIZE;
 }
 
 char *sefGetEffectName(int effectNo)
 {
-    if ((unsigned int) effectNo >= 0xc00) {
+    if ((unsigned int) effectNo >= SRS_EFFECT_NO_COUNT) {
         return 0;
     }
-    return _loadEsdData + effectNo * 0x10;
+    return _loadEsdData + effectNo * SRS_ESD_ENTRY_SIZE;
 }
 
 char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType)
@@ -657,85 +734,85 @@ char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType)
     short *rangeMax;
 
     *charNo = 0;
-    *effectType = 14;
-    if ((unsigned int) (effectNo - 1) >= 3071) {
+    *effectType = SRS_RES_BATTLE_IMAGE;
+    if ((unsigned int) (effectNo - 1) >= SRS_EFFECT_NO_COUNT - 1) {
         return 0;
     }
     if (effectNo >= 3042) {
-        *effectType = 14;
+        *effectType = SRS_RES_BATTLE_IMAGE;
         return 0;
     }
-    if ((unsigned int) (effectNo - 2600) < 62) {
+    if ((unsigned int) (effectNo - SRS_EFFECT_COMMON_FIRST) < SRS_EFFECT_COMMON_COUNT) {
         *charNo = 0;
-        *effectType = 0;
+        *effectType = SRS_RES_IMAGE;
         return 0;
     }
-    if ((unsigned int) (effectNo - 2800) < 200) {
-        *effectType = 2;
-        *charNo = 17;
+    if ((unsigned int) (effectNo - SRS_EFFECT_WEAPON_FIRST) < SRS_EFFECT_WEAPON_COUNT) {
+        *effectType = SRS_RES_WEAPON;
+        *charNo = SRS_CHAR_WEAPON_FIRST;
         return 0;
     }
-    if ((unsigned int) (effectNo - 600) < 400) {
+    if ((unsigned int) (effectNo - SRS_EFFECT_CF_COMMON_FIRST) < SRS_EFFECT_CF_COMMON_COUNT) {
         result = _loadCfCommonData;
-        *effectType = 15;
+        *effectType = SRS_RES_CF_IMAGE;
         return result;
     }
     if ((unsigned int) (effectNo - 2200) < 10) {
         *charNo = 2;
-        *effectType = 14;
+        *effectType = SRS_RES_BATTLE_IMAGE;
         return 0;
     }
     if ((unsigned int) (effectNo - 2210) < 8) {
         *charNo = 5;
-        *effectType = 14;
+        *effectType = SRS_RES_BATTLE_IMAGE;
         return 0;
     }
-    if ((unsigned int) (effectNo - 1000) < 1000) {
+    if ((unsigned int) (effectNo - SRS_EFFECT_CF_FIRST) < SRS_EFFECT_CF_COUNT) {
         *charNo = 0;
-        *effectType = 16;
+        *effectType = SRS_RES_EFFECT;
         return 0;
     }
-    if ((unsigned int) (effectNo - 2000) < 219) {
+    if ((unsigned int) (effectNo - SRS_EFFECT_BATTLE_FIRST) < SRS_EFFECT_BATTLE_COUNT) {
         *charNo = 0;
-        *effectType = 14;
+        *effectType = SRS_RES_BATTLE_IMAGE;
         return 0;
     }
-    for (i = 0; i < 12; i++) {
+    for (i = 0; i < SRS_CHR_EF_ROWS; i++) {
         if (effectNo >= _srsChrEfTbl[i].comboMin && effectNo <= _srsChrEfTbl[i].comboMax) {
             *charNo = _srsChrEfTbl[i].charNo;
-            *effectType = 2;
+            *effectType = SRS_RES_WEAPON;
             return _loadComboData[*charNo];
         }
         if (effectNo >= _srsChrEfTbl[i].firstMin && effectNo <= _srsChrEfTbl[i].firstMax) {
             *charNo = _srsChrEfTbl[i].charNo;
-            *effectType = 14;
+            *effectType = SRS_RES_BATTLE_IMAGE;
             return 0;
         }
         if (effectNo >= _srsChrEfTbl[i].secondMin && effectNo <= _srsChrEfTbl[i].secondMax) {
             *charNo = _srsChrEfTbl[i].charNo;
-            *effectType = 14;
+            *effectType = SRS_RES_BATTLE_IMAGE;
             return 0;
         }
         if (effectNo >= _srsChrEfTbl[i].alternateMin && effectNo <= _srsChrEfTbl[i].alternateMax) {
             *charNo = _srsChrEfTbl[i].charNo;
-            *effectType = 2;
+            *effectType = SRS_RES_WEAPON;
             return _loadComboData[*charNo];
         }
     }
     entry = _srsChrEfTbl2;
     rangeMax = &entry->effectMax;
-    for (i = 0; i < 161; i++, rangeMax += 3) {
+    for (i = 0; i < SRS_CHR_EF2_ROWS; i++, rangeMax += 3) {
         if (effectNo >= rangeMax[-1] && effectNo <= *rangeMax) {
             *charNo = rangeMax[-2];
-            if (*charNo < 151) {
-                *effectType = 11;
+            if (*charNo < SRS_CHAR_BOSS_FIRST) {
+                *effectType = SRS_RES_COMBO;
                 return _loadComboData[*charNo];
             }
             if (effectNo >= 2680) {
-                *effectType = 11;
+                *effectType = SRS_RES_COMBO;
                 return _loadComboData[*charNo];
             }
-            *effectType = 14;
+            *effectType = SRS_RES_BATTLE_IMAGE;
             return 0;
         }
     }
@@ -746,8 +823,8 @@ short srsGetBossWaitEftNo(int effectNo)
 {
     int i;
 
-    if ((unsigned int) (effectNo - 151) < 36) {
-        for (i = 0; i < 36; i++) {
+    if ((unsigned int) (effectNo - SRS_CHAR_BOSS_FIRST) < SRS_BOSS_WAIT_ROWS) {
+        for (i = 0; i < SRS_BOSS_WAIT_ROWS; i++) {
             if (effectNo == _srsChrEfTbl3[i].effectNo) {
                 return _srsChrEfTbl3[i].bossWaitEftNo;
             }
@@ -777,14 +854,14 @@ static int srsMakeFileName(char *buffer, const char *fileName)
         buffer[0] = '\0';
         return 0;
     }
-    if (srsLoadMode == 0) {
+    if (srsLoadMode == SRS_LOAD_MODE_CD) {
         __builtin_strcpy(buffer, "data/simajiri/");
         strcat(buffer, fileName);
-    } else if (srsLoadMode == 1) {
+    } else if (srsLoadMode == SRS_LOAD_MODE_HOST) {
         __builtin_strcpy(buffer, "host0:/home/xeno/work/");
         strcat(buffer, srsViewPath);
         strcat(buffer, fileName);
-    } else if (srsLoadMode == 2) {
+    } else if (srsLoadMode == SRS_LOAD_MODE_USB) {
         __builtin_strcpy(buffer, "usb0:/");
         strcat(buffer, srsViewPath);
         strcat(buffer, fileName);
@@ -806,26 +883,26 @@ void srsChangeSeparator(char *path)
 
 static int srsGetFileLen(const char *name)
 {
-    char path[256];
+    char path[SRS_PATH_LENGTH];
     int descriptor;
     int size;
 
     if (srsMakeFileName(path, name) == 0) {
         return -1;
     }
-    if (srsLoadMode == 0) {
+    if (srsLoadMode == SRS_LOAD_MODE_CD) {
         srsChangeSeparator(path);
         size = xglCdGetFileSize(path);
         if (size <= 0) {
             return -1;
         }
-    } else if (srsLoadMode == 1) {
-        descriptor = sceOpen(path, 1);
+    } else if (srsLoadMode == SRS_LOAD_MODE_HOST) {
+        descriptor = sceOpen(path, SRS_OPEN_RDONLY);
         if (descriptor < 0) {
             return -1;
         }
-        size = sceLseek(descriptor, 0, 2);
-        sceLseek(descriptor, 0, 0);
+        size = sceLseek(descriptor, 0, SRS_SEEK_END);
+        sceLseek(descriptor, 0, SRS_SEEK_SET);
         sceClose(descriptor);
     } else {
         return -1;
@@ -835,7 +912,7 @@ static int srsGetFileLen(const char *name)
 
 static int fileLoad(void *buffer, const char *name, int mode)
 {
-    char path[256];
+    char path[SRS_PATH_LENGTH];
     int descriptor;
     int size;
     int result;
@@ -844,7 +921,7 @@ static int fileLoad(void *buffer, const char *name, int mode)
     if (srsMakeFileName(path, name) == 0) {
         return -1;
     }
-    if (srsLoadMode == 0) {
+    if (srsLoadMode == SRS_LOAD_MODE_CD) {
         srsChangeSeparator(path);
         size = xglCdGetFileSize(path);
         if (size <= 0) {
@@ -859,18 +936,18 @@ static int fileLoad(void *buffer, const char *name, int mode)
                 _nRead = 0;
             }
         }
-    } else if (srsLoadMode == 1) {
-        descriptor = sceOpen(path, 1);
+    } else if (srsLoadMode == SRS_LOAD_MODE_HOST) {
+        descriptor = sceOpen(path, SRS_OPEN_RDONLY);
         if (descriptor < 0) {
             return -1;
         }
-        size = sceLseek(descriptor, 0, 2);
-        sceLseek(descriptor, 0, 0);
+        size = sceLseek(descriptor, 0, SRS_SEEK_END);
+        sceLseek(descriptor, 0, SRS_SEEK_SET);
         size = sceRead(descriptor, buffer, size);
         sceClose(descriptor);
         sresDataMapping();
-    } else if (srsLoadMode == 2) {
-        size = func_00A103C8(path + 5, buffer);
+    } else if (srsLoadMode == SRS_LOAD_MODE_USB) {
+        size = func_00A103C8(path + SRS_USB_PREFIX_LENGTH, buffer);
         if (size > 0) {
             sresDataMapping();
         }
@@ -885,7 +962,7 @@ char *srsGetEffectData(int index)
 
 char **srsGetComboData(int index)
 {
-    if (index >= 195) {
+    if (index >= SRS_COMBO_DATA_COUNT) {
         return 0;
     }
     return (_loadComboData[index] != 0) ? &_loadComboData[index] : 0;
@@ -893,7 +970,7 @@ char **srsGetComboData(int index)
 
 char *srsGetEffectName(int effectNo)
 {
-    static char msg[128];
+    static char msg[SRS_NAME_LENGTH];
 
     char *name;
 
@@ -914,11 +991,11 @@ int srsGetWeaponEffectIdx(int effectNo)
     int no;
 
     no = effectNo;
-    if ((unsigned int) (no - 2900) < 99) {
-        no = no - 100;
+    if ((unsigned int) (no - SRS_EFFECT_WEAPON_ALT_FIRST) < SRS_EFFECT_WEAPON_ALT_COUNT) {
+        no = no - SRS_EFFECT_WEAPON_ALT_OFFSET;
     }
     if (no > 0) {
-        for (i = 0; i < 45; i++) {
+        for (i = 0; i < SRS_WEAPON_ROWS; i++) {
             if (no == _weaponTbl[i].weaponEffectID
                 || no == _weaponTbl[i].weaponEffectID2
                 || no == _weaponTbl[i].weaponEffectID3) {
@@ -947,7 +1024,7 @@ short srsWeapon2EffectID(int weaponID)
     int i;
 
     if (weaponID > 0) {
-        for (i = 0; i < 45; i++) {
+        for (i = 0; i < SRS_WEAPON_ROWS; i++) {
             if (weaponID == _weaponTbl[i].weaponID) {
                 return _weaponTbl[i].weaponEffectID;
             }
@@ -971,7 +1048,7 @@ short srsEftNo2WeaponID(int effectNo)
 
 char *srsGetEffectName2(int effectNo)
 {
-    static char msg[128];
+    static char msg[SRS_NAME_LENGTH];
 
     char *name;
 
@@ -985,7 +1062,7 @@ char *srsGetEffectName2(int effectNo)
 
 static char *srsGetComboName(int index)
 {
-    static char msg[128];
+    static char msg[SRS_NAME_LENGTH];
 
     char **entry;
     char *value;
@@ -1006,19 +1083,19 @@ int srsGetEffectType(int effectNo)
 {
     int effectType;
 
-    effectType = 0;
-    if ((u32) (effectNo - 0xA28) >= 0x3E) {
-        effectType = 2;
-        if ((u32) (effectNo - 0x9C4) >= 0x64 && effectNo >= 0x64) {
-            effectType = 0xE;
-            if ((u32) (effectNo - 0x7D0) >= 0xDB) {
-                effectType = 0xB;
-                if ((u32) (effectNo - 0xF0) >= 0x9D) {
-                    effectType = 0xE;
-                    if ((u32) (effectNo - 0x8FC) >= 0xB6) {
-                        effectType = 2;
-                        if ((u32) (effectNo - 0xAF0) >= 0xC8) {
-                            effectType = ((u32) (effectNo - 0x258) < 0x190) ? 0xF : 0xE;
+    effectType = SRS_RES_IMAGE;
+    if ((u32) (effectNo - SRS_EFFECT_COMMON_FIRST) >= SRS_EFFECT_COMMON_COUNT) {
+        effectType = SRS_RES_WEAPON;
+        if ((u32) (effectNo - 2500) >= 100 && effectNo >= 100) {
+            effectType = SRS_RES_BATTLE_IMAGE;
+            if ((u32) (effectNo - SRS_EFFECT_BATTLE_FIRST) >= SRS_EFFECT_BATTLE_COUNT) {
+                effectType = SRS_RES_COMBO;
+                if ((u32) (effectNo - SRS_EFFECT_COMBO_FIRST) >= SRS_EFFECT_COMBO_COUNT) {
+                    effectType = SRS_RES_BATTLE_IMAGE;
+                    if ((u32) (effectNo - SRS_EFFECT_BATTLE2_FIRST) >= SRS_EFFECT_BATTLE2_COUNT) {
+                        effectType = SRS_RES_WEAPON;
+                        if ((u32) (effectNo - SRS_EFFECT_WEAPON_FIRST) >= SRS_EFFECT_WEAPON_COUNT) {
+                            effectType = ((u32) (effectNo - SRS_EFFECT_CF_COMMON_FIRST) < SRS_EFFECT_CF_COMMON_COUNT) ? SRS_RES_CF_IMAGE : SRS_RES_BATTLE_IMAGE;
                         }
                     }
                 }
@@ -1041,7 +1118,7 @@ int srsLeaveCdRead(void)
 void srsCdReadCallback(int code)
 {
     switch (code) {
-    case 4:
+    case SRS_CD_READ_COMPLETE:
         _nRead--;
         if (_nRead < 0) {
             _nRead = 0;
@@ -1099,17 +1176,17 @@ void sresLoadCommonMemory(void)
 
     memRes = &_srsMemRes;
     if (memRes->image == 0) {
-        memRes->image = smAlloc(0x25800);
+        memRes->image = smAlloc(SRS_COMMON_IMAGE_SIZE);
         if (memRes->image != 0) {
             size = fileLoad(memRes->image, "esp/default.esp", 0);
             if (size >= 0) {
-                if (size <= 0x25800) {
+                if (size <= SRS_COMMON_IMAGE_SIZE) {
                     chunk[0] = memRes->image;
-                    svAddImageMapper(0, 0, chunk, 3000);
+                    svAddImageMapper(SRS_RES_IMAGE, 0, chunk, SRS_MAPPER_HEIGHT_IMAGE);
                 }
             }
         }
-        memset(_loadEsdData, 0, 0xC800);
+        memset(_loadEsdData, 0, SRS_ESD_TABLE_SIZE);
         fileLoad(_loadEsdData, "seffect.esp", 0);
     }
 }
@@ -1122,12 +1199,12 @@ void sresLoadCfMemory(void)
 
     memRes = &_srsMemRes;
     if (memRes->cfImage == 0) {
-        memRes->cfImage = smAlloc(0x3E000);
+        memRes->cfImage = smAlloc(SRS_CF_IMAGE_SIZE);
         if (memRes->cfImage != 0) {
         size = fileLoad(memRes->cfImage, "esp/cf_def.esp", 0);
             if (size >= 0) {
                 chunk[0] = memRes->cfImage;
-                svAddImageMapper(15, 0, chunk, 3500);
+                svAddImageMapper(SRS_RES_CF_IMAGE, 0, chunk, SRS_MAPPER_HEIGHT_CF_IMAGE);
             }
         }
     }
@@ -1135,19 +1212,19 @@ void sresLoadCfMemory(void)
 
 void sresFreeReloaderMemoryNo(int no)
 {
-    if (no < 3) {
+    if (no < SRS_CHARACTER_SLOTS) {
         if (_srsMemRes.weaponData[no][0] != 0) {
-            svDeleteImageMapper(no * 3 + 2);
+            svDeleteImageMapper(no * SRS_WEAPONS_PER_CHARACTER + SRS_RES_WEAPON);
             smFree(_srsMemRes.weaponData[no][0]);
             _srsMemRes.weaponData[no][0] = 0;
             _srsMemRes.weaponData[no][1] = 0;
             _srsMemRes.weaponData[no][2] = 0;
         }
     } else {
-        if (_srsMemRes.comboData[no - 3] != 0) {
-            svDeleteImageMapper(no + 8);
-            smFree(_srsMemRes.comboData[no - 3]);
-            _srsMemRes.comboData[no - 3] = 0;
+        if (_srsMemRes.comboData[no - SRS_CHARACTER_SLOTS] != 0) {
+            svDeleteImageMapper(no + (SRS_RES_COMBO - SRS_CHARACTER_SLOTS));
+            smFree(_srsMemRes.comboData[no - SRS_CHARACTER_SLOTS]);
+            _srsMemRes.comboData[no - SRS_CHARACTER_SLOTS] = 0;
         }
     }
 }
@@ -1158,33 +1235,33 @@ void sresFreeReloaderMemory(int freeCf)
     int type;
 
     if (_srsMemRes.battleImage != 0) {
-        svDeleteImageMapper(14);
+        svDeleteImageMapper(SRS_RES_BATTLE_IMAGE);
         smFree(_srsMemRes.battleImage);
         _srsMemRes.battleImage = 0;
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < SRS_COMBO_SLOTS; i++) {
         if (_srsMemRes.comboData[i] != 0) {
-            svDeleteImageMapper(i + 11);
+            svDeleteImageMapper(i + SRS_RES_COMBO);
             smFree(_srsMemRes.comboData[i]);
             _srsMemRes.comboData[i] = 0;
         }
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < SRS_CHARACTER_SLOTS; i++) {
         if (_srsMemRes.weaponData[i][0] != 0) {
-            svDeleteImageMapper(i * 3 + 2);
-            svDeleteImageMapper(i * 3 + 3);
-            svDeleteImageMapper(i * 3 + 4);
+            svDeleteImageMapper(i * SRS_WEAPONS_PER_CHARACTER + SRS_RES_WEAPON);
+            svDeleteImageMapper(i * SRS_WEAPONS_PER_CHARACTER + SRS_RES_WEAPON + 1);
+            svDeleteImageMapper(i * SRS_WEAPONS_PER_CHARACTER + SRS_RES_WEAPON + 2);
             smFree(_srsMemRes.weaponData[i][0]);
             _srsMemRes.weaponData[i][0] = 0;
             _srsMemRes.weaponData[i][1] = 0;
             _srsMemRes.weaponData[i][2] = 0;
-            _srsMemRes.no[SRS_RES_WEAPON + i * 3] = -1;
-            _srsMemRes.no[SRS_RES_WEAPON + i * 3 + 1] = -1;
-            _srsMemRes.no[SRS_RES_WEAPON + i * 3 + 2] = -1;
+            _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER] = -1;
+            _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + 1] = -1;
+            _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + 2] = -1;
         }
     }
-    for (i = 0; i < 24; i++) {
-        type = i + 16;
+    for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
+        type = i + SRS_RES_EFFECT;
         if (_srsMemRes.effectData[i] != 0) {
             svDeleteImageMapper(type);
             smFree(_srsMemRes.effectData[i]);
@@ -1195,7 +1272,7 @@ void sresFreeReloaderMemory(int freeCf)
     }
     if (freeCf != 0) {
         if (_srsMemRes.cfImage != 0) {
-            svDeleteImageMapper(15);
+            svDeleteImageMapper(SRS_RES_CF_IMAGE);
             smFree(_srsMemRes.cfImage);
             _srsMemRes.cfImage = 0;
         }
@@ -1209,7 +1286,7 @@ void sresFreeMemoryRes(void)
     sresFreeReloaderMemory(1);
     memRes = &_srsMemRes;
     if (memRes->image != 0) {
-        svDeleteImageMapper(0);
+        svDeleteImageMapper(SRS_RES_IMAGE);
         smFree(memRes->image);
         memRes->image = 0;
     }
@@ -1226,36 +1303,36 @@ void sresDataMapping(void)
     if (_srsMemRes.image != 0) {
         if (_srsMemRes.pending[SRS_RES_IMAGE] != 0) {
             chunk[0] = _srsMemRes.image;
-            svAddImageMapper(0, 0, chunk, 3000);
+            svAddImageMapper(SRS_RES_IMAGE, 0, chunk, SRS_MAPPER_HEIGHT_IMAGE);
             _srsMemRes.pending[SRS_RES_IMAGE] = 0;
         }
     }
     if (_srsMemRes.effectImage != 0) {
         if (_srsMemRes.pending[SRS_RES_EFFECT_IMAGE] != 0) {
             chunk[0] = _srsMemRes.effectImage;
-            svAddImageMapper(1, 0, chunk, 3100);
+            svAddImageMapper(SRS_RES_EFFECT_IMAGE, 0, chunk, SRS_MAPPER_HEIGHT_EFFECT_IMAGE);
             _srsMemRes.pending[SRS_RES_EFFECT_IMAGE] = 0;
         }
     }
-    for (i = 0; i < 3; i++) {
-        for (j = 0; j < 3; j++) {
+    for (i = 0; i < SRS_CHARACTER_SLOTS; i++) {
+        for (j = 0; j < SRS_WEAPONS_PER_CHARACTER; j++) {
             if (_srsMemRes.weaponData[i][j] != 0) {
-                pending = _srsMemRes.pending[SRS_RES_WEAPON + i * 3 + j];
+                pending = _srsMemRes.pending[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + j];
                 if (pending != 0) {
                     chunk[0] = _srsMemRes.weaponData[i][j];
-                    svAddImageMapper(i * 3 + j + 2, pending, chunk, 2000);
-                    _srsMemRes.pending[SRS_RES_WEAPON + i * 3 + j] = 0;
+                    svAddImageMapper(i * SRS_WEAPONS_PER_CHARACTER + j + SRS_RES_WEAPON, pending, chunk, SRS_MAPPER_HEIGHT_WEAPON);
+                    _srsMemRes.pending[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + j] = 0;
                 }
             }
         }
     }
-    for (i = 0; i < 3; i++) {
-        type = i + 11;
+    for (i = 0; i < SRS_COMBO_SLOTS; i++) {
+        type = i + SRS_RES_COMBO;
         if (_srsMemRes.comboData[i] != 0) {
             pending = _srsMemRes.pending[SRS_RES_COMBO + i];
             if (pending != 0) {
                 chunk[0] = _srsMemRes.comboData[i];
-                svAddImageMapper(type, pending, chunk, 2100);
+                svAddImageMapper(type, pending, chunk, SRS_MAPPER_HEIGHT_COMBO);
                 _srsMemRes.pending[SRS_RES_COMBO + i] = 0;
             }
         }
@@ -1263,24 +1340,24 @@ void sresDataMapping(void)
     if (_srsMemRes.battleImage != 0) {
         if (_srsMemRes.pending[SRS_RES_BATTLE_IMAGE] != 0) {
             chunk[0] = _srsMemRes.battleImage;
-            svAddImageMapper(14, 0, chunk, 3400);
+            svAddImageMapper(SRS_RES_BATTLE_IMAGE, 0, chunk, SRS_MAPPER_HEIGHT_BATTLE_IMAGE);
             _srsMemRes.pending[SRS_RES_BATTLE_IMAGE] = 0;
         }
     }
     if (_srsMemRes.cfImage != 0) {
         if (_srsMemRes.pending[SRS_RES_CF_IMAGE] != 0) {
             chunk[0] = _srsMemRes.cfImage;
-            svAddImageMapper(15, 0, chunk, 3500);
+            svAddImageMapper(SRS_RES_CF_IMAGE, 0, chunk, SRS_MAPPER_HEIGHT_CF_IMAGE);
             _srsMemRes.pending[SRS_RES_CF_IMAGE] = 0;
         }
     }
-    for (i = 0; i < 24; i++) {
-        type = i + 16;
+    for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
+        type = i + SRS_RES_EFFECT;
         if (_srsMemRes.effectData[i] != 0) {
             pending = _srsMemRes.pending[SRS_RES_EFFECT + i];
             if (pending != 0) {
                 chunk[0] = _srsMemRes.effectData[i];
-                svAddImageMapper(type, pending, chunk, 3600);
+                svAddImageMapper(type, pending, chunk, SRS_MAPPER_HEIGHT_EFFECT);
                 _srsMemRes.pending[SRS_RES_EFFECT + i] = 0;
             }
         }
@@ -1294,7 +1371,7 @@ void sresLoadBattleData(SrsBattlePrm *battlePrm)
     char *name;
     int effectNo;
 
-    for (i = 0; i < 24; i++) {
+    for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
         if (_srsMemRes.effectData[i] != 0) {
             smFree(_srsMemRes.effectData[i]);
             _srsMemRes.effectData[i] = 0;
@@ -1305,30 +1382,30 @@ void sresLoadBattleData(SrsBattlePrm *battlePrm)
         smFree(_srsMemRes.cfImage);
         _srsMemRes.cfImage = 0;
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < SRS_CHARACTER_SLOTS; i++) {
         if (battlePrm->charNo[i] > 0 && battlePrm->charReload[i] != 0) {
             battlePrm->charReload[i] = 0;
-            if (battlePrm->charNo[i] < 151) {
-                if (battlePrm->charNo[i] >= 17 && battlePrm->charNo[i] < 33) {
+            if (battlePrm->charNo[i] < SRS_CHAR_BOSS_FIRST) {
+                if (battlePrm->charNo[i] >= SRS_CHAR_WEAPON_FIRST && battlePrm->charNo[i] < SRS_CHAR_WEAPON_END) {
                     if (_srsMemRes.weaponData[i][0] == 0) {
-                        _srsMemRes.weaponData[i][0] = smAlloc(0x12800);
+                        _srsMemRes.weaponData[i][0] = smAlloc(SRS_WEAPON_IMAGE_SIZE);
                     }
                     if (_srsMemRes.weaponData[i][0] != 0) {
-                        _srsMemRes.weaponData[i][1] = (char *) _srsMemRes.weaponData[i][0] + 0x6000;
-                        _srsMemRes.weaponData[i][2] = (char *) _srsMemRes.weaponData[i][0] + 0xC000;
+                        _srsMemRes.weaponData[i][1] = (char *) _srsMemRes.weaponData[i][0] + SRS_WEAPON_SLOT_STRIDE;
+                        _srsMemRes.weaponData[i][2] = (char *) _srsMemRes.weaponData[i][0] + SRS_WEAPON_SLOT_STRIDE * 2;
                     }
-                    _srsMemRes.no[SRS_RES_WEAPON + i * 3] = -1;
-                    _srsMemRes.no[SRS_RES_WEAPON + i * 3 + 1] = -1;
-                    _srsMemRes.no[SRS_RES_WEAPON + i * 3 + 2] = -1;
-                    for (j = 0; j < 3; j++) {
+                    _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER] = -1;
+                    _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + 1] = -1;
+                    _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + 2] = -1;
+                    for (j = 0; j < SRS_WEAPONS_PER_CHARACTER; j++) {
                         if (battlePrm->weaponEffect[i][j] > 0) {
                             effectNo = srsWeapon2EffectID(battlePrm->weaponEffect[i][j]);
                             name = srsGetEffectName2(effectNo);
                             if (name != 0) {
-                                _srsMemRes.pending[SRS_RES_WEAPON + i * 3 + j] = battlePrm->charNo[i];
-                                _srsMemRes.no[SRS_RES_WEAPON + i * 3 + j] = effectNo;
+                                _srsMemRes.pending[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + j] = battlePrm->charNo[i];
+                                _srsMemRes.no[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + j] = effectNo;
                                 if (fileLoad(_srsMemRes.weaponData[i][j], name, 1) < 0) {
-                                    _srsMemRes.pending[SRS_RES_WEAPON + i * 3 + j] = 0;
+                                    _srsMemRes.pending[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER + j] = 0;
                                 }
                             }
                         }
@@ -1336,25 +1413,25 @@ void sresLoadBattleData(SrsBattlePrm *battlePrm)
                 } else {
                     name = srsGetComboName(battlePrm->charNo[i]);
                     if (_srsMemRes.weaponData[i][0] == 0) {
-                        _srsMemRes.weaponData[i][0] = smAlloc(0x12800);
+                        _srsMemRes.weaponData[i][0] = smAlloc(SRS_WEAPON_IMAGE_SIZE);
                     }
                     _srsMemRes.weaponData[i][1] = 0;
                     _srsMemRes.weaponData[i][2] = 0;
-                    _srsMemRes.pending[SRS_RES_WEAPON + i * 3] = battlePrm->charNo[i];
+                    _srsMemRes.pending[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER] = battlePrm->charNo[i];
                     if (fileLoad(_srsMemRes.weaponData[i][0], name, 1) < 0) {
-                        _srsMemRes.pending[SRS_RES_WEAPON + i * 3] = 0;
+                        _srsMemRes.pending[SRS_RES_WEAPON + i * SRS_WEAPONS_PER_CHARACTER] = 0;
                     }
                 }
             }
         }
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < SRS_COMBO_SLOTS; i++) {
         if (battlePrm->enemyNo[i] > 0 && battlePrm->enemyReload[i] != 0) {
             battlePrm->enemyReload[i] = 0;
-            if (battlePrm->enemyNo[i] < 17 || battlePrm->enemyNo[i] >= 33) {
+            if (battlePrm->enemyNo[i] < SRS_CHAR_WEAPON_FIRST || battlePrm->enemyNo[i] >= SRS_CHAR_WEAPON_END) {
                 name = srsGetComboName(battlePrm->enemyNo[i]);
                 if (_srsMemRes.comboData[i] == 0) {
-                    _srsMemRes.comboData[i] = smAlloc(0x12000);
+                    _srsMemRes.comboData[i] = smAlloc(SRS_COMBO_IMAGE_SIZE);
                 }
                 _srsMemRes.pending[SRS_RES_COMBO + i] = battlePrm->enemyNo[i];
                 if (fileLoad(_srsMemRes.comboData[i], name, 1) <= 0) {
@@ -1380,20 +1457,20 @@ int srsFileLoadCf(int cfId, int effectNo)
     int size;
 
     srsAnalyzeEftNo(effectNo, &charNo, &effectType);
-    if (effectType == 15) {
-        return 15;
+    if (effectType == SRS_RES_CF_IMAGE) {
+        return SRS_RES_CF_IMAGE;
     }
-    if ((unsigned int) (effectType - 16) < 24) {
+    if ((unsigned int) (effectType - SRS_RES_EFFECT) < SRS_EFFECT_SLOTS) {
         name = srsGetEffectName(effectNo);
         if (name == 0) {
             return 0;
         }
-        for (i = 0; i < 24; i++) {
+        for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
             if (_srsMemRes.effectData[i] != 0 && _srsMemRes.no[SRS_RES_EFFECT + i] == effectNo) {
                 return 0;
             }
         }
-        for (i = 0; i < 24; i++) {
+        for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
             if (_srsMemRes.effectData[i] == 0) {
                 size = srsGetFileLen(name);
                 if (size <= 0) {
@@ -1430,16 +1507,16 @@ int srsMemoryLoadCf(void *data, int effectNo, int size)
     int i;
 
     srsAnalyzeEftNo(effectNo, &charNo, &effectType);
-    if (effectType == 15) {
-        return 15;
+    if (effectType == SRS_RES_CF_IMAGE) {
+        return SRS_RES_CF_IMAGE;
     }
-    if ((unsigned int) (effectType - 16) < 24) {
-        for (i = 0; i < 24; i++) {
+    if ((unsigned int) (effectType - SRS_RES_EFFECT) < SRS_EFFECT_SLOTS) {
+        for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
             if (_srsMemRes.effectData[i] != 0 && _srsMemRes.no[SRS_RES_EFFECT + i] == effectNo) {
                 return 0;
             }
         }
-        for (i = 0; i < 24; i++) {
+        for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
             if (_srsMemRes.effectData[i] == 0) {
                 if (size <= 0) {
                     return -1;
@@ -1472,7 +1549,7 @@ int srsEffectNameToID(char *effectName)
     if (effectName == 0) {
         return 0;
     }
-    for (index = 1; index < 3072; index++) {
+    for (index = 1; index < SRS_EFFECT_NO_COUNT; index++) {
         name = srsGetEffectData(index);
         if (name != 0 && strcmp(effectName, name) == 0) {
             return index;

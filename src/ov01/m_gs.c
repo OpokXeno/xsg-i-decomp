@@ -6,7 +6,6 @@
 #include "main/xgl_packet.h"
 
 /* EE scratchpad RAM base. */
-#define SCRATCHPAD_BASE ((void *)0x70000000)
 /* Default packet capacity used when no custom buffer is supplied. */
 #define MGS_PACKET_DEFAULT_CAPACITY 0x400
 /* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */
@@ -53,7 +52,7 @@ extern void *sceVif1PkTerminate(XglPacket *packet);
 
 void MGsGPInit(MGsPacket *packet, void *address, int size)
 {
-    void *base = (address != 0) ? address : SCRATCHPAD_BASE;
+    void *base = (address != 0) ? address : (void *)SCRATCHPAD_BASE;
 
     packet->data = base;
     packet->capacity = (address != 0) ? size : MGS_PACKET_DEFAULT_CAPACITY;

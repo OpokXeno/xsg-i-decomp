@@ -8,7 +8,7 @@
  */
 void Java_xeno_vm_Thread_create__(JThread *thread, void *arguments, JThread **result)
 {
-    *result = JNI_createThread(4, 4, 0x40);
+    *result = JNI_createThread(JTHREAD_KIND_DEFAULT, 4, 0x40);
 }
 
 /*
@@ -49,7 +49,7 @@ void Java_xeno_vm_Thread_start__(JThread *thread, JThread **arguments)
 
     handle = *arguments;
     JNI_initThread(handle);
-    handle->flags |= 0x10;
+    handle->flags |= JTHREAD_FLAG_RUNNABLE;
 }
 
 /*
@@ -61,5 +61,5 @@ void Java_xeno_vm_Thread_stop__(JThread *thread, JThread **arguments)
     JThread *handle;
 
     handle = *arguments;
-    handle->flags &= ~0x10;
+    handle->flags &= ~JTHREAD_FLAG_RUNNABLE;
 }

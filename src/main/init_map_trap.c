@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/act_1.h"
 #include "main/toolkit.h"
 #include "main/exm_2.h"
 #include "main/init_uwamono_sys.h"
@@ -11,6 +12,41 @@
 #include "main/xgl_sound.h"
 
 typedef struct MapUnitRecordTrapView MapUnitRecordTrapView;
+
+/* Trap unit ids (trapId). Ids 0x7001..0x7004 are the four trap kinds that
+ * index uwares_tbl/xtxres_tbl and TrapKind_t, 0x7014 starts the containers. */
+#define TRAP_ID_BASE 0x7000
+#define TRAP_ID_NO_EFFECT 0x7012 /* deleted when triggered, no effect or sound */
+#define TRAP_ID_KIND_FIRST 0x7001
+#define TRAP_ID_KIND_COUNT 4
+#define TRAP_ID_CONTAINER_FIRST 0x7014
+#define TRAP_ID_CONTAINER_COUNT 31
+#define TRAP_KIND_BREAKABLE 4 /* TrapKind_t entry used by breakable objects */
+
+/* MapUnitRecord.flags: what the trap does when it goes off. */
+#define TRAP_FLAG_BREAKABLE 0x00200000u
+#define TRAP_FLAG_ELECTRIC 0x00400000u
+#define TRAP_FLAG_EXPLOSION 0x00800000u
+#define TRAP_FLAG_FALL 0x01000000u
+#define TRAP_FLAG_SLOT 0x02000000u
+#define TRAP_FLAG_SEAL 0x04000000u
+
+/* Actor.flags bits: the actor can be hit by a trap, was already hit, and the
+ * damage kind the trap leaves on it. */
+#define ACTOR_FLAG_TRAP_TARGET 0x00010000u
+#define ACTOR_FLAG_TRAP_HIT 0x00800000u
+#define ACTOR_FLAG_TRAP_EXPLOSION 0x01000000u
+#define ACTOR_FLAG_TRAP_ELECTRIC 0x02000000u
+#define ACTOR_FLAG_TRAP_FALL 0x04000000u
+#define ACTOR_FLAG_TRAP_SEAL 0x08000000u
+
+#define TRAP_SE_ELECTRIC 0x10004
+#define TRAP_SE_EXPLOSION 0x10005
+#define TRAP_SE_FALL 0x10003
+#define TRAP_SE_SEAL 0x1000a
+#define TRAP_EFFECT_BREAK 0x259 /* effect created when a breakable object breaks */
+#define TRAP_END_FRAMES 5       /* frames until the wind of a fired trap stops */
+
 
 typedef struct {
     unsigned int flags;
@@ -91,8 +127,8 @@ typedef struct {
     unsigned char unmodeled_21[0x0f];
 } KowareKindEntry;
 
-extern TrapDamageActor actor[64];
-extern TrapEnemyWorkEntry enepc[16];
+extern TrapDamageActor actor[ACTOR_COUNT];
+extern TrapEnemyWorkEntry enepc[ENEMY_COUNT];
 extern const char actElectricFormat[24];
 extern const char actExplosionFormat[24];
 extern const char actFallFormat[16];
@@ -101,9 +137,9 @@ extern const char actSealFormat[16];
 extern TrapGameLoopStateWords GameLoopState;
 extern const char unitTrapDeleteFormat[0x28];
 extern char trapBrokenMethodName[];
-extern KowareKindEntry KowareKind_t[127];
-extern int uwares_tbl[14];
-extern int xtxres_tbl[14];
+extern KowareKindEntry KowareKind_t[KOWARE_KIND_COUNT];
+extern int uwares_tbl[UWAMONO_RESIDENT_COUNT];
+extern int xtxres_tbl[UWAMONO_RESIDENT_COUNT];
 extern const char setTrapSizeFormat[16];
 extern const char trapSizeXyzFormat[16];
 extern const char createTrapPosFormat[0x30];
@@ -131,8 +167,8 @@ void InitMapTrap(MapUnitRecordTrapView *unit)
     int uwares;
 
     unit->update = MAP_updateUnitTrap;
-    if ((u16)(unit->trapId - 0x7001) < 4) {
-        index = unit->trapId - 0x7001;
+    if ((u16)(unit->trapId - TRAP_ID_KIND_FIRST) < TRAP_ID_KIND_COUNT) {
+        index = unit->trapId - TRAP_ID_KIND_FIRST;
         uwares = uwares_tbl[index];
         xtxres = xtxres_tbl[index];
         unit->uwaresId = uwares;
@@ -149,30 +185,30 @@ void InitMapTrap(MapUnitRecordTrapView *unit)
         if (trap->effectId == -1) {
             trap->effectId = TrapKind_t[index].effectId;
         }
-    } else if ((u16)(unit->trapId - 0x7014) < 31) {
+    } else if ((u16)(unit->trapId - TRAP_ID_CONTAINER_FIRST) < TRAP_ID_CONTAINER_COUNT) {
         SetContainerParam(unit);
     } else {
-        unit->flags |= TrapKind_t[4].flags;
-        unit->dimensions = TrapKind_t[4].dimensions;
+        unit->flags |= TrapKind_t[TRAP_KIND_BREAKABLE].flags;
+        unit->dimensions = TrapKind_t[TRAP_KIND_BREAKABLE].dimensions;
         trap->damageRadius = 3.0f;
         if (trap->kindIndex != -1) {
             if (trap->windState == -1) {
                 trap->windState = KowareKind_t[trap->kindIndex].shape;
             } else {
-                trap->windState = TrapKind_t[4].windState;
+                trap->windState = TrapKind_t[TRAP_KIND_BREAKABLE].windState;
             }
             unit->dimensions = KowareKind_t[trap->kindIndex].dimensions;
             if (trap->effectId == -1) {
                 trap->effectId = TrapKind_t[trap->kindIndex].effectId;
             }
         } else if (trap->windState == -1) {
-            trap->windState = TrapKind_t[4].windState;
+            trap->windState = TrapKind_t[TRAP_KIND_BREAKABLE].windState;
         }
         if (trap->target == -1) {
             trap->target = KowareKind_t[trap->kindIndex].target;
         }
         if (trap->effectId == -1) {
-            trap->effectId = TrapKind_t[4].effectId;
+            trap->effectId = TrapKind_t[TRAP_KIND_BREAKABLE].effectId;
         }
     }
     if (trap->sizeX > 0.0f) {
@@ -190,11 +226,11 @@ void InitMapTrap(MapUnitRecordTrapView *unit)
     if (trap->activeFlags == -1) {
         trap->activeFlags = 1;
     }
-    if (unit->trapId == 0x7000) {
+    if (unit->trapId == TRAP_ID_BASE) {
         unit->flags |= 4;
         trap->activeFlags = 0;
     }
-    if (unit->trapId == 0x7012) {
+    if (unit->trapId == TRAP_ID_NO_EFFECT) {
         unit->flags |= 4;
         trap->activeFlags = 0;
         trap->windState = 0;
@@ -224,7 +260,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
     UwamonoCommonFunc(unit);
     switch (unit->trapState) {
     case 0: {
-        if (unit->linkedObject != 0 && !(unit->flags & 0x00200000u)) {
+        if (unit->linkedObject != 0 && !(unit->flags & TRAP_FLAG_BREAKABLE)) {
             if (trap->activeFlags & 1u) {
                 unit->linkedObject->trap_active = 1;
             } else {
@@ -235,7 +271,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
         if (trap->state == 1) {
             unsigned int flags;
 
-            if (unit->trapId == 0x7012) {
+            if (unit->trapId == TRAP_ID_NO_EFFECT) {
                 unit->update = 0;
                 unit->trapId = -1;
                 ClearUwamonoEffect(unit);
@@ -244,21 +280,21 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
 
             unit->trapState = 3;
             flags = unit->flags;
-            if (flags & 0x00400000u) {
-                xglSoundEffectNormalID(0x10004, unit->trapSerial + 1);
-            } else if (flags & 0x00800000u) {
-                xglSoundEffectNormalID(0x10005, unit->trapSerial + 1);
-            } else if (flags & 0x01000000u) {
-                xglSoundEffectNormalID(0x10003, unit->trapSerial + 1);
-            } else if (flags & 0x02000000u) {
-                xglSoundEffectNormalID(0x10003, unit->trapSerial + 1);
-            } else if (unit->flags & 0x04000000u) {
-                xglSoundEffectNormalID(0x1000a, unit->trapSerial + 1);
-            } else if (unit->flags & 0x00200000u) {
+            if (flags & TRAP_FLAG_ELECTRIC) {
+                xglSoundEffectNormalID(TRAP_SE_ELECTRIC, unit->trapSerial + 1);
+            } else if (flags & TRAP_FLAG_EXPLOSION) {
+                xglSoundEffectNormalID(TRAP_SE_EXPLOSION, unit->trapSerial + 1);
+            } else if (flags & TRAP_FLAG_FALL) {
+                xglSoundEffectNormalID(TRAP_SE_FALL, unit->trapSerial + 1);
+            } else if (flags & TRAP_FLAG_SLOT) {
+                xglSoundEffectNormalID(TRAP_SE_FALL, unit->trapSerial + 1);
+            } else if (unit->flags & TRAP_FLAG_SEAL) {
+                xglSoundEffectNormalID(TRAP_SE_SEAL, unit->trapSerial + 1);
+            } else if (unit->flags & TRAP_FLAG_BREAKABLE) {
                 UwamonoBrokenSe(unit);
             }
 
-            if (unit->flags & 0x00200000u) {
+            if (unit->flags & TRAP_FLAG_BREAKABLE) {
                 Vibration_Set_Strong(0xff, 0x20, 0x1e);
             } else {
                 Vibration_Set_Strong(0xff, 0x20, 0x5a);
@@ -274,7 +310,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
             }
         }
         if (trap->state == 2) {
-            if (unit->trapId == 0x7012) {
+            if (unit->trapId == TRAP_ID_NO_EFFECT) {
                 unit->update = 0;
                 unit->trapId = -1;
                 ClearUwamonoEffect(unit);
@@ -282,7 +318,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
             }
             unit->trapState = 1;
             UwamonoBrokenSe(unit);
-            sefCreateEffectCf(0x259,
+            sefCreateEffectCf(TRAP_EFFECT_BREAK,
                               &unit->position,
                               &unit->effectOrientation);
             unit->flags |= 0x00020004u;
@@ -299,7 +335,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
 
     case 3: {
         unit->trapTimer = unit->trapTimer + 1;
-        if (unit->trapTimer >= 5) {
+        if (unit->trapTimer >= TRAP_END_FRAMES) {
             trap->windState = 0;
             EXM_ClearWindStruct();
         }
@@ -320,7 +356,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
         s16 elapsed;
 
         elapsed = unit->trapTimer = unit->trapTimer + 1;
-        if (elapsed >= 5) {
+        if (elapsed >= TRAP_END_FRAMES) {
             trap->windState = 0;
             if (printflg != 0) {
                 printf(unitTrapDeleteFormat, unit->trapId, unit->trapSerial);
@@ -343,7 +379,7 @@ int GivesEnemyDamage(MapUnitRecordTrapView *unit)
     TrapDamageActor *target;
     TrapDamageProperties *trap = &unit->trap;
 
-    if (unit->flags & 0x00200000u) {
+    if (unit->flags & TRAP_FLAG_BREAKABLE) {
         return 0;
     }
     if (collflg) {
@@ -354,43 +390,43 @@ int GivesEnemyDamage(MapUnitRecordTrapView *unit)
         collisionRecord.blue = 255;
         collisionRecord.mode = 128;
     }
-    for (actorIndex = 0; actorIndex < 64; actorIndex++) {
+    for (actorIndex = 0; actorIndex < ACTOR_COUNT; actorIndex++) {
         target = &actor[actorIndex];
         if (target->flags & 8) {
             continue;
         }
-        if (!(target->flags & 0x00010000u)) {
+        if (!(target->flags & ACTOR_FLAG_TRAP_TARGET)) {
             continue;
         }
-        if (target->flags & 0x00800000u) {
+        if (target->flags & ACTOR_FLAG_TRAP_HIT) {
             continue;
         }
         enepc[actorIndex].trapPosition = unit->position;
         if (!(CheckDist3D(&actor[actorIndex].position, &unit->position) < trap->damageRadius)) {
             continue;
         }
-        target->flags |= 0x00800000u;
-        if (unit->flags & 0x00400000u) {
-            target->flags |= 0x02000000u;
+        target->flags |= ACTOR_FLAG_TRAP_HIT;
+        if (unit->flags & TRAP_FLAG_ELECTRIC) {
+            target->flags |= ACTOR_FLAG_TRAP_ELECTRIC;
             if (printflg) {
                 printf(actElectricFormat, actorIndex);
             }
-        } else if (unit->flags & 0x00800000u) {
-            target->flags |= 0x01000000u;
+        } else if (unit->flags & TRAP_FLAG_EXPLOSION) {
+            target->flags |= ACTOR_FLAG_TRAP_EXPLOSION;
             if (printflg) {
                 printf(actExplosionFormat, actorIndex);
             }
-        } else if (unit->flags & 0x01000000u) {
-            target->flags |= 0x04000000u;
+        } else if (unit->flags & TRAP_FLAG_FALL) {
+            target->flags |= ACTOR_FLAG_TRAP_FALL;
             if (printflg) {
                 printf(actFallFormat, actorIndex);
             }
-        } else if (unit->flags & 0x02000000u) {
+        } else if (unit->flags & TRAP_FLAG_SLOT) {
             if (printflg) {
                 printf(actSlotFormat, actorIndex);
             }
-        } else if (unit->flags & 0x04000000u) {
-            target->flags |= 0x08000000u;
+        } else if (unit->flags & TRAP_FLAG_SEAL) {
+            target->flags |= ACTOR_FLAG_TRAP_SEAL;
             if (printflg) {
                 printf(actSealFormat, actorIndex);
             }

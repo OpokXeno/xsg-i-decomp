@@ -10,6 +10,28 @@
 #define UNIT_WAIT_UNIT 6
 #define UNIT_FLAG_SUSPENDED 0x10
 
+/* JThread.flags bits used by the Unit natives. */
+#define UNIT_THREAD_FLAG_CAN_WAIT 0x40 /* the native may block the Java thread */
+#define UNIT_THREAD_FLAG_WAITING 4 /* blocked on wait_target */
+
+/* MapUnitRecord.flags bits set from the Unit setters. */
+#define UNIT_PEER_FLAG_MAP_SHADOW 0x20
+#define UNIT_PEER_FLAG_CLIP 0x40
+#define UNIT_PEER_FLAG_COLLISION 0x100
+
+/* UnitSequenceEntry.state: which of the motion / scale tracks are active. */
+#define UNIT_SEQ_STATE_MOTION 0x10
+#define UNIT_SEQ_STATE_SCALE_X 0x20
+#define UNIT_SEQ_STATE_SCALE_Y 0x40
+#define UNIT_SEQ_STATE_SCALE_Z 0x80
+#define UNIT_SEQ_STATE_SCALE_ALL 0xe0
+
+#define UNIT_FRAMES_PER_SECOND 30.0f
+#define UNIT_DEGREES_HALF_TURN 180.0f
+#define UNIT_PI 3.1415927f
+#define UNIT_JOINT_ACCESSORY_FLAG 0x8000 /* parent_flags selects an accessory joint */
+#define UNIT_JOINT_ACCESSORY_MASK 0x7fff
+
 /* Partial native field views; unknown spans remain byte storage. */
 
 typedef struct UnitVector3 {
@@ -357,7 +379,7 @@ static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
         channel->frames = -1;
         channel->target_x = call->slot[0].floating + source[0];
         channel->target_z = call->slot[1].floating + source[2];
-        channel->step = call->slot[2].floating / 30.0f;
+        channel->step = call->slot[2].floating / UNIT_FRAMES_PER_SECOND;
         sequence->transSequence = SEQ_moveUnitXZ;
         wait = call->slot[3].byte;
         break;
@@ -376,7 +398,7 @@ static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
         chr_peer = *(void **)(call->slot[0].object + peer_field->offset);
         channel->source = chr_peer;
         channel->frames = -1;
-        channel->step = call->slot[1].floating / 30.0f;
+        channel->step = call->slot[1].floating / UNIT_FRAMES_PER_SECOND;
         sequence->transSequence = SEQ_moveChr;
         wait = call->slot[2].byte;
         break;
@@ -384,13 +406,13 @@ static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -435,14 +457,14 @@ static void UNIT_rotX(int mode, JThread *thread, void *arguments,
     case 0:
         channel->frames[0] = call->slot[0].integer;
         channel->flags &= ~1;
-        channel->target[0] = (call->slot[1].floating + source[0]) / 180.0f * 3.1415927f;
+        channel->target[0] = (call->slot[1].floating + source[0]) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
         wait = call->slot[2].byte;
         break;
     case 1:
         channel->frames[0] = -1;
         channel->flags &= ~1;
-        channel->target[0] = (call->slot[0].floating + source[0]) / 180.0f * 3.1415927f;
-        channel->step[0] = call->slot[1].floating / 180.0f * 3.1415927f / 30.0f;
+        channel->target[0] = (call->slot[0].floating + source[0]) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
+        channel->step[0] = call->slot[1].floating / UNIT_DEGREES_HALF_TURN * UNIT_PI / UNIT_FRAMES_PER_SECOND;
         wait = call->slot[2].byte;
         break;
     case 2:
@@ -457,20 +479,20 @@ static void UNIT_rotX(int mode, JThread *thread, void *arguments,
         channel->frames[0] = -1;
         channel->flags |= 1;
         channel->track.source = chr_peer;
-        channel->step[0] = call->slot[1].floating / 180.0f * 3.1415927f / 30.0f;
+        channel->step[0] = call->slot[1].floating / UNIT_DEGREES_HALF_TURN * UNIT_PI / UNIT_FRAMES_PER_SECOND;
         wait = call->slot[2].byte;
         break;
     }
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -513,14 +535,14 @@ static void UNIT_rotY(int mode, JThread *thread, void *arguments,
     case 0:
         channel->frames[1] = call->slot[0].integer;
         channel->flags &= ~2;
-        channel->target[1] = (call->slot[1].floating + source[1]) / 180.0f * 3.1415927f;
+        channel->target[1] = (call->slot[1].floating + source[1]) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
         wait = call->slot[2].byte;
         break;
     case 1:
         channel->frames[1] = -1;
         channel->flags &= ~2;
-        channel->target[1] = (call->slot[0].floating + source[1]) / 180.0f * 3.1415927f;
-        channel->step[1] = call->slot[1].floating / 180.0f * 3.1415927f / 30.0f;
+        channel->target[1] = (call->slot[0].floating + source[1]) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
+        channel->step[1] = call->slot[1].floating / UNIT_DEGREES_HALF_TURN * UNIT_PI / UNIT_FRAMES_PER_SECOND;
         wait = call->slot[2].byte;
         break;
     case 2:
@@ -539,20 +561,20 @@ static void UNIT_rotY(int mode, JThread *thread, void *arguments,
         channel->frames[1] = -1;
         channel->flags |= 2;
         channel->track.source = chr_peer;
-        channel->step[1] = call->slot[1].floating / 180.0f * 3.1415927f / 30.0f;
+        channel->step[1] = call->slot[1].floating / UNIT_DEGREES_HALF_TURN * UNIT_PI / UNIT_FRAMES_PER_SECOND;
         wait = call->slot[2].byte;
         break;
     }
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -601,14 +623,14 @@ static void UNIT_rotZ(int mode, JThread *thread, void *arguments,
     case 0:
         channel->frames[2] = call->slot[0].integer;
         channel->flags &= ~4;
-        channel->target[2] = (call->slot[1].floating + source[2]) / 180.0f * 3.1415927f;
+        channel->target[2] = (call->slot[1].floating + source[2]) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
         wait = call->slot[2].byte;
         break;
     case 1:
         channel->frames[2] = -1;
         channel->flags &= ~4;
-        channel->target[2] = (call->slot[0].floating + source[2]) / 180.0f * 3.1415927f;
-        channel->step[2] = call->slot[1].floating / 180.0f * 3.1415927f / 30.0f;
+        channel->target[2] = (call->slot[0].floating + source[2]) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
+        channel->step[2] = call->slot[1].floating / UNIT_DEGREES_HALF_TURN * UNIT_PI / UNIT_FRAMES_PER_SECOND;
         wait = call->slot[2].byte;
         break;
     case 2:
@@ -623,20 +645,20 @@ static void UNIT_rotZ(int mode, JThread *thread, void *arguments,
         channel->frames[2] = -1;
         channel->flags |= 2;
         channel->track.source = chr_peer;
-        channel->step[2] = call->slot[1].floating / 180.0f * 3.1415927f / 30.0f;
+        channel->step[2] = call->slot[1].floating / UNIT_DEGREES_HALF_TURN * UNIT_PI / UNIT_FRAMES_PER_SECOND;
         wait = call->slot[2].byte;
         break;
     }
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -656,13 +678,13 @@ void Java_xeno_Unit_getRotate__(JThread *thread, UnitObjectCall *arguments)
     vector = &(*(MapUnitRecord **)(object + peer_field->offset))->rotation;
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitRotationXName, -1), 0);
-    *(float *)(object + field->offset) = vector->x / 3.1415927f * 180.0f;
+    *(float *)(object + field->offset) = vector->x / UNIT_PI * UNIT_DEGREES_HALF_TURN;
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitRotationYName, -1), 0);
-    *(float *)(object + field->offset) = vector->y / 3.1415927f * 180.0f;
+    *(float *)(object + field->offset) = vector->y / UNIT_PI * UNIT_DEGREES_HALF_TURN;
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitRotationZName, -1), 0);
-    *(float *)(object + field->offset) = vector->z / 3.1415927f * 180.0f;
+    *(float *)(object + field->offset) = vector->z / UNIT_PI * UNIT_DEGREES_HALF_TURN;
 }
 
 void Java_xeno_Unit_getSignal__(JThread *thread, UnitObjectCall *arguments,
@@ -757,13 +779,13 @@ void Java_xeno_Unit_move__Lxeno_util_Spline_IZ(JThread *thread,
     track->last_frame = spline->frame_count;
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -805,13 +827,13 @@ void Java_xeno_Unit_rotate__Lxeno_util_Spline_IZ(JThread *thread,
     track->last_frame = spline->frame_count;
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -848,7 +870,7 @@ void UNIT_motion(int mode, JThread *thread, void *arguments,
     peer = *(MapUnitRecord **)(object + peer_field->offset);
     sequence = &unitSequence[peer->slot];
     sequence->motionSequence = SEQ_motionUnit;
-    sequence->state |= 0x10;
+    sequence->state |= UNIT_SEQ_STATE_MOTION;
     motion = &sequence->motion;
 
     switch (mode) {
@@ -873,13 +895,13 @@ void UNIT_motion(int mode, JThread *thread, void *arguments,
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -993,7 +1015,7 @@ void Java_xeno_Unit_scale__Lxeno_util_Spline_IZ(JThread *thread,
     peer = *(MapUnitRecord **)(object + peer_field->offset);
     sequence = &unitSequence[peer->slot];
     track = &sequence->scale.track;
-    sequence->state |= 0xe0;
+    sequence->state |= UNIT_SEQ_STATE_SCALE_ALL;
     lookupClassField(classJava_xeno_Unit, loadConstString(algorithmFieldName, -1), 0);
     spline = arguments->spline;
     wait = arguments->wait;
@@ -1002,13 +1024,13 @@ void Java_xeno_Unit_scale__Lxeno_util_Spline_IZ(JThread *thread,
     track->last_frame = spline->frame_count;
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -1047,7 +1069,7 @@ static void UNIT_sclX(int mode, JThread *thread, void *arguments,
 
     sequence = &unitSequence[peer->slot];
     sequence->scaleSequence = SEQ_scaleUnit;
-    sequence->state |= 0x20;
+    sequence->state |= UNIT_SEQ_STATE_SCALE_X;
     scale = &sequence->scale;
 
     switch (mode) {
@@ -1059,20 +1081,20 @@ static void UNIT_sclX(int mode, JThread *thread, void *arguments,
     case 1:
         scale->frames[0] = -1;
         scale->target[0] = call->first.floating + scale_source[0];
-        scale->step[0] = call->second.floating / 30.0f;
+        scale->step[0] = call->second.floating / UNIT_FRAMES_PER_SECOND;
         wait = call->wait;
         break;
     }
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -1123,7 +1145,7 @@ static void UNIT_sclY(int mode, JThread *thread, void *arguments,
 
     sequence = &unitSequence[peer->slot];
     sequence->scaleSequence = SEQ_scaleUnit;
-    sequence->state |= 0x40;
+    sequence->state |= UNIT_SEQ_STATE_SCALE_Y;
     scale = &sequence->scale;
 
     switch (mode) {
@@ -1135,20 +1157,20 @@ static void UNIT_sclY(int mode, JThread *thread, void *arguments,
     case 1:
         scale->frames[1] = -1;
         scale->target[1] = call->first.floating + scale_source[1];
-        scale->step[1] = call->second.floating / 30.0f;
+        scale->step[1] = call->second.floating / UNIT_FRAMES_PER_SECOND;
         wait = call->wait;
         break;
     }
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -1199,7 +1221,7 @@ static void UNIT_sclZ(int mode, JThread *thread, void *arguments,
 
     sequence = &unitSequence[peer->slot];
     sequence->scaleSequence = SEQ_scaleUnit;
-    sequence->state |= 0x80;
+    sequence->state |= UNIT_SEQ_STATE_SCALE_Z;
     scale = &sequence->scale;
 
     switch (mode) {
@@ -1211,20 +1233,20 @@ static void UNIT_sclZ(int mode, JThread *thread, void *arguments,
     case 1:
         scale->frames[1] = -1;
         scale->target[2] = call->first.floating + scale_source[2];
-        scale->step[2] = call->second.floating / 30.0f;
+        scale->step[2] = call->second.floating / UNIT_FRAMES_PER_SECOND;
         wait = call->wait;
         break;
     }
 
     if (wait == 1) {
         peer->flags |= 2;
-        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & 0x40) == 0)
+        if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
             return;
-        if ((thread->flags & 0x40) != 0) {
+        if ((thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) != 0) {
             thread->wait_target.object = peer;
             thread->wait_kind = UNIT_WAIT_UNIT;
             thread->resume_frames = thread->frame_depth;
-            thread->flags |= 4;
+            thread->flags |= UNIT_THREAD_FLAG_WAITING;
         }
         thread->resume_frames = thread->frame_depth;
         thread->flags |= 1;
@@ -1254,9 +1276,9 @@ void Java_xeno_Unit_setCollision__Z(JThread *thread, UnitBoolCall *arguments)
                                   loadConstString(unitPeerName, -1), 0);
     peer = *(MapUnitRecord **)(object + peer_field->offset);
     if (arguments->flag != 0) {
-        peer->flags |= 0x100;
+        peer->flags |= UNIT_PEER_FLAG_COLLISION;
     } else {
-        peer->flags &= ~0x100;
+        peer->flags &= ~UNIT_PEER_FLAG_COLLISION;
     }
 }
 
@@ -1273,13 +1295,13 @@ void Java_xeno_Unit_setRotate__(JThread *thread, UnitObjectCall *arguments)
     vector = &(*(MapUnitRecord **)(object + peer_field->offset))->rotation;
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitRotationXName, -1), 0);
-    vector->x = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
+    vector->x = *(float *)(object + field->offset) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitRotationYName, -1), 0);
-    vector->y = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
+    vector->y = *(float *)(object + field->offset) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitRotationZName, -1), 0);
-    vector->z = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
+    vector->z = *(float *)(object + field->offset) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
 }
 
 void Java_xeno_Unit_setTranslate__(JThread *thread, UnitObjectCall *arguments)
@@ -1404,7 +1426,7 @@ void Java_xeno_Unit_start__ILjava_lang_Object_(JThread *thread,
             unit_thread->method = method;
             unit_thread->reset = JTHREAD_defaultUnit;
             JNI_initThread(unit_thread);
-            unit_thread->flags |= 0x10;
+            unit_thread->flags |= UNIT_FLAG_SUSPENDED;
         }
         sequence->transSequence = 0;
         sequence->rotateSequence = 0;
@@ -1430,7 +1452,7 @@ void Java_xeno_Unit_stop__(JThread *thread, UnitObjectCall *arguments)
     peer = *(MapUnitRecord **)(object + peer_field->offset);
     unit_thread = JTHREAD_get(object);
     if (unit_thread != 0) {
-        unit_thread->flags &= ~0x10;
+        unit_thread->flags &= ~UNIT_FLAG_SUSPENDED;
     }
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString(unitPositionXName, -1), 0);
@@ -1476,9 +1498,9 @@ void Java_xeno_Unit_setParent__Ljava_lang_Object_I(
                                   loadConstString(unitPeerName, -1), 0);
     parent_peer = *(void **)(chr + peer_field->offset);
     peer->parent_peer = parent_peer;
-    if ((flags & 0x8000) != 0) {
+    if ((flags & UNIT_JOINT_ACCESSORY_FLAG) != 0) {
         peer->parent_flags = ACT_jointGetAccessories(parent_peer,
-                                                     flags & 0x7fff) | 0x8000;
+                                                     flags & UNIT_JOINT_ACCESSORY_MASK) | UNIT_JOINT_ACCESSORY_FLAG;
     } else {
         peer->parent_flags = flags;
     }
@@ -1674,9 +1696,9 @@ void Java_xeno_Unit_mtnGetRoot__ILxeno_util_Vector4f_(
             vector->z = peer->motion_root[0].z;
             break;
         case 1:
-            vector->x = peer->motion_root[1].x / 3.1415927f * 180.0f;
-            vector->y = peer->motion_root[1].y / 3.1415927f * 180.0f;
-            vector->z = peer->motion_root[1].z / 3.1415927f * 180.0f;
+            vector->x = peer->motion_root[1].x / UNIT_PI * UNIT_DEGREES_HALF_TURN;
+            vector->y = peer->motion_root[1].y / UNIT_PI * UNIT_DEGREES_HALF_TURN;
+            vector->z = peer->motion_root[1].z / UNIT_PI * UNIT_DEGREES_HALF_TURN;
             break;
         case 2:
             vector->x = peer->motion_root[2].x;
@@ -1836,9 +1858,9 @@ void Java_xeno_Unit_map_shadow__I(JThread *thread, UnitIntCall *arguments)
                                   loadConstString(unitPeerName, -1), 0);
     peer = *(MapUnitRecord **)(object + peer_field->offset);
     if (arguments->value != 0) {
-        peer->flags |= 0x20;
+        peer->flags |= UNIT_PEER_FLAG_MAP_SHADOW;
     } else {
-        peer->flags &= ~0x20;
+        peer->flags &= ~UNIT_PEER_FLAG_MAP_SHADOW;
     }
 }
 
@@ -1978,9 +2000,9 @@ void Java_xeno_Unit_setClip__I(JThread *thread, UnitIntCall *arguments)
     object = arguments->object;
     peer = *(MapUnitRecord **)(object + peer_field->offset);
     if (value != 0) {
-        peer->flags |= 0x40;
+        peer->flags |= UNIT_PEER_FLAG_CLIP;
     } else {
-        peer->flags &= ~0x40;
+        peer->flags &= ~UNIT_PEER_FLAG_CLIP;
     }
 }
 

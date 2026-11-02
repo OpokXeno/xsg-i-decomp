@@ -9,6 +9,14 @@
 
 #define SHAKE_ANGLE_MIN -6.2831855f
 
+/* EXM_WindState.mode values. */
+#define EXM_WIND_OFF 0
+#define EXM_WIND_DIRECTIONAL 1 /* direction.xyz is the force direction */
+#define EXM_WIND_POINT 2 /* direction.xyz is the source point */
+
+#define EXM_WIND_WAVE_STEP 1.3f
+#define EXM_WAVE_RAD_STEP 0.5f
+
 typedef struct EXM_WindFrame {
     unsigned char unmodeled_00[0x54];
     float angle; /* +0x54, read by EXM_GetWindPower */
@@ -36,9 +44,9 @@ static float waverad = 0.0f;
 
 static EXM_WindState _wind = { 0 };
 
-MapUnitRecord MapUnit[64] = { 0 };
+MapUnitRecord MapUnit[MAP_UNIT_COUNT] = { 0 };
 
-UnitSequenceEntry unitSequence[64] = { 0 };
+UnitSequenceEntry unitSequence[MAP_UNIT_COUNT] = { 0 };
 
 void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *position)
 {
@@ -53,15 +61,15 @@ void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *posi
     float x;
     float z;
 
-    if (wind->mode == 0) {
+    if (wind->mode == EXM_WIND_OFF) {
         result[0] = position[0];
     } else {
-        wave += 1.3f;
+        wave += EXM_WIND_WAVE_STEP;
         power = xglSin(wind->shake_rad - wave) * wave;
         axis_cos = unit->axis_cos;
         axis_sin = unit->axis_sin;
         switch (wind->mode) {
-        case 1:
+        case EXM_WIND_DIRECTIONAL:
             scale = wind->direction.w * (power * wind->shake_power + 1.0f);
             force = wind->direction;
             force.x *= scale;
@@ -69,7 +77,7 @@ void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *posi
             force.z *= scale;
             force_vector = &force;
             break;
-        case 2:
+        case EXM_WIND_POINT:
             force.x = unit->position[0] + position[0] * axis_cos + position[2] * axis_sin - wind->direction.x;
             force.y = unit->position[1] + position[1] - wind->direction.y;
             force.z = unit->position[2] + position[2] * axis_cos - position[0] * axis_sin - wind->direction.z;
@@ -103,7 +111,7 @@ void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *posi
 void EXM_ResetWind(void)
 {
     float reset_value;
-    wind->mode = 0;
+    wind->mode = EXM_WIND_OFF;
     reset_value = 0.0f;
     wind->direction.w = reset_value;
     wind->direction.z = reset_value;
@@ -136,7 +144,7 @@ void EXM_InitWind(void)
 
 void EXM_StopWind(void)
 {
-    wind->mode = 0;
+    wind->mode = EXM_WIND_OFF;
     wind->shake_rad = 0.0f;
 }
 
@@ -165,7 +173,7 @@ void EXM_SetDirectionalWind(Vector4 *direction)
     } else {
         state = wind;
     }
-    state->mode = 1;
+    state->mode = EXM_WIND_DIRECTIONAL;
 }
 
 void EXM_SetPointWind(Vector4 *point)
@@ -178,7 +186,7 @@ void EXM_SetPointWind(Vector4 *point)
     } else {
         state = wind;
     }
-    state->mode = 2;
+    state->mode = EXM_WIND_POINT;
 }
 
 void EXM_SetWindStruct(EXM_WindState *state)
@@ -201,7 +209,7 @@ void EXM_StepShakeWind(void)
             wind->shake_rad += SHAKE_ANGLE_MAX;
         }
     }
-    waverad += 0.5f;
+    waverad += EXM_WAVE_RAD_STEP;
     if (waverad > SHAKE_ANGLE_MAX) {
         waverad -= SHAKE_ANGLE_MAX;
     } else if (waverad < 0.0f) {

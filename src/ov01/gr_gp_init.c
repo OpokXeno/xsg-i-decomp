@@ -160,7 +160,6 @@ extern GrRenderState sRender;
 int fb[4] = {0x70, 0xe0, 0x150, 0xfffff};
 
 /* EE scratchpad RAM base. */
-#define SCRATCHPAD_BASE ((void *)0x70000000)
 /* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */
 #define VIF_CODE_FLUSH 0x11000000
 
@@ -263,7 +262,7 @@ extern void grRotMatrix(Matrix *destination, Matrix *source,
 void grGpInit(GrPacket *packet)
 {
     packet->count = 0;
-    packet->data = SCRATCHPAD_BASE;
+    packet->data = (void *)SCRATCHPAD_BASE;
 }
 
 int grFBAdrGet(int index)

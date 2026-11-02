@@ -6,6 +6,7 @@
 
 /* The pool contains 96 records of 0x420 bytes each. */
 #define MEFOBJ_COUNT 0x60
+#define MEFOBJ_SIZE 0x420
 
 #define MEFOBJ_ACTIVE 1
 #define MEFOBJ_SYS_READY 1
@@ -31,7 +32,7 @@ static MEfObj mefObjBuff[MEFOBJ_COUNT];
 
 void MEfObjInit(void)
 {
-    memset(mefObjBuff, 0, 0x18c00);
+    memset(mefObjBuff, 0, MEFOBJ_COUNT * MEFOBJ_SIZE);
     mefObjSysFlags = 1;
 }
 

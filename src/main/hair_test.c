@@ -9,6 +9,7 @@
 #include "main/face_point.h"
 #include "main/matrix_print.h"
 #include "main/pp_init.h"
+#include "main/res_get_path.h"
 #include "main/xgl_2.h"
 #include "main/xgl_font.h"
 #include "main/xgl_render.h"
@@ -16,10 +17,6 @@
 #include "main/xgl_thread.h"
 #include "quadword.h"
 
-/* "FPK" in the low three bytes of FpkFcvHeader.magic (little-endian). */
-#define FPK_MAGIC 0x4B5046
-
-#define FPK_MAGIC_MASK 0xFFFFFF
 #define HAIR_RESOURCE(i) (list[(i)].resourceId)
 #define HAIR_TEST_PAD_SCALE (9.9999997473787516e-05f)
 
@@ -185,7 +182,7 @@ static void InitTest(void)
     StudioCamera *camera;
     float zero = 0.0f;
 
-    GameResourceInit(0x07000000, 0x06000000);
+    GameResourceInit(GAME_RESOURCE_BASE_ADDRESS, GAME_RESOURCE_BUFFER_SIZE);
     cry_004DC654 = zero;
     lookY = 1.0f;
     crx_004DC650 = zero;
@@ -261,22 +258,22 @@ void HairTest(void)
     xglRenderClearFrame();
     xglSleep();
     InitTest();
-    if ((PadData[0].held & 0x100) == 0x100 &&
-        (PadData[0].pressed & 0x800) == 0x800) {
+    if ((PadData[0].held & PAD_SELECT) == PAD_SELECT &&
+        (PadData[0].pressed & PAD_START) == PAD_START) {
         return;
     }
     do {
         ppNextStart(&cpos_00585200);
-        if (PadData[0].held & 8) {
+        if (PadData[0].held & PAD_R1) {
         cpos_00585200.position.y += 0.01f;
         }
-        if (PadData[0].held & 2) {
+        if (PadData[0].held & PAD_R2) {
         cpos_00585200.position.y -= 0.01f;
         }
-        if (PadData[0].held & 1) {
+        if (PadData[0].held & PAD_L2) {
             lookY -= 0.02f;
         }
-        if (PadData[0].held & 4) {
+        if (PadData[0].held & PAD_L1) {
             lookY += 0.02f;
         }
         moveX = PadData[0].rightX * HAIR_TEST_PAD_SCALE;
@@ -307,37 +304,37 @@ void HairTest(void)
          * short, a re-test of pause after the toggle 16 bytes long, and a
          * conditional-expression test 36 bytes long. */
         if (pause != 0) {
-            if (PadData[0].pressed & 0x800) {
+            if (PadData[0].pressed & PAD_START) {
                 pause = 0;
                 goto unpaused;
             }
-        } else if (PadData[0].pressed & 0x800) {
+        } else if (PadData[0].pressed & PAD_START) {
             pause = 1;
         } else {
 unpaused:
-            if (PadData[0].repeat & 0x4000) {
+            if (PadData[0].repeat & PAD_DOWN) {
                 listpos++;
                 if (list[listpos].resourceId == 0) {
                     listpos = 0;
                 }
-            } else if (PadData[0].repeat & 0x1000) {
+            } else if (PadData[0].repeat & PAD_UP) {
                 listpos--;
                 if (listpos < 0) {
                     listpos = listnum - 1;
                 }
             }
-            if (!(PadData[0].held & 0x80) && listnow != listpos) {
-                GameResourceInit(0x07000000, 0x06000000);
+            if (!(PadData[0].held & PAD_SQUARE) && listnow != listpos) {
+                GameResourceInit(GAME_RESOURCE_BASE_ADDRESS, GAME_RESOURCE_BUFFER_SIZE);
                 ACT_init();
                 pAct_004DC638 = ACT_create(0, list[listpos].resourceId);
                 ACT_loadResource(pAct_004DC638, list[listpos].resourceId);
                 ACT_loadMotion(pAct_004DC638, list[listpos].resourceId, 1);
                 listnow = listpos;
             }
-            if (PadData[0].repeat & 0x2000) {
+            if (PadData[0].repeat & PAD_RIGHT) {
                 mot++;
             }
-            if (PadData[0].repeat & 0x8000) {
+            if (PadData[0].repeat & PAD_LEFT) {
                 mot--;
             }
             motionCount = getNumFCV(pAct_004DC638->animation.fcvHeader);
@@ -354,8 +351,8 @@ unpaused:
         ACT_modelDraw(pAct_004DC638);
         PrintDisp();
         xglSleep();
-    } while ((PadData[0].held & 0x100) != 0x100 ||
-             (PadData[0].pressed & 0x800) != 0x800);
+    } while ((PadData[0].held & PAD_SELECT) != PAD_SELECT ||
+             (PadData[0].pressed & PAD_START) != PAD_START);
 }
 
 static u16 JNT_hairID(ExMotionJointWork *joint)

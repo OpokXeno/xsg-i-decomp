@@ -3,12 +3,27 @@
 #include "ssd_init.h"
 #include "main/ssd_init.h"
 
+/* Commands the IOP sends to RssdSifRpcServer (the SPU read and next-wave ones echo the client command id). */
 enum {
-    RSSD_CMD_QUIT    = 0x02,
-    RSSD_CMD_RESUME  = 0x05,
-    RSSD_CMD_SUSPEND = 0x06,
-    RSSD_FLAG_BUSY   = 0x02
+    RSSD_SERVER_STREAM_END     = 10,
+    RSSD_SERVER_SPU_READ       = 27,
+    RSSD_SERVER_NEXT_WAVE      = 37,
+    RSSD_SERVER_SAMPLE_DMA     = 218,
+    RSSD_SERVER_SAMPLE_KEYOFF  = 219,
+    RSSD_SERVER_BUSY           = 4096
 };
+
+/* SIF RPC ids of the IOP sound driver's client and server. */
+#define RSSD_RPC_CLIENT_ID 2304
+#define RSSD_RPC_SERVER_ID 2305
+/* Buffers are aligned to 64 bytes inside their storage. */
+#define RSSD_BUFFER_ALIGN 64
+#define RSSD_CLIENT_STORAGE_BYTES 65600
+#define RSSD_SERVER_STORAGE_BYTES 65568
+#define RSSD_THREAD_STACK_BYTES 16384
+#define RSSD_THREAD_PRIORITY 6
+/* Sound stream channels reported by the stream-end callback bitmask. */
+#define RSSD_STREAM_CHANNELS 4
 
 extern const char rssdBindErrorFormat[];
 extern const char rssdSifTransferSizeOverMessage[];
@@ -72,13 +87,13 @@ const char rssdBindErrorFormat[32] = "Rssd(%04x) bind error !\n";
 
 const char rssdGetResultErrorMessage[32] = "Rssd get result error !\n";
 
-static unsigned char MYclientPtr[65600];
+static unsigned char MYclientPtr[RSSD_CLIENT_STORAGE_BYTES];
 
-static unsigned char MYserverPtr[65568];
+static unsigned char MYserverPtr[RSSD_SERVER_STORAGE_BYTES];
 
-static unsigned char MYthreadStack[16384];
+static unsigned char MYthreadStack[RSSD_THREAD_STACK_BYTES];
 
-static unsigned char MYwaveTransThStack[16384];
+static unsigned char MYwaveTransThStack[RSSD_THREAD_STACK_BYTES];
 
 void SsdInit(int init_size)
 {
@@ -86,18 +101,18 @@ void SsdInit(int init_size)
     SsdThreadCreateInfo thread;
     void *gp_value;
 
-    if (RssdWork.flags & 1)
+    if (RssdWork.flags & RSSD_FLAG_READY)
         return;
 
-    RssdWork.rpc_buffer_size = 0x10000;
+    RssdWork.rpc_buffer_size = RSSD_TRANSFER_MAX;
     sema.init_count = 1;
     sema.max_count = 1;
     RssdWork.client_buffer_base = MYclientPtr;
     RssdWork.server_buffer_base = MYserverPtr;
     RssdWork.init_parameter = init_size;
     sema.option = 0;
-    RssdWork.response_source = (RssdRpcResponse *)(((unsigned int)MYclientPtr + 63) & -64);
-    RssdWork.server_buffer = (void *)(((unsigned int)MYserverPtr + 63) & -64);
+    RssdWork.response_source = (RssdRpcResponse *)(((unsigned int)MYclientPtr + RSSD_BUFFER_ALIGN - 1) & -RSSD_BUFFER_ALIGN);
+    RssdWork.server_buffer = (void *)(((unsigned int)MYserverPtr + RSSD_BUFFER_ALIGN - 1) & -RSSD_BUFFER_ALIGN);
     RssdWork.flags = 0;
     RssdWork.request_parameter = 0;
     RssdWork.sample_rate = 0;
@@ -120,8 +135,8 @@ void SsdInit(int init_size)
     RssdWork.rpc_thread_stack = MYthreadStack;
     thread.func = RSsdSifRpcThread;
     thread.stack = RssdWork.rpc_thread_stack;
-    thread.stack_size = 16384;
-    thread.initial_priority = 6;
+    thread.stack_size = RSSD_THREAD_STACK_BYTES;
+    thread.initial_priority = RSSD_THREAD_PRIORITY;
     gp_value = &_gp;
     thread.gp_reg = gp_value;
     thread.option = 0;
@@ -131,8 +146,8 @@ void SsdInit(int init_size)
     RssdWork.next_wave_thread_stack = MYwaveTransThStack;
     thread.func = RssdBackNextWaveThread;
     thread.stack = RssdWork.next_wave_thread_stack;
-    thread.stack_size = 16384;
-    thread.initial_priority = 6;
+    thread.stack_size = RSSD_THREAD_STACK_BYTES;
+    thread.initial_priority = RSSD_THREAD_PRIORITY;
     thread.gp_reg = gp_value;
     thread.option = 0;
     RssdWork.next_wave_thread_id = CreateThread(&thread);
@@ -168,20 +183,20 @@ void RssdInitIop(void)
 {
     RssdRequest request;
 
-    if (sceSifBindRpc(RssdWork.rpc_client, 2304, 1) < 0)
+    if (sceSifBindRpc(RssdWork.rpc_client, RSSD_RPC_CLIENT_ID, 1) < 0)
         return;
     while (sceSifCheckStatRpc(RssdWork.rpc_client) != 0)
         ;
     if (RssdWork.rpc_client_serve == 0) {
-        printf(rssdBindErrorFormat, 2304);
+        printf(rssdBindErrorFormat, RSSD_RPC_CLIENT_ID);
         return;
     }
-    RssdWork.flags = 1;
+    RssdWork.flags = RSSD_FLAG_READY;
     sceSifSetRpcQueue(RssdWork.rpc_queue, GetThreadId());
-    sceSifRegisterRpc(RssdWork.rpc_server, 2305, RssdSifRpcServer,
+    sceSifRegisterRpc(RssdWork.rpc_server, RSSD_RPC_SERVER_ID, RssdSifRpcServer,
                       RssdWork.server_buffer, 0, 0, RssdWork.rpc_queue);
     request.arg[0].value = RssdWork.init_parameter;
-    RssdCallFunc(1, &request, 0, 0);
+    RssdCallFunc(RSSD_CMD_INIT, &request, 0, 0);
 }
 
 void *RssdSifRpcServer(unsigned int command, void *data, int size)
@@ -195,26 +210,26 @@ void *RssdSifRpcServer(unsigned int command, void *data, int size)
     RssdWork.server_packet.result = 0;
     RssdWork.server_call_count++;
     switch (command) {
-    case 4096:
+    case RSSD_SERVER_BUSY:
         RssdBusy(data);
         break;
-    case 27:
+    case RSSD_SERVER_SPU_READ:
         RssdSpuRead(data);
         break;
-    case 37:
+    case RSSD_SERVER_NEXT_WAVE:
         RssdBackgroundNextWave(data);
         break;
-    case 218:
+    case RSSD_SERVER_SAMPLE_DMA:
         if (RssdWork.sample_dma_callback != 0)
             RssdWork.sample_dma_callback(RssdWork.sample_dma_callback_arg);
         break;
-    case 219:
+    case RSSD_SERVER_SAMPLE_KEYOFF:
         if (RssdWork.sample_keyoff_callback != 0)
             RssdWork.sample_keyoff_callback(0, RssdWork.sample_keyoff_callback_arg);
         break;
-    case 10:
+    case RSSD_SERVER_STREAM_END:
         if (RssdWork.stream_end_callback != 0) {
-            for (channel = 0; channel < 4; channel++) {
+            for (channel = 0; channel < RSSD_STREAM_CHANNELS; channel++) {
                 if ((request->arg[0].value >> channel) & 1)
                     RssdWork.stream_end_callback(channel, RssdWork.stream_end_callback_arg);
             }
@@ -253,12 +268,12 @@ void RssdSpuRead(RssdRequest *request)
     SsdCopyMemory(RssdWork.spu_write_ptr, request + 1, size);
     RssdWork.spu_write_ptr += size;
     if (more_data == 0)
-        RssdWork.flags &= ~4;
+        RssdWork.flags &= ~RSSD_FLAG_SPU_DMA;
 }
 
 void RssdBackgroundNextWave(const int *request)
 {
-    RssdWork.flags &= ~4;
+    RssdWork.flags &= ~RSSD_FLAG_SPU_DMA;
     if (request[4] >= 0)
         WakeupThread(RssdWork.next_wave_thread_id);
 }
@@ -274,7 +289,7 @@ void RssdBackNextWaveThread(void)
     int transfer_size;
 
     work = &RssdWork;
-    maximum_transfer_size = 0x10000;
+    maximum_transfer_size = RSSD_TRANSFER_MAX;
     for (;;) {
         SleepThread();
         remaining_size = work->spu_bytes_remaining;
@@ -286,11 +301,11 @@ void RssdBackNextWaveThread(void)
         remaining_after_transfer = remaining_size - transfer_size;
         work->spu_write_ptr = write_ptr + transfer_size;
         request.arg[2].value = remaining_after_transfer == 0;
-        work->flags |= 0x24;
+        work->flags |= RSSD_FLAG_SUCCESS | RSSD_FLAG_SPU_DMA;
         work->spu_bytes_remaining = remaining_after_transfer;
         request.arg[0].pointer = write_ptr;
         request.arg[1].value = transfer_size;
-        RssdCallFunc(33, &request, write_ptr, transfer_size);
+        RssdCallFunc(RSSD_CMD_NEXT_WAVE_DATA, &request, write_ptr, transfer_size);
     }
 }
 
@@ -305,7 +320,7 @@ int RssdCallFunc(int command, RssdRequest *request, void *data, int size)
     WaitSema(RssdWork.sema_id);
     if (data == 0)
         size = 0;
-    RssdWork.flags |= 0x8;
+    RssdWork.flags |= RSSD_FLAG_CALL_PENDING;
     RssdWork.response.error_code = -1;
     packet = RssdWork.response_source;
     if (request != 0) {
@@ -316,9 +331,9 @@ int RssdCallFunc(int command, RssdRequest *request, void *data, int size)
     packet->error_code = command;
     packet->data_size = size;
     total_size = ((size + 15) & -16) + sizeof(*packet);
-    if (total_size > 0x10020) {
+    if (total_size > RSSD_PACKET_MAX) {
         printf(rssdSifTransferSizeOverMessage);
-        RssdWork.flags &= ~0x8;
+        RssdWork.flags &= ~RSSD_FLAG_CALL_PENDING;
         SignalSema(RssdWork.sema_id);
         return -1;
     }
@@ -328,7 +343,7 @@ int RssdCallFunc(int command, RssdRequest *request, void *data, int size)
     result = sceSifCallRpc(RssdWork.rpc_client, command, 1, packet, total_size,
                            packet, sizeof(*packet), RssdSifRpcCallback, &RssdWork);
     if (result < 0) {
-        RssdWork.flags &= ~0x8;
+        RssdWork.flags &= ~RSSD_FLAG_CALL_PENDING;
         SignalSema(RssdWork.sema_id);
     } else {
         RssdFuncCallCompleted(1);
@@ -340,13 +355,13 @@ void RssdSifRpcCallback(void)
 {
     int status;
 
-    RssdWork.flags &= ~0x8;
+    RssdWork.flags &= ~RSSD_FLAG_CALL_PENDING;
     RssdWork.response = *RssdWork.response_source;
 
     if (RssdWork.response.result != 0)
         status = -1;
     else
-        status = (RssdWork.flags >> 5) & 1;
+        status = (RssdWork.flags >> RSSD_FLAG_SUCCESS_SHIFT) & 1;
 
     if (RssdWork.complete_callback != 0)
         RssdWork.complete_callback(status, &RssdWork.response, RssdWork.callback_arg);
@@ -375,14 +390,14 @@ int RssdFuncCallCompleted(int status)
 
 int RssdGetCallCompletedCode(void)
 {
-    return (RssdWork.flags >> 3) & 1;
+    return (RssdWork.flags >> RSSD_FLAG_CALL_PENDING_SHIFT) & 1;
 }
 
 int SsdGetResultValue(int *value)
 {
     int result;
 
-    if (RssdWork.flags & 0x8) {
+    if (RssdWork.flags & RSSD_FLAG_CALL_PENDING) {
         result = (RssdWork.flags & RSSD_FLAG_SUCCESS) ? -1 : -2;
     } else if (RssdWork.response.error_code >= 0) {
         result = (RssdWork.flags & RSSD_FLAG_SUCCESS) == 0;
@@ -401,7 +416,7 @@ int SsdGetResultParam(RssdRpcResponse *out)
     int result;
 
     flags = RssdWork.flags;
-    if (flags & 0x8) {
+    if (flags & RSSD_FLAG_CALL_PENDING) {
         result = (flags & RSSD_FLAG_SUCCESS) ? -1 : -2;
     } else if (RssdWork.response.error_code >= 0) {
         *out = RssdWork.response;

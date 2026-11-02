@@ -2,10 +2,13 @@
 #include "main/ssd_init.h"
 #include "main/nml_packet_add.h"
 
-/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
+/* File magic read as a little-endian word: "swdm" in wave bank headers, "seds" in effect data headers. */
 #define SSD_WAVE_TAG 0x6d647773
+#define SSD_EFFECT_TAG 0x73646573
+
+/* Commands without a table entry below. */
+#define RSSD_CMD_SPU_DIRECT_READ 0x1b
+#define RSSD_CMD_ADD_EFFECT_DATA 0x60
 
 /*
  * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
@@ -49,7 +52,6 @@ enum {
 
 enum {
     RSSD_CMD_SEND_FUNC_PACKET          = 0x04,
-    RSSD_CMD_NEXT_WAVE_DATA             = 0x21,
     RSSD_CMD_DISPOSE_WAVE_BANK          = 0x22,
     RSSD_CMD_CHECK_WAVE_DATA            = 0x24,
     RSSD_CMD_SET_SEGMENT_ALLOC_MODE     = 0x2c,
@@ -130,12 +132,12 @@ int SsdSpuDirectRead(unsigned char *spuPtr, int transSize, int size)
     SsdSpuDmaCompleted(1);
     RssdWork.spu_write_ptr = spuPtr;
     RssdWork.spu_bytes_remaining = size;
-    RssdWork.flags = (RssdWork.flags | 4) & ~RSSD_FLAG_SUCCESS;
+    RssdWork.flags = (RssdWork.flags | RSSD_FLAG_SPU_DMA) & ~RSSD_FLAG_SUCCESS;
     RssdWork.wave_chunk_index = 0;
     request.arg[0].value = transSize;
     request.arg[1].value = size;
-    if (RssdCallFunc(0x1b, &request, 0, 0) < 0) {
-        RssdWork.flags &= ~4;
+    if (RssdCallFunc(RSSD_CMD_SPU_DIRECT_READ, &request, 0, 0) < 0) {
+        RssdWork.flags &= ~RSSD_FLAG_SPU_DMA;
         printf("Raad spu direct read error !\n");
     }
     return printf("Ssd spu read  SpuPtr=0x%08x  TransSize=0x%0x\n", transSize, size);
@@ -167,17 +169,17 @@ int SsdAddWaveData(SsdWaveHeader *data, int size, int wave)
         size = data->size < size ? data->size : size;
     }
     id = data->id;
-    chunk = size > 0x10000 ? 0x10000 : size;
+    chunk = size > RSSD_TRANSFER_MAX ? RSSD_TRANSFER_MAX : size;
     request.arg[0] = (int)data;
     request.arg[2] = wave;
     RssdWork.spu_bytes_remaining = size - chunk;
     RssdWork.spu_write_ptr = (unsigned char *)data + chunk;
-    RssdWork.flags |= RSSD_FLAG_SUCCESS | 4;
+    RssdWork.flags |= RSSD_FLAG_SUCCESS | RSSD_FLAG_SPU_DMA;
     RssdWork.wave_id = id;
     request.arg[1] = chunk;
     RssdWork.wave_chunk_index = 0;
     if (RssdCallFunc(RSSD_CMD_ADD_WAVE_DATA, (RssdRequest *)&request, data, chunk) < 0) {
-        RssdWork.flags &= ~4;
+        RssdWork.flags &= ~RSSD_FLAG_SPU_DMA;
         printf("Raad add wave data !\n");
         return -1;
     }
@@ -197,7 +199,7 @@ int SsdNextWaveData(void *data, int size, int wave)
     request.arg[0].pointer = data;
     request.arg[1].value = size;
     request.arg[2].value = wave;
-    RssdWork.flags |= RSSD_FLAG_SUCCESS | 4;
+    RssdWork.flags |= RSSD_FLAG_SUCCESS | RSSD_FLAG_SPU_DMA;
     RssdCallFunc(RSSD_CMD_NEXT_WAVE_DATA, &request, data, size);
     return 0;
 }
@@ -244,7 +246,7 @@ int SsdCheckWaveData(int wave)
 
 int SsdSpuDmaCompleted(int wait)
 {
-    int busy = (RssdWork.flags >> 2) & 1;
+    int busy = (RssdWork.flags >> RSSD_FLAG_SPU_DMA_SHIFT) & 1;
 
     if (wait) {
         while (busy) {
@@ -253,7 +255,7 @@ int SsdSpuDmaCompleted(int wait)
             while ((request = sceSifGetNextRequest(RssdWork.rpc_queue)) != 0) {
                 sceSifExecRequest(request);
             }
-            busy = (RssdWork.flags >> 2) & 1;
+            busy = (RssdWork.flags >> RSSD_FLAG_SPU_DMA_SHIFT) & 1;
         }
     }
     return busy;
@@ -274,7 +276,7 @@ int SsdAddEffectData(RssdEffectData *effectData, int unused)
     RssdRequest request;
     int size;
 
-    if (effectData->tag != 0x73646573) {
+    if (effectData->tag != SSD_EFFECT_TAG) {
         printf("Rssd effect data error !\n", unused, effectData);
         return -1;
     }
@@ -282,7 +284,7 @@ int SsdAddEffectData(RssdEffectData *effectData, int unused)
     size = effectData->size;
     request.arg[0].pointer = effectData;
     RssdWork.flags |= RSSD_FLAG_SUCCESS;
-    RssdCallFunc(0x60, &request, effectData, size);
+    RssdCallFunc(RSSD_CMD_ADD_EFFECT_DATA, &request, effectData, size);
     return RssdWork.response.value;
 }
 

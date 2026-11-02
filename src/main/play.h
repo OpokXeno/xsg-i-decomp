@@ -11,9 +11,6 @@
 #include "main/fcv2.h"
 #include "main/game_init_camera.h"
 
-#define PLAY_FLAG_ENABLED 0x01
-#define PLAY_FLAG_MANUAL_TIME 0x02
-#define PLAY_FLAG_LOOP 0x04
 #define PLAY_SOURCE_FORMAT_MAC 0x004D4143
 #define PLAY_PAD_FAST 0x0100
 #define PLAY_PAD_SHOW_FRAME 0x0200

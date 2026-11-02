@@ -1,10 +1,45 @@
 #include "common.h"
+#include "shared.h"
 #include "xgl_pad.h"
 #include "main/xgl_pad.h"
 
+/* Controller setup state machine (XglPadRecord.setup_state); a pad that is
+ * disconnected restarts at PAD_SETUP_PROBE. */
+#define PAD_SETUP_PROBE 0
+#define PAD_SETUP_QUERY_ACTUATORS_MODE 0x40
+#define PAD_SETUP_SET_MAIN_MODE 0x41
+#define PAD_SETUP_WAIT_MAIN_MODE 0x42
+#define PAD_SETUP_ACTUATOR_ALIGN 0x70
+#define PAD_SETUP_WAIT_ALIGN 0x71
+#define PAD_SETUP_PRESSURE_INFO 0x80
+#define PAD_SETUP_PRESSURE_ENTER 0x81
+#define PAD_SETUP_WAIT_PRESSURE 0x82
+#define PAD_SETUP_READY 0xff
+
+/* scePadGetState results and the scePadInfoMode terminal ids. */
+#define PAD_STATE_STABLE 6
+#define PAD_STATE_FINDCTP1 2
+#define PAD_STATE_EXECCMD 5
+#define PAD_TERM_ID_DIGITAL 4
+#define PAD_TERM_ID_DUALSHOCK 7
+
+/* High nibble of packet[1]: the controller type. */
+#define PAD_TYPE_MASK 0xf0
+#define PAD_TYPE_MOUSE 0x10
+#define PAD_TYPE_NEGCON 0x20
+#define PAD_TYPE_DIGITAL 0x40
+#define PAD_TYPE_ANALOG_JOYSTICK 0x50
+#define PAD_TYPE_DUALSHOCK 0x70
+#define PAD_PACKET_ID_PRESSURE 0x79
+
+#define PAD_PORT_COUNT 2
+#define PAD_DMA_BUFFER_SIZE 0x100
+#define PAD_ANALOG_CENTER 128
+#define PAD_FULL_PRESSURE 255
+
 static unsigned char act_align_0[6] = { 0, 1, 255, 255, 255, 255 };
 
-static unsigned char PadDmaBuffer[0x200];
+static unsigned char PadDmaBuffer[2 * PAD_DMA_BUFFER_SIZE];
 
 void xglPadInitial(void) {
     unsigned int byte_index;
@@ -17,7 +52,7 @@ void xglPadInitial(void) {
 
     scePadInit(0);
     scePadPortOpen(0, 0, PadDmaBuffer);
-    scePadPortOpen(1, 0, &PadDmaBuffer[0x100]);
+    scePadPortOpen(1, 0, &PadDmaBuffer[PAD_DMA_BUFFER_SIZE]);
 
     first_record_bytes = (unsigned char *)&PadData[0];
     second_record_bytes = (unsigned char *)&PadData[1];
@@ -87,7 +122,7 @@ void xglPadRead(void)
     signed char vertical;
     signed char horizontal;
 
-    for (port = 0; port < 2; ++port) {
+    for (port = 0; port < PAD_PORT_COUNT; ++port) {
         XglPadRecord *pad;
         int buttons;
         int directions;
@@ -102,75 +137,75 @@ void xglPadRead(void)
         buttons = 0;
         pad->connection_state = scePadGetState(port, 0);
         if (!pad->connection_state)
-            pad->setup_state = 0;
+            pad->setup_state = PAD_SETUP_PROBE;
         switch (pad->setup_state) {
-        case 0: {
+        case PAD_SETUP_PROBE: {
             int mode;
 
             pad->mode = 0;
             pad->actuator_count = 0;
-            if (pad->connection_state == 6 || pad->connection_state == 2) {
+            if (pad->connection_state == PAD_STATE_STABLE || pad->connection_state == PAD_STATE_FINDCTP1) {
                 mode = scePadInfoMode(port, 0, 1, 0);
                 if (mode) {
                     pad->mode_id = scePadInfoMode(port, 0, 2, 0);
-                    if (mode == 4)
-                        pad->setup_state = 0x40;
-                    else if (mode == 7)
-                        pad->setup_state = 0x70;
+                    if (mode == PAD_TERM_ID_DIGITAL)
+                        pad->setup_state = PAD_SETUP_QUERY_ACTUATORS_MODE;
+                    else if (mode == PAD_TERM_ID_DUALSHOCK)
+                        pad->setup_state = PAD_SETUP_ACTUATOR_ALIGN;
                     else
-                        pad->setup_state = 0xff;
+                        pad->setup_state = PAD_SETUP_READY;
                 }
             }
             break;
         }
-        case 0x40:
-            if (scePadInfoMode(port, 0, 4, -1))
-                pad->setup_state = 0x41;
+        case PAD_SETUP_QUERY_ACTUATORS_MODE:
+            if (scePadInfoMode(port, 0, PAD_TERM_ID_DIGITAL, -1))
+                pad->setup_state = PAD_SETUP_SET_MAIN_MODE;
             else
-                pad->setup_state = 0xff;
+                pad->setup_state = PAD_SETUP_READY;
             break;
-        case 0x41:
+        case PAD_SETUP_SET_MAIN_MODE:
             if (scePadSetMainMode(port, 0, 1, 3) == 1)
-                pad->setup_state = 0x42;
+                pad->setup_state = PAD_SETUP_WAIT_MAIN_MODE;
             break;
-        case 0x42:
+        case PAD_SETUP_WAIT_MAIN_MODE:
             result = scePadGetReqState(port, 0);
             switch (result) {
-            case 0: pad->setup_state = 0; break;
-            case 1: pad->setup_state = 0x41; break;
+            case 0: pad->setup_state = PAD_SETUP_PROBE; break;
+            case 1: pad->setup_state = PAD_SETUP_SET_MAIN_MODE; break;
             }
             break;
-        case 0x70:
+        case PAD_SETUP_ACTUATOR_ALIGN:
             pad->actuator_count = scePadInfoAct(port, 0, -1, 0);
             if (pad->actuator_count) {
                 if (scePadSetActAlign(port, 0, act_align_0))
-                    pad->setup_state = 0x71;
+                    pad->setup_state = PAD_SETUP_WAIT_ALIGN;
             } else {
-                pad->setup_state = 0xff;
+                pad->setup_state = PAD_SETUP_READY;
             }
             break;
-        case 0x71:
-            if (pad->connection_state != 5)
-                pad->setup_state = 0x80;
+        case PAD_SETUP_WAIT_ALIGN:
+            if (pad->connection_state != PAD_STATE_EXECCMD)
+                pad->setup_state = PAD_SETUP_PRESSURE_INFO;
             break;
-        case 0x80:
+        case PAD_SETUP_PRESSURE_INFO:
             if (scePadInfoPressMode(port, 0) != 1)
-                pad->setup_state = 0xff;
+                pad->setup_state = PAD_SETUP_READY;
             else
-                pad->setup_state = 0x81;
+                pad->setup_state = PAD_SETUP_PRESSURE_ENTER;
             break;
-        case 0x81:
+        case PAD_SETUP_PRESSURE_ENTER:
             if (scePadEnterPressMode(port, 0) == 1)
-                pad->setup_state = 0x82;
+                pad->setup_state = PAD_SETUP_WAIT_PRESSURE;
             break;
-        case 0x82:
+        case PAD_SETUP_WAIT_PRESSURE:
             result = scePadGetReqState(port, 0);
             switch (result) {
-            case 0: pad->setup_state = 0xff; break;
-            case 1: pad->setup_state = 0x81; break;
+            case 0: pad->setup_state = PAD_SETUP_READY; break;
+            case 1: pad->setup_state = PAD_SETUP_PRESSURE_ENTER; break;
             }
             break;
-        case 0xff: {
+        case PAD_SETUP_READY: {
             scePadRead(port, 0, pad->packet);
             pad->mode = pad->packet[1];
             if (pad->actuator_count) {
@@ -191,8 +226,8 @@ void xglPadRead(void)
                 pad->actuator[5] = 0;
             }
             if (pad->packet[0] == 0) {
-            switch (pad->packet[1] & 0xf0) {
-            case 0x10: {
+            switch (pad->packet[1] & PAD_TYPE_MASK) {
+            case PAD_TYPE_MOUSE: {
                 int stick_x;
                 int stick_y;
 
@@ -205,7 +240,7 @@ void xglPadRead(void)
                 buttons = (pad->packet[3] << 3) ^ 0xfff8;
                 break;
             }
-            case 0x20: {
+            case PAD_TYPE_NEGCON: {
                 int stick_x;
                 int stick_y;
                 int right_x;
@@ -239,11 +274,11 @@ void xglPadRead(void)
                 buttons = ~(pad->packet[3] + (pad->packet[2] << 8)) & 0xffff;
                 break;
             case 0x30:
-            case 0x40:
+            case PAD_TYPE_DIGITAL:
                 buttons = ~(pad->packet[3] + (pad->packet[2] << 8)) & 0xffff;
                 break;
-            case 0x50:
-            case 0x70: {
+            case PAD_TYPE_ANALOG_JOYSTICK:
+            case PAD_TYPE_DUALSHOCK: {
                 unsigned char first_vertical_position;
                 unsigned char second_axis_threshold;
                 unsigned char third_axis_threshold;
@@ -251,10 +286,10 @@ void xglPadRead(void)
                 int axis;
 
                 shared_value = pad->axis_dead_zone[0];
-                axis = pad->packet[4] + 128;
-                pad->position[1] = pad->packet[5] + 128;
-                pad->position[2] = pad->packet[6] + 128;
-                pad->position[3] = pad->packet[7] + 128;
+                axis = pad->packet[4] + PAD_ANALOG_CENTER;
+                pad->position[1] = pad->packet[5] + PAD_ANALOG_CENTER;
+                pad->position[2] = pad->packet[6] + PAD_ANALOG_CENTER;
+                pad->position[3] = pad->packet[7] + PAD_ANALOG_CENTER;
                 pad->horizontal_pressure = pad->packet[8] - pad->packet[9];
                 pad->vertical_pressure = pad->packet[11] - pad->packet[10];
                 pad->pressure[0] = pad->packet[12];
@@ -296,7 +331,7 @@ void xglPadRead(void)
             break;
         }
         }
-        if (pad->packet[1] != 0x79) {
+        if (pad->packet[1] != PAD_PACKET_ID_PRESSURE) {
             int maximum_pressure;
             int digital_horizontal;
             int digital_vertical;
@@ -315,7 +350,7 @@ void xglPadRead(void)
             int left;
             int second_buttons;
 
-            maximum_pressure = 255;
+            maximum_pressure = PAD_FULL_PRESSURE;
             first_buttons = pad->packet[2];
             second_buttons = pad->packet[3];
             right = first_buttons & 0x20;
@@ -357,14 +392,14 @@ void xglPadRead(void)
         directions = buttons;
         horizontal = pad->position[2];
         if (horizontal < -pad->horizontal_dead_zone)
-            directions = (buttons | 0x8000) & 0xffff;
+            directions = (buttons | PAD_LEFT) & 0xffff;
         if (horizontal > pad->horizontal_dead_zone)
-            directions = (directions | 0x2000) & 0xffff;
+            directions = (directions | PAD_RIGHT) & 0xffff;
         vertical = pad->position[3];
         if (vertical < -pad->vertical_dead_zone)
-            directions = (directions | 0x1000) & 0xffff;
+            directions = (directions | PAD_UP) & 0xffff;
         if (vertical > pad->vertical_dead_zone)
-            directions = (directions | 0x4000) & 0xffff;
+            directions = (directions | PAD_DOWN) & 0xffff;
         button_bits = buttons & 0xff;
         buttons &= 0xff00;
         direction_bits = directions & 0xff;

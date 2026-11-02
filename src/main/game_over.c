@@ -16,16 +16,43 @@
 
 #define IMAGE_FRAME_BUFFER 0x01000000
 
-/* PadData.half_2a press bits used by the ending prompts: 0x20 accepts
- * both questions, 0x40 declines the save question. */
-#define PAD_DECIDE 0x20
-
-#define PAD_CANCEL 0x40
+/* PadData.half_2a press bits used by the ending prompts: PAD_CIRCLE accepts
+ * both questions ("O Button: Yes"), PAD_CROSS declines the save question
+ * ("X Button: No"). */
 
 /* GameEnd's prompt outcome. */
 #define END_CHOICE_SAVE 1
 
 #define END_CHOICE_QUIT 2
+
+/* Fade timing. The ALPHA_1 FIX coefficient runs 128 (full cover, GS 1.0)
+ * down to 0 on the way in and 4..255 on the way out. */
+#define GAME_OVER_FADE_COVER 128
+#define GAME_OVER_FADE_IN_STEP 2
+#define GAME_OVER_FADE_OUT_START 4
+#define GAME_OVER_FADE_OUT_STEP 4
+#define GAME_OVER_FADE_OUT_MAX 255
+#define GAME_END_HOLD_FRAMES 121
+#define INTERMISSION_HOLD_FRAMES 6
+
+/* xglSoundEffectNormalDirect ids. */
+#define GAME_OVER_SE_DECIDE 1
+#define GAME_OVER_SE_BUZZER 5
+
+/* The game-over stream plays at a lowered pitch and full volume. */
+#define GAME_OVER_STREAM_PITCH 3763
+#define GAME_OVER_STREAM_VOLUME 127
+
+/* Screen height in lines (copyframe's source rectangle). */
+#define GAME_OVER_SCREEN_HEIGHT 448
+
+/* Intermission image file name "im00.jpg": offsets of the chapter digits. */
+#define INTERMISSION_NAME_TENS 14
+#define INTERMISSION_NAME_ONES 15
+
+/* xglFontPrint position of the prompt text. */
+#define PROMPT_TEXT_X 32
+#define PROMPT_TEXT_Y 32
 
 /* GS ALPHA_1 register: blend = ((A - B) * C >> 7) + D with the FIX
  * coefficient in bits 32..39 (SCE_GS_SET_ALPHA layout). */
@@ -181,7 +208,7 @@ static int copyframe(void)
     u64 *scratch;
 
     packet = xglPacketGetCurrent();
-    scratch = (u64 *)0x70000000;
+    scratch = (u64 *)SCRATCHPAD_BASE;
     scratch[0] = 0;
     scratch[1] = 0x51000009;
     scratch[2] = ((u64)0x10000000 << 32) | 0x8008;
@@ -191,7 +218,7 @@ static int copyframe(void)
     scratch[5] = 80;
     scratch[6] = 0;
     scratch[7] = 81;
-    scratch[8] = ((u64)448 << 32) | 0x200;
+    scratch[8] = ((u64)GAME_OVER_SCREEN_HEIGHT << 32) | 0x200;
     scratch[9] = 82;
     scratch[10] = 2;
     scratch[11] = 83;
@@ -249,14 +276,14 @@ static void GameEnd(void)
     xglSleep();
 
     /* Fade the image in, then hold it for 121 more frames. */
-    alpha = 128;
+    alpha = GAME_OVER_FADE_COVER;
     count = 0;
     for (;;) {
         if (alpha > 0) {
-            alpha -= 2;
+            alpha -= GAME_OVER_FADE_IN_STEP;
         } else {
             count += 1;
-            if (count >= 121) {
+            if (count >= GAME_END_HOLD_FRAMES) {
                 break;
             }
         }
@@ -267,29 +294,29 @@ static void GameEnd(void)
 
     for (;;) {
         DrawImage((void *)framebuffer);
-        xglFontPrint(32, 32, -1, GameEndSaveQuestion);
+        xglFontPrint(PROMPT_TEXT_X, PROMPT_TEXT_Y, -1, GameEndSaveQuestion);
         buttons = PadData.half_2a;
-        if (buttons & PAD_DECIDE) {
+        if (buttons & PAD_CIRCLE) {
             redraw_frame((void *)framebuffer);
             xglStudioMainCameraInit();
             MenuFileMain(0);
             count = END_CHOICE_SAVE;
             break;
         }
-        if (buttons & PAD_CANCEL) {
-            xglSoundEffectNormalDirect(5);
+        if (buttons & PAD_CROSS) {
+            xglSoundEffectNormalDirect(GAME_OVER_SE_BUZZER);
             do {
                 xglSleep();
                 DrawImage((void *)framebuffer);
-                xglFontPrint(32, 32, -1, GameEndQuestion);
-            } while (!(PadData.half_2a & (PAD_DECIDE | PAD_CANCEL)));
-            if (PadData.half_2a & PAD_DECIDE) {
-                xglSoundEffectNormalDirect(1);
+                xglFontPrint(PROMPT_TEXT_X, PROMPT_TEXT_Y, -1, GameEndQuestion);
+            } while (!(PadData.half_2a & (PAD_CIRCLE | PAD_CROSS)));
+            if (PadData.half_2a & PAD_CIRCLE) {
+                xglSoundEffectNormalDirect(GAME_OVER_SE_DECIDE);
                 redraw_frame((void *)framebuffer);
                 count = END_CHOICE_QUIT;
                 break;
             }
-            xglSoundEffectNormalDirect(5);
+            xglSoundEffectNormalDirect(GAME_OVER_SE_BUZZER);
         }
         xglSleep();
     }
@@ -297,16 +324,16 @@ static void GameEnd(void)
     if (count == END_CHOICE_QUIT) {
         /* Fade to black through the TestEnv.4 ALPHA_1 packet.  The original
          * re-checks the outcome every frame (bne s0,s3 after xglSleep). */
-        alpha = 4;
+        alpha = GAME_OVER_FADE_OUT_START;
         for (;;) {
             DRAW_FADE_FRAME(TestEnv4.words, alpha);
             if (count != END_CHOICE_QUIT) {
                 break;
             }
-            if (alpha < 255) {
-                alpha += 4;
-                if (alpha > 255) {
-                    alpha = 255;
+            if (alpha < GAME_OVER_FADE_OUT_MAX) {
+                alpha += GAME_OVER_FADE_OUT_STEP;
+                if (alpha > GAME_OVER_FADE_OUT_MAX) {
+                    alpha = GAME_OVER_FADE_OUT_MAX;
                 }
             } else {
                 break;
@@ -340,22 +367,24 @@ void GameOver(void)
     xglJpegDecode(&jpeg);
 
     if (GameLoopState.scene_id != GAME_END_SCENE_ID) {
-        xglSoundStreamOpenVagStereoParam(0, GameOverStreamPath, 3763, 127);
+        xglSoundStreamOpenVagStereoParam(0, GameOverStreamPath,
+                                           GAME_OVER_STREAM_PITCH,
+                                           GAME_OVER_STREAM_VOLUME);
     }
 
-    alpha = 128;
+    alpha = GAME_OVER_FADE_COVER;
     xglRenderDrawFlipPk(xglPacketGetCurrent());
     frame_count = 0;
     xglSleep();
 
     /* Fade in, then hold the picture: a non-negative xglSoundStreamMain()
-     * status restarts the 121-frame hold, and a decide/0x800 press ends it. */
+     * status restarts the 121-frame hold, and a circle/start press ends it. */
     for (;;) {
         if (alpha > 0) {
-            alpha -= 2;
+            alpha -= GAME_OVER_FADE_IN_STEP;
         } else {
             frame_count += 1;
-            if (frame_count >= 121 || (PadData.half_2a & (PAD_DECIDE | 0x800))) {
+            if (frame_count >= GAME_END_HOLD_FRAMES || (PadData.half_2a & (PAD_CIRCLE | PAD_START))) {
                 break;
             }
         }
@@ -370,19 +399,19 @@ void GameOver(void)
 
     /* Fade the picture to black through the TestEnv.5 ALPHA_1 packet while
      * the stream volume falls with it. */
-    alpha = 4;
+    alpha = GAME_OVER_FADE_OUT_START;
     for (;;) {
         DrawImage((void *)framebuffer);
         TestEnv5.words[4] = GS_ALPHA(2, 0, 2, 1, alpha);
         FlushCache(0);
         sceVif1PkRef(xglPacketGetCurrent(), TestEnv5.words, 6, 0, 0, 0);
-        SsdSetVagStreamVolume(-1, (255 - alpha) >> 1, 0);
+        SsdSetVagStreamVolume(-1, (GAME_OVER_FADE_OUT_MAX - alpha) >> 1, 0);
         xglSoundStreamMain();
         xglSleep();
-        if (alpha < 255) {
-            alpha += 4;
-            if (alpha > 255) {
-                alpha = 255;
+        if (alpha < GAME_OVER_FADE_OUT_MAX) {
+            alpha += GAME_OVER_FADE_OUT_STEP;
+            if (alpha > GAME_OVER_FADE_OUT_MAX) {
+                alpha = GAME_OVER_FADE_OUT_MAX;
             }
         } else {
             break;
@@ -407,13 +436,13 @@ void Intermission(int chapter)
         return;
     }
     GameLoopState.frame_status = chapter + 1;
-    alpha = 128;
+    alpha = GAME_OVER_FADE_COVER;
     copyframe();
     count = 0;
     framebuffer = GameResourceGetFreeAddr();
     jpeg_source = framebuffer + INTERMISSION_LOAD_OFFSET;
-    name_6[15] = chapter % 10 + '0';
-    name_6[14] = chapter / 10 % 10 + '0';
+    name_6[INTERMISSION_NAME_ONES] = chapter % 10 + '0';
+    name_6[INTERMISSION_NAME_TENS] = chapter / 10 % 10 + '0';
     xglCdReadFile(name_6, (void *)jpeg_source, 0, 1);
     memset(&jpeg, 0, sizeof(jpeg));
     jpeg.source = jpeg_source;
@@ -424,10 +453,10 @@ void Intermission(int chapter)
 
     for (;;) {
         if (alpha > 0) {
-            alpha -= 2;
+            alpha -= GAME_OVER_FADE_IN_STEP;
         } else {
             count += 1;
-            if (count >= 6) {
+            if (count >= INTERMISSION_HOLD_FRAMES) {
                 break;
             }
         }
@@ -438,16 +467,16 @@ void Intermission(int chapter)
 
     for (;;) {
         DrawImage((void *)framebuffer);
-        xglFontPrint(32, 32, -1, gameOverSavePromptText);
+        xglFontPrint(PROMPT_TEXT_X, PROMPT_TEXT_Y, -1, gameOverSavePromptText);
         buttons = PadData.half_2a;
-        if (buttons & PAD_DECIDE) {
+        if (buttons & PAD_CIRCLE) {
             redraw_frame((void *)framebuffer);
             xglStudioMainCameraInit();
             MenuFileMain(0);
             break;
         }
-        if (buttons & PAD_CANCEL) {
-            xglSoundEffectNormalDirect(5);
+        if (buttons & PAD_CROSS) {
+            xglSoundEffectNormalDirect(GAME_OVER_SE_BUZZER);
             redraw_frame((void *)framebuffer);
             break;
         }

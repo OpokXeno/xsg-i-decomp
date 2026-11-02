@@ -6,6 +6,12 @@
 
 extern void reloadClassEntry(void *heap_boundary);
 
+/* Every block carries a 12-byte header (xheap_block), and a block's category
+ * (0 = free) selects one of 32 accounting buckets. */
+#define XHEAP_BLOCK_HEADER_SIZE 12
+#define XHEAP_CATEGORY_COUNT 32
+#define XHEAP_CATEGORY_MASK (XHEAP_CATEGORY_COUNT - 1)
+
 static xheap_block *heap_top;
 
 static int heap_size;
@@ -68,7 +74,7 @@ int xheap_info(int *category_totals) {
     int total;
     int i;
 
-    for (i = 31; i >= 0; i--) {
+    for (i = XHEAP_CATEGORY_COUNT - 1; i >= 0; i--) {
         category_totals[i] = 0;
     }
 
@@ -76,32 +82,32 @@ int xheap_info(int *category_totals) {
     for (block = heap_top; block != 0; block = block->next) {
         if (block->category != 0) {
             int size = block->size_words << 2;
-            int category = block->category & 0x1f;
+            int category = block->category & XHEAP_CATEGORY_MASK;
 
-            total = total + size + 12;
-            category_totals[category] = category_totals[category] + size + 12;
+            total = total + size + XHEAP_BLOCK_HEADER_SIZE;
+            category_totals[category] = category_totals[category] + size + XHEAP_BLOCK_HEADER_SIZE;
         }
     }
     return total;
 }
 
 void infoMemory(void) {
-    int totals[32];
+    int totals[XHEAP_CATEGORY_COUNT];
     xheap_block *block;
     int i;
 
-    for (i = 31; i >= 0; i--) {
+    for (i = XHEAP_CATEGORY_COUNT - 1; i >= 0; i--) {
         totals[i] = 0;
     }
 
     block = heap_top;
     while (block != 0) {
         if (block->category != 0) {
-            int *category_total = &totals[block->category & 0x1f];
+            int *category_total = &totals[block->category & XHEAP_CATEGORY_MASK];
             int size = block->size_words << 2;
 
             *category_total += size;
-            *category_total += 12;
+            *category_total += XHEAP_BLOCK_HEADER_SIZE;
         }
         block = block->next;
     }
@@ -117,7 +123,7 @@ void *xmalloc(unsigned int size, int category) {
 
     size = ((size + 3) >> 2) << 2;
     block = freeBlock->next;
-    next = (xheap_block *)((unsigned char *)block + size + 12);
+    next = (xheap_block *)((unsigned char *)block + size + XHEAP_BLOCK_HEADER_SIZE);
     block->size_words = size >> 2;
     block->category = category;
     block->next = next;

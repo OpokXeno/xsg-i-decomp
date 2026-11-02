@@ -17,13 +17,6 @@
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
 
-#define ACTOR_FLAG_AILMENT_ACTIVE 0x00800000
-#define ACTOR_FLAG_STIFF_ACTIVE   0x01000000
-#define ACTOR_FLAG_FACE_PLAYER    0x00400000
-#define ACTOR_FLAG_COLLIDABLE     0x00010000
-#define ENEMY_STIFF_ACTIVE_BIT    0x01
-#define ENEMY_ALERT_RAISE_FLAG    0x10
-#define ENEMY_AIRBORNE_FLAG       0x20
 
 typedef struct EnemyPreset {
     float route_step_length;

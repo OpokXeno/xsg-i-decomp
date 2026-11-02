@@ -82,7 +82,7 @@ typedef struct TMenu {
         int ewHandle;                  /* +0xFC: TMENU_dispose passes it to EW_dispose */
         EwContainerWidget *rootWidget; /* +0xFC: TMENU_init stores the type-4 root here */
     };
-    EwWidget *widgets[16];             /* +0x100 */
+    EwWidget *widgets[TMENU_WIDGET_COUNT]; /* +0x100 */
     unsigned char itemCapacity;    /* +0x140 */
     unsigned char queryLineCount;  /* +0x141: MSG_queueGetInfo line count */
     signed char currentQueryLine;       /* +0x142: signed index read by text reveal */
@@ -92,8 +92,8 @@ typedef struct TMenu {
     const char **itemTexts;       /* +0x14C */
     unsigned char unmodeled_150[0x154 - 0x150];
     char *nextQueryId;                 /* +0x154 */
-    const char *itemStorage[16];       /* +0x158 */
-    char *queryLineStorage[3];         /* +0x198 */
+    const char *itemStorage[TMENU_ITEM_CAPACITY]; /* +0x158 */
+    char *queryLineStorage[TMENU_QUERY_LINES];    /* +0x198 */
     char queryText[1];                /* +0x1A4: inline string workspace */
 } TMenu;
 
@@ -151,6 +151,15 @@ void *XTK_getWindowOwner(void);
 void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell);
 unsigned int strlen(const char *string);
 
+/* EUC-JP: lead byte of the full-width digits and letters (row 3), and the first
+ * lead byte of a two-byte character. */
+#define EUC_FULLWIDTH_ALNUM_LEAD 0xA3
+
+/* Layout offset and position TWIN_create2 starts from. */
+#define TWIN_CREATE_LAYOUT_OFFSET 45
+#define TWIN_CREATE_X 16.0f
+#define TWIN_CREATE_Y 305.0f
+
 /* Text: {reset} */
 const char twsysResetControl[8] = "\x0b";
 
@@ -159,7 +168,7 @@ static Vector4 vSample = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
 /* Text: {style 0} */
 const char twinStyleControl[3] = "\031\000";
 
-static TComponent tcomponent[4];
+static TComponent tcomponent[TWSYS_SLOT_COUNT];
 
 static unsigned char groupStatus[3];
 
@@ -173,7 +182,7 @@ void TWSYS_init(void)
     int count;
 
     component = tcomponent;
-    end = tcomponent + 4;
+    end = tcomponent + TWSYS_SLOT_COUNT;
     do {
         component->flags = 0;
         component->closeState = 0;
@@ -206,9 +215,9 @@ TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup)
     TComponent *component;
 
     if (slotIndex < 0) {
-        for (candidateIndex = 0; candidateIndex < 4; candidateIndex++) {
+        for (candidateIndex = 0; candidateIndex < TWSYS_SLOT_COUNT; candidateIndex++) {
             component = &tcomponent[candidateIndex];
-            if (!(component->flags & 0x10)) {
+            if (!(component->flags & TCOMP_FLAG_ACTIVE)) {
                 slotIndex = candidateIndex;
                 break;
             }
@@ -233,21 +242,21 @@ void TWSYS_update(void)
     slotIndex = 0;
     do {
         group = (component->kindAndGroup >> 4) & 3;
-        if (!(groupStatus[group] & 1)) {
-            kind = component->kindAndGroup & 0xF;
-            if (component->flags & 0x10) {
+        if (!(groupStatus[group] & TWSYS_GROUP_UPDATE_OFF)) {
+            kind = component->kindAndGroup & TCOMP_KIND_MASK;
+            if (component->flags & TCOMP_FLAG_ACTIVE) {
                 switch (kind) {
-                case 1:
+                case TCOMP_KIND_MENU:
                     TMENU_updateDefault(component);
                     break;
-                case 2:
+                case TCOMP_KIND_SLIDER:
                     TSLIDER_updateDefault(component);
                     break;
-                case 0:
-                case 3:
+                case TCOMP_KIND_TEXT:
+                case TCOMP_KIND_TEXT_FIELD:
                     TWIN_update2(component);
                     break;
-                case 4:
+                case TCOMP_KIND_TEXT_SCENE:
                     TWIN_update2(component);
                     break;
                 }
@@ -255,7 +264,7 @@ void TWSYS_update(void)
         }
         slotIndex += 1;
         component++;
-    } while (slotIndex < 4);
+    } while (slotIndex < TWSYS_SLOT_COUNT);
 }
 
 void TWSYS_draw(void)
@@ -269,26 +278,26 @@ void TWSYS_draw(void)
     slotIndex = 0;
     do {
         group = (component->kindAndGroup >> 4) & 3;
-        if (!(groupStatus[group] & 2)) {
-            if (component->flags & 0x10) {
-                xglFontPrintDirectOT(0xFFFFFF, twsysResetControl);
-                kind = component->kindAndGroup & 0xF;
+        if (!(groupStatus[group] & TWSYS_GROUP_DRAW_OFF)) {
+            if (component->flags & TCOMP_FLAG_ACTIVE) {
+                xglFontPrintDirectOT(EW_ORDER_TEXT, twsysResetControl);
+                kind = component->kindAndGroup & TCOMP_KIND_MASK;
                 switch (kind) {
-                case 1:
-                    xglFontPrintDirectOT(0xFFFFFF, TWSYS_DRAW_WINDOW_FONT);
+                case TCOMP_KIND_MENU:
+                    xglFontPrintDirectOT(EW_ORDER_TEXT, TWSYS_DRAW_WINDOW_FONT);
                     TMENU_drawDefault(component);
                     break;
-                case 2:
-                    xglFontPrintDirectOT(0xFFFFFF, TWSYS_DRAW_WINDOW_FONT);
+                case TCOMP_KIND_SLIDER:
+                    xglFontPrintDirectOT(EW_ORDER_TEXT, TWSYS_DRAW_WINDOW_FONT);
                     TSLIDER_drawDefault(component);
                     break;
-                case 0:
-                case 3:
-                    xglFontPrintDirectOT(0xFFFFFF, TWSYS_DRAW_WINDOW_FONT);
+                case TCOMP_KIND_TEXT:
+                case TCOMP_KIND_TEXT_FIELD:
+                    xglFontPrintDirectOT(EW_ORDER_TEXT, TWSYS_DRAW_WINDOW_FONT);
                     TWIN_draw2(component);
                     break;
-                case 4:
-                    xglFontPrintDirectOT(0xFFFFFF, TWSYS_DRAW_SCENE_FONT);
+                case TCOMP_KIND_TEXT_SCENE:
+                    xglFontPrintDirectOT(EW_ORDER_TEXT, TWSYS_DRAW_SCENE_FONT);
                     TWIN_drawScene2(component);
                     break;
                 }
@@ -296,7 +305,7 @@ void TWSYS_draw(void)
         }
         slotIndex += 1;
         component++;
-    } while (slotIndex < 4);
+    } while (slotIndex < TWSYS_SLOT_COUNT);
     EW_draw();
 }
 
@@ -408,15 +417,15 @@ void STRING_h2zEUC(char *destination, const char *source)
     character = *source++;
     while (character != 0) {
         if (character >= '0' && character <= '9') {
-            *destination++ = 0xA3;
+            *destination++ = EUC_FULLWIDTH_ALNUM_LEAD;
             *destination++ = character - 0x80;
         } else if (character >= 'a' && character <= 'z') {
-            *destination++ = 0xA3;
+            *destination++ = EUC_FULLWIDTH_ALNUM_LEAD;
             *destination++ = character - 0x80;
         } else if (character >= 'A' && character <= 'Z') {
-            *destination++ = 0xA3;
+            *destination++ = EUC_FULLWIDTH_ALNUM_LEAD;
             *destination++ = character + 0x60;
-        } else if (character < 160) {
+        } else if (character < EUC_FIRST_MULTIBYTE_LEAD) {
         } else {
             *destination++ = character;
             *destination++ = *source++;
@@ -462,7 +471,7 @@ void TW_setPos(TComponent *component)
     float rightEdge;
 
     owner = XTK_getWindowOwner();
-    if (owner == 0 || !(component->flags & 0x40))
+    if (owner == 0 || !(component->flags & TCOMP_FLAG_FOLLOW_OWNER))
         return;
 
     projected = (Vector4 *)0x70001680;
@@ -499,7 +508,7 @@ void TW_setPos(TComponent *component)
     halfHeight = (short)component->pixelHeight / 2;
     offsets.x = (float)(halfWidth + 16) * direction.x;
     offsets.y = -(float)(halfHeight + 16);
-    screenShiftY = (float)(224 - halfHeight);
+    screenShiftY = (float)(EW_SCREEN_HEIGHT / 2 - halfHeight);
     distanceOffset = 40.0f * projected->z;
     {
         float shiftX = offsets.x + distanceOffset * direction.x;
@@ -507,7 +516,7 @@ void TW_setPos(TComponent *component)
         projected->x += shiftX;
     }
     projected->y += offsets.y + distanceOffset * direction.y;
-    screenShiftX = (float)(256 - halfWidth);
+    screenShiftX = (float)(EW_SCREEN_WIDTH / 2 - halfWidth);
     projected->x += screenShiftX;
     projected->y += screenShiftY;
     if (8.0f > projected->x)
@@ -536,22 +545,22 @@ void TW_setPos(TComponent *component)
  * line count and on-screen size. */
 void WIN_initCF(TComponent *window)
 {
-    window->line_pitch = 0x18;
-    window->layout_offset = 0x2A;
-    window->line_count = 3;
-    window->pixelWidth = 0x1CC;
-    window->pixelHeight = 0x50;
+    window->line_pitch = TWIN_CF_LINE_PITCH;
+    window->layout_offset = TWIN_CF_LAYOUT_OFFSET;
+    window->line_count = TWIN_LINE_COUNT;
+    window->pixelWidth = TWIN_CF_WIDTH;
+    window->pixelHeight = TWIN_CF_HEIGHT;
 }
 
 /* Configures a scene-message text window's line pitch, layout offset, line
  * count and on-screen size. */
 void WIN_initScene(TComponent *window)
 {
-    window->line_pitch = 0x1A;
-    window->layout_offset = 0x30;
-    window->line_count = 3;
-    window->pixelWidth = 0x1E0;
-    window->pixelHeight = 0x56;
+    window->line_pitch = TWIN_SCENE_LINE_PITCH;
+    window->layout_offset = TWIN_SCENE_LAYOUT_OFFSET;
+    window->line_count = TWIN_LINE_COUNT;
+    window->pixelWidth = TWIN_SCENE_WIDTH;
+    window->pixelHeight = TWIN_SCENE_HEIGHT;
 }
 
 void TWIN_init2(TComponent *window)
@@ -564,15 +573,15 @@ void TWIN_init2(TComponent *window)
 
     window->initializationWord1 = 0;
     window->currentLineIndex = 0;
-    kind = window->kindAndGroup & 0xF;
+    kind = window->kindAndGroup & TCOMP_KIND_MASK;
     window->lineCharacterOffset = 0;
     window->currentPage = 0;
     switch (kind) {
-    case 3:
+    case TCOMP_KIND_TEXT_FIELD:
     default:
         WIN_initCF(window);
         break;
-    case 4:
+    case TCOMP_KIND_TEXT_SCENE:
         WIN_initScene(window);
         break;
     }
@@ -583,13 +592,13 @@ void TWIN_init2(TComponent *window)
     for (lineIndex = 0; lineIndex < window->line_count; lineIndex++) {
         window->lineBufferPointers[lineIndex] = lineBuffer;
         *lineBuffer = 0;
-        lineBuffer += 0xC0;
+        lineBuffer += TWIN_LINE_BUFFER_SIZE;
     }
     window->textOutput = lineBuffer;
-    flagsValue = 0x54;
+    flagsValue = TCOMP_FLAG_FOLLOW_OWNER | TCOMP_FLAG_ACTIVE | TCOMP_FLAG_RUN;
     *lineBuffer = 0;
-    lineBuffer += 0x80;
-    stateValue = 1;
+    lineBuffer += TWIN_CAPTION_BUFFER_SIZE;
+    stateValue = TCOMP_STATE_OPENING;
     window->textScratchBuffer = lineBuffer;
     window->state = (unsigned short)stateValue;
     window->flags = flagsValue;
@@ -604,12 +613,12 @@ int WIN_checkActiveWindow(void)
     unsigned int group;
 
     component = tcomponent;
-    for (slotIndex = 0; slotIndex < 4; slotIndex++, component++) {
+    for (slotIndex = 0; slotIndex < TWSYS_SLOT_COUNT; slotIndex++, component++) {
         group = (component->kindAndGroup >> 4) & 3;
-        if (groupStatus[group] & 1) {
+        if (groupStatus[group] & TWSYS_GROUP_UPDATE_OFF) {
             continue;
         }
-        if (component->flags & 0x10) {
+        if (component->flags & TCOMP_FLAG_ACTIVE) {
             return 1;
         }
     }
@@ -636,57 +645,57 @@ TComponent *TWIN_create2(int index)
     if (messageBuffer == 0) {
         return 0;
     }
-    window->layout_offset = 45;
-    window->line_count = 3;
-    window->x = 16.0f;
-    window->y = 305.0f;
+    window->layout_offset = TWIN_CREATE_LAYOUT_OFFSET;
+    window->line_count = TWIN_LINE_COUNT;
+    window->x = TWIN_CREATE_X;
+    window->y = TWIN_CREATE_Y;
     window->textVerticalOffset = 0;
     TWIN_init2(window);
-    for (childIndex = 7; childIndex >= 0; childIndex--) {
+    for (childIndex = TWIN_WIDGET_COUNT - 1; childIndex >= 0; childIndex--) {
         window->widgets[childIndex] = 0;
     }
 
-    root = (EwContainerWidget *)EW_create(-1, 4);
+    root = (EwContainerWidget *)EW_create(-1, EW_TYPE_CONTAINER);
     root->container.children = window->widgets;
-    root->container.childCapacity = 8;
-    root->flags |= 0x4000;
+    root->container.childCapacity = TWIN_WIDGET_COUNT;
+    root->flags |= EW_FLAG_VISIBLE;
     window->rootWidget = root;
 
-    widget = EW_create(-1, 10);
+    widget = EW_create(-1, EW_TYPE_MASK_TEXT_PASS);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 1, widget);
-    mask = (EwMaskWidget *)window->widgets[1];
-    mask->mask.fix = 0x00808000;
-    mask->mask.blend |= 0x100;
+    EW_addComponent(root, TWIN_WIDGET_MASK, widget);
+    mask = (EwMaskWidget *)window->widgets[TWIN_WIDGET_MASK];
+    mask->mask.fix = EW_MASK_FIX_FULL;
+    mask->mask.blend |= EW_MASK_GRADIENT_HORIZONTAL;
 
-    widget = EW_create(-1, 9);
+    widget = EW_create(-1, EW_TYPE_CLIP_TEXT_PASS);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 0, widget);
+    EW_addComponent(root, TWIN_WIDGET_CLIP, widget);
 
-    widget = EW_create(-1, 7);
+    widget = EW_create(-1, EW_TYPE_LABEL);
     label = (EwLabelWidget *)widget;
     label->textLines = window->lineBufferPointers;
     label->lineCount = -1;
-    EW_addComponent(root, 2, widget);
+    EW_addComponent(root, TWIN_WIDGET_LABEL, widget);
 
-    widget = EW_create(-1, 9);
-    widget->width = 512;
-    widget->height = 448;
+    widget = EW_create(-1, EW_TYPE_CLIP_TEXT_PASS);
+    widget->width = EW_SCREEN_WIDTH;
+    widget->height = EW_SCREEN_HEIGHT;
     widget->x = 0;
     widget->y = 0;
     widget->drawValue = 0;
-    EW_addComponent(root, 3, widget);
-    widget->flags |= 0x4000;
+    EW_addComponent(root, TWIN_WIDGET_SCREEN_CLIP, widget);
+    widget->flags |= EW_FLAG_VISIBLE;
 
-    widget = EW_create(-1, 1);
-    EW_addComponent(root, 4, widget);
+    widget = EW_create(-1, EW_TYPE_FRAME);
+    EW_addComponent(root, TWIN_WIDGET_FRAME, widget);
 
-    widget = EW_create(-1, 5);
+    widget = EW_create(-1, EW_TYPE_SPRITE);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 5, widget);
+    EW_addComponent(root, TWIN_WIDGET_CURSOR, widget);
 
     window->messageBuffer[0] = messageBuffer;
     window->queue.buffer = messageBuffer->cursor;
@@ -696,12 +705,12 @@ TComponent *TWIN_create2(int index)
     window->queue.tail = 0;
     window->queue.count = 0;
     window->queue.width = 0;
-    switch (window->kindAndGroup & 15) {
-    case 3:
+    switch (window->kindAndGroup & TCOMP_KIND_MASK) {
+    case TCOMP_KIND_TEXT_FIELD:
     default:
         WIN_initCF(window);
         break;
-    case 4:
+    case TCOMP_KIND_TEXT_SCENE:
         WIN_initScene(window);
         break;
     }
@@ -710,7 +719,7 @@ TComponent *TWIN_create2(int index)
 
 void TWIN_dispose(TComponent *window)
 {
-    window->flags &= ~0x11;
+    window->flags &= ~(TCOMP_FLAG_ACTIVE | TCOMP_FLAG_OPEN);
     EW_dispose(window->ewHandle);
     if (window->msgBuffer[0] != 0) {
         MBUF_dispose(window->msgBuffer[0]);
@@ -725,7 +734,7 @@ void TWIN_popCF(TComponent *window)
     MsgQueue *queue;
     int code;
 
-    if ((window->flags & 3) != 1) {
+    if ((window->flags & (TCOMP_FLAG_OPEN | TCOMP_FLAG_WAIT)) != TCOMP_FLAG_OPEN) {
         return;
     }
     if (window->queue.tail <= 0) {
@@ -738,35 +747,35 @@ void TWIN_popCF(TComponent *window)
             + window->lineCharacterOffset, 2);
     window->lineWidths[window->currentLineIndex] = window->queue.width;
     code = window->queue.last;
-    if (code >= 128) {
+    if (code >= MSG_CTRL_WAITKEY) {
         switch (code) {
-        case 131:
-            window->state = 13;
+        case MSG_CTRL_WAIT:
+            window->state = TCOMP_STATE_WAIT_FRAMES;
             window->waitFrames = window->queue.label.value;
             break;
-        case 132:
-            window->state = 2;
+        case MSG_CTRL_CLOSE:
+            window->state = TCOMP_STATE_CLOSING;
             break;
-        case 129:
+        case MSG_CTRL_CLEAR:
             window->queue.count = 0;
-            window->state = 9;
+            window->state = TCOMP_STATE_CLEAR_TEXT;
             window->queue.width = 0;
             break;
-        case 128:
-            window->state = 8;
+        case MSG_CTRL_WAITKEY:
+            window->state = TCOMP_STATE_WAIT_RESULT;
             window->pendingMessage = window->queue.label.value;
             break;
-        case 133:
+        case MSG_CTRL_CAPTION:
             strcpy(window->textOutput, (const char *)window->queue.label.text);
             break;
         }
-    } else if (window->queue.width >= window->queue.limit || code == 10) {
+    } else if (window->queue.width >= window->queue.limit || code == '\n') {
         MSG_queueReset(queue, 10);
         if (window->currentLineIndex >= window->line_count - 1
             && window->currentPage >= window->line_count - 1) {
-            window->state = 17;
+            window->state = TCOMP_STATE_WAIT_SCROLL;
         } else {
-            window->state = 10;
+            window->state = TCOMP_STATE_SCROLL_LINE;
         }
     }
     if (window->queue.head < window->queue.tail) {
@@ -781,7 +790,7 @@ void TWIN_popScene(TComponent *window)
     int code;
     MsgQueue *queue;
 
-    if ((window->flags & 3) != 1) {
+    if ((window->flags & (TCOMP_FLAG_OPEN | TCOMP_FLAG_WAIT)) != TCOMP_FLAG_OPEN) {
         return;
     }
     if (window->queue.tail <= 0) {
@@ -795,36 +804,36 @@ void TWIN_popScene(TComponent *window)
                 + window->lineCharacterOffset, 24);
         window->lineWidths[window->currentLineIndex] = window->queue.width;
         code = window->queue.last;
-        if (code >= 128) {
+        if (code >= MSG_CTRL_WAITKEY) {
             switch (code) {
-            case 131:
-                window->state = 13;
+            case MSG_CTRL_WAIT:
+                window->state = TCOMP_STATE_WAIT_FRAMES;
                 window->waitFrames = window->queue.label.value;
                 break;
-            case 132:
-                window->state = 2;
+            case MSG_CTRL_CLOSE:
+                window->state = TCOMP_STATE_CLOSING;
                 break;
-            case 129:
+            case MSG_CTRL_CLEAR:
                 window->queue.count = window->queue.width = 0;
-                window->state = 9;
+                window->state = TCOMP_STATE_CLEAR_TEXT;
                 break;
-            case 128:
-                window->state = 8;
+            case MSG_CTRL_WAITKEY:
+                window->state = TCOMP_STATE_WAIT_RESULT;
                 window->pendingMessage = window->queue.label.value;
                 break;
-            case 133:
+            case MSG_CTRL_CAPTION:
                 strcpy(window->textOutput, (const char *)window->queue.label.text);
                 break;
             }
             return;
         }
-        if (window->queue.width >= (short)component->pixelWidth || code == 10) {
+        if (window->queue.width >= (short)component->pixelWidth || code == '\n') {
             MSG_queueReset(queue, 266);
             window->currentLineIndex++;
             window->lineCharacterOffset = 0;
             if ((unsigned int)window->currentLineIndex >= window->line_count) {
                 window->currentLineIndex = window->line_count - 1;
-                window->state = 12;
+                window->state = TCOMP_STATE_WAIT_SCENE;
                 window->pendingMessage = window->queue.label.value;
                 return;
             }
@@ -846,73 +855,73 @@ void TWIN_update2(TComponent *component)
 
     window->frameCounter++;
     flags = window->flags;
-    if (flags & 1) {
-        mask = (EwMaskWidget *)window->widgets[1];
-        mask->mask.blend |= 0x100;
+    if (flags & TCOMP_FLAG_OPEN) {
+        mask = (EwMaskWidget *)window->widgets[TWIN_WIDGET_MASK];
+        mask->mask.blend |= EW_MASK_GRADIENT_HORIZONTAL;
         alpha = (mask->mask.fix >> 8) & 0xFF;
         if (alpha != 1) {
             alpha -= 4;
             if (alpha <= 0) {
-                label = (EwLabelWidget *)window->widgets[2];
-                label->colorScale = 128;
+                label = (EwLabelWidget *)window->widgets[TWIN_WIDGET_LABEL];
+                label->colorScale = EW_COLOR_SCALE_NEUTRAL;
                 alpha = 1;
             }
             mask->mask.fix = (alpha << 8) | (alpha << 16);
         }
     }
-    switch (window->kindAndGroup & 15) {
-    case 3:
+    switch (window->kindAndGroup & TCOMP_KIND_MASK) {
+    case TCOMP_KIND_TEXT_FIELD:
     default:
         TWIN_popCF(window);
         break;
-    case 4:
+    case TCOMP_KIND_TEXT_SCENE:
         TWIN_popScene(window);
         break;
     }
-    if (!(flags & 2)) {
+    if (!(flags & TCOMP_FLAG_WAIT)) {
         switch (window->state) {
-        case 0:
+        case TCOMP_STATE_IDLE:
             break;
-        case 1:
-        case 8:
-        case 9:
-        case 11:
-        case 12:
-        case 17:
+        case TCOMP_STATE_OPENING:
+        case TCOMP_STATE_WAIT_RESULT:
+        case TCOMP_STATE_CLEAR_TEXT:
+        case TCOMP_STATE_WAIT_CLEAR:
+        case TCOMP_STATE_WAIT_SCENE:
+        case TCOMP_STATE_WAIT_SCROLL:
             window->waitFrames = 0;
-            window->flags |= 2;
+            window->flags |= TCOMP_FLAG_WAIT;
             break;
-        case 13:
-            window->flags |= 2;
+        case TCOMP_STATE_WAIT_FRAMES:
+            window->flags |= TCOMP_FLAG_WAIT;
             break;
-        case 2:
-            window->waitFrames = 10;
-            window->flags |= 2;
+        case TCOMP_STATE_CLOSING:
+            window->waitFrames = TCOMP_CLOSE_FRAMES;
+            window->flags |= TCOMP_FLAG_WAIT;
             break;
-        case 10:
-            window->flags |= 2;
+        case TCOMP_STATE_SCROLL_LINE:
+            window->flags |= TCOMP_FLAG_WAIT;
             window->waitFrames = 0;
             break;
         }
         return;
     }
-    if (!(flags & 4)) {
+    if (!(flags & TCOMP_FLAG_RUN)) {
         return;
     }
     switch (window->state) {
-    case 8:
+    case TCOMP_STATE_WAIT_RESULT:
         window->waitFrames = (window->waitFrames + 1) & 31;
-        if (PadData[0].pressed & 0x20) {
-            window->flags &= ~2;
-            window->state = 0;
+        if (PadData[0].pressed & PAD_CIRCLE) {
+            window->flags &= ~TCOMP_FLAG_WAIT;
+            window->state = TCOMP_STATE_IDLE;
             window->closeState = window->pendingMessage;
         }
         break;
-    case 12:
+    case TCOMP_STATE_WAIT_SCENE:
         window->waitFrames = (window->waitFrames + 1) & 31;
-        if (PadData[0].pressed & 0x20) {
-            window->flags &= ~2;
-            window->state = 0;
+        if (PadData[0].pressed & PAD_CIRCLE) {
+            window->flags &= ~TCOMP_FLAG_WAIT;
+            window->state = TCOMP_STATE_IDLE;
             window->lineCharacterOffset = 0;
             window->currentLineIndex = 0;
             for (lineIndex = 0; lineIndex < window->line_count; lineIndex++) {
@@ -920,16 +929,16 @@ void TWIN_update2(TComponent *component)
             }
         }
         break;
-    case 13:
+    case TCOMP_STATE_WAIT_FRAMES:
         window->waitFrames--;
         if (window->waitFrames < 0) {
-            window->flags &= ~2;
-            window->state = 0;
+            window->flags &= ~TCOMP_FLAG_WAIT;
+            window->state = TCOMP_STATE_IDLE;
         }
         break;
-    case 9:
-        window->flags &= ~2;
-        window->state = 0;
+    case TCOMP_STATE_CLEAR_TEXT:
+        window->flags &= ~TCOMP_FLAG_WAIT;
+        window->state = TCOMP_STATE_IDLE;
         window->currentPage = 0;
         window->lineCharacterOffset = 0;
         window->currentLineIndex = 0;
@@ -937,17 +946,17 @@ void TWIN_update2(TComponent *component)
             window->lineBufferPointers[lineIndex][0] = '\0';
         }
         break;
-    case 2:
+    case TCOMP_STATE_CLOSING:
         window->waitFrames--;
         if (window->waitFrames < 0) {
             window->closeState = 255;
             TWIN_dispose(component);
         }
         break;
-    case 11:
-        if (PadData[0].pressed & 0x20) {
-            window->flags &= ~2;
-            window->state = 0;
+    case TCOMP_STATE_WAIT_CLEAR:
+        if (PadData[0].pressed & PAD_CIRCLE) {
+            window->flags &= ~TCOMP_FLAG_WAIT;
+            window->state = TCOMP_STATE_IDLE;
             window->currentLineIndex = 0;
             window->currentPage = 0;
             for (lineIndex = 0; lineIndex < window->line_count; lineIndex++) {
@@ -956,14 +965,14 @@ void TWIN_update2(TComponent *component)
         }
         window->waitFrames++;
         break;
-    case 17:
+    case TCOMP_STATE_WAIT_SCROLL:
         window->waitFrames++;
-        if (PadData[0].pressed & 0x20) {
+        if (PadData[0].pressed & PAD_CIRCLE) {
             window->waitFrames = 0;
-            window->state = 10;
+            window->state = TCOMP_STATE_SCROLL_LINE;
         }
         break;
-    case 10:
+    case TCOMP_STATE_SCROLL_LINE:
         if (window->currentLineIndex >= window->line_count - 1) {
             window->textVerticalOffset = (int)((float)window->waitFrames * -6.0f);
             window->waitFrames++;
@@ -974,9 +983,9 @@ void TWIN_update2(TComponent *component)
                     window->lineBufferPointers[index] = window->lineBufferPointers[index + 1];
                 }
                 firstLine[0] = '\0';
-                window->state = 0;
+                window->state = TCOMP_STATE_IDLE;
                 window->lineBufferPointers[window->currentLineIndex] = firstLine;
-                window->flags &= ~2;
+                window->flags &= ~TCOMP_FLAG_WAIT;
                 window->lineCharacterOffset = 0;
                 window->textVerticalOffset = 0;
                 if (window->currentPage >= window->line_count - 1) {
@@ -988,20 +997,20 @@ void TWIN_update2(TComponent *component)
         } else {
             window->currentLineIndex++;
             window->currentPage++;
-            window->flags &= ~2;
-            window->state = 0;
+            window->flags &= ~TCOMP_FLAG_WAIT;
+            window->state = TCOMP_STATE_IDLE;
             window->lineCharacterOffset = 0;
         }
         break;
-    case 1:
+    case TCOMP_STATE_OPENING:
         window->waitFrames++;
         if (window->waitFrames < 2) {
             window->textVerticalOffset = 0;
         }
-        if (window->waitFrames >= 11) {
-            window->state = 0;
-            window->flags |= 1;
-            window->flags &= ~2;
+        if (window->waitFrames >= TCOMP_OPEN_FRAMES) {
+            window->state = TCOMP_STATE_IDLE;
+            window->flags |= TCOMP_FLAG_OPEN;
+            window->flags &= ~TCOMP_FLAG_WAIT;
         }
         break;
     }
@@ -1023,75 +1032,76 @@ void TWIN_draw2(TComponent *window)
     int y;
     unsigned short *textOffset;
 
-    if (window->state == 1 || window->state == 2) {
+    if (window->state == TCOMP_STATE_OPENING || window->state == TCOMP_STATE_CLOSING) {
         return;
     }
     x = (int)(16.0f + window->x);
     y = (int)(window->y + 16.0f + 32.0f);
-    mask = window->widgets[1];
-    widget = window->widgets[4];
-    mask->drawValue = 0xFFFFF1;
-    widget->drawValue = 0xFFFFF0;
+    mask = window->widgets[TWIN_WIDGET_MASK];
+    widget = window->widgets[TWIN_WIDGET_FRAME];
+    mask->drawValue = EW_ORDER_MASK;
+    widget->drawValue = EW_ORDER_FRAME;
     mask->x = x;
     mask->y = y;
     mask->width = window->pixelWidth;
     mask->height = window->pixelHeight;
-    mask->flags |= 0x4000;
+    mask->flags |= EW_FLAG_VISIBLE;
     widget->x = x;
     widget->y = y;
     widget->width = window->pixelWidth;
     widget->height = window->pixelHeight;
-    widget->flags |= 0x4000;
-    widget = window->widgets[0];
+    widget->flags |= EW_FLAG_VISIBLE;
+    widget = window->widgets[TWIN_WIDGET_CLIP];
     widget->x = x;
     widget->y = y;
     widget->width = window->pixelWidth;
-    widget->drawValue = 0xFFFFFF;
+    widget->drawValue = EW_ORDER_TEXT;
     widget->height = window->pixelHeight;
-    widget->flags |= 0x4000;
-    body = (EwLabelBody *)window->widgets[2];
+    widget->flags |= EW_FLAG_VISIBLE;
+    body = (EwLabelBody *)window->widgets[TWIN_WIDGET_LABEL];
     widget = (EwWidget *)body;
     body->label.colorScale = 0;
     widget->x = x + 12;
-    widget->drawValue = 0x00FFFFFF;
+    widget->drawValue = EW_ORDER_TEXT;
     /* The text window's halfword at +0x50, read as that kind's own field. */
     textOffset = &window->textVerticalOffset;
     widget->y = *textOffset + (y + 4);
     body->label.textLines = window->lineBufferPointers;
     body->label.lineCount = window->line_count;
-    widget->flags |= 0x4000;
+    widget->flags |= EW_FLAG_VISIBLE;
 
-    widget = window->widgets[5];
-    if (window->state == 11 || window->state == 8 || window->state == 17) {
+    widget = window->widgets[TWIN_WIDGET_CURSOR];
+    if (window->state == TCOMP_STATE_WAIT_CLEAR || window->state == TCOMP_STATE_WAIT_RESULT
+        || window->state == TCOMP_STATE_WAIT_SCROLL) {
         x = (short)window->lineWidths[window->currentLineIndex];
-        y = window->currentLineIndex * 24;
+        y = window->currentLineIndex * TWIN_CF_LINE_PITCH;
         if (x + 16 > window->queue.limit) {
             x = 0 - 8;
-            y = y + 24;
+            y = y + TWIN_CF_LINE_PITCH;
         } else if (x == 0 && window->currentLineIndex != 0) {
             int previousLineWidth = (short)window->lineWidths[window->currentLineIndex - 1];
             if (window->queue.limit >= previousLineWidth + 16) {
                 x = previousLineWidth;
-                y -= 24;
+                y -= TWIN_CF_LINE_PITCH;
             } else {
                 x = -8;
             }
         }
-        widget->drawValue = 0x00FFFFFF;
+        widget->drawValue = EW_ORDER_TEXT;
         x = (int)((float)x + (window->x + 20.0f + 16.0f));
         y = (int)((float)y + (window->y + 12.0f + 16.0f + 32.0f));
         widget->x = x;
         widget->y = y;
         EW_sprtSetCursorUV((EwSpriteWidget *)widget, 3, window->frameCounter);
-        widget->flags |= 0x4000;
+        widget->flags |= EW_FLAG_VISIBLE;
     } else {
-        widget->flags &= 0xBFFF;
+        widget->flags &= ~EW_FLAG_VISIBLE;
     }
     x = (int)(window->x + 16.0f);
     y = (int)(window->y + 16.0f);
-    xglFontPrintDirectOT(0x00FFFFF0, twinFontParamControl);
-    xglFontPrint(x, y, 0x00FFFFF0, window->textOutput);
-    xglFontPrintDirectOT(0x00FFFFF0, twinStyleControl);
+    xglFontPrintDirectOT(EW_ORDER_FRAME, twinFontParamControl);
+    xglFontPrint(x, y, EW_ORDER_FRAME, window->textOutput);
+    xglFontPrintDirectOT(EW_ORDER_FRAME, twinStyleControl);
 }
 
 void TWIN_drawScene2(TComponent *window)
@@ -1102,26 +1112,26 @@ void TWIN_drawScene2(TComponent *window)
     int y;
     int panelDrawValue;
 
-    if (window->state != 1 && window->state != 2) {
-        widget = window->widgets[0];
-        mask = window->widgets[1];
+    if (window->state != TCOMP_STATE_OPENING && window->state != TCOMP_STATE_CLOSING) {
+        widget = window->widgets[TWIN_WIDGET_CLIP];
+        mask = window->widgets[TWIN_WIDGET_MASK];
         x = (int)(16.0f + window->x);
         y = (int)(window->y + 16.0f);
-        mask->drawValue = 0x00FFFFF1;
-        widget->drawValue = 0x00FFFFFF;
+        mask->drawValue = EW_ORDER_MASK;
+        widget->drawValue = EW_ORDER_TEXT;
         panelDrawValue = widget->drawValue;
         mask->x = x;
         mask->y = y;
         mask->width = window->pixelWidth;
         mask->height = window->pixelHeight;
-        mask->flags = mask->flags | 0x4000;
+        mask->flags = mask->flags | EW_FLAG_VISIBLE;
         widget->x = x;
         widget->y = y;
         widget->width = window->pixelWidth;
         widget->height = window->pixelHeight;
-        widget->flags = widget->flags | 0x4000;
+        widget->flags = widget->flags | EW_FLAG_VISIBLE;
 
-        widget = window->widgets[2];
+        widget = window->widgets[TWIN_WIDGET_LABEL];
         {
             EwLabelBody *body = (EwLabelBody *)widget;
 
@@ -1135,12 +1145,12 @@ void TWIN_drawScene2(TComponent *window)
             body->label.lineWidths = window->lineWidths;
             body->label.linePitch = 26;
             body->label.textStyle = twinLabelStyleControl;
-            widget->flags |= 0x4000;
+            widget->flags |= EW_FLAG_VISIBLE;
         }
 
-        widget = window->widgets[5];
-        if (window->state == 11 || window->state == 8
-            || window->state == 12 || window->state == 17) {
+        widget = window->widgets[TWIN_WIDGET_CURSOR];
+        if (window->state == TCOMP_STATE_WAIT_CLEAR || window->state == TCOMP_STATE_WAIT_RESULT
+            || window->state == TCOMP_STATE_WAIT_SCENE || window->state == TCOMP_STATE_WAIT_SCROLL) {
             float cursorOriginX = 16.0f + (window->x + 4.0f);
             float cursorOriginY = 16.0f + (window->y + 12.0f);
             x = (short)window->pixelWidth / 2
@@ -1150,11 +1160,11 @@ void TWIN_drawScene2(TComponent *window)
             x = (int)((float)x + cursorOriginX);
             widget->y = y;
             widget->x = x;
-            widget->drawValue = 0x00FFFFFF;
+            widget->drawValue = EW_ORDER_TEXT;
             EW_sprtSetCursorUV((EwSpriteWidget *)widget, 3, window->frameCounter);
-            widget->flags |= 0x4000;
+            widget->flags |= EW_FLAG_VISIBLE;
         } else {
-            widget->flags = widget->flags & 0xBFFF;
+            widget->flags = widget->flags & ~EW_FLAG_VISIBLE;
         }
     }
 }
@@ -1178,12 +1188,12 @@ void TMENU_init(TComponent *component)
     const char **itemTexts;
 
     menu = (TMenu *)component;
-    capacity = 0x10;
+    capacity = TMENU_ITEM_CAPACITY;
     slots = menu->itemStorage;
     menu->itemTexts = slots;
     slots = menu->queryLineStorage;
     menu->closePolicy = 1;
-    messageBuffer = MBUF_create(0x80, 3);
+    messageBuffer = MBUF_create(0x80, TMENU_QUERY_LINES);
     menu->queryQueue.buffer = messageBuffer->cursor;
     menu->queryQueue.size = 256;
     cursor = menu->itemTexts;
@@ -1194,13 +1204,13 @@ void TMENU_init(TComponent *component)
     menu->queryQueue.count = 0;
     menu->queryQueue.width = 0;
     menu->msgBuffer[1] = 0;
-    count = 15;
+    count = TMENU_ITEM_CAPACITY - 1;
     do {
         cursor[count] = 0;
         count -= 1;
     } while (count >= 0);
     menu->queryLines = slots;
-    slots = (char **)slots + 3;
+    slots = (char **)slots + TMENU_QUERY_LINES;
     menu->currentQueryLine = 0;
     count = 0;
     menu->queryCharacterOffset = 0;
@@ -1211,11 +1221,11 @@ void TMENU_init(TComponent *component)
     do {
         destinationWords[count] = (char *)sourceWords[count];
         count += 1;
-    } while (count < 3);
+    } while (count < TMENU_QUERY_LINES);
     menu->nextQueryId = (char *)slots;
-    count = 15;
-    menu->flags = 0x15;
-    menu->state = 1;
+    count = TMENU_ITEM_CAPACITY - 1;
+    menu->flags = TCOMP_FLAG_ACTIVE | TCOMP_FLAG_RUN | TCOMP_FLAG_OPEN;
+    menu->state = TCOMP_STATE_OPENING;
     menu->x = 120.0f;
     menu->y = 100.0f;
     menu->height = 0x20;
@@ -1225,80 +1235,80 @@ void TMENU_init(TComponent *component)
     menu->selectionResult = 0;
     menu->selectedItem = 0;
     menu->width = 0;
-    for (count = 15; count >= 0; count--) {
+    for (count = TMENU_WIDGET_COUNT - 1; count >= 0; count--) {
         menu->widgets[count] = 0;
     }
-    count = 0x10;
-    root = (EwContainerWidget *)EW_create(-1, 4);
+    count = TMENU_WIDGET_COUNT;
+    root = (EwContainerWidget *)EW_create(-1, EW_TYPE_CONTAINER);
     root->container.children = menu->widgets;
-    root->container.childCapacity = 16;
-    root->flags |= 0x4000;
+    root->container.childCapacity = TMENU_WIDGET_COUNT;
+    root->flags |= EW_FLAG_VISIBLE;
     menu->rootWidget = root;
 
-    widget = EW_create(-1, 9);
+    widget = EW_create(-1, EW_TYPE_CLIP_TEXT_PASS);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 0, widget);
+    EW_addComponent(root, TMENU_WIDGET_CLIP, widget);
 
-    widget = EW_create(-1, 10);
+    widget = EW_create(-1, EW_TYPE_MASK_TEXT_PASS);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 1, widget);
-    mask = (EwMaskWidget *)menu->widgets[1];
-    mask->mask.fix = 0x00808000;
-    mask->mask.blend |= 0x100;
+    EW_addComponent(root, TMENU_WIDGET_MASK, widget);
+    mask = (EwMaskWidget *)menu->widgets[TMENU_WIDGET_MASK];
+    mask->mask.fix = EW_MASK_FIX_FULL;
+    mask->mask.blend |= EW_MASK_GRADIENT_HORIZONTAL;
 
-    widget = EW_create(-1, 7);
+    widget = EW_create(-1, EW_TYPE_LABEL);
     label = (EwLabelWidget *)widget;
     itemTexts = menu->itemTexts;
     label->colorScale = 0;
     ((EwLabelBody *)label)->label.lineCount = -1;
     ((EwLabelSlot *)&label->textLines)->readOnlyTextLines = itemTexts;
-    EW_addComponent(root, 2, widget);
+    EW_addComponent(root, TMENU_WIDGET_ITEMS, widget);
 
-    widget = EW_create(-1, 7);
+    widget = EW_create(-1, EW_TYPE_LABEL);
     label = (EwLabelWidget *)widget;
     textLines = menu->queryLines;
     label->colorScale = 0;
     ((EwLabelBody *)label)->label.lineCount = -1;
     label->textLines = textLines;
-    EW_addComponent(root, 3, widget);
+    EW_addComponent(root, TMENU_WIDGET_QUERY, widget);
 
-    widget = EW_create(-1, 9);
-    widget->width = 512;
-    widget->height = 448;
+    widget = EW_create(-1, EW_TYPE_CLIP_TEXT_PASS);
+    widget->width = EW_SCREEN_WIDTH;
+    widget->height = EW_SCREEN_HEIGHT;
     widget->x = 0;
     widget->y = 0;
     widget->drawValue = 0;
-    EW_addComponent(root, 4, widget);
-    widget->flags |= 0x4000;
+    EW_addComponent(root, TMENU_WIDGET_SCREEN_CLIP, widget);
+    widget->flags |= EW_FLAG_VISIBLE;
 
-    widget = EW_create(-1, 1);
-    EW_addComponent(root, 5, widget);
+    widget = EW_create(-1, EW_TYPE_FRAME);
+    EW_addComponent(root, TMENU_WIDGET_FRAME, widget);
 
-    widget = EW_create(-1, 5);
+    widget = EW_create(-1, EW_TYPE_SPRITE);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 6, widget);
+    EW_addComponent(root, TMENU_WIDGET_ARROW_UP, widget);
 
-    widget = EW_create(-1, 5);
+    widget = EW_create(-1, EW_TYPE_SPRITE);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 7, widget);
+    EW_addComponent(root, TMENU_WIDGET_ARROW_DOWN, widget);
 
-    widget = EW_create(-1, 5);
+    widget = EW_create(-1, EW_TYPE_SPRITE);
     widget->width = 16;
     widget->height = 16;
-    EW_addComponent(root, 8, widget);
-    menu->flags = 0x55;
-    menu->state = 1;
+    EW_addComponent(root, TMENU_WIDGET_CURSOR, widget);
+    menu->flags = TCOMP_FLAG_FOLLOW_OWNER | TCOMP_FLAG_ACTIVE | TCOMP_FLAG_RUN | TCOMP_FLAG_OPEN;
+    menu->state = TCOMP_STATE_OPENING;
 }
 
 TComponent *TMENU_create(int slotIndex)
 {
     TComponent *component;
 
-    component = TWSYS_createComponent(slotIndex, 1);
+    component = TWSYS_createComponent(slotIndex, TCOMP_KIND_MENU);
     if (component == 0) {
         return 0;
     }
@@ -1311,7 +1321,7 @@ TComponent *TMENU_create(int slotIndex)
 
 void TMENU_dispose(TMenu *menu)
 {
-    menu->flags &= ~0x11;
+    menu->flags &= ~(TCOMP_FLAG_ACTIVE | TCOMP_FLAG_OPEN);
     EW_dispose(menu->ewHandle);
     if (menu->msgBuffer[0] != 0) {
         MBUF_dispose(&menu->msgBuffer[0]->active);
@@ -1358,7 +1368,7 @@ void TMENU_setItem(TMenu *menu, int itemIndex, const char *text)
     outputCursor = output;
     inputCursor = text;
     lineWidth = MSG_copyln(&outputCursor, &inputCursor, 0);
-    menu->height = menu->visibleLineCount * 24 + 4;
+    menu->height = menu->visibleLineCount * TMENU_LINE_HEIGHT + 4;
     if (menu->width < lineWidth + 56) {
         menu->width = lineWidth + 56;
     }
@@ -1404,11 +1414,11 @@ void TMENU_addItem(int menuHandle, const char *text)
     }
     menu->itemCount = itemCount;
     if (menu->activeQueryId != 0) {
-        itemHeight = menu->visibleLineCount * 24;
-        menu->height = menu->queryLineCount * 24 + itemHeight + 16;
+        itemHeight = menu->visibleLineCount * TMENU_LINE_HEIGHT;
+        menu->height = menu->queryLineCount * TMENU_LINE_HEIGHT + itemHeight + 16;
     } else {
-        itemHeight = menu->visibleLineCount * 24 + 4;
-        menu->height = itemHeight + menu->queryLineCount * 24;
+        itemHeight = menu->visibleLineCount * TMENU_LINE_HEIGHT + 4;
+        menu->height = itemHeight + menu->queryLineCount * TMENU_LINE_HEIGHT;
     }
     if (menu->width < maximumWidth) {
         menu->width = maximumWidth;
@@ -1428,91 +1438,91 @@ void TMENU_updateDefault(TComponent *component)
     int code;
 
     flags = menu->flags;
-    if (!(flags & 0x10)) {
+    if (!(flags & TCOMP_FLAG_ACTIVE)) {
         return;
     }
     if (menu->itemCount < menu->visibleLineCount) {
         menu->visibleLineCount = menu->itemCount;
     }
     menu->frameCounter++;
-    if (!(flags & 2)) {
+    if (!(flags & TCOMP_FLAG_WAIT)) {
         switch (menu->state) {
-        case 16: {
+        case TCOMP_STATE_REVEAL: {
             EwMaskWidget *initialMask;
-            menu->flags = flags | 2;
-            initialMask = (EwMaskWidget *)menu->widgets[1];
+            menu->flags = flags | TCOMP_FLAG_WAIT;
+            initialMask = (EwMaskWidget *)menu->widgets[TMENU_WIDGET_MASK];
             menu->waitFrames = 0;
-            initialMask->mask.fix = 0x00808000;
-            initialMask->mask.blend |= 0x100;
+            initialMask->mask.fix = EW_MASK_FIX_FULL;
+            initialMask->mask.blend |= EW_MASK_GRADIENT_HORIZONTAL;
             break;
         }
-        case 1:
-            menu->flags = flags | 2;
+        case TCOMP_STATE_OPENING:
+            menu->flags = flags | TCOMP_FLAG_WAIT;
             menu->waitFrames = 0;
-            menu->height = menu->visibleLineCount * 24 + 4;
+            menu->height = menu->visibleLineCount * TMENU_LINE_HEIGHT + 4;
             MSG_queueGetInfo(&menu->queryQueue, &info, 0);
             if (info.lines > 0) {
-                menu->height += info.lines * 24 + 12;
+                menu->height += info.lines * TMENU_LINE_HEIGHT + 12;
             }
             if (menu->width < info.width + 36) {
                 menu->width = info.width + 36;
             }
             menu->queryLineCount = (unsigned char)info.lines;
             break;
-        case 14:
-        case 15:
-            menu->flags = flags | 2;
+        case TCOMP_STATE_INPUT:
+        case TCOMP_STATE_DONE:
+            menu->flags = flags | TCOMP_FLAG_WAIT;
             menu->waitFrames = 0;
             /* The initial input states continue through the wait-state setup. */
-        case 13:
-            menu->flags |= 2;
+        case TCOMP_STATE_WAIT_FRAMES:
+            menu->flags |= TCOMP_FLAG_WAIT;
             break;
-        case 2:
-            menu->waitFrames = 10;
-            menu->flags = flags | 2;
+        case TCOMP_STATE_CLOSING:
+            menu->waitFrames = TCOMP_CLOSE_FRAMES;
+            menu->flags = flags | TCOMP_FLAG_WAIT;
             widget = (EwWidget *)menu->ewHandle;
-            widget->flags &= 0xBFFF;
+            widget->flags &= ~EW_FLAG_VISIBLE;
             break;
         }
         return;
     }
-    if (!(flags & 4)) {
+    if (!(flags & TCOMP_FLAG_RUN)) {
         return;
     }
     switch (menu->state) {
-    case 15:
-        menu->flags = flags & ~2;
+    case TCOMP_STATE_DONE:
+        menu->flags = flags & ~TCOMP_FLAG_WAIT;
         if (menu->closePolicy & 1) {
-            menu->state = 2;
+            menu->state = TCOMP_STATE_CLOSING;
         } else {
-            menu->state = 0;
+            menu->state = TCOMP_STATE_IDLE;
         }
         break;
-    case 14:
-        if (PadData[0].direction_pressed & 0x40) {
-            xglSoundEffectNormalID(2, 0);
-            menu->flags &= ~2;
-            menu->state = 15;
+    case TCOMP_STATE_INPUT:
+        if (PadData[0].direction_pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
+            menu->flags &= ~TCOMP_FLAG_WAIT;
+            menu->state = TCOMP_STATE_DONE;
             menu->selectionResult = -1;
             break;
         }
         oldSelection = menu->selectedItem;
-        if (PadData[0].direction_pressed & 0x20) {
-            xglSoundEffectNormalID(1, 0);
-            menu->flags &= ~2;
-            menu->state = 15;
+        if (PadData[0].direction_pressed & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
+            menu->flags &= ~TCOMP_FLAG_WAIT;
+            menu->state = TCOMP_STATE_DONE;
             break;
         }
         menu->waitFrames = (menu->waitFrames + 1) & 0xFF;
-        if ((PadData[0].direction_repeated & 0x1000)
+        if ((PadData[0].direction_repeated & PAD_UP)
             && oldSelection > 0 && menu->selectionResult == 0) {
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             menu->selectedItem--;
             menu->waitFrames = 0;
         }
-        if ((PadData[0].direction_repeated & 0x4000)
+        if ((PadData[0].direction_repeated & PAD_DOWN)
             && menu->selectedItem < menu->itemCount - 1) {
-            xglSoundEffectNormalID(3, 0);
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             menu->selectedItem++;
             menu->waitFrames = 0;
         }
@@ -1537,39 +1547,39 @@ void TMENU_updateDefault(TComponent *component)
             }
         }
         break;
-    case 13:
+    case TCOMP_STATE_WAIT_FRAMES:
         menu->waitFrames--;
         if (menu->waitFrames < 0) {
-            menu->flags = flags & ~2;
-            menu->state = 16;
+            menu->flags = flags & ~TCOMP_FLAG_WAIT;
+            menu->state = TCOMP_STATE_REVEAL;
         }
         break;
-    case 2:
+    case TCOMP_STATE_CLOSING:
         menu->waitFrames--;
         if (menu->waitFrames < 0) {
             TMENU_dispose(menu);
         }
         break;
-    case 1:
+    case TCOMP_STATE_OPENING:
         menu->waitFrames++;
         TW_setPos(component);
-        if (menu->waitFrames >= 11) {
-            menu->flags |= 1;
+        if (menu->waitFrames >= TCOMP_OPEN_FRAMES) {
+            menu->flags |= TCOMP_FLAG_OPEN;
             /* Both query modes enter the same waiting state. */
             if (menu->activeQueryId != 0) {
-                menu->state = 16;
-                menu->flags &= ~2;
+                menu->state = TCOMP_STATE_REVEAL;
+                menu->flags &= ~TCOMP_FLAG_WAIT;
             } else {
-                menu->state = 16;
-                menu->flags &= ~2;
+                menu->state = TCOMP_STATE_REVEAL;
+                menu->flags &= ~TCOMP_FLAG_WAIT;
             }
         }
-        if (menu->flags & 0x200) {
-            menu->flags &= ~0x200;
+        if (menu->flags & TCOMP_FLAG_PRESELECT) {
+            menu->flags &= ~TCOMP_FLAG_PRESELECT;
             menu->selectedItem = menu->requestedSelection;
         }
         break;
-    case 16:
+    case TCOMP_STATE_REVEAL:
         if (menu->waitFrames < 8) {
             alpha = (int)(128.0f - ((float)menu->waitFrames * 0.125f) * 128.0f);
         } else {
@@ -1581,17 +1591,17 @@ void TMENU_updateDefault(TComponent *component)
             secondaryAlpha = 1;
         }
         menu->waitFrames++;
-        mask = (EwMaskWidget *)menu->widgets[1];
+        mask = (EwMaskWidget *)menu->widgets[TMENU_WIDGET_MASK];
         mask->mask.fix = ((unsigned int)secondaryAlpha << 16)
             | ((unsigned int)alpha << 8);
         if (menu->waitFrames >= 8) {
-            EwLabelWidget *queryLabel = (EwLabelWidget *)menu->widgets[2];
-            EwLabelWidget *itemLabel = (EwLabelWidget *)menu->widgets[3];
-            queryLabel->colorScale = 128;
-            itemLabel->colorScale = 128;
+            EwLabelWidget *queryLabel = (EwLabelWidget *)menu->widgets[TMENU_WIDGET_ITEMS];
+            EwLabelWidget *itemLabel = (EwLabelWidget *)menu->widgets[TMENU_WIDGET_QUERY];
+            queryLabel->colorScale = EW_COLOR_SCALE_NEUTRAL;
+            itemLabel->colorScale = EW_COLOR_SCALE_NEUTRAL;
         }
         widget = (EwWidget *)mask;
-        widget->drawValue = 0x00FFFFF1;
+        widget->drawValue = EW_ORDER_MASK;
         widget->x = (int)(menu->x + 16.0f);
         widget->y = (int)(menu->y + 16.0f);
         widget->width = menu->width;
@@ -1601,21 +1611,21 @@ void TMENU_updateDefault(TComponent *component)
                 (unsigned char *)menu->queryLines[menu->currentQueryLine]
                     + menu->queryCharacterOffset, 1);
             code = menu->queryQueue.last;
-            if (code >= 128) {
+            if (code >= MSG_CTRL_WAITKEY) {
                 switch (code) {
-                case 131:
-                    menu->state = 13;
+                case MSG_CTRL_WAIT:
+                    menu->state = TCOMP_STATE_WAIT_FRAMES;
                     menu->waitFrames = menu->queryQueue.label.value;
                     break;
-                case 128:
-                case 129:
+                case MSG_CTRL_WAITKEY:
+                case MSG_CTRL_CLEAR:
                 case 130:
-                case 132:
-                case 133:
+                case MSG_CTRL_CLOSE:
+                case MSG_CTRL_CAPTION:
                 default:
                     break;
                 }
-            } else if (menu->queryQueue.width >= menu->width || code == 10) {
+            } else if (menu->queryQueue.width >= menu->width || code == '\n') {
                 menu->queryCharacterOffset = 0;
                 menu->currentQueryLine++;
                 MSG_queueReset(&menu->queryQueue, 10);
@@ -1623,10 +1633,10 @@ void TMENU_updateDefault(TComponent *component)
         }
         if (menu->queryQueue.head >= menu->queryQueue.tail && menu->waitFrames >= 9) {
             MSG_queueReset(&menu->queryQueue, 0);
-            menu->flags &= ~2;
-            menu->state = 14;
-            mask = (EwMaskWidget *)menu->widgets[1];
-            mask->mask.fix = 0x00010100;
+            menu->flags &= ~TCOMP_FLAG_WAIT;
+            menu->state = TCOMP_STATE_INPUT;
+            mask = (EwMaskWidget *)menu->widgets[TMENU_WIDGET_MASK];
+            mask->mask.fix = EW_MASK_FIX_NONE;
         }
         break;
     default:
@@ -1644,95 +1654,95 @@ void TMENU_drawDefault(TComponent *component)
     int y;
     int queryHeight;
 
-    if (!(menu->flags & 0x10)) {
+    if (!(menu->flags & TCOMP_FLAG_ACTIVE)) {
         return;
     }
-    if (menu->state == 1 || menu->state == 2) {
+    if (menu->state == TCOMP_STATE_OPENING || menu->state == TCOMP_STATE_CLOSING) {
         return;
     }
     x = (int)menu->x + 16;
     y = (int)menu->y + 16;
-    widget = menu->widgets[1];
+    widget = menu->widgets[TMENU_WIDGET_MASK];
     widget->x = (int)(menu->x + 16.0f);
-    widget->drawValue = 0xFFFFF1;
+    widget->drawValue = EW_ORDER_MASK;
     widget->y = (int)(menu->y + 16.0f);
     widget->width = menu->width;
     widget->height = menu->height;
-    widget->flags |= 0x4000;
-    widget = menu->widgets[5];
-    widget->drawValue = 0x00FFFFF0;
+    widget->flags |= EW_FLAG_VISIBLE;
+    widget = menu->widgets[TMENU_WIDGET_FRAME];
+    widget->drawValue = EW_ORDER_FRAME;
     widget->x = x;
     widget->y = y;
     widget->width = menu->width;
     widget->height = menu->height;
-    widget->flags |= 0x4000;
+    widget->flags |= EW_FLAG_VISIBLE;
     if (menu->queryLineCount != 0) {
-        queryHeight = menu->queryLineCount * 24 + 12;
+        queryHeight = menu->queryLineCount * TMENU_LINE_HEIGHT + 12;
     } else {
         queryHeight = 0x0;
     }
-    widget = menu->widgets[0];
-    widget->drawValue = 0x00FFFFF1;
+    widget = menu->widgets[TMENU_WIDGET_CLIP];
+    widget->drawValue = EW_ORDER_MASK;
     widget->x = x;
     widget->y = y;
     widget->width = menu->width;
     widget->height = menu->height;
-    widget->flags |= 0x4000;
-    widget = menu->widgets[3];
+    widget->flags |= EW_FLAG_VISIBLE;
+    widget = menu->widgets[TMENU_WIDGET_QUERY];
     body = (EwLabelBody *)widget;
     body->label.textLines = menu->queryLines;
-    widget->drawValue = 0xFFFFFF;
+    widget->drawValue = EW_ORDER_TEXT;
     widget->x = x;
     widget->y = y;
     body->label.lineCount = menu->queryLineCount;
     body->label.firstLine = 0x0;
-    widget->flags |= 0x4000;
-    widget = menu->widgets[2];
+    widget->flags |= EW_FLAG_VISIBLE;
+    widget = menu->widgets[TMENU_WIDGET_ITEMS];
     body = (EwLabelBody *)widget;
     widget->x = x + 20;
-    widget->drawValue = 0x00FFFFFF;
+    widget->drawValue = EW_ORDER_TEXT;
     widget->y = y + queryHeight;
     body->label.firstLine = menu->firstVisibleItem;
     ((EwLabelSlot *)&body->label.textLines)->readOnlyTextLines = menu->itemTexts;
     body->label.lineCount = menu->visibleLineCount + 1;
-    widget->flags |= 0x4000;
+    widget->flags |= EW_FLAG_VISIBLE;
 
-    widget = menu->widgets[6];
+    widget = menu->widgets[TMENU_WIDGET_ARROW_UP];
     widget->x = x + menu->width - 16;
     widget->y = y;
-    widget->drawValue = 0x00FFFFFF;
+    widget->drawValue = EW_ORDER_TEXT;
     EW_sprtSetCursorUV((EwSpriteWidget *)widget, 1, menu->frameCounter);
     if (menu->firstVisibleItem > 0) {
-        widget->flags = widget->flags | 0x4000;
+        widget->flags = widget->flags | EW_FLAG_VISIBLE;
     } else {
-        widget->flags = widget->flags & 0xBFFF;
+        widget->flags = widget->flags & ~EW_FLAG_VISIBLE;
     }
-    widget = menu->widgets[7];
-    widget->drawValue = 0x00FFFFFF;
+    widget = menu->widgets[TMENU_WIDGET_ARROW_DOWN];
+    widget->drawValue = EW_ORDER_TEXT;
     widget->x = menu->width + x - 16;
     widget->y = menu->height + y - 16;
     EW_sprtSetCursorUV((EwSpriteWidget *)widget, 2, menu->frameCounter);
     if (menu->firstVisibleItem + menu->visibleLineCount < menu->itemCount) {
-        widget->flags |= 0x4000;
+        widget->flags |= EW_FLAG_VISIBLE;
     } else {
-        widget->flags &= 0xBFFF;
+        widget->flags &= ~EW_FLAG_VISIBLE;
     }
     y = 0xC;
     if (menu->selectedItem >= 0) {
-        y = (menu->selectedItem - menu->firstVisibleItem) * 24 + 12;
+        y = (menu->selectedItem - menu->firstVisibleItem) * TMENU_LINE_HEIGHT + 12;
     }
     if (menu->queryLineCount != 0) {
-        queryHeight = 24 * menu->queryLineCount + 12;
+        queryHeight = TMENU_LINE_HEIGHT * menu->queryLineCount + 12;
     } else {
         queryHeight = 0;
     }
-    widget = menu->widgets[8];
-    widget->drawValue = 0x00FFFFFF;
+    widget = menu->widgets[TMENU_WIDGET_CURSOR];
+    widget->drawValue = EW_ORDER_TEXT;
     /* Retain both floating zero-offset additions in the cursor layout. */
     x = (int)(menu->x + 20.0f + 0.0f + 0.0f);
     y = (int)((float)y + (menu->y + 16.0f - 6.0f + (float)queryHeight));
     widget->x = x;
     widget->y = y;
     EW_sprtSetCursorUV((EwSpriteWidget *)widget, 0, menu->frameCounter);
-    widget->flags |= 0x4000;
+    widget->flags |= EW_FLAG_VISIBLE;
 }

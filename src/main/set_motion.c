@@ -11,6 +11,12 @@
 #include "main/xgl_2.h"
 #include "main/xgl_dma.h"
 
+#define PLAYER_HISTORY_COUNT 64   /* positions PlayHis remembers, a ring indexed by PhCunt */
+#define ENEMY_SENSE_BLOCK_FRAMES 60 /* frames an enemy ignores new sightings after Homing_Search */
+#define ENEMY_STRAIGHT_CHECK_STEPS 32 /* sample count of the Check_Straight_ID walks */
+#define HOMING_STEP_LENGTH 5.0f     /* distance between spline points added along a homing leg */
+#define HOMING_SEARCH_RANGE 1000.0f /* farthest homing position considered */
+
 typedef struct SetMotionPad {
     unsigned char pad_00[0x28];
     unsigned short half_28;
@@ -143,21 +149,21 @@ typedef struct DiscoveryGameLoopState {
  * has alias set 0 and keeps that load below them. See the R09 rematch log. */
 typedef struct EnemyHomingAddState {
     unsigned char unmodeled_00[0x30a0];
-    float homing_positions[64][4];
-    short homing_neighbours[64][4];
-    short homing_neighbour_count[64];
-    short homing_linked_target[64];
+    float homing_positions[ENEMY_HOMING_MAX][4];
+    short homing_neighbours[ENEMY_HOMING_MAX][ENEMY_HOMING_NEIGHBOURS];
+    short homing_neighbour_count[ENEMY_HOMING_MAX];
+    short homing_linked_target[ENEMY_HOMING_MAX];
     short homing_count;
 } EnemyHomingAddState;
 
 extern short SelNum;
-extern ActorEnemyDetectView actor[64];
-extern EnemyWorkEntry enepc[16];
+extern ActorEnemyDetectView actor[ACTOR_COUNT];
+extern EnemyWorkEntry enepc[ENEMY_COUNT];
 extern SetMotionSoundWork SoundWork;
 extern UnduParam UnduTemp;
 extern UnduTestStorage UnduTest;
 extern DiscoveryGameLoopState GameLoopState;
-extern float PlayHis[64][4];
+extern float PlayHis[PLAYER_HISTORY_COUNT][4];
 extern float BackPos[4];
 extern float LocaterAngle[16];
 extern short PhCunt[1];
@@ -259,7 +265,7 @@ static float vec_1[9][2] = {
 
 static float rate_2_003B2008[4] = {1.0f, 2.0f, 0.5f, 3.0f};
 
-float PlayHis[64][4] = {{0.0f}};
+float PlayHis[PLAYER_HISTORY_COUNT][4] = {{0.0f}};
 
 float BackPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
@@ -288,6 +294,18 @@ UnduTestStorage UnduTest = {0};
 /* Declared here, not at the top: moving it up changes the original code. */
 #define SHADOW_NO_NEAREST_DISTANCE 5000.0f
 
+/* Check_Encount classifies the bearing between the player and an enemy:
+ * within 70 degrees of straight ahead is the front, beyond 150 degrees the
+ * back, in between the side. */
+#define ENCOUNTER_FRONT_ARC 1.2217306f
+#define ENCOUNTER_BACK_ARC 2.6179938f
+#define ENCOUNTER_MONSTER_SET_COUNT 8
+
+/* ActorTalkControls.talk_flags bits Before_Talk / After_Talk honour. */
+#define TALK_FLAG_TALK_MOTION 0x1    /* switch to the talk motion and back */
+#define TALK_FLAG_LOOK_AT_PLAYER 0x4 /* turn the head towards the player */
+#define TALK_FLAG_FREEZE 0x10        /* hand the enemy to the script */
+
 void Set_Motion(struct Actor *actor, int motion, unsigned int mode)
 {
     struct Actor *motion_actor = actor;
@@ -297,7 +315,7 @@ void Set_Motion(struct Actor *actor, int motion, unsigned int mode)
     unsigned int enemy_mode;
     int is_enemy_actor;
 
-    if ((enemy_entry->state_flags & 0x100) != 0) {
+    if ((enemy_entry->state_flags & ENEMY_STATE_FLAG_CUSTOM_BLEND) != 0) {
         motion_mode = mode | 0x10000000;
         enemy_mode = motion_mode | 0x20;
         if (motion_actor != GameLoopState.player) {
@@ -332,7 +350,7 @@ void Sound_FootStep(struct Actor *actor)
 
     motion = actor->animation.slot.currentDataId;
     second_step = 0;
-    if (motion != 1 && motion != 3) {
+    if (motion != MOTION_ID_WALK && motion != MOTION_ID_RUN) {
         return;
     }
     if ((actor->animation.slot.flags & 2) != 0) {
@@ -343,7 +361,7 @@ void Sound_FootStep(struct Actor *actor)
         (short)RES_GetEnemySeFoot(*ACTOR_SOUND_EFFECT_ID(actor));
     sound_index = 0;
     thresholds = &FootStep[foot_step_index * 4];
-    if (actor->animation.slot.currentDataId == 3) {
+    if (actor->animation.slot.currentDataId == MOTION_ID_RUN) {
         thresholds += 2;
     }
     previous_step = actor->last_step_distance;
@@ -353,9 +371,9 @@ void Sound_FootStep(struct Actor *actor)
          (short)thresholds[0] <= current_step) ||
         (current_step < previous_step &&
          previous_step < (short)thresholds[0])) {
-        sound_index = 0x20001;
-        if (actor->animation.slot.currentDataId == 3) {
-            sound_index = 0x20003;
+        sound_index = FOOT_STEP_WALK_A;
+        if (actor->animation.slot.currentDataId == MOTION_ID_RUN) {
+            sound_index = FOOT_STEP_RUN_A;
         }
         second_step = 0;
     }
@@ -364,9 +382,9 @@ void Sound_FootStep(struct Actor *actor)
          (short)thresholds[1] <= current_step) ||
         (current_step < previous_step &&
          previous_step < (short)thresholds[1])) {
-        sound_index = 0x20002;
-        if (actor->animation.slot.currentDataId == 3) {
-            sound_index = 0x20004;
+        sound_index = FOOT_STEP_WALK_B;
+        if (actor->animation.slot.currentDataId == MOTION_ID_RUN) {
+            sound_index = FOOT_STEP_RUN_B;
         }
         second_step = 1;
     }
@@ -375,21 +393,21 @@ void Sound_FootStep(struct Actor *actor)
         return;
     }
 
-    if (actor->animation.slot.currentDataId == 1 &&
-        enemy_entry->action == 4) {
-        int sound_number = 3;
+    if (actor->animation.slot.currentDataId == MOTION_ID_WALK &&
+        enemy_entry->action == ENEMY_ACT_ROUTE) {
+        int sound_number = ENEMY_SE_WALK_ALT;
         if (!second_step) {
-            sound_number = 2;
+            sound_number = ENEMY_SE_WALK;
         }
         EnemySound(actor, sound_number, 1, 1);
     }
-    if (actor->animation.slot.currentDataId == 3) {
-        if (enemy_entry->action == 4) {
-            EnemySound(actor, second_step ? 5 : 4, 1, 1);
+    if (actor->animation.slot.currentDataId == MOTION_ID_RUN) {
+        if (enemy_entry->action == ENEMY_ACT_ROUTE) {
+            EnemySound(actor, second_step ? ENEMY_SE_RUN_ALT : ENEMY_SE_RUN, 1, 1);
         }
-        if (actor->animation.slot.currentDataId == 3 &&
-            enemy_entry->action == 6) {
-            EnemySound(actor, second_step ? 5 : 4, 1, 1);
+        if (actor->animation.slot.currentDataId == MOTION_ID_RUN &&
+            enemy_entry->action == ENEMY_ACT_CHASE) {
+            EnemySound(actor, second_step ? ENEMY_SE_RUN_ALT : ENEMY_SE_RUN, 1, 1);
         }
     }
 }
@@ -399,12 +417,12 @@ void EnemySound(struct Actor *actor, short sound_index, signed char play,
 {
     int bank;
 
-    if ((sound_index == 2 || sound_index == 4) && ignore_se_type == 0 &&
+    if ((sound_index == ENEMY_SE_WALK || sound_index == ENEMY_SE_RUN) && ignore_se_type == 0 &&
         RES_GetEnemySeType(*ACTOR_SOUND_EFFECT_ID(actor)) == 1)
     {
         return;
     }
-    if (actor->flags & 8)
+    if (actor->flags & ACTOR_FLAG_HIDDEN)
     {
         return;
     }
@@ -434,13 +452,13 @@ void EnemySound_StopAll(signed char which)
 {
     short actor_index;
 
-    for (actor_index = 0; actor_index < 16; actor_index++)
+    for (actor_index = 0; actor_index < ENEMY_COUNT; actor_index++)
     {
         EnemySound_Stop((struct Actor *)&actor[actor_index], which);
     }
-    xglSoundEffectStopDirect(0x10008);
-    xglSoundEffectStopDirect(0x10009);
-    xglSoundEffectStopDirect(0x1000b);
+    xglSoundEffectStopDirect(SE_ID_DAMAGE_ELECTRIC);
+    xglSoundEffectStopDirect(SE_ID_DAMAGE_EXPLOSION);
+    xglSoundEffectStopDirect(SE_ID_DAMAGE_SEAL);
 }
 
 void EnemySound_Stop(struct Actor *actor, signed char which)
@@ -484,17 +502,17 @@ void Before_Talk(struct Actor *actor)
     ActorTalkControls *controls = &talk_actor->controls;
     EnemyWorkEntry *enemy_state = &enepc[ACTOR_NUMBER(actor)];
 
-    if (controls->talk_flags & 1) {
+    if (controls->talk_flags & TALK_FLAG_TALK_MOTION) {
         enemy_state->saved_motion = talk_actor->saved_talk_motion;
-        Set_Motion(actor, Get_DefaultMotion(actor, 3), 1);
+        Set_Motion(actor, Get_DefaultMotion(actor, ENEMY_DEFAULT_MOTION_TALK), 1);
         talk_actor->motion_progress = 0;
         talk_actor->talk_state = 9;
     }
-    if (controls->talk_flags & 4) {
-        Enemy_Command_LookAt(actor, 100);
+    if (controls->talk_flags & TALK_FLAG_LOOK_AT_PLAYER) {
+        Enemy_Command_LookAt(actor, ENEMY_TARGET_PLAYER);
     }
-    if (controls->talk_flags & 0x10) {
-        Enemy_Command_Freeze(actor, 1);
+    if (controls->talk_flags & TALK_FLAG_FREEZE) {
+        Enemy_Command_Freeze(actor, ENEMY_FREEZE_SCRIPTED);
         /* This path ends with a sibling jump in the original, unlike
          * the after-talk path, which returns through its own epilogue. */
     }
@@ -506,16 +524,16 @@ void After_Talk(struct Actor *actor)
     ActorTalkControls *controls = &talk_actor->controls;
     EnemyWorkEntry *enemy_state = &enepc[ACTOR_NUMBER(actor)];
 
-    if (controls->talk_flags & 1) {
-        Set_Motion(actor, enemy_state->saved_motion, 9);
+    if (controls->talk_flags & TALK_FLAG_TALK_MOTION) {
+        Set_Motion(actor, enemy_state->saved_motion, MOTION_BLEND_DEFAULT);
     }
-    if (controls->talk_flags & 4) {
-        Enemy_Command_LookAt(actor, -1);
+    if (controls->talk_flags & TALK_FLAG_LOOK_AT_PLAYER) {
+        Enemy_Command_LookAt(actor, ENEMY_LOOK_AT_RELEASE);
     }
     do {
-        if (!(controls->talk_flags & 0x10))
+        if (!(controls->talk_flags & TALK_FLAG_FREEZE))
             break;
-        Enemy_Command_Freeze(actor, 0);
+        Enemy_Command_Freeze(actor, ENEMY_FREEZE_RELEASE);
     } while (0);
 }
 
@@ -523,13 +541,13 @@ int Check_EnemyFound(void)
 {
     short enemy_index;
 
-    for (enemy_index = 0; enemy_index < 16; enemy_index++) {
+    for (enemy_index = 0; enemy_index < ENEMY_COUNT; enemy_index++) {
         if (actor[enemy_index].active_state > 0 &&
             actor[enemy_index].status != 1 &&
-            (enepc[enemy_index].state_flags & 1) &&
-            (enepc[enemy_index].action == 6 ||
-             enepc[enemy_index].action == 10 ||
-             enepc[enemy_index].action == 5)) {
+            (enepc[enemy_index].state_flags & ENEMY_STATE_FLAG_ENCOUNTER) &&
+            (enepc[enemy_index].action == ENEMY_ACT_CHASE ||
+             enepc[enemy_index].action == ENEMY_ACT_TENTACLE ||
+             enepc[enemy_index].action == ENEMY_ACT_FOUND)) {
             return 1;
         }
     }
@@ -540,12 +558,12 @@ int Check_EnemyBurn(void)
 {
     short enemy_index;
 
-    for (enemy_index = 0; enemy_index < 16; enemy_index++) {
+    for (enemy_index = 0; enemy_index < ENEMY_COUNT; enemy_index++) {
         if (actor[enemy_index].active_state > 0 &&
             actor[enemy_index].status != 1) {
             EnemyWorkEntry *work = &enepc[enemy_index];
 
-            if (work->action == 11 || work->action == 7) {
+            if (work->action == ENEMY_ACT_DAMAGE_EXPLOSION || work->action == ENEMY_ACT_STIFF) {
                 return 1;
             }
         }
@@ -557,11 +575,11 @@ int Check_EnemyElec(void)
 {
     short enemy_index;
 
-    for (enemy_index = 0; enemy_index < 16; enemy_index++) {
+    for (enemy_index = 0; enemy_index < ENEMY_COUNT; enemy_index++) {
         if (actor[enemy_index].active_state > 0 &&
             actor[enemy_index].status != 1 &&
-            (enepc[enemy_index].action == 12 ||
-             (enepc[enemy_index].stiff_flag & 2))) {
+            (enepc[enemy_index].action == ENEMY_ACT_DAMAGE_ELECTRIC ||
+             (enepc[enemy_index].stiff_flag & ENEMY_STIFF_ELECTRIC))) {
             return 1;
         }
     }
@@ -572,10 +590,10 @@ void Enemy_FindByEar(ActorEnemyDetectView *enemy, const Vector4 *sound_position)
 {
     short index;
 
-    if (PadData.half_28 & 0x200) {
+    if (PadData.half_28 & PAD_L3) {
         return;
     }
-    for (index = 0; index < 64; index++) {
+    for (index = 0; index < ACTOR_COUNT; index++) {
         if (enemy != &actor[index]) {
             EnemyParams *hearing = &actor[index].hearing;
             if (hearing->hearing_distance != 0.0f) {
@@ -594,7 +612,7 @@ void Script_Action(struct Actor *actor)
 {
     EnemyWorkEntry *script = &enepc[ACTOR_NUMBER(actor)];
 
-    if (script->state_flags & 0x10000) {
+    if (script->state_flags & ENEMY_STATE_FLAG_SCRIPT_ACTIVE) {
         if (script->sac_move.frame != -1) {
             Get_MiddlePoint(&script->sac_move.start.x, &script->sac_move.target.x,
                             script->sac_move.frame, script->sac_move.duration,
@@ -631,11 +649,11 @@ void Move_BeltConveyer(struct Actor *actor)
     UnduCheck(&actor->position, 0, &UnduTemp);
     if (ACTOR_NUMBER(actor) == 8) {
         flags = UnduTemp.attribute;
-        surface_flags = flags & 0x3f000000;
-        direction_mask = surface_flags & 0x0f000000;
+        surface_flags = flags & ACTOR_ATTR_FLOOR_MASK;
+        direction_mask = surface_flags & ACTOR_ATTR_FLOOR_DIR_MASK;
         if (direction_mask != 0) {
-            unsigned char direction = idx_0[(unsigned int)direction_mask >> 24];
-            float distance = rate_2_003B2008[(unsigned int)surface_flags >> 28] * 0.1024f;
+            unsigned char direction = idx_0[(unsigned int)direction_mask >> ACTOR_ATTR_FLOOR_DIR_SHIFT];
+            float distance = rate_2_003B2008[(unsigned int)surface_flags >> ACTOR_ATTR_FLOOR_SPEED_SHIFT] * 0.1024f;
             float *direction_vector = vec_1[direction];
             actor->position.x += distance * direction_vector[0];
             actor->position.z += distance * direction_vector[1];
@@ -655,51 +673,51 @@ void Check_Discovery(struct Actor *enemy)
     if ((int)enemy->flags < 0 && state->chase_frame_limit < 0) {
         return;
     }
-    if (enemy->flags & 8) {
+    if (enemy->flags & ACTOR_FLAG_HIDDEN) {
         return;
     }
     player = GameLoopState.player;
     if (player->flash_timer) {
         return;
     }
-    if ((unsigned char)state->action - 5U < 2U) {
+    if ((unsigned char)state->action - ENEMY_ACT_FOUND < 2U) {
         return;
     }
     detection_state = state->action;
-    if (detection_state == 11) {
+    if (detection_state == ENEMY_ACT_DAMAGE_EXPLOSION) {
         return;
     }
-    if (detection_state == 12) {
+    if (detection_state == ENEMY_ACT_DAMAGE_ELECTRIC) {
         return;
     }
-    if (detection_state == 13) {
+    if (detection_state == ENEMY_ACT_DAMAGE_SEAL) {
         return;
     }
-    if (detection_state == 7) {
+    if (detection_state == ENEMY_ACT_STIFF) {
         return;
     }
-    if (detection_state == 10) {
+    if (detection_state == ENEMY_ACT_TENTACLE) {
         return;
     }
-    if (detection_state == 0) {
+    if (detection_state == ENEMY_ACT_INIT) {
         return;
     }
-    if (detection_state == 14) {
+    if (detection_state == ENEMY_ACT_ESCAPE) {
         return;
     }
-    enemy->flags |= 0x00400000;
-    if (FLAG_FRAME_60 != 0 && (PadData.half_28 & 0x200)) {
+    enemy->flags |= ACTOR_FLAG_FACE_PLAYER;
+    if (FLAG_FRAME_60 != 0 && (PadData.half_28 & PAD_L3)) {
         return;
     }
     switch (state->pause_kind) {
     case 2: case 3: case 4: case 7:
-        Enemy_ActionReady(enemy, 10);
+        Enemy_ActionReady(enemy, ENEMY_ACT_TENTACLE);
         break;
     case 6: case 13:
         break;
     case 5: case 8: case 9: case 10: case 11: case 12:
     default:
-        Enemy_ActionReady(enemy, 5);
+        Enemy_ActionReady(enemy, ENEMY_ACT_FOUND);
         state->last_player_position.vector = GameLoopState.player->position;
         break;
     }
@@ -719,7 +737,7 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
     int options;
 
     if (!enable) {
-        if (!(state->state_flags & 1)) {
+        if (!(state->state_flags & ENEMY_STATE_FLAG_ENCOUNTER)) {
             return;
         }
         if (GameLoopState.pause_flags & 0x108000) {
@@ -729,15 +747,15 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
                                    &enemy->head.position,
                                    GameLoopState.player->rotation.y);
         for (;;) {
-            if (Check_Angle(angle, -1.2217306f, 1.2217306f) == 1) {
+            if (Check_Angle(angle, -ENCOUNTER_FRONT_ARC, ENCOUNTER_FRONT_ARC) == 1) {
                 facing[0] = 0;
                 break;
             }
-            if (Check_Angle(angle, 1.2217306f, 2.6179938f) == 1) {
+            if (Check_Angle(angle, ENCOUNTER_FRONT_ARC, ENCOUNTER_BACK_ARC) == 1) {
                 facing[0] = 1;
                 break;
             }
-            if (Check_Angle(angle, -2.6179938f, 1.2217306f) == 1) {
+            if (Check_Angle(angle, -ENCOUNTER_BACK_ARC, ENCOUNTER_FRONT_ARC) == 1) {
                 facing[0] = 1;
             } else {
                 facing[0] = 2;
@@ -748,15 +766,15 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
                                    &GameLoopState.player->position,
                                    enemy->head.rotation.y);
         for (;;) {
-            if (Check_Angle(angle, -1.2217306f, 1.2217306f) == 1) {
+            if (Check_Angle(angle, -ENCOUNTER_FRONT_ARC, ENCOUNTER_FRONT_ARC) == 1) {
                 facing[1] = 0;
                 break;
             }
-            if (Check_Angle(angle, 1.2217306f, 2.6179938f) == 1) {
+            if (Check_Angle(angle, ENCOUNTER_FRONT_ARC, ENCOUNTER_BACK_ARC) == 1) {
                 facing[1] = 1;
                 break;
             }
-            if (Check_Angle(angle, -2.6179938f, 1.2217306f) == 1) {
+            if (Check_Angle(angle, -ENCOUNTER_BACK_ARC, ENCOUNTER_FRONT_ARC) == 1) {
                 facing[1] = 1;
             } else {
                 facing[1] = 2;
@@ -768,7 +786,7 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
     } else {
         GameLoopState.encount.encounter_side = command;
     }
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < ENCOUNTER_MONSTER_SET_COUNT; i++) {
         if (params->monster_set_numbers[i] != -1) {
             count++;
         }
@@ -782,13 +800,13 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
     GameLoopState.encount.event_flags = params->encounter_event_flags;
     GameLoopState.encount.enemy = enemy;
     GameLoopState.encount.trigger_flags = 0;
-    if (options & 1) {
+    if (options & ENEMY_STIFF_ACTIVE_BIT) {
         GameLoopState.encount.trigger_flags = 2;
     }
-    if (options & 2) {
+    if (options & ENEMY_STIFF_ELECTRIC) {
         GameLoopState.encount.trigger_flags |= 1;
     }
-    if (options & 4) {
+    if (options & ENEMY_STIFF_SEAL) {
         GameLoopState.encount.trigger_flags |= 4;
     }
 }
@@ -812,24 +830,24 @@ void Enemy_After_Battle(int victory)
     } else {
         actor[GameLoopState.encount.enemy->number].battle_state = 16;
     }
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < ENEMY_COUNT; i++) {
         if (actor[i].active_state > 0 && actor[i].status != 1) {
-            if (enepc[i].state_flags & 1) {
+            if (enepc[i].state_flags & ENEMY_STATE_FLAG_ENCOUNTER) {
                 if (enepc[i].elec_timer != 0) {
                     enepc[i].elec_timer = 1;
                 }
-                if (enepc[i].action == 7) {
+                if (enepc[i].action == ENEMY_ACT_STIFF) {
                     enepc[i].stiff_timer = 0;
                 }
                 if (enepc[i].status_4_timer != 0) {
                     enepc[i].status_4_timer = 1;
                 }
-                if (enepc[i].action == 6) {
+                if (enepc[i].action == ENEMY_ACT_CHASE) {
                     enepc[i].spline_parameter = 0;
                     BSpline_Init(enepc[i].spline_coordinates[0],
                                  actor[i].head.position.elements,
                                  actor[i].target_angle);
-                    Enemy_ActionReady((struct Actor *)&actor[i], 2);
+                    Enemy_ActionReady((struct Actor *)&actor[i], ENEMY_ACT_THREAT);
                     Homing_Search(&actor[i]);
                 }
             }
@@ -891,20 +909,20 @@ void Set_PlayerHistory(struct Actor *actor)
     if (Check_Straight_ID(actor->body_radius,
                           PlayHis[PhCunt[0] - 1],
                           &enepc[ACTOR_NUMBER(actor)].escape_target,
-                          32, result, 772) < 32) {
+                          ENEMY_STRAIGHT_CHECK_STEPS, result, ENEMY_MAP_INDEX_ENEMY) < ENEMY_STRAIGHT_CHECK_STEPS) {
         PlayHis[PhCunt[0]][0] = BackPos[0];
         PlayHis[PhCunt[0]][1] = BackPos[1];
         PlayHis[PhCunt[0]][2] = BackPos[2];
         PlayHis[PhCunt[0]][3] = BackPos[3];
-        PhCunt[0] = (PhCunt[0] + 1) % 64;
+        PhCunt[0] = (PhCunt[0] + 1) % PLAYER_HISTORY_COUNT;
     }
 }
 
 void Homing_Search(ActorEnemyDetectView *enemy)
 {
     EnemyWorkEntry *state = &enepc[enemy->slot_number];
-    float distances[64];
-    short order[64];
+    float distances[ENEMY_HOMING_MAX];
+    short order[ENEMY_HOMING_MAX];
     float result[4];
     short i;
     short j;
@@ -919,13 +937,13 @@ void Homing_Search(ActorEnemyDetectView *enemy)
     float angle;
     short *order_base;
 
-    state->sense_block_timer = 60;
+    state->sense_block_timer = ENEMY_SENSE_BLOCK_FRAMES;
     if (state->homing_count > 0) {
         for (i = 0; i < state->homing_count; i++) {
             distances[i] = Get_Distance(&enemy->head.position.coordinates, &state->homing_positions[i].vector);
         }
         for (i = 0; i < state->homing_count; i++) {
-            closest = 1000.0f;
+            closest = HOMING_SEARCH_RANGE;
             path_length = -1;
             for (j = 0; j < state->homing_count; j++) {
                 if (distances[j] < closest && 0.0f < distances[j]) {
@@ -938,7 +956,7 @@ void Homing_Search(ActorEnemyDetectView *enemy)
         }
         for (i = 0; i < state->homing_count; i++) {
             if (Check_Straight_ID(enemy->interaction_radius, enemy->head.position.elements,
-                                  state->homing_positions[order[i]].elements, 32, result, 772) == 32) {
+                                  state->homing_positions[order[i]].elements, ENEMY_STRAIGHT_CHECK_STEPS, result, ENEMY_MAP_INDEX_ENEMY) == ENEMY_STRAIGHT_CHECK_STEPS) {
                 parent = order[i];
                 break;
             }
@@ -978,7 +996,7 @@ void Homing_Search(ActorEnemyDetectView *enemy)
             float y = state->homing_positions[order[i]].elements[1];
             float z = state->homing_positions[order[i]].elements[2];
             short steps = (short)(__builtin_sqrtf((previous_x - x) * (previous_x - x) +
-                                                  (previous_z - z) * (previous_z - z)) / 5.0f);
+                                                  (previous_z - z) * (previous_z - z)) / HOMING_STEP_LENGTH);
 
             if (steps != 0) {
                 steps++;
@@ -1014,8 +1032,8 @@ void Homing_Search(ActorEnemyDetectView *enemy)
             TM_Script_Spline_Add(enemy->slot_number, tail_x,
                                  state->homing_positions[order[path_length - 1]].elements[1], tail_z);
         }
-        enemy->head.flags |= 0x80000000;
-        Enemy_ActionReady((struct Actor *)enemy, 4);
+        enemy->head.flags |= ACTOR_FLAG_HOMING;
+        Enemy_ActionReady((struct Actor *)enemy, ENEMY_ACT_ROUTE);
     }
 }
 
@@ -1048,9 +1066,9 @@ void Refresh_Homing(struct Actor *actor)
     int neighbourIndex;
     state = &enepc[ACTOR_NUMBER(actor)];
 
-    for (positionIndex = 0; positionIndex < 64; positionIndex++) {
+    for (positionIndex = 0; positionIndex < ENEMY_HOMING_MAX; positionIndex++) {
         state->homing_neighbour_count[positionIndex] = 0;
-        for (neighbourIndex = 3; neighbourIndex >= 0; neighbourIndex--) {
+        for (neighbourIndex = ENEMY_HOMING_NEIGHBOURS - 1; neighbourIndex >= 0; neighbourIndex--) {
             state->homing_neighbours[positionIndex][neighbourIndex] = -1;
         }
     }
@@ -1082,7 +1100,7 @@ void Disp_Homing(void)
     short k;
 
     if (GameLoopState.player->number != DebugActor) {
-        nearest_distance = 1000.0f;
+        nearest_distance = HOMING_SEARCH_RANGE;
         for (i = 0; i < state->homing_count; i++) {
             float distance = Get_Distance(&GameLoopState.player->position, &state->homing_positions[i].vector);
 
@@ -1091,10 +1109,10 @@ void Disp_Homing(void)
                 nearest = i;
             }
         }
-        if (PadData.half_2a & 0x8) {
+        if (PadData.half_2a & PAD_R1) {
             SelNum = -1;
         }
-        if (PadData.half_2a & 0x80) {
+        if (PadData.half_2a & PAD_SQUARE) {
             if (SelNum == nearest) {
                 SelNum = -1;
             } else if (SelNum != -1) {
@@ -1107,7 +1125,7 @@ void Disp_Homing(void)
         if (((SetMotionPad *)&PadData)->analog_level == 255) {
             state->homing_positions[SelNum].vector = GameLoopState.player->position;
         }
-        if ((PadData.half_2a & 0x40) && SelNum != -1) {
+        if ((PadData.half_2a & PAD_CROSS) && SelNum != -1) {
             for (i = SelNum; i < state->homing_count - 1; i++) {
                 for (k = 0; k < 4; k++) {
                     state->homing_neighbours[i][k] = state->homing_neighbours[i + 1][k];
@@ -1139,7 +1157,7 @@ void Disp_Homing(void)
             }
             SelNum = -1;
         }
-        if ((PadData.half_2a & 0x20) && SelNum != -1) {
+        if ((PadData.half_2a & PAD_CIRCLE) && SelNum != -1) {
             for (d = state->homing_count; d > SelNum; d--) {
                 for (k = 0; k < 4; k++) {
                     state->homing_neighbours[d][k] = state->homing_neighbours[d - 1][k];
@@ -1163,7 +1181,7 @@ void Disp_Homing(void)
                 }
             }
         }
-        if (PadData.half_2a & 0x4) {
+        if (PadData.half_2a & PAD_L1) {
             for (d = 0; d < state->homing_count; d++) {
                 for (k = 0; k < state->homing_neighbour_count[d]; k++) {
                 }
@@ -1211,7 +1229,7 @@ void Set_Shadow(struct Actor *reference_actor)
     AlignedHomingPosition nearest_position;
     short actor_index;
 
-    for (actor_index = 0; actor_index < 16; actor_index++) {
+    for (actor_index = 0; actor_index < ENEMY_COUNT; actor_index++) {
         EnemyWorkEntry *state = &enepc[actor_index];
 
         if (ACTOR_NUMBER(reference_actor) != actor_index &&
@@ -1242,7 +1260,7 @@ int Get_MostNear_Actor(struct Actor *reference_actor)
     short actor_index;
     int nearest_index = -1;
 
-    for (actor_index = 0; actor_index < 64; actor_index++) {
+    for (actor_index = 0; actor_index < ACTOR_COUNT; actor_index++) {
         if (ACTOR_NUMBER(reference_actor) != actor_index &&
             actor[actor_index].active_state > 0 && actor[actor_index].status != 1 &&
             Check_InsideFan(&reference_actor->position,

@@ -15,6 +15,34 @@
 #define SEF_CLIP_VIEW_VOLUME_OFFSET 0x4F0
 #define SCHEDULER_COUNT 0x80
 
+/* The image mapper: SV_TYPE_LIST_COUNT type lists of SV_ENTRY_COUNT entries. */
+#define SV_TYPE_LIST_COUNT 40
+#define SV_ENTRY_COUNT 0x100
+
+/* SvTypeListEntry.resourceKind, equal to the chunk kind it was built from. */
+enum {
+    SV_RES_CLUT = 3,
+    SV_RES_IMAGE = 4,
+    SV_RES_SCRIPT = 5,
+    SV_RES_MODEL = 6
+};
+
+/* Resource chunk kinds svAnalyzeChunk dispatches on (0 ends the file). */
+enum {
+    SV_CHUNK_END = 0,
+    SV_CHUNK_CLUT = 3,
+    SV_CHUNK_IMAGE = 4,
+    SV_CHUNK_SCRIPT = 5,
+    SV_CHUNK_MODEL = 6,
+    SV_CHUNK_SCRIPT2 = 10
+};
+
+/* GS texture pixel formats for 8 and 4 bits per pixel. */
+#define SV_PSM_T8 19
+#define SV_PSM_T4 20
+
+#define SV_BATTLE_IMAGE_SIZE 0x40000 /* buffer for a battle image resource */
+
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
 /*
@@ -121,7 +149,7 @@ typedef struct SvImageItem {
  */
 typedef struct SvImageList {
     unsigned char unmodeled_header[0x1C];
-    SvImageItem items[0x100];
+    SvImageItem items[SV_ENTRY_COUNT];
 } SvImageList;
 
 /*
@@ -159,7 +187,7 @@ typedef struct SvTypeList {
     short height;
     short entryCount;
     unsigned char unmodeled_16[6];
-    SvTypeListEntry entries[0x100];
+    SvTypeListEntry entries[SV_ENTRY_COUNT];
 } SvTypeList;
 
 typedef struct SvReferenceImageSlot {
@@ -169,8 +197,8 @@ typedef struct SvReferenceImageSlot {
 /* _imageMapper's symbol-table size is 40 mapper records followed by these
  * forty two-word reference-image slots. */
 typedef struct SvImageMapperStorage {
-    SvTypeList typeLists[40];
-    SvReferenceImageSlot referenceImages[40];
+    SvTypeList typeLists[SV_TYPE_LIST_COUNT];
+    SvReferenceImageSlot referenceImages[SV_TYPE_LIST_COUNT];
 } SvImageMapperStorage;
 
 
@@ -362,17 +390,17 @@ Matrix4 _defMatLcMod = {{0.0f}};
 
 Matrix4 _defMatLn = {{0.0f}};
 
-static int siz_0[40];
+static int siz_0[SV_TYPE_LIST_COUNT];
 
-static int top_1[40];
+static int top_1[SV_TYPE_LIST_COUNT];
 
 const char imageBmpNameFormat[8] = {'%', 's', '.', 'b', 'm', 'p', '\0', '\0'};
 
 const char imageClutNameFormat[8] = {'%', 's', '.', 'c', 'l', 't', '\0', '\0'};
 
-static int siz_0[40] = { 24576, 8192, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 65536, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072 };
+static int siz_0[SV_TYPE_LIST_COUNT] = { 24576, 8192, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384, 65536, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072 };
 
-static int top_1[40] = { 917504, 942080, 950272, 972032, 993792, 966656, 988416, 1010176, 983040, 1004800, 1026560, 999424, 1015808, 1032192, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272 };
+static int top_1[SV_TYPE_LIST_COUNT] = { 917504, 942080, 950272, 972032, 993792, 966656, 988416, 1010176, 983040, 1004800, 1026560, 999424, 1015808, 1032192, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272, 950272 };
 
 Matrix4 _defMatLc = {{0.0f}};
 
@@ -455,7 +483,7 @@ void svImageListDestroy(SvTypeList *typeList)
 {
   SvTypeList *header = typeList;
   int *used = &typeList->entries[0].used;
-  int count = 0xFF;
+  int count = SV_ENTRY_COUNT - 1;
 
   do
   {
@@ -481,7 +509,7 @@ static int svImageListAlloc(int typeListAddr)
     int index;
 
     typeList = (SvTypeList *)typeListAddr;
-    for (index = 0; index < 0x100; index++) {
+    for (index = 0; index < SV_ENTRY_COUNT; index++) {
         if (typeList->entries[index].used == 0) {
             return index;
         }
@@ -504,7 +532,7 @@ static void *svGetImageListItemSub(int type, unsigned int flags)
     storage = typeList;
     entry = storage->entries;
     index = 0;
-    while (index < 0x100) {
+    while (index < SV_ENTRY_COUNT) {
         if (entry->used != 0 && entry->type == (unsigned char)flags) {
             return entry;
         }
@@ -545,7 +573,7 @@ static SvTypeListEntry *svGetResFromName(const char *name)
     storage = typeList;
     entry = storage->entries;
     index = 0;
-    while (index < 0x100) {
+    while (index < SV_ENTRY_COUNT) {
         if (entry->used != 0 && strcmp(entry->name, name) == 0) {
             return entry;
         }
@@ -584,10 +612,10 @@ SvImageParameter *svGetPrmFromName(const char *baseName,
             dimensionBits =
                 ((unsigned long long)bitmap->textureWidthExponent << 26) |
                 0x400000000ULL;
-            pixelFormat = 20;
+            pixelFormat = SV_PSM_T4;
             bitsPerPixel = bitmap->bitsPerPixel;
             if (bitsPerPixel == 8) {
-                pixelFormat = 19;
+                pixelFormat = SV_PSM_T8;
             }
             formatBits =
                 ((unsigned long long)pixelFormat << 20) |
@@ -631,7 +659,7 @@ void svLoadTexture(SvTypeListEntry *image)
         if (qwc < 0) {
             qwc += 15;
         }
-        sceVif1PkRefLoadImage(packet, basePointer, 19,
+        sceVif1PkRefLoadImage(packet, basePointer, SV_PSM_T8,
                               bufferWidth >> 6, image->data,
                               (unsigned int)(qwc >> 4), 0, 0, width, height);
     } else {
@@ -643,7 +671,7 @@ void svLoadTexture(SvTypeListEntry *image)
         if (qwc < 0) {
             qwc += 15;
         }
-        sceVif1PkRefLoadImage(packet, basePointer, 20,
+        sceVif1PkRefLoadImage(packet, basePointer, SV_PSM_T4,
                               bufferWidth >> 6, image->data,
                               (unsigned int)(qwc >> 4), 0, 0, width, height);
     }
@@ -667,19 +695,19 @@ int svLoadImageList(SvTypeList *typeList)
     int textureCount = 0;
     int index = 0;
 
-    for (; index < 256; index++) {
+    for (; index < SV_ENTRY_COUNT; index++) {
         int used = typeList->entries[index].used;
         int kind;
         if (used == 0) {
             continue;
         }
         kind = typeList->entries[index].resourceKind;
-        if (kind == 4) {
+        if (kind == SV_RES_IMAGE) {
             textureCount++;
             svLoadTexture(&typeList->entries[index]);
             continue;
         }
-        if (kind == 3) {
+        if (kind == SV_RES_CLUT) {
             svLoadClut(&typeList->entries[index]);
         }
     }
@@ -692,7 +720,7 @@ int svLoadMapperList(void)
     int type;
     SvTypeList *typeLists = _imageMapper.typeLists;
 
-    for (type = 0; type < 40; type++) {
+    for (type = 0; type < SV_TYPE_LIST_COUNT; type++) {
         /* Preserve the original loop's separate entry-count pointer. */
         const s16 *entryCount = &typeLists[type].entryCount;
         result = *entryCount;
@@ -736,7 +764,7 @@ static int svAddImage(SvTypeList *typeList, void *chunk)
     entry = &typeList->entries[index];
     entry->data = (unsigned char *)chunk + 0x40;
     entry->used = 1;
-    entry->resourceKind = 4;
+    entry->resourceKind = SV_RES_IMAGE;
     image = chunk;
     typeFlags = image->typeFlags;
     entry->typeFlags = typeFlags;
@@ -777,7 +805,7 @@ static int svAddClut(SvTypeList *typeList, void *const chunkData)
     entry = &typeList->entries[index];
     entry->data = chunk->data;
     entry->used = 1;
-    entry->resourceKind = 3;
+    entry->resourceKind = SV_RES_CLUT;
     entry->typeFlags = chunk->typeFlags;
     entry->width = chunk->width;
     entry->height = chunk->height;
@@ -809,7 +837,7 @@ static int svAddModel(SvTypeList *typeList, SvResourceChunk *chunk)
         return -1;
     }
     entry = &typeList->entries[index];
-    entry->resourceKind = 6;
+    entry->resourceKind = SV_RES_MODEL;
     entry->name = &chunk->payload[8];
     typeFlags = chunk->typeFlags | 0x2000;
     entry->data = &chunk->payload[sizeof(chunk->payload)];
@@ -831,7 +859,7 @@ static int svAddScript(SvTypeList *typeList, SvResourceChunk *chunk)
         return -1;
     }
     entry = &typeList->entries[index];
-    entry->resourceKind = 5;
+    entry->resourceKind = SV_RES_SCRIPT;
     entry->name = &chunk->payload[8];
     typeFlags = chunk->typeFlags;
     entry->data = &chunk->payload[sizeof(chunk->payload)];
@@ -874,17 +902,17 @@ static void svAnalyzeChunk(SvTypeList *typeList, void *chunkFile)
     SvResourceChunkFile *file = chunkFile;
     SvResourceChunk *chunk = file->firstChunk;
 
-    while (chunk->kind != 0) {
+    while (chunk->kind != SV_CHUNK_END) {
         switch (chunk->kind) {
         case 1:
         case 2:
             chunk++;
             continue;
-        case 4:
+        case SV_CHUNK_IMAGE:
             svAddImage(typeList, chunk);
             chunk = (SvResourceChunk *)((unsigned char *)chunk + chunk->byteSize);
             break;
-        case 3:
+        case SV_CHUNK_CLUT:
             svAddClut(typeList, chunk);
             chunk = (SvResourceChunk *)((unsigned char *)chunk + chunk->byteSize);
             break;
@@ -892,16 +920,16 @@ static void svAnalyzeChunk(SvTypeList *typeList, void *chunkFile)
             svAddImage(typeList, chunk);
             chunk = (SvResourceChunk *)((unsigned char *)chunk + chunk->byteSize);
             break;
-        case 6:
+        case SV_CHUNK_MODEL:
         case 9:
             svAddModel(typeList, chunk);
             chunk = (SvResourceChunk *)((unsigned char *)chunk + chunk->byteSize);
             break;
-        case 5:
+        case SV_CHUNK_SCRIPT:
             svAddScript(typeList, chunk);
             chunk = (SvResourceChunk *)((unsigned char *)chunk + chunk->byteSize);
             break;
-        case 10:
+        case SV_CHUNK_SCRIPT2:
             svAddScript2((int)typeList, chunk);
             chunk = (SvResourceChunk *)((unsigned char *)chunk + chunk->byteSize);
             break;
@@ -916,7 +944,7 @@ void svInitImageMapper(void)
     int index;
 
     memset(&_imageMapper, 0, sizeof(_imageMapper));
-    for (index = 0; index < 40; index++) {
+    for (index = 0; index < SV_TYPE_LIST_COUNT; index++) {
         int initialTop = top_1[index];
         int initialCapacity;
 
@@ -936,7 +964,7 @@ static void svInitRefImage(void)
     int index;
 
     storage = &_imageMapper;
-    for (index = 0; index < 40; index++) {
+    for (index = 0; index < SV_TYPE_LIST_COUNT; index++) {
         storage->referenceImages[index].words[0] = 0;
         storage->referenceImages[index].words[1] = 0;
     }
@@ -1019,7 +1047,7 @@ int svFileLoadScript(int cfId, int effectNo)
         resource = &_srsMemRes;
         sefSetLoadQue(0);
         if (resource->battleImage == 0) {
-            resource->battleImage = smAlloc(0x40000);
+            resource->battleImage = smAlloc(SV_BATTLE_IMAGE_SIZE);
             if (resource->battleImage == 0) {
                 return -1;
             }
@@ -1055,9 +1083,9 @@ SvTypeListEntry *svGetScript(int effectId)
             return typeList->entries;
         }
     }
-    for (index = 0; index < 256; index++) {
+    for (index = 0; index < SV_ENTRY_COUNT; index++) {
         if (typeList->entries[index].used != 0 &&
-            typeList->entries[index].resourceKind == 5 &&
+            typeList->entries[index].resourceKind == SV_RES_SCRIPT &&
             typeList->entries[index].name != (const char *)-1) {
             if (strncmp(resourceName, typeList->entries[index].name, strlen(resourceName)) == 0) {
                 return &typeList->entries[index];
@@ -1082,7 +1110,7 @@ void SGsSendPacket(SGsPacket *packet)
         packet->count = 0;
         packet->tagIndex = 0;
         packet->loopCount = 1;
-        packet->base = (void *)0x70000000;
+        packet->base = (void *)SCRATCHPAD_BASE;
     }
 }
 
@@ -1093,14 +1121,14 @@ static inline void svResetTextureFlushPacket(SGsPacket *packet)
 {
     packet->tagIndex = 0;
     packet->loopCount = 1;
-    packet->base = (SGsGifRecord *)0x70000000;
+    packet->base = (SGsGifRecord *)SCRATCHPAD_BASE;
     packet->count = 0;
 }
 
 static inline void svResetGsPacket(SGsPacket *packet)
 {
     packet->loopCount = 1;
-    packet->base = (SGsGifRecord *)0x70000000;
+    packet->base = (SGsGifRecord *)SCRATCHPAD_BASE;
     packet->tagIndex = 0;
     packet->count = 0;
 }
@@ -1179,7 +1207,7 @@ void SGsTexFlush(void)
 
 void SGsInitEnv(void)
 {
-    SGsGifRecord *scratchpad = (SGsGifRecord *)0x70000000;
+    SGsGifRecord *scratchpad = (SGsGifRecord *)SCRATCHPAD_BASE;
     SGsPacket *packet = &_packet;
     StudioLight *light;
     unsigned long long gifRegisters;
@@ -1241,7 +1269,7 @@ void SGsSetZTestEnv(int enable)
 
 void SGsRestoreEnv(void)
 {
-    SGsGifRecord *scratchpad = (SGsGifRecord *)0x70000000;
+    SGsGifRecord *scratchpad = (SGsGifRecord *)SCRATCHPAD_BASE;
     SGsPacket *packet = &_packet;
 
     svBeginGsRegisterPacket(packet, scratchpad, 2);
@@ -1843,7 +1871,7 @@ void sefDrawParticleList(SvParticleEffect *effect)
             Vu0SefSetInverseView(&_invView);
             Vu0SefSetRotation(&_svUnitMatrix);
             packet->loopCount = 1;
-            packet->base = (SGsGifRecord *)0x70000000;
+            packet->base = (SGsGifRecord *)SCRATCHPAD_BASE;
             packet->count = 0;
             available = 64;
             quadRenderType = 4;
@@ -1946,7 +1974,7 @@ void sefDrawParticleListCf(SvParticleEffect *effect,
     available = 64;
     _packet.tagIndex = 0;
     particlePlaceOutput = &particlePlace;
-    scratchpad = (SGsGifRecord *)0x70000000;
+    scratchpad = (SGsGifRecord *)SCRATCHPAD_BASE;
     _packet.base = scratchpad;
     modelPlaceOutput = &modelPlace;
     position.w = 1.0f;
@@ -2293,7 +2321,7 @@ void svDrawScheduler3D(void)
 void SGsInitGifPacket(SGsPacket *packet)
 {
     packet->loopCount = 1;
-    packet->base = (SGsGifRecord *)0x70000000;
+    packet->base = (SGsGifRecord *)SCRATCHPAD_BASE;
     packet->tagIndex = 0;
     packet->count = 0;
 }

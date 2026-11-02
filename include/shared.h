@@ -35,6 +35,10 @@ typedef struct JavaField {
     int offset;        /* +16: read at 0x2f9438/0x2f94ac/... (lw v1,16(v0)) */
 } JavaField;
 
+/* JavaField.flags: the field's type is still a signature, not a resolved class. */
+#define JAVA_FIELD_UNRESOLVED 0x8000
+#define JAVA_FIELD_FLAGS_MASK 0x7fff /* all flags except JAVA_FIELD_UNRESOLVED */
+
 typedef unsigned char SceneByte;
 
 typedef struct JavaClass JavaClass;
@@ -73,6 +77,73 @@ typedef struct {
     u16 mappedPressed;
     u16 mappedRepeat;
 } PadPrefix;
+
+/* Controller button masks (libpad layout) of the button and direction halfwords
+   of PadPrefix/XglPadRecord. */
+#define PAD_L2       0x0001
+#define PAD_R2       0x0002
+#define PAD_L1       0x0004
+#define PAD_R1       0x0008
+#define PAD_TRIANGLE 0x0010
+#define PAD_CIRCLE   0x0020
+#define PAD_CROSS    0x0040
+#define PAD_SQUARE   0x0080
+#define PAD_SELECT   0x0100
+#define PAD_L3       0x0200
+#define PAD_R3       0x0400
+#define PAD_START    0x0800
+#define PAD_UP       0x1000
+#define PAD_RIGHT    0x2000
+#define PAD_DOWN     0x4000
+#define PAD_LEFT     0x8000
+
+/* EE scratchpad RAM. */
+#define SCRATCHPAD_BASE 0x70000000
+
+/* Held SELECT with START newly pressed leaves a test screen (the pad snapshot
+ * packs held halfword +40, then newly pressed halfword +42). */
+#define PAD_EXIT_COMBO 0x08000100ULL
+
+/* PS2 sceOpen flags. */
+#define SCE_RDONLY 1
+#define SCE_WRONLY 2
+#define SCE_RDWR 3
+
+/* Height Get_Height / UnduGet / UnduCheck return, and a LadderStep rung holds,
+ * when there is no ground. */
+#define GROUND_HEIGHT_NONE (-1000.0f)
+
+/* Number of MapUnit[] slots (map_2.h's MapUnit table). */
+#define MAP_UNIT_COUNT 64
+
+/* End of the 32 MiB EE RAM (scene archives load right below it). */
+#define EE_RAM_END 0x02000000
+
+/* "FPK" in the low three bytes of FpkFcvHeader.magic (little-endian). */
+#define FPK_MAGIC 0x004B5046
+#define FPK_MAGIC_MASK 0x00FFFFFF
+
+/* Footstep sound ids Sound_FootStep (set_motion.c) detects: a walk or run
+ * stride has two footfalls; act_3.c's foot_tbl holds two contact frames per gait. */
+#define FOOT_STEP_WALK_A 0x20001
+#define FOOT_STEP_WALK_B 0x20002
+#define FOOT_STEP_RUN_A 0x20003
+#define FOOT_STEP_RUN_B 0x20004
+
+/* EUC-JP: first byte of a two-byte character (0xA0 and up). */
+#define EUC_FIRST_MULTIBYTE_LEAD 160
+
+/* Entries of ItemBoxTbl (create_evt_item_get_task.c), indexed by itemNo. */
+#define ITEM_BOX_COUNT 601
+
+/* MenuWork.flags (window_tex_load.h): the menu state changed this frame. */
+#define MENU_FLAG_ENTER 0x01
+
+/* Menu sound effects (xglSoundEffectNormalID / xglSoundEffectNormalDirect ids). */
+#define SE_DECIDE 1
+#define SE_CANCEL 2
+#define SE_CURSOR 3
+#define SE_BUZZER 5
 
 /*
  * The helper ABI uses a four-float vector record.  Its pinned implementation

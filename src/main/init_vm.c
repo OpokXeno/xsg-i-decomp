@@ -3,8 +3,22 @@
 #include "init_vm.h"
 #include "main/jni.h"
 
-#define VM_ACC_STATIC 0x8
-#define VM_ACC_NATIVE 0x100
+/* newarray element types (JVM specification, newarray atype). */
+enum {
+    JVM_T_BOOLEAN = 4,
+    JVM_T_CHAR = 5,
+    JVM_T_FLOAT = 6,
+    JVM_T_DOUBLE = 7,
+    JVM_T_BYTE = 8,
+    JVM_T_SHORT = 9,
+    JVM_T_INT = 10,
+    JVM_T_LONG = 11,
+    VM_ATYPE_COUNT = 16
+};
+
+/* initVMThread: call frames and operand stack words. */
+#define VM_INIT_THREAD_FRAMES 8
+#define VM_INIT_THREAD_STACK_WORDS 0x40
 
 /* The operand stack slot `n` places above (n > 0) or below (n < 0) the top. */
 #define STACK(n) (stack->base[stack->top + (n)])
@@ -156,12 +170,6 @@ enum {
     OP_JSR_W = 0xC9
 };
 
-/* Constant pool tags ldc/ldc_w read (constants[0] points at the tag table). */
-enum {
-    VM_CONSTANT_INTEGER = 3,
-    VM_CONSTANT_FLOAT = 4,
-    VM_CONSTANT_STRING = 24
-};
 
 typedef struct VMArray {
     unsigned char unmodeled_00[4];
@@ -191,7 +199,7 @@ typedef struct VMFieldRef {
 } VMFieldRef;
 
 extern JavaClass _dummyClass;
-extern JavaClass *primitiveClassTable[16];
+extern JavaClass *primitiveClassTable[VM_ATYPE_COUNT];
 extern JavaClass *classByte;
 extern const char booleanTypeName[];
 extern const char byteTypeName[];
@@ -271,7 +279,7 @@ SceneString *ATTR_ConstantValue;
 
 SceneString *ATTR_LineNumberTable;
 
-unsigned short XTK_peerGroup[4];
+unsigned short XTK_peerGroup[XTK_PEER_GROUP_COUNT];
 
 JavaClass *classStringBuffer;
 
@@ -319,7 +327,7 @@ JavaClass *classString;
 
 JavaClass *classInt;
 
-JavaClass *primitiveClassTable[16];
+JavaClass *primitiveClassTable[VM_ATYPE_COUNT];
 
 /* 0x0099D510, 0x400 bytes of COMMON storage allocated after primitiveClassTable;
    no MAIN function reads it. */
@@ -345,9 +353,9 @@ void initVM(void) {
     ATTR_LocalVariableTable = loadConstString(localVariableTableAttrName, -1);
     jthreadResetFunc = 0;
     jthreadTop = 0;
-    initVMThread = JNI_createThread(0, 8, 0x40);
+    initVMThread = JNI_createThread(JTHREAD_KIND_SYSTEM, VM_INIT_THREAD_FRAMES, VM_INIT_THREAD_STACK_WORDS);
     initBaseClasses();
-    for (i = 3; i >= 0; i--) {
+    for (i = XTK_PEER_GROUP_COUNT - 1; i >= 0; i--) {
         XTK_peerGroup[i] = 0;
     }
 }
@@ -371,19 +379,19 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
     JavaMethod *callee;
     VMSlot *args;
 
-    if (access & VM_ACC_NATIVE) {
-        if (!(thread->flags & 2)) {
+    if (access & JVM_ACC_NATIVE) {
+        if (!(thread->flags & JTHREAD_FLAG_WOKEN)) {
             if (method->native == 0) {
                 resolveNativeMethod(method);
             }
             method->native(thread, arguments, result);
             return;
         }
-        thread->flags &= ~2;
+        thread->flags &= ~JTHREAD_FLAG_WOKEN;
         return;
     }
 
-    if (!(thread->flags & 2)) {
+    if (!(thread->flags & JTHREAD_FLAG_WOKEN)) {
         int count;
         int i;
 
@@ -406,7 +414,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
         frame->pc = 0;
         if (arguments != 0) {
             count = method->parameterSize;
-            if (!(access & VM_ACC_STATIC)) {
+            if (!(access & JVM_ACC_STATIC)) {
                 count++;
             }
             for (i = 0; i < count; i++) {
@@ -512,13 +520,13 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
 
             stack->top++;
             switch (constants[0].tags[index]) {
-            case VM_CONSTANT_STRING:
+            case VM_CONSTANT_RESOLVED_STRING:
                 STACK(0).i = constants[index].intValue;
                 break;
-            case VM_CONSTANT_FLOAT:
+            case JVM_CONSTANT_FLOAT:
                 STACK(0).f = constants[index].floatValue;
                 break;
-            case VM_CONSTANT_INTEGER:
+            case JVM_CONSTANT_INTEGER:
                 STACK(0).i = constants[index].intValue;
                 break;
             }
@@ -531,13 +539,13 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
 
             stack->top++;
             switch (constants[0].tags[index]) {
-            case VM_CONSTANT_STRING:
+            case VM_CONSTANT_RESOLVED_STRING:
                 STACK(0).i = constants[index].intValue;
                 break;
-            case VM_CONSTANT_INTEGER:
+            case JVM_CONSTANT_INTEGER:
                 STACK(0).f = constants[index].floatValue;
                 break;
-            case VM_CONSTANT_FLOAT:
+            case JVM_CONSTANT_FLOAT:
                 STACK(0).f = constants[index].floatValue;
                 break;
             }
@@ -1129,24 +1137,24 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
         case OP_FRETURN:
         case OP_ARETURN:
             if (thread->frame_depth == 0) {
-                thread->flags |= 8;
+                thread->flags |= JTHREAD_FLAG_DONE;
             } else {
-                thread->flags |= 0x80;
+                thread->flags |= JTHREAD_FLAG_FRAME_RETURNED;
             }
             *result = STACK(0);
             break;
         case OP_RETURN:
             if (thread->frame_depth == 0) {
-                thread->flags |= 8;
+                thread->flags |= JTHREAD_FLAG_DONE;
             } else {
-                thread->flags |= 0x80;
+                thread->flags |= JTHREAD_FLAG_FRAME_RETURNED;
             }
             break;
         case OP_GETSTATIC: {
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 1, &ref) == 1) {
-                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & VM_CLASS_FLAG_PRIMITIVE) || (ref.field->flags & VM_FIELD_FLAG_UNRESOLVED_TYPE)) {
                     stack->top++;
                     STACK(0).i = *ref.field->intAddress;
                 } else {
@@ -1181,7 +1189,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 1, &ref) == 1) {
-                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & VM_CLASS_FLAG_PRIMITIVE) || (ref.field->flags & VM_FIELD_FLAG_UNRESOLVED_TYPE)) {
                     *ref.field->intAddress = STACK(0).i;
                     stack->top--;
                 } else {
@@ -1214,7 +1222,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 0, &ref) == 1) {
-                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & VM_CLASS_FLAG_PRIMITIVE) || (ref.field->flags & VM_FIELD_FLAG_UNRESOLVED_TYPE)) {
                     STACK(0).i = *(int *)((char *)STACK(0).ref + ref.field->offset);
                 } else {
                     switch (ref.field->type->typeCode) {
@@ -1244,7 +1252,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
             VMFieldRef ref;
 
             if (getField(CODE_U16(0), method->owner, 0, &ref) == 1) {
-                if (!(ref.field->type->flags & 0x100) || (ref.field->flags & 0x8000)) {
+                if (!(ref.field->type->flags & VM_CLASS_FLAG_PRIMITIVE) || (ref.field->flags & VM_FIELD_FLAG_UNRESOLVED_TYPE)) {
                     *(int *)((char *)_StackTop(stack)[-1].ref + ref.field->offset) = _StackTop(stack)[0].i;
                     stack->top -= 2;
                 } else {
@@ -1402,11 +1410,11 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
             break;
         }
         flags = thread->flags;
-        if (flags & 5) {
+        if (flags & JTHREAD_FLAGS_BUSY) {
             return;
         }
-        if (flags & 0x88) {
-            thread->flags = flags & ~0x80;
+        if (flags & JTHREAD_FLAGS_LEAVE_FRAME) {
+            thread->flags = flags & ~JTHREAD_FLAG_FRAME_RETURNED;
             break;
         }
         frame->pc = frame->nextPc;
@@ -1445,14 +1453,14 @@ static void initPrimitiveTypes(void) {
     initWrapperClass(&classFloat, floatTypeName, 'F', 4);
     initWrapperClass(&classDouble, doubleTypeName, 'D', 8);
 
-    primitiveClassTable[4] = classBoolean;
-    primitiveClassTable[8] = classByte;
-    primitiveClassTable[5] = classChar;
-    primitiveClassTable[9] = classShort;
-    primitiveClassTable[10] = classInt;
-    primitiveClassTable[11] = classLong;
-    primitiveClassTable[6] = classFloat;
-    primitiveClassTable[7] = classDouble;
+    primitiveClassTable[JVM_T_BOOLEAN] = classBoolean;
+    primitiveClassTable[JVM_T_BYTE] = classByte;
+    primitiveClassTable[JVM_T_CHAR] = classChar;
+    primitiveClassTable[JVM_T_SHORT] = classShort;
+    primitiveClassTable[JVM_T_INT] = classInt;
+    primitiveClassTable[JVM_T_LONG] = classLong;
+    primitiveClassTable[JVM_T_FLOAT] = classFloat;
+    primitiveClassTable[JVM_T_DOUBLE] = classDouble;
 }
 
 static void initWrapperClass(JavaClass **class_slot, const char *name,
@@ -1463,7 +1471,7 @@ static void initWrapperClass(JavaClass **class_slot, const char *name,
     JavaClass *stored_class;
 
     *class_slot = new_class;
-    new_class->flags = 0x100;
+    new_class->flags = VM_CLASS_FLAG_PRIMITIVE;
 
     interned_name = loadConstString(name, -1);
     stored_class = *class_slot;

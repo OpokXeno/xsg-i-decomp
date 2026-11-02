@@ -3,6 +3,19 @@
 #include "sc_wait_parse_script.h"
 #include "main/sef.h"
 #include "main/sv_get_image_item.h"
+#include "main/xgl_packet.h"
+
+#define MISSILE_END_FRAME 1024    /* entry frame that ends the command block */
+#define MISSILE_IMAGE_PAIR_COUNT 3
+#define MISSILE_IMAGE_FORMAT_8BIT 8
+
+/* MissileCommandData.command_kind values with their own handling. */
+#define MISSILE_COMMAND_ALL_TARGETS 5   /* targets every enemy (sefCaclAllTarget) */
+#define MISSILE_COMMAND_BY_SUBTYPE 529  /* picks 527 or 528 from missile_subtype */
+#define MISSILE_COMMAND_SUBTYPE_HIGH 527
+#define MISSILE_COMMAND_SUBTYPE_LOW 528
+#define MISSILE_SUBTYPE_HIGH_FIRST 2
+#define MISSILE_SPAWN_DEFAULT 22        /* spawn.command_type of unlisted kinds */
 
 /* Capture the common command fields and the first record's z and tail parameter. */
 #define MISSILE_CAPTURE_COMMON_HEADER(spawn_value, data_value, first_entry_value, parameter_value) do { \
@@ -52,7 +65,7 @@ static int scWaitParseEftScript(ScriptTaskWaitView *script)
     {
         short amb_effect_no = script->amb_effect_no;
 
-        if (script->flags & 0x100)
+        if (script->flags & SCRIPT_TASK_FADE_ON)
             sdvSetAmbState2(2, amb_effect_no);
         else
             sdvSetAmbState(2, amb_effect_no);
@@ -100,7 +113,7 @@ int scWaitParseScript(ScriptTaskWaitView *script)
 
 /* WAITMOV: the wait is over while `flags` bit 5 is clear. */
 
-static int (*waitHandlerTbl[6])(ScriptTaskWaitView *) = {
+static int (*waitHandlerTbl[SCRIPT_WAIT_MODE_COUNT])(ScriptTaskWaitView *) = {
     scWaitParseNopScript,
     scWaitParseCntScript,
     scWaitParseEveScript,
@@ -112,14 +125,14 @@ static int (*waitHandlerTbl[6])(ScriptTaskWaitView *) = {
     unsigned short wait_kind = script->wait_kind;
     int result;
 
-    if (wait_kind >= 6) {
+    if (wait_kind >= SCRIPT_WAIT_MODE_COUNT) {
         script->wait_kind = 0;
         return 1;
     }
 
     result = waitHandlerTbl[(short)wait_kind](script);
     if (result != 0)
-        script->flags &= ~0x10;
+        script->flags &= ~SCRIPT_TASK_WAITING;
 
     return (short)result;
 }
@@ -139,7 +152,7 @@ static int scWaitMissileScript(ScriptTaskWaitView *script)
         MissileCommandEntry *entry = &data->entries[record_index];
 
         spawned = 0;
-        if (entry->frame >= 1024)
+        if (entry->frame >= MISSILE_END_FRAME)
             return 1;
 
         if (frame >= entry->frame) {
@@ -171,14 +184,14 @@ static int scWaitMissileScript(ScriptTaskWaitView *script)
             if (secondary != 0)
                 secondary_word = secondary->texture_word;
 
-            for (i = 0, pair = data->image_pairs; i < 3; i++, pair++) {
+            for (i = 0, pair = data->image_pairs; i < MISSILE_IMAGE_PAIR_COUNT; i++, pair++) {
                 primary_index = pair->primary_index;
                 primary = primary_index > 0
                     ? svGetImageListItem(mapper_index, primary_index) : 0;
                 secondary = pair->secondary_index > 0
                     ? svGetImageListItem(mapper_index, pair->secondary_index) : 0;
                 if (primary != 0 && secondary != 0) {
-                    psm = primary->format == 8 ? 19 : 20;
+                    psm = primary->format == MISSILE_IMAGE_FORMAT_8BIT ? SCE_GS_PSMT8 : SCE_GS_PSMT4;
                     spawn.pair_registers[i] =
                         (unsigned long long)primary->buffer_pointer
                         | (unsigned long long)(primary->buffer_width >> 6) << 14
@@ -214,18 +227,19 @@ static int scWaitMissileScript(ScriptTaskWaitView *script)
 
             spawn.spawn_context1 = script->missile_spawn_context[1];
             command_type = data->command_kind;
-            if (command_type == 529)
-                command_type = script->missile_subtype >= 2 ? 527 : 528;
+            if (command_type == MISSILE_COMMAND_BY_SUBTYPE)
+                command_type = script->missile_subtype >= MISSILE_SUBTYPE_HIGH_FIRST
+                    ? MISSILE_COMMAND_SUBTYPE_HIGH : MISSILE_COMMAND_SUBTYPE_LOW;
             if (command_type & 0x200)
                 spawn.command_type = command_type - 505;
             else if (command_type & 0x100)
                 spawn.command_type = command_type - 249;
             else if (command_type & 0x400)
                 spawn.command_type = command_type - 1024;
-            else if (command_type == 5)
+            else if (command_type == MISSILE_COMMAND_ALL_TARGETS)
                 sefCaclAllTarget(spawn.target);
             else
-                spawn.command_type = 22;
+                spawn.command_type = MISSILE_SPAWN_DEFAULT;
 
             spawn.position[0] = entry->position_x * position_scale;
             spawn.position[3] = 1.0f;
@@ -257,7 +271,7 @@ int scMoveParseScript(ScriptTaskWaitView *script)
 
     result = moveHandlerTbl[(short)move_kind](script);
     if (result != 0)
-        script->flags &= ~0x20;
+        script->flags &= ~SCRIPT_TASK_MISSILE;
 
     return (short)result;
 }

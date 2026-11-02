@@ -22,9 +22,9 @@ typedef struct ScriptRecord ScriptRecord;
  * only that field is evidenced here.
  */
 struct ScriptRecord {
-    ScriptTask tasks[8]; /* eight 0x80-byte task slots */
+    ScriptTask tasks[SCRIPT_TASK_COUNT]; /* eight 0x80-byte task slots */
     short *dataTable; /* +0x400 */
-    int registers[16]; /* +0x404, register selectors 0..15 */
+    int registers[SCRIPT_REGISTER_COUNT]; /* +0x404, register selectors 0..15 */
     short dataIndex; /* +0x444: scCreateScript's mapper result */
     short eventValue; /* +0x446: returned by scREVEScript */
     short activeTasks; /* +0x448: number of active task slots */
@@ -32,7 +32,7 @@ struct ScriptRecord {
     unsigned char unmodeled_44C[4];
 };
 
-extern ScriptRecord _scriptWork[16];
+extern ScriptRecord _scriptWork[SCRIPT_COUNT];
 
 extern int scWaitParseScript(ScriptTask *task);
 extern int scMoveParseScript(ScriptTask *task);
