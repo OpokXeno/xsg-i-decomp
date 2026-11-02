@@ -164,8 +164,27 @@ def instruction_rows(original, tools, root):
     return rows
 
 
-def assemble_reference(root, destination, group, original, rows, contract, tools, bss):
+def contents_symbol(section):
+    return f'_iop_{section[1:]}_contents'
+
+
+def contents_symbol_sections(elf):
+    """Loaded data sections without a symbol: objdiff compares no bytes in those.
+
+    Both sides of the comparison get the same section-start symbol, so the
+    report really compares the anonymous pools ($LC strings) of a source file.
+    """
+    covered = {elf.sections[s['section_index']]['name'] for s in elf.symbols
+               if s['name'] and s['type'] != 3 and 0 < s['section_index'] < len(elf.sections)}
+    return {section['name'] for section in elf.sections
+            if section['name'] in ('.data', '.rodata') and section['size'] and section['name'] not in covered}
+
+
+def assemble_reference(root, destination, group, original, rows, contract, tools, bss, source_object):
     from tools import iop_module
+    # Original globals the compiled object also defines; excludes linker symbols such as _fdata.
+    compiled = iop_module.Elf(source_object)
+    defined = {s['name'] for s in compiled.symbols if s['section_index'] > 0}
     destination.mkdir(parents=True, exist_ok=True)
     funcs = group['functions']
     start = min((f['offset'] for f in funcs), default=0)
@@ -182,7 +201,7 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
     def expression(address):
         for index, pool in enumerate(pools):
             if pool['offset'] <= address < pool['offset'] + pool['size']:
-                return f'_iop_pool_{index}+0x{address-pool["offset"]:x}'
+                return f'.L_iop_pool_{index}+0x{address-pool["offset"]:x}'
         exact = [s for s in original_globals if s['value'] == address]
         enclosing = [s for s in original_globals if s['size'] and
                      s['value'] <= address < s['value'] + s['size']]
@@ -199,6 +218,8 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
         return name
     relocations = iop_module.relocation_expressions(original)
     labels = {f['offset']: f for f in funcs}
+    def code_or_data_expression(address):
+        return f'_iop_target_{address:08x}' if start <= address < end else expression(address)
     source = ['/* Original IOP instructions; reference only, no recovered-source credit. */',
               '.text', '.set noreorder', '.set noat', '.align 4']
     if not funcs:
@@ -232,28 +253,55 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
             operands = re.sub(r'(?:0x)?([0-9a-f]+)\s+<[^>]+>', branch, operands)
         source.append(opcode + (' ' + operands if operands else ''))
     spans = list(pools) + bss
+    pool_names, labelled = set(), set()
     section_origins = {'.text': start} if funcs else {}
     for index, pool in enumerate(pools):
         section = original.by_name[pool['section']]
         section_origins[pool['section']] = pool['offset']
         payload = original.payload(section)[pool['offset']-section['address']:
                                              pool['offset']-section['address']+pool['size']]
-        source.extend([f'.section {pool["section"]}.iop_original,"a",@progbits', f'_iop_pool_{index}:'])
-        for at in range(0, len(payload), 32):
-            source.append('.byte ' + ','.join(map(str, payload[at:at+32])))
+        flags = 'aw' if pool['section'] == '.data' else 'a'
+        source.extend([f'.section {pool["section"]},"{flags}",@progbits', f'.L_iop_pool_{index}:'])
+        if pool['section'] in contents_symbol_sections(compiled) and pool['section'] not in labelled:
+            labelled.add(pool['section'])
+            source.extend([f'.type {contents_symbol(pool["section"])},@object', contents_symbol(pool['section']) + ':'])
+        low, high = pool['offset'], pool['offset'] + pool['size']
+        # Named data keeps its original symbol and a loader-relocated word stays
+        # a relocation, as in the compiled object. The reference link below still
+        # proves the resulting bytes against the original IRX.
+        named = {}
+        for symbol in original_globals:
+            if (symbol['name'] in defined and low <= symbol['value'] < high and
+                    original.sections[symbol['section_index']]['name'] == pool['section']):
+                named.setdefault(symbol['value'], []).append(symbol)
+                pool_names.add(symbol['name'])
+        words = {offset for target, offset in relocations if target == pool['section'] and low <= offset < high}
+        at = low
+        for stop in sorted({*named, *words, high}):
+            for begin in range(at, stop, 32):
+                source.append('.byte ' + ','.join(map(str, payload[begin-low:min(begin+32, stop)-low])))
+            for symbol in named.get(stop, []):
+                binding = '.globl ' if symbol['binding'] == 1 else '.weak '
+                source.extend([binding + symbol['name'], '.type ' + symbol['name'] + ',@object', symbol['name'] + ':',
+                               f'.size {symbol["name"]},{symbol["size"]}'])
+            at = stop
+            if stop in words:
+                value = int(re.search(r'\+0x([0-9a-f]+)', relocations[(pool['section'], stop)])[1], 16)
+                source.append('.word ' + code_or_data_expression(value))
+                at = stop + 4
     for span in sorted(bss, key=lambda s: s['offset']):
         section_origins.setdefault('.bss', span['offset'])
         named = ['.globl ' + span['name'], '.type ' + span['name'] + ',@object', span['name'] + ':'] if span['name'] else []
-        source.extend(['.section .bss.iop_original,"aw",@nobits', f'.org {span["offset"]-section_origins[".bss"]}',
+        source.extend(['.section .bss,"aw",@nobits', f'.org {span["offset"]-section_origins[".bss"]}',
                        *named, f'.space {span["size"]}',
                        *([f'.size {span["name"]},{span["size"]}'] if span['name'] else [])])
     asm = destination / 'target.s'
     asm.write_text('\n'.join(source) + '\n')
     obj = destination / 'target.o'
     run([tools['assembler'], *contract['assembler_flags'], '-o', obj, asm], root)
-    owned_names = {f['name'] for f in funcs} | {s['name'] for s in bss if s['name']}
+    owned_names = {f['name'] for f in funcs} | {s['name'] for s in bss if s['name']} | pool_names
     script = ['OUTPUT_FORMAT("elf32-littlemips")', 'OUTPUT_ARCH(mips:3000)', 'SECTIONS {']
-    script += [f'{name} 0x{address:x} : {{ *({name if name == ".text" else name + ".iop_original"}) }}'
+    script += [f'{name} 0x{address:x} : {{ *({name}) }}'
                for name, address in section_origins.items()]
     script += ['}'] + [f'{name} = 0x{address:x};' for name, address in externals.items() if name not in owned_names]
     linker_script = destination / 'target.ld'
@@ -288,6 +336,7 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
 def prepare(root, project, report_path, *, reporting=False):
     from tu import objdiff_inputs
     groups, contract, tools, report = load_evidence(root, report_path, reporting=reporting)
+    from tools import iop_module
     prefix = Toolchain(root).dir('ps2dev-binutils') / 'mips64r5900el-ps2-elf-'
     units, expected, assigned = [], {}, {}
     originals = {unit: original for unit, _, _, original in groups}
@@ -297,10 +346,14 @@ def prepare(root, project, report_path, *, reporting=False):
         name = unit + '/' + Path(group['source']).stem
         destination = project / name
         target, spans = assemble_reference(root, destination, group, original, rows[unit], contract, tools,
-                                           owners[unit].get(group['fdr_index'], []))
+                                           owners[unit].get(group['fdr_index'], []), Path(candidate['object']))
         assigned.setdefault(unit, []).extend(spans)
         base = destination / 'base.o'
         objdiff_inputs.strip_debug(prefix, Path(candidate['object']), base, root)
+        additions = [item for section in sorted(contents_symbol_sections(iop_module.Elf(base)))
+                     for item in ('--add-symbol', f'{contents_symbol(section)}={section}:0,object,local')]
+        if additions:
+            run([str(prefix) + 'objcopy', *additions, base], root)
         scope = {f['name']: f['size'] for f in group['functions']}
         verification.require(objdiff_inputs.functions(target) == scope == objdiff_inputs.functions(base),
                              name + ': native object function scope differs')

@@ -84,7 +84,7 @@ class Tools:
                 names.add(fields[-1])
         return names
 
-    def target(self, parts, output, cwd, names=None):
+    def target(self, parts, output, cwd, names=None, strip=()):
         """One relocatable object of the original pieces, without debug records.
 
         `names` renames splat labels to the names the source gives the same
@@ -92,7 +92,7 @@ class Tools:
         joined = output.with_suffix('.joined.o')
         # _gp=0 keeps the inputs' GP0, so GPREL16 addends stay as assembled.
         run([self.ld, '-EL', '-m', 'elf32lr5900', '-r', '--defsym', '_gp=0', '-o', joined, *parts], cwd)
-        options = ['--strip-symbol=_gp']
+        options = ['--strip-symbol=_gp', *(f'--strip-symbol={name}' for name in strip)]
         present = self.symbols(joined)
         chosen = {}
         for old, new in sorted((names or {}).items()):
@@ -705,6 +705,63 @@ def overlay_units(root, tools, project, unit_name):
     cc = root / 'tools/tu/cc_tu.sh'
     renames_path = root / 'config/symbols' / f'{unit_name}.renames.json'
     renames = read(renames_path).get('renames', {}) if renames_path.is_file() else {}
+    registry = read(root / 'config/objects/data-carves.json')
+
+    def alignment_labels(tu, parts):
+        """Splat labels on the zero alignment between the C objects of a fully C-owned TU.
+
+        They name no object, so no symbol of the source can pair with them.
+        Their bytes stay in the target; the original-file gate proves them."""
+        tu_id = tu['id'].split('_')[0]
+        if tu_id not in registry.get('alignment_linker_fill_tus', ()):
+            return []
+        runs = [[int(v, 16) for v in run['range']]
+                for section, rows in registry['tus'][tu_id].items() for run in rows]
+        labels = []
+        for name in sorted({n for part in parts for n in tools.symbols(part)}):
+            found = re.fullmatch(r'D_([0-9A-Fa-f]{8})(\.NON_MATCHING)?', name)
+            if found and not any(lo <= int(found[1], 16) < hi for lo, hi in runs):
+                labels.append(name)
+        return labels
+
+    def external_pointers(tu, data, destination):
+        """The scaffold data with raw words naming another image's symbol made relocations.
+
+        splat keeps `.word 0x004A6940` when the address lies outside the overlay.
+        In a fully C-owned TU the compiled table relocates against that symbol, so
+        the word becomes `.word SaveData+addend` when symbol plus addend is the same value."""
+        tu_id = tu['id'].split('_')[0]
+        if tu_id not in registry.get('alignment_linker_fill_tus', ()):
+            return data
+        compiled = Elf((unit_dir / 'build/scaffold/src' / unit_name / f'{tu["name"]}.o').read_bytes())
+        addresses = {m[1]: int(m[2], 16) for m in re.finditer(
+            r'^(\w+) = (0x[0-9A-Fa-f]+);', (unit_dir / 'main_symbols.ld').read_text(), re.M)}
+        symbolic = {}
+        for table in [t for t in compiled.sections if t.type == 9]:
+            section = compiled.sections[table.info]
+            for at in range(table.offset, table.offset + table.size, 8):
+                offset, info = struct.unpack_from('<II', compiled.data, at)
+                symbol = compiled.symbols[info >> 8]
+                if info & 0xff != R_MIPS_32 or symbol.shndx != 0 or symbol.name not in addresses:
+                    continue
+                addend = struct.unpack_from('<i', compiled.data, section.offset + offset)[0]
+                for run in registry['tus'][tu_id].get(section.name, []):
+                    for span in run['c_input_spans']:
+                        low, high = span['object_range']
+                        if low <= offset < high:
+                            symbolic[int(span['range'][0], 16) + offset - low] = symbol.name, addend
+        text = data.read_text()
+        def replace(match):
+            name, addend = symbolic.get(int(match[1], 16), (None, 0))
+            return (match[0] if name is None or addresses[name] + addend != int(match[3], 16)
+                    else f'{match[2]}.word {name}+{addend}')
+        changed = re.sub(
+            r'(?m)^(?=\s*/\*\s*\w+\s+([0-9A-Fa-f]{8})\s)(\s*/\*[^*]*\*/\s*)\.word (0x[0-9A-Fa-f]+)\s*$', replace, text)
+        if changed == text:
+            return data
+        copy = destination / data.name
+        copy.write_text(changed)
+        return copy
 
     def one(tu):
         stem = tu['name']
@@ -724,12 +781,12 @@ def overlay_units(root, tools, project, unit_name):
             parts.append(text)
         for data in sorted((unit_dir / 'asm/data' / unit_name).glob(stem + '.*.s')):
             output = destination / (data.stem + '.o')
-            tools.assemble_data(data, output, unit_dir)
+            tools.assemble_data(external_pointers(tu, data, destination), output, unit_dir)
             parts.append(output)
         if not parts:
             return None
         target = destination / 'target.o'
-        tools.target(parts, target, unit_dir, names=renames)
+        tools.target(parts, target, unit_dir, names=renames, strip=alignment_labels(tu, parts))
         unit = dict(name=f'{unit_name}/{stem}', target_path=str(target),
                     metadata=dict(progress_categories=[unit_name], complete=False))
         source = root / tu['source'] if tu.get('source') else None

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_studio.h"
+#include "ov11/mini_g.h"
 
 extern void xglStudioChange(int studio_index);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
@@ -44,10 +45,8 @@ extern TanakaClearEnv ClearEnv;
 extern void xglRenderClearFrame(void);
 extern void xglRenderClearDepth(void);
 extern int printf(const char *format, ...);
-extern void MiniG_Init(void);
-extern int MiniG_Main(void);
-const char D_00A0BB10[] = "Casino Entry\n";
-const char D_00A0BB20[] = "Casino Exit\n";
+const char casinoEntryDebugText[] = "Casino Entry\n";
+const char casinoExitDebugText[] = "Casino Exit\n";
 
 void TanakaTest(void)
 {
@@ -57,13 +56,13 @@ void TanakaTest(void)
     ClearEnv.color_b = 0;
     ClearEnv.color_r = 0;
     Init();
-    printf(D_00A0BB10);
+    printf(casinoEntryDebugText);
     MiniG_Init();
     while (MiniG_Main() == 0) {
         xglSleep();
     }
     xglSleep();
     xglSleep();
-    printf(D_00A0BB20);
+    printf(casinoExitDebugText);
     xglRenderClearDepth();
 }

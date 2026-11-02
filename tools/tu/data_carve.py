@@ -2644,6 +2644,14 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True,
                     continue
                 stem = p['name'].split('/')[-1]
                 rel = f'{CARVE_DIR}/{unit}/{stem}{sec}'
+                if tu_id in registry.get('alignment_linker_fill_tus', ()):
+                    # All data of this TU is C: what is left between its objects is
+                    # compiler alignment, zero in the original, so the linker fills it.
+                    pin_base = bss_base if sec in ('.bss', '.sbss') else base
+                    if re.match(r'\s*\. = 0x', out[-1]):
+                        out.pop()  # the fill extends the pin that ends the previous C object
+                    out.append(f'{indent}. = 0x{p["end"] - pin_base:X}; {LD_MARK} /* pin: alignment fill */\n')
+                    continue
                 if write:
                     write_piece_file(Path(unit_dir) / f'{rel}.s', p['header'], p['items'])
                 out.append(f'{indent}build/{rel}.o({sec}); {LD_MARK}\n')
