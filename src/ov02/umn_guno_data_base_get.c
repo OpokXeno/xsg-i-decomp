@@ -3,57 +3,99 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/e_battle_win_open.h"
 #include "main/e_message.h"
+#include "main/e_number_main.h"
 #include "main/end_print.h"
+#include "main/menu_model.h"
+#include "main/menu_top_command_check.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+#include "ov02/ov02.h"
+#include "ov02/title_hdd_install.h"
+#include "ov02/tsk_umn_object_task_main.h"
+#include "ov02/tya_uml.h"
+#include "ov02/umn_guno_data_base_get.h"
+#define PAD_MOVE   0x002C0000
+#define UMN_KEYWORD_HIDDEN_X (-272)
 
-extern void *UmnGunoDataBaseTop;
+/* Database records: ids UMN_DB_FIRST_ID.. in a table of UmnGunoDataBase entries based at UmnGunoDataBaseTop. */
+#define UMN_DB_FIRST_ID 0x22
+#define UMN_DB_ENTRY_COUNT 0x1D
+/* Menu entries of the database top menu (list, keyword search, exit); the entry array adds a terminator. */
+#define UMN_DB_MENU_ENTRIES 3
+/* Rows of the name list: all of them exist, at most UMN_DB_NAME_SHOWN are filled; UmnWork.rows is capped at UMN_DB_LIST_ROWS_MAX. */
+#define UMN_DB_NAME_ROWS 14
+#define UMN_DB_NAME_SHOWN 12
+#define UMN_DB_LIST_ROWS_MAX 5
+/* Help lines and arrow sprites of the extra window. */
+#define UMN_DB_EXWIN_LINES 5
+#define UMN_DB_EXWIN_ARROWS 2
 
-int UmnGunoDataBaseGet(int id)
-{
-    int base = (int) UmnGunoDataBaseTop;
+/* UmnWork.tab_state steps of the database terminal beyond the common UMN_STEP_*. */
+#define UMN_DB_STEP_LIST_OPEN 0x20
+#define UMN_DB_STEP_LIST 0x21
+#define UMN_DB_STEP_DETAIL_OPEN 0x30
+#define UMN_DB_STEP_DETAIL 0x31
+#define UMN_DB_STEP_KEYWORD_OPEN 0x50
+#define UMN_DB_STEP_KEYWORD 0x51
 
-    if ((u32) (id - 0x22) < 0x1D) {
-        return base + id * 0x68 - 0xDD0;
-    }
-    return base;
-}
+/* UmnWork.cursor on the top menu. */
+enum {
+    UMN_DB_MENU_LIST,
+    UMN_DB_MENU_KEYWORD,
+    UMN_DB_MENU_EXIT
+};
 
-typedef struct UmnWorkData {
-    unsigned char unmodeled_00;         /* +0x00 */
-    unsigned char mode;                 /* +0x01 */
-    unsigned char unmodeled_02;         /* +0x02 */
-    unsigned char stateOrCategory;      /* +0x03: screen step, or model category */
-    unsigned char unmodeled_04[0x10 - 0x04];
-    union {
-        unsigned short waitOrMoving;    /* +0x10: wait and moving read as one halfword */
-        struct {
-            signed char wait;           /* +0x10 */
-            signed char moving;         /* +0x11 */
-        };
-    };
-    unsigned char unmodeled_12[0x40 - 0x12];
-    signed char column;                 /* +0x40 */
-    unsigned char unmodeled_41;         /* +0x41 */
-    signed char row;                    /* +0x42 */
-    signed char rows;                   /* +0x43 */
-    signed char scroll;                 /* +0x44 */
-    unsigned char unmodeled_45;         /* +0x45 */
-    signed char cursor;                 /* +0x46 */
-    unsigned char unmodeled_47[0x50 - 0x47];
-    signed char listCursor;             /* +0x50 */
-    signed char count;                  /* +0x51 */
-    signed char entry;                  /* +0x52 */
-    unsigned char unmodeled_53[0x5D - 0x53];
-    signed char dataBaseResult;         /* +0x5D */
-    signed char analysed;               /* +0x5E */
-    signed char modelFlag;              /* +0x5F: modelReady or modelResetFlag by caller */
-    unsigned char unmodeled_60[0x80 - 0x60];
-} UmnWorkData;
-extern UmnWorkData UmnWork;
-typedef struct UmnDataBaseTask {
-    unsigned char unmodeled_00[0x10];   /* +0x00 */
-    int state;                          /* +0x10 */
-} UmnDataBaseTask;
+/* tskUmnDataBaseName steps (UmnDataBaseNameWork.step). */
+enum {
+    UMN_DB_NAME_WAIT = 0,
+    UMN_DB_NAME_PLACE = 10,
+    UMN_DB_NAME_SLIDE_LIST = 11,
+    UMN_DB_NAME_LIST_SHOWN = 12,
+    UMN_DB_NAME_SLIDE_DETAIL = 20,
+    UMN_DB_NAME_DETAIL_SHOWN = 22,
+    UMN_DB_NAME_SLIDE_OUT = 30
+};
+
+/* tskUmnDataBaseAnalisis steps (UmnDataBaseAnalisisWork.step). */
+enum {
+    UMN_DB_ANALYSIS_IDLE = 0,
+    UMN_DB_ANALYSIS_WAIT = 1,
+    UMN_DB_ANALYSIS_OPEN = 0xA,
+    UMN_DB_ANALYSIS_SHOWN = 0xC,
+    UMN_DB_ANALYSIS_CLOSE = 0x14
+};
+
+/* tskUmnDataBaseMenu states (UmnDataBaseMenuWork.state). */
+enum {
+    UMN_DB_MENU_IDLE = 0,
+    UMN_DB_MENU_WAIT_OPEN = 10,
+    UMN_DB_MENU_BUILD = 20,
+    UMN_DB_MENU_SLIDE_IN = 21,
+    UMN_DB_MENU_SHOWN = 30,
+    UMN_DB_MENU_SLIDE_OUT = 40
+};
+
+/* tskUmnDataBaseKeyWord steps (UmnDataBaseKeyWordWork.step). */
+enum {
+    UMN_DB_KEYWORD_IDLE = 0,
+    UMN_DB_KEYWORD_WAIT = 1,
+    UMN_DB_KEYWORD_OPEN = 10,
+    UMN_DB_KEYWORD_SHOWN = 11
+};
+
+/* MenuModelUnit.extFuncFlag of the record model (UmnDataBaseModel). */
+enum {
+    UMN_DB_MODEL_INIT = 0,
+    UMN_DB_MODEL_OPEN = 0xA,
+    UMN_DB_MODEL_SHOWN = 0x14,
+    UMN_DB_MODEL_CLOSE = 0x1E,
+    UMN_DB_MODEL_CLOSING = 0x1F,
+    UMN_DB_MODEL_DONE = 0x63
+};
+
 typedef struct UmnDataBaseMenuEntry {
     char *text;                         /* +0x00 */
     unsigned char unmodeled_04[0x08 - 0x04];
@@ -69,37 +111,14 @@ typedef struct UmnDataBaseInfoText {
     UmnDataBaseMenuEntry *entries;      /* +0x10 */
     unsigned char unmodeled_14[0x1B0 - 0x14];
 } UmnDataBaseInfoText;
-typedef struct UmnDataBaseInfoWindow UmnDataBaseInfoWindow;
-struct UmnDataBaseInfoWindow {
-    short x;                            /* +0x00 */
-    short y;                            /* +0x02 */
-    int color;                          /* +0x04 */
-    short width;                        /* +0x08 */
-    short height;                       /* +0x0A */
-    char *caption;                      /* +0x0C */
-    unsigned char state;                /* +0x10 */
-    unsigned char unmodeled_11[0x14 - 0x11];
-    void (*callback)(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
-    UmnDataBaseInfoText *callbackArg;   /* +0x18 */
-    unsigned char unmodeled_1c[0x194 - 0x1C];
-};
 typedef struct UmnDataBaseInfoWork {
     unsigned char state;                /* +0x00 */
     unsigned char opened;               /* +0x01 */
     unsigned char unmodeled_02[0x08 - 0x02];
     int color;                          /* +0x08 */
-    UmnDataBaseInfoWindow window;       /* +0x0C */
+    WindowDX window;       /* +0x0C */
     UmnDataBaseInfoText info;           /* +0x1A0 */
 } UmnDataBaseInfoWork;
-/* The help line text of the database screen (original scaffold data, msg00.0). */
-extern char *msg00_0_00A106F8;
-static char *msg00_1_00A10700[3];
-void MenuInfoWindow(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
-void MenuSelectWindow(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
-void WindowDXSet(UmnDataBaseInfoWindow *window);
-void WindowDXMain(UmnDataBaseInfoWindow *window);
-void MoveSlide(short *current, short *target, float rate);
-
 typedef struct UmnDataBasePasBox {
     short x;                            /* +0x00 */
     short y;                            /* +0x02 */
@@ -112,7 +131,7 @@ typedef struct UmnDataBasePasWork {
     unsigned char state;                /* +0x01 */
     unsigned char unmodeled_02[0x04 - 0x02];
     int kind;                           /* +0x04 */
-    UmnDataBaseInfoWindow window;       /* +0x08 */
+    WindowDX window;       /* +0x08 */
     EMessageParam message;     /* +0x19C */
     unsigned char unmodeled_1e0[0x3BC - 0x1E0];
     UmnDataBasePasBox box;              /* +0x3BC */
@@ -121,34 +140,226 @@ typedef struct UmnDataBasePasMessageView {
     unsigned char unmodeled_00[0x0C];
     EMessageParam message;     /* +0x0C from the view base (work +0x190) */
 } UmnDataBasePasMessageView;
+typedef struct UmnDataBaseNameRow {
+    unsigned short id;                  /* +0x00 (row +0x08 from the work base) */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    WindowDX window;       /* +0x04 */
+    EMessageParam message;              /* +0x198 */
+    ENumberMainData number;            /* +0x1DC */
+} UmnDataBaseNameRow;
+typedef struct UmnDataBaseNameWork {
+    unsigned char step;                 /* +0x00: screen step */
+    unsigned char opened;               /* +0x01 */
+    unsigned char unmodeled_02;         /* +0x02 */
+    unsigned char count;                /* +0x03 */
+    unsigned int color;                 /* +0x04 */
+    UmnDataBaseNameRow rows[UMN_DB_NAME_ROWS]; /* +0x08, 620 bytes each */
+    ECursolMainData cursor;             /* +0x21F0 */
+} UmnDataBaseNameWork;
+/* Partial view of PadPrefix (measured: tskUmnDataBaseAnalisis also performs an
+ * `ld` from PadData + 0x28, a doubleword that PadPrefix cannot give). */
+typedef union UmnPadInputPrefix {
+    PadPrefix canonical;
+    struct {
+        unsigned char unmodeled_00[0x28];
+        union {
+            struct {
+                unsigned short half_28;
+                unsigned short half_2a;
+                unsigned int unmodeled_2c;
+            } halves;
+            unsigned long buttonRegister;
+        } buttons;
+    } wide;
+} UmnPadInputPrefix;
+struct UmnGunoDataBase {
+    unsigned char unmodeled_00[0x20];
+    short x;                                /* +0x20 */
+    short y;                                /* +0x22 */
+    short page;                             /* +0x24 */
+    unsigned char unmodeled_26[0x28 - 0x26];
+    int title;                              /* +0x28 */
+    int text;                                /* +0x2C */
+    int picture;                            /* +0x30 */
+    int sound;                              /* +0x34 */
+    long model;                             /* +0x38 */
+    char name[0x52 - 0x40];                 /* +0x40 */
+    char reading[0x68 - 0x52];              /* +0x52 */
+};
+typedef struct UmnDataBaseWinParam {
+    int width;                              /* +0x00 */
+    int height;                             /* +0x04 */
+    int color;                              /* +0x08 */
+    UmnGunoDataBase *entry;                 /* +0x0C */
+    short x;                                /* +0x10 */
+    short y;                                /* +0x12 */
+    short page;                             /* +0x14 */
+    unsigned char unmodeled_16[0x18 - 0x16];
+    int title;                              /* +0x18 */
+    int text;                               /* +0x1C */
+    int picture;                            /* +0x20 */
+    int sound;                              /* +0x24 */
+    long model;                             /* +0x28 */
+    unsigned char unmodeled_30[0x34 - 0x30];
+    char *name;                             /* +0x34 */
+    char *reading;                          /* +0x38 */
+} UmnDataBaseWinParam;
+typedef struct UmnDataBaseAnalisisWork {
+    unsigned char step;                     /* +0x00 */
+    unsigned char opened;                   /* +0x01 */
+} UmnDataBaseAnalisisWork;
+typedef struct UmnDataBaseMenuWork {
+    unsigned char state;                /* +0x00 */
+    unsigned char opened;               /* +0x01 */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    short x;                            /* +0x04 */
+    short y;                            /* +0x06 */
+    int color;                          /* +0x08 */
+    int pending;                        /* +0x0C */
+    WindowDX window;       /* +0x10 */
+    UmnDataBaseInfoText info;           /* +0x1A4 */
+    unsigned char unmodeled_354[0x79C - 0x354];
+    UmnDataBaseMenuEntry entries[UMN_DB_MENU_ENTRIES + 1]; /* +0x79C */
+} UmnDataBaseMenuWork;
+typedef struct UmnDataBaseExWinLine {
+    short x;                                /* +0x00 */
+    short y;                                /* +0x02 */
+    EMessageParam message;                  /* +0x04 */
+} UmnDataBaseExWinLine;
+typedef struct UmnDataBaseExWinSprite {
+    unsigned char unmodeled_00[0x04];
+    short x;                                /* +0x04 */
+    short y;                                /* +0x06 */
+    int color;                              /* +0x08 */
+    unsigned char unmodeled_0c[0x28 - 0x0C];
+} UmnDataBaseExWinSprite;
+typedef struct UmnDataBaseExWinWork {
+    unsigned char step;                     /* +0x000 */
+    unsigned char opened;                   /* +0x001 */
+    unsigned char unmodeled_002;            /* +0x002 */
+    unsigned char textShown;                /* +0x003 */
+    int color;                              /* +0x004 */
+    UmnDataBaseExWinLine lines[UMN_DB_EXWIN_LINES]; /* +0x008 */
+    int drift[UMN_DB_EXWIN_ARROWS];         /* +0x170 */
+    UmnDataBaseExWinSprite sprites[UMN_DB_EXWIN_ARROWS]; /* +0x178 */
+} UmnDataBaseExWinWork;
+typedef struct UmnDataBaseArrowSprites {
+    short id[UMN_DB_EXWIN_ARROWS];
+} UmnDataBaseArrowSprites;
+typedef struct UmnDataBaseArrowSteps {
+    int step[UMN_DB_EXWIN_ARROWS];
+} UmnDataBaseArrowSteps;
+typedef struct UmnDataBaseKeyWordWork {
+    unsigned char step;                     /* +0x000 */
+    unsigned char active;                   /* +0x001 */
+    unsigned char visible;                  /* +0x002 */
+    unsigned char messageShown;             /* +0x003 */
+    unsigned int color;                     /* +0x004 */
+    WindowDX window;                        /* +0x008 */
+    MenuTopMenuPanel list;                  /* +0x19C */
+    ECursolMainData selectCursor;           /* +0x794 */
+    ECursolMainData indexCursor;            /* +0x7B8 */
+    unsigned char unmodeled_7dc[4];
+    TyaUmlDatabase disp;              /* +0x7E0 */
+    short x;                                /* +0x840 */
+    short y;                                /* +0x842 */
+    int indexNo;                            /* +0x844 */
+    int selectNo;                           /* +0x848 */
+    ETagFontMainData tag;                  /* +0x84C */
+    ERibbonMainData ribbon;                /* +0x86C */
+    ENumberMainData number;                /* +0x8DC */
+    EMessageParam message;                  /* +0x96C */
+} UmnDataBaseKeyWordWork;
+typedef struct UmnDataBaseModelXform {
+    float position[3];              /* +0x00 */
+    unsigned char unmodeled_0c[0x20 - 0x0C];
+    float scale[3];                  /* +0x20 */
+    unsigned char unmodeled_2c[0x40 - 0x2C];
+    float baseRotation[3];           /* +0x40 */
+    unsigned char unmodeled_4c[0x60 - 0x4C];
+    float visible;                    /* +0x60 */
+} UmnDataBaseModelXform;
+typedef struct UmnDataBaseModelData {
+    unsigned char unmodeled_00[0xC0];
+    UmnDataBaseModelXform xform;     /* +0xC0 */
+} UmnDataBaseModelData;
 
-void tskUmnDataBasePas(UmnDataBaseTask *task, UmnDataBasePasWork *work)
+extern void *UmnGunoDataBaseTop;
+/* The help line text of the database screen (original scaffold data, msg00.0). */
+extern char *msg00_0_00A106F8;
+extern char D_00A12F18[];
+extern unsigned short monster_folder[];
+extern int BW3BattleOrDataBase;
+extern char D_00A13028[];
+extern char *text2_2[3];
+extern void MenuModelControl(MenuModelUnit *unit);
+extern void MenuModelUnitBreak(MenuModelUnit *unit);
+extern unsigned short monster_folder[0x80];
+extern char D_00A13150[];
+extern char D_00A13158[];
+extern char D_00A13160[];
+extern char D_00A13170[];
+extern char D_00A12EE0[];
+extern char D_00A12EB0[];
+extern char D_00A12EA8[];
+extern char D_00A13128[];
+extern char D_00A13118[];
+extern char D_00A13108[];
+extern char D_00A130F0[];
+extern char D_00A130D8[];
+
+void xglFontDebugPrintf(int x, int y, const char *format, ...);
+void eBattleWinOpen3(UmnDataBaseWinParam *param);
+void eBattleWinMain3(void);
+void eBattleWinClose3(void);
+void xglSoundEffectNormalID(int sound_id, int variant);
+void eSpriteSet(UmnDataBaseExWinSprite *sprite, short spriteId);
+void eSpriteMain(UmnDataBaseExWinSprite *sprite);
+int UmnDataBaseMonsterCheck(int id);
+int UmnDataBaseAnalisisCheck(int id);
+signed char MenuSelectMove(int cursor, int entries, int mode);
+void xglFontDebugHex(int x, int y, int value, int digits);
+
+UmnGunoDataBase *UmnGunoDataBaseGet(int id)
 {
+    UmnGunoDataBase *base = UmnGunoDataBaseTop;
+
+    if ((u32) (id - UMN_DB_FIRST_ID) < UMN_DB_ENTRY_COUNT) {
+        return base + id - UMN_DB_FIRST_ID;
+    }
+    return base;
+}
+
+static char *msg00_1_00A10700[3];
+
+void tskUmnDataBasePas(UmnObjectTask *task, void *data)
+{
+    UmnDataBasePasWork *work = data;
     short slideTargets[4];
     short windowTarget;
     int i;
 
-    if (UmnWork.mode != 2) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
     switch (task->state) {
-    case 0: {
+    case UMN_TASK_INIT: {
         short messageX = 288;
         short messageY = 11;
-        int messageMode = 0x20;
+        int messageMode = E_MODE_SHOW_START;
         UmnDataBasePasMessageView *view;
 
         work->kind = 0x00FFFFF0;
         WindowDXSet(&work->window);
         work->window.x = -272;
         work->window.y = 8;
-        work->window.color = work->kind;
+        work->window.style = work->kind;
         work->window.width = 272;
-        work->window.state = 1;
+        work->window.state = WINDOWDX_STATE_OPEN;
         work->window.height = 32;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOWDX_STATE_READY;
         eMessageSet(&work->message, msg00_0_00A106F8);
         view = (UmnDataBasePasMessageView *) ((unsigned char *) work + 0x190);
         view->message.mode = messageMode;
@@ -159,15 +370,16 @@ void tskUmnDataBasePas(UmnDataBaseTask *task, UmnDataBasePasWork *work)
         work->state = i;
         break;
     }
-    case 2: {
+    case UMN_TASK_RUN: {
         short slideValue = 288;
 
         windowTarget = -16;
         for (i = 3; i >= 0; i--) {
             slideTargets[i] = slideValue;
         }
-        switch (UmnWork.stateOrCategory) {
-        case 16: case 17: case 32: case 33: case 48: case 49: case 80: case 81:
+        switch (UmnWork.tab_state) {
+        case UMN_STEP_OPEN: case UMN_STEP_ACTIVE: case UMN_DB_STEP_LIST_OPEN: case UMN_DB_STEP_LIST:
+        case UMN_DB_STEP_DETAIL_OPEN: case UMN_DB_STEP_DETAIL: case UMN_DB_STEP_KEYWORD_OPEN: case UMN_DB_STEP_KEYWORD:
             slideTargets[0] = 16;
             break;
         case 18: case 19: case 20: case 21: case 22: case 23: case 24: case 25:
@@ -190,12 +402,12 @@ void tskUmnDataBasePas(UmnDataBaseTask *task, UmnDataBasePasWork *work)
             work->box.kind = work->kind;
             work->box.width = work->window.width - 6;
             work->box.height = work->window.height - 6;
-            endPrintExtFunc(work->kind, 0x65, &work->box);
+            endPrintExtFunc(work->kind, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET, &work->box);
             MoveSlide(&work->message.x, &slideTargets[0], 3.0f);
             if (work->message.x < 256) {
                 eMessageMain(&work->message);
             }
-            endPrintExtFunc(work->kind, 0x66, 0);
+            endPrintExtFunc(work->kind, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
         }
         break;
     }
@@ -208,18 +420,19 @@ void tskUmnDataBasePas(UmnDataBaseTask *task, UmnDataBasePasWork *work)
  * line at the help text of the entry the cursor is on and slides the window
  * to the height the terminal's current step asks for.
  */
-void tskUmnDataBaseInfo(UmnDataBaseTask *task, UmnDataBaseInfoWork *work)
+void tskUmnDataBaseInfo(UmnObjectTask *task, void *data)
 {
+    UmnDataBaseInfoWork *work = data;
     int state;
     short slideTarget;
 
-    if (UmnWork.mode != 2) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
 
     switch (task->state) {
-    case 0:
+    case UMN_TASK_INIT:
         work->color = 0x00FF0000;
         work->opened = 0;
         work->state = 0;
@@ -229,23 +442,23 @@ void tskUmnDataBaseInfo(UmnDataBaseTask *task, UmnDataBaseInfoWork *work)
         work->window.y = 480;
         work->window.width = 544;
         work->window.height = 54;
-        work->window.callback = MenuInfoWindow;
-        work->window.callbackArg = &work->info;
+        work->window.close_callback = MenuInfoWindow;
+        work->window.close_callback_arg = &work->info;
         work->info.x = 0;
-        work->window.color = work->color;
-        work->window.state = 1;
+        work->window.style = work->color;
+        work->window.state = WINDOWDX_STATE_OPEN;
         work->info.y = 0;
         work->info.text = 0;
         WindowDXMain(&work->window);
-        work->window.state = 3;
+        work->window.state = WINDOWDX_STATE_READY;
         break;
-    case 2:
-        state = UmnWork.stateOrCategory;
+    case UMN_TASK_RUN:
+        state = UmnWork.tab_state;
         slideTarget = 386;
         /* Only the terminal's two entry-list steps keep the line this high. */
-        if (state >= 0x12) {
+        if (state >= UMN_STEP_ACTIVE + 1) {
             slideTarget = 480;
-        } else if (state < 0x10) {
+        } else if (state < UMN_STEP_OPEN) {
             slideTarget = 480;
         }
         work->info.text = msg00_1_00A10700[UmnWork.cursor];
@@ -255,41 +468,9 @@ void tskUmnDataBaseInfo(UmnDataBaseTask *task, UmnDataBaseInfoWork *work)
     }
 }
 
-typedef struct UmnKeyWordNumber {
-    short x;                                /* +0x00 */
-    short y;                                /* +0x02 */
-    unsigned int color;                     /* +0x04 */
-    unsigned char unmodeled_08[0x0E - 0x08];
-    unsigned char type;                     /* +0x0E */
-    unsigned char digits;                   /* +0x0F */
-    unsigned char unmodeled_10[0x14 - 0x10];
-    int value;                              /* +0x14 */
-    unsigned char unmodeled_18[0x90 - 0x18];
-} UmnKeyWordNumber;
-void eNumberSet(UmnKeyWordNumber *number, int mode);
-void eNumberMain(UmnKeyWordNumber *number);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-typedef struct UmnDataBaseNameRow {
-    unsigned short id;                  /* +0x00 (row +0x08 from the work base) */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    UmnDataBaseInfoWindow window;       /* +0x04 */
-    EMessageParam message;              /* +0x198 */
-    UmnKeyWordNumber number;            /* +0x1DC */
-} UmnDataBaseNameRow;
-typedef struct UmnDataBaseNameWork {
-    unsigned char step;                 /* +0x00: screen step */
-    unsigned char opened;               /* +0x01 */
-    unsigned char unmodeled_02;         /* +0x02 */
-    unsigned char count;                /* +0x03 */
-    unsigned int color;                 /* +0x04 */
-    UmnDataBaseNameRow rows[14];        /* +0x08, 620 bytes each */
-    ECursolMainData cursor;             /* +0x21F0 */
-} UmnDataBaseNameWork;
-extern char D_00A12F18[];
-extern unsigned short monster_folder[];
-
-void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
+void tskUmnDataBaseName(UmnObjectTask *task, void *data)
 {
+    UmnDataBaseNameWork *work = data;
     short xTarget;
     short yTarget;
     int selected;
@@ -299,54 +480,54 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
     int i;
     int r;
 
-    if (UmnWork.mode != 2) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
 
     switch (task->state) {
-    case 0: {
+    case UMN_TASK_INIT: {
 
         work->color = 0xFFFF00;
-        for (i = 0; i < 14; i++) {
+        for (i = 0; i < UMN_DB_NAME_ROWS; i++) {
             int width;
 
             WindowDXSet(&work->rows[i].window);
             width = 222;
             work->rows[i].window.width = width;
-            work->rows[i].window.color = work->color;
+            work->rows[i].window.style = work->color;
             work->rows[i].window.y = 80 + (i / 2) * 48;
-            work->rows[i].window.caption = D_00A12F18;
+            work->rows[i].window.tag_id = D_00A12F18;
             work->rows[i].window.height = 30;
             work->rows[i].window.x = (i % 2) * (width + 544) - width - 16;
-            work->rows[i].window.state = 1;
+            work->rows[i].window.state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&work->rows[i].window);
-            work->rows[i].window.state = 3;
+            work->rows[i].window.state = WINDOWDX_STATE_READY;
             eNumberSet(&work->rows[i].number, 0);
             work->rows[i].number.digits = 3;
-            work->rows[i].number.type = 1;
+            work->rows[i].number.format = 1;
         }
         eCursolSet(&work->cursor, 0);
         work->count = UmnWork.count;
-        if (work->count >= 13) {
-            work->count = 12;
+        if (work->count >= UMN_DB_NAME_SHOWN + 1) {
+            work->count = UMN_DB_NAME_SHOWN;
         }
-        work->step = 0;
+        work->step = UMN_DB_NAME_WAIT;
         work->opened = 0;
         break;
     }
-    case 2:
+    case UMN_TASK_RUN:
         {
         switch (work->step) {
-        case 0:
+        case UMN_DB_NAME_WAIT:
         case 1:
-            if (UmnWork.stateOrCategory == 0x21) {
-                work->step = 10;
+            if (UmnWork.tab_state == UMN_DB_STEP_LIST) {
+                work->step = UMN_DB_NAME_PLACE;
                 work->opened = 1;
-                eCursolModeChange(&work->cursor, 0x20);
+                eCursolModeChange(&work->cursor, E_MODE_SHOW_START);
             }
             break;
-        case 10: {
+        case UMN_DB_NAME_PLACE: {
             int selected;
 
             selected = UmnWork.column + 2 * UmnWork.row;
@@ -356,10 +537,10 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
                     work->rows[i].window.x = (work->rows[i].window.width + 544) * (i % 2) - work->rows[i].window.width - 16;
                 }
             }
-            work->step = 11;
+            work->step = UMN_DB_NAME_SLIDE_LIST;
         }
             /* fallthrough */
-        case 11: {
+        case UMN_DB_NAME_SLIDE_LIST: {
             int selected;
             int done;
 
@@ -381,22 +562,22 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
                 }
             }
             if (done == work->count) {
-                work->step = 12;
+                work->step = UMN_DB_NAME_LIST_SHOWN;
                 UmnWork.moving = 0;
             }
             break;
         }
-        case 12:
-            if (UmnWork.stateOrCategory != 0x11) {
-                if (UmnWork.stateOrCategory == 0x31) {
-                    work->step = 20;
+        case UMN_DB_NAME_LIST_SHOWN:
+            if (UmnWork.tab_state != UMN_STEP_ACTIVE) {
+                if (UmnWork.tab_state == UMN_DB_STEP_DETAIL) {
+                    work->step = UMN_DB_NAME_SLIDE_DETAIL;
                 }
             } else {
-                work->step = 30;
+                work->step = UMN_DB_NAME_SLIDE_OUT;
             }
             break;
-        case 20:
-        case 30: {
+        case UMN_DB_NAME_SLIDE_DETAIL:
+        case UMN_DB_NAME_SLIDE_OUT: {
             int selected;
             int matched;
             short xTarget;
@@ -406,12 +587,12 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
             matched = 0;
             for (i = 0; i < work->count; i++) {
                 xTarget = (work->rows[i].window.width + 544) * (i % 2) - work->rows[i].window.width - 16;
-                if (work->step == 20 && selected == i) {
+                if (work->step == UMN_DB_NAME_SLIDE_DETAIL && selected == i) {
                     xTarget = 272;
                 }
                 MoveSlide(&work->rows[i].window.x, &xTarget, 3.0f);
                 if (work->rows[i].window.x == xTarget) {
-                    if (work->step == 20 && selected == i) {
+                    if (work->step == UMN_DB_NAME_SLIDE_DETAIL && selected == i) {
                         yTarget = 32;
                         MoveSlide(&work->rows[i].window.y, &yTarget, 3.0f);
                         if (work->rows[i].window.y == yTarget) {
@@ -423,20 +604,20 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
                 }
             }
             if (matched == work->count) {
-                if (work->step == 20) {
-                    work->step = 22;
+                if (work->step == UMN_DB_NAME_SLIDE_DETAIL) {
+                    work->step = UMN_DB_NAME_DETAIL_SHOWN;
                 } else {
-                    work->step = 0;
+                    work->step = UMN_DB_NAME_WAIT;
                 }
                 UmnWork.moving = 0;
             }
             break;
         }
-        case 22: {
+        case UMN_DB_NAME_DETAIL_SHOWN: {
             int selected;
 
-            if (UmnWork.stateOrCategory == 0x21) {
-                work->step = 10;
+            if (UmnWork.tab_state == UMN_DB_STEP_LIST) {
+                work->step = UMN_DB_NAME_PLACE;
             } else {
                 selected = UmnWork.column + 2 * UmnWork.row;
                 for (i = 0; i < work->count; i++) {
@@ -462,7 +643,7 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
 
         selected = UmnWork.column + 2 * UmnWork.row;
         for (i = 0; i < work->count; i++) {
-            r = UmnWork.listCursor - 2 * UmnWork.row - UmnWork.column + i;
+            r = UmnWork.list_cursor - 2 * UmnWork.row - UmnWork.column + i;
             work->rows[i].id = monster_folder[r];
         }
         fill = order;
@@ -475,26 +656,26 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
         for (i = 0; i < work->count; i++) {
             r = order[i];
             if (work->rows[r].id != 0) {
-                work->rows[r].window.color = work->color;
+                work->rows[r].window.style = work->color;
                 if (selected == r) {
-                    work->rows[r].window.color += 16;
+                    work->rows[r].window.style += 16;
                 }
                 WindowDXMain(&work->rows[r].window);
                 eMessageSet(&work->rows[r].message, (const char *) UmnGunoDataBaseGet(work->rows[r].id));
-                work->rows[r].message.mode = 32;
-                work->rows[r].message.draw_parameter = work->rows[r].window.color + 2;
+                work->rows[r].message.mode = E_MODE_SHOW_START;
+                work->rows[r].message.draw_parameter = work->rows[r].window.style + 2;
                 work->rows[r].message.x = work->rows[r].window.x + 19;
                 work->rows[r].message.y = work->rows[r].window.y + 3;
                 eMessageMain(&work->rows[r].message);
                 work->rows[r].number.x = work->rows[r].window.x + 32;
-                work->rows[r].number.color = work->rows[r].window.color + 2;
+                work->rows[r].number.work = work->rows[r].window.style + 2;
                 work->rows[r].number.y = work->rows[r].window.y - 12;
-                work->rows[r].number.value = UmnWork.listCursor - 2 * UmnWork.row - UmnWork.column + order[i] + 1;
+                work->rows[r].number.value = UmnWork.list_cursor - 2 * UmnWork.row - UmnWork.column + order[i] + 1;
                 eNumberMain(&work->rows[r].number);
             }
         }
         work->cursor.x = work->rows[selected].window.x + 3;
-        work->cursor.work = work->rows[selected].window.color + 2;
+        work->cursor.work = work->rows[selected].window.style + 2;
         work->cursor.y = work->rows[selected].window.y + 7;
         eCursolMain(&work->cursor);
     }
@@ -502,110 +683,41 @@ void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
     xglFontDebugPrintf(16, 96, "name_w %2d", work->step);
 }
 
-/* PadPrefix canonically covers [0x00, 0x2C). The original
- * tskUmnDataBaseAnalisis also performs an `ld` from PadData + 0x28, so this
- * TU keeps an explicit four-byte-overlapping wide view ending at +0x30. */
-typedef union UmnPadInputPrefix {
-    PadPrefix canonical;
-    struct {
-        unsigned char unmodeled_00[0x28];
-        union {
-            struct {
-                unsigned short half_28;
-                unsigned short half_2a;
-                unsigned int unmodeled_2c;
-            } halves;
-            unsigned long buttonRegister;
-        } buttons;
-    } wide;
-} UmnPadInputPrefix;
-extern PadPrefix PadData;
-#define UMN_PAD_INPUT ((UmnPadInputPrefix *)&PadData)
-#define PAD_CIRCLE 0x0020
-#define PAD_MOVE   0x002C0000
-typedef struct UmnGunoDataBase {
-    unsigned char unmodeled_00[0x20];
-    short x;                                /* +0x20 */
-    short y;                                /* +0x22 */
-    short page;                             /* +0x24 */
-    unsigned char unmodeled_26[0x28 - 0x26];
-    int title;                              /* +0x28 */
-    int text;                                /* +0x2C */
-    int picture;                            /* +0x30 */
-    int sound;                              /* +0x34 */
-    long model;                             /* +0x38 */
-    char name[0x52 - 0x40];                 /* +0x40 */
-    char reading[0x68 - 0x52];              /* +0x52 */
-} UmnGunoDataBase;
-typedef struct UmnDataBaseWinParam {
-    int width;                              /* +0x00 */
-    int height;                             /* +0x04 */
-    int color;                              /* +0x08 */
-    UmnGunoDataBase *entry;                 /* +0x0C */
-    short x;                                /* +0x10 */
-    short y;                                /* +0x12 */
-    short page;                             /* +0x14 */
-    unsigned char unmodeled_16[0x18 - 0x16];
-    int title;                              /* +0x18 */
-    int text;                               /* +0x1C */
-    int picture;                            /* +0x20 */
-    int sound;                              /* +0x24 */
-    long model;                             /* +0x28 */
-    unsigned char unmodeled_30[0x34 - 0x30];
-    char *name;                             /* +0x34 */
-    char *reading;                          /* +0x38 */
-} UmnDataBaseWinParam;
-typedef struct UmnDataBaseAnalisisWork {
-    unsigned char step;                     /* +0x00 */
-    unsigned char opened;                   /* +0x01 */
-} UmnDataBaseAnalisisWork;
-typedef struct UmnDataBaseAnalisisTask {
-    unsigned char unmodeled_00[0x10];       /* +0x00 */
-    int state;                              /* +0x10 */
-    unsigned char unmodeled_14[0x1C - 0x14];
-    UmnDataBaseAnalisisWork analisis;       /* +0x1C */
-} UmnDataBaseAnalisisTask;
-extern int BW3BattleOrDataBase;
-void eBattleWinOpen3(UmnDataBaseWinParam *param);
-void eBattleWinMain3(void);
-void eBattleWinClose3(void);
-void xglSoundEffectNormalID(int sound_id, int variant);
-
 /*
  * The analysis window of the U.M.N. database: the player opens it with the
  * circle button on an analysed record and closes it again, and the window is
  * driven every frame for as long as it is open.
  */
-void tskUmnDataBaseAnalisis(UmnDataBaseAnalisisTask *task)
+void tskUmnDataBaseAnalisis(UmnObjectTask *task, void *data)
 {
-    UmnDataBaseAnalisisWork *work = &task->analisis;
+    UmnDataBaseAnalisisWork *work = (UmnDataBaseAnalisisWork *)task->zeroedOnCreate;
     UmnDataBaseWinParam param;
     UmnGunoDataBase *entry;
 
-    if (UmnWork.mode != 2) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
 
     switch (work->step) {
-    case 0:
+    case UMN_DB_ANALYSIS_IDLE:
         work->opened = 0;
-        work->step = 1;
+        work->step = UMN_DB_ANALYSIS_WAIT;
         /* fallthrough */
-    case 1:
-        if (UMN_PAD_INPUT->canonical.half_2a & PAD_CIRCLE) {
-            if (UmnWork.stateOrCategory == 0x31) {
-                if (UmnWork.analysed != 0) {
-                    work->step = 0xA;
-                    xglSoundEffectNormalID(1, 0);
+    case UMN_DB_ANALYSIS_WAIT:
+        if (PadData.half_2a & PAD_CIRCLE) {
+            if (UmnWork.tab_state == UMN_DB_STEP_DETAIL) {
+                if (UmnWork.database.analysed != 0) {
+                    work->step = UMN_DB_ANALYSIS_OPEN;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 } else {
-                    xglSoundEffectNormalID(5, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
             }
         }
         break;
-    case 0xA:
-        entry = (UmnGunoDataBase *) UmnGunoDataBaseGet(UmnWork.entry);
+    case UMN_DB_ANALYSIS_OPEN:
+        entry = UmnGunoDataBaseGet(UmnWork.entry);
         param.width = 0x70;
         param.height = 0x90;
         param.color = 0xFFFFF0;
@@ -623,21 +735,21 @@ void tskUmnDataBaseAnalisis(UmnDataBaseAnalisisTask *task)
         BW3BattleOrDataBase = 1;
         eBattleWinOpen3(&param);
         work->opened = 1;
-        work->step = 0xC;
+        work->step = UMN_DB_ANALYSIS_SHOWN;
         /* fallthrough */
-    case 0xC:
-        if (UmnWork.stateOrCategory == 0x31 && UmnWork.modelFlag == 0
-            && !(UMN_PAD_INPUT->wide.buttons.buttonRegister & PAD_MOVE)) {
+    case UMN_DB_ANALYSIS_SHOWN:
+        if (UmnWork.tab_state == UMN_DB_STEP_DETAIL && UmnWork.database.model_flag == 0
+            && !(((UmnPadInputPrefix *)&PadData)->wide.buttons.buttonRegister & PAD_MOVE)) {
             break;
         }
-        work->step = 0x14;
-        if (UMN_PAD_INPUT->canonical.half_2a & PAD_CIRCLE) {
-            xglSoundEffectNormalID(2, 0);
+        work->step = UMN_DB_ANALYSIS_CLOSE;
+        if (PadData.half_2a & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
-    case 0x14:
+    case UMN_DB_ANALYSIS_CLOSE:
         eBattleWinClose3();
-        work->step = 1;
+        work->step = UMN_DB_ANALYSIS_WAIT;
         break;
     }
 
@@ -646,71 +758,55 @@ void tskUmnDataBaseAnalisis(UmnDataBaseAnalisisTask *task)
     }
 }
 
-extern char D_00A13028[];
-extern char *text2_2[3];
-
-typedef struct UmnDataBaseMenuWork {
-    unsigned char state;                /* +0x00 */
-    unsigned char opened;               /* +0x01 */
-    unsigned char unmodeled_02[0x04 - 0x02];
-    short x;                            /* +0x04 */
-    short y;                            /* +0x06 */
-    int color;                          /* +0x08 */
-    int pending;                        /* +0x0C */
-    UmnDataBaseInfoWindow window;       /* +0x10 */
-    UmnDataBaseInfoText info;           /* +0x1A4 */
-    unsigned char unmodeled_354[0x79C - 0x354];
-    UmnDataBaseMenuEntry entries[4];    /* +0x79C */
-} UmnDataBaseMenuWork;
-
 /*
  * The top menu of the U.M.N. database: the first frame builds its window and
  * the three entries, then the window slides in, the cursor follows the
  * terminal and the window slides out again when the menu closes.
  */
-void tskUmnDataBaseMenu(UmnDataBaseTask *task, UmnDataBaseMenuWork *work)
+void tskUmnDataBaseMenu(UmnObjectTask *task, void *data)
 {
+    UmnDataBaseMenuWork *work = data;
     short slideTarget;
     short closeTarget;
     int i;
     int mode;
 
     mode = UmnWork.mode;
-    if (mode != 2) {
-        task->state = -1;
+    if (mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
     switch (task->state) {
-    case 0:
+    case UMN_TASK_INIT:
         work->x = 528;
         work->y = 48;
         work->color = 0x00FFFFF0;
         work->pending = 0;
         WindowDXSet(&work->window);
-        work->window.color = work->color;
+        work->window.style = work->color;
         work->window.width = 125;
         work->window.height = 78;
         work->info.y = mode;
-        work->window.caption = D_00A13028;
-        work->window.callback = MenuSelectWindow;
-        work->window.callbackArg = &work->info;
+        work->window.tag_id = D_00A13028;
+        work->window.close_callback = MenuSelectWindow;
+        work->window.close_callback_arg = &work->info;
         work->info.entries = 0;
-        work->state = 0;
+        work->state = UMN_DB_MENU_IDLE;
         work->opened = 0;
         break;
-    case 2:
+    case UMN_TASK_RUN:
         switch (work->state) {
-        case 0:
+        case UMN_DB_MENU_IDLE:
             work->opened = 0;
-            work->state = 10;
+            work->state = UMN_DB_MENU_WAIT_OPEN;
             /* fallthrough */
-        case 10:
-            if (UmnWork.stateOrCategory == 0x11) {
-                work->state = 20;
+        case UMN_DB_MENU_WAIT_OPEN:
+            if (UmnWork.tab_state == UMN_STEP_ACTIVE) {
+                work->state = UMN_DB_MENU_BUILD;
             }
             break;
-        case 20:
-            for (i = 0; i < 3; i++) {
+        case UMN_DB_MENU_BUILD:
+            for (i = 0; i < UMN_DB_MENU_ENTRIES; i++) {
                 work->entries[i].text = text2_2[i];
                 if (i == 0 && UmnWork.count == 0) {
                     work->entries[i].enabled = 1;
@@ -724,36 +820,36 @@ void tskUmnDataBaseMenu(UmnDataBaseTask *task, UmnDataBaseMenuWork *work)
             work->window.y = 176;
             work->info.value = UmnWork.cursor;
             work->info.entries = &work->entries[0];
-            work->window.state = 1;
+            work->window.state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&work->window);
-            work->window.state = 3;
+            work->window.state = WINDOWDX_STATE_READY;
             work->opened = 1;
-            work->state = 21;
+            work->state = UMN_DB_MENU_SLIDE_IN;
             /* fallthrough */
-        case 21:
+        case UMN_DB_MENU_SLIDE_IN:
             slideTarget = 192;
             MoveSlide(&work->window.x, &slideTarget, 3.0f);
             if (work->window.x == slideTarget) {
-                work->state = 30;
+                work->state = UMN_DB_MENU_SHOWN;
             }
             break;
-        case 30:
+        case UMN_DB_MENU_SHOWN:
             work->info.value = UmnWork.cursor;
-            if (UmnWork.stateOrCategory != 0x11) {
-                work->state = 40;
+            if (UmnWork.tab_state != UMN_STEP_ACTIVE) {
+                work->state = UMN_DB_MENU_SLIDE_OUT;
             } else {
                 UmnWork.moving = 0;
             }
             break;
-        case 40:
+        case UMN_DB_MENU_SLIDE_OUT:
             closeTarget = -125;
-            if ((UmnWork.stateOrCategory >> 4) == 5) {
+            if ((UmnWork.tab_state >> 4) == (UMN_DB_STEP_KEYWORD_OPEN >> 4)) {
                 work->opened = 0;
                 work->window.x = -125;
             } else {
                 MoveSlide(&work->window.x, &closeTarget, 3.0f);
                 if (work->window.x == closeTarget) {
-                    work->state = 0;
+                    work->state = UMN_DB_MENU_IDLE;
                     work->pending = 0;
                 }
             }
@@ -768,40 +864,9 @@ void tskUmnDataBaseMenu(UmnDataBaseTask *task, UmnDataBaseMenuWork *work)
     }
 }
 
-#define PAD_SQUARE 0x0080
-typedef struct UmnDataBaseExWinLine {
-    short x;                                /* +0x00 */
-    short y;                                /* +0x02 */
-    EMessageParam message;                  /* +0x04 */
-} UmnDataBaseExWinLine;
-typedef struct UmnDataBaseExWinSprite {
-    unsigned char unmodeled_00[0x04];
-    short x;                                /* +0x04 */
-    short y;                                /* +0x06 */
-    int color;                              /* +0x08 */
-    unsigned char unmodeled_0c[0x28 - 0x0C];
-} UmnDataBaseExWinSprite;
-typedef struct UmnDataBaseExWinWork {
-    unsigned char step;                     /* +0x000 */
-    unsigned char opened;                   /* +0x001 */
-    unsigned char unmodeled_002;            /* +0x002 */
-    unsigned char textShown;                /* +0x003 */
-    int color;                              /* +0x004 */
-    UmnDataBaseExWinLine lines[5];          /* +0x008 */
-    int drift[2];                           /* +0x170 */
-    UmnDataBaseExWinSprite sprites[2];      /* +0x178 */
-} UmnDataBaseExWinWork;
-typedef struct UmnDataBaseArrowSprites {
-    short id[2];
-} UmnDataBaseArrowSprites;
-typedef struct UmnDataBaseArrowSteps {
-    int step[2];
-} UmnDataBaseArrowSteps;
 static const UmnDataBaseArrowSprites D_00A13138 = {{0x0112, 0x0110}};
 static const UmnDataBaseArrowSteps D_00A13140 = {{1, -1}};
 static char *text_3_00A10720[5];
-void eSpriteSet(UmnDataBaseExWinSprite *sprite, short spriteId);
-void eSpriteMain(UmnDataBaseExWinSprite *sprite);
 
 /*
  * The extra window of the U.M.N. database: five lines of help text with an
@@ -809,32 +874,33 @@ void eSpriteMain(UmnDataBaseExWinSprite *sprite);
  * record, the square button hides and shows the text and each arrow runs off
  * its own side once the player pages that way.
  */
-void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
+void tskUmnDataBaseExWin(UmnObjectTask *task, void *data)
 {
+    UmnDataBaseExWinWork *work = data;
     UmnDataBaseArrowSprites arrowSprite;
-    short lineTarget[5];
-    short arrowTarget[2];
+    short lineTarget[UMN_DB_EXWIN_LINES];
+    short arrowTarget[UMN_DB_EXWIN_ARROWS];
     UmnDataBaseArrowSteps arrowStep;
     int buttons;
     int pressed;
     int i;
 
-    if (UmnWork.mode != 2) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
 
     switch (task->state) {
-    case 0:
+    case UMN_TASK_INIT:
         work->color = 0xFFFFF0;
-        for (i = 0; i < 5; i++) {
+        for (i = 0; i < UMN_DB_EXWIN_LINES; i++) {
             work->lines[i].y = i * 0x18 + 0x120;
             work->lines[i].x = -0xC4;
             eMessageSet(&work->lines[i].message, text_3_00A10720[i]);
-            eMessageModeChange(&work->lines[i].message, 0x20);
+            eMessageModeChange(&work->lines[i].message, E_MODE_SHOW_START);
         }
         arrowSprite = D_00A13138;
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < UMN_DB_EXWIN_ARROWS; i++) {
             eSpriteSet(&work->sprites[i], arrowSprite.id[i]);
             work->sprites[i].x = i * 0x23D - 0x2D;
             work->sprites[i].color = work->color;
@@ -845,21 +911,21 @@ void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
         work->textShown = 1;
         work->step = 0;
         break;
-    case 2:
+    case UMN_TASK_RUN:
     {
-        for (i = 0; i < 5; i++) {
+        for (i = 0; i < UMN_DB_EXWIN_LINES; i++) {
             lineTarget[i] = -0xC4;
         }
         arrowTarget[0] = -0x2D;
         arrowTarget[1] = 0x210;
-        if (UmnWork.stateOrCategory == 0x31) {
-            for (i = 0; i < 5; i++) {
+        if (UmnWork.tab_state == UMN_DB_STEP_DETAIL) {
+            for (i = 0; i < UMN_DB_EXWIN_LINES; i++) {
                 lineTarget[i] = 0x10;
             }
-            buttons = UMN_PAD_INPUT->canonical.half_2a;
+            buttons = PadData.half_2a;
             if (buttons & PAD_SQUARE) {
                 work->textShown ^= 1;
-                buttons = UMN_PAD_INPUT->canonical.half_2a;
+                buttons = PadData.half_2a;
             }
             pressed = buttons & 0xFFFF;
             arrowTarget[0] = 8;
@@ -873,13 +939,13 @@ void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
         } else {
             work->textShown = 1;
         }
-        for (i = 0; i < 5; i++) {
+        for (i = 0; i < UMN_DB_EXWIN_LINES; i++) {
             MoveSlide(&work->lines[i].x, &lineTarget[i], 3.0f);
             work->lines[i].message.x = work->lines[i].x;
             work->lines[i].message.y = work->lines[i].y;
             work->lines[i].message.draw_parameter = work->color;
-            if (i == 4) {
-                if (UmnWork.analysed != 0) {
+            if (i == UMN_DB_EXWIN_LINES - 1) {
+                if (UmnWork.database.analysed != 0) {
                     work->lines[i].message.color_b = 0x80;
                     work->lines[i].message.color_g = 0x80;
                     work->lines[i].message.color_r = 0x80;
@@ -893,7 +959,7 @@ void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
                 eMessageMain(&work->lines[i].message);
             }
         }
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < UMN_DB_EXWIN_ARROWS; i++) {
             if (work->drift[i] != 0) {
                 arrowStep = D_00A13140;
                 work->drift[i] += arrowStep.step[i];
@@ -907,70 +973,8 @@ void tskUmnDataBaseExWin(UmnDataBaseTask *task, UmnDataBaseExWinWork *work)
     }
 }
 
-#define PAD_MARU 0x0020
-#define PAD_BATU 0x0040
-typedef struct UmnDataBaseDispParam {
-    unsigned char unmodeled_00[0x08];       /* +0x00 */
-    short x;                                /* +0x08 */
-    short y;                                /* +0x0A */
-    short width;                            /* +0x0C */
-    short height;                           /* +0x0E */
-    unsigned long color;                    /* +0x10 */
-    unsigned char unmodeled_18[0x40 - 0x18];
-    void *window;                           /* +0x40 */
-    void *list;                             /* +0x44 */
-    void *selectCursor;                     /* +0x48 */
-    void *indexCursor;                      /* +0x4C */
-    short state;                            /* +0x50 */
-    unsigned char unmodeled_52[0x58 - 0x52];
-    short indexNo;                          /* +0x58 */
-    short selectNo;                         /* +0x5A */
-    unsigned char unmodeled_5c[0x60 - 0x5C];
-} UmnDataBaseDispParam;
-typedef struct UmnKeyWordRibbon {
-    short x;                                /* +0x00 */
-    short y;                                /* +0x02 */
-    unsigned int color;                     /* +0x04 */
-    short width;                            /* +0x08 */
-    short height;                           /* +0x0A */
-    unsigned char unmodeled_0c[0x70 - 0x0C];
-} UmnKeyWordRibbon;
-typedef struct UmnKeyWordTagFont {
-    unsigned char unmodeled_00[0x04];       /* +0x00 */
-    short x;                                /* +0x04 */
-    short y;                                /* +0x06 */
-    unsigned int color;                     /* +0x08 */
-    unsigned char unmodeled_0c[0x20 - 0x0C];
-} UmnKeyWordTagFont;
-typedef struct UmnDataBaseKeyWordWork {
-    unsigned char step;                     /* +0x000 */
-    unsigned char active;                   /* +0x001 */
-    unsigned char visible;                  /* +0x002 */
-    unsigned char messageShown;             /* +0x003 */
-    unsigned int color;                     /* +0x004 */
-    unsigned char window[0x194];            /* +0x008 */
-    unsigned char list[0x5F8];              /* +0x19C */
-    unsigned char selectCursor[0x24];       /* +0x794 */
-    unsigned char indexCursor[0x28];        /* +0x7B8 */
-    UmnDataBaseDispParam disp;              /* +0x7E0 */
-    short x;                                /* +0x840 */
-    short y;                                /* +0x842 */
-    int indexNo;                            /* +0x844 */
-    int selectNo;                           /* +0x848 */
-    UmnKeyWordTagFont tag;                  /* +0x84C */
-    UmnKeyWordRibbon ribbon;                /* +0x86C */
-    UmnKeyWordNumber number;                /* +0x8DC */
-    EMessageParam message;                  /* +0x96C */
-} UmnDataBaseKeyWordWork;
-#define UMN_KEYWORD_HIDDEN_X (-272)
 static const char D_00A13148[5] = "\x01Num";
 static char msg00_4[16];
-int tyaUmlDispParamReset(UmnDataBaseDispParam *disp, int mode);
-int tyaUmlDatabaseMain(UmnDataBaseDispParam *disp);
-void eRibbonSet(UmnKeyWordRibbon *ribbon, int mode);
-void eRibbonMain(UmnKeyWordRibbon *ribbon);
-void eTagFontSet(UmnKeyWordTagFont *tag, const char *text);
-void eTagFontMain(UmnKeyWordTagFont *tag);
 
 /*
  * The keyword screen of the U.M.N. database: the frame the task starts on
@@ -978,28 +982,29 @@ void eTagFontMain(UmnKeyWordTagFont *tag);
  * waits for the terminal to reach the keyword step, drives the page while it
  * is there and slides the counter row in and out again.
  */
-void tskUmnDataBaseKeyWord(UmnDataBaseTask *task, UmnDataBaseKeyWordWork *work)
+void tskUmnDataBaseKeyWord(UmnObjectTask *task, void *data)
 {
+    UmnDataBaseKeyWordWork *work = data;
     short slideTarget;
 
-    if (UmnWork.mode != 2) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_DATA_BASE) {
+        task->state = UMN_TASK_END;
         return;
     }
 
     switch (task->state) {
-    case 0:
+    case UMN_TASK_INIT:
         work->color = 0x00F00000;
-        tyaUmlDispParamReset(&work->disp, 0);
-        work->disp.window = work->window;
-        work->disp.list = work->list;
-        work->disp.selectCursor = work->selectCursor;
-        work->disp.indexCursor = work->indexCursor;
-        work->disp.x = 1808;
-        work->disp.width = 480;
-        work->disp.y = 1920;
-        work->disp.color = work->color;
-        work->disp.height = 314;
+        tyaUmlDispParamReset(&work->disp.display, 0);
+        work->disp.window = &work->window;
+        work->disp.menu = &work->list;
+        work->disp.cursorA = &work->selectCursor;
+        work->disp.cursorB = &work->indexCursor;
+        work->disp.display.render_x = 1808;
+        work->disp.display.render_width = 480;
+        work->disp.display.render_y = 1920;
+        work->disp.display.color = work->color;
+        work->disp.display.render_height = 314;
         work->x = UMN_KEYWORD_HIDDEN_X;
         work->y = 48;
         eRibbonSet(&work->ribbon, 3);
@@ -1008,46 +1013,46 @@ void tskUmnDataBaseKeyWord(UmnDataBaseTask *task, UmnDataBaseKeyWordWork *work)
         eTagFontSet(&work->tag, D_00A13148);
         eNumberSet(&work->number, 0);
         eMessageSet(&work->message, msg00_4);
-        work->message.mode = 32;
-        work->step = 0;
+        work->message.mode = E_MODE_SHOW_START;
+        work->step = UMN_DB_KEYWORD_IDLE;
         work->active = 0;
         break;
-    case 2:
+    case UMN_TASK_RUN:
         switch (work->step) {
-        case 0:
+        case UMN_DB_KEYWORD_IDLE:
             work->active = 0;
             work->disp.state = 0;
             /* fallthrough */
-        case 1:
-            if (UmnWork.stateOrCategory == 0x51) {
-                work->step = 10;
+        case UMN_DB_KEYWORD_WAIT:
+            if (UmnWork.tab_state == UMN_DB_STEP_KEYWORD) {
+                work->step = UMN_DB_KEYWORD_OPEN;
             }
             break;
-        case 10:
+        case UMN_DB_KEYWORD_OPEN:
             work->active = 1;
-            work->step = 11;
+            work->step = UMN_DB_KEYWORD_SHOWN;
             work->visible = 1;
             work->messageShown = 1;
             /* fallthrough */
-        case 11:
-            if (UmnWork.stateOrCategory == 0x11 && UmnWork.dataBaseResult == 1) {
-                work->step = 0;
+        case UMN_DB_KEYWORD_SHOWN:
+            if (UmnWork.tab_state == UMN_STEP_ACTIVE && UmnWork.database.data_base_result == 1) {
+                work->step = UMN_DB_KEYWORD_IDLE;
             }
             break;
         }
 
         if (work->active != 0) {
-            if (work->disp.selectNo >= 0) {
-                if (UMN_PAD_INPUT->canonical.half_2a & PAD_MARU) {
+            if (work->disp.fileIndex >= 0) {
+                if (PadData.half_2a & PAD_CIRCLE) {
                     work->messageShown = 0;
                 }
-                if (UMN_PAD_INPUT->canonical.half_2a & PAD_BATU) {
+                if (PadData.half_2a & PAD_CROSS) {
                     work->messageShown = 1;
                 }
             }
-            UmnWork.dataBaseResult = tyaUmlDatabaseMain(&work->disp);
-            work->indexNo = work->disp.selectNo;
-            work->selectNo = work->disp.indexNo;
+            UmnWork.database.data_base_result = tyaUmlDatabaseMain(&work->disp);
+            work->indexNo = work->disp.fileIndex;
+            work->selectNo = work->disp.foundCount;
             if (work->messageShown != 0) {
                 work->message.x = 48;
                 work->message.y = 416;
@@ -1059,7 +1064,7 @@ void tskUmnDataBaseKeyWord(UmnDataBaseTask *task, UmnDataBaseKeyWordWork *work)
         if (work->visible != 0) {
             slideTarget = UMN_KEYWORD_HIDDEN_X;
             /* Only the terminal's keyword steps keep the row on screen. */
-            if (UmnWork.stateOrCategory >> 4 == 5) {
+            if (UmnWork.tab_state >> 4 == UMN_DB_STEP_KEYWORD_OPEN >> 4) {
                 slideTarget = 0;
             }
             MoveSlide(&work->x, &slideTarget, 3.0f);
@@ -1069,17 +1074,17 @@ void tskUmnDataBaseKeyWord(UmnDataBaseTask *task, UmnDataBaseKeyWordWork *work)
             work->y = 48;
             work->ribbon.x = work->x;
             work->ribbon.y = work->y;
-            work->ribbon.color = work->color;
+            work->ribbon.work = work->color;
             eRibbonMain(&work->ribbon);
             work->tag.x = work->x + 166;
             work->tag.y = work->y + 4;
-            work->tag.color = work->ribbon.color + 1;
+            work->tag.work = work->ribbon.work + 1;
             eTagFontMain(&work->tag);
             work->number.x = work->tag.x + 41;
             work->number.y = work->tag.y;
-            work->number.color = work->tag.color;
+            work->number.work = work->tag.work;
             work->number.value = (work->selectNo << 16) + (unsigned short) work->indexNo;
-            work->number.type = 3;
+            work->number.format = 3;
             work->number.digits = 3;
             eNumberMain(&work->number);
         }
@@ -1087,58 +1092,32 @@ void tskUmnDataBaseKeyWord(UmnDataBaseTask *task, UmnDataBaseKeyWordWork *work)
     }
 }
 
-typedef struct UmnDataBaseModelXform {
-    float position[3];              /* +0x00 */
-    unsigned char unmodeled_0c[0x20 - 0x0C];
-    float scale[3];                  /* +0x20 */
-    unsigned char unmodeled_2c[0x40 - 0x2C];
-    float baseRotation[3];           /* +0x40 */
-    unsigned char unmodeled_4c[0x60 - 0x4C];
-    float visible;                    /* +0x60 */
-} UmnDataBaseModelXform;
-typedef struct UmnDataBaseModelData {
-    unsigned char unmodeled_00[0xC0];
-    UmnDataBaseModelXform xform;     /* +0xC0 */
-} UmnDataBaseModelData;
-typedef struct UmnDataBaseModelWork {
-    unsigned char unmodeled_00[0x10];
-    signed char mode;                /* +0x10 */
-    unsigned char active;            /* +0x11 */
-    unsigned char unmodeled_12;
-    unsigned char state;             /* +0x13 */
-    unsigned char unmodeled_14[0x20 - 0x14];
-    UmnDataBaseModelData *model;     /* +0x20 */
-} UmnDataBaseModelWork;
-extern void MenuModelControl(UmnDataBaseModelWork *work);
-extern void MenuModelUnitBreak(void);
-extern void MenuModelUnitOpen(UmnDataBaseModelWork *work, int mode);
-
-void UmnDataBaseModel(UmnDataBaseModelWork *work)
+void UmnDataBaseModel(MenuModelUnit *work, void *context)
 {
-    UmnDataBaseModelData *model = work->model;
+    UmnDataBaseModelData *model = (UmnDataBaseModelData *)work->actor;
 
     if (model == 0) {
-        if (UmnWork.modelFlag != 0) {
-            MenuModelUnitBreak();
-            UmnWork.modelFlag = 0;
+        if (UmnWork.database.model_flag != 0) {
+            MenuModelUnitBreak(work);
+            UmnWork.database.model_flag = 0;
         }
     }
 
     if (work->active != 0) {
         UmnDataBaseModelXform *xform = &model->xform;
 
-        if (UmnWork.stateOrCategory != 0x31) {
-            if (work->state != 0x63) {
-                work->state = 0x1E;
+        if (UmnWork.tab_state != UMN_DB_STEP_DETAIL) {
+            if (work->extFuncFlag != UMN_DB_MODEL_DONE) {
+                work->extFuncFlag = UMN_DB_MODEL_CLOSE;
             }
         }
-        if (UmnWork.modelFlag != 0) {
-            work->state = 0x1E;
-            UmnWork.modelFlag = 0;
+        if (UmnWork.database.model_flag != 0) {
+            work->extFuncFlag = UMN_DB_MODEL_CLOSE;
+            UmnWork.database.model_flag = 0;
         }
         MenuModelControl(work);
-        switch (work->state) {
-        case 0: {
+        switch (work->extFuncFlag) {
+        case UMN_DB_MODEL_INIT: {
             float *scale = xform->scale;
 
             xform->position[0] = -xform->baseRotation[0];
@@ -1147,51 +1126,29 @@ void UmnDataBaseModel(UmnDataBaseModelWork *work)
             scale[2] = 0.5f;
             scale[1] = 0.5f;
             scale[0] = 0.5f;
-            work->state = 0xA;
+            work->extFuncFlag = UMN_DB_MODEL_OPEN;
         }
             /* fallthrough */
-        case 0xA:
+        case UMN_DB_MODEL_OPEN:
             MenuModelUnitOpen(work, 2);
-            work->state = 0x14;
+            work->extFuncFlag = UMN_DB_MODEL_SHOWN;
             break;
-        case 0x14:
+        case UMN_DB_MODEL_SHOWN:
             break;
-        case 0x1E:
+        case UMN_DB_MODEL_CLOSE:
             MenuModelUnitOpen(work, 1);
-            work->state = 0x1F;
+            work->extFuncFlag = UMN_DB_MODEL_CLOSING;
             /* fallthrough */
-        case 0x1F:
+        case UMN_DB_MODEL_CLOSING:
             if (xform->visible == 0.0f) {
-                work->state = 0x63;
-        case 0x63:
-                work->mode = -1;
+                work->extFuncFlag = UMN_DB_MODEL_DONE;
+        case UMN_DB_MODEL_DONE:
+                work->taskPhase = -1;
             }
             break;
         }
     }
 }
-
-extern int UmnWorkEnd;
-extern unsigned short monster_folder[0x80];
-extern void *UmnModelUkn;
-typedef struct MenuModel {
-    unsigned char unmodeled_00[0x10];   /* +0x00 */
-    unsigned char state;                /* +0x10 */
-} MenuModel;
-extern MenuModel *UmnModelSon;
-extern char D_00A13150[];
-extern char D_00A13158[];
-extern char D_00A13160[];
-extern char D_00A13170[];
-void UmnObjectTaskCreate(void (*task)(), int work);
-void UmnChangeTopLevel(int level);
-int UmnDataBaseMonsterCheck(int id);
-int UmnDataBaseAnalisisCheck(int id);
-signed char MenuSelectMove(int cursor, int entries, int mode);
-void MenuModelMemorySet(int mode);
-void MenuModelCreate(MenuModel **model, int id);
-void MenuModelExtFuncSet(MenuModel *model, void (*func)(), int arg);
-void xglFontDebugHex(int x, int y, int value, int digits);
 
 /*
  * The U.M.N. database terminal: it starts the seven screens of the database on
@@ -1209,25 +1166,25 @@ void UmnDataBase(void)
     int steps;
     int column;
 
-    switch (UmnWork.stateOrCategory) {
-    case 0x00:
+    switch (UmnWork.tab_state) {
+    case UMN_STEP_INIT:
         found = 0;
         work = UmnWorkEnd;
         work = (work + 0xF) & ~0xF;
-        UmnObjectTaskCreate(tskUmnDataBasePas, work);
+        UmnObjectTaskCreate(tskUmnDataBasePas, (void *)work);
         work = (work + 0x3D7) & ~0xF;
-        UmnObjectTaskCreate(tskUmnDataBaseInfo, work);
+        UmnObjectTaskCreate(tskUmnDataBaseInfo, (void *)work);
         work = (work + 0x35F) & ~0xF;
-        UmnObjectTaskCreate(tskUmnDataBaseName, work);
+        UmnObjectTaskCreate(tskUmnDataBaseName, (void *)work);
         work = (work + 0x222F) & ~0xF;
-        UmnObjectTaskCreate(tskUmnDataBaseMenu, work);
+        UmnObjectTaskCreate(tskUmnDataBaseMenu, (void *)work);
         work = (work + 0x7DB) & ~0xF;
-        UmnObjectTaskCreate(tskUmnDataBaseExWin, work);
+        UmnObjectTaskCreate(tskUmnDataBaseExWin, (void *)work);
         work = (work + 0x1D7) & ~0xF;
-        UmnObjectTaskCreate(tskUmnDataBaseKeyWord, work);
+        UmnObjectTaskCreate(tskUmnDataBaseKeyWord, (void *)work);
         UmnObjectTaskCreate(tskUmnDataBaseAnalisis, 0);
         memset(monster_folder, 0, 0x80);
-        for (id = 0x22; id < 0x3F; id++) {
+        for (id = UMN_DB_FIRST_ID; id < UMN_DB_FIRST_ID + UMN_DB_ENTRY_COUNT; id++) {
             if (UmnDataBaseMonsterCheck(id) != 0) {
                 monster_folder[found] = id;
                 found++;
@@ -1235,89 +1192,89 @@ void UmnDataBase(void)
         }
         UmnWork.count = found;
         UmnWork.rows = (UmnWork.count - 1) / 2 + 1;
-        if (UmnWork.rows >= 6) {
-            UmnWork.rows = 5;
+        if (UmnWork.rows >= UMN_DB_LIST_ROWS_MAX + 1) {
+            UmnWork.rows = UMN_DB_LIST_ROWS_MAX;
         }
-        UmnWork.stateOrCategory = 0x10;
+        UmnWork.tab_state = UMN_STEP_OPEN;
         break;
-    case 0x10:
-        UmnWork.stateOrCategory = 0x11;
-        UmnWork.wait = 12;
+    case UMN_STEP_OPEN:
+        UmnWork.tab_state = UMN_STEP_ACTIVE;
+        UmnWork.wait = UMN_WAIT_OPEN;
         UmnWork.cursor = 0;
         /* fallthrough */
-    case 0x11:
+    case UMN_STEP_ACTIVE:
         if (UmnWork.wait == 0) {
-            UmnWork.cursor = MenuSelectMove(UmnWork.cursor, 3, 0);
-            if (PadData.half_2a & 0x20) {
+            UmnWork.cursor = MenuSelectMove(UmnWork.cursor, UMN_DB_MENU_ENTRIES, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
                 switch (UmnWork.cursor) {
-                case 0:
+                case UMN_DB_MENU_LIST:
                     if (UmnWork.count == 0) {
-                        xglSoundEffectNormalID(5, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     } else {
-                        UmnWork.stateOrCategory = 0x20;
-                        xglSoundEffectNormalID(1, 0);
+                        UmnWork.tab_state = UMN_DB_STEP_LIST_OPEN;
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
                     }
                     break;
-                case 1:
-                    UmnWork.stateOrCategory = 0x50;
-                    xglSoundEffectNormalID(1, 0);
+                case UMN_DB_MENU_KEYWORD:
+                    UmnWork.tab_state = UMN_DB_STEP_KEYWORD_OPEN;
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     break;
-                case 2:
-                    UmnWork.stateOrCategory = 0xF0;
-                    UmnWork.wait = 16;
-                    xglSoundEffectNormalID(2, 0);
+                case UMN_DB_MENU_EXIT:
+                    UmnWork.tab_state = UMN_STEP_LEAVE;
+                    UmnWork.wait = UMN_WAIT_LEAVE;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                     break;
                 }
             }
-            if (PadData.half_2a & 0x40) {
-                UmnWork.stateOrCategory = 0xF0;
-                UmnWork.wait = 16;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.half_2a & PAD_CROSS) {
+                UmnWork.tab_state = UMN_STEP_LEAVE;
+                UmnWork.wait = UMN_WAIT_LEAVE;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x20:
+    case UMN_DB_STEP_LIST_OPEN:
         UmnWork.column = 0;
         UmnWork.row = 0;
         UmnWork.entry = monster_folder[0];
         UmnWork.scroll = 0;
-        UmnWork.listCursor = 0;
-        UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
-        UmnWork.stateOrCategory = 0x21;
-        UmnWork.wait = 12;
+        UmnWork.list_cursor = 0;
+        UmnWork.database.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+        UmnWork.tab_state = UMN_DB_STEP_LIST;
+        UmnWork.wait = UMN_WAIT_OPEN;
         UmnWork.moving = 1;
         /* fallthrough */
-    case 0x21:
-        if (UmnWork.waitOrMoving == 0) {
+    case UMN_DB_STEP_LIST:
+        if (UmnWork.wait_or_moving == 0) {
             repeats = 1;
             moved = 0;
             switch (PadData.mappedRepeat) {
-            case 0x1000:
+            case PAD_UP:
                 repeats = 2;
                 moved = -1;
                 break;
-            case 0x8000:
+            case PAD_LEFT:
                 moved = -1;
                 break;
-            case 0x4000:
+            case PAD_DOWN:
                 repeats = 2;
                 /* fallthrough */
-            case 0x2000:
+            case PAD_RIGHT:
                 moved = 1;
                 break;
             }
             if (moved != 0) {
                 first = 1;
                 for (steps = 0; steps < repeats; steps++) {
-                    UmnWork.listCursor += moved;
-                    if (UmnWork.listCursor < 0) {
-                        UmnWork.listCursor = 0;
+                    UmnWork.list_cursor += moved;
+                    if (UmnWork.list_cursor < 0) {
+                        UmnWork.list_cursor = 0;
                         moved = 0;
-                    } else if (UmnWork.listCursor > UmnWork.count - 1) {
-                        UmnWork.listCursor = UmnWork.count - 1;
+                    } else if (UmnWork.list_cursor > UmnWork.count - 1) {
+                        UmnWork.list_cursor = UmnWork.count - 1;
                         moved = 0;
                     }
-                    column = UmnWork.listCursor & 1;
+                    column = UmnWork.list_cursor & 1;
                     UmnWork.column = column;
                     if (moved < 0) {
                         if (UmnWork.column != 0) {
@@ -1339,44 +1296,44 @@ void UmnDataBase(void)
                         continue;
                     }
                     if (first != 0) {
-                        xglSoundEffectNormalID(3, 0);
+                        xglSoundEffectNormalID(SE_CURSOR, 0);
                     }
                     first = 0;
                 }
-                UmnWork.entry = monster_folder[UmnWork.listCursor];
-                UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+                UmnWork.entry = monster_folder[UmnWork.list_cursor];
+                UmnWork.database.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
             }
-            if (PadData.half_2a & 0x20) {
-                UmnWork.stateOrCategory = 0x30;
-                xglSoundEffectNormalID(1, 0);
+            if (PadData.half_2a & PAD_CIRCLE) {
+                UmnWork.tab_state = UMN_DB_STEP_DETAIL_OPEN;
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
-            if (PadData.half_2a & 0x40) {
-                UmnWork.stateOrCategory = 0x11;
-                UmnWork.wait = 12;
-                xglSoundEffectNormalID(2, 0);
+            if (PadData.half_2a & PAD_CROSS) {
+                UmnWork.tab_state = UMN_STEP_ACTIVE;
+                UmnWork.wait = UMN_WAIT_OPEN;
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         break;
-    case 0x30:
+    case UMN_DB_STEP_DETAIL_OPEN:
         if (UmnModelUkn != 0) {
             break;
         }
         MenuModelMemorySet(1);
-        UmnWork.modelFlag = 0;
-        UmnWork.stateOrCategory = 0x31;
-        UmnWork.wait = 12;
+        UmnWork.database.model_flag = 0;
+        UmnWork.tab_state = UMN_DB_STEP_DETAIL;
+        UmnWork.wait = UMN_WAIT_OPEN;
         UmnWork.moving = 1;
         /* fallthrough */
-    case 0x31:
-        if (UmnWork.waitOrMoving == 0) {
+    case UMN_DB_STEP_DETAIL:
+        if (UmnWork.wait_or_moving == 0) {
             if (UmnWork.count >= 2) {
                 if (PadData.half_2a == PAD_L1) {
-                    if (UmnWork.listCursor == 0) {
-                        UmnWork.listCursor = UmnWork.count - 1;
-                        UmnWork.column = UmnWork.listCursor & 1;
+                    if (UmnWork.list_cursor == 0) {
+                        UmnWork.list_cursor = UmnWork.count - 1;
+                        UmnWork.column = UmnWork.list_cursor & 1;
                         UmnWork.row = UmnWork.rows - 1;
                     } else {
-                        UmnWork.listCursor--;
+                        UmnWork.list_cursor--;
                         if (UmnWork.column == 1) {
                             UmnWork.column--;
                         } else {
@@ -1388,18 +1345,18 @@ void UmnDataBase(void)
                             }
                         }
                     }
-                    UmnWork.entry = monster_folder[UmnWork.listCursor];
-                    UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
-                    UmnWork.modelFlag = 1;
-                    xglSoundEffectNormalID(3, 0);
+                    UmnWork.entry = monster_folder[UmnWork.list_cursor];
+                    UmnWork.database.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+                    UmnWork.database.model_flag = 1;
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
                 if (PadData.half_2a == PAD_R1) {
-                    if (UmnWork.listCursor == UmnWork.count - 1) {
-                        UmnWork.listCursor = 0;
+                    if (UmnWork.list_cursor == UmnWork.count - 1) {
+                        UmnWork.list_cursor = 0;
                         UmnWork.column = 0;
                         UmnWork.row = 0;
                     } else {
-                        UmnWork.listCursor++;
+                        UmnWork.list_cursor++;
                         if (UmnWork.column == 0) {
                             UmnWork.column++;
                         } else {
@@ -1411,16 +1368,16 @@ void UmnDataBase(void)
                             }
                         }
                     }
-                    UmnWork.entry = monster_folder[UmnWork.listCursor];
-                    UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
-                    UmnWork.modelFlag = 1;
-                    xglSoundEffectNormalID(3, 0);
+                    UmnWork.entry = monster_folder[UmnWork.list_cursor];
+                    UmnWork.database.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+                    UmnWork.database.model_flag = 1;
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
             }
-            if (PadData.half_2a == 0x40) {
-                UmnWork.stateOrCategory = 0x21;
+            if (PadData.half_2a == PAD_CROSS) {
+                UmnWork.tab_state = UMN_DB_STEP_LIST;
                 UmnWork.moving = 1;
-                xglSoundEffectNormalID(2, 0);
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
         if (UmnModelSon == 0) {
@@ -1428,27 +1385,27 @@ void UmnDataBase(void)
             MenuModelExtFuncSet(UmnModelSon, UmnDataBaseModel, 0);
         }
         break;
-    case 0x50:
-        UmnWork.stateOrCategory = 0x51;
-        UmnWork.dataBaseResult = 0;
+    case UMN_DB_STEP_KEYWORD_OPEN:
+        UmnWork.tab_state = UMN_DB_STEP_KEYWORD;
+        UmnWork.database.data_base_result = 0;
         /* fallthrough */
-    case 0x51:
-        if (UmnWork.dataBaseResult == 1) {
-            UmnWork.stateOrCategory = 0x11;
-            UmnWork.wait = 12;
-            xglSoundEffectNormalID(2, 0);
+    case UMN_DB_STEP_KEYWORD:
+        if (UmnWork.database.data_base_result == 1) {
+            UmnWork.tab_state = UMN_STEP_ACTIVE;
+            UmnWork.wait = UMN_WAIT_OPEN;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
-    case 0xF0:
+    case UMN_STEP_LEAVE:
         if (UmnModelSon != 0) {
-            if (UmnModelSon->state == 0xFF) {
+            if (UmnModelSon->taskPhase == 0xFF) {
                 UmnModelSon = 0;
             }
             break;
         }
-        UmnWork.stateOrCategory = 0xF1;
+        UmnWork.tab_state = UMN_STEP_LEAVE_WAIT;
         /* fallthrough */
-    case 0xF1:
+    case UMN_STEP_LEAVE_WAIT:
         if (UmnWork.wait == 0) {
             MenuModelMemorySet(0);
             UmnChangeTopLevel(0);
@@ -1459,21 +1416,12 @@ void UmnDataBase(void)
     if (UmnWork.wait != 0) {
         UmnWork.wait--;
     }
-    xglFontDebugHex(0, 0x40, UmnWork.stateOrCategory, 2);
+    xglFontDebugHex(0, 0x40, UmnWork.tab_state, 2);
     xglFontDebugPrintf(0x10, 0x18, D_00A13150, UmnWork.entry);
-    xglFontDebugPrintf(0x10, 0x20, D_00A13158, UmnWork.listCursor, UmnWork.count);
+    xglFontDebugPrintf(0x10, 0x20, D_00A13158, UmnWork.list_cursor, UmnWork.count);
     xglFontDebugPrintf(0x10, 0x28, D_00A13160, UmnWork.column, UmnWork.row, UmnWork.rows);
     xglFontDebugPrintf(0x10, 0x30, D_00A13170, UmnWork.moving);
 }
-
-extern char D_00A12EE0[];
-extern char D_00A12EB0[];
-extern char D_00A12EA8[];
-extern char D_00A13128[];
-extern char D_00A13118[];
-extern char D_00A13108[];
-extern char D_00A130F0[];
-extern char D_00A130D8[];
 
 static char *msg00_1_00A10700[3] = {
     D_00A12EE0, D_00A12EB0, D_00A12EA8,
@@ -1483,15 +1431,11 @@ static char *text_3_00A10720[5] = {
 };
 static char msg00_4[16] = "\x1E\0Index Search:";
 
-
-
 char D_00A12EA8[8] = "Cancel.";
 
 char D_00A12EB0[48] = "View keywords that you have come across.";
 
 char D_00A12EE0[56] = "View data of all the Gnosis you have encountered.";
-
-
 
 char D_00A130D8[24] = "\036\001\241\247Analysis info";
 

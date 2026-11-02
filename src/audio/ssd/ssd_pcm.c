@@ -1,20 +1,11 @@
-/* Original SSD ssd_pcm.c translation unit. Unmodeled spans retain original storage. */
+#include "ssd/ssd_pcm.h"
+#include "ssd/ssd_dma.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
 
-typedef struct SsdProcess SsdProcess;
-struct SsdProcess {
-    unsigned short flags;
-    unsigned short reset_control;
-    void (*callback)(SsdProcess *process, void *context);
-    void *context;
-    SsdProcess *next;
-} ;
-
-typedef struct SsdModulation {
-    int current;
-    int increment;
-    int target;
-    short duration;
-} SsdModulation;
+/* AutoDMA stream data is interleaved in 512-byte runs per channel. */
+#define SSD_PCM_INTERLEAVE_BYTES 512
+#define SSD_PCM_BLOCK_BYTES 1024
 
 typedef struct SsdPcmStreamState {
     unsigned char flags;
@@ -27,82 +18,21 @@ typedef struct SsdPcmStreamState {
     int buffer_bytes;
     void (*fill_callback)(void *context);
     void *callback_context;
-    SsdModulation volume;
-    SsdProcess process;
+    SsdRamp volume;
+    SsdProc process;
 } SsdPcmStreamState;
-
-typedef struct SsdDriverState {
-    unsigned char original_prefix[0x1df];
-    unsigned char stereo_enabled;
-} SsdDriverState;
-
-extern SsdDriverState SsdWork;
 
 SsdPcmStreamState SsdPcmStrWork;
 
-extern int CpuDisableIntr(void);
-
-extern int CpuEnableIntr(void);
-
-extern void *SsdNewPtr(int bytes);
-
-extern unsigned int SsdGetMemoryFreeSize(void);
-
-extern int printf(const char *format, ...);
-
-extern void SsdSetPcmStreamCallback(void (*callback)(void));
-
-extern int SsdStreamInterruptProcess(int channel, void *context);
-
-extern int sceSdSetTransIntrHandler(int channel, int (*handler)(int, void *), void *context);
-
-extern SsdProcess *SsdLinkProc(SsdProcess *process,
-                             void (*callback)(SsdProcess *, void *), void *context);
-
-extern int sceSdSetParam(int entry, int value);
-
-extern void SsdUnlinkProc(SsdProcess *process);
-
-extern void SsdDisposePtr(void *buffer);
-
-extern int sceSdBlockTrans(int channel, int mode, void *buffer, int bytes);
-
-extern int sceSdBlockTransStatus(int channel, int wait);
-
-extern void SsdCalculateModulate(SsdModulation *modulation);
-
-void SsdInitPcmStream(int buffer_bytes, void (*callback)(void *), void *context);
-
-void SsdDisposePcmStream(void);
-
-void SsdResumePcmStream(void);
-
-void SsdSuspendPcmStream(void);
-
-void SsdPlayPcmStream(int volume, int duration);
-
-void SsdStopPcmStream(int duration);
-
-int SsdGetPcmStreamStatus(void);
-
-void SsdSetPcmStreamData(const void *source);
-
-void SsdSetPcmStreamVolume(int volume, int duration);
-
-void SsdPcmStreamVolumeFadeProc(void *process, void *context);
-
-void SsdPcmStreamCallback(void);
-
+void SsdPcmStreamVolumeFadeProc(SsdGlobalWork *work, void *context);
+void SsdPcmStreamCallback(int result, void *argument);
 void SsdStreamMonoCopyMemory(unsigned char *destination, const void *source_buffer, int bytes);
-
-void SsdStreamCopyMemory(void *destination_buffer, const void *source_buffer, int bytes);
-
 void SsdStreamClearMemory(void *buffer, int bytes);
 
 void SsdInitPcmStream(int buffer_bytes, void (*callback)(void *), void *context)
 {
-    SsdPcmStrWork.flags = 1;
-    SsdPcmStrWork.playing = 0;
+    SsdPcmStrWork.flags = SSD_STREAM_FLAG_OPEN;
+    SsdPcmStrWork.playing = SSD_STREAM_STOPPED;
     SsdPcmStrWork.transfer_busy = 0;
     SsdPcmStrWork.reset_control = 0;
     SsdPcmStrWork.active_buffer = 0;
@@ -131,10 +61,10 @@ void SsdInitPcmStream(int buffer_bytes, void (*callback)(void *), void *context)
 
 void SsdDisposePcmStream(void)
 {
-    if (SsdPcmStrWork.playing == 1)
+    if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING)
         SsdStopPcmStream(0);
-    sceSdSetParam(SsdPcmStrWork.dma_channel | 0xf80, 0);
-    sceSdSetParam(SsdPcmStrWork.dma_channel | 0x1080, 0);
+    sceSdSetParam(SsdPcmStrWork.dma_channel | SD_P_BVOLL, 0);
+    sceSdSetParam(SsdPcmStrWork.dma_channel | SD_P_BVOLR, 0);
     CpuDisableIntr();
     SsdUnlinkProc(&SsdPcmStrWork.process);
     sceSdSetTransIntrHandler(SsdPcmStrWork.dma_channel, 0, 0);
@@ -149,11 +79,11 @@ void SsdDisposePcmStream(void)
 
 void SsdResumePcmStream(void)
 {
-    if (SsdPcmStrWork.playing == 1) {
+    if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING) {
         SsdPcmStrWork.transfer_busy = 1;
         CpuDisableIntr();
-        SsdPcmStrWork.flags &= ~2;
-        sceSdBlockTrans(SsdPcmStrWork.dma_channel, 16,
+        SsdPcmStrWork.flags &= ~SSD_STREAM_FLAG_SUSPENDED;
+        sceSdBlockTrans(SsdPcmStrWork.dma_channel, SD_BLOCK_LOOP,
                         SsdPcmStrWork.buffers[0], SsdPcmStrWork.buffer_bytes * 2);
         CpuEnableIntr();
         SsdPcmStrWork.transfer_busy = 0;
@@ -162,11 +92,11 @@ void SsdResumePcmStream(void)
 
 void SsdSuspendPcmStream(void)
 {
-    if (SsdPcmStrWork.playing == 1) {
+    if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING) {
         SsdPcmStrWork.transfer_busy = 1;
         CpuDisableIntr();
-        SsdPcmStrWork.flags |= 2;
-        sceSdBlockTrans(SsdPcmStrWork.dma_channel, 2, 0, 0);
+        SsdPcmStrWork.flags |= SSD_STREAM_FLAG_SUSPENDED;
+        sceSdBlockTrans(SsdPcmStrWork.dma_channel, SD_TRANS_MODE_STOP, 0, 0);
         CpuEnableIntr();
         SsdPcmStrWork.transfer_busy = 0;
     }
@@ -174,21 +104,21 @@ void SsdSuspendPcmStream(void)
 
 void SsdPlayPcmStream(int volume, int duration)
 {
-    SsdPcmStrWork.volume.duration = 0;
-    if (SsdPcmStrWork.playing != 1) {
+    SsdPcmStrWork.volume.remaining = 0;
+    if (SsdPcmStrWork.playing != SSD_STREAM_PLAYING) {
         SsdStreamClearMemory(SsdPcmStrWork.buffers[0], SsdPcmStrWork.buffer_bytes * 2);
         SsdPcmStrWork.transfer_busy = 1;
-        SsdPcmStrWork.volume.current = 0;
-        sceSdSetParam(SsdPcmStrWork.dma_channel | 0xf80, 0);
-        sceSdSetParam(SsdPcmStrWork.dma_channel | 0x1080, 0);
+        SsdPcmStrWork.volume.current.value = 0;
+        sceSdSetParam(SsdPcmStrWork.dma_channel | SD_P_BVOLL, 0);
+        sceSdSetParam(SsdPcmStrWork.dma_channel | SD_P_BVOLR, 0);
         CpuDisableIntr();
-        sceSdBlockTrans(SsdPcmStrWork.dma_channel, 16,
+        sceSdBlockTrans(SsdPcmStrWork.dma_channel, SD_BLOCK_LOOP,
                         SsdPcmStrWork.buffers[0], SsdPcmStrWork.buffer_bytes * 2);
         CpuEnableIntr();
         SsdPcmStrWork.transfer_busy = 0;
     }
     SsdSetPcmStreamVolume(volume, duration);
-    SsdPcmStrWork.playing = 1;
+    SsdPcmStrWork.playing = SSD_STREAM_PLAYING;
 }
 
 void SsdStopPcmStream(int duration)
@@ -196,10 +126,10 @@ void SsdStopPcmStream(int duration)
     SsdSetPcmStreamVolume(0, duration);
     if (!duration) {
         CpuDisableIntr();
-        if (SsdPcmStrWork.playing == 1) {
+        if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING) {
             SsdPcmStrWork.transfer_busy = 1;
-            SsdPcmStrWork.playing = 0;
-            sceSdBlockTrans(SsdPcmStrWork.dma_channel, 2, 0, 0);
+            SsdPcmStrWork.playing = SSD_STREAM_STOPPED;
+            sceSdBlockTrans(SsdPcmStrWork.dma_channel, SD_TRANS_MODE_STOP, 0, 0);
             SsdPcmStrWork.transfer_busy = 0;
         }
         CpuEnableIntr();
@@ -221,7 +151,7 @@ void SsdSetPcmStreamData(const void *source)
     destination = SsdPcmStrWork.buffers[active ^ 1];
     bytes = SsdPcmStrWork.buffer_bytes;
     if (source) {
-        if (!SsdWork.stereo_enabled)
+        if (!SsdWork.output_mode)
             SsdStreamMonoCopyMemory(destination, source, bytes);
         else
             SsdStreamCopyMemory(destination, source, bytes);
@@ -232,38 +162,37 @@ void SsdSetPcmStreamData(const void *source)
 
 void SsdSetPcmStreamVolume(int volume, int duration)
 {
-    int target = (unsigned int)volume << 16;
+    int target = volume << 16;
     if (!duration) {
         int level;
-        SsdPcmStrWork.volume.current = target;
+        SsdPcmStrWork.volume.current.value = target;
         target >>= 16;
-        target = (unsigned int)target * target * 2;
-        level = target & 0xffff;
-        sceSdSetParam(SsdPcmStrWork.dma_channel | 0xf80, level);
-        sceSdSetParam(SsdPcmStrWork.dma_channel | 0x1080, level);
+        target = target * target * 2;
+        level = target;
+        sceSdSetParam(SsdPcmStrWork.dma_channel | SD_P_BVOLL, level);
+        sceSdSetParam(SsdPcmStrWork.dma_channel | SD_P_BVOLR, level);
     } else {
-        int difference = (unsigned int)target - (unsigned int)SsdPcmStrWork.volume.current;
-        SsdPcmStrWork.volume.increment = difference / duration;
+        int difference = target - SsdPcmStrWork.volume.current.value;
+        SsdPcmStrWork.volume.step = difference / duration;
     }
     /* The immediate path stores its squared amplitude in target in the original. */
     SsdPcmStrWork.volume.target = target;
-    SsdPcmStrWork.volume.duration = duration;
+    SsdPcmStrWork.volume.remaining = duration;
 }
 
-void SsdPcmStreamVolumeFadeProc(void *process, void *context)
+void SsdPcmStreamVolumeFadeProc(SsdGlobalWork *work, void *context)
 {
     SsdPcmStreamState *stream = context;
     int volume;
     int level;
 
-    if (stream->volume.duration) {
+    if (stream->volume.remaining) {
         SsdCalculateModulate(&stream->volume);
-        volume = stream->volume.current;
+        volume = stream->volume.current.value;
         level = volume >> 16;
         level = (level * level) << 1;
-        level &= 0xffff;
-        sceSdSetParam(stream->dma_channel | 0xf80, level);
-        sceSdSetParam(stream->dma_channel | 0x1080, level);
+        sceSdSetParam(stream->dma_channel | SD_P_BVOLL, level);
+        sceSdSetParam(stream->dma_channel | SD_P_BVOLR, level);
         /*
          * Always false: (volume << 16) has no low bits set. The original keeps
          * the raw volume word live in a callee-saved register across both SDK
@@ -272,16 +201,16 @@ void SsdPcmStreamVolumeFadeProc(void *process, void *context)
          * allocation, so it emits no code.
          */
         if ((volume << 16) & 0xffff) {
-            stream->volume.current = volume;
+            stream->volume.current.value = volume;
         }
     }
 }
 
-void SsdPcmStreamCallback(void)
+void SsdPcmStreamCallback(int result, void *argument)
 {
-    if (SsdPcmStrWork.flags & 2)
+    if (SsdPcmStrWork.flags & SSD_STREAM_FLAG_SUSPENDED)
         return;
-    if (SsdPcmStrWork.playing != 1)
+    if (SsdPcmStrWork.playing != SSD_STREAM_PLAYING)
         return;
     if (SsdPcmStrWork.fill_callback)
         SsdPcmStrWork.fill_callback(SsdPcmStrWork.callback_context);
@@ -291,12 +220,12 @@ void SsdStreamMonoCopyMemory(unsigned char *destination, const void *source_buff
 {
     const unsigned char *source = source_buffer;
     int block;
-    for (block = 0; block < bytes / 1024; block++) {
-        SsdStreamCopyMemory(destination, source, 512);
-        destination += 512;
-        SsdStreamCopyMemory(destination, source, 512);
-        destination += 512;
-        source += 1024;
+    for (block = 0; block < bytes / SSD_PCM_BLOCK_BYTES; block++) {
+        SsdStreamCopyMemory(destination, source, SSD_PCM_INTERLEAVE_BYTES);
+        destination += SSD_PCM_INTERLEAVE_BYTES;
+        SsdStreamCopyMemory(destination, source, SSD_PCM_INTERLEAVE_BYTES);
+        destination += SSD_PCM_INTERLEAVE_BYTES;
+        source += SSD_PCM_BLOCK_BYTES;
     }
 }
 

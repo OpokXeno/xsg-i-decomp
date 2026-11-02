@@ -1,147 +1,71 @@
-/* Original ssd_out.c translation unit. Shared data is defined by its owning FDR. */
+#include "ssd/ssd_out.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_dev.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_seq.h"
 
+/* SPDIF mode register value written at start-up. */
+#define SSD_SPDIF_MODE_DEFAULT 0x880
 
-
-
-
-typedef struct SsdWorkState SsdWorkState;
-typedef struct SsdStereoVolume SsdStereoVolume;
-typedef struct SsdVolumeFade SsdVolumeFade;
-typedef struct SsdReverbState SsdReverbState;
-typedef struct SsdChannel SsdChannel;
-typedef struct SsdEffectAttr SsdEffectAttr;
-
-struct SsdStereoVolume { short left, right; };
-
-struct SsdVolumeFade { int value, step, target; short frames; short unmodeled_0e; };
-
-struct SsdReverbState {
-    unsigned char unmodeled_00[3];
-    signed char mode;
-    SsdStereoVolume volume;
-    signed char delay, feedback;
-    short depth;
-    unsigned int work_end;
-    unsigned char unmodeled_10[8];
-};
-
-struct SsdChannel {
-    unsigned int unmodeled_00;
-    struct SsdChannel *next;
-    unsigned char unmodeled_08[12];
-    void *device;
-    unsigned char unmodeled_18[20];
-    unsigned char output_volume, output_group;
-};
-
-struct SsdEffectAttr {
-    int core, mode;
-    SsdStereoVolume volume;
-    int delay, feedback;
-};
-
-struct SsdWorkState {
-    unsigned char unmodeled_000[0x168];
-    SsdChannel *channels;
-    unsigned char unmodeled_16c[0x40];
-    unsigned int output_flags;
-    SsdStereoVolume master_volume;
-    short master_depth_left, master_depth_right;
-    unsigned char unmodeled_1b8[4];
-    SsdStereoVolume cd_volume;
-    unsigned int cd_reverb_left, cd_reverb_right;
-    unsigned char unmodeled_1c8[12];
-    short master_depth, cd_depth;
-    unsigned char unmodeled_1d8[4];
-    unsigned char sequence_volume, effect_volume, unmodeled_1de, output_mode;
-    SsdVolumeFade master_fade, cd_fade;
-    unsigned int unmodeled_200;
-    SsdReverbState reverb[2];
-    unsigned char unmodeled_234[0x3048];
-    int reverb_clear_result;
-};
-
-extern SsdWorkState SsdWork;
-extern void sceSdVoiceTransStatus(short core, int wait);
-extern void sceSdSetParam(unsigned short, unsigned short);
-extern unsigned short sceSdGetParam(unsigned short);
-extern void sceSdSetCoreAttr(unsigned short, unsigned short);
-extern void sceSdSetAddr(unsigned short, unsigned int);
-extern void sceSdGetEffectAttr(int, SsdEffectAttr *);
-extern void sceSdSetEffectAttr(int, SsdEffectAttr *);
-extern void sceSdClearEffectWorkArea(int, int, int);
-extern void SsdSetReverbModeDepth(int, short, short);
-extern void SsdSetChannelAllVoiceEvent(void *, int);
-extern void SsdSetMidiDeviceOutputVolume(void *, int);
-void SsdSetOutputMode(int mode);
-void SsdSetSpuVolume(int volume, int frames);
-void SsdSetCDVolume(int volume, int frames);
 void SsdSetAudioAttenuator(int value);
 void SsdSetCDMixingReverb(int left, int right);
 void SsdCheckWideMode(void);
-void SsdSetVolumeRec(int volume, SsdStereoVolume *output, int reverb);
 void SsdSetGroupOutputVolume(int volume, int unused, int group);
-int SsdReverbClearCompleted(int core);
 void SsdReverbClear(void);
 void SsdReverbClearCallback(void);
-void SsdInitOutputControl(void);
-void SsdSetSequenceOutputVolume(int volume, int unused);
-void SsdSetEffectOutputVolume(int volume, int unused);
-int SsdSetReverbParameter(int mode, int depth, int delay, int feedback);
-void SsdEnableReverbParam(int core);
 
 void SsdInitOutputControl(void) {
     int core;
     unsigned short parameter;
     SsdWork.master_depth_right = SsdWork.master_depth_left = 0;
     SsdWork.output_flags = 12;
-    SsdWork.sequence_volume = 127;
-    SsdWork.effect_volume = 127;
-    SsdSetOutputMode(1);
-    SsdSetSpuVolume(16383, 0);
+    SsdWork.sequence_volume = SSD_MIDI_VALUE_MAX;
+    SsdWork.effect_volume = SSD_MIDI_VALUE_MAX;
+    SsdSetOutputMode(SSD_OUTPUT_STEREO);
+    SsdSetSpuVolume(SSD_MASTER_VOLUME_DEFAULT, 0);
     SsdSetCDVolume(0, 0);
     SsdSetAudioAttenuator(128);
     SsdSetCDMixingReverb(0, 1);
-    sceSdSetCoreAttr(10, 2176);
-    for (core = 0; core < 2; core++) {
-        parameter = core | 0x800;
+    sceSdSetCoreAttr(SD_C_SPDIF_MODE, SSD_SPDIF_MODE_DEFAULT);
+    for (core = 0; core < SSD_CORE_COUNT; core++) {
+        parameter = core | SD_P_MMIX;
         sceSdSetParam(parameter, sceSdGetParam(parameter) & 0xffcf);
     }
 }
 
 void SsdSetOutputMode(int mode) {
-    SsdChannel *channel;
+    SsdSequence *sequence;
     int left;
     int right;
     SsdWork.output_mode = mode;
     SsdCheckWideMode();
-    SsdSetReverbModeDepth(0, SsdWork.reverb[0].volume.left, SsdWork.reverb[0].volume.right);
-    SsdSetReverbModeDepth(1, SsdWork.reverb[1].volume.left, SsdWork.reverb[1].volume.right);
-    for (channel = SsdWork.channels; channel; channel = channel->next)
-        SsdSetChannelAllVoiceEvent(channel->device, 32);
-    if (mode < 2) {
-        left = right = 32767;
+    SsdSetReverbModeDepth(0, SsdWork.cores.reverb[0].volume.left, SsdWork.cores.reverb[0].volume.right);
+    SsdSetReverbModeDepth(1, SsdWork.cores.reverb[1].volume.left, SsdWork.cores.reverb[1].volume.right);
+    for (sequence = SsdWork.sequences; sequence; sequence = sequence->next)
+        SsdSetChannelAllVoiceEvent(sequence->device, SSD_VOICE_EVENT_VOLUME);
+    if (mode < SSD_OUTPUT_SURROUND) {
+        left = right = SSD_SPU_VOLUME_MAX;
     } else {
-        left = 32767;
-        right = -32767;
+        left = SSD_SPU_VOLUME_MAX;
+        right = -SSD_SPU_VOLUME_MAX;
     }
-    sceSdSetParam(3457, left);
-    sceSdSetParam(3713, right);
+    sceSdSetParam(SD_P_AVOLL | SD_CORE_1, left);
+    sceSdSetParam(SD_P_AVOLR | SD_CORE_1, right);
 }
 
 void SsdSetSpuVolume(int volume, int frames) {
     int difference;
     SsdWork.master_fade.target = volume;
     if (frames == 0) {
-        SsdWork.master_fade.value = volume << 16;
-        SsdWork.master_fade.frames = 0;
+        SsdWork.master_fade.current.value = volume << 16;
+        SsdWork.master_fade.remaining = 0;
         SsdWork.master_depth = volume;
         SsdSetVolumeRec((short)volume, &SsdWork.master_volume, 0);
-        SsdWork.output_flags |= 3;
+        SsdWork.output_flags |= SSD_OUTPUT_MASTER_VOLUME;
     } else {
-        difference = (volume << 8) - (SsdWork.master_fade.value >> 8);
+        difference = (volume << 8) - (SsdWork.master_fade.current.value >> 8);
         if (difference) {
-            SsdWork.master_fade.frames = frames;
+            SsdWork.master_fade.remaining = frames;
             SsdWork.master_fade.step = (difference / frames) << 8;
         }
     }
@@ -151,16 +75,16 @@ void SsdSetCDVolume(int volume, int frames) {
     int difference;
     SsdWork.cd_fade.target = volume;
     if (frames == 0) {
-        SsdWork.cd_fade.value = volume << 16;
-        SsdWork.cd_fade.frames = 0;
+        SsdWork.cd_fade.current.value = volume << 16;
+        SsdWork.cd_fade.remaining = 0;
         SsdWork.cd_depth = volume;
         SsdWork.cd_volume.right = volume;
         SsdWork.cd_volume.left = volume;
-        SsdWork.output_flags |= 0xc0;
+        SsdWork.output_flags |= SSD_OUTPUT_CD_VOLUME;
     } else {
-        difference = (volume << 8) - (SsdWork.cd_fade.value >> 8);
+        difference = (volume << 8) - (SsdWork.cd_fade.current.value >> 8);
         if (difference) {
-            SsdWork.cd_fade.frames = frames;
+            SsdWork.cd_fade.remaining = frames;
             SsdWork.cd_fade.step = (difference / frames) << 8;
         }
     }
@@ -177,11 +101,11 @@ void SsdSetEffectOutputVolume(int volume, int unused) {
 }
 
 void SsdSetGroupOutputVolume(int volume, int unused, int group) {
-    SsdChannel *channel;
-    for (channel = SsdWork.channels; channel; channel = channel->next) {
-        if (channel->output_group == group) {
-            channel->output_volume = volume;
-            SsdSetMidiDeviceOutputVolume(channel->device, volume);
+    SsdSequence *sequence;
+    for (sequence = SsdWork.sequences; sequence; sequence = sequence->next) {
+        if (sequence->is_effect == group) {
+            sequence->output_volume = volume;
+            SsdSetMidiDeviceOutputVolume(sequence->device, volume);
         }
     }
 }
@@ -189,32 +113,32 @@ void SsdSetGroupOutputVolume(int volume, int unused, int group) {
 void SsdSetCDMixingReverb(int left, int right) {
     SsdWork.cd_reverb_left = left;
     SsdWork.cd_reverb_right = right;
-    SsdWork.output_flags |= 0x300;
+    SsdWork.output_flags |= SSD_OUTPUT_CD_REVERB;
 }
 
 void SsdSetAudioAttenuator(int value) {}
 
 int SsdSetReverbParameter(int mode, int depth, int delay, int feedback) {
-    SsdEffectAttr attributes;
+    SceSdEffectAttr attributes;
     int core;
     int changed;
     SsdReverbState *reverb;
-    if (mode == -2) return 0;
+    if (mode == SSD_REVERB_MODE_SKIP) return 0;
     changed = 0;
     core = mode >> 8;
     mode &= 0xff;
-    reverb = &SsdWork.reverb[core];
-    if (mode == 0) {
+    reverb = &SsdWork.cores.reverb[core];
+    if (mode == SSD_REVERB_MODE_OFF) {
         feedback = 0;
         delay = 0;
         depth = 0;
-    } else if (mode == -1) {
+    } else if (mode == SSD_REVERB_MODE_NONE) {
         mode = reverb->mode;
     }
     sceSdGetEffectAttr(core, &attributes);
-    if (attributes.mode != mode || mode == 0) {
+    if (attributes.mode != mode || mode == SSD_REVERB_MODE_OFF) {
         changed = 1;
-        sceSdSetAddr(core | 0x1d00, reverb->work_end - 1);
+        sceSdSetAddr(core | SD_A_EEA,reverb->work_end - 1);
     }
     reverb->mode = mode;
     reverb->delay = delay;
@@ -226,11 +150,11 @@ int SsdSetReverbParameter(int mode, int depth, int delay, int feedback) {
     attributes.delay = delay;
     attributes.feedback = feedback;
     if (changed) {
-        attributes.volume.right = 0;
-        attributes.volume.left = 0;
+        attributes.depth_right = 0;
+        attributes.depth_left = 0;
     } else {
-        attributes.volume.left = reverb->volume.left;
-        attributes.volume.right = reverb->volume.right;
+        attributes.depth_left = reverb->volume.left;
+        attributes.depth_right = reverb->volume.right;
     }
     sceSdSetEffectAttr(core, &attributes);
     if (changed) sceSdClearEffectWorkArea(core, core, mode);
@@ -238,13 +162,13 @@ int SsdSetReverbParameter(int mode, int depth, int delay, int feedback) {
 }
 
 void SsdEnableReverbParam(int core) {
-    SsdEffectAttr attributes;
+    SceSdEffectAttr attributes;
     attributes.core = core;
-    attributes.mode = SsdWork.reverb[core].mode;
-    attributes.volume.left = SsdWork.reverb[core].volume.left;
-    attributes.volume.right = SsdWork.reverb[core].volume.right;
-    attributes.delay = SsdWork.reverb[core].delay;
-    attributes.feedback = SsdWork.reverb[core].feedback;
+    attributes.mode = SsdWork.cores.reverb[core].mode;
+    attributes.depth_left = SsdWork.cores.reverb[core].volume.left;
+    attributes.depth_right = SsdWork.cores.reverb[core].volume.right;
+    attributes.delay = SsdWork.cores.reverb[core].delay;
+    attributes.feedback = SsdWork.cores.reverb[core].feedback;
     sceSdSetEffectAttr(core, &attributes);
 }
 
@@ -252,9 +176,9 @@ void SsdCheckWideMode(void) {
     SsdSetVolumeRec(SsdWork.master_depth, &SsdWork.master_volume, 0);
     SsdWork.cd_volume.right = SsdWork.cd_depth;
     SsdWork.cd_volume.left = SsdWork.cd_depth;
-    SsdSetVolumeRec(SsdWork.reverb[0].depth, &SsdWork.reverb[0].volume, 1);
-    SsdSetVolumeRec(SsdWork.reverb[1].depth, &SsdWork.reverb[1].volume, 1);
-    SsdWork.output_flags |= 3;
+    SsdSetVolumeRec(SsdWork.cores.reverb[0].depth, &SsdWork.cores.reverb[0].volume, 1);
+    SsdSetVolumeRec(SsdWork.cores.reverb[1].depth, &SsdWork.cores.reverb[1].volume, 1);
+    SsdWork.output_flags |= SSD_OUTPUT_MASTER_VOLUME;
 }
 
 void SsdSetVolumeRec(int volume, SsdStereoVolume *output, int reverb) {
@@ -262,12 +186,12 @@ void SsdSetVolumeRec(int volume, SsdStereoVolume *output, int reverb) {
     output->right = volume;
     output->left = volume;
     mode = SsdWork.output_mode;
-    if (mode >= 2U) {
-        if (mode == 2 && reverb == 1) {
+    if (mode >= SSD_OUTPUT_SURROUND) {
+        if (mode == SSD_OUTPUT_SURROUND && reverb == 1) {
             output->right = -volume;
             return;
         }
-        if (mode == 2 || reverb != 0) {
+        if (mode == SSD_OUTPUT_SURROUND || reverb != 0) {
             output->left = -volume;
             return;
         }
@@ -279,7 +203,7 @@ void SsdReverbClear(void) {}
 
 void SsdReverbClearCallback(void) {}
 
-int SsdReverbClearCompleted(int core) {
-    sceSdVoiceTransStatus((short)core, 1);
+int SsdReverbClearCompleted(int core, int wait) {
+    sceSdVoiceTransStatus(core, 1);
     return SsdWork.reverb_clear_result;
 }

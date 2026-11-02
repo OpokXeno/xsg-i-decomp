@@ -5,13 +5,12 @@
 #include "shared.h"
 #include "main/party.h"
 #include "main/xgl_flags.h"
-#include "title_game_init.h"
-
-extern u8 GameLoopState[];
+#include "ov02/ov02.h"
+#include "ov02/title_game_init.h"
 
 void TitleGameInit(void)
 {
-    memset(GameLoopState, 0, 0x2a030);
+    memset(&GameLoopState, 0, GAME_LOOP_STATE_SIZE);
     xglFlagsInitial();
     PartyDataInit();
     xglFontLoad(1, 0);

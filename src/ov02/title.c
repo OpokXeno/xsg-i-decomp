@@ -4,6 +4,10 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/xgl_render.h"
+#include "ov02/ov02.h"
+#include "ov02/title_game_init.h"
+#include "ov02/title_hdd_install.h"
 #include "title.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_mc.h"
@@ -14,9 +18,36 @@
 #include "main/xgl_dma.h"
 #include "main/control_entry.h"
 #include "main/file.h"
-#include "title_game_init.h"
 
 #include "main/xgl_packet.h"
+
+/* Options of the title menu (flag in Title). */
+#define TITLE_CHOICE_NEW_GAME 0
+#define TITLE_CHOICE_CONTINUE 1
+#define TITLE_CHOICE_HDD_INSTALL 2
+
+/* Title hard disk state (cursor in Title) when no disk is usable. */
+#define TITLE_HDD_UNAVAILABLE (-1)
+
+/* Frames without input before the title leaves, and the frames a press is ignored after startup or a move. */
+#define TITLE_TIMEOUT_FRAMES 600
+#define TITLE_PREROLL_FRAMES 4
+
+/* The fade overlay alpha (TestEnv_12) starts at TITLE_FADE_MAX and drops TITLE_FADE_STEP per frame. */
+#define TITLE_FADE_MAX 128
+#define TITLE_FADE_STEP 4
+
+/* Snow particles: 256 records at TITLE_PARTICLE_BASE. */
+#define TITLE_PARTICLE_COUNT 256
+#define TITLE_PARTICLE_BASE 0x01000000
+
+/* Memory map of the loaded title data: the object texture archive, then the jpeg behind it. */
+#define TITLE_OBJECT_BASE 0x01001000
+#define TITLE_JPEG_BASE 0x010E1000
+
+/* The object texture is sent in two halves of TITLE_TEXTURE_QWC quadwords. */
+#define TITLE_TEXTURE_QWC 0x7000
+#define TITLE_TEXTURE_HALF_SIZE (TITLE_TEXTURE_QWC * 16)
 
 #define TITLE_PARTICLE_STRIDE 16
 #define TITLE_PARTICLE_AT(storage, index) \
@@ -30,29 +61,29 @@ static int copyframe(void)
     u64 *scratch;
 
     packet = xglPacketGetCurrent();
-    scratch = (u64 *)0x70000000;
+    scratch = (u64 *)SCRATCHPAD_BASE;
     scratch[0] = 0;
     scratch[1] = 0x51000009;
     scratch[2] = ((u64)0x10000000 << 32) | 0x8008;
-    scratch[3] = 14;
+    scratch[3] = GIF_REG_AD;
     scratch[4] = (0x80000 | (sRender.width << 5)) |
                  ((u64)sRender.height << 37) | ((u64)0x8000 << 36);
-    scratch[5] = 80;
+    scratch[5] = SCE_GS_BITBLTBUF;
     scratch[6] = 0;
-    scratch[7] = 81;
-    scratch[8] = ((u64)448 << 32) | 0x200;
-    scratch[9] = 82;
+    scratch[7] = SCE_GS_TRXPOS;
+    scratch[8] = ((u64)OV02_SCREEN_HEIGHT << 32) | OV02_SCREEN_WIDTH;
+    scratch[9] = SCE_GS_TRXREG;
     scratch[10] = 2;
-    scratch[11] = 83;
+    scratch[11] = SCE_GS_TRXDIR;
     scratch[12] = 0;
-    scratch[13] = 63;
+    scratch[13] = SCE_GS_TEXFLUSH;
     scratch[14] = (0x80000 | (sRender.width << 5)) |
-                  ((u64)sRender.framebuffer_page << 37) | ((u64)0x8000 << 36);
-    scratch[15] = 80;
+                  ((u64)sRender.flip_base << 37) | ((u64)0x8000 << 36);
+    scratch[15] = SCE_GS_BITBLTBUF;
     scratch[16] = 2;
-    scratch[17] = 83;
+    scratch[17] = SCE_GS_TRXDIR;
     scratch[18] = 0;
-    scratch[19] = 63;
+    scratch[19] = SCE_GS_TEXFLUSH;
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDirectDataN(packet, scratch, 10);
@@ -62,21 +93,21 @@ static int copyframe(void)
 static void build_mipmap(XglPacket *packet)
 {
     TitleMipmapPacket *gif;
-    u32 copy_u = 0x2000; /* right edge of the full-size copy, 512 texels in 12.4 */
+    u32 copy_u = OV02_SCREEN_WIDTH << 4; /* right edge of the full-size copy, in 12.4 */
 
-    gif = (TitleMipmapPacket *)0x70000000;
+    gif = (TitleMipmapPacket *)SCRATCHPAD_BASE;
     gif->vif_direct.lo = 0;
     gif->vif_direct.hi = 0x51000023;
     gif->frame_tag.lo = 0x1000000000000004ULL;
-    gif->frame_tag.hi = 0xE;
+    gif->frame_tag.hi = GIF_REG_AD;
     gif->frame_1.data = (u64)sRender.texture_buffer_base | ((u64)8 << 16);
-    gif->frame_1.reg = 0x4C;
+    gif->frame_1.reg = SCE_GS_FRAME_1;
     gif->tex0_1.data = 0x24020000 | (sRender.display_buffer_base << 5) | (0xC800ULL << 19);
-    gif->tex0_1.reg = 6;
+    gif->tex0_1.reg = SCE_GS_TEX0_1;
     gif->tex1_1.data = 0x60;
-    gif->tex1_1.reg = 0x14;
+    gif->tex1_1.reg = SCE_GS_TEX1_1;
     gif->test_1.data = 0x30000;
-    gif->test_1.reg = 0x47;
+    gif->test_1.reg = SCE_GS_TEST_1;
     gif->vertex_tag.lo = 0x508B400000000001ULL;
     gif->vertex_tag.hi = 0x53531;
     gif->rgbaq_0.r = 0x80;
@@ -98,7 +129,7 @@ static void build_mipmap(XglPacket *packet)
     gif->texture_tag.lo = 0x008B400000000001ULL;
     gif->texture_tag.hi = 0x535315353153531EULL;
     gif->tex0_texture.data = 0x24020000 | (sRender.texture_buffer_base << 5) | (0xC800ULL << 19);
-    gif->tex0_texture.reg = 6;
+    gif->tex0_texture.reg = SCE_GS_TEX0_1;
     gif->rgbaq_1.r = 0x80;
     gif->rgbaq_1.g = 0x80;
     gif->rgbaq_1.b = 0x80;
@@ -148,21 +179,21 @@ static void build_mipmap(XglPacket *packet)
     gif->xyz_7.z = 0;
     gif->xyz_7.adc = 0;
     gif->mip_tag.lo = 0x1000000000008006ULL;
-    gif->mip_tag.hi = 0xE;
+    gif->mip_tag.hi = GIF_REG_AD;
     gif->frame_2.data = (u64)sRender.display_buffer_base | ((u64)8 << 16);
-    gif->frame_2.reg = 0x4C;
+    gif->frame_2.reg = SCE_GS_FRAME_1;
     gif->miptbp1.data = (u64)(sRender.texture_buffer_base << 5) | ((u64)8 << 14)
                         | ((u64)((sRender.texture_buffer_base << 5) + 128) << 20) | ((u64)8 << 34)
                         | ((u64)((sRender.texture_buffer_base << 5) + 192) << 40) | ((u64)8 << 54);
-    gif->miptbp1.reg = 0x34;
+    gif->miptbp1.reg = SCE_GS_MIPTBP1_1;
     gif->miptbp2.data = (u64)((sRender.texture_buffer_base << 5) + 224) | ((u64)8 << 14);
-    gif->miptbp2.reg = 0x36;
+    gif->miptbp2.reg = SCE_GS_MIPTBP2_1;
     gif->tex1_2.data = 0x170;
-    gif->tex1_2.reg = 0x14;
+    gif->tex1_2.reg = SCE_GS_TEX1_1;
     gif->tex0_2.data = 0x24020000 | (sRender.display_buffer_base << 5) | (0xC800ULL << 19);
-    gif->tex0_2.reg = 6;
+    gif->tex0_2.reg = SCE_GS_TEX0_1;
     gif->texture_flush.data = 0;
-    gif->texture_flush.reg = 0x3F;
+    gif->texture_flush.reg = SCE_GS_TEXFLUSH;
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDirectDataN(packet, gif, 36);
@@ -212,25 +243,25 @@ int Title(void)
     struct HddExistRequest hddRequest;
     short portStatus[2];
     TitleJpegRequest jpeg;
-    int objectEnd;
+    u8 *objectEnd;
     int frameTimer;
     int preroll;
     int flag;
     int fade;
     int cursor;
-    int jpegDst;
+    u8 *jpegDst;
     int bytesRead;
     int i;
-    TitleRenderState *render;
+    XglRenderState *render;
     int r;
     u64 recordWord;
 
     copyframe();
     mc.buffer = WorkEnd;
     mc.slot = -1;
-    frameTimer = 600;
-    xglMcRequest(0, 2, &mc, &mcResult[0]);
-    xglMcRequest(1, 2, &mc, &mcResult[1]);
+    frameTimer = TITLE_TIMEOUT_FRAMES;
+    xglMcRequest(0, MC_REQUEST_DIRECTORY, &mc, &mcResult[0]);
+    xglMcRequest(1, MC_REQUEST_DIRECTORY, &mc, &mcResult[1]);
     hddRequest.found = WorkEnd;
     hddRequest.card = -1;
     mcResult[2] = xglHddMcExist(&hddRequest);
@@ -239,12 +270,12 @@ int Title(void)
         /* xglMcMain returns both ports' status halfwords as one word. */
         *(unsigned int *)portStatus = xglMcMain();
         xglSleep();
-    } while (0 != xglCdSync() || 255 == portStatus[0] || 128 == portStatus[0] ||
-             255 == portStatus[1] || 128 == portStatus[1]);
+    } while (0 != xglCdSync() || MC_STATUS_BUSY == portStatus[0] || MC_STATUS_ERROR == portStatus[0] ||
+             MC_STATUS_BUSY == portStatus[1] || MC_STATUS_ERROR == portStatus[1]);
     if (mcResult[0] > 0 || mcResult[1] > 0 || mcResult[2] > 0)
-        flag = 1;
+        flag = TITLE_CHOICE_CONTINUE;
     else
-        flag = 0;
+        flag = TITLE_CHOICE_NEW_GAME;
     switch (xglHddMount()) {
     case 0:
         cursor = 0;
@@ -263,23 +294,23 @@ int Title(void)
         cursor = 1;
         break;
     default:
-        cursor = -1;
+        cursor = TITLE_HDD_UNAVAILABLE;
         break;
     }
-    bytesRead = xglCdReadFile("data\\yajima\\title_obj.xtx", (void *)0x01001000, 0, 1);
-    jpegDst = 0x010E1000 + bytesRead;
-    objectEnd = 0x01001000 + bytesRead;
-    xglCdReadFile("data\\title.jpg", (void *)jpegDst, 0, 1);
+    bytesRead = xglCdReadFile("data\\yajima\\title_obj.xtx", (void *)TITLE_OBJECT_BASE, 0, 1);
+    jpegDst = (u8 *)TITLE_JPEG_BASE + bytesRead;
+    objectEnd = (u8 *)TITLE_OBJECT_BASE + bytesRead;
+    xglCdReadFile("data\\title.jpg", jpegDst, 0, 1);
     memset(&jpeg, 0, 32);
-    jpeg.source = (u8 *)jpegDst;
-    jpeg.output_end = (u8 *)objectEnd;
+    jpeg.source = jpegDst;
+    jpeg.output_end = objectEnd;
     xglJpegDecode(&jpeg);
-    for (i = 0; 256 > i; i++)
-        particle_reset((TitleParticleView *)0x01000000, i);
+    for (i = 0; TITLE_PARTICLE_COUNT > i; i++)
+        particle_reset((TitleParticleView *)TITLE_PARTICLE_BASE, i);
     copyframe();
-    scratch = (int *)0x70000000;
-    fade = 128;
-    preroll = 4;
+    scratch = (int *)SCRATCHPAD_BASE;
+    fade = TITLE_FADE_MAX;
+    preroll = TITLE_PREROLL_FRAMES;
 
     for (;;) {
         TitleRecordHeader *header;
@@ -298,11 +329,11 @@ int Title(void)
             return (int)D_2A007F8;
         if (0 < preroll) {
             preroll--;
-        } else if (fade == 0 && (PadData.half_2a & 0x820)) {
-            if (flag == 2 && cursor < 0) {
-                xglSoundEffectNormalID(5, 0);
+        } else if (fade == 0 && (PadData.half_2a & (PAD_START | PAD_CIRCLE))) {
+            if (flag == TITLE_CHOICE_HDD_INSTALL && cursor < 0) {
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             } else {
-                xglSoundEffectNormalID(1, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 copyframe();
                 xglSleep();
                 break;
@@ -312,23 +343,23 @@ int Title(void)
         repeat = PadData.mappedRepeat;
         maxFlag = cursor < 0 ? 1 : 2;
         step = 0;
-        if (repeat & 0x1000)
+        if (repeat & PAD_UP)
             step = 0 < flag ? -1 : 0;
-        if (repeat & 0x4000)
+        if (repeat & PAD_DOWN)
             step = maxFlag > flag ? 1 : step;
         if (0 != step) {
             while (0 != step) {
                 flag += step;
-                if (flag != 2 || cursor != -1)
+                if (flag != TITLE_CHOICE_HDD_INSTALL || cursor != TITLE_HDD_UNAVAILABLE)
                     break;
             }
-            xglSoundEffectNormalID(3, 0);
-            if (preroll < 4)
-                preroll = 4;
-            frameTimer = 600;
+            xglSoundEffectNormalID(SE_CURSOR, 0);
+            if (preroll < TITLE_PREROLL_FRAMES)
+                preroll = TITLE_PREROLL_FRAMES;
+            frameTimer = TITLE_TIMEOUT_FRAMES;
         }
         if (0 < fade) {
-            fade -= 4;
+            fade -= TITLE_FADE_STEP;
             fade = 0 > fade ? 0 : fade;
         }
 
@@ -337,9 +368,9 @@ int Title(void)
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, TestEnv_0_00A0F780, 24);
         sceVif1PkRef(packet, TransEnv_1_00A0F7E0, 2, 0, 0, 0);
-        sceVif1PkRef(packet, (void *)objectEnd, 28672, 0, 0x51007000, 0);
+        sceVif1PkRef(packet, objectEnd, TITLE_TEXTURE_QWC, 0, 0x51007000, 0);
         sceVif1PkRef(packet, TransEnv_1_00A0F7E0, 2, 0, 0, 0);
-        sceVif1PkRef(packet, (void *)(objectEnd + 0x70000), 28672, 0, 0x51007000, 0);
+        sceVif1PkRef(packet, objectEnd + TITLE_TEXTURE_HALF_SIZE, TITLE_TEXTURE_QWC, 0, 0x51007000, 0);
         sceVif1PkRef(packet, FlushEnv_2_00A0F800, 3, 0, 0, 0);
         sceVif1PkRef(packet, TestEnv_3, 11, 0, 0, 0);
         sceVif1PkRef(packet, image_4, 18, 0, 0, 0);
@@ -347,23 +378,23 @@ int Title(void)
         sceVif1PkRef(packet, FlushEnv_5, 3, 0, 0, 0);
         sceVif1PkCnt(packet, 0);
 
-        for (particleIndex = 0; 256 > particleIndex; particleIndex++) {
-            TitleParticleView *particle = (TitleParticleView *)(0x01000000 + particleIndex * TITLE_PARTICLE_STRIDE);
+        for (particleIndex = 0; TITLE_PARTICLE_COUNT > particleIndex; particleIndex++) {
+            TitleParticleView *particle = (TitleParticleView *)(TITLE_PARTICLE_BASE + particleIndex * TITLE_PARTICLE_STRIDE);
 
             scratch[11] = 1 + (xglSRand() & 0xf);
-            scratch[16] = 28664 + (s16)particle->x;
-            scratch[17] = 29176 + (s16)particle->z;
+            scratch[16] = OV02_GS_VERTEX_X + (s16)particle->x;
+            scratch[17] = OV02_GS_VERTEX_Y + (s16)particle->z;
             scratch[24] = scratch[16] + (u16)particle->speed;
             scratch[25] = scratch[17] + (u16)particle->speed;
             particle->x = (u16)particle->x + (u16)particle->y;
             particle->z = (s16)((u16)particle->z + (u16)particle->depth);
             if (!(8193 > (u16)particle->x && 0 <= particle->z && 7169 > particle->z))
-                particle_reset((TitleParticleView *)0x01000000, particleIndex);
+                particle_reset((TitleParticleView *)TITLE_PARTICLE_BASE, particleIndex);
             sceVif1PkAddDataN(packet, scratch, 28);
         }
 
-        header = (TitleRecordHeader *)0x01001000;
-        record = (TitleRecord *)(0x01001000 + header->first);
+        header = (TitleRecordHeader *)TITLE_OBJECT_BASE;
+        record = (TitleRecord *)(TITLE_OBJECT_BASE + header->first);
         for (recordIndex = 0; (int)header->count > recordIndex; record++, recordIndex++) {
             u32 width;
 
@@ -388,8 +419,8 @@ int Title(void)
             w3 = 180;
             w6 = 18;
             sel = m;
-            if (m == 2) {
-                if (cursor == -1)
+            if (m == TITLE_CHOICE_HDD_INSTALL) {
+                if (cursor == TITLE_HDD_UNAVAILABLE)
                     continue;
                 if (cursor == 1)
                     sel = 3;
@@ -400,9 +431,9 @@ int Title(void)
                 w8 = 291 + m * 18;
                 w6 = 12;
             }
-            if (m <= 2) {
+            if (m <= TITLE_CHOICE_HDD_INSTALL) {
                 int selRow = sel * 288;
-                int row9 = w9 * 16 + 28664;
+                int row9 = w9 * 16 + OV02_GS_VERTEX_X;
                 int row8 = w8 * 16 + 29175;
 
                 TestEnv_11[45] = selRow + 288;
@@ -416,7 +447,7 @@ int Title(void)
             }
         }
 
-        recordWord = (sRender.framebuffer_page << 5) | 0x24120000ULL;
+        recordWord = (sRender.flip_base << 5) | 0x24120000ULL;
         recordWord |= 0xC800ULL << 19;
         TestEnv_12[8] = 100 | ((u64)fade << 32);
         TestEnv_12[6] = recordWord;
@@ -425,12 +456,12 @@ int Title(void)
         xglSleep();
     }
         switch (flag) {
-        case 0:
+        case TITLE_CHOICE_NEW_GAME:
             TitleGameInit();
             GameLoopState.word_18 = 0x100003E8;
             GameLoopState.half_0e = 0;
             return (int)D_1245C58;
-        case 1:
+        case TITLE_CHOICE_CONTINUE:
             TitleGameInit();
             r = MenuFileMain(1);
             if (r == flag) {
@@ -438,7 +469,7 @@ int Title(void)
                 return (int)D_1245C58;
             }
             return 0;
-        case 2:
+        case TITLE_CHOICE_HDD_INSTALL:
             if (0 <= cursor)
                 TitleHddInstall(cursor);
             return 0;

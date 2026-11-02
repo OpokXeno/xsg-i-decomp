@@ -1,5 +1,6 @@
-/* Original ssd_data.c translation unit: driver tables with no functions,
- * shared by the initializer, effect volume, note and pitch code. */
+#include "ssd/ssd_data.h"
+
+/* Driver tables with no functions, shared by the initializer, effect volume, note and pitch code. */
 
 /* SPU reverb work area size for each reverb mode. */
 unsigned int SpuReverbWorkSize[10] = {

@@ -1,100 +1,53 @@
-/* Original SSD object: ssd_smpl.c. Partial layouts describe evidenced fields. */
-typedef struct SsdVoiceControl {
-    unsigned char index, core, voice, state;
-    unsigned short updates;
-    unsigned char effect, attributes;
-    short output_volume[4];
-    unsigned short unknown16, unknown18;
-    unsigned short pitch, release;
-    /* Allocation uses the full word; keyoff observes its low activity byte. */
-    union {
-        unsigned int priority;
-        struct {
-            unsigned char active;
-            unsigned char unmodeled_019[3];
-        } parts;
-    } allocation;
-    unsigned int spu_address, loop_address;
-    unsigned short adsr1, adsr2;
-    unsigned char unmodeled_028[216];
-} SsdVoiceControl;
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_dma.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_voic.h"
 
-typedef struct {
-    SsdVoiceControl *voice;
+/* Up to four sampling voices, taken from the end of the voice table (they overlap the VAG stream's). */
+#define SSD_SAMPLING_MAX_CHANNELS 4
+#define SSD_SAMPLING_FIRST_VOICE 43
+#define SSD_SAMPLING_VOICE_PRIORITY 0x90000
+
+typedef void (*SsdSampleKeyoffCallback)(int result, int channel, int argument);
+
+typedef struct SsdSamplingChannel {
+    SsdVoice *voice;
     unsigned int unknown04;
     unsigned char state, status;
     unsigned short pitch;
     int volume[4], pan[4];
     unsigned char effect, attributes;
     unsigned short unknown46;
-} SamplingChannel;
+} SsdSamplingChannel;
 
-typedef struct {
-    unsigned short flags;
-    unsigned short unknown02;
-    unsigned int unknown04, unknown08, unknown12;
-} SamplingProcess;
-
-typedef struct {
+typedef struct SsdSamplingWork {
     unsigned char voice_count, unknown01;
     unsigned short pitch, volume, pan;
     unsigned char effect, attributes;
     unsigned short unknown10;
-    SamplingChannel channels[4];
+    SsdSamplingChannel channels[SSD_SAMPLING_MAX_CHANNELS];
     unsigned int spu_address, buffer_size, next_address;
-    void (*dma_callback)();
-    void (*keyoff_callback)();
+    SsdDmaCallback dma_callback;
+    SsdSampleKeyoffCallback keyoff_callback;
     void *buffer;
-    SamplingProcess process;
-} SamplingWork;
+    SsdProc process;
+} SsdSamplingWork;
 
-SamplingWork SsdSampleWork;
-extern void SsdCalcDirectVoiceVolume(short *, int, int);
-extern void SsdUnlinkProc(SamplingProcess *);
-extern void CpuDisableIntr(void);
-extern void CpuEnableIntr(void);
-void SsdSampleKeyoffInterProc(void);
-extern void SsdLinkProc(SamplingProcess *, void (*)(void), SamplingWork *);
-extern void SsdKeyonVoice(SsdVoiceControl *);
-extern void SsdMemoryCopy(void *, const void *, unsigned int);
-extern void SsdSpuDmaWrite(unsigned int, const void *, unsigned int,
-                           void (*)(), SamplingWork *);
-extern unsigned int SsdSpuMallocAdrsDynamic(unsigned int, unsigned int, int);
-extern void SsdCutoffUnlinkVoice(SsdVoiceControl *);
-extern unsigned int SsdSpuMFree(unsigned int);
-extern int FreeSysMemory(void *);
-extern void *AllocSysMemory(int, unsigned int, void *);
-extern int printf(const char *, ...);
+SsdSamplingWork SsdSampleWork;
+
+void SsdSampleKeyoffInterProc(SsdGlobalWork *work, void *argument);
 void SsdAllocSamplingVoice(int count);
 void SsdInitSamplingVoice(void);
-extern struct {
-    unsigned char unmodeled_000[0x230];
-    unsigned int key_on[2], key_off[2], cutoff[2], noise[2];
-    unsigned int pitch_modulation[2], effect_left[2], effect_right[2];
-    unsigned int active_voices;
-    SsdVoiceControl voices[48];
-} SsdWork;
-extern void SsdUnlinkChannelVoice(SsdVoiceControl *);
-void SsdSetSamplingEffect(int channel, int reverb, int noise);
-void SsdSetSamplingParam(int channel, int pitch, int volume, int pan);
-void SsdPlaySampling(int channel, int pitch, int volume, int pan);
-void SsdTransferSampling(int channel, const void *data, unsigned int size);
-void SsdTransferSamplingNext(const void *data, unsigned int size);
-void SsdStopSampling(int channel);
-void SsdDisposeSampling(void);
-void SsdSetSampleDmaCallback(void (*callback)());
-void SsdSetSampleKeyoffCallback(void (*callback)());
-void SsdInitSampling(int voice_count, unsigned int spu_address,
-                     unsigned int buffer_size);
 
 void SsdInitSampling(int voice_count, unsigned int spu_address,
                      unsigned int buffer_size)
 {
-    if (voice_count < 5) {
-        SsdSampleWork.pitch = 4096;
-        SsdSampleWork.volume = 127;
-        SsdSampleWork.pan = 64;
-        SsdSampleWork.effect = 12;
+    if (voice_count <= SSD_SAMPLING_MAX_CHANNELS) {
+        SsdSampleWork.pitch = SSD_VOICE_PITCH_NORMAL;
+        SsdSampleWork.volume = SSD_MIDI_VALUE_MAX;
+        SsdSampleWork.pan = SSD_MIDI_PAN_CENTER;
+        SsdSampleWork.effect = SSD_VOICE_EFFECT_REVERB | SSD_VOICE_EFFECT_DRY;
         SsdSampleWork.attributes = 0;
         SsdSampleWork.spu_address = spu_address;
         SsdSampleWork.buffer_size = buffer_size;
@@ -115,25 +68,25 @@ void SsdInitSampling(int voice_count, unsigned int spu_address,
 void SsdDisposeSampling(void)
 {
     int channel;
-    SamplingChannel *sample;
-    SsdVoiceControl *voice;
+    SsdSamplingChannel *sample;
+    SsdVoice *voice;
     for (channel = 0; channel < SsdSampleWork.voice_count; channel++) {
         sample = &SsdSampleWork.channels[channel];
         voice = sample->voice;
         SsdCutoffUnlinkVoice(voice);
-        SsdSpuMFree(voice->spu_address);
+        SsdSpuMFree(voice->sample_start);
     }
     CpuDisableIntr();
     FreeSysMemory(SsdSampleWork.buffer);
     CpuEnableIntr();
 }
 
-void SsdSetSampleDmaCallback(void (*callback)())
+void SsdSetSampleDmaCallback(SsdDmaCallback callback)
 {
     SsdSampleWork.dma_callback = callback;
 }
 
-void SsdSetSampleKeyoffCallback(void (*callback)())
+void SsdSetSampleKeyoffCallback(SsdSampleKeyoffCallback callback)
 {
     SsdSampleWork.keyoff_callback = callback;
 }
@@ -141,16 +94,16 @@ void SsdSetSampleKeyoffCallback(void (*callback)())
 void SsdTransferSampling(int channel, const void *data, unsigned int size)
 {
     unsigned int address;
-    SamplingChannel *sample;
+    SsdSamplingChannel *sample;
     SsdMemoryCopy(SsdSampleWork.buffer, data, size);
     sample = &SsdSampleWork.channels[channel];
-    address = sample->voice->spu_address;
+    address = sample->voice->sample_start;
     SsdSpuDmaWrite(address, SsdSampleWork.buffer, size,
                    SsdSampleWork.dma_callback, &SsdSampleWork);
     SsdSampleWork.next_address = address + size;
 }
 
-void SsdTransferSamplingNext(const void *data, unsigned int size)
+void SsdTransferSamplingNext(void *data, unsigned int size)
 {
     unsigned int address = SsdSampleWork.next_address;
     SsdSpuDmaWrite(address, data, size, SsdSampleWork.dma_callback,
@@ -160,8 +113,8 @@ void SsdTransferSamplingNext(const void *data, unsigned int size)
 
 void SsdPlaySampling(int channel, int pitch, int volume, int pan)
 {
-    SamplingChannel *sample;
-    SsdVoiceControl *voice;
+    SsdSamplingChannel *sample;
+    SsdVoice *voice;
     CpuDisableIntr();
     SsdLinkProc(&SsdSampleWork.process, SsdSampleKeyoffInterProc,
                 &SsdSampleWork);
@@ -174,18 +127,18 @@ void SsdPlaySampling(int channel, int pitch, int volume, int pan)
     sample->pan[0] = pan;
     sample->status = 0;
     voice->pitch = pitch;
-    SsdCalcDirectVoiceVolume(voice->output_volume, volume, pan);
+    SsdCalcDirectVoiceVolume(&voice->left_volume, volume, pan);
     CpuDisableIntr();
-    voice->updates = 0xffff;
+    voice->flags = SSD_VOICE_FLAG_ALL;
     SsdKeyonVoice(voice);
     CpuEnableIntr();
 }
 
 void SsdStopSampling(int channel)
 {
-    SamplingChannel *sample;
+    SsdSamplingChannel *sample;
     CpuDisableIntr();
-    if (SsdSampleWork.process.flags & 1)
+    if (SsdSampleWork.process.kind & 1)
         SsdUnlinkProc(&SsdSampleWork.process);
     CpuEnableIntr();
     sample = &SsdSampleWork.channels[channel];
@@ -196,47 +149,47 @@ void SsdStopSampling(int channel)
 
 void SsdSetSamplingParam(int channel, int pitch, int volume, int pan)
 {
-    SamplingChannel *sample = &SsdSampleWork.channels[channel];
-    SsdVoiceControl *voice = sample->voice;
+    SsdSamplingChannel *sample = &SsdSampleWork.channels[channel];
+    SsdVoice *voice = sample->voice;
     sample->volume[0] = volume;
     sample->pan[0] = pan;
     voice->pitch = pitch;
-    SsdCalcDirectVoiceVolume(voice->output_volume, volume, pan);
-    voice->updates |= 3;
+    SsdCalcDirectVoiceVolume(&voice->left_volume, volume, pan);
+    voice->flags |= SSD_VOICE_FLAG_PITCH | SSD_VOICE_FLAG_VOLUME;
 }
 
-void SsdSetSamplingEffect(int channel, int reverb, int noise)
+void SsdSetSamplingEffect(int channel, int dry, int reverb)
 {
     unsigned char effect = 0;
     unsigned short updates = 0;
-    SamplingChannel *sample;
-    SsdVoiceControl *voice;
-    if (reverb) {
-        effect = 8;
-        updates = 0x8000;
+    SsdSamplingChannel *sample;
+    SsdVoice *voice;
+    if (dry) {
+        effect = SSD_VOICE_EFFECT_DRY;
+        updates = SSD_VOICE_FLAG_DRY;
     }
-    if (noise) {
-        effect |= 4;
-        updates = 0x4000;
+    if (reverb) {
+        effect |= SSD_VOICE_EFFECT_REVERB;
+        updates = SSD_VOICE_FLAG_REVERB;
     }
     sample = &SsdSampleWork.channels[channel];
     voice = sample->voice;
     sample->effect = effect;
-    voice->effect = effect;
-    voice->updates |= updates;
+    voice->effects = effect;
+    voice->flags |= updates;
 }
 
 void SsdAllocSamplingVoice(int count)
 {
     int channel;
-    int first_voice = 43;
+    int first_voice = SSD_SAMPLING_FIRST_VOICE;
     SsdSampleWork.voice_count = count;
     for (channel = 0; channel < count; channel++) {
-        SsdVoiceControl *voices = SsdWork.voices;
-        SsdVoiceControl *voice = &voices[first_voice + channel];
-        SamplingChannel *sample = &SsdSampleWork.channels[channel];
+        SsdVoice *voices = SsdWork.voices;
+        SsdVoice *voice = &voices[first_voice + channel];
+        SsdSamplingChannel *sample = &SsdSampleWork.channels[channel];
         SsdUnlinkChannelVoice(voice);
-        voice->allocation.priority = (unsigned short)voice->allocation.priority | 0x90000;
+        voice->allocation.priority = (unsigned short)voice->allocation.priority | SSD_SAMPLING_VOICE_PRIORITY;
         sample->voice = voice;
     }
 }
@@ -245,14 +198,14 @@ void SsdInitSamplingVoice(void)
 {
     if (SsdSampleWork.voice_count) {
     int channel = 0;
-    short pitch = 4096;
-    int volume = 127;
-    int pan = 64;
-    unsigned char effect = 12;
-    int adsr1 = 0x20ff;
+    short pitch = SSD_VOICE_PITCH_NORMAL;
+    int volume = SSD_MIDI_VALUE_MAX;
+    int pan = SSD_MIDI_PAN_CENTER;
+    unsigned char effect = SSD_VOICE_EFFECT_REVERB | SSD_VOICE_EFFECT_DRY;
+    int adsr1 = SSD_VOICE_ADSR1_RAW;
     do {
-        SamplingChannel *sample = &SsdSampleWork.channels[channel];
-        SsdVoiceControl *voice = sample->voice;
+        SsdSamplingChannel *sample = &SsdSampleWork.channels[channel];
+        SsdVoice *voice = sample->voice;
         sample->pitch = pitch;
         sample->state = 0;
         sample->status = 0;
@@ -261,34 +214,34 @@ void SsdInitSamplingVoice(void)
         sample->effect = effect;
         sample->attributes = 0;
         voice->pitch = sample->pitch;
-        SsdCalcDirectVoiceVolume(voice->output_volume, sample->volume[0],
+        SsdCalcDirectVoiceVolume(&voice->left_volume, sample->volume[0],
                                  sample->pan[0]);
-        voice->updates = 0;
-        voice->effect = sample->effect;
+        voice->flags = 0;
+        voice->effects = sample->effect;
         voice->attributes = sample->attributes;
-        voice->output_volume[2] = 0;
-        voice->output_volume[3] = 0;
-        voice->release = 0;
-        voice->spu_address = SsdSpuMallocAdrsDynamic(SsdSampleWork.buffer_size,
-                                                    SsdSampleWork.spu_address, 10);
+        voice->reserved_volume[0] = 0;
+        voice->reserved_volume[1] = 0;
+        voice->modulation = 0;
+        voice->sample_start = SsdSpuMallocAdrsDynamic(SsdSampleWork.buffer_size,
+                                                    SsdSampleWork.spu_address, SSD_SPU_BLOCK_SAMPLING);
         voice->adsr1 = adsr1;
-        voice->adsr2 = 0x5fc6;
+        voice->adsr2 = SSD_VOICE_ADSR2_RAW;
         channel++;
     } while (channel < SsdSampleWork.voice_count);
     }
 }
 
-void SsdSampleKeyoffInterProc(void)
+void SsdSampleKeyoffInterProc(SsdGlobalWork *work, void *argument)
 {
     int channel;
     for (channel = 0; channel < SsdSampleWork.voice_count; channel++) {
-        SamplingChannel *sample = &SsdSampleWork.channels[channel];
+        SsdSamplingChannel *sample = &SsdSampleWork.channels[channel];
         unsigned char state = sample->state;
-        int active = sample->voice->allocation.parts.active;
+        int active = sample->voice->allocation.envx;
         if (state & 2) {
             if (active == 0) {
                 SsdSampleWork.keyoff_callback(1, channel, 0);
-                if (SsdSampleWork.process.flags & 1)
+                if (SsdSampleWork.process.kind & 1)
                     SsdUnlinkProc(&SsdSampleWork.process);
                 sample->state = 0;
             }

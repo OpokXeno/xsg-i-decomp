@@ -1,78 +1,12 @@
-/* Original ssd_mem.c translation unit. Shared data is defined by its owning FDR. */
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_init.h"
 
-
-
-
-
-typedef struct SsdMainMemoryBlock SsdMainMemoryBlock;
-typedef struct SsdMainMemoryManager SsdMainMemoryManager;
-typedef struct SsdMemoryWork SsdMemoryWork;
-typedef struct SsdSpuMemoryBlock SsdSpuMemoryBlock;
-typedef struct SsdSpuMemoryManager SsdSpuMemoryManager;
-typedef struct SsdSegmentAllocMode SsdSegmentAllocMode;
-
-struct SsdMainMemoryBlock {
-    unsigned short flags, type;
-    unsigned int cleared_word;
-    unsigned char *end;
-    struct SsdMainMemoryBlock *next;
-};
-
-struct SsdMainMemoryManager {
-    SsdMainMemoryBlock *first;
-    unsigned char *end;
-    int size;
-};
-
-struct SsdSpuMemoryBlock {
-    unsigned char next_index, flags;
-    unsigned short type;
-    int address;
-    int size;
-    unsigned char unmodeled_00c[4];
-};
-
-struct SsdSpuMemoryManager {
-    int limit;
-    unsigned char unmodeled_004[4];
-    SsdSpuMemoryBlock blocks[16];
-};
-
-struct SsdSegmentAllocMode {
-    unsigned int address;
-    int size;
-};
-
-struct SsdMemoryWork {
-    unsigned char unmodeled_000[16];
-    SsdMainMemoryManager main_memory;
-    SsdSpuMemoryManager spu_memory;
-    SsdSegmentAllocMode segment_modes[4];
-};
-
-extern SsdMemoryWork SsdWork;
 void SsdMemoryClear(void *memory, int size);
 int SsdGetSpuMemManagerBlock(void);
-SsdMainMemoryBlock *SsdDisposePtr(void *memory);
 SsdSpuMemoryBlock *SsdGetSpuAddsBlock(int address);
-void *SsdNewPtr2(int size);
-int SsdSpuMalloc(int size, int type);
-int SsdGetMemoryBlockCount(void);
-void SsdInitSpuMemoryManager(void);
-void SsdResetSegmentAllocMode(unsigned int address);
 int SsdSpuMalloc2(int size, unsigned short type);
-void SsdMemoryCopy(void *destination_memory, const void *source_memory, int size);
-void SsdInitMainMemoryManager(unsigned int address, int size);
 void SsdDisposeMemoryMap(void *map);
 void SsdSetSpuType(unsigned int address, int type);
-void *SsdNewPtr(int size);
-int SsdGetMemoryFreeSize(void);
-int SsdSpuMallocAdrs(int size, int address, unsigned short type);
-int SsdSpuMallocAdrsSegment(int size, int minimum_address, int segment_size, int type);
-void SsdSetSegmentAllocMode(unsigned int address, int size);
-unsigned int SsdSpuMFree(unsigned int address);
-int SsdGetSpuMemoryFree(void);
-int SsdSpuMallocAdrsDynamic(int size, int minimum_address, int type);
 
 void SsdInitMainMemoryManager(unsigned int address, int size)
 {
@@ -86,7 +20,7 @@ void SsdInitMainMemoryManager(unsigned int address, int size)
     SsdWork.main_memory.first = block;
     SsdWork.main_memory.end = (unsigned char *)address + size;
     SsdWork.main_memory.size = size;
-    block->flags = 0x8000;
+    block->flags = SSD_MEM_BLOCK_ARENA;
     block->type = 0;
     block->cleared_word = 0;
     block->end = (unsigned char *)(block + 1);
@@ -119,7 +53,7 @@ allocate:
     header->end = payload + size;
     header->next = 0;
     header->cleared_word = 0;
-    header->flags = 2;
+    header->flags = SSD_MEM_BLOCK_ALLOCATED;
     header->type = 0;
     header->next = block->next;
     block->next = header;
@@ -131,7 +65,7 @@ allocate:
 
 void *SsdNewPtr2(int size)
 {
-    int required = ((size + 3) & ~3) + 16;
+    int required = ((size + 3) & ~3) + sizeof(SsdMainMemoryBlock);
     SsdMainMemoryManager *manager = &SsdWork.main_memory;
     SsdMainMemoryBlock *block = manager->first;
     SsdMainMemoryBlock *selected = 0;
@@ -165,7 +99,7 @@ void *SsdNewPtr2(int size)
     header->end = payload + size;
     header->next = 0;
     header->cleared_word = 0;
-    header->flags = 2;
+    header->flags = SSD_MEM_BLOCK_ALLOCATED;
     header->type = 0;
     header->next = selected->next;
     selected->next = header;
@@ -287,25 +221,25 @@ void SsdInitSpuMemoryManager(void)
 {
     int remaining;
     SsdSpuMemoryBlock *sentinel;
-    SsdWork.spu_memory.limit = 0x200000;
-    for (remaining = 0; remaining < 16; remaining++) {
+    SsdWork.spu_memory.limit = SSD_SPU_RAM_SIZE;
+    for (remaining = 0; remaining < SSD_SPU_BLOCK_COUNT; remaining++) {
         SsdWork.spu_memory.blocks[remaining].flags = 0;
     }
-    for (remaining = 0; remaining < 4; remaining++) {
+    for (remaining = 0; remaining < SSD_SEGMENT_MODE_COUNT; remaining++) {
         SsdWork.segment_modes[remaining].address = 0;
     }
     sentinel = SsdWork.spu_memory.blocks;
-    sentinel->flags = 0x81;
-    sentinel->type = 1;
+    sentinel->flags = SSD_SPU_BLOCK_USED | SSD_SPU_BLOCK_FIXED;
+    sentinel->type = SSD_SPU_BLOCK_SYSTEM;
     sentinel->address = 0;
-    sentinel->size = 20544;
+    sentinel->size = SSD_SPU_SYSTEM_SIZE;
     sentinel->next_index = 0;
 }
 
 void SsdSetSegmentAllocMode(unsigned int address, int size)
 {
     int index = 0;
-    for (; index < 4; ++index) {
+    for (; index < SSD_SEGMENT_MODE_COUNT; ++index) {
         if (!SsdWork.segment_modes[index].address) {
             SsdWork.segment_modes[index].address = address;
             SsdWork.segment_modes[index].size = size;
@@ -318,7 +252,7 @@ void SsdResetSegmentAllocMode(unsigned int address)
 {
     int index = 0;
     SsdSegmentAllocMode *mode = SsdWork.segment_modes;
-    for (; index < 4; ++index, ++mode) {
+    for (; index < SSD_SEGMENT_MODE_COUNT; ++index, ++mode) {
         if (mode->address == address) {
             mode->address = 0;
             return;
@@ -354,7 +288,7 @@ int SsdSpuMalloc(int size, int type)
         index = SsdGetSpuMemManagerBlock();
         if (index >= 0) {
             candidate = &SsdWork.spu_memory.blocks[index];
-            candidate->flags = 0x80;
+            candidate->flags = SSD_SPU_BLOCK_USED;
             candidate->type = allocation_type;
             candidate->address = address;
             candidate->size = allocation_size;
@@ -397,7 +331,7 @@ int SsdSpuMalloc2(int size, unsigned short type)
         index = SsdGetSpuMemManagerBlock();
         if (index >= 0) {
             candidate = &SsdWork.spu_memory.blocks[index];
-            candidate->flags = 0x80;
+            candidate->flags = SSD_SPU_BLOCK_USED;
             candidate->type = type;
             candidate->address = address;
             candidate->size = size;
@@ -441,7 +375,7 @@ int SsdSpuMallocAdrs(int size, int address, unsigned short type)
         index = SsdGetSpuMemManagerBlock();
         if (index >= 0) {
             candidate = &SsdWork.spu_memory.blocks[index];
-            candidate->flags = 0x80;
+            candidate->flags = SSD_SPU_BLOCK_USED;
             candidate->type = allocation_type;
             candidate->address = address;
             candidate->size = size;
@@ -489,7 +423,7 @@ reserve_descriptor:
     index = SsdGetSpuMemManagerBlock();
     if (index >= 0) {
         next = &SsdWork.spu_memory.blocks[index];
-        next->flags = 0x80;
+        next->flags = SSD_SPU_BLOCK_USED;
         next->type = type;
         next->address = address;
         next->size = size;
@@ -536,7 +470,7 @@ reserve_descriptor:
     index = SsdGetSpuMemManagerBlock();
     if (index >= 0) {
         next = &SsdWork.spu_memory.blocks[index];
-        next->flags = 0x80;
+        next->flags = SSD_SPU_BLOCK_USED;
         next->type = type;
         next->address = address;
         next->size = size;
@@ -609,7 +543,7 @@ int SsdGetSpuMemManagerBlock(void)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
     int index = 0;
-    for (; index < 16; ++index, ++block) {
+    for (; index < SSD_SPU_BLOCK_COUNT; ++index, ++block) {
         if (!block->flags) {
             return index;
         }

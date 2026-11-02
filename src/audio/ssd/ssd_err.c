@@ -1,18 +1,6 @@
-/* Partial view of the SSD work prefix used by this FDR; SsdWork is defined in ssd_init.c. */
-struct SsdErrorState {
-    signed char function_code;
-    signed char warning_code;
-    signed char sequence_code;
-    int detail;
-};
+#include "ssd/ssd_err.h"
+#include "ssd/ssd_init.h"
 
-struct SsdWorkPrefix {
-    unsigned int flags;
-    struct SsdErrorState errors;
-};
-
-extern struct SsdWorkPrefix SsdWork;
-int printf(const char *format, ...);
 unsigned int SsdGetCheckSum(const int *data);
 
 int SsdGetFuncErrorCode(void)
@@ -26,17 +14,19 @@ void SsdResetFuncErrorCode(void)
     SsdWork.errors.warning_code = 0;
 }
 
-int SsdCheckSumMusicData(void)
+int SsdCheckSumMusicData(const void *data)
 {
     return 0;
 }
 
-int SsdCheckData(const int *data, int signature)
+int SsdCheckData(const void *data, int signature)
 {
-    if (data[0] != signature)
-        return -1;
-    if (SsdGetCheckSum(data) != 0)
-        return -2;
+    const int *words = data;
+
+    if (words[0] != signature)
+        return SSD_ERROR_BAD_SIGNATURE;
+    if (SsdGetCheckSum(words) != 0)
+        return SSD_ERROR_BAD_CHECKSUM;
     return 0;
 }
 
@@ -56,7 +46,7 @@ void SsdErrorProc(int code, int detail)
     SsdWork.errors.function_code = code;
     SsdWork.errors.detail = detail;
     printf("Ssd function error : %d,0x%08x\n", code, detail);
-    SsdWork.flags |= 8;
+    SsdWork.flags |= SSD_FLAG_ERROR;
 }
 
 void SsdWarringProc(int code, int detail)
@@ -70,5 +60,5 @@ void SsdSeqErrorProc(int code, int detail)
 {
     SsdWork.errors.sequence_code = code;
     SsdWork.errors.detail = detail;
-    SsdWork.flags |= 8;
+    SsdWork.flags |= SSD_FLAG_ERROR;
 }

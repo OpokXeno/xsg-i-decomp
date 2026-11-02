@@ -3,115 +3,137 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "main/xgl_cd.h"
+#include "main/e_battle_win_open.h"
+#include "main/end_print.h"
+#include "main/game.h"
+#include "main/game_snap_shot.h"
+#include "main/look_at_player.h"
 #include "main/menu_model.h"
+#include "main/res_get_path.h"
+#include "main/vibration.h"
+#include "main/party.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_light.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_sound.h"
 #include "main/xgl_studio.h"
-
-#include "tsk_umn_object_task_main.h"
 #include "main/xgl_task.h"
-extern int UmnSimulationNo;
-extern int UmnMemory;
-extern unsigned char *umn_task;
-extern unsigned char *task_xmx;
-extern int UmnWorkEndTop;
-extern int UmnEventTextMakeWork;
-extern void endPrintInit(void);
-extern void GameCFSoundMenuPurge(int flag);
-extern void xglRenderClearDepth(void);
-extern int xglSoundSendSwd(void *swd, int bank);
-extern int SsdSpuDmaCompleted(int wait);
-extern int xglSoundSendSmd2(void *smd, int bank);
-extern void xglSoundSequenceNormal2(int channel, int volume);
-extern void xglFSrand(float seed);
-extern void tyaUmlDispInit(void);
-extern void tyaUmlDispInit2(unsigned char *work_buffer);
-extern void *UmnInterface2Init(void *work);
-extern void *UmnBgCubeInit(void *work);
-extern void *eBattleWinInit2(void *arg);
-extern int UmnMailHeaderCreate(int work);
-extern int UmnHistoryTreeLoad(int work);
-extern XglPacket *xglPacketGetCurrent(void);
-extern void endPrintDirectFrameCopy(XglPacket *packet, int width, int height);
-extern void xglSleep(void);
-extern void *memset(void *dest, int value, unsigned int size);
+#include "main/xgl_thread.h"
+#include "ov02/ov02.h"
+#include "ov02/task_umn_top_win.h"
+#include "ov02/title_game_init.h"
+#include "ov02/title_hdd_install.h"
+#include "ov02/tsk_umn_object_task_main.h"
+#include "ov02/tsk_umn_plugin_pas.h"
+#include "ov02/tsk_umn_simulation_pas.h"
+#include "ov02/tsk_umn_mail_pas.h"
+#include "ov02/tya_uml.h"
+#include "ov02/umn_event_text_symbol_check.h"
+#include "ov02/umn_guno_data_base_get.h"
+#include "ov02/umn_interface2.h"
+#include "ov02/umn_procurator.h"
+
+/* Rows of UmnWork past the common prefix that UmnChangeTopLevel clears. */
+#define UMN_WORK_SECTION_ROWS 7
+
+/*
+ * The memory block UmnMain reserves (UmnMemory): MenuModel memory comes first;
+ * UmnInit places the cube texture, the cube model, the texture archive and
+ * the task area at these offsets.
+ */
+#define UMN_ARENA_SIZE 0x480000
+#define UMN_MODEL_MEMORY_SIZE 0x200000
+#define UMN_CUBE_XTX_OFFSET 0x180000
+#define UMN_CUBE_LEX_OFFSET 0x190000
+#define UMN_TEXTURE_OFFSET 0x1A0000
+#define UMN_WORK_OFFSET 0x1E0800
+#define UMN_MEMORY_NEXT_OFFSET 0x220800
+
+/* Entries of the two task schedulers (umn_task and task_xmx). */
+#define UMN_TASK_COUNT 0x20
+
+/* Sequence slot and volume the Umnmode.SMD plays at. */
+#define UMN_SEQUENCE_SLOT 4
+#define UMN_SEQUENCE_VOLUME 0x7F
+
+typedef unsigned int UmnWorkQuadword __attribute__((mode(TI)));
+
+/* UmnWork read as 16-byte rows: UmnChangeTopLevel clears rows 1..7 at once. */
+typedef struct UmnWorkRows {
+    unsigned char unmodeled_00[0x10];
+    UmnWorkQuadword section_state[UMN_WORK_SECTION_ROWS];
+} UmnWorkRows;
+
 typedef struct {
     unsigned char unmodeled_00[0x10];
     unsigned short width;
     unsigned short height;
     unsigned short height2;
 } UmnMainRenderSize;
+
+typedef struct UmnLightTable {
+    XglLightQuadword ambient;
+    XglLightQuadword parallel[3];
+    XglLightVector direction[3];
+} UmnLightTable;
+
 extern UmnMainRenderSize sRender;
-extern int MenuModelWorkTop;
-extern void MenuLoadInit(void);
-extern void MenuModelMemoryInit(void *base, int size);
-extern void MenuModelMemorySet(int count);
-extern int UmnModelUkn;
-extern int UmnModelSon;
-extern void UmnChangeTopLevel(int level);
-extern void GameSnapShotCheck(void);
-extern void UmnTopMenu(void);
-extern void UmnMail(int menuId);
-extern void UmnDataBase(void);
-extern void UmnSimulation(void);
-extern void UmnPlugin(void);
-extern void endPrintExtFunc(int kind, int id, void *data);
-extern void UmnInterface2Main(void);
-extern void MenuModelMain(void);
-extern void MenuModelAllBreak(void);
+extern unsigned char *MenuModelWorkTop;
+extern void xglRenderClearDepth(void);
+extern int SsdSpuDmaCompleted(int wait);
+extern void xglFSrand(float seed);
+extern void GameCFSoundMenuPurge(int flag);
 extern void GameCFSoundMenuReload(void);
+extern UmnLightTable D_00A11DF0;
+extern int UmnEventTextMakeWork;
 
 int tskUmnObjectTaskMain(XglTaskPrefix *base) {
     UmnObjectTask *task = (UmnObjectTask *)base;
     UmnObjectTaskWorker worker = task->worker;
 
-    if (UmnWork.mode == 0xff)
-        task->state = -1;
+    if (UmnWork.mode == UMN_MODE_NONE)
+        task->state = UMN_TASK_END;
 
     switch (task->state) {
-    case 0:
+    case UMN_TASK_INIT:
         worker(task, task->data);
-        task->state = 2;
+        task->state = UMN_TASK_RUN;
         /* fall through */
-    case 2:
+    case UMN_TASK_RUN:
         worker(task, task->data);
         break;
-    case -1:
+    case UMN_TASK_END:
         xglTaskWaitRemove(base);
         break;
     }
 }
 
 void UmnObjectTaskCreate(UmnObjectTaskWorker worker, void *data) {
-    XglTaskScheduler *scheduler = (XglTaskScheduler *)umn_task;
+    XglTaskScheduler *scheduler = umn_task;
     UmnObjectTask *task = (UmnObjectTask *)xglTaskEntryNext(
         scheduler, tskUmnObjectTaskMain,
         scheduler != 0 ? scheduler->active_tail : 0);
     int i;
 
-    task->state = 0;
+    task->state = UMN_TASK_INIT;
     task->worker = worker;
     task->data = data;
-    for (i = 24; i >= 0; --i)
+    for (i = UMN_TASK_CLEAR_COUNT - 1; i >= 0; --i)
         task->zeroedOnCreate[i] = 0;
 }
-
-extern void UmnProcuratorSet(void);
 
 void UmnChangeTopLevel(int level) {
     UmnWorkQuadword zero = 0;
     int index = 0;
     int remaining;
 
-    for (remaining = 6; remaining >= 0; remaining--)
-        UmnWork.section_state[index++] = zero;
+    for (remaining = UMN_WORK_SECTION_ROWS - 1; remaining >= 0; remaining--)
+        ((UmnWorkRows *)&UmnWork)->section_state[index++] = zero;
 
     UmnWork.mode = level;
-    UmnWork.stateOrCategory = 0;
+    UmnWork.tab_state = 0;
     UmnProcuratorSet();
 }
-
-/* UmnTextLoad is ov02:0x00a0f578 (src/ov02/umn_event_text_symbol_check.c). */
-extern int UmnTextLoad(int work, int mode);
 
 /* "data\\endou\\umn\\cube.xtx", "data\\endou\\umn\\cube.lex" and
  * "data\\endou\\umn\\umn00.xtx" filename buffers loaded below. */
@@ -120,11 +142,6 @@ static const char D_00A11D58[24] = "data\\endou\\umn\\cube.lex";
 static const char D_00A11D70[32] = "data\\endou\\umn\\umn00.xtx";
 static const char D_00A11D90[32] = "data\\sound\\smd\\Umnmode.SWD";
 static const char D_00A11DB0[32] = "data\\sound\\smd\\Umnmode.SMD";
-
-extern int UmnBgCubeXtx;
-extern int UmnBgCubeLex;
-extern int UmnTexAddr;
-extern int UmnWorkEnd;
 
 static void UmnFirstLoad(void) {
     UmnWorkEnd = UmnTextLoad(UmnWorkEnd, 0);
@@ -150,24 +167,24 @@ static void UmnInit(void) {
         ;
 
     xglCdReadFile(D_00A11DB0, (void *)buffer, 0, 1);
-    xglSoundSendSmd2((void *)buffer, 4);
-    xglSoundSequenceNormal2(4, 0x7F);
+    xglSoundSendSmd2((void *)buffer, UMN_SEQUENCE_SLOT);
+    xglSoundSequenceNormal2(UMN_SEQUENCE_SLOT, UMN_SEQUENCE_VOLUME);
     xglFSrand(0.12345679f);
     tyaUmlDispInit();
     tyaUmlDispInit2((unsigned char *)UmnMemory);
 
     base = UmnMemory;
-    UmnBgCubeXtx = base + 0x180000;
-    UmnBgCubeLex = base + 0x190000;
-    UmnTexAddr = base + 0x1A0000;
-    UmnWorkEndTop = base + 0x1E0800;
-    UmnMemory = base + 0x220800;
+    UmnBgCubeXtx = base + UMN_CUBE_XTX_OFFSET;
+    UmnBgCubeLex = base + UMN_CUBE_LEX_OFFSET;
+    UmnTexAddr = base + UMN_TEXTURE_OFFSET;
+    UmnWorkEndTop = base + UMN_WORK_OFFSET;
+    UmnMemory = base + UMN_MEMORY_NEXT_OFFSET;
     UmnWorkEnd = UmnWorkEndTop;
-    umn_task = (unsigned char *)UmnWorkEndTop;
-    UmnWorkEnd = (int)xglTaskInitial((void *)UmnWorkEndTop, 0x20, 0);
+    umn_task = (XglTaskScheduler *)UmnWorkEndTop;
+    UmnWorkEnd = (int)xglTaskInitial((void *)UmnWorkEndTop, UMN_TASK_COUNT, 0);
 
-    task_xmx = (unsigned char *)UmnWorkEnd;
-    UmnWorkEnd = (int)xglTaskInitial((void *)UmnWorkEnd, 0x20, 0);
+    task_xmx = (XglTaskScheduler *)UmnWorkEnd;
+    UmnWorkEnd = (int)xglTaskInitial((void *)UmnWorkEnd, UMN_TASK_COUNT, 0);
     UmnWorkEnd = (int)UmnInterface2Init((void *)UmnWorkEnd);
     UmnWorkEnd = (int)UmnBgCubeInit((void *)UmnWorkEnd);
     UmnWorkEnd = (int)eBattleWinInit2((void *)UmnWorkEnd);
@@ -175,7 +192,7 @@ static void UmnInit(void) {
     next = UmnHistoryTreeLoad(UmnWorkEnd);
 
     UmnEventTextMakeWork = next;
-    UmnWorkEnd = next + 0x2000;
+    UmnWorkEnd = next + UMN_EVENT_TEXT_BUFFER_SIZE;
 }
 
 void UmnMain(void) {
@@ -188,92 +205,65 @@ void UmnMain(void) {
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.height << 5, sRender.height2 << 5);
 
-    UmnMemory = MenuModelWorkTop;
-    memset((void *)UmnMemory, 0, 0x480000);
+    UmnMemory = (int)MenuModelWorkTop;
+    memset((void *)UmnMemory, 0, UMN_ARENA_SIZE);
 
     UmnInit();
     MenuLoadInit();
-    MenuModelMemoryInit((void *)UmnMemory, 0x200000);
+    MenuModelMemoryInit((void *)UmnMemory, UMN_MODEL_MEMORY_SIZE);
     MenuModelMemorySet(0);
 
     UmnModelUkn = 0;
     UmnModelSon = 0;
-    UmnChangeTopLevel(0);
+    UmnChangeTopLevel(UMN_MODE_TOP_MENU);
     UmnFirstLoad();
 
     for (;;) {
         GameSnapShotCheck();
         switch (UmnWork.mode) {
-        case 0:
+        case UMN_MODE_TOP_MENU:
             UmnTopMenu();
             break;
-        case 1:
+        case UMN_MODE_MAIL:
             UmnMail(0);
             break;
-        case 2:
+        case UMN_MODE_DATA_BASE:
             UmnDataBase();
             break;
-        case 3:
+        case UMN_MODE_SIMULATION:
             UmnSimulation();
             break;
-        case 4:
+        case UMN_MODE_PLUGIN:
             UmnPlugin();
             break;
         default:
-            UmnChangeTopLevel(0);
+            UmnChangeTopLevel(UMN_MODE_TOP_MENU);
             break;
         }
 
-        endPrintExtFunc(0, 0x64, 0);
+        endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
         UmnInterface2Main();
-        xglTaskExecute((XglTaskScheduler *)task_xmx);
+        xglTaskExecute(task_xmx);
         MenuModelMain();
-        xglTaskExecute((XglTaskScheduler *)umn_task);
+        xglTaskExecute(umn_task);
         xglSleep();
 
-        if (UmnWork.mode != 0xff) {
+        if (UmnWork.mode != UMN_MODE_NONE) {
             if (UmnSimulationNo == 0)
                 continue;
-            UmnWork.mode = 0xff;
+            UmnWork.mode = UMN_MODE_NONE;
         }
         break;
     }
 
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.width << 5, sRender.height << 5);
-    xglTaskExecute((XglTaskScheduler *)task_xmx);
-    xglTaskExecute((XglTaskScheduler *)umn_task);
+    xglTaskExecute(task_xmx);
+    xglTaskExecute(umn_task);
     MenuModelAllBreak();
     xglSleep();
     GameCFSoundMenuReload();
 }
-
-extern StudioLight *xglStudioGetLight2(void);
-extern void xglStudioChange(int mode);
-extern void xglLightIntensityAmbient(void *light, void *values);
-extern void xglLightIntensityParallel(void *light, int index, void *values);
-extern void xglLightDirection(void *light, int index, void *values);
-extern void MenuCfTaikiPush(void);
-extern void MenuCfTaikiPop(void);
-extern void MenuGameDataPush(void);
-extern void MenuGameDataPop(void);
-extern void MenuLoadCancel(void);
-extern void MenuFontLoad(int mode, int id);
-extern void WindowTexLoad(int mode, int id);
-extern void *GameResourceWorkAlloc(int size);
-extern void GameResourceWorkReload(void);
-extern void GameCfPlayerLoadResource(int id);
-extern void GameSnapShotCheck(void);
-extern void VibrationEngine(void);
-extern unsigned int GameLoopState[];
-
-typedef struct UmnLightTable {
-    UmnWorkQuadword ambient;
-    UmnWorkQuadword parallel[3];
-    UmnWorkQuadword direction[3];
-} UmnLightTable;
-
-extern UmnLightTable D_00A11DF0;
 
 void UmnMain2(int menuId) {
     XglPacket *packet;
@@ -286,7 +276,7 @@ void UmnMain2(int menuId) {
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.height << 5, sRender.height2 << 5);
 
-    GameLoopState[4] |= 0x04000000;
+    GameLoopState.flags |= GAME_FLAG_UMN;
     MenuCfTaikiPush();
     MenuGameDataPush();
     GameCFSoundMenuPurge(0);
@@ -296,54 +286,54 @@ void UmnMain2(int menuId) {
     lights = D_00A11DF0;
     xglLightIntensityAmbient(light, &lights.ambient);
     xglLightIntensityParallel(light, 0, &lights.parallel[0]);
-    xglLightDirection(light, 0, &lights.direction[0]);
+    xglLightDirection(light, 0, &lights.direction[0].value);
     xglLightIntensityParallel(light, 1, &lights.parallel[1]);
-    xglLightDirection(light, 1, &lights.direction[1]);
+    xglLightDirection(light, 1, &lights.direction[1].value);
     xglLightIntensityParallel(light, 2, &lights.parallel[2]);
-    xglLightDirection(light, 2, &lights.direction[2]);
+    xglLightDirection(light, 2, &lights.direction[2].value);
 
-    UmnMemory = (int)GameResourceWorkAlloc(0x480000);
-    memset((void *)UmnMemory, 0, 0x480000);
+    UmnMemory = (int)GameResourceWorkAlloc(UMN_ARENA_SIZE);
+    memset((void *)UmnMemory, 0, UMN_ARENA_SIZE);
 
     UmnInit();
     MenuLoadInit();
     UmnWorkEnd = (int)MenuModelInit((void *)UmnWorkEnd);
-    MenuModelMemoryInit((void *)UmnMemory, 0x200000);
+    MenuModelMemoryInit((void *)UmnMemory, UMN_MODEL_MEMORY_SIZE);
     MenuModelMemorySet(0);
 
     UmnModelUkn = 0;
     UmnModelSon = 0;
-    UmnChangeTopLevel(1);
+    UmnChangeTopLevel(UMN_MODE_MAIL);
     UmnFirstLoad();
     MenuFontLoad(1, 0);
     WindowTexLoad(0, 1);
     WindowTexLoad(0, 2);
 
-    while (!(UmnModelUkn != 0 && ((MenuModelUnit *)UmnModelUkn)->active != 0)) {
+    while (!(UmnModelUkn != 0 && UmnModelUkn->active != 0)) {
         UmnInterface2Main();
         MenuModelMain();
         xglSleep();
     }
 
-    if (UmnWork.mode == 1) {
+    if (UmnWork.mode == UMN_MODE_MAIL) {
         do {
             GameSnapShotCheck();
             UmnMail(menuId);
             UmnInterface2Main();
-            endPrintExtFunc(0, 0x64, 0);
-            xglTaskExecute((XglTaskScheduler *)task_xmx);
+            endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0);
+            xglTaskExecute(task_xmx);
             MenuModelMain();
-            xglTaskExecute((XglTaskScheduler *)umn_task);
+            xglTaskExecute(umn_task);
             VibrationEngine();
             xglSleep();
-        } while (UmnWork.mode == 1);
+        } while (UmnWork.mode == UMN_MODE_MAIL);
     }
 
     MenuLoadCancel();
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.width << 5, sRender.height << 5);
-    xglTaskExecute((XglTaskScheduler *)task_xmx);
-    xglTaskExecute((XglTaskScheduler *)umn_task);
+    xglTaskExecute(task_xmx);
+    xglTaskExecute(umn_task);
     MenuModelAllBreak();
     xglSleep();
     MenuCfTaikiPop();
@@ -353,5 +343,5 @@ void UmnMain2(int menuId) {
     GameCfPlayerLoadResource(1);
     MenuGameDataPop();
     GameCFSoundMenuReload();
-    GameLoopState[4] &= 0xFBFFFFFF;
+    GameLoopState.flags &= ~GAME_FLAG_UMN;
 }

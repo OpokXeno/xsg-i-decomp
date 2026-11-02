@@ -1,11 +1,50 @@
+/*
+ * OV02 original TU 7: UmnTopMenu, its window task and the manzai window records.
+ */
 #include "common.h"
-#include "umn_procurator.h"
+#include "main/e_message.h"
 #include "main/e_number_main.h"
 #include "main/end_print.h"
 #include "main/xgl_dma.h"
-#include "main/e_message.h"
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
+#include "ov02/task_umn_top_win.h"
+#include "ov02/title_hdd_install.h"
+#include "ov02/tsk_umn_object_task_main.h"
+#include "ov02/umn_event_text_symbol_check.h"
+#include "ov02/ov02.h"
+
+/* Entries of the top menu: option_ids[] and UmnTopWinWork.option[]. */
+#define UMN_TOP_OPTION_COUNT 4
+
+/* UmnWork.tab_state steps of UmnTopMenu. */
+#define UMN_TOP_STEP_OPEN 0x20
+#define UMN_TOP_STEP_ACTIVE 0x21
+
+/* UmnTopWinWork.state steps of taskUmnTopWin. */
+#define UMN_TOP_WIN_INIT 0
+#define UMN_TOP_WIN_WAIT 20
+#define UMN_TOP_WIN_SCROLL 22
+
+/* UmnMailSaveData.plugin_unlock_flags bits that add an option to the top menu. */
+#define UMN_TOP_UNLOCK_DATA_BASE 0x2
+#define UMN_TOP_UNLOCK_SIMULATION 0x8
+
+/* Frame countdowns armed in UmnWork.wait. */
+#define UMN_TOP_WAIT_OPEN 8
+#define UMN_TOP_WAIT_MOVE 7
+
+/* Option layout: the selected option rests at y 128; the others scroll 16 per frame and wrap at 464 / -112. */
+#define UMN_TOP_OPTION_SELECTED_Y 128
+#define UMN_TOP_OPTION_SCROLL_STEP 16
+#define UMN_TOP_OPTION_WRAP_BOTTOM 464
+#define UMN_TOP_OPTION_WRAP_TOP (-112)
+
+/* Colour of the translucent panels and the outline of the empty option slots. */
+#define UMN_TOP_PANEL_RED 56
+#define UMN_TOP_PANEL_GREEN (-84)
+#define UMN_TOP_PANEL_BLUE (-62)
+#define UMN_TOP_PANEL_ALPHA 84
 
 /* ESprite as this TU writes it: the colour bytes are named channels. */
 typedef struct UmnTopSprite {
@@ -86,7 +125,7 @@ typedef struct UmnTopWinWork {
     short y;
     int graphics;
     int selected_option;
-    UmnTopOption option[4];
+    UmnTopOption option[UMN_TOP_OPTION_COUNT];
     UmnTopWindow window;
     EMessageParam top_message;
     EMessageParam bottom_message;
@@ -102,11 +141,6 @@ typedef struct UmnTopWinWork {
     UmnTopEntry entry[5];
 } UmnTopWinWork;
 
-typedef struct UmnTopTask {
-    unsigned char unmodeled_00[0x10];
-    int state;
-} UmnTopTask;
-
 typedef struct UmnTopShortSet {
     short value[4];
 } UmnTopShortSet;
@@ -120,18 +154,13 @@ extern char *moji01_1[4];
 extern UmnTopShortSet D_00A12030;
 extern UmnTopIntSet D_00A12038;
 extern UmnTopShortSet D_00A12048;
-extern int UmnTexAddr;
+extern const char D_00A12050[];
 
 void eWindowSet(void *window);
 void eSpriteSet(ESprite *sprite, int texture);
 void eSpriteMain(ESprite *sprite);
 
-/* UmnWork read as 16-byte quadword rows; row 2 holds the option ids. */
-typedef struct UmnTopMenuRows {
-    unsigned char row[4][16];
-} UmnTopMenuRows;
-
-void taskUmnTopWin(UmnTopTask *task, void *data)
+void taskUmnTopWin(UmnObjectTask *task, void *data)
 {
     UmnTopWinWork *work;
     UmnTopOption *option;
@@ -154,44 +183,44 @@ void taskUmnTopWin(UmnTopTask *task, void *data)
     unsigned char *bar;
     float fade;
 
-    if (UmnWork.mode != 0) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_TOP_MENU) {
+        task->state = UMN_TASK_END;
         return;
     }
     work = data;
     switch (task->state) {
-    case 0:
+    case UMN_TASK_INIT:
         work->x = 48;
         work->y = 256;
         work->graphics = 0xfc000;
         work->visible = 0;
         eWindowSet(&work->window);
-        work->window.mode = 32;
+        work->window.mode = E_MODE_SHOW_START;
         work->window.graphics = work->graphics;
         work->window.width = 576;
         work->window.height = 102;
-        index = ((UmnTopMenuRows *)&UmnWork)->row[2][UmnWork.top.cursor] - 1;
+        index = UmnWork.option_ids[UmnWork.menu_cursor] - 1;
         eMessageSet(&work->top_message, moji00_0[index]);
-        eMessageModeChange(&work->top_message, 36);
+        eMessageModeChange(&work->top_message, EMESSAGE_MODE_LINE_START);
         graphicsTemp = work->graphics;
         work->top_message.draw_parameter = graphicsTemp + 6;
         eMessageSet(&work->bottom_message, moji01_1[index]);
-        eMessageModeChange(&work->bottom_message, 36);
+        eMessageModeChange(&work->bottom_message, EMESSAGE_MODE_LINE_START);
         graphicsTemp = work->graphics;
         work->bottom_message.draw_parameter = graphicsTemp + 6;
         icons = D_00A12030;
         work->selection_span = 144;
         positions = D_00A12038;
-        for (k = 0; k < UmnWork.top.count; k++) {
+        for (k = 0; k < UmnWork.menu_count; k++) {
             eRibbonSet(&work->option[k].ribbon, 3);
             work->option[k].ribbon.width = 102;
             work->option[k].ribbon.height = 128;
-            if (((UmnTopMenuRows *)&UmnWork)->row[2][k] != 0) {
-                eSpriteSet((ESprite *)&work->option[k].sprite, icons.value[((UmnTopMenuRows *)&UmnWork)->row[2][k] - 1]);
+            if (UmnWork.option_ids[k] != 0) {
+                eSpriteSet((ESprite *)&work->option[k].sprite, icons.value[UmnWork.option_ids[k] - 1]);
             }
             work->option[k].x = 48;
-            work->option[k].y = work->selection_span * positions.value[(unsigned int)(k - UmnWork.top.cursor) % (unsigned int)UmnWork.top.count] + 128;
-            if (UmnWork.top.cursor == k) {
+            work->option[k].y = work->selection_span * positions.value[(unsigned int)(k - UmnWork.menu_cursor) % (unsigned int)UmnWork.menu_count] + UMN_TOP_OPTION_SELECTED_Y;
+            if (UmnWork.menu_cursor == k) {
                 work->option[k].fade = 1.0f;
             } else {
                 work->option[k].fade = 0.5f;
@@ -220,93 +249,93 @@ void taskUmnTopWin(UmnTopTask *task, void *data)
         work->state = 0;
         work->visible = 1;
         break;
-    case 2:
+    case UMN_TASK_RUN:
         switch (work->state) {
-        case 0:
-            work->state = 20;
-        case 20:
-            nav = UmnWork.top.direction;
+        case UMN_TOP_WIN_INIT:
+            work->state = UMN_TOP_WIN_WAIT;
+        case UMN_TOP_WIN_WAIT:
+            nav = UmnWork.direction;
             if (nav != 0) {
-                work->selected_option = UmnWork.top.cursor;
-                if (((UmnTopMenuRows *)&UmnWork)->row[2][UmnWork.top.cursor] != 0) {
-                    int message = ((UmnTopMenuRows *)&UmnWork)->row[2][UmnWork.top.cursor] - 1;
+                work->selected_option = UmnWork.menu_cursor;
+                if (UmnWork.option_ids[UmnWork.menu_cursor] != 0) {
+                    int message = UmnWork.option_ids[UmnWork.menu_cursor] - 1;
 
                     eMessageTextChange(&work->top_message, moji00_0[message]);
-                    eMessageModeChange(&work->top_message, 36);
+                    eMessageModeChange(&work->top_message, EMESSAGE_MODE_LINE_START);
                     eMessageTextChange(&work->bottom_message, moji01_1[message]);
-                    eMessageModeChange(&work->bottom_message, 36);
+                    eMessageModeChange(&work->bottom_message, EMESSAGE_MODE_LINE_START);
                 }
                 waiting = 0;
-                work->state = 22;
+                work->state = UMN_TOP_WIN_SCROLL;
             } else {
                 waiting = 1;
             }
             if (waiting) {
                 break;
             }
-        case 22:
-            for (v = 0; v < UmnWork.top.count; v++) {
-                work->option[v].y -= UmnWork.top.direction * 16;
-                if (work->option[v].y == 464) {
-                    work->option[v].y = -112;
-                } else if (work->option[v].y == -112) {
-                    work->option[v].y = 464;
+        case UMN_TOP_WIN_SCROLL:
+            for (v = 0; v < UmnWork.menu_count; v++) {
+                work->option[v].y -= UmnWork.direction * UMN_TOP_OPTION_SCROLL_STEP;
+                if (work->option[v].y == UMN_TOP_OPTION_WRAP_BOTTOM) {
+                    work->option[v].y = UMN_TOP_OPTION_WRAP_TOP;
+                } else if (work->option[v].y == UMN_TOP_OPTION_WRAP_TOP) {
+                    work->option[v].y = UMN_TOP_OPTION_WRAP_BOTTOM;
                 }
             }
-            cur = UmnWork.top.cursor;
-            if (128 == work->option[cur].y) {
-                if (((UmnTopMenuRows *)&UmnWork)->row[2][cur] == 0) {
-                    UmnWork.top.cursor = cur + UmnWork.top.direction;
-                    UmnWork.top.cursor = UmnWork.top.cursor % UmnWork.top.count;
-                    work->state = 20;
+            cur = UmnWork.menu_cursor;
+            if (UMN_TOP_OPTION_SELECTED_Y == work->option[cur].y) {
+                if (UmnWork.option_ids[cur] == 0) {
+                    UmnWork.menu_cursor = cur + UmnWork.direction;
+                    UmnWork.menu_cursor = UmnWork.menu_cursor % UmnWork.menu_count;
+                    work->state = UMN_TOP_WIN_WAIT;
                 } else {
-                    work->state = 20;
-                    UmnWork.top.direction = 0;
+                    work->state = UMN_TOP_WIN_WAIT;
+                    UmnWork.direction = 0;
                 }
             }
         }
         if (work->visible != 0) {
             work->quad0.vertex[0].y = 0;
             work->quad0.vertex[1].x = 36;
-            work->quad0.vertex[1].y = 448;
+            work->quad0.vertex[1].y = OV02_SCREEN_HEIGHT;
             work->quad0.vertex[1].graphics = work->graphics;
             work->quad0.vertex[0].x = 36;
             work->quad0.vertex[0].graphics = work->graphics;
-            work->quad0.vertex[0].red = 56;
-            work->quad0.vertex[1].red = 56;
-            work->quad0.vertex[0].green = -84;
-            work->quad0.vertex[1].green = -84;
-            work->quad0.vertex[0].blue = -62;
-            work->quad0.vertex[1].blue = -62;
-            work->quad0.vertex[0].alpha = 84;
-            work->quad0.vertex[1].alpha = 84;
+            work->quad0.vertex[0].red = UMN_TOP_PANEL_RED;
+            work->quad0.vertex[1].red = UMN_TOP_PANEL_RED;
+            work->quad0.vertex[0].green = UMN_TOP_PANEL_GREEN;
+            work->quad0.vertex[1].green = UMN_TOP_PANEL_GREEN;
+            work->quad0.vertex[0].blue = UMN_TOP_PANEL_BLUE;
+            work->quad0.vertex[1].blue = UMN_TOP_PANEL_BLUE;
+            work->quad0.vertex[0].alpha = UMN_TOP_PANEL_ALPHA;
+            work->quad0.vertex[1].alpha = UMN_TOP_PANEL_ALPHA;
             work->quad0.vertex[2].graphics = 0;
-            endPrintExtFunc(0, 0, &work->quad0);
+            endPrintExtFunc(0, END_PRINT_CMD_LINE, &work->quad0);
             work->quad1.vertex[1].x = 160;
-            work->quad1.vertex[1].y = 448;
+            work->quad1.vertex[1].y = OV02_SCREEN_HEIGHT;
             work->quad1.vertex[1].graphics = work->graphics;
             work->quad1.vertex[0].x = 160;
             work->quad1.vertex[0].graphics = work->graphics;
             work->quad1.vertex[0].y = 0;
-            work->quad1.vertex[0].red = 56;
-            work->quad1.vertex[1].red = 56;
-            work->quad1.vertex[0].green = -84;
-            work->quad1.vertex[1].green = -84;
-            work->quad1.vertex[0].blue = -62;
-            work->quad1.vertex[1].blue = -62;
-            work->quad1.vertex[0].alpha = 84;
-            work->quad1.vertex[1].alpha = 84;
+            work->quad1.vertex[0].red = UMN_TOP_PANEL_RED;
+            work->quad1.vertex[1].red = UMN_TOP_PANEL_RED;
+            work->quad1.vertex[0].green = UMN_TOP_PANEL_GREEN;
+            work->quad1.vertex[1].green = UMN_TOP_PANEL_GREEN;
+            work->quad1.vertex[0].blue = UMN_TOP_PANEL_BLUE;
+            work->quad1.vertex[1].blue = UMN_TOP_PANEL_BLUE;
+            work->quad1.vertex[0].alpha = UMN_TOP_PANEL_ALPHA;
+            work->quad1.vertex[1].alpha = UMN_TOP_PANEL_ALPHA;
             work->quad1.vertex[2].graphics = 0;
-            endPrintExtFunc(0, 0, &work->quad1);
+            endPrintExtFunc(0, END_PRINT_CMD_LINE, &work->quad1);
             work->texture_addr = UmnTexAddr;
-            endPrintExtFunc(0, 14, &work->texture_addr);
-            for (k = 0; (int)k < UmnWork.top.count; k++) {
-                id = ((UmnTopMenuRows *)&UmnWork)->row[2][k];
+            endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_CHANGE, &work->texture_addr);
+            for (k = 0; (int)k < UmnWork.menu_count; k++) {
+                id = UmnWork.option_ids[k];
                 if (id != 0) {
                     work->option[k].sprite.x = work->option[k].x;
                     work->option[k].sprite.y = work->option[k].y;
                     work->option[k].sprite.work = work->graphics - 2;
-                    if (UmnWork.top.cursor == k) {
+                    if (UmnWork.menu_cursor == k) {
                         fade = work->option[k].fade + 0.1f;
                         work->option[k].fade = fade;
                         if (fade > 1.0f) {
@@ -331,13 +360,13 @@ void taskUmnTopWin(UmnTopTask *task, void *data)
                         work->entry[k].vertex[point].x = px[point];
                         work->entry[k].vertex[point].y = py[point];
                         work->entry[k].vertex[point].graphics = work->graphics;
-                        work->entry[k].vertex[point].red = 56;
-                        work->entry[k].vertex[point].green = -84;
-                        work->entry[k].vertex[point].blue = -62;
-                        work->entry[k].vertex[point].alpha = 84;
+                        work->entry[k].vertex[point].red = UMN_TOP_PANEL_RED;
+                        work->entry[k].vertex[point].green = UMN_TOP_PANEL_GREEN;
+                        work->entry[k].vertex[point].blue = UMN_TOP_PANEL_BLUE;
+                        work->entry[k].vertex[point].alpha = UMN_TOP_PANEL_ALPHA;
                     }
                     work->entry[k].vertex[5].graphics = 0;
-                    endPrintExtFunc(0, 0, &work->entry[k].vertex[0]);
+                    endPrintExtFunc(0, END_PRINT_CMD_LINE, &work->entry[k].vertex[0]);
                 }
             }
             do {
@@ -347,15 +376,15 @@ void taskUmnTopWin(UmnTopTask *task, void *data)
                     eSpriteMain(&work->group2[m]);
                 }
             } while (0);
-            endPrintExtFunc(0, 15, 0);
+            endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_RELOAD, 0);
             work->window.x = work->x - 96;
             work->window.y = work->y;
-            endPrintExtFunc(0, 14, &work->texture_addr);
+            endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_CHANGE, &work->texture_addr);
             work->box.box_16 = 64;
             work->box.box_20 = work->y + 7;
             work->box.box_24 = work->graphics + 1;
-            endPrintExtFunc(0, 8, &work->box);
-            endPrintExtFunc(0, 15, 0);
+            endPrintExtFunc(0, END_PRINT_CMD_SPRITE_QUAD, &work->box);
+            endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_RELOAD, 0);
             work->top_message.x = work->x + 108;
             work->top_message.y = work->y + 10;
             eMessageMain(&work->top_message);
@@ -367,15 +396,10 @@ void taskUmnTopWin(UmnTopTask *task, void *data)
     }
 }
 
-extern void *UmnWorkEnd;
-extern const char D_00A12050[];
-extern unsigned char D_4A1A0C[];
-void UmnChangeTopLevel(int arg);
-
 void UmnTopMenu(void)
 {
     unsigned char *slot;
-    unsigned char *object;
+    UmnMailSaveData *save;
     int count;
     int i;
     int pos;
@@ -385,90 +409,90 @@ void UmnTopMenu(void)
     unsigned short navPad;
     signed char nav;
 
-    switch (UmnWork.stateOrCategory) {
-    case 0:
-        UmnObjectTaskCreate((UmnTaskFunction)taskUmnTopWin, (void *)(((int)UmnWorkEnd + 15) & -16));
-        object = D_4A1A0C;
-        slot = &UmnWork.top.slots[3];
-        for (i = 3; i >= 0; i--) {
+    switch (UmnWork.tab_state) {
+    case UMN_STEP_INIT:
+        UmnObjectTaskCreate(taskUmnTopWin, (void *)(((int)UmnWorkEnd + 15) & -16));
+        save = &D_4A1A0C;
+        slot = &UmnWork.option_ids[UMN_TOP_OPTION_COUNT - 1];
+        for (i = UMN_TOP_OPTION_COUNT - 1; i >= 0; i--) {
             *slot-- = 0;
         }
-        pad = *(unsigned short *)&object[134];
-        i = 4;
-        if (pad & 0x8) {
-            UmnWork.top.slots[0] = 3;
+        pad = save->plugin_unlock_flags;
+        i = UMN_TOP_OPTION_COUNT;
+        if (pad & UMN_TOP_UNLOCK_SIMULATION) {
+            UmnWork.option_ids[0] = UMN_MODE_SIMULATION;
         }
-        UmnWork.top.slots[1] = 1;
-        if (pad & 0x2) {
-            UmnWork.top.slots[2] = 2;
+        UmnWork.option_ids[1] = UMN_MODE_MAIL;
+        if (pad & UMN_TOP_UNLOCK_DATA_BASE) {
+            UmnWork.option_ids[2] = UMN_MODE_DATA_BASE;
         }
-        UmnWork.top.slots[3] = i;
-        UmnWork.top.count = i;
-        if (UmnWork.unmodeled_02 == 0) {
+        UmnWork.option_ids[3] = i;
+        UmnWork.menu_count = i;
+        if (UmnWork.menu_selected == 0) {
             i = 0;
-            while (i < 4 && UmnWork.top.slots[i] == 0) {
+            while (i < UMN_TOP_OPTION_COUNT && UmnWork.option_ids[i] == 0) {
                 i++;
             }
-            UmnWork.unmodeled_02 = i;
+            UmnWork.menu_selected = i;
         }
-        UmnWork.top.cursor = UmnWork.unmodeled_02;
-        UmnWork.stateOrCategory = 32;
-        UmnWork.top.repeat_delay = 8;
+        UmnWork.menu_cursor = UmnWork.menu_selected;
+        UmnWork.tab_state = UMN_TOP_STEP_OPEN;
+        UmnWork.wait = UMN_TOP_WAIT_OPEN;
         /* falls through */
-    case 32:
-        UmnWork.stateOrCategory = 33;
-        UmnWork.top.direction = 0;
-        UmnWork.top.unmodeled_11 = 0;
+    case UMN_TOP_STEP_OPEN:
+        UmnWork.tab_state = UMN_TOP_STEP_ACTIVE;
+        UmnWork.direction = 0;
+        UmnWork.moving = 0;
         /* falls through */
-    case 33:
-        if (UmnWork.top.repeat_delay != 0) {
+    case UMN_TOP_STEP_ACTIVE:
+        if (UmnWork.wait != 0) {
             break;
         }
-        if (UmnWork.top.direction == 0) {
-            if (UmnWork.top.count >= 2) {
-                navPad = *(unsigned short *)&PadData.unmodeled_2c[4];
-                if (navPad & 0x1000) {
-                    UmnWork.top.direction = -1;
+        if (UmnWork.direction == 0) {
+            if (UmnWork.menu_count >= 2) {
+                navPad = PadData.half_30;
+                if (navPad & PAD_UP) {
+                    UmnWork.direction = -1;
                 }
-                if (navPad & 0x4000) {
-                    UmnWork.top.direction = 1;
+                if (navPad & PAD_DOWN) {
+                    UmnWork.direction = 1;
                 }
             }
-            nav = UmnWork.top.direction;
+            nav = UmnWork.direction;
             if (nav != 0) {
-                UmnWork.top.cursor = UmnWork.top.cursor + UmnWork.top.direction;
-                UmnWork.top.cursor = UmnWork.top.cursor % UmnWork.top.count;
-                UmnWork.top.repeat_delay = 7;
-                xglSoundEffectNormalID(3, 0);
+                UmnWork.menu_cursor = UmnWork.menu_cursor + UmnWork.direction;
+                UmnWork.menu_cursor = UmnWork.menu_cursor % UmnWork.menu_count;
+                UmnWork.wait = UMN_TOP_WAIT_MOVE;
+                xglSoundEffectNormalID(SE_CURSOR, 0);
             } else {
                 pressed = PadData.half_2a;
-                if (pressed & 0x20) {
-                    UmnWork.unmodeled_02 = UmnWork.top.cursor;
-                    pos = (unsigned char)UmnWork.top.cursor;
-                    if (UmnWork.top.slots[pos] != 0) {
-                        UmnChangeTopLevel(UmnWork.top.slots[pos]);
-                        arg = 1;
+                if (pressed & PAD_CIRCLE) {
+                    UmnWork.menu_selected = UmnWork.menu_cursor;
+                    pos = (unsigned char)UmnWork.menu_cursor;
+                    if (UmnWork.option_ids[pos] != 0) {
+                        UmnChangeTopLevel(UmnWork.option_ids[pos]);
+                        arg = SE_DECIDE;
                     } else {
-                        arg = 5;
+                        arg = SE_BUZZER;
                     }
                     xglSoundEffectNormalID(arg, 0);
-                } else if (pressed & 0x40) {
-                    UmnWork.stateOrCategory = -16;
-                    xglSoundEffectNormalID(2, 0);
+                } else if (pressed & PAD_CROSS) {
+                    UmnWork.tab_state = UMN_STEP_LEAVE;
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                 }
             }
         }
         break;
-    case 240:
-        UmnWork.mode = -1;
+    case UMN_STEP_LEAVE:
+        UmnWork.mode = UMN_MODE_NONE;
         break;
     }
-    if (UmnWork.top.repeat_delay != 0) {
-        UmnWork.top.repeat_delay = UmnWork.top.repeat_delay - 1;
+    if (UmnWork.wait != 0) {
+        UmnWork.wait = UmnWork.wait - 1;
     }
-    xglFontDebugPrintf(0, 64, D_00A12050, UmnWork.top.cursor);
+    xglFontDebugPrintf(0, 64, D_00A12050, UmnWork.menu_cursor);
 }
 
-short *UmnManzaiText = 0;
+UmnEventTextRecord *UmnManzaiText = 0;
 unsigned int UmnManzaiFlag = 0;
-UmnManzaiWinTask UmnManzaiWin[2] = {{0}, {0}};
+UmnManzaiWinTask UmnManzaiWin[UMN_MANZAI_WINDOW_COUNT] = {{0}, {0}};

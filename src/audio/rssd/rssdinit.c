@@ -1,106 +1,19 @@
-/* Original RSSD rssdinit.c translation unit. Uninterpreted storage remains
- * explicitly unmodeled; RPC records retain their original 32-byte stride. */
-typedef void (*RssdFunctionCallback)(void *);
-typedef struct RssdRpcPacket {
-    short command;
-    short error;
-    int parameter;
-    int value;
-    int dataSize;
-    int arguments[4];
-    unsigned char data[0];
-} RssdRpcPacket;
-
-typedef struct RssdRequestNode {
-    struct RssdRequestNode *next;
-    int unmodeled_004;
-    RssdFunctionCallback callback;
-    void *callbackArgument;
-    RssdRpcPacket packet;
-    unsigned char data[0];
-} RssdRequestNode;
-
-typedef struct SifRpcClientData { unsigned int opaque[9]; } SifRpcClientData;
-typedef struct EnvelopeCache {
-    int frames;
-    int count;
-    int total;
-} EnvelopeCache;
-
-typedef struct RssdGlobalWork {
-    unsigned int flags;
-    unsigned char *allocation;
-    unsigned char *clientBuffer;
-    unsigned char *clientData;
-    unsigned char unmodeled_010[0x38];
-    void *serverBuffer;
-    unsigned char unmodeled_04c[0x14];
-    RssdRpcPacket lastPacket;
-    SifRpcClientData client;
-    unsigned char unmodeled_0a4[4];
-    int serverThread;
-    int clientThread;
-    int completionSemaphore;
-    int serverCallCount;
-    RssdRequestNode *firstRequest;
-    EnvelopeCache envelopeCache;
-    unsigned char unmodeled_0c8[0x10];
-    RssdFunctionCallback nextCallback;
-    void *nextCallbackArgument;
-    RssdFunctionCallback completionCallback;
-    void *completionArgument;
-    unsigned char unmodeled_0e8[0x18];
-} RssdGlobalWork;
-
-
-typedef struct SsdSequence {
-    unsigned char unmodeled_000[48];
-    unsigned int flags;
-    unsigned char unmodeled_034[24];
-    int position;
-    unsigned int time;
-    unsigned char unmodeled_054[4];
-    int playInfo[4];
-    unsigned char unmodeled_068[22];
-    short playValue;
-} SsdSequence;
-
-typedef struct IopThreadParameter {
-    unsigned int attributes;
-    unsigned int option;
-    int (*entry)(void *argument);
-    int stackSize;
-    int priority;
-    unsigned int unmodeled_014;
-} IopThreadParameter;
-
-typedef struct IopSemaphoreParameter {
-    unsigned int attributes;
-    unsigned int option;
-    int initialCount;
-    int maximumCount;
-} IopSemaphoreParameter;
-
-typedef struct SifRpcQueueData { unsigned int opaque[6]; } SifRpcQueueData;
-
-typedef struct SifRpcServerData { unsigned int opaque[17]; } SifRpcServerData;
-
-typedef void *(*SifRpcFunction)(int function, void *buffer, int size);
-
-typedef struct SsdVoiceEnvelopeRecord {
-    int envelope;
-    unsigned char unmodeled_004[0xfc];
-} SsdVoiceEnvelopeRecord;
-
-typedef struct SsdGlobalWork {
-    unsigned char unmodeled_000[0x154];
-    int status;
-    unsigned char unmodeled_158[0x12c];
-    SsdVoiceEnvelopeRecord voices[48];
-    unsigned char unmodeled_3284[0x14];
-    int intervalCount;
-    int intervalTotal;
-} SsdGlobalWork;
+#include "rssd/rssd.h"
+#include "rssd/rssdfunc.h"
+#include "rssd/rssdstrm.h"
+#include "ssd/ssd_dbg.h"
+#include "ssd/ssd_err.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_musc.h"
+#include "ssd/ssd_out.h"
+#include "ssd/ssd_pcm.h"
+#include "ssd/ssd_sec.h"
+#include "ssd/ssd_seq.h"
+#include "ssd/ssd_smpl.h"
+#include "ssd/ssd_vag.h"
+#include "ssd/ssd_voic.h"
+#include "ssd/ssd_wave.h"
 
 /* IRX module identity read by the loader: name and version 2.5. */
 typedef struct ModuleInfo {
@@ -108,257 +21,31 @@ typedef struct ModuleInfo {
     unsigned short version;
 } ModuleInfo;
 
+/* RssdSifServerThread / RssdSifClientThread creation parameters. */
+#define RSSD_THREAD_ATTRIBUTES 0x02000000 /* TH_C */
+#define RSSD_THREAD_STACK_SIZE 4096
+#define RSSD_SERVER_THREAD_PRIORITY 10
+#define RSSD_CLIENT_THREAD_PRIORITY 9
+
+/* Polls of RssdGetVoiceEnvX that reuse one cached SSD interval measurement. */
+#define RSSD_ENVELOPE_CACHE_FRAMES 20
+
+/* Bytes of timing fields (measure, beat, ticks, time signature) sent by RssdGetSeqPlayInfo. */
+#define RSSD_SEQ_PLAY_INFO_SIZE 16
+
 ModuleInfo Module = { "PS2_SSDRemote", 0x0205 };
 
-extern int printf(const char *format, ...);
-
-extern void SsdResetFuncErrorCode(void);
-
+/* The SSD definitions in src/audio/ssd declare fewer or narrower parameters than the
+ * original RSSD call sites use (an extra argument, or int / unsigned char / unsigned
+ * short loads, or a signed char result), so the SSD headers cannot declare these without changing the calls. */
 extern signed char SsdGetFuncErrorCode(void);
-
-extern void RssdInit(RssdRpcPacket *);
-
-extern void RssdSpuDirectRead(RssdRpcPacket *);
-
-extern void RssdAddWaveData(RssdRpcPacket *);
-
-extern void RssdNextWaveData(RssdRpcPacket *);
-
-extern void RssdPlaySequenceData(RssdRpcPacket *);
-
-extern void RssdAddSequenceData(RssdRpcPacket *);
-
-extern void RssdAddSeqEffectData(RssdRpcPacket *);
-
-extern void RssdAddEffectData(RssdRpcPacket *);
-
-extern void RssdInitSampling(RssdRpcPacket *);
-
-extern void RssdTransferSampling(RssdRpcPacket *);
-
-extern void RssdTransferSamplingNext(RssdRpcPacket *);
-
-extern void SsdResume(void);
-
-extern void SsdSuspend(void);
-
-extern void SsdSetOutputMode(int);
-
-extern void SsdSetSpuVolume(int, int);
-
-extern void SsdSetCDVolume(int, int);
-
-extern void SsdSetReverbParameter(int, int, int, int);
-
-extern void SsdReverbClearCompleted(int, int);
-
-extern void SsdEnableReverbParam(int);
-
-extern void SsdDisposeWaveBank(unsigned short);
-
-extern int SsdCheckWaveData(int);
-
-extern void SsdSetSegmentAllocMode(int, int);
-
-extern void SsdResetSegmentAllocMode(int);
-
-extern void SsdDisposeSequence(int);
-
-extern int SsdCheckSequence(int);
-
-extern void SsdStartSequence(int, int, int);
-
-extern void SsdResumeSequence(int, int, int);
-
-extern void SsdStopSequence(int);
-
-extern void SsdPauseSequence(int, int);
-
-extern int SsdGetSeqPlayStatus(int);
-
-extern void SsdSetSeqMasterTempo(int, int, int);
-
-extern void SsdSetSeqMasterVolume(int, int, int);
-
-extern void SsdSetSeqMasterNote(int, int, int);
-
-extern void SsdSetSeqMasterPanpot(int, int, int);
-
-extern void SsdSetSeqMute(int, int);
-
-extern void SsdSetSeqNoteFader(int, int, int);
-
-extern void SsdSetSeqVolumeFader(int, int, int);
-
-extern void SsdSetSeqPanpotFader(int, int, int);
-
-extern void SsdSetSequenceOutputVolume(int, int);
-
-extern void SsdSetEffectOutputVolume(int, int);
-
-extern void SsdSetSeqPatchNumber(int, int);
-
-extern void SsdSetTrackPatchSet(int, void *);
-
-extern void SsdSetSeqSignal(int, int);
-
-extern void SsdDisposeEffectData(int);
-
-extern int SsdCheckEffectData(int);
-
-extern void SsdPlayEffectNormal(int, int);
-
-extern void SsdPlayEffectParam(int, int, int, int);
-
-extern void SsdSetEffectParam(int, int, int, int);
-
-extern void SsdSetPlayEffectParam(int, int, int, int);
-
-extern void SsdStopAllEffect(void);
-
-extern void SsdFadeoutEffect(int, int, int);
-
-extern void SsdFadeoutEffectFileID(int, int);
-
-extern void SsdContinueOneEffect(int, int, int);
-
-extern int SsdCheckPlayEffectAll(void);
-
-extern int SsdCheckPlayEffect(int, int);
-
-extern int SsdCheckPlayEffectFileID(int);
-
-extern void SsdPlayWaveNormal(int, int);
-
-extern void SsdPlayWaveParam(int, int, int, int);
-
-extern void SsdStopWave(int, int);
-
-extern void SsdInitEEPcmStream(int, int);
-
-extern void SsdDisposeEEPcmStream(void);
-
-extern void SsdPlayPcmStream(int, int);
-
-extern void SsdStopPcmStream(int);
-
-extern void SsdSetEEPcmStreamData(RssdRpcPacket *);
-
-extern int SsdGetEEPcmStreamStatus(void);
-
-extern void SsdSetPcmStreamVolume(int, int);
-
-extern void SsdEEClearRingBuffer(int);
-
-extern void SsdInitEEVagStreamStereo(int, int);
-
-extern void SsdInitEEVagStreamMono(int, int, int);
-
-extern void SsdDisposeEEVagStream(void);
-
-extern void SsdPlayEEVagStream(RssdRpcPacket *);
-
-extern void SsdStopEEVagStream(RssdRpcPacket *);
-
-extern void SsdSetEEVagStreamDataStereo(RssdRpcPacket *);
-
-extern void SsdSetEEVagStreamDataMono(RssdRpcPacket *);
-
-extern int SsdGetEEVagStreamStatusStereo(RssdRpcPacket *);
-
-extern int SsdGetEEVagStreamStatusMono(RssdRpcPacket *);
-
-extern int SsdGetEEVagStreamStatusAll(RssdRpcPacket *);
-
 extern void SsdSetVagStreamPitch(int, int, int);
-
-extern void SsdSetVagStreamVolume(int, int, int);
-
 extern void SsdSetVagStreamPanpot(int, int, int);
-
-extern void SsdSetVagStreamParam(int, int, int, int);
-
-extern void SsdDisposeSampling(void);
-
-extern void SsdPlaySampling(int, int, int, int);
-
-extern void SsdStopSampling(int);
-
-extern void SsdSetSamplingParam(int, int, int, int);
-
-extern void SsdSetSamplingEffect(int, int, int);
-
-extern int SsdCheckSpuMemory(int);
-
-extern void SsdDebOpenDevice(void);
-
-extern void SsdDebCloseDevice(void);
-
-extern void SsdDebWaveKeyon(void *, int, int);
-
-extern void SsdDebWaveKeyoff(int);
-
+extern void SsdSetSeqNoteFader(int, int, int);
+extern void SsdSetSeqPanpotFader(int, int, int);
 extern void SsdMidiDevSetMidiEvent(int, int);
-
 extern void SsdMidiDevSetHWEffect(int, unsigned char);
-
 extern void SsdDebAddEffect(void *, int, int, unsigned short);
-
-extern void SsdDebPlayEffect(void);
-
-extern void SsdCompellingKeyoff(void);
-
-extern void *AllocSysMemory(int mode, int size, void *address);
-
-extern void SsdMemoryCopy(void *destination, const void *source, int size);
-
-extern int iWakeupThread(int thread);
-
-extern void CpuDisableIntr(void);
-
-extern void CpuEnableIntr(void);
-
-extern int WakeupThread(int thread);
-
-extern int iSignalSema(int semaphore);
-
-extern SsdSequence *SsdGetSequencePtr(int sequenceId);
-
-extern int SleepThread(void);
-
-extern int WaitSema(int semaphore);
-
-extern int SignalSema(int semaphore);
-
-extern int FreeSysMemory(void *memory);
-
-extern int sceSifCallRpc(SifRpcClientData *client, int command, int mode,
-    void *send, int sendSize, void *receive, int receiveSize,
-    void (*callback)(void *argument), void *argument);
-
-extern int CreateSema(IopSemaphoreParameter *parameter);
-
-extern int CreateThread(IopThreadParameter *parameter);
-
-extern int StartThread(int thread, void *argument);
-
-extern int sceSifCheckInit(void);
-
-extern void sceSifInit(void);
-
-extern void sceSifInitRpc(int mode);
-
-extern int GetThreadId(void);
-
-extern void sceSifSetRpcQueue(SifRpcQueueData *queue, int thread);
-
-extern void sceSifRegisterRpc(SifRpcServerData *server, int id,
-    SifRpcFunction function, void *buffer, SifRpcFunction callback,
-    void *callbackBuffer, SifRpcQueueData *queue);
-
-extern void sceSifRpcLoop(SifRpcQueueData *queue);
-
-extern SsdGlobalWork *SsdGetGlobalWorkPtr(void);
 
 RssdGlobalWork RssdWork;
 void RssdExecFunc(RssdRpcPacket *packet);
@@ -368,34 +55,32 @@ int RssdSifClientThread(void *argument);
 void RssdSifRpcCallback(void *argument);
 void RssdGetVoiceEnvX(void);
 void RssdGetSeqPlayInfo(RssdRpcPacket *packet);
-void RssdCallFunc(int command, const void *requestData, const void *data, int size);
-
 
 int start(void)
 {
     IopThreadParameter thread;
     IopSemaphoreParameter semaphore;
     CpuDisableIntr();
-    RssdWork.allocation = AllocSysMemory(0, 0x10020, 0);
-    RssdWork.serverBuffer = AllocSysMemory(0, 0x10020, 0);
+    RssdWork.allocation = AllocSysMemory(SMEM_Low, RSSD_RPC_BUFFER_SIZE, 0);
+    RssdWork.serverBuffer = AllocSysMemory(SMEM_Low, RSSD_RPC_BUFFER_SIZE, 0);
     CpuEnableIntr();
     RssdWork.clientBuffer = RssdWork.allocation;
-    RssdWork.clientData = RssdWork.allocation + 32;
+    RssdWork.clientData = RssdWork.allocation + sizeof(RssdRpcPacket);
     semaphore.initialCount = 1;
     semaphore.maximumCount = 1;
     semaphore.attributes = 0;
     RssdWork.completionSemaphore = CreateSema(&semaphore);
-    thread.attributes = 0x02000000;
+    thread.attributes = RSSD_THREAD_ATTRIBUTES;
     thread.entry = RssdSifServerThread;
-    thread.stackSize = 4096;
-    thread.priority = 10;
+    thread.stackSize = RSSD_THREAD_STACK_SIZE;
+    thread.priority = RSSD_SERVER_THREAD_PRIORITY;
     thread.option = 0;
     RssdWork.serverThread = CreateThread(&thread);
     StartThread(RssdWork.serverThread, 0);
-    thread.attributes = 0x02000000;
+    thread.attributes = RSSD_THREAD_ATTRIBUTES;
     thread.entry = RssdSifClientThread;
-    thread.stackSize = 4096;
-    thread.priority = 9;
+    thread.stackSize = RSSD_THREAD_STACK_SIZE;
+    thread.priority = RSSD_CLIENT_THREAD_PRIORITY;
     thread.option = 0;
     RssdWork.clientThread = CreateThread(&thread);
     StartThread(RssdWork.clientThread, 0);
@@ -410,7 +95,7 @@ int RssdSifServerThread(void *argument)
         sceSifInit();
     sceSifInitRpc(0);
     sceSifSetRpcQueue(&queue, GetThreadId());
-    sceSifRegisterRpc(&server, 0x900, RssdSifRpcServer,
+    sceSifRegisterRpc(&server, RSSD_RPC_SERVER_ID, RssdSifRpcServer,
         RssdWork.serverBuffer, 0, 0, &queue);
     sceSifRpcLoop(&queue);
     return 0;
@@ -419,7 +104,7 @@ int RssdSifServerThread(void *argument)
 void *RssdSifRpcServer(int command, void *bufferData, int size)
 {
     RssdRpcPacket *buffer = bufferData;
-    if (command == 4) {
+    if (command == RSSD_RPC_BATCH) {
         int remaining = buffer->arguments[1];
         RssdRpcPacket *record = buffer + 1;
         if (remaining) {
@@ -440,300 +125,300 @@ void RssdExecFunc(RssdRpcPacket *packet)
 {
     SsdResetFuncErrorCode();
     switch (packet->command) {
-    case 0x1:
+    case RSSD_CMD_INIT:
         RssdInit(packet);
         break;
-    case 0x5:
+    case RSSD_CMD_RESUME:
         SsdResume();
         break;
-    case 0x6:
+    case RSSD_CMD_SUSPEND:
         SsdSuspend();
         break;
-    case 0x10:
+    case RSSD_CMD_SET_OUTPUT_MODE:
         SsdSetOutputMode(packet->arguments[0]);
         break;
-    case 0x12:
+    case RSSD_CMD_SET_SPU_VOLUME:
         SsdSetSpuVolume(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x13:
+    case RSSD_CMD_SET_CD_VOLUME:
         SsdSetCDVolume(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x14:
+    case RSSD_CMD_SET_REVERB_PARAMETER:
         SsdSetReverbParameter(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         SsdReverbClearCompleted(packet->arguments[0] >> 8, 1);
         SsdEnableReverbParam(packet->arguments[0] >> 8);
         break;
-    case 0x1b:
+    case RSSD_CMD_SPU_DIRECT_READ:
         RssdSpuDirectRead(packet);
         break;
-    case 0x20:
+    case RSSD_CMD_ADD_WAVE_DATA:
         RssdAddWaveData(packet);
         break;
-    case 0x21:
+    case RSSD_CMD_NEXT_WAVE_DATA:
         RssdNextWaveData(packet);
         break;
-    case 0x22:
-        SsdDisposeWaveBank((unsigned short)packet->arguments[0]);
+    case RSSD_CMD_DISPOSE_WAVE_BANK:
+        SsdDisposeWaveBank(packet->arguments[0]);
         break;
-    case 0x24:
+    case RSSD_CMD_CHECK_WAVE_DATA:
         packet->value = SsdCheckWaveData(packet->arguments[0]);
         break;
-    case 0x2c:
+    case RSSD_CMD_SET_SEGMENT_ALLOC_MODE:
         SsdSetSegmentAllocMode(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x2d:
+    case RSSD_CMD_RESET_SEGMENT_ALLOC_MODE:
         SsdResetSegmentAllocMode(packet->arguments[0]);
         break;
-    case 0x30:
+    case RSSD_CMD_PLAY_SEQUENCE_DATA:
         RssdPlaySequenceData(packet);
         break;
-    case 0x31:
+    case RSSD_CMD_ADD_SEQUENCE_DATA:
         RssdAddSequenceData(packet);
         break;
-    case 0x38:
+    case RSSD_CMD_ADD_SEQ_EFFECT_DATA:
         RssdAddSeqEffectData(packet);
         break;
-    case 0x32:
+    case RSSD_CMD_DISPOSE_SEQUENCE:
         SsdDisposeSequence(packet->arguments[0]);
         break;
-    case 0x33:
+    case RSSD_CMD_CHECK_SEQUENCE:
         packet->value = SsdCheckSequence(packet->arguments[0]);
         break;
-    case 0x34:
+    case RSSD_CMD_START_SEQUENCE:
         SsdStartSequence(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x35:
+    case RSSD_CMD_RESUME_SEQUENCE:
         SsdResumeSequence(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x36:
+    case RSSD_CMD_STOP_SEQUENCE:
         SsdStopSequence(packet->arguments[0]);
         break;
-    case 0x37:
+    case RSSD_CMD_PAUSE_SEQUENCE:
         SsdPauseSequence(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x40:
+    case RSSD_CMD_GET_SEQ_PLAY_STATUS:
         packet->value = SsdGetSeqPlayStatus(packet->arguments[0]);
         break;
-    case 0x41:
+    case RSSD_CMD_SET_SEQ_MASTER_TEMPO:
         SsdSetSeqMasterTempo(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x42:
+    case RSSD_CMD_SET_SEQ_MASTER_VOLUME:
         SsdSetSeqMasterVolume(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x43:
+    case RSSD_CMD_SET_SEQ_MASTER_NOTE:
         SsdSetSeqMasterNote(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x44:
+    case RSSD_CMD_SET_SEQ_MASTER_PANPOT:
         SsdSetSeqMasterPanpot(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x45:
+    case RSSD_CMD_SET_SEQ_MUTE:
         SsdSetSeqMute(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x48:
+    case RSSD_CMD_SET_SEQ_NOTE_FADER:
         SsdSetSeqNoteFader(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x49:
+    case RSSD_CMD_SET_SEQ_VOLUME_FADER:
         SsdSetSeqVolumeFader(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x4a:
+    case RSSD_CMD_SET_SEQ_PANPOT_FADER:
         SsdSetSeqPanpotFader(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x4b:
+    case RSSD_CMD_SET_SEQUENCE_OUTPUT_VOLUME:
         SsdSetSequenceOutputVolume(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x4c:
+    case RSSD_CMD_SET_EFFECT_OUTPUT_VOLUME:
         SsdSetEffectOutputVolume(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x50:
+    case RSSD_CMD_SET_SEQ_PATCH_NUMBER:
         SsdSetSeqPatchNumber(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x51:
-        SsdSetTrackPatchSet(packet->arguments[0], packet->data);
+    case RSSD_CMD_SET_TRACK_PATCH_SET:
+        SsdSetTrackPatchSet(packet->arguments[0], (SsdTrackPatchSet *)packet->data);
         break;
-    case 0x58:
+    case RSSD_CMD_SET_SEQ_SIGNAL:
         SsdSetSeqSignal(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x60:
+    case RSSD_CMD_ADD_EFFECT_DATA:
         RssdAddEffectData(packet);
         break;
-    case 0x61:
+    case RSSD_CMD_DISPOSE_EFFECT_DATA:
         SsdDisposeEffectData(packet->arguments[0]);
         break;
-    case 0x62:
+    case RSSD_CMD_CHECK_EFFECT_DATA:
         packet->value = SsdCheckEffectData(packet->arguments[0]);
         break;
-    case 0x70:
+    case RSSD_CMD_PLAY_EFFECT_NORMAL:
         SsdPlayEffectNormal(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x71:
+    case RSSD_CMD_PLAY_EFFECT_PARAM:
         SsdPlayEffectParam(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0x7b:
+    case RSSD_CMD_SET_EFFECT_PARAM:
         SsdSetEffectParam(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0x7c:
+    case RSSD_CMD_SET_PLAY_EFFECT_PARAM:
         SsdSetPlayEffectParam(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0x78:
+    case RSSD_CMD_STOP_ALL_EFFECT:
         SsdStopAllEffect();
         break;
-    case 0x79:
+    case RSSD_CMD_FADEOUT_EFFECT:
         SsdFadeoutEffect(packet->arguments[0], 0, packet->arguments[1]);
         break;
-    case 0x7a:
+    case RSSD_CMD_FADEOUT_EFFECT_FILE_ID:
         SsdFadeoutEffectFileID(packet->arguments[0], 0);
         break;
-    case 0x7d:
+    case RSSD_CMD_CONTINUE_ONE_EFFECT:
         SsdContinueOneEffect(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x7e:
+    case RSSD_CMD_FADEOUT_EFFECT_FROM:
         SsdFadeoutEffect(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x7f:
+    case RSSD_CMD_FADEOUT_EFFECT_FILE_ID_FROM:
         SsdFadeoutEffectFileID(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x80:
+    case RSSD_CMD_CHECK_PLAY_EFFECT_ALL:
         packet->value = SsdCheckPlayEffectAll();
         break;
-    case 0x81:
+    case RSSD_CMD_CHECK_PLAY_EFFECT:
         packet->value = SsdCheckPlayEffect(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x82:
+    case RSSD_CMD_CHECK_PLAY_EFFECT_FILE_ID:
         packet->value = SsdCheckPlayEffectFileID(packet->arguments[0]);
         break;
-    case 0x90:
+    case RSSD_CMD_PLAY_WAVE_NORMAL:
         SsdPlayWaveNormal(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x91:
+    case RSSD_CMD_PLAY_WAVE_PARAM:
         SsdPlayWaveParam(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0x92:
+    case RSSD_CMD_STOP_WAVE:
         SsdStopWave(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0xa0:
+    case RSSD_CMD_INIT_PCM_STREAM:
         SsdInitEEPcmStream(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0xa1:
+    case RSSD_CMD_DISPOSE_PCM_STREAM:
         SsdDisposeEEPcmStream();
         break;
-    case 0xa2:
+    case RSSD_CMD_PLAY_PCM_STREAM:
         SsdPlayPcmStream(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0xa3:
+    case RSSD_CMD_STOP_PCM_STREAM:
         SsdStopPcmStream(packet->arguments[0]);
         break;
-    case 0xa4:
+    case RSSD_CMD_SET_PCM_STREAM_DATA:
         SsdSetEEPcmStreamData(packet);
         break;
-    case 0xa5:
+    case RSSD_CMD_GET_PCM_STREAM_STATUS:
         packet->value = SsdGetEEPcmStreamStatus();
         break;
-    case 0xa6:
+    case RSSD_CMD_SET_PCM_STREAM_VOLUME:
         SsdSetPcmStreamVolume(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0xa8:
+    case RSSD_CMD_CLEAR_RING_BUFFER:
         SsdEEClearRingBuffer(packet->arguments[0]);
         break;
-    case 0xb0:
+    case RSSD_CMD_INIT_VAG_STREAM_STEREO:
         SsdInitEEVagStreamStereo(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0xb1:
+    case RSSD_CMD_INIT_VAG_STREAM_MONO:
         SsdInitEEVagStreamMono(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0xb2:
+    case RSSD_CMD_DISPOSE_VAG_STREAM:
         SsdDisposeEEVagStream();
         break;
-    case 0xb3:
+    case RSSD_CMD_PLAY_VAG_STREAM:
         SsdPlayEEVagStream(packet);
         break;
-    case 0xb4:
+    case RSSD_CMD_STOP_VAG_STREAM:
         SsdStopEEVagStream(packet);
         break;
-    case 0xb5:
+    case RSSD_CMD_SET_VAG_STREAM_DATA_STEREO:
         SsdSetEEVagStreamDataStereo(packet);
         break;
-    case 0xb6:
+    case RSSD_CMD_SET_VAG_STREAM_DATA_MONO:
         SsdSetEEVagStreamDataMono(packet);
         break;
-    case 0xb7:
+    case RSSD_CMD_GET_VAG_STREAM_STATUS_STEREO:
         packet->value = SsdGetEEVagStreamStatusStereo(packet);
         break;
-    case 0xb8:
+    case RSSD_CMD_GET_VAG_STREAM_STATUS_MONO:
         packet->value = SsdGetEEVagStreamStatusMono(packet);
         break;
-    case 0xbe:
+    case RSSD_CMD_GET_VAG_STREAM_STATUS_ALL:
         packet->value = SsdGetEEVagStreamStatusAll(packet);
         break;
-    case 0xba:
+    case RSSD_CMD_SET_VAG_STREAM_PITCH:
         SsdSetVagStreamPitch(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0xbb:
+    case RSSD_CMD_SET_VAG_STREAM_VOLUME:
         SsdSetVagStreamVolume(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0xbc:
+    case RSSD_CMD_SET_VAG_STREAM_PANPOT:
         SsdSetVagStreamPanpot(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0xbd:
+    case RSSD_CMD_SET_VAG_STREAM_PARAM:
         SsdSetVagStreamParam(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0xd0:
+    case RSSD_CMD_INIT_SAMPLING:
         RssdInitSampling(packet);
         break;
-    case 0xd1:
+    case RSSD_CMD_DISPOSE_SAMPLING:
         SsdDisposeSampling();
         break;
-    case 0xd2:
+    case RSSD_CMD_TRANSFER_SAMPLING:
         RssdTransferSampling(packet);
         break;
-    case 0xd3:
+    case RSSD_CMD_TRANSFER_SAMPLING_NEXT:
         RssdTransferSamplingNext(packet);
         break;
-    case 0xd4:
+    case RSSD_CMD_PLAY_SAMPLING:
         SsdPlaySampling(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0xd5:
+    case RSSD_CMD_STOP_SAMPLING:
         SsdStopSampling(packet->arguments[0]);
         break;
-    case 0xd6:
+    case RSSD_CMD_SET_SAMPLING_PARAM:
         SsdSetSamplingParam(packet->arguments[0], packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0xd7:
+    case RSSD_CMD_SET_SAMPLING_EFFECT:
         SsdSetSamplingEffect(packet->arguments[0], packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x100:
+    case RSSD_CMD_CHECK_SPU_MEMORY:
         packet->value = SsdCheckSpuMemory(packet->arguments[0]);
         break;
-    case 0x102:
+    case RSSD_CMD_GET_VOICE_ENV:
         RssdGetVoiceEnvX();
         break;
-    case 0x103:
+    case RSSD_CMD_GET_SEQ_PLAY_INFO:
         RssdGetSeqPlayInfo(packet);
         break;
-    case 0x200:
+    case RSSD_CMD_DEB_OPEN_DEVICE:
         SsdDebOpenDevice();
         break;
-    case 0x201:
+    case RSSD_CMD_DEB_CLOSE_DEVICE:
         SsdDebCloseDevice();
         break;
-    case 0x202:
-        SsdDebWaveKeyon(packet->data, packet->arguments[1], packet->arguments[2]);
+    case RSSD_CMD_DEB_WAVE_KEYON:
+        SsdDebWaveKeyon((struct SsdWavePatch *)packet->data, packet->arguments[1], packet->arguments[2]);
         break;
-    case 0x203:
+    case RSSD_CMD_DEB_WAVE_KEYOFF:
         SsdDebWaveKeyoff(packet->arguments[0]);
         break;
-    case 0x204:
+    case RSSD_CMD_MIDI_DEV_SET_MIDI_EVENT:
         SsdMidiDevSetMidiEvent(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x205:
-        SsdMidiDevSetHWEffect(packet->arguments[0], (unsigned char)packet->arguments[1]);
+    case RSSD_CMD_MIDI_DEV_SET_HW_EFFECT:
+        SsdMidiDevSetHWEffect(packet->arguments[0], packet->arguments[1]);
         break;
-    case 0x300:
-        SsdDebAddEffect(packet->data, packet->arguments[1], packet->arguments[2], (unsigned short)packet->arguments[3]);
+    case RSSD_CMD_DEB_ADD_EFFECT:
+        SsdDebAddEffect(packet->data, packet->arguments[1], packet->arguments[2], packet->arguments[3]);
         break;
-    case 0x301:
+    case RSSD_CMD_DEB_PLAY_EFFECT:
         SsdDebPlayEffect();
         break;
-    case 0x400:
+    case RSSD_CMD_COMPELLING_KEYOFF:
         SsdCompellingKeyoff();
         break;
     default:
@@ -747,34 +432,35 @@ void RssdExecFunc(RssdRpcPacket *packet)
 
 void RssdGetVoiceEnvX(void)
 {
-    int envelopes[48];
+    int envelopes[SSD_VOICE_COUNT];
     RssdRpcPacket request;
     SsdGlobalWork *work = SsdGetGlobalWorkPtr();
     EnvelopeCache *cache = &RssdWork.envelopeCache;
     int voice;
     if (!cache->frames) {
-        cache->count = work->intervalCount;
-        cache->total = work->intervalTotal;
-        work->intervalTotal = 0;
-        work->intervalCount = 0;
-        cache->frames = 20;
+        cache->processingTicks = work->processing_ticks;
+        cache->interrupts = work->measured_interrupts;
+        work->measured_interrupts = 0;
+        work->processing_ticks = 0;
+        cache->frames = RSSD_ENVELOPE_CACHE_FRAMES;
     }
     --cache->frames;
-    request.arguments[0] = cache->count;
-    request.arguments[1] = cache->total;
-    request.arguments[2] = work->status;
-    for (voice = 0; voice < 48; ++voice)
-        envelopes[voice] = work->voices[voice].envelope;
-    RssdCallFunc(0x102, &request, envelopes, sizeof(envelopes));
+    request.arguments[0] = cache->processingTicks;
+    request.arguments[1] = cache->interrupts;
+    request.arguments[2] = work->timer_interval;
+    for (voice = 0; voice < SSD_VOICE_COUNT; ++voice)
+        envelopes[voice] = work->voices[voice].allocation.priority; /* whole word: ENVX in the low byte */
+    RssdCallFunc(RSSD_CMD_GET_VOICE_ENV, &request, envelopes, sizeof(envelopes));
 }
 
 void RssdGetSeqPlayInfo(RssdRpcPacket *packet)
 {
     SsdSequence *sequence = SsdGetSequencePtr(packet->arguments[0]);
-    packet->arguments[1] = sequence->position;
-    packet->arguments[2] = sequence->time >> 8;
-    packet->arguments[3] = (sequence->flags & 0xffff0000) + sequence->playValue;
-    RssdCallFunc(0x103, packet, sequence->playInfo, 16);
+    packet->arguments[1] = sequence->play_ticks;
+    packet->arguments[2] = sequence->play_time >> 8;
+    packet->arguments[3] = (sequence->tempo.value & 0xffff0000) + sequence->master_tempo.current.parts.integer;
+    /* The 16 bytes from unmodeled_58 through time_numerator go out as one block. */
+    RssdCallFunc(RSSD_CMD_GET_SEQ_PLAY_INFO, packet, &sequence->unmodeled_58, RSSD_SEQ_PLAY_INFO_SIZE);
 }
 
 int RssdSifClientThread(void *argument)
@@ -789,33 +475,33 @@ int RssdSifClientThread(void *argument)
         SleepThread();
         request = RssdWork.firstRequest;
         if (request) {
-        WaitSema(RssdWork.completionSemaphore);
-        CpuDisableIntr();
-        RssdWork.firstRequest = request->next;
-        CpuEnableIntr();
-        packet = &request->packet;
-        RssdWork.completionCallback = request->callback;
-        RssdWork.completionArgument = request->callbackArgument;
-        RssdWork.flags |= 1;
-        context = &RssdWork;
-        receiveSize = sizeof(RssdRpcPacket);
-        callback = RssdSifRpcCallback;
-        sendSize = packet->dataSize + sizeof(RssdRpcPacket);
-        if (sceSifCallRpc(&RssdWork.client, packet->command, 0, packet,
-            sendSize, packet, receiveSize, callback, context) < 0) {
-            RssdWork.flags &= ~1;
-            SignalSema(RssdWork.completionSemaphore);
-        }
-        CpuDisableIntr();
-        FreeSysMemory(request);
-        CpuEnableIntr();
+            WaitSema(RssdWork.completionSemaphore);
+            CpuDisableIntr();
+            RssdWork.firstRequest = request->next;
+            CpuEnableIntr();
+            packet = &request->packet;
+            RssdWork.completionCallback = request->callback;
+            RssdWork.completionArgument = request->callbackArgument;
+            RssdWork.flags |= RSSD_FLAG_RPC_BUSY;
+            context = &RssdWork;
+            receiveSize = sizeof(RssdRpcPacket);
+            callback = RssdSifRpcCallback;
+            sendSize = packet->dataSize + sizeof(RssdRpcPacket);
+            if (sceSifCallRpc(&RssdWork.client, packet->command, 0, packet,
+                sendSize, packet, receiveSize, callback, context) < 0) {
+                RssdWork.flags &= ~RSSD_FLAG_RPC_BUSY;
+                SignalSema(RssdWork.completionSemaphore);
+            }
+            CpuDisableIntr();
+            FreeSysMemory(request);
+            CpuEnableIntr();
         }
     }
 }
 
 void RssdSifRpcCallback(void *argument)
 {
-    RssdWork.flags &= ~1;
+    RssdWork.flags &= ~RSSD_FLAG_RPC_BUSY;
     iSignalSema(RssdWork.completionSemaphore);
     if (RssdWork.completionCallback)
         RssdWork.completionCallback(RssdWork.completionArgument);
@@ -832,7 +518,7 @@ void RssdCallFunc(int command, const void *requestData, const void *data, int si
         size = 0;
     allocationSize = size + sizeof(RssdRequestNode);
     CpuDisableIntr();
-    node = AllocSysMemory(0, allocationSize, 0);
+    node = AllocSysMemory(SMEM_Low, allocationSize, 0);
     CpuEnableIntr();
     packet = &node->packet;
     if (request)
@@ -867,7 +553,7 @@ void iRssdCallFunc(int command, const void *requestData, const void *data, int s
     RssdRpcPacket *packet;
     if (!data)
         size = 0;
-    node = AllocSysMemory(0, size + sizeof(RssdRequestNode), 0);
+    node = AllocSysMemory(SMEM_Low, size + sizeof(RssdRequestNode), 0);
     packet = &node->packet;
     if (request)
         *packet = *request;

@@ -114,6 +114,8 @@ PartyDataPrefix *PartyDataGet(void);
  * item/weapon/bullet/accessory/event inventories, gives the starting money and
  * weapon 19, clears the simulation number and restarts the play clock.
  */
+/* 4-byte .sdata value at 0x004da814: the umn simulation script number, 0 = none. */
+extern int UmnSimulationNo;
 extern void PartyDataInit(void);
 
 void PartyFriendOff(int id);

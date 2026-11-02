@@ -3,21 +3,29 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_2.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_mc.h"
+#include "main/xgl_render.h"
+#include "main/xgl_sound.h"
 #include "main/xgl_thread.h"
+#include "ov02/ov02.h"
 
-extern int xglMcMain(void);
-extern void xglFontPrintDirectOT(int color, void *param);
-const char D_00A10D28[8] = "\x19\x03";
+/* Position of the message the device checks print. */
+#define LOGO_MESSAGE_X 16
+#define LOGO_MESSAGE_Y 64
 
-static int device_check_sync(void)
-{
-    int status;
+/* Frames xglMcMain is polled for after the memory cards settle. */
+#define LOGO_CARD_SETTLE_FRAMES 8
 
-    status = xglMcMain();
-    xglSleep();
-    xglFontPrintDirectOT(-1, &D_00A10D28);
-    return status;
-}
+/* ipuplay: the movie stream buffer, its size, and the buffer the frames are displayed from. */
+#define LOGO_MOVIE_STREAM_BASE 0x01000000
+#define LOGO_MOVIE_STREAM_SIZE 0x80000
+#define LOGO_MOVIE_DISPLAY_BASE 0x01100000
+
+/* Quadwords of TestEnv_1_00A0F690 sent to the GIF. */
+#define LOGO_TEST_ENV_QWC 9
 
 typedef struct HddCheckRequest {
     int result;
@@ -29,13 +37,89 @@ typedef struct HddNameTable {
     const char *name[3];
 } HddNameTable;
 
+typedef union McSlotState {
+    int value;
+    struct {
+        s16 slot0;
+        s16 slot1;
+    } slot;
+} McSlotState;
+
+typedef struct McCheckRequest {
+    int status;
+    unsigned char unmodeled_04[4];
+    unsigned char *workspace_end;
+    unsigned char unmodeled_0c[4];
+} McCheckRequest;
+
+typedef struct LogoMovieInfo {
+    u8 unmodeled_00[0x48];
+    u32 frame_width;
+    u8 unmodeled_4c[0x44];
+    u32 stream_base;
+    u32 stream_size;
+    u8 unmodeled_98[0x18];
+    u32 display_base;
+    u32 display_end;
+    u8 unmodeled_b8[0x11];
+    u8 stopped;
+    u8 unmodeled_ca[6];
+} LogoMovieInfo;
+
+typedef struct LogoGifTag {
+    u32 control_low;
+    u32 control_high;
+    u32 registers_low;
+    u32 registers_high;
+} LogoGifTag;
+
+typedef struct LogoGifAdCommand {
+    u64 value;
+    u32 register_address;
+    u32 unused;
+} LogoGifAdCommand;
+
+typedef struct LogoGifRgbaq {
+    u32 red;
+    u32 green;
+    u32 blue;
+    u32 alpha;
+} LogoGifRgbaq;
+
+typedef struct LogoGifUv {
+    u32 u;
+    u32 v;
+    u32 unused_08;
+    u32 unused_0c;
+} LogoGifUv;
+
+typedef struct LogoGifXyz2 {
+    u16 x;
+    u16 unused_x;
+    u16 y;
+    u16 unused_y;
+    u32 z;
+    u32 unused;
+} LogoGifXyz2;
+
+typedef struct LogoTestEnvironment {
+    LogoGifTag tag;
+    LogoGifAdCommand flush_texture_cache;
+    LogoGifAdCommand set_clamp_1;
+    u64 command;
+    u32 set_tex0_register_address;
+    u32 set_tex0_unused;
+    LogoGifRgbaq color;
+    LogoGifUv texture_coordinates_0;
+    LogoGifXyz2 vertex_0;
+    LogoGifUv texture_coordinates_1;
+    LogoGifXyz2 vertex_1;
+} LogoTestEnvironment;
+
 extern int xglHddMount(void);
 extern int xglHddMcExist(HddCheckRequest *request);
 extern int xglHddMcCheck(HddCheckRequest *request);
 extern int xglHddActivate(int state);
-extern void xglFontPrint(int x, int y, int color, const char *text);
-extern void xglSoundEffectNormalDirect(int effect_id);
-extern PadPrefix PadData;
 extern u8 *WorkEnd;
 extern u8 carddata_0[];
 extern const HddNameTable D_00A11048;
@@ -47,6 +131,39 @@ extern const char D_00A11158[];
 extern const char D_00A11250[];
 extern const char D_00A112F0[];
 extern const char D_00A11338[];
+extern int xglMcRequest(int card, int command, McCheckRequest *request, int *result);
+extern const char D_00A11358[];
+extern const char D_00A113C8[];
+extern const char D_00A113E8[];
+extern const char D_00A11430[];
+extern const char D_00A11478[];
+extern const char D_00A114C8[];
+extern const char D_00A11520[];
+extern void Logo(void);
+extern const char D_00A115A0[];
+extern void xglMovieInfoInit(LogoMovieInfo *movie);
+extern int xglMovieOpen(LogoMovieInfo *movie, const char *path);
+extern int xglMoviePlay(LogoMovieInfo *movie);
+extern int xglMovieClose(LogoMovieInfo *movie);
+extern void FlushCache(int mode);
+
+static int ipuplay(const char *path);
+
+/* Defined here: D_00A10D28, TestEnv_1_00A0F690, D_00A115A8, D_00A115B8 (data order is section order). */
+const char D_00A10D28[8] = "\x19\x03";
+
+static int device_check_sync(void)
+{
+    int status;
+
+    status = xglMcMain();
+    xglSleep();
+    xglFontPrintDirectOT(-1, D_00A10D28);
+    return status;
+}
+
+
+
 
 static int hdd_check(void)
 {
@@ -69,10 +186,10 @@ static int hdd_check(void)
         {
             break;
         }
-        xglFontPrint(16, 64, -1, D_00A10D30);
-        if (PadData.half_2a & 0x20)
+        xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A10D30);
+        if (PadData.half_2a & PAD_CIRCLE)
         {
-            xglSoundEffectNormalDirect(1);
+            xglSoundEffectNormalDirect(SE_DECIDE);
             break;
         }
         device_check_sync();
@@ -94,21 +211,21 @@ static int hdd_check(void)
         {
             return 0;
         }
-        request.size = 0x163B0;
+        request.size = MC_SAVE_DATA_SIZE;
         request.buffer = carddata_0;
         status = xglHddMcCheck(&request);
         if (status == -1)
         {
             for (;;)
             {
-                xglFontPrint(16, 64, -1, D_00A11158);
-                if (PadData.half_2a & 0x20)
+                xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A11158);
+                if (PadData.half_2a & PAD_CIRCLE)
                 {
                     break;
                 }
                 device_check_sync();
             }
-            xglSoundEffectNormalDirect(1);
+            xglSoundEffectNormalDirect(SE_DECIDE);
             device_check_sync();
             xglHddActivate(2);
             return 1;
@@ -126,29 +243,29 @@ static int hdd_check(void)
 
     for (;;)
     {
-        xglFontPrint(16, 64, -1, text_a);
-        xglFontPrintDirectOT(-1, (void *)D_00A11250);
-        if (PadData.half_2a & 0x20)
+        xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, text_a);
+        xglFontPrintDirectOT(-1, D_00A11250);
+        if (PadData.half_2a & PAD_CIRCLE)
         {
-            xglSoundEffectNormalDirect(1);
+            xglSoundEffectNormalDirect(SE_DECIDE);
             break;
         }
-        if (PadData.half_2a & 0x40)
+        if (PadData.half_2a & PAD_CROSS)
         {
-            xglSoundEffectNormalDirect(2);
+            xglSoundEffectNormalDirect(SE_CANCEL);
             device_check_sync();
             for (;;)
             {
-                xglFontPrint(16, 64, -1, D_00A112F0);
-                xglFontPrintDirectOT(-1, (void *)text_b);
-                xglFontPrintDirectOT(-1, (void *)D_00A11338);
-                if (PadData.half_2a & 0x20)
+                xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A112F0);
+                xglFontPrintDirectOT(-1, text_b);
+                xglFontPrintDirectOT(-1, D_00A11338);
+                if (PadData.half_2a & PAD_CIRCLE)
                 {
                     break;
                 }
                 device_check_sync();
             }
-            xglSoundEffectNormalDirect(1);
+            xglSoundEffectNormalDirect(SE_DECIDE);
             break;
         }
         device_check_sync();
@@ -157,33 +274,8 @@ static int hdd_check(void)
     return 1;
 }
 
-typedef union McSlotState {
-    int value;
-    struct {
-        s16 slot0;
-        s16 slot1;
-    } slot;
-} McSlotState;
 
-typedef struct McCheckRequest {
-    int status;
-    unsigned char unmodeled_04[4];
-    unsigned char *workspace_end;
-    unsigned char unmodeled_0c[4];
-} McCheckRequest;
 
-extern int xglMcRequest(int card, int command, McCheckRequest *request, int *result);
-extern void xglFontPrint(int x, int y, int color, const char *text);
-extern void xglSoundEffectNormalDirect(int effect_id);
-extern PadPrefix PadData;
-extern u8 *WorkEnd;
-extern const char D_00A11358[];
-extern const char D_00A113C8[];
-extern const char D_00A113E8[];
-extern const char D_00A11430[];
-extern const char D_00A11478[];
-extern const char D_00A114C8[];
-extern const char D_00A11520[];
 
 static int mc_check(void)
 {
@@ -197,7 +289,7 @@ static int mc_check(void)
     int warning_mask;
     int i;
 
-    for (i = 7; i >= 0; i--)
+    for (i = LOGO_CARD_SETTLE_FRAMES - 1; i >= 0; i--)
     {
         screen_state[0].value = device_check_sync();
     }
@@ -210,27 +302,27 @@ static int mc_check(void)
 
     for (;;)
     {
-        xglMcRequest(0, 1, 0, &slot_status[0]);
-        xglMcRequest(1, 1, 0, &slot_status[1]);
+        xglMcRequest(0, MC_REQUEST_FREE_SPACE, 0, &slot_status[0]);
+        xglMcRequest(1, MC_REQUEST_FREE_SPACE, 0, &slot_status[1]);
         request.status = -1;
         request.workspace_end = WorkEnd;
-        xglMcRequest(0, 2, &request, &free_space[0]);
-        xglMcRequest(1, 2, &request, &free_space[1]);
+        xglMcRequest(0, MC_REQUEST_DIRECTORY, &request, &free_space[0]);
+        xglMcRequest(1, MC_REQUEST_DIRECTORY, &request, &free_space[1]);
 
         do
         {
             screen_state[0].value = device_check_sync();
-        } while (screen_state[0].slot.slot0 == 255 || screen_state[0].slot.slot0 == 128 ||
-                 screen_state[0].slot.slot1 == 255 || screen_state[0].slot.slot1 == 128);
+        } while (screen_state[0].slot.slot0 == MC_STATUS_BUSY || screen_state[0].slot.slot0 == MC_STATUS_ERROR ||
+                 screen_state[0].slot.slot1 == MC_STATUS_BUSY || screen_state[0].slot.slot1 == MC_STATUS_ERROR);
 
-        for (i = 7; i >= 0; i--)
+        for (i = LOGO_CARD_SETTLE_FRAMES - 1; i >= 0; i--)
         {
             screen_state[0].value = device_check_sync();
         }
 
         capacity_warning = D_00A11358;
-        if (screen_state[0].slot.slot0 != 1 && screen_state[0].slot.slot0 != 2 &&
-            screen_state[0].slot.slot1 != 1 && screen_state[0].slot.slot1 != 2)
+        if (screen_state[0].slot.slot0 != MC_STATUS_READY && screen_state[0].slot.slot0 != MC_STATUS_UNFORMATTED &&
+            screen_state[0].slot.slot1 != MC_STATUS_READY && screen_state[0].slot.slot1 != MC_STATUS_UNFORMATTED)
         {
             warning = D_00A113C8;
         }
@@ -239,11 +331,11 @@ static int mc_check(void)
             warning_mask = 0;
             do
             {
-                if (screen_state[0].slot.slot0 == 2 || screen_state[0].slot.slot1 == 2)
+                if (screen_state[0].slot.slot0 == MC_STATUS_UNFORMATTED || screen_state[0].slot.slot1 == MC_STATUS_UNFORMATTED)
                 {
                     break;
                 }
-                if (screen_state[0].slot.slot0 == 1)
+                if (screen_state[0].slot.slot0 == MC_STATUS_READY)
                 {
                     if (free_space[0] <= 0 && slot_status[0] < 165)
                     {
@@ -254,7 +346,7 @@ static int mc_check(void)
                         break;
                     }
                 }
-                if (screen_state[0].slot.slot1 == 1)
+                if (screen_state[0].slot.slot1 == MC_STATUS_READY)
                 {
                     if (free_space[1] <= 0 && slot_status[1] < 165)
                     {
@@ -287,30 +379,30 @@ static int mc_check(void)
 
         while (warning != 0)
         {
-            xglFontPrint(16, 64, -1, warning);
+            xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, warning);
             if (capacity_warning != 0)
             {
-                xglFontPrintDirectOT(-1, (void *)capacity_warning);
+                xglFontPrintDirectOT(-1, capacity_warning);
             }
-            xglFontPrintDirectOT(-1, (void *)D_00A114C8);
+            xglFontPrintDirectOT(-1, D_00A114C8);
 
-            if (PadData.half_2a & 0x20)
+            if (PadData.half_2a & PAD_CIRCLE)
             {
-                xglSoundEffectNormalDirect(1);
+                xglSoundEffectNormalDirect(SE_DECIDE);
                 warning = 0;
                 break;
             }
 
-            if (PadData.half_2a & 0x40)
+            if (PadData.half_2a & PAD_CROSS)
             {
-                xglSoundEffectNormalDirect(2);
+                xglSoundEffectNormalDirect(SE_CANCEL);
                 do
                 {
                     wait_state[0].value = device_check_sync();
-                    xglFontPrint(16, 64, -1, D_00A11520);
-                    if (PadData.half_2a & 0x40)
+                    xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A11520);
+                    if (PadData.half_2a & PAD_CROSS)
                     {
-                        xglSoundEffectNormalDirect(1);
+                        xglSoundEffectNormalDirect(SE_DECIDE);
                         break;
                     }
                 } while (screen_state[0].value == wait_state[0].value);
@@ -333,85 +425,21 @@ static int mc_check(void)
     return device_check_sync();
 }
 
-extern void xglRenderClearOff(void);
-extern void Logo(void);
-extern const char D_00A115A0[];
 
 void LogoFirst(void)
 {
     xglRenderClearFrame();
-    xglRenderClearColor(0x80000000);
+    xglRenderClearColor(OV02_CLEAR_COLOR_BLACK);
     xglSleep();
     xglRenderClearOff();
     if (hdd_check() != 0)
     {
         mc_check();
     }
-    xglFontPrintDirectOT(-1, (void *)D_00A115A0);
+    xglFontPrintDirectOT(-1, D_00A115A0);
     Logo();
 }
 
-typedef struct LogoMovieInfo {
-    u8 unmodeled_00[0x48];
-    u32 frame_width;
-    u8 unmodeled_4c[0x44];
-    u32 stream_base;
-    u32 stream_size;
-    u8 unmodeled_98[0x18];
-    u32 display_base;
-    u32 display_end;
-    u8 unmodeled_b8[0x11];
-    u8 stopped;
-    u8 unmodeled_ca[6];
-} LogoMovieInfo;
-typedef struct LogoGifTag {
-    u32 control_low;
-    u32 control_high;
-    u32 registers_low;
-    u32 registers_high;
-} LogoGifTag;
-typedef struct LogoGifAdCommand {
-    u64 value;
-    u32 register_address;
-    u32 unused;
-} LogoGifAdCommand;
-typedef struct LogoGifRgbaq {
-    u32 red;
-    u32 green;
-    u32 blue;
-    u32 alpha;
-} LogoGifRgbaq;
-typedef struct LogoGifUv {
-    u32 u;
-    u32 v;
-    u32 unused_08;
-    u32 unused_0c;
-} LogoGifUv;
-typedef struct LogoGifXyz2 {
-    u16 x;
-    u16 unused_x;
-    u16 y;
-    u16 unused_y;
-    u32 z;
-    u32 unused;
-} LogoGifXyz2;
-typedef struct LogoTestEnvironment {
-    LogoGifTag tag;
-    LogoGifAdCommand flush_texture_cache;
-    LogoGifAdCommand set_clamp_1;
-    u64 command;
-    u32 set_tex0_register_address;
-    u32 set_tex0_unused;
-    LogoGifRgbaq color;
-    LogoGifUv texture_coordinates_0;
-    LogoGifXyz2 vertex_0;
-    LogoGifUv texture_coordinates_1;
-    LogoGifXyz2 vertex_1;
-} LogoTestEnvironment;
-typedef struct LogoRenderState {
-    u8 unmodeled_00[0x14];
-    u16 display_buffer;
-} LogoRenderState;
 static LogoTestEnvironment TestEnv_1_00A0F690 = {
     .tag = { 0x00008001, 0x808B4000, 0x53531EEE, 0 },
     .flush_texture_cache = { 0, 0x3F, 0 },
@@ -425,18 +453,8 @@ static LogoTestEnvironment TestEnv_1_00A0F690 = {
     .texture_coordinates_1 = { 0x2000, 0x1C00, 0, 0 },
     .vertex_1 = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
 };
-extern LogoRenderState sRender;
-extern void xglSoundEffectNormalDirect(int effect_id);
-extern PadPrefix PadData;
-extern void xglMovieInfoInit(LogoMovieInfo *movie);
-extern int xglMovieOpen(LogoMovieInfo *movie, const char *path);
-extern int xglMoviePlay(LogoMovieInfo *movie);
-extern int xglMovieClose(LogoMovieInfo *movie);
-extern float xglFRand(void);
-extern void FlushCache(int mode);
-extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
 
-static int ipuplay(char *path)
+static int ipuplay(const char *path)
 {
     LogoMovieInfo movie;
     int skipped;
@@ -444,11 +462,11 @@ static int ipuplay(char *path)
 
     skipped = 0;
     xglMovieInfoInit(&movie);
-    frame_buffer_base = 0x01000000;
+    frame_buffer_base = LOGO_MOVIE_STREAM_BASE;
     movie.stream_base = frame_buffer_base;
-    movie.stream_size = 0x80000;
+    movie.stream_size = LOGO_MOVIE_STREAM_SIZE;
     movie.stopped = 0;
-    frame_buffer_base = 0x01100000;
+    frame_buffer_base = LOGO_MOVIE_DISPLAY_BASE;
     xglMovieOpen(&movie, path);
     movie.display_base = frame_buffer_base;
     frame_buffer_base += movie.frame_width * 16;
@@ -459,10 +477,10 @@ static int ipuplay(char *path)
         xglSRand();
         xglFRand();
 
-        if (PadData.half_2a & 0x800)
+        if (PadData.half_2a & PAD_START)
         {
             skipped = 1;
-            xglSoundEffectNormalDirect(1);
+            xglSoundEffectNormalDirect(SE_DECIDE);
             break;
         }
 
@@ -473,9 +491,9 @@ static int ipuplay(char *path)
 
         /* The display-buffer value occupies bits 5 and above of the low command word. */
         TestEnv_1_00A0F690.command = 0x2000000640000000ULL |
-                                     (u64)~(~0x24020000U & ~((u32)sRender.display_buffer << 5));
+                                     (u64)~(~0x24020000U & ~((u32)sRender.flip_base << 5));
         FlushCache(0);
-        xglDmaDirectNormal(2, (u32)&TestEnv_1_00A0F690, 9);
+        xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, (u32)&TestEnv_1_00A0F690, LOGO_TEST_ENV_QWC);
         xglSleep();
     }
 
@@ -484,17 +502,13 @@ static int ipuplay(char *path)
     return skipped;
 }
 
-static int ipuplay(char *path);
-extern void xglRenderClearColor(u32 color);
-extern void xglRenderClearDepth(void);
-extern void xglRenderClearFrame(void);
 const char D_00A115A8[] = "data\\namco.ipu";
 const char D_00A115B8[] = "data\\logo_msi.ipu";
 
 void Logo(void)
 {
     xglRenderClearFrame();
-    xglRenderClearColor(0x80000000);
+    xglRenderClearColor(OV02_CLEAR_COLOR_BLACK);
     xglSleep();
     xglRenderClearDepth();
     if (ipuplay(D_00A115A8) == 0)

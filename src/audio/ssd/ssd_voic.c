@@ -1,125 +1,60 @@
-/* Original SSD object: ssd_voic.c. Untouched storage remains partial. */
+#include "ssd/ssd_voic.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_data.h"
+#include "ssd/ssd_dev.h"
+#include "ssd/ssd_init.h"
 
-typedef struct SsdVoiceControl {
-    unsigned char index;
-    unsigned char core;
-    unsigned char voice;
-    unsigned char state;
-    unsigned short dirty_attributes;
-    unsigned char hardware_attributes;
-    unsigned char unmodeled_007;
-    unsigned short left_volume;
-    unsigned short right_volume;
-    unsigned char unmodeled_00c[8];
-    unsigned short pitch;
-    unsigned char unmodeled_016[2];
-    unsigned int priority;
-    unsigned int start_address;
-    unsigned int loop_address;
-    unsigned short adsr1;
-    unsigned short adsr2;
-    unsigned char unmodeled_028[216];
-} SsdVoiceControl;
-
-typedef struct SsdChannel {
-    unsigned char unmodeled_000[6];
-    unsigned char allocation_mode;
-    unsigned char unmodeled_007;
-    unsigned char priority;
-    unsigned char unmodeled_009[223];
-    SsdVoiceControl *voice;
-} SsdChannel;
-
-typedef struct SsdVoiceRange {
-    unsigned char first;
-    unsigned char last;
-} SsdVoiceRange;
-
-extern struct {
-    unsigned char unmodeled_000[0x1df];
-    unsigned char stereo;
-    unsigned char unmodeled_1e0[0x50];
-    unsigned int key_on[2];
-    unsigned int key_off[2];
-    unsigned int cutoff[2];
-    unsigned int noise[2];
-    unsigned int pitch_modulation[2];
-    unsigned int effect_left[2];
-    unsigned int effect_right[2];
-    unsigned int active_voices;
-    SsdVoiceControl voices[48];
-} SsdWork;
-
-extern void sceSdSetSwitch(unsigned short entry, unsigned int bits);
-extern void SsdUnlinkChannelVoice(SsdVoiceControl *voice);
-extern void sceSdSetParam(unsigned short entry, unsigned short value);
-extern void sceSdSetAddr(unsigned short entry, unsigned int value);
-extern unsigned short sceSdGetParam(unsigned short entry);
-extern unsigned char SsdAllKeyTable[];
-extern short SsdAllPitchTable[];
-extern void SsdSetVoiceRRAttr(int voice, int rate, int mode);
-
-void SsdInitVoiceManager(void);
-SsdVoiceControl *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range);
-void SsdKeyonVoice(SsdVoiceControl *voice);
-void SsdKeyoffUnlinkVoice(SsdVoiceControl *voice);
-void SsdCutoffUnlinkVoice(SsdVoiceControl *voice);
-void SsdCutoffVoice(SsdVoiceControl *voice);
-void SsdKeyoffVoice(SsdVoiceControl *voice);
-void SsdSetVoiceKeyon(void);
-void SsdSetVoiceKeyoff(void);
-int SsdNoteToPitch(int note);
-void SsdCompellingKeyoff(void);
-void SsdCalcDirectVoiceVolume(short output[2], int volume, int pan);
+void SsdKeyoffUnlinkVoice(SsdVoice *voice);
+void SsdCutoffVoice(SsdVoice *voice);
 
 void SsdInitVoiceManager(void)
 {
     int i;
     int core;
     int index;
-    for (i = 0; i < 2; ++i) {
-        sceSdSetSwitch(i | 0x1600, 0xffffff);
-        SsdWork.key_on[i] = 0;
-        SsdWork.key_off[i] = 0;
-        SsdWork.cutoff[i] = 0;
-        SsdWork.noise[i] = 0;
-        SsdWork.pitch_modulation[i] = 0;
-        SsdWork.effect_left[i] = 0;
-        SsdWork.effect_right[i] = 0;
+    for (i = 0; i < SSD_CORE_COUNT; ++i) {
+        sceSdSetSwitch(i | SD_S_KOFF, SSD_CORE_VOICE_MASK);
+        SsdWork.cores.switches.key_on[i] = 0;
+        SsdWork.cores.switches.key_off[i] = 0;
+        SsdWork.cores.switches.cutoff[i] = 0;
+        SsdWork.cores.switches.pitch_modulation[i] = 0;
+        SsdWork.cores.switches.noise[i] = 0;
+        SsdWork.cores.switches.reverb_mix[i] = 0;
+        SsdWork.cores.switches.dry_mix[i] = 0;
     }
-    SsdWork.active_voices = 0;
+    SsdWork.cores.switches.active_voices = 0;
     index = 0;
-    for (core = 0; core < 2; ++core) {
-        for (i = 0; i < 24; ++i) {
+    for (core = 0; core < SSD_CORE_COUNT; ++core) {
+        for (i = 0; i < SSD_CORE_VOICE_COUNT; ++i) {
             SsdWork.voices[index].index = index;
-            SsdWork.voices[index].voice = i;
+            SsdWork.voices[index].number = i;
             SsdWork.voices[index].core = core;
             SsdWork.voices[index].state = 0;
-            SsdWork.voices[index].priority = 0;
+            SsdWork.voices[index].allocation.priority = 0;
             ++index;
         }
     }
 }
 
-SsdVoiceControl *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
+SsdVoice *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
 {
-    SsdVoiceControl *voice;
+    SsdVoice *voice;
     int i;
     unsigned int priority;
     int selected;
     switch (channel->allocation_mode) {
     case 2:
-        voice = channel->voice;
+        voice = channel->voices;
         if (voice != 0) return voice;
         voice = &SsdWork.voices[range->first];
-        priority = (channel->priority << 16) + 511;
-        if (voice->priority < priority)
+        priority = (channel->priority << 16) + SSD_VOICE_PRIORITY_ACTIVE;
+        if (voice->allocation.priority < priority)
             SsdUnlinkChannelVoice(voice);
         else
             voice = 0;
         return voice;
     case 1:
-        voice = channel->voice;
+        voice = channel->voices;
         if (voice != 0) return voice;
         break;
     case 0:
@@ -127,10 +62,10 @@ SsdVoiceControl *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
         break;
     }
     i = range->first;
-    priority = (channel->priority << 16) + 511;
+    priority = (channel->priority << 16) + SSD_VOICE_PRIORITY_ACTIVE;
     selected = range->last;
     for (; i <= range->last; ++i) {
-        unsigned int candidate = SsdWork.voices[i].priority;
+        unsigned int candidate = SsdWork.voices[i].allocation.priority;
         if (candidate < priority) {
             selected = i;
             if (candidate == 0) break;
@@ -138,7 +73,7 @@ SsdVoiceControl *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
         }
     }
     i = selected;
-    if (selected >= 48) {
+    if (selected >= SSD_VOICE_COUNT) {
         voice = 0;
     } else {
         voice = &SsdWork.voices[i];
@@ -147,67 +82,67 @@ SsdVoiceControl *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
     return voice;
 }
 
-void SsdKeyonVoice(SsdVoiceControl *voice)
+void SsdKeyonVoice(SsdVoice *voice)
 {
     int core;
     unsigned int mask;
-    voice->priority |= 0x1ff;
-    voice->dirty_attributes = 0xffff;
+    voice->allocation.priority |= SSD_VOICE_PRIORITY_ACTIVE;
+    voice->flags = SSD_VOICE_FLAG_ALL;
     core = voice->core;
-    mask = 1 << voice->voice;
-    SsdWork.key_off[core] &= ~mask;
-    SsdWork.cutoff[core] &= ~mask;
-    SsdWork.key_on[core] |= mask;
+    mask = 1 << voice->number;
+    SsdWork.cores.switches.key_off[core] &= ~mask;
+    SsdWork.cores.switches.cutoff[core] &= ~mask;
+    SsdWork.cores.switches.key_on[core] |= mask;
 }
 
-void SsdKeyoffUnlinkVoice(SsdVoiceControl *voice)
+void SsdKeyoffUnlinkVoice(SsdVoice *voice)
 {
     unsigned int mask;
     int core;
-    voice->priority = (unsigned char)voice->priority;
-    mask = 1 << voice->voice;
+    voice->allocation.priority = (unsigned char)voice->allocation.priority;
+    mask = 1 << voice->number;
     core = voice->core;
-    SsdWork.key_on[core] &= ~mask;
-    SsdWork.key_off[core] |= mask;
+    SsdWork.cores.switches.key_on[core] &= ~mask;
+    SsdWork.cores.switches.key_off[core] |= mask;
 }
 
-void SsdCutoffUnlinkVoice(SsdVoiceControl *voice)
+void SsdCutoffUnlinkVoice(SsdVoice *voice)
 {
     unsigned int mask;
     int core;
-    voice->priority = (unsigned char)voice->priority;
-    mask = 1 << voice->voice;
+    voice->allocation.priority = (unsigned char)voice->allocation.priority;
+    mask = 1 << voice->number;
     core = voice->core;
-    SsdWork.key_on[core] &= ~mask;
-    SsdWork.cutoff[core] |= mask;
+    SsdWork.cores.switches.key_on[core] &= ~mask;
+    SsdWork.cores.switches.cutoff[core] |= mask;
 }
 
-void SsdCutoffVoice(SsdVoiceControl *voice)
+void SsdCutoffVoice(SsdVoice *voice)
 {
     unsigned int mask;
     int core;
-    voice->priority &= 0xffff00ff;
-    mask = 1 << voice->voice;
+    voice->allocation.priority &= SSD_VOICE_PRIORITY_KEYOFF_MASK;
+    mask = 1 << voice->number;
     core = voice->core;
-    SsdWork.key_on[core] &= ~mask;
-    SsdWork.cutoff[core] |= mask;
+    SsdWork.cores.switches.key_on[core] &= ~mask;
+    SsdWork.cores.switches.cutoff[core] |= mask;
 }
 
-void SsdKeyoffVoice(SsdVoiceControl *voice)
+void SsdKeyoffVoice(SsdVoice *voice)
 {
     unsigned int mask;
     int core;
-    voice->priority &= 0xffff00ff;
-    mask = 1 << voice->voice;
+    voice->allocation.priority &= SSD_VOICE_PRIORITY_KEYOFF_MASK;
+    mask = 1 << voice->number;
     core = voice->core;
-    SsdWork.key_on[core] &= ~mask;
-    SsdWork.key_off[core] |= mask;
+    SsdWork.cores.switches.key_on[core] &= ~mask;
+    SsdWork.cores.switches.key_off[core] |= mask;
 }
 
 void SsdSetVoiceKeyon(void)
 {
     unsigned short changes[2];
-    SsdVoiceControl *voice = SsdWork.voices;
+    SsdVoice *voice = SsdWork.voices;
     int i;
     int core;
     int hardware_voice;
@@ -215,78 +150,78 @@ void SsdSetVoiceKeyon(void)
     unsigned int mask;
     changes[1] = 0;
     changes[0] = 0;
-    for (i = 0; i < 48; ++i) {
-        if (voice->priority & 0x1ff) {
-            dirty = voice->dirty_attributes;
+    for (i = 0; i < SSD_VOICE_COUNT; ++i) {
+        if (voice->allocation.priority & SSD_VOICE_PRIORITY_ACTIVE) {
+            dirty = voice->flags;
             if (dirty != 0) {
                 core = voice->core;
-                hardware_voice = voice->voice << 1;
-                if (dirty & 2) {
-                    sceSdSetParam(core | hardware_voice, voice->left_volume);
-                    sceSdSetParam(core | hardware_voice | 0x100, voice->right_volume);
+                hardware_voice = voice->number << 1;
+                if (dirty & SSD_VOICE_FLAG_VOLUME) {
+                    sceSdSetParam(core | hardware_voice | SD_VP_VOLL, voice->left_volume);
+                    sceSdSetParam(core | hardware_voice | SD_VP_VOLR, voice->right_volume);
                 }
-                if (dirty & 1)
-                    sceSdSetParam(core | hardware_voice | 0x200, voice->pitch);
-                if (dirty & 8)
-                    sceSdSetAddr(core | hardware_voice | 0x2040, voice->start_address);
-                if (dirty & 0x10)
-                    sceSdSetParam(core | hardware_voice | 0x300, voice->adsr1);
-                if (dirty & 0x20)
-                    sceSdSetParam(core | hardware_voice | 0x400, voice->adsr2);
-                if (dirty & 0xf000) {
-                    mask = 1 << voice->voice;
-                    if (dirty & 0x1000) {
-                        changes[core] |= 0x1000;
-                        if (voice->hardware_attributes & 1)
-                            SsdWork.noise[core] |= mask;
+                if (dirty & SSD_VOICE_FLAG_PITCH)
+                    sceSdSetParam(core | hardware_voice | SD_VP_PITCH, voice->pitch);
+                if (dirty & SSD_VOICE_FLAG_SAMPLE_ADDRESS)
+                    sceSdSetAddr(core | hardware_voice | SD_VA_SSA, voice->sample_start);
+                if (dirty & SSD_VOICE_FLAG_ADSR1)
+                    sceSdSetParam(core | hardware_voice | SD_VP_ADSR1, voice->adsr1);
+                if (dirty & SSD_VOICE_FLAG_ADSR2)
+                    sceSdSetParam(core | hardware_voice | SD_VP_ADSR2, voice->adsr2);
+                if (dirty & SSD_VOICE_FLAG_EFFECTS) {
+                    mask = 1 << voice->number;
+                    if (dirty & SSD_VOICE_FLAG_PITCH_MOD) {
+                        changes[core] |= SSD_VOICE_FLAG_PITCH_MOD;
+                        if (voice->effects & SSD_VOICE_EFFECT_PITCH_MOD)
+                            SsdWork.cores.switches.pitch_modulation[core] |= mask;
                         else
-                            SsdWork.noise[core] &= ~mask;
+                            SsdWork.cores.switches.pitch_modulation[core] &= ~mask;
                     }
-                    if (dirty & 0x2000) {
-                        changes[core] |= 0x2000;
-                        if (voice->hardware_attributes & 2)
-                            SsdWork.pitch_modulation[core] |= mask;
+                    if (dirty & SSD_VOICE_FLAG_NOISE) {
+                        changes[core] |= SSD_VOICE_FLAG_NOISE;
+                        if (voice->effects & SSD_VOICE_EFFECT_NOISE)
+                            SsdWork.cores.switches.noise[core] |= mask;
                         else
-                            SsdWork.pitch_modulation[core] &= ~mask;
+                            SsdWork.cores.switches.noise[core] &= ~mask;
                     }
-                    if (dirty & 0x4000) {
-                        changes[core] |= 0x4000;
-                        if (voice->hardware_attributes & 4)
-                            SsdWork.effect_left[core] |= mask;
+                    if (dirty & SSD_VOICE_FLAG_REVERB) {
+                        changes[core] |= SSD_VOICE_FLAG_REVERB;
+                        if (voice->effects & SSD_VOICE_EFFECT_REVERB)
+                            SsdWork.cores.switches.reverb_mix[core] |= mask;
                         else
-                            SsdWork.effect_left[core] &= ~mask;
+                            SsdWork.cores.switches.reverb_mix[core] &= ~mask;
                     }
-                    if (dirty & 0x8000) {
-                        changes[core] |= 0x8000;
-                        if (voice->hardware_attributes & 8)
-                            SsdWork.effect_right[core] |= mask;
+                    if (dirty & SSD_VOICE_FLAG_DRY) {
+                        changes[core] |= SSD_VOICE_FLAG_DRY;
+                        if (voice->effects & SSD_VOICE_EFFECT_DRY)
+                            SsdWork.cores.switches.dry_mix[core] |= mask;
                         else
-                            SsdWork.effect_right[core] &= ~mask;
+                            SsdWork.cores.switches.dry_mix[core] &= ~mask;
                     }
                 }
-                voice->dirty_attributes = 0;
+                voice->flags = 0;
             }
         }
         ++voice;
     }
-    for (core = 0; core < 2; ++core) {
-        if (changes[core] & 0xf000) {
-            if (changes[core] & 0x1000)
-                sceSdSetSwitch(core | 0x1300, SsdWork.noise[core]);
-            if (changes[core] & 0x2000)
-                sceSdSetSwitch(core | 0x1400, SsdWork.pitch_modulation[core]);
-            if (changes[core] & 0x4000) {
-                sceSdSetSwitch(core | 0x1900, SsdWork.effect_left[core]);
-                sceSdSetSwitch(core | 0x1b00, SsdWork.effect_left[core]);
+    for (core = 0; core < SSD_CORE_COUNT; ++core) {
+        if (changes[core] & SSD_VOICE_FLAG_EFFECTS) {
+            if (changes[core] & SSD_VOICE_FLAG_PITCH_MOD)
+                sceSdSetSwitch(core | SD_S_PMON, SsdWork.cores.switches.pitch_modulation[core]);
+            if (changes[core] & SSD_VOICE_FLAG_NOISE)
+                sceSdSetSwitch(core | SD_S_NON, SsdWork.cores.switches.noise[core]);
+            if (changes[core] & SSD_VOICE_FLAG_REVERB) {
+                sceSdSetSwitch(core | SD_S_VMIXEL, SsdWork.cores.switches.reverb_mix[core]);
+                sceSdSetSwitch(core | SD_S_VMIXER, SsdWork.cores.switches.reverb_mix[core]);
             }
-            if (changes[core] & 0x8000) {
-                sceSdSetSwitch(core | 0x1800, SsdWork.effect_right[core]);
-                sceSdSetSwitch(core | 0x1a00, SsdWork.effect_right[core]);
+            if (changes[core] & SSD_VOICE_FLAG_DRY) {
+                sceSdSetSwitch(core | SD_S_VMIXL, SsdWork.cores.switches.dry_mix[core]);
+                sceSdSetSwitch(core | SD_S_VMIXR, SsdWork.cores.switches.dry_mix[core]);
             }
         }
-        if (SsdWork.key_on[core] != 0) {
-            sceSdSetSwitch(core | 0x1500, SsdWork.key_on[core]);
-            SsdWork.key_on[core] = 0;
+        if (SsdWork.cores.switches.key_on[core] != 0) {
+            sceSdSetSwitch(core | SD_S_KON, SsdWork.cores.switches.key_on[core]);
+            SsdWork.cores.switches.key_on[core] = 0;
         }
     }
 }
@@ -296,21 +231,21 @@ void SsdSetVoiceKeyoff(void)
     int core;
     int voice;
     unsigned int bits;
-    for (core = 0; core < 2; ++core) {
-        bits = SsdWork.cutoff[core];
+    for (core = 0; core < SSD_CORE_COUNT; ++core) {
+        bits = SsdWork.cores.switches.cutoff[core];
         if (bits != 0) {
-            for (voice = 0; voice < 24; ++voice) {
+            for (voice = 0; voice < SSD_CORE_VOICE_COUNT; ++voice) {
                 if (bits & (1 << voice)) {
-                    unsigned short entry = core | (voice << 1) | 0x400;
+                    unsigned short entry = core | (voice << 1) | SD_VP_ADSR2;
                     unsigned short adsr = sceSdGetParam(entry);
                     sceSdSetParam(entry, (adsr & 0xffc0) | 0x66);
                 }
             }
         }
-        bits |= SsdWork.key_off[core];
+        bits |= SsdWork.cores.switches.key_off[core];
         if (bits != 0) {
-            sceSdSetSwitch(core | 0x1600, bits);
-            SsdWork.key_off[core] = SsdWork.cutoff[core] = 0;
+            sceSdSetSwitch(core | SD_S_KOFF, bits);
+            SsdWork.cores.switches.key_off[core] = SsdWork.cores.switches.cutoff[core] = 0;
         }
     }
 }
@@ -336,14 +271,14 @@ int SsdNoteToPitch(int note)
 void SsdCompellingKeyoff(void)
 {
     int i;
-    SsdVoiceControl *voice;
-    for (i = 0; i < 48; ++i) {
+    SsdVoice *voice;
+    for (i = 0; i < SSD_VOICE_COUNT; ++i) {
         SsdSetVoiceRRAttr(i, 6, 3);
     }
-    sceSdSetSwitch(0x1600, 0xffffff);
-    sceSdSetSwitch(0x1601, 0xffffff);
+    sceSdSetSwitch(0 | SD_S_KOFF, SSD_CORE_VOICE_MASK);
+    sceSdSetSwitch(1 | SD_S_KOFF, SSD_CORE_VOICE_MASK);
     voice = SsdWork.voices;
-    for (i = 0; i < 48; ++i) {
+    for (i = 0; i < SSD_VOICE_COUNT; ++i) {
         SsdUnlinkChannelVoice(voice);
         ++voice;
     }
@@ -355,21 +290,21 @@ void SsdCalcDirectVoiceVolume(short output[2], int volume, int pan)
     int right;
     volume *= volume;
     pan = (pan - 1) << 8;
-    if (pan > 32256) pan = 32256;
+    if (pan > SSD_PAN_RANGE) pan = SSD_PAN_RANGE;
     if (pan < 0) pan = 0;
-    if (SsdWork.stereo) {
-        if (pan < 16128) {
-            right = pan * 23040 / 16128;
-            left = 32512 - pan * 9472 / 16128;
+    if (SsdWork.output_mode) {
+        if (pan < SSD_PAN_CENTER) {
+            right = pan * SSD_PAN_CENTER_GAIN / SSD_PAN_CENTER;
+            left = SSD_PAN_UNITY_GAIN - pan * SSD_PAN_ATTENUATION / SSD_PAN_CENTER;
         } else {
-            pan = 32256 - pan;
-            left = pan * 23040 / 16128;
-            right = 32512 - pan * 9472 / 16128;
+            pan = SSD_PAN_RANGE - pan;
+            left = pan * SSD_PAN_CENTER_GAIN / SSD_PAN_CENTER;
+            right = SSD_PAN_UNITY_GAIN - pan * SSD_PAN_ATTENUATION / SSD_PAN_CENTER;
         }
         left = left * volume >> 15;
         right = right * volume >> 15;
     } else {
-        right = volume * 23040 >> 15;
+        right = volume * SSD_PAN_CENTER_GAIN >> 15;
         left = right;
     }
     output[0] = left & 0x7fff;

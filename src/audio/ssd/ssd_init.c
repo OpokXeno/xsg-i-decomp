@@ -1,132 +1,27 @@
-/* Original ssd_init.c translation unit. */
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_data.h"
+#include "ssd/ssd_dev.h"
+#include "ssd/ssd_midi.h"
+#include "ssd/ssd_pcm.h"
+#include "ssd/ssd_sec.h"
+#include "ssd/ssd_seq.h"
+#include "ssd/ssd_vag.h"
+#include "ssd/ssd_voic.h"
 
+#define SSD_RANDOM_SEED 0x12345678
+#define SSD_REVERB_DEPTH 10240
+#define SSD_REVERB_END_CORE1 0x1e0000
 
-
-typedef struct SsdWorkState SsdWorkState;
-typedef struct SsdProc SsdProc;
-typedef struct SsdSequence SsdSequence;
-typedef struct SsdChannel SsdChannel;
-typedef struct SsdReverbState SsdReverbState;
-typedef struct SsdMidiState SsdMidiState;
-typedef struct IopSysClock IopSysClock;
-
-typedef int (*SsdInterruptHandler)(int core, SsdWorkState *work);
-
-typedef void (*SsdProcCallback)(SsdWorkState *work, void *argument);
-
-struct SsdProc {
-    unsigned short kind;
-    unsigned short flags;
-    SsdProcCallback callback;
-    void *argument;
-    struct SsdProc *next;
-};
-
-typedef void (*SsdUserCallback)(int channel, void *argument);
-
-struct SsdReverbState {
-    unsigned char unmodeled_00[3];
-    signed char mode;
-    short left, right;
-    signed char delay, feedback;
-    short depth;
-    unsigned int work_end;
-    unsigned int work_handle;
-    unsigned int unmodeled_14;
-};
-
-struct SsdMidiState { short flags; unsigned char unmodeled_002[526]; };
-
-struct IopSysClock { unsigned int low, high; };
-
-struct SsdWorkState {
-    int flags;
-    unsigned char control_byte_04, unmodeled_05, control_byte_06, unmodeled_07;
-    unsigned int process_state, unmodeled_0c;
-    void *memory_base;
-    unsigned char unmodeled_014[0x134];
-    unsigned int stream_buffer, stream_buffer_size;
-    int timer_id;
-    unsigned int timer_interval;
-    unsigned int sequence_ticks, wave_interrupts, stream_interrupts, irq_interrupts;
-    SsdChannel *channels;
-    SsdSequence *effect_sequence;
-    void *list_170, *list_174, *list_178;
-    unsigned char unmodeled_17c[0x18];
-    SsdUserCallback stream_callback;
-    void *stream_argument;
-    SsdUserCallback callback_19c;
-    void *argument_1a0;
-    SsdUserCallback irq_callback;
-    void *irq_argument;
-    unsigned char unmodeled_1ac[0x58];
-    SsdReverbState reverb[2];
-    unsigned char unmodeled_234[0x3048];
-    int reverb_clear_result;
-    SsdProc *processes;
-    int random_state;
-    unsigned char unmodeled_3288[0x18];
-};
-
-SsdWorkState SsdWork;
-extern int StopHardTimer(int timer);
-extern int printf(const char *format, ...);
-extern int SsdIrqInterruptProcess(int core, SsdWorkState *work);
-extern int SsdWaveTransferInterruptProcess(int core, SsdWorkState *work);
-extern SsdInterruptHandler sceSdSetSpu2IntrHandler(SsdInterruptHandler handler, SsdWorkState *work);
-extern SsdInterruptHandler sceSdSetTransIntrHandler(int core, SsdInterruptHandler handler, SsdWorkState *work);
-extern int CpuEnableIntr(void);
-extern int EnableIntr(int interrupt);
-extern void CpuDisableIntr(void);
-extern void SsdSuspendDeviceAll(void);
-extern void SsdSuspendPcmStream(void);
-extern void SsdSuspendVagStream(void);
-extern void sceSdSetParam(unsigned short parameter, unsigned short value);
-extern void SsdSeqInterruptProcess(SsdWorkState *work);
-extern int StartHardTimer(int timer_id);
-extern int DisableIntr(int interrupt, int *previous_state);
-extern SsdMidiState SsdMidi;
-extern unsigned int SpuReverbWorkSize[];
-extern void SsdErrorProc(int code, int detail);
-extern void SsdInitMainMemoryManager(void *memory, unsigned int size);
-extern void SsdInitSpuMemoryManager(void);
-extern void SsdInitDmaManager(void);
-extern void SsdInitVoiceManager(void);
-int SsdInitTimer(void);
-int SsdInitInterrupt(void);
-extern void SsdInitOutputControl(void);
-extern SsdSequence *SsdMakeEffectSequenceRec(int size, int flags);
-extern void SsdLinkSequence(SsdSequence *sequence);
-extern unsigned int SsdSpuMallocAdrs(unsigned int size, unsigned int address, int tag);
-extern int SsdSetReverbParameter(int mode, int depth, int delay, int feedback);
-extern void SsdSetReverb(int core, int enabled);
-extern int SsdReverbClearCompleted(int core, int wait);
-extern void SsdEnableReverbParam(int core);
-extern unsigned int SsdSpuMalloc(unsigned int size, int tag);
 extern struct SsdExportLibrary ssd_entry;
-extern int RegisterLibraryEntries(struct SsdExportLibrary *library);
-extern void USec2SysClock(unsigned int microseconds, IopSysClock *clock);
-extern int AllocHardTimer(int source, int size, int prescale);
-unsigned int SsdMainInterruptProcess(SsdWorkState *work);
-extern int SetTimerHandler(int timer, unsigned int interval, unsigned int (*handler)(SsdWorkState *), SsdWorkState *work);
-extern int SetupHardTimer(int timer, int source, int mode, int prescale);
-extern void SsdResumeDeviceAll(void);
-extern void SsdResumePcmStream(void);
-extern void SsdResumeVagStream(void);
+
+SsdGlobalWork SsdWork;
+
+unsigned int SsdMainInterruptProcess(void *argument);
+int SsdInitInterrupt(void);
+int SsdInitTimer(void);
 void SsdQuitInterrupt(void);
 void SsdQuitTimer(void);
-extern void SsdCompellingKeyoff(void);
-void SsdSuspend(void);
-SsdProc *SsdLinkProc(SsdProc *process, SsdProcCallback callback, void *argument);
-void SsdUnlinkProc(SsdProc *process);
-void SsdEnable(void);
-void *SsdInit(void *memory, unsigned int size, int mode);
-int SsdStart(int argc, char **argv);
-int SsdGetRSRandom(void);
-void SsdDisable(void);
-void SsdResume(void);
-SsdWorkState *SsdGetGlobalWorkPtr(void);
-void *SsdQuit(void);
 
 /* IRX module identity read by the loader: name and version 2.5. */
 typedef struct ModuleInfo {
@@ -143,7 +38,7 @@ int SsdStart(int argc, char **argv)
     return 0;
 }
 
-SsdWorkState *SsdGetGlobalWorkPtr(void)
+SsdGlobalWork *SsdGetGlobalWorkPtr(void)
 {
     return &SsdWork;
 }
@@ -154,28 +49,28 @@ void *SsdInit(void *memory, unsigned int size, int mode) {
     unsigned int reverb_size;
     printf("Ssd init  Suzuki sound driver  version 2.5\n");
     if (SsdWork.flags < 0) {
-        SsdErrorProc(-128, 0);
+        SsdErrorProc(SSD_ERROR_ALREADY_INITIALIZED, 0);
         return 0;
     }
-    flags = 0x8e01;
-    if (mode & 1) flags = 0xae01;
+    flags = SSD_FLAG_INITIALIZED | 0xe00 | SSD_FLAG_ENABLED;
+    if (mode & SSD_INIT_TIMER_LOCKED) flags |= SSD_FLAG_TIMER_LOCKED;
     SsdWork.flags = flags;
-    SsdWork.random_state = 0x12345678;
-    SsdWork.channels = 0;
+    SsdWork.random_state = SSD_RANDOM_SEED;
+    SsdWork.sequences = 0;
     SsdWork.effect_sequence = 0;
-    SsdWork.list_170 = 0;
-    SsdWork.list_174 = 0;
-    SsdWork.list_178 = 0;
-    SsdWork.sequence_ticks = 0;
-    SsdWork.wave_interrupts = 0;
-    SsdWork.stream_interrupts = 0;
-    SsdWork.irq_interrupts = 0;
-    SsdWork.stream_callback = 0;
-    SsdWork.callback_19c = 0;
+    SsdWork.effect_sets = 0;
+    SsdWork.wave_banks = 0;
+    SsdWork.devices = 0;
+    SsdWork.interrupt_count = 0;
+    SsdWork.wave_interrupt_count = 0;
+    SsdWork.stream_interrupt_count = 0;
+    SsdWork.irq_interrupt_count = 0;
+    SsdWork.pcm_callback = 0;
+    SsdWork.vag_callback = 0;
     SsdWork.irq_callback = 0;
-    SsdMidi.flags = 0;
-    SsdInitMainMemoryManager(memory, size);
-    reverb = &SsdWork.reverb[0];
+    SsdMidi.enabled = 0;
+    SsdInitMainMemoryManager((unsigned int)memory, size);
+    reverb = &SsdWork.cores.reverb[0];
     SsdInitSpuMemoryManager();
     SsdInitDmaManager();
     SsdInitVoiceManager();
@@ -184,42 +79,42 @@ void *SsdInit(void *memory, unsigned int size, int mode) {
     SsdInitOutputControl();
     SsdWork.effect_sequence = SsdMakeEffectSequenceRec(44, 0);
     SsdLinkSequence(SsdWork.effect_sequence);
-    reverb_size = SpuReverbWorkSize[4];
+    reverb_size = SpuReverbWorkSize[SD_EFFECT_MODE_STUDIO_C];
     SsdWork.reverb_clear_result = 0;
-    reverb->work_end = 0x200000;
-    reverb->mode = -1;
-    reverb->work_handle = SsdSpuMallocAdrs(reverb_size, 0x200000 - reverb_size, 4);
-    reverb = &SsdWork.reverb[1];
-    reverb_size = SpuReverbWorkSize[4];
-    reverb->work_end = 0x1e0000;
-    reverb->mode = -1;
-    reverb->work_handle = SsdSpuMallocAdrs(reverb_size, 0x1e0000 - reverb_size, 5);
-    SsdSetReverbParameter(4, 10240, 0, 0);
-    SsdSetReverbParameter(260, 10240, 0, 0);
+    reverb->work_end = SSD_SPU_RAM_SIZE;
+    reverb->mode = SSD_REVERB_MODE_NONE;
+    reverb->work_handle = SsdSpuMallocAdrs(reverb_size, SSD_SPU_RAM_SIZE - reverb_size, SSD_SPU_BLOCK_REVERB_CORE0);
+    reverb = &SsdWork.cores.reverb[1];
+    reverb_size = SpuReverbWorkSize[SD_EFFECT_MODE_STUDIO_C];
+    reverb->work_end = SSD_REVERB_END_CORE1;
+    reverb->mode = SSD_REVERB_MODE_NONE;
+    reverb->work_handle = SsdSpuMallocAdrs(reverb_size, SSD_REVERB_END_CORE1 - reverb_size, SSD_SPU_BLOCK_REVERB_CORE1);
+    SsdSetReverbParameter(SD_EFFECT_MODE_STUDIO_C, SSD_REVERB_DEPTH, 0, 0);
+    SsdSetReverbParameter(SSD_REVERB_MODE_CORE1 | SD_EFFECT_MODE_STUDIO_C, SSD_REVERB_DEPTH, 0, 0);
     SsdSetReverb(0, 1);
     SsdSetReverb(1, 1);
     SsdReverbClearCompleted(1, 1);
     SsdEnableReverbParam(0);
     SsdEnableReverbParam(1);
-    SsdSpuMalloc(4032, 2);
-    SsdWork.stream_buffer = SsdSpuMalloc(8192, 3);
+    SsdSpuMalloc(SSD_SPU_STREAM_BASE - SSD_SPU_SYSTEM_SIZE, SSD_SPU_BLOCK_DRIVER);
+    SsdWork.stream_buffer = SsdSpuMalloc(SSD_SPU_STREAM_SIZE, SSD_SPU_BLOCK_STREAM);
     SsdWork.stream_buffer_size = 32768;
     return memory;
 }
 
 void *SsdQuit(void) {
     void *memory;
-    if (SsdWork.flags & 0x8000) {
+    if (SsdWork.flags & SSD_FLAG_INITIALIZED) {
         SsdWork.flags = 0;
         SsdQuitInterrupt();
         SsdQuitTimer();
         SsdCompellingKeyoff();
-        memory = SsdWork.memory_base;
-        SsdWork.control_byte_04 = 0;
-        SsdWork.control_byte_06 = 0;
-        SsdWork.process_state = 0;
+        memory = SsdWork.main_memory.first;
+        SsdWork.errors.function_code = 0;
+        SsdWork.errors.sequence_code = 0;
+        SsdWork.errors.detail = 0;
     } else {
-        SsdErrorProc(-129, 0);
+        SsdErrorProc(SSD_ERROR_NOT_INITIALIZED, 0);
         memory = 0;
     }
     return memory;
@@ -229,9 +124,9 @@ int SsdInitInterrupt(void) {
     sceSdSetSpu2IntrHandler(SsdIrqInterruptProcess, &SsdWork);
     sceSdSetTransIntrHandler(0, SsdWaveTransferInterruptProcess, &SsdWork);
     CpuEnableIntr();
-    EnableIntr(36);
-    EnableIntr(40);
-    EnableIntr(9);
+    EnableIntr(SSD_INTR_SPU2_DMA0);
+    EnableIntr(SSD_INTR_SPU2_DMA1);
+    EnableIntr(SSD_INTR_SPU2);
     return 0;
 }
 
@@ -250,9 +145,9 @@ int SsdInitTimer(void) {
 
 void SsdQuitInterrupt(void) {
     int previous_state;
-    DisableIntr(36, &previous_state);
-    DisableIntr(40, &previous_state);
-    DisableIntr(9, &previous_state);
+    DisableIntr(SSD_INTR_SPU2_DMA0, &previous_state);
+    DisableIntr(SSD_INTR_SPU2_DMA1, &previous_state);
+    DisableIntr(SSD_INTR_SPU2, &previous_state);
 }
 
 void SsdQuitTimer(void) {
@@ -265,11 +160,11 @@ void SsdResume(void) {
     SsdResumeDeviceAll();
     SsdResumePcmStream();
     SsdResumeVagStream();
-    sceSdSetParam(2432, 16383);
-    sceSdSetParam(2688, 16383);
-    sceSdSetParam(2433, 16383);
-    sceSdSetParam(2689, 16383);
-    SsdWork.flags &= ~0x80U;
+    sceSdSetParam(SD_P_MVOLL | SD_CORE_0, SSD_MASTER_VOLUME_DEFAULT);
+    sceSdSetParam(SD_P_MVOLR | SD_CORE_0, SSD_MASTER_VOLUME_DEFAULT);
+    sceSdSetParam(SD_P_MVOLL | SD_CORE_1, SSD_MASTER_VOLUME_DEFAULT);
+    sceSdSetParam(SD_P_MVOLR | SD_CORE_1, SSD_MASTER_VOLUME_DEFAULT);
+    SsdWork.flags &= ~SSD_FLAG_SUSPENDED;
     CpuEnableIntr();
     printf("Ssd resume\n");
 }
@@ -279,49 +174,50 @@ void SsdSuspend(void) {
     SsdSuspendDeviceAll();
     SsdSuspendPcmStream();
     SsdSuspendVagStream();
-    sceSdSetParam(2432, 0);
-    sceSdSetParam(2688, 0);
-    sceSdSetParam(2433, 0);
-    sceSdSetParam(2689, 0);
-    SsdWork.flags |= 0x80;
+    sceSdSetParam(SD_P_MVOLL | SD_CORE_0, 0);
+    sceSdSetParam(SD_P_MVOLR | SD_CORE_0, 0);
+    sceSdSetParam(SD_P_MVOLL | SD_CORE_1, 0);
+    sceSdSetParam(SD_P_MVOLR | SD_CORE_1, 0);
+    SsdWork.flags |= SSD_FLAG_SUSPENDED;
     CpuEnableIntr();
     printf("Ssd suspend\n");
 }
 
 void SsdEnable(void) {
-    if (!(SsdWork.flags & 0x2000)) {
-      if (!(SsdWork.flags & 1)) {
+    if (!(SsdWork.flags & SSD_FLAG_TIMER_LOCKED)) {
+      if (!(SsdWork.flags & SSD_FLAG_ENABLED)) {
         StartHardTimer(SsdWork.timer_id);
-        SsdWork.flags |= 1;
+        SsdWork.flags |= SSD_FLAG_ENABLED;
       }
     }
 }
 
 void SsdDisable(void) {
-    if (!(SsdWork.flags & 0x2000)) {
-        if (SsdWork.flags & 1) {
+    if (!(SsdWork.flags & SSD_FLAG_TIMER_LOCKED)) {
+        if (SsdWork.flags & SSD_FLAG_ENABLED) {
             StopHardTimer(SsdWork.timer_id);
-            SsdWork.flags &= ~1U;
+            SsdWork.flags &= ~SSD_FLAG_ENABLED;
         }
     }
 }
 
 int SsdGetRSRandom(void) {
     int state = SsdWork.random_state;
-    state ^= (unsigned int)state << 17;
+    state ^= state << 17;
     state ^= state >> 15;
     SsdWork.random_state = state;
     return state & 0x7fff;
 }
 
-unsigned int SsdMainInterruptProcess(SsdWorkState *work) {
+unsigned int SsdMainInterruptProcess(void *argument) {
+    SsdGlobalWork *work = argument;
     SsdSeqInterruptProcess(work);
     return work->timer_interval;
 }
 
 SsdProc *SsdLinkProc(SsdProc *process, SsdProcCallback callback, void *argument) {
     SsdProc *tail;
-    process->kind = 3;
+    process->kind = SSD_PROC_LINKED;
     process->flags = 0;
     process->callback = callback;
     process->argument = argument;

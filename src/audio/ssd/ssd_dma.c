@@ -1,49 +1,18 @@
-typedef void (*SsdDmaCallback)(int, void *);
-typedef struct SsdDmaBuffer SsdDmaBuffer;
-struct SsdDmaBuffer {
-    unsigned char operation;
-    unsigned char unmodeled_001[3];
-    unsigned int progress;
-    void *memory;
-    unsigned int spu_address;
-    unsigned int size;
-    SsdDmaCallback callback;
-    void *callback_argument;
-    /* The DMA interrupt and producer share the queue links. */
-    SsdDmaBuffer *volatile next;
-};
-typedef struct SsdDmaWork {
-    unsigned int flags;
-    unsigned char unmodeled_004[344];
-    unsigned int wave_interrupt_count;
-    unsigned int stream_interrupt_count;
-    unsigned int irq_interrupt_count;
-    unsigned char unmodeled_168[20];
-    SsdDmaBuffer *buffers;
-    SsdDmaBuffer *queue;
-    unsigned char unmodeled_184[16];
-    SsdDmaCallback pcm_callback;
-    void *pcm_argument;
-    SsdDmaCallback vag_callback;
-    void *vag_argument;
-    SsdDmaCallback irq_callback;
-    void *irq_argument;
-} SsdDmaWork;
-extern SsdDmaWork SsdWork;
-extern void *SsdNewPtr(unsigned int);
-extern void CpuDisableIntr(void);
-extern void CpuEnableIntr(void);
-extern void SsdSeqErrorProc(int, void *);
-extern int sceSdVoiceTrans(int, int, void *, unsigned int, unsigned int);
+#include "ssd/ssd_dma.h"
+#include "ssd/ssd_err.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
+
 void SsdResetDmaManager(void);
-void SsdDmaStartBuffer(SsdDmaWork *);
-SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdDmaWork *);
-void SsdDmaStartTransfer(SsdDmaWork *, unsigned int, void *, unsigned int,
-                         SsdDmaCallback, void *, int);
+void SsdDmaStartBuffer(SsdGlobalWork *work);
+SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdGlobalWork *work);
+void SsdDmaStartTransfer(SsdGlobalWork *work, unsigned int spu_address,
+                         void *memory, unsigned int size,
+                         SsdDmaCallback callback, void *argument, int operation);
 
 void SsdInitDmaManager(void)
 {
-    SsdWork.buffers = SsdNewPtr(256);
+    SsdWork.dma_buffers = SsdNewPtr(SSD_DMA_BUFFER_COUNT * sizeof(SsdDmaBuffer));
     SsdResetDmaManager();
 }
 void SsdSetPcmStreamCallback(SsdDmaCallback callback)
@@ -61,27 +30,27 @@ void SsdSetIrqCallback(SsdDmaCallback callback)
 void SsdSpuDmaWrite(unsigned int spu_address, void *memory, unsigned int size,
                     SsdDmaCallback callback, void *argument)
 {
-    SsdDmaStartTransfer(&SsdWork, spu_address, memory, size, callback, argument, 1);
+    SsdDmaStartTransfer(&SsdWork, spu_address, memory, size, callback, argument, SSD_DMA_OP_WRITE);
 }
 void SsdSpuDmaRead(unsigned int spu_address, void *memory, unsigned int size,
                    SsdDmaCallback callback, void *argument)
 {
-    SsdDmaStartTransfer(&SsdWork, spu_address, memory, size, callback, argument, 2);
+    SsdDmaStartTransfer(&SsdWork, spu_address, memory, size, callback, argument, SSD_DMA_OP_READ);
 }
-void SsdDmaStartTransfer(SsdDmaWork *work, unsigned int spu_address,
+void SsdDmaStartTransfer(SsdGlobalWork *work, unsigned int spu_address,
                          void *memory, unsigned int size,
                          SsdDmaCallback callback, void *argument, int operation)
 {
     unsigned short flags = work->flags;
     SsdDmaBuffer *buffer = SsdGetDmaQueueBuffer(work);
     SsdDmaBuffer *tail;
-    if (!(flags & 0x30)) {
+    if (!(flags & (SSD_FLAG_IN_TRANSFER_INTR | SSD_FLAG_IN_IRQ_INTR))) {
         while (!buffer)
             buffer = SsdGetDmaQueueBuffer(work);
         CpuDisableIntr();
     }
     if (!buffer) {
-        SsdSeqErrorProc(-225, memory);
+        SsdSeqErrorProc(SSD_ERROR_DMA_QUEUE_FULL, (int)memory);
         return;
     }
     buffer->operation = operation & 15;
@@ -91,16 +60,16 @@ void SsdDmaStartTransfer(SsdDmaWork *work, unsigned int spu_address,
     buffer->size = size;
     buffer->callback = callback;
     buffer->next = 0;
-    if (!work->queue) {
-        work->queue = buffer;
+    if (!work->dma_queue) {
+        work->dma_queue = buffer;
         SsdDmaStartBuffer(work);
     } else {
-        tail = work->queue;
+        tail = work->dma_queue;
         while (tail->next)
             tail = tail->next;
         tail->next = buffer;
     }
-    if (!(flags & 0x30))
+    if (!(flags & (SSD_FLAG_IN_TRANSFER_INTR | SSD_FLAG_IN_IRQ_INTR)))
         CpuEnableIntr();
 }
 int SsdSpuDmaCompleted(int wait)
@@ -108,19 +77,19 @@ int SsdSpuDmaCompleted(int wait)
     if (wait & 1) {
         /* The DMA completion interrupt clears bit 1 while this thread polls. */
         volatile unsigned short *status = (volatile unsigned short *)&SsdWork.flags;
-        while (*status & 2)
+        while (*status & SSD_FLAG_DMA_BUSY)
             ;
     }
-    if (SsdWork.queue != 0) {
-        return SsdWork.queue->operation;
+    if (SsdWork.dma_queue != 0) {
+        return SsdWork.dma_queue->operation;
     }
     return 0;
 }
-SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdDmaWork *work)
+SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdGlobalWork *work)
 {
-    SsdDmaBuffer *buffer = work->buffers;
+    SsdDmaBuffer *buffer = work->dma_buffers;
     int i;
-    for (i = 0; i < 6; i++, buffer++) {
+    for (i = 0; i < SSD_DMA_BUFFER_LIMIT; i++, buffer++) {
         if (!buffer->operation)
             return buffer;
     }
@@ -128,65 +97,65 @@ SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdDmaWork *work)
 }
 int SsdWaveTransferInterruptProcess(int channel, void *argument)
 {
-    SsdDmaWork *work = argument;
+    SsdGlobalWork *work = argument;
     SsdDmaBuffer *buffer;
     work->wave_interrupt_count++;
-    work->flags |= 0x10;
-    buffer = work->queue;
+    work->flags |= SSD_FLAG_IN_TRANSFER_INTR;
+    buffer = work->dma_queue;
     if (buffer) {
         if (buffer->callback)
-            buffer->callback(2, buffer->callback_argument);
+            buffer->callback(SSD_DMA_RESULT_DONE,buffer->callback_argument);
         buffer->operation = 0;
-        work->flags &= ~2;
-        work->queue = buffer->next;
-        if (work->queue)
+        work->flags &= ~SSD_FLAG_DMA_BUSY;
+        work->dma_queue = buffer->next;
+        if (work->dma_queue)
             SsdDmaStartBuffer(work);
     }
-    work->flags &= ~0x10;
+    work->flags &= ~SSD_FLAG_IN_TRANSFER_INTR;
     return 0;
 }
 int SsdStreamInterruptProcess(int channel, void *argument)
 {
-    SsdDmaWork *work = argument;
+    SsdGlobalWork *work = argument;
     work->stream_interrupt_count++;
-    work->flags |= 0x10;
+    work->flags |= SSD_FLAG_IN_TRANSFER_INTR;
     if (work->pcm_callback)
         work->pcm_callback(channel, work->pcm_argument);
-    work->flags &= ~0x10;
+    work->flags &= ~SSD_FLAG_IN_TRANSFER_INTR;
     return 0;
 }
-void SsdDmaStartBuffer(SsdDmaWork *work)
+void SsdDmaStartBuffer(SsdGlobalWork *work)
 {
-    SsdDmaBuffer *buffer = work->queue;
-    work->flags |= 2;
+    SsdDmaBuffer *buffer = work->dma_queue;
+    work->flags |= SSD_FLAG_DMA_BUSY;
     switch (buffer->operation) {
-    case 0:
+    case SSD_DMA_OP_NONE:
         break;
-    case 1:
-        sceSdVoiceTrans(0, 0, buffer->memory, buffer->spu_address, buffer->size);
+    case SSD_DMA_OP_WRITE:
+        sceSdVoiceTrans(0, SD_TRANS_MODE_WRITE, buffer->memory, buffer->spu_address, buffer->size);
         break;
-    case 2:
-        sceSdVoiceTrans(0, 1, buffer->memory, buffer->spu_address, buffer->size);
+    case SSD_DMA_OP_READ:
+        sceSdVoiceTrans(0, SD_TRANS_MODE_READ,buffer->memory, buffer->spu_address, buffer->size);
         break;
     }
 }
 int SsdIrqInterruptProcess(int channel, void *argument)
 {
-    SsdDmaWork *work = argument;
+    SsdGlobalWork *work = argument;
     channel--;
-    work->flags |= 0x20;
+    work->flags |= SSD_FLAG_IN_IRQ_INTR;
     work->irq_interrupt_count++;
     if (work->irq_callback)
         work->irq_callback(channel, work->irq_argument);
-    work->flags &= ~0x20;
+    work->flags &= ~SSD_FLAG_IN_IRQ_INTR;
     return 0;
 }
 void SsdResetDmaManager(void)
 {
-    SsdDmaBuffer *buffer = SsdWork.buffers;
+    SsdDmaBuffer *buffer = SsdWork.dma_buffers;
     int i;
-    for (i = 7; i >= 0; i--, buffer++)
+    for (i = SSD_DMA_BUFFER_COUNT - 1; i >= 0; i--, buffer++)
         buffer->operation = 0;
-    SsdWork.queue = 0;
-    SsdWork.flags &= ~2;
+    SsdWork.dma_queue = 0;
+    SsdWork.flags &= ~SSD_FLAG_DMA_BUSY;
 }

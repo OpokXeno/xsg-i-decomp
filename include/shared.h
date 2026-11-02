@@ -73,7 +73,8 @@ typedef struct {
     u8 pad_00[0x28];
     u16 half_28;
     u16 half_2a;
-    unsigned char unmodeled_2c[6];
+    unsigned char unmodeled_2c[4];
+    u16 half_30;
     u16 mappedPressed;
     u16 mappedRepeat;
 } PadPrefix;

@@ -20,6 +20,10 @@
 #define EMESSAGE_MODE_LINE_START 0x24
 #define EMESSAGE_MODE_LINE_STEP 0x25
 
+/* Message string bytes: 30 is followed by an icon id, 31 ends a page (wait for a key). */
+#define EMESSAGE_CODE_ICON 30
+#define EMESSAGE_CODE_WAITKEY 31
+
 typedef struct EMessageParam {
     unsigned char flags;
     unsigned char mode;

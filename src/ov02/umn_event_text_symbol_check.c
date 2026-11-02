@@ -3,11 +3,122 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "umn_event_text_symbol_check.h"
+#include "main/e_message.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_font.h"
+#include "ov02/ov02.h"
+#include "ov02/umn_event_text_symbol_check.h"
 
+/* Tags of the event text, UmnEventTextSymbol.value: the names are in D_00A13588. */
+#define UMN_EVENT_TAG_SPEECH 1       /* "speech": opens a block */
+#define UMN_EVENT_TAG_CHAR 2         /* "char": the speaker of the block */
+#define UMN_EVENT_TAG_MSG 3          /* "msg": the message text */
+#define UMN_EVENT_TAG_MOT 4          /* "mot": the motion number */
+#define UMN_EVENT_TAG_SPEECH_END 5   /* "/speech" */
+#define UMN_EVENT_TAG_MEMO 6         /* "memo": skipped up to the closing tag */
+#define UMN_EVENT_TAG_MEMO_END 7     /* "/memo" */
+#define UMN_EVENT_TAG_COUNT 7
+#define UMN_EVENT_SPEAKER_COUNT 2
+
+/* UmnEventTextNumberGet bases. */
+#define UMN_EVENT_NUMBER_OCTAL 0
+#define UMN_EVENT_NUMBER_DECIMAL 1
+
+/* Mail ids listed in event_tbl and compulsion_down_load_tbl. */
+/* uet_text_buf layout: a 4-byte count header, then 8-byte speech records. */
+#define UMN_EVENT_TEXT_HEADER_SIZE 4
+#define UMN_EVENT_TEXT_RECORD_SIZE 8
+
+#define UMN_EVENT_MAIL_COUNT 18
+#define UMN_COMPULSION_MAIL_COUNT 13
+
+/* Attachment kinds (UmnMailHeader.attach) and the size of an umn_attach_tbl record: kind, id, quantity. */
+#define UMN_ATTACH_PLUGIN 1
+#define UMN_ATTACH_ITEM 2
+#define UMN_ATTACH_WEAPON 3
+#define UMN_ATTACH_MONEY 4
+#define UMN_ATTACH_RECORD_SIZE 3
+#define UMN_ATTACH_COUNT 23
+
+/* Work area blocks the loaders hand back: the history tree is aligned to a CD sector. */
+#define UMN_HISTORY_TREE_SIZE 0x800
+#define UMN_TEXT_BLOCK_SIZE 0x800
+/* umn_text holds one 0x80-byte record for each of the first six plugins. */
+#define UMN_PLUGIN_TEXT_COUNT 6
+#define UMN_PLUGIN_TEXT_SIZE 0x80
+#define UMN_MAIL_HEADER_TABLE_SIZE 0x4800
+
+/*
+ * event_end_mail (ov02 .data, 2 bytes: 0x1D, 0x1E) is the one configured
+ * follow-up mail: UmnEventEndMailCheck unlocks follow_mail_id's data byte 0
+ * and registers it into the mailbox once trigger_mail_id has been read.
+ */
+typedef struct EventEndMail {
+    signed char trigger_mail_id;
+    signed char follow_mail_id;
+} EventEndMail;
+
+/* Record-count header of uet_text_buf; the speech records follow it. */
+typedef struct UmnEventTextRecordBuf {
+    short count;
+    unsigned short cur;
+    UmnEventTextRecord records[1];
+} UmnEventTextRecordBuf;
+
+/* Mail-list file records consumed while UmnMailHeaderCreate builds the
+ * runtime header table. */
+typedef struct UmnMailListBody {
+    unsigned char unmodeled_00[8];
+    unsigned char attach[3];
+    unsigned char kind;
+    unsigned short flags;
+    unsigned char plugin;
+    unsigned char unmodeled_0f;
+    int data;
+    unsigned char unmodeled_14[0x4c];
+    unsigned char text[1];
+} UmnMailListBody;
+
+typedef struct UmnMailList {
+    int size;
+    int mail_id;
+    UmnMailListBody body;
+} UmnMailList;
+
+typedef struct UmnEventTextSymbol {
+    unsigned char *text;
+    short length;
+    short value;
+} UmnEventTextSymbol;
+
+typedef struct UmnEventTextSymbolTable {
+    UmnEventTextSymbol entry[UMN_EVENT_TAG_COUNT];
+} UmnEventTextSymbolTable;
+
+/* Scaffold-owned symbol table at 0x00A13588 (no recovered C definition). */
+extern const UmnEventTextSymbolTable D_00A13588;
+
+typedef struct UmnEventTextCharTable {
+    UmnEventTextSymbol entry[UMN_EVENT_SPEAKER_COUNT];
+} UmnEventTextCharTable;
+
+/* Scaffold-owned speaker-name table at 0x00A135D0 (no recovered C definition). */
+extern const UmnEventTextCharTable D_00A135D0;
+
+extern char *eMessageNextWaitKeySearch(char *text);
+
+/*
+ * Declared int, unlike main/data.h's void dataWpnBoxInc (measured: the void
+ * prototype moves the loop-bound compare in UmnMailAttachSet from $v1 to $v0).
+ */
+extern int dataItmBoxInc(int id);
+extern int dataWpnBoxInc(int id);
+extern int dataMoneyBoxInc(int amount);
+
+/* "data\\endou\\umn\\histree.bin" and "data\\umn\\header.lst", ov02 .data; no witnessed rename. */
 const char D_00A13620[] = "data\\endou\\umn\\histree.bin";
 const char D_00A13640[] = "data\\umn\\header.lst";
-static unsigned char umn_attach_tbl[0x45] = {
+static unsigned char umn_attach_tbl[UMN_ATTACH_COUNT * UMN_ATTACH_RECORD_SIZE] = {
     1, 1, 1, 1, 2, 1, 1, 3, 1, 2, 2, 5,
     2, 6, 5, 2, 10, 5, 4, 4, 1, 4, 6, 1,
     2, 23, 2, 3, 20, 1, 4, 4, 1, 4, 8, 1,
@@ -15,7 +126,7 @@ static unsigned char umn_attach_tbl[0x45] = {
     4, 60, 1, 4, 40, 1, 1, 5, 1, 3, 22, 1,
     4, 10, 2, 4, 20, 2, 3, 21, 1
 };
-static unsigned char event_tbl[18] = {
+static unsigned char event_tbl[UMN_EVENT_MAIL_COUNT] = {
     0x00, 0x09, 0x06, 0x05, 0x11, 0x16, 0x1d, 0x29, 0x2c,
     0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x43, 0x44, 0x47, 0x4d
 };
@@ -26,30 +137,17 @@ static unsigned char kosmos_special_tbl[4][4] = {
     { 0x46, 0x39, 0x3a, 0x00 },
     { 0x4a, 0x3b, 0x00, 0x00 }
 };
-static signed char compulsion_down_load_tbl[13] = {
+static signed char compulsion_down_load_tbl[UMN_COMPULSION_MAIL_COUNT] = {
     0x09, 0x11, 0x26, 0x27, 0x2d, 0x2e, 0x35,
     0x36, 0x37, 0x39, 0x3a, 0x44, 0x4d
 };
 int UmnEventTextMakeWork = 0;
-char *uet_text_buf = 0;
+UmnEventTextRecordBuf *uet_text_buf = 0;
 int uet_flag = 0;
-int uet_file_end = 0;
-int *UmnHistoryTreeBuf = 0;
+unsigned char *uet_file_end = 0;
+UmnHistoryNode *UmnHistoryTreeBuf = 0;
 UmnMailHeader *UmnMailHeaderBuf = 0;
 char *umn_text = 0;
-
-typedef struct UmnEventTextSymbol {
-    unsigned char *text;
-    short length;
-    short value;
-} UmnEventTextSymbol;
-
-typedef struct UmnEventTextSymbolTable {
-    UmnEventTextSymbol entry[7];
-} UmnEventTextSymbolTable;
-
-/* Scaffold-owned symbol table at 0x00A13588 (no recovered C definition). */
-extern const UmnEventTextSymbolTable D_00A13588;
 
 /*
  * After a '<' the text is compared against the seven symbol names; on a
@@ -66,7 +164,7 @@ int UmnEventTextSymbolCheck(unsigned char **cursor)
 
         *cursor = *cursor + 1;
         table = D_00A13588;
-        for (i = 0; i < 7; i++) {
+        for (i = 0; i < UMN_EVENT_TAG_COUNT; i++) {
             unsigned char *input = *cursor;
             unsigned char *text = table.entry[i].text;
 
@@ -84,13 +182,6 @@ int UmnEventTextSymbolCheck(unsigned char **cursor)
     return 0;
 }
 
-typedef struct UmnEventTextCharTable {
-    UmnEventTextSymbol entry[2];
-} UmnEventTextCharTable;
-
-/* Scaffold-owned speaker-name table at 0x00A135D0 (no recovered C definition). */
-extern const UmnEventTextCharTable D_00A135D0;
-
 int UmnEventTextCharCheck(unsigned char **cursor)
 {
     UmnEventTextCharTable table;
@@ -102,7 +193,7 @@ int UmnEventTextCharCheck(unsigned char **cursor)
     i = 0;
     table = D_00A135D0;
     input = *cursor;
-    for (; 2 > i; i++) {
+    for (; UMN_EVENT_SPEAKER_COUNT > i; i++) {
         text = table.entry[i].text;
         n = 0;
         for (; n < table.entry[i].length; n++) {
@@ -126,7 +217,7 @@ int UmnEventTextNumberGet(unsigned char **cursor, int base)
     unsigned int max_digit;
 
     value = 0;
-    if (base == 1) {
+    if (base == UMN_EVENT_NUMBER_DECIMAL) {
         max_digit = '9';
         radix = 10;
     } else {
@@ -164,7 +255,7 @@ void UmnEventTextGyouJump(unsigned char **str)
 
 /*
  * Copies one message body from *cursor into *dest up to the closing '<'.
- * A '\\' escape stores its numeric value; value 31 also skips the newline
+ * A '\\' escape stores its numeric value; EMESSAGE_CODE_WAITKEY also skips the newline
  * run that follows. Terminates *dest and leaves *cursor 6 bytes past the '<'.
  */
 void UmnEventTextMessageMake(unsigned char **cursor, unsigned char **dest)
@@ -181,8 +272,8 @@ void UmnEventTextMessageMake(unsigned char **cursor, unsigned char **dest)
             if (c == '\\') {
                 unsigned char *out;
                 *cursor = p + 1;
-                value = UmnEventTextNumberGet(cursor, 0);
-                if (value == 31) {
+                value = UmnEventTextNumberGet(cursor, UMN_EVENT_NUMBER_OCTAL);
+                if (value == EMESSAGE_CODE_WAITKEY) {
                     UmnEventTextGyouJump(cursor);
                 }
                 out = *dest;
@@ -212,7 +303,7 @@ int UmnEventTextMake(int event_no)
 {
     char name[] = "data\\umn\\event00.txt";
     int size;
-    int aligned;
+    unsigned char *aligned;
     int count;
     int index;
     unsigned char *scan;
@@ -227,56 +318,56 @@ int UmnEventTextMake(int event_no)
 
     name[14] = '0' + event_no / 10;
     name[15] = '0' + event_no % 10;
-    aligned = (UmnEventTextMakeWork + 0xF) & ~0xF;
+    aligned = (unsigned char *) ((UmnEventTextMakeWork + 0xF) & ~0xF);
     size = xglCdGetFileSize(name);
     if (size < 0) {
         return -1;
     }
-    xglCdReadFile(name, (void *) aligned, 0, 1);
-    cursor = (unsigned char *) aligned;
+    xglCdReadFile(name, aligned, 0, 1);
+    cursor = aligned;
     write = (unsigned char *) uet_text_buf;
-    buf = (UmnEventTextRecordBuf *) uet_text_buf;
+    buf = uet_text_buf;
     uet_file_end = aligned + size;
 
     count = 0;
-    scan = (unsigned char *) aligned;
-    if (scan < (unsigned char *) uet_file_end) {
+    scan = aligned;
+    if (scan < uet_file_end) {
         do {
             switch (UmnEventTextSymbolCheck(&scan)) {
-            case 6:
+            case UMN_EVENT_TAG_MEMO:
                 do {
                     scan++;
-                } while (UmnEventTextSymbolCheck(&scan) != 7);
+                } while (UmnEventTextSymbolCheck(&scan) != UMN_EVENT_TAG_MEMO_END);
                 break;
-            case 1:
+            case UMN_EVENT_TAG_SPEECH:
                 count++;
                 break;
             }
             scan++;
-        } while (scan < (unsigned char *) uet_file_end);
+        } while (scan < uet_file_end);
     }
 
     head = (UmnEventTextRecordBuf *) write;
     head->count = count;
     head->cur = 0;
-    records = (unsigned char *) head + 4;
-    write = records + count * 8;
+    records = (unsigned char *) head + UMN_EVENT_TEXT_HEADER_SIZE;
+    write = records + count * UMN_EVENT_TEXT_RECORD_SIZE;
 
     index = 0;
     UmnEventTextGyouJump(&cursor);
-    while (cursor < (unsigned char *) uet_file_end) {
-        record = (UmnEventTextRecord *) ((char *) buf + index * 8 + 4);
+    while (cursor < uet_file_end) {
+        record = &buf->records[index];
         tag = UmnEventTextSymbolCheck(&cursor);
         switch (tag) {
-        case 6:
+        case UMN_EVENT_TAG_MEMO:
             do {
                 cursor++;
-            } while (UmnEventTextSymbolCheck(&cursor) != 7);
+            } while (UmnEventTextSymbolCheck(&cursor) != UMN_EVENT_TAG_MEMO_END);
             break;
         case 0:
             return -1;
-        case 1:
-            UmnEventTextNumberGet(&cursor, 1);
+        case UMN_EVENT_TAG_SPEECH:
+            UmnEventTextNumberGet(&cursor, UMN_EVENT_NUMBER_DECIMAL);
             record->count = 0;
             record->text = 0;
             do {
@@ -284,13 +375,13 @@ int UmnEventTextMake(int event_no)
             } while (0);
             record->value = 0;
             break;
-        case 2:
+        case UMN_EVENT_TAG_CHAR:
             record->value = UmnEventTextCharCheck(&cursor);
             break;
-        case 4:
-            record->number = UmnEventTextNumberGet(&cursor, 1);
+        case UMN_EVENT_TAG_MOT:
+            record->number = UmnEventTextNumberGet(&cursor, UMN_EVENT_NUMBER_DECIMAL);
             break;
-        case 3:
+        case UMN_EVENT_TAG_MSG:
             text = write;
             record->text = (char *) text;
             UmnEventTextGyouJump(&cursor);
@@ -302,7 +393,7 @@ int UmnEventTextMake(int event_no)
                 } while (*text != 0);
             }
             break;
-        case 5:
+        case UMN_EVENT_TAG_SPEECH_END:
             index++;
             break;
         default:
@@ -319,10 +410,10 @@ int UmnEventTextMake(int event_no)
  * advances the cursor by delta and returns the record at the new position,
  * or NULL once it runs past count.
  */
-void *UmnEventTextNextGet(int delta)
+UmnEventTextRecord *UmnEventTextNextGet(int delta)
 {
-    UmnEventTextRecordBuf *buf = (UmnEventTextRecordBuf *) uet_text_buf;
-    void *result;
+    UmnEventTextRecordBuf *buf = uet_text_buf;
+    UmnEventTextRecord *result;
     int wide_cur;
     short cur;
 
@@ -333,7 +424,7 @@ void *UmnEventTextNextGet(int delta)
     if (cur >= buf->count) {
         return result;
     }
-    result = (char *) buf + cur * 8 + 4;
+    result = &buf->records[cur];
     return result;
 }
 
@@ -346,7 +437,7 @@ int UmnMailEventCheck(int mail_id)
     unsigned char *data;
     int i;
 
-    for (i = 0; i < 18; i++) {
+    for (i = 0; i < UMN_EVENT_MAIL_COUNT; i++) {
         if (event_tbl[i] == mail_id) {
             data = UmnMailDataGet(mail_id);
             if (*data & 4) {
@@ -385,20 +476,20 @@ int UmnEventEndMailCheck(int mail_id)
  */
 int UmnHistoryTreeLoad(int work)
 {
-    int aligned = (work + 0x7FF) & ~0x7FF;
-    int next = aligned + 0x800;
+    int aligned = (work + UMN_HISTORY_TREE_SIZE - 1) & ~(UMN_HISTORY_TREE_SIZE - 1);
+    int next = aligned + UMN_HISTORY_TREE_SIZE;
 
-    UmnHistoryTreeBuf = (int *)aligned;
-    xglCdReadFile(D_00A13620, (void *)aligned, 0, 0);
+    UmnHistoryTreeBuf = (UmnHistoryNode *)aligned;
+    xglCdReadFile(D_00A13620, UmnHistoryTreeBuf, 0, 0);
     return next;
 }
 
-int *UmnHistoryTreeGet(unsigned int history_id)
+UmnHistoryNode *UmnHistoryTreeGet(unsigned int history_id)
 {
-    int *tree = UmnHistoryTreeBuf;
-    int *entry = 0;
+    UmnHistoryNode *tree = UmnHistoryTreeBuf;
+    UmnHistoryNode *entry = 0;
 
-    if (history_id < 128) {
+    if (history_id < UMN_MAIL_COUNT) {
         entry = &tree[history_id];
     }
     return entry;
@@ -436,12 +527,12 @@ void UmnKosmosSpecialGetCheck(int id)
 
 unsigned char *UmnMailAttachGet(int box_id)
 {
-    return umn_attach_tbl + box_id * 3;
+    return umn_attach_tbl + box_id * UMN_ATTACH_RECORD_SIZE;
 }
 
 void UmnMailAttachSet(int box_id)
 {
-    UmnAttachmentState *state = &D_4A1A0C;
+    UmnMailSaveData *state = &D_4A1A0C;
     unsigned char *attachment;
     int index;
     int scale;
@@ -454,10 +545,10 @@ void UmnMailAttachSet(int box_id)
 
     attachment = UmnMailAttachGet(box_id - 1);
     switch (attachment[0]) {
-    case 1:
+    case UMN_ATTACH_PLUGIN:
         state->plugin_unlock_flags |= 1 << attachment[1];
         break;
-    case 2:
+    case UMN_ATTACH_ITEM:
         if (attachment[2] != 0) {
             index = 0;
             do {
@@ -467,7 +558,7 @@ void UmnMailAttachSet(int box_id)
             } while (index < (short)quantity);
         }
         break;
-    case 3:
+    case UMN_ATTACH_WEAPON:
         if (attachment[2] != 0) {
             index = 0;
             do {
@@ -477,7 +568,7 @@ void UmnMailAttachSet(int box_id)
             } while (index < (short)quantity);
         }
         break;
-    case 4:
+    case UMN_ATTACH_MONEY:
         scale = 10;
         quantity = attachment[2];
         exponent = quantity + 1;
@@ -499,27 +590,16 @@ UmnMailHeader *UmnMailHeaderGet(int mail_id)
     return &UmnMailHeaderBuf[mail_id];
 }
 
-typedef struct UmnMailHeaderView {
-    char sender[0x40];
-    char title[0x40];
-    unsigned char attach[3];
-    unsigned char unmodeled_83;
-    unsigned short flags;
-    unsigned char kind;
-    unsigned char level[5];
-    int data;
-} UmnMailHeaderView;
-
 int UmnMailHeaderCreate(int work)
 {
     int aligned = (work + 0xF) & ~0xF;
-    unsigned char *list = (unsigned char *)(aligned + 0x4800);
+    unsigned char *list = (unsigned char *)(aligned + UMN_MAIL_HEADER_TABLE_SIZE);
     unsigned char *record = list;
     unsigned char *cursor = list;
     UmnMailList *entry;
     UmnMailListBody *body;
-    UmnMailHeaderView *header;
-    unsigned char *sender;
+    UmnMailHeader *header;
+    unsigned char *subject;
     unsigned char *title;
     int size;
     int slot;
@@ -527,30 +607,30 @@ int UmnMailHeaderCreate(int work)
     int i;
 
     UmnMailHeaderBuf = (UmnMailHeader *)aligned;
-    memset((void *)aligned, 0, 0x4800);
+    memset(UmnMailHeaderBuf, 0, UMN_MAIL_HEADER_TABLE_SIZE);
     xglCdReadFile(D_00A13640, list, 0, 0);
     size = ((UmnMailList *)cursor)->size;
     while (size != 0) {
         cursor = cursor + 4;
         entry = (UmnMailList *)(cursor - 4);
-        header = (UmnMailHeaderView *)UmnMailHeaderBuf;
+        header = UmnMailHeaderBuf;
         header += entry->mail_id;
         cursor = cursor + 4;
         body = (UmnMailListBody *)cursor;
         for (i = 0; i < 3; i++) {
-            header->attach[i] = body->attach[i];
+            header->name[i] = body->attach[i];
         }
-        header->flags = body->flags;
-        header->kind = body->kind;
+        header->scenario_limit = body->flags;
+        header->attach = body->kind;
         slot = body->plugin >> 5;
         level = (body->plugin & 3) + 1;
-        memset(header->level, 0, 5);
+        memset(header->kosmos_items, 0, 5);
         if (slot >= 1 && slot <= 4) {
-            header->level[slot - 1] = level;
+            header->kosmos_items[slot - 1] = level;
         }
-        header->data = body->data;
+        header->cost = body->data;
         cursor = cursor + 96;
-        sender = cursor;
+        subject = cursor;
         while (*cursor != 0) {
             if (*cursor < 32) {
                 cursor = cursor + xglFontGetSPcodeSize(*cursor, cursor);
@@ -569,13 +649,13 @@ int UmnMailHeaderCreate(int work)
                 cursor = cursor + 1;
             }
         }
-        eMessageCpy(header->title, (char *)sender + 9);
-        eMessageCpy(header->sender, (char *)title + 8);
+        eMessageCpy(header->subject, subject + 9);
+        eMessageCpy(header->title, title + 8);
         record = record + size + 4;
         cursor = record;
         size = ((UmnMailList *)cursor)->size;
     }
-    return aligned + 0x4800;
+    return aligned + UMN_MAIL_HEADER_TABLE_SIZE;
 }
 
 /* One 0x80-byte plugin text record for the first six ids, falling back to
@@ -585,8 +665,8 @@ char *UmnPluginTextGet(unsigned int plugin_id)
     char *text = umn_text;
     char *entry = text;
 
-    if (plugin_id < 6) {
-        entry = umn_text + plugin_id * 0x80;
+    if (plugin_id < UMN_PLUGIN_TEXT_COUNT) {
+        entry = umn_text + plugin_id * UMN_PLUGIN_TEXT_SIZE;
     }
     text = entry;
     return text;
@@ -596,13 +676,13 @@ int UmnTextLoad(int work, int mode)
 {
     static char f_name[] = "data\\endou\\umn\\umntxt.bin";
     int aligned = (work + 0xF) & ~0xF;
-    int next = aligned + 0x800;
+    int next = aligned + UMN_TEXT_BLOCK_SIZE;
 
     umn_text = (char *)aligned;
     if (mode == 0) {
-        xglCdReadFile(f_name, (void *)aligned, 0, 1);
+        xglCdReadFile(f_name, umn_text, 0, 1);
     } else {
-        MenuLoadFile(f_name, (void *)aligned);
+        MenuLoadFile(f_name, umn_text);
     }
     return next;
 }
@@ -616,10 +696,10 @@ int UmnMailCompulsionDownLoadCheck(int mail_id)
     unsigned char *data;
     int i;
 
-    for (i = 0; i < 13; i++) {
+    for (i = 0; i < UMN_COMPULSION_MAIL_COUNT; i++) {
         if (compulsion_down_load_tbl[i] == mail_id) {
             data = UmnMailDataGet(mail_id);
-            if (data[1] & 0x80) {
+            if (data[1] & UMN_MAIL_ATTACH_TAKEN) {
                 break;
             }
             return 1;
@@ -632,7 +712,7 @@ int UmnEventTextInit(int work)
 {
     int aligned = (work + 0xF) & ~0xF;
 
-    uet_text_buf = (char *)aligned;
+    uet_text_buf = (UmnEventTextRecordBuf *)aligned;
     uet_flag = 0;
-    return aligned + 0x2000;
+    return aligned + UMN_EVENT_TEXT_BUFFER_SIZE;
 }

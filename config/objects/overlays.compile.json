@@ -6189,7 +6189,7 @@
       "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm+swap (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-swap-v1)",
       "path": "tool:ee-as-la29-vsqrt-swap",
       "sha256": "448143a3f1f7ecd4fffb79ea3e641afa36863895366873f93462028535f95494",
-      "argv": "-EL -m5900 -mabi=eabi <G> -g -I .",
+      "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "User decision 2026-10-27: one corrected (swap-mask) ee-as for every in-scope game C TU with the per-object flag -g (config/tu-build.json contract ee-tu-c296-G*-g)"
      },
      "contract_basis": {
@@ -6402,7 +6402,7 @@
       "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm+swap (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-swap-v1)",
       "path": "tool:ee-as-la29-vsqrt-swap",
       "sha256": "448143a3f1f7ecd4fffb79ea3e641afa36863895366873f93462028535f95494",
-      "argv": "-EL -m5900 -mabi=eabi <G> -g -I .",
+      "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "User decision 2026-10-27: one corrected (swap-mask) ee-as for every in-scope game C TU with the per-object flag -g (config/tu-build.json contract ee-tu-c296-G*-g)"
      },
      "contract_basis": {

@@ -7,8 +7,6 @@
 
 #include "shared.h"
 
-typedef signed short s16;
-
 /* Only the ten bytes touched by particle_reset are recovered here. */
 typedef struct TitleParticleView {
     u16 x;
@@ -17,21 +15,6 @@ typedef struct TitleParticleView {
     s16 depth;
     s16 speed;
 } TitleParticleView;
-
-/* copyframe reads the screen size and framebuffer-page halfwords of sRender
- * (the same object and offsets as main/tu130's DrawImageRenderState view). */
-typedef struct {
-    u8 unmodeled_00[0x10];
-    u16 width;
-    u16 height;
-    u16 framebuffer_page;
-    u8 unmodeled_16[4];
-    u16 texture_buffer_base;
-    u8 unmodeled_1c[4];
-    u16 display_buffer_base;
-} TitleRenderState;
-
-extern TitleRenderState sRender;
 
 /* One 128-bit GS/VIF quadword of the scratchpad packet: two 64-bit halves. */
 typedef struct TitleGsQword {
@@ -108,24 +91,7 @@ typedef struct TitleMipmapPacket {
     TitleGsAd texture_flush;
 } TitleMipmapPacket;
 
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern u8 D_2A007F8[];
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 
 typedef struct TitleMcRequest {
     int slot;
@@ -160,15 +126,6 @@ typedef struct TitleFrameCopy {
     u8 bytes[0x70];
 } TitleFrameCopy;
 
-typedef struct TitleGameLoopState {
-    u8 unmodeled_00[14];
-    s16 half_0e;
-    u8 unmodeled_10[8];
-    u32 word_18;
-} TitleGameLoopState;
-
-extern TitleGameLoopState GameLoopState;
-
 extern u64 TestEnv_0_00A0F780[12];
 extern u64 TransEnv_1_00A0F7E0[4];
 extern u64 FlushEnv_2_00A0F800[6];
@@ -179,9 +136,5 @@ extern TitleFrameCopy TestEnvOrg_6;
 extern u64 TestEnv_10[12];
 extern u32 TestEnv_11[52];
 extern u64 TestEnv_12[20];
-
-extern void FlushCache(int mode);
-extern void TitleHddInstall(int cursor);
-extern int MenuFileMain(int mode);
 
 #endif /* SRC_OV02_TITLE_H */

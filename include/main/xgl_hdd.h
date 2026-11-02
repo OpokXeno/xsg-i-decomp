@@ -14,6 +14,33 @@
 #define HDD_CREATE_TOO_MANY_SAVES (-13)
 #define HDD_CREATE_NO_SPACE (-15)
 
+/* xglHddInstall() reports its progress to the callback as these stages (the
+ * second argument counts within a stage) and each failure as a negative code. */
+#define HDD_INSTALL_STAGE_BEGIN 0
+#define HDD_INSTALL_STAGE_RESOURCE_READ 1
+#define HDD_INSTALL_STAGE_PARTITION_OPEN 2
+#define HDD_INSTALL_STAGE_EXTEND 3
+#define HDD_INSTALL_STAGE_FORMAT 4
+#define HDD_INSTALL_STAGE_MOUNT 5
+#define HDD_INSTALL_STAGE_COPY 6
+#define HDD_INSTALL_STAGE_FINISH 7
+#define HDD_INSTALL_STAGE_DONE 8
+#define HDD_INSTALL_FAIL_RESOURCE (-1)
+#define HDD_INSTALL_FAIL_PARTITION_OPEN (-2)
+#define HDD_INSTALL_FAIL_WRITE_HEADER (-3)
+#define HDD_INSTALL_FAIL_EXTEND (-4)
+#define HDD_INSTALL_FAIL_PARTITION_CLOSE (-5)
+#define HDD_INSTALL_FAIL_FORMAT (-6)
+#define HDD_INSTALL_FAIL_MOUNT (-7)
+#define HDD_INSTALL_FAIL_DATA_OPEN (-8)
+#define HDD_INSTALL_FAIL_DATA_WRITE (-9)
+#define HDD_INSTALL_FAIL_DATA_CLOSE (-10)
+#define HDD_INSTALL_FAIL_CHECK_OPEN (-11)
+#define HDD_INSTALL_FAIL_CHECK_WRITE (-12)
+#define HDD_INSTALL_FAIL_CHECK_CLOSE (-13)
+#define HDD_INSTALL_FAIL_UNMOUNT (-14)
+#define HDD_INSTALL_FAIL_REMOUNT (-15)
+
 /* sceDevctl commands on the hdd0: device (HDIOC_*) and on a mounted pfs
  * partition (PDIOC_*), and the sceIoctl2 command that adds a sub-partition. */
 #define HDD_DEVCTL_MAX_SECTORS 0x4801

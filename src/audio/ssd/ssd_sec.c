@@ -1,248 +1,53 @@
-/* Original SSD object: ssd_sec.c. Partial layouts describe evidenced fields. */
-typedef struct SsdVoiceRange {
-    signed char first;
-    signed char last;
-} SsdVoiceRange;
+#include "ssd/ssd_sec.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_data.h"
+#include "ssd/ssd_err.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_seq.h"
+#include "ssd/ssd_wave.h"
 
-typedef struct SsdChannel {
-    unsigned int flags;
-    unsigned char effects, ordinal, allocation_mode, program_type, priority;
-    SsdVoiceRange voice_range;
-    unsigned char unmodeled_00b[13];
-    int volume;
-    unsigned char unmodeled_01c[4];
-    short fader_note;
-    signed char fader_volume, fader_panpot;
-    unsigned char unmodeled_024[5];
-    signed char channel_volume, expression;
-    unsigned char unmodeled_02b[209];
-} SsdChannel;
-
-typedef struct SsdRamp {
-    int value;
-    int step;
-    int target;
-    short remaining;
-    unsigned char _unmodeled_00e[2];
-} SsdRamp;
-
-typedef struct SsdEffectTrack {
-    short flags;
-    unsigned short effects;
-    unsigned char index;
-    unsigned char channel_index;
-    unsigned char voice_index;
-    unsigned char _unmodeled_007;
-    unsigned char priority;
-    unsigned char loop_depth;
-    unsigned short bank_id;
-    unsigned int effect_id;
-    int mode;
-    unsigned int timestamp;
-    unsigned char *begin;
-    unsigned char *stream;
-    unsigned char *jump;
-    SsdChannel *channel;
-    int gate;
-    short gate_ticks;
-    unsigned char gate_state;
-    unsigned char _unmodeled_02f;
-    int wait;
-    int delta;
-    int duration;
-    unsigned char gate_ratio;
-    unsigned char octave;
-    unsigned char note;
-    unsigned char last_note;
-    SsdRamp velocity;
-    SsdRamp pitch;
-    SsdRamp volume;
-    SsdRamp pan;
-    unsigned char _unmodeled_080[48];
-} SsdEffectTrack;
-
-typedef struct SsdMidiDevice {
-    unsigned char _unmodeled_000[32];
-    SsdChannel channels[1];
-} SsdMidiDevice;
-
-typedef struct SsdEffectSequence {
-    unsigned int magic;
-    struct SsdEffectSequence *next;
-    void *data;
-    SsdEffectTrack *tracks;
-    void *label_chunk;
-    SsdMidiDevice *device;
-    void *metadata;
-    int file_id;
-    short flags;
-    short active_tracks;
-    unsigned short bank_id;
-    unsigned char track_count;
-    unsigned char patch_count;
-    unsigned char _unmodeled_028;
-    unsigned char file_mode;
-    unsigned char sequence_kind;
-    unsigned char reverb;
-    unsigned char output_volume;
-    unsigned char volume_group;
-    unsigned char _unmodeled_02e[150];
-} SsdEffectSequence;
-
-typedef struct SsdEffectData {
-    unsigned int magic;
-    unsigned char _unmodeled_004[4];
-    unsigned int size;
-    unsigned char _unmodeled_00c[2];
-    unsigned short file_id;
-    unsigned char _unmodeled_010[10];
-    unsigned short effect_count;
-    unsigned short bank_id;
-    unsigned char _unmodeled_01e[18];
-    struct SsdEffectData *next;
-    unsigned short effect_offsets[0];
-} SsdEffectData;
-
-typedef struct SsdGlobalEffects {
-    unsigned char unmodeled_000[0x158];
-    unsigned int ticks;
-    unsigned char unmodeled_15c[16];
-    SsdEffectSequence *effect_sequence;
-    SsdEffectData *effect_sets;
-    unsigned char unmodeled_174[105];
-    unsigned char effect_output_volume;
-} SsdGlobalEffects;
-
-typedef struct SsdWaveSample {
-    unsigned int body_offset;
-    unsigned int loop_offset;
-    unsigned char volume;
-    unsigned char pan;
-    short base_pitch;
-    unsigned short adsr1;
-    unsigned short adsr2;
-    char name[16];
-} SsdWaveSample;
-
-typedef struct SsdWaveBank {
-    unsigned int signature;
-    unsigned short bank_id;
-    unsigned char sample_count;
-    unsigned char program_count;
-    unsigned char _unmodeled_008[4];
-    unsigned int spu_address;
-    unsigned int body_size;
-    unsigned char _unmodeled_014[4];
-    SsdWaveSample *samples;
-    void *programs;
-    unsigned char _unmodeled_020[4];
-    struct SsdWaveBank *next;
-} SsdWaveBank;
-
-typedef struct SsdEffectEntry {
-    unsigned char flags;
-    unsigned char volume;
-    unsigned char priority;
-    unsigned char track_count;
-    unsigned char _unmodeled_004[4];
-    unsigned short track_offsets[0];
-} SsdEffectEntry;
-
-typedef struct SsdEffectPlayParam {
-    unsigned int effect_id;
-    int mode;
-    unsigned short bank_id;
-    unsigned char start_track;
-    unsigned char track_count;
-    unsigned char first_track;
-    unsigned char priority;
-    unsigned char volume;
-    unsigned char pan;
-    unsigned char flags;
-    SsdEffectEntry *effect_data;
-} SsdEffectPlayParam;
-
-extern SsdGlobalEffects SsdWork;
-extern void CpuDisableIntr(void);
-extern void CpuEnableIntr(void);
-void SsdFadeoutStopEffectTrack(SsdEffectTrack *track, int duration);
-void SsdFadeoutEffect(unsigned int effect_id, int duration, int mode);
-void SsdStopEffect(int effect, int mode);
-void SsdPlayWaveParam(unsigned int wave, int volume, int pan, int mode);
-extern signed char SsdVolumeTable[];
-extern SsdWaveBank *SsdGetWSPtrBank(int bank_id);
-/* The driver stores error details as a 32-bit integer diagnostic word. */
-extern void SsdErrorProc(int error, int detail);
-extern void SsdResetChannel(SsdChannel *channel, int bank_id);
-extern void SsdSetChannelWave(SsdChannel *channel, int sample_index);
-extern void SsdCutoffChannel(SsdChannel *channel);
-int SsdSetEffectParam(unsigned int effect_id, int volume, int pan, int mode);
-void SsdPlayEffectParam(unsigned int effect_id, int volume, int pan, int mode);
-int SsdSaechSeqFreeTrack(SsdEffectPlayParam *play);
-int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play);
-extern void SsdSetChannelVoiceEvent(SsdChannel *channel, int events);
-void SsdFadeoutEffectFileID(int file_id, int duration);
-SsdEffectTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play);
-extern void *SsdNewPtr(unsigned int size);
-extern SsdMidiDevice *SsdNewMidiDevice(int count, int allocation_mode,
-                                     const SsdVoiceRange *voice_range);
-extern void SsdInitSequence(SsdEffectSequence *sequence);
-extern void SsdSetMidiDevicePriority(SsdMidiDevice *device, int priority);
-extern void SsdSetMidiDeviceOutputVolume(SsdMidiDevice *device, int volume);
+void SsdFadeoutStopEffectTrack(SsdTrack *track, int duration);
+SsdTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play);
 SsdEffectData *SsdGetFileIDToEffectData(int file_id);
 void SsdStopEffectFileID(int file_id);
 int SsdUnlinkEffectSet(SsdEffectData *effect);
-extern void SsdDisposePtr(void *allocation);
-extern int SsdCheckData(const void *data, unsigned int magic);
-int SsdCheckEffectData(int file_id);
-extern void SsdMemoryCopy(void *destination, const void *source, unsigned int size);
 void SsdLinkEffectSet(SsdEffectData *effect);
-int SsdCheckPlayEffectFileID(int file_id);
-void SsdStopWave(int effect, int mode);
-void SsdContinueOneEffect(unsigned int effect_id, int duration, int mode);
-void SsdPlayWaveNormal(unsigned int wave, int mode);
-int SsdCheckPlayEffectAll(void);
-void SsdSetPlayEffectParam(unsigned int effect, int volume, int pan, int mode);
-void SsdStopAllEffect(void);
-void SsdPlayEffectNormal(unsigned int effect, int mode);
-SsdEffectSequence *SsdMakeEffectSequenceRec(int track_count, int first_voice);
-void SsdDisposeEffectData(int file_id);
-int SsdCheckPlayEffect(unsigned int effect_id, int mode);
-int SsdAddEffectData(SsdEffectData *effect);
+void SsdSetMidiDevicePriority(SsdMidiDevice *device, unsigned char priority);
 
-SsdEffectSequence *SsdMakeEffectSequenceRec(int track_count, int first_voice)
+SsdSequence *SsdMakeEffectSequenceRec(int track_count, int first_voice)
 {
-    SsdEffectSequence *sequence = SsdNewPtr(sizeof(*sequence));
-    SsdEffectTrack *track = SsdNewPtr(track_count * sizeof(*track));
+    SsdSequence *sequence = SsdNewPtr(sizeof(*sequence));
+    SsdTrack *track = SsdNewPtr(track_count * sizeof(*track));
     int index;
 
-    sequence->device = SsdNewMidiDevice(track_count, 2, 0);
+    sequence->device = SsdNewMidiDevice(track_count, SSD_ALLOCATION_FIXED, 0);
     sequence->data = 0;
     SsdInitSequence(sequence);
     SsdSetMidiDevicePriority(sequence->device, 3);
-    sequence->magic = 0x71657373;
+    sequence->signature = SSD_EFFECT_SEQUENCE_SIGNATURE;
     sequence->metadata = 0;
-    sequence->file_id = 0xf000;
-    sequence->file_mode = 1;
-    sequence->sequence_kind = 1;
+    sequence->sequence_id = SSD_EFFECT_SEQUENCE_ID;
+    sequence->priority = 1;
+    sequence->mode = 1;
     sequence->tracks = track;
     sequence->track_count = track_count;
-    sequence->output_volume = SsdWork.effect_output_volume;
-    sequence->volume_group = 1;
+    sequence->output_volume = SsdWork.effect_volume;
+    sequence->is_effect = 1;
     SsdSetMidiDeviceOutputVolume(sequence->device, sequence->output_volume);
     for (index = 0; index < track_count; ++first_voice) {
         SsdChannel *channel;
 
         track->flags = 0;
-        track->effects = 0;
+        track->control_flags = 0;
         track->index = index;
-        track->channel_index = index;
+        track->midi_channel = index;
         track->voice_index = first_voice;
         track->begin = 0;
         channel = &sequence->device->channels[index];
         track->channel = channel;
         channel->voice_range.first = channel->voice_range.last = first_voice;
-        channel->allocation_mode = 2;
+        channel->allocation_mode = SSD_ALLOCATION_FIXED;
         ++track;
         ++index;
     }
@@ -251,7 +56,7 @@ SsdEffectSequence *SsdMakeEffectSequenceRec(int track_count, int first_voice)
 
 int SsdAddEffectData(SsdEffectData *effect)
 {
-    int error = (short)SsdCheckData(effect, 0x73646573);
+    int error = (short)SsdCheckData(effect, SSD_EFFECT_DATA_SIGNATURE);
     const SsdEffectData *source;
     unsigned int size;
 
@@ -262,8 +67,8 @@ int SsdAddEffectData(SsdEffectData *effect)
         size = effect->size;
         effect = SsdNewPtr(size);
         SsdMemoryCopy(effect, source, size);
-        error = -11;
-        if (effect->magic == 0x73646573) {
+        error = SSD_ERROR_BAD_EFFECT_DATA;
+        if (effect->magic == SSD_EFFECT_DATA_SIGNATURE) {
             SsdLinkEffectSet(effect);
             return effect->file_id;
         }
@@ -277,8 +82,8 @@ void SsdDisposeEffectData(int file_id)
     SsdEffectData *effect = SsdGetFileIDToEffectData(file_id);
 
     if (effect != 0) {
-        if (effect->magic != 0x73646573) {
-            SsdErrorProc(-11, (int)effect);
+        if (effect->magic != SSD_EFFECT_DATA_SIGNATURE) {
+            SsdErrorProc(SSD_ERROR_BAD_EFFECT_DATA, (int)effect);
         } else {
             SsdStopEffectFileID(file_id);
             SsdUnlinkEffectSet(effect);
@@ -311,8 +116,8 @@ int SsdUnlinkEffectSet(SsdEffectData *effect)
     }
     if (current == 0) {
         CpuEnableIntr();
-        SsdErrorProc(-18, (int)effect);
-        return -18;
+        SsdErrorProc(SSD_ERROR_EFFECT_SET_NOT_FOUND, (int)effect);
+        return SSD_ERROR_EFFECT_SET_NOT_FOUND;
     }
     if (previous != 0)
         previous->next = effect->next;
@@ -336,7 +141,7 @@ int SsdCheckEffectData(int file_id)
 
 void SsdPlayEffectNormal(unsigned int effect, int mode)
 {
-    SsdPlayEffectParam(effect, 127, 63, mode);
+    SsdPlayEffectParam(effect, SSD_MIDI_VALUE_MAX, SSD_PANPOT_CENTER, mode);
 }
 
 void SsdSetPlayEffectParam(unsigned int effect, int volume, int pan, int mode)
@@ -358,23 +163,23 @@ void SsdPlayEffectParam(unsigned int effect_id, int volume, int pan, int mode)
     SsdEffectEntry *entry;
     SsdEffectPlayParam play;
     if (effect == 0) {
-        SsdErrorProc(-18, effect_id);
+        SsdErrorProc(SSD_ERROR_EFFECT_SET_NOT_FOUND, effect_id);
         return;
     }
     while (effect->file_id != file_id) {
         effect = effect->next;
         if (effect == 0) {
-            SsdErrorProc(-18, effect_id);
+            SsdErrorProc(SSD_ERROR_EFFECT_SET_NOT_FOUND, effect_id);
             return;
         }
     }
     index = effect_id;
     if (index >= effect->effect_count) {
-        SsdErrorProc(-19, effect_id);
+        SsdErrorProc(SSD_ERROR_EFFECT_INDEX, effect_id);
         return;
     }
     offsets = effect->effect_offsets;
-    if (effect->magic != 0x73646573)
+    if (effect->magic != SSD_EFFECT_DATA_SIGNATURE)
         return;
     selected_offset = offsets + index;
     offset = *selected_offset;
@@ -401,8 +206,8 @@ void SsdPlayEffectParam(unsigned int effect_id, int volume, int pan, int mode)
 
 int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
 {
-    SsdEffectSequence *sequence;
-    SsdEffectTrack *track;
+    SsdSequence *sequence;
+    SsdTrack *track;
     SsdEffectEntry *entry;
     unsigned short *offsets;
     unsigned int timestamp;
@@ -411,7 +216,7 @@ int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
     int remaining;
 
     if (SsdGetWSPtrBank(play->bank_id) == 0) {
-        SsdErrorProc(-20, play->effect_id);
+        SsdErrorProc(SSD_ERROR_NO_EFFECT_BANK, play->effect_id);
         return 0;
     }
     remaining = play->track_count;
@@ -422,10 +227,11 @@ int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
     if (track->flags != 0)
         SsdStopEffect(track->effect_id, track->mode);
     entry = play->effect_data;
-    timestamp = SsdWork.ticks;
+    timestamp = SsdWork.interrupt_count;
     mapped_volume = SsdVolumeTable[play->volume];
     CpuDisableIntr();
-    output_volume = mapped_volume * 100 * 127 / (127 * 127);
+    output_volume = mapped_volume * SSD_CHANNEL_VOLUME_DEFAULT * SSD_MIDI_VALUE_MAX /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
     offsets = entry->track_offsets;
     do {
         unsigned short offset = *offsets++;
@@ -439,8 +245,8 @@ int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
             track->effect_id = play->effect_id;
             track->mode = play->mode;
             track->priority = entry->priority;
-            track->flags = (short)0x8400;
-            track->effects = 0;
+            track->flags = SSD_TRACK_ACTIVE | SSD_TRACK_REST;
+            track->control_flags = 0;
             bank_id = play->bank_id;
             events = (unsigned char *)entry + offset;
             track->begin = events;
@@ -452,27 +258,27 @@ int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
             track->wait = 0;
             track->delta = 0;
             track->duration = 0;
-            track->gate_ratio = 15;
-            track->octave = 60;
-            track->note = 60;
-            track->last_note = 60;
+            track->gate_ratio = SSD_TRACK_GATE_RATIO_DEFAULT;
+            track->octave = SSD_NOTE_MIDDLE_C;
+            track->note = SSD_NOTE_MIDDLE_C;
+            track->last_note = SSD_NOTE_MIDDLE_C;
             track->velocity.remaining = 0;
             track->bank_id = bank_id;
-            track->velocity.value = entry->volume << 16;
+            track->velocity.current.value = entry->volume << 16;
             track->pitch.remaining = 0;
-            track->pitch.value = 0;
-            track->volume.value = 0x640000;
+            track->pitch.current.value = 0;
+            track->volume.current.value = SSD_FIXED_VOLUME_DEFAULT;
             track->volume.remaining = 0;
-            track->pan.value = 0x3f0000;
+            track->pan.current.value = SSD_PANPOT_CENTER_FIXED;
             track->pan.remaining = 0;
-            track->loop_depth = 255;
+            track->loop_depth = SSD_TRACK_LOOP_NONE;
             channel = track->channel;
             SsdResetChannel(channel, play->bank_id);
             SsdSetChannelWave(channel, 0);
             channel->fader_note = 0;
             channel->fader_volume = mapped_volume;
             channel->fader_panpot = play->pan;
-            channel->channel_volume = 100;
+            channel->channel_volume = SSD_CHANNEL_VOLUME_DEFAULT;
             channel->volume = output_volume;
         } else {
             track->flags = 0;
@@ -480,14 +286,14 @@ int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
         --remaining;
         ++track;
     } while (remaining != 0);
-    sequence->flags = (short)0x8000;
+    sequence->flags = SSD_SEQUENCE_PLAYING;
     CpuEnableIntr();
     return play->first_track;
 }
 
 void SsdPlayWaveNormal(unsigned int wave, int mode)
 {
-    SsdPlayWaveParam(wave, 127, 63, mode);
+    SsdPlayWaveParam(wave, SSD_MIDI_VALUE_MAX, SSD_PANPOT_CENTER, mode);
 }
 
 void SsdPlayWaveParam(unsigned int wave, int volume, int pan, int mode)
@@ -515,11 +321,11 @@ void SsdStopWave(int effect, int mode)
     SsdStopEffect(effect, mode);
 }
 
-SsdEffectTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
+SsdTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
 {
     SsdWaveBank *bank = SsdGetWSPtrBank(play->bank_id);
-    SsdEffectSequence *sequence;
-    SsdEffectTrack *track;
+    SsdSequence *sequence;
+    SsdTrack *track;
     SsdChannel *channel;
     int sample_index;
     int mapped_volume;
@@ -529,7 +335,7 @@ SsdEffectTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
     int invalid_sample;
 
     if (bank == 0) {
-        SsdErrorProc(-20, play->effect_id);
+        SsdErrorProc(SSD_ERROR_NO_EFFECT_BANK, play->effect_id);
         return 0;
     }
     sample_index = play->start_track;
@@ -539,7 +345,7 @@ SsdEffectTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
         invalid_sample = sample->volume == 0;
     }
     if (invalid_sample) {
-        SsdErrorProc(-21, play->effect_id);
+        SsdErrorProc(SSD_ERROR_BAD_EFFECT_SAMPLE, play->effect_id);
         return 0;
     }
     if (play->track_count == 0)
@@ -550,22 +356,22 @@ SsdEffectTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
         SsdStopEffect(track->effect_id, track->mode);
     mapped_volume = SsdVolumeTable[play->volume];
     CpuDisableIntr();
-    timestamp = SsdWork.ticks;
+    timestamp = SsdWork.interrupt_count;
     channel = track->channel;
     track->timestamp = timestamp;
     track->effect_id = play->effect_id;
     track->mode = play->mode;
     track->priority = 0;
-    track->effects = 0;
+    track->control_flags = 0;
     bank_id = play->bank_id;
-    track->gate_ratio = 15;
-    track->octave = 60;
-    track->note = 60;
-    track->last_note = 60;
-    track->velocity.value = 0x7f0000;
-    track->volume.value = 0x640000;
-    track->pan.value = 0x3f0000;
-    track->loop_depth = 255;
+    track->gate_ratio = SSD_TRACK_GATE_RATIO_DEFAULT;
+    track->octave = SSD_NOTE_MIDDLE_C;
+    track->note = SSD_NOTE_MIDDLE_C;
+    track->last_note = SSD_NOTE_MIDDLE_C;
+    track->velocity.current.value = SSD_TRACK_VELOCITY_DEFAULT;
+    track->volume.current.value = SSD_FIXED_VOLUME_DEFAULT;
+    track->pan.current.value = SSD_PANPOT_CENTER_FIXED;
+    track->loop_depth = SSD_TRACK_LOOP_NONE;
     track->begin = 0;
     track->stream = 0;
     track->jump = 0;
@@ -579,27 +385,28 @@ SsdEffectTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
     track->volume.remaining = 0;
     track->pan.remaining = 0;
     track->pitch.remaining = 0;
-    track->pitch.value = 0;
-    track->flags = (short)0x8420;
+    track->pitch.current.value = 0;
+    track->flags = SSD_TRACK_ACTIVE | SSD_TRACK_REST | 0x20;
     track->bank_id = bank_id;
     SsdResetChannel(channel, play->bank_id);
     SsdSetChannelWave(channel, sample_index);
-    output_volume = mapped_volume * 100 * 127 / (127 * 127);
+    output_volume = mapped_volume * SSD_CHANNEL_VOLUME_DEFAULT * SSD_MIDI_VALUE_MAX /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
     channel->fader_note = 0;
     channel->fader_volume = mapped_volume;
     channel->fader_panpot = play->pan;
-    channel->channel_volume = 100;
+    channel->channel_volume = SSD_CHANNEL_VOLUME_DEFAULT;
     channel->volume = output_volume;
-    sequence->flags |= 0x8000;
+    sequence->flags |= SSD_SEQUENCE_PLAYING;
     CpuEnableIntr();
     return track;
 }
 
 int SsdSetEffectParam(unsigned int effect_id, int volume, int pan, int mode)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
+    SsdSequence *sequence = SsdWork.effect_sequence;
     int changed = 0;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
     int mapped_volume = SsdVolumeTable[volume];
     SsdChannel *channel;
@@ -607,29 +414,31 @@ int SsdSetEffectParam(unsigned int effect_id, int volume, int pan, int mode)
     CpuDisableIntr();
     if (mode == 0) {
         do {
-            if ((track->flags & 0x8000) && track->effect_id == effect_id) {
-                int update_events = 0x30;
+            if ((track->flags & SSD_TRACK_ACTIVE) && track->effect_id == effect_id) {
+                int update_events = SSD_VOICE_EVENT_PITCH | SSD_VOICE_EVENT_VOLUME;
                 channel = track->channel;
                 changed = 1;
                 channel->fader_volume = mapped_volume;
                 channel->fader_panpot = pan;
                 channel->volume = channel->channel_volume * channel->expression *
-                                  mapped_volume / (127 * 127);
+                                  mapped_volume /
+                                  (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
                 SsdSetChannelVoiceEvent(channel, update_events);
             }
             ++track;
         } while (--remaining != 0);
     } else {
         do {
-            if ((track->flags & 0x8000) && track->effect_id == effect_id &&
+            if ((track->flags & SSD_TRACK_ACTIVE) && track->effect_id == effect_id &&
                 track->mode == mode) {
-                int update_events = 0x30;
+                int update_events = SSD_VOICE_EVENT_PITCH | SSD_VOICE_EVENT_VOLUME;
                 channel = track->channel;
                 changed = 1;
                 channel->fader_volume = mapped_volume;
                 channel->fader_panpot = pan;
                 channel->volume = channel->channel_volume * channel->expression *
-                                  mapped_volume / (127 * 127);
+                                  mapped_volume /
+                                  (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
                 SsdSetChannelVoiceEvent(channel, update_events);
             }
             ++track;
@@ -641,37 +450,37 @@ int SsdSetEffectParam(unsigned int effect_id, int volume, int pan, int mode)
 
 int SsdSaechSeqFreeTrack(SsdEffectPlayParam *play)
 {
-    SsdEffectSequence *sequence;
+    SsdSequence *sequence;
     int needed;
     int search_limit;
     int first_index;
-    SsdEffectTrack *first;
+    SsdTrack *first;
 
-    if (play->flags & 4)
+    if (play->flags & SSD_EFFECT_FLAG_STOP_ANY_MODE)
         SsdStopEffect(play->effect_id, 0);
     else
         SsdStopEffect(play->effect_id, play->mode);
     sequence = SsdWork.effect_sequence;
     needed = play->track_count;
-    if (play->flags & 0x20) {
-        search_limit = 24 - needed;
+    if (play->flags & SSD_EFFECT_FLAG_LOW_TRACKS) {
+        search_limit = SSD_EFFECT_LOW_TRACK_COUNT - needed;
         first_index = search_limit;
     } else {
         first_index = sequence->track_count - needed;
-        search_limit = first_index - 24;
+        search_limit = first_index - SSD_EFFECT_LOW_TRACK_COUNT;
     }
     first = &sequence->tracks[first_index];
     for (;;) {
         int position = search_limit;
-        SsdEffectTrack *track = first;
-        SsdEffectTrack *victim;
+        SsdTrack *track = first;
+        SsdTrack *victim;
         unsigned int oldest_time;
 
         while (position >= 0) {
             int remaining = needed;
 
             if (track->flags == 0) {
-                SsdEffectTrack *next = track + 1;
+                SsdTrack *next = track + 1;
 
                 --remaining;
                 while (remaining != 0) {
@@ -709,14 +518,14 @@ int SsdSaechSeqFreeTrack(SsdEffectPlayParam *play)
 
 void SsdStopAllEffect(void)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
 
     CpuDisableIntr();
     while (remaining != 0) {
         --remaining;
-        if (track->flags & 0x8000) {
+        if (track->flags & SSD_TRACK_ACTIVE) {
             SsdCutoffChannel(track->channel);
             track->flags = 0;
         }
@@ -732,22 +541,22 @@ void SsdStopEffect(int effect, int mode)
 
 void SsdContinueOneEffect(unsigned int effect_id, int duration, int mode)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
 
     CpuDisableIntr();
     if (mode == 0) {
         while (remaining != 0) {
             --remaining;
-            if ((track->flags & 0x8000) && track->effect_id != effect_id)
+            if ((track->flags & SSD_TRACK_ACTIVE) && track->effect_id != effect_id)
                 SsdFadeoutStopEffectTrack(track, duration);
             ++track;
         }
     } else {
         while (remaining != 0) {
             --remaining;
-            if ((track->flags & 0x8000) &&
+            if ((track->flags & SSD_TRACK_ACTIVE) &&
                 (track->effect_id != effect_id || track->mode != mode))
                 SsdFadeoutStopEffectTrack(track, duration);
             ++track;
@@ -763,22 +572,22 @@ void SsdStopEffectFileID(int file_id)
 
 void SsdFadeoutEffect(unsigned int effect_id, int duration, int mode)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
 
     CpuDisableIntr();
     if (mode == 0) {
         while (remaining != 0) {
             --remaining;
-            if ((track->flags & 0x8000) && track->effect_id == effect_id)
+            if ((track->flags & SSD_TRACK_ACTIVE) && track->effect_id == effect_id)
                 SsdFadeoutStopEffectTrack(track, duration);
             ++track;
         }
     } else {
         while (remaining != 0) {
             --remaining;
-            if ((track->flags & 0x8000) && track->effect_id == effect_id &&
+            if ((track->flags & SSD_TRACK_ACTIVE) && track->effect_id == effect_id &&
                 track->mode == mode)
                 SsdFadeoutStopEffectTrack(track, duration);
             ++track;
@@ -789,26 +598,26 @@ void SsdFadeoutEffect(unsigned int effect_id, int duration, int mode)
 
 void SsdFadeoutEffectFileID(int file_id, int duration)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
 
     CpuDisableIntr();
     while (remaining != 0) {
         --remaining;
-        if ((track->flags & 0x8000) && (track->effect_id >> 16) == file_id)
+        if ((track->flags & SSD_TRACK_ACTIVE) && (track->effect_id >> 16) == file_id)
             SsdFadeoutStopEffectTrack(track, duration);
         ++track;
     }
     CpuEnableIntr();
 }
 
-void SsdFadeoutStopEffectTrack(SsdEffectTrack *track, int duration)
+void SsdFadeoutStopEffectTrack(SsdTrack *track, int duration)
 {
     if (duration != 0) {
-        int step = track->velocity.value / duration;
+        int step = track->velocity.current.value / duration;
 
-        track->effects |= 0x20;
+        track->control_flags |= SSD_TRACK_CONTROL_FADE_OUT;
         track->velocity.target = 0;
         track->velocity.remaining = duration;
         track->velocity.step = -step;
@@ -820,12 +629,12 @@ void SsdFadeoutStopEffectTrack(SsdEffectTrack *track, int duration)
 
 int SsdCheckPlayEffectAll(void)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
 
     do {
-        if (track->flags & 0x8000)
+        if (track->flags & SSD_TRACK_ACTIVE)
             return 1;
         --remaining;
         ++track;
@@ -835,13 +644,13 @@ int SsdCheckPlayEffectAll(void)
 
 int SsdCheckPlayEffect(unsigned int effect_id, int mode)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
     switch (mode) {
     case 0:
         do {
-            if ((track->flags & 0x8000) && track->effect_id == effect_id)
+            if ((track->flags & SSD_TRACK_ACTIVE) && track->effect_id == effect_id)
                 return 1;
             --remaining;
             ++track;
@@ -849,7 +658,7 @@ int SsdCheckPlayEffect(unsigned int effect_id, int mode)
         break;
     default:
     do {
-        if ((track->flags & 0x8000) &&
+        if ((track->flags & SSD_TRACK_ACTIVE) &&
             track->effect_id == effect_id && track->mode == mode)
             return 1;
         ++track;
@@ -862,12 +671,12 @@ int SsdCheckPlayEffect(unsigned int effect_id, int mode)
 
 int SsdCheckPlayEffectFileID(int file_id)
 {
-    SsdEffectSequence *sequence = SsdWork.effect_sequence;
-    SsdEffectTrack *track = sequence->tracks;
+    SsdSequence *sequence = SsdWork.effect_sequence;
+    SsdTrack *track = sequence->tracks;
     int remaining = sequence->track_count;
 
     do {
-        if ((track->flags & 0x8000) &&
+        if ((track->flags & SSD_TRACK_ACTIVE) &&
             (track->effect_id >> 16) == file_id)
             return 1;
         --remaining;

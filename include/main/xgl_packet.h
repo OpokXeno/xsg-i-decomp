@@ -107,6 +107,8 @@ extern XglPacket *xglPacketGetCurrent(void);
 #define SCE_GS_TEX0_1 0x06
 #define SCE_GS_TEX1_1 0x14
 #define SCE_GS_CLAMP_1 0x08
+#define SCE_GS_MIPTBP1_1 0x34
+#define SCE_GS_MIPTBP2_1 0x36
 #define SCE_GS_XYOFFSET_1 0x18
 #define SCE_GS_XYOFFSET_2 0x19
 #define SCE_GS_PRMODECONT 0x1A

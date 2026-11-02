@@ -1,48 +1,45 @@
-/* Original SSD ssd_vag.c translation unit. Unmodeled spans retain original storage. */
+#include "ssd/ssd_vag.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_dma.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_pcm.h"
+#include "ssd/ssd_voic.h"
 
-typedef struct SsdVoice {
-    unsigned char index, core, voice, state;
-    unsigned short dirty;
-    unsigned char effect, mode;
-    short volume[2];
-    unsigned short parameter_0c, parameter_0e;
-    unsigned char envelope_state[4];
-    unsigned short pitch, modulation;
-    unsigned int flags, sample_start;
-    unsigned char sample_state[4];
-    unsigned short adsr1, adsr2;
-    unsigned char unmodeled_028[216];
-} SsdVoice;
+/* Streams of up to four mono channels, each double-buffered in SPU memory at SSD_SPU_STREAM_BASE. */
+#define SSD_VAG_MAX_CHANNELS 4
+#define SSD_VAG_CHUNK_BYTES 1024
+#define SSD_VAG_VOICE_STRIDE (SSD_VAG_CHUNK_BYTES * 2)
+#define SSD_VAG_PACKETS_PER_CHUNK 64
+#define SSD_VAG_FIRST_VOICE (SSD_VOICE_COUNT - SSD_VAG_MAX_CHANNELS)
+#define SSD_VAG_VOICE_PRIORITY 0xa0000
 
-typedef struct SsdModulator {
-    union {
-        int value;
-        struct {
-            unsigned short fraction;
-            short integer;
-        } parts;
-    } current;
-    int delta, target;
-    short ticks;
-} SsdModulator;
+/* SsdVagWork.flags above SSD_STREAM_FLAG_*: voices wait for the IRQ, a DMA chain is running. */
+#define SSD_VAG_FLAG_START_PENDING 0x10
+#define SSD_VAG_FLAG_TRANSFERRING 0x20
+
+/* SsdVagChannel.data_flags: the application has supplied data for the next half. */
+#define SSD_VAG_DATA_READY 0x10
+
+/* VAG packet flags */
+#define SSD_VAG_PACKET_LOOP_END 0x1
+#define SSD_VAG_PACKET_LOOP 0x2
+#define SSD_VAG_PACKET_LOOP_START 0x4
+
+/* Silent packet: coding byte 0x0c, flags byte 0x02. */
+#define SSD_VAG_SILENT_HEADER 0x20c
+
+/* The IRQ address sits on the second packet of the chunk being played. */
+#define SSD_VAG_IRQ_OFFSET 0x10
 
 typedef struct SsdVagChannel {
     SsdVoice *voice;
     unsigned char voice_state[4];
     unsigned char data_flags, channel_state;
     short pitch;
-    SsdModulator controls[2];
+    SsdRamp controls[2];
     unsigned char effect, flags;
 } SsdVagChannel;
-
-typedef struct SsdProc SsdProc;
-struct SsdProc {
-    unsigned short kind;
-    unsigned short flags;
-    void (*callback)(SsdProc *, void *);
-    void *arg;
-    SsdProc *next;
-} ;
 
 typedef struct SsdVagWork {
     unsigned char flags;
@@ -53,7 +50,7 @@ typedef struct SsdVagWork {
     signed char channel_count;
     signed char dma_channel_index;
     unsigned char process_state[4];
-    SsdModulator master_volume;
+    SsdRamp master_volume;
     unsigned char transfer_state[4];
     unsigned char *buffers[2];
     int buffer_bytes;
@@ -66,7 +63,7 @@ typedef struct SsdVagWork {
     unsigned char half_blocks;
     unsigned char completed_blocks;
     unsigned char buffer_index;
-    SsdVagChannel channels[4];
+    SsdVagChannel channels[SSD_VAG_MAX_CHANNELS];
     SsdProc update_proc;
 } SsdVagWork;
 
@@ -75,16 +72,6 @@ typedef struct SsdVagBlock {
     unsigned int samples[3];
 } SsdVagBlock;
 
-typedef void (*SsdVagTransferCallback)(int dmaChannel, void *argument);
-
-typedef struct SsdGlobalWork {
-    unsigned char unmodeled_000[412];
-    SsdVagTransferCallback vagTransferCallback;
-    void *vagTransferArgument;
-    unsigned char unmodeled_1a4[200];
-    SsdVoice voices[48];
-} SsdGlobalWork;
-
 typedef struct SsdVagPacket {
     unsigned char coding, flags;
     unsigned char samples[14];
@@ -92,100 +79,16 @@ typedef struct SsdVagPacket {
 
 SsdVagWork SsdVagStrWork;
 
-
-extern int printf(const char *format, ...);
-
-extern SsdGlobalWork SsdWork;
-
-extern void CpuDisableIntr(void);
-
-extern void CpuEnableIntr(void);
-
-extern unsigned char *SsdNewPtr(int bytes);
-
-extern void SsdSetVagStreamCallback(void (*callback)(void));
-
-extern void SsdStreamInterruptProcess(void);
-
-extern void sceSdSetTransIntrHandler(int channel, void (*handler)(void), void *arg);
-
-extern SsdProc *SsdLinkProc(SsdProc *proc, void (*callback)(SsdProc *, void *), void *arg);
-
-extern void SsdUnlinkProc(SsdProc *proc);
-
-extern void SsdDisposePtr(void *ptr);
-
-extern void SsdStreamCopyMemory(void *destination, const void *source, int bytes);
-
-extern void sceSdSetCoreAttr(int attribute, int value);
-
-extern void sceSdSetAddr(int attribute, unsigned int address);
-
-extern void SsdKeyonVoice(SsdVoice *voice);
-
-extern void SsdSetIrqCallback(void (*)(void));
-
-extern void SsdSetPcmStreamCallback(void (*)(int, void *));
-
-extern void SsdCutoffUnlinkVoice(SsdVoice *voice);
-
-extern SsdGlobalWork *SsdGetGlobalWorkPtr(void);
-
-extern int Kprintf(const char *format, ...);
-
-extern int sceSdVoiceTransStatus(int, int);
-
-extern int sceSdVoiceTrans(int, int, void *, unsigned int, int);
-
-extern void SsdCalcDirectVoiceVolume(short *volume, int level, int pan);
-
-extern void SsdCalculateModulate(SsdModulator *modulator);
-
-extern void SsdUnlinkChannelVoice(SsdVoice *voice);
-
-#define SSD_VAG_PREPARE_TRANSFER(out_packet, out_spu_base, out_bank, block) \
-    do { \
-        int stride = SsdVagStrWork.transfer_stride; \
-        int block_byte_offset = stride * (block); \
-        unsigned char *block_source = SsdVagStrWork.transfer_source; \
-        int channel = SsdVagStrWork.dma_channel_index; \
-        int channel_offset = channel * 1024; \
-        (out_bank) = SsdVagStrWork.buffer_index; \
-        block_source += block_byte_offset; \
-        (out_spu_base) = channel * 2048 + 0x6000; \
-        (out_packet) = (SsdVagPacket *)&block_source[channel_offset]; \
-    } while (0)
-
-void SsdInitVagStreamStereo(int bytes, void (*callback)(void *), void *arg);
-
-void SsdInitVagStreamMono(int bytes, int channels, void (*callback)(void *), void *arg);
-
 void SsdInitVagStream(int bytes_per_channel, int channels,
                      void (*callback)(void *), void *arg);
 
-void SsdDisposeVagStream(void);
-
-void SsdResumeVagStream(void);
-
-void SsdSuspendVagStream(void);
-
-void SsdPlayVagStream(int volume, int ticks, int pitch);
-
-void SsdStopVagStream(int ticks);
-
-int SsdGetVagStreamStatus(void);
-
-int SsdGetVagStreamParam(int channel, int *pitch, int *volume, int *pan);
-
 void SsdSetVagStreamDataStereo(const void *source);
 
-void SsdSetVagStreamDataMono(int channel, const unsigned char *source, int bytes);
-
-void SsdVagStreamCallback(void);
+void SsdVagStreamCallback(int result, void *argument);
 
 void SsdVagStreamClearMemory(void *buffer, int bytes);
 
-void SsdVagStreamIrqCallback(void);
+void SsdVagStreamIrqCallback(int result, void *argument);
 
 void SsdVagStreamDmaCallback(int first, void *context);
 
@@ -203,17 +106,13 @@ void SsdInitVagStreamVoice(int channel);
 
 void SsdSetVagStreamPitch(int channel, int pitch);
 
-void SsdSetVagStreamVolume(int channel, int volume, int ticks);
-
 void SsdSetVagStreamPanpot(int channel, int pan);
-
-void SsdSetVagStreamParam(int channel, int pitch, int volume, int pan);
 
 void SsdSetVagStreamHWEffect(int channel, int control, int dirty);
 
 void SsdSetVagStreamMasterVolume(int volume, int ticks);
 
-void SsdVagStreamVolumeFadeProc(SsdProc *proc, void *context);
+void SsdVagStreamVolumeFadeProc(SsdGlobalWork *global_work, void *context);
 
 void SsdAllocVoiceVagStream(void);
 
@@ -222,15 +121,15 @@ void SsdFreeVoiceVagStream(void);
 void SsdInitVagStreamStereo(int bytes, void (*callback)(void *), void *arg)
 {
     SsdInitVagStream(bytes / 2, 2, callback, arg);
-    SsdVagStrWork.channels[0].pitch = 4096;
-    SsdVagStrWork.channels[0].controls[0].current.value = 127 * 65536;
+    SsdVagStrWork.channels[0].pitch = SSD_VOICE_PITCH_NORMAL;
+    SsdVagStrWork.channels[0].controls[0].current.value = SSD_MIDI_VALUE_MAX * 65536;
     SsdVagStrWork.channels[0].controls[1].current.value = 0;
-    SsdVagStrWork.channels[0].effect = 8;
+    SsdVagStrWork.channels[0].effect = SSD_VOICE_EFFECT_DRY;
     SsdVagStrWork.channels[0].flags = 0;
-    SsdVagStrWork.channels[1].pitch = 4096;
-    SsdVagStrWork.channels[1].controls[0].current.value = 127 * 65536;
-    SsdVagStrWork.channels[1].controls[1].current.value = 127 * 65536;
-    SsdVagStrWork.channels[1].effect = 8;
+    SsdVagStrWork.channels[1].pitch = SSD_VOICE_PITCH_NORMAL;
+    SsdVagStrWork.channels[1].controls[0].current.value = SSD_MIDI_VALUE_MAX * 65536;
+    SsdVagStrWork.channels[1].controls[1].current.value = SSD_MIDI_VALUE_MAX * 65536;
+    SsdVagStrWork.channels[1].effect = SSD_VOICE_EFFECT_DRY;
     SsdVagStrWork.channels[1].flags = 0;
 }
 
@@ -238,16 +137,16 @@ void SsdInitVagStreamMono(int bytes, int channels, void (*callback)(void *), voi
 {
     int channel;
 
-    if (channels > 4) {
+    if (channels > SSD_VAG_MAX_CHANNELS) {
         printf("Ssd init vag stream  Error NumChannel=%d\n", channels);
         return;
     }
     SsdInitVagStream(bytes, channels, callback, arg);
     for (channel = 0; channel < channels; channel++) {
-        SsdVagStrWork.channels[channel].pitch = 4096;
-        SsdVagStrWork.channels[channel].controls[0].current.value = 127 * 65536;
-        SsdVagStrWork.channels[channel].controls[1].current.value = 64 * 65536;
-        SsdVagStrWork.channels[channel].effect = 8;
+        SsdVagStrWork.channels[channel].pitch = SSD_VOICE_PITCH_NORMAL;
+        SsdVagStrWork.channels[channel].controls[0].current.value = SSD_MIDI_VALUE_MAX * 65536;
+        SsdVagStrWork.channels[channel].controls[1].current.value = SSD_MIDI_PAN_CENTER * 65536;
+        SsdVagStrWork.channels[channel].effect = SSD_VOICE_EFFECT_DRY;
         SsdVagStrWork.channels[channel].flags = 0;
     }
 }
@@ -258,8 +157,8 @@ void SsdInitVagStream(int bytes_per_channel, int channels,
     int half_bytes = bytes_per_channel * channels;
     int total_bytes = half_bytes * 2;
 
-    SsdVagStrWork.flags = 1;
-    SsdVagStrWork.status = 0;
+    SsdVagStrWork.flags = SSD_STREAM_FLAG_OPEN;
+    SsdVagStrWork.status = SSD_STREAM_STOPPED;
     SsdVagStrWork.buffer_selector = 0;
     SsdVagStrWork.dma_channel = 1;
     SsdVagStrWork.mode = 1;
@@ -276,7 +175,7 @@ void SsdInitVagStream(int bytes_per_channel, int channels,
     SsdVagStrWork.half_buffer_bytes = half_bytes;
     SsdVagStrWork.callback = callback;
     SsdVagStrWork.callback_arg = arg;
-    SsdVagStrWork.transfer_stride = channels * 1024;
+    SsdVagStrWork.transfer_stride = channels * SSD_VAG_CHUNK_BYTES;
     SsdVagStreamClearMemory(SsdVagStrWork.buffers[0], total_bytes);
     SsdVagStreamInitTrans(SsdVagStrWork.buffers[0], bytes_per_channel);
     SsdVagStrWork.master_volume.current.value = 0;
@@ -290,7 +189,7 @@ void SsdInitVagStream(int bytes_per_channel, int channels,
 
 void SsdDisposeVagStream(void)
 {
-    if (SsdVagStrWork.status == 1)
+    if (SsdVagStrWork.status == SSD_STREAM_PLAYING)
         SsdStopVagStream(0);
     CpuDisableIntr();
     sceSdSetTransIntrHandler(SsdVagStrWork.dma_channel, 0, 0);
@@ -306,8 +205,8 @@ void SsdDisposeVagStream(void)
 
 void SsdResumeVagStream(void)
 {
-    if (SsdVagStrWork.status == 1) {
-        SsdVagStrWork.flags &= ~2;
+    if (SsdVagStrWork.status == SSD_STREAM_PLAYING) {
+        SsdVagStrWork.flags &= ~SSD_STREAM_FLAG_SUSPENDED;
         CpuDisableIntr();
         SsdVagStreamBlockTrans(SsdVagStrWork.dma_channel, 1, 0, 0);
         CpuEnableIntr();
@@ -316,8 +215,8 @@ void SsdResumeVagStream(void)
 
 void SsdSuspendVagStream(void)
 {
-    if (SsdVagStrWork.status == 1) {
-        SsdVagStrWork.flags |= 2;
+    if (SsdVagStrWork.status == SSD_STREAM_PLAYING) {
+        SsdVagStrWork.flags |= SSD_STREAM_FLAG_SUSPENDED;
         CpuDisableIntr();
         SsdVagStreamBlockTrans(SsdVagStrWork.dma_channel, 0, 0, 0);
         CpuEnableIntr();
@@ -329,14 +228,14 @@ void SsdPlayVagStream(int volume, int ticks, int pitch)
     int channels = SsdVagStrWork.channel_count;
     int channel;
 
-    if (SsdVagStrWork.status != 1) {
+    if (SsdVagStrWork.status != SSD_STREAM_PLAYING) {
         SsdVagStreamClearMemory(SsdVagStrWork.buffers[0], SsdVagStrWork.buffer_bytes);
         SsdSetVagStreamMasterVolume(0, 0);
         for (channel = 0; channel < channels; channel++) {
-            SsdVagStrWork.channels[channel].data_flags &= ~16;
+            SsdVagStrWork.channels[channel].data_flags &= ~SSD_VAG_DATA_READY;
             SsdVagStrWork.channels[channel].pitch = pitch;
         }
-        SsdVagStrWork.status = 1;
+        SsdVagStrWork.status = SSD_STREAM_PLAYING;
         SsdSetVagStreamMasterVolume(volume, ticks);
         CpuDisableIntr();
         SsdVagStreamBlockTrans(SsdVagStrWork.dma_channel, 1, 0, 0);
@@ -351,7 +250,7 @@ void SsdStopVagStream(int ticks)
     if (SsdVagStrWork.status) {
         SsdSetVagStreamMasterVolume(0, ticks);
         if (ticks == 0) {
-            SsdVagStrWork.status = 0;
+            SsdVagStrWork.status = SSD_STREAM_STOPPED;
             SsdVagStreamClearMemory(SsdVagStrWork.buffers[0], SsdVagStrWork.buffer_bytes);
             CpuDisableIntr();
             SsdVagStreamBlockTrans(SsdVagStrWork.dma_channel, 0, 0, 0);
@@ -388,12 +287,12 @@ void SsdSetVagStreamDataStereo(const void *source)
     buffer = SsdVagStrWork.buffers[selector ^ 1];
     if (source) {
         SsdStreamCopyMemory(buffer, source, SsdVagStrWork.half_buffer_bytes);
-        SsdVagStrWork.channels[0].data_flags |= 16;
-        SsdVagStrWork.channels[1].data_flags |= 16;
+        SsdVagStrWork.channels[0].data_flags |= SSD_VAG_DATA_READY;
+        SsdVagStrWork.channels[1].data_flags |= SSD_VAG_DATA_READY;
     } else {
         SsdVagStreamClearMemory(buffer, SsdVagStrWork.half_buffer_bytes);
-        SsdVagStrWork.channels[0].data_flags &= ~16;
-        SsdVagStrWork.channels[1].data_flags &= ~16;
+        SsdVagStrWork.channels[0].data_flags &= ~SSD_VAG_DATA_READY;
+        SsdVagStrWork.channels[1].data_flags &= ~SSD_VAG_DATA_READY;
     }
 }
 
@@ -405,37 +304,37 @@ void SsdSetVagStreamDataMono(int channel, const unsigned char *source, int bytes
     block = SsdVagStreamTransferStatus(SsdVagStrWork.dma_channel, 0) >> 24;
     SsdVagStrWork.buffer_selector = block;
     block ^= 1;
-    buffer = SsdVagStrWork.buffers[block] + channel * 1024;
+    buffer = SsdVagStrWork.buffers[block] + channel * SSD_VAG_CHUNK_BYTES;
     if (source) {
         for (block = 0; block < SsdVagStrWork.half_blocks; block++) {
-            int chunk = 1024;
+            int chunk = SSD_VAG_CHUNK_BYTES;
 
             if (bytes < chunk) {
                 chunk = bytes;
-                SsdVagStreamClearMemory(buffer, 1024);
+                SsdVagStreamClearMemory(buffer, SSD_VAG_CHUNK_BYTES);
             }
             if (chunk) {
                 SsdStreamCopyMemory(buffer, source, chunk);
                 bytes -= chunk;
-                source += 1024;
+                source += SSD_VAG_CHUNK_BYTES;
             }
             buffer += SsdVagStrWork.transfer_stride;
         }
-        SsdVagStrWork.channels[channel].data_flags |= 16;
+        SsdVagStrWork.channels[channel].data_flags |= SSD_VAG_DATA_READY;
     } else {
         for (block = 0; block < SsdVagStrWork.half_blocks; block++) {
-            SsdVagStreamClearMemory(buffer, 1024);
+            SsdVagStreamClearMemory(buffer, SSD_VAG_CHUNK_BYTES);
             buffer += SsdVagStrWork.transfer_stride;
         }
-        SsdVagStrWork.channels[channel].data_flags &= ~16;
+        SsdVagStrWork.channels[channel].data_flags &= ~SSD_VAG_DATA_READY;
     }
 }
 
-void SsdVagStreamCallback(void)
+void SsdVagStreamCallback(int result, void *argument)
 {
-    if (SsdVagStrWork.flags & 2)
+    if (SsdVagStrWork.flags & SSD_STREAM_FLAG_SUSPENDED)
         return;
-    if (SsdVagStrWork.status != 1)
+    if (SsdVagStrWork.status != SSD_STREAM_PLAYING)
         return;
     if (SsdVagStrWork.callback)
         SsdVagStrWork.callback(SsdVagStrWork.callback_arg);
@@ -448,20 +347,20 @@ void SsdVagStreamClearMemory(void *buffer, int bytes)
     int count = bytes >> 4;
 
     for (index = 0; index < count; index++) {
-        blocks->header = 524;
+        blocks->header = SSD_VAG_SILENT_HEADER;
         blocks->samples[0] = blocks->samples[1] = blocks->samples[2] = 0;
         blocks++;
     }
 }
 
-void SsdVagStreamIrqCallback(void)
+void SsdVagStreamIrqCallback(int result, void *argument)
 {
     SsdVagStreamSpuTransfer();
 }
 
 void SsdVagStreamDmaCallback(int first, void *context)
 {
-    if (SsdVagStrWork.flags & 0x20) {
+    if (SsdVagStrWork.flags & SSD_VAG_FLAG_TRANSFERRING) {
         int channel;
         int start_voices;
 
@@ -471,10 +370,11 @@ void SsdVagStreamDmaCallback(int first, void *context)
             SsdVagStreamDmaTransfer(first);
             return;
         }
-        sceSdSetCoreAttr(5, 0);
-        SsdVagStrWork.flags &= ~0x10;
-        sceSdSetAddr(0x1f01, 0x6010 + (SsdVagStrWork.buffer_index << 10));
-        sceSdSetCoreAttr(5, 1);
+        sceSdSetCoreAttr(SD_C_IRQ_ENABLE | SD_CORE_1, 0);
+        SsdVagStrWork.flags &= ~SSD_VAG_FLAG_START_PENDING;
+        sceSdSetAddr(SD_A_IRQA | SD_CORE_1,
+                     SSD_SPU_STREAM_BASE + SSD_VAG_IRQ_OFFSET + (SsdVagStrWork.buffer_index << 10));
+        sceSdSetCoreAttr(SD_C_IRQ_ENABLE | SD_CORE_1, 1);
         if (start_voices) {
             for (channel = 0; channel < SsdVagStrWork.channel_count; channel++)
                 SsdKeyonVoice(SsdVagStrWork.channels[channel].voice);
@@ -487,7 +387,7 @@ void SsdVagStreamInitTrans(void *source, int bytes)
     int blocks;
 
     SsdVagStrWork.transfer_source = source;
-    blocks = bytes / 1024;
+    blocks = bytes / SSD_VAG_CHUNK_BYTES;
     SsdVagStrWork.total_blocks = blocks * 2;
     SsdVagStrWork.half_blocks = blocks;
     SsdVagStrWork.completed_blocks = 0;
@@ -497,9 +397,9 @@ void SsdVagStreamBlockTrans(int channel, int start, void *buffer, int bytes)
 {
     int voice;
     if (start == 1) {
-        SsdVagStrWork.flags |= 0x30;
+        SsdVagStrWork.flags |= SSD_VAG_FLAG_TRANSFERRING | SSD_VAG_FLAG_START_PENDING;
         SsdVagStrWork.buffer_index = 0;
-        sceSdSetCoreAttr(5, 0);
+        sceSdSetCoreAttr(SD_C_IRQ_ENABLE | SD_CORE_1, 0);
         SsdSetIrqCallback(SsdVagStreamIrqCallback);
         SsdSetPcmStreamCallback(SsdVagStreamDmaCallback);
         for (voice = 0; voice < SsdVagStrWork.channel_count; voice++)
@@ -507,11 +407,11 @@ void SsdVagStreamBlockTrans(int channel, int start, void *buffer, int bytes)
         SsdVagStrWork.dma_channel_index = 0;
         SsdVagStreamDmaTransfer(1);
     } else {
-        SsdVagStrWork.flags &= ~0x30;
+        SsdVagStrWork.flags &= ~(SSD_VAG_FLAG_TRANSFERRING | SSD_VAG_FLAG_START_PENDING);
         SsdSetPcmStreamCallback(0);
         for (voice = 0; voice < SsdVagStrWork.channel_count; voice++)
             SsdCutoffUnlinkVoice(SsdVagStrWork.channels[voice].voice);
-        sceSdSetCoreAttr(5, 0);
+        sceSdSetCoreAttr(SD_C_IRQ_ENABLE | SD_CORE_1, 0);
     }
 }
 
@@ -520,7 +420,7 @@ void SsdVagStreamSpuTransfer(void)
     int completedIndex;
     int nextIndex;
 
-    sceSdSetCoreAttr(5, 0);
+    sceSdSetCoreAttr(SD_C_IRQ_ENABLE | SD_CORE_1, 0);
     SsdVagStrWork.dma_channel_index = 0;
     completedIndex = SsdVagStrWork.completed_blocks;
     nextIndex = completedIndex + 1;
@@ -531,8 +431,8 @@ void SsdVagStreamSpuTransfer(void)
     SsdVagStrWork.buffer_index = !SsdVagStrWork.buffer_index;
     if (completedIndex == 0 || completedIndex == SsdVagStrWork.half_blocks) {
         SsdGlobalWork *work = SsdGetGlobalWorkPtr();
-        if (work->vagTransferCallback != 0) {
-            work->vagTransferCallback(SsdVagStrWork.dma_channel, work->vagTransferArgument);
+        if (work->vag_callback != 0) {
+            work->vag_callback(SsdVagStrWork.dma_channel, work->vag_argument);
         }
     }
     SsdVagStreamDmaTransfer(0);
@@ -548,20 +448,31 @@ void SsdVagStreamDmaTransfer(int first)
     unsigned int spu_start;
     {
         int block = SsdVagStrWork.completed_blocks;
-        SSD_VAG_PREPARE_TRANSFER(packet, spu_start, buffer_index, block);
-        destination = buffer_index * 1024 + spu_start;
+        do {
+            int stride = SsdVagStrWork.transfer_stride;
+            int block_byte_offset = stride * block;
+            unsigned char *block_source = SsdVagStrWork.transfer_source;
+            int channel = SsdVagStrWork.dma_channel_index;
+            int channel_offset = channel * SSD_VAG_CHUNK_BYTES;
+            buffer_index = SsdVagStrWork.buffer_index;
+            block_source += block_byte_offset;
+            spu_start = channel * SSD_VAG_VOICE_STRIDE + SSD_SPU_STREAM_BASE;
+            packet = (SsdVagPacket *)&block_source[channel_offset];
+        } while (0);
+        destination = buffer_index * SSD_VAG_CHUNK_BYTES + spu_start;
     }
     if (first)
-        packet->flags = 6;
-    last_packet = &packet[63];
+        packet->flags = SSD_VAG_PACKET_LOOP | SSD_VAG_PACKET_LOOP_START;
+    last_packet = &packet[SSD_VAG_PACKETS_PER_CHUNK - 1];
     if (buffer_index)
-        last_packet->flags = 3;
+        last_packet->flags = SSD_VAG_PACKET_LOOP | SSD_VAG_PACKET_LOOP_END;
     else
-        last_packet->flags = 2;
+        last_packet->flags = SSD_VAG_PACKET_LOOP;
     status = sceSdVoiceTransStatus(SsdVagStrWork.dma_channel, 0);
     if (status < 0)
         Kprintf("sceSdVoiceTransStatus Error=%d", status);
-    status = sceSdVoiceTrans(SsdVagStrWork.dma_channel, 0, packet, destination, 1024);
+    status = sceSdVoiceTrans(SsdVagStrWork.dma_channel, SD_TRANS_MODE_WRITE, packet, destination,
+                             SSD_VAG_CHUNK_BYTES);
     if (status < 0)
         Kprintf("sceSdVoiceTrans Error=%d", status);
 }
@@ -577,18 +488,18 @@ void SsdInitVagStreamVoice(int channel)
     SsdVoice *voice = stream->voice;
 
     voice->pitch = stream->pitch;
-    SsdCalcDirectVoiceVolume(voice->volume,
-        (stream->controls[0].current.value >> 16) * (SsdVagStrWork.master_volume.current.value >> 16) / 127,
+    SsdCalcDirectVoiceVolume(&voice->left_volume,
+        (stream->controls[0].current.value >> 16) * (SsdVagStrWork.master_volume.current.value >> 16) / SSD_MIDI_VALUE_MAX,
         stream->controls[1].current.value >> 16);
-    voice->dirty = 0;
-    voice->effect = stream->effect;
-    voice->mode = stream->flags;
-    voice->adsr1 = 0x20ff;
-    voice->parameter_0c = 0;
-    voice->parameter_0e = 0;
+    voice->flags = 0;
+    voice->effects = stream->effect;
+    voice->attributes = stream->flags;
+    voice->adsr1 = SSD_VOICE_ADSR1_RAW;
+    voice->reserved_volume[0] = 0;
+    voice->reserved_volume[1] = 0;
     voice->modulation = 0;
-    voice->sample_start = 0x6000 + channel * 2048;
-    voice->adsr2 = 0x5fc6;
+    voice->sample_start = SSD_SPU_STREAM_BASE + channel * SSD_VAG_VOICE_STRIDE;
+    voice->adsr2 = SSD_VOICE_ADSR2_RAW;
 }
 
 void SsdSetVagStreamPitch(int channel, int pitch)
@@ -599,7 +510,7 @@ void SsdSetVagStreamPitch(int channel, int pitch)
 
         stream->pitch = pitch;
         voice->pitch = pitch;
-        voice->dirty |= 1;
+        voice->flags |= SSD_VOICE_FLAG_PITCH;
     }
 }
 
@@ -619,17 +530,17 @@ void SsdSetVagStreamVolume(int channel, int volume, int ticks)
     while (channel < end) {
         stream = &SsdVagStrWork.channels[channel];
         stream->controls[0].target = fixed_volume;
-        stream->controls[0].ticks = ticks;
+        stream->controls[0].remaining = ticks;
         if (ticks == 0) {
             int level;
             SsdVoice *voice;
             stream->controls[0].current.value = fixed_volume;
-            level = volume * (SsdVagStrWork.master_volume.current.value >> 16) / 127;
+            level = volume * (SsdVagStrWork.master_volume.current.value >> 16) / SSD_MIDI_VALUE_MAX;
             voice = stream->voice;
-            SsdCalcDirectVoiceVolume(voice->volume, level, stream->controls[1].current.value >> 16);
-            voice->dirty |= 2;
+            SsdCalcDirectVoiceVolume(&voice->left_volume, level, stream->controls[1].current.value >> 16);
+            voice->flags |= SSD_VOICE_FLAG_VOLUME;
         } else {
-            stream->controls[0].delta = (fixed_volume - stream->controls[0].current.value) / ticks;
+            stream->controls[0].step = (fixed_volume - stream->controls[0].current.value) / ticks;
         }
         channel++;
     }
@@ -651,7 +562,7 @@ void SsdSetVagStreamPanpot(int channel, int pan)
     }
     if (channel >= end)
         return;
-    fixed_pan = (unsigned int)pan << 16;
+    fixed_pan = pan << 16;
     do {
         int channel_volume;
         int master_volume;
@@ -660,10 +571,10 @@ void SsdSetVagStreamPanpot(int channel, int pan)
         channel_volume = stream->controls[0].current.value >> 16;
         stream->controls[1].current.value = fixed_pan;
         master_volume = SsdVagStrWork.master_volume.current.value >> 16;
-        level = channel_volume * master_volume / 127;
+        level = channel_volume * master_volume / SSD_MIDI_VALUE_MAX;
         voice = stream->voice;
-        SsdCalcDirectVoiceVolume(voice->volume, level, pan);
-        voice->dirty |= 2;
+        SsdCalcDirectVoiceVolume(&voice->left_volume, level, pan);
+        voice->flags |= SSD_VOICE_FLAG_VOLUME;
         ++channel;
     } while (channel < end);
 }
@@ -677,9 +588,9 @@ void SsdSetVagStreamParam(int channel, int pitch, int volume, int pan)
     stream->pitch = pitch;
     stream->controls[1].current.value = pan * 65536;
     voice->pitch = pitch;
-    SsdCalcDirectVoiceVolume(voice->volume,
-        volume * (SsdVagStrWork.master_volume.current.value >> 16) / 127, pan);
-    voice->dirty |= 3;
+    SsdCalcDirectVoiceVolume(&voice->left_volume,
+        volume * (SsdVagStrWork.master_volume.current.value >> 16) / SSD_MIDI_VALUE_MAX, pan);
+    voice->flags |= SSD_VOICE_FLAG_PITCH | SSD_VOICE_FLAG_VOLUME;
 }
 
 void SsdSetVagStreamHWEffect(int channel, int control, int dirty)
@@ -687,8 +598,8 @@ void SsdSetVagStreamHWEffect(int channel, int control, int dirty)
     SsdVagChannel *stream = &SsdVagStrWork.channels[channel];
     SsdVoice *voice = stream->voice;
 
-    voice->effect = stream->effect;
-    voice->dirty |= dirty;
+    voice->effects = stream->effect;
+    voice->flags |= dirty;
 }
 
 void SsdSetVagStreamMasterVolume(int volume, int ticks)
@@ -706,34 +617,34 @@ void SsdSetVagStreamMasterVolume(int volume, int ticks)
         channel = 0;
         if (channel < SsdVagStrWork.channel_count) {
             do {
-                level = (stream->controls[0].current.value >> 16) * volume / 127;
+                level = (stream->controls[0].current.value >> 16) * volume / SSD_MIDI_VALUE_MAX;
                 voice = stream->voice;
-                SsdCalcDirectVoiceVolume(voice->volume,
+                SsdCalcDirectVoiceVolume(&voice->left_volume,
                     level,
                     stream->controls[1].current.value >> 16);
-                voice->dirty |= 2;
+                voice->flags |= SSD_VOICE_FLAG_VOLUME;
                 stream++;
                 channel++;
             } while (channel < SsdVagStrWork.channel_count);
         }
     } else {
-        SsdVagStrWork.master_volume.delta =
+        SsdVagStrWork.master_volume.step =
             (fixed_volume - SsdVagStrWork.master_volume.current.value) / ticks;
     }
-    SsdVagStrWork.master_volume.ticks = ticks;
+    SsdVagStrWork.master_volume.remaining = ticks;
 }
 
-void SsdVagStreamVolumeFadeProc(SsdProc *proc, void *context)
+void SsdVagStreamVolumeFadeProc(SsdGlobalWork *global_work, void *context)
 {
     SsdVagWork *work = context;
     unsigned char changed[4];
     int channel;
-    if (work->status == 1) {
-    if (work->master_volume.ticks != 0) {
+    if (work->status == SSD_STREAM_PLAYING) {
+    if (work->master_volume.remaining != 0) {
         SsdCalculateModulate(&work->master_volume);
         if (work->master_volume.current.value == 0) {
             SsdVagStreamBlockTrans(work->dma_channel, 0, 0, 0);
-            work->status = 0;
+            work->status = SSD_STREAM_STOPPED;
             Kprintf("Stream stop !\n");
         }
         changed[0] = changed[1] = changed[2] = changed[3] = 1;
@@ -745,7 +656,7 @@ void SsdVagStreamVolumeFadeProc(SsdProc *proc, void *context)
         unsigned char *modulated_channels = changed;
         do {
             SsdVagChannel *fading_channel = &work->channels[channel];
-            if (fading_channel->controls[0].ticks != 0) {
+            if (fading_channel->controls[0].remaining != 0) {
                 SsdCalculateModulate(&fading_channel->controls[0]);
                 modulated_channels[channel] = 1;
             }
@@ -759,11 +670,11 @@ void SsdVagStreamVolumeFadeProc(SsdProc *proc, void *context)
             if (changed_channels[channel]) {
                 SsdVagChannel *stream = &work->channels[channel];
                 SsdVoice *voice = stream->voice;
-                SsdCalcDirectVoiceVolume(voice->volume,
+                SsdCalcDirectVoiceVolume(&voice->left_volume,
                     (stream->controls[0].current.value >> 16) *
-                        (work->master_volume.current.value >> 16) / 127,
+                        (work->master_volume.current.value >> 16) / SSD_MIDI_VALUE_MAX,
                     stream->controls[1].current.value >> 16);
-                voice->dirty |= 2;
+                voice->flags |= SSD_VOICE_FLAG_VOLUME;
             }
             channel++;
         } while (channel < work->channel_count);
@@ -778,14 +689,14 @@ void SsdAllocVoiceVagStream(void)
 
     CpuDisableIntr();
     channelIndex = 0;
-    firstVoice = 44;
+    firstVoice = SSD_VAG_FIRST_VOICE;
     if (SsdVagStrWork.channel_count > 0) {
         do {
             SsdVoice *voice = &SsdWork.voices[firstVoice + channelIndex];
-            unsigned int streamFlags = 0xa0000;
+            unsigned int streamFlags = SSD_VAG_VOICE_PRIORITY;
             SsdUnlinkChannelVoice(voice);
             SsdVagStrWork.channels[channelIndex].voice = voice;
-            voice->flags = (voice->flags & 0xffff) | streamFlags;
+            voice->allocation.priority = (voice->allocation.priority & 0xffff) | streamFlags;
             channelIndex++;
         } while (channelIndex < SsdVagStrWork.channel_count);
     }

@@ -3,64 +3,34 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/e_battle_win_open.h"
 #include "main/e_message.h"
+#include "main/e_number_main.h"
+#include "main/end_print.h"
+#include "main/menu_1.h"
+#include "main/menu_top_command_check.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+#include "ov02/ov02.h"
+#include "ov02/title_hdd_install.h"
+#include "ov02/tsk_umn_object_task_main.h"
+#include "ov02/tsk_umn_plugin_pas.h"
+#include "ov02/umn_event_text_symbol_check.h"
 
-struct UmnPluginState {
-    unsigned char unmodeled_00;
-    unsigned char plugin_work_state;
-    unsigned char unmodeled_02;
-    unsigned char plugin_mode;
-    unsigned char unmodeled_04[0x0c];
-    signed char transition_timer;
-    unsigned char unmodeled_11[0x3f];
-    signed char selected_plugin_index;
-    signed char unlocked_plugin_count;
-    unsigned char selected_plugin_id;
-    unsigned char unmodeled_53[0x2d];
-};
+/* Plug-in slots (bits of the unlock flags, entries of plugin_folder). */
+#define UMN_PLUGIN_SLOTS 16
+/* Plug-ins the list shows (ids below this have a description); the list array adds the "end" row and the terminator. */
+#define UMN_PLUGIN_LIST_MAX 6
 
-extern struct UmnPluginState UmnWork;
-extern unsigned char *UmnWorkEnd;
-extern const char D_00A13440[];
-extern const char D_00A13458[];
-extern const char D_00A13460[];
-static void *msg00_0_00A10C40 = (void *)D_00A13440;
-unsigned char plugin_folder[16] = { 0 };
-static const char D_00A13450[8] = "";
-/* The original EUC-JP debug label spells プラグイン. */
-/* JP: プラグイン
- * EN: Plugin */
-static const char D_00A13540[16] =
-    "\xA5\xD7\xA5\xE9\xA5\xB0\xA5\xA4\xA5\xF3";
-extern unsigned short D_4A1A0C[];
-
-/* PadData's +0x2a halfword records newly pressed controller buttons. */
-extern PadPrefix PadData;
-
-struct UmnPluginTask {
-    XglTaskPrefix prefix;
-    int state;
-};
-
-struct UmnPluginInfoWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[4];
-    unsigned char state;
-    unsigned char unmodeled_11[3];
-    void (*callback)(void *, void *);
-    void *callback_arg;
-    unsigned char unmodeled_1c[0x178];
-};
-
-struct UmnPluginInfoText {
-    short x;
-    short y;
-    unsigned char unmodeled_04[8];
-    char *text;
+/* tskUmnPluginList phases (UmnPluginListWork.phase). */
+enum {
+    UMN_PLUGIN_LIST_IDLE = 0,
+    UMN_PLUGIN_LIST_WAIT_OPEN = 10,
+    UMN_PLUGIN_LIST_FILL = 20,
+    UMN_PLUGIN_LIST_SLIDE_IN = 30,
+    UMN_PLUGIN_LIST_SELECT = 40,
+    UMN_PLUGIN_LIST_SLIDE_OUT = 50
 };
 
 struct UmnPluginInfoWork {
@@ -68,31 +38,8 @@ struct UmnPluginInfoWork {
     unsigned char opened;
     unsigned char unmodeled_02[6];
     int color;
-    struct UmnPluginInfoWindow window;
-    struct UmnPluginInfoText info;
-};
-
-struct UmnPluginPasWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[4];
-    unsigned char state;
-};
-
-struct UmnPluginPasLabel {
-    unsigned char unmodeled_00[12];
-    EMessageParam message;
-};
-
-struct UmnPluginPasRect {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
+    WindowDX window;
+    UmnInfoPanel info;
 };
 
 struct UmnPluginPasWork {
@@ -100,34 +47,10 @@ struct UmnPluginPasWork {
     unsigned char initialized;
     unsigned char unmodeled_02[2];
     int color;
-    struct UmnPluginPasWindow window;
-    unsigned char unmodeled_1c[0x190 - 0x1c];
-    struct UmnPluginPasLabel label;
+    WindowDX window;
+    EMessageParam message;
     unsigned char unmodeled_1e0[0x3bc - 0x1e0];
-    struct UmnPluginPasRect caption_rect;
-};
-
-struct UmnPluginListItem {
-    const char *text;
-    int icon;
-    signed char flags;
-    unsigned char unmodeled_09[3];
-};
-
-struct UmnPluginListWindow {
-    unsigned char state;
-    unsigned char draw_flags;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    int style;
-    short width;
-    short height;
-    const char *title;
-    signed char columns;
-    signed char rows;
-    unsigned char unmodeled_16[6];
-    struct UmnPluginListItem *items;
+    WindowDXRect caption_rect;
 };
 
 struct UmnPluginListWork {
@@ -137,46 +60,16 @@ struct UmnPluginListWork {
     short slide_x;
     short slide_y;
     int color;
-    struct UmnPluginListWindow window;
-    unsigned char unmodeled_2c[0x1744 - 0x2c];
-    struct UmnPluginListItem items[8];
-};
-
-struct UmnPluginExWinTag {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int style;
-    unsigned char unmodeled_0c[0x20 - 0x0c];
-};
-
-struct UmnPluginExWinRibbon {
-    short x;
-    short y;
-    int style;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x70 - 0x0c];
-};
-
-struct UmnPluginExWinNumber {
-    short x;
-    short y;
-    int style;
-    unsigned char unmodeled_08[6];
-    unsigned char option;
-    unsigned char places;
-    unsigned char unmodeled_10[4];
-    int value;
-    unsigned char unmodeled_18[0x90 - 0x18];
+    WindowSPCursor window;
+    MenuListEntry items[UMN_PLUGIN_LIST_MAX + 2];
 };
 
 struct UmnPluginExWinItem {
     short slide_x;
     short slide_y;
-    struct UmnPluginExWinTag tag;
-    struct UmnPluginExWinRibbon ribbon;
-    struct UmnPluginExWinNumber number;
+    ETagFontMainData tag;
+    ERibbonMainData ribbon;
+    ENumberMainData number;
 };
 
 struct UmnPluginExWin {
@@ -189,46 +82,30 @@ struct UmnPluginExWin {
     struct UmnPluginExWinItem item[1];
 };
 
+extern const char D_00A13440[];
+extern const char D_00A13458[];
+extern const char D_00A13460[];
 extern char msg00_1_00A10C48[];
+extern void xglFontDebugHex(int x, int y, int value, int digits);
 
-void eRibbonSet(void *ribbon, int style);
-void eRibbonMain(void *ribbon);
-void eTagFontSet(void *tag, const char *text);
-void eTagFontMain(void *tag);
-void eNumberSet(void *number, int unused);
-void eNumberMain(void *number);
+static const char *msg00_0_00A10C40 = D_00A13440;
+unsigned char plugin_folder[UMN_PLUGIN_SLOTS] = { 0 };
+static const char D_00A13450[8] = "";
+/* The original EUC-JP debug label spells プラグイン. */
+/* JP: プラグイン
+ * EN: Plugin */
+static const char D_00A13540[16] =
+    "\xA5\xD7\xA5\xE9\xA5\xB0\xA5\xA4\xA5\xF3";
 
-void endPrintExtFunc(int color, int mode, void *rectangle);
-
-void tskUmnPluginPas(void *task, void *work);
-void tskUmnPluginInfo(void *task, void *work);
-void tskUmnPluginList(void *task, void *work);
-void tskUmnPluginExWin(void *task, void *work);
-void UmnObjectTaskCreate(void (*task)(void *, void *), void *work);
-void UmnChangeTopLevel(int level);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-void xglFontDebugHex(int x, int y, int value, int digits);
-void xglSoundEffectNormalID(int sound, int channel);
-void WindowDXSet(void *window);
-void WindowDXMain(void *window);
-void MenuInfoWindow(void *window, void *text);
-char *UmnPluginTextGet(unsigned int plugin_id);
-void MoveSlide(short *current, short *target, float rate);
-void WindowSPSet(void *cursor);
-int WindowSPSelect(void *cursor, int button_flags);
-void WindowSPItemChange(void *cursor);
-void WindowSPMain(void *cursor);
-
-void tskUmnPluginPas(void *task_opaque, void *work_opaque)
+void tskUmnPluginPas(UmnObjectTask *task, void *work_opaque)
 {
-    struct UmnPluginTask *task = task_opaque;
     struct UmnPluginPasWork *work = work_opaque;
 
-    if (UmnWork.plugin_work_state != 4) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_PLUGIN) {
+        task->state = UMN_TASK_END;
     } else {
         switch (task->state) {
-        case 0: {
+        case UMN_TASK_INIT: {
             int label_x = 288;
             int label_y = 11;
             int label_font_size = 32;
@@ -237,37 +114,37 @@ void tskUmnPluginPas(void *task_opaque, void *work_opaque)
             work->color = 0x00FFFFF0;
             WindowDXSet(&work->window);
             work->window.x = -272;
-            work->window.color = work->color;
+            work->window.style = work->color;
             work->window.y = 8;
             work->window.width = 272;
             work->window.height = label_font_size;
             work->window.state = initial_state;
             WindowDXMain(&work->window);
-            work->window.state = 3;
-            eMessageSet(&work->label.message, msg00_0_00A10C40);
+            work->window.state = WINDOWDX_STATE_READY;
+            eMessageSet(&work->message, msg00_0_00A10C40);
             {
-            struct UmnPluginPasLabel *label = &work->label;
+            UmnWindowMessageView *label = (UmnWindowMessageView *)((unsigned char *)work + 0x190);
             label->message.mode = label_font_size;
             panel_color = work->color;
             label->message.x = label_x;
             label->message.y = label_y;
             work->initialized = initial_state;
             }
-            work->label.message.draw_parameter = panel_color + 2;
+            work->message.draw_parameter = panel_color + 2;
             break;
         }
-        case 2:
+        case UMN_TASK_RUN:
             {
                 short slide_targets[2];
                 short *label_target;
-                int plugin_mode = UmnWork.plugin_mode;
+                int plugin_mode = UmnWork.tab_state;
                 int caption_mode;
 
                 slide_targets[0] = -16;
                 label_target = &slide_targets[1];
                 *label_target = 288;
-                if (plugin_mode < 18) {
-                    if (plugin_mode >= 16) {
+                if (plugin_mode < UMN_STEP_ACTIVE + 1) {
+                    if (plugin_mode >= UMN_STEP_OPEN) {
                         slide_targets[1] = 16;
                     } else {
                         slide_targets[0] = -272;
@@ -278,18 +155,18 @@ void tskUmnPluginPas(void *task_opaque, void *work_opaque)
                 if (work->initialized != 0) {
                     MoveSlide(&work->window.x, &slide_targets[0], 3.0f);
                     WindowDXMain(&work->window);
-                    caption_mode = 101;
+                    caption_mode = END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET;
                     work->caption_rect.x = (unsigned short)work->window.x + 3;
                     work->caption_rect.y = (unsigned short)work->window.y + 3;
                     work->caption_rect.width = work->window.width - 6;
                     work->caption_rect.height = work->window.height - 6;
-                    work->caption_rect.color = work->color;
+                    work->caption_rect.style = work->color;
                     endPrintExtFunc(work->color, caption_mode, &work->caption_rect);
-                    MoveSlide(&work->label.message.x, label_target, 3.0f);
-                    if (work->label.message.x < 256) {
-                        eMessageMain(&work->label.message);
+                    MoveSlide(&work->message.x, label_target, 3.0f);
+                    if (work->message.x < 256) {
+                        eMessageMain(&work->message);
                     }
-                    endPrintExtFunc(work->color, 102, 0);
+                    endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
                 }
             }
             break;
@@ -297,16 +174,15 @@ void tskUmnPluginPas(void *task_opaque, void *work_opaque)
     }
 }
 
-void tskUmnPluginInfo(void *task_opaque, void *work_opaque)
+void tskUmnPluginInfo(UmnObjectTask *task, void *work_opaque)
 {
-    struct UmnPluginTask *task = task_opaque;
     struct UmnPluginInfoWork *work = work_opaque;
 
-    if (UmnWork.plugin_work_state != 4) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_PLUGIN) {
+        task->state = UMN_TASK_END;
     } else {
         switch (task->state) {
-        case 0:
+        case UMN_TASK_INIT:
             work->color = 0x00FF0000;
             work->opened = 0;
             work->state = 0;
@@ -316,32 +192,32 @@ void tskUmnPluginInfo(void *task_opaque, void *work_opaque)
             work->window.y = 480;
             work->window.width = 544;
             work->window.height = 54;
-            work->window.callback = MenuInfoWindow;
-            work->window.color = work->color;
-            work->window.callback_arg = &work->info;
+            work->window.close_callback = MenuInfoWindow;
+            work->window.style = work->color;
+            work->window.close_callback_arg = &work->info;
             work->info.x = 0;
             work->info.y = 0;
             work->info.text = 0;
-            ((volatile struct UmnPluginInfoWork *)work)->window.state = 1;
+            ((volatile struct UmnPluginInfoWork *)work)->window.state = WINDOWDX_STATE_OPEN;
             WindowDXMain(&work->window);
-            work->window.state = 3;
+            work->window.state = WINDOWDX_STATE_READY;
             break;
-        case 2:
+        case UMN_TASK_RUN:
             {
                 short slide_target = 480;
-                int plugin_mode = UmnWork.plugin_mode;
+                int plugin_mode = UmnWork.tab_state;
                 unsigned char plugin_id;
 
-                if (plugin_mode < 18) {
-                    if (plugin_mode >= 16) {
+                if (plugin_mode < UMN_STEP_ACTIVE + 1) {
+                    if (plugin_mode >= UMN_STEP_OPEN) {
                         slide_target = 386;
                     }
                 }
-                plugin_id = UmnWork.selected_plugin_id;
-                if (plugin_id < 6) {
+                plugin_id = UmnWork.entry;
+                if (plugin_id < UMN_PLUGIN_LIST_MAX) {
                     work->info.text = UmnPluginTextGet((signed char)plugin_id) + 0x20;
                 } else {
-                    work->info.text = (char *)D_00A13450;
+                    work->info.text = D_00A13450;
                 }
                 MoveSlide(&work->window.y, &slide_target, 3.0f);
                 WindowDXMain(&work->window);
@@ -351,19 +227,18 @@ void tskUmnPluginInfo(void *task_opaque, void *work_opaque)
     }
 }
 
-void tskUmnPluginList(void *task_opaque, void *work_opaque)
+void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
 {
-    struct UmnPluginTask *task = task_opaque;
     struct UmnPluginListWork *work = work_opaque;
     int i;
 
-    if (UmnWork.plugin_work_state != 4) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_PLUGIN) {
+        task->state = UMN_TASK_END;
         return;
     }
     switch (task->state) {
-    case 0:
-        work->phase = 0;
+    case UMN_TASK_INIT:
+        work->phase = UMN_PLUGIN_LIST_IDLE;
         work->redraw = 0;
         work->slide_x = 528;
         work->slide_y = 112;
@@ -371,7 +246,7 @@ void tskUmnPluginList(void *task_opaque, void *work_opaque)
         work->window.x = 528;
         work->window.y = 112;
         work->window.style = 0x00FF0000;
-        work->window.draw_flags = 3;
+        work->window.draw_flags = WINDOWSP_DRAW_CURSORS | WINDOWSP_DRAW_MESSAGES;
         work->window.title = D_00A13458;
         work->window.rows = 10;
         work->window.columns = 1;
@@ -380,61 +255,61 @@ void tskUmnPluginList(void *task_opaque, void *work_opaque)
         work->window.items = 0;
         WindowSPSet(&work->window);
         break;
-    case 2:
+    case UMN_TASK_RUN:
         switch (work->phase) {
-        case 0:
+        case UMN_PLUGIN_LIST_IDLE:
             work->redraw = 0;
-            work->phase = 10;
+            work->phase = UMN_PLUGIN_LIST_WAIT_OPEN;
             /* fallthrough */
-        case 10:
-            if (UmnWork.plugin_mode == 17) {
+        case UMN_PLUGIN_LIST_WAIT_OPEN:
+            if (UmnWork.tab_state == UMN_STEP_ACTIVE) {
                 work->redraw = 1;
-                work->phase = 20;
+                work->phase = UMN_PLUGIN_LIST_FILL;
             }
             break;
-        case 20:
-            for (i = 0; i < UmnWork.unlocked_plugin_count; i++) {
+        case UMN_PLUGIN_LIST_FILL:
+            for (i = 0; i < UmnWork.count; i++) {
                 unsigned char plugin_id = plugin_folder[i];
 
-                work->items[i].text = UmnPluginTextGet(plugin_id);
-                work->items[i].icon = 0;
-                work->items[i].flags = 0;
+                work->items[i].name = UmnPluginTextGet(plugin_id);
+                work->items[i].amount = 0;
+                work->items[i].flag = 0;
             }
-            work->items[i].text = D_00A13450;
-            work->items[i + 1].text = 0;
+            work->items[i].name = D_00A13450;
+            work->items[i + 1].name = 0;
             work->window.items = work->items;
             WindowSPItemChange(&work->window);
-            work->window.state = 17;
+            work->window.state = WINDOWSP_STATE_OPEN | (WINDOWSP_OPEN_NO_ANIMATION << 4);
             WindowSPMain(&work->window);
-            work->phase = 30;
+            work->phase = UMN_PLUGIN_LIST_SLIDE_IN;
             /* fallthrough */
-        case 30: {
+        case UMN_PLUGIN_LIST_SLIDE_IN: {
             short slide_target = 56;
 
             MoveSlide(&work->slide_x, &slide_target, 3.0f);
             if (work->slide_x == slide_target) {
-                work->phase = 40;
+                work->phase = UMN_PLUGIN_LIST_SELECT;
             }
             break;
         }
-        case 40: {
+        case UMN_PLUGIN_LIST_SELECT: {
             int selected = WindowSPSelect(&work->window, PadData.mappedRepeat);
 
             if (selected >= 0) {
-                UmnWork.selected_plugin_index = selected;
-                UmnWork.selected_plugin_id = plugin_folder[(signed char)selected];
+                UmnWork.list_cursor = selected;
+                UmnWork.entry = plugin_folder[(signed char)selected];
             }
-            if (UmnWork.plugin_mode != 17) {
-                work->phase = 50;
+            if (UmnWork.tab_state != UMN_STEP_ACTIVE) {
+                work->phase = UMN_PLUGIN_LIST_SLIDE_OUT;
             }
             break;
         }
-        case 50: {
+        case UMN_PLUGIN_LIST_SLIDE_OUT: {
             short slide_target = 528;
 
             MoveSlide(&work->slide_x, &slide_target, 3.0f);
             if (work->slide_x == slide_target) {
-                work->phase = 0;
+                work->phase = UMN_PLUGIN_LIST_IDLE;
             }
             break;
         }
@@ -450,17 +325,16 @@ void tskUmnPluginList(void *task_opaque, void *work_opaque)
     xglFontDebugPrintf(0, 16, D_00A13460, work->phase);
 }
 
-void tskUmnPluginExWin(void *task_opaque, void *work_opaque)
+void tskUmnPluginExWin(UmnObjectTask *task, void *work_opaque)
 {
-    struct UmnPluginTask *task = task_opaque;
     struct UmnPluginExWin *work = work_opaque;
     int i;
 
-    if (UmnWork.plugin_work_state != 4) {
-        task->state = -1;
+    if (UmnWork.mode != UMN_MODE_PLUGIN) {
+        task->state = UMN_TASK_END;
     } else {
         switch (task->state) {
-        case 0:
+        case UMN_TASK_INIT:
             work->x = 528;
             work->y = 32;
             work->style = 0x00FFFFF0;
@@ -476,12 +350,12 @@ void tskUmnPluginExWin(void *task_opaque, void *work_opaque)
             work->state = 0;
             work->redraw = 0;
             break;
-        case 2:
+        case UMN_TASK_RUN:
             {
                 short slide_target = -272;
-                int plugin_mode = UmnWork.plugin_mode;
-                if (plugin_mode < 18) {
-                    if (plugin_mode >= 16) {
+                int plugin_mode = UmnWork.tab_state;
+                if (plugin_mode < UMN_STEP_ACTIVE + 1) {
+                    if (plugin_mode >= UMN_STEP_OPEN) {
                         slide_target = 0;
                     }
                 }
@@ -489,18 +363,18 @@ void tskUmnPluginExWin(void *task_opaque, void *work_opaque)
                     MoveSlide(&work->item[i].slide_x, &slide_target, 3.0f);
                     work->item[i].ribbon.x = (unsigned short)work->item[i].slide_x;
                     work->item[i].ribbon.y = (unsigned short)work->item[i].slide_y;
-                    work->item[i].ribbon.style = work->style;
+                    work->item[i].ribbon.work = work->style;
                     eRibbonMain(&work->item[i].ribbon);
                     work->item[i].tag.x = (unsigned short)work->item[i].slide_x + 188;
-                    work->item[i].tag.style = work->item[i].ribbon.style + 1;
+                    work->item[i].tag.work = work->item[i].ribbon.work + 1;
                     work->item[i].tag.y = (unsigned short)work->item[i].slide_y + 4;
                     eTagFontMain(&work->item[i].tag);
                     work->item[i].number.x = (unsigned short)work->item[i].tag.x + 30;
-                    work->item[i].number.style = work->item[i].tag.style;
-                    work->item[i].number.option = 3;
+                    work->item[i].number.work = work->item[i].tag.work;
+                    work->item[i].number.format = 3;
                     work->item[i].number.y = (unsigned short)work->item[i].tag.y;
-                    work->item[i].number.value = UmnWork.selected_plugin_index + (UmnWork.unlocked_plugin_count << 16) + 1;
-                    work->item[i].number.places = 2;
+                    work->item[i].number.value = UmnWork.list_cursor + (UmnWork.count << 16) + 1;
+                    work->item[i].number.digits = 2;
                     eNumberMain(&work->item[i].number);
                 }
             }
@@ -511,14 +385,14 @@ void tskUmnPluginExWin(void *task_opaque, void *work_opaque)
 
 void UmnPlugin(void)
 {
-    switch (UmnWork.plugin_mode) {
-    case 0:
+    switch (UmnWork.tab_state) {
+    case UMN_STEP_INIT:
         {
         unsigned short unlocked_plugins;
         int plugin_index;
-        unsigned char *task_work = UmnWorkEnd;
+        unsigned char *task_work = (unsigned char *)UmnWorkEnd;
         unsigned char *folder_cursor;
-        unsigned short *plugin_flags;
+        UmnMailSaveData *save;
 
         UmnObjectTaskCreate(tskUmnPluginPas, task_work);
         task_work += 968;
@@ -527,53 +401,52 @@ void UmnPlugin(void)
         task_work += 848;
         UmnObjectTaskCreate(tskUmnPluginList, task_work);
         UmnObjectTaskCreate(tskUmnPluginExWin, task_work + 6340);
-        plugin_flags = D_4A1A0C;
-        UmnWork.unlocked_plugin_count = 0;
-        UmnWork.selected_plugin_index = 0;
+        save = &D_4A1A0C;
+        UmnWork.count = 0;
+        UmnWork.list_cursor = 0;
         memset(folder_cursor, 0, sizeof(plugin_folder));
-        unlocked_plugins = plugin_flags[0x43];
-        for (plugin_index = 0; plugin_index < 16; plugin_index++) {
+        unlocked_plugins = save->plugin_unlock_flags;
+        for (plugin_index = 0; plugin_index < UMN_PLUGIN_SLOTS; plugin_index++) {
             if (((int)unlocked_plugins >> plugin_index) & 1) {
                 *folder_cursor++ = plugin_index;
-                UmnWork.unlocked_plugin_count++;
+                UmnWork.count++;
             }
         }
-        if (UmnWork.unlocked_plugin_count >= 7) {
-            UmnWork.unlocked_plugin_count = 6;
+        if (UmnWork.count >= UMN_PLUGIN_LIST_MAX + 1) {
+            UmnWork.count = UMN_PLUGIN_LIST_MAX;
         }
-        UmnWork.plugin_mode = 16;
-        UmnWork.selected_plugin_id = plugin_folder[UmnWork.selected_plugin_index];
+        UmnWork.tab_state = UMN_STEP_OPEN;
+        UmnWork.entry = plugin_folder[UmnWork.list_cursor];
         break;
         }
-    case 16:
-        UmnWork.plugin_mode = 17;
-        UmnWork.transition_timer = 12;
+    case UMN_STEP_OPEN:
+        UmnWork.tab_state = UMN_STEP_ACTIVE;
+        UmnWork.wait = UMN_WAIT_OPEN;
         /* Continue through the entry timer check. */
-    case 17:
-        if (UmnWork.transition_timer == 0 &&
-            (PadData.half_2a & 0x40) != 0) {
-            UmnWork.plugin_mode = 240;
-            xglSoundEffectNormalID(2, 0);
+    case UMN_STEP_ACTIVE:
+        if (UmnWork.wait == 0 &&
+            (PadData.half_2a & PAD_CROSS) != 0) {
+            UmnWork.tab_state = UMN_STEP_LEAVE;
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
-    case 240:
-        UmnWork.plugin_mode = 241;
-        UmnWork.transition_timer = 16;
+    case UMN_STEP_LEAVE:
+        UmnWork.tab_state = UMN_STEP_LEAVE_WAIT;
+        UmnWork.wait = UMN_WAIT_LEAVE;
         /* Continue through the exit timer check. */
-    case 241:
-        if (UmnWork.transition_timer == 0) {
+    case UMN_STEP_LEAVE_WAIT:
+        if (UmnWork.wait == 0) {
             UmnChangeTopLevel(0);
         }
         break;
     }
 
-    if (UmnWork.transition_timer != 0) {
-        UmnWork.transition_timer--;
+    if (UmnWork.wait != 0) {
+        UmnWork.wait--;
     }
     xglFontDebugPrintf(32, 208, D_00A13540);
-    xglFontDebugHex(0, 64, UmnWork.plugin_mode, 2);
+    xglFontDebugHex(0, 64, UmnWork.tab_state, 2);
 }
 
-
-
+/* Defined here, after the functions: the plug-ins caption string. */
 const char D_00A13440[16] = "Plug-ins";

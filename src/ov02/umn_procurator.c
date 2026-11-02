@@ -3,55 +3,126 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/e_message.h"
+#include "main/end_print.h"
+#include "main/menu_model.h"
 #include "main/xgl_2.h"
-#include "umn_procurator.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+#include "main/xgl_dma.h"
+#include "ov02/ov02.h"
+#include "ov02/task_umn_top_win.h"
+#include "ov02/title_hdd_install.h"
+#include "ov02/tsk_umn_object_task_main.h"
+#include "ov02/umn_event_text_symbol_check.h"
+#include "ov02/umn_procurator.h"
 
-#include "shared.h"
-extern PadPrefix PadData;
-extern void xglSoundEffectNormalID(int id, int arg);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+/* Model id of the procurator that MenuModelCreate builds into UmnModelUkn. */
+#define UMN_PROCURATOR_MODEL_ID 0x1D
+
+/* UmnManzaiWinTask.phase: the steps of tskUmnManzaiWin. */
+#define UMN_MANZAI_WIN_START 0
+#define UMN_MANZAI_WIN_WAIT_SHOWN 1
+#define UMN_MANZAI_WIN_IDLE 2
+#define UMN_MANZAI_WIN_SLIDE_IN_START 10
+#define UMN_MANZAI_WIN_SLIDE_IN 11
+#define UMN_MANZAI_WIN_SLIDE_OUT_START 20
+#define UMN_MANZAI_WIN_SLIDE_OUT 21
+
+/* MenuModelUnit.extFuncFlag of the two Manzai model workers. */
+#define UMN_MANZAI_MODEL_INIT 0
+#define UMN_MANZAI_MODEL_ENTER 1
+#define UMN_MANZAI_MODEL_SUBWINDOW 2
+#define UMN_MANZAI_MODEL_SPEAKING 3       /* the sub window grows: this model has the text */
+#define UMN_MANZAI_MODEL_WAIT_TEXT 4
+#define UMN_MANZAI_MODEL_LISTENING 5      /* the sub window shrinks: the other model has the text */
+#define UMN_MANZAI_MODEL_CLOSE 10
+#define UMN_MANZAI_MODEL_DONE 11
+
+/*
+ * The subwindow record MenuModelUnit.subWindow points at. UmnProcuratorManzai2
+ * slides the +4/+6 pair toward the +8/+0xA pair (read unsigned) and
+ * UmnProcuratorManzai slides the +8/+0xA pair toward the +4/+6 pair, so each
+ * function reads the record through its own view of the same layout.
+ */
+typedef struct UmnSubWindow {
+    unsigned char unmodeled_00[4];
+    short x;                /* +0x4 */
+    short y;                /* +0x6 */
+    unsigned short width;   /* +0x8 */
+    unsigned short height;  /* +0xA */
+    StudioCamera *camera;   /* +0xC */
+} UmnSubWindow;
+
+typedef struct UmnSubWindowView {
+    unsigned char unmodeled_00[4];
+    unsigned short x;       /* +0x4 */
+    unsigned short y;       /* +0x6 */
+    short width;            /* +0x8 */
+    short height;           /* +0xA */
+    StudioCamera *camera;   /* +0xC */
+} UmnSubWindowView;
+
+/* The original table is copied as fourteen doublewords. */
+typedef union UmnLightSet {
+    Vector4 v[7];
+    XglLightQuadword quadword[7];
+    u64 words[14];
+} UmnLightSet;
+
+/* Defined in main/tu165 over a view whose only used member is the actor at +0x20, the same as MenuModelUnit. */
+extern void MenuModelMotionSet(MenuModelUnit *unit, unsigned int data_id);
 extern const char D_00A12060[];
+extern const char D_00A12080[];
 extern const char D_00A12190[];
+extern const UmnLightSet D_00A120F0;
+extern DoublewordAlignedVector4 D_00A12160;
+extern DoublewordAlignedVector4 D_00A12170;
+extern const DoublewordAlignedVector4 D_00A12180;
+extern DoublewordAlignedVector4 D_00A121D0;
+extern DoublewordAlignedVector4 D_00A121E0;
+extern DoublewordAlignedVector4 D_00A121F0;
+extern DoublewordAlignedVector4 D_00A12230;
 
 int UmnManzaiControl(void)
 {
     unsigned int flag = UmnManzaiFlag;
-    short *next;
+    UmnEventTextRecord *next;
     unsigned int cleared;
 
-    if (!(flag & 0x40)) {
-        if ((flag & 0x30) == 0x30) {
-            cleared = flag & ~1;
-            UmnManzaiFlag = cleared & ~8;
-            if ((flag & 0x206) == 0) {
-                if (PadData.half_2a == 0x20) {
-                    UmnManzaiFlag |= 1;
-                    if (eMessageNextPage(&UmnManzaiWin[*UmnManzaiText - 1].message, 0) == 0) {
+    if (!(flag & UMN_MANZAI_FINISHED)) {
+        if ((flag & UMN_MANZAI_BOTH_SHOWN) == UMN_MANZAI_BOTH_SHOWN) {
+            cleared = flag & ~UMN_MANZAI_CONFIRM;
+            UmnManzaiFlag = cleared & ~UMN_MANZAI_NEW_TEXT;
+            if ((flag & UMN_MANZAI_SLIDING) == 0) {
+                if (PadData.half_2a == PAD_CIRCLE) {
+                    UmnManzaiFlag |= UMN_MANZAI_CONFIRM;
+                    if (eMessageNextPage(&UmnManzaiWin[UmnManzaiText->value - 1].message, 0) == 0) {
                         next = UmnEventTextNextGet(1);
-                        xglSoundEffectNormalID(1, 0);
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
                         if (next == 0) {
-                            UmnManzaiFlag |= 0x40;
+                            UmnManzaiFlag |= UMN_MANZAI_FINISHED;
                         } else {
                             UmnManzaiText = next;
-                            UmnManzaiFlag |= 8;
+                            UmnManzaiFlag |= UMN_MANZAI_NEW_TEXT;
                         }
                     }
                 }
             }
         }
-    } else if ((flag & 0x30) == 0) {
+    } else if ((flag & UMN_MANZAI_BOTH_SHOWN) == 0) {
         return 0;
     }
     xglFontDebugPrintf(0x80, 0x40, D_00A12060, UmnManzaiFlag);
     return 1;
 }
 
-int UmnManzaiInit(void)
+int UmnManzaiInit(int event_no)
 {
     UmnManzaiWinTask *window;
     int index;
 
-    if (UmnEventTextMake() < 0) {
+    if (UmnEventTextMake(event_no) < 0) {
         return -1;
     }
     UmnManzaiText = UmnEventTextNextGet(0);
@@ -72,25 +143,23 @@ int UmnManzaiInit(void)
         }
         /* Advance this loop to the next task record. */
         window++;
-    } while (index < 2);
-    UmnManzaiFlag = 6;
+    } while (index < UMN_MANZAI_WINDOW_COUNT);
+    UmnManzaiFlag = UMN_MANZAI_UKN_MOVING | UMN_MANZAI_SON_MOVING;
     return 0;
 }
 
-extern void endPrintExtFunc(int kind, int id, void *data);
-extern const char D_00A12080[];
-
 /* Window worker: the title-window step machine, run once per window record. */
-void tskUmnManzaiWin(UmnManzaiTask *task, UmnManzaiWinTask *window)
+void tskUmnManzaiWin(UmnObjectTask *task, void *data)
 {
+    UmnManzaiWinTask *window = data;
     unsigned char mode = UmnWork.mode;
     int i;
-    if (mode != 1) {
+    if (mode != UMN_MODE_MAIL) {
         task->state = -1;
         return;
     }
     if (task->state == 0) {
-        window->phase = 0;
+        window->phase = UMN_MANZAI_WIN_START;
         if (window->task_index == mode) {
             window->x = 0;
             window->y = 16;
@@ -98,7 +167,7 @@ void tskUmnManzaiWin(UmnManzaiTask *task, UmnManzaiWinTask *window)
             window->x = 48;
             window->y = 352;
         }
-        for (i = 0; i < 6; i++) {
+        for (i = 0; i < UMN_MANZAI_ROW_COUNT; i++) {
             window->rows[i].word = 0x00fffff0;
             window->rows[i].c = 0;
             window->rows[i].b = 0;
@@ -120,43 +189,43 @@ void tskUmnManzaiWin(UmnManzaiTask *task, UmnManzaiWinTask *window)
     }
 
     switch (window->phase) {
-    case 0:
-        window->phase = 1;
+    case UMN_MANZAI_WIN_START:
+        window->phase = UMN_MANZAI_WIN_WAIT_SHOWN;
         /* fall through */
-    case 1:
-        if ((UmnManzaiFlag & 0x30) == 0x30) {
-            if (*window->text == window->task_index) {
-                window->phase = 10;
+    case UMN_MANZAI_WIN_WAIT_SHOWN:
+        if ((UmnManzaiFlag & UMN_MANZAI_BOTH_SHOWN) == UMN_MANZAI_BOTH_SHOWN) {
+            if (window->text->value == window->task_index) {
+                window->phase = UMN_MANZAI_WIN_SLIDE_IN_START;
             } else {
-                window->phase = 2;
+                window->phase = UMN_MANZAI_WIN_IDLE;
             }
         }
         /* fall through */
-    case 2: {
+    case UMN_MANZAI_WIN_IDLE: {
         unsigned int flags = UmnManzaiFlag;
 
-        UmnManzaiFlag = flags & ~0x200;
-        if (flags & 0x8) {
-            if (*UmnManzaiText == window->task_index) {
+        UmnManzaiFlag = flags & ~UMN_MANZAI_TEXT_TAKEN;
+        if (flags & UMN_MANZAI_NEW_TEXT) {
+            if (UmnManzaiText->value == window->task_index) {
                 window->text = UmnManzaiText;
-                window->phase = 10;
+                window->phase = UMN_MANZAI_WIN_SLIDE_IN_START;
             } else {
-                window->phase = 20;
+                window->phase = UMN_MANZAI_WIN_SLIDE_OUT_START;
             }
-            UmnManzaiFlag |= 0x200;
+            UmnManzaiFlag |= UMN_MANZAI_TEXT_TAKEN;
         }
-        if (UmnManzaiFlag & 0x40) {
-            window->phase = 20;
+        if (UmnManzaiFlag & UMN_MANZAI_FINISHED) {
+            window->phase = UMN_MANZAI_WIN_SLIDE_OUT_START;
         }
         break;
     }
-    case 10:
+    case UMN_MANZAI_WIN_SLIDE_IN_START:
         if (window->ready == 0) {
-            for (i = 0; i < 6; i++) {
+            for (i = 0; i < UMN_MANZAI_ROW_COUNT; i++) {
                 if (window->task_index == 1) {
                     window->rows[i].x = 0;
                 } else {
-                    window->rows[i].x = 512;
+                    window->rows[i].x = OV02_SCREEN_WIDTH;
                 }
                 if (i & 1) {
                     window->rows[i].y = window->y + 80;
@@ -165,45 +234,45 @@ void tskUmnManzaiWin(UmnManzaiTask *task, UmnManzaiWinTask *window)
                 }
             }
         }
-        window->phase = 11;
+        window->phase = UMN_MANZAI_WIN_SLIDE_IN;
         window->ready = 1;
         /* fall through */
-    case 11: {
+    case UMN_MANZAI_WIN_SLIDE_IN: {
         short old_x = window->rows[4].x;
-        short *slide = (short *)&window->rows[4].x;
-        short targets[2] = { 464, 48 };
+        short *slide = &window->rows[4].x;
+        short targets[UMN_MANZAI_WINDOW_COUNT] = { 464, 48 };
 
         MoveSlide(slide, &targets[window->task_index - 1], 3.0f);
         window->rows[5].x = window->rows[4].x;
         window->rows[2].x += window->rows[4].x - old_x;
         window->rows[3].x = window->rows[2].x;
         if (*slide == targets[window->task_index - 1]) {
-            window->phase = 2;
-            eMessageTextChange(&window->message, ((UmnManzaiTextEntry *)window->text)->text);
-            eMessageModeChange(&window->message, 34);
+            window->phase = UMN_MANZAI_WIN_IDLE;
+            eMessageTextChange(&window->message, window->text->text);
+            eMessageModeChange(&window->message, E_MODE_OPEN_START);
         }
         break;
     }
-    case 20:
-        window->phase = 21;
-        eMessageModeChange(&window->message, 112);
+    case UMN_MANZAI_WIN_SLIDE_OUT_START:
+        window->phase = UMN_MANZAI_WIN_SLIDE_OUT;
+        eMessageModeChange(&window->message, E_MODE_HIDE_START);
         /* fall through */
-    case 21: {
+    case UMN_MANZAI_WIN_SLIDE_OUT: {
         short old_x = window->rows[4].x;
-        short *slide = (short *)&window->rows[4].x;
-        short targets[2] = { 0, 512 };
+        short *slide = &window->rows[4].x;
+        short targets[UMN_MANZAI_WINDOW_COUNT] = { 0, OV02_SCREEN_WIDTH };
 
         MoveSlide(slide, &targets[window->task_index - 1], 3.0f);
         window->rows[5].x = window->rows[4].x;
         window->rows[2].x += window->rows[4].x - old_x;
         window->rows[3].x = window->rows[2].x;
         if (*slide == targets[window->task_index - 1]) {
-            if (UmnManzaiFlag & 0x40) {
+            if (UmnManzaiFlag & UMN_MANZAI_FINISHED) {
                 task->state = -1;
                 return;
             }
             window->ready = 0;
-            window->phase = 2;
+            window->phase = UMN_MANZAI_WIN_IDLE;
         }
         break;
     }
@@ -212,7 +281,7 @@ void tskUmnManzaiWin(UmnManzaiTask *task, UmnManzaiWinTask *window)
     }
 
     if (window->ready != 0) {
-        endPrintExtFunc(0, 3, window->rows);
+        endPrintExtFunc(0, END_PRINT_CMD_RIBBON, window->rows);
         if (window->task_index == 1) {
             window->message.x = window->x + 22;
         } else {
@@ -224,44 +293,24 @@ void tskUmnManzaiWin(UmnManzaiTask *task, UmnManzaiWinTask *window)
     xglFontDebugPrintf(0x80, (window->task_index << 3) + 32, D_00A12080, window->phase);
 }
 
-extern void xglLightIntensityParallel(void *light, int index,
-                                      const Vector4 *intensity);
-extern void xglLightIntensityAmbient(void *light,
-                                     const Vector4 *intensity);
-extern void xglLightDirection(void *light, unsigned int index,
-                              const Vector4 *direction);
-
-/* The original table is copied as fourteen doublewords. */
-typedef union UmnLightSet {
-    Vector4 v[7];
-    u64 words[14];
-} UmnLightSet;
-
-extern const UmnLightSet D_00A120F0;
-
 static void LocalLightSet(void *model, int unused)
 {
     UmnLightSet lights = D_00A120F0;
     Actor *actor = model;
     StudioLight *light = &actor->light;
 
-    xglLightIntensityAmbient(light, &lights.v[0]);
-    xglLightIntensityParallel(light, 0, &lights.v[1]);
+    xglLightIntensityAmbient(light, &lights.quadword[0]);
+    xglLightIntensityParallel(light, 0, &lights.quadword[1]);
     xglLightDirection(light, 0, &lights.v[4]);
-    xglLightIntensityParallel(light, 1, &lights.v[2]);
+    xglLightIntensityParallel(light, 1, &lights.quadword[2]);
     xglLightDirection(light, 1, &lights.v[5]);
-    xglLightIntensityParallel(light, 2, &lights.v[3]);
+    xglLightIntensityParallel(light, 2, &lights.quadword[3]);
     xglLightDirection(light, 2, &lights.v[6]);
     actor->flags |= 0x8000;
 }
 
-extern DoublewordAlignedVector4 D_00A12160;
-extern DoublewordAlignedVector4 D_00A12170;
-extern const DoublewordAlignedVector4 D_00A12180;
-
-void UmnProcuratorManzai2(void *argument)
+void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
 {
-    MenuModelUnit *task = argument;
     Actor *actor;
     Actor *uknActor;
     ActorMenuControl *menu;
@@ -280,23 +329,23 @@ void UmnProcuratorManzai2(void *argument)
     menu = &actor->menu;
     rotation = &actor->menu.rotation;
     scale = &actor->menu.scale;
-    uknActor = ((MenuModelUnit *)UmnModelUkn)->actor;
+    uknActor = UmnModelUkn->actor;
     uknMenu = &uknActor->menu;
     uknRotation = &uknActor->menu.rotation;
-    if (((MenuModelUnit *)UmnModelUkn)->extFuncFlag < 2) {
+    if (UmnModelUkn->extFuncFlag < 2) {
         menu->transparency = 0.0f;
         return;
     }
 
-    if (task->extFuncFlag < 11 && (UmnManzaiFlag & 0x40))
-        task->extFuncFlag = 10;
+    if (task->extFuncFlag < UMN_MANZAI_MODEL_DONE && (UmnManzaiFlag & UMN_MANZAI_FINISHED))
+        task->extFuncFlag = UMN_MANZAI_MODEL_CLOSE;
 
     switch (task->extFuncFlag) {
-    case 0:
-        if (((MenuModelUnit *)UmnModelUkn)->extFuncFlag < 2)
+    case UMN_MANZAI_MODEL_INIT:
+        if (UmnModelUkn->extFuncFlag < 2)
             break;
         {
-            float matrix[16];
+            float matrix[4][4];
             DoublewordAlignedVector4 position;
             DoublewordAlignedVector4 scale_src;
 
@@ -316,30 +365,30 @@ void UmnProcuratorManzai2(void *argument)
             xglMatrixStackRotY(uknRotation->y);
             xglMatrixStackRotX(uknRotation->x);
             xglMatrixStackTrans(&position.x);
-            xglMatrixStackSave((float (*)[4])matrix);
+            xglMatrixStackSave(matrix);
 
-            menu->offset.x += matrix[12];
-            menu->offset.y += matrix[13];
-            menu->offset.z += matrix[14];
+            menu->offset.x += matrix[3][0];
+            menu->offset.y += matrix[3][1];
+            menu->offset.z += matrix[3][2];
             LocalLightSet(actor, 1);
             menu->transparency = 0.0f;
-            task->extFuncFlag = 1;
+            task->extFuncFlag = UMN_MANZAI_MODEL_ENTER;
         }
         /* fall through */
-    case 1:
-        if (((MenuModelUnit *)UmnModelUkn)->extFuncFlag < 2)
+    case UMN_MANZAI_MODEL_ENTER:
+        if (UmnModelUkn->extFuncFlag < 2)
             break;
         menu->transparency += 0.2f;
         if (menu->transparency >= 1.0f) {
             menu->transparency = 1.0f;
-            task->extFuncFlag = 2;
-            UmnManzaiFlag |= 0x100;
+            task->extFuncFlag = UMN_MANZAI_MODEL_SUBWINDOW;
+            UmnManzaiFlag |= UMN_MANZAI_SON_VISIBLE;
         }
         break;
-    case 2:
+    case UMN_MANZAI_MODEL_SUBWINDOW:
         {
             DoublewordAlignedVector4 local = D_00A12180;
-            float matrix[16];
+            float matrix[4][4];
             StudioCamera *camera;
             Vector4 *cameraRotation;
             Vector4 *cameraPosition;
@@ -361,29 +410,29 @@ void UmnProcuratorManzai2(void *argument)
             xglMatrixStackRotY(cameraRotation->y);
             xglMatrixStackRotX(cameraRotation->x);
             xglMatrixStackTrans(&local.x);
-            xglMatrixStackSave((float (*)[4])matrix);
+            xglMatrixStackSave(matrix);
 
-            cameraPosition->x += matrix[12];
-            cameraPosition->y += matrix[13];
-            cameraPosition->z += matrix[14];
+            cameraPosition->x += matrix[3][0];
+            cameraPosition->y += matrix[3][1];
+            cameraPosition->z += matrix[3][2];
             cameraRotation->x -= 0.3f;
             sub->width = 432;
             sub->x = 432;
             sub->height = 368;
             sub->y = 368;
-            if (*UmnManzaiText == 2) {
-                task->extFuncFlag = 3;
+            if (UmnManzaiText->value == UMN_EVENT_SPEAKER_SHION) {
+                task->extFuncFlag = UMN_MANZAI_MODEL_SPEAKING;
             } else {
-                task->extFuncFlag = 5;
+                task->extFuncFlag = UMN_MANZAI_MODEL_LISTENING;
             }
         }
         /* fall through */
-    case 3:
-    case 5:
-    case 10:
+    case UMN_MANZAI_MODEL_SPEAKING:
+    case UMN_MANZAI_MODEL_LISTENING:
+    case UMN_MANZAI_MODEL_CLOSE:
         sub = (UmnSubWindow *)task->subWindow;
         switch (task->extFuncFlag) {
-        case 3:
+        case UMN_MANZAI_MODEL_SPEAKING:
             {
                 int width = sub->width;
                 int height = sub->height;
@@ -391,7 +440,7 @@ void UmnProcuratorManzai2(void *argument)
                 target_y = height - 240;
             }
             break;
-        case 5:
+        case UMN_MANZAI_MODEL_LISTENING:
             {
                 int width = sub->width;
                 int height = sub->height;
@@ -399,37 +448,37 @@ void UmnProcuratorManzai2(void *argument)
                 target_y = height - 144;
             }
             break;
-        case 10:
+        case UMN_MANZAI_MODEL_CLOSE:
             target_x = (short)sub->width;
             target_y = (short)sub->height;
             break;
         }
         if (sub->x == target_x && sub->y == target_y) {
-            if (task->extFuncFlag == 10) {
-                UmnManzaiFlag &= ~0x20;
-                task->extFuncFlag = 11;
+            if (task->extFuncFlag == UMN_MANZAI_MODEL_CLOSE) {
+                UmnManzaiFlag &= ~UMN_MANZAI_SON_SHOWN;
+                task->extFuncFlag = UMN_MANZAI_MODEL_DONE;
             } else {
-                UmnManzaiFlag |= 0x20;
-                task->extFuncFlag = 4;
+                UmnManzaiFlag |= UMN_MANZAI_SON_SHOWN;
+                task->extFuncFlag = UMN_MANZAI_MODEL_WAIT_TEXT;
             }
-            UmnManzaiFlag &= ~4;
+            UmnManzaiFlag &= ~UMN_MANZAI_SON_MOVING;
         } else {
             MoveSlide(&sub->x, &target_x, 3.0f);
             MoveSlide(&sub->y, &target_y, 3.0f);
         }
         break;
-    case 4:
-        if (UmnManzaiFlag & 0x8) {
-            if (*UmnManzaiText == 2) {
-                MenuModelMotionSet(task, ((signed char *)UmnManzaiText)[3]);
-                task->extFuncFlag = 3;
+    case UMN_MANZAI_MODEL_WAIT_TEXT:
+        if (UmnManzaiFlag & UMN_MANZAI_NEW_TEXT) {
+            if (UmnManzaiText->value == UMN_EVENT_SPEAKER_SHION) {
+                MenuModelMotionSet(task, UmnManzaiText->number);
+                task->extFuncFlag = UMN_MANZAI_MODEL_SPEAKING;
             } else {
-                task->extFuncFlag = 5;
+                task->extFuncFlag = UMN_MANZAI_MODEL_LISTENING;
             }
-            UmnManzaiFlag |= 0x4;
+            UmnManzaiFlag |= UMN_MANZAI_SON_MOVING;
         }
         break;
-    case 11:
+    case UMN_MANZAI_MODEL_DONE:
         MenuModelSubWindowBreak(task);
         task->taskPhase = -1;
         break;
@@ -440,27 +489,22 @@ void UmnProcuratorManzai2(void *argument)
 
 static void Rotation(float *out, float *position, float *base, float *rotation)
 {
-    float matrix[16];
+    float matrix[4][4];
 
     xglMatrixStackUnit();
     xglMatrixStackRotZ(rotation[2]);
     xglMatrixStackRotY(rotation[1]);
     xglMatrixStackRotX(rotation[0]);
     xglMatrixStackTrans(position);
-    xglMatrixStackSave((float (*)[4])matrix);
+    xglMatrixStackSave(matrix);
 
-    out[0] = base[0] + matrix[12];
-    out[1] = base[1] + matrix[13];
-    out[2] = base[2] + matrix[14];
+    out[0] = base[0] + matrix[3][0];
+    out[1] = base[1] + matrix[3][1];
+    out[2] = base[2] + matrix[3][2];
 }
 
-extern DoublewordAlignedVector4 D_00A121D0;
-extern DoublewordAlignedVector4 D_00A121E0;
-extern DoublewordAlignedVector4 D_00A121F0;
-
-void UmnProcuratorManzai(void *argument)
+void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
 {
-    MenuModelUnit *task = argument;
     Actor *actor;
     AlignedVector4 *offset;
     AlignedVector4 *rotation;
@@ -480,15 +524,15 @@ void UmnProcuratorManzai(void *argument)
     rotation = &actor->menu.rotation;
     scale = &actor->menu.scale;
 
-    if (task->extFuncFlag != 11) {
-        if (UmnManzaiFlag & 0x40)
-            task->extFuncFlag = 10;
+    if (task->extFuncFlag != UMN_MANZAI_MODEL_DONE) {
+        if (UmnManzaiFlag & UMN_MANZAI_FINISHED)
+            task->extFuncFlag = UMN_MANZAI_MODEL_CLOSE;
     }
 
     state = task->extFuncFlag;
     switch (state) {
-    case 0:
-        task->extFuncFlag = 1;
+    case UMN_MANZAI_MODEL_INIT:
+        task->extFuncFlag = UMN_MANZAI_MODEL_ENTER;
         LocalLightSet(actor, 0);
         {
             StudioCamera *case_camera = xglStudioGetCamera2(0);
@@ -499,7 +543,7 @@ void UmnProcuratorManzai(void *argument)
             case_camera->rotation.vector = rotation_copy;
         }
         /* fall through */
-    case 1:
+    case UMN_MANZAI_MODEL_ENTER:
         done = 0;
         offset->x += 0.02f;
         if (offset->x >= 1.5f) {
@@ -529,10 +573,10 @@ void UmnProcuratorManzai(void *argument)
         scale->z = scale->x;
         scale->y = scale->x;
         if (done == 5)
-            task->extFuncFlag = 2;
+            task->extFuncFlag = UMN_MANZAI_MODEL_SUBWINDOW;
         break;
-    case 2:
-        if (!(UmnManzaiFlag & 0x100))
+    case UMN_MANZAI_MODEL_SUBWINDOW:
+        if (!(UmnManzaiFlag & UMN_MANZAI_SON_VISIBLE))
             break;
         {
             Vector4 *camera_rotation;
@@ -551,54 +595,54 @@ void UmnProcuratorManzai(void *argument)
             window->x = 80;
             window->height = 64;
             window->y = 64;
-            if (*UmnManzaiText == 1)
-                task->extFuncFlag = 3;
+            if (UmnManzaiText->value == UMN_EVENT_SPEAKER_UKUN)
+                task->extFuncFlag = UMN_MANZAI_MODEL_SPEAKING;
             else
-                task->extFuncFlag = 5;
+                task->extFuncFlag = UMN_MANZAI_MODEL_LISTENING;
         }
         /* fall through */
-    case 3:
-    case 5:
-    case 10:
+    case UMN_MANZAI_MODEL_SPEAKING:
+    case UMN_MANZAI_MODEL_LISTENING:
+    case UMN_MANZAI_MODEL_CLOSE:
         window = (UmnSubWindowView *)task->subWindow;
         switch (task->extFuncFlag) {
-        case 3:
+        case UMN_MANZAI_MODEL_SPEAKING:
             x = window->x + 0xE0;
             y = window->y + 0x110;
             break;
-        case 5:
+        case UMN_MANZAI_MODEL_LISTENING:
             x = window->x + 0x80;
             y = window->y + 0x90;
             break;
-        case 10:
+        case UMN_MANZAI_MODEL_CLOSE:
             x = window->x;
             y = window->y;
             break;
         }
         if (window->width == x && window->height == y) {
-            if (task->extFuncFlag == 10) {
-                UmnManzaiFlag &= ~0x10;
-                task->extFuncFlag = 11;
+            if (task->extFuncFlag == UMN_MANZAI_MODEL_CLOSE) {
+                UmnManzaiFlag &= ~UMN_MANZAI_UKN_SHOWN;
+                task->extFuncFlag = UMN_MANZAI_MODEL_DONE;
             } else {
-                UmnManzaiFlag |= 0x10;
-                task->extFuncFlag = 4;
+                UmnManzaiFlag |= UMN_MANZAI_UKN_SHOWN;
+                task->extFuncFlag = UMN_MANZAI_MODEL_WAIT_TEXT;
             }
-            UmnManzaiFlag &= ~2;
+            UmnManzaiFlag &= ~UMN_MANZAI_UKN_MOVING;
         } else {
             MoveSlide(&window->width, &x, 3.0f);
             MoveSlide(&window->height, &y, 3.0f);
         }
         break;
-    case 4:
-        if (UmnManzaiFlag & 8) {
-            if (*UmnManzaiText == 1)
-                task->extFuncFlag = 3;
+    case UMN_MANZAI_MODEL_WAIT_TEXT:
+        if (UmnManzaiFlag & UMN_MANZAI_NEW_TEXT) {
+            if (UmnManzaiText->value == UMN_EVENT_SPEAKER_UKUN)
+                task->extFuncFlag = UMN_MANZAI_MODEL_SPEAKING;
             else
-                task->extFuncFlag = 5;
-            UmnManzaiFlag |= 2;
+                task->extFuncFlag = UMN_MANZAI_MODEL_LISTENING;
+            UmnManzaiFlag |= UMN_MANZAI_UKN_MOVING;
         }
         break;
-    case 11:
+    case UMN_MANZAI_MODEL_DONE:
         MenuModelSubWindowBreak(task);
         MenuModelExtFuncSet(UmnModelUkn, UmnProcuratorMail, 0);
         break;
@@ -608,11 +652,8 @@ void UmnProcuratorManzai(void *argument)
     xglFontDebugPrintf(0x80, 0x18, D_00A12190, task->extFuncFlag);
 }
 
-extern DoublewordAlignedVector4 D_00A12230;
-
-void UmnProcuratorMail(void *argument)
+void UmnProcuratorMail(MenuModelUnit *task, void *argument)
 {
-    MenuModelUnit *task = argument;
     AlignedVector4 *offset;
     AlignedVector4 *rotation;
     AlignedVector4 *scale;
@@ -680,9 +721,8 @@ void UmnProcuratorMail(void *argument)
         task->extFuncFlag = 2;
 }
 
-void UmnProcuratorTop(void *argument)
+void UmnProcuratorTop(MenuModelUnit *task, void *argument)
 {
-    MenuModelUnit *task = argument;
     AlignedVector4 *offset;
     AlignedVector4 *rotation;
     int state;
@@ -712,9 +752,8 @@ void UmnProcuratorTop(void *argument)
     task->extFuncFlag = 2;
 }
 
-void UmnProcuratorGoodBy(void *argument)
+void UmnProcuratorGoodBy(MenuModelUnit *task, void *argument)
 {
-    MenuModelUnit *task = argument;
     ActorMenuControl *menu;
     AlignedVector4 *rotation;
 
@@ -741,14 +780,14 @@ void UmnProcuratorGoodBy(void *argument)
 void UmnProcuratorSet(void)
 {
     switch (UmnWork.mode) {
-    case 0:
+    case UMN_MODE_TOP_MENU:
         if (UmnModelUkn == 0)
-            MenuModelCreate(&UmnModelUkn, 0x1D);
+            MenuModelCreate(&UmnModelUkn, UMN_PROCURATOR_MODEL_ID);
         MenuModelExtFuncSet(UmnModelUkn, UmnProcuratorTop, 0);
         break;
-    case 1:
+    case UMN_MODE_MAIL:
         if (UmnModelUkn == 0)
-            MenuModelCreate(&UmnModelUkn, 0x1D);
+            MenuModelCreate(&UmnModelUkn, UMN_PROCURATOR_MODEL_ID);
         MenuModelExtFuncSet(UmnModelUkn, UmnProcuratorMail, 0);
         break;
     default:

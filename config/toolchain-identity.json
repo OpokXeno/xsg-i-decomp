@@ -928,6 +928,52 @@
         "."
       ],
       "scaffold_assembler": "ee-as-la29-vsqrt-swap"
+    },
+    "ee-tu-c296-G0-cajino-swap": {
+      "description": "Whole original OV11 caption TU: GCC 2.96 -O2 -G0 with the corrected (swap-mask) GAS, no -g",
+      "compiler": "ee-gcc2.96-realconv-lp7",
+      "driver": "ee-gcc",
+      "driver_flags": [
+        "-nostdinc",
+        "-fno-builtin"
+      ],
+      "flags": [
+        "-O2",
+        "-G0"
+      ],
+      "assembler": "ee-as-la29-vsqrt-swap",
+      "assembler_argv": [
+        "-EL",
+        "-m5900",
+        "-mabi=eabi",
+        "-G0",
+        "-I",
+        "."
+      ],
+      "scaffold_assembler": "ee-as-la29-vsqrt-swap"
+    },
+    "ee-tu-c296-G0-minig-swap": {
+      "description": "Whole original OV11 casino TU: GCC 2.96 -O2 -G0 with the corrected (swap-mask) GAS, no -g",
+      "compiler": "ee-gcc2.96-realconv-lp7",
+      "driver": "ee-gcc",
+      "driver_flags": [
+        "-nostdinc",
+        "-fno-builtin"
+      ],
+      "flags": [
+        "-O2",
+        "-G0"
+      ],
+      "assembler": "ee-as-la29-vsqrt-swap",
+      "assembler_argv": [
+        "-EL",
+        "-m5900",
+        "-mabi=eabi",
+        "-G0",
+        "-I",
+        "."
+      ],
+      "scaffold_assembler": "ee-as-la29-vsqrt-swap"
     }
   },
   "splat": {

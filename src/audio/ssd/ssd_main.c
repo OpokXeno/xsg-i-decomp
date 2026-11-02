@@ -1,222 +1,49 @@
-/* Original ssd_main.c translation unit. Shared data is defined by its owning FDR. */
+#include "ssd/ssd_main.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_data.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_lfo.h"
+#include "ssd/ssd_midi.h"
+#include "ssd/ssd_out.h"
+#include "ssd/ssd_seq.h"
+#include "ssd/ssd_trap.h"
+#include "ssd/ssd_voic.h"
 
+/* Sequence stream opcodes (commands start at 0x80; SsdSeqFuncTrap is indexed by opcode - 0x80). */
+#define SSD_SEQ_COMMAND_BASE 0x80
+#define SSD_SEQ_REST 0x88
+#define SSD_SEQ_TIE 0x89
+#define SSD_SEQ_STOP 0x90
+#define SSD_SEQ_LOOP_END 0x99
+#define SSD_SEQ_LOOP_ESCAPE 0x9a
+#define SSD_SEQ_SLUR_OFF 0xc1
 
+/* Gate ratio (sixteenths of the note length) that plays the whole note. */
+#define SSD_TRACK_GATE_RATIO_FULL 16
 
+#define SSD_NOTES_PER_OCTAVE 12
 
-
-typedef struct SsdVoice SsdVoice;
-typedef struct SsdChannel SsdChannel;
-typedef struct SsdDevice SsdDevice;
-typedef struct SsdGlobalWork SsdGlobalWork;
-typedef struct SsdRamp SsdRamp;
-typedef struct SsdPart SsdPart;
-typedef struct SsdSequence SsdSequence;
-typedef struct SsdNote SsdNote;
-typedef struct SsdLoop SsdLoop;
-typedef struct SsdMidiQueue SsdMidiQueue;
-typedef struct SsdSequenceCallback SsdSequenceCallback;
-typedef struct SsdStereoVolume SsdStereoVolume;
-
-struct SsdVoice {
-    unsigned char unmodeled_00[4];
-    unsigned short hardware_changes;
-    unsigned char unmodeled_06[2];
-    unsigned short left, right;
-    unsigned char unmodeled_0c[8];
-    unsigned short pitch;
-    unsigned char unmodeled_16[2];
-    unsigned char envelope;
-    unsigned char unmodeled_19[19];
-    unsigned short flags, events;
-    unsigned char unmodeled_30[4];
-    unsigned int gate;
-    short note, velocity;
-    unsigned char unmodeled_3c[8];
-    short pan;
-    unsigned char unmodeled_46[4];
-    short pitch_modulation, volume_modulation, pan_modulation;
-    unsigned char unmodeled_50[168];
-    struct SsdVoice *next;
-    unsigned char unmodeled_fc[4];
-};
-
-struct SsdChannel {
-    unsigned int flags;
-    unsigned char unmodeled_04[16];
-    int pitch, volume, pan;
-    unsigned char unmodeled_20[2];
-    signed char volume_factor, pan_offset;
-    short transpose;
-    unsigned char unmodeled_26[3];
-    signed char volume_control, expression;
-    unsigned char unmodeled_2b[189];
-    SsdVoice *voices;
-    unsigned char unmodeled_ec[16];
-};
-
-struct SsdDevice {
-    unsigned int flags;
-    unsigned char unmodeled_04, channel_count;
-    unsigned char unmodeled_06[6];
-    int transpose, volume, pan;
-    unsigned char unmodeled_18[4];
-    struct SsdDevice *next;
-    SsdChannel channels[0];
-};
-
-struct SsdRamp { int value, step, target; short remaining; };
-
-struct SsdSequence {
-    unsigned char unmodeled_00[4];
-    struct SsdSequence *next;
-    unsigned char unmodeled_08[4];
-    SsdPart *parts;
-    unsigned char unmodeled_10[4];
-    SsdDevice *device;
-    unsigned char unmodeled_18[8];
-    short flags;
-    short active_parts;
-    unsigned char unmodeled_24[2];
-    unsigned char part_count;
-    unsigned char unmodeled_27[3];
-    unsigned char mode;
-    unsigned char unmodeled_2b[7];
-    short base_tempo;
-    unsigned char unmodeled_34[12];
-    int clock, clock_step, interrupts, ticks, tempo_accumulator;
-    unsigned char unmodeled_54[6];
-    unsigned short measure, beat, beat_tick, beats_per_measure, ticks_per_beat;
-    unsigned char unmodeled_64[24];
-    SsdRamp tempo, note, volume, pan;
-};
-
-struct SsdNote {
-    unsigned char trigger;
-    unsigned char unmodeled_01;
-    unsigned char velocity;
-    unsigned char pitch;
-    int duration;
-};
-
-struct SsdLoop {
-    unsigned char remaining;
-    unsigned char unmodeled_01[3];
-    unsigned char *begin;
-    unsigned char *end;
-};
-
-struct SsdMidiQueue {
-    unsigned char unmodeled_00[4];
-    struct SsdDevice *device;
-    unsigned short count;
-    unsigned int messages[64];
-};
-
-struct SsdSequenceCallback {
-    unsigned char unmodeled_00[4];
-    void (*process)(SsdGlobalWork *work, void *argument);
-    void *argument;
-    struct SsdSequenceCallback *next;
-};
-
-struct SsdStereoVolume {
-    short left;
-    short right;
-};
-
-struct SsdGlobalWork {
-    unsigned int flags;
-    unsigned char unmodeled_004[332];
-    int timer;
-    unsigned char unmodeled_154[4];
-    unsigned int interrupt_count;
-    unsigned char unmodeled_15c[12];
-    SsdSequence *sequences;
-    unsigned char unmodeled_16c[12];
-    SsdDevice *devices;
-    unsigned char unmodeled_17c[48];
-    unsigned int output_changes;
-    SsdStereoVolume master_output;
-    unsigned char unmodeled_1b4[8];
-    SsdStereoVolume reverb_output;
-    unsigned char unmodeled_1c0[20];
-    short master_volume, reverb_volume;
-    unsigned char unmodeled_1d8[7];
-    unsigned char stereo_mode;
-    SsdRamp master_ramp, reverb_ramp;
-    unsigned char unmodeled_200[108];
-    SsdVoice voices[48];
-    unsigned char unmodeled_326c[20];
-    SsdSequenceCallback *callbacks;
-    unsigned char unmodeled_3284[20];
-    unsigned int processing_ticks, measured_interrupts;
-};
-
-struct SsdPart {
-    short flags;
-    unsigned short effects;
-    unsigned char unmodeled_04[5];
-    unsigned char loop_depth;
-    unsigned char unmodeled_0a[18];
-    unsigned char *stream, *jump;
-    SsdChannel *channel;
-    unsigned char unmodeled_28[8];
-    int wait;
-    unsigned char unmodeled_34[4];
-    unsigned int duration;
-    signed char gate_ratio;
-    unsigned char octave, note, last_note;
-    SsdRamp fade, pitch, volume, pan;
-    SsdLoop loops[4];
-};
-
-extern SsdGlobalWork SsdWork;
-extern int SsdNoteToPitch(short note);
-extern void SsdKeyonVoice(SsdVoice *voice);
-extern void SsdKeyoffVoice(SsdVoice *voice);
-void SsdDeviceVoiceEvent(SsdDevice *device);
-extern void SsdCutoffChannel(SsdChannel *channel);
-extern void SsdSetChannelVoiceVelocity(SsdChannel *channel, int velocity);
-extern void SsdSetChannelVoiceEvent(SsdChannel *channel, unsigned short events);
-extern void SsdKeyoffChannelVoice(SsdChannel *channel, SsdVoice *voice);
-extern unsigned short sceSdGetParam(unsigned short entry);
-extern unsigned char *(*SsdSeqFuncTrap[128])(SsdSequence *, SsdPart *, unsigned char *);
-extern void SsdKeyonChannel(struct SsdChannel *channel, SsdNote *note);
-extern unsigned char SsdSeqFuncLength[128];
-extern SsdMidiQueue SsdMidi;
-extern void SsdMidiEventDecode(struct SsdDevice *device, unsigned int message);
-extern unsigned int GetTimerCounter(int timer);
+void SsdDeviceVoiceEvent(SsdMidiDevice *device);
 void SsdCommonControl(SsdGlobalWork *work);
 void SsdMainSequenceProcess(SsdGlobalWork *work);
 void SsdMidiTrackSequence(void);
 void SsdGetEnvx(void);
-extern void SsdLfoControlProc(SsdGlobalWork *work);
 void SsdVoiceEvent(void);
-extern void SsdSetVoiceKeyon(void);
-extern void SsdSetVoiceKeyoff(void);
-void SsdCalculateModulate(SsdRamp *ramp);
-extern void SsdSetMidiDeviceNote(struct SsdDevice *device, int note);
-extern void SsdSetMidiDeviceVolume(struct SsdDevice *device, int volume);
-extern void SsdSetMidiDevicePanpot(struct SsdDevice *device, int pan);
 void SsdNormalTrackEffect(SsdSequence *sequence);
-void SsdNormalTrackGate(SsdSequence *track);
+void SsdNormalTrackGate(SsdSequence *sequence);
 void SsdNormalTrackSequence(SsdSequence *sequence);
 void SsdEffectTrackSequence(SsdSequence *sequence);
-extern void SsdCutoffDevive(struct SsdDevice *device);
-extern void SsdSetVolumeRec(int volume, SsdStereoVolume *output, int channel);
-extern void SsdSetMasterVolume(int core, int left, int right);
-void SsdSeqInterruptProcess(SsdGlobalWork *work);
 
 void SsdSeqInterruptProcess(SsdGlobalWork *work)
 {
     unsigned int start;
     unsigned int end;
-    SsdSequenceCallback *callback;
+    SsdProc *callback;
 
-    if (work->flags & 0x80) {
+    if (work->flags & SSD_FLAG_SUSPENDED) {
         return;
     }
-    start = GetTimerCounter(SsdWork.timer);
+    start = GetTimerCounter(SsdWork.timer_id);
     if (++work->interrupt_count & 1) {
         SsdCommonControl(work);
     }
@@ -228,14 +55,14 @@ void SsdSeqInterruptProcess(SsdGlobalWork *work)
     SsdSetVoiceKeyon();
     SsdSetVoiceKeyoff();
 
-    callback = SsdWork.callbacks;
+    callback = SsdWork.processes;
     while (callback != 0) {
-        void (*process)(SsdGlobalWork *, void *) = callback->process;
+        SsdProcCallback process = callback->callback;
         void *argument = callback->argument;
         callback = callback->next;
         process(work, argument);
     }
-    end = GetTimerCounter(SsdWork.timer);
+    end = GetTimerCounter(SsdWork.timer_id);
     if (end >= start) {
         work->processing_ticks += end - start;
         ++work->measured_interrupts;
@@ -244,23 +71,23 @@ void SsdSeqInterruptProcess(SsdGlobalWork *work)
 
 void SsdCommonControl(SsdGlobalWork *work)
 {
-    if (work->master_ramp.remaining != 0) {
-        SsdCalculateModulate(&work->master_ramp);
-        work->master_volume = work->master_ramp.value >> 16;
-        SsdSetVolumeRec(work->master_volume, &work->master_output, 0);
-        work->output_changes |= 3;
+    if (work->master_fade.remaining != 0) {
+        SsdCalculateModulate(&work->master_fade);
+        work->master_depth = work->master_fade.current.value >> 16;
+        SsdSetVolumeRec(work->master_depth, &work->master_volume, 0);
+        work->output_flags |= SSD_OUTPUT_MASTER_VOLUME;
     }
-    if (work->reverb_ramp.remaining != 0) {
-        SsdCalculateModulate(&work->reverb_ramp);
-        work->reverb_volume = work->reverb_ramp.value >> 16;
-        SsdSetVolumeRec(work->reverb_volume, &work->reverb_output, 0);
-        work->output_changes |= 0xc0;
+    if (work->cd_fade.remaining != 0) {
+        SsdCalculateModulate(&work->cd_fade);
+        work->cd_depth = work->cd_fade.current.value >> 16;
+        SsdSetVolumeRec(work->cd_depth, &work->cd_volume, 0);
+        work->output_flags |= SSD_OUTPUT_CD_VOLUME;
     }
-    if (work->output_changes != 0) {
-        if (work->output_changes & 3) {
-            SsdSetMasterVolume(0, work->master_output.left, work->master_output.right);
+    if (work->output_flags != 0) {
+        if (work->output_flags & SSD_OUTPUT_MASTER_VOLUME) {
+            SsdSetMasterVolume(0, work->master_volume.left, work->master_volume.right);
         }
-        work->output_changes = 0;
+        work->output_flags = 0;
     }
 }
 
@@ -272,27 +99,27 @@ void SsdMainSequenceProcess(SsdGlobalWork *work)
         if (sequence->flags < 0) {
             int clock;
             int tempo;
-            if (sequence->tempo.remaining != 0) {
-                SsdCalculateModulate(&sequence->tempo);
-                sequence->clock_step = ((sequence->base_tempo * 53687 >> 8) * (sequence->tempo.value >> 16)) >> 8;
+            if (sequence->master_tempo.remaining != 0) {
+                SsdCalculateModulate(&sequence->master_tempo);
+                sequence->clock_step = ((sequence->tempo.parts.integer * SSD_TEMPO_CLOCK_SCALE >> 8) * (sequence->master_tempo.current.value >> 16)) >> 8;
             }
-            if (sequence->note.remaining != 0) {
-                SsdCalculateModulate(&sequence->note);
-                SsdSetMidiDeviceNote(sequence->device, sequence->note.value >> 16);
+            if (sequence->master_note.remaining != 0) {
+                SsdCalculateModulate(&sequence->master_note);
+                SsdSetMidiDeviceNote(sequence->device, sequence->master_note.current.value >> 16);
             }
-            if (sequence->volume.remaining != 0) {
-                SsdCalculateModulate(&sequence->volume);
-                SsdSetMidiDeviceVolume(sequence->device, sequence->volume.value >> 16);
+            if (sequence->master_volume.remaining != 0) {
+                SsdCalculateModulate(&sequence->master_volume);
+                SsdSetMidiDeviceVolume(sequence->device, sequence->master_volume.current.value >> 16);
             }
-            if (sequence->pan.remaining != 0) {
-                SsdCalculateModulate(&sequence->pan);
-                SsdSetMidiDevicePanpot(sequence->device, sequence->pan.value >> 16);
+            if (sequence->master_pan.remaining != 0) {
+                SsdCalculateModulate(&sequence->master_pan);
+                SsdSetMidiDevicePanpot(sequence->device, sequence->master_pan.current.value >> 16);
             }
             ++sequence->interrupts;
-            tempo = sequence->tempo.value >> 16;
+            tempo = sequence->master_tempo.current.value >> 16;
             clock = sequence->clock - sequence->clock_step;
             sequence->clock = clock;
-            sequence->tempo_accumulator += tempo;
+            sequence->play_time += tempo;
             if (clock < 0) {
                 do {
                     sequence->clock += 65536;
@@ -303,7 +130,7 @@ void SsdMainSequenceProcess(SsdGlobalWork *work)
                             ++sequence->measure;
                         }
                     }
-                    sequence->active_parts = 0;
+                    sequence->active_tracks = 0;
                     SsdNormalTrackEffect(sequence);
                     SsdNormalTrackGate(sequence);
                     switch (sequence->mode) {
@@ -314,13 +141,14 @@ void SsdMainSequenceProcess(SsdGlobalWork *work)
                         SsdEffectTrackSequence(sequence);
                         break;
                     }
-                    if (sequence->active_parts == 0) {
-                        sequence->flags &= 0x7fff;
+                    if (sequence->active_tracks == 0) {
+                        sequence->flags &= ~SSD_SEQUENCE_PLAYING;
                         break;
                     }
-                    ++sequence->ticks;
-                    if (sequence->volume.value == 0) {
-                        sequence->flags = (sequence->flags | 0x100) & 0x7dff;
+                    ++sequence->play_ticks;
+                    if (sequence->master_volume.current.value == 0) {
+                        sequence->flags = (sequence->flags | SSD_SEQUENCE_STOPPED) &
+                                          ~(SSD_SEQUENCE_PLAYING | SSD_SEQUENCE_STOP_PENDING);
                         SsdCutoffDevive(sequence->device);
                     }
                 } while (sequence->clock < 0);
@@ -332,11 +160,11 @@ void SsdMainSequenceProcess(SsdGlobalWork *work)
 
 void SsdMidiTrackSequence(void)
 {
-    int count = SsdMidi.count;
-    struct SsdDevice *device = SsdMidi.device;
-    unsigned int *message = SsdMidi.messages;
+    int count = SsdMidi.queues[0].count;
+    SsdMidiDevice *device = SsdMidi.device;
+    unsigned int *message = SsdMidi.queues[0].events;
 
-    SsdMidi.count = 0;
+    SsdMidi.queues[0].count = 0;
     while (count != 0) {
         --count;
         SsdMidiEventDecode(device, *message++);
@@ -345,63 +173,64 @@ void SsdMidiTrackSequence(void)
 
 void SsdNormalTrackEffect(SsdSequence *sequence)
 {
-    int remaining = sequence->part_count;
-    SsdPart *part = sequence->parts;
+    int remaining = sequence->track_count;
+    SsdTrack *part = sequence->tracks;
 
     while (remaining != 0) {
         --remaining;
         if (part->flags < 0) {
-            unsigned short effects = part->effects;
+            unsigned short effects = part->control_flags;
             unsigned short events = 0;
             SsdChannel *channel = part->channel;
 
-            if (effects & 1) {
+            if (effects & SSD_TRACK_CONTROL_PITCH_RAMP) {
                 if (!(effects & 2)) {
                     if (--part->pitch.remaining == 0) {
-                        part->pitch.value = part->pitch.target;
-                        effects &= ~1;
+                        part->pitch.current.value = part->pitch.target;
+                        effects &= ~SSD_TRACK_CONTROL_PITCH_RAMP;
                     } else {
-                        part->pitch.value += part->pitch.step;
+                        part->pitch.current.value += part->pitch.step;
                     }
                 }
-                channel->pitch = part->pitch.value;
-                events |= 0x10;
+                channel->pitch_offset = part->pitch.current.value;
+                events |= SSD_VOICE_EVENT_PITCH;
             }
-            if (effects & 8) {
-                int volume;
+            if (effects & SSD_TRACK_CONTROL_VOLUME_RAMP) {
+                signed char volume;
                 if (--part->volume.remaining == 0) {
-                    part->volume.value = part->volume.target;
-                    effects &= ~8;
+                    part->volume.current.value = part->volume.target;
+                    effects &= ~SSD_TRACK_CONTROL_VOLUME_RAMP;
                 } else {
-                    part->volume.value += part->volume.step;
+                    part->volume.current.value += part->volume.step;
                 }
-                volume = part->volume.value >> 16;
-                channel->volume_control = volume;
-                channel->volume = (signed char)volume * channel->expression * channel->volume_factor / 16129;
-                events |= 0x20;
+                volume = part->volume.current.value >> 16;
+                channel->channel_volume = volume;
+                channel->volume = volume * channel->expression * channel->fader_volume /
+                                  (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
+                events |= SSD_VOICE_EVENT_VOLUME;
             }
-            if (effects & 0x10) {
+            if (effects & SSD_TRACK_CONTROL_PAN_RAMP) {
                 if (--part->pan.remaining == 0) {
-                    part->pan.value = part->pan.target;
-                    effects &= ~0x10;
+                    part->pan.current.value = part->pan.target;
+                    effects &= ~SSD_TRACK_CONTROL_PAN_RAMP;
                 } else {
-                    part->pan.value += part->pan.step;
+                    part->pan.current.value += part->pan.step;
                 }
-                channel->pan = part->pan.value;
-                events |= 0x20;
+                channel->panpot = part->pan.current.value;
+                events |= SSD_VOICE_EVENT_VOLUME;
             }
-            if (effects & 0x20) {
-                if (--part->fade.remaining == 0) {
+            if (effects & SSD_TRACK_CONTROL_FADE_OUT) {
+                if (--part->velocity.remaining == 0) {
                     SsdCutoffChannel(part->channel);
                     events = 0;
                     effects = 0;
                     part->flags = 0;
                 } else {
-                    part->fade.value += part->fade.step;
-                    SsdSetChannelVoiceVelocity(part->channel, (signed char)(part->fade.value >> 16));
+                    part->velocity.current.value += part->velocity.step;
+                    SsdSetChannelVoiceVelocity(part->channel, (signed char)(part->velocity.current.value >> 16));
                 }
             }
-            part->effects = effects;
+            part->control_flags = effects;
             if (events != 0) {
                 SsdSetChannelVoiceEvent(part->channel, events);
             }
@@ -412,7 +241,7 @@ void SsdNormalTrackEffect(SsdSequence *sequence)
 
 void SsdNormalTrackGate(SsdSequence *track)
 {
-    SsdDevice *device = track->device;
+    SsdMidiDevice *device = track->device;
     int remaining = device->channel_count;
     SsdChannel *channel = device->channels;
 
@@ -420,12 +249,12 @@ void SsdNormalTrackGate(SsdSequence *track)
         SsdVoice *voice = channel->voices;
         --remaining;
         while (voice != 0) {
-            unsigned int gate = voice->gate;
+            unsigned int gate = voice->duration;
             if (gate != 0) {
                 if (--gate == 0) {
                     SsdKeyoffChannelVoice(channel, voice);
                 }
-                voice->gate = gate;
+                voice->duration = gate;
             }
             voice = voice->next;
         }
@@ -435,14 +264,14 @@ void SsdNormalTrackGate(SsdSequence *track)
 
 void SsdNormalTrackSequence(SsdSequence *sequence)
 {
-    int remaining = sequence->part_count;
-    SsdPart *part = sequence->parts;
+    int remaining = sequence->track_count;
+    SsdTrack *part = sequence->tracks;
 
     while (remaining != 0) {
         --remaining;
         if (part->flags < 0) {
             unsigned char *stream;
-            ++sequence->active_parts;
+            ++sequence->active_tracks;
             stream = part->stream;
             if (stream != 0) {
                 do {
@@ -452,19 +281,19 @@ void SsdNormalTrackSequence(SsdSequence *sequence)
                     }
                     opcode = *stream++;
                     if ((signed char)opcode < 0) {
-                        stream = SsdSeqFuncTrap[opcode - 128](sequence, part, stream);
+                        stream = SsdSeqFuncTrap[opcode - SSD_SEQ_COMMAND_BASE](sequence, part, stream);
                     } else {
-                        SsdNote note;
+                        SsdMidiEvent note;
                         unsigned char attributes;
                         int bytes;
                         unsigned int duration;
 
                         note.velocity = opcode;
-                        part->fade.value = opcode << 16;
+                        part->velocity.current.value = opcode << 16;
                         attributes = *stream++;
                         bytes = attributes >> 6;
-                        part->octave += (((attributes >> 4) & 3) - 1) * 12;
-                        note.pitch = part->octave + (attributes & 15);
+                        part->octave += (((attributes >> 4) & 3) - 1) * SSD_NOTES_PER_OCTAVE;
+                        note.key = part->octave + (attributes & 15);
                         if (bytes != 0) {
                             duration = 0;
                             while (bytes-- != 0) {
@@ -476,7 +305,7 @@ void SsdNormalTrackSequence(SsdSequence *sequence)
                             duration = part->duration;
                         }
                         note.duration = duration;
-                        if (!(part->flags & 2)) {
+                        if (!(part->flags & SSD_TRACK_MUTED)) {
                             SsdKeyonChannel(part->channel, &note);
                         }
                     }
@@ -491,88 +320,88 @@ void SsdNormalTrackSequence(SsdSequence *sequence)
 
 void SsdEffectTrackSequence(SsdSequence *sequence)
 {
-    SsdPart *part = sequence->parts;
-    int remaining = sequence->part_count;
-    SsdNote note;
+    SsdTrack *part = sequence->tracks;
+    int remaining = sequence->track_count;
+    SsdMidiEvent note;
     int duration;
     unsigned char *stream;
     unsigned char opcode;
     unsigned char trigger = 1;
-    int jump_command = 144;
+    int jump_command = SSD_SEQ_STOP;
 
-    sequence->active_parts = 0;
+    sequence->active_tracks = 0;
     do {
         if ((unsigned short)part->flags != 0) {
 
-            ++sequence->active_parts;
+            ++sequence->active_tracks;
             note.trigger = 0;
             stream = part->stream;
             while (part->wait == 0) {
-                part->flags &= 0xf8ff;
-                note.velocity = part->fade.value >> 16;
-                note.pitch = part->note;
+                part->flags &= ~(SSD_TRACK_NOTE | SSD_TRACK_SLURRED | SSD_TRACK_REST);
+                note.velocity = part->velocity.current.value >> 16;
+                note.key = part->note;
                 do {
                     opcode = *stream++;
                     if ((signed char)opcode >= 0) {
-                        int velocity = part->fade.value >> 16;
+                        int velocity = part->velocity.current.value >> 16;
                         int pitch;
                         duration = stream[0] + (stream[1] << 8);
                         note.velocity = velocity;
                         pitch = part->octave + (opcode & 15);
                         note.duration = duration;
-                        note.pitch = pitch;
+                        note.key = pitch;
                         part->wait = duration;
                         stream += 2;
-                        part->flags |= 0x100;
+                        part->flags |= SSD_TRACK_NOTE;
                         note.trigger = trigger;
                     } else {
-                        stream = SsdSeqFuncTrap[opcode - 128](sequence, part, stream);
-                        if ((short)part->flags >= 0) {
+                        stream = SsdSeqFuncTrap[opcode - SSD_SEQ_COMMAND_BASE](sequence, part, stream);
+                        if (part->flags >= 0) {
                             break;
                         }
-                        if (part->flags & 0x100) {
+                        if (part->flags & SSD_TRACK_NOTE) {
                             note.duration = part->wait;
                             note.trigger = trigger;
                         }
                     }
-                } while (!(part->flags & 0x500));
+                } while (!(part->flags & (SSD_TRACK_NOTE | SSD_TRACK_REST)));
                 part->stream = stream;
-                if ((short)part->flags & 0x8000) {
-                    SsdLoop *loop;
-                    if (part->flags & 0x800) {
-                        part->flags |= 0x200;
+                if (part->flags & SSD_TRACK_ACTIVE) {
+                    SsdTrackLoop *loop;
+                    if (part->flags & SSD_TRACK_SLUR_MODE) {
+                        part->flags |= SSD_TRACK_SLURRED;
                     }
                     loop = &part->loops[part->loop_depth];
                     while ((signed char)(opcode = *stream) < 0) {
-                        int hold_command = 137;
-                        int repeat_command = 153;
-                        int exit_command = 154;
-                        if ((unsigned char)opcode == jump_command) {
+                        int hold_command = SSD_SEQ_TIE;
+                        int repeat_command = SSD_SEQ_LOOP_END;
+                        int exit_command = SSD_SEQ_LOOP_ESCAPE;
+                        if (opcode == jump_command) {
                             stream = part->jump;
                             if (stream != 0) {
                                 continue;
                             } else {
                                 break;
                             }
-                        } else if ((unsigned char)opcode == 136 || (unsigned char)opcode == 193) {
-                            part->flags &= 0xfdff;
+                        } else if (opcode == SSD_SEQ_REST || opcode == SSD_SEQ_SLUR_OFF) {
+                            part->flags &= ~SSD_TRACK_SLURRED;
                             break;
-                        } else if ((unsigned char)opcode == hold_command) {
-                            part->flags |= 0x200;
+                        } else if (opcode == hold_command) {
+                            part->flags |= SSD_TRACK_SLURRED;
                             break;
                         } else {
-                            if ((unsigned char)opcode == repeat_command) {
+                            if (opcode == repeat_command) {
                                 if (loop->remaining != 0) {
-                                    stream = loop->begin;
+                                    stream = loop->start;
                                     continue;
                                 }
                                 --loop;
                             }
                             if (opcode == exit_command && loop->remaining == 0) {
-                                stream = loop->end;
+                                stream = loop->escape;
                                 --loop;
                             } else {
-                                stream += SsdSeqFuncLength[opcode - 128];
+                                stream += SsdSeqFuncLength[opcode - SSD_SEQ_COMMAND_BASE];
                             }
                         }
                     }
@@ -580,7 +409,7 @@ void SsdEffectTrackSequence(SsdSequence *sequence)
                     break;
                 }
             }
-            if ((short)part->flags >= 0) {
+            if (part->flags >= 0) {
                 --part->wait;
                 ++part;
                 continue;
@@ -591,9 +420,9 @@ void SsdEffectTrackSequence(SsdSequence *sequence)
                 if (duration != -1) {
                     int ratio = part->gate_ratio;
                     switch (ratio) {
-                    case 16:
+                    case SSD_TRACK_GATE_RATIO_FULL:
                         break;
-                    case 15:
+                    case SSD_TRACK_GATE_RATIO_DEFAULT:
                         duration -= 2;
                         duration = duration > 0 ? duration : 1;
                         break;
@@ -604,12 +433,12 @@ void SsdEffectTrackSequence(SsdSequence *sequence)
                     }
                 }
                 note.duration = duration;
-                part->last_note = part->note = note.pitch;
+                part->last_note = part->note = note.key;
                 SsdKeyonChannel(channel, &note);
-                if (part->flags & 0x200) {
-                    channel->flags |= 2;
+                if (part->flags & SSD_TRACK_SLURRED) {
+                    channel->flags |= SSD_CHANNEL_SLUR;
                 } else {
-                    channel->flags &= ~2;
+                    channel->flags &= ~SSD_CHANNEL_SLUR;
                 }
             }
             --part->wait;
@@ -620,7 +449,7 @@ void SsdEffectTrackSequence(SsdSequence *sequence)
 
 void SsdVoiceEvent(void)
 {
-    SsdDevice *device = SsdWork.devices;
+    SsdMidiDevice *device = SsdWork.devices;
 
     while (device != 0) {
         SsdDeviceVoiceEvent(device);
@@ -628,13 +457,13 @@ void SsdVoiceEvent(void)
     }
 }
 
-void SsdDeviceVoiceEvent(SsdDevice *device)
+void SsdDeviceVoiceEvent(SsdMidiDevice *device)
 {
     int left;
     int right;
     int volume;
     int pan;
-    if (!(device->flags & 1)) {
+    if (!(device->state & SSD_DEVICE_SKIP)) {
         int remaining = device->channel_count;
         SsdChannel *channel;
         short unity_volume;
@@ -646,68 +475,68 @@ void SsdDeviceVoiceEvent(SsdDevice *device)
 
         do {
             SsdVoice *voice = channel->voices;
-            unity_volume = 32512;
+            unity_volume = SSD_PAN_UNITY_GAIN;
             --remaining;
             while (voice != 0) {
                 unsigned short events = voice->events;
-                if (events & 0x20) {
+                if (events & SSD_VOICE_EVENT_VOLUME) {
                     int gain;
                     volume = channel->volume * voice->velocity / 63;
 
-                    volume -= (volume * voice->volume_modulation) >> 14;
-                    if (volume > 32767) {
-                        volume = 32767;
+                    volume -= (volume * voice->lfo.volume) >> 14;
+                    if (volume > SSD_SPU_VOLUME_MAX) {
+                        volume = SSD_SPU_VOLUME_MAX;
                     }
-                    if (volume < -32767) {
-                        volume = -32767;
+                    if (volume < -SSD_SPU_VOLUME_MAX) {
+                        volume = -SSD_SPU_VOLUME_MAX;
                     }
-                    volume = ((device->volume >> 8) * volume) >> 23;
+                    volume = ((device->master_volume >> 8) * volume) >> 23;
                     gain = volume * volume;
                     if (volume < 0) {
                         gain = -gain;
                     }
-                    pan = voice->pan_modulation + ((channel->pan + device->pan) >> 8);
-                    pan += channel->pan_offset * 256 - 16384;
-                    pan += voice->pan * 256 - 16384;
+                    pan = voice->lfo.pan + ((channel->panpot + device->master_panpot) >> 8);
+                    pan += channel->fader_panpot * 256 - 16384;
+                    pan += voice->base_panpot * 256 - 16384;
                     volume = gain;
-                    if (pan > 32256) {
-                        pan = 32256;
+                    if (pan > SSD_PAN_RANGE) {
+                        pan = SSD_PAN_RANGE;
                     }
                     if (pan < 0) {
                         pan = 0;
                     }
-                    if (SsdWork.stereo_mode != 0) {
-                        if (pan < 16128) {
-                            right = pan * 23040 / 16128;
-                            left = unity_volume - pan * 9472 / 16128;
+                    if (SsdWork.output_mode != SSD_OUTPUT_MONO) {
+                        if (pan < SSD_PAN_CENTER) {
+                            right = pan * SSD_PAN_CENTER_GAIN / SSD_PAN_CENTER;
+                            left = unity_volume - pan * SSD_PAN_ATTENUATION / SSD_PAN_CENTER;
                         } else {
-                            pan = 32256 - pan;
-                            left = pan * 23040 / 16128;
-                            right = unity_volume - pan * 9472 / 16128;
+                            pan = SSD_PAN_RANGE - pan;
+                            left = pan * SSD_PAN_CENTER_GAIN / SSD_PAN_CENTER;
+                            right = unity_volume - pan * SSD_PAN_ATTENUATION / SSD_PAN_CENTER;
                         }
                         left = (left * volume) >> 15;
                         right = (right * volume) >> 15;
                     } else {
-                        left = right = (volume * 23040) >> 15;
+                        left = right = (volume * SSD_PAN_CENTER_GAIN) >> 15;
                     }
-                    voice->left = left & 0x7fff;
-                    voice->right = right & 0x7fff;
-                    voice->hardware_changes |= 2;
+                    voice->left_volume = left & 0x7fff;
+                    voice->right_volume = right & 0x7fff;
+                    voice->flags |= SSD_VOICE_FLAG_VOLUME;
                 }
-                if (events & 0x10) {
-                    int note = voice->note + channel->transpose + voice->pitch_modulation;
-                    note += (channel->pitch + device->transpose) >> 16;
-                    voice->pitch = SsdNoteToPitch((short)note) & 0x3fff;
-                    voice->hardware_changes |= 1;
+                if (events & SSD_VOICE_EVENT_PITCH) {
+                    int note = voice->note + channel->transpose + voice->lfo.pitch;
+                    note += (channel->pitch_offset + device->master_note) >> 16;
+                    voice->pitch = SsdNoteToPitch((short)note) & SSD_VOICE_PITCH_MAX;
+                    voice->flags |= SSD_VOICE_FLAG_PITCH;
                 }
-                if ((events & 1) && !(channel->flags & 1)) {
+                if ((events & SSD_VOICE_EVENT_KEYON) && !(channel->flags & 1)) {
                     SsdKeyonVoice(voice);
-                    voice->flags |= 9;
+                    voice->key_state |= 9;
                 }
-                if (events & 2) {
+                if (events & SSD_VOICE_EVENT_KEYOFF) {
                     SsdKeyoffVoice(voice);
                     events = 0;
-                    voice->flags &= 0xfffe;
+                    voice->key_state &= 0xfffe;
                 } else {
                     events = 0;
                 }
@@ -725,9 +554,9 @@ void SsdGetEnvx(void)
     int core;
     int voice;
 
-    for (core = 0; core < 2; ++core) {
-        for (voice = 0; voice < 24; ++voice) {
-            record->envelope = sceSdGetParam((unsigned short)(core | (voice << 1) | 0x500)) >> 8;
+    for (core = 0; core < SSD_CORE_COUNT; ++core) {
+        for (voice = 0; voice < SSD_CORE_VOICE_COUNT; ++voice) {
+            record->allocation.envx = sceSdGetParam(core | (voice << 1) | SD_VP_ENVX) >> 8;
             ++record;
         }
     }
@@ -736,8 +565,8 @@ void SsdGetEnvx(void)
 void SsdCalculateModulate(SsdRamp *ramp)
 {
     if (--ramp->remaining != 0) {
-        ramp->value = (unsigned int)ramp->value + (unsigned int)ramp->step;
+        ramp->current.value += ramp->step;
     } else {
-        ramp->value = ramp->target;
+        ramp->current.value = ramp->target;
     }
 }

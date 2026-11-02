@@ -131,8 +131,19 @@ def compile_group(root, profile_path, unit, group, module, build_root, expected_
     else:
         require(staged_source.is_file() and digest(staged_source) == digest(source),
                 "reused staged source differs from published src/: " + group["source"])
+    # The module's shared declarations: include/ssd or include/rssd, one per
+    # owner source as in the EE units. Headers are ordinary C too: the
+    # preprocessed stream below is checked as a whole.
+    module_dirs = {"iop_ssd": ("ssd",), "iop_rssd": ("rssd", "ssd")}[unit]
+    module_headers = sorted(header for name in module_dirs for header in (root / "include").glob(f"{name}/*.h"))
+    if not reuse_work:
+        for header in module_headers:
+            target = stage / "include" / header.relative_to(root / "include")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(header, target)
     authored = staged_source.read_text(encoding="ascii")
-    ordinary_c(authored, staged=staged_source, headers=())
+    ordinary_c(authored, staged=staged_source,
+               headers={header.relative_to(root).as_posix() for header in module_headers})
 
     functions = [dict(name=f["name"], va=f"0x{f['offset']:08x}", size=f["size"])
                  for f in group["functions"]]

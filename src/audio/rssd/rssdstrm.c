@@ -1,9 +1,28 @@
-/* Original RSSD rssdstrm.c translation unit. */
+#include "rssd/rssd.h"
+#include "rssd/rssdring.h"
+#include "rssd/rssdstrm.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_pcm.h"
+#include "ssd/ssd_vag.h"
 
-typedef struct RingBuffer {
-    signed char capacity;
-    unsigned char queued;
-} RingBuffer;
+/* RssdIopStreamWork.mode */
+#define RSSD_STREAM_MODE_NONE 0
+#define RSSD_STREAM_MODE_PCM 1
+#define RSSD_STREAM_MODE_VAG_MONO 2
+#define RSSD_STREAM_MODE_VAG_STEREO 3
+
+/* Number of VAG voices (channels) the EE stream can drive. */
+#define RSSD_VAG_CHANNEL_MAX 7
+
+/* Empty polls after the last queued block before a channel reports "finished". */
+#define RSSD_STREAM_DRAIN_COUNT 2
+
+/* Stream status word: bit 1 = channel active, bits 8 and up = free ring slots. */
+#define RSSD_STREAM_STATUS_ACTIVE 2
+#define RSSD_STREAM_STATUS_FREE_SHIFT 8
+
+/* Stereo VAG data arrives as interleaved 1024-byte blocks, left then right. */
+#define RSSD_VAG_INTERLEAVE_SIZE 1024
 
 typedef struct StreamChannel {
     short format;
@@ -19,69 +38,19 @@ typedef struct RssdIopStreamWork {
     unsigned char channel_count;
     int chunk_size;
     StreamChannel pcm;
-    StreamChannel vag[7];
+    StreamChannel vag[RSSD_VAG_CHANNEL_MAX];
     unsigned char unmodeled_068[4];
 } RssdIopStreamWork;
 
-typedef struct StreamRequest {
-    unsigned char _unmodeled_header[16];
-    int argument[4];
-    unsigned char data[0];
-} StreamRequest;
-
-RssdIopStreamWork RssdStrWork;
-
-extern RingBuffer *InitRingBuffer(int, int);
-
-extern void SsdInitVagStreamStereo(int, void (*)(RssdIopStreamWork *), RssdIopStreamWork *);
-
-void SsdEEVagStreamCallbackStereo(RssdIopStreamWork *);
-
-extern void DisposeRingBuffer(RingBuffer *);
-
-extern void SsdDisposeVagStream(void);
-
-extern int SsdGetVagStreamParam(int, int *, int *, int *);
-
-extern void ClearRingBuffer(RingBuffer *);
-
-void SsdEEClearRingBuffer(int);
-
-extern void SsdInitPcmStream(int, void (*)(StreamChannel *), StreamChannel *);
-
-void SsdEEPcmStreamCallback(StreamChannel *);
-
-extern void SsdDisposePcmStream(void);
-
-extern int SsdGetVagStreamStatus(void);
-
-extern int InRingBuffer(RingBuffer *, const void *, int);
-
-extern void SsdPlayVagStream(int, int, int);
-
-extern void SsdStopVagStream(int);
-
-extern void *OutRingBuffer(RingBuffer *, int *);
-
-extern void SsdSetVagStreamDataMono(int, void *, int);
-
-extern int iRssdCallFunc(int, int *, void *, int);
-
-void SsdEEVagStreamCallbackMono(RssdIopStreamWork *);
-
-extern int SsdGetPcmStreamStatus(void);
-
-extern void SsdInitVagStreamMono(int, int, void (*)(RssdIopStreamWork *), RssdIopStreamWork *);
-
+/* SsdSetVagStreamDataStereo is called with the block size too, which the SSD
+ * definition in src/audio/ssd does not declare. */
 extern void SsdSetVagStreamDataStereo(void *, int);
 
-extern void SsdSetPcmStreamData(void *);
+void SsdEEVagStreamCallbackStereo(void *argument);
+void SsdEEVagStreamCallbackMono(void *argument);
+void SsdEEPcmStreamCallback(void *argument);
 
-extern void *GetRingInBufferPtr(RingBuffer *);
-
-extern void IncRingInBufferPtr(RingBuffer *, int);
-
-extern void SsdMemoryCopy(void *, const void *, int);
+RssdIopStreamWork RssdStrWork;
 
 void SsdInitEEPcmStream(int chunk_size, int format)
 {
@@ -93,7 +62,7 @@ void SsdInitEEPcmStream(int chunk_size, int format)
         work->pcm.active = 0;
         work->pcm.drain_count = 0;
         work->initialized = 1;
-        work->mode = 1;
+        work->mode = RSSD_STREAM_MODE_PCM;
         work->chunk_size = chunk_size;
         SsdInitPcmStream(chunk_size, SsdEEPcmStreamCallback, &work->pcm);
     }
@@ -106,14 +75,14 @@ void SsdDisposeEEPcmStream(void)
         SsdDisposePcmStream();
         DisposeRingBuffer(work->pcm.ring);
         work->initialized = 0;
-        work->mode = 0;
+        work->mode = RSSD_STREAM_MODE_NONE;
     }
 }
 
-int SsdSetEEPcmStreamData(StreamRequest *request)
+int SsdSetEEPcmStreamData(RssdRpcPacket *request)
 {
     unsigned char *data = request->data;
-    int left = request->argument[1];
+    int left = request->arguments[1];
     int chunk_size = RssdStrWork.pcm.chunk_size;
     int count = 0;
     while (left > 0) {
@@ -125,7 +94,7 @@ int SsdSetEEPcmStreamData(StreamRequest *request)
     }
     if (count) {
         RssdStrWork.pcm.active = 1;
-        RssdStrWork.pcm.drain_count = 2;
+        RssdStrWork.pcm.drain_count = RSSD_STREAM_DRAIN_COUNT;
     }
     return count;
 }
@@ -137,12 +106,13 @@ int SsdGetEEPcmStreamStatus(void)
     }
     return SsdGetPcmStreamStatus() |
         ((RssdStrWork.pcm.ring->capacity -
-          RssdStrWork.pcm.ring->queued) << 8);
+          RssdStrWork.pcm.ring->count) << RSSD_STREAM_STATUS_FREE_SHIFT);
 }
 
-void SsdEEPcmStreamCallback(StreamChannel *channel)
+void SsdEEPcmStreamCallback(void *argument)
 {
-    int request[8];
+    StreamChannel *channel = argument;
+    RssdRpcPacket request;
     int size;
     int drain_count;
     void *data = OutRingBuffer(channel->ring, &size);
@@ -152,8 +122,8 @@ void SsdEEPcmStreamCallback(StreamChannel *channel)
         int remaining = drain_count - 1;
         channel->drain_count = remaining;
         if (!remaining) {
-            request[4] = 1;
-            iRssdCallFunc(10, request, 0, 0);
+            request.arguments[0] = 1;
+            iRssdCallFunc(RSSD_EE_STREAM_FINISHED, &request, 0, 0);
             channel->active = 0;
         }
     }
@@ -171,7 +141,7 @@ void SsdInitEEVagStreamStereo(int chunk_size, int format)
         channel->drain_count = 0;
         work->initialized = 1;
         work->channel_count = 1;
-        work->mode = 3;
+        work->mode = RSSD_STREAM_MODE_VAG_STEREO;
         work->chunk_size = chunk_size;
         SsdInitVagStreamStereo(chunk_size, SsdEEVagStreamCallbackStereo, work);
     }
@@ -190,7 +160,7 @@ void SsdInitEEVagStreamMono(int chunk_size, int channels, int format)
             RssdStrWork.vag[i].drain_count = 0;
         }
         RssdStrWork.initialized = 1;
-        RssdStrWork.mode = 2;
+        RssdStrWork.mode = RSSD_STREAM_MODE_VAG_MONO;
         RssdStrWork.chunk_size = chunk_size;
         SsdInitVagStreamMono(chunk_size, channels, SsdEEVagStreamCallbackMono, &RssdStrWork);
         for (i = 0; i < channels; i++) {
@@ -209,15 +179,15 @@ void SsdDisposeEEVagStream(void)
             channel++;
         }
         RssdStrWork.initialized = 0;
-        RssdStrWork.mode = 0;
+        RssdStrWork.mode = RSSD_STREAM_MODE_NONE;
     }
 }
 
-void SsdPlayEEVagStream(StreamRequest *request)
+void SsdPlayEEVagStream(RssdRpcPacket *request)
 {
     int i;
     StreamChannel *channel;
-    SsdPlayVagStream(request->argument[0], request->argument[1], request->argument[2]);
+    SsdPlayVagStream(request->arguments[0], request->arguments[1], request->arguments[2]);
     channel = RssdStrWork.vag;
     for (i = 0; i < RssdStrWork.channel_count; i++) {
         channel->active = 0;
@@ -226,16 +196,16 @@ void SsdPlayEEVagStream(StreamRequest *request)
     }
 }
 
-void SsdStopEEVagStream(StreamRequest *request)
+void SsdStopEEVagStream(RssdRpcPacket *request)
 {
-    SsdStopVagStream(request->argument[0]);
-    if (!request->argument[0])
+    SsdStopVagStream(request->arguments[0]);
+    if (!request->arguments[0])
         SsdEEClearRingBuffer(-1);
 }
 
-int SsdSetEEVagStreamDataStereo(const StreamRequest *request)
+int SsdSetEEVagStreamDataStereo(const RssdRpcPacket *request)
 {
-    int channel_index = request->argument[0];
+    int channel_index = request->arguments[0];
     const int *chunk_size_field = &RssdStrWork.chunk_size;
     unsigned int mode = RssdStrWork.mode;
     int chunk_size = *chunk_size_field;
@@ -247,10 +217,10 @@ int SsdSetEEVagStreamDataStereo(const StreamRequest *request)
     int copied;
     const unsigned char *data;
     unsigned char *output;
-    if (mode == 3) {
+    if (mode == RSSD_STREAM_MODE_VAG_STEREO) {
         StreamChannel *channel;
         count = 0;
-        left = request->argument[2];
+        left = request->arguments[2];
         data = request->data;
         channel = RssdStrWork.vag;
         for (; left > 0; count++) {
@@ -261,20 +231,20 @@ int SsdSetEEVagStreamDataStereo(const StreamRequest *request)
         }
         if (count) {
             channel->active = 1;
-            channel->drain_count = 2;
+            channel->drain_count = RSSD_STREAM_DRAIN_COUNT;
         }
     } else {
         int active = 1;
-        int drain_count = 2;
+        int drain_count = RSSD_STREAM_DRAIN_COUNT;
         StreamChannel *channels;
         pair_index = 0;
-        offset = sizeof(StreamRequest);
+        offset = sizeof(RssdRpcPacket);
         channels = RssdStrWork.vag;
         channels += channel_index;
         do {
             StreamChannel *channel = &channels[pair_index];
             count = 0;
-            left = request->argument[2] >> 1;
+            left = request->arguments[2] >> 1;
             data = (const unsigned char *)request + offset;
             while (left > 0) {
                 length = chunk_size;
@@ -284,10 +254,10 @@ int SsdSetEEVagStreamDataStereo(const StreamRequest *request)
                 if (!output)
                     break;
                 for (copied = length; copied > 0;) {
-                    SsdMemoryCopy(output, data, 1024);
-                    copied -= 1024;
-                    output += 1024;
-                    data += 2048;
+                    SsdMemoryCopy(output, data, RSSD_VAG_INTERLEAVE_SIZE);
+                    copied -= RSSD_VAG_INTERLEAVE_SIZE;
+                    output += RSSD_VAG_INTERLEAVE_SIZE;
+                    data += 2 * RSSD_VAG_INTERLEAVE_SIZE;
                 }
                 IncRingInBufferPtr(channel->ring, left);
                 left -= length;
@@ -298,13 +268,13 @@ int SsdSetEEVagStreamDataStereo(const StreamRequest *request)
                 channel->drain_count = drain_count;
             }
             pair_index++;
-            offset += 1024;
+            offset += RSSD_VAG_INTERLEAVE_SIZE;
         } while (pair_index < 2);
     }
     return 0;
 }
 
-int SsdGetEEVagStreamStatusStereo(StreamRequest *request)
+int SsdGetEEVagStreamStatusStereo(RssdRpcPacket *request)
 {
     StreamChannel *channel;
     int status;
@@ -314,16 +284,17 @@ int SsdGetEEVagStreamStatusStereo(StreamRequest *request)
     channel = RssdStrWork.vag;
     status = SsdGetVagStreamStatus();
     ring = channel->ring;
-    status |= (ring->capacity - ring->queued) << 8;
+    status |= (ring->capacity - ring->count) << RSSD_STREAM_STATUS_FREE_SHIFT;
     if (channel->active)
-        status |= 2;
-    request->argument[0] = status;
+        status |= RSSD_STREAM_STATUS_ACTIVE;
+    request->arguments[0] = status;
     return status;
 }
 
-void SsdEEVagStreamCallbackStereo(RssdIopStreamWork *work)
+void SsdEEVagStreamCallbackStereo(void *argument)
 {
-    int request[8];
+    RssdIopStreamWork *work = argument;
+    RssdRpcPacket request;
     int size;
     unsigned char drain_count;
     void *data = OutRingBuffer(work->vag[0].ring, &size);
@@ -332,19 +303,19 @@ void SsdEEVagStreamCallbackStereo(RssdIopStreamWork *work)
     if (!data && drain_count) {
         work->vag[0].drain_count = --drain_count;
         if (!drain_count) {
-            request[4] = 1;
-            iRssdCallFunc(10, request, 0, 0);
+            request.arguments[0] = 1;
+            iRssdCallFunc(RSSD_EE_STREAM_FINISHED, &request, 0, 0);
             work->vag[0].active = 0;
         }
     }
 }
 
-int SsdSetEEVagStreamDataMono(StreamRequest *request)
+int SsdSetEEVagStreamDataMono(RssdRpcPacket *request)
 {
     unsigned char *data = request->data;
     int count = 0;
-    int left = request->argument[2];
-    StreamChannel *channel = &RssdStrWork.vag[request->argument[0]];
+    int left = request->arguments[2];
+    StreamChannel *channel = &RssdStrWork.vag[request->arguments[0]];
     while (left > 0) {
         int length = RssdStrWork.chunk_size;
         if (left < length)
@@ -357,12 +328,12 @@ int SsdSetEEVagStreamDataMono(StreamRequest *request)
     }
     if (count) {
         channel->active = 1;
-        channel->drain_count = 2;
+        channel->drain_count = RSSD_STREAM_DRAIN_COUNT;
     }
     return 0;
 }
 
-int SsdGetEEVagStreamStatusMono(StreamRequest *request)
+int SsdGetEEVagStreamStatusMono(RssdRpcPacket *request)
 {
     int volume;
     int pan;
@@ -372,18 +343,18 @@ int SsdGetEEVagStreamStatusMono(StreamRequest *request)
     RingBuffer *ring;
     if (!RssdStrWork.initialized)
         return -1;
-    channel = request->argument[0];
+    channel = request->arguments[0];
     status = SsdGetVagStreamParam(channel, &volume, &pan, &pitch);
     if (RssdStrWork.vag[channel].active)
-        status |= 2;
-    request->argument[1] = volume;
-    request->argument[2] = pan;
-    request->argument[3] = pitch;
+        status |= RSSD_STREAM_STATUS_ACTIVE;
+    request->arguments[1] = volume;
+    request->arguments[2] = pan;
+    request->arguments[3] = pitch;
     ring = RssdStrWork.vag[channel].ring;
-    return status | ((ring->capacity - ring->queued) << 8);
+    return status | ((ring->capacity - ring->count) << RSSD_STREAM_STATUS_FREE_SHIFT);
 }
 
-int SsdGetEEVagStreamStatusAll(StreamRequest *request)
+int SsdGetEEVagStreamStatusAll(RssdRpcPacket *request)
 {
     int i;
     if (!RssdStrWork.initialized)
@@ -392,9 +363,9 @@ int SsdGetEEVagStreamStatusAll(StreamRequest *request)
         RingBuffer *ring = RssdStrWork.vag[i].ring;
         int status = SsdGetVagStreamStatus();
         if (RssdStrWork.vag[i].active)
-            status |= 2;
-        status |= (ring->capacity - ring->queued) << 8;
-        request->argument[i] = status;
+            status |= RSSD_STREAM_STATUS_ACTIVE;
+        status |= (ring->capacity - ring->count) << RSSD_STREAM_STATUS_FREE_SHIFT;
+        request->arguments[i] = status;
     }
     return 0;
 }
@@ -417,9 +388,9 @@ void SsdEEClearRingBuffer(int index)
     }
 }
 
-void SsdEEVagStreamCallbackMono(RssdIopStreamWork *argument)
+void SsdEEVagStreamCallbackMono(void *argument)
 {
-    int request[8];
+    RssdRpcPacket request;
     int size;
     int i = 0;
     RssdIopStreamWork *work = argument;
@@ -440,7 +411,7 @@ void SsdEEVagStreamCallbackMono(RssdIopStreamWork *argument)
         channel++;
     }
     if (finished) {
-        request[4] = finished;
-        iRssdCallFunc(10, request, 0, 0);
+        request.arguments[0] = finished;
+        iRssdCallFunc(RSSD_EE_STREAM_FINISHED, &request, 0, 0);
     }
 }

@@ -177,6 +177,8 @@ void WindowDXSet(WindowDX *window);
 void WindowDXMain(WindowDX *window);
 int WindowSPSelect(WindowSPCursor *cursor, int button_flags);
 void WindowSPItemChange(WindowSPCursor *list);
+void WindowSPSet(WindowSPCursor *list);
+void WindowSPMain(WindowSPCursor *list);
 void WindowSPSetSelect(WindowSPCursor *list, unsigned char *keep);
 void eBattleWinClose(void *window);
 void eBattleWinClose3(void);

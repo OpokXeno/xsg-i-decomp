@@ -1,82 +1,14 @@
-/* Original SSD object: ssd_lfo.c. Untouched storage remains partial. */
+#include "ssd/ssd_lfo.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_voic.h"
 
-typedef struct SsdLfoParam {
-    unsigned short flags;
-    unsigned char target;
-    unsigned char waveform;
-    int depth;
-    unsigned short period;
-    unsigned short delay;
-    unsigned short fadeStep;
-} SsdLfoParam;
-typedef struct SsdLfoState SsdLfoState;
-/* One LFO waveform step; only the noise steps also read the driver work. */
-typedef int (*SsdLfoProcedure)(SsdLfoState *state, void *ssd);
-struct SsdLfoState {
-    SsdLfoParam param;
-    int (*process)(SsdLfoState *, void *);
-    SsdLfoState *next;
-    int value;
-    int step;
-    unsigned short countdown;
-    unsigned short delay;
-    short fadeLevel;
-};
-typedef struct SsdLfoWork {
-    unsigned char active;
-    short pitch;
-    short volume;
-    short pan;
-    short field08;
-    SsdLfoState *first;
-    SsdLfoState states[4];
-} SsdLfoWork;
-
-typedef struct SsdVoiceControl {
-    unsigned char index;
-    unsigned char core;
-    unsigned char voice;
-    unsigned char state;
-    unsigned char unmodeled_004[20];
-    unsigned int priority;
-    unsigned char unmodeled_01c[18];
-    unsigned short events;
-    unsigned char unmodeled_030[24];
-    SsdLfoWork lfo;
-    unsigned char unmodeled_0f8[8];
-} SsdVoiceControl;
-
-typedef struct SsdDriverState {
-    unsigned char unmodeled_000[0x230];
-    unsigned int key_on[2];
-    unsigned int key_off[2];
-    unsigned int cutoff[2];
-    unsigned int noise[2];
-    unsigned int pitch_modulation[2];
-    unsigned int effect_left[2];
-    unsigned int effect_right[2];
-    unsigned int active_voices;
-    SsdVoiceControl voices[48];
-    unsigned char unmodeled_326c[24];
-    int lfoRandom;
-} SsdDriverState;
-
-extern SsdLfoProcedure WaveformTable[];
-
-void SsdInitLfoWork(SsdLfoWork *work);
-void SsdInitLfoParam(SsdLfoWork *work, SsdLfoParam *params);
-void SsdResetLfoProc(SsdLfoWork *work, SsdLfoWork *source);
-int SsdSeqGetLFODepth(int depth, int period, int waveform);
-void SsdLfoControlProc(SsdDriverState *work);
-int SsdLfoOffProc(SsdLfoState *state);
-int SsdLfoRectangularSingleProc(SsdLfoState *state);
-int SsdLfoRectangularDoubleProc(SsdLfoState *state);
-int SsdLfoTriangularSingleProc(SsdLfoState *state);
-int SsdLfoTriangularDoubleProc(SsdLfoState *state);
-int SsdLfoSawtoothSingleProc(SsdLfoState *state);
-int SsdLfoNoiseSingleProc(SsdLfoState *state, void *ssd);
-int SsdLfoNoiseDoubleProc(SsdLfoState *state, void *ssd);
-int SsdGetRSLFORandom(SsdDriverState *work);
+int SsdLfoOffProc(SsdLfoState *state, SsdGlobalWork *work);
+int SsdLfoRectangularSingleProc(SsdLfoState *state, SsdGlobalWork *work);
+int SsdLfoRectangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work);
+int SsdLfoSawtoothSingleProc(SsdLfoState *state, SsdGlobalWork *work);
+int SsdLfoNoiseSingleProc(SsdLfoState *state, SsdGlobalWork *work);
+int SsdLfoNoiseDoubleProc(SsdLfoState *state, SsdGlobalWork *work);
+int SsdGetRSLFORandom(SsdGlobalWork *work);
 
 void SsdInitLfoWork(SsdLfoWork *work)
 {
@@ -85,19 +17,19 @@ void SsdInitLfoWork(SsdLfoWork *work)
     work->pitch = 0;
     work->volume = 0;
     work->pan = 0;
-    work->field08 = 0;
+    work->unmodeled_08 = 0;
     work->first = 0;
-    for (i = 3; i >= 0; --i)
+    for (i = SSD_LFO_STATE_COUNT - 1; i >= 0; --i)
         work->states[i].param.flags = 0;
 }
 
-void SsdInitLfoParam(SsdLfoWork *work, SsdLfoParam *params)
+void SsdInitLfoParam(SsdLfoWork *work, const SsdLfoParam *params)
 {
     int i;
     int active;
     work->first = 0;
     active = 0;
-    for (i = 0; i < 4; ++i) {
+    for (i = 0; i < SSD_LFO_STATE_COUNT; ++i) {
         if (params->flags) {
             work->states[i].param = *params;
             work->states[i].process = WaveformTable[params->waveform];
@@ -122,17 +54,17 @@ void SsdResetLfoProc(SsdLfoWork *work, SsdLfoWork *source)
     if (source->active) {
         initial = source->states;
         state = work->states;
-        for (count = 4; count != 0; ) {
+        for (count = SSD_LFO_STATE_COUNT; count != 0; ) {
             unsigned short flags = initial->param.flags;
             --count;
-            if (flags & 1) {
+            if (flags & SSD_LFO_ENABLED) {
                 state->param = initial->param;
                 state->process = initial->process;
                 state->value = 0;
                 state->countdown = 1;
                 state->delay = initial->param.delay;
-                state->fadeLevel = initial->param.fadeStep;
-                state->param.flags = flags & 0xff9f;
+                state->fade_level = initial->param.fade_step;
+                state->param.flags = flags & ~(SSD_LFO_PHASE_STARTED | SSD_LFO_PHASE_NEGATIVE);
                 state->next = work->first;
                 work->first = state;
             }
@@ -146,8 +78,8 @@ int SsdSeqGetLFODepth(int depth, int period, int waveform)
 {
     if (depth && period) {
         switch (waveform) {
-        case 2:
-        case 3:
+        case SSD_LFO_WAVEFORM_TRIANGULAR_SINGLE:
+        case SSD_LFO_WAVEFORM_TRIANGULAR_DOUBLE:
             depth /= period;
             break;
         case 4:
@@ -163,7 +95,7 @@ int SsdSeqGetLFODepth(int depth, int period, int waveform)
     return depth;
 }
 
-void SsdLfoControlProc(SsdDriverState *work)
+void SsdLfoControlProc(SsdGlobalWork *work)
 {
     int remaining;
     int value;
@@ -173,13 +105,13 @@ void SsdLfoControlProc(SsdDriverState *work)
     int volumeTarget;
     int panTarget;
     SsdLfoState *state;
-    SsdVoiceControl *voice = work->voices;
-    remaining = 47;
-    volumeTarget = 1;
-    panTarget = 2;
+    SsdVoice *voice = work->voices;
+    remaining = SSD_VOICE_COUNT - 1;
+    volumeTarget = SSD_LFO_TARGET_VOLUME;
+    panTarget = SSD_LFO_TARGET_PAN;
     do {
         events = 0;
-        if (voice->priority & 0x1ff) {
+        if (voice->allocation.priority & SSD_VOICE_PRIORITY_ACTIVE) {
             state = voice->lfo.first;
             voice->lfo.pan = 0;
             voice->lfo.volume = 0;
@@ -190,17 +122,17 @@ void SsdLfoControlProc(SsdDriverState *work)
                     continue;
                 }
                     value = state->process(state, work);
-                    fade = state->fadeLevel;
-                    if (fade < 1024) {
+                    fade = state->fade_level;
+                    if (fade < SSD_LFO_FADE_FULL) {
                         value = (value >> 10) * fade;
-                        state->fadeLevel = state->param.fadeStep + fade;
+                        state->fade_level = state->param.fade_step + fade;
                     }
                     value >>= 16;
                     target = state->param.target;
                     if (target == volumeTarget)
                         goto accumulate_volume;
-                    if (target < 2) {
-                        if (target == 0)
+                    if (target < SSD_LFO_TARGET_PAN) {
+                        if (target == SSD_LFO_TARGET_PITCH)
                             goto accumulate_pitch;
                         continue;
                     }
@@ -208,15 +140,15 @@ void SsdLfoControlProc(SsdDriverState *work)
                         goto accumulate_pan;
                     continue;
 accumulate_pitch:
-                        events |= 0x10;
+                        events |= SSD_VOICE_EVENT_PITCH;
                         voice->lfo.pitch += value;
                         continue;
 accumulate_volume:
-                        events |= 0x20;
+                        events |= SSD_VOICE_EVENT_VOLUME;
                         voice->lfo.volume += value;
                         continue;
 accumulate_pan:
-                        events |= 0x20;
+                        events |= SSD_VOICE_EVENT_VOLUME;
                         voice->lfo.pan += value;
             }
             voice->events |= events;
@@ -226,13 +158,13 @@ accumulate_pan:
     } while (remaining != -1);
 }
 
-int SsdLfoOffProc(SsdLfoState *state)
+int SsdLfoOffProc(SsdLfoState *state, SsdGlobalWork *work)
 {
-    state->param.flags &= 0xfffe;
+    state->param.flags &= ~SSD_LFO_ENABLED;
     return 0;
 }
 
-int SsdLfoRectangularSingleProc(SsdLfoState *state)
+int SsdLfoRectangularSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     int value = 0;
     if (--state->countdown == 0) {
@@ -244,33 +176,33 @@ int SsdLfoRectangularSingleProc(SsdLfoState *state)
     return state->value;
 }
 
-int SsdLfoRectangularDoubleProc(SsdLfoState *state)
+int SsdLfoRectangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
         int depth = state->param.depth;
         state->countdown = state->param.period;
-        if (state->param.flags & 0x40)
+        if (state->param.flags & SSD_LFO_PHASE_NEGATIVE)
             depth = -depth;
         state->value = depth;
-        state->param.flags ^= 0x40;
+        state->param.flags ^= SSD_LFO_PHASE_NEGATIVE;
     }
     return state->value;
 }
 
-int SsdLfoTriangularSingleProc(SsdLfoState *state)
+int SsdLfoTriangularSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
         int depth = state->param.depth;
         state->countdown = state->param.period;
-        if (state->param.flags & 0x40)
+        if (state->param.flags & SSD_LFO_PHASE_NEGATIVE)
             depth = -depth;
         state->step = depth;
-        state->param.flags ^= 0x40;
+        state->param.flags ^= SSD_LFO_PHASE_NEGATIVE;
     }
     return state->value += state->step;
 }
 
-int SsdLfoTriangularDoubleProc(SsdLfoState *state)
+int SsdLfoTriangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     int countdown = state->countdown;
     --countdown;
@@ -278,19 +210,19 @@ int SsdLfoTriangularDoubleProc(SsdLfoState *state)
         unsigned short flags = state->param.flags;
         int depth;
         countdown = state->param.period;
-        if (flags & 0x20)
+        if (flags & SSD_LFO_PHASE_STARTED)
             countdown *= 2;
         depth = state->param.depth;
         state->step = depth;
-        if (flags & 0x40)
+        if (flags & SSD_LFO_PHASE_NEGATIVE)
             state->step = -depth;
-        state->param.flags = (flags | 0x20) ^ 0x40;
+        state->param.flags = (flags | SSD_LFO_PHASE_STARTED) ^ SSD_LFO_PHASE_NEGATIVE;
     }
     state->countdown = countdown;
     return state->value += state->step;
 }
 
-int SsdLfoSawtoothSingleProc(SsdLfoState *state)
+int SsdLfoSawtoothSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
         state->value = 0;
@@ -301,53 +233,53 @@ int SsdLfoSawtoothSingleProc(SsdLfoState *state)
     return state->value;
 }
 
-int SsdLfoNoiseSingleProc(SsdLfoState *state, void *ssd)
+int SsdLfoNoiseSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
         int random;
         state->countdown = state->param.period;
-        random = SsdGetRSLFORandom(ssd);
+        random = SsdGetRSLFORandom(work);
         state->value = (state->param.depth >> 15) * random;
     }
     return state->value;
 }
 
-int SsdLfoNoiseDoubleProc(SsdLfoState *state, void *ssd)
+int SsdLfoNoiseDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
         int random;
         state->countdown = state->param.period;
-        random = SsdGetRSLFORandom(ssd);
+        random = SsdGetRSLFORandom(work);
         state->value = (state->param.depth >> 14) * random - state->param.depth;
     }
     return state->value;
 }
 
-int SsdGetRSLFORandom(SsdDriverState *work)
+int SsdGetRSLFORandom(SsdGlobalWork *work)
 {
-    int random = work->lfoRandom;
-    random ^= (unsigned int)random << 17;
+    int random = work->random_state;
+    random ^= random << 17;
     random ^= random >> 15;
-    work->lfoRandom = random;
+    work->random_state = random;
     return random & 0x7fff;
 }
 
 /* LFO waveform procedures by waveform number; unused numbers are off. */
 SsdLfoProcedure WaveformTable[16] = {
-    /*  0 */ (SsdLfoProcedure)SsdLfoRectangularSingleProc,
-    /*  1 */ (SsdLfoProcedure)SsdLfoRectangularDoubleProc,
-    /*  2 */ (SsdLfoProcedure)SsdLfoTriangularSingleProc,
-    /*  3 */ (SsdLfoProcedure)SsdLfoTriangularDoubleProc,
-    /*  4 */ (SsdLfoProcedure)SsdLfoSawtoothSingleProc,
-    /*  5 */ (SsdLfoProcedure)SsdLfoSawtoothSingleProc,
+    /*  0 */ SsdLfoRectangularSingleProc,
+    /*  1 */ SsdLfoRectangularDoubleProc,
+    /*  2 */ SsdLfoTriangularSingleProc,
+    /*  3 */ SsdLfoTriangularDoubleProc,
+    /*  4 */ SsdLfoSawtoothSingleProc,
+    /*  5 */ SsdLfoSawtoothSingleProc,
     /*  6 */ SsdLfoNoiseSingleProc,
     /*  7 */ SsdLfoNoiseDoubleProc,
-    /*  8 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /*  9 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /* 10 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /* 11 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /* 12 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /* 13 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /* 14 */ (SsdLfoProcedure)SsdLfoOffProc,
-    /* 15 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /*  8 */ SsdLfoOffProc,
+    /*  9 */ SsdLfoOffProc,
+    /* 10 */ SsdLfoOffProc,
+    /* 11 */ SsdLfoOffProc,
+    /* 12 */ SsdLfoOffProc,
+    /* 13 */ SsdLfoOffProc,
+    /* 14 */ SsdLfoOffProc,
+    /* 15 */ SsdLfoOffProc,
 };

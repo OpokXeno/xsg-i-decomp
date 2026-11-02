@@ -112,6 +112,8 @@ void xglFontPrintExtFunc(int ot, FontExtFunc function, void *argument);
 void xglFontReloadTexture(FontDrawCursor *cursor, int flags);
 
 extern void xglFontPrint(int x, int y, int color, const char *text);
+extern void xglFontPrintDirectOT(int ot, const char *text);
+extern void xglFontPrintf(int x, int y, unsigned int color, void *arg);
 
 /* The accepted io-domain prototype (include/xeno/io/functions.h, the same
  * spelling as src/io/main-00256190/HddTest.c). The io headers cannot be

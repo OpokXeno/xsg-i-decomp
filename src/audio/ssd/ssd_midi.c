@@ -1,119 +1,29 @@
-/* Original SSD ssd_midi.c translation unit. Unmodeled spans retain original storage. */
+#include "ssd/ssd_midi.h"
+#include "ssd/ssd_chan.h"
 
-typedef struct SsdMidiEventQueue {
-    unsigned short count;
-    unsigned char unmodeled_002[2];
-    unsigned int events[64];
-} SsdMidiEventQueue;
-
-typedef struct SsdMidiChannel {
-    unsigned int flags;
-    unsigned char unmodeled_004[10];
-    unsigned short bank;
-    unsigned char unmodeled_010[4];
-    int pitch_offset;
-    int voice_volume;
-    int voice_panpot;
-    unsigned char unmodeled_020[2];
-    signed char output_volume;
-    unsigned char unmodeled_023[6];
-    signed char midi_volume;
-    signed char midi_expression;
-    unsigned char unmodeled_02b;
-    unsigned char nonregistered_parameter_lsb, nonregistered_parameter_msb;
-    unsigned char registered_parameter_lsb, registered_parameter_msb;
-    unsigned char unmodeled_030[2];
-    unsigned char registered_parameter_selected, pitch_bend_sensitivity;
-    unsigned char unmodeled_034[200];
-} SsdMidiChannel;
-
-typedef struct SsdMidiDevice {
-    unsigned char unmodeled_000[32];
-    /* SsdNewMidiDevice allocates the channel tail for the requested count. */
-    SsdMidiChannel channels[1];
-} SsdMidiDevice;
-
-typedef struct SsdMidiState {
-    unsigned short enabled;
-    unsigned short queue_index;
-    SsdMidiDevice *device;
-    SsdMidiEventQueue queues[2];
-} SsdMidiState;
-
-typedef struct SsdMidiNote {
-    unsigned char unmodeled_000[2];
-    unsigned char velocity;
-    unsigned char note;
-    int duration;
-} SsdMidiNote;
-
-typedef void (*SsdMidiController)(SsdMidiChannel *, int);
+typedef void (*SsdMidiController)(SsdChannel *channel, int value);
 
 SsdMidiState SsdMidi;
 
-extern SsdMidiDevice *SsdNewMidiDevice(int channel, int mode, int options);
-
-extern void SsdResetMidiDeviceParam(SsdMidiDevice *device, int mode);
-
-extern void SsdResetChannelAll(SsdMidiDevice *device, int mode);
-
-extern int printf(const char *format, ...);
-
-extern void CpuDisableIntr(void);
-
-extern void CpuEnableIntr(void);
-
 extern SsdMidiController SsdMidiControlChangeTable[];
 
-extern void SsdKeyoffChannel(SsdMidiChannel *, SsdMidiNote *);
-
-extern void SsdKeyonChannel(SsdMidiChannel *, SsdMidiNote *);
-
-extern void SsdSetChannelProgram(SsdMidiChannel *, int);
-
-extern void SsdSetChannelVoiceEvent(SsdMidiChannel *channel, int event);
-
-extern void SsdSendChannelKeyoffEvent(SsdMidiChannel *channel);
-
-extern void SsdSetChannelHWEffectOn(SsdMidiChannel *channel, int effect, int mask);
-
-extern void SsdSetChannelHWEffectOff(SsdMidiChannel *channel, int effect, int mask);
-
 SsdMidiDevice *SsdMakeMidiSequenceRec(int channel);
-
 void SsdInMidiEvent(unsigned int event);
-
-void SsdMidiEventDecode(SsdMidiDevice *device, unsigned int event);
-
-void SsdMidiControlBankMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlBankLSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlModulationMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlPortamentoMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlVolumeMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlPanpotMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlExpressionMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlSustaion(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlReverb(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlRegParLSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlRegParMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlNonRegParLSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlNonRegParMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlSetRegParDataMSB(SsdMidiChannel *channel, int value);
-
-void SsdMidiControlSetRegParDataLSB(SsdMidiChannel *channel, int value);
+void SsdMidiControlBankMSB(SsdChannel *channel, int value);
+void SsdMidiControlBankLSB(SsdChannel *channel, int value);
+void SsdMidiControlModulationMSB(SsdChannel *channel, int value);
+void SsdMidiControlPortamentoMSB(SsdChannel *channel, int value);
+void SsdMidiControlVolumeMSB(SsdChannel *channel, int value);
+void SsdMidiControlPanpotMSB(SsdChannel *channel, int value);
+void SsdMidiControlExpressionMSB(SsdChannel *channel, int value);
+void SsdMidiControlSustaion(SsdChannel *channel, int value);
+void SsdMidiControlReverb(SsdChannel *channel, int value);
+void SsdMidiControlRegParLSB(SsdChannel *channel, int value);
+void SsdMidiControlRegParMSB(SsdChannel *channel, int value);
+void SsdMidiControlNonRegParLSB(SsdChannel *channel, int value);
+void SsdMidiControlNonRegParMSB(SsdChannel *channel, int value);
+void SsdMidiControlSetRegParDataMSB(SsdChannel *channel, int value);
+void SsdMidiControlSetRegParDataLSB(SsdChannel *channel, int value);
 
 SsdMidiDevice *SsdMakeMidiSequenceRec(int channel)
 {
@@ -139,7 +49,7 @@ void SsdInMidiEvent(unsigned int event)
 
     CpuDisableIntr();
     count = queue->count;
-    if (count < 64) {
+    if (count < SSD_MIDI_EVENT_QUEUE_SIZE) {
         queue->events[count] = event;
         queue->count = count + 1;
     }
@@ -152,38 +62,38 @@ void SsdMidiEventDecode(SsdMidiDevice *device, unsigned int event)
     unsigned int message = event >> 8;
     int status = message & 0xff;
     int data1 = (event >> 16) & 0xff;
-    unsigned int data2 = event >> 24;
-    SsdMidiChannel *channel;
-    SsdMidiNote note;
+    int data2 = event >> 24;
+    SsdChannel *channel;
+    SsdMidiEvent note;
     SsdMidiController controller;
     int pitch;
 
     channel_index = (channel_index << 4) + (message & 15);
-    if (status < 0xf0)
+    if (status < SSD_MIDI_SYSTEM)
         status = message & 0xf0;
 
-    if (status == 0xd0)
+    if (status == SSD_MIDI_CHANNEL_PRESSURE)
         return;
-    if (status < 0xd1) {
-        if (status == 0xa0)
+    if (status < SSD_MIDI_CHANNEL_PRESSURE + 1) {
+        if (status == SSD_MIDI_POLY_PRESSURE)
             return;
-        if (status < 0xa1) {
-            if (status == 0x80)
+        if (status < SSD_MIDI_POLY_PRESSURE + 1) {
+            if (status == SSD_MIDI_NOTE_OFF)
                 goto note_off;
-            if (status == 0x90)
+            if (status == SSD_MIDI_NOTE_ON)
                 goto note_on;
             return;
         }
-        if (status == 0xb0)
+        if (status == SSD_MIDI_CONTROL_CHANGE)
             goto control_change;
-        if (status == 0xc0)
+        if (status == SSD_MIDI_PROGRAM_CHANGE)
             goto program_change;
         return;
     }
-    if (status == 0xf7)
+    if (status == SSD_MIDI_SYSTEM_EXCLUSIVE_END)
         return;
-    if (status < 0xf8) {
-        if (status == 0xe0)
+    if (status < SSD_MIDI_SYSTEM_REALTIME) {
+        if (status == SSD_MIDI_PITCH_BEND)
             goto pitch_bend;
     }
     return;
@@ -191,13 +101,13 @@ void SsdMidiEventDecode(SsdMidiDevice *device, unsigned int event)
 note_off:
     channel = &device->channels[channel_index];
     note.velocity = data2;
-    note.note = data1;
+    note.key = data1;
     SsdKeyoffChannel(channel, &note);
     return;
 note_on:
     channel = &device->channels[channel_index];
     note.velocity = data2;
-    note.note = data1;
+    note.key = data1;
     note.duration = -1;
     if (data2)
         SsdKeyonChannel(channel, &note);
@@ -215,124 +125,126 @@ program_change:
     return;
 pitch_bend:
     channel = &device->channels[channel_index];
-    pitch = ((int)(data1 + (data2 << 7) - 8192) *
+    pitch = ((data1 +(data2 << 7) - SSD_MIDI_PITCH_BEND_CENTER) *
              channel->pitch_bend_sensitivity) / 32;
-    channel->pitch_offset = (unsigned int)pitch << 16;
-    SsdSetChannelVoiceEvent(channel, 16);
+    channel->pitch_offset = pitch << 16;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     return;
 }
 
-void SsdMidiControlBankMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlBankMSB(SsdChannel *channel, int value)
 {
     channel->bank = (channel->bank & 0xff00) | value;
 }
 
-void SsdMidiControlBankLSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlBankLSB(SsdChannel *channel, int value)
 {
     channel->bank = (channel->bank & 0xff) | (value << 8);
 }
 
-void SsdMidiControlModulationMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlModulationMSB(SsdChannel *channel, int value)
 {
 }
 
-void SsdMidiControlPortamentoMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlPortamentoMSB(SsdChannel *channel, int value)
 {
 }
 
-void SsdMidiControlVolumeMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlVolumeMSB(SsdChannel *channel, int value)
 {
-    channel->voice_volume =
-        value * channel->midi_expression * channel->output_volume / (127 * 127);
-    channel->midi_volume = value;
-    SsdSetChannelVoiceEvent(channel, 32);
+    channel->volume =
+        value * channel->expression * channel->fader_volume /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
+    channel->channel_volume = value;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
 }
 
-void SsdMidiControlPanpotMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlPanpotMSB(SsdChannel *channel, int value)
 {
     int panpot = value - 1;
     if (panpot < 0)
         panpot = 0;
-    channel->voice_panpot = panpot << 16;
-    SsdSetChannelVoiceEvent(channel, 32);
+    channel->panpot = panpot << 16;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
 }
 
-void SsdMidiControlExpressionMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlExpressionMSB(SsdChannel *channel, int value)
 {
-    channel->voice_volume =
-        channel->midi_volume * value * channel->output_volume / (127 * 127);
-    channel->midi_expression = value;
-    SsdSetChannelVoiceEvent(channel, 32);
+    channel->volume =
+        channel->channel_volume * value * channel->fader_volume /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
+    channel->expression = value;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
 }
 
-void SsdMidiControlSustaion(SsdMidiChannel *channel, int value)
+void SsdMidiControlSustaion(SsdChannel *channel, int value)
 {
-    if (value >= 64) {
-        channel->flags |= 4;
+    if (value >= SSD_MIDI_SWITCH_ON) {
+        channel->flags |= SSD_CHANNEL_SUSTAIN;
     } else {
-        channel->flags &= ~4U;
+        channel->flags &= ~SSD_CHANNEL_SUSTAIN;
         SsdSendChannelKeyoffEvent(channel);
     }
 }
 
-void SsdMidiControlReverb(SsdMidiChannel *channel, int value)
+void SsdMidiControlReverb(SsdChannel *channel, int value)
 {
-    if (value >= 64)
-        SsdSetChannelHWEffectOn(channel, 4, 0x4000);
+    if (value >= SSD_MIDI_SWITCH_ON)
+        SsdSetChannelHWEffectOn(channel, SSD_VOICE_EFFECT_REVERB, SSD_VOICE_FLAG_REVERB);
     else
-        SsdSetChannelHWEffectOff(channel, 4, 0x4000);
+        SsdSetChannelHWEffectOff(channel, SSD_VOICE_EFFECT_REVERB, SSD_VOICE_FLAG_REVERB);
 }
 
-void SsdMidiControlRegParLSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlRegParLSB(SsdChannel *channel, int value)
 {
     channel->registered_parameter_lsb = value;
     channel->registered_parameter_selected = 1;
 }
 
-void SsdMidiControlRegParMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlRegParMSB(SsdChannel *channel, int value)
 {
     channel->registered_parameter_msb = value;
     channel->registered_parameter_selected = 1;
 }
 
-void SsdMidiControlNonRegParLSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlNonRegParLSB(SsdChannel *channel, int value)
 {
     channel->nonregistered_parameter_lsb = value;
     channel->registered_parameter_selected = 0;
 }
 
-void SsdMidiControlNonRegParMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlNonRegParMSB(SsdChannel *channel, int value)
 {
     channel->nonregistered_parameter_msb = value;
     channel->registered_parameter_selected = 0;
 }
 
-void SsdMidiControlSetRegParDataMSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlSetRegParDataMSB(SsdChannel *channel, int value)
 {
     if (channel->registered_parameter_selected &&
         ((channel->registered_parameter_msb << 8) +
-         channel->registered_parameter_lsb) == 0)
+         channel->registered_parameter_lsb) == SSD_MIDI_RPN_PITCH_BEND_SENSITIVITY)
         channel->pitch_bend_sensitivity = value;
 }
 
-void SsdMidiControlSetRegParDataLSB(SsdMidiChannel *channel, int value)
+void SsdMidiControlSetRegParDataLSB(SsdChannel *channel, int value)
 {
 }
 
 /* MIDI control change handlers by controller number; 0 = ignored. */
-SsdMidiController SsdMidiControlChangeTable[128] = {
-    /* 0x00 */ SsdMidiControlBankMSB,
-    /* 0x01 */ SsdMidiControlModulationMSB,
+SsdMidiController SsdMidiControlChangeTable[SSD_MIDI_CONTROLLER_COUNT] = {
+    /* 0x00 bank select MSB */ SsdMidiControlBankMSB,
+    /* 0x01 modulation wheel */ SsdMidiControlModulationMSB,
     /* 0x02 */ 0,
     /* 0x03 */ 0,
     /* 0x04 */ 0,
-    /* 0x05 */ SsdMidiControlPortamentoMSB,
-    /* 0x06 */ SsdMidiControlSetRegParDataMSB,
-    /* 0x07 */ SsdMidiControlVolumeMSB,
+    /* 0x05 portamento time */ SsdMidiControlPortamentoMSB,
+    /* 0x06 data entry MSB */ SsdMidiControlSetRegParDataMSB,
+    /* 0x07 channel volume */ SsdMidiControlVolumeMSB,
     /* 0x08 */ 0,
     /* 0x09 */ 0,
-    /* 0x0a */ SsdMidiControlPanpotMSB,
-    /* 0x0b */ SsdMidiControlExpressionMSB,
+    /* 0x0a pan */ SsdMidiControlPanpotMSB,
+    /* 0x0b expression */ SsdMidiControlExpressionMSB,
     /* 0x0c */ 0,
     /* 0x0d */ 0,
     /* 0x0e */ 0,
@@ -353,7 +265,7 @@ SsdMidiController SsdMidiControlChangeTable[128] = {
     /* 0x1d */ 0,
     /* 0x1e */ 0,
     /* 0x1f */ 0,
-    /* 0x20 */ SsdMidiControlBankLSB,
+    /* 0x20 bank select LSB */ SsdMidiControlBankLSB,
     /* 0x21 */ 0,
     /* 0x22 */ 0,
     /* 0x23 */ 0,
@@ -385,7 +297,7 @@ SsdMidiController SsdMidiControlChangeTable[128] = {
     /* 0x3d */ 0,
     /* 0x3e */ 0,
     /* 0x3f */ 0,
-    /* 0x40 */ SsdMidiControlSustaion,
+    /* 0x40 damper pedal (sustain) */ SsdMidiControlSustaion,
     /* 0x41 */ 0,
     /* 0x42 */ 0,
     /* 0x43 */ 0,
@@ -412,17 +324,17 @@ SsdMidiController SsdMidiControlChangeTable[128] = {
     /* 0x58 */ 0,
     /* 0x59 */ 0,
     /* 0x5a */ 0,
-    /* 0x5b */ SsdMidiControlReverb,
+    /* 0x5b effects 1 depth (reverb) */ SsdMidiControlReverb,
     /* 0x5c */ 0,
     /* 0x5d */ 0,
     /* 0x5e */ 0,
     /* 0x5f */ 0,
     /* 0x60 */ 0,
     /* 0x61 */ 0,
-    /* 0x62 */ SsdMidiControlNonRegParLSB,
-    /* 0x63 */ SsdMidiControlNonRegParMSB,
-    /* 0x64 */ SsdMidiControlRegParLSB,
-    /* 0x65 */ SsdMidiControlRegParLSB,
+    /* 0x62 NRPN LSB */ SsdMidiControlNonRegParLSB,
+    /* 0x63 NRPN MSB */ SsdMidiControlNonRegParMSB,
+    /* 0x64 RPN LSB */ SsdMidiControlRegParLSB,
+    /* 0x65 RPN MSB (the original table also points it at the LSB handler) */ SsdMidiControlRegParLSB,
     /* 0x66 */ 0,
     /* 0x67 */ 0,
     /* 0x68 */ 0,

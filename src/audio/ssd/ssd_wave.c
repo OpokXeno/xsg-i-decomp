@@ -1,139 +1,45 @@
-/* Original ssd_wave.c translation unit. Shared data is defined by its owning FDR. */
+#include "ssd/ssd_wave.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_dma.h"
+#include "ssd/ssd_err.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_voic.h"
 
-
-
-
-
-typedef struct SsdWaveBank SsdWaveBank;
-typedef struct SsdGlobalWork SsdGlobalWork;
-typedef struct SsdWaveFileHeader SsdWaveFileHeader;
-typedef struct SsdSpuWaveSegment SsdSpuWaveSegment;
-typedef struct SsdWaveTransferState SsdWaveTransferState;
-typedef struct SsdWaveChunk SsdWaveChunk;
-typedef struct SsdWaveSample SsdWaveSample;
-typedef struct SsdVoiceControl SsdVoiceControl;
-
-struct SsdWaveBank {
-    unsigned int signature;
-    unsigned short bank_id;
-    unsigned char sample_count;
-    unsigned char program_count;
-    unsigned char unmodeled_008[4];
-    unsigned int spu_address;
-    unsigned int body_size;
-    unsigned char unmodeled_014[4];
-    SsdWaveSample *samples;
-    void *programs;
-    unsigned char unmodeled_020[4];
-    struct SsdWaveBank *next;
-};
-
-struct SsdSpuWaveSegment {
-    unsigned int address;
-    unsigned int segment_size;
-};
-
-typedef void (*SsdWaveTransferCallback)(int result, void *argument);
-
-struct SsdWaveTransferState {
-    unsigned int next_spu_address;
-    int bank_id;
-    SsdWaveTransferCallback callback;
-    void *argument;
-};
-
-struct SsdWaveChunk {
+typedef struct SsdWaveChunk {
     unsigned short type;
     unsigned short size;
-    unsigned char unmodeled_004[12];
-};
+    unsigned char unmodeled_04[12];
+} SsdWaveChunk;
 
-struct SsdWaveSample {
-    unsigned int body_offset;
-    unsigned int loop_offset;
-    unsigned char volume;
-    unsigned char pan;
-    short base_pitch;
-    unsigned short adsr1;
-    unsigned short adsr2;
-    char name[16];
-};
-
-struct SsdVoiceControl {
-    unsigned char unmodeled_000[28];
-    unsigned int start_address;
-    unsigned int loop_offset;
-    unsigned short adsr1;
-    unsigned short adsr2;
-    unsigned char unmodeled_028[20];
-    unsigned char sustain_rate;
-    unsigned char wave_flags;
-    unsigned char unmodeled_03e;
-    unsigned char sample_index;
-    short base_pitch;
-    unsigned short volume;
-    unsigned short pan;
-};
-
-struct SsdGlobalWork {
-    unsigned char unmodeled_000[0x124];
-    SsdSpuWaveSegment wave_segments[4];
-    unsigned char unmodeled_144[0x30];
-    SsdWaveBank *wave_banks;
-    unsigned char unmodeled_178[12];
-    SsdWaveTransferState wave_transfer;
-};
-
-struct SsdWaveFileHeader {
+typedef struct SsdWaveFileHeader {
     unsigned int signature;
-    unsigned char unmodeled_004[12];
+    unsigned char unmodeled_04[12];
     unsigned short flags;
     unsigned short bank_id;
     unsigned char sample_count;
     unsigned char program_count;
-    unsigned char unmodeled_016[10];
+    unsigned char unmodeled_16[10];
     unsigned int spu_address;
     unsigned int body_size;
     unsigned int body_offset;
-    unsigned char unmodeled_02c[20];
+    unsigned char unmodeled_2c[20];
     SsdWaveChunk first_chunk;
-};
+} SsdWaveFileHeader;
 
-SsdWaveBank *SsdGetWSPtrBank(int bank);
-int SsdDisposeWaveData(SsdWaveBank *wave);
-extern void SsdWarringProc(int error, unsigned int value);
-extern SsdGlobalWork SsdWork;
-extern void SsdErrorProc(int error, unsigned int value);
-extern void CpuDisableIntr(void);
-extern void CpuEnableIntr(void);
-extern unsigned int SsdSpuMFree(unsigned int address);
-extern void SsdDisposePtr(void *pointer);
-extern unsigned int SsdSpuMalloc(unsigned int size, int tag);
-extern unsigned int SsdSpuMallocAdrs(unsigned int size, unsigned int address, int tag);
-extern unsigned int SsdSpuMallocAdrsDynamic(unsigned int size, unsigned int address, int tag);
-extern unsigned int SsdSpuMallocAdrsSegment(unsigned int size, unsigned int address,
-                                         unsigned int segment_size, int tag);
+int SsdNextWaveData(void *data, int size);
 unsigned int SsdSpuWaveMalloc(const SsdWaveFileHeader *header, unsigned int address);
-extern void SsdSpuDmaWrite(unsigned int address, const void *data, int size,
-                          SsdWaveTransferCallback callback, void *argument);
-extern void *SsdNewPtr2(int size);
-extern void SsdMemoryCopy(void *destination, const void *source, int size);
-int SsdDisposeWaveBank(unsigned short bank);
-void SsdSetWaveTransCallback(SsdWaveTransferCallback callback, void *argument);
-SsdWaveBank *SsdGetWSPtrSpuAdrs(unsigned int address);
-int SsdCheckWaveData(int bank);
-int SsdAddWaveData(const void *data, int size, int spu_address);
-int SsdNextWaveData(const void *data, int size);
-void SsdSetWaveToVoiceControl(SsdVoiceControl *voice, SsdWaveBank *bank, short sample_index);
+int SsdDisposeWaveData(SsdWaveBank *wave);
+void SsdSetWaveToVoiceControl(SsdVoice *voice, SsdWaveBank *bank, short sample_index);
 
-int SsdAddWaveData(const void *data, int size, int spu_address)
+int SsdAddWaveData(void *data, int size, int spu_address)
 {
-    const SsdWaveFileHeader *header;
-    const void *sample_data;
-    const void *program_data;
+    SsdWaveFileHeader *header;
+    void *sample_data;
+    void *program_data;
     int sample_size;
     int program_size;
-    const SsdWaveChunk *chunk;
+    SsdWaveChunk *chunk;
     int scanning;
     int chunk_size;
     int transfer_size;
@@ -143,16 +49,16 @@ int SsdAddWaveData(const void *data, int size, int spu_address)
 
     SsdWork.wave_transfer.next_spu_address = 0;
     header = data;
-    if (header->signature != 0x6d647773) {
-        SsdErrorProc(-1, (unsigned int)header);
+    if (header->signature != SSD_WAVE_FILE_SIGNATURE) {
+        SsdErrorProc(SSD_ERROR_BAD_SIGNATURE,(unsigned int)header);
         if (SsdWork.wave_transfer.callback != 0)
-            SsdWork.wave_transfer.callback(-2, SsdWork.wave_transfer.argument);
+            SsdWork.wave_transfer.callback(SSD_WAVE_RESULT_FAILED, SsdWork.wave_transfer.argument);
         return -1;
     }
     if (SsdGetWSPtrBank(header->bank_id) != 0) {
-        SsdWarringProc(-24, header->bank_id);
+        SsdWarringProc(SSD_WARNING_WAVE_BANK_LOADED,header->bank_id);
         if (SsdWork.wave_transfer.callback != 0)
-            SsdWork.wave_transfer.callback(-2, SsdWork.wave_transfer.argument);
+            SsdWork.wave_transfer.callback(SSD_WAVE_RESULT_FAILED, SsdWork.wave_transfer.argument);
         return header->bank_id;
     }
     program_data = 0;
@@ -164,28 +70,28 @@ int SsdAddWaveData(const void *data, int size, int spu_address)
     do {
         chunk_size = chunk->size;
         switch (chunk->type) {
-        case 3:
+        case SSD_WAVE_CHUNK_SAMPLES:
             sample_data = chunk + 1;
             sample_size = chunk_size - sizeof(SsdWaveChunk);
             break;
-        case 4:
+        case SSD_WAVE_CHUNK_PROGRAMS:
             program_data = chunk + 1;
             program_size = chunk_size - sizeof(SsdWaveChunk);
             break;
-        case 0:
+        case SSD_WAVE_CHUNK_END:
             scanning = 0;
             break;
         }
         /* Variable-size on-disk records advance by their declared byte length. */
-        chunk = (const SsdWaveChunk *)((const char *)chunk + chunk_size);
+        chunk = (SsdWaveChunk *)((char *)chunk + chunk_size);
     } while (scanning);
 
     spu_address = SsdSpuWaveMalloc(header, spu_address);
     if (spu_address == 0) {
-        SsdErrorProc(-33, header->bank_id);
+        SsdErrorProc(SSD_ERROR_NO_SPU_MEMORY, header->bank_id);
         if (SsdWork.wave_transfer.callback != 0)
-            SsdWork.wave_transfer.callback(-2, SsdWork.wave_transfer.argument);
-        return -33;
+            SsdWork.wave_transfer.callback(SSD_WAVE_RESULT_FAILED, SsdWork.wave_transfer.argument);
+        return SSD_ERROR_NO_SPU_MEMORY;
     }
     transfer_size = size - header->body_offset;
     SsdSpuDmaWrite(spu_address, chunk, transfer_size,
@@ -194,10 +100,10 @@ int SsdAddWaveData(const void *data, int size, int spu_address)
     wave = SsdNewPtr2(sample_size + program_size + sizeof(SsdWaveBank));
     if (wave == 0) {
         SsdSpuMFree(spu_address);
-        SsdErrorProc(-32, header->bank_id);
-        return -32;
+        SsdErrorProc(SSD_ERROR_NO_MEMORY, header->bank_id);
+        return SSD_ERROR_NO_MEMORY;
     }
-    wave->signature = 0x76617773;
+    wave->signature = SSD_WAVE_BANK_SIGNATURE;
     wave->bank_id = header->bank_id;
     wave->sample_count = header->sample_count;
     wave->program_count = header->program_count;
@@ -220,15 +126,15 @@ int SsdAddWaveData(const void *data, int size, int spu_address)
     return wave->bank_id;
 }
 
-int SsdNextWaveData(const void *data, int size)
+int SsdNextWaveData(void *data, int size)
 {
     SsdWaveTransferState *state = &SsdWork.wave_transfer;
     unsigned int address = state->next_spu_address;
     if (address == 0) {
-        SsdWarringProc(-28, 0);
+        SsdWarringProc(SSD_WARNING_NO_WAVE_TRANSFER, 0);
         if (state->callback != 0)
-            state->callback(-2, state->argument);
-        return -28;
+            state->callback(SSD_WAVE_RESULT_FAILED, state->argument);
+        return SSD_WARNING_NO_WAVE_TRANSFER;
     }
     SsdSpuDmaWrite(address, data, size, state->callback, state->argument);
     state->next_spu_address = address + size;
@@ -243,26 +149,26 @@ unsigned int SsdSpuWaveMalloc(const SsdWaveFileHeader *header, unsigned int addr
     int i;
     if (address == 0)
         address = header->spu_address;
-    else if (address == ~0U)
+    else if (address == SSD_WAVE_ADDRESS_ANY)
         address = 0;
     size = header->body_size;
     if (address == 0) {
-        result = SsdSpuMalloc(size, 9);
+        result = SsdSpuMalloc(size, SSD_SPU_BLOCK_WAVE);
     } else {
         segment = 0;
         address = header->spu_address;
-        for (i = 0; i < 4; i++) {
-            if (SsdWork.wave_segments[i].address == address) {
-                segment = SsdWork.wave_segments[i].segment_size;
+        for (i = 0; i < SSD_SEGMENT_MODE_COUNT; i++) {
+            if (SsdWork.segment_modes[i].address == address) {
+                segment = SsdWork.segment_modes[i].size;
                 break;
             }
         }
         if (segment != 0) {
-            result = SsdSpuMallocAdrsSegment(size, address, segment, 9);
-        } else if (header->flags & 1) {
-            result = SsdSpuMallocAdrsDynamic(size, address, 9);
+            result = SsdSpuMallocAdrsSegment(size, address, segment, SSD_SPU_BLOCK_WAVE);
+        } else if (header->flags & SSD_WAVE_FLAG_DYNAMIC_ADDRESS) {
+            result = SsdSpuMallocAdrsDynamic(size, address, SSD_SPU_BLOCK_WAVE);
         } else {
-            result = SsdSpuMallocAdrs(size, address, 9);
+            result = SsdSpuMallocAdrs(size, address, SSD_SPU_BLOCK_WAVE);
         }
     }
     return result;
@@ -276,8 +182,8 @@ int SsdDisposeWaveBank(unsigned short bank)
         SsdDisposeWaveData(wave);
         result = 0;
     } else {
-        SsdWarringProc(-16, bank);
-        result = -16;
+        SsdWarringProc(SSD_ERROR_WAVE_BANK_NOT_FOUND, bank);
+        result = SSD_ERROR_WAVE_BANK_NOT_FOUND;
     }
     return result;
 }
@@ -293,8 +199,8 @@ int SsdDisposeWaveData(SsdWaveBank *wave)
         cursor = previous->next;
     }
     if (cursor == 0) {
-        SsdErrorProc(-16, (unsigned int)wave);
-        return -16;
+        SsdErrorProc(SSD_ERROR_WAVE_BANK_NOT_FOUND, (unsigned int)wave);
+        return SSD_ERROR_WAVE_BANK_NOT_FOUND;
     }
     CpuDisableIntr();
     if (previous != 0)
@@ -303,7 +209,7 @@ int SsdDisposeWaveData(SsdWaveBank *wave)
         SsdWork.wave_banks = wave->next;
     CpuEnableIntr();
     if (wave->spu_address != SsdSpuMFree(wave->spu_address))
-        SsdErrorProc(-43, (unsigned int)wave);
+        SsdErrorProc(SSD_ERROR_WAVE_SPU_FREE,(unsigned int)wave);
     SsdDisposePtr(wave);
     return 0;
 }
@@ -338,7 +244,7 @@ SsdWaveBank *SsdGetWSPtrBank(int bank)
     return 0;
 }
 
-void SsdSetWaveToVoiceControl(SsdVoiceControl *voice, SsdWaveBank *bank, short sample_index)
+void SsdSetWaveToVoiceControl(SsdVoice *voice, SsdWaveBank *bank, short sample_index)
 {
     SsdWaveSample *sample;
     unsigned int body_offset;
@@ -347,18 +253,18 @@ void SsdSetWaveToVoiceControl(SsdVoiceControl *voice, SsdWaveBank *bank, short s
     if (bank != 0) {
         sample = &bank->samples[sample_index];
         body_offset = sample->body_offset;
-        voice->start_address = body_offset + bank->spu_address;
-        voice->loop_offset = body_offset + sample->loop_offset;
+        voice->sample_start = body_offset + bank->spu_address;
+        voice->loop_start = body_offset + sample->loop_offset;
         adsr1 = sample->adsr1;
         adsr2 = sample->adsr2;
-        voice->sample_index = sample_index;
+        voice->wave_index = sample_index;
         voice->adsr2 = adsr2;
         voice->adsr1 = adsr1;
-        voice->sustain_rate = adsr2 & 31;
-        voice->volume = sample->volume;
-        voice->pan = sample->pan;
-        voice->base_pitch = sample->base_pitch;
-        voice->wave_flags = 0;
+        voice->release_rate = adsr2 & SSD_ADSR2_RELEASE_RATE_MASK;
+        voice->base_velocity = sample->volume;
+        voice->base_panpot = sample->pan;
+        voice->base_note = sample->base_pitch;
+        voice->transpose = 0;
     }
 }
 

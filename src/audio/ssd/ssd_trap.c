@@ -1,174 +1,23 @@
-/* Original SSD FDR 10: sequence opcode handlers. Shared partial layouts preserve evidenced field offsets. */
+#include "ssd/ssd_trap.h"
+#include "ssd/ssd_chan.h"
+#include "ssd/ssd_err.h"
+#include "ssd/ssd_lfo.h"
+#include "ssd/ssd_out.h"
+#include "ssd/ssd_seq.h"
 
-/* The signed/unsigned views retain the original halfword and byte accesses.
- * Fixed-point sequence tempos use a whole-word accumulator and its signed
- * integer half. All unmodeled spans below are untouched by this FDR. */
-typedef struct SsdSequence SsdSequence;
-typedef struct SsdSequenceTrack SsdSequenceTrack;
-typedef struct SsdChannel SsdChannel;
-typedef struct SsdVoice SsdVoice;
-typedef struct SsdGlobalWork SsdGlobalWork;
-typedef struct SsdLfoRecord SsdLfoRecord;
-typedef int (*SsdLfoProcedure)(SsdLfoRecord *, SsdGlobalWork *);
-typedef union SsdSignedHalf {
-    unsigned short bits;
-    short value;
-} SsdSignedHalf;
-typedef union SsdSignedByte {
-    unsigned char bits;
-    signed char value;
-} SsdSignedByte;
-typedef union SsdFixedPoint {
-    int value;
-    struct { unsigned short fraction; short integer; } parts;
-} SsdFixedPoint;
-typedef struct SsdDevice { unsigned int flags; } SsdDevice;
-typedef struct SsdRamp {
-    SsdFixedPoint current;
-    int step;
-    int target;
-    short remaining;
-} SsdRamp;
-typedef struct SsdSequenceMeter {
-    unsigned short beats_per_measure;
-    unsigned short ticks_per_beat;
-    unsigned short meter_denominator;
-    unsigned short meter_numerator;
-} SsdSequenceMeter;
-typedef struct SsdMeasureEvent { unsigned char denominator, numerator; } SsdMeasureEvent;
-struct SsdSequence {
-    unsigned char unmodeled_000[0x14];
-    SsdDevice *device;
-    unsigned char unmodeled_018[0xf];
-    unsigned char condition;
-    unsigned char noise_clock;
-    unsigned char unmodeled_029[7];
-    SsdFixedPoint tempo;
-    int tempo_increment;
-    int tempo_target;
-    short tempo_duration;
-    unsigned char unmodeled_03e[6];
-    int tempo_step;
-    unsigned char unmodeled_048[8];
-    unsigned int time_offset;
-    unsigned char unmodeled_054[6];
-    short measure, beat, tick;
-    SsdSequenceMeter meter;
-    unsigned char unmodeled_068[4];
-    short reverb_parameter;
-    unsigned char unmodeled_06e[2];
-    signed char reverb_left, reverb_right;
-    unsigned char unmodeled_072[10];
-    SsdRamp master_tempo;
-    unsigned char unmodeled_08c[16];
-    int master_fade_volume, master_fade_step, master_fade_target;
-    unsigned short master_fade_time;
-};
-struct SsdVoice {
-    unsigned char unmodeled_000[4];
-    unsigned short flags;
-    unsigned char unmodeled_006[0x1e];
-    unsigned short adsr1, adsr2;
-    unsigned char unmodeled_028[0xd0];
-    SsdVoice *next;
-};
-struct SsdLfoRecord {
-    unsigned short flags;
-    unsigned char destination, waveform;
-    int step;
-    SsdSignedHalf period, phase, fade_step;
-    SsdLfoProcedure process;
-    SsdLfoRecord *next;
-    int value;
-    unsigned char unmodeled_01c[4];
-    unsigned short remaining, delay;
-    short fade;
-};
-typedef struct SsdLfoWork { unsigned char flags; } SsdLfoWork;
-struct SsdChannel {
-    unsigned int flags;
-    unsigned char unmodeled_004[7];
-    unsigned char random_parameter_1, random_parameter_2;
-    unsigned char unmodeled_00d;
-    unsigned short bank;
-    unsigned char unmodeled_010[4];
-    int pitch;
-    int output_volume;
-    int pan;
-    unsigned char unmodeled_020[2];
-    signed char volume_scale;
-    unsigned char unmodeled_023;
-    SsdSignedHalf tuning;
-    unsigned char unmodeled_026[3];
-    signed char volume;
-    SsdSignedByte expression;
-    unsigned char unmodeled_02b[9];
-    unsigned short adsr1, adsr2;
-    SsdLfoWork lfo;
-    unsigned char selected_lfo;
-    unsigned char unmodeled_03a[14];
-    SsdLfoRecord lfos[4];
-    SsdVoice *voices;
-};
-typedef struct SsdTrackLoop {
-    unsigned char remaining;
-    unsigned char unmodeled_001;
-    unsigned char start_octave, escape_octave;
-    unsigned char *start, *escape;
-} SsdTrackLoop;
-struct SsdSequenceTrack {
-    unsigned short flags, control_flags;
-    unsigned char track_index, midi_channel, effect_parameter, attributes;
-    unsigned char priority, loop_depth;
-    unsigned short bank_id;
-    unsigned int effect_file_id, effect_id, timestamp;
-    unsigned char *data_start, *cursor, *repeat_cursor;
-    SsdChannel *channel;
-    unsigned int state_028;
-    unsigned short repeat_count;
-    unsigned char state_02e, repeat_octave;
-    unsigned int delta, after_delta, gate_delta;
-    unsigned char gate_time, octave;
-    unsigned char unmodeled_03e[18];
-    int pitch, sweep_step, sweep_target;
-    SsdSignedHalf sweep_ticks;
-    unsigned char unmodeled_05e[2];
-    int volume, volume_step, volume_target;
-    unsigned short volume_time;
-    unsigned char unmodeled_06e[2];
-    int pan, pan_step, pan_target;
-    unsigned short pan_time;
-    unsigned char unmodeled_07e[2];
-    SsdTrackLoop loops[4];
-};
-extern SsdLfoProcedure WaveformTable[];
-extern int SsdLfoTriangularDoubleProc(SsdLfoRecord *, SsdGlobalWork *);
-extern int SsdLfoTriangularSingleProc(SsdLfoRecord *, SsdGlobalWork *);
-extern void SsdInitLfoWork(SsdLfoWork *);
+typedef struct SsdMeasureEvent {
+    unsigned char denominator;
+    unsigned char numerator;
+} SsdMeasureEvent;
 
-extern void SsdSeqErrorProc(int error, unsigned char *events);
-extern void SsdCutoffChannel(SsdChannel *channel);
-extern int Kprintf(const char *format, ...);
-extern void SsdSetChannelWave(SsdChannel *channel, int wave);
-extern void SsdSetChannelProgram(SsdChannel *channel, int program);
-extern void SsdSendChannelKeyoffEvent(SsdChannel *channel);
-extern void SsdSetChannelHWEffectOn(SsdChannel *channel, int enabled, int effect);
-extern void SsdSetChannelHWEffectOff(SsdChannel *, int effect, int mask);
-extern void SsdSetReverbParameter(int core, int parameter, int left, int right);
-extern void SsdSetChannelVoiceEvent(SsdChannel *channel, int event);
-extern int SsdSeqGetLFODepth(int depth, int rate, int type);
-#define SSD_SET_U16(field, value) \
-    do { (field) = (unsigned short)(value); } while (0)
-#define SSD_SET_METER_TICKS(sequence, ticks) \
-    do { SSD_SET_U16((sequence)->meter.ticks_per_beat, (ticks)); } while (0)
-void SsdLfoOn(SsdSequenceTrack *track, int index);
-void SsdLfoOff(SsdSequenceTrack *track, int index);
+void SsdLfoOn(SsdTrack *track, int index);
+void SsdLfoOff(SsdTrack *track, int index);
 
-unsigned char *SsdSeqDummy(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqDummy(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
-    SsdSeqErrorProc(-192, events);
-    track->flags &= 0x7fff;
+    SsdSeqErrorProc(SSD_SEQ_ERROR_DUMMY_TRAP, (int)events);
+    track->flags &= ~SSD_TRACK_ACTIVE;
     SsdCutoffChannel(track->channel);
     events--;
     Kprintf("Ssd exec dummy trap\n");
@@ -176,102 +25,102 @@ unsigned char *SsdSeqDummy(SsdSequence *sequence, SsdSequenceTrack *track,
 }
 
 unsigned char *SsdSeqDeltaForAfterDelta(SsdSequence *sequence,
-                                      SsdSequenceTrack *channel,
+                                      SsdTrack *track,
                                       unsigned char *events)
 {
-    channel->delta = channel->after_delta;
+    track->wait = track->delta;
     return events;
 }
 
 unsigned char *SsdSeqDeltaForGate(SsdSequence *sequence,
-                                SsdSequenceTrack *track,
+                                SsdTrack *track,
                                 unsigned char *events)
 {
-    unsigned int duration = track->gate_delta;
-    track->after_delta = duration;
+    unsigned int duration = track->duration;
     track->delta = duration;
+    track->wait = duration;
     return events;
 }
 
-unsigned char *SsdSeqDeltaAddGate(SsdSequence *sequence, SsdSequenceTrack *channel,
+unsigned char *SsdSeqDeltaAddGate(SsdSequence *sequence, SsdTrack *track,
                                 unsigned char *events)
 {
-    int gate = (signed char)events[0] + channel->after_delta;
-    channel->after_delta = gate;
-    channel->delta = gate;
+    int gate = (signed char)events[0] + track->delta;
+    track->delta = gate;
+    track->wait = gate;
     return events + 1;
 }
 
 unsigned char *SsdSeqDeltaAddAfterDelta(SsdSequence *sequence,
-                                     SsdSequenceTrack *track,
+                                     SsdTrack *track,
                                      unsigned char *events)
 {
-    unsigned int duration = (signed char)events[0] + track->gate_delta;
-    track->after_delta = duration;
+    unsigned int duration = (signed char)events[0] + track->duration;
     track->delta = duration;
+    track->wait = duration;
     return events + 1;
 }
 
-unsigned char *SsdSeqDelta1(SsdSequence *sequence, SsdSequenceTrack *channel,
+unsigned char *SsdSeqDelta1(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
     int delta = events[0];
-    channel->after_delta = delta;
-    channel->delta = delta;
+    track->delta = delta;
+    track->wait = delta;
     return events + 1;
 }
 
-unsigned char *SsdSeqDelta2(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqDelta2(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
     unsigned int duration = events[0] + (events[1] << 8);
-    track->after_delta = duration;
     track->delta = duration;
+    track->wait = duration;
     return events + 2;
 }
 
-unsigned char *SsdSeqDelta3(SsdSequence *sequence, SsdSequenceTrack *channel,
+unsigned char *SsdSeqDelta3(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
     int delta = events[0];
     delta += events[1] << 8;
     delta += events[2] << 16;
-    channel->after_delta = delta;
-    channel->delta = delta;
+    track->delta = delta;
+    track->wait = delta;
     return events + 3;
 }
 
-unsigned char *SsdSeqRest(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqRest(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     unsigned int duration = events[0] + (events[1] << 8);
     unsigned short flags = track->flags;
     SsdChannel *channel = track->channel;
 
-    flags = (flags | 0x400) & 0xe4ff;
-    track->delta = duration;
+    flags = (flags | SSD_TRACK_REST) & 0xe4ff;
+    track->wait = duration;
     track->flags = flags;
-    channel->flags &= ~6;
+    channel->flags &= ~(SSD_CHANNEL_SLUR | SSD_CHANNEL_SUSTAIN);
     return events + 2;
 }
 
-unsigned char *SsdSeqTie(SsdSequence *sequence, SsdSequenceTrack *channel,
+unsigned char *SsdSeqTie(SsdSequence *sequence, SsdTrack *track,
                        unsigned char *events)
 {
-    channel->delta = events[0] + (events[1] << 8);
-    channel->flags |= 0x100;
+    track->wait = events[0] + (events[1] << 8);
+    track->flags |= SSD_TRACK_NOTE;
     return events + 2;
 }
 
-unsigned char *SsdSeqStop(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqStop(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
-    unsigned char *repeat = track->repeat_cursor;
-    track->after_delta = 0;
-    track->gate_delta = 0;
+    unsigned char *repeat = track->jump;
+    track->delta = 0;
+    track->duration = 0;
     if (repeat) {
         events = repeat;
-        track->repeat_count++;
+        track->gate_ticks++;
         track->octave = track->repeat_octave;
     } else {
         SsdCutoffChannel(track->channel);
@@ -281,27 +130,27 @@ unsigned char *SsdSeqStop(SsdSequence *sequence, SsdSequenceTrack *track,
     return events;
 }
 
-unsigned char *SsdSeqRepeat(SsdSequence *sequence, SsdSequenceTrack *channel,
+unsigned char *SsdSeqRepeat(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
-    channel->repeat_cursor = events;
-    channel->after_delta = 0;
-    channel->gate_delta = 0;
-    channel->repeat_octave = channel->octave;
+    track->jump = events;
+    track->delta = 0;
+    track->duration = 0;
+    track->repeat_octave = track->octave;
     return events;
 }
 
-unsigned char *SsdSeqJump(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqJump(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     int displacement = events[0] | (events[1] << 8);
     return events + (short)(displacement - 1);
 }
 
-unsigned char *SsdSeqIf(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqIf(SsdSequence *sequence, SsdTrack *track,
                       unsigned char *events)
 {
-    if (sequence->condition == events[0]) {
+    if (sequence->signal == events[0]) {
         int displacement = events[1] | (events[2] << 8);
         events += (short)(displacement - 1);
     } else {
@@ -311,7 +160,7 @@ unsigned char *SsdSeqIf(SsdSequence *sequence, SsdChannel *channel,
 }
 
 unsigned char *SsdSeqOctaveAbsolute(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
     track->octave = events[0] * 12;
@@ -319,28 +168,28 @@ unsigned char *SsdSeqOctaveAbsolute(SsdSequence *sequence,
 }
 
 unsigned char *SsdSeqOctaveRelative(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
     track->octave = (track->octave + (signed char)events[0] * 12) & 0x7f;
     return events + 1;
 }
 
-unsigned char *SsdSeqOctaveUp(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqOctaveUp(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     track->octave += 12;
     return events;
 }
 
-unsigned char *SsdSeqOctaveDown(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqOctaveDown(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     track->octave -= 12;
     return events;
 }
 
-unsigned char *SsdSeqLoopTop(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqLoopTop(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     SsdTrackLoop *loop;
@@ -352,7 +201,7 @@ unsigned char *SsdSeqLoopTop(SsdSequence *sequence, SsdSequenceTrack *track,
     return events;
 }
 
-unsigned char *SsdSeqLoopEnd(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqLoopEnd(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
     SsdTrackLoop *loop = &track->loops[track->loop_depth];
@@ -367,7 +216,7 @@ unsigned char *SsdSeqLoopEnd(SsdSequence *sequence, SsdSequenceTrack *track,
     return events;
 }
 
-unsigned char *SsdSeqLoopEscape(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqLoopEscape(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     SsdTrackLoop *frame = &track->loops[track->loop_depth];
@@ -380,39 +229,39 @@ unsigned char *SsdSeqLoopEscape(SsdSequence *sequence, SsdSequenceTrack *track,
 }
 
 unsigned char *SsdSeqTempoAbsolute(SsdSequence *sequence,
-                                 SsdSequenceTrack *track,
+                                 SsdTrack *track,
                                  unsigned char *events)
 {
     int tempo = events[0];
-    int step = (tempo * 53687) >> 8;
+    int step = (tempo * SSD_TEMPO_CLOCK_SCALE) >> 8;
     sequence->tempo.value = tempo << 16;
-    sequence->tempo_step = (step * sequence->master_tempo.current.parts.integer) >> 8;
+    sequence->clock_step = (step * sequence->master_tempo.current.parts.integer) >> 8;
     return events + 1;
 }
 
 unsigned char *SsdSeqTempoRelative(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
     int tempo = sequence->tempo.value + (*events << 16);
-    int scaled_tempo = ((tempo >> 16) * 53687) >> 8;
+    int scaled_tempo = ((tempo >> 16) * SSD_TEMPO_CLOCK_SCALE) >> 8;
     sequence->tempo.value = tempo;
-    sequence->tempo_step = (scaled_tempo * sequence->master_tempo.current.parts.integer) >> 8;
+    sequence->clock_step = (scaled_tempo * sequence->master_tempo.current.parts.integer) >> 8;
     return events + 1;
 }
 
 unsigned char *SsdSeqTempoChange(SsdSequence *sequence,
-                               SsdSequenceTrack *track,
+                               SsdTrack *track,
                                unsigned char *events)
 {
     int target = events[1];
     int duration = events[0];
     sequence->tempo_target = target << 8;
     if (duration == 0) {
-        int step = (target * 53687) >> 8;
+        int step = (target * SSD_TEMPO_CLOCK_SCALE) >> 8;
         sequence->tempo_duration = 0;
         sequence->tempo.value = target << 16;
-        sequence->tempo_step = (step * sequence->master_tempo.current.parts.integer) >> 8;
+        sequence->clock_step = (step * sequence->master_tempo.current.parts.integer) >> 8;
     } else {
         int difference = (target << 16) - sequence->tempo.value;
         if (difference != 0) {
@@ -423,51 +272,56 @@ unsigned char *SsdSeqTempoChange(SsdSequence *sequence,
     return events + 2;
 }
 
-unsigned char *SsdSeqMeasure(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqMeasure(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
-    const SsdMeasureEvent *meter_event = (const SsdMeasureEvent *)events;
-    unsigned short denominator = meter_event->denominator;
-    int ticks_per_beat = 384 / (int)denominator;
-    int numerator = meter_event->numerator;
-    SSD_SET_U16(sequence->meter.meter_denominator, denominator);
-    sequence->meter.beats_per_measure = numerator;
-    sequence->meter.meter_numerator = numerator;
-    SSD_SET_METER_TICKS(sequence, ticks_per_beat);
+    unsigned short denominator = events[0];
+    int ticks_per_beat = SSD_TICKS_PER_WHOLE_NOTE / denominator;
+    int numerator = events[1];
+    do {
+        sequence->time_denominator = denominator;
+    } while (0);
+    sequence->beats_per_measure = numerator;
+    sequence->time_numerator = numerator;
+    do {
+        do {
+            sequence->ticks_per_beat = ticks_per_beat;
+        } while (0);
+    } while (0);
     return events + 2;
 }
 
-unsigned char *SsdSeqPosition(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqPosition(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     sequence->measure = events[0] - 1;
     sequence->beat = events[1] - 1;
-    sequence->tick = 0;
+    sequence->beat_tick = 0;
     return events + 2;
 }
 
 unsigned char *SsdSeqMasterFader(SsdSequence *sequence,
-                                SsdSequenceTrack *track,
+                                SsdTrack *track,
                                 unsigned char *events)
 {
     int target = events[0] << 16;
-    int duration = events[1] * 500;
+    int duration = events[1] * SSD_TICKS_PER_SECOND;
 
-    sequence->master_fade_target = target;
+    sequence->master_volume.target = target;
     if (duration == 0) {
-        sequence->master_fade_volume = target;
-        sequence->master_fade_time = 0;
+        sequence->master_volume.current.value = target;
+        sequence->master_volume.remaining = 0;
     } else {
-        int difference = target - sequence->master_fade_volume;
+        int difference = target - sequence->master_volume.current.value;
         if (difference != 0) {
-            sequence->master_fade_step = difference / duration;
-            sequence->master_fade_time = duration;
+            sequence->master_volume.step = difference / duration;
+            sequence->master_volume.remaining = duration;
         }
     }
     return events + 2;
 }
 
-unsigned char *SsdSeqBankMSB(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqBankMSB(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -475,7 +329,7 @@ unsigned char *SsdSeqBankMSB(SsdSequence *sequence, SsdSequenceTrack *track,
     return events + 1;
 }
 
-unsigned char *SsdSeqBankLSB(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqBankLSB(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -483,7 +337,7 @@ unsigned char *SsdSeqBankLSB(SsdSequence *sequence, SsdSequenceTrack *track,
     return events + 1;
 }
 
-unsigned char *SsdSeqWaveChange(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqWaveChange(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     SsdSetChannelWave(track->channel, events[0]);
@@ -491,7 +345,7 @@ unsigned char *SsdSeqWaveChange(SsdSequence *sequence, SsdSequenceTrack *track,
 }
 
 unsigned char *SsdSeqWaveBankType(SsdSequence *sequence,
-                                 SsdSequenceTrack *track,
+                                 SsdTrack *track,
                                  unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -501,40 +355,40 @@ unsigned char *SsdSeqWaveBankType(SsdSequence *sequence,
 }
 
 unsigned char *SsdSeqProgramChange(SsdSequence *sequence,
-                                 SsdSequenceTrack *track,
+                                 SsdTrack *track,
                                  unsigned char *events)
 {
     SsdSetChannelProgram(track->channel, events[0]);
     return events + 1;
 }
 
-unsigned char *SsdSeqRandomNote(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqRandomNote(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     SsdChannel *channel = track->channel;
     if (events[0]) {
-        channel->flags |= 0x30;
-        channel->random_parameter_1 = events[1];
-        channel->random_parameter_2 = events[2];
+        channel->flags |= SSD_CHANNEL_FIXED_PITCH | SSD_CHANNEL_RANDOM_KEY;
+        channel->random_note_low = events[1];
+        channel->random_note_high = events[2];
     } else {
-        channel->flags &= ~0x30;
+        channel->flags &= ~(SSD_CHANNEL_FIXED_PITCH | SSD_CHANNEL_RANDOM_KEY);
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqADSRReset(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqADSRReset(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     return events;
 }
 
-unsigned char *SsdSeqADSRMode(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqADSRMode(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     return events + 3;
 }
 
-unsigned char *SsdSeqAR(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqAR(SsdSequence *sequence, SsdTrack *track,
                       unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -543,13 +397,13 @@ unsigned char *SsdSeqAR(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr1 = adsr;
     while (voice != 0) {
         voice->adsr1 = adsr;
-        voice->flags |= 0x10;
+        voice->flags |= SSD_VOICE_FLAG_ADSR1;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqDR(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqDR(SsdSequence *sequence, SsdTrack *track,
                        unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -559,13 +413,13 @@ unsigned char *SsdSeqDR(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr1 = adsr1;
     while (voice) {
         voice->adsr1 = adsr1;
-        voice->flags |= 0x10;
+        voice->flags |= SSD_VOICE_FLAG_ADSR1;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqSL(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSL(SsdSequence *sequence, SsdTrack *track,
                       unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -576,13 +430,13 @@ unsigned char *SsdSeqSL(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr1 = merged;
     while (voice != 0) {
         voice->adsr1 = adsr;
-        voice->flags |= 0x10;
+        voice->flags |= SSD_VOICE_FLAG_ADSR1;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqSR(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSR(SsdSequence *sequence, SsdTrack *track,
                        unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -591,13 +445,13 @@ unsigned char *SsdSeqSR(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr2 = adsr2;
     while (voice) {
         voice->adsr2 = adsr2;
-        voice->flags |= 0x20;
+        voice->flags |= SSD_VOICE_FLAG_ADSR2;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqRR(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqRR(SsdSequence *sequence, SsdTrack *track,
                        unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -608,13 +462,13 @@ unsigned char *SsdSeqRR(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr2 = merged;
     while (voice) {
         voice->adsr2 = adsr;
-        voice->flags |= 0x20;
+        voice->flags |= SSD_VOICE_FLAG_ADSR2;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqDRSL(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqDRSL(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -624,13 +478,13 @@ unsigned char *SsdSeqDRSL(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr1 = adsr1;
     while (voice) {
         voice->adsr1 = adsr1;
-        voice->flags |= 0x10;
+        voice->flags |= SSD_VOICE_FLAG_ADSR1;
         voice = voice->next;
     }
     return events + 2;
 }
 
-unsigned char *SsdSeqAMode(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqAMode(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -639,13 +493,13 @@ unsigned char *SsdSeqAMode(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr1 = adsr;
     while (voice != 0) {
         voice->adsr1 = adsr;
-        voice->flags |= 0x10;
+        voice->flags |= SSD_VOICE_FLAG_ADSR1;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqSMode(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSMode(SsdSequence *sequence, SsdTrack *track,
                        unsigned char *events)
 {
     SsdChannel *channel = track->channel;
@@ -654,13 +508,13 @@ unsigned char *SsdSeqSMode(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr2 = adsr2;
     while (voice) {
         voice->adsr2 = adsr2;
-        voice->flags |= 0x20;
+        voice->flags |= SSD_VOICE_FLAG_ADSR2;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqRMode(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqRMode(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
     int mode = events[0] << 5;
@@ -670,243 +524,243 @@ unsigned char *SsdSeqRMode(SsdSequence *sequence, SsdSequenceTrack *track,
     channel->adsr2 = adsr;
     while (voice) {
         voice->adsr2 = adsr;
-        voice->flags |= 0x20;
+        voice->flags |= SSD_VOICE_FLAG_ADSR2;
         voice = voice->next;
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqPriority(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqPriority(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     track->priority = events[0] & 15;
     return events + 1;
 }
 
-unsigned char *SsdSeqGateTime(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqGateTime(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
-    track->gate_time = events[0];
+    track->gate_ratio = events[0];
     return events + 1;
 }
 
-unsigned char *SsdSeqSustaion(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSustaion(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     SsdChannel *channel = track->channel;
-    if (events[0] >= 64) {
-        channel->flags |= 4;
+    if (events[0] >= SSD_MIDI_SWITCH_ON) {
+        channel->flags |= SSD_CHANNEL_SUSTAIN;
     } else {
-        channel->flags &= ~4U;
+        channel->flags &= ~SSD_CHANNEL_SUSTAIN;
         SsdSendChannelKeyoffEvent(channel);
     }
     return events + 1;
 }
 
-unsigned char *SsdSeqSulrOn(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSulrOn(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
-    track->flags |= 0x800;
+    track->flags |= SSD_TRACK_SLUR_MODE;
     return events;
 }
 
-unsigned char *SsdSeqSulrOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSulrOff(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
-    track->flags &= ~0x800;
+    track->flags &= ~SSD_TRACK_SLUR_MODE;
     return events;
 }
 
-unsigned char *SsdSeqPMOn(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqPMOn(SsdSequence *sequence, SsdTrack *track,
                         unsigned char *events)
 {
-    SsdSetChannelHWEffectOn(track->channel, 1, 0x1000);
+    SsdSetChannelHWEffectOn(track->channel, SSD_VOICE_EFFECT_PITCH_MOD, SSD_VOICE_FLAG_PITCH_MOD);
     return events;
 }
 
-unsigned char *SsdSeqPMOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqPMOff(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
-    SsdSetChannelHWEffectOff(track->channel, 1, 0x1000);
+    SsdSetChannelHWEffectOff(track->channel, SSD_VOICE_EFFECT_PITCH_MOD, SSD_VOICE_FLAG_PITCH_MOD);
     return events;
 }
 
-unsigned char *SsdSeqNoiseAbsolute(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqNoiseAbsolute(SsdSequence *sequence, SsdTrack *track,
                                   unsigned char *events)
 {
     sequence->noise_clock = events[0];
-    SsdSetChannelHWEffectOn(track->channel, 2, 0x2000);
+    SsdSetChannelHWEffectOn(track->channel, SSD_VOICE_EFFECT_NOISE, SSD_VOICE_FLAG_NOISE);
     return events + 1;
 }
 
-signed char *SsdSeqNoiseRelative(SsdSequence *sequence,
-                                 SsdSequenceTrack *track,
-                                 signed char *events)
+unsigned char *SsdSeqNoiseRelative(SsdSequence *sequence,
+                                 SsdTrack *track,
+                                 unsigned char *events)
 {
     short noise = sequence->noise_clock;
-    int delta = events[0];
+    int delta = (signed char)events[0];
     noise += delta;
     sequence->noise_clock = noise & 0x3f;
-    SsdSetChannelHWEffectOn(track->channel, 2, 0x2000);
+    SsdSetChannelHWEffectOn(track->channel, SSD_VOICE_EFFECT_NOISE, SSD_VOICE_FLAG_NOISE);
     return events + 1;
 }
 
-unsigned char *SsdSeqNoiseOn(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqNoiseOn(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
-    SsdSetChannelHWEffectOn(track->channel, 2, 0x2000);
+    SsdSetChannelHWEffectOn(track->channel, SSD_VOICE_EFFECT_NOISE, SSD_VOICE_FLAG_NOISE);
     return events;
 }
 
-unsigned char *SsdSeqNoiseOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqNoiseOff(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
-    SsdSetChannelHWEffectOff(track->channel, 2, 0x2000);
+    SsdSetChannelHWEffectOff(track->channel, SSD_VOICE_EFFECT_NOISE, SSD_VOICE_FLAG_NOISE);
     return events;
 }
 
-signed char *SsdSeqReverbParameter(SsdSequence *sequence, SsdSequenceTrack *track,
-                                  signed char *events)
+unsigned char *SsdSeqReverbParameter(SsdSequence *sequence, SsdTrack *track,
+                                  unsigned char *events)
 {
-    int parameter = (unsigned char)events[0];
+    int parameter = events[0];
     int left;
     int right;
-    sequence->reverb_parameter = parameter << 8;
-    left = events[1];
-    sequence->reverb_left = left;
-    right = events[2];
-    sequence->reverb_right = right;
+    sequence->reverb_depth = parameter << 8;
+    left = (signed char)events[1];
+    sequence->reverb_delay = left;
+    right = (signed char)events[2];
+    sequence->reverb_feedback = right;
     SsdSetReverbParameter(-1, (short)(parameter << 8), left, right);
     return events + 3;
 }
 
-unsigned char *SsdSeqReverbSet(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqReverbSet(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     SsdChannel *channel = track->channel;
     if (events[0])
-        SsdSetChannelHWEffectOn(channel, 8, 0x8000);
+        SsdSetChannelHWEffectOn(channel, SSD_VOICE_EFFECT_DRY, SSD_VOICE_FLAG_DRY);
     else
-        SsdSetChannelHWEffectOff(channel, 8, 0x8000);
+        SsdSetChannelHWEffectOff(channel, SSD_VOICE_EFFECT_DRY, SSD_VOICE_FLAG_DRY);
     if (events[1])
-        SsdSetChannelHWEffectOn(channel, 4, 0x4000);
+        SsdSetChannelHWEffectOn(channel, SSD_VOICE_EFFECT_REVERB, SSD_VOICE_FLAG_REVERB);
     else
-        SsdSetChannelHWEffectOff(channel, 4, 0x4000);
+        SsdSetChannelHWEffectOff(channel, SSD_VOICE_EFFECT_REVERB, SSD_VOICE_FLAG_REVERB);
     return events + 2;
 }
 
-unsigned char *SsdSeqReverbOn(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqReverbOn(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
-    SsdSetChannelHWEffectOn(track->channel, 4, 0x4000);
+    SsdSetChannelHWEffectOn(track->channel, SSD_VOICE_EFFECT_REVERB, SSD_VOICE_FLAG_REVERB);
     return events;
 }
 
-unsigned char *SsdSeqReverbOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqReverbOff(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
-    SsdSetChannelHWEffectOff(track->channel, 4, 0x4000);
+    SsdSetChannelHWEffectOff(track->channel, SSD_VOICE_EFFECT_REVERB, SSD_VOICE_FLAG_REVERB);
     return events;
 }
 
-unsigned char *SsdSeqKeyTransposeAbsolute(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqKeyTransposeAbsolute(SsdSequence *sequence, SsdTrack *track,
                                          unsigned char *events)
 {
     int key = events[0];
     SsdChannel *channel = track->channel;
-    channel->tuning.value = key << 8;
-    SsdSetChannelVoiceEvent(channel, 16);
+    channel->transpose = key << 8;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     return events + 1;
 }
 
 unsigned char *SsdSeqKeyTransposeRelative(SsdSequence *sequence,
-                                        SsdSequenceTrack *track,
+                                        SsdTrack *track,
                                         unsigned char *events)
 {
     int offset = (short)(events[0] << 8);
     SsdChannel *channel = track->channel;
-    channel->tuning.bits += offset;
-    SsdSetChannelVoiceEvent(channel, 16);
+    channel->transpose += offset;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     return events + 1;
 }
 
-unsigned char *SsdSeqTune(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqTune(SsdSequence *sequence, SsdTrack *track,
                         unsigned char *events)
 {
     short operand = events[0] << 8;
     SsdChannel *channel = track->channel;
     int adjustment = operand >> 5;
-    channel->tuning.bits += adjustment;
-    SsdSetChannelVoiceEvent(channel, 0x10);
+    channel->transpose += adjustment;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     return events + 1;
 }
 
-unsigned char *SsdSeqDetune(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqDetune(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
     SsdChannel *channel = track->channel;
     int delta = events[0] + (short)(events[1] << 8);
-    channel->tuning.bits += delta;
-    SsdSetChannelVoiceEvent(channel, 16);
+    channel->transpose += delta;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     return events + 2;
 }
 
-signed char *SsdSeqBender(SsdSequence *sequence, SsdSequenceTrack *track,
-                          signed char *events)
+unsigned char *SsdSeqBender(SsdSequence *sequence, SsdTrack *track,
+                          unsigned char *events)
 {
-    int low = (unsigned char)events[0];
-    int high = events[1];
+    int low = events[0];
+    int high = (signed char)events[1];
     SsdChannel *channel = track->channel;
     int bend;
-    track->sweep_ticks.value = 0;
+    track->pitch.remaining = 0;
     bend = low * 65536 + high * 16777216;
-    track->pitch = bend;
-    channel->pitch = bend;
-    SsdSetChannelVoiceEvent(channel, 16);
-    track->control_flags &= 0xfffe;
+    track->pitch.current.value = bend;
+    channel->pitch_offset = bend;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
+    track->control_flags &= ~SSD_TRACK_CONTROL_PITCH_RAMP;
     return events + 2;
 }
 
-unsigned char *SsdSeqSweep(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSweep(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     unsigned short duration = events[0] | (events[1] << 8);
     int target = (signed char)events[2] * 16777216;
     int difference;
     if (target) {
-        target += track->pitch;
-        difference = target - track->pitch;
+        target += track->pitch.current.value;
+        difference = target - track->pitch.current.value;
     } else {
-        difference = -track->pitch;
+        difference = -track->pitch.current.value;
     }
     if (duration && difference) {
         int step = difference / duration;
         unsigned short flags = track->control_flags;
         SsdChannel *channel = track->channel;
-        track->sweep_target = target;
-        track->sweep_ticks.bits = duration;
-        track->control_flags = flags | 1;
-        track->sweep_step = step;
-        channel->pitch = track->pitch;
-        SsdSetChannelVoiceEvent(channel, 16);
+        track->pitch.target = target;
+        track->pitch.remaining = duration;
+        track->control_flags = flags | SSD_TRACK_CONTROL_PITCH_RAMP;
+        track->pitch.step = step;
+        channel->pitch_offset = track->pitch.current.value;
+        SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqVibrateFade(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqVibrateFade(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
     int duration = events[0];
     SsdChannel *channel = track->channel;
-    int step = 1024;
+    int step = SSD_LFO_FADE_FULL;
     if (duration != 0) {
         step /= duration * 4;
     }
-    channel->lfos[0].fade_step.value = step;
+    channel->lfo.states[SSD_LFO_SLOT_VIBRATO].param.fade_step = step;
     return events + 1;
 }
 
-unsigned char *SsdSeqVibrate1(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqVibrate1(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     int depth = (signed char)events[1];
@@ -914,173 +768,177 @@ unsigned char *SsdSeqVibrate1(SsdSequence *sequence, SsdSequenceTrack *track,
     if (depth && rate) {
         int delay;
         SsdChannel *channel;
-        SsdLfoRecord *vibrato;
+        SsdLfoState *vibrato;
 
         depth = depth < 0 ? -(depth * depth) * 16384
                           : (depth * depth) * 16384;
-        rate = rate > 20 ? rate * rate / 20 : rate;
+        rate = rate > SSD_LFO_RATE_LINEAR_LIMIT ?
+            rate * rate / SSD_LFO_RATE_LINEAR_LIMIT : rate;
         channel = track->channel;
-        vibrato = &channel->lfos[0];
+        vibrato = &channel->lfo.states[SSD_LFO_SLOT_VIBRATO];
         delay = events[2] * 10;
-        vibrato->flags = 17;
-        vibrato->destination = 0;
-        vibrato->waveform = 3;
-        vibrato->step = SsdSeqGetLFODepth(depth, rate, 3);
-        vibrato->fade_step.bits = 1024;
-        vibrato->period.bits = rate;
-        vibrato->phase.bits = delay;
+        vibrato->param.flags = SSD_LFO_ENABLED | SSD_LFO_SINGLE_CYCLE;
+        vibrato->param.target = SSD_LFO_TARGET_PITCH;
+        vibrato->param.waveform = SSD_LFO_WAVEFORM_TRIANGULAR_DOUBLE;
+        vibrato->param.depth = SsdSeqGetLFODepth(depth, rate, SSD_LFO_WAVEFORM_TRIANGULAR_DOUBLE);
+        vibrato->param.fade_step = SSD_LFO_FADE_FULL;
+        vibrato->param.period = rate;
+        vibrato->param.delay = delay;
         vibrato->process = SsdLfoTriangularDoubleProc;
-        channel->lfo.flags |= 1;
+        channel->lfo.active |= 1 << SSD_LFO_SLOT_VIBRATO;
     }
     return events + 3;
 }
 
-signed char *SsdSeqVibrate2(SsdSequence *sequence, SsdSequenceTrack *track,
-                           signed char *events)
+unsigned char *SsdSeqVibrate2(SsdSequence *sequence, SsdTrack *track,
+                           unsigned char *events)
 {
-    unsigned short speed = (unsigned char)events[0];
-    int depth = events[1];
+    unsigned short speed = events[0];
+    int depth = (signed char)events[1];
     unsigned char type = events[2];
     if (depth && speed) {
-        int originalSpeed;
+        short originalSpeed;
         short adjustedSpeed;
         unsigned short flags;
         SsdChannel *channel;
-        SsdLfoRecord *vibrato;
+        SsdLfoState *vibrato;
         if (depth < 0)
             depth = -(depth * depth) * 16384;
         else
             depth = depth * depth * 16384;
-        originalSpeed = (short)speed;
-        if (originalSpeed < 21)
+        originalSpeed = speed;
+        if (originalSpeed < SSD_LFO_RATE_LINEAR_LIMIT + 1)
             adjustedSpeed = speed;
         else
-            adjustedSpeed = originalSpeed * originalSpeed / 20;
+            adjustedSpeed = originalSpeed * originalSpeed / SSD_LFO_RATE_LINEAR_LIMIT;
         speed = adjustedSpeed;
-        flags = type & 0x10;
+        flags = type & SSD_LFO_OPERAND_CONTINUOUS;
         flags = !flags;
-        flags = (flags * 0x10) | 1;
-        type &= 0x0f;
+        flags = (flags * SSD_LFO_SINGLE_CYCLE) | SSD_LFO_ENABLED;
+        type &= SSD_LFO_WAVEFORM_MASK;
         channel = track->channel;
-        vibrato = &channel->lfos[0];
-        vibrato->flags = flags;
-        vibrato->destination = 0;
-        vibrato->waveform = type;
-        vibrato->step = SsdSeqGetLFODepth(depth, (short)speed, type);
-        vibrato->period.value = speed;
-        vibrato->phase.value = 0;
-        vibrato->fade_step.value = 1024;
+        vibrato = &channel->lfo.states[SSD_LFO_SLOT_VIBRATO];
+        vibrato->param.flags = flags;
+        vibrato->param.target = SSD_LFO_TARGET_PITCH;
+        vibrato->param.waveform = type;
+        vibrato->param.depth = SsdSeqGetLFODepth(depth, adjustedSpeed, type);
+        vibrato->param.period = speed;
+        vibrato->param.delay = 0;
+        vibrato->param.fade_step = SSD_LFO_FADE_FULL;
         vibrato->process = WaveformTable[type];
-        channel->lfo.flags |= 1;
+        channel->lfo.active |= 1 << SSD_LFO_SLOT_VIBRATO;
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqVibrateOn(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqVibrateOn(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     return events;
 }
 
-unsigned char *SsdSeqVibrateOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqVibrateOff(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     return events;
 }
 
-unsigned char *SsdSeqBenderOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqBenderOff(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     SsdChannel *channel = track->channel;
-    track->pitch = 0;
-    track->sweep_ticks.bits = 0;
-    channel->pitch = 0;
-    SsdSetChannelVoiceEvent(channel, 16);
+    track->pitch.current.value = 0;
+    track->pitch.remaining = 0;
+    channel->pitch_offset = 0;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH);
     return events;
 }
 
-unsigned char *SsdSeqExpression(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqExpression(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
     SsdChannel *channel = track->channel;
     int expression = events[0];
-    channel->expression.bits = expression;
-    channel->output_volume = channel->volume * expression * channel->volume_scale / 16129;
-    SsdSetChannelVoiceEvent(channel, 32);
+    channel->expression = expression;
+    channel->volume = channel->channel_volume * expression * channel->fader_volume /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
     return events + 1;
 }
 
 unsigned char *SsdSeqVolumeAbsolute(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
     int volume = (signed char)events[0];
     SsdChannel *channel = track->channel;
     int scaled_volume;
-    track->volume = volume * 65536;
-    scaled_volume = volume * channel->expression.value * channel->volume_scale;
-    channel->volume = volume;
-    channel->output_volume = scaled_volume / (127 * 127);
+    track->volume.current.value = volume * 65536;
+    scaled_volume = volume * channel->expression * channel->fader_volume;
+    channel->channel_volume = volume;
+    channel->volume = scaled_volume / (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
     track->control_flags &= 0xfef7;
-    SsdSetChannelVoiceEvent(channel, 32);
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
     return events + 1;
 }
 
 unsigned char *SsdSeqVolumeRelative(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
     SsdChannel *channel = track->channel;
-    int volume = channel->volume = channel->volume + events[0];
-    track->volume = volume * 65536;
-    channel->output_volume =
-        volume * channel->expression.value * channel->volume_scale / 16129;
-    SsdSetChannelVoiceEvent(channel, 0x20);
+    int volume = channel->channel_volume = channel->channel_volume + events[0];
+    track->volume.current.value = volume * 65536;
+    channel->volume =
+        volume * channel->expression * channel->fader_volume /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
     track->control_flags &= 0xfef7;
     return events + 1;
 }
 
-unsigned char *SsdSeqVolumeFade(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqVolumeFade(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
-    int target = (unsigned int)(signed char)events[2] << 16;
+    int target = (signed char)events[2] << 16;
     int duration = events[0] + (events[1] << 8);
     int difference;
-    difference = target - track->volume;
+    difference = target - track->volume.current.value;
     if (duration && difference) {
         int step = difference / duration;
-        int volume;
+        signed char volume;
         int output_scale;
         SsdChannel *channel;
-        track->volume_time = duration;
-        volume = track->volume >> 16;
+        track->volume.remaining = duration;
+        volume = track->volume.current.value >> 16;
         channel = track->channel;
-        track->volume_target = target;
-        track->volume_step = step;
-        output_scale = channel->volume_scale;
-        target = (signed char)volume;
-        channel->volume = volume;
-        channel->output_volume = target *
-            channel->expression.value * output_scale / (127 * 127);
-        SsdSetChannelVoiceEvent(channel, 32);
-        track->control_flags = (track->control_flags | 8) & 0xfeff;
+        track->volume.target = target;
+        track->volume.step = step;
+        output_scale = channel->fader_volume;
+        target = volume;
+        channel->channel_volume = volume;
+        channel->volume = target *
+            channel->expression * output_scale /
+            (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
+        SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
+        track->control_flags = (track->control_flags | SSD_TRACK_CONTROL_VOLUME_RAMP) & 0xfeff;
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqTremoloFade(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqTremoloFade(SsdSequence *sequence, SsdTrack *track,
                                 unsigned char *events)
 {
     int duration = events[0];
     SsdChannel *channel = track->channel;
-    int step = 1024;
+    int step = SSD_LFO_FADE_FULL;
     if (duration)
-        step = 1024 / (duration * 4);
-    channel->lfos[1].fade_step.value = step;
+        step = SSD_LFO_FADE_FULL / (duration * 4);
+    channel->lfo.states[SSD_LFO_SLOT_TREMOLO].param.fade_step = step;
     return events + 1;
 }
 
-unsigned char *SsdSeqTremolo1(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqTremolo1(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     int depth = (signed char)events[1];
@@ -1088,78 +946,79 @@ unsigned char *SsdSeqTremolo1(SsdSequence *sequence, SsdSequenceTrack *track,
     if (depth && period) {
         int fade;
         SsdChannel *channel;
-        SsdLfoRecord *lfo;
-        period = period < 21 ? period : period * period / 20;
+        SsdLfoState *lfo;
+        period = period < SSD_LFO_RATE_LINEAR_LIMIT + 1 ?
+            period : period * period / SSD_LFO_RATE_LINEAR_LIMIT;
         channel = track->channel;
         fade = events[2] * 10;
-        lfo = &channel->lfos[1];
-        lfo->flags = 17;
-        lfo->destination = 1;
-        lfo->waveform = 2;
-        lfo->step = SsdSeqGetLFODepth(depth * 8388608, period, 2);
-        lfo->fade_step.bits = 1024;
-        lfo->period.bits = period;
-        lfo->phase.bits = fade;
+        lfo = &channel->lfo.states[SSD_LFO_SLOT_TREMOLO];
+        lfo->param.flags = SSD_LFO_ENABLED | SSD_LFO_SINGLE_CYCLE;
+        lfo->param.target = SSD_LFO_TARGET_VOLUME;
+        lfo->param.waveform = SSD_LFO_WAVEFORM_TRIANGULAR_SINGLE;
+        lfo->param.depth = SsdSeqGetLFODepth(depth * 8388608, period, SSD_LFO_WAVEFORM_TRIANGULAR_SINGLE);
+        lfo->param.fade_step = SSD_LFO_FADE_FULL;
+        lfo->param.period = period;
+        lfo->param.delay = fade;
         lfo->process = SsdLfoTriangularSingleProc;
-        channel->lfo.flags |= 2;
+        channel->lfo.active |= 1 << SSD_LFO_SLOT_TREMOLO;
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqTremolo2(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqTremolo2(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     unsigned short period = events[0];
     int depth = (signed char)events[1];
     unsigned char waveform = events[2];
     if (depth != 0) {
-        int original_period = (short)period;
+        short original_period = period;
         if (original_period != 0) {
             SsdChannel *channel;
-            SsdLfoRecord *lfo;
+            SsdLfoState *lfo;
             short adjusted_period;
             unsigned short flags;
             depth *= 8388608;
-            if (original_period < 21) {
+            if (original_period < SSD_LFO_RATE_LINEAR_LIMIT + 1) {
                 adjusted_period = period;
             } else {
-                adjusted_period = original_period * original_period / 20;
+                adjusted_period = original_period * original_period / SSD_LFO_RATE_LINEAR_LIMIT;
             }
             period = adjusted_period;
-            flags = waveform & 0x10;
+            flags = waveform & SSD_LFO_OPERAND_CONTINUOUS;
             flags = !flags;
-            flags = (flags * 0x10) | 1;
-            waveform &= 0x0f;
+            flags = (flags * SSD_LFO_SINGLE_CYCLE) | SSD_LFO_ENABLED;
+            waveform &= SSD_LFO_WAVEFORM_MASK;
             channel = track->channel;
-            lfo = &channel->lfos[1];
-            lfo->flags = flags;
-            lfo->destination = 1;
-            lfo->waveform = waveform;
-            lfo->step = SsdSeqGetLFODepth(depth, (short)period, waveform);
-            lfo->period.value = period;
-            lfo->phase.value = 0;
-            lfo->fade_step.value = 1024;
+            lfo = &channel->lfo.states[SSD_LFO_SLOT_TREMOLO];
+            lfo->param.flags = flags;
+            lfo->param.target = SSD_LFO_TARGET_VOLUME;
+            lfo->param.waveform = waveform;
+            lfo->param.depth = SsdSeqGetLFODepth(depth, adjusted_period, waveform);
+            lfo->param.period = period;
+            lfo->param.delay = 0;
+            lfo->param.fade_step = SSD_LFO_FADE_FULL;
             lfo->process = WaveformTable[waveform];
-            channel->lfo.flags |= 2;
+            channel->lfo.active |= 1 << SSD_LFO_SLOT_TREMOLO;
         }
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqTremoloOn(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqTremoloOn(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     return events;
 }
 
-unsigned char *SsdSeqTremoloOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqTremoloOff(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
     return events;
 }
 
 unsigned char *SsdSeqPanpotAbsolute(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
     int pan = ((signed char)events[0] - 1) * 65536;
@@ -1167,18 +1026,18 @@ unsigned char *SsdSeqPanpotAbsolute(SsdSequence *sequence,
     if (pan < 0)
         pan = 0;
     channel = track->channel;
-    track->pan = pan;
-    channel->pan = pan;
-    SsdSetChannelVoiceEvent(channel, 32);
-    track->control_flags &= ~0x10;
+    track->pan.current.value = pan;
+    channel->panpot = pan;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
+    track->control_flags &= ~SSD_TRACK_CONTROL_PAN_RAMP;
     return events + 1;
 }
 
 unsigned char *SsdSeqPanpotRelative(SsdSequence *sequence,
-                                  SsdSequenceTrack *track,
+                                  SsdTrack *track,
                                   unsigned char *events)
 {
-    int pan = track->pan + (signed char)events[0] * 65536;
+    int pan = track->pan.current.value + (signed char)events[0] * 65536;
     SsdChannel *channel;
     if (pan < 0) {
         pan = 0;
@@ -1187,14 +1046,14 @@ unsigned char *SsdSeqPanpotRelative(SsdSequence *sequence,
         pan = 0x7e0000;
     }
     channel = track->channel;
-    track->pan = pan;
-    channel->pan = pan;
-    SsdSetChannelVoiceEvent(channel, 0x20);
-    track->control_flags &= 0xffef;
+    track->pan.current.value = pan;
+    channel->panpot = pan;
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
+    track->control_flags &= ~SSD_TRACK_CONTROL_PAN_RAMP;
     return events + 1;
 }
 
-unsigned char *SsdSeqPanpoMove(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqPanpoMove(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     int target = (signed char)events[2] - 1;
@@ -1203,37 +1062,37 @@ unsigned char *SsdSeqPanpoMove(SsdSequence *sequence, SsdSequenceTrack *track,
     if (target < 0)
         target = 0;
     target *= 65536;
-    difference = target - track->pan;
+    difference = target - track->pan.current.value;
     if (duration && difference) {
         int step = difference / duration;
         unsigned short state = track->control_flags;
         SsdChannel *channel;
         int pan;
-        track->pan_target = target;
+        track->pan.target = target;
         channel = track->channel;
-        track->pan_time = duration;
-        pan = track->pan;
-        track->control_flags = state | 16;
-        track->pan_step = step;
-        channel->pan = pan;
-        SsdSetChannelVoiceEvent(channel, 32);
+        track->pan.remaining = duration;
+        pan = track->pan.current.value;
+        track->control_flags = state | SSD_TRACK_CONTROL_PAN_RAMP;
+        track->pan.step = step;
+        channel->panpot = pan;
+        SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_VOLUME);
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqShakeFade(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqShakeFade(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     int duration = events[0];
     SsdChannel *channel = track->channel;
-    int step = 1024;
+    int step = SSD_LFO_FADE_FULL;
     if (duration)
-        step = 1024 / (duration * 4);
-    channel->lfos[2].fade_step.value = step;
+        step = SSD_LFO_FADE_FULL / (duration * 4);
+    channel->lfo.states[SSD_LFO_SLOT_SHAKE].param.fade_step = step;
     return events + 1;
 }
 
-unsigned char *SsdSeqShake1(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqShake1(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
     int depth = (signed char)events[1];
@@ -1241,72 +1100,73 @@ unsigned char *SsdSeqShake1(SsdSequence *sequence, SsdSequenceTrack *track,
     if (depth && period) {
         int fade;
         SsdChannel *channel;
-        SsdLfoRecord *lfo;
-        period = period < 21 ? period : period * period / 20;
+        SsdLfoState *lfo;
+        period = period < SSD_LFO_RATE_LINEAR_LIMIT + 1 ?
+            period : period * period / SSD_LFO_RATE_LINEAR_LIMIT;
         channel = track->channel;
         fade = events[2] * 10;
-        lfo = &channel->lfos[2];
-        lfo->flags = 17;
-        lfo->destination = 2;
-        lfo->waveform = 3;
-        lfo->step = SsdSeqGetLFODepth(depth * 16777216, period, 3);
-        lfo->fade_step.bits = 1024;
-        lfo->period.bits = period;
-        lfo->phase.bits = fade;
+        lfo = &channel->lfo.states[SSD_LFO_SLOT_SHAKE];
+        lfo->param.flags = SSD_LFO_ENABLED | SSD_LFO_SINGLE_CYCLE;
+        lfo->param.target = SSD_LFO_TARGET_PAN;
+        lfo->param.waveform = SSD_LFO_WAVEFORM_TRIANGULAR_DOUBLE;
+        lfo->param.depth = SsdSeqGetLFODepth(depth * 16777216, period, SSD_LFO_WAVEFORM_TRIANGULAR_DOUBLE);
+        lfo->param.fade_step = SSD_LFO_FADE_FULL;
+        lfo->param.period = period;
+        lfo->param.delay = fade;
         lfo->process = SsdLfoTriangularDoubleProc;
-        channel->lfo.flags |= 4;
+        channel->lfo.active |= 1 << SSD_LFO_SLOT_SHAKE;
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqShake2(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqShake2(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
     unsigned short period = events[0];
     int depth = (signed char)events[1];
     unsigned char waveform = events[2];
     if (depth != 0) {
-        int original_period = (short)period;
+        short original_period = period;
         if (original_period != 0) {
             SsdChannel *channel;
-            SsdLfoRecord *lfo;
+            SsdLfoState *lfo;
             short adjusted_period;
             unsigned short flags;
             depth *= 16777216;
-            if (original_period < 21) {
+            if (original_period < SSD_LFO_RATE_LINEAR_LIMIT + 1) {
                 adjusted_period = period;
             } else {
-                adjusted_period = original_period * original_period / 20;
+                adjusted_period = original_period * original_period / SSD_LFO_RATE_LINEAR_LIMIT;
             }
             period = adjusted_period;
-            flags = waveform & 0x10;
+            flags = waveform & SSD_LFO_OPERAND_CONTINUOUS;
             flags = !flags;
-            flags = (flags * 0x10) | 1;
-            waveform &= 0x0f;
+            flags = (flags * SSD_LFO_SINGLE_CYCLE) | SSD_LFO_ENABLED;
+            waveform &= SSD_LFO_WAVEFORM_MASK;
             channel = track->channel;
-            lfo = &channel->lfos[2];
-            lfo->flags = flags;
-            lfo->destination = 2;
-            lfo->waveform = waveform;
-            lfo->step = SsdSeqGetLFODepth(depth, (short)period, waveform);
-            lfo->period.value = period;
-            lfo->phase.value = 0;
-            lfo->fade_step.value = 1024;
+            lfo = &channel->lfo.states[SSD_LFO_SLOT_SHAKE];
+            lfo->param.flags = flags;
+            lfo->param.target = SSD_LFO_TARGET_PAN;
+            lfo->param.waveform = waveform;
+            lfo->param.depth = SsdSeqGetLFODepth(depth, adjusted_period, waveform);
+            lfo->param.period = period;
+            lfo->param.delay = 0;
+            lfo->param.fade_step = SSD_LFO_FADE_FULL;
             lfo->process = WaveformTable[waveform];
-            channel->lfo.flags |= 4;
+            channel->lfo.active |= 1 << SSD_LFO_SLOT_SHAKE;
         }
     }
     return events + 3;
 }
 
-unsigned char *SsdSeqShakeOn(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqShakeOn(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
     SsdLfoOn(track, 2);
     return events;
 }
 
-unsigned char *SsdSeqShakeOff(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqShakeOff(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     SsdLfoOff(track, 2);
@@ -1315,10 +1175,10 @@ unsigned char *SsdSeqShakeOff(SsdSequence *sequence, SsdSequenceTrack *track,
 
 static __inline__ int SsdLfoSingleCycleFlag(int waveform)
 {
-    return !(waveform & 0x10) << 4;
+    return !(waveform & SSD_LFO_OPERAND_CONTINUOUS) << 4;
 }
 
-unsigned char *SsdSeqLFOProcess(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqLFOProcess(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     unsigned char index = events[0];
@@ -1327,150 +1187,155 @@ unsigned char *SsdSeqLFOProcess(SsdSequence *sequence, SsdSequenceTrack *track,
     unsigned char destination = events[2];
     unsigned short mode_flags = SsdLfoSingleCycleFlag(waveform);
     int waveform_index;
-    SsdLfoRecord *lfo;
-    channel->selected_lfo = index;
-    index = channel->selected_lfo;
-    lfo = &channel->lfos[index];
-    waveform_index = waveform & 15;
-    lfo->flags = mode_flags | 1;
-    lfo->waveform = waveform_index;
-    lfo->destination = destination;
-    lfo->step = 0;
-    lfo->period.bits = 0;
-    lfo->phase.bits = 0;
-    lfo->fade_step.bits = 1024;
+    SsdLfoState *lfo;
+    channel->lfo.selected = index;
+    index = channel->lfo.selected;
+    lfo = &channel->lfo.states[index];
+    waveform_index = waveform & SSD_LFO_WAVEFORM_MASK;
+    lfo->param.flags = mode_flags | SSD_LFO_ENABLED;
+    lfo->param.waveform = waveform_index;
+    lfo->param.target = destination;
+    lfo->param.depth = 0;
+    lfo->param.period = 0;
+    lfo->param.delay = 0;
+    lfo->param.fade_step = SSD_LFO_FADE_FULL;
     lfo->process = WaveformTable[waveform_index];
     return events + 3;
 }
 
 unsigned char *SsdSeqLFOParameter(SsdSequence *sequence,
-                                SsdSequenceTrack *track,
+                                SsdTrack *track,
                                 unsigned char *events)
 {
     int period;
     unsigned int depth;
     SsdChannel *channel;
-    SsdLfoRecord *lfo;
-    if (events[0] < 21) {
+    SsdLfoState *lfo;
+    if (events[0] < SSD_LFO_RATE_LINEAR_LIMIT + 1) {
         period = events[0];
     } else {
-        period = events[0] * events[0] / 20;
+        period = events[0] * events[0] / SSD_LFO_RATE_LINEAR_LIMIT;
     }
     depth = events[1] * 0x1000000U | events[2] * 0x10000U;
     channel = track->channel;
-    lfo = &channel->lfos[channel->selected_lfo];
-    lfo->step = SsdSeqGetLFODepth(depth, period, lfo->waveform);
-    lfo->period.value = period;
+    lfo = &channel->lfo.states[channel->lfo.selected];
+    lfo->param.depth = SsdSeqGetLFODepth(depth, period, lfo->param.waveform);
+    lfo->param.period = period;
     return events + 3;
 }
 
-unsigned char *SsdSeqLFODelay(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqLFODelay(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
-    int fade_step = 1024;
+    int fade_step = SSD_LFO_FADE_FULL;
     int delay = events[0] * 10;
     SsdChannel *channel = track->channel;
     if (events[1])
         fade_step /= events[1] * 4;
-    channel->lfos[channel->selected_lfo].phase.bits = delay;
-    channel->lfos[channel->selected_lfo].fade_step.bits = fade_step;
+    channel->lfo.states[channel->lfo.selected].param.delay = delay;
+    channel->lfo.states[channel->lfo.selected].param.fade_step = fade_step;
     return events + 2;
 }
 
-unsigned char *SsdSeqLFOOn(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqLFOOn(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
     return events + 1;
 }
 
-unsigned char *SsdSeqLFOOff(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqLFOOff(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
     return events + 1;
 }
 
-void SsdLfoOn(SsdSequenceTrack *track, int index)
+void SsdLfoOn(SsdTrack *track, int index)
 {
 }
 
-void SsdLfoOff(SsdSequenceTrack *track, int index)
+void SsdLfoOff(SsdTrack *track, int index)
 {
 }
 
-unsigned char *SsdSeqAllReset(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqAllReset(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     SsdChannel *channel;
     int masterVolume;
-    track->volume = 100 * 65536;
+    track->volume.current.value = SSD_FIXED_VOLUME_DEFAULT;
     channel = track->channel;
-    track->pan = 63 * 65536;
-    track->pitch = 0;
+    track->pan.current.value = SSD_PANPOT_CENTER_FIXED;
+    track->pitch.current.value = 0;
     track->control_flags = 0;
     track->flags &= 0xf4ff;
-    masterVolume = channel->volume_scale;
-    channel->pan = 63 * 65536;
-    channel->volume = 100;
-    channel->pitch = 0;
+    masterVolume = channel->fader_volume;
+    channel->panpot = SSD_PANPOT_CENTER_FIXED;
+    channel->channel_volume = SSD_CHANNEL_VOLUME_DEFAULT;
+    channel->pitch_offset = 0;
     channel->flags &= ~0x0e;
-    channel->output_volume = masterVolume * 12700 / 16129;
+    channel->volume = masterVolume * (SSD_CHANNEL_VOLUME_DEFAULT * SSD_MIDI_VALUE_MAX) /
+        (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
     channel->bank = track->bank_id;
     SsdCutoffChannel(channel);
-    SsdSetChannelHWEffectOff(channel, 7, 0x7000);
-    SsdSetChannelHWEffectOn(channel, 8, 0x8000);
-    SsdSetChannelVoiceEvent(channel, 48);
+    SsdSetChannelHWEffectOff(channel,
+                             SSD_VOICE_EFFECT_PITCH_MOD | SSD_VOICE_EFFECT_NOISE | SSD_VOICE_EFFECT_REVERB,
+                             SSD_VOICE_FLAG_PITCH_MOD | SSD_VOICE_FLAG_NOISE | SSD_VOICE_FLAG_REVERB);
+    SsdSetChannelHWEffectOn(channel, SSD_VOICE_EFFECT_DRY, SSD_VOICE_FLAG_DRY);
+    SsdSetChannelVoiceEvent(channel, SSD_VOICE_EVENT_PITCH | SSD_VOICE_EVENT_VOLUME);
     SsdInitLfoWork(&channel->lfo);
     return events;
 }
 
-unsigned char *SsdSeqLabel(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqLabel(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     return events + 1;
 }
 
-unsigned char *SsdSeqSMPTETime(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSMPTETime(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     return events + 3;
 }
 
-unsigned char *SsdSeqSMPTEFrame(SsdSequence *sequence, SsdChannel *channel,
+unsigned char *SsdSeqSMPTEFrame(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
     return events + 2;
 }
 
-unsigned char *SsdSeqSMPTEOffset(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSMPTEOffset(SsdSequence *sequence, SsdTrack *track,
                                 unsigned char *events)
 {
-    int ticks = events[0] * 1800000 + events[1] * 30000
-              + events[2] * 500 + events[3] * 500 / 30;
-    sequence->time_offset = (unsigned int)ticks << 8;
+    int ticks = events[0] * (SSD_TICKS_PER_SECOND * 60 * 60) +
+                events[1] * (SSD_TICKS_PER_SECOND * 60) +
+                events[2] * SSD_TICKS_PER_SECOND +
+                events[3] * SSD_TICKS_PER_SECOND / SSD_SMPTE_FRAMES_PER_SECOND;
+    sequence->play_time = ticks << 8;
     return events + 5;
 }
 
-unsigned char *SsdSeqSkip(SsdSequence *sequence, SsdSequenceTrack *track,
+unsigned char *SsdSeqSkip(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
     int speed;
-    SsdDevice *device = sequence->device;
+    SsdMidiDevice *device = sequence->device;
     if (events[0]) {
-        speed = 16384;
-        device->flags |= 1;
+        speed = SSD_MASTER_TEMPO_SKIP;
+        device->state |= SSD_DEVICE_SKIP;
     } else {
-        speed = 256;
-        device->flags &= ~1u;
+        speed = SSD_MASTER_TEMPO_NORMAL;
+        device->state &= ~SSD_DEVICE_SKIP;
     }
     sequence->master_tempo.current.value = speed * 65536;
     sequence->master_tempo.remaining = 0;
-    sequence->tempo_step = ((sequence->tempo.parts.integer * 53687 >> 8) *
+    sequence->clock_step = ((sequence->tempo.parts.integer * SSD_TEMPO_CLOCK_SCALE >> 8) *
                             (sequence->master_tempo.current.value >> 16)) >> 8;
     return events + 1;
 }
 
 /* Handlers of sequence opcodes 0x80-0xff, indexed by opcode - 0x80. */
-unsigned char *(*SsdSeqFuncTrap[128])(SsdSequence *, SsdSequenceTrack *, unsigned char *) = {
+unsigned char *(*SsdSeqFuncTrap[128])(SsdSequence *, SsdTrack *, unsigned char *) = {
     /* 0x80 */ SsdSeqDeltaForGate,
     /* 0x81 */ SsdSeqDeltaForAfterDelta,
     /* 0x82 */ SsdSeqDeltaAddGate,

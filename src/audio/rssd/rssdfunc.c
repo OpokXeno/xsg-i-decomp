@@ -1,324 +1,209 @@
-/* Original RSSD rssdfunc.c translation unit. */
+#include "rssd/rssd.h"
+#include "rssd/rssdfunc.h"
+#include "ssd/ssd_dma.h"
+#include "ssd/ssd_init.h"
+#include "ssd/ssd_mem.h"
+#include "ssd/ssd_musc.h"
+#include "ssd/ssd_sec.h"
+#include "ssd/ssd_smpl.h"
+#include "ssd/ssd_wave.h"
 
-typedef struct SsdWaveBank {
-    unsigned char unmodeled_000[12];
-    unsigned int metadata_00c;
-    unsigned int metadata_010;
-} SsdWaveBank;
+/* SPU read / wave upload chunk size. */
+#define RSSD_SPU_READ_CHUNK_SIZE 0x10000
 
-typedef struct RssdWaveCommand {
-    int command;
-    int callback;
-    int result;
-    int data_size;
-    SsdWaveBank *bank;
-    unsigned int metadata_014;
-    unsigned int metadata_018;
-    int parameter3;
-    unsigned char data[0];
-} RssdWaveCommand;
+/* RSSD passes a third argument that SsdNextWaveData in src/audio/ssd does not declare. */
+extern int SsdNextWaveData(void *, int, int);
 
-extern void SsdMemoryCopy(void *, const void *, unsigned int);
+void RssdSpuDmaTransferCallback(int status, void *argument);
+void RssdSamplingDmaCallbackProc(int status, void *argument);
+void RssdSamplingKeyoffCallbackProc(int status, int channel, int argument);
+void RssdSpuReadCallback(int status, void *argument);
+void RssdSpuReadNext(void *);
 
-extern void SsdSetWaveTransCallback(void (*)(int), void *);
-
-extern int SsdAddWaveData(void *, unsigned int, unsigned int);
-
-extern SsdWaveBank *SsdGetWSPtrBank(int);
-
-extern void RssdSpuDmaTransferCallback(int);
-
-typedef struct RssdCommand {
-    int command;
-    int callback;
-    int result;
-    int data_size;
-    int parameter[4];
-    unsigned char data[0];
-} RssdCommand;
-
-extern int SsdPlaySequence(void *, int, int);
-
-extern int SsdAddSequenceData(void *);
-
-extern int SsdAddSeqEffectData(void *);
-
-extern int SsdAddEffectData(void *);
-
-extern int SsdGetMemoryFreeSize(void);
-
-extern int SsdGetMemoryBlockCount(void);
-
-extern void SsdInitSampling(int, int, int);
-
-extern void SsdSetSampleDmaCallback(void (*)(int));
-
-extern void SsdSetSampleKeyoffCallback(void (*)(int));
-
-extern void SsdTransferSampling(int, void *, int);
-
-extern void RssdCallFunc(int, void *, void *, int);
-
-extern void iRssdCallFunc(int, void *, void *, int);
-
-void RssdSamplingDmaCallbackProc(int);
-
-void RssdSamplingKeyoffCallbackProc(int);
-
-extern void SsdSpuDmaRead(unsigned int, void *, unsigned int, void (*)(int), void *);
-
-extern void RssdSpuReadCallback(int);
-
-typedef struct RssdInitNotification {
-    int command;
-    int callback;
-    int result;
-    int data_size;
-    void *runtime_buffer;
-    int runtime_size;
-    unsigned int protocol_value2;
-    unsigned int protocol_value3;
-} RssdInitNotification;
-
-typedef struct RssdRpcClient {
-    unsigned char unmodeled_000[36];
-    void *server;
-    unsigned char unmodeled_028[32];
-} RssdRpcClient;
-
-extern int sceSdInit(int);
-
-extern void CpuDisableIntr(void);
-
-extern void CpuEnableIntr(void);
-
-extern void *AllocSysMemory(int, int, void *);
-
-extern void SsdInit(void *, int, int);
-
-extern int sceSifBindRpc(RssdRpcClient *, unsigned int, int);
-
-extern int sceSifCheckStatRpc(RssdRpcClient *);
-
-typedef struct RssdReadCommand {
-    int command;
-    int callback;
-    int result;
-    int data_size;
-    unsigned int spu_address;
-    int total_size;
-    int parameter2;
-    int parameter3;
-} RssdReadCommand;
-
-extern int printf(const char *, ...);
-
-extern void RssdSetFuncCallback(void (*)(void *), void *);
-
-extern void RssdSpuReadNext(void *);
-
-extern int SsdNextWaveData(void *, unsigned int, unsigned int);
-
-/* The transfer words are shared by SPU reads and wave uploads. */
-typedef struct RssdWorkState {
-    unsigned char unmodeled_000[128];
-    RssdRpcClient client;
-    union {
-        struct {
-            RssdWaveCommand *transfer_buffer;
-            unsigned int spu_address;
-            int chunk_size;
-            int remaining;
-        } read;
-        unsigned int parameter[4];
-    } transfer;
-} RssdWorkState;
-extern RssdWorkState RssdWork;
-
-void RssdInit(RssdCommand *request)
+void RssdInit(RssdRpcPacket *request)
 {
     int size;
     void *runtime;
-    RssdInitNotification notification;
+    RssdRpcPacket notification;
     sceSdInit(0);
-    size = request->parameter[0];
+    size = request->arguments[0];
     CpuDisableIntr();
-    runtime = AllocSysMemory(0, size, 0);
-    RssdWork.transfer.read.transfer_buffer = AllocSysMemory(0, 0x10020, 0);
+    runtime = AllocSysMemory(SMEM_Low, size, 0);
+    RssdWork.spuRead.transferBuffer = AllocSysMemory(SMEM_Low, RSSD_RPC_BUFFER_SIZE, 0);
     CpuEnableIntr();
     SsdInit(runtime, size, 0);
-    sceSifBindRpc(&RssdWork.client, 0x901, 0);
+    sceSifBindRpc(&RssdWork.client, RSSD_RPC_EE_CLIENT_ID, 0);
     while (sceSifCheckStatRpc(&RssdWork.client))
         ;
     if (RssdWork.client.server) {
-        notification.runtime_buffer = runtime;
-        notification.runtime_size = size;
-        notification.protocol_value2 = 0x6001f4;
-        notification.protocol_value3 = 0x10250;
-        RssdCallFunc(0x1000, &notification, 0, 0);
+        notification.arguments[0] = (int)runtime;
+        notification.arguments[1] = size;
+        notification.arguments[2] = 0x6001f4;
+        notification.arguments[3] = 0x10250;
+        RssdCallFunc(RSSD_EE_INIT_NOTIFY, &notification, 0, 0);
     }
 }
 
-void RssdSpuDirectRead(RssdReadCommand *request)
+void RssdSpuDirectRead(RssdRpcPacket *request)
 {
-    int total = request->total_size;
-    unsigned int address = request->spu_address;
+    int total = request->arguments[1];
+    unsigned int address = request->arguments[0];
     int size = total;
-    if (size > 0x10000)
-        size = 0x10000;
-    SsdSpuDmaRead(address, RssdWork.transfer.read.transfer_buffer, size, RssdSpuReadCallback, 0);
-    RssdWork.transfer.read.spu_address = address;
-    RssdWork.transfer.read.chunk_size = size;
-    RssdWork.transfer.read.remaining = total - size;
+    if (size > RSSD_SPU_READ_CHUNK_SIZE)
+        size = RSSD_SPU_READ_CHUNK_SIZE;
+    SsdSpuDmaRead(address, RssdWork.spuRead.transferBuffer, size, RssdSpuReadCallback, 0);
+    RssdWork.spuRead.spuAddress = address;
+    RssdWork.spuRead.chunkSize = size;
+    RssdWork.spuRead.remaining = total - size;
     printf("Rssd spu read  SpuPtr=%06x  TransSize=%x\n", address, total);
 }
 
-void RssdSpuReadCallback(int status)
+void RssdSpuReadCallback(int status, void *argument)
 {
-    RssdCommand request;
-    request.parameter[0] = RssdWork.transfer.read.spu_address;
-    request.parameter[1] = RssdWork.transfer.read.chunk_size;
-    request.parameter[2] = RssdWork.transfer.read.remaining;
-    if (status == -2) {
-        RssdCallFunc(27, &request, 0, 0);
+    RssdRpcPacket request;
+    request.arguments[0] = RssdWork.spuRead.spuAddress;
+    request.arguments[1] = RssdWork.spuRead.chunkSize;
+    request.arguments[2] = RssdWork.spuRead.remaining;
+    if (status == RSSD_CALLBACK_THREAD_CONTEXT) {
+        RssdCallFunc(RSSD_CMD_SPU_DIRECT_READ, &request, 0, 0);
     } else {
         RssdSetFuncCallback(RssdSpuReadNext, &RssdWork);
-        iRssdCallFunc(27, &request, RssdWork.transfer.read.transfer_buffer, RssdWork.transfer.read.chunk_size);
+        iRssdCallFunc(RSSD_CMD_SPU_DIRECT_READ, &request, RssdWork.spuRead.transferBuffer, RssdWork.spuRead.chunkSize);
     }
 }
 
 void RssdSpuReadNext(void *argument)
 {
+    /* The original walks the transfer words through a pointer to the last one. */
     unsigned int size;
-    unsigned int *remaining_word = &RssdWork.transfer.parameter[3];
-    int remaining = *remaining_word;
+    unsigned int *remainingField = &RssdWork.spuRead.remaining;
+    int remaining = *remainingField;
     unsigned int address;
     if (!remaining)
         return;
-        address = remaining_word[-2] + remaining_word[-1];
-        RssdWork.transfer.parameter[1] = address;
-        if (remaining <= 0x10000)
-            size = remaining;
-        else
-            size = 0x10000;
-        {
-            unsigned int *counts = remaining_word - 1;
-            remaining_word[-1] = size;
-            counts[1] -= size;
-            SsdSpuDmaRead(address, (void *)counts[-2],
-                          size, RssdSpuReadCallback, 0);
-        }
+    address = remainingField[-2] + remainingField[-1];
+    RssdWork.spuRead.spuAddress = address;
+    if (remaining <= RSSD_SPU_READ_CHUNK_SIZE)
+        size = remaining;
+    else
+        size = RSSD_SPU_READ_CHUNK_SIZE;
+    {
+        unsigned int *counts = remainingField - 1;
+        remainingField[-1] = size;
+        counts[1] -= size;
+        SsdSpuDmaRead(address, (void *)counts[-2], size, RssdSpuReadCallback, 0);
+    }
 }
 
-void RssdAddWaveData(RssdWaveCommand *request)
+void RssdAddWaveData(RssdRpcPacket *request)
 {
     unsigned char *data;
     int bank_id;
     SsdWaveBank *bank;
-    SsdMemoryCopy(RssdWork.transfer.read.transfer_buffer, request, request->data_size + 32);
-    data = RssdWork.transfer.read.transfer_buffer->data;
+    SsdMemoryCopy(RssdWork.spuRead.transferBuffer, request, request->dataSize + sizeof(RssdRpcPacket));
+    data = RssdWork.spuRead.transferBuffer->data;
     SsdSetWaveTransCallback(RssdSpuDmaTransferCallback, 0);
-    bank_id = SsdAddWaveData(data, request->metadata_014, request->metadata_018);
+    bank_id = SsdAddWaveData(data, request->arguments[1], request->arguments[2]);
     bank = 0;
     if (bank_id >= 0)
         bank = SsdGetWSPtrBank(bank_id);
-    request->result = bank_id;
-    request->bank = bank;
+    request->value = bank_id;
+    request->arguments[0] = (int)bank;
     if (bank) {
-        request->metadata_014 = bank->metadata_00c;
-        request->metadata_018 = bank->metadata_010;
+        request->arguments[1] = bank->spu_address;
+        request->arguments[2] = bank->body_size;
     }
 }
 
-void RssdNextWaveData(RssdWaveCommand *request)
+void RssdNextWaveData(RssdRpcPacket *request)
 {
     unsigned char *data;
     int bank_id;
     SsdWaveBank *bank;
-    SsdMemoryCopy(RssdWork.transfer.read.transfer_buffer, request, request->data_size + 32);
-    data = RssdWork.transfer.read.transfer_buffer->data;
+    SsdMemoryCopy(RssdWork.spuRead.transferBuffer, request, request->dataSize + sizeof(RssdRpcPacket));
+    data = RssdWork.spuRead.transferBuffer->data;
     SsdSetWaveTransCallback(RssdSpuDmaTransferCallback, 0);
-    bank_id = SsdNextWaveData(data, request->metadata_014, request->metadata_018);
+    bank_id = SsdNextWaveData(data, request->arguments[1], request->arguments[2]);
     bank = 0;
     if (bank_id >= 0)
         bank = SsdGetWSPtrBank(bank_id);
-    request->result = bank_id;
-    request->bank = bank;
+    request->value = bank_id;
+    request->arguments[0] = (int)bank;
     if (bank) {
-        request->metadata_014 = bank->metadata_00c;
-        request->metadata_018 = bank->metadata_010;
+        request->arguments[1] = bank->spu_address;
+        request->arguments[2] = bank->body_size;
     }
 }
 
-void RssdSpuDmaTransferCallback(int status)
+void RssdSpuDmaTransferCallback(int status, void *argument)
 {
-    RssdCommand request;
-    request.parameter[0] = status;
-    if (status == -2) {
-        RssdCallFunc(37, &request, 0, 0);
+    RssdRpcPacket request;
+    request.arguments[0] = status;
+    if (status == RSSD_CALLBACK_THREAD_CONTEXT) {
+        RssdCallFunc(RSSD_EE_WAVE_TRANSFER_DONE, &request, 0, 0);
     } else {
-        iRssdCallFunc(37, &request, 0, 0);
+        iRssdCallFunc(RSSD_EE_WAVE_TRANSFER_DONE, &request, 0, 0);
     }
 }
 
-void RssdPlaySequenceData(RssdCommand *request)
+void RssdPlaySequenceData(RssdRpcPacket *request)
 {
-    request->result = SsdPlaySequence(request->data, request->parameter[1], request->parameter[2]);
+    request->value = SsdPlaySequence(request->data, request->arguments[1], request->arguments[2]);
 }
 
-void RssdAddSequenceData(RssdCommand *request)
+void RssdAddSequenceData(RssdRpcPacket *request)
 {
-    request->result = SsdAddSequenceData(request->data);
-    request->parameter[0] = SsdGetMemoryFreeSize();
-    request->parameter[1] = SsdGetMemoryBlockCount();
+    request->value = SsdAddSequenceData((SsdMusicData *)request->data);
+    request->arguments[0] = SsdGetMemoryFreeSize();
+    request->arguments[1] = SsdGetMemoryBlockCount();
 }
 
-void RssdAddSeqEffectData(RssdCommand *request)
+void RssdAddSeqEffectData(RssdRpcPacket *request)
 {
-    request->result = SsdAddSeqEffectData(request->data);
-    request->parameter[0] = SsdGetMemoryFreeSize();
-    request->parameter[1] = SsdGetMemoryBlockCount();
+    request->value = SsdAddSeqEffectData((SsdMusicData *)request->data);
+    request->arguments[0] = SsdGetMemoryFreeSize();
+    request->arguments[1] = SsdGetMemoryBlockCount();
 }
 
-void RssdAddEffectData(RssdCommand *request)
+void RssdAddEffectData(RssdRpcPacket *request)
 {
-    request->result = SsdAddEffectData(request->data);
-    request->parameter[0] = SsdGetMemoryFreeSize();
-    request->parameter[1] = SsdGetMemoryBlockCount();
+    request->value = SsdAddEffectData((SsdEffectData *)request->data);
+    request->arguments[0] = SsdGetMemoryFreeSize();
+    request->arguments[1] = SsdGetMemoryBlockCount();
 }
 
-void RssdInitSampling(RssdCommand *request)
+void RssdInitSampling(RssdRpcPacket *request)
 {
-    SsdInitSampling(request->parameter[0], request->parameter[1], request->parameter[2]);
+    SsdInitSampling(request->arguments[0], request->arguments[1], request->arguments[2]);
     SsdSetSampleDmaCallback(RssdSamplingDmaCallbackProc);
     SsdSetSampleKeyoffCallback(RssdSamplingKeyoffCallbackProc);
 }
 
-void RssdTransferSampling(RssdCommand *request)
+void RssdTransferSampling(RssdRpcPacket *request)
 {
-    SsdTransferSampling(request->parameter[0], request->data, request->parameter[2]);
+    SsdTransferSampling(request->arguments[0], request->data, request->arguments[2]);
 }
 
-void RssdTransferSamplingNext(void)
+void RssdTransferSamplingNext(RssdRpcPacket *request)
 {
 }
 
-void RssdSamplingDmaCallbackProc(int status)
+void RssdSamplingDmaCallbackProc(int status, void *argument)
 {
-    RssdCommand request;
-    request.parameter[0] = status;
-    if (status == -2)
-        RssdCallFunc(218, &request, 0, 0);
+    RssdRpcPacket request;
+    request.arguments[0] = status;
+    if (status == RSSD_CALLBACK_THREAD_CONTEXT)
+        RssdCallFunc(RSSD_EE_SAMPLING_DMA_DONE, &request, 0, 0);
     else
-        iRssdCallFunc(218, &request, 0, 0);
+        iRssdCallFunc(RSSD_EE_SAMPLING_DMA_DONE, &request, 0, 0);
 }
 
-void RssdSamplingKeyoffCallbackProc(int status)
+void RssdSamplingKeyoffCallbackProc(int status, int channel, int argument)
 {
-    RssdCommand request;
-    request.parameter[0] = status;
-    if (status == -2)
-        RssdCallFunc(219, &request, 0, 0);
+    RssdRpcPacket request;
+    request.arguments[0] = status;
+    if (status == RSSD_CALLBACK_THREAD_CONTEXT)
+        RssdCallFunc(RSSD_EE_SAMPLING_KEYOFF, &request, 0, 0);
     else
-        iRssdCallFunc(219, &request, 0, 0);
+        iRssdCallFunc(RSSD_EE_SAMPLING_KEYOFF, &request, 0, 0);
 }
