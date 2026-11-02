@@ -5,6 +5,7 @@
 #include "jnt.h"
 #include "main/align.h"
 #include "main/matrix_print.h"
+#include "quadword.h"
 
 /*
  * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
@@ -223,24 +224,12 @@ float jointMovementFollowRate = 0.80000001192092896f;
 
 static inline void jntCopyMatrix(JntMatrix *destination, const JntMatrix *source)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)\n\t"
-        "lq $2, 16(%1)\n\t"
-        "sq $2, 16(%0)\n\t"
-        "lq $2, 32(%1)\n\t"
-        "sq $2, 32(%0)\n\t"
-        "lq $2, 48(%1)\n\t"
-        "sq $2, 48(%0)"
-        : : "r"(destination), "r"(source) : "$2", "memory");
+    QuadwordCopyMatrix(destination, source);
 }
 
 static inline void jntCopyMatrixRow(float destination[4], const float source[4])
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        : : "r"(destination), "r"(source) : "$2", "memory");
+    QuadwordCopy(destination, source);
 }
 
 static inline JntMatrix *jntMatrixAt(void *base, int index)

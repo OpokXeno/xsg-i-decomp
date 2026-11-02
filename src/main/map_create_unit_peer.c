@@ -5,6 +5,7 @@
 #include "main/map_2.h"
 #include "main/play.h"
 #include "main/map_create_unit_peer.h"
+#include "quadword.h"
 
 /* One component of `goal` carried through a bone matrix: the three
  * rotation/scale rows, then the translation row. */
@@ -690,17 +691,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             float rz;
 
             /* Aligned matrix copies use the SDK's scratch-register quartet. */
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n"
-                "sq $2, 0(%0)\n"
-                "lq $2, 16(%1)\n"
-                "sq $2, 16(%0)\n"
-                "lq $2, 32(%1)\n"
-                "sq $2, 32(%0)\n"
-                "lq $2, 48(%1)\n"
-                "sq $2, 48(%0)\n"
-                : : "r" (local), "r" (unit->matrix)
-                : "$2", "memory");
+            QuadwordCopyMatrix(local, unit->matrix);
             local[3][0] = 0.0f;
             local[3][3] = 1.0f;
             local[3][1] = 0.0f;
@@ -769,17 +760,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             local[3][1] = local[3][1] + angles.y + unit->matrix[3][1];
             local[3][2] = local[3][2] + angles.z + unit->matrix[3][2];
             if (unit->partIndex < display->model->partCount) {
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n"
-                    "sq $2, 0(%0)\n"
-                    "lq $2, 16(%1)\n"
-                    "sq $2, 16(%0)\n"
-                    "lq $2, 32(%1)\n"
-                    "sq $2, 32(%0)\n"
-                    "lq $2, 48(%1)\n"
-                    "sq $2, 48(%0)\n"
-                    : : "r" (unit->partIndex * sizeof(Matrix4) + (unsigned int)matrices), "r" (local)
-                    : "$2", "memory");
+                QuadwordCopyMatrix(unit->partIndex * sizeof(Matrix4) + (unsigned int)matrices, local);
             }
         }
     }

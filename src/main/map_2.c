@@ -4,6 +4,7 @@
 #include "main/map_2.h"
 #include "main/mdl.h"
 #include "main/nml_model_set.h"
+#include "quadword.h"
 
 #define NULL ((void *)0)
 
@@ -184,45 +185,15 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
         if (matrixIndex >= 0) {
             /* Aligned matrix copies use the SDK's scratch-register quartet. */
             if (matrixIndex & 0x8000) {
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n"
-                    "sq $2, 0(%0)\n"
-                    "lq $2, 16(%1)\n"
-                    "sq $2, 16(%0)\n"
-                    "lq $2, 32(%1)\n"
-                    "sq $2, 32(%0)\n"
-                    "lq $2, 48(%1)\n"
-                    "sq $2, 48(%0)\n"
-                    : : "r" (joint), "r" ((matrixIndex & 0x7FFF) * sizeof(Matrix4) + (unsigned int)matrices)
-                    : "$2", "memory");
+                QuadwordCopyMatrix(joint, (matrixIndex & 0x7FFF) * sizeof(Matrix4) + (unsigned int)matrices);
                 homogeneousZero = 0.0f;
                 joint[2][3] = homogeneousZero;
                 joint[1][3] = homogeneousZero;
                 joint[0][3] = homogeneousZero;
                 xglMatrixStackLoad(joint);
             } else {
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n"
-                    "sq $2, 0(%0)\n"
-                    "lq $2, 16(%1)\n"
-                    "sq $2, 16(%0)\n"
-                    "lq $2, 32(%1)\n"
-                    "sq $2, 32(%0)\n"
-                    "lq $2, 48(%1)\n"
-                    "sq $2, 48(%0)\n"
-                    : : "r" (root), "r" (matrices[0])
-                    : "$2", "memory");
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n"
-                    "sq $2, 0(%0)\n"
-                    "lq $2, 16(%1)\n"
-                    "sq $2, 16(%0)\n"
-                    "lq $2, 32(%1)\n"
-                    "sq $2, 32(%0)\n"
-                    "lq $2, 48(%1)\n"
-                    "sq $2, 48(%0)\n"
-                    : : "r" (joint), "r" ((unit->parentMatrixIndex & 0x7FFF) * sizeof(Matrix4) + (unsigned int)matrices)
-                    : "$2", "memory");
+                QuadwordCopyMatrix(root, matrices[0]);
+                QuadwordCopyMatrix(joint, (unit->parentMatrixIndex & 0x7FFF) * sizeof(Matrix4) + (unsigned int)matrices);
                 homogeneousZero = 0.0f;
                 joint[2][3] = homogeneousZero;
                 joint[1][3] = homogeneousZero;

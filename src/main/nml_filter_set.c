@@ -3,6 +3,7 @@
 #include "nml_filter_set.h"
 #include "main/nml_packet_add.h"
 #include "main/xgl_2.h"
+#include "quadword.h"
 
 struct NmlFilterRenderView {
     u8 unmodeled_00[2];
@@ -607,20 +608,11 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
                 jointModel->transformOffset))[descriptor->secondJoint]);
     } else {
         descriptor = &s_inStealthUnitDat;
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)"
-            : : "r"(&fallback), "r"(&model->fields.center) : "$2", "memory");
+        QuadwordCopy(&fallback, &model->fields.center);
         fallback.y -= fallback.w * 0.3f;
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)"
-            : : "r"(firstEndpoint), "r"(&fallback) : "$2", "memory");
+        QuadwordCopy(firstEndpoint, &fallback);
         fallback.y += fallback.w * 0.6f;
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)"
-            : : "r"(&geometry->endpoints[1]), "r"(&fallback) : "$2", "memory");
+        QuadwordCopy(&geometry->endpoints[1], &fallback);
     }
 
     __asm__ __volatile__(

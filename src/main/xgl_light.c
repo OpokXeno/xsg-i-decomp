@@ -3,6 +3,7 @@
 #include "xgl_light.h"
 #include "main/xgl_light.h"
 #include "main/xgl_2.h"
+#include "quadword.h"
 
 extern char Vu0CallLightCalcMatrix[];
 
@@ -42,13 +43,7 @@ void xglLightSetDefault(StudioLight *lightSet)
 void xglLightIntensityAmbient(StudioLight *lightSet, const XglLightQuadword *intensity)
 {
     /* SDK-style quadword transfer: original uses fixed scratch $2. */
-    __asm__ __volatile__(
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)"
-        :
-        : "r"(lightSet), "r"(intensity)
-        : "$2", "memory"
-    );
+    QuadwordCopy(lightSet, intensity);
 }
 
 void xglLightIntensityParallel(StudioLight *lightSet, unsigned int index, const XglLightQuadword *intensity)
@@ -60,13 +55,7 @@ void xglLightIntensityParallel(StudioLight *lightSet, unsigned int index, const 
             (index * sizeof(StudioLightEntry) + lightSetAddress +
              sizeof(lightSet->ambient_color));
         /* SDK-style quadword transfer to the selected intensity. */
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)"
-            :
-            : "r"(&parallelLight->color), "r"(intensity)
-            : "$2", "memory"
-        );
+        QuadwordCopy(&parallelLight->color, intensity);
     }
 }
 
@@ -95,13 +84,7 @@ void xglLightAngle(StudioLight *lightSet, unsigned int index, const Vector4 *ang
             (index * sizeof(StudioLightEntry) + lightSetAddress +
              sizeof(lightSet->ambient_color));
         /* SDK-style quadword transfer of the matrix's third row. */
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)"
-            :
-            : "r"(&parallelLight->direction), "r"(&matrix[2])
-            : "$2", "memory"
-        );
+        QuadwordCopy(&parallelLight->direction, &matrix[2]);
     }
 }
 

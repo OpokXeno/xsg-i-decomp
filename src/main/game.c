@@ -37,6 +37,7 @@
 #include "main/xgl_pad.h"
 #include "main/xgl_render.h"
 #include "main/xgl_studio.h"
+#include "quadword.h"
 
 #define game_mode_flags (GameLoopState.flags)
 #define game_mode_kind (GameLoopState.kind)
@@ -758,18 +759,8 @@ void GameStateSave(void)
     GameLoopState.saved_actor_state84 = controlled_actor->state84;
     GameLoopState.saved_actor_in_use_id = controlled_actor->inUseId;
     GameLoopState.saved_actor_update = controlled_actor->update;
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&GameLoopState.saved_actor_position), "r" (&controlled_actor->position)
-        : "$2", "memory");
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&GameLoopState.saved_actor_rotation), "r" (&controlled_actor->rotation)
-        : "$2", "memory");
+    QuadwordCopy(&GameLoopState.saved_actor_position, &controlled_actor->position);
+    QuadwordCopy(&GameLoopState.saved_actor_rotation, &controlled_actor->rotation);
     GameLoopState.saved_map_number = GameLoopState.map_number;
     GameStateSaveCameraLight();
 }
@@ -795,18 +786,8 @@ void GamePushSaveDataUser(void)
     for (i = 0; i < 8; i++) {
         save->params[i] = state->params[i];
     }
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&save->actor_position), "r" (&state->saved_actor_position)
-        : "$2", "memory");
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&save->actor_rotation), "r" (&state->saved_actor_rotation)
-        : "$2", "memory");
+    QuadwordCopy(&save->actor_position, &state->saved_actor_position);
+    QuadwordCopy(&save->actor_rotation, &state->saved_actor_rotation);
     org = save->org;
     players = save->players;
     for (i = 0; i < 33; i++) {
@@ -841,18 +822,8 @@ void GamePopSaveDataUser(void)
     for (i = 0; i < 8; i++) {
         state->params[i] = save->params[i];
     }
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&state->saved_actor_position), "r" (&save->actor_position)
-        : "$2", "memory");
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&state->saved_actor_rotation), "r" (&save->actor_rotation)
-        : "$2", "memory");
+    QuadwordCopy(&state->saved_actor_position, &save->actor_position);
+    QuadwordCopy(&state->saved_actor_rotation, &save->actor_rotation);
     org = save->org;
     players = save->players;
     for (i = 0; i < 33; i++) {
@@ -1282,18 +1253,7 @@ static void GameDispTag(void)
                 /* The original copies these four complete matrix rows
                  * with the SDK quadword idiom. The scratch is confined
                  * to this block; both bases are genuine C objects. */
-                __asm__ __volatile__(
-                    "lq $2,0(%0)\n\t"
-                    "sq $2,0(%1)\n\t"
-                    "lq $2,16(%0)\n\t"
-                    "sq $2,16(%1)\n\t"
-                    "lq $2,32(%0)\n\t"
-                    "sq $2,32(%1)\n\t"
-                    "lq $2,48(%0)\n\t"
-                    "sq $2,48(%1)"
-                    :
-                    : "r"(root_matrix), "r"(matrix)
-                    : "$2", "memory");
+                QuadwordCopyMatrix(matrix, root_matrix);
             }
             matrix[3][3] = 1.0f;
             xglRotTransPers((Vector4 *)&projected, 0, (Vector4 *)matrix[3], camera_id);
@@ -1997,12 +1957,7 @@ void Game(void)
         GamePopSaveDataUser();
         position_dst = (Quadword *)&player->position;
         Java_xeno_util_Runtime_jump_sub(GameLoopState.current_event_id, -1);
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (position_dst), "r" (&GameLoopState.saved_actor_position)
-            : "$2", "memory");
+        QuadwordCopy(position_dst, &GameLoopState.saved_actor_position);
         GameLoopState.move_mode |= 0xa0;
     } else {
         Java_xeno_util_Runtime_jump_sub(GameLoopState.current_event_id, -1);

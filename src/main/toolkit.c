@@ -5,6 +5,7 @@
 #include "toolkit.h"
 #include "main/init_vm.h"
 #include "main/near_dir.h"
+#include "quadword.h"
 
 /* Used by getPeer_Stage for its short-valued Java id field. */
 #define JAVA_USHORT_FIELD(object, field) \
@@ -213,16 +214,7 @@ static void *getPeer_Unit(SceneObject java_unit)
                     ((unsigned char *)model + model->part_transform_offset);
                 source = &table[peer->serial];
                 transform = &peer->transform;
-                __asm__ __volatile__("lq $2, 0(%1)\n"
-                                     "sq $2, 0(%0)\n"
-                                     "lq $2, 16(%1)\n"
-                                     "sq $2, 16(%0)\n"
-                                     "lq $2, 32(%1)\n"
-                                     "sq $2, 32(%0)\n"
-                                     "lq $2, 48(%1)\n"
-                                     "sq $2, 48(%0)\n"
-                                     : : "r"(transform), "r"(source)
-                                     : "$2", "memory");
+                QuadwordCopyMatrix(transform, source);
                 sequence->pivot_x = peer->transform.m[3][0];
                 sequence->pivot_y = peer->transform.m[3][1];
                 sequence->pivot_z = peer->transform.m[3][2];

@@ -11,6 +11,7 @@
 #include "main/matrix_print.h"
 #include "main/xgl_light.h"
 #include "main/xgl_studio.h"
+#include "quadword.h"
 
 /* Partial shape binding: original lhu loads +2 for the 0x40-byte joint
  * matrix index and +4 for the shape identifier passed to the model renderer. */
@@ -196,17 +197,7 @@ void ACT_resetMatrix(Actor *actor)
     CUR_MATRIX_Sxyz4s(&actor->scale);
     CUR_MATRIX_Get((void *)matrices);
     previous = actor->previousJointMatrices;
-    __asm__ __volatile__("lq $2, 0(%1)\n"
-                         "sq $2, 0(%0)\n"
-                         "lq $2, 16(%1)\n"
-                         "sq $2, 16(%0)\n"
-                         "lq $2, 32(%1)\n"
-                         "sq $2, 32(%0)\n"
-                         "lq $2, 48(%1)\n"
-                         "sq $2, 48(%0)\n"
-                         :
-                         : "r"(previous), "r"(matrices)
-                         : "$2", "memory");
+    QuadwordCopyMatrix(previous, matrices);
     {
         unsigned int flagsBits = 0x8000;
 
@@ -570,17 +561,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
         swapTmp = actor->staticValueRecords;
         actor->staticValueRecords = valueTmp;
         actor->valueRecords = swapTmp;
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             "lq $2, 16(%1)\n"
-                             "sq $2, 16(%0)\n"
-                             "lq $2, 32(%1)\n"
-                             "sq $2, 32(%0)\n"
-                             "lq $2, 48(%1)\n"
-                             "sq $2, 48(%0)\n"
-                             :
-                             : "r"(actor->jointMatrices), "r"(*&actor->previousJointMatrices)
-                             : "$2", "memory");
+        QuadwordCopyMatrix(actor->jointMatrices, *&actor->previousJointMatrices);
     }
     FCV2_setStep(slot->speed);
     JNT_animSetFlags(slot->flags);
@@ -993,8 +974,8 @@ void ACT_initMotion(Actor *actor)
     animation->blendWork[1] = 0;
     animation->blendWork[3] = 0;
     animation->animData = 0;
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r" (&cleared[0]) : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r" (&cleared[1]) : "memory");
+    QuadwordZero(&cleared[0]);
+    QuadwordZero(&cleared[1]);
     actor->attachmentCount = 0;
     JNT_initProducer(&actor->jointProducer);
     JNT_addConsumer(&actor->jointProducer, 0, JNT_computeMatrix, 0);
@@ -1117,17 +1098,7 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
                 swapTmp = actor->staticValueRecords;
                 actor->staticValueRecords = valueTmp;
                 actor->valueRecords = swapTmp;
-                __asm__ __volatile__("lq $2, 0(%1)\n"
-                                     "sq $2, 0(%0)\n"
-                                     "lq $2, 16(%1)\n"
-                                     "sq $2, 16(%0)\n"
-                                     "lq $2, 32(%1)\n"
-                                     "sq $2, 32(%0)\n"
-                                     "lq $2, 48(%1)\n"
-                                     "sq $2, 48(%0)\n"
-                                     :
-                                     : "r"(actor->jointMatrices), "r"(actor->previousJointMatrices)
-                                     : "$2", "memory");
+                QuadwordCopyMatrix(actor->jointMatrices, actor->previousJointMatrices);
                 animation->previousDataId = slot->currentDataId;
                 slot->nextDataId = 0xffff;
                 slot->currentDataId = motionId & 0x7ff;

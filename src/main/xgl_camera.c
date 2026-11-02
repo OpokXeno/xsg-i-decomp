@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "quadword.h"
 
 typedef struct XglCamera XglCamera;
 
@@ -152,14 +153,8 @@ static void xglCameraScreenInit(StudioCamera *studio)
 
     screen->depthMax = 0xffffff;
     screen->depthMin = 0;
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&screen->clipRange), "r"(&sClipRange_0)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&screen->portEffect), "r"(&sPortEffect_1)
-                         : "$2", "memory");
+    QuadwordCopy(&screen->clipRange, &sClipRange_0);
+    QuadwordCopy(&screen->portEffect, &sPortEffect_1);
     screen->resolution.x = sRender.width;
     screen->resolution.y = sRender.height;
     screen->resolution.z = sRender.width;
@@ -179,51 +174,23 @@ static void xglCameraTravelInit(StudioCamera *studio)
     travel->fov = 0.69813174f;
     travel->fov_velocity = 0.0f;
     travel->scale = 0.0f;
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->rotation), "r"(&sShootAngleR_2)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->angle_velocity), "r"(&sShootAngleV_3)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->angle_delta), "r"(&sShootAngleA_4)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->position), "r"(&sShootPlaceR_5)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->place_velocity), "r"(&sShootPlaceV_6)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->place_delta), "r"(&sShootPlaceA_7)
-                         : "$2", "memory");
+    QuadwordCopy(&travel->rotation, &sShootAngleR_2);
+    QuadwordCopy(&travel->angle_velocity, &sShootAngleV_3);
+    QuadwordCopy(&travel->angle_delta, &sShootAngleA_4);
+    QuadwordCopy(&travel->position, &sShootPlaceR_5);
+    QuadwordCopy(&travel->place_velocity, &sShootPlaceV_6);
+    QuadwordCopy(&travel->place_delta, &sShootPlaceA_7);
     travel->chase_yaw = travel->rotation.y;
     travel->chase_distance = travel->position.z;
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->chase_reference), "r"(&sChaseRefPos_8)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&travel->chase_position), "r"(&sChaseIntPos_9)
-                         : "$2", "memory");
+    QuadwordCopy(&travel->chase_reference, &sChaseRefPos_8);
+    QuadwordCopy(&travel->chase_position, &sChaseIntPos_9);
 }
 
 static void xglCameraTravelReset(CameraTravel *travel)
 {
     travel->scale = 0.0f;
-    __asm__ __volatile__("lq $2, 0(%1)\nsq $2, 0(%0)"
-                         : : "r"(&travel->angle_delta), "r"(&sShootAngleA_10)
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\nsq $2, 0(%0)"
-                         : : "r"(&travel->place_delta), "r"(&sShootPlaceA_11)
-                         : "$2", "memory");
+    QuadwordCopy(&travel->angle_delta, &sShootAngleA_10);
+    QuadwordCopy(&travel->place_delta, &sShootPlaceA_11);
 }
 
 static void xglCameraTravelFocus(CameraTravel *travel)
@@ -399,10 +366,7 @@ static void xglCameraTravelChase(XglCamera *camera)
     if (offset.w < 1.0f) {
         xglVectorScaleAddXYZ(&travel->chase_position, &offset, &travel->chase_position, 0.2f);
     } else {
-        __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                             "sq $2, 0(%0)"
-                             : : "r"(&travel->chase_position), "r"(&travel->chase_reference)
-                             : "$2", "memory");
+        QuadwordCopy(&travel->chase_position, &travel->chase_reference);
     }
     offset.x = 0.0f;
     offset.y = 0.0f;
@@ -506,10 +470,7 @@ static void xglCameraViewScreen(StudioCamera *studio, const Vector4 *offset)
     }
     screen->clipRange.z = screen->projection.x * (scaled.z / screen->resolution.z);
     screen->clipRange.w = screen->projection.y * (scaled.w / screen->resolution.w);
-    __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                         "sq $2, 0(%0)"
-                         : : "r"(&screen->projection), "r"(&screen->resolution)
-                         : "$2", "memory");
+    QuadwordCopy(&screen->projection, &screen->resolution);
     screen->projection.x *= aspect;
     screen->screenOffset.x = centerX + 2048.0f;
     screen->projection.z *= aspect;
@@ -592,16 +553,7 @@ static void xglCameraViewVolume(StudioCamera *studio, Vector4 *offset)
     transform = camera->transform;
     for (; i < 1; i++) {
         volume = &camera->volume[i];
-        __asm__ __volatile__("lq $2, 0(%1)\n\t"
-                             "sq $2, 0(%0)\n\t"
-                             "lq $2, 16(%1)\n\t"
-                             "sq $2, 16(%0)\n\t"
-                             "lq $2, 32(%1)\n\t"
-                             "sq $2, 32(%0)\n\t"
-                             "lq $2, 48(%1)\n\t"
-                             "sq $2, 48(%0)"
-                             : : "r"(volume->frustum), "r"(travelFrustum)
-                             : "$2", "memory");
+        QuadwordCopyMatrix(volume->frustum, travelFrustum);
         xglMatrixStackUnit();
         xglMatrixStackFrustum(volume->frustum[0][2], volume->frustum[1][2],
                               volume->frustum[2][2], volume->frustum[3][2],

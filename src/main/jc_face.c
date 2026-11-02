@@ -1,19 +1,11 @@
 #include "common.h"
 #include "main/jc_face.h"
 #include "jc_face.h"
+#include "quadword.h"
 
 static inline void copyMatrix(void *destination, const void *source)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%0)\n"
-        "sq $2, 0(%1)\n"
-        "lq $2, 16(%0)\n"
-        "sq $2, 16(%1)\n"
-        "lq $2, 32(%0)\n"
-        "sq $2, 32(%1)\n"
-        "lq $2, 48(%0)\n"
-        "sq $2, 48(%1)\n"
-        : : "r"(source), "r"(destination) : "$2", "memory");
+    QuadwordCopyMatrix(destination, source);
 }
 
 /*
@@ -56,17 +48,7 @@ matrix_available:
         unsigned int flags_after_copy;
         destination = &work->matrix_buffer[chain->index];
         {
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n"
-                "sq $2, 0(%0)\n"
-                "lq $2, 16(%1)\n"
-                "sq $2, 16(%0)\n"
-                "lq $2, 32(%1)\n"
-                "sq $2, 32(%0)\n"
-                "lq $2, 48(%1)\n"
-                "sq $2, 48(%0)\n"
-                : : "r"(destination), "r"(chain->static_index * sizeof(*matrix_table) + (unsigned int)matrix_table)
-                : "$2", "memory");
+            QuadwordCopyMatrix(destination, chain->static_index * sizeof(*matrix_table) + (unsigned int)matrix_table);
         }
         flags_after_copy = work->flags | 8;
         destination->flat[3] = 1.0f;
@@ -128,17 +110,7 @@ matrix_available:
                 root_destination += chain->index;
                 previous_destination = root_destination - 1;
                 {
-                    __asm__ __volatile__(
-                        "lq $2, 0(%1)\n"
-                        "sq $2, 0(%0)\n"
-                        "lq $2, 16(%1)\n"
-                        "sq $2, 16(%0)\n"
-                        "lq $2, 32(%1)\n"
-                        "sq $2, 32(%0)\n"
-                        "lq $2, 48(%1)\n"
-                        "sq $2, 48(%0)\n"
-                    : : "r"(previous_destination), "r"(chain->static_index * sizeof(*matrix_table) + (unsigned int)matrix_table)
-                        : "$2", "memory");
+                    QuadwordCopyMatrix(previous_destination, chain->static_index * sizeof(*matrix_table) + (unsigned int)matrix_table);
                 }
             }
             slot = 0;
@@ -150,17 +122,7 @@ matrix_available:
                     unsigned int destination = destination_index * sizeof(JntMatrix) + (unsigned int)work->matrix_buffer;
                     unsigned int source = source_index * sizeof(*matrix_table) + (unsigned int)matrix_table;
                     {
-                        __asm__ __volatile__(
-                            "lq $2, 0(%1)\n"
-                            "sq $2, 0(%0)\n"
-                            "lq $2, 16(%1)\n"
-                            "sq $2, 16(%0)\n"
-                            "lq $2, 32(%1)\n"
-                            "sq $2, 32(%0)\n"
-                            "lq $2, 48(%1)\n"
-                            "sq $2, 48(%0)\n"
-                        : : "r"(destination), "r"(source)
-                            : "$2", "memory");
+                        QuadwordCopyMatrix(destination, source);
                     }
                     slot++;
                     cursor = JNT_nextElement(cursor);
@@ -286,17 +248,7 @@ matrix_available:
         destination = &work->matrix_buffer[chain->index];
 
         {
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n"
-                "sq $2, 0(%0)\n"
-                "lq $2, 16(%1)\n"
-                "sq $2, 16(%0)\n"
-                "lq $2, 32(%1)\n"
-                "sq $2, 32(%0)\n"
-                "lq $2, 48(%1)\n"
-                "sq $2, 48(%0)\n"
-            : : "r"(destination), "r"((chain->static_index * sizeof(*records)) + (unsigned int)records)
-                : "$2", "memory");
+            QuadwordCopyMatrix(destination, (chain->static_index * sizeof(*records)) + (unsigned int)records);
         }
         flags_after_copy = work->flags | 8;
         destination->flat[3] = 1.0f;
@@ -333,33 +285,13 @@ matrix_available:
             root_destination = &work->matrix_buffer[0];
             destination = &work->matrix_buffer[chain->index];
             {
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n"
-                    "sq $2, 0(%0)\n"
-                    "lq $2, 16(%1)\n"
-                    "sq $2, 16(%0)\n"
-                    "lq $2, 32(%1)\n"
-                    "sq $2, 32(%0)\n"
-                    "lq $2, 48(%1)\n"
-                    "sq $2, 48(%0)\n"
-                : : "r"(root_destination), "r"(&records[0])
-                    : "$2", "memory");
+                QuadwordCopyMatrix(root_destination, &records[0]);
             }
             source_byte_offset = chain->static_index * sizeof(*records);
         }
 
         {
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n"
-                "sq $2, 0(%0)\n"
-                "lq $2, 16(%1)\n"
-                "sq $2, 16(%0)\n"
-                "lq $2, 32(%1)\n"
-                "sq $2, 32(%0)\n"
-                "lq $2, 48(%1)\n"
-                "sq $2, 48(%0)\n"
-            : : "r"(destination), "r"(source_byte_offset + (unsigned int)records)
-                : "$2", "memory");
+            QuadwordCopyMatrix(destination, source_byte_offset + (unsigned int)records);
         }
         destination->flat[3] = destination->flat[7] =
             destination->flat[11] = 1.0f;
@@ -376,17 +308,7 @@ matrix_available:
                 root_destination += chain->index;
                 previous_destination = root_destination - 1;
                 {
-                    __asm__ __volatile__(
-                        "lq $2, 0(%1)\n"
-                        "sq $2, 0(%0)\n"
-                        "lq $2, 16(%1)\n"
-                        "sq $2, 16(%0)\n"
-                        "lq $2, 32(%1)\n"
-                        "sq $2, 32(%0)\n"
-                        "lq $2, 48(%1)\n"
-                        "sq $2, 48(%0)\n"
-                    : : "r"(previous_destination), "r"((chain->static_index * sizeof(*records)) + (unsigned int)records)
-                        : "$2", "memory");
+                    QuadwordCopyMatrix(previous_destination, (chain->static_index * sizeof(*records)) + (unsigned int)records);
                 }
             }
             slot = 0;
@@ -394,17 +316,7 @@ matrix_available:
             if (work->current_index < bound && cursor->type != 4) {
                 do {
                     {
-                        __asm__ __volatile__(
-                            "lq $2, 0(%1)\n"
-                            "sq $2, 0(%0)\n"
-                            "lq $2, 16(%1)\n"
-                            "sq $2, 16(%0)\n"
-                            "lq $2, 32(%1)\n"
-                            "sq $2, 32(%0)\n"
-                            "lq $2, 48(%1)\n"
-                            "sq $2, 48(%0)\n"
-                        : : "r"(((chain->index + slot) * sizeof(JntMatrix)) + (unsigned int)work->matrix_buffer), "r"(((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records)
-                            : "$2", "memory");
+                        QuadwordCopyMatrix(((chain->index + slot) * sizeof(JntMatrix)) + (unsigned int)work->matrix_buffer, ((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records);
                     }
                     cursor = JNT_nextElement(cursor);
                     work->current_index++;
@@ -433,33 +345,13 @@ matrix_available:
             root_destination = &work->matrix_buffer[0];
             destination = &work->matrix_buffer[chain->index];
             {
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n"
-                    "sq $2, 0(%0)\n"
-                    "lq $2, 16(%1)\n"
-                    "sq $2, 16(%0)\n"
-                    "lq $2, 32(%1)\n"
-                    "sq $2, 32(%0)\n"
-                    "lq $2, 48(%1)\n"
-                    "sq $2, 48(%0)\n"
-                : : "r"(root_destination), "r"(&records[0])
-                    : "$2", "memory");
+                QuadwordCopyMatrix(root_destination, &records[0]);
             }
             source_byte_offset = chain->static_index * sizeof(*records);
         }
 
         {
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n"
-                "sq $2, 0(%0)\n"
-                "lq $2, 16(%1)\n"
-                "sq $2, 16(%0)\n"
-                "lq $2, 32(%1)\n"
-                "sq $2, 32(%0)\n"
-                "lq $2, 48(%1)\n"
-                "sq $2, 48(%0)\n"
-            : : "r"(destination), "r"(source_byte_offset + (unsigned int)records)
-                : "$2", "memory");
+            QuadwordCopyMatrix(destination, source_byte_offset + (unsigned int)records);
         }
         destination->flat[3] = destination->flat[7] =
             destination->flat[11] = 1.0f;
@@ -495,17 +387,7 @@ matrix_available:
                 root_destination += chain->index;
                 previous_destination = root_destination - 1;
                 {
-                    __asm__ __volatile__(
-                        "lq $2, 0(%1)\n"
-                        "sq $2, 0(%0)\n"
-                        "lq $2, 16(%1)\n"
-                        "sq $2, 16(%0)\n"
-                        "lq $2, 32(%1)\n"
-                        "sq $2, 32(%0)\n"
-                        "lq $2, 48(%1)\n"
-                        "sq $2, 48(%0)\n"
-                    : : "r"(previous_destination), "r"((chain->static_index * sizeof(*records)) + (unsigned int)records)
-                        : "$2", "memory");
+                    QuadwordCopyMatrix(previous_destination, (chain->static_index * sizeof(*records)) + (unsigned int)records);
                 }
             }
             slot = 0;
@@ -513,17 +395,7 @@ matrix_available:
             if (work->current_index < bound && cursor->type != 4) {
                 do {
                     {
-                        __asm__ __volatile__(
-                            "lq $2, 0(%1)\n"
-                            "sq $2, 0(%0)\n"
-                            "lq $2, 16(%1)\n"
-                            "sq $2, 16(%0)\n"
-                            "lq $2, 32(%1)\n"
-                            "sq $2, 32(%0)\n"
-                            "lq $2, 48(%1)\n"
-                            "sq $2, 48(%0)\n"
-                        : : "r"(((chain->index + slot) * sizeof(JntMatrix)) + (unsigned int)work->matrix_buffer), "r"(((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records)
-                            : "$2", "memory");
+                        QuadwordCopyMatrix(((chain->index + slot) * sizeof(JntMatrix)) + (unsigned int)work->matrix_buffer, ((chain->static_index + slot) * sizeof(*records)) + (unsigned int)records);
                     }
                     slot++;
                     cursor = JNT_nextElement(cursor);
@@ -731,17 +603,7 @@ matrix_available:
 static inline void copyJointMatrix(JntMatrix *destination,
                                    const JntMatrix *source)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n"
-        "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n"
-        "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n"
-        "sq $2, 48(%0)\n"
-        : : "r"(destination), "r"(source)
-        : "$2", "memory");
+    QuadwordCopyMatrix(destination, source);
 }
 
 static inline void copyChainSlot(JntWork *work, const JcChain *chain,

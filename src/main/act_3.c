@@ -6,6 +6,7 @@
 #include "main/nml_model_set.h"
 #include "main/res_get_path.h"
 #include "main/xgl_sound.h"
+#include "quadword.h"
 
 #define GIF_TAG_NLOOP_1 1u
 #define GIF_TAG_EOP (1u << 15)
@@ -926,16 +927,7 @@ static void DrawZeldaShadow(void *actor_pointer)
         ActShadowMatrix *destination = &scratchpad->matrix;
         ActShadowMatrix *matrix = actor->shadow_matrices->matrices;
         /* Four aligned copies use the original scratch data register. */
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)\n\t"
-            "lq $2,16(%1)\n\t"
-            "sq $2,16(%0)\n\t"
-            "lq $2,32(%1)\n\t"
-            "sq $2,32(%0)\n\t"
-            "lq $2,48(%1)\n\t"
-            "sq $2,48(%0)"
-            : : "r"(destination), "r"(matrix) : "$2", "memory");
+        QuadwordCopyMatrix(destination, matrix);
     }
     direction = actor->direction;
     scratchpad->radius = __builtin_sqrtf(1.0f - direction[1] * direction[1]) * 0.5f;
@@ -1370,16 +1362,7 @@ static void DrawDropShadow(void *actor_pointer)
         ActShadowMatrix *matrix = actor->shadow_matrices;
         ActShadowMatrix *destination = &work->model;
         /* Match the original four aligned SDK copies through its scratch GPR. */
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)\n\t"
-            "lq $2,16(%1)\n\t"
-            "sq $2,16(%0)\n\t"
-            "lq $2,32(%1)\n\t"
-            "sq $2,32(%0)\n\t"
-            "lq $2,48(%1)\n\t"
-            "sq $2,48(%0)"
-            : : "r"(destination), "r"(matrix) : "$2", "memory");
+        QuadwordCopyMatrix(destination, matrix);
     }
     {
         float light_x = actor->light_direction.x;
@@ -1582,11 +1565,7 @@ void ACT_DrawShadow(ActDrawShadowActor *actor)
         light = xglStudioGetLight2();
     }
     /* sceVu0CopyVector shape: one quadword through a fixed scratch register. */
-    __asm__ __volatile__("lq $2, 0(%1)\n"
-                         "sq $2, 0(%0)\n"
-                         :
-                         : "r"(&actor->direction), "r"(&light->direction)
-                         : "$2", "memory");
+    QuadwordCopy(&actor->direction, &light->direction);
     if ((actor->kind & 0xf000) == 0 && (actor->flags & 0x100) == 0) {
         Footstep((ActShadowActor *)actor);
     }

@@ -5,6 +5,7 @@
 #include "act_2.h"
 #include "main/string_utf_get_hash.h"
 #include "main/xgl_2.h"
+#include "quadword.h"
 
 typedef struct TCamera TCamera;
 
@@ -667,11 +668,7 @@ void Java_xeno_Camera_setCFAngle__IFFFF(JavaEnvironment *environment,
         float *source = angles;
 
         definition->pedestal_mode = 0;
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r" (definition->angles.values), "r" (source)
-                             : "$2", "memory");
+        QuadwordCopy(definition->angles.values, source);
         definition->current_yaw = definition->angles.values[1];
         definition++;
     }
@@ -725,11 +722,7 @@ void Java_xeno_Camera_setCFAnglePers__IFFFFF(JavaEnvironment *environment,
         float *source = angles;
 
         definition->pedestal_mode = 0;
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r" (definition->angles.values), "r" (source)
-                             : "$2", "memory");
+        QuadwordCopy(definition->angles.values, source);
         definition->perspective = perspective;
         definition->current_yaw = definition->angles.values[1];
         definition++;
@@ -972,16 +965,8 @@ void Java_xeno_Camera_setFog__IFFFFIIII(JThread *thread,
         float *source_parameters = fog_parameters;
         float *source_color = fog_color;
 
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r" (definition->fog_parameters), "r" (source_parameters)
-                             : "$2", "memory");
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r" (&definition->fog_color), "r" (source_color)
-                             : "$2", "memory");
+        QuadwordCopy(definition->fog_parameters, source_parameters);
+        QuadwordCopy(&definition->fog_color, source_color);
         definition++;
     }
 }
@@ -1002,8 +987,8 @@ void Java_xeno_Camera_resetFog__I(JThread *thread, VMSlot *arguments, VMSlot *re
         last = index + 1;
     }
     for (definition = &CfCameraDefine[index]; index < last; index++, definition++) {
-        __asm__ __volatile__("sq $0, 0(%0)\n" : : "r" (definition->fog_parameters) : "memory");
-        __asm__ __volatile__("sq $0, 0(%0)\n" : : "r" (&definition->fog_color) : "memory");
+        QuadwordZero(definition->fog_parameters);
+        QuadwordZero(&definition->fog_color);
     }
 }
 

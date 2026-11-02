@@ -6,6 +6,7 @@
 #include "main/game_camera.h"
 #include "main/nml_model_set.h"
 #include "main/xgl_2.h"
+#include "quadword.h"
 
 #define MoveHokanStateFlag (GameLoopState.camera_flags)
 
@@ -295,12 +296,7 @@ void GameCameraStateSave(void)
 
     camera = xglStudioGetCamera2(0);
     save_cam = *camera;
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (GameLoopState.saved_camera_angles), "r" (CfCameraDefine[0].angles.values)
-        : "$2", "memory");
+    QuadwordCopy(GameLoopState.saved_camera_angles, CfCameraDefine[0].angles.values);
     GameLoopState.saved_camera_callback = GameLoopState.camera_callback;
 }
 
@@ -313,12 +309,7 @@ void GameCameraStateRestore(void)
     *camera = save_cam;
     camera->state = 4;
     camera->rotation.vector.z = 0.0f;
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (CfCameraDefine[0].angles.values), "r" (GameLoopState.saved_camera_angles)
-        : "$2", "memory");
+    QuadwordCopy(CfCameraDefine[0].angles.values, GameLoopState.saved_camera_angles);
     GameLoopState.camera_callback = GameLoopState.saved_camera_callback;
     HokanNow.position_step = 0.0f;
     HokanNow.look_at_step = 0.0f;
@@ -421,12 +412,7 @@ static void MoveHokan(void *unused, float step, const Vector4 *target,
            this site and the matching one below as identical and folds them
            into one shared unaligned ldl/ldr/sdl/sdr block reached by two
            jumps -- which the original does not do. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (current), "r" (target)
-            : "$2", "memory");
+        QuadwordCopy(current, target);
         return;
     }
 
@@ -448,12 +434,7 @@ static void MoveHokan(void *unused, float step, const Vector4 *target,
         *remaining = 0.0f;
 
     if (*remaining == 0.0f) {
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (current), "r" (target)
-            : "$2", "memory");
+        QuadwordCopy(current, target);
     } else {
         xglVectorScaleAddXYZ(*remaining, current, &difference, target);
     }
@@ -648,12 +629,7 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
             CamPosPos.y = height;
         }
     } else {
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (&CamPosPos), "r" (&CamLookAtPos)
-            : "$2", "memory");
+        QuadwordCopy(&CamPosPos, &CamLookAtPos);
         CamPos.query_cursor = 0;
         CamPos.query_flags = 0;
         UnduCheck(&CamPosPos, 0, &CamPos);
@@ -864,12 +840,7 @@ static void CameraType0(void)
     scratchpad->view->rotation.x = xglAtan2(scratchpad->look_at_delta.y,
         __builtin_sqrtf(scratchpad->look_at_delta.x * scratchpad->look_at_delta.x
                             + scratchpad->look_at_delta.z * scratchpad->look_at_delta.z));
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&scratchpad->view->focus), "r" (&scratchpad->look_at)
-        : "$2", "memory");
+    QuadwordCopy(&scratchpad->view->focus, &scratchpad->look_at);
 }
 
 static void CameraType1Core(void)
@@ -994,12 +965,7 @@ static void CameraType1(void)
         }
     }
 
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        :
-        : "r" (&scratchpad->view->focus), "r" (&scratchpad->look_at)
-        : "$2", "memory");
+    QuadwordCopy(&scratchpad->view->focus, &scratchpad->look_at);
 }
 
 static void CameraType4(void)
@@ -1048,12 +1014,7 @@ static void CameraType4(void)
             horizontal = __builtin_sqrtf(scratchpad->look_at_delta.x * scratchpad->look_at_delta.x
                                              + scratchpad->look_at_delta.z * scratchpad->look_at_delta.z);
             scratchpad->view->rotation.x = xglAtan2(scratchpad->look_at_delta.y, horizontal);
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n"
-                "sq $2, 0(%0)\n"
-                :
-                : "r" (&scratchpad->view->focus), "r" (&scratchpad->look_at)
-                : "$2", "memory");
+            QuadwordCopy(&scratchpad->view->focus, &scratchpad->look_at);
         }
     }
 }
@@ -1158,12 +1119,7 @@ void GameCamera(void)
         CamPos.attribute_mask = 2;
     }
     if (GameLoopState.camera_flags & 0x20) {
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (&CamPlyPosOld), "r" (&scratchpad->target->position)
-            : "$2", "memory");
+        QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
     }
     if ((unsigned)(enepc[scratchpad->target->enemy_index].state - 3) >= 5) {
         scratchpad->previous_mode = GameLoopState.camera_mode;
@@ -1183,12 +1139,7 @@ void GameCamera(void)
                     : "memory");
                 UnduCheck(&CamPlyPosOld, &scratchpad->look_at_delta, &CamPlayer);
                 if (CamPlayer.height == -1000.0f) {
-                    __asm__ __volatile__(
-                        "lq $2, 0(%1)\n"
-                        "sq $2, 0(%0)\n"
-                        :
-                        : "r" (&CamPlyPosOld), "r" (&scratchpad->target->position)
-                        : "$2", "memory");
+                    QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
                     CamPlayer.query_cursor = 0;
                     CamPlayer.query_flags = 0;
                     UnduCheck(&CamPlyPosOld, 0, &CamPlayer);
@@ -1264,18 +1215,8 @@ void GameCamera(void)
         }
     }
     if (GameLoopState.camera_flags & 0x80) {
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (&CamPlyPosOld), "r" (&scratchpad->target->position)
-            : "$2", "memory");
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            :
-            : "r" (&CamLookAtPos), "r" (&scratchpad->target->position)
-            : "$2", "memory");
+        QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
+        QuadwordCopy(&CamLookAtPos, &scratchpad->target->position);
         if (scratchpad->definition->pedestal_mode == 0) {
             scratchpad->definition->angles.values[1] = scratchpad->definition->current_yaw;
             GetCameraPos(&CamPosPos.x, &CamLookAtPos.x, scratchpad->definition->angles.values);

@@ -5,6 +5,7 @@
 #include "main/jni.h"
 #include "main/jthread.h"
 #include "main/toolkit.h"
+#include "quadword.h"
 
 /* Bind a following target together with the enabled rotation axes. */
 #define CHR_SET_FOLLOW_TARGET(rotation_value, target_value, flags_value) do { \
@@ -2268,10 +2269,7 @@ void Java_xeno_Chr_setPointLightReset__(JThread *thread, ChrObjectCall *argument
     field_value = (void *)(object + peer_field->offset);
     peer = field_value->actor;
     for (index = 0; index < 3; index++) {
-        __asm__ __volatile__("sq $0, 0(%0)\n"
-                             :
-                             : "r"(&peer->drawEnv.lightColor[index])
-                             : "memory");
+        QuadwordZero(&peer->drawEnv.lightColor[index]);
     }
     peer->drawEnv.flags &= ~0x20;
 }
@@ -2456,30 +2454,12 @@ void Java_xeno_Chr_look_default__(JThread *thread, ChrObjectCall *arguments)
     peer->look_mode = 1;
     peer->look_eye_control = 0;
     peer->look_target = 0;
-    __asm__ __volatile__("sq $0, 0(%0)\n"
-                         :
-                         : "r"(&peer->look_clear_600[0])
-                         : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)\n"
-                         :
-                         : "r"(&peer->look_clear_600[4])
-                         : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)\n"
-                         :
-                         : "r"(&peer->look_point[0])
-                         : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)\n"
-                         :
-                         : "r"(&peer->look_clear_640[0])
-                         : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)\n"
-                         :
-                         : "r"(&peer->look_clear_640[4])
-                         : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)\n"
-                         :
-                         : "r"(&peer->look_eye_angle[0])
-                         : "memory");
+    QuadwordZero(&peer->look_clear_600[0]);
+    QuadwordZero(&peer->look_clear_600[4]);
+    QuadwordZero(&peer->look_point[0]);
+    QuadwordZero(&peer->look_clear_640[0]);
+    QuadwordZero(&peer->look_clear_640[4]);
+    QuadwordZero(&peer->look_eye_angle[0]);
     peer->look_speed = 1.0f;
     peer->look_eye_speed = 1.0f;
 }

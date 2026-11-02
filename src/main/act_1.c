@@ -5,6 +5,7 @@
 #include "main/exm_2.h"
 #include "main/game_init_camera.h"
 #include "main/xgl_studio.h"
+#include "quadword.h"
 
 /* PadData's pressed-button halfword layout as ACT_info reads it. */
 typedef struct ActInfoPad {
@@ -211,7 +212,7 @@ void ACT_init(void)
         quad = self->drawEnv.lightColor;
         count = 2;
         do {
-            __asm__ __volatile__("sq $0, 0(%0)" : : "r"(quad) : "memory");
+            QuadwordZero(quad);
             count -= 1;
             quad += 1;
         } while (count >= 0);
@@ -234,9 +235,9 @@ void ACT_init(void)
         self->look_eye_control = 0;
         self->look_mode = 1;
         self->look_target = 0;
-        __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&self->lookState[0]) : "memory");
-        __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&self->lookState[4]) : "memory");
-        __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&self->lookState[8]) : "memory");
+        QuadwordZero(&self->lookState[0]);
+        QuadwordZero(&self->lookState[4]);
+        QuadwordZero(&self->lookState[8]);
         self->look_speed = 1.0f;
         self->look_eye_speed = 1.0f;
         self->shadowClipScale = 1.0f;

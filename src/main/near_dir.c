@@ -8,6 +8,7 @@
 #include "main/act_2.h"
 #include "main/nml_model_set.h"
 #include "main/xgl_2.h"
+#include "quadword.h"
 
 typedef struct {
     u32 active;
@@ -867,18 +868,7 @@ void ACT_updatePlayer(Actor *actor)
 
         /* sceVu0CopyMatrix shape: the camera basis is copied as four quadwords
          * through a fixed scratch register. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            "lq $2, 16(%1)\n"
-            "sq $2, 16(%0)\n"
-            "lq $2, 32(%1)\n"
-            "sq $2, 32(%0)\n"
-            "lq $2, 48(%1)\n"
-            "sq $2, 48(%0)\n"
-            :
-            : "r"(&matrix), "r"(&camera->cameraToWorldMatrix)
-            : "$2", "memory");
+        QuadwordCopyMatrix(&matrix, &camera->cameraToWorldMatrix);
         matrix[3][0] = 0.0f;
         matrix[3][1] = 0.0f;
         matrix[3][2] = 0.0f;

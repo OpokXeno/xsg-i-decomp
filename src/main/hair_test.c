@@ -14,6 +14,7 @@
 #include "main/xgl_render.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_thread.h"
+#include "quadword.h"
 
 /* "FPK" in the low three bytes of FpkFcvHeader.magic (little-endian). */
 #define FPK_MAGIC 0x4B5046
@@ -399,35 +400,11 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
     frame = joint->current_frame;
     {
         JntMatrix *rootSource = joint->matrix_buffer;
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)\n\t"
-            "lq $2,16(%1)\n\t"
-            "sq $2,16(%0)\n\t"
-            "lq $2,32(%1)\n\t"
-            "sq $2,32(%0)\n\t"
-            "lq $2,48(%1)\n\t"
-            "sq $2,48(%0)"
-            :
-            : "r"(rootMatrix), "r"(rootSource)
-            : "$2", "memory"
-        );
+        QuadwordCopyMatrix(rootMatrix, rootSource);
     }
     {
         matrixBase = joint->matrix_buffer;
-        __asm__ __volatile__(
-            "lq $2,0(%1)\n\t"
-            "sq $2,0(%0)\n\t"
-            "lq $2,16(%1)\n\t"
-            "sq $2,16(%0)\n\t"
-            "lq $2,32(%1)\n\t"
-            "sq $2,32(%0)\n\t"
-            "lq $2,48(%1)\n\t"
-            "sq $2,48(%0)"
-            :
-            : "r"(&savedRoot), "r"(matrixBase)
-            : "$2", "memory"
-        );
+        QuadwordCopyMatrix(&savedRoot, matrixBase);
     }
     xglMatrixUnit4s(joint->matrix_buffer->elements);
 
@@ -529,19 +506,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
         }
         {
             JntMatrix *rootRestore = joint->matrix_buffer;
-            __asm__ __volatile__(
-                "lq $2,0(%1)\n\t"
-                "sq $2,0(%0)\n\t"
-                "lq $2,16(%1)\n\t"
-                "sq $2,16(%0)\n\t"
-                "lq $2,32(%1)\n\t"
-                "sq $2,32(%0)\n\t"
-                "lq $2,48(%1)\n\t"
-                "sq $2,48(%0)"
-                :
-                : "r"(rootRestore), "r"(&savedRoot)
-                : "$2", "memory"
-            );
+            QuadwordCopyMatrix(rootRestore, &savedRoot);
         }
         animationState = joint->animation_flags;
         if (animationState < 0) {
@@ -621,19 +586,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
                 {
                     matrixIndex = joint->current_index;
                     matrixBase = joint->matrix_buffer;
-                    __asm__ __volatile__(
-                        "lq $2,0(%0)\n\t"
-                        "sq $2,0(%1)\n\t"
-                        "lq $2,16(%0)\n\t"
-                        "sq $2,16(%1)\n\t"
-                        "lq $2,32(%0)\n\t"
-                        "sq $2,32(%1)\n\t"
-                        "lq $2,48(%0)\n\t"
-                        "sq $2,48(%1)"
-                        :
-                        : "r"(composedSource), "r"((((unsigned int)matrixIndex) << 6) + (unsigned int)matrixBase)
-                        : "$2", "memory"
-                    );
+                    QuadwordCopyMatrix((((unsigned int)matrixIndex) << 6) + (unsigned int)matrixBase, composedSource);
                 }
                 index = joint->current_index + 1;
                 joint->current_index = index;
@@ -747,19 +700,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
             rootDestination = joint->matrix_buffer;
         }
         {
-            __asm__ __volatile__(
-                "lq $2,0(%1)\n\t"
-                "sq $2,0(%0)\n\t"
-                "lq $2,16(%1)\n\t"
-                "sq $2,16(%0)\n\t"
-                "lq $2,32(%1)\n\t"
-                "sq $2,32(%0)\n\t"
-                "lq $2,48(%1)\n\t"
-                "sq $2,48(%0)"
-                :
-                : "r"(rootDestination), "r"(&savedRoot)
-                : "$2", "memory"
-            );
+            QuadwordCopyMatrix(rootDestination, &savedRoot);
         }
         MATRIX_convert4(savedRoot.rows, savedRoot.rows);
         joint->current_index = index;
@@ -772,19 +713,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
                 {
                     matrixIndex = joint->current_index;
                     matrixBase = joint->matrix_buffer;
-                    __asm__ __volatile__(
-                        "lq $2,0(%0)\n\t"
-                        "sq $2,0(%1)\n\t"
-                        "lq $2,16(%0)\n\t"
-                        "sq $2,16(%1)\n\t"
-                        "lq $2,32(%0)\n\t"
-                        "sq $2,32(%1)\n\t"
-                        "lq $2,48(%0)\n\t"
-                        "sq $2,48(%1)"
-                        :
-                        : "r"(composedSource), "r"((((unsigned int)matrixIndex) << 6) + (unsigned int)matrixBase)
-                        : "$2", "memory"
-                    );
+                    QuadwordCopyMatrix((((unsigned int)matrixIndex) << 6) + (unsigned int)matrixBase, composedSource);
                 }
                 index = joint->current_index + 1;
                 joint->current_index = index;

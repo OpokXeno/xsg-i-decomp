@@ -1,6 +1,7 @@
 #include "common.h"
 #include "pause_menu_page_enemy.h"
 #include "main/pause_menu_page_enemy.h"
+#include "quadword.h"
 
 /* Partial view of UnduParam; the full type changes this object (the extern
  * UnduTemp of this TU is recorded at its 0x28-byte view size). */
@@ -725,28 +726,8 @@ void Debug_Mark(const Vector4 *position, int entry)
     xglStudioGetLight(&light);
     xglLightCalcMatrix(light);
     /* The SDK copies the two matrix blocks through its fixed scratch GPR. */
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n"
-        "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n"
-        "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n"
-        "sq $2, 48(%0)\n"
-        : : "r" (colorMatrix), "r" (&light->color_modifier_matrix)
-        : "$2", "memory");
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n"
-        "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n"
-        "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n"
-        "sq $2, 48(%0)\n"
-        : : "r" (normalMatrix), "r" (&light->normal_matrix)
-        : "$2", "memory");
+    QuadwordCopyMatrix(colorMatrix, &light->color_modifier_matrix);
+    QuadwordCopyMatrix(normalMatrix, &light->normal_matrix);
     nmlModelSetLight(&colorMatrix, &normalMatrix);
     nmlModelSetPlace(&place);
     nmlModelEntry(entry);

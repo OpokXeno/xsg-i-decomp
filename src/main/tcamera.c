@@ -9,6 +9,7 @@
 #include "main/xgl_2.h"
 #include "main/xgl_font.h"
 #include "main/fcv2.h"
+#include "quadword.h"
 
 #define TCAMERA_ROTATION(camera)    (&((TCamera *)(camera))->rotation)
 #define TCAMERA_TRANSLATION(camera) (&((TCamera *)(camera))->translation)
@@ -179,12 +180,7 @@ void TCAMERA_transMPack2(TCamera *camera, void *source, float frame)
     interest.vector.y = FCV2_getPackValue(TCAMERA_MPACK_SCRATCH, frame);
     interest.vector.z = FCV2_getPackValue(TCAMERA_MPACK_SCRATCH, frame);
     interest.vector.w = 1.0f;
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        :
-        : "r"(&mpack_interest.storage), "r"(&interest.storage)
-        : "$2", "memory");
+    QuadwordCopy(&mpack_interest.storage, &interest.storage);
     __asm__ __volatile__(
         "lqc2 $vf3, 0(%0)\n\t"
         "lqc2 $vf2, 0(%1)\n\t"

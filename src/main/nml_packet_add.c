@@ -5,6 +5,7 @@
 #include "nml_packet_add.h"
 #include "main/xgl_packet.h"
 #include "main/ssd_init.h"
+#include "quadword.h"
 
 /* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
 #define VIF_CODE_MSCAL 0x14000000
@@ -454,35 +455,13 @@ static inline void nmlPacketSetPixelBlend(LayoutStore *model,
 static inline void nmlPartsCopyGeometryMatrix(NmlPartsScratchMatrix *destination,
                                               const Vector4 *source)
 {
-    __asm__ __volatile__(
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "lq $2,16(%1)\n\t"
-        "sq $2,16(%0)\n\t"
-        "lq $2,32(%1)\n\t"
-        "sq $2,32(%0)\n\t"
-        "lq $2,48(%1)\n\t"
-        "sq $2,48(%0)"
-        :
-        : "r"(destination->values), "r"(source)
-        : "$2", "memory");
+    QuadwordCopyMatrix(destination->values, source);
 }
 
 static inline void nmlPartsCopyLayoutMatrix(NmlPartsScratchMatrix *destination,
                                              const Vector4 *source)
 {
-    __asm__ __volatile__(
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "lq $2,16(%1)\n\t"
-        "sq $2,16(%0)\n\t"
-        "lq $2,32(%1)\n\t"
-        "sq $2,32(%0)\n\t"
-        "lq $2,48(%1)\n\t"
-        "sq $2,48(%0)"
-        :
-        : "r"(destination->values), "r"(source)
-        : "$2", "memory");
+    QuadwordCopyMatrix(destination->values, source);
 }
 
 static inline float nmlPartsSetRowW(NmlPartsScratchMatrix *matrix, float row_w)
@@ -1019,13 +998,7 @@ void nmlPacketAddScreen(const StudioCamera *camera)
     sceVif1PkCnt(packet, 0);
     /* The SDK copy pins its quadword scratch register; the second parcel
      * below is an ordinary native-TI argument load. */
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        :
-        : "r"(&translation), "r"(&camera->screenOffset)
-        : "$2", "memory"
-    );
+    QuadwordCopy(&translation, &camera->screenOffset);
     translation.lanes[3] = 0.0f;
     if ((sRender.texture_buffer_base << 5) != 0x3800)
         translation.lanes[3] = 3.1415927f;
@@ -1700,12 +1673,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
                 const NmlScreenQuadword *source_row = &proreal->final_normal_row;
                 NmlScreenQuadword *destination_row = &matrices.normal.quadwords[3];
 
-                __asm__ __volatile__(
-                    "lq $2,0(%1)\n\t"
-                    "sq $2,0(%0)"
-                    :
-                    : "r"(destination_row), "r"(source_row)
-                    : "$2", "memory");
+                QuadwordCopy(destination_row, source_row);
             }
 
             selected = s_pPacket;
@@ -2108,18 +2076,7 @@ u8 *nmlPacketSetAttributeData64(const void *data)
         /* The original SDK-style transfers at 0x00238e8c-0x00238ea8
          * reuse GPR2 for all four aligned quadwords. Address calculation
          * and allocation remain C; the block owns only these transfers. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n\t"
-            "sq $2, 0(%0)\n\t"
-            "lq $2, 16(%1)\n\t"
-            "sq $2, 16(%0)\n\t"
-            "lq $2, 32(%1)\n\t"
-            "sq $2, 32(%0)\n\t"
-            "lq $2, 48(%1)\n\t"
-            "sq $2, 48(%0)"
-            :
-            : "r"(destination), "r"(source)
-            : "$2", "memory");
+        QuadwordCopyMatrix(destination, source);
     }
     {
         NmlCurrentPacket finished = s_pPacket;

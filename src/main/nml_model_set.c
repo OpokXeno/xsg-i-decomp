@@ -10,6 +10,7 @@
 #include "main/nml_packet_add.h"
 #include "main/nml_filter_set.h"
 #include "main/xgl_light.h"
+#include "quadword.h"
 
 #define NML_RENDER_MAP_ENTRY 0x10000u
 
@@ -808,52 +809,10 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
     xglStudioChange(0);
     xglStudioGetLight(&light);
     xglLightCalcMatrix(light);
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)\n\t"
-        "lq $2, 16(%1)\n\t"
-        "sq $2, 16(%0)\n\t"
-        "lq $2, 32(%1)\n\t"
-        "sq $2, 32(%0)\n\t"
-        "lq $2, 48(%1)\n\t"
-        "sq $2, 48(%0)"
-        :
-        : "r"(arg0->fields.lightDirection), "r"(&light->color_modifier_matrix)
-        : "$2", "memory"
-    );
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)\n\t"
-        "lq $2, 16(%1)\n\t"
-        "sq $2, 16(%0)\n\t"
-        "lq $2, 32(%1)\n\t"
-        "sq $2, 32(%0)\n\t"
-        "lq $2, 48(%1)\n\t"
-        "sq $2, 48(%0)"
-        :
-        : "r"(arg0->fields.lightColor), "r"(light->normal_matrix)
-        : "$2", "memory"
-    );
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)\n\t"
-        "lq $2, 16(%1)\n\t"
-        "sq $2, 16(%0)\n\t"
-        "lq $2, 32(%1)\n\t"
-        "sq $2, 32(%0)\n\t"
-        "lq $2, 48(%1)\n\t"
-        "sq $2, 48(%0)"
-        :
-        : "r"(s_inGblPlace), "r"(arg0->fields.place)
-        : "$2", "memory"
-    );
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        :
-        : "r"(&s_inGblPos), "r"(&arg0->slots[0x1F0 / 4])
-        : "$2", "memory"
-    );
+    QuadwordCopyMatrix(arg0->fields.lightDirection, &light->color_modifier_matrix);
+    QuadwordCopyMatrix(arg0->fields.lightColor, light->normal_matrix);
+    QuadwordCopyMatrix(s_inGblPlace, arg0->fields.place);
+    QuadwordCopy(&s_inGblPos, &arg0->slots[0x1F0 / 4]);
     arg0->slots[0x88].f = 1.0f;
     arg0->slots[0x89].f = 2.0f;
     arg0->slots[0xB0].f = 1.0f;
@@ -907,8 +866,8 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
         : "r"(&arg0->fields.pointColor[0])
         : "memory"
     );
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&arg0->slots[0x1F0 / 4]) : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&arg0->slots[0x210 / 4]) : "memory");
+    QuadwordZero(&arg0->slots[0x1F0 / 4]);
+    QuadwordZero(&arg0->slots[0x210 / 4]);
 }
 
 static void CONSTRUCT_CIRCLR_SHADOW(void)
@@ -1121,8 +1080,8 @@ static void CONSTRUCT_MODELSYSTEM(void)
         "sq $0, 32(%0)\n"
         "sq $0, 48(%0)"
         : : "r"(s_inGblPointC) : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r"(s_inGblFogCol) : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&s_inGblFogPara) : "memory");
+    QuadwordZero(s_inGblFogCol);
+    QuadwordZero(&s_inGblFogPara);
 }
 
 static void INIT_MODELSYSTEM(void)
@@ -1149,20 +1108,8 @@ static void FLUSH_MODELSYSTEM(void)
     s_nFrameLockOff = 0;
     camera = xglStudioSelectGetActiveCamera(0);
     if (camera != 0) {
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n\t"
-            "sq $2, 0(%0)"
-            :
-            : "r"(&s_inMainCameraPos), "r"(&camera->position)
-            : "$2", "memory"
-        );
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n\t"
-            "sq $2, 0(%0)"
-            :
-            : "r"(&s_inMainCameraAng), "r"(&camera->rotation)
-            : "$2", "memory"
-        );
+        QuadwordCopy(&s_inMainCameraPos, &camera->position);
+        QuadwordCopy(&s_inMainCameraAng, &camera->rotation);
         s_nMainCameraWarp = 0;
     }
 }
@@ -1600,13 +1547,7 @@ int nmlModelAskNonLinearCamera(void)
 
 void nmlModelGetGblPosition(Vector4 *position)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        :
-        : "r"(position), "r"(&s_inGblPos)
-        : "$2", "memory"
-    );
+    QuadwordCopy(position, &s_inGblPos);
     position->w = 1.0f;
 }
 
@@ -1679,13 +1620,7 @@ void nmlModelSetGlobalPointLight(int index, const Vector4 *position, const Vecto
     if (index < 3U) {
         NmlPointQuadword *point = &s_inGblPointP[index];
 
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n\t"
-            "sq $2, 0(%0)"
-            :
-            : "r"(point), "r"(position)
-            : "$2", "memory"
-        );
+        QuadwordCopy(point, position);
         xglVectorScaleXYZ(&s_inGblPointC[index], color, 128.0f);
         s_inLayout.fields.render_status |= 0x02000000;
     }
@@ -1703,10 +1638,7 @@ void nmlModelSetGlobalPointLightPos(unsigned int index, const Vector4 *position)
 {
     if (index < 3) {
         NmlPointQuadword *destination = &s_inGblPointP[index];
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            : : "r" (destination), "r" (position) : "$2", "memory");
+        QuadwordCopy(destination, position);
         s_inLayout.fields.render_status |= 0x02000000;
     }
 }
@@ -1714,7 +1646,7 @@ void nmlModelSetGlobalPointLightPos(unsigned int index, const Vector4 *position)
 void nmlModelSetGlobalPointLightReset(void)
 {
     s_inLayout.fields.render_status &= 0xfdffffffu;
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r"(s_inGblPointC) : "memory");
+    QuadwordZero(s_inGblPointC);
     __asm__ __volatile__("sq $0, 16(%0)" : : "r"(s_inGblPointC) : "memory");
     __asm__ __volatile__("sq $0, 32(%0)" : : "r"(s_inGblPointC) : "memory");
     __asm__ __volatile__("sq $0, 48(%0)" : : "r"(s_inGblPointC) : "memory");
@@ -1723,11 +1655,7 @@ void nmlModelSetGlobalPointLightReset(void)
 void nmlModelSetPointLight(unsigned int index, const Vector4 *position, const Vector4 *color)
 {
     if (index < 3) {
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            : : "r" (&s_inLayout.fields.pointPosition[index]), "r" (position)
-            : "$2", "memory");
+        QuadwordCopy(&s_inLayout.fields.pointPosition[index], position);
         xglVectorScaleXYZ(&s_inLayout.fields.pointColor[index], color, 128.0f);
         s_inLayout.fields.render_status |= 0x1000;
     }
@@ -1751,13 +1679,7 @@ void nmlModelSetShadowHeight(float height)
 
 void nmlModelSetShadowVec(const Vector4 *shadowVector)
 {
-    __asm__ __volatile__(
-        "lq $2,0(%0)\n\t"
-        "sq $2,0(%1)"
-        :
-        : "r"(shadowVector), "r"(&s_inShadowVec)
-        : "$2", "memory"
-    );
+    QuadwordCopy(&s_inShadowVec, shadowVector);
     s_nShadowVec = 1;
 }
 
@@ -1875,22 +1797,11 @@ void nmlModelSetProreal(NmlProRealState *input)
     input->fields.textureVOffset = (float)input->fields.unmodeled_104 / (float)screenHeight -
                             input->fields.textureVScale * 0.5f;
 
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&input->fields.unmodeled_0c0[0]),
-                             "r"(&s_inProReal[0].fields.unmodeled_170[0])
-                         : "$2", "memory");
-    __asm__ __volatile__("sq $0, 0(%0)"
-                         : : "r"(&input->fields.unmodeled_0c0[1]) : "memory");
-    __asm__ __volatile__("sq $0, 0(%0)"
-                         : : "r"(&input->fields.unmodeled_0c0[2]) : "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&input->fields.unmodeled_0c0[3]),
-                             "r"(&s_inProReal[0].fields.unmodeled_170[1])
-                         : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&input->fields.unmodeled_080[0]),
-                             "r"(&s_inProReal[0].fields.unmodeled_160)
-                         : "$2", "memory");
+    QuadwordCopy(&input->fields.unmodeled_0c0[0], &s_inProReal[0].fields.unmodeled_170[0]);
+    QuadwordZero(&input->fields.unmodeled_0c0[1]);
+    QuadwordZero(&input->fields.unmodeled_0c0[2]);
+    QuadwordCopy(&input->fields.unmodeled_0c0[3], &s_inProReal[0].fields.unmodeled_170[1]);
+    QuadwordCopy(&input->fields.unmodeled_080[0], &s_inProReal[0].fields.unmodeled_160);
     input->fields.unmodeled_11c = 0;
     s_inLayout.fields.render_status |= 0x800;
     s_inProReal[0] = *input;
@@ -1994,13 +1905,7 @@ void nmlModelSetPartsPixelAlpha(int partId, int alpha)
 
 void nmlModelSetScale(const Vector4 *scale)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        :
-        : "r"(&s_inScale), "r"(scale)
-        : "$2", "memory"
-    );
+    QuadwordCopy(&s_inScale, scale);
     if (s_inScale.x < s_inScale.y) {
         s_inScale.x = s_inScale.y;
     }
@@ -2069,20 +1974,8 @@ void nmlModelSetToumei(int enabled)
 
 void nmlModelSetLight(Matrix4 *direction, Matrix4 *color)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n" "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n" "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n" "sq $2, 48(%0)\n"
-        : : "r" (&s_inLayout.fields.lightDirection), "r" (direction)
-        : "$2", "memory");
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n" "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n" "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n" "sq $2, 48(%0)\n"
-        : : "r" (&s_inLayout.fields.lightColor), "r" (color)
-        : "$2", "memory");
+    QuadwordCopyMatrix(&s_inLayout.fields.lightDirection, direction);
+    QuadwordCopyMatrix(&s_inLayout.fields.lightColor, color);
     s_inLayout.fields.render_status |= 0x10;
 }
 
@@ -2114,13 +2007,7 @@ void nmlModelSetMatrix(void *matrix)
 
 void nmlModelSetPlace(Matrix4 *place)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n" "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n" "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n" "sq $2, 48(%0)\n"
-        : : "r" (&s_inLayout.fields.place), "r" (place)
-        : "$2", "memory");
+    QuadwordCopyMatrix(&s_inLayout.fields.place, place);
     xglMatrixInverse(s_inLayout.fields.inversePlace, *place);
     s_inLayout.fields.render_status |= 1;
 }
@@ -2137,26 +2024,17 @@ void nmlModelSetMatOffset(const NmlMaterialName *name, const Vector4 *color)
 {
     s_aMatName = *name;
     s_aMatName.text[31] = 0;
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
-        : : "r" (&s_inMulColor), "r" (color) : "$2", "memory");
+    QuadwordCopy(&s_inMulColor, color);
 }
 
 void nmlModelSetMulColor(const Vector4 *color)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        : : "r" (&s_inLayout.fields.multiplyColor), "r" (color)
-        : "$2", "memory");
+    QuadwordCopy(&s_inLayout.fields.multiplyColor, color);
 }
 
 void nmlModelSetFogCol(const Vector4 *color)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n" "sq $2, 0(%0)\n"
-        : : "r" (&s_inLayout.fields.fogColor), "r" (color)
-        : "$2", "memory");
+    QuadwordCopy(&s_inLayout.fields.fogColor, color);
     s_inLayout.fields.render_status |= NML_RENDER_FOG;
 }
 
@@ -2194,10 +2072,7 @@ void nmlModelSetFogDist(float fogNear, float fogFar, float fogMin, float fogMax)
 
 void nmlModelSetGlobalFogCol(const NmlPointQuadword *color)
 {
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        : : "r" (s_inGblFogCol), "r" (color) : "$2", "memory");
+    QuadwordCopy(s_inGblFogCol, color);
     s_inLayout.fields.render_status |= 0x01000000;
 }
 
@@ -2790,23 +2665,10 @@ static void nmlModelLexBlockDoit(NmlModel *model)
 
         if (s_aMatName.text[0] != '\0') {
             if (strcmp(s_aMatName.text, block->materialName) == 0) {
-                __asm__ __volatile__(
-                    "lq $2, 0(%1)\n\t"
-                    "sq $2, 0(%0)"
-                    :
-                    : "r"(&block->multiplyColor), "r"(&s_inMulColor)
-                    : "$2", "memory"
-                );
+                QuadwordCopy(&block->multiplyColor, &s_inMulColor);
             }
         } else {
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n\t"
-                "sq $2, 0(%0)"
-                :
-                : "r"(&block->multiplyColor),
-                  "r"(&s_inLayout.fields.multiplyColor)
-                : "$2", "memory"
-            );
+            QuadwordCopy(&block->multiplyColor, &s_inLayout.fields.multiplyColor);
         }
 
         if ((u32)(block->shapeFlags - 2) < 2) {
@@ -2925,22 +2787,10 @@ static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
                 s_inLayout.slots[0x230 / 4].f - s_inLayout.slots[0x1F4 / 4].f;
         }
         currentPosition = &s_inLayout.fields.currentPosition;
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n\t"
-            "sq $2, 0(%0)"
-            :
-            : "r"(currentPosition), "r"(weightedPosition)
-            : "$2", "memory"
-        );
+        QuadwordCopy(currentPosition, weightedPosition);
         if (parent != 0) {
             Vector4 *parentPosition = &parent->layout->fields.currentPosition;
-            __asm__ __volatile__(
-                "lq $2, 0(%1)\n\t"
-                "sq $2, 0(%0)"
-                :
-                : "r"(currentPosition), "r"(parentPosition)
-                : "$2", "memory"
-            );
+            QuadwordCopy(currentPosition, parentPosition);
         }
     } else {
         __asm__ __volatile__(
@@ -3006,13 +2856,7 @@ static int nmlModelCalcEntryClip(NmlModel *model, StudioCamera *camera)
     do {
     } while (0);
     if (s_nClip != clipDisabled) {
-        __asm__ __volatile__(
-                "lq $2, 0(%1)\n\t"
-                "sq $2, 0(%0)"
-                :
-            : "r"(&clip), "r"(&s_inLayout.slots[0x7C])
-                : "$2", "memory"
-        );
+        QuadwordCopy(&clip, &s_inLayout.slots[0x7C]);
         clip.w *= entryClipWidthScale;
 
         if (model->sampleCount != 0) {
@@ -3288,17 +3132,11 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
 
     __asm__ __volatile__("sq $0, 0(%0)\n\tsq $0, 16(%0)\n\tsq $0, 32(%0)\n\tsq $0, 48(%0)"
                          : : "r"(&s_inProReal[0].fields.unmodeled_0c0[0]) : "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_0c0[0]),
-                             "r"(&s_inProReal[0].fields.unmodeled_170[0]) : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_0c0[3]),
-                             "r"(&s_inProReal[0].fields.unmodeled_170[1]) : "$2", "memory");
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[0], &s_inProReal[0].fields.unmodeled_170[0]);
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[3], &s_inProReal[0].fields.unmodeled_170[1]);
     xglVectorScaleXYZ(&s_inProReal[0].fields.unmodeled_160,
                       &s_inProReal[0].fields.unmodeled_160, -1.0f);
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_080[0]),
-                             "r"(&s_inProReal[0].fields.unmodeled_160) : "$2", "memory");
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_080[0], &s_inProReal[0].fields.unmodeled_160);
 
     s_inProReal[0].fields.unmodeled_190[1].q = s_inProReal[0].fields.unmodeled_190[0].q;
     s_inProReal[0].fields.unmodeled_190[2].q = s_inProReal[0].fields.unmodeled_190[0].q;
@@ -3375,9 +3213,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
         }
     }
 
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_190[0]),
-                             "r"(&s_inLayout.fields.center) : "$2", "memory");
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_190[0], &s_inLayout.fields.center);
     s_inProReal[0].fields.unmodeled_190[0].v.y -= 0.2f;
     distance = __builtin_fabsf(s_inProReal[0].fields.unmodeled_190[0].v.y - s_inLayout.slots[0x2d].f);
     if (distance > model->entryTranslation.w) {
@@ -3452,25 +3288,15 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
 
     __asm__ __volatile__("sq $0, 0(%0)\n\tsq $0, 16(%0)\n\tsq $0, 32(%0)\n\tsq $0, 48(%0)"
                          : : "r"(&s_inProReal[0].fields.unmodeled_0c0[0]) : "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_0c0[0]),
-                             "r"(&s_inProReal[0].fields.unmodeled_170[0]) : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_0c0[3]),
-                             "r"(&s_inProReal[0].fields.unmodeled_170[1]) : "$2", "memory");
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[0], &s_inProReal[0].fields.unmodeled_170[0]);
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[3], &s_inProReal[0].fields.unmodeled_170[1]);
     xglVectorScaleXYZ(&s_inProReal[0].fields.unmodeled_160,
                       &s_inProReal[0].fields.unmodeled_160, -1.0f);
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_080[0]),
-                             "r"(&s_inProReal[0].fields.unmodeled_160) : "$2", "memory");
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_080[0], &s_inProReal[0].fields.unmodeled_160);
 
     s_inLayout.fields.render_status &= ~0x800;
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_190[1]),
-                             "r"(&s_inProReal[0].fields.unmodeled_190[0]) : "$2", "memory");
-    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_190[2]),
-                             "r"(&s_inProReal[0].fields.unmodeled_190[0]) : "$2", "memory");
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_190[1], &s_inProReal[0].fields.unmodeled_190[0]);
+    QuadwordCopy(&s_inProReal[0].fields.unmodeled_190[2], &s_inProReal[0].fields.unmodeled_190[0]);
 
     offset = s_inLayout.slots[0x9d].f * 0.8f;
     s_inProReal[0].fields.unmodeled_190[2].v.x += offset;
@@ -3640,22 +3466,12 @@ void nmlModelEntry(NmlModel *model)
             LAYOUT_S32(0x25c) = s_nModel;
             s_inLayout.fields.mapShadowPartCount = s_nMapShadowParts;
             if ((s_inLayout.qwords[0x250 / 8] & 0x1000002) == 0x1000000) {
-                __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                    : : "r"(&s_inLayout.fields.fogPara), "r"(&s_inGblFogPara) : "$2", "memory");
-                __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                    : : "r"(&s_inLayout.fields.fogColor), "r"(s_inGblFogCol) : "$2", "memory");
+                QuadwordCopy(&s_inLayout.fields.fogPara, &s_inGblFogPara);
+                QuadwordCopy(&s_inLayout.fields.fogColor, s_inGblFogCol);
             }
             if ((s_inLayout.qwords[0x250 / 8] & 0x2001000) == 0x2000000) {
-                __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)\n\t"
-                                     "lq $2, 16(%1)\n\tsq $2, 16(%0)\n\t"
-                                     "lq $2, 32(%1)\n\tsq $2, 32(%0)\n\t"
-                                     "lq $2, 48(%1)\n\tsq $2, 48(%0)"
-                    : : "r"(&s_inLayout.fields.pointPosition[0]), "r"(&s_inGblPointP[0]) : "$2", "memory");
-                __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)\n\t"
-                                     "lq $2, 16(%1)\n\tsq $2, 16(%0)\n\t"
-                                     "lq $2, 32(%1)\n\tsq $2, 32(%0)\n\t"
-                                     "lq $2, 48(%1)\n\tsq $2, 48(%0)"
-                    : : "r"(&s_inLayout.fields.pointColor[0]), "r"(&s_inGblPointC[0]) : "$2", "memory");
+                QuadwordCopyMatrix(&s_inLayout.fields.pointPosition[0], &s_inGblPointP[0]);
+                QuadwordCopyMatrix(&s_inLayout.fields.pointColor[0], &s_inGblPointC[0]);
             }
             if (parent != 0) {
                 s_inLayout.fields.render_status |= parent->layout->fields.render_status & 0x204000;
@@ -3729,8 +3545,7 @@ void nmlModelEntry(NmlModel *model)
                 }
                 s_inLayout.fields.clipMasks = nmlPacketSetAttributeAlloc16N(quadCount / 16);
                 for (quadIndex = 0; quadIndex < quadCount / 16; quadIndex++) {
-                    __asm__ __volatile__("sq $0, 0(%0)"
-                        : : "r"(quadIndex * 16 + (int)s_inLayout.fields.clipMasks) : "memory");
+                    QuadwordZero(quadIndex * 16 + (int)s_inLayout.fields.clipMasks);
                 }
                 if ((s_inLayout.fields.render_status & 0x204800) != 0) {
                     LAYOUT_S32(0x260) = (int)nmlPacketSetAttributeData16N(s_inProReal, 0x1e);
@@ -3882,7 +3697,7 @@ void nmlModelEntry(NmlModel *model)
                 }
                 if (alphaAdded != 0 && (s_nParent == 0 || alphaParentAdded != 0) &&
                     s_nAlphaGroup < 0x1ff) {
-                    __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)" : : "r"(&sortPos), "r"(&layout->fields.center) : "$2", "memory");
+                    QuadwordCopy(&sortPos, &layout->fields.center);
                     first = (NmlModelBlock *)((char *)model + blockOffsets[0]);
                     if (first->materialFlags & 0x10) {
                         sortPos.z = 10000.0f;
@@ -3953,8 +3768,7 @@ void nmlModelEntryEffect(NmlModel *model)
         }
         s_inLayout.fields.clipMasks = nmlPacketSetAttributeAlloc16N(paddedBlockCount / 16);
         for (quadIndex = 0; quadIndex < paddedBlockCount / 16; quadIndex++) {
-            __asm__ __volatile__("sq $0, 0(%0)"
-                : : "r"(quadIndex * 16 + (int)s_inLayout.fields.clipMasks) : "memory");
+            QuadwordZero(quadIndex * 16 + (int)s_inLayout.fields.clipMasks);
         }
         layout = nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
         alphaAdded = 0;
@@ -4005,8 +3819,7 @@ void nmlModelEntryEffect(NmlModel *model)
         nextModel = s_nModel + 1;
         __builtin_memcpy(&s_nModel, &nextModel, sizeof(nextModel));
         if (alphaAdded != 0 && s_nAlphaGroup < 0x1ff) {
-            __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                : : "r"(&sortPos), "r"(&layout->fields.center) : "$2", "memory");
+            QuadwordCopy(&sortPos, &layout->fields.center);
             AlphaGroupSortEntry(&sortPos);
             s_nAlphaGroup = s_nAlphaGroup + 1;
         }
@@ -4064,8 +3877,7 @@ void nmlModelEntryCard(NmlModel *model)
         }
         s_inLayout.fields.clipMasks = nmlPacketSetAttributeAlloc16N(paddedBlockCount / 16);
         for (quadIndex = 0; quadIndex < paddedBlockCount / 16; quadIndex++) {
-            __asm__ __volatile__("sq $0, 0(%0)"
-                : : "r"(quadIndex * 16 + (int)s_inLayout.fields.clipMasks) : "memory");
+            QuadwordZero(quadIndex * 16 + (int)s_inLayout.fields.clipMasks);
         }
         layout = nmlPacketSetAttributeData16N(&s_inLayout, 0x32);
         __builtin_memset(&alphaAdded, 0, sizeof(alphaAdded));
@@ -4115,8 +3927,7 @@ void nmlModelEntryCard(NmlModel *model)
         nextModel = s_nModel + 1;
         __builtin_memcpy(&s_nModel, &nextModel, sizeof(nextModel));
         if (alphaAdded != 0 && s_nAlphaGroup < 0x1ff) {
-            __asm__ __volatile__("lq $2, 0(%1)\n\tsq $2, 0(%0)"
-                : : "r"(&sortPos), "r"(&layout->fields.center) : "$2", "memory");
+            QuadwordCopy(&sortPos, &layout->fields.center);
             AlphaGroupSortEntry(&sortPos);
             s_nAlphaGroup = s_nAlphaGroup + 1;
         }

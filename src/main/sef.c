@@ -14,6 +14,7 @@
 #include "main/sm_initilize.h"
 #include "main/sv_get_image_item.h"
 #include "main/xgl_sound.h"
+#include "quadword.h"
 
 /* Original-backed literal aliases; keep the accepted function bodies intact. */
 #define circle_angle_scale_literal (0.01745329238474369f)
@@ -3859,10 +3860,7 @@ int sefCreateScheduler2(int effect_no, void *parameters, void *position, int tab
                          :
                          : "r"(origin), "r"(&_scheduler[scheduler_index].position)
                          : "$8", "memory");
-    __asm__ __volatile__("sq $0, 0(%0)"
-                         :
-                         : "r"(&_scheduler[scheduler_index].rotation)
-                         : "memory");
+    QuadwordZero(&_scheduler[scheduler_index].rotation);
     _scheduler[scheduler_index].savedActive = 0;
     _scheduler[scheduler_index].scriptAddress = (unsigned char *)table;
     _scheduler[scheduler_index].delayFrames = (short)flags;

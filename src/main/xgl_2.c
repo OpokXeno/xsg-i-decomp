@@ -4,6 +4,7 @@
 #include "xgl_2.h"
 #include "main/xgl_dma.h"
 #include "main/xgl_studio.h"
+#include "quadword.h"
 
 extern unsigned int D_004ADE80[];
 extern char Vu0CallSin[];
@@ -629,18 +630,7 @@ void xglMatrixUnit(float matrix[4][4])
         {0.0f, 0.0f, 0.0f, 1.0f}
     };
 
-    __asm__ __volatile__(
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "lq $2,16(%1)\n\t"
-        "sq $2,16(%0)\n\t"
-        "lq $2,32(%1)\n\t"
-        "sq $2,32(%0)\n\t"
-        "lq $2,48(%1)\n\t"
-        "sq $2,48(%0)"
-        :
-        : "r"(matrix), "r"(unit)
-        : "$2", "memory");
+    QuadwordCopyMatrix(matrix, unit);
 }
 
 void xglMatrixUnit4s(Matrix4 destination)
@@ -653,18 +643,7 @@ void xglMatrixUnit4s(Matrix4 destination)
         {0.0f, 0.0f, 0.0f, 1.0f}
     };
 
-    __asm__ __volatile__(
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "lq $2,16(%1)\n\t"
-        "sq $2,16(%0)\n\t"
-        "lq $2,32(%1)\n\t"
-        "sq $2,32(%0)\n\t"
-        "lq $2,48(%1)\n\t"
-        "sq $2,48(%0)"
-        :
-        : "r"(destination), "r"(unit)
-        : "$2", "memory");
+    QuadwordCopyMatrix(destination, unit);
 }
 
 void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right)
@@ -716,19 +695,7 @@ void xglMatrixReverse(Matrix4 destination, Matrix4 source)
         }
     }
     /* The original SDK copy reuses scratch $2 for all four rows. */
-    __asm__ __volatile__(
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "lq $2,16(%1)\n\t"
-        "sq $2,16(%0)\n\t"
-        "lq $2,32(%1)\n\t"
-        "sq $2,32(%0)\n\t"
-        "lq $2,48(%1)\n\t"
-        "sq $2,48(%0)"
-        :
-        : "r"(destination), "r"(&transposed)
-        : "$2", "memory"
-    );
+    QuadwordCopyMatrix(destination, &transposed);
 }
 
 void xglMatrixInverse(Matrix4 destination, Matrix4 source)

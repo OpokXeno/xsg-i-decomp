@@ -2,6 +2,7 @@
 #include "game_id_light_set.h"
 #include "main/game_id_light_set.h"
 #include "main/Undulate.h"
+#include "quadword.h"
 
 /* The background parameter block ends in the light preset table's first slot. */
 typedef struct GameBgDrawType2 {
@@ -72,23 +73,8 @@ void GameIdLightSet(IdLightActor *actor, IdLightQuery *query) {
                        &target->lights[1].color, fraction);
         xglVectorInter(&actor->light.lights[2].color, &actor->light.lights[2].color,
                        &target->lights[2].color, fraction);
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r"(&actor->light.lights[0].direction),
-                               "r"(&target->lights[0].direction)
-                             : "$2", "memory");
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r"(&actor->light.lights[1].direction),
-                               "r"(&target->lights[1].direction)
-                             : "$2", "memory");
-        __asm__ __volatile__("lq $2, 0(%1)\n"
-                             "sq $2, 0(%0)\n"
-                             :
-                             : "r"(&actor->light.lights[2].direction),
-                               "r"(&target->lights[2].direction)
-                             : "$2", "memory");
+        QuadwordCopy(&actor->light.lights[0].direction, &target->lights[0].direction);
+        QuadwordCopy(&actor->light.lights[1].direction, &target->lights[1].direction);
+        QuadwordCopy(&actor->light.lights[2].direction, &target->lights[2].direction);
     }
 }

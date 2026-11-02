@@ -814,6 +814,92 @@ def debug_break_header_ok(text):
     return True, None
 
 
+# include/quadword.h (user decision 2026-11-02, .work/main-tidy-20261101/
+# lq-sq-research.md): the original's quadword transfer macros. Each macro is one
+# `__asm__ __volatile__` statement; the header holds its guard and the three
+# definitions, nothing else.
+QUADWORD_MACROS = {
+    'QuadwordCopy': (('destination', 'source'),
+                     ['lq $2, 0(%1)\\n', 'sq $2, 0(%0)\\n'], '"$2", "memory"'),
+    'QuadwordZero': (('destination',), ['sq $0, 0(%0)\\n'], '"memory"'),
+    'QuadwordCopyMatrix': (('destination', 'source'),
+                           [f'{op} $2, {off}(%{n})\\n' for off in (0, 16, 32, 48)
+                            for op, n in (('lq', 1), ('sq', 0))], '"$2", "memory"'),
+}
+
+
+def _quadword_definition(name):
+    params, lines, clobbers = QUADWORD_MACROS[name]
+    inputs = ', '.join(f'"r" ({p})' for p in params)
+    body = ' '.join(f'"{line}"' for line in lines)
+    return f'#define {name}({", ".join(params)}) __asm__ __volatile__( {body} : : {inputs} : {clobbers})'
+
+
+QUADWORD_HEADER_LINES = ['#ifndef QUADWORD_H', '#define QUADWORD_H'] + \
+    [_quadword_definition(n) for n in QUADWORD_MACROS] + ['#endif']
+
+
+def quadword_header_ok(text):
+    """(ok, reason): include/quadword.h, exactly its guard and the three
+    quadword transfer macro definitions (line continuations folded)."""
+    code = re.sub(r'/\*.*?\*/|//[^\n]*', ' ', text, flags=re.S).replace('\\\n', ' ')
+    lines = [re.sub(r'\s+', ' ', line).strip() for line in code.splitlines()]
+    lines = [re.sub(r'\(\s+', '(', re.sub(r'\s+\)', ')', line)) if line.startswith('#define Q') else line
+             for line in lines if line]
+    want = [re.sub(r'\(\s+', '(', re.sub(r'\s+\)', ')', line)) for line in QUADWORD_HEADER_LINES]
+    if lines != want:
+        return False, 'not the quadword.h macro definitions'
+    return True, None
+
+
+def _balanced_args(text, i):
+    """Arguments of the call whose '(' is at text[i]: (args, index after ')')."""
+    depth, args, cur, j = 0, [], '', i
+    while j < len(text):
+        c = text[j]
+        if c == '(':
+            depth += 1
+            if depth > 1:
+                cur += c
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                args.append(cur.strip())
+                return args, j + 1
+            cur += c
+        elif c == ',' and depth == 1:
+            args.append(cur.strip())
+            cur = ''
+        else:
+            cur += c
+        j += 1
+    return None, None
+
+
+def quadword_admission_text(text):
+    """Admission text of a function body: every include/quadword.h statement
+    `QuadwordCopy(D, S);`, `QuadwordZero(D);`, `QuadwordCopyMatrix(D, S);` is
+    replaced by the exact inline asm statement it expands to, so the function's
+    own class admission (ee-mmi, hardware, ...) validates the same block as
+    before the macros existed. Nothing else changes."""
+    out, pos = [], 0
+    for m in re.finditer(r'\b(QuadwordCopyMatrix|QuadwordCopy|QuadwordZero)\s*\(', text):
+        if m.start() < pos:
+            continue
+        name = m.group(1)
+        args, end = _balanced_args(text, m.end() - 1)
+        params, lines, clobbers = QUADWORD_MACROS[name]
+        if args is None or len(args) != len(params):
+            continue
+        inputs = ', '.join(f'"r" ({a})' for a in args)
+        body = ' '.join(f'"{line}"' for line in lines)
+        out.append(text[pos:m.start()])
+        out.append(f'__asm__ __volatile__({body} : : {inputs} : {clobbers})')
+        pos = end
+    out.append(text[pos:])
+    return ''.join(out)
+
+
 def macro_include_ok(text):
     """(ok, reason): only the scaffold macros, guards and comments at top level."""
     depth, names = 0, []
@@ -5460,6 +5546,8 @@ def _audit_body(args, result, checks, unit_dir, tu_c, tu_rel, contract, source_c
                 kind = 'scaffold'
             elif Path(path_rel).name == 'debug_break.h' and debug_break_header_ok(text)[0]:
                 kind = 'debug-break'
+            elif Path(path_rel).name == 'quadword.h' and quadword_header_ok(text)[0]:
+                kind = 'quadword'
             else:
                 ok, reason = False, f'{e}' + (f'; not a scaffold header: {scaffold_reason}' if scaffold_reason else '')
         for n, p in resolved.items():
@@ -8370,6 +8458,8 @@ def audit_c(b, tu, prelude, tu_rel, header_set, regions, scaffold_names, obj_fun
     reasons += sym_reasons
     elig, count = [], None
     text = prelude + tu.block_text(b) + '\n'
+    if cls in INLINE_ASM_CLASSES:
+        text = quadword_admission_text(text)
     composed = cls in INLINE_ASM_CLASSES and tu_class == 'native-ti'
     try:
         from tools import unaligned_scalar

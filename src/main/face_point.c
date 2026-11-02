@@ -4,6 +4,7 @@
 #include "main/xgl_2.h"
 #include "main/face_point.h"
 #include "main/xgl_studio.h"
+#include "quadword.h"
 
 typedef int s32;
 
@@ -848,7 +849,7 @@ void setup_occlusion(CullingVolume *volume, const StudioCamera *camera)
     if (corners[3].z < volume->occlusionDepth) {
         volume->occlusionDepth = corners[3].z;
     }
-    __asm__ __volatile__("sq $0, 0(%0)" : : "r"(&origin) : "memory");
+    QuadwordZero(&origin);
     plane_from_points(&corners[0], &corners[1], &corners[2], &volume->occlusionPlanes[0]);
     if (0.0f < volume->occlusionPlanes[0].w) {
         plane_from_points(&origin, &corners[0], &corners[1], &volume->occlusionPlanes[1]);

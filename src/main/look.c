@@ -1,6 +1,7 @@
 #include "common.h"
 #include "look.h"
 #include "main/look.h"
+#include "quadword.h"
 
 typedef struct LookEnemyTargetSlot {
     unsigned char unmodeled_000[0x0c];
@@ -29,28 +30,17 @@ extern char *strstr(const char *haystack, const char *needle);
 
 static inline void look_copy_place(LookAlignedVector4 *place, const Vector4 *source)
 {
-    __asm__ __volatile__("lq $2, 0(%0)\n"
-                         "sq $2, 0(%1)\n"
-                         : : "r" (source), "r" (place) : "$2", "memory");
+    QuadwordCopy(place, source);
 }
 
 static inline void look_zero_vector(Vector4 *destination)
 {
-    __asm__ __volatile__("sq $0, 0(%0)"
-                         : : "r" (destination) : "memory");
+    QuadwordZero(destination);
 }
 
 static inline void look_copy_matrix(Matrix4 destination, Matrix4 source)
 {
-    __asm__ __volatile__("lq $2, 0(%1)\n"
-                         "sq $2, 0(%0)\n"
-                         "lq $2, 16(%1)\n"
-                         "sq $2, 16(%0)\n"
-                         "lq $2, 32(%1)\n"
-                         "sq $2, 32(%0)\n"
-                         "lq $2, 48(%1)\n"
-                         "sq $2, 48(%0)\n"
-                         : : "r" (destination), "r" (source) : "$2", "memory");
+    QuadwordCopyMatrix(destination, source);
 }
 
 float xglAsin(float value)
@@ -257,16 +247,12 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
             MATRIX_convert4(rootMatrix, work->rootMatrix);
             xglMatrixMul(matrix, rootMatrix, matrix);
             /* The SDK copies the joint's translated row through one scratch register. */
-            __asm__ __volatile__("lq $2, 0(%1)\n"
-                                 "sq $2, 0(%0)\n"
-                                 : : "r" (&actor->headPosition), "r" (matrix[3])
-                                 : "$2", "memory");
+            QuadwordCopy(&actor->headPosition, matrix[3]);
             actor->headPositionValid = 1;
             actor->headPosition.y += LOOK_HEAD_POSITION_Y_OFFSET;
             if (look_get_place(actor, &place) == 0) {
                 place.v.w = 1.0f;
-                __asm__ __volatile__("sq $0, 0(%0)\n"
-                                     : : "r" (&rotation) : "memory");
+                QuadwordZero(&rotation);
                 xglMatrixInverse(matrix, matrix);
                 xglVectorMulMat(&localPlace, matrix, &place.v);
                 rotation.y = xglAtan2(localPlace.z, localPlace.x);

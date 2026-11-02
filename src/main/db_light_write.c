@@ -11,6 +11,7 @@
 #include "main/transform_vector.h"
 #include "main/xgl_font.h"
 #include "main/xgl_prim_add.h"
+#include "quadword.h"
 
 /* Owner declarations used by these debug views; storage remains original scaffolding. */
 typedef struct {
@@ -767,18 +768,7 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
     ((DebugLineScratch *)0x70000000)->input[0].z = position->z;
     ((DebugLineScratch *)0x70000000)->input[0].w = 1.0f;
     transformVector(((DebugLineScratch *)0x70000000)->output, ((DebugLineScratch *)0x70000000)->input, 1, &((DebugLineScratch *)0x70000000)->transform);
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n"
-        "sq $2, 0(%0)\n"
-        "lq $2, 16(%1)\n"
-        "sq $2, 16(%0)\n"
-        "lq $2, 32(%1)\n"
-        "sq $2, 32(%0)\n"
-        "lq $2, 48(%1)\n"
-        "sq $2, 48(%0)\n"
-        :
-        : "r"(&rotation), "r"((*camera)->cameraToWorldMatrix)
-        : "$2", "memory");
+    QuadwordCopyMatrix(&rotation, (*camera)->cameraToWorldMatrix);
     rotation.elements[12] = 0.0f;
     rotation.elements[13] = 0.0f;
     rotation.elements[14] = 0.0f;
@@ -996,18 +986,7 @@ void updateCursorMode1(void)
 
     xglVectorLength(&direction_length, &direction);
     if (direction_length > 40.0f) {
-        __asm__ __volatile__(
-            "lq $2,0(%0)\n\t"
-            "sq $2,0(%1)\n\t"
-            "lq $2,16(%0)\n\t"
-            "sq $2,16(%1)\n\t"
-            "lq $2,32(%0)\n\t"
-            "sq $2,32(%1)\n\t"
-            "lq $2,48(%0)\n\t"
-            "sq $2,48(%1)"
-            :
-            : "r" (camera->cameraToWorldMatrix), "r" (camera_matrix)
-            : "$2", "memory");
+        QuadwordCopyMatrix(camera_matrix, camera->cameraToWorldMatrix);
         camera_matrix[3][0] = 0.0f;
         camera_matrix[3][1] = 0.0f;
         camera_matrix[3][2] = 0.0f;
@@ -1151,18 +1130,7 @@ void updateCursorModePlane(void)
     if (length > 40.0f) {
         /* Copy the origin-relative camera-to-world transform through one scratch
          * register; remove translation below to transform a movement direction. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            "lq $2, 16(%1)\n"
-            "sq $2, 16(%0)\n"
-            "lq $2, 32(%1)\n"
-            "sq $2, 32(%0)\n"
-            "lq $2, 48(%1)\n"
-            "sq $2, 48(%0)\n"
-            :
-            : "r"(&rotation), "r"(camera->cameraToWorldMatrix)
-            : "$2", "memory");
+        QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = zero;
         rotation.elements[13] = zero;
         rotation.elements[14] = zero;
@@ -1207,18 +1175,7 @@ void updateCursorModePlane(void)
     if (length > 40.0f) {
         /* Copy the origin-relative camera-to-world transform through one scratch
          * register; remove translation below to transform a movement direction. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            "lq $2, 16(%1)\n"
-            "sq $2, 16(%0)\n"
-            "lq $2, 32(%1)\n"
-            "sq $2, 32(%0)\n"
-            "lq $2, 48(%1)\n"
-            "sq $2, 48(%0)\n"
-            :
-            : "r"(&rotation), "r"(camera->cameraToWorldMatrix)
-            : "$2", "memory");
+        QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = 0.0f;
         rotation.elements[13] = 0.0f;
         rotation.elements[14] = 0.0f;
@@ -1313,18 +1270,7 @@ void updateCursorMode0(void)
     if (length > 40.0f) {
         /* Copy the origin-relative camera-to-world transform through one scratch
          * register; remove translation below to transform a movement direction. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            "lq $2, 16(%1)\n"
-            "sq $2, 16(%0)\n"
-            "lq $2, 32(%1)\n"
-            "sq $2, 32(%0)\n"
-            "lq $2, 48(%1)\n"
-            "sq $2, 48(%0)\n"
-            :
-            : "r"(&rotation), "r"(camera->cameraToWorldMatrix)
-            : "$2", "memory");
+        QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = zero;
         rotation.elements[13] = zero;
         rotation.elements[14] = zero;
@@ -1369,18 +1315,7 @@ void updateCursorMode0(void)
     if (length > 40.0f) {
         /* Copy the origin-relative camera-to-world transform through one scratch
          * register; remove translation below to transform a movement direction. */
-        __asm__ __volatile__(
-            "lq $2, 0(%1)\n"
-            "sq $2, 0(%0)\n"
-            "lq $2, 16(%1)\n"
-            "sq $2, 16(%0)\n"
-            "lq $2, 32(%1)\n"
-            "sq $2, 32(%0)\n"
-            "lq $2, 48(%1)\n"
-            "sq $2, 48(%0)\n"
-            :
-            : "r"(&rotation), "r"(camera->cameraToWorldMatrix)
-            : "$2", "memory");
+        QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = 0.0f;
         rotation.elements[13] = 0.0f;
         rotation.elements[14] = 0.0f;
@@ -2086,18 +2021,7 @@ void updateLight(int mode)
     translation.y = 0.0f;
     translation.z = 5.0f;
     translation.w = 1.0f;
-    __asm__ __volatile__(
-        "lq $2,0(%0)\n\t"
-        "sq $2,0(%1)\n\t"
-        "lq $2,16(%0)\n\t"
-        "sq $2,16(%1)\n\t"
-        "lq $2,32(%0)\n\t"
-        "sq $2,32(%1)\n\t"
-        "lq $2,48(%0)\n\t"
-        "sq $2,48(%1)"
-        :
-        : "r" (camera->cameraToWorldMatrix), "r" (cameraMatrix)
-        : "$2", "memory");
+    QuadwordCopyMatrix(cameraMatrix, camera->cameraToWorldMatrix);
     xglMatrixStackUnit();
     xglMatrixStackMul(cameraMatrix);
     xglMatrixStackTrans(&translation.x);
