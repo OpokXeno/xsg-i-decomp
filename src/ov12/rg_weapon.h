@@ -128,7 +128,13 @@ struct RgWeapon {
     RgEquip equip;
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    unsigned char unmodeled_13c[0x48];
+    /*
+     * _CommonPassTime (ov12:0x00a19688) indexes 0x13c with the same
+     * (charID*3+shotMotionOffset) arithmetic and starts that motion once
+     * the actor's current one has ended: a third table, named after
+     * shotStartMotionTable.
+     */
+    int shotEndMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     /*
      * _CheckLockOn (ov12:0x00a1c098) computes the locked-on target's angle
      * in the weapon's own local XZ-plane (atan2f of the inverse-local-space
@@ -136,7 +142,7 @@ struct RgWeapon {
      * range to decide whether the target counts as locked on.
      *
      * The published unmodeled_13c[0x64] (0x13c..0x1a0, 100 bytes) is split
-     * here into unmodeled_13c[0x48] (0x13c..0x184, 72 bytes) + lockOnAngleMin
+     * here into shotEndMotionTable (0x13c..0x184, 72 bytes) + lockOnAngleMin
      * (4) + lockOnAngleMax (4) + unmodeled_18c[4] (0x18c..0x190, 4 bytes) +
      * targetPosition (RgVector, 16 bytes): 0x48+4+4+4+0x10 = 0x64, so the
      * total size and the following member's offset (targeting at 0x1a0) are
@@ -359,6 +365,50 @@ typedef struct RgWeaponUnArmedEssenceInit {
     unsigned char unmodeled_18c[0x224];
     int terminator;
 } RgWeaponUnArmedEssenceInit;
+
+/*
+ * InitRgWeaponAttackEssence (ov12:0x00a1aa88) evidences an in-memory
+ * essence/init object at RgWeaponAttackEssence's own address: the
+ * create-method slot at +0x00 (_CreateWeaponAttackType), the mode word at
+ * +0x04 (0x4A), the six-row motion table at +0xB0 (0x2B, 0x2C, -1 per row,
+ * as in RgWeaponShieldEssence), two ints at +0x3B0/+0x3B4 that
+ * _InitWeaponAttack copies to the weapon's followJoint and to its unnamed
+ * +0x1F4, the damage at +0x3B8 and the hit-effect name at +0x3BC (the
+ * "damage"/"hiteff" keys of RgWeaponAttackEssence in rg_weapon_db.c).
+ */
+typedef struct RgWeaponAttackEssenceInit {
+    RgWeaponAttackType *(*m_pCreateMethod)(RgWeaponAttackEssence *pEss,
+                                            RgWeaponCreateInfo *pInfo);
+    int controlMode;
+    unsigned char unmodeled_08[0xa8];
+    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
+    unsigned char unmodeled_f8[0x2b8];
+    int followJoint;
+    int unmodeled_3b4;
+    float damage;
+    char hitEffectName[0x24];
+} RgWeaponAttackEssenceInit;
+
+/*
+ * InitRgWeaponEnergyEssence (ov12:0x00a1b390) evidences an in-memory
+ * essence/init object at RgWeaponEnergyEssence's own address: the
+ * create-method slot at +0x00 (_CreateWeaponEnergyType), the mode word at
+ * +0x04 (0x20), the capacity at +0x14 (RgWeaponEssence's "energy" key) and
+ * the four floats at +0x3B0..+0x3BC that _ReadEnergyType fills
+ * (RgWeaponEnergyEssence in rg_weapon_db.c).
+ */
+typedef struct RgWeaponEnergyEssenceInit {
+    RgWeaponEnergyType *(*m_pCreateMethod)(RgWeaponEnergyEssence *pEss,
+                                            RgWeaponCreateInfo *pInfo);
+    int controlMode;
+    unsigned char unmodeled_08[0x0c];
+    float capacity;
+    unsigned char unmodeled_18[0x398];
+    float shotEnergy;
+    float upTemp;
+    float limitTemp;
+    float downTemp;
+} RgWeaponEnergyEssenceInit;
 
 /*
  * InitRgWeaponShieldEssence (ov12:0x00a1aed8) evidences the interior of

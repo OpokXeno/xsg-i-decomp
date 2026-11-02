@@ -224,6 +224,27 @@ typedef struct SelType {
 } SelType;
 
 /*
+ * Number of character positions on the character-select cursor
+ * (s_aeCharTbl in rg_select_agws.c); also the number of character slots
+ * the weapon-name save area holds.
+ */
+#define RG_ACTOR_CHAR_NUM 6
+
+/* One weapon name slot: _GetAllNameOnCursorSelType's own 0x20 stride. */
+#define WEP_NAME_SIZE 0x20
+
+/*
+ * The 0x248-byte select-data block _DumpSelect__ logs: the character
+ * selector (its "char %d (selectable %x)" line reads cursor and
+ * selectableMask) followed by one WEP_NAME_SIZE name per character and
+ * equipment type, printed with '%s'.
+ */
+typedef struct SelDumpData {
+    SelChar selChar;                                          /* +0x000 */
+    char weaponName[RG_ACTOR_CHAR_NUM][RG_EQUIP_TYPE_NUM][WEP_NAME_SIZE]; /* +0x008 */
+} SelDumpData;
+
+/*
  * The select-data record _CreateSelectData allocates and _DisposeSelectData
  * releases; RgHeapAlloc's own literal 0x8B0 is this allocation's evidence
  * for the total size (used below via sizeof). Four members are evidenced:

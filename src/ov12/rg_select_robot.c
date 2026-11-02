@@ -354,7 +354,32 @@ void RgSelectRobotPassTime(RgSelectRobot *pCont, float deltaTime)
     _JobAct(pCont, deltaTime);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotDisp);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern void ACT_draw(void);
+static void _DrawAct(RgSelectRobot *pCont);
+
+/* ov12:0x00a56f08 holds "ROB %d", ov12:0x00a56f10 holds "WEP(%d) %d". */
+extern const char D_00A56F08[];
+extern const char D_00A56F10[];
+
+void RgSelectRobotDisp(RgSelectRobot *pCont)
+{
+    unsigned int i;
+    int weapon;
+
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 0x33D);
+    }
+    xglFontDebugPrintf(0, 8, D_00A56F08, pCont->robotID);
+    /* y and the action pointer are left to gcc's induction variables. */
+    for (i = 0; i < 3; i++) {
+        weapon = pCont->actions[i]->weaponID;
+        xglFontDebugPrintf(0, 16 + i * 8, D_00A56F10, i, weapon);
+    }
+    ACT_draw();
+    _DrawAct(pCont);
+    _JobLoad();
+}
 
 static void _DumpHead(void)
 {

@@ -82,7 +82,7 @@ extern void RgShotEffectSetTexLine(RgShotEffect *effect, const char *file);
 extern void RgShotEffectSetTexLineModelSize(RgShotEffect *effect, float width,
                                             float height);
 extern void RgShotEffectSetTexLineModelColor(RgShotEffect *effect,
-                                             const void *color);
+                                             const int *color);
 extern void RgShotEffectStopAlive(RgShotEffect *effect, float time);
 extern RgParticleEffect *RgShotEffectGetPtclEffect(RgShotEffect *effect);
 extern void RgParticleEffectStopShoot(RgParticleEffect *effect);
@@ -261,7 +261,23 @@ static void _InitShotCommon(void *shot, void *essence, void *info, float speed)
     XrgClearVector(position);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _InitRgShotEssence);
+static void _InitRgShotEssence(RgShotEssence *essence)
+{
+    essence->life = 0.0f;
+    essence->texLineWidth = 1.0f;
+    essence->modelVariant[0] = '\0';
+    essence->particleFile[0] = '\0';
+    essence->texLineHeight = 0.2f;
+    essence->texLineFile[0] = '\0';
+    essence->texLineColor[2] = 0x80;
+    essence->texLineColor[1] = 0x80;
+    essence->texLineColor[0] = 0x80;
+    essence->texLineColor[3] = 0x7f;
+    essence->damage = 5.0f;
+    essence->hitEffectFile[0] = '\0';
+    essence->damageParticleFile[0] = '\0';
+    essence->notDamLimit = 0.0f;
+}
 
 /* Defined earlier in this TU (a local sibling still in asm). */
 static void _InitShotCommon(void *shot, void *essence, void *info, float speed);

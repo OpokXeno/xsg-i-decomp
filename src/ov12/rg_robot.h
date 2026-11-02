@@ -299,7 +299,13 @@ typedef struct RgBody {
     float weakHitAccum;               /* +0x28 */
     float weakHitWindow;              /* +0x2c */
     int shieldActive;                 /* +0x30 */
-    unsigned char unmodeled_34[0x1c]; /* +0x34 */
+    unsigned char unmodeled_34[0xc];  /* +0x34 */
+    /*
+     * +0x40, read by RgRobotIsInvalidAttack (lwc1 +0x40/+0x44/+0x48) while
+     * shieldActive is set: an attack whose direction has a non-negative dot
+     * product with it is reported as invalid (blocked).
+     */
+    RgVector shieldDirection;
     float dashTime;                   /* +0x50 */
     RgRobotSpec *spec;                /* +0x54 */
     void *target;                     /* +0x58 */
