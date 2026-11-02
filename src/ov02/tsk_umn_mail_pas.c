@@ -354,19 +354,19 @@ extern char *MenuNumberTextGet(int value, int width, int flags);
 extern const struct UmnMailCaptionA mailInfoCaptionTexts;
 extern const struct UmnMailCaptionB mailMenuHelpTexts;
 extern const struct UmnMailCaptionC mailReplyCaptionTexts;
-extern const char sikaku_1[];
+static char sikaku_1[16];
 extern const short mailSpriteIdTable[4];
 extern const char mailScrollTypeDebugFormat[];
 extern const char mailNowPageDebugFormat[];
 extern int tyaUmlDispMain(void *param);
 extern int tyaUmlDispParamReset(void *param, int value);
-extern char text_2[];
+static char text_2[9];
 extern const char mailSelectTagText[];
 extern const char mailMenuTagText[];
 extern const char mailYesNoDebugFormat[];
-extern const char *text2_4[4];
-extern const char *text_3_00A10650[2];
-extern unsigned char *text_5[3];
+static const char *text2_4[4];
+static const char *text_3_00A10650[2];
+static unsigned char *text_5[3];
 extern const char mailNumberTagText[];
 
 void UmnMailFolderSet(void);
@@ -2434,3 +2434,121 @@ const char mailPathReadText[8] = "/Read";
 const char mailPathFolderText[8] = "/Folder";
 
 const char mailPathRootText[8] = "Mail";
+
+extern const char mailYesNoChoices[8];
+extern const char mailConfirmPrompt[16];
+extern const char mailReadLabel[8];
+extern const char mailCancelLabel[8];
+extern const char mailHistoryLabel[8];
+extern const char mailDownloadLabel[16];
+extern const unsigned char mailHistoryCaption[16];
+extern const unsigned char mailSetCancelCaption[32];
+extern const unsigned char mailReplyBackCaption[32];
+extern const char mailOldPrefixText[];
+extern const char mailNewPrefixText[];
+extern const char mailFileAttachedText[];
+extern const char mailNoAttachmentsText[];
+extern const char mailFromText[];
+extern const char mailReplyToText[];
+extern const char mailViewMailHelpText[];
+extern const char mailViewHistoryHelpText[];
+extern const char mailDownloadAttachmentHelpText[];
+extern const char mailCancelHelpText[];
+
+static char sikaku_1[16] = "\036\000:Topic Search";
+
+static char text_2[9] = "1:\n2:\n3:";
+
+static const char * text_3_00A10650[2] = { mailConfirmPrompt, mailYesNoChoices };
+
+static const char * text2_4[4] = { mailReadLabel, mailHistoryLabel, mailDownloadLabel, mailCancelLabel };
+
+static unsigned char * text_5[3] = { (unsigned char *)mailHistoryCaption, (unsigned char *)mailReplyBackCaption, (unsigned char *)mailSetCancelCaption };
+
+unsigned char mail_folder[128] = "";
+
+const char mailOldPrefixText[8] = "Old/";
+
+const char mailNewPrefixText[8] = "New/";
+
+const char mailFileAttachedText[16] = "File attached.";
+
+const char mailNoAttachmentsText[16] = "No attachments.";
+
+const char mailFromText[16] = "Mail from ";
+
+const char mailReplyToText[16] = "Reply to ";
+
+const struct UmnMailCaptionA mailInfoCaptionTexts = { .text = { mailOldPrefixText, mailNewPrefixText, mailFileAttachedText, mailNoAttachmentsText, mailFromText, mailReplyToText } };
+
+const char mailViewMailHelpText[24] = "View selected mail.";
+
+const char mailViewHistoryHelpText[32] = "View history of selected mail.";
+
+const char mailDownloadAttachmentHelpText[24] = "Download attachment.";
+
+const char mailCancelHelpText[8] = "Cancel.";
+
+const struct UmnMailCaptionB mailMenuHelpTexts = { .text = { mailViewMailHelpText, mailViewHistoryHelpText, mailDownloadAttachmentHelpText, mailCancelHelpText } };
+
+const char mailSelectReplyPromptText[32] = "Select the reply mail to ";
+
+const char mailReplyConfirmText[40] = "Will reply with the selected mail.";
+
+const char mailReplySentText[16] = "Sent reply. \037";
+
+const char mailAttachmentSavedText[24] = "Saved attachment. \037";
+
+const char mailInvestmentAmountText[24] = "Investment amount: ";
+
+const char mailAmountNeededText[16] = "Amount needed: ";
+
+const char mailMoneyUnitText[8] = "G";
+
+const struct UmnMailCaptionC mailReplyCaptionTexts = {
+    { mailSelectReplyPromptText, mailReplyConfirmText, mailReplySentText, mailAttachmentSavedText, mailInvestmentAmountText, mailAmountNeededText, mailMoneyUnitText }
+};
+
+const char mailSentenceEndText[8] = ".\n";
+
+const char mailEmptyText[8] = "";
+
+const char mailNewlineText[8] = "\n";
+
+const short mailSpriteIdTable[4] = { 6401, 6400, 6402, 6403 };
+
+const char mailScrollTypeDebugFormat[24] = "scrol_type : %2d";
+
+const char mailNowPageDebugFormat[16] = "now_page : %2d";
+
+const char mailYesNoChoices[8] = "Yes\nNo";
+
+const char mailConfirmPrompt[16] = "Is this okay\?";
+
+const char mailCancelLabel[8] = "Cancel";
+
+const char mailDownloadLabel[16] = "Download";
+
+const char mailHistoryLabel[8] = "History";
+
+const char mailReadLabel[8] = "Read";
+
+const char mailSelectTagText[8] = "Select";
+
+const char mailMenuTagText[8] = "Menu";
+
+const char mailYesNoDebugFormat[24] = "yn : %2d";
+
+const unsigned char mailSetCancelCaption[32] = "\014@@@\036\001:Set    \014\200\200\200\036\003:Cancel";
+
+const unsigned char mailReplyBackCaption[32] = "\014@@@\036\001:Reply  \014\200\200\200\036\003:Back";
+
+const unsigned char mailHistoryCaption[16] = "\036\002:History";
+
+const char mailNumberTagText[16] = "\001Num";
+
+const char mailTabStateDebugFormat[8] = "%2x";
+
+const char mailListCursorDebugFormat[8] = "%2d/%2d";
+
+const char mailDirectionDebugFormat[8] = "%2d";

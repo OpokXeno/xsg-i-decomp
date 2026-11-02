@@ -77,7 +77,7 @@ extern struct HddInstallRenderState sRender;
 extern int xglHddInstall(int (*callback)(), int *status);
 extern void tyaDrawGauge(struct HddInstallGauge *gauge);
 extern int printf(const char *format, ...);
-extern unsigned char installSpinnerCount;
+static unsigned char count_3;
 extern const char installingText[];
 extern const char installStartLabel[];
 extern const char createPartitionLabel[];
@@ -96,10 +96,10 @@ extern const char checkFileMountLabel[];
 extern const char installCompleteLabel[];
 extern const char installCallbackFormat[];
 extern const char installErrorFormat[];
-extern const char anim_4[4];
-extern const char sztmp_5[3];
-extern const char sztmp_6[6];
-extern const char *mes_7[];
+static char anim_4[4];
+static char sztmp_5[3];
+static char sztmp_6[6];
+static const char *mes_7[3];
 extern const char installStartPromptText[];
 extern const char installCompleteText[];
 extern const char installFailedText[];
@@ -218,9 +218,9 @@ static int HddInstallCB(int command, int offset, int *status)
         tyaDrawGauge(&gauge);
         xglFontPrint(HDD_MESSAGE_X, 80, -1, installAbortButtonText);
         print_args[0] = (u32)sztmp_5;
-        print_args[1] = (u32)anim_4[(installSpinnerCount >> 3) & 3];
+        print_args[1] = (u32)anim_4[(count_3 >> 3) & 3];
         xglFontPrintf(152, 414, -1, print_args);
-        installSpinnerCount++;
+        count_3++;
         print_args[0] = (u32)sztmp_6;
         percent = ((offset & 0xFFFF) * 100) / (offset >> 16);
         print_args[1] = percent;
@@ -528,3 +528,83 @@ void TitleHddInstall(int command)
     HddInstallSync();
     WorkEnd = saved_work_end;
 }
+
+extern const char installUnformattedText[56];
+extern const char installNoSpaceText[];
+extern const char installAccessFailText[];
+
+static char anim_4[4] = "-\177|/";
+
+static char sztmp_5[3] = "%c";
+
+static char sztmp_6[6] = "%3d\033\022";
+
+static const char * mes_7[3] = { installAccessFailText, installUnformattedText, installNoSpaceText };
+
+int UmnVecMat = 0;
+
+int UmnModel[320] = { 0 };
+
+u32 UmnBackRgba = 0;
+
+const char installingText[96] = "\031\001\245\244\245\363\245\271\245\310\241\274\245\353\303\346\244\307\244\271\241\243\241\310\243\320\243\354\243\341\243\371\243\323\243\364\243\341\243\364\243\351\243\357\243\356\010\210\000\010\243\262\241\311\313\334\302\316\244\316\n\n\305\305\270\273\244\362\300\332\244\351\244\312\244\244\244\307\244\257\244\300\244\265\244\244\241\243";
+
+const char installStartLabel[16] = "Install Start";
+
+const char createPartitionLabel[24] = "Create Partition";
+
+const char writeResourceLabel[16] = "Write Resource";
+
+const char createSubPartitionFormat[32] = "Create Sub Partition %1d";
+
+const char formatPartitionLabel[24] = "Format Partition";
+
+const char mountPartitionLabel[16] = "Mount Partition";
+
+const char startInstallLabel[16] = "Start Install";
+
+const char installAbortButtonText[32] = "\031\000\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\303\346\303\307";
+
+const char installAbortPromptText[104] = "\245\244\245\363\245\271\245\310\241\274\245\353\244\317\244\336\244\300\264\260\316\273\244\267\244\306\244\244\244\336\244\273\244\363\241\243\n\n\303\346\303\307\244\267\244\336\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\303\346\303\307\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\267\321\302\263";
+
+const char checkFileCreateLabel[24] = "CheckFile Create";
+
+const char checkFileWriteLabel[16] = "CheckFile Write";
+
+const char checkFileCloseLabel[16] = "CheckFile Close";
+
+const char checkFileUnmountLabel[24] = "CheckFile Unmount";
+
+const char checkFileMountLabel[16] = "CheckFile Mount";
+
+const char installCompleteLabel[24] = "Install Complete";
+
+const char installCallbackFormat[16] = "%d:%d(%08x)\n";
+
+const char installErrorFormat[24] = "Error %2d/%8x";
+
+const char installStartPromptText[112] = "\245\274\245\316\245\265\241\274\245\254\244\316\245\244\245\363\245\271\245\310\241\274\245\353\244\362\263\253\273\317\244\267\244\336\244\271\241\243\n\n\244\350\244\355\244\267\244\244\244\307\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\263\253\273\317\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\245\255\245\343\245\363\245\273\245\353";
+
+const char installCompleteText[72] = "\245\244\245\363\245\271\245\310\241\274\245\353\244\254\300\265\276\357\244\313\275\252\316\273\244\267\244\336\244\267\244\277\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+
+const char installFailedText[112] = "\245\244\245\363\245\271\245\310\241\274\245\353\244\313\274\272\307\324\244\267\244\336\244\267\244\277\241\243\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\244\317\244\244\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\244\244\244\244\244\250";
+
+const char uninstallStartPromptText[120] = "\245\274\245\316\245\265\241\274\245\254\244\316\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\362\263\253\273\317\244\267\244\336\244\271\241\243\n\n\244\350\244\355\244\267\244\244\244\307\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\263\253\273\317\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\245\255\245\343\245\363\245\273\245\353";
+
+const char uninstallCompleteText[80] = "\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\254\300\265\276\357\244\313\275\252\316\273\244\267\244\336\244\267\244\277\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+
+const char uninstallFailedText[120] = "\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\313\274\272\307\324\244\267\244\336\244\267\244\277\241\243\n\n\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\244\317\244\244\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\244\244\244\244\244\250";
+
+const char installArchivePath[24] = "data\\yajima\\hddi.bin";
+
+const char installNoSpaceText[240] = "\245\317\241\274\245\311\245\307\245\243\245\271\245\257\245\311\245\351\245\244\245\326\244\313\241\242\245\274\245\316\245\265\241\274\245\254\244\316\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\313\311\254\315\327\244\312\266\365\244\255\315\306\316\314\244\254\302\255\244\352\244\336\244\273\244\363\241\243\n\n\010\210\377\370\241\312\266\365\244\255\315\306\316\314\244\310\244\267\244\306\031\001\243\261\243\267\243\271\243\262\243\315\243\302\031\000\260\312\276\345\311\254\315\327\244\307\244\271\241\243\010\210\377\370\241\313\n\n\n\n\302\276\244\316\245\242\245\327\245\352\245\261\241\274\245\267\245\347\245\363\244\362\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\271\244\353\244\310\241\242\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\307\244\255\244\353\244\350\244\246\244\313\244\312\244\353\262\304\307\275\300\255\244\254\244\242\244\352\244\336\244\271\241\243";
+
+const char installUnformattedText[56] = "\245\317\241\274\245\311\245\307\245\243\245\271\245\257\245\311\245\351\245\244\245\326\244\254\245\325\245\251\241\274\245\336\245\303\245\310\244\265\244\354\244\306\n\n\244\244\244\336\244\273\244\363\241\243";
+
+const char installAccessFailText[48] = "\245\317\241\274\245\311\245\307\245\243\245\271\245\257\245\311\245\351\245\244\245\326\244\313\245\242\245\257\245\273\245\271\244\307\244\255\244\336\244\273\244\363\241\243";
+
+const char installCancelText[72] = "\n\n\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+
+const char uninstallCancelText[72] = "\n\n\n\n\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+
+static unsigned char count_3;

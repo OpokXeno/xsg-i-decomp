@@ -2,6 +2,7 @@
  "description": "OV11 placeholder data labels renamed to source names (docs/naming.md); scaffold keeps the labels; user 2026-11-02",
  "standard": "docs/naming.md#recovered-data-names",
  "renames": {
+  "D_00A09224": "casinoUnusedWord",
   "D_00A0BB10": "casinoEntryDebugText",
   "D_00A0BB20": "casinoExitDebugText",
   "D_00A0BB30": "spriteTextureGifTag",
@@ -106,6 +107,7 @@
   "D_00A0C638": "viewerCursorText",
   "D_00A0C640": "viewerTitleFontControl",
   "D_00A0C650": "viewerInfoFontControl",
+  "D_00A0C658": "casinoUmnModeText",
   "D_00A0C660": "miniSlotSedPath",
   "D_00A0C680": "miniSlotSwdPath",
   "D_00A0C6A0": "musicSmdPathFormat",

@@ -72,8 +72,8 @@ typedef struct {
 } UmnMainRenderSize;
 
 typedef struct UmnLightTable {
-    XglLightQuadword ambient;
-    XglLightQuadword parallel[3];
+    XglLightVector ambient;
+    XglLightVector parallel[3];
     XglLightVector direction[3];
 } UmnLightTable;
 
@@ -84,7 +84,7 @@ extern int SsdSpuDmaCompleted(int wait);
 extern void xglFSrand(float seed);
 extern void GameCFSoundMenuPurge(int flag);
 extern void GameCFSoundMenuReload(void);
-extern UmnLightTable objectLightTable;
+extern const UmnLightTable objectLightTable;
 extern int UmnEventTextMakeWork;
 
 int tskUmnObjectTaskMain(XglTaskPrefix *base) {
@@ -284,12 +284,12 @@ void UmnMain2(int menuId) {
     xglStudioChange(0);
     light = xglStudioGetLight2();
     lights = objectLightTable;
-    xglLightIntensityAmbient(light, &lights.ambient);
-    xglLightIntensityParallel(light, 0, &lights.parallel[0]);
+    xglLightIntensityAmbient(light, &lights.ambient.quadword);
+    xglLightIntensityParallel(light, 0, &lights.parallel[0].quadword);
     xglLightDirection(light, 0, &lights.direction[0].value);
-    xglLightIntensityParallel(light, 1, &lights.parallel[1]);
+    xglLightIntensityParallel(light, 1, &lights.parallel[1].quadword);
     xglLightDirection(light, 1, &lights.direction[1].value);
-    xglLightIntensityParallel(light, 2, &lights.parallel[2]);
+    xglLightIntensityParallel(light, 2, &lights.parallel[2].quadword);
     xglLightDirection(light, 2, &lights.direction[2].value);
 
     UmnMemory = (int)GameResourceWorkAlloc(UMN_ARENA_SIZE);
@@ -345,3 +345,19 @@ void UmnMain2(int menuId) {
     GameCFSoundMenuReload();
     GameLoopState.flags &= ~GAME_FLAG_UMN;
 }
+
+
+
+const UmnLightTable objectLightTable = {
+    { .value = { 0.3f, 0.3f, 0.3f, 1.0f } },
+    {
+        { .value = { 0.5f, 0.5f, 0.5f, 1.0f } },
+        { .value = { 0.5f, 0.5f, 0.5f, 1.0f } },
+        { .value = { 0.5f, 0.5f, 0.5f, 1.0f } }
+    },
+    {
+        { .value = { 1.0f, 1.0f, 0.5f, 1.0f } },
+        { .value = { -1.0f, 1.0f, 0.5f, 1.0f } },
+        { .value = { 0.0f, 1.0f, 0.5f, 1.0f } }
+    },
+};

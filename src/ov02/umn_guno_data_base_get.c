@@ -97,7 +97,7 @@ enum {
 };
 
 typedef struct UmnDataBaseMenuEntry {
-    char *text;                         /* +0x00 */
+    const char *text;                       /* +0x00 */
     unsigned char unmodeled_04[0x08 - 0x04];
     unsigned char enabled;              /* +0x08 */
     unsigned char unmodeled_09[0x0C - 0x09];
@@ -107,7 +107,7 @@ typedef struct UmnDataBaseInfoText {
     short y;                            /* +0x02 */
     int value;                          /* +0x04 */
     unsigned char unmodeled_08[0x0C - 0x08];
-    char *text;                         /* +0x0C */
+    const char *text;                       /* +0x0C */
     UmnDataBaseMenuEntry *entries;      /* +0x10 */
     unsigned char unmodeled_14[0x1B0 - 0x14];
 } UmnDataBaseInfoText;
@@ -286,27 +286,27 @@ typedef struct UmnDataBaseModelData {
 
 extern void *UmnGunoDataBaseTop;
 /* The help line text of the database screen (original scaffold data, msg00.0). */
-extern char *msg00_0_00A106F8;
-extern char dataBaseRowTagText[];
+static const char *msg00_0_00A106F8;
+extern const char dataBaseRowTagText[];
 extern unsigned short monster_folder[];
 extern int BW3BattleOrDataBase;
-extern char dataBaseMenuTagText[];
-extern char *text2_2[3];
+extern const char dataBaseMenuTagText[];
+static const char *text2_2[3];
 extern void MenuModelControl(MenuModelUnit *unit);
 extern void MenuModelUnitBreak(MenuModelUnit *unit);
 extern unsigned short monster_folder[0x80];
-extern char dataBaseEntryDebugFormat[];
-extern char dataBaseListCursorDebugFormat[];
-extern char dataBaseColumnRowDebugFormat[];
-extern char dataBaseMovingDebugFormat[];
-extern char dataBaseGnosisHelpText[];
-extern char dataBaseKeywordHelpText[];
-extern char dataBaseCancelHelpText[];
-extern char dataBaseZoomOutHintText[];
-extern char dataBaseZoomInHintText[];
-extern char dataBaseRotateHintText[];
-extern char dataBaseTurnMenuOffHintText[];
-extern char dataBaseAnalysisInfoHintText[];
+extern const char dataBaseEntryDebugFormat[];
+extern const char dataBaseListCursorDebugFormat[];
+extern const char dataBaseColumnRowDebugFormat[];
+extern const char dataBaseMovingDebugFormat[];
+extern const char dataBaseGnosisHelpText[];
+extern const char dataBaseKeywordHelpText[];
+extern const char dataBaseCancelHelpText[];
+extern const char dataBaseZoomOutHintText[];
+extern const char dataBaseZoomInHintText[];
+extern const char dataBaseRotateHintText[];
+extern const char dataBaseTurnMenuOffHintText[];
+extern const char dataBaseAnalysisInfoHintText[];
 
 void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void eBattleWinOpen3(UmnDataBaseWinParam *param);
@@ -330,7 +330,7 @@ UmnGunoDataBase *UmnGunoDataBaseGet(int id)
     return base;
 }
 
-static char *msg00_1_00A10700[3];
+static const char *msg00_1_00A10700[3];
 
 void tskUmnDataBasePas(UmnObjectTask *task, void *data)
 {
@@ -866,7 +866,7 @@ void tskUmnDataBaseMenu(UmnObjectTask *task, void *data)
 
 static const UmnDataBaseArrowSprites dataBaseArrowSpriteTable = {{0x0112, 0x0110}};
 static const UmnDataBaseArrowSteps dataBaseArrowStepTable = {{1, -1}};
-static char *text_3_00A10720[5];
+static const char *text_3_00A10720[5];
 
 /*
  * The extra window of the U.M.N. database: five lines of help text with an
@@ -1423,26 +1423,57 @@ void UmnDataBase(void)
     xglFontDebugPrintf(0x10, 0x30, dataBaseMovingDebugFormat, UmnWork.moving);
 }
 
-static char *msg00_1_00A10700[3] = {
+static const char *msg00_1_00A10700[3] = {
     dataBaseGnosisHelpText, dataBaseKeywordHelpText, dataBaseCancelHelpText,
 };
-static char *text_3_00A10720[5] = {
+static const char *text_3_00A10720[5] = {
     dataBaseZoomOutHintText, dataBaseZoomInHintText, dataBaseRotateHintText, dataBaseTurnMenuOffHintText, dataBaseAnalysisInfoHintText,
 };
 static char msg00_4[16] = "\x1E\0Index Search:";
 
-char dataBaseCancelHelpText[8] = "Cancel.";
+const char dataBaseCancelHelpText[8] = "Cancel.";
 
-char dataBaseKeywordHelpText[48] = "View keywords that you have come across.";
+const char dataBaseKeywordHelpText[48] = "View keywords that you have come across.";
 
-char dataBaseGnosisHelpText[56] = "View data of all the Gnosis you have encountered.";
+const char dataBaseGnosisHelpText[56] = "View data of all the Gnosis you have encountered.";
 
-char dataBaseAnalysisInfoHintText[24] = "\036\001\241\247Analysis info";
+const char dataBaseAnalysisInfoHintText[24] = "\036\001\241\247Analysis info";
 
-char dataBaseTurnMenuOffHintText[24] = "\036\000\241\247Turn menu off";
+const char dataBaseTurnMenuOffHintText[24] = "\036\000\241\247Turn menu off";
 
-char dataBaseRotateHintText[16] = "\0364\241\247Rotate";
+const char dataBaseRotateHintText[16] = "\0364\241\247Rotate";
 
-char dataBaseZoomInHintText[16] = "\0365\241\247Zoom in";
+const char dataBaseZoomInHintText[16] = "\0365\241\247Zoom in";
 
-char dataBaseZoomOutHintText[16] = "\0366\241\247Zoom out";
+const char dataBaseZoomOutHintText[16] = "\0366\241\247Zoom out";
+
+extern const char databaseTitleText[16];
+extern const char databaseCancelLabel[8];
+extern const char databaseKeywordsLabel[16];
+extern const char databaseGnosisLabel[8];
+
+static const char *msg00_0_00A106F8 = databaseTitleText;
+
+static const char *text2_2[3] = { databaseGnosisLabel, databaseKeywordsLabel, databaseCancelLabel };
+
+unsigned short monster_folder[128] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+const char databaseTitleText[16] = "Database";
+
+const char dataBaseRowTagText[8] = "No.";
+
+const char databaseCancelLabel[8] = "Cancel";
+
+const char databaseKeywordsLabel[16] = "Keywords";
+
+const char databaseGnosisLabel[8] = "Gnosis";
+
+const char dataBaseMenuTagText[8] = "Menu";
+
+const char dataBaseEntryDebugFormat[8] = "id %2d";
+
+const char dataBaseListCursorDebugFormat[8] = "%2d/%2d";
+
+const char dataBaseColumnRowDebugFormat[16] = "%2d/%2d/";
+
+const char dataBaseMovingDebugFormat[16] = "st=%2d";

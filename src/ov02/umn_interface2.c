@@ -82,7 +82,6 @@ typedef struct UmnIf2Parameters {
     UmnIf2Rgba remaining_vertices;
 } UmnIf2Parameters;
 
-extern UmnBgCubeVec bgCubeScaleInitVector;
 extern const UmnBgCubeLights bgCubeLightTable;
 extern const UmnIf2Coordinates backdropQuadXTable;
 extern const UmnIf2Coordinates backdropQuadYTable;
@@ -111,7 +110,7 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
         task->enabled = 1;
         memset(&zero, 0, 16);
         zero.v.w = 1.0f;
-        scale_init = bgCubeScaleInitVector;
+        scale_init = (UmnBgCubeVec){ { 1.0f, 1.0f, 1.0f, 1.0f } };
         *position = zero;
         *rotation = zero;
         *spare = zero;
@@ -293,3 +292,21 @@ void *UmnInterface2Init(void *memory) {
     color_b_state->color_b[0] = UMN_IF2_INTENSITY_MAX;
     return result;
 }
+
+
+
+const UmnBgCubeLights bgCubeLightTable = {
+    {
+        { { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { { 0.8f, 0.8f, 0.8f, 1.0f } },
+        { { 0.8f, 0.8f, 0.8f, 1.0f } },
+        { { 0.8f, 0.8f, 0.8f, 1.0f } },
+        { { 1.0f, 1.0f, 0.5f, 1.0f } },
+        { { -1.0f, 1.0f, 0.0f, 1.0f } },
+        { { 0.0f, 1.0f, -1.0f, 1.0f } }
+    }
+};
+
+const UmnIf2Coordinates backdropQuadXTable = { .values = { 256, 0, 512, 512, 0, 0 } };
+
+const UmnIf2Coordinates backdropQuadYTable = { .values = { 224, 0, 0, 448, 448, 0 } };

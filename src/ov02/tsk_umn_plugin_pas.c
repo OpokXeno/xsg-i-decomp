@@ -85,7 +85,7 @@ struct UmnPluginExWin {
 extern const char pluginTitleText[];
 extern const char pluginListTitleText[];
 extern const char pluginListPhaseDebugFormat[];
-extern char msg00_1_00A10C48[];
+static char msg00_1_00A10C48[5];
 extern void xglFontDebugHex(int x, int y, int value, int digits);
 
 static const char *msg00_0_00A10C40 = pluginTitleText;
@@ -450,3 +450,11 @@ void UmnPlugin(void)
 
 /* Defined here, after the functions: the plug-ins caption string. */
 const char pluginTitleText[16] = "Plug-ins";
+
+
+
+static char msg00_1_00A10C48[5] = "\001Num";
+
+const char pluginListTitleText[8] = "List";
+
+const char pluginListPhaseDebugFormat[16] = "list : %2d";

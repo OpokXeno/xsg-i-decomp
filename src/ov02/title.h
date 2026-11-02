@@ -126,15 +126,15 @@ typedef struct TitleFrameCopy {
     u8 bytes[0x70];
 } TitleFrameCopy;
 
-extern u64 TestEnv_0_00A0F780[12];
-extern u64 TransEnv_1_00A0F7E0[4];
-extern u64 FlushEnv_2_00A0F800[6];
-extern u64 TestEnv_3[22];
-extern u64 image_4[36];
-extern u64 FlushEnv_5[6];
-extern TitleFrameCopy TestEnvOrg_6;
-extern u64 TestEnv_10[12];
-extern u32 TestEnv_11[52];
-extern u64 TestEnv_12[20];
+static u64 TestEnv_0_00A0F780[12];
+static u64 TransEnv_1_00A0F7E0[4];
+static u64 FlushEnv_2_00A0F800[6];
+static u64 TestEnv_3[22];
+static u64 image_4[36];
+static u64 FlushEnv_5[6];
+static TitleFrameCopy TestEnvOrg_6;
+static u64 TestEnv_10[12];
+static u32 TestEnv_11[52];
+static u64 TestEnv_12[20];
 
 #endif /* SRC_OV02_TITLE_H */

@@ -716,3 +716,50 @@ int UmnEventTextInit(int work)
     uet_flag = 0;
     return aligned + UMN_EVENT_TEXT_BUFFER_SIZE;
 }
+
+extern const char eventTagSpeech[];
+extern const char eventTagChar[];
+extern const char eventTagMsg[];
+extern const char eventTagMot[];
+extern const char eventTagSpeechEnd[];
+extern const char eventTagMemo[];
+extern const char eventTagMemoEnd[];
+extern const char eventSpeakerUkun[];
+extern const char eventSpeakerShion[];
+
+const char eventTagSpeech[8] = "speech";
+
+const char eventTagChar[8] = "char";
+
+const char eventTagMsg[8] = "msg";
+
+const char eventTagMot[8] = "mot";
+
+const char eventTagSpeechEnd[8] = "/speech";
+
+const char eventTagMemo[8] = "memo";
+
+const char eventTagMemoEnd[8] = "/memo";
+
+const UmnEventTextSymbolTable eventTextTagTable = {
+    {
+        { (unsigned char *)eventTagSpeech, 6, 1 },
+        { (unsigned char *)eventTagChar, 4, 2 },
+        { (unsigned char *)eventTagMsg, 3, 3 },
+        { (unsigned char *)eventTagMot, 3, 4 },
+        { (unsigned char *)eventTagSpeechEnd, 7, 5 },
+        { (unsigned char *)eventTagMemo, 4, 6 },
+        { (unsigned char *)eventTagMemoEnd, 5, 7 }
+    }
+};
+
+const char eventSpeakerUkun[8] = "UKUN";
+
+const char eventSpeakerShion[8] = "SHION";
+
+const UmnEventTextCharTable eventTextSpeakerTable = {
+    {
+        { (unsigned char *)eventSpeakerUkun, 4, 1 },
+        { (unsigned char *)eventSpeakerShion, 5, 2 }
+    }
+};

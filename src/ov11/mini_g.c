@@ -5180,7 +5180,7 @@ const char pokerPlay100CoinsText[40] = "Play 100 coins per round poker\241\251";
 
 
 
-int D_00A09224 = 0;
+int casinoUnusedWord = 0;
 
 static struct SpriteTex slot_window_0 = { .u = 256, .v = 48, .w = 112, .h = 200, .texture_base = 0, .clut_base = 316, .format = 0 };
 
@@ -5626,7 +5626,7 @@ const char viewerTitleFontControl[16] = "\031\003\025\002\002\010\025\002\001\01
 
 const char viewerInfoFontControl[8] = "\025\002\001\013";
 
-const char D_00A0C658[8] = "Umnmode";
+const char casinoUmnModeText[8] = "Umnmode";
 
 const char miniSlotSedPath[32] = "data\\sound\\sed\\Minislot.sed";
 

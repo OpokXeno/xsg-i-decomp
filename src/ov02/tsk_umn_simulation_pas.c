@@ -97,7 +97,7 @@ extern const UmnInfoName simulateInfoName;
 extern const char simulationEmptyText[];
 extern const char simulationPeriodText[];
 extern const char simulationInfoTitleText[];
-extern const char *ListText[];
+static const char *ListText[7];
 extern int MenuScenarioNoGet(void);
 extern int xglFontDebugHex(int x, int y, int value, int digits);
 
@@ -453,3 +453,35 @@ int UmnSimulation(void)
     xglFontDebugPrintf(32, 208, simulationDebugLabel);
     return xglFontDebugHex(0, 64, UmnWork.tab_state, 2);
 }
+
+extern const char simWoglindeName[16];
+extern const char simKosmosName[24];
+extern const char simBattleshipName[24];
+extern const char simSongOfNephilimName[24];
+extern const char simCathedralShipName[16];
+extern const char simPleromaName[8];
+extern const char simEncephalonName[16];
+
+static const char * ListText[7] = { simKosmosName, simWoglindeName, simPleromaName, simBattleshipName, simCathedralShipName, simEncephalonName, simSongOfNephilimName };
+
+const char simSongOfNephilimName[24] = "Song of Nephilim";
+
+const char simEncephalonName[16] = "Encephalon";
+
+const char simCathedralShipName[16] = "Cathedral Ship";
+
+const char simBattleshipName[24] = "U-TIC Battleship";
+
+const char simPleromaName[8] = "Pleroma";
+
+const char simWoglindeName[16] = "Woglinde";
+
+const char simKosmosName[24] = "KOS-MOS Simulator";
+
+const char simulationEmptyText[8] = "";
+
+const UmnInfoName simulateInfoName = { .text = "Simulate " };
+
+const char simulationPeriodText[8] = ".";
+
+const char simulationInfoTitleText[24] = "Information";

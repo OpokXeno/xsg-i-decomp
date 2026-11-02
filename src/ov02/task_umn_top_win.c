@@ -149,11 +149,8 @@ typedef struct UmnTopIntSet {
     int value[4];
 } UmnTopIntSet;
 
-extern char *moji00_0[4];
-extern char *moji01_1[4];
-extern UmnTopShortSet optionIconSpriteTable;
-extern UmnTopIntSet optionSlotPositionTable;
-extern UmnTopShortSet iconGroupSpriteTable;
+static const char *moji00_0[4];
+static const char *moji01_1[4];
 extern const char menuCursorDebugFormat[];
 
 void eWindowSet(void *window);
@@ -208,9 +205,9 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
         eMessageModeChange(&work->bottom_message, EMESSAGE_MODE_LINE_START);
         graphicsTemp = work->graphics;
         work->bottom_message.draw_parameter = graphicsTemp + 6;
-        icons = optionIconSpriteTable;
+        icons = (UmnTopShortSet){ .value = { 5120, 5121, 5122, 5123 } };
         work->selection_span = 144;
-        positions = optionSlotPositionTable;
+        positions = (UmnTopIntSet){ .value = { 0, 1, 2, -1 } };
         for (k = 0; k < UmnWork.menu_count; k++) {
             eRibbonSet(&work->option[k].ribbon, 3);
             work->option[k].ribbon.width = 102;
@@ -230,7 +227,7 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
             eSpriteSet(&work->group1[j], 266);
             work->group1[j].work = work->graphics + 8;
         }
-        icons2 = iconGroupSpriteTable;
+        icons2 = (UmnTopShortSet){ .value = { 6144, 6145, 6146, 6147 } };
         for (j = 0; j < 4; j++) {
             eSpriteSet(&work->group2[j], icons2.value[j]);
             work->group2[j].work = work->graphics + 8;
@@ -496,3 +493,34 @@ void UmnTopMenu(void)
 UmnEventTextRecord *UmnManzaiText = 0;
 unsigned int UmnManzaiFlag = 0;
 UmnManzaiWinTask UmnManzaiWin[UMN_MANZAI_WINDOW_COUNT] = {{0}, {0}};
+
+extern const char topMenuDatabaseTitle[16];
+extern const char topMenuMailTitle[8];
+extern const char topMenuSimulatorTitle[32];
+extern const char topMenuPluginTitle[16];
+extern const char topMenuSimulatorHelp[56];
+extern const char topMenuPluginHelp[48];
+extern const char topMenuDatabaseHelp[64];
+extern const char topMenuMailHelp[48];
+
+static const char *moji00_0[4] = { topMenuMailTitle, topMenuDatabaseTitle, topMenuSimulatorTitle, topMenuPluginTitle };
+
+static const char *moji01_1[4] = { topMenuMailHelp, topMenuDatabaseHelp, topMenuSimulatorHelp, topMenuPluginHelp };
+
+const char topMenuPluginTitle[16] = "Plug-in Module";
+
+const char topMenuSimulatorTitle[32] = "EVS (Environmental Simulator)";
+
+const char topMenuDatabaseTitle[16] = "Database";
+
+const char topMenuMailTitle[8] = "Mail";
+
+const char topMenuPluginHelp[48] = "View list of Plug-ins currently\nequipped.";
+
+const char topMenuSimulatorHelp[56] = "Simulate places that you have\nbeen to previously.";
+
+const char topMenuDatabaseHelp[64] = "View database relating to the\ncharacters and the Gnosis.";
+
+const char topMenuMailHelp[48] = "Read and reply to emails.\nDownload attachments.";
+
+const char menuCursorDebugFormat[16] = "%d";

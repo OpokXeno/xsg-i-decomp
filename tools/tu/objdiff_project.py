@@ -499,7 +499,8 @@ def anonymous_labels(target_path, base_path):
     for symbol in base.symbols:
         if symbol.type == 1 and 0 < symbol.shndx < len(base.sections) and symbol.size:
             twin = target_objects.get((base.sections[symbol.shndx].name, symbol.name))
-            if twin is not None and twin.size == symbol.size:
+            # A shorter base object stands for the same one: splat counted the fill.
+            if twin is not None and 0 <= twin.size - symbol.size <= 15:
                 regions.append((symbol, twin))
     occupied = {(s.shndx, s.value) for s in base.symbols if s.type in (1, 2) and s.shndx}
     used = {s.name for s in base.symbols}
@@ -555,12 +556,18 @@ def anonymous_labels(target_path, base_path):
                 original = masked(target, target.sections[label.shndx], label.value, size,
                                   target_relocations.get(label.shndx, {}))
                 compiled = base_relocations.get(destination, {})
-                if masked(base, section, position, size, compiled) != original:
+                foreign = any(position <= o < position + size
+                              and label.value + o - position not in target_relocations.get(label.shndx, {})
+                              for o in compiled)
+                if foreign or masked(base, section, position, size, compiled) != original:
                     # splat sizes a label up to the next one, alignment fill included:
-                    # a string keeps its terminator, at most 15 zero bytes are fill.
+                    # a string keeps its terminator, a table its last relocated
+                    # word, at most 15 zero bytes are fill.
                     body = original.rstrip(b'\0')
-                    size = len(body) + 1
-                    if (not body or len(original) - size > 15
+                    words = [o + 4 - label.value for o in target_relocations.get(label.shndx, {})
+                             if label.value <= o < label.value + size]
+                    size = max(len(body) + 1 if body else 0, *words, 0)
+                    if (not size or len(original) - size > 15
                             or masked(base, section, position, size, compiled) != original[:size]):
                         continue
             if symbol.type == 3:
@@ -718,7 +725,7 @@ def overlay_units(root, tools, project, unit_name):
         runs = [[int(v, 16) for v in run['range']]
                 for section, rows in registry['tus'][tu_id].items() for run in rows]
         labels = []
-        for name in sorted({n for part in parts for n in tools.symbols(part)}):
+        for name in sorted({n for part in parts for n in tools.defined(part)}):
             found = re.fullmatch(r'D_([0-9A-Fa-f]{8})(\.NON_MATCHING)?', name)
             if found and not any(lo <= int(found[1], 16) < hi for lo, hi in runs):
                 labels.append(name)

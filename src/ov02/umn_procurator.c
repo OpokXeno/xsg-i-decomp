@@ -76,13 +76,8 @@ extern const char manzaiFlagDebugFormat[];
 extern const char manzaiWindowPhaseDebugFormat[];
 extern const char manzaiModelStateDebugFormat[];
 extern const UmnLightSet manzaiModelLightTable;
-extern DoublewordAlignedVector4 manzaiModelPositionVector;
-extern DoublewordAlignedVector4 manzaiModelScaleVector;
 extern const DoublewordAlignedVector4 manzaiSubWindowCameraOffsetVector;
-extern DoublewordAlignedVector4 manzaiCaseCameraRotationVector;
-extern DoublewordAlignedVector4 manzaiCaseCameraPositionVector;
-extern DoublewordAlignedVector4 manzaiSubWindowFaceOffsetVector;
-extern DoublewordAlignedVector4 manzaiModelCameraPositionVector;
+extern const DoublewordAlignedVector4 manzaiSubWindowFaceOffsetVector;
 
 int UmnManzaiControl(void)
 {
@@ -349,8 +344,8 @@ void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
             DoublewordAlignedVector4 position;
             DoublewordAlignedVector4 scale_src;
 
-            position = manzaiModelPositionVector;
-            scale_src = manzaiModelScaleVector;
+            position = (DoublewordAlignedVector4){ 0.0f, 0.0f, 2.5f, 1.0f };
+            scale_src = (DoublewordAlignedVector4){ 0.5f, 0.5f, 0.5f, 1.0f };
             *scale = scale_src;
             menu->offset.x = uknMenu->offset.x;
             menu->offset.y = uknMenu->offset.y;
@@ -536,8 +531,8 @@ void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
         LocalLightSet(actor, 0);
         {
             StudioCamera *case_camera = xglStudioGetCamera2(0);
-            DoublewordAlignedVector4 rotation_copy = manzaiCaseCameraRotationVector;
-            DoublewordAlignedVector4 position_copy = manzaiCaseCameraPositionVector;
+            DoublewordAlignedVector4 rotation_copy = { -0.13090007f, -2.12645435f, -0.0558503568f, 1.0f };
+            DoublewordAlignedVector4 position_copy = { -1.16537404f, 1.18399096f, 0.223813906f, 1.0f };
 
             case_camera->position.vector = position_copy;
             case_camera->rotation.vector = rotation_copy;
@@ -683,7 +678,7 @@ void UmnProcuratorMail(MenuModelUnit *task, void *argument)
             camera = xglStudioGetCamera2(0);
             memset(&camera_rotation, 0, sizeof(camera_rotation));
             camera_rotation.w = 1.0f;
-            position = manzaiModelCameraPositionVector;
+            position = (DoublewordAlignedVector4){ 0.0f, 0.0f, 4.0f, 1.0f };
             camera->position.vector = position;
             camera->rotation.vector = camera_rotation;
             MenuModelUnitOpen(task, 2);
@@ -795,3 +790,27 @@ void UmnProcuratorSet(void)
         break;
     }
 }
+
+
+
+const char manzaiFlagDebugFormat[16] = "flag %4x";
+
+const char manzaiWindowPhaseDebugFormat[16] = "man_win %2d";
+
+const UmnLightSet manzaiModelLightTable = {
+    {
+        { 0.3f, 0.3f, 0.3f, 1.0f },
+        { 0.55f, 0.55f, 0.55f, 1.0f },
+        { 0.35f, 0.35f, 0.35f, 1.0f },
+        { 0.55f, 0.55f, 0.55f, 1.0f },
+        { 0.171f, 0.023f, -0.985f, 1.0f },
+        { 0.688f, 0.643f, 0.336f, 1.0f },
+        { -0.156f, 0.022f, 0.988f, 1.0f }
+    }
+};
+
+const DoublewordAlignedVector4 manzaiSubWindowCameraOffsetVector = { 0.0f, 0.88f, 0.5f, 1.0f };
+
+const char manzaiModelStateDebugFormat[16] = "%2d";
+
+const DoublewordAlignedVector4 manzaiSubWindowFaceOffsetVector = { 0.04f, 1.0f, 2.25f, 1.0f };

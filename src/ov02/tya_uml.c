@@ -122,13 +122,13 @@ typedef struct TyaUmlTextRecord {
 } TyaUmlTextRecord;
 
 extern unsigned char SaveData[];
-extern char name_0[0x12];
+static char name_0[18];
 extern const unsigned char tyaUmlEffectCodeTable[4];
-extern u64 TestEnv_2[14];
-extern u64 InitEnv_3[4];
-extern int TestEnv_4[24];
-extern int TestEnv_5[16];
-extern int TestEnv_6[28];
+static u64 TestEnv_2[14];
+static u64 InitEnv_3[4];
+static int TestEnv_4[24];
+static int TestEnv_5[16];
+static int TestEnv_6[28];
 /* Defined in src/main/xgl_flags.c. */
 extern int xglFlagsGet(int bit_offset, int bit_count);
 extern const char tyaUmlDbHeaderPath[24];
@@ -138,8 +138,8 @@ extern const char tyaUmlDbHeaderPath[24];
 extern const char tyaUmlIndexBarHeaderText[16];
 extern const char tyaUmlIndexHighlightText[8];
 extern const char tyaUmlIndexNormalText[8];
-extern const char *idx_7;
-extern char msg_8[5];
+static const char *idx_7;
+static char msg_8[5];
 
 static void tyaUmlDispType3(TyaUmlDispParam *parameter);
 static void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument);
@@ -964,3 +964,36 @@ void tyaUmlDispInit(void)
 {
     tyaUmlDispInit2((u8 *)TYA_UML_WORK_BUFFER);
 }
+
+extern const char umlIndexLetters[];
+
+static char name_0[18] = "data\\umn\\0000.uml";
+
+static u64 TestEnv_2[14] = { 1152921504606879750ULL, 14ULL, 458752ULL, 71ULL, 68ULL, 66ULL, 27449767936ULL, 6ULL, 0ULL, 20ULL, 0ULL, 8ULL, 0ULL, 64ULL };
+
+static u64 InitEnv_3[4] = { 1152921504606879745ULL, 14ULL, 0ULL, 63ULL };
+
+static int TestEnv_4[24] = { 32769, 1351303168, 341297, 0, 128, 128, 128, 128, 0, 0, 0, 0, 31744, 31736, 268435456, 0, 2048, 2048, 0, 0, 33792, 33784, 268435456, 0 };
+
+static int TestEnv_5[16] = { 32769, 805519360, 1361, 0, 128, 128, 128, 128, 31744, 31736, 268435456, 0, 33792, 33784, 268435456, 0 };
+
+static int TestEnv_6[28] = { 32769, 1619738624, 5460766, 0, 0, 0, 63, 0, 128, 128, 128, 128, 0, 0, 0, 0, 31744, 31736, 268435456, 0, 2048, 2048, 0, 0, 33792, 33784, 268435456, 0 };
+
+static const char *idx_7 = umlIndexLetters;
+
+static char msg_8[5] = "\010\210";
+
+unsigned char UmnMailData[256] = { 0 };
+
+const unsigned char tyaUmlEffectCodeTable[4] = { 'O', 'Q', 'V', 'Y' };
+
+const char tyaUmlDbHeaderPath[24] = "data\\umn\\dbheader.lst";
+
+const char umlIndexLetters[] =
+    "A\0B\0C\0D\0E\0F\0G\0H\0I\0J\0K\0L\0M\0N\0O\0P\0R\0S\0T\0U\0V\0W\0Y\0Z\0##";
+
+const char tyaUmlIndexBarHeaderText[16] = "\016\001\002\000\000\000\r\002";
+
+const char tyaUmlIndexHighlightText[8] = "\014\200  ";
+
+const char tyaUmlIndexNormalText[8] = "\014\200\200\200";
