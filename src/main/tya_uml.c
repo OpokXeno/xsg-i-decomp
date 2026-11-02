@@ -322,22 +322,17 @@ static void dbfileno_load(void)
             do {
                 value = value * 10 + *source++ - '0';
             } while ((u8)(*source - '0') < 10);
-            *destination = (s16)value;
-        } else {
-            if (*source != '-')
-                goto skip_destination;
-            *destination = -1;
+            *destination++ = (s16)value;
+        } else if (*source == '-') {
+            *destination++ = -1;
         }
-        destination++;
 
-    do {
-    skip_destination:
-        if (*source == 0)
-            goto done;
-    } while (*source++ != '\n');
+        while (*source != 0) {
+            if (*source++ == '\n')
+                break;
+        }
     }
 
-done:
     *destination = -2;
 }
 

@@ -1608,34 +1608,24 @@ void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
     }
 
     if (part < 4 || part == 2048) {
-        goto done;
-    }
-    if (part == 256) {
+    } else if (part == 256) {
         if (battle->caster != 0) {
             point_block = &battle->casterMatrix;
         }
-        goto done;
-    }
-    if (part == 512) {
+    } else if (part == 512) {
         if (battle->target != 0) {
             point_block = &battle->targetMatrix;
         }
-        goto done;
-    }
-    if ((part & 0x100) != 0) {
+    } else if ((part & 0x100) != 0) {
         sefGetNullPosition(position, battle->caster, part - 257, 1);
         copy_base = &battle->casterMatrix;
         goto copy_site;
-    }
-    if ((part & 0x200) != 0) {
+    } else if ((part & 0x200) != 0) {
         sefGetNullPosition(position, battle->target, part - 513, 0);
         copy_base = &battle->targetMatrix;
         goto copy_site;
-    }
-    if ((part & 0x1000) != 0) {
-        goto done;
-    }
-    if (part == 4) {
+    } else if ((part & 0x1000) != 0) {
+    } else if (part == 4) {
         unsigned char *parent;
 
         if (_parentLine >= 0 && _nowParentLocal >= 0) {
@@ -1646,40 +1636,28 @@ void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
         if (parent != 0) {
             QuadwordCopyT0(position, parent + 192);
         }
-        goto done;
-    }
-    if ((part & 0x400) != 0) {
+    } else if ((part & 0x400) != 0) {
         sefGetWeaponPosition(position, battle->weaponActor, part - 1024);
         copy_base = &battle->casterMatrix;
-    } else {
-        goto not_weapon;
-    }
-
 copy_site:
-    __asm__ __volatile__(
-        "lq $8, 0(%1)\n\t"
-        "lq $9, 16(%1)\n\t"
-        "lq $10, 32(%1)\n\t"
-        "lq $11, 0(%2)\n\t"
-        "sq $8, 0(%0)\n\t"
-        "sq $9, 16(%0)\n\t"
-        "sq $10, 32(%0)\n\t"
-        "sq $11, 48(%0)"
-        : : "r"(point_copy), "r"(copy_base), "r"(position), "r"(point_block) : "$8", "$9", "$10", "$11", "memory");
-    point_block = &point_copy;
-    goto done;
-
-not_weapon:
-    if (part == 5) {
+        __asm__ __volatile__(
+            "lq $8, 0(%1)\n\t"
+            "lq $9, 16(%1)\n\t"
+            "lq $10, 32(%1)\n\t"
+            "lq $11, 0(%2)\n\t"
+            "sq $8, 0(%0)\n\t"
+            "sq $9, 16(%0)\n\t"
+            "sq $10, 32(%0)\n\t"
+            "sq $11, 48(%0)"
+            : : "r"(point_copy), "r"(copy_base), "r"(position), "r"(point_block) : "$8", "$9", "$10", "$11", "memory");
+        point_block = &point_copy;
+    } else if (part == 5) {
         QuadwordCopyT0(position, pointSourceVector);
-        goto done;
-    }
-    if ((part & 0x800) != 0) {
+    } else if ((part & 0x800) != 0) {
         sefGetNullPosition(position, battle->caster, part - 2049, 1);
         MMathApplyMatrix(position, battle->casterMatrix, position);
     }
 
-done:
     if (point_block) {
         if (has_source) {
             MMathApplyMatrix(position, point_block, (const Vector4 *)source);

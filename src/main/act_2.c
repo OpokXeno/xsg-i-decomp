@@ -1070,62 +1070,55 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
         JNT_setMatrix(actor->jointMatrices);
         JNT_setModelMatrix();
     } else {
-        if (slot->currentDataId == motionId) {
-            if ((flags & 0x20000000) == 0) {
-                goto early;
-            }
-            slotFlags = slot->flags;
-            goto common;
-        }
-            slotFlags = slot->flags;
-            if (0 == (slotFlags & 0x2)) {
-                flags |= 0x10000;
-            } else if (slot->nextDataId == 0xffff) {
-                void *swapTmp;
-                void *valueTmp;
+        if (slot->currentDataId != motionId || (flags & 0x20000000) != 0) {
+            if (slot->currentDataId == motionId) {
+                slotFlags = slot->flags;
+            } else {
+                slotFlags = slot->flags;
+                if (0 == (slotFlags & 0x2)) {
+                    flags |= 0x10000;
+                } else if (slot->nextDataId == 0xffff) {
+                    void *swapTmp;
+                    void *valueTmp;
 
-                if (0 == (slotFlags & 0x20u)) {
-                    slot->nextDataId = motionId;
-                    slot->animQueuedFlags = flags;
-                    slot->forwardLimit = animation->blendEndFrame;
+                    if (0 == (slotFlags & 0x20u)) {
+                        slot->nextDataId = motionId;
+                        slot->animQueuedFlags = flags;
+                        slot->forwardLimit = animation->blendEndFrame;
+                        return;
+                    }
+                    swapTmp = actor->jointMatrices;
+                    valueTmp = actor->valueRecords;
+                    actor->jointMatrices = actor->previousJointMatrices;
+                    actor->previousJointMatrices = swapTmp;
+                    actor->animation.slot.bufferIndex = (actor->animation.slot.bufferIndex + 1) & 1;
+                    swapTmp = actor->staticValueRecords;
+                    actor->staticValueRecords = valueTmp;
+                    actor->valueRecords = swapTmp;
+                    QuadwordCopyMatrix(actor->jointMatrices, actor->previousJointMatrices);
+                    animation->previousDataId = slot->currentDataId;
+                    slot->nextDataId = 0xffff;
+                    slot->currentDataId = motionId & 0x7ff;
+                    flags &= 0xdfffffff;
+                    slot->flags = (slot->flags & 0xdffffff7) | flags;
+                    slot->animQueuedFlags = 0;
+                    bank = (motionId >> 8) & 7;
+                    ANM_reset(slot, actor->animPackTables[bank]);
                     return;
                 }
-                swapTmp = actor->jointMatrices;
-                valueTmp = actor->valueRecords;
-                actor->jointMatrices = actor->previousJointMatrices;
-                actor->previousJointMatrices = swapTmp;
-                actor->animation.slot.bufferIndex = (actor->animation.slot.bufferIndex + 1) & 1;
-                swapTmp = actor->staticValueRecords;
-                actor->staticValueRecords = valueTmp;
-                actor->valueRecords = swapTmp;
-                QuadwordCopyMatrix(actor->jointMatrices, actor->previousJointMatrices);
-                animation->previousDataId = slot->currentDataId;
-                slot->nextDataId = 0xffff;
-                slot->currentDataId = motionId & 0x7ff;
-                flags &= 0xdfffffff;
-                slot->flags = (slot->flags & 0xdffffff7) | flags;
-                slot->animQueuedFlags = 0;
-                bank = (motionId >> 8) & 7;
-                ANM_reset(slot, actor->animPackTables[bank]);
-                return;
             }
-
-common:
-        animation->previousDataId = slot->currentDataId;
-        slot->nextDataId = 0xffff;
-        slot->currentDataId = motionId & 0x7ff;
-        flags &= 0xdfffffff;
-        slot->flags = (slotFlags & 0xdffffff6) | flags;
-        slot->animQueuedFlags = 0;
-        bank = (motionId >> 8) & 7;
-        ANM_reset(slot, actor->animPackTables[bank]);
-        goto done;
-early:
-        flags &= 0xdfffffff;
-        slot->flags |= flags;
-done:
-        ;
-
+            animation->previousDataId = slot->currentDataId;
+            slot->nextDataId = 0xffff;
+            slot->currentDataId = motionId & 0x7ff;
+            flags &= 0xdfffffff;
+            slot->flags = (slotFlags & 0xdffffff6) | flags;
+            slot->animQueuedFlags = 0;
+            bank = (motionId >> 8) & 7;
+            ANM_reset(slot, actor->animPackTables[bank]);
+        } else {
+            flags &= 0xdfffffff;
+            slot->flags |= flags;
+        }
     }
 }
 

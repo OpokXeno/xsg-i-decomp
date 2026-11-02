@@ -688,7 +688,7 @@ static CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *nam
                 *scan = 92;
         }
     }
-    for (;;) {
+    do {
         entry = &ArcHeader[0].entry;
         if (entry->state != 0xff && xglCdGetFilePosSub(entry, name) != 0) {
             name = arcname_1;
@@ -699,24 +699,22 @@ static CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *nam
         if (entry->state != 0xff && xglCdGetFilePosSub(entry, name) != 0) {
             name = arcname_2;
             position->source = entry->state;
-            goto resolved;
+        } else {
+            entry++;
+            if (entry->state != 0xff && xglCdGetFilePosSub(entry, name) != 0) {
+                name = arcname_3;
+                position->source = entry->state;
+            } else {
+                entry++;
+                if (entry->state != 0xff && xglCdGetFilePosSub(entry, name) != 0) {
+                    name = arcname_4;
+                    position->source = entry->state;
+                } else {
+                    entry = 0;
+                }
+            }
         }
-        entry++;
-        if (entry->state != 0xff && xglCdGetFilePosSub(entry, name) != 0) {
-            name = arcname_3;
-            position->source = entry->state;
-            goto resolved;
-        }
-        entry++;
-        if (entry->state != 0xff && xglCdGetFilePosSub(entry, name) != 0) {
-            name = arcname_4;
-            position->source = entry->state;
-            goto resolved;
-        }
-        entry = 0;
-        goto resolved;
-    }
-resolved:
+    } while (0);
     if (name[0] == 92) {
         absolute_source = name + 1;
         absolute_destination = buffer;

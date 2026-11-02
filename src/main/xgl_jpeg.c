@@ -1021,7 +1021,6 @@ static void HuffmanDecode(float *coefficients, int component)
  */
 static void FFIDCT(float block[8][8])
 {
-    JpegWork *work;
     float *column;
     float *stage;
     float *line;
@@ -1055,8 +1054,7 @@ static void FFIDCT(float block[8][8])
             :
             : "r"(stage)
             : "memory");
-        work = sw;
-        line = work->idct_block[i];
+        line = sw->idct_block[i];
         line[0] = stage[0] + stage[2] + stage[4];
         line[1] = stage[1] + stage[3] + stage[5];
         line[2] = stage[1] - stage[3] + stage[6];
@@ -1067,22 +1065,8 @@ static void FFIDCT(float block[8][8])
         line[7] = stage[0] + stage[2] - stage[4];
     }
 
-    /*
-     * The work-area pointer the second pass reads is the one the first pass
-     * left behind, so the first column starts without reloading it; every
-     * later column re-reads sw, because the VU0 block above clobbers memory.
-     * The original's loop is entered past that reload for exactly that reason
-     * (see the style note in the attempt report: the structured spelling of
-     * this loop compiles to a strength-reduced destination walk instead of the
-     * original's recomputed sw + 5232 + i * 4 and block + i * 32).
-     */
-    i = 0;
-    goto transform_column;
-reload_work:
-    work = sw;
-    for (;;) {
-transform_column:
-        column = &work->idct_block[0][i];
+    for (i = 0; i < 8; i++) {
+        column = &sw->idct_block[0][i];
         stage[0] = column[0 * 8];
         stage[1] = column[2 * 8];
         stage[2] = column[4 * 8];
@@ -1116,10 +1100,6 @@ transform_column:
         out[5] = stage[1] - stage[3] - stage[6];
         out[6] = stage[1] + stage[3] - stage[5];
         out[7] = stage[0] + stage[2] - stage[4];
-        if (++i >= 8) {
-            break;
-        }
-        goto reload_work;
     }
 }
 

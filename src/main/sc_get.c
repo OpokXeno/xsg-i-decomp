@@ -1227,7 +1227,9 @@ static int scDispatchScript(ScriptTask *task)
     return 1;
 }
 
-static int scParseScript(ScriptTask *task)
+/* Runs script commands until a handler asks to stop. A handler that returns 0
+ * ends the script, so its task is deleted; every other exit leaves it alone. */
+static inline void scRunScript(ScriptTask *task)
 {
     int count;
     int result;
@@ -1238,19 +1240,23 @@ static int scParseScript(ScriptTask *task)
     while (command = scGetCmdScript(task), (result = _scFuncHandler[command](task)) != 0) {
         flags = task->flags;
         if (flags == 0 || (flags & 4)) {
-            goto done;
+            return;
         }
         if (result == 2) {
             task->flags = flags | 0x10;
-            goto done;
+            return;
         }
         count++;
         if (count > 2000) {
-            goto done;
+            return;
         }
     }
     scDeleteTask(_nowScript, _nowEvent);
-done:
+}
+
+static int scParseScript(ScriptTask *task)
+{
+    scRunScript(task);
     return 1;
 }
 

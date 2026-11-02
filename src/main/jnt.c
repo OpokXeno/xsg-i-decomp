@@ -1298,29 +1298,31 @@ void *JNT_getStaticVal2(JntWork *work, JntStaticChannel *channel)
     rotate = channel->rotate.bits;
     next = channel + 1;
 
-    if (type < 5) {
-        if (type == 0) {
-            goto advance_channel;
-        }
-    } else {
-        if (type == 5) {
-            matrix = &work->matrix_buffer[channel->matrix_index];
-            CUR_MATRIX_Set(matrix);
-            CUR_MATRIX_Txyz4s(translate);
-            CUR_MATRIX_Rzyx4s(rotate);
-            matrix = &work->matrix_buffer[work->current_index];
-            CUR_MATRIX_Get(matrix);
-        }
-        goto advance_channel;
+    switch (type) {
+    case 5:
+        matrix = &work->matrix_buffer[channel->matrix_index];
+        CUR_MATRIX_Set(matrix);
+        CUR_MATRIX_Txyz4s(translate);
+        CUR_MATRIX_Rzyx4s(rotate);
+        matrix = &work->matrix_buffer[work->current_index];
+        CUR_MATRIX_Get(matrix);
+        break;
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+        matrix = &work->matrix_buffer[channel->matrix_index];
+        CUR_MATRIX_Set(matrix);
+        CUR_MATRIX_Txyz4s(translate);
+        CUR_MATRIX_Rzyx4s(rotate);
+        matrix = &work->matrix_buffer[work->current_index];
+        CUR_MATRIX_Get(matrix);
+        break;
+    case 0:
+    default:
+        break;
     }
-    matrix = &work->matrix_buffer[channel->matrix_index];
-    CUR_MATRIX_Set(matrix);
-    CUR_MATRIX_Txyz4s(translate);
-    CUR_MATRIX_Rzyx4s(rotate);
-    matrix = &work->matrix_buffer[work->current_index];
-    CUR_MATRIX_Get(matrix);
 
-advance_channel:
     work->current_index++;
     return next;
 }

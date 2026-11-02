@@ -1142,13 +1142,12 @@ int OptMntToPosEquip(int mountCode)
 advance_position:
         position++;
         if (position >= 8)
-            goto no_mount;
+            break;
     } while (opt_mnt_tbl[position] != mountCode);
-    equipmentPosition = (1 << position) & 0xff;
-    goto return_equipment_mask;
-no_mount:
-    equipmentPosition = 0;
-return_equipment_mask:
+    if (position < 8)
+        equipmentPosition = (1 << position) & 0xff;
+    else
+        equipmentPosition = 0;
     return equipmentPosition;
 }
 

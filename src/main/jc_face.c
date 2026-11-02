@@ -31,17 +31,9 @@ JntStaticChannel *JC_face(JntWork *work, JntStaticChannel *elements, JcChain *ch
     const JntMatrix *matrix_table;
 
     element_array = elements;
-    if (work->matrix_buffer != 0) {
-        if (chain == 0) {
-            return 0;
-        }
-        matrix_table = *chain->source;
-        if (matrix_table != 0) {
-            goto matrix_available;
-        }
+    if (work->matrix_buffer == 0 || chain == 0 || (matrix_table = *chain->source) == 0) {
+        return 0;
     }
-    return 0;
-matrix_available:
     frame = work->current_frame;
 
     if (element_array == 0) {
@@ -230,17 +222,9 @@ void *JC_setParent(JntWork *work, JntStaticChannel *elements, const JcChain *cha
     JntMatrix *previous_destination;
 
     element_array = elements;
-    if (work->matrix_buffer != 0) {
-        if (chain == 0) {
-            return 0;
-        }
-        records = *chain->source;
-        if (records != 0) {
-            goto matrix_available;
-        }
+    if (work->matrix_buffer == 0 || chain == 0 || (records = *chain->source) == 0) {
+        return 0;
     }
-    return 0;
-matrix_available:
     frame = work->current_frame;
 
     if (element_array == 0) {
@@ -432,17 +416,9 @@ JntStaticChannel *JC_setParent2(JntWork *work, JntStaticChannel *elements, JcCha
 
     element_array = elements;
     matrix_buffer = work->matrix_buffer;
-    if (matrix_buffer != 0) {
-        if (chain == 0) {
-            return 0;
-        }
-        records = *chain->source;
-        if (records != 0) {
-            goto matrix_available;
-        }
+    if (matrix_buffer == 0 || chain == 0 || (records = *chain->source) == 0) {
+        return 0;
     }
-    return 0;
-matrix_available:
     frame = work->current_frame;
 
     if (element_array == 0) {

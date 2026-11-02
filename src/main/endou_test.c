@@ -2897,48 +2897,49 @@ void UmlTest(void)
 
             ++text;
             source_byte = (unsigned char)*text;
-            if (source_byte != 't')
-                goto test_character;
-            text += 2;
-            digit_count = 0;
-            value = 0;
-            while ((unsigned char)((unsigned char)*text - '0') < 10) {
-                digits[digit_count++] = (unsigned char)*text++ - '0';
-            }
-            place = 1;
-            for (index = 0; index < digit_count - 1; ++index)
-                place *= 10;
-            for (index = 0; index < digit_count; ++index) {
-                value += digits[index] * place;
-                place /= 10;
-            }
-            *output++ = value;
-            ++text;
-            *output++ = '\t';
-            trailing_fields = 2;
-            trailing_count = 0;
-            for (; trailing_fields != 0; --trailing_fields) {
+            if (source_byte == 't') {
+                text += 2;
+                digit_count = 0;
+                value = 0;
                 while ((unsigned char)((unsigned char)*text - '0') < 10) {
-                    digits[trailing_count] = (unsigned char)*text - '0';
-                    ++trailing_count;
-                    ++text;
+                    digits[digit_count++] = (unsigned char)*text++ - '0';
                 }
                 place = 1;
-                for (trailing_index = 0; trailing_index < trailing_count - 1; ++trailing_index)
+                for (index = 0; index < digit_count - 1; ++index)
                     place *= 10;
-                trailing_value = 0;
-                for (trailing_index = 0; trailing_index < trailing_count; ++trailing_index) {
-                    trailing_value += digits[trailing_index] * place;
+                for (index = 0; index < digit_count; ++index) {
+                    value += digits[index] * place;
                     place /= 10;
                 }
+                *output++ = value;
                 ++text;
+                *output++ = '\t';
+                trailing_fields = 2;
+                trailing_count = 0;
+                for (; trailing_fields != 0; --trailing_fields) {
+                    while ((unsigned char)((unsigned char)*text - '0') < 10) {
+                        digits[trailing_count] = (unsigned char)*text - '0';
+                        ++trailing_count;
+                        ++text;
+                    }
+                    place = 1;
+                    for (trailing_index = 0; trailing_index < trailing_count - 1; ++trailing_index)
+                        place *= 10;
+                    trailing_value = 0;
+                    for (trailing_index = 0; trailing_index < trailing_count; ++trailing_index) {
+                        trailing_value += digits[trailing_index] * place;
+                        place /= 10;
+                    }
+                    ++text;
+                }
+                source_byte = (unsigned char)*text;
             }
         } else {
             *output = source_byte;
             ++output;
             ++text;
+            source_byte = (unsigned char)*text;
         }
-        source_byte = (unsigned char)*text;
 test_character:
         character = source_byte;
     } while (character != 0);

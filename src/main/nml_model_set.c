@@ -4010,17 +4010,16 @@ render_body:
         }
     }
 
-    if (result != 0) {
-        goto render_done;
-    }
-    if (firstLayout != 0) {
-        nmlFilterSetTexFillDraw(frameBase, firstLayout);
-    }
-    nmlPacketGsInit();
-    nmlPacketAddGsScissor(0x01bf000001ff0000ULL);
-    nmlPacketAddGsFlush();
-    if (firstLayout != 0) {
-        result = nmlModelRenderProreal(firstLayout, frame);
+    if (result == 0) {
+        if (firstLayout != 0) {
+            nmlFilterSetTexFillDraw(frameBase, firstLayout);
+        }
+        nmlPacketGsInit();
+        nmlPacketAddGsScissor(0x01bf000001ff0000ULL);
+        nmlPacketAddGsFlush();
+        if (firstLayout != 0) {
+            result = nmlModelRenderProreal(firstLayout, frame);
+        }
     }
     goto render_done;
 

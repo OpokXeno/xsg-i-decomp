@@ -507,28 +507,23 @@ void eCursolMain(ECursolMainData *cursol)
 
 void eCursolModeChange(ECursolMainData *cursol, unsigned int mode)
 {
-    if (mode < 34) {
-        if (mode < 32)
-            goto set_state;
-        goto protected_early_states;
+    switch (mode) {
+    case 0 ... 31:
+        /* Modes below 32 are always accepted. */
+        break;
+    case 32:
+    case 33:
+        if (cursol->state == 'P') return;
+        if (cursol->state == 'Q') return;
+        if (cursol->state == ' ') return;
+        if (cursol->state == '!') return;
+        break;
+    case 80:
+    case 81:
+        if (cursol->state == 'P') return;
+        if (cursol->state == 'Q') return;
+        break;
     }
-    if (mode >= 82)
-        goto set_state;
-    if (mode >= 80)
-        goto protected_late_states;
-    goto set_state;
-
-protected_early_states:
-    if (cursol->state == 'P') return;
-    if (cursol->state == 'Q') return;
-    if (cursol->state == ' ') return;
-    if (cursol->state == '!') return;
-    goto set_state;
-
-protected_late_states:
-    if (cursol->state == 'P') return;
-    if (cursol->state == 'Q') return;
-set_state:
     cursol->state = mode;
 }
 

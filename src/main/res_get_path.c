@@ -1593,18 +1593,13 @@ static char *command_enenpcse(int command, char *cursor, int mode)
         break;
     }
     dst = name;
-    goto enemy_name_test;
-
-enemy_name_copy:
-    *dst++ = character;
-    next++;
-    character = (u8)*next;
-
-enemy_name_test:
-    if ((u8)character != ',' && (u8)character != ' ' &&
-        (u8)character != '\t' && (u8)character != '\n' &&
-        (u8)character != '\r')
-        goto enemy_name_copy;
+    while ((u8)character != ',' && (u8)character != ' ' &&
+           (u8)character != '\t' && (u8)character != '\n' &&
+           (u8)character != '\r') {
+        *dst++ = character;
+        next++;
+        character = (u8)*next;
+    }
     *dst = '\0';
     for (;;) {
         character = (u8)*next;
@@ -1616,17 +1611,12 @@ enemy_name_test:
         break;
     }
     motion_id = 0;
-    goto enemy_digit_test;
-
-enemy_digit:
-    motion_id *= 10;
-    motion_id += (u8)*next - '0';
-    next++;
-    character = *next & 0xff;
-
-enemy_digit_test:
-    if ((u8)((u8)character + 0xD0) < 10U)
-        goto enemy_digit;
+    while ((u8)((u8)character + 0xD0) < 10U) {
+        motion_id *= 10;
+        motion_id += (u8)*next - '0';
+        next++;
+        character = *next & 0xff;
+    }
 
     address = GameResourceGetFreeAddr();
     for (slot = 0; slot < 7; slot++) {
@@ -2231,7 +2221,18 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             end++;
             source++;
         }
-        goto format_numbered_path;
+        quotient = resource_id;
+        end[-5] = (u8)end[-5] + quotient % 10;
+        quotient /= 10;
+        end[-6] = (u8)end[-6] + quotient % 10;
+        quotient /= 10;
+        end[-7] = (u8)end[-7] + quotient % 10;
+        quotient /= 10;
+        end[-8] = (u8)end[-8] + quotient % 10;
+        size = xglCdGetFileSize(path);
+        if (size > 0)
+            readreq(path, address);
+        break;
     case 11:
         if (arcfileaddr != 0) {
             size = next_arc_size(address);
@@ -2244,8 +2245,6 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             end++;
             source++;
         }
-
-format_numbered_path:
         quotient = resource_id;
         end[-5] = (u8)end[-5] + quotient % 10;
         quotient /= 10;

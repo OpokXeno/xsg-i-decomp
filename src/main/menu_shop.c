@@ -997,31 +997,30 @@ static void MenuShopModelMain(TskObject *task, void *data)
         case 0xA0:
         case 0xA2:
         case 0xA4:
-            break;
+            category = MenuShopWork->category;
+            if (category == 7) {
+                if ((MenuShopWork->itemId >> 16) != category)
+                    break;
+                if (*modelId != MenuShopWork->modelId) {
+                    MenuShopWork->modelPending = 1;
+                    *modelId = MenuShopWork->modelId;
+                    work = MenuShopWorkRead();
+                }
+                if (work->modelId == 0)
+                    break;
+                if (MenuModelOut[0] != 0)
+                    break;
+                work->modelPending = 0;
+                MenuModelCreate(MenuModelOut, work->modelId);
+                MenuModelExtFuncSet(MenuModelOut[0], MenuShopModelDisp, 0);
+                *modelId = MenuShopWork->modelId;
+                break;
+            }
+            /* fall through */
         default:
-            goto mark_pending;
-        }
-        category = MenuShopWork->category;
-        if (category != 7)
-            goto mark_pending;
-        if ((MenuShopWork->itemId >> 16) != category)
-            break;
-        if (*modelId != MenuShopWork->modelId) {
             MenuShopWork->modelPending = 1;
-            *modelId = MenuShopWork->modelId;
-            work = MenuShopWorkRead();
+            break;
         }
-        if (work->modelId == 0)
-            break;
-        if (MenuModelOut[0] != 0)
-            break;
-        work->modelPending = 0;
-        MenuModelCreate(MenuModelOut, work->modelId);
-        MenuModelExtFuncSet(MenuModelOut[0], MenuShopModelDisp, 0);
-        *modelId = MenuShopWork->modelId;
-        break;
-mark_pending:
-        MenuShopWork->modelPending = 1;
         break;
     }
 }

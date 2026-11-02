@@ -520,7 +520,6 @@ static void xglFontPrintSub(void *args)
                     goto numeric_tail;
                 case 'x':
                     radix = 16;
-                    goto numeric_tail;
                 numeric_tail:
                     {
                         unsigned long long value = (unsigned int)list[0];
@@ -540,8 +539,6 @@ static void xglFontPrintSub(void *args)
                     }
                     break;
                 case 'f':
-                    goto float_tail;
-                float_tail:
                     {
                         float value = dptofp(list[0]);
                         unsigned int bits = *(unsigned int *)&value;
