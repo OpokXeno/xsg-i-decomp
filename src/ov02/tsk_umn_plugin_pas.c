@@ -82,19 +82,19 @@ struct UmnPluginExWin {
     struct UmnPluginExWinItem item[1];
 };
 
-extern const char D_00A13440[];
-extern const char D_00A13458[];
-extern const char D_00A13460[];
+extern const char pluginTitleText[];
+extern const char pluginListTitleText[];
+extern const char pluginListPhaseDebugFormat[];
 extern char msg00_1_00A10C48[];
 extern void xglFontDebugHex(int x, int y, int value, int digits);
 
-static const char *msg00_0_00A10C40 = D_00A13440;
+static const char *msg00_0_00A10C40 = pluginTitleText;
 unsigned char plugin_folder[UMN_PLUGIN_SLOTS] = { 0 };
-static const char D_00A13450[8] = "";
+static const char pluginEmptyText[8] = "";
 /* The original EUC-JP debug label spells プラグイン. */
 /* JP: プラグイン
  * EN: Plugin */
-static const char D_00A13540[16] =
+static const char pluginDebugLabel[16] =
     "\xA5\xD7\xA5\xE9\xA5\xB0\xA5\xA4\xA5\xF3";
 
 void tskUmnPluginPas(UmnObjectTask *task, void *work_opaque)
@@ -217,7 +217,7 @@ void tskUmnPluginInfo(UmnObjectTask *task, void *work_opaque)
                 if (plugin_id < UMN_PLUGIN_LIST_MAX) {
                     work->info.text = UmnPluginTextGet((signed char)plugin_id) + 0x20;
                 } else {
-                    work->info.text = D_00A13450;
+                    work->info.text = pluginEmptyText;
                 }
                 MoveSlide(&work->window.y, &slide_target, 3.0f);
                 WindowDXMain(&work->window);
@@ -247,7 +247,7 @@ void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
         work->window.y = 112;
         work->window.style = 0x00FF0000;
         work->window.draw_flags = WINDOWSP_DRAW_CURSORS | WINDOWSP_DRAW_MESSAGES;
-        work->window.title = D_00A13458;
+        work->window.title = pluginListTitleText;
         work->window.rows = 10;
         work->window.columns = 1;
         work->window.width = 400;
@@ -275,7 +275,7 @@ void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
                 work->items[i].amount = 0;
                 work->items[i].flag = 0;
             }
-            work->items[i].name = D_00A13450;
+            work->items[i].name = pluginEmptyText;
             work->items[i + 1].name = 0;
             work->window.items = work->items;
             WindowSPItemChange(&work->window);
@@ -322,7 +322,7 @@ void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
         work->window.style = work->color;
         WindowSPMain(&work->window);
     }
-    xglFontDebugPrintf(0, 16, D_00A13460, work->phase);
+    xglFontDebugPrintf(0, 16, pluginListPhaseDebugFormat, work->phase);
 }
 
 void tskUmnPluginExWin(UmnObjectTask *task, void *work_opaque)
@@ -401,7 +401,7 @@ void UmnPlugin(void)
         task_work += 848;
         UmnObjectTaskCreate(tskUmnPluginList, task_work);
         UmnObjectTaskCreate(tskUmnPluginExWin, task_work + 6340);
-        save = &D_4A1A0C;
+        save = &umnMailSaveData;
         UmnWork.count = 0;
         UmnWork.list_cursor = 0;
         memset(folder_cursor, 0, sizeof(plugin_folder));
@@ -444,9 +444,9 @@ void UmnPlugin(void)
     if (UmnWork.wait != 0) {
         UmnWork.wait--;
     }
-    xglFontDebugPrintf(32, 208, D_00A13540);
+    xglFontDebugPrintf(32, 208, pluginDebugLabel);
     xglFontDebugHex(0, 64, UmnWork.tab_state, 2);
 }
 
 /* Defined here, after the functions: the plug-ins caption string. */
-const char D_00A13440[16] = "Plug-ins";
+const char pluginTitleText[16] = "Plug-ins";

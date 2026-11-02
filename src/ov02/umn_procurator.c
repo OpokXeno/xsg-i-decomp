@@ -72,17 +72,17 @@ typedef union UmnLightSet {
 
 /* Defined in main/tu165 over a view whose only used member is the actor at +0x20, the same as MenuModelUnit. */
 extern void MenuModelMotionSet(MenuModelUnit *unit, unsigned int data_id);
-extern const char D_00A12060[];
-extern const char D_00A12080[];
-extern const char D_00A12190[];
-extern const UmnLightSet D_00A120F0;
-extern DoublewordAlignedVector4 D_00A12160;
-extern DoublewordAlignedVector4 D_00A12170;
-extern const DoublewordAlignedVector4 D_00A12180;
-extern DoublewordAlignedVector4 D_00A121D0;
-extern DoublewordAlignedVector4 D_00A121E0;
-extern DoublewordAlignedVector4 D_00A121F0;
-extern DoublewordAlignedVector4 D_00A12230;
+extern const char manzaiFlagDebugFormat[];
+extern const char manzaiWindowPhaseDebugFormat[];
+extern const char manzaiModelStateDebugFormat[];
+extern const UmnLightSet manzaiModelLightTable;
+extern DoublewordAlignedVector4 manzaiModelPositionVector;
+extern DoublewordAlignedVector4 manzaiModelScaleVector;
+extern const DoublewordAlignedVector4 manzaiSubWindowCameraOffsetVector;
+extern DoublewordAlignedVector4 manzaiCaseCameraRotationVector;
+extern DoublewordAlignedVector4 manzaiCaseCameraPositionVector;
+extern DoublewordAlignedVector4 manzaiSubWindowFaceOffsetVector;
+extern DoublewordAlignedVector4 manzaiModelCameraPositionVector;
 
 int UmnManzaiControl(void)
 {
@@ -113,7 +113,7 @@ int UmnManzaiControl(void)
     } else if ((flag & UMN_MANZAI_BOTH_SHOWN) == 0) {
         return 0;
     }
-    xglFontDebugPrintf(0x80, 0x40, D_00A12060, UmnManzaiFlag);
+    xglFontDebugPrintf(0x80, 0x40, manzaiFlagDebugFormat, UmnManzaiFlag);
     return 1;
 }
 
@@ -290,12 +290,12 @@ void tskUmnManzaiWin(UmnObjectTask *task, void *data)
         window->message.y = window->y + 4;
         eMessageMain(&window->message);
     }
-    xglFontDebugPrintf(0x80, (window->task_index << 3) + 32, D_00A12080, window->phase);
+    xglFontDebugPrintf(0x80, (window->task_index << 3) + 32, manzaiWindowPhaseDebugFormat, window->phase);
 }
 
 static void LocalLightSet(void *model, int unused)
 {
-    UmnLightSet lights = D_00A120F0;
+    UmnLightSet lights = manzaiModelLightTable;
     Actor *actor = model;
     StudioLight *light = &actor->light;
 
@@ -349,8 +349,8 @@ void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
             DoublewordAlignedVector4 position;
             DoublewordAlignedVector4 scale_src;
 
-            position = D_00A12160;
-            scale_src = D_00A12170;
+            position = manzaiModelPositionVector;
+            scale_src = manzaiModelScaleVector;
             *scale = scale_src;
             menu->offset.x = uknMenu->offset.x;
             menu->offset.y = uknMenu->offset.y;
@@ -387,7 +387,7 @@ void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
         break;
     case UMN_MANZAI_MODEL_SUBWINDOW:
         {
-            DoublewordAlignedVector4 local = D_00A12180;
+            DoublewordAlignedVector4 local = manzaiSubWindowCameraOffsetVector;
             float matrix[4][4];
             StudioCamera *camera;
             Vector4 *cameraRotation;
@@ -484,7 +484,7 @@ void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
         break;
     }
 
-    xglFontDebugPrintf(0x80, 0x20, D_00A12190, task->extFuncFlag);
+    xglFontDebugPrintf(0x80, 0x20, manzaiModelStateDebugFormat, task->extFuncFlag);
 }
 
 static void Rotation(float *out, float *position, float *base, float *rotation)
@@ -536,8 +536,8 @@ void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
         LocalLightSet(actor, 0);
         {
             StudioCamera *case_camera = xglStudioGetCamera2(0);
-            DoublewordAlignedVector4 rotation_copy = D_00A121D0;
-            DoublewordAlignedVector4 position_copy = D_00A121E0;
+            DoublewordAlignedVector4 rotation_copy = manzaiCaseCameraRotationVector;
+            DoublewordAlignedVector4 position_copy = manzaiCaseCameraPositionVector;
 
             case_camera->position.vector = position_copy;
             case_camera->rotation.vector = rotation_copy;
@@ -580,7 +580,7 @@ void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
             break;
         {
             Vector4 *camera_rotation;
-            DoublewordAlignedVector4 sub_position = D_00A121F0;
+            DoublewordAlignedVector4 sub_position = manzaiSubWindowFaceOffsetVector;
 
             MenuModelSubWindowSet(task, 1, 2);
             window = (UmnSubWindowView *)task->subWindow;
@@ -649,7 +649,7 @@ void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
     default:
         break;
     }
-    xglFontDebugPrintf(0x80, 0x18, D_00A12190, task->extFuncFlag);
+    xglFontDebugPrintf(0x80, 0x18, manzaiModelStateDebugFormat, task->extFuncFlag);
 }
 
 void UmnProcuratorMail(MenuModelUnit *task, void *argument)
@@ -683,7 +683,7 @@ void UmnProcuratorMail(MenuModelUnit *task, void *argument)
             camera = xglStudioGetCamera2(0);
             memset(&camera_rotation, 0, sizeof(camera_rotation));
             camera_rotation.w = 1.0f;
-            position = D_00A12230;
+            position = manzaiModelCameraPositionVector;
             camera->position.vector = position;
             camera->rotation.vector = camera_rotation;
             MenuModelUnitOpen(task, 2);

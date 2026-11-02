@@ -122,25 +122,25 @@ extern int xglHddMcCheck(HddCheckRequest *request);
 extern int xglHddActivate(int state);
 extern u8 *WorkEnd;
 extern u8 carddata_0[];
-extern const HddNameTable D_00A11048;
-extern const HddNameTable D_00A11148;
-extern const char D_00A10D30[];
-extern const char D_00A10E38[];
-extern const char D_00A10E98[];
-extern const char D_00A11158[];
-extern const char D_00A11250[];
-extern const char D_00A112F0[];
-extern const char D_00A11338[];
+extern const HddNameTable hddFullReasonTexts;
+extern const HddNameTable hddFullAdviceTexts;
+extern const char hddAppDataCorruptText[];
+extern const char hddUnformattedText[];
+extern const char hddFormatRequestText[];
+extern const char hddAccessErrorText[];
+extern const char hddSkipSavePromptText[];
+extern const char hddUseForSaveIntroText[];
+extern const char proceedButtonText[];
 extern int xglMcRequest(int card, int command, McCheckRequest *request, int *result);
-extern const char D_00A11358[];
-extern const char D_00A113C8[];
-extern const char D_00A113E8[];
-extern const char D_00A11430[];
-extern const char D_00A11478[];
-extern const char D_00A114C8[];
-extern const char D_00A11520[];
+extern const char memoryCardCapacityWarningText[];
+extern const char memoryCardMissingText[];
+extern const char memoryCardSlot1FullText[];
+extern const char memoryCardSlot2FullText[];
+extern const char memoryCardBothSlotsFullText[];
+extern const char continueWithoutSavingPromptText[];
+extern const char insertMemoryCardPromptText[];
 extern void Logo(void);
-extern const char D_00A115A0[];
+extern const char defaultFontModeText[];
 extern void xglMovieInfoInit(LogoMovieInfo *movie);
 extern int xglMovieOpen(LogoMovieInfo *movie, const char *path);
 extern int xglMoviePlay(LogoMovieInfo *movie);
@@ -149,8 +149,8 @@ extern void FlushCache(int mode);
 
 static int ipuplay(const char *path);
 
-/* Defined here: D_00A10D28, TestEnv_1_00A0F690, D_00A115A8, D_00A115B8 (data order is section order). */
-const char D_00A10D28[8] = "\x19\x03";
+/* Defined here: deviceCheckFontModeText, TestEnv_1_00A0F690, namcoLogoPath, msiLogoPath (data order is section order). */
+const char deviceCheckFontModeText[8] = "\x19\x03";
 
 static int device_check_sync(void)
 {
@@ -158,7 +158,7 @@ static int device_check_sync(void)
 
     status = xglMcMain();
     xglSleep();
-    xglFontPrintDirectOT(-1, D_00A10D28);
+    xglFontPrintDirectOT(-1, deviceCheckFontModeText);
     return status;
 }
 
@@ -186,7 +186,7 @@ static int hdd_check(void)
         {
             break;
         }
-        xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A10D30);
+        xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, hddAppDataCorruptText);
         if (PadData.half_2a & PAD_CIRCLE)
         {
             xglSoundEffectNormalDirect(SE_DECIDE);
@@ -198,13 +198,13 @@ static int hdd_check(void)
 
     if (status == -3)
     {
-        text_a = D_00A10E38;
-        text_b = D_00A10E98;
+        text_a = hddUnformattedText;
+        text_b = hddFormatRequestText;
     }
     else
     {
-        names_a = D_00A11048;
-        names_b = D_00A11148;
+        names_a = hddFullReasonTexts;
+        names_b = hddFullAdviceTexts;
         request.buffer = WorkEnd;
         request.result = -1;
         if (xglHddMcExist(&request) > 0)
@@ -218,7 +218,7 @@ static int hdd_check(void)
         {
             for (;;)
             {
-                xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A11158);
+                xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, hddAccessErrorText);
                 if (PadData.half_2a & PAD_CIRCLE)
                 {
                     break;
@@ -244,7 +244,7 @@ static int hdd_check(void)
     for (;;)
     {
         xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, text_a);
-        xglFontPrintDirectOT(-1, D_00A11250);
+        xglFontPrintDirectOT(-1, hddSkipSavePromptText);
         if (PadData.half_2a & PAD_CIRCLE)
         {
             xglSoundEffectNormalDirect(SE_DECIDE);
@@ -256,9 +256,9 @@ static int hdd_check(void)
             device_check_sync();
             for (;;)
             {
-                xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A112F0);
+                xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, hddUseForSaveIntroText);
                 xglFontPrintDirectOT(-1, text_b);
-                xglFontPrintDirectOT(-1, D_00A11338);
+                xglFontPrintDirectOT(-1, proceedButtonText);
                 if (PadData.half_2a & PAD_CIRCLE)
                 {
                     break;
@@ -320,11 +320,11 @@ static int mc_check(void)
             screen_state[0].value = device_check_sync();
         }
 
-        capacity_warning = D_00A11358;
+        capacity_warning = memoryCardCapacityWarningText;
         if (screen_state[0].slot.slot0 != MC_STATUS_READY && screen_state[0].slot.slot0 != MC_STATUS_UNFORMATTED &&
             screen_state[0].slot.slot1 != MC_STATUS_READY && screen_state[0].slot.slot1 != MC_STATUS_UNFORMATTED)
         {
-            warning = D_00A113C8;
+            warning = memoryCardMissingText;
         }
         else
         {
@@ -364,13 +364,13 @@ static int mc_check(void)
                     warning = 0;
                     break;
                 case 1:
-                    warning = D_00A113E8;
+                    warning = memoryCardSlot1FullText;
                     break;
                 case 2:
-                    warning = D_00A11430;
+                    warning = memoryCardSlot2FullText;
                     break;
                 case 3:
-                    warning = D_00A11478;
+                    warning = memoryCardBothSlotsFullText;
                     break;
                 default:
                     break;
@@ -384,7 +384,7 @@ static int mc_check(void)
             {
                 xglFontPrintDirectOT(-1, capacity_warning);
             }
-            xglFontPrintDirectOT(-1, D_00A114C8);
+            xglFontPrintDirectOT(-1, continueWithoutSavingPromptText);
 
             if (PadData.half_2a & PAD_CIRCLE)
             {
@@ -399,7 +399,7 @@ static int mc_check(void)
                 do
                 {
                     wait_state[0].value = device_check_sync();
-                    xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, D_00A11520);
+                    xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, insertMemoryCardPromptText);
                     if (PadData.half_2a & PAD_CROSS)
                     {
                         xglSoundEffectNormalDirect(SE_DECIDE);
@@ -436,7 +436,7 @@ void LogoFirst(void)
     {
         mc_check();
     }
-    xglFontPrintDirectOT(-1, D_00A115A0);
+    xglFontPrintDirectOT(-1, defaultFontModeText);
     Logo();
 }
 
@@ -502,8 +502,8 @@ static int ipuplay(const char *path)
     return skipped;
 }
 
-const char D_00A115A8[] = "data\\namco.ipu";
-const char D_00A115B8[] = "data\\logo_msi.ipu";
+const char namcoLogoPath[] = "data\\namco.ipu";
+const char msiLogoPath[] = "data\\logo_msi.ipu";
 
 void Logo(void)
 {
@@ -511,7 +511,7 @@ void Logo(void)
     xglRenderClearColor(OV02_CLEAR_COLOR_BLACK);
     xglSleep();
     xglRenderClearDepth();
-    if (ipuplay(D_00A115A8) == 0)
+    if (ipuplay(namcoLogoPath) == 0)
     {
         /*
          * The original calls ipuplay with jal and returns through the
@@ -522,7 +522,7 @@ void Logo(void)
          * compiles to `j ipuplay`.
          */
         do {
-            ipuplay(D_00A115B8);
+            ipuplay(msiLogoPath);
         } while (0);
     }
 }

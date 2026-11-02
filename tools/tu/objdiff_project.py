@@ -703,6 +703,8 @@ def overlay_units(root, tools, project, unit_name):
     unit_dir = root / 'build' / unit_name
     manifest = read(unit_dir / 'compile-manifest.json')['units'][unit_name]
     cc = root / 'tools/tu/cc_tu.sh'
+    renames_path = root / 'config/symbols' / f'{unit_name}.renames.json'
+    renames = read(renames_path).get('renames', {}) if renames_path.is_file() else {}
 
     def one(tu):
         stem = tu['name']
@@ -727,7 +729,7 @@ def overlay_units(root, tools, project, unit_name):
         if not parts:
             return None
         target = destination / 'target.o'
-        tools.target(parts, target, unit_dir)
+        tools.target(parts, target, unit_dir, names=renames)
         unit = dict(name=f'{unit_name}/{stem}', target_path=str(target),
                     metadata=dict(progress_categories=[unit_name], complete=False))
         source = root / tu['source'] if tu.get('source') else None
@@ -763,9 +765,7 @@ def main():
     project = args.project.resolve()
     project.mkdir(parents=True, exist_ok=True)
     tools = Tools(root)
-    renames = {}
-    for path in sorted((root / 'config/symbols').glob('*.renames.json')):
-        renames.update(read(path).get('renames', {}))
+    renames = read(root / 'config/symbols/main.renames.json').get('renames', {})
     units = main_units(root, tools, project, renames)
     for unit in EE_UNITS[1:]:
         units += overlay_units(root, tools, project, unit)

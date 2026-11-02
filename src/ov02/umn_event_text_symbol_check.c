@@ -9,7 +9,7 @@
 #include "ov02/ov02.h"
 #include "ov02/umn_event_text_symbol_check.h"
 
-/* Tags of the event text, UmnEventTextSymbol.value: the names are in D_00A13588. */
+/* Tags of the event text, UmnEventTextSymbol.value: the names are in eventTextTagTable. */
 #define UMN_EVENT_TAG_SPEECH 1       /* "speech": opens a block */
 #define UMN_EVENT_TAG_CHAR 2         /* "char": the speaker of the block */
 #define UMN_EVENT_TAG_MSG 3          /* "msg": the message text */
@@ -96,14 +96,14 @@ typedef struct UmnEventTextSymbolTable {
 } UmnEventTextSymbolTable;
 
 /* Scaffold-owned symbol table at 0x00A13588 (no recovered C definition). */
-extern const UmnEventTextSymbolTable D_00A13588;
+extern const UmnEventTextSymbolTable eventTextTagTable;
 
 typedef struct UmnEventTextCharTable {
     UmnEventTextSymbol entry[UMN_EVENT_SPEAKER_COUNT];
 } UmnEventTextCharTable;
 
 /* Scaffold-owned speaker-name table at 0x00A135D0 (no recovered C definition). */
-extern const UmnEventTextCharTable D_00A135D0;
+extern const UmnEventTextCharTable eventTextSpeakerTable;
 
 extern char *eMessageNextWaitKeySearch(char *text);
 
@@ -116,8 +116,8 @@ extern int dataWpnBoxInc(int id);
 extern int dataMoneyBoxInc(int amount);
 
 /* "data\\endou\\umn\\histree.bin" and "data\\umn\\header.lst", ov02 .data; no witnessed rename. */
-const char D_00A13620[] = "data\\endou\\umn\\histree.bin";
-const char D_00A13640[] = "data\\umn\\header.lst";
+const char historyTreePath[] = "data\\endou\\umn\\histree.bin";
+const char mailHeaderListPath[] = "data\\umn\\header.lst";
 static unsigned char umn_attach_tbl[UMN_ATTACH_COUNT * UMN_ATTACH_RECORD_SIZE] = {
     1, 1, 1, 1, 2, 1, 1, 3, 1, 2, 2, 5,
     2, 6, 5, 2, 10, 5, 4, 4, 1, 4, 6, 1,
@@ -163,7 +163,7 @@ int UmnEventTextSymbolCheck(unsigned char **cursor)
         UmnEventTextSymbolTable table;
 
         *cursor = *cursor + 1;
-        table = D_00A13588;
+        table = eventTextTagTable;
         for (i = 0; i < UMN_EVENT_TAG_COUNT; i++) {
             unsigned char *input = *cursor;
             unsigned char *text = table.entry[i].text;
@@ -191,7 +191,7 @@ int UmnEventTextCharCheck(unsigned char **cursor)
     int n;
 
     i = 0;
-    table = D_00A135D0;
+    table = eventTextSpeakerTable;
     input = *cursor;
     for (; UMN_EVENT_SPEAKER_COUNT > i; i++) {
         text = table.entry[i].text;
@@ -480,7 +480,7 @@ int UmnHistoryTreeLoad(int work)
     int next = aligned + UMN_HISTORY_TREE_SIZE;
 
     UmnHistoryTreeBuf = (UmnHistoryNode *)aligned;
-    xglCdReadFile(D_00A13620, UmnHistoryTreeBuf, 0, 0);
+    xglCdReadFile(historyTreePath, UmnHistoryTreeBuf, 0, 0);
     return next;
 }
 
@@ -532,7 +532,7 @@ unsigned char *UmnMailAttachGet(int box_id)
 
 void UmnMailAttachSet(int box_id)
 {
-    UmnMailSaveData *state = &D_4A1A0C;
+    UmnMailSaveData *state = &umnMailSaveData;
     unsigned char *attachment;
     int index;
     int scale;
@@ -608,7 +608,7 @@ int UmnMailHeaderCreate(int work)
 
     UmnMailHeaderBuf = (UmnMailHeader *)aligned;
     memset(UmnMailHeaderBuf, 0, UMN_MAIL_HEADER_TABLE_SIZE);
-    xglCdReadFile(D_00A13640, list, 0, 0);
+    xglCdReadFile(mailHeaderListPath, list, 0, 0);
     size = ((UmnMailList *)cursor)->size;
     while (size != 0) {
         cursor = cursor + 4;

@@ -93,10 +93,10 @@ typedef struct UmnSimulationListWork {
     UmnListBody body;
 } UmnSimulationListWork;
 
-extern const UmnInfoName D_00A13220;
-extern const char D_00A13218[];
-extern const char D_00A13230[];
-extern const char D_00A13238[];
+extern const UmnInfoName simulateInfoName;
+extern const char simulationEmptyText[];
+extern const char simulationPeriodText[];
+extern const char simulationInfoTitleText[];
 extern const char *ListText[];
 extern int MenuScenarioNoGet(void);
 extern int xglFontDebugHex(int x, int y, int value, int digits);
@@ -113,7 +113,7 @@ static int UmnSimulationScriptNoTbl[] = {
 static const char *msg00_0_00A10888 = "Environmental Simulator";
 /* JP: シミュレーション
  * EN: Simulation */
-const char D_00A132F8[] =
+const char simulationDebugLabel[] =
     "\245\267\245\337\245\345\245\354\241\274\245\267\245\347\245\363";
 
 void tskUmnSimulationPas(UmnObjectTask *task, void *data)
@@ -207,7 +207,7 @@ void tskUmnSimulationInfo(UmnObjectTask *task, void *data)
             UmnInfoPos *pos;
 
             work->color = 0x00ff0000;
-            __builtin_memcpy(work->text_buf.text, D_00A13218, 1);
+            __builtin_memcpy(work->text_buf.text, simulationEmptyText, 1);
             work->opened = 0;
             work->mode = 0;
             WindowDXSet(&work->window);
@@ -246,9 +246,9 @@ void tskUmnSimulationInfo(UmnObjectTask *task, void *data)
                 if (tab_state < UMN_STEP_ACTIVE + 1) {
                     if (tab_state >= UMN_STEP_OPEN) {
                         if (UmnWork.simulation.list_index >= 0) {
-                            __builtin_memcpy(work->text_buf.text, D_00A13220.text, 10);
+                            __builtin_memcpy(work->text_buf.text, simulateInfoName.text, 10);
                             strcat(work->text_buf.text, ListText[UmnWork.simulation.list_index]);
-                            strcat(work->text_buf.text, D_00A13230);
+                            strcat(work->text_buf.text, simulationPeriodText);
                         }
                     } else {
                         slide_target = 512;
@@ -295,7 +295,7 @@ void tskUmnSimulationList(UmnObjectTask *task, void *data)
                 }
                 list->body.items[i].amount = 0;
             }
-            list->body.items[i].name = D_00A13218;
+            list->body.items[i].name = simulationEmptyText;
             list->body.items[i].amount = 0;
             list->body.items[i].flag = 0;
             offset = (i + 1) * sizeof(MenuListEntry);
@@ -307,7 +307,7 @@ void tskUmnSimulationList(UmnObjectTask *task, void *data)
             list->body.window.style = list->body.color;
             terminator->name = 0;
             list->body.window.draw_flags = WINDOWSP_DRAW_CURSORS | WINDOWSP_DRAW_MESSAGES;
-            list->body.window.title = D_00A13238;
+            list->body.window.title = simulationInfoTitleText;
             list->body.window.columns = 1;
             list->body.window.rows = UMN_SIM_LIST_MAX;
             list->body.window.width = 422;
@@ -450,6 +450,6 @@ int UmnSimulation(void)
     if (UmnWork.wait != 0) {
         UmnWork.wait--;
     }
-    xglFontDebugPrintf(32, 208, D_00A132F8);
+    xglFontDebugPrintf(32, 208, simulationDebugLabel);
     return xglFontDebugHex(0, 64, UmnWork.tab_state, 2);
 }

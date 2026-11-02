@@ -53,7 +53,7 @@
 #define TITLE_PARTICLE_AT(storage, index) \
     ((TitleParticleView *)((u8 *)(storage) + ((index) * TITLE_PARTICLE_STRIDE)))
 
-extern u8 D_1245C58[];
+extern u8 gameEntrySelection[];
 
 static int copyframe(void)
 {
@@ -326,7 +326,7 @@ int Title(void)
         packet = xglPacketGetCurrent();
         frameTimer--;
         if (0 >= frameTimer)
-            return (int)D_2A007F8;
+            return (int)logoEntrySelection;
         if (0 < preroll) {
             preroll--;
         } else if (fade == 0 && (PadData.half_2a & (PAD_START | PAD_CIRCLE))) {
@@ -460,13 +460,13 @@ int Title(void)
             TitleGameInit();
             GameLoopState.word_18 = 0x100003E8;
             GameLoopState.half_0e = 0;
-            return (int)D_1245C58;
+            return (int)gameEntrySelection;
         case TITLE_CHOICE_CONTINUE:
             TitleGameInit();
             r = MenuFileMain(1);
             if (r == flag) {
                 GameLoopState.half_0e = r;
-                return (int)D_1245C58;
+                return (int)gameEntrySelection;
             }
             return 0;
         case TITLE_CHOICE_HDD_INSTALL:
@@ -477,7 +477,7 @@ int Title(void)
             TitleGameInit();
             GameLoopState.word_18 = 0;
             GameLoopState.half_0e = 0;
-            return (int)D_1245C58;
+            return (int)gameEntrySelection;
         default:
             return 0;
         }

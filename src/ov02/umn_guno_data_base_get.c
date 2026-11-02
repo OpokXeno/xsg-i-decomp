@@ -287,26 +287,26 @@ typedef struct UmnDataBaseModelData {
 extern void *UmnGunoDataBaseTop;
 /* The help line text of the database screen (original scaffold data, msg00.0). */
 extern char *msg00_0_00A106F8;
-extern char D_00A12F18[];
+extern char dataBaseRowTagText[];
 extern unsigned short monster_folder[];
 extern int BW3BattleOrDataBase;
-extern char D_00A13028[];
+extern char dataBaseMenuTagText[];
 extern char *text2_2[3];
 extern void MenuModelControl(MenuModelUnit *unit);
 extern void MenuModelUnitBreak(MenuModelUnit *unit);
 extern unsigned short monster_folder[0x80];
-extern char D_00A13150[];
-extern char D_00A13158[];
-extern char D_00A13160[];
-extern char D_00A13170[];
-extern char D_00A12EE0[];
-extern char D_00A12EB0[];
-extern char D_00A12EA8[];
-extern char D_00A13128[];
-extern char D_00A13118[];
-extern char D_00A13108[];
-extern char D_00A130F0[];
-extern char D_00A130D8[];
+extern char dataBaseEntryDebugFormat[];
+extern char dataBaseListCursorDebugFormat[];
+extern char dataBaseColumnRowDebugFormat[];
+extern char dataBaseMovingDebugFormat[];
+extern char dataBaseGnosisHelpText[];
+extern char dataBaseKeywordHelpText[];
+extern char dataBaseCancelHelpText[];
+extern char dataBaseZoomOutHintText[];
+extern char dataBaseZoomInHintText[];
+extern char dataBaseRotateHintText[];
+extern char dataBaseTurnMenuOffHintText[];
+extern char dataBaseAnalysisInfoHintText[];
 
 void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void eBattleWinOpen3(UmnDataBaseWinParam *param);
@@ -497,7 +497,7 @@ void tskUmnDataBaseName(UmnObjectTask *task, void *data)
             work->rows[i].window.width = width;
             work->rows[i].window.style = work->color;
             work->rows[i].window.y = 80 + (i / 2) * 48;
-            work->rows[i].window.tag_id = D_00A12F18;
+            work->rows[i].window.tag_id = dataBaseRowTagText;
             work->rows[i].window.height = 30;
             work->rows[i].window.x = (i % 2) * (width + 544) - width - 16;
             work->rows[i].window.state = WINDOWDX_STATE_OPEN;
@@ -787,7 +787,7 @@ void tskUmnDataBaseMenu(UmnObjectTask *task, void *data)
         work->window.width = 125;
         work->window.height = 78;
         work->info.y = mode;
-        work->window.tag_id = D_00A13028;
+        work->window.tag_id = dataBaseMenuTagText;
         work->window.close_callback = MenuSelectWindow;
         work->window.close_callback_arg = &work->info;
         work->info.entries = 0;
@@ -864,8 +864,8 @@ void tskUmnDataBaseMenu(UmnObjectTask *task, void *data)
     }
 }
 
-static const UmnDataBaseArrowSprites D_00A13138 = {{0x0112, 0x0110}};
-static const UmnDataBaseArrowSteps D_00A13140 = {{1, -1}};
+static const UmnDataBaseArrowSprites dataBaseArrowSpriteTable = {{0x0112, 0x0110}};
+static const UmnDataBaseArrowSteps dataBaseArrowStepTable = {{1, -1}};
 static char *text_3_00A10720[5];
 
 /*
@@ -899,7 +899,7 @@ void tskUmnDataBaseExWin(UmnObjectTask *task, void *data)
             eMessageSet(&work->lines[i].message, text_3_00A10720[i]);
             eMessageModeChange(&work->lines[i].message, E_MODE_SHOW_START);
         }
-        arrowSprite = D_00A13138;
+        arrowSprite = dataBaseArrowSpriteTable;
         for (i = 0; i < UMN_DB_EXWIN_ARROWS; i++) {
             eSpriteSet(&work->sprites[i], arrowSprite.id[i]);
             work->sprites[i].x = i * 0x23D - 0x2D;
@@ -961,7 +961,7 @@ void tskUmnDataBaseExWin(UmnObjectTask *task, void *data)
         }
         for (i = 0; i < UMN_DB_EXWIN_ARROWS; i++) {
             if (work->drift[i] != 0) {
-                arrowStep = D_00A13140;
+                arrowStep = dataBaseArrowStepTable;
                 work->drift[i] += arrowStep.step[i];
             }
             MoveSlide(&work->sprites[i].x, &arrowTarget[i], 3.0f);
@@ -973,7 +973,7 @@ void tskUmnDataBaseExWin(UmnObjectTask *task, void *data)
     }
 }
 
-static const char D_00A13148[5] = "\x01Num";
+static const char dataBaseNumberTagText[5] = "\x01Num";
 static char msg00_4[16];
 
 /*
@@ -1010,7 +1010,7 @@ void tskUmnDataBaseKeyWord(UmnObjectTask *task, void *data)
         eRibbonSet(&work->ribbon, 3);
         work->ribbon.width = 256;
         work->ribbon.height = 24;
-        eTagFontSet(&work->tag, D_00A13148);
+        eTagFontSet(&work->tag, dataBaseNumberTagText);
         eNumberSet(&work->number, 0);
         eMessageSet(&work->message, msg00_4);
         work->message.mode = E_MODE_SHOW_START;
@@ -1417,32 +1417,32 @@ void UmnDataBase(void)
         UmnWork.wait--;
     }
     xglFontDebugHex(0, 0x40, UmnWork.tab_state, 2);
-    xglFontDebugPrintf(0x10, 0x18, D_00A13150, UmnWork.entry);
-    xglFontDebugPrintf(0x10, 0x20, D_00A13158, UmnWork.list_cursor, UmnWork.count);
-    xglFontDebugPrintf(0x10, 0x28, D_00A13160, UmnWork.column, UmnWork.row, UmnWork.rows);
-    xglFontDebugPrintf(0x10, 0x30, D_00A13170, UmnWork.moving);
+    xglFontDebugPrintf(0x10, 0x18, dataBaseEntryDebugFormat, UmnWork.entry);
+    xglFontDebugPrintf(0x10, 0x20, dataBaseListCursorDebugFormat, UmnWork.list_cursor, UmnWork.count);
+    xglFontDebugPrintf(0x10, 0x28, dataBaseColumnRowDebugFormat, UmnWork.column, UmnWork.row, UmnWork.rows);
+    xglFontDebugPrintf(0x10, 0x30, dataBaseMovingDebugFormat, UmnWork.moving);
 }
 
 static char *msg00_1_00A10700[3] = {
-    D_00A12EE0, D_00A12EB0, D_00A12EA8,
+    dataBaseGnosisHelpText, dataBaseKeywordHelpText, dataBaseCancelHelpText,
 };
 static char *text_3_00A10720[5] = {
-    D_00A13128, D_00A13118, D_00A13108, D_00A130F0, D_00A130D8,
+    dataBaseZoomOutHintText, dataBaseZoomInHintText, dataBaseRotateHintText, dataBaseTurnMenuOffHintText, dataBaseAnalysisInfoHintText,
 };
 static char msg00_4[16] = "\x1E\0Index Search:";
 
-char D_00A12EA8[8] = "Cancel.";
+char dataBaseCancelHelpText[8] = "Cancel.";
 
-char D_00A12EB0[48] = "View keywords that you have come across.";
+char dataBaseKeywordHelpText[48] = "View keywords that you have come across.";
 
-char D_00A12EE0[56] = "View data of all the Gnosis you have encountered.";
+char dataBaseGnosisHelpText[56] = "View data of all the Gnosis you have encountered.";
 
-char D_00A130D8[24] = "\036\001\241\247Analysis info";
+char dataBaseAnalysisInfoHintText[24] = "\036\001\241\247Analysis info";
 
-char D_00A130F0[24] = "\036\000\241\247Turn menu off";
+char dataBaseTurnMenuOffHintText[24] = "\036\000\241\247Turn menu off";
 
-char D_00A13108[16] = "\0364\241\247Rotate";
+char dataBaseRotateHintText[16] = "\0364\241\247Rotate";
 
-char D_00A13118[16] = "\0365\241\247Zoom in";
+char dataBaseZoomInHintText[16] = "\0365\241\247Zoom in";
 
-char D_00A13128[16] = "\0366\241\247Zoom out";
+char dataBaseZoomOutHintText[16] = "\0366\241\247Zoom out";

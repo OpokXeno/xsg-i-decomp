@@ -151,10 +151,10 @@ typedef struct UmnTopIntSet {
 
 extern char *moji00_0[4];
 extern char *moji01_1[4];
-extern UmnTopShortSet D_00A12030;
-extern UmnTopIntSet D_00A12038;
-extern UmnTopShortSet D_00A12048;
-extern const char D_00A12050[];
+extern UmnTopShortSet optionIconSpriteTable;
+extern UmnTopIntSet optionSlotPositionTable;
+extern UmnTopShortSet iconGroupSpriteTable;
+extern const char menuCursorDebugFormat[];
 
 void eWindowSet(void *window);
 void eSpriteSet(ESprite *sprite, int texture);
@@ -208,9 +208,9 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
         eMessageModeChange(&work->bottom_message, EMESSAGE_MODE_LINE_START);
         graphicsTemp = work->graphics;
         work->bottom_message.draw_parameter = graphicsTemp + 6;
-        icons = D_00A12030;
+        icons = optionIconSpriteTable;
         work->selection_span = 144;
-        positions = D_00A12038;
+        positions = optionSlotPositionTable;
         for (k = 0; k < UmnWork.menu_count; k++) {
             eRibbonSet(&work->option[k].ribbon, 3);
             work->option[k].ribbon.width = 102;
@@ -230,7 +230,7 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
             eSpriteSet(&work->group1[j], 266);
             work->group1[j].work = work->graphics + 8;
         }
-        icons2 = D_00A12048;
+        icons2 = iconGroupSpriteTable;
         for (j = 0; j < 4; j++) {
             eSpriteSet(&work->group2[j], icons2.value[j]);
             work->group2[j].work = work->graphics + 8;
@@ -412,7 +412,7 @@ void UmnTopMenu(void)
     switch (UmnWork.tab_state) {
     case UMN_STEP_INIT:
         UmnObjectTaskCreate(taskUmnTopWin, (void *)(((int)UmnWorkEnd + 15) & -16));
-        save = &D_4A1A0C;
+        save = &umnMailSaveData;
         slot = &UmnWork.option_ids[UMN_TOP_OPTION_COUNT - 1];
         for (i = UMN_TOP_OPTION_COUNT - 1; i >= 0; i--) {
             *slot-- = 0;
@@ -490,7 +490,7 @@ void UmnTopMenu(void)
     if (UmnWork.wait != 0) {
         UmnWork.wait = UmnWork.wait - 1;
     }
-    xglFontDebugPrintf(0, 64, D_00A12050, UmnWork.menu_cursor);
+    xglFontDebugPrintf(0, 64, menuCursorDebugFormat, UmnWork.menu_cursor);
 }
 
 UmnEventTextRecord *UmnManzaiText = 0;

@@ -123,7 +123,7 @@ typedef struct TyaUmlTextRecord {
 
 extern unsigned char SaveData[];
 extern char name_0[0x12];
-extern const unsigned char D_00A13310[4];
+extern const unsigned char tyaUmlEffectCodeTable[4];
 extern u64 TestEnv_2[14];
 extern u64 InitEnv_3[4];
 extern int TestEnv_4[24];
@@ -131,13 +131,13 @@ extern int TestEnv_5[16];
 extern int TestEnv_6[28];
 /* Defined in src/main/xgl_flags.c. */
 extern int xglFlagsGet(int bit_offset, int bit_count);
-extern const char D_00A133B0[24];
+extern const char tyaUmlDbHeaderPath[24];
 /* Font control streams: the index-bar header, the highlighted and the normal
  * entry colour, the two-byte entry labels (through idx.7) and the suffix
  * template msg.8, whose bytes 2 and 3 take the high and low suffix byte. */
-extern const char D_00A13400[16];
-extern const char D_00A13410[8];
-extern const char D_00A13418[8];
+extern const char tyaUmlIndexBarHeaderText[16];
+extern const char tyaUmlIndexHighlightText[8];
+extern const char tyaUmlIndexNormalText[8];
 extern const char *idx_7;
 extern char msg_8[5];
 
@@ -273,7 +273,7 @@ static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
             out[7] = -11;
             cursor++;
             index = xglSRand() & 3;
-            out[8] = D_00A13310[index];
+            out[8] = tyaUmlEffectCodeTable[index];
             out[9] = 19;
             out[10] = 0;
             out[11] = 0;
@@ -330,7 +330,7 @@ static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
 
 /* Font control stream consumed by xglFontPrint; individual opcodes remain
  * unmodeled, but all 24 original bytes and the call-site type are known. */
-static const char D_00A13380[24] = {
+static const char tyaUmlType3FontText[24] = {
     0x0D, 0x00, 0x15, 0x02, 0x01, 0x0C, 0x0C, 0x80,
     0x80, 0x80, 0x15, 0x02, 0x02, 0x04, 0x19, 0x03,
     0x15, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -493,7 +493,7 @@ static void tyaUmlDispType3(TyaUmlDispParam *parameter)
     parameter->render_pending = 0;
     xglFontPrintExtFunc((unsigned int)(parameter->color + 1),
                         tyaUmlDispType3Sub0, parameter);
-    xglFontPrint(0, 0, (int)(parameter->color + 15), D_00A13380);
+    xglFontPrint(0, 0, (int)(parameter->color + 15), tyaUmlType3FontText);
 
     x = render_x - parameter->clip_x;
     y = render_y - parameter->clip_y;
@@ -655,10 +655,10 @@ static void dbheader_load(TyaUmlDatabase *database)
     source = base_tbl;
     out = buffer;
     dbfileno_load();
-    size = xglCdGetFileSize(D_00A133B0);
+    size = xglCdGetFileSize(tyaUmlDbHeaderPath);
     blockSize = (size + TYA_UML_SECTOR_SIZE - 1) & -TYA_UML_SECTOR_SIZE;
     file = buffer - blockSize + TYA_UML_FILE_AREA_SIZE;
-    xglCdReadFile(D_00A133B0, file, 0, 1);
+    xglCdReadFile(tyaUmlDbHeaderPath, file, 0, 1);
     tbl = (s16 *)(file - TYA_UML_FILTERED_TABLE_SIZE);
     dest = tbl;
 
@@ -724,12 +724,12 @@ static void disp_index(TyaUmlDatabase *database, int suffix)
 
     xglFontPrint(display->render_x + display->render_width - 0x824,
                  display->render_y + display->render_height - 0x71C,
-                 ot, D_00A13400);
+                 ot, tyaUmlIndexBarHeaderText);
     for (i = 0; i < TYA_UML_INDEX_COUNT; i++) {
         if (i == database->indexCursor)
-            xglFontPrintDirectOT(ot, D_00A13410);
+            xglFontPrintDirectOT(ot, tyaUmlIndexHighlightText);
         else
-            xglFontPrintDirectOT(ot, D_00A13418);
+            xglFontPrintDirectOT(ot, tyaUmlIndexNormalText);
         xglFontPrintDirectOT(ot, idx_7 + i * 2);
         if (suffix != 0) {
             msg_8[2] = suffix >> 8;

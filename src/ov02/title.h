@@ -91,7 +91,7 @@ typedef struct TitleMipmapPacket {
     TitleGsAd texture_flush;
 } TitleMipmapPacket;
 
-extern u8 D_2A007F8[];
+extern u8 logoEntrySelection[];
 
 typedef struct TitleMcRequest {
     int slot;

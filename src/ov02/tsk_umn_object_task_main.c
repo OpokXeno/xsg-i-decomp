@@ -84,7 +84,7 @@ extern int SsdSpuDmaCompleted(int wait);
 extern void xglFSrand(float seed);
 extern void GameCFSoundMenuPurge(int flag);
 extern void GameCFSoundMenuReload(void);
-extern UmnLightTable D_00A11DF0;
+extern UmnLightTable objectLightTable;
 extern int UmnEventTextMakeWork;
 
 int tskUmnObjectTaskMain(XglTaskPrefix *base) {
@@ -137,17 +137,17 @@ void UmnChangeTopLevel(int level) {
 
 /* "data\\endou\\umn\\cube.xtx", "data\\endou\\umn\\cube.lex" and
  * "data\\endou\\umn\\umn00.xtx" filename buffers loaded below. */
-static const char D_00A11D40[24] = "data\\endou\\umn\\cube.xtx";
-static const char D_00A11D58[24] = "data\\endou\\umn\\cube.lex";
-static const char D_00A11D70[32] = "data\\endou\\umn\\umn00.xtx";
-static const char D_00A11D90[32] = "data\\sound\\smd\\Umnmode.SWD";
-static const char D_00A11DB0[32] = "data\\sound\\smd\\Umnmode.SMD";
+static const char bgCubeTexturePath[24] = "data\\endou\\umn\\cube.xtx";
+static const char bgCubeModelPath[24] = "data\\endou\\umn\\cube.lex";
+static const char umnTexturePath[32] = "data\\endou\\umn\\umn00.xtx";
+static const char umnModeWaveBankPath[32] = "data\\sound\\smd\\Umnmode.SWD";
+static const char umnModeSequencePath[32] = "data\\sound\\smd\\Umnmode.SMD";
 
 static void UmnFirstLoad(void) {
     UmnWorkEnd = UmnTextLoad(UmnWorkEnd, 0);
-    xglCdReadFile(D_00A11D40, (void *)UmnBgCubeXtx, 0, 1);
-    xglCdReadFile(D_00A11D58, (void *)UmnBgCubeLex, 0, 1);
-    xglCdReadFile(D_00A11D70, (void *)UmnTexAddr, 0, 1);
+    xglCdReadFile(bgCubeTexturePath, (void *)UmnBgCubeXtx, 0, 1);
+    xglCdReadFile(bgCubeModelPath, (void *)UmnBgCubeLex, 0, 1);
+    xglCdReadFile(umnTexturePath, (void *)UmnTexAddr, 0, 1);
 }
 
 static void UmnInit(void) {
@@ -161,12 +161,12 @@ static void UmnInit(void) {
     xglRenderClearDepth();
 
     buffer = (UmnMemory + 0xF) & ~0xF;
-    xglCdReadFile(D_00A11D90, (void *)buffer, 0, 1);
+    xglCdReadFile(umnModeWaveBankPath, (void *)buffer, 0, 1);
     xglSoundSendSwd((void *)buffer, -5);
     while (SsdSpuDmaCompleted(0))
         ;
 
-    xglCdReadFile(D_00A11DB0, (void *)buffer, 0, 1);
+    xglCdReadFile(umnModeSequencePath, (void *)buffer, 0, 1);
     xglSoundSendSmd2((void *)buffer, UMN_SEQUENCE_SLOT);
     xglSoundSequenceNormal2(UMN_SEQUENCE_SLOT, UMN_SEQUENCE_VOLUME);
     xglFSrand(0.12345679f);
@@ -283,7 +283,7 @@ void UmnMain2(int menuId) {
     MenuLoadInit();
     xglStudioChange(0);
     light = xglStudioGetLight2();
-    lights = D_00A11DF0;
+    lights = objectLightTable;
     xglLightIntensityAmbient(light, &lights.ambient);
     xglLightIntensityParallel(light, 0, &lights.parallel[0]);
     xglLightDirection(light, 0, &lights.direction[0].value);

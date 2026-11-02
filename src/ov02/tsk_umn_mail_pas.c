@@ -319,55 +319,55 @@ struct UmnMailEdgePair {
     signed char edge[2];
 };
 
-extern const char D_00A12268[];
-extern const char D_00A12260[];
-extern const char D_00A12258[];
-extern const char D_00A12250[];
-extern const char D_00A12240[];
-extern const char D_00A12D78[];
-extern const char D_00A12D80[];
-extern const char D_00A12D88[];
+extern const char mailPathRootText[];
+extern const char mailPathFolderText[];
+extern const char mailPathReadText[];
+extern const char mailPathReplyText[];
+extern const char mailPathHistoryText[];
+extern const char mailTabStateDebugFormat[];
+extern const char mailListCursorDebugFormat[];
+extern const char mailDirectionDebugFormat[];
 extern unsigned char mail_folder[0x80];
 extern void eSpriteSet(void *sprite, short sprite_id);
 extern void eSpriteMain(void *sprite);
-extern const char D_00A123B8[];
-extern const char D_00A123C0[];
-extern const char D_00A123C8[];
-extern const char D_00A123D8[];
-extern const char D_00A123E8[];
-extern const char D_00A123F8[];
-extern const char D_00A12420[];
-extern const char D_00A12438[];
-extern const char D_00A12458[];
-extern const char D_00A12470[];
-extern const char D_00A12488[];
-extern const char D_00A124A8[];
-extern const char D_00A124D0[];
-extern const char D_00A124E0[];
-extern const char D_00A124F8[];
-extern const char D_00A12510[];
-extern const char D_00A12520[];
-extern const char D_00A12548[];
-extern const char D_00A12550[];
-extern const char D_00A12558[];
+extern const char mailOldPrefixText[];
+extern const char mailNewPrefixText[];
+extern const char mailFileAttachedText[];
+extern const char mailNoAttachmentsText[];
+extern const char mailFromText[];
+extern const char mailReplyToText[];
+extern const char mailViewMailHelpText[];
+extern const char mailViewHistoryHelpText[];
+extern const char mailDownloadAttachmentHelpText[];
+extern const char mailCancelHelpText[];
+extern const char mailSelectReplyPromptText[];
+extern const char mailReplyConfirmText[];
+extern const char mailReplySentText[];
+extern const char mailAttachmentSavedText[];
+extern const char mailInvestmentAmountText[];
+extern const char mailAmountNeededText[];
+extern const char mailMoneyUnitText[];
+extern const char mailSentenceEndText[];
+extern const char mailEmptyText[];
+extern const char mailNewlineText[];
 extern char *MenuNumberTextGet(int value, int width, int flags);
-extern const struct UmnMailCaptionA D_00A12408;
-extern const struct UmnMailCaptionB D_00A12478;
-extern const struct UmnMailCaptionC D_00A12528;
+extern const struct UmnMailCaptionA mailInfoCaptionTexts;
+extern const struct UmnMailCaptionB mailMenuHelpTexts;
+extern const struct UmnMailCaptionC mailReplyCaptionTexts;
 extern const char sikaku_1[];
-extern const short D_00A12840[4];
-extern const char D_00A12848[];
-extern const char D_00A12860[];
+extern const short mailSpriteIdTable[4];
+extern const char mailScrollTypeDebugFormat[];
+extern const char mailNowPageDebugFormat[];
 extern int tyaUmlDispMain(void *param);
 extern int tyaUmlDispParamReset(void *param, int value);
 extern char text_2[];
-extern const char D_00A12AC8[];
-extern const char D_00A12AD0[];
-extern const char D_00A12AD8[];
+extern const char mailSelectTagText[];
+extern const char mailMenuTagText[];
+extern const char mailYesNoDebugFormat[];
 extern const char *text2_4[4];
 extern const char *text_3_00A10650[2];
 extern unsigned char *text_5[3];
-extern const char D_00A12C60[];
+extern const char mailNumberTagText[];
 
 void UmnMailFolderSet(void);
 int MenuSelectMove(int cursor, int count, int wrap);
@@ -375,11 +375,11 @@ int dataMoneyBoxChk(void);
 void dataMoneyBoxDec(int money);
 
 static const char *msg00_0_00A10618[UMN_MAIL_CAPTIONS] = {
-    D_00A12268,
-    D_00A12260,
-    D_00A12258,
-    D_00A12250,
-    D_00A12240,
+    mailPathRootText,
+    mailPathFolderText,
+    mailPathReadText,
+    mailPathReplyText,
+    mailPathHistoryText,
 };
 
 void tskUmnMailPas(UmnObjectTask *task, void *data)
@@ -490,9 +490,9 @@ void tskUmnMailPas(UmnObjectTask *task, void *data)
 void tskUmnMailInfo(UmnObjectTask *task, void *argument)
 {
     struct UmnMailInfoWork *work = argument;
-    struct UmnMailCaptionA caption_a = D_00A12408;
-    struct UmnMailCaptionB caption_b = D_00A12478;
-    struct UmnMailCaptionC caption_c = D_00A12528;
+    struct UmnMailCaptionA caption_a = mailInfoCaptionTexts;
+    struct UmnMailCaptionB caption_b = mailMenuHelpTexts;
+    struct UmnMailCaptionC caption_c = mailReplyCaptionTexts;
     short slide_target;
     unsigned char *box_data;
     UmnHistoryNode *history;
@@ -565,12 +565,12 @@ void tskUmnMailInfo(UmnObjectTask *task, void *argument)
                     if (box_header != 0) {
                         eMessageCpy(work->text_buffer, caption_a.text[4]);
                         eMessageCat(box_header->title);
-                        eMessageCat(D_00A12548);
+                        eMessageCat(mailSentenceEndText);
                         eMessageCat(caption_a.text[5]);
                         eMessageCat(box_header->subject);
-                        eMessageCat(D_00A12548);
+                        eMessageCat(mailSentenceEndText);
                     } else {
-                        eMessageCpy(work->text_buffer, D_00A12550);
+                        eMessageCpy(work->text_buffer, mailEmptyText);
                     }
                 } else {
                     if ((box_data[0] & UMN_MAIL_FLAG_READ) != 0) {
@@ -606,7 +606,7 @@ void tskUmnMailInfo(UmnObjectTask *task, void *argument)
                     eMessageCpy(work->text_buffer, caption_c.text[4]);
                     eMessageCat(MenuNumberTextGet(cost, 8, 1));
                     eMessageCat(caption_c.text[6]);
-                    eMessageCat(D_00A12558);
+                    eMessageCat(mailNewlineText);
                     eMessageCat(caption_c.text[5]);
                     eMessageCat(MenuNumberTextGet(magnitude, 8, 1));
                     eMessageCat(caption_c.text[6]);
@@ -625,7 +625,7 @@ void tskUmnMailInfo(UmnObjectTask *task, void *argument)
                 eMessageCpy(work->text_buffer, caption_c.text[3]);
                 break;
             default:
-                eMessageCpy(work->text_buffer, D_00A12550);
+                eMessageCpy(work->text_buffer, mailEmptyText);
                 slide_target = 512;
                 break;
             }
@@ -1158,7 +1158,7 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
         work->cursor_x = 474;
         work->cursor_pitch = 288;
         work->tya_kind = (unsigned int)(work->pos_kind + 2);
-        sprite_ids = *(const UmnMailSpriteIds *)D_00A12840;
+        sprite_ids = *(const UmnMailSpriteIds *)mailSpriteIdTable;
         for (i = 0; i < 4; i++) {
             eSpriteSet(&work->sprites[i], sprite_ids.id[i]);
             work->sprites[i].color = 0x00f00000;
@@ -1482,8 +1482,8 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
         break;
     }
 
-    xglFontDebugPrintf(16, 128, D_00A12848, work->scrol_type);
-    xglFontDebugPrintf(16, 136, D_00A12860, work->now_page);
+    xglFontDebugPrintf(16, 128, mailScrollTypeDebugFormat, work->scrol_type);
+    xglFontDebugPrintf(16, 136, mailNowPageDebugFormat, work->now_page);
 }
 
 void tskUmnMailHensin(UmnObjectTask *task, void *data)
@@ -1603,7 +1603,7 @@ void tskUmnMailMenu(UmnObjectTask *task, void *data)
         work->window1_visible = 0;
         WindowDXSet(&work->window1);
         work->window1.style = work->color;
-        work->window1.tag_id = D_00A12AC8;
+        work->window1.tag_id = mailSelectTagText;
         work->window1.width = 169;
         work->window1.height = 86;
         work->select1.text = text_3_00A10650[1];
@@ -1617,7 +1617,7 @@ void tskUmnMailMenu(UmnObjectTask *task, void *data)
         work->window2.width = 125;
         work->window2.height = 102;
         work->select2.rows = 2;
-        work->window2.tag_id = D_00A12AD0;
+        work->window2.tag_id = mailMenuTagText;
         work->window2.close_callback = MenuSelectWindow;
         work->window2.close_callback_arg = &work->select2;
         work->state = UMN_MAIL_MENU_IDLE;
@@ -1728,7 +1728,7 @@ void tskUmnMailMenu(UmnObjectTask *task, void *data)
             WindowDXMain(&work->window2);
         }
     }
-    xglFontDebugPrintf(0, 40, D_00A12AD8, work->state);
+    xglFontDebugPrintf(0, 40, mailYesNoDebugFormat, work->state);
 }
 
 void tskUmnMailExWin(UmnObjectTask *task, void *data)
@@ -1757,7 +1757,7 @@ void tskUmnMailExWin(UmnObjectTask *task, void *data)
             eRibbonSet(&work->rows[i].ribbon, 3);
             work->rows[i].ribbon.width = 256;
             work->rows[i].ribbon.height = 24;
-            eTagFontSet(&work->rows[i].tag, D_00A12C60);
+            eTagFontSet(&work->rows[i].tag, mailNumberTagText);
             eNumberSet(&work->rows[i].number, 0);
         }
         work->unmodeled_00 = 0;
@@ -1944,7 +1944,7 @@ void UmnMailFolderSet(void)
         int entry;
 
         UmnWork.count = 0;
-        for (ids = D_4A1A0C.mail_ids; *ids != -1; ids++) {
+        for (ids = umnMailSaveData.mail_ids; *ids != -1; ids++) {
             UmnWork.count++;
         }
         /* The list is stored newest first; the folder shows it oldest first. */
@@ -2209,7 +2209,7 @@ void UmnMail(int menu_id)
         data = UmnMailDataGet(UmnWork.entry);
         if ((data[0] & UMN_MAIL_FLAG_READ) == 0) {
             header = UmnMailHeaderGet(UmnWork.entry);
-            kosmos = &D_4A1A0C;
+            kosmos = &umnMailSaveData;
             for (i = 0; i < UMN_MAIL_KOSMOS_ITEMS; i++) {
                 int item = header->kosmos_items[i];
 
@@ -2420,17 +2420,17 @@ void UmnMail(int menu_id)
     if (UmnWork.wait != 0) {
         UmnWork.wait--;
     }
-    xglFontDebugPrintf(0, 80, D_00A12D78, (unsigned char)UmnWork.tab_state);
-    xglFontDebugPrintf(0, 88, D_00A12D80, UmnWork.list_cursor, UmnWork.count);
-    xglFontDebugPrintf(0, 96, D_00A12D88, UmnWork.direction);
+    xglFontDebugPrintf(0, 80, mailTabStateDebugFormat, (unsigned char)UmnWork.tab_state);
+    xglFontDebugPrintf(0, 88, mailListCursorDebugFormat, UmnWork.list_cursor, UmnWork.count);
+    xglFontDebugPrintf(0, 96, mailDirectionDebugFormat, UmnWork.direction);
 }
 
-const char D_00A12240[16] = "/History";
+const char mailPathHistoryText[16] = "/History";
 
-const char D_00A12250[8] = "/Reply";
+const char mailPathReplyText[8] = "/Reply";
 
-const char D_00A12258[8] = "/Read";
+const char mailPathReadText[8] = "/Read";
 
-const char D_00A12260[8] = "/Folder";
+const char mailPathFolderText[8] = "/Folder";
 
-const char D_00A12268[8] = "Mail";
+const char mailPathRootText[8] = "Mail";

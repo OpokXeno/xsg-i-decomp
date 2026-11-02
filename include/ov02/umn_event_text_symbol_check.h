@@ -60,7 +60,7 @@ typedef struct UmnHistoryNode {
 } UmnHistoryNode;
 
 /* Functions and data used by other translation units. */
-extern UmnMailSaveData D_4A1A0C;
+extern UmnMailSaveData umnMailSaveData;
 extern int UmnEventTextMakeWork;
 int UmnEventTextMake(int event_no);
 UmnEventTextRecord *UmnEventTextNextGet(int delta);

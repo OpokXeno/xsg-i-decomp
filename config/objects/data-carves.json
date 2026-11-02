@@ -248746,26 +248746,26 @@
             "device_check_sync"
           ],
           "c_owned_symbols": [
-            "D_00A10D28"
+            "deviceCheckFontModeText"
           ],
           "also_referenced_by_c": [
-            "D_00A10D30",
-            "D_00A10E38",
-            "D_00A10E98",
-            "D_00A11048",
-            "D_00A11148",
-            "D_00A11158",
-            "D_00A11250",
-            "D_00A112F0",
-            "D_00A11338",
-            "D_00A11358",
-            "D_00A113C8",
-            "D_00A113E8",
-            "D_00A11430",
-            "D_00A11478",
-            "D_00A114C8",
-            "D_00A11520",
-            "D_00A115A0"
+            "hddAppDataCorruptText",
+            "hddUnformattedText",
+            "hddFormatRequestText",
+            "hddFullReasonTexts",
+            "hddFullAdviceTexts",
+            "hddAccessErrorText",
+            "hddSkipSavePromptText",
+            "hddUseForSaveIntroText",
+            "proceedButtonText",
+            "memoryCardCapacityWarningText",
+            "memoryCardMissingText",
+            "memoryCardSlot1FullText",
+            "memoryCardSlot2FullText",
+            "memoryCardBothSlotsFullText",
+            "continueWithoutSavingPromptText",
+            "insertMemoryCardPromptText",
+            "defaultFontModeText"
           ],
           "basis": {
             "kind": "express-integration",
@@ -248787,8 +248787,8 @@
             "Logo"
           ],
           "c_owned_symbols": [
-            "D_00A115A8",
-            "D_00A115B8"
+            "namcoLogoPath",
+            "msiLogoPath"
           ],
           "also_referenced_by_c": [],
           "basis": {
@@ -249462,27 +249462,27 @@
             "TitleHddInstall"
           ],
           "c_owned_symbols": [
-            "D_00A11620"
+            "installScreenFontText"
           ],
           "also_referenced_by_c": [
-            "D_00A11628",
-            "D_00A11688",
-            "D_00A11698",
-            "D_00A116B0",
-            "D_00A116C0",
-            "D_00A116E0",
-            "D_00A116F8",
-            "D_00A11708",
-            "D_00A11718",
-            "D_00A11738",
-            "D_00A117A0",
-            "D_00A117B8",
-            "D_00A117C8",
-            "D_00A117D8",
-            "D_00A117F0",
-            "D_00A11800",
-            "D_00A11818",
-            "D_00A11828"
+            "installingText",
+            "installStartLabel",
+            "createPartitionLabel",
+            "writeResourceLabel",
+            "createSubPartitionFormat",
+            "formatPartitionLabel",
+            "mountPartitionLabel",
+            "startInstallLabel",
+            "installAbortButtonText",
+            "installAbortPromptText",
+            "checkFileCreateLabel",
+            "checkFileWriteLabel",
+            "checkFileCloseLabel",
+            "checkFileUnmountLabel",
+            "checkFileMountLabel",
+            "installCompleteLabel",
+            "installCallbackFormat",
+            "installErrorFormat"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249508,16 +249508,16 @@
             "jtbl_00A118A0"
           ],
           "also_referenced_by_c": [
-            "D_00A118B8",
-            "D_00A11928",
-            "D_00A11970",
-            "D_00A119E0",
-            "D_00A11A58",
-            "D_00A11AA8",
-            "D_00A11B20",
-            "D_00A11C60",
-            "D_00A11C90",
-            "D_00A11CD8"
+            "installStartPromptText",
+            "installCompleteText",
+            "installFailedText",
+            "uninstallStartPromptText",
+            "uninstallCompleteText",
+            "uninstallFailedText",
+            "installArchivePath",
+            "installAccessFailText",
+            "installCancelText",
+            "uninstallCancelText"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249568,15 +249568,15 @@
             "UmnMain"
           ],
           "c_owned_symbols": [
-            "D_00A11D40",
-            "D_00A11D58",
-            "D_00A11D70",
-            "D_00A11D90",
-            "D_00A11DB0",
+            "bgCubeTexturePath",
+            "bgCubeModelPath",
+            "umnTexturePath",
+            "umnModeWaveBankPath",
+            "umnModeSequencePath",
             "jtbl_00A11DD0"
           ],
           "also_referenced_by_c": [
-            "D_00A11DF0"
+            "objectLightTable"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249636,8 +249636,8 @@
             "D_00A12078"
           ],
           "also_referenced_by_c": [
-            "D_00A12060",
-            "D_00A12080"
+            "manzaiFlagDebugFormat",
+            "manzaiWindowPhaseDebugFormat"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249662,11 +249662,11 @@
             "jtbl_00A12090"
           ],
           "also_referenced_by_c": [
-            "D_00A120F0",
-            "D_00A12160",
-            "D_00A12170",
-            "D_00A12180",
-            "D_00A12190"
+            "manzaiModelLightTable",
+            "manzaiModelPositionVector",
+            "manzaiModelScaleVector",
+            "manzaiSubWindowCameraOffsetVector",
+            "manzaiModelStateDebugFormat"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249691,9 +249691,9 @@
             "jtbl_00A121A0"
           ],
           "also_referenced_by_c": [
-            "D_00A121D0",
-            "D_00A121E0",
-            "D_00A121F0"
+            "manzaiCaseCameraRotationVector",
+            "manzaiCaseCameraPositionVector",
+            "manzaiSubWindowFaceOffsetVector"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249718,7 +249718,7 @@
             "jtbl_00A12200"
           ],
           "also_referenced_by_c": [
-            "D_00A12230"
+            "manzaiModelCameraPositionVector"
           ],
           "basis": {
             "kind": "express-integration",
@@ -249781,7 +249781,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12240"
+            "mailPathHistoryText"
           ],
           "c_input_spans": [
             {
@@ -249795,7 +249795,7 @@
                 "0x00a12250"
               ],
               "symbols": [
-                "D_00A12240"
+                "mailPathHistoryText"
               ],
               "credit": "verified"
             }
@@ -249818,7 +249818,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12250"
+            "mailPathReplyText"
           ],
           "c_input_spans": [
             {
@@ -249832,7 +249832,7 @@
                 "0x00a12258"
               ],
               "symbols": [
-                "D_00A12250"
+                "mailPathReplyText"
               ],
               "credit": "verified"
             }
@@ -249855,7 +249855,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12258"
+            "mailPathReadText"
           ],
           "c_input_spans": [
             {
@@ -249869,7 +249869,7 @@
                 "0x00a12260"
               ],
               "symbols": [
-                "D_00A12258"
+                "mailPathReadText"
               ],
               "credit": "verified"
             }
@@ -249892,7 +249892,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12260"
+            "mailPathFolderText"
           ],
           "c_input_spans": [
             {
@@ -249906,7 +249906,7 @@
                 "0x00a12268"
               ],
               "symbols": [
-                "D_00A12260"
+                "mailPathFolderText"
               ],
               "credit": "verified"
             }
@@ -249929,7 +249929,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12268"
+            "mailPathRootText"
           ],
           "c_input_spans": [
             {
@@ -249943,7 +249943,7 @@
                 "0x00a12270"
               ],
               "symbols": [
-                "D_00A12268"
+                "mailPathRootText"
               ],
               "credit": "verified"
             }
@@ -250545,7 +250545,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12EA8"
+            "dataBaseCancelHelpText"
           ],
           "c_input_spans": [
             {
@@ -250559,7 +250559,7 @@
                 "0x00a12eb0"
               ],
               "symbols": [
-                "D_00A12EA8"
+                "dataBaseCancelHelpText"
               ],
               "credit": "verified"
             }
@@ -250582,7 +250582,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12EB0"
+            "dataBaseKeywordHelpText"
           ],
           "c_input_spans": [
             {
@@ -250596,7 +250596,7 @@
                 "0x00a12ee0"
               ],
               "symbols": [
-                "D_00A12EB0"
+                "dataBaseKeywordHelpText"
               ],
               "credit": "verified"
             }
@@ -250619,7 +250619,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A12EE0"
+            "dataBaseGnosisHelpText"
           ],
           "c_input_spans": [
             {
@@ -250633,7 +250633,7 @@
                 "0x00a12f18"
               ],
               "symbols": [
-                "D_00A12EE0"
+                "dataBaseGnosisHelpText"
               ],
               "credit": "verified"
             }
@@ -250800,7 +250800,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A130D8"
+            "dataBaseAnalysisInfoHintText"
           ],
           "c_input_spans": [
             {
@@ -250814,7 +250814,7 @@
                 "0x00a130f0"
               ],
               "symbols": [
-                "D_00A130D8"
+                "dataBaseAnalysisInfoHintText"
               ],
               "credit": "verified"
             }
@@ -250837,7 +250837,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A130F0"
+            "dataBaseTurnMenuOffHintText"
           ],
           "c_input_spans": [
             {
@@ -250851,7 +250851,7 @@
                 "0x00a13108"
               ],
               "symbols": [
-                "D_00A130F0"
+                "dataBaseTurnMenuOffHintText"
               ],
               "credit": "verified"
             }
@@ -250874,7 +250874,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13108"
+            "dataBaseRotateHintText"
           ],
           "c_input_spans": [
             {
@@ -250888,7 +250888,7 @@
                 "0x00a13118"
               ],
               "symbols": [
-                "D_00A13108"
+                "dataBaseRotateHintText"
               ],
               "credit": "verified"
             }
@@ -250911,7 +250911,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13118"
+            "dataBaseZoomInHintText"
           ],
           "c_input_spans": [
             {
@@ -250925,7 +250925,7 @@
                 "0x00a13128"
               ],
               "symbols": [
-                "D_00A13118"
+                "dataBaseZoomInHintText"
               ],
               "credit": "verified"
             }
@@ -250948,7 +250948,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13128"
+            "dataBaseZoomOutHintText"
           ],
           "c_input_spans": [
             {
@@ -250962,7 +250962,7 @@
                 "0x00a13138"
               ],
               "symbols": [
-                "D_00A13128"
+                "dataBaseZoomOutHintText"
               ],
               "credit": "verified"
             }
@@ -250985,7 +250985,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13138"
+            "dataBaseArrowSpriteTable"
           ],
           "c_input_spans": [
             {
@@ -250999,7 +250999,7 @@
                 "0x00a13140"
               ],
               "symbols": [
-                "D_00A13138"
+                "dataBaseArrowSpriteTable"
               ],
               "credit": "verified",
               "zero_padding_tail": 4
@@ -251023,7 +251023,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13140"
+            "dataBaseArrowStepTable"
           ],
           "c_input_spans": [
             {
@@ -251037,7 +251037,7 @@
                 "0x00a13148"
               ],
               "symbols": [
-                "D_00A13140"
+                "dataBaseArrowStepTable"
               ],
               "credit": "verified"
             }
@@ -251060,7 +251060,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13148"
+            "dataBaseNumberTagText"
           ],
           "c_input_spans": [
             {
@@ -251074,7 +251074,7 @@
                 "0x00a1314d"
               ],
               "symbols": [
-                "D_00A13148"
+                "dataBaseNumberTagText"
               ],
               "credit": "verified"
             }
@@ -251247,7 +251247,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A132F8"
+            "simulationDebugLabel"
           ],
           "c_input_spans": [
             {
@@ -251261,7 +251261,7 @@
                 41
               ],
               "symbols": [
-                "D_00A132F8"
+                "simulationDebugLabel"
               ]
             }
           ],
@@ -251421,15 +251421,15 @@
           ],
           "c_owned_symbols": [
             "jtbl_00A13320",
-            "D_00A13380",
+            "tyaUmlType3FontText",
             "db_fileno_path"
           ],
           "also_referenced_by_c": [
-            "D_00A13310",
-            "D_00A133B0",
-            "D_00A13400",
-            "D_00A13410",
-            "D_00A13418"
+            "tyaUmlEffectCodeTable",
+            "tyaUmlDbHeaderPath",
+            "tyaUmlIndexBarHeaderText",
+            "tyaUmlIndexHighlightText",
+            "tyaUmlIndexNormalText"
           ],
           "basis": {
             "kind": "express-integration",
@@ -251552,7 +251552,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13440"
+            "pluginTitleText"
           ],
           "c_input_spans": [
             {
@@ -251566,7 +251566,7 @@
                 "0x00a13450"
               ],
               "symbols": [
-                "D_00A13440"
+                "pluginTitleText"
               ],
               "credit": "verified"
             }
@@ -251589,7 +251589,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13450"
+            "pluginEmptyText"
           ],
           "c_input_spans": [
             {
@@ -251603,7 +251603,7 @@
                 "0x00a13458"
               ],
               "symbols": [
-                "D_00A13450"
+                "pluginEmptyText"
               ],
               "credit": "verified"
             }
@@ -251662,7 +251662,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13540"
+            "pluginDebugLabel"
           ],
           "c_input_spans": [
             {
@@ -251676,7 +251676,7 @@
                 "0x00a13550"
               ],
               "symbols": [
-                "D_00A13540"
+                "pluginDebugLabel"
               ],
               "credit": "verified"
             }
@@ -252245,7 +252245,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13620"
+            "historyTreePath"
           ],
           "c_input_spans": [
             {
@@ -252259,7 +252259,7 @@
                 32
               ],
               "symbols": [
-                "D_00A13620"
+                "historyTreePath"
               ],
               "zero_padding_tail": 5
             }
@@ -252282,7 +252282,7 @@
           ],
           "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13640"
+            "mailHeaderListPath"
           ],
           "c_input_spans": [
             {
@@ -252296,7 +252296,7 @@
                 52
               ],
               "symbols": [
-                "D_00A13640"
+                "mailHeaderListPath"
               ]
             }
           ],

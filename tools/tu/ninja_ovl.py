@@ -277,6 +277,14 @@ def scaffold_aliases(unit_dir, ctus, orig, registry=None, unit=None, linker_scri
                 # As above, these retained scaffold aliases refer to exact
                 # original storage addresses in both ROM and ELF link scripts.
                 out.append(f'PROVIDE("{alias}" = 0x{address:08X});')
+    # The recovered source name of a splat placeholder (config/symbols/<unit>.renames.json,
+    # docs/naming.md) is the same address.  Data still owned by the scaffold keeps its label,
+    # so C reaches it through this name; PROVIDE never overrides a C definition of the name.
+    renames_path = ROOT / "config" / "symbols" / f"{unit or unit_dir.name}.renames.json"
+    if renames_path.is_file():
+        out.append("/* recovered source names of splat placeholders */")
+        for label, name in sorted(json.loads(renames_path.read_text()).get("renames", {}).items()):
+            out.append(f'PROVIDE("{name}" = 0x{int(label[2:], 16):08X});')
     text = "\n".join(out) + "\n"
     path = unit_dir / "scaffold_aliases.ld"
     if not path.is_file() or path.read_text() != text:
@@ -762,7 +770,8 @@ def main():
         else:
             lines.append(f"build {obj}: as {rel}.s")
     lines += [f"build scaffold_aliases.ld: scaffold_aliases | {' '.join(sorted(emitted_cc))} "
-              f"{HERE}/ninja_ovl.py {CARVE_REGISTRY} {a.manifest.resolve()} {unit}.ld symbol_addrs.txt {target}"]
+              f"{HERE}/ninja_ovl.py {CARVE_REGISTRY} {a.manifest.resolve()} {unit}.ld symbol_addrs.txt {target}"
+              + (f" {ROOT}/config/symbols/{unit}.renames.json" if (ROOT / "config/symbols" / f"{unit}.renames.json").is_file() else "")]
     elf_objs = [o for o in objs if not o.startswith("build/assets/")]
     lines += ["",
               f"build build/{unit}.rom.elf: ld | {' '.join(objs)} {unit}.ld undefined_syms_auto.txt undefined_funcs_auto.txt main_symbols.ld scaffold_aliases.ld",

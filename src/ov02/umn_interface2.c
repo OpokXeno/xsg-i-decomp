@@ -82,10 +82,10 @@ typedef struct UmnIf2Parameters {
     UmnIf2Rgba remaining_vertices;
 } UmnIf2Parameters;
 
-extern UmnBgCubeVec D_00A11E60;
-extern const UmnBgCubeLights D_00A11E70;
-extern const UmnIf2Coordinates D_00A11EE0;
-extern const UmnIf2Coordinates D_00A11EF8;
+extern UmnBgCubeVec bgCubeScaleInitVector;
+extern const UmnBgCubeLights bgCubeLightTable;
+extern const UmnIf2Coordinates backdropQuadXTable;
+extern const UmnIf2Coordinates backdropQuadYTable;
 
 void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
 {
@@ -111,7 +111,7 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
         task->enabled = 1;
         memset(&zero, 0, 16);
         zero.v.w = 1.0f;
-        scale_init = D_00A11E60;
+        scale_init = bgCubeScaleInitVector;
         *position = zero;
         *rotation = zero;
         *spare = zero;
@@ -144,7 +144,7 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     xglMatrixStackRotY(rotation->v.y);
     xglMatrixStackRotX(rotation->v.x);
     xglMatrixStackSave(matrix);
-    lights = D_00A11E70;
+    lights = bgCubeLightTable;
     xglLightIntensityAmbient(&work, &lights.v[0].quadword);
     xglLightIntensityParallel(&work, 0, &lights.v[1].quadword);
     xglLightDirection(&work, 0, &lights.v[4].v);
@@ -217,8 +217,8 @@ static void DrawUmnInterface2(FontDrawCursor *cursor, void *argument)
     setup->test.register_address = SCE_GS_TEST_1;
     sceVif1PkAddDirectDataN(cursor->packet, setup, 5);
 
-    x_coordinates = D_00A11EE0;
-    y_coordinates = D_00A11EF8;
+    x_coordinates = backdropQuadXTable;
+    y_coordinates = backdropQuadYTable;
 
     geometry->tag_low = 0x8006;
     geometry->tag_high = 0x30AEC000;
