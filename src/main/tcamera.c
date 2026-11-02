@@ -10,6 +10,7 @@
 #include "main/xgl_font.h"
 #include "main/fcv2.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 #define TCAMERA_ROTATION(camera)    (&((TCamera *)(camera))->rotation)
 #define TCAMERA_TRANSLATION(camera) (&((TCamera *)(camera))->translation)
@@ -141,14 +142,7 @@ void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
     interest[0] = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
     interest[1] = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
     interest[2] = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%2)"
-        :
-        : "r"(interest), "r"(translation), "r"(&direction)
-        : "memory");
+    Vu0SubVectorXYZ(&direction, translation, interest);
     yaw = xglAtan2(direction.x, direction.z);
     radiansPerDegree = 3.1415927f;
     rotation->y = yaw;
@@ -181,14 +175,7 @@ void TCAMERA_transMPack2(TCamera *camera, void *source, float frame)
     interest.vector.z = FCV2_getPackValue(TCAMERA_MPACK_SCRATCH, frame);
     interest.vector.w = 1.0f;
     QuadwordCopy(&mpack_interest.storage, &interest.storage);
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%2)"
-        :
-        : "r"(&interest.vector), "r"(translation), "r"(&direction)
-        : "memory");
+    Vu0SubVectorXYZ(&direction, translation, &interest.vector);
     rotation->y = xglAtan2(direction.x, direction.z);
     rotation->x = -xglAtan2(direction.y,
                             direction.x * xglSin(rotation->y) +
@@ -245,14 +232,7 @@ void TCAMERA_setView(TCamera *camera, float x, float y, float z)
     home[0] = x;
     home[1] = y;
     home[2] = z;
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%2)"
-        :
-        : "r"(home), "r"(translation), "r"(&dir)
-        : "memory");
+    Vu0SubVectorXYZ(&dir, translation, home);
     yaw = xglAtan2(dir.x, dir.z);
     rotation->y = yaw;
     sine = xglSin(yaw);
@@ -289,14 +269,7 @@ void TCAMERA_viewSPL(TCamera *camera, void *spline, float frame)
     float pitchDenominator;
 
     SPL_getValueXYZ(point, spline, frame);
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%2)"
-        :
-        : "r"(point), "r"(translation), "r"(&direction)
-        : "memory");
+    Vu0SubVectorXYZ(&direction, translation, point);
     yaw = xglAtan2(direction.x, direction.z);
     rotation->y = yaw;
     sine = xglSin(yaw);
@@ -323,14 +296,7 @@ void TCAMERA_transCNS(TCamera *camera, Vector4 **reference_position, Vector4 *of
         point[1] = (*reference_position)[1].y;
         point[2] = (*reference_position)[1].z;
     }
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vadd.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%2)"
-        :
-        : "r"(offset), "r"(point), "r"(translation)
-        : "memory");
+    Vu0AddVectorXYZ(translation, point, offset);
 }
 
 void TCAMERA_viewCNS(TCamera *camera, Vector4 **reference_position, Vector4 *offset, int mode)
@@ -357,22 +323,8 @@ void TCAMERA_viewCNS(TCamera *camera, Vector4 **reference_position, Vector4 *off
         point[2] = (*reference_position)[1].z;
     }
     camera = (TCamera *)((u8 *)camera + 0xd0);
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vadd.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%1)"
-        :
-        : "r"(offset), "r"(point)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 $vf3, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
-        "sqc2 $vf2, 0(%2)"
-        :
-        : "r"(point), "r"(camera), "r"(&direction)
-        : "memory");
+    Vu0AddVectorXYZ(point, point, offset);
+    Vu0SubVectorXYZ(&direction, camera, point);
     yaw = xglAtan2(direction.x, direction.z);
     rotation->y = yaw;
     sine = xglSin(yaw);

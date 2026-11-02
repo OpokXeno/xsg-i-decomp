@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 typedef struct XglCamera XglCamera;
 
@@ -280,28 +281,15 @@ static void xglCameraTravelManual(XglCamera *camera)
     travel->fov += travel->fov_velocity;
     xglVectorScaleXYZ(&travel->angle_velocity, &travel->angle_velocity, damping);
     xglVectorScaleXYZ(&travel->place_velocity, &travel->place_velocity, damping);
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vadd.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%0)"
-                         : : "r"(&travel->angle_velocity), "r"(&travel->angle_delta)
-                         : "memory");
+    Vu0AddVectorXYZ(&travel->angle_velocity, &travel->angle_velocity, &travel->angle_delta);
     xglMatrixStackUnit();
     xglMatrixStackRotY(travel->rotation.y);
     xglMatrixStackSave((float (*)[4])axes);
     xglVectorScaleAddXYZ(&travel->place_velocity, &axes[0], &travel->place_velocity, travel->place_delta.x);
     travel->place_velocity.y += travel->place_delta.y;
     xglVectorScaleAddXYZ(&travel->place_velocity, &axes[2], &travel->place_velocity, travel->place_delta.z);
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vadd.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%0)"
-                         : : "r"(&travel->rotation), "r"(&travel->angle_velocity) : "memory");
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vadd.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%0)"
-                         : : "r"(&travel->position), "r"(&travel->place_velocity) : "memory");
+    Vu0AddVectorXYZ(&travel->rotation, &travel->rotation, &travel->angle_velocity);
+    Vu0AddVectorXYZ(&travel->position, &travel->position, &travel->place_velocity);
 }
 
 static void xglCameraTravelChase(XglCamera *camera)
@@ -338,16 +326,8 @@ static void xglCameraTravelChase(XglCamera *camera)
     travel->fov += travel->fov_velocity;
     xglVectorScaleXYZ(&travel->angle_velocity, &travel->angle_velocity, damping);
     xglVectorScaleXYZ(&travel->place_velocity, &travel->place_velocity, damping);
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vadd.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%0)"
-                         : : "r"(&travel->angle_velocity), "r"(&travel->angle_delta) : "memory");
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vadd.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%0)"
-                         : : "r"(&travel->place_velocity), "r"(&travel->place_delta) : "memory");
+    Vu0AddVectorXYZ(&travel->angle_velocity, &travel->angle_velocity, &travel->angle_delta);
+    Vu0AddVectorXYZ(&travel->place_velocity, &travel->place_velocity, &travel->place_delta);
     travel->chase_distance += travel->place_velocity.z;
     travel->chase_yaw += travel->angle_velocity.y;
     if (travel->chase_distance < 0.4f) {
@@ -356,12 +336,7 @@ static void xglCameraTravelChase(XglCamera *camera)
     if (travel->chase_distance > 100.0f) {
         travel->chase_distance = 100.0f;
     }
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vsub.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%2)"
-                         : : "r"(&travel->chase_reference), "r"(&travel->chase_position), "r"(&offset)
-                         : "memory");
+    Vu0SubVectorXYZ(&offset, &travel->chase_reference, &travel->chase_position);
     xglVectorLength(&offset.w, &offset);
     if (offset.w < 1.0f) {
         xglVectorScaleAddXYZ(&travel->chase_position, &offset, &travel->chase_position, 0.2f);
@@ -386,12 +361,7 @@ static void xglCameraTravelChase(XglCamera *camera)
     if (travel->position.y > 100.0f) {
         travel->position.y = 100.0f;
     }
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vsub.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%2)"
-                         : : "r"(&travel->chase_position), "r"(&travel->position), "r"(&offset)
-                         : "memory");
+    Vu0SubVectorXYZ(&offset, &travel->chase_position, &travel->position);
     xglVectorNormal(&offset, &offset);
     offset.z = -offset.z;
     travel->rotation.y = atan2f(offset.x, offset.z);
@@ -516,11 +486,7 @@ static void xglCameraViewTravel(StudioCamera *studio, Vector4 *offset)
                          : : "r"(&camera->travel.frustum[1]), "r"(frustum), "r"(&ratio) : "memory");
     xglVectorScale(&camera->travel.frustum[0], &camera->travel.frustum[1], -1.0f);
     xglMatrixStackUnit();
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vsub.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%2)"
-                         : : "r"(&travel->position), "r"(offset), "r"(&shift) : "memory");
+    Vu0SubVectorXYZ(&shift, &travel->position, offset);
     xglMatrixStackTrans(&shift.x);
     xglMatrixStackRotY(travel->rotation.y);
     xglMatrixStackRotX(travel->rotation.x);

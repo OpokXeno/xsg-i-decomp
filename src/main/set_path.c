@@ -12,6 +12,7 @@
 #include "main/xgl_render.h"
 #include "main/xgl_sound.h"
 #include "main/xgl_thread.h"
+#include "vu0_macro.h"
 
 #define SCAM_TAKE_DEFAULT_RATE 0.1f
 #define SCAM_TAKE_DEFAULT_RANGE 2.6f
@@ -694,7 +695,7 @@ static void seffectDebugCf(void)
 
     handle_9 = 0;
     memset(&dmyActor_12, 0, sizeof(dmyActor_12));
-    __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&dmyActor_12.scale) : "memory");
+    Vu0SetOrigin(&dmyActor_12.scale);
     dmyActor_12.scale.x = 1.0f;
     dmyActor_12.scale.w = 1.0f;
     dmyActor_12.scale.z = 1.0f;

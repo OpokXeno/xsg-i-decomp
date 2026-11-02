@@ -24,26 +24,6 @@ extern const float circle_angle_scale_literal; /* 0x004d82e8, pi/180 */
 extern const float effect_scale_literal_0_1; /* 0x004d82dc, 0.1f */
 
 /*
- * config/units/math-main-w3-002e7f40.json (sefDeg2RadVector @ 0x002e7f40):
- * the degrees-to-radians factor is a scaffold-owned .lit4 word at 0x004d8354,
- * reachable image-wide as the linker symbol `lit4_004d8354`
- * (config/symbols/main.txt). Reading it as a real extern keeps the original
- * gp-relative relocation instead of a hand-written $gp offset
- */
-extern const float lit4_004d8354;
-
-/*
- * sefCalcRotChange (main:0x002e2f00): a second, distinct .lit4 occurrence of
- * the same degrees-to-radians factor as lit4_004d8354 above, at its own
- * address 0x004d8318. Unlike lit4_004d8354, no accepted record has renamed
- * this word yet, so it still keeps the scaffold's own splat label
- * (build/main/asm/main/data/sef.lit4.s: `dlabel DEG_TO_RAD`), and this extern
- * names it verbatim rather than inventing a new symbol the scaffold does not
- * define
- */
-extern const float DEG_TO_RAD;
-
-/*
  * sefGetDmgNull (main:0x002e7e40): 0x0079411C is _battleData + SEF_BATTLE_PHASE
  * (0x00794110 + 0x00c), the same battle-phase field sefCalcLocalMatrix reads
  * as *(short *)(battle + SEF_BATTLE_PHASE) (this file, main:0x002e2d48).

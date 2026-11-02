@@ -1,6 +1,7 @@
 #include "common.h"
 #include "main/exm_1.h"
 #include "exm_1.h"
+#include "vu0_macro.h"
 
 #define EXM_SET_JOINT_POSITION(joint, pos)     do {         (joint)->elements[12] = (pos)[0];         (joint)->elements[13] = (pos)[1];         (joint)->elements[14] = (pos)[2];     } while (0)
 
@@ -2163,13 +2164,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
         if (index < jointCount) {
             do {
                 Matrix *current = ExMotionMatrices(work) + work->saved_index + index;
-                __asm__ __volatile__(
-                    "lqc2 $vf20,0(%0)\n\t"
-                    "lqc2 $vf21,0(%1)\n\t"
-                    "vsub.xyzw $vf20,$vf20,$vf21\n\t"
-                    "sqc2 $vf20,0(%2)"
-                    : : "r"(&current[1].elements[12]), "r"(&current->elements[12]), "r"(&direction)
-                    : "memory");
+                Vu0SubVector(&direction, &current[1].elements[12], &current->elements[12]);
                 OrientExMotionJoint(work, index, &direction);
                 if (flags & 1) {
                     MATRIX_rotX4s(ExMotionMatrices(work)[work->saved_index + index].rows,

@@ -7,6 +7,7 @@
 #include "main/res_get_path.h"
 #include "main/xgl_sound.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 #define GIF_TAG_NLOOP_1 1u
 #define GIF_TAG_EOP (1u << 15)
@@ -1176,13 +1177,7 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             /* Each VU block loads both complete vectors, changes XYZ, and retains
                the VF2 input's W. VF2/VF3 and arithmetic flags are scratch here;
                no incoming ACC/Q state is used and this compiler has no VF allocator. */
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vsub.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(work->temporary.values), "r"(first_position),
-                    "r"(second_position) : "memory");
+            Vu0SubVectorXYZ(work->temporary.values, second_position, first_position);
             xglVectorOuter(perpendicular, &work->temporary.vector,
                              light_direction);
             xglVectorLength(&length, perpendicular);
@@ -1198,33 +1193,15 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             work->temporary.values[0] = first_position[0];
             work->temporary.values[1] = first_position[1];
             work->temporary.values[2] = first_position[2];
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vadd.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[0]), "r"(&work->outer_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0AddVectorXYZ(&points[0], work->temporary.values, &work->outer_offset);
             xglVectorMulMat(&points[8], work->flatten.elements, &points[0]);
             points[0].w = 1.0f;
             points[8].w = 1.0f;
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vsub.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[1]), "r"(&work->outer_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0SubVectorXYZ(&points[1], work->temporary.values, &work->outer_offset);
             xglVectorMulMat(&points[9], work->flatten.elements, &points[1]);
             points[1].w = 1.0f;
             points[9].w = 1.0f;
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vsub.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[4]), "r"(axial_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0SubVectorXYZ(&points[4], work->temporary.values, axial_offset);
             xglVectorMulMat(&points[12], work->flatten.elements, &points[4]);
             points[4].w = 1.0f;
             points[12].w = 1.0f;
@@ -1232,33 +1209,15 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             work->temporary.values[0] = second_position[0];
             work->temporary.values[1] = second_position[1];
             work->temporary.values[2] = second_position[2];
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vadd.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[2]), "r"(&work->outer_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0AddVectorXYZ(&points[2], work->temporary.values, &work->outer_offset);
             xglVectorMulMat(&points[10], work->flatten.elements, &points[2]);
             points[2].w = 1.0f;
             points[10].w = 1.0f;
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vsub.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[3]), "r"(&work->outer_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0SubVectorXYZ(&points[3], work->temporary.values, &work->outer_offset);
             xglVectorMulMat(&points[11], work->flatten.elements, &points[3]);
             points[3].w = 1.0f;
             points[11].w = 1.0f;
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vadd.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[5]), "r"(axial_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0AddVectorXYZ(&points[5], work->temporary.values, axial_offset);
             xglVectorMulMat(&points[13], work->flatten.elements, &points[5]);
             points[5].w = 1.0f;
             points[13].w = 1.0f;
@@ -1269,23 +1228,11 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
                 (first_position[1] + second_position[1]) * 0.5f;
             work->temporary.values[2] =
                 (first_position[2] + second_position[2]) * 0.5f;
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vadd.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[6]), "r"(inner_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0AddVectorXYZ(&points[6], work->temporary.values, inner_offset);
             xglVectorMulMat(&points[14], work->flatten.elements, &points[6]);
             points[6].w = 1.0f;
             points[14].w = 1.0f;
-            __asm__ __volatile__(
-                "lqc2 vf3,0(%1)\n\t"
-                "lqc2 vf2,0(%2)\n\t"
-                "vsub.xyz vf2,vf2,vf3\n\t"
-                "sqc2 vf2,0(%0)"
-                : : "r"(&points[7]), "r"(inner_offset),
-                    "r"(work->temporary.values) : "memory");
+            Vu0SubVectorXYZ(&points[7], work->temporary.values, inner_offset);
             xglVectorMulMat(&points[15], work->flatten.elements, &points[7]);
             points[7].w = 1.0f;
             points[15].w = 1.0f;

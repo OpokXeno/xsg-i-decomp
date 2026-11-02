@@ -1428,14 +1428,16 @@ def _cop2_check_operands(section, kind, allowed=None):
     return constraints
 
 
-def _cop2_check_clobbers(section):
+def _cop2_check_clobbers(section, fprs=frozenset()):
+    """`fprs`: the FPRs this block loads with an admitted `li.s` (see
+    `_cop2_float_constant`); no other FPR may be clobbered."""
     seen = set()
     for item in _split_top(section, ','):
         stripped = item.strip(' \t\r\n')
         require(_COP2_CLOBBER_LIT.fullmatch(stripped),
                 'hardware clobbers must be single string literals')
         name = _literal_prefix(stripped)[0]
-        require(name == 'memory' or _COP2_CLOBBER_GPR.fullmatch(name),
+        require(name == 'memory' or _COP2_CLOBBER_GPR.fullmatch(name) or name in fprs,
                 'uncalibrated hardware clobber: ' + name[:40])
         require(name not in seen, 'duplicate hardware clobber: ' + name[:40])
         seen.add(name)
@@ -1506,9 +1508,12 @@ def _cop2_null_default(body, outputs, clobbers):
     between two hard-coded registers, a group that defaults an input rather
     than a read-write output, a second group in the same block, and every other
     scalar instruction (`sw`, `lw`, `addu`, `sll`, `daddu`, branches, labels and
-    the assembler mode directives). This is the ONE non-hardware idiom in the
-    table and it is expected to stay the only one: another scalar sequence needs
-    its own evidence that the original hand-wrote it and that no C reaches it.
+    the assembler mode directives). Further `movz` lines after the first, each
+    defaulting another read-write output from the same scratch, are admitted
+    since 2026-11-02 (MMathCalcAngle/Cam). The other scalar library sequences
+    with their own evidence are `_cop2_float_constant` and `_cop2_clip_flags`
+    (user decision 2026-11-02); any further one needs its own evidence that the
+    original hand-wrote it and that no C reaches it.
     """
     head = _NULL_DEFAULT_HI.fullmatch(body[0]) if body else None
     if head is None:
@@ -1538,11 +1543,28 @@ def _cop2_null_default(body, outputs, clobbers):
     require(move.group('d') == move.group('t'),
             'the null-default idiom must default the operand it tests, not %%%s from %%%s'
             % (move.group('d'), move.group('t')))
-    index = int(move.group('d'), 10)
-    require(index < len(outputs) and outputs[index] == '+r',
-            'the null-default idiom must default a read-write output operand; %%%s is %s'
-            % (move.group('d'), outputs[index] if index < len(outputs) else 'an input'))
-    rest = body[3:]
+    # User decision 2026-11-02: one lui/addiu may default several pointers, each
+    # with its own `movz` (MMathCalcAngle / MMathCalcAngleCam default both
+    # `source` and `target` to McMathUnitVector through one $8). Every movz is
+    # checked like the first and must default a distinct read-write output.
+    defaulted = set()
+    count = 2
+    while True:
+        index = int(move.group('d'), 10)
+        require(index < len(outputs) and outputs[index] == '+r',
+                'the null-default idiom must default a read-write output operand; %%%s is %s'
+                % (move.group('d'), outputs[index] if index < len(outputs) else 'an input'))
+        require(move.group('d') == move.group('t') and move.group('reg') == reg,
+                'every null-default movz tests and defaults one operand from the same scratch: '
+                + body[count][:120])
+        require(index not in defaulted,
+                'the null-default idiom defaults each operand once: ' + body[count][:120])
+        defaulted.add(index)
+        count += 1
+        move = _NULL_DEFAULT_MOVZ.fullmatch(body[count]) if count < len(body) else None
+        if move is None:
+            break
+    rest = body[count:]
     require(any((_cop2_match_line(line) or ('', ))[0] not in ('', 'gprquad') + _MMI_KINDS
                for line in rest),
             'the null-default idiom is admitted only inside a block that performs a COP2/VU '
@@ -1551,6 +1573,154 @@ def _cop2_null_default(body, outputs, clobbers):
         require(not _NULL_DEFAULT_HI.fullmatch(line),
                 'one null-default idiom per hardware block: ' + line[:120])
     return rest
+
+
+# Library scalar glue (user decision 2026-11-02, "calibra tu_audit"). The VU0
+# libraries of MAIN (MMath, nml, sef, sv) wrote these scalar steps inside their
+# own asm blocks with their fixed scratch registers; plain C never reaches those
+# registers (probed: the allocator picks v0/v1/at, never $8/$9/$2/$f8), and the
+# register-asm bindings and empty barriers that used to imitate them are
+# forbidden (user 2026-10-16 and 2026-11-02). Each shape below is admitted only
+# as written; any other scalar line stays refused.
+
+_FLOAT_CONSTANT = re.compile(r'li\.s' + _WS + r'\$f(?P<f>[0-9]|[12][0-9]|3[01])' + _SEP +
+                             r'(?P<value>-?[0-9]+\.[0-9]+(?:e-?[0-9]+)?)')
+_FLOAT_CONSTANT_MFC1 = re.compile(r'mfc1' + _WS + r'\$(?P<g>[0-9]|[12][0-9]|3[01])' + _SEP +
+                                  r'\$f(?P<f>[0-9]|[12][0-9]|3[01])')
+
+
+def _cop2_float_constant_registers(lines):
+    """The FPRs an admitted `li.s` writes, so the clobber check can accept them."""
+    return frozenset('$f' + m.group('f') for m in map(_FLOAT_CONSTANT.fullmatch, lines) if m)
+
+
+def _cop2_float_constant(body, clobbers):
+    """Consume one `li.s $fN, constant` feeding the next line's `mfc1 $G, $fN`.
+
+    Evidence: the original loads the VU0 scale constants of MMathDeg2Rad/Rad2Deg
+    (and their I forms), sefDeg2RadVector, sefCalcRotChange and svDrawModel
+    with an `lwc1 $fN, %gp_rel(.lit4)` that gas emits for `li.s`, immediately
+    followed by the block's `mfc1`; in svDrawModel (`li.s $f0, 0.0078125`) the
+    gas COP1 hazard `nop` between `mtc1 at,$f0` and `mfc1` appears only when the
+    two lines share one template. Admitted once per block, only into a declared
+    FPR clobber, and only consumed by the very next line's `mfc1` (VU0's float
+    interface); the `mfc1` itself is checked by the ordinary table.
+    """
+    out, seen = [], False
+    for index, line in enumerate(body):
+        m = _FLOAT_CONSTANT.fullmatch(line)
+        if m is None:
+            out.append(line)
+            continue
+        require(not seen, 'one li.s float constant per hardware block: ' + line[:120])
+        seen = True
+        nxt = _FLOAT_CONSTANT_MFC1.fullmatch(body[index + 1]) if index + 1 < len(body) else None
+        require(nxt is not None and nxt.group('f') == m.group('f'),
+                'a li.s float constant must be consumed by the next line\'s `mfc1 $G,$f%s`: %s'
+                % (m.group('f'), line[:120]))
+        require('$f' + m.group('f') in clobbers,
+                'a li.s float constant must declare its FPR $f%s as a clobber' % m.group('f'))
+        require('$' + nxt.group('g') in clobbers,
+                'the li.s float constant\'s mfc1 scratch $%s must be declared as a clobber'
+                % nxt.group('g'))
+    return out
+
+
+_CLIP_CFC2_HARD = re.compile(r'cfc2' + _WS + r'\$(?P<r>[1-9]|[12][0-9]|3[01])' + _SEP + r'\$vi18')
+_CLIP_CFC2_OPERAND = re.compile(r'cfc2' + _WS + r'%(?P<k>[0-9])' + _SEP + r'\$vi18')
+_CLIP_ANDI = re.compile(r'andi' + _WS + r'\$(?P<d>[0-9]+)' + _SEP + r'\$(?P<s>[0-9]+)' + _SEP +
+                        r'(?P<imm>0x[0-9a-fA-F]+|[0-9]+)')
+_CLIP_MOVE = re.compile(r'move' + _WS + r'%(?P<k>[0-9])' + _SEP + r'\$(?P<s>[0-9]+)')
+_CLIP_LI = re.compile(r'li' + _WS + r'\$(?P<s>[1-9]|[12][0-9]|3[01])' + _SEP +
+                      r'(?P<imm>0x[0-9a-fA-F]+|[0-9]+)')
+_CLIP_MOVN = re.compile(r'movn' + _WS + r'%(?P<d>[0-9])' + _SEP + r'\$(?P<s>[0-9]+)' + _SEP +
+                        r'%(?P<t>[0-9])')
+
+
+def _cop2_clip_flags(body, outputs, clobbers):
+    """Consume the clip-flag read-out after `cfc2 ..., $vi18` (the VU0 clip flags).
+
+    Two library shapes, both measured against the original (2026-11-02):
+
+      * nml `_CurRotTransPersClip` (three TUs): the block ends
+        `cfc2 $R,$vi18 / nop / andi $R,$R,mask / move %K,$R` -- the flags are
+        masked in the scratch and handed to an `=r` output, which is why the
+        original returns through `move a0,v0; jr ra; move v0,a0`;
+      * MMathRotTransPersClip: `li $S,imm` earlier in the block, then
+        `cfc2 %K,$vi18 / nop / movn %K,$S,%K` (flags != 0 -> the clipped mark),
+        VU lines may follow.
+
+    The `nop` is the COP2 control-transfer hazard slot the original keeps right
+    after `cfc2`. Admitted once per block; the scratch must be clobbered and %K
+    must be an `=r` output. Every other scalar line stays refused.
+    """
+    def output(k, line):
+        index = int(k, 10)
+        require(index < len(outputs) and outputs[index] in ('=r', '=&r'),
+                'the clip-flag read-out must deliver into an =r output: ' + line[:120])
+    for index, line in enumerate(body):
+        hard = _CLIP_CFC2_HARD.fullmatch(line)
+        if hard and body[index + 1:index + 2] == ['nop'] and len(body) == index + 4:
+            andi = _CLIP_ANDI.fullmatch(body[index + 2])
+            move = _CLIP_MOVE.fullmatch(body[index + 3])
+            reg = hard.group('r')
+            require(andi is not None and move is not None and andi.group('d') == reg
+                    and andi.group('s') == reg and move.group('s') == reg,
+                    'the clip-flag read-out is `cfc2 $R,$vi18 / nop / andi $R,$R,mask / '
+                    'move %K,$R`: ' + line[:120])
+            require('$' + reg in clobbers,
+                    'the clip-flag scratch $%s must be declared as a clobber' % reg)
+            output(move.group('k'), body[index + 3])
+            return body[:index + 1]
+        oper = _CLIP_CFC2_OPERAND.fullmatch(line)
+        if oper and body[index + 1:index + 2] == ['nop'] and index + 2 < len(body) \
+                and _CLIP_MOVN.fullmatch(body[index + 2]):
+            movn = _CLIP_MOVN.fullmatch(body[index + 2])
+            k = oper.group('k')
+            require(movn.group('d') == k and movn.group('t') == k,
+                    'the clip-flag movn must test and update the cfc2 operand: ' + body[index + 2][:120])
+            loads = [(i, _CLIP_LI.fullmatch(l)) for i, l in enumerate(body[:index])
+                     if _CLIP_LI.fullmatch(l)]
+            require(len(loads) == 1 and loads[0][1].group('s') == movn.group('s'),
+                    'the clip-flag movn takes its mark from one earlier `li $S,imm` of the block: '
+                    + body[index + 2][:120])
+            require('$' + movn.group('s') in clobbers,
+                    'the clip-flag mark scratch $%s must be declared as a clobber' % movn.group('s'))
+            output(k, line)
+            return ([l for i, l in enumerate(body[:index]) if i != loads[0][0]] + [line] +
+                    body[index + 3:])
+    return body
+
+
+# VU register-only lines (VF/ACC/Q/I arithmetic, moves and waits): no GPR, no
+# memory, no VI, no microprogram call.
+_VU_REGISTER_KINDS = frozenset(('accbc3', 'accplain3', 'bc3', 'plain3', 'opmsub', 'imove',
+                                'qmove', 'move2', 'barrier', 'sqrt', 'vdiv', 'clipw'))
+
+
+def _cop2_register_only_block(sections, body, operands):
+    """A VU0 block with no operands and no clobbers that touches only VU registers.
+
+    User decision 2026-11-02, evidence sefDrawParticle (main/tu210): the original
+    splits its particle transform so that the pure VU matrix multiply (vf9..vf12
+    times vf21..vf24 into vf27..vf30) is its own `__asm__ __volatile__(... : :)`.
+    Such a statement is a bare volatile ASM_OPERANDS for cc1, which flushes cse's
+    table there -- that is what the forbidden empty barrier used to imitate --
+    while a "memory" clobber would make it a PARALLEL and change the code. It is
+    admitted only when there is no operand and no clobber at all and EVERY line
+    is a VU register operation (no lqc2/sqc2, no GPR or COP1 transfer, no VI or
+    control register, no vcallms): such a block cannot read or write anything
+    the compiler owns, so it has nothing to declare.
+    """
+    if operands or len(sections) < 2 or any(part.strip(' \t\r\n') for part in sections[1:]):
+        return False
+    for line in body:
+        found = _cop2_match_line(line)
+        if found is None or found[0] not in _VU_REGISTER_KINDS:
+            return False
+    for line in body:
+        _cop2_check_line(line)
+    return True
 
 
 def _cop2_block_scratch_reads(body):
@@ -1924,17 +2094,22 @@ def _cop2_parse_construct(text, start, *, mmi_transpose=False, sef_particle_scal
     outputs = _cop2_check_operands(sections[1], 'output') if len(sections) >= 2 else []
     inputs = _cop2_check_operands(sections[2], 'input') if len(sections) >= 3 else []
     operands = len(outputs) + len(inputs)
+    if _cop2_register_only_block(sections, body, operands):
+        _COP2_SPANS.append(dict(kind='cop2', start=start))
+        return i + 1
     require(len(sections) >= 4, 'COP2 inline must declare a memory clobber')
     if sef_particle_scale and any(re.match(r'lwc1(?:\s|$)', line) for line in lines):
         _sef_particle_scale_block(lines, outputs, inputs, sections[2], sections[3])
         _COP2_SPANS.append(dict(kind='cop2', sef_particle_scale=True, start=start))
         return i + 1
-    clobbers = _cop2_check_clobbers(sections[3])
+    clobbers = _cop2_check_clobbers(sections[3], _cop2_float_constant_registers(body))
     if mmi_transpose:
         _mmi_cop2_transpose_block(body, outputs, inputs, clobbers)
         _COP2_SPANS.append(dict(kind='cop2', start=start))
         return i + 1
     body = _cop2_null_default(body, outputs, clobbers)
+    body = _cop2_float_constant(body, clobbers)
+    body = _cop2_clip_flags(body, outputs, clobbers)
     i_immediate = False
     if vu0_i_immediate:
         body, i_immediate = _vu0_i_immediate(body, clobbers)
@@ -2172,7 +2347,10 @@ def hardware_c(text, staged=None, headers=(), inner=None, *, mmi_transpose=False
     inside real C.
 
     Three admissions are not COP2 instructions and each is bounded by its own
-    measured reason:
+    measured reason (since 2026-11-02 the library scalar glue of
+    `_cop2_float_constant` / `_cop2_clip_flags`, the multi-`movz` null default
+    and the operand-free `_cop2_register_only_block` join them, each documented
+    where it is checked):
 
     * a trailing `nop`, and only as the last line of a block that performs a
       COP2/VU operation (`_cop2_delay_slot_filler`);

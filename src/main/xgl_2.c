@@ -5,6 +5,7 @@
 #include "main/xgl_dma.h"
 #include "main/xgl_studio.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 extern unsigned int D_004ADE80[];
 extern char Vu0CallSin[];
@@ -81,23 +82,7 @@ float xglAtan2(float y, float x)
 
 void xglMemCopy64(void *destination, const void *source, int count)
 {
-    __asm__ __volatile__(
-        "1:\n\t"
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "lq $2,16(%1)\n\t"
-        "sq $2,16(%0)\n\t"
-        "lq $2,32(%1)\n\t"
-        "sq $2,32(%0)\n\t"
-        "lq $2,48(%1)\n\t"
-        "sq $2,48(%0)\n\t"
-        "addi %2,%2,-1\n\t"
-        "addi %0,%0,64\n\t"
-        "addi %1,%1,64\n\t"
-        "bne $0,%2,1b"
-        : "+r"(destination), "+r"(source), "+r"(count)
-        :
-        : "$2", "memory");
+    QuadwordCopyMatrixArray(destination, source, count);
 }
 
 void xglMemCopy64b(void *destination, const void *source, int count)
@@ -123,17 +108,7 @@ void xglMemCopy64b(void *destination, const void *source, int count)
 
 void xglMemCopy16(void *destination, const void *source, int count)
 {
-    __asm__ __volatile__(
-        "1:\n\t"
-        "lq $2,0(%1)\n\t"
-        "sq $2,0(%0)\n\t"
-        "addi %2,%2,-1\n\t"
-        "addi %0,%0,16\n\t"
-        "addi %1,%1,16\n\t"
-        "bne $0,%2,1b"
-        : "+r"(destination), "+r"(source), "+r"(count)
-        :
-        : "$2", "memory");
+    QuadwordCopyArray(destination, source, count);
 }
 
 void xglMemCopy16b(void *destination, const void *source, int count)
@@ -428,23 +403,19 @@ void xglVectorOuter(Vector4 *destination, const Vector4 *left,
 
 void xglVectorLength(float *destination, const Vector4 *vector)
 {
-    register float length asm("$2");
-
     __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "vmul.xyz vf3xyz, vf3xyz, vf3xyz\n\t"
-        "vaddy.x vf3x, vf3x, vf3y\n\t"
-        "vaddz.x vf3x, vf3x, vf3z\n\t"
-        "vsqrt Q, vf3x\n\t"
-        "vwaitq\n\t"
-        "vaddq.x vf4x, vf0x, Q\n\t"
-        "qmfc2 %0, vf4"
-        : "=r"(length)
-        : "r"(vector)
-        : "memory"
-    );
-    *destination = length;
-    __asm__ __volatile__("" : : "r"(destination));
+        "lqc2 vf3, 0(%1)\n"
+        "vmul.xyz vf3, vf3, vf3\n"
+        "vaddy.x vf3, vf3, vf3y\n"
+        "vaddz.x vf3, vf3, vf3z\n"
+        "vsqrt Q, vf3x\n"
+        "vwaitq\n"
+        "vaddq.x vf4, vf0, Q\n"
+        "qmfc2 $2, vf4\n"
+        "sw $2, 0(%0)\n"
+        :
+        : "r"(destination), "r"(vector)
+        : "$2", "memory");
 }
 
 float xglPointLength(const Vector4 *point1, const Vector4 *point2)
@@ -538,25 +509,9 @@ void xglPlaneParameter(Vector4 *destination, const Vector4 *p0,
     Vector4 edge0;
     Vector4 edge1;
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%2)\n\t"
-        "vsub.xyz vf2xyz, vf2xyz, vf3xyz\n\t"
-        "sqc2 vf2, 0(%0)\n\t"
-        :
-        : "r"(&edge0), "r"(p0), "r"(p1)
-        : "memory"
-    );
+    Vu0SubVectorXYZ(&edge0, p1, p0);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%2)\n\t"
-        "vsub.xyz vf2xyz, vf2xyz, vf3xyz\n\t"
-        "sqc2 vf2, 0(%0)\n\t"
-        :
-        : "r"(&edge1), "r"(p1), "r"(p2)
-        : "memory"
-    );
+    Vu0SubVectorXYZ(&edge1, p2, p1);
 
     xglVectorOuter(destination, &edge0, &edge1);
     xglVectorNormal(destination, destination);
@@ -803,40 +758,13 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     float sinY;
     float sinZ;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosineForScale)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosineForScale, (unsigned int)Vu0CallCos / 8, angle);
     xglVectorScaleXYZ(&oneMinusCosAxis, axis, 1.0f - cosineForScale);
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(sine)
-        : "r"((unsigned int)Vu0CallSin / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(sine, (unsigned int)Vu0CallSin / 8, angle);
     xglVectorScaleXYZ(&sinAxis, axis, sine);
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosineForRow0)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosineForRow0, (unsigned int)Vu0CallCos / 8, angle);
     ax = axis->x;
     oneMinusCosX = oneMinusCosAxis.x;
     oneMinusCosY = oneMinusCosAxis.y;
@@ -850,16 +778,7 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     rotation.elements[3] = 0.0f;
     rotation.elements[4] = oneMinusCosX * ay - sinZ;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosineForRow1)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosineForRow1, (unsigned int)Vu0CallCos / 8, angle);
     sinX = sinAxis.x;
     az = axis->z;
     rotation.elements[5] = oneMinusCosY * ay + cosineForRow1;
@@ -868,16 +787,7 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     rotation.elements[8] = oneMinusCosX * az + sinY;
     rotation.elements[9] = oneMinusCosY * az - sinX;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosineForRow2)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosineForRow2, (unsigned int)Vu0CallCos / 8, angle);
     rotation.elements[10] = oneMinusCosZ * az + cosineForRow2;
     rotation.elements[11] = 0.0f;
     rotation.elements[12] = 0.0f;
@@ -895,27 +805,9 @@ void xglMatrixRotX(Matrix4 destination, const Matrix4 source, float angle)
     float sine;
     float cosine;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(sine)
-        : "r"((unsigned int)Vu0CallSin / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(sine, (unsigned int)Vu0CallSin / 8, angle);
     cosSin[1] = sine;
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosine)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosine, (unsigned int)Vu0CallCos / 8, angle);
     cosSin[0] = cosine;
 
     __asm__ __volatile__(
@@ -945,27 +837,9 @@ void xglMatrixRotY(Matrix4 destination, const Matrix4 source, float angle)
     float sine;
     float cosine;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(sine)
-        : "r"((unsigned int)Vu0CallSin / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(sine, (unsigned int)Vu0CallSin / 8, angle);
     cosSin[1] = sine;
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosine)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosine, (unsigned int)Vu0CallCos / 8, angle);
     cosSin[0] = cosine;
 
     __asm__ __volatile__(
@@ -995,27 +869,9 @@ void xglMatrixRotZ(Matrix4 destination, const Matrix4 source, float angle)
     float sine;
     float cosine;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(sine)
-        : "r"((unsigned int)Vu0CallSin / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(sine, (unsigned int)Vu0CallSin / 8, angle);
     cosSin[1] = sine;
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,vf1"
-        : "=r"(cosine)
-        : "r"((unsigned int)Vu0CallCos / 8), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(cosine, (unsigned int)Vu0CallCos / 8, angle);
     cosSin[0] = cosine;
 
     __asm__ __volatile__(
@@ -1067,15 +923,7 @@ void xglMatrixStackUnit(void)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackUnit >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry)
-        : "memory"
-    );
+    Vu0CallMicro(entry);
 }
 
 void xglMatrixStackMul(Matrix4 matrix)
@@ -1099,60 +947,28 @@ void xglMatrixStackReverse(void)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackReverse >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry)
-        : "memory"
-    );
+    Vu0CallMicro(entry);
 }
 
 void xglMatrixStackInverse(void)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackInverse >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry)
-        : "memory"
-    );
+    Vu0CallMicro(entry);
 }
 
 void xglMatrixStackScale(const float scale[4])
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackScale >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "lqc2 $vf4,0(%1)\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry), "r"(scale)
-        : "memory"
-    );
+    Vu0CallMicroVector(entry, scale);
 }
 
 void xglMatrixStackTrans(const float translation[4])
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackTrans >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "lqc2 $vf4,0(%1)\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry), "r"(translation)
-        : "memory"
-    );
+    Vu0CallMicroVector(entry, translation);
 }
 
 void xglMatrixStackRotV(const float axis[4], float angle)
@@ -1174,45 +990,21 @@ void xglMatrixStackRotX(float angle)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackRotX >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %1,$vf4\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroArgument(entry, angle);
 }
 
 void xglMatrixStackRotY(float angle)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackRotY >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %1,$vf4\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroArgument(entry, angle);
 }
 
 void xglMatrixStackRotZ(float angle)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackRotZ >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %1,$vf4\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroArgument(entry, angle);
 }
 
 void xglMatrixStackFrustum(float left, float right, float bottom, float top,
@@ -1268,30 +1060,14 @@ void xglMatrixStackPushUnit(void)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackPushUnit >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry)
-        : "memory"
-    );
+    Vu0CallMicro(entry);
 }
 
 void xglMatrixStackPush(void)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackPush >> 3;
 
-    __asm__ __volatile__(
-        "ctc2.i %0,$vi27\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vcallmsr $vi27"
-        :
-        : "r"(entry)
-        : "memory"
-    );
+    Vu0CallMicro(entry);
 }
 
 void xglMatrixStackPop(int count)
@@ -1559,16 +1335,7 @@ float xglSin(float angle)
     unsigned int entry = (unsigned int)Vu0CallSin >> 3;
     float result;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,$vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,$vf1"
-        : "=r"(result)
-        : "r"(entry), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(result, entry, angle);
     return result;
 }
 
@@ -1577,16 +1344,7 @@ float xglCos(float angle)
     unsigned int entry = (unsigned int)Vu0CallCos >> 3;
     float result;
 
-    __asm__ __volatile__(
-        "ctc2.i %1,$vi27\n\t"
-        "vnop\n\t"
-        "qmtc2 %2,$vf4\n\t"
-        "vcallmsr $vi27\n\t"
-        "qmfc2.i %0,$vf1"
-        : "=r"(result)
-        : "r"(entry), "r"(angle)
-        : "memory"
-    );
+    Vu0CallMicroResult(result, entry, angle);
     return result;
 }
 

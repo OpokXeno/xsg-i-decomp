@@ -15,13 +15,12 @@
 #include "main/sv_get_image_item.h"
 #include "main/xgl_sound.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 /* Original-backed literal aliases; keep the accepted function bodies intact. */
 #define circle_angle_scale_literal (0.01745329238474369f)
 
 #define effect_scale_literal_0_1 (0.10000000149011612f)
-#define DEG_TO_RAD (0.01745329238474369f)
-#define lit4_004d8354 (0.01745329238474369f)
 #define SEF_ACTOR_LIGHT_FLAG 0x00008000u
 #define SEF_BATTLE_ACTOR_MAX 24
 #define SEF_LINE_DATA_RECORD_SIZE 0x820
@@ -1138,13 +1137,7 @@ void sefCalcRotTransSMatrix(Vector4 *angles, Vector4 *translation, Vector4 *scal
 static void sefCalcInvView(Matrix4 *matrix) {
     StudioCamera *camera = xglStudioGetActiveCamera();
 
-    __asm__ __volatile__("vmr32.xyzw vf1, vf0" : : : "memory");
-    __asm__ __volatile__("vmr32.xyzw vf2, vf1" : : : "memory");
-    __asm__ __volatile__("vmr32.xyzw vf3, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf0, 48(%0)" : : "r"(matrix) : "memory");
-    __asm__ __volatile__("sqc2 vf1, 32(%0)" : : "r"(matrix) : "memory");
-    __asm__ __volatile__("sqc2 vf2, 16(%0)" : : "r"(matrix) : "memory");
-    __asm__ __volatile__("sqc2 vf3, 0(%0)" : : "r"(matrix) : "memory");
+    Vu0UnitMatrix(matrix);
     MMathRotateMatrixYXZ(matrix, matrix, &camera->rotation.vector);
 }
 
@@ -1381,21 +1374,10 @@ static int sefLerpVectorSC(void *keys, Vector4 *vectors)
     int status = sefLerpVector(keys, vectors);
     float scale = effect_scale_literal_0_1;
 
-    __asm__ __volatile__("" : : "f"(scale));
-
     if (status != 0) {
         vectors++;
 
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "mfc1 $8, %1\n\t"
-            "qmtc2 $8, $vf2\n\t"
-            "vmulx.xyz $vf1xyz, $vf1xyz, $vf2x\n\t"
-            "sqc2 $vf1, 0(%0)"
-            :
-            : "r"(vectors), "f"(scale)
-            : "$8", "memory"
-        );
+        Vu0SefScaleVectorXYZ(vectors, vectors, scale);
     }
 
     return status;
@@ -1558,19 +1540,7 @@ void sefGetMotionNullMatrix(Matrix4 *matrix, Actor *actor, int index)
     if (actor != 0) {
         joint = ACT_jointGetAccessories(actor, index + 8);
         if (joint >= 0 && actor->jointMatrices != 0) {
-            __asm__ __volatile__(
-                "lq $8, 0(%1)\n\t"
-                "lq $9, 16(%1)\n\t"
-                "lq $10, 32(%1)\n\t"
-                "lq $11, 48(%1)\n\t"
-                "sq $8, 0(%0)\n\t"
-                "sq $9, 16(%0)\n\t"
-                "sq $10, 32(%0)\n\t"
-                "sq $11, 48(%0)"
-                :
-                : "r"(matrix), "r"((joint << 6) + (int)actor->jointMatrices)
-                : "$8", "$9", "$10", "$11", "memory"
-            );
+            QuadwordCopyMatrixT0(matrix, (joint << 6) + (int)actor->jointMatrices);
             if (sefIsNonZeroVector((Vector4 *)(*matrix)[3])) {
                 return;
             }
@@ -1578,13 +1548,7 @@ void sefGetMotionNullMatrix(Matrix4 *matrix, Actor *actor, int index)
         sefCalcRotTransSMatrix(&actor->rotation, &actor->position, &actor->scale, matrix);
         return;
     }
-    __asm__ __volatile__("vmr32.xyzw vf1, vf0" : : : "memory");
-    __asm__ __volatile__("vmr32.xyzw vf2, vf1" : : : "memory");
-    __asm__ __volatile__("vmr32.xyzw vf3, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf0, 48(%0)" : : "r"(matrix) : "memory");
-    __asm__ __volatile__("sqc2 vf1, 32(%0)" : : "r"(matrix) : "memory");
-    __asm__ __volatile__("sqc2 vf2, 16(%0)" : : "r"(matrix) : "memory");
-    __asm__ __volatile__("sqc2 vf3, 0(%0)" : : "r"(matrix) : "memory");
+    Vu0UnitMatrix(matrix);
 }
 
 void sefGetNullPosition(Vector4 *position, Actor *actor, unsigned int index,
@@ -1599,7 +1563,7 @@ void sefGetNullPosition(Vector4 *position, Actor *actor, unsigned int index,
         if (joint < 0 || matrices == 0) {
             position->y = 20.0f;
         } else {
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(position), "r"((joint << 6) + (int)matrices + 48) : "$8", "memory");
+            QuadwordCopyT0(position, (joint << 6) + (int)matrices + 48);
         }
     }
 }
@@ -1615,7 +1579,7 @@ void sefGetWeaponPosition(Vector4 *position, Actor *actor, unsigned int index)
         if (joint < 0 || matrices == 0) {
             position->y = 20.0f;
         } else {
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(position), "r"((joint << 6) + (int)matrices + 48) : "$8", "memory");
+            QuadwordCopyT0(position, (joint << 6) + (int)matrices + 48);
         }
     }
 }
@@ -1631,7 +1595,7 @@ void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
 
     source_nonzero = (*(const int *)(source + 8) | *(const long long *)source) != 0;
     has_source = (short)source_nonzero;
-    __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(position) : "memory");
+    Vu0SetOrigin(position);
     battle = &_battleData.status;
 
     if ((battle->flags & 2) != 0) {
@@ -1680,7 +1644,7 @@ void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
             parent = 0;
         }
         if (parent != 0) {
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(position), "r"(parent + 192) : "$8", "memory");
+            QuadwordCopyT0(position, parent + 192);
         }
         goto done;
     }
@@ -1707,7 +1671,7 @@ copy_site:
 
 not_weapon:
     if (part == 5) {
-        __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(position), "r"(pointSourceVector) : "$8", "memory");
+        QuadwordCopyT0(position, pointSourceVector);
         goto done;
     }
     if ((part & 0x800) != 0) {
@@ -1720,15 +1684,10 @@ done:
         if (has_source) {
             MMathApplyMatrix(position, point_block, (const Vector4 *)source);
         } else {
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(position), "r"((*point_block)[3]) : "$8", "memory");
+            QuadwordCopyT0(position, (*point_block)[3]);
         }
     } else {
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "lqc2 $vf2, 0(%1)\n\t"
-            "vadd.xyz $vf1, $vf1, $vf2\n\t"
-            "sqc2 $vf1, 0(%0)"
-            : : "r"(position), "r"(source) : "memory");
+        Vu0SefAddVectorXYZ(position, position, source);
     }
 }
 
@@ -1749,28 +1708,10 @@ static void sefGetCirclePos(Vector4 *pos, float radius)
     float x_unit;
     float z_unit;
 
-    __asm__ __volatile__(
-        "mfc1 $8, %1\n\t"
-        "qmtc2 $8, $vf4\n\t"
-        "vcallms 0xe8\n\t"
-        "qmfc2.i $8, $vf1\n\t"
-        "mtc1 $8, %0\n\t"
-        : "=f"(x_unit)
-        : "f"(angle)
-        : "$8", "memory"
-    );
+    Vu0Cos(x_unit, angle);
     pos->x = x_unit * radius;
 
-    __asm__ __volatile__(
-        "mfc1 $8, %1\n\t"
-        "qmtc2 $8, $vf4\n\t"
-        "vcallms 0x20\n\t"
-        "qmfc2.i $8, $vf1\n\t"
-        "mtc1 $8, %0\n\t"
-        : "=f"(z_unit)
-        : "f"(angle)
-        : "$8", "memory"
-    );
+    Vu0Sin(z_unit, angle);
 
     pos->y = 0.0f;
     pos->w = 1.0f;
@@ -1841,9 +1782,7 @@ void sefGetCubePosBtm(Vector4 *pos, const int *extent)
     float final_scale;
     float half_scale;
 
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(extent) : "memory");
-    __asm__ __volatile__("vitof0.xyzw vf1, vf1" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&extent_vector) : "memory");
+    Vu0SefIntToFloatVector(&extent_vector, extent);
     random_vector.w = 0.0f;
     random_position = &random_vector;
 
@@ -1859,29 +1798,16 @@ void sefGetCubePosBtm(Vector4 *pos, const int *extent)
     random_vector.y = (float)random_y * random_scale;
     random_vector.z = (float)random_z * random_scale;
 
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(random_position) : "memory");
-    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(&extent_vector) : "memory");
-    __asm__ __volatile__("vmul.xyz vf1, vf1, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(random_position) : "memory");
+    Vu0SefMulVectorXYZ(random_position, random_position, &extent_vector);
     extent_vector.y = 0.0f;
-    __asm__ __volatile__("" : : "m"(extent_vector.y));
 
     half_scale = 0.5f;
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&extent_vector) : "memory");
-    __asm__ __volatile__("mfc1 $8, %0\n\tqmtc2 $8, vf2" : : "f"(half_scale) : "$8", "memory");
-    __asm__ __volatile__("vmulx.xyz vf1, vf1, vf2x" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&extent_vector) : "memory");
+    Vu0SefScaleVectorXYZ(&extent_vector, &extent_vector, half_scale);
 
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(random_position) : "memory");
-    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(&extent_vector) : "memory");
-    __asm__ __volatile__("vsub.xyz vf1, vf1, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(random_position) : "memory");
+    Vu0SefSubVectorXYZ(random_position, random_position, &extent_vector);
 
     final_scale = 0.1f;
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(random_position) : "memory");
-    __asm__ __volatile__("mfc1 $8, %0\n\tqmtc2 $8, vf2" : : "f"(final_scale) : "$8", "memory");
-    __asm__ __volatile__("vmulx.xyz vf1, vf1, vf2x" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(pos) : "memory");
+    Vu0SefScaleVectorXYZ(pos, random_position, final_scale);
 }
 
 static void sefGetCubePosTop(Vector4 *pos, const int *extent)
@@ -1904,9 +1830,7 @@ static void sefGetCubePos(Vector4 *pos, const int *extent)
     float final_scale;
     float half_scale;
 
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(extent) : "memory");
-    __asm__ __volatile__("vitof0.xyzw vf1, vf1" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&extent_vector) : "memory");
+    Vu0SefIntToFloatVector(&extent_vector, extent);
     random_vector.w = 0.0f;
 
     random_scale = 3.051851e-05f;
@@ -1921,34 +1845,22 @@ static void sefGetCubePos(Vector4 *pos, const int *extent)
     random_vector.y = (float)random_y * random_scale;
     random_vector.z = (float)random_z * random_scale;
 
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&random_vector) : "memory");
-    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(&extent_vector) : "memory");
-    __asm__ __volatile__("vmul.xyz vf1, vf1, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&random_vector) : "memory");
+    Vu0SefMulVectorXYZ(&random_vector, &random_vector, &extent_vector);
 
     half_scale = 0.5f;
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&extent_vector) : "memory");
-    __asm__ __volatile__("mfc1 $8, %0\n\tqmtc2 $8, vf2" : : "f"(half_scale) : "$8", "memory");
-    __asm__ __volatile__("vmulx.xyz vf1, vf1, vf2x" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&extent_vector) : "memory");
+    Vu0SefScaleVectorXYZ(&extent_vector, &extent_vector, half_scale);
 
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&random_vector) : "memory");
-    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(&extent_vector) : "memory");
-    __asm__ __volatile__("vsub.xyz vf1, vf1, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&random_vector) : "memory");
+    Vu0SefSubVectorXYZ(&random_vector, &random_vector, &extent_vector);
 
     final_scale = 0.1f;
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&random_vector) : "memory");
-    __asm__ __volatile__("mfc1 $8, %0\n\tqmtc2 $8, vf2" : : "f"(final_scale) : "$8", "memory");
-    __asm__ __volatile__("vmulx.xyz vf1, vf1, vf2x" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(pos) : "memory");
+    Vu0SefScaleVectorXYZ(pos, &random_vector, final_scale);
 }
 
 static void sefGetOfsRange(Vector4 *position, const void *offset_table, int index)
 {
     const int *offsets = offset_table;
 
-    __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(position) : "memory");
+    Vu0SetOrigin(position);
 
     if (index == 0) {
         float radius;
@@ -1984,17 +1896,7 @@ static void sefGetOfsRange(Vector4 *position, const void *offset_table, int inde
         Vector4 circle_position;
 
         sefGetCirclePos(&circle_position, (float)offsets[0] * circlePosScale);
-        __asm__ __volatile__(
-            "vmr32.xyzw vf1, vf0\n\t"
-            "vmr32.xyzw vf2, vf1\n\t"
-            "vmr32.xyzw vf3, vf2\n\t"
-            "sqc2 vf0, 48(%0)\n\t"
-            "sqc2 vf1, 32(%0)\n\t"
-            "sqc2 vf2, 16(%0)\n\t"
-            "sqc2 vf3, 0(%0)"
-            :
-            : "r"(&rotation)
-            : "memory");
+        Vu0UnitMatrix(&rotation);
 
         if (offsets[1] != 0) {
             MMathRotateMatrixX(&rotation, &rotation, (float)offsets[1] * rotateXDegToRad);
@@ -2083,15 +1985,7 @@ void sefGetVecMatrix(Matrix4 *dest, Vector4 *source_a, Vector4 *source_b)
 {
     Vector4 dir;
 
-    __asm__ __volatile__(
-        "lqc2 $vf1, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vsub.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-        "sqc2 $vf1, 0(%2)\n\t"
-        :
-        : "r"(source_a), "r"(source_b), "r"(&dir)
-        : "memory"
-    );
+    Vu0SefSubVectorXYZ(&dir, source_a, source_b);
     sefGetDirMatrix(dest, &dir);
 }
 
@@ -2101,18 +1995,12 @@ static void sefGetDirVector(void *dest, void *source) {
 
 static void sefGetStartPos(Vector4 *position, SefParticleOffset *record) {
     sefGetOfsRange(position, record->start_offset_table, *record->start_index);
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&record->start_position) : "memory");
-    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(position) : "memory");
-    __asm__ __volatile__("vadd.xyz vf1, vf1, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(position) : "memory");
+    Vu0SefAddVectorXYZ(position, &record->start_position, position);
 }
 
 static void sefGetTargetPos(Vector4 *position, SefParticleOffset *record) {
     sefGetOfsRange(position, record->target_offset_table, *record->target_index);
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&record->target_position) : "memory");
-    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(position) : "memory");
-    __asm__ __volatile__("vadd.xyz vf1, vf1, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(position) : "memory");
+    Vu0SefAddVectorXYZ(position, &record->target_position, position);
 }
 
 static void sefGetSpeed(Vector4 *position, void *particle, int mode, int option)
@@ -2129,17 +2017,14 @@ static void sefGetSpeed(Vector4 *position, void *particle, int mode, int option)
     speed = *(float *)(record + 0x270) + *(float *)(record + 0x150);
     out = position;
     if (0.0f == speed) {
-        __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(out) : "memory");
+        Vu0SetOrigin(out);
         return;
     }
 
     if (option != 0 && mode != 0) {
         MMathSpecialVectorSub(&vector, source, source, (float)option);
     } else {
-        __asm__ __volatile__(
-            "lq $8, 0(%0)\n\t"
-            "sq $8, 0(%1)"
-            : : "r"(source), "r"(&vector) : "$8", "memory");
+        QuadwordCopyT0(&vector, source);
     }
 
     if (mode >= 5) {
@@ -2158,7 +2043,7 @@ static void sefGetSpeed(Vector4 *position, void *particle, int mode, int option)
             }
         } else if (mode == 3) {
             speed = 10.0f * speed;
-            __asm__ __volatile__("lq $8, 0(%0)\n\tsq $8, 0(%0)" : : "r"(&vector) : "$8", "memory");
+            QuadwordCopyT0(&vector, &vector);
         } else if (mode == 1) {
             if (_battleData.status.caster != 0) {
                 MMathApplyMatrix(&vector, _battleData.status.casterMatrix, &vector);
@@ -2191,58 +2076,27 @@ void sefMoveParticle(void *arg0, void *arg1, int arg2) {
             target += 1792;
         }
         if ((_nowScheduler->flags & 0x1400) == 0x1000) {
-            __asm__ __volatile__(
-                "lq $8, 0(%1)\n\t"
-                "lq $9, 16(%1)\n\t"
-                "lq $10, 32(%1)\n\t"
-                "lq $11, 48(%1)\n\t"
-                "sq $8, 0(%0)\n\t"
-                "sq $9, 16(%0)\n\t"
-                "sq $10, 32(%0)\n\t"
-                "sq $11, 48(%0)"
-                : : "r"(particle + 0x40), "r"(_battleData.status.particleTransform)
-                : "$8", "$9", "$10", "$11", "memory");
+            QuadwordCopyMatrixT0(particle + 0x40, _battleData.status.particleTransform);
             *(float *)(particle + 0x154) = _battleData.status.particleScale;
         }
     }
 
     if (*(signed char *)(particle + 0x163) == 0) {
         sefGetSpeed(&speed, particle, target, arg2);
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "lqc2 $vf2, 0(%1)\n\t"
-            "vadd.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-            "sqc2 $vf1, 0(%0)"
-            : : "r"(particle + 0xc0), "r"(&speed) : "memory");
+        Vu0SefAddVectorXYZ(particle + 0xc0, particle + 0xc0, &speed);
     }
     *(float *)(particle + 0x114) = *(float *)(particle + 0x114) - _gravity;
-    __asm__ __volatile__(
-        "lqc2 $vf1, 0(%0)\n\t"
-        "lqc2 $vf2, 0(%1)\n\t"
-        "vadd.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-        "sqc2 $vf1, 0(%0)"
-        : : "r"(particle + 0xc0), "r"(particle + 0x110) : "memory");
+    Vu0SefAddVectorXYZ(particle + 0xc0, particle + 0xc0, particle + 0x110);
     if (_colision != 0.0f) {
         if (*(float *)(particle + 0xc4) <= _height) {
             float colision;
             if (*(signed char *)(particle + 0x163) == 0) {
-                __asm__ __volatile__(
-                    "lqc2 $vf1, 0(%0)\n\t"
-                    "lqc2 $vf2, 0(%1)\n\t"
-                    "vadd.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-                    "sqc2 $vf1, 0(%1)"
-                    : : "r"(&speed), "r"(particle + 0x110) : "memory");
+                Vu0SefAddVectorXYZ(particle + 0x110, &speed, particle + 0x110);
             }
             *(particle + 0x163) = 1;
             colision = _colision;
             *(float *)(particle + 0xc4) = _height;
-            __asm__ __volatile__(
-                "lqc2 $vf1, 0(%0)\n\t"
-                "mfc1 $8, %1\n\t"
-                "qmtc2 $8, $vf2\n\t"
-                "vmulx.xyz $vf1xyz, $vf1xyz, $vf2x\n\t"
-                "sqc2 $vf1, 0(%0)"
-                : : "r"(particle + 0x110), "f"(colision) : "$8", "memory");
+            Vu0SefScaleVectorXYZ(particle + 0x110, particle + 0x110, colision);
             if (*(float *)(particle + 0x114) < 0.0f) {
                 *(float *)(particle + 0x114) = -*(float *)(particle + 0x114);
             }
@@ -2304,31 +2158,12 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
     } else if (target == 1) {
         /* The base matrix becomes the local one: the four quadword moves the
          * original performs inline through the EE's own scratch GPRs. */
-        __asm__ __volatile__(
-            "lq $8, 0(%0)\n\t"
-            "lq $9, 16(%0)\n\t"
-            "lq $10, 32(%0)\n\t"
-            "lq $11, 48(%0)\n\t"
-            "sq $8, 0(%1)\n\t"
-            "sq $9, 16(%1)\n\t"
-            "sq $10, 32(%1)\n\t"
-            "sq $11, 48(%1)"
-            :
-            : "r"(&record->base_matrix), "r"(&record->local_matrix)
-            : "$8", "$9", "$10", "$11", "memory");
+        QuadwordCopyMatrixT0(&record->local_matrix, &record->base_matrix);
         return;
     } else if (in_battle != 0 && (target & 0x200) != 0) {
         Vector4 direction;
 
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "lqc2 $vf2, 0(%1)\n\t"
-            "vadd.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-            "sqc2 $vf1, 0(%2)"
-            :
-            : "r"(&record->start_position), "r"(&_nowScheduler->position),
-              "r"(&direction)
-            : "memory");
+        Vu0SefAddVectorXYZ(&direction, &record->start_position, &_nowScheduler->position);
         sefGetVecMatrix(&record->local_matrix, &battle->matrixSource, &direction);
     } else if (target >= 5) {
         sefGetVecMatrix(&record->local_matrix, (Vector4 *)localPointVector,
@@ -2336,17 +2171,7 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
     } else {
         /* The identity matrix, built by rotating $vf0 = (0,0,0,1) one lane at
          * a time and storing the rows back to front. */
-        __asm__ __volatile__(
-            "vmr32.xyzw $vf1xyzw, $vf0xyzw\n\t"
-            "vmr32.xyzw $vf2xyzw, $vf1xyzw\n\t"
-            "vmr32.xyzw $vf3xyzw, $vf2xyzw\n\t"
-            "sqc2 $vf0, 48(%0)\n\t"
-            "sqc2 $vf1, 32(%0)\n\t"
-            "sqc2 $vf2, 16(%0)\n\t"
-            "sqc2 $vf3, 0(%0)"
-            :
-            : "r"(&record->local_matrix)
-            : "memory");
+        Vu0UnitMatrix(&record->local_matrix);
     }
 
     if (local->offsetXYBits != 0 ||
@@ -2393,39 +2218,26 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
  * (src/main/m_math.c); a null matrix argument here reaches their own
  * null-default idiom (docs/tu-worker.md), not a call site concern.
  *
- * The degrees-to-radians factor is DEG_TO_RAD, a second occurrence of the
- * same .lit4 constant sefDeg2RadVector reads as lit4_004d8354 above: EE GCC
- * 2.96 does not merge identical .lit4 words across call sites, so each user
- * gets its own address and its own extern (docs/naming.md, "Scaffold-owned
- * data keeps its splat name").
- *
+ * The degrees-to-radians factor is loaded by `li.s` inside the asm
+ * statement, as in sefDeg2RadVector: the assembler places each `li.s`
+ * constant in .lit4 (its own word, gp-relative) and the template converts
+ * it through $f8 and $8 into vf1 (docs/ee-hand-asm.md).
  */
 static void sefCalcRotChange(SefParticle *particle, int flags, int update)
 {
     __asm__ __volatile__("lqc2 $vf2, 0(%0)" : : "r"(&particle->rotation) : "memory");
 
-    {
-        register float degToRad asm("$f8") = DEG_TO_RAD;
-
-        __asm__ __volatile__(
-            "mfc1 $8, %1\n\t"
-            "qmtc2.ni $8, $vf1\n\t"
-            "vmulx.xyz $vf2, $vf2, $vf1x\n\t"
-            "sqc2 $vf2, 0(%0)"
-            :
-            : "r"(&particle->rotation), "f"(degToRad)
-            : "$8", "memory");
-    }
-
     __asm__ __volatile__(
-        "lqc2 $vf1, 0(%1)\n\t"
-        "lqc2 $vf2, 0(%2)\n\t"
-        "vadd.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-        "sqc2 $vf1, 0(%0)"
+        "li.s $f8, 0.017453292\n"
+        "mfc1 $8, $f8\n"
+        "qmtc2.ni $8, $vf1\n"
+        "vmulx.xyz $vf2, $vf2, $vf1x\n"
+        "sqc2 $vf2, 0(%0)"
         :
-        : "r"(&particle->rotated_position), "r"(&particle->random_rotation),
-          "r"(&particle->rotation)
-        : "memory");
+        : "r"(&particle->rotation)
+        : "$8", "$f8", "memory");
+
+    Vu0SefAddVectorXYZ(&particle->rotated_position, &particle->random_rotation, &particle->rotation);
 
     if (update == 0) {
         return;
@@ -2538,14 +2350,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
                     if (line_data->size_vector_keys != 0 &&
                         sefLerpVector(line_data->size_vector_keys,
                                       (unsigned char *)particle + 0x230) && update_scaled_size) {
-                        __asm__ __volatile__(
-                            "lqc2 $vf1, 0(%0)\n\t"
-                            "mfc1 $8, %1\n\t"
-                            "qmtc2 $8, $vf2\n\t"
-                            "vmulx.xyz $vf1xyz, $vf1xyz, $vf2x\n\t"
-                            "sqc2 $vf1, 0(%0)"
-                            : : "r"(&particle->size), "f"(particleSizeScale)
-                            : "$8", "memory");
+                        Vu0SefScaleVectorXYZ(&particle->size, &particle->size, particleSizeScale);
                     }
                     sefLerpFloat(float_keys, &particle->float_progress);
                     if (sefLerpVector(color_keys,
@@ -2605,15 +2410,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
                         component_result = particle->second_integer_progress.value;
                     }
                     if (update_parent) {
-                        __asm__ __volatile__(
-                            "lqc2 $vf1, 0(%1)\n\t"
-                            "lqc2 $vf2, 0(%2)\n\t"
-                            "vadd.xyz $vf1xyz, $vf1xyz, $vf2xyz\n\t"
-                            "sqc2 $vf1, 0(%0)"
-                            : : "r"(&particle->start_position),
-                                "r"(&particle->start_position),
-                                "r"(&line_data->position_delta)
-                            : "memory");
+                        Vu0SefAddVectorXYZ(&particle->start_position, &particle->start_position, &line_data->position_delta);
                     }
                     sefMoveParticle(particle, &line_data->scale_keys,
                                     component_result);
@@ -2776,41 +2573,17 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
     if (line_data->scale_keys != 0 && line_data->scale_keys[9] == 0x400) {
         sefLerpVectorA(line_data->scale_keys + 4, &line_data->global_position_source);
         vector_scale = globalPositionScale;
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "mfc1 $8, %1\n\t"
-            "qmtc2.ni $8, $vf2\n\t"
-            "vmulx.xyz $vf1, $vf1, $vf2x\n\t"
-            "sqc2 $vf1, 0(%0)"
-            :
-            : "r"(&line_data->global_position_source), "f"(vector_scale)
-            : "$8", "memory");
+        Vu0SefScaleVectorXYZNI(&line_data->global_position_source, &line_data->global_position_source, vector_scale);
     }
     if (line_data->rotation_keys != 0 && line_data->rotation_keys[9] == 0x400) {
         sefLerpVectorA(line_data->rotation_keys + 4, &line_data->parent_position_source);
         vector_scale = parentPositionScale;
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "mfc1 $8, %1\n\t"
-            "qmtc2.ni $8, $vf2\n\t"
-            "vmulx.xyz $vf1, $vf1, $vf2x\n\t"
-            "sqc2 $vf1, 0(%0)"
-            :
-            : "r"(&line_data->parent_position_source), "f"(vector_scale)
-            : "$8", "memory");
+        Vu0SefScaleVectorXYZNI(&line_data->parent_position_source, &line_data->parent_position_source, vector_scale);
     }
     if (line_data->position_keys != 0 && line_data->position_keys[9] == 0x400) {
         sefLerpVectorA(line_data->position_keys + 4, line_data->position_source);
         vector_scale = positionSourceScale;
-        __asm__ __volatile__(
-            "lqc2 $vf1, 0(%0)\n\t"
-            "mfc1 $8, %1\n\t"
-            "qmtc2.ni $8, $vf2\n\t"
-            "vmulx.xyz $vf1, $vf1, $vf2x\n\t"
-            "sqc2 $vf1, 0(%0)"
-            :
-            : "r"(line_data->position_source), "f"(vector_scale)
-            : "$8", "memory");
+        Vu0SefScaleVectorXYZNI(line_data->position_source, line_data->position_source, vector_scale);
     }
 
     line_data->script_parameters[0] = line_table[0];
@@ -3043,25 +2816,9 @@ int sefCreateParticle(SefLocalData *data, int kind)
                 jitter.y = sefRandf();
                 jitter.z = sefRandf();
                 jitter.w = 0.0f;
-                __asm__ __volatile__(
-                    "lqc2 vf1, 0(%0)\n\t"
-                    "lqc2 vf2, 0(%1)\n\t"
-                    "vmul.xyz vf1, vf1, vf2\n\t"
-                    "sqc2 vf1, 0(%0)"
-                    : : "r"(&jitter), "r"(&spread) : "memory");
-                __asm__ __volatile__(
-                    "lqc2 vf1, 0(%0)\n\t"
-                    "mfc1 $8, %1\n\t"
-                    "qmtc2 $8, vf2\n\t"
-                    "vmulx.xyz vf1, vf1, vf2x\n\t"
-                    "sqc2 vf1, 0(%0)"
-                    : : "r"(&spread), "f"(0.5f) : "$8", "memory");
-                __asm__ __volatile__(
-                    "lqc2 vf1, 0(%0)\n\t"
-                    "lqc2 vf2, 0(%1)\n\t"
-                    "vsub.xyz vf1, vf1, vf2\n\t"
-                    "sqc2 vf1, 0(%2)"
-                    : : "r"(&jitter), "r"(&spread), "r"(&particle->random_rotation) : "memory");
+                Vu0SefMulVectorXYZ(&jitter, &jitter, &spread);
+                Vu0SefScaleVectorXYZ(&spread, &spread, 0.5f);
+                Vu0SefSubVectorXYZ(&particle->random_rotation, &jitter, &spread);
                 __asm__ __volatile__(
                     "lqc2 vf2, 0(%0)\n\t"
                     "lwc1 $f8, %1\n\t"
@@ -3072,16 +2829,7 @@ int sefCreateParticle(SefLocalData *data, int kind)
                     : : "r"(&particle->random_rotation), "m"(randomRotationDegToRad) : "$8", "$f8", "memory");
                 battle = &_battleData.status;
                 if (battle->running != 0) {
-                    __asm__ __volatile__(
-                        "lq $8, 0(%1)\n\t"
-                        "lq $9, 16(%1)\n\t"
-                        "lq $10, 32(%1)\n\t"
-                        "lq $11, 48(%1)\n\t"
-                        "sq $8, 0(%0)\n\t"
-                        "sq $9, 16(%0)\n\t"
-                        "sq $10, 32(%0)\n\t"
-                        "sq $11, 48(%0)"
-                        : : "r"(&particle->transform), "r"(battle->particleTransform) : "$8", "$9", "$10", "$11", "memory");
+                    QuadwordCopyMatrixT0(&particle->transform, battle->particleTransform);
                     particle->battle_scale = battle->particleScale;
                 } else if (data->spread_rotation_keys[0] == 1) {
                     MMathRotateMatrixYXZ(&particle->transform, 0, &particle->random_rotation);
@@ -3136,12 +2884,7 @@ int sefCreateParticle(SefLocalData *data, int kind)
                 }
                 sefCalcRotChange(particle, angle, update);
             }
-            __asm__ __volatile__(
-                "lqc2 vf1, 0(%0)\n\t"
-                "lqc2 vf2, 0(%1)\n\t"
-                "vadd.xyz vf1, vf1, vf2\n\t"
-                "sqc2 vf1, 0(%2)"
-                : : "r"(&particle->random_rotation), "r"(&particle->rotation), "r"(&particle->rotated_position) : "memory");
+            Vu0SefAddVectorXYZ(&particle->rotated_position, &particle->random_rotation, &particle->rotation);
 
             if (data->signal_keys != 0) {
                 particle->signal = *data->signal_keys;
@@ -3231,22 +2974,10 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
             sefGetParentMatrix(_nowScheduler, (short)scale_mode - 0x1000, &parent_matrix);
         }
     }
-    __asm__ __volatile__(
-        "lq $8, 0(%0)\n\t"
-        "sq $8, 0(%1)"
-        :
-        : "r"(&global->global_position), "r"(&initial_position)
-        : "$8", "memory");
+    QuadwordCopyT0(&initial_position, &global->global_position);
     if (!scale_is_fixed) {
         sefGetPosition(&global->global_position, &global->global_position_source, keys[0][0]);
-        __asm__ __volatile__(
-            "lqc2 vf1, 0(%0)\n\t"
-            "lqc2 vf2, 0(%1)\n\t"
-            "vadd.xyz vf1, vf1, vf2\n\t"
-            "sqc2 vf1, 0(%0)"
-            :
-            : "r"(&global->global_position), "r"(&line_data->origin_offset)
-            : "memory");
+        Vu0SefAddVectorXYZ(&global->global_position, &global->global_position, &line_data->origin_offset);
     }
     if (!rotation_is_fixed) {
         sefGetPosition(&global->parent_position, &global->parent_position_source, keys[2][0]);
@@ -3257,7 +2988,7 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
             SefLocalData *parent_data = (SefLocalData *)&_lineData[_parentLine * SEF_LINE_DATA_RECORD_SIZE];
 
             if (parent_data == 0) {
-                __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(&global->position_delta) : "memory");
+                Vu0SetOrigin(&global->position_delta);
                 return 1;
             }
             for (parent_line = 0; parent_line < 0x100; parent_line++) {
@@ -3291,14 +3022,7 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
             }
         }
     }
-    __asm__ __volatile__(
-        "lqc2 vf1, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vsub.xyz vf1, vf1, vf2\n\t"
-        "sqc2 vf1, 0(%2)"
-        :
-        : "r"(&global->global_position), "r"(&initial_position), "r"(&global->position_delta)
-        : "memory");
+    Vu0SefSubVectorXYZ(&global->position_delta, &global->global_position, &initial_position);
     return 1;
 }
 
@@ -3855,11 +3579,7 @@ int sefCreateScheduler2(int effect_no, void *parameters, void *position, int tab
     if (origin == 0) {
         origin = (void *)_zeroPos_004CBF00;
     }
-    __asm__ __volatile__("lq $8, 0(%0)\n\t"
-                         "sq $8, 0(%1)"
-                         :
-                         : "r"(origin), "r"(&_scheduler[scheduler_index].position)
-                         : "$8", "memory");
+    QuadwordCopyT0(&_scheduler[scheduler_index].position, origin);
     QuadwordZero(&_scheduler[scheduler_index].rotation);
     _scheduler[scheduler_index].savedActive = 0;
     _scheduler[scheduler_index].scriptAddress = (unsigned char *)table;
@@ -4034,46 +3754,13 @@ void sefGetParentMatrix(SchedulerState *scheduler, int index, Matrix4 *matrix)
                 if (matrixIndex >= 0) {
                 if (matrixIndex & 0x8000) {
                     selected_source = (Matrix4 *)(((matrixIndex & 0x7fff) << 6) + (int)accessory);
-                    __asm__ __volatile__(
-                        "lq $8, 0(%0)\n\t"
-                        "lq $9, 16(%0)\n\t"
-                        "lq $10, 32(%0)\n\t"
-                        "lq $11, 48(%0)\n\t"
-                        "sq $8, 0(%1)\n\t"
-                        "sq $9, 16(%1)\n\t"
-                        "sq $10, 32(%1)\n\t"
-                        "sq $11, 48(%1)"
-                        :
-                        : "r"(*selected_source), "r"(selected)
-                        : "$8", "$9", "$10", "$11", "memory");
+                    QuadwordCopyMatrixT0(selected, *selected_source);
                     selected[0][3] = selected[1][3] = selected[2][3] = 0.0f;
                     xglMatrixStackLoad(selected);
                 } else {
-                    __asm__ __volatile__(
-                        "lq $8, 0(%0)\n\t"
-                        "lq $9, 16(%0)\n\t"
-                        "lq $10, 32(%0)\n\t"
-                        "lq $11, 48(%0)\n\t"
-                        "sq $8, 0(%1)\n\t"
-                        "sq $9, 16(%1)\n\t"
-                        "sq $10, 32(%1)\n\t"
-                        "sq $11, 48(%1)"
-                        :
-                        : "r"(*accessory), "r"(base)
-                        : "$8", "$9", "$10", "$11", "memory");
+                    QuadwordCopyMatrixT0(base, *accessory);
                     selected_source = (Matrix4 *)(((scheduler->casterUnit->parentMatrixIndex & 0x7fff) << 6) + (int)accessory);
-                    __asm__ __volatile__(
-                        "lq $8, 0(%0)\n\t"
-                        "lq $9, 16(%0)\n\t"
-                        "lq $10, 32(%0)\n\t"
-                        "lq $11, 48(%0)\n\t"
-                        "sq $8, 0(%1)\n\t"
-                        "sq $9, 16(%1)\n\t"
-                        "sq $10, 32(%1)\n\t"
-                        "sq $11, 48(%1)"
-                        :
-                        : "r"(*selected_source), "r"(selected)
-                        : "$8", "$9", "$10", "$11", "memory");
+                    QuadwordCopyMatrixT0(selected, *selected_source);
                     base[0][3] = base[1][3] = base[2][3] = selected[0][3] = selected[1][3] = selected[2][3] = 0.0f;
                     xglMatrixStackLoad(base);
                     xglMatrixStackMul(selected);
@@ -4083,46 +3770,15 @@ void sefGetParentMatrix(SchedulerState *scheduler, int index, Matrix4 *matrix)
                 }
             }
         }
-        __asm__ __volatile__(
-            "lq $8, 0(%0)\n\t"
-            "lq $9, 16(%0)\n\t"
-            "lq $10, 32(%0)\n\t"
-            "lq $11, 48(%0)\n\t"
-            "sq $8, 0(%1)\n\t"
-            "sq $9, 16(%1)\n\t"
-            "sq $10, 32(%1)\n\t"
-            "sq $11, 48(%1)"
-            :
-            : "r"(*matrix), "r"(parentMatrixState)
-            : "$8", "$9", "$10", "$11", "memory");
+        QuadwordCopyMatrixT0(parentMatrixState, *matrix);
         parentMatrixState[40] = sefGetMatrixScale(parentMatrixState);
         }
     goto published;
 identity:
     {
         matrixReady = 0;
-        __asm__ __volatile__("vmr32.xyzw vf1, vf0\n\t"
-                             "vmr32.xyzw vf2, vf1\n\t"
-                             "vmr32.xyzw vf3, vf2\n\t"
-                             "sqc2 vf0, 48(%0)\n\t"
-                             "sqc2 vf1, 32(%0)\n\t"
-                             "sqc2 vf2, 16(%0)\n\t"
-                             "sqc2 vf3, 0(%0)"
-                             :
-                             : "r"(matrix)
-                             : "memory");
-        __asm__ __volatile__(
-            "lq $8, 0(%0)\n\t"
-            "lq $9, 16(%0)\n\t"
-            "lq $10, 32(%0)\n\t"
-            "lq $11, 48(%0)\n\t"
-            "sq $8, 0(%1)\n\t"
-            "sq $9, 16(%1)\n\t"
-            "sq $10, 32(%1)\n\t"
-            "sq $11, 48(%1)"
-            :
-            : "r"(*matrix), "r"(parentMatrixState)
-            : "$8", "$9", "$10", "$11", "memory");
+        Vu0UnitMatrix(matrix);
+        QuadwordCopyMatrixT0(parentMatrixState, *matrix);
         parentMatrixState[40] = 1.0f;
     }
 published:
@@ -4215,13 +3871,13 @@ int sefExecScheduler(void)
             sefCalcRotTransSMatrix(&scheduler->rotation, &scheduler->position,
                                    &scheduler->scale, (Matrix4 *)&scheduler->localMatrix);
 
-            __asm__ __volatile__("vmr32.xyzw vf1, vf0\n\tvmr32.xyzw vf2, vf1\n\tvmr32.xyzw vf3, vf2\n\tsqc2 vf0, 48(%0)\n\tsqc2 vf1, 32(%0)\n\tsqc2 vf2, 16(%0)\n\tsqc2 vf3, 0(%0)" : : "r"(&BATTLE->casterMatrix) : "memory");
-            __asm__ __volatile__("vmr32.xyzw vf1, vf0\n\tvmr32.xyzw vf2, vf1\n\tvmr32.xyzw vf3, vf2\n\tsqc2 vf0, 48(%0)\n\tsqc2 vf1, 32(%0)\n\tsqc2 vf2, 16(%0)\n\tsqc2 vf3, 0(%0)" : : "r"(&BATTLE->targetMatrix) : "memory");
+            Vu0UnitMatrix(&BATTLE->casterMatrix);
+            Vu0UnitMatrix(&BATTLE->targetMatrix);
 
             if (running != 0) {
                 sefGetParentMatrix(scheduler, 0, &scheduler->worldMatrix);
             } else {
-                __asm__ __volatile__("vmr32.xyzw vf1, vf0\n\tvmr32.xyzw vf2, vf1\n\tvmr32.xyzw vf3, vf2\n\tsqc2 vf0, 48(%0)\n\tsqc2 vf1, 32(%0)\n\tsqc2 vf2, 16(%0)\n\tsqc2 vf3, 0(%0)" : : "r"(&scheduler->worldMatrix) : "memory");
+                Vu0UnitMatrix(&scheduler->worldMatrix);
                 if (SLOT(caster) != 0) {
                     sefCalcRotTransSMatrix(&SLOT(caster)->rotation, &SLOT(caster)->position,
                                            &SLOT(caster)->scale, &BATTLE->casterMatrix);
@@ -4413,7 +4069,7 @@ static void sefInitBattlePrm(void)
     int count = 0;
     int i;
 
-    __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(&_battleActor->center) : "memory");
+    Vu0SetOrigin(&_battleActor->center);
     for (i = 0; i < _battleActor->count; i++) {
         record = &_battleActor->actors[i];
         actor = record->actor;
@@ -4422,10 +4078,7 @@ static void sefInitBattlePrm(void)
         record->seSignal = 0;
         if (actor != 0 && record->excluded == 0) {
             position = &actor->position;
-            __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&_battleActor->center) : "memory");
-            __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(position) : "memory");
-            __asm__ __volatile__("vadd.xyz vf1, vf1, vf2" : : : "memory");
-            __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&_battleActor->center) : "memory");
+            Vu0SefAddVectorXYZ(&_battleActor->center, &_battleActor->center, position);
             count++;
         }
     }
@@ -4442,16 +4095,13 @@ void sefCaclAllTarget(Vector4 *target)
     int count = 0;
     int i;
 
-    __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(target) : "memory");
+    Vu0SetOrigin(target);
     for (i = 0; i < _battleActor->count; i++) {
         record = &_battleActor->actors[i];
         actor = record->actor;
         if (actor != 0 && record->excluded == 0) {
             position = &actor->position;
-            __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(target) : "memory");
-            __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(position) : "memory");
-            __asm__ __volatile__("vadd.xyz vf1, vf1, vf2" : : : "memory");
-            __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(target) : "memory");
+            Vu0SefAddVectorXYZ(target, target, position);
             count++;
         }
     }
@@ -4561,14 +4211,7 @@ static void sefAddLightActor(const Vector4 *position, const SefLightInput *light
         }
 
         sefGetNullPosition(&actor_position, battle_actor->actor, 0, 1);
-        __asm__ __volatile__(
-            "lqc2 vf1, 0(%0)\n\t"
-            "lqc2 vf2, 0(%1)\n\t"
-            "vsub.xyz vf1, vf1, vf2\n\t"
-            "sqc2 vf1, 0(%2)"
-            :
-            : "r"(position), "r"(&actor_position), "r"(&difference)
-            : "memory");
+        Vu0SefSubVectorXYZ(&difference, position, &actor_position);
         distance_squared = MMathVectorDotProduct(&difference, &difference);
         if (!(distance_squared < range_squared)) {
             continue;
@@ -4578,12 +4221,12 @@ static void sefAddLightActor(const Vector4 *position, const SefLightInput *light
         weight = (range_squared - distance_squared) / range_squared * 0.0078125f;
         if (battle_actor->lightCount == 0) {
             *(SefLightSet *)lights = *(SefLightSet *)_defLight;
-            __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(&battle_actor->light_accumulator) : "memory");
+            Vu0SetOrigin(&battle_actor->light_accumulator);
             MMathNormalizeVector2(&battle_actor->light_direction, &difference);
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(&lights[6]), "r"(&battle_actor->light_direction) : "$8", "memory");
+            QuadwordCopyT0(&lights[6], &battle_actor->light_direction);
             battle_actor->actor->flags |= SEF_ACTOR_LIGHT_FLAG;
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(&battle_actor->light_position), "r"(position) : "$8", "memory");
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(&battle_actor->actor_position), "r"(&actor_position) : "$8", "memory");
+            QuadwordCopyT0(&battle_actor->light_position, position);
+            QuadwordCopyT0(&battle_actor->actor_position, &actor_position);
         }
 
         __asm__ __volatile__(
@@ -4947,7 +4590,7 @@ void sefCreateEffect(SefEffectRequest *request)
         }
         script_request = &_battleData.request;
         *script_request = *request;
-        __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(_battleData.bytes + 0x30) : "memory");
+        Vu0SetOrigin(_battleData.bytes + 0x30);
         sefCnvDeathEffectNo(script_request);
         scCreateScript(script_request);
     }
@@ -5050,7 +4693,7 @@ static SchedulerState *sefCreateEffectCf2(int effectNo,
         scheduler = &((SchedulerState *)_scheduler)[index];
         scheduler->flags |= 0x412;
         if (orientation != 0) {
-            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)" : : "r"(&scheduler->rotation), "r"(orientation) : "$8", "memory");
+            QuadwordCopyT0(&scheduler->rotation, orientation);
         }
     }
     return scheduler;
@@ -5205,18 +4848,9 @@ void sefPushEffect(void)
     sefMemZero(_savePrm, sizeof(_savePrm));
     for (index = 0; index < SEF_SAVE_PRM_COUNT; index++) {
         if (_scheduler[index].inUse != 0) {
-            __asm__ __volatile__(
-                "lq $8, 0(%1)\n\t"
-                "sq $8, 0(%0)"
-                : : "r"(&_savePrm[index].position), "r"(&_scheduler[index].position) : "$8", "memory");
-            __asm__ __volatile__(
-                "lq $8, 0(%1)\n\t"
-                "sq $8, 0(%0)"
-                : : "r"(&_savePrm[index].rotation), "r"(&_scheduler[index].rotation) : "$8", "memory");
-            __asm__ __volatile__(
-                "lq $8, 0(%1)\n\t"
-                "sq $8, 0(%0)"
-                : : "r"(&_savePrm[index].scale), "r"(&_scheduler[index].scale) : "$8", "memory");
+            QuadwordCopyT0(&_savePrm[index].position, &_scheduler[index].position);
+            QuadwordCopyT0(&_savePrm[index].rotation, &_scheduler[index].rotation);
+            QuadwordCopyT0(&_savePrm[index].scale, &_scheduler[index].scale);
             _savePrm[index].savedActive = _scheduler[index].savedActive;
             _savePrm[index].caster = _scheduler[index].caster;
             _savePrm[index].target = _scheduler[index].target;
@@ -5243,10 +4877,7 @@ void sefPopEffect(void)
         if (_savePrm[index].savedActive != 0) {
             sefCreateEffectCf2(_savePrm[index].effectNo, &_savePrm[index].position,
                                &_savePrm[index].rotation, index);
-            __asm__ __volatile__(
-                "lq $8, 0(%1)\n\t"
-                "sq $8, 0(%0)"
-                : : "r"(&_scheduler[index].scale), "r"(&_savePrm[index].scale) : "$8", "memory");
+            QuadwordCopyT0(&_scheduler[index].scale, &_savePrm[index].scale);
             save = &_savePrm[index];
             _scheduler[index].savedActive = save->savedActive;
             _scheduler[index].caster = save->caster;
@@ -5316,36 +4947,20 @@ void sefDeg2RadVector(Vector4 *dst, Vector4 *src)
 {
     __asm__ __volatile__("lqc2 $vf2, 0(%0)" : : "r"(src) : "memory");
 
-    {
-        register float degToRad asm("$f8") = lit4_004d8354;
-
-        __asm__ __volatile__(
-            "mfc1 $8, %1\n\t"
-            "qmtc2.ni $8, $vf1\n\t"
-            "vmulx.xyz $vf2, $vf2, $vf1x\n\t"
-            "sqc2 $vf2, 0(%0)"
-            :
-            : "r"(dst), "f"(degToRad)
-            : "$8", "memory"
-        );
-    }
+    __asm__ __volatile__(
+        "li.s $f8, 0.017453292\n"
+        "mfc1 $8, $f8\n"
+        "qmtc2.ni $8, $vf1\n"
+        "vmulx.xyz $vf2, $vf2, $vf1x\n"
+        "sqc2 $vf2, 0(%0)"
+        :
+        : "r"(dst)
+        : "$8", "$f8", "memory");
 }
 
 void sefMergeMatrixPos(Matrix4 *dest, Matrix4 *matrix, Vector4 *position)
 {
-    __asm__ __volatile__(
-        "lq $8, 0(%1)\n\t"
-        "lq $9, 16(%1)\n\t"
-        "lq $10, 32(%1)\n\t"
-        "lq $11, 0(%2)\n\t"
-        "sq $8, 0(%0)\n\t"
-        "sq $9, 16(%0)\n\t"
-        "sq $10, 32(%0)\n\t"
-        "sq $11, 48(%0)"
-        :
-        : "r"(dest), "r"(matrix), "r"(position)
-        : "$8", "$9", "$10", "$11", "memory"
-    );
+    QuadwordMergeMatrixPosition(dest, matrix, position);
 }
 
 void sefLerpVectorB(void *first, Vector4 *dest, float factor)

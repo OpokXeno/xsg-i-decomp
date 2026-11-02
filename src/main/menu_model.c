@@ -13,6 +13,7 @@
 #include "main/window_tex_load.h"
 #include "main/xgl_camera.h"
 #include "main/xgl_font.h"
+#include "vu0_macro.h"
 
 typedef struct MenuModelScaleLimits {
     float value[2];
@@ -1174,12 +1175,7 @@ void MenuModelNavelMove(MenuModelUnit *unit)
     actor->position.z = control->position.z - matrix[3][2];
     actor->position.w = 1.0f;
     /* VF2 retains position.w; VF2/VF3 and arithmetic flags are scratch here. */
-    __asm__ __volatile__(
-        "lqc2 vf3,0(%0)\n\t"
-        "lqc2 vf2,0(%1)\n\t"
-        "vadd.xyz vf2,vf2,vf3\n\t"
-        "sqc2 vf2,0(%1)\n\t"
-        : : "r"(&control->offset), "r"(&actor->position) : "memory");
+    Vu0AddVectorXYZ(&actor->position, &actor->position, &control->offset);
     xglFontDebugPrintf(98, 32, navelRotationXFormat, (double)actor->rotation.x);
     xglFontDebugPrintf(98, 40, navelRotationYFormat, (double)actor->rotation.y);
     xglFontDebugPrintf(98, 48, navelRotationZFormat, (double)actor->rotation.z);

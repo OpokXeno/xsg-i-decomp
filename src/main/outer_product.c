@@ -3,6 +3,7 @@
 #include "main/xgl_2.h"
 #include "outer_product.h"
 #include "main/outer_product.h"
+#include "vu0_macro.h"
 
 extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                                const Vector4 *third, Vector4 *vertical);
@@ -25,22 +26,8 @@ void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
     Vector4 second_edge;
     Vector4 normal;
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%2)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)"
-        :
-        : "r"(&first_edge), "r"(first), "r"(second)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%2)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)"
-        :
-        : "r"(&second_edge), "r"(first), "r"(third)
-        : "memory");
+    Vu0SubVectorXYZ(&first_edge, second, first);
+    Vu0SubVectorXYZ(&second_edge, third, first);
     xglVectorOuter(&normal, &first_edge, &second_edge);
     xglVectorOuter(vertical, &first_edge, &normal);
 }
@@ -53,14 +40,7 @@ float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *thi
 
     CalcVerticalVector(first, second, third, &vertical);
     xglVectorNormal(&vertical, &vertical);
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%2)"
-        :
-        : "r"(third), "r"(first), "r"(&delta)
-        : "memory");
+    Vu0SubVectorXYZ(&delta, first, third);
     xglVectorInner(&length, &vertical, &delta);
     return length;
 }
@@ -75,14 +55,7 @@ void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
     intersection_values[1] = CalcLength(first, second, third);
     CalcVerticalVector(first, second, third, &normal);
     xglVectorNormal(&normal, &normal);
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%2)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)"
-        :
-        : "r"(cross_point), "r"(third), "r"(fourth)
-        : "memory");
+    Vu0SubVectorXYZ(cross_point, fourth, third);
     xglVectorInner(&intersection_values[0], cross_point, &normal);
     intersection_values[0] = intersection_values[1] / intersection_values[0];
     xglVectorLength(&intersection_values[1], cross_point);

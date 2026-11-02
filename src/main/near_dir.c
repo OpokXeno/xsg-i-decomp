@@ -9,6 +9,7 @@
 #include "main/nml_model_set.h"
 #include "main/xgl_2.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 typedef struct {
     u32 active;
@@ -384,15 +385,7 @@ void SEQ_moveSPL(Actor *actor)
         Vector4 delta;
         float length;
 
-        __asm__ __volatile__(
-            "lqc2 $vf3,0(%1)\n\t"
-            "lqc2 $vf2,0(%2)\n\t"
-            "vsub.xyz $vf2xyz,$vf2xyz,$vf3xyz\n\t"
-            "sqc2 $vf2,0(%0)\n\t"
-            :
-            : "r"(&delta), "r"(&actor->position), "r"(&sample)
-            : "memory"
-        );
+        Vu0SubVectorXYZ(&delta, &sample, &actor->position);
 
         /* The original computes the distance and never reads it: `length` is
          * written by the call and dead afterwards. The call is the observable

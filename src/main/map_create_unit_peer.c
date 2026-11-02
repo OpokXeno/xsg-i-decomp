@@ -6,6 +6,7 @@
 #include "main/play.h"
 #include "main/map_create_unit_peer.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 /* One component of `goal` carried through a bone matrix: the three
  * rotation/scale rows, then the translation row. */
@@ -712,13 +713,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             xglMatrixStackSave(inverse);
             xglMatrixStackLoad(aligned);
             xglMatrixStackMul(local);
-            __asm__ __volatile__(
-                "lqc2 $vf20, 0(%1)\n"
-                "lqc2 $vf21, 0(%2)\n"
-                "vsub.xyzw $vf20xyzw, $vf20xyzw, $vf21xyzw\n"
-                "sqc2 $vf20, 0(%0)\n"
-                : : "r" (&delta), "r" (&sequence_entry->pivot_x), "r" (unit->matrix[3])
-                : "memory");
+            Vu0SubVector(&delta, &sequence_entry->pivot_x, unit->matrix[3]);
             rot_x = unit->rotation.x;
             rot_y = unit->rotation.y;
             rz = unit->rotation.z;

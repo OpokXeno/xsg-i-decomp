@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "matrix_print.h"
 #include "main/matrix_print.h"
+#include "vu0_macro.h"
 
 extern int printf(const char *format, ...);
 void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);
@@ -673,28 +674,12 @@ void CUR_MATRIX_Unit4s(void)
 
 void CUR_MATRIX_Set(Matrix4 matrix)
 {
-    __asm__ __volatile__(
-        "lqc2 vf27, 0(%0)\n\t"
-        "lqc2 vf28, 16(%0)\n\t"
-        "lqc2 vf29, 32(%0)\n\t"
-        "lqc2 vf30, 48(%0)\n\t"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0SetCurrentMatrix(matrix);
 }
 
 void CUR_MATRIX_Get(Matrix4 matrix)
 {
-    __asm__ __volatile__(
-        "sqc2 vf27, 0(%0)\n\t"
-        "sqc2 vf28, 16(%0)\n\t"
-        "sqc2 vf29, 32(%0)\n\t"
-        "sqc2 vf30, 48(%0)\n\t"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0GetCurrentMatrix(matrix);
 }
 
 void CUR_MATRIX_GetT(Vector4 *translation)

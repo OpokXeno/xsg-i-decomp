@@ -67904,7 +67904,8 @@
     "compiler_profile": "ee-gcc2_96-realconv-lp7",
     "flags": [
      "-O2",
-     "-G8"
+     "-G8",
+     "-fno-optimize-sibling-calls"
     ],
     "language": "c",
     "source_class": "c",
@@ -67920,7 +67921,27 @@
     "g_basis": "10 gp-relative insns, 0 local objects in .sdata/.sbss",
     "g_confidence": "high",
     "g_flag": "-G8",
-    "source": "toolchain-per-object.json main#219"
+    "source": "toolchain-per-object.json main#219",
+    "assignment": {
+     "kind": "whole_tu_flag_assignment",
+     "previous_contract": "ee-tu-c296-G8",
+     "contract": "ee-tu-c296-G8-g-nosib",
+     "compiler_profile": "ee-gcc2_96-realconv",
+     "flags_added": [
+      "-fno-optimize-sibling-calls"
+     ],
+     "evidence": [
+      {
+       "path": ".work/main-tidy-20261101/hack-removal/m_math-nosib-evidence.json",
+       "sha256": "f81a227c3ffca9f6f7e4b767da4510dc6a18afc9293c53d9e5759dfb6d1c2373"
+      }
+     ],
+     "original": {
+      "text_sha256": "2915791c45dc6853f2e9483e25cb010512df997edaf065c3cfe162278735963c",
+      "functions_sha256": "78e4e9970c5d6cd5da32a2dc46f537792c33013af73b34e00c72fd0d35d11304"
+     },
+     "reason": "User decision 2026-11-02 ('calibra tu_audit y a\u00f1ade ese contrato para m_math'): main/tu219 (m_math) is compiled with -fno-optimize-sibling-calls. Its original has no tail call (0 `j` sibcalls against 803 in the rest of MAIN), and the natural C of MMathCalcDir / MMathCalcDirVector reproduces the original bytes only without sibling-call optimization; the former dead store and register binding that blocked the tail calls are gone (.work/main-tidy-20261101/hack-removal/m_math-nosib-evidence.json)."
+    }
    },
    "domain": "math",
    "functions": [
@@ -68351,7 +68372,7 @@
    },
    "shared_contract": {
     "present": true,
-    "id": "ee-tu-c296-G8-g",
+    "id": "ee-tu-c296-G8-g-nosib",
     "path": "src/main/m_math.c",
     "cc1": "tool:ee-gcc2.96-realconv-lp7/cc1",
     "cc1_sha256": "58a63b84ed4385101b1135a71919a2516f2d6c61b80258b5917ccd47bc56b1f4",

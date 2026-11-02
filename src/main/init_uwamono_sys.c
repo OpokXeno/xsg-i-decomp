@@ -16,6 +16,7 @@
 #include "main/pause_menu_page_uwamono.h"
 #include "main/vibration.h"
 #include "main/xgl_font.h"
+#include "vu0_macro.h"
 
 #define UWAMONO_SYMBOL_PHASE_STEP 0.05f
 #define WIND_POSITION_W 0.3f
@@ -2732,14 +2733,7 @@ void CalcNearCrossPointCircle(const Vector4 *from, const Vector4 *to,
     if (CrossCheckMapUnitCircle(from, to, unit)) {
         delta = *from;
         delta.y = unit->position.vector.y;
-        __asm__ __volatile__(
-            "lqc2 vf3,0(%0)\n\t"
-            "lqc2 vf2,0(%1)\n\t"
-            "vsub.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
-            "sqc2 vf2,0(%2)"
-            :
-            : "r"(from), "r"(&unit->position), "r"(&delta)
-            : "memory");
+        Vu0SubVectorXYZ(&delta, &unit->position, from);
         xglVectorLength(&distance, &delta);
         xglVectorNormal(&direction, &delta);
         distance -= unit->dimensions.x;
@@ -2817,26 +2811,10 @@ void CheckNearPoint(const Vector4 *origin, const Vector4 *candA, const Vector4 *
     float lenA;
     float lenB;
 
-    __asm__ __volatile__(
-        "lqc2 vf3,0(%1)\n\t"
-        "lqc2 vf2,0(%0)\n\t"
-        "vsub.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
-        "sqc2 vf2,0(%2)"
-        :
-        : "r"(origin), "r"(candA), "r"(&delta)
-        : "memory"
-    );
+    Vu0SubVectorXYZ(&delta, origin, candA);
     xglVectorLength(&lenA, &delta);
 
-    __asm__ __volatile__(
-        "lqc2 vf3,0(%1)\n\t"
-        "lqc2 vf2,0(%0)\n\t"
-        "vsub.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
-        "sqc2 vf2,0(%2)"
-        :
-        : "r"(origin), "r"(candB), "r"(&delta)
-        : "memory"
-    );
+    Vu0SubVectorXYZ(&delta, origin, candB);
     xglVectorLength(&lenB, &delta);
 
     if (lenA < lenB)

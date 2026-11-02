@@ -7,6 +7,7 @@
 #include "main/twsys_init.h"
 #include "twsys_init.h"
 #include "main/xgl_sound.h"
+#include "vu0_macro.h"
 
 /*
  * The font control strings TWSYS_draw emits before a component's own drawing
@@ -487,13 +488,7 @@ void TW_setPos(TComponent *component)
 
     /* Original VU0 operation: distance from the anchor to the camera.
      * vf2/vf3 are local VU scratch state; the stored vector feeds length. */
-    __asm__ __volatile__(
-        "lqc2 $vf3,0(%1)\n"
-        "lqc2 $vf2,0(%2)\n"
-        "vsub.xyz $vf2xyz,$vf2xyz,$vf3xyz\n"
-        "sqc2 $vf2,0(%0)"
-        : : "r"(&cameraDelta), "r"(cameraPosition), "r"(&anchorPosition)
-        : "memory");
+    Vu0SubVectorXYZ(&cameraDelta, &anchorPosition, cameraPosition);
     xglVectorLength(&projected->z, &cameraDelta);
     if (projected->z > 2.5f)
         projected->z = 2.5f;

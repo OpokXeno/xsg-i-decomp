@@ -11,6 +11,7 @@
 #include "main/nml_filter_set.h"
 #include "main/xgl_light.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 #define NML_RENDER_MAP_ENTRY 0x10000u
 
@@ -621,86 +622,28 @@ static inline int fade_packet_close(GifCommandData *gif,
 
 static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
 {
-    register float lengthSq asm("$f0");
+    float lengthSq;
 
-    __asm__ __volatile__(
-        "lqc2 $vf10,0(%1)\n\t"
-        "lqc2 $vf11,0(%2)\n\t"
-        "vsub.xyz vf10xyz,vf11xyz,vf10xyz\n\t"
-        "vmul.xyz vf10xyz,vf10xyz,vf10xyz\n\t"
-        "vaddz.x vf10x,vf10x,vf10z\n\t"
-        "vaddy.x vf10x,vf10x,vf10y\n\t"
-        "qmfc2 $2,$vf10\n\t"
-        "mtc1 $2,$f2\n\t"
-        "mtc1 $2,%0"
-        : "=f"(lengthSq)
-        : "r"(first), "r"(second)
-        : "$2", "memory"
-    );
+    Vu0DistanceSquaredXYZ(lengthSq, first, second);
     return lengthSq;
 }
 
 static void _CurSetMatrix(float matrix[4][4])
 {
-    __asm__ __volatile__(
-        "lqc2 $vf27,0(%0)\n\t"
-        "lqc2 $vf28,16(%0)\n\t"
-        "lqc2 $vf29,32(%0)\n\t"
-        "lqc2 $vf30,48(%0)"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0SetCurrentMatrix(matrix);
 }
 
 static void _CurSetViewScaleTrans(const float viewScale[4], const float viewTrans[4])
 {
-    __asm__ __volatile__(
-        "lqc2 $vf25,0(%0)\n\t"
-        "lqc2 $vf26,0(%1)"
-        :
-        : "r"(viewScale), "r"(viewTrans)
-        : "memory"
-    );
+    Vu0SetViewScaleTranslation(viewScale, viewTrans);
 }
 
-static int _CurRotTransPersClip(NmlProjectedPoint destination, const Vector4 *vector)
+static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
 {
-    register int clipFlags asm("$2");
-    /* The SQC2 destination is an EE32 address in GPR4. After that
-     * hardware use ends, the same word carries the masked clip flags. */
-    register unsigned int destinationOrFlags asm("$4") = (unsigned int)destination;
+    int clipFlags;
 
-    __asm__ __volatile__(
-        "ctc2 $0,$vi18\n\t"
-        "lqc2 $vf31,0(%2)\n\t"
-        "vmulax.xyzw ACC,vf27xyzw,vf31x\n\t"
-        "vmadday.xyzw ACC,vf28xyzw,vf31y\n\t"
-        "vmaddaz.xyzw ACC,vf29xyzw,vf31z\n\t"
-        "vmaddw.xyzw vf31xyzw,vf30xyzw,vf0w\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vclipw.xyz vf31xyz,vf31w\n\t"
-        "vdiv Q,vf0w,vf31w\n\t"
-        "vwaitq\n\t"
-        "vmulq.xyzw vf31xyzw,vf31xyzw,Q\n\t"
-        "vmulaw.xyzw ACC,vf26xyzw,vf0w\n\t"
-        "vmadd.xyzw vf31xyzw,vf31xyzw,vf25xyzw\n\t"
-        "vftoi4.xyw vf23xyw,vf31xyw\n\t"
-        "vftoi0.z vf23z,vf31z\n\t"
-        "vsub.w vf23w,vf23w,vf23w\n\t"
-        "sqc2 $vf23,0(%1)\n\t"
-        "cfc2 %0,$vi18\n\t"
-        "nop"
-        : "=r"(clipFlags)
-        : "r"(destinationOrFlags), "r"(vector)
-        : "memory"
-    );
-    clipFlags &= 0x3f;
-    destinationOrFlags = clipFlags;
-    __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
-    return destinationOrFlags;
+    Vu0CurrentRotTransPersClip(clipFlags, destination, vector);
+    return clipFlags;
 }
 
 static void _CurRotTransPersFog(Vector4 *destination, const Vector4 *vector, const Vector4 *fog) {
@@ -726,17 +669,7 @@ static void _CurRotTransPersFog(Vector4 *destination, const Vector4 *vector, con
 }
 
 static void _CurApplyMatrix(Vector4 *destination, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "vmulax.xyzw ACC, vf27, vf31x\n\t"
-        "vmadday.xyzw ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyzw ACC, vf29, vf31z\n\t"
-        "vmaddw.xyzw vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%1)"
-        :
-        : "r"(vector), "r"(destination)
-        : "memory"
-    );
+    Vu0ApplyCurrentMatrix(destination, vector);
 }
 
 static void _WeightToGlobalVec(Vector4 *destination, Matrix4 matrix, Matrix4 weights)
@@ -857,15 +790,7 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
     arg0->slots[0xBE].f = 1.0f;
     arg0->slots[0xBF].f = 1.0f;
     arg0->slots[0xB1].f = 0.0f;
-    __asm__ __volatile__(
-        "sq $0, 0(%0)\n\t"
-        "sq $0, 16(%0)\n\t"
-        "sq $0, 32(%0)\n\t"
-        "sq $0, 48(%0)"
-        :
-        : "r"(&arg0->fields.pointColor[0])
-        : "memory"
-    );
+    QuadwordZeroMatrix(&arg0->fields.pointColor[0]);
     QuadwordZero(&arg0->slots[0x1F0 / 4]);
     QuadwordZero(&arg0->slots[0x210 / 4]);
 }
@@ -1074,12 +999,7 @@ static void CONSTRUCT_MODELSYSTEM(void)
     s_nMenu = 0;
     g_aSubWindow[3] = g_aSubWindow[2] = g_aSubWindow[1] = inactiveWindow;
     s_nEffectWrite = 1;
-    __asm__ __volatile__(
-        "sq $0, 0(%0)\n"
-        "sq $0, 16(%0)\n"
-        "sq $0, 32(%0)\n"
-        "sq $0, 48(%0)"
-        : : "r"(s_inGblPointC) : "memory");
+    QuadwordZeroMatrix(s_inGblPointC);
     QuadwordZero(s_inGblFogCol);
     QuadwordZero(&s_inGblFogPara);
 }
@@ -1527,14 +1447,7 @@ int nmlModelAskNonLinearCamera(void)
             if (length >= 1.0f) {
                 s_nMainCameraWarp = 2;
             } else {
-                __asm__ __volatile__(
-                    "lqc2 vf3, 0(%1)\n\t"
-                    "lqc2 vf2, 0(%2)\n\t"
-                    "vsub.xyz vf2, vf2, vf3\n\t"
-                    "sqc2 vf2, 0(%0)"
-                    :
-                    : "r"(&angleDelta), "r"(&camera->rotation), "r"(&s_inMainCameraAng)
-                    : "memory");
+                Vu0SubVectorXYZ(&angleDelta, &s_inMainCameraAng, &camera->rotation);
                 angleY = __builtin_fabsf(angleDelta.y);
                 if (nonLinearCameraMinAngleY < angleY && angleY < nonLinearCameraMaxAngleY) {
                     s_nMainCameraWarp = 2;
@@ -1737,15 +1650,7 @@ void nmlModelSetProreal(NmlProRealState *input)
     xglVectorMulMat(&input->fields.transformOrigin, scaledTransform,
                     &transformOrigin);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n"
-        "lqc2 vf2, 0(%1)\n"
-        "vsub.xyz vf2, vf2, vf3\n"
-        "sqc2 vf2, 0(%2)\n"
-        :
-        : "r"(&scaledTransform[3]), "r"(&input->fields.transformOrigin),
-          "r"(&input->fields.unmodeled_160)
-        : "memory");
+    Vu0SubVectorXYZ(&input->fields.unmodeled_160, &input->fields.transformOrigin, &scaledTransform[3]);
 
     xglMatrixInverse(input->fields.inverseTransform, scaledTransform);
     xglVectorNormal(&input->fields.unmodeled_160, &input->fields.unmodeled_160);
@@ -2793,16 +2698,7 @@ static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
             QuadwordCopy(currentPosition, parentPosition);
         }
     } else {
-        __asm__ __volatile__(
-            "lqc2 vf3, 0(%1)\n\t"
-            "lqc2 vf2, 0(%0)\n\t"
-            "vadd.xyz vf2, vf2, vf3\n\t"
-            "sqc2 vf2, 0(%0)"
-            :
-            : "r"(&s_inLayout.fields.center),
-              "r"(&model->entryTranslation)
-            : "memory"
-        );
+        Vu0AddVectorXYZ(&s_inLayout.fields.center, &s_inLayout.fields.center, &model->entryTranslation);
     }
 
     _CurSetMatrix((f32 (*)[4])&s_inLayout.fields.place);
@@ -3080,14 +2976,7 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     cameraTranslation.w = one;
     projectionAngles.z = 0.0f;
     projectionAngles.y = 0.0f;
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vadd.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%1)"
-        :
-        : "r"(&s_inProReal[0].fields.unmodeled_190[0].v), "r"(&cameraTranslation)
-        : "memory");
+    Vu0AddVectorXYZ(&cameraTranslation, &cameraTranslation, &s_inProReal[0].fields.unmodeled_190[0].v);
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&cameraTranslation.x);
@@ -3130,8 +3019,7 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     nmlModelSetProreal(s_inProReal);
     s_inProReal[0].fields.unmodeled_11c = 1;
 
-    __asm__ __volatile__("sq $0, 0(%0)\n\tsq $0, 16(%0)\n\tsq $0, 32(%0)\n\tsq $0, 48(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_0c0[0]) : "memory");
+    QuadwordZeroMatrix(&s_inProReal[0].fields.unmodeled_0c0[0]);
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[0], &s_inProReal[0].fields.unmodeled_170[0]);
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[3], &s_inProReal[0].fields.unmodeled_170[1]);
     xglVectorScaleXYZ(&s_inProReal[0].fields.unmodeled_160,
@@ -3239,12 +3127,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
 
     xglVectorNormal(&surfaceDir, &surfaceDir);
     xglVectorScale(&surfaceDir, &surfaceDir, 3.0f);
-    __asm__ __volatile__("lqc2 vf3, 0(%1)\n\t"
-                         "lqc2 vf2, 0(%0)\n\t"
-                         "vadd.xyz vf2, vf2, vf3\n\t"
-                         "sqc2 vf2, 0(%0)"
-                         : : "r"(&surfaceDir), "r"(&s_inProReal[0].fields.unmodeled_190[0].v)
-                         : "memory");
+    Vu0AddVectorXYZ(&surfaceDir, &surfaceDir, &s_inProReal[0].fields.unmodeled_190[0].v);
 
     xglMatrixStackUnit();
     xglMatrixStackTrans(&surfaceDir.x);
@@ -3286,8 +3169,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     nmlModelSetProreal(s_inProReal);
     s_inProReal[0].fields.unmodeled_11c = 1;
 
-    __asm__ __volatile__("sq $0, 0(%0)\n\tsq $0, 16(%0)\n\tsq $0, 32(%0)\n\tsq $0, 48(%0)"
-                         : : "r"(&s_inProReal[0].fields.unmodeled_0c0[0]) : "memory");
+    QuadwordZeroMatrix(&s_inProReal[0].fields.unmodeled_0c0[0]);
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[0], &s_inProReal[0].fields.unmodeled_170[0]);
     QuadwordCopy(&s_inProReal[0].fields.unmodeled_0c0[3], &s_inProReal[0].fields.unmodeled_170[1]);
     xglVectorScaleXYZ(&s_inProReal[0].fields.unmodeled_160,
@@ -3744,14 +3626,7 @@ void nmlModelEntryEffect(NmlModel *model)
         LAYOUT_S32(0x25c) = s_nModel;
         s_fSortOffset = s_fSortOffsetEntry;
         s_inLayout.fields.model = model;
-        __asm__ __volatile__(
-            "lqc2 vf3, 0(%1)\n\t"
-            "lqc2 vf2, 0(%0)\n\t"
-            "vadd.xyz vf2, vf2, vf3\n\t"
-            "sqc2 vf2, 0(%0)"
-            :
-            : "r"(&s_inLayout.fields.center), "r"(&model->entryTranslation)
-            : "memory");
+        Vu0AddVectorXYZ(&s_inLayout.fields.center, &s_inLayout.fields.center, &model->entryTranslation);
         _CurSetMatrix(s_inLayout.fields.place);
         _CurApplyMatrix(&s_inLayout.fields.center.v, &s_inLayout.fields.center.v);
         s_inLayout.fields.center.v.w = model->entryTranslation.w;
@@ -3851,14 +3726,7 @@ void nmlModelEntryCard(NmlModel *model)
         LAYOUT_S32(0x25c) = s_nModel;
         s_fSortOffset = s_fSortOffsetEntry;
         s_inLayout.fields.model = model;
-        __asm__ __volatile__(
-            "lqc2 vf3, 0(%1)\n\t"
-            "lqc2 vf2, 0(%0)\n\t"
-            "vadd.xyz vf2, vf2, vf3\n\t"
-            "sqc2 vf2, 0(%0)"
-            :
-            : "r"(&s_inLayout.fields.center), "r"(&model->entryTranslation)
-            : "memory");
+        Vu0AddVectorXYZ(&s_inLayout.fields.center, &s_inLayout.fields.center, &model->entryTranslation);
         _CurSetMatrix(s_inLayout.fields.place);
         _CurApplyMatrix(&s_inLayout.fields.center.v, &s_inLayout.fields.center.v);
         s_inLayout.fields.center.v.w = model->entryTranslation.w;
@@ -3978,12 +3846,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                 bound->x < model->fields.proreal->bounds_min.x || bound->z < model->fields.proreal->bounds_min.z) {
                 continue;
             }
-            __asm__ __volatile__(
-                "lqc2 vf3, 0(%1)\n\t"
-                "lqc2 vf2, 0(%2)\n\t"
-                "vsub.xyz vf2, vf2, vf3\n\t"
-                "sqc2 vf2, 0(%0)"
-                : : "r"(&pointA), "r"(bound), "r"(&model->fields.proreal->reference_point) : "memory");
+            Vu0SubVectorXYZ(&pointA, &model->fields.proreal->reference_point, bound);
             if (pointA.x * model->fields.proreal->plane_normal_x + pointA.z * model->fields.proreal->plane_normal_z < 0.0f) {
                 continue;
             }
@@ -4026,14 +3889,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                     Vector4 *minCorner = &pointB;
                     float *matrixRow = layout->fields.weightedMatrices[entry->block.matrixIndices[0] - 1].matrix[3];
 
-                    __asm__ __volatile__(
-                        "lqc2 vf3, 0(%1)\n\t"
-                        "lqc2 vf2, 0(%2)\n\t"
-                        "vadd.xyz vf2, vf2, vf3\n\t"
-                        "sqc2 vf2, 0(%0)"
-                        : : "r"(&pointA),
-                            "r"(matrixRow),
-                            "r"(&entry->bounds.boxMaxOffset) : "memory");
+                    Vu0AddVectorXYZ(&pointA, &entry->bounds.boxMaxOffset, matrixRow);
                     __asm__ __volatile__(
                         "lqc2 vf3, 0(%2)\n\t"
                         "lqc2 vf2, 0(%3)\n\t"
@@ -4048,13 +3904,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                         continue;
                     }
                 } else {
-                    __asm__ __volatile__(
-                        "lqc2 vf3, 0(%1)\n\t"
-                        "lqc2 vf2, 0(%2)\n\t"
-                        "vadd.xyz vf2, vf2, vf3\n\t"
-                        "sqc2 vf2, 0(%0)"
-                        : : "r"(worldMax),"r"(&layout->fields.place[3]),
-                            "r"(&layout->fields.model->boxMaxOffset) : "memory");
+                    Vu0AddVectorXYZ(worldMax, &layout->fields.model->boxMaxOffset, &layout->fields.place[3]);
                     __asm__ __volatile__(
                         "lqc2 vf3, 0(%2)\n\t"
                         "lqc2 vf2, 0(%3)\n\t"

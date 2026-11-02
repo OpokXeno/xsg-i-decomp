@@ -814,41 +814,173 @@ def debug_break_header_ok(text):
     return True, None
 
 
-# include/quadword.h (user decision 2026-11-02, .work/main-tidy-20261101/
-# lq-sq-research.md): the original's quadword transfer macros. Each macro is one
-# `__asm__ __volatile__` statement; the header holds its guard and the three
-# definitions, nothing else.
-QUADWORD_MACROS = {
-    'QuadwordCopy': (('destination', 'source'),
-                     ['lq $2, 0(%1)\\n', 'sq $2, 0(%0)\\n'], '"$2", "memory"'),
-    'QuadwordZero': (('destination',), ['sq $0, 0(%0)\\n'], '"memory"'),
-    'QuadwordCopyMatrix': (('destination', 'source'),
-                           [f'{op} $2, {off}(%{n})\\n' for off in (0, 16, 32, 48)
-                            for op, n in (('lq', 1), ('sq', 0))], '"$2", "memory"'),
+# The original's hardware inline-asm macros (user decisions 2026-11-02):
+# include/quadword.h (lq/sq quadword transfers) and include/vu0_macro.h (VU0
+# macro-mode vector helpers). Each macro is one `__asm__ __volatile__`
+# statement; each header holds its guard and exactly its definitions.
+# name -> (header, params, constraints, template lines, clobbers); constraints
+# starting with '=' or '+' are outputs. Generated with the headers by
+# .work/main-tidy-20261101/lq-research/gen_headers.py (one order for both).
+HARDWARE_MACROS = {
+    'QuadwordCopy': ('quadword.h', ('destination', 'source'), ('r', 'r'),
+        ['lq $2, 0(%1)', 'sq $2, 0(%0)'],
+        ('$2', 'memory')),
+    'QuadwordZero': ('quadword.h', ('destination',), ('r',),
+        ['sq $0, 0(%0)'],
+        ('memory',)),
+    'QuadwordCopyMatrix': ('quadword.h', ('destination', 'source'), ('r', 'r'),
+        ['lq $2, 0(%1)', 'sq $2, 0(%0)', 'lq $2, 16(%1)', 'sq $2, 16(%0)', 'lq $2, 32(%1)', 'sq $2, 32(%0)', 'lq $2, 48(%1)', 'sq $2, 48(%0)'],
+        ('$2', 'memory')),
+    'QuadwordZeroMatrix': ('quadword.h', ('destination',), ('r',),
+        ['sq $0, 0(%0)', 'sq $0, 16(%0)', 'sq $0, 32(%0)', 'sq $0, 48(%0)'],
+        ('memory',)),
+    'QuadwordCopyT0': ('quadword.h', ('destination', 'source'), ('r', 'r'),
+        ['lq $8, 0(%1)', 'sq $8, 0(%0)'],
+        ('$8', 'memory')),
+    'QuadwordCopyMatrixT0': ('quadword.h', ('destination', 'source'), ('r', 'r'),
+        ['lq $8, 0(%1)', 'lq $9, 16(%1)', 'lq $10, 32(%1)', 'lq $11, 48(%1)', 'sq $8, 0(%0)', 'sq $9, 16(%0)', 'sq $10, 32(%0)', 'sq $11, 48(%0)'],
+        ('$8', '$9', '$10', '$11', 'memory')),
+    'QuadwordMergeMatrixPosition': ('quadword.h', ('destination', 'matrix', 'position'), ('r', 'r', 'r'),
+        ['lq $8, 0(%1)', 'lq $9, 16(%1)', 'lq $10, 32(%1)', 'lq $11, 0(%2)', 'sq $8, 0(%0)', 'sq $9, 16(%0)', 'sq $10, 32(%0)', 'sq $11, 48(%0)'],
+        ('$8', '$9', '$10', '$11', 'memory')),
+    'QuadwordCopyArray': ('quadword.h', ('destination', 'source', 'count'), ('+r', '+r', '+r'),
+        ['1:', 'lq $2, 0(%1)', 'sq $2, 0(%0)', 'addi %2, %2, -1', 'addi %0, %0, 16', 'addi %1, %1, 16', 'bne $0, %2, 1b'],
+        ('$2', 'memory')),
+    'QuadwordCopyMatrixArray': ('quadword.h', ('destination', 'source', 'count'), ('+r', '+r', '+r'),
+        ['1:', 'lq $2, 0(%1)', 'sq $2, 0(%0)', 'lq $2, 16(%1)', 'sq $2, 16(%0)', 'lq $2, 32(%1)', 'sq $2, 32(%0)', 'lq $2, 48(%1)', 'sq $2, 48(%0)', 'addi %2, %2, -1', 'addi %0, %0, 64', 'addi %1, %1, 64', 'bne $0, %2, 1b'],
+        ('$2', 'memory')),
+    'Vu0AddVectorXYZ': ('vu0_macro.h', ('destination', 'first', 'second'), ('r', 'r', 'r'),
+        ['lqc2 vf3, 0(%2)', 'lqc2 vf2, 0(%1)', 'vadd.xyz vf2, vf2, vf3', 'sqc2 vf2, 0(%0)'],
+        ('memory',)),
+    'Vu0SubVectorXYZ': ('vu0_macro.h', ('destination', 'minuend', 'subtrahend'), ('r', 'r', 'r'),
+        ['lqc2 vf3, 0(%2)', 'lqc2 vf2, 0(%1)', 'vsub.xyz vf2, vf2, vf3', 'sqc2 vf2, 0(%0)'],
+        ('memory',)),
+    'Vu0SubVector': ('vu0_macro.h', ('destination', 'minuend', 'subtrahend'), ('r', 'r', 'r'),
+        ['lqc2 vf20, 0(%1)', 'lqc2 vf21, 0(%2)', 'vsub.xyzw vf20, vf20, vf21', 'sqc2 vf20, 0(%0)'],
+        ('memory',)),
+    'Vu0SefAddVectorXYZ': ('vu0_macro.h', ('destination', 'first', 'second'), ('r', 'r', 'r'),
+        ['lqc2 vf1, 0(%1)', 'lqc2 vf2, 0(%2)', 'vadd.xyz vf1, vf1, vf2', 'sqc2 vf1, 0(%0)'],
+        ('memory',)),
+    'Vu0SefSubVectorXYZ': ('vu0_macro.h', ('destination', 'minuend', 'subtrahend'), ('r', 'r', 'r'),
+        ['lqc2 vf1, 0(%1)', 'lqc2 vf2, 0(%2)', 'vsub.xyz vf1, vf1, vf2', 'sqc2 vf1, 0(%0)'],
+        ('memory',)),
+    'Vu0SefMulVectorXYZ': ('vu0_macro.h', ('destination', 'first', 'second'), ('r', 'r', 'r'),
+        ['lqc2 vf1, 0(%1)', 'lqc2 vf2, 0(%2)', 'vmul.xyz vf1, vf1, vf2', 'sqc2 vf1, 0(%0)'],
+        ('memory',)),
+    'Vu0SefScaleVectorXYZ': ('vu0_macro.h', ('destination', 'vector', 'scale'), ('r', 'r', 'f'),
+        ['lqc2 vf1, 0(%1)', 'mfc1 $8, %2', 'qmtc2 $8, vf2', 'vmulx.xyz vf1, vf1, vf2x', 'sqc2 vf1, 0(%0)'],
+        ('$8', 'memory')),
+    'Vu0SefScaleVectorXYZNI': ('vu0_macro.h', ('destination', 'vector', 'scale'), ('r', 'r', 'f'),
+        ['lqc2 vf1, 0(%1)', 'mfc1 $8, %2', 'qmtc2.ni $8, vf2', 'vmulx.xyz vf1, vf1, vf2x', 'sqc2 vf1, 0(%0)'],
+        ('$8', 'memory')),
+    'Vu0SefIntToFloatVector': ('vu0_macro.h', ('destination', 'source'), ('r', 'r'),
+        ['lqc2 vf1, 0(%1)', 'vitof0.xyzw vf1, vf1', 'sqc2 vf1, 0(%0)'],
+        ('memory',)),
+    'Vu0SefSetInverseView': ('vu0_macro.h', ('matrix',), ('r',),
+        ['lqc2 vf16, 0(%0)', 'lqc2 vf17, 16(%0)', 'lqc2 vf18, 32(%0)', 'lqc2 vf19, 48(%0)'],
+        ('memory',)),
+    'Vu0SefSetRotation': ('vu0_macro.h', ('matrix',), ('r',),
+        ['lqc2 vf13, 0(%0)', 'lqc2 vf14, 16(%0)', 'lqc2 vf15, 32(%0)'],
+        ('memory',)),
+    'Vu0SefQuadCornersXY': ('vu0_macro.h', ('halfWidth', 'halfHeight', 'center'), ('f', 'f', 'r'),
+        ['lqc2 vf5, 0(%2)', 'mfc1 $2, %0', 'mfc1 $3, %1', 'qmtc2 $2, vf6', 'qmtc2 $3, vf7', 'vmove.zw vf1, vf5', 'vmove.zw vf2, vf5', 'vmove.zw vf3, vf5', 'vmove.zw vf4, vf5', 'vsubx.x vf1, vf5, vf6x', 'vaddx.x vf2, vf5, vf6x', 'vsubx.x vf3, vf5, vf6x', 'vaddx.x vf4, vf5, vf6x', 'vaddx.y vf1, vf5, vf7x', 'vaddx.y vf2, vf5, vf7x', 'vsubx.y vf3, vf5, vf7x', 'vsubx.y vf4, vf5, vf7x'],
+        ('$2', '$3', 'memory')),
+    'Vu0SefQuadCornersXZ': ('vu0_macro.h', ('halfWidth', 'halfHeight', 'center'), ('f', 'f', 'r'),
+        ['lqc2 vf5, 0(%2)', 'mfc1 $2, %0', 'mfc1 $3, %1', 'qmtc2 $2, vf6', 'qmtc2 $3, vf7', 'vmove.yw vf1, vf5', 'vmove.yw vf2, vf5', 'vmove.yw vf3, vf5', 'vmove.yw vf4, vf5', 'vsubx.x vf1, vf5, vf6x', 'vaddx.x vf2, vf5, vf6x', 'vsubx.x vf3, vf5, vf6x', 'vaddx.x vf4, vf5, vf6x', 'vaddx.z vf1, vf5, vf7x', 'vaddx.z vf2, vf5, vf7x', 'vsubx.z vf3, vf5, vf7x', 'vsubx.z vf4, vf5, vf7x'],
+        ('$2', '$3', 'memory')),
+    'Vu0SefQuadCornersYZ': ('vu0_macro.h', ('halfWidth', 'halfHeight', 'center'), ('f', 'f', 'r'),
+        ['lqc2 vf5, 0(%2)', 'mfc1 $2, %0', 'mfc1 $3, %1', 'qmtc2 $2, vf6', 'qmtc2 $3, vf7', 'vmove.xw vf1, vf5', 'vmove.xw vf2, vf5', 'vmove.xw vf3, vf5', 'vmove.xw vf4, vf5', 'vsubx.y vf1, vf5, vf6x', 'vaddx.y vf2, vf5, vf6x', 'vsubx.y vf3, vf5, vf6x', 'vaddx.y vf4, vf5, vf6x', 'vaddx.z vf1, vf5, vf7x', 'vaddx.z vf2, vf5, vf7x', 'vsubx.z vf3, vf5, vf7x', 'vsubx.z vf4, vf5, vf7x'],
+        ('$2', '$3', 'memory')),
+    'Vu0ApplyMatrixXYZ': ('vu0_macro.h', ('destination', 'matrix', 'vector'), ('r', 'r', 'r'),
+        ['lqc2 vf31, 0(%2)', 'lqc2 vf27, 0(%1)', 'lqc2 vf28, 16(%1)', 'lqc2 vf29, 32(%1)', 'lqc2 vf30, 48(%1)', 'vmulax.xyz ACC, vf27, vf31x', 'vmadday.xyz ACC, vf28, vf31y', 'vmaddaz.xyz ACC, vf29, vf31z', 'vmaddw.xyz vf31, vf30, vf0w', 'sqc2 vf31, 0(%0)'],
+        ('memory',)),
+    'Vu0ApplyMatrix33XYZ': ('vu0_macro.h', ('destination', 'matrix', 'vector'), ('r', 'r', 'r'),
+        ['lqc2 vf31, 0(%2)', 'lqc2 vf27, 0(%1)', 'lqc2 vf28, 16(%1)', 'lqc2 vf29, 32(%1)', 'lqc2 vf30, 48(%1)', 'vmulax.xyz ACC, vf27, vf31x', 'vmadday.xyz ACC, vf28, vf31y', 'vmaddz.xyz vf31, vf29, vf31z', 'sqc2 vf31, 0(%0)'],
+        ('memory',)),
+    'Vu0ApplyMatrix2XYZ': ('vu0_macro.h', ('destination', 'first', 'second', 'vector'), ('r', 'r', 'r', 'r'),
+        ['lqc2 vf31, 0(%3)', 'lqc2 vf27, 0(%1)', 'lqc2 vf28, 16(%1)', 'lqc2 vf29, 32(%1)', 'lqc2 vf30, 48(%1)', 'vmulax.xyz ACC, vf27, vf31x', 'vmadday.xyz ACC, vf28, vf31y', 'vmaddaz.xyz ACC, vf29, vf31z', 'vmaddw.xyz vf31, vf30, vf0w', 'lqc2 vf27, 0(%2)', 'lqc2 vf28, 16(%2)', 'lqc2 vf29, 32(%2)', 'lqc2 vf30, 48(%2)', 'vmulax.xyz ACC, vf27, vf31x', 'vmadday.xyz ACC, vf28, vf31y', 'vmaddaz.xyz ACC, vf29, vf31z', 'vmaddw.xyz vf31, vf30, vf0w', 'sqc2 vf31, 0(%0)'],
+        ('memory',)),
+    'Vu0UnitMatrix': ('vu0_macro.h', ('destination',), ('r',),
+        ['vmr32.xyzw vf1, vf0', 'vmr32.xyzw vf2, vf1', 'vmr32.xyzw vf3, vf2', 'sqc2 vf0, 48(%0)', 'sqc2 vf1, 32(%0)', 'sqc2 vf2, 16(%0)', 'sqc2 vf3, 0(%0)'],
+        ('memory',)),
+    'Vu0SetOrigin': ('vu0_macro.h', ('destination',), ('r',),
+        ['sqc2 vf0, 0(%0)'],
+        ('memory',)),
+    'Vu0SetCurrentMatrix': ('vu0_macro.h', ('matrix',), ('r',),
+        ['lqc2 vf27, 0(%0)', 'lqc2 vf28, 16(%0)', 'lqc2 vf29, 32(%0)', 'lqc2 vf30, 48(%0)'],
+        ('memory',)),
+    'Vu0GetCurrentMatrix': ('vu0_macro.h', ('matrix',), ('r',),
+        ['sqc2 vf27, 0(%0)', 'sqc2 vf28, 16(%0)', 'sqc2 vf29, 32(%0)', 'sqc2 vf30, 48(%0)'],
+        ('memory',)),
+    'Vu0ApplyCurrentMatrix': ('vu0_macro.h', ('destination', 'vector'), ('r', 'r'),
+        ['lqc2 vf31, 0(%1)', 'vmulax.xyzw ACC, vf27, vf31x', 'vmadday.xyzw ACC, vf28, vf31y', 'vmaddaz.xyzw ACC, vf29, vf31z', 'vmaddw.xyzw vf31, vf30, vf0w', 'sqc2 vf31, 0(%0)'],
+        ('memory',)),
+    'Vu0CurrentRotTransPersClip': ('vu0_macro.h', ('flags', 'destination', 'vector'), ('=r', 'r', 'r'),
+        ['ctc2 $0, $vi18', 'lqc2 vf31, 0(%2)', 'vmulax.xyzw ACC, vf27, vf31x', 'vmadday.xyzw ACC, vf28, vf31y', 'vmaddaz.xyzw ACC, vf29, vf31z', 'vmaddw.xyzw vf31, vf30, vf0w', 'vnop', 'vnop', 'vnop', 'vclipw.xyz vf31, vf31w', 'vdiv Q, vf0w, vf31w', 'vwaitq', 'vmulq.xyzw vf31, vf31, Q', 'vmulaw.xyzw ACC, vf26, vf0w', 'vmadd.xyzw vf31, vf31, vf25', 'vftoi4.xyw vf23, vf31', 'vftoi0.z vf23, vf31', 'vsub.w vf23, vf23, vf23', 'sqc2 vf23, 0(%1)', 'cfc2 $2, $vi18', 'nop', 'andi $2, $2, 0x3f', 'move %0, $2'],
+        ('$2', 'memory')),
+    'Vu0SetViewScaleTranslation': ('vu0_macro.h', ('scale', 'translation'), ('r', 'r'),
+        ['lqc2 vf25, 0(%0)', 'lqc2 vf26, 0(%1)'],
+        ('memory',)),
+    'Vu0SetClipMatrices': ('vu0_macro.h', ('clip',), ('r',),
+        ['lqc2 vf12, 0(%0)', 'lqc2 vf13, 16(%0)', 'lqc2 vf14, 32(%0)', 'lqc2 vf15, 48(%0)', 'lqc2 vf16, 64(%0)', 'lqc2 vf17, 80(%0)', 'lqc2 vf18, 96(%0)', 'lqc2 vf19, 112(%0)'],
+        ('memory',)),
+    'Vu0DistanceSquaredXYZ': ('vu0_macro.h', ('result', 'first', 'second'), ('=f', 'r', 'r'),
+        ['lqc2 vf10, 0(%1)', 'lqc2 vf11, 0(%2)', 'vsub.xyz vf10, vf11, vf10', 'vmul.xyz vf10, vf10, vf10', 'vaddz.x vf10, vf10, vf10z', 'vaddy.x vf10, vf10, vf10y', 'qmfc2 $2, vf10', 'mtc1 $2, $f2', 'mtc1 $2, %0'],
+        ('$2', 'memory')),
+    'Vu0Sin': ('vu0_macro.h', ('result', 'angle'), ('=f', 'f'),
+        ['mfc1 $8, %1', 'qmtc2 $8, vf4', 'vcallms 0x20', 'qmfc2.i $8, vf1', 'mtc1 $8, %0'],
+        ('$8', 'memory')),
+    'Vu0Cos': ('vu0_macro.h', ('result', 'angle'), ('=f', 'f'),
+        ['mfc1 $8, %1', 'qmtc2 $8, vf4', 'vcallms 0xe8', 'qmfc2.i $8, vf1', 'mtc1 $8, %0'],
+        ('$8', 'memory')),
+    'Vu0CallMicro': ('vu0_macro.h', ('address',), ('r',),
+        ['ctc2.i %0, $vi27', 'vnop', 'vnop', 'vcallmsr $vi27'],
+        ('memory',)),
+    'Vu0CallMicroArgument': ('vu0_macro.h', ('address', 'argument'), ('r', 'r'),
+        ['ctc2.i %0, $vi27', 'vnop', 'qmtc2 %1, vf4', 'vcallmsr $vi27'],
+        ('memory',)),
+    'Vu0CallMicroVector': ('vu0_macro.h', ('address', 'vector'), ('r', 'r'),
+        ['ctc2.i %0, $vi27', 'vnop', 'lqc2 vf4, 0(%1)', 'vcallmsr $vi27'],
+        ('memory',)),
+    'Vu0CallMicroResult': ('vu0_macro.h', ('result', 'address', 'argument'), ('=r', 'r', 'r'),
+        ['ctc2.i %1, $vi27', 'vnop', 'qmtc2 %2, vf4', 'vcallmsr $vi27', 'qmfc2.i %0, vf1'],
+        ('memory',)),
 }
+HARDWARE_MACRO_HEADERS = {'quadword.h': 'QUADWORD_H', 'vu0_macro.h': 'VU0_MACRO_H'}
 
 
-def _quadword_definition(name):
-    params, lines, clobbers = QUADWORD_MACROS[name]
-    inputs = ', '.join(f'"r" ({p})' for p in params)
-    body = ' '.join(f'"{line}"' for line in lines)
-    return f'#define {name}({", ".join(params)}) __asm__ __volatile__( {body} : : {inputs} : {clobbers})'
+def _macro_asm(name, args):
+    _header, params, constraints, lines, clobbers = HARDWARE_MACROS[name]
+    body = ' '.join(f'"{line}\\n"' for line in lines)
+    pairs = list(zip(constraints, args))
+    outputs = ', '.join(f'"{c}" ({a})' for c, a in pairs if c[0] in '=+')
+    inputs = ', '.join(f'"{c}" ({a})' for c, a in pairs if c[0] not in '=+')
+    clobber = ', '.join(chr(34) + c + chr(34) for c in clobbers)
+    return f'__asm__ __volatile__( {body} : {outputs} : {inputs} : {clobber})'
 
 
-QUADWORD_HEADER_LINES = ['#ifndef QUADWORD_H', '#define QUADWORD_H'] + \
-    [_quadword_definition(n) for n in QUADWORD_MACROS] + ['#endif']
+def _macro_definition(name):
+    params = HARDWARE_MACROS[name][1]
+    return f'#define {name}({", ".join(params)}) ' + _macro_asm(name, params)
 
 
-def quadword_header_ok(text):
-    """(ok, reason): include/quadword.h, exactly its guard and the three
-    quadword transfer macro definitions (line continuations folded)."""
+def _tight(line):
+    return re.sub(r'\(\s+', '(', re.sub(r'\s+\)', ')', line))
+
+
+def hardware_macro_header_ok(name, text):
+    """(ok, reason): include/quadword.h or include/vu0_macro.h, exactly its
+    guard and its macro definitions (comments ignored, continuations folded)."""
+    guard = HARDWARE_MACRO_HEADERS.get(name)
+    if guard is None:
+        return False, 'not a hardware macro header'
     code = re.sub(r'/\*.*?\*/|//[^\n]*', ' ', text, flags=re.S).replace('\\\n', ' ')
-    lines = [re.sub(r'\s+', ' ', line).strip() for line in code.splitlines()]
-    lines = [re.sub(r'\(\s+', '(', re.sub(r'\s+\)', ')', line)) if line.startswith('#define Q') else line
-             for line in lines if line]
-    want = [re.sub(r'\(\s+', '(', re.sub(r'\s+\)', ')', line)) for line in QUADWORD_HEADER_LINES]
-    if lines != want:
-        return False, 'not the quadword.h macro definitions'
+    lines = [_tight(re.sub(r'\s+', ' ', line).strip()) for line in code.splitlines()]
+    want = [f'#ifndef {guard}', f'#define {guard}'] + \
+        [_tight(re.sub(r'\s+', ' ', _macro_definition(n))) for n, v in HARDWARE_MACROS.items()
+         if v[0] == name] + ['#endif']
+    if [line for line in lines if line] != want:
+        return False, f'not the {name} macro definitions'
     return True, None
 
 
@@ -876,25 +1008,21 @@ def _balanced_args(text, i):
     return None, None
 
 
-def quadword_admission_text(text):
-    """Admission text of a function body: every include/quadword.h statement
-    `QuadwordCopy(D, S);`, `QuadwordZero(D);`, `QuadwordCopyMatrix(D, S);` is
-    replaced by the exact inline asm statement it expands to, so the function's
-    own class admission (ee-mmi, hardware, ...) validates the same block as
-    before the macros existed. Nothing else changes."""
+def hardware_macro_admission_text(text):
+    """Admission text of a function body: every statement of a hardware macro
+    (HARDWARE_MACROS) is replaced by the exact inline asm statement it expands
+    to, so the function's own class admission (ee-mmi, hardware, ...) validates
+    the same block as before the macros existed. Nothing else changes."""
+    names = '|'.join(sorted(HARDWARE_MACROS, key=len, reverse=True))
     out, pos = [], 0
-    for m in re.finditer(r'\b(QuadwordCopyMatrix|QuadwordCopy|QuadwordZero)\s*\(', text):
+    for m in re.finditer(r'\b(' + names + r')\s*\(', text):
         if m.start() < pos:
             continue
-        name = m.group(1)
         args, end = _balanced_args(text, m.end() - 1)
-        params, lines, clobbers = QUADWORD_MACROS[name]
-        if args is None or len(args) != len(params):
+        if args is None or len(args) != len(HARDWARE_MACROS[m.group(1)][1]):
             continue
-        inputs = ', '.join(f'"r" ({a})' for a in args)
-        body = ' '.join(f'"{line}"' for line in lines)
         out.append(text[pos:m.start()])
-        out.append(f'__asm__ __volatile__({body} : : {inputs} : {clobbers})')
+        out.append(_macro_asm(m.group(1), args))
         pos = end
     out.append(text[pos:])
     return ''.join(out)
@@ -5546,8 +5674,8 @@ def _audit_body(args, result, checks, unit_dir, tu_c, tu_rel, contract, source_c
                 kind = 'scaffold'
             elif Path(path_rel).name == 'debug_break.h' and debug_break_header_ok(text)[0]:
                 kind = 'debug-break'
-            elif Path(path_rel).name == 'quadword.h' and quadword_header_ok(text)[0]:
-                kind = 'quadword'
+            elif hardware_macro_header_ok(Path(path_rel).name, text)[0]:
+                kind = 'hardware-macro'
             else:
                 ok, reason = False, f'{e}' + (f'; not a scaffold header: {scaffold_reason}' if scaffold_reason else '')
         for n, p in resolved.items():
@@ -8459,7 +8587,7 @@ def audit_c(b, tu, prelude, tu_rel, header_set, regions, scaffold_names, obj_fun
     elig, count = [], None
     text = prelude + tu.block_text(b) + '\n'
     if cls in INLINE_ASM_CLASSES:
-        text = quadword_admission_text(text)
+        text = hardware_macro_admission_text(text)
     composed = cls in INLINE_ASM_CLASSES and tu_class == 'native-ti'
     try:
         from tools import unaligned_scalar

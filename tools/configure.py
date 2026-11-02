@@ -246,7 +246,7 @@ def stage_shared_headers(root, unit_dir):
     dst_root.mkdir(parents=True, exist_ok=True)
     # debug_break.h: the ee-assert-break DEBUG_BREAK() macro (docs/ee-hand-asm.md);
     # quadword.h: the original's lq/sq quadword transfer macros (docs/ee-mmi.md).
-    for name in ("shared.h", "debug_break.h", "quadword.h"):
+    for name in ("shared.h", "debug_break.h", "quadword.h", "vu0_macro.h"):
         shared = root / "include" / name
         if shared.is_file():
             shutil.copyfile(shared, dst_root / name)

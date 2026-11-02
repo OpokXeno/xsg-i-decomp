@@ -711,6 +711,32 @@
       "scaffold_assembler": "ee-as-la29-vsqrt-swap",
       "note": "User decision 2026-10-27 (one assembler for game code): GAS -g sets mips_optimize=1 (no delay-slot swapping) and keeps local $L labels in the object symbol table; .text/.data bytes are those of the original. Default for every in-scope game EE C TU."
     },
+    "ee-tu-c296-G8-g-nosib": {
+      "description": "Game C TU m_math (main/tu219): -O2 -G8 -fno-optimize-sibling-calls, corrected (swap-mask) GAS with the per-object flag -g",
+      "compiler": "ee-gcc2.96-realconv-lp7",
+      "driver": "ee-gcc",
+      "driver_flags": [
+        "-nostdinc",
+        "-fno-builtin"
+      ],
+      "flags": [
+        "-O2",
+        "-G8",
+        "-fno-optimize-sibling-calls"
+      ],
+      "assembler": "ee-as-la29-vsqrt-swap",
+      "assembler_argv": [
+        "-EL",
+        "-m5900",
+        "-mabi=eabi",
+        "-G8",
+        "-g",
+        "-I",
+        "."
+      ],
+      "scaffold_assembler": "ee-as-la29-vsqrt-swap",
+      "note": "User decision 2026-11-02 ('calibra tu_audit y añade ese contrato para m_math'): main/tu219 (m_math) is compiled with -fno-optimize-sibling-calls. Its original has no tail call (0 `j` sibcalls against 803 in the rest of MAIN), and the natural C of MMathCalcDir / MMathCalcDirVector reproduces the original bytes only without sibling-call optimization; the former dead store and register binding that blocked the tail calls are gone (.work/main-tidy-20261101/hack-removal/m_math-nosib-evidence.json)."
+    },
     "ee-tu-c991111-G0": {
       "description": "SCE SDK object, gcc 2.9-ee-991111, -O2 -G0",
       "compiler": "ee-gcc2.9-991111",

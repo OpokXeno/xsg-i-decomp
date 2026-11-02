@@ -6,6 +6,7 @@
 #include "main/align.h"
 #include "main/matrix_print.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 /*
  * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
@@ -751,6 +752,11 @@ JntStaticChannel *JNT_getVal_staticChain(JntWork *work,
     return next_channel;
 }
 
+static inline void JntCopyVector(Vector4 *destination, const Vector4 *source)
+{
+    *destination = *source;
+}
+
 JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
 {
     Vector4 target;
@@ -952,17 +958,9 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     float squared_difference;
                     float sine;
                     float sine_magnitude;
-                    Vector4 *endpoint_payload;
                     Vector4 *upper_translation;
                     Vector4 *lower_translation;
-                    __asm__ __volatile__(
-                        "lqc2 vf20, 0(%2)\n\t"
-                        "lqc2 vf21, 0(%3)\n\t"
-                        "vsub.xyzw vf20, vf20, vf21\n\t"
-                        "sqc2 vf20, 0(%1)"
-                        : "=m"(two_link_axis)
-                        : "r"(&two_link_axis.x), "r"(&target.x), "r"(&work->chain_slots[0].translation.x),
-                          "m"(target), "m"(work->chain_slots[0].translation));
+                    Vu0SubVector(&two_link_axis, &target, &work->chain_slots[0].translation);
                     {
                         float x = two_link_axis.x;
                         float y = two_link_axis.y;
@@ -1064,23 +1062,9 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     CUR_MATRIX_Get(basis);
                     CUR_MATRIX_Get(work->interpolation_root.elements);
                     homogeneous = 1.0f;
-                    {
-                        const Vector4 *basis_translation =
-                            (const Vector4 *)work->interpolation_root.elements[3];
-                        endpoint = *basis_translation;
-                    }
-                    __asm__ __volatile__("" : : "m"(endpoint), "f"(homogeneous));
-                    endpoint_payload = &endpoint;
-                    __asm__ __volatile__("" : : "r"(endpoint_payload));
+                    JntCopyVector(&endpoint, (const Vector4 *)work->interpolation_root.elements[3]);
                     endpoint.w = homogeneous;
-                    __asm__ __volatile__(
-                        "lqc2 vf20, 0(%2)\n\t"
-                        "lqc2 vf21, 0(%3)\n\t"
-                        "vsub.xyzw vf20, vf20, vf21\n\t"
-                        "sqc2 vf20, 0(%1)"
-                        : "=m"(two_link_axis)
-                        : "r"(&two_link_axis.x), "r"(&target.x), "r"(endpoint_payload),
-                          "m"(target), "m"(endpoint));
+                    Vu0SubVector(&two_link_axis, &target, &endpoint);
                     {
                         float *output_y = &two_link_axis.y;
                         float *output_z = &two_link_axis.z;
@@ -1128,14 +1112,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     CUR_MATRIX_Txyz4s(translation);
                     CUR_MATRIX_Get(work->matrix_buffer[work->chain_base_index + 2].elements);
                 } else {
-                    __asm__ __volatile__(
-                        "lqc2 vf20, 0(%2)\n\t"
-                        "lqc2 vf21, 0(%3)\n\t"
-                        "vsub.xyzw vf20, vf20, vf21\n\t"
-                        "sqc2 vf20, 0(%1)"
-                        : "=m"(chain_axis)
-                        : "r"(&chain_axis.x), "r"(&target.x), "r"(&work->chain_slots[0].translation.x),
-                          "m"(target), "m"(work->chain_slots[0].translation));
+                    Vu0SubVector(&chain_axis, &target, &work->chain_slots[0].translation);
                     {
                         float x = chain_axis.x;
                         float y = chain_axis.y;
@@ -1234,7 +1211,6 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                         CUR_MATRIX_Txyz4s(&work->elements[index].translation);
                         CUR_MATRIX_Get(work->transform_basis);
                     }
-                    __asm__ __volatile__("" : : "f"(distance));
                     CUR_MATRIX_GetT(&current_translation);
                     {
                         float *output_y = &chain_axis.y;
@@ -1253,6 +1229,9 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                                       work->transform_basis[2][1] * y +
                                       work->transform_basis[2][2] * z_component;
                     }
+                    distance = chain_axis.x * chain_axis.x +
+                               chain_axis.y * chain_axis.y +
+                               chain_axis.z * chain_axis.z;
                     alignXAxis(&chain_axis, alignment);
                     MATRIX_transpose3(alignment);
                     CUR_MATRIX_Set(work->transform_basis);
@@ -1291,7 +1270,6 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                     jntMatrixAt(work->matrix_buffer, work->current_index)->elements;
                 float (*parent)[4] =
                     jntMatrixAt(work->matrix_buffer, parent_index)->elements;
-                __asm__ __volatile__("" : : "r"(parent), "r"(current));
                 work->root_correction[3][0] = -(current[3][0] - parent[3][0]);
                 work->root_correction[3][1] = -(current[3][1] - parent[3][1]);
                 work->root_correction[3][2] = -(current[3][2] - parent[3][2]);
@@ -1300,13 +1278,11 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                 current[3][2] = parent[3][2];
             }
         }
-    }
-    {
-        JntStaticChannel *result = next_channel;
         work->current_index++;
-        __asm__ __volatile__("" : : "m"(work->current_index), "r"(result));
-        return result;
+        return next_channel;
     }
+    work->current_index++;
+    return next_channel;
 }
 
 void *JNT_getStaticVal2(JntWork *work, JntStaticChannel *channel)
@@ -1622,14 +1598,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 float lane_z;
 
                 /* sums - slot0 translation, computed as one VU0 vector subtract. */
-                __asm__ __volatile__(
-                    "lqc2 $vf20, 0(%1)\n"
-                    "lqc2 $vf21, 0(%2)\n"
-                    "vsub.xyzw $vf20, $vf20, $vf21\n"
-                    "sqc2 $vf20, 0(%0)\n"
-                    :
-                    : "r"(&axis_a), "r"(&sums_pair[1]), "r"(&jntChainAt(work, 0)->translation)
-                    : "memory");
+                Vu0SubVector(&axis_a, &sums_pair[1], &jntChainAt(work, 0)->translation);
                 lane_x = axis_a.x;
                 lane_y = axis_a.y;
                 lane_z = axis_a.z;
@@ -1724,14 +1693,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                     CUR_MATRIX_Get(work->transform_basis);
                     CUR_MATRIX_GetT(&mid_b);
                     /* sums - end translation, computed as one VU0 vector subtract. */
-                    __asm__ __volatile__(
-                        "lqc2 $vf20, 0(%0)\n"
-                        "lqc2 $vf21, 0(%1)\n"
-                        "vsub.xyzw $vf20, $vf20, $vf21\n"
-                        "sqc2 $vf20, 0(%2)\n"
-                        :
-                        : "r"(&sums_pair[1]), "r"(&mid_b), "r"(&axis_a)
-                        : "memory");
+                    Vu0SubVector(&axis_a, &sums_pair[1], &mid_b);
                     lane_x = axis_a.x;
                     lane_y = axis_a.y;
                     lane_z = axis_a.z;
@@ -1781,14 +1743,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 float direction_z;
 
                 /* sums - slot0 translation, computed as one VU0 vector subtract. */
-                __asm__ __volatile__(
-                    "lqc2 $vf20, 0(%0)\n"
-                    "lqc2 $vf21, 0(%1)\n"
-                    "vsub.xyzw $vf20, $vf20, $vf21\n"
-                    "sqc2 $vf20, 0(%2)\n"
-                    :
-                    : "r"(&sums_pair[1]), "r"(&jntChainAt(work, 0)->translation), "r"(cp)
-                    : "memory");
+                Vu0SubVector(cp, &sums_pair[1], &jntChainAt(work, 0)->translation);
                 lane_x = axis_c.x;
                 lane_y = axis_c.y;
                 lane_z = axis_c.z;

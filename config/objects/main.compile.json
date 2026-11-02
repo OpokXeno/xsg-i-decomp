@@ -5707,7 +5707,8 @@
    "compiler_profile": "ee-gcc2_96-realconv-lp7",
    "flags": [
     "-O2",
-    "-G8"
+    "-G8",
+    "-fno-optimize-sibling-calls"
    ],
    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g; game C TUs, user 2026-10-27)",
    "owners": {

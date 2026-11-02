@@ -4,6 +4,7 @@
 #include "m_math.h"
 #include "main/m_math.h"
 #include "main/sdv.h"
+#include "vu0_macro.h"
 
 extern float srsAtan2(float deltaX, float deltaZ);
 
@@ -54,52 +55,44 @@ float MMathCalcRotFar(float first, float second)
  * only) to the `float *` the original object's `daddu v0,a0,zero` lead-in
  * requires, matching every other pointer-returning function of this TU.
  *
- * The original fixes the parameter's COP1->GPR transfer in $10/t2 (the
- * qmtc2 immediately after reads it from there), so `scratch` is declared on
- * that hard register and used as this block's own read/write operand: a
- * genuine "=r" output at %0 receives the mfc1, and the same variable is
- * re-supplied as an "r" input at %2 for the qmtc2 that consumes it. Nothing
- * in the template names a register directly; the compiler places the mfc1
- * and qmtc2 using ordinary operand substitution, and $10 is fixed only by
- * the explicit-register C declaration, the one register value the original
- * object pins.
+ * The parameter goes to VU0 through the library's fixed scratch GPR: $10
+ * here (t2), because $8 and $9 would be the fifth and sixth argument
+ * registers of this six-argument function.
  */
 float *MMathCalcHermite(float *destination, float parameter,
                          HermiteVector *tangent_first, HermiteVector *tangent_second,
                          HermiteVector *endpoint_first, HermiteVector *endpoint_second)
 {
-    register int scratch asm("$10");
-
     __asm__ __volatile__(
-        "mfc1 %0,%1\n\t"
-        "qmtc2 %2,$vf1\n\t"
-        "vaddx.xyz $vf2xyz,$vf0xyz,$vf1x\n\t"
-        "vmulx.xyz $vf2xyz,$vf2xyz,$vf1x\n\t"
-        "vmulx.y $vf2y,$vf2y,$vf1x\n\t"
-        "vaddw.xyzw $vf3xyzw,$vf0xyzw,$vf0w\n\t"
-        "vaddw.xyzw $vf3xyzw,$vf3xyzw,$vf0w\n\t"
-        "vmr32.xyzw $vf3xyzw,$vf3xyzw\n\t"
-        "vmul.xyz $vf3xyz,$vf3xyz,$vf2xyz\n\t"
-        "vsubz.y $vf5y,$vf3y,$vf3z\n\t"
-        "vaddw.y $vf5y,$vf5y,$vf0w\n\t"
-        "vsuby.z $vf6z,$vf3z,$vf3y\n\t"
-        "vsubx.y $vf7y,$vf2y,$vf3x\n\t"
-        "vaddx.y $vf7y,$vf7y,$vf1x\n\t"
-        "vsubx.y $vf8y,$vf2y,$vf2x\n\t"
-        "lqc2 $vf1,0(%4)\n\t"
-        "lqc2 $vf2,0(%5)\n\t"
-        "lqc2 $vf3,0(%6)\n\t"
-        "lqc2 $vf4,0(%7)\n\t"
-        "vmulay.xyz ACCxyz,$vf1xyz,$vf7y\n\t"
-        "vmadday.xyz ACCxyz,$vf2xyz,$vf8y\n\t"
-        "vmadday.xyz ACCxyz,$vf3xyz,$vf5y\n\t"
-        "vmaddz.xyz $vf1xyz,$vf4xyz,$vf6z\n\t"
-        "vmove.w $vf1w,$vf0w\n\t"
-        "sqc2 $vf1,0(%3)"
-        : "=r"(scratch)
-        : "f"(parameter), "r"(scratch), "r"(destination), "r"(tangent_first),
+        "mfc1 $10, %0\n"
+        "qmtc2 $10, vf1\n"
+        "vaddx.xyz vf2, vf0, vf1x\n"
+        "vmulx.xyz vf2, vf2, vf1x\n"
+        "vmulx.y vf2, vf2, vf1x\n"
+        "vaddw.xyzw vf3, vf0, vf0w\n"
+        "vaddw.xyzw vf3, vf3, vf0w\n"
+        "vmr32.xyzw vf3, vf3\n"
+        "vmul.xyz vf3, vf3, vf2\n"
+        "vsubz.y vf5, vf3, vf3z\n"
+        "vaddw.y vf5, vf5, vf0w\n"
+        "vsuby.z vf6, vf3, vf3y\n"
+        "vsubx.y vf7, vf2, vf3x\n"
+        "vaddx.y vf7, vf7, vf1x\n"
+        "vsubx.y vf8, vf2, vf2x\n"
+        "lqc2 vf1, 0(%2)\n"
+        "lqc2 vf2, 0(%3)\n"
+        "lqc2 vf3, 0(%4)\n"
+        "lqc2 vf4, 0(%5)\n"
+        "vmulay.xyz ACC, vf1, vf7y\n"
+        "vmadday.xyz ACC, vf2, vf8y\n"
+        "vmadday.xyz ACC, vf3, vf5y\n"
+        "vmaddz.xyz vf1, vf4, vf6z\n"
+        "vmove.w vf1, vf0\n"
+        "sqc2 vf1, 0(%1)\n"
+        :
+        : "f"(parameter), "r"(destination), "r"(tangent_first),
           "r"(tangent_second), "r"(endpoint_first), "r"(endpoint_second)
-        : "memory");
+        : "$10", "memory");
     return destination;
 }
 
@@ -130,72 +123,56 @@ void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_en
 
 void *MMathDeg2RadVector(void *destination, const Vector4 *source)
 {
-    register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 0.017453292f;
     __asm__ __volatile__(
-        "mfc1 $8,%2\n\t"
-        "qmtc2 $8,vf1\n\t"
-        "lqc2 vf2,0(%1)\n\t"
-        "vmulx.xyz vf2xyz,vf2xyz,vf1x\n\t"
-        "sqc2 vf2,0(%0)"
-        : "+r"(result)
-        : "r"(source), "f"(scale)
-        : "$8", "memory"
-    );
-    return result;
+        "li.s $f8, 0.017453292\n"
+        "mfc1 $8, $f8\n"
+        "qmtc2 $8, vf1\n"
+        "lqc2 vf2, 0(%1)\n"
+        "vmulx.xyz vf2, vf2, vf1x\n"
+        "sqc2 vf2, 0(%0)\n"
+        : : "r"(destination), "r"(source) : "$8", "$f8", "memory");
+    return destination;
 }
 
 void *MMathDeg2RadVectorI(void *destination, const Vector4 *source)
 {
-    register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 0.017453292f;
     __asm__ __volatile__(
-        "mfc1 $8,%2\n\t"
-        "qmtc2 $8,vf1\n\t"
-        "lqc2 vf2,0(%1)\n\t"
-        "vitof0.xyz vf2xyz,vf2xyz\n\t"
-        "vmulx.xyz vf2xyz,vf2xyz,vf1x\n\t"
-        "sqc2 vf2,0(%0)"
-        : "+r"(result)
-        : "r"(source), "f"(scale)
-        : "$8", "memory"
-    );
-    return result;
+        "li.s $f8, 0.017453292\n"
+        "mfc1 $8, $f8\n"
+        "qmtc2 $8, vf1\n"
+        "lqc2 vf2, 0(%1)\n"
+        "vitof0.xyz vf2, vf2\n"
+        "vmulx.xyz vf2, vf2, vf1x\n"
+        "sqc2 vf2, 0(%0)\n"
+        : : "r"(destination), "r"(source) : "$8", "$f8", "memory");
+    return destination;
 }
 
 void *MMathRad2DegVector(void *destination, const Vector4 *source)
 {
-    register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 57.29578f;
     __asm__ __volatile__(
-        "mfc1 $8,%2\n\t"
-        "qmtc2 $8,vf1\n\t"
-        "lqc2 vf2,0(%1)\n\t"
-        "vmulx.xyz vf2xyz,vf2xyz,vf1x\n\t"
-        "sqc2 vf2,0(%0)"
-        : "+r"(result)
-        : "r"(source), "f"(scale)
-        : "$8", "memory"
-    );
-    return result;
+        "li.s $f8, 57.29578\n"
+        "mfc1 $8, $f8\n"
+        "qmtc2 $8, vf1\n"
+        "lqc2 vf2, 0(%1)\n"
+        "vmulx.xyz vf2, vf2, vf1x\n"
+        "sqc2 vf2, 0(%0)\n"
+        : : "r"(destination), "r"(source) : "$8", "$f8", "memory");
+    return destination;
 }
 
 void *MMathRad2DegVectorI(void *destination, const Vector4 *source)
 {
-    register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 57.29578f;
     __asm__ __volatile__(
-        "mfc1 $8,%2\n\t"
-        "qmtc2 $8,vf1\n\t"
-        "lqc2 vf2,0(%1)\n\t"
-        "vmulx.xyz vf2xyz,vf2xyz,vf1x\n\t"
-        "vftoi0.xyz vf2xyz,vf2xyz\n\t"
-        "sqc2 vf2,0(%0)"
-        : "+r"(result)
-        : "r"(source), "f"(scale)
-        : "$8", "memory"
-    );
-    return result;
+        "li.s $f8, 57.29578\n"
+        "mfc1 $8, $f8\n"
+        "qmtc2 $8, vf1\n"
+        "lqc2 vf2, 0(%1)\n"
+        "vmulx.xyz vf2, vf2, vf1x\n"
+        "vftoi0.xyz vf2, vf2\n"
+        "sqc2 vf2, 0(%0)\n"
+        : : "r"(destination), "r"(source) : "$8", "$f8", "memory");
+    return destination;
 }
 
 void *MMathNormalizeVector2(void *destination, const Vector4 *source)
@@ -340,61 +317,47 @@ float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second)
 Vector4 *MMathCalcDirVector(Vector4 *destination, const Vector4 *source,
                             const Vector4 *target)
 {
-    register Vector4 *normalized_destination asm("$2") = destination;
     __asm__ __volatile__(
         "lqc2 vf1,0(%1)\n\t"
         "lqc2 vf2,0(%2)\n\t"
         "vsub.xyz vf2,vf2,vf1\n\t"
         "sqc2 vf2,0(%0)"
-        : "+r"(normalized_destination)
-        : "r"(source), "r"(target)
+        :
+        : "r"(destination), "r"(source), "r"(target)
         : "memory");
-    MMathNormalizeVector2(destination, normalized_destination);
-    return normalized_destination;
+    return MMathNormalizeVector2(destination, destination);
 }
 
 void MMathCalcDir(const Vector4 *from, const Vector4 *to)
 {
-    float toX;
-
     srsAtan2(to->x - from->x, to->z - from->z);
-    toX = to->x;
 }
 
 Vector4 *MMathCalcAngle(Vector4 *out, Vector4 *source, Vector4 *target)
 {
     Vector4 difference;
-    register float lengthXZ asm("$f13") = 0.0f;
-    register const Vector4 *sourceArg asm("$5") = source;
-    register const Vector4 *targetArg asm("$6") = target;
-    /* GPR8 first carries an EE32 default-vector address, then the low
-     * word of QMFC2's vector result for its transfer to COP1. */
-    register unsigned int transferWord asm("$8");
-
-    __asm__ __volatile__("" : : "f"(lengthXZ));
-    transferWord = (unsigned int)&McMathUnitVector;
-
-    if (!targetArg)
-        targetArg = (const Vector4 *)transferWord;
-    if (!sourceArg)
-        sourceArg = (const Vector4 *)transferWord;
+    float lengthXZ = 0.0f;
 
     __asm__ __volatile__(
-        "lqc2 vf1,0(%3)\n\t"
-        "lqc2 vf2,0(%4)\n\t"
-        "vsub.xyz vf3,vf2,vf1\n\t"
-        "vmul.xz vf4,vf3,vf3\n\t"
-        "vaddz.x vf4,vf4,vf4z\n\t"
-        "vsqrt Q,vf4x\n\t"
-        "sqc2 vf3,0(%5)\n\t"
-        "sqc2 vf0,0(%2)\n\t"
-        "vwaitq\n\t"
-        "vaddq.x vf1,vf0,Q\n\t"
-        "qmfc2 %1,vf1\n\t"
-        "mtc1 %1,%0"
-        : "+f"(lengthXZ), "=&r"(transferWord)
-        : "r"(out), "r"(sourceArg), "r"(targetArg), "r"(&difference)
-        : "memory");
+        "lui $8, %%hi(McMathUnitVector)\n"
+        "addiu $8, $8, %%lo(McMathUnitVector)\n"
+        "movz %1, $8, %1\n"
+        "movz %2, $8, %2\n"
+        "lqc2 vf1, 0(%1)\n"
+        "lqc2 vf2, 0(%2)\n"
+        "vsub.xyz vf3, vf2, vf1\n"
+        "vmul.xz vf4, vf3, vf3\n"
+        "vaddz.x vf4, vf4, vf4z\n"
+        "vsqrt Q, vf4x\n"
+        "sqc2 vf3, 0(%4)\n"
+        "sqc2 vf0, 0(%3)\n"
+        "vwaitq\n"
+        "vaddq.x vf1, vf0, Q\n"
+        "qmfc2 $8, vf1\n"
+        "mtc1 $8, %0\n"
+        : "+f"(lengthXZ), "+r"(source), "+r"(target)
+        : "r"(out), "r"(&difference)
+        : "$8", "memory");
 
     out->x = srsAtan2(difference.y, lengthXZ);
     out->y = srsAtan2(difference.x, difference.z);
@@ -404,38 +367,29 @@ Vector4 *MMathCalcAngle(Vector4 *out, Vector4 *source, Vector4 *target)
 Vector4 *MMathCalcAngleCam(Vector4 *out, Vector4 *source, Vector4 *target)
 {
     Vector4 difference;
-    register float lengthXZ asm("$f13") = 0.0f;
-    register const Vector4 *sourceArg asm("$5") = source;
-    register const Vector4 *targetArg asm("$6") = target;
-    /* GPR8 first carries an EE32 default-vector address, then the low
-     * word of QMFC2's vector result for its transfer to COP1. */
-    register unsigned int transferWord asm("$8");
-
-    __asm__ __volatile__("" : : "f"(lengthXZ));
-    transferWord = (unsigned int)&McMathUnitVector;
-
-    if (!targetArg)
-        targetArg = (const Vector4 *)transferWord;
-    if (!sourceArg)
-        sourceArg = (const Vector4 *)transferWord;
+    float lengthXZ = 0.0f;
 
     __asm__ __volatile__(
-        "lqc2 vf1,0(%3)\n\t"
-        "lqc2 vf2,0(%4)\n\t"
-        "vsub.xyz vf3,vf1,vf2\n\t"
-        "vmul.xz vf4,vf3,vf3\n\t"
-        "vaddz.x vf4,vf4,vf4z\n\t"
-        "vsqrt Q,vf4x\n\t"
-        "vsub.y vf3y,vf2y,vf1y\n\t"
-        "sqc2 vf3,0(%5)\n\t"
-        "sqc2 vf0,0(%2)\n\t"
-        "vwaitq\n\t"
-        "vaddq.x vf1,vf0,Q\n\t"
-        "qmfc2 %1,vf1\n\t"
-        "mtc1 %1,%0"
-        : "+f"(lengthXZ), "=&r"(transferWord)
-        : "r"(out), "r"(sourceArg), "r"(targetArg), "r"(&difference)
-        : "memory");
+        "lui $8, %%hi(McMathUnitVector)\n"
+        "addiu $8, $8, %%lo(McMathUnitVector)\n"
+        "movz %1, $8, %1\n"
+        "movz %2, $8, %2\n"
+        "lqc2 vf1, 0(%1)\n"
+        "lqc2 vf2, 0(%2)\n"
+        "vsub.xyz vf3, vf1, vf2\n"
+        "vmul.xz vf4, vf3, vf3\n"
+        "vaddz.x vf4, vf4, vf4z\n"
+        "vsqrt Q, vf4x\n"
+        "vsub.y vf3, vf2, vf1\n"
+        "sqc2 vf3, 0(%4)\n"
+        "sqc2 vf0, 0(%3)\n"
+        "vwaitq\n"
+        "vaddq.x vf1, vf0, Q\n"
+        "qmfc2 $8, vf1\n"
+        "mtc1 $8, %0\n"
+        : "+f"(lengthXZ), "+r"(source), "+r"(target)
+        : "r"(out), "r"(&difference)
+        : "$8", "memory");
 
     out->x = srsAtan2(difference.y, lengthXZ);
     out->y = srsAtan2(difference.x, difference.z);
@@ -1092,13 +1046,7 @@ Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
 {
     float directionX;
 
-    __asm__ __volatile__("vmr32.xyzw vf1, vf0" : : : "memory");
-    __asm__ __volatile__("vmr32.xyzw vf2, vf1" : : : "memory");
-    __asm__ __volatile__("vmr32.xyzw vf3, vf2" : : : "memory");
-    __asm__ __volatile__("sqc2 vf0, 48(%0)" : : "r"(out) : "memory");
-    __asm__ __volatile__("sqc2 vf1, 32(%0)" : : "r"(out) : "memory");
-    __asm__ __volatile__("sqc2 vf2, 16(%0)" : : "r"(out) : "memory");
-    __asm__ __volatile__("sqc2 vf3, 0(%0)" : : "r"(out) : "memory");
+    Vu0UnitMatrix(out);
 
     directionX = direction->x;
     if (directionX == 0.0f && direction->z == 0.0f) {
@@ -1125,7 +1073,7 @@ Vector4 *MMathCalcAngleMatrix(Vector4 *out, const Matrix4 *matrix)
     Vector4 direction;
 
     MMathCalcVectorMatrix(&direction, matrix);
-    __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(out) : "memory");
+    Vu0SetOrigin(out);
     out->x = srsAtan2(direction.y, MMathCalcLengthXZ(&direction));
     out->y = srsAtan2(direction.x, direction.z);
     return out;
@@ -1159,53 +1107,38 @@ void MMathRotTransPers(Vector4 *destination, const StudioCamera *camera, const M
 
 int MMathRotTransPersClip(Vector4 *destination, const StudioCamera *camera, const Matrix4 *matrix, const Vector4 *point)
 {
-    register int clipped_mask __asm__("$9");
     int result;
 
     __asm__ __volatile__(
-        "lqc2 vf1, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "lqc2 vf3, 16(%1)\n\t"
-        "lqc2 vf4, 32(%1)\n\t"
-        "lqc2 vf5, 48(%1)\n\t"
-        "vmulax.xyzw ACC, vf2, vf1x\n\t"
-        "vmadday.xyzw ACC, vf3, vf1y\n\t"
-        "vmaddaz.xyzw ACC, vf4, vf1z\n\t"
-        "vmaddw.xyzw vf1, vf5, vf1w\n\t"
-        "vdiv Q, vf0w, vf1w\n\t"
-        "ctc2.ni $0, $vi18\n\t"
-        "lqc2 vf2, 0(%2)\n\t"
-        "lqc2 vf3, 0(%3)\n\t"
-        :
-        : "r"(point), "r"(matrix), "r"(&camera->screenScale), "r"(&camera->screenOffset)
-        : "memory");
-
-    clipped_mask = 0x8000;
-
-    __asm__ __volatile__(
-        "vwaitq\n\t"
-        "vmulq.xyz vf4, vf1, Q\n\t"
-        "vclipw.xyz vf4xyz, vf0w\n\t"
-        "vmula.xyz ACC, vf4, vf2\n\t"
-        "vmaddw.xyz vf5, vf3, vf0w\n\t"
-        "vftoi4.xy vf1, vf5\n\t"
-        "vftoi0.z vf1, vf5\n\t"
-        "cfc2.ni %0, $vi18\n\t"
-        "nop"
+        "lqc2 vf1, 0(%1)\n"
+        "lqc2 vf2, 0(%2)\n"
+        "lqc2 vf3, 16(%2)\n"
+        "lqc2 vf4, 32(%2)\n"
+        "lqc2 vf5, 48(%2)\n"
+        "vmulax.xyzw ACC, vf2, vf1x\n"
+        "vmadday.xyzw ACC, vf3, vf1y\n"
+        "vmaddaz.xyzw ACC, vf4, vf1z\n"
+        "vmaddw.xyzw vf1, vf5, vf1w\n"
+        "vdiv Q, vf0w, vf1w\n"
+        "ctc2 $0, $vi18\n"
+        "lqc2 vf2, 0(%3)\n"
+        "lqc2 vf3, 0(%4)\n"
+        "li $9, 0x8000\n"
+        "vwaitq\n"
+        "vmulq.xyz vf4, vf1, Q\n"
+        "vclipw.xyz vf4, vf0w\n"
+        "vmula.xyz ACC, vf4, vf2\n"
+        "vmaddw.xyz vf5, vf3, vf0w\n"
+        "vftoi4.xy vf1, vf5\n"
+        "vftoi0.z vf1, vf5\n"
+        "cfc2 %0, $vi18\n"
+        "nop\n"
+        "movn %0, $9, %0\n"
+        "qmtc2 %0, vf2\n"
+        "vmr32.w vf1, vf2\n"
+        "sqc2 vf1, 0(%5)\n"
         : "=r"(result)
-        :
-        : "memory");
-
-    if (result != 0)
-        result = clipped_mask;
-
-    __asm__ __volatile__(
-        "qmtc2.ni %0, vf2\n\t"
-        "vmr32.w vf1, vf2\n\t"
-        "sqc2 vf1, 0(%1)"
-        :
-        : "r"(result), "r"(destination)
-        : "memory");
-
+        : "r"(point), "r"(matrix), "r"(&camera->screenScale), "r"(&camera->screenOffset), "r"(destination)
+        : "$9", "memory");
     return result;
 }

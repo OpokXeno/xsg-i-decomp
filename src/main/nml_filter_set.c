@@ -4,6 +4,7 @@
 #include "main/nml_packet_add.h"
 #include "main/xgl_2.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 struct NmlFilterRenderView {
     u8 unmodeled_00[2];
@@ -81,65 +82,20 @@ struct NmlStealthTint {
 
 static void _CurSetMatrix(float matrix[4][4])
 {
-    __asm__ __volatile__(
-        "lqc2 $vf27,0(%0)\n\t"
-        "lqc2 $vf28,16(%0)\n\t"
-        "lqc2 $vf29,32(%0)\n\t"
-        "lqc2 $vf30,48(%0)"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0SetCurrentMatrix(matrix);
 }
 
 static void _CurSetViewScaleTrans(const float viewScale[4], const float viewTrans[4])
 {
-    __asm__ __volatile__(
-        "lqc2 $vf25,0(%0)\n\t"
-        "lqc2 $vf26,0(%1)"
-        :
-        : "r"(viewScale), "r"(viewTrans)
-        : "memory"
-    );
+    Vu0SetViewScaleTranslation(viewScale, viewTrans);
 }
 
 static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
 {
-    register int clipFlags asm("$2");
-    /* The SQC2 destination is an EE32 address in GPR4. After that
-     * hardware use ends, the same word carries the masked clip flags. */
-    register unsigned int destinationOrFlags asm("$4") = (unsigned int)destination;
+    int clipFlags;
 
-    __asm__ __volatile__(
-        "ctc2 $0,$vi18\n\t"
-        "lqc2 $vf31,0(%2)\n\t"
-        "vmulax.xyzw ACC,vf27xyzw,vf31x\n\t"
-        "vmadday.xyzw ACC,vf28xyzw,vf31y\n\t"
-        "vmaddaz.xyzw ACC,vf29xyzw,vf31z\n\t"
-        "vmaddw.xyzw vf31xyzw,vf30xyzw,vf0w\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vclipw.xyz vf31xyz,vf31w\n\t"
-        "vdiv Q,vf0w,vf31w\n\t"
-        "vwaitq\n\t"
-        "vmulq.xyzw vf31xyzw,vf31xyzw,Q\n\t"
-        "vmulaw.xyzw ACC,vf26xyzw,vf0w\n\t"
-        "vmadd.xyzw vf31xyzw,vf31xyzw,vf25xyzw\n\t"
-        "vftoi4.xyw vf23xyw,vf31xyw\n\t"
-        "vftoi0.z vf23z,vf31z\n\t"
-        "vsub.w vf23w,vf23w,vf23w\n\t"
-        "sqc2 $vf23,0(%1)\n\t"
-        "cfc2 %0,$vi18\n\t"
-        "nop"
-        : "=r"(clipFlags)
-        : "r"(destinationOrFlags), "r"(vector)
-        : "memory"
-    );
-    clipFlags &= 0x3f;
-    destinationOrFlags = clipFlags;
-    __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
-    return destinationOrFlags;
+    Vu0CurrentRotTransPersClip(clipFlags, destination, vector);
+    return clipFlags;
 }
 
 #define NML_FILTER_EMIT(id, payload) do { \
@@ -489,22 +445,9 @@ static void _WeightToGlobalPlaceVec(Vector4 *destination,
 
 static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
 {
-    register float lengthSq asm("$f0");
+    float lengthSq;
 
-    __asm__ __volatile__(
-        "lqc2 $vf10,0(%1)\n\t"
-        "lqc2 $vf11,0(%2)\n\t"
-        "vsub.xyz vf10xyz,vf11xyz,vf10xyz\n\t"
-        "vmul.xyz vf10xyz,vf10xyz,vf10xyz\n\t"
-        "vaddz.x vf10x,vf10x,vf10z\n\t"
-        "vaddy.x vf10x,vf10x,vf10y\n\t"
-        "qmfc2 $2,$vf10\n\t"
-        "mtc1 $2,$f2\n\t"
-        "mtc1 $2,%0"
-        : "=f"(lengthSq)
-        : "r"(first), "r"(second)
-        : "$2", "memory"
-    );
+    Vu0DistanceSquaredXYZ(lengthSq, first, second);
     return lengthSq;
 }
 
@@ -615,34 +558,19 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
         QuadwordCopy(&geometry->endpoints[1], &fallback);
     }
 
-    __asm__ __volatile__(
-        "lqc2 $vf3,0(%1)\n\t"
-        "lqc2 $vf2,0(%0)\n\t"
-        "vadd.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
-        "sqc2 $vf2,0(%2)"
-        : : "r"(firstEndpoint), "r"(&geometry->endpoints[1]), "r"(&center) : "memory");
+    Vu0AddVectorXYZ(&center, firstEndpoint, &geometry->endpoints[1]);
     xglVectorScaleXYZ(&center, &center, 0.5f);
     geometry->sortClass = (float)descriptor->sortClass;
     firstEndpoint->w = _VectorLengthSQ(&camera->position.vector, &center);
     if (descriptor->firstExtension != 0.0f) {
-        __asm__ __volatile__(
-            "lqc2 $vf3,0(%0)\n\t"
-            "lqc2 $vf2,0(%1)\n\t"
-            "vsub.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
-            "sqc2 $vf2,0(%2)"
-            : : "r"(firstEndpoint), "r"(&geometry->endpoints[1]), "r"(&direction) : "memory");
+        Vu0SubVectorXYZ(&direction, &geometry->endpoints[1], firstEndpoint);
         xglVectorNormal(&direction, &direction);
         firstEndpoint->x -= direction.x * descriptor->firstExtension;
         firstEndpoint->y -= direction.y * descriptor->firstExtension;
         firstEndpoint->z -= direction.z * descriptor->firstExtension;
     }
     if (descriptor->secondExtension != 0.0f) {
-        __asm__ __volatile__(
-            "lqc2 $vf3,0(%0)\n\t"
-            "lqc2 $vf2,0(%1)\n\t"
-            "vsub.xyz vf2xyz,vf2xyz,vf3xyz\n\t"
-            "sqc2 $vf2,0(%2)"
-            : : "r"(firstEndpoint), "r"(&geometry->endpoints[1]), "r"(&direction) : "memory");
+        Vu0SubVectorXYZ(&direction, &geometry->endpoints[1], firstEndpoint);
         xglVectorNormal(&direction, &direction);
         geometry->endpoints[1].x += direction.x * descriptor->secondExtension;
         geometry->endpoints[1].y += direction.y * descriptor->secondExtension;

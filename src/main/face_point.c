@@ -5,6 +5,7 @@
 #include "main/face_point.h"
 #include "main/xgl_studio.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 typedef int s32;
 
@@ -541,19 +542,7 @@ static void culling_matrix(CullingVolume *volume)
     xglMatrixStackSave(volume->inverseTransform);
 
     axis = cullingForwardAxisVector;
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddz.xyz vf31, vf29, vf31z\n\t"
-        "sqc2 vf31, 0(%2)\n\t"
-        :
-        : "r"(&axis), "r"(volume->transform), "r"(&volume->normalizedDirection)
-        : "memory");
+    Vu0ApplyMatrix33XYZ(&volume->normalizedDirection, volume->transform, &axis);
     xglVectorNormal(&volume->normalizedDirection, &volume->normalizedDirection);
 
     corners[0] = cullingCornerLowerLeftVector;
@@ -561,66 +550,10 @@ static void culling_matrix(CullingVolume *volume)
     corners[2] = cullingCornerUpperRightVector;
     corners[3] = cullingCornerUpperLeftVector;
 
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)\n\t"
-        :
-        : "r"(&volume->cullingCorners[0]), "r"(&corners[0]),
-          "r"(volume->transform)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)\n\t"
-        :
-        : "r"(&volume->cullingCorners[1]), "r"(&corners[1]),
-          "r"(volume->transform)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)\n\t"
-        :
-        : "r"(&volume->cullingCorners[2]), "r"(&corners[2]),
-          "r"(volume->transform)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)\n\t"
-        :
-        : "r"(&volume->cullingCorners[3]), "r"(&corners[3]),
-          "r"(volume->transform)
-        : "memory");
+    Vu0ApplyMatrixXYZ(&volume->cullingCorners[0], volume->transform, &corners[0]);
+    Vu0ApplyMatrixXYZ(&volume->cullingCorners[1], volume->transform, &corners[1]);
+    Vu0ApplyMatrixXYZ(&volume->cullingCorners[2], volume->transform, &corners[2]);
+    Vu0ApplyMatrixXYZ(&volume->cullingCorners[3], volume->transform, &corners[3]);
 }
 
 /* An empty per-volume debug display hook; the caller still passes the volume. */
@@ -690,61 +623,17 @@ float _CheckLine(const Vector4 *offsetStart, const Vector4 *offsetEnd,
     xglVectorScaleXYZ(&adjustedStart, offsetStart, planePoint->w * 0.5f);
     xglVectorScaleXYZ(&adjustedEnd, offsetEnd, planePoint->w * 0.5f);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)\n\t"
-        :
-        : "r"(&adjustedStart), "r"(endpointStart)
-        : "memory");
+    Vu0SubVectorXYZ(&adjustedStart, endpointStart, &adjustedStart);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)\n\t"
-        :
-        : "r"(&adjustedEnd), "r"(endpointEnd)
-        : "memory");
+    Vu0SubVectorXYZ(&adjustedEnd, endpointEnd, &adjustedEnd);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%0)\n\t"
-        "vadd.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)\n\t"
-        :
-        : "r"(&adjustedStart), "r"(&normalOffset)
-        : "memory");
+    Vu0AddVectorXYZ(&adjustedStart, &adjustedStart, &normalOffset);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n\t"
-        "lqc2 vf2, 0(%0)\n\t"
-        "vadd.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%0)\n\t"
-        :
-        : "r"(&adjustedEnd), "r"(&normalOffset)
-        : "memory");
+    Vu0AddVectorXYZ(&adjustedEnd, &adjustedEnd, &normalOffset);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%2)\n\t"
-        :
-        : "r"(&adjustedStart), "r"(&adjustedEnd),
-          "r"(&endpointDelta)
-        : "memory");
+    Vu0SubVectorXYZ(&endpointDelta, &adjustedEnd, &adjustedStart);
 
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%0)\n\t"
-        "lqc2 vf2, 0(%1)\n\t"
-        "vsub.xyz vf2, vf2, vf3\n\t"
-        "sqc2 vf2, 0(%2)\n\t"
-        :
-        : "r"(&adjustedStart), "r"(planePoint),
-          "r"(&pointFromStart)
-        : "memory");
+    Vu0SubVectorXYZ(&pointFromStart, planePoint, &adjustedStart);
 
     return endpointDelta.x * pointFromStart.x +
            endpointDelta.y * pointFromStart.y +
@@ -778,62 +667,10 @@ void setup_occlusion(CullingVolume *volume, const StudioCamera *camera)
     Vector4 corners[4];
     Vector4 origin;
 
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)"
-        :
-        : "r"(&corners[0]), "r"(&volume->cullingCorners[0]), "r"(cameraTransform)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)"
-        :
-        : "r"(&corners[1]), "r"(&volume->cullingCorners[1]), "r"(cameraTransform)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)"
-        :
-        : "r"(&corners[2]), "r"(&volume->cullingCorners[2]), "r"(cameraTransform)
-        : "memory");
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%1)\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%0)"
-        :
-        : "r"(&corners[3]), "r"(&volume->cullingCorners[3]), "r"(cameraTransform)
-        : "memory");
+    Vu0ApplyMatrixXYZ(&corners[0], cameraTransform, &volume->cullingCorners[0]);
+    Vu0ApplyMatrixXYZ(&corners[1], cameraTransform, &volume->cullingCorners[1]);
+    Vu0ApplyMatrixXYZ(&corners[2], cameraTransform, &volume->cullingCorners[2]);
+    Vu0ApplyMatrixXYZ(&corners[3], cameraTransform, &volume->cullingCorners[3]);
 
     corners[0].z = -corners[0].z;
     corners[1].z = -corners[1].z;
@@ -874,20 +711,7 @@ s32 check_occlusion(CullingVolume *volume, const StudioCamera *camera, const Vec
     float negativeW;
     s32 result;
 
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%2)"
-        :
-        : "r"(modelBounds), "r"(cameraTransform), "r"(&viewPoint)
-        : "memory");
+    Vu0ApplyMatrixXYZ(&viewPoint, cameraTransform, modelBounds);
 
     result = 0;
     negativeZ = -viewPoint.z;
@@ -1146,14 +970,7 @@ void xglCullingMapDebug(void)
  */
 static void _ModelCalcClipInit(const Matrix4 clip[2])
 {
-    __asm__ __volatile__("lqc2 vf12, 0(%0)"   :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf13, 16(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf14, 32(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf15, 48(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf16, 64(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf17, 80(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf18, 96(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf19, 112(%0)" :: "r"(clip) : "memory");
+    Vu0SetClipMatrices(clip);
 }
 
 /*
@@ -1423,21 +1240,7 @@ s32 nmlModelCalcClipMat1(const Vector4 *model, const Matrix4 *matrix) {
     const StudioCamera *camera = xglStudioGetActiveCamera();
 
     if (camera != 0) {
-        __asm__ __volatile__(
-            "lqc2 vf31, 0(%0)\n\t"
-            "lqc2 vf27, 0(%1)\n\t"
-            "lqc2 vf28, 16(%1)\n\t"
-            "lqc2 vf29, 32(%1)\n\t"
-            "lqc2 vf30, 48(%1)\n\t"
-            "vmulax.xyz ACC, vf27, vf31x\n\t"
-            "vmadday.xyz ACC, vf28, vf31y\n\t"
-            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-            "vmaddw.xyz vf31, vf30, vf0w\n\t"
-            "sqc2 vf31, 0(%2)\n\t"
-            :
-            : "r"(model), "r"(matrix), "r"(&bounds)
-            : "memory"
-        );
+        Vu0ApplyMatrixXYZ(&bounds, matrix, model);
         _ModelCalcClipInit(camera->clipMatrices);
         clip = _ModelCalcClip(&bounds);
         clip |= xglCullingCheck(camera, &bounds);
@@ -1452,29 +1255,7 @@ s32 nmlModelCalcClipMat2(const Vector4 *model, const Matrix4 *matrix1, const Mat
     const StudioCamera *camera = xglStudioGetActiveCamera();
 
     if (camera != 0) {
-        __asm__ __volatile__(
-            "lqc2 vf31, 0(%0)\n\t"
-            "lqc2 vf27, 0(%1)\n\t"
-            "lqc2 vf28, 16(%1)\n\t"
-            "lqc2 vf29, 32(%1)\n\t"
-            "lqc2 vf30, 48(%1)\n\t"
-            "vmulax.xyz ACC, vf27, vf31x\n\t"
-            "vmadday.xyz ACC, vf28, vf31y\n\t"
-            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-            "vmaddw.xyz vf31, vf30, vf0w\n\t"
-            "lqc2 vf27, 0(%2)\n\t"
-            "lqc2 vf28, 16(%2)\n\t"
-            "lqc2 vf29, 32(%2)\n\t"
-            "lqc2 vf30, 48(%2)\n\t"
-            "vmulax.xyz ACC, vf27, vf31x\n\t"
-            "vmadday.xyz ACC, vf28, vf31y\n\t"
-            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-            "vmaddw.xyz vf31, vf30, vf0w\n\t"
-            "sqc2 vf31, 0(%3)\n\t"
-            :
-            : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
-            : "memory"
-        );
+        Vu0ApplyMatrix2XYZ(&bounds, matrix1, matrix2, model);
         _ModelCalcClipInit(camera->clipMatrices);
         clip = _ModelCalcClip(&bounds);
         clip |= xglCullingCheck(camera, &bounds);
@@ -1524,21 +1305,7 @@ s32 nmlModelCalcClipMat1AllCam(const Vector4 *model, const Matrix4 *matrix)
             return 0;
         }
         if (g_aSubWindow[i] != 0) {
-            __asm__ __volatile__(
-                "lqc2 vf31, 0(%0)\n\t"
-                "lqc2 vf27, 0(%1)\n\t"
-                "lqc2 vf28, 16(%1)\n\t"
-                "lqc2 vf29, 32(%1)\n\t"
-                "lqc2 vf30, 48(%1)\n\t"
-                "vmulax.xyz ACC, vf27, vf31x\n\t"
-                "vmadday.xyz ACC, vf28, vf31y\n\t"
-                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-                "vmaddw.xyz vf31, vf30, vf0w\n\t"
-                "sqc2 vf31, 0(%2)\n\t"
-                :
-                : "r"(model), "r"(matrix), "r"(&bounds)
-                : "memory"
-            );
+            Vu0ApplyMatrixXYZ(&bounds, matrix, model);
             _ModelCalcClipInit(camera->clipMatrices);
             clip = _ModelCalcClip(&bounds);
             clip |= xglCullingCheck(camera, &bounds);
@@ -1568,29 +1335,7 @@ s32 nmlModelCalcClipMat2AllCam(const Vector4 *model, const Matrix4 *matrix1, con
                 return 0;
             }
             _ModelCalcClipInit(camera->clipMatrices);
-            __asm__ __volatile__(
-                "lqc2 vf31, 0(%0)\n\t"
-                "lqc2 vf27, 0(%1)\n\t"
-                "lqc2 vf28, 16(%1)\n\t"
-                "lqc2 vf29, 32(%1)\n\t"
-                "lqc2 vf30, 48(%1)\n\t"
-                "vmulax.xyz ACC, vf27, vf31x\n\t"
-                "vmadday.xyz ACC, vf28, vf31y\n\t"
-                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-                "vmaddw.xyz vf31, vf30, vf0w\n\t"
-                "lqc2 vf27, 0(%2)\n\t"
-                "lqc2 vf28, 16(%2)\n\t"
-                "lqc2 vf29, 32(%2)\n\t"
-                "lqc2 vf30, 48(%2)\n\t"
-                "vmulax.xyz ACC, vf27, vf31x\n\t"
-                "vmadday.xyz ACC, vf28, vf31y\n\t"
-                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-                "vmaddw.xyz vf31, vf30, vf0w\n\t"
-                "sqc2 vf31, 0(%3)\n\t"
-                :
-                : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
-                : "memory"
-            );
+            Vu0ApplyMatrix2XYZ(&bounds, matrix1, matrix2, model);
             clip = _ModelCalcClip(&bounds);
             tested++;
             clipMask |= clip << i;
@@ -1606,64 +1351,15 @@ s32 nmlModelCalcClipMat2AllCam(const Vector4 *model, const Matrix4 *matrix1, con
 }
 
 void _ApplyMatrix33(Vector4 *destination, const Matrix4 matrix, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddz.xyz vf31, vf29, vf31z\n\t"
-        "sqc2 vf31, 0(%2)"
-        :
-        : "r"(vector), "r"(matrix), "r"(destination)
-        : "memory"
-    );
+    Vu0ApplyMatrix33XYZ(destination, matrix, vector);
 }
 
 void _ApplyMatrix(Vector4 *destination, Matrix4 matrix, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%2)"
-        :
-        : "r"(vector), "r"(matrix), "r"(destination)
-        : "memory"
-    );
+    Vu0ApplyMatrixXYZ(destination, matrix, vector);
 }
 
 void _ApplyMatrix2Mat(Vector4 *destination, const Matrix4 matrix1, const Matrix4 matrix2, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%3)"
-        :
-        : "r"(vector), "r"(matrix1), "r"(matrix2), "r"(destination)
-        : "memory"
-    );
+    Vu0ApplyMatrix2XYZ(destination, matrix1, matrix2, vector);
 }
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */

@@ -7,6 +7,7 @@
 #include "main/nml_model_set.h"
 #include "main/xgl_2.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 #define MoveHokanStateFlag (GameLoopState.camera_flags)
 
@@ -346,9 +347,9 @@ void GameCameraChangeID(int id, int unused1, int unused2)
 }
 
 /* MoveHokan (main:0x00246c60, 348 bytes): five-argument EE ABI. `unused` (a0)
- * is never read; `step` (f12) is the per-frame countdown decrement; `target`
- * (a1) is the point being approached; `current` (a2) is the vector advanced
- * in place; `remaining` (a3) is the caller's countdown, zeroed and used as
+ * is never read; `target` (a1) is the point being approached; `current` (a2)
+ * is the vector advanced in place; `step` (f12) is the per-frame countdown
+ * decrement; `remaining` (a3) is the caller's countdown, zeroed and used as
  * the interpolation weight. When the countdown is already zero or
  * MoveHokanStateFlag's high bit is set, snap `current` to `target` and clear
  * the countdown. Otherwise compute `current - target` on COP2 (vf20/vf21,
@@ -357,80 +358,29 @@ void GameCameraChangeID(int id, int unused1, int unused2)
  * distance undershoots `step`, exceeds 100 units or goes negative, then
  * either snap-copy (countdown hit zero) or interpolate XYZ through
  * xglVectorScaleAddXYZ using the stored difference and the remaining W lane
- * untouched. config/tu/source-classes.json binds this function to
- * config/tu/contracts/main-tu120-move-hokan.asm_contract.json, which states
- * the three inline statements' own interface and the $f21 pin below. */
-static void MoveHokan(void *unused, float step, const Vector4 *target,
-                      Vector4 *current, float *remaining)
+ * untouched. The two inline statements are the quadword snap-copy and the
+ * COP2 vector subtract (config/tu/contracts/main-tu120-move-hokan.asm_contract.json). */
+static void MoveHokan(void *unused, const Vector4 *target, Vector4 *current,
+                      float step, float *remaining)
 {
-    /* Pins the 0.0f comparand shared by the initial guard, the early-return
-       snap-zero and the mid-tail negative check to $f21, the original's own
-       register choice for it (docs/tu-worker.md's single-value register pin,
-       "let the allocator place the rest"; compiler pattern CP-0154).
-
-       The pin is load-bearing, and its control is measured, not asserted
-       (docs/register-pin-receipt.md; the receipt is attempt-51d4a4cacc1c
-       build/register-pins.json): the control form is this same source with
-       the pin removed and nothing else changed, charged here as
-       attempt-51d4a4cacc1c build/form-01. It compiles, links and comes out
-       348 bytes -- the exact original size -- at 99.307%, object 5cd4a755...,
-       and still misses, because without the pin GCC 2.96 -O2 -G8 puts this
-       constant in $f20 and the `step` mirror in $f21 instead: a whole-function
-       register-role swap, first visible at object offset 0x00000354 (main VA
-       0x00246c6c), where the original writes `swc1 $f21,56(sp)` and the
-       control writes `swc1 $f20,48(sp)`. The same control was measured before
-       this rework at attempt-b103f57e2557 build/form-02 and at
-       attempt-763904f524a9 build/form-04, and all three emit the same object.
-
-       The final snap-vs-interpolate test a few lines below is deliberately
-       left as a plain 0.0f literal: the original independently rematerializes
-       0.0 there (mtc1 zero,$f0) rather than reusing the live $f21 value, so
-       pinning that site too shrinks the function by two instructions relative
-       to the original -- attempt-b103f57e2557 build/form-03 (97.636%, 340
-       bytes, 8 bytes short; the original's extra `mtc1 zero,$f0` and its
-       delay-slot `sll` before the final `c.eq.s` are dropped when the pin
-       forces reuse there), matching attempt-763904f524a9 build/form-06.
-
-       This pin is a precondition on the surrounding ordinary C's register
-       allocation; it is not an operand of any of the three inline blocks
-       below. */
-    register float zero asm("$f21") = 0.0f;
     Vector4 difference;
     float distance;
 
     (void)unused;
-    if (*remaining == zero || (MoveHokanStateFlag & 0x80) != 0) {
-        *remaining = zero;
-        /* current = *target, the SDK sceVu0CopyVector 16-byte quadword-copy
-           idiom: the
-           original hand-wrote this snap as inline lq/sq using $2 (v0) as the
-           scratch register, rather than leaving the 16-byte aggregate copy
-           to the compiler's own block-copy codegen. Confirmed necessary, not
-           just stylistic: a plain `*current = *target;` here compiles
-           individually to the same two-instruction lq/sq pair the original
-           uses, but the compiler's own aggregate-copy path recognizes both
-           this site and the matching one below as identical and folds them
-           into one shared unaligned ldl/ldr/sdl/sdr block reached by two
-           jumps -- which the original does not do. */
+    if (*remaining == 0.0f || (MoveHokanStateFlag & 0x80) != 0) {
+        *remaining = 0.0f;
         QuadwordCopy(current, target);
         return;
     }
 
-    __asm__ __volatile__(
-        "lqc2 vf20, 0(%0)\n"
-        "lqc2 vf21, 0(%1)\n"
-        "vsub.xyzw vf20, vf20, vf21\n"
-        "sqc2 vf20, 0(%2)\n"
-        :
-        : "r" (current), "r" (target), "r" (&difference)
-        : "memory");
+    Vu0SubVector(&difference, current, target);
 
     distance = __builtin_sqrtf(difference.x * difference.x
                                    + difference.y * difference.y
                                    + difference.z * difference.z);
 
     *remaining -= step;
-    if (distance < step || 100.0f < distance || *remaining < zero)
+    if (distance < step || 100.0f < distance || *remaining < 0.0f)
         *remaining = 0.0f;
 
     if (*remaining == 0.0f) {
@@ -537,27 +487,14 @@ static void CalcLookAt(struct CameraScratchpad *scratchpad)
     float distance;
     int steps;
 
-    __asm__ __volatile__(
-        "lqc2 vf20, 0(%0)\n\t"
-        "lqc2 vf21, 0(%1)\n\t"
-        "vsub.xyzw vf20, vf20, vf21\n\t"
-        "sqc2 vf20, 0(%2)"
-        : : "r"(&scratchpad->look_at), "r"(&CamLookAtPos), "r"(&scratchpad->look_at_delta)
-        : "memory");
+    Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->look_at, &CamLookAtPos);
     CamLookAt.attribute_mask = 3;
     UnduCheck(&CamLookAtPos, &scratchpad->look_at_delta, &CamLookAt);
     if (CamLookAt.result_flags & 3) {
         requestedLookAtHeight = scratchpad->look_at.y;
         CamLookAt.attribute_mask = 2;
         CamLookAtPos.y = requestedLookAtHeight;
-        __asm__ __volatile__(
-            "lqc2 vf20, 0(%0)\n"
-            "lqc2 vf21, 0(%1)\n"
-            "vsub.xyzw vf20, vf20, vf21\n"
-            "sqc2 vf20, 0(%2)\n"
-            :
-            : "r" (&scratchpad->look_at), "r" (&CamLookAtPos), "r" (&scratchpad->look_at_delta)
-            : "memory");
+        Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->look_at, &CamLookAtPos);
         UnduCheck(&CamLookAtPos, &scratchpad->look_at_delta, &CamLookAt);
     }
     if (CamLookAt.height == -1000.0f) {
@@ -565,14 +502,7 @@ static void CalcLookAt(struct CameraScratchpad *scratchpad)
         CamLookAt.query_cursor = 0;
         CamLookAt.query_flags = 0;
         UnduCheck(&CamLookAtPos, 0, &CamLookAt);
-        __asm__ __volatile__(
-            "lqc2 vf20, 0(%0)\n"
-            "lqc2 vf21, 0(%1)\n"
-            "vsub.xyzw vf20, vf20, vf21\n"
-            "sqc2 vf20, 0(%2)\n"
-            :
-            : "r" (&scratchpad->look_at), "r" (&CamLookAtPos), "r" (&scratchpad->look_at_delta)
-            : "memory");
+        Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->look_at, &CamLookAtPos);
         CamLookAt.attribute_mask = 3;
         UnduCheck(&CamLookAtPos, &scratchpad->look_at_delta, &CamLookAt);
         if ((GameLoopState.camera_mode == 3) ||
@@ -584,10 +514,7 @@ static void CalcLookAt(struct CameraScratchpad *scratchpad)
             CamLookAtPos.y = maximumLookAtHeight;
         }
         CamLookAt.attribute_mask = 2;
-        __asm__ __volatile__("lqc2 vf20, 0(%0)" : : "r"(&scratchpad->look_at) : "memory");
-        __asm__ __volatile__("lqc2 vf21, 0(%0)" : : "r"(&CamLookAtPos) : "memory");
-        __asm__ __volatile__("vsub.xyzw vf20, vf20, vf21" : : : "memory");
-        __asm__ __volatile__("sqc2 vf20, 0(%0)" : : "r"(&scratchpad->look_at_delta) : "memory");
+        Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->look_at, &CamLookAtPos);
         lookAtDeltaX = scratchpad->look_at_delta.x;
         lookAtDeltaZ = scratchpad->look_at_delta.z;
         distance = 2.0f * (float)sqrt((lookAtDeltaX * lookAtDeltaX) +
@@ -612,14 +539,7 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
 {
     float height;
 
-    __asm__ __volatile__(
-        "lqc2 vf20, 0(%0)\n"
-        "lqc2 vf21, 0(%1)\n"
-        "vsub.xyzw vf20, vf20, vf21\n"
-        "sqc2 vf20, 0(%2)\n"
-        :
-        : "r" (&scratchpad->position), "r" (&CamPosPos), "r" (&scratchpad->probe_delta)
-        : "memory");
+    Vu0SubVector(&scratchpad->probe_delta, &scratchpad->position, &CamPosPos);
     UnduCheck(&CamPosPos, &scratchpad->probe_delta, &CamPos);
     height = CamPos.height;
     if (height != -1000.0f && (CamPos.result_flags & 3) == 0) {
@@ -633,14 +553,7 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
         CamPos.query_cursor = 0;
         CamPos.query_flags = 0;
         UnduCheck(&CamPosPos, 0, &CamPos);
-        __asm__ __volatile__(
-            "lqc2 vf20, 0(%0)\n"
-            "lqc2 vf21, 0(%1)\n"
-            "vsub.xyzw vf20, vf20, vf21\n"
-            "sqc2 vf20, 0(%2)\n"
-            :
-            : "r" (&scratchpad->position), "r" (&CamPosPos), "r" (&scratchpad->position_delta)
-            : "memory");
+        Vu0SubVector(&scratchpad->position_delta, &scratchpad->position, &CamPosPos);
         if (-0.001f < scratchpad->position_delta.x && scratchpad->position_delta.x < 0.001f) {
             scratchpad->position_delta.x = scratchpad->position_delta.x * 100.0f;
         }
@@ -689,8 +602,8 @@ static void CameraType0(void)
     }
     GetCenter(&scratchpad->look_at, scratchpad->target);
     look_at_out = &scratchpad->view->look_at;
-    MoveHokan(scratchpad, HokanNow.look_at_step, &scratchpad->look_at,
-              look_at_out, &HokanNow.look_at_remaining);
+    MoveHokan(scratchpad, &scratchpad->look_at, look_at_out,
+              HokanNow.look_at_step, &HokanNow.look_at_remaining);
     GetCameraPos(&scratchpad->look_at_delta.x, &scratchpad->view->look_at.x,
                  scratchpad->definition->angles.values);
     UnduParamInit(&ground);
@@ -826,16 +739,9 @@ static void CameraType0(void)
             CamPosPos.z = scratchpad->look_at_delta.z;
         }
     }
-    MoveHokan(scratchpad, HokanNow.position_step, &CamPosPos,
-              &scratchpad->view->position, &HokanNow.position_remaining);
-    __asm__ __volatile__(
-        "lqc2 vf3, 0(%1)\n"
-        "lqc2 vf2, 0(%0)\n"
-        "vsub.xyz vf2, vf2, vf3\n"
-        "sqc2 vf2, 0(%2)\n"
-        :
-        : "r" (&scratchpad->view->look_at), "r" (&scratchpad->view->position), "r" (&scratchpad->look_at_delta)
-        : "memory");
+    MoveHokan(scratchpad, &CamPosPos, &scratchpad->view->position,
+              HokanNow.position_step, &HokanNow.position_remaining);
+    Vu0SubVectorXYZ(&scratchpad->look_at_delta, &scratchpad->view->look_at, &scratchpad->view->position);
     scratchpad->view->rotation.y = xglAtan2(scratchpad->look_at_delta.x, scratchpad->look_at_delta.z) + 3.1415927f;
     scratchpad->view->rotation.x = xglAtan2(scratchpad->look_at_delta.y,
         __builtin_sqrtf(scratchpad->look_at_delta.x * scratchpad->look_at_delta.x
@@ -873,10 +779,10 @@ static void CameraType1Core(void)
         }
     }
     CalcCameraPos(scratchpad);
-    MoveHokan(scratchpad, HokanNow.look_at_step, &CamLookAtPos,
-              &scratchpad->view->look_at, &HokanNow.look_at_remaining);
-    MoveHokan(scratchpad, HokanNow.position_step, &CamPosPos,
-              &scratchpad->view->position, &HokanNow.position_remaining);
+    MoveHokan(scratchpad, &CamLookAtPos, &scratchpad->view->look_at,
+              HokanNow.look_at_step, &HokanNow.look_at_remaining);
+    MoveHokan(scratchpad, &CamPosPos, &scratchpad->view->position,
+              HokanNow.position_step, &HokanNow.position_remaining);
     if (scratchpad->view->position.z - cameraLookAtMargin < scratchpad->view->look_at.z) {
         scratchpad->view->look_at.z = scratchpad->view->position.z - cameraLookAtMargin;
     }
@@ -904,15 +810,7 @@ static void CameraType1(void)
         const Vector4 *view_look_at = &view->look_at;
         const Vector4 *view_position = &view->position;
 
-        __asm__ __volatile__(
-            "lqc2 vf3, 0(%2)\n\t"
-            "lqc2 vf2, 0(%1)\n\t"
-            "vsub.xyz vf2, vf2, vf3\n\t"
-            "sqc2 vf2, 0(%0)\n\t"
-            :
-            : "r" (look_at_delta), "r" (view_look_at),
-              "r" (view_position)
-            : "memory");
+        Vu0SubVectorXYZ(look_at_delta, view_look_at, view_position);
     }
 
     scratchpad->view->rotation.y =
@@ -996,20 +894,13 @@ static void CameraType4(void)
         scratchpad->view->rotation.z = definition->parameters.pedestal[2];
         break;
     }
-    MoveHokan(scratchpad, HokanNow.position_step, &CamPosPos,
-              &scratchpad->view->position, &HokanNow.position_remaining);
+    MoveHokan(scratchpad, &CamPosPos, &scratchpad->view->position,
+              HokanNow.position_step, &HokanNow.position_remaining);
     if (mode >= 0) {
         if (mode < 2) {
-            MoveHokan(scratchpad, HokanNow.look_at_step, &scratchpad->look_at,
-                      &scratchpad->view->look_at, &HokanNow.look_at_remaining);
-            __asm__ __volatile__(
-                "lqc2 vf3, 0(%1)\n"
-                "lqc2 vf2, 0(%0)\n"
-                "vsub.xyz vf2, vf2, vf3\n"
-                "sqc2 vf2, 0(%2)\n"
-                :
-                : "r" (&scratchpad->view->look_at), "r" (&scratchpad->view->position), "r" (&scratchpad->look_at_delta)
-                : "memory");
+            MoveHokan(scratchpad, &scratchpad->look_at, &scratchpad->view->look_at,
+                      HokanNow.look_at_step, &HokanNow.look_at_remaining);
+            Vu0SubVectorXYZ(&scratchpad->look_at_delta, &scratchpad->view->look_at, &scratchpad->view->position);
             scratchpad->view->rotation.y = xglAtan2(scratchpad->look_at_delta.x, scratchpad->look_at_delta.z) + cameraYawHalfTurn;
             horizontal = __builtin_sqrtf(scratchpad->look_at_delta.x * scratchpad->look_at_delta.x
                                              + scratchpad->look_at_delta.z * scratchpad->look_at_delta.z);
@@ -1129,14 +1020,7 @@ void GameCamera(void)
             GameLoopState.camera_id = 0x8000;
         } else {
             if (CamPlayer.header != 0 && !(GameLoopState.camera_flags & 2)) {
-                __asm__ __volatile__(
-                    "lqc2 vf20, 0(%0)\n"
-                    "lqc2 vf21, 0(%1)\n"
-                    "vsub.xyzw vf20, vf20, vf21\n"
-                    "sqc2 vf20, 0(%2)\n"
-                    :
-                    : "r" (&scratchpad->target->position), "r" (&CamPlyPosOld), "r" (&scratchpad->look_at_delta)
-                    : "memory");
+                Vu0SubVector(&scratchpad->look_at_delta, &scratchpad->target->position, &CamPlyPosOld);
                 UnduCheck(&CamPlyPosOld, &scratchpad->look_at_delta, &CamPlayer);
                 if (CamPlayer.height == -1000.0f) {
                     QuadwordCopy(&CamPlyPosOld, &scratchpad->target->position);
@@ -1259,14 +1143,7 @@ void GameCamera(void)
             xglMatrixStackRotY(scratchpad->target->facing_angle);
             xglMatrixStackTrans(scratchpad->translation);
             xglMatrixStackSave(scratchpad->matrix);
-            __asm__ __volatile__(
-                "lqc2 vf3, 0(%1)\n"
-                "lqc2 vf2, 0(%2)\n"
-                "vsub.xyz vf2, vf2, vf3\n"
-                "sqc2 vf2, 0(%0)\n"
-                :
-                : "r" (scratchpad->translation), "r" (CfCameraOfsNow), "r" (scratchpad->matrix[3])
-                : "memory");
+            Vu0SubVectorXYZ(scratchpad->translation, scratchpad->matrix[3], CfCameraOfsNow);
             xglVectorScaleAddXYZ(scratchpad->definition->parameters.offset.first_value,
                                  (Vector4 *)CfCameraOfsNow, &scratchpad->translation_vector,
                                  (Vector4 *)CfCameraOfsNow);

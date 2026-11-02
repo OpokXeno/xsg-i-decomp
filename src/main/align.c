@@ -56,7 +56,8 @@ void alignXAxisEuler(const Vector4 *direction, Vector4 *euler) {
         "vwaitq\n\t"
         "vmulq.w vf10, vf5, Q\n\t"
         "sqc2 vf10, 0(%0)"
-        : : "r"(&components), "r"(direction)
+        :
+        : "r"(&components), "r"(direction)
         : "memory");
 
     euler->w = 1.0f;

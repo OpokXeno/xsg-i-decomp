@@ -6,6 +6,7 @@
 #include "main/xgl_packet.h"
 #include "main/ssd_init.h"
 #include "quadword.h"
+#include "vu0_macro.h"
 
 /* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
 #define VIF_CODE_MSCAL 0x14000000
@@ -485,28 +486,12 @@ static inline void nmlPartsSetNormalTranslation(NmlPartsScratchMatrix *normal,
 
 static void _CurMatrixSet(Matrix4 matrix)
 {
-    __asm__ __volatile__(
-        "lqc2 vf27, 0(%0)\n\t"
-        "lqc2 vf28, 16(%0)\n\t"
-        "lqc2 vf29, 32(%0)\n\t"
-        "lqc2 vf30, 48(%0)"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0SetCurrentMatrix(matrix);
 }
 
 static void _CurMatrixGet(Matrix4 matrix)
 {
-    __asm__ __volatile__(
-        "sqc2 vf27, 0(%0)\n\t"
-        "sqc2 vf28, 16(%0)\n\t"
-        "sqc2 vf29, 32(%0)\n\t"
-        "sqc2 vf30, 48(%0)"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0GetCurrentMatrix(matrix);
 }
 
 static void _CurMatrixMul(Matrix4 matrix)
@@ -543,17 +528,7 @@ static void _CurMatrixMul(Matrix4 matrix)
 
 static void _CurApplyMatrix(Vector4 *destination, const Vector4 *source)
 {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "vmulax.xyzw ACC, vf27, vf31x\n\t"
-        "vmadday.xyzw ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyzw ACC, vf29, vf31z\n\t"
-        "vmaddw.xyzw vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%1)"
-        :
-        : "r"(source), "r"(destination)
-        : "memory"
-    );
+    Vu0ApplyCurrentMatrix(destination, source);
 }
 
 static void _CurMatrixMul33norm(Vector4 *destination, Matrix4 source)
@@ -613,13 +588,7 @@ static void _CurMatrixMul33norm(Vector4 *destination, Matrix4 source)
 
 static void _CurSetViewScaleTrans(const Vector4 *view_scale, const Vector4 *view_translation)
 {
-    __asm__ __volatile__(
-        "lqc2 vf25, 0(%0)\n\t"
-        "lqc2 vf26, 0(%1)"
-        :
-        : "r"(view_scale), "r"(view_translation)
-        : "memory"
-    );
+    Vu0SetViewScaleTranslation(view_scale, view_translation);
 }
 
 static int _CurRotTransPersClip(
@@ -628,58 +597,45 @@ static int _CurRotTransPersClip(
     const Vector4 *position,
     const Vector4 *coordinates)
 {
-    register int clipFlags asm("$2");
-    /* The SQC2 destination is an EE32 address in GPR4. After that
-     * hardware use ends, the same word carries the masked clip flags. */
-    register unsigned int destinationOrFlags asm("$4") = (unsigned int)projectedPosition;
+    int clipFlags;
 
     __asm__ __volatile__(
-        "ctc2 $0,$vi18\n\t"
-        "lqc2 $vf31,0(%3)\n\t"
-        "lqc2 $vf20,0(%4)\n\t"
-        "vmulax.xyzw ACC,vf27xyzw,vf31x\n\t"
-        "vmadday.xyzw ACC,vf28xyzw,vf31y\n\t"
-        "vmaddaz.xyzw ACC,vf29xyzw,vf31z\n\t"
-        "vmaddw.xyzw vf31xyzw,vf30xyzw,vf0w\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vnop\n\t"
-        "vclipw.xyz vf31xyz,vf31w\n\t"
-        "vdiv Q,vf0w,vf31w\n\t"
-        "vwaitq\n\t"
-        "vmulq.xyzw vf31xyzw,vf31xyzw,Q\n\t"
-        "vmulq.xyzw vf20xyzw,vf20xyzw,Q\n\t"
-        "vmulaw.xyzw ACC,vf26xyzw,vf0w\n\t"
-        "vmadd.xyzw vf31xyzw,vf31xyzw,vf25xyzw\n\t"
-        "vftoi4.xyw vf23xyw,vf31xyw\n\t"
-        "vftoi0.z vf23z,vf31z\n\t"
-        "vsub.w vf23w,vf23w,vf23w\n\t"
-        "sqc2 $vf23,0(%1)\n\t"
-        "sqc2 $vf20,0(%2)\n\t"
-        "cfc2 %0,$vi18\n\t"
-        "nop"
+        "ctc2 $0, $vi18\n"
+        "lqc2 vf31, 0(%3)\n"
+        "lqc2 vf20, 0(%4)\n"
+        "vmulax.xyzw ACC, vf27, vf31x\n"
+        "vmadday.xyzw ACC, vf28, vf31y\n"
+        "vmaddaz.xyzw ACC, vf29, vf31z\n"
+        "vmaddw.xyzw vf31, vf30, vf0w\n"
+        "vnop\n"
+        "vnop\n"
+        "vnop\n"
+        "vclipw.xyz vf31, vf31w\n"
+        "vdiv Q, vf0w, vf31w\n"
+        "vwaitq\n"
+        "vmulq.xyzw vf31, vf31, Q\n"
+        "vmulq.xyzw vf20, vf20, Q\n"
+        "vmulaw.xyzw ACC, vf26, vf0w\n"
+        "vmadd.xyzw vf31, vf31, vf25\n"
+        "vftoi4.xyw vf23, vf31\n"
+        "vftoi0.z vf23, vf31\n"
+        "vsub.w vf23, vf23, vf23\n"
+        "sqc2 vf23, 0(%1)\n"
+        "sqc2 vf20, 0(%2)\n"
+        "cfc2 $2, $vi18\n"
+        "nop\n"
+        "andi $2, $2, 0x3f\n"
+        "move %0, $2\n"
         : "=r"(clipFlags)
-        : "r"(destinationOrFlags), "r"(perspectiveCoordinates),
+        : "r"(projectedPosition), "r"(perspectiveCoordinates),
           "r"(position), "r"(coordinates)
-        : "memory"
-    );
-    clipFlags &= 0x3f;
-    destinationOrFlags = clipFlags;
-    __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
-    return destinationOrFlags;
+        : "$2", "memory");
+    return clipFlags;
 }
 
 static void _CurSetMatrix(Matrix4 matrix)
 {
-    __asm__ __volatile__(
-        "lqc2 vf27, 0(%0)\n\t"
-        "lqc2 vf28, 16(%0)\n\t"
-        "lqc2 vf29, 32(%0)\n\t"
-        "lqc2 vf30, 48(%0)"
-        :
-        : "r"(matrix)
-        : "memory"
-    );
+    Vu0SetCurrentMatrix(matrix);
 }
 
 void nmlPacketAddGsFlush(void)
@@ -876,13 +832,7 @@ void nmlPacketAddTransMicrocodeInit(void)
     sceVif1PkCloseUpkCode(selected.sdk);
     s_nReflRotType = 1;
     /* The SDK zero-vector operation clears all four light parcels. */
-    __asm__ __volatile__(
-        "sq $0, 0(%0)\n\t"
-        "sq $0, 16(%0)\n\t"
-        "sq $0, 32(%0)\n\t"
-        "sq $0, 48(%0)"
-        : : "r"(s_inLc0) : "memory"
-    );
+    QuadwordZeroMatrix(s_inLc0);
     s_inLc0[3].lanes[0] = s_inLc0[3].lanes[1] =
         s_inLc0[3].lanes[2] = s_inLc0[3].lanes[3] = 1.0f;
 }
@@ -2099,23 +2049,7 @@ void *nmlPacketSetAttributeData64N(const void *data, int count)
     source = data;
     /* One 64-byte attribute record per pass: four quadword copies, then the
      * count, pointer and branch of the original copy loop (delay slot nop). */
-    __asm__ __volatile__(
-        "1:\n\t"
-        "lq $2, 0(%2)\n\t"
-        "sq $2, 0(%1)\n\t"
-        "lq $2, 16(%2)\n\t"
-        "sq $2, 16(%1)\n\t"
-        "lq $2, 32(%2)\n\t"
-        "sq $2, 32(%1)\n\t"
-        "lq $2, 48(%2)\n\t"
-        "sq $2, 48(%1)\n\t"
-        "addi %0, %0, -1\n\t"
-        "addi %1, %1, 64\n\t"
-        "addi %2, %2, 64\n\t"
-        "bne $0, %0, 1b"
-        : "+r"(remaining), "+r"(destination), "+r"(source)
-        :
-        : "$2", "memory");
+    QuadwordCopyMatrixArray(destination, source, remaining);
     return s_pPacket.sdk->cursor;
 }
 
@@ -2134,17 +2068,7 @@ void *nmlPacketSetAttributeData16N(const void *data, int count)
     source = data;
     /* One 16-byte quadword per pass: copy, then the count, pointer and branch
      * of the original copy loop (the delay-slot nop is emitted by GCC). */
-    __asm__ __volatile__(
-        "1:\n\t"
-        "lq $2, 0(%2)\n\t"
-        "sq $2, 0(%1)\n\t"
-        "addi %0, %0, -1\n\t"
-        "addi %1, %1, 16\n\t"
-        "addi %2, %2, 16\n\t"
-        "bne $0, %0, 1b"
-        : "+r"(remaining), "+r"(destination), "+r"(source)
-        :
-        : "$2", "memory");
+    QuadwordCopyArray(destination, source, remaining);
     return s_pPacket.attributes->cursor.bytes;
 }
 
