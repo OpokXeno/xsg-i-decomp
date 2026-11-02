@@ -248721,7 +248721,15 @@
           "c_owned_symbols": [
             "TestEnv_1_00A0F690"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [
+            "carddata_0"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
@@ -248740,7 +248748,31 @@
           "c_owned_symbols": [
             "D_00A10D28"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [
+            "D_00A10D30",
+            "D_00A10E38",
+            "D_00A10E98",
+            "D_00A11048",
+            "D_00A11148",
+            "D_00A11158",
+            "D_00A11250",
+            "D_00A112F0",
+            "D_00A11338",
+            "D_00A11358",
+            "D_00A113C8",
+            "D_00A113E8",
+            "D_00A11430",
+            "D_00A11478",
+            "D_00A114C8",
+            "D_00A11520",
+            "D_00A115A0"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -248758,7 +248790,42 @@
             "D_00A115A8",
             "D_00A115B8"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        }
+      ]
+    },
+    "ov02/tu002": {
+      ".rodata": [
+        {
+          "range": [
+            "0x00a115d0",
+            "0x00a11620"
+          ],
+          "generated": [
+            "0x00a115d0",
+            "0x00a1161c"
+          ],
+          "generated_by": [
+            "Title"
+          ],
+          "c_owned_symbols": [
+            "D_00A115D0",
+            "D_00A115F0",
+            "jtbl_00A11600"
+          ],
+          "also_referenced_by_c": [],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -248796,24 +248863,29 @@
               ],
               "alignment": 4
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".data": [
         {
           "range": [
-            "0x00A0FE10",
-            "0x00A0FE70"
+            "0x00a0fe10",
+            "0x00a0fe70"
           ],
           "generated": [
-            "0x00A0FE10",
-            "0x00A0FE70"
+            "0x00a0fe10",
+            "0x00a0fe70"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "TestEnv_0_00A0FE10"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -248840,22 +248912,27 @@
                 "size": 96
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FE70",
-            "0x00A0FE90"
+            "0x00a0fe70",
+            "0x00a0fe90"
           ],
           "generated": [
-            "0x00A0FE70",
-            "0x00A0FE90"
+            "0x00a0fe70",
+            "0x00a0fe90"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "TransEnv_1_00A0FE70"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -248882,22 +248959,27 @@
                 "size": 32
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FE90",
-            "0x00A0FEC0"
+            "0x00a0fe90",
+            "0x00a0fec0"
           ],
           "generated": [
-            "0x00A0FE90",
-            "0x00A0FEC0"
+            "0x00a0fe90",
+            "0x00a0fec0"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "FlushEnv_2_00A0FE90"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -248924,22 +249006,27 @@
                 "size": 48
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FEF0",
-            "0x00A0FEF4"
+            "0x00a0fef0",
+            "0x00a0fef4"
           ],
           "generated": [
-            "0x00A0FEF0",
-            "0x00A0FEF4"
+            "0x00a0fef0",
+            "0x00a0fef4"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnWorkEnd"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -248955,22 +249042,27 @@
                 "UmnWorkEnd"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FEF4",
-            "0x00A0FEF8"
+            "0x00a0fef4",
+            "0x00a0fef8"
           ],
           "generated": [
-            "0x00A0FEF4",
-            "0x00A0FEF8"
+            "0x00a0fef4",
+            "0x00a0fef8"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnTexAddr"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -248986,22 +249078,27 @@
                 "UmnTexAddr"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FEF8",
-            "0x00A0FEFC"
+            "0x00a0fef8",
+            "0x00a0fefc"
           ],
           "generated": [
-            "0x00A0FEF8",
-            "0x00A0FEFC"
+            "0x00a0fef8",
+            "0x00a0fefc"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnBgCubeXtx"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249017,22 +249114,27 @@
                 "UmnBgCubeXtx"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FEFC",
-            "0x00A0FF00"
+            "0x00a0fefc",
+            "0x00a0ff00"
           ],
           "generated": [
-            "0x00A0FEFC",
-            "0x00A0FF00"
+            "0x00a0fefc",
+            "0x00a0ff00"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnBgCubeLex"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249048,22 +249150,27 @@
                 "UmnBgCubeLex"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FF00",
-            "0x00A0FF04"
+            "0x00a0ff00",
+            "0x00a0ff04"
           ],
           "generated": [
-            "0x00A0FF00",
-            "0x00A0FF04"
+            "0x00a0ff00",
+            "0x00a0ff04"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnModelUkn"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249079,22 +249186,27 @@
                 "UmnModelUkn"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FF04",
-            "0x00A0FF08"
+            "0x00a0ff04",
+            "0x00a0ff08"
           ],
           "generated": [
-            "0x00A0FF04",
-            "0x00A0FF08"
+            "0x00a0ff04",
+            "0x00a0ff08"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnModelSon"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249110,22 +249222,27 @@
                 "UmnModelSon"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A0FF08",
-            "0x00A0FF0C"
+            "0x00a0ff08",
+            "0x00a0ff0c"
           ],
           "generated": [
-            "0x00A0FF08",
-            "0x00A0FF0C"
+            "0x00a0ff08",
+            "0x00a0ff0c"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "task_xmx"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249141,22 +249258,27 @@
                 "task_xmx"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10410",
-            "0x00A10490"
+            "0x00a10410",
+            "0x00a10490"
           ],
           "generated": [
-            "0x00A10410",
-            "0x00A10490"
+            "0x00a10410",
+            "0x00a10490"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnWork"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249172,22 +249294,27 @@
                 "UmnWork"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10490",
-            "0x00A10494"
+            "0x00a10490",
+            "0x00a10494"
           ],
           "generated": [
-            "0x00A10490",
-            "0x00A10494"
+            "0x00a10490",
+            "0x00a10494"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "umn_task"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249203,22 +249330,27 @@
                 "umn_task"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10494",
-            "0x00A10498"
+            "0x00a10494",
+            "0x00a10498"
           ],
           "generated": [
-            "0x00A10494",
-            "0x00A10498"
+            "0x00a10494",
+            "0x00a10498"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnMemory"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249234,22 +249366,27 @@
                 "UmnMemory"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10498",
-            "0x00A1049C"
+            "0x00a10498",
+            "0x00a1049c"
           ],
           "generated": [
-            "0x00A10498",
-            "0x00A1049C"
+            "0x00a10498",
+            "0x00a1049c"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnWorkEndTop"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249265,22 +249402,27 @@
                 "UmnWorkEndTop"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A104A4",
-            "0x00A104A8"
+            "0x00a104a4",
+            "0x00a104a8"
           ],
           "generated": [
-            "0x00A104A4",
-            "0x00A104A8"
+            "0x00a104a4",
+            "0x00a104a8"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "UmnInterface2"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249296,7 +249438,13 @@
                 "UmnInterface2"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
@@ -249310,26 +249458,105 @@
             "0x00a11628"
           ],
           "generated_by": [
-            "HddInstallSync"
+            "HddInstallSync",
+            "TitleHddInstall"
           ],
           "c_owned_symbols": [
             "D_00A11620"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [
+            "D_00A11628",
+            "D_00A11688",
+            "D_00A11698",
+            "D_00A116B0",
+            "D_00A116C0",
+            "D_00A116E0",
+            "D_00A116F8",
+            "D_00A11708",
+            "D_00A11718",
+            "D_00A11738",
+            "D_00A117A0",
+            "D_00A117B8",
+            "D_00A117C8",
+            "D_00A117D8",
+            "D_00A117F0",
+            "D_00A11800",
+            "D_00A11818",
+            "D_00A11828"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a11840",
+            "0x00a118b8"
+          ],
+          "generated": [
+            "0x00a11840",
+            "0x00a118b8"
+          ],
+          "generated_by": [
+            "HddInstallCB"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A11840",
+            "jtbl_00A118A0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A118B8",
+            "D_00A11928",
+            "D_00A11970",
+            "D_00A119E0",
+            "D_00A11A58",
+            "D_00A11AA8",
+            "D_00A11B20",
+            "D_00A11C60",
+            "D_00A11C90",
+            "D_00A11CD8"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a11d20",
+            "0x00a11d40"
+          ],
+          "generated": [
+            "0x00a11d20",
+            "0x00a11d38"
+          ],
+          "generated_by": [
+            "TitleHddInstall"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A11D20"
+          ],
+          "also_referenced_by_c": [],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
     "ov02/tu005": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A11D40",
-            "D_00A11D58",
-            "D_00A11D70",
-            "D_00A11D90",
-            "D_00A11DB0",
-            "jtbl_00A11DD0"
+          "range": [
+            "0x00a11d40",
+            "0x00a11df0"
           ],
           "generated": [
             "0x00a11d40",
@@ -249340,10 +249567,23 @@
             "UmnInit",
             "UmnMain"
           ],
-          "range": [
-            "0x00a11d40",
-            "0x00a11df0"
-          ]
+          "c_owned_symbols": [
+            "D_00A11D40",
+            "D_00A11D58",
+            "D_00A11D70",
+            "D_00A11D90",
+            "D_00A11DB0",
+            "jtbl_00A11DD0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A11DF0"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -249364,7 +249604,128 @@
             "UmnManzaiFlag",
             "UmnManzaiWin"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [
+            "moji00_0",
+            "moji01_1"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        }
+      ]
+    },
+    "ov02/tu008": {
+      ".rodata": [
+        {
+          "range": [
+            "0x00a12070",
+            "0x00a12080"
+          ],
+          "generated": [
+            "0x00a12070",
+            "0x00a12080"
+          ],
+          "generated_by": [
+            "tskUmnManzaiWin"
+          ],
+          "c_owned_symbols": [
+            "D_00A12070",
+            "D_00A12078"
+          ],
+          "also_referenced_by_c": [
+            "D_00A12060",
+            "D_00A12080"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12090",
+            "0x00a120f0"
+          ],
+          "generated": [
+            "0x00a12090",
+            "0x00a120f0"
+          ],
+          "generated_by": [
+            "tskUmnManzaiWin"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A12090"
+          ],
+          "also_referenced_by_c": [
+            "D_00A120F0",
+            "D_00A12160",
+            "D_00A12170",
+            "D_00A12180",
+            "D_00A12190"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a121a0",
+            "0x00a121d0"
+          ],
+          "generated": [
+            "0x00a121a0",
+            "0x00a121d0"
+          ],
+          "generated_by": [
+            "UmnProcuratorManzai2"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A121A0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A121D0",
+            "D_00A121E0",
+            "D_00A121F0"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12200",
+            "0x00a12230"
+          ],
+          "generated": [
+            "0x00a12200",
+            "0x00a12230"
+          ],
+          "generated_by": [
+            "UmnProcuratorManzai"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A12200"
+          ],
+          "also_referenced_by_c": [
+            "D_00A12230"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -249383,7 +249744,6 @@
           "c_owned_symbols": [
             "msg00_0_00A10618"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249400,7 +249760,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
@@ -249417,13 +249783,12 @@
           "c_owned_symbols": [
             "D_00A12240"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                328,
-                344
+                2168,
+                2184
               ],
               "range": [
                 "0x00a12240",
@@ -249434,7 +249799,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249449,13 +249820,12 @@
           "c_owned_symbols": [
             "D_00A12250"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                344,
-                352
+                2184,
+                2192
               ],
               "range": [
                 "0x00a12250",
@@ -249466,7 +249836,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249481,13 +249857,12 @@
           "c_owned_symbols": [
             "D_00A12258"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                352,
-                360
+                2192,
+                2200
               ],
               "range": [
                 "0x00a12258",
@@ -249498,7 +249873,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249513,13 +249894,12 @@
           "c_owned_symbols": [
             "D_00A12260"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                360,
-                368
+                2200,
+                2208
               ],
               "range": [
                 "0x00a12260",
@@ -249530,7 +249910,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249545,13 +249931,12 @@
           "c_owned_symbols": [
             "D_00A12268"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                368,
-                376
+                2208,
+                2216
               ],
               "range": [
                 "0x00a12268",
@@ -249562,7 +249947,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249577,7 +249968,6 @@
           "c_owned_symbols": [
             "jtbl_00A12270"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -249593,7 +249983,373 @@
               "credit": "verified",
               "anonymous_emission": true
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12560",
+            "0x00a126a8"
+          ],
+          "generated": [
+            "0x00a12560",
+            "0x00a126a8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A12560"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12560",
+                "0x00a126a8"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                336,
+                664
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a126a8",
+            "0x00a126b8"
+          ],
+          "generated": [
+            "0x00a126a8",
+            "0x00a126b8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A126A8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a126a8",
+                "0x00a126b8"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                664,
+                680
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a126b8",
+            "0x00a126c0"
+          ],
+          "generated": [
+            "0x00a126b8",
+            "0x00a126c0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A126B8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a126b8",
+                "0x00a126c0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                680,
+                688
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a126c0",
+            "0x00a126d0"
+          ],
+          "generated": [
+            "0x00a126c0",
+            "0x00a126d0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A126C0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a126c0",
+                "0x00a126d0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                688,
+                704
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a126d0",
+            "0x00a12840"
+          ],
+          "generated": [
+            "0x00a126d0",
+            "0x00a12840"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A126D0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a126d0",
+                "0x00a12840"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                704,
+                1072
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12870",
+            "0x00a129c0"
+          ],
+          "generated": [
+            "0x00a12870",
+            "0x00a129c0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A12870"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12870",
+                "0x00a129c0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1072,
+                1408
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a129c0",
+            "0x00a129e0"
+          ],
+          "generated": [
+            "0x00a129c0",
+            "0x00a129e0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A129C0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a129c0",
+                "0x00a129e0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1408,
+                1440
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a129e0",
+            "0x00a12a88"
+          ],
+          "generated": [
+            "0x00a129e0",
+            "0x00a12a88"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A129E0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a129e0",
+                "0x00a12a88"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1440,
+                1608
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12af0",
+            "0x00a12c10"
+          ],
+          "generated": [
+            "0x00a12af0",
+            "0x00a12c10"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A12AF0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12af0",
+                "0x00a12c10"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1616,
+                1904
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12c70",
+            "0x00a12d78"
+          ],
+          "generated": [
+            "0x00a12c70",
+            "0x00a12d78"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A12C70"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12c70",
+                "0x00a12d78"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1904,
+                2168
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -249601,24 +250357,23 @@
       ".data": [
         {
           "range": [
-            "0x00A10700",
-            "0x00A1070C"
+            "0x00a10700",
+            "0x00a1070c"
           ],
           "generated": [
-            "0x00A10700",
-            "0x00A1070C"
+            "0x00a10700",
+            "0x00a1070c"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "msg00_1_00A10700"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10700",
-                "0x00A1070C"
+                "0x00a10700",
+                "0x00a1070c"
               ],
               "object_range": [
                 0,
@@ -249639,28 +250394,33 @@
                 "size": 12
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10720",
-            "0x00A10734"
+            "0x00a10720",
+            "0x00a10734"
           ],
           "generated": [
-            "0x00A10720",
-            "0x00A10734"
+            "0x00a10720",
+            "0x00a10734"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "text_3_00A10720"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10720",
-                "0x00A10734"
+                "0x00a10720",
+                "0x00a10734"
               ],
               "object_range": [
                 16,
@@ -249681,28 +250441,33 @@
                 "size": 20
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10738",
-            "0x00A10748"
+            "0x00a10738",
+            "0x00a10748"
           ],
           "generated": [
-            "0x00A10738",
-            "0x00A10748"
+            "0x00a10738",
+            "0x00a10748"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "msg00_4"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10738",
-                "0x00A10748"
+                "0x00a10738",
+                "0x00a10748"
               ],
               "object_range": [
                 40,
@@ -249723,10 +250488,52 @@
                 "size": 16
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
+        {
+          "range": [
+            "0x00a12da0",
+            "0x00a12ea8"
+          ],
+          "generated": [
+            "0x00a12da0",
+            "0x00a12ea8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A12DA0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12da0",
+                "0x00a12ea8"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                0,
+                264
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
         {
           "range": [
             "0x00a12ea8",
@@ -249740,7 +250547,6 @@
           "c_owned_symbols": [
             "D_00A12EA8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249757,7 +250563,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249772,7 +250584,6 @@
           "c_owned_symbols": [
             "D_00A12EB0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249789,7 +250600,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249804,7 +250621,6 @@
           "c_owned_symbols": [
             "D_00A12EE0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249821,7 +250637,85 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12f20",
+            "0x00a12f30"
+          ],
+          "generated": [
+            "0x00a12f20",
+            "0x00a12f30"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A12F20"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12f20",
+                "0x00a12f30"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                264,
+                280
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a12f30",
+            "0x00a12fb0"
+          ],
+          "generated": [
+            "0x00a12f30",
+            "0x00a12fb0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A12F30"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a12f30",
+                "0x00a12fb0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                288,
+                416
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249836,13 +250730,12 @@
           "c_owned_symbols": [
             "jtbl_00A12FB0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                0,
-                88
+                416,
+                504
               ],
               "range": [
                 "0x00a12fb0",
@@ -249852,7 +250745,49 @@
               "credit": "verified",
               "anonymous_emission": true
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a13030",
+            "0x00a130d8"
+          ],
+          "generated": [
+            "0x00a13030",
+            "0x00a130d8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A13030"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a13030",
+                "0x00a130d8"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                512,
+                680
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249867,7 +250802,6 @@
           "c_owned_symbols": [
             "D_00A130D8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249884,7 +250818,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249899,7 +250839,6 @@
           "c_owned_symbols": [
             "D_00A130F0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249916,7 +250855,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249931,7 +250876,6 @@
           "c_owned_symbols": [
             "D_00A13108"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249948,7 +250892,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249963,7 +250913,6 @@
           "c_owned_symbols": [
             "D_00A13118"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -249980,7 +250929,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -249995,7 +250950,6 @@
           "c_owned_symbols": [
             "D_00A13128"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -250012,7 +250966,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250027,13 +250987,12 @@
           "c_owned_symbols": [
             "D_00A13138"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                88,
-                96
+                680,
+                688
               ],
               "range": [
                 "0x00a13138",
@@ -250045,7 +251004,13 @@
               "credit": "verified",
               "zero_padding_tail": 4
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250060,13 +251025,12 @@
           "c_owned_symbols": [
             "D_00A13140"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                96,
-                104
+                688,
+                696
               ],
               "range": [
                 "0x00a13140",
@@ -250077,7 +251041,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250092,13 +251062,12 @@
           "c_owned_symbols": [
             "D_00A13148"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                104,
-                109
+                696,
+                701
               ],
               "range": [
                 "0x00a13148",
@@ -250109,7 +251078,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -250124,13 +251099,32 @@
             "0x00a10868",
             "0x00a10884"
           ],
-          "generated_by": [
-            "UmnSimulation"
-          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "UmnSimulationScriptNoTbl"
           ],
-          "also_referenced_by_c": []
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a10868",
+                "0x00a10884"
+              ],
+              "object_range": [
+                0,
+                28
+              ],
+              "symbols": [
+                "UmnSimulationScriptNoTbl"
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250141,13 +251135,32 @@
             "0x00a10888",
             "0x00a1088c"
           ],
-          "generated_by": [
-            "tskUmnSimulationPas"
-          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "msg00_0_00A10888"
           ],
-          "also_referenced_by_c": []
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a10888",
+                "0x00a1088c"
+              ],
+              "object_range": [
+                28,
+                32
+              ],
+              "symbols": [
+                "msg00_0_00A10888"
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
@@ -250160,33 +251173,104 @@
             "0x00a13200",
             "0x00a13218"
           ],
-          "generated_by": [
-            "tskUmnSimulationPas"
-          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A13200"
           ],
-          "also_referenced_by_c": [],
-          "reached_through": {
-            "D_00A13200": "msg00_0_00A10888"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a13200",
+                "0x00a13218"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                0,
+                24
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a13250",
+            "0x00a132f4"
+          ],
+          "generated": [
+            "0x00a13250",
+            "0x00a132f4"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A13250"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a13250",
+                "0x00a132f4"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                48,
+                212
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
           }
         },
         {
           "range": [
             "0x00a132f8",
-            "0x00a13310"
+            "0x00a13309"
           ],
           "generated": [
             "0x00a132f8",
             "0x00a13309"
           ],
-          "generated_by": [
-            "UmnSimulation"
-          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A132F8"
           ],
-          "also_referenced_by_c": []
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a132f8",
+                "0x00a13309"
+              ],
+              "object_range": [
+                24,
+                41
+              ],
+              "symbols": [
+                "D_00A132F8"
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -250226,24 +251310,29 @@
               ],
               "alignment": 8
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".data": [
         {
           "range": [
-            "0x00A108B0",
-            "0x00A10910"
+            "0x00a108b0",
+            "0x00a10910"
           ],
           "generated": [
-            "0x00A108B0",
-            "0x00A10910"
+            "0x00a108b0",
+            "0x00a10910"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "TestEnv_1_00A108B0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -250270,22 +251359,27 @@
                 "size": 96
               }
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
-            "0x00A10BC0",
-            "0x00A10C40"
+            "0x00a10bc0",
+            "0x00a10c40"
           ],
           "generated": [
-            "0x00A10BC0",
-            "0x00A10C40"
+            "0x00a10bc0",
+            "0x00a10c40"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "image"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -250301,28 +251395,71 @@
                 "image"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
         {
           "range": [
-            "0x00a13380",
+            "0x00a13320",
             "0x00a133b0"
           ],
           "generated": [
-            "0x00a13380",
+            "0x00a13320",
             "0x00a133b0"
           ],
           "generated_by": [
             "dbfileno_load",
+            "tyaUmlDispLoad",
             "tyaUmlDispType3"
           ],
           "c_owned_symbols": [
+            "jtbl_00A13320",
             "D_00A13380",
             "db_fileno_path"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [
+            "D_00A13310",
+            "D_00A133B0",
+            "D_00A13400",
+            "D_00A13410",
+            "D_00A13418"
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a13420",
+            "0x00a13440"
+          ],
+          "generated": [
+            "0x00a13420",
+            "0x00a1343c"
+          ],
+          "generated_by": [
+            "tyaUmlDatabaseMain"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A13420"
+          ],
+          "also_referenced_by_c": [],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
@@ -250341,7 +251478,6 @@
           "c_owned_symbols": [
             "msg00_0_00A10C40"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -250358,7 +251494,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250373,7 +251515,6 @@
           "c_owned_symbols": [
             "plugin_folder"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -250390,7 +251531,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
@@ -250407,13 +251554,12 @@
           "c_owned_symbols": [
             "D_00A13440"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                24,
-                40
+                240,
+                256
               ],
               "range": [
                 "0x00a13440",
@@ -250424,7 +251570,13 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250439,7 +251591,6 @@
           "c_owned_symbols": [
             "D_00A13450"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -250456,7 +251607,49 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a13470",
+            "0x00a13540"
+          ],
+          "generated": [
+            "0x00a13470",
+            "0x00a13540"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A13470"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a13470",
+                "0x00a13540"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                32,
+                240
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
           "range": [
@@ -250471,7 +251664,6 @@
           "c_owned_symbols": [
             "D_00A13540"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -250488,41 +251680,37 @@
               ],
               "credit": "verified"
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },
     "ov02/tu014": {
       ".data": [
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10C60",
-            "0x00A10CA5"
+            "0x00a10c60",
+            "0x00a10ca5"
           ],
           "generated": [
-            "0x00A10C60",
-            "0x00A10CA5"
+            "0x00a10c60",
+            "0x00a10ca5"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "umn_attach_tbl"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10C60",
-                "0x00A10CA5"
+                "0x00a10c60",
+                "0x00a10ca5"
               ],
               "object_range": [
                 0,
@@ -250532,37 +251720,33 @@
                 "umn_attach_tbl"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10CA8",
-            "0x00A10CBA"
+            "0x00a10ca8",
+            "0x00a10cba"
           ],
           "generated": [
-            "0x00A10CA8",
-            "0x00A10CBA"
+            "0x00a10ca8",
+            "0x00a10cba"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "event_tbl"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10CA8",
-                "0x00A10CBA"
+                "0x00a10ca8",
+                "0x00a10cba"
               ],
               "object_range": [
                 72,
@@ -250572,37 +251756,33 @@
                 "event_tbl"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10CC0",
-            "0x00A10CC2"
+            "0x00a10cc0",
+            "0x00a10cc2"
           ],
           "generated": [
-            "0x00A10CC0",
-            "0x00A10CC2"
+            "0x00a10cc0",
+            "0x00a10cc2"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "event_end_mail"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10CC0",
-                "0x00A10CC2"
+                "0x00a10cc0",
+                "0x00a10cc2"
               ],
               "object_range": [
                 96,
@@ -250612,37 +251792,33 @@
                 "event_end_mail"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10CC8",
-            "0x00A10CD8"
+            "0x00a10cc8",
+            "0x00a10cd8"
           ],
           "generated": [
-            "0x00A10CC8",
-            "0x00A10CD8"
+            "0x00a10cc8",
+            "0x00a10cd8"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "kosmos_special_tbl"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10CC8",
-                "0x00A10CD8"
+                "0x00a10cc8",
+                "0x00a10cd8"
               ],
               "object_range": [
                 104,
@@ -250652,37 +251828,33 @@
                 "kosmos_special_tbl"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10CD8",
-            "0x00A10CF2"
+            "0x00a10cd8",
+            "0x00a10cf2"
           ],
           "generated": [
-            "0x00A10CD8",
-            "0x00A10CF2"
+            "0x00a10cd8",
+            "0x00a10cf2"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "f_name.0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10CD8",
-                "0x00A10CF2"
+                "0x00a10cd8",
+                "0x00a10cf2"
               ],
               "object_range": [
                 168,
@@ -250692,37 +251864,33 @@
                 "f_name.0"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10CF8",
-            "0x00A10D05"
+            "0x00a10cf8",
+            "0x00a10d05"
           ],
           "generated": [
-            "0x00A10CF8",
-            "0x00A10D05"
+            "0x00a10cf8",
+            "0x00a10d05"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "compulsion_down_load_tbl"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10CF8",
-                "0x00A10D05"
+                "0x00a10cf8",
+                "0x00a10d05"
               ],
               "object_range": [
                 120,
@@ -250732,37 +251900,33 @@
                 "compulsion_down_load_tbl"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D08",
-            "0x00A10D0C"
+            "0x00a10d08",
+            "0x00a10d0c"
           ],
           "generated": [
-            "0x00A10D08",
-            "0x00A10D0C"
+            "0x00a10d08",
+            "0x00a10d0c"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "UmnEventTextMakeWork"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D08",
-                "0x00A10D0C"
+                "0x00a10d08",
+                "0x00a10d0c"
               ],
               "object_range": [
                 136,
@@ -250772,37 +251936,33 @@
                 "UmnEventTextMakeWork"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D0C",
-            "0x00A10D10"
+            "0x00a10d0c",
+            "0x00a10d10"
           ],
           "generated": [
-            "0x00A10D0C",
-            "0x00A10D10"
+            "0x00a10d0c",
+            "0x00a10d10"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "uet_text_buf"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D0C",
-                "0x00A10D10"
+                "0x00a10d0c",
+                "0x00a10d10"
               ],
               "object_range": [
                 140,
@@ -250812,37 +251972,33 @@
                 "uet_text_buf"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D10",
-            "0x00A10D14"
+            "0x00a10d10",
+            "0x00a10d14"
           ],
           "generated": [
-            "0x00A10D10",
-            "0x00A10D14"
+            "0x00a10d10",
+            "0x00a10d14"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "uet_flag"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D10",
-                "0x00A10D14"
+                "0x00a10d10",
+                "0x00a10d14"
               ],
               "object_range": [
                 144,
@@ -250852,37 +252008,33 @@
                 "uet_flag"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D14",
-            "0x00A10D18"
+            "0x00a10d14",
+            "0x00a10d18"
           ],
           "generated": [
-            "0x00A10D14",
-            "0x00A10D18"
+            "0x00a10d14",
+            "0x00a10d18"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "uet_file_end"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D14",
-                "0x00A10D18"
+                "0x00a10d14",
+                "0x00a10d18"
               ],
               "object_range": [
                 148,
@@ -250892,37 +252044,33 @@
                 "uet_file_end"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D18",
-            "0x00A10D1C"
+            "0x00a10d18",
+            "0x00a10d1c"
           ],
           "generated": [
-            "0x00A10D18",
-            "0x00A10D1C"
+            "0x00a10d18",
+            "0x00a10d1c"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "UmnHistoryTreeBuf"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D18",
-                "0x00A10D1C"
+                "0x00a10d18",
+                "0x00a10d1c"
               ],
               "object_range": [
                 152,
@@ -250932,37 +252080,33 @@
                 "UmnHistoryTreeBuf"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D1C",
-            "0x00A10D20"
+            "0x00a10d1c",
+            "0x00a10d20"
           ],
           "generated": [
-            "0x00A10D1C",
-            "0x00A10D20"
+            "0x00a10d1c",
+            "0x00a10d20"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "UmnMailHeaderBuf"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D1C",
-                "0x00A10D20"
+                "0x00a10d1c",
+                "0x00a10d20"
               ],
               "object_range": [
                 156,
@@ -250972,37 +252116,33 @@
                 "UmnMailHeaderBuf"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A10D20",
-            "0x00A10D24"
+            "0x00a10d20",
+            "0x00a10d24"
           ],
           "generated": [
-            "0x00A10D20",
-            "0x00A10D24"
+            "0x00a10d20",
+            "0x00a10d24"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "umn_text"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
               "range": [
-                "0x00A10D20",
-                "0x00A10D24"
+                "0x00a10d20",
+                "0x00a10d24"
               ],
               "object_range": [
                 160,
@@ -251012,39 +252152,107 @@
                 "umn_text"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ],
       ".rodata": [
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A13620",
-            "0x00A13640"
+            "0x00a135e0",
+            "0x00a135f8"
           ],
           "generated": [
-            "0x00A13620",
-            "0x00A13640"
+            "0x00a135e0",
+            "0x00a135f8"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
-            "D_00A13620"
+            "D_00A135E0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "range": [
-                "0x00A13620",
-                "0x00A13640"
+                "0x00a135e0",
+                "0x00a135f8"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                56,
+                80
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a13600",
+            "0x00a1361c"
+          ],
+          "generated": [
+            "0x00a13600",
+            "0x00a1361c"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A13600"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a13600",
+                "0x00a1361c"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                80,
+                108
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
+        },
+        {
+          "range": [
+            "0x00a13620",
+            "0x00a13640"
+          ],
+          "generated": [
+            "0x00a13620",
+            "0x00a13640"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A13620"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a13620",
+                "0x00a13640"
               ],
               "object_range": [
                 0,
@@ -251055,37 +252263,33 @@
               ],
               "zero_padding_tail": 5
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         },
         {
-          "generated_by": [
-            "UmnHistoryTreeLoad",
-            "UmnMailAttachGet",
-            "UmnMailAttachSet",
-            "UmnMailEventCheck",
-            "UmnEventEndMailCheck",
-            "UmnEventTextNextGet",
-            "UmnEventTextMake",
-            "UmnEventTextMakeWork"
-          ],
           "range": [
-            "0x00A13640",
-            "0x00A13654"
+            "0x00a13640",
+            "0x00a13654"
           ],
           "generated": [
-            "0x00A13640",
-            "0x00A13654"
+            "0x00a13640",
+            "0x00a13654"
           ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A13640"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "range": [
-                "0x00A13640",
-                "0x00A13654"
+                "0x00a13640",
+                "0x00a13654"
               ],
               "object_range": [
                 32,
@@ -251095,7 +252299,13 @@
                 "D_00A13640"
               ]
             }
-          ]
+          ],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov02-integration-20261102",
+            "tool": "tools/tu/data_carve.py derive",
+            "note": "user 2026-11-02: integrate the 41 matched OV02 functions; express route, unreviewed; whole-file gate decides"
+          }
         }
       ]
     },

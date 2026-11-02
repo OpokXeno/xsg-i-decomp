@@ -357,6 +357,21 @@ def finish_overlays(root, build, overlays, logs, tc, verbose):
             print(f"{unit}: unit build directory ready")
 
 
+def embed_ov02(root, build, logs, verbose):
+    """MAIN's embedded OV02 section links the OV02 unit's objects (user 2026-11-02).
+
+    `tools/tu/ov02_embed.py` turns build/ov02/ov02.ld into the body of MAIN's
+    `ov02` output section and its input list; it runs whenever either unit is
+    configured, since the OV02 layout (data carves included) decides both."""
+    if not (build / "main/tu-manifest.json").is_file():
+        return
+    log = logs / "ov02_embed.log"
+    check(run([sys.executable, "-B", TOOLS / "ov02_embed.py", "--main-dir", build / "main",
+               "--ov02-dir", build / "ov02"], root, log, 120), "ov02_embed.py", log)
+    if verbose:
+        print("main: embedded OV02 linked from the ov02 unit")
+
+
 def tool_env(tc):
     """The resolved toolchain, passed to the generators that write build.ninja."""
     env = dict(os.environ)
@@ -413,7 +428,11 @@ def root_ninja(root, build, njobs):
         report_targets = [f"build/{unit}.bin", f"build/{unit}.elf"]
         if unit == 'main':
             report_targets += ["build/carve/main.compare.json", "build/accepted_asm.json"]
-        lines += [f"build {stamp}: unit",
+        # MAIN links the OV02 unit's objects for its embedded OV02 image
+        # (tools/tu/ov02_embed.py), so the ov02 unit builds first.
+        after = " || build/ov02/.always-built" if unit == "main" else ""
+        report_after = " || build/ov02/.always-report-built" if unit == "main" else ""
+        lines += [f"build {stamp}: unit{after}",
                   f"  dir = build/{unit}",
                   f"  name = {unit}",
                   "  targets = ",
@@ -424,7 +443,7 @@ def root_ninja(root, build, njobs):
                   "",
                   # Reporting uses the same compile/link rules and their fatal
                   # failures, but native objdiff measures C mismatches later.
-                  f"build {report_stamp}: unit",
+                  f"build {report_stamp}: unit{report_after}",
                   f"  dir = build/{unit}",
                   f"  name = {unit}",
                   "  targets = " + " ".join(report_targets),
@@ -497,6 +516,8 @@ def main(argv=None):
     overlays = [u for u in wanted if u != "main"]
     if overlays:
         finish_overlays(root, build, overlays, logs, tc, not a.quiet)
+    if "main" in wanted or "ov02" in wanted:
+        embed_ov02(root, build, logs, not a.quiet)
     root_ninja(root, build, njobs)
     for note in tc.relaxed:
         print("configure: relaxed tool check: " + note, file=sys.stderr)

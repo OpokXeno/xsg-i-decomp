@@ -4,6 +4,8 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_cd.h"
+#include "main/menu_model.h"
+#include "main/xgl_studio.h"
 
 #include "tsk_umn_object_task_main.h"
 #include "main/xgl_task.h"
@@ -246,4 +248,110 @@ void UmnMain(void) {
     GameCFSoundMenuReload();
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tsk_umn_object_task_main", UmnMain2);
+extern StudioLight *xglStudioGetLight2(void);
+extern void xglStudioChange(int mode);
+extern void xglLightIntensityAmbient(void *light, void *values);
+extern void xglLightIntensityParallel(void *light, int index, void *values);
+extern void xglLightDirection(void *light, int index, void *values);
+extern void MenuCfTaikiPush(void);
+extern void MenuCfTaikiPop(void);
+extern void MenuGameDataPush(void);
+extern void MenuGameDataPop(void);
+extern void MenuLoadCancel(void);
+extern void MenuFontLoad(int mode, int id);
+extern void WindowTexLoad(int mode, int id);
+extern void *GameResourceWorkAlloc(int size);
+extern void GameResourceWorkReload(void);
+extern void GameCfPlayerLoadResource(int id);
+extern void GameSnapShotCheck(void);
+extern void VibrationEngine(void);
+extern unsigned int GameLoopState[];
+
+typedef struct UmnLightTable {
+    UmnWorkQuadword ambient;
+    UmnWorkQuadword parallel[3];
+    UmnWorkQuadword direction[3];
+} UmnLightTable;
+
+extern UmnLightTable D_00A11DF0;
+
+void UmnMain2(int menuId) {
+    XglPacket *packet;
+    StudioLight *light;
+    UmnLightTable lights;
+
+    packet = xglPacketGetCurrent();
+    endPrintDirectFrameCopy(packet, sRender.width << 5, sRender.height << 5);
+    xglSleep();
+    packet = xglPacketGetCurrent();
+    endPrintDirectFrameCopy(packet, sRender.height << 5, sRender.height2 << 5);
+
+    GameLoopState[4] |= 0x04000000;
+    MenuCfTaikiPush();
+    MenuGameDataPush();
+    GameCFSoundMenuPurge(0);
+    MenuLoadInit();
+    xglStudioChange(0);
+    light = xglStudioGetLight2();
+    lights = D_00A11DF0;
+    xglLightIntensityAmbient(light, &lights.ambient);
+    xglLightIntensityParallel(light, 0, &lights.parallel[0]);
+    xglLightDirection(light, 0, &lights.direction[0]);
+    xglLightIntensityParallel(light, 1, &lights.parallel[1]);
+    xglLightDirection(light, 1, &lights.direction[1]);
+    xglLightIntensityParallel(light, 2, &lights.parallel[2]);
+    xglLightDirection(light, 2, &lights.direction[2]);
+
+    UmnMemory = (int)GameResourceWorkAlloc(0x480000);
+    memset((void *)UmnMemory, 0, 0x480000);
+
+    UmnInit();
+    MenuLoadInit();
+    UmnWorkEnd = (int)MenuModelInit((void *)UmnWorkEnd);
+    MenuModelMemoryInit((void *)UmnMemory, 0x200000);
+    MenuModelMemorySet(0);
+
+    UmnModelUkn = 0;
+    UmnModelSon = 0;
+    UmnChangeTopLevel(1);
+    UmnFirstLoad();
+    MenuFontLoad(1, 0);
+    WindowTexLoad(0, 1);
+    WindowTexLoad(0, 2);
+
+    while (!(UmnModelUkn != 0 && ((MenuModelUnit *)UmnModelUkn)->active != 0)) {
+        UmnInterface2Main();
+        MenuModelMain();
+        xglSleep();
+    }
+
+    if (UmnWork.mode == 1) {
+        do {
+            GameSnapShotCheck();
+            UmnMail(menuId);
+            UmnInterface2Main();
+            endPrintExtFunc(0, 0x64, 0);
+            xglTaskExecute((XglTaskScheduler *)task_xmx);
+            MenuModelMain();
+            xglTaskExecute((XglTaskScheduler *)umn_task);
+            VibrationEngine();
+            xglSleep();
+        } while (UmnWork.mode == 1);
+    }
+
+    MenuLoadCancel();
+    packet = xglPacketGetCurrent();
+    endPrintDirectFrameCopy(packet, sRender.width << 5, sRender.height << 5);
+    xglTaskExecute((XglTaskScheduler *)task_xmx);
+    xglTaskExecute((XglTaskScheduler *)umn_task);
+    MenuModelAllBreak();
+    xglSleep();
+    MenuCfTaikiPop();
+    MenuFontLoad(0, 0);
+    WindowTexLoad(0, 0);
+    GameResourceWorkReload();
+    GameCfPlayerLoadResource(1);
+    MenuGameDataPop();
+    GameCFSoundMenuReload();
+    GameLoopState[4] &= 0xFBFFFFFF;
+}

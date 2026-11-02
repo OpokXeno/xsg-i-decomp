@@ -153,21 +153,267 @@ void tskUmnSimulationPas(UmnTaskCommand *task, UmnSimulationPasWork *work)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tsk_umn_simulation_pas", tskUmnSimulationInfo);
+extern const char D_00A13218[];
+extern const char D_00A13230[];
+extern const char *ListText[];
+extern void MenuInfoWindow(void);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tsk_umn_simulation_pas", tskUmnSimulationList);
+typedef union UmnInfoName {
+    unsigned long long align;
+    char text[10];
+} UmnInfoName;
+extern const UmnInfoName D_00A13220;
 
+typedef struct UmnInfoPos {
+    short x;
+    short y;
+} UmnInfoPos;
+
+typedef struct UmnInfoWork {
+    unsigned char mode;
+    unsigned char opened;
+    unsigned char unmodeled_02[2];
+    unsigned char unmodeled_04[4];
+    int color;
+    UmnWindow window;
+    unsigned char unmodeled_28[0x1a0 - 0x28];
+    UmnInfoPos pos;
+    unsigned char unmodeled_1a4[0x1ac - 0x1a4];
+    char *text;
+    unsigned char unmodeled_1b0[0x350 - 0x1b0];
+    UmnInfoName text_buf;
+} UmnInfoWork;
+
+void tskUmnSimulationInfo(UmnTaskCommand *task, UmnInfoWork *work)
+{
+    unsigned char simulation_state = UmnWork.simulation_state;
+
+    if (simulation_state != 3) {
+        task->command = -1;
+    } else {
+        int command = task->command;
+
+        switch (command) {
+        case 0: {
+            UmnInfoPos *pos;
+
+            work->color = 0x00ff0000;
+            __builtin_memcpy(work->text_buf.text, D_00A13218, 1);
+            work->opened = 0;
+            work->mode = 0;
+            WindowDXSet(&work->window);
+            work->window.x = -16;
+            work->window.state = 0;
+            work->window.y = 480;
+            work->window.width = 544;
+            work->window.height = 54;
+            work->window.color = work->color;
+            pos = &work->pos;
+            work->window.callback = MenuInfoWindow;
+            work->window.callback_arg = pos;
+            pos->x = 0;
+            work->window.state = 1;
+            work->pos.y = 0;
+            work->text = 0;
+            WindowDXMain(&work->window);
+            work->window.state = simulation_state;
+            break;
+        }
+
+        case 2: {
+            short slide_target = 386;
+            unsigned char mode = work->mode;
+
+            if (mode != 0 && mode != command) {
+                mode = 0;
+            } else {
+                int tab_state;
+
+                if (mode == 0) {
+                    work->mode = command;
+                    work->opened = 1;
+                }
+                tab_state = UmnWork.tab_state;
+                if (tab_state < 18) {
+                    if (tab_state >= 16) {
+                        if (UmnWork.list_index >= 0) {
+                            __builtin_memcpy(work->text_buf.text, D_00A13220.text, 10);
+                            strcat(work->text_buf.text, ListText[UmnWork.list_index]);
+                            strcat(work->text_buf.text, D_00A13230);
+                        }
+                    } else {
+                        slide_target = 512;
+                    }
+                } else {
+                    slide_target = 512;
+                }
+            }
+            work->text = work->text_buf.text;
+            MoveSlide(&work->window.y, &slide_target, 3.0f);
+            WindowDXMain(&work->window);
+            break;
+        }
+        }
+    }
+}
 typedef struct UmnGameLoopState {
     unsigned char unmodeled_00[0x10];
     unsigned int flags;
 } UmnGameLoopState;
 extern PadPrefix PadData;
 extern UmnGameLoopState GameLoopState;
+
+typedef struct UmnListItem {
+    const char *text;
+    int icon;
+    signed char flags;
+    unsigned char unmodeled_09[3];
+} UmnListItem;
+
+typedef struct UmnListWindow {
+    unsigned char state;
+    unsigned char draw_flags;
+    unsigned char unmodeled_02[2];
+    short x;
+    short y;
+    int style;
+    short width;
+    short height;
+    const char *title;
+    signed char columns;
+    signed char rows;
+    unsigned char unmodeled_16[6];
+    UmnListItem *items;
+} UmnListWindow;
+
+typedef struct UmnListBody {
+    union {
+        short slide[2];
+        int slide_word;
+    };
+    int color;
+    UmnListWindow window;
+    unsigned char unmodeled_28[0x1740 - 0x28];
+    UmnListItem items[9];
+} UmnListBody;
+
+typedef struct UmnSimulationListWork {
+    unsigned char state;
+    unsigned char opened;
+    unsigned char unmodeled_02[2];
+    UmnListBody body;
+} UmnSimulationListWork;
+
+extern const char D_00A13238[];
+extern void WindowSPSet(void *window);
+extern void WindowSPMain(void *window);
+extern int WindowSPSelect(void *window, int value);
+
+void tskUmnSimulationList(UmnTaskCommand *task, UmnSimulationListWork *list)
+{
+    unsigned char simulation_state = UmnWork.simulation_state;
+
+    if (simulation_state != 3) {
+        task->command = -1;
+    } else {
+        int command = task->command;
+
+        switch (command) {
+        case 0: {
+            int i;
+            UmnListItem *terminator;
+            UmnListBody *body;
+            int offset;
+
+            list->body.slide[0] = 528;
+            list->body.slide[1] = 112;
+            list->body.color = 0x00FFFF00;
+
+            for (i = 0; i < UmnWork.list_count; i++) {
+                list->body.items[i].text = ListText[i];
+                if ((GameLoopState.flags & 0x400000) != 0) {
+                    list->body.items[i].flags = 0;
+                } else {
+                    list->body.items[i].flags = 1;
+                }
+                list->body.items[i].icon = 0;
+            }
+            list->body.items[i].text = D_00A13218;
+            list->body.items[i].icon = 0;
+            list->body.items[i].flags = 0;
+            offset = (i + 1) * sizeof(UmnListItem);
+            body = &list->body;
+            terminator = (UmnListItem *)((char *)body->items + offset);
+
+            list->body.window.x = list->body.slide[0];
+            list->body.window.y = list->body.slide[1];
+            list->body.window.style = list->body.color;
+            terminator->text = 0;
+            list->body.window.draw_flags = 3;
+            list->body.window.title = D_00A13238;
+            list->body.window.columns = 1;
+            list->body.window.rows = 7;
+            list->body.window.width = 422;
+            list->body.window.height = 174;
+            list->body.window.items = list->body.items;
+            WindowSPSet(&list->body.window);
+            list->body.window.state = 0x11;
+            list->opened = 0;
+            list->state = 0;
+            break;
+        }
+
+        case 2:
+            switch (list->state) {
+            case 0:
+                list->opened = 0;
+                list->state = 10;
+                /* fallthrough */
+            case 10:
+                if (UmnWork.tab_state == 17) {
+                    list->opened = 1;
+                    list->state = 20;
+                }
+                break;
+            case 20:
+            case 40: {
+                short slide_target = 32;
+
+                if (list->state != 20) {
+                    slide_target = 528;
+                } else {
+                    slide_target = 32;
+                }
+                MoveSlide(&list->body.slide[0], &slide_target, 3.0f);
+                if (list->body.slide[0] == slide_target) {
+                    if (list->state == 20) {
+                        list->state = 30;
+                    } else {
+                        list->state = 0;
+                    }
+                }
+                break;
+            }
+            case 30:
+                UmnWork.list_index = WindowSPSelect(&list->body.window, PadData.mappedRepeat);
+                if (UmnWork.tab_state != 17) {
+                    list->state = 40;
+                }
+                break;
+            }
+            break;
+        }
+
+        if (list->opened != 0) {
+            list->body.window.x = list->body.slide[0];
+            list->body.window.y = list->body.slide[1];
+            WindowSPMain(&list->body.window);
+        }
+    }
+}
 extern int UmnWorkEnd;
 extern int UmnSimulationNo;
 extern int MenuScenarioNoGet(void);
-extern void tskUmnSimulationInfo(UmnTaskCommand *task, void *work);
-extern void tskUmnSimulationList(UmnTaskCommand *task, void *work);
 extern void UmnObjectTaskCreate(void (*callback)(), int offset);
 extern void UmnChangeTopLevel(int next_level);
 extern void xglSoundEffectNormalID(int sound_id, int volume);

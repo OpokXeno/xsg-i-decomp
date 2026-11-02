@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/e_message.h"
+#include "main/end_print.h"
 
 extern void *UmnGunoDataBaseTop;
 
@@ -17,16 +18,30 @@ int UmnGunoDataBaseGet(int id)
     return base;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_guno_data_base_get", tskUmnDataBasePas);
-
 typedef struct UmnWorkData {
     unsigned char unmodeled_00;         /* +0x00 */
     unsigned char mode;                 /* +0x01 */
     unsigned char unmodeled_02;         /* +0x02 */
     unsigned char stateOrCategory;      /* +0x03: screen step, or model category */
-    unsigned char unmodeled_04[0x46 - 0x04];
+    unsigned char unmodeled_04[0x10 - 0x04];
+    union {
+        unsigned short waitOrMoving;    /* +0x10: wait and moving read as one halfword */
+        struct {
+            signed char wait;           /* +0x10 */
+            signed char moving;         /* +0x11 */
+        };
+    };
+    unsigned char unmodeled_12[0x40 - 0x12];
+    signed char column;                 /* +0x40 */
+    unsigned char unmodeled_41;         /* +0x41 */
+    signed char row;                    /* +0x42 */
+    signed char rows;                   /* +0x43 */
+    signed char scroll;                 /* +0x44 */
+    unsigned char unmodeled_45;         /* +0x45 */
     signed char cursor;                 /* +0x46 */
-    unsigned char unmodeled_47[0x52 - 0x47];
+    unsigned char unmodeled_47[0x50 - 0x47];
+    signed char listCursor;             /* +0x50 */
+    signed char count;                  /* +0x51 */
     signed char entry;                  /* +0x52 */
     unsigned char unmodeled_53[0x5D - 0x53];
     signed char dataBaseResult;         /* +0x5D */
@@ -39,12 +54,20 @@ typedef struct UmnDataBaseTask {
     unsigned char unmodeled_00[0x10];   /* +0x00 */
     int state;                          /* +0x10 */
 } UmnDataBaseTask;
+typedef struct UmnDataBaseMenuEntry {
+    char *text;                         /* +0x00 */
+    unsigned char unmodeled_04[0x08 - 0x04];
+    unsigned char enabled;              /* +0x08 */
+    unsigned char unmodeled_09[0x0C - 0x09];
+} UmnDataBaseMenuEntry;
 typedef struct UmnDataBaseInfoText {
     short x;                            /* +0x00 */
     short y;                            /* +0x02 */
-    unsigned char unmodeled_04[0x0C - 0x04];
+    int value;                          /* +0x04 */
+    unsigned char unmodeled_08[0x0C - 0x08];
     char *text;                         /* +0x0C */
-    unsigned char unmodeled_10[0x1B0 - 0x10];
+    UmnDataBaseMenuEntry *entries;      /* +0x10 */
+    unsigned char unmodeled_14[0x1B0 - 0x14];
 } UmnDataBaseInfoText;
 typedef struct UmnDataBaseInfoWindow UmnDataBaseInfoWindow;
 struct UmnDataBaseInfoWindow {
@@ -53,7 +76,7 @@ struct UmnDataBaseInfoWindow {
     int color;                          /* +0x04 */
     short width;                        /* +0x08 */
     short height;                       /* +0x0A */
-    unsigned char unmodeled_0c[0x10 - 0x0C];
+    char *caption;                      /* +0x0C */
     unsigned char state;                /* +0x10 */
     unsigned char unmodeled_11[0x14 - 0x11];
     void (*callback)(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
@@ -68,11 +91,116 @@ typedef struct UmnDataBaseInfoWork {
     UmnDataBaseInfoWindow window;       /* +0x0C */
     UmnDataBaseInfoText info;           /* +0x1A0 */
 } UmnDataBaseInfoWork;
+/* The help line text of the database screen (original scaffold data, msg00.0). */
+extern char *msg00_0_00A106F8;
 static char *msg00_1_00A10700[3];
 void MenuInfoWindow(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
+void MenuSelectWindow(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
 void WindowDXSet(UmnDataBaseInfoWindow *window);
 void WindowDXMain(UmnDataBaseInfoWindow *window);
 void MoveSlide(short *current, short *target, float rate);
+
+typedef struct UmnDataBasePasBox {
+    short x;                            /* +0x00 */
+    short y;                            /* +0x02 */
+    int kind;                           /* +0x04 */
+    short width;                        /* +0x08 */
+    short height;                       /* +0x0A */
+} UmnDataBasePasBox;
+typedef struct UmnDataBasePasWork {
+    unsigned char unmodeled_00;
+    unsigned char state;                /* +0x01 */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    int kind;                           /* +0x04 */
+    UmnDataBaseInfoWindow window;       /* +0x08 */
+    EMessageParam message;     /* +0x19C */
+    unsigned char unmodeled_1e0[0x3BC - 0x1E0];
+    UmnDataBasePasBox box;              /* +0x3BC */
+} UmnDataBasePasWork;
+typedef struct UmnDataBasePasMessageView {
+    unsigned char unmodeled_00[0x0C];
+    EMessageParam message;     /* +0x0C from the view base (work +0x190) */
+} UmnDataBasePasMessageView;
+
+void tskUmnDataBasePas(UmnDataBaseTask *task, UmnDataBasePasWork *work)
+{
+    short slideTargets[4];
+    short windowTarget;
+    int i;
+
+    if (UmnWork.mode != 2) {
+        task->state = -1;
+        return;
+    }
+    switch (task->state) {
+    case 0: {
+        short messageX = 288;
+        short messageY = 11;
+        int messageMode = 0x20;
+        UmnDataBasePasMessageView *view;
+
+        work->kind = 0x00FFFFF0;
+        WindowDXSet(&work->window);
+        work->window.x = -272;
+        work->window.y = 8;
+        work->window.color = work->kind;
+        work->window.width = 272;
+        work->window.state = 1;
+        work->window.height = 32;
+        WindowDXMain(&work->window);
+        work->window.state = 3;
+        eMessageSet(&work->message, msg00_0_00A106F8);
+        view = (UmnDataBasePasMessageView *) ((unsigned char *) work + 0x190);
+        view->message.mode = messageMode;
+        view->message.x = messageX;
+        view->message.y = messageY;
+        work->message.draw_parameter = work->kind + 2;
+        i = 1;
+        work->state = i;
+        break;
+    }
+    case 2: {
+        short slideValue = 288;
+
+        windowTarget = -16;
+        for (i = 3; i >= 0; i--) {
+            slideTargets[i] = slideValue;
+        }
+        switch (UmnWork.stateOrCategory) {
+        case 16: case 17: case 32: case 33: case 48: case 49: case 80: case 81:
+            slideTargets[0] = 16;
+            break;
+        case 18: case 19: case 20: case 21: case 22: case 23: case 24: case 25:
+        case 26: case 27: case 28: case 29: case 30: case 31: case 34: case 35:
+        case 36: case 37: case 38: case 39: case 40: case 41: case 42: case 43:
+        case 44: case 45: case 46: case 47: case 50: case 51: case 52: case 53:
+        case 54: case 55: case 56: case 57: case 58: case 59: case 60: case 61:
+        case 62: case 63: case 64: case 65: case 66: case 67: case 68: case 69:
+        case 70: case 71: case 72: case 73: case 74: case 75: case 76: case 77:
+        case 78: case 79:
+        default:
+            windowTarget = -272;
+            break;
+        }
+        if (work->state != 0) {
+            MoveSlide(&work->window.x, &windowTarget, 3.0f);
+            WindowDXMain(&work->window);
+            work->box.x = work->window.x + 3;
+            work->box.y = work->window.y + 3;
+            work->box.kind = work->kind;
+            work->box.width = work->window.width - 6;
+            work->box.height = work->window.height - 6;
+            endPrintExtFunc(work->kind, 0x65, &work->box);
+            MoveSlide(&work->message.x, &slideTargets[0], 3.0f);
+            if (work->message.x < 256) {
+                eMessageMain(&work->message);
+            }
+            endPrintExtFunc(work->kind, 0x66, 0);
+        }
+        break;
+    }
+    }
+}
 
 /*
  * The help line at the bottom of the U.M.N. database screen: the frame the
@@ -127,7 +255,252 @@ void tskUmnDataBaseInfo(UmnDataBaseTask *task, UmnDataBaseInfoWork *work)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_guno_data_base_get", tskUmnDataBaseName);
+typedef struct UmnKeyWordNumber {
+    short x;                                /* +0x00 */
+    short y;                                /* +0x02 */
+    unsigned int color;                     /* +0x04 */
+    unsigned char unmodeled_08[0x0E - 0x08];
+    unsigned char type;                     /* +0x0E */
+    unsigned char digits;                   /* +0x0F */
+    unsigned char unmodeled_10[0x14 - 0x10];
+    int value;                              /* +0x14 */
+    unsigned char unmodeled_18[0x90 - 0x18];
+} UmnKeyWordNumber;
+void eNumberSet(UmnKeyWordNumber *number, int mode);
+void eNumberMain(UmnKeyWordNumber *number);
+void xglFontDebugPrintf(int x, int y, const char *format, ...);
+typedef struct UmnDataBaseNameRow {
+    unsigned short id;                  /* +0x00 (row +0x08 from the work base) */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    UmnDataBaseInfoWindow window;       /* +0x04 */
+    EMessageParam message;              /* +0x198 */
+    UmnKeyWordNumber number;            /* +0x1DC */
+} UmnDataBaseNameRow;
+typedef struct UmnDataBaseNameWork {
+    unsigned char step;                 /* +0x00: screen step */
+    unsigned char opened;               /* +0x01 */
+    unsigned char unmodeled_02;         /* +0x02 */
+    unsigned char count;                /* +0x03 */
+    unsigned int color;                 /* +0x04 */
+    UmnDataBaseNameRow rows[14];        /* +0x08, 620 bytes each */
+    ECursolMainData cursor;             /* +0x21F0 */
+} UmnDataBaseNameWork;
+extern char D_00A12F18[];
+extern unsigned short monster_folder[];
+
+void tskUmnDataBaseName(UmnDataBaseTask *task, UmnDataBaseNameWork *work)
+{
+    short xTarget;
+    short yTarget;
+    int selected;
+    int done;
+    int matched;
+    int k;
+    int i;
+    int r;
+
+    if (UmnWork.mode != 2) {
+        task->state = -1;
+        return;
+    }
+
+    switch (task->state) {
+    case 0: {
+
+        work->color = 0xFFFF00;
+        for (i = 0; i < 14; i++) {
+            int width;
+
+            WindowDXSet(&work->rows[i].window);
+            width = 222;
+            work->rows[i].window.width = width;
+            work->rows[i].window.color = work->color;
+            work->rows[i].window.y = 80 + (i / 2) * 48;
+            work->rows[i].window.caption = D_00A12F18;
+            work->rows[i].window.height = 30;
+            work->rows[i].window.x = (i % 2) * (width + 544) - width - 16;
+            work->rows[i].window.state = 1;
+            WindowDXMain(&work->rows[i].window);
+            work->rows[i].window.state = 3;
+            eNumberSet(&work->rows[i].number, 0);
+            work->rows[i].number.digits = 3;
+            work->rows[i].number.type = 1;
+        }
+        eCursolSet(&work->cursor, 0);
+        work->count = UmnWork.count;
+        if (work->count >= 13) {
+            work->count = 12;
+        }
+        work->step = 0;
+        work->opened = 0;
+        break;
+    }
+    case 2:
+        {
+        switch (work->step) {
+        case 0:
+        case 1:
+            if (UmnWork.stateOrCategory == 0x21) {
+                work->step = 10;
+                work->opened = 1;
+                eCursolModeChange(&work->cursor, 0x20);
+            }
+            break;
+        case 10: {
+            int selected;
+
+            selected = UmnWork.column + 2 * UmnWork.row;
+            for (i = 0; i < work->count; i++) {
+                if (selected != i) {
+                    work->rows[i].window.y = 80 + (i / 2) * 48;
+                    work->rows[i].window.x = (work->rows[i].window.width + 544) * (i % 2) - work->rows[i].window.width - 16;
+                }
+            }
+            work->step = 11;
+        }
+            /* fallthrough */
+        case 11: {
+            int selected;
+            int done;
+
+            selected = UmnWork.column + 2 * UmnWork.row;
+            done = 0;
+            for (i = 0; i < work->count; i++) {
+                if (selected == i) {
+                    yTarget = 80 + (i / 2) * 48;
+                    MoveSlide(&work->rows[i].window.y, &yTarget, 3.0f);
+                    if (work->rows[i].window.y != yTarget) {
+                        continue;
+                    }
+                    selected = -1;
+                }
+                xTarget = (work->rows[0].window.width + 16) * (i % 2) + 32;
+                MoveSlide(&work->rows[i].window.x, &xTarget, 3.0f);
+                if (work->rows[i].window.x == xTarget) {
+                    done++;
+                }
+            }
+            if (done == work->count) {
+                work->step = 12;
+                UmnWork.moving = 0;
+            }
+            break;
+        }
+        case 12:
+            if (UmnWork.stateOrCategory != 0x11) {
+                if (UmnWork.stateOrCategory == 0x31) {
+                    work->step = 20;
+                }
+            } else {
+                work->step = 30;
+            }
+            break;
+        case 20:
+        case 30: {
+            int selected;
+            int matched;
+            short xTarget;
+            short yTarget;
+
+            selected = UmnWork.column + 2 * UmnWork.row;
+            matched = 0;
+            for (i = 0; i < work->count; i++) {
+                xTarget = (work->rows[i].window.width + 544) * (i % 2) - work->rows[i].window.width - 16;
+                if (work->step == 20 && selected == i) {
+                    xTarget = 272;
+                }
+                MoveSlide(&work->rows[i].window.x, &xTarget, 3.0f);
+                if (work->rows[i].window.x == xTarget) {
+                    if (work->step == 20 && selected == i) {
+                        yTarget = 32;
+                        MoveSlide(&work->rows[i].window.y, &yTarget, 3.0f);
+                        if (work->rows[i].window.y == yTarget) {
+                            matched++;
+                        }
+                    } else {
+                        matched++;
+                    }
+                }
+            }
+            if (matched == work->count) {
+                if (work->step == 20) {
+                    work->step = 22;
+                } else {
+                    work->step = 0;
+                }
+                UmnWork.moving = 0;
+            }
+            break;
+        }
+        case 22: {
+            int selected;
+
+            if (UmnWork.stateOrCategory == 0x21) {
+                work->step = 10;
+            } else {
+                selected = UmnWork.column + 2 * UmnWork.row;
+                for (i = 0; i < work->count; i++) {
+                    if (selected == i) {
+                        work->rows[i].window.x = 272;
+                    } else {
+                        work->rows[i].window.x = 528;
+                    }
+                    work->rows[i].window.y = 32;
+                }
+            }
+            break;
+        }
+        }
+        }
+        break;
+    }
+
+    if (work->opened != 0) {
+        int r;
+        int *fill;
+        int order[12];
+
+        selected = UmnWork.column + 2 * UmnWork.row;
+        for (i = 0; i < work->count; i++) {
+            r = UmnWork.listCursor - 2 * UmnWork.row - UmnWork.column + i;
+            work->rows[i].id = monster_folder[r];
+        }
+        fill = order;
+        for (i = 0; i < work->count; i++) {
+            if (selected != i) {
+                *fill++ = i;
+            }
+        }
+        *fill = selected;
+        for (i = 0; i < work->count; i++) {
+            r = order[i];
+            if (work->rows[r].id != 0) {
+                work->rows[r].window.color = work->color;
+                if (selected == r) {
+                    work->rows[r].window.color += 16;
+                }
+                WindowDXMain(&work->rows[r].window);
+                eMessageSet(&work->rows[r].message, (const char *) UmnGunoDataBaseGet(work->rows[r].id));
+                work->rows[r].message.mode = 32;
+                work->rows[r].message.draw_parameter = work->rows[r].window.color + 2;
+                work->rows[r].message.x = work->rows[r].window.x + 19;
+                work->rows[r].message.y = work->rows[r].window.y + 3;
+                eMessageMain(&work->rows[r].message);
+                work->rows[r].number.x = work->rows[r].window.x + 32;
+                work->rows[r].number.color = work->rows[r].window.color + 2;
+                work->rows[r].number.y = work->rows[r].window.y - 12;
+                work->rows[r].number.value = UmnWork.listCursor - 2 * UmnWork.row - UmnWork.column + order[i] + 1;
+                eNumberMain(&work->rows[r].number);
+            }
+        }
+        work->cursor.x = work->rows[selected].window.x + 3;
+        work->cursor.work = work->rows[selected].window.color + 2;
+        work->cursor.y = work->rows[selected].window.y + 7;
+        eCursolMain(&work->cursor);
+    }
+
+    xglFontDebugPrintf(16, 96, "name_w %2d", work->step);
+}
 
 /* PadPrefix canonically covers [0x00, 0x2C). The original
  * tskUmnDataBaseAnalisis also performs an `ld` from PadData + 0x28, so this
@@ -273,7 +646,127 @@ void tskUmnDataBaseAnalisis(UmnDataBaseAnalisisTask *task)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_guno_data_base_get", tskUmnDataBaseMenu);
+extern char D_00A13028[];
+extern char *text2_2[3];
+
+typedef struct UmnDataBaseMenuWork {
+    unsigned char state;                /* +0x00 */
+    unsigned char opened;               /* +0x01 */
+    unsigned char unmodeled_02[0x04 - 0x02];
+    short x;                            /* +0x04 */
+    short y;                            /* +0x06 */
+    int color;                          /* +0x08 */
+    int pending;                        /* +0x0C */
+    UmnDataBaseInfoWindow window;       /* +0x10 */
+    UmnDataBaseInfoText info;           /* +0x1A4 */
+    unsigned char unmodeled_354[0x79C - 0x354];
+    UmnDataBaseMenuEntry entries[4];    /* +0x79C */
+} UmnDataBaseMenuWork;
+
+/*
+ * The top menu of the U.M.N. database: the first frame builds its window and
+ * the three entries, then the window slides in, the cursor follows the
+ * terminal and the window slides out again when the menu closes.
+ */
+void tskUmnDataBaseMenu(UmnDataBaseTask *task, UmnDataBaseMenuWork *work)
+{
+    short slideTarget;
+    short closeTarget;
+    int i;
+    int mode;
+
+    mode = UmnWork.mode;
+    if (mode != 2) {
+        task->state = -1;
+        return;
+    }
+    switch (task->state) {
+    case 0:
+        work->x = 528;
+        work->y = 48;
+        work->color = 0x00FFFFF0;
+        work->pending = 0;
+        WindowDXSet(&work->window);
+        work->window.color = work->color;
+        work->window.width = 125;
+        work->window.height = 78;
+        work->info.y = mode;
+        work->window.caption = D_00A13028;
+        work->window.callback = MenuSelectWindow;
+        work->window.callbackArg = &work->info;
+        work->info.entries = 0;
+        work->state = 0;
+        work->opened = 0;
+        break;
+    case 2:
+        switch (work->state) {
+        case 0:
+            work->opened = 0;
+            work->state = 10;
+            /* fallthrough */
+        case 10:
+            if (UmnWork.stateOrCategory == 0x11) {
+                work->state = 20;
+            }
+            break;
+        case 20:
+            for (i = 0; i < 3; i++) {
+                work->entries[i].text = text2_2[i];
+                if (i == 0 && UmnWork.count == 0) {
+                    work->entries[i].enabled = 1;
+                } else {
+                    work->entries[i].enabled = 0;
+                }
+            }
+            work->entries[i].text = 0;
+            work->pending = 1;
+            work->window.x = 528;
+            work->window.y = 176;
+            work->info.value = UmnWork.cursor;
+            work->info.entries = &work->entries[0];
+            work->window.state = 1;
+            WindowDXMain(&work->window);
+            work->window.state = 3;
+            work->opened = 1;
+            work->state = 21;
+            /* fallthrough */
+        case 21:
+            slideTarget = 192;
+            MoveSlide(&work->window.x, &slideTarget, 3.0f);
+            if (work->window.x == slideTarget) {
+                work->state = 30;
+            }
+            break;
+        case 30:
+            work->info.value = UmnWork.cursor;
+            if (UmnWork.stateOrCategory != 0x11) {
+                work->state = 40;
+            } else {
+                UmnWork.moving = 0;
+            }
+            break;
+        case 40:
+            closeTarget = -125;
+            if ((UmnWork.stateOrCategory >> 4) == 5) {
+                work->opened = 0;
+                work->window.x = -125;
+            } else {
+                MoveSlide(&work->window.x, &closeTarget, 3.0f);
+                if (work->window.x == closeTarget) {
+                    work->state = 0;
+                    work->pending = 0;
+                }
+            }
+            break;
+        }
+        break;
+    }
+    if (work->opened != 0) {
+        if (work->pending != 0) {
+            WindowDXMain(&work->window);
+        }
+    }
+}
 
 #define PAD_SQUARE 0x0080
 #define PAD_LEFT   0x0004
@@ -451,17 +944,6 @@ typedef struct UmnKeyWordTagFont {
     unsigned int color;                     /* +0x08 */
     unsigned char unmodeled_0c[0x20 - 0x0C];
 } UmnKeyWordTagFont;
-typedef struct UmnKeyWordNumber {
-    short x;                                /* +0x00 */
-    short y;                                /* +0x02 */
-    unsigned int color;                     /* +0x04 */
-    unsigned char unmodeled_08[0x0E - 0x08];
-    unsigned char type;                     /* +0x0E */
-    unsigned char digits;                   /* +0x0F */
-    unsigned char unmodeled_10[0x14 - 0x10];
-    int value;                              /* +0x14 */
-    unsigned char unmodeled_18[0x90 - 0x18];
-} UmnKeyWordNumber;
 typedef struct UmnDataBaseKeyWordWork {
     unsigned char step;                     /* +0x000 */
     unsigned char active;                   /* +0x001 */
@@ -491,8 +973,6 @@ void eRibbonSet(UmnKeyWordRibbon *ribbon, int mode);
 void eRibbonMain(UmnKeyWordRibbon *ribbon);
 void eTagFontSet(UmnKeyWordTagFont *tag, const char *text);
 void eTagFontMain(UmnKeyWordTagFont *tag);
-void eNumberSet(UmnKeyWordNumber *number, int mode);
-void eNumberMain(UmnKeyWordNumber *number);
 
 /*
  * The keyword screen of the U.M.N. database: the frame the task starts on
@@ -693,7 +1173,300 @@ void UmnDataBaseModel(UmnDataBaseModelWork *work)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_guno_data_base_get", UmnDataBase);
+extern int UmnWorkEnd;
+extern unsigned short monster_folder[0x80];
+extern void *UmnModelUkn;
+typedef struct MenuModel {
+    unsigned char unmodeled_00[0x10];   /* +0x00 */
+    unsigned char state;                /* +0x10 */
+} MenuModel;
+extern MenuModel *UmnModelSon;
+extern char D_00A13150[];
+extern char D_00A13158[];
+extern char D_00A13160[];
+extern char D_00A13170[];
+void UmnObjectTaskCreate(void (*task)(), int work);
+void UmnChangeTopLevel(int level);
+int UmnDataBaseMonsterCheck(int id);
+int UmnDataBaseAnalisisCheck(int id);
+signed char MenuSelectMove(int cursor, int entries, int mode);
+void MenuModelMemorySet(int mode);
+void MenuModelCreate(MenuModel **model, int id);
+void MenuModelExtFuncSet(MenuModel *model, void (*func)(), int arg);
+void xglFontDebugHex(int x, int y, int value, int digits);
+
+/*
+ * The U.M.N. database terminal: it starts the seven screens of the database on
+ * the first frame, keeps the folder of records the player may look up, and
+ * drives the top menu, the name list and the record display from the pad.
+ */
+void UmnDataBase(void)
+{
+    int found;
+    int id;
+    int work;
+    signed char moved;
+    int first;
+    int repeats;
+    int steps;
+    int column;
+
+    switch (UmnWork.stateOrCategory) {
+    case 0x00:
+        found = 0;
+        work = UmnWorkEnd;
+        work = (work + 0xF) & ~0xF;
+        UmnObjectTaskCreate(tskUmnDataBasePas, work);
+        work = (work + 0x3D7) & ~0xF;
+        UmnObjectTaskCreate(tskUmnDataBaseInfo, work);
+        work = (work + 0x35F) & ~0xF;
+        UmnObjectTaskCreate(tskUmnDataBaseName, work);
+        work = (work + 0x222F) & ~0xF;
+        UmnObjectTaskCreate(tskUmnDataBaseMenu, work);
+        work = (work + 0x7DB) & ~0xF;
+        UmnObjectTaskCreate(tskUmnDataBaseExWin, work);
+        work = (work + 0x1D7) & ~0xF;
+        UmnObjectTaskCreate(tskUmnDataBaseKeyWord, work);
+        UmnObjectTaskCreate(tskUmnDataBaseAnalisis, 0);
+        memset(monster_folder, 0, 0x80);
+        for (id = 0x22; id < 0x3F; id++) {
+            if (UmnDataBaseMonsterCheck(id) != 0) {
+                monster_folder[found] = id;
+                found++;
+            }
+        }
+        UmnWork.count = found;
+        UmnWork.rows = (UmnWork.count - 1) / 2 + 1;
+        if (UmnWork.rows >= 6) {
+            UmnWork.rows = 5;
+        }
+        UmnWork.stateOrCategory = 0x10;
+        break;
+    case 0x10:
+        UmnWork.stateOrCategory = 0x11;
+        UmnWork.wait = 12;
+        UmnWork.cursor = 0;
+        /* fallthrough */
+    case 0x11:
+        if (UmnWork.wait == 0) {
+            UmnWork.cursor = MenuSelectMove(UmnWork.cursor, 3, 0);
+            if (PadData.half_2a & 0x20) {
+                switch (UmnWork.cursor) {
+                case 0:
+                    if (UmnWork.count == 0) {
+                        xglSoundEffectNormalID(5, 0);
+                    } else {
+                        UmnWork.stateOrCategory = 0x20;
+                        xglSoundEffectNormalID(1, 0);
+                    }
+                    break;
+                case 1:
+                    UmnWork.stateOrCategory = 0x50;
+                    xglSoundEffectNormalID(1, 0);
+                    break;
+                case 2:
+                    UmnWork.stateOrCategory = 0xF0;
+                    UmnWork.wait = 16;
+                    xglSoundEffectNormalID(2, 0);
+                    break;
+                }
+            }
+            if (PadData.half_2a & 0x40) {
+                UmnWork.stateOrCategory = 0xF0;
+                UmnWork.wait = 16;
+                xglSoundEffectNormalID(2, 0);
+            }
+        }
+        break;
+    case 0x20:
+        UmnWork.column = 0;
+        UmnWork.row = 0;
+        UmnWork.entry = monster_folder[0];
+        UmnWork.scroll = 0;
+        UmnWork.listCursor = 0;
+        UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+        UmnWork.stateOrCategory = 0x21;
+        UmnWork.wait = 12;
+        UmnWork.moving = 1;
+        /* fallthrough */
+    case 0x21:
+        if (UmnWork.waitOrMoving == 0) {
+            repeats = 1;
+            moved = 0;
+            switch (PadData.mappedRepeat) {
+            case 0x1000:
+                repeats = 2;
+                moved = -1;
+                break;
+            case 0x8000:
+                moved = -1;
+                break;
+            case 0x4000:
+                repeats = 2;
+                /* fallthrough */
+            case 0x2000:
+                moved = 1;
+                break;
+            }
+            if (moved != 0) {
+                first = 1;
+                for (steps = 0; steps < repeats; steps++) {
+                    UmnWork.listCursor += moved;
+                    if (UmnWork.listCursor < 0) {
+                        UmnWork.listCursor = 0;
+                        moved = 0;
+                    } else if (UmnWork.listCursor > UmnWork.count - 1) {
+                        UmnWork.listCursor = UmnWork.count - 1;
+                        moved = 0;
+                    }
+                    column = UmnWork.listCursor & 1;
+                    UmnWork.column = column;
+                    if (moved < 0) {
+                        if (UmnWork.column != 0) {
+                            if (UmnWork.row == 0) {
+                                UmnWork.scroll--;
+                            } else {
+                                UmnWork.row--;
+                            }
+                        }
+                    } else if (moved > 0) {
+                        if (UmnWork.column == 0) {
+                            if (UmnWork.row == 5) {
+                                UmnWork.scroll++;
+                            } else {
+                                UmnWork.row++;
+                            }
+                        }
+                    } else {
+                        continue;
+                    }
+                    if (first != 0) {
+                        xglSoundEffectNormalID(3, 0);
+                    }
+                    first = 0;
+                }
+                UmnWork.entry = monster_folder[UmnWork.listCursor];
+                UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+            }
+            if (PadData.half_2a & 0x20) {
+                UmnWork.stateOrCategory = 0x30;
+                xglSoundEffectNormalID(1, 0);
+            }
+            if (PadData.half_2a & 0x40) {
+                UmnWork.stateOrCategory = 0x11;
+                UmnWork.wait = 12;
+                xglSoundEffectNormalID(2, 0);
+            }
+        }
+        break;
+    case 0x30:
+        if (UmnModelUkn != 0) {
+            break;
+        }
+        MenuModelMemorySet(1);
+        UmnWork.modelFlag = 0;
+        UmnWork.stateOrCategory = 0x31;
+        UmnWork.wait = 12;
+        UmnWork.moving = 1;
+        /* fallthrough */
+    case 0x31:
+        if (UmnWork.waitOrMoving == 0) {
+            if (UmnWork.count >= 2) {
+                if (PadData.half_2a == PAD_LEFT) {
+                    if (UmnWork.listCursor == 0) {
+                        UmnWork.listCursor = UmnWork.count - 1;
+                        UmnWork.column = UmnWork.listCursor & 1;
+                        UmnWork.row = UmnWork.rows - 1;
+                    } else {
+                        UmnWork.listCursor--;
+                        if (UmnWork.column == 1) {
+                            UmnWork.column--;
+                        } else {
+                            UmnWork.column = 1;
+                            if (UmnWork.row > 0) {
+                                UmnWork.row--;
+                            } else {
+                                UmnWork.scroll--;
+                            }
+                        }
+                    }
+                    UmnWork.entry = monster_folder[UmnWork.listCursor];
+                    UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+                    UmnWork.modelFlag = 1;
+                    xglSoundEffectNormalID(3, 0);
+                }
+                if (PadData.half_2a == PAD_RIGHT) {
+                    if (UmnWork.listCursor == UmnWork.count - 1) {
+                        UmnWork.listCursor = 0;
+                        UmnWork.column = 0;
+                        UmnWork.row = 0;
+                    } else {
+                        UmnWork.listCursor++;
+                        if (UmnWork.column == 0) {
+                            UmnWork.column++;
+                        } else {
+                            UmnWork.column = 0;
+                            if (UmnWork.row < UmnWork.rows - 1) {
+                                UmnWork.row++;
+                            } else {
+                                UmnWork.scroll++;
+                            }
+                        }
+                    }
+                    UmnWork.entry = monster_folder[UmnWork.listCursor];
+                    UmnWork.analysed = UmnDataBaseAnalisisCheck(UmnWork.entry);
+                    UmnWork.modelFlag = 1;
+                    xglSoundEffectNormalID(3, 0);
+                }
+            }
+            if (PadData.half_2a == 0x40) {
+                UmnWork.stateOrCategory = 0x21;
+                UmnWork.moving = 1;
+                xglSoundEffectNormalID(2, 0);
+            }
+        }
+        if (UmnModelSon == 0) {
+            MenuModelCreate(&UmnModelSon, UmnWork.entry);
+            MenuModelExtFuncSet(UmnModelSon, UmnDataBaseModel, 0);
+        }
+        break;
+    case 0x50:
+        UmnWork.stateOrCategory = 0x51;
+        UmnWork.dataBaseResult = 0;
+        /* fallthrough */
+    case 0x51:
+        if (UmnWork.dataBaseResult == 1) {
+            UmnWork.stateOrCategory = 0x11;
+            UmnWork.wait = 12;
+            xglSoundEffectNormalID(2, 0);
+        }
+        break;
+    case 0xF0:
+        if (UmnModelSon != 0) {
+            if (UmnModelSon->state == 0xFF) {
+                UmnModelSon = 0;
+            }
+            break;
+        }
+        UmnWork.stateOrCategory = 0xF1;
+        /* fallthrough */
+    case 0xF1:
+        if (UmnWork.wait == 0) {
+            MenuModelMemorySet(0);
+            UmnChangeTopLevel(0);
+        }
+        break;
+    }
+
+    if (UmnWork.wait != 0) {
+        UmnWork.wait--;
+    }
+    xglFontDebugHex(0, 0x40, UmnWork.stateOrCategory, 2);
+    xglFontDebugPrintf(0x10, 0x18, D_00A13150, UmnWork.entry);
+    xglFontDebugPrintf(0x10, 0x20, D_00A13158, UmnWork.listCursor, UmnWork.count);
+    xglFontDebugPrintf(0x10, 0x28, D_00A13160, UmnWork.column, UmnWork.row, UmnWork.rows);
+    xglFontDebugPrintf(0x10, 0x30, D_00A13170, UmnWork.moving);
+}
 
 extern char D_00A12EE0[];
 extern char D_00A12EB0[];

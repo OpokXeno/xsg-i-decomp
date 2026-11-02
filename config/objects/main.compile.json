@@ -10393,11 +10393,11 @@
   "ov02/05_tsk_umn_object_task_main": {
    "id": "main/ov02-embedded/tu05",
    "ordinal": 1005,
-   "path": "src/main/tsk_umn_object_task_main.c",
+   "path": "src/main/ov02/05_tsk_umn_object_task_main.c",
    "kind": "gcc",
    "category": "game",
    "in_scope": false,
-   "mode": "c",
+   "mode": "asm",
    "language": "c",
    "compiler_profile": "ee-gcc2_96-realconv-lp7",
    "flags": [
@@ -10406,7 +10406,7 @@
    ],
    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g; game C TUs, user 2026-10-27)",
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
    "evidence": "toolchain-per-object.json ov02#5",
    "all_functions_accepted": false,
@@ -10418,11 +10418,11 @@
   "ov02/06_umn_interface2": {
    "id": "main/ov02-embedded/tu06",
    "ordinal": 1006,
-   "path": "src/main/umn_interface2.c",
+   "path": "src/main/ov02/06_umn_interface2.c",
    "kind": "gcc",
    "category": "game",
    "in_scope": false,
-   "mode": "c",
+   "mode": "asm",
    "language": "c",
    "compiler_profile": "ee-gcc2_96-realconv-lp7",
    "flags": [
@@ -10431,7 +10431,7 @@
    ],
    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g; game C TUs, user 2026-10-27)",
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
    "evidence": "toolchain-per-object.json ov02#6",
    "all_functions_accepted": false,
@@ -10468,11 +10468,11 @@
   "ov02/08_umn_procurator": {
    "id": "main/ov02-embedded/tu08",
    "ordinal": 1008,
-   "path": "src/main/umn_procurator.c",
+   "path": "src/main/ov02/08_umn_procurator.c",
    "kind": "gcc",
    "category": "game",
    "in_scope": false,
-   "mode": "c",
+   "mode": "asm",
    "language": "c",
    "compiler_profile": "ee-gcc2_96-realconv-lp7",
    "flags": [
@@ -10481,7 +10481,7 @@
    ],
    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g; game C TUs, user 2026-10-27)",
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
    "evidence": "toolchain-per-object.json ov02#8",
    "all_functions_accepted": false,
@@ -10568,11 +10568,11 @@
   "ov02/12_tya_uml": {
    "id": "main/ov02-embedded/tu12",
    "ordinal": 1012,
-   "path": "src/main/tya_uml.c",
+   "path": "src/main/ov02/12_tya_uml.c",
    "kind": "gcc",
    "category": "game",
    "in_scope": false,
-   "mode": "c",
+   "mode": "asm",
    "language": "c",
    "compiler_profile": "ee-gcc2_96-realconv-lp7",
    "flags": [
@@ -10581,7 +10581,7 @@
    ],
    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g; game C TUs, user 2026-10-27)",
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
    "evidence": "toolchain-per-object.json ov02#12",
    "all_functions_accepted": false,

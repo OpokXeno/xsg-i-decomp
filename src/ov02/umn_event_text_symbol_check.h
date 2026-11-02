@@ -81,6 +81,16 @@ typedef struct UmnEventTextRecordBuf {
     unsigned short cur;
 } UmnEventTextRecordBuf;
 
+/* One 8-byte speech record after the UmnEventTextRecordBuf header. */
+typedef struct UmnEventTextRecord {
+    short value;
+    unsigned char count;
+    signed char number;
+    char *text;
+} UmnEventTextRecord;
+
+extern char *eMessageNextWaitKeySearch(char *text);
+
 
 typedef struct UmnAttachmentState {
     unsigned char unmodeled_00[0x86];

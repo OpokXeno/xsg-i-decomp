@@ -38,11 +38,114 @@ int *UmnHistoryTreeBuf = 0;
 UmnMailHeader *UmnMailHeaderBuf = 0;
 char *umn_text = 0;
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextSymbolCheck);
+typedef struct UmnEventTextSymbol {
+    unsigned char *text;
+    short length;
+    short value;
+} UmnEventTextSymbol;
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextCharCheck);
+typedef struct UmnEventTextSymbolTable {
+    UmnEventTextSymbol entry[7];
+} UmnEventTextSymbolTable;
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextNumberGet);
+/* Scaffold-owned symbol table at 0x00A13588 (no recovered C definition). */
+extern const UmnEventTextSymbolTable D_00A13588;
+
+/*
+ * After a '<' the text is compared against the seven symbol names; on a
+ * match *cursor advances past the name and its terminator and the symbol's
+ * value is returned, otherwise 0.
+ */
+int UmnEventTextSymbolCheck(unsigned char **cursor)
+{
+    int i;
+    int n;
+
+    if (**cursor == '<') {
+        UmnEventTextSymbolTable table;
+
+        *cursor = *cursor + 1;
+        table = D_00A13588;
+        for (i = 0; i < 7; i++) {
+            unsigned char *input = *cursor;
+            unsigned char *text = table.entry[i].text;
+
+            for (n = 0; n < table.entry[i].length; n++) {
+                if (input[n] != text[n]) {
+                    break;
+                }
+            }
+            if (n == table.entry[i].length) {
+                *cursor += n + 1;
+                return table.entry[i].value;
+            }
+        }
+    }
+    return 0;
+}
+
+typedef struct UmnEventTextCharTable {
+    UmnEventTextSymbol entry[2];
+} UmnEventTextCharTable;
+
+/* Scaffold-owned speaker-name table at 0x00A135D0 (no recovered C definition). */
+extern const UmnEventTextCharTable D_00A135D0;
+
+int UmnEventTextCharCheck(unsigned char **cursor)
+{
+    UmnEventTextCharTable table;
+    unsigned char *input;
+    unsigned char *text;
+    int i;
+    int n;
+
+    i = 0;
+    table = D_00A135D0;
+    input = *cursor;
+    for (; 2 > i; i++) {
+        text = table.entry[i].text;
+        n = 0;
+        for (; n < table.entry[i].length; n++) {
+            if (input[n] != text[n]) {
+                break;
+            }
+        }
+        if (n == table.entry[i].length) {
+            *cursor += n;
+            return table.entry[i].value;
+        }
+    }
+    return 0;
+}
+
+int UmnEventTextNumberGet(unsigned char **cursor, int base)
+{
+    unsigned char c;
+    unsigned char value;
+    int radix;
+    unsigned int max_digit;
+
+    value = 0;
+    if (base == 1) {
+        max_digit = '9';
+        radix = 10;
+    } else {
+        max_digit = '7';
+        radix = 8;
+    }
+    for (;;) {
+        unsigned int digit = **cursor;
+
+        if (digit < '0' || digit > max_digit) {
+            break;
+        }
+        c = **cursor;
+        value *= radix;
+        value += c - '0';
+        *cursor = *cursor + 1;
+    }
+    return value;
+}
 
 /* Advances *str past every consecutive newline. */
 void UmnEventTextGyouJump(unsigned char **str)
@@ -59,9 +162,157 @@ void UmnEventTextGyouJump(unsigned char **str)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextMessageMake);
+/*
+ * Copies one message body from *cursor into *dest up to the closing '<'.
+ * A '\\' escape stores its numeric value; value 31 also skips the newline
+ * run that follows. Terminates *dest and leaves *cursor 6 bytes past the '<'.
+ */
+void UmnEventTextMessageMake(unsigned char **cursor, unsigned char **dest)
+{
+    unsigned char *out;
+    unsigned char *p;
+    unsigned char c;
+    int value;
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextMake);
+    p = *cursor;
+    if (*p != '<') {
+        do {
+            c = *p;
+            if (c == '\\') {
+                unsigned char *out;
+                *cursor = p + 1;
+                value = UmnEventTextNumberGet(cursor, 0);
+                if (value == 31) {
+                    UmnEventTextGyouJump(cursor);
+                }
+                out = *dest;
+                *out++ = value;
+                *dest = out;
+            } else {
+                unsigned char *out;
+                out = *dest;
+                *out++ = c;
+                *cursor = p + 1;
+                *dest = out;
+            }
+            p = *cursor;
+        } while (*p != '<');
+    }
+    out = *dest;
+    *out++ = 0;
+    *dest = out;
+    *cursor += 6;
+}
+
+/*
+ * Loads event NN's script into the work arena, counts its speech blocks and
+ * fills the record table at uet_text_buf from the event text.
+ */
+int UmnEventTextMake(int event_no)
+{
+    char name[] = "data\\umn\\event00.txt";
+    int size;
+    int aligned;
+    int count;
+    int index;
+    unsigned char *scan;
+    unsigned char *cursor;
+    unsigned char *write;
+    unsigned char *records;
+    unsigned char *text;
+    UmnEventTextRecordBuf *buf;
+    UmnEventTextRecordBuf *head;
+    UmnEventTextRecord *record;
+    unsigned int tag;
+
+    name[14] = '0' + event_no / 10;
+    name[15] = '0' + event_no % 10;
+    aligned = (UmnEventTextMakeWork + 0xF) & ~0xF;
+    size = xglCdGetFileSize(name);
+    if (size < 0) {
+        return -1;
+    }
+    xglCdReadFile(name, (void *) aligned, 0, 1);
+    cursor = (unsigned char *) aligned;
+    write = (unsigned char *) uet_text_buf;
+    buf = (UmnEventTextRecordBuf *) uet_text_buf;
+    uet_file_end = aligned + size;
+
+    count = 0;
+    scan = (unsigned char *) aligned;
+    if (scan < (unsigned char *) uet_file_end) {
+        do {
+            switch (UmnEventTextSymbolCheck(&scan)) {
+            case 6:
+                do {
+                    scan++;
+                } while (UmnEventTextSymbolCheck(&scan) != 7);
+                break;
+            case 1:
+                count++;
+                break;
+            }
+            scan++;
+        } while (scan < (unsigned char *) uet_file_end);
+    }
+
+    head = (UmnEventTextRecordBuf *) write;
+    head->count = count;
+    head->cur = 0;
+    records = (unsigned char *) head + 4;
+    write = records + count * 8;
+
+    index = 0;
+    UmnEventTextGyouJump(&cursor);
+    while (cursor < (unsigned char *) uet_file_end) {
+        record = (UmnEventTextRecord *) ((char *) buf + index * 8 + 4);
+        tag = UmnEventTextSymbolCheck(&cursor);
+        switch (tag) {
+        case 6:
+            do {
+                cursor++;
+            } while (UmnEventTextSymbolCheck(&cursor) != 7);
+            break;
+        case 0:
+            return -1;
+        case 1:
+            UmnEventTextNumberGet(&cursor, 1);
+            record->count = 0;
+            record->text = 0;
+            do {
+                record->number = 0;
+            } while (0);
+            record->value = 0;
+            break;
+        case 2:
+            record->value = UmnEventTextCharCheck(&cursor);
+            break;
+        case 4:
+            record->number = UmnEventTextNumberGet(&cursor, 1);
+            break;
+        case 3:
+            text = write;
+            record->text = (char *) text;
+            UmnEventTextGyouJump(&cursor);
+            UmnEventTextMessageMake(&cursor, &write);
+            if (*text != 0) {
+                do {
+                    text = (unsigned char *) eMessageNextWaitKeySearch((char *) text);
+                    record->count++;
+                } while (*text != 0);
+            }
+            break;
+        case 5:
+            index++;
+            break;
+        default:
+            break;
+        }
+        UmnEventTextGyouJump(&cursor);
+    }
+    uet_flag = 1;
+    return 0;
+}
 
 /*
  * uet_text_buf holds a signed record count followed by 8-byte records;

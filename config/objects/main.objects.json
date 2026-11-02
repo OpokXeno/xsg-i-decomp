@@ -97903,15 +97903,15 @@
    "in_scope": false,
    "kind": "gcc",
    "map_class": "ov02-embedded",
-   "mode": "c",
+   "mode": "asm",
    "name": "ov02/05_tsk_umn_object_task_main",
    "name_basis": "tu-map-ovl suggested_name",
    "name_confidence": "map",
    "ordinal": 1005,
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
-   "path": "src/main/tsk_umn_object_task_main.c",
+   "path": "src/main/ov02/05_tsk_umn_object_task_main.c",
    "scaffold_path": "scaffold/src/main/ov02/05_tsk_umn_object_task_main.c",
    "sections": {},
    "shared_contract": {
@@ -97934,18 +97934,7 @@
     "start": "0x00A023A8"
    },
    "toolchain_classification": "game",
-   "unit": "main",
-   "import": {
-    "mode": "c",
-    "note": "Use the reviewed PR30 C subset in MAIN embedded OV02; other functions and all data remain original scaffolding. Alias coverage is not counted twice.",
-    "source": {
-     "kind": "file",
-     "path": "src/main/tsk_umn_object_task_main.c",
-     "include_dirs": [
-      "include"
-     ]
-    }
-   }
+   "unit": "main"
   },
   {
    "accepted": {
@@ -98034,15 +98023,15 @@
    "in_scope": false,
    "kind": "gcc",
    "map_class": "ov02-embedded",
-   "mode": "c",
+   "mode": "asm",
    "name": "ov02/06_umn_interface2",
    "name_basis": "tu-map-ovl suggested_name",
    "name_confidence": "map",
    "ordinal": 1006,
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
-   "path": "src/main/umn_interface2.c",
+   "path": "src/main/ov02/06_umn_interface2.c",
    "scaffold_path": "scaffold/src/main/ov02/06_umn_interface2.c",
    "sections": {},
    "shared_contract": {
@@ -98065,18 +98054,7 @@
     "start": "0x00A02D68"
    },
    "toolchain_classification": "game",
-   "unit": "main",
-   "import": {
-    "mode": "c",
-    "note": "Use the reviewed PR30 C subset in MAIN embedded OV02; other functions and all data remain original scaffolding. Alias coverage is not counted twice.",
-    "source": {
-     "kind": "file",
-     "path": "src/main/umn_interface2.c",
-     "include_dirs": [
-      "include"
-     ]
-    }
-   }
+   "unit": "main"
   },
   {
    "accepted": {
@@ -98306,15 +98284,15 @@
    "in_scope": false,
    "kind": "gcc",
    "map_class": "ov02-embedded",
-   "mode": "c",
+   "mode": "asm",
    "name": "ov02/08_umn_procurator",
    "name_basis": "tu-map-ovl suggested_name",
    "name_confidence": "map",
    "ordinal": 1008,
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
-   "path": "src/main/umn_procurator.c",
+   "path": "src/main/ov02/08_umn_procurator.c",
    "scaffold_path": "scaffold/src/main/ov02/08_umn_procurator.c",
    "sections": {},
    "shared_contract": {
@@ -98337,18 +98315,7 @@
     "start": "0x00A04170"
    },
    "toolchain_classification": "game",
-   "unit": "main",
-   "import": {
-    "mode": "c",
-    "note": "Use the reviewed PR30 C subset in MAIN embedded OV02; other functions and all data remain original scaffolding. Alias coverage is not counted twice.",
-    "source": {
-     "kind": "file",
-     "path": "src/main/umn_procurator.c",
-     "include_dirs": [
-      "include"
-     ]
-    }
-   }
+   "unit": "main"
   },
   {
    "accepted": {
@@ -98958,15 +98925,15 @@
    "in_scope": false,
    "kind": "gcc",
    "map_class": "ov02-embedded",
-   "mode": "c",
+   "mode": "asm",
    "name": "ov02/12_tya_uml",
    "name_basis": "tu-map-ovl suggested_name",
    "name_confidence": "map",
    "ordinal": 1012,
    "owners": {
-    ".text": "c"
+    ".text": "asm"
    },
-   "path": "src/main/tya_uml.c",
+   "path": "src/main/ov02/12_tya_uml.c",
    "scaffold_path": "scaffold/src/main/ov02/12_tya_uml.c",
    "sections": {},
    "shared_contract": {
@@ -98989,18 +98956,7 @@
     "start": "0x00A0C488"
    },
    "toolchain_classification": "game",
-   "unit": "main",
-   "import": {
-    "mode": "c",
-    "note": "Use the reviewed PR30 C subset in MAIN embedded OV02; other functions and all data remain original scaffolding. Alias coverage is not counted twice.",
-    "source": {
-     "kind": "file",
-     "path": "src/main/tya_uml.c",
-     "include_dirs": [
-      "include"
-     ]
-    }
-   }
+   "unit": "main"
   },
   {
    "accepted": {

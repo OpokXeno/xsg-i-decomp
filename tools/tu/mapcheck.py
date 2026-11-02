@@ -7,7 +7,10 @@ Placement (every build):
   * every TU piece (text, data, NOBITS) starts at its cut; scaffold pieces
     (INCLUDE_ASM/hand-asm objects, splat data objects) fill it exactly;
   * the COMMON-tail pieces (linker/scommon, linker/common), the fixed blobs
-    (.reginfo/.ctors/.dtors/.eh_frame/.vudata/ov02 data) and, in a ROM-style
+    (.reginfo/.ctors/.dtors/.eh_frame/.vudata; ov02 data in the --carve
+    diagnostic, which links MAIN's own splat of the embedded OV02 image; the
+    ordinary link takes that image from the OV02 unit's objects, and only they
+    may sit inside it) and, in a ROM-style
     link, the retail bin blobs sit at their manifest addresses with their sizes
     (tu-main-skel review R3);
   * scaffold code objects contribute .text only; tentative definitions stay
@@ -334,6 +337,8 @@ def main():
         # a TU with several C runs in one data section links its split object, whose
         # run k > 0 is the input section `<sec>.carve.<k>` (tools/tu/data_carve.py)
         c_obj = t.get("c_link_object") or f"build/c/{n}.o"
+        if t["text"].get("section") == "ov02" and not a.carve:
+            continue  # the embedded OV02 image: checked as a whole below
         if t["text"]["splat"]:
             s, e = (int(x, 16) for x in t["text"]["splat_range"])
             if mode(t) == "c":
@@ -461,9 +466,24 @@ def main():
               va, va + b["size"], True, b["name"])
         checked += 1
     ov = S["ov02"]
-    ov_text_end = max(int(t["text"]["splat_range"][1], 16) for t in tus if t["text"].get("section") == "ov02")
-    check("build/ov02/data.o", ".data", ov_text_end, ov.addr + ov.size - ov.size % 4, True, "ov02/data")
-    checked += 1
+    if a.carve:
+        ov_text_end = max(int(t["text"]["splat_range"][1], 16) for t in tus if t["text"].get("section") == "ov02")
+        check("build/ov02/data.o", ".data", ov_text_end, ov.addr + ov.size - ov.size % 4, True, "ov02/data")
+        checked += 1
+    else:
+        # The embedded OV02 image links the OV02 unit's own objects
+        # (tools/tu/ov02_embed.py); that unit's map check places every piece.
+        # Here: only OV02 unit objects inside the section, and they start it.
+        inside = [(addr, o, sec) for (o, sec), (addr, size) in placed.items()
+                  if size and ov.addr <= addr < ov.addr + ov.size]
+        for addr, o, sec in sorted(inside):
+            if not o.startswith("../ov02/build/"):
+                problems.append(dict(kind="embedded ov02 input from outside the ov02 unit", object=o,
+                                     section=sec, addr=f"0x{addr:08X}"))
+        if not inside or min(inside)[0] != ov.addr:
+            problems.append(dict(kind="embedded ov02 image does not start at its section", section="ov02",
+                                 expected_start=f"0x{ov.addr:08X}"))
+        checked += 1
     if a.rom:
         unit = a.manifest.resolve().parent
         for line in (unit / "splat.yaml").read_text().splitlines():

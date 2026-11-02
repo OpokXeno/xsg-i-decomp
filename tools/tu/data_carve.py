@@ -4481,7 +4481,9 @@ def anonymous_coordinate_candidates(elf, csec, rels, data, want, length,
                 if value != struct.unpack_from('<I', want)[0]:
                     return
         candidates.add(offset)
-        if len(candidates) > 128:
+        # A TU with many switch tables (ov02 tsk_umn_mail_pas: 437) offers one
+        # candidate per relocation; the 20-second deadline above bounds the work.
+        if len(candidates) > 1024:
             raise CarveError(f'{tu_id} {sec}: anonymous coordinate search exceeds its bound')
 
     for offset, _, _ in rels:
