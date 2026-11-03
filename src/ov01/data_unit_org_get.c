@@ -1179,16 +1179,19 @@ int dataUnitFileLoadMotSp2(UnitEquipInfo *unit, int motionId, int slot, int p3, 
     if (p4 == 5) {
         actor = unit->equipActor[0];
         if (actor != 0) {
-            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] = unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
+            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] =
+                unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
         actor = unit->equipActor[1];
         if (actor != 0) {
-            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] = unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
+            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] =
+                unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
     } else if (p3 >= 0) {
         actor = unit->equipActor[p3 & 3];
         if (actor != 0) {
-            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] = unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
+            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] =
+                unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
     }
     return 1;
