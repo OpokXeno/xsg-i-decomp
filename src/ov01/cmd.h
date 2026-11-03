@@ -375,12 +375,19 @@ extern int monsSetNoGet(void);
  * functions above that call them.
  */
 extern short thinkRegNo(short pc);
-extern int thinkRegGet(int regIndex);
+/*
+ * thinkRegGet, cmdReg and cmdNum return the 16-bit script value as short:
+ * cmdAtktbl passes a stored cmdNum result straight to thinkAdrGet(short)
+ * (lw $4,0x8($29) at 0x00a1ff5c with no sll/sra) and cmdAtktblSearch does
+ * the same from a register (daddu $4,$16,$0 at 0x00a203c4), which gcc only
+ * omits for a value it already holds sign-extended.
+ */
+extern short thinkRegGet(int regIndex);
 extern void thinkRegSet(int regIndex, int value);
 
-extern int cmdNum(short pc);
+extern short cmdNum(short pc);
 extern int cmdThinksetSub(ThinkProcess *proc);
-extern void cmdAtktblSortSub(ThinkProcess *proc);
+extern int cmdAtktblSortSub(ThinkProcess *proc);
 extern int thinkProcessChk(int slot);
 
 /*
@@ -520,8 +527,26 @@ extern int cmdUnitpara(ObjectTask *unit, int category, int value, int mode);
  * still asm) look up a technique's parameter; cmdTecparaGet (0x00a20518) is
  * the only claimed caller here.
  */
-extern int cmdTecpara(int tec, int category);
-extern int dataTecGet(int tecId);
+/*
+ * dataTecGet's record (TecRecord, TU-local to src/ov01/data_unit_org_get.c),
+ * as far as this TU reads it: cmdAtktbl loads the byte at +0x00 (lbu $5,0x0($2)
+ * at 0x00a1fe50) as calcTrg2PE's target-selection flags, the same byte
+ * src/ov01/calc.c's TecKindView names attr. cmdTecpara/cmdTecparaSub only
+ * forward the pointer.
+ */
+typedef struct CmdTecRecord {
+    unsigned char attr;    /* +0x00 */
+} CmdTecRecord;
+
+extern int cmdTecpara(CmdTecRecord *tec, int category);
+extern CmdTecRecord *dataTecGet(int tecId);
+
+/*
+ * calcTrg2PE and calcAtkChk (src/ov01/calc.c, C there) are declared the way
+ * that TU declares them; cmdAtktbl is this TU's only caller of either.
+ */
+extern int calcTrg2PE(ObjectTask *unit, int trgFlags);
+extern short calcAtkChk(ObjectTask *unit, ObjectTask *target, int tecId);
 
 /*
  * mapMulSet's own parameter block is a different TU's union
