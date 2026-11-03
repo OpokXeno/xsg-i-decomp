@@ -23,14 +23,44 @@ extern const char D_00A50FD8[]; /* "MCamGetActorCoord: actor is NULL" */
 
 extern void bcopy(const void *source, void *destination, unsigned int count);
 /*
+ * The interpolation curve MCamMoveProc_CalcRatio applies to a move's ratio
+ * (its "Invalid IPTYPE" message names the selector; the cases are its
+ * switch: linear, (1 - cos(pi r)) / 2, 1 - cos(pi r / 2), sin(pi r / 2)).
+ */
+typedef enum MCamIpType {
+    MCAM_IP_LINEAR = 0,
+    MCAM_IP_SINE_IN_OUT = 1,
+    MCAM_IP_SINE_IN = 2,
+    MCAM_IP_SINE_OUT = 3
+} MCamIpType;
+
+/*
+ * A move's frame count. An enum rather than unsigned int for the compiler's
+ * type-based alias classes (-fstrict-aliasing at -O2): the counters of
+ * MCamMoveState must not share the int class of camFlags and of
+ * MCamMoveRequest's mode/duration. With unsigned int counters MCamMove_Bank
+ * compiles `sw $3,0($5)` (camFlags) ahead of `swc1 $f0,0x14($2)`
+ * (0x00a32784, current) and `lw $6,0xB4($4)` (mode) ahead of
+ * `lwc1 $f1,0xA0($4)` (0x00a3277c, bank): the second scheduling pass orders
+ * the camFlags store first because the int stores to the state depend on it,
+ * and the mode load first because more stores depend on it. In a class of
+ * their own the counters give the original order (whole-file gate pass).
+ */
+typedef enum MCamFrameCount {
+    MCAM_FRAME_COUNT_NONE = 0
+} MCamFrameCount;
+
+/*
  * Linear interpolation state shared by the per-parameter MoveProc callbacks
  * (mode/duration/elapsed feed MCamMoveProc_CalcRatio; start/end/current hold
- * the eased scalar value).
+ * the eased scalar value). mode is the MCamIpType selector for the same
+ * alias-class reason as the counters (the int class puts `sw mode` among the
+ * stores that depend on the camFlags store).
  */
 typedef struct MCamMoveState {
-    unsigned int mode;
-    unsigned int duration;
-    unsigned int elapsed;
+    MCamIpType mode;
+    MCamFrameCount duration;
+    MCamFrameCount elapsed;
     float start;
     float end;
     float current;
@@ -82,7 +112,7 @@ typedef struct MCamCoordOffset {
     float distance;
     float pitch;
     float yaw;
-    unsigned char unmodeled_2C[0x8];
+    unsigned char unmodeled_2C[0x4];
 } MCamCoordOffset;
 
 /*
@@ -134,6 +164,10 @@ typedef struct MCamPointParams {
     unsigned char unmodeled_44[0x28];
     float ratio;
     MCamCoordOffset coordOffset;
+    /* Bank angle (radians): MCamMove_Bank reads a request's target bank here
+     * (`lwc1 $f1,0xA0($4)`, 0x00a3277c); MCamSet mode 2 copies the same word
+     * to camParams.bank (`lwc1 $f0,0xA0($5)`, 0x00a31a78). */
+    float bank;
     /* MCamMove_Pers reads a request's perspective angle (degrees) here. */
     float perspectiveAngle;
     unsigned char unmodeled_A8[0x8];
@@ -762,7 +796,36 @@ static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Bank);
+/*
+ * Starts the bank (roll) move from the current bank to the request's target
+ * bank. Statement order is the matching form: the start store precedes the
+ * request loads (the bank load `lwc1 $f1,0xA0($4)` at 0x00a3277c depends on
+ * `swc1 $f0,0xC($2)` through the float alias class and is read last so the
+ * request pointer dies there), current is the last store through state (so
+ * the state pointer dies at `swc1 $f0,0x14($2)`, 0x00a32784) and the camFlags
+ * update comes after it; with current or camFlags earlier the compiler emits
+ * `sw $3,0($5)` first.
+ */
+static void MCamMove_Bank(MCamMoveRequest *request)
+{
+    MCamMoveState *state = &camParams.bankMove;
+    float start;
+    int duration;
+    int mode;
+    float end;
+
+    start = camParams.bank;
+    state->start = start;
+    duration = request->duration;
+    mode = request->mode;
+    end = request->target.bank;
+    state->mode = mode;
+    state->duration = duration;
+    state->end = end;
+    state->elapsed = 0;
+    state->current = start;
+    camFlags |= CAM_FLAG_MOVE_BANK;
+}
 
 static void MCamMove_Pers(MCamMoveRequest *request)
 {
