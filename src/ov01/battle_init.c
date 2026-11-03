@@ -598,7 +598,7 @@ static __inline__ Actor *unitActorGet(ObjectTask *unit)
  * technique (kind 1 or 2) is preceded by a 0xE record carrying the same
  * words; a ranged technique adds the 0x2C or 0xF record its technique flags
  * select, an unranged one a 0x11 record once (actor bit 0x100), and every
- * technique sets actor bit 0x200 (and 0x1000 for technique kind 2). An item
+ * technique sets actor bit 0x200 (and 0x1000 when its TecRecord kind is 2). An item
  * (kind 3) gets the 0xE record only. Kind 8 queues the 0x12 (bit 0x100) or
  * 0x10 (bit 0x200) record with the unit's position id and clears bits
  * 0x100, 0x200 and 0x1000. Always 1.
@@ -876,7 +876,8 @@ extern KeyWpnData *dataWpnGet(int weaponId);
  * character, by calcUPGet()'s flags bit 0x40) and returns the command of
  * the entry whose whole sequence equals the buffer, with its AP cost in
  * *apCost (an enemy's from the weapon in the command's slot). 0 for an
- * empty buffer, 0x1B when nothing matches.
+ * empty buffer, 0x1B when nothing matches or an enemy has no weapon slot for
+ * the matched command.
  */
 int keyBuffChk(ObjectTask *unit, int *apCost)
 {
@@ -987,7 +988,6 @@ int actUnitTblMake(int side, BattleUnit **actUnits)
 }
 
 /* Defined by ov01/tu004 (src/ov01/calc.c). */
-
 
 BattleUnit *tgtUnitPick(BattleUnit **table, int count)
 {
@@ -1264,7 +1264,6 @@ int scenarioBatNext(void)
     }
     return 0;
 }
-
 
 /*
  * dataItmGet's return as far as scenarioCam reads it: the item's
@@ -1608,11 +1607,9 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
                     }
                     target = dest->unit;
                 } else {
-                    /* The target is read at the end of each branch: the
-                     * original loads it in both predecessors of the call's
-                     * block (`lw $5,0x0($19)` at 0x00a0cac8 and 0x00a0cb14),
-                     * and a single read after the if is loaded after
-                     * exec->unit instead. */
+                    /* Read at the end of each branch: `lw $5,0x0($19)` sits in
+                     * both predecessors of the call's block (0x00a0cac8,
+                     * 0x00a0cb14). */
                     int i;
 
                     for (i = 0; i < 3; i++) {
@@ -2531,11 +2528,9 @@ static CursorSelectList curMove;
 extern int dataPadRead(int padNo);
 
 /*
- * curMove2Pos is defined later in this TU (still asm); forward-declared to
- * call it here.
+ * curMove2Pos is defined later in this TU; forward-declared to call it here.
  */
 extern void curMove2Pos(CursorObject *cursor, CursorSelectList *list);
-
 
 int curSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int prevMask)
 {
