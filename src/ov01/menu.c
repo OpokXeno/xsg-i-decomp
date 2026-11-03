@@ -1531,8 +1531,8 @@ void menuStatIconPut(GrPacket *packet, int x, int y, int charaId, int statFlags)
  */
 void menuPlStatPut(ObjectTask *task, GrPacket *packet, BattleUnit *unit)
 {
-    /* Declared in the original's spill-slot order (0x10 up, 0x14 charaId,
-     * 0x18 iconSlot, 0x1C ap, 0x20 ep, 0x24 bp). */
+    /* The spilled locals keep the original's slots in declaration order
+     * (0x10 up, 0x14 charaId, 0x18 iconSlot, 0x1C ap, 0x20 ep, 0x24 bp). */
     CalcUnitParam *up;
     MenuStatObjWork *work;
     int charaId;
