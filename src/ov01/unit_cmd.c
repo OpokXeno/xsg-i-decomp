@@ -587,7 +587,7 @@ int unitCmdMove(UnitRecord *unit)
     unitCmdPtrGet(&unit->task);
     if (!(*(u32 *)unit->task.work & ACTOR_FLAG_ENEMY)) {
         calcParam = calcUPGet(&unit->task);
-        useWarp = calcParam->flags & 0x40;
+        useWarp = calcParam->flags & CALC_UNIT_FLAG_AGWS;
     } else {
         calcParam = calcUPGet(&unit->task);
         useWarp = calcParam->moveKindId == 4;
@@ -656,7 +656,7 @@ int unitCmdAgws(ObjectTask *unit)
 
     cmd = unitCmdPtrGet(unit);
     param = calcUPGet(unit);
-    if (param->flags & 0x40) {
+    if (param->flags & CALC_UNIT_FLAG_AGWS) {
         charaId = param->linkedUnit->charaId;
     } else {
         charaId = param->baseCharaId;
@@ -668,7 +668,7 @@ int unitCmdAgws(ObjectTask *unit)
     unitCmdSet(unit, &entry);
     entry.selector = 0x2D;
     unitCmdSet(unit, &entry);
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) {
         effectId = 0x67;
         soundId = 0x20;
     } else {
@@ -1256,7 +1256,7 @@ void unitCmdPosAdj(ObjectTask *unit)
     frame = motionActor->motionFrame;
     index = 0;
     if (!(actor->flags & ACTOR_FLAG_ENEMY) &&
-        !(calcUPGet(unit)->flags & 0x40) &&
+        !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
         (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
         table = adjTblPl;
         for (i = 0; table[i].charaId != 0; i++) {
@@ -1453,9 +1453,9 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdVASet);
  * actor's acceleration into its velocity and the velocity into its position.
  * An axis whose free flag is 1 keeps moving while at least one step remains
  * in posSnapX (the step count unitCmdVASet stores there, decremented here by
- * one per call); any other axis snaps onto the target once it passes it or
- * comes within 1e-6, and counts as arrived. Returns 1 when all three axes
- * have arrived.
+ * one per call); any other axis counts as arrived when it already equals the
+ * target, or snaps onto the target once it passes it or comes within 1e-6.
+ * Returns 1 when all three axes have arrived.
  *
  * Forms that moved the bytes: velocity/position locals keep both in FPRs
  * across the stores (no reload of +0x30/+0x10); the block-scoped zero is
@@ -1465,7 +1465,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdVASet);
  * $8; the magnitude negates distance inside the comparison, which keeps
  * neg.s (0x00a06160) and the duplicated 1e-6 test, where a separate
  * `if (distance < zero) distance = -distance;` gives a branch-likely neg and
- * a plain ternary folds into a compare against -1e-6.
+ * a ternary without the assignment folds into a compare against -1e-6.
  */
 int unitCmdMoveCalc(ObjectTask *unit, int freeX, int freeY, int freeZ)
 {
@@ -1626,7 +1626,7 @@ int unitCmdBtst(ObjectTask *unit)
         }
     } else if (actor->moveState == 1) {
         if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-            !(calcUPGet(unit)->flags & 0x40) &&
+            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
             (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
             unitMotSet(unit, 0x23);
             unitWpnMotSet(unit, 0, 0, 0x2F);
@@ -1642,7 +1642,7 @@ int unitCmdBtst(ObjectTask *unit)
             actor->moveState++;
         }
     } else if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-               !(calcUPGet(unit)->flags & 0x40) &&
+               !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
                (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
         unitMtdProc((UnitRecord *)unit);
         if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
@@ -1671,7 +1671,7 @@ int unitCmdBted(ObjectTask *unit)
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
         if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-            !(calcUPGet(unit)->flags & 0x40) &&
+            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
             (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
             unitMotSet(unit, 0x24);
             unitWpnMotSet(unit, 0, 0, 0x30);
@@ -1683,10 +1683,10 @@ int unitCmdBted(ObjectTask *unit)
     } else {
         unitMtdProc((UnitRecord *)unit);
         if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
-            if (calcUPGet(unit)->flags & 0x40) {
+            if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) {
                 unitWpnMotSet(unit, 0, 0, 5);
             } else if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-                       !(calcUPGet(unit)->flags & 0x40) &&
+                       !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
                        (calcUPGet(unit)->charaId < 0xBB ||
                         calcUPGet(unit)->charaId >= 0xC3)) {
                 unitWpnMotSet(unit, 0, 0, 0xFF);
@@ -1811,7 +1811,7 @@ int unitCmdAgws2(ObjectTask *unit)
     actor = unit->work;
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
-        decoEffCall(unit, (calcUPGet(unit)->flags & 0x40) ? 0x67 : 0x66);
+        decoEffCall(unit, (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) ? 0x67 : 0x66);
         actor->moveState++;
     } else if (actor->moveState == 1) {
         unitMotStandSet(unit);
@@ -1950,7 +1950,7 @@ void unitFaceMotSet(ObjectTask *unit, int motion)
 
     flags = 0;
     if (motion != 0x3A && motion != 0x3B) {
-        flags = 8;
+        flags = 8; /* ACT_setMotion2's flag, not ACTOR_FLAG_HIDDEN */
     }
     faceActor = ((UnitRecord *)unit)->subActor;
     if (faceActor != 0 && ACT_animGetData(faceActor, motion - 1) != 0) {
@@ -2111,7 +2111,7 @@ int unitAgwsChk(int side)
     found = 0;
     count = unitTblGet(side, &table);
     for (i = 0; i < count; i++) {
-        if (table[i] != 0 && (calcUPGet(&table[i]->task)->flags & 0x40)) {
+        if (table[i] != 0 && (calcUPGet(&table[i]->task)->flags & CALC_UNIT_FLAG_AGWS)) {
             found++;
         }
     }
