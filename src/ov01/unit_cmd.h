@@ -88,16 +88,18 @@ typedef struct Actor {
     /*
      * +0xC0 opens the kind-specific block that include/main/act_1.h models
      * as an anonymous union (menu control, Java arguments, enemy
-     * parameters); a battle unit's motion actor keeps its transparency
-     * there. Accessed as a union member it may alias any other access:
-     * unitTelIn/unitTelOut reload UnitRecord.motionActor after storing it
-     * (lw $4,0x14($4) at 0x00a06460 and 0x00a06500), which a plain float
-     * member lets the compiler merge into the first load.
+     * parameters) and ACTOR_ARGS reads as bytes; a battle unit's motion actor
+     * keeps its transparency there. `args` covers the bytes of the block this
+     * view models, up to posSnapX. Accessed as a union member, transparency
+     * may alias any other access: unitTelIn/unitTelOut reload
+     * UnitRecord.motionActor after storing it (lw $4,0x14($4) at 0x00a06460
+     * and 0x00a06500), which a plain float member lets the compiler merge
+     * into the first load.
      */
     union {
         float transparency;   /* +0xC0: unitActdraw draws translucent below 1.0 */
+        unsigned char args[0xD0 - 0xC0];
     };
-    unsigned char unmodeled_c4[0xD0 - 0xC4];
     float posSnapX;        /* +0xD0: unitCmdJump's arrival check rounds it
                              * and compares against posSnapZ*0.5 rounded. */
     float hopLength;       /* +0xD4: replaces four bytes of filler

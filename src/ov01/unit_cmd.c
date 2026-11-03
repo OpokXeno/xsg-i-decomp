@@ -1592,7 +1592,7 @@ int unitTelOut(ObjectTask *unit)
     Actor *motionActor = ((UnitRecord *)unit)->motionActor;
 
     if (actor->movePhaseTimer == 0) {
-        actor->movePhaseTimer = 1;
+        actor->movePhaseTimer++;
     } else {
         motionActor->transparency -= motionActor->posSnapX;
         if (motionActor->transparency <= 0.0f) {
