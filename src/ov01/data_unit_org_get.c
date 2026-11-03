@@ -1011,7 +1011,7 @@ extern void ACT_initMotion(BattleModelActor *actor);
 #define FACE_MODEL_ADDRESS ((void *)0x010B4000)
 /* dataUnitFileLoadFaceMdl's cache-miss buffers: lui $4,(0x10E6000>>16) /
  * ori $4,$4,(0x10E6000&0xFFFF) builds the texture address below (stored to
- * actor->resource[BATTLE_ACTOR_RESOURCE_TEXTURE], not actor->resource[BATTLE_ACTOR_RESOURCE_ANIMATION]). */
+ * the texture slot, not the animation slot). */
 #define FACE_TEXTURE_ADDRESS ((void *)0x010E6000)
 
 extern char mdlFileName[];
@@ -1179,18 +1179,18 @@ int dataUnitFileLoadMotSp2(UnitEquipInfo *unit, int motionId, int slot, int p3, 
     if (p4 == 5) {
         actor = unit->equipActor[0];
         if (actor != 0) {
-            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] =
+            actor->resource[BATTLE_ACTOR_RESOURCE_WEAPON_MOTION] =
                 unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
         actor = unit->equipActor[1];
         if (actor != 0) {
-            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] =
+            actor->resource[BATTLE_ACTOR_RESOURCE_WEAPON_MOTION] =
                 unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
     } else if (p3 >= 0) {
         actor = unit->equipActor[p3 & 3];
         if (actor != 0) {
-            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] =
+            actor->resource[BATTLE_ACTOR_RESOURCE_WEAPON_MOTION] =
                 unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
     }

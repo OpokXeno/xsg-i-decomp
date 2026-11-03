@@ -26,8 +26,9 @@ UnitInitData *dataUnitInitGet(int entry);
 typedef struct BattleModelActor {
     BattleActor state;
     unsigned char unmodeled_88[0x100 - 0x88];
-    /* dataMotAdrSet stores a motion's interpolation data here, one word per
-     * motion slot (`sw $2,0x100($5)`, $5 = actor + motionId * 4). */
+    /* dataMotAdrSet stores a motion's interpolation data here by motion id
+     * (`sw $2,0x100($5)`, $5 = actor + motionId * 4); the extent past the
+     * ids seen so far is not recovered. */
     void *motionInterp[4]; /* +0x100 */
     unsigned char unmodeled_110[0x8D0 - 0x110];
     /*
@@ -37,10 +38,9 @@ typedef struct BattleModelActor {
      * reads and dataMotAdrSet resolves in place. dataMotAdrSet needs the
      * array spelling: it adds the slot constant to the index before the
      * actor base (`addiu $3,$3,0x8DC` / `addu $4,$4,$3` at 0x00a1c8e0) and
-     * keeps the scaled index for the interp store (`daddu $5,$3,$0`). The
-     * former modelAdr/animationAdr/textureAdr/motion members were respelled
-     * as indexes; a union over them moved dataPackWpnMdl2's stores
-     * (0x00a1c8b4) and dataUnitFileLoadFaceMdl's registers (0x00a1b97a).
+     * keeps the scaled index for the interp store (`daddu $5,$3,$0`).
+     * Named members in a union here move dataPackWpnMdl2's stores (0x00a1c8b4)
+     * and dataUnitFileLoadFaceMdl's registers (0x00a1b97a).
      */
     void *resource[11]; /* +0x8D0 */
 } BattleModelActor;
@@ -49,6 +49,7 @@ typedef struct BattleModelActor {
 #define BATTLE_ACTOR_RESOURCE_ANIMATION 1
 #define BATTLE_ACTOR_RESOURCE_TEXTURE 2
 #define BATTLE_ACTOR_RESOURCE_MOTION 3 /* + motion slot */
+#define BATTLE_ACTOR_RESOURCE_WEAPON_MOTION (BATTLE_ACTOR_RESOURCE_MOTION + 1)
 
 #define BATTLE_ACTOR_FLAG_ENEMY 0x40
 #define CALC_UNIT_FLAG_AGWS 0x40
