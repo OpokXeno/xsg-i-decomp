@@ -2097,7 +2097,25 @@ int cmdEventSlotGet(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkCamEvent);
+int cmdThinkCamEvent(ThinkProcess *proc)
+{
+    ThinkCamEvent event;
+    ThinkProcess saved;
+    short param;
+
+    param = cmdNum(proc->pc);
+    proc->pc += 2;
+    __builtin_memcpy(&saved, proc, sizeof(ThinkProcess));
+    event.type = CAM_EVENT_THINK;
+    event.unit = pThinkUnit;
+    event.param = param;
+    event.target = 0;
+    camEventExec(&event);
+    __builtin_memcpy(proc, &saved, sizeof(ThinkProcess));
+    thinkTopSet(pThinkTop);
+    thinkContextSet((int)context);
+    return 0;
+}
 
 int cmdCfEncountGet(ThinkProcess *proc)
 {

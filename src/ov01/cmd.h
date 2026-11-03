@@ -418,6 +418,33 @@ extern void dataVPadSet(int padMask);
 extern int menuTimeGet(void);
 
 /*
+ * Camera-event request record cmdThinkCamEvent (0x00a22140) fills on its
+ * stack for camEventExec (this TU, still asm): type at +0x0
+ * (sw $3,0x0($29) after addiu $3,$0,0x19), the script operand at +0x4
+ * (sw $2,0x4($29), cmdNum's result), the acting unit pThinkUnit at +0x8
+ * (sw $5,0x8($29)) and no target at +0xC (sw $0,0xC($29)); the same four
+ * words as src/ov01/battle_init.c's CamEvent, which types the units as
+ * BattleUnit; this TU holds the acting unit as ObjectTask (pThinkUnit).
+ */
+typedef struct ThinkCamEvent {
+    int type;            /* +0x00 */
+    int param;           /* +0x04 */
+    ObjectTask *unit;    /* +0x08 */
+    ObjectTask *target;  /* +0x0C */
+} ThinkCamEvent;
+#define CAM_EVENT_THINK 0x19
+/*
+ * Declared returning int, as src/ov01/entry_first_init.c does (the value is
+ * not read): with a void declaration sched1 ranks the param store
+ * (sw $2,0x4($29), the live cmdNum result) last of the four record stores
+ * and emits it before sw $3,0x0($29) / sw $5,0x8($29) (ready list
+ * 71 65 58 68 instead of 71 68 65 58 in the -dS dump; the dependence links
+ * of the four stores are identical in both forms); the int declaration
+ * keeps the original order type, unit, param, target.
+ */
+extern int camEventExec(ThinkCamEvent *event);
+
+/*
  * cfEncountGet (src/ov01/battle_init.c, still asm) returns the active
  * encounter-configuration flags; cmdCfEncountGet (0x00a22250) is the only
  * claimed caller here.
