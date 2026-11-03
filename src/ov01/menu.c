@@ -1451,8 +1451,8 @@ typedef struct MenuStatDisplay {
 } MenuStatDisplay;
 
 /*
- * The status-icon task's own work record, as far as menuStatObjDraw and
- * menuStatNamePut read it. menuStatNamePut (0x00a2a5c0..0x00a2a5c8) loads
+ * The status-icon task's own work record, as far as menuStatObjDraw,
+ * menuStatNamePut and menuPlStatPut read it. menuStatNamePut (0x00a2a5c0..0x00a2a5c8) loads
  * `lw $17,0x78($2)` / `lw $5,0x7c($2)` from task->work and passes them to
  * menuStatIconChk/dataStatNameGet as the character id and the icon slot to
  * check; menuStatObjDraw (0x00a29bf4..0x00a29c00) loads `lw $17,0x80($2)`
