@@ -182,8 +182,8 @@ void calcPara2OrgSub(ObjectTask *unit) {
 
 /*
  * Gives one hit point in the persistent origin record to every unit that,
- * when its table slot is re-read after the two lookups, is gone, dead
- * (CALC_ACTOR_FLAG_DEAD) or at zero HP. A slot that is already empty at
+ * when its table slot is re-read after the two lookups, is gone or dead
+ * (CALC_ACTOR_FLAG_DEAD), or whose origin record is at zero HP. A slot that is already empty at
  * the first read is skipped: it has no origin record to update.
  *
  * The original keeps the unit table in a register across the loop (`lw
@@ -339,8 +339,9 @@ typedef struct TecKindView TecKindView;
 
 struct TecKindView {
     /*
-     * +0x00: calcAtkChk's range class, `lbu $3,0x0($2)`/`andi $16,$3,0x3`
-     * (0x00a16024..0x00a16028; TEC_ATTR_RANGE, defined beside calcAtkChk).
+     * +0x00: attribute bits: calcAtkChk's range class, `lbu $3,0x0($2)`/`andi
+     * $16,$3,0x3` (0x00a16024..0x00a16028; TEC_ATTR_RANGE, defined beside
+     * calcAtkChk), and calcUseEtherMenu's CALC_TRG_BIT4 (0x00a112f4).
      */
     u8 attr;
     signed char epCost;     /* +0x01: calcTakeEpGet's base term, `lb $16,0x1($2)` */
@@ -365,7 +366,7 @@ struct TecKindView {
     u16 statMask;           /* +0x0E: calcStatClr's `lhu $2,0xE($18)` */
     unsigned char unmodeled_10[0x11 - 0x10];
     /*
-     * +0x11: calcBp2Tid's timeline selector. calcBp2Tid.s (0x00a1267c)
+     * +0x11: calcBp2Tid's timeline selector. calcBp2Tid (0x00a1267c)
      * reads it with `lb $2,0x11($2)` (signed byte load), hence `signed char`.
      */
     signed char kind;
@@ -392,13 +393,13 @@ extern TecKindView *dataTecGet(int tecId);
  * tgtFindChk, as far as either reads it: tgtFindFirst resolves +0x00
  * through dataTecGet and +0x08 through dataItmGet, takes the target from
  * +0x04, and branches on mode 3 (an item, as in sndConvSpid's mode 3).
- * calcHitRate (calc.c) reads the same +0x00 (`lw $4,0x0($17)` before
+ * calcHitRate (below) reads the same +0x00 (`lw $4,0x0($17)` before
  * dataTecGet) and +0x04 (`lw $4,0x4($17)` before calcUPGet).
  */
 typedef struct TgtCmd {
     int tecId;          /* +0x00 */
     ObjectTask *target; /* +0x04 */
-    int itmId;          /* +0x08 */
+    int itmId;          /* +0x08: an item's id, or an ether's for mode 2 */
     int mode;           /* +0x0C: 2 = ether, 3 = item */
 } TgtCmd;
 
@@ -437,6 +438,7 @@ typedef struct CalcHitInfo {
     int clearMask;
 } CalcHitInfo;
 
+/* calcUseEtherMenu's `addiu $2,$0,2` / `sw $2,0x32C($29)`, cmd at 0x320 (0x00a112cc). */
 #define TGT_CMD_MODE_ETHER 2
 
 /*
