@@ -1569,7 +1569,7 @@ int unitTelIn(ObjectTask *unit)
 
     if (actor->movePhaseTimer == 0) {
         motionActor->transparency = 0.0f;
-        ((UnitRecord *)unit)->motionActor->flags &= ~8;
+        ((UnitRecord *)unit)->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
         actor->movePhaseTimer++;
     } else {
         motionActor->transparency += motionActor->posSnapX;
@@ -1582,8 +1582,9 @@ int unitTelIn(ObjectTask *unit)
 }
 
 /*
- * Teleport fade-out, unitTelIn reversed: transparency falls by posSnapX
- * each step; at 0.0 the hidden-draw flag is set and the step reports 1.
+ * Teleport fade-out, unitTelIn reversed: the first step only starts the
+ * phase timer; after that transparency falls by posSnapX each step, and at
+ * 0.0 the hidden-draw flag is set and the step reports 1.
  */
 int unitTelOut(ObjectTask *unit)
 {
@@ -1596,7 +1597,7 @@ int unitTelOut(ObjectTask *unit)
         motionActor->transparency -= motionActor->posSnapX;
         if (motionActor->transparency <= 0.0f) {
             motionActor->transparency = 0.0f;
-            ((UnitRecord *)unit)->motionActor->flags |= 8;
+            ((UnitRecord *)unit)->motionActor->flags |= ACTOR_FLAG_HIDDEN;
             return 1;
         }
     }
@@ -1935,7 +1936,8 @@ void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
 /*
  * Plays a motion on the unit's sub-actor (UnitRecord.subActor), when it has
  * the animation: ACT_setMotion2's flags are 0 for motions 0x3A and 0x3B
- * (one unsigned range compare, sltiu at 0x00a0722c) and 8 otherwise.
+ * (the compiler folds the two tests into the sltiu at 0x00a0722c) and 8
+ * otherwise.
  * Receipts: flags starts at 0 and the if sets 8 (daddu $17,$0,$0 then
  * movz at 0x00a0723c; a ternary gives movn with 8 preloaded), and
  * `motion - 1` is written in both calls, which keeps it in $18 and the
@@ -1943,16 +1945,16 @@ void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
  */
 void unitFaceMotSet(ObjectTask *unit, int motion)
 {
-    Actor *face;
+    Actor *faceActor;
     unsigned int flags;
 
     flags = 0;
     if (motion != 0x3A && motion != 0x3B) {
         flags = 8;
     }
-    face = ((UnitRecord *)unit)->subActor;
-    if (face != 0 && ACT_animGetData(face, motion - 1) != 0) {
-        ACT_setMotion2(face, motion - 1, flags);
+    faceActor = ((UnitRecord *)unit)->subActor;
+    if (faceActor != 0 && ACT_animGetData(faceActor, motion - 1) != 0) {
+        ACT_setMotion2(faceActor, motion - 1, flags);
     }
 }
 
@@ -2049,7 +2051,7 @@ void unitDispOn(int side)
             if (unit != 0) {
                 /* Clears the motion actor's hidden-draw flag (bit 0x8 of
                  * Actor.flags); no other claimed function here touches it. */
-                unit->motionActor->flags &= ~8;
+                unit->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
             }
             remaining--;
         } while (remaining != 0);
@@ -2072,7 +2074,7 @@ void unitDispOff(int side)
             unit = *cur;
             cur++;
             if (unit != 0) {
-                unit->motionActor->flags |= 8;
+                unit->motionActor->flags |= ACTOR_FLAG_HIDDEN;
             }
             remaining--;
         } while (remaining != 0);
@@ -2169,14 +2171,14 @@ void unitDispOnOff(int flag)
             unit = table[index];
             if (unit != 0) {
                 if (flag == 0) {
-                    unit->motionActor->flags &= ~8;
+                    unit->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
                     effectUnit = calcUPGet((ObjectTask *) unit)->effectUnit;
                     if (effectUnit != 0) {
                         effectUnit->flags &= ~UNIT_WORK_STATUS_BLOCKED;
                     }
                     statEffOn((ObjectTask *) table[index]);
                 } else {
-                    unit->motionActor->flags |= 8;
+                    unit->motionActor->flags |= ACTOR_FLAG_HIDDEN;
                     effectUnit = calcUPGet((ObjectTask *) unit)->effectUnit;
                     if (effectUnit != 0) {
                         effectUnit->flags |= UNIT_WORK_STATUS_BLOCKED;

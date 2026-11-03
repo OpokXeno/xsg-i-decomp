@@ -189,6 +189,9 @@ extern void unitFaceMotSet(ObjectTask *unit, int motion);
  */
 #define ACTOR_FLAG_ENEMY 0x40u
 
+/* Bit 0x8 of Actor.flags hides the actor (include/main/act_1.h spells it the same). */
+#define ACTOR_FLAG_HIDDEN 0x8
+
 /*
  * unitCmdSet (src/ov01/unit_cmd.c, still asm) sets this bit of Actor.flags
  * when it queues a command whose selector is nonzero (ori 0x2 at
