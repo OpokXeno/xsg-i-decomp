@@ -1107,7 +1107,7 @@ int cmdUnitChange(ThinkProcess *proc)
  * Builds the attack table at script offset outStart: for every one of the
  * unit's normal techniques, every eligible live target adds a (technique
  * slot, unit number) pair after entry 0, which finally receives the pair
- * count (also returned in the result register). Eligible means: on the side
+ * count (also stored in the script register regNo). Eligible means: on the side
  * calcTrg2PE selects from the technique's target flags (unitTblGet's table),
  * not flagged dead (andi $2,$2,0x80 at 0x00a1fe9c) and accepted by calcAtkChk.
  */
@@ -1173,8 +1173,8 @@ void cmdAtktblSortRev(ThinkProcess *proc)
  * script offset of the first operand by the unit parameter the second operand
  * selects: descending (largest first) when cmdAtktblSort called (sortMode 0,
  * a larger value moves into the slot), ascending from cmdAtktblSortRev
- * (sortMode 1, a smaller one does). A selection sort over the table's own script
- * memory, every access going through thinkAdrGet.
+ * (sortMode 1, a smaller one does). An exchange sort over the table's own
+ * script memory, every access going through thinkAdrGet.
  */
 int cmdAtktblSortSub(ThinkProcess *proc)
 {
@@ -1228,7 +1228,7 @@ int cmdAtktblSortSub(ThinkProcess *proc)
  * pair of the attack table at the first operand, with the pair in registers
  * 0x8010/0x8012, and copies every pair the script accepts (register 0x8018
  * nonzero) into the table at the second operand, whose entry 0 receives the
- * accepted pair count (also returned in the result register). The process's
+ * accepted pair count (also stored in the script register regNo). The process's
  * pc and both registers are restored afterwards.
  */
 int cmdAtktblSearch(ThinkProcess *proc)
