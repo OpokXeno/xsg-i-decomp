@@ -26,30 +26,27 @@ UnitInitData *dataUnitInitGet(int entry);
 typedef struct BattleModelActor {
     BattleActor state;
     unsigned char unmodeled_88[0x100 - 0x88];
-    /* dataMotAdrSet stores a motion's interpolation data here by motion id
-     * (`sw $2,0x100($5)`, $5 = actor + motionId * 4); the extent past the
-     * ids seen so far is not recovered. */
+    /* dataMotAdrSet stores the address of a motion pack's second entry here by
+     * motion id (`sw $2,0x100($5)`, $5 = actor + motionId * 4). No instruction
+     * here bounds the array or shows what the entry holds. */
     void *motionInterp[4]; /* +0x100 */
     unsigned char unmodeled_110[0x8D0 - 0x110];
     /*
-     * +0x8D0: the actor's eleven resource pointers (include/main/act_1.h,
-     * ACTOR_RESOURCES/ACTOR_RESOURCE_COUNT): model, animation (matrix),
-     * texture (move), then the motion slots that dataUnitFileLoadMotSp2
-     * reads and dataMotAdrSet resolves in place. dataMotAdrSet needs the
-     * array spelling: it adds the slot constant to the index before the
-     * actor base (`addiu $3,$3,0x8DC` / `addu $4,$4,$3` at 0x00a1c8e0) and
-     * keeps the scaled index for the interp store (`daddu $5,$3,$0`).
-     * Named members in a union here move dataPackWpnMdl2's stores (0x00a1c8b4)
-     * and dataUnitFileLoadFaceMdl's registers (0x00a1b97a).
+     * +0x8D0: the block include/main/act_1.h names modelResource,
+     * matrixResource, move and animPackTables[8]. One array here is what
+     * dataMotAdrSet's address needs: the original adds the slot constant to the
+     * scaled index before the actor base (`addiu $3,$3,0x8DC` / `addu $4,$4,$3`
+     * at 0x00a1c8e0), while a member array at +0x8DC indexed by motionId adds
+     * the base first (`addu $6,$5,$4` / `addiu $6,$6,0x8DC`).
      */
     void *resource[11]; /* +0x8D0 */
 } BattleModelActor;
 
 #define BATTLE_ACTOR_RESOURCE_MODEL 0
-#define BATTLE_ACTOR_RESOURCE_ANIMATION 1
-#define BATTLE_ACTOR_RESOURCE_TEXTURE 2
-#define BATTLE_ACTOR_RESOURCE_MOTION 3 /* + motion slot */
-#define BATTLE_ACTOR_RESOURCE_WEAPON_MOTION (BATTLE_ACTOR_RESOURCE_MOTION + 1)
+#define BATTLE_ACTOR_RESOURCE_MATRIX 1
+#define BATTLE_ACTOR_RESOURCE_MOVE 2
+#define BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE 3 /* + table slot */
+#define BATTLE_ACTOR_RESOURCE_WEAPON_MOTION (BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + 1)
 
 #define BATTLE_ACTOR_FLAG_ENEMY 0x40
 #define CALC_UNIT_FLAG_AGWS 0x40
