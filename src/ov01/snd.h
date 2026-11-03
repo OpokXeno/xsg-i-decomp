@@ -9,11 +9,45 @@
 #include "ov01/obj.h"
 #include "ov01/calc.h"
 
+/*
+ * Sound-effect index of a loaded bank.  An enumeration rather than int: the
+ * dataSndSeRegLoad2 fill loop stores it next to int loads of the bank file's
+ * offset table, and only a type that cannot alias those loads reproduces the
+ * original's addiu-before-lw loop head (ov01:0x00a2d820; with int the two
+ * instructions swap).
+ */
+typedef enum SndSeType {
+    SND_SE_TYPE_NONE = 0 /* no bank loaded / lookup failed */
+} SndSeType;
+
+/* seType is intentionally under-typed: it holds the resolved bank index
+ * (1..N, SND_SE_TYPE_NONE on failure); the enum exists for its alias set. */
 typedef struct {
-    int seType; /* +0x00: echoes the resolved sound-effect index; 0 on lookup failure */
+    SndSeType seType; /* +0x00: echoes the resolved sound-effect index; SND_SE_TYPE_NONE on lookup failure */
     void *dest; /* +0x04: destination address dataFileLoadNB loads into */
     int size;   /* +0x08: file size rounded up to a 2048-byte CD sector */
 } SndSeLoadWork;
+
+/*
+ * Byte offsets of one bank's "sed" and "swd" blocks from the start of the
+ * loaded sound-effect bank file it belongs to.
+ */
+typedef struct SndSeBankOffset {
+    int sed; /* +0x00 */
+    int swd; /* +0x04 */
+} SndSeBankOffset;
+
+/*
+ * Header of a loaded sound-effect bank file (SndSeLoadWork.dest): the 64-bit
+ * count of 32-bit offset words that follow (ld 0(a2) at ov01:0x00a2d7fc,
+ * halved into the bank count at 0x00a2d800..0x00a2d80c), then one
+ * SndSeBankOffset per bank (lw 8(a3) / lw 12(a3) at ov01:0x00a2d824/
+ * 0x00a2d828, stride 8 at 0x00a2d82c).
+ */
+typedef struct SndSeBankHeader {
+    long long count;        /* +0x00 */
+    SndSeBankOffset offset; /* +0x08: the first bank's pair */
+} SndSeBankHeader;
 
 extern int dataNormIdxGet(ObjectTask *unit, int seType);
 extern CalcUnitParam *calcUPGet(ObjectTask *unit);
