@@ -1011,7 +1011,7 @@ extern void ACT_initMotion(BattleModelActor *actor);
 #define FACE_MODEL_ADDRESS ((void *)0x010B4000)
 /* dataUnitFileLoadFaceMdl's cache-miss buffers: lui $4,(0x10E6000>>16) /
  * ori $4,$4,(0x10E6000&0xFFFF) builds the texture address below (stored to
- * the texture slot, not the animation slot). */
+ * the MOVE slot, not the MATRIX slot). */
 #define FACE_TEXTURE_ADDRESS ((void *)0x010E6000)
 
 extern char mdlFileName[];
@@ -1261,25 +1261,25 @@ void dataPackWpnMdl2(BattleModelActor *actor)
 
 /*
  * Resolve a loaded motion pack in place: the anim pack table slot gets the
- * address of the pack's first entry and the matching motionInterp slot that of
+ * address of the pack's first entry and the matching motionPackEntry slot that of
  * its second, both as offsets from the pack header (the PackedFile idiom
- * above). The slot index is a local so the scaled index survives for the
- * motionInterp store (`daddu $5,$3,$0`); both header offsets are read before
- * the stores.
+ * above). Computing the slot in a local keeps the scaled-index copy the
+ * motionPackEntry store uses (`daddu $5,$3,$0`); both header offsets are read
+ * before the stores.
  */
 void dataMotAdrSet(BattleModelActor *actor, int motionId)
 {
     PackedFile *pack;
     unsigned char *motion;
-    unsigned char *interp;
+    unsigned char *packEntry;
     int slot;
 
     slot = BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + motionId;
     pack = (PackedFile *)actor->resource[slot];
     motion = (unsigned char *)pack + pack->entryOffset[0];
-    interp = (unsigned char *)pack + pack->entryOffset[1];
+    packEntry = (unsigned char *)pack + pack->entryOffset[1];
     actor->resource[slot] = motion;
-    actor->motionInterp[motionId] = interp;
+    actor->motionPackEntry[motionId] = packEntry;
 }
 
 /*
