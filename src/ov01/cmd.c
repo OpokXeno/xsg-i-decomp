@@ -1200,7 +1200,8 @@ int cmdAtktblSortSub(ThinkProcess *proc)
     tableStart += 2;
     for (i = 0; i < count - 1; i++) {
         for (j = i; j < count; j++) {
-            unitParaValue = cmdUnitparaSub(unitPtrGet(*(short *)thinkAdrGet(tableStart + j * 4 + 2)), category, &valueType);
+            unitParaValue = cmdUnitparaSub(unitPtrGet(*(short *)thinkAdrGet(tableStart + j * 4 + 2)),
+                                           category, &valueType);
             value = (valueType == 1) ? unitParaValue->byteValue : unitParaValue->halfwordValue;
             if (i == j) {
                 best = value;
@@ -1862,7 +1863,7 @@ int cmdCamCoordGet(ThinkProcess *proc)
 }
 
 /*
- * mbankPtrGet (this TU, still asm) returns the bank parameter block
+ * mbankPtrGet (defined above in this TU) returns the bank parameter block
  * cmdCamBank fills in; only the member that function touches is modeled.
  */
 typedef struct MbankParams {
@@ -1891,7 +1892,7 @@ int cmdCamBank(ThinkProcess *proc)
 }
 
 /*
- * mpersPtrGet (this TU, still asm) returns the perspective parameter block
+ * mpersPtrGet (defined above in this TU) returns the perspective parameter block
  * cmdCamPers fills in; only the member that function touches is modeled.
  */
 typedef struct MpersParams {
