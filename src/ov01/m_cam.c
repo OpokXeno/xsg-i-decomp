@@ -35,27 +35,15 @@ typedef enum MCamIpType {
 } MCamIpType;
 
 /*
- * A move's frame count. An enum so that MCamMoveState's counters stay out of
- * the int alias class of camFlags and of MCamMoveRequest's mode/duration: with
- * int-class counters `sw $3,0($5)` (camFlags) schedules ahead of
- * `swc1 $f0,0x14($2)` (0x00a32784) and `lw $6,0xB4($4)` ahead of
- * `lwc1 $f1,0xA0($4)` (0x00a3277c). Holds any count; only the zero is named.
- */
-typedef enum MCamFrameCount {
-    MCAM_FRAME_COUNT_NONE = 0
-} MCamFrameCount;
-
-/*
  * Linear interpolation state shared by the per-parameter MoveProc callbacks
  * (mode/duration/elapsed feed MCamMoveProc_CalcRatio; start/end/current hold
- * the eased scalar value). mode is the MCamIpType selector for the same
- * alias-class reason as the counters (the int class puts `sw mode` among the
- * stores that depend on the camFlags store).
+ * the eased scalar value). The counters compare unsigned (`sltu $2,$2,$3`,
+ * 0x00a32bf8 in MCamMoveProc_Bank).
  */
 typedef struct MCamMoveState {
     MCamIpType mode;
-    MCamFrameCount duration;
-    MCamFrameCount elapsed;
+    unsigned int duration;
+    unsigned int elapsed;
     float start;
     float end;
     float current;
@@ -250,13 +238,6 @@ extern Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, c
 static void *sysCam;
 /* MCamTakeControl saves the StudioCamera returned by xglStudioGetCamera2. */
 static StudioCamera sysCamBuff;
-static int camFlags;
-static MCamParameterStorage camParams;
-
-/* Original local labels are interior views in camParams, not extra storage. */
-#define D_00A5B220 (camParams.actorLength[0])
-#define D_00A5B224 (camParams.actorLength[1])
-#define D_00A5B5F8 (camParams.perspectiveMove)
 
 /* Bits of camFlags. MCamMove_Coord picks CAM_FLAG_FIX_COORD (point 0) or
  * CAM_FLAG_FIX_TARGET (point 1) at its head (`addiu $21,$0,0x2000` at
@@ -265,7 +246,9 @@ static MCamParameterStorage camParams;
  * (`lh $3,0xBC($18)`, 0x00a3270c) is nonzero, after the move bit
  * (`or $2,$2,$22`, 0x00a3271c); the bits the older functions test keep
  * their names. Enum constants, not macros, as the project publishes them
- * (CALC_NORMAL_TECHNIQUE_COUNT). */
+ * (CALC_NORMAL_TECHNIQUE_COUNT). camFlags has this type because an int camFlags
+ * shares the alias class of MCamMoveState's counters, and `sw $3,0($5)` then
+ * schedules ahead of `swc1 $f0,0x14($2)` (0x00a32784, MCamMove_Bank). */
 enum CamFlag {
     CAM_FLAG_ACTIVE = 0x1,
     CAM_FLAG_DUMP_DISABLED = 0x10,
@@ -277,6 +260,14 @@ enum CamFlag {
     CAM_FLAG_FIX_TARGET = 0x4000
 };
 #define CAM_SHAKE_BIT 12
+
+static enum CamFlag camFlags;
+static MCamParameterStorage camParams;
+
+/* Original local labels are interior views in camParams, not extra storage. */
+#define D_00A5B220 (camParams.actorLength[0])
+#define D_00A5B224 (camParams.actorLength[1])
+#define D_00A5B5F8 (camParams.perspectiveMove)
 
 void *MCamGetSysCam(void)
 {
@@ -421,12 +412,14 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamSet);
  * 0xB4, duration at 0xB8); this one is reshaped (target point record 0xB0, path
  * 0xB0, mode 0xB4, duration 0xB8) and extended by the halfword at 0xBC. MCamMove_Coord copies its leading 0xB0 bytes as the target
  * point record and sets the point's fix flag when fixOnArrival (lh +0xBC)
- * is non-zero.
+ * is non-zero. mode is the MCamIpType selector MCamMove_Bank and MCamMove_Pers
+ * copy to MCamMoveState.mode; as an int its load schedules ahead of duration's
+ * (original: `lw $7,0xB8($4)` at 0x00a32774, `lw $6,0xB4($4)` at 0x00a32780).
  */
 typedef struct MCamMoveRequest {
     MCamPointParams target;
     int path;
-    int mode;
+    MCamIpType mode;
     int duration;
     short fixOnArrival;
 } MCamMoveRequest;
@@ -548,7 +541,8 @@ void MCamShake(unsigned int mode, unsigned int amplitude, unsigned int phaseStep
 
 int MCamIsShaking(void)
 {
-    return (camFlags >> CAM_SHAKE_BIT) & 1;
+    /* Arithmetic shift (`sra $2,$2,12`, 0x00a31e10); enum CamFlag is unsigned. */
+    return ((int)camFlags >> CAM_SHAKE_BIT) & 1;
 }
 
 /* Local in the original: splat emits `glabel MCamGetActorCoord, local`; no reference outside m_cam.c. */
@@ -793,31 +787,26 @@ static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
 
 /*
  * Starts the bank (roll) move from the current bank to the request's target
- * bank. Statement order is the matching form: the start store precedes the
- * request loads (the bank load `lwc1 $f1,0xA0($4)` at 0x00a3277c depends on
- * `swc1 $f0,0xC($2)` through the float alias class and is read last so the
- * request pointer dies there), current is the last store through state (so
- * the state pointer dies at `swc1 $f0,0x14($2)`, 0x00a32784) and the camFlags
- * update comes after it; with current or camFlags earlier the compiler emits
- * `sw $3,0($5)` first.
+ * bank. The start store precedes the request's bank load (`swc1 $f0,0xC($2)`
+ * 0x00a32770, `lwc1 $f1,0xA0($4)` 0x00a3277c: both float class).
  */
 static void MCamMove_Bank(MCamMoveRequest *request)
 {
     MCamMoveState *state = &camParams.bankMove;
     float start;
-    MCamFrameCount duration;
+    int duration;
     MCamIpType mode;
     float end;
 
     start = camParams.bank;
     state->start = start;
-    duration = request->duration;
     mode = request->mode;
+    duration = request->duration;
     end = request->target.bank;
     state->mode = mode;
     state->duration = duration;
     state->end = end;
-    state->elapsed = MCAM_FRAME_COUNT_NONE;
+    state->elapsed = 0;
     state->current = start;
     camFlags |= CAM_FLAG_MOVE_BANK;
 }
@@ -825,7 +814,7 @@ static void MCamMove_Bank(MCamMoveRequest *request)
 static void MCamMove_Pers(MCamMoveRequest *request)
 {
     MCamMoveState *state = &D_00A5B5F8;
-    int mode;
+    MCamIpType mode;
     int duration;
     float angle;
     float angleRad;
