@@ -1517,7 +1517,116 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase25);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase30);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase40);
+#define TEC_PROC_FLOW_SPEC 0x20
+/* Actor.windFlags bit 0x1000 (`andi $2,$2,0x1000` at 0x00a0eab0 and
+ * 0x00a0eae0): set, the unit is still held in its action motion. */
+#define ACTOR_MOTION_HOLD_BIT 0x1000
+
+void scenarioMtd(ScenarioBatExec *exec);
+int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done);
+void scenarioBatExecMain(int source, ScenarioDstEntry *dest);
+void scenarioBatExecPhase50(int source, ScenarioDstEntry *dest);
+/* The special-flow technique handlers (both still asm here): nonzero once
+ * the flow is done. */
+int flowSpecProcInit(ScenarioBatExec *exec, ScenarioDstEntry *dest);
+int flowSpecProc(ScenarioBatExec *exec, ScenarioDstEntry *dest);
+/*
+ * Defined by ov01/tu004 calc.c (still asm there); takes the unit: the call
+ * at 0x00a0c9c8 reuses the `lw $4,0x0($16)` of 0x00a0c9b0 (the preceding
+ * bnel's delay slot runs only on the taken path).
+ */
+extern int calcHitMotChk(BattleUnit *unit);
+/* Defined by src/main/sef.c. */
+extern int sefIsHitActor(Actor *actor);
+/* Defined by ov01/tu005 data_unit_org_get.c (still asm there). */
+extern void dataFileLoadWepSpEnd(BattleUnit *unit, int tecId);
+extern void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion);
+/*
+ * Four-argument call: the original loads the target, the action type and
+ * the technique id into $5..$7 (0x00a0cb14..0x00a0cb24) around
+ * `jal unitCmdAtkEnd`; unit_cmd.c's definition reads only the unit.
+ */
+extern void unitCmdAtkEnd(ObjectTask *unit, ObjectTask *target, int type, int tecId);
+
+/*
+ * Install the next phase handler and run it within the same frame. The
+ * do { } while (0) keeps the handler a plain call: the original returns
+ * through its own epilogue after `jal scenarioBatExecPhase50` (0x00a0cb38)
+ * instead of jumping to it.
+ */
+#define SCENARIO_PHASE_ENTER(phase) \
+    do { \
+        scenarioPtrFuncSet(phase); \
+        phase(source, dest); \
+    } while (0)
+
+/*
+ * The action's main phase, run on frames 0 and 1 of the phase: an ordinary
+ * action runs scenarioBatExecMain; a special-flow technique starts its flow
+ * (on frame 0, once the unit is held in motion, the hit motion check passes
+ * or the effect reaches the target) and steps it afterwards. Once the
+ * action has ended, the special weapon is put away, the unit's weapon
+ * motions are reset (5 for an AGWS, 0xFF otherwise), the attack is closed
+ * on its target and scenarioBatExecPhase50 takes over.
+ */
+void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
+{
+    ScenarioBatExec *exec = (ScenarioBatExec *)source;
+    int done;
+    ObjectTask *target;
+
+    if (scenarioPtr.phaseTimer < 2) {
+        if (scenarioPtr.phaseTimer >= 0) {
+            done = 0;
+            scenarioMtd(exec);
+            if (exec->type == 3 || !(dataTecGet(exec->tecId)->procFlags & TEC_PROC_FLOW_SPEC)) {
+                scenarioBatExecMain(source, dest);
+            } else if (scenarioPtr.phaseTimer == 0) {
+                if ((exec->unit->actor->windFlags & ACTOR_MOTION_HOLD_BIT) || calcHitMotChk(exec->unit)
+                    || sefIsHitActor(((BattleUnit *)dest->unit)->actor)) {
+                    done = flowSpecProcInit(exec, dest);
+                    scenarioPtr.phaseTimer = 1;
+                }
+            } else {
+                done = flowSpecProc(exec, dest);
+            }
+            if (scenarioSrcEndChk(exec, dest, done)) {
+                if (exec->type == 1) {
+                    if (!dataMtdRead(exec->unit, 3)) {
+                        spWepDispOff(exec, dataDefWpnGet(exec->unit));
+                    }
+                    dataFileLoadWepSpEnd(exec->unit, exec->tecId);
+                }
+                if (calcUPGet((ObjectTask *)exec->unit)->flags & 0x40) {
+                    int i;
+
+                    for (i = 0; i < 3; i++) {
+                        if (calcUPGet((ObjectTask *)exec->unit)->weaponId[i] != 0) {
+                            unitWpnMotSet((ObjectTask *)exec->unit, i, 0, 5);
+                        }
+                    }
+                    target = dest->unit;
+                } else {
+                    /* The target is read at the end of each branch: the
+                     * original loads it in both predecessors of the call's
+                     * block (`lw $5,0x0($19)` at 0x00a0cac8 and 0x00a0cb14),
+                     * and a single read after the if is loaded after
+                     * exec->unit instead. */
+                    int i;
+
+                    for (i = 0; i < 3; i++) {
+                        if (calcUPGet((ObjectTask *)exec->unit)->weaponId[i] != 0) {
+                            unitWpnMotSet((ObjectTask *)exec->unit, i, 0, 0xFF);
+                        }
+                    }
+                    target = dest->unit;
+                }
+                unitCmdAtkEnd((ObjectTask *)exec->unit, target, exec->type, exec->tecId);
+                SCENARIO_PHASE_ENTER(scenarioBatExecPhase50);
+            }
+        }
+    }
+}
 
 /* Defined in src/main/sef.c; nonzero once the effect has finished. */
 extern int sefIsFinishEffect(int effect_no);
@@ -1990,11 +2099,6 @@ void transWepOutDraw(Actor *actor) {
         actor->flags |= WEAPON_HIDDEN_BIT;
     }
 }
-
-#define TEC_PROC_FLOW_SPEC 0x20
-/* Actor.windFlags bit 0x1000 (`andi $2,$2,0x1000` at 0x00a0eab0 and
- * 0x00a0eae0): set, the unit is still held in its action motion. */
-#define ACTOR_MOTION_HOLD_BIT 0x1000
 
 extern void unitMotStandSet(ObjectTask *unit);
 
