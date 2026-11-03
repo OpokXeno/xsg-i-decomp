@@ -1011,7 +1011,7 @@ extern void ACT_initMotion(BattleModelActor *actor);
 #define FACE_MODEL_ADDRESS ((void *)0x010B4000)
 /* dataUnitFileLoadFaceMdl's cache-miss buffers: lui $4,(0x10E6000>>16) /
  * ori $4,$4,(0x10E6000&0xFFFF) builds the texture address below (stored to
- * actor->textureAdr, not actor->animationAdr). */
+ * actor->resource[BATTLE_ACTOR_RESOURCE_TEXTURE], not actor->resource[BATTLE_ACTOR_RESOURCE_ANIMATION]). */
 #define FACE_TEXTURE_ADDRESS ((void *)0x010E6000)
 
 extern char mdlFileName[];
@@ -1088,9 +1088,9 @@ int dataUnitFileLoadMdl(UnitEquipInfo *unit, int charaId, UnitFileInfo *file)
     } else {
         printf(D_00A45E10, charaId, file->modelAdr);
     }
-    actor->modelAdr = file->modelAdr;
-    actor->animationAdr = file->animationAdr;
-    actor->textureAdr = file->textureAdr;
+    actor->resource[BATTLE_ACTOR_RESOURCE_MODEL] = file->modelAdr;
+    actor->resource[BATTLE_ACTOR_RESOURCE_ANIMATION] = file->animationAdr;
+    actor->resource[BATTLE_ACTOR_RESOURCE_TEXTURE] = file->textureAdr;
     ACT_initMotion(actor);
     printf(D_00A45E38, file->modelSize + file->animationSize + file->textureSize);
     if ((unit->task.battle.work->flags & BATTLE_ACTOR_FLAG_ENEMY) == 0
@@ -1127,10 +1127,10 @@ int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *file)
     }
 
     actor = dataChildActorCreate(charaId);
-    actor->modelAdr = file->faceModelAdr;
+    actor->resource[BATTLE_ACTOR_RESOURCE_MODEL] = file->faceModelAdr;
     equip->faceActor = actor;
-    actor->animationAdr = file->animationAdr;
-    actor->textureAdr = file->faceTextureAdr;
+    actor->resource[BATTLE_ACTOR_RESOURCE_ANIMATION] = file->animationAdr;
+    actor->resource[BATTLE_ACTOR_RESOURCE_TEXTURE] = file->faceTextureAdr;
     return 1;
 }
 
@@ -1179,16 +1179,16 @@ int dataUnitFileLoadMotSp2(UnitEquipInfo *unit, int motionId, int slot, int p3, 
     if (p4 == 5) {
         actor = unit->equipActor[0];
         if (actor != 0) {
-            actor->motion.weapon.motionAdr = unit->motionActor->motion.slot[slot];
+            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] = unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
         actor = unit->equipActor[1];
         if (actor != 0) {
-            actor->motion.weapon.motionAdr = unit->motionActor->motion.slot[slot];
+            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] = unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
     } else if (p3 >= 0) {
         actor = unit->equipActor[p3 & 3];
         if (actor != 0) {
-            actor->motion.weapon.motionAdr = unit->motionActor->motion.slot[slot];
+            actor->resource[BATTLE_ACTOR_RESOURCE_MOTION + 1] = unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_MOTION + slot];
         }
     }
     return 1;
@@ -1247,16 +1247,36 @@ void dataPackWpnMdl2(BattleModelActor *actor)
     PackedFile *pack;
     int offset;
 
-    pack = (PackedFile *)actor->modelAdr;
+    pack = (PackedFile *)actor->resource[BATTLE_ACTOR_RESOURCE_MODEL];
     offset = pack->entryOffset[0];
-    actor->modelAdr = (unsigned char *)pack + offset;
+    actor->resource[BATTLE_ACTOR_RESOURCE_MODEL] = (unsigned char *)pack + offset;
     offset = pack->entryOffset[1];
-    actor->animationAdr = (unsigned char *)pack + offset;
+    actor->resource[BATTLE_ACTOR_RESOURCE_ANIMATION] = (unsigned char *)pack + offset;
     offset = pack->entryOffset[2];
-    actor->textureAdr = (unsigned char *)pack + offset;
+    actor->resource[BATTLE_ACTOR_RESOURCE_TEXTURE] = (unsigned char *)pack + offset;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotAdrSet);
+/*
+ * Resolve a loaded motion pack in place: the resource slot keeps the motion
+ * data and the matching motionInterp slot gets the interpolation data, both
+ * as offsets from the pack header (the PackedFile idiom above). The slot
+ * index is a local so the scaled index survives for the interp store
+ * (`daddu $5,$3,$0`); both header offsets are read before the stores.
+ */
+void dataMotAdrSet(BattleModelActor *actor, int motionId)
+{
+    PackedFile *pack;
+    unsigned char *motion;
+    unsigned char *interp;
+    int slot;
+
+    slot = BATTLE_ACTOR_RESOURCE_MOTION + motionId;
+    pack = (PackedFile *)actor->resource[slot];
+    motion = (unsigned char *)pack + pack->entryOffset[0];
+    interp = (unsigned char *)pack + pack->entryOffset[1];
+    actor->resource[slot] = motion;
+    actor->motionInterp[motionId] = interp;
+}
 
 /*
  * dataFpkAdrGet resolves a packed file's data pointer: 8 bytes not

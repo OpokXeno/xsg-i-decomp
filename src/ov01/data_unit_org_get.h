@@ -25,20 +25,30 @@ UnitInitData *dataUnitInitGet(int entry);
  * larger extent (calc.c's 0x110-byte temporary allocation). */
 typedef struct BattleModelActor {
     BattleActor state;
-    unsigned char unmodeled_88[0x8D0 - 0x88];
-    void *modelAdr; /* +0x8D0 */
-    void *animationAdr; /* +0x8D4 */
-    void *textureAdr; /* +0x8D8 */
-    /* dataUnitFileLoadMotSp2 indexes from +0x8DC; the extent is not yet
-     * recovered. The overlapping motionAdr word is entry 1 at +0x8E0. */
-    union {
-        int slot[2];
-        struct {
-            int unmodeled_8dc;
-            int motionAdr;
-        } weapon;
-    } motion;
+    unsigned char unmodeled_88[0x100 - 0x88];
+    /* dataMotAdrSet stores a motion's interpolation data here, one word per
+     * motion slot (`sw $2,0x100($5)`, $5 = actor + motionId * 4). */
+    void *motionInterp[4]; /* +0x100 */
+    unsigned char unmodeled_110[0x8D0 - 0x110];
+    /*
+     * +0x8D0: the actor's eleven resource pointers (include/main/act_1.h,
+     * ACTOR_RESOURCES/ACTOR_RESOURCE_COUNT): model, animation (matrix),
+     * texture (move), then the motion slots that dataUnitFileLoadMotSp2
+     * reads and dataMotAdrSet resolves in place. dataMotAdrSet needs the
+     * array spelling: it adds the slot constant to the index before the
+     * actor base (`addiu $3,$3,0x8DC` / `addu $4,$4,$3` at 0x00a1c8e0) and
+     * keeps the scaled index for the interp store (`daddu $5,$3,$0`). The
+     * former modelAdr/animationAdr/textureAdr/motion members were respelled
+     * as indexes; a union over them moved dataPackWpnMdl2's stores
+     * (0x00a1c8b4) and dataUnitFileLoadFaceMdl's registers (0x00a1b97a).
+     */
+    void *resource[11]; /* +0x8D0 */
 } BattleModelActor;
+
+#define BATTLE_ACTOR_RESOURCE_MODEL 0
+#define BATTLE_ACTOR_RESOURCE_ANIMATION 1
+#define BATTLE_ACTOR_RESOURCE_TEXTURE 2
+#define BATTLE_ACTOR_RESOURCE_MOTION 3 /* + motion slot */
 
 #define BATTLE_ACTOR_FLAG_ENEMY 0x40
 #define CALC_UNIT_FLAG_AGWS 0x40
