@@ -350,7 +350,7 @@ int dataSndSeRegLoad(ObjectTask *unit)
     if (dataSndSeLoadSub(unit, SND_SE_TYPE_BASE, &bank->work) == 0) {
         return 0;
     }
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS) {
         end = (unsigned char *)bank->work.dest + bank->work.size;
         for (seType = SND_SE_TYPE_SLOT_FIRST; seType <= SND_SE_TYPE_SLOT_LAST; seType++) {
             bank = &record->bank[seType - 1];
@@ -500,7 +500,7 @@ int sndConvRegNo(int id)
 
 /*
  * ov01:0x00a2dca0. Picks the sound-effect bank a sound id plays from. Ids
- * 5..22 of a player-side unit (neither the actor's nor calcUP's enemy flag)
+ * 5..22 of a player-side unit (no actor enemy flag, no CalcUnitParam AGWS flag)
  * use bank 2 unless the unit is a boss (charaId 0xBB..0xC2); ids 24, 25 and
  * 26 up use bank 2, ids 3..7 of an enemy actor too; id 1 uses bank 3, every
  * other id but 2 bank 1. The damage sound (id 2) gets one of the banks 4..6:
