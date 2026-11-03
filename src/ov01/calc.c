@@ -180,7 +180,49 @@ void calcPara2OrgSub(ObjectTask *unit) {
     origin->ep = param->currentEp;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcDeadReset);
+/*
+ * Gives one hit point in the persistent origin record to every unit that,
+ * when its table slot is re-read after the two lookups, is gone, dead
+ * (CALC_ACTOR_FLAG_DEAD) or at zero HP. A slot that is already empty at
+ * the first read is skipped: it has no origin record to update.
+ *
+ * The original keeps the unit table in a register across the loop (`lw
+ * $5,0x0($29)` once before it, 0x00a10f74) and refreshes that register after
+ * the two calls through a second load that is copied over it (`lw $2,0x0($29)`
+ * / `daddu $5,$2`, 0x00a10fa8..0x00a10fac) before the element is indexed
+ * through the refreshed copy (`addu $3,$16,$5`). Only this spelling, the
+ * re-read into its own local and the cursor assigned from it, reproduces
+ * that copy: reading `table` again directly merges into one load.
+ */
+void calcDeadReset(void)
+{
+    ObjectTask **table;
+    ObjectTask **units;
+    ObjectTask **refreshed;
+    ObjectTask *unit;
+    CalcCharParaData *origin;
+    int count;
+    int i;
+
+    i = 0;
+    count = unitTblGet(0, &table);
+    if (count > 0) {
+        units = table;
+        do {
+            unit = units[i];
+            if (unit != 0) {
+                origin = dataUnitOrgGet(calcUPGet(unit)->charaId);
+                refreshed = table;
+                units = refreshed;
+                if (refreshed[i] == 0
+                    || (((CalcActorRecord *) refreshed[i]->work)->flags & CALC_ACTOR_FLAG_DEAD)
+                    || origin->hp == 0) {
+                    origin->hp = 1;
+                }
+            }
+        } while (++i < count);
+    }
+}
 
 CalcUnitParam *calcUPGet(ObjectTask *unit)
 {
