@@ -95,7 +95,7 @@ typedef struct MCamCoordOffset {
     float distance;
     float pitch;
     float yaw;
-    unsigned char unmodeled_2C[0x4];
+    unsigned char unmodeled_2C[0x4]; /* ends at MCamPointParams +0xA0, where bank sits */
 } MCamCoordOffset;
 
 /*
@@ -147,7 +147,7 @@ typedef struct MCamPointParams {
     unsigned char unmodeled_44[0x28];
     float ratio;
     MCamCoordOffset coordOffset;
-    /* Bank angle (radians): MCamMove_Bank reads a request's target bank here
+    /* Bank angle: MCamMove_Bank reads a request's target bank here
      * (`lwc1 $f1,0xA0($4)`, 0x00a3277c); MCamSet mode 2 copies the same word
      * to camParams.bank (`lwc1 $f0,0xA0($5)`, 0x00a31a78). */
     float bank;
@@ -413,8 +413,8 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamSet);
  * 0xB0, mode 0xB4, duration 0xB8) and extended by the halfword at 0xBC. MCamMove_Coord copies its leading 0xB0 bytes as the target
  * point record and sets the point's fix flag when fixOnArrival (lh +0xBC)
  * is non-zero. mode is the MCamIpType selector MCamMove_Bank and MCamMove_Pers
- * copy to MCamMoveState.mode; as an int its load schedules ahead of duration's
- * (original: `lw $7,0xB8($4)` at 0x00a32774, `lw $6,0xB4($4)` at 0x00a32780).
+ * copy to MCamMoveState.mode. The original loads duration first (`lw $7,0xB8($4)`
+ * at 0x00a32774, `lw $6,0xB4($4)` at 0x00a32780); as an int, mode loads first.
  */
 typedef struct MCamMoveRequest {
     MCamPointParams target;
