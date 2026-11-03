@@ -272403,6 +272403,227 @@
         }
       ]
     },
+    "ov10/tu010": {
+      ".data": [
+        {
+          "range": [
+            "0x00a4bb88",
+            "0x00a4bb8c"
+          ],
+          "generated": [
+            "0x00a4bb88",
+            "0x00a4bb8c"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "commplay"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4bb88",
+                "0x00a4bb8c"
+              ],
+              "object_range": [
+                0,
+                4
+              ],
+              "symbols": [
+                "commplay"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a4bb8c",
+            "0x00a4bb90"
+          ],
+          "generated": [
+            "0x00a4bb8c",
+            "0x00a4bb90"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "play413"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4bb8c",
+                "0x00a4bb90"
+              ],
+              "object_range": [
+                4,
+                8
+              ],
+              "symbols": [
+                "play413"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a4bb90",
+            "0x00a4bb94"
+          ],
+          "generated": [
+            "0x00a4bb90",
+            "0x00a4bb94"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "playteppeki"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4bb90",
+                "0x00a4bb94"
+              ],
+              "object_range": [
+                8,
+                12
+              ],
+              "symbols": [
+                "playteppeki"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a4bb94",
+            "0x00a4bb98"
+          ],
+          "generated": [
+            "0x00a4bb94",
+            "0x00a4bb98"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "cardno.0"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4bb94",
+                "0x00a4bb98"
+              ],
+              "object_range": [
+                12,
+                16
+              ],
+              "symbols": [
+                "cardno.0"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a4bb98",
+            "0x00a4bb9c"
+          ],
+          "generated": [
+            "0x00a4bb98",
+            "0x00a4bb9c"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "no.1"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4bb98",
+                "0x00a4bb9c"
+              ],
+              "object_range": [
+                16,
+                20
+              ],
+              "symbols": [
+                "no.1"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a4bb9c",
+            "0x00a4bba0"
+          ],
+          "generated": [
+            "0x00a4bb9c",
+            "0x00a4bba0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "timer.2"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4bb9c",
+                "0x00a4bba0"
+              ],
+              "object_range": [
+                20,
+                24
+              ],
+              "symbols": [
+                "timer.2"
+              ]
+            }
+          ]
+        }
+      ],
+      ".rodata": [
+        {
+          "range": [
+            "0x00a4f850",
+            "0x00a4fa10"
+          ],
+          "generated": [
+            "0x00a4f850",
+            "0x00a4fa04"
+          ],
+          "generated_by": [
+            "CC_Kara_CommPlay",
+            "CC_Kara_CommRequest",
+            "CC_Kara_MoveFase_2",
+            "LvUpCheck"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A4F850",
+            "jtbl_00A4F8F0",
+            "jtbl_00A4F990",
+            "jtbl_00A4F9B0",
+            "jtbl_00A4F9D0",
+            "jtbl_00A4F9F0"
+          ],
+          "also_referenced_by_c": [],
+          "basis": {
+            "kind": "express-integration",
+            "task": "ov10-tu010-integration-20261103"
+          }
+        }
+      ]
+    },
     "ov11/tu001": {
       ".bss": [
         {

@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "ov10/cgp.h"
+#include "ov10/battle_area_check_enemy.h"
 
 /*
  * One CPU deck record inside cpudeck (0x80 bytes). InitCpuDeck slices 48
@@ -40,9 +41,6 @@ void InitCpuDeck(void) {
 
 /* Advances the card game turn; defined in ov10/tu008 (still assembler). */
 extern void CGPNextTurnSub(CardGameWork *work);
-
-/* AI move-phase handler; defined in ov10/battle_area_check_enemy.c (still assembler). */
-extern int CC_Kara_MoveFase(int side, CardGameWork *work);
 
 /* Board moves of the side's positions; defined in ov10/cgp.c. */
 extern void CGPShuntPosSub(CardPlaySide *side);
@@ -86,19 +84,12 @@ void CardEnemyMove(int side, CardGameWork *work) {
     }
 }
 
-/* AI set-phase handler; defined in ov10/battle_area_check_enemy.c (still assembler). */
-extern int CC_Kara_SetFase(int side, CardGameWork *work);
-
 /* Battle slot count of one side (ov10/card_fread.c, still assembler). */
 extern int CardPlayBattleCnt(CardPlaySide *side);
 
 /* aiPhase values of CardEnemySet (switch at 0x00a32688..0x00a32690). */
 #define CARD_ENEMY_SET_CHOOSE 0     /* run CC_Kara_SetFase until it finishes */
 #define CARD_ENEMY_SET_WAIT 1       /* count the wait down, then clear the flags and end the turn */
-
-/* Battle slots and disposal slots per side, 0x1BC bytes apart (loop stride
- * `addiu $4,$4,0x1BC`, 0x00a32738). */
-#define CARD_BOARD_SLOTS 4
 
 /* Card whose base-layer flag byte the set phase clears once the wait is over
  * (`lh` / `bnel` against 0xE at 0x00a32710..0x00a32714). */
@@ -149,9 +140,6 @@ void CardEnemySet(int side, CardGameWork *work) {
  * of one side's CardHand (include/ov10/cgp.h, owned by ov10/tu008). */
 extern int CardPlayHandCnt(CardHand *hand);
 
-/* AI command-request handler; defined in ov10/tu010 (still assembler). */
-extern void CC_Kara_CommRequest(int side, CardGameWork *work);
-
 void CardEnemyCommandRequest(int side, CardGameWork *work) {
     CardPlayHandCnt(side == 0
         ? &work->player.hand
@@ -171,12 +159,6 @@ typedef struct CardEnemyOpeArg {
 
 /* True when the side may still play the operation card; defined in ov10/cgp.c. */
 extern int CGPChkOpePlayable(int side, CardGameWork *work, s16 command);
-
-/* Damage-command searches over the board; both defined in
- * ov10/battle_area_check_enemy.c (still assembler). CheckDamageCommand answers
- * with a slot index, or -1 when it finds none. */
-extern int CheckDamageCommand(int side, CardGameWork *work, int kind);
-extern int CheckXDamageCommand(int side, CardGameWork *work, int kind);
 
 /* Runs one operation card for the AI; defined below in this TU. */
 extern int CGPEnemyExecOperation(int side, CardGameWork *work, int operationIndex,
@@ -245,15 +227,9 @@ int CardEnemyOperationPlay(int side, CardGameWork *work) {
     return 1;
 }
 
-/* AI command-play handler; defined in ov10/tu010 (still assembler). */
-extern void CC_Kara_CommPlay(int side, CardGameWork *work);
-
 void CardEnemyCommandPlay(int side, CardGameWork *work) {
     CC_Kara_CommPlay(side, work);
 }
-
-/* AI first-answer handler; defined in ov10/tu010 (still assembler). */
-extern void CC_Kara_1stAnswer(int side, CardGameWork *work);
 
 void CardEnemy1stAnswer(int side, CardGameWork *work) {
     CardPlayHandCnt(side == 0
@@ -307,39 +283,19 @@ int CardEnemyAnswer(int side, CardGameWork *work) {
 /* Sets the card game work area's error message; defined in ov10/cgp.c. */
 extern void CGPSetErrorMessPlus(s8 side, CardGameWork *work, u8 reason, s16 value);
 
-/*
- * The board position this TU hands to the CCU/CCC handlers of ov10/tu003.
- * That TU keeps its own record of the same storage TU-local, so no header
- * declares it yet and each caller models the members it fills.
- */
-typedef struct CardEnemyCursor {
-    s16 zone;
-    s16 index;
-    s16 cardId;
-    u8 unmodeled_06[2];
-} CardEnemyCursor;
-
 /* Command handlers for the cards the AI answers with; defined in
  * ov10/ccu_038_exec_sub.c. */
-extern void CCU038ExecSub(CardHand *hand, CardEnemyCursor *position);
-extern void CCU055ExecSub(CardHand *hand, CardEnemyCursor *position);
-extern void CCU058ExecSub(int side, CardPlaySide *owner, CardEnemyCursor *position);
-extern void CCU061ExecSub(CardPlaySide *side, CardEnemyCursor *position);
-extern void CCC07ExecSub(CardGameWork *work, CardHand *hand, CardEnemyCursor *position);
-
-/* The value of one board slot's stack; defined in
- * ov10/battle_area_check_enemy.c. */
-extern int GetPrice(CardLayerStack *stack);
-
-/* Answers with the retreat command's target slot, or -1 when there is none;
- * defined in ov10/battle_area_check_enemy.c (still assembler). */
-extern int CheckTaikyakuCommand(int side, CardGameWork *work);
+extern void CCU038ExecSub(CardHand *hand, CardCursorPosition *position);
+extern void CCU055ExecSub(CardHand *hand, CardCursorPosition *position);
+extern void CCU058ExecSub(int side, CardPlaySide *owner, CardCursorPosition *position);
+extern void CCU061ExecSub(CardPlaySide *side, CardCursorPosition *position);
+extern void CCC07ExecSub(CardGameWork *work, CardHand *hand, CardCursorPosition *position);
 
 int CardEnemyAnswerCardxx(int side, CardGameWork *work, s16 cardId) {
     CardPlaySide *ownSide;
     CardPlaySide *oppSide;
-    CardEnemyCursor position;
-    CardEnemyCursor *target;
+    CardCursorPosition position;
+    CardCursorPosition *target;
     int discardZone;
     int operationZone;
     int boardZone;
@@ -602,15 +558,13 @@ int CardEnemyAnswerCardxx(int side, CardGameWork *work, s16 cardId) {
 extern void CCC02ExecSub(u8 *commandState);
 extern void CCC03ExecSub(int side, CardGameWork *work, CardHand *hand, CardLayerStack *card);
 extern void CCC06ExecSub(int side, CardGameWork *work, CardHand *hand);
-extern void CCC10ExecSub(int side, CardGameWork *work, CardHand *hand, CardEnemyCursor *position);
-extern void CCC26ExecSub(int side, CardGameWork *work, CardPlaySide *owner, CardEnemyCursor *position);
+extern void CCC10ExecSub(int side, CardGameWork *work, CardHand *hand, CardCursorPosition *position);
+extern void CCC26ExecSub(int side, CardGameWork *work, CardPlaySide *owner, CardCursorPosition *position);
 extern void CCC30ExecSub(int side, CardGameWork *work, CardLayerStack *card);
 extern void CCC31ExecSub(int side, CardGameWork *work, CardLayerStack *card);
-extern void CCC38ExecSub(int side, CardGameWork *work, CardPlaySide *owner, CardEnemyCursor *position);
+extern void CCC38ExecSub(int side, CardGameWork *work, CardPlaySide *owner, CardCursorPosition *position);
 
-/* Draw-pile and junk-pile helpers of ov10/card_fread.c; GetDeckData is defined in
- * ov10/battle_area_check_enemy.c (still assembler). */
-extern u32 GetDeckData(int side, CardGameWork *work, int cardId);
+/* Draw-pile and junk-pile helpers of ov10/card_fread.c. */
 extern int CardPlayDrawCard(CardHand *hand);
 extern int CardPlayRecavery(CardHand *hand);
 extern int CardPlayJunkCnt(CardPlaySide *side);
@@ -632,7 +586,7 @@ extern void CardPlayCleanYama(CardPlaySide *side);
 extern void CardPlayShuffleYama(CardPlaySide *side);
 
 /* The battle or disposal stack a cursor names; zones 6 and 2 are discard zones. */
-static inline CardLayerStack *CardEnemyTargetStack(CardPlaySide *side, CardEnemyCursor *target) {
+static inline CardLayerStack *CardEnemyTargetStack(CardPlaySide *side, CardCursorPosition *target) {
     if (target->zone == CARD_ZONE_DISCARD_A || target->zone == CARD_ZONE_DISCARD_B) {
         return &side->disposal[target->index].battle;
     }
@@ -673,7 +627,7 @@ enum CardCommandId {
     CARD_COND_OTHER_DISPOSAL_CARD_119 = 119  /* 0x00a33778 */
 };
 
-int CGPEnemyExecCommand(int side, CardGameWork *work, CardEnemyCursor *targets, int count) {
+int CGPEnemyExecCommand(int side, CardGameWork *work, CardCursorPosition *targets, int count) {
     CardPlaySide *ownSide;
     CardPlaySide *oppSide;
     int opponentSide;
@@ -1008,33 +962,12 @@ extern void CardPlayCleanHand(CardHand *hand);
 /* An Lv10 card's id is its base card's id plus 7 (cardId - 7 at 0x00a33d50, 0x00a33f6c, 0x00a33fb0). */
 #define CARD_LV10_ID_OFFSET 7
 
-/* Frames a card takes to slide from the hand to its slot (li 10 at 0x00a33dfc, 10.0f divisor). */
-#define CARD_SLIDE_FRAMES 10
-
 /* Results; the callers (CC_Kara_*, 0x00a37618 / 0x00a37b4c) only test for zero. */
 #define LV10_SET_OK 0               /* the `result = 0` initializer at function entry */
 #define LV10_SET_NO_BASE_CARD (-1)  /* not an Lv10 card, or its base card is not on the board; `li t1,-1` at 0x00a33d54 */
 #define LV10_SET_NO_POINTS 12       /* same code as CGPDispoSub0's "needs more play points"; `li t1,12` at 0x00a33d48 */
 #define LV10_SET_BASE_WAITING 9     /* the base card (id - 7) sits in a disposal slot; `li t1,9` at 0x00a33d68 */
 #define LV10_SET_ALREADY_WAITING 5  /* the Lv10 card itself sits in a disposal slot; `li t1,5` at 0x00a33d74 */
-
-/*
- * Per-frame movement record of a hand card, 28 bytes each, at +0x192C of the side
- * (CardMoveRecord / CardPlayField.handMove in ov10/cgp.c). TU-local view: CardPlaySide stops at
- * 0x106C. Making handMove a real CardPlaySide member (u8 gap to 0x192C plus handMove[40]) was
- * tested and breaks the ov10/tu000 data carve, which stops with "allocation refused: D_00A4FA10
- * cc1 directives prove size/alignment 0x8be0/0x8, record claims 0x71a0/0x8", so the view stays.
- */
-typedef struct CardEnemyMoveRecord {
-    u8 unmodeled_00[4];
-    float position[3];             /* +0x04 */
-    float step[3];                 /* +0x10 */
-} CardEnemyMoveRecord;
-
-typedef struct CardEnemyFieldView {
-    u8 unmodeled_0000[0x192C];
-    CardEnemyMoveRecord handMove[40];  /* +0x192C */
-} CardEnemyFieldView;
 
 /*
  * Cards CGPEnemyLv10SetSub accepts: the hand card id must be 7, 9 or 10..13 (`beq v1,t0` with
@@ -1058,7 +991,7 @@ enum CardLv10Id {
  */
 int CGPEnemyLv10SetSub(int side, CardGameWork *work, int index) {
     CardPlaySide *ownSide;
-    CardEnemyCursor position;  /* zone, hand index and card id of the card being played; never read back */
+    CardCursorPosition position;  /* zone, hand index and card id of the card being played; never read back */
     int result = 0;
     int i;
 
@@ -1125,22 +1058,22 @@ int CGPEnemyLv10SetSub(int side, CardGameWork *work, int index) {
                             stack->layers[0].life
                                 = work->definitions[position.cardId].operationDuration + lifeLost;
                             stack->position[0]
-                                = ((CardEnemyFieldView *) ownSide)->handMove[position.index].position[0];
+                                = ((CardPlaySideMoveView *) ownSide)->handMove[position.index].position[0];
                             stack->position[1]
-                                = ((CardEnemyFieldView *) ownSide)->handMove[position.index].position[1];
+                                = ((CardPlaySideMoveView *) ownSide)->handMove[position.index].position[1];
                             stack->position[2]
-                                = ((CardEnemyFieldView *) ownSide)->handMove[position.index].position[2];
+                                = ((CardPlaySideMoveView *) ownSide)->handMove[position.index].position[2];
                             stack->step[0]
                                 = (BattlePos1P[i][0]
-                                   - ((CardEnemyFieldView *) ownSide)->handMove[position.index].position[0])
+                                   - ((CardPlaySideMoveView *) ownSide)->handMove[position.index].position[0])
                                   / 10.0f;
                             stack->step[1]
                                 = (BattlePos1P[i][1]
-                                   - ((CardEnemyFieldView *) ownSide)->handMove[position.index].position[1])
+                                   - ((CardPlaySideMoveView *) ownSide)->handMove[position.index].position[1])
                                   / 10.0f;
                             stack->step[2]
                                 = (BattlePos1P[i][2]
-                                   - ((CardEnemyFieldView *) ownSide)->handMove[position.index].position[2])
+                                   - ((CardPlaySideMoveView *) ownSide)->handMove[position.index].position[2])
                                   / 10.0f;
                             stack->moveFrames = CARD_SLIDE_FRAMES;
                             ownSide->hand.playPoints[0]
@@ -1162,9 +1095,6 @@ int CGPEnemyLv10SetSub(int side, CardGameWork *work, int index) {
     }
     return result;
 }
-
-/* AI comm-phase handler; defined in ov10/tu010 (still assembler). */
-extern int CC_Kara_CommFase(int side, CardGameWork *work);
 
 void CardEnemyComm(int side, CardGameWork *work) {
     if (CC_Kara_CommFase(side, work) == 1) {
@@ -1193,9 +1123,6 @@ void CardEnemyAnswerSionSearch(int side, CardGameWork *work) {
         }
     }
 }
-
-/* AI end-of-phase handler; defined in ov10/tu010 (still assembler). */
-extern int CC_Kara_EndFase(int side, CardGameWork *work);
 
 void CardEnemyEnd(int side, CardGameWork *work) {
     int endFaseResult = 1;

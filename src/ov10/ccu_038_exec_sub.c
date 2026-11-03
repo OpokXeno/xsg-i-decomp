@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "ov10/cgp.h"
+#include "ov10/battle_area_check_enemy.h"
 
 /* Sets the card game work area's error message; defined in ov10/tu008
  * (src/ov10/cgp.c), still assembler-scaffolded here. */
@@ -16,13 +17,6 @@ enum CardQueueWord {
     CARD_QUEUE_OPERAND,
     CARD_QUEUE_TARGET
 };
-
-typedef struct CardCursorPosition {
-    s16 zone;
-    s16 index;
-    s16 cardId;
-    u8 unmodeled_06[2];
-} CardCursorPosition;
 
 static inline CardLayerStack *CardSelectBattle(CardPlaySide *side, int index,
                                                int fromDisposal) {
@@ -85,7 +79,6 @@ extern void CGCPHandDispSub2(CardDefinition *definitions, CardHand *hand, int se
 extern void CGCPHandDispSub3(CardDefinition *definitions, CardHand *hand, int selected, int mode, int option);
 extern void CardEnemyAnswerSionSearch(int side, CardGameWork *work);
 extern void CGPDispErrorMessPlus(int side, int message, s16 cardId);
-extern void CC_Kara_EndFase(int side, CardGameWork *work);
 extern int CardPlayDesertCard(CardHand *hand, int index);
 extern int CardPlayIdentityCheck(CardGameWork *work, CardHand *hand, u8 identity);
 void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
@@ -219,8 +212,6 @@ void CCU063ExecSub(CardGameWork *work, int context) {
         }
     }
 }
-
-typedef signed int s32;
 
 /* CPU-driven card command handlers; the plain *ExecSub siblings they tail-call
  * are still assembler in this TU. */

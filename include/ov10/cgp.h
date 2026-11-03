@@ -4,6 +4,68 @@
 #include "shared.h"
 
 typedef signed char s8;
+typedef signed int s32;
+
+/* Board geometry shared by the card-game TUs. */
+#define CARD_BOARD_SLOTS 4         /* battle slots per side, and disposal slots per side */
+#define CARD_SLIDE_FRAMES 10       /* frames a card takes to slide to a new slot */
+
+/*
+ * Phases of a turn, in the order of the help screen's list (DRAW PHASE ...
+ * ADJUST PHASE); CardCommandControl.phase counts them for side 0 and then,
+ * CARD_PHASES_PER_SIDE later, for side 1.
+ */
+#define CARD_PHASE_DRAW 0
+#define CARD_PHASE_MOVE 1
+#define CARD_PHASE_EVENT 2
+#define CARD_PHASE_SET 3
+#define CARD_PHASE_BLOCK 4
+#define CARD_PHASE_BATTLE 5
+#define CARD_PHASE_ADJUST 6
+#define CARD_PHASES_PER_SIDE 7
+
+/* CardDefinition.kind ("There are three types of cards: Battle, event, and situation"). */
+#define CARD_KIND_BATTLE 1
+#define CARD_KIND_EVENT 2
+#define CARD_KIND_SITUATION 4
+
+/*
+ * CardDefinition.attackType, in the order the help text lists the types
+ * ("Hand, Ballistic, Spread, and Homing"). CheckFriendKakutouCnt counts the
+ * hand-to-hand type; TodomeHyouka subtracts a spread attack from every
+ * target's life and counts a homing attack against the other side's deck.
+ */
+#define CARD_ATTACK_HAND 1
+#define CARD_ATTACK_BALLISTIC 2
+#define CARD_ATTACK_SPREAD 3
+#define CARD_ATTACK_HOMING 4
+
+/*
+ * CardDefinition.flags: the battle card's attribute icon (H Human, M Mech,
+ * G Gnosis, R Realian). CheckREAL tests 2 and CheckGuno 4; Human and Mech are
+ * the two remaining bits, Human being the attribute the Tamasii situation
+ * card powers up (GetFriendAttack).
+ */
+#define CARD_ATTR_HUMAN 0x0001
+#define CARD_ATTR_REALIAN 0x0002
+#define CARD_ATTR_GNOSIS 0x0004
+#define CARD_ATTR_MECH 0x0008
+
+/* CardLayerStack.flags bits. */
+#define CARD_STACK_FLAG_END 0x01       /* cleared by CardPlayClearEndflg */
+#define CARD_STACK_FLAG_FROZEN 0x02    /* no countdown and no attack (CGP_STACK_FLAG_FROZEN in ov10/cgp.c) */
+
+/*
+ * A board or hand position: the zone code, the slot or hand index and the
+ * card there (8 bytes, passed by value to CGPDisposeWeaponSub). ov10/cgp.c
+ * keeps the same record as CGPCursorPosition.
+ */
+typedef struct CardCursorPosition {
+    s16 zone;
+    s16 index;
+    s16 cardId;
+    s16 stackedCard;               /* +0x06: the card stacked on the slot's base card */
+} CardCursorPosition;
 
 /*
  * One side's hand of card ids inside CardGameWork. CardPlayHandCnt (ov10/tu002,
@@ -121,6 +183,28 @@ typedef struct CardPlaySide {
     s16 operationFlags[40];        /* +0xFCC */
     s16 operationDuration[40];     /* +0x101C */
 } CardPlaySide;
+
+/*
+ * Per-frame movement record of a hand card (28 bytes each), at +0x192C of a
+ * side (CardMoveRecord / CardPlayField.handMove in ov10/cgp.c).
+ */
+typedef struct CardHandMoveRecord {
+    u8 unmodeled_00[4];
+    float position[3];             /* +0x04 */
+    float step[3];                 /* +0x10 */
+} CardHandMoveRecord;
+
+/*
+ * Partial view of a side past the end of CardPlaySide (measured: CardPlaySide
+ * stops at 0x106C, and making handMove a real member breaks the ov10/tu000
+ * data carve, "allocation refused: D_00A4FA10 cc1 directives prove
+ * size/alignment 0x8be0/0x8, record claims 0x71a0/0x8"). Callers cast their
+ * CardPlaySide pointer; a separately computed pointer changes the schedule.
+ */
+typedef struct CardPlaySideMoveView {
+    u8 unmodeled_0000[0x192C];
+    CardHandMoveRecord handMove[40];   /* +0x192C */
+} CardPlaySideMoveView;
 
 /* One side's controller snapshot for the command being played. */
 typedef struct CardCommandInput {
@@ -388,34 +472,13 @@ typedef struct CardPowerCard {
     s16 cardId;                     /* +0x0E: negative while the slot is empty */
 } CardPowerCard;
 
-/* Movement record fields used by the slot swap at 0x00a25b70. */
-typedef struct CardMoveLayer {
-    u8 state;
-    u8 preservedByte01;
-    u8 boostCount;
-    u8 life;
-    u8 preservedByte04;
-    u8 damageTimer;
-    s16 cardId;
-    u8 unmodeled_08[2];
-} CardMoveLayer;
-
-typedef struct CardMoveWork {
-    u8 flags;
-    u8 moveStep;
-    u8 power;
-    u8 powerLimit;
-    u8 unmodeled_04[4];
-    CardMoveLayer layers[40];
-    float position[3];
-    float velocity[3];
-    float shuntPosition[3];
-} CardMoveWork;
-
 /*
  * Swap a disposal slot's stack with a battle slot's and start the ten-frame
- * slide that carries each of them to the other's position.
+ * slide that carries each of them to the other's position. Each argument is
+ * the `battle` member of a CardBoardSlot; the swap also exchanges the 12 bytes
+ * that follow the stack, which are the next slot's shunt position (ov10/cgp.c
+ * models that span as its own CardMoveWork record).
  */
-void CGPMoveDSBATTLEwork(CardMoveWork *disposal, CardMoveWork *battle);
+void CGPMoveDSBATTLEwork(CardLayerStack *disposal, CardLayerStack *battle);
 
 #endif /* INCLUDE_OV10_CGP_H */
