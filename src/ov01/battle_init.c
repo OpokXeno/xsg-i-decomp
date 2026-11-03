@@ -701,8 +701,9 @@ extern int keyCmdChk(ObjectTask *unit, BattleUnit *target, int command);
 
 /*
  * One frame of command-key input for unit: 0x1A when it cannot act (too
- * few action points by dblActKind, or a pursuit it cannot follow) or the
- * pad cancels, 0 while nothing new is pressed, 0x1B while the buffered keys
+ * few action points by dblActKind, or a pursuit it cannot follow) or key
+ * 0x40 cancels, 0 while pad bits 0xA are held or nothing new is pressed,
+ * 0x1B while the buffered keys
  * form no usable command (the rejected key is dropped again), else the
  * command keyBuffChk matched.
  */
@@ -2393,10 +2394,12 @@ extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int fla
  * accepted by objCur alongside 2. */
 #define CURSOR_CMD_POSITION 1
 #define CURSOR_CMD_UNIT 2
+#define CURSOR_CMD_TARGET 3
 /* Cursor state flag bits: 0x2 is set by curCmdSet while a command is
  * queued; 0x4 hides the cursor (objCurDraw); 0x8 marks a unit selection. */
 #define CURSOR_STATE_FLAG_QUEUED 0x2
 #define CURSOR_STATE_FLAG_HIDDEN 0x4
+#define CURSOR_STATE_FLAG_UNIT_SELECT 0x8
 
 /*
  * The cursor task's per-frame step: run the queued command. A position
@@ -2657,7 +2660,7 @@ int curEnProc(BattleUnit **target)
     int changed;
 
     list->posMode = 0;
-    curStateGet(cursor)->flags |= 8;
+    curStateGet(cursor)->flags |= CURSOR_STATE_FLAG_UNIT_SELECT;
     curSel(cursor, list, 0x2000, 0x8000);
     changed = list->prevIdx != list->curIdx;
     unit = list->units[list->curIdx];
@@ -2685,7 +2688,7 @@ int curPosProc(ObjectTask *unit, int *posId)
     int changed;
 
     list->posMode = 1;
-    curStateGet(cursor)->flags &= ~8;
+    curStateGet(cursor)->flags &= ~CURSOR_STATE_FLAG_UNIT_SELECT;
     curSel(cursor, list, 0x2000, 0x8000);
     changed = list->prevIdx != list->curIdx;
     if (!(curStateGet(cursor)->flags & CURSOR_STATE_FLAG_QUEUED)) {
@@ -2723,7 +2726,7 @@ int curTgtProc(BattleUnit **target, int targetFlags)
 
     if (!(targetFlags & 0x10)) {
         list->posMode = 0;
-        curStateGet(cursor)->flags &= ~8;
+        curStateGet(cursor)->flags &= ~CURSOR_STATE_FLAG_UNIT_SELECT;
         curSel(cursor, list, 0x2000, 0x8000);
         changed = list->prevIdx != list->curIdx;
         unit = list->units[list->curIdx];
@@ -2734,7 +2737,7 @@ int curTgtProc(BattleUnit **target, int targetFlags)
             curCmdSet(cursor, &cmd);
         }
     } else {
-        curStateGet(cursor)->flags &= ~8;
+        curStateGet(cursor)->flags &= ~CURSOR_STATE_FLAG_UNIT_SELECT;
         if (!(curStateGet(cursor)->flags & CURSOR_STATE_FLAG_QUEUED)) {
             for (i = 0; i < list->count; i++) {
                 if (list->units[i] == curStateGet(cursor)->targetUnit) {
@@ -2747,8 +2750,8 @@ int curTgtProc(BattleUnit **target, int targetFlags)
             if (i >= list->count) {
                 i = 0;
             }
-            /* objCur handles selector 3 together with CURSOR_CMD_UNIT. */
-            cmd.selector = 3;
+            /* objCur handles this selector together with CURSOR_CMD_UNIT. */
+            cmd.selector = CURSOR_CMD_TARGET;
             cmd.argument = (int)list->units[i];
             curCmdSet(cursor, &cmd);
             curStateGet(cursor)->targetUnit = list->units[i];
