@@ -178,6 +178,8 @@ typedef struct SndSeActorFlags {
     unsigned int flags;
 } SndSeActorFlags;
 #define SND_SE_ACTOR_FLAG_ENEMY 0x40u
+/* The same bit value on CalcUnitParam.flags means AGWS, not enemy. */
+#define SND_SE_UNIT_FLAG_AGWS 0x40u
 
 /*
  * ov01:0x00a2d388. Reports whether the sound-effect index seType has a
@@ -191,7 +193,7 @@ int sndSeRegChk(ObjectTask *unit, int seType)
     int registered = 0;
 
     if (!(((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY)
-        && !(calcUPGet(unit)->flags & SND_SE_ACTOR_FLAG_ENEMY)
+        && !(calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS)
         && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
         if (seType > 0 && (seType < 5 || seType == 23)) {
             registered = 1;
@@ -370,8 +372,9 @@ int dataSndSeRegLoad(ObjectTask *unit)
  * table (bank i gets index i + 1), then, for an AGWS unit, relocates the
  * three bank files dataSndSeRegLoad loaded after it from their own headers.
  * The offset table is read as 8-byte records from the file start: record 0
- * is the count, so bank i's offsets are the record after record i (indexing
- * the pairs from +8 instead starts the cursor at header + 8, T3 form).
+ * is the count, so bank i's offsets are the record after record i. The
+ * cursor starts at the file start, not at SndSeBankHeader.offset: the loop
+ * head's `lw $2,8($7)` addresses from it.
  */
 void dataSndSeRegLoad2(ObjectTask *unit)
 {
@@ -379,7 +382,7 @@ void dataSndSeRegLoad2(ObjectTask *unit)
     SndSeRegDat *record;
     SndSeRegBank *bank;
     SndSeBankHeader *header;
-    SndSeBankOffset *records;
+    SndSeBankOffset *entry;
     int count;
     int i;
 
@@ -395,13 +398,13 @@ void dataSndSeRegLoad2(ObjectTask *unit)
     header = bank->work.dest;
     count = header->count / 2;
     for (i = 0; i < count; i++) {
-        records = (SndSeBankOffset *)header + i;
-        bank->sed = (unsigned char *)header + records[1].sed;
-        bank->swd = (unsigned char *)header + records[1].swd;
+        entry = (SndSeBankOffset *)header + i;
+        bank->sed = (unsigned char *)header + entry[1].sed;
+        bank->swd = (unsigned char *)header + entry[1].swd;
         bank->work.seType = i + 1;
         bank++;
     }
-    if (calcUPGet(unit)->flags & SND_SE_ACTOR_FLAG_ENEMY) {
+    if (calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS) {
         for (i = 2; i >= 0; i--) {
             if (bank->work.seType != 0) {
                 header = bank->work.dest;
@@ -516,7 +519,7 @@ int sndBankGet(ObjectTask *unit, int id)
 
     if (id >= 5 && id < 23
         && !(((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY)
-        && !(calcUPGet(unit)->flags & SND_SE_ACTOR_FLAG_ENEMY)
+        && !(calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS)
         && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
         bank = 2;
     } else if (id >= 26 || id == 24 || id == 25
