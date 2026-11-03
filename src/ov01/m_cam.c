@@ -35,16 +35,11 @@ typedef enum MCamIpType {
 } MCamIpType;
 
 /*
- * A move's frame count. An enum rather than unsigned int for the compiler's
- * type-based alias classes (-fstrict-aliasing at -O2): the counters of
- * MCamMoveState must not share the int class of camFlags and of
- * MCamMoveRequest's mode/duration. With unsigned int counters MCamMove_Bank
- * compiles `sw $3,0($5)` (camFlags) ahead of `swc1 $f0,0x14($2)`
- * (0x00a32784, current) and `lw $6,0xB4($4)` (mode) ahead of
- * `lwc1 $f1,0xA0($4)` (0x00a3277c, bank): the second scheduling pass orders
- * the camFlags store first because the int stores to the state depend on it,
- * and the mode load first because more stores depend on it. In a class of
- * their own the counters give the original order (whole-file gate pass).
+ * A move's frame count. An enum so that MCamMoveState's counters stay out of
+ * the int alias class of camFlags and of MCamMoveRequest's mode/duration: with
+ * int-class counters `sw $3,0($5)` (camFlags) schedules ahead of
+ * `swc1 $f0,0x14($2)` (0x00a32784) and `lw $6,0xB4($4)` ahead of
+ * `lwc1 $f1,0xA0($4)` (0x00a3277c). Holds any count; only the zero is named.
  */
 typedef enum MCamFrameCount {
     MCAM_FRAME_COUNT_NONE = 0
@@ -810,8 +805,8 @@ static void MCamMove_Bank(MCamMoveRequest *request)
 {
     MCamMoveState *state = &camParams.bankMove;
     float start;
-    int duration;
-    int mode;
+    MCamFrameCount duration;
+    MCamIpType mode;
     float end;
 
     start = camParams.bank;
@@ -822,7 +817,7 @@ static void MCamMove_Bank(MCamMoveRequest *request)
     state->mode = mode;
     state->duration = duration;
     state->end = end;
-    state->elapsed = 0;
+    state->elapsed = MCAM_FRAME_COUNT_NONE;
     state->current = start;
     camFlags |= CAM_FLAG_MOVE_BANK;
 }
@@ -868,7 +863,7 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
     ratio = (float)elapsed / (float)duration;
 
     switch (mode) {
-    case 1: {
+    case MCAM_IP_SINE_IN_OUT: {
         float sine1;
         ratio = ratio * 3.14159265f + 4.712389f;
         __asm__ __volatile__(
@@ -884,9 +879,9 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
         ratio = (sine1 + 1.0f) * 0.5f;
         break;
     }
-    case 0:
+    case MCAM_IP_LINEAR:
         break;
-    case 2: {
+    case MCAM_IP_SINE_IN: {
         float sine2;
         ratio = ratio * 1.57079633f + 4.712389f;
         __asm__ __volatile__(
@@ -902,7 +897,7 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
         ratio = sine2 + 1.0f;
         break;
     }
-    case 3: {
+    case MCAM_IP_SINE_OUT: {
         float sine3;
         ratio = ratio * 1.57079633f;
         __asm__ __volatile__(
