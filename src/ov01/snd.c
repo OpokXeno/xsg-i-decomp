@@ -166,7 +166,7 @@ int sndSeRegRemove(int id)
         if (sndSeRegDat[i].id == id) {
             sndSeRegDat[i].id = 0;
             for (j = 4; j >= 0; j--) {
-                sndSeRegDat[i].bank[j].work.seType = 0;
+                sndSeRegDat[i].bank[j].work.seType = SND_SE_TYPE_NONE;
             }
             return 1;
         }
@@ -195,17 +195,17 @@ int sndSeRegChk(ObjectTask *unit, int seType)
     if (!(((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY)
         && !(calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS)
         && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
-        if (seType > 0 && (seType < 5 || seType == 23)) {
+        if (seType > SND_SE_TYPE_NONE && (seType <= SND_SE_TYPE_AT2 || seType == SND_SE_TYPE_CV)) {
             registered = 1;
         }
     } else if (calcUPGet(unit)->charaId >= 0x97 && calcUPGet(unit)->charaId < 0xBB) {
-        if (seType < 3) {
-            if (seType > 0) {
+        if (seType < SND_SE_TYPE_SLOT_FIRST) {
+            if (seType > SND_SE_TYPE_NONE) {
                 registered = 1;
             }
         }
-    } else if (seType < 6) {
-        registered = seType > 0;
+    } else if (seType <= SND_SE_TYPE_SLOT_LAST) {
+        registered = seType > SND_SE_TYPE_NONE;
     }
     return registered;
 }
@@ -276,7 +276,7 @@ int dataSndSeLoadSub(ObjectTask *unit, int seType, SndSeLoadWork *work)
     dataSndSeNameGet(name, unit, seType);
     if (name[0] == 0) {
         printf(D_00A4E6A8, calcUPGet(unit)->charaId, seType);
-        work->seType = 0;
+        work->seType = SND_SE_TYPE_NONE;
         return 0;
     }
 
@@ -347,17 +347,17 @@ int dataSndSeRegLoad(ObjectTask *unit)
         return 0;
     }
     bank = &record->bank[0];
-    if (dataSndSeLoadSub(unit, 0, &bank->work) == 0) {
+    if (dataSndSeLoadSub(unit, SND_SE_TYPE_BASE, &bank->work) == 0) {
         return 0;
     }
     if (calcUPGet(unit)->flags & 0x40) {
         end = (unsigned char *)bank->work.dest + bank->work.size;
-        for (seType = 3; seType < 6; seType++) {
+        for (seType = SND_SE_TYPE_SLOT_FIRST; seType <= SND_SE_TYPE_SLOT_LAST; seType++) {
             bank = &record->bank[seType - 1];
             bank->work.dest = end;
             if (dataSndSeLoadSub(unit, seType, &bank->work) == 0) {
                 bank->work.size = 0;
-                bank->work.seType = 0;
+                bank->work.seType = SND_SE_TYPE_NONE;
             }
             end = (unsigned char *)bank->work.dest + bank->work.size;
         }
@@ -386,7 +386,7 @@ void dataSndSeRegLoad2(ObjectTask *unit)
     int count;
     int i;
 
-    dataSndSeNameGet(name, unit, 0);
+    dataSndSeNameGet(name, unit, SND_SE_TYPE_BASE);
     if (name[0] == 0) {
         return;
     }
@@ -406,7 +406,7 @@ void dataSndSeRegLoad2(ObjectTask *unit)
     }
     if (calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS) {
         for (i = 2; i >= 0; i--) {
-            if (bank->work.seType != 0) {
+            if (bank->work.seType != SND_SE_TYPE_NONE) {
                 header = bank->work.dest;
                 bank->sed = (unsigned char *)header + header->offset.sed;
                 bank->swd = (unsigned char *)header + header->offset.swd;

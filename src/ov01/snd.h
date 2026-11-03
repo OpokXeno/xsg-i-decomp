@@ -10,20 +10,26 @@
 #include "ov01/calc.h"
 
 /*
- * Sound-effect index of a loaded bank.  An enumeration rather than int: the
- * dataSndSeRegLoad2 fill loop stores it next to int loads of the bank file's
- * offset table, and only a type that cannot alias those loads reproduces the
- * original's addiu-before-lw loop head (ov01:0x00a2d820; with int the two
- * instructions swap).
+ * Sound-effect type: picks a unit's sound name in dataSndSeNameGet and tags a
+ * loaded bank with its 1-based index.  Names are the ones the code proves:
+ * entry 0 of the suffix tables (ov01:0x00a427f8 and following) is the empty
+ * suffix of the base file, plChaMidSeName[4] is "_AT2" and [23] is "_CV"; 3..5
+ * are the banks of weaponId[seType - 3] for an AGWS unit (lh $4,0x58($3) with
+ * $3 = param + seType * 2, ov01:0x00a2d100) and of normalTechniqueId[seType - 3]
+ * for an enemy (lh $17,0x70($3), ov01:0x00a2d178).
+ * Int instead of this enum swaps dataSndSeRegLoad2's addiu/lw at ov01:0x00a2d820.
  */
 typedef enum SndSeType {
-    SND_SE_TYPE_NONE = 0 /* no bank loaded / lookup failed */
+    SND_SE_TYPE_NONE = 0,       /* no bank loaded: rejected by sndSeRegChk */
+    SND_SE_TYPE_BASE = 0,       /* the name request for the base bank file */
+    SND_SE_TYPE_SLOT_FIRST = 3, /* first per-slot bank */
+    SND_SE_TYPE_AT2 = 4,        /* player character "_AT2" */
+    SND_SE_TYPE_SLOT_LAST = 5,  /* last per-slot bank */
+    SND_SE_TYPE_CV = 23         /* player character "_CV" */
 } SndSeType;
 
-/* seType is intentionally under-typed: it holds the resolved bank index
- * (1..N, SND_SE_TYPE_NONE on failure); the enum exists for its alias set. */
 typedef struct {
-    SndSeType seType; /* +0x00: echoes the resolved sound-effect index; SND_SE_TYPE_NONE on lookup failure */
+    SndSeType seType; /* +0x00: the resolved type; SND_SE_TYPE_NONE on lookup failure */
     void *dest; /* +0x04: destination address dataFileLoadNB loads into */
     int size;   /* +0x08: file size rounded up to a 2048-byte CD sector */
 } SndSeLoadWork;
