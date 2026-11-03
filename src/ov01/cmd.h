@@ -266,8 +266,8 @@ extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int fla
  * completed here. thinkUnitAtkExec (0x00a1dc40) reads a signed half two
  * levels down: the pointer this offset holds (into calcUPGet's unmodeled_44
  * span) points at one entry of this TU's own attack table (cmdAtktbl/
- * cmdAtkset/cmdAtktblSort/cmdAtktblSortSub/cmdAtktblSearch below, all still
- * asm), whose script-offset field thinkUnitAtkExec is the first claimed
+ * cmdAtkset/cmdAtktblSort/cmdAtktblSortSub/cmdAtktblSearch below), whose
+ * script-offset field thinkUnitAtkExec is the first claimed
  * reader of.
  */
 #define CALC_UNIT_PARAM_ATK_TBL_OFF 0x48
@@ -340,7 +340,7 @@ extern int monsSetNoGet(void);
  * The AI script command argument the interpreter (thinkExec and friends,
  * still asm) hands to every opcode handler in this TU's cmd* family:
  * cmdLineChk, cmdAtktblSort, cmdAtktblSortRev, cmdMonsSetNoGet and
- * cmdAtktblSortSub (this TU, still asm) all take the same pointer. Each
+ * cmdAtktblSortSub (this TU) all take the same pointer. Each
  * handler reads a 16-bit operand from the running AI script through the
  * cursor at +0x4 (thinkAdrGet(cursor) resolves it to an address) and
  * advances the cursor by 2 per operand it consumes; cmdAtktblSort and
@@ -371,8 +371,9 @@ extern int monsSetNoGet(void);
  */
 /*
  * thinkRegNo/thinkRegGet/thinkRegSet/cmdNum/cmdThinksetSub/cmdAtktblSortSub
- * are this TU's own siblings, still asm; forward-declared here for the
- * functions above that call them.
+ * are this TU's own siblings; forward-declared here for the functions above
+ * that call them. cmdAtktblSortSub returns int: `daddu $2,$0,$0` at 0x00a202dc
+ * sets its result on the way out.
  */
 extern short thinkRegNo(short pc);
 /*
@@ -550,8 +551,8 @@ extern const char D_00A461B8[];
 extern int cmdUnitpara(ObjectTask *unit, int category, int value, int mode);
 
 /*
- * cmdTecpara/dataTecGet (this TU and src/ov01/data_unit_org_get.c, both
- * still asm) look up a technique's parameter; cmdTecparaGet (0x00a20518) is
+ * cmdTecpara/dataTecGet (this TU and src/ov01/data_unit_org_get.c) look up a
+ * technique's parameter; cmdTecparaGet (0x00a20518) is
  * the only claimed caller here.
  */
 /*
@@ -565,7 +566,7 @@ typedef struct CmdTecRecord {
     unsigned char attr;    /* +0x00 */
 } CmdTecRecord;
 
-extern int cmdTecpara(CmdTecRecord *tec, int category);
+extern int cmdTecpara(CmdTecRecord *tecRecord, int category);
 extern CmdTecRecord *dataTecGet(int tecId);
 
 /*

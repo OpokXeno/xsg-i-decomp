@@ -12,7 +12,7 @@ typedef union {
     short halfwordValue;
 } CmdTecparaValue;
 
-extern CmdTecparaValue *cmdTecparaSub(CmdTecRecord *tec, short category, short *valueType);
+extern CmdTecparaValue *cmdTecparaSub(CmdTecRecord *tecRecord, short category, short *valueType);
 
 /*
  * Returns int: with a void callee gcc keeps cmdUnitChange's 0x25 command in
@@ -1173,7 +1173,7 @@ void cmdAtktblSortRev(ThinkProcess *proc)
  * script offset of the first operand by the unit parameter the second operand
  * selects: descending (largest first) when cmdAtktblSort called (sortMode 0,
  * a larger value moves into the slot), ascending from cmdAtktblSortRev
- * (sortMode 1, a smaller one does). An exchange sort over the table's own
+ * (sortMode 1, a smaller one does). A sort that swaps on every improvement, over the table's own
  * script memory, every access going through thinkAdrGet.
  */
 int cmdAtktblSortSub(ThinkProcess *proc)
@@ -1225,8 +1225,8 @@ int cmdAtktblSortSub(ThinkProcess *proc)
 
 /*
  * Runs the script at the third operand once per (technique slot, unit number)
- * pair of the attack table at the first operand, with the pair in registers
- * 0x8010/0x8012, and copies every pair the script accepts (register 0x8018
+ * pair of the attack table at the first operand, with the unit number in
+ * register 0x8010 and the technique slot in 0x8012, and copies every pair the script accepts (register 0x8018
  * nonzero) into the table at the second operand, whose entry 0 receives the
  * accepted pair count (also stored in the script register regNo). The process's
  * pc and both registers are restored afterwards.
@@ -1299,10 +1299,10 @@ int cmdTecparaGet(ThinkProcess *proc)
     return 0;
 }
 
-int cmdTecpara(CmdTecRecord *tec, int category)
+int cmdTecpara(CmdTecRecord *tecRecord, int category)
 {
     short valueType;
-    CmdTecparaValue *valueAddress = cmdTecparaSub(tec, category, &valueType);
+    CmdTecparaValue *valueAddress = cmdTecparaSub(tecRecord, category, &valueType);
 
     if (valueType == 1) {
         return valueAddress->byteValue;
@@ -2106,6 +2106,7 @@ int cmdThinkCamEvent(ThinkProcess *proc)
 
     param = cmdNum(proc->pc);
     proc->pc += 2;
+    /* A block copy, not struct assignment: an assignment lets `sw $5,8($29)` float above it. */
     __builtin_memcpy(&saved, proc, sizeof(ThinkProcess));
     event.type = CAM_EVENT_THINK;
     event.unit = pThinkUnit;
