@@ -9,17 +9,24 @@ extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
 static int s_aePosToJntID[8] = {0, 2, 4, 1, 3, 5, 6, 7};
+
 const char D_00A53E10[] = "(RG_EQUIP_POS_LEFT_HAND <= (ePos) && (ePos) <= RG_EQUIP_POS_BACK_RIGHT) || (ePos) == RG_EQUIP_POS_INVALID";
+
 const char D_00A53E80[] = "../rg_equip_type.euc.c";
+
 const char D_00A53E98[] = "pEquip != NIL";
+
 const char D_00A53EC8[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
+
 const char D_00A53F90[] = "left";
+
 const char D_00A53F98[] = "right";
+
 const char D_00A53FA0[] = "back";
-const char D_00A53FA8[] = "???";
+
+const char D_00A53FA8[] = "?\?\?";
 
 #define RG_EQUIP_TYPE_COUNT 3
-
 /*
  * The 8 mount positions RG_EQUIP_POS_LEFT_HAND..RG_EQUIP_POS_BACK_RIGHT
  * (D_00A53E10; RgEquipAddMount bounds ePos + 1 below 9).
@@ -46,14 +53,51 @@ void InitRgEquip(RgEquipRecord *pEquip)
     pEquip->activeMount = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", CopyRgEquip);
+/* ov12:0x00a53ea8 holds the CopyRgEquip assert text (line 69). */
+extern const char D_00A53EA8[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipAddMount);
+void CopyRgEquip(RgEquipRecord *pDst, RgEquipRecord *pSrc)
+{
+    int i;
 
-/* Still INCLUDE_ASM above: appends one mount (RgEquipMount). */
+    if (pDst == 0 || pSrc == 0) {
+        assert_prog(D_00A53EA8, D_00A53E80, 69);
+    }
+    pDst->mountCount = pSrc->mountCount;
+    for (i = 0; i < pSrc->mountCount; i++) {
+        pDst->mounts[i].type = pSrc->mounts[i].type;
+        pDst->mounts[i].pos = pSrc->mounts[i].pos;
+        pDst->mounts[i].posMask = pSrc->mounts[i].posMask;
+    }
+}
+
+/* ov12:0x00a53f08 is the mount-count assert text (line 89). */
+extern const char D_00A53F08[];
+
 void RgEquipAddMount(RgEquipRecord *pEquip, unsigned int eType, int ePos,
-                     unsigned int posMask);
+                     unsigned int posMask)
+{
+    int mountIndex;
 
+    if (pEquip == 0) {
+        assert_prog(D_00A53E98, D_00A53E80, 85);
+    }
+    if (eType >= RG_EQUIP_TYPE_COUNT) {
+        assert_prog(D_00A53EC8, D_00A53E80, 86);
+    }
+    if ((unsigned int)ePos + 1u >= RG_EQUIP_POS_NUM + 1) {
+        assert_prog(D_00A53E10, D_00A53E80, 88);
+    }
+    if (pEquip->mountCount >= RG_EQUIP_MOUNT_MAX) {
+        assert_prog(D_00A53F08, D_00A53E80, 89);
+    }
+    mountIndex = pEquip->mountCount++;
+    pEquip->mounts[mountIndex].type = eType;
+    pEquip->mounts[mountIndex].pos = ePos;
+    pEquip->mounts[mountIndex].posMask = posMask;
+}
+
+void RgEquipAddMount(RgEquipRecord *pEquip, unsigned int eType, int ePos, unsigned int posMask);
 /* ov12:0x00a53f38 holds "nMount >= 0"; s_aePosToType (.data, still
  * scaffold-owned) maps each of the 8 mount positions to its equip type. */
 extern const char D_00A53F38[];
@@ -110,7 +154,47 @@ int RgEquipIsEquipable(RgEquipRecord *pEquip, int eType)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipCheckConfrict);
+extern const char D_00A53F48[];
+extern const char D_00A53F58[];
+int RgEquipCheckConfrict(RgEquipRecord **ppEquip, unsigned int eType)
+{
+    unsigned int mask[RG_EQUIP_TYPE_COUNT];
+    unsigned int i;
+    unsigned int j;
+    unsigned int result;
+    RgEquipMount *pMount;
+
+    if (ppEquip == 0) {
+        assert_prog(D_00A53F48, D_00A53E80, 149);
+    }
+    if (eType >= RG_EQUIP_TYPE_COUNT) {
+        assert_prog(D_00A53F58, D_00A53E80, 150);
+    }
+    if (ppEquip[eType] == 0) {
+        return 0;
+    }
+    for (i = 0; i < RG_EQUIP_TYPE_COUNT; i++) {
+        mask[i] = 0;
+        if (ppEquip[i] != 0) {
+            for (j = 0; j < ppEquip[i]->mountCount; j++) {
+                pMount = &ppEquip[i]->mounts[j];
+                if (pMount->type == i) {
+                    mask[i] |= pMount->posMask;
+                }
+            }
+        }
+    }
+    result = 0;
+    for (i = 0; i < RG_EQUIP_TYPE_COUNT; i++) {
+        if (i != eType && (mask[i] & mask[eType]) != 0) {
+            result = result | (1u << i);
+        }
+    }
+    if (ppEquip[eType] != 0 && ppEquip[eType]->activeMount != 0) {
+        result |= 1 << eType;
+    }
+    return result;
+}
 
 const char *RgEquipTypeString(int eType)
 {
@@ -145,7 +229,6 @@ static RgEquipMount *_GetMountData(RgEquipRecord *pEquip, int eType)
 }
 
 extern int strcmp(const char *s1, const char *s2);
-
 /* ov12:0x00a53fb0/0x00a53fb8/0x00a53fc0 hold the weapon names "BMP45VX",
  * "SMP53AG" and "CB85VX". */
 extern const char D_00A53FB0[];
@@ -181,4 +264,54 @@ int RgEquipMountPos(RgEquipRecord *pEquip, unsigned int eType, int charID,
     return ePos;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipMountPosString);
+/* ov12:0x00a53f48 holds "apEquip != NIL"; ov12:0x00a53f58 holds
+ * "RG_EQUIP_TYPE_MIN <= eType && eType < RG_EQUIP_TYPE_NUM". */
+/* The eight mount position names, in RgEquipMountPos order (ov12 rodata). */
+extern const char D_00A53FC8[];
+extern const char D_00A53FD8[];
+extern const char D_00A53FE8[];
+extern const char D_00A53FF8[];
+extern const char D_00A54008[];
+extern const char D_00A54018[];
+extern const char D_00A54028[];
+extern const char D_00A54038[];
+
+const char *RgEquipMountPosString(RgEquipRecord *pEquip, unsigned int eType,
+                                  int charID, const char *pszWepName)
+{
+    int ePos;
+
+    if (eType >= RG_EQUIP_TYPE_COUNT) {
+        assert_prog(D_00A53EC8, D_00A53E80, 340);
+    }
+    if (eType == 2) {
+        return D_00A53FA0;
+    }
+    ePos = RgEquipMountPos(pEquip, eType, charID, pszWepName);
+    switch (ePos) {
+    case 0:
+        return D_00A53FC8;
+    case 1:
+        return D_00A53FD8;
+    case 2:
+        return D_00A53FE8;
+    case 3:
+        return D_00A53FF8;
+    case 4:
+        return D_00A54008;
+    case 5:
+        return D_00A54018;
+    case 6:
+        return D_00A54028;
+    case 7:
+        return D_00A54038;
+    default:
+        if (eType == 0) {
+            return D_00A53F90;
+        }
+        if (eType == 1) {
+            return D_00A53F98;
+        }
+        return RgEquipTypeString(eType);
+    }
+}

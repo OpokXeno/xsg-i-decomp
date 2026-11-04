@@ -5,13 +5,18 @@
 #include "shared.h"
 
 const char D_00A53418[] = "pEff != NIL";
+
 const char D_00A53428[] = "../rg_shot_effect.euc.c";
+
 const char D_00A53440[] = "pShotEff != NIL";
 
 /* Opaque handles this TU only ever passes through by pointer. */
 typedef struct RgDispModel RgDispModel;
+
 typedef struct RgParticleEffect RgParticleEffect;
+
 typedef struct RgEffectEnv RgEffectEnv;
+
 typedef struct RgBxx RgBxx;
 
 /*
@@ -60,7 +65,9 @@ extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
                        int line);
 extern int RgEffectEnvGetParticleData(RgEffectEnv *effectEnv, char *name,
                                       void *buffer);
+
 typedef struct RgParticleEffectEssence RgParticleEffectEssence;
+
 extern RgParticleEffect *CreateRgParticleEffect(RgParticleEffectEssence *essence,
                                                 int context);
 extern void XrgUnitMatrix(RgMatrix destination);
@@ -71,13 +78,11 @@ extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
 extern void XrgNegateVector(RgVector destination, RgVector source);
 extern void RgParticleEffectSetShootLocal(RgParticleEffect *effect,
                                           RgMatrix local);
-
 /*
  * Linker witnesses for the original literals at ov12:0x00a53418,
  * 0x00a53428 and 0x00a53440; this TU's .rodata stays scaffold-owned
  * (config/tu-build.json).
  */
-
 /*
  * Linker witnesses for the original literals at ov12:0x00a53418 and
  * 0x00a53428; this TU's .rodata stays scaffold-owned (config/tu-build.json).
@@ -331,4 +336,67 @@ void RgShotEffectPassTime(RgShotEffect *pEff, float time)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_effect", RgShotEffectDisp);
+typedef struct XrgPaint2D XrgPaint2D;
+
+typedef struct XrgPaint2DLine3D XrgPaint2DLine3D;
+
+extern void RgDispModelSetLocal(RgDispModel *dispModel, const RgMatrix matrix);
+extern void RgDispModelSetTransparent(RgDispModel *dispModel, float transparent);
+extern void RgDispModelDisplay(RgDispModel *dispModel);
+extern void RgParticleEffectDisp(RgParticleEffect *particleEffect);
+extern XrgPaint2D *InstanceOfXrgPaint2D(void);
+extern void XrgPaint2DAlpha(XrgPaint2D *paint2D, int alpha);
+extern void XrgPaint2DUseTexture(XrgPaint2D *paint2D, int picId);
+extern void XrgPaint2DColor(XrgPaint2D *paint2D, int *color);
+extern void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, int flags, float width);
+extern void XrgPaint2DDrawLine(XrgPaint2D *paint2D, XrgPaint2DLine3D *line);
+extern void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
+extern void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
+extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
+extern void XrgScaleVectorXYZ(RgVector destination, RgVector source, float scale);
+extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
+
+void RgShotEffectDisp(RgShotEffect *pEff)
+{
+    RgMatrix matrix;
+    /* Raw XrgPaint2DLine3D descriptor: its struct lives in ov12/xrg_paint2d.c's
+     * TU-local header (mode, 12-byte gap, start at 16, end at 32, width at 48);
+     * this TU fills start and end only. */
+    RgVector line[4];
+    RgVector diff;
+    XrgPaint2D *paint2D;
+
+    if (pEff == 0) {
+        assert_prog(D_00A53418, D_00A53428, 284);
+    }
+    if (pEff->dispModel != 0) {
+        XrgUnitMatrix(matrix);
+        matrix[10] = matrix[5] = matrix[0] = pEff->scale;
+        XrgRotMatrixY(matrix, matrix, pEff->yRotation);
+        XrgMulMatrix(matrix, pEff->matrix, matrix);
+        RgDispModelSetLocal(pEff->dispModel, matrix);
+        if (pEff->transparent < 1.0f) {
+            RgDispModelSetTransparent(pEff->dispModel, pEff->transparent);
+        }
+        RgDispModelDisplay(pEff->dispModel);
+    }
+    if (pEff->particleEffect != 0) {
+        RgParticleEffectDisp(pEff->particleEffect);
+    }
+    if (pEff->texLinePicId != 0) {
+        paint2D = InstanceOfXrgPaint2D();
+        XrgPaint2DAlpha(paint2D, 1);
+        XrgPaint2DUseTexture(paint2D, pEff->texLinePicId);
+        InitXrgPaint2DLine3D((XrgPaint2DLine3D *) line, 1, pEff->texLineModelHeight);
+        __asm__ __volatile__("lqc2 vf31, 0(%0)\n\t"
+                             "sqc2 vf31, 0(%1)"
+                             :
+                             : "r"(pEff->endPos), "r"(line[1])
+                             : "memory");
+        XrgSubVector(diff, pEff->startPos, pEff->endPos);
+        XrgScaleVectorXYZ(diff, diff, pEff->texLineModelWidth);
+        XrgAddVector(line[2], line[1], diff);
+        XrgPaint2DColor(paint2D, pEff->texLineModelColor);
+        XrgPaint2DDrawLine(paint2D, (XrgPaint2DLine3D *) line);
+    }
+}

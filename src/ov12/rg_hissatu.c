@@ -20,11 +20,33 @@ const char D_00A526D8[8] = "HMR55AG";
 extern void assert_prog(const char *expression, const char *sourceFile,
                         int sourceLine);
 extern int RgWeaponIsNotBusy(RgWeapon *weapon);
+extern const char D_00A52660[];
+extern void *RgWeaponGetEss(RgWeapon *weapon);
+extern float RgWeaponGetShotNum(RgWeapon *weapon);
+extern int strcasecmp(const char *left, const char *right);
 
 static int _IsSpecWep(RgWeapon *weapon, const char *weaponName);
 
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_hissatu", _IsSpecWep);
+static int _IsSpecWep(RgWeapon *weapon, const char *weaponName)
+{
+    char *essence;
+
+    if (weaponName == 0) {
+        assert_prog(D_00A52660, D_00A52670, 21);
+    }
+    if (weapon == 0) {
+        return 0;
+    }
+    essence = (char *) RgWeaponGetEss(weapon);
+    if (essence == 0 || strcasecmp(essence + 816, weaponName) != 0) {
+        return 0;
+    }
+    if (RgWeaponGetShotNum(weapon) <= 0.0f || RgWeaponIsNotBusy(weapon) == 0) {
+        return 0;
+    }
+    return 1;
+}
 
 extern int RgWeaponGetControlFlag(RgWeapon *weapon);
 

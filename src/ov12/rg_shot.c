@@ -9,24 +9,35 @@ extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
 const char D_00A532E8[16] = "pShot != NIL";
+
 const char D_00A532F8[24] = "../rg_shot.euc.c";
+
 const char D_00A53310[16] = "pGeom != NIL";
+
 const char D_00A53338[16] = "pExtInfo != NIL";
+
 const char D_00A53348[16] = "pEssence != NIL";
+
 const char D_00A53358[16] = "pInfo != NIL";
+
 const char D_00A53368[16] = "pBom != NIL";
+
 const char D_00A53378[8] = "tama";
+
 const char D_00A53380[16] = "eff11.ptcl";
+
 const char D_00A53390[16] = "pEss != NIL";
+
 const char D_00A533A0[16] = "pFire != NIL";
+
 const char D_00A533C8[16] = "pBeam != NIL";
+
 const char D_00A533D8[16] = "pRob != NIL";
+
 const char D_00A533E8[16] = "pBgObj != NIL";
 
 extern void *RgCharAlloc(unsigned int size, int type);
-static void *_InitBeam(void *beam, void *essence, void *info);
-
-/* Local siblings of this TU still in asm, needed by functions of this allocation. */
+static void _InitBeam(void *beam, RgBeamEssence *essence, RgShotRequest *info);
 static void _InitShotCommonSub(RgShot *shot, int id);
 static void _InitRgShotEssence(RgShotEssence *essence);
 static int _GrenadeEntryHistory(RgShot *shot, int bgObject);
@@ -34,12 +45,10 @@ static void _GrenadeBomPassTime(RgShot *shot, float deltaTime);
 static void _InitGrenade(void *shot, void *essence, void *info);
 static void _HomingPassTime(RgHomingShot *shot, float deltaTime);
 static void _ShotCommonPassTime(RgShot *shot, float deltaTime);
-
 extern int RgBgObjTryToBreak(int bgObject, float damage);
 extern void XrgSoundRingVol(int driver, int soundId, int volume);
 extern void CreateRgHitEffectPos(RgVector position, const char *effectFile,
                                  const char *defaultEffectFile);
-
 /* Defined by other translation units of this overlay. */
 extern void RgGeomFree(RgGeom *geom);
 extern void RgGeomResetStatus(RgGeom *geom, unsigned int flags);
@@ -50,7 +59,6 @@ extern void RgCharPassTimeMethod(RgChar *pChar,
 extern void RgShotEffectDisp(RgShotEffect *effect);
 extern void DisposeRgShotEffect(RgShotEffect *effect);
 extern void XrgSoundRingStop(int driver, int soundId);
-
 extern void XrgCopyVector(RgVector destination, RgVector source);
 extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
 extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
@@ -63,7 +71,6 @@ extern void XrgCalcMatrixXtoY(RgMatrix destination, RgVector x_axis,
 extern void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle);
 extern float XrgRand(float lower, float upper);
 extern float cosf(float angle);
-
 extern void RgGeomBallSetRadius(RgGeomBall *geom, float radius);
 extern void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity);
 extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
@@ -73,7 +80,6 @@ extern void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
                                 const char *source_file, int source_line);
 extern void __RgGeomPointGetOldPos(RgGeomPoint *point, RgVector destination,
                                    const char *source_file, int source_line);
-
 extern void RgShotEffectSetPos(RgShotEffect *effect, RgVector from, RgVector to);
 extern void RgShotEffectPassTime(RgShotEffect *effect, float deltaTime);
 extern void RgShotEffectSetModel(RgShotEffect *effect, const char *variant);
@@ -86,7 +92,6 @@ extern void RgShotEffectSetTexLineModelColor(RgShotEffect *effect,
 extern void RgShotEffectStopAlive(RgShotEffect *effect, float time);
 extern RgParticleEffect *RgShotEffectGetPtclEffect(RgShotEffect *effect);
 extern void RgParticleEffectStopShoot(RgParticleEffect *effect);
-
 /* Defined later in this TU (a local sibling still in asm). */
 static RgGeom *_CommonGetGeom(RgShot *shot);
 
@@ -223,7 +228,60 @@ static int _ShotCommonIsReleased(RgShot *shot)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _InitShotCommonSub);
+const char D_00A53320[24] = "pShotGroup != NIL";
+
+extern RgShotEffect *CreateRgShotEffect(void);
+extern void RgCharControlMethod(RgChar *pChar,
+                                void (*controlMethod)(RgChar *pChar));
+extern void RgCharDispMethod(RgChar *pChar,
+                             void (*dispMethod)(RgChar *pChar));
+extern void RgCharDestructMethod(RgChar *pChar,
+                                 void (*destructMethod)(RgChar *pChar));
+extern RgGeomBall *CreateRgGeomBall(float radius, float weight);
+struct RgGeomGroup;
+extern RgGeom *RgGeomGroupCreateBall(struct RgGeomGroup *pGroup, void *parent);
+/* Defined later in this TU (a local sibling still in asm). */
+static void _ShotCommonHitBg(RgShot *shot, int bgObject, RgVector position);
+static void _ShotCommonHitRobot(RgShot *shot, int robot, RgVector position);
+
+static void _InitShotCommonSub(RgShot *shot, int id)
+{
+    if (id == 0) {
+        assert_prog(D_00A53320, D_00A532F8, 242);
+    }
+    RgCharControlMethod((RgChar *) shot, (void (*)(RgChar *)) _ShotCommonControl);
+    RgCharDispMethod((RgChar *) shot, (void (*)(RgChar *)) _ShotCommonDisp);
+    RgCharDestructMethod((RgChar *) shot, (void (*)(RgChar *)) _ShotCommonDestruct);
+    RgCharPassTimeMethod((RgChar *) shot,
+                         (void (*)(RgChar *, float)) _ShotCommonPassTime);
+    shot->notifyHit = (void (*)(RgShot *, RgVector)) _ShotCommonHit;
+    shot->hitRobot = _ShotCommonHitRobot;
+    shot->hitBg = _ShotCommonHitBg;
+    shot->isReleased = _ShotCommonIsReleased;
+    shot->hitHistory = 0;
+    shot->essence = 0;
+    shot->life = 0.0f;
+    shot->damage = 0.0f;
+    shot->hitRobotCount = 0;
+    shot->effect = CreateRgShotEffect();
+    if (id != 0) {
+        shot->geomTray = RgGeomGroupCreateBall((struct RgGeomGroup *) id, shot);
+    } else {
+        shot->geomTray = (RgGeom *) CreateRgGeomBall(0.5f, 1.0f);
+    }
+    RgGeomBallSetRadius((RgGeomBall *) shot->geomTray, 0.5f);
+    RgGeomResetStatus(shot->geomTray, 16);
+    shot->soundDriver = 0;
+    shot->hideSoundId = 0;
+    shot->noLifeSoundVolume = 128;
+    shot->hitSoundId = 0;
+    shot->bgHitSoundId = 0;
+    shot->noLifeSoundId = 0;
+    do {
+        shot->hitSoundVolume = 128;
+        shot->bgHitSoundVolume = 128;
+    } while (0);
+}
 
 static void _InitShotCommon(void *shot, void *essence, void *info, float speed)
 {
@@ -415,9 +473,122 @@ void InitRgHomingShotEssence(void *essence)
     typedEssence->delay = 0.3f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _GrenadeEntryHistory);
+static int _GrenadeEntryHistory(RgShot *shot, int bgObject)
+{
+    RgGrenadeShot *typedShot;
+    unsigned int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _GrenadeBomPassTime);
+    typedShot = (RgGrenadeShot *) shot;
+    if (shot == 0) {
+        assert_prog(D_00A53368, D_00A532F8, 522);
+    }
+    if (bgObject == 0) {
+        return 0;
+    }
+    if (typedShot->historyCount >= 8) {
+        return 0;
+    }
+    for (i = 0; i < typedShot->historyCount; i++) {
+        if (typedShot->bgObjectHistory[i] == bgObject) {
+            return 0;
+        }
+    }
+    {
+        unsigned int *historyCountPtr;
+        unsigned int count;
+
+        historyCountPtr = &typedShot->historyCount;
+        count = *historyCountPtr;
+        *historyCountPtr = count + 1;
+        typedShot->bgObjectHistory[count] = bgObject;
+    }
+    return 1;
+}
+
+const char D_00A533F8[16] = "pRobot != NIL";
+
+const char D_00A53408[16] = "eff06.ptcl";
+
+extern void RgShotEffectSetScale(RgShotEffect *effect, float scale);
+extern void RgShotEffectSetYRot(RgShotEffect *effect, float yRotation);
+extern void RgShotEffectSetTransparent(RgShotEffect *effect, float transparent);
+extern void RgShotEffectSetAddAlpha(RgShotEffect *effect);
+
+static void _GrenadeBomPassTime(RgShot *shot, float deltaTime)
+{
+    RgGrenadeShot *typedShot;
+    RgGeom *geom;
+    float twiceElapsed;
+    float factor;
+    float radius;
+    float angle;
+    float alpha;
+    float fadeWindow;
+    float maxTransparency;
+    float halfTurn;
+
+    typedShot = (RgGrenadeShot *) shot;
+    if (shot == 0) {
+        assert_prog(D_00A53368, D_00A532F8, 542);
+    }
+    geom = _CommonGetGeom(shot);
+    _ShotCommonPassTime(shot, deltaTime);
+    typedShot->elapsedTime = typedShot->elapsedTime + deltaTime;
+    if (typedShot->duration < typedShot->elapsedTime) {
+        RgGeomResetStatus(geom, 1);
+        shot->life = 0.0f;
+    } else {
+        twiceElapsed = typedShot->elapsedTime + typedShot->elapsedTime;
+        if (twiceElapsed < 0.0f) {
+            factor = 0.0f;
+        } else if (typedShot->duration < twiceElapsed) {
+            factor = typedShot->duration;
+        } else {
+            factor = twiceElapsed;
+        }
+        maxTransparency = 0.9f;
+        fadeWindow = 0.5f;
+        radius = typedShot->explosionRadius * factor / typedShot->duration;
+        RgGeomBallSetRadius((RgGeomBall *) geom, radius);
+        RgShotEffectSetScale(shot->effect, radius * 1.5f);
+
+        angle = typedShot->spinAngle + 0.19634954f;
+        halfTurn = 3.14159265f;
+        if (halfTurn < angle) {
+            do {
+                angle -= 6.28318531f;
+            } while (halfTurn < angle);
+        }
+        if (angle < -3.14159265f) {
+            do {
+                angle += 6.28318531f;
+            } while (angle < -3.14159265f);
+        }
+        typedShot->spinAngle = angle;
+        RgShotEffectSetYRot(shot->effect, angle);
+
+        if (0.0f < (float) typedShot->repeatCount) {
+            RgShotEffectSetAddAlpha(shot->effect);
+            RgShotEffectSetTransparent(shot->effect, 0.1f);
+            XrgSoundRingVol(shot->soundDriver, shot->hitSoundId,
+                            shot->hitSoundVolume);
+        } else {
+            RgShotEffectSetAddAlpha(shot->effect);
+            if (typedShot->duration < typedShot->elapsedTime + fadeWindow) {
+                alpha = (typedShot->duration - typedShot->elapsedTime)
+                        / fadeWindow * maxTransparency;
+                if (alpha < 0.0f) {
+                    alpha = 0.0f;
+                } else if (maxTransparency < alpha) {
+                    alpha = maxTransparency;
+                }
+                RgShotEffectSetTransparent(shot->effect, alpha);
+            } else {
+                RgShotEffectSetTransparent(shot->effect, 0.9f);
+            }
+        }
+    }
+}
 
 /* Defined later in this TU (a local sibling still in asm). */
 static void _GrenadeSetBom(RgShot *shot);
@@ -436,10 +607,40 @@ static void _GrenadeBomHit(RgShot *shot, RgVector position)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _GrenadeHitRobot);
+extern RgGeomPoint *RgRobotGetGeom(RgStatus *pRobot);
+extern unsigned int RgRobotGetStatusFlags(RgStatus *pRobot);
+extern void RgRobotSetConfuse(RgStatus *pRobot, float confuse);
+extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
 
-/* Defined later in this TU (a local sibling still in asm). */
-static void _ShotCommonHitBg(RgShot *shot, int bgObject, RgVector position);
+static void _GrenadeHitRobot(RgShot *shot, int robot, RgVector position)
+{
+    RgGrenadeShot *typedShot;
+    RgGeomPoint *robotGeom;
+    RgVector robotPosition;
+    RgVector force;
+
+    typedShot = (RgGrenadeShot *) shot;
+    if (_GrenadeEntryHistory(shot, robot) == 0) {
+        return;
+    }
+    if ((float) typedShot->repeatCount <= 0.0f) {
+        _ShotCommonHitRobot(shot, robot, position);
+        robotGeom = RgRobotGetGeom((RgStatus *) robot);
+        __RgGeomPointGetPos(robotGeom, robotPosition, D_00A532F8, 638);
+        __RgGeomPointGetPos((RgGeomPoint *) _CommonGetGeom(shot), force,
+                            D_00A532F8, 639);
+        XrgSubVector(force, robotPosition, force);
+        force[1] = 0.0f;
+        XrgNormalizeVector(force, force);
+        XrgScaleVector(force, force, 1.5e6f);
+        RgGeomPointAddForce(robotGeom, force);
+    } else {
+        if ((RgRobotGetStatusFlags((RgStatus *) robot) & 0x80) != 0) {
+            return;
+        }
+        RgRobotSetConfuse((RgStatus *) robot, (float) typedShot->repeatCount);
+    }
+}
 
 static void _GrenadeHitBg(RgShot *shot, int bgObject, RgVector position)
 {
@@ -505,7 +706,30 @@ static void _GrenadeHomingPassTime(RgGrenadeShot *bom, float deltaTime)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _InitGrenade);
+static void _GrenadeHitRobot(RgShot *shot, int robot, RgVector position);
+
+static void _InitGrenade(void *shot, void *essence, void *info)
+{
+    RgGrenadeShot *typedShot;
+    RgGrenadeEssence *typedEssence;
+
+    typedShot = shot;
+    typedEssence = essence;
+    _InitHoming(shot, essence, info);
+    RgCharPassTimeMethod((RgChar *) shot,
+                         (void (*)(RgChar *, float)) _GrenadeHomingPassTime);
+    typedShot->explosionRadius = typedEssence->explosionRadius;
+    typedShot->proximity = typedEssence->proximity;
+    typedShot->common.common.notifyHit = _GrenadeHomingHit;
+    typedShot->duration = typedEssence->duration;
+    typedShot->elapsedTime = 0.0f;
+    typedShot->spinAngle = 0.0f;
+    typedShot->common.common.hitRobot = _GrenadeHitRobot;
+    typedShot->common.common.hitBg = _GrenadeHitBg;
+    typedShot->common.common.hitHistory = (void (*)(void)) _GrenadeShotZeroLife;
+    typedShot->historyCount = 0;
+    typedShot->repeatCount = (unsigned int) typedEssence->repeatCount;
+}
 
 static void *_CreateGrenade(void *essence, void *info)
 {
@@ -527,7 +751,6 @@ static void *_CreateGrenade(void *essence, void *info)
 
 /* Defined earlier in this TU (a local sibling still in asm). */
 extern void InitRgHomingShotEssence(void *essence);
-
 /* Defined earlier in this TU (a local sibling still in asm). */
 static void *_CreateGrenade(void *essence, void *info);
 
@@ -558,7 +781,76 @@ static void _FireKill(RgShot *shot)
     RgShotEffectStopAlive(shot->effect, typedShot->fadeTime);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _FirePassTime);
+extern void RgGeomSetStatus(RgGeom *geom, unsigned int flags);
+extern void RgError(const char *message, const char *source_file, int line, ...);
+extern const char D_00A533B0[24];
+
+static void _FirePassTime(RgShot *shot, float deltaTime)
+{
+    RgFireShot *typedShot;
+    RgGeom *geom;
+    RgVector position;
+    RgVector direction;
+    unsigned int status;
+    float *originPos;
+    float *tipPos;
+
+    typedShot = (RgFireShot *) shot;
+    if (shot == 0) {
+        assert_prog(D_00A533A0, D_00A532F8, 831);
+    }
+    geom = _CommonGetGeom(shot);
+    _ShotCommonPassTimeGeom(shot, deltaTime);
+    _ShotCommonPassTimeLife(shot, deltaTime);
+    status = typedShot->status;
+    switch (status) {
+    default:
+        RgError(D_00A533B0, D_00A532F8, 876, status);
+        originPos = typedShot->origin;
+        tipPos = typedShot->tipPosition;
+        break;
+    case 0:
+        RgGeomSetStatus(geom, 1);
+        typedShot->status = 1;
+        /* fall through */
+    case 1:
+        shot->damage = typedShot->damageRate * deltaTime;
+        if (_GetShotPosDir((RgShot *) &typedShot->request, position,
+                           direction) != 0) {
+            originPos = typedShot->origin;
+            XrgCopyVector(originPos, position);
+            XrgNormalizeVector(direction, direction);
+            XrgScaleVector(direction, direction, typedShot->speed);
+            tipPos = typedShot->tipPosition;
+            XrgAddVector(tipPos, position, direction);
+        } else {
+            _FireKill(shot);
+        }
+        originPos = typedShot->origin;
+        tipPos = typedShot->tipPosition;
+        typedShot->remainingTime = typedShot->remainingTime - deltaTime;
+        if (typedShot->remainingTime < 0.0f) {
+            _FireKill(shot);
+        }
+        break;
+    case 2:
+        RgGeomResetStatus(geom, 1);
+        typedShot->fadeTime = typedShot->fadeTime - deltaTime;
+        if (typedShot->fadeTime < 0.0f) {
+            RgCharFree((RgChar *) shot);
+            originPos = typedShot->origin;
+            tipPos = typedShot->tipPosition;
+        } else {
+            originPos = typedShot->origin;
+            tipPos = typedShot->tipPosition;
+        }
+        break;
+    }
+    RgGeomPointSetPos((RgGeomPoint *) geom, originPos);
+    RgGeomPointMovePos((RgGeomPoint *) geom, tipPos);
+    RgShotEffectSetPos(shot->effect, originPos, tipPos);
+    RgShotEffectPassTime(shot->effect, deltaTime);
+}
 
 static int _FireIsReleased(RgShot *shot)
 {
@@ -588,9 +880,6 @@ static void _FireHit(RgShot *shot, RgVector position)
 {
 }
 
-/* Defined later in this TU (a local sibling still in asm). */
-static void _ShotCommonHitRobot(RgShot *shot, int robot, RgVector position);
-
 static void _FireHitRobot(RgShot *shot, int robot, RgVector position)
 {
     RgFireShot *fire = (RgFireShot *)shot;
@@ -601,10 +890,47 @@ static void _FireHitRobot(RgShot *shot, int robot, RgVector position)
     fire->alreadyHitRobot = 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _InitFire);
+extern void RgShotEffectSetParticleShootReverse(RgShotEffect *effect);
+static void _FirePassTime(RgShot *shot, float deltaTime);
 
-/* Defined earlier in this TU (a local sibling still in asm). */
-static void *_InitFire(void *fire, void *essence, void *info);
+static void _InitFire(void *fire, void *essence, void *info)
+{
+    RgShot *shot;
+    RgFireShot *typedShot;
+    RgFireEssence *typedEssence;
+    RgShotRequest *typedInfo;
+
+    shot = fire;
+    typedShot = fire;
+    typedEssence = essence;
+    typedInfo = info;
+    _InitShotCommon(fire, essence, info, 0.0f);
+    shot->notifyHit = _FireHit;
+    shot->isReleased = _FireIsReleased;
+    shot->release = _FireRelease;
+    shot->hitRobot = _FireHitRobot;
+    RgGeomBallSetRadius((RgGeomBall *) shot->geomTray, 1.0f);
+    RgShotEffectSetParticleShootReverse(shot->effect);
+    XrgClearVector(typedShot->origin);
+    XrgClearVector(typedShot->tipPosition);
+    typedShot->status = 0;
+    typedShot->speed = typedEssence->speed;
+    typedShot->remainingTime = typedEssence->duration;
+    typedShot->damageRate = shot->damage;
+    typedShot->quickFade = typedEssence->trailingCount;
+    typedShot->robot = typedEssence->robot;
+    typedShot->alreadyHitRobot = 0;
+    shot->damage = 0.0f;
+    shot->life = 1e8f;
+    RgCharPassTimeMethod((RgChar *) shot,
+                         (void (*)(RgChar *, float)) _FirePassTime);
+    typedShot->request.posOwner = typedInfo->posOwner;
+    typedShot->request.getPos = typedInfo->getPos;
+    typedShot->request.target = typedInfo->target;
+    typedShot->request.id = typedInfo->id;
+}
+
+static void _InitFire(void *fire, void *essence, void *info);
 
 static void *_CreateFire(void *essence, void *info)
 {
@@ -714,7 +1040,6 @@ static void _BeamHit(RgShot *shot, RgVector position)
  * lifetime value at byte offset 0x98; the surrounding object layout remains
  * outside this allocation.
  */
-
 static void _BeamRelease(void *beam)
 {
     BeamLifetimeField *lifetime_field =
@@ -723,7 +1048,39 @@ static void _BeamRelease(void *beam)
     lifetime_field->lifetime = -0.5f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _InitBeam);
+static void _InitBeam(void *beam, RgBeamEssence *essence, RgShotRequest *info)
+{
+    RgShot *shot;
+    RgBeamShot *typedBeam;
+    RgVector origin;
+    RgVector direction;
+    float damageRate;
+    float lifetime;
+
+    shot = beam;
+    typedBeam = beam;
+    _InitShotCommon(beam, essence, info, essence->speed);
+    shot->notifyHit = _BeamHit;
+    shot->isReleased = _BeamIsReleased;
+    shot->release = _BeamRelease;
+    RgGeomBallSetRadius((RgGeomBall *) shot->geomTray, 1.0f);
+    XrgCopyVector(typedBeam->origin, origin);
+    XrgCopyVector(typedBeam->direction, direction);
+    typedBeam->speed = essence->speed;
+    typedBeam->length = 0.0f;
+    damageRate = shot->damage;
+    lifetime = essence->duration;
+    typedBeam->hit = 0;
+    typedBeam->damageRate = damageRate;
+    typedBeam->lifetime = lifetime;
+    shot->damage = 0.0f;
+    RgCharPassTimeMethod((RgChar *) shot,
+                         (void (*)(RgChar *, float)) _BeamPassTime);
+    ((RgShot *) &typedBeam->request)->posOwner = ((RgShot *) info)->posOwner;
+    ((RgShot *) &typedBeam->request)->getPos = ((RgShot *) info)->getPos;
+    typedBeam->request.target = info->target;
+    typedBeam->request.id = info->id;
+}
 
 static void *_CreateBeam(void *essence, void *info)
 {
@@ -857,7 +1214,52 @@ void RgShotHitBg(RgShot *shot, int bgObject, RgVector position)
         shot->notifyHit(shot, position);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _ShotCommonHitRobot);
+extern void CreateRgHitEffectPosDir(RgVector position, RgVector direction,
+                                    const char *name1, const char *name2);
+extern int RgRobotIsInvalidAttack(RgStatus *pRobot, RgVector direction);
+extern void RgRobotGiveDamage(RgStatus *pRobot, RgVector direction,
+                              int damageType, float damage);
+extern void RgRobotGiveWeakDamage(RgStatus *pRobot, RgVector direction,
+                                  float damage, float threshold,
+                                  float windowSeed, float weakHitMotion,
+                                  float weakHitPower);
+extern void RgRobotInvalidAttack(RgStatus *pRobot, RgVector direction,
+                                 float scale);
+
+static void _ShotCommonHitRobot(RgShot *shot, int robot, RgVector position)
+{
+    RgVector direction;
+    RgVector robotPosition;
+
+    if (shot == 0)
+        assert_prog(D_00A532E8, D_00A532F8, 1324);
+    if (robot == 0)
+        assert_prog(D_00A533F8, D_00A532F8, 1325);
+    __RgGeomPointGetOldPos((RgGeomPoint *) _CommonGetGeom(shot), direction,
+                           D_00A532F8, 1328);
+    __RgGeomPointGetPos(RgRobotGetGeom((RgStatus *) robot), robotPosition,
+                        D_00A532F8, 1329);
+    XrgSubVector(direction, direction, robotPosition);
+    if (RgRobotIsInvalidAttack((RgStatus *) robot, direction) == 0) {
+        if (shot->essence != 0 && 0.0f < shot->essence->notDamLimit) {
+            RgRobotGiveWeakDamage((RgStatus *) robot, direction, shot->damage,
+                                  shot->essence->notDamLimit,
+                                  shot->essence->notDamTime,
+                                  shot->essence->slowTime,
+                                  shot->essence->slowRate);
+        } else {
+            RgRobotGiveDamage((RgStatus *) robot, direction, 1, shot->damage);
+        }
+        XrgSoundRingVol(shot->soundDriver, shot->hitSoundId,
+                        shot->hitSoundVolume);
+        CreateRgHitEffectPosDir(position, direction,
+                                shot->essence->damageParticleFile, D_00A53408);
+    } else {
+        CreateRgHitEffectPosDir(position, direction,
+                                shot->essence->hitEffectFile, D_00A53380);
+        RgRobotInvalidAttack((RgStatus *) robot, direction, shot->damage);
+    }
+}
 
 static void _ShotCommonHitBg(RgShot *shot, int bgObject, RgVector position)
 {

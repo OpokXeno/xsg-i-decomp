@@ -11,14 +11,20 @@
 
 /* Referenced original data recovered from this translation unit. */
 const char D_00A56650[16] = "pSelChar != NIL";
-const char D_00A56660[24] = "../rg_select_agws.euc.c";
-const char D_00A56698[16] = "pSelWep != NIL";
-const char D_00A566A8[16] = "uSize > 0";
-const char D_00A566B8[24] = "uSize <= WEP_MAX";
-const char D_00A566D0[24] = "pSelWep->m_uSize > 0";
-const char D_00A566E8[40] = "0 <= nCur && nCur < pSelWep->m_uSize";
-const char D_00A56720[32] = "unknown type select ID %d";
 
+const char D_00A56660[24] = "../rg_select_agws.euc.c";
+
+const char D_00A56698[16] = "pSelWep != NIL";
+
+const char D_00A566A8[16] = "uSize > 0";
+
+const char D_00A566B8[24] = "uSize <= WEP_MAX";
+
+const char D_00A566D0[24] = "pSelWep->m_uSize > 0";
+
+const char D_00A566E8[40] = "0 <= nCur && nCur < pSelWep->m_uSize";
+
+const char D_00A56720[32] = "unknown type select ID %d";
 
 extern const char D_00A56758[];
 extern const char D_00A56768[];
@@ -98,7 +104,9 @@ static void _disp_pic(XrgPaint2D *paint, void *pic, int x, int y)
  * entries, indexed here without completing that type.
  */
 extern void XrgPaint2DColor(XrgPaint2D *paint, const void *color);
+
 typedef struct XrgPlayerColor { int r; int g; int b; int a; } XrgPlayerColor;
+
 static XrgPlayerColor s_aPlayerCol[2] = {{51, 124, 62, 127}, {123, 90, 64, 127}};
 
 static void _disp_pic_pl(XrgPaint2D *paint, void *pic, int x, int y,
@@ -241,10 +249,11 @@ static int _CharIDToCharCursor(int charID)
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
+extern const char D_00A56650[];
+/* "pSelChar != NIL" */
+extern const char D_00A56660[];
 
-extern const char D_00A56650[]; /* "pSelChar != NIL" */
-extern const char D_00A56660[]; /* "../rg_select_agws.euc.c" */
-
+/* "../rg_select_agws.euc.c" */
 static void _InitSelectChar(SelChar *pSelChar)
 {
     if (pSelChar == 0) {
@@ -297,8 +306,9 @@ static void _SetSelectableSelectChar(SelChar *pSelChar, unsigned int charIDMask)
     }
 }
 
-extern const char D_00A56678[]; /* "eCharID != RG_ACTOR_CHAR_NOP" */
+extern const char D_00A56678[];
 
+/* "eCharID != RG_ACTOR_CHAR_NOP" */
 /*
  * ov12:0x00a568f0 "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP"
  * (_TransitToWeaponSelect below) and ov12:0x00a56678 "eCharID !=
@@ -306,7 +316,6 @@ extern const char D_00A56678[]; /* "eCharID != RG_ACTOR_CHAR_NOP" */
  * for the original sentinel value _InitSelType resets SelType::charID to.
  */
 #define RG_ACTOR_CHAR_NOP (-1)
-
 
 static void _SetCharSelectChar(SelChar *pSelChar, int charID)
 {
@@ -402,8 +411,9 @@ static void _PassTimeSelectChar(SelChar *pSelChar, float deltaTime)
     }
 }
 
-extern const char D_00A56698[]; /* "pSelWep != NIL" */
+extern const char D_00A56698[];
 
+/* "pSelWep != NIL" */
 static void _InitSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
@@ -413,9 +423,10 @@ static void _InitSelWep(SelWep *pSelWep)
     pSelWep->m_uSize = 0;
 }
 
-extern const char D_00A566A8[]; /* "uSize > 0" */
-extern const char D_00A566B8[]; /* "uSize <= WEP_MAX" */
-
+extern const char D_00A566A8[];
+/* "uSize > 0" */
+extern const char D_00A566B8[];
+/* "uSize <= WEP_MAX" */
 /*
  * Fills `list` with the weapons matching the filter and returns their count.
  * The first call passes no list and its count is checked against WEP_MAX
@@ -451,8 +462,9 @@ static void _InitCharTypeSelWep(SelWep *pSelWep, int characterID,
     pSelWep->m_uSize = uSize;
 }
 
-extern const char D_00A566D0[]; /* "pSelWep->m_uSize > 0" */
+extern const char D_00A566D0[];
 
+/* "pSelWep->m_uSize > 0" */
 static int _GetEssSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
@@ -488,8 +500,9 @@ static int _GetCursorSelWep(SelWep *pSelWep)
     return pSelWep->cursor;
 }
 
-extern const char D_00A566E8[]; /* "0 <= nCur && nCur < pSelWep->m_uSize" */
+extern const char D_00A566E8[];
 
+/* "0 <= nCur && nCur < pSelWep->m_uSize" */
 static void _SetCursorSelWep(SelWep *pSelWep, int nCur)
 {
     if (pSelWep == 0) {
@@ -501,14 +514,41 @@ static void _SetCursorSelWep(SelWep *pSelWep, int nCur)
     pSelWep->cursor = nCur;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetCursorByNameSelWep);
-
 /*
  * Name field offset within an unrecovered weapon-essence record; only this
  * field is evidenced by _GetNameOnCursorSelWep (docs/style.md, "Struct
  * fields, not offset casts" -- narrowly evidenced scalar access).
  */
 #define WEP_ESSENCE_NAME_OFFSET 0x330
+
+extern int strcmp(const char *left, const char *right);
+extern const char D_00A56710[];
+
+/* "pszName != NIL" */
+/*
+ * Selects the first list entry whose name equals pszName and returns 1; the
+ * cursor is 0 while nothing matches, and the result is 0.
+ */
+static int _SetCursorByNameSelWep(SelWep *pSelWep, char *pszName)
+{
+    unsigned int i;
+
+    if (pSelWep == 0) {
+        assert_prog(D_00A56698, D_00A56660, 401);
+    }
+    if (pszName == 0) {
+        assert_prog(D_00A56710, D_00A56660, 402);
+    }
+    pSelWep->cursor = 0;
+    for (i = 0; i < pSelWep->m_uSize; i++) {
+        if (strcmp((const char *) (pSelWep->list[i] + WEP_ESSENCE_NAME_OFFSET),
+                   pszName) == 0) {
+            pSelWep->cursor = i;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 extern char *strcpy(char *destination, const char *source);
 
@@ -524,10 +564,6 @@ static void _GetNameOnCursorSelWep(SelWep *pSelWep, char *name)
     }
     *name = '\0';
 }
-
-extern int XrgPadIsUp(void);
-extern int XrgPadIsDown(void);
-extern void XrgSoundSystemCursor(void);
 
 /*
  * deltaTime is unused here, but _PassTimeSelType passes its own deltaTime
@@ -558,7 +594,8 @@ static void _PassTimeSelWep(SelWep *pSelWep, float deltaTime)
     }
 }
 
-extern const char D_00A56720[]; /* "unknown type select ID %d" */
+extern const char D_00A56720[];
+/* "unknown type select ID %d" */
 extern void RgError(const char *message, const char *source_file, int line, ...);
 
 static int _EquipCurIDToEquipType(int curID)
@@ -587,50 +624,71 @@ static int _EquipCurIDToEquipType(int curID)
 }
 
 const char D_00A56758[16] = "pSelType != NIL";
+
 const char D_00A56768[32] = "eType != RG_EQUIP_TYPE_INVALID";
+
 const char D_00A56798[16] = "pDisp != NIL";
+
 const char D_00A56838[16] = "pSelDat != NIL";
+
 const char D_00A568C0[16] = "pData != NIL";
+
 const char D_00A568E0[16] = "pSel != NIL";
+
 const char D_00A568F0[56] = "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP";
+
 const char D_00A56928[16] = "pBxx != NIL";
+
 const char D_00A56968[16] = "frm11on_ul.bmp";
+
 const char D_00A56978[16] = "frm11on_ur.bmp";
+
 const char D_00A56988[16] = "frm11on_bl.bmp";
+
 const char D_00A56998[16] = "frm11on_br.bmp";
+
 const char D_00A569A8[16] = "frm11on_cl.bmp";
+
 const char D_00A569B8[16] = "frm11on_cr.bmp";
+
 const char D_00A569C8[16] = "frm11on_cc.bmp";
+
 const char D_00A569D8[24] = "icon_leftarrow.bmp";
+
 const char D_00A569F0[24] = "icon_rightarrow.bmp";
+
 const char D_00A56A08[16] = "say_yes.bmp";
+
 const char D_00A56A18[16] = "say_no.bmp";
+
 const char D_00A56A28[32] = "pWinInfo->m_pTop[0] != NIL";
+
 const char D_00A56A48[32] = "pWinInfo->m_pTop[1] != NIL";
+
 const char D_00A56A68[32] = "pWinInfo->m_pBtm[0] != NIL";
+
 const char D_00A56A88[32] = "pWinInfo->m_pBtm[1] != NIL";
+
 const char D_00A56AA8[32] = "pWinInfo->m_pSide[0] != NIL";
+
 const char D_00A56AC8[32] = "pWinInfo->m_pSide[1] != NIL";
+
 const char D_00A56AE8[32] = "pWinInfo->m_pInner != NIL";
+
 const char D_00A56B08[32] = "pWinInfo->m_pLeft != NIL";
+
 const char D_00A56B28[32] = "pWinInfo->m_pRight != NIL";
+
 const char D_00A56B48[32] = "pWinInfo->m_pMaru != NIL";
+
 const char D_00A56B68[32] = "pWinInfo->m_pBatu != NIL";
+
 const char D_00A56BB0[24] = "pDat->m_apPic[0] != NIL";
+
 const char D_00A56BC8[24] = "pDat->m_apPic[1] != NIL";
-const char D_00A56C48[16] = "pView != NIL";
-const char D_00A56C90[24] = "pszFileName != NIL";
-const char D_00A56CA8[16] = "data\\nisimori\\";
-const char D_00A56CB8[16] = "select.bxx";
-const char D_00A56CC8[24] = "cannot load select.bxx";
-const char D_00A56CE0[16] = "agwsseltop.r2d";
-const char D_00A56CF0[16] = "agwssel.r2d";
-const char D_00A56D00[16] = "wepseltop.r2d";
-const char D_00A56D10[16] = "wepsel.r2d";
-const char D_00A56D20[24] = "apCollects != NIL";
 
-extern const char D_00A56758[]; /* "pSelType != NIL" */
 
+/* "pSelType != NIL" */
 static void _SetSelTypeCursor(SelType *pSelType, int mode)
 {
     int cursor;
@@ -650,8 +708,7 @@ static void _ResumeSelTypeOldCursor(SelType *pSelType)
     pSelType->cursor = pSelType->oldCursor;
 }
 
- /* "pSelType != NIL" */
-
+/* "pSelType != NIL" */
 static int _GetCursorSelType(SelType *pSelType)
 {
     if (pSelType == 0) {
@@ -735,8 +792,8 @@ static void _SetSpecModeSelType(SelType *pSelType, int mode)
  * below fail on.
  */
 #define RG_EQUIP_TYPE_INVALID (-1)
-extern const char D_00A56768[]; /* "eType != RG_EQUIP_TYPE_INVALID" */
 
+/* "eType != RG_EQUIP_TYPE_INVALID" */
 static int _GetCurrentConfrictSelType(SelType *pSelType)
 {
     int eType;
@@ -751,7 +808,7 @@ static int _GetCurrentConfrictSelType(SelType *pSelType)
     return pSelType->confrict[eType];
 }
 
-static void _GetCurrentWeaponSelType(SelType *pSelType)
+static int _GetCurrentWeaponSelType(SelType *pSelType)
 {
     int eType;
 
@@ -762,7 +819,7 @@ static void _GetCurrentWeaponSelType(SelType *pSelType)
     if (eType == RG_EQUIP_TYPE_INVALID) {
         assert_prog(D_00A56768, D_00A56660, 0x24C);
     }
-    _GetEssSelWep(&pSelType->wepList[eType]);
+    return _GetEssSelWep(&pSelType->wepList[eType]);
 }
 
 static void _GetAllSelType(SelType *pSelType, int *out)
@@ -774,8 +831,9 @@ static void _GetAllSelType(SelType *pSelType, int *out)
     }
 }
 
-extern const char D_00A56788[]; /* "aszName != NIL" */
+extern const char D_00A56788[];
 
+/* "aszName != NIL" */
 static void _GetAllNameOnCursorSelType(SelType *pSelType, char *aszName)
 {
     unsigned int i;
@@ -804,8 +862,7 @@ static void _CheckConfrictSelType(SelType *pSelType)
     }
 }
 
-/* Still INCLUDE_ASM above: moves the list cursor to the entry named `name`. */
-static int _SetCursorByNameSelWep(SelWep *pSelWep, char *name);
+/* "pszName != NIL" */ /* * Selects the first list entry whose name equals pszName and returns 1; the * cursor is 0 while nothing matches, and the result is 0. */ static int _SetCursorByNameSelWep(SelWep *pSelWep, char *pszName);
 
 static void _SetAllCursorByNameSelType(SelType *pSelType, char *aszName)
 {
@@ -918,19 +975,45 @@ static int _DetachWeaponIfConfrictSelType(SelType *pSelType)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _InitWepListDisp);
+/* "pDisp != NIL" */
+extern const char D_00A567A8[];
+/* "fnt02on.bmp" */
+extern const char D_00A567B8[];
+/* "pTex != NIL" */
+extern const char D_00A567C8[];
+/* "frm08on.bmp" */
+extern const char D_00A567D8[];
+/* "icon_uparrow.bmp" */
+extern const char D_00A567F0[];
+/* "icon_downarrow.bmp" */
+extern void *RgBxxGetPic(RgBxx *pBxx, const char *pszName);
+
+static void _InitWepListDisp(WepListDisp *pDisp, RgBxx *pBxx)
+{
+    void *pTex;
+
+    if (pDisp == 0) {
+        assert_prog(D_00A56798, D_00A56660, 748);
+    }
+    pTex = RgBxxGetPic(pBxx, D_00A567A8);
+    if (pTex == 0) {
+        assert_prog(D_00A567B8, D_00A56660, 751);
+    }
+    pDisp->font = _CreateSelectWepFont((int) pTex);
+    pDisp->pFrame = RgBxxGetPic(pBxx, D_00A567C8);
+    pDisp->pUpArrow = RgBxxGetPic(pBxx, D_00A567D8);
+    pDisp->pDownArrow = RgBxxGetPic(pBxx, D_00A567F0);
+    pDisp->originX = 568;
+    pDisp->originY = 168;
+    pDisp->topIndex = 0;
+    pDisp->pSelType = 0;
+    pDisp->pSelWep = 0;
+}
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
-
-/*
- * _InitWepListDisp (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. equipType is _CreateWepListDisp's
- * own argument, forwarded unchanged; the callee itself is unresolved, so
- * no stronger evidence for this role exists within this allocation.
- */
-static void _InitWepListDisp(WepListDisp *pDisp, int equipType);
+static void _InitWepListDisp(WepListDisp *pDisp, RgBxx *pBxx);
 
 static WepListDisp *_CreateWepListDisp(int equipType)
 {
@@ -943,8 +1026,8 @@ static WepListDisp *_CreateWepListDisp(int equipType)
 }
 
 extern void DisposeRgFont(int font);
-extern const char D_00A56798[]; /* "pDisp != NIL" */
 
+/* "pDisp != NIL" */
 static void _DestructWepListDisp(WepListDisp *pDisp)
 {
     if (pDisp == 0) {
@@ -977,10 +1060,139 @@ static void _SetSelectorWepListDisp(WepListDisp *pDisp, SelType *pSelType)
     pDisp->topIndex = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DrawWepListDisp);
+extern void RgFontSetColor(int fontId, const void *color);
+extern void RgFontSetDefaultColor(int fontId);
+extern void RgFontPut(XrgPaint2D *paint, int fontId, int code, int x, int y,
+                      int flag);
+extern void XrgDispMainFont(int x, int y, const char *text, int flag);
+extern const RgFontColor s_aRed_1[2];
+extern const RgFontColor s_aWhite_2[2];
+extern const char D_00A56808[];
+extern const char D_00A56820[];
 
-extern const char D_00A56838[]; /* "pSelDat != NIL" */
+static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
+                             int ofsY)
+{
+    int equipType;
+    int xBase;
+    int yBase;
+    int cursor;
+    int essSize;
+    int *pSlot;
+    int endIdx;
+    int maxTop;
+    int x;
+    int y;
+    int i;
+    int selected;
+    int confrict;
+    int topIndex;
+    int *essList;
+    unsigned int curConfrict;
+    int ess;
+    SelWep *pCur;
+    int essences[4];
 
+    if (pDisp == 0) {
+        assert_prog(D_00A56798, D_00A56660, 813);
+    }
+    if (pDisp->pSelType == 0) {
+        return;
+    }
+    _GetCursorSelType(pDisp->pSelType);
+    equipType = _GetTypeSelType(pDisp->pSelType);
+    pCur = _GetCurSelType(pDisp->pSelType);
+    if (pCur == 0) {
+        return;
+    }
+    _GetAllSelType(pDisp->pSelType, essences);
+    if (pCur != pDisp->pSelWep) {
+        pDisp->pSelWep = pCur;
+        pDisp->topIndex = _GetCursorSelWep(pCur) - 3;
+    }
+    topIndex = pDisp->topIndex;
+    cursor = _GetCursorSelWep(pCur);
+    essSize = _GetEssListSizeSelWep(pCur);
+    if (topIndex > cursor - 2) {
+        topIndex = cursor - 2;
+    }
+    if (topIndex < cursor - 4) {
+        topIndex = cursor - 4;
+    }
+    maxTop = essSize - 7;
+    if (maxTop < 0) {
+        maxTop = 0;
+    }
+    if (topIndex < 0) {
+        topIndex = 0;
+    } else if (topIndex > maxTop) {
+        topIndex = maxTop;
+    }
+    pDisp->topIndex = topIndex;
+    x = pDisp->originX + ofsX;
+    y = pDisp->originY + ofsY;
+    xBase = x;
+    yBase = y;
+    essList = _GetEssListSelWep(pCur);
+    endIdx = topIndex + 7;
+
+    for (i = topIndex; i < endIdx && i < essSize; i++) {
+        selected = (i == cursor);
+        ess = essList[i];
+        pSlot = &essences[equipType];
+        *pSlot = ess;
+        confrict = _CheckEquipWeps(essences, equipType);
+        if (selected != 0) {
+            XrgPaint2DUseTexture(paint, pDisp->pFrame);
+            XrgPaint2DAlpha(paint, 0);
+            XrgPaint2DDrawXYWH(paint, 32, x - 9, y - 8, 0, 0);
+        }
+        if (!confrict) {
+            RgFontSetColor(pDisp->font, &s_aWhite_2[selected]);
+        } else {
+            RgFontSetColor(pDisp->font, &s_aRed_1[selected]);
+        }
+        RgFontStr(paint, pDisp->font, (const char *)ess + 816, x, y, 0);
+        y += 23;
+    }
+
+    if (topIndex < cursor) {
+        x += 108;
+        y = yBase - _SinGet(4) + 58;
+        XrgPaint2DUseTexture(paint, pDisp->pUpArrow);
+        XrgPaint2DAlpha(paint, 0);
+        XrgPaint2DDrawXYWH(paint, 32, x, y, 0, 0);
+    }
+    if (cursor < essSize - 1) {
+        x = xBase + 108;
+        y = yBase + _SinGet(4) + 102;
+        XrgPaint2DUseTexture(paint, pDisp->pDownArrow);
+        XrgPaint2DAlpha(paint, 0);
+        XrgPaint2DDrawXYWH(paint, 32, x, y, 0, 0);
+    }
+
+    RgFontSetDefaultColor(pDisp->font);
+    if (topIndex > 0) {
+        RgFontPut(paint, pDisp->font, 64, xBase + 32, yBase - 20, 1);
+    }
+    if (topIndex < essSize - 7) {
+        RgFontPut(paint, pDisp->font, 33, xBase + 32, yBase + 156, 1);
+    }
+
+    x = xBase - 48;
+    y = yBase + 192;
+    ess = _GetCurrentWeaponSelType(pDisp->pSelType);
+    curConfrict = _GetCurrentConfrictSelType(pDisp->pSelType);
+    if (!curConfrict) {
+        XrgDispMainFont(x, y, (const char *)ess + 848, 0);
+    } else if (curConfrict & (1 << equipType)) {
+        XrgDispMainFont(x, y, D_00A56808, 0);
+    } else {
+        XrgDispMainFont(x, y, D_00A56820, 0);
+    }
+}
+
+/* "pSelDat != NIL" */
 /*
  * InitRgSelectAGWSData (ov12:0x00a3c248) is still INCLUDE_ASM; this call
  * only forwards the confrict scratch address below, so no stronger
@@ -1028,8 +1240,7 @@ static void _DumpSelect__(SelDumpData *pData, const char *pszTitle, int nValue)
     }
 }
 
-extern const char D_00A568C0[]; /* "pData != NIL" */
-
+/* "pData != NIL" */
 static void _SaveCharSelectData(SelDat *pSelDat, int *pData)
 {
     if (pSelDat == 0) {
@@ -1079,10 +1290,7 @@ static int _SaveWepSelectData(SelDat *pSelDat, int *pData)
     }
 }
 
-extern const char D_00A56838[]; /* "pSelDat != NIL" */
-extern const char D_00A568C0[]; /* "pData != NIL" */
-
-
+/* "pData != NIL" */
 static void _LoadCharSelectData(SelDat *pSelDat, int *pData)
 {
     if (pSelDat == 0) {
@@ -1121,9 +1329,42 @@ static int _LoadWepSelectData(SelDat *pSelDat, int *pData)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetBaseSelectData);
+extern const char D_00A568D0[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetBaseSelectData);
+/* "pResult != NIL" */
+/*
+ * The 0x248-byte select-data block as doublewords: the 8-byte alignment of
+ * this view makes the struct copy below move the block with doubleword
+ * loads and stores, as the original does.
+ */
+typedef struct SelDumpWords {
+    u64 word[0x248 / 8];
+} SelDumpWords;
+
+static void _GetBaseSelectData(SelDat *pSelDat, void *pResult)
+{
+    if (pSelDat == 0) {
+        assert_prog(D_00A56838, D_00A56660, 1058);
+    }
+    if (pResult == 0) {
+        assert_prog(D_00A568D0, D_00A56660, 1059);
+    }
+    *(SelDumpWords *) pResult = *(SelDumpWords *) &pSelDat->selType.confrict[3];
+}
+
+/* "pData != NIL" */
+static void _SetBaseSelectData(SelDat *pSelDat, void *pData)
+{
+    if (pSelDat == 0) {
+        assert_prog(D_00A56838, D_00A56660, 1068);
+    }
+    if (pData == 0) {
+        assert_prog(D_00A568C0, D_00A56660, 1069);
+    }
+    *(SelDumpWords *) &pSelDat->selType.confrict[3] = *(SelDumpWords *) pData;
+    _LoadCharSelectData(pSelDat, pData);
+    _LoadWepSelectData(pSelDat, pData);
+}
 
 static int _GetModeSelectData(SelDat *pSelDat)
 {
@@ -1143,9 +1384,6 @@ static SelDat *_CreateSelectData(void)
     return pSelDat;
 }
 
-extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
-                       int line);
-
 static void _DisposeSelectData(SelDat *pSelDat)
 {
     if (pSelDat == 0) {
@@ -1154,9 +1392,7 @@ static void _DisposeSelectData(SelDat *pSelDat)
     RgHeapFree(InstanceOfRgHeap(), pSelDat, D_00A56660, 1100);
 }
 
-extern const char D_00A568E0[]; /* "pSel != NIL" */
-extern const char D_00A568F0[]; /* "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP" */
-
+/* "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP" */
 static void _TransitToWeaponSelect(SelDat *pSel)
 {
     int *pData;
@@ -1195,8 +1431,7 @@ static void _SaveToBaseData(SelDat *pSel)
     _SaveCharSelectData(pSel, pData);
 }
 
- /* "pSel != NIL" */
-
+/* "pSel != NIL" */
 static void _TransitToOffSelect(SelDat *pSel)
 {
     if (pSel == 0) {
@@ -1222,7 +1457,6 @@ static int _GetPlayerModeSelectData(SelDat *pSel)
 }
 
 extern void XrgPadSetID(int pad_id);
-
 
 static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
 {
@@ -1294,7 +1528,6 @@ static int _GetWepSelection(SelDat *pSelDat, int *apCollects)
     return confrictMask;
 }
 
-extern void *RgBxxGetPic(RgBxx *pBxx, const char *pszName);
 /* ov12:0x00a56938 / 0x00a56948: the picture names for player modes 0 and 1. */
 extern const char D_00A56938[];
 extern const char D_00A56948[];
@@ -1320,8 +1553,161 @@ static void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetCharSelDisp);
+typedef struct RgSelCharPicEntry {
+    int m_idx[6];
+} RgSelCharPicEntry;
+extern const RgSelCharPicEntry s_ainPics_3[6];
+extern const char D_00A56958[];
+extern void *RgPicListGetPic(RgPicList *pList, int index);
+extern void RgPicSetAlpha(void *pPic, int alpha);
+extern void RgPicNotDraw(void *pPic, int notDraw);
+extern void RgPicSetDark(void *pPic, int dark);
+extern void RgPicSetOfsXY(void *pPic, int ofsX, int ofsY);
 
+static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
+{
+    int i;
+    unsigned int cursor;
+    int flag;
+    unsigned int selectable;
+    unsigned int selChar;
+    int off;
+    void *pA;
+    void *pB;
+    void *pUp;
+    const char *table = (const char *) s_ainPics_3;
+    void *pDown;
+
+    if (pList == 0) {
+        assert_prog(D_00A56958, D_00A56660, 1292);
+    }
+    if (pSelChar == 0) {
+        assert_prog(D_00A56650, D_00A56660, 1293);
+    }
+    i = 0;
+    off = 0;
+    selChar = _GetSelectChar(pSelChar);
+    cursor = _GetSelectCursor(pSelChar);
+    selectable = _GetSelectableSelectChar(pSelChar);
+
+    for (; i < 6; i++, off += 24) {
+        if ((unsigned int) i < 6) {
+            void *pC;
+            void *pD;
+            void *pE;
+            pA = RgPicListGetPic(pList, ((const RgSelCharPicEntry *) (table + off))->m_idx[2]);
+            table = pA;
+            if (pA != 0) {
+                table = (const char *) s_ainPics_3;
+            } else if (selChar != 0) {
+                table = (const char *) s_ainPics_3;
+            } else {
+                table = (const char *) s_ainPics_3;
+            }
+            pB = RgPicListGetPic(pList, ((const RgSelCharPicEntry *) (off + table))->m_idx[3]);
+            table = pB;
+            pC = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[4]);
+            pD = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[5]);
+            pE = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[1]);
+            table = (const char *) s_ainPics_3;
+            if ((selectable & (1 << i)) != 0) {
+                if (pA) {
+                    RgPicSetAlpha(pA, 3);
+                    if (selChar == i) {
+                        RgPicNotDraw(pA, 0);
+                    } else {
+                        RgPicNotDraw(pA, 1);
+                    }
+                }
+                if (0 != pB) {
+                    RgPicSetAlpha(pB, 3);
+                    RgPicSetDark(pB, 1);
+                    if (selChar == i) {
+                        RgPicNotDraw(pB, 1);
+                    } else {
+                        RgPicNotDraw(pB, 0);
+                    }
+                }
+                if (0 != pC) {
+                    RgPicNotDraw(pC, 1);
+                }
+                if (0 != pD) {
+                    RgPicNotDraw(pD, 1);
+                }
+                if (0 != pE) {
+                    RgPicNotDraw(pE, 0);
+                }
+            } else {
+                if (pA != 0) {
+                    RgPicNotDraw(pA, 1);
+                }
+                if (pB != 0) {
+                    RgPicNotDraw(pB, 1);
+                }
+                if (pE != 0) {
+                    RgPicNotDraw(pE, 1);
+                }
+                if (pC != 0) {
+                    RgPicNotDraw(pC, 0);
+                }
+                if (pD != 0) {
+                    RgPicNotDraw(pD, 0);
+                    RgPicSetDark(pD, 1);
+                }
+            }
+        }
+    }
+
+    flag = (cursor != 6);
+    RgPicSetDark(RgPicListGetPic(pList, 44), flag);
+    RgPicSetDark(RgPicListGetPic(pList, 57), flag);
+
+    for (i = 0; 6 > i; i++) {
+        if ((unsigned int) i < 6) {
+            pA = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[0]);
+            pB = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[1]);
+            if (pA != 0) {
+                if (selChar == i) {
+                    RgPicSetDark(pA, 0);
+                } else {
+                    RgPicSetDark(pA, 1);
+                }
+            }
+            if (pB != 0) {
+                if (selChar == i) {
+                    RgPicSetDark(pB, 0);
+                } else {
+                    RgPicSetDark(pB, 1);
+                }
+            }
+        }
+    }
+
+    {
+        pUp = RgPicListGetPic(pList, 58);
+
+        if (pUp != 0) {
+            if (_IsExistItemUpper(pSelChar) != 0) {
+                RgPicNotDraw(pUp, 0);
+            } else {
+                RgPicNotDraw(pUp, 1);
+            }
+            RgPicSetOfsXY(pUp, 0, -_SinGet(4));
+        }
+    }
+    {
+        pDown = RgPicListGetPic(pList, 59);
+
+        if (pDown != 0) {
+            if (_IsExistItemLower(pSelChar) != 0) {
+                RgPicNotDraw(pDown, 0);
+            } else {
+                RgPicNotDraw(pDown, 1);
+            }
+            RgPicSetOfsXY(pDown, 0, _SinGet(4));
+        }
+    }
+}
 
 extern const char D_00A56968[]; /* "frm11on_ul.bmp" */
 extern const char D_00A56978[]; /* "frm11on_ur.bmp" */
@@ -1399,32 +1785,118 @@ static void _InitDetermWin(WinInfo *pWinInfo, RgBxx *pBxx, int value0, int value
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DispDetermWindow);
+extern const char D_00A56B88[];
+extern const char D_00A56B90[];
+extern const char D_00A56B98[];
+extern const char D_00A56BA0[];
+extern const char D_00A56BA8[];
 
-extern const char D_00A56BB0[]; /* "pDat->m_apPic[0] != NIL" */
-extern const char D_00A56BC8[]; /* "pDat->m_apPic[1] != NIL" */
+#define WEP_ESSENCE_DETERM_TEXT_OFFSET 848
 
+typedef struct RgBxxPicSize RgBxxPicSize;
+
+struct RgBxxPicSize {
+    unsigned char unmodeled_000[0x34];
+    int width;  /* +0x34 */
+    int height; /* +0x38 */
+};
+
+extern void XrgDispMainFont(int x, int y, const char *text, int color);
+
+static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
+                              SelDat *pSelDat)
+{
+    unsigned int charID;
+    int innerX;
+    unsigned int i;
+    unsigned int j;
+    int apCollects[RG_EQUIP_TYPE_NUM];
+    RgBxxPicSize *inner;
+    RgBxxPicSize *side1;
+    RgBxxPicSize *side0;
+    int buttonX;
+    int y;
+    int x;
+    int baseY;
+    SelDat *selData;
+    int originX;
+    int coord;
+
+    coord = pWinInfo->m_nValue0;
+    y = pWinInfo->m_nValue1;
+    pWinInfo->m_nValue0 = coord;
+    x = coord;
+    _disp_pic(paint, pWinInfo->m_pTop[0], x, y);
+    originX = x;
+    baseY = y;
+    _disp_pic(paint, pWinInfo->m_pTop[1],
+              x + ((RgBxxPicSize *) pWinInfo->m_pTop[0])->width, y);
+    coord = y + ((RgBxxPicSize *) pWinInfo->m_pTop[1])->height;
+    y = coord;
+    for (i = 0; i < 8; i++) {
+        side0 = pWinInfo->m_pSide[0];
+        side1 = pWinInfo->m_pSide[1];
+        inner = pWinInfo->m_pInner;
+        _disp_pic(paint, side0, x, y);
+        _disp_pic(paint, inner, x + side0->width, y);
+        _disp_pic(paint, side1, x + side0->width + inner->width, y);
+        y = y + inner->height;
+    }
+    _disp_pic(paint, pWinInfo->m_pBtm[0], x, y);
+    x += ((RgBxxPicSize *) pWinInfo->m_pBtm[0])->width;
+    buttonX = originX + 281;
+    _disp_pic(paint, pWinInfo->m_pBtm[1], x, y);
+    y = 183;
+    _disp_pic(paint, pWinInfo->m_pMaru, buttonX, baseY + 130);
+    _disp_pic(paint, pWinInfo->m_pBatu, buttonX, baseY + 154);
+
+    selData = pSelDat;
+    charID = _GetWepSelection(selData, apCollects);
+    _GetSelectCharID(selData);
+    for (j = 0; j < RG_EQUIP_TYPE_NUM; j++) {
+        switch (j) {
+        case 0:
+            XrgDispMainFont(184, y, D_00A56B88, 0);
+            break;
+        case 1:
+            XrgDispMainFont(184, y, D_00A56B90, 0);
+            break;
+        case 2:
+            XrgDispMainFont(184, y, D_00A56B98, 0);
+            break;
+        }
+        XrgDispMainFont(232, y,
+                        (const char *) (apCollects[j] +
+                                        WEP_ESSENCE_DETERM_TEXT_OFFSET),
+                        charID & (1u << j));
+        y += 26;
+    }
+    XrgDispMainFont(372, y + 12, D_00A56BA0, 0);
+    XrgDispMainFont(372, y + 36, D_00A56BA8, 0);
+}
+
+/* "pDat->m_apPic[1] != NIL" */
 static void _InitFloatArrowHori(FloatArrow *pDat, RgBxx *pBxx)
 {
-    pDat->pic0 = RgBxxGetPic(pBxx, D_00A569D8);
-    pDat->pic1 = RgBxxGetPic(pBxx, D_00A569F0);
-    if (pDat->pic0 == 0) {
+    pDat->m_apPic[0] = RgBxxGetPic(pBxx, D_00A569D8);
+    pDat->m_apPic[1] = RgBxxGetPic(pBxx, D_00A569F0);
+    if (pDat->m_apPic[0] == 0) {
         assert_prog(D_00A56BB0, D_00A56660, 1534);
     }
-    if (pDat->pic1 == 0) {
+    if (pDat->m_apPic[1] == 0) {
         assert_prog(D_00A56BC8, D_00A56660, 1535);
     }
     pDat->visibility_mask = 0;
-    pDat->x0 = 0;
-    pDat->x1 = 0;
+    pDat->m_aiX[0] = 0;
+    pDat->m_aiX[1] = 0;
     /*
      * gcc 2.96 -O2 reorders an unbroken run of independent stores by moving
      * the last one to the front; grouping this trailing pair in its own
      * scope keeps them in the original in-order sequence.
      */
     do {
-        pDat->y0 = 0;
-        pDat->y1 = 0;
+        pDat->m_aiY[0] = 0;
+        pDat->m_aiY[1] = 0;
     } while (0);
 }
 
@@ -1432,17 +1904,177 @@ static void _SetFloatArrowPos(FloatArrow *arrow, int first_x, int first_y,
                               int second_x, int second_y, int offset_x,
                               int offset_y)
 {
-    arrow->x0 = first_x + offset_x;
-    arrow->y0 = first_y + offset_y;
-    arrow->x1 = second_x + offset_x;
-    arrow->y1 = second_y + offset_y;
+    arrow->m_aiX[0] = first_x + offset_x;
+    arrow->m_aiY[0] = first_y + offset_y;
+    arrow->m_aiX[1] = second_x + offset_x;
+    arrow->m_aiY[1] = second_y + offset_y;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DispFloatArrow);
+extern void RgFontSetColor(int fontId, const void *color);
+extern void RgFontSetDefaultColor(int fontId);
+extern void RgFontPut(XrgPaint2D *paint, int fontId, int code, int x, int y,
+                      int flag);
+extern void XrgDispMainFont(int x, int y, const char *text, int flag);
+extern const RgFontColor s_aRed_1[2];
+extern const RgFontColor s_aWhite_2[2];
+extern const char D_00A56808[];
+extern const char D_00A56820[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetWepSelPicList);
+static void _DispFloatArrow(XrgPaint2D *paint, FloatArrow *pDat)
+{
+    int aOfs[2] = {-1, 1};
+    unsigned int i;
+    void *pic;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DispWepSelOverlaps);
+    for (i = 0; i < 2; i++) {
+        if (pDat->visibility_mask & (1 << i)) {
+            pic = pDat->m_apPic[i];
+            if (pic != 0) {
+                _disp_pic(paint, pic,
+                          pDat->m_aiX[i] + aOfs[i] * _SinGet(4),
+                          pDat->m_aiY[i]);
+            }
+        }
+    }
+}
+
+extern void *RgPicListGetPic(RgPicList *pList, int index);
+extern void RgPicNotDraw(void *pic, int notDraw);
+extern void RgPicSetDark(void *pic, int dark);
+extern void RgPicSetAlpha(void *pic, int alpha);
+
+typedef struct SelWepPicIdx { int m_idx[3]; } SelWepPicIdx;
+
+/* A 4-component color copied as two doublewords (ld/sd); its components are
+ * only read by RgPicSetColor. */
+typedef union SelWepColor {
+    long long halves[2];
+    int channels[4];
+} SelWepColor;
+
+extern void RgPicSetColor(void *pic, const SelWepColor *color);
+extern const SelWepPicIdx D_00A56BE8;
+/* 3 picture indices, one per equip type */
+extern SelWepColor D_00A56C00;
+/* confrict color */
+extern SelWepColor D_00A56C10;
+
+/* normal color */
+static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
+{
+    unsigned int slot;
+    unsigned int cursor;
+    SelWepPicIdx picIdx;
+
+    picIdx = D_00A56BE8;
+    if (_GetModeSelectData(pSelDat) == 1) {
+        void *pic;
+        int equipType;
+        SelType *pSelType = &pSelDat->selType;
+        const SelWepColor *pConfrictColor;
+        const SelWepColor *pNormalColor;
+
+        cursor = _GetCursorSelType(pSelType);
+        equipType = _GetTypeSelType(pSelType);
+        RgPicNotDraw(RgPicListGetPic(pList, 17), 1);
+        RgPicNotDraw(RgPicListGetPic(pList, 18), 1);
+        RgPicNotDraw(RgPicListGetPic(pList, 4), 1);
+        RgPicNotDraw(RgPicListGetPic(pList, 3), 1);
+        pConfrictColor = &D_00A56C00;
+        pNormalColor = &D_00A56C10;
+
+        slot = 0;
+        while (3 > slot) {
+            void *loopPic;
+            SelWepColor colorA;
+            SelWepColor colorB;
+
+            colorA = *pConfrictColor;
+            colorB = *pNormalColor;
+            loopPic = RgPicListGetPic(pList, picIdx.m_idx[slot]);
+            RgPicSetDark(loopPic, 1);
+            if (_GetConfrictSelType(pSelType, slot) != 0) {
+                RgPicSetColor(loopPic, &colorA);
+            } else {
+                RgPicSetColor(loopPic, &colorB);
+            }
+            slot++;
+        }
+        RgPicSetDark(RgPicListGetPic(pList, 16), 1);
+        RgPicSetDark(RgPicListGetPic(pList, 15), 1);
+        pic = RgPicListGetPic(pList, 14);
+        RgPicSetAlpha(pic, 2);
+        if (cursor < 3) {
+            RgPicSetDark(pic, 0);
+        } else {
+            RgPicSetDark(pic, 1);
+        }
+        switch (cursor) {
+        case 0:
+        case 1:
+        case 2:
+            RgPicSetDark(RgPicListGetPic(pList, picIdx.m_idx[equipType]), 0);
+            break;
+        case 4:
+            RgPicSetDark(RgPicListGetPic(pList, 16), 0);
+            RgPicSetDark(RgPicListGetPic(pList, 15), 0);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+extern const char D_00A56C20[];
+static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
+                              SelDat *pSelDat);
+static void _DispFloatArrow(XrgPaint2D *paint, FloatArrow *pDat);
+
+static void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat,
+                                int ofsX, int ofsY)
+{
+    WinInfo win;
+    FloatArrow arrow;
+    int cursor;
+
+    if (paint == 0) {
+        assert_prog(D_00A56C20, D_00A56660, 1651);
+    }
+    if (pBxx == 0) {
+        assert_prog(D_00A56928, D_00A56660, 1652);
+    }
+    if (pSelDat == 0) {
+        assert_prog(D_00A56838, D_00A56660, 1653);
+    }
+    if (_GetModeSelectData(pSelDat) == 1) {
+        _InitFloatArrowHori(&arrow, pBxx);
+        cursor = _GetCursorSelType(&pSelDat->selType);
+        _SetFloatArrowPos(&arrow, 256, 103, 463, 104, 256, 0);
+        switch (cursor) {
+        case 0:
+            arrow.visibility_mask = 3;
+            break;
+        case 1:
+            arrow.visibility_mask = 3;
+            break;
+        case 2:
+            arrow.visibility_mask = 3;
+            break;
+        case 3:
+            _InitDetermWin(&win, pBxx, 167 - ofsX, 144 - ofsY);
+            _DispDetermWindow(paint, &win, pSelDat);
+            arrow.visibility_mask = 0;
+            break;
+        case 4:
+            _SetFloatArrowPos(&arrow, 353, 411, 0, 0, -ofsX, -ofsY);
+            arrow.visibility_mask = 1;
+            break;
+        }
+        _DispFloatArrow(paint, &arrow);
+    }
+}
+
+const char D_00A56C48[16] = "pView != NIL";
 
 /*
  * Local helpers still unallocated in this TU. Their own definitions stay
@@ -1453,20 +2085,13 @@ static void _InitSelect(RgSelectAGWS *pSel);
 static void _Destruct(RgSelectAGWS *pSel);
 static void _PassTime(RgSelectAGWS *pSel, float deltaTime);
 static void _Disp(RgSelectAGWS *pSel);
-static void _SetBaseSelectData(SelDat *pSelDat, void *pData);
+/* "pData != NIL" */ static void _SetBaseSelectData(SelDat *pSelDat, void *pData);
 static int _GetWepSelection(SelDat *pSelDat, int *apCollects);
 static int _GetSelectCharID(SelDat *pSelDat);
 static void _SetPlayerModeSelectData(SelDat *pSelDat, int mode);
-
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-
-
 extern void RgDrawViewInit(RgDrawView *pView);
 
-extern const char D_00A56C48[]; /* "pView != NIL" */
-
+/* "pView != NIL" */
 static void _init_camera(RgDrawView *pView)
 {
     if (pView == 0) {
@@ -1494,8 +2119,7 @@ static void _set_camera(RgDrawView *pView)
     RgDrawViewSetRotateZ(pView, 0.0f);
 }
 
- /* "pSel != NIL" */
-
+/* "pSel != NIL" */
 extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
                                   int line);
 extern void DisposeRgPicList(RgPicList *pList);
@@ -1517,7 +2141,197 @@ void _Destruct(RgSelectAGWS *pSel) {
     DisposeRgBxx_sub(pSel->pBxx, D_00A56660, 0x6FA);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _PassTime_00A3B9E8);
+extern const char D_00A56C58[];
+extern int XrgPadIsMaru(void);
+extern int XrgPadIsBatu(void);
+extern int XrgPadIsLR(void);
+extern int XrgPadIsL12(void);
+extern int XrgPadIsR12(void);
+extern void XrgSoundSystemOk(void);
+extern void XrgSoundSystemNG(void);
+extern void XrgSoundSystemCancel(void);
+extern void RgPicListSetDrawEnable(RgPicList *pList, int enable);
+extern void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos);
+extern void RgSelectRobotSetMode(RgSelectRobot *pCont, int mode);
+extern void RgSelectRobotPassTime(RgSelectRobot *pCont, float deltaTime);
+extern void RgSelectRobotSet(RgSelectRobot *pCont, int *selection);
+
+static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
+{
+    SelDat *pSelDat;
+    SelType *pSelType;
+    int *pData;
+    int aSelection[7];
+    unsigned int cursor;
+    int type;
+    int charID;
+
+    pSelDat = pSel->pSelDat;
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 1798);
+    }
+    switch (pSel->state) {
+    case 0:
+        RgSelectRobotScreenPos(pSel->pRobot, 0.0f);
+        RgSelectRobotSetMode(pSel->pRobot, -1);
+        pData = &pSelDat->selType.confrict[3];
+        _SaveCharSelectData(pSelDat, pData);
+        _LoadWepSelectData(pSelDat, pData);
+        if (XrgPadIsRight() != 0) {
+            charID = _GetSelectCharID(pSelDat);
+            if (charID != -1) {
+                pSel->state = 3;
+                _TransitToOffSelect(pSelDat);
+                XrgSoundSystemCursor();
+                break;
+            }
+        }
+        if (XrgPadIsMaru() != 0) {
+            if (_GetSelectCharID(pSelDat) == -1) {
+                pSel->state = 7;
+                XrgSoundSystemCancel();
+            } else {
+                pSel->state = 3;
+                _TransitToOffSelect(pSelDat);
+                XrgSoundSystemOk();
+            }
+        }
+        break;
+    case 1:
+        pSelType = &pSelDat->selType;
+        cursor = _GetCursorSelType(pSelType);
+        type = _GetTypeSelType(pSelType);
+        RgSelectRobotSetMode(pSel->pRobot, type);
+        RgSelectRobotScreenPos(pSel->pRobot, 1.0f);
+        pData = &pSelDat->selType.confrict[3];
+        _SaveWepSelectData(pSelDat, pData);
+        if (XrgPadIsLR() != 0) {
+            if (cursor != 3) {
+                _SetSpecModeSelType(pSelType, 2);
+                XrgSoundSystemCursor();
+            }
+        } else if (XrgPadIsL12() != 0) {
+            if (cursor != 3) {
+                _SetSpecModeSelType(pSelType, 0);
+                XrgSoundSystemCursor();
+            }
+        } else if (XrgPadIsR12() != 0) {
+            if (cursor != 3) {
+                _SetSpecModeSelType(pSelType, 1);
+                XrgSoundSystemCursor();
+            }
+        } else if (XrgPadIsLeft() != 0) {
+            if (cursor == 0) {
+                pSel->state = 2;
+                _TransitToOffSelect(pSelDat);
+                XrgSoundSystemCursor();
+            }
+        } else if (XrgPadIsMaru() != 0) {
+            switch (cursor) {
+            case 0:
+            case 1:
+            case 2:
+                if (_DetachWeaponIfConfrictSelType(pSelType) == 0) {
+                    _SetDetermModeSelType(pSelType);
+                    XrgSoundSystemOk();
+                } else {
+                    XrgSoundSystemNG();
+                }
+                break;
+            case 3:
+                pSel->state = 6;
+                XrgSoundSystemOk();
+                break;
+            case 4:
+                pSel->state = 2;
+                _TransitToOffSelect(pSelDat);
+                XrgSoundSystemCancel();
+                break;
+            }
+        } else if (XrgPadIsBatu() != 0) {
+            if (cursor != 3) {
+                pSel->state = 2;
+                _TransitToOffSelect(pSelDat);
+                XrgSoundSystemCancel();
+            } else {
+                _ResumeSelTypeOldCursor(pSelType);
+                XrgSoundSystemCancel();
+            }
+        }
+        break;
+    case 2:
+        if (pSel->ofsX < 0) {
+            pSel->ofsX += 32;
+            if (pSel->ofsX > 0) {
+                pSel->ofsX = 0;
+            }
+            if (pSel->ofsX >= 0) {
+                pSel->state = 4;
+            }
+        } else {
+            pSel->state = 4;
+        }
+        RgSelectRobotScreenPos(pSel->pRobot, (float) -pSel->ofsX * 0.00390625f);
+        break;
+    case 3:
+        if (pSel->ofsX < -255) {
+            pSel->state = 5;
+        } else {
+            pSel->ofsX -= 32;
+            if (pSel->ofsX < -256) {
+                pSel->ofsX = -256;
+            }
+            if (pSel->ofsX < -255) {
+                pSel->state = 5;
+            }
+        }
+        _TransitToWeaponSelect(pSelDat);
+        RgSelectRobotScreenPos(pSel->pRobot, (float) -pSel->ofsX * 0.00390625f);
+        break;
+    case 4:
+        pSel->state = 0;
+        RgPicListSetDrawEnable(pSel->pAgwsSelTop, 1);
+        RgPicListSetDrawEnable(pSel->pWepSelTop, 0);
+        _TransitToCharSelect(pSelDat);
+        break;
+    case 5:
+        pSel->state = 1;
+        RgPicListSetDrawEnable(pSel->pAgwsSelTop, 0);
+        RgPicListSetDrawEnable(pSel->pWepSelTop, 1);
+        _SetSelectorWepListDisp(pSel->pWepListDisp, &pSelDat->selType);
+        break;
+    case 6:
+    case 7:
+        break;
+    default:
+        RgError(D_00A56C58, D_00A56660, 1987, pSel->state);
+        break;
+    }
+    _PassTimeSelectData(pSelDat, deltaTime);
+    RgSelectRobotPassTime(pSel->pRobot, deltaTime);
+    aSelection[0] = _GetSelectCharID(pSelDat);
+    _GetSelectWeps(pSelDat, &aSelection[1], &aSelection[4]);
+    RgSelectRobotSet(pSel->pRobot, aSelection);
+}
+
+const char D_00A56C90[24] = "pszFileName != NIL";
+
+const char D_00A56CA8[16] = "data\\nisimori\\";
+
+const char D_00A56CB8[16] = "select.bxx";
+
+const char D_00A56CC8[24] = "cannot load select.bxx";
+
+const char D_00A56CE0[16] = "agwsseltop.r2d";
+
+const char D_00A56CF0[16] = "agwssel.r2d";
+
+const char D_00A56D00[16] = "wepseltop.r2d";
+
+const char D_00A56D10[16] = "wepsel.r2d";
+
+const char D_00A56D20[24] = "apCollects != NIL";
+
 
 /*
  * The picture handle RgPicListGetPic indexes out of a RgPicList (owned by
@@ -1527,18 +2341,13 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _PassTime_00A3B9E8);
  * convention for a foreign handle its own TU only forwards.
  */
 extern void RgPicListDraw(RgPicList *pList, XrgPaint2D *paint);
-extern void *RgPicListGetPic(RgPicList *pList, int index);
-extern void RgPicSetAlpha(void *pic, int alpha);
 extern void RgPicListSetOffset(RgPicList *pList, int ofsX, int ofsY);
 extern void RgSelectRobotDisp(RgSelectRobot *pRobot);
 extern void XrgPaint2DFlush(XrgPaint2D *paint);
-extern void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat,
-                                int ofsX, int ofsY);
+static void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat, int ofsX, int ofsY);
 extern void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode);
-extern void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
-                             int ofsY);
 extern void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode);
-extern void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat);
+/* normal color */ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat);
 
 void _Disp(RgSelectAGWS *pSel) {
     SelDat *pSelDat;
@@ -1570,20 +2379,15 @@ extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
                                     const char *pszRoot);
 extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *pszFile,
                                      int iLine);
-
 /*
  * Opaque handle: CreateRgPicListFromBinary is defined by ov12/tu070
  * (src/ov12/rg_piclist.c), still INCLUDE_ASM there, and this call only
  * forwards its result, so an incomplete type is enough here.
  */
 struct RgPicList;
-
 extern struct RgPicList *CreateRgPicListFromBinary(struct RgBxx *pBxx, void *pData);
 
-extern const char D_00A56928[]; /* "pBxx != NIL" */
-extern const char D_00A56C90[]; /* "pszFileName != NIL" */
-extern const char D_00A56CA8[]; /* "data\\nisimori\\" */
-
+/* "data\\nisimori\\" */
 static struct RgPicList *_LoadPicList(const char *pszFileName, struct RgBxx *pBxx)
 {
     RgFileSysData *pFile;
@@ -1616,15 +2420,8 @@ extern RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
                             int nMode);
 extern RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex);
 extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
-extern void RgPicListSetDrawEnable(RgPicList *pList, int enable);
 
-extern const char D_00A56CB8[]; /* "select.bxx" */
-extern const char D_00A56CC8[]; /* "cannot load select.bxx" */
-extern const char D_00A56CE0[]; /* "agwsseltop.r2d" */
-extern const char D_00A56CF0[]; /* "agwssel.r2d" */
-extern const char D_00A56D00[]; /* "wepseltop.r2d" */
-extern const char D_00A56D10[]; /* "wepsel.r2d" */
-
+/* "wepsel.r2d" */
 void _InitSelect(RgSelectAGWS *pSel) {
     RgBxx *pBxx;
     RgDrawStudio *pStudio;
@@ -1663,8 +2460,7 @@ void _InitSelect(RgSelectAGWS *pSel) {
     _SinInit();
 }
 
- /* "pData != NIL" */
-
+/* "pData != NIL" */
 /*
  * The per-character weapon-name record within pData's caller-owned buffer:
  * one WEP_NAME_LEN-byte slot per equip type (RG_EQUIP_TYPE_NUM), preceded by
@@ -1673,7 +2469,6 @@ void _InitSelect(RgSelectAGWS *pSel) {
  * this allocation's evidence for both strides.
  */
 #define WEP_NAME_LEN 0x20
-#define WEP_NAME_LIST_OFFSET 8
 #define CHAR_WEP_RECORD_SIZE (RG_EQUIP_TYPE_NUM * WEP_NAME_LEN)
 
 void InitRgSelectAGWSData(int *pData)
@@ -1695,9 +2490,7 @@ void InitRgSelectAGWSData(int *pData)
     }
 }
 
-extern const char D_00A568E0[]; /* "pSel != NIL" */
-extern const char D_00A568C0[]; /* "pData != NIL" */
-
+/* "pData != NIL" */
 void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel, void *pData)
 {
     if (pSel == 0) {
@@ -1709,17 +2502,10 @@ void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel, void *pData)
     _SetBaseSelectData(pSel->pSelDat, pData);
 }
 
-/*
- * _GetBaseSelectData (ov12, still INCLUDE_ASM) mirrors the accepted
- * _SetBaseSelectData(SelDat *, void *) shape above (RgSelectAGWSSetSelectData's
- * own counterpart call); declare it so this caller does not see an implicit
- * declaration.
- */
-static void _GetBaseSelectData(SelDat *pSelDat, void *pData);
+static void _GetBaseSelectData(SelDat *pSelDat, void *pResult);
 
- /* "pSel != NIL" */
- /* "pData != NIL" */
-
+/* "pSel != NIL" */
+/* "pData != NIL" */
 void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel, void *pData)
 {
     if (pSel == 0) {
@@ -1732,8 +2518,7 @@ void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel, void *pData)
     _GetBaseSelectData(pSel->pSelDat, pData);
 }
 
-extern const char D_00A56D20[]; /* "apCollects != NIL" */
-
+/* "apCollects != NIL" */
 int RgSelectAGWSGetCollectData(RgSelectAGWS *pSel, int *apCollects)
 {
     SelDat *pSelDat;
@@ -1754,8 +2539,7 @@ void RgSelectAGWSSetMode(RgSelectAGWS *pSel, int mode)
     _SetPlayerModeSelectData(pSel->pSelDat, mode);
 }
 
- /* "pSel != NIL" */
-
+/* "pSel != NIL" */
 int RgSelectAGWSIsEnd(RgSelectAGWS *pSel)
 {
     int result;

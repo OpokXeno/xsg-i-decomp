@@ -6,13 +6,21 @@
 #include "rg_heap.h"
 
 const char D_00A52A40[40] = "-------- Heap Assert %s ---------\n";
+
 const char D_00A52A68[24] = "../rg_heap.euc.c";
+
 const char D_00A52A80[24] = "%s (in %s at %d)\n\n";
+
 const char D_00A52A98[32] = "heap = %p top = %p size = %d\n\n";
+
 const char D_00A52AB8[16] = "heap-dump";
+
 const char D_00A52AC8[16] = "heap = NIL\n";
+
 const char D_00A52AF0[24] = "HEAD_SIZE < nBlockSize";
+
 const char D_00A52B08[16] = "make block";
+
 /* Three adjacent diagnostics occupy this one original 48-byte string pool. */
 const struct {
     char heapNotNil[16];
@@ -23,19 +31,33 @@ const struct {
     "(HEAD_SIZE & 0xf) == 0",
     "init-1"
 };
+
 const char D_00A52B48[24] = "(nBufSize & 0xf) == 0";
+
 const char D_00A52B60[8] = "init-2";
+
 const char D_00A52E88[40] = "\n\n---------------------------------\n";
+
 const char D_00A52EB0[32] = "HEAD DUMP %p from %s %d\n";
+
 const char D_00A52ED0[40] = "***** FREE MAP top %p (comment %s)\n";
+
 const char D_00A52EF8[32] = "%p : size = %x(%d) next:%p\n";
+
 const char D_00A52F18[40] = "***** ALLOC MAP top %p (comment %s)\n";
+
 const char D_00A52F40[48] = "%p : size = %x(%d) next:%p allocated at %s,%d\n";
+
 const char D_00A52F70[32] = "pHeap != NIL && pPtr != NIL";
+
 const char D_00A52F90[24] = "------------ dump %p\n";
+
 const char D_00A52FA8[16] = "pre %p next %p\n";
+
 const char D_00A52FB8[24] = "size %p mark %d\n";
+
 const char D_00A52FD0[24] = "module '%s' line %d\n";
+
 const char D_00A52FE8[32] = "  this block is not in heap %p\n";
 
 extern void assert_prog(const char *expression, const char *source_file,
@@ -70,7 +92,6 @@ extern void RgHeapDump_sub(RgHeap *pHeap, const char *comment,
  * ov12:0x00a52fe8 contains the format string
  *      "  this block is not in heap %p\n".
  */
-
 static void _Error(const char *expression, const char *tag, RgHeap *pHeap,
                    const char *source_file, int line)
 {
@@ -158,6 +179,7 @@ static int _IsAllocated(struct RgHeapBlock *pBlock)
  * block's magic field (lw of the symbol itself, not an inline array).
  */
 extern const unsigned char D_00A52AD8[];
+
 static const unsigned char *s_szMagicString = D_00A52AD8;
 
 static void _SetMagicString(struct RgHeapBlock *pBlock)
@@ -187,7 +209,6 @@ static int _IsCollectMagicString(struct RgHeapBlock *pBlock)
  *      "HEAD_SIZE < nBlockSize".
  * ov12:0x00a52b08 contains the tag "make block".
  */
-
 static struct RgHeapBlock *_SetHeapHead(void *pTop, u32 nBufSize)
 {
     struct RgHeapBlock *pHead;
@@ -228,6 +249,7 @@ static void _MergeBlocks(struct RgHeapBlock *pHead)
 /* The two heap instances and their backing arenas are zero-initialized data. */
 RgHeap D_00A59AA0;
 u8 D_00A59AB0[0x800];
+
 static int s_bInit1_0 = 0;
 
 RgHeap *InstanceOfRgHeap(void)
@@ -241,6 +263,7 @@ RgHeap *InstanceOfRgHeap(void)
 
 RgHeap D_00A5A2B0;
 u8 D_00A5A2C0[0x800];
+
 static int s_bInit2_3 = 0;
 
 RgHeap *InstanceOfRgHeapData(void)
@@ -278,9 +301,191 @@ void InitRgHeap(RgHeap *pHeap, void *pTop, u32 nBufSize)
     pHeap->pHead = pHead;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapAlloc);
+extern void RgError(const char *message, const char *source_file, int line,
+                    ...);
+extern char *strncpy(char *dest, const char *src, unsigned int n);
+extern const char D_00A52B68[];
+extern const char D_00A52B90[];
+extern const char D_00A52BA0[];
+extern const char D_00A52BB8[];
+extern const char D_00A52BE8[];
+extern const char D_00A52BF8[];
+extern const char D_00A52C30[];
+extern const char D_00A52C40[];
+extern const char D_00A52C80[];
+extern const char D_00A52C90[];
+extern const char D_00A52CD0[];
+extern const char D_00A52CF8[];
+extern const char D_00A52D08[];
+extern const char D_00A52D38[];
+extern const char D_00A52D50[];
+extern const char D_00A52D60[];
+extern const char D_00A52D80[];
+extern const char D_00A52D90[];
+extern const char D_00A52DD0[];
+extern const char D_00A52DF0[];
+extern const char D_00A52E28[];
+extern const char D_00A52E58[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapFree);
+void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
+{
+    struct RgHeapBlock *pHead;
+    struct RgHeapBlock *pCur;
+    struct RgHeapBlock *pBest;
+    struct RgHeapBlock *pNew;
+    u32 nNeed;
+    u32 nBestSize;
+    u32 nRemain;
+    u32 nBlockSize;
+    void *pPtr;
+
+    if (nSize == 0) {
+        RgError(D_00A52B68, D_00A52A68, 217, source_file, line);
+    }
+    if (pHeap == 0) {
+        _Error(D_00A52B90, D_00A52BA0, 0, D_00A52A68, 218);
+    }
+    pHead = pHeap->pHead;
+    if (pHead == 0) {
+        RgError(D_00A52BB8, D_00A52A68, 223, source_file, line);
+        return 0;
+    }
+    nNeed = ((nSize + 0xF) & ~0xFU) + sizeof(struct RgHeapBlock);
+
+    pBest = 0;
+    nBestSize = 0;
+    pCur = pHead;
+    do {
+        if (pCur->size >= nNeed && (pCur->size < nBestSize || nBestSize == 0)) {
+            nBestSize = pCur->size;
+            pBest = pCur;
+        }
+        pCur = pCur->next;
+    } while (pCur != pHead);
+
+    if (pBest == 0) {
+        if (pHeap == InstanceOfRgHeapData()) {
+            RgHeapDump_sub(pHeap, D_00A52BE8, D_00A52A68, 245);
+            RgError(D_00A52BF8, D_00A52A68, 246, nSize, source_file, line);
+        } else if (pHeap == InstanceOfRgHeap()) {
+            RgHeapDump_sub(pHeap, D_00A52C30, D_00A52A68, 248);
+            RgError(D_00A52C40, D_00A52A68, 249, nSize, source_file, line);
+        } else {
+            RgHeapDump_sub(pHeap, D_00A52C80, D_00A52A68, 251);
+            RgError(D_00A52C90, D_00A52A68, 252, nSize, source_file, line);
+        }
+        return 0;
+    }
+    if (nBestSize < nNeed) {
+        _Error(D_00A52CD0, D_00A52CF8, pHeap, D_00A52A68, 262);
+    }
+    nRemain = nBestSize - nNeed;
+    if (nRemain >= 0x41) {
+        nBlockSize = nNeed;
+        pNew = (struct RgHeapBlock *)((u8 *)pBest + nNeed);
+        _SetHeapHead(pNew, nRemain);
+    } else {
+        nBlockSize = nBestSize;
+        pNew = 0;
+    }
+    if (pNew != 0) {
+        _InsertNext(pBest, pNew);
+    }
+    if (pBest == pHead) {
+        pHeap->pHead = pBest->next;
+    }
+    _Unlink(pBest);
+    _SetHeapHead(pBest, nBlockSize);
+    _MarkAlloc(pBest);
+
+    if (source_file != 0) {
+        strncpy(pBest->module, source_file, 31);
+        pBest->module[31] = 0;
+        pBest->line = line;
+    } else {
+        pBest->module[0] = 0;
+        pBest->line = 0;
+    }
+    _SetMagicString(pBest);
+
+    if (pHeap->pAlloc == 0) {
+        pHeap->pAlloc = pBest;
+        _Link(pBest, pBest, pBest);
+    } else {
+        _InsertNext(pHeap->pAlloc, pBest);
+    }
+    pPtr = (void *)(pBest + 1);
+    if ((u32)pPtr & 0xF) {
+        _Error(D_00A52D08, D_00A52D38, pHeap, D_00A52A68, 304);
+    }
+    return pPtr;
+}
+
+void RgHeapFree(RgHeap *pHeap, void *pPtr, const char *source_file, int line)
+{
+    struct RgHeapBlock *pHdr = (struct RgHeapBlock *)pPtr - 1;
+    struct RgHeapBlock *pCur;
+    struct RgHeapBlock *pAlloc;
+    struct RgHeapBlock *pNext;
+
+    if (pHeap == 0) {
+        _Error(D_00A52B18.heapNotNil, D_00A52D50, pHeap, D_00A52A68, 316);
+    }
+    if (pPtr == 0) {
+        RgError(D_00A52D60, D_00A52A68, 320, source_file, line);
+    }
+    if (!_IsAllocated(pHdr)) {
+        if (_IsCollectMagicString(pHdr)) {
+            RgHeapDump_sub(pHeap, D_00A52D80, D_00A52A68, 329);
+            RgError(D_00A52D90, D_00A52A68, 335, pPtr, source_file, line,
+                    pHdr->module, pHdr->line);
+        } else {
+            RgError(D_00A52DD0, D_00A52A68, 339, pPtr, source_file, line);
+        }
+    }
+    if (!_IsCollectMagicString(pHdr)) {
+        RgError(D_00A52DF0, D_00A52A68, 345, pPtr, source_file, line);
+    }
+    if (!RgHeapIsInSelf(pHeap, pHdr)) {
+        RgError(D_00A52E28, D_00A52A68, 350, pHeap, source_file, line);
+    }
+    pAlloc = pHeap->pAlloc;
+    pNext = pAlloc->next;
+    if (pNext == pAlloc) {
+        if (pHdr != pNext) {
+            RgError(D_00A52E58, D_00A52A68, 359);
+        }
+        pHeap->pAlloc = 0;
+    } else {
+        if (pAlloc == pHdr) {
+            _Unlink(pHdr);
+            pHeap->pAlloc = pNext;
+        } else {
+            _Unlink(pHdr);
+        }
+    }
+    _UnmarkAlloc(pHdr);
+    if (pHeap->pHead == 0) {
+        pHeap->pHead = _SetHeapHead(pHdr, pHdr->size);
+        return;
+    }
+    pCur = pHeap->pHead;
+    _Link(pHdr, 0, 0);
+    do {
+        if (pHdr < pCur) {
+            _InsertPre(pCur, pHdr);
+            if (pHdr < pHeap->pHead) {
+                pHeap->pHead = pHdr;
+            }
+            break;
+        }
+        pCur = pCur->next;
+    } while (pCur != pHeap->pHead);
+    if (pHdr->next == 0) {
+        _InsertPre(pHeap->pHead, pHdr);
+    }
+    _MergeBlocks(pHeap->pHead);
+}
 
 int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr)
 {
@@ -323,7 +528,6 @@ int RgHeapIsInvalidMemory(RgHeap *pHeap, void *pPtr)
  * ov12:0x00a52f40 contains the format string
  *      "%p : size = %x(%d) next:%p allocated at %s,%d\n".
  */
-
 void RgHeapDump_sub(RgHeap *pHeap, const char *comment, const char *source_file,
                     int line)
 {
@@ -367,7 +571,5 @@ void RgHeapDumpBlock(RgHeap *pHeap, void *pPtr)
     }
     XrgLog(D_00A52FE8, D_00A52A68, 471, pHeap);
 }
-
-
 
 const unsigned char D_00A52AD8[24] = "gAMe sHoW 2001.10.15";

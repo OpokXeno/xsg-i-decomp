@@ -32,10 +32,25 @@ typedef struct RgColiData {
     RgColiTriangle *m_pTriangles;
 } RgColiData;
 
+/* The ball RgGeomPolyCheckBall passes through RgColiDataVsBall: a center
+ * point, then the radius just past its four components. */
+typedef struct RgColiBall {
+    RgVector m_center;
+    float m_radius;
+} RgColiBall;
+
+/* The hit record _CheckIntersectBall writes: the hit count at +0, the
+ * correction vector accumulated at +16 (+4..+15 are not evidenced). */
+typedef struct RgColiBallResult {
+    int m_nHits;
+    unsigned char unmodeled_04[12];
+    RgVector m_correction;
+} RgColiBallResult;
+
 static void _DisposeColiData(RgColiData *pData);
 static void _InitTriangles(RgColiData *pData, int nCapa);
 static void _AddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2);
-static void _CheckIntersectBall(RgColiData *pPoly, void *pArg, void *pResult);
+static int _CheckIntersectBall(RgColiData *pPoly, void *pArg, RgColiBallResult *pHit);
 
 /* File-backed OV12 witnesses, this TU's own .rodata (scaffold-owned; kept
  * under their splat names, docs/naming.md "Scaffold-owned data keeps its
@@ -51,5 +66,24 @@ extern const char D_00A55670[];
 
 /* 0x00a55560 "pData->m_nCapaOfTri > pData->m_nNumOfTri" */
 extern const char D_00A55560[];
+
+/*
+ * Scaffold-owned quad prism template: 0x00a55590 holds eight vertices, and
+ * 0x00a55610 holds six quads of four vertex indices each.
+ */
+typedef struct RgColiQuadVertices {
+    DoublewordAlignedVector4 m_vertices[8];
+} RgColiQuadVertices;
+
+typedef union RgColiQuadIndices {
+    DoublewordAlignedVector4 m_vectors[6];
+    int m_quads[6][4];
+} RgColiQuadIndices;
+
+extern const RgColiQuadVertices D_00A55590;
+extern const RgColiQuadIndices D_00A55610;
+
+void RgColiDataInitTriangles(RgColiData *pData, int nCapa);
+void RgColiDataAddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2);
 
 #endif /* SRC_OV12_RG_COLIDATA_H */

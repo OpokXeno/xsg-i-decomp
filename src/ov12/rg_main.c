@@ -22,7 +22,35 @@ static int _IsEndOfMode(void)
     return result;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_main", _DoAnyOnePausing);
+static int _DoAnyOnePausing(unsigned int mode)
+{
+    switch (mode) {
+    case 1:
+        if ((PadData[0].prefix.half_2a & 0x800) != 0) {
+            return 0;
+        }
+        break;
+    case 0:
+        if ((PadData[0].prefix.half_2a & 0x800) != 0) {
+            return 0;
+        }
+        break;
+    case 2:
+        if ((PadData[1].prefix.half_2a & 0x800) != 0) {
+            return 1;
+        }
+        break;
+    case 3:
+        if ((PadData[0].prefix.half_2a & 0x800) != 0) {
+            return 0;
+        }
+        if ((PadData[1].prefix.half_2a & 0x800) != 0) {
+            return 1;
+        }
+        break;
+    }
+    return -1;
+}
 
 static int _IsEndOfPause(int controller)
 {
@@ -44,20 +72,105 @@ static void _EndOfFrame(void)
     XrgSleep();
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_main", _GetStageData);
+typedef struct RgBattleNames {
+    char characterName[64];
+    RgVector position;
+    RgVector direction;
+    union {
+        char names[3][64];
+        unsigned long long words[3][8];
+    } weaponStorage;
+} RgBattleNames;
+
+typedef struct RgBattleInit {
+    RgBattleNames players[2];
+    char background[64];
+    int stageKind;
+    int enemyLevel;
+} RgBattleInit;
+
+extern void assert_prog(const char *expression, const char *file, int line);
+extern void RgError(const char *message, const char *file, int line, ...);
+extern char *strcpy(char *destination, const char *source);
+extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
+const char D_00A51450[] = "../rg_main.euc.c";
+extern const char D_00A51440[];
+
+static void _GetStageData(int stageId, RgBattleInit *data)
+{
+    RgBattleNames *player[2];
+    float zero;
+    float height;
+
+    if (data == 0) {
+        assert_prog(D_00A51440, D_00A51450, 123);
+    }
+    player[0] = &data->players[0];
+    player[1] = &data->players[1];
+    switch (stageId) {
+    case 0:
+        zero = 0.0f;
+        height = 1.5f;
+        __builtin_strcpy(data->background, "BG_TOWN");
+        XrgSetVectorXYZ(player[0]->position, zero, height, -80.0f);
+        XrgSetVectorXYZ(player[1]->position, zero, height, 80.0f);
+        XrgSetVectorXYZ(player[0]->direction, 0.0f, zero, 1.0f);
+        XrgSetVectorXYZ(player[1]->direction, 0.0f, zero, -1.0f);
+        break;
+    case 1:
+        __builtin_strcpy(data->background, "BG_AIRCAR");
+        zero = 0.0f;
+        height = 1.5f;
+        XrgSetVectorXYZ(player[0]->position, zero, height, -97.5f);
+        XrgSetVectorXYZ(player[1]->position, zero, height, 68.0f);
+        XrgSetVectorXYZ(player[0]->direction, 0.0f, zero, 1.0f);
+        XrgSetVectorXYZ(player[1]->direction, 0.0f, zero, -1.0f);
+        break;
+    case 2:
+        zero = 0.0f;
+        height = 1.5f;
+        __builtin_strcpy(data->background, "BG_COL");
+        XrgSetVectorXYZ(player[0]->position, zero, height, -10.0f);
+        XrgSetVectorXYZ(player[1]->position, zero, height, 10.0f);
+        XrgSetVectorXYZ(player[0]->direction, 0.0f, zero, 1.0f);
+        XrgSetVectorXYZ(player[1]->direction, 0.0f, zero, -1.0f);
+        break;
+    case 3:
+        height = 1.5f;
+        __builtin_strcpy(data->background, "BG_BLOCK");
+        zero = 0.0f;
+        XrgSetVectorXYZ(player[0]->position, -90.0f, height, -80.0f);
+        XrgSetVectorXYZ(player[1]->position, 90.0f, height, 80.0f);
+        XrgSetVectorXYZ(player[0]->direction, 0.0f, zero, 1.0f);
+        XrgSetVectorXYZ(player[1]->direction, 0.0f, zero, -1.0f);
+        break;
+    case 4:
+        zero = 0.0f;
+        height = 1.5f;
+        __builtin_strcpy(data->background, "BG_VS1");
+        XrgSetVectorXYZ(player[0]->position, zero, height, -10.0f);
+        XrgSetVectorXYZ(player[1]->position, zero, height, 10.0f);
+        XrgSetVectorXYZ(player[0]->direction, 0.0f, zero, 1.0f);
+        XrgSetVectorXYZ(player[1]->direction, 0.0f, zero, -1.0f);
+        break;
+    default:
+        RgError("unknown stage ID %d", D_00A51450, 163, stageId);
+        return;
+    }
+}
 
 /*
  * ov12:0x00a514d8 contains the format string "over stage-serial ID for
  * enemy (%d)"; ov12:0x00a51450 contains the source filename
  * "../rg_main.euc.c".
  */
-const char D_00A51450[] = "../rg_main.euc.c";
+
 const char D_00A514D8[] = "over stage-serial ID for enemy (%d)";
 
 /* Stage id per serial, indexed 0..3 (ov12:0x00a4f4c8, size 0x10). */
 static int s_aeBgTbl_0[4] = {0, 1, 2, 3};
 
-static void _GetStageData(int stageId, void *data);
+static void _GetStageData(int stageId, RgBattleInit *data);
 
 static void _GetStageDataBySerial(u32 serial, void *data)
 {
@@ -70,8 +183,6 @@ static void _GetStageDataBySerial(u32 serial, void *data)
 }
 
 /* data: the caller's output record (asserted non-null; layout not yet recovered). */
-
-
 /* Same (serial, data) interface as _GetStageDataBySerial; the hard data is
  * always stage 3 and the caller's record is forwarded untouched. */
 static void _GetStageHardDataBySerial(int serial, void *data)
@@ -80,6 +191,7 @@ static void _GetStageHardDataBySerial(int serial, void *data)
 }
 
 extern const char D_00A514D8[];
+
 static int s_anEnemyLevel_1[4] = {0x1000, 0x0B15, 0x05FE, 0x1DEF};
 
 static int _GetEnemyLevelBySerial(u32 serial)
@@ -116,34 +228,22 @@ static int _GetEnemyHardLevelBySerial(u32 serial)
 
 #include "ov12/rg_select_agws.h"
 #include "ov12/rg_weapon_db.h"
-typedef struct RgBattleNames {
-    char characterName[64];
-    RgVector position;
-    RgVector direction;
-    union {
-        char names[3][64];
-        unsigned long long words[3][8];
-    } weaponStorage;
-} RgBattleNames;
-typedef struct RgBattleInit {
-    RgBattleNames players[2];
-    char background[64];
-    int stageKind;
-    int enemyLevel;
-} RgBattleInit;
+
 extern int sRender[];
+
 int abInit_3[2] = {0, 0};
+
 int s_stack[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-extern void assert_prog(const char *expression, const char *file, int line);
+
 typedef struct RgNamedWeaponEssence {
     RgWeaponEssence common;
     unsigned char unmodeled_018[0x318];
     char name[1];
 } RgNamedWeaponEssence;
+
 extern int RgSelectGetEnemyChar(void);
 extern int RgSelectGetEnemyWeapons(RgNamedWeaponEssence **weapons, int charId);
 extern const char *RgActorCharIDToName(int charId);
-extern char *strcpy(char *destination, const char *source);
 
 static void _GetEnemyChar(RgBattleNames *names, int player)
 {
@@ -163,21 +263,37 @@ static void _GetEnemyChar(RgBattleNames *names, int player)
 }
 
 const char D_00A51530[] = "SMG32VX";
+
 const char D_00A51538[] = "BA15VX";
+
 const char D_00A51540[] = "SMP53AG";
+
 const char D_00A51548[] = "DLC02AG4";
+
 const char D_00A51558[] = "UNARMED";
+
 const char D_00A51560[] = "CB85VX";
+
 const char D_00A51568[] = "HMP-AG5";
+
 const char D_00A51570[] = "HGG-AG5";
+
 const char D_00A51578[] = "BMP-AG5";
+
 const char D_00A51580[] = "HG75VX";
+
 const char D_00A51588[] = "ECM1-VX";
+
 const char D_00A51590[] = "LG10AG";
+
 const char D_00A51598[] = "BSW13AG";
+
 const char D_00A515A0[] = "AIRD-AG2";
+
 const char D_00A515B0[] = "FLM64AG";
+
 const char D_00A515B8[] = "LG24VX";
+
 const char D_00A515C0[] = "BMP45VX";
 
 static int _GetHardEnemyChar(RgBattleNames *names, int player, unsigned int stage)
@@ -226,7 +342,9 @@ static int _GetHardEnemyChar(RgBattleNames *names, int player, unsigned int stag
 }
 
 const char D_00A515C8[] = "rg_robot_spec.info";
+
 const char D_00A515E0[] = "rg_shot.info";
+
 const char D_00A515F0[] = "rg_weapon.info";
 
 static void _InitDataBase(void)
@@ -243,6 +361,7 @@ static void _InitDataBase(void)
 }
 
 typedef struct RgTitle RgTitle;
+
 extern RgFileSys *InstanceOfRgFileSys(void);
 extern void RgFileSysPrepareFile(RgFileSys *fileSys, const char *path, const char *origin);
 extern void RgFileSysDisposePrepares(RgFileSys *fileSys);
@@ -252,8 +371,6 @@ extern void RgTitlePassTime(RgTitle *title, float time);
 extern void RgTitleDisp(RgTitle *title);
 extern int RgTitleGetResult(RgTitle *title);
 extern float RgGetFrameTime(void);
-
-
 
 static int _Title(int mode)
 {
@@ -279,6 +396,7 @@ typedef struct RgSelectState {
     int availableCharacters;
     unsigned char unmodeled_08[0x240];
 } RgSelectState;
+
 static RgSelectState D_00A59490[2];
 extern const char D_00A51630[];
 extern void InitRgSelectAGWSData(RgSelectState *state);
@@ -357,6 +475,7 @@ static int _SelectOneChar(RgBattleInit *init, int player)
 const char D_00A51630[16] = {0};
 
 typedef struct RgAnnounce RgAnnounce;
+
 void RgAnnounceDispInit(RgAnnounce *pAnn, int kind);
 
 static void _AnnSetRound(RgAnnounce *pAnn, u32 round)
@@ -433,7 +552,9 @@ static void _GameInfoInit(RgGameInfo *info)
 }
 
 typedef struct RgBattleMgr RgBattleMgr;
+
 typedef struct RgRobot RgRobot;
+
 extern float RgBattleMgrGetPlayTime(RgBattleMgr *battleMgr);
 extern float RgBattleMgrGetPlayerDamage(RgBattleMgr *battleMgr, RgRobot *robot);
 
@@ -569,7 +690,219 @@ static void _disp_hardmode(void)
     RgFontStr(InstanceOfXrgPaint2D(), weaponFont, D_00A51658, 8, 0x64, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_main", _OneBattle);
+const char D_00A51668[] = "pMgr != NIL";
+
+extern RgAnnounce *CreateRgAnnounce(void);
+extern void DisposeRgAnnounce(RgAnnounce *pAnn);
+extern void RgBattleMgrSetPlayerControl(RgBattleMgr *battle, int control);
+extern void RgBattleMgrInitBattle(RgBattleMgr *battle, RgBattleInit *init);
+extern RgDispLife *RgBattleMgrGetDispLife(RgBattleMgr *battle);
+extern int RgBattleMgrGetMode(RgBattleMgr *battle);
+extern int RgBattleMgrGetResult(RgBattleMgr *battle);
+extern void RgBattleMgrActivateTimer(RgBattleMgr *battle, int enable);
+extern void RgBattleMgrControl(RgBattleMgr *battle);
+extern void RgBattleMgrPassTime(RgBattleMgr *battle, float deltaTime);
+extern void RgBattleMgrDisp(RgBattleMgr *battle);
+extern void RgAnnounceDisp(RgAnnounce *pAnn);
+extern void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime);
+extern void RgAnnounceDispInitTime(RgAnnounce *pAnn, int kind, float duration);
+extern void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage);
+extern void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
+                                   const float *afDamage, unsigned int uStage);
+extern void XrgPadSetID(int padId);
+extern int XrgPadIsStart(void);
+extern void XrgSoundSystemStop(void);
+
+static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info, int difficulty)
+{
+    RgAnnounce *announce;
+    RgDispLife *dispLife;
+    unsigned int mode;
+    float frameTime;
+    float phaseTimer;
+    unsigned int battlePhase;
+    int simulateFrame;
+    int drawnOnce;
+    int pauseController;
+    int battleResult;
+    int playTime;
+    float damage;
+    int modeEnded;
+
+    drawnOnce = 0;
+    pauseController = -1;
+    if (battle == 0) {
+        assert_prog(D_00A51668, D_00A51450, 755);
+    }
+    battlePhase = 0;
+    announce = CreateRgAnnounce();
+    RgBattleMgrInitBattle(battle, init);
+    dispLife = RgBattleMgrGetDispLife(battle);
+    phaseTimer = 1.0f;
+    _GameInfoSetDispLife(info, dispLife, -1);
+    battleResult = 0;
+    mode = RgBattleMgrGetMode(battle);
+    while ((modeEnded = _IsEndOfMode()) == 0 && battlePhase != 9) {
+        frameTime = RgGetFrameTime();
+        phaseTimer -= frameTime;
+        simulateFrame = 1;
+        if (battlePhase < 9) {
+            switch (battlePhase) {
+            case 0:
+                battlePhase = 1;
+                _AnnSetRound(announce, info->activePlayer);
+                /* fallthrough */
+            case 1:
+                if (phaseTimer < 0.0f) {
+                    phaseTimer = 1.5f;
+                    battlePhase = 2;
+                    RgAnnounceDispInit(announce, 3);
+                }
+                break;
+            case 2:
+                if (phaseTimer < 0.0f) {
+                    battlePhase = 3;
+                    RgAnnounceDispInitTime(announce, 4, 0.5f);
+                    RgBattleMgrSetPlayerControl(battle, 1);
+                }
+                break;
+            case 3:
+                battleResult = RgBattleMgrGetResult(battle);
+                pauseController = _DoAnyOnePausing(mode);
+                if (pauseController >= 0) {
+                    battlePhase = 4;
+                }
+                if (battleResult != 0) {
+                    int winner;
+
+                    RgBattleMgrActivateTimer(battle, 0);
+                    phaseTimer = 3.0f;
+                    battlePhase = 5;
+                    winner = battleResult & 3;
+                    switch (winner) {
+                    default:
+                        _GameInfoEndOfBattle(info, -1, battle);
+                        break;
+                    case 1:
+                        _GameInfoEndOfBattle(info, 0, battle);
+                        _GameInfoSetDispLife(info, dispLife, 0);
+                        break;
+                    case 2:
+                        _GameInfoEndOfBattle(info, 1, battle);
+                        _GameInfoSetDispLife(info, dispLife, 1);
+                        break;
+                    }
+                }
+                break;
+            case 5:
+                _AnnSetResult(announce, battleResult, RgBattleMgrGetMode(battle), phaseTimer);
+                if (!(phaseTimer >= 0.0f)) {
+                    int winner;
+
+                    RgBattleMgrSetPlayerControl(battle, 0);
+                    winner = battleResult & 3;
+                    switch (mode) {
+                    case 1:
+                        if (winner == mode && _GameInfoIsPlayerGetGame(info, 0) != 0) {
+                            battlePhase = 7;
+                            playTime = _GameInfoGetCurrentPlayTime(info);
+                            damage = _GameInfoGetCurrentDamage(info);
+                            phaseTimer = 5.0f;
+                            RgAnnounceDispInit(announce, 10);
+                            RgAnnounceSetStageClear(announce, playTime, damage);
+                        } else if (winner == 2 && _GameInfoIsPlayerGetGame(info, 1) != 0) {
+                            phaseTimer = 4.0f;
+                            battlePhase = 6;
+                            RgAnnounceDispInit(announce, 8);
+                        } else {
+                            battlePhase = 9;
+                        }
+                        break;
+                    case 3:
+                        if (_GameInfoIsEndOfGame(info) != 0) {
+                            RgAnnounceDispInit(announce, 8);
+                            phaseTimer = 4.0f;
+                            battlePhase = 6;
+                        } else {
+                            battlePhase = 9;
+                        }
+                        break;
+                    case 0:
+                    case 2:
+                    default:
+                        battlePhase = 9;
+                        break;
+                    }
+                }
+                break;
+            case 6:
+                if (phaseTimer <= 0.0f) {
+                    battlePhase = 9;
+                }
+                XrgPadSetID(0);
+                if (XrgPadIsStart() != 0) {
+                    battlePhase = 9;
+                }
+                XrgPadSetID(1);
+                if (XrgPadIsStart() != 0) {
+                    battlePhase = 9;
+                }
+                break;
+            case 7:
+                XrgPadSetID(0);
+                if (phaseTimer <= 0.0f || XrgPadIsStart() != 0) {
+                    if (_GameInfoGetStage(info) == 3) {
+                        phaseTimer = 60.0f;
+                        battlePhase = 8;
+                        RgAnnounceDispInit(announce, 11);
+                        RgAnnounceSetGameClear(announce, info->playTime, info->damage, 4);
+                    } else {
+                        battlePhase = 9;
+                    }
+                }
+                if (difficulty != 0) {
+                    _disp_hardmode();
+                }
+                break;
+            case 8:
+                XrgPadSetID(0);
+                if (XrgPadIsStart() != 0 || phaseTimer <= 0.0f) {
+                    battlePhase = 9;
+                }
+                if (difficulty != 0) {
+                    _disp_hardmode();
+                }
+                break;
+            case 4:
+                simulateFrame = 0;
+                if (_IsEndOfPause(pauseController) != 0) {
+                    battlePhase = 3;
+                }
+                break;
+            }
+        }
+        if (simulateFrame != 0) {
+            RgBattleMgrControl(battle);
+            RgBattleMgrPassTime(battle, frameTime);
+            RgAnnouncePassTime(announce, frameTime);
+        }
+        if (drawnOnce != 0) {
+            RgBattleMgrDisp(battle);
+        } else {
+            drawnOnce = 1;
+        }
+        RgAnnounceDisp(announce);
+        if (battlePhase == 4) {
+            _DispPause();
+        }
+        _EndOfFrame();
+    }
+    XrgSleep();
+    XrgSleep();
+    XrgSoundSystemStop();
+    DisposeRgAnnounce(announce);
+    return modeEnded;
+}
 
 static void _GetEnemyChar(RgBattleNames *names, int player);
 static int _GetHardEnemyChar(RgBattleNames *names, int player,
@@ -577,7 +910,6 @@ static int _GetHardEnemyChar(RgBattleNames *names, int player,
 extern void XrgSoundSystemPlayBGM(int sequence);
 extern RgBattleMgr *CreateRgBattleMgr(void);
 extern void DisposeRgBattleMgr(RgBattleMgr *battle);
-extern void RgBattleMgrSetPlayerControl(RgBattleMgr *battle, int control);
 static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info, int difficulty);
 
 static int _OneGame(RgBattleInit *init, RgGameInfo *info, int difficulty)
@@ -597,19 +929,33 @@ static int _OneGame(RgBattleInit *init, RgGameInfo *info, int difficulty)
 }
 
 static int _SelectOneChar(RgBattleInit *init, int player);
+
 const char D_00A516A8[] = "This game is 'HARD' mode";
+
 const char D_00A516C8[] = "--------------------------------------------------\n";
+
 const char D_00A51700[] = "stage %s : level %d\n";
+
 const char D_00A51718[] = "mode %x\n";
+
 const char D_00A51728[] = "enemy lev %x\n";
+
 const char D_00A51738[] = "\n";
+
 const char D_00A51740[] = "player 1 '%s'\n";
+
 const char D_00A51750[] = "pos %f %f %f\n";
+
 const char D_00A51760[] = "dir %f %f %f\n";
+
 const char D_00A51770[] = "weapon left  '%s'\n";
+
 const char D_00A51788[] = "weapon right '%s'\n";
+
 const char D_00A517A0[] = "weapon back  '%s'\n";
+
 const char D_00A517B8[] = "player 2 '%s'\n";
+
 extern void XrgLog(const char *format, const char *file, int line, ...);
 extern double fptodp(float value);
 extern void InitRgBattleInit(RgBattleInit *init);
@@ -716,13 +1062,16 @@ static void _2PGame(void)
 }
 
 typedef struct RgHelp RgHelp;
+
 extern RgHelp *CreateRgHelp(void);
 extern void DisposeRgHelp(RgHelp *help);
 extern void RgHelpPassTime(RgHelp *help, float deltaTime);
 extern void RgHelpDisp(RgHelp *help);
 extern int RgHelpIsEnd(RgHelp *help);
+
 /* OV12 TU001 file/path labels retained as local C data. */
 const char D_00A517C8[16] = "help.npr";
+
 const char D_00A517D8[24] = "unknown title status";
 
 static void _Help(void)
@@ -776,7 +1125,6 @@ extern void InitXrgSoundSystem(void);
 extern void DisposeXrgSoundSystem(void);
 extern void RgDrawCreateDrawStudioFullScreen(RgDraw *draw);
 extern void RgFileSysClear(RgFileSys *fileSys);
-extern void RgError(const char *message, const char *file, int line, ...);
 
 void RobotGameMain(void)
 {

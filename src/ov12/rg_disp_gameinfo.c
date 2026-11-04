@@ -154,8 +154,8 @@ extern void XrgPaint2DDrawRect(XrgPaint2D *paint,
 /* Anchored, rotated, scaled rectangle with per-frame jitter. */
 #define RG_DISP_GAME_INFO_COLOR_RECT_MODE 0x1E5
 
-void _paint_xy_color(RgDispGameInfo *pInfo, int x, int y, int intensity,
-                     float angle, float scale)
+void _paint_xy_color(RgDispGameInfo *pInfo, int x, int y, float angle, float scale,
+                     int intensity)
 {
     unsigned int color[4] = {intensity, intensity, intensity, 127};
     RgDispGameInfoColorRect rectangle;
@@ -169,7 +169,237 @@ void _paint_xy_color(RgDispGameInfo *pInfo, int x, int y, int intensity,
     XrgPaint2DDrawRect(pInfo->paint, &rectangle);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", _DispInfo);
+extern float XrgRand(float lower, float upper);
+extern float XrgLengthVector(RgVector vector);
+extern void XrgSubVector(RgVector result, RgVector a, RgVector b);
+extern void __RgGeomPointGetPos(void *point, RgVector destination,
+                                const char *source_file, int line);
+extern unsigned int RgRobotGetStatusFlags(void *robot);
+extern void *RgRobotGetGeom(void *robot);
+extern int RgRobotIsConfused(void *robot);
+extern void *RgRobotGetWeapon(void *robot, unsigned int slot);
+extern int RgWeaponIsTargetting(void *weapon);
+extern float RgWeaponGetShotNum(void *weapon);
+extern int RgWeaponIsNotBusy(void *weapon);
+extern void XrgPaint2DFlush(XrgPaint2D *paint);
+extern void XrgPaint2DOffset2D(XrgPaint2D *paint, int x, int y);
+extern void XrgPaint2DOffset3DForce(XrgPaint2D *paint, const RgVector anchor,
+                                    float force);
+extern void XrgPaint2DOffsetResult(XrgPaint2D *paint, const void *anchor);
+extern float atan2f(float y, float x);
+extern float sinf(float angle);
+extern float cosf(float angle);
+extern const char D_00A545A8[];
+extern const char D_00A545C0[];
+extern const char D_00A545C8[];
+extern const char D_00A545D0[];
+extern const char D_00A545D8[];
+extern const char D_00A545E8[];
+extern const char D_00A545F0[];
+extern const char D_00A545F8[];
+extern const char D_00A54600[];
+
+void _DispInfo(RgDispGameInfo *pInfo)
+{
+    RgVector hostPos;
+    RgVector subPos;
+    RgVector delta;
+    RgVector anchor;
+    void *hostRobot;
+    void *hostGeom;
+    void *subGeom;
+    void *weapon;
+    RgDispGameOffset *offsetBlock;
+    XrgPaint2D *paint;
+    unsigned int flags;
+    int confused;
+    float spread;
+    float glow;
+    float clamped;
+    float distance;
+    float alpha;
+    float angle;
+    float radius;
+    float xArm;
+    float yArm;
+    float cosWeighted;
+    float sinWeighted;
+    float a4;
+    float a5;
+    float wrapped5;
+    float unit;
+    int y;
+    int x;
+    int sway;
+    int intensity;
+    unsigned int state;
+
+    paint = pInfo->paint;
+    if (pInfo->subRobot != 0) {
+        const float pi = 3.1415927f;
+
+        a4 = *(float *)&pInfo->value4 + 0.09817477f;
+        offsetBlock = &pInfo->offset;
+        while (a4 > pi) {
+            a4 -= 6.2831855f;
+        }
+        if (a4 < -3.1415927f) {
+            do {
+                a4 += 6.2831855f;
+            } while (a4 < -3.1415927f);
+        }
+        *(float *)&pInfo->value4 = a4;
+        wrapped5 = *(float *)&pInfo->value5 + 0.33379424f;
+        while (wrapped5 > 3.1415927f) {
+            wrapped5 -= 6.2831855f;
+        }
+        if (wrapped5 < -3.1415927f) {
+            do {
+                wrapped5 += 6.2831855f;
+            } while (wrapped5 < -3.1415927f);
+        }
+        *(float *)&pInfo->value5 = wrapped5;
+
+        flags = RgRobotGetStatusFlags(pInfo->hostRobot);
+        hostRobot = pInfo->hostRobot;
+        hostGeom = RgRobotGetGeom(hostRobot);
+        subGeom = RgRobotGetGeom(pInfo->subRobot);
+        __RgGeomPointGetPos(hostGeom, hostPos, D_00A54570, 201);
+        __RgGeomPointGetPos(subGeom, subPos, D_00A54570, 202);
+        confused = RgRobotIsConfused(hostRobot);
+        XrgSubVector(delta, hostPos, subPos);
+        distance = XrgLengthVector(delta);
+        clamped = distance < 0.0f ? 0.0f : (50.0f < distance ? 50.0f : distance);
+        unit = 1.0f;
+        distance = unit - clamped / 50.0f;
+        alpha = unit;
+        unit = distance;
+        spread = (distance - 0.5f) * 1.5707964f;
+        glow = 0.75f + distance * 0.6f;
+
+        if (confused != 0) {
+            anchor[0] = hostPos[0] + XrgRand(-50.0f, 50.0f);
+            anchor[1] = hostPos[1] + XrgRand(-10.0f, 10.0f);
+            anchor[2] = hostPos[2] + XrgRand(-50.0f, 50.0f);
+            anchor[3] = alpha;
+            XrgPaint2DOffset3DForce(paint, anchor, 180.0f);
+            pInfo->value2 = alpha;
+            pInfo->value3 = 3;
+        } else {
+            state = pInfo->value3;
+            switch (state) {
+            case 1:
+                pInfo->value2 -= 0.1f;
+                if (pInfo->value2 < 0.0f) {
+                    pInfo->value2 = 0.0f;
+                    pInfo->value3 = 2;
+                }
+                /* fallthrough */
+            case 2:
+                if (flags & 1) {
+                    pInfo->value3 = 3;
+                }
+                XrgPaint2DOffset2D(paint, offsetBlock->offsetX,
+                                   offsetBlock->offsetY);
+                pInfo->value2 = 0.0f;
+                break;
+            case 3:
+                pInfo->value2 += 0.1f;
+                if (pInfo->value2 > alpha) {
+                    pInfo->value2 = alpha;
+                    pInfo->value3 = 0;
+                }
+                /* fallthrough */
+            case 0:
+                if ((flags & 1) == 0) {
+                    pInfo->value3 = 1;
+                }
+                XrgPaint2DOffset3DForce(paint, subPos, 180.0f);
+                break;
+            default:
+                RgError(D_00A545A8, D_00A54570, 263, pInfo->value3);
+                break;
+            }
+        }
+        XrgPaint2DOffsetResult(pInfo->paint, offsetBlock);
+        alpha = pInfo->value2;
+        _paint_set_tex_alpha(pInfo, D_00A545C0, 1);
+        _paint_xy_color(pInfo, 0, 0, spread, alpha, 0x80);
+        _paint_set_tex_alpha(pInfo, D_00A545C8, 1);
+        _paint_xy_color(pInfo, 0, 0, 0.0f, alpha, 0x80);
+        _paint_set_tex_alpha(pInfo, D_00A545D0, 1);
+        _paint_xy_color(pInfo, 0, 0, 0.0f, alpha * glow, 0x80);
+
+        if (pInfo->value3 == 0) {
+            if (confused == 0) {
+                if (offsetBlock->hasVector != 0) {
+                    angle = atan2f(offsetBlock->vectorY, offsetBlock->vectorX);
+                    a5 = *(float *)&pInfo->value5;
+                    while (a5 > 3.1415927f) {
+                        a5 -= 6.2831855f;
+                    }
+                    if (a5 < -3.1415927f) {
+                        do {
+                            a5 += 6.2831855f;
+                        } while (a5 < -3.1415927f);
+                    }
+                    radius = 5.0f * sinf(a5);
+                    xArm = cosf(angle) * radius;
+                    yArm = sinf(angle) * radius;
+                    angle += 1.5707964f;
+                    cosWeighted = cosf(-angle) * xArm;
+                    x = (int)(cosWeighted - sinf(-angle) * yArm);
+                    sinWeighted = sinf(-angle) * xArm;
+                    y = (int)(sinWeighted + cosf(-angle) * yArm);
+                } else {
+                    y = 0;
+                    x = 0;
+                    angle = *(float *)&pInfo->value4;
+                }
+                _paint_set_tex_alpha(pInfo, D_00A545D8, 1);
+                _paint_xy_color(pInfo, x, y, angle, 1.0f, 0x80);
+            }
+        }
+
+        if (0.3f < pInfo->value2) {
+            sway = (int)(sinf(4.0f * *(float *)&pInfo->value4) * 8.0f);
+            weapon = RgRobotGetWeapon(hostRobot, 0);
+            if (weapon != 0 && RgWeaponIsTargetting(weapon) != 0
+                && 0.0f < RgWeaponGetShotNum(weapon)) {
+                    intensity = 0x80;
+                    if (RgWeaponIsNotBusy(weapon) == 0) {
+                        intensity = 0x20;
+                    }
+                    _paint_set_tex_alpha(pInfo, D_00A545E8, 1);
+                    _paint_xy_color(pInfo, sway - 0x30, 0, 0.0f, 1.0f, intensity);
+            }
+            weapon = RgRobotGetWeapon(hostRobot, 1);
+            if (weapon != 0 && RgWeaponIsTargetting(weapon) != 0
+                && 0.0f < RgWeaponGetShotNum(weapon)) {
+                    intensity = 0x80;
+                    if (RgWeaponIsNotBusy(weapon) == 0) {
+                        intensity = 0x20;
+                    }
+                    _paint_set_tex_alpha(pInfo, D_00A545F0, 1);
+                    _paint_xy_color(pInfo, 0x30 - sway, 0, 0.0f, 1.0f, intensity);
+            }
+            weapon = RgRobotGetWeapon(hostRobot, 2);
+            if (weapon != 0 && RgWeaponIsTargetting(weapon) != 0
+                && 0.0f < RgWeaponGetShotNum(weapon)) {
+                sway -= 0x30;
+                intensity = 0x80;
+                if (RgWeaponIsNotBusy(weapon) == 0) {
+                    intensity = 0x20;
+                }
+                _paint_set_tex_alpha(pInfo, D_00A545F8, 1);
+                _paint_xy_color(pInfo, 0, sway, 0.0f, 1.0f, intensity);
+                _paint_set_tex_alpha(pInfo, D_00A54600, 1);
+                _paint_xy_color(pInfo, 0, -sway, 0.0f, 1.0f, intensity);
+            }
+        }
+    }
+    XrgPaint2DFlush(pInfo->paint);
+}
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,

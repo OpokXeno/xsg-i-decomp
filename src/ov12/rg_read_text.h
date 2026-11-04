@@ -21,6 +21,8 @@
 
 typedef struct RgReadText RgReadText;
 
+enum RgUngetFlag { RG_UNGET_CLEAR = 0, RG_UNGET_SET = 1 };
+
 struct RgReadText {
     RgFileSysData *m_pFile;      /* 0x00, disposed by _DisposeReader */
     char *m_pszBuf;              /* 0x04, "pReader->m_pszBuf" (D_00A543E0) */
@@ -36,7 +38,7 @@ struct RgReadText {
      * _GetString, RgReadTextUnget and RgReadTextRewind use.
      */
     char m_szUngetToken[RG_READ_TEXT_TOKEN_MAX + 1];
-    int m_bUngetPending;         /* 0x58, RgReadTextUnget/-Rewind */
+    enum RgUngetFlag m_bUngetPending; /* 0x58, RgReadTextUnget/-Rewind */
 };
 
 RgReadText *CreateRgReadText(const char *pszName);

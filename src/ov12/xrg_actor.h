@@ -15,13 +15,34 @@
  * not this translation unit, so only the offsets this TU's own setters read
  * or write are named; the rest are unmodeled spans.
  */
+/*
+ * The motion state an XenoAct carries at 0x6F0.  flags bit 0x1000 is the
+ * motion-ended flag _IsEndOfMotUseXenoActor tests; frame and length are the
+ * values XrgActorGetPlayingMotTime and XrgActorGetMotionLength return;
+ * start and next are only read by XrgActorDebugDisp's log, so their engine
+ * meaning is not evidenced.
+ */
+typedef struct XenoMotion {
+    unsigned int flags;               /* 0x00 */
+    float frame;                      /* 0x04 */
+    float step;                       /* 0x08: elapsed time of this update */
+    float start;                      /* 0x0C */
+    float length;                     /* 0x10 */
+    unsigned char unmodeled_14[0x16 - 0x14];
+    unsigned short next;              /* 0x16 */
+} XenoMotion;
+
 typedef struct XenoAct {
     unsigned int flags;             /* 0x000: |= 0x408 drops the weapon, |= 0x800 marks it transparent */
     unsigned char unmodeled_004[0x008 - 0x004];
     void (*drawFunc)(struct XenoAct *pXenoAct); /* 0x008: _InitAfterLoadXenoActor installs
                                         _ActorDrawFunction here; the ACT_* module calls it
                                         back with this same XenoAct as its argument */
-    unsigned char unmodeled_00c[0x090 - 0x00C];
+    unsigned char unmodeled_00c[0x010 - 0x00C];
+    float position[3];                /* 0x010 */
+    unsigned char unmodeled_01c[0x054 - 0x01C];
+    float rotationY;                  /* 0x054 */
+    unsigned char unmodeled_058[0x090 - 0x058];
     signed char lightCost[2];        /* 0x090: byte pair enabled by renderFlags 0x40;
                                         _InitAfterLoadXenoActor stores {7, 0x30},
                                         XrgActorSetLightCost {9, 0x70}; the engine
@@ -30,16 +51,13 @@ typedef struct XenoAct {
     StudioLight light;                 /* 0x510: _InitAfterLoadXenoActor's
                                            xglLightSetDefault target */
     unsigned char unmodeled_600[0x6F0 - 0x600];
-    unsigned int motionFlags;         /* 0x6F0: _IsEndOfMotUseXenoActor tests bit 0x1000
-                                         (lw + andi 0x1000 at ov12:0x00a464ec) as the
-                                         motion-ended flag; main's chr.h and menu_model.c
-                                         name the same word motion_flags/motionFlags */
-    float motionFrame;                /* 0x6F4: returned by XrgActorGetPlayingMotTime
-                                         (lwc1 at ov12:0x00a47584) */
-    unsigned char unmodeled_6f8[0x700 - 0x6F8];
-    float motionLength;               /* 0x700: returned by XrgActorGetMotionLength
-                                         (lwc1 at ov12:0x00a4751c) */
-    unsigned char unmodeled_704[0x8D0 - 0x704];
+    XenoMotion motion;                 /* 0x6F0: the motion state, see XenoMotion */
+    unsigned char unmodeled_708[0x824 - 0x708];
+    RgMatrix *jointMatrices;           /* 0x824: joint matrix block, one RgMatrix (64 bytes)
+                                           per element; _SkeManiGet and _SkeManiSet index it
+                                           by the manipulator's elementIndex, element 0 is
+                                           the base matrix the get path multiplies by */
+    unsigned char unmodeled_828[0x8D0 - 0x828];
     void *dupFileData;                 /* 0x8D0: resourceFiles[2]->data, cached by
                                            _DupLoadXenoActor after RgFileSysDup */
     void *auxFileData;                  /* 0x8D4: resourceFiles[1]->data, cached by
@@ -80,7 +98,7 @@ typedef struct XrgActor {
     int loopPlay;                         /* 0x054 */
     int motionID;                          /* 0x058: -1 when no motion is set */
     int motionComaStep;                     /* 0x05C */
-    float motionComaStepAccum;               /* 0x060: float, as _PassTime_00A45D30 reads and
+    float motionComaStepAccum;               /* 0x060: float, as _PassTime reads and
                                                 writes it with lwc1/swc1 */
     void *children;                            /* 0x064: the RgVector of attached child XrgActor
                                                    records XrgActorAttachChild pushes to and
@@ -96,7 +114,12 @@ typedef struct XrgActor {
                                                    to _GetPakaPakaBaseJnt and
                                                    RgActorCharIDToName (ov12:0x00a47824/
                                                    0x00a4783c) */
-    unsigned char unmodeled_074[0x104 - 0x074];
+    struct MatrixEffector *effector[2][8];      /* 0x074: two effector banks of eight entries
+                                                   (32 bytes each); _DisposeUseXenoActor
+                                                   disposes every live entry of both banks */
+    unsigned char unmodeled_0b4[0x0F4 - 0x0B4];
+    int effectorCount[2];                        /* 0x0F4: live entries per bank */
+    unsigned char unmodeled_0fc[0x104 - 0x0FC];
     RgFileSysData *resourceFiles[4];            /* 0x104: per-index roles beyond the load/cache
                                                    bookkeeping _DupLoadXenoActor performs are not
                                                    evidenced; index 3 is the joint/skeleton file
@@ -109,6 +132,8 @@ typedef struct XrgActor {
     int pakaBaseJnt;                            /* 0x11C: _GetPakaPakaBaseJnt's result for
                                                    the parent's charID and this attachID,
                                                    logged as "paka base %d" */
+    RgMatrix pakaBaseMatrix;                    /* 0x120 */
+    int unmodeled_160;                          /* 0x160: _LoadXenoActor clears it after setting the light */
 } XrgActor;
 
 /*
@@ -122,8 +147,8 @@ typedef struct XrgActorEssence {
     char fileName[0x84 - 0x004]; /* 0x004: InitXrgActorEssence empties it by clearing byte 0,
                                     the same empty-string idiom _InitRgShotEssence uses on
                                     RgShotEssence.hitEffectFile (src/ov12/rg_shot.h) */
-    int state;                    /* 0x084: InitXrgActorEssence clears it; no reader in this
-                                     allocation evidences its meaning beyond that */
+    RgVector *light;              /* 0x084: the light _LoadXenoActor hands XrgActorSetLight;
+                                     InitXrgActorEssence clears it to 0 (the default light) */
 } XrgActorEssence;
 
 /*

@@ -39,6 +39,9 @@
 #define RG_ACTOR_CHAR_ROBNUM 6
 
 typedef struct RgWeapon RgWeapon;
+enum RgWeaponControl { RG_WEAPON_CONTROL_NONE = 0 };
+enum RgActorFlag { RG_ACTOR_FLAG_NONE = 0 };
+enum RgLockOnStop { RG_LOCKON_STOP_NONE = 0 };
 
 /*
  * The actor handle RgWeaponGetActor/RgWeaponPlayMotion/RgWeaponDisposeLockon
@@ -61,7 +64,11 @@ typedef struct XrgActor XrgActor;
  * 0x3c bytes) are attested.
  */
 typedef struct RgEquip {
-    unsigned char unmodeled_00[0x3c];
+    unsigned char unmodeled_00[0x38];
+    /* +0x38 (weapon+0xa8): _InitWeaponCommon copies the essence's int at
+     * +0xa8 here after CopyRgEquip; no other function of this allocation
+     * reads it. */
+    int equipExtra;
 } RgEquip;
 
 /*
@@ -102,10 +109,12 @@ typedef struct RgWeaponAttach {
 } RgWeaponAttach;
 
 struct RgWeapon {
-    int controlFlags;
+    enum RgWeaponControl controlFlags;
     int robotId;
     int id;
-    unsigned char unmodeled_0c[4];
+    /* +0x0c: _InitWeaponCommon copies the create info's pointer here (see
+     * RgWeaponCreateInfo.atkGeoms). */
+    void *atkGeoms;
     int shotRequested;
     void (*dispose)(RgWeapon *weapon);
     /* +0x18: _InitWeaponCommon stores _CommonDisp here (sw at 0x00a19910);
@@ -120,9 +129,12 @@ struct RgWeapon {
      * _EnergyIsBusy here (sw at 0x00a1a3d0 / 0x00a1b270). */
     int (*isBusy)(RgWeapon *weapon);
     void (*setFree)(RgWeapon *weapon);
-    unsigned char unmodeled_38[8];
+    /* +0x38: _InitWeaponCommon copies the essence's shotEssence pointer
+     * (ess+0x10) here, as the third argument of CreateXrgActor. */
+    struct RgShotEssence *shotEssence;
+    unsigned char unmodeled_3c[4];
     RgWeaponAttach shotAttach;
-    unsigned char unmodeled_64[4];
+    int aimJointCursor; /* +0x64: cleared by _InitWeaponCommon, advanced by _GetDefShotPosDirFunc */
     XrgActor *actor;
     unsigned char unmodeled_6c[4];
     RgEquip equip;
@@ -166,7 +178,7 @@ struct RgWeapon {
     int lockOnEffector;
     int ess;
     int equipped;
-    int lockOnStopped;
+    enum RgLockOnStop lockOnStopped;
     int sound;
     /*
      * _ShotAttackType (ov12:0x00a1a540) reads shotSound/shotVolume as the
@@ -183,7 +195,9 @@ struct RgWeapon {
      */
     int robotHitSound;
     int bgHitSound;
-    unsigned char unmodeled_1d4[4];
+    /* +0x1d4: copied from the essence's +0x38c by _InitWeaponCommon; no
+     * reader inside this allocation. */
+    int bgHitVolume;
     int shotVolume;
     /*
      * _HitRobotAttackType (ov12:0x00a1a720) reads this as XrgSoundRingVol's
@@ -195,7 +209,11 @@ struct RgWeapon {
      * (0x1f0 bytes) is unchanged.
      */
     int robotHitVolume;
-    unsigned char unmodeled_1e0[0x10];
+    /* +0x1e0, +0x1e4: copied from the essence's +0x398/+0x39c by
+     * _InitWeaponCommon; no reader inside this allocation. */
+    int extraVolume0;
+    int extraVolume1;
+    unsigned char unmodeled_1e8[8];
 };
 
 /*
@@ -220,7 +238,7 @@ typedef struct RgWeaponAttackType {
      * (0x1fc) is unchanged.
      */
     int followJoint;
-    unsigned char unmodeled_1f4[4];
+    int followExtra;
     XrgActor *followActor;
     float damage;
     /*
@@ -259,7 +277,11 @@ typedef struct RgWeaponAttackType {
  */
 typedef struct RgWeaponShotType {
     RgWeapon common;
-    unsigned char unmodeled_1f0[4];
+    /*
+     * _InitWeaponShot (ov12:0x00a1a388) copies the shot essence's busyTime
+     * key (+0x3b0) here and zeroes cooldown right after it.
+     */
+    float busyTime;
     float cooldown;
     unsigned char unmodeled_1f8[8];
 } RgWeaponShotType;
@@ -284,7 +306,11 @@ typedef struct RgWeaponEnergyType {
     RgWeapon common;
     int active;
     int shotPending;
-    int energyCharge;
+    float energyCharge;
+    float shotEnergy;
+    float upTemp;
+    float limitTemp;
+    float downTemp;
 } RgWeaponEnergyType;
 
 /*
@@ -325,7 +351,7 @@ typedef struct RgWeaponEssenceCommon {
 typedef struct RgWeaponShotEssenceInit {
     RgWeaponShotType *(*m_pCreateMethod)(RgWeaponShotEssence *pEss,
                                           RgWeaponCreateInfo *pInfo);
-    int controlMode;
+    enum RgWeaponControl controlMode;
     unsigned char unmodeled_08[0x3a8];
     float busyTime;
 } RgWeaponShotEssenceInit;
@@ -357,7 +383,7 @@ typedef struct RgWeaponShotEssenceInit {
 typedef struct RgWeaponUnArmedEssenceInit {
     RgWeapon *(*m_pCreateMethod)(RgWeaponUnArmedEssence *pEss,
                                   RgWeaponCreateInfo *pInfo);
-    int controlMode;
+    enum RgWeaponControl controlMode;
     unsigned char unmodeled_08[0xa8];
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     unsigned char unmodeled_f8[0x90];
@@ -379,12 +405,12 @@ typedef struct RgWeaponUnArmedEssenceInit {
 typedef struct RgWeaponAttackEssenceInit {
     RgWeaponAttackType *(*m_pCreateMethod)(RgWeaponAttackEssence *pEss,
                                             RgWeaponCreateInfo *pInfo);
-    int controlMode;
+    enum RgWeaponControl controlMode;
     unsigned char unmodeled_08[0xa8];
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     unsigned char unmodeled_f8[0x2b8];
     int followJoint;
-    int unmodeled_3b4;
+    int followExtra;
     float damage;
     char hitEffectName[0x24];
 } RgWeaponAttackEssenceInit;
@@ -400,7 +426,7 @@ typedef struct RgWeaponAttackEssenceInit {
 typedef struct RgWeaponEnergyEssenceInit {
     RgWeaponEnergyType *(*m_pCreateMethod)(RgWeaponEnergyEssence *pEss,
                                             RgWeaponCreateInfo *pInfo);
-    int controlMode;
+    enum RgWeaponControl controlMode;
     unsigned char unmodeled_08[0x0c];
     float capacity;
     unsigned char unmodeled_18[0x398];
@@ -424,7 +450,7 @@ typedef struct RgWeaponEnergyEssenceInit {
 struct RgWeaponShieldEssence {
     RgWeapon *(*m_pCreateMethod)(RgWeaponShieldEssence *pEss,
                                   RgWeaponCreateInfo *pInfo);
-    int controlMode;
+    enum RgWeaponControl controlMode;
     unsigned char unmodeled_08[0xa8];
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
 };
@@ -491,5 +517,74 @@ struct RgWeaponShotRequest {
     int id;
     int targetConfused;
 };
+
+/*
+ * The creation info _InitWeaponCommon (ov12:0x00a19870) reads: the robot ID
+ * (+0x00), the equip type the weapon is mounted on (+0x04, asserted against
+ * RG_EQUIP_TYPE_NUM with "RG_EQUIP_TYPE_MIN <= (eEquipType) && (eEquipType)
+ * < RG_EQUIP_TYPE_NUM", ov12:0x00a53698), the id (+0x08) and a pointer
+ * (+0x0c) that rg_player.c's own view of the same creation record names
+ * atkGeoms.
+ */
+struct RgWeaponCreateInfo {
+    int robotId;
+    unsigned int equipType;
+    int id;
+    void *atkGeoms;
+};
+
+/*
+ * RG_EQUIP_TYPE_NUM is the original identifier baked into the equip-type
+ * assert string at ov12:0x00a53698 that _InitWeaponCommon cites.
+ */
+#define RG_EQUIP_TYPE_NUM 3
+
+/*
+ * The common prefix every essence type places at its start: the create-method
+ * slot (+0x00), the mode word (+0x04), the lock-on angles (+0x08, +0x0c), the
+ * shot essence pointer (+0x10), the capacity (+0x14), the aim fields read by
+ * _GetDefShotPosDirFunc (+0x18..+0x67), the equip record (+0x70), the weight
+ * (+0xac), the three six-row motion tables (+0xb0, +0xf8, +0x140), the actor
+ * flag (+0x188), the per-equip-type actor specs (+0x190, 0x88 bytes each) and
+ * the sound and volume words (+0x380..+0x39c).
+ */
+typedef struct RgWeaponBaseEssence {
+    RgWeapon *(*m_pCreateMethod)(void *essence, RgWeaponCreateInfo *info);
+    enum RgWeaponControl controlMode;
+    float angleMin;
+    float angleMax;
+    struct RgShotEssence *shotEssence;
+    float capacity;
+    float shotPitch;
+    float shotYaw;
+    int aimAxis;
+    unsigned int aimJointCount;
+    int aimJointTable[0x10];
+    int unmodeled68;
+    unsigned char unmodeled_6c[4];
+    RgEquip equip;
+    float weight;
+    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
+    int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
+    int shotEndMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
+    enum RgActorFlag actorFlag;
+    unsigned char unmodeled_18c[4];
+    unsigned char actorSpec[RG_EQUIP_TYPE_NUM][0x88];
+    unsigned char unmodeled_328[8];
+    unsigned char unmodeled330;
+    unsigned char unmodeled_331[0x1f];
+    unsigned char unmodeled350;
+    unsigned char unmodeled_351[0x2f];
+    int shotSound;
+    int robotHitSound;
+    int bgHitSound;
+    int bgHitVolume;
+    int shotVolume;
+    int robotHitVolume;
+    int extraVolume0;
+    int extraVolume1;
+    int unmodeled3a0;
+    int unmodeled3a4;
+} RgWeaponBaseEssence;
 
 #endif /* SRC_OV12_RG_WEAPON_H */

@@ -2,7 +2,7 @@
 
 Everything under `include/` except `common.h`, `include_asm.h`, `labels.inc`,
 `macro.inc` and this file is **generated** by `tools/header_harvest.py` from
-published source (user decision 2026-09-12, docs/header-canon.md). Never edit a
+published source. Never edit a
 generated header by hand: change the source that declares the name, or record a
 decision, and regenerate (`python3 -B tools/header_harvest.py`, then `--check`).
 

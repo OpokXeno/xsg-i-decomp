@@ -141,6 +141,8 @@ struct RgFireEssence {
     int trailingCount;                   /* +0x128: cleared by
                                            * InitRgFireEssence; no reader is
                                            * evidenced by this allocation */
+    int robot;                           /* +0x12c: copied to the new fire's
+                                           * robot field by _InitFire */
 };
 
 /*
@@ -170,9 +172,12 @@ struct RgBeamEssence {
 typedef struct RgShotRequest RgShotRequest;
 
 struct RgShotRequest {
-    unsigned char unmodeled_00[0x08]; /* +0x00..+0x07: posOwner/getPos,
+    void *posOwner;                   /* +0x00: first argument to getPos,
                                         * aliased with RgShot for
                                         * _GetShotPosDir */
+    int (*getPos)(void *posOwner, RgVector position, RgVector aimPoint);
+                                      /* +0x04: position callback, aliased
+                                       * with RgShot for _GetShotPosDir */
     RgGeom *target;                   /* +0x08 */
     int id;                           /* +0x0c */
     int targetConfused;               /* +0x10 */
@@ -277,9 +282,16 @@ struct RgGrenadeShot {
     unsigned char unmodeled_088[8];     /* +0x88..+0x8f */
     float explosionRadius;              /* +0x90 */
     float duration;                     /* +0x94 */
-    unsigned char unmodeled_098[4];     /* +0x98..+0x9b */
+    float elapsedTime;                  /* +0x98: _GrenadeBomPassTime adds the
+                                         * frame time here and releases the
+                                         * bomb once it exceeds duration */
     float proximity;                    /* +0x9c */
-    unsigned char unmodeled_0a0[0x28];  /* +0xa0..+0xc7 */
+    float spinAngle;                    /* +0xa0: _GrenadeBomPassTime wraps it
+                                         * into one turn */
+    int bgObjectHistory[8];             /* +0xa4..+0xc3: bgObject ids
+                                         * recorded by _GrenadeEntryHistory */
+    unsigned int historyCount;          /* +0xc4: entries used in
+                                         * bgObjectHistory */
     unsigned int repeatCount;           /* +0xc8 */
 };
 
@@ -299,7 +311,12 @@ typedef struct RgFireShot RgFireShot;
 struct RgFireShot {
     unsigned char unmodeled_000[0x70]; /* +0x00..+0x6f: the RgShot prefix */
     int status;                        /* +0x70 */
-    unsigned char unmodeled_074[0x38]; /* +0x74..+0xab */
+    unsigned char unmodeled_074[0x0C]; /* +0x74..+0x7f */
+    RgVector origin;                   /* +0x80 */
+    RgVector tipPosition;              /* +0x90 */
+    float speed;                       /* +0xa0 */
+    float remainingTime;               /* +0xa4 */
+    float damageRate;                  /* +0xa8 */
     float fadeTime;                    /* +0xac: the time _FireKill passes
                                          * to RgShotEffectStopAlive */
     int quickFade;                     /* +0xb0: nonzero selects a fade
@@ -308,6 +325,9 @@ struct RgFireShot {
                                          * is recorded */
     int alreadyHitRobot;               /* +0xb8: set once _FireHitRobot has
                                          * run the common hit-robot handling */
+    unsigned char unmodeled_0bc[0x04]; /* +0xbc..+0xbf */
+    RgShotRequest request;             /* +0xc0: the request _GetShotPosDir
+                                         * reads while the fire is attached */
 };
 
 /*

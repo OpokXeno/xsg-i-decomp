@@ -111,6 +111,14 @@ ASM_SORT_IDENTITY = ('main', 'main/tu106', 'AlphaGroupSort')
 # immediate `lui $2,0x3e00` -> `ctc2 $2,$vi21` (user decision 2026-10-28,
 # tools/match.py `vu0_i_immediate_c`, docs/ee-hand-asm.md).
 VU0_I_IMMEDIATE_IDENTITY = ('main', 'main/tu097', 'StartOfScan')
+# The only `hardware` functions whose COP2 block may keep three EE `nop` lines between
+# `vmaddw vf31` and `vclipw vf31` (user decisions 2026-11-04, tools/match.py
+# `xrg_clip_nops_c`, docs/ee-hand-asm.md).
+XRG_CLIP_NOPS_IDENTITIES = frozenset({
+    ('ov12', 'ov12/tu084', '_Disp'),
+    ('ov12', 'ov12/tu086', '_CalcPosOnScreen'),
+    ('ov12', 'ov12/tu086', '_CalcPosOnScreenFloat'),
+})
 # The one function identity whose TU may spell `__attribute__((packed))` on its
 # TU-local byte enum typedefs (user decision 2026-10-28 on main/tu125): the gp
 # byte stores GameMovieInit makes through pointer locals need a non-char,
@@ -1119,6 +1127,11 @@ def admission(cls, tu_class=None, *, unit=None, tu_id=None, function=None):
         if (unit, tu_id, function) == VU0_I_IMMEDIATE_IDENTITY:
             return (match.vu0_i_immediate_native_ti_c if tu_class == 'native-ti'
                     else match.vu0_i_immediate_c)
+        # User decisions 2026-11-04: these original clip sequences keep three EE
+        # nops that vnop cannot encode, for these identities only.
+        if (unit, tu_id, function) in XRG_CLIP_NOPS_IDENTITIES:
+            return (match.xrg_clip_nops_native_ti_c if tu_class == 'native-ti'
+                    else match.xrg_clip_nops_c)
         # User decision 2026-10-18: compose the existing MMI and COP2 guards
         # only for these two original NML identities, not for hardware generally.
         if (unit, tu_id, function) in {
@@ -1215,6 +1228,23 @@ _ADMITTED_VECTOR_TYPEDEFS = ((_ALIGNED_VECTOR4_TYPEDEF, '__attribute__((aligned(
                              (_DOUBLEWORD_ALIGNED_VECTOR4_TYPEDEF, '__attribute__((aligned(8)))'))
 
 
+# The doubleword-aligned OV12 keyword table entry (user decision 2026-11-04,
+# docs/ee-hand-asm.md): initialized tables of it are copied by ld/sd with no
+# runtime alignment test. Only this one struct closing in include/ov12/rg_text_info.h.
+_RG_TEXT_INFO_ENTRY_ATTRIBUTE = '__attribute__((aligned(8)))'
+_RG_TEXT_INFO_ENTRY_PATTERN = re.compile(
+    r'(struct RgTextInfoEntry \{[^{}]*\} )' + re.escape(_RG_TEXT_INFO_ENTRY_ATTRIBUTE) + r'(;)')
+
+
+def rg_text_info_entry_admission_text(text):
+    """Admission text of include/ov12/rg_text_info.h: the attribute of the single
+    struct RgTextInfoEntry definition is blanked; anything else stays refused."""
+    if len(_RG_TEXT_INFO_ENTRY_PATTERN.findall(text)) != 1:
+        return text
+    return _RG_TEXT_INFO_ENTRY_PATTERN.sub(
+        lambda m: m.group(1) + ' ' * len(_RG_TEXT_INFO_ENTRY_ATTRIBUTE) + m.group(2), text)
+
+
 def aligned_vector4_admission_text(full, text, unit_dir):
     """Admission text of a header: for include/shared.h (the repository file or
     the unit's staged copy) the attribute of each single exact admitted vector
@@ -1222,6 +1252,9 @@ def aligned_vector4_admission_text(full, text, unit_dir):
     other attribute, header and spelling stays under the ordinary refusal. The
     compiled header is untouched."""
     full = Path(full).resolve()
+    if full in {(ROOT / 'include' / 'ov12' / 'rg_text_info.h').resolve(),
+                (Path(unit_dir) / 'include' / 'ov12' / 'rg_text_info.h').resolve()}:
+        return rg_text_info_entry_admission_text(text)
     homes = {(ROOT / 'include' / 'shared.h').resolve(), (Path(unit_dir) / 'include' / 'shared.h').resolve()}
     if full not in homes:
         return text

@@ -2,6 +2,7 @@
  * OV12 original TU 37: 0x00a22668..0x00a22a78 (2 functions)
  */
 #include "common.h"
+#include "ov12/rg_text_info.h"
 
 const char D_00A54480[24] = "pParaList != NIL";
 const char D_00A54498[24] = "../rg_text_info.euc.c";
@@ -12,44 +13,11 @@ const char D_00A544E8[24] = "unknown key word '%s'";
 const char D_00A54500[8] = ".";
 const char D_00A54508[40] = "unknown parameter type %d";
 
-struct RgTextInfoEntry {
-    unsigned int type;
-    const char *pszName;
-    union {
-        unsigned int offset;
-        void *address;
-        int *integer;
-        float *real;
-        char *string;
-    } destination;
-    union {
-        unsigned int count;
-        void (*parse)(void *destination, char *pszString, int index);
-    } auxiliary;
-};
-
-enum {
-    RG_TEXT_INFO_INT_OFFSET,
-    RG_TEXT_INFO_FLOAT_OFFSET,
-    RG_TEXT_INFO_STRING_OFFSET,
-    RG_TEXT_INFO_BOOL_OFFSET,
-    RG_TEXT_INFO_FLOAT_ARRAY_OFFSET,
-    RG_TEXT_INFO_CALLBACK_OFFSET,
-    RG_TEXT_INFO_INT_ADDRESS,
-    RG_TEXT_INFO_FLOAT_ADDRESS,
-    RG_TEXT_INFO_STRING_ADDRESS,
-    RG_TEXT_INFO_BOOL_ADDRESS,
-    RG_TEXT_INFO_FLOAT_ARRAY_ADDRESS,
-    RG_TEXT_INFO_CALLBACK_ADDRESS,
-    RG_TEXT_INFO_END
-};
-
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
 extern int strcmp(const char *s1, const char *s2);
-struct RgReadText;
 extern int RgReadTextIsEOF(struct RgReadText *pReader);
 extern void RgReadTextGetString(struct RgReadText *pReader, char *pszOut);
 extern float RgReadTextGetFloat(struct RgReadText *pReader);
@@ -111,54 +79,54 @@ void RgTextInfoRead(struct RgReadText *pReadText,
         case RG_TEXT_INFO_INT_OFFSET:
             integer = RgReadTextGetInt(pReadText);
             /* Each descriptor supplies an offset into its caller's data layout. */
-            *(int *)(pData + pEntry->destination.offset) = integer;
+            *(int *)(pData + (unsigned int) pEntry->destination) = integer;
             break;
         case RG_TEXT_INFO_INT_ADDRESS:
             integer = RgReadTextGetInt(pReadText);
-            *pEntry->destination.integer = integer;
+            *(int *) pEntry->destination = integer;
             break;
         case RG_TEXT_INFO_FLOAT_OFFSET:
             real = RgReadTextGetFloat(pReadText);
-            *(float *)(pData + pEntry->destination.offset) = real;
+            *(float *)(pData + (unsigned int) pEntry->destination) = real;
             break;
         case RG_TEXT_INFO_FLOAT_ADDRESS:
             real = RgReadTextGetFloat(pReadText);
-            *pEntry->destination.real = real;
+            *(float *) pEntry->destination = real;
             break;
         case RG_TEXT_INFO_STRING_OFFSET:
             RgReadTextGetString(pReadText,
-                                pData + pEntry->destination.offset);
+                                pData + (unsigned int) pEntry->destination);
             break;
         case RG_TEXT_INFO_STRING_ADDRESS:
-            RgReadTextGetString(pReadText, pEntry->destination.string);
+            RgReadTextGetString(pReadText, (char *) pEntry->destination);
             break;
         case RG_TEXT_INFO_BOOL_OFFSET:
             integer = RgReadTextGetBool(pReadText);
-            *(int *)(pData + pEntry->destination.offset) = integer;
+            *(int *)(pData + (unsigned int) pEntry->destination) = integer;
             break;
         case RG_TEXT_INFO_BOOL_ADDRESS:
             integer = RgReadTextGetBool(pReadText);
-            *pEntry->destination.integer = integer;
+            *(int *) pEntry->destination = integer;
             break;
         case RG_TEXT_INFO_FLOAT_ARRAY_OFFSET:
-            if (pEntry->auxiliary.count != 0) {
+            if ((unsigned int) pEntry->auxiliary != 0) {
                 value_index = 0;
                 do {
                     real = RgReadTextGetFloat(pReadText);
-                    offset_elements = (float *)(pData + pEntry->destination.offset);
-                    offset_count = pEntry->auxiliary.count;
+                    offset_elements = (float *)(pData + (unsigned int) pEntry->destination);
+                    offset_count = (unsigned int) pEntry->auxiliary;
                     offset_elements[value_index] = real;
                     value_index++;
                 } while (value_index < offset_count);
             }
             break;
         case RG_TEXT_INFO_FLOAT_ARRAY_ADDRESS:
-            if (pEntry->auxiliary.count != 0) {
+            if ((unsigned int) pEntry->auxiliary != 0) {
                 value_index = 0;
                 do {
                     real = RgReadTextGetFloat(pReadText);
-                    address_elements = pEntry->destination.real;
-                    address_count = pEntry->auxiliary.count;
+                    address_elements = (float *) pEntry->destination;
+                    address_count = (unsigned int) pEntry->auxiliary;
                     address_elements[value_index] = real;
                     value_index++;
                 } while (value_index < address_count);
@@ -168,9 +136,9 @@ void RgTextInfoRead(struct RgReadText *pReadText,
             value_index = 0;
             RgReadTextGetString(pReadText, pszString);
             while (strcmp(pszString, D_00A54500) != 0) {
-                if (pEntry->auxiliary.parse != 0) {
-                    pEntry->auxiliary.parse(
-                        pData + pEntry->destination.offset, pszString,
+                if (pEntry->auxiliary != 0) {
+                    ((RgTextInfoParse) pEntry->auxiliary)(
+                        pData + (unsigned int) pEntry->destination, pszString,
                         value_index);
                 }
                 if (RgReadTextIsEOF(pReadText) != 0) {
@@ -184,8 +152,8 @@ void RgTextInfoRead(struct RgReadText *pReadText,
             value_index = 0;
             RgReadTextGetString(pReadText, pszString);
             while (strcmp(pszString, D_00A54500) != 0) {
-                if (pEntry->auxiliary.parse != 0) {
-                    pEntry->auxiliary.parse(pEntry->destination.address,
+                if (pEntry->auxiliary != 0) {
+                    ((RgTextInfoParse) pEntry->auxiliary)(pEntry->destination,
                                             pszString, value_index);
                 }
                 if (RgReadTextIsEOF(pReadText) != 0) {

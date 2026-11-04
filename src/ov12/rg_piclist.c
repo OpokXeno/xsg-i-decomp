@@ -5,7 +5,6 @@
 #include "shared.h"
 #include "rg_piclist.h"
 #include "ov12/rg_debug_flags.h"
-
 /*
  * XrgPaint2DDrawXYWH's mode word is the same bit set XrgPaint2DRect.mode
  * documents in src/ov12/xrg_paint2d.h: bit 0x20 takes the drawn extent from
@@ -15,7 +14,6 @@
 #define XRG_PAINT2D_MODE_USE_PIC_SIZE 0x20
 #define XRG_PAINT2D_ADD 1
 #define XRG_PAINT2D_LINEAR 0
-
 /* The fixed on-disk size of a serialized picture record. */
 #define RG_PIC_BINARY_SIZE 0x100
 
@@ -29,11 +27,10 @@ extern void XrgPaint2DAlpha(int paint, int blendMode);
 extern void XrgPaint2DUseTexture(int paint, int texture);
 extern void XrgPaint2DDrawXYWH(int paint, int mode, int x, int y, int width,
                                int height);
-
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgDebugFlags *InstanceOfRgDebugFlags(void);
-extern RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
+RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
 
 /*
  * These are external file-backed witnesses, not candidate-emitted data.
@@ -41,6 +38,7 @@ extern RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
  * allocation keeps the splat default names rather than inventing new ones.
  */
 const char D_00A57310[] = "pPic != NIL";
+
 const char D_00A57320[] = "../rg_piclist.euc.c";
 
 extern RgHeap *InstanceOfRgHeap(void);
@@ -52,7 +50,7 @@ extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
 /* The fixed on-disk header size of a serialized picture list. */
 #define RG_PIC_LIST_BINARY_SIZE 0x40
 
-extern RgPic *CreateRgPic(RgBxx *bxx, const char *pszName);
+RgPic *CreateRgPic(RgBxx *bxx, const char *pszName);
 extern void DisposeRgPicList(RgPicList *pList);
 
 /*
@@ -60,10 +58,15 @@ extern void DisposeRgPicList(RgPicList *pList);
  * none registered with a name in config/symbols/ov12.txt.
  */
 const char D_00A57338[] = "pBxx != NIL";
+
 const char D_00A57358[] = "pszName != NIL";
+
 const char D_00A57380[] = "pPaint != NIL";
+
 const char D_00A57390[] = "pList != NIL";
+
 const char D_00A573A0[] = "pList->m_uNum < PIC_MAX";
+
 const char D_00A573B8[] = "pDebug != NIL";
 
 static void _draw_add(int paintId, int picGroup, int picIndex, int x, int y)
@@ -90,7 +93,29 @@ static void _draw_linear(int paintId, int picGroup, int picIndex, int x, int y)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", _draw_nontex);
+/* Scaffold-owned counter (config/symbols/ov12.txt: s_nColor_0). */
+extern int s_nColor_0;
+extern void XrgPaint2DColor(int paint, const RgPicColor *color);
+
+static void _draw_nontex(int paintId, int x, int y, int width, int height)
+{
+    int color[4];
+    int fill[4];
+    int level;
+
+    memset(fill, 0, sizeof(fill));
+    level = s_nColor_0;
+    fill[0] = level;
+    fill[1] = level;
+    fill[2] = level;
+    __builtin_memcpy(color, fill, sizeof(color));
+    s_nColor_0 = level + 8;
+    if (s_nColor_0 >= 33)
+        s_nColor_0 = 0;
+    XrgPaint2DColor(paintId, (RgPicColor *) color);
+    XrgPaint2DAlpha(paintId, XRG_PAINT2D_ADD);
+    XrgPaint2DDrawXYWH(paintId, 0, x, y, width, height);
+}
 
 int RgPicGetWidth(RgPic *pic)
 {
@@ -118,14 +143,86 @@ int RgPicGetHeight(RgPic *pic)
     return height;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicWrite);
+void RgPicWrite(RgPic *pic, int handle)
+{
+    unsigned char buffer[0x400];
+    RgDebugFlags *debugFlags;
+    unsigned char *cursor;
+    unsigned char *src;
+    int remaining;
+
+    extern int XrgHostWrite(int handle, const void *buffer, int size);
+
+    debugFlags = InstanceOfRgDebugFlags();
+    if (debugFlags->flags[3] == 0)
+        return;
+    if (pic == 0)
+        assert_prog(D_00A57310, D_00A57320, 110);
+
+    /*
+     * The picture record is copied through a plain byte pointer, so the
+     * moves stay unaligned (the same way RgPicListRead copies its header).
+     */
+    src = (unsigned char *) pic;
+    __builtin_memcpy(buffer, src, 32);
+    __builtin_memcpy(&buffer[32], src + 36, 4);
+    __builtin_memcpy(&buffer[36], src + 40, 4);
+    __builtin_memcpy(&buffer[40], src + 44, 4);
+    __builtin_memcpy(&buffer[44], src + 48, 4);
+    __builtin_memcpy(&buffer[48], src + 52, 4);
+    cursor = &buffer[52];
+    remaining = 203;
+    do {
+        *cursor = 0;
+        cursor++;
+    } while (remaining-- > 0);
+    XrgHostWrite(handle, buffer, RG_PIC_BINARY_SIZE);
+}
 
 int RgPicBinarySize(void)
 {
     return RG_PIC_BINARY_SIZE;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPicFromBinary);
+const char D_00A57348[] = "pBuf != NIL";
+
+RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer)
+{
+    unsigned char *src;
+    RgPic *pic;
+    int tex;
+
+    src = buffer;
+    pic = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPic), D_00A57320, 136);
+    if (bxx == 0)
+        assert_prog(D_00A57338, D_00A57320, 139);
+    if (buffer == 0)
+        assert_prog(D_00A57348, D_00A57320, 140);
+    __builtin_memcpy(pic->name, src, 32);
+    src += 32;
+    __builtin_memcpy(&pic->x, src, 4);
+    src += 4;
+    __builtin_memcpy(&pic->y, src, 4);
+    src += 4;
+    __builtin_memcpy(&pic->alpha, src, 4);
+    src += 4;
+    __builtin_memcpy(&pic->dark, src, 4);
+    src += 4;
+    __builtin_memcpy(&pic->notDraw, src, 4);
+    tex = RgBxxGetPic(bxx, pic->name);
+    pic->tex = (RgPicTexture *)tex;
+    pic->ofsY = 0;
+    pic->ofsX = 0;
+    pic->color.b = 128;
+    pic->color.g = 128;
+    pic->color.r = 128;
+    pic->color.a = 127;
+    if (tex == 0) {
+        RgHeapFree(InstanceOfRgHeap(), pic, D_00A57320, 153);
+        pic = 0;
+    }
+    return pic;
+}
 
 RgPic *RgPicRead(int handle, RgBxx *bxx)
 {
@@ -143,7 +240,37 @@ RgPic *RgPicRead(int handle, RgBxx *bxx)
     return CreateRgPicFromBinary(bxx, buffer);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPic);
+const char D_00A57368[] = "pPic->m_pPic != NIL";
+
+RgPic *CreateRgPic(RgBxx *bxx, const char *pszName)
+{
+    RgPic *pic;
+
+    extern char *strcpy(char *destination, const char *source);
+
+    pic = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPic), D_00A57320, 177);
+    if (bxx == 0)
+        assert_prog(D_00A57338, D_00A57320, 178);
+    if (pszName == 0)
+        assert_prog(D_00A57358, D_00A57320, 179);
+
+    pic->tex = RgBxxGetPic(bxx, pszName);
+    if (pic->tex == 0)
+        assert_prog(D_00A57368, D_00A57320, 181);
+    pic->alpha = 2;
+    pic->color.a = 127;
+    pic->x = 0;
+    pic->y = 0;
+    pic->dark = 0;
+    pic->notDraw = 0;
+    pic->ofsY = 0;
+    pic->ofsX = 0;
+    pic->color.b = 128;
+    pic->color.g = 128;
+    pic->color.r = 128;
+    strcpy(pic->name, pszName);
+    return pic;
+}
 
 void DisposeRgPic(RgPic *pic)
 {
@@ -227,8 +354,6 @@ void RgPicMove(RgPic *pic, int dx, int dy)
     pic->x += dx;
     pic->y += dy;
 }
-
-extern void XrgPaint2DColor(int paint, const RgPicColor *color);
 
 /*
  * The picture's alpha field selects a blend mode with the same values
@@ -390,9 +515,84 @@ static int _BinarySizePicList(void)
     return RG_PIC_LIST_BINARY_SIZE;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListWrite);
+void RgPicListWrite(RgPicList *pList, int handle)
+{
+    unsigned char buffer[0x400];
+    RgDebugFlags *debugFlags;
+    unsigned char *dst;
+    unsigned char *cursor;
+    int reserved;
+    int size;
+    int remaining;
+    unsigned int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPicListFromBinary);
+    extern int XrgHostWrite(int handle, const void *buffer, int size);
+
+    debugFlags = InstanceOfRgDebugFlags();
+    if (debugFlags->flags[3] == 0)
+        return;
+    reserved = 0;
+    if (pList == 0)
+        assert_prog(D_00A57390, D_00A57320, 452);
+
+    dst = buffer;
+    __builtin_memcpy(dst, &pList->m_uNum, 4);
+    __builtin_memcpy(dst + 4, &pList->ofsX, 4);
+    __builtin_memcpy(dst + 8, &pList->ofsY, 4);
+    __builtin_memcpy(dst + 12, &reserved, 4);
+
+    cursor = &buffer[16];
+    size = _BinarySizePicList();
+    remaining = size - 17;
+    if (size - 16 > 0) {
+        do {
+            *cursor = 0;
+            cursor++;
+        } while (remaining-- > 0);
+    }
+    XrgHostWrite(handle, buffer, _BinarySizePicList());
+    for (i = 0; i < pList->m_uNum; i++)
+        RgPicWrite(pList->pics[i], handle);
+}
+
+RgPicList *CreateRgPicListFromBinary(RgBxx *bxx, void *buffer)
+{
+    RgPicList *pList;
+    unsigned char *cursor;
+    unsigned int num;
+    int reserved;
+    int size;
+    int remaining;
+    unsigned int i;
+    RgPic *pic;
+
+    pList = CreateRgPicList(bxx);
+    cursor = buffer;
+    __builtin_memcpy(&num, cursor, 4);
+    cursor += 4;
+    __builtin_memcpy(&pList->ofsX, cursor, 4);
+    cursor += 4;
+    __builtin_memcpy(&pList->ofsY, cursor, 4);
+    cursor += 4;
+    __builtin_memcpy(&reserved, cursor, 4);
+    cursor += 4;
+
+    size = _BinarySizePicList();
+    remaining = size - 17;
+    if (size - 16 > 0) {
+        do {
+            cursor++;
+        } while (remaining-- > 0);
+    }
+    for (i = 0; i < num; i++) {
+        pic = CreateRgPicFromBinary(bxx, cursor);
+        if (pic != 0) {
+            pList->pics[pList->m_uNum++] = pic;
+        }
+        cursor += RgPicBinarySize();
+    }
+    return pList;
+}
 
 RgPicList *RgPicListRead(int handle, RgBxx *bxx)
 {
@@ -491,14 +691,15 @@ void DisposeRgPicDebug(RgPicDebug *pDebug)
  * buttons at +0x28 (lhu PadData+0x28, ov12:0x00a41750). Button bits as in
  * src/ov12/xrg_pad.c.
  */
-extern PadPrefix PadData;
+#include "main/xgl_pad.h"
+
+extern XglPadRecord PadData[2];
 
 #define PAD_L1    0x0004
 #define PAD_UP    0x1000
 #define PAD_RIGHT 0x2000
 #define PAD_DOWN  0x4000
 #define PAD_LEFT  0x8000
-
 /* L1 moves in steps of 8 and snaps both coordinates to that grid. */
 #define PIC_DEBUG_COARSE_STEP 8
 
@@ -508,7 +709,7 @@ void RgPicDebugEditPosition(int *x, int *y)
     int step;
     int coarse;
 
-    buttons = PadData.half_28;
+    buttons = PadData[0].buttons;
     coarse = 0;
     step = 1;
     if (buttons & PAD_L1) {
@@ -533,9 +734,295 @@ void RgPicDebugEditPosition(int *x, int *y)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicDebugControl);
+#include "main/xgl_pad.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicDebugDisp);
+extern struct RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id);
+extern int RgBxxGetTexNum(RgBxx *pBxx);
+extern int XrgHostCreateOpen(const char *filename);
+extern int XrgHostReadOpen(const char *filename);
+extern void XrgHostClose(int handle);
+extern void RgError(const char *message, const char *source_file, int line, ...);
+void RgPicListWrite(RgPicList *pList, int handle);
+void RgPicWrite(RgPic *pic, int handle);
+
+const char D_00A573C8[] = "host0:place2d.bin";
+
+const char D_00A573E0[] = "pDebug->m_pList != NIL";
+
+const char D_00A573F8[] = "unknown debug edit mode %d";
+
+void RgPicDebugControl(RgPicDebug *pDebug)
+{
+    RgPic *pic;
+    RgPic *oldPic;
+    RgPic *newPic;
+    struct RgBxxPic *pBxxPic;
+    unsigned int alpha;
+    int mode;
+    int buttons;
+    int repeat;
+    int stickX;
+    int stickY;
+    int x;
+    int y;
+    int dx;
+    int dy;
+    int ofsX;
+    int ofsY;
+    int offX;
+    int offY;
+    int texNum;
+    int index;
+    int last;
+    int picIndex;
+    int selected;
+    int picId;
+    int handle;
+
+    buttons = PadData[0].buttons;
+    repeat = PadData[0].repeated;
+    stickY = PadData[0].position[1] + PadData[0].position[3];
+    stickX = PadData[0].position[0] + PadData[0].position[2];
+
+    if (pDebug == 0)
+        assert_prog(D_00A573B8, D_00A57320, 636);
+
+    mode = pDebug->mode;
+    if (mode == 1) {
+        pic = RgPicListGetPic(pDebug->list, pDebug->index);
+        if (pic != 0) {
+            x = RgPicGetX(pic);
+            y = RgPicGetY(pic);
+            RgPicDebugEditPosition(&x, &y);
+            if (repeat & 0x8) {
+                alpha = RgPicGetAlpha(pic) + 1;
+                RgPicSetAlpha(pic, alpha < 4 ? alpha : 0);
+            }
+            RgPicSetPos(pic, x, y);
+        }
+        if (repeat & 0x10)
+            pDebug->index--;
+        if (repeat & 0x80)
+            pDebug->index++;
+        last = RgPicListGetSize(pDebug->list) - 1;
+        index = pDebug->index;
+        if (index < 0)
+            selected = 0;
+        else if (index > last)
+            selected = last;
+        else
+            selected = index;
+        pDebug->index = selected;
+        if (repeat & 0x20)
+            pDebug->mode = 0;
+        if (repeat & 0x40)
+            pDebug->mode = 2;
+        if ((buttons & 5) == 5)
+            pDebug->mode = 3;
+        if ((buttons & 0xa) == 10)
+            pDebug->mode = 4;
+        if (repeat & 0x800)
+            pDebug->mode = 5;
+    } else if (mode == 0) {
+        texNum = RgBxxGetTexNum(pDebug->bxx);
+        if (texNum == 0)
+            pDebug->mode = 1;
+        if (repeat & 0x10)
+            pDebug->picId--;
+        else if (repeat & 0x80)
+            pDebug->picId++;
+        last = texNum - 1;
+        picIndex = pDebug->picId;
+        if (picIndex < 0)
+            picId = 0;
+        else if (picIndex > last)
+            picId = last;
+        else
+            picId = picIndex;
+        pDebug->picId = picId;
+        if (repeat & 0x20) {
+            pBxxPic = RgBxxGetPicID(pDebug->bxx, picId);
+            if (pBxxPic != 0) {
+                oldPic = RgPicListGetPic(pDebug->list, pDebug->index);
+                newPic = RgPicListAddPic(pDebug->list, (const char *)pBxxPic);
+                if (newPic != 0) {
+                    if (oldPic == 0) {
+                        RgPicSetPos(newPic, 64, 128);
+                    } else {
+                        offX = 128 - RgPicGetX(oldPic);
+                        offY = 128 - RgPicGetY(oldPic);
+                        if (stickX < -80) {
+                            offX = -RgPicGetWidth(newPic);
+                            offY = 0;
+                        } else if (stickX >= 81) {
+                            offX = RgPicGetWidth(oldPic);
+                            offY = 0;
+                        } else if (stickY < -80) {
+                            offX = 0;
+                            offY = -RgPicGetHeight(newPic);
+                        } else if (stickY >= 81) {
+                            offX = 0;
+                            offY = RgPicGetHeight(oldPic);
+                        }
+                        RgPicSetPos(newPic, RgPicGetX(oldPic) + offX,
+                                    RgPicGetY(oldPic) + offY);
+                    }
+                }
+            }
+            pDebug->mode = 1;
+            pDebug->index = RgPicListGetSize(pDebug->list) - 1;
+        }
+        if (repeat & 0x40)
+            pDebug->mode = 1;
+    } else if (mode == 2) {
+        if (repeat & 0x20) {
+            int newIndex;
+
+            RgPicListDelPic(pDebug->list, pDebug->index);
+            if (RgPicListGetSize(pDebug->list)) {
+                last = RgPicListGetSize(pDebug->list) - 1;
+                index = pDebug->index;
+                if (0 > index)
+                    newIndex = 0;
+                else if (last < index)
+                    newIndex = last;
+                else
+                    newIndex = index;
+                pDebug->index = newIndex;
+            } else {
+                pDebug->index = -1;
+            }
+            pDebug->mode = 1;
+        }
+        if (repeat & 0x840)
+            pDebug->mode = 1;
+    } else if (mode == 3) {
+        if (repeat & 0x20) {
+            if (InstanceOfRgDebugFlags()->flags[3] != 0) {
+                handle = XrgHostCreateOpen(D_00A573C8);
+                if (handle >= 0) {
+                    RgPicListWrite(pDebug->list, handle);
+                    XrgHostClose(handle);
+                }
+            }
+            pDebug->mode = 1;
+        } else if (repeat & 0x40) {
+            pDebug->mode = 1;
+        }
+    } else if (mode == 4) {
+        if (repeat & 0x20) {
+            if (InstanceOfRgDebugFlags()->flags[3] != 0) {
+                handle = XrgHostReadOpen(D_00A573C8);
+                if (handle >= 0) {
+                    DisposeRgPicList(pDebug->list);
+                    pDebug->list = RgPicListRead(handle, pDebug->bxx);
+                    if (pDebug->list == 0)
+                        assert_prog(D_00A573E0, D_00A57320, 770);
+                    XrgHostClose(handle);
+                    pDebug->index = RgPicListGetSize(pDebug->list) - 1;
+                }
+            }
+            pDebug->mode = 1;
+        } else if (repeat & 0x40) {
+            pDebug->mode = 1;
+        }
+    } else if (mode == 5) {
+        ofsX = RgPicListGetOfsX(pDebug->list);
+        ofsY = RgPicListGetOfsY(pDebug->list);
+        if (buttons & 8) {
+            dx = 0;
+            dy = 0;
+            RgPicDebugEditPosition(&dx, &dy);
+            RgPicListMoveAllPic(pDebug->list, dx, dy);
+        } else {
+            RgPicDebugEditPosition(&ofsX, &ofsY);
+            RgPicListSetOffset(pDebug->list, ofsX, ofsY);
+        }
+        if (repeat & 0x20)
+            pDebug->mode = 1;
+    } else {
+        RgError(D_00A573F8, D_00A57320, 802, mode);
+    }
+}
+
+/* Debug text strings: scaffold-owned rodata, referenced by address only. */
+extern const char D_00A57418[];
+extern const char D_00A57440[];
+extern const char D_00A57458[];
+extern const char D_00A57470[];
+extern const char D_00A57490[];
+extern const char D_00A574A0[];
+extern const char D_00A574B8[];
+extern const char D_00A574D0[];
+extern const char D_00A574E8[];
+extern const char D_00A57500[];
+extern const char D_00A57520[];
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+void RgPicDebugDisp(RgPicDebug *pDebug, int paint)
+{
+    RgPic *pic;
+    RgPicTexture *tex;
+    struct RgBxxPic *pBxxPic;
+    char *name;
+    int x;
+    int y;
+    int alpha;
+    unsigned int size;
+
+    if (pDebug == 0)
+        assert_prog(D_00A573B8, D_00A57320, 812);
+
+    switch (pDebug->mode) {
+    case 1:
+        pic = RgPicListGetPic(pDebug->list, pDebug->index);
+        if (pic != 0) {
+            tex = RgPicGetTex(pic);
+            x = RgPicGetX(pic);
+            y = RgPicGetY(pic);
+            size = RgPicListGetSize(pDebug->list);
+            RgPicListDraw(pDebug->list, paint);
+            xglFontDebugPrintf(0, 8, D_00A57418);
+            xglFontDebugPrintf(0, 24, D_00A57440, pDebug->index, size);
+            name = RgPicGetName(pic);
+            alpha = RgPicGetAlpha(pic);
+            xglFontDebugPrintf(0, 36, D_00A57458, name, x, y, alpha);
+            _draw_nontex(paint, x, y, tex->width, tex->height);
+        }
+        break;
+    case 0:
+        pBxxPic = RgBxxGetPicID(pDebug->bxx, pDebug->picId);
+        if (pBxxPic != 0) {
+            xglFontDebugPrintf(0, 8, D_00A57470);
+            xglFontDebugPrintf(0, 32, D_00A57490, pDebug->picId, pBxxPic);
+            _draw_linear(paint, pDebug->bxx, pBxxPic, 64, 128);
+        }
+        break;
+    case 2:
+        pic = RgPicListGetPic(pDebug->list, pDebug->index);
+        xglFontDebugPrintf(0, 8, D_00A574A0);
+        if (pic != 0)
+            RgPicDraw(pic, paint);
+        break;
+    case 3:
+        xglFontDebugPrintf(0, 8, D_00A574B8);
+        xglFontDebugPrintf(0, 24, D_00A574D0);
+        break;
+    case 4:
+        xglFontDebugPrintf(0, 8, D_00A574E8);
+        xglFontDebugPrintf(0, 24, D_00A574D0);
+        break;
+    case 5:
+        RgPicListDraw(pDebug->list, paint);
+        xglFontDebugPrintf(0, 8, D_00A57500);
+        {
+            int ofsX = RgPicListGetOfsX(pDebug->list);
+            int ofsY = RgPicListGetOfsY(pDebug->list);
+            xglFontDebugPrintf(0, 24, D_00A57520, ofsX, ofsY);
+        }
+        break;
+    }
+}
 
 void CreateRgPlacer2D(void)
 {

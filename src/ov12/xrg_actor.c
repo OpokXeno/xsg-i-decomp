@@ -7,10 +7,15 @@
 #include "ov12/rg_draw.h"
 
 const char D_00A587B0[48] = "_ActJntToAccID_sub joint=%d error(%s:%d)";
+
 const char D_00A587E0[24] = "../xrg_actor.euc.c";
+
 const char D_00A587F8[16] = "pXenoAct != NIL";
+
 const char D_00A58978[40] = "joint id error (jnt:%d elm:%d)\nat %s %d";
+
 const char D_00A589A0[24] = "pJnt->numElement > 1";
+
 /* The two diagnostics share a 48-byte pool, with the second starting at +16. */
 const struct {
     char actorNotNil[16];
@@ -19,35 +24,37 @@ const struct {
     "pActor != NIL",
     "parent mat list nul (char %d)"
 };
+
 const char D_00A58A30[32] = "pActor != NIL && pChild != NIL";
+
 const char D_00A58A50[72] = "RG_ACTOR_JNT_LEFT_HAND <= (eJntID) && (eJntID) < RG_ACTOR_JNT_MAX";
+
 const char D_00A58AC8[24] = "pSrcActor != NIL";
+
 const char D_00A58AE0[32] = "pActor->m_pXenoAct != NIL";
+
 const char D_00A58B00[16] = "pEss != NIL";
+
 const char D_00A58B40[16] = "pDup != NIL";
+
 const char D_00A58B50[24] = "pNewParent != NIL";
+
 const char D_00A58BC0[32] = "cannot delete %p from %p\n";
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-
 /* Assertion and source-file strings retain their scaffold names. */
-
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
-
-/* Defined later in this TU (still INCLUDE_ASM); called by the functions below. */
-extern void _LoadXenoActor(XrgActor *pActor, int actorID);
-extern void _DupXenoActor(XrgActor *pDup, XrgActor *pActor);
+void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss);
+void _DupXenoActor(XrgActor *pDup, XrgActor *pActor);
 extern void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int attachID);
-extern void _SetMotUseXenoActor(XrgActor *pActor, int motion);
+void _SetMotUseXenoActor(XrgActor *pActor, int motion);
 extern int _IsEndOfMotUseXenoActor(XrgActor *pActor);
-
 /* ACT_* animation module (main), config/symbols/main.txt. */
 extern void ACT_initMotion(XenoAct *pXenoAct);
 extern void ACT_initExMotion(XenoAct *pXenoAct, int useExtended, int weaponMotion);
-
 extern void *InstanceOfRgBattleCommonData(void);
 extern int RgBattleCommonDataGetWeaponMot(void *battleCommonData);
 
@@ -57,6 +64,7 @@ static int s_aJntIDToAccID_0[21] = {
     0x18, 0x20, 0x19, 0x21, 0x1A, 0x22, 0x1B, 0x23,
     0, 1, 2, 3, 4, 5, 6, 7, 0x11, 0x12, 0x0F, 0x10, 0x17
 };
+
 extern void RgError(const char *message, const char *source_file, int line, ...);
 
 int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line)
@@ -93,14 +101,12 @@ void *_ActJntToJoint(XenoAct *pXenoAct, int jntID)
     return _AccIDToJoint(pXenoAct, _ActJntToAccID_sub(jntID, D_00A587E0, 87));
 }
 
-/*
- * One 16-byte entry of the 25-entry actor data table s_aDatTbl.1
- * (0x00a50978, size 0x190, still asm-owned). _GetXenoDatEntry only
- * compares charID; the rest of the entry stays unmodeled.
- */
 typedef struct XenoDatEntry {
     int charID;                     /* 0x00 */
-    unsigned char unmodeled_04[0x10 - 0x04];
+    const char *m_pszMdlName;       /* 0x04: model file name ACT_create loads */
+    const char *m_pszOptFile;       /* 0x08: optional name XrgActorEssenceGetFileName appends as the fourth entry */
+    const char *m_pszFileBase;      /* 0x0C: base name XrgActorEssenceGetFileName copies when the essence has none;
+                                       its assert text (D_00A58B20) calls it m_pszMdlName */
 } XenoDatEntry;
 
 extern XenoDatEntry s_aDatTbl_1[25];
@@ -122,9 +128,18 @@ XenoDatEntry *_GetXenoDatEntry(int charID)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _SkeManiGet);
-
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _SkeManiSet);
+extern int RgHeapIsInvalidMemory(RgHeap *heap, void *ptr);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file, int line);
+/* ov12:0x00a58b68 "already disposed XrgActor %p" */
+extern const char D_00A58B68[];
+void _DisposeUseXenoActor(XrgActor *pActor);
+extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *sourceFile, int line);
+extern void DisposeRgVector(void *pVector, const char *sourceFile, int line);
+extern void DisposeRgMatricesEffector(struct MatrixEffector *pEffector);
+extern void ACT_dispose(XenoAct *pXenoAct);
+/* XrgUnitMatrix (ov12/rg_geom_poly.h) and XrgMulMatrix (ov12/rg_matrices_effector.h) are not included here. */
+extern void XrgUnitMatrix(RgMatrix destination);
+extern void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
 
 /*
  * The joint/skeleton data blob XenoAct.jointData points to: only the
@@ -146,8 +161,77 @@ typedef struct SkeMani {
     int elementIndex;    /* 0x0C: only set together with pXenoAct */
 } SkeMani;
 
-extern void _SkeManiGet(SkeMani *mani, RgMatrix matrix);
-extern void _SkeManiSet(SkeMani *mani, RgMatrix matrix);
+/* * Copies the manipulator's joint matrix into matrix, translation column * dropped. A clear renderLevelFlag also multiplies it by the element-0 * matrix (translation dropped too). */ void _SkeManiGet(SkeMani *mani, RgMatrix matrix);
+/* * Stores the manipulator's matrix (translation column dropped) into the * joint matrix block element. A clear renderLevelFlag first premultiplies * matrix by the inverse of the element-0 base matrix (translation dropped). */ void _SkeManiSet(SkeMani *mani, RgMatrix matrix);
+
+/*
+ * Copies the manipulator's joint matrix into matrix, translation column
+ * dropped. A clear renderLevelFlag also multiplies it by the element-0
+ * matrix (translation dropped too).
+ */
+void _SkeManiGet(SkeMani *mani, RgMatrix matrix)
+{
+    XenoAct *pXenoAct;
+    RgMatrix *jointMatrices;
+    RgMatrix tmp;
+
+    pXenoAct = mani->pXenoAct;
+    if (pXenoAct != 0) {
+        jointMatrices = pXenoAct->jointMatrices;
+        if (pXenoAct->renderLevelFlag != 0) {
+            XrgCopyMatrix(matrix, jointMatrices[mani->elementIndex]);
+            matrix[3] = 0.0f;
+            matrix[7] = 0.0f;
+            matrix[11] = 0.0f;
+        } else {
+            XrgCopyMatrix(matrix, jointMatrices[mani->elementIndex]);
+            XrgCopyMatrix(tmp, jointMatrices[0]);
+            matrix[3] = 0.0f;
+            matrix[7] = 0.0f;
+            matrix[11] = 0.0f;
+            tmp[3] = 0.0f;
+            tmp[7] = 0.0f;
+            tmp[11] = 0.0f;
+            XrgMulMatrix(matrix, tmp, matrix);
+        }
+    } else {
+        XrgUnitMatrix(matrix);
+    }
+}
+
+/*
+ * Stores the manipulator's matrix (translation column dropped) into the
+ * joint matrix block element. A clear renderLevelFlag first premultiplies
+ * matrix by the inverse of the element-0 base matrix (translation dropped).
+ */
+void _SkeManiSet(SkeMani *mani, RgMatrix matrix)
+{
+    XenoAct *pXenoAct;
+    RgMatrix *jointMatrices;
+    RgMatrix tmp;
+    int elementIndex;
+    int row;
+    int col;
+
+    pXenoAct = mani->pXenoAct;
+    if (pXenoAct != 0) {
+        elementIndex = mani->elementIndex;
+        jointMatrices = pXenoAct->jointMatrices;
+        if (pXenoAct->renderLevelFlag == 0) {
+            XrgCopyMatrix(tmp, jointMatrices[0]);
+            tmp[3] = 0.0f;
+            tmp[7] = 0.0f;
+            tmp[11] = 0.0f;
+            XrgInvMatrix(tmp, tmp);
+            XrgMulMatrix(matrix, tmp, matrix);
+        }
+        for (col = 0; col < 3; col++) {
+            for (row = 0; row < 4; row++) {
+                jointMatrices[elementIndex][4 * row + col] = matrix[4 * row + col];
+            }
+        }
+    }
+}
 
 int _InitSkeMani(SkeMani *pMani, XenoAct *pXenoAct, int elmID,
                  const char *sourceFile, int line)
@@ -182,11 +266,81 @@ int _InitSkeMani(SkeMani *pMani, XenoAct *pXenoAct, int elmID,
     return result;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _CreateSkeMani_sub);
+const char D_00A589B8[16] = "pUnit != NIL";
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _CreateAccMani_sub);
+/*
+ * Allocates a SkeMani record and binds it to pXenoAct's element elmID through
+ * _InitSkeMani; the record is freed and NULL returned when the binding fails.
+ */
+SkeMani *_CreateSkeMani_sub(XenoAct *pXenoAct, int elmID, const char *sourceFile,
+                            int line)
+{
+    SkeMani *pMani;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _DisposeUseXenoActor);
+    pMani = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SkeMani), sourceFile, line);
+    if (pMani == 0) {
+        assert_prog(D_00A589B8, D_00A587E0, 272);
+    }
+    if (_InitSkeMani(pMani, pXenoAct, elmID, sourceFile, line) == 0) {
+        RgHeapFree(InstanceOfRgHeap(), pMani, D_00A587E0, 274);
+        return 0;
+    }
+    return pMani;
+}
+
+const char D_00A58B10[16] = "pEntry != NIL";
+
+SkeMani *_CreateAccMani_sub(XenoAct *pXenoAct, int jntID, const char *sourceFile, int line)
+{
+    SkeMani *pMani;
+
+    pMani = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SkeMani), D_00A587E0, 285);
+    if (pMani == 0) {
+        assert_prog(D_00A589B8, D_00A587E0, 286);
+    }
+    if (pXenoAct != 0) {
+        if (_InitSkeMani(pMani, pXenoAct, (int) _AccIDToJoint(pXenoAct, jntID), sourceFile, line) == 0) {
+            RgHeapFree(InstanceOfRgHeap(), pMani, D_00A587E0, 291);
+            return 0;
+        }
+    } else {
+        if (_InitSkeMani(pMani, 0, 0, sourceFile, line) == 0) {
+            RgHeapFree(InstanceOfRgHeap(), pMani, D_00A587E0, 296);
+            return 0;
+        }
+    }
+    return pMani;
+}
+
+void _DisposeUseXenoActor(XrgActor *pActor)
+{
+    unsigned int i;
+    unsigned int j;
+
+    if (pActor->resourceFiles[0] != 0) {
+        DisposeRgFileSysData_sub(pActor->resourceFiles[0], D_00A587E0, 321);
+    }
+    if (pActor->resourceFiles[1] != 0) {
+        DisposeRgFileSysData_sub(pActor->resourceFiles[1], D_00A587E0, 323);
+    }
+    if (pActor->resourceFiles[2] != 0) {
+        DisposeRgFileSysData_sub(pActor->resourceFiles[2], D_00A587E0, 325);
+    }
+    if (pActor->resourceFiles[3] != 0) {
+        DisposeRgFileSysData_sub(pActor->resourceFiles[3], D_00A587E0, 327);
+    }
+    if (pActor->pXenoAct != 0) {
+        ACT_dispose(pActor->pXenoAct);
+    }
+    for (i = 0; i < 2; i++) {
+        for (j = 0; j < pActor->effectorCount[i]; j++) {
+            DisposeRgMatricesEffector(pActor->effector[i][j]);
+        }
+        pActor->effectorCount[i] = 0;
+    }
+    DisposeRgVector(pActor->children, D_00A587E0, 340);
+    pActor->children = 0;
+}
 
 /*
  * _copy_matrix copies src into dst and drops its translation column
@@ -224,7 +378,109 @@ static void _store_matrix(RgMatrix dst, const RgMatrix src)
     dst[15] = m33;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _PassTime_00A45D30);
+extern void ACT_updateMotion(XenoAct *pXenoAct);
+extern double atan2(double y, double x);
+extern void RgMatricesEffectorJob(struct MatrixEffector *pEffector);
+extern const char D_00A589F8[];
+extern const char D_00A58A10[];
+extern int D_00A5ACE4;
+
+void _PassTime(XrgActor *pActor, float dt)
+{
+    RgMatrix locals[64];
+    RgMatrix a;
+    RgMatrix b;
+    RgMatrix c;
+    XenoAct *pXenoAct;
+    XrgActor *pParent;
+    XenoAct *pParentAct;
+    void *pJntData;
+    RgMatrix *pOwnMatrices;
+    float *pRoot;
+    RgMatrix *pParentMatrices;
+    unsigned int numElement;
+    unsigned int i;
+    unsigned int j;
+    float step;
+    const float frameTime = 1.0f / 30.0f;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 371);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct == 0) {
+        return;
+    }
+    pParent = pActor->parent;
+    if (pParent == 0) {
+        pParentAct = 0;
+        pXenoAct->position[0] = pActor->local[12];
+        pXenoAct->position[1] = pActor->local[13] - 1.5f;
+        pXenoAct->position[2] = pActor->local[14];
+        pXenoAct->rotationY = atan2(-pActor->local[8], -pActor->local[10]);
+    } else {
+        pParentAct = pParent->pXenoAct;
+    }
+    if (pActor->motionComaStep != 0) {
+        step = pActor->motionComaStepAccum + dt;
+        pActor->motionComaStepAccum = step;
+        if (!(frameTime <= step)) {
+            pXenoAct->motion.step = 0.0f;
+        } else {
+            pActor->motionComaStepAccum = step - frameTime;
+            pXenoAct->motion.step = frameTime;
+        }
+    } else {
+        pXenoAct->motion.step = dt;
+    }
+    ACT_updateMotion(pXenoAct);
+    if (pActor->pakaPaka != 0 && pParentAct != 0) {
+        D_00A5ACE4 = pActor->pakaBaseJnt;
+        pJntData = pXenoAct->jointData;
+        pOwnMatrices = pXenoAct->jointMatrices;
+        pParentMatrices = pParentAct->jointMatrices;
+        if (pJntData != 0 && pParentMatrices != 0 && pOwnMatrices != 0) {
+            pRoot = pOwnMatrices[1];
+            _ActJntToJoint(pParentAct, pActor->attachID);
+            if (pActor->unmodeled_160 == 0) {
+                _copy_matrix(b, pParentMatrices[0]);
+                _copy_matrix(a, pParentMatrices[D_00A5ACE4]);
+                XrgMulMatrix(a, b, a);
+                _copy_matrix(b, pRoot);
+                XrgInvMatrix(c, a);
+                XrgMulMatrix(pActor->pakaBaseMatrix, c, b);
+                pActor->unmodeled_160 = 1;
+            }
+            numElement = *(unsigned short *) ((char *) pJntData + 6);
+            if (numElement >= 65) {
+                RgWarn(D_00A589F8, D_00A587E0, 456);
+            }
+            _copy_matrix(a, pRoot);
+            XrgInvMatrix(c, a);
+            for (i = 1; i < numElement; i++) {
+                _copy_matrix(a, pOwnMatrices[i]);
+                XrgMulMatrix(locals[i], c, a);
+            }
+            _copy_matrix(b, pParentMatrices[0]);
+            _copy_matrix(a, pParentMatrices[D_00A5ACE4]);
+            XrgMulMatrix(b, b, a);
+            XrgMulMatrix(b, b, pActor->pakaBaseMatrix);
+            for (i = 1; i < numElement; i++) {
+                XrgMulMatrix(a, b, locals[i]);
+                _store_matrix(pOwnMatrices[i], a);
+            }
+        }
+    }
+    for (i = 0; i < 2; i++) {
+        for (j = 0; j < pActor->effectorCount[i]; j++) {
+            if (pActor->effector[i][j] != 0) {
+                RgMatricesEffectorJob(pActor->effector[i][j]);
+            } else {
+                RgWarn(D_00A58A10, D_00A587E0, 487, pActor->charID, i, j);
+            }
+        }
+    }
+}
 
 #include "ov12/rg_debug_flags.h"
 
@@ -232,6 +488,7 @@ extern RgDebugFlags *InstanceOfRgDebugFlags(void);
 extern void nmlModelSetFogCol(float *);
 extern void nmlModelSetFogDist(float, float, float, float);
 extern void nmlModelSetRenderLevel(int);
+
 RgFog *s_pUseFog = 0;
 
 void _ActorDrawFunction(XenoAct *pXenoAct)
@@ -280,7 +537,35 @@ void _SetMotionToXenoActorWithRgMotID(XrgActor *pActor, int rgMotID, int playbac
     ACT_setMotion2(pActor->pXenoAct, rgMotID, playbackParam, playbackParam);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _SetMotUseXenoActor);
+void _SetMotUseXenoActor(XrgActor *pActor, int motion)
+{
+    XenoAct *pXenoAct;
+    int playbackParam;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 563);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct != 0) {
+        playbackParam = pActor->smoothPlay != 0;
+        if (pActor->loopPlay != 0) {
+            playbackParam |= 8;
+        }
+        pActor->smoothPlay = 0;
+        pActor->loopPlay = 0;
+        if (pActor->parent == 0) {
+            ACT_initMotion(pXenoAct);
+        }
+        _SetMotionToXenoActorWithRgMotID(pActor, motion, playbackParam);
+        pActor->motionID = motion;
+        if (pActor->charID == 2 && motion == 63 || pActor->charID == 3) {
+            pActor->motionComaStep = 1;
+        } else {
+            pActor->motionComaStep = 0;
+        }
+        pActor->motionComaStepAccum = 0.0f;
+    }
+}
 
 extern void ACT_allocMatrix(XenoAct *pXenoAct, int flags);
 extern void ACT_setArms(XenoAct *pChildXenoAct, XenoAct *pParentXenoAct,
@@ -293,7 +578,6 @@ extern void ACT_setModelWrapper(XenoAct *pXenoAct, int flags);
  */
 #define RG_ACTOR_JNT_LEFT_HAND 0
 #define RG_ACTOR_JNT_MAX 21
-
 
 void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
@@ -341,17 +625,64 @@ int _IsEndOfMotUseXenoActor(XrgActor *pActor)
     if (pActor->motionID == -1) {
         return 1;
     }
-    if (pXenoAct == 0 || (pXenoAct->motionFlags & 0x1000) == 0) {
+    if (pXenoAct == 0 || (pXenoAct->motion.flags & 0x1000) == 0) {
         return 0;
     }
     return 1;
 }
 
-void _DumpHead(void) {
+void _DumpHead(RgFileSysData *pFile) {
 
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _LoadXenoActorMdl);
+const char D_00A58A98[18] = "pszMdlName != NIL";
+
+const char D_00A58AB0[5] = ".xtx";
+
+const char D_00A58AB8[5] = ".lex";
+
+const char D_00A58AC0[5] = ".jnt";
+
+void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName)
+{
+    XenoAct *pXenoAct;
+    char szFileName[3][128];
+    RgFileSysData *pFile;
+    RgFileSysData *pJoint;
+    RgFileSysData *pDup;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 681);
+    }
+    if (pszMdlName == 0) {
+        assert_prog(D_00A58A98, D_00A587E0, 682);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct == 0) {
+        assert_prog(D_00A587F8, D_00A587E0, 685);
+    }
+    strcat(strcpy(szFileName[0], pszMdlName), D_00A58AB0);
+    strcat(strcpy(szFileName[1], pszMdlName), D_00A58AB8);
+    strcat(strcpy(szFileName[2], pszMdlName), D_00A58AC0);
+    pFile = RgFileSysRead(InstanceOfRgFileSys(), szFileName[0], 0);
+    pActor->resourceFiles[1] = pFile;
+    pJoint = RgFileSysRead(InstanceOfRgFileSys(), szFileName[2], 0);
+    pActor->resourceFiles[3] = pJoint;
+    pDup = RgFileSysDup(InstanceOfRgFileSys(), szFileName[1], 0);
+    pActor->resourceFiles[2] = pDup;
+    if (pDup != 0) {
+        pXenoAct->dupFileData = pDup->data;
+        _DumpHead(pDup);
+    }
+    if (pFile != 0) {
+        pXenoAct->auxFileData = pFile->data;
+        _DumpHead(pFile);
+    }
+    if (pJoint != 0) {
+        pXenoAct->jointData = pJoint->data;
+        _DumpHead(pJoint);
+    }
+}
 
 extern RgFileSys *InstanceOfRgFileSys(void);
 extern char *RgFileSysDataGetName(RgFileSysData *pFile);
@@ -410,7 +741,41 @@ void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _InitXenoActor);
+extern void *CreateRgVector(unsigned int capacity, const char *sourceFile, int line);
+
+/*
+ * Resets every field of a freshly allocated actor: its charID and parent
+ * links, a new children vector, the effector counts, the resource file
+ * slots, the identity local matrix, and the motion and light flags.
+ */
+void _InitXenoActor(XrgActor *pActor)
+{
+    unsigned int i;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 745);
+    }
+    pActor->charID = 0;
+    pActor->parent = 0;
+    pActor->children = CreateRgVector(4, D_00A587E0, 748);
+    for (i = 0; i < 2; i++) {
+        pActor->effectorCount[i] = 0;
+    }
+    pActor->resourceFiles[0] = 0;
+    pActor->attachID = -1;
+    pActor->resourceFiles[2] = 0;
+    pActor->resourceFiles[1] = 0;
+    pActor->resourceFiles[3] = 0;
+    pActor->weaponMotionActive = 0;
+    XrgUnitMatrix(pActor->local);
+    pActor->pXenoAct = 0;
+    pActor->motionID = -1;
+    pActor->pakaPaka = 0;
+    pActor->smoothPlay = 0;
+    do {
+        pActor->loopPlay = 0;
+    } while (0);
+}
 
 void _SetBattleCommonWepMotion(XrgActor *pActor)
 {
@@ -498,9 +863,84 @@ void XrgActorSetPlayMotionComaStep(XrgActor *pActor, int step)
     pActor->motionComaStepAccum = 0.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _LoadXenoActor);
+const char D_00A58B20[28] = "pEntry->m_pszMdlName != NIL";
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _DupXenoActor);
+extern XenoAct *ACT_create(int number, const char *mdlName);
+void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName);
+/* * Resets every field of a freshly allocated actor: its charID and parent * links, a new children vector, the effector counts, the resource file * slots, the identity local matrix, and the motion and light flags. */ void _InitXenoActor(XrgActor *pActor);
+extern void _InitAfterLoadXenoActor(XrgActor *pActor);
+void XrgActorSetLight(XrgActor *pActor, RgVector *light);
+extern void *InstanceOfGlobalLight(void);
+
+void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss)
+{
+    XenoDatEntry *pEntry;
+    int actorID;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 882);
+    }
+    if (pEss == 0) {
+        assert_prog(D_00A58B00, D_00A587E0, 883);
+    }
+    actorID = pEss->actorID;
+    pEntry = _GetXenoDatEntry(actorID);
+    if (pEntry == 0) {
+        assert_prog(D_00A58B10, D_00A587E0, 887);
+    }
+    _InitXenoActor(pActor);
+    pActor->charID = actorID;
+    if (pEntry != 0) {
+        pActor->pXenoAct = ACT_create(-1, pEntry->m_pszMdlName);
+        if (pActor->pXenoAct == 0) {
+            assert_prog(D_00A587F8, D_00A587E0, 894);
+        }
+        if (pEss->fileName[0] == 0) {
+            if (pEntry->m_pszFileBase == 0) {
+                assert_prog(D_00A58B20, D_00A587E0, 899);
+            }
+            _LoadXenoActorMdl(pActor, pEntry->m_pszFileBase);
+        } else {
+            _LoadXenoActorMdl(pActor, pEss->fileName);
+        }
+        if (pEntry->m_pszOptFile != 0) {
+            pActor->resourceFiles[0] = RgFileSysRead(InstanceOfRgFileSys(), pEntry->m_pszOptFile, 0);
+        }
+        _InitAfterLoadXenoActor(pActor);
+    } else {
+        pActor->pXenoAct = 0;
+    }
+    if (pEss->light != 0) {
+        XrgActorSetLight(pActor, pEss->light);
+    } else {
+        XrgActorSetLight(pActor, (RgVector *) InstanceOfGlobalLight());
+    }
+    pActor->pakaPaka = 0;
+    pActor->unmodeled_160 = 0;
+}
+
+void _DupXenoActor(XrgActor *pDup, XrgActor *pActor)
+{
+    XenoDatEntry *pEntry;
+
+    if (pDup == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 933);
+    }
+    if (pActor == 0) {
+        assert_prog(D_00A58AC8, D_00A587E0, 934);
+    }
+    pEntry = _GetXenoDatEntry(pActor->charID);
+    if (pEntry == 0) {
+        assert_prog(D_00A58B10, D_00A587E0, 937);
+    }
+    pDup->charID = pActor->charID;
+    pDup->motionComaStep = 0;
+    _InitXenoActor(pDup);
+    pDup->pXenoAct = ACT_create(-1, pEntry->m_pszMdlName);
+    _DupLoadXenoActor(pDup, pActor);
+    _InitAfterLoadXenoActor(pDup);
+    pDup->pakaPaka = 0;
+}
 
 XrgActor *CreateXrgActor(int actorID)
 {
@@ -532,7 +972,17 @@ XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent)
     return pDup;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", DisposeXrgActor);
+void DisposeXrgActor(XrgActor *pActor)
+{
+    if (RgHeapIsInvalidMemory(InstanceOfRgHeap(), pActor) != 0) {
+        RgError(D_00A58B68, D_00A587E0, 985, pActor);
+    }
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 987);
+    }
+    _DisposeUseXenoActor(pActor);
+    RgHeapFree(InstanceOfRgHeap(), pActor, D_00A587E0, 989);
+}
 
 void XrgActorSetLocal(XrgActor *pActor, const RgMatrix matrix)
 {
@@ -542,7 +992,27 @@ void XrgActorSetLocal(XrgActor *pActor, const RgMatrix matrix)
     XrgCopyMatrix(pActor->local, matrix);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorSetLight);
+void XrgActorSetLight(XrgActor *pActor, RgVector *light)
+{
+    XenoAct *pXenoAct;
+    int i;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1008);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct != 0) {
+        if (light != 0) {
+            XrgCopyVector(pXenoAct->light.ambient_color_row, light[0]);
+            for (i = 0; i < 3; i++) {
+                XrgCopyVector(pXenoAct->light.lights[i].color_row, light[4 + i]);
+                XrgCopyVector(pXenoAct->light.lights[i].direction_row, light[1 + i]);
+            }
+        } else {
+            xglLightSetDefault(&pXenoAct->light);
+        }
+    }
+}
 
 void XrgActorSetMotion(XrgActor *pActor, int motion)
 {
@@ -595,7 +1065,7 @@ void XrgActorSetMotionFrame(XrgActor *pActor, float frame)
         if (pActor->parent == 0) {
             ACT_initMotion(pActor->pXenoAct);
         }
-        pActor->pXenoAct->motionFrame = frame;
+        pActor->pXenoAct->motion.frame = frame;
     }
 }
 
@@ -652,7 +1122,7 @@ float XrgActorGetMotionLength(XrgActor *pActor)
     if (pActor->motionID == -1 || (pXenoAct = pActor->pXenoAct) == 0) {
         return 0.0f;
     }
-    return pXenoAct->motionLength;
+    return pXenoAct->motion.length;
 }
 
 /* The current motion's playing time, or 0 when no motion is set or loaded. */
@@ -666,7 +1136,7 @@ float XrgActorGetPlayingMotTime(XrgActor *pActor)
     if (pActor->motionID == -1 || (pXenoAct = pActor->pXenoAct) == 0) {
         return 0.0f;
     }
-    return pXenoAct->motionFrame;
+    return pXenoAct->motion.frame;
 }
 
 void XrgActorGetLocal(XrgActor *pActor, RgMatrix matrix)
@@ -677,7 +1147,38 @@ void XrgActorGetLocal(XrgActor *pActor, RgMatrix matrix)
     XrgCopyMatrix(matrix, pActor->local);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorGetJointLocal);
+int XrgActorGetJointLocal(XrgActor *pActor, int jntID, RgMatrix matrix)
+{
+    XenoAct *pXenoAct;
+    RgMatrix *jointMatrices;
+    int jointIndex;
+    int result;
+
+    result = 0;
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1161);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct == 0) {
+        assert_prog(D_00A587F8, D_00A587E0, 1163);
+    }
+    if (!(RG_ACTOR_JNT_LEFT_HAND <= jntID && jntID < RG_ACTOR_JNT_MAX)) {
+        assert_prog(D_00A58A50, D_00A587E0, 1164);
+    }
+    if (jntID < 20) {
+        if (jntID >= 0) {
+            jointIndex = (int) _ActJntToJoint(pXenoAct, jntID);
+            if (jointIndex >= 0) {
+                jointMatrices = pXenoAct->jointMatrices;
+                if (jointIndex < ((SkeJointData *) pXenoAct->jointData)->numElement) {
+                    XrgCopyMatrix(matrix, jointMatrices[jointIndex]);
+                    result = 1;
+                }
+            }
+        }
+    }
+    return result;
+}
 
 int XrgActorGetAttachedJoint(XrgActor *pActor)
 {
@@ -748,7 +1249,6 @@ void XrgActorCheckPakaPaka(XrgActor *pActor)
 
 extern int RgVectorRemove(void *vector, void *element, const char *source_file,
                           int line);
-extern void RgWarn(const char *format, const char *source_file, int line, ...);
 extern void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild);
 
 void XrgActorDettachChild(XrgActor *pParent, XrgActor *pChild)
@@ -778,16 +1278,15 @@ void XrgActorDraw(XrgActor *pActor)
     RgDrawReq(InstanceOfRgDraw(), pActor, &_DrawActor, 0, 0, -1);
 }
 
-static void _PassTime_00A45D30(XrgActor *pActor, float dt);
+void _PassTime(XrgActor *pActor, float dt);
 
 void XrgActorPassTime(XrgActor *pActor, float dt)
 {
     if (pActor == 0) {
         assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1285);
     }
-    _PassTime_00A45D30(pActor, dt);
+    _PassTime(pActor, dt);
 }
-
 
 void InitXrgActorEssence(XrgActorEssence *pEss, int actorID)
 {
@@ -796,10 +1295,54 @@ void InitXrgActorEssence(XrgActorEssence *pEss, int actorID)
     }
     pEss->actorID = actorID;
     pEss->fileName[0] = 0;
-    pEss->state = 0;
+    pEss->light = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorEssenceGetFileName);
+const char D_00A58CB0[] = "actor %p (xeno %p) ---------\n";
+
+const char D_00A58CD0[] = "time = %f start %f end %f\n";
+
+const char D_00A58CF0[] = "flags = %x(end %x) next %x\n";
+
+extern char *strcpy(char *destination, const char *source);
+
+int XrgActorEssenceGetFileName(XrgActorEssence *pEss, char *pFileName)
+{
+    XenoDatEntry *pEntry;
+    int count;
+
+    if (pEss == 0) {
+        assert_prog(D_00A58B00, D_00A587E0, 1308);
+    }
+    pEntry = _GetXenoDatEntry(pEss->actorID);
+    if (pEntry == 0) {
+        return 0;
+    }
+    count = 0;
+    if (pEss->fileName[0] == 0) {
+        if (pEntry->m_pszFileBase == 0) {
+            assert_prog(D_00A58B20, D_00A587E0, 1318);
+        }
+        if (pFileName != 0) {
+            count = 3;
+            strcat(strcpy(pFileName, pEntry->m_pszFileBase), D_00A58AB0);
+            strcat(strcpy(pFileName + 64, pEntry->m_pszFileBase), D_00A58AB8);
+            strcat(strcpy(pFileName + 128, pEntry->m_pszFileBase), D_00A58AC0);
+        }
+    } else {
+        if (pFileName != 0) {
+            count = 3;
+            strcat(strcpy(pFileName, pEss->fileName), D_00A58AB0);
+            strcat(strcpy(pFileName + 64, pEss->fileName), D_00A58AB8);
+            strcat(strcpy(pFileName + 128, pEss->fileName), D_00A58AC0);
+        }
+    }
+    if (pEntry->m_pszOptFile != 0) {
+        strcpy(pFileName + count * 64, pEntry->m_pszOptFile);
+        count++;
+    }
+    return count;
+}
 
 /* Each record begins with its actor/joint key, followed by the original
  * signed joint-remapping payload. The payload uses -1 as its list terminator.
@@ -872,10 +1415,199 @@ int _GetPakaPakaBaseJnt(int charID, int attachID)
     return -1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorCreateEffConstraint);
+extern const char D_00A58BF0[];
+extern const char D_00A58C10[];
+extern const char D_00A58C20[];
+extern const char D_00A58C38[];
+extern const char D_00A58C68[];
+extern const char D_00A58C88[];
+extern void RgMatEffConstraintSetRoot(void *constraint, void *root, void *top);
+extern void RgMatEffConstraintSetTop(void *constraint, void *top);
+extern void RgMatEffCombineSetRoot(void *combine, void *root, void *top);
+extern void RgMatricesEffectorAddManipulator(void *effector, void *unit);
+extern void RgMatricesEffectorAddDoubleMani(void *effector, void *first, void *second);
+struct MatrixEffector *XrgActorCreateEffConstraint(XrgActor *pActor, unsigned int eEffID, XrgActor *pWep)
+{
+    void *pCon;
+    XrgRawJntData *pRaw;
+    SkeJointData *pJointData;
+    SkeMani *pMani;
+    int accID;
+    int i;
+    const char *loadFile;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorCreateEffArmCombine);
+    pCon = CreateRgMatEffConstraint();
+    if (pActor == 0 || pWep == 0) {
+        assert_prog(D_00A58BF0, D_00A587E0, 1471);
+    }
+    if (pCon == 0) {
+        assert_prog(D_00A58C10, D_00A587E0, 1472);
+    }
+    pRaw = _FindRawJntData(pActor->charID, eEffID);
+    if (pRaw == 0) {
+        DisposeRgMatricesEffector(pCon);
+        return 0;
+    }
+    for (i = 0; pRaw->jointMap[i] >= 0; i++) {
+        pMani = _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[i], D_00A587E0, 1483);
+        RgMatricesEffectorAddManipulator(pCon, pMani);
+    }
+    loadFile = D_00A587E0;
+    RgMatEffConstraintSetRoot(pCon,
+                              _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[32], loadFile, 1488),
+                              _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[33], loadFile, 1489));
+    accID = _ActJntToAccID_sub(8, loadFile, 1492);
+    XrgLog(D_00A58C20, loadFile, 1492, 8, accID);
+    accID = _ActJntToAccID_sub(8, loadFile, 1493);
+    pMani = _CreateAccMani_sub(pWep->pXenoAct, accID, loadFile, 1493);
+    RgMatEffConstraintSetTop(pCon, pMani);
+    pJointData = pWep->pXenoAct->jointData;
+    for (i = 1; i < pJointData->numElement; i++) {
+        if (pWep->pXenoAct != 0) {
+            pMani = _CreateSkeMani_sub(pWep->pXenoAct, i, D_00A587E0, 1500);
+            RgMatricesEffectorAddManipulator(pCon, pMani);
+        }
+    }
+    if (eEffID >= 2) {
+        assert_prog(D_00A58C38, D_00A587E0, 1505);
+    }
+    if ((unsigned int) pActor->effectorCount[eEffID] >= 4) {
+        assert_prog(D_00A58C68, D_00A587E0, 1506);
+    }
+    RgMatricesEffectorSetActivity(pCon, 0);
+    pActor->effector[eEffID][pActor->effectorCount[eEffID]++] = pCon;
+    return pCon;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorDisposeEffector);
+struct MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActor, XrgActor *pWpn, XrgActor *pSubWpn, unsigned int eEffID)
+{
+    void *pCon;
+    XrgRawJntData *pRaw;
+    SkeJointData *pJointData;
+    SkeMani *pRoot;
+    SkeMani *pJoint;
+    XenoAct *pXenoAct;
+    XenoAct *pSrcXeno;
+    XenoAct *pWpnXeno;
+    XenoAct *pSubXeno;
+    int effectorIndex;
+    int i;
+    int jointID;
+    SkeMani *jointSubMani;
+    SkeMani *jointMani;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorDebugDisp);
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1528);
+    }
+    if (pSrcActor == 0) {
+        assert_prog(D_00A58AC8, D_00A587E0, 1529);
+    }
+    if (pWpn == 0) {
+        assert_prog(D_00A58C88, D_00A587E0, 1530);
+    }
+    pSrcXeno = pSrcActor->pXenoAct;
+    pXenoAct = pActor->pXenoAct;
+    pRaw = _FindRawJntData(pActor->charID, eEffID);
+    if (pRaw == 0) {
+        return 0;
+    }
+    pCon = CreateRgMatEffCombine();
+    for (i = 0; pRaw->jointMap[i] >= 0; i++) {
+        jointID = pRaw->jointMap[i];
+        jointMani = _CreateSkeMani_sub(pXenoAct, jointID, D_00A587E0, 1553);
+        jointSubMani = _CreateSkeMani_sub(pSrcXeno, jointID, D_00A587E0, 1554);
+        RgMatricesEffectorAddDoubleMani(pCon, jointMani, jointSubMani);
+    }
+    i = pRaw->jointMap[33];
+    pRoot = _CreateSkeMani_sub(pXenoAct, i, D_00A587E0, 1560);
+    pJoint = _CreateSkeMani_sub(pSrcXeno, i, D_00A587E0, 1560);
+    RgMatEffCombineSetRoot(pCon, pRoot, pJoint);
+    if (pWpn != 0) {
+        if (pSubWpn != 0) {
+            pWpnXeno = pWpn->pXenoAct;
+            pSubXeno = pSubWpn->pXenoAct;
+            pJointData = pWpnXeno->jointData;
+            for (i = 1; i < pJointData->numElement; i++) {
+                SkeMani *pMani;
+                SkeMani *pSubMani;
+                pMani = _CreateSkeMani_sub(pWpnXeno, i, D_00A587E0, 1569);
+                pSubMani = _CreateSkeMani_sub(pSubXeno, i, D_00A587E0, 1570);
+                if (pMani != 0 && pSubMani != 0) {
+                    RgMatricesEffectorAddDoubleMani(pCon, pMani, pSubMani);
+                }
+            }
+        }
+    }
+    if (eEffID >= 2) {
+        assert_prog(D_00A58C38, D_00A587E0, 1577);
+    }
+    if ((unsigned int) pActor->effectorCount[eEffID] >= 4) {
+        assert_prog(D_00A58C68, D_00A587E0, 1578);
+    }
+    RgMatricesEffectorSetActivity(pCon, 0);
+    effectorIndex = pActor->effectorCount[eEffID];
+    pActor->effectorCount[eEffID] = effectorIndex + 1;
+    pActor->effector[eEffID][effectorIndex] = pCon;
+    return pCon;
+}
+
+const char D_00A58C98[18] = "eff over (%d)->%d";
+
+void XrgActorDisposeEffector(XrgActor *pActor, struct MatrixEffector *pEffector)
+{
+    struct MatrixEffector *kept[2][4];
+    int keptCount[2];
+    unsigned int bank;
+    unsigned int i;
+    int cnt;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1595);
+    }
+    for (bank = 0; bank < 2; bank++) {
+        keptCount[bank] = pActor->effectorCount[bank];
+        for (i = 0; i < pActor->effectorCount[bank]; i++) {
+            kept[bank][i] = pActor->effector[bank][i];
+        }
+    }
+    for (bank = 0; bank < 2; bank++) {
+        for (i = 0; i < keptCount[bank]; i++) {
+            if (kept[bank][i] == pEffector) {
+                if (pEffector != 0) {
+                    DisposeRgMatricesEffector(pEffector);
+                    kept[bank][i] = 0;
+                }
+            }
+        }
+    }
+    for (bank = 0; bank < 2; bank++) {
+        cnt = 0;
+        for (i = 0; i < keptCount[bank]; i++) {
+            if (kept[bank][i] != 0) {
+                pActor->effector[bank][cnt] = kept[bank][i];
+                cnt++;
+            }
+        }
+        pActor->effectorCount[bank] = cnt;
+        if (cnt >= 4) {
+            RgError(D_00A58C98, D_00A587E0, 1623, bank, keptCount[bank]);
+        }
+    }
+}
+
+void XrgActorDebugDisp(XrgActor *pActor)
+{
+    XenoAct *pXenoAct;
+    XenoMotion *pMotion;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1634);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct != 0) {
+        pMotion = &pXenoAct->motion;
+        XrgLog(D_00A58CB0, D_00A587E0, 1638, pActor, pXenoAct);
+        XrgLog(D_00A58CD0, D_00A587E0, 1639, pMotion->frame, pMotion->start, pMotion->length);
+        XrgLog(D_00A58CF0, D_00A587E0, 1640, pMotion->flags, 0x1000, pMotion->next);
+    }
+}

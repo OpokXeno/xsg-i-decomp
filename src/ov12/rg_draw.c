@@ -21,7 +21,9 @@ static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
 static void _DestructDraw(RgDraw *pDraw);
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
+
 typedef struct RgLight RgLight;
+
 extern RgLight *InstanceOfGlobalLight(void);
 extern void xglStudioChange(int studio_index);
 extern void XrgSleep(void);
@@ -50,18 +52,31 @@ const GifTag D_00A54AC0 = {
 
 /* The assertion text, filename and error messages referenced by this TU. */
 const char D_00A54AD0[32] = "not exist xeno studio ID (%d)";
+
 const char D_00A54AF0[24] = "../rg_draw.euc.c";
+
 const char D_00A54B08[16] = "pView != NIL";
+
 const char D_00A54B18[24] = "pParentStudio != NIL";
+
 const char D_00A54B30[16] = "pStudio != NIL";
+
 const char D_00A54B40[24] = "pStudio->m_pView != NIL";
+
 const char D_00A54B58[16] = "pDraw != NIL";
+
 const char D_00A54B68[24] = "unknown studio id %d";
+
 const char D_00A54B80[16] = "pFog != NIL";
+
 const char D_00A54B90[32] = "global studio don't have view";
+
 const char D_00A54BB0[24] = "unknown studio ID %d";
+
 const char D_00A54BC8[32] = "pDraw->m_uReqNum < REQ_CAPA";
+
 const char D_00A54BE8[40] = "pObject != NIL && pHandler != NIL";
+
 const char D_00A54C50[24] = "unknown draw id %d";
 
 extern void sceVif1PkCnt(XglPacket *packet, int count);
@@ -509,7 +524,45 @@ void RgDrawSetGlobalFog(RgDraw *pDraw, RgFog *pFog)
     _CopyFog(&pDraw->m_Fog, pFog);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewInit);
+void RgDrawViewInit(RgDrawView *pView)
+{
+    int screenIndex;
+    int cameraIndex;
+    StudioCamera *pCamera;
+
+    if (pView == 0) {
+        assert_prog(D_00A54B08, D_00A54AF0, 541);
+    }
+    screenIndex = pView->m_pParentStudio->m_ScreenIndex;
+    pCamera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (pCamera != 0) {
+        pCamera->state = 4;
+        pCamera->fov = 0.698132f;
+        pCamera->position.vector.y = 0.0f;
+        pCamera->position.vector.z = 0.0f;
+        pCamera->rotation.vector.x = 0.0f;
+        pCamera->rotation.vector.y = 0.0f;
+        pCamera->rotation.vector.z = 0.0f;
+        pCamera->position.vector.x = 0.0f;
+    }
+}
 
 /*
  * External file-backed witness of this allocation's own functions, not
@@ -517,7 +570,6 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewInit);
  *
  * ov12:0x00a54ad0 contains the error message "not exist xeno studio ID (%d)".
  */
-
 void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
 {
     int screenIndex;
@@ -640,7 +692,62 @@ void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewIsPointInView);
+extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
+                            const Vector4 *vector);
+
+int RgDrawViewIsPointInView(RgDrawView *pView, Vector4 *pPoint, float margin)
+{
+    int result;
+    int screenIndex;
+    int cameraIndex;
+    float limit;
+    StudioCamera *pCamera;
+    Matrix4 *pClipMatrix0;
+    Matrix4 *pClipMatrix1;
+    Vector4 point;
+    Vector4 clipped0;
+    Vector4 clipped1;
+
+    result = 0;
+    if (pView == 0) {
+        assert_prog(D_00A54B08, D_00A54AF0, 602);
+    }
+    limit = -margin;
+    screenIndex = pView->m_pParentStudio->m_ScreenIndex;
+    pCamera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (pCamera != 0) {
+        pClipMatrix0 = &pCamera->clipMatrices[0];
+        pClipMatrix1 = &pCamera->clipMatrices[1];
+        point.x = pPoint->x;
+        point.y = pPoint->y;
+        point.z = pPoint->z;
+        point.w = 1.0f;
+        xglVectorMulMat(&clipped0, *pClipMatrix0, &point);
+        xglVectorMulMat(&clipped1, *pClipMatrix1, &point);
+        if (clipped0.x < limit && clipped0.y < limit && clipped1.x < limit
+            && clipped1.y < limit) {
+            result = 1;
+        }
+    }
+    return result;
+}
 
 void RgDrawViewGetScreenRect(RgDrawView *pView, RgRect *pRect)
 {
@@ -732,7 +839,60 @@ void RgDrawReq(RgDraw *pDraw, void *pObject,
     request->drawID = drawID;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _FadeShadow);
+/* Four GIF tags, the 64-byte block _FadeShadow copies from ov12:0x00a54c10. */
+/* Two 32-byte halves of the 64-byte vertex block. */
+typedef struct GifTagBlock {
+    GifTag v[4];
+} GifTagBlock;
+
+/* One GIF PACKED-mode RGBAQ quadword: four 32-bit channel words. */
+typedef union RgDrawGifRgbaq {
+    int channels[4];
+    Quadword quad;
+} RgDrawGifRgbaq;
+
+/* The 0x20-byte VIF1 packet object sceVif1PkInit fills on the stack. */
+typedef struct sceVif1Packet {
+    unsigned char opaque[0x20];
+} sceVif1Packet;
+
+extern void sceVif1PkInit(XglPacket *packet, u32 buffer);
+extern int sceVif1PkSize(XglPacket *packet);
+extern void sceVif1PkAddGsAD(XglPacket *packet, int address, u64 data);
+extern void sceVif1PkAddGsPacked(XglPacket *packet, Quadword data);
+extern void nmlModelDirectSend(int mode, const void *data, int count);
+extern const GifTagBlock D_00A54C10;
+
+static void _FadeShadow(int alpha, int mode)
+{
+    GifTagBlock vertices = D_00A54C10;
+    RgDrawGifRgbaq rgbaq;
+    sceVif1Packet packet;
+    XglPacket *pPacket;
+    unsigned long long clampData;
+
+    memset(&rgbaq, '\0', sizeof rgbaq);
+    rgbaq.channels[3] = alpha;
+    pPacket = (XglPacket *)&packet;
+    sceVif1PkInit(pPacket, (u32)SCRATCHPAD_BASE);
+    _openVifGifAD(pPacket);
+    sceVif1PkAddGsAD(pPacket, 0x3f, 0x0ULL);
+    sceVif1PkAddGsAD(pPacket, 0x47, 0x31001u);
+    clampData = ((u64)0x3fcu << 32) | ((u64)0x3fu << 16) | 0xc000u;
+    sceVif1PkAddGsAD(pPacket, 0x08, clampData);
+    sceVif1PkAddGsAD(pPacket, 0x49, 0x0);
+    sceVif1PkAddGsAD(pPacket, 0x42, 0x44);
+    _closeVifGif(pPacket);
+    _openVifGif(pPacket, 4u, 5u, 0x44441u);
+    sceVif1PkAddGsPacked(pPacket, rgbaq.quad);
+    sceVif1PkAddGsPacked(pPacket, vertices.v[0].quad);
+    sceVif1PkAddGsPacked(pPacket, vertices.v[1].quad);
+    sceVif1PkAddGsPacked(pPacket, vertices.v[2].quad);
+    sceVif1PkAddGsPacked(pPacket, vertices.v[3].quad);
+    _closeVifGif(pPacket);
+    nmlModelDirectSend(mode, (const void *)SCRATCHPAD_BASE,
+                       sceVif1PkSize(pPacket));
+}
 
 void _DrawReqTerminate(RgDraw *pDraw)
 {

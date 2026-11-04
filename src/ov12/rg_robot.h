@@ -315,15 +315,15 @@ typedef struct RgBody {
     RgGeomPoint *advanceGeometry;     /* +0x68 */
     float rotate;                     /* +0x6c */
     void *weapon[RG_EQUIP_TYPE_NUM];  /* +0x70 */
-    int spareWeapon[RG_EQUIP_TYPE_NUM]; /* +0x7c */
-    void *shotThread[RG_EQUIP_TYPE_NUM]; /* +0x88 */
+    void *spareWeapon[RG_EQUIP_TYPE_NUM]; /* +0x7c */
+    struct RgShotThread *shotThread[RG_EQUIP_TYPE_NUM]; /* +0x88 */
     RgHomingThread *homingThread;     /* +0x94 */
     RgRobotEffect *effect;            /* +0x98 */
     int motSmooth;                    /* +0x9c */
     int smoothSuppressed;             /* +0xa0 */
     float confuse;                    /* +0xa4 */
     int landingSoundID;               /* +0xa8 */
-    unsigned char unmodeled_ac[4];    /* +0xac */
+    float landingSoundTime;           /* +0xac: landing sound age; advanced by _BodyPassTime */
 } RgBody;
 
 /*
@@ -348,15 +348,38 @@ typedef struct RgBody {
  * only claimed writer past +0x10, storing its RgDrawView argument at +0x48.
  * Nothing claimed touches +0x14..0x47 or +0x4c..0x5f.
  */
+/* Same four-float position as src/ov12/rg_geom_point.h (not included here). */
+typedef struct RgPointVector RgPointVector;
+struct RgPointVector {
+    float x;
+    float y;
+    float z;
+    float w;
+};
+
+/* ov12/tu031's dull flag (src/ov12/rg_dull_flag.h), redeclared opaque-free here. */
+typedef struct RgDullFlag RgDullFlag;
+struct RgDullFlag {
+    float time;                       /* +0x00 */
+    float dullTime;                   /* +0x04 */
+};
+
 struct RgStatus {
     RgBody *body;                     /* +0x00 */
     struct RgRobotStatus *robotStatus; /* +0x04 */
     void *cmdQueue;                   /* +0x08 */
     unsigned int acceptedCommandMask; /* +0x0c */
     unsigned int statusFlags;         /* +0x10 */
-    unsigned char unmodeled_14[0x34]; /* +0x14 */
+    unsigned char unmodeled_14[0x0c]; /* +0x14 */
+    RgDullFlag dullFlag0;             /* +0x20 */
+    unsigned char unmodeled_28[0x08]; /* +0x28 */
+    RgDullFlag dullFlag1;             /* +0x30 */
+    unsigned char unmodeled_38[0x08]; /* +0x38 */
+    RgDullFlag dullFlag2;             /* +0x40 */
     RgDrawView *drawView;             /* +0x48 */
-    unsigned char unmodeled_4c[0x14]; /* +0x4c */
+    int passTimePhase;                /* +0x4c: RgRobotPassTime phase (0 idle, 1 timing, 2 done) */
+    float passTimeTimer;              /* +0x50: RgRobotPassTime countdown */
+    unsigned char unmodeled_54[0x0c]; /* +0x54 */
 };
 
 typedef struct RgRobotStatus RgRobotStatus;
@@ -456,15 +479,51 @@ struct RgRobotStatus {
     };
     union {
         int scratch1;                     /* +0x04 */
+        float scratch1AsFloat;            /* +0x04: float view for the Targetting and DashVR statuses */
         RgMotionShotInfo *dropMotionInfo; /* +0x04: Drop's motion-info record */
+        RgWeapon *attackWeapon;           /* +0x04: Attack's ranged weapon handle */
     };
-    int scratch2;                         /* +0x08 */
-    float scratchTimer;                   /* +0x0c */
-    unsigned char unmodeled_10[8];        /* +0x10 */
-    int eSide;                            /* +0x18 */
-    unsigned char unmodeled_1c[0x14];     /* +0x1c */
+    union {
+        int scratch2;                     /* +0x08 */
+        float scratch2AsFloat;            /* +0x08: float view for the Targetting status */
+        RgWeapon *attackLockonWeapon;     /* +0x08: Attack's lock-on weapon */
+        RgMotionShotInfo *hissatuMotionInfo; /* +0x08: Hissatu's motion-info record */
+    };
+    union {
+        float scratchTimer;               /* +0x0c */
+        int scratch3;                     /* +0x0c */
+        RgWeapon *shieldWeapon;           /* +0x0c: Shield's ranged weapon handle */
+        RgMotionShotInfo *attackMotionInfo; /* +0x0c: Attack's motion-info record */
+        struct RgMotionAction *currentAction; /* +0x0c: Hissatu's current action */
+    };
+    union {
+        RgMotionShotInfo *motionInfo;     /* +0x10: Shield's motion-info record; Dash's vector view (x +0x10, y +0x14, z +0x18) */
+        int attackActive;                 /* +0x10: Attack's active flag */
+        int scratch10;                    /* +0x10: seeded 0 by _InitStatusHissatu */
+        int shotCounter;                  /* +0x10: Hissatu's alternating-shot count */
+    };
+    union {
+        int scratch4;                     /* +0x14 */
+        int boosting;                     /* +0x14: Hissatu's boost flag, cleared on a new action */
+    };
+    union {
+        int eSide;                        /* +0x18 */
+        int shotPending;                  /* +0x18: Hissatu's pending shot-stop request */
+    };
+    union {
+        int scratch5;                     /* +0x1c: seeded 0 by _InitStatusHissatu */
+        int effectStarted;                /* +0x1c: Hissatu's dash effect started */
+    };
+    int dashMotionPlayed;                 /* +0x20; Shield copies a vector over +0x20..+0x2f */
+    union {
+        int dashVRMode;                   /* +0x24 */
+        float dashPhaseTimer;             /* +0x24 */
+    };
+    float dashTimeStart;                  /* +0x28 */
+    int dashLimited;                      /* +0x2c */
     int restoreDashTime;                  /* +0x30 */
-    unsigned char unmodeled_34[0xc];      /* +0x34 */
+    int dashVRAllowed;                    /* +0x34: set by _InitDashStatus */
+    unsigned char unmodeled_38[8];        /* +0x38 */
     int type;                            /* +0x40 */
     float elapsedTime;                   /* +0x44 */
     RgStatusExecCmdFunc execCmdMethod;   /* +0x48 */
@@ -531,7 +590,10 @@ struct RgRobotStatus {
  * Bytes 0x28-0x2f stay unmodeled.
  */
 struct RgCmd {
-    int param;                       /* +0x00 */
+    union {
+        int param;                   /* +0x00 */
+        RgWeapon *weapon;            /* +0x00: the Attack command's weapon handle */
+    };
     unsigned char unmodeled_04[0xc]; /* +0x04 */
     float scratch0;                  /* +0x10 */
     int scratch1;                    /* +0x14 */
@@ -576,7 +638,7 @@ static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body);
 /* Returns the accepted entry, or 0 when the ring is full or the type invalid. */
 static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType);
 
-static void _BodyEquipWeapon(RgBody *body, int eSide, int weaponID);
+static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon);
 
 static void _BodySetSpareWeapon(RgBody *body, int eSide, int weaponID);
 

@@ -57,6 +57,7 @@ extern const char D_00A59330[];
 extern const char D_00A59328[];
 
 static int s_bSetEventLevel = 0;
+
 static int s_eEventLevel = 0;
 
 static struct XrgEventWeaponEntry s_aWepTbl_0[41] = {
@@ -75,6 +76,7 @@ static struct XrgEventWeaponEntry s_aWepTbl_0[41] = {
     { D_00A59348, 92 }, { D_00A59340, 104 }, { D_00A59338, 99 },
     { D_00A59330, 110 }, { D_00A59328, 111 },
 };
+
 extern int PartyAgwsGet(int *party_ids);
 extern int strcasecmp(const char *left, const char *right);
 extern int dataWpnBoxChk(int weapon_id);
@@ -100,7 +102,28 @@ int XrgEventGetLevel(void)
     return (xglFlagsGet1(0x12D) == 0) ? (usable != 0) : 2;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_event", XrgEventIsUsableEnemy);
+int XrgEventIsUsableEnemy(unsigned int index)
+{
+    int level;
+
+    level = XrgEventGetLevel();
+    switch (index) {
+    case 2:
+        return level > 0;
+    case 0:
+        return level >= 0;
+    case 5:
+        return level >= 0;
+    case 1:
+        return level >= 2;
+    case 3:
+        return level >= 2;
+    case 4:
+        return level >= 2;
+    default:
+        return 0;
+    }
+}
 
 int XrgEventIsUsablePlayer(unsigned int character_index)
 {
@@ -164,8 +187,6 @@ int XrgEventIsUsableWeapon(struct XrgEventWeaponFilter *event)
     }
     return 0;
 }
-
-
 
 const char D_00A59328[8] = "DEF-VX";
 

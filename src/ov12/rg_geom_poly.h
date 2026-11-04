@@ -105,4 +105,12 @@ void RgGeomPolyGetInvLocal(const RgGeom *geom, RgMatrix destination);
 
 int RgGeomPolyCheckBall(RgGeom *pPoly, float *pOrgArg, float *pResult);
 
+/*
+ * RgColiDataVsRay is an original function of the collision-data OV12
+ * translation unit (rg_colidata.c, still INCLUDE_ASM there). RgGeomPolyCheckRay
+ * passes it the coliData field, a stack ray buffer (origin, direction) and
+ * the hit buffer, and tests its int return right after the call.
+ */
+extern int RgColiDataVsRay(RgColiData *pPoly, void *pArg, void *pResult);
+
 #endif /* SRC_OV12_RG_GEOM_POLY_H */

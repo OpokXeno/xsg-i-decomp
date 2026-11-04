@@ -39,8 +39,37 @@ typedef struct RgGeomTray {
     RgMatrix inverse_local;  /* +0x60: RgGeomTraySetLocal */
 } RgGeomTray;
 
+/*
+ * Partial view of a ball's point body as RgGeomTrayCheckBall reads it: the
+ * current and previous positions at +0x20 and +0x30 and the radius at +0x70,
+ * where rg_geom_ball.c keeps it.  The bytes no function here reads stay
+ * unmodeled.
+ */
+typedef struct RgGeomBallBody {
+    unsigned char unmodeled_00[0x20];
+    RgVector position;      /* +0x20 */
+    RgVector old_position;  /* +0x30 */
+    unsigned char unmodeled_40[0x30];
+    float radius;           /* +0x70 */
+} RgGeomBallBody;
+
+/*
+ * The contact record RgGeomTrayCheckBall fills: the last contact point and the
+ * clipped ball position (both world space), up to three contact normals (world
+ * space), and their count at +0x50.
+ */
+typedef struct RgGeomTrayContact {
+    RgVector last_contact;      /* +0x00 */
+    RgVector clipped_position;  /* +0x10 */
+    RgVector normals[3];        /* +0x20 */
+    int hit_count;              /* +0x50 */
+} RgGeomTrayContact;
+
 RgGeom *CreateRgGeomTray(void);
 
 void RgGeomTraySetSize(void *tray, float width, float height);
+
+int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
+                        RgGeomTrayContact *contact);
 
 #endif /* SRC_OV12_RG_GEOM_TRAY_H */

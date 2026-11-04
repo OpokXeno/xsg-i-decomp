@@ -50,10 +50,10 @@ typedef struct RgDispLife {
         };
         struct {
             struct RgBxx *dispBxx;             /* +0x00 */
-            unsigned char unmodeled_04[4];    /* +0x04 */
+            int timeFont;                     /* +0x04 */
             void *primaryBoardPic;              /* +0x08 */
             void *secondaryBoardPic;            /* +0x0c */
-            unsigned char unmodeled_10[4];    /* +0x10 */
+            void *agwsNamePic;                /* +0x10 */
         };
     };
     union {
@@ -64,20 +64,13 @@ typedef struct RgDispLife {
         RgStatus *robots[2];                 /* +0x14 */
     };
     RgGauge *gauge[2];                       /* +0x1c */
-    unsigned char unmodeled_24[0x44 - 0x24]; /* +0x24 */
+    void *lifePic[8];                        /* +0x24 */
     float timer;                             /* +0x44 */
     void *paint;                             /* +0x48 */
-    union {
-        struct {
-            unsigned char unmodeled_4c[0x14]; /* +0x4c */
-        };
-        struct {
-            int vsMode;                       /* +0x4c */
-            int winCount[2];                  /* +0x50 */
-            int winnerMask;                   /* +0x58 */
-            float elapsedTime;                /* +0x5c */
-        };
-    };
+    int vsMode;                              /* +0x4c */
+    int winCount[2];                         /* +0x50 */
+    int winnerMask;                          /* +0x58 */
+    float elapsedTime;                       /* +0x5c */
 } RgDispLife;
 
 /* RgDispLifeSetVsMode uses dispBxx +0x00, board pictures +0x08/+0x0c, and

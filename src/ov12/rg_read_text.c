@@ -6,32 +6,20 @@
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-
 extern void RgError(const char *message, const char *source_file, int line, ...);
-
 extern RgHeap *InstanceOfRgHeap(void);
-
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
-
 extern void RgHeapFree(void *heap, void *ptr, const char *source_file, int line);
-
 extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *pszFile,
                                      int iLine);
-
 extern double atof(const char *nptr);
 extern int strcmp(const char *string1, const char *string2);
-
 static int _InitReader(RgReadText *pReader, const char *pszName);
-
 static int _IsEOF(RgReadText *pReader);
-
 static void _GetString(RgReadText *pReader, char *pszOut, unsigned int nCapacity);
-
 static float _GetFloat(RgReadText *pReader);
-
 static int _GetInt(RgReadText *pReader);
-
 static int _GetBool(RgReadText *pReader);
 
 /*
@@ -53,17 +41,52 @@ const char D_00A543B8[] = "../rg_read_text.euc.c";
 const char D_00A543E0[] = "pCur - pReader->m_pszBuf = %d\npReader->m_nSize = %d\n";
 
 const char D_00A54418[] = "pCur != NIL";
+
 const char D_00A54438[] = "true";
+
 const char D_00A54440[] = "on";
+
 const char D_00A54448[] = "pszUngetToken != NIL";
 
 /*
  * ov12:0x00a54460, 19 bytes, contains the message "not find delimiter".
  */
 const char D_00A54460[0x18] = "not find delimiter";
+
 const char D_00A54478[8] = "?";
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _InitReader);
+extern RgFileSys *InstanceOfRgFileSys(void);
+extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
+                                    const char *pszRoot);
+extern void XrgFileSysPushMode(int eMode);
+extern void XrgFileSysPopMode(void);
+extern const char D_00A543D0[];
+
+static int _InitReader(RgReadText *pReader, const char *pszName)
+{
+    RgFileSysData *pFile;
+    unsigned int nSize;
+    char *pBuf;
+
+    if (pReader == 0) {
+        assert_prog(D_00A543A8, D_00A543B8, 40);
+    }
+    XrgFileSysPushMode(1);
+    pFile = RgFileSysRead(InstanceOfRgFileSys(), pszName, D_00A543D0);
+    pReader->m_pFile = pFile;
+    XrgFileSysPopMode();
+    if (pFile == 0) {
+        return 0;
+    }
+    nSize = pFile->size;
+    pBuf = pFile->data;
+    pReader->m_pszDelim = 0;
+    pReader->m_bUngetPending = 0;
+    pReader->m_pszBuf = pBuf;
+    pReader->m_pszCur = pBuf;
+    pReader->m_nSize = nSize;
+    return 1;
+}
 
 static void _DisposeReader(RgReadText *pReader)
 {
@@ -148,7 +171,40 @@ static int _IsEOF(RgReadText *pReader)
     return _SkipWhiteSpace(pReader) == 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _GetString);
+extern char *strcpy(char *dest, const char *src);
+extern const char D_00A54428[];
+
+static void _GetString(RgReadText *pReader, char *pszOut, unsigned int nCapacity)
+{
+    unsigned char *pCur;
+
+    if (pReader->m_bUngetPending != 0) {
+        strcpy(pszOut, pReader->m_szUngetToken);
+        pReader->m_bUngetPending = 0;
+    } else {
+        pCur = (unsigned char *)_SkipWhiteSpace(pReader);
+        if (pCur == 0) {
+            assert_prog(D_00A54418, D_00A543B8, 171);
+        }
+        while (!_IsWhiteSpace(*pCur)) {
+            if (nCapacity == 0) {
+                assert_prog(D_00A54428, D_00A543B8, 173);
+            }
+            if (*pCur == '@') {
+                *pszOut = ' ';
+            } else {
+                *pszOut = *pCur;
+            }
+            pszOut++;
+            do {
+            } while (0);
+            pCur++;
+            _SetCurrent(pReader, (char *)pCur);
+            nCapacity--;
+        }
+        *pszOut = 0;
+    }
+}
 
 static float _GetFloat(RgReadText *pReader)
 {
@@ -164,8 +220,6 @@ static float _GetFloat(RgReadText *pReader)
 }
 
 extern int atoi(const char *nptr);
-
-
 
 int _GetInt(RgReadText *pReader)
 {

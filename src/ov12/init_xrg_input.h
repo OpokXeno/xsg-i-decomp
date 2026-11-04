@@ -39,6 +39,33 @@ typedef struct XrgInput {
     unsigned int latchedFlags; /* +0x2C */
 } XrgInput;
 
+/*
+ * One 0x68-byte per-pad record of PadData (ov12:0x00490d90). XrgInputDeviceCheck
+ * reads the held (+0x28) and pressed (+0x2a) halfwords and four signed stick
+ * bytes at +0x38..+0x3b, scaled by 1/128.
+ */
+typedef struct XrgPadSticks {
+    u8 unmodeled_00[8];
+    signed char analog[4];
+} XrgPadSticks;
+
+typedef struct XrgPadPrefix {
+    u8 pad_00[0x28];
+    u16 half_28;
+    u16 half_2a;
+} XrgPadPrefix;
+
+typedef struct XrgPadRecord {
+    XrgPadPrefix prefix;
+    u8 unmodeled_2c[0x30 - 0x2c];
+    XrgPadSticks sticks;
+    u8 unmodeled_3c[0x68 - 0x3c];
+} XrgPadRecord;
+
+extern float XrgNormalizeVector(RgVector destination, RgVector source);
+extern float atan2f(float y, float x);
+
 void InitXrgInput(XrgInput *pInput, int padId);
+void XrgInputDeviceCheck(XrgInput *pInput, float frameTime);
 
 #endif /* SRC_OV12_INIT_XRG_INPUT_H */

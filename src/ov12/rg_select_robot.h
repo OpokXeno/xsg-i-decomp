@@ -30,15 +30,22 @@ struct RgSelectRobot {
         struct {
             int robotID;                     /* +0x00, RgSelectRobotDisp prints it as "ROB %d" (lw +0x00) */
             unsigned int *actorFlags;        /* +0x04 */
-            unsigned char unmodeled_08[0x120]; /* +0x08 */
+            int disposeCounter;              /* +0x08 */
+            char names[4][64];              /* +0x0c..+0x10b */
+            unsigned int nameCount;          /* +0x10c */
+            void *bufferSlots[5];            /* +0x110..+0x123 */
+            struct RgSelectRobot *parent;    /* +0x124 */
             int hasActions;                  /* +0x128 */
             struct RgSelectAction *actions[3]; /* +0x12c */
             float screenPosTyped;            /* +0x138 */
             RgFileSysData *fileData;         /* +0x13c */
             RgDispModel *displayModel;       /* +0x140 */
-            unsigned char unmodeled_144[0x14]; /* +0x144 */
+            int actionActive[3];             /* +0x144 */
+            unsigned int drawCount;          /* +0x150 */
+            float displayYaw;                /* +0x154 */
             float displayPosition;           /* +0x158 */
-            unsigned char unmodeled_15c[8];  /* +0x15c */
+            unsigned char *equipTable;       /* +0x15c, provisional */
+            int equipSlot;                   /* +0x160, provisional */
             void *heapBufferTyped;           /* +0x164 */
         };
     };

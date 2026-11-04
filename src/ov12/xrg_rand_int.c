@@ -229,10 +229,31 @@ void XrgUnitMatrix(RgMatrix destination)
     } while (row >= 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgMulMatrix);
+void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right)
+{
+    __asm__ __volatile__(
+        "lqc2 vf4,0(%2)\n\t"
+        "lqc2 vf5,16(%2)\n\t"
+        "lqc2 vf6,32(%2)\n\t"
+        "lqc2 vf7,48(%2)\n\t"
+        "addiu $7,$0,4\n"
+        "1:\n\t"
+        "lqc2 vf8,0(%1)\n\t"
+        "vmulax.xyzw ACCxyzw,vf4xyzw,vf8x\n\t"
+        "vmadday.xyzw ACCxyzw,vf5xyzw,vf8y\n\t"
+        "vmaddaz.xyzw ACCxyzw,vf6xyzw,vf8z\n\t"
+        "vmaddw.xyzw vf9xyzw,vf7xyzw,vf8w\n\t"
+        "sqc2 vf9,0(%0)\n\t"
+        "addi $7,$7,-1\n\t"
+        "addi %1,%1,16\n\t"
+        "addi %0,%0,16\n\t"
+        "bne $0,$7,1b"
+        : "+r"(destination), "+r"(right)
+        : "r"(left)
+        : "$7", "memory");
+}
 
 void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
-
 void XrgApplyVector(RgVector destination, RgMatrix matrix, RgVector vector);
 
 void XrgTransMatrix(RgMatrix destination, RgMatrix source, RgVector translation)
@@ -268,9 +289,40 @@ void XrgNegateVector(RgVector destination, RgVector source)
     destination[3] = source[3];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRandVector);
+void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
+void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRandVectorRange);
+void XrgRandVector(RgVector destination)
+{
+    float pitch;
+    float yaw;
+    RgMatrix rotation;
+
+    pitch = (float) rand() * 4.656613e-10f;
+    yaw = (float) rand() * 4.656613e-10f;
+    yaw = yaw * 6.2831855f - 3.1415927f;
+    pitch = pitch * 3.1415927f - 1.5707964f;
+    XrgUnitMatrix(rotation);
+    XrgRotMatrixY(rotation, rotation, yaw);
+    XrgRotMatrixX(rotation, rotation, pitch);
+    XrgApplyVector(destination, rotation, XrgVectorZ());
+}
+
+void XrgRandVectorRange(RgVector destination, float pitchRange, float yawRange)
+{
+    float pitch;
+    float yaw;
+    RgMatrix rotation;
+
+    pitch = (float) rand() * 4.656613e-10f;
+    yaw = (float) rand() * 4.656613e-10f;
+    pitch = pitch * pitchRange - 0.5f * pitchRange;
+    yaw = yaw * yawRange - 0.5f * yawRange;
+    XrgUnitMatrix(rotation);
+    XrgRotMatrixY(rotation, rotation, yaw);
+    XrgRotMatrixX(rotation, rotation, pitch);
+    XrgApplyVector(destination, rotation, XrgVectorZ());
+}
 
 /* ACC accumulates the transformed vector one row at a time: row 0 times x,
  * then rows 1-3 times y, z and the source vector's own w, the same shape as
@@ -477,7 +529,6 @@ void XrgClearMatStack(void)
 /* The current matrix-stack top. The data is still scaffold-owned
  * (docs/naming.md); the scaffold defines it under the original ELF symbol
  * name s_paTop, imported through config/symbols/ov12.txt. */
-
 void XrgPushMatStack(void)
 {
     float *previous_top = s_paTop;
@@ -553,9 +604,85 @@ void XrgCalcPlane(RgVector plane, RgVector p0, RgVector p1, RgVector p2)
     plane[3] = -XrgInnerVector(plane, p0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgIsTriIntersectedByRay);
+int XrgIsTriIntersectedByRay(RgVector origin, RgVector direction, RgVector triangle[3], float *distance)
+{
+    RgVector edge0;
+    RgVector edge1;
+    RgVector edge2;
+    RgVector normal;
+    RgVector offset;
+    float facing;
+    float t;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgQuantAngle);
+    XrgSubVector(edge0, triangle[1], triangle[0]);
+    XrgSubVector(edge1, triangle[2], triangle[1]);
+    XrgSubVector(edge2, triangle[0], triangle[2]);
+
+    XrgOuterVector(normal, edge0, direction);
+    XrgSubVector(offset, origin, triangle[0]);
+    if (XrgInnerVector(offset, normal) <= -0.0001f) {
+        return 0;
+    }
+    XrgOuterVector(normal, edge1, direction);
+    XrgSubVector(offset, origin, triangle[1]);
+    if (XrgInnerVector(offset, normal) <= -0.0001f) {
+        return 0;
+    }
+    XrgOuterVector(normal, edge2, direction);
+    XrgSubVector(offset, origin, triangle[2]);
+    if (XrgInnerVector(offset, normal) <= -0.0001f) {
+        return 0;
+    }
+
+    XrgOuterVector(normal, edge0, edge1);
+    normal[3] = -XrgInnerVector(normal, triangle[0]);
+    facing = XrgInnerVector(normal, direction);
+    if (facing >= -0.0001f) {
+        return 0;
+    }
+    t = -(XrgInnerVector(normal, origin) + normal[3]) / facing;
+    *distance = t;
+    if (0.0f <= t && t < 1.0f) {
+        return 1;
+    }
+    return 0;
+}
+
+int XrgQuantAngle(float angle)
+{
+    if (3.1415927f < angle) {
+        do {
+            angle -= 6.2831855f;
+        } while (3.1415927f < angle);
+    }
+    if (angle < -3.1415927f) {
+        do {
+            angle += 6.2831855f;
+        } while (angle < -3.1415927f);
+    }
+    if (-0.3926991f <= angle && angle < 0.3926991f) {
+        return 0;
+    }
+    if (0.3926991f <= angle && angle < 1.1780972f) {
+        return 1;
+    }
+    if (1.1780972f <= angle && angle < 1.9634955f) {
+        return 2;
+    }
+    if (1.9634955f <= angle && angle < 2.7488937f) {
+        return 3;
+    }
+    if (2.7488937f <= angle || angle < -2.7488937f) {
+        return 4;
+    }
+    if (-2.7488937f <= angle && angle < -1.9634955f) {
+        return 5;
+    }
+    if (-1.9634955f <= angle && angle < -1.1780972f) {
+        return 6;
+    }
+    return 7;
+}
 
 /*
  * Wraps angle into (-pi, pi] and returns its quadrant around the forward

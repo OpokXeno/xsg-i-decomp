@@ -92,5 +92,22 @@ extern const char D_00A55348[];
 extern const char D_00A55360[];
 extern const char D_00A55380[];
 extern const char D_00A553A8[];
+/* 0x00a553b8 "pArg != NIL": the assert message RgGeomGroupCollision uses. */
+extern const char D_00A553B8[];
+
+/*
+ * The pair RgGeomGroupCollision passes to RgGeomCollisionJob (ov12/tu058):
+ * one member of each group at words 0 and 2, with two words copied from the
+ * RgGameColiArg at words 1 and 3. InitRgGeomColiArg clears all four words.
+ */
+typedef struct RgGeomCollisionPair {
+    RgGeom *pGeom1;            /* +0x00 */
+    unsigned int unmodeled_04; /* +0x04 */
+    RgGeom *pGeom2;            /* +0x08 */
+    unsigned int unmodeled_0C; /* +0x0C */
+} RgGeomCollisionPair;
+
+extern void InitRgGeomColiArg(RgGeomCollisionPair *pArg);
+extern int RgGeomCollisionJob(RgGeomCollisionPair *pPair);
 
 #endif /* SRC_OV12_RG_GEOM_GROUP_H */

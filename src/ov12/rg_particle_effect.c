@@ -14,10 +14,9 @@ extern void *RgHeapAlloc(void *heap, unsigned int size,
 extern void XrgUnitMatrix(RgMatrix destination);
 extern void DisposeArrayOfXrgParticle(XrgParticle *particles);
 extern void DisposeRgParticleEffect(RgParticleEffect *effect);
-
 extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
                        int line);
-extern int RgParticleEffectIsAlive(RgParticleEffect *effect);
+int RgParticleEffectIsAlive(RgParticleEffect *effect);
 extern void RgParticleEffectPassTime(RgParticleEffect *effect, float time);
 
 /*
@@ -26,8 +25,8 @@ extern void RgParticleEffectPassTime(RgParticleEffect *effect, float time);
  * further below that names this TU's own local sibling using it.
  */
 typedef struct RgChar RgChar;
-extern void RgCharFree(RgChar *pChar);
 
+extern void RgCharFree(RgChar *pChar);
 static void _InitEffect(RgParticleEffect *effect, RgParticleEffectEssence *essence,
                         int context);
 
@@ -42,11 +41,17 @@ static void _InitEffect(RgParticleEffect *effect, RgParticleEffectEssence *essen
  * ov12:0x00a54398 contains the assertion expression "pChar != NIL".
  */
 const char D_00A542C8[16] = "pEff != NIL";
+
 const char D_00A542D8[32] = "../rg_particle_effect.euc.c";
+
 const char D_00A542F8[16] = "aEss != NIL";
+
 const char D_00A54368[16] = "pEss != NIL";
+
 const char D_00A54378[16] = "pData != NIL";
+
 const char D_00A54388[16] = "pSrc != NIL";
+
 const char D_00A54398[16] = "pChar != NIL";
 
 static void _InitShoot(RgParticleShoot *shoot, RgParticleEffectEssence *essence)
@@ -65,7 +70,150 @@ static void _InitShoot(RgParticleShoot *shoot, RgParticleEffectEssence *essence)
     XrgClearVector(shoot->force);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", _ShootParticles);
+extern float floorf(float value);
+
+extern float XrgRand(float lower, float upper);
+extern void XrgUnitVector(RgVector vector);
+extern void XrgRandVectorRange(RgVector destination, float lower, float upper);
+extern void XrgLinearIntpVector(RgVector destination, RgVector first,
+                                RgVector second, float weight);
+extern void XrgScaleVectorXYZ(RgVector destination, RgVector source, float scale);
+extern void XrgAddVectorXYZ(RgVector destination, RgVector first, RgVector second);
+
+static inline int _MaxInt(int a, int b)
+{
+    return (a >= b) ? a : b;
+}
+
+static void _ShootParticles(RgParticleShot *shot, float deltaTime, int opening)
+{
+    RgParticleShoot *shoot;
+    RgVector *end;
+    unsigned int count;
+    RgVector *cursor;
+    RgMatrix matrix;
+    float *localMatrix;
+    RgVector base0;
+    RgVector base1;
+    RgVector force;
+    RgVector point;
+    RgVector dir;
+    RgVector zero;
+    RgVector spinePos;
+    RgVector spineDir;
+    float lo;
+    float hi;
+    float piBound;
+    float hiMin;
+    float twoPi;
+    float emitted;
+    float ret;
+    float invCount;
+    float interval;
+    float scale;
+    int elapsed;
+    unsigned int requested;
+    int intRet;
+
+    end = (RgVector *)shot->dispArg0 + shot->dispArg1 * 5;
+    shoot = (RgParticleShoot *)shot->shoot;
+    if (opening != 0) {
+        if (shoot->duration > 0.0f) {
+            return;
+        }
+        count = shot->dispArg1;
+    } else {
+        shoot->life = shoot->life - deltaTime;
+        if (shoot->life < 0.0f) {
+            return;
+        }
+        emitted = shoot->duration * deltaTime + *(float *)&shoot->shotCount;
+        ret = floorf(emitted);
+        *(float *)&shoot->shotCount = emitted - ret;
+        if (ret <= 0.5f) {
+            return;
+        }
+        intRet = (int)ret;
+        count = _MaxInt(intRet, 1);
+    }
+    XrgCopyVector(force, shoot->force);
+    if (shoot->elapsedFrames == 0) {
+        shoot->elapsedFrames = (int)shot->dispArg0;
+    }
+    cursor = (RgVector *)shoot->elapsedFrames;
+    piBound = 3.1415927f;
+    lo = shoot->speed;
+    if (lo < 0.0f) {
+        lo = 0.0f;
+    } else if (lo > piBound) {
+        lo = piBound;
+    }
+    hi = shoot->speed;
+    hiMin = 0.0f;
+    twoPi = 6.2831855f;
+    if (hi < hiMin) {
+        hi = hiMin;
+    } else if (hi > twoPi) {
+        hi = twoPi;
+    }
+    localMatrix = shoot->localMatrix;
+    XrgCopyMatrix(matrix, localMatrix);
+    XrgUnitVector(&matrix[12]);
+    XrgCopyVector(base0, &localMatrix[12]);
+    if (shoot->flags != 0) {
+        XrgCopyVector(base1, &shoot->worldMatrix[12]);
+    } else {
+        XrgCopyVector(base1, base0);
+        shoot->flags = 1;
+    }
+    XrgCopyMatrix(shoot->worldMatrix, localMatrix);
+    invCount = 1.0f / (float)(unsigned int)count;
+    requested = count;
+    count = count - 1;
+    if (requested != 0) {
+        do {
+            XrgLinearIntpVector(point, base0, base1, (float)count * invCount);
+            XrgRandVectorRange(dir, lo, hi);
+            interval = shoot->interval;
+            scale = XrgRand(interval * 0.5f, interval);
+            XrgScaleVectorXYZ(dir, dir, scale);
+            __asm__ __volatile__(
+                "lqc2 $vf2, 0(%2)\n\t"
+                "lqc2 $vf3, 0(%1)\n\t"
+                "lqc2 $vf4, 16(%1)\n\t"
+                "lqc2 $vf5, 32(%1)\n\t"
+                "lqc2 $vf6, 48(%1)\n\t"
+                "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+                "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+                "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+                "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+                "sqc2 $vf2, 0(%0)\n\t"
+                : : "r"(dir), "r"(matrix), "r"(dir) : "memory");
+            XrgAddVectorXYZ(dir, dir, force);
+            XrgClearVector(zero);
+            XrgCopyVector(spinePos, shoot->position);
+            XrgCopyVector(spineDir, shoot->direction);
+            spinePos[2] = spinePos[2] * 6.2831855f;
+            spinePos[3] = spinePos[3] * 6.2831855f;
+            if (spineDir[2] != 0.0f) {
+                spinePos[2] = XrgRand(0.0f, 3.1415927f);
+            }
+            if (spineDir[3] != 0.0f) {
+                spinePos[3] = XrgRand(0.0f, 3.1415927f);
+            }
+            XrgCopyVector(cursor[0], point);
+            XrgCopyVector(cursor[1], dir);
+            XrgCopyVector(cursor[2], zero);
+            XrgCopyVector(cursor[3], spinePos);
+            XrgCopyVector(cursor[4], spineDir);
+            cursor += 5;
+            if (cursor >= end) {
+                cursor = (RgVector *)shot->dispArg0;
+            }
+        } while (count-- > 0);
+    }
+    shoot->elapsedFrames = (int)cursor;
+}
 
 static void _ReInitShoot(RgParticleShoot *shoot)
 {
@@ -74,7 +222,107 @@ static void _ReInitShoot(RgParticleShoot *shoot)
     XrgClearVector(shoot->force);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", _InitEffect_00A20C70);
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_effect_env.h"
+
+extern XrgParticle *CreateArrayOfXrgParticle(unsigned int count);
+extern void RgError(const char *message, const char *source_file, int line, ...);
+
+typedef struct RgEffectEnv RgEffectEnv;
+
+extern RgEffectEnv *InstanceOfRgEffectEnv(void);
+extern RgBxx *RgEffectEnvGetBxx(RgEffectEnv *env);
+
+typedef struct RgBxxPic RgBxxPic;
+
+extern RgBxxPic *RgBxxGetPic(RgBxx *pBxx, const char *pszName);
+
+const char D_00A54308[16] = "pBxx != NIL";
+
+const char D_00A54318[32] = "too many particle total (%d)";
+
+const char D_00A54338[48] = "there is not texture named '%s' for particle";
+
+extern float XrgRand(float min, float max);
+extern void XrgUnitVector(RgVector vector);
+extern void XrgLinearIntpVector(RgVector destination, RgVector first, RgVector second, float t);
+extern void XrgRandVectorRange(RgVector destination, float min, float max);
+extern void XrgScaleVectorXYZ(RgVector destination, RgVector vector, float scale);
+extern void XrgAddVectorXYZ(RgVector destination, RgVector first, RgVector second);
+extern void XrgClearVector(RgVector destination);
+extern void XrgCopyVector(RgVector destination, RgVector source);
+extern float func_00323DE8(float value);
+extern void XrgCopyMatrix(RgMatrix destination, const RgMatrix source);
+
+/*
+ * Element stride of the XrgParticle array CreateArrayOfXrgParticle returns:
+ * _InitEffect advances the particle cursor by particleCount * 0x50 bytes.
+ */
+struct XrgParticle {
+    u8 unmodeled_00[0x50];
+};
+
+static void _InitEffect(RgParticleEffect *effect, RgParticleEffectEssence *essence,
+                        int context)
+{
+    RgBxx *bxx;
+    unsigned int particleTotal;
+    unsigned int i;
+    RgParticleShot *shot;
+    XrgParticle *particles;
+    RgBxxPic *pic;
+    int repeat;
+
+    bxx = RgEffectEnvGetBxx(InstanceOfRgEffectEnv());
+    if (effect == 0) {
+        assert_prog(D_00A542C8, D_00A542D8, 246);
+    }
+    if (essence == 0) {
+        assert_prog(D_00A542F8, D_00A542D8, 247);
+    }
+    if (bxx == 0) {
+        assert_prog(D_00A54308, D_00A542D8, 248);
+    }
+    effect->state = RG_PARTICLE_EFFECT_STATE_ACTIVE;
+    particleTotal = 0;
+    effect->shootActive = 1;
+    InitRgParticleEffectControlData(&effect->controlData);
+    for (i = 0; i < context; i++) {
+        particleTotal += essence[i].particleCount;
+    }
+    effect->particleTotal = particleTotal;
+    effect->shootCount = context;
+    if (context == 0 || particleTotal == 0) {
+        effect->particles = 0;
+        return;
+    }
+    if (particleTotal > 4096) {
+        RgError(D_00A54318, D_00A542D8, 267, particleTotal);
+    }
+    effect->particles = CreateArrayOfXrgParticle(particleTotal);
+    particles = effect->particles;
+    for (i = 0; i < context; i++) {
+        shot = &effect->shots[i];
+        shot->dispArg1 = essence[i].particleCount;
+        shot->dispArg0 = (int)particles;
+        pic = RgBxxGetPic(bxx, essence[i].textureName);
+        shot->life = essence[i].shotLife;
+        shot->started = 0;
+        repeat = essence[i].repeat;
+        shot->lifeMax = essence[i].shotLife;
+        shot->dispArg2 = (int)pic;
+        shot->flags = 0;
+        shot->resist = essence[i].resist;
+        if (repeat) {
+            shot->flags = RG_PARTICLE_SHOT_REPEAT;
+        }
+        if (shot->dispArg2 == 0) {
+            RgError(D_00A54338, D_00A542D8, 290, essence[i].textureName);
+        }
+        _InitShoot((RgParticleShoot *)shot->shoot, &essence[i]);
+        particles += essence[i].particleCount;
+    }
+}
 
 static void _DestructEffect(RgParticleEffect *effect)
 {
@@ -234,7 +482,6 @@ void InitRgParticleEffectControlData(RgParticleEffectControlData *pData)
  *
  * ov12:0x00a54388 contains the assertion expression "pSrc != NIL".
  */
-
 void RgParticleEffectSetControlData(RgParticleEffect *effect, RgParticleEffectControlData *pSrc)
 {
     float value0;
@@ -263,7 +510,24 @@ void RgParticleEffectSetControlData(RgParticleEffect *effect, RgParticleEffectCo
     dst->value[2] = value2;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", RgParticleEffectIsAlive);
+int RgParticleEffectIsAlive(RgParticleEffect *effect)
+{
+    unsigned int alive;
+    unsigned int i;
+    RgParticleShot *shot;
+
+    alive = 0;
+    if (effect->state & RG_PARTICLE_EFFECT_STATE_LOCKED) {
+        return 0;
+    }
+    for (i = 0; i < effect->shootCount; i++) {
+        shot = &effect->shots[i];
+        if (shot->life > 0.0f) {
+            alive++;
+        }
+    }
+    return alive >= effect->shootCount;
+}
 
 int RgParticleEffectIsActive(RgParticleEffect *effect)
 {
@@ -360,6 +624,7 @@ void RgParticleEffectPassTime(RgParticleEffect *effect, float deltaTime)
 }
 
 typedef struct XrgParticleDriver XrgParticleDriver;
+
 extern XrgParticleDriver *InstanceOfXrgParticleDriver(void);
 extern void XrgParticleDriverDispReq(XrgParticleDriver *driver, int dispArg0,
                                      int dispArg1, int dispArg2);
@@ -415,16 +680,8 @@ static void _PassTimePtclChar(RgParticleChar *pChar, float deltaTime)
     RgCharFree((RgChar *)pChar);
 }
 
-/*
- * RgChar is defined in src/ov12/rg_char.h (another translation unit). This
- * TU only passes RgChar pointers through (RgCharAlloc's result), so the tag
- * is forward-declared here without repeating that TU's member layout, the
- * same pattern src/ov12/rg_charmgr.c uses.
- */
-typedef struct RgChar RgChar;
 #include "ov12/rg_char.h"
-extern void XrgCopyVector(RgVector destination, RgVector source);
-extern void XrgClearVector(RgVector destination);
+
 extern void RgParticleEffectDisp(RgParticleEffect *effect);
 static void _InitPtclChar(RgParticleChar *pChar, RgParticleEffect *effect);
 

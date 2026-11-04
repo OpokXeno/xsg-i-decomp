@@ -58,13 +58,30 @@ typedef struct XrgPaint2D XrgPaint2D;
  *   value5  +0x60  int, seeded to 0; +0x64..+0x6F stays an untouched gap.
  * +0x14..+0x4F stays an untouched gap between value1 and value2.
  */
+/*
+ * Offset block at pInfo+0x20 (its address is the anchor that
+ * XrgPaint2DOffsetResult fills): the offsets read by _DispInfo and the
+ * vector and flag that drive the sway and orbit parts of the display.
+ */
+typedef struct RgDispGameOffset {
+    unsigned char unmodeled_00[0x08];
+    int offsetX;
+    int offsetY;
+    int hasVector;
+    unsigned char unmodeled_14[0x20 - 0x14];
+    float vectorX;
+    float vectorY;
+} RgDispGameOffset;
+
 typedef struct RgDispGameInfo {
     void *hostRobot;
     void *subRobot;
     XrgPaint2D *paint;
     int dispTex;
     float value1;
-    unsigned char unmodeled_14[0x50 - 0x14];
+    unsigned char unmodeled_14[0x20 - 0x14];
+    RgDispGameOffset offset;
+    unsigned char unmodeled_48[0x50 - 0x48];
     float value2;
     int value3;
     int studio;

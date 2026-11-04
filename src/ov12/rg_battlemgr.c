@@ -6,22 +6,39 @@
 #include "rg_battlemgr.h"
 
 const char D_00A54CA0[16] = "rg_camera.info";
+
 const char D_00A54CB0[16] = "pStudio != NIL";
+
 const char D_00A54CC0[24] = "../rg_battlemgr.euc.c";
+
 const char D_00A54CD8[8] = "CAM";
+
 const char D_00A54CE0[8] = "2";
+
 const char D_00A54CE8[16] = "pList != NIL";
+
 const char D_00A54CF8[16] = "i < PLAYER_MAX";
+
 const char D_00A54D08[24] = "i < pList->m_uNum";
+
 const char D_00A54D50[16] = "pField != NIL";
+
 const char D_00A54D60[24] = "uIndex < pField->m_uNum";
+
 const char D_00A54D78[32] = "pField->m_uNum < BTL_STUDIO_MAX";
+
 const char D_00A54D98[16] = "pDisp != NIL";
+
 const char D_00A54DA8[16] = "pInfo != NIL";
+
 const char D_00A54DB8[24] = "0 <= nHost && nHost < 2";
+
 const char D_00A54DD0[24] = "0 <= nSub && nSub < 2";
+
 const char D_00A54DE8[16] = "pMgr != NIL";
+
 const char D_00A54DF8[32] = "*** max = %f life = %f ***\n";
+
 #include "ov12/rg_draw.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
@@ -31,11 +48,9 @@ extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
 extern void RgHeapFree(void *heap, void *block, const char *source_file,
                        int line);
 extern RgHeap *InstanceOfRgHeap(void);
-
 /* ov12/tu016 (src/ov12/rg_camera.h), still INCLUDE_ASM there. */
 extern RgCamera *CreateRgCamera(int type, RgDrawStudio *pStudio);
 extern void RgCameraLoadText(RgCamera *pCamera, RgReadText *pReader);
-
 /* ov12/tu036 (src/ov12/rg_read_text.h). CreateRgReadText/RgReadTextRewind are
  * already accepted there; DisposeRgReadText and RgReadTextFindParagraph are
  * still INCLUDE_ASM. */
@@ -44,10 +59,8 @@ extern void DisposeRgReadText(RgReadText *pReader);
 extern void RgReadTextRewind(RgReadText *pReader);
 extern int RgReadTextFindParagraph(RgReadText *pReader, const char *pszTag,
                                    const char *pszSubTag);
-
 /* ov12/tu059 (src/ov12/rg_geom_group.h), already accepted there. */
 extern void DisposeRgGeomGroup(RgGeomGroup *pGroup);
-
 /* Linker witness: this TU's own source-file name, used by every assert here. */
 extern const char D_00A54CC0[];
 /* Linker witness for the original literal at ov12:0x00a54ca0
@@ -170,7 +183,41 @@ static RgPlayer *_GetInPlayerList(PlayerList *pList, RgRobot *robot)
     return players[slotIndex];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _AddPlayerList);
+/* Linker witness for the original literal at ov12:0x00a54d20
+ * ("pPlayer != NIL"). */
+extern const char D_00A54D20[];
+/* Linker witness for the original literal at ov12:0x00a54d30
+ * ("pList->m_uNum < PLAYER_MAX"). */
+extern const char D_00A54D30[];
+
+static void _AddPlayerList(PlayerList *pList, RgPlayer *pPlayer)
+{
+    RgPlayer **players;
+    RgPlayer **pSlot;
+    RgPlayer **pNextSlot;
+    u32 i;
+
+    if (pList == 0) {
+        assert_prog(D_00A54CE8, D_00A54CC0, 140);
+    }
+    if (pPlayer == 0) {
+        assert_prog(D_00A54D20, D_00A54CC0, 141);
+    }
+    if ((u32)pList->count >= 2U) {
+        assert_prog(D_00A54D30, D_00A54CC0, 142);
+    }
+    pSlot = &pList->player1P;
+    for (i = 0; i < 2; i++) {
+        if (*pSlot++ == pPlayer) {
+            return;
+        }
+    }
+    i = pList->count;
+    players = &pList->player1P;
+    pNextSlot = players + i;
+    *pNextSlot = pPlayer;
+    pList->count = i + 1;
+}
 
 extern void DisposeRgPlayer(RgPlayer *pPlayer);
 
@@ -401,6 +448,7 @@ static void _DisposeBattleField(BattleField *pField)
 }
 
 #include "ov12/rg_camera.h"
+
 extern RgDispGameInfo *CreateRgDispGameInfo(int dispTex);
 extern void RgDrawCreateDrawStudioDouble(RgDraw *pDraw);
 extern RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex);
@@ -616,7 +664,36 @@ static void _DrawDispInfoOnePlayer(RgDispGameInfo *pInfo, RgPlayer **players,
     RgDispGameInfoDisplay(pInfo);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DrawDispInfo);
+extern void RgDispGameInfoSetStudio(RgDispGameInfo *pInfo, int studio);
+
+static void _DrawDispInfo(DispInfo *pInfo)
+{
+    u32 mode;
+    u32 i;
+
+    if (pInfo == 0) {
+        assert_prog(D_00A54D98, D_00A54CC0, 519);
+    }
+    mode = pInfo->mode;
+    switch (mode) {
+    case 0:
+    case 3:
+        RgDispGameInfoSetStudio(pInfo->gameInfo[0], 0);
+        RgDispGameInfoSetStudio(pInfo->gameInfo[1], 1);
+        for (i = 0; i < 2; i++) {
+            _DrawDispInfoOnePlayer(pInfo->gameInfo[i], pInfo->players, i, 1 - i);
+        }
+        break;
+    case 1:
+        RgDispGameInfoSetStudio(pInfo->gameInfo[0], -2);
+        _DrawDispInfoOnePlayer(pInfo->gameInfo[0], pInfo->players, 0, 1);
+        return;
+    case 2:
+        RgDispGameInfoSetStudio(pInfo->gameInfo[1], -2);
+        _DrawDispInfoOnePlayer(pInfo->gameInfo[1], pInfo->players, 1, 0);
+        break;
+    }
+}
 
 extern RgBattleCommonDataEnv *InstanceOfRgBattleCommonData(void);
 extern int RgBattleCommonDataGetDispTex(RgBattleCommonDataEnv *pEnv);
@@ -707,7 +784,215 @@ static void _BattleMgrActivateTime(RgBattleMgr *pMgr, int active)
     pMgr->timerActive = active;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _InitBattle);
+#include "ov12/rg_game_collision.h"
+#include "ov12/rg_robot_control.h"
+
+extern u32 RgBattleInitCreatePlayers(RgBattleInitModes *pInfo,
+                                     RgPlayer **players, u32 maxCount);
+extern RgFileSysData *RgBattleInitCreateBg(RgBattleInitModes *pInfo,
+                                           RgGeomGroup *pGeomGroup);
+extern void RgPlayerSetLightCost(RgPlayer *pPlayer);
+extern void RgDispLifeSetRobot(RgDispLife *pDisp, RgRobot *pRobot1,
+                               RgRobot *pRobot2);
+extern void RgDispLifeSetVsMode(RgDispLife *pDisp, int vsMode);
+extern void RgDispWpn1PSetRobot(RgDispWpn1P *pDisp, RgRobot *pRobot);
+extern void RgDispWpn2PSetRobot(RgDispWpn2P *pDisp, RgRobot *pRobot1,
+                                RgRobot *pRobot2);
+extern RgGeomPoint *RgRobotGetGeom(RgRobot *pRobot);
+extern void RgCameraSetting(RgCamera *pCamera, RgGeomPoint **pGeoms);
+extern RgRobotControl *CreateRgRobotControlInput(RgRobot *pRobot,
+                                                 RgCamera *pCamera, int padId);
+extern void RgPlayerSetTraceCamera(RgPlayer *pPlayer, RgCamera *pCamera);
+extern void RgPlayerSetControl(RgPlayer *pPlayer, RgRobotControl *pControl);
+extern RgRobotControl *CreateRgEnemyControl(RgRobot *pRobot,
+                                            RgRobot *pEnemyRobot,
+                                            int enemyType);
+extern void RgRobotSetTarget(RgRobot *pRobot, RgGeomPoint *pTarget);
+extern RgGeomGroup *RgPlayerGetShotGeoms(RgPlayer *pPlayer);
+extern RgGeomGroup *RgPlayerGetAtkGeoms(RgPlayer *pPlayer);
+extern RgGeomGroup *RgPlayerGetBodyGeoms(RgPlayer *pPlayer);
+extern RgGeomGroup *RgPlayerGetAdvGeoms(RgPlayer *pPlayer);
+extern RgGeomGroup *RgPlayerGetEyeGeoms(RgPlayer *pPlayer);
+extern void InitRgGeomGroupColiArg(RgGameColiArg *pArg);
+extern void RgGameCollisionAdd(RgGameCollision *pGameColi,
+                               RgGameColiArg *pArg);
+extern void RgHandlerShotVsBG();
+extern void RgHandlerWeaponVsBG();
+extern void RgHandlerWeaponVsRobot();
+extern void RgHandlerShotVsRobot();
+extern void RgHandlerRobotVsRobot();
+extern void RgHandlerRobotVsBG();
+extern void RgHandlerCameraVsBG();
+
+static void _InitBattle(RgBattleMgr *pMgr, RgBattleInitModes *pInfo)
+{
+    RgPlayer *players[4];
+    RgRobot *robots[4];
+    RgGeomPoint *geoms[2];
+    RgGameColiArg collArg;
+    RgCamera *camera;
+    u32 playerCount;
+    int screenCount;
+    u32 playerBit;
+    u32 nextIndex;
+    u32 i;
+    int mode;
+
+    if (pMgr == 0) {
+        assert_prog(D_00A54DE8, D_00A54CC0, 663);
+    }
+    if (pInfo == 0) {
+        assert_prog(D_00A54DA8, D_00A54CC0, 664);
+    }
+    pMgr->remainingTime = 180.0f;
+    mode = pInfo->mode;
+    pMgr->mode = mode;
+    screenCount = (mode == 0 || mode == 3) ? _DoubleScreenBattleField(pMgr->battleField) : _FullScreenBattleField(pMgr->battleField);
+    pMgr->fileSysData = RgBattleInitCreateBg(pInfo, pMgr->geomGroup);
+    playerCount = RgBattleInitCreatePlayers(pInfo, players, 4);
+    for (i = 0; i < playerCount; i++) {
+        _AddPlayerList(pMgr->playerList, players[i]);
+        robots[i] = RgPlayerGetRobot(players[i]);
+    }
+    if (mode == 0 || mode == 3) {
+        for (i = 0; i < playerCount; i++) {
+            RgPlayerSetLightCost(players[i]);
+        }
+    }
+    _SetDispInfo(pMgr->dispInfo, mode, players[0], players[1]);
+    RgDispLifeSetRobot(pMgr->dispLife, robots[0], robots[1]);
+    if (mode == 0 || mode == 3) {
+        RgDispWpn2PSetRobot(pMgr->dispWpn2P, robots[0], robots[1]);
+        RgDispLifeSetVsMode(pMgr->dispLife, 1);
+    } else {
+        RgDispWpn1PSetRobot(pMgr->dispWpn1P, robots[0]);
+        RgDispLifeSetVsMode(pMgr->dispLife, 0);
+    }
+    for (i = 0; i < screenCount; i++) {
+        nextIndex = i + 1;
+        camera = _GetCameraBattleField(pMgr->battleField, i);
+        geoms[0] = RgRobotGetGeom(RgPlayerGetRobot(players[i]));
+        geoms[1] = RgRobotGetGeom(
+            RgPlayerGetRobot(players[nextIndex % playerCount]));
+        RgCameraSetting(camera, geoms);
+        playerBit = 1U << i;
+        if (i < playerCount && (pInfo->mode & playerBit)) {
+            RgRobotControl *control;
+            RgPlayer *player;
+
+            player = players[i];
+            control = CreateRgRobotControlInput(RgPlayerGetRobot(player),
+                                                camera, i);
+            RgPlayerSetTraceCamera(player, camera);
+            RgPlayerSetControl(player, control);
+        }
+    }
+    for (i = 0; i < playerCount; i++) {
+        playerBit = 1U << i;
+        if (!(pInfo->mode & playerBit)) {
+            RgRobot *robotA;
+            RgRobot *robotB;
+            RgRobotControl *control;
+            RgPlayer *player;
+
+            player = players[i];
+            robotA = RgPlayerGetRobot(player);
+            robotB = RgPlayerGetRobot(players[(i + 1) % playerCount]);
+            control = CreateRgEnemyControl(robotA, robotB, pInfo->enemyType);
+            RgPlayerSetControl(player, control);
+        }
+    }
+    for (i = 0; i < playerCount; i++) {
+        u32 j;
+
+        for (j = i + 1; j < playerCount; j++) {
+            RgRobot *robotA;
+            RgRobot *robotB;
+            RgGeomPoint *geomA;
+            RgGeomPoint *geomB;
+
+            robotA = RgPlayerGetRobot(players[i]);
+            robotB = RgPlayerGetRobot(players[j]);
+            geomA = RgRobotGetGeom(robotA);
+            geomB = RgRobotGetGeom(robotB);
+            RgRobotSetTarget(robotA, geomB);
+            RgRobotSetTarget(robotB, geomA);
+        }
+    }
+    for (i = 0; i < playerCount; i++) {
+        u32 j;
+
+        InitRgGeomGroupColiArg(&collArg);
+        collArg.m_pGroup1 = RgPlayerGetShotGeoms(players[i]);
+        collArg.m_pGroup2 = pMgr->geomGroup;
+        collArg.unmodeled_04 = (unsigned int)RgHandlerShotVsBG;
+        RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+        InitRgGeomGroupColiArg(&collArg);
+        collArg.m_pGroup1 = RgPlayerGetAtkGeoms(players[i]);
+        collArg.m_pGroup2 = pMgr->geomGroup;
+        collArg.unmodeled_04 = (unsigned int)RgHandlerWeaponVsBG;
+        RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+        for (j = i + 1; j < playerCount; j++) {
+            InitRgGeomGroupColiArg(&collArg);
+            collArg.m_pGroup1 = RgPlayerGetBodyGeoms(players[i]);
+            collArg.m_pGroup2 = RgPlayerGetBodyGeoms(players[j]);
+            collArg.unmodeled_04 = (unsigned int)RgHandlerRobotVsRobot;
+            collArg.unmodeled_10 = (unsigned int)RgHandlerRobotVsRobot;
+            RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+            InitRgGeomGroupColiArg(&collArg);
+            collArg.m_pGroup1 = RgPlayerGetShotGeoms(players[j]);
+            collArg.m_pGroup2 = RgPlayerGetBodyGeoms(players[i]);
+            collArg.unmodeled_04 = (unsigned int)RgHandlerShotVsRobot;
+            RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+            InitRgGeomGroupColiArg(&collArg);
+            collArg.m_pGroup1 = RgPlayerGetShotGeoms(players[i]);
+            collArg.m_pGroup2 = RgPlayerGetBodyGeoms(players[j]);
+            collArg.unmodeled_04 = (unsigned int)RgHandlerShotVsRobot;
+            RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+            InitRgGeomGroupColiArg(&collArg);
+            collArg.m_pGroup1 = RgPlayerGetAtkGeoms(players[j]);
+            collArg.m_pGroup2 = RgPlayerGetBodyGeoms(players[i]);
+            collArg.unmodeled_04 = (unsigned int)RgHandlerWeaponVsRobot;
+            RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+            InitRgGeomGroupColiArg(&collArg);
+            collArg.m_pGroup1 = RgPlayerGetAtkGeoms(players[i]);
+            collArg.m_pGroup2 = RgPlayerGetBodyGeoms(players[j]);
+            collArg.unmodeled_04 = (unsigned int)RgHandlerWeaponVsRobot;
+            RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+        }
+
+        InitRgGeomGroupColiArg(&collArg);
+        collArg.m_pGroup1 = RgPlayerGetAdvGeoms(players[i]);
+        collArg.m_pGroup2 = pMgr->geomGroup;
+        RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+        InitRgGeomGroupColiArg(&collArg);
+        collArg.m_pGroup1 = RgPlayerGetEyeGeoms(players[i]);
+        collArg.m_pGroup2 = pMgr->geomGroup;
+        RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+
+        InitRgGeomGroupColiArg(&collArg);
+        collArg.m_pGroup1 = RgPlayerGetBodyGeoms(players[i]);
+        collArg.m_pGroup2 = pMgr->geomGroup;
+        collArg.unmodeled_04 = (unsigned int)RgHandlerRobotVsBG;
+        RgGameCollisionAdd(pMgr->gameCollision, &collArg);
+    }
+    {
+        RgGameColiArg cameraArg;
+
+        InitRgGeomGroupColiArg(&cameraArg);
+        cameraArg.m_pGroup1 = _GetGeomGroupBattleField(pMgr->battleField);
+        cameraArg.m_pGroup2 = pMgr->geomGroup;
+        cameraArg.unmodeled_04 = (unsigned int)RgHandlerCameraVsBG;
+        RgGameCollisionAdd(pMgr->gameCollision, &cameraArg);
+    }
+}
 
 extern RgCharMgr *InstanceOfRgCharMgr(void);
 extern void RgCharMgrControl(RgCharMgr *pMgr);
@@ -901,15 +1186,12 @@ RgDispLife *RgBattleMgrGetDispLife(RgBattleMgr *pMgr)
     return pMgr->dispLife;
 }
 
-extern RgRobot *RgPlayerGetRobot(RgPlayer *pPlayer);
 extern float RgRobotGetLife(RgRobot *pRobot);
 extern float RgRobotGetLifeMax(RgRobot *pRobot);
 extern void XrgLog(const char *format, const char *source_file, int line,
                    ...);
 extern double fptodp(float value);
-
 static RgPlayer *_GetInPlayerList(PlayerList *pList, RgRobot *robot);
-
 /* Linker witness for the original literal at ov12:0x00a54df8
  * ("*** max = %f life = %f ***\n"), RgBattleMgrGetPlayerDamage's debug log
  * of a robot's max and current life before returning the difference. */
@@ -938,7 +1220,7 @@ float RgBattleMgrGetPlayerDamage(RgBattleMgr *pMgr, RgRobot *robot)
     return 0.0f;
 }
 
-static void _InitBattle(RgBattleMgr *pMgr, int mode);
+static void _InitBattle(RgBattleMgr *pMgr, RgBattleInitModes *pInfo);
 
 void RgBattleMgrInitBattle(RgBattleMgr *pMgr, int mode)
 {

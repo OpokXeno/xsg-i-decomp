@@ -11,13 +11,13 @@ extern void assert_prog(const char *expression, const char *source_file,
 
 /* Assertion strings and the source filename passed to the assertion helper. */
 const char D_00A529B0[16] = "pObj != NIL";
+
 const char D_00A529C0[24] = "../rg_bgobj.euc.c";
 
 static float s_fBgObjBlight = 1.0f;
 
 /* The RgChar type tag CreateRgBgObj passes to RgCharAlloc for a background object. */
 #define RG_CHAR_TYPE_BGOBJ 2
-
 /*
  * RgBgObj::flags bits. RgBgObjIgnoreHide sets or clears bit 0, which
  * RgBgObjSetHide tests; RgBgObjEnableBodyAttack sets or clears bit 1.
@@ -50,13 +50,11 @@ typedef struct RgBgObj {
  * and, when it is not negative, passes it to RgDispModelSetTransparent as
  * the dispModel's transparency override.
  */
-
 /* Defined later in this TU. */
 static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray);
 static void _Draw(RgBgObj *pObj);
 void _PassTime(RgChar *pChar, float deltaTime);
 static void _Destruct(RgBgObj *pObj);
-
 /* Defined by other TUs. */
 extern void DisposeRgDispModel(void *dispModel);
 extern void RgGeomFree(RgGeom *geom);
@@ -71,6 +69,7 @@ extern RgDebugFlags *InstanceOfRgDebugFlags(void);
 extern void XrgUnitMatrix(RgMatrix destination);
 extern void CreateRgHitEffectPos(RgVector position, const char *effectFile,
                                  const char *defaultEffectFile);
+
 const unsigned char D_00A529D8[16] = "eff12.ptcl";
 
 static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray)
@@ -123,7 +122,48 @@ static void _Destruct(RgBgObj *pObj)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", _PassTime_00A12B90);
+static void _PassTime(RgChar *pChar, float deltaTime)
+{
+    RgBgObj *pObj = (RgBgObj *)pChar;
+    unsigned int hideState;
+
+    if (pObj == 0) {
+        assert_prog(D_00A529B0, D_00A529C0, 136);
+    }
+    pObj->hideElapsed += deltaTime;
+    hideState = pObj->hideState;
+    switch (hideState) {
+    case 0:
+        break;
+
+    case 1:
+        if (pObj->hideElapsed > 0.3f) {
+            pObj->transparent = 0.0f;
+            hideState = 2;
+        } else {
+            pObj->transparent = (0.3f - pObj->hideElapsed) / 0.3f;
+        }
+        break;
+
+    case 2:
+        pObj->hideDuration -= deltaTime;
+        if (pObj->hideDuration < 0.0f) {
+            pObj->hideElapsed = 0.0f;
+            hideState = 3;
+        }
+        break;
+
+    case 3:
+        if (pObj->hideElapsed > 0.3f) {
+            pObj->transparent = -1.0f;
+            hideState = 0;
+        } else {
+            pObj->transparent = pObj->hideElapsed / 0.3f;
+        }
+        break;
+    }
+    pObj->hideState = hideState;
+}
 
 /*
  * InstanceOfRgDebugFlags()->flags[1] is one of the individual debug toggles

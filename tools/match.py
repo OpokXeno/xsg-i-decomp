@@ -2043,8 +2043,30 @@ def _vu0_i_immediate(body, clobbers):
     return body[1:], True
 
 
+# XrgParticle _Disp clip-sequence nops (user decision 2026-11-04 on ov12/tu084). The
+# original _Disp (ov12 VA 0x00a49318) keeps three EE `sll $0,$0,0` between
+# `vmaddw.xyzw vf31,vf30,vf0w` and `vclipw.xyz vf31,vf31w`; `vnop` encodes
+# 0x4a0002ff and cannot produce those bytes. Only that exact run is admitted, once
+# per function and only for the identities tools/tu_audit.py selects
+# (`xrg_clip_nops_c`: also XrgPaint2D _CalcPosOnScreen and _CalcPosOnScreenFloat, same
+# sequence, user decision 2026-11-04). Every other `nop` keeps the ordinary refusal.
+# Not a precedent.
+_XRG_CLIP_NOPS_BEFORE = re.compile(r'vmaddw\.xyzw' + _WS + r'vf31' + _SEP + r'vf30' + _SEP + r'vf0w')
+_XRG_CLIP_NOPS_AFTER = re.compile(r'vclipw\.xyz' + _WS + r'vf31' + _SEP + r'vf31w')
+
+
+def _xrg_clip_nops(body):
+    """Consume the three `nop` lines of the XRG clip sequence. Returns (rest, used)."""
+    for index in range(1, len(body) - 3):
+        if (body[index:index + 3] == ['nop', 'nop', 'nop']
+                and _XRG_CLIP_NOPS_BEFORE.fullmatch(body[index - 1])
+                and _XRG_CLIP_NOPS_AFTER.fullmatch(body[index + 3])):
+            return body[:index] + body[index + 3:], True
+    return body, False
+
+
 def _cop2_parse_construct(text, start, *, mmi_transpose=False, sef_particle_scale=False,
-                          vu0_i_immediate=False):
+                          vu0_i_immediate=False, xrg_clip_nops=False):
     # Advance by the keyword actually written, not by a fixed len('__asm__').
     # The permuter's vendored pycparser reprints `__asm__ __volatile__(...)` as
     # `asm __volatile__(...)`, and skipping seven characters past a three-letter
@@ -2113,6 +2135,9 @@ def _cop2_parse_construct(text, start, *, mmi_transpose=False, sef_particle_scal
     i_immediate = False
     if vu0_i_immediate:
         body, i_immediate = _vu0_i_immediate(body, clobbers)
+    clip_nops = False
+    if xrg_clip_nops:
+        body, clip_nops = _xrg_clip_nops(body)
     for line in body:
         _cop2_check_line(line)
     _cop2_quadword_scratch(body, clobbers)
@@ -2126,6 +2151,7 @@ def _cop2_parse_construct(text, start, *, mmi_transpose=False, sef_particle_scal
                             for line in body)
               else 'other'),
         vu0_i_immediate=i_immediate,
+        xrg_clip_nops=clip_nops,
         start=start))
     return i + 1
 
@@ -2140,7 +2166,7 @@ _COP2_SPANS = []
 
 
 def _cop2_inline_spans(text, *, mmi_transpose=False, sef_particle_scale=False,
-                       vu0_i_immediate=False):
+                       vu0_i_immediate=False, xrg_clip_nops=False):
     """Locate calibrated COP2 inline statements; raise with exact errors."""
     del _COP2_SPANS[:]
     found = []
@@ -2157,7 +2183,8 @@ def _cop2_inline_spans(text, *, mmi_transpose=False, sef_particle_scale=False,
             continue
         end = _cop2_parse_construct(text, m.start(), mmi_transpose=mmi_transpose,
                                     sef_particle_scale=sef_particle_scale,
-                                    vu0_i_immediate=vu0_i_immediate)
+                                    vu0_i_immediate=vu0_i_immediate,
+                                    xrg_clip_nops=xrg_clip_nops)
         if end is not None:
             found.append((m.start(), end))
     return found
@@ -2323,7 +2350,7 @@ def _hardware_line_continuations_ok(text):
 
 
 def hardware_c(text, staged=None, headers=(), inner=None, *, mmi_transpose=False,
-               sef_particle_scale=False, vu0_i_immediate=False):
+               sef_particle_scale=False, vu0_i_immediate=False, xrg_clip_nops=False):
     """Only calibrated barriers/interrupt operations and an allowlisted
     COP2/VU0-macro spelling set are admitted inline (EE caller side).
 
@@ -2393,7 +2420,11 @@ def hardware_c(text, staged=None, headers=(), inner=None, *, mmi_transpose=False
     masked = re.sub(tokens, replace, text, flags=re.S)
     spans = _cop2_inline_spans(masked, mmi_transpose=mmi_transpose,
                                sef_particle_scale=sef_particle_scale,
-                               vu0_i_immediate=vu0_i_immediate)
+                               vu0_i_immediate=vu0_i_immediate,
+                               xrg_clip_nops=xrg_clip_nops)
+    if xrg_clip_nops:
+        require(sum(span.get('xrg_clip_nops', False) for span in _COP2_SPANS) <= 1,
+                'the XRG clip sequence admits its three nops once per function')
     if mmi_transpose:
         require(count == 0 and len(spans) == 1, 'the bounded MMI/COP2 transpose is one inline block')
     if sef_particle_scale:
@@ -2954,6 +2985,17 @@ def vu0_i_immediate_c(text, staged=None, headers=(), inner=None):
 def vu0_i_immediate_native_ti_c(text, staged=None, headers=()):
     from tools import native_ti
     return vu0_i_immediate_c(text, staged, headers, inner=native_ti.hardware_source)
+
+
+def xrg_clip_nops_c(text, staged=None, headers=(), inner=None):
+    """Identity-scoped admission of _Disp's three clip-sequence `nop` lines,
+    selected only by TU audit admission (ov12/tu084 _Disp, 2026-11-04)."""
+    return hardware_c(text, staged, headers, inner=inner, xrg_clip_nops=True)
+
+
+def xrg_clip_nops_native_ti_c(text, staged=None, headers=()):
+    from tools import native_ti
+    return xrg_clip_nops_c(text, staged, headers, inner=native_ti.hardware_source)
 
 
 # ---------------------------------------------------------------------------

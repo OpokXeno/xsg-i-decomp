@@ -6,8 +6,11 @@
 #include "rg_geom_poly.h"
 
 const char D_00A551A8[16] = "pData != NIL";
+
 const char D_00A551B8[24] = "../rg_geom_poly.euc.c";
+
 const char D_00A551D0[16] = "pPoly != NIL";
+
 const char D_00A551E0[56] = "pPoly != NIL && pOrgArg != NIL && pResult != NIL";
 
 #define RgGeomLocalMatricesAt(geom) \
@@ -146,4 +149,75 @@ int RgGeomPolyCheckBall(RgGeom *pPoly, float *pOrgArg, float *pResult)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", RgGeomPolyCheckRay);
+/*
+ * pOrgArg holds the ray origin (pOrgArg[0..3], homogeneous component forced
+ * to 1.0) and direction (pOrgArg[4..7], component forced to 0.0). Both are
+ * transformed into poly space with inverseLocal into a local ray buffer that
+ * RgColiDataVsRay reads. On a hit, the hit-point vector pResult (component
+ * forced to 0.0) is transformed back out with the poly's local matrix.
+ */
+int RgGeomPolyCheckRay(RgGeom *pPoly, float *pOrgArg, float *pResult)
+{
+    RgGeomPoly *poly = (RgGeomPoly *)pPoly;
+    struct {
+        RgVector origin;
+        RgVector direction;
+    } ray;
+
+    if (pPoly == 0 || pOrgArg == 0 || pResult == 0) {
+        assert_prog(D_00A551E0, D_00A551B8, 134);
+    }
+
+    if (poly->coliData == 0) {
+        return 0;
+    }
+
+    pOrgArg[3] = 1.0f;
+    pOrgArg[7] = 0.0f;
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(ray.origin), "r"(pOrgArg), "r"(poly->inverseLocal)
+        : "memory");
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(ray.direction), "r"(pOrgArg + 4), "r"(poly->inverseLocal)
+        : "memory");
+
+    if (RgColiDataVsRay(poly->coliData, &ray, pResult) == 0) {
+        return 0;
+    }
+
+    pResult[3] = 0.0f;
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(pResult), "r"(pResult), "r"(poly->local)
+        : "memory");
+    return 1;
+}

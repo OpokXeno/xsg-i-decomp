@@ -23,7 +23,8 @@ extern void *RgHeapAlloc(void *heap, unsigned int size,
 typedef struct RgGeomBall {
     unsigned char unmodeled_00[0x20];
     float position[4];
-    unsigned char unmodeled_30[0x40];
+    float oldPosition[4];
+    unsigned char unmodeled_40[0x30];
     float radius;
     unsigned char unmodeled_74[0x0c];
 } RgGeomBall;
@@ -36,6 +37,8 @@ typedef struct RgGeomBallContact {
 } RgGeomBallContact;
 
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
+extern float XrgLengthVector(RgVector vector);
+extern void XrgNegateVector(RgVector destination, RgVector source);
 
 /* InitRgGeomBall stores its first float at the radius and hands its second
  * to InitRgGeomPoint as the point's weight. */
@@ -125,7 +128,218 @@ void RgGeomBallPassTime(RgGeomBall *pBall, float deltaTime)
     RgGeomPointPassTime((RgGeomPoint *)pBall, deltaTime);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_ball", RgGeomBallCheckBall);
+int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
+                        RgGeomBallContact *contact)
+{
+    RgVector motionNormal;
+    RgVector motion1;
+    RgVector motion2;
+    RgVector oldPosition1;
+    RgVector oldPosition2;
+    RgVector startOffset;
+    float speedSq1;
+    float speedSq2;
+    float overlap;
+    float s;
+    float t;
+
+    __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                         "sqc2 $vf31, 0(%0)\n\t"
+                         : : "r"(oldPosition1), "r"(ball1->oldPosition) : "memory");
+    __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                         "sqc2 $vf31, 0(%0)\n\t"
+                         : : "r"(oldPosition2), "r"(ball2->oldPosition) : "memory");
+    __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
+                         "lqc2 $vf31, 0(%2)\n\t"
+                         "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                         "sqc2 $vf30, 0(%0)\n\t"
+                         : : "r"(motion1), "r"(ball1->position), "r"(oldPosition1) : "memory");
+    __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
+                         "lqc2 $vf31, 0(%2)\n\t"
+                         "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                         "sqc2 $vf30, 0(%0)\n\t"
+                         : : "r"(motion2), "r"(ball2->position), "r"(oldPosition2) : "memory", "$2");
+    __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
+                         "lqc2 $vf31, 0(%2)\n\t"
+                         "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                         "sqc2 $vf30, 0(%0)\n\t"
+                         : : "r"(startOffset), "r"(oldPosition1), "r"(oldPosition2) : "memory");
+    /* The outer product of the two motions is computed and stored, and
+       nothing reads it back. */
+    __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
+                         "lqc2 $vf31, 0(%2)\n\t"
+                         "vopmula.xyz ACC, vf30, vf31\n\t"
+                         "vopmsub.xyz vf30, vf31, vf30\n\t"
+                         "sqc2 $vf30, 0(%0)\n\t"
+                         : : "r"(motionNormal), "r"(motion1), "r"(motion2) : "memory");
+
+    speedSq1 = motion1[0] * motion1[0] + motion1[1] * motion1[1] +
+               motion1[2] * motion1[2];
+    speedSq2 = motion2[0] * motion2[0] + motion2[1] * motion2[1] +
+               motion2[2] * motion2[2];
+
+    if (0.005f <= speedSq1 && 0.005f <= speedSq2) {
+        float one = 1.0f;
+        float offsetDot1 = startOffset[0] * motion1[0] +
+                           startOffset[1] * motion1[1] +
+                           startOffset[2] * motion1[2];
+        float offsetDot2 = startOffset[0] * motion2[0] +
+                           startOffset[1] * motion2[1] +
+                           startOffset[2] * motion2[2];
+        float dot12 = motion1[0] * motion2[0] + motion1[1] * motion2[1] +
+                      motion1[2] * motion2[2];
+        float numerator = offsetDot2 * dot12 - speedSq2 * offsetDot1;
+        s = numerator / (speedSq1 * speedSq2 - dot12 * dot12);
+        t = (s * dot12 + offsetDot2) / speedSq2;
+        if (s < 0.0f) {
+            s = 0.0f;
+        } else if (one < s) {
+            s = one;
+        }
+        {
+            float oneT = 1.0f;
+
+            if (t < 0.0f) {
+                t = 0.0f;
+            } else if (oneT < t) {
+                t = oneT;
+            }
+        }
+
+        motion1[0] *= s;
+        motion1[1] *= s;
+        motion1[2] *= s;
+        motion1[3] *= s;
+        __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                             "lqc2 $vf31, 0(%1)\n\t"
+                             "vadd.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%1)\n\t"
+                             : : "r"(motion1), "r"(oldPosition1) : "memory");
+        motion2[0] *= t;
+        motion2[1] *= t;
+        motion2[2] *= t;
+        motion2[3] *= t;
+        __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                             "lqc2 $vf31, 0(%1)\n\t"
+                             "vadd.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%1)\n\t"
+                             : : "r"(motion2), "r"(oldPosition2) : "memory");
+        __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
+                             "lqc2 $vf31, 0(%2)\n\t"
+                             "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%0)\n\t"
+                             : : "r"(motion1), "r"(oldPosition1), "r"(oldPosition2) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position1), "r"(oldPosition1) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position2), "r"(oldPosition2) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->penetration), "r"(motion1) : "memory");
+        contact->distance = XrgLengthVector(motion1);
+    } else if (0.005f <= speedSq1) {
+        RgVector closest;
+        float one = 1.0f;
+        float *position2 = ball2->position;
+        s = ((position2[0] * motion1[0] + position2[1] * motion1[1] +
+              position2[2] * motion1[2]) -
+             (oldPosition1[0] * motion1[0] + oldPosition1[1] * motion1[1] +
+              oldPosition1[2] * motion1[2])) /
+            speedSq1;
+        if (s < 0.0f) {
+            s = 0.0f;
+        } else if (one < s) {
+            s = one;
+        }
+
+        closest[0] = motion1[0] * s;
+        closest[1] = motion1[1] * s;
+        closest[2] = motion1[2] * s;
+        closest[3] = motion1[3] * s;
+        __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                             "lqc2 $vf31, 0(%1)\n\t"
+                             "vadd.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%0)\n\t"
+                             : : "r"(closest), "r"(oldPosition1) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position1), "r"(closest) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position2), "r"(ball2->position) : "memory");
+        __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                             "lqc2 $vf31, 0(%1)\n\t"
+                             "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%0)\n\t"
+                             : : "r"(closest), "r"(ball2->position) : "memory");
+        contact->distance = XrgLengthVector(closest);
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->penetration), "r"(closest) : "memory");
+    } else if (0.005f <= speedSq2) {
+        RgVector closest;
+        float one = 1.0f;
+        float *position1 = ball1->position;
+        s = ((position1[0] * motion2[0] + position1[1] * motion2[1] +
+              position1[2] * motion2[2]) -
+             (oldPosition2[0] * motion2[0] + oldPosition2[1] * motion2[1] +
+              oldPosition2[2] * motion2[2])) /
+            speedSq2;
+        if (s < 0.0f) {
+            s = 0.0f;
+        } else if (one < s) {
+            s = one;
+        }
+
+        closest[0] = motion2[0] * s;
+        closest[1] = motion2[1] * s;
+        closest[2] = motion2[2] * s;
+        closest[3] = motion2[3] * s;
+        __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                             "lqc2 $vf31, 0(%1)\n\t"
+                             "vadd.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%0)\n\t"
+                             : : "r"(closest), "r"(oldPosition2) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position1), "r"(ball1->position) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position2), "r"(closest) : "memory");
+        __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                             "lqc2 $vf31, 0(%1)\n\t"
+                             "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                             "sqc2 $vf30, 0(%0)\n\t"
+                             : : "r"(closest), "r"(ball1->position) : "memory");
+        contact->distance = XrgLengthVector(closest);
+        XrgNegateVector(contact->penetration, closest);
+    } else {
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position1), "r"(ball1->position) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->position2), "r"(ball2->position) : "memory");
+        __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
+                             "sqc2 $vf31, 0(%0)\n\t"
+                             : : "r"(contact->penetration), "r"(startOffset) : "memory");
+        contact->distance = XrgLengthVector(startOffset);
+    }
+
+    overlap = ball1->radius + ball2->radius - contact->distance;
+    if (0.0f < overlap) {
+        float *penetration = contact->penetration;
+        XrgNormalizeVector(motion1, penetration);
+        penetration[0] = motion1[0] * overlap;
+        penetration[1] = motion1[1] * overlap;
+        penetration[2] = motion1[2] * overlap;
+        penetration[3] = motion1[3] * overlap;
+        return 1;
+    }
+    return 0;
+}
 
 int RgGeomBallCheckBallDist(RgGeomBall *ball1, RgGeomBall *ball2,
                             RgGeomBallContact *contact)

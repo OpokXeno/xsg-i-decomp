@@ -116,7 +116,7 @@ struct RgParticleEffectControlData {
 struct RgParticleEffect {
     int state;
     XrgParticle *particles;
-    u8 unmodeled_08[0x0C - 0x08];
+    int particleTotal;
     int shootCount;
     RgParticleShot shots[4];
     int shootActive;

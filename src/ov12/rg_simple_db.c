@@ -16,7 +16,6 @@ extern int strcmp(const char *left, const char *right);
 extern char *strncpy(char *dest, const char *src, unsigned int n);
 extern void XrgLog(const char *format, const char *source_file, int line,
                    ...);
-
 /*
  * External file-backed witnesses, not candidate-emitted data: this window is
  * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
@@ -26,7 +25,6 @@ extern void XrgLog(const char *format, const char *source_file, int line,
  */
 extern const char D_00A531F0[];
 extern const char D_00A53200[];
-
 /*
  * More of the same asm-owned OV12 rodata window, used only by _GetDataID,
  * _EntryDB, _GetDataDB and _GetDataDBName.
@@ -48,7 +46,6 @@ extern const char D_00A53238[];
 extern const char D_00A53260[];
 extern const char D_00A53288[];
 extern const char D_00A53290[];
-
 static void _InitDB(RgSimpleDB *pDB, int capacity, int entry_size);
 static void _ClearDB(RgSimpleDB *pDB);
 static void _DisposeDB(RgSimpleDB *pDB);
@@ -239,13 +236,39 @@ void RgSimpleDBClear(RgSimpleDB *pDB)
     _ClearDB(pDB);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_simple_db", RgSimpleDBDump);
+/*
+ * ov12:0x00a532c0 contains the format string "data base - %p\n".
+ * ov12:0x00a532d0 contains the format string "data %d : %s (%p)\n".
+ */
+extern const char D_00A532C0[];
+extern const char rgSimpleDBDumpFormat[] __asm__("D_00A532D0");
+
+void RgSimpleDBDump(RgSimpleDB *pDB)
+{
+    int i;
+
+    if (pDB == 0) {
+        assert_prog(D_00A531F0, D_00A53200, 218);
+    }
+    XrgLog(D_00A532C0, D_00A53200, 220, pDB);
+    for (i = 0; i < pDB->m_nNumOfData; ++i) {
+        XrgLog(rgSimpleDBDumpFormat, D_00A53200, 222, i, pDB->m_apName[i],
+               pDB->m_apData[i]);
+    }
+}
 
 const char D_00A531F0[16] = "pDB != NIL";
+
 const char D_00A53200[24] = "../rg_simple_db.euc.c";
+
 const char D_00A53218[16] = "pszName != NIL";
+
 const char D_00A53228[16] = "pDat != NIL";
+
 const char D_00A53238[40] = "pDB->m_nNumOfData < pDB->m_nDataCapa";
+
 const char D_00A53260[40] = "\n***** already entried name '%s'\n\n";
+
 const char D_00A53288[8] = "0";
+
 const char D_00A53290[48] = "0 <= nDataID && nDataID < pDB->m_nNumOfData";

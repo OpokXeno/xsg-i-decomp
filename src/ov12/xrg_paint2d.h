@@ -93,6 +93,11 @@ typedef struct XrgPaint2DRect {
 
 typedef struct XrgPaint2D XrgPaint2D;
 typedef struct XrgPaint2DDrawReq XrgPaint2DDrawReq;
+struct XrgPaint2DVertex;
+
+/* The 16-byte quadword the COP2 copies move: the same mode(TI) type as the
+ * Quadword typedef xrg_paint2d.c declares for its own use. */
+typedef unsigned int XrgPaint2DQuad __attribute__((mode(TI)));
 
 /*
  * The draw-request object CreateXrgPaint2D_sub's paint keeps a pointer to at
@@ -153,6 +158,7 @@ typedef union XrgPaint2DOffset {
         float w;
     } f;
     long long quadword[2];
+    XrgPaint2DQuad whole;
 } XrgPaint2DOffset;
 
 /*
@@ -182,10 +188,25 @@ typedef union XrgPaint2DOffset {
  *   uSize,   the explicit UV extent XrgPaint2DSetUVSize stores, the same
  *   vSize    way.
  */
+struct XrgPaint2DVertex;
+
 typedef struct XrgPaint2DDrawReq {
-    unsigned char unmodeled_00[4];
+    void (*geom)(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners);
     void (*draw)(XrgPaint2D *paint, void *pStudio);
-    unsigned char unmodeled_08[0x38];
+    int mode;
+    unsigned char unmodeled_0c[4];
+    XrgPaint2DQuad rectQuad;
+    union {
+        XrgPaint2DQuad whole;
+        struct {
+            float scale;
+            float angle;
+        } scaleAngle;
+    } rectScaleAngle;
+    union {
+        XrgPaint2DQuad whole;
+        float halfWidth;
+    } lineWidth;
     int offsetMode;
     unsigned char unmodeled_44[0xC];
     XrgPaint2DOffset offsetAnchor;
@@ -263,7 +284,7 @@ typedef struct XrgPaint2D {
      * _Paint2DClearReq always zeroes this word right before rewinding
      * `request` to `req`: the count of queued draw requests it also resets.
      */
-    int reqCount;
+    unsigned int reqCount;
     XrgPaint2DDrawReq *request;
     /*
      * The allocation site _InitPaint (0x00a4b750) records: it strcpy's

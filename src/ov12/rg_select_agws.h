@@ -17,20 +17,13 @@ typedef struct RgBxx RgBxx;
 typedef struct FloatArrow FloatArrow;
 
 /*
- * The selection screen keeps two picture handles followed by the two arrow
- * x/y coordinate pairs.  _DispFloatArrow reads the visibility mask at 0x18;
- * this function only updates the four coordinate fields.  Scalar members are
- * used here (changed hypothesis vs the predecessor array-member layout);
- * offsets are identical: pic0 0x00, pic1 0x04, x0 0x08, x1 0x0c, y0 0x10,
- * y1 0x14, visibility_mask 0x18.
+ * Two picture handles, two x and two y coordinates, then the visibility mask
+ * read by _DispFloatArrow at 0x18.
  */
 struct FloatArrow {
-    void *pic0;
-    void *pic1;
-    int x0;
-    int x1;
-    int y0;
-    int y1;
+    void *m_apPic[2];
+    int m_aiX[2];
+    int m_aiY[2];
     unsigned int visibility_mask;
 };
 
@@ -292,7 +285,17 @@ typedef struct WepListDisp {
     SelType *pSelType;
     SelWep *pSelWep;
     int font;
-    unsigned char unmodeled_00c[20];
+    /*
+     * The three pictures _InitWepListDisp loads from "frm08on.bmp",
+     * "icon_uparrow.bmp" and "icon_downarrow.bmp", then the list origin
+     * _InitWepListDisp stores as 568 and 168 (_DrawWepListDisp reads both
+     * as ints).
+     */
+    void *pFrame;
+    void *pUpArrow;
+    void *pDownArrow;
+    int originX;
+    int originY;
     int topIndex;
 } WepListDisp;
 

@@ -20,7 +20,6 @@ extern const char D_00A55228[];
  */
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-
 /*
  * RgGeomInit / RgGeomSetType: original functions of the base geometry TU
  * (rg_geom.c, ov12/tu051), already recovered as C. Declared TU-locally, as
@@ -29,7 +28,6 @@ extern void assert_prog(const char *expression, const char *source_file,
  */
 extern void RgGeomInit(RgGeom *pGeom);
 extern void RgGeomSetType(RgGeom *pGeom, int type);
-
 /*
  * XrgUnitMatrix: original function of the polygon-geometry TU
  * (rg_geom_poly.c, ov12/tu055), still assembly there. Declared TU-locally,
@@ -81,9 +79,6 @@ RgGeom *CreateRgGeomTray(void)
     return (RgGeom *)tray;
 }
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-
 void RgGeomTraySetSize(void *tray, float width, float height)
 {
     RgGeomTray *pTray = tray;
@@ -107,7 +102,6 @@ void RgGeomTraySetSize(void *tray, float width, float height)
  * modelled here: these two routines only address the two evidenced matrix
  * objects and pass them to the established matrix helpers.
  */
-
 void RgGeomTraySetLocal(void *tray, Matrix4 source)
 {
     XrgCopyMatrix((float *)((char *)tray + 0x20), (const float *)source);
@@ -277,7 +271,123 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
     return hit_count;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_tray", RgGeomTrayCheckBall);
+extern const char D_00A55240[];
+extern const char D_00A55250[];
+
+/*
+ * Sweeps the ball from its previous position to its current one through the
+ * tray.  Both path endpoints are taken into the tray's local space with the
+ * inverse-local matrix and clipped by _CalcIntersect; the clipped position,
+ * the last contact point and each contact normal are then brought back to
+ * world space with the local matrix.  Returns non-zero when the ball touched
+ * the tray.
+ */
+int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
+                        RgGeomTrayContact *contact)
+{
+    RgVector clipped_position;
+    RgVector last_contact;
+    RgVector start_position;
+    RgVector end_position;
+    RgVector spare_position;
+    unsigned int i;
+
+    if (tray == 0) {
+        assert_prog(D_00A55218, D_00A55228, 226);
+    }
+    if (ball == 0) {
+        assert_prog(D_00A55240, D_00A55228, 227);
+    }
+    if (contact == 0) {
+        assert_prog(D_00A55250, D_00A55228, 228);
+    }
+
+    __asm__ __volatile__(
+        "lqc2 $vf31, 0(%1)\n\t"
+        "sqc2 $vf31, 0(%0)\n\t"
+        : : "r"(start_position), "r"(ball->old_position) : "memory");
+    __asm__ __volatile__(
+        "lqc2 $vf31, 0(%1)\n\t"
+        "sqc2 $vf31, 0(%0)\n\t"
+        : : "r"(end_position), "r"(ball->position) : "memory");
+
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%0)\n\t"
+        "lqc2 $vf3, 0(%1)\n\t"
+        "lqc2 $vf4, 16(%1)\n\t"
+        "lqc2 $vf5, 32(%1)\n\t"
+        "lqc2 $vf6, 48(%1)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(start_position), "r"(tray->inverse_local) : "memory");
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%0)\n\t"
+        "lqc2 $vf3, 0(%1)\n\t"
+        "lqc2 $vf4, 16(%1)\n\t"
+        "lqc2 $vf5, 32(%1)\n\t"
+        "lqc2 $vf6, 48(%1)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(end_position), "r"(tray->inverse_local) : "memory");
+
+    contact->hit_count = _CalcIntersect(clipped_position, last_contact,
+                                        start_position, end_position,
+                                        contact->normals, tray->width,
+                                        tray->height, ball->radius);
+
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(contact->last_contact), "r"(last_contact),
+            "r"(tray->local) : "memory");
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(contact->clipped_position), "r"(clipped_position),
+            "r"(tray->local) : "memory");
+
+    for (i = 0; i < contact->hit_count; i++) {
+        contact->normals[i][3] = 0.0f;
+        __asm__ __volatile__(
+            "lqc2 $vf2, 0(%1)\n\t"
+            "lqc2 $vf3, 0(%2)\n\t"
+            "lqc2 $vf4, 16(%2)\n\t"
+            "lqc2 $vf5, 32(%2)\n\t"
+            "lqc2 $vf6, 48(%2)\n\t"
+            "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+            "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+            "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+            "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+            "sqc2 $vf2, 0(%0)\n\t"
+            : : "r"(contact->normals[i]), "r"(contact->normals[i]),
+                "r"(tray->local) : "memory");
+    }
+
+    return contact->hit_count != 0;
+}
 
 const char D_00A55218[16] = "pTray != NIL";
+
 const char D_00A55228[24] = "../rg_geom_tray.euc.c";

@@ -151,4 +151,16 @@ typedef struct RgBattleMgr {
     BattleField *battleField;       /* +0x34 */
 } RgBattleMgr;
 
+/*
+ * The battle-init record _InitBattle reads (RgBattleInitInfo of ov12/tu049,
+ * src/ov12/rg_battle_init.h, not included here). Only the battle mode at
+ * +0x280, which doubles as the bit mask of human-controlled players, and the
+ * enemy type at +0x284 are evidenced by this allocation.
+ */
+typedef struct RgBattleInitModes {
+    unsigned char unmodeled_000[0x280];
+    int mode;                       /* +0x280 */
+    int enemyType;                  /* +0x284 */
+} RgBattleInitModes;
+
 #endif /* SRC_OV12_RG_BATTLEMGR_H */

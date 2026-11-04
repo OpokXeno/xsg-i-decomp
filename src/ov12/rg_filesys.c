@@ -3,18 +3,18 @@
  */
 #include "common.h"
 #include "rg_filesys.h"
-
 #define PREPARE_MAX 4
 #define FILE_MODE_PREPARED 2
 #define PREPARED_REF_COUNT 2
+
 struct RgFileSys {
     void *files;
     RgFileSysData *prepared_files[PREPARE_MAX];
     unsigned int prepared_count;
 };
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
                          const char *source_file, int line);
@@ -33,8 +33,9 @@ extern unsigned int RgVectorSize(void *vector);
 extern void *RgVectorIndex(void *vector, unsigned int index,
                            const char *source_file, int line);
 extern int strcmp(const char *string1, const char *string2);
-extern const char D_00A559B0[]; /* "pszName != NIL" */
+extern const char D_00A559B0[];
 
+/* "pszName != NIL" */
 static int _FindFile(RgFileSys *pSys, const char *pszName)
 {
     RgFileSysData *found;
@@ -58,32 +59,52 @@ static int _FindFile(RgFileSys *pSys, const char *pszName)
 }
 
 const char rg_filesys_source_file[24] = "../rg_filesys.euc.c";
+
 const char pSys_not_nil[16] = "pSys != NIL";
+
 const char D_00A559B0[16] = "pszName != NIL";
+
 const char D_00A559F0[32] = "free -> %s (mode=%d ref=%d)\n";
+
 const char D_00A55A10[32] = "strlen(pszName) <= NAME_LEN";
+
 const char D_00A55A30[16] = "pFile != NIL";
+
 const char D_00A55A40[40] = "read prepare data by normal read %s";
+
 const char D_00A55A68[16] = "pOrg != NIL";
+
 const char D_00A55A78[32] = "pDup->common.m_pBuf != NIL";
+
 const char prepare_count_check[40] = "pSys->m_uPrepareNum < PREPARE_MAX";
+
 const char D_00A55AC0[16] = "pPrepare != NIL";
+
 const char D_00A55AD0[32] = "prepare '%s' is referenced (%d)";
+
 const char D_00A55AF0[32] = "prepare '%s' collect dispose";
+
 const char D_00A55B10[16] = "pBuf != NIL";
+
 const char D_00A55B20[48] = "RgFileSysOnMemory failure (already loaded %s)\n";
+
 const char D_00A55B50[40] = "RG_FILESYS : on memory (%s %p:%d)\n";
+
 const char D_00A55B78[24] = "pFile->m_pSys != NIL";
+
 const char D_00A55B90[24] = "pFile->m_pOrg != NIL";
+
 const char D_00A55BA8[40] = "unknown filesys error (%s) call NIS!";
+
 const char D_00A55BD0[48] = "************* file sys (file=%d) *************\n";
+
 const char D_00A55C00[24] = "[%s]:ptr=%p alloc=%d\n";
+
 const char D_00A55C18[16] = "  normal\n";
+
 const char D_00A55C28[16] = "  dup org=%p\n";
+
 const char D_00A55C38[16] = "  prepare\n";
-
-
-
 
 static RgFileSysData *_FindFileObj(RgFileSys *pSys, RgFileSysData *pFile)
 {
@@ -104,7 +125,81 @@ static RgFileSysData *_FindFileObj(RgFileSys *pSys, RgFileSysData *pFile)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", _FindInPrepare);
+/*
+ * The out parameter _FindInPrepare fills when it locates
+ * pszName inside the first prepared link archive: the archive's own record
+ * (to bump its reference count), the payload pointer RgLinkDataGet returned,
+ * and a size RgFileSysRead stores as-is into the new record.
+ */
+typedef struct RgFileSysLinkFound {
+    RgFileSysData *dupOf;
+    void *data;
+    unsigned int size;
+} RgFileSysLinkFound;
+
+static int _FindInPrepare(RgFileSys *pSys, const char *pszFile, RgFileSysLinkFound *pFound);
+extern void RgError(const char *message, const char *source_file, int line,
+                    ...);
+extern char *strcpy(char *destination, const char *source);
+extern void InitRgLinkData(void *pAna, void *pBuf);
+extern int RgLinkDataMatchDataName(void *pAna, const char *name);
+extern void *RgLinkDataGet(void *pAna, const char *name);
+extern unsigned int RgLinkDataGetSize(void *pAna, const char *name);
+extern const char D_00A559C0[];
+/* "pszFile != NIL" */
+extern const char D_00A559D0[];
+extern const char D_00A559D8[];
+
+static int _FindInPrepare(RgFileSys *pSys, const char *pszFile,
+                          RgFileSysLinkFound *pFound)
+{
+    RgFileSysData *pArchive;
+    const char *pLast;
+    char szName[128];
+    void *linkData;
+    RgFileSys *sys = pSys;
+    unsigned int index;
+    const char *p;
+    void *payload;
+    unsigned int size;
+
+    if (pSys == 0) {
+        assert_prog(pSys_not_nil, rg_filesys_source_file, 114);
+    }
+    if (pszFile == 0) {
+        assert_prog(D_00A559C0, rg_filesys_source_file, 115);
+    }
+    pLast = 0;
+    for (p = pszFile; *p != 0; p++) {
+        if (*p == '\\' || *p == '/') {
+            pLast = p;
+        }
+    }
+    if (pLast != 0) {
+        strcpy(szName, pLast + 1);
+    } else {
+        strcpy(szName, pszFile);
+    }
+    for (index = 0; index < sys->prepared_count; index++) {
+        pArchive = sys->prepared_files[index];
+        InitRgLinkData(&linkData, pArchive->data);
+        if (RgLinkDataMatchDataName(&linkData, D_00A559D0) == 0) {
+            RgError(D_00A559D8, rg_filesys_source_file, 137, pArchive->name);
+        }
+        payload = RgLinkDataGet(&linkData, szName);
+        size = RgLinkDataGetSize(&linkData, szName);
+        if (payload != 0 && size != 0) {
+            if (pFound != 0) {
+                pFound->dupOf = pArchive;
+                pFound->data = payload;
+                pFound->size = size;
+            }
+            return 1;
+        }
+        return 0;
+    }
+    return 0;
+}
 
 extern void *CreateRgVector(int capacity, const char *source_file, int line);
 
@@ -156,8 +251,9 @@ RgFileSys *InstanceOfRgFileSys(void)
 extern void XrgFileSysFree(void *pBuf, const char *pszFile, int iLine);
 extern void RgVectorClear(void *vector);
 extern void XrgLog(const char *format, const char *source_file, int line, ...);
-extern const char D_00A559F0[]; /* "free -> %s (mode=%d ref=%d)\n" */
+extern const char D_00A559F0[];
 
+/* "free -> %s (mode=%d ref=%d)\n" */
 void RgFileSysClear(RgFileSys *pSys)
 {
     void *files;
@@ -180,20 +276,7 @@ void RgFileSysClear(RgFileSys *pSys)
     RgVectorClear(files);
 }
 
-/*
- * The out parameter _FindInPrepare (still INCLUDE_ASM) fills when it locates
- * pszName inside the first prepared link archive: the archive's own record
- * (to bump its reference count), the payload pointer RgLinkDataGet returned,
- * and a size RgFileSysRead stores as-is into the new record.
- */
-typedef struct RgFileSysLinkFound {
-    RgFileSysData *dupOf;
-    void *data;
-    unsigned int size;
-} RgFileSysLinkFound;
-
-extern int _FindInPrepare(RgFileSys *pSys, const char *pszFile,
-                          RgFileSysLinkFound *pFound);
+static int _FindInPrepare(RgFileSys *pSys, const char *pszFile, RgFileSysLinkFound *pFound);
 extern int _FindFile(RgFileSys *pSys, const char *pszName);
 extern unsigned int strlen(const char *string);
 extern char *strcat(char *destination, const char *source);
@@ -205,14 +288,13 @@ extern unsigned int XrgCdFileAlignmentSize(unsigned int size);
 extern void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile,
                              int iLine);
 extern int XrgCdFileRead(const char *pszFile, void *pBuf);
+extern const char D_00A55A10[];
+/* "strlen(pszName) <= NAME_LEN" */
+extern const char D_00A55A30[];
+/* "pFile != NIL" */
+extern const char D_00A55A40[];
 
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern char *strcpy(char *destination, const char *source);
-extern const char D_00A55A10[]; /* "strlen(pszName) <= NAME_LEN" */
-extern const char D_00A55A30[]; /* "pFile != NIL" */
-extern const char D_00A55A40[]; /* "read prepare data by normal read %s" */
-
+/* "read prepare data by normal read %s" */
 RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
                              const char *pszRoot)
 {
@@ -288,12 +370,12 @@ RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
     return pFile;
 }
 
-
 extern void *memcpy(void *destination, const void *source, unsigned int count);
+extern const char D_00A55A68[];
+/* "pOrg != NIL" */
+extern const char D_00A55A78[];
 
-extern const char D_00A55A68[]; /* "pOrg != NIL" */
-extern const char D_00A55A78[]; /* "pDup->common.m_pBuf != NIL" */
-
+/* "pDup->common.m_pBuf != NIL" */
 RgFileSysData *RgFileSysDup(RgFileSys *pSys, const char *pszName,
                             const char *pszRoot)
 {
@@ -350,9 +432,12 @@ void RgFileSysPrepareFile(RgFileSys *pSys, const char *pszName,
 }
 
 extern void RgWarn(const char *format, const char *source_file, int line, ...);
-extern const char D_00A55AC0[]; /* "pPrepare != NIL" */
-extern const char D_00A55AD0[]; /* "prepare '%s' is referenced (%d)" */
-extern const char D_00A55AF0[]; /* "prepare '%s' collect dispose" */
+extern const char D_00A55AC0[];
+/* "pPrepare != NIL" */
+extern const char D_00A55AD0[];
+/* "prepare '%s' is referenced (%d)" */
+extern const char D_00A55AF0[];
+/* "prepare '%s' collect dispose" */
 extern void DisposeRgFileSysData_sub(RgFileSysData *pFile,
                                      const char *source_file, int line);
 
@@ -381,15 +466,14 @@ void RgFileSysDisposePrepares(RgFileSys *pSys)
     pSys->prepared_count = 0;
 }
 
+/* "pszName != NIL" */
+extern const char D_00A55B10[];
+/* "pBuf != NIL" */
+extern const char D_00A55B20[];
+/* "RgFileSysOnMemory failure (already loaded %s)\n" */
+extern const char D_00A55B50[];
 
-
-
- /* "pszName != NIL" */
-extern const char D_00A55B10[]; /* "pBuf != NIL" */
-extern const char D_00A55B20[]; /* "RgFileSysOnMemory failure (already loaded %s)\n" */
-extern const char D_00A55B50[]; /* "RG_FILESYS : on memory (%s %p:%d)\n" */
-
-
+/* "RG_FILESYS : on memory (%s %p:%d)\n" */
 RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
                                  void *pBuf, unsigned int nSize)
 {
@@ -421,13 +505,15 @@ RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
     return pFile;
 }
 
- /* "pFile != NIL" */
-extern const char D_00A55B78[]; /* "pFile->m_pSys != NIL" */
-extern const char D_00A55B90[]; /* "pFile->m_pOrg != NIL" */
-extern const char D_00A55BA8[]; /* "unknown filesys error (%s) call NIS!" */
+/* "pFile != NIL" */
+extern const char D_00A55B78[];
+/* "pFile->m_pSys != NIL" */
+extern const char D_00A55B90[];
+/* "pFile->m_pOrg != NIL" */
+extern const char D_00A55BA8[];
+/* "unknown filesys error (%s) call NIS!" */
 extern int RgVectorRemove(void *vector, void *element, const char *source_file,
                           int line);
-
 
 void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *source_file,
                               int line)
@@ -495,8 +581,7 @@ typedef struct RgFileSysDataName {
     char name; /* +0x1C */
 } RgFileSysDataName;
 
- /* "pFile != NIL" */
-
+/* "pFile != NIL" */
 char *RgFileSysDataGetName(RgFileSysData *pFile)
 {
     if (pFile == 0) {
@@ -506,12 +591,17 @@ char *RgFileSysDataGetName(RgFileSysData *pFile)
     return &((RgFileSysDataName *)pFile)->name;
 }
 
-extern const char D_00A55BD0[]; /* "************* file sys (file=%d) *************\n" */
-extern const char D_00A55C00[]; /* "[%s]:ptr=%p alloc=%d\n" */
-extern const char D_00A55C18[]; /* "  normal\n" */
-extern const char D_00A55C28[]; /* "  dup org=%p\n" */
-extern const char D_00A55C38[]; /* "  prepare\n" */
+extern const char D_00A55BD0[];
+/* "************* file sys (file=%d) *************\n" */
+extern const char D_00A55C00[];
+/* "[%s]:ptr=%p alloc=%d\n" */
+extern const char D_00A55C18[];
+/* "  normal\n" */
+extern const char D_00A55C28[];
+/* "  dup org=%p\n" */
+extern const char D_00A55C38[];
 
+/* "  prepare\n" */
 void RgFileSysDump(RgFileSys *pSys)
 {
     unsigned int index;

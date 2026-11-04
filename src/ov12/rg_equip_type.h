@@ -27,9 +27,20 @@ typedef struct RgEquipRecord RgEquipRecord;
  * RgEquipSetDefault passes the masked position set). RgEquipMountPos
  * reads pos back through _GetMountData.
  */
+/*
+ * The equip type and the mount position are enumerations in the original
+ * (asserts "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM" and
+ * "(RG_EQUIP_POS_LEFT_HAND <= (ePos) && ...) || (ePos) == RG_EQUIP_POS_INVALID").
+ * Their stores in RgEquipAddMount are scheduled independently of the posMask
+ * store, as stores to distinct types.
+ */
+typedef enum RgEquipType { RG_EQUIP_TYPE_MIN = 0 } RgEquipType;
+
+typedef enum RgEquipPos { RG_EQUIP_POS_INVALID = -1 } RgEquipPos;
+
 typedef struct RgEquipMount {
-    int type;
-    int pos;
+    RgEquipType type;
+    RgEquipPos pos;
     unsigned int posMask;
 } RgEquipMount;
 

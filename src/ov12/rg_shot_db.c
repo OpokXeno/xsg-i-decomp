@@ -46,7 +46,6 @@ static void _EntryTemporariesShotDB(RgSimpleDB *database) {
  * is its initial capacity and its second is the byte size of each entry;
  * those roles are established by the callee's stores and allocation loop.
  */
-
 static void _WrapperDestruct(RgSimpleDB *database)
 {
     DisposeRgSimpleDB(database);
@@ -82,6 +81,7 @@ void *RgShotDBGetEssence(RgSimpleDB *database, const char *name)
 
 /* Common settings are addressed through every shot-essence allocation. */
 typedef struct RgShotDbCommonFields RgShotDbCommonFields;
+
 struct RgShotDbCommonFields {
     void *(*createFunc)(void *essence, void *info);
     float damage;
@@ -173,8 +173,6 @@ extern void RgReadTextGetString(RgReadText *pReader, char *pszOut);
 extern float RgReadTextGetFloat(RgReadText *pReader);
 extern int RgReadTextIsEOF(RgReadText *pReader);
 extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
-
-
 /*
  * Scaffold-owned data (splat names, no config/symbols/ov12.txt entry).
  * ov12:0x00a53470 holds "../rg_shot_db.euc.c", the source file name
@@ -183,10 +181,8 @@ extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
  * reports. ov12:0x00a53530 holds "spd", the text key _ReadNormal and
  * _ReadBeam both recognize for the shot speed.
  */
-
 extern const char D_00A53520[];
 extern const char D_00A53530[];
-
 /*
  * _ReadCommon is one of two file-local statics of that name in this
  * overlay (the other, ov12:0x00a1cd08, belongs to a different translation
@@ -204,6 +200,7 @@ static int _ReadCommon(RgReadText *pReader, void *essence, char *pszToken);
  * RgNormalShotEssence.speed.
  */
 typedef struct RgShotDbNormalEssence RgShotDbNormalEssence;
+
 struct RgShotDbNormalEssence {
     unsigned char unmodeled_000[0x120];
     float speed;                 /* +0x120, the "spd" key above */
@@ -277,7 +274,6 @@ static int _ReadHomingMain(RgReadText *pReader,
 typedef struct RgHomingShotEssence RgHomingShotEssence;
 
 extern void InitRgHomingShotEssence(RgHomingShotEssence *essence);
-
 /*
  * _ReadHomingMain (ov12:0x00a18c50's sibling, still INCLUDE_ASM above)
  * consumes the token _ReadHoming already read and reports (nonzero) whether
@@ -321,6 +317,7 @@ extern const char D_00A53588[];
 extern const char D_00A53598[];
 
 typedef struct RgShotDbGrenadeEssence RgShotDbGrenadeEssence;
+
 struct RgShotDbGrenadeEssence {
     RgHomingShotEssence homing;
     float explosionRadius; /* +0x130, the "bom-size" key */
@@ -386,6 +383,7 @@ extern const char D_00A535A0[];
  * independently completes as RgBeamEssence.speed/.duration.
  */
 typedef struct RgShotDbBeamEssence RgShotDbBeamEssence;
+
 struct RgShotDbBeamEssence {
     unsigned char unmodeled_000[0x120];
     float speed;                 /* +0x120, the "spd" key above */
@@ -430,6 +428,7 @@ extern const char D_00A535B8[];
 extern const char D_00A535C8[];
 
 typedef struct RgShotDbFireEssence RgShotDbFireEssence;
+
 struct RgShotDbFireEssence {
     unsigned char unmodeled_000[0x120];
     float length;       /* +0x120, the "length" key */
@@ -478,10 +477,64 @@ static RgShotDbFireEssence *_ReadFire(RgReadText *pReader)
     return essence;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBRead);
-
 extern const char D_00A535D8[];
+extern const char D_00A535E8[];
+extern const char D_00A53600[];
+extern const char D_00A53608[];
+extern const char D_00A53610[];
+extern const char D_00A53618[];
+extern const char D_00A53620[];
+extern const char D_00A53628[];
+extern RgReadText *CreateRgReadText(const char *pszDataBase);
+extern void DisposeRgReadText(RgReadText *pReader);
+extern void RgError(const char *format, const char *source_file, int line, ...);
+extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pEntry, const char *pszName);
 
+void RgShotDBRead(RgSimpleDB *pDB, const char *pszDataBase)
+{
+    char szToken[0x100];
+    RgReadText *pReader;
+    void *pEntry;
+
+    if (pDB == 0) {
+        assert_prog(D_00A535D8, D_00A53470, 297);
+    }
+    if (pszDataBase == 0) {
+        assert_prog(D_00A535E8, D_00A53470, 298);
+    }
+
+    pReader = CreateRgReadText(pszDataBase);
+    if (pReader != 0) {
+        while (RgReadTextIsEOF(pReader) == 0) {
+            pEntry = 0;
+            RgReadTextGetString(pReader, szToken);
+
+            if (strcmp(szToken, D_00A53600) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = _ReadNormal(pReader);
+            } else if (strcmp(szToken, D_00A53608) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = _ReadHoming(pReader);
+            } else if (strcmp(szToken, D_00A53610) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = _ReadGrenade(pReader);
+            } else if (strcmp(szToken, D_00A53618) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = _ReadBeam(pReader);
+            } else if (strcmp(szToken, D_00A53620) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = _ReadFire(pReader);
+            } else {
+                RgError(D_00A53628, D_00A53470, 334, pszDataBase, szToken);
+            }
+
+            if (pEntry != 0) {
+                RgSimpleDBEntry(pDB, pEntry, szToken);
+            }
+        }
+        DisposeRgReadText(pReader);
+    }
+}
 
 void RgShotDBClear(RgSimpleDB *database)
 {
@@ -493,32 +546,61 @@ void RgShotDBClear(RgSimpleDB *database)
 }
 
 const char D_00A53450[8] = "shot";
+
 const char D_00A53458[24] = "ignored 'shot %s'";
+
 const char D_00A53470[24] = "../rg_shot_db.euc.c";
+
 const char D_00A53488[8] = "model";
+
 const char D_00A53490[8] = "ptcl";
+
 const char D_00A53498[8] = "puttex";
+
 const char D_00A534A0[16] = "break-ptcl";
+
 const char D_00A534B0[16] = "damage-ptcl";
+
 const char D_00A534C0[16] = "puttex-all";
+
 const char D_00A534D0[8] = "damage";
+
 const char D_00A534D8[8] = "life";
+
 const char D_00A534E0[16] = "not-dam-limit";
+
 const char D_00A534F0[16] = "not-dam-time";
+
 const char D_00A53500[16] = "slow-time";
+
 const char D_00A53510[16] = "slow-rate";
+
 const char D_00A53520[16] = "pReader != NIL";
+
 const char D_00A53530[8] = "spd";
+
 const char D_00A53538[16] = "pEss != NIL";
+
 const char D_00A53548[8] = "aim";
+
 const char D_00A53550[16] = "accuracy";
+
 const char D_00A53560[8] = "wait";
+
 const char D_00A53568[16] = "bom-size";
+
 const char D_00A53578[16] = "bom-time";
+
 const char D_00A53588[16] = "bom-dist";
+
 const char D_00A53598[8] = "chaff";
+
 const char D_00A535A0[16] = "attach-time";
+
 const char D_00A535B0[8] = "length";
+
 const char D_00A535B8[16] = "imm-dead";
+
 const char D_00A535C8[16] = "once-hit";
+
 const char D_00A535D8[16] = "pDB != NIL";

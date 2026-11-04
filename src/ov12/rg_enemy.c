@@ -21,14 +21,146 @@ static int _GetPadRelease(void)
 }
 
 typedef struct RgWeapon RgWeapon;
+
 extern RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon);
 extern struct RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssence *essence);
 extern void *RgWeaponEssCastToAttack(RgWeaponEssence *essence);
 extern void *RgWeaponEssCastToShield(RgWeaponEssence *essence);
 extern int RgWeaponIsLockedOn(RgWeapon *weapon);
 extern int RgWeaponIsTargetting(RgWeapon *weapon);
+extern int csr_0;
+extern int D_00A599D8;
+extern const char D_00A51C60[];
+extern const char D_00A51C68[];
+extern const char D_00A51C70[];
+extern const char D_00A51C78[];
+extern const char D_00A51C80[];
+extern const char D_00A51C88[];
+extern const char D_00A51C90[];
+extern const char D_00A51CA0[];
+extern const char D_00A51CB0[];
+extern const char D_00A51CC0[];
+extern const char D_00A51CD0[];
+extern const char D_00A51CE0[];
+extern const char D_00A51CF0[];
+extern const char D_00A51D08[];
+extern const char D_00A51D18[];
+extern const char D_00A51D28[];
+extern const char D_00A51D38[];
+extern const char D_00A51D48[];
+extern const char D_00A51D70[];
+extern const char D_00A51D88[];
+extern void xglSleep(void);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_enemy", _dbgThinkTool);
+static void _dbgThinkTool(unsigned int *pEnemyType)
+{
+    unsigned int startPressed;
+    int armed;
+    unsigned int startEdge;
+
+    armed = 0;
+    startPressed = _GetPadEdge() & 0x100;
+    startEdge = startPressed;
+
+    for (;;) {
+        unsigned int padEdge;
+
+        if (startEdge != 0) {
+            armed = 1;
+        }
+        if (armed != 0 && (_GetPadRelease() & 0x100)) {
+            break;
+        }
+
+        padEdge = _GetPadEdge();
+        if (padEdge & 0xA000) {
+            if (csr_0 == 12) {
+                if (padEdge & 0x8000) {
+                    *pEnemyType &= 3;
+                } else {
+                    *pEnemyType |= ~3;
+                }
+            } else if (csr_0 != 0) {
+                *pEnemyType ^= 1 << (csr_0 + 1);
+            } else {
+                unsigned int enemyType;
+                unsigned int keep;
+                unsigned int level;
+
+                enemyType = *pEnemyType;
+                if (padEdge & 0x8000) {
+                    keep = enemyType & ~3;
+                    level = (enemyType & 3) - 1;
+                } else {
+                    keep = enemyType & ~3;
+                    level = (enemyType & 3) + 1;
+                }
+                *pEnemyType = (level & 3) | keep;
+            }
+        }
+
+        if (_GetPadEdge() & 0x20) {
+            if (csr_0 == 12) {
+                for (D_00A599D8 = 1; D_00A599D8 < 12; D_00A599D8++) {
+                    *pEnemyType ^= 1 << (D_00A599D8 + 1);
+                }
+            }
+        }
+
+        padEdge = _GetPadEdge();
+        if (padEdge & 0x1000) {
+            csr_0--;
+        }
+        if (padEdge & 0x4000) {
+            csr_0++;
+        }
+        while (csr_0 < 0) {
+            csr_0 += 13;
+        }
+        csr_0 = csr_0 % 13;
+
+        for (D_00A599D8 = 1; D_00A599D8 < 12; D_00A599D8++) {
+            if (((int)*pEnemyType >> (D_00A599D8 + 1)) & 1) {
+                xglFontDebugPrintf(40, D_00A599D8 * 12 + 12, D_00A51C60);
+            } else {
+                xglFontDebugPrintf(40, D_00A599D8 * 12 + 12, D_00A51C68);
+            }
+        }
+
+        switch ((int)(*pEnemyType & 3)) {
+        case 0:
+            xglFontDebugPrintf(96, 12, D_00A51C70);
+            break;
+        case 1:
+            xglFontDebugPrintf(96, 12, D_00A51C78);
+            break;
+        case 2:
+            xglFontDebugPrintf(96, 12, D_00A51C80);
+            break;
+        case 3:
+            xglFontDebugPrintf(96, 12, D_00A51C88);
+            break;
+        default:
+            break;
+        }
+        xglFontDebugPrintf(40, 12, D_00A51C90);
+        xglFontDebugPrintf(80, 24, D_00A51CA0);
+        xglFontDebugPrintf(80, 36, D_00A51CB0);
+        xglFontDebugPrintf(80, 48, D_00A51CC0);
+        xglFontDebugPrintf(80, 60, D_00A51CD0);
+        xglFontDebugPrintf(80, 72, D_00A51CE0);
+        xglFontDebugPrintf(80, 84, D_00A51CF0);
+        xglFontDebugPrintf(80, 96, D_00A51D08);
+        xglFontDebugPrintf(80, 108, D_00A51D18);
+        xglFontDebugPrintf(80, 120, D_00A51D28);
+        xglFontDebugPrintf(80, 132, D_00A51D38);
+        xglFontDebugPrintf(80, 144, D_00A51D48);
+        xglFontDebugPrintf(80, 156, D_00A51D70);
+        xglFontDebugPrintf(20, csr_0 * 12 + 12, D_00A51D88);
+        xglSleep();
+    }
+}
 
 static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait)
 {
@@ -88,8 +220,6 @@ static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle)
     return 1;
 }
 
-typedef struct RgWeapon RgWeapon;
-
 extern RgGeomPoint *RgRobotGetGeom(RgRobot *pRobot);
 extern void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
                                 const char *source_file, int source_line);
@@ -114,11 +244,8 @@ extern void RgRobotDashContinue(RgRobot *pRobot);
 extern void RgRobotBreak(RgRobot *pRobot);
 extern void RgRobotTargetting(RgRobot *pRobot);
 extern void RgRobotShot(RgRobot *pRobot, unsigned int eType);
-
-
 extern float RgWeaponGetShotNum(RgWeapon *weapon);
 extern float RgGetFrameTime(void);
-
 static void _dbgThinkTool(unsigned int *pEnemyType);
 static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait);
 static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle);
@@ -901,7 +1028,6 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-
 static void _DestructEnemy(RgEnemyControl *pBaka)
 {
     if (pBaka == 0) {
@@ -949,8 +1075,6 @@ static void _InitEnemy(RgEnemyControl *pControl, RgRobot *pRobot,
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
-
-
 /*
  * _InitEnemy is defined later in this TU (a local sibling still in asm).
  * enemyType is forwarded to it untouched and unasserted; no stronger

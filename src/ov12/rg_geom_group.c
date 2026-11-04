@@ -7,9 +7,13 @@
 #include "rg_geom_group.h"
 
 const char D_00A55338[] = "pGroup != NIL";
+
 const char D_00A55348[] = "../rg_geom_group.euc.c";
+
 const char D_00A55360[] = "pGroup != NIL && pElm != NIL";
+
 const char D_00A55380[] = "RgVectorFind(pGroup->m_pList,pElm) < 0";
+
 const char D_00A553A8[] = "pGeom != NIL";
 
 static void _InitGroup(RgGeomGroup *pGroup)
@@ -360,7 +364,56 @@ void InitRgGeomGroupColiArg(RgGameColiArg *pArg)
     pArg->unmodeled_10 = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", RgGeomGroupCollision);
+const char D_00A553B8[] = "pArg != NIL";
+
+void RgGeomGroupCollision(RgGameColiArg *pArg)
+{
+    RgGeomCollisionPair pair;
+    void *list1;
+    void *list2;
+    unsigned int size1;
+    unsigned int size2;
+    unsigned int i;
+    unsigned int j;
+    int hits;
+
+    hits = 0;
+    if (pArg == 0) {
+        assert_prog(D_00A553B8, D_00A55348, 348);
+    }
+    if (pArg->m_pGroup1 != 0 && pArg->m_pGroup2 != 0) {
+        list1 = pArg->m_pGroup1->m_pList;
+        list2 = pArg->m_pGroup2->m_pList;
+        size1 = RgVectorSize(list1);
+        size2 = RgVectorSize(list2);
+        InitRgGeomColiArg(&pair);
+        pair.unmodeled_04 = pArg->unmodeled_04;
+        pair.unmodeled_0C = pArg->unmodeled_10;
+        for (i = 0; i < size2; i++) {
+            for (j = 0; j < size1; j++) {
+                pair.pGeom1 = RgVectorIndex(list1, j, D_00A55348, 367);
+                pair.pGeom2 = RgVectorIndex(list2, i, D_00A55348, 368);
+                if (RgGeomCollisionJob(&pair) != 0) {
+                    hits++;
+                }
+            }
+        }
+        if (hits <= 0) {
+            if (pArg->unmodeled_08 != 0) {
+                for (i = 0; i < size1; i++) {
+                    ((void (*)(RgGeom *, int))pArg->unmodeled_08)(
+                        RgVectorIndex(list1, i, D_00A55348, 378), 0);
+                }
+            }
+            if (pArg->unmodeled_14 != 0) {
+                for (i = 0; i < size2; i++) {
+                    ((void (*)(RgGeom *, int))pArg->unmodeled_14)(
+                        RgVectorIndex(list2, i, D_00A55348, 382), 0);
+                }
+            }
+        }
+    }
+}
 
 void RgGeomGroupDebugDisp(RgGeomGroup *pGroup)
 {

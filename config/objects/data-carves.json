@@ -284324,98 +284324,41 @@
           ]
         }
       ],
-      ".data": [
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "abInit_3",
-            "s_aeBgTbl_0",
-            "s_anEnemyLevel_1",
-            "s_anEnemyLevel_2",
-            "s_stack"
-          ],
-          "c_storage_aliases": [
-            {
-              "address": "0x00A4F4F8",
-              "original_name": "abInit.3",
-              "storage_owner": {
-                "address": "0x00A4F4F8",
-                "name": "abInit_3",
-                "size": 8
-              }
-            },
-            {
-              "address": "0x00A4F4C8",
-              "original_name": "s_aeBgTbl.0",
-              "storage_owner": {
-                "address": "0x00A4F4C8",
-                "name": "s_aeBgTbl_0",
-                "size": 16
-              }
-            },
-            {
-              "address": "0x00A4F4D8",
-              "original_name": "s_anEnemyLevel.1",
-              "storage_owner": {
-                "address": "0x00A4F4D8",
-                "name": "s_anEnemyLevel_1",
-                "size": 16
-              }
-            },
-            {
-              "address": "0x00A4F4E8",
-              "original_name": "s_anEnemyLevel.2",
-              "storage_owner": {
-                "address": "0x00A4F4E8",
-                "name": "s_anEnemyLevel_2",
-                "size": 16
-              }
-            }
-          ],
-          "generated": [
-            "0x00a4f4c8",
-            "0x00a4f520"
-          ],
-          "generated_by": [
-            "_GetEnemyHardLevelBySerial",
-            "_GetEnemyLevelBySerial",
-            "_GetStageDataBySerial",
-            "_SelectOneChar",
-            "_pop",
-            "_push"
-          ],
-          "range": [
-            "0x00a4f4c8",
-            "0x00a4f520"
-          ]
-        }
-      ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A51450"
+          "range": [
+            "0x00a51450",
+            "0x00a51808"
           ],
           "generated": [
             "0x00a51450",
-            "0x00a51468"
+            "0x00a51808"
           ],
           "generated_by": [
             "RobotGameMain",
+            "_DispPause",
             "_GetEnemyHardLevelBySerial",
             "_GetEnemyLevelBySerial",
+            "_GetHardEnemyChar",
+            "_GetStageData",
             "_GetStageDataBySerial",
+            "_Help",
+            "_InitDataBase",
+            "_OneBattle",
             "_SelectOneChar",
-            "_VsCpuGame"
+            "_Title",
+            "_VsCpuGame",
+            "_disp_hardmode"
           ],
-          "range": [
-            "0x00a51450",
-            "0x00a51468"
-          ]
-        },
-        {
-          "also_referenced_by_c": [],
           "c_owned_symbols": [
+            "D_00A51450",
+            "D_00A51468",
+            "D_00A51470",
+            "D_00A51480",
+            "D_00A51488",
+            "D_00A51498",
+            "D_00A514A0",
+            "jtbl_00A514C0",
             "D_00A514D8",
             "D_00A51500",
             "D_00A51530",
@@ -284444,32 +284387,9 @@
             "D_00A51630",
             "D_00A51640",
             "D_00A51650",
-            "D_00A51658"
-          ],
-          "generated": [
-            "0x00a514d8",
-            "0x00a51668"
-          ],
-          "generated_by": [
-            "_DispPause",
-            "_GetEnemyHardLevelBySerial",
-            "_GetEnemyLevelBySerial",
-            "_GetHardEnemyChar",
-            "_GetStageDataBySerial",
-            "_Help",
-            "_InitDataBase",
-            "_SelectOneChar",
-            "_Title",
-            "_disp_hardmode"
-          ],
-          "range": [
-            "0x00a514d8",
-            "0x00a51668"
-          ]
-        },
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
+            "D_00A51658",
+            "D_00A51668",
+            "jtbl_00A51680",
             "D_00A516A8",
             "D_00A516C8",
             "D_00A51700",
@@ -284487,19 +284407,37 @@
             "D_00A517D8",
             "jtbl_00A517F0"
           ],
+          "also_referenced_by_c": [
+            "D_00A51440"
+          ]
+        }
+      ],
+      ".data": [
+        {
+          "range": [
+            "0x00a4f4c8",
+            "0x00a4f520"
+          ],
           "generated": [
-            "0x00a516a8",
-            "0x00a51808"
+            "0x00a4f4c8",
+            "0x00a4f520"
           ],
           "generated_by": [
-            "RobotGameMain",
-            "_Help",
-            "_VsCpuGame"
+            "_GetEnemyHardLevelBySerial",
+            "_GetEnemyLevelBySerial",
+            "_GetStageDataBySerial",
+            "_SelectOneChar",
+            "_pop",
+            "_push"
           ],
-          "range": [
-            "0x00a516a8",
-            "0x00a51808"
-          ]
+          "c_owned_symbols": [
+            "s_aeBgTbl_0",
+            "s_anEnemyLevel_1",
+            "s_anEnemyLevel_2",
+            "abInit_3",
+            "s_stack"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -284539,154 +284477,338 @@
     "ov12/tu004": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a51830",
+            "0x00a51878"
+          ],
+          "generated": [
+            "0x00a51830",
+            "0x00a51878"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A51830",
             "D_00A51840",
             "D_00A51858"
           ],
-          "generated": [
-            "0x00a51830",
-            "0x00a51878"
-          ],
-          "generated_by": [
-            "CreateRgRobot",
-            "DisposeRgRobot",
-            "RgRobotAccelarate",
-            "RgRobotBreak",
-            "RgRobotDash",
-            "RgRobotDashContinue",
-            "RgRobotDisp",
-            "RgRobotDropWeapon",
-            "RgRobotGetActor",
-            "RgRobotGetCharID",
-            "RgRobotGetDashTime",
-            "RgRobotGetGeom",
-            "RgRobotGetLife",
-            "RgRobotGetLifeMax",
-            "RgRobotGetSpec",
-            "RgRobotGetStatusFlags",
-            "RgRobotGetTarget",
-            "RgRobotGetWeapon",
-            "RgRobotGiveDamage",
-            "RgRobotGiveWeakDamage",
-            "RgRobotHitBG",
-            "RgRobotHitByBody",
-            "RgRobotHitWeaponAttack",
-            "RgRobotInvalidAttack",
-            "RgRobotIsAcceptedCommand",
-            "RgRobotIsDead",
-            "RgRobotNearBG",
-            "RgRobotSetActor",
-            "RgRobotSetAdvanceGeom",
-            "RgRobotSetConfuse",
-            "RgRobotSetEyeGeom",
-            "RgRobotSetGeom",
-            "RgRobotSetMotSmooth",
-            "RgRobotSetRgDrawView",
-            "RgRobotSetSoundDriver",
-            "RgRobotSetSpareWeapon",
-            "RgRobotSetSpec",
-            "RgRobotSetTarget",
-            "RgRobotSetWeapon",
-            "RgRobotShot",
-            "RgRobotTargetting",
-            "_AdvanceGeomPassTime",
-            "_BodyExecCmd",
-            "_BodyGetTargetPos",
-            "_BodySetActor",
-            "_BodySetAdvanceGeom",
-            "_BodySetAutoHomingEnv",
-            "_BodySetEyeGeom",
-            "_BodySetGeom",
-            "_BodySetTarget",
-            "_CalcMaxSpeed",
-            "_ClearCmdQueue",
-            "_CreateBody",
-            "_CreateCmdQueue",
-            "_CreateHomingThread",
-            "_CreateStatue",
-            "_DestructRobot",
-            "_DispRobot",
-            "_DisposeBody",
-            "_DisposeCmdQueue",
-            "_DisposeHomingThread",
-            "_DisposeStatus",
-            "_EyeGeomPassTime",
-            "_GetDropMotion",
-            "_GetSleepTimeHomingThread",
-            "_GetStatHomingThread",
-            "_InitCmdQueue",
-            "_InitStatus",
-            "_SetStatus",
-            "_StartHomingThread",
-            "_StatusDisp",
-            "_StatusExecCmd",
-            "_StatusPassTime",
-            "_StopHomingThread"
-          ],
-          "range": [
-            "0x00a51830",
-            "0x00a51878"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 1,
+              "section": ".rodata",
+              "range": [
+                "0x00a51830",
+                "0x00a51840"
+              ],
+              "object_range": [
+                0,
+                16
+              ],
+              "symbols": [
+                "D_00A51830"
+              ]
+            },
+            {
+              "zero_padding_tail": 6,
+              "section": ".rodata",
+              "range": [
+                "0x00a51840",
+                "0x00a51858"
+              ],
+              "object_range": [
+                16,
+                40
+              ],
+              "symbols": [
+                "D_00A51840"
+              ]
+            },
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a51858",
+                "0x00a51878"
+              ],
+              "object_range": [
+                40,
+                72
+              ],
+              "symbols": [
+                "D_00A51858"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a518f0",
+            "0x00a51900"
+          ],
+          "generated": [
+            "0x00a518f0",
+            "0x00a51900"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A518F0"
           ],
-          "generated": [
-            "0x00a518f0",
-            "0x00a51900"
-          ],
-          "generated_by": [
-            "_DisposeStatus",
-            "_InitStatus",
-            "_SetStatus",
-            "_StatusDisp",
-            "_StatusExecCmd",
-            "_StatusPassTime"
-          ],
-          "range": [
-            "0x00a518f0",
-            "0x00a51900"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 1,
+              "section": ".rodata",
+              "range": [
+                "0x00a518f0",
+                "0x00a51900"
+              ],
+              "object_range": [
+                72,
+                88
+              ],
+              "symbols": [
+                "D_00A518F0"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a51900",
+            "0x00a51940"
+          ],
+          "generated": [
+            "0x00a51900",
+            "0x00a51940"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A51900"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a51900",
+                "0x00a51940"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                416,
+                480
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a51940",
+            "0x00a51950"
+          ],
+          "generated": [
+            "0x00a51940",
+            "0x00a51950"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A51940"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a51940",
+                "0x00a51950"
+              ],
+              "object_range": [
+                480,
+                496
+              ],
+              "symbols": [
+                "D_00A51940"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a51950",
+            "0x00a51968"
+          ],
+          "generated": [
+            "0x00a51950",
+            "0x00a51968"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A51950"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a51950",
+                "0x00a51968"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                496,
+                520
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a51990",
+            "0x00a519a8"
+          ],
+          "generated": [
+            "0x00a51990",
+            "0x00a519a8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A51990"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a51990",
+                "0x00a519a8"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                528,
+                552
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a519e0",
+            "0x00a519f4"
+          ],
+          "generated": [
+            "0x00a519e0",
+            "0x00a519f4"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A519E0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a519e0",
+                "0x00a519f4"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                560,
+                580
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a51a58",
+            "0x00a51ac8"
+          ],
+          "generated": [
+            "0x00a51a58",
+            "0x00a51ac8"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A51A58",
             "D_00A51A68",
             "D_00A51A78",
             "D_00A51A88"
           ],
-          "generated": [
-            "0x00a51a58",
-            "0x00a51ac8"
-          ],
-          "generated_by": [
-            "RgRobotDropWeapon",
-            "RgRobotShot",
-            "_BodyExecCmd",
-            "_BodyGetTargetPos",
-            "_BodySetActor",
-            "_BodySetAdvanceGeom",
-            "_BodySetAutoHomingEnv",
-            "_BodySetEyeGeom",
-            "_BodySetGeom",
-            "_BodySetTarget",
-            "_ClearCmdQueue",
-            "_DisposeBody",
-            "_DisposeCmdQueue",
-            "_InitCmdQueue"
-          ],
-          "range": [
-            "0x00a51a58",
-            "0x00a51ac8"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 6,
+              "section": ".rodata",
+              "range": [
+                "0x00a51a58",
+                "0x00a51a68"
+              ],
+              "object_range": [
+                88,
+                104
+              ],
+              "symbols": [
+                "D_00A51A58"
+              ]
+            },
+            {
+              "zero_padding_tail": 3,
+              "section": ".rodata",
+              "range": [
+                "0x00a51a68",
+                "0x00a51a78"
+              ],
+              "object_range": [
+                104,
+                120
+              ],
+              "symbols": [
+                "D_00A51A68"
+              ]
+            },
+            {
+              "zero_padding_tail": 3,
+              "section": ".rodata",
+              "range": [
+                "0x00a51a78",
+                "0x00a51a88"
+              ],
+              "object_range": [
+                120,
+                136
+              ],
+              "symbols": [
+                "D_00A51A78"
+              ]
+            },
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a51a88",
+                "0x00a51ac8"
+              ],
+              "object_range": [
+                136,
+                200
+              ],
+              "symbols": [
+                "D_00A51A88"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a51b48",
+            "0x00a51c1c"
+          ],
+          "generated": [
+            "0x00a51b48",
+            "0x00a51c1c"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A51B48",
             "D_00A51B58",
@@ -284696,61 +284818,111 @@
             "D_00A51BC0",
             "D_00A51BE0"
           ],
-          "generated": [
-            "0x00a51b48",
-            "0x00a51c1c"
-          ],
-          "generated_by": [
-            "DisposeRgRobot",
-            "RgRobotAccelarate",
-            "RgRobotBreak",
-            "RgRobotDash",
-            "RgRobotDashContinue",
-            "RgRobotDisp",
-            "RgRobotDropWeapon",
-            "RgRobotGetActor",
-            "RgRobotGetCharID",
-            "RgRobotGetDashTime",
-            "RgRobotGetGeom",
-            "RgRobotGetLife",
-            "RgRobotGetLifeMax",
-            "RgRobotGetSpec",
-            "RgRobotGetStatusFlags",
-            "RgRobotGetTarget",
-            "RgRobotGetWeapon",
-            "RgRobotGiveDamage",
-            "RgRobotGiveWeakDamage",
-            "RgRobotHitBG",
-            "RgRobotHitByBody",
-            "RgRobotHitWeaponAttack",
-            "RgRobotInvalidAttack",
-            "RgRobotIsAcceptedCommand",
-            "RgRobotIsDead",
-            "RgRobotNearBG",
-            "RgRobotSetActor",
-            "RgRobotSetAdvanceGeom",
-            "RgRobotSetConfuse",
-            "RgRobotSetEyeGeom",
-            "RgRobotSetGeom",
-            "RgRobotSetMotSmooth",
-            "RgRobotSetRgDrawView",
-            "RgRobotSetSoundDriver",
-            "RgRobotSetSpareWeapon",
-            "RgRobotSetSpec",
-            "RgRobotSetTarget",
-            "RgRobotSetWeapon",
-            "RgRobotShot",
-            "RgRobotTargetting",
-            "_BodyExecCmd",
-            "_DestructRobot",
-            "_DispRobot",
-            "_DisposeBody",
-            "_ExecHitByBody",
-            "_GetDropMotion"
-          ],
-          "range": [
-            "0x00a51b48",
-            "0x00a51c20"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a51b48",
+                "0x00a51b58"
+              ],
+              "object_range": [
+                200,
+                216
+              ],
+              "symbols": [
+                "D_00A51B48"
+              ]
+            },
+            {
+              "zero_padding_tail": 7,
+              "section": ".rodata",
+              "range": [
+                "0x00a51b58",
+                "0x00a51b78"
+              ],
+              "object_range": [
+                216,
+                248
+              ],
+              "symbols": [
+                "D_00A51B58"
+              ]
+            },
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a51b78",
+                "0x00a51ba0"
+              ],
+              "object_range": [
+                248,
+                288
+              ],
+              "symbols": [
+                "D_00A51B78"
+              ]
+            },
+            {
+              "zero_padding_tail": 5,
+              "section": ".rodata",
+              "range": [
+                "0x00a51ba0",
+                "0x00a51bb0"
+              ],
+              "object_range": [
+                288,
+                304
+              ],
+              "symbols": [
+                "D_00A51BA0"
+              ]
+            },
+            {
+              "zero_padding_tail": 2,
+              "section": ".rodata",
+              "range": [
+                "0x00a51bb0",
+                "0x00a51bc0"
+              ],
+              "object_range": [
+                304,
+                320
+              ],
+              "symbols": [
+                "D_00A51BB0"
+              ]
+            },
+            {
+              "zero_padding_tail": 5,
+              "section": ".rodata",
+              "range": [
+                "0x00a51bc0",
+                "0x00a51be0"
+              ],
+              "object_range": [
+                320,
+                352
+              ],
+              "symbols": [
+                "D_00A51BC0"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a51be0",
+                "0x00a51c1c"
+              ],
+              "object_range": [
+                352,
+                412
+              ],
+              "symbols": [
+                "D_00A51BE0"
+              ]
+            }
           ]
         }
       ]
@@ -284788,13 +284960,9 @@
     "ov12/tu006": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A51D90",
-            "jtbl_00A51DB0",
-            "D_00A51DD0",
-            "D_00A51DE0",
-            "D_00A51DF0"
+          "range": [
+            "0x00a51d90",
+            "0x00a51e08"
           ],
           "generated": [
             "0x00a51d90",
@@ -284806,9 +284974,34 @@
             "_InitEnemy",
             "_JobEnemy"
           ],
-          "range": [
-            "0x00a51d90",
-            "0x00a51e08"
+          "c_owned_symbols": [
+            "D_00A51D90",
+            "jtbl_00A51DB0",
+            "D_00A51DD0",
+            "D_00A51DE0",
+            "D_00A51DF0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A51C60",
+            "D_00A51C68",
+            "D_00A51C70",
+            "D_00A51C78",
+            "D_00A51C80",
+            "D_00A51C88",
+            "D_00A51C90",
+            "D_00A51CA0",
+            "D_00A51CB0",
+            "D_00A51CC0",
+            "D_00A51CD0",
+            "D_00A51CE0",
+            "D_00A51CF0",
+            "D_00A51D08",
+            "D_00A51D18",
+            "D_00A51D28",
+            "D_00A51D38",
+            "D_00A51D48",
+            "D_00A51D70",
+            "D_00A51D88"
           ]
         }
       ]
@@ -284912,7 +285105,49 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A51F30",
+            "D_00A51F40",
+            "D_00A51F50",
+            "D_00A51F60",
+            "D_00A51F70",
+            "D_00A51F88",
+            "D_00A51F90",
+            "D_00A51FA0",
+            "D_00A51FB0",
+            "D_00A51FC0",
+            "D_00A51FD0",
+            "D_00A51FE0",
+            "D_00A51FE8",
+            "D_00A52000",
+            "D_00A52018",
+            "D_00A52020",
+            "D_00A52030",
+            "D_00A52038",
+            "D_00A52048",
+            "D_00A52058",
+            "D_00A52068",
+            "D_00A52078",
+            "D_00A52080",
+            "D_00A52088",
+            "D_00A52090",
+            "D_00A52098",
+            "D_00A520A0",
+            "D_00A520C0",
+            "D_00A520E0",
+            "D_00A52100",
+            "D_00A52120",
+            "D_00A52140",
+            "D_00A52160",
+            "D_00A52180",
+            "D_00A521A0",
+            "D_00A521C0",
+            "D_00A521E0",
+            "D_00A52200",
+            "D_00A52220",
+            "D_00A52240",
+            "D_00A52260"
+          ],
           "c_owned_symbols": [
             "D_00A51F28"
           ],
@@ -285012,15 +285247,12 @@
     "ov12/tu010": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A52378",
-            "D_00A523A0",
-            "D_00A523C0",
-            "D_00A523E0"
+          "range": [
+            "0x00a52358",
+            "0x00a523f0"
           ],
           "generated": [
-            "0x00a52378",
+            "0x00a52358",
             "0x00a523ef"
           ],
           "generated_by": [
@@ -285039,13 +285271,20 @@
             "RgRobotEffectTermJet",
             "_AddEffect",
             "_DestructRobEff",
+            "_InitDashDefault",
+            "_InitJetDefault",
             "_InitRobEff",
             "_SetShootLocalGenEffect"
           ],
-          "range": [
-            "0x00a52378",
-            "0x00a523f0"
-          ]
+          "c_owned_symbols": [
+            "D_00A52358",
+            "D_00A52368",
+            "D_00A52378",
+            "D_00A523A0",
+            "D_00A523C0",
+            "D_00A523E0"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -285108,13 +285347,9 @@
     "ov12/tu013": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A52460",
-            "D_00A52470",
-            "D_00A52490",
-            "D_00A524C0",
-            "D_00A524E0"
+          "range": [
+            "0x00a52460",
+            "0x00a524f0"
           ],
           "generated": [
             "0x00a52460",
@@ -285126,6 +285361,7 @@
             "RgMotionInfoDBDump",
             "RgMotionInfoDBGet",
             "RgMotionInfoDBIsDefaultData",
+            "RgMotionInfoDBLoad",
             "RgMotionInfoGetActionInTime",
             "RgMotionInfoIsAfter",
             "RgMotionInfoIsBefore",
@@ -285137,21 +285373,32 @@
             "_TableFree",
             "_WrapperDestruct_00A0F8E8"
           ],
-          "range": [
-            "0x00a52460",
-            "0x00a524f0"
+          "c_owned_symbols": [
+            "D_00A52460",
+            "D_00A52470",
+            "D_00A52490",
+            "D_00A524C0",
+            "D_00A524E0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A524F0",
+            "D_00A52500",
+            "D_00A52508",
+            "D_00A52520",
+            "D_00A52530",
+            "D_00A52540",
+            "D_00A52548",
+            "D_00A52558",
+            "D_00A52560",
+            "D_00A52570",
+            "D_00A52580",
+            "D_00A52590"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A52598",
-            "D_00A525A8",
-            "D_00A525D8",
-            "D_00A525F0",
-            "D_00A52608",
-            "D_00A52618",
-            "D_00A52630"
+          "range": [
+            "0x00a52598",
+            "0x00a52660"
           ],
           "generated": [
             "0x00a52598",
@@ -285163,17 +285410,25 @@
             "RgMotionInfoIsAfter",
             "RgMotionInfoIsBefore"
           ],
-          "range": [
-            "0x00a52598",
-            "0x00a52660"
-          ]
+          "c_owned_symbols": [
+            "D_00A52598",
+            "D_00A525A8",
+            "D_00A525D8",
+            "D_00A525F0",
+            "D_00A52608",
+            "D_00A52618",
+            "D_00A52630"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
     "ov12/tu014": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A52660"
+          ],
           "c_owned_symbols": [
             "D_00A52670",
             "D_00A52688",
@@ -285193,7 +285448,8 @@
             "0x00a526f8"
           ],
           "generated_by": [
-            "RgHissatuCheck"
+            "RgHissatuCheck",
+            "_IsSpecWep"
           ],
           "range": [
             "0x00a52670",
@@ -285243,18 +285499,17 @@
       ".data": [
         {
           "range": [
-            "0x00A4F5E8",
-            "0x00A4F610"
+            "0x00a4f5e8",
+            "0x00a4f610"
           ],
           "generated": [
-            "0x00A4F5E8",
-            "0x00A4F610"
+            "0x00a4f5e8",
+            "0x00a4f610"
           ],
           "generated_by": [],
           "c_owned_symbols": [
             "s_aszVer3TimerName"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -285276,12 +285531,12 @@
       ".rodata": [
         {
           "range": [
-            "0x00A52750",
-            "0x00A52788"
+            "0x00a52750",
+            "0x00a52788"
           ],
           "generated": [
-            "0x00A52750",
-            "0x00A52788"
+            "0x00a52750",
+            "0x00a52788"
           ],
           "generated_by": [],
           "c_owned_symbols": [
@@ -285289,7 +285544,6 @@
             "D_00A52760",
             "D_00A52778"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285351,7 +285605,6 @@
           "c_owned_symbols": [
             "D_00A52788"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285383,7 +285636,6 @@
           "c_owned_symbols": [
             "D_00A52798"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285415,7 +285667,6 @@
           "c_owned_symbols": [
             "D_00A527A8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285447,7 +285698,6 @@
           "c_owned_symbols": [
             "D_00A527B8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285479,7 +285729,6 @@
           "c_owned_symbols": [
             "D_00A527C0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285511,7 +285760,6 @@
           "c_owned_symbols": [
             "D_00A527C8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285543,7 +285791,6 @@
           "c_owned_symbols": [
             "D_00A527D0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285575,7 +285822,6 @@
           "c_owned_symbols": [
             "D_00A527E0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285607,7 +285853,6 @@
           "c_owned_symbols": [
             "D_00A527E8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285639,7 +285884,6 @@
           "c_owned_symbols": [
             "D_00A527F0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285660,12 +285904,12 @@
         },
         {
           "range": [
-            "0x00A52920",
-            "0x00A529AA"
+            "0x00a52920",
+            "0x00a529aa"
           ],
           "generated": [
-            "0x00A52920",
-            "0x00A529AA"
+            "0x00a52920",
+            "0x00a529aa"
           ],
           "generated_by": [],
           "c_owned_symbols": [
@@ -285677,7 +285921,6 @@
             "D_00A52978",
             "D_00A52998"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -285787,33 +286030,11 @@
       ]
     },
     "ov12/tu017": {
-      ".data": [
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_fBgObjBlight"
-          ],
-          "generated": [
-            "0x00a4f638",
-            "0x00a4f63c"
-          ],
-          "generated_by": [
-            "StaticRgBgObjGetBlight",
-            "StaticRgBgObjSetBlight"
-          ],
-          "range": [
-            "0x00a4f638",
-            "0x00a4f63c"
-          ]
-        }
-      ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A529B0",
-            "D_00A529C0",
-            "D_00A529D8"
+          "range": [
+            "0x00a529b0",
+            "0x00a529e8"
           ],
           "generated": [
             "0x00a529b0",
@@ -285832,12 +286053,35 @@
             "RgBgObjTryToBreak",
             "_Destruct_00A12B28",
             "_Draw",
-            "_InitRgBgObj"
+            "_InitRgBgObj",
+            "_PassTime_00A12B90"
           ],
+          "c_owned_symbols": [
+            "D_00A529B0",
+            "D_00A529C0",
+            "D_00A529D8"
+          ],
+          "also_referenced_by_c": []
+        }
+      ],
+      ".data": [
+        {
           "range": [
-            "0x00a529b0",
-            "0x00a529e8"
-          ]
+            "0x00a4f638",
+            "0x00a4f63c"
+          ],
+          "generated": [
+            "0x00a4f638",
+            "0x00a4f63c"
+          ],
+          "generated_by": [
+            "StaticRgBgObjGetBlight",
+            "StaticRgBgObjSetBlight"
+          ],
+          "c_owned_symbols": [
+            "s_fBgObjBlight"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -285960,7 +286204,6 @@
           "c_owned_symbols": [
             "s_szMagicString"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -285992,7 +286235,6 @@
           "c_owned_symbols": [
             "s_bInit1_0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -286024,7 +286266,6 @@
           "c_owned_symbols": [
             "s_bInit2_3"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -286058,7 +286299,6 @@
           "c_owned_symbols": [
             "D_00A52A40"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286090,7 +286330,6 @@
           "c_owned_symbols": [
             "D_00A52A68"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286122,7 +286361,6 @@
           "c_owned_symbols": [
             "D_00A52A80"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286154,7 +286392,6 @@
           "c_owned_symbols": [
             "D_00A52A98"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286186,7 +286423,6 @@
           "c_owned_symbols": [
             "D_00A52AB8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286218,7 +286454,6 @@
           "c_owned_symbols": [
             "D_00A52AC8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286250,7 +286485,6 @@
           "c_owned_symbols": [
             "D_00A52AD8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286282,7 +286516,6 @@
           "c_owned_symbols": [
             "D_00A52AF0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286314,7 +286547,6 @@
           "c_owned_symbols": [
             "D_00A52B08"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286346,7 +286578,6 @@
           "c_owned_symbols": [
             "D_00A52B18"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286378,7 +286609,6 @@
           "c_owned_symbols": [
             "D_00A52B48"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286410,7 +286640,6 @@
           "c_owned_symbols": [
             "D_00A52B60"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286442,7 +286671,6 @@
           "c_owned_symbols": [
             "D_00A52E88"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286474,7 +286702,6 @@
           "c_owned_symbols": [
             "D_00A52EB0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286506,7 +286733,6 @@
           "c_owned_symbols": [
             "D_00A52ED0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286538,7 +286764,6 @@
           "c_owned_symbols": [
             "D_00A52EF8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286570,7 +286795,6 @@
           "c_owned_symbols": [
             "D_00A52F18"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286602,7 +286826,6 @@
           "c_owned_symbols": [
             "D_00A52F40"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286634,7 +286857,6 @@
           "c_owned_symbols": [
             "D_00A52F70"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286666,7 +286888,6 @@
           "c_owned_symbols": [
             "D_00A52F90"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286698,7 +286919,6 @@
           "c_owned_symbols": [
             "D_00A52FA8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286730,7 +286950,6 @@
           "c_owned_symbols": [
             "D_00A52FB8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286762,7 +286981,6 @@
           "c_owned_symbols": [
             "D_00A52FD0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286794,7 +287012,6 @@
           "c_owned_symbols": [
             "D_00A52FE8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -286927,7 +287144,28 @@
     "ov12/tu022": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a531f0",
+            "0x00a532c0"
+          ],
+          "generated": [
+            "0x00a531f0",
+            "0x00a532c0"
+          ],
+          "generated_by": [
+            "CreateRgSimpleDB",
+            "DisposeRgSimpleDB",
+            "RgSimpleDBClear",
+            "RgSimpleDBDump",
+            "_ClearDB",
+            "_DisposeDB",
+            "_EntryDB",
+            "_GetDataDB",
+            "_GetDataDBName",
+            "_GetDataID",
+            "_GetDataSize",
+            "_InitDB_00A14D38"
+          ],
           "c_owned_symbols": [
             "D_00A531F0",
             "D_00A53200",
@@ -286938,26 +287176,9 @@
             "D_00A53288",
             "D_00A53290"
           ],
-          "generated": [
-            "0x00a531f0",
-            "0x00a532c0"
-          ],
-          "generated_by": [
-            "CreateRgSimpleDB",
-            "DisposeRgSimpleDB",
-            "RgSimpleDBClear",
-            "_ClearDB",
-            "_DisposeDB",
-            "_EntryDB",
-            "_GetDataDB",
-            "_GetDataDBName",
-            "_GetDataID",
-            "_GetDataSize",
-            "_InitDB_00A14D38"
-          ],
-          "range": [
-            "0x00a531f0",
-            "0x00a532c0"
+          "also_referenced_by_c": [
+            "D_00A532C0",
+            "D_00A532D0"
           ]
         }
       ]
@@ -286965,59 +287186,105 @@
     "ov12/tu023": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A532E8",
-            "D_00A532F8",
-            "D_00A53310"
+          "range": [
+            "0x00a532e8",
+            "0x00a53320"
           ],
           "generated": [
             "0x00a532e8",
             "0x00a53320"
           ],
-          "generated_by": [
-            "CreateRgShotFromEssence",
-            "InitRgBeamEssence",
-            "InitRgFireEssence",
-            "InitRgHomingShotEssence",
-            "InitRgNormalShotEssence",
-            "RgShotGetDamage",
-            "RgShotGetHitRobNum",
-            "RgShotHitBg",
-            "RgShotHitRobot",
-            "RgShotIsReleased",
-            "RgShotRelease",
-            "RgShotSetBgHitSound",
-            "RgShotSetHideSound",
-            "RgShotSetHitSound",
-            "RgShotSetNoLifeSound",
-            "RgShotSetSoundDriver",
-            "_BeamHit",
-            "_BeamIsReleased",
-            "_BeamPassTime",
-            "_CommonGetGeom",
-            "_CreateBeam",
-            "_CreateFire",
-            "_CreateGrenade",
-            "_CreateHoming",
-            "_CreateRgNormalShot",
-            "_FireIsReleased",
-            "_FireKill",
-            "_FireRelease",
-            "_GrenadeHomingPassTime",
-            "_GrenadeSetBom",
-            "_HomingPassTime",
-            "_InitShotCommon",
-            "_ShotCommonHitBg",
-            "_ShotCommonPassTimeEffect"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A532E8",
+            "D_00A532F8",
+            "D_00A53310"
           ],
-          "range": [
-            "0x00a532e8",
-            "0x00a53320"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a532e8",
+                "0x00a532f8"
+              ],
+              "object_range": [
+                0,
+                16
+              ],
+              "symbols": [
+                "D_00A532E8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a532f8",
+                "0x00a53310"
+              ],
+              "object_range": [
+                16,
+                40
+              ],
+              "symbols": [
+                "D_00A532F8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53310",
+                "0x00a53320"
+              ],
+              "object_range": [
+                40,
+                56
+              ],
+              "symbols": [
+                "D_00A53310"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a53320",
+            "0x00a53338"
+          ],
+          "generated": [
+            "0x00a53320",
+            "0x00a53338"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A53320"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53320",
+                "0x00a53338"
+              ],
+              "object_range": [
+                224,
+                248
+              ],
+              "symbols": [
+                "D_00A53320"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a53338",
+            "0x00a533b0"
+          ],
+          "generated": [
+            "0x00a53338",
+            "0x00a533b0"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A53338",
             "D_00A53348",
@@ -287028,55 +287295,239 @@
             "D_00A53390",
             "D_00A533A0"
           ],
-          "generated": [
-            "0x00a53338",
-            "0x00a533b0"
-          ],
-          "generated_by": [
-            "CreateRgShotFromEssence",
-            "InitRgBeamEssence",
-            "InitRgFireEssence",
-            "InitRgHomingShotEssence",
-            "InitRgNormalShotEssence",
-            "_CreateBeam",
-            "_CreateFire",
-            "_CreateGrenade",
-            "_CreateHoming",
-            "_FireIsReleased",
-            "_FireKill",
-            "_FireRelease",
-            "_GrenadeHomingPassTime",
-            "_GrenadeSetBom",
-            "_InitShotCommon",
-            "_ShotCommonHitBg"
-          ],
-          "range": [
-            "0x00a53338",
-            "0x00a533b0"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53338",
+                "0x00a53348"
+              ],
+              "object_range": [
+                56,
+                72
+              ],
+              "symbols": [
+                "D_00A53338"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53348",
+                "0x00a53358"
+              ],
+              "object_range": [
+                72,
+                88
+              ],
+              "symbols": [
+                "D_00A53348"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53358",
+                "0x00a53368"
+              ],
+              "object_range": [
+                88,
+                104
+              ],
+              "symbols": [
+                "D_00A53358"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53368",
+                "0x00a53378"
+              ],
+              "object_range": [
+                104,
+                120
+              ],
+              "symbols": [
+                "D_00A53368"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53378",
+                "0x00a53380"
+              ],
+              "object_range": [
+                120,
+                128
+              ],
+              "symbols": [
+                "D_00A53378"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53380",
+                "0x00a53390"
+              ],
+              "object_range": [
+                128,
+                144
+              ],
+              "symbols": [
+                "D_00A53380"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53390",
+                "0x00a533a0"
+              ],
+              "object_range": [
+                144,
+                160
+              ],
+              "symbols": [
+                "D_00A53390"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a533a0",
+                "0x00a533b0"
+              ],
+              "object_range": [
+                160,
+                176
+              ],
+              "symbols": [
+                "D_00A533A0"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a533c8",
+            "0x00a533f8"
+          ],
+          "generated": [
+            "0x00a533c8",
+            "0x00a533f8"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A533C8",
             "D_00A533D8",
             "D_00A533E8"
           ],
-          "generated": [
-            "0x00a533c8",
-            "0x00a533f8"
-          ],
-          "generated_by": [
-            "RgShotHitBg",
-            "RgShotHitRobot",
-            "_BeamHit",
-            "_BeamIsReleased",
-            "_BeamPassTime",
-            "_ShotCommonHitBg"
-          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a533c8",
+                "0x00a533d8"
+              ],
+              "object_range": [
+                176,
+                192
+              ],
+              "symbols": [
+                "D_00A533C8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a533d8",
+                "0x00a533e8"
+              ],
+              "object_range": [
+                192,
+                208
+              ],
+              "symbols": [
+                "D_00A533D8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a533e8",
+                "0x00a533f8"
+              ],
+              "object_range": [
+                208,
+                224
+              ],
+              "symbols": [
+                "D_00A533E8"
+              ]
+            }
+          ]
+        },
+        {
           "range": [
-            "0x00a533c8",
-            "0x00a533f8"
+            "0x00a533f8",
+            "0x00a53408"
+          ],
+          "generated": [
+            "0x00a533f8",
+            "0x00a53408"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A533F8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a533f8",
+                "0x00a53408"
+              ],
+              "object_range": [
+                248,
+                264
+              ],
+              "symbols": [
+                "D_00A533F8"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a53408",
+            "0x00a53418"
+          ],
+          "generated": [
+            "0x00a53408",
+            "0x00a53418"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A53408"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53408",
+                "0x00a53418"
+              ],
+              "object_range": [
+                264,
+                280
+              ],
+              "symbols": [
+                "D_00A53408"
+              ]
+            }
           ]
         }
       ]
@@ -287084,11 +287535,9 @@
     "ov12/tu024": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A53418",
-            "D_00A53428",
-            "D_00A53440"
+          "range": [
+            "0x00a53418",
+            "0x00a53450"
           ],
           "generated": [
             "0x00a53418",
@@ -287097,6 +287546,7 @@
           "generated_by": [
             "CreateRgShotEffect",
             "DisposeRgShotEffect",
+            "RgShotEffectDisp",
             "RgShotEffectGetPtclEffect",
             "RgShotEffectPassTime",
             "RgShotEffectSetAddAlpha",
@@ -287113,17 +287563,37 @@
             "RgShotEffectStopAlive",
             "_InitEffect_00A17C90"
           ],
-          "range": [
-            "0x00a53418",
-            "0x00a53450"
-          ]
+          "c_owned_symbols": [
+            "D_00A53418",
+            "D_00A53428",
+            "D_00A53440"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
     "ov12/tu025": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a53450",
+            "0x00a535e8"
+          ],
+          "generated": [
+            "0x00a53450",
+            "0x00a535e8"
+          ],
+          "generated_by": [
+            "RgShotDBClear",
+            "RgShotDBRead",
+            "_ReadBeam",
+            "_ReadCommon_00A18730",
+            "_ReadFire",
+            "_ReadGrenade",
+            "_ReadHoming",
+            "_ReadHomingMain",
+            "_ReadNormal"
+          ],
           "c_owned_symbols": [
             "D_00A53450",
             "D_00A53458",
@@ -287156,23 +287626,14 @@
             "D_00A535C8",
             "D_00A535D8"
           ],
-          "generated": [
-            "0x00a53450",
-            "0x00a535e8"
-          ],
-          "generated_by": [
-            "RgShotDBClear",
-            "_ReadBeam",
-            "_ReadCommon_00A18730",
-            "_ReadFire",
-            "_ReadGrenade",
-            "_ReadHoming",
-            "_ReadHomingMain",
-            "_ReadNormal"
-          ],
-          "range": [
-            "0x00a53450",
-            "0x00a535e8"
+          "also_referenced_by_c": [
+            "D_00A535E8",
+            "D_00A53600",
+            "D_00A53608",
+            "D_00A53610",
+            "D_00A53618",
+            "D_00A53620",
+            "D_00A53628"
           ]
         }
       ]
@@ -287180,7 +287641,11 @@
     "ov12/tu026": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A53670",
+            "D_00A53698",
+            "D_00A536E0"
+          ],
           "c_owned_symbols": [
             "D_00A53648",
             "D_00A53658"
@@ -287193,14 +287658,19 @@
             "CreateRgWeaponFromEssence",
             "DisposeRgWeapon",
             "DisposeRgWeaponNotActor",
+            "InitRgWeaponAttackEssence",
+            "InitRgWeaponEnergyEssence",
             "InitRgWeaponShieldEssence",
             "InitRgWeaponShotEssence",
             "InitRgWeaponUnArmedEssence",
+            "RgWeaponDisp",
             "RgWeaponDisposeLockon",
             "RgWeaponGetActor",
+            "RgWeaponGetAttachedShot",
             "RgWeaponGetControlFlag",
             "RgWeaponGetEquip",
             "RgWeaponGetEss",
+            "RgWeaponGetRestUnit",
             "RgWeaponGetShotNum",
             "RgWeaponGetWeight",
             "RgWeaponHitBG",
@@ -287208,6 +287678,7 @@
             "RgWeaponIsActiveLockOnSys",
             "RgWeaponIsAttachedShot",
             "RgWeaponIsLockedOn",
+            "RgWeaponIsNotBusy",
             "RgWeaponIsTargetting",
             "RgWeaponPassTime",
             "RgWeaponPlayMotion",
@@ -287222,6 +287693,8 @@
             "RgWeaponShotStop",
             "RgWeaponStopLockon",
             "RgWeaponSubShotNum",
+            "_AddShotAttach",
+            "_CheckAttach",
             "_CheckLockOn",
             "_CommonDisp",
             "_CreateWeaponAttackType",
@@ -287232,11 +287705,16 @@
             "_EnergyFree",
             "_EnergyIsBusy",
             "_GetAllAttach",
+            "_GetDefShotPosDir",
+            "_GetDefShotPosDirFunc",
             "_GetNumAttach",
             "_GetParentCharID",
             "_GetShotInfo",
             "_HitRobotAttackType",
             "_InitAttach",
+            "_InitWeaponAttack",
+            "_InitWeaponCommon",
+            "_InitWeaponCommonEffector",
             "_PlayShotMotion",
             "_ReleaseAttach",
             "_ShotAttackType",
@@ -287244,7 +287722,8 @@
             "_ShotStopAttackType",
             "_ShotStopShieldType",
             "_ShotTypeFree",
-            "_ShotTypeIsBusy"
+            "_ShotTypeIsBusy",
+            "_ShotTypeShot"
           ],
           "range": [
             "0x00a53648",
@@ -287252,7 +287731,9 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A53700"
+          ],
           "c_owned_symbols": [
             "D_00A536F0"
           ],
@@ -287263,8 +287744,10 @@
           "generated_by": [
             "DisposeRgWeapon",
             "DisposeRgWeaponNotActor",
+            "RgWeaponDisp",
             "RgWeaponDisposeLockon",
             "RgWeaponGetActor",
+            "RgWeaponGetAttachedShot",
             "RgWeaponGetControlFlag",
             "RgWeaponGetEquip",
             "RgWeaponGetEss",
@@ -287275,6 +287758,7 @@
             "RgWeaponIsActiveLockOnSys",
             "RgWeaponIsAttachedShot",
             "RgWeaponIsLockedOn",
+            "RgWeaponIsNotBusy",
             "RgWeaponIsTargetting",
             "RgWeaponPassTime",
             "RgWeaponPlayMotion",
@@ -287297,8 +287781,10 @@
             "_CreateWeaponUnArmedType",
             "_EnergyFree",
             "_EnergyIsBusy",
+            "_GetDefShotPosDir",
             "_GetParentCharID",
             "_HitRobotAttackType",
+            "_InitWeaponCommonEffector",
             "_PlayShotMotion",
             "_ShotAttackType",
             "_ShotShieldType",
@@ -287313,7 +287799,9 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A53750"
+          ],
           "c_owned_symbols": [
             "D_00A53710",
             "D_00A53720",
@@ -287325,6 +287813,8 @@
             "0x00a53750"
           ],
           "generated_by": [
+            "InitRgWeaponAttackEssence",
+            "InitRgWeaponEnergyEssence",
             "InitRgWeaponShieldEssence",
             "InitRgWeaponShotEssence",
             "InitRgWeaponUnArmedEssence",
@@ -287341,7 +287831,10 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A537A8",
+            "D_00A537B8"
+          ],
           "c_owned_symbols": [
             "D_00A53768",
             "D_00A53788"
@@ -287370,6 +287863,7 @@
           ],
           "generated_by": [
             "RgWeaponRobotShotMotion",
+            "_GetDefShotPosDirFunc",
             "_GetShotInfo"
           ],
           "range": [
@@ -287397,6 +287891,7 @@
             "RgWeaponDBRead",
             "_IsOnChar",
             "_ReadAttackType",
+            "_ReadCommon_00A1CD08",
             "_ReadEnergyType",
             "_ReadEquipBitMask",
             "_ReadEquipType",
@@ -287415,7 +287910,69 @@
             "D_00A53888",
             "D_00A538A8"
           ],
-          "also_referenced_by_c": []
+          "also_referenced_by_c": [
+            "D_00A538C8",
+            "D_00A538D0",
+            "D_00A538D8",
+            "D_00A538E0",
+            "D_00A538F0",
+            "D_00A53918",
+            "D_00A53940",
+            "D_00A53968",
+            "D_00A53970",
+            "D_00A53978",
+            "D_00A53988",
+            "D_00A53990",
+            "D_00A53998",
+            "D_00A539A0",
+            "D_00A539A8",
+            "D_00A539D8",
+            "D_00A539F0",
+            "D_00A539F8",
+            "D_00A53A00",
+            "D_00A53A10",
+            "D_00A53A18",
+            "D_00A53A28",
+            "D_00A53A40",
+            "D_00A53A48",
+            "D_00A53A50",
+            "D_00A53A68",
+            "D_00A53A70",
+            "D_00A53A78",
+            "D_00A53A88",
+            "D_00A53A90",
+            "D_00A53A98",
+            "D_00A53AA8",
+            "D_00A53AB0",
+            "D_00A53AC0",
+            "D_00A53AC8",
+            "D_00A53AE0",
+            "D_00A53AF0",
+            "D_00A53AF8",
+            "D_00A53B10",
+            "D_00A53B18",
+            "D_00A53B20",
+            "D_00A53B28",
+            "D_00A53B30",
+            "D_00A53B38",
+            "D_00A53B40",
+            "D_00A53B48",
+            "D_00A53B50",
+            "D_00A53B58",
+            "D_00A53B60",
+            "D_00A53B68",
+            "D_00A53B70",
+            "D_00A53B78",
+            "D_00A53B88",
+            "D_00A53B90",
+            "D_00A53BA0",
+            "D_00A53BA8",
+            "D_00A53BB0",
+            "D_00A53BB8",
+            "D_00A53BC0",
+            "D_00A53BD0",
+            "D_00A53C00"
+          ]
         },
         {
           "range": [
@@ -287521,81 +288078,237 @@
     "ov12/tu030": {
       ".data": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_aePosToJntID"
+          "range": [
+            "0x00a4f688",
+            "0x00a4f6a8"
           ],
           "generated": [
             "0x00a4f688",
             "0x00a4f6a8"
           ],
-          "generated_by": [
-            "RgEquipPosToJntID"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "s_aePosToJntID"
           ],
-          "range": [
-            "0x00a4f688",
-            "0x00a4f6a8"
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a4f688",
+                "0x00a4f6a8"
+              ],
+              "object_range": [
+                0,
+                32
+              ],
+              "symbols": [
+                "s_aePosToJntID"
+              ]
+            }
           ]
         }
       ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a53e10",
+            "0x00a53ea8"
+          ],
+          "generated": [
+            "0x00a53e10",
+            "0x00a53ea8"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A53E10",
             "D_00A53E80",
             "D_00A53E98"
           ],
-          "generated": [
-            "0x00a53e10",
-            "0x00a53ea8"
-          ],
-          "generated_by": [
-            "InitRgEquip",
-            "RgEquipIsEquipable",
-            "RgEquipPosToJntID",
-            "RgEquipTypeString"
-          ],
-          "range": [
-            "0x00a53e10",
-            "0x00a53ea8"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 6,
+              "section": ".rodata",
+              "range": [
+                "0x00a53e10",
+                "0x00a53e80"
+              ],
+              "object_range": [
+                0,
+                112
+              ],
+              "symbols": [
+                "D_00A53E10"
+              ]
+            },
+            {
+              "zero_padding_tail": 1,
+              "section": ".rodata",
+              "range": [
+                "0x00a53e80",
+                "0x00a53e98"
+              ],
+              "object_range": [
+                112,
+                136
+              ],
+              "symbols": [
+                "D_00A53E80"
+              ]
+            },
+            {
+              "zero_padding_tail": 2,
+              "section": ".rodata",
+              "range": [
+                "0x00a53e98",
+                "0x00a53ea8"
+              ],
+              "object_range": [
+                136,
+                152
+              ],
+              "symbols": [
+                "D_00A53E98"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a53ec8",
+            "0x00a53f08"
+          ],
+          "generated": [
+            "0x00a53ec8",
+            "0x00a53f08"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A53EC8"
           ],
-          "generated": [
-            "0x00a53ec8",
-            "0x00a53f08"
-          ],
-          "generated_by": [
-            "RgEquipTypeString"
-          ],
-          "range": [
-            "0x00a53ec8",
-            "0x00a53f08"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a53ec8",
+                "0x00a53f08"
+              ],
+              "object_range": [
+                152,
+                216
+              ],
+              "symbols": [
+                "D_00A53EC8"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a53f90",
+            "0x00a53fac"
+          ],
+          "generated": [
+            "0x00a53f90",
+            "0x00a53fac"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A53F90",
             "D_00A53F98",
             "D_00A53FA0",
             "D_00A53FA8"
           ],
-          "generated": [
-            "0x00a53f90",
-            "0x00a53fac"
-          ],
-          "generated_by": [
-            "RgEquipTypeString"
-          ],
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 3,
+              "section": ".rodata",
+              "range": [
+                "0x00a53f90",
+                "0x00a53f98"
+              ],
+              "object_range": [
+                216,
+                224
+              ],
+              "symbols": [
+                "D_00A53F90"
+              ]
+            },
+            {
+              "zero_padding_tail": 2,
+              "section": ".rodata",
+              "range": [
+                "0x00a53f98",
+                "0x00a53fa0"
+              ],
+              "object_range": [
+                224,
+                232
+              ],
+              "symbols": [
+                "D_00A53F98"
+              ]
+            },
+            {
+              "zero_padding_tail": 3,
+              "section": ".rodata",
+              "range": [
+                "0x00a53fa0",
+                "0x00a53fa8"
+              ],
+              "object_range": [
+                232,
+                240
+              ],
+              "symbols": [
+                "D_00A53FA0"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a53fa8",
+                "0x00a53fac"
+              ],
+              "object_range": [
+                240,
+                244
+              ],
+              "symbols": [
+                "D_00A53FA8"
+              ]
+            }
+          ]
+        },
+        {
           "range": [
-            "0x00a53f90",
-            "0x00a53fb0"
+            "0x00a54050",
+            "0x00a54070"
+          ],
+          "generated": [
+            "0x00a54050",
+            "0x00a54070"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A54050"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54050",
+                "0x00a54070"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                256,
+                288
+              ]
+            }
           ]
         }
       ]
@@ -287787,67 +288500,228 @@
     "ov12/tu035": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A542C8",
-            "D_00A542D8",
-            "D_00A542F8"
+          "range": [
+            "0x00a542c8",
+            "0x00a54308"
           ],
           "generated": [
             "0x00a542c8",
             "0x00a54308"
           ],
-          "generated_by": [
-            "CreateRgParticleEffect",
-            "DisposeRgParticleEffect",
-            "InitRgParticleEffectControlData",
-            "InitRgParticleEffectEssence",
-            "RgParticleEffectDisp",
-            "RgParticleEffectEssenceSerialize",
-            "RgParticleEffectIsActive",
-            "RgParticleEffectPassTime",
-            "RgParticleEffectSetActive",
-            "RgParticleEffectSetControlData",
-            "RgParticleEffectSetShootInertia",
-            "RgParticleEffectSetShootLocal",
-            "RgParticleEffectStopAlive",
-            "RgParticleEffectStopShoot",
-            "_DestructEffect_00A20E90",
-            "_DestructPtclChar",
-            "_DispPtclChar",
-            "_InitPtclChar",
-            "_PassTimePtclChar"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A542C8",
+            "D_00A542D8",
+            "D_00A542F8"
           ],
-          "range": [
-            "0x00a542c8",
-            "0x00a54308"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a542c8",
+                "0x00a542d8"
+              ],
+              "object_range": [
+                0,
+                16
+              ],
+              "symbols": [
+                "D_00A542C8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a542d8",
+                "0x00a542f8"
+              ],
+              "object_range": [
+                16,
+                48
+              ],
+              "symbols": [
+                "D_00A542D8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a542f8",
+                "0x00a54308"
+              ],
+              "object_range": [
+                48,
+                64
+              ],
+              "symbols": [
+                "D_00A542F8"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a54308",
+            "0x00a54318"
+          ],
+          "generated": [
+            "0x00a54308",
+            "0x00a54318"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A54308"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54308",
+                "0x00a54318"
+              ],
+              "object_range": [
+                128,
+                144
+              ],
+              "symbols": [
+                "D_00A54308"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a54318",
+            "0x00a54338"
+          ],
+          "generated": [
+            "0x00a54318",
+            "0x00a54338"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A54318"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54318",
+                "0x00a54338"
+              ],
+              "object_range": [
+                144,
+                176
+              ],
+              "symbols": [
+                "D_00A54318"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a54338",
+            "0x00a54368"
+          ],
+          "generated": [
+            "0x00a54338",
+            "0x00a54368"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A54338"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54338",
+                "0x00a54368"
+              ],
+              "object_range": [
+                176,
+                224
+              ],
+              "symbols": [
+                "D_00A54338"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a54368",
+            "0x00a543a8"
+          ],
+          "generated": [
+            "0x00a54368",
+            "0x00a543a8"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A54368",
             "D_00A54378",
             "D_00A54388",
             "D_00A54398"
           ],
-          "generated": [
-            "0x00a54368",
-            "0x00a543a8"
-          ],
-          "generated_by": [
-            "InitRgParticleEffectControlData",
-            "InitRgParticleEffectEssence",
-            "RgParticleEffectEssenceSerialize",
-            "RgParticleEffectSetControlData",
-            "_DestructPtclChar",
-            "_DispPtclChar",
-            "_InitPtclChar",
-            "_PassTimePtclChar"
-          ],
-          "range": [
-            "0x00a54368",
-            "0x00a543a8"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54368",
+                "0x00a54378"
+              ],
+              "object_range": [
+                64,
+                80
+              ],
+              "symbols": [
+                "D_00A54368"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54378",
+                "0x00a54388"
+              ],
+              "object_range": [
+                80,
+                96
+              ],
+              "symbols": [
+                "D_00A54378"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54388",
+                "0x00a54398"
+              ],
+              "object_range": [
+                96,
+                112
+              ],
+              "symbols": [
+                "D_00A54388"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a54398",
+                "0x00a543a8"
+              ],
+              "object_range": [
+                112,
+                128
+              ],
+              "symbols": [
+                "D_00A54398"
+              ]
+            }
           ]
         }
       ]
@@ -287855,10 +288729,9 @@
     "ov12/tu036": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A543A8",
-            "D_00A543B8"
+          "range": [
+            "0x00a543a8",
+            "0x00a543d0"
           ],
           "generated": [
             "0x00a543a8",
@@ -287881,18 +288754,22 @@
             "_GetBool",
             "_GetFloat",
             "_GetInt",
+            "_GetString",
+            "_InitReader",
             "_SetCurrent"
           ],
-          "range": [
-            "0x00a543a8",
-            "0x00a543d0"
+          "c_owned_symbols": [
+            "D_00A543A8",
+            "D_00A543B8"
+          ],
+          "also_referenced_by_c": [
+            "D_00A543D0"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A543E0",
-            "D_00A54418"
+          "range": [
+            "0x00a543e0",
+            "0x00a54428"
           ],
           "generated": [
             "0x00a543e0",
@@ -287902,20 +288779,21 @@
             "_GetBool",
             "_GetFloat",
             "_GetInt",
+            "_GetString",
             "_SetCurrent"
           ],
-          "range": [
-            "0x00a543e0",
-            "0x00a54428"
+          "c_owned_symbols": [
+            "D_00A543E0",
+            "D_00A54418"
+          ],
+          "also_referenced_by_c": [
+            "D_00A54428"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54438",
-            "D_00A54440",
-            "D_00A54448",
-            "D_00A54460"
+          "range": [
+            "0x00a54438",
+            "0x00a54480"
           ],
           "generated": [
             "0x00a54438",
@@ -287926,10 +288804,13 @@
             "RgReadTextUnget",
             "_GetBool"
           ],
-          "range": [
-            "0x00a54438",
-            "0x00a54480"
-          ]
+          "c_owned_symbols": [
+            "D_00A54438",
+            "D_00A54440",
+            "D_00A54448",
+            "D_00A54460"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -287965,7 +288846,17 @@
     "ov12/tu038": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A545A8",
+            "D_00A545C0",
+            "D_00A545C8",
+            "D_00A545D0",
+            "D_00A545D8",
+            "D_00A545E8",
+            "D_00A545F0",
+            "D_00A545F8",
+            "D_00A54600"
+          ],
           "c_owned_symbols": [
             "D_00A54560",
             "D_00A54570",
@@ -287983,6 +288874,7 @@
             "RgDispGameInfoSetHostRobot",
             "RgDispGameInfoSetStudio",
             "RgDispGameInfoSetSubRobot",
+            "_DispInfo",
             "_DisposeInfo",
             "_InitInfo",
             "_PassTimeInfo",
@@ -288198,32 +289090,11 @@
       ]
     },
     "ov12/tu043": {
-      ".data": [
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_aCharIDToUVWH_0"
-          ],
-          "generated": [
-            "0x00a4fb30",
-            "0x00a4fbf0"
-          ],
-          "generated_by": [
-            "_GetAgwsNameUVWH"
-          ],
-          "range": [
-            "0x00a4fb30",
-            "0x00a4fbf0"
-          ]
-        }
-      ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54810",
-            "D_00A54820",
-            "D_00A54838"
+          "range": [
+            "0x00a54810",
+            "0x00a54848"
           ],
           "generated": [
             "0x00a54810",
@@ -288232,41 +289103,62 @@
           "generated_by": [
             "CreateRgDispLife",
             "DisposeRgDispLife",
+            "RgDispLifeDisp",
             "RgDispLifePassTime",
             "RgDispLifeSetRobot",
             "RgDispLifeSetTimer",
             "RgDispLifeSetVsMode",
+            "RgDispLifeSetWin",
             "_DestructDisp_00A26190",
-            "_DispAgwsName"
+            "_DispAgwsName",
+            "_InitDisp_00A25E58"
           ],
-          "range": [
-            "0x00a54810",
-            "0x00a54848"
+          "c_owned_symbols": [
+            "D_00A54810",
+            "D_00A54820",
+            "D_00A54838"
+          ],
+          "also_referenced_by_c": [
+            "D_00A54848",
+            "D_00A54858"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54870",
-            "D_00A54880"
+          "range": [
+            "0x00a54870",
+            "0x00a54890"
           ],
           "generated": [
             "0x00a54870",
             "0x00a54890"
           ],
           "generated_by": [
-            "RgDispLifeSetVsMode"
+            "RgDispLifeSetVsMode",
+            "_InitDisp_00A25E58"
           ],
-          "range": [
-            "0x00a54870",
-            "0x00a54890"
+          "c_owned_symbols": [
+            "D_00A54870",
+            "D_00A54880"
+          ],
+          "also_referenced_by_c": [
+            "D_00A54890",
+            "D_00A548A0",
+            "D_00A548B0",
+            "D_00A548C0",
+            "D_00A548D0",
+            "D_00A548E0",
+            "D_00A548F0",
+            "D_00A54900",
+            "D_00A54910",
+            "D_00A54920",
+            "D_00A54930",
+            "D_00A54940"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54950",
-            "D_00A54960"
+          "range": [
+            "0x00a54950",
+            "0x00a54970"
           ],
           "generated": [
             "0x00a54950",
@@ -288275,9 +289167,31 @@
           "generated_by": [
             "RgDispLifeSetVsMode"
           ],
+          "c_owned_symbols": [
+            "D_00A54950",
+            "D_00A54960"
+          ],
+          "also_referenced_by_c": []
+        }
+      ],
+      ".data": [
+        {
           "range": [
-            "0x00a54950",
-            "0x00a54970"
+            "0x00a4fb30",
+            "0x00a4fbf0"
+          ],
+          "generated": [
+            "0x00a4fb30",
+            "0x00a4fbf0"
+          ],
+          "generated_by": [
+            "_GetAgwsNameUVWH"
+          ],
+          "c_owned_symbols": [
+            "s_aCharIDToUVWH_0"
+          ],
+          "also_referenced_by_c": [
+            "s_anPos_1"
           ]
         }
       ]
@@ -288401,43 +289315,11 @@
       ]
     },
     "ov12/tu045": {
-      ".data": [
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_aView_0"
-          ],
-          "generated": [
-            "0x00a50080",
-            "0x00a50090"
-          ],
-          "generated_by": [
-            "_FullScreenStudio"
-          ],
-          "range": [
-            "0x00a50080",
-            "0x00a50090"
-          ]
-        }
-      ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54AC0",
-            "D_00A54AD0",
-            "D_00A54AF0",
-            "D_00A54B08",
-            "D_00A54B18",
-            "D_00A54B30",
-            "D_00A54B40",
-            "D_00A54B58",
-            "D_00A54B68",
-            "D_00A54B80",
-            "D_00A54B90",
-            "D_00A54BB0",
-            "D_00A54BC8",
-            "D_00A54BE8"
+          "range": [
+            "0x00a54ac0",
+            "0x00a54c10"
           ],
           "generated": [
             "0x00a54ac0",
@@ -288456,6 +289338,8 @@
             "RgDrawSetGlobalFog",
             "RgDrawStudioGetView",
             "RgDrawViewGetScreenRect",
+            "RgDrawViewInit",
+            "RgDrawViewIsPointInView",
             "RgDrawViewSetPosition",
             "RgDrawViewSetRotateX",
             "RgDrawViewSetRotateY",
@@ -288474,20 +289358,36 @@
             "_GetViewRgDrawStudio",
             "_InitDraw",
             "_InitRgDrawStudio",
+            "_InitRgDrawView",
             "_InitStudioList",
             "_SetScreenSplitMode",
             "_WrapperDestruct_00A27700",
             "_openVifGifAD_00A26CF0"
           ],
-          "range": [
-            "0x00a54ac0",
-            "0x00a54c10"
+          "c_owned_symbols": [
+            "D_00A54AC0",
+            "D_00A54AD0",
+            "D_00A54AF0",
+            "D_00A54B08",
+            "D_00A54B18",
+            "D_00A54B30",
+            "D_00A54B40",
+            "D_00A54B58",
+            "D_00A54B68",
+            "D_00A54B80",
+            "D_00A54B90",
+            "D_00A54BB0",
+            "D_00A54BC8",
+            "D_00A54BE8"
+          ],
+          "also_referenced_by_c": [
+            "D_00A54C10"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54C50"
+          "range": [
+            "0x00a54c50",
+            "0x00a54c68"
           ],
           "generated": [
             "0x00a54c50",
@@ -288496,10 +289396,29 @@
           "generated_by": [
             "_DrawMain"
           ],
+          "c_owned_symbols": [
+            "D_00A54C50"
+          ],
+          "also_referenced_by_c": []
+        }
+      ],
+      ".data": [
+        {
           "range": [
-            "0x00a54c50",
-            "0x00a54c68"
-          ]
+            "0x00a50080",
+            "0x00a50090"
+          ],
+          "generated": [
+            "0x00a50080",
+            "0x00a50090"
+          ],
+          "generated_by": [
+            "_FullScreenStudio"
+          ],
+          "c_owned_symbols": [
+            "s_aView_0"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -288532,16 +289451,9 @@
     "ov12/tu047": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54CA0",
-            "D_00A54CB0",
-            "D_00A54CC0",
-            "D_00A54CD8",
-            "D_00A54CE0",
-            "D_00A54CE8",
-            "D_00A54CF8",
-            "D_00A54D08"
+          "range": [
+            "0x00a54ca0",
+            "0x00a54d20"
           ],
           "generated": [
             "0x00a54ca0",
@@ -288561,8 +289473,10 @@
             "RgBattleMgrInitBattle",
             "RgBattleMgrPassTime",
             "RgBattleMgrSetPlayerControl",
+            "_AddPlayerList",
             "_BattleMgrActivateTime",
             "_BattleMgrPlayerControl",
+            "_ClearBattleField",
             "_ClearPlayerList",
             "_ControlBattle",
             "_ControlPlayerList",
@@ -288579,7 +289493,9 @@
             "_DisposeDispInfo",
             "_DisposePlayerList",
             "_DoubleScreenBattleField",
+            "_DrawDispInfo",
             "_DrawDispInfoOnePlayer",
+            "_FullScreenBattleField",
             "_GetBigLifePlayer",
             "_GetCameraBattleField",
             "_GetDeadList",
@@ -288587,6 +289503,7 @@
             "_GetInPlayerList",
             "_GetNumOfPlayerList",
             "_GetStudioBattleField",
+            "_InitBattle",
             "_InitBattleField",
             "_InitBattleMgr",
             "_InitDispInfo",
@@ -288596,23 +289513,25 @@
             "_PassTimePlayerList",
             "_SetDispInfo"
           ],
-          "range": [
-            "0x00a54ca0",
-            "0x00a54d20"
+          "c_owned_symbols": [
+            "D_00A54CA0",
+            "D_00A54CB0",
+            "D_00A54CC0",
+            "D_00A54CD8",
+            "D_00A54CE0",
+            "D_00A54CE8",
+            "D_00A54CF8",
+            "D_00A54D08"
+          ],
+          "also_referenced_by_c": [
+            "D_00A54D20",
+            "D_00A54D30"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A54D50",
-            "D_00A54D60",
-            "D_00A54D78",
-            "D_00A54D98",
-            "D_00A54DA8",
-            "D_00A54DB8",
-            "D_00A54DD0",
-            "D_00A54DE8",
-            "D_00A54DF8"
+          "range": [
+            "0x00a54d50",
+            "0x00a54e18"
           ],
           "generated": [
             "0x00a54d50",
@@ -288634,6 +289553,7 @@
             "RgBattleMgrSetPlayerControl",
             "_BattleMgrActivateTime",
             "_BattleMgrPlayerControl",
+            "_ClearBattleField",
             "_ControlBattle",
             "_DestructBattleField",
             "_DestructDispInfo",
@@ -288642,10 +289562,13 @@
             "_DisposeBattleMgr",
             "_DisposeDispInfo",
             "_DoubleScreenBattleField",
+            "_DrawDispInfo",
             "_DrawDispInfoOnePlayer",
+            "_FullScreenBattleField",
             "_GetCameraBattleField",
             "_GetGeomGroupBattleField",
             "_GetStudioBattleField",
+            "_InitBattle",
             "_InitBattleField",
             "_InitBattleMgr",
             "_InitDispInfo",
@@ -288653,10 +289576,18 @@
             "_PassTimeBattleField",
             "_SetDispInfo"
           ],
-          "range": [
-            "0x00a54d50",
-            "0x00a54e18"
-          ]
+          "c_owned_symbols": [
+            "D_00A54D50",
+            "D_00A54D60",
+            "D_00A54D78",
+            "D_00A54D98",
+            "D_00A54DA8",
+            "D_00A54DB8",
+            "D_00A54DD0",
+            "D_00A54DE8",
+            "D_00A54DF8"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -288871,12 +289802,9 @@
     "ov12/tu055": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A551A8",
-            "D_00A551B8",
-            "D_00A551D0",
-            "D_00A551E0"
+          "range": [
+            "0x00a551a8",
+            "0x00a55218"
           ],
           "generated": [
             "0x00a551a8",
@@ -288886,24 +289814,27 @@
             "CreateRgGeomPoly",
             "InitRgGeomPoly",
             "RgGeomPolyCheckBall",
+            "RgGeomPolyCheckRay",
             "RgGeomPolyGetData",
             "RgGeomPolySetColiData",
             "_InitRgGeomPoly"
           ],
-          "range": [
-            "0x00a551a8",
-            "0x00a55218"
-          ]
+          "c_owned_symbols": [
+            "D_00A551A8",
+            "D_00A551B8",
+            "D_00A551D0",
+            "D_00A551E0"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
     "ov12/tu056": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A55218",
-            "D_00A55228"
+          "range": [
+            "0x00a55218",
+            "0x00a55240"
           ],
           "generated": [
             "0x00a55218",
@@ -288911,12 +289842,17 @@
           ],
           "generated_by": [
             "CreateRgGeomTray",
+            "RgGeomTrayCheckBall",
             "RgGeomTraySetSize",
             "_InitRgGeomTray"
           ],
-          "range": [
-            "0x00a55218",
-            "0x00a55240"
+          "c_owned_symbols": [
+            "D_00A55218",
+            "D_00A55228"
+          ],
+          "also_referenced_by_c": [
+            "D_00A55240",
+            "D_00A55250"
           ]
         }
       ]
@@ -289040,29 +289976,36 @@
       ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A55260",
-            "D_00A55270"
+          "range": [
+            "0x00a55260",
+            "0x00a552e8"
           ],
           "generated": [
             "0x00a55260",
-            "0x00a55290"
+            "0x00a552e4"
           ],
           "generated_by": [
-            "InitRgGeomPillar"
+            "CheckBallBoxCollision_00A2EB18",
+            "InitRgGeomPillar",
+            "_CheckPillarBall"
           ],
-          "range": [
-            "0x00a55260",
-            "0x00a55290"
-          ]
+          "c_owned_symbols": [
+            "D_00A55260",
+            "D_00A55270",
+            "jtbl_00A55290",
+            "jtbl_00A552C0"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
     "ov12/tu058": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A552E8",
+            "D_00A55318"
+          ],
           "c_owned_symbols": [
             "D_00A552F8"
           ],
@@ -289071,7 +290014,9 @@
             "0x00a55318"
           ],
           "generated_by": [
-            "InitRgGeomColiArg"
+            "InitRgGeomColiArg",
+            "RgGeomCollisionJob",
+            "_RobotVsPoly"
           ],
           "range": [
             "0x00a552f8",
@@ -289088,7 +290033,8 @@
             "0x00a55338"
           ],
           "generated_by": [
-            "InitRgGeomColiArg"
+            "InitRgGeomColiArg",
+            "RgGeomCollisionJob"
           ],
           "range": [
             "0x00a55328",
@@ -289100,22 +290046,19 @@
     "ov12/tu059": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A55338",
-            "D_00A55348",
-            "D_00A55360",
-            "D_00A55380",
-            "D_00A553A8"
+          "range": [
+            "0x00a55338",
+            "0x00a553c8"
           ],
           "generated": [
             "0x00a55338",
-            "0x00a553b5"
+            "0x00a553c4"
           ],
           "generated_by": [
             "CreateRgGeomGroup",
             "DisposeRgGeomGroup",
             "RgGeomGroupAddElm",
+            "RgGeomGroupCollision",
             "RgGeomGroupCreateBall",
             "RgGeomGroupCreatePiller",
             "RgGeomGroupCreatePoint",
@@ -289140,10 +290083,15 @@
             "_DisposeGroup",
             "_InitGroup"
           ],
-          "range": [
-            "0x00a55338",
-            "0x00a553b8"
-          ]
+          "c_owned_symbols": [
+            "D_00A55338",
+            "D_00A55348",
+            "D_00A55360",
+            "D_00A55380",
+            "D_00A553A8",
+            "D_00A553B8"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -289213,7 +290161,10 @@
     "ov12/tu062": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A55590",
+            "D_00A55610"
+          ],
           "c_owned_symbols": [
             "D_00A554F0",
             "D_00A55500",
@@ -289232,6 +290183,7 @@
             "RgColiDataAddTriangle",
             "RgColiDataInitTriangles",
             "RgColiDataVsBall",
+            "RgColiDataVsRay",
             "_AddTriangle",
             "_AllocDataMemory",
             "_DisposeColiData",
@@ -289244,7 +290196,10 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A556A0",
+            "D_00A556B0"
+          ],
           "c_owned_symbols": [
             "D_00A55670"
           ],
@@ -289364,11 +290319,9 @@
     "ov12/tu065": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "rg_filesys_source_file",
-            "pSys_not_nil",
-            "D_00A559B0"
+          "range": [
+            "0x00a55988",
+            "0x00a559c0"
           ],
           "generated": [
             "0x00a55988",
@@ -289388,16 +290341,41 @@
             "_AllocFile",
             "_FindFile",
             "_FindFileObj",
+            "_FindInPrepare",
             "_InitFileSys",
             "_WrapperDestruct_00A33FB0"
           ],
-          "range": [
-            "0x00a55988",
-            "0x00a559c0"
+          "c_owned_symbols": [
+            "rg_filesys_source_file",
+            "pSys_not_nil",
+            "D_00A559B0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A559C0",
+            "D_00A559D0",
+            "D_00A559D8"
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a559f0",
+            "0x00a55c48"
+          ],
+          "generated": [
+            "0x00a559f0",
+            "0x00a55c48"
+          ],
+          "generated_by": [
+            "DisposeRgFileSysData_sub",
+            "RgFileSysClear",
+            "RgFileSysDataGetName",
+            "RgFileSysDisposePrepares",
+            "RgFileSysDump",
+            "RgFileSysDup",
+            "RgFileSysOnMemory",
+            "RgFileSysPrepareFile",
+            "RgFileSysRead"
+          ],
           "c_owned_symbols": [
             "D_00A559F0",
             "D_00A55A10",
@@ -289421,25 +290399,7 @@
             "D_00A55C28",
             "D_00A55C38"
           ],
-          "generated": [
-            "0x00a559f0",
-            "0x00a55c48"
-          ],
-          "generated_by": [
-            "DisposeRgFileSysData_sub",
-            "RgFileSysClear",
-            "RgFileSysDataGetName",
-            "RgFileSysDisposePrepares",
-            "RgFileSysDump",
-            "RgFileSysDup",
-            "RgFileSysOnMemory",
-            "RgFileSysPrepareFile",
-            "RgFileSysRead"
-          ],
-          "range": [
-            "0x00a559f0",
-            "0x00a55c48"
-          ]
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -289895,7 +290855,11 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "s_aRed_1",
+            "s_aWhite_2",
+            "s_ainPics_3"
+          ],
           "c_owned_symbols": [
             "s_aeCharTbl"
           ],
@@ -289915,7 +290879,9 @@
       ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56678"
+          ],
           "c_owned_symbols": [
             "D_00A56650",
             "D_00A56660"
@@ -289940,10 +290906,17 @@
             "_CreateWepListDisp",
             "_DestructWepListDisp",
             "_Destruct_00A3B940",
+            "_DetachWeaponIfConfrictSelType",
+            "_DispWepSelOverlaps",
             "_Disp_00A3BE70",
             "_DisposeSelectData",
             "_DisposeWepListDisp",
+            "_DrawPlayerMode",
+            "_DrawWepListDisp",
+            "_DumpSelect__",
             "_EquipCurIDToEquipType",
+            "_GetAllNameOnCursorSelType",
+            "_GetBaseSelectData",
             "_GetConfrictSelType",
             "_GetCurSelType",
             "_GetCurrentConfrictSelType",
@@ -289961,7 +290934,10 @@
             "_GetSelectCharID",
             "_GetSelectCursor",
             "_GetSelectWeps",
+            "_GetSelectableSelectChar",
             "_GetTypeSelType",
+            "_GetWepSelection",
+            "_InitByCharSelType",
             "_InitCharTypeSelWep",
             "_InitDetermWin",
             "_InitFloatArrowHori",
@@ -289970,18 +290946,29 @@
             "_InitSelect",
             "_InitSelectChar",
             "_InitSelectData",
+            "_InitWepListDisp",
             "_IsExistItemLower",
             "_IsExistItemUpper",
             "_LoadCharSelectData",
             "_LoadPicList",
+            "_LoadWepSelectData",
+            "_PassTimeSelType",
             "_PassTimeSelWep",
+            "_PassTimeSelectChar",
             "_PassTimeSelectData",
+            "_PassTime_00A3B9E8",
             "_SaveCharSelectData",
             "_SaveWepSelectData",
+            "_SetAllCursorByNameSelType",
+            "_SetBaseSelectData",
+            "_SetCharSelDisp",
+            "_SetCharSelectChar",
+            "_SetCursorByNameSelWep",
             "_SetCursorSelWep",
             "_SetDetermModeSelType",
             "_SetPlayerModeSelectData",
             "_SetSelTypeCursor",
+            "_SetSelectableSelectChar",
             "_SetSelectorWepListDisp",
             "_SetSpecModeSelType",
             "_TransitToCharSelect",
@@ -289995,7 +290982,9 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56710"
+          ],
           "c_owned_symbols": [
             "D_00A56698",
             "D_00A566A8",
@@ -290013,9 +291002,11 @@
             "_GetEssListSizeSelWep",
             "_GetEssSelWep",
             "_GetNameOnCursorSelWep",
+            "_GetWepSelection",
             "_InitCharTypeSelWep",
             "_InitSelWep",
             "_PassTimeSelWep",
+            "_SetCursorByNameSelWep",
             "_SetCursorSelWep"
           ],
           "range": [
@@ -290024,7 +291015,9 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56788"
+          ],
           "c_owned_symbols": [
             "D_00A56720",
             "jtbl_00A56740",
@@ -290036,7 +291029,9 @@
             "0x00a56788"
           ],
           "generated_by": [
+            "_DetachWeaponIfConfrictSelType",
             "_EquipCurIDToEquipType",
+            "_GetAllNameOnCursorSelType",
             "_GetConfrictSelType",
             "_GetCurSelType",
             "_GetCurrentConfrictSelType",
@@ -290044,7 +291039,10 @@
             "_GetCursorSelType",
             "_GetSelWepSelType",
             "_GetTypeSelType",
+            "_InitByCharSelType",
             "_InitSelType",
+            "_PassTimeSelType",
+            "_SetAllCursorByNameSelType",
             "_SetDetermModeSelType",
             "_SetSelTypeCursor",
             "_SetSpecModeSelType"
@@ -290055,7 +291053,15 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A567A8",
+            "D_00A567B8",
+            "D_00A567C8",
+            "D_00A567D8",
+            "D_00A567F0",
+            "D_00A56808",
+            "D_00A56820"
+          ],
           "c_owned_symbols": [
             "D_00A56798"
           ],
@@ -290066,6 +291072,8 @@
           "generated_by": [
             "_DestructWepListDisp",
             "_DisposeWepListDisp",
+            "_DrawWepListDisp",
+            "_InitWepListDisp",
             "_SetSelectorWepListDisp"
           ],
           "range": [
@@ -290074,7 +291082,11 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56848",
+            "D_00A56878",
+            "D_00A56898"
+          ],
           "c_owned_symbols": [
             "D_00A56838"
           ],
@@ -290083,12 +291095,16 @@
             "0x00a56848"
           ],
           "generated_by": [
+            "_DispWepSelOverlaps",
             "_DisposeSelectData",
+            "_GetBaseSelectData",
             "_GetModeSelectData",
             "_InitSelectData",
             "_LoadCharSelectData",
+            "_LoadWepSelectData",
             "_SaveCharSelectData",
-            "_SaveWepSelectData"
+            "_SaveWepSelectData",
+            "_SetBaseSelectData"
           ],
           "range": [
             "0x00a56838",
@@ -290096,7 +291112,9 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A568D0"
+          ],
           "c_owned_symbols": [
             "D_00A568C0"
           ],
@@ -290110,8 +291128,10 @@
             "RgSelectAGWSSetSelectData",
             "_LoadCharSelectData",
             "_LoadPicList",
+            "_LoadWepSelectData",
             "_SaveCharSelectData",
-            "_SaveWepSelectData"
+            "_SaveWepSelectData",
+            "_SetBaseSelectData"
           ],
           "range": [
             "0x00a568c0",
@@ -290119,7 +291139,11 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56938",
+            "D_00A56948",
+            "D_00A56958"
+          ],
           "c_owned_symbols": [
             "D_00A568E0",
             "D_00A568F0",
@@ -290140,13 +291164,16 @@
             "RgSelectAGWSPassTime",
             "RgSelectAGWSSetSelectData",
             "_Destruct_00A3B940",
+            "_DispWepSelOverlaps",
             "_Disp_00A3BE70",
+            "_DrawPlayerMode",
             "_GetPlayerModeSelectData",
             "_GetSelectCharID",
             "_GetSelectWeps",
             "_InitSelect",
             "_LoadPicList",
             "_PassTimeSelectData",
+            "_PassTime_00A3B9E8",
             "_SetPlayerModeSelectData",
             "_TransitToCharSelect",
             "_TransitToOffSelect",
@@ -290158,7 +291185,13 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56B88",
+            "D_00A56B90",
+            "D_00A56B98",
+            "D_00A56BA0",
+            "D_00A56BA8"
+          ],
           "c_owned_symbols": [
             "D_00A56968",
             "D_00A56978",
@@ -290197,43 +291230,55 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56BE8",
+            "D_00A56C00",
+            "D_00A56C10",
+            "D_00A56C20"
+          ],
           "c_owned_symbols": [
             "D_00A56BB0",
-            "D_00A56BC8"
+            "D_00A56BC8",
+            "D_00A56BE0"
           ],
           "generated": [
             "0x00a56bb0",
-            "0x00a56be0"
+            "0x00a56be8"
           ],
           "generated_by": [
+            "_DispFloatArrow",
             "_InitFloatArrowHori"
           ],
           "range": [
             "0x00a56bb0",
-            "0x00a56be0"
+            "0x00a56be8"
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A56C58"
+          ],
           "c_owned_symbols": [
+            "jtbl_00A56C30",
             "D_00A56C48"
           ],
           "generated": [
-            "0x00a56c48",
+            "0x00a56c30",
             "0x00a56c58"
           ],
           "generated_by": [
+            "_DispWepSelOverlaps",
             "_init_camera"
           ],
           "range": [
-            "0x00a56c48",
+            "0x00a56c30",
             "0x00a56c58"
           ]
         },
         {
           "also_referenced_by_c": [],
           "c_owned_symbols": [
+            "jtbl_00A56C70",
             "D_00A56C90",
             "D_00A56CA8",
             "D_00A56CB8",
@@ -290245,27 +291290,50 @@
             "D_00A56D20"
           ],
           "generated": [
-            "0x00a56c90",
+            "0x00a56c70",
             "0x00a56d38"
           ],
           "generated_by": [
             "RgSelectAGWSGetCollectData",
             "_InitSelect",
-            "_LoadPicList"
+            "_LoadPicList",
+            "_PassTime_00A3B9E8"
           ],
           "range": [
-            "0x00a56c90",
+            "0x00a56c70",
             "0x00a56d38"
           ]
         }
       ]
     },
     "ov12/tu070": {
+      ".rodata": [
+        {
+          "range": [
+            "0x00a56d38",
+            "0x00a56d90"
+          ],
+          "generated": [
+            "0x00a56d38",
+            "0x00a56d81"
+          ],
+          "generated_by": [
+            "RgSelectGetEnemyWeapons"
+          ],
+          "c_owned_symbols": [
+            "D_00A56D38",
+            "D_00A56D48",
+            "D_00A56D68",
+            "D_00A56D78"
+          ],
+          "also_referenced_by_c": []
+        }
+      ],
       ".data": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_bIgnoreEventFlag"
+          "range": [
+            "0x00a50470",
+            "0x00a50474"
           ],
           "generated": [
             "0x00a50470",
@@ -290274,14 +291342,15 @@
           "generated_by": [
             "RgSelectGetEnemyChar",
             "RgSelectGetEnemyChars",
+            "RgSelectGetEnemyWeapons",
             "RgSelectGetPlayerChars",
             "RgSelectIgnoreEventFlag",
             "RgSelectWeapons"
           ],
-          "range": [
-            "0x00a50470",
-            "0x00a50474"
-          ]
+          "c_owned_symbols": [
+            "s_bIgnoreEventFlag"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -290384,11 +291453,128 @@
           ]
         }
       ],
+      ".rodata": [
+        {
+          "range": [
+            "0x00a56d90",
+            "0x00a56dc0"
+          ],
+          "generated": [
+            "0x00a56d90",
+            "0x00a56dc0"
+          ],
+          "generated_by": [
+            "CreateRgSelectRobot",
+            "DisposeRgSelectRobot",
+            "RgSelectRobotDisp",
+            "RgSelectRobotPassTime",
+            "RgSelectRobotScreenPos",
+            "RgSelectRobotSet",
+            "RgSelectRobotSetMode",
+            "_ActivateAct",
+            "_DestructAct",
+            "_DestructSelRob",
+            "_DrawAct",
+            "_InitAct",
+            "_InitSelRob",
+            "_JobAct",
+            "_ReadCallback",
+            "_ReqAct",
+            "_ReqLoad"
+          ],
+          "c_owned_symbols": [
+            "D_00A56D90",
+            "D_00A56DA0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A56DC0"
+          ]
+        },
+        {
+          "range": [
+            "0x00a56dd8",
+            "0x00a56de8"
+          ],
+          "generated": [
+            "0x00a56dd8",
+            "0x00a56de8"
+          ],
+          "generated_by": [
+            "_ActivateAct",
+            "_DestructAct",
+            "_DrawAct",
+            "_InitAct",
+            "_JobAct",
+            "_ReqAct"
+          ],
+          "c_owned_symbols": [
+            "D_00A56DD8"
+          ],
+          "also_referenced_by_c": [
+            "D_00A56DE8",
+            "D_00A56DF8",
+            "D_00A56E08"
+          ]
+        },
+        {
+          "range": [
+            "0x00a56e10",
+            "0x00a56e50"
+          ],
+          "generated": [
+            "0x00a56e10",
+            "0x00a56e50"
+          ],
+          "generated_by": [
+            "_select_light"
+          ],
+          "c_owned_symbols": [
+            "D_00A56E10"
+          ],
+          "also_referenced_by_c": [
+            "D_00A56E50",
+            "D_00A56E68",
+            "D_00A56E80",
+            "D_00A56E98",
+            "D_00A56EA8",
+            "D_00A56EB8",
+            "D_00A56ED0",
+            "D_00A56EE0"
+          ]
+        },
+        {
+          "range": [
+            "0x00a56ef8",
+            "0x00a56f08"
+          ],
+          "generated": [
+            "0x00a56ef8",
+            "0x00a56f05"
+          ],
+          "generated_by": [
+            "DisposeRgSelectRobot",
+            "RgSelectRobotDisp",
+            "RgSelectRobotPassTime",
+            "RgSelectRobotScreenPos",
+            "RgSelectRobotSet",
+            "RgSelectRobotSetMode",
+            "_DestructSelRob",
+            "_InitSelRob"
+          ],
+          "c_owned_symbols": [
+            "D_00A56EF8"
+          ],
+          "also_referenced_by_c": [
+            "D_00A56F08",
+            "D_00A56F10"
+          ]
+        }
+      ],
       ".data": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_bLoading"
+          "range": [
+            "0x00a50480",
+            "0x00a50484"
           ],
           "generated": [
             "0x00a50480",
@@ -290401,16 +291587,15 @@
             "_KillLoad",
             "_ReadCallback"
           ],
-          "range": [
-            "0x00a50480",
-            "0x00a50484"
-          ]
+          "c_owned_symbols": [
+            "s_bLoading"
+          ],
+          "also_referenced_by_c": []
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "asDirection_0",
-            "s_aPos_1"
+          "range": [
+            "0x00a50490",
+            "0x00a504f0"
           ],
           "generated": [
             "0x00a50490",
@@ -290420,110 +291605,20 @@
             "_ActorPos",
             "_select_light"
           ],
-          "range": [
-            "0x00a50490",
-            "0x00a504f0"
-          ]
-        }
-      ],
-      ".rodata": [
-        {
-          "also_referenced_by_c": [],
           "c_owned_symbols": [
-            "D_00A56D90",
-            "D_00A56DA0"
+            "asDirection_0",
+            "s_aPos_1"
           ],
-          "generated": [
-            "0x00a56d90",
-            "0x00a56dc0"
-          ],
-          "generated_by": [
-            "CreateRgSelectRobot",
-            "DisposeRgSelectRobot",
-            "RgSelectRobotPassTime",
-            "RgSelectRobotScreenPos",
-            "RgSelectRobotSet",
-            "RgSelectRobotSetMode",
-            "_DestructAct",
-            "_DestructSelRob",
-            "_InitSelRob",
-            "_ReadCallback"
-          ],
-          "range": [
-            "0x00a56d90",
-            "0x00a56dc0"
-          ]
-        },
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A56DD8"
-          ],
-          "generated": [
-            "0x00a56dd8",
-            "0x00a56de8"
-          ],
-          "generated_by": [
-            "_DestructAct"
-          ],
-          "range": [
-            "0x00a56dd8",
-            "0x00a56de8"
-          ]
-        },
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A56E10"
-          ],
-          "generated": [
-            "0x00a56e10",
-            "0x00a56e50"
-          ],
-          "generated_by": [
-            "_select_light"
-          ],
-          "range": [
-            "0x00a56e10",
-            "0x00a56e50"
-          ]
-        },
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A56EF8"
-          ],
-          "generated": [
-            "0x00a56ef8",
-            "0x00a56f05"
-          ],
-          "generated_by": [
-            "DisposeRgSelectRobot",
-            "RgSelectRobotPassTime",
-            "RgSelectRobotScreenPos",
-            "RgSelectRobotSet",
-            "RgSelectRobotSetMode",
-            "_DestructSelRob",
-            "_InitSelRob"
-          ],
-          "range": [
-            "0x00a56ef8",
-            "0x00a56f08"
-          ]
+          "also_referenced_by_c": []
         }
       ]
     },
     "ov12/tu072": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A56F20",
-            "D_00A56F38",
-            "D_00A56F50",
-            "D_00A56F60",
-            "D_00A56F70",
-            "D_00A56F80"
+          "range": [
+            "0x00a56f20",
+            "0x00a56f90"
           ],
           "generated": [
             "0x00a56f20",
@@ -290532,14 +291627,20 @@
           "generated_by": [
             "CreateRgFont",
             "DisposeRgFont",
+            "RgFontPut",
             "RgFontSetColor",
             "RgFontSetDefaultColor",
             "RgFontStr"
           ],
-          "range": [
-            "0x00a56f20",
-            "0x00a56f90"
-          ]
+          "c_owned_symbols": [
+            "D_00A56F20",
+            "D_00A56F38",
+            "D_00A56F50",
+            "D_00A56F60",
+            "D_00A56F70",
+            "D_00A56F80"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -290675,101 +291776,354 @@
     "ov12/tu075": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a57310",
+            "0x00a57348"
+          ],
+          "generated": [
+            "0x00a57310",
+            "0x00a57348"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A57310",
             "D_00A57320",
             "D_00A57338"
           ],
-          "generated": [
-            "0x00a57310",
-            "0x00a57348"
-          ],
-          "generated_by": [
-            "CreateRgPicDebug",
-            "CreateRgPicList",
-            "DisposeRgPic",
-            "DisposeRgPicDebug",
-            "DisposeRgPicList",
-            "RgPicDraw",
-            "RgPicGetAlpha",
-            "RgPicGetHeight",
-            "RgPicGetName",
-            "RgPicGetTex",
-            "RgPicGetWidth",
-            "RgPicGetX",
-            "RgPicGetY",
-            "RgPicListAddPic",
-            "RgPicListDelPic",
-            "RgPicListDraw",
-            "RgPicListGetOfsX",
-            "RgPicListGetOfsY",
-            "RgPicListGetPic",
-            "RgPicListGetSize",
-            "RgPicListMoveAllPic",
-            "RgPicListSetDrawEnable",
-            "RgPicListSetOffset",
-            "RgPicMove",
-            "RgPicNotDraw",
-            "RgPicRead",
-            "RgPicSetAlpha",
-            "RgPicSetColor",
-            "RgPicSetDark",
-            "RgPicSetOfsXY",
-            "RgPicSetPos"
-          ],
-          "range": [
-            "0x00a57310",
-            "0x00a57348"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a57310",
+                "0x00a57320"
+              ],
+              "object_range": [
+                0,
+                16
+              ],
+              "symbols": [
+                "D_00A57310"
+              ]
+            },
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a57320",
+                "0x00a57338"
+              ],
+              "object_range": [
+                16,
+                40
+              ],
+              "symbols": [
+                "D_00A57320"
+              ]
+            },
+            {
+              "zero_padding_tail": 4,
+              "section": ".rodata",
+              "range": [
+                "0x00a57338",
+                "0x00a57348"
+              ],
+              "object_range": [
+                40,
+                56
+              ],
+              "symbols": [
+                "D_00A57338"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a57348",
+            "0x00a57354"
+          ],
+          "generated": [
+            "0x00a57348",
+            "0x00a57354"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A57348"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a57348",
+                "0x00a57354"
+              ],
+              "object_range": [
+                144,
+                156
+              ],
+              "symbols": [
+                "D_00A57348"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a57358",
+            "0x00a57368"
+          ],
+          "generated": [
+            "0x00a57358",
+            "0x00a57368"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A57358"
           ],
-          "generated": [
-            "0x00a57358",
-            "0x00a57368"
-          ],
-          "generated_by": [
-            "RgPicListAddPic"
-          ],
-          "range": [
-            "0x00a57358",
-            "0x00a57368"
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 1,
+              "section": ".rodata",
+              "range": [
+                "0x00a57358",
+                "0x00a57368"
+              ],
+              "object_range": [
+                56,
+                72
+              ],
+              "symbols": [
+                "D_00A57358"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a57368",
+            "0x00a5737c"
+          ],
+          "generated": [
+            "0x00a57368",
+            "0x00a5737c"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A57368"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a57368",
+                "0x00a5737c"
+              ],
+              "object_range": [
+                160,
+                180
+              ],
+              "symbols": [
+                "D_00A57368"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a57380",
+            "0x00a573c6"
+          ],
+          "generated": [
+            "0x00a57380",
+            "0x00a573c6"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A57380",
             "D_00A57390",
             "D_00A573A0",
             "D_00A573B8"
           ],
-          "generated": [
-            "0x00a57380",
-            "0x00a573c6"
-          ],
-          "generated_by": [
-            "DisposeRgPicDebug",
-            "DisposeRgPicList",
-            "RgPicDraw",
-            "RgPicListAddPic",
-            "RgPicListDelPic",
-            "RgPicListDraw",
-            "RgPicListGetOfsX",
-            "RgPicListGetOfsY",
-            "RgPicListGetPic",
-            "RgPicListGetSize",
-            "RgPicListMoveAllPic",
-            "RgPicListSetDrawEnable",
-            "RgPicListSetOffset"
-          ],
+          "c_input_spans": [
+            {
+              "zero_padding_tail": 2,
+              "section": ".rodata",
+              "range": [
+                "0x00a57380",
+                "0x00a57390"
+              ],
+              "object_range": [
+                72,
+                88
+              ],
+              "symbols": [
+                "D_00A57380"
+              ]
+            },
+            {
+              "zero_padding_tail": 3,
+              "section": ".rodata",
+              "range": [
+                "0x00a57390",
+                "0x00a573a0"
+              ],
+              "object_range": [
+                88,
+                104
+              ],
+              "symbols": [
+                "D_00A57390"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a573a0",
+                "0x00a573b8"
+              ],
+              "object_range": [
+                104,
+                128
+              ],
+              "symbols": [
+                "D_00A573A0"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a573b8",
+                "0x00a573c6"
+              ],
+              "object_range": [
+                128,
+                142
+              ],
+              "symbols": [
+                "D_00A573B8"
+              ]
+            }
+          ]
+        },
+        {
           "range": [
-            "0x00a57380",
-            "0x00a573c8"
+            "0x00a573c8",
+            "0x00a573da"
+          ],
+          "generated": [
+            "0x00a573c8",
+            "0x00a573da"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A573C8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a573c8",
+                "0x00a573da"
+              ],
+              "object_range": [
+                184,
+                202
+              ],
+              "symbols": [
+                "D_00A573C8"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a573e0",
+            "0x00a573f7"
+          ],
+          "generated": [
+            "0x00a573e0",
+            "0x00a573f7"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A573E0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a573e0",
+                "0x00a573f7"
+              ],
+              "object_range": [
+                208,
+                231
+              ],
+              "symbols": [
+                "D_00A573E0"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a573f8",
+            "0x00a57413"
+          ],
+          "generated": [
+            "0x00a573f8",
+            "0x00a57413"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A573F8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a573f8",
+                "0x00a57413"
+              ],
+              "object_range": [
+                232,
+                259
+              ],
+              "symbols": [
+                "D_00A573F8"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a57530",
+            "0x00a57548"
+          ],
+          "generated": [
+            "0x00a57530",
+            "0x00a57548"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A57530"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a57530",
+                "0x00a57548"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                272,
+                296
+              ]
+            }
           ]
         }
       ]
@@ -293792,31 +295146,11 @@
       ]
     },
     "ov12/tu077": {
-      ".data": [
-        {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_apFuncs_0"
-          ],
-          "generated": [
-            "0x00a50860",
-            "0x00a50898"
-          ],
-          "generated_by": [
-            "RgAnnounceDispInit"
-          ],
-          "range": [
-            "0x00a50860",
-            "0x00a50898"
-          ]
-        }
-      ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A57BB0",
-            "D_00A57BC0"
+          "range": [
+            "0x00a57bb0",
+            "0x00a57bd8"
           ],
           "generated": [
             "0x00a57bb0",
@@ -293825,25 +295159,128 @@
           "generated_by": [
             "CreateRgAnnounce",
             "DisposeRgAnnounce",
+            "RgAnnounceDisp",
             "RgAnnounceDispInit",
             "RgAnnounceDispOff",
             "RgAnnouncePassTime",
             "RgAnnounceSetGameClear",
             "RgAnnounceSetStageClear",
-            "_DestructAnn"
+            "_DestructAnn",
+            "_InitAnn"
           ],
-          "range": [
-            "0x00a57bb0",
-            "0x00a57bd8"
+          "c_owned_symbols": [
+            "D_00A57BB0",
+            "D_00A57BC0"
+          ],
+          "also_referenced_by_c": [
+            "D_00A57BD8",
+            "D_00A57BE8",
+            "D_00A57C10",
+            "D_00A57C28",
+            "D_00A57C38",
+            "D_00A57C60",
+            "D_00A57C70",
+            "D_00A57C98",
+            "D_00A57CA0",
+            "D_00A57CC8",
+            "D_00A57CD0",
+            "D_00A57CF8",
+            "D_00A57D08",
+            "D_00A57D30",
+            "D_00A57D40",
+            "D_00A57D68",
+            "D_00A57D70",
+            "D_00A57D98",
+            "D_00A57DA8",
+            "D_00A57DD0",
+            "D_00A57DE0",
+            "D_00A57E08",
+            "D_00A57E18",
+            "D_00A57E40",
+            "D_00A57E50",
+            "D_00A57E78",
+            "D_00A57E88",
+            "D_00A57EB0",
+            "D_00A57EC0",
+            "D_00A57EE8",
+            "D_00A57EF8",
+            "D_00A57F20",
+            "D_00A57F30",
+            "D_00A57F58",
+            "D_00A57F68",
+            "D_00A57F90",
+            "D_00A57FA0",
+            "D_00A57FC8",
+            "D_00A57FD8",
+            "D_00A58000",
+            "D_00A58010",
+            "D_00A58038",
+            "D_00A58048",
+            "D_00A58070",
+            "D_00A58080",
+            "D_00A580A8",
+            "D_00A580B8",
+            "D_00A580E0",
+            "D_00A580E8",
+            "D_00A58110",
+            "D_00A58120",
+            "D_00A58148",
+            "D_00A58158",
+            "D_00A58180",
+            "D_00A58188",
+            "D_00A581B0",
+            "D_00A581C0",
+            "D_00A581E8",
+            "D_00A581F8",
+            "D_00A58220",
+            "D_00A58230",
+            "D_00A58258",
+            "D_00A58268",
+            "D_00A58290",
+            "D_00A582A0",
+            "D_00A582C8",
+            "D_00A582D8",
+            "D_00A58300",
+            "D_00A58310",
+            "D_00A58338",
+            "D_00A58348",
+            "D_00A58370",
+            "D_00A58380",
+            "D_00A583A8",
+            "D_00A583B8",
+            "D_00A583E0",
+            "D_00A583F0",
+            "D_00A58418",
+            "D_00A58420",
+            "D_00A58448",
+            "D_00A58450",
+            "D_00A58478",
+            "D_00A58488",
+            "D_00A584B0",
+            "D_00A584C0",
+            "D_00A584E8",
+            "D_00A584F0",
+            "D_00A58518",
+            "D_00A58528",
+            "D_00A58550",
+            "D_00A58560",
+            "D_00A58588",
+            "D_00A58598",
+            "D_00A585C0",
+            "D_00A585D0",
+            "D_00A585F8",
+            "D_00A58608",
+            "D_00A58630",
+            "D_00A58640",
+            "D_00A58668",
+            "D_00A58678",
+            "D_00A586A0"
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A586B0",
-            "D_00A586C0",
-            "D_00A586D0",
-            "D_00A586D8"
+          "range": [
+            "0x00a586b0",
+            "0x00a58720"
           ],
           "generated": [
             "0x00a586b0",
@@ -293855,10 +295292,32 @@
             "_damage_disp_title",
             "_time_disp_title"
           ],
+          "c_owned_symbols": [
+            "D_00A586B0",
+            "D_00A586C0",
+            "D_00A586D0",
+            "D_00A586D8"
+          ],
+          "also_referenced_by_c": []
+        }
+      ],
+      ".data": [
+        {
           "range": [
-            "0x00a586b0",
-            "0x00a58720"
-          ]
+            "0x00a50860",
+            "0x00a50898"
+          ],
+          "generated": [
+            "0x00a50860",
+            "0x00a50898"
+          ],
+          "generated_by": [
+            "RgAnnounceDispInit"
+          ],
+          "c_owned_symbols": [
+            "s_apFuncs_0"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -293918,239 +295377,740 @@
     "ov12/tu080": {
       ".data": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a50920",
+            "0x00a50974"
+          ],
+          "generated": [
+            "0x00a50920",
+            "0x00a50974"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "s_aJntIDToAccID_0"
           ],
-          "generated": [
-            "0x00a50920",
-            "0x00a50974"
-          ],
-          "generated_by": [
-            "_ActJntToAccID_sub"
-          ],
-          "range": [
-            "0x00a50920",
-            "0x00a50974"
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a50920",
+                "0x00a50974"
+              ],
+              "object_range": [
+                0,
+                84
+              ],
+              "symbols": [
+                "s_aJntIDToAccID_0"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a50b08",
+            "0x00a50b0c"
+          ],
+          "generated": [
+            "0x00a50b08",
+            "0x00a50b0c"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "s_pUseFog"
           ],
-          "generated": [
-            "0x00a50b08",
-            "0x00a50b0c"
-          ],
-          "generated_by": [
-            "_ActorDrawFunction",
-            "_DrawActor"
-          ],
-          "range": [
-            "0x00a50b08",
-            "0x00a50b0c"
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a50b08",
+                "0x00a50b0c"
+              ],
+              "object_range": [
+                84,
+                88
+              ],
+              "symbols": [
+                "s_pUseFog"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "s_aRawJntData"
+          "range": [
+            "0x00a50b10",
+            "0x00a511d0"
           ],
           "generated": [
             "0x00a50b10",
             "0x00a511d0"
           ],
-          "generated_by": [
-            "_FindRawJntData"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "s_aRawJntData"
           ],
-          "range": [
-            "0x00a50b10",
-            "0x00a511d0"
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a50b10",
+                "0x00a511d0"
+              ],
+              "object_range": [
+                88,
+                1816
+              ],
+              "symbols": [
+                "s_aRawJntData"
+              ]
+            }
           ]
         }
       ],
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a587b0",
+            "0x00a58808"
+          ],
+          "generated": [
+            "0x00a587b0",
+            "0x00a58808"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A587B0",
             "D_00A587E0",
             "D_00A587F8"
           ],
-          "generated": [
-            "0x00a587b0",
-            "0x00a58808"
-          ],
-          "generated_by": [
-            "CreateXrgActor",
-            "DuplicateXrgActor",
-            "InitXrgActorEssence",
-            "XrgActorAttachChild",
-            "XrgActorDeriveMotion",
-            "XrgActorDettachChild",
-            "XrgActorGetAttachedJoint",
-            "XrgActorGetLocal",
-            "XrgActorIsEndOfMotion",
-            "XrgActorJntIDtoAccID",
-            "XrgActorPassTime",
-            "XrgActorSetDraw",
-            "XrgActorSetDropWeapon",
-            "XrgActorSetLightCost",
-            "XrgActorSetLocal",
-            "XrgActorSetLoopPlay",
-            "XrgActorSetMotion",
-            "XrgActorSetMotionFrame",
-            "XrgActorSetPlayMotionComaStep",
-            "XrgActorSetSmoothPlay",
-            "XrgActorSetTransparent",
-            "_AccIDToJoint",
-            "_ActJntToAccID_sub",
-            "_ActJntToJoint",
-            "_AttachChildUseXenoActor",
-            "_DetachChildUseXenoActor",
-            "_DrawActor",
-            "_DupLoadXenoActor",
-            "_InitAfterLoadXenoActor",
-            "_InitSkeMani",
-            "_SetBattleCommonWepMotion"
-          ],
-          "range": [
-            "0x00a587b0",
-            "0x00a58808"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a587b0",
+                "0x00a587e0"
+              ],
+              "object_range": [
+                0,
+                48
+              ],
+              "symbols": [
+                "D_00A587B0"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a587e0",
+                "0x00a587f8"
+              ],
+              "object_range": [
+                48,
+                72
+              ],
+              "symbols": [
+                "D_00A587E0"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a587f8",
+                "0x00a58808"
+              ],
+              "object_range": [
+                72,
+                88
+              ],
+              "symbols": [
+                "D_00A587F8"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a58978",
+            "0x00a589b8"
+          ],
+          "generated": [
+            "0x00a58978",
+            "0x00a589b8"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A58978",
             "D_00A589A0"
           ],
-          "generated": [
-            "0x00a58978",
-            "0x00a589b8"
-          ],
-          "generated_by": [
-            "_InitSkeMani"
-          ],
-          "range": [
-            "0x00a58978",
-            "0x00a589b8"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58978",
+                "0x00a589a0"
+              ],
+              "object_range": [
+                88,
+                128
+              ],
+              "symbols": [
+                "D_00A58978"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a589a0",
+                "0x00a589b8"
+              ],
+              "object_range": [
+                128,
+                152
+              ],
+              "symbols": [
+                "D_00A589A0"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a589b8",
+            "0x00a589c8"
+          ],
+          "generated": [
+            "0x00a589b8",
+            "0x00a589c8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A589B8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a589b8",
+                "0x00a589c8"
+              ],
+              "object_range": [
+                448,
+                464
+              ],
+              "symbols": [
+                "D_00A589B8"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a589c8",
+            "0x00a589f8"
+          ],
+          "generated": [
+            "0x00a589c8",
+            "0x00a589f8"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A589C8"
           ],
-          "generated": [
-            "0x00a589c8",
-            "0x00a589f8"
-          ],
-          "generated_by": [
-            "CreateXrgActor",
-            "XrgActorAttachChild",
-            "XrgActorDeriveMotion",
-            "XrgActorDettachChild",
-            "XrgActorGetAttachedJoint",
-            "XrgActorGetLocal",
-            "XrgActorIsEndOfMotion",
-            "XrgActorPassTime",
-            "XrgActorSetDraw",
-            "XrgActorSetDropWeapon",
-            "XrgActorSetLightCost",
-            "XrgActorSetLocal",
-            "XrgActorSetLoopPlay",
-            "XrgActorSetMotion",
-            "XrgActorSetMotionFrame",
-            "XrgActorSetPlayMotionComaStep",
-            "XrgActorSetSmoothPlay",
-            "XrgActorSetTransparent",
-            "_DrawActor",
-            "_DupLoadXenoActor",
-            "_InitAfterLoadXenoActor",
-            "_SetBattleCommonWepMotion"
-          ],
-          "range": [
-            "0x00a589c8",
-            "0x00a589f8"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a589c8",
+                "0x00a589f8"
+              ],
+              "object_range": [
+                152,
+                200
+              ],
+              "symbols": [
+                "D_00A589C8"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a58a30",
+            "0x00a58a98"
+          ],
+          "generated": [
+            "0x00a58a30",
+            "0x00a58a98"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A58A30",
             "D_00A58A50"
           ],
-          "generated": [
-            "0x00a58a30",
-            "0x00a58a98"
-          ],
-          "generated_by": [
-            "XrgActorAttachChild",
-            "_AttachChildUseXenoActor",
-            "_DetachChildUseXenoActor"
-          ],
-          "range": [
-            "0x00a58a30",
-            "0x00a58a98"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58a30",
+                "0x00a58a50"
+              ],
+              "object_range": [
+                200,
+                232
+              ],
+              "symbols": [
+                "D_00A58A30"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58a50",
+                "0x00a58a98"
+              ],
+              "object_range": [
+                232,
+                304
+              ],
+              "symbols": [
+                "D_00A58A50"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a58a98",
+            "0x00a58aaa"
+          ],
+          "generated": [
+            "0x00a58a98",
+            "0x00a58aaa"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58A98"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58a98",
+                "0x00a58aaa"
+              ],
+              "object_range": [
+                480,
+                498
+              ],
+              "symbols": [
+                "D_00A58A98"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58ab0",
+            "0x00a58ab5"
+          ],
+          "generated": [
+            "0x00a58ab0",
+            "0x00a58ab5"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58AB0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58ab0",
+                "0x00a58ab5"
+              ],
+              "object_range": [
+                504,
+                509
+              ],
+              "symbols": [
+                "D_00A58AB0"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58ab8",
+            "0x00a58abd"
+          ],
+          "generated": [
+            "0x00a58ab8",
+            "0x00a58abd"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58AB8"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58ab8",
+                "0x00a58abd"
+              ],
+              "object_range": [
+                512,
+                517
+              ],
+              "symbols": [
+                "D_00A58AB8"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58ac0",
+            "0x00a58ac5"
+          ],
+          "generated": [
+            "0x00a58ac0",
+            "0x00a58ac5"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58AC0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58ac0",
+                "0x00a58ac5"
+              ],
+              "object_range": [
+                520,
+                525
+              ],
+              "symbols": [
+                "D_00A58AC0"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58ac8",
+            "0x00a58b10"
+          ],
+          "generated": [
+            "0x00a58ac8",
+            "0x00a58b10"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A58AC8",
             "D_00A58AE0",
             "D_00A58B00"
           ],
-          "generated": [
-            "0x00a58ac8",
-            "0x00a58b10"
-          ],
-          "generated_by": [
-            "InitXrgActorEssence",
-            "XrgActorDeriveMotion",
-            "_DupLoadXenoActor",
-            "_InitAfterLoadXenoActor"
-          ],
-          "range": [
-            "0x00a58ac8",
-            "0x00a58b10"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58ac8",
+                "0x00a58ae0"
+              ],
+              "object_range": [
+                304,
+                328
+              ],
+              "symbols": [
+                "D_00A58AC8"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58ae0",
+                "0x00a58b00"
+              ],
+              "object_range": [
+                328,
+                360
+              ],
+              "symbols": [
+                "D_00A58AE0"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58b00",
+                "0x00a58b10"
+              ],
+              "object_range": [
+                360,
+                376
+              ],
+              "symbols": [
+                "D_00A58B00"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a58b10",
+            "0x00a58b20"
+          ],
+          "generated": [
+            "0x00a58b10",
+            "0x00a58b20"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58B10"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58b10",
+                "0x00a58b20"
+              ],
+              "object_range": [
+                464,
+                480
+              ],
+              "symbols": [
+                "D_00A58B10"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58b20",
+            "0x00a58b3c"
+          ],
+          "generated": [
+            "0x00a58b20",
+            "0x00a58b3c"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58B20"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58b20",
+                "0x00a58b3c"
+              ],
+              "object_range": [
+                528,
+                556
+              ],
+              "symbols": [
+                "D_00A58B20"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58b40",
+            "0x00a58b68"
+          ],
+          "generated": [
+            "0x00a58b40",
+            "0x00a58b68"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "D_00A58B40",
             "D_00A58B50"
           ],
-          "generated": [
-            "0x00a58b40",
-            "0x00a58b68"
-          ],
-          "generated_by": [
-            "DuplicateXrgActor"
-          ],
-          "range": [
-            "0x00a58b40",
-            "0x00a58b68"
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58b40",
+                "0x00a58b50"
+              ],
+              "object_range": [
+                376,
+                392
+              ],
+              "symbols": [
+                "D_00A58B40"
+              ]
+            },
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58b50",
+                "0x00a58b68"
+              ],
+              "object_range": [
+                392,
+                416
+              ],
+              "symbols": [
+                "D_00A58B50"
+              ]
+            }
           ]
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A58BC0"
+          "range": [
+            "0x00a58bc0",
+            "0x00a58be0"
           ],
           "generated": [
             "0x00a58bc0",
             "0x00a58be0"
           ],
-          "generated_by": [
-            "XrgActorDettachChild"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58BC0"
           ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58bc0",
+                "0x00a58be0"
+              ],
+              "object_range": [
+                416,
+                448
+              ],
+              "symbols": [
+                "D_00A58BC0"
+              ]
+            }
+          ]
+        },
+        {
           "range": [
-            "0x00a58bc0",
-            "0x00a58be0"
+            "0x00a58c98",
+            "0x00a58caa"
+          ],
+          "generated": [
+            "0x00a58c98",
+            "0x00a58caa"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58C98"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58c98",
+                "0x00a58caa"
+              ],
+              "object_range": [
+                656,
+                674
+              ],
+              "symbols": [
+                "D_00A58C98"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58cb0",
+            "0x00a58cce"
+          ],
+          "generated": [
+            "0x00a58cb0",
+            "0x00a58cce"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58CB0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58cb0",
+                "0x00a58cce"
+              ],
+              "object_range": [
+                560,
+                590
+              ],
+              "symbols": [
+                "D_00A58CB0"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58cd0",
+            "0x00a58ceb"
+          ],
+          "generated": [
+            "0x00a58cd0",
+            "0x00a58ceb"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58CD0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58cd0",
+                "0x00a58ceb"
+              ],
+              "object_range": [
+                592,
+                619
+              ],
+              "symbols": [
+                "D_00A58CD0"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a58cf0",
+            "0x00a58d0c"
+          ],
+          "generated": [
+            "0x00a58cf0",
+            "0x00a58d0c"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A58CF0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a58cf0",
+                "0x00a58d0c"
+              ],
+              "object_range": [
+                624,
+                652
+              ],
+              "symbols": [
+                "D_00A58CF0"
+              ]
+            }
           ]
         }
       ]
@@ -294158,22 +296118,28 @@
     "ov12/tu081": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A58D10",
-            "D_00A58D20"
+          "range": [
+            "0x00a58d10",
+            "0x00a58e28"
           ],
           "generated": [
             "0x00a58d10",
-            "0x00a58d38"
+            "0x00a58e24"
           ],
           "generated_by": [
+            "XrgBxxPs2Tex0",
             "_Log2"
           ],
-          "range": [
-            "0x00a58d10",
-            "0x00a58d38"
-          ]
+          "c_owned_symbols": [
+            "D_00A58D10",
+            "D_00A58D20",
+            "D_00A58D38",
+            "D_00A58D48",
+            "D_00A58D58",
+            "D_00A58D60",
+            "jtbl_00A58D80"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     },
@@ -294257,7 +296223,9 @@
     "ov12/tu084": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A58F50"
+          ],
           "c_owned_symbols": [
             "D_00A58F10",
             "D_00A58F20",
@@ -294268,6 +296236,7 @@
             "0x00a58f48"
           ],
           "generated_by": [
+            "CreateArrayOfXrgParticle",
             "CreateXrgParticleDriver",
             "DisposeArrayOfXrgParticle",
             "DisposeXrgParticleDriver",
@@ -294278,6 +296247,7 @@
             "XrgParticleDriverSet",
             "_ClearReqDisp",
             "_DisposeDriver",
+            "_DrawDriver",
             "_InitDriver",
             "_openVifGifAD_00A48C80"
           ],
@@ -294287,7 +296257,10 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A58FE8",
+            "D_00A58FF8"
+          ],
           "c_owned_symbols": [
             "D_00A58F78",
             "D_00A58FA0",
@@ -294299,6 +296272,7 @@
             "0x00a58fe8"
           ],
           "generated_by": [
+            "CreateArrayOfXrgParticle",
             "XrgParticleDriverDispReq",
             "XrgParticleDriverPassTimeReq"
           ],
@@ -294328,10 +296302,13 @@
         }
       ]
     },
+    "ov12/tu085": {},
     "ov12/tu086": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A59040"
+          ],
           "c_owned_symbols": [
             "D_00A59030"
           ],
@@ -294348,7 +296325,9 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A59070"
+          ],
           "c_owned_symbols": [
             "D_00A59058"
           ],
@@ -294362,17 +296341,26 @@
             "InstanceOfXrgPaint2D",
             "XrgPaint2DAlpha",
             "XrgPaint2DColor",
+            "XrgPaint2DDrawLine",
+            "XrgPaint2DDrawRect",
             "XrgPaint2DFlush",
+            "XrgPaint2DOffset2D",
+            "XrgPaint2DOffset2DDot",
             "XrgPaint2DOffset3D",
             "XrgPaint2DOffset3DForce",
+            "XrgPaint2DOffsetCenter",
             "XrgPaint2DOffsetResult",
             "XrgPaint2DSetDrawID",
             "XrgPaint2DSetDrawPrio",
             "XrgPaint2DSetUVOffset",
             "XrgPaint2DSetUVSize",
             "XrgPaint2DUseTexture",
+            "_CalcOffset",
             "_DestructPaint",
+            "_Geom2D",
+            "_InitPaint",
             "_Paint2DClearReq",
+            "_Paint2DFlush",
             "_WrapperDestruct_00A4B910"
           ],
           "range": [
@@ -294381,7 +296369,10 @@
           ]
         },
         {
-          "also_referenced_by_c": [],
+          "also_referenced_by_c": [
+            "D_00A590D8",
+            "D_00A590F8"
+          ],
           "c_owned_symbols": [
             "D_00A59098",
             "jtbl_00A590B0",
@@ -294395,9 +296386,14 @@
             "DisposeXrgPaint2D_sub",
             "XrgPaint2DAlpha",
             "XrgPaint2DColor",
+            "XrgPaint2DDrawLine",
+            "XrgPaint2DDrawRect",
             "XrgPaint2DFlush",
+            "XrgPaint2DOffset2D",
+            "XrgPaint2DOffset2DDot",
             "XrgPaint2DOffset3D",
             "XrgPaint2DOffset3DForce",
+            "XrgPaint2DOffsetCenter",
             "XrgPaint2DOffsetResult",
             "XrgPaint2DSetDrawID",
             "XrgPaint2DSetDrawPrio",
@@ -294405,7 +296401,9 @@
             "XrgPaint2DSetUVSize",
             "XrgPaint2DUseTexture",
             "_DestructPaint",
-            "_Paint2DClearReq"
+            "_InitPaint",
+            "_Paint2DClearReq",
+            "_Paint2DFlush"
           ],
           "range": [
             "0x00a59098",
@@ -294737,7 +296735,6 @@
           "c_owned_symbols": [
             "s_bSetEventLevel"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -294769,7 +296766,6 @@
           "c_owned_symbols": [
             "s_eEventLevel"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -294801,7 +296797,6 @@
           "c_owned_symbols": [
             "s_aWepTbl_0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".data",
@@ -294824,6 +296819,36 @@
       ".rodata": [
         {
           "range": [
+            "0x00a592f0",
+            "0x00a59310"
+          ],
+          "generated": [
+            "0x00a592f0",
+            "0x00a59310"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A592F0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a592f0",
+                "0x00a59310"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                0,
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
             "0x00a59310",
             "0x00a59328"
           ],
@@ -294835,13 +296860,12 @@
           "c_owned_symbols": [
             "jtbl_00A59310"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                0,
-                24
+                32,
+                56
               ],
               "range": [
                 "0x00a59310",
@@ -294866,13 +296890,12 @@
           "c_owned_symbols": [
             "D_00A59328"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                24,
-                32
+                56,
+                64
               ],
               "range": [
                 "0x00a59328",
@@ -294898,13 +296921,12 @@
           "c_owned_symbols": [
             "D_00A59330"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                32,
-                40
+                64,
+                72
               ],
               "range": [
                 "0x00a59330",
@@ -294930,13 +296952,12 @@
           "c_owned_symbols": [
             "D_00A59338"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                40,
-                48
+                72,
+                80
               ],
               "range": [
                 "0x00a59338",
@@ -294962,13 +296983,12 @@
           "c_owned_symbols": [
             "D_00A59340"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                48,
-                56
+                80,
+                88
               ],
               "range": [
                 "0x00a59340",
@@ -294994,13 +297014,12 @@
           "c_owned_symbols": [
             "D_00A59348"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                56,
-                64
+                88,
+                96
               ],
               "range": [
                 "0x00a59348",
@@ -295026,13 +297045,12 @@
           "c_owned_symbols": [
             "D_00A59350"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                64,
-                72
+                96,
+                104
               ],
               "range": [
                 "0x00a59350",
@@ -295058,13 +297076,12 @@
           "c_owned_symbols": [
             "D_00A59358"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                72,
-                80
+                104,
+                112
               ],
               "range": [
                 "0x00a59358",
@@ -295090,13 +297107,12 @@
           "c_owned_symbols": [
             "D_00A59360"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                80,
-                96
+                112,
+                128
               ],
               "range": [
                 "0x00a59360",
@@ -295122,13 +297138,12 @@
           "c_owned_symbols": [
             "D_00A59370"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                96,
-                104
+                128,
+                136
               ],
               "range": [
                 "0x00a59370",
@@ -295154,13 +297169,12 @@
           "c_owned_symbols": [
             "D_00A59378"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                104,
-                120
+                136,
+                152
               ],
               "range": [
                 "0x00a59378",
@@ -295186,13 +297200,12 @@
           "c_owned_symbols": [
             "D_00A59388"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                120,
-                128
+                152,
+                160
               ],
               "range": [
                 "0x00a59388",
@@ -295218,13 +297231,12 @@
           "c_owned_symbols": [
             "D_00A59390"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                128,
-                136
+                160,
+                168
               ],
               "range": [
                 "0x00a59390",
@@ -295250,13 +297262,12 @@
           "c_owned_symbols": [
             "D_00A59398"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                136,
-                144
+                168,
+                176
               ],
               "range": [
                 "0x00a59398",
@@ -295282,13 +297293,12 @@
           "c_owned_symbols": [
             "D_00A593A0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                144,
-                152
+                176,
+                184
               ],
               "range": [
                 "0x00a593a0",
@@ -295314,13 +297324,12 @@
           "c_owned_symbols": [
             "D_00A593A8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                152,
-                160
+                184,
+                192
               ],
               "range": [
                 "0x00a593a8",
@@ -295346,13 +297355,12 @@
           "c_owned_symbols": [
             "D_00A593B0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                160,
-                168
+                192,
+                200
               ],
               "range": [
                 "0x00a593b0",
@@ -295378,13 +297386,12 @@
           "c_owned_symbols": [
             "D_00A593B8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                168,
-                176
+                200,
+                208
               ],
               "range": [
                 "0x00a593b8",
@@ -295410,13 +297417,12 @@
           "c_owned_symbols": [
             "D_00A593C0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                176,
-                184
+                208,
+                216
               ],
               "range": [
                 "0x00a593c0",
@@ -295442,13 +297448,12 @@
           "c_owned_symbols": [
             "D_00A593C8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                184,
-                192
+                216,
+                224
               ],
               "range": [
                 "0x00a593c8",
@@ -295474,13 +297479,12 @@
           "c_owned_symbols": [
             "D_00A593D0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                192,
-                208
+                224,
+                240
               ],
               "range": [
                 "0x00a593d0",
@@ -295506,13 +297510,12 @@
           "c_owned_symbols": [
             "D_00A593E0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                208,
-                224
+                240,
+                256
               ],
               "range": [
                 "0x00a593e0",
@@ -295538,13 +297541,12 @@
           "c_owned_symbols": [
             "D_00A593F0"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                224,
-                232
+                256,
+                264
               ],
               "range": [
                 "0x00a593f0",
@@ -295570,13 +297572,12 @@
           "c_owned_symbols": [
             "D_00A593F8"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                232,
-                240
+                264,
+                272
               ],
               "range": [
                 "0x00a593f8",
@@ -295602,13 +297603,12 @@
           "c_owned_symbols": [
             "D_00A59400"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                240,
-                248
+                272,
+                280
               ],
               "range": [
                 "0x00a59400",
@@ -295634,13 +297634,12 @@
           "c_owned_symbols": [
             "D_00A59408"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                248,
-                256
+                280,
+                288
               ],
               "range": [
                 "0x00a59408",
@@ -295666,13 +297665,12 @@
           "c_owned_symbols": [
             "D_00A59410"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                256,
-                264
+                288,
+                296
               ],
               "range": [
                 "0x00a59410",
@@ -295698,13 +297696,12 @@
           "c_owned_symbols": [
             "D_00A59418"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                264,
-                272
+                296,
+                304
               ],
               "range": [
                 "0x00a59418",
@@ -295730,13 +297727,12 @@
           "c_owned_symbols": [
             "D_00A59420"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                272,
-                280
+                304,
+                312
               ],
               "range": [
                 "0x00a59420",
@@ -295762,13 +297758,12 @@
           "c_owned_symbols": [
             "D_00A59428"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                280,
-                288
+                312,
+                320
               ],
               "range": [
                 "0x00a59428",
@@ -295794,13 +297789,12 @@
           "c_owned_symbols": [
             "D_00A59430"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                288,
-                296
+                320,
+                328
               ],
               "range": [
                 "0x00a59430",
@@ -295826,13 +297820,12 @@
           "c_owned_symbols": [
             "D_00A59438"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                296,
-                304
+                328,
+                336
               ],
               "range": [
                 "0x00a59438",
@@ -295858,13 +297851,12 @@
           "c_owned_symbols": [
             "D_00A59440"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                304,
-                312
+                336,
+                344
               ],
               "range": [
                 "0x00a59440",
@@ -295890,13 +297882,12 @@
           "c_owned_symbols": [
             "D_00A59448"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                312,
-                320
+                344,
+                352
               ],
               "range": [
                 "0x00a59448",
@@ -295922,13 +297913,12 @@
           "c_owned_symbols": [
             "D_00A59450"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                320,
-                328
+                352,
+                360
               ],
               "range": [
                 "0x00a59450",
@@ -295954,13 +297944,12 @@
           "c_owned_symbols": [
             "D_00A59458"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                328,
-                336
+                360,
+                368
               ],
               "range": [
                 "0x00a59458",
@@ -295986,13 +297975,12 @@
           "c_owned_symbols": [
             "D_00A59460"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                336,
-                344
+                368,
+                376
               ],
               "range": [
                 "0x00a59460",
@@ -296018,13 +298006,12 @@
           "c_owned_symbols": [
             "D_00A59468"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                344,
-                352
+                376,
+                384
               ],
               "range": [
                 "0x00a59468",
@@ -296050,13 +298037,12 @@
           "c_owned_symbols": [
             "D_00A59470"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                352,
-                360
+                384,
+                392
               ],
               "range": [
                 "0x00a59470",
@@ -296082,13 +298068,12 @@
           "c_owned_symbols": [
             "D_00A59478"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                360,
-                368
+                392,
+                400
               ],
               "range": [
                 "0x00a59478",
@@ -296114,13 +298099,12 @@
           "c_owned_symbols": [
             "D_00A59480"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                368,
-                376
+                400,
+                408
               ],
               "range": [
                 "0x00a59480",
@@ -296146,13 +298130,12 @@
           "c_owned_symbols": [
             "D_00A59488"
           ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
               "object_range": [
-                376,
-                384
+                408,
+                416
               ],
               "range": [
                 "0x00a59488",

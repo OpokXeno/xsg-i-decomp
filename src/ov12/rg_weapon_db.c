@@ -52,13 +52,21 @@ extern unsigned int strlen(const char *string);
  * "pDB != NIL", ov12:0x00a53828 holds "../rg_weapon_db.euc.c".
  */
 const char D_00A53818[] = "pDB != NIL";
+
 const char D_00A53828[] = "../rg_weapon_db.euc.c";
+
 const char D_00A53840[] = "left";
+
 const char D_00A53848[] = "right";
+
 const char D_00A53850[] = "back";
+
 const char D_00A53858[] = "unknown equip type '%s'";
+
 const char D_00A53870[] = "'%c' is not 'o' or 'x'";
+
 const char D_00A53888[] = "'%s' is not '???-??-???'";
+
 const char D_00A538A8[] = "'%s' is not '???-??-???' format";
 
 extern void RgSimpleDBClear(RgSimpleDB *pDB);
@@ -231,15 +239,590 @@ static void _SetAllCharMotion(int motionTable[][3], int motion0, int motion1,
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon_db", _ReadCommon_00A1CD08);
+/*
+ * The embedded equip record of a weapon essence is owned by ov12/tu030
+ * (RgEquipRecord, 0x38 bytes); this file sets only its activeMount member
+ * (+0x34) and passes its address on, so the rest is left unmodeled.
+ */
+typedef struct RgWeaponEquip {
+    unsigned char unmodeled_00[0x34];
+    int activeMount;                   /* +0x34 */
+} RgWeaponEquip;
+
+extern const char D_00A538C8[];
+extern const char D_00A538D0[];
+extern const char D_00A538D8[];
+extern const char D_00A538E0[];
+extern const char D_00A538F0[];
+extern const char D_00A53918[];
+extern const char D_00A53940[];
+extern const char D_00A53968[];
+extern const char D_00A53970[];
+extern const char D_00A53978[];
+extern const char D_00A53988[];
+extern const char D_00A53990[];
+extern const char D_00A53998[];
+extern const char D_00A539A0[];
+extern const char D_00A539A8[];
+extern const char D_00A539D8[];
+extern const char D_00A539F0[];
+extern const char D_00A539F8[];
+extern const char D_00A53A00[];
+extern const char D_00A53A10[];
+extern const char D_00A53A18[];
+extern const char D_00A53A28[];
+extern const char D_00A53A40[];
+extern const char D_00A53A48[];
+extern const char D_00A53A50[];
+extern const char D_00A53A68[];
+extern const char D_00A53A70[];
+extern const char D_00A53A78[];
+extern const char D_00A53A88[];
+extern const char D_00A53A90[];
+extern const char D_00A53A98[];
+extern const char D_00A53AA8[];
+extern const char D_00A53AB0[];
+extern const char D_00A53AC0[];
+extern const short D_00A53AC8[];
+extern const char D_00A53AE0[];
+extern const char D_00A53AF0[];
+extern const char D_00A53AF8[];
+extern const char D_00A53B10[];
+extern const char D_00A53B18[];
+extern const char D_00A53B20[];
+extern const char D_00A53B28[];
+extern const char D_00A53B30[];
+extern const char D_00A53B38[];
+extern const char D_00A53B40[];
+extern const char D_00A53B48[];
+extern const char D_00A53B50[];
+extern const char D_00A53B58[];
+extern const char D_00A53B60[];
+extern const char D_00A53B68[];
+extern const char D_00A53B70[];
+extern const char D_00A53B78[];
+extern const char D_00A53B88[];
+extern const char D_00A53B90[];
+extern const char D_00A53BA0[];
+extern const char D_00A53BA8[];
+extern const char D_00A53BB0[];
+extern const char D_00A53BB8[];
+extern const char D_00A53BC0[];
+extern const char D_00A53BD0[];
+extern const char D_00A53C00[];
+extern int s_aeJntTbl_0[8];
+extern RgReadText *CreateRgReadText(const char *pszDataBase);
+extern double atof(const char *pszText);
+extern float dptofp(double value);
+extern float RgReadTextGetFloat(RgReadText *pReader);
+extern int RgReadTextGetInt(RgReadText *pReader);
+extern void RgWarn(const char *format, const char *file, int line, ...);
+extern RgSimpleDB *InstanceOfRgShotDB(void);
+extern struct RgShotEssence *RgShotDBGetEssence(RgSimpleDB *pDB, char *pszName);
+extern int RgActorMotIDGetFromName(char *pszName);
+extern int RgActorNameToCharID(char *pszName);
+extern void RgEquipSetDefault(RgWeaponEquip *pEquip, unsigned int mask);
+extern void RgEquipAddMount(RgWeaponEquip *pEquip, int type, int equipmentType,
+                            unsigned int mask);
+
+/*
+ * The prefix every weapon essence the weapon database builds shares: each
+ * _Read*Type function of rg_weapon_db.c hands its own essence to _ReadCommon
+ * (ov12:0x00a1cd08), which fills these members from the common keys. The
+ * database record (RgWeaponDBRecord) keeps its key and display name at the
+ * same offsets (+0x330, +0x350).
+ */
+typedef struct RgWeaponModelEntry RgWeaponModelEntry;
+
+struct RgWeaponModelEntry {
+    int robotCount;                    /* +0x00: RG_ACTOR_CHAR_ROBNUM */
+    char path[0x84];                   /* +0x04: "data\weapon\robo\" + name */
+};
+
+typedef struct RgWeaponEssence RgWeaponEssence;
+
+struct RgWeaponEssence {
+    unsigned char unmodeled_00[0x04];
+    unsigned int flags;                /* +0x04: notlock/full-mot/adv/lock bits */
+    float lockOnAngleMin;              /* +0x08: "lock" (radians) */
+    float lockOnAngleMax;              /* +0x0c */
+    struct RgShotEssence *shotEssence; /* +0x10: "shot" */
+    float capacity;                    /* +0x14: "num", "energy", "hardness" */
+    float vDir;                        /* +0x18: "v-dir" */
+    float hDir;                        /* +0x1c: "h-dir" */
+    unsigned char unmodeled_20[0x04];
+    int shotPntNum;                    /* +0x24: "shot-pnt" count */
+    int shotPnt[16]; /* +0x28: 16 joint indices */
+    unsigned char unmodeled_68[0x08];
+    RgWeaponEquip equip;               /* +0x70: "equip", "occupy", "fake" */
+    int useMask;                       /* +0xa8: "use" */
+    float mass;                        /* +0xac: "mass", "weight" */
+    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];  /* +0xb0: "mot" */
+    int selfMotionTable[RG_ACTOR_CHAR_ROBNUM][3];  /* +0xf8: "selfmot" */
+    int baseMotionTable[RG_ACTOR_CHAR_ROBNUM][3];  /* +0x140: "basemot" */
+    unsigned char unmodeled_188[0x08];
+    RgWeaponModelEntry models[3];      /* +0x190: "model", "modelall" */
+    unsigned char unmodeled_328[0x08];
+    char databaseName[0x20];           /* +0x330: record key */
+    char displayName[0x30];            /* +0x350: "name" */
+    int shotSound;                     /* +0x380: "shotsnd" */
+    int robotHitSound;                 /* +0x384: "hitsnd" */
+    int bgHitSound;                    /* +0x388: "bgsnd" */
+    int lifeSound;                     /* +0x38c: "lifesnd" */
+    int shotVolume;                    /* +0x390: "vshotsnd" */
+    int robotHitVolume;                /* +0x394: "vhitsnd" */
+    int bgHitVolume;                   /* +0x398: "vbgsnd" */
+    int lifeVolume;                    /* +0x39c: "vlifesnd" */
+    int attackSlot;                    /* +0x3a0: "1wa", "2wa", "3wa" */
+    int isDefault;                     /* +0x3a4: "default" */
+};
+
+static inline int _Clamp(int value, int low, int high)
+{
+    if (value < low) {
+        return low;
+    }
+    return high < value ? high : value;
+}
+
+static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
+{
+    RgWeaponEssence *pWeapon;
+    char szToken[0x80];
+    char szName[0x40];
+    unsigned int equipMask;
+    unsigned int occupyMask;
+    int equipmentType;
+    int mountType;
+    unsigned int i;
+    int volume;
+    char firstChar;
+    int level;
+    pWeapon = (RgWeaponEssence *)pEss;
+
+    if (strcasecmp(pszToken, D_00A538C8) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        while (strcasecmp(szToken, D_00A538D0) != 0) {
+            if (strcasecmp(szToken, D_00A538D8) == 0) {
+                pWeapon->flags &= ~0x20;
+                pWeapon->flags &= ~0x18;
+                pWeapon->flags |= 0x08;
+            } else if (strcasecmp(szToken, D_00A538E0) == 0) {
+                if ((pWeapon->flags & 7) == 2) {
+                    RgError(D_00A538F0, D_00A53828, 224);
+                } else if ((pWeapon->flags & 7) == 3) {
+                    RgError(D_00A53918, D_00A53828, 226);
+                } else if ((pWeapon->flags & 7) == 4) {
+                    RgError(D_00A53940, D_00A53828, 228);
+                } else {
+                    pWeapon->flags = (pWeapon->flags & ~7) | 1;
+                }
+            } else if (strcasecmp(szToken, D_00A53968) == 0) {
+                pWeapon->flags &= ~0x40;
+            } else if (strcasecmp(szToken, D_00A53970) == 0) {
+                pWeapon->flags |= 0x40;
+            } else if (strcasecmp(szToken, D_00A53978) == 0) {
+                pWeapon->flags |= 0x80;
+            } else if (strcasecmp(szToken + 4, D_00A53988) == 0) {
+                pWeapon->flags &= ~0x18;
+                szToken[3] = 0;
+                if (strcasecmp(szToken, D_00A53990) != 0) {
+                    if (strcasecmp(szToken, D_00A53998) == 0) {
+                        pWeapon->flags |= 0x10;
+                    } else if (strcasecmp(szToken, D_00A539A0) == 0) {
+                        pWeapon->flags |= 0x08;
+                    } else {
+                        RgError(D_00A539A8, D_00A53828, 256);
+                    }
+                }
+            } else {
+                RgError(D_00A539D8, D_00A53828, 260, szToken);
+            }
+            RgReadTextGetString(pReader, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A539F0) == 0 || strcasecmp(pszToken, D_00A539F8) == 0 ||
+        strcasecmp(pszToken, D_00A53A00) == 0) {
+        RgReadTextGetString(pReader, szName);
+        if (strcasecmp(szName, D_00A53A10) == 0) {
+            pWeapon->capacity = 1.0e8f;
+        } else {
+            pWeapon->capacity = dptofp(atof(szName));
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A18) == 0) {
+        RgReadTextGetFloat(pReader);
+        RgWarn(D_00A53A28, D_00A53828, 282);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A40) == 0) {
+        pWeapon->lockOnAngleMin = RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+        pWeapon->lockOnAngleMax = RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A48) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        pWeapon->shotEssence = RgShotDBGetEssence(InstanceOfRgShotDB(), szToken);
+        if (pWeapon->shotEssence == 0) {
+            RgError(D_00A53A50, D_00A53828, 294, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A68) == 0) {
+        int motion0;
+        int motion1;
+        int motion2;
+
+        RgReadTextGetString(pReader, szToken);
+        motion0 = RgActorMotIDGetFromName(szToken);
+        RgReadTextGetString(pReader, szToken);
+        motion1 = RgActorMotIDGetFromName(szToken);
+        RgReadTextGetString(pReader, szToken);
+        motion2 = RgActorMotIDGetFromName(szToken);
+        _SetAllCharMotion(pWeapon->shotMotionTable, motion0, motion1, motion2);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A70) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (szToken[0] != '(') {
+            assert_prog(D_00A53A78, D_00A53828, 307);
+        }
+        RgReadTextGetString(pReader, szToken);
+        while (szToken[0] != ')') {
+            int motion0;
+            int motion1;
+            int motion2;
+            int charID;
+
+            if (strcasecmp(szToken, D_00A53A88) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                motion0 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion1 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion2 = RgActorMotIDGetFromName(szToken);
+                _SetAllCharMotion(pWeapon->shotMotionTable, motion0, motion1, motion2);
+            } else {
+                charID = RgActorNameToCharID(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion0 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion1 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion2 = RgActorMotIDGetFromName(szToken);
+                pWeapon->shotMotionTable[charID][0] = motion0;
+                pWeapon->shotMotionTable[charID][1] = motion1;
+                pWeapon->shotMotionTable[charID][2] = motion2;
+            }
+            RgReadTextGetString(pReader, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A90) == 0) {
+        int motion0;
+        int motion1;
+        int motion2;
+
+        RgReadTextGetString(pReader, szToken);
+        motion0 = RgActorMotIDGetFromName(szToken);
+        RgReadTextGetString(pReader, szToken);
+        motion1 = RgActorMotIDGetFromName(szToken);
+        RgReadTextGetString(pReader, szToken);
+        motion2 = RgActorMotIDGetFromName(szToken);
+        _SetAllCharMotion(pWeapon->selfMotionTable, motion0, motion1, motion2);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53A98) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (szToken[0] != '(') {
+            assert_prog(D_00A53A78, D_00A53828, 339);
+        }
+        RgReadTextGetString(pReader, szToken);
+        while (szToken[0] != ')') {
+            int motion0;
+            int motion1;
+            int motion2;
+            int charID;
+
+            if (strcasecmp(szToken, D_00A53A88) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                motion0 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion1 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion2 = RgActorMotIDGetFromName(szToken);
+                _SetAllCharMotion(pWeapon->selfMotionTable, motion0, motion1, motion2);
+            } else {
+                charID = RgActorNameToCharID(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion0 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion1 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion2 = RgActorMotIDGetFromName(szToken);
+                pWeapon->selfMotionTable[charID][0] = motion0;
+                pWeapon->selfMotionTable[charID][1] = motion1;
+                pWeapon->selfMotionTable[charID][2] = motion2;
+            }
+            RgReadTextGetString(pReader, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53AA8) == 0) {
+        int motion0;
+        int motion1;
+        int motion2;
+
+        RgReadTextGetString(pReader, szToken);
+        motion0 = RgActorMotIDGetFromName(szToken);
+        RgReadTextGetString(pReader, szToken);
+        motion1 = RgActorMotIDGetFromName(szToken);
+        RgReadTextGetString(pReader, szToken);
+        motion2 = RgActorMotIDGetFromName(szToken);
+        _SetAllCharMotion(pWeapon->baseMotionTable, motion0, motion1, motion2);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53AB0) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (szToken[0] != '(') {
+            assert_prog(D_00A53A78, D_00A53828, 371);
+        }
+        RgReadTextGetString(pReader, szToken);
+        while (szToken[0] != ')') {
+            int motion0;
+            int motion1;
+            int motion2;
+            int charID;
+
+            if (strcasecmp(szToken, D_00A53A88) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                motion0 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion1 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion2 = RgActorMotIDGetFromName(szToken);
+                _SetAllCharMotion(pWeapon->baseMotionTable, motion0, motion1, motion2);
+            } else {
+                charID = RgActorNameToCharID(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion0 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion1 = RgActorMotIDGetFromName(szToken);
+                RgReadTextGetString(pReader, szToken);
+                motion2 = RgActorMotIDGetFromName(szToken);
+                pWeapon->baseMotionTable[charID][0] = motion0;
+                pWeapon->baseMotionTable[charID][1] = motion1;
+                pWeapon->baseMotionTable[charID][2] = motion2;
+            }
+            RgReadTextGetString(pReader, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53AC0) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        for (i = 0; i < 3; i++) {
+            pWeapon->models[i].robotCount = RG_ACTOR_CHAR_ROBNUM;
+            __builtin_memcpy(pWeapon->models[i].path, D_00A53AC8, 18);
+            strcat(pWeapon->models[i].path, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53AE0) == 0) {
+        for (i = 0; i < 3; i++) {
+            RgReadTextGetString(pReader, szToken);
+            pWeapon->models[i].robotCount = RG_ACTOR_CHAR_ROBNUM;
+            __builtin_memcpy(pWeapon->models[i].path, D_00A53AC8, 18);
+            strcat(pWeapon->models[i].path, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53AF0) == 0) {
+        int charID;
+
+        pWeapon->useMask = 0;
+        RgReadTextGetString(pReader, szToken);
+        while (strcasecmp(szToken, D_00A538D0) != 0) {
+            charID = RgActorNameToCharID(szToken);
+            if (charID == -1) {
+                RgError(D_00A53AF8, D_00A53828, 426, szToken);
+            }
+            pWeapon->useMask |= 1 << charID;
+            RgReadTextGetString(pReader, szToken);
+        }
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B10) == 0) {
+        _ReadEquipBitMask(pReader, &equipMask);
+        RgEquipSetDefault(&pWeapon->equip, equipMask);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B18) == 0) {
+        equipmentType = _ReadEquipType(pReader);
+        occupyMask = 0;
+        mountType = _ReadEquipBitMask(pReader, &occupyMask);
+        RgEquipAddMount(&pWeapon->equip, equipmentType, mountType, occupyMask);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B20) == 0) {
+        pWeapon->equip.activeMount = 1;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B28) == 0 || strcasecmp(pszToken, D_00A53B30) == 0) {
+        pWeapon->mass = RgReadTextGetFloat(pReader);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B38) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        _copy_str_n(pWeapon->displayName, szToken, 48);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B40) == 0) {
+        pWeapon->vDir = -RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B48) == 0) {
+        pWeapon->hDir = -RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B50) == 0) {
+        pWeapon->robotHitSound = RgReadTextGetInt(pReader);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B58) == 0) {
+        pWeapon->shotSound = RgReadTextGetInt(pReader);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B60) == 0) {
+        pWeapon->bgHitSound = RgReadTextGetInt(pReader);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B68) == 0) {
+        pWeapon->lifeSound = RgReadTextGetInt(pReader);
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B70) == 0) {
+        pWeapon->robotHitSound = RgReadTextGetInt(pReader);
+        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
+        level = _Clamp(volume, 0, 128);
+        pWeapon->robotHitVolume = level;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B78) == 0) {
+        pWeapon->shotSound = RgReadTextGetInt(pReader);
+        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
+        level = _Clamp(volume, 0, 128);
+        pWeapon->shotVolume = level;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B88) == 0) {
+        pWeapon->bgHitSound = RgReadTextGetInt(pReader);
+        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
+        level = _Clamp(volume, 0, 128);
+        pWeapon->bgHitVolume = level;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53B90) == 0) {
+        pWeapon->lifeSound = RgReadTextGetInt(pReader);
+        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
+        level = _Clamp(volume, 0, 128);
+        pWeapon->lifeVolume = level;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53BA0) == 0) {
+        pWeapon->attackSlot = 0;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53BA8) == 0) {
+        pWeapon->attackSlot = 1;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53BB0) == 0) {
+        pWeapon->attackSlot = 2;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53BB8) == 0) {
+        pWeapon->isDefault = 1;
+        return 1;
+    }
+
+    if (strcasecmp(pszToken, D_00A53BC0) == 0) {
+        unsigned char *pChar;
+        unsigned int nextChar;
+        unsigned int shotChar;
+        int *pShotPntNum;
+        unsigned int shotPnt;
+        int tableIndex;
+
+        pWeapon->shotPntNum = 0;
+        RgReadTextGetString(pReader, szToken);
+        firstChar = szToken[0];
+        pChar = (unsigned char *)szToken;
+        shotChar = *pChar;
+        if (firstChar != 0) {
+            do {
+                pShotPntNum = &pWeapon->shotPntNum;
+                if ((unsigned int)(shotChar - '1') < 8) {
+                    shotPnt = *pShotPntNum;
+                    *pShotPntNum = shotPnt + 1;
+                    tableIndex = (char)shotChar - '1';
+                    if (!(shotPnt + 1 < 17)) {
+                        assert_prog(D_00A53BD0, D_00A53828, 552);
+                    }
+                    if (!((unsigned int)tableIndex < 8)) {
+                        assert_prog(D_00A53C00, D_00A53828, 553);
+                    }
+                    pWeapon->shotPnt[shotPnt] = s_aeJntTbl_0[tableIndex];
+                }
+                pChar++;
+                nextChar = *pChar;
+                shotChar = nextChar;
+            } while (nextChar != 0);
+        }
+        return 1;
+    }
+
+    return 0;
+}
 
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
 extern RgHeap *InstanceOfRgHeap(void);
-extern float RgReadTextGetFloat(RgReadText *pReader);
 extern int RgReadTextIsEOF(RgReadText *pReader);
 extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
-
 /*
  * _ReadCommon is one of two file-local statics of that name in this overlay
  * (the other, ov12:0x00a18730, belongs to a different translation unit).
@@ -250,44 +833,12 @@ extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
 static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken);
 
 /*
- * The prefix every weapon essence the weapon database builds shares: each
- * _Read*Type function of rg_weapon_db.c hands its own essence to _ReadCommon
- * (ov12:0x00a1cd08), which fills these members from the common keys.
- *
- * shotEssence (+0x10): the "shot" key (ov12:0x00a53a48) names an entry of
- * the shot database. _ReadCommon stores RgShotDBGetEssence's result here
- * (sw $2,0x10 at ov12:0x00a1d130) and reports "unknown shot '%s'" when there
- * is none. That entry is whichever shot kind RgShotDBRead built (normal,
- * homing, grenade, beam or fire), so it is typed by the prefix all of them
- * share. rg_weapon.c's _InitWeaponCommon copies it onto the weapon
- * (ov12:0x00a198ec/0x00a19904), and _ShotTypeShot and _EnergyPassTime pass
- * that copy to CreateRgShotFromEssence (ov12:0x00a1a0ec/0x00a1b0dc).
- *
- * capacity (+0x14): the "num", "energy" and "hardness" keys all store one
- * float here, and "inf" stores 1e8 (swc1 0x14 at ov12:0x00a1d02c/0x00a1d048).
- * _InitWeaponCommon copies it to the weapon's shot count (ov12:0x00a198c0/
- * 0x00a198d0).
- *
- * _ReadCommon also writes parts of the span before +0x10 (the "lock" key
- * stores two angles at +0x08/+0x0c); that span stays unmodeled here.
- *
- * shotEssence is spelled with the struct tag so that this type needs no
- * typedef from rg_shot.c's header; RgShotEssence (src/ov12/rg_shot.h)
- * completes the same tag.
- */
-typedef struct RgWeaponEssence RgWeaponEssence;
-struct RgWeaponEssence {
-    unsigned char unmodeled_00[0x10];
-    struct RgShotEssence *shotEssence; /* +0x10 */
-    float capacity;                    /* +0x14 */
-};
-
-/*
  * Scaffold-owned data. ov12:0x00a53c20 holds "pReader != NIL", the argument
  * check every Read*Type function below reports; 0x00a53c30 holds "busy", the
  * key _ReadShotType recognizes for a shot type's cooldown.
  */
 const char D_00A53C20[] = "pReader != NIL";
+
 const char D_00A53C30[] = "busy";
 
 /*
@@ -297,6 +848,7 @@ const char D_00A53C30[] = "busy";
  * write below completes it.
  */
 typedef struct RgWeaponShotEssence RgWeaponShotEssence;
+
 struct RgWeaponShotEssence {
     unsigned char unmodeled_000[0x3b0];
     float busyTime;             /* +0x3b0, the "busy" key above */
@@ -341,6 +893,7 @@ static RgWeaponShotEssence *_ReadShotType(RgReadText *pReader)
  * the two keys _ReadAttackType and _ReadUnArmedType both recognize.
  */
 const char D_00A53C38[] = "damage";
+
 const char D_00A53C40[] = "hiteff";
 
 /*
@@ -349,6 +902,7 @@ const char D_00A53C40[] = "hiteff";
  * complete it.
  */
 typedef struct RgWeaponAttackEssence RgWeaponAttackEssence;
+
 struct RgWeaponAttackEssence {
     unsigned char unmodeled_000[0x3b8];
     float damage;                /* +0x3b8, the "damage" key above */
@@ -394,6 +948,7 @@ static RgWeaponAttackEssence *_ReadAttackType(RgReadText *pReader)
  * the same "damage"/"hiteff" keys at the same offsets.
  */
 typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
+
 struct RgWeaponUnArmedEssence {
     unsigned char unmodeled_000[0x3b8];
     float damage;                /* +0x3b8, the "damage" key above */
@@ -468,6 +1023,7 @@ static RgWeaponShieldEssence *_ReadShieldType(RgReadText *pReader)
 }
 
 typedef struct RgWeaponEnergyEssence RgWeaponEnergyEssence;
+
 struct RgWeaponEnergyEssence {
     unsigned char unmodeled_000[0x3b0];
     float shotEnergy;
@@ -524,26 +1080,25 @@ static RgWeaponEnergyEssence *_ReadEnergyType(RgReadText *pReader)
  * The parser stores the record key at +0x330 and uses +0x350 as its optional
  * display name, defaulting it to the key when _ReadCommon left it empty.
  */
-typedef struct RgWeaponDBRecord RgWeaponDBRecord;
-struct RgWeaponDBRecord {
-    RgWeaponEssence common;
-    unsigned char unmodeled_18[0x318];
-    char databaseName[0x20];
-    char displayName[0x30];
-};
+typedef struct RgWeaponEssence RgWeaponDBRecord;
 
 const char D_00A53C80[] = "pszDataBase != NIL";
+
 const char D_00A53C98[] = "shottype";
+
 const char D_00A53CA8[] = "atktype";
+
 const char D_00A53CB0[] = "sldtype";
+
 const char D_00A53CB8[] = "enetype";
+
 const char D_00A53CC0[] = "sudetype";
+
 const char D_00A53CD0[] = "%s : unknown keyword : %s";
 
 extern char *strcpy(char *destination, const char *source);
 extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat,
                             const char *pszName);
-extern RgReadText *CreateRgReadText(const char *pszDataBase);
 extern void DisposeRgReadText(RgReadText *pReader);
 
 void RgWeaponDBRead(RgSimpleDB *pDB, const char *pszDataBase)
