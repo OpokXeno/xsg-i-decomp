@@ -63,6 +63,10 @@ jobs:
           path.write_bytes(data)
           path.chmod(0o755)
           PY
+          # A unit is complete only when its code and data both fully match: the
+          # first report measures that, the second one is published.
+          "$RUNNER_TEMP/objdiff-cli" report generate --project build/objdiff --output build/report-first.json
+          python3 -B tools/tu/objdiff_complete.py --project build/objdiff --report build/report-first.json
           "$RUNNER_TEMP/objdiff-cli" report generate --project build/objdiff --output build/report.json
 
       - name: Upload progress report

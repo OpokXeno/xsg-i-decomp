@@ -13,6 +13,7 @@ translation unit, the original object (target) with the compiled C (base).
           still provided by INCLUDE_ASM or ACCEPTED_ASM are renamed so they never
           pair with the target: assembly earns no C credit.
 """
+from collections import Counter
 import argparse
 import os
 import json
@@ -111,8 +112,10 @@ class Tools:
 
         Zero-size objects (`int table[] = {}`) are renamed too: they hold no
         bytes, and objdiff refuses to pair a target symbol with one."""
-        present = self.defined(compiled)
         scaffold = set(scaffold_functions) | assembly_functions(compiled)
+        laid_out = linked_layout(self, compiled, target, output, unit, cwd) if target is not None else None
+        compiled = laid_out or compiled
+        present = self.defined(compiled)
         renames = [f'--redefine-sym={n}={n}{SCAFFOLD_SUFFIX}' for n in sorted(scaffold) if n in present]
         renames += [f'--redefine-sym={n}={n}.empty' for n in sorted(self.empty_objects(compiled))]
         if target is not None:
@@ -143,10 +146,13 @@ class Tools:
             stripped = target.with_suffix('.stripped.o')
             run([self.objcopy, *[f'--strip-symbol={name}' for name in interior], target, stripped], cwd)
             stripped.replace(target)
+        section_tails(target, output)
 
 
 R_MIPS_32, R_MIPS_HI16, R_MIPS_LO16, R_MIPS_GPREL16, R_MIPS_LITERAL = 2, 5, 6, 7, 8
 ADDRESS_LABEL = re.compile(r'D_([0-9A-F]+)$')
+# A label that states its original address: D_00A10910, jtbl_004D24E0, TestEnv_2_00A10910.
+STATED_ADDRESS = re.compile(r'(?:.*[._])?([0-9A-F]{8})$')
 LITERAL_SECTIONS = ('.lit4', '.lit8')
 
 
@@ -322,6 +328,138 @@ def named_words(path):
         path.write_bytes(bytes(data))
 
 
+def section_words(path):
+    """Turn the split's piece labels back into section-relative relocations.
+
+    The split keeps each addend by biasing `.Lcarve*` by minus the piece's
+    offset, so label + addend is the address reached.  The naming passes read
+    section-relative relocations, and this hands them that form."""
+    elf = Elf(path.read_bytes())
+    data = bytearray(elf.data)
+    anchor = {s.shndx: s for s in elf.symbols if s.type == 3}
+    def rebind(at, kind, symbol):
+        struct.pack_into('<I', data, at + 4, (anchor[symbol.shndx].index << 8) | kind)
+    def half(where, value):
+        struct.pack_into('<H', data, where, value & 0xffff)
+    for table in [s for s in elf.sections if s.type == 9]:
+        section = elf.sections[table.info]
+        if section.type == 8:
+            continue
+        high = {}
+        for at in range(table.offset, table.offset + table.size, 8):
+            offset, info = struct.unpack_from('<II', data, at)
+            kind, symbol = info & 0xff, elf.symbols[info >> 8]
+            if not symbol.name.startswith('.Lcarve') or symbol.shndx not in anchor:
+                continue
+            where = section.offset + offset
+            word = struct.unpack_from('<I', data, where)[0]
+            if kind == R_MIPS_32:
+                struct.pack_into('<I', data, where, (symbol.value + word) & 0xffffffff)
+            elif kind == R_MIPS_HI16:
+                # The addend is split: settled by the LO16 closing the pair.
+                high.setdefault(symbol.index, []).append((at, where, word))
+                continue
+            elif kind == R_MIPS_LO16:
+                low = struct.unpack('<h', struct.pack('<H', word & 0xffff))[0]
+                for hi_at, hi_where, hi_word in high.pop(symbol.index, []):
+                    address = ((hi_word & 0xffff) << 16) + low + symbol.value
+                    half(hi_where, (address + 0x8000) >> 16)
+                    rebind(hi_at, R_MIPS_HI16, symbol)
+                half(where, low + symbol.value)
+            elif kind in (R_MIPS_GPREL16, R_MIPS_LITERAL):
+                half(where, word + symbol.value)
+            else:
+                continue
+            rebind(at, kind, symbol)
+    path.write_bytes(bytes(data))
+
+
+def carve_report(compiled):
+    """The split report of a compiled object: {input section: [placed piece]}, or None."""
+    for name in (compiled.with_suffix('.carved.o.json'), compiled.with_suffix('.allocated.carved.o.json')):
+        if name.is_file():
+            return name.with_suffix(''), read(name)
+    allocated = compiled.parents[3] / 'c' / compiled.parent.name / f'{compiled.stem}.allocated.carved.o.json'
+    if allocated.is_file():
+        return allocated.with_suffix(''), read(allocated)
+    return None
+
+
+def section_addresses(elf, addresses):
+    """{section name: the address of its first byte}, from the labels it holds."""
+    votes = {}
+    for symbol in elf.symbols:
+        if not 0 < symbol.shndx < len(elf.sections) or symbol.type not in (0, 1, 2):
+            continue
+        name = symbol.name.removesuffix('.NON_MATCHING')
+        label = STATED_ADDRESS.match(name)
+        address = addresses.get(name, int(label.group(1), 16) if label else None)
+        if address is not None:
+            section = elf.sections[symbol.shndx].name
+            votes.setdefault(section, Counter())[address - symbol.value] += 1
+    return {section: count.most_common(1)[0][0] for section, count in votes.items()}
+
+
+def linked_layout(tools, compiled, target_path, output, unit, cwd):
+    """The compiled object with its data placed as the link places it.
+
+    The compiler emits data in source order; the registry routes each object to
+    its original address, and the link follows it. A section of the target is in
+    address order, so comparing the raw sections reports a reordering as a
+    difference. This links the object the build itself links, piece by piece, at
+    the offset of its address in the target: every byte still comes from the
+    compiled C, and a span no piece fills stays zero and is reported."""
+    found = carve_report(compiled)
+    if found is None:
+        return None
+    carved, report = found
+    target = Elf(Path(target_path).read_bytes())
+    bases = section_addresses(target, tools.addresses(unit))
+    # A section holding only static names states no address: its own objects do,
+    # through the piece of the compiled object each one lies in.
+    built = Elf(carved.read_bytes())
+    pieces = {p['section']: int(p['va'], 16) for entry in report.get('sections', {}).values() for p in entry.get('pieces', [])}
+    known = {}
+    for symbol in built.symbols:
+        if symbol.type == 1 and 0 < symbol.shndx < len(built.sections) and built.sections[symbol.shndx].name in pieces:
+            known.setdefault(symbol.name.replace('.', '_'), set()).add(pieces[built.sections[symbol.shndx].name] + symbol.value)
+    votes = {}
+    for symbol in target.symbols:
+        if symbol.type == 1 and 0 < symbol.shndx < len(target.sections) and len(known.get(symbol.name.replace('.', '_'), ())) == 1:
+            votes.setdefault(target.sections[symbol.shndx].name, Counter())[next(iter(known[symbol.name.replace('.', '_')])) - symbol.value] += 1
+    for section, count in votes.items():
+        bases.setdefault(section, count.most_common(1)[0][0])
+    placed = {}
+    for entry in report.get('sections', {}).values():
+        for piece in entry.get('pieces', []):
+            address = int(piece['va'], 16)
+            for section in target.sections:
+                if section.name in bases and 0 <= address - bases[section.name] < section.size:
+                    placed.setdefault(section.name, []).append((address - bases[section.name], piece['section']))
+                    break
+    if not placed:
+        return None
+    lines = ['SECTIONS {']
+    for section, pieces in placed.items():
+        lines.append(f'  {section} 0 : SUBALIGN(1) {{')
+        for offset, name in sorted(pieces):
+            lines += [f'    . = {offset:#x};', f'    *({name})']
+        # The extent of the target: what no piece fills stays zero and is compared.
+        size = next(s.size for s in target.sections if s.name == section)
+        lines += [f'    . = {size:#x};', '  }']
+    lines.append('}')
+    script = output.with_suffix('.layout.ld')
+    script.write_text('\n'.join(lines) + '\n')
+    # ld cannot merge the ECOFF debug sections of a relocatable input.
+    plain = output.with_suffix('.plain.o')
+    run([tools.objcopy, '--remove-section=.mdebug*', carved, plain], cwd)
+    laid_out = output.with_suffix('.layout.o')
+    run([tools.ld, '-EL', '-m', 'elf32lr5900', '-r', '-T', script, '-o', laid_out, plain], cwd)
+    plain.unlink()
+    section_words(laid_out)
+    return laid_out
+
+
 def same_extent(target, section, base, twin):
     """Whether two data sections hold the same layout: equal sizes, or the
     target longer only by the zero fill splat keeps up to the next file."""
@@ -378,55 +516,67 @@ def linked_addresses(root, unit):
 
 
 def data_words(target_path, base_path, addresses):
-    """Drop the pointers splat guessed in data the compiled C holds as values.
+    """Compare data words by the address they hold in the linked image.
 
-    splat turns every data word that looks like an address into `.word sym`.
-    Where the data object of the same name in the base has no relocation at
-    that word and holds exactly the address the linked image gives `sym`, the
-    original word was that value, not a reference: the target keeps the value
-    and loses the relocation."""
-    target, base = Elf(target_path.read_bytes()), Elf(Path(base_path).read_bytes())
-    base_objects = {(base.sections[s.shndx].name, s.name): s for s in base.symbols
-                    if s.type == 1 and 0 < s.shndx < len(base.sections) and s.size}
-    base_relocations = relocations(base)
-    data = bytearray(target.data)
-    drop = set()
-    for symbol in target.symbols:
-        if symbol.type != 1 or not 0 < symbol.shndx < len(target.sections) or not symbol.size:
+    splat turns every data word that looks like an address into `.word sym`,
+    also in text and numbers the compiled C holds as values, while it leaves
+    other real pointers as raw words; and the two sides can name one address
+    differently.  Where a word differs in form and both sides reach exactly the
+    same address, both keep that address as a value and lose the relocation.
+    A word reaching another address is left alone and stays a difference."""
+    target_path, base_path = Path(target_path), Path(base_path)
+    target, base = Elf(target_path.read_bytes()), Elf(base_path.read_bytes())
+    bases = section_addresses(target, addresses)
+    def reached(elf, entry, word):
+        if entry is None:
+            return word
+        symbol = entry[2]
+        if symbol.shndx == 0xfff1:
+            return symbol.value + word
+        if 0 < symbol.shndx < len(elf.sections):
+            start = bases.get(elf.sections[symbol.shndx].name)
+            if start is not None:
+                return start + symbol.value + word
+        label = STATED_ADDRESS.match(symbol.name)
+        address = addresses.get(symbol.name, int(label.group(1), 16) if label else None)
+        return None if address is None else address + word
+    target_relocations, base_relocations = relocations(target), relocations(base)
+    twins = {s.name: s for s in base.sections}
+    target_data, base_data = bytearray(target.data), bytearray(base.data)
+    target_drop, base_drop = set(), set()
+    for section in target.sections:
+        twin = twins.get(section.name)
+        if twin is None or section.name == '.text' or section.flags & 2 == 0 or section.type == 8 or twin.type == 8:
             continue
-        section = target.sections[symbol.shndx]
-        twin = base_objects.get((section.name, symbol.name))
-        if twin is None or twin.size != symbol.size or section.name == '.text':
+        theirs, mine = target_relocations.get(section.index, {}), base_relocations.get(twin.index, {})
+        for offset in set(theirs) | set(mine):
+            if offset + 4 > min(section.size, twin.size):
+                continue
+            their, my = theirs.get(offset), mine.get(offset)
+            if (their and their[1] != R_MIPS_32) or (my and my[1] != R_MIPS_32):
+                continue
+            their_word = struct.unpack_from('<I', target.data, section.offset + offset)[0]
+            my_word = struct.unpack_from('<I', base.data, twin.offset + offset)[0]
+            if their and my and their[2].name == my[2].name and their_word == my_word:
+                continue
+            address = reached(target, their, their_word)
+            if address is None or address != reached(base, my, my_word):
+                continue
+            struct.pack_into('<I', target_data, section.offset + offset, address & 0xffffffff)
+            struct.pack_into('<I', base_data, twin.offset + offset, address & 0xffffffff)
+            if their:
+                target_drop.add(their[0])
+            if my:
+                base_drop.add(my[0])
+    for elf, data, drop, path in ((target, target_data, target_drop, target_path), (base, base_data, base_drop, base_path)):
+        if not drop:
             continue
-        theirs = base_relocations.get(twin.shndx, {})
-        table = next((t for t in target.sections if t.type == 9 and t.info == section.index), None)
-        if table is None:
-            continue
-        for at in range(table.offset, table.offset + table.size, 8):
-            offset, info = struct.unpack_from('<II', data, at)
-            if info & 0xff != R_MIPS_32 or not symbol.value <= offset < symbol.value + symbol.size:
-                continue
-            position = twin.value + offset - symbol.value
-            if position in theirs:
-                continue
-            name = target.symbols[info >> 8].name
-            label = ADDRESS_LABEL.match(name)
-            address = addresses.get(name, int(label.group(1), 16) if label else None)
-            if address is None:
-                continue
-            where = section.offset + offset
-            value = (struct.unpack_from('<I', data, where)[0] + address) & 0xffffffff
-            if struct.unpack_from('<I', base.section_bytes(base.sections[twin.shndx]), position)[0] != value:
-                continue
-            struct.pack_into('<I', data, where, value)
-            drop.add(at)
-    if drop:
-        for table in [t for t in target.sections if t.type == 9]:
+        for table in [t for t in elf.sections if t.type == 9]:
             kept = [bytes(data[at:at + 8]) for at in range(table.offset, table.offset + table.size, 8)
                     if at not in drop]
             data[table.offset:table.offset + 8 * len(kept)] = b''.join(kept)
-            struct.pack_into('<I', data, target.shoff + table.index * target.shentsize + 20, 8 * len(kept))
-        target_path.write_bytes(bytes(data))
+            struct.pack_into('<I', data, elf.shoff + table.index * elf.shentsize + 20, 8 * len(kept))
+        path.write_bytes(bytes(data))
 
 
 def interior_labels(target_path, base_path):
@@ -642,6 +792,43 @@ def data_padding(target_path, base_path):
     target_path.write_bytes(bytes(data))
 
 
+def section_tails(target_path, base_path):
+    """Let both sides measure a data section to the same end.
+
+    objdiff compares a data section only up to the end of its last symbol.
+    Where the two sides stop at different points and the bytes between are the
+    same, the side that stops first has its last symbol grown over them."""
+    target, base = Elf(target_path.read_bytes()), Elf(base_path.read_bytes())
+    twins = {s.name: s for s in base.sections}
+    def last(elf, section):
+        symbols = [s for s in elf.symbols if s.shndx == section.index and s.type == 1]
+        return max(symbols, key=lambda s: s.value + s.size, default=None)
+    grown = [(target_path, target, {}), (base_path, base, {})]
+    for section in target.sections:
+        twin = twins.get(section.name)
+        if (twin is None or section.name == '.text' or section.flags & 2 == 0 or section.type == 8
+                or twin.type == 8 or section.size != twin.size):
+            continue
+        ours, theirs = last(target, section), last(base, twin)
+        if ours is None or theirs is None:
+            continue
+        ours_end, theirs_end = ours.value + ours.size, theirs.value + theirs.size
+        start, end = sorted((ours_end, theirs_end))
+        if start == end or target.section_bytes(section)[start:end] != base.section_bytes(twin)[start:end]:
+            continue
+        if ours_end < theirs_end:
+            grown[0][2][ours.index] = end - ours.value
+        else:
+            grown[1][2][theirs.index] = end - theirs.value
+    for path, elf, sizes in grown:
+        if sizes:
+            symtab = next(s for s in elf.sections if s.type == 2)
+            data = bytearray(elf.data)
+            for index, size in sizes.items():
+                struct.pack_into('<I', data, symtab.offset + 16 * index + 8, size)
+            path.write_bytes(bytes(data))
+
+
 def scaffold_functions(source):
     """Functions the source still takes from assembly (INCLUDE_ASM, ACCEPTED_ASM)."""
     return set(ASM_MACRO.findall(source.read_text(errors='replace'))) if source.is_file() else set()
@@ -657,6 +844,54 @@ def assembly_functions(path):
             if s.type == 2 and (s.shndx, s.value) in marked and not s.name.endswith('.NON_MATCHING')}
 
 
+def owner_corrections(root, manifest):
+    """The registered moves of a section's tail to the unit whose C emits it.
+
+    The registry records where the map's cut is wrong (`basis.owner_correction`):
+    the bytes [lo, end) of `from_tu` belong to the source owner.
+    {stem: [(section, lo, moved out?, the unit that loses them)]}."""
+    stems = {tu['id']: tu['name'] for tu in manifest['tus']}
+    found = {}
+    for tu_id, sections in read(root / 'config/objects/data-carves.json')['tus'].items():
+        for section, runs in sections.items():
+            for run_entry in runs:
+                source = (run_entry.get('basis') or {}).get('owner_correction', {}).get('from_tu')
+                if source:
+                    low = int(run_entry['range'][0], 16)
+                    found.setdefault(source, []).append((section, low, True, source))
+                    found.setdefault(stems[tu_id], []).append((section, low, False, source))
+    return found
+
+
+def split_data(source, low, kept, moved):
+    """Cut a splat data file at an address: the bytes before it and from it on."""
+    lines = source.read_text().splitlines()
+    at = next(i for i, line in enumerate(lines)
+              if (m := re.match(r'\s*/\* [0-9A-F]+ ([0-9A-F]{8}) \*/', line)) and int(m.group(1), 16) >= low)
+    if int(re.match(r'\s*/\* [0-9A-F]+ ([0-9A-F]{8}) \*/', lines[at]).group(1), 16) != low:
+        raise ValueError(f'{source}: no item starts at {low:#x}')
+    while lines[at - 1].split()[:1] in ([], ['nonmatching'], ['dlabel']):
+        at -= 1
+    header = lines[:next(i for i, line in enumerate(lines) if line.startswith('.section')) + 1]
+    opened = None
+    for line in lines[:at]:
+        word = line.split()
+        if word[:1] == ['dlabel']:
+            opened = word[1]
+        elif word[:1] == ['enddlabel']:
+            opened = None
+    head, tail = lines[:at], lines[at:]
+    if opened:
+        # The cut falls inside a label: each side closes its own.
+        label = f'D_{low:08X}'
+        head += [f'enddlabel {opened}', f'.size {opened}, . - {opened}']
+        tail = [f'dlabel {label}'] + [
+            line.replace(opened, label) if line.split()[:1] in (['enddlabel'], ['.size']) and opened in line else line
+            for line in tail]
+    kept.write_text('\n'.join(head) + '\n')
+    moved.write_text('\n'.join(header + tail) + '\n')
+
+
 def main_units(root, tools, project, renames):
     unit_dir = root / 'build/main'
     names = dict(renames)
@@ -664,6 +899,9 @@ def main_units(root, tools, project, renames):
                   if label['splat_name'] != label['name']})
     manifest = read(unit_dir / 'tu-manifest.json')
     by_name = {t['name']: t for t in manifest['tus']}
+    corrections = owner_corrections(root, manifest)
+    pieces = {(section, piece.get('tu')): piece for section, entry in manifest['sections'].items()
+              for piece in entry['order']}
     jobs = []
     for tu in read(root / 'config/objects/main.objects.json')['tus']:
         if not tu.get('in_scope'):
@@ -685,8 +923,24 @@ def main_units(root, tools, project, renames):
                     continue
                 data = unit_dir / (piece.get('file') or f'asm/main/data/{piece["piece"]}.{section[1:]}.s')
                 output = destination / f'{piece["piece"]}.{section[1:]}.o'
+                for name, low, out, _ in corrections.get(stem, ()):
+                    if name == section and out:
+                        kept = output.with_suffix('.kept.s')
+                        split_data(data, low, kept, output.with_suffix('.moved.s'))
+                        data = kept
                 tools.assemble_data(data, output, unit_dir)
                 parts.append(output)
+        # What the registry gives this unit comes first in its section: it is the
+        # earlier unit's tail, and it precedes this unit's own range.
+        for name, low, out, donor in corrections.get(stem, ()):
+            if not out:
+                piece = pieces[name, donor]
+                data = unit_dir / (piece.get('file') or f'asm/main/data/{piece["piece"]}.{name[1:]}.s')
+                output = destination / f'{donor}.{name[1:]}.moved.o'
+                moved = output.with_suffix('.s')
+                split_data(data, low, output.with_suffix('.kept.s'), moved)
+                tools.assemble_data(moved, output, unit_dir)
+                parts.insert(0, output)
         unit = dict(name=f'main/{stem}', metadata=dict(progress_categories=['main'], complete=False))
         if not parts:
             return None
@@ -814,8 +1068,15 @@ def overlay_units(root, tools, project, unit_name):
 def iop_units(root, project, iop_report):
     from tu import iop_objdiff
     report = read(iop_report)
-    units, _, _ = iop_objdiff.prepare(root, project, Path(iop_report).resolve(),
-                                      reporting=report.get('mode') == 'reporting')
+    units, _, accounting = iop_objdiff.prepare(root, project, Path(iop_report).resolve(),
+                                               reporting=report.get('mode') == 'reporting')
+    for unit in units:
+        # The same rule as the EE units; the unattributed-data unit of a module
+        # holds what no source group owns, so it is complete when that is nothing.
+        source = unit['metadata'].get('source_path')
+        module = unit['name'].split('/')[0]
+        unit['metadata']['complete'] = (not scaffold_functions(root / source) if source else
+                                        accounting['data_accounting'][module]['totals']['residual'] == 0)
     return units
 
 
