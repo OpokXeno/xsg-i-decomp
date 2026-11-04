@@ -141,3 +141,7 @@ int RgHissatuCheck(unsigned int attackType, RgWeapon *weapons[RG_EQUIP_TYPE_NUM]
     }
     return 0;
 }
+
+
+
+const char hissatuAssertNameNotNil[16] = "pszName != NIL";

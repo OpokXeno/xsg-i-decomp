@@ -22,7 +22,7 @@
  * free-block list head _SetHeapHead returns and InitRgHeap/ClearRgHeap store
  * at 0x08. pAlloc is the allocated-block list head RgHeapAlloc reads and
  * writes at 0x0C, which InitRgHeap clears to NULL. sizeof(RgHeap) == 0x10
- * matches the scaffold's s_inHeap_1/s_inHeap_4 singletons.
+ * matches the two function-local heap singletons.
  */
 struct RgHeap {
     void *top;

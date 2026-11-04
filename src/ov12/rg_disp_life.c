@@ -70,7 +70,7 @@ extern const char dispLifeRightBarPictureName[];
 extern const char dispLifeBarTop1PictureName[];
 extern const char dispLifeBarTopDeadPictureName[];
 extern const char dispLifeBarTop2PictureName[];
-extern const int s_anPos_1[2][2];
+static int s_anPos_1[2][2];
 
 static AgwsNameRecord s_aCharIDToUVWH_0[RG_DISP_LIFE_AGWS_NAMES] = {
     {0, {0}, 0, 0, 88, 16},
@@ -93,7 +93,7 @@ const char dispLifeSecondaryBoardPictureName[] = "board_nb.bmp";
 
 const char dispLifeVsPrimaryBoardPictureName[] = "board_nc.bmp";
 
-const char dispLifeVsSecondaryBoardPictureName[] = "board_nd.bmp";
+const char dispLifeVsSecondaryBoardPictureName[16] = "board_nd.bmp";
 
 static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh)
 {
@@ -397,3 +397,35 @@ void RgDispLifeDisp(RgDispLife *pDisp)
     }
     XrgPaint2DFlush(paint);
 }
+
+
+
+static int s_anPos_1[2][2] = { { 0, 64 }, { 464, 64 } };
+
+const char dispLifeAssertBxxNotNil[16] = "pBxx != NIL";
+
+const char dispLifeAssertTimeFontNotNil[24] = "pTimeFont != NIL";
+
+const char dispLifeAgwsNamePictureName[16] = "agwsname.bmp";
+
+const char dispLifeLeftWindow0PictureName[16] = "l_a_0win.bmp";
+
+const char dispLifeLeftWindow1PictureName[16] = "l_a_1win.bmp";
+
+const char dispLifeLeftWindow2PictureName[16] = "l_a_2win.bmp";
+
+const char dispLifeRightWindow0PictureName[16] = "r_a_0win.bmp";
+
+const char dispLifeRightWindow1PictureName[16] = "r_a_1win.bmp";
+
+const char dispLifeRightWindow2PictureName[16] = "r_a_2win.bmp";
+
+const char dispLifeLeftBarPictureName[16] = "left_b.bmp";
+
+const char dispLifeRightBarPictureName[16] = "right_b.bmp";
+
+const char dispLifeBarTop1PictureName[16] = "bar_top1.bmp";
+
+const char dispLifeBarTopDeadPictureName[16] = "bar_topd.bmp";
+
+const char dispLifeBarTop2PictureName[16] = "bar_top2.bmp";

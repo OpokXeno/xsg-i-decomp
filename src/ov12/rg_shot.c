@@ -1151,3 +1151,7 @@ static void _ShotCommonHitBg(RgShot *shot, struct RgBgObj *bgObject,
                         shot->bgHitSoundVolume);
     CreateRgHitEffectPos(position, shot->essence->hitEffectFile, shotGrenadeHitEffectName);
 }
+
+
+
+const char shotUnknownFireStatusFormat[24] = "unknown fire status %d";

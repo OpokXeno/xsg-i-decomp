@@ -61,7 +61,7 @@ extern const char cameraUnknownBoolOperatorFormat[];
 static int _SetBit(int *flags, int bit, int value);
 static void _PassTimeVersion3(RgCamera *camera, float elapsed);
 static int _GetVer3TimerID(char *timerName);
-extern int (*s_apConditionTbl_0[RG_CAMERA_TIMER_COUNT])(RgCamera *);
+static int (*s_apConditionTbl_0[RG_CAMERA_TIMER_COUNT])(RgCamera *);
 static void _SetVersion3Extent(RgCamera *camera);
 static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader);
 
@@ -236,12 +236,12 @@ static void _IsActionTargetInScrn(RgCamera *camera)
                             0.0f);
 }
 
-static int _IsActionTrue(void)
+static int _IsActionTrue(RgCamera *camera)
 {
     return 1;
 }
 
-static int _IsActionFalse(void)
+static int _IsActionFalse(RgCamera *camera)
 {
     return 0;
 }
@@ -824,3 +824,58 @@ const char cameraDumpAttackText[8] = "attack";
 const char cameraDumpAdvanceText[8] = "advance";
 
 const char cameraDumpRollText[8] = "roll";
+
+
+
+static int (*s_apConditionTbl_0[RG_CAMERA_TIMER_COUNT])(RgCamera *) = {
+    _IsActionRoll,
+    _IsActionAdvance,
+    _IsActionAttack,
+    _IsActionLockAndAttack,
+    _IsActionDash,
+    (int (*)(RgCamera *))_IsActionTargetInScrn,
+    _IsActionLockOn,
+    _IsActionSeeTarget,
+    _IsActionTrue,
+    _IsActionFalse
+};
+
+const char cameraTextKeyBehindOffset[16] = "behind-offset";
+
+const char cameraTextKeyLookDown[16] = "look-down";
+
+const char cameraTextKeyUpperOffset[16] = "upper-offset";
+
+const char cameraTextKeyRollCoef[16] = "roll-coef";
+
+const char cameraTextKeyUseMoveDir[16] = "use-move-dir";
+
+const char cameraTextKeyRollTime[16] = "roll-time";
+
+const char cameraTextKeyCondition1[8] = "cond-1";
+
+const char cameraTextKeyCondition2[8] = "cond-2";
+
+const char cameraTextKeyCondition3[8] = "cond-3";
+
+const char cameraTextKeyCondition4[8] = "cond-4";
+
+const char cameraTextKeyOperator1[8] = "ope-1";
+
+const char cameraTextKeyOperator2[8] = "ope-2";
+
+const char cameraTextKeySubslideStart[16] = "subslide-start";
+
+const char cameraTextKeySubslideDegree[16] = "subslide-degree";
+
+const char cameraTextKeySubslideLength[16] = "subslide-len";
+
+const char cameraTextKeySubslideCoef[16] = "subslide-coef";
+
+const char cameraOperatorAndText[8] = "and";
+
+const char cameraOperatorOrText[8] = "or";
+
+const char cameraUnknownOperatorFormat[32] = "unknown operator name '%s'";
+
+const char cameraUnknownBoolOperatorFormat[40] = "unknown bool operator %d (index %d)";

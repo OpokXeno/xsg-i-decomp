@@ -61,7 +61,7 @@ const char coliDataAssertTriangleCountPositive[] = "nNumOfTriangles > 0";
 
 const char coliDataAssertTriangleCapacityLeftOver[] = "pData->m_nCapaOfTri > pData->m_nNumOfTri";
 
-const char coliDataAssertBallArgumentsNotNil[] = "pPoly != NIL && pArg != NIL && pResult != NIL";
+const char coliDataAssertBallArgumentsNotNil[48] = "pPoly != NIL && pArg != NIL && pResult != NIL";
 
 static void _InitTriColi(RgColiTriangle *triangle, void *pV0, void *pV1,
                          void *pV2)
@@ -463,3 +463,33 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
     }
     return 0;
 }
+
+
+
+const RgColiQuadVertices coliDataQuadPrismVertexTable = {
+    {
+        { -1.0f, 0.0f, -1.0f, 1.0f },
+        { 1.0f, 0.0f, -1.0f, 1.0f },
+        { -1.0f, 0.0f, 1.0f, 1.0f },
+        { 1.0f, 0.0f, 1.0f, 1.0f },
+        { -1.0f, 1.0f, -1.0f, 1.0f },
+        { 1.0f, 1.0f, -1.0f, 1.0f },
+        { -1.0f, 1.0f, 1.0f, 1.0f },
+        { 1.0f, 1.0f, 1.0f, 1.0f }
+    }
+};
+
+const RgColiQuadIndices coliDataQuadPrismIndexTable = {
+    .m_quads = {
+        { 1, 0, 3, 2 },
+        { 4, 5, 6, 7 },
+        { 5, 4, 1, 0 },
+        { 7, 5, 3, 1 },
+        { 6, 7, 2, 3 },
+        { 4, 6, 0, 2 }
+    }
+};
+
+const char coliDataAssertSegmentNotNil[16] = "pArg != NIL";
+
+const char coliDataAssertRayResultNotNil[16] = "pResult != NIL";

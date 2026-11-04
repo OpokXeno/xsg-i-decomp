@@ -45,7 +45,7 @@ extern const char equipMountRightShoulderText[];
 extern const char equipMountBackLeftText[];
 extern const char equipMountBackRightText[];
 /* Maps each mount position to its equip type. */
-extern int s_aePosToType[RG_EQUIP_POS_NUM];
+static int s_aePosToType[RG_EQUIP_POS_NUM];
 
 int RgEquipPosToJntID(int ePos)
 {
@@ -293,3 +293,39 @@ const char *RgEquipMountPosString(RgEquip *pEquip, unsigned int eType,
         return RgEquipTypeString(eType);
     }
 }
+
+
+
+static int s_aePosToType[RG_EQUIP_POS_NUM] = { 0, 0, 0, 1, 1, 1, 2, 2 };
+
+const char equipTypeAssertCopyPointersNotNil[32] = "pDst != NIL && pSrc != NIL";
+
+const char equipTypeAssertMountCountBelowMax[48] = "pEquip->m_nMountNum < RG_EQUIP_MOUNT_MAX";
+
+const char equipTypeAssertMountCountNotNegative[16] = "nMount >= 0";
+
+const char equipTypeAssertEquipArrayNotNil[16] = "apEquip != NIL";
+
+const char equipTypeAssertTypeInRangeLoose[56] = "RG_EQUIP_TYPE_MIN <= eType && eType < RG_EQUIP_TYPE_NUM";
+
+const char equipTypeWeaponNameBmp45vx[8] = "BMP45VX";
+
+const char equipTypeWeaponNameSmp53ag[8] = "SMP53AG";
+
+const char equipTypeWeaponNameCb85vx[8] = "CB85VX";
+
+const char equipMountLeftHandText[16] = "left hand";
+
+const char equipMountLeftElbowText[16] = "left elbow";
+
+const char equipMountLeftShoulderText[16] = "left shoulder";
+
+const char equipMountRightHandText[16] = "right hand";
+
+const char equipMountRightElbowText[16] = "right elbow";
+
+const char equipMountRightShoulderText[16] = "right shoulder";
+
+const char equipMountBackLeftText[16] = "back left";
+
+const char equipMountBackRightText[24] = "back right";

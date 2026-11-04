@@ -1010,3 +1010,14 @@ void RgDrawFadeOut(RgDraw *pDraw)
         assert_prog(drawAssertDrawNotNil, drawSourcePath, 876);
     }
 }
+
+
+
+const GifTagBlock drawFadeShadowVertexBlock = {
+    {
+        { { 0x0000000000000000ULL, 0x0000007F00040000ULL } },
+        { { 0x0000000000000FFFULL, 0x0000007F00040000ULL } },
+        { { 0x00000FFF00000000ULL, 0x0000007F00040000ULL } },
+        { { 0x00000FFF00000FFFULL, 0x0000007F00040000ULL } }
+    }
+};

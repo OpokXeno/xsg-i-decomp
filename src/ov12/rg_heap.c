@@ -244,33 +244,30 @@ static void _MergeBlocks(struct RgHeapBlock *pHead)
     } while (pBlock != pHead);
 }
 
-/* The two heap instances and their backing arenas are zero-initialized data. */
-RgHeap s_inHeap_1;
-u8 s_aTmp_2[RG_HEAP_ARENA_SIZE];
-
-static int s_bInit1_0 = 0;
-
 RgHeap *InstanceOfRgHeap(void)
 {
-    if (s_bInit1_0 == 0) {
-        s_bInit1_0 = 1;
-        InitRgHeap(&s_inHeap_1, s_aTmp_2, RG_HEAP_ARENA_SIZE);
+    static int s_bInit1 = 0;
+    static RgHeap s_inHeap;
+    static u8 s_aTmp[RG_HEAP_ARENA_SIZE];
+
+    if (s_bInit1 == 0) {
+        s_bInit1 = 1;
+        InitRgHeap(&s_inHeap, s_aTmp, RG_HEAP_ARENA_SIZE);
     }
-    return &s_inHeap_1;
+    return &s_inHeap;
 }
-
-RgHeap s_inHeap_4;
-u8 s_aTmp_5[RG_HEAP_ARENA_SIZE];
-
-static int s_bInit2_3 = 0;
 
 RgHeap *InstanceOfRgHeapData(void)
 {
-    if (s_bInit2_3 == 0) {
-        s_bInit2_3 = 1;
-        InitRgHeap(&s_inHeap_4, s_aTmp_5, RG_HEAP_ARENA_SIZE);
+    static int s_bInit2 = 0;
+    static RgHeap s_inHeap;
+    static u8 s_aTmp[RG_HEAP_ARENA_SIZE];
+
+    if (s_bInit2 == 0) {
+        s_bInit2 = 1;
+        InitRgHeap(&s_inHeap, s_aTmp, RG_HEAP_ARENA_SIZE);
     }
-    return &s_inHeap_4;
+    return &s_inHeap;
 }
 
 void ClearRgHeap(RgHeap *pHeap)
@@ -546,3 +543,49 @@ void RgHeapDumpBlock(RgHeap *pHeap, void *pPtr)
 }
 
 const unsigned char heapMagicString[24] = "gAMe sHoW 2001.10.15";
+
+
+
+const char heapAllocZeroSizeFormat[40] = "size <= 0 error allocated at %s,%d";
+
+const char heapAssertHeapNotNilParenthesized[16] = "(pHeap != NIL)";
+
+const char heapAllocEntryHeapPtrComment[24] = "alloc-entry-heap-ptr";
+
+const char heapAllocNoHeapFormat[48] = "there is no heap for allocation at %s,%d";
+
+const char heapNoDataHeapComment[16] = "no heap 1";
+
+const char heapAllocTooBigDataHeapFormat[56] = "too big size (%d) of allocation\nat %s,%d\nfrom data heap";
+
+const char heapNoNormalHeapComment[16] = "no heap 2";
+
+const char heapAllocTooBigNormalHeapFormat[64] = "too big size (%d) of allocation\nat %s,%d\nfrom normal heap";
+
+const char heapNoUnknownHeapComment[16] = "no heap 3";
+
+const char heapAllocTooBigUnknownHeapFormat[64] = "too big size (%d) of allocation\nat %s,%d\nfrom unknown heap";
+
+const char heapAssertMatchBlockSizeEnough[40] = "(nMatchBlockSiz >= nNeedBlockSiz)";
+
+const char heapBlockAlignComment[16] = "block align";
+
+const char heapAssertAllocAligned[48] = "(((int)(BYTE*)pAlloc + HEAD_SIZE) & 0xf) == 0";
+
+const char heapNotAlignedBlockComment[24] = "not aligned block";
+
+const char heapFreeEntryComment[16] = "free entry";
+
+const char heapFreeNilAddressFormat[32] = "free NIL address at %s,%d";
+
+const char heapErrorComment[16] = "heap error";
+
+const char heapAlreadyFreeFormat[64] = "%p is already free at %s,%d\n(MAYBE allocated at %s,%d !\?)";
+
+const char heapNotAllocatedFreeFormat[32] = "not allocated %p free at %s,%d";
+
+const char heapBlockDestroyedFormat[56] = "heap block is destroyed or not in heap %p free at %s,%d";
+
+const char heapPtrNotInAreaFormat[48] = "%p is not in %p HEAP memory area\nfree at %s %d";
+
+const char heapAllocListNodeFreeBlockMismatchFormat[48] = "alloc list node 1 && free block is not this";

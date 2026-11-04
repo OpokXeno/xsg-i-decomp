@@ -241,3 +241,103 @@ void RgRobotSpecDump(RgRobotSpec *pSpec)
     XrgLog(robotSpecDumpLifeFormat, robotSpecSourcePath, 174, pSpec->life);
     XrgLog(robotSpecDumpDamageStiffTimeFormat, robotSpecSourcePath, 175, pSpec->damageStiffTime);
 }
+
+
+
+const char robotSpecAssertSpecNotNil[16] = "pSpec != NIL";
+
+const char robotSpecSourcePath[24] = "../rg_robot_spec.euc.c";
+
+const char robotSpecAssertAutoHomingIdInRange[72] = "nID < sizeof(pSpec->m_aAutoHoming) / sizeof(pSpec->m_aAutoHoming[0])";
+
+const char robotSpecAutoHomingSeeTargetKeyword[16] = "see-target";
+
+const char robotSpecAutoHomingLockOnKeyword[8] = "lock-on";
+
+const char robotSpecAutoHomingShotKeyword[8] = "shot";
+
+const char robotSpecAutoHomingInScreenKeyword[8] = "in-scrn";
+
+const char robotSpecUnknownAutoHomingKeywordFormat[32] = "unknown autohoming-keyword '%s'";
+
+const char robotSpecEnginePowerKey[16] = "engine-power";
+
+const char robotSpecEngineImpulseKey[16] = "engine-impulse";
+
+const char robotSpecMoveSpeedMaxKey[16] = "move-spd-max";
+
+const char robotSpecDashSpeedMaxKey[16] = "dash-spd-max";
+
+const char robotSpecRotSpeedBottomRateKey[24] = "rot-spd-bottom-rate";
+
+const char robotSpecWeightKey[8] = "weight";
+
+const char robotSpecMoveResistKey[16] = "move-resist";
+
+const char robotSpecRotResistKey[16] = "rot-resist";
+
+const char robotSpecDashTimeKey[16] = "dash-time";
+
+const char robotSpecDashPowerKey[16] = "dash-power";
+
+const char robotSpecDashCooldownKey[16] = "dash-cooldown";
+
+const char robotSpecLifeKey[8] = "life";
+
+const char robotSpecDamageStiffTimeKey[24] = "damage-stiff-time";
+
+const char robotSpecBodyAttackDamageKey[24] = "body-attack-damage";
+
+const char robotSpecJetEffectKey[8] = "jet-eff";
+
+const char robotSpecDashEffectKey[16] = "dash-eff";
+
+const char robotSpecBareHandKey[8] = "sude";
+
+const char robotSpecRollPowerKey[16] = "roll-power";
+
+const char robotSpecAutoHomingKey[16] = "auto-homing";
+
+const char robotSpecRotSpeedMaxKey[16] = "rot-spd-max";
+
+const char robotSpecDashModeKey[16] = "dash-mode";
+
+const char robotSpecDashModeNormalKeyword[8] = "normal";
+
+const char robotSpecDashModeVrKeyword[8] = "vr";
+
+const char robotSpecDashModeNeoKeyword[8] = "neo";
+
+const char robotSpecDashModeNeo2Keyword[8] = "neo2";
+
+const char robotSpecDashModeNeo3Keyword[8] = "neo3";
+
+const char robotSpecDumpEnginePowerFormat[32] = "engine-power         %f\n";
+
+const char robotSpecDumpRollPowerFormat[32] = "roll-power           %f\n";
+
+const char robotSpecDumpMoveSpeedMaxFormat[32] = "move-spd-max         %f\n";
+
+const char robotSpecDumpRotSpeedMaxFormat[32] = "rot-spd-max          %f\n";
+
+const char robotSpecDumpRotSpeedBottomRateFormat[32] = "rot-spd-bottom-rate  %f\n";
+
+const char robotSpecDumpWeightFormat[32] = "weight               %f\n";
+
+const char robotSpecDumpMoveResistFormat[32] = "move-resist          %f\n";
+
+const char robotSpecDumpRotResistFormat[32] = "rot-resist           %f\n";
+
+const char robotSpecDumpDashTimeFormat[32] = "dash-time            %f\n";
+
+const char robotSpecDumpDashPowerFormat[32] = "dash-power           %f\n";
+
+const char robotSpecDumpDashCooldownFormat[32] = "dash-cooldown        %f\n";
+
+const char robotSpecDumpAutoHoming0Format[32] = "auto-homing 0        %f (%x)\n";
+
+const char robotSpecDumpAutoHoming1Format[32] = "auto-homing 1        %f (%x)\n";
+
+const char robotSpecDumpLifeFormat[32] = "life                 %f\n";
+
+const char robotSpecDumpDamageStiffTimeFormat[32] = "damage-stiff-time    %f\n";

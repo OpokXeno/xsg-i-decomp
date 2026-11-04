@@ -47,14 +47,14 @@ extern const char robotUnknownVrDashCmdModeFormat[];
 extern const char robotUnknownVrDashModeFormat[];
 /* One priority level per command type (s_anCmdLevel, 0x3c bytes). */
 #define RG_CMD_TYPE_NUM 15
-extern int s_anCmdLevel[RG_CMD_TYPE_NUM];
+static int s_anCmdLevel[15];
 extern const char robotEmptyEquipDatabaseName[];
 extern const char robotAssertEquipPosValid[];
 extern const char robotAssertJointIdValid[];
 extern const char robotCheckPakaPakaLog[];
 extern const char robotCheckPakaPakaEndLog[];
 extern const char robotNoLockOnLog[];
-extern RgRobotSpec s_inDefSpec_0;
+static RgRobotSpec s_inDefSpec_0;
 
 static int _ExecAccelarateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 static int _ExecRotateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
@@ -3525,3 +3525,95 @@ void RgRobotNearBG(RgStatus *pRobot, RgVector direction)
         XrgCopyVector(command->vector, direction);
     }
 }
+
+extern const char robotCommandNameAccelarate[];
+extern const char robotCommandNameAccelarateRotate[];
+extern const char robotCommandNameShot[];
+extern const char robotCommandNameTargetting[];
+extern const char robotCommandNameBreak[];
+extern const char robotCommandNameDash[];
+extern const char robotCommandNameDashContinue[];
+extern const char robotCommandNameDropWeapon[];
+extern const char robotCommandNameDamage[];
+extern const char robotCommandNameWeakDamage[];
+extern const char robotCommandNameHitWeaponAttack[];
+extern const char robotCommandNameInvalidAttack[];
+extern const char robotCommandNameHitBg[];
+extern const char robotCommandNameNearBg[];
+extern const char robotCommandNameHitByBody[];
+
+static const char *s_aszCommandName[15] = {
+    robotCommandNameAccelarate,
+    robotCommandNameAccelarateRotate,
+    robotCommandNameShot,
+    robotCommandNameTargetting,
+    robotCommandNameBreak,
+    robotCommandNameDash,
+    robotCommandNameDashContinue,
+    robotCommandNameDropWeapon,
+    robotCommandNameDamage,
+    robotCommandNameWeakDamage,
+    robotCommandNameHitWeaponAttack,
+    robotCommandNameInvalidAttack,
+    robotCommandNameHitBg,
+    robotCommandNameNearBg,
+    robotCommandNameHitByBody
+};
+
+static int s_anCmdLevel[15] = { 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 2, 1, 1, 1, 2 };
+
+const char robotCommandNameHitByBody[8] = "H_BB";
+
+const char robotCommandNameNearBg[8] = "B_NB";
+
+const char robotCommandNameHitBg[8] = "B_HB";
+
+const char robotCommandNameInvalidAttack[8] = "INVA";
+
+const char robotCommandNameHitWeaponAttack[8] = "HITW";
+
+const char robotCommandNameWeakDamage[8] = "WEAK";
+
+const char robotCommandNameDamage[8] = "DMG ";
+
+const char robotCommandNameDropWeapon[8] = "DROP";
+
+const char robotCommandNameDashContinue[8] = "DSHC";
+
+const char robotCommandNameDash[8] = "DASH";
+
+const char robotCommandNameBreak[8] = "BRK ";
+
+const char robotCommandNameTargetting[8] = "TGT ";
+
+const char robotCommandNameShot[8] = "ATK ";
+
+const char robotCommandNameAccelarateRotate[8] = "ROT ";
+
+const char robotCommandNameAccelarate[8] = "ACC ";
+
+const char robotUnknownShieldStatusFormat[40] = "unknown shield status %d";
+
+const char robotUnknownDashStatusFormat[24] = "unknown dash status %d";
+
+const char robotUnknownDashModeFormat[32] = "unknown dash mode %d";
+
+const char robotUnknownVrDashCmdModeFormat[32] = "unknown VRDASH cmd mode %d";
+
+const char robotUnknownVrDashModeFormat[24] = "unknown VR dash mode %d";
+
+const char robotCannotTransitVrDashModeFormat[40] = "cannot transit to VR dash mode %d";
+
+const char robotEmptyEquipDatabaseName[8] = "";
+
+const char robotAssertEquipPosValid[40] = "eEquipPos != RG_EQUIP_POS_INVALID";
+
+const char robotAssertJointIdValid[32] = "eJntID != RG_ACTOR_JNT_NUL";
+
+const char robotCheckPakaPakaLog[16] = "check pakapaka\n";
+
+const char robotCheckPakaPakaEndLog[24] = "check pakapaka end\n";
+
+const char robotNoLockOnLog[8] = "\?\?\?\n";
+
+static RgRobotSpec s_inDefSpec_0;

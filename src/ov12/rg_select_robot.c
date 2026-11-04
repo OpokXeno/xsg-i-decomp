@@ -132,7 +132,7 @@ const AlignedLightBlock selectRobotLightIntensityBlock = {
     }
 };
 
-const char selectRobotAssertContNotNil[] = "pCont != NIL";
+const char selectRobotAssertContNotNil[16] = "pCont != NIL";
 
 /*
  * xglCdReadFile's completion callback: only completion code 4 does
@@ -885,3 +885,33 @@ void RgSelectRobotDisp(RgSelectRobot *pCont)
 static void _DumpHead(void)
 {
 }
+
+
+
+const char selectRobotAssertFileNumWithinDataMax[24] = "uFileNum <= DAT_MAX";
+
+const char selectRobotFloorModelFileName[16] = "sel_yuka.rbg";
+
+const char selectRobotDataDirectory[16] = "data\\nisimori\\";
+
+const char selectRobotFloorModelName[8] = "SA_yuka";
+
+const char selectRobotAssertActStatOk[24] = "pAct->m_eStat == OK";
+
+const char selectRobotAssertActDataNumAtLeastThree[24] = "pAct->m_uDataNum >= 3";
+
+const char selectRobotAssertActActorNil[24] = "pAct->m_pActor == NIL";
+
+const char selectRobotAssertNewNotNil[16] = "pNew != NIL";
+
+const char selectRobotAssertWepEssNotNil[16] = "apWepEss != NIL";
+
+const char selectRobotUnknownActStatError[24] = "unknow Act stat %d";
+
+const char selectRobotUnknownRobotKindFormat[16] = "hoge \? %d";
+
+const char selectRobotAssertActBufferNotNil[24] = "pAct->m_apBuf[i] != NIL";
+
+const char selectRobotDebugStateFormat[8] = "ROB %d";
+
+const char selectRobotDebugWeaponFormat[16] = "WEP(%d) %d";

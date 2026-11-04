@@ -39,7 +39,7 @@ typedef struct {
 /* The pair-dispatch table, scaffold data at 0x00a50090: handlers for the
  * [typeA][typeB] geometry pairs. */
 typedef int (*RgGeomCollisionHandler)(RgGeomCollisionPair *pPair);
-extern RgGeomCollisionHandler s_apJobFuncTbl[RG_GEOM_TYPE_COUNT][RG_GEOM_TYPE_COUNT];
+static RgGeomCollisionHandler s_apJobFuncTbl[RG_GEOM_TYPE_COUNT][RG_GEOM_TYPE_COUNT];
 
 static int _BallVsBall(RgGeomCollisionPair *pArg)
 {
@@ -583,3 +583,18 @@ int RgGeomCollisionJob(RgGeomCollisionPair *pArg)
     }
     return result;
 }
+
+
+
+static RgGeomCollisionHandler s_apJobFuncTbl[RG_GEOM_TYPE_COUNT][RG_GEOM_TYPE_COUNT] = {
+    { 0, 0, 0, 0, 0, 0 },
+    { 0, _BallVsBall, _BallVsBall, _BallVsPoly, _BallVsTray, _BallVsPillar },
+    { 0, _BallVsBall, _BallVsBall, _RobotVsPoly, _RobVsTray, _RobVsPillar },
+    { 0, (RgGeomCollisionHandler)_PolyVsBall, (RgGeomCollisionHandler)_PolyVsRobot, 0, 0, 0 },
+    { 0, (RgGeomCollisionHandler)_TrayVsBall, (RgGeomCollisionHandler)_TrayVsRob, 0, 0, 0 },
+    { 0, (RgGeomCollisionHandler)_PillarVsBall, (RgGeomCollisionHandler)_PillarVsRob, 0, 0, 0 }
+};
+
+const char geomCollisionAssertRobot1NotNil[16] = "pRobot1 != NIL";
+
+const char geomCollisionAssertPoly2NotNil[16] = "pPoly2 != NIL";

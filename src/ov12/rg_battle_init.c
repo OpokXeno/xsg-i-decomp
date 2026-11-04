@@ -203,4 +203,26 @@ const char battleInitSourcePath[] = "../rg_battle_init.euc.c";
 
 const unsigned char battleInitEmptyString[8] = "";
 
-const char battleInitAssertDstAndSrcNotNil[] = "pDst != NIL && pSrc != NIL";
+const char battleInitAssertDstAndSrcNotNil[32] = "pDst != NIL && pSrc != NIL";
+
+
+
+const char battleInitUnarmedWeaponName[8] = "UNARMED";
+
+const char battleInitBgInfoFileName[16] = "rg_bg.info";
+
+const char battleInitAssertBgGroupAndNameNotNil[40] = "pBgGroup != NIL && pszBgName != NIL";
+
+const char battleInitCannotOpenFormat[24] = "cannot open '%s'";
+
+const char battleInitAssertDstNotNil[16] = "pDst != NIL";
+
+const char battleInitDumpHeaderFormat[32] = "**** dump battle init %p ****\n";
+
+const char battleInitDumpBgFormat[16] = "  BG : %s\n";
+
+const char battleInitDumpPlayerFormat[16] = "  PLAYER : %s\n";
+
+const char battleInitDumpPositionAndWeaponFormats[24] = "  POS    : %f %f %f\n";
+
+const char battleInitWeaponDumpFormat[24] = "     WPN (%d) : %s\n";

@@ -1614,3 +1614,19 @@ RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(RgWeaponEssence *ess)
     }
     return 0;
 }
+
+
+
+const char weaponAssertAttachNumInRange[40] = "pAttach->m_uAttachNum < ATTACH_MAX";
+
+const char weaponAssertEquipTypeInRange[72] = "RG_EQUIP_TYPE_MIN <= (eEquipType) && (eEquipType) < RG_EQUIP_TYPE_NUM";
+
+const char weaponAssertShotTypePNotNil[16] = "p != NIL";
+
+const char weaponAssertRobotNotNilEffector[16] = "pRob != NIL";
+
+const char weaponAssertAttackGeomNotNil[24] = "pWpn->m_pAtkGeom != NIL";
+
+const char weaponAssertWeaponPointerNotNil[16] = "pWeapon != NIL";
+
+const char weaponNoEssenceWarnFormat[32] = "weapon not have essence %p(%d)";

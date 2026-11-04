@@ -453,3 +453,19 @@ const char shotDbImmediateDeadKeyword[16] = "imm-dead";
 const char shotDbOnceHitKeyword[16] = "once-hit";
 
 const char shotDbAssertDbNotNil[16] = "pDB != NIL";
+
+
+
+const char shotDbAssertDataBaseNameNotNil[24] = "pszDataBase != NIL";
+
+const char shotDbNormalTypeKeyword[8] = "normal";
+
+const char shotDbHomingTypeKeyword[8] = "homing";
+
+const char shotDbGrenadeTypeKeyword[8] = "gre";
+
+const char shotDbBeamTypeKeyword[8] = "beam";
+
+const char shotDbFireTypeKeyword[8] = "fire";
+
+const char shotDbUnknownKeywordFormat[32] = "%s : unknown keyword : %s";

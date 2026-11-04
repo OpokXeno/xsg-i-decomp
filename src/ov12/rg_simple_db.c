@@ -241,3 +241,9 @@ const char simpleDbAlreadyEntriedNameFormat[40] = "\n***** already entried name 
 const char simpleDbAssertZero[8] = "0";
 
 const char simpleDbAssertDataIdInRange[48] = "0 <= nDataID && nDataID < pDB->m_nNumOfData";
+
+
+
+const char simpleDbDumpHeaderFormat[16] = "data base - %p\n";
+
+const char simpleDbDumpEntryFormat[24] = "data %d : %s (%p)\n";

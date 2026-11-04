@@ -556,3 +556,11 @@ void RgFileSysDump(RgFileSys *pSys)
         }
     }
 }
+
+
+
+const char fileSysAssertFileNameNotNil[16] = "pszFile != NIL";
+
+const char fileSysLinkDataTypeName[8] = "NLNK";
+
+const char fileSysNotLinkDataFormat[24] = "%s is not nlink data";

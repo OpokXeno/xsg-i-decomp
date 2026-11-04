@@ -89,7 +89,7 @@ const char particleAssertPicNotNil[] = "pPic != NIL";
 
 const char particleAssertPNotNil[] = "p != NIL";
 
-const char particleAssertArrayNotNil[] = "pArray != NIL";
+const char particleAssertArrayNotNil[24] = "pArray != NIL";
 
 static void _openVifGifAD(XglPacket *packet)
 {
@@ -231,8 +231,7 @@ static void _Calc(XrgParticle *particle, int count, float rate,
     }
 }
 
-extern RgDrawView *s_pCurView_00A511F4;
-extern DoublewordAlignedVector4 particleScreenCenterVector;
+static RgDrawView *s_pCurView_00A511F4;
 
 static void _Disp(XrgParticle *pPoints, unsigned int count, long long tex0, XrgParticleRow *rows)
 {
@@ -247,7 +246,7 @@ static void _Disp(XrgParticle *pPoints, unsigned int count, long long tex0, XrgP
     int mask;
     XrgParticleRow *pStore;
 
-    *(DoublewordAlignedVector4 *)&work[2] = particleScreenCenterVector;
+    *(DoublewordAlignedVector4 *)&work[2] = (DoublewordAlignedVector4){ 128.0f, 128.0f, 128.0f, 128.0f };
     pView = s_pCurView_00A511F4;
     sceVif1PkInit((XglPacket *)packet, SCRATCHPAD_BASE);
     _openVifGifAD((XglPacket *)packet);
@@ -630,3 +629,14 @@ void DisposeArrayOfXrgParticle(XrgParticle *array)
     }
     RgHeapFree(InstanceOfRgHeapData(), array, particleSourcePath, 544);
 }
+
+
+
+static RgDrawView * s_pCurView_00A511F4 = 0;
+
+
+const char particleAssertD128Size[] = "sizeof(D128) == 16";
+
+const char particleAssertEnvNotNil[16] = "pEnv != NIL";
+
+const char particleAssertViewNotNil[16] = "pView != NIL";

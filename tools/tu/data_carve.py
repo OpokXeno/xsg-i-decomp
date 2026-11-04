@@ -7336,6 +7336,13 @@ def compare_bytes(elf, csec, pieces, ctx, target_pieces=None, original_elf=None)
                     if symbol.shndx != 0 and symbol.type == 2:
                         original_function_symbols.setdefault((symbol.name, symbol.bind), []).append(symbol)
             original_funcs = original_function_symbols.get((raw_func.name, raw_func.bind), [])
+            if len(original_funcs) > 1:
+                # Several TUs of one image can hold a local function of this
+                # name (ov12 _Disp, _PassTime). The one this word points into
+                # is the owner; no candidate leaves the word as a difference.
+                wanted = struct.unpack_from('<I', wants[k], pos)[0]
+                original_funcs = [s for s in original_funcs
+                                  if s.value + target - raw_func.value == wanted]
             if len(original_funcs) != 1:
                 unresolved += 1
                 continue

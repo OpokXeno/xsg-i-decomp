@@ -405,3 +405,13 @@ void XrgSoundPassTime(XrgSound *sound, float dt)
         }
     }
 }
+
+
+
+const char soundBattle1SequenceName[8] = "BATTLE1";
+
+const char soundBattle2SequenceName[8] = "BATTLE2";
+
+const char soundBattle3SequenceName[8] = "BATTLE3";
+
+const char soundUmnModeSequenceName[16] = "Umnmode";

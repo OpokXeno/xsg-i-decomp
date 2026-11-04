@@ -353,3 +353,9 @@ int RgReadTextFindParagraph(RgReadText *pReader, const char *pszTag,
         }
     }
 }
+
+
+
+const char readTextDirectory[16] = "data\\nisimori\\";
+
+const char readTextAssertCapacityPositive[16] = "nCapa > 0";

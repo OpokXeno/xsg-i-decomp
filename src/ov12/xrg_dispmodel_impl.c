@@ -167,3 +167,9 @@ RgDispModel *CreateXrgDispModelImpl(void *archive, const char *variant)
     }
     return (RgDispModel *)pDisp;
 }
+
+
+
+static RgVector aAmbVec[4] = { { 0.0f } };
+
+static RgVector aAmbCol[4] = { { 0.0f } };

@@ -103,10 +103,10 @@ extern struct XrgPaint2DDispEnvView {
 } DispEnv;
 
 /* The current view and its screen metrics, set by _Paint2DFlush. */
-extern RgDrawView *s_pCurView_00A51220;
-extern int s_anHomePos[2];
-extern float s_aSizeRatio[2];
-extern RgVector s_aCurCenterPos;
+static RgDrawView *s_pCurView_00A51220;
+static int s_anHomePos[2];
+static float s_aSizeRatio[2];
+static RgVector s_aCurCenterPos;
 
 /* Scaffold-owned strings. */
 extern const char paint2dUnknownOffsetModeFormat[];
@@ -1291,3 +1291,21 @@ void XrgPaint2DFlush(XrgPaint2D *paint)
     RgDrawReq(InstanceOfRgDraw(), paint, _Paint2DFlush, _Paint2DClearReq,
              paint->prio, paint->drawID);
 }
+
+
+
+static int s_anHomePos[2] = { 28672, 29184 };
+
+static float s_aSizeRatio[2] = { 1.0f, 1.0f };
+
+static RgVector s_aCurCenterPos = { 2048.0f, 2048.0f, 0.0f, 0.0f };
+
+static RgDrawView * s_pCurView_00A51220 = 0;
+
+const char paint2dUnknownOffsetModeFormat[24] = "unknown offset mode %x";
+
+const char paint2dUnknownGeomModeFormat[40] = "unknown XrgPaint2DGeom mode (%x)";
+
+const char paint2dAssertRequestCountBelowMax[32] = "pPaint->m_uReqNum < REQ_MAX - 1";
+
+const char paint2dAssertViewNotNil[16] = "pView != NIL";

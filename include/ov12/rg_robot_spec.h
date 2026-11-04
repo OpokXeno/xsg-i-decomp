@@ -61,7 +61,6 @@ typedef struct RgRobotSpec {
         char sude[0x20];
         unsigned long long sudeWords[4];
     };                               /* +0x98 */
-    unsigned char unmodeled_b8[8];   /* +0xb8: RgRobotDBGetDefault's static copy is 0xc0 bytes */
 } RgRobotSpec;
 
 struct RgReadText;

@@ -112,7 +112,7 @@ extern const char weaponDbDefaultArmKeyword[];  /* "default" */
 extern const char weaponDbShotPointKeyword[];  /* "shot-pnt" */
 extern const char weaponDbAssertShotPointCountInRange[];  /* "pEss->m_uShotPntNum <= RG_WEAPON_SHOTPNT_MAX" */
 extern const char weaponDbAssertDataIndexInRange[];  /* "0 <= uDatIdx && uDatIdx < 8" */
-extern int s_aeJntTbl_0[8];
+static int s_aeJntTbl_0[8];
 
 
 static void _EntryTemporaries(RgSimpleDB *database);
@@ -919,7 +919,7 @@ const char weaponDbEnergyTypeKeyword[] = "enetype";
 
 const char weaponDbUnarmedTypeKeyword[] = "sudetype";
 
-const char weaponDbUnknownKeywordFormat[] = "%s : unknown keyword : %s";
+const char weaponDbUnknownKeywordFormat[32] = "%s : unknown keyword : %s";
 
 void RgWeaponDBRead(RgSimpleDB *pDB, const char *pszDataBase)
 {
@@ -975,3 +975,129 @@ void RgWeaponDBDump(RgSimpleDB *pDB)
 {
     RgSimpleDBDump(pDB);
 }
+
+
+
+static int s_aeJntTbl_0[8] = { 8, 9, 10, 11, 12, 13, 14, 15 };
+
+const char weaponDbContinueKeyword[8] = "cont";
+
+const char weaponDbEndMarkerKeyword[8] = ".";
+
+const char weaponDbNotLockKeyword[8] = "notlock";
+
+const char weaponDbFullMotionKeyword[16] = "full-mot";
+
+const char weaponDbFullMotionAttackErrorText[40] = "'full-mot' cannot spec to AttackWeapon";
+
+const char weaponDbFullMotionShieldErrorText[40] = "'full-mot' cannot spec to ShieldWeapon";
+
+const char weaponDbFullMotionUnarmedErrorText[40] = "'full-mot' cannot spec to UnArmedWeapon";
+
+const char weaponDbNotAdvanceKeyword[8] = "not-adv";
+
+const char weaponDbAdvanceKeyword[8] = "adv";
+
+const char weaponDbNoRobotMotionKeyword[16] = "no-robmot";
+
+const char weaponDbTargetSuffixKeyword[8] = "target";
+
+const char weaponDbNotPrefixKeyword[8] = "not";
+
+const char weaponDbAfterKeyword[8] = "aft";
+
+const char weaponDbWithKeyword[8] = "wth";
+
+const char weaponDbUnknownTargetKeywordFormat[48] = "unknown keyword '%s-target'\ncollect not,aft,wth";
+
+const char weaponDbContinueErrorFormat[24] = "'%s' is error in 'cont'";
+
+const char weaponDbNumKeyword[8] = "num";
+
+const char weaponDbEnergyKeyword[8] = "energy";
+
+const char weaponDbHardnessKeyword[16] = "hardness";
+
+const char weaponDbInfiniteKeyword[8] = "inf";
+
+const char weaponDbLockRangeKeyword[16] = "lock-range";
+
+const char weaponDbIgnoredLockRangeText[24] = "ignored 'lock-range'";
+
+const char weaponDbLockKeyword[8] = "lock";
+
+const char weaponDbShotKeyword[8] = "shot";
+
+const char weaponDbUnknownShotFormat[24] = "unknown shot '%s'";
+
+const char weaponDbMotionKeyword[8] = "mot";
+
+const char weaponDbMotionAllKeyword[8] = "mot-all";
+
+const char weaponDbAssertOpenParen[16] = "szStr[0] == '('";
+
+const char weaponDbDefaultKeyword[8] = "def";
+
+const char weaponDbSelfMotionKeyword[8] = "selfmot";
+
+const char weaponDbSelfMotionAllKeyword[16] = "selfmot-all";
+
+const char weaponDbBaseMotionKeyword[8] = "basemot";
+
+const char weaponDbBaseMotionAllKeyword[16] = "basemot-all";
+
+const char weaponDbModelKeyword[8] = "model";
+
+const short weaponDbRobotModelDirectory[12] = { 24932, 24948, 30556, 24933, 28528, 23662, 28530, 28514, 92, 0, 0, 0 };
+
+const char weaponDbModelAllKeyword[16] = "modelall";
+
+const char weaponDbUseKeyword[8] = "use";
+
+const char weaponDbUnknownCharNameFormat[24] = "unknown char name '%s'";
+
+const char weaponDbEquipKeyword[8] = "equip";
+
+const char weaponDbOccupyKeyword[8] = "occupy";
+
+const char weaponDbFakeKeyword[8] = "fake";
+
+const char weaponDbMassKeyword[8] = "mass";
+
+const char weaponDbWeightKeyword[8] = "weight";
+
+const char weaponDbNameKeyword[8] = "name";
+
+const char weaponDbVerticalDirectionKeyword[8] = "v-dir";
+
+const char weaponDbHorizontalDirectionKeyword[8] = "h-dir";
+
+const char weaponDbHitSoundKeyword[8] = "hitsnd";
+
+const char weaponDbShotSoundKeyword[8] = "shotsnd";
+
+const char weaponDbBackgroundSoundKeyword[8] = "bgsnd";
+
+const char weaponDbLifeSoundKeyword[8] = "lifesnd";
+
+const char weaponDbVoiceHitSoundKeyword[8] = "vhitsnd";
+
+const char weaponDbVoiceShotSoundKeyword[16] = "vshotsnd";
+
+const char weaponDbVoiceBackgroundSoundKeyword[8] = "vbgsnd";
+
+const char weaponDbVoiceLifeSoundKeyword[16] = "vlifesnd";
+
+const char weaponDbFirstWeaponArmKeyword[8] = "1wa";
+
+const char weaponDbSecondWeaponArmKeyword[8] = "2wa";
+
+const char weaponDbThirdWeaponArmKeyword[8] = "3wa";
+
+const char weaponDbDefaultArmKeyword[8] = "default";
+
+const char weaponDbShotPointKeyword[16] = "shot-pnt";
+
+const char weaponDbAssertShotPointCountInRange[48] = "pEss->m_uShotPntNum <= RG_WEAPON_SHOTPNT_MAX";
+
+const char weaponDbAssertDataIndexInRange[32] = "0 <= uDatIdx && uDatIdx < 8";

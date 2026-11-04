@@ -126,12 +126,12 @@ typedef struct RgSelectAGWSDataWords {
 } RgSelectAGWSDataWords;
 
 /* Defined elsewhere (scaffold data): messages, picture names and tables. */
-extern const RgFontColor s_aRed_1[2];
-extern const RgFontColor s_aWhite_2[2];
-extern const RgSelCharPicEntry s_ainPics_3[6];
+static RgFontColor s_aRed_1[2];
+static RgFontColor s_aWhite_2[2];
+static RgSelCharPicEntry s_ainPics_3[6];
 extern const SelWepPicIdx agwsSelectWepPicIndexTable;
-extern SelWepColor agwsSelectConflictColor;
-extern SelWepColor agwsSelectNormalColor;
+extern const SelWepColor agwsSelectConflictColor;
+extern const SelWepColor agwsSelectNormalColor;
 extern const char agwsSelectAssertCharIdNotNop[];
 extern const char agwsSelectAssertNameNotNil[];
 extern const char agwsSelectAssertNameArrayNotNil[];
@@ -2379,3 +2379,71 @@ void RgSelectAGWSDisp(RgSelectAGWS *pSel)
     }
     _Disp(pSel);
 }
+
+
+
+static RgFontColor s_aRed_1[2] = {
+    { 0x50, 0x10, 0x10, 0x7F },
+    { 0x80, 0x20, 0x20, 0x7F }
+};
+
+static RgFontColor s_aWhite_2[2] = {
+    { 0x50, 0x50, 0x50, 0x7F },
+    { 0x80, 0x80, 0x80, 0x7F }
+};
+
+static RgSelCharPicEntry s_ainPics_3[6] = { { .m_idx = { 38, 45, 51, 60, 66, 72 } }, { .m_idx = { 43, 50, 56, 65, 71, 77 } }, { .m_idx = { 39, 47, 53, 62, 68, 74 } }, { .m_idx = { 41, 49, 55, 64, 70, 76 } }, { .m_idx = { 40, 46, 52, 61, 67, 73 } }, { .m_idx = { 42, 48, 54, 63, 69, 75 } } };
+
+const char agwsSelectAssertCharIdNotNop[32] = "eCharID != RG_ACTOR_CHAR_NOP";
+
+const char agwsSelectAssertNameNotNil[16] = "pszName != NIL";
+
+const char agwsSelectAssertNameArrayNotNil[16] = "aszName != NIL";
+
+const char agwsSelectWepListTextureName[16] = "fnt02on.bmp";
+
+const char agwsSelectAssertTextureNotNil[16] = "pTex != NIL";
+
+const char agwsSelectWepListFrameTextureName[16] = "frm08on.bmp";
+
+const char agwsSelectUpArrowTextureName[24] = "icon_uparrow.bmp";
+
+const char agwsSelectDownArrowTextureName[24] = "icon_downarrow.bmp";
+
+const char agwsSelectCannotEquipForBattleText[24] = "Cannot equip for battle";
+
+const char agwsSelectCannotEquipTogetherText[24] = "Cannot equip together";
+
+const char agwsSelectDumpTitleFormat[48] = "---------------- %s %d ----------------------\n";
+
+const char agwsSelectDumpCharacterFormat[32] = "char %d (selectable %x)\n";
+
+const char agwsSelectDumpWeaponNameFormat[40] = "   **** char %d type %d : '%s' ***\n";
+
+const char agwsSelectAssertResultNotNil[16] = "pResult != NIL";
+
+const char agwsSelectPlayer1FrameTextureName[16] = "frm12_1p.bmp";
+
+const char agwsSelectPlayer2FrameTextureName[16] = "frm12_2p.bmp";
+
+const char agwsSelectAssertListNotNil[16] = "pList != NIL";
+
+const char agwsSelectDetermLabelFullWidthL[8] = "\243\314";
+
+const char agwsSelectDetermLabelFullWidthR[8] = "\243\322";
+
+const char agwsSelectDetermLabelFullWidthLR[8] = "\243\314\243\322";
+
+const char agwsSelectDetermConfirmText[8] = "Confirm";
+
+const char agwsSelectDetermCancelText[8] = "Cancel";
+
+const SelWepPicIdx agwsSelectWepPicIndexTable = { .m_idx = { 0, 1, 2 } };
+
+const SelWepColor agwsSelectConflictColor = { .halves = { 137438953600LL, 545460846624LL } };
+
+const SelWepColor agwsSelectNormalColor = { .halves = { 549755814016LL, 545460846720LL } };
+
+const char agwsSelectAssertPaintNotNil[16] = "pPaint != NIL";
+
+const char agwsSelectUnknownSelectModeFormat[24] = "unknown select mode %d";

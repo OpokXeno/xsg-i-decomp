@@ -1084,3 +1084,9 @@ void RgBattleMgrDisp(RgBattleMgr *pMgr)
     }
     _DispBattle(pMgr);
 }
+
+
+
+const char battleMgrAssertPlayerNotNil[16] = "pPlayer != NIL";
+
+const char battleMgrAssertListCountBelowPlayerMax[32] = "pList->m_uNum < PLAYER_MAX";

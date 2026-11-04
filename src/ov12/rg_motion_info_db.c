@@ -477,3 +477,29 @@ void RgMotionInfoDBDump(RgMotionInfoDB *db)
         }
     }
 }
+
+
+
+const char motionInfoDbFileName[16] = "rg_motion.info";
+
+const char motionInfoDbActionToken[8] = "action";
+
+const char motionInfoDbAssertStartTimeBeforeEndTime[24] = "fStartTime <= fEndTime";
+
+const char motionInfoDbActionFrameToken[16] = "action-f";
+
+const char motionInfoDbAssertStartBeforeEnd[16] = "fStart <= fEnd";
+
+const char motionInfoDbNextToken[8] = "next";
+
+const char motionInfoDbAssertActNotNil[16] = "pAct != NIL";
+
+const char motionInfoDbEventToken[8] = "event";
+
+const char motionInfoDbHitShiftFrameToken[16] = "hit-shift-f";
+
+const char motionInfoDbShotBodyToken[16] = "shot-body";
+
+const char motionInfoDbShotNotFixToken[16] = "shot-notfix";
+
+const char motionInfoDbCharToken[8] = "char";

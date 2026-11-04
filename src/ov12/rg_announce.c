@@ -766,7 +766,7 @@ void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
 }
 
 /* "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])" */
-const char announceAssertStageInTotalTimeRange[] =
+const char announceAssertStageInTotalTimeRange[72] =
     "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])";
 
 void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
@@ -789,3 +789,209 @@ void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
     pAnn->stageClearActive = 0;
     pAnn->stageClearTick = 0;
 }
+
+
+
+const char announceRound1PicName[16] = "round1_1";
+
+const char announceAssertRound1PicNotNil[40] = "pAnn->m_apPics[ID_round1_1] != NIL";
+
+const char announceIdHeaderPath[24] = "../rg_announce_id.h";
+
+const char announceRound2PicName[16] = "round2_1";
+
+const char announceAssertRound2PicNotNil[40] = "pAnn->m_apPics[ID_round2_1] != NIL";
+
+const char announceRound3PicName[16] = "round3_1";
+
+const char announceAssertRound3PicNotNil[40] = "pAnn->m_apPics[ID_round3_1] != NIL";
+
+const char announceReadyPicName[8] = "ready_1";
+
+const char announceAssertReadyPicNotNil[40] = "pAnn->m_apPics[ID_ready_1] != NIL";
+
+const char announceFightPicName[8] = "fight_1";
+
+const char announceAssertFightPicNotNil[40] = "pAnn->m_apPics[ID_fight_1] != NIL";
+
+const char announceYouWinPicName[16] = "youwin_1";
+
+const char announceAssertYouWinPicNotNil[40] = "pAnn->m_apPics[ID_youwin_1] != NIL";
+
+const char announceYouLosePicName[16] = "youlos_1";
+
+const char announceAssertYouLosePicNotNil[40] = "pAnn->m_apPics[ID_youlos_1] != NIL";
+
+const char announceDrawPicName[8] = "draw_1";
+
+const char announceAssertDrawPicNotNil[40] = "pAnn->m_apPics[ID_draw_1] != NIL";
+
+const char announceTimeOverPicName[16] = "tmover_1";
+
+const char announceAssertTimeOverPicNotNil[40] = "pAnn->m_apPics[ID_tmover_1] != NIL";
+
+const char announceGameOverPicName[16] = "gmover_1";
+
+const char announceAssertGameOverPicNotNil[40] = "pAnn->m_apPics[ID_gmover_1] != NIL";
+
+const char announceStageClearPicName[16] = "stcler_1";
+
+const char announceAssertStageClearPicNotNil[40] = "pAnn->m_apPics[ID_stcler_1] != NIL";
+
+const char announceGameClearPicName[16] = "gmcler_1";
+
+const char announceAssertGameClearPicNotNil[40] = "pAnn->m_apPics[ID_gmcler_1] != NIL";
+
+const char announceContinuePicName[16] = "cntinu_1";
+
+const char announceAssertContinuePicNotNil[40] = "pAnn->m_apPics[ID_cntinu_1] != NIL";
+
+const char announceCount0PicName[16] = "count0_1";
+
+const char announceAssertCount0PicNotNil[40] = "pAnn->m_apPics[ID_count0_1] != NIL";
+
+const char announceCount1PicName[16] = "count1_1";
+
+const char announceAssertCount1PicNotNil[40] = "pAnn->m_apPics[ID_count1_1] != NIL";
+
+const char announceCount2PicName[16] = "count2_1";
+
+const char announceAssertCount2PicNotNil[40] = "pAnn->m_apPics[ID_count2_1] != NIL";
+
+const char announceCount3PicName[16] = "count3_1";
+
+const char announceAssertCount3PicNotNil[40] = "pAnn->m_apPics[ID_count3_1] != NIL";
+
+const char announceCount4PicName[16] = "count4_1";
+
+const char announceAssertCount4PicNotNil[40] = "pAnn->m_apPics[ID_count4_1] != NIL";
+
+const char announceCount5PicName[16] = "count5_1";
+
+const char announceAssertCount5PicNotNil[40] = "pAnn->m_apPics[ID_count5_1] != NIL";
+
+const char announceCount6PicName[16] = "count6_1";
+
+const char announceAssertCount6PicNotNil[40] = "pAnn->m_apPics[ID_count6_1] != NIL";
+
+const char announceCount7PicName[16] = "count7_1";
+
+const char announceAssertCount7PicNotNil[40] = "pAnn->m_apPics[ID_count7_1] != NIL";
+
+const char announceCount8PicName[16] = "count8_1";
+
+const char announceAssertCount8PicNotNil[40] = "pAnn->m_apPics[ID_count8_1] != NIL";
+
+const char announceCount9PicName[16] = "count9_1";
+
+const char announceAssertCount9PicNotNil[40] = "pAnn->m_apPics[ID_count9_1] != NIL";
+
+const char announceTotalLabelPicName[8] = "total_1";
+
+const char announceAssertTotalLabelPicNotNil[40] = "pAnn->m_apPics[ID_total_1] != NIL";
+
+const char announceTotalValueAPicName[16] = "total_2a";
+
+const char announceAssertTotalValueAPicNotNil[40] = "pAnn->m_apPics[ID_total_2a] != NIL";
+
+const char announceTotalValueBPicName[16] = "total_2b";
+
+const char announceAssertTotalValueBPicNotNil[40] = "pAnn->m_apPics[ID_total_2b] != NIL";
+
+const char announceTimePointPicName[8] = "time_pt";
+
+const char announceAssertTimePointPicNotNil[40] = "pAnn->m_apPics[ID_time_pt] != NIL";
+
+const char announceYouWinSubPicName[16] = "youwin_2";
+
+const char announceAssertYouWinSubPicNotNil[40] = "pAnn->m_apPics[ID_youwin_2] != NIL";
+
+const char announceCount0SubPicName[16] = "count0_2";
+
+const char announceAssertCount0SubPicNotNil[40] = "pAnn->m_apPics[ID_count0_2] != NIL";
+
+const char announceCount1SubPicName[16] = "count1_2";
+
+const char announceAssertCount1SubPicNotNil[40] = "pAnn->m_apPics[ID_count1_2] != NIL";
+
+const char announceCount2SubPicName[16] = "count2_2";
+
+const char announceAssertCount2SubPicNotNil[40] = "pAnn->m_apPics[ID_count2_2] != NIL";
+
+const char announceCount3SubPicName[16] = "count3_2";
+
+const char announceAssertCount3SubPicNotNil[40] = "pAnn->m_apPics[ID_count3_2] != NIL";
+
+const char announceCount4SubPicName[16] = "count4_2";
+
+const char announceAssertCount4SubPicNotNil[40] = "pAnn->m_apPics[ID_count4_2] != NIL";
+
+const char announceCount5SubPicName[16] = "count5_2";
+
+const char announceAssertCount5SubPicNotNil[40] = "pAnn->m_apPics[ID_count5_2] != NIL";
+
+const char announceCount6SubPicName[16] = "count6_2";
+
+const char announceAssertCount6SubPicNotNil[40] = "pAnn->m_apPics[ID_count6_2] != NIL";
+
+const char announceCount7SubPicName[16] = "count7_2";
+
+const char announceAssertCount7SubPicNotNil[40] = "pAnn->m_apPics[ID_count7_2] != NIL";
+
+const char announcePicNameCount82[16] = "count8_2";
+
+const char announceAssertPicCount82NotNil[40] = "pAnn->m_apPics[ID_count8_2] != NIL";
+
+const char announcePicNameCount92[16] = "count9_2";
+
+const char announceAssertPicCount92NotNil[40] = "pAnn->m_apPics[ID_count9_2] != NIL";
+
+const char announcePicNameDraw2[8] = "draw_2";
+
+const char announceAssertPicDraw2NotNil[40] = "pAnn->m_apPics[ID_draw_2] != NIL";
+
+const char announcePicNameFight2[8] = "fight_2";
+
+const char announceAssertPicFight2NotNil[40] = "pAnn->m_apPics[ID_fight_2] != NIL";
+
+const char announcePicNameGmcler2[16] = "gmcler_2";
+
+const char announceAssertPicGmcler2NotNil[40] = "pAnn->m_apPics[ID_gmcler_2] != NIL";
+
+const char announcePicNameGmover2[16] = "gmover_2";
+
+const char announceAssertPicGmover2NotNil[40] = "pAnn->m_apPics[ID_gmover_2] != NIL";
+
+const char announcePicNameReady2[8] = "ready_2";
+
+const char announceAssertPicReady2NotNil[40] = "pAnn->m_apPics[ID_ready_2] != NIL";
+
+const char announcePicNameRound12[16] = "round1_2";
+
+const char announceAssertPicRound12NotNil[40] = "pAnn->m_apPics[ID_round1_2] != NIL";
+
+const char announcePicNameRound22[16] = "round2_2";
+
+const char announceAssertPicRound22NotNil[40] = "pAnn->m_apPics[ID_round2_2] != NIL";
+
+const char announcePicNameRound32[16] = "round3_2";
+
+const char announceAssertPicRound32NotNil[40] = "pAnn->m_apPics[ID_round3_2] != NIL";
+
+const char announcePicNameStcler2[16] = "stcler_2";
+
+const char announceAssertPicStcler2NotNil[40] = "pAnn->m_apPics[ID_stcler_2] != NIL";
+
+const char announcePicNameTmover2[16] = "tmover_2";
+
+const char announceAssertPicTmover2NotNil[40] = "pAnn->m_apPics[ID_tmover_2] != NIL";
+
+const char announcePicNameYoulos2[16] = "youlos_2";
+
+const char announceAssertPicYoulos2NotNil[40] = "pAnn->m_apPics[ID_youlos_2] != NIL";
+
+const char announcePicNameCntinu2[16] = "cntinu_2";
+
+const char announceAssertPicCntinu2NotNil[40] = "pAnn->m_apPics[ID_cntinu_2] != NIL";
+
+const RgAnnounceColorHalves announceClearPanelColor = { .halves = { 549755814016LL, 545460846720LL } };

@@ -114,12 +114,12 @@ typedef struct XrgRawJntData {
 /* ACT_* animation module (main), config/symbols/main.txt. */
 
 /* Scaffold-owned data: the joint table, the actor-data table and its strings. */
-extern XenoDatEntry s_aDatTbl_1[XENO_DAT_COUNT];
+static XenoDatEntry s_aDatTbl_1[25];
 extern const char actorInvalidCharIdFormat[]; /* "invalid actor char ID = %d" */
 extern const char actorAlreadyDisposedFormat[]; /* "already disposed XrgActor %p" */
 extern const char actorOver32JointText[];
 extern const char actorCharEffectErrorFormat[];
-extern int nKataJnt_2;
+static int nKataJnt_2;
 extern const char actorPakaPakaLogFormat[]; /* "actor %p Pakapaka %s -> %d : paka base %d" */
 extern const char actorPakaPakaLogThree[]; /* "3\n" */
 extern const char actorPakaPakaLogFour[]; /* "4\n" */
@@ -1597,3 +1597,70 @@ void XrgActorDebugDisp(XrgActor *pActor)
         XrgLog(actorDebugFlagsFormat, actorSourcePath, 1640, pMotion->flags, XRG_MOTION_FLAG_ENDED, pMotion->nextDataId);
     }
 }
+
+extern const char actorVx01ArchiveFile[];
+extern const char actorVx01ModelDirectory[];
+extern const char actorAg05ArchiveFile[];
+extern const char actorAg05ModelDirectory[];
+extern const char actorVx02ArchiveFile[];
+extern const char actorVx02ModelDirectory[];
+extern const char actorAg04ArchiveFile[];
+extern const char actorAg04ModelDirectory[];
+extern const char actorVx06ArchiveFile[];
+extern const char actorVx06ModelDirectory[];
+extern const char actorAg02ArchiveFile[];
+extern const char actorAg02ModelDirectory[];
+
+static XenoDatEntry s_aDatTbl_1[25] = { { .charID = 0, .modelID = 8193, .m_pszOptFile = actorVx01ArchiveFile, .m_pszFileBase = actorVx01ModelDirectory }, { .charID = 1, .modelID = 8453, .m_pszOptFile = actorAg05ArchiveFile, .m_pszFileBase = actorAg05ModelDirectory }, { .charID = 2, .modelID = 8194, .m_pszOptFile = actorVx02ArchiveFile, .m_pszFileBase = actorVx02ModelDirectory }, { .charID = 3, .modelID = 8452, .m_pszOptFile = actorAg04ArchiveFile, .m_pszFileBase = actorAg04ModelDirectory }, { .charID = 4, .modelID = 8198, .m_pszOptFile = actorVx06ArchiveFile, .m_pszFileBase = actorVx06ModelDirectory }, { .charID = 5, .modelID = 8450, .m_pszOptFile = actorAg02ArchiveFile, .m_pszFileBase = actorAg02ModelDirectory }, { .charID = 6, .modelID = 13829, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 7, .modelID = 13837, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 8, .modelID = 13847, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 9, .modelID = 13826, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 10, .modelID = 13836, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 11, .modelID = 13834, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 12, .modelID = 13846, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 13, .modelID = 13827, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 14, .modelID = 13831, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 15, .modelID = 13832, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 16, .modelID = 13845, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 17, .modelID = 13828, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 18, .modelID = 13839, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 19, .modelID = 13849, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 20, .modelID = 13861, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 21, .modelID = 13838, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 22, .modelID = 13852, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 23, .modelID = 13854, .m_pszOptFile = 0, .m_pszFileBase = 0 }, { .charID = 24, .modelID = 13830, .m_pszOptFile = 0, .m_pszFileBase = 0 } };
+
+const char actorAg02ModelDirectory[24] = "data\\robo\\ag\\ag_02";
+
+const char actorAg02ArchiveFile[32] = "data\\nisimori\\ag02_all.fpk";
+
+const char actorVx06ModelDirectory[24] = "data\\robo\\vx\\vx_06";
+
+const char actorVx06ArchiveFile[32] = "data\\nisimori\\vx06_all.fpk";
+
+const char actorAg04ModelDirectory[24] = "data\\robo\\ag\\ag_04";
+
+const char actorAg04ArchiveFile[32] = "data\\nisimori\\ag04_all.fpk";
+
+const char actorVx02ModelDirectory[24] = "data\\robo\\vx\\vx_02";
+
+const char actorVx02ArchiveFile[32] = "data\\nisimori\\vx02_all.fpk";
+
+const char actorAg05ModelDirectory[24] = "data\\robo\\ag\\ag_05";
+
+const char actorAg05ArchiveFile[32] = "data\\nisimori\\ag05_all.fpk";
+
+const char actorVx01ModelDirectory[24] = "data\\robo\\vx\\vx_01";
+
+const char actorVx01ArchiveFile[32] = "data\\nisimori\\vx01_all.fpk";
+
+const char actorInvalidCharIdFormat[32] = "invalid actor char ID = %d";
+
+const char actorOver32JointText[24] = "over 32 joint actor";
+
+const char actorCharEffectErrorFormat[32] = "char %s -> eff %d %d error\n";
+
+const char actorAlreadyDisposedFormat[32] = "already disposed XrgActor %p";
+
+const char actorPakaPakaLogFormat[56] = "\n***\n***\nactor %p Pakapaka %s -> %d : paka base %d\n";
+
+const char actorPakaPakaLogThree[8] = "3\n";
+
+const char actorPakaPakaLogFour[8] = "4\n";
+
+const char actorAssertActorAndWeaponNotNil[32] = "pActor != NIL && pWep != NIL";
+
+const char actorAssertEffectNotNil[16] = "pEff != NIL";
+
+const char actorEffectJointLogFormat[24] = "jntID = %d accID = %d\n";
+
+const char actorAssertEffectTypeInRange[48] = "0 <= eEffID && eEffID < RG_ACTOR_EFF_TYPE_NUM";
+
+const char actorAssertEffectCountBelowFour[32] = "pActor->m_auEffsNum[eEffID] < 4";
+
+const char actorAssertWeaponNotNil[16] = "pWpn != NIL";
+
+static int nKataJnt_2;

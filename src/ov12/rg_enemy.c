@@ -40,8 +40,8 @@ static int _GetPadRelease(void)
     return 0;
 }
 
-extern int csr_0;
-extern int i_1;
+static int csr_0;
+static int i_1;
 extern const char enemyDebugSwitchOnText[];
 extern const char enemyDebugSwitchOffText[];
 extern const char enemyDebugLevelMonkeyText[];
@@ -1093,3 +1093,49 @@ RgEnemyControl *CreateRgEnemyControl(RgStatus *pRobot, RgStatus *pEnemyRobot,
     _InitEnemy(pControl, pRobot, pEnemyRobot, enemyType);
     return pControl;
 }
+
+
+
+static int csr_0 = 0;
+
+const char enemyDebugSwitchOnText[8] = "\013\243\317\243\316";
+
+const char enemyDebugSwitchOffText[8] = "\013\243\317\243\306\243\306";
+
+const char enemyDebugLevelMonkeyText[8] = "\013\261\356\260\312\262\274";
+
+const char enemyDebugLevelAverageText[8] = "\013\277\315\312\302\244\337";
+
+const char enemyDebugLevelMechanicalText[8] = "\013\265\241\263\243\305\252";
+
+const char enemyDebugLevelGodText[8] = "\013\277\300\241\252";
+
+const char enemyDebugThinkLevelLabelText[16] = "\013\273\327\271\315\245\354\245\331\245\353\241\247";
+
+const char enemyDebugTurnWhileMovingText[16] = "\013\260\334\306\260\303\346\300\373\262\363\262\304\307\275";
+
+const char enemyDebugDashHeavyUseText[16] = "\013\245\300\245\303\245\267\245\345\302\277\315\321";
+
+const char enemyDebugHomingHeavyUseText[16] = "\013\245\333\241\274\245\337\245\363\245\260\302\277\315\321";
+
+const char enemyDebugSatelliteHeavyUseText[16] = "\013\245\265\245\306\245\351\245\244\245\310\302\277\315\321";
+
+const char enemyDebugBackAttackText[16] = "\013\307\330\314\314\274\350\244\352";
+
+const char enemyDebugDodgeLockOnText[24] = "\013\310\357\245\355\245\303\245\257\245\252\245\363\262\363\310\362";
+
+const char enemyDebugAvoidObstacleText[16] = "\013\276\343\263\262\312\252\262\363\310\362";
+
+const char enemyDebugBreakObstacleText[16] = "\013\276\343\263\262\312\252\307\313\262\365";
+
+const char enemyDebugPreciseShotText[16] = "\013\300\265\263\316\274\315\267\342";
+
+const char enemyDebugDualGunText[16] = "\013\306\363\304\362\267\375\275\306";
+
+const char enemyDebugMeleeLoverAutoOnText[40] = "\013\300\334\266\341\300\357\271\245\244\255\241\312\301\264\311\360\264\357\303\306\300\332\244\354\274\253\306\260\243\317\243\316\241\313";
+
+const char enemyDebugAllOnOffText[24] = "\013\260\354\263\347\243\317\243\316\241\277\243\317\243\306\243\306";
+
+const char enemyDebugCursorText[8] = "\013\241\344";
+
+static int i_1;

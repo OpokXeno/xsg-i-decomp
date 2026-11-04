@@ -366,3 +366,9 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBall *ball,
 const char geomTrayAssertTrayNotNil[16] = "pTray != NIL";
 
 const char geomTraySourcePath[24] = "../rg_geom_tray.euc.c";
+
+
+
+const char geomTrayAssertCheckNotNil[16] = "pCheck != NIL";
+
+const char geomTrayAssertResultNotNil[16] = "pResult != NIL";

@@ -409,3 +409,23 @@ void RgDispGameInfoDisplay(RgDispGameInfo *pInfo) {
     }
     _DispInfo(pInfo);
 }
+
+
+
+const char dispGameInfoUnknownLockOnStateFormat[24] = "unknown lock-on-stat %d";
+
+const char dispGameInfoPicture001Name[8] = "001.bmp";
+
+const char dispGameInfoPicture002Name[8] = "002.bmp";
+
+const char dispGameInfoPicture003Name[8] = "003.bmp";
+
+const char dispGameInfoPolygonPictureName[16] = "polygon.bmp";
+
+const char dispGameInfoPicture011Name[8] = "011.bmp";
+
+const char dispGameInfoPicture012Name[8] = "012.bmp";
+
+const char dispGameInfoPicture013Name[8] = "013.bmp";
+
+const char dispGameInfoPicture014Name[8] = "014.bmp";

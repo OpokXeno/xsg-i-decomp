@@ -64,7 +64,7 @@ typedef struct RgPicDebug {
 
 
 /* Scaffold-owned counter (config/symbols/ov12.txt: s_nColor_0). */
-extern int s_nColor_0;
+static int s_nColor_0;
 extern XglPadRecord PadData[2];
 
 /* Debug text strings: scaffold-owned rodata, referenced by address only. */
@@ -1007,3 +1007,29 @@ void RgPicDebugDisp(RgPicDebug *pDebug, XrgPaint2D *paint)
 void CreateRgPlacer2D(void)
 {
 }
+
+
+
+static int s_nColor_0 = 32;
+
+const char picListDebugEditHelpText[40] = "\241\373\304\311\262\303\241\241\241\337\272\357\275\374\241\241\243\322\243\261\246\301\241\241\242\244\242\242\300\332\302\330";
+
+const char picListDebugPicNumberFormat[24] = "\263\250\310\326\271\346%3d\241\312\301\264\311\364\244\307%3d\241\313";
+
+const char picListDebugPicPositionFormat[24] = "%s\n%3d,%3d(a:%d)";
+
+const char picListDebugSelectHelpText[32] = "\241\373\267\350\304\352\241\241\241\337\245\255\245\343\245\363\245\273\245\353\241\241\242\244\242\242\301\252\302\362";
+
+const char picListDebugTextureNameFormat[16] = "TEX NAME %3d:%s";
+
+const char picListDebugDeleteHelpText[24] = "\241\373\272\357\275\374\241\241\241\337\245\255\245\343\245\363\245\273\245\353";
+
+const char picListDebugSavePromptText[24] = "\245\273\241\274\245\326\244\267\244\336\244\271\244\253\241\251";
+
+const char picListDebugConfirmCancelHelpText[24] = "\241\373\267\350\304\352\241\241\241\337\245\255\245\343\245\363\245\273\245\353";
+
+const char picListDebugLoadPromptText[24] = "\245\355\241\274\245\311\244\267\244\336\244\271\244\253\241\251";
+
+const char picListDebugMoveImageHintText[32] = "\241\373\275\252\244\357\244\352\241\241\243\322\243\261\263\250\274\253\302\316\260\334\306\260";
+
+const char picListDebugOffsetFormat[16] = "offset %3d %3d";

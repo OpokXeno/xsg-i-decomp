@@ -280,7 +280,7 @@ static int _GetEnemyHardLevelBySerial(u32 serial)
     return level;
 }
 
-int abInit_3[2] = {0, 0};
+static int abInit_3[2]  = {0, 0};
 
 int s_stack[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -1105,3 +1105,7 @@ void RobotGameMain(void)
 void RobotGameMainDebug(void)
 {
 }
+
+
+
+const char mainAssertStageDataNotNil[16] = "pInitDat != NIL";
