@@ -3,21 +3,16 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
 #include "rg_linkdata.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern unsigned int strlen(const char *string);
-extern int strcmp(const char *string1, const char *string2);
-extern int strncmp(const char *string1, const char *string2,
-                   unsigned int count);
 
 void InitRgLinkData(RgLinkData *pAna, void *pBuf) {
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 18);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 18);
     }
     if (pBuf == 0) {
-        assert_prog(D_00A556E8, D_00A556D0, 19);
+        assert_prog(linkDataAssertBufNotNil, linkDataSourcePath, 19);
     }
     pAna->buf = pBuf;
 }
@@ -29,10 +24,10 @@ static unsigned int _get_uint(const unsigned char *buf) {
 int RgLinkDataMatchDataName(RgLinkData *pAna, const char *name) {
     char *dataName = pAna->buf;
 
-    if (strlen(name) != 4) {
+    if (strlen(name) != RG_LINKDATA_TAG_LENGTH) {
         return 0;
     }
-    return strncmp(dataName, name, 4) == 0;
+    return strncmp(dataName, name, RG_LINKDATA_TAG_LENGTH) == 0;
 }
 
 unsigned int RgLinkDataVersion(RgLinkData *pAna) {
@@ -45,7 +40,7 @@ unsigned int RgLinkDataTime(RgLinkData *pAna) {
     RgLinkDataHeader *header;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x30);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x30);
     }
     header = pAna->buf;
     return _get_uint(header->time);
@@ -55,7 +50,7 @@ unsigned int RgLinkDataNumOfData(RgLinkData *pAna) {
     RgLinkDataHeader *header;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x36);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x36);
     }
     header = pAna->buf;
     return _get_uint(header->numOfData);
@@ -66,10 +61,10 @@ char *RgLinkDataGetName(RgLinkData *pAna, unsigned int nIndex) {
     RgLinkDataName *nameTable;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x40);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x40);
     }
     if (nIndex >= RgLinkDataNumOfData(pAna)) {
-        assert_prog(D_00A556F8, D_00A556D0, 0x42);
+        assert_prog(linkDataAssertNumGreaterThanIndex, linkDataSourcePath, 0x42);
     }
     header = pAna->buf;
     nameTable = (RgLinkDataName *) ((char *) header + _get_uint(header->nameTableOffset));
@@ -85,10 +80,10 @@ unsigned int RgLinkDataGetSize(RgLinkData *pAna, const char *name) {
     unsigned int nIndex;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x4F);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x4F);
     }
-    if (RgLinkDataVersion(pAna) < 2) {
-        assert_prog(D_00A55708, D_00A556D0, 0x50);
+    if (RgLinkDataVersion(pAna) < RG_LINKDATA_MIN_VERSION_FOR_SIZE) {
+        assert_prog(linkDataAssertVersionAtLeastTwo, linkDataSourcePath, 0x50);
     }
     entryCount = 0;
     numOfData = RgLinkDataNumOfData(pAna);
@@ -120,7 +115,7 @@ void *RgLinkDataGet(RgLinkData *pAna, const char *name) {
     unsigned int nIndex;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x66);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x66);
     }
     entryCount = 0;
     numOfData = RgLinkDataNumOfData(pAna);
@@ -154,7 +149,7 @@ void *RgLinkDataFindExt(RgLinkData *pAna, const char *ext) {
     unsigned int nIndex;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x7B);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x7B);
     }
     entryCount = 0;
     numOfData = RgLinkDataNumOfData(pAna);
@@ -184,19 +179,19 @@ void *RgLinkDataGetIndex(RgLinkData *pAna, int index) {
     RgLinkDataOffset *offset;
 
     if (pAna == 0) {
-        assert_prog(D_00A556C0, D_00A556D0, 0x90);
+        assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 0x90);
     }
     if (index >= RgLinkDataNumOfData(pAna)) {
-        assert_prog(D_00A55728, D_00A556D0, 0x92);
+        assert_prog(linkDataAssertNumGreaterThanUnsignedIndex, linkDataSourcePath, 0x92);
     }
     header = pAna->buf;
     offset = (RgLinkDataOffset *) ((char *) header + _get_uint(header->offsetTableOffset));
     return (char *) header + _get_uint(offset[index]);
 }
 
-const char D_00A556C0[16] = "pAna != NIL";
-const char D_00A556D0[24] = "../rg_linkdata.euc.c";
-const char D_00A556E8[16] = "pBuf != NIL";
-const char D_00A556F8[16] = "uNum > nIndex";
-const char D_00A55708[32] = "RgLinkDataVersion(pAna) >= 2";
-const char D_00A55728[16] = "uNum > uIndex";
+const char linkDataAssertLinkDataNotNil[16] = "pAna != NIL";
+const char linkDataSourcePath[24] = "../rg_linkdata.euc.c";
+const char linkDataAssertBufNotNil[16] = "pBuf != NIL";
+const char linkDataAssertNumGreaterThanIndex[16] = "uNum > nIndex";
+const char linkDataAssertVersionAtLeastTwo[32] = "RgLinkDataVersion(pAna) >= 2";
+const char linkDataAssertNumGreaterThanUnsignedIndex[16] = "uNum > uIndex";

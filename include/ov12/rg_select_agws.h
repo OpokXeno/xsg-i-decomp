@@ -1,66 +1,76 @@
 #ifndef INCLUDE_OV12_RG_SELECT_AGWS_H
 #define INCLUDE_OV12_RG_SELECT_AGWS_H
 
-/*
- * RgBxx is defined by ov12/tu073 (src/ov12/rg_bxx.c); this allocation only
- * stores and forwards the pointer LoadRgBxx_sub returns and DisposeRgBxx_sub
- * takes, so an incomplete type is enough here.
- */
-typedef struct RgBxx RgBxx;
+#include "shared.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_draw.h"
+#include "ov12/rg_select_robot.h"
+#include "ov12/rg_select_subcon.h"
 
-typedef struct RgDrawStudio RgDrawStudio;
+/* Number of characters the selection offers, and equip types per character. */
+#define RG_SELECT_AGWS_CHAR_NUM RG_SELECT_CHAR_NUM
 
-typedef struct RgPicList RgPicList;
+/* Size of one weapon name slot of the selection data. */
+#define RG_SELECT_AGWS_WEAPON_NAME_SIZE 0x20
 
-/*
- * The select-data record _InitSelect creates and RgSelectAGWS::pSelDat
- * points at; owned by _InitSelect/_Destruct (unallocated in this TU), which
- * never define it within this allocation. _SetBaseSelectData's own assert
- * names its first parameter "pSelDat" (ov12:0x00a56838, "pSelDat != NIL").
- */
+/* What the selection reads and writes back: the character, the characters
+ * that may be chosen, and the name of the weapon chosen per character and
+ * equip type (empty when none). 0x248 bytes. */
+struct RgSelectAGWSData {
+    int selectedCharacter;
+    unsigned int availableCharacters;
+    char weaponName[RG_SELECT_AGWS_CHAR_NUM][RG_SELECT_WEAPON_SLOTS]
+                   [RG_SELECT_AGWS_WEAPON_NAME_SIZE];
+};
+
+/* The selection screen's working data, defined by rg_select_agws.c. */
 typedef struct SelDat SelDat;
 
-/*
- * The robot-preview object CreateRgSelectRobot allocates and
- * DisposeRgSelectRobot releases; owned by ov12/tu071 (src/ov12/
- * rg_select_robot.c, full body there). No published include/ov12/
- * rg_select_robot.h exists yet, so this allocation only forwards the
- * pointer, never dereferencing one itself.
- */
-typedef struct RgSelectRobot RgSelectRobot;
-
+/* The weapon list display object, defined by rg_select_agws.c. */
 typedef struct WepListDisp WepListDisp;
 
 typedef struct RgSelectAGWS RgSelectAGWS;
 
-/*
- * _InitSelect, _Destruct and _Disp (this allocation) claim every remaining
- * member up to RG_SELECT_AGWS_SIZE. _InitSelect stores a fixed value (4) at
- * +0x00 (state; no function in this allocation reads it back), the archive
- * LoadRgBxx_sub("select.bxx") returns at +0x08 (pBxx), four picture lists
- * _LoadPicList loads from "agwsseltop.r2d", "agwssel.r2d", "wepseltop.r2d"
- * and "wepsel.r2d" at +0x0C/+0x10/+0x14/+0x18, a scroll offset pair at
- * +0x1C/+0x20 that _Disp forwards to RgPicListSetOffset (named ofsX/ofsY
- * after src/ov12/rg_piclist.h's own fields for the same two values), the
- * weapon-list display object _CreateWepListDisp returns at +0x24
- * (pWepListDisp), the paint context CreateXrgPaint2D_sub returns at +0x28
- * (paint), the draw studio RgDrawGetStudio returns at +0x2C (pStudio) and
- * the robot preview CreateRgSelectRobot returns at +0x30 (pRobot).
- */
+/* The character and weapon selection screen. */
 struct RgSelectAGWS {
     int state;
     SelDat *pSelDat;
     RgBxx *pBxx;
-    RgPicList *pAgwsSelTop;
-    RgPicList *pAgwsSel;
-    RgPicList *pWepSelTop;
-    RgPicList *pWepSel;
+    struct RgPicList *pAgwsSelTop;
+    struct RgPicList *pAgwsSel;
+    struct RgPicList *pWepSelTop;
+    struct RgPicList *pWepSel;
     int ofsX;
     int ofsY;
     WepListDisp *pWepListDisp;
-    XrgPaint2D *paint;
+    struct XrgPaint2D *paint;
     RgDrawStudio *pStudio;
     RgSelectRobot *pRobot;
 };
+
+/* Values returned by RgSelectAGWSIsEnd. */
+enum {
+    RG_SELECT_AGWS_END_NONE,
+    RG_SELECT_AGWS_END_DONE,
+    RG_SELECT_AGWS_END_CANCELLED
+};
+
+/* Functions and data used by other translation units. */
+extern void InitRgSelectAGWSData(struct RgSelectAGWSData *pData);
+extern void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel,
+                                      struct RgSelectAGWSData *pData);
+extern void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel,
+                                      struct RgSelectAGWSData *pData);
+extern int RgSelectAGWSGetCollectData(RgSelectAGWS *pSel,
+                                      RgWeaponEssence **apCollects);
+extern RgSelectAGWS *CreateRgSelectAGWS(void);
+extern void DisposeRgSelectAGWS(RgSelectAGWS *pSel);
+extern void RgSelectAGWSSetMode(RgSelectAGWS *pSel, int mode);
+extern int RgSelectAGWSIsEnd(RgSelectAGWS *pSel);
+extern int RgSelectAGWSGetCharacter(RgSelectAGWS *pSel);
+extern void RgSelectAGWSGetWeapon(
+    RgSelectAGWS *pSel, RgWeaponEssence **apCollects);
+extern void RgSelectAGWSPassTime(RgSelectAGWS *pSel, float deltaTime);
+extern void RgSelectAGWSDisp(RgSelectAGWS *pSel);
 
 #endif /* INCLUDE_OV12_RG_SELECT_AGWS_H */

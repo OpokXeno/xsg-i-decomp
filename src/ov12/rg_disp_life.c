@@ -2,20 +2,46 @@
  * OV12 original TU 43: 0x00a25d30..0x00a26a00 (12 functions)
  */
 #include "common.h"
-#include "rg_disp_life.h"
+#include "shared.h"
+#include "ov12/rg_disp_life.h"
+#include "ov12/rg_gauge.h"
+#include "ov12/xrg_paint2d.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_robot.h"
+#include "ov12/rg_robot_spec.h"
+#include "ov12/rg_font.h"
+#include "ov12/rg_bxx.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern RgHeap *InstanceOfRgHeap(void);
-static void _InitDisp(RgDispLife *pDisp, int dispTex, int timeFont);
-static void _DestructDisp(RgDispLife *pDisp);
-/* The original TU-local tables and strings used by the C accessors below. */
-struct AgwsNameUvwh;
+#define RG_DISP_LIFE_PLAYERS 2
+#define RG_DISP_LIFE_MAX_WINS 2
+#define RG_DISP_LIFE_AGWS_NAMES 6
 
+/* Life-bar picture slots: three win-count pictures per player. */
+#define RG_DISP_LIFE_WIN_PICS_PER_PLAYER 3
+/* lifePic[6] and [7] (12 pointers past secondaryBoardPic) are the players' boards. */
+
+/* The win picture of the player who just won blinks with this period. */
+#define RG_DISP_LIFE_BLINK_PERIOD 1.0f
+#define RG_DISP_LIFE_BLINK_HALF 0.5f
+
+/* The timer text counts centiseconds: m'ss"cc. */
+#define RG_DISP_LIFE_CENTIS_PER_MINUTE 6000U
+
+
+/*
+ * The AGWS name texture's UV rectangle _GetAgwsNameUVWH fills: u, v feed
+ * XrgPaint2DSetUVOffset and w, h feed both XrgPaint2DSetUVSize and the draw
+ * call's own width/height.
+ */
+typedef struct AgwsNameUvwh {
+    int u;
+    int v;
+    int w;
+    int h;
+} AgwsNameUvwh;
+
+/* One entry of the character-id to name-texture table (32 bytes). */
 typedef struct AgwsNameRecord {
     int characterId;
     unsigned char unmodeled_04[12];
@@ -25,7 +51,28 @@ typedef struct AgwsNameRecord {
     int texture_height;
 } AgwsNameRecord;
 
-static AgwsNameRecord s_aCharIDToUVWH_0[6] = {
+static void _InitDisp(RgDispLife *pDisp, RgBxx *pBxx, RgFont *timeFont);
+static void _DestructDisp(RgDispLife *pDisp);
+static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh);
+
+/* Scaffold-owned strings (string table at 0x00a54848..0x00a54940). */
+extern const char dispLifeAssertBxxNotNil[];
+extern const char dispLifeAssertTimeFontNotNil[];
+extern const char dispLifeAgwsNamePictureName[];
+extern const char dispLifeLeftWindow0PictureName[];
+extern const char dispLifeLeftWindow1PictureName[];
+extern const char dispLifeLeftWindow2PictureName[];
+extern const char dispLifeRightWindow0PictureName[];
+extern const char dispLifeRightWindow1PictureName[];
+extern const char dispLifeRightWindow2PictureName[];
+extern const char dispLifeLeftBarPictureName[];
+extern const char dispLifeRightBarPictureName[];
+extern const char dispLifeBarTop1PictureName[];
+extern const char dispLifeBarTopDeadPictureName[];
+extern const char dispLifeBarTop2PictureName[];
+extern const int s_anPos_1[2][2];
+
+static AgwsNameRecord s_aCharIDToUVWH_0[RG_DISP_LIFE_AGWS_NAMES] = {
     {0, {0}, 0, 0, 88, 16},
     {2, {0}, 168, 0, 80, 16},
     {4, {0}, 88, 0, 80, 16},
@@ -34,25 +81,25 @@ static AgwsNameRecord s_aCharIDToUVWH_0[6] = {
     {1, {0}, 168, 32, 80, 16}
 };
 
-const char D_00A54810[] = "pPic != NIL";
+const char dispLifeAssertPictureNotNil[] = "pPic != NIL";
 
-const char D_00A54820[] = "../rg_disp_life.euc.c";
+const char dispLifeSourcePath[] = "../rg_disp_life.euc.c";
 
-const char D_00A54838[] = "pDisp != NIL";
+const char dispLifeAssertDispNotNil[] = "pDisp != NIL";
 
-const char D_00A54870[] = "board_na.bmp";
+const char dispLifePrimaryBoardPictureName[] = "board_na.bmp";
 
-const char D_00A54880[] = "board_nb.bmp";
+const char dispLifeSecondaryBoardPictureName[] = "board_nb.bmp";
 
-const char D_00A54950[] = "board_nc.bmp";
+const char dispLifeVsPrimaryBoardPictureName[] = "board_nc.bmp";
 
-const char D_00A54960[] = "board_nd.bmp";
+const char dispLifeVsSecondaryBoardPictureName[] = "board_nd.bmp";
 
-static int _GetAgwsNameUVWH(int nameIndex, struct AgwsNameUvwh *uvwh)
+static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh)
 {
     unsigned int index;
 
-    for (index = 0; index < 6; index++) {
+    for (index = 0; index < RG_DISP_LIFE_AGWS_NAMES; index++) {
         if (s_aCharIDToUVWH_0[index].characterId == nameIndex) {
             /*
              * Each record is 32 bytes, with an aligned 16-byte UVWH vector
@@ -71,33 +118,13 @@ static int _GetAgwsNameUVWH(int nameIndex, struct AgwsNameUvwh *uvwh)
     return 0;
 }
 
-/*
- * The AGWS name texture's UV rectangle _GetAgwsNameUVWH (still INCLUDE_ASM)
- * fills: u, v feed XrgPaint2DSetUVOffset and w, h feed both
- * XrgPaint2DSetUVSize and the draw call's own width/height.
- */
-typedef struct AgwsNameUvwh {
-    int u;
-    int v;
-    int w;
-    int h;
-} AgwsNameUvwh;
-
-static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh);
-extern void XrgPaint2DUseTexture(void *paint, void *pic);
-extern void XrgPaint2DSetUVOffset(void *paint, int u, int v);
-extern void XrgPaint2DSetUVSize(void *paint, int width, int height);
-extern void XrgPaint2DAlpha(void *paint, int blendMode);
-extern void XrgPaint2DDrawXYWH(void *paint, int mode, int x, int y,
-                               int width, int height);
-
-static void _DispAgwsName(void *paint, void *pPic, int nameIndex, int x,
-                          int y)
+static void _DispAgwsName(XrgPaint2D *paint, RgBxxPic *pPic, int nameIndex,
+                          int x, int y)
 {
     AgwsNameUvwh uvwh;
 
     if (pPic == 0) {
-        assert_prog(D_00A54810, D_00A54820, 100);
+        assert_prog(dispLifeAssertPictureNotNil, dispLifeSourcePath, 100);
     }
     if (_GetAgwsNameUVWH(nameIndex, &uvwh) && (pPic != 0)) {
         XrgPaint2DUseTexture(paint, pPic);
@@ -108,84 +135,56 @@ static void _DispAgwsName(void *paint, void *pPic, int nameIndex, int x,
     }
 }
 
-extern void *RgBxxGetPic(struct RgBxx *bxx, const char *picture_name);
-extern RgGauge *CreateRgGauge(void);
-extern void *RgGaugeGetDisp(RgGauge *gauge);
-extern void RgGaugeDispSetTex(void *gaugeDisp, void *barPic, void *restPic);
-extern void RgGaugeDispSetBarUVWH(void *gaugeDisp, int u, int v, int w,
-                                  int h);
-extern void RgGaugeDispSetRestUVWH(void *gaugeDisp, int u, int v, int w,
-                                   int h);
-extern void RgGaugeDispSetAlpha(void *gaugeDisp, int alpha);
-extern void RgGaugeDispSetPos(void *gaugeDisp, int x, int y);
-extern void *CreateXrgPaint2D_sub(const char *source_file, int line);
-extern void XrgPaint2DSetDrawPrio(void *paint, int prio);
-extern const char D_00A54848[];
-extern const char D_00A54858[];
-extern const char D_00A54890[];
-extern const char D_00A548A0[];
-extern const char D_00A548B0[];
-extern const char D_00A548C0[];
-extern const char D_00A548D0[];
-extern const char D_00A548E0[];
-extern const char D_00A548F0[];
-extern const char D_00A54900[];
-extern const char D_00A54910[];
-extern const char D_00A54920[];
-extern const char D_00A54930[];
-extern const char D_00A54940[];
-
-static void _InitDisp(RgDispLife *pDisp, int dispTex, int timeFont)
+static void _InitDisp(RgDispLife *pDisp, RgBxx *pBxx, RgFont *timeFont)
 {
-    struct RgBxx *pBxx = (struct RgBxx *)dispTex;
     unsigned int i;
 
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 117);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 117);
     }
     if (pBxx == 0) {
-        assert_prog(D_00A54848, D_00A54820, 118);
+        assert_prog(dispLifeAssertBxxNotNil, dispLifeSourcePath, 118);
     }
     if (timeFont == 0) {
-        assert_prog(D_00A54858, D_00A54820, 119);
+        assert_prog(dispLifeAssertTimeFontNotNil, dispLifeSourcePath, 119);
     }
     pDisp->timeFont = timeFont;
     pDisp->timer = 0.0f;
     pDisp->vsMode = 0;
     pDisp->dispBxx = pBxx;
-    pDisp->primaryBoardPic = RgBxxGetPic(pBxx, D_00A54870);
-    pDisp->secondaryBoardPic = RgBxxGetPic(pBxx, D_00A54880);
-    pDisp->agwsNamePic = RgBxxGetPic(pBxx, D_00A54890);
-    pDisp->lifePic[0] = RgBxxGetPic(pBxx, D_00A548A0);
-    pDisp->lifePic[1] = RgBxxGetPic(pBxx, D_00A548B0);
-    pDisp->lifePic[2] = RgBxxGetPic(pBxx, D_00A548C0);
-    pDisp->lifePic[3] = RgBxxGetPic(pBxx, D_00A548D0);
-    pDisp->lifePic[4] = RgBxxGetPic(pBxx, D_00A548E0);
-    pDisp->lifePic[5] = RgBxxGetPic(pBxx, D_00A548F0);
-    pDisp->lifePic[6] = RgBxxGetPic(pBxx, D_00A54900);
-    pDisp->lifePic[7] = RgBxxGetPic(pBxx, D_00A54910);
+    pDisp->primaryBoardPic = RgBxxGetPic(pBxx, dispLifePrimaryBoardPictureName);
+    pDisp->secondaryBoardPic = RgBxxGetPic(pBxx, dispLifeSecondaryBoardPictureName);
+    pDisp->agwsNamePic = RgBxxGetPic(pBxx, dispLifeAgwsNamePictureName);
+    pDisp->lifePic[0] = RgBxxGetPic(pBxx, dispLifeLeftWindow0PictureName);
+    pDisp->lifePic[1] = RgBxxGetPic(pBxx, dispLifeLeftWindow1PictureName);
+    pDisp->lifePic[2] = RgBxxGetPic(pBxx, dispLifeLeftWindow2PictureName);
+    pDisp->lifePic[3] = RgBxxGetPic(pBxx, dispLifeRightWindow0PictureName);
+    pDisp->lifePic[4] = RgBxxGetPic(pBxx, dispLifeRightWindow1PictureName);
+    pDisp->lifePic[5] = RgBxxGetPic(pBxx, dispLifeRightWindow2PictureName);
+    pDisp->lifePic[6] = RgBxxGetPic(pBxx, dispLifeLeftBarPictureName);
+    pDisp->lifePic[7] = RgBxxGetPic(pBxx, dispLifeRightBarPictureName);
     pDisp->winnerMask = 0;
     pDisp->elapsedTime = 0.0f;
-    for (i = 0; i < 2; ++i) {
-        void *gaugeDisp;
-        void *barPic;
-        void *restPic;
+    for (i = 0; i < RG_DISP_LIFE_PLAYERS; ++i) {
+        RgGaugeDisp *gaugeDisp;
+        RgBxxPic *barPic;
+        RgBxxPic *restPic;
 
         pDisp->robots[i] = 0;
         pDisp->gauge[i] = CreateRgGauge();
         pDisp->winCount[i] = 0;
         gaugeDisp = RgGaugeGetDisp(pDisp->gauge[i]);
         if (i == 0) {
-            barPic = RgBxxGetPic(pBxx, D_00A54920);
-            restPic = RgBxxGetPic(pBxx, D_00A54930);
+            barPic = RgBxxGetPic(pBxx, dispLifeBarTop1PictureName);
+            restPic = RgBxxGetPic(pBxx, dispLifeBarTopDeadPictureName);
             RgGaugeDispSetTex(gaugeDisp, barPic, restPic);
             RgGaugeDispSetBarUVWH(gaugeDisp, 14, 8, 183, 12);
             RgGaugeDispSetRestUVWH(gaugeDisp, 0, 0, 0, 12);
             RgGaugeDispSetAlpha(gaugeDisp, 1);
             RgGaugeDispSetPos(gaugeDisp, 142, 24);
         } else {
-            barPic = RgBxxGetPic(pBxx, D_00A54940);
-            restPic = RgBxxGetPic(pBxx, D_00A54930);
+            barPic = RgBxxGetPic(pBxx, dispLifeBarTop2PictureName);
+            restPic = RgBxxGetPic(pBxx, dispLifeBarTopDeadPictureName);
             RgGaugeDispSetTex(gaugeDisp, barPic, restPic);
             RgGaugeDispSetBarUVWH(gaugeDisp, 11, 15, 183, 12);
             RgGaugeDispSetRestUVWH(gaugeDisp, 0, 0, 0, 12);
@@ -193,32 +192,28 @@ static void _InitDisp(RgDispLife *pDisp, int dispTex, int timeFont)
             RgGaugeDispSetPos(gaugeDisp, 187, 47);
         }
     }
-    pDisp->paint = CreateXrgPaint2D_sub(D_00A54820, 181);
+    pDisp->paint = CreateXrgPaint2D_sub(dispLifeSourcePath, 181);
     XrgPaint2DSetDrawPrio(pDisp->paint, 4);
 }
-
-extern void DisposeRgGauge(RgGauge *gauge);
-extern void DisposeXrgPaint2D_sub(void *paint, const char *source_file,
-                                  int line);
 
 static void _DestructDisp(RgDispLife *pDisp)
 {
     unsigned int i;
 
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 188);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 188);
     }
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < RG_DISP_LIFE_PLAYERS; i++) {
         DisposeRgGauge(pDisp->gauge[i]);
     }
-    DisposeXrgPaint2D_sub(pDisp->paint, D_00A54820, 192);
+    DisposeXrgPaint2D_sub(pDisp->paint, dispLifeSourcePath, 192);
 }
 
-RgDispLife *CreateRgDispLife(int dispTex, int timeFont)
+RgDispLife *CreateRgDispLife(RgBxx *dispTex, RgFont *timeFont)
 {
     RgDispLife *pDisp;
 
-    pDisp = RgHeapAlloc(InstanceOfRgHeap(), 0x60, D_00A54820, 0xC7);
+    pDisp = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgDispLife), dispLifeSourcePath, 0xC7);
     _InitDisp(pDisp, dispTex, timeFont);
     return pDisp;
 }
@@ -226,25 +221,25 @@ RgDispLife *CreateRgDispLife(int dispTex, int timeFont)
 void DisposeRgDispLife(RgDispLife *pDisp)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 0xCF);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 0xCF);
     }
     _DestructDisp(pDisp);
-    RgHeapFree(InstanceOfRgHeap(), pDisp, D_00A54820, 0xD1);
+    RgHeapFree(InstanceOfRgHeap(), pDisp, dispLifeSourcePath, 0xD1);
 }
 
 void RgDispLifeSetRobot(RgDispLife *pDisp, RgStatus *pRobot1, RgStatus *pRobot2)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 0xDB);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 0xDB);
     }
-    pDisp->robot1P = pRobot1;
-    pDisp->robot2P = pRobot2;
+    pDisp->robots[0] = pRobot1;
+    pDisp->robots[1] = pRobot2;
 }
 
 void RgDispLifeSetTimer(RgDispLife *pDisp, float timer)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 0xE5);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 0xE5);
     }
     if (timer >= 0.0f) {
         pDisp->timer = timer;
@@ -262,70 +257,53 @@ static inline int _ClampWin(int count, int lo, int hi)
 void RgDispLifeSetWin(RgDispLife *pDisp, int win1P, int win2P, int winnerMask)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 0xEE);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 0xEE);
     }
-    pDisp->winCount[0] = _ClampWin(win1P, 0, 2);
-    pDisp->winCount[1] = _ClampWin(win2P, 0, 2);
+    pDisp->winCount[0] = _ClampWin(win1P, 0, RG_DISP_LIFE_MAX_WINS);
+    pDisp->winCount[1] = _ClampWin(win2P, 0, RG_DISP_LIFE_MAX_WINS);
     pDisp->winnerMask = winnerMask;
 }
-
-extern const char D_00A54950[];
-extern const char D_00A54960[];
-extern const char D_00A54870[];
-extern const char D_00A54880[];
 
 void RgDispLifeSetVsMode(RgDispLife *pDisp, int vsMode)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 250);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 250);
     }
 
     pDisp->vsMode = vsMode;
     if (vsMode != 0) {
-        pDisp->primaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54950);
-        pDisp->secondaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54960);
+        pDisp->primaryBoardPic = RgBxxGetPic(pDisp->dispBxx, dispLifeVsPrimaryBoardPictureName);
+        pDisp->secondaryBoardPic = RgBxxGetPic(pDisp->dispBxx, dispLifeVsSecondaryBoardPictureName);
     } else {
-        pDisp->primaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54870);
-        pDisp->secondaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54880);
+        pDisp->primaryBoardPic = RgBxxGetPic(pDisp->dispBxx, dispLifePrimaryBoardPictureName);
+        pDisp->secondaryBoardPic = RgBxxGetPic(pDisp->dispBxx, dispLifeSecondaryBoardPictureName);
     }
 }
-
-extern float RgRobotGetLife(RgStatus *robot);
-extern void RgGaugeSetValue(RgGauge *gauge, float value);
-extern void RgGaugePassTime(RgGauge *gauge, float deltaTime);
 
 void RgDispLifePassTime(RgDispLife *pDisp, float deltaTime)
 {
     unsigned int i;
 
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 272);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 272);
     }
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < RG_DISP_LIFE_PLAYERS; i++) {
         if (pDisp->robots[i] != 0) {
             RgGaugeSetValue(pDisp->gauge[i], RgRobotGetLife(pDisp->robots[i]));
         }
         RgGaugePassTime(pDisp->gauge[i], deltaTime);
     }
     pDisp->elapsedTime += deltaTime;
-    if (pDisp->elapsedTime > 1.0f) {
+    if (pDisp->elapsedTime > RG_DISP_LIFE_BLINK_PERIOD) {
         pDisp->elapsedTime = 0.0f;
     }
 }
 
-extern float floorf(float value);
-extern int RgFontStr(void *paint, int fontId, const char *text, int x, int y,
-                      int color);
-extern void RgGaugeDraw(RgGauge *gauge, void *paint);
-extern int *RgRobotGetSpec(RgStatus *pRobot);
-extern void XrgPaint2DFlush(void *paint);
-extern const int s_anPos_1[2][2];
-
 void RgDispLifeDisp(RgDispLife *pDisp)
 {
-    void *paint;
-    void **playerPics;
-    void **pBoard;
+    XrgPaint2D *paint;
+    RgBxxPic **playerPics;
+    RgBxxPic **pBoard;
     char timeText[32];
     unsigned int centis;
     unsigned int i;
@@ -333,25 +311,25 @@ void RgDispLifeDisp(RgDispLife *pDisp)
     int countBase;
 
     if (pDisp == 0) {
-        assert_prog(D_00A54838, D_00A54820, 293);
+        assert_prog(dispLifeAssertDispNotNil, dispLifeSourcePath, 293);
     }
     paint = pDisp->paint;
     if (pDisp->secondaryBoardPic != 0) {
         XrgPaint2DUseTexture(paint, pDisp->secondaryBoardPic);
         XrgPaint2DAlpha(paint, 0);
-        XrgPaint2DDrawXYWH(paint, 0x20, 0, 0x10, 0, 0);
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, 0, 0x10, 0, 0);
     }
     if (pDisp->primaryBoardPic != 0) {
         XrgPaint2DUseTexture(paint, pDisp->primaryBoardPic);
         XrgPaint2DAlpha(paint, 0);
-        XrgPaint2DDrawXYWH(paint, 0x20, 0, 0, 0, 0);
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, 0, 0, 0, 0);
     }
 
     centis = (unsigned int) floorf(pDisp->timer * 100.0f);
-    timeText[0] = (char) ('0' + (centis / 60000U) % 10U);
-    timeText[1] = (char) ('0' + (centis / 6000U) % 10U);
+    timeText[0] = (char) ('0' + (centis / (RG_DISP_LIFE_CENTIS_PER_MINUTE * 10U)) % 10U);
+    timeText[1] = (char) ('0' + (centis / RG_DISP_LIFE_CENTIS_PER_MINUTE) % 10U);
     timeText[2] = '\'';
-    centis %= 6000U;
+    centis %= RG_DISP_LIFE_CENTIS_PER_MINUTE;
     timeText[3] = (char) ('0' + (centis / 1000U) % 10U);
     timeText[4] = (char) ('0' + (centis / 100U) % 10U);
     timeText[5] = '"';
@@ -365,7 +343,7 @@ void RgDispLifeDisp(RgDispLife *pDisp)
             RgStatus *robot = pDisp->robots[i];
 
             if (robot != 0) {
-                int nameIndex = *RgRobotGetSpec(robot);
+                int nameIndex = RgRobotGetSpec(robot)->charID;
                 int nameX;
                 int nameY;
 
@@ -382,8 +360,8 @@ void RgDispLifeDisp(RgDispLife *pDisp)
     }
 
     i = 0;
-    pBoard = (void **) &pDisp->secondaryBoardPic;
-    for (; i < 2; i++) {
+    pBoard = &pDisp->secondaryBoardPic;
+    for (; i < RG_DISP_LIFE_PLAYERS; i++) {
         RgGaugeDraw(pDisp->gauge[i], paint);
     }
     playerPics = pBoard + 12;
@@ -395,27 +373,27 @@ void RgDispLifeDisp(RgDispLife *pDisp)
         int lastWin = winCount - 1;
         int clamped;
         int winBit;
-        void *countPic;
-        void *clampPic;
+        RgBxxPic *countPic;
+        RgBxxPic *clampPic;
 
         countPic = pDisp->lifePic[countBase + winCount];
-        countBase += 3;
-        clamped = _ClampWin(lastWin, 0, 2);
+        countBase += RG_DISP_LIFE_WIN_PICS_PER_PLAYER;
+        clamped = _ClampWin(lastWin, 0, RG_DISP_LIFE_MAX_WINS);
         clampPic = pDisp->lifePic[clampBase + clamped];
-        clampBase += 3;
+        clampBase += RG_DISP_LIFE_WIN_PICS_PER_PLAYER;
 
         XrgPaint2DUseTexture(paint, playerPics[i]);
         XrgPaint2DAlpha(paint, 0);
-        XrgPaint2DDrawXYWH(paint, 0x20, s_anPos_1[i][0], s_anPos_1[i][1], 0, 0);
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, s_anPos_1[i][0], s_anPos_1[i][1], 0, 0);
 
         winBit = 1 << i;
-        if ((pDisp->winnerMask & winBit) && pDisp->elapsedTime > 0.5f) {
+        if ((pDisp->winnerMask & winBit) && pDisp->elapsedTime > RG_DISP_LIFE_BLINK_HALF) {
             XrgPaint2DUseTexture(paint, clampPic);
         } else {
             XrgPaint2DUseTexture(paint, countPic);
         }
         XrgPaint2DAlpha(paint, 0);
-        XrgPaint2DDrawXYWH(paint, 0x20, s_anPos_1[i][0], s_anPos_1[i][1], 0, 0);
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, s_anPos_1[i][0], s_anPos_1[i][1], 0, 0);
     }
     XrgPaint2DFlush(paint);
 }

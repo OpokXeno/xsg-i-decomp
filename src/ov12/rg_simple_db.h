@@ -5,10 +5,16 @@
 #ifndef SRC_OV12_RG_SIMPLE_DB_H
 #define SRC_OV12_RG_SIMPLE_DB_H
 
+#include "shared.h"
+#include "ov12/rg_simple_db.h"
+
+/* Bytes of one pointer in the data and name arrays. */
+#define RG_SIMPLE_DB_ENTRY_STRIDE 4
+
 /*
  * _EntryDB's assert message "pDB->m_nNumOfData < pDB->m_nDataCapa"
- * (D_00A53238) names m_nNumOfData and m_nDataCapa; include/ov12/rg_simple_db.h
- * records that _InitDB stores capacity at +4 and entry_size at +8.
+ * (simpleDbAssertNumOfDataBelowCapacity) names m_nNumOfData and m_nDataCapa; _InitDB stores capacity at
+ * +4 and entry_size at +8.
  * _ClearDB, _EntryDB and _GetDataDB index the data array at +0xC by the
  * 4-byte pointer stride, and _EntryDB and _GetDataID index the name array
  * at +0x10 the same way; _EntryDB copies each name into its slot with

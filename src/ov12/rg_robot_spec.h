@@ -1,17 +1,11 @@
 /*
- * TU-local declarations of ov12/tu008 (src/ov12/rg_robot_spec.c).
+ * TU-local declarations of ov12/tu008 (src/ov12/rg_robot_spec.c). The
+ * shared record and functions live in include/ov12/rg_robot_spec.h.
  */
 
 #ifndef SRC_OV12_RG_ROBOT_SPEC_H
 #define SRC_OV12_RG_ROBOT_SPEC_H
 
-#include "shared.h"
-
-/*
- * Parser index for the module's auto-homing text field (_AnaAutoHoming,
- * 0x00a0d2e8, still INCLUDE_ASM); -1 means no auto-homing entry is active.
- * .data is still scaffold-owned.
- */
-extern int s_nAnaAutoHomingID;
+#include "ov12/rg_robot_spec.h"
 
 #endif /* SRC_OV12_RG_ROBOT_SPEC_H */

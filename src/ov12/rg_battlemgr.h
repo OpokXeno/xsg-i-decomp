@@ -6,101 +6,51 @@
 #define SRC_OV12_RG_BATTLEMGR_H
 
 #include "shared.h"
+#include "ov12/rg_battle_init.h"
+#include "ov12/rg_battlemgr.h"
+#include "ov12/rg_camera.h"
+#include "ov12/rg_disp_gameinfo.h"
+#include "ov12/rg_disp_life.h"
+#include "ov12/rg_disp_wpn1p.h"
+#include "ov12/rg_disp_wpn2p.h"
+#include "ov12/rg_draw.h"
+#include "ov12/rg_game_collision.h"
+#include "ov12/rg_geom_group.h"
+#include "ov12/rg_player.h"
+#include "ov12/rg_read_text.h"
+#include "ov12/xrg_paint2d.h"
 
-/* Opaque handles owned by other TUs (RgPlayerGetRobot, RgDispLifeSetRobot). */
-typedef struct RgPlayer RgPlayer;
-typedef struct RgDispLife RgDispLife;
-
-/*
- * Opaque handles owned by other TUs: this allocation only creates, forwards
- * or disposes of them, it never reads or writes a member.
- *   RgCamera     - ov12/tu016 (src/ov12/rg_camera.h), CreateRgCamera's result
- *   RgReadText   - ov12/tu036 (src/ov12/rg_read_text.h), the paragraph reader
- *   RgDrawStudio - ov12/tu045 (include/ov12/rg_draw.h), _CreateBattleCamera's
- *                  argument (assert message "pStudio != NIL")
- *   RgGeomGroup  - ov12/tu059 (src/ov12/rg_geom_group.h), BattleField's
- *                  geometry group
- */
-typedef struct RgCamera RgCamera;
-typedef struct RgReadText RgReadText;
-typedef struct RgDrawStudio RgDrawStudio;
-typedef struct RgGeomGroup RgGeomGroup;
-
-/*
- * Opaque handles owned by other TUs: this allocation only creates, forwards
- * or disposes of them, it never reads or writes a member.
- *   RgGameCollision       - ov12/tu060 (src/ov12/rg_game_collision.h),
- *                           CreateRgGameCollision's result
- *   RgDispWpn1P           - ov12/tu041 (src/ov12/rg_disp_wpn1p.h),
- *                           CreateRgDispWpn1P's result
- *   RgDispWpn2P           - ov12/tu042 (src/ov12/rg_disp_wpn2p.h),
- *                           CreateRgDispWpn2P's result
- *   RgBattleCommonDataEnv - ov12/tu001 (src/ov12/rg_main.h),
- *                           InstanceOfRgBattleCommonData's singleton
- *   RgDispGameInfo        - ov12/tu038 (src/ov12/rg_disp_gameinfo.h),
- *                           _DrawDispInfoOnePlayer's game-info argument
- *   XrgPaint2D            - ov12/tu086 (src/ov12/xrg_paint2d.h),
- *                           InstanceOfXrgPaint2D's result, forwarded to the
- *                           XrgPaint2D draw calls by _DispBattle
- */
-typedef struct RgGameCollision RgGameCollision;
-typedef struct RgDispWpn1P RgDispWpn1P;
-typedef struct RgDispWpn2P RgDispWpn2P;
-typedef struct RgBattleCommonDataEnv RgBattleCommonDataEnv;
-typedef struct RgDispGameInfo RgDispGameInfo;
-typedef struct XrgPaint2D XrgPaint2D;
-
-/*
- * Opaque handles owned by other TUs: RgBattleMgrGetPlayerDamage only ever
- * forwards a robot pointer to RgPlayerGetRobot/RgRobotGetLife/
- * RgRobotGetLifeMax, it never reads or writes a member of it. Declared here
- * as RgRobot, this TU's own name for the pointer (src/ov12/rg_player.c
- * passes the very same pointer, uncast, to RgRobotGetActor's own local
- * extern of it as RgRobot too); rg_robot.c's own TU names it RgStatus.
- */
-typedef struct RgRobot RgRobot;
-
-/*
- * A battle's participant list, embedded (as a pointer) at RgBattleMgr+0x0c.
- * _InitPlayerList's three sequential stores (offsets 0x00, 0x04, 0x08) and
- * _ClearPlayerList's own reads/stores of the same three offsets (still
- * INCLUDE_ASM in this allocation; loops over the two player slots, then
- * clears count) are the only evidence for this type so far.
- */
+/* A battle's participant list, at RgBattleMgr+0x0c: the player count and the two player slots. */
 typedef struct PlayerList {
-    int count;           /* +0x00, _GetNumOfPlayerList */
-    RgPlayer *player1P;  /* +0x04, cleared by _InitPlayerList/_ClearPlayerList */
-    RgPlayer *player2P;  /* +0x08, cleared by _InitPlayerList/_ClearPlayerList */
+    int count;                  /* +0x00, _GetNumOfPlayerList */
+    union {
+        struct {
+            RgPlayer *player1P; /* +0x04 */
+            RgPlayer *player2P; /* +0x08 */
+        };
+        RgPlayer *players[2];   /* +0x04 */
+    };
 } PlayerList;
 
 /*
- * The battle field _CreateBattleField allocates (RgHeapAlloc size 0x20,
- * exactly this type's size) and _InitBattleField (still INCLUDE_ASM) fills.
- * Only the geometry-group pointer this allocation's _DestructBattleField/
- * _GetGeomGroupBattleField read or dispose of is modeled here.
- *
- * _InitBattleField allocates a 0x20-byte object, clears count at +0x00 and
- * the two studio, screen-ball and camera slots. _GetStudioBattleField and
- * _GetCameraBattleField return indexed pointers from +0x08 and +0x18;
- * _DoubleScreenBattleField stores the two screen balls at +0x10.
+ * The battle field _CreateBattleField allocates (0x20 bytes): the active
+ * studio count, the geometry group and, per studio, a draw studio, a
+ * screen-ball geometry and a camera.
  */
+/* Studios (and with them cameras and screen balls) a battle field can hold. */
+#define BTL_STUDIO_MAX 2
+
 typedef struct BattleField {
     int count;                /* +0x00, bound for the studio/camera indices */
     RgGeomGroup *geomGroup;   /* +0x04 */
-    RgDrawStudio *studio[2];  /* +0x08 */
-    RgGeom *screenBall[2];    /* +0x10 */
-    RgCamera *camera[2];      /* +0x18 */
+    RgDrawStudio *studio[BTL_STUDIO_MAX];  /* +0x08 */
+    RgGeomBall *screenBall[BTL_STUDIO_MAX];    /* +0x10 */
+    RgCamera *camera[BTL_STUDIO_MAX];      /* +0x18 */
 } BattleField;
 
 /*
- * A single round's display line, allocated by _CreateDispInfo (RgHeapAlloc
- * size 0x14, exactly this type's size) and filled by _SetDispInfo, which
- * _InitBattle calls with the battle mode value and the first two players
- * RgBattleInitCreatePlayers() stores (the sibling accessors
- * RgDispWpn1PSetRobot/RgDispWpn2PSetRobot name the same two player slots
- * "1P"/"2P"). Bytes 0x04..0x0b hold the two RgDispGameInfo handles that
- * _InitDispInfo creates and _DestructDispInfo disposes. The player slots at
- * +0x0c/+0x10 are read and written individually and as an indexed pair.
+ * A round's display line (0x14 bytes): the battle mode, one RgDispGameInfo
+ * per player and the two players it shows.
  */
 typedef struct DispInfo {
     int mode;                       /* +0x00 */
@@ -114,27 +64,8 @@ typedef struct DispInfo {
     };
 } DispInfo;
 
-/*
- * The battle manager CreateRgBattleMgr allocates (RgHeapAlloc size 0x38) and
- * _InitBattleMgr fills. Only the members this allocation's accessors read or
- * write are modeled here; _InitBattleMgr/_DisposeBattleMgr (still
- * INCLUDE_ASM) own the rest of the 0x38-byte object. Offsets 0x0c (the
- * player list) and 0x18 (the DispInfo) are used by _InitBattle, still
- * INCLUDE_ASM, and are gaps only as far as this allocation's code goes.
- *
- * This allocation also models +0x0c: RgBattleMgrGetPlayerDamage reads the
- * player-list pointer there and forwards it to _GetInPlayerList (still
- * INCLUDE_ASM) to look up the player owning the requested robot.
- *
- * _InitBattleMgr now fills every other member too, and _DisposeBattleMgr
- * (still INCLUDE_ASM) disposes each handle and clears playerList,
- * geomGroup, battleField, dispInfo and fileSysData back to 0. fileSysData
- * (+0x30) is only ever cleared to 0 by this allocation; _DisposeBattleMgr
- * reads it and forwards a non-zero value to DisposeRgFileSysData_sub before
- * clearing it, so it is a file-system handle this allocation never
- * populates.
- */
-typedef struct RgBattleMgr {
+/* The battle manager CreateRgBattleMgr allocates (0x38 bytes). */
+struct RgBattleMgr {
     int mode;                       /* +0x00, RgBattleMgrGetMode */
     float remainingTime;            /* +0x04, RgBattleMgrGetPlayTime returns 180 - this */
     int result;                     /* +0x08, RgBattleMgrGetResult */
@@ -149,18 +80,6 @@ typedef struct RgBattleMgr {
     RgGeomGroup *geomGroup;         /* +0x2c */
     RgFileSysData *fileSysData;     /* +0x30 */
     BattleField *battleField;       /* +0x34 */
-} RgBattleMgr;
-
-/*
- * The battle-init record _InitBattle reads (RgBattleInitInfo of ov12/tu049,
- * src/ov12/rg_battle_init.h, not included here). Only the battle mode at
- * +0x280, which doubles as the bit mask of human-controlled players, and the
- * enemy type at +0x284 are evidenced by this allocation.
- */
-typedef struct RgBattleInitModes {
-    unsigned char unmodeled_000[0x280];
-    int mode;                       /* +0x280 */
-    int enemyType;                  /* +0x284 */
-} RgBattleInitModes;
+};
 
 #endif /* SRC_OV12_RG_BATTLEMGR_H */

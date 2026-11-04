@@ -2,76 +2,95 @@
  * OV12 original TU 16: 0x00a10f20..0x00a129c8 (43 functions)
  */
 #include "common.h"
-#include "rg_camera.h"
+#include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_camera.h"
+#include "ov12/rg_char.h"
+#include "ov12/rg_draw.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_heap.h"
 #include "ov12/rg_text_info.h"
+#include "ov12/xrg_pad.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_v_log.h"
+
+/* Follow distances RgCameraSetFarMode and the SELECT toggle switch between. */
+#define RG_CAMERA_NEAR_DISTANCE 8.0f
+#define RG_CAMERA_FAR_DISTANCE 14.0f
+#define RG_CAMERA_FAR_THRESHOLD 10.0f
+
+/* Largest sideways drift per frame of the camera yaw (pi / 80). */
+#define RG_CAMERA_TURN_STEP 0.039269908f
+
+#define offsetof(type, member) ((unsigned int) &((type *) 0)->member)
+
+extern const char cameraDumpRollText[];
+extern const char cameraDumpAdvanceText[];
+extern const char cameraDumpAttackText[];
+extern const char cameraDumpLockAttackText[];
+extern const char cameraDumpDashText[];
+extern const char cameraDumpInScreenText[];
+extern const char cameraDumpLockText[];
+extern const char cameraDumpSeeTargetText[];
+extern const char cameraDumpAllTrueText[];
+extern const char cameraDumpAllFalseText[];
+extern const char cameraTextKeyBehindOffset[];
+extern const char cameraTextKeyLookDown[];
+extern const char cameraTextKeyUpperOffset[];
+extern const char cameraTextKeyRollCoef[];
+extern const char cameraTextKeyUseMoveDir[];
+extern const char cameraTextKeyRollTime[];
+extern const char cameraTextKeyCondition1[];
+extern const char cameraTextKeyCondition2[];
+extern const char cameraTextKeyCondition3[];
+extern const char cameraTextKeyCondition4[];
+extern const char cameraTextKeyOperator1[];
+extern const char cameraTextKeyOperator2[];
+extern const char cameraTextKeySubslideStart[];
+extern const char cameraTextKeySubslideDegree[];
+extern const char cameraTextKeySubslideLength[];
+extern const char cameraTextKeySubslideCoef[];
+extern const char cameraOperatorAndText[];
+extern const char cameraOperatorOrText[];
+extern const char cameraUnknownOperatorFormat[];
+extern const char cameraUnknownBoolOperatorFormat[];
 
 static int _SetBit(int *flags, int bit, int value);
 static void _PassTimeVersion3(RgCamera *camera, float elapsed);
 static int _GetVer3TimerID(char *timerName);
-extern int strcmp(const char *left, const char *right);
-extern const char D_00A527F0[];
-extern const char D_00A527E8[];
-extern const char D_00A527E0[];
-extern const char D_00A527D0[];
-extern const char D_00A527C8[];
-extern const char D_00A527C0[];
-extern const char D_00A527B8[];
-extern const char D_00A527A8[];
-extern const char D_00A52798[];
-extern const char D_00A52788[];
+extern int (*s_apConditionTbl_0[RG_CAMERA_TIMER_COUNT])(RgCamera *);
+static void _SetVersion3Extent(RgCamera *camera);
+static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader);
 
-const char D_00A52750[] = "pCam != NIL";
+const char cameraAssertCamNotNil[] = "pCam != NIL";
 
-const char D_00A52760[] = "../rg_camera.euc.c";
+const char cameraSourcePath[] = "../rg_camera.euc.c";
 
-const char D_00A52778[] = "pStudio != NIL";
+const char cameraAssertStudioNotNil[] = "pStudio != NIL";
 
-static const char *s_aszVer3TimerName[10] = {
-    D_00A527F0, D_00A527E8, D_00A527E0, D_00A527D0, D_00A527C8,
-    D_00A527C0, D_00A527B8, D_00A527A8, D_00A52798, D_00A52788
+static const char *s_aszVer3TimerName[RG_CAMERA_TIMER_COUNT] = {
+    cameraDumpRollText, cameraDumpAdvanceText, cameraDumpAttackText, cameraDumpLockAttackText, cameraDumpDashText,
+    cameraDumpInScreenText, cameraDumpLockText, cameraDumpSeeTargetText, cameraDumpAllTrueText, cameraDumpAllFalseText
 };
 
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size, const char *source_file, int line);
-extern void RgError(const char *message, const char *source_file, int line, ...);
-extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
-extern float XrgLengthVector(RgVector vector);
-extern float atan2f(float y, float x);
-extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
-extern void RgDrawViewSetPosition(RgDrawView *view, RgVector position);
-extern void RgDrawViewSetRotateX(RgDrawView *view, float angle);
-extern void RgDrawViewSetRotateY(RgDrawView *view, float angle);
-extern void RgDrawViewSetRotateZ(RgDrawView *view, float angle);
-extern void RgDrawViewInit(RgDrawView *view);
+const char cameraVersionErrorFormat[] = "camera version error (%d)";
 
-const char D_00A52920[] = "camera version error (%d)";
+const char cameraAssertZero[] = "0";
 
-const char D_00A52940[] = "0";
+const char cameraAssertRgCamNotNil[] = "pRgCam != NIL";
 
-const char D_00A52948[] = "pRgCam != NIL";
+const char cameraAssertEssenceNotNil[] = "pEssence != NIL";
 
-const char D_00A52958[] = "pEssence != NIL";
-
-extern RgHeap *InstanceOfRgHeap(void);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file, int line);
-extern void RgCalcLocalForChar(RgMatrix dest_matrix, RgVector position,
-                               RgVector facing, RgVector up_ref);
-
-/* Opaque here: rg_geom_point.c (ov12/tu052) owns the RgPointVector definition. */
-typedef struct RgPointVector RgPointVector;
-
-extern void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
-                                const char *source_file, int source_line);
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
-
-/* ov12:0x00a52948 "pRgCam != NIL" */
-/* ov12:0x00a52968 "pReader != NIL" */
-const char D_00A52968[] = "pReader != NIL";
+const char cameraAssertReaderNotNil[] = "pReader != NIL";
 
 /* ov12:0x00a52978 "---------- camera dump %p\n" */
-const char D_00A52978[] = "---------- camera dump %p\n";
+const char cameraDumpHeaderFormat[] = "---------- camera dump %p\n";
 
 /* ov12:0x00a52998 "  me=%p enemy=%p\n" */
-const char D_00A52998[] = "  me=%p enemy=%p\n";
+const char cameraDumpMeEnemyFormat[] = "  me=%p enemy=%p\n";
 
 static int _SetBit(int *flags, int bit, int value)
 {
@@ -95,18 +114,13 @@ static void _NonJobMethod(void)
 {
 }
 
-extern void assert_prog(const char *expression, const char *source_file, int line);
-extern void XrgClearVector(RgVector vector);
-extern void XrgCopyVector(RgVector destination, RgVector source);
-extern float *XrgVectorY(void);
-
 static void _InitAbstructCamera(RgCamera *camera, RgDrawStudio *studio)
 {
     if (camera == 0) {
-        assert_prog(D_00A52750, D_00A52760, 86);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 86);
     }
     if (studio == 0) {
-        assert_prog(D_00A52778, D_00A52760, 87);
+        assert_prog(cameraAssertStudioNotNil, cameraSourcePath, 87);
     }
     camera->studio = studio;
     XrgClearVector(camera->eye);
@@ -119,14 +133,14 @@ static void _InitAbstructCamera(RgCamera *camera, RgDrawStudio *studio)
     do {
         XrgClearVector(camera->target);
         XrgCopyVector(camera->up, XrgVectorY());
-        camera->actionState[0] = 0;
-        camera->actionState[1] = 0;
-        camera->actionState[4] = 1;
-        camera->actionState[2] = 0;
-        camera->actionState[3] = 0;
+        camera->turnRate = 0.0f;
+        camera->actionFlags = 0;
+        camera->snapToTarget = 1;
+        camera->me = 0;
+        camera->enemy = 0;
     } while (0);
-    camera->actionState[5] = 0;
-    camera->actionState[6] = 0;
+    camera->setCamera = 0;
+    camera->loadText = 0;
 }
 
 static void _SetView(RgCamera *camera)
@@ -140,19 +154,19 @@ static void _SetView(RgCamera *camera)
     XrgCopyVectorXYZ(direction, camera->target);
     direction[1] = 0.0f;
     pitch = atan2f(camera->target[1], XrgLengthVector(direction));
-    yaw = atan2f(direction[0], direction[2]) + 3.1415927f;
-    if (yaw > 3.1415927f) {
-        yaw -= 6.2831855f;
-        while (yaw > 3.1415927f) {
-            yaw -= 6.2831855f;
+    yaw = atan2f(direction[0], direction[2]) + XRG_PI;
+    if (yaw > XRG_PI) {
+        yaw -= XRG_TWO_PI;
+        while (yaw > XRG_PI) {
+            yaw -= XRG_TWO_PI;
         }
     }
-    if (yaw < -3.1415927f) {
+    if (yaw < -XRG_PI) {
         do {
-            yaw += 6.2831855f;
-        } while (yaw < -3.1415927f);
+            yaw += XRG_TWO_PI;
+        } while (yaw < -XRG_PI);
     }
-    __builtin_memcpy(&roll, &camera->actionState[0], sizeof(roll));
+    roll = camera->turnRate;
     view = RgDrawStudioGetView(camera->studio);
     RgDrawViewSetPosition(view, camera->eye);
     RgDrawViewSetRotateX(view, pitch);
@@ -174,22 +188,22 @@ static int _GetVer3TimerID(char *timerName)
 
 static int _IsActionRoll(RgCamera *camera)
 {
-    return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 2);
+    return _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_ROLL);
 }
 
 static int _IsActionAdvance(RgCamera *camera)
 {
-    return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 1);
+    return _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_ADVANCE);
 }
 
 static int _IsActionAttack(RgCamera *camera)
 {
-    return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 4);
+    return _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_ATTACK);
 }
 
 static int _IsActionSeeTarget(RgCamera *camera)
 {
-    return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 5);
+    return _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_SEE_TARGET);
 }
 
 static int _IsActionLockAndAttack(RgCamera *camera)
@@ -197,37 +211,29 @@ static int _IsActionLockAndAttack(RgCamera *camera)
     int result;
 
     result = 0;
-    if (_CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 4)) {
-        result = _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 0) != 0;
+    if (_CheckBit(camera->actionFlags, RG_CAMERA_ACTION_ATTACK)) {
+        result = _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_LOCKED_ON) != 0;
     }
     return result;
 }
 
 static int _IsActionLockOn(RgCamera *camera)
 {
-    return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 0);
+    return _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_LOCKED_ON);
 }
 
 static int _IsActionDash(RgCamera *camera)
 {
-    return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 3);
+    return _CheckBit(camera->actionFlags, RG_CAMERA_ACTION_DASH);
 }
-
-extern int RgDrawViewIsPointInView(RgDrawView *view, RgPointVector *point, float margin);
 
 static void _IsActionTargetInScrn(RgCamera *camera)
 {
-    /*
-     * A RgPointVector-sized scratch buffer (rg_geom_point.c owns the type);
-     * __RgGeomPointGetPos fills it and RgDrawViewIsPointInView reads it back.
-     */
-    unsigned char position[sizeof(RgVector)];
+    RgVector position;
 
-    /* actionState[3] (+0x4c) is the "enemy" geometry point of RgCameraDump's log. */
-    __RgGeomPointGetPos((RgGeomPoint *)camera->actionState[3],
-                         (RgPointVector *)position, D_00A52760, 220);
-    RgDrawViewIsPointInView(RgDrawStudioGetView(camera->studio),
-                             (RgPointVector *)position, 0.0f);
+    __RgGeomPointGetPos(camera->enemy, position, cameraSourcePath, 220);
+    RgDrawViewIsPointInView(RgDrawStudioGetView(camera->studio), position,
+                            0.0f);
 }
 
 static int _IsActionTrue(void)
@@ -240,16 +246,16 @@ static int _IsActionFalse(void)
     return 0;
 }
 
-static void _InitVer3Timer(RgVer3Timer *timer, int (*predicate)(int), float duration)
+static void _InitVer3Timer(RgVer3Timer *timer, int (*predicate)(RgCamera *), float duration)
 {
     timer->predicate = predicate;
     timer->duration = duration;
     timer->remaining = 0.0f;
 }
 
-static void _PreJobVer3Timer(RgVer3Timer *timer, int value)
+static void _PreJobVer3Timer(RgVer3Timer *timer, RgCamera *camera)
 {
-    if (timer->predicate != 0 && timer->predicate(value) != 0) {
+    if (timer->predicate != 0 && timer->predicate(camera) != 0) {
         timer->remaining = timer->duration;
     }
 }
@@ -270,11 +276,9 @@ static int _IsVer3TimerActive(RgVer3Timer *timer)
     return timer->remaining > 0.0f;
 }
 
-static void _SettingVersion3(void)
+static void _SettingVersion3(RgCamera *camera, RgGeomPoint **points)
 {
 }
-
-extern int (*s_apConditionTbl_0[10])(int);
 
 static void _SetVersion3Extent(RgCamera *camera)
 {
@@ -293,93 +297,70 @@ static void _SetVersion3Extent(RgCamera *camera)
     one = 1.0f;
     ten = 10.0f;
     half = 0.5f;
-    pi4 = 0.7853982f;
+    pi4 = XRG_QUARTER_PI;
     point3 = 0.3f;
-    camera->cam74 = one;
-    camera->cam78 = one;
+    camera->lookDown = one;
+    camera->upperOffset = one;
     camera->farDistance = twelve;
-    camera->cam74 = one;
-    camera->cam78 = one;
-    camera->cam7c = half;
-    RG_CAMERA_SELECTABLE_FAR(camera) = -1;
-    camera->cam90 = pi4;
-    camera->cam_a0 = 0;
-    camera->cam140 = 0;
-    camera->cam8c = ten;
-    camera->cam94 = ten;
-    camera->cam9c = point3;
-    camera->cam98 = 0;
-    for (timerIndex = 0; timerIndex < 10; timerIndex++) {
+    camera->lookDown = one;
+    camera->upperOffset = one;
+    camera->rollCoef = half;
+    camera->selectableFar = -1;
+    camera->lockAngle = pi4;
+    camera->useMoveDir = 0;
+    camera->conditionInvertMask = 0;
+    camera->enemyRange = ten;
+    camera->pullBack = ten;
+    camera->distanceSmoothing = point3;
+    camera->distance = 0;
+    for (timerIndex = 0; timerIndex < RG_CAMERA_TIMER_COUNT; timerIndex++) {
         _InitVer3Timer(&camera->timers[timerIndex], s_apConditionTbl_0[timerIndex], 0.5f);
     }
     three = 3;
     five = 5;
     do {
-        camera->cam13c = three;
-        camera->cam130 = five;
+        camera->conditionTimer[3] = three;
+        camera->conditionTimer[0] = five;
     } while (0);
     do {
-        camera->cam144 = 0;
-        camera->cam148 = 0;
+        camera->decisionIsAnd[0] = 0;
+        camera->decisionIsAnd[1] = 0;
     } while (0);
     do {
-        camera->cam134 = three;
-        camera->cam138 = 0;
+        camera->conditionTimer[1] = three;
+        camera->conditionTimer[2] = 0;
     } while (0);
 }
 
-
-extern void *memcpy(void *dest, const void *src, unsigned int n);
-extern unsigned int strlen(const char *s);
-extern const char D_00A527F8[];
-extern const char D_00A52808[];
-extern const char D_00A52818[];
-extern const char D_00A52828[];
-extern const char D_00A52838[];
-extern const char D_00A52848[];
-extern const char D_00A52858[];
-extern const char D_00A52860[];
-extern const char D_00A52868[];
-extern const char D_00A52870[];
-extern const char D_00A52878[];
-extern const char D_00A52880[];
-extern const char D_00A52888[];
-extern const char D_00A52898[];
-extern const char D_00A528A8[];
-extern const char D_00A528B8[];
-extern const char D_00A528C8[];
-extern const char D_00A528D0[];
-extern const char D_00A528D8[];
-
-static void _LoadVersion3(RgCamera *camera, void *reader)
+static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader)
 {
     char text[6][64];
     char *operatorText = text[4];
     struct RgTextInfoEntry table[] = {
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A527F8, (void *) 0x70, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A52808, (void *) 0x74, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A52818, (void *) 0x78, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A52828, (void *) 0x7C, 0 },
-        { RG_TEXT_INFO_BOOL_OFFSET, D_00A52838, (void *) 0xA0, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[0], (void *) 0xb4, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[1], (void *) 0xc0, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[2], (void *) 0xcc, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[3], (void *) 0xd8, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[4], (void *) 0xe4, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[5], (void *) 0xf0, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[6], (void *) 0xfc, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[7], (void *) 0x108, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A52848, (void *) 0xB4, 0 },
-        { RG_TEXT_INFO_STRING_ADDRESS, D_00A52858, text[0], 0 },
-        { RG_TEXT_INFO_STRING_ADDRESS, D_00A52860, text[1], 0 },
-        { RG_TEXT_INFO_STRING_ADDRESS, D_00A52868, text[2], 0 },
-        { RG_TEXT_INFO_STRING_ADDRESS, D_00A52870, text[3], 0 },
-        { RG_TEXT_INFO_STRING_ADDRESS, D_00A52878, text[4], 0 },
-        { RG_TEXT_INFO_STRING_ADDRESS, D_00A52880, text[5], 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A52888, (void *) 0x8C, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A52898, (void *) 0x90, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A528A8, (void *) 0x94, 0 },
-        { RG_TEXT_INFO_FLOAT_OFFSET, D_00A528B8, (void *) 0x9C, 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeyBehindOffset, (void *) offsetof(RgCamera, farDistance), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeyLookDown, (void *) offsetof(RgCamera, lookDown), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeyUpperOffset, (void *) offsetof(RgCamera, upperOffset), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeyRollCoef, (void *) offsetof(RgCamera, rollCoef), 0 },
+        { RG_TEXT_INFO_BOOL_OFFSET, cameraTextKeyUseMoveDir, (void *) offsetof(RgCamera, useMoveDir), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[0], (void *) offsetof(RgCamera, timers[0].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[1], (void *) offsetof(RgCamera, timers[1].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[2], (void *) offsetof(RgCamera, timers[2].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[3], (void *) offsetof(RgCamera, timers[3].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[4], (void *) offsetof(RgCamera, timers[4].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[5], (void *) offsetof(RgCamera, timers[5].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[6], (void *) offsetof(RgCamera, timers[6].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, s_aszVer3TimerName[7], (void *) offsetof(RgCamera, timers[7].duration), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeyRollTime, (void *) offsetof(RgCamera, timers[0].duration), 0 },
+        { RG_TEXT_INFO_STRING_ADDRESS, cameraTextKeyCondition1, text[0], 0 },
+        { RG_TEXT_INFO_STRING_ADDRESS, cameraTextKeyCondition2, text[1], 0 },
+        { RG_TEXT_INFO_STRING_ADDRESS, cameraTextKeyCondition3, text[2], 0 },
+        { RG_TEXT_INFO_STRING_ADDRESS, cameraTextKeyCondition4, text[3], 0 },
+        { RG_TEXT_INFO_STRING_ADDRESS, cameraTextKeyOperator1, text[4], 0 },
+        { RG_TEXT_INFO_STRING_ADDRESS, cameraTextKeyOperator2, text[5], 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeySubslideStart, (void *) offsetof(RgCamera, enemyRange), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeySubslideDegree, (void *) offsetof(RgCamera, lockAngle), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeySubslideLength, (void *) offsetof(RgCamera, pullBack), 0 },
+        { RG_TEXT_INFO_FLOAT_OFFSET, cameraTextKeySubslideCoef, (void *) offsetof(RgCamera, distanceSmoothing), 0 },
         { RG_TEXT_INFO_END }
     };
     int *timerId;
@@ -396,15 +377,15 @@ static void _LoadVersion3(RgCamera *camera, void *reader)
     operatorText[0] = 0;
     RgTextInfoRead(reader, table, (char *)camera);
 
-    camera->cam90 = camera->cam90 * 3.1415927f / 180.0f;
+    camera->lockAngle = camera->lockAngle * XRG_PI / 180.0f;
 
-    timerId = &camera->cam130;
+    timerId = camera->conditionTimer;
     for (i = 0; i < 4; i++) {
         name = text[i];
 
         if (name[0] == '!') {
             name++;
-            camera->cam140 |= 1 << i;
+            camera->conditionInvertMask |= 1 << i;
         }
         id = _GetVer3TimerID(name);
         if (id >= 0) {
@@ -412,33 +393,20 @@ static void _LoadVersion3(RgCamera *camera, void *reader)
         }
     }
 
-    operatorIsAnd = &camera->cam144;
+    operatorIsAnd = camera->decisionIsAnd;
     operator = operatorText;
     for (i = 0; i < 2; i++) {
-        if (strcmp(operator, D_00A528C8) == 0) {
+        if (strcmp(operator, cameraOperatorAndText) == 0) {
             *operatorIsAnd = 1;
-        } else if (strcmp(operator, D_00A528D0) == 0) {
+        } else if (strcmp(operator, cameraOperatorOrText) == 0) {
             *operatorIsAnd = 0;
         } else if (strlen(operator) != 0) {
-            RgError(D_00A528D8, D_00A52760, 429, operator);
+            RgError(cameraUnknownOperatorFormat, cameraSourcePath, 429, operator);
         }
         operatorIsAnd++;
         operator += 64;
     }
 }
-
-
-extern float sinf(float x);
-extern float cosf(float x);
-extern void XrgPadSetID(int pad_id);
-extern int XrgPadIsSelect(void);
-extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
-extern void XrgOuterVector(RgVector destination, RgVector first, RgVector second);
-extern float XrgInnerVector(RgVector first, RgVector second);
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern float RgGeomRobotGetRotate(const RgGeom *geom);
-extern void RgCameraResetAction(RgCamera *pRgCam);
-extern const char D_00A528F8[];
 
 static void _PassTimeVersion3(RgCamera *camera, float elapsed)
 {
@@ -480,18 +448,18 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
     float smoothVel;
     float smoothedDist;
 
-    me = (RgGeomPoint *)camera->actionState[2];
-    enemy = (RgGeomPoint *)camera->actionState[3];
-    prevInt50 = RG_CAMERA_INT_50(camera);
-    RG_CAMERA_INT_50(camera) = 0;
+    me = camera->me;
+    enemy = camera->enemy;
+    prevInt50 = camera->snapToTarget;
+    camera->snapToTarget = 0;
 
-    if (RG_CAMERA_SELECTABLE_FAR(camera) >= 0) {
-        XrgPadSetID(RG_CAMERA_SELECTABLE_FAR(camera));
+    if (camera->selectableFar >= 0) {
+        XrgPadSetID(camera->selectableFar);
         if (XrgPadIsSelect()) {
-            if (camera->farDistance >= 10.0f) {
-                camera->farDistance = 8.0f;
+            if (camera->farDistance >= RG_CAMERA_FAR_THRESHOLD) {
+                camera->farDistance = RG_CAMERA_NEAR_DISTANCE;
             } else {
-                camera->farDistance = 14.0f;
+                camera->farDistance = RG_CAMERA_FAR_DISTANCE;
             }
         }
     }
@@ -503,30 +471,30 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
     target = &camera->target;
     XrgCopyVector(targetCopy, *target);
     yaw = atan2f(targetCopy[0], targetCopy[2]);
-    smoothVel = RG_CAMERA_FLOAT_40(camera);
+    smoothVel = camera->turnRate;
 
     targetDist = camera->farDistance;
-    __RgGeomPointGetPos(me, (RgPointVector *)pos, D_00A52760, 494);
+    __RgGeomPointGetPos(me, pos, cameraSourcePath, 494);
     if (enemy != 0) {
-        __RgGeomPointGetPos(enemy, (RgPointVector *)enemyPos, D_00A52760, 496);
+        __RgGeomPointGetPos(enemy, enemyPos, cameraSourcePath, 496);
     } else {
         XrgClearVector(enemyPos);
     }
     XrgSubVector(delta, enemyPos, pos);
     dist = XrgLengthVector(delta);
-    robotRot = RgGeomRobotGetRotate(me);
+    robotRot = RgGeomRobotGetRotate(&me->geom);
     enemyYaw = atan2f(delta[0], delta[2]);
 
-    timers = RG_CAMERA_VER3_TIMERS(camera);
-    for (i = 0; i < 10; i++) {
-        _PreJobVer3Timer(&timers[i], (int)camera);
+    timers = camera->timers;
+    for (i = 0; i < RG_CAMERA_TIMER_COUNT; i++) {
+        _PreJobVer3Timer(&timers[i], camera);
         timerActive[i] = _IsVer3TimerActive(&timers[i]);
     }
 
-    mask = RG_CAMERA_INT_140(camera);
+    mask = camera->conditionInvertMask;
     for (i = 0; i <= 3; i++) {
         int bit = 1 << i;
-        int active = timerActive[RG_CAMERA_TIMER_IDS(camera)[i]];
+        int active = timerActive[camera->conditionTimer[i]];
 
         localFlag[i] = active;
         if (mask & bit) {
@@ -535,7 +503,7 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
     }
 
     for (i = 0; i < 2; i++) {
-        switch (RG_CAMERA_FLAGS_144(camera)[i]) {
+        switch (camera->decisionIsAnd[i]) {
         case 1:
             outFlag[i] = localFlag[i * 2] && localFlag[i * 2 + 1];
             break;
@@ -543,7 +511,7 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
             outFlag[i] = localFlag[i * 2] || localFlag[i * 2 + 1];
             break;
         default:
-            RgError(D_00A528F8, D_00A52760, 525, RG_CAMERA_FLAGS_144(camera)[i], i);
+            RgError(cameraUnknownBoolOperatorFormat, cameraSourcePath, 525, camera->decisionIsAnd[i], i);
             break;
         }
     }
@@ -556,32 +524,32 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
         } else {
             desiredYaw = yaw;
         }
-    } else if (RG_CAMERA_USE_MOVE_DIR(camera) != 0) {
+    } else if (camera->useMoveDir != 0) {
         RgGeomPointGetVel(me, dirVec);
         desiredYaw = atan2f(dirVec[0], dirVec[2]);
     } else {
-        desiredYaw = RgGeomRobotGetRotate(me);
+        desiredYaw = RgGeomRobotGetRotate(&me->geom);
     }
 
     XrgCopyVector(yAxis, XrgVectorY());
 
-    ratio = (RG_CAMERA_FLOAT_8C(camera) - dist) / RG_CAMERA_FLOAT_8C(camera);
+    ratio = (camera->enemyRange - dist) / camera->enemyRange;
     diff = enemyYaw - robotRot;
-    while (diff > 3.1415927f) {
-        diff -= 6.2831855f;
+    while (diff > XRG_PI) {
+        diff -= XRG_TWO_PI;
     }
-    while (diff < -3.1415927f) {
-        diff += 6.2831855f;
+    while (diff < -XRG_PI) {
+        diff += XRG_TWO_PI;
     }
     if (diff < 0.0f) {
         diff = -diff;
     }
-    limit = RG_CAMERA_FLOAT_90(camera);
-    limit = limit / (3.1415927f - limit);
+    limit = camera->lockAngle;
+    limit = limit / (XRG_PI - limit);
     excess = diff - limit;
     if (ratio > 0.0f) {
         if (excess > 0.0f) {
-            targetDist = camera->farDistance + RG_CAMERA_FLOAT_94(camera) * ratio;
+            targetDist = camera->farDistance + camera->pullBack * ratio;
         }
     }
 
@@ -590,65 +558,62 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
         RgGeomPointGetVel(me, vel);
         XrgOuterVector(outer, *target, *up);
         if (0.0f < XrgInnerVector(outer, vel)) {
-            turnRate = 0.039269908f;
+            turnRate = RG_CAMERA_TURN_STEP;
         } else {
-            turnRate = -0.039269908f;
+            turnRate = -RG_CAMERA_TURN_STEP;
         }
     }
 
     if (prevInt50 != 0) {
-        RG_CAMERA_FLOAT_98(camera) = targetDist;
+        camera->distance = targetDist;
         yaw = desiredYaw;
         smoothVel = smoothVel * 0.9f + turnRate * 0.1f;
-        eyeCopy[0] = mePos[0] - sinf(yaw) * RG_CAMERA_FLOAT_98(camera);
-        eyeCopy[1] = mePos[1] + RG_CAMERA_UPPER_OFFSET(camera);
-        eyeCopy[2] = mePos[2] - cosf(yaw) * RG_CAMERA_FLOAT_98(camera);
+        eyeCopy[0] = mePos[0] - sinf(yaw) * camera->distance;
+        eyeCopy[1] = mePos[1] + camera->upperOffset;
+        eyeCopy[2] = mePos[2] - cosf(yaw) * camera->distance;
         XrgCopyVector(upCopy, yAxis);
     } else {
         yawDelta = desiredYaw - yaw;
-        while (yawDelta > 3.1415927f) {
-            yawDelta -= 6.2831855f;
+        while (yawDelta > XRG_PI) {
+            yawDelta -= XRG_TWO_PI;
         }
-        while (yawDelta < -3.1415927f) {
-            yawDelta += 6.2831855f;
+        while (yawDelta < -XRG_PI) {
+            yawDelta += XRG_TWO_PI;
         }
-        yaw += yawDelta * RG_CAMERA_ROLL_COEF(camera);
-        smoothedDist = targetDist * RG_CAMERA_FLOAT_9C(camera)
-            + RG_CAMERA_FLOAT_98(camera) * (1.0f - RG_CAMERA_FLOAT_9C(camera));
-        RG_CAMERA_FLOAT_98(camera) = smoothedDist;
+        yaw += yawDelta * camera->rollCoef;
+        smoothedDist = targetDist * camera->distanceSmoothing
+            + camera->distance * (1.0f - camera->distanceSmoothing);
+        camera->distance = smoothedDist;
         smoothVel = smoothVel * 0.9f + turnRate * 0.1f;
-        eyeCopy[0] = mePos[0] - sinf(yaw) * RG_CAMERA_FLOAT_98(camera);
-        eyeCopy[1] = mePos[1] + RG_CAMERA_UPPER_OFFSET(camera);
-        eyeCopy[2] = mePos[2] - cosf(yaw) * RG_CAMERA_FLOAT_98(camera);
+        eyeCopy[0] = mePos[0] - sinf(yaw) * camera->distance;
+        eyeCopy[1] = mePos[1] + camera->upperOffset;
+        eyeCopy[2] = mePos[2] - cosf(yaw) * camera->distance;
         XrgCopyVector(upCopy, yAxis);
     }
 
     delta[0] = sinf(yaw) * camera->farDistance;
-    delta[1] = -RG_CAMERA_LOOK_DOWN(camera);
+    delta[1] = -camera->lookDown;
     delta[2] = cosf(yaw) * camera->farDistance;
     XrgCopyVectorXYZ(*target, delta);
     XrgCopyVectorXYZ(*eye, eyeCopy);
     XrgCopyVectorXYZ(*up, upCopy);
-    RG_CAMERA_FLOAT_40(camera) = smoothVel;
+    camera->turnRate = smoothVel;
 
     _SetView(camera);
-    for (i = 0; i < 10; i++) {
-        _PastVer3Timer(&RG_CAMERA_VER3_TIMERS(camera)[i], elapsed);
+    for (i = 0; i < RG_CAMERA_TIMER_COUNT; i++) {
+        _PastVer3Timer(&camera->timers[i], elapsed);
     }
     RgCameraResetAction(camera);
 }
 
-static void _SetVersion3Extent(RgCamera *camera);
-static void _LoadVersion3(RgCamera *camera, void *reader);
-
 static void _InitVersion3(RgCamera *camera, RgDrawStudio *studio)
 {
     if (camera == 0) {
-        assert_prog(D_00A52750, D_00A52760, 652);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 652);
     }
     _InitAbstructCamera(camera, studio);
-    camera->actionState[5] = (int) _SettingVersion3;
-    camera->actionState[6] = (int) _LoadVersion3;
+    camera->setCamera = _SettingVersion3;
+    camera->loadText = _LoadVersion3;
     _SetVersion3Extent(camera);
 }
 
@@ -658,20 +623,20 @@ RgCamera *CreateRgCamera(int cameraVersion, RgDrawStudio *studio)
 
     camera = 0;
     if (cameraVersion == 0) {
-        RgError(D_00A52920, D_00A52760, 676, cameraVersion);
+        RgError(cameraVersionErrorFormat, cameraSourcePath, 676, cameraVersion);
     } else if (cameraVersion == 1) {
-        RgError(D_00A52920, D_00A52760, 679, cameraVersion);
-    } else if (cameraVersion == 2) {
+        RgError(cameraVersionErrorFormat, cameraSourcePath, 679, cameraVersion);
+    } else if (cameraVersion == RG_CAMERA_VERSION3) {
         RgCamera *allocatedCamera;
 
-        allocatedCamera = RgHeapAlloc(InstanceOfRgHeap(), 0x150, D_00A52760, 683);
+        allocatedCamera = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgCamera), cameraSourcePath, 683);
         if (allocatedCamera == 0) {
-            assert_prog(D_00A52750, D_00A52760, 684);
+            assert_prog(cameraAssertCamNotNil, cameraSourcePath, 684);
         }
         _InitVersion3(allocatedCamera, studio);
         camera = allocatedCamera;
     } else {
-        assert_prog(D_00A52940, D_00A52760, 689);
+        assert_prog(cameraAssertZero, cameraSourcePath, 689);
     }
     return camera;
 }
@@ -679,50 +644,41 @@ RgCamera *CreateRgCamera(int cameraVersion, RgDrawStudio *studio)
 void DisposeRgCamera(RgCamera *pRgCam)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 697);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 697);
     }
-    RgHeapFree(InstanceOfRgHeap(), pRgCam, D_00A52760, 698);
+    RgHeapFree(InstanceOfRgHeap(), pRgCam, cameraSourcePath, 698);
 }
 
-typedef struct RgCameraEssence {
-    int me_point_address;
-    int enemy_point_address;
-} RgCameraEssence;
-
-void RgCameraSetting(RgCamera *camera, RgCameraEssence *essence)
+void RgCameraSetting(RgCamera *camera, RgGeomPoint **essence)
 {
-    void (*setCamera)(RgCamera *, RgCameraEssence *);
+    void (*setCamera)(RgCamera *, RgGeomPoint **);
 
     if (camera == 0) {
-        assert_prog(D_00A52750, D_00A52760, 709);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 709);
     }
     if (essence == 0) {
-        assert_prog(D_00A52958, D_00A52760, 710);
+        assert_prog(cameraAssertEssenceNotNil, cameraSourcePath, 710);
     }
-    setCamera = (void (*)(RgCamera *, RgCameraEssence *))camera->actionState[5];
-    camera->actionState[2] = essence->me_point_address;
-    camera->actionState[3] = essence->enemy_point_address;
+    setCamera = camera->setCamera;
+    camera->me = essence[0];
+    camera->enemy = essence[1];
     if (setCamera != 0) {
         setCamera(camera, essence);
     }
     RgDrawViewInit(RgDrawStudioGetView(camera->studio));
 }
 
-void RgCameraLoadText(RgCamera *pCam, void *pReader)
+void RgCameraLoadText(RgCamera *pCam, struct RgReadText *pReader)
 {
-    void (*loadText)(RgCamera *, void *);
+    void (*loadText)(RgCamera *, struct RgReadText *);
 
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 726);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 726);
     }
     if (pReader == 0) {
-        assert_prog(D_00A52968, D_00A52760, 727);
+        assert_prog(cameraAssertReaderNotNil, cameraSourcePath, 727);
     }
-    /*
-     * actionState[6] (+0x58) holds a per-mode text-load callback; the array's
-     * other indices are unrelated (see RgCamera's own definition).
-     */
-    loadText = (void (*)(RgCamera *, void *))pCam->actionState[6];
+    loadText = pCam->loadText;
     if (loadText != 0) {
         loadText(pCam, pReader);
     }
@@ -731,47 +687,46 @@ void RgCameraLoadText(RgCamera *pCam, void *pReader)
 void RgCameraSetFarMode(RgCamera *pCam, int enable)
 {
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 737);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 737);
     }
     if (enable != 0) {
-        pCam->farDistance = 14.0f;
+        pCam->farDistance = RG_CAMERA_FAR_DISTANCE;
     } else {
-        pCam->farDistance = 8.0f;
+        pCam->farDistance = RG_CAMERA_NEAR_DISTANCE;
     }
 }
 
 void RgCameraSelectableFar(RgCamera *pCam, int level)
 {
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 750);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 750);
     }
     if (level >= 2) {
         level = -1;
     }
-    RG_CAMERA_SELECTABLE_FAR(pCam) = level;
+    pCam->selectableFar = level;
 }
 
 void RgCameraLocal(RgCamera *pCam, RgMatrix matrix)
 {
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 762);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 762);
     }
     RgCalcLocalForChar(matrix, pCam->eye, pCam->target, pCam->up);
 }
 
-void RgCameraGetTarget(RgCamera *pCam, RgPointVector *position)
+void RgCameraGetTarget(RgCamera *pCam, RgVector position)
 {
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 771);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 771);
     }
-    /* actionState[2] (+0x48) is the "me" geometry point of RgCameraDump's log. */
-    __RgGeomPointGetPos((RgGeomPoint *)pCam->actionState[2], position, D_00A52760, 772);
+    __RgGeomPointGetPos(pCam->me, position, cameraSourcePath, 772);
 }
 
 RgDrawStudio *RgCameraGetStudio(RgCamera *pCam)
 {
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 779);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 779);
     }
     return pCam->studio;
 }
@@ -779,63 +734,63 @@ RgDrawStudio *RgCameraGetStudio(RgCamera *pCam)
 void RgCameraResetAction(RgCamera *pRgCam)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 789);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 789);
     }
-    pRgCam->actionState[1] = 0;
+    pRgCam->actionFlags = 0;
 }
 
 void RgCameraSetActionLockedOn(RgCamera *pRgCam, int enable)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 797);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 797);
     }
-    _SetBit(&pRgCam->actionState[1], 0, enable);
+    _SetBit(&pRgCam->actionFlags, RG_CAMERA_ACTION_LOCKED_ON, enable);
 }
 
 void RgCameraSetActionAdvance(RgCamera *pRgCam, int enable)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 805);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 805);
     }
-    _SetBit(&pRgCam->actionState[1], 1, enable);
+    _SetBit(&pRgCam->actionFlags, RG_CAMERA_ACTION_ADVANCE, enable);
 }
 
 void RgCameraSetActionRoll(RgCamera *pRgCam, int enable)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 813);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 813);
     }
-    _SetBit(&pRgCam->actionState[1], 2, enable);
+    _SetBit(&pRgCam->actionFlags, RG_CAMERA_ACTION_ROLL, enable);
 }
 
 void RgCameraSetActionDash(RgCamera *pRgCam, int enable)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 821);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 821);
     }
-    _SetBit(&pRgCam->actionState[1], 3, enable);
+    _SetBit(&pRgCam->actionFlags, RG_CAMERA_ACTION_DASH, enable);
 }
 
 void RgCameraSetActionAttack(RgCamera *pRgCam, int enable)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 829);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 829);
     }
-    _SetBit(&pRgCam->actionState[1], 4, enable);
+    _SetBit(&pRgCam->actionFlags, RG_CAMERA_ACTION_ATTACK, enable);
 }
 
 void RgCameraSetActionSeeTarget(RgCamera *pRgCam, int enable)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 837);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 837);
     }
-    _SetBit(&pRgCam->actionState[1], 5, enable);
+    _SetBit(&pRgCam->actionFlags, RG_CAMERA_ACTION_SEE_TARGET, enable);
 }
 
 void RgCameraControl(RgCamera *pCam, float elapsed)
 {
     if (pCam == 0) {
-        assert_prog(D_00A52750, D_00A52760, 846);
+        assert_prog(cameraAssertCamNotNil, cameraSourcePath, 846);
     }
     _PassTimeVersion3(pCam, elapsed);
 }
@@ -843,29 +798,29 @@ void RgCameraControl(RgCamera *pCam, float elapsed)
 void RgCameraDump(RgCamera *pRgCam)
 {
     if (pRgCam == 0) {
-        assert_prog(D_00A52948, D_00A52760, 854);
+        assert_prog(cameraAssertRgCamNotNil, cameraSourcePath, 854);
     }
-    XrgLog(D_00A52978, D_00A52760, 858, pRgCam);
-    XrgLog(D_00A52998, D_00A52760, 859,
-           (void *)pRgCam->actionState[2], (void *)pRgCam->actionState[3]);
+    XrgLog(cameraDumpHeaderFormat, cameraSourcePath, 858, pRgCam);
+    XrgLog(cameraDumpMeEnemyFormat, cameraSourcePath, 859,
+           pRgCam->me, pRgCam->enemy);
 }
 
-const char D_00A52788[16] = "all-false";
+const char cameraDumpAllFalseText[16] = "all-false";
 
-const char D_00A52798[16] = "all-true";
+const char cameraDumpAllTrueText[16] = "all-true";
 
-const char D_00A527A8[16] = "see-target";
+const char cameraDumpSeeTargetText[16] = "see-target";
 
-const char D_00A527B8[8] = "lock";
+const char cameraDumpLockText[8] = "lock";
 
-const char D_00A527C0[8] = "in-scrn";
+const char cameraDumpInScreenText[8] = "in-scrn";
 
-const char D_00A527C8[8] = "dash";
+const char cameraDumpDashText[8] = "dash";
 
-const char D_00A527D0[16] = "lock-attack";
+const char cameraDumpLockAttackText[16] = "lock-attack";
 
-const char D_00A527E0[8] = "attack";
+const char cameraDumpAttackText[8] = "attack";
 
-const char D_00A527E8[8] = "advance";
+const char cameraDumpAdvanceText[8] = "advance";
 
-const char D_00A527F0[8] = "roll";
+const char cameraDumpRollText[8] = "roll";

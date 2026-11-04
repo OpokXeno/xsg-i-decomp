@@ -3,29 +3,19 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_dispmodel.h"
+#include "ov12/rg_dispmodel.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
-                       int line);
-extern void XrgUnitMatrix(RgMatrix destination);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a58720 contains the assertion expression "pDispModel != NIL".
- * ov12:0x00a58738 contains the source filename "../rg_dispmodel.euc.c".
- */
-const char D_00A58720[] = "pDispModel != NIL";
-const char D_00A58738[] = "../rg_dispmodel.euc.c";
+const char dispModelAssertNotNil[] = "pDispModel != NIL";
+const char dispModelSourcePath[] = "../rg_dispmodel.euc.c";
 
 void InitRgDispModel(RgDispModel *pDispModel)
 {
     if (pDispModel == 0) {
-        assert_prog(D_00A58720, D_00A58738, 18);
+        assert_prog(dispModelAssertNotNil, dispModelSourcePath, 18);
     }
 
     pDispModel->dispMethod = 0;
@@ -39,22 +29,22 @@ void InitRgDispModel(RgDispModel *pDispModel)
 void DisposeRgDispModel(RgDispModel *pDispModel)
 {
     if (pDispModel == 0) {
-        assert_prog(D_00A58720, D_00A58738, 30);
+        assert_prog(dispModelAssertNotNil, dispModelSourcePath, 30);
     }
 
     if (pDispModel->destructMethod != 0) {
         pDispModel->destructMethod(pDispModel);
     }
-    RgHeapFree(InstanceOfRgHeap(), pDispModel, D_00A58738, 33);
+    RgHeapFree(InstanceOfRgHeap(), pDispModel, dispModelSourcePath, 33);
 }
 
 void RgDispModelDisplay(RgDispModel *pDispModel)
 {
     if (pDispModel == 0) {
-        assert_prog(D_00A58720, D_00A58738, 41);
+        assert_prog(dispModelAssertNotNil, dispModelSourcePath, 41);
     }
 
-    if (pDispModel->dispMethod != 0 && !(pDispModel->mode & 2)) {
+    if (pDispModel->dispMethod != 0 && !(pDispModel->mode & RG_DISP_MODEL_MODE_HIDDEN)) {
         pDispModel->dispMethod(pDispModel);
     }
 }
@@ -80,16 +70,10 @@ void RgDispModelSetLocal(RgDispModel *pDispModel, const RgMatrix source)
     }
 }
 
-/*
- * RgDispModel keeps its local four-by-four matrix at byte offset zero.  The
- * neighboring setter passes the model pointer directly to XrgCopyMatrix,
- * while the getter reverses the argument order for the destination copy.
- */
-
-void RgDispModelGetLocal(void *model, RgMatrix destination)
+void RgDispModelGetLocal(RgDispModel *pDispModel, RgMatrix destination)
 {
-    if (model != 0)
-        XrgCopyMatrix(destination, (float *)model);
+    if (pDispModel != 0)
+        XrgCopyMatrix(destination, pDispModel->local);
 }
 
 void RgDispModelSetTransparent(RgDispModel *pDispModel, float transparent)

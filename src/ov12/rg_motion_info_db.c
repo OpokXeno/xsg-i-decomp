@@ -3,47 +3,78 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_actor_charid.h"
+#include "ov12/rg_actor_motid.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_motion_info_db.h"
+#include "ov12/rg_read_text.h"
 #include "ov12/rg_singleton_id.h"
-#include "rg_motion_info_db.h"
+#include "ov12/xrg_v_log.h"
 
-const char D_00A52460[16] = "pInfo != NIL";
-
-const char D_00A52470[32] = "../rg_motion_info_db.euc.c";
-
-const char D_00A52490[48] = "pInfo->m_uActTblSiz < RG_MOTINFO_ACT_TABLE_SIZE";
-
-const char D_00A524C0[32] = "pTable->m_uTblSize < ENTRY_MAX";
-
-const char D_00A524E0[16] = "pDB != NIL";
-
-const char D_00A52598[16] = "pMotInfo != NIL";
-
-const char D_00A525A8[48] = "dump shot info %d ----------------------\n";
-
-const char D_00A525D8[24] = "--- list mot %d ---\n";
-
-const char D_00A525F0[24] = "  ** char %d **\n";
-
-const char D_00A52608[16] = "   mot id = %d\n";
-
-const char D_00A52618[24] = "   mot flag = %x\n";
-
-const char D_00A52630[48] = "    [action %d (%f,%f) shift-mot %d wep %d]\n";
-
-#define RG_MOTION_ANY_TIME 100000000.0f
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
+/* libgcc float-to-double helper (shared.h cannot declare it: main/matrix_print.c uses another result type). */
 extern double fptodp(float value);
+
+/* Bytes of the singleton's allocation, and of the loader's token buffer. */
+#define RG_MOTION_INFO_DB_ALLOC_BYTES 0x280
+#define RG_MOTINFO_TOKEN_SIZE 0x80
+
+/* Motion frames per second: "action-f" and "hit-shift-f" times are frames. */
+#define RG_MOTION_FRAME_RATE 30.0f
+
+/* Defaults of the action InitDB seeds RgMotionInfoDB.defaultShotInfo with. */
+#define RG_MOTION_DEFAULT_START 0.1f
+#define RG_MOTION_DEFAULT_END 0.2f
+
+
+/* Scaffold-owned data (splat names): the text file name and the keywords. */
+extern const char motionInfoDbFileName[];
+extern const char motionInfoDbActionToken[];
+extern const char motionInfoDbAssertStartTimeBeforeEndTime[];
+extern const char motionInfoDbActionFrameToken[];
+extern const char motionInfoDbAssertStartBeforeEnd[];
+extern const char motionInfoDbNextToken[];
+extern const char motionInfoDbAssertActNotNil[];
+extern const char motionInfoDbEventToken[];
+extern const char motionInfoDbHitShiftFrameToken[];
+extern const char motionInfoDbShotBodyToken[];
+extern const char motionInfoDbShotNotFixToken[];
+extern const char motionInfoDbCharToken[];
+
+static void _TableFree(RgMotionInfoDB *db);
+static void _InitDB(RgMotionInfoDB *db);
+static void _WrapperDestruct(void *db);
+RgMotionShotInfo *_TableGetMatchChar(RgMotionInfoDB *db, int motionNo,
+                                     int charId);
+
+const char motionInfoDbAssertInfoNotNil[16] = "pInfo != NIL";
+
+const char motionInfoDbSourcePath[32] = "../rg_motion_info_db.euc.c";
+
+const char motionInfoDbAssertActTableSizeBelowMax[48] = "pInfo->m_uActTblSiz < RG_MOTINFO_ACT_TABLE_SIZE";
+
+const char motionInfoDbAssertTableSizeBelowEntryMax[32] = "pTable->m_uTblSize < ENTRY_MAX";
+
+const char motionInfoDbAssertDbNotNil[16] = "pDB != NIL";
+
+const char motionInfoDbAssertMotInfoNotNil[16] = "pMotInfo != NIL";
+
+const char motionInfoDbDumpHeaderFormat[48] = "dump shot info %d ----------------------\n";
+
+const char motionInfoDbDumpActionFormat[24] = "--- list mot %d ---\n";
+
+const char motionInfoDbDumpCharFormat[24] = "  ** char %d **\n";
+
+const char motionInfoDbDumpMotionIdFormat[16] = "   mot id = %d\n";
+
+const char motionInfoDbDumpMotionFlagFormat[24] = "   mot flag = %x\n";
+
+const char motionInfoDbDumpActionEntryFormat[48] = "    [action %d (%f,%f) shift-mot %d wep %d]\n";
 
 static void _InitRgMotionShotInfo(RgMotionShotInfo *info, int motionNo)
 {
     if (info == 0) {
-        assert_prog(D_00A52460, D_00A52470, 51);
+        assert_prog(motionInfoDbAssertInfoNotNil, motionInfoDbSourcePath, 51);
     }
     info->motionNo = motionNo;
     info->next = 0;
@@ -51,15 +82,13 @@ static void _InitRgMotionShotInfo(RgMotionShotInfo *info, int motionNo)
     info->charId = -1;
 }
 
-#define RG_MOTINFO_ACT_TABLE_SIZE 4
-
 static RgMotionAction *_AddActionRgMotion(RgMotionShotInfo *info, int actionNo,
                                           float startTime, float endTime)
 {
     RgMotionAction *action;
 
     if (!((unsigned int)info->actionCount < RG_MOTINFO_ACT_TABLE_SIZE)) {
-        assert_prog(D_00A52490, D_00A52470, 65);
+        assert_prog(motionInfoDbAssertActTableSizeBelowMax, motionInfoDbSourcePath, 65);
     }
     action = &info->actions[info->actionCount++];
     action->actionNo = actionNo;
@@ -147,14 +176,11 @@ RgMotionShotInfo *_TableGetMatchChar(RgMotionInfoDB *db, int motionNo,
 
 static void _TableEntry(RgMotionInfoDB *db, RgMotionShotInfo *entry)
 {
-    if ((unsigned int)db->entryCount >= 0x80) {
-        assert_prog(D_00A524C0, D_00A52470, 176);
+    if ((unsigned int)db->entryCount >= RG_MOTINFO_ENTRY_MAX) {
+        assert_prog(motionInfoDbAssertTableSizeBelowEntryMax, motionInfoDbSourcePath, 176);
     }
     db->table[db->entryCount++] = entry;
 }
-
-extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
-                       int line);
 
 static void _TableFree(RgMotionInfoDB *db)
 {
@@ -166,7 +192,7 @@ static void _TableFree(RgMotionInfoDB *db)
         info = db->table[i];
         while (info != 0) {
             next = info->next;
-            RgHeapFree(InstanceOfRgHeap(), info, D_00A52470, 189);
+            RgHeapFree(InstanceOfRgHeap(), info, motionInfoDbSourcePath, 189);
             info = next;
         }
     }
@@ -178,80 +204,39 @@ static void _InitDB(RgMotionInfoDB *db) {
 
     info = &db->defaultShotInfo;
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 200);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 200);
     }
     _TableInit(db);
     _InitRgMotionShotInfo(info, -1);
-    _AddActionRgMotion(info, 0, 0.1f, 0.2f);
+    _AddActionRgMotion(info, RG_MOTION_ACTION_ACTION, RG_MOTION_DEFAULT_START,
+                        RG_MOTION_DEFAULT_END);
 }
-
-/* Same TU, not part of this allocation. */
-static void _TableFree(RgMotionInfoDB *db);
 
 static void _DestructDB(RgMotionInfoDB *db)
 {
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 211);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 211);
     }
     _TableFree(db);
 }
 
-static void _WrapperDestruct(RgMotionInfoDB *db) {
+static void _WrapperDestruct(void *db) {
     _DestructDB(db);
-    RgHeapFree(InstanceOfRgHeap(), db, D_00A52470, 215);
+    RgHeapFree(InstanceOfRgHeap(), db, motionInfoDbSourcePath, 215);
 }
-
-/* Same TU, not part of this allocation. */
-static void _InitDB(RgMotionInfoDB *db);
-static void _WrapperDestruct(RgMotionInfoDB *db);
 
 RgMotionInfoDB *InstanceOfRgMotionInfoDB(void)
 {
     RgMotionInfoDB *db;
 
-    db = RgSingletonIDGet(12);
+    db = RgSingletonIDGet(RG_SINGLETON_MOTION_INFO_DB);
     if (db == 0) {
-        db = RgHeapAlloc(InstanceOfRgHeap(), 0x280, D_00A52470, 225);
+        db = RgHeapAlloc(InstanceOfRgHeap(), RG_MOTION_INFO_DB_ALLOC_BYTES, motionInfoDbSourcePath, 225);
         _InitDB(db);
-        /*
-         * The registry keeps any singleton with its destructor; its shared
-         * prototype (include/shared.h, config/header-canon.json) is spelled
-         * for the RgSimpleDB singletons, so this one converts at the call.
-         */
-        RgSingletonIDEntry(12, (RgSimpleDB *)db,
-                           (void (*)(RgSimpleDB *))_WrapperDestruct);
+        RgSingletonIDEntry(RG_SINGLETON_MOTION_INFO_DB, db, _WrapperDestruct);
     }
     return db;
 }
-
-/*
- * Opaque text reader owned by ov12/tu036 (src/ov12/rg_read_text.h): this TU
- * only forwards the pointer between the RgReadText* calls below.
- */
-typedef struct RgReadText RgReadText;
-
-extern RgReadText *CreateRgReadText(const char *pszName);
-extern void DisposeRgReadText(RgReadText *pReader);
-extern void RgReadTextGetString(RgReadText *pReader, char *pszOut);
-extern float RgReadTextGetFloat(RgReadText *pReader);
-extern int RgReadTextIsEOF(RgReadText *pReader);
-extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
-extern int RgActorMotIDGetFromName(const char *pszName);
-extern int RgActorNameToCharID(const char *pszName);
-extern int strcasecmp(const char *pszLeft, const char *pszRight);
-/* Scaffold-owned data (splat names): the text file name and the keywords. */
-extern const char D_00A524F0[];
-extern const char D_00A52500[];
-extern const char D_00A52508[];
-extern const char D_00A52520[];
-extern const char D_00A52530[];
-extern const char D_00A52540[];
-extern const char D_00A52548[];
-extern const char D_00A52558[];
-extern const char D_00A52560[];
-extern const char D_00A52570[];
-extern const char D_00A52580[];
-extern const char D_00A52590[];
 
 void RgMotionInfoDBLoad(RgMotionInfoDB *db)
 {
@@ -259,33 +244,33 @@ void RgMotionInfoDBLoad(RgMotionInfoDB *db)
     RgMotionShotInfo *info;
     RgMotionShotInfo *existing;
     RgMotionAction *action;
-    char szToken[0x80];
+    char szToken[RG_MOTINFO_TOKEN_SIZE];
     int motionNo;
 
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 239);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 239);
     }
-    reader = CreateRgReadText(D_00A524F0);
+    reader = CreateRgReadText(motionInfoDbFileName);
     if (reader != 0) {
         while (RgReadTextIsEOF(reader) == 0) {
             RgReadTextGetString(reader, szToken);
             motionNo = RgActorMotIDGetFromName(szToken);
-            info = RgHeapAlloc(InstanceOfRgHeap(), 0x64, D_00A52470, 258);
+            info = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgMotionShotInfo), motionInfoDbSourcePath, 258);
             _InitRgMotionShotInfo(info, motionNo);
 
             while (RgReadTextIsEOF(reader) == 0) {
                 RgReadTextGetString(reader, szToken);
-                if (strcasecmp(szToken, D_00A52500) == 0) {
+                if (strcasecmp(szToken, motionInfoDbActionToken) == 0) {
                     float startTime;
                     float endTime;
 
                     startTime = RgReadTextGetFloat(reader);
                     endTime = RgReadTextGetFloat(reader);
                     if (!(startTime <= endTime)) {
-                        assert_prog(D_00A52508, D_00A52470, 271);
+                        assert_prog(motionInfoDbAssertStartTimeBeforeEndTime, motionInfoDbSourcePath, 271);
                     }
-                    _AddActionRgMotion(info, 0, startTime, endTime);
-                } else if (strcasecmp(szToken, D_00A52520) == 0) {
+                    _AddActionRgMotion(info, RG_MOTION_ACTION_ACTION, startTime, endTime);
+                } else if (strcasecmp(szToken, motionInfoDbActionFrameToken) == 0) {
                     float startTime;
                     float endTime;
                     float frameEnd;
@@ -293,55 +278,56 @@ void RgMotionInfoDBLoad(RgMotionInfoDB *db)
 
                     startTime = RgReadTextGetFloat(reader);
                     endTime = RgReadTextGetFloat(reader);
-                    frameStart = startTime / 30.0f;
-                    frameEnd = endTime / 30.0f;
+                    frameStart = startTime / RG_MOTION_FRAME_RATE;
+                    frameEnd = endTime / RG_MOTION_FRAME_RATE;
                     if (!(startTime <= endTime)) {
-                        assert_prog(D_00A52530, D_00A52470, 280);
+                        assert_prog(motionInfoDbAssertStartBeforeEnd, motionInfoDbSourcePath, 280);
                     }
-                    _AddActionRgMotion(info, 0, frameStart, frameEnd);
-                } else if (strcasecmp(szToken, D_00A52540) == 0) {
-                    action = _AddActionRgMotion(info, 2, 0.0f,
+                    _AddActionRgMotion(info, RG_MOTION_ACTION_ACTION, frameStart, frameEnd);
+                } else if (strcasecmp(szToken, motionInfoDbNextToken) == 0) {
+                    action = _AddActionRgMotion(info, RG_MOTION_ACTION_NEXT, 0.0f,
                                                 RG_MOTION_ANY_TIME);
                     if (action == 0) {
-                        assert_prog(D_00A52548, D_00A52470, 286);
+                        assert_prog(motionInfoDbAssertActNotNil, motionInfoDbSourcePath, 286);
                     }
                     RgReadTextGetString(reader, szToken);
                     action->shiftMotionNo = RgActorMotIDGetFromName(szToken);
                     RgReadTextGetString(reader, szToken);
                     action->weaponMotionNo = RgActorMotIDGetFromName(szToken);
-                } else if (strcasecmp(szToken, D_00A52558) == 0) {
-                    action = _AddActionRgMotion(info, 3, 0.0f,
+                } else if (strcasecmp(szToken, motionInfoDbEventToken) == 0) {
+                    action = _AddActionRgMotion(info, RG_MOTION_ACTION_EVENT, 0.0f,
                                                 RG_MOTION_ANY_TIME);
                     if (action == 0) {
-                        assert_prog(D_00A52548, D_00A52470, 296);
+                        assert_prog(motionInfoDbAssertActNotNil, motionInfoDbSourcePath, 296);
                     }
                     RgReadTextGetString(reader, szToken);
                     action->shiftMotionNo = RgActorMotIDGetFromName(szToken);
                     RgReadTextGetString(reader, szToken);
                     action->weaponMotionNo = RgActorMotIDGetFromName(szToken);
-                } else if (strcasecmp(szToken, D_00A52560) == 0) {
+                } else if (strcasecmp(szToken, motionInfoDbHitShiftFrameToken) == 0) {
                     float startTime;
                     float endTime;
 
                     startTime = RgReadTextGetFloat(reader);
                     endTime = RgReadTextGetFloat(reader);
-                    action = _AddActionRgMotion(info, 1, startTime / 30.0f,
-                                                endTime / 30.0f);
+                    action = _AddActionRgMotion(info, RG_MOTION_ACTION_HIT_SHIFT,
+                                                startTime / RG_MOTION_FRAME_RATE,
+                                                endTime / RG_MOTION_FRAME_RATE);
                     if (action == 0) {
-                        assert_prog(D_00A52548, D_00A52470, 311);
+                        assert_prog(motionInfoDbAssertActNotNil, motionInfoDbSourcePath, 311);
                     }
                     if (!(startTime <= endTime)) {
-                        assert_prog(D_00A52530, D_00A52470, 312);
+                        assert_prog(motionInfoDbAssertStartBeforeEnd, motionInfoDbSourcePath, 312);
                     }
                     RgReadTextGetString(reader, szToken);
                     action->shiftMotionNo = RgActorMotIDGetFromName(szToken);
                     RgReadTextGetString(reader, szToken);
                     action->weaponMotionNo = RgActorMotIDGetFromName(szToken);
-                } else if (strcasecmp(szToken, D_00A52570) == 0) {
-                    info->shotFlags |= 1;
-                } else if (strcasecmp(szToken, D_00A52580) == 0) {
-                    info->shotFlags |= 2;
-                } else if (strcasecmp(szToken, D_00A52590) == 0) {
+                } else if (strcasecmp(szToken, motionInfoDbShotBodyToken) == 0) {
+                    info->shotFlags |= RG_MOTION_SHOT_BODY;
+                } else if (strcasecmp(szToken, motionInfoDbShotNotFixToken) == 0) {
+                    info->shotFlags |= RG_MOTION_SHOT_NOTFIX;
+                } else if (strcasecmp(szToken, motionInfoDbCharToken) == 0) {
                     RgReadTextGetString(reader, szToken);
                     info->charId = RgActorNameToCharID(szToken);
                 } else {
@@ -366,13 +352,9 @@ void RgMotionInfoDBLoad(RgMotionInfoDB *db)
 void RgMotionInfoDBDispose(RgMotionInfoDB *db)
 {
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 365);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 365);
     }
 }
-
-/* Same TU, not part of this allocation. */
-extern RgMotionShotInfo *_TableGetMatchChar(RgMotionInfoDB *db, int motionNo,
-                                            int charId);
 
 RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
                                     int charId)
@@ -380,7 +362,7 @@ RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
     RgMotionShotInfo *info;
 
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 374);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 374);
     }
     info = _TableGetMatchChar(db, motionNo, charId);
     if (info == 0) {
@@ -392,7 +374,7 @@ RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
 int RgMotionInfoDBIsDefaultData(RgMotionInfoDB *db, int motionNo, int charId)
 {
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 388);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 388);
     }
     return _TableGetMatchChar(db, motionNo, charId) == 0;
 }
@@ -404,7 +386,7 @@ RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
     unsigned int i;
 
     if (info == 0) {
-        assert_prog(D_00A52598, D_00A52470, 405);
+        assert_prog(motionInfoDbAssertMotInfoNotNil, motionInfoDbSourcePath, 405);
     }
     for (i = 0; i < (unsigned int)info->actionCount; i++) {
         action = &info->actions[i];
@@ -426,7 +408,7 @@ int RgMotionInfoIsBefore(RgMotionShotInfo *info, int actionNo, float time)
     unsigned int i;
 
     if (info == 0) {
-        assert_prog(D_00A52598, D_00A52470, 425);
+        assert_prog(motionInfoDbAssertMotInfoNotNil, motionInfoDbSourcePath, 425);
     }
     for (i = 0; i < (unsigned int)info->actionCount; i++) {
         action = &info->actions[i];
@@ -443,7 +425,7 @@ int RgMotionInfoIsAfter(RgMotionShotInfo *info, int actionNo, float time)
     unsigned int i;
 
     if (info == 0) {
-        assert_prog(D_00A52598, D_00A52470, 442);
+        assert_prog(motionInfoDbAssertMotInfoNotNil, motionInfoDbSourcePath, 442);
     }
     for (i = 0; i < (unsigned int)info->actionCount; i++) {
         action = &info->actions[i];
@@ -467,19 +449,19 @@ void RgMotionInfoDBDump(RgMotionInfoDB *db)
     RgMotionShotInfo *current;
 
     if (db == 0) {
-        assert_prog(D_00A524E0, D_00A52470, 459);
+        assert_prog(motionInfoDbAssertDbNotNil, motionInfoDbSourcePath, 459);
     }
-    XrgLog(D_00A525A8, D_00A52470, 461, db->entryCount);
+    XrgLog(motionInfoDbDumpHeaderFormat, motionInfoDbSourcePath, 461, db->entryCount);
     for (tableIndex = 0; tableIndex < (unsigned int) db->entryCount;
          tableIndex++) {
         current = db->table[tableIndex];
         actionNo = current->motionNo;
-        XrgLog(D_00A525D8, D_00A52470, 465, actionNo);
+        XrgLog(motionInfoDbDumpActionFormat, motionInfoDbSourcePath, 465, actionNo);
         info = current;
         for (; info != 0; info = info->next) {
-            XrgLog(D_00A525F0, D_00A52470, 469, info->charId);
-            XrgLog(D_00A52608, D_00A52470, 470, info->motionNo);
-            XrgLog(D_00A52618, D_00A52470, 471, info->shotFlags);
+            XrgLog(motionInfoDbDumpCharFormat, motionInfoDbSourcePath, 469, info->charId);
+            XrgLog(motionInfoDbDumpMotionIdFormat, motionInfoDbSourcePath, 470, info->motionNo);
+            XrgLog(motionInfoDbDumpMotionFlagFormat, motionInfoDbSourcePath, 471, info->shotFlags);
             for (actionIndex = 0;
                  actionIndex < (unsigned int) info->actionCount;
                  actionIndex++) {
@@ -488,7 +470,7 @@ void RgMotionInfoDBDump(RgMotionInfoDB *db)
                 endSeconds = fptodp(info->actions[actionIndex].endTime);
                 shiftedMotionNo = info->actions[actionIndex].shiftMotionNo;
                 weaponMotionNo = info->actions[actionIndex].weaponMotionNo;
-                XrgLog(D_00A52630, D_00A52470, 473, actionNo,
+                XrgLog(motionInfoDbDumpActionEntryFormat, motionInfoDbSourcePath, 473, actionNo,
                        startSeconds, endSeconds, shiftedMotionNo,
                        weaponMotionNo);
             }

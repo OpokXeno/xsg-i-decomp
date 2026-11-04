@@ -3,32 +3,25 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_gauge.h"
+#include "ov12/rg_gauge.h"
+#include "ov12/xrg_paint2d.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
 
-const char D_00A54608[] = "pGauge != NIL";
-const char D_00A54618[] = "../rg_gauge.euc.c";
-const char D_00A54630[] = "pPaint != NIL";
+#define RG_GAUGE_DEFAULT_CHANGE_SPEED 100.0f
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
 static void _InitGauge(RgGauge *pGauge);
-extern void DisposeRgGaugeDisp(RgGaugeDisp *disp);
-extern void RgGaugeDispSetValue(RgGaugeDisp *disp, float currentValue,
-                                float maxValue);
-extern void RgGaugeDispDraw(RgGaugeDisp *disp, void *pPaint);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern RgGaugeDisp *CreateRgGaugeDisp(void);
 
-void _InitGauge(RgGauge *pGauge)
+const char gaugeAssertGaugeNotNil[] = "pGauge != NIL";
+const char gaugeSourcePath[] = "../rg_gauge.euc.c";
+const char gaugeAssertPaintNotNil[] = "pPaint != NIL";
+
+static void _InitGauge(RgGauge *pGauge)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 29);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 29);
     }
-    pGauge->changeSpeed = 100.0f;
+    pGauge->changeSpeed = RG_GAUGE_DEFAULT_CHANGE_SPEED;
     pGauge->currentValue = 1.0f;
     pGauge->maxValue = 1.0f;
     pGauge->targetValue = 1.0f;
@@ -40,7 +33,7 @@ void _InitGauge(RgGauge *pGauge)
 static void _DestructGauge(RgGauge *pGauge)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 41);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 41);
     }
     DisposeRgGaugeDisp(pGauge->disp);
 }
@@ -49,7 +42,7 @@ RgGauge *CreateRgGauge(void)
 {
     RgGauge *pGauge;
 
-    pGauge = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGauge), D_00A54618, 49);
+    pGauge = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGauge), gaugeSourcePath, 49);
     _InitGauge(pGauge);
     return pGauge;
 }
@@ -57,16 +50,16 @@ RgGauge *CreateRgGauge(void)
 void DisposeRgGauge(RgGauge *pGauge)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 57);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 57);
     }
     _DestructGauge(pGauge);
-    RgHeapFree(InstanceOfRgHeap(), pGauge, D_00A54618, 59);
+    RgHeapFree(InstanceOfRgHeap(), pGauge, gaugeSourcePath, 59);
 }
 
 void RgGaugeSetValue(RgGauge *pGauge, float value)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 69);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 69);
     }
     pGauge->targetValue = value;
     if (pGauge->initialized == 0) {
@@ -78,7 +71,7 @@ void RgGaugeSetValue(RgGauge *pGauge, float value)
 void RgGaugeSetActivity(RgGauge *pGauge, int active)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 83);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 83);
     }
     pGauge->active = active;
 }
@@ -86,7 +79,7 @@ void RgGaugeSetActivity(RgGauge *pGauge, int active)
 float RgGaugeGetValue(RgGauge *pGauge)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 94);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 94);
     }
     return pGauge->currentValue;
 }
@@ -94,7 +87,7 @@ float RgGaugeGetValue(RgGauge *pGauge)
 float RgGaugeGetMax(RgGauge *pGauge)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 102);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 102);
     }
     return pGauge->maxValue;
 }
@@ -102,7 +95,7 @@ float RgGaugeGetMax(RgGauge *pGauge)
 RgGaugeDisp *RgGaugeGetDisp(RgGauge *pGauge)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 110);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 110);
     }
     return pGauge->disp;
 }
@@ -114,7 +107,7 @@ void RgGaugePassTime(RgGauge *pGauge, float deltaTime)
     int sign;
 
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 123);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 123);
     }
     if (pGauge->active == 0) {
         return;
@@ -140,13 +133,13 @@ void RgGaugePassTime(RgGauge *pGauge, float deltaTime)
     }
 }
 
-void RgGaugeDraw(RgGauge *pGauge, void *pPaint)
+void RgGaugeDraw(RgGauge *pGauge, XrgPaint2D *pPaint)
 {
     if (pGauge == 0) {
-        assert_prog(D_00A54608, D_00A54618, 143);
+        assert_prog(gaugeAssertGaugeNotNil, gaugeSourcePath, 143);
     }
     if (pPaint == 0) {
-        assert_prog(D_00A54630, D_00A54618, 144);
+        assert_prog(gaugeAssertPaintNotNil, gaugeSourcePath, 144);
     }
     if (pGauge->active == 0) {
         return;

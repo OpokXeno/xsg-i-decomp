@@ -1,590 +1,122 @@
 /*
  * TU-local declarations of ov12/tu026 (src/ov12/rg_weapon.c).
- *
- * RgWeapon is needed by only this TU so far: the other accepted-side caller
- * of the addresses below, rg_robot.c's _BodyEquipWeapon (ov12:0x00a06618),
- * still reaches them through its own INCLUDE_ASM body.
- *
- * Field offsets are attested by the loads/stores/address computations of the
- * allocation this header supports (ov12:0x00a1b530..0x00a1bd78):
- *   controlFlags 0x00, robotId 0x04, shotRequested 0x10, dispose 0x14,
- *   shoot 0x20, actor 0x68, equip 0x70, shotMotionTable 0xac (18 ints:
- *   RG_ACTOR_CHAR_ROBNUM rows of 3, RgWeaponRobotShotMotion's own bound
- *   check proves the row count and its address arithmetic the row width),
- *   targeting 0x1a0, lockedOn 0x1a4, shotMotionOffset 0x1a8, shotNum 0x1ac,
- *   weight 0x1b0, lockOnEffector 0x1b4, ess 0x1b8, equipped 0x1bc,
- *   lockOnStopped 0x1c0, sound 0x1c4. Every span between them that no
- * function of this allocation reads or writes is `unmodeled_XX`.
- *
- * The allocation ov12:0x00a1a6e8..0x00a1b52c adds the trailing span
- * 0x1c8..0x1f0 as `unmodeled_1c8` and fixes the common object's size at 0x1f0:
- * _CreateWeaponShieldType (ov12:0x00a1ae10) allocates exactly 0x1f0 bytes for
- * a shield-type weapon and this allocation's shield functions
- * (_ShotShieldType, _ShotStopShieldType, _PassTimeShieldType,
- * _DestructShieldType) touch nothing past the null check, so a shield-type
- * weapon is a bare RgWeapon. The larger sibling allocations
- * (_CreateWeaponAttackType/_CreateWeaponUnArmedType at 0x230,
- * _CreateWeaponEnergyType at 0x210) extend it with the type-specific trailing
- * fields RgWeaponAttackType and RgWeaponEnergyType attest below.
  */
 
 #ifndef SRC_OV12_RG_WEAPON_H
 #define SRC_OV12_RG_WEAPON_H
 
-/*
- * RG_ACTOR_CHAR_ROBNUM is the original identifier baked into the assert
- * string at ov12:0x00a537d8 ("0 <= eCharID && eCharID < RG_ACTOR_CHAR_ROBNUM")
- * that RgWeaponRobotShotMotion cites.
- */
-#define RG_ACTOR_CHAR_ROBNUM 6
+#include "ov12/rg_weapon.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_matrices_effector.h"
+#include "ov12/xrg_sound.h"
 
-typedef struct RgWeapon RgWeapon;
-enum RgWeaponControl { RG_WEAPON_CONTROL_NONE = 0 };
-enum RgActorFlag { RG_ACTOR_FLAG_NONE = 0 };
-enum RgLockOnStop { RG_LOCKON_STOP_NONE = 0 };
-
-/*
- * The actor handle RgWeaponGetActor/RgWeaponPlayMotion/RgWeaponDisposeLockon
- * pass to the Xrg actor API (XrgActorSetMotion, XrgActorDisposeEffector,
- * RgRobotGetActor) is a pointer: annotations/overlays/ov12_annotations.csv
- * describes RgRobotGetActor (ov12:0x00a08a88) as returning "the robot body's
- * actor pointer", and XrgActorSetMotion/XrgActorDisposeEffector are defined
- * by src/ov12/xrg_actor.c, not yet recovered, so its members are unattested
- * here; only the pointer identity this allocation's loads/stores/comparisons
- * evidence is claimed.
- */
-typedef struct XrgActor XrgActor;
-
-/*
- * The embedded equip record RgWeaponGetEquip exposes by address (addiu
- * $2,$16,0x70 at ov12:0x00a1b90c, consumed as a pointer argument by
- * rg_robot.c's _BodyEquipWeapon at ov12:0x00a066bc/0x00a066e0). Its interior
- * is outside this allocation's evidence: only its start (weapon+0x70) and
- * its extent up to the next evidenced member (shotMotionTable at 0xac, so
- * 0x3c bytes) are attested.
- */
-typedef struct RgEquip {
-    unsigned char unmodeled_00[0x38];
-    /* +0x38 (weapon+0xa8): _InitWeaponCommon copies the essence's int at
-     * +0xa8 here after CopyRgEquip; no other function of this allocation
-     * reads it. */
-    int equipExtra;
-} RgEquip;
-
-/*
- * _EnergyIsBusy (ov12:0x00a1af68) takes the address of RgWeapon+0x40 and
- * passes it to _GetNumAttach (ov12:0x00a19448, local). That function and
- * its siblings _InitAttach/_ReleaseAttach/_AddShotAttach/_CheckAttach/
- * _GetAllAttach null-check the same pointer ("pAttach != NIL", D_00A53648)
- * and _AddShotAttach bounds it with "pAttach->m_uAttachNum < ATTACH_MAX"
- * (D_00A53670): a count at +0x20 following up to 8 pointer-sized slots,
- * fixing this member at 0x24 bytes. _EnergyIsBusy itself only takes the
- * address; the slots' pointee type belongs to another translation unit and
- * no byte of the interior is claimed here.
- */
-/*
- * ATTACH_MAX is the original identifier baked into the assert string at
- * ov12:0x00a53670 ("pAttach->m_uAttachNum < ATTACH_MAX") that _AddShotAttach
- * cites; RgWeaponAttach's slot count below evidences its value as 8.
- */
+/* Shots a weapon keeps attached at once ("pAttach->m_uAttachNum < ATTACH_MAX"). */
 #define ATTACH_MAX 8
 
-/*
- * _ReleaseAttach and _GetAllAttach (ov12:0x00a193c8/0x00a19488) evidence the
- * slot array's own identity: _ReleaseAttach passes each entry unchanged to
- * RgShotRelease(RgShot *), and _GetAllAttach copies each entry to its
- * caller's array unchanged. Only the pointer identity is claimed; RgShot's
- * interior belongs to src/ov12/rg_shot.c, not yet recovered here.
- *
- * RgShot *shots[ATTACH_MAX] is ATTACH_MAX (8) 4-byte pointers = 0x20 bytes,
- * exactly the unmodeled_00[0x20] span it replaces; the trailing
- * unsigned int m_uAttachNum is untouched, so RgWeaponAttach's total size
- * (0x24 bytes) is unchanged.
- */
-typedef struct RgShot RgShot;
+/* RgWeapon.lockOnStopped. */
+enum RgLockOnStop {
+    RG_LOCKON_RUNNING = 0,
+    RG_LOCKON_STOPPED = 1
+};
 
+/* The shots a weapon keeps attached, released when it stops or is freed. */
 typedef struct RgWeaponAttach {
     RgShot *shots[ATTACH_MAX];
     unsigned int m_uAttachNum;
 } RgWeaponAttach;
 
+/*
+ * A live weapon: the common part every weapon type shares. The type-specific
+ * callbacks are installed by the type's _InitWeapon* function and run through
+ * the RgWeapon* entry points below. _InitWeaponCommon copies the essence
+ * members onto it. A shield weapon is a bare RgWeapon; the other types extend
+ * it (RgWeaponShotType, RgWeaponAttackType, RgWeaponEnergyType).
+ */
 struct RgWeapon {
-    enum RgWeaponControl controlFlags;
-    int robotId;
-    int id;
-    /* +0x0c: _InitWeaponCommon copies the create info's pointer here (see
-     * RgWeaponCreateInfo.atkGeoms). */
-    void *atkGeoms;
-    int shotRequested;
-    void (*dispose)(RgWeapon *weapon);
-    /* +0x18: _InitWeaponCommon stores _CommonDisp here (sw at 0x00a19910);
-     * RgWeaponDisp calls it before drawing the actor. */
-    void (*disp)(RgWeapon *weapon);
-    void (*passTime)(RgWeapon *weapon, float dt);
-    int (*shoot)(RgWeapon *weapon);
-    void (*shotStop)(RgWeapon *weapon);
-    void (*hitRobot)(RgWeapon *weapon, int robotId, int damage);
-    void (*hitBG)(RgWeapon *weapon, int bgObject, int damage);
-    /* +0x30: _InitWeaponShot stores _ShotTypeIsBusy and _InitEnergyType
-     * _EnergyIsBusy here (sw at 0x00a1a3d0 / 0x00a1b270). */
-    int (*isBusy)(RgWeapon *weapon);
-    void (*setFree)(RgWeapon *weapon);
-    /* +0x38: _InitWeaponCommon copies the essence's shotEssence pointer
-     * (ess+0x10) here, as the third argument of CreateXrgActor. */
-    struct RgShotEssence *shotEssence;
+    enum RgWeaponControl controlFlags;                  /* +0x00: RG_WEAPON_CONTROL_* */
+    RgStatus *robot;                           /* +0x04: owner */
+    int id;                                     /* +0x08: the shot geometry group pointer, int-typed (measured: a pointer member reorders _InitWeaponCommon) */
+    void *atkGeoms;                             /* +0x0c: copied from the creation info */
+    int shotRequested;                          /* +0x10 */
+    void (*dispose)(RgWeapon *weapon);          /* +0x14 */
+    void (*disp)(RgWeapon *weapon);             /* +0x18 */
+    void (*passTime)(RgWeapon *weapon, float dt); /* +0x1c */
+    int (*shoot)(RgWeapon *weapon);             /* +0x20 */
+    void (*shotStop)(RgWeapon *weapon);         /* +0x24 */
+    void (*hitRobot)(RgWeapon *weapon, RgStatus *robot, RgVector position); /* +0x28 */
+    void (*hitBG)(RgWeapon *weapon, RgBgObj *bgObject, RgVector position);     /* +0x2c */
+    int (*isBusy)(RgWeapon *weapon);            /* +0x30 */
+    void (*setFree)(RgWeapon *weapon);          /* +0x34 */
+    struct RgShotEssence *shotEssence;          /* +0x38 */
     unsigned char unmodeled_3c[4];
-    RgWeaponAttach shotAttach;
-    int aimJointCursor; /* +0x64: cleared by _InitWeaponCommon, advanced by _GetDefShotPosDirFunc */
-    XrgActor *actor;
+    RgWeaponAttach shotAttach;                  /* +0x40 */
+    int aimJointCursor;                         /* +0x64: next shot point of the essence's shotPnt */
+    XrgActor *actor;                            /* +0x68 */
     unsigned char unmodeled_6c[4];
-    RgEquip equip;
-    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    /*
-     * _CommonPassTime (ov12:0x00a19688) indexes 0x13c with the same
-     * (charID*3+shotMotionOffset) arithmetic and starts that motion once
-     * the actor's current one has ended: a third table, named after
-     * shotStartMotionTable.
-     */
-    int shotEndMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    /*
-     * _CheckLockOn (ov12:0x00a1c098) computes the locked-on target's angle
-     * in the weapon's own local XZ-plane (atan2f of the inverse-local-space
-     * transform's x/z) and compares it against this inclusive [min, max]
-     * range to decide whether the target counts as locked on.
-     *
-     * The published unmodeled_13c[0x64] (0x13c..0x1a0, 100 bytes) is split
-     * here into shotEndMotionTable (0x13c..0x184, 72 bytes) + lockOnAngleMin
-     * (4) + lockOnAngleMax (4) + unmodeled_18c[4] (0x18c..0x190, 4 bytes) +
-     * targetPosition (RgVector, 16 bytes): 0x48+4+4+4+0x10 = 0x64, so the
-     * total size and the following member's offset (targeting at 0x1a0) are
-     * unchanged.
-     */
-    float lockOnAngleMin;
-    float lockOnAngleMax;
+    RgEquip equip;                              /* +0x70 */
+    int useMask;                                /* +0xa8 */
+    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][RG_EQUIP_TYPE_NUM];      /* +0xac, indexed [charID][shotMotionOffset] */
+    int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][RG_EQUIP_TYPE_NUM]; /* +0xf4 */
+    int shotEndMotionTable[RG_ACTOR_CHAR_ROBNUM][RG_EQUIP_TYPE_NUM];   /* +0x13c */
+    float lockOnAngleMin;                       /* +0x184: _CheckLockOn's inclusive range */
+    float lockOnAngleMax;                       /* +0x188 */
     unsigned char unmodeled_18c[4];
-    /*
-     * _CheckLockOn (ov12:0x00a1c098) copies the locked-on target's last read
-     * world position here (XrgCopyVector from __RgGeomPointGetPos's result)
-     * whenever a target is present, whether or not it is within
-     * lockOnAngleMin/lockOnAngleMax.
-     */
-    RgVector targetPosition;
-    int targeting;
-    int lockedOn;
-    int shotMotionOffset;
-    float shotNum;
-    float weight;
-    int lockOnEffector;
-    int ess;
-    int equipped;
-    enum RgLockOnStop lockOnStopped;
-    int sound;
-    /*
-     * _ShotAttackType (ov12:0x00a1a540) reads shotSound/shotVolume as the
-     * soundId/volume arguments of XrgSoundRingVol alongside sound as the
-     * driver; no other function of this allocation touches either field.
-     */
-    int shotSound;
-    /*
-     * _HitRobotAttackType (ov12:0x00a1a720) plays a distinct impact sound
-     * through XrgSoundRingVol using sound as the driver: this is its own
-     * soundId, separate from shotSound above. This int exactly fills the
-     * published unmodeled_1cc[4] span (4 bytes), so bgHitSound's offset
-     * (0x1d0) is unchanged.
-     */
-    int robotHitSound;
-    int bgHitSound;
-    /* +0x1d4: copied from the essence's +0x38c by _InitWeaponCommon; no
-     * reader inside this allocation. */
-    int bgHitVolume;
-    int shotVolume;
-    /*
-     * _HitRobotAttackType (ov12:0x00a1a720) reads this as XrgSoundRingVol's
-     * volume argument for robotHitSound above.
-     *
-     * The published unmodeled_1dc[0x14] (0x1dc..0x1f0, 20 bytes) is split
-     * into this int robotHitVolume (4 bytes) + unmodeled_1e0[0x10]
-     * (0x1e0..0x1f0, 16 bytes): 4+0x10 = 0x14, so RgWeapon's total size
-     * (0x1f0 bytes) is unchanged.
-     */
-    int robotHitVolume;
-    /* +0x1e0, +0x1e4: copied from the essence's +0x398/+0x39c by
-     * _InitWeaponCommon; no reader inside this allocation. */
-    int extraVolume0;
-    int extraVolume1;
+    RgVector targetPosition;                    /* +0x190: the locked-on target's last position */
+    int targeting;                              /* +0x1a0 */
+    int lockedOn;                               /* +0x1a4 */
+    int shotMotionOffset;                       /* +0x1a8: the equip type */
+    float shotNum;                              /* +0x1ac: rounds left, 1e8 = infinite */
+    float weight;                               /* +0x1b0 */
+    MatrixEffector *lockOnEffector;             /* +0x1b4 */
+    RgWeaponEssence *ess;                       /* +0x1b8 */
+    int equipped;                               /* +0x1bc */
+    enum RgLockOnStop lockOnStopped;                        /* +0x1c0: RG_LOCKON_* */
+    XrgSound *sound;                            /* +0x1c4: sound driver */
+    int shotSound;                              /* +0x1c8 */
+    int robotHitSound;                          /* +0x1cc */
+    int bgHitSound;                             /* +0x1d0 */
+    int lifeSound;                              /* +0x1d4 */
+    int shotVolume;                             /* +0x1d8 */
+    int robotHitVolume;                         /* +0x1dc */
+    int bgHitVolume;                            /* +0x1e0 */
+    int lifeVolume;                             /* +0x1e4 */
     unsigned char unmodeled_1e8[8];
 };
 
-/*
- * The per-instance data _CreateWeaponAttackType (ov12:0x00a1a9c0) and
- * _CreateWeaponUnArmedType (ov12:0x00a1abc8) allocate on top of RgWeapon
- * (0x230 bytes total). _HitBgAttackType (ov12:0x00a1a6e8) reads damage as a
- * float at 0x1fc (lwc1, passed to RgBgObjTryToBreak) and clears active as an
- * int at 0x220 once the background object breaks; the span in between is
- * unattested by this allocation.
- */
+/* An attack weapon, 0x230 bytes: a melee hit that follows an actor joint. */
 typedef struct RgWeaponAttackType {
     RgWeapon common;
-    /*
-     * _PassTimeAttackType (ov12:0x00a1a5f0) reads followJoint/followActor as
-     * XrgActorGetJointLocal's joint/actor pair (only sampled while
-     * followActor is non-zero) to keep the attack's tracking geometry point
-     * riding the actor's joint each frame.
-     *
-     * The published unmodeled_1f0[0x0c] (0x1f0..0x1fc, 12 bytes) is split
-     * into this int followJoint (4) + unmodeled_1f4[4] (0x1f4..0x1f8, 4
-     * bytes) + XrgActor *followActor (4): 4+4+4 = 0xc, so damage's offset
-     * (0x1fc) is unchanged.
-     */
-    int followJoint;
-    int followExtra;
-    XrgActor *followActor;
-    float damage;
-    /*
-     * _DestructAttackType (ov12:0x00a1a6d0) reads this as the collision
-     * geometry handle it passes to RgGeomFree; no other function of this
-     * allocation touches it.
-     */
-    int geom;
+    int followJoint;                            /* +0x1f0 */
+    int followExtra;                            /* +0x1f4 */
+    XrgActor *followActor;                      /* +0x1f8 */
+    float damage;                               /* +0x1fc */
+    RgGeomBall *geom;                           /* +0x200: the collision ball */
     unsigned char unmodeled_204[0x0c];
-    /*
-     * _PassTimeAttackType (ov12:0x00a1a5f0) keeps the tracking geometry
-     * point's own copy of the position RgGeomPointMovePos last moved it to,
-     * so a frame with no new joint sample (followActor == 0) still has a
-     * position to fall back to.
-     *
-     * The published unmodeled_204[0x1c] (0x204..0x220, 28 bytes) is split
-     * into unmodeled_204[0x0c] (0x204..0x210, 12 bytes) + this RgVector
-     * followPosition (16 bytes): 0xc+0x10 = 0x1c, so active's offset (0x220)
-     * is unchanged.
-     */
-    RgVector followPosition;
-    int active;
-    /*
-     * _ShotAttackType/_ShotStopAttackType (ov12:0x00a1a540/0x00a1a5a8) guard
-     * XrgSoundRingVol with this flag: set once the attack's fire sound has
-     * rung, cleared when the shot stops.
-     */
-    int shotSoundPlaying;
+    RgVector followPosition;                    /* +0x210: last position the ball was moved to */
+    int active;                                 /* +0x220 */
+    int shotSoundPlaying;                       /* +0x224: the fire sound has rung */
+    unsigned char unmodeled_228[8];
 } RgWeaponAttackType;
 
-/*
- * The per-instance data _CreateWeaponShotType (ov12:0x00a1a410) allocates on
- * top of RgWeapon (0x200 bytes total). _ShotTypeIsBusy/_ShotTypeFree
- * (ov12:0x00a1a1b8/0x00a1a218) read and clear a single float at 0x1f4: the
- * time remaining before the shot type can fire again.
- */
+/* A shot weapon, 0x200 bytes. */
 typedef struct RgWeaponShotType {
     RgWeapon common;
-    /*
-     * _InitWeaponShot (ov12:0x00a1a388) copies the shot essence's busyTime
-     * key (+0x3b0) here and zeroes cooldown right after it.
-     */
-    float busyTime;
-    float cooldown;
+    float busyTime;                             /* +0x1f0 */
+    float cooldown;                             /* +0x1f4: time before it can fire again */
     unsigned char unmodeled_1f8[8];
 } RgWeaponShotType;
 
-/*
- * _CreateWeaponShotType (ov12:0x00a1a410) only null-checks its essence and
- * creation-info arguments ("pEss != NIL", "pInfo != NIL",
- * ov12:0x00a53710/0x00a53720) and forwards them to the still-unrecovered
- * _InitWeaponShot; no interior of RgWeaponShotEssence is evidenced here.
- */
-typedef struct RgWeaponShotEssence RgWeaponShotEssence;
-
-/*
- * The per-instance data _CreateWeaponEnergyType (ov12:0x00a1b2c8) allocates on
- * top of RgWeapon (0x210 bytes total). _EnergyFree (ov12:0x00a1afc0) clears
- * both as ints (sw): active at 0x1f0, energyCharge at 0x1f8.
- * shotPending (0x1f4) is set to 1 by _EnergyShot (sw at ov12:0x00a1b024),
- * read by _EnergyPassTime (lw at ov12:0x00a1b098) and cleared by it and by
- * _InitEnergyType (sw $0).
- */
+/* An energy weapon, 0x210 bytes. */
 typedef struct RgWeaponEnergyType {
     RgWeapon common;
-    int active;
-    int shotPending;
-    float energyCharge;
+    int active;                                 /* +0x1f0: overheated */
+    int shotPending;                            /* +0x1f4 */
+    float energyCharge;                         /* +0x1f8 */
     float shotEnergy;
     float upTemp;
     float limitTemp;
     float downTemp;
+    unsigned char unmodeled_20c[4];
 } RgWeaponEnergyType;
-
-/*
- * Opaque per-type essence and creation-info handles _CreateWeaponAttackType,
- * _CreateWeaponUnArmedType, _CreateWeaponShieldType and _CreateWeaponEnergyType
- * only null-check ("pEss != NIL", "pInfo != NIL", ov12:0x00a53710/0x00a53720)
- * and forward to their still-unrecovered _InitWeaponAttack/_InitWeaponUnArmedType/
- * _InitWeaponShield/_InitEnergyType; no interior is evidenced here.
- */
-typedef struct RgWeaponCreateInfo RgWeaponCreateInfo;
-typedef struct RgWeaponAttackEssence RgWeaponAttackEssence;
-typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
-typedef struct RgWeaponShieldEssence RgWeaponShieldEssence;
-typedef struct RgWeaponEnergyEssence RgWeaponEnergyEssence;
-
-/*
- * CreateRgWeaponFromEssence (ov12:0x00a1b420) is the shared essence -> weapon
- * front end every concrete essence type's create-info pair goes through: it
- * only ever reads the create-method slot every essence type places at +0x00
- * (RgWeaponShieldEssence.m_pCreateMethod below, RgWeaponUnArmedEssenceInit's
- * own m_pCreateMethod further below), so only that one member is claimed
- * through this generic view.
- */
-typedef struct RgWeaponEssenceCommon {
-    RgWeapon *(*m_pCreateMethod)(void *essence, RgWeaponCreateInfo *info);
-} RgWeaponEssenceCommon;
-
-/*
- * InitRgWeaponShotEssence (ov12:0x00a1a4d8) evidences an in-memory
- * essence/init object at RgWeaponShotEssence's own address: a create-method
- * slot at +0x00 it points at _CreateWeaponShotType, a mode word at +0x04 it
- * sets to 0x20 (the same bit _CommonDisp tests as weapon->controlFlags &
- * 0x20), and a float at +0x3B0 it sets to 0.4f: the same offset
- * include/ov12/rg_weapon_db.h's own RgWeaponShotEssence.busyTime names from
- * the weapon database's "busy" key, so this allocation's own view of that
- * span keeps the same field name. No byte outside these spans is claimed.
- */
-typedef struct RgWeaponShotEssenceInit {
-    RgWeaponShotType *(*m_pCreateMethod)(RgWeaponShotEssence *pEss,
-                                          RgWeaponCreateInfo *pInfo);
-    enum RgWeaponControl controlMode;
-    unsigned char unmodeled_08[0x3a8];
-    float busyTime;
-} RgWeaponShotEssenceInit;
-
-/*
- * InitRgWeaponUnArmedEssence (ov12:0x00a1ac90) evidences an in-memory
- * essence/init object at RgWeaponUnArmedEssence's own address: a create-method
- * slot at +0x00 it points at _CreateWeaponUnArmedType (the same
- * m_pCreateMethod pattern InitRgWeaponShieldEssence's RgWeaponShieldEssence
- * uses below), a mode word at +0x04 it sets to 76, a six-row table at +0xB0
- * (RG_ACTOR_CHAR_ROBNUM rows of 3, the same offset and shape as
- * RgWeaponShieldEssence's own table) it fills with motion IDs 21 and 22 and a
- * trailing -1 per row, an int at +0x188 it always clears to 0 (no function of
- * this allocation reads it back), and a terminator int at +0x3B0 it always
- * sets to -1. No byte outside these spans is claimed.
- *
- * ov12/tu027's src/ov12/rg_weapon_db.c (include/ov12/rg_weapon_db.h)
- * independently completes the SAME tag, RgWeaponUnArmedEssence, as a
- * data-driven weapon-database record: unmodeled_000[0x3b8] + damage at +0x3b8
- * + hitEffectName at +0x3bc (0x3e0 bytes total). That is a different field
- * layout at overlapping offsets (a float at +0x3b8 where this evidence claims
- * no member up to the terminator at +0x3b0..+0x3b4), not a partial view of
- * this same object, so RgWeaponUnArmedEssence itself is left exactly as
- * published above (an opaque forward declaration only: _CreateWeaponUnArmedType
- * already uses it that way) and this allocation's own evidence is named
- * RgWeaponUnArmedEssenceInit instead, cast from the RgWeaponUnArmedEssence
- * pointer InitRgWeaponUnArmedEssence receives.
- */
-typedef struct RgWeaponUnArmedEssenceInit {
-    RgWeapon *(*m_pCreateMethod)(RgWeaponUnArmedEssence *pEss,
-                                  RgWeaponCreateInfo *pInfo);
-    enum RgWeaponControl controlMode;
-    unsigned char unmodeled_08[0xa8];
-    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    unsigned char unmodeled_f8[0x90];
-    int resetFlag;
-    unsigned char unmodeled_18c[0x224];
-    int terminator;
-} RgWeaponUnArmedEssenceInit;
-
-/*
- * InitRgWeaponAttackEssence (ov12:0x00a1aa88) evidences an in-memory
- * essence/init object at RgWeaponAttackEssence's own address: the
- * create-method slot at +0x00 (_CreateWeaponAttackType), the mode word at
- * +0x04 (0x4A), the six-row motion table at +0xB0 (0x2B, 0x2C, -1 per row,
- * as in RgWeaponShieldEssence), two ints at +0x3B0/+0x3B4 that
- * _InitWeaponAttack copies to the weapon's followJoint and to its unnamed
- * +0x1F4, the damage at +0x3B8 and the hit-effect name at +0x3BC (the
- * "damage"/"hiteff" keys of RgWeaponAttackEssence in rg_weapon_db.c).
- */
-typedef struct RgWeaponAttackEssenceInit {
-    RgWeaponAttackType *(*m_pCreateMethod)(RgWeaponAttackEssence *pEss,
-                                            RgWeaponCreateInfo *pInfo);
-    enum RgWeaponControl controlMode;
-    unsigned char unmodeled_08[0xa8];
-    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    unsigned char unmodeled_f8[0x2b8];
-    int followJoint;
-    int followExtra;
-    float damage;
-    char hitEffectName[0x24];
-} RgWeaponAttackEssenceInit;
-
-/*
- * InitRgWeaponEnergyEssence (ov12:0x00a1b390) evidences an in-memory
- * essence/init object at RgWeaponEnergyEssence's own address: the
- * create-method slot at +0x00 (_CreateWeaponEnergyType), the mode word at
- * +0x04 (0x20), the capacity at +0x14 (RgWeaponEssence's "energy" key) and
- * the four floats at +0x3B0..+0x3BC that _ReadEnergyType fills
- * (RgWeaponEnergyEssence in rg_weapon_db.c).
- */
-typedef struct RgWeaponEnergyEssenceInit {
-    RgWeaponEnergyType *(*m_pCreateMethod)(RgWeaponEnergyEssence *pEss,
-                                            RgWeaponCreateInfo *pInfo);
-    enum RgWeaponControl controlMode;
-    unsigned char unmodeled_08[0x0c];
-    float capacity;
-    unsigned char unmodeled_18[0x398];
-    float shotEnergy;
-    float upTemp;
-    float limitTemp;
-    float downTemp;
-} RgWeaponEnergyEssenceInit;
-
-/*
- * InitRgWeaponShieldEssence (ov12:0x00a1aed8) evidences the interior of
- * RgWeaponShieldEssence: a create-method slot at +0x00 that it points at
- * _CreateWeaponShieldType (the assert_prog string at ov12:0x00a53788,
- * "pEss->m_pCreateMethod != NIL", cited by the sibling
- * CreateRgWeaponFromEssence, names this member), a mode word at +0x04 that
- * it sets to 3, and a six-row table at +0xB0 (RG_ACTOR_CHAR_ROBNUM rows of
- * 3, the same shape as RgWeapon's own shotMotionTable) that it fills with
- * motion IDs 0x2B and 0x2C and a trailing -1 per row. No byte outside
- * these spans is claimed.
- */
-struct RgWeaponShieldEssence {
-    RgWeapon *(*m_pCreateMethod)(RgWeaponShieldEssence *pEss,
-                                  RgWeaponCreateInfo *pInfo);
-    enum RgWeaponControl controlMode;
-    unsigned char unmodeled_08[0xa8];
-    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-};
-
-/*
- * The type-specific callback slots RgWeaponShotStop/RgWeaponHitRobot/
- * RgWeaponHitBG/RgWeaponPassTime/RgWeaponSetFree invoke when installed
- * (ov12:0x00a1bd78..0x00a1c000): shotStop 0x24 (lw 36($16) in
- * RgWeaponShotStop), hitRobot 0x28 and hitBG 0x2c (lw 40($16)/44($16),
- * annotations/overlays/ov12_annotations.csv: "the weapon's robot-hit
- * callback stored at offset 0x28"/"the optional background-hit callback at
- * 0x2c"), passTime 0x1c (lw 28($16) in RgWeaponPassTime, called with the
- * same float RgWeaponPassTime received) and setFree 0x34 (lw 52($16),
- * annotations: "the weapon's optional free-state callback"). hitRobot and
- * hitBG forward the two ints RgHandlerWeaponVsRobot/RgHandlerWeaponVsBG
- * report from the collision (annotations/overlays/ov12_annotations.csv);
- * _HitBgAttackType (ov12:0x00a1a6e8, the attack-type weapon's hitBG) reads
- * only the first of them as its bgObject argument, so the second is named
- * from the domain (damage) without being read by that one implementation.
- *
- * RgWeaponHitBG additionally reads a second sound handle at 0x1d0
- * (lw 464($16)) alongside the driver at 0x1c4, passing the same value as
- * both the soundId and volume arguments of XrgSoundRingVol (annotations:
- * "plays the ring sound using handles at 0x1c4 and 0x1d0").
- *
- * _GetShotInfo (ov12:0x00a1c678) reads a scalar at 0x08 (lw 8($18)) and
- * copies it unmodified into the shot descriptor it builds; no other
- * function of this allocation touches it, so only its presence next to
- * robotId is claimed, named `id` for the weapon's own instance identifier.
- *
- * _PlayShotMotion (ov12:0x00a1c330, "starts shot motion") indexes
- * weapon+0xf4 with the same (charID*3+shotMotionOffset) arithmetic
- * RgWeaponRobotShotMotion uses on shotMotionTable at 0xac, one full table
- * (0x48 bytes) further in: a second RG_ACTOR_CHAR_ROBNUM-by-3 table this
- * allocation names shotStartMotionTable. Only the one cell this function
- * reads is evidenced past that; nothing claims the remaining span.
- */
-
-/*
- * The descriptor _GetShotInfo (ov12:0x00a1c678) fills in for its callers
- * _ShotTypeShot and _EnergyPassTime (both still INCLUDE_ASM in this TU):
- * weapon at +0x00, a position/direction callback at +0x04 (always set to
- * _GetDefShotPosDir, ov12:0x00a1c3d0, "writes default shot position and
- * direction when enabled, returning whether data was produced"), the
- * weapon's target at +0x08 (RgRobotGetTarget's own return value, a
- * pointer), weapon->id copied unmodified at +0x0c, and the target's
- * confusion state at +0x10 (RgRobotIsConfused's return value). Nothing
- * past +0x10 is written by this allocation, so the descriptor's full
- * extent is not claimed here.
- *
- * The callback takes the descriptor's weapon, not the descriptor:
- * rg_shot's _GetShotPos2 loads +0x00 (lw 0x0, ov12:0x00a15698) into $4
- * before the jalr through +0x04 (0x00a156b0), and _GetDefShotPosDir
- * asserts "pWpn != NIL" on that argument.
- */
-typedef struct RgWeaponShotRequest RgWeaponShotRequest;
-typedef int (*RgWeaponGetPosDirFunc)(RgWeapon *weapon, RgVector position,
-                                     RgVector direction);
-
-struct RgWeaponShotRequest {
-    RgWeapon *weapon;
-    RgWeaponGetPosDirFunc getPosDir;
-    void *target;
-    int id;
-    int targetConfused;
-};
-
-/*
- * The creation info _InitWeaponCommon (ov12:0x00a19870) reads: the robot ID
- * (+0x00), the equip type the weapon is mounted on (+0x04, asserted against
- * RG_EQUIP_TYPE_NUM with "RG_EQUIP_TYPE_MIN <= (eEquipType) && (eEquipType)
- * < RG_EQUIP_TYPE_NUM", ov12:0x00a53698), the id (+0x08) and a pointer
- * (+0x0c) that rg_player.c's own view of the same creation record names
- * atkGeoms.
- */
-struct RgWeaponCreateInfo {
-    int robotId;
-    unsigned int equipType;
-    int id;
-    void *atkGeoms;
-};
-
-/*
- * RG_EQUIP_TYPE_NUM is the original identifier baked into the equip-type
- * assert string at ov12:0x00a53698 that _InitWeaponCommon cites.
- */
-#define RG_EQUIP_TYPE_NUM 3
-
-/*
- * The common prefix every essence type places at its start: the create-method
- * slot (+0x00), the mode word (+0x04), the lock-on angles (+0x08, +0x0c), the
- * shot essence pointer (+0x10), the capacity (+0x14), the aim fields read by
- * _GetDefShotPosDirFunc (+0x18..+0x67), the equip record (+0x70), the weight
- * (+0xac), the three six-row motion tables (+0xb0, +0xf8, +0x140), the actor
- * flag (+0x188), the per-equip-type actor specs (+0x190, 0x88 bytes each) and
- * the sound and volume words (+0x380..+0x39c).
- */
-typedef struct RgWeaponBaseEssence {
-    RgWeapon *(*m_pCreateMethod)(void *essence, RgWeaponCreateInfo *info);
-    enum RgWeaponControl controlMode;
-    float angleMin;
-    float angleMax;
-    struct RgShotEssence *shotEssence;
-    float capacity;
-    float shotPitch;
-    float shotYaw;
-    int aimAxis;
-    unsigned int aimJointCount;
-    int aimJointTable[0x10];
-    int unmodeled68;
-    unsigned char unmodeled_6c[4];
-    RgEquip equip;
-    float weight;
-    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    int shotEndMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    enum RgActorFlag actorFlag;
-    unsigned char unmodeled_18c[4];
-    unsigned char actorSpec[RG_EQUIP_TYPE_NUM][0x88];
-    unsigned char unmodeled_328[8];
-    unsigned char unmodeled330;
-    unsigned char unmodeled_331[0x1f];
-    unsigned char unmodeled350;
-    unsigned char unmodeled_351[0x2f];
-    int shotSound;
-    int robotHitSound;
-    int bgHitSound;
-    int bgHitVolume;
-    int shotVolume;
-    int robotHitVolume;
-    int extraVolume0;
-    int extraVolume1;
-    int unmodeled3a0;
-    int unmodeled3a4;
-} RgWeaponBaseEssence;
 
 #endif /* SRC_OV12_RG_WEAPON_H */

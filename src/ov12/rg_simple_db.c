@@ -3,49 +3,22 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
 #include "rg_simple_db.h"
+#include "ov12/xrg_v_log.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern int strcmp(const char *left, const char *right);
-extern char *strncpy(char *dest, const char *src, unsigned int n);
-extern void XrgLog(const char *format, const char *source_file, int line,
-                   ...);
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a531f0 contains the assertion expression "pDB != NIL".
- * ov12:0x00a53200 contains the source filename "../rg_simple_db.euc.c".
- */
-extern const char D_00A531F0[];
-extern const char D_00A53200[];
-/*
- * More of the same asm-owned OV12 rodata window, used only by _GetDataID,
- * _EntryDB, _GetDataDB and _GetDataDBName.
- *
- * ov12:0x00a53218 contains the assertion expression "pszName != NIL".
- * ov12:0x00a53228 contains the assertion expression "pDat != NIL".
- * ov12:0x00a53238 contains the assertion expression
- * "pDB->m_nNumOfData < pDB->m_nDataCapa".
- * ov12:0x00a53260 contains the format string
- * "\n***** already entried name '%s'\n\n".
- * ov12:0x00a53288 contains the assertion expression "0" (an unconditional
- * assert_prog call on the duplicate-name path).
- * ov12:0x00a53290 contains the assertion expression
- * "0 <= nDataID && nDataID < pDB->m_nNumOfData".
- */
-extern const char D_00A53218[];
-extern const char D_00A53228[];
-extern const char D_00A53238[];
-extern const char D_00A53260[];
-extern const char D_00A53288[];
-extern const char D_00A53290[];
+
+/* Defined here: the assert and log strings at the end of the file. */
+extern const char simpleDbAssertDbNotNil[];
+extern const char simpleDbSourcePath[];
+extern const char simpleDbAssertNameNotNil[];
+extern const char simpleDbAssertDatNotNil[];
+extern const char simpleDbAssertNumOfDataBelowCapacity[];
+extern const char simpleDbAlreadyEntriedNameFormat[];
+extern const char simpleDbAssertZero[];
+extern const char simpleDbAssertDataIdInRange[];
+
 static void _InitDB(RgSimpleDB *pDB, int capacity, int entry_size);
 static void _ClearDB(RgSimpleDB *pDB);
 static void _DisposeDB(RgSimpleDB *pDB);
@@ -61,19 +34,19 @@ static void _InitDB(RgSimpleDB *pDB, int capacity, int entry_size)
     unsigned int pointer_array_size;
 
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 35);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 35);
     }
     pDB->m_nNumOfData = 0;
-    pointer_array_size = capacity * 4;
+    pointer_array_size = capacity * RG_SIMPLE_DB_ENTRY_STRIDE;
     pDB->m_nDataCapa = capacity;
     pDB->m_nEntrySize = entry_size;
     pDB->m_apData = RgHeapAlloc(InstanceOfRgHeap(), pointer_array_size,
-                                D_00A53200, 39);
+                                simpleDbSourcePath, 39);
     pDB->m_apName = RgHeapAlloc(InstanceOfRgHeap(), pointer_array_size,
-                                D_00A53200, 40);
+                                simpleDbSourcePath, 40);
     for (i = 0; i < capacity; i++) {
         pDB->m_apName[i] = RgHeapAlloc(InstanceOfRgHeap(), entry_size,
-                                       D_00A53200, 42);
+                                       simpleDbSourcePath, 42);
     }
 }
 
@@ -82,10 +55,10 @@ static void _ClearDB(RgSimpleDB *pDB)
     int i;
 
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 50);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 50);
     }
     for (i = 0; i < pDB->m_nNumOfData; i++) {
-        RgHeapFree(InstanceOfRgHeap(), pDB->m_apData[i], D_00A53200, 52);
+        RgHeapFree(InstanceOfRgHeap(), pDB->m_apData[i], simpleDbSourcePath, 52);
     }
     pDB->m_nNumOfData = 0;
 }
@@ -95,17 +68,17 @@ static void _DisposeDB(RgSimpleDB *pDB)
     int i;
 
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 60);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 60);
     }
     for (i = 0; i < pDB->m_nNumOfData; i++) {
-        RgHeapFree(InstanceOfRgHeap(), pDB->m_apData[i], D_00A53200, 63);
+        RgHeapFree(InstanceOfRgHeap(), pDB->m_apData[i], simpleDbSourcePath, 63);
     }
-    RgHeapFree(InstanceOfRgHeap(), pDB->m_apData, D_00A53200, 64);
+    RgHeapFree(InstanceOfRgHeap(), pDB->m_apData, simpleDbSourcePath, 64);
     pDB->m_apData = 0;
     for (i = 0; i < pDB->m_nDataCapa; i++) {
-        RgHeapFree(InstanceOfRgHeap(), pDB->m_apName[i], D_00A53200, 68);
+        RgHeapFree(InstanceOfRgHeap(), pDB->m_apName[i], simpleDbSourcePath, 68);
     }
-    RgHeapFree(InstanceOfRgHeap(), pDB->m_apName, D_00A53200, 69);
+    RgHeapFree(InstanceOfRgHeap(), pDB->m_apName, simpleDbSourcePath, 69);
     pDB->m_apName = 0;
 }
 
@@ -114,10 +87,10 @@ static int _GetDataID(RgSimpleDB *pDB, const char *pszName)
     int i;
 
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 80);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 80);
     }
     if (pszName == 0) {
-        assert_prog(D_00A53218, D_00A53200, 81);
+        assert_prog(simpleDbAssertNameNotNil, simpleDbSourcePath, 81);
     }
     for (i = 0; i < pDB->m_nNumOfData; i++) {
         if (strcmp(pDB->m_apName[i], pszName) == 0) {
@@ -130,7 +103,7 @@ static int _GetDataID(RgSimpleDB *pDB, const char *pszName)
 static int _GetDataSize(RgSimpleDB *pDB)
 {
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 94);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 94);
     }
     return pDB->m_nNumOfData;
 }
@@ -141,17 +114,17 @@ static void _EntryDB(RgSimpleDB *pDB, void *pDat, const char *pszName)
 
     nIndex = pDB->m_nNumOfData;
     if (pDat == 0) {
-        assert_prog(D_00A53228, D_00A53200, 105);
+        assert_prog(simpleDbAssertDatNotNil, simpleDbSourcePath, 105);
     }
     if (pszName == 0) {
-        assert_prog(D_00A53218, D_00A53200, 106);
+        assert_prog(simpleDbAssertNameNotNil, simpleDbSourcePath, 106);
     }
     if (!(pDB->m_nNumOfData < pDB->m_nDataCapa)) {
-        assert_prog(D_00A53238, D_00A53200, 107);
+        assert_prog(simpleDbAssertNumOfDataBelowCapacity, simpleDbSourcePath, 107);
     }
     if (_GetDataID(pDB, pszName) >= 0) {
-        XrgLog(D_00A53260, D_00A53200, 111, pszName);
-        assert_prog(D_00A53288, D_00A53200, 112);
+        XrgLog(simpleDbAlreadyEntriedNameFormat, simpleDbSourcePath, 111, pszName);
+        assert_prog(simpleDbAssertZero, simpleDbSourcePath, 112);
     }
     pDB->m_apData[nIndex] = pDat;
     strncpy(pDB->m_apName[nIndex], pszName, pDB->m_nEntrySize - 1);
@@ -162,10 +135,10 @@ static void _EntryDB(RgSimpleDB *pDB, void *pDat, const char *pszName)
 static void *_GetDataDB(RgSimpleDB *pDB, int nDataID)
 {
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 130);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 130);
     }
     if (!(0 <= nDataID && nDataID < pDB->m_nNumOfData)) {
-        assert_prog(D_00A53290, D_00A53200, 131);
+        assert_prog(simpleDbAssertDataIdInRange, simpleDbSourcePath, 131);
     }
     return pDB->m_apData[nDataID];
 }
@@ -173,10 +146,10 @@ static void *_GetDataDB(RgSimpleDB *pDB, int nDataID)
 static char *_GetDataDBName(RgSimpleDB *pDB, int nDataID)
 {
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 138);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 138);
     }
     if (!(0 <= nDataID && nDataID < pDB->m_nNumOfData)) {
-        assert_prog(D_00A53290, D_00A53200, 139);
+        assert_prog(simpleDbAssertDataIdInRange, simpleDbSourcePath, 139);
     }
     return pDB->m_apName[nDataID];
 }
@@ -185,10 +158,9 @@ RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size)
 {
     RgSimpleDB *pDB;
 
-    /* 20 bytes: the size of the opaque RgSimpleDB descriptor. */
-    pDB = RgHeapAlloc(InstanceOfRgHeap(), 20, D_00A53200, 151);
+    pDB = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgSimpleDB), simpleDbSourcePath, 151);
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 152);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 152);
     }
     _InitDB(pDB, capacity, entry_size);
     return pDB;
@@ -197,10 +169,10 @@ RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size)
 void DisposeRgSimpleDB(RgSimpleDB *pDB)
 {
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 158);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 158);
     }
     _DisposeDB(pDB);
-    RgHeapFree(InstanceOfRgHeap(), pDB, D_00A53200, 160);
+    RgHeapFree(InstanceOfRgHeap(), pDB, simpleDbSourcePath, 160);
 }
 
 int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName)
@@ -231,44 +203,41 @@ void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat, const char *pszName)
 void RgSimpleDBClear(RgSimpleDB *pDB)
 {
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 207);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 207);
     }
     _ClearDB(pDB);
 }
 
-/*
- * ov12:0x00a532c0 contains the format string "data base - %p\n".
- * ov12:0x00a532d0 contains the format string "data %d : %s (%p)\n".
- */
-extern const char D_00A532C0[];
-extern const char rgSimpleDBDumpFormat[] __asm__("D_00A532D0");
+/* Scaffold data in the same rodata window. */
+extern const char simpleDbDumpHeaderFormat[];
+extern const char rgSimpleDBDumpFormat[] __asm__("simpleDbDumpEntryFormat");
 
 void RgSimpleDBDump(RgSimpleDB *pDB)
 {
     int i;
 
     if (pDB == 0) {
-        assert_prog(D_00A531F0, D_00A53200, 218);
+        assert_prog(simpleDbAssertDbNotNil, simpleDbSourcePath, 218);
     }
-    XrgLog(D_00A532C0, D_00A53200, 220, pDB);
+    XrgLog(simpleDbDumpHeaderFormat, simpleDbSourcePath, 220, pDB);
     for (i = 0; i < pDB->m_nNumOfData; ++i) {
-        XrgLog(rgSimpleDBDumpFormat, D_00A53200, 222, i, pDB->m_apName[i],
+        XrgLog(rgSimpleDBDumpFormat, simpleDbSourcePath, 222, i, pDB->m_apName[i],
                pDB->m_apData[i]);
     }
 }
 
-const char D_00A531F0[16] = "pDB != NIL";
+const char simpleDbAssertDbNotNil[16] = "pDB != NIL";
 
-const char D_00A53200[24] = "../rg_simple_db.euc.c";
+const char simpleDbSourcePath[24] = "../rg_simple_db.euc.c";
 
-const char D_00A53218[16] = "pszName != NIL";
+const char simpleDbAssertNameNotNil[16] = "pszName != NIL";
 
-const char D_00A53228[16] = "pDat != NIL";
+const char simpleDbAssertDatNotNil[16] = "pDat != NIL";
 
-const char D_00A53238[40] = "pDB->m_nNumOfData < pDB->m_nDataCapa";
+const char simpleDbAssertNumOfDataBelowCapacity[40] = "pDB->m_nNumOfData < pDB->m_nDataCapa";
 
-const char D_00A53260[40] = "\n***** already entried name '%s'\n\n";
+const char simpleDbAlreadyEntriedNameFormat[40] = "\n***** already entried name '%s'\n\n";
 
-const char D_00A53288[8] = "0";
+const char simpleDbAssertZero[8] = "0";
 
-const char D_00A53290[48] = "0 <= nDataID && nDataID < pDB->m_nNumOfData";
+const char simpleDbAssertDataIdInRange[48] = "0 <= nDataID && nDataID < pDB->m_nNumOfData";

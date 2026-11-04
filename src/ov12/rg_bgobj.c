@@ -3,87 +3,49 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_char.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_bgobj.h"
 #include "ov12/rg_debug_flags.h"
+#include "ov12/rg_geom_tray.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/create_rg.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
+/* Seconds a camera-blocking object takes to fade out and back in. */
+#define RG_BGOBJ_FADE_TIME 0.3f
+
+/* A body attack breaks the object at this energy or more. */
+#define RG_BGOBJ_BODY_ATTACK_MIN_ENERGY 288000.0f
+
+/* Height above the object where the break effect appears. */
+#define RG_BGOBJ_BREAK_EFFECT_HEIGHT 2.0f
 
 /* Assertion strings and the source filename passed to the assertion helper. */
-const char D_00A529B0[16] = "pObj != NIL";
+const char bgObjAssertObjNotNil[16] = "pObj != NIL";
 
-const char D_00A529C0[24] = "../rg_bgobj.euc.c";
+const char bgObjSourcePath[24] = "../rg_bgobj.euc.c";
 
 static float s_fBgObjBlight = 1.0f;
 
-/* The RgChar type tag CreateRgBgObj passes to RgCharAlloc for a background object. */
-#define RG_CHAR_TYPE_BGOBJ 2
-/*
- * RgBgObj::flags bits. RgBgObjIgnoreHide sets or clears bit 0, which
- * RgBgObjSetHide tests; RgBgObjEnableBodyAttack sets or clears bit 1.
- */
-#define RGBGOBJ_FLAG_IGNORE_HIDE (1 << 0)
-#define RGBGOBJ_FLAG_BODY_ATTACK_ENABLED (1 << 1)
-
-/*
- * A background object extends RgChar: CreateRgBgObj allocates it with
- * RgCharAlloc(sizeof(RgBgObj), RG_CHAR_TYPE_BGOBJ), so its own fields begin
- * right after RgChar's 0x1C bytes. The float at 0x34 is used only by
- * _InitRgBgObj, _PassTime and _Draw; its role is not established, so it
- * stays unmodeled.
- */
-typedef struct RgBgObj {
-    RgChar rgChar;                  /* 0x00 */
-    unsigned int flags;             /* 0x1C */
-    void *dispModel;                /* 0x20 */
-    RgGeom *geomTray;               /* 0x24 */
-    unsigned int hideState;         /* 0x28 */
-    float hideDuration;             /* 0x2C */
-    float hideElapsed;              /* 0x30 */
-    float transparent;              /* 0x34 */
-    float hardness;                 /* 0x38 */
-    int notUseGeomLocal;            /* 0x3C */
-} RgBgObj;
-
-/*
- * _InitRgBgObj sets the field at 0x34 to -1.0f to disable it; _Draw reads it
- * and, when it is not negative, passes it to RgDispModelSetTransparent as
- * the dispModel's transparency override.
- */
 /* Defined later in this TU. */
-static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray);
-static void _Draw(RgBgObj *pObj);
-void _PassTime(RgChar *pChar, float deltaTime);
-static void _Destruct(RgBgObj *pObj);
-/* Defined by other TUs. */
-extern void DisposeRgDispModel(void *dispModel);
-extern void RgGeomFree(RgGeom *geom);
-extern void RgGeomSetParent(RgGeom *pGeom, void *parent);
-extern void RgGeomTraySetLocal(void *tray, Matrix4 source);
-extern void RgGeomTrayGetLocal(void *tray, Matrix4 destination);
-extern void RgDispModelSetMode(void *dispModel, int mode);
-extern void RgDispModelSetLocal(void *dispModel, Matrix4 local);
-extern void RgDispModelSetTransparent(void *dispModel, float transparent);
-extern void RgDispModelDisplay(void *dispModel);
-extern RgDebugFlags *InstanceOfRgDebugFlags(void);
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void CreateRgHitEffectPos(RgVector position, const char *effectFile,
-                                 const char *defaultEffectFile);
+static void _InitRgBgObj(RgBgObj *pObj, RgDispModel *dispModel, RgGeom *geomTray);
+static void _Draw(RgChar *pChar);
+static void _PassTime(RgChar *pChar, float deltaTime);
+static void _Destruct(RgChar *pChar);
 
-const unsigned char D_00A529D8[16] = "eff12.ptcl";
+const char bgObjBreakHitEffectName[16] = "eff12.ptcl";
 
-static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray)
+static void _InitRgBgObj(RgBgObj *pObj, RgDispModel *dispModel, RgGeom *geomTray)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 70);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 70);
     }
-    RgCharDispMethod(&pObj->rgChar, (void (*)(RgChar *)) _Draw);
+    RgCharDispMethod(&pObj->rgChar, _Draw);
     RgCharPassTimeMethod(&pObj->rgChar, _PassTime);
-    RgCharDestructMethod(&pObj->rgChar, (void (*)(RgChar *)) _Destruct);
+    RgCharDestructMethod(&pObj->rgChar, _Destruct);
     pObj->dispModel = dispModel;
     pObj->geomTray = geomTray;
     if (dispModel != 0) {
-        RgDispModelSetMode(dispModel, 8);
+        RgDispModelSetMode(dispModel, RG_DISP_MODEL_MODE_MAPCLIP);
     }
     pObj->flags = 0;
     pObj->hideState = 0;
@@ -97,22 +59,24 @@ static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray)
     }
 }
 
-RgBgObj *CreateRgBgObj(void *dispModel, RgGeom *geomTray)
+RgBgObj *CreateRgBgObj(RgDispModel *dispModel, RgGeom *geomTray)
 {
     RgBgObj *pObj;
 
     pObj = (RgBgObj *)RgCharAlloc(sizeof(RgBgObj), RG_CHAR_TYPE_BGOBJ);
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 110);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 110);
     }
     _InitRgBgObj(pObj, dispModel, geomTray);
     return pObj;
 }
 
-static void _Destruct(RgBgObj *pObj)
+static void _Destruct(RgChar *pChar)
 {
+    RgBgObj *pObj = (RgBgObj *)pChar;
+
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 122);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 122);
     }
     if (pObj->dispModel != 0) {
         DisposeRgDispModel(pObj->dispModel);
@@ -128,37 +92,37 @@ static void _PassTime(RgChar *pChar, float deltaTime)
     unsigned int hideState;
 
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 136);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 136);
     }
     pObj->hideElapsed += deltaTime;
     hideState = pObj->hideState;
     switch (hideState) {
-    case 0:
+    case RG_BGOBJ_HIDE_NONE:
         break;
 
-    case 1:
-        if (pObj->hideElapsed > 0.3f) {
+    case RG_BGOBJ_HIDE_FADE_OUT:
+        if (pObj->hideElapsed > RG_BGOBJ_FADE_TIME) {
             pObj->transparent = 0.0f;
-            hideState = 2;
+            hideState = RG_BGOBJ_HIDE_HIDDEN;
         } else {
-            pObj->transparent = (0.3f - pObj->hideElapsed) / 0.3f;
+            pObj->transparent = (RG_BGOBJ_FADE_TIME - pObj->hideElapsed) / RG_BGOBJ_FADE_TIME;
         }
         break;
 
-    case 2:
+    case RG_BGOBJ_HIDE_HIDDEN:
         pObj->hideDuration -= deltaTime;
         if (pObj->hideDuration < 0.0f) {
             pObj->hideElapsed = 0.0f;
-            hideState = 3;
+            hideState = RG_BGOBJ_HIDE_FADE_IN;
         }
         break;
 
-    case 3:
-        if (pObj->hideElapsed > 0.3f) {
+    case RG_BGOBJ_HIDE_FADE_IN:
+        if (pObj->hideElapsed > RG_BGOBJ_FADE_TIME) {
             pObj->transparent = -1.0f;
-            hideState = 0;
+            hideState = RG_BGOBJ_HIDE_NONE;
         } else {
-            pObj->transparent = pObj->hideElapsed / 0.3f;
+            pObj->transparent = pObj->hideElapsed / RG_BGOBJ_FADE_TIME;
         }
         break;
     }
@@ -170,21 +134,22 @@ static void _PassTime(RgChar *pChar, float deltaTime)
  * _InitRgDebugFlags enables by default (include/ov12/rg_debug_flags.h), so
  * background objects draw normally unless a developer disables it.
  */
-static void _Draw(RgBgObj *pObj)
+static void _Draw(RgChar *pChar)
 {
-    void *dispModel;
-    Matrix4 local;
+    RgBgObj *pObj = (RgBgObj *)pChar;
+    RgDispModel *dispModel;
+    RgMatrix local;
     float transparent;
 
     if (InstanceOfRgDebugFlags()->flags[1] != 0) {
         if (pObj == 0) {
-            assert_prog(D_00A529B0, D_00A529C0, 179);
+            assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 179);
         }
-        if (pObj->hideState != 2) {
+        if (pObj->hideState != RG_BGOBJ_HIDE_HIDDEN) {
             dispModel = pObj->dispModel;
             if (dispModel != 0) {
                 if (pObj->notUseGeomLocal != 0) {
-                    XrgUnitMatrix((float *)local);
+                    XrgUnitMatrix(local);
                 } else {
                     RgGeomTrayGetLocal(pObj->geomTray, local);
                 }
@@ -199,10 +164,10 @@ static void _Draw(RgBgObj *pObj)
     }
 }
 
-void RgBgObjSetLocal(RgBgObj *pObj, Matrix4 local)
+void RgBgObjSetLocal(RgBgObj *pObj, RgMatrix local)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 205);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 205);
     }
     RgGeomTraySetLocal(pObj->geomTray, local);
 }
@@ -210,7 +175,7 @@ void RgBgObjSetLocal(RgBgObj *pObj, Matrix4 local)
 void RgBgObjSetHardness(RgBgObj *pObj, float hardness)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 215);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 215);
     }
     pObj->hardness = hardness;
 }
@@ -218,24 +183,24 @@ void RgBgObjSetHardness(RgBgObj *pObj, float hardness)
 void RgBgObjSetHide(RgBgObj *pObj, float duration)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 226);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 226);
     }
 
-    if (!(pObj->flags & RGBGOBJ_FLAG_IGNORE_HIDE)) {
+    if (!(pObj->flags & RG_BGOBJ_FLAG_IGNORE_HIDE)) {
         unsigned int hideState;
 
         hideState = pObj->hideState;
         pObj->hideDuration = duration;
         switch (hideState) {
-        case 2:
+        case RG_BGOBJ_HIDE_HIDDEN:
             break;
 
-        case 0:
+        case RG_BGOBJ_HIDE_NONE:
             pObj->hideElapsed = 0.0f;
             /* fallthrough */
-        case 1:
-        case 3:
-            hideState = 1;
+        case RG_BGOBJ_HIDE_FADE_OUT:
+        case RG_BGOBJ_HIDE_FADE_IN:
+            hideState = RG_BGOBJ_HIDE_FADE_OUT;
             break;
         }
         pObj->hideState = hideState;
@@ -245,52 +210,51 @@ void RgBgObjSetHide(RgBgObj *pObj, float duration)
 void RgBgObjIgnoreHide(RgBgObj *pObj, int ignoreHide)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 254);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 254);
     }
 
     if (ignoreHide != 0) {
-        pObj->flags |= RGBGOBJ_FLAG_IGNORE_HIDE;
+        pObj->flags |= RG_BGOBJ_FLAG_IGNORE_HIDE;
     } else {
-        pObj->flags &= ~RGBGOBJ_FLAG_IGNORE_HIDE;
+        pObj->flags &= ~RG_BGOBJ_FLAG_IGNORE_HIDE;
     }
 }
 
 void RgBgObjEnableBodyAttack(RgBgObj *pObj, int enableBodyAttack)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 263);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 263);
     }
 
     if (enableBodyAttack != 0) {
-        pObj->flags |= RGBGOBJ_FLAG_BODY_ATTACK_ENABLED;
+        pObj->flags |= RG_BGOBJ_FLAG_BODY_ATTACK_ENABLED;
     } else {
-        pObj->flags &= ~RGBGOBJ_FLAG_BODY_ATTACK_ENABLED;
+        pObj->flags &= ~RG_BGOBJ_FLAG_BODY_ATTACK_ENABLED;
     }
 }
 
 void RgBgObjNotUseGeomLocal(RgBgObj *pObj)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 272);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 272);
     }
     pObj->notUseGeomLocal = 1;
 }
 
-void *RgBgObjGetDispModel(RgBgObj *pObj)
+RgDispModel *RgBgObjGetDispModel(RgBgObj *pObj)
 {
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 283);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 283);
     }
     return pObj->dispModel;
 }
 
-int RgBgObjTryToBreak(int bgObject, float damage)
+int RgBgObjTryToBreak(RgBgObj *pObj, float damage)
 {
-    RgBgObj *pObj = (RgBgObj *)bgObject;
-    Matrix4 local;
+    RgMatrix local;
 
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 294);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 294);
     }
     if (pObj->hardness < 0.0f) {
         return 0;
@@ -298,8 +262,8 @@ int RgBgObjTryToBreak(int bgObject, float damage)
     if (pObj->hardness < damage) {
         if (pObj->geomTray != 0) {
             RgGeomTrayGetLocal(pObj->geomTray, local);
-            local[3][1] += 2.0f;
-            CreateRgHitEffectPos(local[3], D_00A529D8, 0);
+            local[13] += RG_BGOBJ_BREAK_EFFECT_HEIGHT;
+            CreateRgHitEffectPos(&local[12], bgObjBreakHitEffectName, 0);
         }
         RgCharFree(&pObj->rgChar);
     } else {
@@ -308,24 +272,23 @@ int RgBgObjTryToBreak(int bgObject, float damage)
     return 1;
 }
 
-void RgBgObjTryToBodyAttack(void *bgObject, float energy)
+void RgBgObjTryToBodyAttack(RgBgObj *pObj, float energy)
 {
-    RgBgObj *pObj = (RgBgObj *)bgObject;
-    Matrix4 local;
+    RgMatrix local;
 
     if (pObj == 0) {
-        assert_prog(D_00A529B0, D_00A529C0, 324);
+        assert_prog(bgObjAssertObjNotNil, bgObjSourcePath, 324);
     }
-    if (energy < 288000.0f) {
+    if (energy < RG_BGOBJ_BODY_ATTACK_MIN_ENERGY) {
         return;
     }
-    if (!(pObj->flags & RGBGOBJ_FLAG_BODY_ATTACK_ENABLED)) {
+    if (!(pObj->flags & RG_BGOBJ_FLAG_BODY_ATTACK_ENABLED)) {
         return;
     }
     if (pObj->geomTray != 0) {
         RgGeomTrayGetLocal(pObj->geomTray, local);
-        local[3][1] += 2.0f;
-        CreateRgHitEffectPos(local[3], D_00A529D8, 0);
+        local[13] += RG_BGOBJ_BREAK_EFFECT_HEIGHT;
+        CreateRgHitEffectPos(&local[12], bgObjBreakHitEffectName, 0);
     }
     RgCharFree(&pObj->rgChar);
 }

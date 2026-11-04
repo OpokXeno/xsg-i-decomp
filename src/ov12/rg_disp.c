@@ -3,17 +3,32 @@
  */
 #include "common.h"
 #include "rg_disp.h"
+#include "ov12/rg_weapon.h"
+#include "ov12/rg_robot.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/xrg_rand_int.h"
 
-extern RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon);
-extern unsigned int RgWeaponGetRestUnit(RgWeapon *weapon);
-extern float RgWeaponGetShotNum(RgWeapon *weapon);
+#define RG_WPN_PIC_COUNT 36
 
-/* ov12:0x00a54970 "%d/%d" */
-const char D_00A54970[] = "%d/%d";
-/* ov12:0x00a54978 "%d%%" */
-const char D_00A54978[] = "%d%%";
 
-int RgDispWpnDat_CreateRestNumStr(RgWeapon *weapon, char *buffer)
+/*
+ * One entry of the weapon picture table: a weapon-name pointer
+ * RgDispWpnDat_GetNameUVWH matches with strcasecmp, followed by a 16-byte,
+ * 16-byte-aligned block it copies whole with a COP2 quadword transfer.
+ */
+typedef struct {
+    const char *name;
+    unsigned char unmodeled_04[12];
+    unsigned int uvwh[4];
+} RgWpnPicEntry;
+
+/* Defined here: dispWpnDatSpeedFormat ("%d k"), after RgDispWpnDat_GetNameUVWH. */
+extern const char dispWpnDatSpeedFormat[];
+
+const char dispWpnDatRestNumFractionFormat[] = "%d/%d";
+const char dispWpnDatRestNumPercentFormat[] = "%d%%";
+
+void RgDispWpnDat_CreateRestNumStr(RgWeapon *weapon, char *buffer)
 {
     RgWeaponEssence *ess;
     unsigned int restUnit;
@@ -25,32 +40,19 @@ int RgDispWpnDat_CreateRestNumStr(RgWeapon *weapon, char *buffer)
     shotNum = RgWeaponGetShotNum(weapon);
     capacity = ess->capacity;
     switch (restUnit) {
-    case 0:
-        return sprintf(buffer, D_00A54970, (int) shotNum, (int) capacity);
-    case 1:
-        return sprintf(buffer, D_00A54978, (int) (shotNum / capacity * 100.0f));
-    case 2:
+    case RG_WEAPON_REST_UNIT_COUNT:
+        sprintf(buffer, dispWpnDatRestNumFractionFormat, (int) shotNum, (int) capacity);
+        break;
+    case RG_WEAPON_REST_UNIT_PERCENT:
+        sprintf(buffer, dispWpnDatRestNumPercentFormat, (int) (shotNum / capacity * 100.0f));
+        break;
+    case RG_WEAPON_REST_UNIT_NONE:
         *buffer = 0;
         break;
     }
 }
 
-extern int strcasecmp(const char *left, const char *right);
-
-/*
- * s_aWepPicTbl_0 (ov12:0x00a4fc00, size 0x480, scaffold-owned .rodata) holds
- * 36 32-byte entries: a weapon-name pointer RgDispWpnDat_GetNameUVWH matches
- * with strcasecmp, followed by a 16-byte, 16-byte-aligned block it copies
- * whole with a COP2 quadword transfer (evidenced size/alignment only; no
- * caller dereferences its fields yet).
- */
-typedef struct {
-    const char *name;
-    unsigned char unmodeled_04[12];
-    unsigned int uvwh[4];
-} RgWpnPicEntry;
-
-static RgWpnPicEntry s_aWepPicTbl_0[36] = {
+static RgWpnPicEntry s_aWepPicTbl_0[RG_WPN_PIC_COUNT] = {
     {"SWD21AG", {0}, {0, 0, 64, 16}},
     {"LG24VX", {0}, {0, 16, 64, 16}},
     {"HG45VX", {0}, {0, 32, 64, 16}},
@@ -93,7 +95,7 @@ int RgDispWpnDat_GetNameUVWH(const char *name, u64 *uvwh)
 {
     unsigned int i;
 
-    for (i = 0; i < 36; i++) {
+    for (i = 0; i < RG_WPN_PIC_COUNT; i++) {
         if (strcasecmp(s_aWepPicTbl_0[i].name, name) == 0) {
             __asm__ __volatile__(
                 "lqc2 $vf31, 0(%1)\n\t"
@@ -105,13 +107,7 @@ int RgDispWpnDat_GetNameUVWH(const char *name, u64 *uvwh)
     return 0;
 }
 
-extern RgGeomPoint *RgRobotGetGeom(RgStatus *robot);
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern float XrgLengthVector(RgVector vector);
-extern int XrgRandInt(void);
-
-/* ov12:0x00a54ab0 "%d k" */
-const char D_00A54AB0[] = "%d k";
+const char dispWpnDatSpeedFormat[] = "%d k";
 
 void RgDispWpnDat_CreateSpeedStr(RgStatus *robot, char *buffer)
 {
@@ -128,5 +124,5 @@ void RgDispWpnDat_CreateSpeedStr(RgStatus *robot, char *buffer)
     if (speed > 0) {
         speed = speed + (XrgRandInt() & 3) - 1;
     }
-    sprintf(buffer, D_00A54AB0, speed);
+    sprintf(buffer, dispWpnDatSpeedFormat, speed);
 }

@@ -2,12 +2,7 @@
  * OV12 original TU 90: 0x00a4e1f0..0x00a4e340 (8 functions)
  */
 #include "common.h"
-
-/* The EE GCC argument pointer is a plain byte pointer: XrgLog and XrgOut hand
- * the address of their spilled register arguments down as it. */
-typedef char *va_list;
-#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
-#define va_end(ap) ((void)0)
+#include "ov12/xrg_v_log.h"
 
 /*
  * The release build's output sinks: XrgVLog/XrgVOut pass them the format and

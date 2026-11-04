@@ -4,24 +4,20 @@
 #include "common.h"
 #include "shared.h"
 #include "ov12/rg_singleton_id.h"
-#include "rg_light.h"
+#include "ov12/rg_light.h"
+#include "ov12/assert_prog.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/rg_heap.h"
 
-const char D_00A54C68[] = "pLight != NIL";
-const char D_00A54C78[] = "../rg_light.euc.c";
-const char D_00A54C90[] = "pSrc != NIL";
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
-extern void XrgClearVector(RgVector destination);
-extern const char D_00A54C68[]; /* "pLight != NIL" */
-extern const char D_00A54C78[];
-extern const char D_00A54C90[]; /* "pSrc != NIL" */
+const char lightAssertLightNotNil[] = "pLight != NIL";
+const char lightSourcePath[] = "../rg_light.euc.c";
+const char lightAssertSourceNotNil[] = "pSrc != NIL";
 
 void InitRgLight(RgLight *light)
 {
     if (light == 0) {
-        assert_prog(D_00A54C68, D_00A54C78, 18);
+        assert_prog(lightAssertLightNotNil, lightSourcePath, 18);
     }
     XrgSetVectorXYZ(light->ambient_color, 0.08f, 0.08f, 0.11f);
     XrgSetVectorXYZ(light->direction[0], -0.5f, 1.0f, 0.5f);
@@ -32,52 +28,39 @@ void InitRgLight(RgLight *light)
     XrgClearVector(light->color[2]);
 }
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-
-
 static void _DisposeGlobalLight(void *light)
 {
-    RgHeapFree(InstanceOfRgHeap(), light, D_00A54C78, 35);
+    RgHeapFree(InstanceOfRgHeap(), light, lightSourcePath, 35);
 }
-
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
 
 RgLight *InstanceOfGlobalLight(void)
 {
     RgLight *light;
 
-    light = RgSingletonIDGet(6U);
+    light = RgSingletonIDGet(RG_SINGLETON_GLOBAL_LIGHT);
     if (light == 0) {
-        light = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgLight), D_00A54C78,
+        light = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgLight), lightSourcePath,
                              42);
         InitRgLight(light);
-        RgSingletonIDEntry(6, (RgSimpleDB *) light,
-                           (void (*)(RgSimpleDB *)) _DisposeGlobalLight);
+        RgSingletonIDEntry(RG_SINGLETON_GLOBAL_LIGHT, light, _DisposeGlobalLight);
     }
     return light;
 }
 
-void RgLightCopy(void *pLight, void *pSrc)
+void RgLightCopy(RgLight *pLight, RgLight *pSrc)
 {
-    RgLight *destination;
-    RgLight *source;
     int i;
 
     if (pLight == 0) {
-        assert_prog(D_00A54C68, D_00A54C78, 55);
+        assert_prog(lightAssertLightNotNil, lightSourcePath, 55);
     }
     if (pSrc == 0) {
-        assert_prog(D_00A54C90, D_00A54C78, 56);
+        assert_prog(lightAssertSourceNotNil, lightSourcePath, 56);
     }
 
-    destination = pLight;
-    source = pSrc;
-    XrgCopyVector(destination->ambient_color, source->ambient_color);
+    XrgCopyVector(pLight->ambient_color, pSrc->ambient_color);
     for (i = 0; i < 3; i++) {
-        XrgCopyVector(destination->color[i], source->color[i]);
-        XrgCopyVector(destination->direction[i], source->direction[i]);
+        XrgCopyVector(pLight->color[i], pSrc->color[i]);
+        XrgCopyVector(pLight->direction[i], pSrc->direction[i]);
     }
 }

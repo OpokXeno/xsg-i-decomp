@@ -3,25 +3,77 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
 #include "ov12/rg_game_collision.h"
-#include "rg_geom_group.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_collision.h"
+#include "ov12/rg_geom_group.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_poly.h"
+#include "ov12/rg_geom_pillar.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_geom_tray.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_vector.h"
 
-const char D_00A55338[] = "pGroup != NIL";
+/*
+ * The geometries a group creates are allocated larger than their plain kind:
+ * the RgGeomGroup that owns the object is appended, so the destructor can
+ * remove it from its group's list.
+ */
+typedef struct RgGeomGroupPoint {
+    RgGeomPoint point;
+    RgGeomGroup *group;
+    unsigned char unmodeled_74[0x0c];
+} RgGeomGroupPoint;
 
-const char D_00A55348[] = "../rg_geom_group.euc.c";
+typedef struct RgGeomGroupBall {
+    RgGeomBall ball;
+    RgGeomGroup *group;
+    unsigned char unmodeled_84[0x0c];
+} RgGeomGroupBall;
 
-const char D_00A55360[] = "pGroup != NIL && pElm != NIL";
+typedef struct RgGeomGroupRobot {
+    RgGeomRobot robot;
+    RgGeomGroup *group;
+    unsigned char unmodeled_a4[0x0c];
+} RgGeomGroupRobot;
 
-const char D_00A55380[] = "RgVectorFind(pGroup->m_pList,pElm) < 0";
+typedef struct RgGeomGroupPoly {
+    RgGeomPoly poly;
+    RgGeomGroup *group;
+    unsigned char unmodeled_a4[0x0c];
+} RgGeomGroupPoly;
 
-const char D_00A553A8[] = "pGeom != NIL";
+/* A pillar is a tray tagged as a pillar. */
+typedef struct RgGeomGroupTray {
+    RgGeomTray tray;
+    RgGeomGroup *group;
+    unsigned char unmodeled_a4[0x0c];
+} RgGeomGroupTray;
+
+/* Most geometries one group can hold. */
+#define RG_GEOM_GROUP_CAPACITY 128
+
+static void RgGeomGroupRemoveElm(RgGeomGroup *group, void *element);
+
+const char geomGroupAssertGroupNotNil[] = "pGroup != NIL";
+
+const char geomGroupSourcePath[] = "../rg_geom_group.euc.c";
+
+const char geomGroupAssertGroupAndElmNotNil[] = "pGroup != NIL && pElm != NIL";
+
+const char geomGroupAssertElmNotYetInList[] = "RgVectorFind(pGroup->m_pList,pElm) < 0";
+
+const char geomGroupAssertGeomNotNil[] = "pGeom != NIL";
 
 static void _InitGroup(RgGeomGroup *pGroup)
 {
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 36);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 36);
     }
-    pGroup->m_pList = CreateRgVector(128, D_00A55348, 37);
+    pGroup->m_pList = CreateRgVector(RG_GEOM_GROUP_CAPACITY, geomGroupSourcePath, 37);
 }
 
 static void _DisposeGroup(RgGeomGroup *group)
@@ -31,18 +83,18 @@ static void _DisposeGroup(RgGeomGroup *group)
     RgGeom *geom;
 
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 43);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 43);
     }
     index = 0;
     size = RgVectorSize(group->m_pList);
     if (size != 0) {
         do {
-            geom = RgVectorIndex(group->m_pList, index, D_00A55348, 50);
+            geom = RgVectorIndex(group->m_pList, index, geomGroupSourcePath, 50);
             index += 1;
             RgGeomSetDestructMethod(geom, 0);
         } while (index < size);
     }
-    DisposeRgVector(group->m_pList, D_00A55348, 52);
+    DisposeRgVector(group->m_pList, geomGroupSourcePath, 52);
     group->m_pList = 0;
 }
 
@@ -50,9 +102,9 @@ RgGeomGroup *CreateRgGeomGroup(void)
 {
     RgGeomGroup *pGroup;
 
-    pGroup = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroup), D_00A55348, 62);
+    pGroup = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroup), geomGroupSourcePath, 62);
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 63);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 63);
     }
     _InitGroup(pGroup);
     return pGroup;
@@ -61,19 +113,19 @@ RgGeomGroup *CreateRgGeomGroup(void)
 void DisposeRgGeomGroup(RgGeomGroup *pGroup)
 {
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 70);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 70);
     }
     _DisposeGroup(pGroup);
-    RgHeapFree(InstanceOfRgHeap(), pGroup, D_00A55348, 72);
+    RgHeapFree(InstanceOfRgHeap(), pGroup, geomGroupSourcePath, 72);
 }
 
 static void RgGeomGroupAddElm(RgGeomGroup *pGroup, void *pElm)
 {
     if ((pGroup == 0) || (pElm == 0)) {
-        assert_prog(D_00A55360, D_00A55348, 82);
+        assert_prog(geomGroupAssertGroupAndElmNotNil, geomGroupSourcePath, 82);
     }
-    if (RgVectorFind_sub(pGroup->m_pList, pElm, D_00A55348, 83) >= 0) {
-        assert_prog(D_00A55380, D_00A55348, 83);
+    if (RgVectorFind_sub(pGroup->m_pList, pElm, geomGroupSourcePath, 83) >= 0) {
+        assert_prog(geomGroupAssertElmNotYetInList, geomGroupSourcePath, 83);
     }
     RgVectorPush(pGroup->m_pList, pElm);
 }
@@ -81,204 +133,183 @@ static void RgGeomGroupAddElm(RgGeomGroup *pGroup, void *pElm)
 static void RgGeomGroupRemoveElm(RgGeomGroup *group, void *element)
 {
     if ((group == 0) || (element == 0)) {
-        assert_prog(D_00A55360, D_00A55348, 91);
+        assert_prog(geomGroupAssertGroupAndElmNotNil, geomGroupSourcePath, 91);
     }
-    RgVectorRemove(group->m_pList, element, D_00A55348, 93);
+    RgVectorRemove(group->m_pList, element, geomGroupSourcePath, 93);
 }
 
-/*
- * Every geometry kind a group creates stores the RgGeomGroup that owns it
- * inside its own RgGeom object, but at a different fixed offset per kind
- * (evidenced by each destructor below, which reads exactly one field at one
- * offset and passes it straight to RgGeomGroupRemoveElm). RgGeom's full
- * layout is not established in this TU -- src/ov12/rg_geom_point.c and
- * rg_geom_pillar.c already document other fields of a plain point object
- * (position, oldPosition, radius) inside the same 0x70..0x80 span the point
- * and ball kinds use here for their owner pointer, and the two pieces of
- * evidence are not reconciled -- so each owner is reached with one named,
- * documented offset access instead of a struct (docs/naming.md, "a narrowly
- * evidenced scalar access outside a partial type can be reviewed with an
- * explicit limitation").
- */
-#define RG_GEOM_POINT_GROUP_OFFSET  0x70
-#define RG_GEOM_BALL_GROUP_OFFSET   0x80
-#define RG_GEOM_ROBOT_GROUP_OFFSET  0xA0
-#define RG_GEOM_POLY_GROUP_OFFSET   0xA0
-#define RG_GEOM_TRAY_GROUP_OFFSET   0xA0
-#define RG_GEOM_PILLAR_GROUP_OFFSET 0xA0
-
-static void _DestructPointMadeByGroup(RgGeom *pGeom)
+static void _DestructPointMadeByGroup(void *pGeom)
 {
+    RgGeomGroupPoint *geom = pGeom;
+
     if (pGeom == 0) {
-        assert_prog(D_00A553A8, D_00A55348, 138);
+        assert_prog(geomGroupAssertGeomNotNil, geomGroupSourcePath, 138);
     }
-    RgGeomGroupRemoveElm(
-        *(RgGeomGroup **)((unsigned char *)pGeom + RG_GEOM_POINT_GROUP_OFFSET),
-        pGeom);
+    RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
-static void _DestructBallMadeByGroup(RgGeom *pGeom)
+static void _DestructBallMadeByGroup(void *pGeom)
 {
+    RgGeomGroupBall *geom = pGeom;
+
     if (pGeom == 0) {
-        assert_prog(D_00A553A8, D_00A55348, 143);
+        assert_prog(geomGroupAssertGeomNotNil, geomGroupSourcePath, 143);
     }
-    RgGeomGroupRemoveElm(
-        *(RgGeomGroup **)((unsigned char *)pGeom + RG_GEOM_BALL_GROUP_OFFSET),
-        pGeom);
+    RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
-static void _DestructRobotMadeByGroup(RgGeom *pGeom)
+static void _DestructRobotMadeByGroup(void *pGeom)
 {
+    RgGeomGroupRobot *geom = pGeom;
+
     if (pGeom == 0) {
-        assert_prog(D_00A553A8, D_00A55348, 148);
+        assert_prog(geomGroupAssertGeomNotNil, geomGroupSourcePath, 148);
     }
-    RgGeomGroupRemoveElm(
-        *(RgGeomGroup **)((unsigned char *)pGeom + RG_GEOM_ROBOT_GROUP_OFFSET),
-        pGeom);
+    RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
-static void _DestructPolyMadeByGroup(RgGeom *pGeom)
+static void _DestructPolyMadeByGroup(void *pGeom)
 {
+    RgGeomGroupPoly *geom = pGeom;
+
     if (pGeom == 0) {
-        assert_prog(D_00A553A8, D_00A55348, 153);
+        assert_prog(geomGroupAssertGeomNotNil, geomGroupSourcePath, 153);
     }
-    RgGeomGroupRemoveElm(
-        *(RgGeomGroup **)((unsigned char *)pGeom + RG_GEOM_POLY_GROUP_OFFSET),
-        pGeom);
+    RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
-static void _DestructTrayMadeByGroup(RgGeom *pGeom)
+static void _DestructTrayMadeByGroup(void *pGeom)
 {
+    RgGeomGroupTray *geom = pGeom;
+
     if (pGeom == 0) {
-        assert_prog(D_00A553A8, D_00A55348, 158);
+        assert_prog(geomGroupAssertGeomNotNil, geomGroupSourcePath, 158);
     }
-    RgGeomGroupRemoveElm(
-        *(RgGeomGroup **)((unsigned char *)pGeom + RG_GEOM_TRAY_GROUP_OFFSET),
-        pGeom);
+    RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
-static void _DestructPillarMadeByGroup(RgGeom *pGeom)
+static void _DestructPillarMadeByGroup(void *pGeom)
 {
+    RgGeomGroupTray *geom = pGeom;
+
     if (pGeom == 0) {
-        assert_prog(D_00A553A8, D_00A55348, 163);
+        assert_prog(geomGroupAssertGeomNotNil, geomGroupSourcePath, 163);
     }
-    RgGeomGroupRemoveElm(
-        *(RgGeomGroup **)((unsigned char *)pGeom + RG_GEOM_PILLAR_GROUP_OFFSET),
-        pGeom);
+    RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
 static RgGeom *_CreatePointWithGroup(RgGeomGroup *group)
 {
-    RgGeom *geom;
+    RgGeomGroupPoint *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0x80, D_00A55348, 170);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroupPoint), geomGroupSourcePath, 170);
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 171);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 171);
     }
-    InitRgGeomPoint(geom, 1.0f);
-    RgGeomSetDestructMethod(geom, _DestructPointMadeByGroup);
-    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_POINT_GROUP_OFFSET) = group;
+    InitRgGeomPoint(&geom->point, 1.0f);
+    RgGeomSetDestructMethod(&geom->point.geom, _DestructPointMadeByGroup);
+    geom->group = group;
     RgGeomGroupAddElm(group, geom);
-    return geom;
+    return &geom->point.geom;
 }
 
-static RgGeom *_CreateBallWithGroup(RgGeomGroup *group)
+static RgGeomBall *_CreateBallWithGroup(RgGeomGroup *group)
 {
-    RgGeom *geom;
+    RgGeomGroupBall *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0x90, D_00A55348, 184);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroupBall), geomGroupSourcePath, 184);
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 185);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 185);
     }
-    InitRgGeomBall(geom, 1.0f, 1.0f);
-    RgGeomSetDestructMethod(geom, _DestructBallMadeByGroup);
-    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_BALL_GROUP_OFFSET) = group;
+    InitRgGeomBall(&geom->ball, 1.0f, 1.0f);
+    RgGeomSetDestructMethod(&geom->ball.point.geom, _DestructBallMadeByGroup);
+    geom->group = group;
     RgGeomGroupAddElm(group, geom);
-    return geom;
+    return &geom->ball;
 }
 
 static RgGeom *_CreateRobotWithGroup(RgGeomGroup *group)
 {
-    RgGeom *geom;
+    RgGeomGroupRobot *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 199);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroupRobot), geomGroupSourcePath, 199);
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 200);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 200);
     }
-    InitRgGeomRobot(geom);
-    RgGeomSetDestructMethod(geom, _DestructRobotMadeByGroup);
-    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_ROBOT_GROUP_OFFSET) = group;
+    InitRgGeomRobot(&geom->robot.ball.point.geom);
+    RgGeomSetDestructMethod(&geom->robot.ball.point.geom, _DestructRobotMadeByGroup);
+    geom->group = group;
     RgGeomGroupAddElm(group, geom);
-    return geom;
+    return &geom->robot.ball.point.geom;
 }
 
 static RgGeom *_CreatePolyWithGroup(RgGeomGroup *group)
 {
-    RgGeom *geom;
+    RgGeomGroupPoly *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 214);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroupPoly), geomGroupSourcePath, 214);
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 215);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 215);
     }
-    InitRgGeomPoly(geom);
-    RgGeomSetDestructMethod(geom, _DestructPolyMadeByGroup);
-    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_POLY_GROUP_OFFSET) = group;
+    InitRgGeomPoly(&geom->poly.geom);
+    RgGeomSetDestructMethod(&geom->poly.geom, _DestructPolyMadeByGroup);
+    geom->group = group;
     RgGeomGroupAddElm(group, geom);
-    return geom;
+    return &geom->poly.geom;
 }
 
 static RgGeom *_CreateTrayWithGroup(RgGeomGroup *group)
 {
-    RgGeom *geom;
+    RgGeomGroupTray *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 229);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroupTray), geomGroupSourcePath, 229);
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 230);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 230);
     }
-    InitRgGeomTray(geom);
-    RgGeomSetDestructMethod(geom, _DestructTrayMadeByGroup);
-    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_TRAY_GROUP_OFFSET) = group;
+    InitRgGeomTray(&geom->tray.geom);
+    RgGeomSetDestructMethod(&geom->tray.geom, _DestructTrayMadeByGroup);
+    geom->group = group;
     RgGeomGroupAddElm(group, geom);
-    return geom;
+    return &geom->tray.geom;
 }
 
 static RgGeom *_CreatePillarWithGroup(RgGeomGroup *group)
 {
-    RgGeom *geom;
+    RgGeomGroupTray *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 244);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroupTray), geomGroupSourcePath, 244);
     if (group == 0) {
-        assert_prog(D_00A55338, D_00A55348, 245);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 245);
     }
-    InitRgGeomPillar(geom);
-    RgGeomSetDestructMethod(geom, _DestructPillarMadeByGroup);
-    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_PILLAR_GROUP_OFFSET) = group;
+    InitRgGeomPillar(&geom->tray.geom);
+    RgGeomSetDestructMethod(&geom->tray.geom, _DestructPillarMadeByGroup);
+    geom->group = group;
     RgGeomGroupAddElm(group, geom);
-    return geom;
+    return &geom->tray.geom;
 }
 
-RgGeom *RgGeomGroupCreatePoint(RgGeomGroup *pGroup, RgGeom *parent)
+RgGeom *RgGeomGroupCreatePoint(RgGeomGroup *pGroup, void *parent)
 {
     RgGeom *geom;
 
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 261);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 261);
     }
     geom = _CreatePointWithGroup(pGroup);
     RgGeomSetParent(geom, parent);
     return geom;
 }
 
-RgGeom *RgGeomGroupCreateBall(RgGeomGroup *pGroup, RgGeom *parent)
+RgGeomBall *RgGeomGroupCreateBall(RgGeomGroup *pGroup, void *parent)
 {
-    RgGeom *geom;
+    RgGeomBall *ball;
 
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 271);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 271);
     }
-    geom = _CreateBallWithGroup(pGroup);
-    RgGeomSetParent(geom, parent);
-    return geom;
+    ball = _CreateBallWithGroup(pGroup);
+    RgGeomSetParent(&ball->point.geom, parent);
+    return ball;
 }
 
 /*
@@ -289,21 +320,21 @@ RgGeom *RgGeomGroupCreateBall(RgGeomGroup *pGroup, RgGeom *parent)
  * _CreateRobotWithGroup returned. The value is used, but the function never
  * returns it explicitly.
  */
-void RgGeomGroupCreateRobot(RgGeomGroup *pGroup, RgGeom *parent)
+void RgGeomGroupCreateRobot(RgGeomGroup *pGroup, void *parent)
 {
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 281);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 281);
     }
     RgGeomSetParent(_CreateRobotWithGroup(pGroup), parent);
 }
 
-RgGeom *RgGeomGroupCreatePoly(RgGeomGroup *pGroup, RgGeom *parent,
+RgGeom *RgGeomGroupCreatePoly(RgGeomGroup *pGroup, void *parent,
                               RgColiData *coliData)
 {
     RgGeom *geom;
 
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 290);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 290);
     }
     geom = _CreatePolyWithGroup(pGroup);
     RgGeomSetParent(geom, parent);
@@ -311,24 +342,24 @@ RgGeom *RgGeomGroupCreatePoly(RgGeomGroup *pGroup, RgGeom *parent,
     return geom;
 }
 
-RgGeom *RgGeomGroupCreateTray(RgGeomGroup *pGroup, RgGeom *parent)
+RgGeom *RgGeomGroupCreateTray(RgGeomGroup *pGroup, void *parent)
 {
     RgGeom *geom;
 
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 300);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 300);
     }
     geom = _CreateTrayWithGroup(pGroup);
     RgGeomSetParent(geom, parent);
     return geom;
 }
 
-RgGeom *RgGeomGroupCreatePiller(RgGeomGroup *pGroup, RgGeom *parent)
+RgGeom *RgGeomGroupCreatePiller(RgGeomGroup *pGroup, void *parent)
 {
     RgGeom *geom;
 
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 309);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 309);
     }
     geom = _CreatePillarWithGroup(pGroup);
     RgGeomSetParent(geom, parent);
@@ -338,7 +369,7 @@ RgGeom *RgGeomGroupCreatePiller(RgGeomGroup *pGroup, RgGeom *parent)
 void RgGeomGroupDisposeElm(RgGeomGroup *pGroup, RgGeom *pElm)
 {
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 319);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 319);
     }
     RgGeomGroupRemoveElm(pGroup, pElm);
     RgGeomFree(pElm);
@@ -346,31 +377,31 @@ void RgGeomGroupDisposeElm(RgGeomGroup *pGroup, RgGeom *pElm)
 
 void InitRgGeomGroupColiArg(RgGameColiArg *pArg)
 {
-    pArg->unmodeled_14 = 0;
+    pArg->missCallback2 = 0;
     /*
      * gcc 2.96 -O2 reorders an unbroken run of independent stores by moving
-     * the last one to the front (unmodeled_14 above); grouping this middle
+     * the last one to the front (missCallback2 above); grouping this middle
      * run in its own scope keeps it from being merged with the trailing
-     * unmodeled_10 store and reordered again. A plain sequential rewrite of
+     * hitCallback2 store and reordered again. A plain sequential rewrite of
      * this whole function (no scope) fails the whole-file compare (6 diff
      * ranges), confirming the scope is compiler-forced, not incidental.
      */
     do {
         pArg->m_pGroup1 = 0;
-        pArg->unmodeled_04 = 0;
-        pArg->unmodeled_08 = 0;
+        pArg->hitCallback1 = 0;
+        pArg->missCallback1 = 0;
         pArg->m_pGroup2 = 0;
     } while (0);
-    pArg->unmodeled_10 = 0;
+    pArg->hitCallback2 = 0;
 }
 
-const char D_00A553B8[] = "pArg != NIL";
+const char geomGroupAssertArgNotNil[] = "pArg != NIL";
 
 void RgGeomGroupCollision(RgGameColiArg *pArg)
 {
     RgGeomCollisionPair pair;
-    void *list1;
-    void *list2;
+    RgPtrVector *list1;
+    RgPtrVector *list2;
     unsigned int size1;
     unsigned int size2;
     unsigned int i;
@@ -379,7 +410,7 @@ void RgGeomGroupCollision(RgGameColiArg *pArg)
 
     hits = 0;
     if (pArg == 0) {
-        assert_prog(D_00A553B8, D_00A55348, 348);
+        assert_prog(geomGroupAssertArgNotNil, geomGroupSourcePath, 348);
     }
     if (pArg->m_pGroup1 != 0 && pArg->m_pGroup2 != 0) {
         list1 = pArg->m_pGroup1->m_pList;
@@ -387,28 +418,28 @@ void RgGeomGroupCollision(RgGameColiArg *pArg)
         size1 = RgVectorSize(list1);
         size2 = RgVectorSize(list2);
         InitRgGeomColiArg(&pair);
-        pair.unmodeled_04 = pArg->unmodeled_04;
-        pair.unmodeled_0C = pArg->unmodeled_10;
+        pair.callback1 = (RgGeomColiCallback)pArg->hitCallback1;
+        pair.callback2 = (RgGeomColiCallback)pArg->hitCallback2;
         for (i = 0; i < size2; i++) {
             for (j = 0; j < size1; j++) {
-                pair.pGeom1 = RgVectorIndex(list1, j, D_00A55348, 367);
-                pair.pGeom2 = RgVectorIndex(list2, i, D_00A55348, 368);
+                pair.pGeom1 = RgVectorIndex(list1, j, geomGroupSourcePath, 367);
+                pair.pGeom2 = RgVectorIndex(list2, i, geomGroupSourcePath, 368);
                 if (RgGeomCollisionJob(&pair) != 0) {
                     hits++;
                 }
             }
         }
         if (hits <= 0) {
-            if (pArg->unmodeled_08 != 0) {
+            if (pArg->missCallback1 != 0) {
                 for (i = 0; i < size1; i++) {
-                    ((void (*)(RgGeom *, int))pArg->unmodeled_08)(
-                        RgVectorIndex(list1, i, D_00A55348, 378), 0);
+                    pArg->missCallback1(
+                        RgVectorIndex(list1, i, geomGroupSourcePath, 378), 0);
                 }
             }
-            if (pArg->unmodeled_14 != 0) {
+            if (pArg->missCallback2 != 0) {
                 for (i = 0; i < size2; i++) {
-                    ((void (*)(RgGeom *, int))pArg->unmodeled_14)(
-                        RgVectorIndex(list2, i, D_00A55348, 382), 0);
+                    pArg->missCallback2(
+                        RgVectorIndex(list2, i, geomGroupSourcePath, 382), 0);
                 }
             }
         }
@@ -418,6 +449,6 @@ void RgGeomGroupCollision(RgGameColiArg *pArg)
 void RgGeomGroupDebugDisp(RgGeomGroup *pGroup)
 {
     if (pGroup == 0) {
-        assert_prog(D_00A55338, D_00A55348, 396);
+        assert_prog(geomGroupAssertGroupNotNil, geomGroupSourcePath, 396);
     }
 }

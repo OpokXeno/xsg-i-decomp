@@ -3,117 +3,147 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_piclist.h"
+#include "ov12/rg_piclist.h"
+#include "main/xgl_pad.h"
 #include "ov12/rg_debug_flags.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_hostfile.h"
+#include "main/xgl_font.h"
+
 /*
- * XrgPaint2DDrawXYWH's mode word is the same bit set XrgPaint2DRect.mode
- * documents in src/ov12/xrg_paint2d.h: bit 0x20 takes the drawn extent from
- * the bound picture instead of the width/height arguments, which is why
- * both draw helpers below always pass zero for width and height.
+ * The debug editor object: bxx is the archive, list the edited picture list,
+ * mode the editor state RgPicDebugControl dispatches on, index the selected
+ * picture (-1 for none) and picId the archive picture being browsed.
+ * CreateRgPicDebug allocates sizeof(RgPicDebug) == 0x14 bytes.
  */
-#define XRG_PAINT2D_MODE_USE_PIC_SIZE 0x20
-#define XRG_PAINT2D_ADD 1
-#define XRG_PAINT2D_LINEAR 0
+typedef struct RgPicDebug {
+    RgBxx *bxx;      /* 0x00 */
+    RgPicList *list; /* 0x04 */
+    int mode;        /* 0x08 */
+    int index;       /* 0x0C */
+    int picId;       /* 0x10 */
+} RgPicDebug;
+
 /* The fixed on-disk size of a serialized picture record. */
 #define RG_PIC_BINARY_SIZE 0x100
-
-extern int RgBxxGetPic(int group, int index);
-/*
- * The second argument selects a blend mode (XrgPaint2DAlpha switches over
- * 0..5; RgPicDraw passes 0, 1 or 3 from the picture's alpha setting), not an
- * on/off flag.
- */
-extern void XrgPaint2DAlpha(int paint, int blendMode);
-extern void XrgPaint2DUseTexture(int paint, int texture);
-extern void XrgPaint2DDrawXYWH(int paint, int mode, int x, int y, int width,
-                               int height);
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgDebugFlags *InstanceOfRgDebugFlags(void);
-RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
-
-/*
- * These are external file-backed witnesses, not candidate-emitted data.
- * Neither address has an entry in config/symbols/ov12.txt, so this
- * allocation keeps the splat default names rather than inventing new ones.
- */
-const char D_00A57310[] = "pPic != NIL";
-
-const char D_00A57320[] = "../rg_piclist.euc.c";
-
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
-                       int line);
-
 /* The fixed on-disk header size of a serialized picture list. */
 #define RG_PIC_LIST_BINARY_SIZE 0x40
 
-RgPic *CreateRgPic(RgBxx *bxx, const char *pszName);
-extern void DisposeRgPicList(RgPicList *pList);
+/* RgPic.alpha values: the blend mode the picture draws with. */
+#define RG_PIC_ALPHA_ADD 1
+#define RG_PIC_ALPHA_LINEAR 2
+#define RG_PIC_ALPHA_ALPHA 3
+#define RG_PIC_ALPHA_COUNT 4
 
-/*
- * Additional file-backed witnesses this allocation's assertions reference,
- * none registered with a name in config/symbols/ov12.txt.
- */
-const char D_00A57338[] = "pBxx != NIL";
+/* Default color of a picture: RgPicColor components. */
+#define RG_PIC_DEFAULT_RGB 128
+#define RG_PIC_DEFAULT_ALPHA 127
 
-const char D_00A57358[] = "pszName != NIL";
+/* Placement of a picture added from the archive browser. */
+#define RG_PIC_DEBUG_START_X 64
+#define RG_PIC_DEBUG_START_Y 128
+#define RG_PIC_DEBUG_STICK_THRESHOLD 80
 
-const char D_00A57380[] = "pPaint != NIL";
+/* Colors of the debug rectangle cycle through 0..32 in steps of 8. */
+#define RG_PIC_NONTEX_COLOR_STEP 8
+#define RG_PIC_NONTEX_COLOR_LIMIT 33
 
-const char D_00A57390[] = "pList != NIL";
+/* RgPicDebug.mode: the editor states RgPicDebugControl dispatches on. */
+#define RG_PIC_DEBUG_BROWSE 0   /* pick an archive picture to add */
+#define RG_PIC_DEBUG_EDIT 1     /* move/restyle the selected picture */
+#define RG_PIC_DEBUG_DELETE 2   /* confirm deleting the selected picture */
+#define RG_PIC_DEBUG_SAVE 3     /* confirm saving the list */
+#define RG_PIC_DEBUG_LOAD 4     /* confirm loading the list */
+#define RG_PIC_DEBUG_OFFSET 5   /* move the whole list */
 
-const char D_00A573A0[] = "pList->m_uNum < PIC_MAX";
+/* L1 moves in steps of 8 and snaps both coordinates to that grid. */
+#define PIC_DEBUG_COARSE_STEP 8
 
-const char D_00A573B8[] = "pDebug != NIL";
-
-static void _draw_add(int paintId, int picGroup, int picIndex, int x, int y)
-{
-    int texture;
-
-    texture = RgBxxGetPic(picGroup, picIndex);
-    if (texture != 0) {
-        XrgPaint2DAlpha(paintId, XRG_PAINT2D_ADD);
-        XrgPaint2DUseTexture(paintId, texture);
-        XrgPaint2DDrawXYWH(paintId, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
-    }
-}
-
-static void _draw_linear(int paintId, int picGroup, int picIndex, int x, int y)
-{
-    int texture;
-
-    texture = RgBxxGetPic(picGroup, picIndex);
-    if (texture != 0) {
-        XrgPaint2DAlpha(paintId, XRG_PAINT2D_LINEAR);
-        XrgPaint2DUseTexture(paintId, texture);
-        XrgPaint2DDrawXYWH(paintId, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
-    }
-}
 
 /* Scaffold-owned counter (config/symbols/ov12.txt: s_nColor_0). */
 extern int s_nColor_0;
-extern void XrgPaint2DColor(int paint, const RgPicColor *color);
+extern XglPadRecord PadData[2];
 
-static void _draw_nontex(int paintId, int x, int y, int width, int height)
+/* Debug text strings: scaffold-owned rodata, referenced by address only. */
+extern const char picListDebugEditHelpText[];
+extern const char picListDebugPicNumberFormat[];
+extern const char picListDebugPicPositionFormat[];
+extern const char picListDebugSelectHelpText[];
+extern const char picListDebugTextureNameFormat[];
+extern const char picListDebugDeleteHelpText[];
+extern const char picListDebugSavePromptText[];
+extern const char picListDebugConfirmCancelHelpText[];
+extern const char picListDebugLoadPromptText[];
+extern const char picListDebugMoveImageHintText[];
+extern const char picListDebugOffsetFormat[];
+
+RgPic *CreateRgPic(RgBxx *bxx, const char *pszName);
+RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
+void RgPicWrite(RgPic *pic, int handle);
+void RgPicListWrite(RgPicList *pList, int handle);
+
+const char picListAssertPicNotNil[] = "pPic != NIL";
+
+const char picListSourcePath[] = "../rg_piclist.euc.c";
+
+const char picListAssertBxxNotNil[] = "pBxx != NIL";
+
+const char picListAssertNameNotNil[] = "pszName != NIL";
+
+const char picListAssertPaintNotNil[] = "pPaint != NIL";
+
+const char picListAssertListNotNil[] = "pList != NIL";
+
+const char picListAssertNumBelowPicMax[] = "pList->m_uNum < PIC_MAX";
+
+const char picListAssertDebugNotNil[] = "pDebug != NIL";
+
+static void _draw_add(XrgPaint2D *paintId, RgBxx *bxx, const char *picName,
+                      int x, int y)
 {
-    int color[4];
-    int fill[4];
+    RgBxxPic *texture;
+
+    texture = RgBxxGetPic(bxx, picName);
+    if (texture != 0) {
+        XrgPaint2DAlpha(paintId, XRG_PAINT2D_BLEND_ADD);
+        XrgPaint2DUseTexture(paintId, texture);
+        XrgPaint2DDrawXYWH(paintId, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
+    }
+}
+
+static void _draw_linear(XrgPaint2D *paintId, RgBxx *bxx, const char *picName,
+                         int x, int y)
+{
+    RgBxxPic *texture;
+
+    texture = RgBxxGetPic(bxx, picName);
+    if (texture != 0) {
+        XrgPaint2DAlpha(paintId, XRG_PAINT2D_BLEND_LINEAR);
+        XrgPaint2DUseTexture(paintId, texture);
+        XrgPaint2DDrawXYWH(paintId, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
+    }
+}
+
+static void _draw_nontex(XrgPaint2D *paintId, int x, int y, int width, int height)
+{
+    RgPicColor color;
+    RgPicColor fill;
     int level;
 
-    memset(fill, 0, sizeof(fill));
+    memset(&fill, 0, sizeof(fill));
     level = s_nColor_0;
-    fill[0] = level;
-    fill[1] = level;
-    fill[2] = level;
-    __builtin_memcpy(color, fill, sizeof(color));
-    s_nColor_0 = level + 8;
-    if (s_nColor_0 >= 33)
+    fill.r = level;
+    fill.g = level;
+    fill.b = level;
+    __builtin_memcpy(&color, &fill, sizeof(color));
+    s_nColor_0 = level + RG_PIC_NONTEX_COLOR_STEP;
+    if (s_nColor_0 >= RG_PIC_NONTEX_COLOR_LIMIT)
         s_nColor_0 = 0;
-    XrgPaint2DColor(paintId, (RgPicColor *) color);
-    XrgPaint2DAlpha(paintId, XRG_PAINT2D_ADD);
+    XrgPaint2DColor(paintId, &color);
+    XrgPaint2DAlpha(paintId, XRG_PAINT2D_BLEND_ADD);
     XrgPaint2DDrawXYWH(paintId, 0, x, y, width, height);
 }
 
@@ -122,7 +152,7 @@ int RgPicGetWidth(RgPic *pic)
     int width;
 
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 81);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 81);
 
     width = 0;
     if (pic->tex != 0)
@@ -135,7 +165,7 @@ int RgPicGetHeight(RgPic *pic)
     int height;
 
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 93);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 93);
 
     height = 0;
     if (pic->tex != 0)
@@ -151,13 +181,11 @@ void RgPicWrite(RgPic *pic, int handle)
     unsigned char *src;
     int remaining;
 
-    extern int XrgHostWrite(int handle, const void *buffer, int size);
-
     debugFlags = InstanceOfRgDebugFlags();
     if (debugFlags->flags[3] == 0)
         return;
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 110);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 110);
 
     /*
      * The picture record is copied through a plain byte pointer, so the
@@ -184,20 +212,20 @@ int RgPicBinarySize(void)
     return RG_PIC_BINARY_SIZE;
 }
 
-const char D_00A57348[] = "pBuf != NIL";
+const char picListAssertBufferNotNil[] = "pBuf != NIL";
 
 RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer)
 {
     unsigned char *src;
     RgPic *pic;
-    int tex;
+    RgBxxPic *tex;
 
     src = buffer;
-    pic = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPic), D_00A57320, 136);
+    pic = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPic), picListSourcePath, 136);
     if (bxx == 0)
-        assert_prog(D_00A57338, D_00A57320, 139);
+        assert_prog(picListAssertBxxNotNil, picListSourcePath, 139);
     if (buffer == 0)
-        assert_prog(D_00A57348, D_00A57320, 140);
+        assert_prog(picListAssertBufferNotNil, picListSourcePath, 140);
     __builtin_memcpy(pic->name, src, 32);
     src += 32;
     __builtin_memcpy(&pic->x, src, 4);
@@ -210,15 +238,15 @@ RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer)
     src += 4;
     __builtin_memcpy(&pic->notDraw, src, 4);
     tex = RgBxxGetPic(bxx, pic->name);
-    pic->tex = (RgPicTexture *)tex;
+    pic->tex = tex;
     pic->ofsY = 0;
     pic->ofsX = 0;
-    pic->color.b = 128;
-    pic->color.g = 128;
-    pic->color.r = 128;
-    pic->color.a = 127;
+    pic->color.b = RG_PIC_DEFAULT_RGB;
+    pic->color.g = RG_PIC_DEFAULT_RGB;
+    pic->color.r = RG_PIC_DEFAULT_RGB;
+    pic->color.a = RG_PIC_DEFAULT_ALPHA;
     if (tex == 0) {
-        RgHeapFree(InstanceOfRgHeap(), pic, D_00A57320, 153);
+        RgHeapFree(InstanceOfRgHeap(), pic, picListSourcePath, 153);
         pic = 0;
     }
     return pic;
@@ -229,45 +257,41 @@ RgPic *RgPicRead(int handle, RgBxx *bxx)
     unsigned char buffer[0x400];
     RgDebugFlags *debugFlags;
 
-    extern int XrgHostRead(int handle, void *buffer, int size);
-
     debugFlags = InstanceOfRgDebugFlags();
     if (debugFlags->flags[3] == 0)
         return 0;
     if (bxx == 0)
-        assert_prog(D_00A57338, D_00A57320, 165);
+        assert_prog(picListAssertBxxNotNil, picListSourcePath, 165);
     XrgHostRead(handle, buffer, RgPicBinarySize());
     return CreateRgPicFromBinary(bxx, buffer);
 }
 
-const char D_00A57368[] = "pPic->m_pPic != NIL";
+const char picListAssertPicDataNotNil[] = "pPic->m_pPic != NIL";
 
 RgPic *CreateRgPic(RgBxx *bxx, const char *pszName)
 {
     RgPic *pic;
 
-    extern char *strcpy(char *destination, const char *source);
-
-    pic = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPic), D_00A57320, 177);
+    pic = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPic), picListSourcePath, 177);
     if (bxx == 0)
-        assert_prog(D_00A57338, D_00A57320, 178);
+        assert_prog(picListAssertBxxNotNil, picListSourcePath, 178);
     if (pszName == 0)
-        assert_prog(D_00A57358, D_00A57320, 179);
+        assert_prog(picListAssertNameNotNil, picListSourcePath, 179);
 
     pic->tex = RgBxxGetPic(bxx, pszName);
     if (pic->tex == 0)
-        assert_prog(D_00A57368, D_00A57320, 181);
-    pic->alpha = 2;
-    pic->color.a = 127;
+        assert_prog(picListAssertPicDataNotNil, picListSourcePath, 181);
+    pic->alpha = RG_PIC_ALPHA_LINEAR;
+    pic->color.a = RG_PIC_DEFAULT_ALPHA;
     pic->x = 0;
     pic->y = 0;
     pic->dark = 0;
     pic->notDraw = 0;
     pic->ofsY = 0;
     pic->ofsX = 0;
-    pic->color.b = 128;
-    pic->color.g = 128;
-    pic->color.r = 128;
+    pic->color.b = RG_PIC_DEFAULT_RGB;
+    pic->color.g = RG_PIC_DEFAULT_RGB;
+    pic->color.r = RG_PIC_DEFAULT_RGB;
     strcpy(pic->name, pszName);
     return pic;
 }
@@ -275,49 +299,49 @@ RgPic *CreateRgPic(RgBxx *bxx, const char *pszName)
 void DisposeRgPic(RgPic *pic)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 197);
-    RgHeapFree(InstanceOfRgHeap(), pic, D_00A57320, 198);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 197);
+    RgHeapFree(InstanceOfRgHeap(), pic, picListSourcePath, 198);
 }
 
 char *RgPicGetName(RgPic *pic)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 204);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 204);
     return pic->name;
 }
 
 int RgPicGetAlpha(RgPic *pic)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 211);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 211);
     return pic->alpha;
 }
 
 void RgPicSetAlpha(RgPic *pic, int alpha)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 218);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 218);
     pic->alpha = alpha;
 }
 
 int RgPicGetX(RgPic *pic)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 225);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 225);
     return pic->x;
 }
 
 int RgPicGetY(RgPic *pic)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 230);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 230);
     return pic->y;
 }
 
 void RgPicSetOfsXY(RgPic *pic, int ofsX, int ofsY)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 237);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 237);
     pic->ofsX = ofsX;
     pic->ofsY = ofsY;
 }
@@ -325,24 +349,24 @@ void RgPicSetOfsXY(RgPic *pic, int ofsX, int ofsY)
 void RgPicSetColor(RgPic *pic, const RgPicColor *color)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 245);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 245);
     pic->color.r = color->r;
     pic->color.g = color->g;
     pic->color.b = color->b;
     pic->color.a = color->a;
 }
 
-RgPicTexture *RgPicGetTex(RgPic *pic)
+RgBxxPic *RgPicGetTex(RgPic *pic)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 255);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 255);
     return pic->tex;
 }
 
 void RgPicSetPos(RgPic *pic, int x, int y)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 262);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 262);
     pic->x = x;
     pic->y = y;
 }
@@ -350,7 +374,7 @@ void RgPicSetPos(RgPic *pic, int x, int y)
 void RgPicMove(RgPic *pic, int dx, int dy)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 270);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 270);
     pic->x += dx;
     pic->y += dy;
 }
@@ -362,28 +386,28 @@ void RgPicMove(RgPic *pic, int dx, int dy)
  * A "dark" picture halves every color component before handing it to
  * XrgPaint2DColor instead of drawing with its stored color unchanged.
  */
-void RgPicDraw(RgPic *pic, int paint)
+void RgPicDraw(RgPic *pic, XrgPaint2D *paint)
 {
     RgPicColor darkColor;
 
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 280);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 280);
     if (paint == 0)
-        assert_prog(D_00A57380, D_00A57320, 281);
+        assert_prog(picListAssertPaintNotNil, picListSourcePath, 281);
 
     if (pic->notDraw == 0) {
         switch ((unsigned int) pic->alpha) {
-        case 1:
-            XrgPaint2DAlpha(paint, 1);
+        case RG_PIC_ALPHA_ADD:
+            XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_ADD);
             break;
-        case 3:
-            XrgPaint2DAlpha(paint, 3);
+        case RG_PIC_ALPHA_ALPHA:
+            XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_ALPHA);
             break;
-        case 2:
-            XrgPaint2DAlpha(paint, 0);
+        case RG_PIC_ALPHA_LINEAR:
+            XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
             break;
         }
-        XrgPaint2DUseTexture(paint, (int) pic->tex);
+        XrgPaint2DUseTexture(paint, pic->tex);
         if (pic->dark != 0) {
             darkColor.r = pic->color.r / 2;
             darkColor.g = pic->color.g / 2;
@@ -393,7 +417,7 @@ void RgPicDraw(RgPic *pic, int paint)
         } else {
             XrgPaint2DColor(paint, &pic->color);
         }
-        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE,
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE,
                             pic->x + pic->ofsX, pic->y + pic->ofsY, 0, 0);
     }
 }
@@ -401,14 +425,14 @@ void RgPicDraw(RgPic *pic, int paint)
 void RgPicSetDark(RgPic *pic, int dark)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 318);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 318);
     pic->dark = dark;
 }
 
 void RgPicNotDraw(RgPic *pic, int notDraw)
 {
     if (pic == 0)
-        assert_prog(D_00A57310, D_00A57320, 326);
+        assert_prog(picListAssertPicNotNil, picListSourcePath, 326);
     pic->notDraw = notDraw;
 }
 
@@ -416,9 +440,9 @@ RgPicList *CreateRgPicList(RgBxx *pBxx)
 {
     RgPicList *pList;
 
-    pList = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPicList), D_00A57320, 347);
+    pList = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPicList), picListSourcePath, 347);
     if (pBxx == 0)
-        assert_prog(D_00A57338, D_00A57320, 348);
+        assert_prog(picListAssertBxxNotNil, picListSourcePath, 348);
     pList->bxx = pBxx;
     pList->m_uNum = 0;
     pList->ofsX = 0;
@@ -432,10 +456,10 @@ void DisposeRgPicList(RgPicList *pList)
     unsigned int i;
 
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 362);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 362);
     for (i = 0; i < pList->m_uNum; i++)
         DisposeRgPic(pList->pics[i]);
-    RgHeapFree(InstanceOfRgHeap(), pList, D_00A57320, 365);
+    RgHeapFree(InstanceOfRgHeap(), pList, picListSourcePath, 365);
 }
 
 RgPic *RgPicListAddPic(RgPicList *pList, const char *pszName)
@@ -443,11 +467,11 @@ RgPic *RgPicListAddPic(RgPicList *pList, const char *pszName)
     RgPic *pic;
 
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 373);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 373);
     if (pszName == 0)
-        assert_prog(D_00A57358, D_00A57320, 374);
+        assert_prog(picListAssertNameNotNil, picListSourcePath, 374);
     if (pList->m_uNum >= PIC_MAX)
-        assert_prog(D_00A573A0, D_00A57320, 375);
+        assert_prog(picListAssertNumBelowPicMax, picListSourcePath, 375);
 
     pic = CreateRgPic(pList->bxx, pszName);
     pList->pics[pList->m_uNum++] = pic;
@@ -459,7 +483,7 @@ void RgPicListDelPic(RgPicList *pList, int index)
     unsigned int i;
 
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 385);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 385);
 
     if (index >= 0 && index < pList->m_uNum) {
         DisposeRgPic(pList->pics[index]);
@@ -472,7 +496,7 @@ void RgPicListDelPic(RgPicList *pList, int index)
 RgPic *RgPicListGetPic(RgPicList *pList, int index)
 {
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 399);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 399);
 
     if (index >= 0 && index < pList->m_uNum) {
         return pList->pics[index];
@@ -483,18 +507,16 @@ RgPic *RgPicListGetPic(RgPicList *pList, int index)
 unsigned int RgPicListGetSize(RgPicList *pList)
 {
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 410);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 410);
     return pList->m_uNum;
 }
 
-extern void XrgPaint2DOffset2DDot(int paint, int offsetX, int offsetY);
-
-void RgPicListDraw(RgPicList *pList, int paint)
+void RgPicListDraw(RgPicList *pList, XrgPaint2D *paint)
 {
     unsigned int i;
 
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 419);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 419);
 
     if (pList->drawEnable != 0) {
         XrgPaint2DOffset2DDot(paint, pList->ofsX, pList->ofsY);
@@ -506,7 +528,7 @@ void RgPicListDraw(RgPicList *pList, int paint)
 void RgPicListSetDrawEnable(RgPicList *pList, int enable)
 {
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 431);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 431);
     pList->drawEnable = enable;
 }
 
@@ -526,14 +548,12 @@ void RgPicListWrite(RgPicList *pList, int handle)
     int remaining;
     unsigned int i;
 
-    extern int XrgHostWrite(int handle, const void *buffer, int size);
-
     debugFlags = InstanceOfRgDebugFlags();
     if (debugFlags->flags[3] == 0)
         return;
     reserved = 0;
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 452);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 452);
 
     dst = buffer;
     __builtin_memcpy(dst, &pList->m_uNum, 4);
@@ -604,8 +624,6 @@ RgPicList *RgPicListRead(int handle, RgBxx *bxx)
     unsigned int i;
     unsigned char *src;
 
-    extern int XrgHostRead(int handle, void *buffer, int size);
-
     if (InstanceOfRgDebugFlags()->flags[3] != 0) {
         pList = CreateRgPicList(bxx);
         XrgHostRead(handle, buffer, _BinarySizePicList());
@@ -634,21 +652,21 @@ RgPicList *RgPicListRead(int handle, RgBxx *bxx)
 int RgPicListGetOfsX(RgPicList *pList)
 {
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 528);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 528);
     return pList->ofsX;
 }
 
 int RgPicListGetOfsY(RgPicList *pList)
 {
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 534);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 534);
     return pList->ofsY;
 }
 
 void RgPicListSetOffset(RgPicList *pList, int ofsX, int ofsY)
 {
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 541);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 541);
     pList->ofsX = ofsX;
     pList->ofsY = ofsY;
 }
@@ -658,7 +676,7 @@ void RgPicListMoveAllPic(RgPicList *pList, int dx, int dy)
     unsigned int i;
 
     if (pList == 0)
-        assert_prog(D_00A57390, D_00A57320, 550);
+        assert_prog(picListAssertListNotNil, picListSourcePath, 550);
     for (i = 0; i < pList->m_uNum; i++)
         RgPicMove(pList->pics[i], dx, dy);
 }
@@ -668,11 +686,11 @@ RgPicDebug *CreateRgPicDebug(RgBxx *pBxx)
     RgPicDebug *pDebug;
 
     if (pBxx == 0)
-        assert_prog(D_00A57338, D_00A57320, 582);
-    pDebug = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPicDebug), D_00A57320, 583);
+        assert_prog(picListAssertBxxNotNil, picListSourcePath, 582);
+    pDebug = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPicDebug), picListSourcePath, 583);
     pDebug->bxx = pBxx;
     pDebug->list = CreateRgPicList(pBxx);
-    pDebug->mode = 1;
+    pDebug->mode = RG_PIC_DEBUG_EDIT;
     pDebug->index = -1;
     pDebug->picId = 0;
     return pDebug;
@@ -681,28 +699,14 @@ RgPicDebug *CreateRgPicDebug(RgBxx *pBxx)
 void DisposeRgPicDebug(RgPicDebug *pDebug)
 {
     if (pDebug == 0)
-        assert_prog(D_00A573B8, D_00A57320, 596);
+        assert_prog(picListAssertDebugNotNil, picListSourcePath, 596);
     DisposeRgPicList(pDebug->list);
-    RgHeapFree(InstanceOfRgHeap(), pDebug, D_00A57320, 598);
+    RgHeapFree(InstanceOfRgHeap(), pDebug, picListSourcePath, 598);
 }
 
 /*
- * The pad table in MAIN (0x00490d90); RgPicDebugEditPosition reads the held
- * buttons at +0x28 (lhu PadData+0x28, ov12:0x00a41750). Button bits as in
- * src/ov12/xrg_pad.c.
+ * The held buttons are read at PadData+0x28 (lhu, ov12:0x00a41750).
  */
-#include "main/xgl_pad.h"
-
-extern XglPadRecord PadData[2];
-
-#define PAD_L1    0x0004
-#define PAD_UP    0x1000
-#define PAD_RIGHT 0x2000
-#define PAD_DOWN  0x4000
-#define PAD_LEFT  0x8000
-/* L1 moves in steps of 8 and snaps both coordinates to that grid. */
-#define PIC_DEBUG_COARSE_STEP 8
-
 void RgPicDebugEditPosition(int *x, int *y)
 {
     u16 buttons;
@@ -734,29 +738,18 @@ void RgPicDebugEditPosition(int *x, int *y)
     }
 }
 
-#include "main/xgl_pad.h"
+const char picListHostPlacementFileName[] = "host0:place2d.bin";
 
-extern struct RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id);
-extern int RgBxxGetTexNum(RgBxx *pBxx);
-extern int XrgHostCreateOpen(const char *filename);
-extern int XrgHostReadOpen(const char *filename);
-extern void XrgHostClose(int handle);
-extern void RgError(const char *message, const char *source_file, int line, ...);
-void RgPicListWrite(RgPicList *pList, int handle);
-void RgPicWrite(RgPic *pic, int handle);
+const char picListAssertDebugListNotNil[] = "pDebug->m_pList != NIL";
 
-const char D_00A573C8[] = "host0:place2d.bin";
-
-const char D_00A573E0[] = "pDebug->m_pList != NIL";
-
-const char D_00A573F8[] = "unknown debug edit mode %d";
+const char picListUnknownDebugEditModeFormat[] = "unknown debug edit mode %d";
 
 void RgPicDebugControl(RgPicDebug *pDebug)
 {
     RgPic *pic;
     RgPic *oldPic;
     RgPic *newPic;
-    struct RgBxxPic *pBxxPic;
+    RgBxxPic *pBxxPic;
     unsigned int alpha;
     int mode;
     int buttons;
@@ -785,24 +778,24 @@ void RgPicDebugControl(RgPicDebug *pDebug)
     stickX = PadData[0].position[0] + PadData[0].position[2];
 
     if (pDebug == 0)
-        assert_prog(D_00A573B8, D_00A57320, 636);
+        assert_prog(picListAssertDebugNotNil, picListSourcePath, 636);
 
     mode = pDebug->mode;
-    if (mode == 1) {
+    if (mode == RG_PIC_DEBUG_EDIT) {
         pic = RgPicListGetPic(pDebug->list, pDebug->index);
         if (pic != 0) {
             x = RgPicGetX(pic);
             y = RgPicGetY(pic);
             RgPicDebugEditPosition(&x, &y);
-            if (repeat & 0x8) {
+            if (repeat & PAD_R1) {
                 alpha = RgPicGetAlpha(pic) + 1;
-                RgPicSetAlpha(pic, alpha < 4 ? alpha : 0);
+                RgPicSetAlpha(pic, alpha < RG_PIC_ALPHA_COUNT ? alpha : 0);
             }
             RgPicSetPos(pic, x, y);
         }
-        if (repeat & 0x10)
+        if (repeat & PAD_TRIANGLE)
             pDebug->index--;
-        if (repeat & 0x80)
+        if (repeat & PAD_SQUARE)
             pDebug->index++;
         last = RgPicListGetSize(pDebug->list) - 1;
         index = pDebug->index;
@@ -813,23 +806,23 @@ void RgPicDebugControl(RgPicDebug *pDebug)
         else
             selected = index;
         pDebug->index = selected;
-        if (repeat & 0x20)
-            pDebug->mode = 0;
-        if (repeat & 0x40)
-            pDebug->mode = 2;
-        if ((buttons & 5) == 5)
-            pDebug->mode = 3;
-        if ((buttons & 0xa) == 10)
-            pDebug->mode = 4;
-        if (repeat & 0x800)
-            pDebug->mode = 5;
-    } else if (mode == 0) {
+        if (repeat & PAD_CIRCLE)
+            pDebug->mode = RG_PIC_DEBUG_BROWSE;
+        if (repeat & PAD_CROSS)
+            pDebug->mode = RG_PIC_DEBUG_DELETE;
+        if ((buttons & (PAD_L1 | PAD_L2)) == (PAD_L1 | PAD_L2))
+            pDebug->mode = RG_PIC_DEBUG_SAVE;
+        if ((buttons & (PAD_R1 | PAD_R2)) == (PAD_R1 | PAD_R2))
+            pDebug->mode = RG_PIC_DEBUG_LOAD;
+        if (repeat & PAD_START)
+            pDebug->mode = RG_PIC_DEBUG_OFFSET;
+    } else if (mode == RG_PIC_DEBUG_BROWSE) {
         texNum = RgBxxGetTexNum(pDebug->bxx);
         if (texNum == 0)
-            pDebug->mode = 1;
-        if (repeat & 0x10)
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
+        if (repeat & PAD_TRIANGLE)
             pDebug->picId--;
-        else if (repeat & 0x80)
+        else if (repeat & PAD_SQUARE)
             pDebug->picId++;
         last = texNum - 1;
         picIndex = pDebug->picId;
@@ -840,27 +833,27 @@ void RgPicDebugControl(RgPicDebug *pDebug)
         else
             picId = picIndex;
         pDebug->picId = picId;
-        if (repeat & 0x20) {
+        if (repeat & PAD_CIRCLE) {
             pBxxPic = RgBxxGetPicID(pDebug->bxx, picId);
             if (pBxxPic != 0) {
                 oldPic = RgPicListGetPic(pDebug->list, pDebug->index);
-                newPic = RgPicListAddPic(pDebug->list, (const char *)pBxxPic);
+                newPic = RgPicListAddPic(pDebug->list, pBxxPic->name);
                 if (newPic != 0) {
                     if (oldPic == 0) {
-                        RgPicSetPos(newPic, 64, 128);
+                        RgPicSetPos(newPic, RG_PIC_DEBUG_START_X, RG_PIC_DEBUG_START_Y);
                     } else {
                         offX = 128 - RgPicGetX(oldPic);
                         offY = 128 - RgPicGetY(oldPic);
-                        if (stickX < -80) {
+                        if (stickX < -RG_PIC_DEBUG_STICK_THRESHOLD) {
                             offX = -RgPicGetWidth(newPic);
                             offY = 0;
-                        } else if (stickX >= 81) {
+                        } else if (stickX >= RG_PIC_DEBUG_STICK_THRESHOLD + 1) {
                             offX = RgPicGetWidth(oldPic);
                             offY = 0;
-                        } else if (stickY < -80) {
+                        } else if (stickY < -RG_PIC_DEBUG_STICK_THRESHOLD) {
                             offX = 0;
                             offY = -RgPicGetHeight(newPic);
-                        } else if (stickY >= 81) {
+                        } else if (stickY >= RG_PIC_DEBUG_STICK_THRESHOLD + 1) {
                             offX = 0;
                             offY = RgPicGetHeight(oldPic);
                         }
@@ -869,13 +862,13 @@ void RgPicDebugControl(RgPicDebug *pDebug)
                     }
                 }
             }
-            pDebug->mode = 1;
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
             pDebug->index = RgPicListGetSize(pDebug->list) - 1;
         }
-        if (repeat & 0x40)
-            pDebug->mode = 1;
-    } else if (mode == 2) {
-        if (repeat & 0x20) {
+        if (repeat & PAD_CROSS)
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
+    } else if (mode == RG_PIC_DEBUG_DELETE) {
+        if (repeat & PAD_CIRCLE) {
             int newIndex;
 
             RgPicListDelPic(pDebug->list, pDebug->index);
@@ -892,44 +885,44 @@ void RgPicDebugControl(RgPicDebug *pDebug)
             } else {
                 pDebug->index = -1;
             }
-            pDebug->mode = 1;
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
         }
-        if (repeat & 0x840)
-            pDebug->mode = 1;
-    } else if (mode == 3) {
-        if (repeat & 0x20) {
+        if (repeat & (PAD_START | PAD_CROSS))
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
+    } else if (mode == RG_PIC_DEBUG_SAVE) {
+        if (repeat & PAD_CIRCLE) {
             if (InstanceOfRgDebugFlags()->flags[3] != 0) {
-                handle = XrgHostCreateOpen(D_00A573C8);
+                handle = XrgHostCreateOpen(picListHostPlacementFileName);
                 if (handle >= 0) {
                     RgPicListWrite(pDebug->list, handle);
                     XrgHostClose(handle);
                 }
             }
-            pDebug->mode = 1;
-        } else if (repeat & 0x40) {
-            pDebug->mode = 1;
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
+        } else if (repeat & PAD_CROSS) {
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
         }
-    } else if (mode == 4) {
-        if (repeat & 0x20) {
+    } else if (mode == RG_PIC_DEBUG_LOAD) {
+        if (repeat & PAD_CIRCLE) {
             if (InstanceOfRgDebugFlags()->flags[3] != 0) {
-                handle = XrgHostReadOpen(D_00A573C8);
+                handle = XrgHostReadOpen(picListHostPlacementFileName);
                 if (handle >= 0) {
                     DisposeRgPicList(pDebug->list);
                     pDebug->list = RgPicListRead(handle, pDebug->bxx);
                     if (pDebug->list == 0)
-                        assert_prog(D_00A573E0, D_00A57320, 770);
+                        assert_prog(picListAssertDebugListNotNil, picListSourcePath, 770);
                     XrgHostClose(handle);
                     pDebug->index = RgPicListGetSize(pDebug->list) - 1;
                 }
             }
-            pDebug->mode = 1;
-        } else if (repeat & 0x40) {
-            pDebug->mode = 1;
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
+        } else if (repeat & PAD_CROSS) {
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
         }
-    } else if (mode == 5) {
+    } else if (mode == RG_PIC_DEBUG_OFFSET) {
         ofsX = RgPicListGetOfsX(pDebug->list);
         ofsY = RgPicListGetOfsY(pDebug->list);
-        if (buttons & 8) {
+        if (buttons & PAD_R1) {
             dx = 0;
             dy = 0;
             RgPicDebugEditPosition(&dx, &dy);
@@ -938,32 +931,18 @@ void RgPicDebugControl(RgPicDebug *pDebug)
             RgPicDebugEditPosition(&ofsX, &ofsY);
             RgPicListSetOffset(pDebug->list, ofsX, ofsY);
         }
-        if (repeat & 0x20)
-            pDebug->mode = 1;
+        if (repeat & PAD_CIRCLE)
+            pDebug->mode = RG_PIC_DEBUG_EDIT;
     } else {
-        RgError(D_00A573F8, D_00A57320, 802, mode);
+        RgError(picListUnknownDebugEditModeFormat, picListSourcePath, 802, mode);
     }
 }
 
-/* Debug text strings: scaffold-owned rodata, referenced by address only. */
-extern const char D_00A57418[];
-extern const char D_00A57440[];
-extern const char D_00A57458[];
-extern const char D_00A57470[];
-extern const char D_00A57490[];
-extern const char D_00A574A0[];
-extern const char D_00A574B8[];
-extern const char D_00A574D0[];
-extern const char D_00A574E8[];
-extern const char D_00A57500[];
-extern const char D_00A57520[];
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-void RgPicDebugDisp(RgPicDebug *pDebug, int paint)
+void RgPicDebugDisp(RgPicDebug *pDebug, XrgPaint2D *paint)
 {
     RgPic *pic;
-    RgPicTexture *tex;
-    struct RgBxxPic *pBxxPic;
+    RgBxxPic *tex;
+    RgBxxPic *pBxxPic;
     char *name;
     int x;
     int y;
@@ -971,10 +950,10 @@ void RgPicDebugDisp(RgPicDebug *pDebug, int paint)
     unsigned int size;
 
     if (pDebug == 0)
-        assert_prog(D_00A573B8, D_00A57320, 812);
+        assert_prog(picListAssertDebugNotNil, picListSourcePath, 812);
 
     switch (pDebug->mode) {
-    case 1:
+    case RG_PIC_DEBUG_EDIT:
         pic = RgPicListGetPic(pDebug->list, pDebug->index);
         if (pic != 0) {
             tex = RgPicGetTex(pic);
@@ -982,43 +961,44 @@ void RgPicDebugDisp(RgPicDebug *pDebug, int paint)
             y = RgPicGetY(pic);
             size = RgPicListGetSize(pDebug->list);
             RgPicListDraw(pDebug->list, paint);
-            xglFontDebugPrintf(0, 8, D_00A57418);
-            xglFontDebugPrintf(0, 24, D_00A57440, pDebug->index, size);
+            xglFontDebugPrintf(0, 8, picListDebugEditHelpText);
+            xglFontDebugPrintf(0, 24, picListDebugPicNumberFormat, pDebug->index, size);
             name = RgPicGetName(pic);
             alpha = RgPicGetAlpha(pic);
-            xglFontDebugPrintf(0, 36, D_00A57458, name, x, y, alpha);
+            xglFontDebugPrintf(0, 36, picListDebugPicPositionFormat, name, x, y, alpha);
             _draw_nontex(paint, x, y, tex->width, tex->height);
         }
         break;
-    case 0:
+    case RG_PIC_DEBUG_BROWSE:
         pBxxPic = RgBxxGetPicID(pDebug->bxx, pDebug->picId);
         if (pBxxPic != 0) {
-            xglFontDebugPrintf(0, 8, D_00A57470);
-            xglFontDebugPrintf(0, 32, D_00A57490, pDebug->picId, pBxxPic);
-            _draw_linear(paint, pDebug->bxx, pBxxPic, 64, 128);
+            xglFontDebugPrintf(0, 8, picListDebugSelectHelpText);
+            xglFontDebugPrintf(0, 32, picListDebugTextureNameFormat, pDebug->picId, pBxxPic);
+            _draw_linear(paint, pDebug->bxx, pBxxPic->name, RG_PIC_DEBUG_START_X,
+                         RG_PIC_DEBUG_START_Y);
         }
         break;
-    case 2:
+    case RG_PIC_DEBUG_DELETE:
         pic = RgPicListGetPic(pDebug->list, pDebug->index);
-        xglFontDebugPrintf(0, 8, D_00A574A0);
+        xglFontDebugPrintf(0, 8, picListDebugDeleteHelpText);
         if (pic != 0)
             RgPicDraw(pic, paint);
         break;
-    case 3:
-        xglFontDebugPrintf(0, 8, D_00A574B8);
-        xglFontDebugPrintf(0, 24, D_00A574D0);
+    case RG_PIC_DEBUG_SAVE:
+        xglFontDebugPrintf(0, 8, picListDebugSavePromptText);
+        xglFontDebugPrintf(0, 24, picListDebugConfirmCancelHelpText);
         break;
-    case 4:
-        xglFontDebugPrintf(0, 8, D_00A574E8);
-        xglFontDebugPrintf(0, 24, D_00A574D0);
+    case RG_PIC_DEBUG_LOAD:
+        xglFontDebugPrintf(0, 8, picListDebugLoadPromptText);
+        xglFontDebugPrintf(0, 24, picListDebugConfirmCancelHelpText);
         break;
-    case 5:
+    case RG_PIC_DEBUG_OFFSET:
         RgPicListDraw(pDebug->list, paint);
-        xglFontDebugPrintf(0, 8, D_00A57500);
+        xglFontDebugPrintf(0, 8, picListDebugMoveImageHintText);
         {
             int ofsX = RgPicListGetOfsX(pDebug->list);
             int ofsY = RgPicListGetOfsY(pDebug->list);
-            xglFontDebugPrintf(0, 24, D_00A57520, ofsX, ofsY);
+            xglFontDebugPrintf(0, 24, picListDebugOffsetFormat, ofsX, ofsY);
         }
         break;
     }

@@ -4,29 +4,26 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_thread.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_singleton_id.h"
 #include "ov12/xrg_rand_int.h"
 #include "xrg_sysinit.h"
+#include "main/act_1.h"
+#include "main/xgl_light.h"
+#include "main/xgl_studio.h"
+#include "ov12/xrg_v_log.h"
+#include "main/xgl_render.h"
 
-/*
- * Partial view of the light-set block xglStudioGetLight2 (0x0022c698) hands
- * back: src/main/xgl_studio.h models the full 0xf0-byte block as StudioLight
- * with the span from +0x70 on left opaque, and src/main/xgl_light.h models
- * only its first 0x70 bytes as XglLightSet. xglLightCalcMatrix (0x0022ade0,
- * src/main/xgl_light.c) writes its own two 4x4 output matrices into that
- * opaque span, at +0x70 (the light directions, transposed into columns with
- * a trailing (0,0,0,1) row) and +0xB0 (the light colors); _SetDefaultLight
- * only reaches those two matrices, so nothing before +0x70 is modeled here.
- */
-typedef struct {
-    unsigned char unmodeled_00[0x70];
-    RgMatrix direction;
-    RgMatrix color;
-} XrgLightMatrixSet;
+extern StudioLight *xglStudioGetLight2(void);
 
-extern XrgLightMatrixSet *xglStudioGetLight2(void);
-extern void xglLightCalcMatrix(XrgLightMatrixSet *lightSet);
-extern void XrgUnitMatrix(RgMatrix destination);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
+/* The two heaps live back to back in the extended RAM the game reserves. */
+#define XRG_CODE_HEAP_BASE 0x01000000
+#define XRG_CODE_HEAP_SIZE 0x00100000
+#define XRG_DATA_HEAP_BASE 0x01100000
+#define XRG_DATA_HEAP_SIZE 0x00f00000
+
+/* The number of lights the default set holds. */
+#define XRG_DEFAULT_LIGHT_COUNT 3
 
 static const char xrg_system_init_log_1[16] = "sys init 1\n";
 const char xrg_system_init_source_file[24] = "../xrg_sysinit.euc.c";
@@ -39,19 +36,19 @@ static const char xrg_system_init_log_6[16] = "sys init 6\n";
 static const char xrg_system_init_log_7[16] = "sys init 7\n";
 static const char xrg_system_init_log_8[16] = "sys init 8\n";
 
-static RgVector ainLight_0[3] = {
+static RgVector ainLight_0[XRG_DEFAULT_LIGHT_COUNT] = {
     {1.0f, -1.0f, -0.5f, 0.0f},
     {-1.0f, 1.0f, 0.5f, 0.0f},
     {0.0f, 0.0f, 0.0f, 0.0f},
 };
-static RgVector ainLightCol_1[3] = {
+static RgVector ainLightCol_1[XRG_DEFAULT_LIGHT_COUNT] = {
     {0.5f, 0.5f, 0.5f, 1.0f},
     {0.3f, 0.38f, 0.3f, 1.0f},
     {0.0f, 0.0f, 0.0f, 1.0f},
 };
 
 static void _SetDefaultLight(void) {
-    XrgLightMatrixSet *lightSet;
+    StudioLight *lightSet;
     float *directionDst;
     float *colorPtr;
     float *colorDst;
@@ -59,13 +56,13 @@ static void _SetDefaultLight(void) {
     int i;
 
     lightSet = xglStudioGetLight2();
-    directionDst = lightSet->direction;
-    colorPtr = lightSet->color;
+    directionDst = &lightSet->normal_matrix[0][0];
+    colorPtr = &lightSet->color_modifier_matrix[0][0];
     XrgUnitMatrix(directionDst);
     colorDst = colorPtr;
     XrgUnitMatrix(colorPtr);
 
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < XRG_DEFAULT_LIGHT_COUNT; i++) {
         XrgCopyVector(direction, ainLight_0[i]);
         XrgNormalizeVector(direction, direction);
         directionDst[i] = direction[0];
@@ -88,8 +85,8 @@ void XrgSystemInit(void) {
     XrgLogSys(xrg_system_init_log_1, source_file, 0x47);
     XrgLogSys(xrg_system_init_log_2, source_file, 0x4c);
     XrgLogSys(xrg_system_init_log_3, source_file, 0x5b);
-    InitRgHeap(InstanceOfRgHeap(), (void *)0x01000000, 0x00100000);
-    InitRgHeap(InstanceOfRgHeapData(), (void *)0x01100000, 0x00f00000);
+    InitRgHeap(InstanceOfRgHeap(), (void *)XRG_CODE_HEAP_BASE, XRG_CODE_HEAP_SIZE);
+    InitRgHeap(InstanceOfRgHeapData(), (void *)XRG_DATA_HEAP_BASE, XRG_DATA_HEAP_SIZE);
     XrgLogSys(xrg_system_init_log_4, source_file, 0x65);
     xglRenderClearFrame();
     xglRenderClearColor(0x80000000u);
@@ -102,18 +99,13 @@ void XrgSystemInit(void) {
     XrgLogSys(xrg_system_init_log_8, source_file, 0x7a);
 }
 
-extern void ACT_init(void);
-extern void RgHeapDump_sub(RgHeap *pHeap, const char *comment,
-                           const char *source_file, int line);
-extern void RgSingletonDispose(void);
-
-static const char D_00A591C0[16] = "system dispose";
-static const char D_00A591D0[24] = "system dispose 2";
+static const char sysInitDisposeHeapDumpLabel[16] = "system dispose";
+static const char sysInitDisposeHeapDumpLabel2[24] = "system dispose 2";
 
 void XrgSystemDispose(void) {
     RgSingletonDispose();
-    RgHeapDump_sub(InstanceOfRgHeap(), D_00A591C0, xrg_system_init_source_file, 0x85);
-    RgHeapDump_sub(InstanceOfRgHeapData(), D_00A591D0, xrg_system_init_source_file, 0x86);
+    RgHeapDump_sub(InstanceOfRgHeap(), sysInitDisposeHeapDumpLabel, xrg_system_init_source_file, 0x85);
+    RgHeapDump_sub(InstanceOfRgHeapData(), sysInitDisposeHeapDumpLabel2, xrg_system_init_source_file, 0x86);
     ClearRgHeap(InstanceOfRgHeap());
     ACT_init();
 }

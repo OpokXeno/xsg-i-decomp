@@ -3,12 +3,32 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_enemy.h"
+#include "main/xgl_2.h"
+#include "main/xgl_font.h"
+#include "main/xgl_thread.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_enemy.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_get_frame_time.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_robot.h"
 #include "ov12/rg_robot_control.h"
-#include "ov12/rg_weapon_db.h"
 #include "ov12/rg_shot.h"
+#include "ov12/rg_weapon.h"
+#include "ov12/rg_weapon_db.h"
+#include "ov12/xrg_rand_int.h"
 
-extern void InitRgRobotControlCommon(RgRobotControl *pControl, RgRobot *pRobot);
+/* The debug think tool lists 13 rows: 0 is the level, 1-11 the behaviour switches, 12 all of them. */
+#define RG_ENEMY_DBG_ROWS 13
+#define RG_ENEMY_DBG_ALL_ROW 12
+
+/* Weapon type flags _GetWeaponTypeFlag builds for _JobEnemy's shot job. */
+#define RG_ENEMY_WEAPON_ATTACK 0x20
+#define RG_ENEMY_WEAPON_SHIELD 0x40
+#define RG_ENEMY_WEAPON_EMPTY 0x8000
+/* Any flag above the shot bits: attack, shield or no weapon. */
+#define RG_ENEMY_WEAPON_NOT_SHOT (RG_ENEMY_WEAPON_EMPTY | RG_ENEMY_WEAPON_SHIELD | RG_ENEMY_WEAPON_ATTACK)
 
 static int _GetPadEdge(void)
 {
@@ -20,38 +40,28 @@ static int _GetPadRelease(void)
     return 0;
 }
 
-typedef struct RgWeapon RgWeapon;
-
-extern RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon);
-extern struct RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssence *essence);
-extern void *RgWeaponEssCastToAttack(RgWeaponEssence *essence);
-extern void *RgWeaponEssCastToShield(RgWeaponEssence *essence);
-extern int RgWeaponIsLockedOn(RgWeapon *weapon);
-extern int RgWeaponIsTargetting(RgWeapon *weapon);
 extern int csr_0;
-extern int D_00A599D8;
-extern const char D_00A51C60[];
-extern const char D_00A51C68[];
-extern const char D_00A51C70[];
-extern const char D_00A51C78[];
-extern const char D_00A51C80[];
-extern const char D_00A51C88[];
-extern const char D_00A51C90[];
-extern const char D_00A51CA0[];
-extern const char D_00A51CB0[];
-extern const char D_00A51CC0[];
-extern const char D_00A51CD0[];
-extern const char D_00A51CE0[];
-extern const char D_00A51CF0[];
-extern const char D_00A51D08[];
-extern const char D_00A51D18[];
-extern const char D_00A51D28[];
-extern const char D_00A51D38[];
-extern const char D_00A51D48[];
-extern const char D_00A51D70[];
-extern const char D_00A51D88[];
-extern void xglSleep(void);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern int i_1;
+extern const char enemyDebugSwitchOnText[];
+extern const char enemyDebugSwitchOffText[];
+extern const char enemyDebugLevelMonkeyText[];
+extern const char enemyDebugLevelAverageText[];
+extern const char enemyDebugLevelMechanicalText[];
+extern const char enemyDebugLevelGodText[];
+extern const char enemyDebugThinkLevelLabelText[];
+extern const char enemyDebugTurnWhileMovingText[];
+extern const char enemyDebugDashHeavyUseText[];
+extern const char enemyDebugHomingHeavyUseText[];
+extern const char enemyDebugSatelliteHeavyUseText[];
+extern const char enemyDebugBackAttackText[];
+extern const char enemyDebugDodgeLockOnText[];
+extern const char enemyDebugAvoidObstacleText[];
+extern const char enemyDebugBreakObstacleText[];
+extern const char enemyDebugPreciseShotText[];
+extern const char enemyDebugDualGunText[];
+extern const char enemyDebugMeleeLoverAutoOnText[];
+extern const char enemyDebugAllOnOffText[];
+extern const char enemyDebugCursorText[];
 
 static void _dbgThinkTool(unsigned int *pEnemyType)
 {
@@ -60,7 +70,7 @@ static void _dbgThinkTool(unsigned int *pEnemyType)
     unsigned int startEdge;
 
     armed = 0;
-    startPressed = _GetPadEdge() & 0x100;
+    startPressed = _GetPadEdge() & PAD_SELECT;
     startEdge = startPressed;
 
     for (;;) {
@@ -69,14 +79,14 @@ static void _dbgThinkTool(unsigned int *pEnemyType)
         if (startEdge != 0) {
             armed = 1;
         }
-        if (armed != 0 && (_GetPadRelease() & 0x100)) {
+        if (armed != 0 && (_GetPadRelease() & PAD_SELECT)) {
             break;
         }
 
         padEdge = _GetPadEdge();
-        if (padEdge & 0xA000) {
-            if (csr_0 == 12) {
-                if (padEdge & 0x8000) {
+        if (padEdge & (PAD_LEFT | PAD_RIGHT)) {
+            if (csr_0 == RG_ENEMY_DBG_ALL_ROW) {
+                if (padEdge & PAD_LEFT) {
                     *pEnemyType &= 3;
                 } else {
                     *pEnemyType |= ~3;
@@ -89,7 +99,7 @@ static void _dbgThinkTool(unsigned int *pEnemyType)
                 unsigned int level;
 
                 enemyType = *pEnemyType;
-                if (padEdge & 0x8000) {
+                if (padEdge & PAD_LEFT) {
                     keep = enemyType & ~3;
                     level = (enemyType & 3) - 1;
                 } else {
@@ -100,64 +110,64 @@ static void _dbgThinkTool(unsigned int *pEnemyType)
             }
         }
 
-        if (_GetPadEdge() & 0x20) {
-            if (csr_0 == 12) {
-                for (D_00A599D8 = 1; D_00A599D8 < 12; D_00A599D8++) {
-                    *pEnemyType ^= 1 << (D_00A599D8 + 1);
+        if (_GetPadEdge() & PAD_CIRCLE) {
+            if (csr_0 == RG_ENEMY_DBG_ALL_ROW) {
+                for (i_1 = 1; i_1 < 12; i_1++) {
+                    *pEnemyType ^= 1 << (i_1 + 1);
                 }
             }
         }
 
         padEdge = _GetPadEdge();
-        if (padEdge & 0x1000) {
+        if (padEdge & PAD_UP) {
             csr_0--;
         }
-        if (padEdge & 0x4000) {
+        if (padEdge & PAD_DOWN) {
             csr_0++;
         }
         while (csr_0 < 0) {
-            csr_0 += 13;
+            csr_0 += RG_ENEMY_DBG_ROWS;
         }
-        csr_0 = csr_0 % 13;
+        csr_0 = csr_0 % RG_ENEMY_DBG_ROWS;
 
-        for (D_00A599D8 = 1; D_00A599D8 < 12; D_00A599D8++) {
-            if (((int)*pEnemyType >> (D_00A599D8 + 1)) & 1) {
-                xglFontDebugPrintf(40, D_00A599D8 * 12 + 12, D_00A51C60);
+        for (i_1 = 1; i_1 < 12; i_1++) {
+            if (((int)*pEnemyType >> (i_1 + 1)) & 1) {
+                xglFontDebugPrintf(40, i_1 * 12 + 12, enemyDebugSwitchOnText);
             } else {
-                xglFontDebugPrintf(40, D_00A599D8 * 12 + 12, D_00A51C68);
+                xglFontDebugPrintf(40, i_1 * 12 + 12, enemyDebugSwitchOffText);
             }
         }
 
         switch ((int)(*pEnemyType & 3)) {
         case 0:
-            xglFontDebugPrintf(96, 12, D_00A51C70);
+            xglFontDebugPrintf(96, 12, enemyDebugLevelMonkeyText);
             break;
         case 1:
-            xglFontDebugPrintf(96, 12, D_00A51C78);
+            xglFontDebugPrintf(96, 12, enemyDebugLevelAverageText);
             break;
         case 2:
-            xglFontDebugPrintf(96, 12, D_00A51C80);
+            xglFontDebugPrintf(96, 12, enemyDebugLevelMechanicalText);
             break;
         case 3:
-            xglFontDebugPrintf(96, 12, D_00A51C88);
+            xglFontDebugPrintf(96, 12, enemyDebugLevelGodText);
             break;
         default:
             break;
         }
-        xglFontDebugPrintf(40, 12, D_00A51C90);
-        xglFontDebugPrintf(80, 24, D_00A51CA0);
-        xglFontDebugPrintf(80, 36, D_00A51CB0);
-        xglFontDebugPrintf(80, 48, D_00A51CC0);
-        xglFontDebugPrintf(80, 60, D_00A51CD0);
-        xglFontDebugPrintf(80, 72, D_00A51CE0);
-        xglFontDebugPrintf(80, 84, D_00A51CF0);
-        xglFontDebugPrintf(80, 96, D_00A51D08);
-        xglFontDebugPrintf(80, 108, D_00A51D18);
-        xglFontDebugPrintf(80, 120, D_00A51D28);
-        xglFontDebugPrintf(80, 132, D_00A51D38);
-        xglFontDebugPrintf(80, 144, D_00A51D48);
-        xglFontDebugPrintf(80, 156, D_00A51D70);
-        xglFontDebugPrintf(20, csr_0 * 12 + 12, D_00A51D88);
+        xglFontDebugPrintf(40, 12, enemyDebugThinkLevelLabelText);
+        xglFontDebugPrintf(80, 24, enemyDebugTurnWhileMovingText);
+        xglFontDebugPrintf(80, 36, enemyDebugDashHeavyUseText);
+        xglFontDebugPrintf(80, 48, enemyDebugHomingHeavyUseText);
+        xglFontDebugPrintf(80, 60, enemyDebugSatelliteHeavyUseText);
+        xglFontDebugPrintf(80, 72, enemyDebugBackAttackText);
+        xglFontDebugPrintf(80, 84, enemyDebugDodgeLockOnText);
+        xglFontDebugPrintf(80, 96, enemyDebugAvoidObstacleText);
+        xglFontDebugPrintf(80, 108, enemyDebugBreakObstacleText);
+        xglFontDebugPrintf(80, 120, enemyDebugPreciseShotText);
+        xglFontDebugPrintf(80, 132, enemyDebugDualGunText);
+        xglFontDebugPrintf(80, 144, enemyDebugMeleeLoverAutoOnText);
+        xglFontDebugPrintf(80, 156, enemyDebugAllOnOffText);
+        xglFontDebugPrintf(20, csr_0 * 12 + 12, enemyDebugCursorText);
         xglSleep();
     }
 }
@@ -170,31 +180,30 @@ static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait)
     unsigned int typeFlags;
 
     if (weapon == 0) {
-        return side == 2 ? 0x8000 : 0x20;
+        return side == 2 ? RG_ENEMY_WEAPON_EMPTY : RG_ENEMY_WEAPON_ATTACK;
     }
 
     essence = RgWeaponGetEss(weapon);
     if (essence == 0) {
-        return 0x8000;
+        return RG_ENEMY_WEAPON_EMPTY;
     }
 
-    /* The shared partial essence type leaves this tested word at +4 unnamed. */
-    essenceFlags = *(unsigned int *)((unsigned char *)essence + 4);
+    essenceFlags = essence->controlFlags;
     typeFlags = 4;
-    if (essenceFlags & 0x20) {
+    if (essenceFlags & RG_WEAPON_CONTROL_LOCKON) {
         typeFlags = 0;
     }
 
     if (RgWeaponEssCastToAttack(essence) != 0) {
-        return typeFlags | 0x20;
+        return typeFlags | RG_ENEMY_WEAPON_ATTACK;
     }
     if (RgWeaponEssCastToShield(essence) != 0) {
-        return typeFlags | 0x40;
+        return typeFlags | RG_ENEMY_WEAPON_SHIELD;
     }
 
     if ((shotEssence = RgWeaponEssCastToShot(essence)) != 0) {
         if (!(shotEssence->busyTime + shotEssence->busyTime <
-              wait * 0.033333335f)) {
+              wait * RG_FRAME_TIME)) {
             return typeFlags;
         }
         return typeFlags | 1;
@@ -220,38 +229,25 @@ static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle)
     return 1;
 }
 
-extern RgGeomPoint *RgRobotGetGeom(RgRobot *pRobot);
-extern void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
-                                const char *source_file, int source_line);
-extern float RgGeomRobotGetRotate(RgGeomPoint *point);
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern float RgGeomPointGetSpeed(RgGeomPoint *point);
-extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern float XrgLengthVector(RgVector vector);
-extern int XrgRandInt(void);
-extern double atan2(double y, double x);
-extern float xglSin(float angle);
-extern float xglCos(float angle);
-extern RgWeapon *RgRobotGetWeapon(RgRobot *pRobot, unsigned int eSide);
-extern unsigned int RgRobotGetStatusFlags(RgRobot *pRobot);
-extern float RgRobotGetLife(RgRobot *pRobot);
-extern int RgRobotIsDead(RgRobot *pRobot);
-extern void RgRobotAccelarateRotate(RgRobot *pRobot, float rotate);
-extern void RgRobotAccelarate(RgRobot *pRobot, RgVector velocity);
-extern void RgRobotDash(RgRobot *pRobot, RgVector direction);
-extern void RgRobotDashContinue(RgRobot *pRobot);
-extern void RgRobotBreak(RgRobot *pRobot);
-extern void RgRobotTargetting(RgRobot *pRobot);
-extern void RgRobotShot(RgRobot *pRobot, unsigned int eType);
-extern float RgWeaponGetShotNum(RgWeapon *weapon);
-extern float RgGetFrameTime(void);
 static void _dbgThinkTool(unsigned int *pEnemyType);
 static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait);
 static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle);
 
-#define RG_PI 3.1415927f
+#define RG_PI XRG_PI
 #define RG_ENEMY_NO_WEAPON 0x10000
+
+/* Move job states (RgEnemyJob.state of RgEnemyControl.move). */
+enum {
+    RG_ENEMY_MOVE_IDLE,
+    RG_ENEMY_MOVE_APPROACH,  /* toward the enemy */
+    RG_ENEMY_MOVE_RETREAT,   /* away from the enemy */
+    RG_ENEMY_MOVE_FORWARD,   /* along our own facing */
+    RG_ENEMY_MOVE_BACKWARD,
+    RG_ENEMY_MOVE_STRAFE,    /* diagonal around the enemy */
+    RG_ENEMY_MOVE_HOLD,      /* wait without moving */
+    RG_ENEMY_MOVE_UNSTICK,   /* leave a spot where velocity stalled */
+    RG_ENEMY_MOVE_STOP       /* the enemy is dead */
+};
 
 static inline float _Abs(float x)
 {
@@ -282,7 +278,7 @@ static inline float _RoundAngle(float angle)
  */
 static inline int _EnemyTime(RgEnemyControl *pCtrl, int range, int base)
 {
-    int level = pCtrl->enemyType & 3;
+    int level = pCtrl->enemyType & RG_ENEMY_TYPE_LEVEL_MASK;
     int time = (XrgRandInt() & range) + base;
 
     time = (time >> level) - level;
@@ -316,8 +312,8 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     RgVector move;
     unsigned int weaponFlags[3];
     int targetting;
-    RgRobot *pRobot;
-    RgRobot *pEnemy;
+    RgStatus *pRobot;
+    RgStatus *pEnemy;
     RgGeomPoint *pGeom;
     RgGeomPoint *pEnemyGeom;
     RgEnemyJob *pJob;
@@ -338,7 +334,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     float diff;
 
     targetting = 0;
-    pRobot = pCtrl->pRobot;
+    pRobot = pCtrl->base.robot;
     pEnemy = pCtrl->pEnemyRobot;
     pGeom = RgRobotGetGeom(pRobot);
     pEnemyGeom = RgRobotGetGeom(pEnemy);
@@ -347,7 +343,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     XrgSubVector(direction, enemyPosition, position);
     direction[1] = 0.0f;
     direction[3] = 0.0f;
-    rotate = RgGeomRobotGetRotate(pGeom);
+    rotate = RgGeomRobotGetRotate(&pGeom->geom);
     enemyAngle = atan2(direction[0], direction[2]);
     distance = XrgNormalizeVector(direction, direction);
     relAngle = _RoundAngle(enemyAngle - rotate);
@@ -371,7 +367,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     } else {
         range = 10.0f;
     }
-    if (pCtrl->enemyType & 0x1000) {
+    if (pCtrl->enemyType & RG_ENEMY_TYPE_CLOSE_COMBAT) {
         range -= 45.0f;
     }
 
@@ -382,7 +378,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
         pCtrl->idleTime++;
     }
 
-    if (pCtrl->move.state == 5) {
+    if (pCtrl->move.state == RG_ENEMY_MOVE_STRAFE) {
         if (pCtrl->escapeTime > _EnemyTime(pCtrl, 0xF0, 0x78) + 200) {
             pCtrl->restTime = _EnemyTime(pCtrl, 0x320, 0x190) + 0x100;
         } else {
@@ -394,7 +390,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
 
     if (pCtrl->restTime != 0) {
         pCtrl->restTime--;
-        if ((pCtrl->enemyType & 0x20) && pCtrl->restTime != 0) {
+        if ((pCtrl->enemyType & RG_ENEMY_TYPE_SATELLITE_OFTEN) && pCtrl->restTime != 0) {
             pCtrl->restTime--;
         }
         range -= 5.0f;
@@ -412,7 +408,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     if (RgRobotIsDead(pEnemy)) {
         pCtrl->enemyState = 2;
         pCtrl->turn.state = 4;
-        pCtrl->move.state = 8;
+        pCtrl->move.state = RG_ENEMY_MOVE_STOP;
         pCtrl->shot.state = 5;
     }
 
@@ -425,13 +421,13 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
             distance < 50.0f) {
             if (absAngle > RG_PI / 8) {
                 /* The enemy's facing relative to ours. */
-                diff = RgGeomRobotGetRotate(pEnemyGeom);
+                diff = RgGeomRobotGetRotate(&pEnemyGeom->geom);
                 diff = _RoundAngle(_RoundAngle(diff) - _RoundAngle(rotate));
                 if (position[1] <= 1.51f &&
                     ((!(status & 0x100) && absAngle > RG_PI * 3 / 4 &&
                       _EnemyTime(pCtrl, 0x50, 0x28) < pJob->count) ||
-                     ((pCtrl->enemyType & 0x10) && absAngle > RG_PI / 2 &&
-                      pCtrl->move.state != 5 && diff > RG_PI / 2))) {
+                     ((pCtrl->enemyType & RG_ENEMY_TYPE_HOMING_OFTEN) && absAngle > RG_PI / 2 &&
+                      pCtrl->move.state != RG_ENEMY_MOVE_STRAFE && diff > RG_PI / 2))) {
                     wait = _EnemyTime(pCtrl, 0x1E, 0xF);
                     pJob->count = 0;
                     targetting = 1;
@@ -457,7 +453,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                 pJob->angle = -pJob->angle;
             }
         }
-        if ((!(pCtrl->enemyType & 4) || (status & 0x100)) && pCtrl->move.state != 0 &&
+        if ((!(pCtrl->enemyType & RG_ENEMY_TYPE_TURN_WHILE_MOVING) || (status & 0x100)) && pCtrl->move.state != 0 &&
             state != 3) {
             state = 0;
             wait = 0;
@@ -483,7 +479,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     case 2:
         RgRobotAccelarateRotate(pRobot, pJob->angle);
         if (pJob->param == 0) {
-            if (landing && (absAngle < RG_PI / 2 || (int)(pCtrl->enemyType & 3) >= 2)) {
+            if (landing && (absAngle < RG_PI / 2 || (int)(pCtrl->enemyType & RG_ENEMY_TYPE_LEVEL_MASK) >= 2)) {
                 pJob->param = _EnemyTime(pCtrl, 0xF, 7);
             }
         } else {
@@ -515,10 +511,11 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     state = pCtrl->move.state;
     wait = pCtrl->move.wait;
     pJob = &pCtrl->move;
-    if ((pCtrl->enemyType & 0x100) && state != 6 && state != 0 && state != 8) {
+    if ((pCtrl->enemyType & RG_ENEMY_TYPE_AVOID_OBSTACLES) && state != RG_ENEMY_MOVE_HOLD && state != RG_ENEMY_MOVE_IDLE &&
+        state != RG_ENEMY_MOVE_STOP) {
         cosine = _GetCosine(pCtrl->lastVelocity, velocity);
-        if (state != 7 && _Abs(cosine) < 0.5f && speed < 0.2f) {
-            state = 7;
+        if (state != RG_ENEMY_MOVE_UNSTICK && _Abs(cosine) < 0.5f && speed < 0.2f) {
+            state = RG_ENEMY_MOVE_UNSTICK;
             if (relAngle > 0.0f) {
                 pJob->param = 1;
             } else {
@@ -545,23 +542,23 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                 }
             } else if (distance < range + 70.0f) {
                 if (pCtrl->restTime == 0 &&
-                    ((pCtrl->enemyType & 0x20) || (enemyStatus & 2))) {
-                    if ((pCtrl->enemyType & 0x80) && (enemyStatus & 2)) {
+                    ((pCtrl->enemyType & RG_ENEMY_TYPE_SATELLITE_OFTEN) || (enemyStatus & 2))) {
+                    if ((pCtrl->enemyType & RG_ENEMY_TYPE_AVOID_LOCKON) && (enemyStatus & 2)) {
                         if (pCtrl->shot.state == 0 && absAngle < RG_PI / 8) {
                             pJob->param ^= 1;
                         }
                         pJob->flags |= 1;
-                    } else if (distance < 5.0f && !(pCtrl->enemyType & 0x1000)) {
+                    } else if (distance < 5.0f && !(pCtrl->enemyType & RG_ENEMY_TYPE_CLOSE_COMBAT)) {
                         /* A random number is drawn and discarded. */
                         XrgRandInt();
-                        if (pCtrl->enemyType & 8) {
+                        if (pCtrl->enemyType & RG_ENEMY_TYPE_DASH_OFTEN) {
                             pJob->flags |= 1;
                         }
-                    } else if ((pCtrl->enemyType & 0x40) || !(pJob->flags & 4)) {
-                        diff = RgGeomRobotGetRotate(pEnemyGeom);
+                    } else if ((pCtrl->enemyType & RG_ENEMY_TYPE_BEHIND) || !(pJob->flags & 4)) {
+                        diff = RgGeomRobotGetRotate(&pEnemyGeom->geom);
                         diff = _RoundAngle(_RoundAngle(diff) - _RoundAngle(rotate));
                         if (_Abs(diff) < RG_PI * 3 / 8) {
-                            if ((pCtrl->enemyType & 8) || !(absAngle < RG_PI / 8)) {
+                            if ((pCtrl->enemyType & RG_ENEMY_TYPE_DASH_OFTEN) || !(absAngle < RG_PI / 8)) {
                                 pJob->flags |= 1;
                             }
                         } else if (diff > 0.0f) {
@@ -572,13 +569,13 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                     } else if (speed < 1.0f) {
                         pJob->param ^= 1;
                     }
-                    if ((pCtrl->enemyType & 8) && absAngle < RG_PI / 16) {
+                    if ((pCtrl->enemyType & RG_ENEMY_TYPE_DASH_OFTEN) && absAngle < RG_PI / 16) {
                         pJob->flags |= 1;
                     }
                     state = 5;
                     wait = _EnemyTime(pCtrl, 0x3C, 0x1E);
                 } else {
-                    if ((pCtrl->enemyType & 0x80) && (enemyStatus & 2)) {
+                    if ((pCtrl->enemyType & RG_ENEMY_TYPE_AVOID_LOCKON) && (enemyStatus & 2)) {
                         state = 5;
                         pJob->param ^= 1;
                         wait = _EnemyTime(pCtrl, 0x1E, 0xF) + 60;
@@ -589,7 +586,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                             wait = _EnemyTime(pCtrl, 0x32, 0x19);
                             state = 2;
                         } else if (!(enemyStatus & 2) && distance < range + 40.0f &&
-                                   !(pCtrl->enemyType & 0x1000)) {
+                                   !(pCtrl->enemyType & RG_ENEMY_TYPE_CLOSE_COMBAT)) {
                             wait = _EnemyTime(pCtrl, 0x14, 0xA);
                             state = 6;
                         } else if (!closeRange && distance < range + 70.0f) {
@@ -602,12 +599,12 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                             state = 5;
                             /* The random time is based on the new state number. */
                             wait = _EnemyTime(pCtrl, 0xA, state) + 20;
-                            if (pCtrl->enemyType & 8) {
+                            if (pCtrl->enemyType & RG_ENEMY_TYPE_DASH_OFTEN) {
                                 pJob->flags |= 1;
                             }
                         }
                     }
-                    if ((pCtrl->enemyType & 8) && absAngle < RG_PI / 16) {
+                    if ((pCtrl->enemyType & RG_ENEMY_TYPE_DASH_OFTEN) && absAngle < RG_PI / 16) {
                         pJob->flags |= 1;
                     }
                     if (enemyStatus & 0x40) {
@@ -624,7 +621,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
         }
         pJob->flags &= ~4;
     }
-    if ((!(pCtrl->enemyType & 4) || (status & 0x100)) && pCtrl->turn.state != 0) {
+    if ((!(pCtrl->enemyType & RG_ENEMY_TYPE_TURN_WHILE_MOVING) || (status & 0x100)) && pCtrl->turn.state != 0) {
         state = 0;
         wait = 0;
         pJob->flags &= ~3;
@@ -632,38 +629,38 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
 
     move[0] = move[2] = 0.0f;
     switch (state) {
-    case 1:
+    case RG_ENEMY_MOVE_APPROACH:
         move[0] = direction[0];
         move[2] = direction[2];
         if (wait <= 0) {
             state = 0;
         }
         break;
-    case 2:
+    case RG_ENEMY_MOVE_RETREAT:
         move[0] = -direction[0];
         move[2] = -direction[2];
-        if (pCtrl->enemyType & 0x1000) {
-            state = 1;
+        if (pCtrl->enemyType & RG_ENEMY_TYPE_CLOSE_COMBAT) {
+            state = RG_ENEMY_MOVE_APPROACH;
         }
         if (wait <= 0) {
             state = 0;
         }
         break;
-    case 3:
+    case RG_ENEMY_MOVE_FORWARD:
         move[0] = xglSin(rotate);
         move[2] = xglCos(rotate);
         if (wait <= 0) {
             state = 0;
         }
         break;
-    case 4:
+    case RG_ENEMY_MOVE_BACKWARD:
         move[0] = -xglSin(rotate);
         move[2] = -xglCos(rotate);
         if (wait <= 0) {
             state = 0;
         }
         break;
-    case 5:
+    case RG_ENEMY_MOVE_STRAFE:
         if (pJob->flags & 1) {
             enemyAngle = _RoundAngle(enemyAngle);
             if (pJob->param & 1) {
@@ -691,12 +688,12 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
             pJob->flags |= 4;
         }
         break;
-    case 6:
+    case RG_ENEMY_MOVE_HOLD:
         if (wait <= 0) {
             state = 0;
         }
         break;
-    case 7:
+    case RG_ENEMY_MOVE_UNSTICK:
         move[0] = xglSin(pJob->angle);
         move[2] = xglCos(pJob->angle);
         if (wait <= 0) {
@@ -737,18 +734,18 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
         pJob->flags &= ~3;
     } else {
         move[1] = move[3] = 0.0f;
-        if ((status & 0x104) == 4 && state != 7 &&
+        if ((status & 0x104) == 4 && state != RG_ENEMY_MOVE_UNSTICK &&
             (((enemyStatus & 2) && !(status & 2) && wait <= 0 && !(pJob->flags & 0x10)) ||
              ((pJob->flags & 0x10) && _EnemyTime(pCtrl, 0x50, 0x28) < pCtrl->boostTime))) {
             RgRobotDashContinue(pRobot);
         }
-        if ((pJob->flags & 1) && (wait <= 0 || (pCtrl->enemyType & 8))) {
+        if ((pJob->flags & 1) && (wait <= 0 || (pCtrl->enemyType & RG_ENEMY_TYPE_DASH_OFTEN))) {
             RgRobotDash(pRobot, move);
             pJob->flags &= ~1;
         } else if ((status & 0x100) &&
                    ((absAngle < RG_PI / 4 && !(enemyStatus & 2)) || !(enemyStatus & 1) ||
                     distance > 150.0f) &&
-                   state != 7) {
+                   state != RG_ENEMY_MOVE_UNSTICK) {
             RgRobotBreak(pRobot);
             pJob->flags &= ~3;
         } else {
@@ -822,18 +819,18 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
         } else if (pJob->param >= 4) {
             pJob->param -= 4;
         }
-        if ((4 - (pCtrl->enemyType & 3)) * 4 < pJob->param) {
+        if ((4 - (pCtrl->enemyType & RG_ENEMY_TYPE_LEVEL_MASK)) * 4 < pJob->param) {
             state = 0;
         }
         break;
     }
 
     if (state == 0 && !(status & 0x100)) {
-        if (pCtrl->move.state != 7 &&
+        if (pCtrl->move.state != RG_ENEMY_MOVE_UNSTICK &&
             ((status & 2) ||
-             ((absAngle < RG_PI / 8 || !(pCtrl->enemyType & 0x400)) &&
+             ((absAngle < RG_PI / 8 || !(pCtrl->enemyType & RG_ENEMY_TYPE_ACCURATE_SHOT)) &&
               absAngle < RG_PI * 3 / 8)) &&
-            (landing || (pCtrl->enemyType & 0x200))) {
+            (landing || (pCtrl->enemyType & RG_ENEMY_TYPE_BREAK_OBSTACLES))) {
             if ((enemyStatus & 0x10) || enemyVelocity[1] > 0.01f ||
                 (enemySpeed < 0.1f && distance < 20.0f)) {
                 state = 3;
@@ -862,21 +859,24 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
             weaponFlags[1] = _GetWeaponTypeFlag(weapons[1], 1, wait);
             weaponFlags[2] = _GetWeaponTypeFlag(weapons[2], 2, wait);
             allFlags = weaponFlags[0] | weaponFlags[1] | weaponFlags[2];
-            if (!(pCtrl->enemyType & 0x1000) && (weaponFlags[0] & 0x8060) &&
-                (weaponFlags[1] & 0x8060) && (weaponFlags[2] & 0x8060)) {
-                pCtrl->enemyType |= 0x1000;
+            if (!(pCtrl->enemyType & RG_ENEMY_TYPE_CLOSE_COMBAT) &&
+                (weaponFlags[0] & RG_ENEMY_WEAPON_NOT_SHOT) &&
+                (weaponFlags[1] & RG_ENEMY_WEAPON_NOT_SHOT) &&
+                (weaponFlags[2] & RG_ENEMY_WEAPON_NOT_SHOT)) {
+                pCtrl->enemyType |= RG_ENEMY_TYPE_CLOSE_COMBAT;
             }
-            if ((allFlags & 0x40) && (enemyStatus & 0x42) && landing && distance > 16.0f &&
+            if ((allFlags & RG_ENEMY_WEAPON_SHIELD) && (enemyStatus & 0x42) && landing &&
+                distance > 16.0f &&
                 distance < 70.0f && !(enemyStatus & 0x80) &&
                 RgRobotGetLife(pRobot) > RgRobotGetLife(pEnemy) + 10.0f &&
                 absAngle < RG_PI / 8) {
-                if ((weaponFlags[0] & 0x40) && relAngle > 0.0f) {
+                if ((weaponFlags[0] & RG_ENEMY_WEAPON_SHIELD) && relAngle > 0.0f) {
                     pJob->flags = 0;
-                } else if ((weaponFlags[1] & 0x40) && relAngle < 0.0f) {
+                } else if ((weaponFlags[1] & RG_ENEMY_WEAPON_SHIELD) && relAngle < 0.0f) {
                     pJob->flags = 1;
-                } else if (weaponFlags[2] & 0x40) {
+                } else if (weaponFlags[2] & RG_ENEMY_WEAPON_SHIELD) {
                     pJob->flags = 2;
-                } else if (weaponFlags[0] & 0x40) {
+                } else if (weaponFlags[0] & RG_ENEMY_WEAPON_SHIELD) {
                     pJob->flags = 0;
                 } else {
                     pJob->flags = 1;
@@ -884,15 +884,15 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                 wait += _EnemyTime(pCtrl, 0x320, 0x190) + 200;
                 state = 4;
                 pJob->param = 0;
-            } else if ((allFlags & 0x20) && distance < 15.0f && absAngle < RG_PI / 4 &&
-                       !(enemyStatus & 0x40)) {
-                if ((weaponFlags[0] & 0x20) && relAngle > 0.0f) {
+            } else if ((allFlags & RG_ENEMY_WEAPON_ATTACK) && distance < 15.0f &&
+                       absAngle < RG_PI / 4 && !(enemyStatus & 0x40)) {
+                if ((weaponFlags[0] & RG_ENEMY_WEAPON_ATTACK) && relAngle > 0.0f) {
                     pJob->flags = 0;
-                } else if ((weaponFlags[1] & 0x20) && relAngle < 0.0f) {
+                } else if ((weaponFlags[1] & RG_ENEMY_WEAPON_ATTACK) && relAngle < 0.0f) {
                     pJob->flags = 1;
-                } else if (weaponFlags[2] & 0x20) {
+                } else if (weaponFlags[2] & RG_ENEMY_WEAPON_ATTACK) {
                     pJob->flags = 2;
-                } else if (weaponFlags[0] & 0x20) {
+                } else if (weaponFlags[0] & RG_ENEMY_WEAPON_ATTACK) {
                     pJob->flags = 0;
                 } else {
                     pJob->flags = 1;
@@ -907,8 +907,8 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                 wait += _EnemyTime(pCtrl, 0x14, 0xA);
             } else {
                 found = 0;
-                if ((pCtrl->enemyType & 0x800) && (int)weaponFlags[0] < 0x20 &&
-                    (int)weaponFlags[1] < 0x20) {
+                if ((pCtrl->enemyType & RG_ENEMY_TYPE_DUAL_GUNS) && (int)weaponFlags[0] < RG_ENEMY_WEAPON_ATTACK &&
+                    (int)weaponFlags[1] < RG_ENEMY_WEAPON_ATTACK) {
                     RgWeaponEssence *essence;
                     struct RgWeaponShotEssence *shotEssence;
                     float lastBusyTime = 0.0f;
@@ -943,20 +943,20 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                     if (weaponFlags[pJob->flags] & 4) {
                         pJob->param |= 8;
                     }
-                    if (pCtrl->enemyType & 0x400) {
+                    if (pCtrl->enemyType & RG_ENEMY_TYPE_ACCURATE_SHOT) {
                         pJob->param |= 4;
                     }
                 }
                 if (!found) {
-                    if ((int)weaponFlags[0] < 0x20 && relAngle > RG_PI / 32) {
+                    if ((int)weaponFlags[0] < RG_ENEMY_WEAPON_ATTACK && relAngle > RG_PI / 32) {
                         pJob->flags = 0;
-                    } else if ((int)weaponFlags[1] < 0x20 && relAngle < -RG_PI / 32) {
+                    } else if ((int)weaponFlags[1] < RG_ENEMY_WEAPON_ATTACK && relAngle < -RG_PI / 32) {
                         pJob->flags = 1;
-                    } else if ((int)weaponFlags[2] < 0x20) {
+                    } else if ((int)weaponFlags[2] < RG_ENEMY_WEAPON_ATTACK) {
                         pJob->flags = 2;
-                    } else if ((int)weaponFlags[0] < 0x20) {
+                    } else if ((int)weaponFlags[0] < RG_ENEMY_WEAPON_ATTACK) {
                         pJob->flags = 0;
-                    } else if ((int)weaponFlags[1] < 0x20) {
+                    } else if ((int)weaponFlags[1] < RG_ENEMY_WEAPON_ATTACK) {
                         pJob->flags = 1;
                     }
                     if (pJob->flags != RG_ENEMY_NO_WEAPON) {
@@ -966,7 +966,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                         if (weaponFlags[pJob->flags] & 4) {
                             pJob->param |= 8;
                         }
-                        if (pCtrl->enemyType & 0x400) {
+                        if (pCtrl->enemyType & RG_ENEMY_TYPE_ACCURATE_SHOT) {
                             pJob->param |= 4;
                         }
                     }
@@ -976,11 +976,11 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
                 pJob->flags = lastWeapon;
                 state = 0;
             } else {
-                if ((int)weaponFlags[pJob->flags] < 0x20 && (pJob->param & 4) &&
+                if ((int)weaponFlags[pJob->flags] < RG_ENEMY_WEAPON_ATTACK && (pJob->param & 4) &&
                     weapons[pJob->flags] != 0) {
                     RgWeaponEssence *essence = RgWeaponGetEss(weapons[pJob->flags]);
 
-                    if ((pCtrl->enemyType & 0x400) && distance > 25.0f) {
+                    if ((pCtrl->enemyType & RG_ENEMY_TYPE_ACCURATE_SHOT) && distance > 25.0f) {
                         float chance;
 
                         chance = _Abs(_GetCosine(direction, enemyVelocity));
@@ -1020,13 +1020,11 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     pCtrl->shot.state = state;
     pCtrl->shot.wait = wait;
 
-    if (_GetPadRelease() & 0x100) {
+    if (_GetPadRelease() & PAD_SELECT) {
         _dbgThinkTool(&pCtrl->enemyType);
     }
 }
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
 
 static void _DestructEnemy(RgEnemyControl *pBaka)
 {
@@ -1035,19 +1033,18 @@ static void _DestructEnemy(RgEnemyControl *pBaka)
     }
 }
 
-static void _InitEnemy(RgEnemyControl *pControl, RgRobot *pRobot,
-                       RgRobot *pEnemyRobot, int enemyType)
+static void _InitEnemy(RgEnemyControl *pControl, RgStatus *pRobot,
+                       RgStatus *pEnemyRobot, int enemyType)
 {
-    RgRobotControl *pBaseControl = (RgRobotControl *)pControl;
     float zeroVelocity;
 
     if (pControl == 0) {
         assert_prog("pBaka != NIL", "../rg_enemy.euc.c", 1570);
     }
 
-    InitRgRobotControlCommon(pBaseControl, pRobot);
-    pBaseControl->jobMethod = (RgRobotControlJobFunc)_JobEnemy;
-    pBaseControl->destructMethod = (RgRobotControlDestructFunc)_DestructEnemy;
+    InitRgRobotControlCommon(&pControl->base, pRobot);
+    pControl->base.jobMethod = (RgRobotControlJobFunc)_JobEnemy;
+    pControl->base.destructMethod = (RgRobotControlDestructFunc)_DestructEnemy;
     pControl->pEnemyRobot = pEnemyRobot;
     pControl->enemyType = enemyType;
     pControl->turn.work = 0;
@@ -1072,18 +1069,15 @@ static void _InitEnemy(RgEnemyControl *pControl, RgRobot *pRobot,
     pControl->enemyState = 1;
 }
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
 /*
  * _InitEnemy is defined later in this TU (a local sibling still in asm).
  * enemyType is forwarded to it untouched and unasserted; no stronger
  * evidence for its role exists within this allocation.
  */
-static void _InitEnemy(RgEnemyControl *pControl, RgRobot *pRobot,
-                       RgRobot *pEnemyRobot, int enemyType);
+static void _InitEnemy(RgEnemyControl *pControl, RgStatus *pRobot,
+                       RgStatus *pEnemyRobot, int enemyType);
 
-RgEnemyControl *CreateRgEnemyControl(RgRobot *pRobot, RgRobot *pEnemyRobot,
+RgEnemyControl *CreateRgEnemyControl(RgStatus *pRobot, RgStatus *pEnemyRobot,
                                      int enemyType)
 {
     RgEnemyControl *pControl;

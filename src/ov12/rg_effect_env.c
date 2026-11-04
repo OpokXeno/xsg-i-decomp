@@ -3,77 +3,40 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/rg_effect_env.h"
 #include "ov12/rg_singleton_id.h"
-#include "rg_effect_env.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_filesys.h"
+#include "ov12/rg_linkdata.h"
+#include "ov12/rg_particle_effect.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
+/* Particle effect records returned per link-data entry, and their strides. */
+#define RG_EFFECT_ENV_PARTICLE_SLOTS 4
 
-/*
- * RgBxx is defined by ov12/tu073 (src/ov12/rg_bxx.c); this TU only stores and
- * forwards the pointer LoadRgBxx_sub/DisposeRgBxx_sub return and take, so an
- * incomplete type is enough here.
- */
-extern RgBxx *LoadRgBxx_sub(const char *pszName, const char *source_file,
-                            int line);
-extern void DisposeRgBxx_sub(RgBxx *pBxx, const char *source_file, int line);
+/* One archive entry: the essence, then data nothing here reads, up to the 0x100-byte entry stride. */
+typedef struct RgEffectEnvLinkEntry {
+    RgParticleEffectEssence essence;
+    u8 unmodeled_b0[0x100 - 0xB0];
+} RgEffectEnvLinkEntry;
 
-/*
- * RgFileSys and RgFileSysData are defined by ov12/tu065 (src/ov12/rg_filesys.c);
- * this TU only stores and forwards the pointers InstanceOfRgFileSys/
- * RgFileSysRead return, so incomplete types are enough here.
- */
-extern struct RgFileSys *InstanceOfRgFileSys(void);
-extern struct RgFileSysData *RgFileSysRead(struct RgFileSys *pSys,
-                                           const char *pszName,
-                                           const char *pszRoot);
-extern void DisposeRgFileSysData_sub(struct RgFileSysData *pFile,
-                                     const char *source_file, int line);
+/* The link-data record and the essence slots are only forwarded, never read. */
 
-/* File-backed OV12 witnesses, this TU's own .rodata (scaffold-owned, kept
- * under their splat names): 0x00a540c8 "pEnv != NIL", 0x00a540d8
- * "../rg_effect_env.euc.c", 0x00a540f0 "shot.rbg", 0x00a54100
- * "data\\nisimori\\", 0x00a54110 "particle_effect.rpl", 0x00a54128
- * "effect.bxx". */
-const char D_00A540C8[] = "pEnv != NIL";
-const char D_00A540D8[] = "../rg_effect_env.euc.c";
-const char D_00A540F0[] = "shot.rbg";
-const char D_00A54100[] = "data\\nisimori\\";
-const char D_00A54110[] = "particle_effect.rpl";
-const char D_00A54128[] = "effect.bxx";
+const char effectEnvAssertEnvNotNil[] = "pEnv != NIL";
+const char effectEnvSourcePath[] = "../rg_effect_env.euc.c";
+const char effectEnvShotModelFileName[] = "shot.rbg";
+const char effectEnvDataDirectory[] = "data\\nisimori\\";
+const char effectEnvParticleDataFileName[] = "particle_effect.rpl";
+const char effectEnvBxxFileName[] = "effect.bxx";
 
-/* Two more witnesses in the same window: 0x00a54138 "pszName != NIL",
- * 0x00a54148 "aResult != NIL". */
-const char D_00A54138[] = "pszName != NIL";
-const char D_00A54148[] = "aResult != NIL";
-
-/*
- * RgLinkData is defined by ov12/tu063 (src/ov12/rg_linkdata.c); this
- * function only creates the record on the stack and forwards its address to
- * InitRgLinkData/RgLinkDataGet without ever reading a member itself, so an
- * opaque view (void *) is enough here.
- */
-extern void InitRgLinkData(void *pAna, void *pBuf);
-extern void *RgLinkDataGet(void *pAna, const char *name);
-
-/*
- * RgParticleEffectEssenceResume is defined by ov12/tu035
- * (src/ov12/rg_particle_effect.c), where it copies one essence record. This function
- * only forwards the current output slot and link-data entry addresses,
- * stepping each on its own by a byte stride (0xB0 for aResult's records,
- * 0x100 for the link-data entries), so opaque views are enough here too.
- */
-extern void RgParticleEffectEssenceResume(void *essence, void *linkEntry);
+const char effectEnvAssertNameNotNil[] = "pszName != NIL";
+const char effectEnvAssertResultNotNil[] = "aResult != NIL";
 
 static void _InitEnv(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 25);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 25);
     }
     pEnv->bxx = 0;
     pEnv->shotMdl = 0;
@@ -83,36 +46,35 @@ static void _InitEnv(RgEffectEnv *pEnv)
 static void _DestructEnv(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 33);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 33);
     }
     if (pEnv->bxx != 0) {
-        DisposeRgBxx_sub(pEnv->bxx, D_00A540D8, 36);
+        DisposeRgBxx_sub(pEnv->bxx, effectEnvSourcePath, 36);
     }
     if (pEnv->shotMdl != 0) {
-        DisposeRgFileSysData_sub(pEnv->shotMdl, D_00A540D8, 39);
+        DisposeRgFileSysData_sub(pEnv->shotMdl, effectEnvSourcePath, 39);
     }
     if (pEnv->particleData != 0) {
-        DisposeRgFileSysData_sub(pEnv->particleData, D_00A540D8, 42);
+        DisposeRgFileSysData_sub(pEnv->particleData, effectEnvSourcePath, 42);
     }
     _InitEnv(pEnv);
 }
 
-static void _WrapperDestruct(RgEffectEnv *pEnv)
+static void _WrapperDestruct(void *pEnv)
 {
     _DestructEnv(pEnv);
-    RgHeapFree(InstanceOfRgHeap(), pEnv, D_00A540D8, 46);
+    RgHeapFree(InstanceOfRgHeap(), pEnv, effectEnvSourcePath, 46);
 }
 
 RgEffectEnv *InstanceOfRgEffectEnv(void)
 {
     RgEffectEnv *pEnv;
 
-    pEnv = RgSingletonIDGet(8);
+    pEnv = RgSingletonIDGet(RG_SINGLETON_EFFECT_ENV);
     if (pEnv == 0) {
-        pEnv = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgEffectEnv), D_00A540D8, 56);
+        pEnv = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgEffectEnv), effectEnvSourcePath, 56);
         _InitEnv(pEnv);
-        RgSingletonIDEntry(8, (RgSimpleDB *) pEnv,
-                           (void (*)(RgSimpleDB *)) _WrapperDestruct);
+        RgSingletonIDEntry(RG_SINGLETON_EFFECT_ENV, pEnv, _WrapperDestruct);
     }
     return pEnv;
 }
@@ -120,34 +82,34 @@ RgEffectEnv *InstanceOfRgEffectEnv(void)
 void RgEffectEnvLoadData(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 68);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 68);
     }
     if (pEnv->shotMdl == 0) {
-        pEnv->shotMdl = RgFileSysRead(InstanceOfRgFileSys(), D_00A540F0, D_00A54100);
+        pEnv->shotMdl = RgFileSysRead(InstanceOfRgFileSys(), effectEnvShotModelFileName, effectEnvDataDirectory);
     }
     if (pEnv->particleData == 0) {
-        pEnv->particleData = RgFileSysRead(InstanceOfRgFileSys(), D_00A54110, D_00A54100);
+        pEnv->particleData = RgFileSysRead(InstanceOfRgFileSys(), effectEnvParticleDataFileName, effectEnvDataDirectory);
     }
     if (pEnv->bxx == 0) {
-        pEnv->bxx = LoadRgBxx_sub(D_00A54128, D_00A540D8, 74);
+        pEnv->bxx = LoadRgBxx_sub(effectEnvBxxFileName, effectEnvSourcePath, 74);
     }
 }
 
 void RgEffectEnvDisposeData(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 82);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 82);
     }
     if (pEnv->bxx != 0) {
-        DisposeRgBxx_sub(pEnv->bxx, D_00A540D8, 84);
+        DisposeRgBxx_sub(pEnv->bxx, effectEnvSourcePath, 84);
         pEnv->bxx = 0;
     }
     if (pEnv->shotMdl != 0) {
-        DisposeRgFileSysData_sub(pEnv->shotMdl, D_00A540D8, 88);
+        DisposeRgFileSysData_sub(pEnv->shotMdl, effectEnvSourcePath, 88);
         pEnv->shotMdl = 0;
     }
     if (pEnv->particleData != 0) {
-        DisposeRgFileSysData_sub(pEnv->particleData, D_00A540D8, 92);
+        DisposeRgFileSysData_sub(pEnv->particleData, effectEnvSourcePath, 92);
         pEnv->particleData = 0;
     }
 }
@@ -155,36 +117,36 @@ void RgEffectEnvDisposeData(RgEffectEnv *pEnv)
 RgBxx *RgEffectEnvGetBxx(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 104);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 104);
     }
     return pEnv->bxx;
 }
 
-struct RgFileSysData *RgEffectEnvGetShotMdl(RgEffectEnv *pEnv)
+RgFileSysData *RgEffectEnvGetShotMdl(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 112);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 112);
     }
     return pEnv->shotMdl;
 }
 
-int RgEffectEnvGetParticleData(RgEffectEnv *pEnv, char *pszName, void *aResult)
+int RgEffectEnvGetParticleData(RgEffectEnv *pEnv, const char *pszName, void *aResult)
 {
-    struct RgFileSysData *particleData;
-    void *linkData;
-    char *linkEntry;
-    signed char *slot;
+    RgFileSysData *particleData;
+    RgLinkData linkData;
+    RgEffectEnvLinkEntry *linkEntry;
+    RgParticleEffectEssence *slot;
     int count;
     unsigned int index;
 
     if (pEnv == 0) {
-        assert_prog(D_00A540C8, D_00A540D8, 124);
+        assert_prog(effectEnvAssertEnvNotNil, effectEnvSourcePath, 124);
     }
     if (pszName == 0) {
-        assert_prog(D_00A54138, D_00A540D8, 125);
+        assert_prog(effectEnvAssertNameNotNil, effectEnvSourcePath, 125);
     }
     if (aResult == 0) {
-        assert_prog(D_00A54148, D_00A540D8, 126);
+        assert_prog(effectEnvAssertResultNotNil, effectEnvSourcePath, 126);
     }
     particleData = pEnv->particleData;
     if (particleData == 0) {
@@ -199,13 +161,13 @@ int RgEffectEnvGetParticleData(RgEffectEnv *pEnv, char *pszName, void *aResult)
     count = 0;
     index = 0;
     do {
-        RgParticleEffectEssenceResume(slot, linkEntry);
+        RgParticleEffectEssenceResume(slot, &linkEntry->essence);
         index++;
-        if (*slot != 0) {
+        if (slot->textureName[0] != 0) {
             count++;
         }
-        linkEntry += 256;
-        slot += 176;
-    } while (index < 4);
+        linkEntry++;
+        slot++;
+    } while (index < RG_EFFECT_ENV_PARTICLE_SLOTS);
     return count;
 }

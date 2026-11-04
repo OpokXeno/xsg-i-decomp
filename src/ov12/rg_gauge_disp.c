@@ -3,45 +3,58 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_gauge_disp.h"
+#include "ov12/rg_gauge_disp.h"
+#include "ov12/xrg_paint2d.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-const char D_00A54640[] = "pDisp != NIL";
-const char D_00A54650[] = "../rg_gauge_disp.euc.c";
-const char D_00A54668[] = "pPaint != NIL";
+/* RgGaugeDisp.validState: what _CheckDatas found drawable. */
+#define RG_GAUGE_DISP_DRAW_BAR_AND_REST 0
+#define RG_GAUGE_DISP_DRAW_BAR_ONLY 1
+#define RG_GAUGE_DISP_DRAW_NOTHING 2
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
-                       int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void XrgSetIVector(int *destination, int texU, int texV, int texW,
-                          int texH);
+#define RG_GAUGE_DISP_FULL_VALUE 100.0f
+
+/*
+ * The rectangle _disp_bar computes for the drawn bar's remainder and hands
+ * to _disp_bar_rest.
+ */
+typedef struct RgGaugeDispRect {
+    int x;
+    int y;
+    int width;
+    int height;
+} RgGaugeDispRect;
+
 static void _CheckDatas(RgGaugeDisp *disp);
 static void _InitDisp(RgGaugeDisp *disp);
+
+const char gaugeDispAssertDispNotNil[] = "pDisp != NIL";
+const char gaugeDispSourcePath[] = "../rg_gauge_disp.euc.c";
+const char gaugeDispAssertPaintNotNil[] = "pPaint != NIL";
 
 static void _CheckDatas(RgGaugeDisp *disp)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 45);
-    disp->validState = 2;
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 45);
+    disp->validState = RG_GAUGE_DISP_DRAW_NOTHING;
     if (disp->barPic != 0 && disp->barUVWH[2] >= 0 && disp->barUVWH[3] >= 0) {
         if (disp->restPic != 0 && disp->restUVWH[2] >= 0 && disp->restUVWH[3] >= 0) {
-            disp->validState = 0;
+            disp->validState = RG_GAUGE_DISP_DRAW_BAR_AND_REST;
             return;
         }
-        disp->validState = 1;
+        disp->validState = RG_GAUGE_DISP_DRAW_BAR_ONLY;
     }
 }
 
 static void _InitDisp(RgGaugeDisp *disp)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 61);
-    disp->currentValue = 100.0f;
-    disp->validState = 2;
-    disp->maxValue = 100.0f;
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 61);
+    disp->currentValue = RG_GAUGE_DISP_FULL_VALUE;
+    disp->validState = RG_GAUGE_DISP_DRAW_NOTHING;
+    disp->maxValue = RG_GAUGE_DISP_FULL_VALUE;
     disp->barPic = 0;
     disp->restPic = 0;
     XrgSetIVector(disp->barUVWH, 0, 0, 0, 0);
@@ -55,14 +68,14 @@ static void _InitDisp(RgGaugeDisp *disp)
 static void _DestructDisp(RgGaugeDisp *disp)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 88);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 88);
 }
 
 RgGaugeDisp *CreateRgGaugeDisp(void)
 {
     RgGaugeDisp *disp;
 
-    disp = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGaugeDisp), D_00A54650,
+    disp = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGaugeDisp), gaugeDispSourcePath,
                        95);
     _InitDisp(disp);
     return disp;
@@ -71,32 +84,32 @@ RgGaugeDisp *CreateRgGaugeDisp(void)
 void DisposeRgGaugeDisp(RgGaugeDisp *disp)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 103);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 103);
     _DestructDisp(disp);
-    RgHeapFree(InstanceOfRgHeap(), disp, D_00A54650, 105);
+    RgHeapFree(InstanceOfRgHeap(), disp, gaugeDispSourcePath, 105);
 }
 
 int RgGaugeDispIsDrawable(RgGaugeDisp *disp)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 115);
-    return disp->validState < 2;
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 115);
+    return disp->validState < RG_GAUGE_DISP_DRAW_NOTHING;
 }
 
 void RgGaugeDispSetValue(RgGaugeDisp *disp, float currentValue,
                          float maxValue)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 131);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 131);
     disp->currentValue = currentValue;
     disp->maxValue = maxValue;
     _CheckDatas(disp);
 }
 
-void RgGaugeDispSetTex(RgGaugeDisp *disp, int barPic, int restPic)
+void RgGaugeDispSetTex(RgGaugeDisp *disp, RgBxxPic *barPic, RgBxxPic *restPic)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 144);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 144);
     disp->barPic = barPic;
     disp->restPic = restPic;
     _CheckDatas(disp);
@@ -106,7 +119,7 @@ void RgGaugeDispSetBarUVWH(RgGaugeDisp *disp, int texU, int texV, int texW,
                            int texH)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 157);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 157);
     XrgSetIVector(disp->barUVWH, texU, texV, texW, texH);
     _CheckDatas(disp);
 }
@@ -115,7 +128,7 @@ void RgGaugeDispSetRestUVWH(RgGaugeDisp *disp, int texU, int texV, int texW,
                             int texH)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 169);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 169);
     XrgSetIVector(disp->restUVWH, texU, texV, texW, texH);
     _CheckDatas(disp);
 }
@@ -123,7 +136,7 @@ void RgGaugeDispSetRestUVWH(RgGaugeDisp *disp, int texU, int texV, int texW,
 void RgGaugeDispSetPos(RgGaugeDisp *disp, int x, int y)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 180);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 180);
     disp->posX = x;
     disp->posY = y;
     _CheckDatas(disp);
@@ -132,7 +145,7 @@ void RgGaugeDispSetPos(RgGaugeDisp *disp, int x, int y)
 void RgGaugeDispSetOrder(RgGaugeDisp *disp, int order)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 193);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 193);
     disp->order = order;
     _CheckDatas(disp);
 }
@@ -140,17 +153,10 @@ void RgGaugeDispSetOrder(RgGaugeDisp *disp, int order)
 void RgGaugeDispSetAlpha(RgGaugeDisp *disp, int alpha)
 {
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 204);
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 204);
     disp->alpha = alpha;
     _CheckDatas(disp);
 }
-
-extern void XrgPaint2DUseTexture(XrgPaint2D *paint, int texture);
-extern void XrgPaint2DSetUVOffset(XrgPaint2D *paint, int u, int v);
-extern void XrgPaint2DSetUVSize(XrgPaint2D *paint, int width, int height);
-extern void XrgPaint2DAlpha(XrgPaint2D *paint, int blend);
-extern void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
-                               int width, int height);
 
 static void _disp_bar(XrgPaint2D *paint, RgGaugeDisp *disp,
                       RgGaugeDispRect *rest)
@@ -202,11 +208,11 @@ void RgGaugeDispDraw(RgGaugeDisp *disp, XrgPaint2D *paint)
     RgGaugeDispRect rest;
 
     if (paint == 0)
-        assert_prog(D_00A54668, D_00A54650, 268);
+        assert_prog(gaugeDispAssertPaintNotNil, gaugeDispSourcePath, 268);
     if (disp == 0)
-        assert_prog(D_00A54640, D_00A54650, 269);
-    if (disp->validState != 1) {
-        if (disp->validState != 0)
+        assert_prog(gaugeDispAssertDispNotNil, gaugeDispSourcePath, 269);
+    if (disp->validState != RG_GAUGE_DISP_DRAW_BAR_ONLY) {
+        if (disp->validState != RG_GAUGE_DISP_DRAW_BAR_AND_REST)
             return;
         _disp_bar(paint, disp, &rest);
         _disp_bar_rest(paint, disp, &rest);

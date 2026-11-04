@@ -4,91 +4,189 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_robot.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_actor_motid.h"
+#include "ov12/rg_robot_effect.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_weapon.h"
+#include "ov12/rg_shot_thread.h"
+#include "ov12/xrg_actor.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_sound.h"
+#include "ov12/rg_robot_subcon.h"
+#include "ov12/create_rg.h"
+#include "ov12/rg_drop_weapon.h"
+#include "ov12/rg_dull_flag.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_hissatu.h"
+#include "ov12/rg_motion_info_db.h"
+#include "ov12/rg_robot_spec.h"
+#include "ov12/rg_shot.h"
+#include "ov12/xrg_v_log.h"
+#include "ov12/rg_robot.h"
 
-const char D_00A51830[] = "pThread != NIL";
-
-const char D_00A51840[] = "../rg_robot.euc.c";
-
-const char D_00A51858[] = "fBaseSpeed > RG_FCONST(0.0)";
-
-const char D_00A518F0[] = "pStatus != NIL";
-
-const char D_00A51A58[] = "pQ != NIL";
-
-const char D_00A51A68[] = "pBody != NIL";
-
-const char D_00A51A78[] = "pGeom != NIL";
-
-const char D_00A51A88[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
-
-const char D_00A51B48[] = "pCmd != NIL";
-
-const char D_00A51B58[] = "already disposed body %p";
-
-const char D_00A51B78[] = "unknown equip type (drop weapon) %d";
-
-const char D_00A51BA0[] = "eff06.ptcl";
-
-const char D_00A51BB0[] = "pRobot != NIL";
-
-const char D_00A51BC0[] = "already disposed robot %p\n";
-
-const char D_00A51BE0[] = "RG_EQUIP_TYPE_MIN <= (eSide) && (eSide) < RG_EQUIP_TYPE_NUM";
+/* _AllowAllCmdInMoving supplies mode 1; _InitTargettingStatus tests this
+ * mode as zero/nonzero and reads the actual target from body separately.
+ * Its result is the 0x100 command-processing mask bit, not a command id. */
+#define RG_CMD_RESULT_TARGETTING 0x100
 
 /* RgShotThread is defined in tu011 and stays opaque at this call site. */
 struct RgShotThread;
-extern void RgShotThreadSleep(struct RgShotThread *thread);
-/*
- * These are external file-backed witnesses in the TU's still asm-owned
- * .rodata (config/tu/ov12/tu004.json data_ownership), not candidate-emitted
- * data. They keep their splat names per docs/naming.md ("Scaffold-owned data
- * keeps its splat name") until that data becomes C-owned.
- *
- * ov12:0x00a51840 (D_00A51840), 18 bytes, SHA-256
- * b8693e915c6e9d84b2f020600f866bdc3ba67025729e8a7566ebdf621f4380ca
- * contains the source filename "../rg_robot.euc.c".
- * ov12:0x00a51bb0 (D_00A51BB0), 14 bytes, SHA-256
- * d7e89b8cbef744999f0635dbf5f1111a85f0daeb1ad5c69e912cc14f4c1096a9
- * contains the assertion expression "pRobot != NIL".
- * ov12:0x00a51be0 (D_00A51BE0), 60 bytes, SHA-256
- * 1eafc9773d62673cff56b70f703e51d2bc76ff912cea41f18140919845228eb2
- * contains the range expression
- * "RG_EQUIP_TYPE_MIN <= (eSide) && (eSide) < RG_EQUIP_TYPE_NUM".
- */
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern const char D_00A51840[];
-extern const char D_00A51BB0[];
-extern const char D_00A51BE0[];
-/*
- * ov12:0x00a51830 (D_00A51830) contains the assertion expression
- * "pThread != NIL".
- * ov12:0x00a518f0 (D_00A518F0) contains the assertion expression
- * "pStatus != NIL".
- * ov12:0x00a51858 (D_00A51858) contains the assertion expression
- * "fBaseSpeed > RG_FCONST(0.0)".
- */
-extern const char D_00A51830[];
-extern const char D_00A518F0[];
-extern const char D_00A51858[];
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
-                       int line);
-extern void XrgSoundRing(int soundID, int count);
-extern float RgGeomPointGetWeight(RgGeomPoint *point);
+
+struct RgShot;
+extern const char robotUnknownShieldStatusFormat[];
+extern const char robotCannotTransitVrDashModeFormat[];
+extern const char robotUnknownDashStatusFormat[];
+extern const char robotUnknownDashModeFormat[];
+extern const char robotUnknownVrDashCmdModeFormat[];
+extern const char robotUnknownVrDashModeFormat[];
+/* One priority level per command type (s_anCmdLevel, 0x3c bytes). */
+#define RG_CMD_TYPE_NUM 15
+extern int s_anCmdLevel[RG_CMD_TYPE_NUM];
+extern const char robotEmptyEquipDatabaseName[];
+extern const char robotAssertEquipPosValid[];
+extern const char robotAssertJointIdValid[];
+extern const char robotCheckPakaPakaLog[];
+extern const char robotCheckPakaPakaEndLog[];
+extern const char robotNoLockOnLog[];
+extern RgRobotSpec s_inDefSpec_0;
+
+static int _ExecAccelarateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecRotateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *command, int targettingMode);
+static int _ExecBreakCmd(RgRobotStatus *status, RgBody *body, void *command);
+static int _ExecDashCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecDropWeaponCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static void _BodyPlayMotionLoop(RgBody *body, int motion);
+static void _BodyPlayMotion(RgBody *body, int motion);
+static int _AllowAllCmdInMoving(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body, int motion, RgWeapon *weapon, int eSide);
+static int _IsBackWeaponReady(RgBody *body, unsigned int eType);
+static void _BodyAdvanceForAttack(RgBody *body, float attackPower, float attackFactor);
+static void _StartHomingThread(RgHomingThread *thread, RgGeomPoint *geometry, RgGeomPoint *target, float actionTime);
+static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime);
+static float _CalcMaxSpeed(RgBody *body, float baseSpeed);
+static int _StatusPassTime(RgRobotStatus *status, RgBody *body, float dt);
+static void _BodyGeomPassTime(RgBody *body, float deltaTime);
+static int _EyeGeomPassTime(RgBody *body, float deltaTime);
+static void _AdvanceGeomPassTime(RgBody *body, float deltaTime);
+static void _PassTimeRobot(RgStatus *pRobot, float deltaTime);
+static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _HissatuPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _TargettingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgVector direction);
+static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion, RgWeapon *shieldWeapon, int scratch2Arg);
+static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _ExecCmdInTargetting(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _GetDropMotion(int eSide);
+static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion, int eSide);
+static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
+static void _BodySetSound(RgBody *body, XrgSound *sound);
+static int _BodyDropWeapon(RgBody *body, unsigned int eType);
+static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime);
+static void _InitBody(RgBody *body);
+static void _DestructBody(RgBody *body);
+static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body);
+static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump);
+static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body, RgCmd *command);
+static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body, float deltaTime);
+static void _ClearCmdQueue(RgCmdQueue *cmdQueue);
+static void _PassTimeRobot(RgStatus *pRobot, float deltaTime);
+static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _HissatuPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _TargettingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgVector direction);
+static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion, RgWeapon *shieldWeapon, int scratch2Arg);
+static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static int _ExecCmdInTargetting(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _GetDropMotion(int eSide);
+static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion, int eSide);
+static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
+static void _BodySetSound(RgBody *body, XrgSound *sound);
+static int _BodyDropWeapon(RgBody *body, unsigned int eType);
+static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime);
+static void _InitBody(RgBody *body);
+static void _DestructBody(RgBody *body);
+static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body);
+static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump);
+static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body, RgCmd *command);
+static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body, float deltaTime);
+static void _ClearCmdQueue(RgCmdQueue *cmdQueue);
+static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime);
+static void _InitRobot(RgStatus *pRobot);
+static void _DestructRobot(RgStatus *pRobot);
+static void _DispRobot(RgStatus *pRobot);
+static void _BodySetSpec(RgBody *body, RgRobotSpec *spec);
+static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry);
+static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry);
+static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry);
+static void _BodySetActor(RgBody *body, XrgActorEssence *actorSpec);
+
+const char robotAssertThreadNotNil[] = "pThread != NIL";
+
+const char robotSourcePath[] = "../rg_robot.euc.c";
+
+const char robotAssertBaseSpeedPositive[] = "fBaseSpeed > RG_FCONST(0.0)";
+
+const char robotAssertStatusNotNil[] = "pStatus != NIL";
+
+const char robotAssertCmdQueueNotNil[] = "pQ != NIL";
+
+const char robotAssertBodyNotNil[] = "pBody != NIL";
+
+const char robotAssertGeomNotNil[] = "pGeom != NIL";
+
+const char robotAssertEquipTypeInRange[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
+
+const char robotAssertCmdNotNil[] = "pCmd != NIL";
+
+const char robotAlreadyDisposedBodyFormat[] = "already disposed body %p";
+
+const char robotUnknownDropWeaponEquipTypeFormat[] = "unknown equip type (drop weapon) %d";
+
+const char robotHitEffectName[] = "eff06.ptcl";
+
+const char robotAssertRobotNotNil[] = "pRobot != NIL";
+
+const char robotAlreadyDisposedRobotFormat[] = "already disposed robot %p\n";
+
+const char robotAssertEquipSideInRange[] = "RG_EQUIP_TYPE_MIN <= (eSide) && (eSide) < RG_EQUIP_TYPE_NUM";
 
 static void _InitHomingThread(RgHomingThread *thread)
 {
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 73);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 73);
     }
     thread->geometry = 0;
     thread->target = 0;
     thread->actionTime = 0;
     thread->sleepTime = 0;
-    thread->homingSpeed = 4.0f * 3.1415927f;
+    thread->homingSpeed = RG_ROBOT_HOMING_TURN_SPEED;
     thread->state = 0;
 }
 
@@ -97,7 +195,7 @@ static RgHomingThread *_CreateHomingThread(void)
     RgHomingThread *thread;
 
     thread = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgHomingThread),
-                          D_00A51840, 85);
+                          robotSourcePath, 85);
     _InitHomingThread(thread);
     return thread;
 }
@@ -105,16 +203,16 @@ static RgHomingThread *_CreateHomingThread(void)
 static void _DisposeHomingThread(RgHomingThread *thread)
 {
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 93);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 93);
     }
-    RgHeapFree(InstanceOfRgHeap(), thread, D_00A51840, 94);
+    RgHeapFree(InstanceOfRgHeap(), thread, robotSourcePath, 94);
 }
 
 static void _StartHomingThread(RgHomingThread *thread, RgGeomPoint *geometry,
-                               void *target, float actionTime)
+                               RgGeomPoint *target, float actionTime)
 {
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 100);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 100);
     }
     thread->actionTime = actionTime;
     thread->target = target;
@@ -130,7 +228,7 @@ static void _StartHomingThread(RgHomingThread *thread, RgGeomPoint *geometry,
 static void _StopHomingThread(RgHomingThread *thread)
 {
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 114);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 114);
     }
     if (thread->state == 1) {
         thread->sleepTime = 0;
@@ -141,7 +239,7 @@ static void _StopHomingThread(RgHomingThread *thread)
 static int _GetStatHomingThread(RgHomingThread *thread)
 {
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 124);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 124);
     }
     return thread->state;
 }
@@ -151,7 +249,7 @@ static float _GetSleepTimeHomingThread(RgHomingThread *thread)
     float sleepTime;
 
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 131);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 131);
     }
     sleepTime = 99999.9f;
     if (thread->state == 2) {
@@ -160,15 +258,12 @@ static float _GetSleepTimeHomingThread(RgHomingThread *thread)
     return sleepTime;
 }
 
-extern float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
-                            float speed, float deltaTime);
-
 static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
 {
     float actionTime;
 
     if (thread == 0) {
-        assert_prog(D_00A51830, D_00A51840, 141);
+        assert_prog(robotAssertThreadNotNil, robotSourcePath, 141);
     }
     switch (thread->state) {
     case 1:
@@ -195,7 +290,7 @@ static float _CalcMaxSpeed(RgBody *body, float baseSpeed)
     specWeight = body->spec->weight;
     geomWeight = RgGeomPointGetWeight(body->geometry);
     if (!(baseSpeed > 0.0f)) {
-        assert_prog(D_00A51858, D_00A51840, 247);
+        assert_prog(robotAssertBaseSpeedPositive, robotSourcePath, 247);
     }
     return (baseSpeed * specWeight) / geomWeight;
 }
@@ -212,7 +307,7 @@ static void _StopAllShotThread(RgBody *body)
 static void _BodyOnGround(RgBody *body)
 {
     if (body->grounded == 0) {
-        XrgSoundRing(body->landingSoundID, 0x32);
+        XrgSoundRing(body->landingSound, 0x32);
     }
     body->grounded = 1;
 }
@@ -220,7 +315,7 @@ static void _BodyOnGround(RgBody *body)
 static void _InitStatus(RgRobotStatus *status)
 {
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 611);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 611);
     }
     status->type = 0;
     status->elapsedTime = 0;
@@ -234,7 +329,7 @@ static RgRobotStatus *_CreateStatue(void)
 {
     RgRobotStatus *status;
 
-    status = RgHeapAlloc(InstanceOfRgHeap(), 0x60U, D_00A51840, 624);
+    status = RgHeapAlloc(InstanceOfRgHeap(), 0x60U, robotSourcePath, 624);
     _InitStatus(status);
     return status;
 }
@@ -244,7 +339,7 @@ static void _SetStatus(RgRobotStatus *status, int type, RgBody *body)
     RgStatusExitFunc exitMethod;
 
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 633);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 633);
     }
     exitMethod = status->exitMethod;
     if (exitMethod != 0) {
@@ -257,9 +352,9 @@ static void _SetStatus(RgRobotStatus *status, int type, RgBody *body)
 static void _DisposeStatus(RgRobotStatus *status)
 {
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 647);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 647);
     }
-    RgHeapFree(InstanceOfRgHeap(), status, D_00A51840, 648);
+    RgHeapFree(InstanceOfRgHeap(), status, robotSourcePath, 648);
 }
 
 static int _StatusExecCmd(RgRobotStatus *status, RgCmd *command, RgBody *body)
@@ -267,7 +362,7 @@ static int _StatusExecCmd(RgRobotStatus *status, RgCmd *command, RgBody *body)
     RgStatusExecCmdFunc execCmdMethod;
 
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 657);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 657);
     }
     execCmdMethod = status->execCmdMethod;
     if (execCmdMethod != 0) {
@@ -283,7 +378,7 @@ static int _StatusPassTime(RgRobotStatus *status, RgBody *body, float dt)
 
     result = 0;
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 668);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 668);
     }
     passTimeMethod = status->passTimeMethod;
     if (passTimeMethod != 0) {
@@ -298,7 +393,7 @@ static void _StatusDisp(RgRobotStatus *status, RgBody *body)
     RgStatusDispFunc dispMethod;
 
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 678);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 678);
     }
     dispMethod = status->dispMethod;
     if (dispMethod != 0) {
@@ -306,55 +401,43 @@ static void _StatusDisp(RgRobotStatus *status, RgBody *body)
     }
 }
 
-static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command);
-static int _ExecRotateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *command, int targettingMode);
-static int _ExecBreakCmd(RgRobotStatus *status, RgBody *body, void *command);
-static int _ExecDashCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecDropWeaponCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command);
-
 static int _AllowAllCmdInMoving(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
 
     result = 0;
     switch ((unsigned int) command->type) {
-    case 0:
-        result = _ExecAccelarateCmd((RgStatus *) status, body, command);
+    case RG_CMD_ACCELARATE:
+        result = _ExecAccelarateCmd(status, body, command);
         break;
-    case 1:
+    case RG_CMD_ACCELARATE_ROTATE:
         result = _ExecRotateCmd(status, body, command);
         break;
-    case 2:
+    case RG_CMD_SHOT:
         result = _ExecShotOrAttackCmd(status, body, command);
         break;
-    case 3:
+    case RG_CMD_TARGETTING:
         result = _ExecTargettingCmd(status, body, command, 1);
         break;
-    case 4:
+    case RG_CMD_BREAK:
         result = _ExecBreakCmd(status, body, command);
         break;
-    case 5:
+    case RG_CMD_DASH:
         result = _ExecDashCmd(status, body, command);
         break;
-    case 6:
+    case RG_CMD_DASH_CONTINUE:
         result = _ExecDashContinueCmd(status, body, command);
         break;
-    case 7:
+    case RG_CMD_DROP_WEAPON:
         result = _ExecDropWeaponCmd(status, body, command);
         break;
-    case 8:
+    case RG_CMD_DAMAGE:
         result = _ExecDamageCmd(status, body, command);
         break;
-    case 9:
+    case RG_CMD_WEAK_DAMAGE:
         result = _ExecWeakDamageCmd(status, body, command);
         break;
-    case 14:
+    case RG_CMD_HIT_BY_BODY:
         result = _ExecHitByBody(status, body, command);
         break;
     }
@@ -372,13 +455,13 @@ static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 
     result = 0;
     switch ((unsigned int) command->type) {
-    case 8:
+    case RG_CMD_DAMAGE:
         result = _ExecDamageCmd(status, body, command);
         break;
-    case 9:
+    case RG_CMD_WEAK_DAMAGE:
         result = _ExecWeakDamageCmd(status, body, command);
         break;
-    case 14:
+    case RG_CMD_HIT_BY_BODY:
         result = _ExecHitByBody(status, body, command);
         break;
     }
@@ -391,10 +474,10 @@ static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCm
 
     result = 0;
     switch (command->type) {
-    case 8:
+    case RG_CMD_DAMAGE:
         result = _ExecDamageCmd(status, body, command);
         break;
-    case 9:
+    case RG_CMD_WEAK_DAMAGE:
         result = _ExecWeakDamageCmd(status, body, command);
         break;
     }
@@ -408,8 +491,8 @@ static int _AllowDamageCmdNotPetrify(RgRobotStatus *status, RgBody *body, RgCmd 
 
     (void)status;
     result = 0;
-    if (command->type != 8) {
-        if (command->type == 9) {
+    if (command->type != RG_CMD_DAMAGE) {
+        if (command->type == RG_CMD_WEAK_DAMAGE) {
             goto damage;
         }
     } else {
@@ -424,14 +507,7 @@ damage:
     return result;
 }
 
-const char D_00A51940[] = "pMotInfo != NIL";
-
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern float RgGeomRobotGetRotVel(RgGeomPoint *geom);
-extern int RgRobSubGetAdvanceMot(RgGeomPoint *geom, int flag);
-extern int RgRobSubGetRollMotion(RgGeomPoint *geom);
-static void _BodyPlayMotionLoop(RgBody *body, int motion);
-static void _BodyPlayMotion(RgBody *body, int motion);
+const char robotAssertMotionInfoNotNil[] = "pMotInfo != NIL";
 
 static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -446,23 +522,23 @@ static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     spec = body->spec;
     RgGeomPointGetVel(body->geometry, velocity);
     speed = __builtin_sqrtf(velocity[0] * velocity[0] + velocity[2] * velocity[2]);
-    rotVel = RgGeomRobotGetRotVel(body->geometry);
+    rotVel = RgGeomRobotGetRotVel(&body->geometry->geom);
     if (rotVel < 0.0f) {
         rotVel = -rotVel;
     }
     advanceMot = RgRobSubGetAdvanceMot(body->geometry, 0);
     rollMot = RgRobSubGetRollMotion(body->geometry);
-    if (5.0f < speed && advanceMot != -1) {
+    if (5.0f < speed && advanceMot != RG_MOT_NONE) {
         motion = advanceMot;
-    } else if (0.39269908f < rotVel && rollMot != -1) {
+    } else if (0.39269908f < rotVel && rollMot != RG_MOT_NONE) {
         motion = rollMot;
     } else {
-        motion = 0;
+        motion = RG_MOT_STAND;
     }
     if (motion != status->scratch0) {
         status->scratch0 = motion;
-        if (motion == 0) {
-            _BodyPlayMotionLoop(body, 0);
+        if (motion == RG_MOT_STAND) {
+            _BodyPlayMotionLoop(body, RG_MOT_STAND);
         } else {
             _BodyPlayMotion(body, motion);
         }
@@ -476,34 +552,13 @@ static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 0;
 }
 
-static int _AllowAllCmdInMoving(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
-
 static void _InitMovingStatus(RgRobotStatus *status, RgBody *body)
 {
-    _SetStatus(status, 1, body);
+    _SetStatus(status, RG_STATUS_MOVING, body);
     status->execCmdMethod = _AllowAllCmdInMoving;
     status->passTimeMethod = _MovingPassTime;
-    status->scratch0 = -1;
+    status->scratch0 = RG_MOT_NONE;
 }
-
-static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body, int motion, RgWeapon *weapon, int eSide);
-
-typedef struct RgMotionAction RgMotionAction;
-
-struct RgMotionAction
-{
-    int actionNo;
-    float startTime;
-    float endTime;
-    int shiftMotionNo;
-    int weaponMotionNo;
-};
-
-extern RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
-                                                   int actionNo, float time);
-static int _IsBackWeaponReady(RgBody *body, unsigned int eType);
-extern void RgWeaponPlayMotion(RgWeapon *weapon, int motion);
 
 static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -517,7 +572,7 @@ static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command)
     result = _AllowDamageCmd(status, body, command);
     elapsedTime = status->elapsedTime;
     motionInfo = status->attackMotionInfo;
-    if (result == 0 && command->type == 10) {
+    if (result == 0 && command->type == RG_CMD_HIT_WEAPON_ATTACK) {
         action = RgMotionInfoGetActionInTime(motionInfo, 1, elapsedTime);
         if (action == 0) return 0;
         if (action->shiftMotionNo == -1) return 0;
@@ -530,20 +585,13 @@ static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command)
         }
         result = 1024;
     }
-    if (command->type == 2 && nextStatus->eSide != 2 &&
+    if (command->type == RG_CMD_SHOT && nextStatus->eSide != RG_EQUIP_TYPE_BACK &&
         _IsBackWeaponReady(body, command->param) &&
         nextStatus->attackActive != 0) {
         result |= _ExecShotOrAttackCmd(status, body, command);
     }
     return result;
 }
-
-extern int RgWeaponGetControlFlag(RgWeapon *weapon);
-extern void RgWeaponShot(RgWeapon *weapon);
-extern void RgWeaponShotStop(RgWeapon *weapon);
-extern int XrgActorIsEndOfMotion(void *actor);
-static void _BodyAdvanceForAttack(RgBody *body, float attackPower,
-                                  float attackFactor);
 
 static int _AttackPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -568,7 +616,7 @@ static int _AttackPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
         if (weapon != 0) RgWeaponShotStop(weapon);
         _InitMovingStatus(status, body);
     } else if (status->motionInfo != 0) {
-        if (status->scratch4 != 0 && (controlFlag & 0x40) != 0) {
+        if (status->scratch4 != 0 && (controlFlag & RG_WEAPON_CONTROL_ADV) != 0) {
             _BodyAdvanceForAttack(body, deltaTime, 1.0f);
         }
     } else {
@@ -578,80 +626,29 @@ static int _AttackPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 32;
 }
 
-extern char *RgWeaponGetEss(void *weapon);
-extern void RgWeaponRestartLockon(RgWeapon *weapon);
-
-/*
- * Motion-ID table offset within the weapon-essence record RgWeaponGetEss
- * returns; only this field is evidenced here (docs/style.md, "Struct
- * fields, not offset casts" -- narrowly evidenced scalar access).
- */
-#define WEP_ESSENCE_ATTACK_MOTION_OFFSET 0x140
-
 static void _AttackExit(RgRobotStatus *status, RgBody *body)
 {
-    void *shotWeapon;
-    void *motionWeapon;
-    char *ess;
+    RgWeapon *shotWeapon;
+    RgWeapon *motionWeapon;
+    RgWeaponEssence *ess;
 
-    shotWeapon = (void *) status->scratch1;
+    shotWeapon = status->attackWeapon;
     if (shotWeapon != 0) {
         RgWeaponShotStop(shotWeapon);
     }
     _StopHomingThread(body->homingThread);
-    motionWeapon = (void *) status->scratch1;
+    motionWeapon = status->attackWeapon;
     if (motionWeapon != 0) {
         ess = RgWeaponGetEss(motionWeapon);
         if (ess != 0) {
             RgWeaponPlayMotion(motionWeapon,
-                *(int *) (ess + WEP_ESSENCE_ATTACK_MOTION_OFFSET
-                          + (body->charID * RG_EQUIP_TYPE_NUM + status->eSide) * 4));
+                               ess->shotEndMotionTable[body->charID][status->eSide]);
         }
     }
-    if (status->scratch2 != 0) {
-        RgWeaponRestartLockon((void *) status->scratch2);
+    if (status->attackLockonWeapon != 0) {
+        RgWeaponRestartLockon(status->attackLockonWeapon);
     }
 }
-
-extern void RgRobotEffectStartJet(RgRobotEffect *effect, float dashTime);
-extern void RgRobotEffectStartDash(RgRobotEffect *effect, float dashTime);
-extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
-extern void XrgSoundRingMoving(int soundID, int unused, float volume);
-extern void RgGeomPointSetWeight(RgGeomPoint *point, float weight);
-extern float RgWeaponGetWeight(RgWeapon *weapon);
-extern void XrgSoundPassTime(int soundID, float dt);
-extern float RgGeomRobotGetRotate(RgGeomPoint *point);
-extern void RgRobotEffectPassTime(RgRobotEffect *effect, float time);
-extern void RgShotThreadPassTime(void *thread, float deltaTime);
-extern void XrgActorPassTime(void *actor, float dt);
-extern void RgWeaponPassTime(void *weapon, float dt);
-extern RgGeomPoint *CreateRgGeomBall(float radius, float weight);
-extern float RgWeaponGetShotNum(RgWeapon *weapon);
-extern void RgDullFlagPassTime(RgDullFlag *pDull, float fTime);
-extern float XrgRand(float lower, float upper);
-extern void RgGeomRobotAddRotForce(RgGeomPoint *point, float force);
-extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
-extern float RgGetGeomGravity(void);
-extern void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction, float scale);
-static void _StartHomingThread(RgHomingThread *thread, RgGeomPoint *geometry,
-                               void *target, float actionTime);
-static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime);
-static float _CalcMaxSpeed(RgBody *body, float baseSpeed);
-static int _StatusPassTime(RgRobotStatus *status, RgBody *body, float dt);
-static void _BodyGeomPassTime(RgBody *body, float deltaTime);
-static int _EyeGeomPassTime(RgBody *body, float deltaTime);
-static void _AdvanceGeomPassTime(RgBody *body, float deltaTime);
-static void _PassTimeRobot(RgStatus *pRobot, float deltaTime);
-extern void RgWeaponPlayShotMotion(RgWeapon *weapon);
-extern int RgWeaponIsTargetting(RgWeapon *weapon);
-
-typedef struct RgMotionInfoDB RgMotionInfoDB;
-
-extern RgMotionInfoDB *InstanceOfRgMotionInfoDB(void);
-extern RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
-                                           int charId);
-static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command);
-extern void RgWeaponStopLockon(RgWeapon *weapon);
 
 static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body,
                                         int motion, RgWeapon *weapon, int eSide)
@@ -661,10 +658,10 @@ static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body,
 
     motionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), motion,
                                    body->charID);
-    if (motionInfo == 0) assert_prog(D_00A51940, D_00A51840, 1009);
+    if (motionInfo == 0) assert_prog(robotAssertMotionInfoNotNil, robotSourcePath, 1009);
     _StopAllShotThread(body);
     if (body->actor == 0) return 0;
-    _SetStatus(status, 2, body);
+    _SetStatus(status, RG_STATUS_ATTACK, body);
     status->execCmdMethod = _ExecCmdInAttack;
     status->passTimeMethod = _AttackPassTime;
     status->exitMethod = _AttackExit;
@@ -675,10 +672,10 @@ static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body,
     status->eSide = eSide;
     switch (eSide) {
     case 0:
-        status->attackLockonWeapon = body->weapon[1];
+        status->attackLockonWeapon = body->weapon[RG_EQUIP_TYPE_RIGHT];
         break;
     case 1:
-        status->attackLockonWeapon = body->weapon[0];
+        status->attackLockonWeapon = body->weapon[RG_EQUIP_TYPE_LEFT];
         break;
     default:
         status->attackLockonWeapon = 0;
@@ -690,9 +687,10 @@ static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body,
     _BodyPlayMotion(body, motion);
     if (weapon != 0) {
         RgWeaponPlayShotMotion(weapon);
-        if ((RgWeaponGetControlFlag(weapon) & 0x18) == 8
+        if ((RgWeaponGetControlFlag(weapon) & RG_WEAPON_CONTROL_TARGET_MASK)
+                == RG_WEAPON_CONTROL_TARGET_WTH
             && RgWeaponIsTargetting(weapon)) {
-            action = RgMotionInfoGetActionInTime(motionInfo, 0, 100000000.0f);
+            action = RgMotionInfoGetActionInTime(motionInfo, 0, RG_ROBOT_TIME_UNLIMITED);
             if (action != 0) {
                 _StartHomingThread(body->homingThread, body->geometry,
                                    body->target, action->startTime);
@@ -702,18 +700,10 @@ static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body,
     return status;
 }
 
-static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-
 static int _ExecCmdInHissatu(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     return _AllowDamageCmd(status, body, command);
 }
-
-struct RgShot;
-extern void RgWeaponSetFree(RgWeapon *weapon);
-extern unsigned int RgWeaponGetAttachedShot(RgWeapon *weapon,
-                                            struct RgShot **shots);
-extern int RgShotGetHitRobNum(struct RgShot *shot);
 
 static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
                             float deltaTime)
@@ -740,8 +730,8 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
     elapsedTime = status->elapsedTime;
     moveMaxSpeed = _CalcMaxSpeed(body, spec->moveSpeedMax);
     dashMaxSpeed = _CalcMaxSpeed(body, spec->dashSpeedMax);
-    weapon0 = (RgWeapon *) body->weapon[0];
-    weapon1 = (RgWeapon *) body->weapon[1];
+    weapon0 = body->weapon[RG_EQUIP_TYPE_LEFT];
+    weapon1 = body->weapon[RG_EQUIP_TYPE_RIGHT];
     if (body->actor == 0 || XrgActorIsEndOfMotion(body->actor)) {
         _InitMovingStatus(status, body);
         return 0;
@@ -770,8 +760,8 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
         }
         if (RgWeaponIsTargetting(weapon0) != 0
             || RgWeaponIsTargetting(weapon1) != 0) {
-            RgRobSubHoming(body->geometry, body->target, 12.566371f, deltaTime);
-            body->flags |= 1;
+            RgRobSubHoming(body->geometry, body->target, RG_ROBOT_HOMING_TURN_SPEED, deltaTime);
+            body->flags |= RG_BODY_FLAG_FREE_TURN;
         }
         if (action != 0) {
             switch (status->scratch0) {
@@ -792,8 +782,8 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
         RgWeaponStopLockon(weapon0);
         if (RgWeaponIsTargetting(weapon0) != 0
             || RgWeaponIsTargetting(weapon1) != 0) {
-            RgRobSubHoming(body->geometry, body->target, 12.566371f, deltaTime);
-            body->flags |= 1;
+            RgRobSubHoming(body->geometry, body->target, RG_ROBOT_HOMING_TURN_SPEED, deltaTime);
+            body->flags |= RG_BODY_FLAG_FREE_TURN;
         }
         if (action != 0) {
             if ((status->shotCounter & 3) == 0) {
@@ -812,7 +802,7 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
 
     case 4:
         if (status->shotPending != 0) {
-            shotThread = body->shotThread[1];
+            shotThread = body->shotThread[RG_EQUIP_TYPE_RIGHT];
             if (weapon1 != 0 && shotThread != 0) {
                 RgShotThreadSleep(shotThread);
                 RgWeaponShotStop(weapon1);
@@ -822,9 +812,9 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
             _BodyAdvanceForAttack(body, deltaTime, 1.0f);
             if (RgWeaponIsTargetting(weapon0) != 0
                 || RgWeaponIsTargetting(weapon1) != 0) {
-                RgRobSubHoming(body->geometry, body->target, 12.566371f,
+                RgRobSubHoming(body->geometry, body->target, RG_ROBOT_HOMING_TURN_SPEED,
                                deltaTime);
-                body->flags |= 1;
+                body->flags |= RG_BODY_FLAG_FREE_TURN;
             }
         } else {
             shotCount = RgWeaponGetAttachedShot(weapon0, shots);
@@ -834,14 +824,14 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
                     hit = 1;
                 }
             }
-            if (status->scratch1 == 78 && hit != 0) {
-                nextMotionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), 79,
+            if (status->scratch1 == RG_MOT_HISSATU && hit != 0) {
+                nextMotionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), RG_MOT_HISSATU_VX06_HIT,
                                                    body->charID);
                 if (nextMotionInfo != 0) {
                     status->hissatuMotionInfo = nextMotionInfo;
-                    status->scratch1 = 79;
+                    status->scratch1 = RG_MOT_HISSATU_VX06_HIT;
                     status->elapsedTime = 0.0f;
-                    _BodyPlayMotion(body, 79);
+                    _BodyPlayMotion(body, RG_MOT_HISSATU_VX06_HIT);
                 }
             }
         }
@@ -880,8 +870,8 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
             _BodyAdvanceForAttack(body, deltaTime, 1.0f);
             if (RgWeaponIsTargetting(weapon0) != 0
                 || RgWeaponIsTargetting(weapon1) != 0) {
-                RgRobSubHoming(body->geometry, body->target, 12.566371f, deltaTime);
-                body->flags |= 1;
+                RgRobSubHoming(body->geometry, body->target, RG_ROBOT_HOMING_TURN_SPEED, deltaTime);
+                body->flags |= RG_BODY_FLAG_FREE_TURN;
             }
         }
         if (action != 0) {
@@ -913,8 +903,8 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
         }
         if (RgWeaponIsTargetting(weapon0) != 0
             || RgWeaponIsTargetting(weapon1) != 0) {
-            RgRobSubHoming(body->geometry, body->target, 12.566371f, deltaTime);
-            body->flags |= 1;
+            RgRobSubHoming(body->geometry, body->target, RG_ROBOT_HOMING_TURN_SPEED, deltaTime);
+            body->flags |= RG_BODY_FLAG_FREE_TURN;
         }
         if (action != 0) {
             result = 1024;
@@ -926,8 +916,8 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
         if (status->boosting != 0
             && (RgWeaponIsTargetting(weapon0) != 0
                 || RgWeaponIsTargetting(weapon1) != 0)) {
-            RgRobSubHoming(body->geometry, body->target, 12.566371f, deltaTime);
-            body->flags |= 1;
+            RgRobSubHoming(body->geometry, body->target, RG_ROBOT_HOMING_TURN_SPEED, deltaTime);
+            body->flags |= RG_BODY_FLAG_FREE_TURN;
         }
         if (action != 0) {
             switch ((unsigned int) status->scratch0) {
@@ -953,9 +943,6 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
     return result | 0x200;
 }
 
-extern void RgRobotEffectTermDash(RgRobotEffect *effect);
-extern void XrgSoundRingStopMoving(int soundID);
-
 static void _HissatuExit(RgRobotStatus *status, RgBody *body)
 {
     float maxSpeed;
@@ -963,8 +950,8 @@ static void _HissatuExit(RgRobotStatus *status, RgBody *body)
     void *weapon1;
 
     (void)status;
-    weapon0 = body->weapon[0];
-    weapon1 = body->weapon[1];
+    weapon0 = body->weapon[RG_EQUIP_TYPE_LEFT];
+    weapon1 = body->weapon[RG_EQUIP_TYPE_RIGHT];
     maxSpeed = _CalcMaxSpeed(body, body->spec->moveSpeedMax);
     if (weapon0 != 0) {
         RgWeaponRestartLockon(weapon0);
@@ -980,16 +967,14 @@ static void _HissatuExit(RgRobotStatus *status, RgBody *body)
     RgRobotEffectTermJet(body->effect);
 }
 
-static int _HissatuPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
-
 static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body)
 {
     RgMotionShotInfo *motionInfo;
     int motion;
 
-    motion = 78;
+    motion = RG_MOT_HISSATU;
     motionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), motion, body->charID);
-    _SetStatus(status, 10, body);
+    _SetStatus(status, RG_STATUS_HISSATU, body);
     status->execCmdMethod = _ExecCmdInHissatu;
     status->scratch1 = motion;
     status->passTimeMethod = _HissatuPassTime;
@@ -1000,11 +985,9 @@ static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body)
     status->scratch4 = 1;
     status->eSide = 1;
     status->scratch5 = 0;
-    status->scratch2 = (int) motionInfo;
-    _BodyPlayMotion(body, 78);
+    status->hissatuMotionInfo = motionInfo;
+    _BodyPlayMotion(body, RG_MOT_HISSATU);
 }
-
-extern void RgWeaponSubShotNum(void *weapon, float shotNum);
 
 static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -1019,24 +1002,24 @@ static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command)
     }
     type = command->type;
     kind = type;
-    if (type == 2) {
+    if (type == RG_CMD_SHOT) {
         if (status->scratch2 == command->param) {
             if (status->scratch0 != type) {
                 status->scratch1 = 1;
             }
         }
     }
-    if (kind == 11) {
+    if (kind == RG_CMD_INVALID_ATTACK) {
         weapon = *(void **) &status->scratchTimer;
         if (weapon != 0) {
             RgWeaponSubShotNum(weapon, command->scratch0);
         }
         status->scratch4 = 1;
         result |= 0x400;
-        XrgCopyVector((float *) &status->dashMotionPlayed, (float *) command);
+        XrgCopyVector((float *) &status->dashMotionPlayed, command->vector);
         type = command->type;
     }
-    if (type == 2) {
+    if (type == RG_CMD_SHOT) {
         if (status->scratch2 != 2) {
             if (status->scratch0 == 0) {
                 if (_IsBackWeaponReady(body, command->param)) {
@@ -1047,13 +1030,6 @@ static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command)
     }
     return result;
 }
-
-extern void RgGeomRobotCalcLocal(RgGeomPoint *geometry, RgMatrix local);
-extern void XrgNegateVector(RgVector destination, RgVector source);
-extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern const char D_00A51968[];
 
 static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -1072,7 +1048,7 @@ static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
         RgVector force;
         weight = RgGeomPointGetWeight(body->geometry);
         status->scratch4 = 0;
-        action = RgMotionInfoGetActionInTime(motionInfo, 3, 100000000.0f);
+        action = RgMotionInfoGetActionInTime(motionInfo, 3, RG_ROBOT_TIME_UNLIMITED);
         XrgScaleVector(force, (float *) &status->dashMotionPlayed,
                        -weight * 7.0f / deltaTime);
         RgGeomPointAddForce(body->geometry, force);
@@ -1092,11 +1068,11 @@ static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
         break;
     case 1:
         body->shieldActive = 1;
-        RgGeomRobotCalcLocal(body->geometry, localFrame);
+        RgGeomRobotCalcLocal(&body->geometry->geom, localFrame);
         XrgNegateVector(body->shieldDirection, &localFrame[8]);
         body->shieldDirection[1] = 0.0f;
         if (!status->scratch1 || RgWeaponGetShotNum(weapon) <= 0.0f) {
-            action = RgMotionInfoGetActionInTime(motionInfo, 2, 100000000.0f);
+            action = RgMotionInfoGetActionInTime(motionInfo, 2, RG_ROBOT_TIME_UNLIMITED);
             if (action != 0) {
                 _BodyPlayMotion(body, action->shiftMotionNo);
                 if (weapon != 0) {
@@ -1113,7 +1089,7 @@ static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
         }
         break;
     default:
-        RgError(D_00A51968, D_00A51840, 0x63C, state);
+        RgError(robotUnknownShieldStatusFormat, robotSourcePath, 0x63C, state);
         break;
     }
     }
@@ -1127,18 +1103,15 @@ static void _ShieldExit(RgRobotStatus *status, RgBody *body)
 
     (void)status;
     body->shieldActive = 0;
-    weapon = body->weapon[0];
+    weapon = body->weapon[RG_EQUIP_TYPE_LEFT];
     if (weapon != 0) {
         RgWeaponRestartLockon(weapon);
     }
-    weapon = body->weapon[1];
+    weapon = body->weapon[RG_EQUIP_TYPE_RIGHT];
     if (weapon != 0) {
         RgWeaponRestartLockon(weapon);
     }
 }
-
-static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
-static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
 static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion,
                               RgWeapon *shieldWeapon, int scratch2Arg)
@@ -1149,10 +1122,10 @@ static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion,
     motionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), motion,
                                    body->charID);
     if (motionInfo == 0) {
-        assert_prog(D_00A51940, D_00A51840, 1629);
+        assert_prog(robotAssertMotionInfoNotNil, robotSourcePath, 1629);
     }
     _StopAllShotThread(body);
-    _SetStatus(status, 3, body);
+    _SetStatus(status, RG_STATUS_SHIELD, body);
     status->execCmdMethod = _ExecCmdInShield;
     status->passTimeMethod = _ShieldPassTime;
     status->exitMethod = _ShieldExit;
@@ -1166,11 +1139,11 @@ static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion,
     if (actor != 0) {
         _BodyPlayMotion(body, motion);
     }
-    if (body->weapon[0] != 0) {
-        RgWeaponStopLockon(body->weapon[0]);
+    if (body->weapon[RG_EQUIP_TYPE_LEFT] != 0) {
+        RgWeaponStopLockon(body->weapon[RG_EQUIP_TYPE_LEFT]);
     }
-    if (body->weapon[1] != 0) {
-        RgWeaponStopLockon(body->weapon[1]);
+    if (body->weapon[RG_EQUIP_TYPE_RIGHT] != 0) {
+        RgWeaponStopLockon(body->weapon[RG_EQUIP_TYPE_RIGHT]);
     }
 }
 
@@ -1184,29 +1157,26 @@ static int _ExecCmdInTargetting(RgRobotStatus *status, RgBody *body, RgCmd *comm
     mask = _AllowDamageCmd(status, body, command);
     if (status->scratch1AsFloat <= elapsedTime) {
         switch (command->type) {
-        case 1:
+        case RG_CMD_ACCELARATE_ROTATE:
             mask |= _AllowAllCmdInMoving(status, body, command);
             _StopHomingThread(body->homingThread);
             break;
-        case 2:
+        case RG_CMD_SHOT:
             weapon = body->weapon[command->param];
             if (weapon != 0 && RgWeaponGetShotNum(weapon) > 0.0f
-                && (RgWeaponGetControlFlag(weapon) & 7) == 0) {
+                && (RgWeaponGetControlFlag(weapon) & RG_WEAPON_CONTROL_KIND_MASK) == 0) {
                 mask |= _AllowAllCmdInMoving(status, body, command);
             }
             break;
-        case 0:
-        case 4:
-        case 5:
+        case RG_CMD_ACCELARATE:
+        case RG_CMD_BREAK:
+        case RG_CMD_DASH:
             mask |= _AllowAllCmdInMoving(status, body, command);
             break;
         }
     }
     return mask;
 }
-
-extern void RgRobotEffectTermJet(RgRobotEffect *effect);
-extern void RgRobotEffectSetJetInertia(RgRobotEffect *effect, int inertia);
 
 static int _TargettingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -1216,13 +1186,13 @@ static int _TargettingPassTime(RgRobotStatus *status, RgBody *body, float deltaT
     elapsedTime = status->elapsedTime;
     result = 0;
     if (_GetStatHomingThread(body->homingThread) == 1) {
-        body->flags |= 3;
+        body->flags |= RG_BODY_FLAG_FREE_TURN | RG_BODY_FLAG_NO_AUTO_HOMING;
         result = 8;
     }
     if (elapsedTime < *(float *) &status->scratch2) {
         if (status->scratch0 == 0) {
             if (*(float *) &status->scratch2 - elapsedTime < 0.2f) {
-                _BodyPlayMotion(body, 75);
+                _BodyPlayMotion(body, RG_MOT_JUMP_END);
                 status->scratch0 = 1;
             }
         }
@@ -1251,52 +1221,46 @@ static void _ExitTargettingStatus(RgRobotStatus *status, RgBody *body)
     RgRobotEffectSetJetInertia(body->effect, 1);
 }
 
-static int _TargettingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
-extern void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
-                                const char *source_file, int source_line);
-extern void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity);
-extern int RgGeomGetEventFlag(RgGeom *geom);
-
 static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump)
 {
     RgVector velocity;
     RgVector position;
     RgGeomPoint *geometry;
-    void *target;
+    RgGeomPoint *target;
     float gravity;
-    int soundID;
+    XrgSound *sound;
     int startHoming;
 
     target = body->target;
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 0x6F2);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 0x6F2);
     }
     _StopAllShotThread(body);
-    startHoming = RgGeomGetEventFlag((RgGeom *) body->eyeGeometry) == 0;
+    startHoming = RgGeomGetEventFlag(&body->eyeGeometry->geom) == 0;
     if (target == 0) {
         startHoming = 0;
     }
     if (body->confuse > 0.0f) {
         startHoming = 0;
     }
-    _SetStatus(status, 4, body);
+    _SetStatus(status, RG_STATUS_TARGETTING, body);
     status->execCmdMethod = _ExecCmdInTargetting;
     status->passTimeMethod = _TargettingPassTime;
     status->exitMethod = _ExitTargettingStatus;
     if (jump != 0) {
         geometry = body->geometry;
         RgGeomPointGetVel(geometry, velocity);
-        __RgGeomPointGetPos(geometry, (RgPointVector *) position, D_00A51840, 0x70D);
+        __RgGeomPointGetPos(geometry, position, robotSourcePath, 0x70D);
         gravity = RgGetGeomGravity();
         if (0.0f < 7.5f - position[1]) {
             velocity[1] = __builtin_sqrtf((gravity + gravity) * (7.5f - position[1]));
         }
         RgGeomPointSetVel(geometry, velocity);
         gravity = RgGetGeomGravity();
-        soundID = body->landingSoundID;
+        sound = body->landingSound;
         status->scratch2AsFloat = (velocity[1] + velocity[1]) / gravity;
-        XrgSoundRingStopMoving(soundID);
-        XrgSoundRingMoving(body->landingSoundID, 1, status->scratch2AsFloat);
+        XrgSoundRingStopMoving(sound);
+        XrgSoundRingMoving(body->landingSound, 1, status->scratch2AsFloat);
         RgRobotEffectStartJet(body->effect, status->scratch2AsFloat * 0.4f);
         RgRobotEffectSetJetInertia(body->effect, 0);
         body->grounded = 0;
@@ -1308,7 +1272,7 @@ static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump)
         _StartHomingThread(body->homingThread, body->geometry, body->target,
                            status->scratch1AsFloat);
     }
-    _BodyPlayMotion(body, 0x13);
+    _BodyPlayMotion(body, RG_MOT_JUMP);
     status->scratch0 = 0;
 }
 
@@ -1319,8 +1283,8 @@ static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *comman
     int rotateSign;
 
     mask = _AllowDamageCmd(status, body, command);
-    if (command->type == 1) {
-        delta = *(float *) command;
+    if (command->type == RG_CMD_ACCELARATE_ROTATE) {
+        delta = command->rotate;
         if (delta > 0.0f) {
             rotateSign = 1;
         } else if (delta < 0.0f) {
@@ -1328,9 +1292,9 @@ static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *comman
         } else {
             rotateSign = 0;
         }
-        RgGeomRobotAddRotForce(body->geometry,
+        RgGeomRobotAddRotForce(&body->geometry->geom,
                                (float) rotateSign * body->spec->rotateForce * 0.1f);
-        body->flags |= 2;
+        body->flags |= RG_BODY_FLAG_NO_AUTO_HOMING;
     }
     return mask;
 }
@@ -1350,22 +1314,19 @@ static int _BreakingPassTime(RgRobotStatus *status, RgBody *body, float deltaTim
 static void _BreakingExit(RgRobotStatus *status, RgBody *body)
 {
     (void)status;
-    _BodyPlayMotion(body, 0);
+    _BodyPlayMotion(body, RG_MOT_STAND);
 }
 
 static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
 {
     _StopAllShotThread(body);
-    _SetStatus(status, 8, body);
+    _SetStatus(status, RG_STATUS_BREAKING, body);
     status->execCmdMethod = _ExecCmdInBreaking;
     status->passTimeMethod = _BreakingPassTime;
     status->exitMethod = _BreakingExit;
     status->scratch0AsFloat = 0.3f;
-    _BodyPlayMotion(body, 0x14);
+    _BodyPlayMotion(body, RG_MOT_BREAK);
 }
-
-extern const char D_00A51A30[];
-static int _InitDashVRStatus();
 
 static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -1374,14 +1335,14 @@ static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 
     result = _AllowDamageCmd(status, body, command);
     if (status->dashVRAllowed != 0) {
-        if (command->type == 6) {
-            XrgCopyVector(vector, &status->scratch10);
-            if (_InitDashVRStatus(status, body, (RgCmd *) vector)) {
+        if (command->type == RG_CMD_DASH_CONTINUE) {
+            XrgCopyVector(vector, (float *) &status->scratch10);
+            if (_InitDashVRStatus(status, body, vector)) {
                 result |= 4;
             }
         }
     }
-    if (command->type == 2) {
+    if (command->type == RG_CMD_SHOT) {
         result = _ExecShotOrAttackCmd(status, body, command);
         if (result != 0) {
             return result;
@@ -1389,8 +1350,6 @@ static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     }
     return result;
 }
-
-extern const char D_00A519A8[];
 
 static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -1433,12 +1392,12 @@ static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
                 }
             }
         }
-        if (RgGeomGetEventFlag((RgGeom *) body->advanceGeometry) != 0) {
+        if (RgGeomGetEventFlag(&body->advanceGeometry->geom) != 0) {
             next = 1;
         }
         if (next == 2) {
             XrgCopyVector(tmpVector, (float *) &status->motionInfo);
-            _InitDashVRStatus(status, body, (RgCmd *) tmpVector);
+            _InitDashVRStatus(status, body, tmpVector);
         } else if (next == 1) {
             status->scratch0 = next;
             status->dashPhaseTimer = 0.3f;
@@ -1457,7 +1416,7 @@ static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
         }
         break;
     default:
-        RgError(D_00A519A8, D_00A51840, 0x7FE, ((int *) &status->scratch0)[0]);
+        RgError(robotUnknownDashStatusFormat, robotSourcePath, 0x7FE, ((int *) &status->scratch0)[0]);
         break;
     }
     return ret;
@@ -1474,15 +1433,10 @@ static void _DashExit(RgRobotStatus *status, RgBody *body)
     if (status->restoreDashTime != 0) {
         body->dashTime = spec->dashTime;
     }
-    XrgSoundRingStopMoving(body->landingSoundID);
+    XrgSoundRingStopMoving(body->landingSound);
 }
 
-static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion, RgWeapon *shieldWeapon, int scratch2Arg);
-extern const char D_00A519C0[];
-static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
-
-static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector vector)
+static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector direction)
 {
     RgRobotSpec *spec;
     float limit;
@@ -1490,13 +1444,13 @@ static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector vector)
 
     spec = body->spec;
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 0x81E);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 0x81E);
     }
-    if (spec->type == 1) {
+    if (spec->type == RG_DASH_MODE_VR) {
         return 0;
     }
-    if (spec->type != 0) {
-        if ((unsigned int) spec->type < 5) {
+    if (spec->type != RG_DASH_MODE_NORMAL) {
+        if ((unsigned int) spec->type < RG_DASH_MODE_NUM) {
             limit = spec->dashTime * 0.2f;
             if (body->dashTime < limit) {
                 return 0;
@@ -1505,22 +1459,22 @@ static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector vector)
         }
     }
     _StopAllShotThread(body);
-    _SetStatus(status, 5, body);
+    _SetStatus(status, RG_STATUS_DASH, body);
     status->execCmdMethod = _DashExecCmd;
     status->passTimeMethod = _DashPassTime;
     status->exitMethod = _DashExit;
     status->scratch0 = 0;
     status->dashMotionPlayed = 0;
-    XrgCopyVector((float *) &status->motionInfo, vector);
+    XrgCopyVector((float *) &status->motionInfo, direction);
     status->dashVRAllowed = 0;
     switch (spec->type) {
-    case 0:
-    case 1:
+    case RG_DASH_MODE_NORMAL:
+    case RG_DASH_MODE_VR:
         status->restoreDashTime = 1;
         status->dashTimeStart = body->dashTime;
         status->dashLimited = 0;
         break;
-    case 2:
+    case RG_DASH_MODE_NEO:
         status->dashLimited = 1;
         dashTime = body->dashTime;
         if (!(dashTime < 0.5f)) {
@@ -1529,8 +1483,8 @@ static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector vector)
         status->dashTimeStart = dashTime;
         status->restoreDashTime = 0;
         break;
-    case 3:
-    case 4:
+    case RG_DASH_MODE_NEO2:
+    case RG_DASH_MODE_NEO3:
         status->dashLimited = 1;
         dashTime = body->dashTime;
         dashTime = (dashTime < 0.5f) ? dashTime : 0.5f;
@@ -1539,12 +1493,12 @@ static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector vector)
         status->restoreDashTime = 0;
         break;
     default:
-        RgError(D_00A519C0, D_00A51840, 0x85D, spec->type);
+        RgError(robotUnknownDashModeFormat, robotSourcePath, 0x85D, spec->type);
         break;
     }
     RgRobotEffectStartJet(body->effect, spec->dashTime);
     RgRobotEffectStartDash(body->effect, spec->dashTime);
-    XrgSoundRingMoving(body->landingSoundID, 1, 100000000.0f);
+    XrgSoundRingMoving(body->landingSound, 1, RG_ROBOT_TIME_UNLIMITED);
     return 1;
 }
 
@@ -1558,15 +1512,8 @@ static void _DashVRMainToFollow(RgRobotStatus *status, RgBody *body)
 {
     status->scratch0 = 1;
     status->scratchTimer = 0.1f;
-    _BodyPlayMotion(body, 0);
+    _BodyPlayMotion(body, RG_MOT_STAND);
 }
-
-struct RgPointVector;
-static int _ExecCmdInTargetting(RgRobotStatus *status, RgBody *body, RgCmd *command);
-extern float atan2f(float y, float x);
-extern float sinf(float angle);
-extern float cosf(float angle);
-extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
 
 /*
  * Clamp value into [min, max] as one ternary chain, the same compare and
@@ -1595,14 +1542,14 @@ static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     result = _AllowDamageCmdNotPetrify(status, body, command);
     type = command->type;
     angle = ((float *) &status->scratch1)[0];
-    if (type == 3) {
+    if (type == RG_CMD_TARGETTING) {
         _InitTargettingStatus(status, body, 1);
         return result | 0x100;
     }
-    if (type == 1) {
-        if (((float *) command)[0] > 0.0f) {
+    if (type == RG_CMD_ACCELARATE_ROTATE) {
+        if (command->vector[0] > 0.0f) {
             sign = 1;
-        } else if (((float *) command)[0] < 0.0f) {
+        } else if (command->vector[0] < 0.0f) {
             sign = -1;
         } else {
             sign = 0;
@@ -1622,14 +1569,14 @@ static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
         }
         angle = value;
     }
-    if (type == 0) {
-        angle = atan2f(((float *) command)[0], ((float *) command)[2]);
+    if (type == RG_CMD_ACCELARATE) {
+        angle = atan2f(command->vector[0], command->vector[2]);
     }
     type = command->type;
-    if (type == 2) {
+    if (type == RG_CMD_SHOT) {
         weapon = body->weapon[command->param];
         if (weapon != 0) {
-            flag = RgWeaponGetControlFlag(weapon) & 0x7;
+            flag = RgWeaponGetControlFlag(weapon) & RG_WEAPON_CONTROL_KIND_MASK;
             if ((flag == type || flag == 4) && RgWeaponGetShotNum(weapon) > 0.0f) {
                 result = _ExecShotOrAttackCmd(status, body, command);
                 if (result != 0) {
@@ -1641,13 +1588,13 @@ static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
         }
         type = command->type;
     }
-    if (type == 12) {
+    if (type == RG_CMD_HIT_BG) {
         vec[0] = sinf(status->scratch1AsFloat);
         vec[1] = 0.0f;
         vec[2] = cosf(status->scratch1AsFloat);
-        dot = vec[0] * ((float *) command)[0] + vec[1] * ((float *) command)[1]
-            + vec[2] * ((float *) command)[2];
-        XrgScaleVector(scaled, (float *) command, -dot);
+        dot = vec[0] * command->vector[0] + vec[1] * command->vector[1]
+            + vec[2] * command->vector[2];
+        XrgScaleVector(scaled, command->vector, -dot);
         XrgAddVector(vec, vec, scaled);
         angle = atan2f(vec[0], vec[2]);
         status->scratch1AsFloat = angle;
@@ -1666,17 +1613,10 @@ static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
         }
     }
     step = diff / 0.2f;
-    step = _ClampFloat(step, -12.566371f, 12.566371f);
+    step = _ClampFloat(step, -RG_ROBOT_HOMING_TURN_SPEED, RG_ROBOT_HOMING_TURN_SPEED);
     ((float *) &status->scratch2)[0] += step;
     return result;
 }
-
-extern const char D_00A519F8[];
-extern const char D_00A51A18[];
-extern void RgGeomRobotSetRotate(RgGeom *geom, float rotate);
-extern float RgRobSubTargetting(RgGeomPoint *geometry,
-                                struct RgPointVector *targetPosition,
-                                float speed, float turnRate);
 
 static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -1715,7 +1655,7 @@ static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
             }
         }
         status->scratch1AsFloat = angle;
-        RgGeomRobotSetRotate((RgGeom *) geometry, angle);
+        RgGeomRobotSetRotate(&geometry->geom, angle);
         ((float *) &status->scratch2)[0] =
             ((float *) &status->scratch2)[0] * (deltaTime * 0.7f);
         RgGeomPointGetVel(geometry, vel);
@@ -1739,7 +1679,7 @@ static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
             }
             break;
         default:
-            RgError(D_00A519F8, D_00A51840, 0x900, status->dashVRMode);
+            RgError(robotUnknownVrDashCmdModeFormat, robotSourcePath, 0x900, status->dashVRMode);
         }
         if (flag != 0) {
             _DashVRMainToFollow(status, body);
@@ -1759,21 +1699,21 @@ static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
         if (status->scratchTimer < 0.0f) {
             _InitMovingStatus(status, body);
         } else {
-            __RgGeomPointGetPos(body->geometry, (struct RgPointVector *) pos,
-                                D_00A51840, 0x920);
+            __RgGeomPointGetPos(body->geometry, pos,
+                                robotSourcePath, 0x920);
             XrgAddVector(pos, pos, (float *) &status->motionInfo);
-            RgRobSubTargetting(body->geometry, (struct RgPointVector *) pos,
-                               12.566371f, deltaTime);
-            body->flags |= 3;
+            RgRobSubTargetting(body->geometry, pos,
+                               RG_ROBOT_HOMING_TURN_SPEED, deltaTime);
+            body->flags |= RG_BODY_FLAG_FREE_TURN | RG_BODY_FLAG_NO_AUTO_HOMING;
         }
-        rollMotion = RgRobSubGetRollMotion((RgGeom *) body->geometry);
+        rollMotion = RgRobSubGetRollMotion(body->geometry);
         if (rollMotion != status->dashMotionPlayed) {
             status->dashMotionPlayed = rollMotion;
             _BodyPlayMotion(body, rollMotion);
         }
         break;
     default:
-        RgError(D_00A51A18, D_00A51840, 0x931, ((int *) &status->scratch0)[0]);
+        RgError(robotUnknownVrDashModeFormat, robotSourcePath, 0x931, ((int *) &status->scratch0)[0]);
     }
     return ret;
 }
@@ -1784,10 +1724,10 @@ static void _DashVRExit(RgRobotStatus *status, RgBody *body)
     RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, body->spec->moveSpeedMax));
     RgRobotEffectTermJet(body->effect);
     RgRobotEffectTermDash(body->effect);
-    XrgSoundRingStopMoving(body->landingSoundID);
+    XrgSoundRingStopMoving(body->landingSound);
 }
 
-static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgCmd *command)
+static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgVector direction)
 {
     RgRobotSpec *spec;
     RgGeomPoint *geometry;
@@ -1797,47 +1737,45 @@ static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgCmd *command
 
     spec = body->spec;
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 0x94D);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 0x94D);
     }
     _StopAllShotThread(body);
     if (body->dashTime < spec->dashTime * 0.2f) {
         return 0;
     }
-    _SetStatus(status, 7, body);
+    _SetStatus(status, RG_STATUS_DASH_VR, body);
     status->execCmdMethod = _DashVRExecCmd;
     status->passTimeMethod = _DashVRPassTime;
     status->exitMethod = _DashVRExit;
     *(int *) &status->scratch0 = 0;
-    angle = atan2f(((float *) command)[0], ((float *) command)[2]);
+    angle = atan2f(direction[0], direction[2]);
     status->scratch2 = 0;
     geometry = body->geometry;
     status->scratch1AsFloat = angle;
-    rotate = RgGeomRobotGetRotate(geometry);
+    rotate = RgGeomRobotGetRotate(&geometry->geom);
     ((float *) &status->motionInfo)[0] = sinf(rotate) * 50.0f;
     status->scratch4 = 0;
     ((float *) &status->motionInfo)[2] = cosf(rotate) * 50.0f;
     type = spec->type;
     switch (type) {
-    case 3:
+    case RG_DASH_MODE_NEO2:
         status->dashVRMode = 1;
         break;
-    case 2:
-    case 4:
+    case RG_DASH_MODE_NEO:
+    case RG_DASH_MODE_NEO3:
         status->dashVRMode = 0;
         break;
     default:
-        RgError(D_00A51A30, D_00A51840, 0x971, type);
+        RgError(robotCannotTransitVrDashModeFormat, robotSourcePath, 0x971, type);
         break;
     }
     RgRobotEffectStartJet(body->effect, spec->dashTime);
     RgRobotEffectStartDash(body->effect, spec->dashTime);
     RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->dashSpeedMax));
     _BodyPlayMotion(body, 0x32);
-    XrgSoundRingMoving(body->landingSoundID, 1, 100000000.0f);
+    XrgSoundRingMoving(body->landingSound, 1, RG_ROBOT_TIME_UNLIMITED);
     return 1;
 }
-
-static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
 /*
  * Damage status's own scratch1 (see RgRobotStatus) is nonzero while a
@@ -1850,7 +1788,7 @@ static int _DamageExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 
     result = _AllowDamageCmdNotVRDashHit(status, body, command);
     if (result == 0) {
-        if (status->scratch1 != 0 && command->type == 5) {
+        if (status->scratch1 != 0 && command->type == RG_CMD_DASH) {
             result = _ExecDashCmd(status, body, command);
         }
         return result;
@@ -1865,8 +1803,6 @@ static int _DamagePassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     }
     return 0x10;
 }
-
-extern int RgRobSubGetDamageMotion(RgGeomPoint *geometry, RgVector direction);
 
 /*
  * stiffScale scales the spec's damage-stiff-time, clamped to 0.1..10 s
@@ -1892,10 +1828,10 @@ static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
 
     spec = body->spec;
     if (status == 0) {
-        assert_prog(D_00A518F0, D_00A51840, 2478);
+        assert_prog(robotAssertStatusNotNil, robotSourcePath, 2478);
     }
     _StopAllShotThread(body);
-    _SetStatus(status, 6, body);
+    _SetStatus(status, RG_STATUS_DAMAGE, body);
     body->weakHitAccum = 0.0f;
     body->weakHitWindow = 0.0f;
     status->execCmdMethod = _DamageExecCmd;
@@ -1906,11 +1842,8 @@ static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
     if (stiffTime > 0.0f) {
         status->scratch0AsFloat = stiffTime;
     }
-    _BodyPlayMotion(body, RgRobSubGetDamageMotion(body->geometry, (float *) command));
+    _BodyPlayMotion(body, RgRobSubGetDamageMotion(body->geometry, command->vector));
 }
-
-static int _GetDropMotion(int eSide);
-static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion, int eSide);
 
 /*
  * Drop status's own scratch0/scratch2 (see RgRobotStatus): scratch0 is the
@@ -1923,7 +1856,7 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
     int mask;
 
     mask = _AllowDamageCmd(status, body, command);
-    if (command->type == 7
+    if (command->type == RG_CMD_DROP_WEAPON
         && command->param != status->scratch0
         && command->param == 2
         && status->scratch2 != 0) {
@@ -1932,8 +1865,6 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
     }
     return mask;
 }
-
-static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
 
 /*
  * Drop status's own scratch1 (see RgRobotStatus) is the drop motion id
@@ -1963,16 +1894,6 @@ static int _DropPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 0;
 }
 
-extern int RgWeaponIsAttachedShot(RgWeapon *weapon);
-
-/*
- * The weapon control flag's low three bits give its type; 4 is the unarmed
- * type (InitRgWeaponUnArmedEssence sets the mode word to 76, whose low bits
- * are 4; rg_hissatu.c's _IsUnarmed tests the same value).
- */
-#define RG_WEAPON_CONTROL_TYPE_MASK 7
-#define RG_WEAPON_CONTROL_UNARMED 4
-
 static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
                            int eSide)
 {
@@ -1986,14 +1907,14 @@ static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
     if (motionInfo == 0) {
         return 0;
     }
-    if ((RgWeaponGetControlFlag(body->weapon[eSide]) & RG_WEAPON_CONTROL_TYPE_MASK)
-        == RG_WEAPON_CONTROL_UNARMED) {
+    if ((RgWeaponGetControlFlag(body->weapon[eSide]) & RG_WEAPON_CONTROL_KIND_MASK)
+        == RG_WEAPON_CONTROL_KIND_UNARMED) {
         return 0;
     }
     if (RgWeaponIsAttachedShot(body->weapon[eSide]) != 0) {
         return 0;
     }
-    _SetStatus(status, 9, body);
+    _SetStatus(status, RG_STATUS_DROP, body);
     status->execCmdMethod = _ExecCmdInDrop;
     status->passTimeMethod = _DropPassTime;
     status->scratch0 = eSide;
@@ -2003,11 +1924,6 @@ static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
     return 1;
 }
 
-/* ov12:0x00a4f560, 0x3c bytes: one priority level per command type. */
-#define RG_CMD_TYPE_NUM 15
-
-extern int s_anCmdLevel[RG_CMD_TYPE_NUM];
-
 static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType)
 {
     RgCmdQueue *pQ = cmdQueue;
@@ -2016,7 +1932,7 @@ static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType)
     RgCmd *command;
 
     if (pQ == 0) {
-        assert_prog(D_00A51A58, D_00A51840, 0xA41);
+        assert_prog(robotAssertCmdQueueNotNil, robotSourcePath, 0xA41);
     }
     if (pQ->count >= RG_CMD_QUEUE_CAPACITY) {
         return 0;
@@ -2043,12 +1959,11 @@ static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType)
 }
 
 /* ov12:0x00a51a58 contains the assertion expression "pQ != NIL". */
-extern const char D_00A51A58[];
 
 static void _InitCmdQueue(RgCmdQueue *cmdQueue)
 {
     if (cmdQueue == 0) {
-        assert_prog(D_00A51A58, D_00A51840, 2673);
+        assert_prog(robotAssertCmdQueueNotNil, robotSourcePath, 2673);
     }
     cmdQueue->count = 0;
     cmdQueue->entryCount = 0;
@@ -2057,7 +1972,7 @@ static void _InitCmdQueue(RgCmdQueue *cmdQueue)
 static void _ClearCmdQueue(RgCmdQueue *cmdQueue)
 {
     if (cmdQueue == 0) {
-        assert_prog(D_00A51A58, D_00A51840, 2681);
+        assert_prog(robotAssertCmdQueueNotNil, robotSourcePath, 2681);
     }
     cmdQueue->count = 0;
 }
@@ -2066,7 +1981,7 @@ static RgCmdQueue *_CreateCmdQueue(void)
 {
     RgCmdQueue *cmdQueue;
 
-    cmdQueue = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgCmdQueue), D_00A51840, 2689);
+    cmdQueue = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgCmdQueue), robotSourcePath, 2689);
     _InitCmdQueue(cmdQueue);
     return cmdQueue;
 }
@@ -2074,21 +1989,16 @@ static RgCmdQueue *_CreateCmdQueue(void)
 static void _DisposeCmdQueue(RgCmdQueue *cmdQueue)
 {
     if (cmdQueue == 0) {
-        assert_prog(D_00A51A58, D_00A51840, 2697);
+        assert_prog(robotAssertCmdQueueNotNil, robotSourcePath, 2697);
     }
-    RgHeapFree(InstanceOfRgHeap(), cmdQueue, D_00A51840, 2698);
+    RgHeapFree(InstanceOfRgHeap(), cmdQueue, robotSourcePath, 2698);
 }
-
-typedef struct XrgActor XrgActor;
-
-extern void XrgActorSetMotion(XrgActor *actor, int motion);
-extern void XrgActorSetSmoothPlay(XrgActor *actor, int smoothPlay);
 
 static void _BodyPlayMotion(RgBody *body, int motion)
 {
     XrgActor *actor;
 
-    actor = (XrgActor *) body->actor;
+    actor = body->actor;
     if (actor != 0) {
         if (body->smoothSuppressed != 0) {
             XrgActorSetSmoothPlay(actor, 0);
@@ -2099,13 +2009,11 @@ static void _BodyPlayMotion(RgBody *body, int motion)
     }
 }
 
-extern void XrgActorSetLoopPlay(XrgActor *actor, int loopPlay);
-
 static void _BodyPlayMotionLoop(RgBody *body, int motion)
 {
     XrgActor *actor;
 
-    actor = (XrgActor *) body->actor;
+    actor = body->actor;
     if (actor != 0) {
         if (body->smoothSuppressed != 0) {
             XrgActorSetSmoothPlay(actor, 0);
@@ -2127,7 +2035,7 @@ static void _BodyAdvanceForAttack(RgBody *body, float attackPower,
 
     geometry = body->geometry;
     spec = body->spec;
-    RgGeomRobotCalcLocal(geometry, localFrame);
+    RgGeomRobotCalcLocal(&geometry->geom, localFrame);
     /* row 2 of the local frame: the body's forward (z) axis */
     XrgNegateVector(direction, &localFrame[8]);
     RgRobSubAcceralate(geometry, direction,
@@ -2135,18 +2043,14 @@ static void _BodyAdvanceForAttack(RgBody *body, float attackPower,
 }
 
 /* ov12:0x00a51a68 contains the assertion expression "pBody != NIL". */
-extern const char D_00A51A68[];
 
-/* Opaque here: rg_geom_point.c (ov12/tu052) owns the RgPointVector definition. */
-typedef struct RgPointVector RgPointVector;
-
-static int _BodyGetTargetPos(RgBody *body, RgPointVector *position)
+static int _BodyGetTargetPos(RgBody *body, RgVector position)
 {
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 2758);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 2758);
     }
     if (body->target != 0) {
-        __RgGeomPointGetPos(body->target, position, D_00A51840, 2760);
+        __RgGeomPointGetPos(body->target, position, robotSourcePath, 2760);
         return 1;
     }
     return 0;
@@ -2157,7 +2061,7 @@ static void _BodySetSpec(RgBody *body, RgRobotSpec *spec)
     float life;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 2773);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 2773);
     }
     if (spec != 0) {
         body->spec = spec;
@@ -2169,12 +2073,7 @@ static void _BodySetSpec(RgBody *body, RgRobotSpec *spec)
     }
 }
 
-extern void RgGeomFree(RgGeomPoint *point);
-extern void RgGeomPointSetMoveResist(RgGeomPoint *point, float resist);
-extern void RgGeomRobotSetRotResist(RgGeomPoint *point, float resist);
-extern void RgRobotEffectSetGeom(RgRobotEffect *effect, RgGeomPoint *geometry);
 /* ov12:0x00a51a78 contains the assertion expression "pGeom != NIL". */
-extern const char D_00A51A78[];
 
 static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry)
 {
@@ -2182,21 +2081,21 @@ static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry)
     RgRobotSpec *spec;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xAEA);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xAEA);
     }
     if (geometry == 0) {
-        assert_prog(D_00A51A78, D_00A51840, 0xAEB);
+        assert_prog(robotAssertGeomNotNil, robotSourcePath, 0xAEB);
     }
     oldGeometry = body->geometry;
     if (geometry != oldGeometry) {
-        RgGeomFree(oldGeometry);
+        RgGeomFree(&oldGeometry->geom);
     }
     spec = body->spec;
     body->geometry = geometry;
     RgGeomPointSetWeight(geometry, spec->weight);
     RgGeomPointSetMoveResist(geometry, spec->moveResist);
-    RgGeomRobotSetRotResist(geometry, spec->rotResist);
-    body->rotate = RgGeomRobotGetRotate(geometry);
+    RgGeomRobotSetRotResist(&geometry->geom, spec->rotResist);
+    body->rotate = RgGeomRobotGetRotate(&geometry->geom);
     RgRobotEffectSetGeom(body->effect, geometry);
     RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->moveSpeedMax));
 }
@@ -2206,11 +2105,11 @@ static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry)
     RgGeomPoint *oldEyeGeometry;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 2816);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 2816);
     }
     oldEyeGeometry = body->eyeGeometry;
     if (oldEyeGeometry != 0 && oldEyeGeometry != eyeGeometry) {
-        RgGeomFree(oldEyeGeometry);
+        RgGeomFree(&oldEyeGeometry->geom);
     }
     body->eyeGeometry = eyeGeometry;
 }
@@ -2221,79 +2120,65 @@ static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry)
     RgGeomPoint *oldAdvanceGeometry;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 2826);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 2826);
     }
     if (advanceGeometry == 0) {
-        assert_prog(D_00A51A78, D_00A51840, 2827);
+        assert_prog(robotAssertGeomNotNil, robotSourcePath, 2827);
     }
     oldAdvanceGeometry = body->advanceGeometry;
     if (oldAdvanceGeometry != 0 && oldAdvanceGeometry != advanceGeometry) {
-        RgGeomFree(oldAdvanceGeometry);
+        RgGeomFree(&oldAdvanceGeometry->geom);
     }
     body->advanceGeometry = advanceGeometry;
 }
 
-extern void DisposeXrgSound(int soundID);
-extern void RgWeaponSetSound(RgWeapon *weapon, int soundID);
-
-static void _BodySetSound(RgBody *body, void *soundDriver)
+static void _BodySetSound(RgBody *body, XrgSound *sound)
 {
     unsigned int eSide;
     RgWeapon *weapon;
 
-    if (body->landingSoundID != 0 && body->landingSoundID != (int) soundDriver) {
-        DisposeXrgSound(body->landingSoundID);
+    if (body->landingSound != 0 && body->landingSound != sound) {
+        DisposeXrgSound(body->landingSound);
     }
-    body->landingSoundID = (int) soundDriver;
+    body->landingSound = sound;
     eSide = 0;
     while (eSide < RG_EQUIP_TYPE_NUM) {
         if ((weapon = body->weapon[eSide]) != 0) {
-            RgWeaponSetSound(weapon, body->landingSoundID);
+            RgWeaponSetSound(weapon, body->landingSound);
         }
-        if ((weapon = (RgWeapon *) body->spareWeapon[eSide]) != 0) {
-            RgWeaponSetSound(weapon, body->landingSoundID);
+        if ((weapon = body->spareWeapon[eSide]) != 0) {
+            RgWeaponSetSound(weapon, body->landingSound);
         }
         eSide++;
     }
 }
 
-/*
- * CreateXrgActor's published parameter is `int actorID` (src/ov12/xrg_actor.c,
- * ov12/tu080); this caller passes the actorSpec pointer's own raw value as
- * that argument (ov12:0x00a06438, daddu $4, $17, $0 straight into the call,
- * no load first), then reads charID back from *actorSpec afterward
- * (ov12:0x00a06440), so actorSpec is reinterpreted as actorID here.
- */
-extern XrgActor *CreateXrgActor(int actorID);
-extern void DisposeXrgActor(XrgActor *actor);
-extern void RgRobotEffectSetActor(RgRobotEffect *effect, void *actor);
-
-static void _BodySetActor(RgBody *body, void *actorSpec)
+static void _BodySetActor(RgBody *body, XrgActorEssence *actorSpec)
 {
     XrgActor *oldActor;
     XrgActor *actor;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xB2A);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xB2A);
     }
-    oldActor = (XrgActor *) body->actor;
+    oldActor = body->actor;
     if (oldActor != 0) {
         DisposeXrgActor(oldActor);
     }
     body->actor = 0;
     if (actorSpec != 0) {
-        actor = CreateXrgActor((int) actorSpec);
+        actor = CreateXrgActor(actorSpec);
         body->actor = actor;
-        body->charID = *(int *) actorSpec;
+        body->charID = actorSpec->actorID;
         RgRobotEffectSetActor(body->effect, actor);
-        _BodyPlayMotionLoop(body, 0);
+        _BodyPlayMotionLoop(body, RG_MOT_STAND);
     }
 }
 
-static void _BodySetTarget(RgBody *body, void *target)
+static void _BodySetTarget(RgBody *body, RgGeomPoint *target)
 {
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 2890);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 2890);
     }
     body->target = target;
 }
@@ -2301,16 +2186,16 @@ static void _BodySetTarget(RgBody *body, void *target)
 static int _BodyDropWeapon(RgBody *body, unsigned int eType)
 {
     RgWeapon *weapon;
-    void *actor;
-    void *weaponActor;
+    XrgActor *actor;
+    XrgActor *weaponActor;
     RgGeomPoint *geometry;
     float geomWeight;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 2900);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 2900);
     }
     if (eType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51A88, D_00A51840, 2901);
+        assert_prog(robotAssertEquipTypeInRange, robotSourcePath, 2901);
     }
     weapon = body->weapon[eType];
     if (weapon != 0) {
@@ -2333,51 +2218,24 @@ static int _BodyDropWeapon(RgBody *body, unsigned int eType)
     return 0;
 }
 
-extern void *RgWeaponGetActor(RgWeapon *weapon);
-extern void XrgActorDettachChild(void *parent, void *child);
-extern void RgWeaponDisposeLockon(RgWeapon *weapon);
-extern void RgWeaponSetdown(RgWeapon *weapon);
-extern void *DisposeRgWeaponNotActor(RgWeapon *weapon);
-extern void CreateRgDropWeapon(void *actor);
-extern void RgShotThreadInit(struct RgShotThread *thread, void *weapon,
-                             int side, void *actor);
-extern void *RgWeaponGetEquip(RgWeapon *weapon);
-extern int RgEquipMountPos(void *equip, unsigned int side, int charID,
-                           const void *mountTable);
-extern int RgEquipPosToJntID(int mountPos);
-extern void XrgActorDeriveMotion(void *weaponActor, void *actor);
-extern void XrgActorAttachChild(void *parent, void *child, int jointID);
-extern int RgWeaponIsActiveLockOnSys(RgWeapon *weapon);
-extern int XrgActorGetAttachedJoint(void *actor);
-extern void XrgActorCheckPakaPaka(void *actor);
-extern void RgShotThreadMotOff(struct RgShotThread *thread);
-extern void XrgLog(const char *message, const char *sourceFile, int line);
-extern const char D_00A51AC8[];
-extern const char D_00A51AD0[];
-extern const char D_00A51AF8[];
-extern const char D_00A51B18[];
-extern const char D_00A51B28[];
-extern const char D_00A51B40[];
-static void _BodySetSound(RgBody *body, void *soundDriver);
-
 static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
 {
-    char *ess;
-    void *equip;
+    RgWeaponEssence *ess;
+    RgEquip *equip;
     int mountPos;
     int jointID;
-    void *weaponActor;
-    void *lockonActor;
+    XrgActor *weaponActor;
+    XrgActor *lockonActor;
     RgWeapon *otherWeapon;
-    void *shotThread;
+    RgShotThread *shotThread;
     float geomWeight;
     int result;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xBA9);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xBA9);
     }
     if ((unsigned int) side >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51A88, D_00A51840, 0xBAA);
+        assert_prog(robotAssertEquipTypeInRange, robotSourcePath, 0xBAA);
     }
     result = _BodyDropWeapon(body, side);
     if (weapon == 0) {
@@ -2386,10 +2244,10 @@ static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
     ess = RgWeaponGetEss(weapon);
     if (ess != 0) {
         equip = RgWeaponGetEquip(weapon);
-        mountPos = RgEquipMountPos(equip, side, body->charID, ess + 0x330);
+        mountPos = RgEquipMountPos(equip, side, body->charID, ess->databaseName);
     } else {
         equip = RgWeaponGetEquip(weapon);
-        mountPos = RgEquipMountPos(equip, side, body->charID, D_00A51AC8);
+        mountPos = RgEquipMountPos(equip, side, body->charID, robotEmptyEquipDatabaseName);
     }
     body->weapon[side] = weapon;
     geomWeight = RgGeomPointGetWeight(body->geometry);
@@ -2399,16 +2257,16 @@ static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
         lockonActor = 0;
         RgWeaponGetActor(weapon);
         jointID = RgEquipPosToJntID(mountPos);
-        if (body->weapon[2] != 0) {
-            lockonActor = RgWeaponGetActor(body->weapon[2]);
+        if (body->weapon[RG_EQUIP_TYPE_BACK] != 0) {
+            lockonActor = RgWeaponGetActor(body->weapon[RG_EQUIP_TYPE_BACK]);
         }
         if (mountPos == -1) {
-            assert_prog(D_00A51AD0, D_00A51840, 0xBE3);
+            assert_prog(robotAssertEquipPosValid, robotSourcePath, 0xBE3);
         }
         weaponActor = RgWeaponGetActor(weapon);
         XrgActorDeriveMotion(weaponActor, body->actor);
         if (jointID == -1) {
-            assert_prog(D_00A51AF8, D_00A51840, 0xBEA);
+            assert_prog(robotAssertJointIdValid, robotSourcePath, 0xBEA);
         }
         XrgActorAttachChild(body->actor, weaponActor, jointID);
 
@@ -2424,25 +2282,25 @@ static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
                     XrgActorCheckPakaPaka(lockonActor);
                 }
             }
-        } else if (side == 2) {
+        } else if (side == RG_EQUIP_TYPE_BACK) {
             otherWeapon = 0;
             if (jointID == 4) {
-                otherWeapon = body->weapon[0];
+                otherWeapon = body->weapon[RG_EQUIP_TYPE_LEFT];
             } else if (jointID == 5) {
-                otherWeapon = body->weapon[1];
+                otherWeapon = body->weapon[RG_EQUIP_TYPE_RIGHT];
             }
             if (otherWeapon != 0 && RgWeaponIsActiveLockOnSys(otherWeapon)
-                && (RgWeaponGetControlFlag(otherWeapon) & 0x20)) {
-                XrgLog(D_00A51B18, D_00A51840, 0xC0E);
+                && (RgWeaponGetControlFlag(otherWeapon) & RG_WEAPON_CONTROL_LOCKON)) {
+                XrgLog(robotCheckPakaPakaLog, robotSourcePath, 0xC0E);
                 XrgActorCheckPakaPaka(weaponActor);
-                XrgLog(D_00A51B28, D_00A51840, 0xC10);
+                XrgLog(robotCheckPakaPakaEndLog, robotSourcePath, 0xC10);
             } else {
-                XrgLog(D_00A51B40, D_00A51840, 0xC12);
+                XrgLog(robotNoLockOnLog, robotSourcePath, 0xC12);
             }
         }
     }
 
-    if ((RgWeaponGetControlFlag(weapon) & RG_WEAPON_CONTROL_TYPE_MASK)
+    if ((RgWeaponGetControlFlag(weapon) & RG_WEAPON_CONTROL_KIND_MASK)
         == 0) {
         RgShotThreadInit(body->shotThread[side], weapon, side, body->actor);
     } else {
@@ -2462,57 +2320,46 @@ static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
             RgShotThreadMotOff(shotThread);
         }
     }
-    _BodySetSound(body, body->landingSoundID);
+    _BodySetSound(body, body->landingSound);
     return result;
 }
 
-/*
- * spareWeapon[] holds the weapon handle as int (RgRobotSetSpareWeapon's
- * weaponID); the slot being replaced is disposed as the weapon it is.
- */
-extern void DisposeRgWeapon(RgWeapon *weapon);
-
-static void _BodySetSpareWeapon(RgBody *body, int eSide, int weaponID)
+static void _BodySetSpareWeapon(RgBody *body, int eSide, RgWeapon *weapon)
 {
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xC3B);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xC3B);
     }
     if ((unsigned int) eSide >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51A88, D_00A51840, 0xC3C);
+        assert_prog(robotAssertEquipTypeInRange, robotSourcePath, 0xC3C);
     }
-    if (body->spareWeapon[eSide] != 0 && body->spareWeapon[eSide] != weaponID) {
-        DisposeRgWeapon((RgWeapon *) body->spareWeapon[eSide]);
+    if (body->spareWeapon[eSide] != 0 && body->spareWeapon[eSide] != weapon) {
+        DisposeRgWeapon(body->spareWeapon[eSide]);
     }
-    body->spareWeapon[eSide] = weaponID;
+    body->spareWeapon[eSide] = weapon;
 }
 
 static void _BodySetAutoHomingEnv(RgBody *body, int autoHomingEnv)
 {
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 3142);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 3142);
     }
     body->autoHomingEnv = autoHomingEnv;
 }
 
 /* ov12:0x00a51b48 contains the assertion expression "pCmd != NIL". */
-extern const char D_00A51B48[];
 
 static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
                         RgCmd *command)
 {
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 3152);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 3152);
     }
     if (command == 0) {
-        assert_prog(D_00A51B48, D_00A51840, 3153);
+        assert_prog(robotAssertCmdNotNil, robotSourcePath, 3153);
     }
     body->cmdMask |= 1 << command->type;
     return _StatusExecCmd(robotStatus, command, body);
 }
-
-extern float RgGeomPointGetSpeed(RgGeomPoint *point);
-extern void RgGeomRobotSetMaxRotVel(RgGeom *geom, float maxRotVel);
-extern void RgGeomPassTime(RgGeom *geom, float deltaTime);
 
 static void _BodyGeomPassTime(RgBody *body, float deltaTime)
 {
@@ -2526,56 +2373,53 @@ static void _BodyGeomPassTime(RgBody *body, float deltaTime)
     spec = body->spec;
     speed = RgGeomPointGetSpeed(geometry);
     maxSpeed = _CalcMaxSpeed(body, spec->moveSpeedMax);
-    if (!(body->flags & 1)) {
+    if (!(body->flags & RG_BODY_FLAG_FREE_TURN)) {
         rotVelScale = (maxSpeed - speed) / maxSpeed;
         if (!(rotVelScale > 0.5f)) {
             rotVelScale = 0.5f;
         }
-        RgGeomRobotSetMaxRotVel((RgGeom *)geometry, spec->turnRate * rotVelScale);
+        RgGeomRobotSetMaxRotVel(&geometry->geom, spec->turnRate * rotVelScale);
     } else {
-        RgGeomRobotSetMaxRotVel((RgGeom *)geometry, 1e8f);
+        RgGeomRobotSetMaxRotVel(&geometry->geom, RG_ROBOT_ROT_VEL_UNLIMITED);
     }
-    body->flags &= ~1;
-    RgGeomPassTime((RgGeom *)geometry, deltaTime);
+    body->flags &= ~RG_BODY_FLAG_FREE_TURN;
+    RgGeomPassTime(&geometry->geom, deltaTime);
 }
-
-extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
-extern void RgGeomPointMovePos(RgGeomPoint *point, RgVector position);
 
 static int _EyeGeomPassTime(RgBody *body, float deltaTime)
 {
-    RgGeom *eyeGeom;
+    RgGeomPoint *eyeGeom;
     int eventFlag;
     RgVector position;
 
-    eyeGeom = (RgGeom *) body->eyeGeometry;
-    eventFlag = RgGeomGetEventFlag(eyeGeom);
-    RgGeomPassTime(eyeGeom, deltaTime);
-    __RgGeomPointGetPos(body->geometry, (RgPointVector *) position, D_00A51840, 0xC79);
-    RgGeomPointSetPos((RgGeomPoint *) eyeGeom, position);
+    eyeGeom = body->eyeGeometry;
+    eventFlag = RgGeomGetEventFlag(&eyeGeom->geom);
+    RgGeomPassTime(&eyeGeom->geom, deltaTime);
+    __RgGeomPointGetPos(body->geometry, position, robotSourcePath, 0xC79);
+    RgGeomPointSetPos(eyeGeom, position);
     if (body->target != 0) {
-        __RgGeomPointGetPos(body->target, (RgPointVector *) position, D_00A51840, 0xC7E);
-        RgGeomPointMovePos((RgGeomPoint *) eyeGeom, position);
+        __RgGeomPointGetPos(body->target, position, robotSourcePath, 0xC7E);
+        RgGeomPointMovePos(eyeGeom, position);
     }
     return eventFlag;
 }
 
 static void _AdvanceGeomPassTime(RgBody *body, float deltaTime)
 {
-    RgGeom *advanceGeom;
+    RgGeomPoint *advanceGeom;
     RgGeomPoint *geometry;
     RgVector position;
     RgVector velocity;
 
-    advanceGeom = (RgGeom *) body->advanceGeometry;
+    advanceGeom = body->advanceGeometry;
     geometry = body->geometry;
-    RgGeomPassTime(advanceGeom, deltaTime);
-    __RgGeomPointGetPos(geometry, (RgPointVector *) position, D_00A51840, 3213);
-    RgGeomPointSetPos((RgGeomPoint *) advanceGeom, position);
+    RgGeomPassTime(&advanceGeom->geom, deltaTime);
+    __RgGeomPointGetPos(geometry, position, robotSourcePath, 3213);
+    RgGeomPointSetPos(advanceGeom, position);
     RgGeomPointGetVel(geometry, velocity);
     XrgScaleVector(velocity, velocity, 0.5f);
     XrgAddVector(position, position, velocity);
-    RgGeomPointMovePos((RgGeomPoint *) advanceGeom, position);
+    RgGeomPointMovePos(advanceGeom, position);
 }
 
 static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime)
@@ -2587,30 +2431,26 @@ static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime)
     unsigned int homingFlags;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 3230);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 3230);
     }
     flags = body->flags;
     spec = body->spec;
     geometry = body->geometry;
-    if ((flags & 2) != 0) {
-        body->flags = flags & ~2U;
+    if ((flags & RG_BODY_FLAG_NO_AUTO_HOMING) != 0) {
+        body->flags = flags & ~RG_BODY_FLAG_NO_AUTO_HOMING;
         return;
     }
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < RG_AUTO_HOMING_ENTRY_NUM; i++) {
         homingFlags = spec->m_aAutoHoming[i].flags;
         if (0.0f < spec->m_aAutoHoming[i].value) {
             if (homingFlags != 0 && (body->autoHomingEnv & homingFlags) == homingFlags) {
                 RgRobSubHoming(geometry, body->target, spec->m_aAutoHoming[i].value,
                                deltaTime);
-                body->flags |= 1;
+                body->flags |= RG_BODY_FLAG_FREE_TURN;
             }
         }
     }
 }
-
-static int _BodyDropWeapon(RgBody *body, unsigned int eType);
-extern int RgWeaponIsLockedOn(void *weapon);
-static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime);
 
 static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
                          float deltaTime)
@@ -2623,15 +2463,15 @@ static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
     flags = 0;
     passTime = frameTime;
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xCBD);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xCBD);
     }
     body->landingSoundTime += passTime;
-    XrgSoundPassTime(body->landingSoundID, passTime);
+    XrgSoundPassTime(body->landingSound, passTime);
     if (body->confuse > 0.0f) {
         body->confuse = body->confuse - passTime;
     }
-    if (!(robotStatus->type == 7 || robotStatus->type == 5)) {
-        body->rotate = RgGeomRobotGetRotate(body->geometry);
+    if (!(robotStatus->type == RG_STATUS_DASH_VR || robotStatus->type == RG_STATUS_DASH)) {
+        body->rotate = RgGeomRobotGetRotate(&body->geometry->geom);
     }
     RgRobotEffectPassTime(body->effect, frameTime);
     if (body->weakHitMotion > 0.0f) {
@@ -2640,19 +2480,19 @@ static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
         passTime = frameTime * body->weakHitPower;
     }
     flags |= _StatusPassTime(robotStatus, body, passTime);
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         RgShotThreadPassTime(body->shotThread[i], passTime);
     }
     _PassTimeHomingThread(body->homingThread, passTime);
     if (_GetStatHomingThread(body->homingThread) == 1) {
-        body->flags |= 1;
+        body->flags |= RG_BODY_FLAG_FREE_TURN;
     }
     _BodyAutoHomingPassTime(body, passTime);
     _BodyGeomPassTime(body, passTime);
     if (body->actor != 0) {
         XrgActorPassTime(body->actor, passTime);
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         if (body->weapon[i] != 0) {
             RgWeaponPassTime(body->weapon[i], passTime);
             if (RgWeaponIsLockedOn(body->weapon[i])) {
@@ -2670,21 +2510,16 @@ static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
     return flags;
 }
 
-extern void XrgActorSetLocal(XrgActor *actor, const RgMatrix matrix);
-extern void XrgActorDraw(XrgActor *actor);
-extern void RgWeaponDisp(RgWeapon *weapon);
-extern void RgRobotEffectDisp(RgRobotEffect *effect);
-
 static void _BodyDisp(RgRobotStatus *robotStatus, RgBody *body)
 {
     RgMatrix localFrame;
     unsigned int eSide;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xD0E);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xD0E);
     }
     _StatusDisp(robotStatus, body);
-    RgGeomRobotCalcLocal(body->geometry, localFrame);
+    RgGeomRobotCalcLocal(&body->geometry->geom, localFrame);
     if (body->actor != 0) {
         XrgActorSetLocal(body->actor, localFrame);
         XrgActorDraw(body->actor);
@@ -2697,24 +2532,18 @@ static void _BodyDisp(RgRobotStatus *robotStatus, RgBody *body)
     RgRobotEffectDisp(body->effect);
 }
 
-extern RgRobotSpec D_00A59920;
-extern void InitRgRobotSpec(RgRobotSpec *pSpec);
-extern RgGeomPoint *CreateRgGeomRobot(void);
-extern void *CreateRgShotThread(void);
-extern RgRobotEffect *CreateRgRobotEffect(void);
-
 static void _InitBody(RgBody *body)
 {
     unsigned int eType;
 
-    InitRgRobotSpec(&D_00A59920);
+    InitRgRobotSpec(&s_inDefSpec_0);
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 0xD37);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 0xD37);
     }
     body->charID = -1;
     body->life = 100.0f;
     body->lifeMax = 100.0f;
-    body->spec = &D_00A59920;
+    body->spec = &s_inDefSpec_0;
     body->grounded = 1;
     body->flags = 0;
     body->autoHomingEnv = 0;
@@ -2727,9 +2556,9 @@ static void _InitBody(RgBody *body)
     body->shieldActive = 0;
     body->target = 0;
     body->actor = 0;
-    body->geometry = CreateRgGeomRobot();
-    body->eyeGeometry = CreateRgGeomBall(1.0f, 1.0f);
-    body->advanceGeometry = CreateRgGeomBall(0.3f, 0.3f);
+    body->geometry = (RgGeomPoint *) CreateRgGeomRobot();
+    body->eyeGeometry = &CreateRgGeomBall(1.0f, 1.0f)->point;
+    body->advanceGeometry = &CreateRgGeomBall(0.3f, 0.3f)->point;
     RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, body->spec->moveSpeedMax));
     body->dashTime = body->spec->dashTime;
     for (eType = 0; eType < RG_EQUIP_TYPE_NUM; eType++) {
@@ -2746,35 +2575,31 @@ static void _InitBody(RgBody *body)
     } while (0);
     do {
         body->motSmooth = 1;
-        body->landingSoundID = 0;
+        body->landingSound = 0;
         body->confuse = 0.0f;
     } while (0);
 }
-
-extern void DisposeRgShotThread(struct RgShotThread *thread);
-struct XrgSound;
-extern void DisposeRgRobotEffect(RgRobotEffect *effect);
 
 static void _DestructBody(RgBody *body)
 {
     unsigned int i;
 
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 3454);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 3454);
     }
-    RgGeomFree(body->geometry);
+    RgGeomFree(&body->geometry->geom);
     if (body->eyeGeometry != 0) {
-        RgGeomFree(body->eyeGeometry);
+        RgGeomFree(&body->eyeGeometry->geom);
     }
     if (body->advanceGeometry != 0) {
-        RgGeomFree(body->advanceGeometry);
+        RgGeomFree(&body->advanceGeometry->geom);
     }
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         if (body->weapon[i] != 0) {
             DisposeRgWeapon(body->weapon[i]);
         }
         if (body->spareWeapon[i] != 0) {
-            DisposeRgWeapon((RgWeapon *) body->spareWeapon[i]);
+            DisposeRgWeapon(body->spareWeapon[i]);
         }
         DisposeRgShotThread(body->shotThread[i]);
     }
@@ -2783,40 +2608,35 @@ static void _DestructBody(RgBody *body)
     if (body->actor != 0) {
         DisposeXrgActor(body->actor);
     }
-    if (body->landingSoundID != 0) {
-        DisposeXrgSound((struct XrgSound *) body->landingSoundID);
+    if (body->landingSound != 0) {
+        DisposeXrgSound(body->landingSound);
     }
 }
-
-static void _InitBody(RgBody *body);
 
 static RgBody *_CreateBody(void)
 {
     RgBody *body;
 
-    body = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgBody), D_00A51840, 3482);
+    body = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgBody), robotSourcePath, 3482);
     _InitBody(body);
     return body;
 }
 
-extern int RgHeapIsInvalidMemory(RgHeap *heap, void *ptr);
-static void _DestructBody(RgBody *body);
 /* ov12:0x00a51b58 contains the format string "already disposed body %p". */
-extern const char D_00A51B58[];
 
 static void _DisposeBody(RgBody *body)
 {
     if (body == 0) {
-        assert_prog(D_00A51A68, D_00A51840, 3490);
+        assert_prog(robotAssertBodyNotNil, robotSourcePath, 3490);
     }
     if (RgHeapIsInvalidMemory(InstanceOfRgHeap(), body) != 0) {
-        RgError(D_00A51B58, D_00A51840, 3492, body);
+        RgError(robotAlreadyDisposedBodyFormat, robotSourcePath, 3492, body);
     }
     _DestructBody(body);
-    RgHeapFree(InstanceOfRgHeap(), body, D_00A51840, 3494);
+    RgHeapFree(InstanceOfRgHeap(), body, robotSourcePath, 3494);
 }
 
-static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
+static int _ExecAccelarateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgRobotSpec *spec;
     RgGeomPoint *geometry;
@@ -2824,8 +2644,8 @@ static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
     spec = body->spec;
     geometry = body->geometry;
     RgGeomPointSetMaxXYSpd(geometry, _CalcMaxSpeed(body, spec->moveSpeedMax));
-    RgRobSubAcceralate(geometry, (float *) command, spec->enginePower);
-    XrgSoundRingMoving(body->landingSoundID, 0, 0.2f);
+    RgRobSubAcceralate(geometry, command->vector, spec->enginePower);
+    XrgSoundRingMoving(body->landingSound, 0, 0.2f);
     return 1;
 }
 
@@ -2839,7 +2659,7 @@ static int _ExecRotateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     float delta;
     int rotateSign;
 
-    delta = *(float *) command;
+    delta = command->rotate;
     if (delta > 0.0f) {
         rotateSign = 1;
     } else if (delta < 0.0f) {
@@ -2850,16 +2670,16 @@ static int _ExecRotateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     if ((float) rotateSign == 0.0f) {
         return 0;
     }
-    RgGeomRobotAddRotForce(body->geometry, (float) rotateSign * body->spec->rotateForce);
-    body->flags |= 2;
-    XrgSoundRingMoving(body->landingSoundID, 0, 0.2f);
+    RgGeomRobotAddRotForce(&body->geometry->geom, (float) rotateSign * body->spec->rotateForce);
+    body->flags |= RG_BODY_FLAG_NO_AUTO_HOMING;
+    XrgSoundRingMoving(body->landingSound, 0, 0.2f);
     return 2;
 }
 
 static int _IsBackWeaponReady(RgBody *body, unsigned int eType)
 {
     if (eType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51A88, D_00A51840, 0xDD7);
+        assert_prog(robotAssertEquipTypeInRange, robotSourcePath, 0xDD7);
     }
     if (eType != RG_EQUIP_TYPE_BACK) {
         return 0;
@@ -2873,22 +2693,9 @@ static int _IsBackWeaponReady(RgBody *body, unsigned int eType)
     return 1;
 }
 
-static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
-static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
-extern int RgHissatuCheck(int charID, void **weapon);
-extern void RgShotThreadStart(void *thread, void *params);
-extern int RgShotThreadGetStatus(void *thread);
-extern int RgWeaponRobotShotMotion(RgWeapon *weapon, int charID);
-extern int RgWeaponIsNotBusy(RgWeapon *weapon);
-static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body);
-
 static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
-    struct {
-        int motion;
-        float startTime;
-        float endTime;
-    } startParam;
+    RgShotMotStartInfo startParam;
     RgMotionShotInfo *motionInfo;
     RgMotionAction *action;
     RgWeapon *weapon;
@@ -2901,7 +2708,7 @@ static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *comm
     eSide = command->param;
     weapon = body->weapon[eSide];
     shotThread = body->shotThread[eSide];
-    if (eSide == 2 && RgHissatuCheck(body->charID, body->weapon)) {
+    if (eSide == RG_EQUIP_TYPE_BACK && RgHissatuCheck(body->charID, body->weapon)) {
         _InitStatusHissatu(status, body);
         return 8;
     }
@@ -2920,26 +2727,26 @@ static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *comm
     }
     controlFlag = RgWeaponGetControlFlag(weapon);
     motion = RgWeaponRobotShotMotion(weapon, body->charID);
-    shotType = controlFlag & 0x7;
+    shotType = controlFlag & RG_WEAPON_CONTROL_KIND_MASK;
     motionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), motion, body->charID);
-    if (eSide == 2) {
-        RgShotThreadSleep(body->shotThread[0]);
-        RgShotThreadSleep(body->shotThread[1]);
+    if (eSide == RG_EQUIP_TYPE_BACK) {
+        RgShotThreadSleep(body->shotThread[RG_EQUIP_TYPE_LEFT]);
+        RgShotThreadSleep(body->shotThread[RG_EQUIP_TYPE_RIGHT]);
     }
-    if (shotType == 0 && RgShotThreadGetStatus(shotThread) != 5) {
-        action = RgMotionInfoGetActionInTime(motionInfo, 0, 100000000.0f);
-        if ((controlFlag & 0x20) != 0 || motion == -1) {
-            startParam.motion = -1;
-            startParam.startTime = 0.18f;
-            startParam.endTime = 0.4f;
+    if (shotType == 0 && RgShotThreadGetStatus(shotThread) != RG_SHOT_THREAD_DISABLED) {
+        action = RgMotionInfoGetActionInTime(motionInfo, 0, RG_ROBOT_TIME_UNLIMITED);
+        if ((controlFlag & RG_WEAPON_CONTROL_LOCKON) != 0 || motion == -1) {
+            startParam.motion = RG_SHOT_THREAD_NO_MOTION;
+            startParam.frame = 0.18f;
+            startParam.duration = 0.4f;
         } else {
             startParam.motion = motion;
             if (action == 0) {
-                startParam.startTime = 0.18f;
-                startParam.endTime = 0.4f;
+                startParam.frame = 0.18f;
+                startParam.duration = 0.4f;
             } else {
-                startParam.startTime = action->startTime;
-                startParam.endTime = action->endTime;
+                startParam.frame = action->startTime;
+                startParam.duration = action->endTime;
             }
         }
         RgShotThreadStart(shotThread, &startParam);
@@ -2953,13 +2760,6 @@ static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *comm
     _InitAttackStatus(status, body, (motion == -1) ? 0 : motion, weapon, eSide);
     return 0x10;
 }
-
-static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump);
-
-/* _AllowAllCmdInMoving supplies mode 1; _InitTargettingStatus tests this
- * mode as zero/nonzero and reads the actual target from body separately.
- * Its result is the 0x100 command-processing mask bit, not a command id. */
-#define RG_CMD_RESULT_TARGETTING 0x100
 
 static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *command, int targettingMode)
 {
@@ -2993,10 +2793,10 @@ static int _ExecDashCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
             goto done;
         }
 normal:
-        _InitDashStatus(status, body, command);
+        _InitDashStatus(status, body, command->vector);
         result = 4;
     } else {
-        _InitDashVRStatus(status, body, command);
+        _InitDashVRStatus(status, body, command->vector);
         result = 4;
     }
 done:
@@ -3008,33 +2808,32 @@ static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *comm
     int result;
 
     result = 0;
-    if (body->spec->type == 1) {
+    if (body->spec->type == RG_DASH_MODE_VR) {
         /* The original call passes two extra, ignored arguments. */
-        ((int (*)()) _InitDashVRStatus)(status, body, command, 1, 0);
+        ((int (*)()) _InitDashVRStatus)(status, body, command->vector, 1, 0);
         result = 4;
     }
     return result;
 }
 
 /* The format string "unknown equip type (drop weapon) %d". */
-extern const char D_00A51B78[];
 
 static int _GetDropMotion(int eSide)
 {
     int motion;
 
-    motion = 0;
+    motion = RG_MOT_STAND;
     switch (eSide) {
-    case 2:
+    case RG_EQUIP_TYPE_BACK:
         break;
-    case 0:
-        motion = 0x1F;
+    case RG_EQUIP_TYPE_LEFT:
+        motion = RG_MOT_DROP_LEFT;
         break;
-    case 1:
-        motion = 0x20;
+    case RG_EQUIP_TYPE_RIGHT:
+        motion = RG_MOT_DROP_RIGHT;
         break;
     default:
-        RgError(D_00A51B78, D_00A51840, 3752, eSide);
+        RgError(robotUnknownDropWeaponEquipTypeFormat, robotSourcePath, 3752, eSide);
         break;
     }
     return motion;
@@ -3048,10 +2847,6 @@ static int _ExecDropWeaponCmd(RgRobotStatus *status, RgBody *body,
                ? 0
                : 0x200;
 }
-
-extern void CreateRgHitEffectPosDir(RgVector position, RgVector direction,
-                                    char *name1, char *name2);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
 
 static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -3067,16 +2862,13 @@ static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return 0x80;
 }
 
-extern const char D_00A51BA0[];
-
 static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgVector force;
 
-    /* The legacy API accepts char * but only reads this effect name. */
-    CreateRgHitEffectPosDir(&command->scratch0, (float *) command,
-                            (char *) D_00A51BA0, 0);
-    XrgNormalizeVector(force, (float *) command);
+    CreateRgHitEffectPosDir(&command->scratch0, command->vector,
+                            robotHitEffectName, 0);
+    XrgNormalizeVector(force, command->vector);
     XrgScaleVector(force, force, command->scratch5);
     RgGeomPointAddForce(body->geometry, force);
     body->life -= command->scratch4;
@@ -3114,13 +2906,9 @@ static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
     return 0x80;
 }
 
-extern void RgDullFlagSetFlag(RgDullFlag *pDull);
-extern int RgDullFlagGet(RgDullFlag *pDull);
-extern int RgDrawViewIsPointInView(RgDrawView *view, RgPointVector *point, float margin);
-
 static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime)
 {
-    RgPointVector targetPos;
+    RgVector targetPos;
     unsigned int flags;
     unsigned int mask;
 
@@ -3149,21 +2937,14 @@ static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime)
     if (RgDullFlagGet(&pRobot->dullFlag1)) {
         flags |= 2;
     }
-    if (_BodyGetTargetPos(pRobot->body, &targetPos) != 0) {
+    if (_BodyGetTargetPos(pRobot->body, targetPos) != 0) {
         if (pRobot->drawView != 0
-            && RgDrawViewIsPointInView(pRobot->drawView, &targetPos, 0.0f)) {
+            && RgDrawViewIsPointInView(pRobot->drawView, targetPos, 0.0f)) {
             flags |= 8;
         }
     }
     _BodySetAutoHomingEnv(pRobot->body, flags);
 }
-
-extern int RgRobotIsDead(RgStatus *pRobot);
-static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
-                         RgCmd *command);
-static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body, float deltaTime);
-static void _ClearCmdQueue(RgCmdQueue *cmdQueue);
-static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime);
 
 static void _PassTimeRobot(RgStatus *pRobot, float deltaTime)
 {
@@ -3193,47 +2974,35 @@ static void _PassTimeRobot(RgStatus *pRobot, float deltaTime)
 static void _DispRobot(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 3976);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 3976);
     }
     _BodyDisp(pRobot->robotStatus, pRobot->body);
 }
 
 /* ov12:0x00a51bc0 contains the format string "already disposed robot %p\n". */
-extern const char D_00A51BC0[];
 
 static void _DestructRobot(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 3985);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 3985);
     }
     if (RgHeapIsInvalidMemory(InstanceOfRgHeap(), pRobot) != 0) {
-        RgError(D_00A51BC0, D_00A51840, 3987, pRobot);
+        RgError(robotAlreadyDisposedRobotFormat, robotSourcePath, 3987, pRobot);
     }
     _DisposeBody(pRobot->body);
     _DisposeStatus(pRobot->robotStatus);
     _DisposeCmdQueue(pRobot->cmdQueue);
 }
 
-static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector vector);
-
-/*
- * RgDullFlag is defined by ov12/tu031 (src/ov12/rg_dull_flag.h); this TU
- * only passes the pointer, at RgStatus's dull-flag offsets.
- */
-typedef struct RgDullFlag RgDullFlag;
-
-extern void InitRgDullFlag(RgDullFlag *pDull);
-extern void RgDullFlagSetDullTime(RgDullFlag *pDull, float fTime);
-
 static void _InitRobot(RgStatus *pRobot)
 {
     RgRobotStatus *status;
-    RgDullFlag *dullFlag0 = (RgDullFlag *) (pRobot->unmodeled_14 + 0x0c);
-    RgDullFlag *dullFlag1 = (RgDullFlag *) (pRobot->unmodeled_14 + 0x1c);
-    RgDullFlag *dullFlag2 = (RgDullFlag *) (pRobot->unmodeled_14 + 0x2c);
+    RgDullFlag *dullFlag0 = &pRobot->dullFlag0;
+    RgDullFlag *dullFlag1 = &pRobot->dullFlag1;
+    RgDullFlag *dullFlag2 = &pRobot->dullFlag2;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4002);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4002);
     }
     pRobot->body = _CreateBody();
     status = _CreateStatue();
@@ -3250,33 +3019,27 @@ static void _InitRobot(RgStatus *pRobot)
     RgDullFlagSetDullTime(dullFlag2, 0.4f);
     pRobot->drawView = 0;
     pRobot->passTimePhase = 0;
-    *(int *) &pRobot->passTimeTimer = 0;
+    pRobot->passTimeTimer = 0.0f;
 }
-
-static void _InitRobot(RgStatus *pRobot);
 
 RgStatus *CreateRgRobot(void)
 {
     RgStatus *pRobot;
 
-    pRobot = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgStatus), D_00A51840,
+    pRobot = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgStatus), robotSourcePath,
                           4041);
     _InitRobot(pRobot);
     return pRobot;
 }
 
-static void _DestructRobot(RgStatus *pRobot);
-
 void DisposeRgRobot(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4049);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4049);
     }
     _DestructRobot(pRobot);
-    RgHeapFree(InstanceOfRgHeap(), pRobot, D_00A51840, 4051);
+    RgHeapFree(InstanceOfRgHeap(), pRobot, robotSourcePath, 4051);
 }
-
-extern void CreateRgHitEffectPos(RgVector position, char *name1, char *name2);
 
 void RgRobotPassTime(RgStatus *pRobot, float deltaTime)
 {
@@ -3284,12 +3047,12 @@ void RgRobotPassTime(RgStatus *pRobot, float deltaTime)
     RgRobotStatus *status;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 0xFDC);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 0xFDC);
     }
     _PassTimeRobot(pRobot, deltaTime);
     if (pRobot->body->life <= 0.0f) {
         status = pRobot->robotStatus;
-        if (status->type != 1) {
+        if (status->type != RG_STATUS_MOVING) {
             _InitMovingStatus(status, pRobot->body);
         }
     }
@@ -3304,93 +3067,80 @@ void RgRobotPassTime(RgStatus *pRobot, float deltaTime)
             pRobot->passTimePhase = 2;
         } else {
             if (((int) (pRobot->passTimeTimer * 15.0f) & 1) == 0) {
-                __RgGeomPointGetPos(pRobot->body->geometry, (RgPointVector *) position,
-                                    D_00A51840, 0xFF7);
+                __RgGeomPointGetPos(pRobot->body->geometry, position,
+                                    robotSourcePath, 0xFF7);
                 position[0] = position[0] + XrgRand(-1.7f, 1.7f);
                 position[1] = position[1] + XrgRand(-1.0f, 3.5f);
                 position[2] = position[2] + XrgRand(-1.7f, 1.7f);
-                CreateRgHitEffectPos(position, (char *) D_00A51BA0,
-                                     (char *) D_00A51BA0);
+                CreateRgHitEffectPos(position, robotHitEffectName, robotHitEffectName);
             }
             if (((int) (pRobot->passTimeTimer * 20.0f) & 1) == 0) {
-                XrgSoundRing(pRobot->body->landingSoundID, 21);
+                XrgSoundRing(pRobot->body->landingSound, 21);
             }
         }
     }
 }
 
-static void _DispRobot(RgStatus *pRobot);
-
 void RgRobotDisp(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4109);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4109);
     }
     _DispRobot(pRobot);
 }
 
-static void _BodySetSpec(RgBody *body, RgRobotSpec *spec);
-
 void RgRobotSetSpec(RgStatus *pRobot, RgRobotSpec *spec)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4124);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4124);
     }
     _BodySetSpec(pRobot->body, spec);
 }
 
-static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry);
-
 void RgRobotSetGeom(RgStatus *pRobot, RgGeomPoint *geometry)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4133);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4133);
     }
     _BodySetGeom(pRobot->body, geometry);
 }
 
-static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry);
-
 void RgRobotSetEyeGeom(RgStatus *pRobot, RgGeomPoint *eyeGeometry)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4142);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4142);
     }
     _BodySetEyeGeom(pRobot->body, eyeGeometry);
 }
 
-static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry);
-
 void RgRobotSetAdvanceGeom(RgStatus *pRobot, RgGeomPoint *advanceGeometry)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4152);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4152);
     }
     _BodySetAdvanceGeom(pRobot->body, advanceGeometry);
 }
 
-void RgRobotSetSoundDriver(RgStatus *pRobot, void *soundDriver)
+void RgRobotSetSoundDriver(RgStatus *pRobot, XrgSound *sound)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4161);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4161);
     }
-    _BodySetSound(pRobot->body, soundDriver);
+    _BodySetSound(pRobot->body, sound);
 }
 
-static void _BodySetActor(RgBody *body, void *actor);
-
-void RgRobotSetActor(RgStatus *pRobot, void *actor)
+void RgRobotSetActor(RgStatus *pRobot, XrgActorEssence *actor)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4169);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4169);
     }
     _BodySetActor(pRobot->body, actor);
 }
 
-void RgRobotSetTarget(RgStatus *pRobot, void *target)
+void RgRobotSetTarget(RgStatus *pRobot, RgGeomPoint *target)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4177);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4177);
     }
     _BodySetTarget(pRobot->body, target);
 }
@@ -3398,7 +3148,7 @@ void RgRobotSetTarget(RgStatus *pRobot, void *target)
 void RgRobotSetRgDrawView(RgStatus *pRobot, RgDrawView *view)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4187);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4187);
     }
     pRobot->drawView = view;
 }
@@ -3406,7 +3156,7 @@ void RgRobotSetRgDrawView(RgStatus *pRobot, RgDrawView *view)
 void RgRobotSetMotSmooth(RgStatus *pRobot, int motSmooth)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4195);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4195);
     }
     pRobot->body->motSmooth = motSmooth;
 }
@@ -3414,50 +3164,50 @@ void RgRobotSetMotSmooth(RgStatus *pRobot, int motSmooth)
 void RgRobotSetConfuse(RgStatus *pRobot, float confuse)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4203);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4203);
     }
     pRobot->body->confuse = confuse;
 }
 
-void RgRobotSetWeapon(RgStatus *pRobot, int eSide, int weaponID)
+void RgRobotSetWeapon(RgStatus *pRobot, int eSide, RgWeapon *weapon)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4217);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4217);
     }
-    _BodyEquipWeapon(pRobot->body, eSide, weaponID);
+    _BodyEquipWeapon(pRobot->body, eSide, weapon);
 }
 
-void RgRobotSetSpareWeapon(RgStatus *pRobot, int eSide, int weaponID)
+void RgRobotSetSpareWeapon(RgStatus *pRobot, int eSide, RgWeapon *weapon)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4227);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4227);
     }
-    _BodySetSpareWeapon(pRobot->body, eSide, weaponID);
+    _BodySetSpareWeapon(pRobot->body, eSide, weapon);
 }
 
 RgGeomPoint *RgRobotGetGeom(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4239);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4239);
     }
     return pRobot->body->geometry;
 }
 
-void *RgRobotGetWeapon(RgStatus *pRobot, unsigned int eSide)
+RgWeapon *RgRobotGetWeapon(RgStatus *pRobot, unsigned int eSide)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4247);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4247);
     }
     if (eSide >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51BE0, D_00A51840, 4248);
+        assert_prog(robotAssertEquipSideInRange, robotSourcePath, 4248);
     }
     return pRobot->body->weapon[eSide];
 }
 
-void *RgRobotGetTarget(RgStatus *pRobot)
+RgGeomPoint *RgRobotGetTarget(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4256);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4256);
     }
     return pRobot->body->target;
 }
@@ -3465,7 +3215,7 @@ void *RgRobotGetTarget(RgStatus *pRobot)
 int RgRobotIsDead(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4264);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4264);
     }
     return pRobot->body->life <= 0.0f;
 }
@@ -3473,7 +3223,7 @@ int RgRobotIsDead(RgStatus *pRobot)
 float RgRobotGetLife(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4272);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4272);
     }
     return pRobot->body->life;
 }
@@ -3481,15 +3231,15 @@ float RgRobotGetLife(RgStatus *pRobot)
 float RgRobotGetLifeMax(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4278);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4278);
     }
     return pRobot->body->lifeMax;
 }
 
-void *RgRobotGetActor(RgStatus *pRobot)
+XrgActor *RgRobotGetActor(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4286);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4286);
     }
     return pRobot->body->actor;
 }
@@ -3497,7 +3247,7 @@ void *RgRobotGetActor(RgStatus *pRobot)
 int RgRobotGetCharID(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4294);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4294);
     }
     return pRobot->body->charID;
 }
@@ -3507,7 +3257,7 @@ int RgRobotIsInvalidAttack(RgStatus *pRobot, RgVector direction)
     float *shield;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 0x10CF);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 0x10CF);
     }
     if (pRobot->body->shieldActive != 0) {
         shield = pRobot->body->shieldDirection;
@@ -3522,15 +3272,15 @@ int RgRobotIsInvalidAttack(RgStatus *pRobot, RgVector direction)
 float RgRobotGetDashTime(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4321);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4321);
     }
     return pRobot->body->dashTime;
 }
 
-void *RgRobotGetSpec(RgStatus *pRobot)
+RgRobotSpec *RgRobotGetSpec(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4329);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4329);
     }
     return pRobot->body->spec;
 }
@@ -3538,7 +3288,7 @@ void *RgRobotGetSpec(RgStatus *pRobot)
 int RgRobotIsConfused(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4337);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4337);
     }
     if (pRobot->body->confuse > 0.0f)
         return 1;
@@ -3548,7 +3298,7 @@ int RgRobotIsConfused(RgStatus *pRobot)
 int RgRobotIsAcceptedCommand(RgStatus *pRobot, int command)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4348);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4348);
     }
     return (pRobot->acceptedCommandMask & (1 << command)) != 0;
 }
@@ -3556,7 +3306,7 @@ int RgRobotIsAcceptedCommand(RgStatus *pRobot, int command)
 unsigned int RgRobotGetStatusFlags(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4356);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4356);
     }
     return pRobot->statusFlags;
 }
@@ -3566,11 +3316,11 @@ void RgRobotAccelarate(RgStatus *pRobot, RgVector velocity)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4370);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4370);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 0);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_ACCELARATE);
     if (command != 0) {
-        XrgCopyVector((float *) command, velocity);
+        XrgCopyVector(command->vector, velocity);
     }
 }
 
@@ -3579,11 +3329,11 @@ void RgRobotAccelarateRotate(RgStatus *pRobot, float rotate)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4382);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4382);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 1);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_ACCELARATE_ROTATE);
     if (command != 0) {
-        *(float *) command = rotate;
+        command->rotate = rotate;
     }
 }
 
@@ -3591,19 +3341,18 @@ void RgRobotAccelarateRotate(RgStatus *pRobot, float rotate)
  * ov12:0x00a51a88 contains the range expression
  * "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM".
  */
-extern const char D_00A51A88[];
 
 void RgRobotShot(RgStatus *pRobot, unsigned int eType)
 {
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4394);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4394);
     }
     if (eType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51A88, D_00A51840, 4395);
+        assert_prog(robotAssertEquipTypeInRange, robotSourcePath, 4395);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 2);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_SHOT);
     if (command != 0) {
         command->param = eType;
     }
@@ -3614,9 +3363,9 @@ void RgRobotTargetting(RgStatus *pRobot)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4407);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4407);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 3);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_TARGETTING);
     if (command != 0) {
         command->param = (int) pRobot->body->target;
     }
@@ -3625,9 +3374,9 @@ void RgRobotTargetting(RgStatus *pRobot)
 void RgRobotBreak(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4419);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4419);
     }
-    _EntryCmdQueue(pRobot->cmdQueue, 4); /* command type 4: break */
+    _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_BREAK);
 }
 
 void RgRobotDash(RgStatus *pRobot, RgVector direction)
@@ -3635,20 +3384,20 @@ void RgRobotDash(RgStatus *pRobot, RgVector direction)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4428);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4428);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 5);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_DASH);
     if (command != 0) {
-        XrgCopyVector((float *) command, direction);
+        XrgCopyVector(command->vector, direction);
     }
 }
 
 void RgRobotDashContinue(RgStatus *pRobot)
 {
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4440);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4440);
     }
-    _EntryCmdQueue(pRobot->cmdQueue, 6); /* command type 6: continue dash */
+    _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_DASH_CONTINUE);
 }
 
 void RgRobotGiveDamage(RgStatus *pRobot, RgVector direction, int damageType,
@@ -3657,13 +3406,13 @@ void RgRobotGiveDamage(RgStatus *pRobot, RgVector direction, int damageType,
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4449);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4449);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 8);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_DAMAGE);
     if (command != 0) {
         command->scratch0 = damage;
         command->scratch1 = damageType;
-        XrgCopyVector((float *) command, direction);
+        XrgCopyVector(command->vector, direction);
     }
 }
 
@@ -3674,12 +3423,12 @@ void RgRobotGiveWeakDamage(RgStatus *pRobot, RgVector direction, float damage,
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 0x117A);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 0x117A);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 9);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_WEAK_DAMAGE);
     if (command != 0) {
         command->scratch0 = damage;
-        XrgCopyVector((float *) command, direction);
+        XrgCopyVector(command->vector, direction);
         *(float *) &command->scratch1 = threshold;
         command->scratch2 = windowSeed;
         command->scratch3 = weakHitMotion;
@@ -3693,12 +3442,12 @@ void RgRobotHitByBody(RgStatus *pRobot, RgVector direction, RgVector position,
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 0x118C);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 0x118C);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 0xE);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_HIT_BY_BODY);
     if (command != 0) {
         XrgCopyVector(&command->scratch0, direction);
-        XrgCopyVector((float *) command, position);
+        XrgCopyVector(command->vector, position);
         command->scratch4 = damage;
         command->scratch5 = scale;
     }
@@ -3709,12 +3458,12 @@ void RgRobotDropWeapon(RgStatus *pRobot, unsigned int eType)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4508);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4508);
     }
     if (eType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A51A88, D_00A51840, 4509);
+        assert_prog(robotAssertEquipTypeInRange, robotSourcePath, 4509);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 7);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_DROP_WEAPON);
     if (command != 0) {
         command->param = eType;
     }
@@ -3725,9 +3474,9 @@ void RgRobotHitWeaponAttack(RgStatus *pRobot, int param)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4522);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4522);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 0xA);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_HIT_WEAPON_ATTACK);
     if (command != 0) {
         command->param = param;
     }
@@ -3738,11 +3487,11 @@ void RgRobotInvalidAttack(RgStatus *pRobot, RgVector direction, float scale)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4536);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4536);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 0xB);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_INVALID_ATTACK);
     if (command != 0) {
-        XrgNormalizeVector((float *) command, direction);
+        XrgNormalizeVector(command->vector, direction);
         command->scratch0 = scale;
     }
 }
@@ -3752,11 +3501,11 @@ void RgRobotHitBG(RgStatus *pRobot, RgVector direction)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4550);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4550);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 0xC);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_HIT_BG);
     if (command != 0) {
-        XrgCopyVector((float *) command, direction);
+        XrgCopyVector(command->vector, direction);
     }
     if (!(direction[1] > 0.9f)) {
         return;
@@ -3769,10 +3518,10 @@ void RgRobotNearBG(RgStatus *pRobot, RgVector direction)
     RgCmd *command;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51BB0, D_00A51840, 4568);
+        assert_prog(robotAssertRobotNotNil, robotSourcePath, 4568);
     }
-    command = _EntryCmdQueue(pRobot->cmdQueue, 0xD);
+    command = _EntryCmdQueue(pRobot->cmdQueue, RG_CMD_NEAR_BG);
     if (command != 0) {
-        XrgCopyVector((float *) command, direction);
+        XrgCopyVector(command->vector, direction);
     }
 }

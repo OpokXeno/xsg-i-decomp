@@ -3,15 +3,124 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_read_text.h"
 #include "ov12/rg_simple_db.h"
 #include "ov12/rg_singleton_id.h"
-#include "rg_weapon_db.h"
+#include "ov12/rg_weapon_db.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/rg_actor_charid.h"
+#include "ov12/rg_actor_motid.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_shot_db.h"
+#include "ov12/rg_weapon.h"
+
+/* Lengths of the "???-??-???" equip mark string _ReadEquipBitMask parses. */
+#define RG_EQUIP_MARK_LEN 10
+
+/* Weapon database sound volumes run from 0 to RG_WEAPON_VOLUME_MAX; the file stores them as 0..1. */
+#define RG_WEAPON_VOLUME_SCALE 128.0f
+
+/* Weapon database capacity: entries, and bytes per entry. */
+#define RG_WEAPON_DB_ENTRIES 48
+#define RG_WEAPON_DB_ENTRY_SIZE 16
+
+extern float dptofp(double value);
+
+
+/* Declared here: the read-only strings defined between the functions below. */
+extern const char weaponDbAssertDbNotNil[];
+extern const char weaponDbSourcePath[];
+extern const char weaponDbLeftKeyword[];
+extern const char weaponDbRightKeyword[];
+extern const char weaponDbBackKeyword[];
+extern const char weaponDbUnknownEquipTypeFormat[];
+extern const char weaponDbNotOrXMarkerFormat[];
+extern const char weaponDbBadEquipMaskFormat[];
+extern const char weaponDbBadEquipMaskLayoutFormat[];
+extern const char weaponDbAssertReaderNotNil[];
+extern const char weaponDbBusyKeyword[];
+extern const char weaponDbDamageKeyword[];
+extern const char weaponDbHitEffectKeyword[];
+extern const char weaponDbAssertDataBaseNameNotNil[];
+extern const char weaponDbShotTypeKeyword[];
+extern const char weaponDbAttackTypeKeyword[];
+extern const char weaponDbShieldTypeKeyword[];
+extern const char weaponDbEnergyTypeKeyword[];
+extern const char weaponDbUnarmedTypeKeyword[];
+extern const char weaponDbUnknownKeywordFormat[];
+/* Declared here: strings and tables of the scaffold-owned data window (ov12:0x00a538c8..0x00a53c1c). */
+extern const char weaponDbContinueKeyword[];  /* "cont" */
+extern const char weaponDbEndMarkerKeyword[];  /* "." */
+extern const char weaponDbNotLockKeyword[];  /* "notlock" */
+extern const char weaponDbFullMotionKeyword[];  /* "full-mot" */
+extern const char weaponDbFullMotionAttackErrorText[];  /* "'full-mot' cannot spec to AttackWeapon" */
+extern const char weaponDbFullMotionShieldErrorText[];  /* "'full-mot' cannot spec to ShieldWeapon" */
+extern const char weaponDbFullMotionUnarmedErrorText[];  /* "'full-mot' cannot spec to UnArmedWeapon" */
+extern const char weaponDbNotAdvanceKeyword[];  /* "not-adv" */
+extern const char weaponDbAdvanceKeyword[];  /* "adv" */
+extern const char weaponDbNoRobotMotionKeyword[];  /* "no-robmot" */
+extern const char weaponDbTargetSuffixKeyword[];  /* "target" */
+extern const char weaponDbNotPrefixKeyword[];  /* "not" */
+extern const char weaponDbAfterKeyword[];  /* "aft" */
+extern const char weaponDbWithKeyword[];  /* "wth" */
+extern const char weaponDbUnknownTargetKeywordFormat[];  /* "unknown keyword '%s-target'..." */
+extern const char weaponDbContinueErrorFormat[];  /* "'%s' is error in 'cont'" */
+extern const char weaponDbNumKeyword[];  /* "num" */
+extern const char weaponDbEnergyKeyword[];  /* "energy" */
+extern const char weaponDbHardnessKeyword[];  /* "hardness" */
+extern const char weaponDbInfiniteKeyword[];  /* "inf" */
+extern const char weaponDbLockRangeKeyword[];  /* "lock-range" */
+extern const char weaponDbIgnoredLockRangeText[];  /* "ignored 'lock-range'" */
+extern const char weaponDbLockKeyword[];  /* "lock" */
+extern const char weaponDbShotKeyword[];  /* "shot" */
+extern const char weaponDbUnknownShotFormat[];  /* "unknown shot '%s'" */
+extern const char weaponDbMotionKeyword[];  /* "mot" */
+extern const char weaponDbMotionAllKeyword[];  /* "mot-all" */
+extern const char weaponDbAssertOpenParen[];  /* "szStr[0] == '('" */
+extern const char weaponDbDefaultKeyword[];  /* "def" */
+extern const char weaponDbSelfMotionKeyword[];  /* "selfmot" */
+extern const char weaponDbSelfMotionAllKeyword[];  /* "selfmot-all" */
+extern const char weaponDbBaseMotionKeyword[];  /* "basemot" */
+extern const char weaponDbBaseMotionAllKeyword[];  /* "basemot-all" */
+extern const char weaponDbModelKeyword[];  /* "model" */
+extern const short weaponDbRobotModelDirectory[]; /* "data\weapon\robo\" */
+extern const char weaponDbModelAllKeyword[];  /* "modelall" */
+extern const char weaponDbUseKeyword[];  /* "use" */
+extern const char weaponDbUnknownCharNameFormat[];  /* "unknown char name '%s'" */
+extern const char weaponDbEquipKeyword[];  /* "equip" */
+extern const char weaponDbOccupyKeyword[];  /* "occupy" */
+extern const char weaponDbFakeKeyword[];  /* "fake" */
+extern const char weaponDbMassKeyword[];  /* "mass" */
+extern const char weaponDbWeightKeyword[];  /* "weight" */
+extern const char weaponDbNameKeyword[];  /* "name" */
+extern const char weaponDbVerticalDirectionKeyword[];  /* "v-dir" */
+extern const char weaponDbHorizontalDirectionKeyword[];  /* "h-dir" */
+extern const char weaponDbHitSoundKeyword[];  /* "hitsnd" */
+extern const char weaponDbShotSoundKeyword[];  /* "shotsnd" */
+extern const char weaponDbBackgroundSoundKeyword[];  /* "bgsnd" */
+extern const char weaponDbLifeSoundKeyword[];  /* "lifesnd" */
+extern const char weaponDbVoiceHitSoundKeyword[];  /* "vhitsnd" */
+extern const char weaponDbVoiceShotSoundKeyword[];  /* "vshotsnd" */
+extern const char weaponDbVoiceBackgroundSoundKeyword[];  /* "vbgsnd" */
+extern const char weaponDbVoiceLifeSoundKeyword[];  /* "vlifesnd" */
+extern const char weaponDbFirstWeaponArmKeyword[];  /* "1wa" */
+extern const char weaponDbSecondWeaponArmKeyword[];  /* "2wa" */
+extern const char weaponDbThirdWeaponArmKeyword[];  /* "3wa" */
+extern const char weaponDbDefaultArmKeyword[];  /* "default" */
+extern const char weaponDbShotPointKeyword[];  /* "shot-pnt" */
+extern const char weaponDbAssertShotPointCountInRange[];  /* "pEss->m_uShotPntNum <= RG_WEAPON_SHOTPNT_MAX" */
+extern const char weaponDbAssertDataIndexInRange[];  /* "0 <= uDatIdx && uDatIdx < 8" */
+extern int s_aeJntTbl_0[8];
+
+
+static void _EntryTemporaries(RgSimpleDB *database);
+static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken);
 
 static void _EntryTemporaries(RgSimpleDB *database) {
 
 }
-
-extern void *memcpy(void *destination, const void *source, unsigned int count);
 
 /*
  * Copies at most nSize bytes from pszSrc into pszDest, then always writes a
@@ -25,7 +134,7 @@ static void _copy_str_n(char *pszDest, const char *pszSrc, u32 nSize)
     pszDest[nSize - 1] = 0;
 }
 
-static void _WrapperDestruct(RgSimpleDB *database)
+static void _WrapperDestruct(void *database)
 {
     DisposeRgSimpleDB(database);
 }
@@ -35,50 +144,35 @@ RgSimpleDB *InstanceOfRgWeaponDB(void)
     RgSimpleDB *database = RgSingletonIDGet(2);
 
     if (database == 0) {
-        database = CreateRgSimpleDB(48, 16);
+        database = CreateRgSimpleDB(RG_WEAPON_DB_ENTRIES, RG_WEAPON_DB_ENTRY_SIZE);
         _EntryTemporaries(database);
         RgSingletonIDEntry(2, database, _WrapperDestruct);
     }
     return database;
 }
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern unsigned int strlen(const char *string);
+const char weaponDbAssertDbNotNil[] = "pDB != NIL";
 
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53816..0x00a53cf0). ov12:0x00a53818 holds
- * "pDB != NIL", ov12:0x00a53828 holds "../rg_weapon_db.euc.c".
- */
-const char D_00A53818[] = "pDB != NIL";
+const char weaponDbSourcePath[] = "../rg_weapon_db.euc.c";
 
-const char D_00A53828[] = "../rg_weapon_db.euc.c";
+const char weaponDbLeftKeyword[] = "left";
 
-const char D_00A53840[] = "left";
+const char weaponDbRightKeyword[] = "right";
 
-const char D_00A53848[] = "right";
+const char weaponDbBackKeyword[] = "back";
 
-const char D_00A53850[] = "back";
+const char weaponDbUnknownEquipTypeFormat[] = "unknown equip type '%s'";
 
-const char D_00A53858[] = "unknown equip type '%s'";
+const char weaponDbNotOrXMarkerFormat[] = "'%c' is not 'o' or 'x'";
 
-const char D_00A53870[] = "'%c' is not 'o' or 'x'";
+const char weaponDbBadEquipMaskFormat[] = "'%s' is not '???-??-???'";
 
-const char D_00A53888[] = "'%s' is not '???-??-???'";
-
-const char D_00A538A8[] = "'%s' is not '???-??-???' format";
-
-extern void RgSimpleDBClear(RgSimpleDB *pDB);
-extern int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
-extern int RgSimpleDBSize(RgSimpleDB *pDB);
-extern void *RgSimpleDBGet(RgSimpleDB *pDB, int nDataID);
-extern void RgSimpleDBDump(RgSimpleDB *pDB);
+const char weaponDbBadEquipMaskLayoutFormat[] = "'%s' is not '???-??-???' format";
 
 void RgWeaponDBClear(RgSimpleDB *pDB)
 {
     if (pDB == 0) {
-        assert_prog(D_00A53818, D_00A53828, 85);
+        assert_prog(weaponDbAssertDbNotNil, weaponDbSourcePath, 85);
     }
     RgSimpleDBClear(pDB);
     _EntryTemporaries(pDB);
@@ -101,7 +195,7 @@ void *RgWeaponDBGetEssence(RgSimpleDB *pDB, const char *pszName)
 int RgWeaponDBGetSize(RgSimpleDB *pDB)
 {
     if (pDB == 0) {
-        assert_prog(D_00A53818, D_00A53828, 113);
+        assert_prog(weaponDbAssertDbNotNil, weaponDbSourcePath, 113);
     }
     return RgSimpleDBSize(pDB);
 }
@@ -109,36 +203,10 @@ int RgWeaponDBGetSize(RgSimpleDB *pDB)
 void *RgWeaponDBGetIndex(RgSimpleDB *pDB, int nDataID)
 {
     if (pDB == 0) {
-        assert_prog(D_00A53818, D_00A53828, 121);
+        assert_prog(weaponDbAssertDbNotNil, weaponDbSourcePath, 121);
     }
     return RgSimpleDBGet(pDB, nDataID);
 }
-
-/*
- * Opaque handle owned by ov12/tu036 (src/ov12/rg_read_text.c,
- * src/ov12/rg_read_text.h): this TU only forwards the pointer between
- * RgReadTextGetString/-GetFloat/-IsEOF/-Unget and RgError, it never reads or
- * writes a member of it.
- */
-typedef struct RgReadText RgReadText;
-
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern void RgReadTextGetString(RgReadText *pReader, char *pszOut);
-extern int strcasecmp(const char *s1, const char *s2);
-
-/*
- * Scaffold-owned data (same window as above). ov12:0x00a53840 holds "left",
- * 0x00a53848 "right", 0x00a53850 "back": the three equip-slot keywords
- * _ReadEquipType recognizes. 0x00a53858 holds "unknown equip type '%s'", the
- * RgError message it reports for anything else.
- */
-/*
- * The equip-slot indices the strings above are keyed to; "left" (index 0) is
- * the value _ReadEquipType falls through to below without a named constant.
- */
-#define RG_EQUIP_RIGHT 1
-#define RG_EQUIP_BACK  2
 
 static int _ReadEquipType(RgReadText *pReader)
 {
@@ -146,15 +214,15 @@ static int _ReadEquipType(RgReadText *pReader)
     int result;
 
     RgReadTextGetString(pReader, szToken);
-    result = strcasecmp(szToken, D_00A53840);
+    result = strcasecmp(szToken, weaponDbLeftKeyword);
     if (result != 0) {
-        if (strcasecmp(szToken, D_00A53848) == 0) {
-            return RG_EQUIP_RIGHT;
+        if (strcasecmp(szToken, weaponDbRightKeyword) == 0) {
+            return RG_EQUIP_TYPE_RIGHT;
         }
-        if (strcasecmp(szToken, D_00A53850) == 0) {
-            return RG_EQUIP_BACK;
+        if (strcasecmp(szToken, weaponDbBackKeyword) == 0) {
+            return RG_EQUIP_TYPE_BACK;
         }
-        RgError(D_00A53858, D_00A53828, 0x8C, szToken);
+        RgError(weaponDbUnknownEquipTypeFormat, weaponDbSourcePath, 0x8C, szToken);
         result = -1;
         return result;
     }
@@ -172,7 +240,7 @@ static int _IsOnChar(char marker)
     if (marker == 'x') {
         return 0;
     }
-    RgError(D_00A53870, D_00A53828, 157, marker);
+    RgError(weaponDbNotOrXMarkerFormat, weaponDbSourcePath, 157, marker);
     return 0;
 }
 
@@ -183,14 +251,14 @@ static int _ReadEquipBitMask(RgReadText *pReader, unsigned int *pMask)
     int equipmentType = -1;
 
     RgReadTextGetString(pReader, szToken);
-    if (strlen(szToken) != 10) {
-        RgError(D_00A53888, D_00A53828, 169, szToken);
+    if (strlen(szToken) != RG_EQUIP_MARK_LEN) {
+        RgError(weaponDbBadEquipMaskFormat, weaponDbSourcePath, 169, szToken);
     }
     if (szToken[3] != '-') {
-        RgError(D_00A538A8, D_00A53828, 170, szToken);
+        RgError(weaponDbBadEquipMaskLayoutFormat, weaponDbSourcePath, 170, szToken);
     }
     if (szToken[6] != '-') {
-        RgError(D_00A538A8, D_00A53828, 171, szToken);
+        RgError(weaponDbBadEquipMaskLayoutFormat, weaponDbSourcePath, 171, szToken);
     }
 
     mask = 0;
@@ -219,15 +287,7 @@ static int _ReadEquipBitMask(RgReadText *pReader, unsigned int *pMask)
     return equipmentType;
 }
 
-/*
- * RG_ACTOR_CHAR_ROBNUM (6): the same evidenced constant as ov12/tu026's
- * RgWeapon.shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3] (src/ov12/rg_weapon.h),
- * the number of party characters who can pilot an AGWS robot. The loop below
- * fills the equivalent per-character motion table one row at a time.
- */
-#define RG_ACTOR_CHAR_ROBNUM 6
-
-static void _SetAllCharMotion(int motionTable[][3], int motion0, int motion1,
+static void _SetAllCharMotion(int motionTable[][RG_EQUIP_TYPE_NUM], int motion0, int motion1,
                                int motion2)
 {
     unsigned int i;
@@ -238,144 +298,6 @@ static void _SetAllCharMotion(int motionTable[][3], int motion0, int motion1,
         motionTable[i][2] = motion2;
     }
 }
-
-/*
- * The embedded equip record of a weapon essence is owned by ov12/tu030
- * (RgEquipRecord, 0x38 bytes); this file sets only its activeMount member
- * (+0x34) and passes its address on, so the rest is left unmodeled.
- */
-typedef struct RgWeaponEquip {
-    unsigned char unmodeled_00[0x34];
-    int activeMount;                   /* +0x34 */
-} RgWeaponEquip;
-
-extern const char D_00A538C8[];
-extern const char D_00A538D0[];
-extern const char D_00A538D8[];
-extern const char D_00A538E0[];
-extern const char D_00A538F0[];
-extern const char D_00A53918[];
-extern const char D_00A53940[];
-extern const char D_00A53968[];
-extern const char D_00A53970[];
-extern const char D_00A53978[];
-extern const char D_00A53988[];
-extern const char D_00A53990[];
-extern const char D_00A53998[];
-extern const char D_00A539A0[];
-extern const char D_00A539A8[];
-extern const char D_00A539D8[];
-extern const char D_00A539F0[];
-extern const char D_00A539F8[];
-extern const char D_00A53A00[];
-extern const char D_00A53A10[];
-extern const char D_00A53A18[];
-extern const char D_00A53A28[];
-extern const char D_00A53A40[];
-extern const char D_00A53A48[];
-extern const char D_00A53A50[];
-extern const char D_00A53A68[];
-extern const char D_00A53A70[];
-extern const char D_00A53A78[];
-extern const char D_00A53A88[];
-extern const char D_00A53A90[];
-extern const char D_00A53A98[];
-extern const char D_00A53AA8[];
-extern const char D_00A53AB0[];
-extern const char D_00A53AC0[];
-extern const short D_00A53AC8[];
-extern const char D_00A53AE0[];
-extern const char D_00A53AF0[];
-extern const char D_00A53AF8[];
-extern const char D_00A53B10[];
-extern const char D_00A53B18[];
-extern const char D_00A53B20[];
-extern const char D_00A53B28[];
-extern const char D_00A53B30[];
-extern const char D_00A53B38[];
-extern const char D_00A53B40[];
-extern const char D_00A53B48[];
-extern const char D_00A53B50[];
-extern const char D_00A53B58[];
-extern const char D_00A53B60[];
-extern const char D_00A53B68[];
-extern const char D_00A53B70[];
-extern const char D_00A53B78[];
-extern const char D_00A53B88[];
-extern const char D_00A53B90[];
-extern const char D_00A53BA0[];
-extern const char D_00A53BA8[];
-extern const char D_00A53BB0[];
-extern const char D_00A53BB8[];
-extern const char D_00A53BC0[];
-extern const char D_00A53BD0[];
-extern const char D_00A53C00[];
-extern int s_aeJntTbl_0[8];
-extern RgReadText *CreateRgReadText(const char *pszDataBase);
-extern double atof(const char *pszText);
-extern float dptofp(double value);
-extern float RgReadTextGetFloat(RgReadText *pReader);
-extern int RgReadTextGetInt(RgReadText *pReader);
-extern void RgWarn(const char *format, const char *file, int line, ...);
-extern RgSimpleDB *InstanceOfRgShotDB(void);
-extern struct RgShotEssence *RgShotDBGetEssence(RgSimpleDB *pDB, char *pszName);
-extern int RgActorMotIDGetFromName(char *pszName);
-extern int RgActorNameToCharID(char *pszName);
-extern void RgEquipSetDefault(RgWeaponEquip *pEquip, unsigned int mask);
-extern void RgEquipAddMount(RgWeaponEquip *pEquip, int type, int equipmentType,
-                            unsigned int mask);
-
-/*
- * The prefix every weapon essence the weapon database builds shares: each
- * _Read*Type function of rg_weapon_db.c hands its own essence to _ReadCommon
- * (ov12:0x00a1cd08), which fills these members from the common keys. The
- * database record (RgWeaponDBRecord) keeps its key and display name at the
- * same offsets (+0x330, +0x350).
- */
-typedef struct RgWeaponModelEntry RgWeaponModelEntry;
-
-struct RgWeaponModelEntry {
-    int robotCount;                    /* +0x00: RG_ACTOR_CHAR_ROBNUM */
-    char path[0x84];                   /* +0x04: "data\weapon\robo\" + name */
-};
-
-typedef struct RgWeaponEssence RgWeaponEssence;
-
-struct RgWeaponEssence {
-    unsigned char unmodeled_00[0x04];
-    unsigned int flags;                /* +0x04: notlock/full-mot/adv/lock bits */
-    float lockOnAngleMin;              /* +0x08: "lock" (radians) */
-    float lockOnAngleMax;              /* +0x0c */
-    struct RgShotEssence *shotEssence; /* +0x10: "shot" */
-    float capacity;                    /* +0x14: "num", "energy", "hardness" */
-    float vDir;                        /* +0x18: "v-dir" */
-    float hDir;                        /* +0x1c: "h-dir" */
-    unsigned char unmodeled_20[0x04];
-    int shotPntNum;                    /* +0x24: "shot-pnt" count */
-    int shotPnt[16]; /* +0x28: 16 joint indices */
-    unsigned char unmodeled_68[0x08];
-    RgWeaponEquip equip;               /* +0x70: "equip", "occupy", "fake" */
-    int useMask;                       /* +0xa8: "use" */
-    float mass;                        /* +0xac: "mass", "weight" */
-    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];  /* +0xb0: "mot" */
-    int selfMotionTable[RG_ACTOR_CHAR_ROBNUM][3];  /* +0xf8: "selfmot" */
-    int baseMotionTable[RG_ACTOR_CHAR_ROBNUM][3];  /* +0x140: "basemot" */
-    unsigned char unmodeled_188[0x08];
-    RgWeaponModelEntry models[3];      /* +0x190: "model", "modelall" */
-    unsigned char unmodeled_328[0x08];
-    char databaseName[0x20];           /* +0x330: record key */
-    char displayName[0x30];            /* +0x350: "name" */
-    int shotSound;                     /* +0x380: "shotsnd" */
-    int robotHitSound;                 /* +0x384: "hitsnd" */
-    int bgHitSound;                    /* +0x388: "bgsnd" */
-    int lifeSound;                     /* +0x38c: "lifesnd" */
-    int shotVolume;                    /* +0x390: "vshotsnd" */
-    int robotHitVolume;                /* +0x394: "vhitsnd" */
-    int bgHitVolume;                   /* +0x398: "vbgsnd" */
-    int lifeVolume;                    /* +0x39c: "vlifesnd" */
-    int attackSlot;                    /* +0x3a0: "1wa", "2wa", "3wa" */
-    int isDefault;                     /* +0x3a4: "default" */
-};
 
 static inline int _Clamp(int value, int low, int high)
 {
@@ -400,53 +322,53 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
     int level;
     pWeapon = (RgWeaponEssence *)pEss;
 
-    if (strcasecmp(pszToken, D_00A538C8) == 0) {
+    if (strcasecmp(pszToken, weaponDbContinueKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
-        while (strcasecmp(szToken, D_00A538D0) != 0) {
-            if (strcasecmp(szToken, D_00A538D8) == 0) {
-                pWeapon->flags &= ~0x20;
-                pWeapon->flags &= ~0x18;
-                pWeapon->flags |= 0x08;
-            } else if (strcasecmp(szToken, D_00A538E0) == 0) {
-                if ((pWeapon->flags & 7) == 2) {
-                    RgError(D_00A538F0, D_00A53828, 224);
-                } else if ((pWeapon->flags & 7) == 3) {
-                    RgError(D_00A53918, D_00A53828, 226);
-                } else if ((pWeapon->flags & 7) == 4) {
-                    RgError(D_00A53940, D_00A53828, 228);
+        while (strcasecmp(szToken, weaponDbEndMarkerKeyword) != 0) {
+            if (strcasecmp(szToken, weaponDbNotLockKeyword) == 0) {
+                pWeapon->controlFlags &= ~RG_WEAPON_CONTROL_LOCKON;
+                pWeapon->controlFlags &= ~RG_WEAPON_CONTROL_TARGET_MASK;
+                pWeapon->controlFlags |= RG_WEAPON_CONTROL_TARGET_WTH;
+            } else if (strcasecmp(szToken, weaponDbFullMotionKeyword) == 0) {
+                if ((pWeapon->controlFlags & RG_WEAPON_CONTROL_KIND_MASK) == RG_WEAPON_CONTROL_KIND_ATTACK) {
+                    RgError(weaponDbFullMotionAttackErrorText, weaponDbSourcePath, 224);
+                } else if ((pWeapon->controlFlags & RG_WEAPON_CONTROL_KIND_MASK) == RG_WEAPON_CONTROL_KIND_SHIELD) {
+                    RgError(weaponDbFullMotionShieldErrorText, weaponDbSourcePath, 226);
+                } else if ((pWeapon->controlFlags & RG_WEAPON_CONTROL_KIND_MASK) == RG_WEAPON_CONTROL_KIND_UNARMED) {
+                    RgError(weaponDbFullMotionUnarmedErrorText, weaponDbSourcePath, 228);
                 } else {
-                    pWeapon->flags = (pWeapon->flags & ~7) | 1;
+                    pWeapon->controlFlags = (pWeapon->controlFlags & ~RG_WEAPON_CONTROL_KIND_MASK) | RG_WEAPON_CONTROL_KIND_FULL_MOT;
                 }
-            } else if (strcasecmp(szToken, D_00A53968) == 0) {
-                pWeapon->flags &= ~0x40;
-            } else if (strcasecmp(szToken, D_00A53970) == 0) {
-                pWeapon->flags |= 0x40;
-            } else if (strcasecmp(szToken, D_00A53978) == 0) {
-                pWeapon->flags |= 0x80;
-            } else if (strcasecmp(szToken + 4, D_00A53988) == 0) {
-                pWeapon->flags &= ~0x18;
+            } else if (strcasecmp(szToken, weaponDbNotAdvanceKeyword) == 0) {
+                pWeapon->controlFlags &= ~RG_WEAPON_CONTROL_ADV;
+            } else if (strcasecmp(szToken, weaponDbAdvanceKeyword) == 0) {
+                pWeapon->controlFlags |= RG_WEAPON_CONTROL_ADV;
+            } else if (strcasecmp(szToken, weaponDbNoRobotMotionKeyword) == 0) {
+                pWeapon->controlFlags |= RG_WEAPON_CONTROL_NO_ROBMOT;
+            } else if (strcasecmp(szToken + 4, weaponDbTargetSuffixKeyword) == 0) {
+                pWeapon->controlFlags &= ~RG_WEAPON_CONTROL_TARGET_MASK;
                 szToken[3] = 0;
-                if (strcasecmp(szToken, D_00A53990) != 0) {
-                    if (strcasecmp(szToken, D_00A53998) == 0) {
-                        pWeapon->flags |= 0x10;
-                    } else if (strcasecmp(szToken, D_00A539A0) == 0) {
-                        pWeapon->flags |= 0x08;
+                if (strcasecmp(szToken, weaponDbNotPrefixKeyword) != 0) {
+                    if (strcasecmp(szToken, weaponDbAfterKeyword) == 0) {
+                        pWeapon->controlFlags |= RG_WEAPON_CONTROL_TARGET_AFT;
+                    } else if (strcasecmp(szToken, weaponDbWithKeyword) == 0) {
+                        pWeapon->controlFlags |= RG_WEAPON_CONTROL_TARGET_WTH;
                     } else {
-                        RgError(D_00A539A8, D_00A53828, 256);
+                        RgError(weaponDbUnknownTargetKeywordFormat, weaponDbSourcePath, 256);
                     }
                 }
             } else {
-                RgError(D_00A539D8, D_00A53828, 260, szToken);
+                RgError(weaponDbContinueErrorFormat, weaponDbSourcePath, 260, szToken);
             }
             RgReadTextGetString(pReader, szToken);
         }
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A539F0) == 0 || strcasecmp(pszToken, D_00A539F8) == 0 ||
-        strcasecmp(pszToken, D_00A53A00) == 0) {
+    if (strcasecmp(pszToken, weaponDbNumKeyword) == 0 || strcasecmp(pszToken, weaponDbEnergyKeyword) == 0 ||
+        strcasecmp(pszToken, weaponDbHardnessKeyword) == 0) {
         RgReadTextGetString(pReader, szName);
-        if (strcasecmp(szName, D_00A53A10) == 0) {
+        if (strcasecmp(szName, weaponDbInfiniteKeyword) == 0) {
             pWeapon->capacity = 1.0e8f;
         } else {
             pWeapon->capacity = dptofp(atof(szName));
@@ -454,28 +376,28 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A18) == 0) {
+    if (strcasecmp(pszToken, weaponDbLockRangeKeyword) == 0) {
         RgReadTextGetFloat(pReader);
-        RgWarn(D_00A53A28, D_00A53828, 282);
+        RgWarn(weaponDbIgnoredLockRangeText, weaponDbSourcePath, 282);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A40) == 0) {
-        pWeapon->lockOnAngleMin = RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
-        pWeapon->lockOnAngleMax = RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+    if (strcasecmp(pszToken, weaponDbLockKeyword) == 0) {
+        pWeapon->lockOnAngleMin = RgReadTextGetFloat(pReader) * XRG_PI / 180.0f;
+        pWeapon->lockOnAngleMax = RgReadTextGetFloat(pReader) * XRG_PI / 180.0f;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A48) == 0) {
+    if (strcasecmp(pszToken, weaponDbShotKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         pWeapon->shotEssence = RgShotDBGetEssence(InstanceOfRgShotDB(), szToken);
         if (pWeapon->shotEssence == 0) {
-            RgError(D_00A53A50, D_00A53828, 294, szToken);
+            RgError(weaponDbUnknownShotFormat, weaponDbSourcePath, 294, szToken);
         }
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A68) == 0) {
+    if (strcasecmp(pszToken, weaponDbMotionKeyword) == 0) {
         int motion0;
         int motion1;
         int motion2;
@@ -490,10 +412,10 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A70) == 0) {
+    if (strcasecmp(pszToken, weaponDbMotionAllKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         if (szToken[0] != '(') {
-            assert_prog(D_00A53A78, D_00A53828, 307);
+            assert_prog(weaponDbAssertOpenParen, weaponDbSourcePath, 307);
         }
         RgReadTextGetString(pReader, szToken);
         while (szToken[0] != ')') {
@@ -502,7 +424,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
             int motion2;
             int charID;
 
-            if (strcasecmp(szToken, D_00A53A88) == 0) {
+            if (strcasecmp(szToken, weaponDbDefaultKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
                 motion0 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
@@ -527,7 +449,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A90) == 0) {
+    if (strcasecmp(pszToken, weaponDbSelfMotionKeyword) == 0) {
         int motion0;
         int motion1;
         int motion2;
@@ -538,14 +460,14 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         motion1 = RgActorMotIDGetFromName(szToken);
         RgReadTextGetString(pReader, szToken);
         motion2 = RgActorMotIDGetFromName(szToken);
-        _SetAllCharMotion(pWeapon->selfMotionTable, motion0, motion1, motion2);
+        _SetAllCharMotion(pWeapon->shotStartMotionTable, motion0, motion1, motion2);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53A98) == 0) {
+    if (strcasecmp(pszToken, weaponDbSelfMotionAllKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         if (szToken[0] != '(') {
-            assert_prog(D_00A53A78, D_00A53828, 339);
+            assert_prog(weaponDbAssertOpenParen, weaponDbSourcePath, 339);
         }
         RgReadTextGetString(pReader, szToken);
         while (szToken[0] != ')') {
@@ -554,14 +476,14 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
             int motion2;
             int charID;
 
-            if (strcasecmp(szToken, D_00A53A88) == 0) {
+            if (strcasecmp(szToken, weaponDbDefaultKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
                 motion0 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
                 motion1 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
                 motion2 = RgActorMotIDGetFromName(szToken);
-                _SetAllCharMotion(pWeapon->selfMotionTable, motion0, motion1, motion2);
+                _SetAllCharMotion(pWeapon->shotStartMotionTable, motion0, motion1, motion2);
             } else {
                 charID = RgActorNameToCharID(szToken);
                 RgReadTextGetString(pReader, szToken);
@@ -570,16 +492,16 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
                 motion1 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
                 motion2 = RgActorMotIDGetFromName(szToken);
-                pWeapon->selfMotionTable[charID][0] = motion0;
-                pWeapon->selfMotionTable[charID][1] = motion1;
-                pWeapon->selfMotionTable[charID][2] = motion2;
+                pWeapon->shotStartMotionTable[charID][0] = motion0;
+                pWeapon->shotStartMotionTable[charID][1] = motion1;
+                pWeapon->shotStartMotionTable[charID][2] = motion2;
             }
             RgReadTextGetString(pReader, szToken);
         }
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53AA8) == 0) {
+    if (strcasecmp(pszToken, weaponDbBaseMotionKeyword) == 0) {
         int motion0;
         int motion1;
         int motion2;
@@ -590,14 +512,14 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         motion1 = RgActorMotIDGetFromName(szToken);
         RgReadTextGetString(pReader, szToken);
         motion2 = RgActorMotIDGetFromName(szToken);
-        _SetAllCharMotion(pWeapon->baseMotionTable, motion0, motion1, motion2);
+        _SetAllCharMotion(pWeapon->shotEndMotionTable, motion0, motion1, motion2);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53AB0) == 0) {
+    if (strcasecmp(pszToken, weaponDbBaseMotionAllKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         if (szToken[0] != '(') {
-            assert_prog(D_00A53A78, D_00A53828, 371);
+            assert_prog(weaponDbAssertOpenParen, weaponDbSourcePath, 371);
         }
         RgReadTextGetString(pReader, szToken);
         while (szToken[0] != ')') {
@@ -606,14 +528,14 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
             int motion2;
             int charID;
 
-            if (strcasecmp(szToken, D_00A53A88) == 0) {
+            if (strcasecmp(szToken, weaponDbDefaultKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
                 motion0 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
                 motion1 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
                 motion2 = RgActorMotIDGetFromName(szToken);
-                _SetAllCharMotion(pWeapon->baseMotionTable, motion0, motion1, motion2);
+                _SetAllCharMotion(pWeapon->shotEndMotionTable, motion0, motion1, motion2);
             } else {
                 charID = RgActorNameToCharID(szToken);
                 RgReadTextGetString(pReader, szToken);
@@ -622,44 +544,44 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
                 motion1 = RgActorMotIDGetFromName(szToken);
                 RgReadTextGetString(pReader, szToken);
                 motion2 = RgActorMotIDGetFromName(szToken);
-                pWeapon->baseMotionTable[charID][0] = motion0;
-                pWeapon->baseMotionTable[charID][1] = motion1;
-                pWeapon->baseMotionTable[charID][2] = motion2;
+                pWeapon->shotEndMotionTable[charID][0] = motion0;
+                pWeapon->shotEndMotionTable[charID][1] = motion1;
+                pWeapon->shotEndMotionTable[charID][2] = motion2;
             }
             RgReadTextGetString(pReader, szToken);
         }
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53AC0) == 0) {
+    if (strcasecmp(pszToken, weaponDbModelKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         for (i = 0; i < 3; i++) {
-            pWeapon->models[i].robotCount = RG_ACTOR_CHAR_ROBNUM;
-            __builtin_memcpy(pWeapon->models[i].path, D_00A53AC8, 18);
-            strcat(pWeapon->models[i].path, szToken);
+            pWeapon->actorSpec[i].actorID = RG_ACTOR_CHAR_ROBNUM;
+            __builtin_memcpy(pWeapon->actorSpec[i].fileName, weaponDbRobotModelDirectory, 18);
+            strcat(pWeapon->actorSpec[i].fileName, szToken);
         }
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53AE0) == 0) {
+    if (strcasecmp(pszToken, weaponDbModelAllKeyword) == 0) {
         for (i = 0; i < 3; i++) {
             RgReadTextGetString(pReader, szToken);
-            pWeapon->models[i].robotCount = RG_ACTOR_CHAR_ROBNUM;
-            __builtin_memcpy(pWeapon->models[i].path, D_00A53AC8, 18);
-            strcat(pWeapon->models[i].path, szToken);
+            pWeapon->actorSpec[i].actorID = RG_ACTOR_CHAR_ROBNUM;
+            __builtin_memcpy(pWeapon->actorSpec[i].fileName, weaponDbRobotModelDirectory, 18);
+            strcat(pWeapon->actorSpec[i].fileName, szToken);
         }
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53AF0) == 0) {
+    if (strcasecmp(pszToken, weaponDbUseKeyword) == 0) {
         int charID;
 
         pWeapon->useMask = 0;
         RgReadTextGetString(pReader, szToken);
-        while (strcasecmp(szToken, D_00A538D0) != 0) {
+        while (strcasecmp(szToken, weaponDbEndMarkerKeyword) != 0) {
             charID = RgActorNameToCharID(szToken);
             if (charID == -1) {
-                RgError(D_00A53AF8, D_00A53828, 426, szToken);
+                RgError(weaponDbUnknownCharNameFormat, weaponDbSourcePath, 426, szToken);
             }
             pWeapon->useMask |= 1 << charID;
             RgReadTextGetString(pReader, szToken);
@@ -667,13 +589,13 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B10) == 0) {
+    if (strcasecmp(pszToken, weaponDbEquipKeyword) == 0) {
         _ReadEquipBitMask(pReader, &equipMask);
         RgEquipSetDefault(&pWeapon->equip, equipMask);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B18) == 0) {
+    if (strcasecmp(pszToken, weaponDbOccupyKeyword) == 0) {
         equipmentType = _ReadEquipType(pReader);
         occupyMask = 0;
         mountType = _ReadEquipBitMask(pReader, &occupyMask);
@@ -681,105 +603,105 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B20) == 0) {
+    if (strcasecmp(pszToken, weaponDbFakeKeyword) == 0) {
         pWeapon->equip.activeMount = 1;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B28) == 0 || strcasecmp(pszToken, D_00A53B30) == 0) {
+    if (strcasecmp(pszToken, weaponDbMassKeyword) == 0 || strcasecmp(pszToken, weaponDbWeightKeyword) == 0) {
         pWeapon->mass = RgReadTextGetFloat(pReader);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B38) == 0) {
+    if (strcasecmp(pszToken, weaponDbNameKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         _copy_str_n(pWeapon->displayName, szToken, 48);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B40) == 0) {
-        pWeapon->vDir = -RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+    if (strcasecmp(pszToken, weaponDbVerticalDirectionKeyword) == 0) {
+        pWeapon->shotPitch = -RgReadTextGetFloat(pReader) * XRG_PI / 180.0f;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B48) == 0) {
-        pWeapon->hDir = -RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+    if (strcasecmp(pszToken, weaponDbHorizontalDirectionKeyword) == 0) {
+        pWeapon->shotYaw = -RgReadTextGetFloat(pReader) * XRG_PI / 180.0f;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B50) == 0) {
+    if (strcasecmp(pszToken, weaponDbHitSoundKeyword) == 0) {
         pWeapon->robotHitSound = RgReadTextGetInt(pReader);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B58) == 0) {
+    if (strcasecmp(pszToken, weaponDbShotSoundKeyword) == 0) {
         pWeapon->shotSound = RgReadTextGetInt(pReader);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B60) == 0) {
+    if (strcasecmp(pszToken, weaponDbBackgroundSoundKeyword) == 0) {
         pWeapon->bgHitSound = RgReadTextGetInt(pReader);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B68) == 0) {
+    if (strcasecmp(pszToken, weaponDbLifeSoundKeyword) == 0) {
         pWeapon->lifeSound = RgReadTextGetInt(pReader);
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B70) == 0) {
+    if (strcasecmp(pszToken, weaponDbVoiceHitSoundKeyword) == 0) {
         pWeapon->robotHitSound = RgReadTextGetInt(pReader);
-        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
-        level = _Clamp(volume, 0, 128);
+        volume = (int)(RgReadTextGetFloat(pReader) * RG_WEAPON_VOLUME_SCALE);
+        level = _Clamp(volume, 0, RG_WEAPON_VOLUME_MAX);
         pWeapon->robotHitVolume = level;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B78) == 0) {
+    if (strcasecmp(pszToken, weaponDbVoiceShotSoundKeyword) == 0) {
         pWeapon->shotSound = RgReadTextGetInt(pReader);
-        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
-        level = _Clamp(volume, 0, 128);
+        volume = (int)(RgReadTextGetFloat(pReader) * RG_WEAPON_VOLUME_SCALE);
+        level = _Clamp(volume, 0, RG_WEAPON_VOLUME_MAX);
         pWeapon->shotVolume = level;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B88) == 0) {
+    if (strcasecmp(pszToken, weaponDbVoiceBackgroundSoundKeyword) == 0) {
         pWeapon->bgHitSound = RgReadTextGetInt(pReader);
-        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
-        level = _Clamp(volume, 0, 128);
+        volume = (int)(RgReadTextGetFloat(pReader) * RG_WEAPON_VOLUME_SCALE);
+        level = _Clamp(volume, 0, RG_WEAPON_VOLUME_MAX);
         pWeapon->bgHitVolume = level;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53B90) == 0) {
+    if (strcasecmp(pszToken, weaponDbVoiceLifeSoundKeyword) == 0) {
         pWeapon->lifeSound = RgReadTextGetInt(pReader);
-        volume = (int)(RgReadTextGetFloat(pReader) * 128.0f);
-        level = _Clamp(volume, 0, 128);
+        volume = (int)(RgReadTextGetFloat(pReader) * RG_WEAPON_VOLUME_SCALE);
+        level = _Clamp(volume, 0, RG_WEAPON_VOLUME_MAX);
         pWeapon->lifeVolume = level;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53BA0) == 0) {
-        pWeapon->attackSlot = 0;
+    if (strcasecmp(pszToken, weaponDbFirstWeaponArmKeyword) == 0) {
+        pWeapon->eventLevel = 0;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53BA8) == 0) {
-        pWeapon->attackSlot = 1;
+    if (strcasecmp(pszToken, weaponDbSecondWeaponArmKeyword) == 0) {
+        pWeapon->eventLevel = 1;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53BB0) == 0) {
-        pWeapon->attackSlot = 2;
+    if (strcasecmp(pszToken, weaponDbThirdWeaponArmKeyword) == 0) {
+        pWeapon->eventLevel = 2;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53BB8) == 0) {
+    if (strcasecmp(pszToken, weaponDbDefaultArmKeyword) == 0) {
         pWeapon->isDefault = 1;
         return 1;
     }
 
-    if (strcasecmp(pszToken, D_00A53BC0) == 0) {
+    if (strcasecmp(pszToken, weaponDbShotPointKeyword) == 0) {
         unsigned char *pChar;
         unsigned int nextChar;
         unsigned int shotChar;
@@ -800,10 +722,10 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
                     *pShotPntNum = shotPnt + 1;
                     tableIndex = (char)shotChar - '1';
                     if (!(shotPnt + 1 < 17)) {
-                        assert_prog(D_00A53BD0, D_00A53828, 552);
+                        assert_prog(weaponDbAssertShotPointCountInRange, weaponDbSourcePath, 552);
                     }
                     if (!((unsigned int)tableIndex < 8)) {
-                        assert_prog(D_00A53C00, D_00A53828, 553);
+                        assert_prog(weaponDbAssertDataIndexInRange, weaponDbSourcePath, 553);
                     }
                     pWeapon->shotPnt[shotPnt] = s_aeJntTbl_0[tableIndex];
                 }
@@ -818,44 +740,9 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
     return 0;
 }
 
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern int RgReadTextIsEOF(RgReadText *pReader);
-extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
-/*
- * _ReadCommon is one of two file-local statics of that name in this overlay
- * (the other, ov12:0x00a18730, belongs to a different translation unit).
- * This one, ov12:0x00a1cd08, is still INCLUDE_ASM above and shared by every
- * Read*Type function below: it consumes the token they already read and
- * reports (zero) whether it recognized a field common to every essence type.
- */
-static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken);
+const char weaponDbAssertReaderNotNil[] = "pReader != NIL";
 
-/*
- * Scaffold-owned data. ov12:0x00a53c20 holds "pReader != NIL", the argument
- * check every Read*Type function below reports; 0x00a53c30 holds "busy", the
- * key _ReadShotType recognizes for a shot type's cooldown.
- */
-const char D_00A53C20[] = "pReader != NIL";
-
-const char D_00A53C30[] = "busy";
-
-/*
- * The per-instance data _ReadShotType allocates. ov12/tu026's rg_weapon.h
- * only forward-declares this tag (its own evidence, _CreateWeaponShotType's
- * null checks, does not reach the interior); this allocation's own field
- * write below completes it.
- */
-typedef struct RgWeaponShotEssence RgWeaponShotEssence;
-
-struct RgWeaponShotEssence {
-    unsigned char unmodeled_000[0x3b0];
-    float busyTime;             /* +0x3b0, the "busy" key above */
-    unsigned char unmodeled_3b4[0x0c];
-};
-
-extern void InitRgWeaponShotEssence(RgWeaponShotEssence *pEss);
+const char weaponDbBusyKeyword[] = "busy";
 
 static RgWeaponShotEssence *_ReadShotType(RgReadText *pReader)
 {
@@ -863,16 +750,16 @@ static RgWeaponShotEssence *_ReadShotType(RgReadText *pReader)
     RgWeaponShotEssence *pEss;
 
     if (pReader == 0) {
-        assert_prog(D_00A53C20, D_00A53828, 0x238);
+        assert_prog(weaponDbAssertReaderNotNil, weaponDbSourcePath, 0x238);
     }
     pEss = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponShotEssence),
-                       D_00A53828, 0x23A);
+                       weaponDbSourcePath, 0x23A);
     InitRgWeaponShotEssence(pEss);
     for (;;) {
         if (RgReadTextIsEOF(pReader) == 0) {
             RgReadTextGetString(pReader, szToken);
             if (_ReadCommon(pEss, pReader, szToken) == 0) {
-                if (strcasecmp(szToken, D_00A53C30) == 0) {
+                if (strcasecmp(szToken, weaponDbBusyKeyword) == 0) {
                     pEss->busyTime = RgReadTextGetFloat(pReader);
                     continue;
                 } else {
@@ -888,28 +775,9 @@ static RgWeaponShotEssence *_ReadShotType(RgReadText *pReader)
     return pEss;
 }
 
-/*
- * Scaffold-owned data. ov12:0x00a53c38 holds "damage", 0x00a53c40 "hiteff":
- * the two keys _ReadAttackType and _ReadUnArmedType both recognize.
- */
-const char D_00A53C38[] = "damage";
+const char weaponDbDamageKeyword[] = "damage";
 
-const char D_00A53C40[] = "hiteff";
-
-/*
- * The per-instance data _ReadAttackType allocates. ov12/tu026's rg_weapon.h
- * only forward-declares this tag; this allocation's own field writes below
- * complete it.
- */
-typedef struct RgWeaponAttackEssence RgWeaponAttackEssence;
-
-struct RgWeaponAttackEssence {
-    unsigned char unmodeled_000[0x3b8];
-    float damage;                /* +0x3b8, the "damage" key above */
-    char hitEffectName[0x24];    /* +0x3bc, the "hiteff" key above */
-};
-
-extern void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss);
+const char weaponDbHitEffectKeyword[] = "hiteff";
 
 static RgWeaponAttackEssence *_ReadAttackType(RgReadText *pReader)
 {
@@ -917,19 +785,19 @@ static RgWeaponAttackEssence *_ReadAttackType(RgReadText *pReader)
     RgWeaponAttackEssence *pEss;
 
     if (pReader == 0) {
-        assert_prog(D_00A53C20, D_00A53828, 0x252);
+        assert_prog(weaponDbAssertReaderNotNil, weaponDbSourcePath, 0x252);
     }
     pEss = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponAttackEssence),
-                       D_00A53828, 0x254);
+                       weaponDbSourcePath, 0x254);
     InitRgWeaponAttackEssence(pEss);
     while (RgReadTextIsEOF(pReader) == 0) {
         RgReadTextGetString(pReader, szToken);
         if (_ReadCommon(pEss, pReader, szToken) == 0) {
-            if (strcasecmp(szToken, D_00A53C38) == 0) {
+            if (strcasecmp(szToken, weaponDbDamageKeyword) == 0) {
                 pEss->damage = RgReadTextGetFloat(pReader);
                 continue;
             } else {
-                if (strcasecmp(szToken, D_00A53C40) == 0) {
+                if (strcasecmp(szToken, weaponDbHitEffectKeyword) == 0) {
                     RgReadTextGetString(pReader, pEss->hitEffectName);
                     continue;
                 }
@@ -941,21 +809,6 @@ static RgWeaponAttackEssence *_ReadAttackType(RgReadText *pReader)
 
     return pEss;
 }
-
-/*
- * The per-instance data _ReadUnArmedType allocates. ov12/tu026's rg_weapon.h
- * only forward-declares this tag. Its layout matches RgWeaponAttackEssence:
- * the same "damage"/"hiteff" keys at the same offsets.
- */
-typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
-
-struct RgWeaponUnArmedEssence {
-    unsigned char unmodeled_000[0x3b8];
-    float damage;                /* +0x3b8, the "damage" key above */
-    char hitEffectName[0x24];    /* +0x3bc, the "hiteff" key above */
-};
-
-extern void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss);
 
 static RgWeaponUnArmedEssence *_ReadUnArmedType(RgReadText *pReader)
 {
@@ -963,19 +816,19 @@ static RgWeaponUnArmedEssence *_ReadUnArmedType(RgReadText *pReader)
     RgWeaponUnArmedEssence *pEss;
 
     if (pReader == 0) {
-        assert_prog(D_00A53C20, D_00A53828, 0x26F);
+        assert_prog(weaponDbAssertReaderNotNil, weaponDbSourcePath, 0x26F);
     }
     pEss = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponUnArmedEssence),
-                       D_00A53828, 0x271);
+                       weaponDbSourcePath, 0x271);
     InitRgWeaponUnArmedEssence(pEss);
     while (RgReadTextIsEOF(pReader) == 0) {
         RgReadTextGetString(pReader, szToken);
         if (_ReadCommon(pEss, pReader, szToken) == 0) {
-            if (strcasecmp(szToken, D_00A53C38) == 0) {
+            if (strcasecmp(szToken, weaponDbDamageKeyword) == 0) {
                 pEss->damage = RgReadTextGetFloat(pReader);
                 continue;
             } else {
-                if (strcasecmp(szToken, D_00A53C40) == 0) {
+                if (strcasecmp(szToken, weaponDbHitEffectKeyword) == 0) {
                     RgReadTextGetString(pReader, pEss->hitEffectName);
                     continue;
                 }
@@ -988,24 +841,15 @@ static RgWeaponUnArmedEssence *_ReadUnArmedType(RgReadText *pReader)
     return pEss;
 }
 
-/*
- * RgWeaponShieldEssence is fully evidenced and completed by ov12/tu026
- * (src/ov12/rg_weapon.h, InitRgWeaponShieldEssence's own field writes); this
- * TU only allocates and forwards the pointer, so it stays opaque here.
- */
-typedef struct RgWeaponShieldEssence RgWeaponShieldEssence;
-
-extern void InitRgWeaponShieldEssence(RgWeaponShieldEssence *pEss);
-
 static RgWeaponShieldEssence *_ReadShieldType(RgReadText *pReader)
 {
     char szToken[0x80];
     RgWeaponShieldEssence *pEss;
 
     if (pReader == 0) {
-        assert_prog(D_00A53C20, D_00A53828, 0x28C);
+        assert_prog(weaponDbAssertReaderNotNil, weaponDbSourcePath, 0x28C);
     }
-    pEss = RgHeapAlloc(InstanceOfRgHeap(), 0x3B0, D_00A53828, 0x28E);
+    pEss = RgHeapAlloc(InstanceOfRgHeap(), 0x3B0, weaponDbSourcePath, 0x28E);
     InitRgWeaponShieldEssence(pEss);
     for (;;) {
         if (RgReadTextIsEOF(pReader) == 0) {
@@ -1022,28 +866,16 @@ static RgWeaponShieldEssence *_ReadShieldType(RgReadText *pReader)
     return pEss;
 }
 
-typedef struct RgWeaponEnergyEssence RgWeaponEnergyEssence;
-
-struct RgWeaponEnergyEssence {
-    unsigned char unmodeled_000[0x3b0];
-    float shotEnergy;
-    float upTemp;
-    float limitTemp;
-    float downTemp;
-};
-
-extern void InitRgWeaponEnergyEssence(RgWeaponEnergyEssence *pEss);
-
 static RgWeaponEnergyEssence *_ReadEnergyType(RgReadText *pReader)
 {
     char szToken[0x80];
     RgWeaponEnergyEssence *pEss;
 
     if (pReader == 0) {
-        assert_prog(D_00A53C20, D_00A53828, 676);
+        assert_prog(weaponDbAssertReaderNotNil, weaponDbSourcePath, 676);
     }
     pEss = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponEnergyEssence),
-                       D_00A53828, 678);
+                       weaponDbSourcePath, 678);
     InitRgWeaponEnergyEssence(pEss);
     while (RgReadTextIsEOF(pReader) == 0) {
         RgReadTextGetString(pReader, szToken);
@@ -1075,43 +907,31 @@ static RgWeaponEnergyEssence *_ReadEnergyType(RgReadText *pReader)
     return pEss;
 }
 
-/*
- * Database names occupy two fields shared by every type-specific essence.
- * The parser stores the record key at +0x330 and uses +0x350 as its optional
- * display name, defaulting it to the key when _ReadCommon left it empty.
- */
-typedef struct RgWeaponEssence RgWeaponDBRecord;
+const char weaponDbAssertDataBaseNameNotNil[] = "pszDataBase != NIL";
 
-const char D_00A53C80[] = "pszDataBase != NIL";
+const char weaponDbShotTypeKeyword[] = "shottype";
 
-const char D_00A53C98[] = "shottype";
+const char weaponDbAttackTypeKeyword[] = "atktype";
 
-const char D_00A53CA8[] = "atktype";
+const char weaponDbShieldTypeKeyword[] = "sldtype";
 
-const char D_00A53CB0[] = "sldtype";
+const char weaponDbEnergyTypeKeyword[] = "enetype";
 
-const char D_00A53CB8[] = "enetype";
+const char weaponDbUnarmedTypeKeyword[] = "sudetype";
 
-const char D_00A53CC0[] = "sudetype";
-
-const char D_00A53CD0[] = "%s : unknown keyword : %s";
-
-extern char *strcpy(char *destination, const char *source);
-extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat,
-                            const char *pszName);
-extern void DisposeRgReadText(RgReadText *pReader);
+const char weaponDbUnknownKeywordFormat[] = "%s : unknown keyword : %s";
 
 void RgWeaponDBRead(RgSimpleDB *pDB, const char *pszDataBase)
 {
     char szToken[0x100];
     RgReadText *pReader;
-    RgWeaponDBRecord *pEntry;
+    RgWeaponEssence *pEntry;
 
     if (pDB == 0) {
-        assert_prog(D_00A53818, D_00A53828, 709);
+        assert_prog(weaponDbAssertDbNotNil, weaponDbSourcePath, 709);
     }
     if (pszDataBase == 0) {
-        assert_prog(D_00A53C80, D_00A53828, 710);
+        assert_prog(weaponDbAssertDataBaseNameNotNil, weaponDbSourcePath, 710);
     }
 
     pReader = CreateRgReadText(pszDataBase);
@@ -1120,23 +940,23 @@ void RgWeaponDBRead(RgSimpleDB *pDB, const char *pszDataBase)
             pEntry = 0;
             RgReadTextGetString(pReader, szToken);
 
-            if (strcasecmp(szToken, D_00A53C98) == 0) {
+            if (strcasecmp(szToken, weaponDbShotTypeKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
-                pEntry = (RgWeaponDBRecord *)_ReadShotType(pReader);
-            } else if (strcasecmp(szToken, D_00A53CA8) == 0) {
+                pEntry = &_ReadShotType(pReader)->common;
+            } else if (strcasecmp(szToken, weaponDbAttackTypeKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
-                pEntry = (RgWeaponDBRecord *)_ReadAttackType(pReader);
-            } else if (strcasecmp(szToken, D_00A53CB0) == 0) {
+                pEntry = &_ReadAttackType(pReader)->common;
+            } else if (strcasecmp(szToken, weaponDbShieldTypeKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
-                pEntry = (RgWeaponDBRecord *)_ReadShieldType(pReader);
-            } else if (strcasecmp(szToken, D_00A53CB8) == 0) {
+                pEntry = &_ReadShieldType(pReader)->common;
+            } else if (strcasecmp(szToken, weaponDbEnergyTypeKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
-                pEntry = (RgWeaponDBRecord *)_ReadEnergyType(pReader);
-            } else if (strcasecmp(szToken, D_00A53CC0) == 0) {
+                pEntry = &_ReadEnergyType(pReader)->common;
+            } else if (strcasecmp(szToken, weaponDbUnarmedTypeKeyword) == 0) {
                 RgReadTextGetString(pReader, szToken);
-                pEntry = (RgWeaponDBRecord *)_ReadUnArmedType(pReader);
+                pEntry = &_ReadUnArmedType(pReader)->common;
             } else {
-                RgError(D_00A53CD0, D_00A53828, 746, pszDataBase, szToken);
+                RgError(weaponDbUnknownKeywordFormat, weaponDbSourcePath, 746, pszDataBase, szToken);
             }
 
             if (pEntry != 0) {

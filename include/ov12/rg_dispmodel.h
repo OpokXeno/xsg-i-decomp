@@ -3,26 +3,23 @@
 
 #include "shared.h"
 
-/*
- * RgDispModel is defined by src/ov12/rg_dispmodel.c (ov12/tu049); only the
- * pointer identity CreateXrgDispModelImpl returns and RgDispModelSetMode
- * takes is used here.
- */
 typedef struct RgDispModel RgDispModel;
 
 typedef void (*RgDispModelDispFunc)(RgDispModel *pDispModel);
 
 typedef void (*RgDispModelDestructFunc)(RgDispModel *pDispModel);
 
+/* RgDispModel.mode bits. */
+#define RG_DISP_MODEL_MODE_FOG 1     /* apply the studio's fog */
+#define RG_DISP_MODEL_MODE_HIDDEN 2  /* RgDispModelDisplay draws nothing */
+#define RG_DISP_MODEL_MODE_ALPHA 4   /* blend mode 0x48 while translucent */
+#define RG_DISP_MODEL_MODE_MAPCLIP 8 /* clip against the map */
+
 /*
- * The observed access view: the local four-by-four matrix at 0x00,
- * the mode flag word RgDispModelDisplay tests bit 0x2 of at 0x40, the
- * transparency and blight floats RgDispModelGetTransparent/
- * RgDispModelSetTransparent and RgDispModelSetBlight access at 0x44 and
- * 0x48, and the per-instance display and destruct callbacks
- * RgDispModelDisplay and DisposeRgDispModel call at 0x4C and 0x50.
- * InitRgDispModel writes every one of these offsets; no size or member
- * beyond 0x50 is claimed.
+ * A displayable model: its local matrix, the mode flags above, the
+ * transparency and blight factors, and the per-instance display and destruct
+ * callbacks RgDispModelDisplay and DisposeRgDispModel call. No size or
+ * member beyond 0x50 is claimed.
  */
 struct RgDispModel {
     RgMatrix local;
@@ -32,5 +29,18 @@ struct RgDispModel {
     RgDispModelDispFunc dispMethod;
     RgDispModelDestructFunc destructMethod;
 };
+
+/* Functions and data used by other translation units. */
+void InitRgDispModel(RgDispModel *pDispModel);
+void DisposeRgDispModel(RgDispModel *pDispModel);
+void RgDispModelDisplay(RgDispModel *pDispModel);
+void RgDispModelSetMode(RgDispModel *pDispModel, int mode);
+void RgDispModelResetMode(RgDispModel *pDispModel, int mode);
+void RgDispModelSetLocal(RgDispModel *pDispModel, const RgMatrix source);
+void RgDispModelGetLocal(RgDispModel *pDispModel, RgMatrix destination);
+void RgDispModelSetTransparent(RgDispModel *pDispModel, float transparent);
+void RgDispModelSetBlight(RgDispModel *pDispModel, float blight);
+float RgDispModelGetTransparent(RgDispModel *pDispModel);
+RgDispModel *CreateXrgDispModelImpl(void *archive, const char *variant);
 
 #endif /* INCLUDE_OV12_RG_DISPMODEL_H */

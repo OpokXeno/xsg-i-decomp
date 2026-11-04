@@ -3,34 +3,15 @@
  */
 #include "common.h"
 #include "shared.h"
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
-                       int line);
-typedef struct XrgPaint2D XrgPaint2D;
-
-extern void XrgPaint2DUseTexture(XrgPaint2D *paint, void *pic);
-extern void XrgPaint2DAlpha(XrgPaint2D *paint, int blendMode);
-extern void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
-                               int width, int height);
-extern void XrgPadSetID(int padID);
-extern int XrgPadIsUp(void);
-extern int XrgPadIsDown(void);
-extern int XrgPadIsMaru(void);
-extern int XrgPadIsStart(void);
-extern void XrgSoundSystemCursor(void);
-extern void XrgSoundSystemOk(void);
-extern void XrgSoundSystemCancel(void);
-
-#define XRG_PAINT2D_MODE_USE_PIC_SIZE 0x20
-#define XRG_PAINT2D_BLEND_LINEAR 0
-#define XRG_PAINT2D_BLEND_ADD 1
+#include "ov12/assert_prog.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_title.h"
+#include "ov12/xrg_event.h"
+#include "ov12/xrg_pad.h"
+#include "ov12/xrg_paint2d.h"
+#include "ov12/xrg_sound.h"
 
 #define TITLE_BACKGROUND_COUNT 2
 #define TITLE_CURSOR_Y 176
@@ -40,64 +21,101 @@ extern void XrgSoundSystemCancel(void);
 #define TITLE_PI 3.1415927f
 #define TITLE_TWO_PI 6.2831855f
 
-const char D_00A57118[] = "pPaint != NIL";
-const char D_00A57128[] = "../rg_title.euc.c";
-const char D_00A57140[] = "pPic != NIL";
-const char D_00A57150[] = "pTitle != NIL";
-const char D_00A57160[] = "top_base.bxx";
-const char D_00A57170[] = "top_base_ag02.bxx";
-const char D_00A57188[] = "top_base_vx01.bxx";
-const char D_00A571A0[] = "top_title.bxx";
-const char D_00A571B0[] = "top_red.bxx";
-const char D_00A571C0[] = "top_b1h.bxx";
-const char D_00A571D0[] = "top_ve.bxx";
-const char D_00A571E0[] = "top_cur_1e.bxx";
-const char D_00A571F0[] = "top_cur_vh.bxx";
-const char D_00A57200[] = "bg.bmp";
-const char D_00A57208[] = "bg_ag02.bmp";
-const char D_00A57218[] = "bg_vx10.bmp";
-const char D_00A57228[] = "blue_e.bmp";
-const char D_00A57238[] = "red_ecpt.bmp";
-const char D_00A57248[] = "red_1p.bmp";
-const char D_00A57258[] = "red_exit.bmp";
-const char D_00A57268[] = "red_help.bmp";
-const char D_00A57278[] = "red_vs.bmp";
-const char D_00A57288[] = "sel_btn.bmp";
-const char D_00A57298[] = "sel_e1p.bmp";
-const char D_00A572A8[] = "sel_ehlp.bmp";
-const char D_00A572B8[] = "sel_evs.bmp";
-const char D_00A572C8[] = "sel_eext.bmp";
-const char D_00A572D8[] = "cannot find %d pic";
+/* Full brightness of a blend colour component, in the GS 0-0x80 scale. */
+#define TITLE_BRIGHTNESS_MAX 128
+#define TITLE_BRIGHTNESS_SHIFT 7
 
-/*
- * The blend color XrgPaint2DColor copies into a paint object with one
- * lqc2/sqc2 quadword (ov12:0x00a4bd7c/0x00a4bd80).  s_aCol's own bytes are
- * the words 0x80, 0x80, 0x80, 0x7F: full-range red/green/blue in the GS's
- * 0-0x80 fixed scale with alpha one unit short of it, the same per-component
- * integer layout RgPicColor documents for RgPicSetColor
- * (src/ov12/rg_piclist.h).
- */
-typedef struct XrgColor {
-    int r;
-    int g;
-    int b;
-    int a;
-} XrgColor;
+/* Values of RgTitle.menu_state. */
+enum {
+    TITLE_STATE_SELECT,
+    TITLE_STATE_DECIDED,
+    TITLE_STATE_FADE_OUT,
+    TITLE_STATE_DONE
+};
 
-extern void XrgPaint2DColor(XrgPaint2D *paint, const XrgColor *color);
-static XrgColor s_aCol = {128, 128, 128, 127};
+/* Values of RgTitle.cursor_id, in menu order. */
+enum {
+    TITLE_CURSOR_ONE_PLAYER,
+    TITLE_CURSOR_VERSUS,
+    TITLE_CURSOR_HELP,
+    TITLE_CURSOR_EXIT,
+    TITLE_CURSOR_COUNT
+};
 
-#include "rg_title.h"
+/* Seconds the decided and fade-out states last. */
+#define TITLE_DECIDED_TIME 1.0f
+#define TITLE_FADE_OUT_TIME 0.5f
 
-extern XrgPaint2D *CreateXrgPaint2D_sub(const char *source_file, int line);
-extern RgBxx *LoadRgBxx_sub(const char *filename, const char *archive_name,
-                            int mode);
-extern RgBxxPic *RgBxxGetPic(RgBxx *archive, const char *filename);
+/* Slots of RgTitle.bxx, named after the archives loaded. */
+enum {
+    TITLE_BXX_BASE,
+    TITLE_BXX_BASE_AG02,
+    TITLE_BXX_BASE_VX01,
+    TITLE_BXX_TITLE,
+    TITLE_BXX_RED,
+    TITLE_BXX_B1H,
+    TITLE_BXX_VE,
+    TITLE_BXX_CUR_1E,
+    TITLE_BXX_CUR_VH
+};
 
-typedef struct RgTitle RgTitle;
+/* Slots of RgTitle.pictures, named after the pictures looked up. */
+enum {
+    TITLE_PIC_BG,
+    TITLE_PIC_BG_AG02,
+    TITLE_PIC_BG_VX10,
+    TITLE_PIC_BLUE_E,
+    TITLE_PIC_RED_ECPT,
+    TITLE_PIC_SEL_BTN,
+    TITLE_PIC_SEL_E1P,
+    TITLE_PIC_SEL_EHLP,
+    TITLE_PIC_SEL_EVS,
+    TITLE_PIC_SEL_EEXT,
+    TITLE_PIC_RED_1P,
+    TITLE_PIC_RED_EXIT,
+    TITLE_PIC_RED_HELP,
+    TITLE_PIC_RED_VS
+};
+
 
 static void _InitTitle(RgTitle *pTitle, int count);
 static void _DestructTitle(RgTitle *pTitle);
+static void _disp_blight(float brightness);
+static void _disp_add_blight(XrgPaint2D *paint, RgBxxPic *picture, int x, int y,
+                             int brightness);
+
+const char titleAssertPaintNotNil[] = "pPaint != NIL";
+const char titleSourcePath[] = "../rg_title.euc.c";
+const char titleAssertPicNotNil[] = "pPic != NIL";
+const char titleAssertTitleNotNil[] = "pTitle != NIL";
+const char titleBaseBxxFileName[] = "top_base.bxx";
+const char titleBaseAg02BxxFileName[] = "top_base_ag02.bxx";
+const char titleBaseVx01BxxFileName[] = "top_base_vx01.bxx";
+const char titleTitleBxxFileName[] = "top_title.bxx";
+const char titleRedBxxFileName[] = "top_red.bxx";
+const char titleB1hBxxFileName[] = "top_b1h.bxx";
+const char titleVeBxxFileName[] = "top_ve.bxx";
+const char titleCursor1eBxxFileName[] = "top_cur_1e.bxx";
+const char titleCursorVhBxxFileName[] = "top_cur_vh.bxx";
+const char titleBackgroundPicName[] = "bg.bmp";
+const char titleBackgroundAg02PicName[] = "bg_ag02.bmp";
+const char titleBackgroundVx10PicName[] = "bg_vx10.bmp";
+const char titleBlueEnglishPicName[] = "blue_e.bmp";
+const char titleRedEcptPicName[] = "red_ecpt.bmp";
+const char titleRed1pPicName[] = "red_1p.bmp";
+const char titleRedExitPicName[] = "red_exit.bmp";
+const char titleRedHelpPicName[] = "red_help.bmp";
+const char titleRedVsPicName[] = "red_vs.bmp";
+const char titleSelectButtonPicName[] = "sel_btn.bmp";
+const char titleSelectEnglish1pPicName[] = "sel_e1p.bmp";
+const char titleSelectEnglishHelpPicName[] = "sel_ehlp.bmp";
+const char titleSelectEnglishVsPicName[] = "sel_evs.bmp";
+const char titleSelectEnglishExitPicName[] = "sel_eext.bmp";
+const char titleCannotFindPicFormat[] = "cannot find %d pic";
+
+/* The blend colour: full-range red, green and blue in the GS 0-0x80 scale,
+ * alpha one unit short of it. */
+static XrgPaint2DRGBA s_aCol = {128, 128, 128, 127};
 
 static void _disp_blight(float brightness)
 {
@@ -119,61 +137,61 @@ static void _disp_blight(float brightness)
     s_aCol.r = component;
 }
 
-static void _disp_normal(XrgPaint2D *pPaint, void *pPic, int x, int y)
+static void _disp_normal(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y)
 {
     if (pPaint == 0) {
-        assert_prog(D_00A57118, D_00A57128, 101);
+        assert_prog(titleAssertPaintNotNil, titleSourcePath, 101);
     }
     if (pPic == 0) {
-        assert_prog(D_00A57140, D_00A57128, 102);
+        assert_prog(titleAssertPicNotNil, titleSourcePath, 102);
     }
     XrgPaint2DUseTexture(pPaint, pPic);
     XrgPaint2DColor(pPaint, &s_aCol);
-    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
-static void _disp_linear(XrgPaint2D *pPaint, void *pPic, int x, int y)
+static void _disp_linear(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y)
 {
     if (pPaint == 0) {
-        assert_prog(D_00A57118, D_00A57128, 110);
+        assert_prog(titleAssertPaintNotNil, titleSourcePath, 110);
     }
     if (pPic == 0) {
-        assert_prog(D_00A57140, D_00A57128, 111);
+        assert_prog(titleAssertPicNotNil, titleSourcePath, 111);
     }
     XrgPaint2DUseTexture(pPaint, pPic);
     XrgPaint2DColor(pPaint, &s_aCol);
     XrgPaint2DAlpha(pPaint, XRG_PAINT2D_BLEND_LINEAR);
-    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
-static void _disp_add(XrgPaint2D *pPaint, void *pPic, int x, int y)
+static void _disp_add(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y)
 {
     if (pPaint == 0) {
-        assert_prog(D_00A57118, D_00A57128, 119);
+        assert_prog(titleAssertPaintNotNil, titleSourcePath, 119);
     }
     if (pPic == 0) {
-        assert_prog(D_00A57140, D_00A57128, 120);
+        assert_prog(titleAssertPicNotNil, titleSourcePath, 120);
     }
     XrgPaint2DUseTexture(pPaint, pPic);
     XrgPaint2DColor(pPaint, &s_aCol);
     XrgPaint2DAlpha(pPaint, XRG_PAINT2D_BLEND_ADD);
-    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
-static void _disp_add_blight(XrgPaint2D *pPaint, void *pPic, int x, int y,
+static void _disp_add_blight(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y,
                              int brightness)
 {
-    XrgColor color;
+    XrgPaint2DRGBA color;
     int maximum_brightness;
 
     if (pPaint == 0) {
-        assert_prog(D_00A57118, D_00A57128, 129);
+        assert_prog(titleAssertPaintNotNil, titleSourcePath, 129);
     }
     if (pPic == 0) {
-        assert_prog(D_00A57140, D_00A57128, 130);
+        assert_prog(titleAssertPicNotNil, titleSourcePath, 130);
     }
 
-    maximum_brightness = 128;
+    maximum_brightness = TITLE_BRIGHTNESS_MAX;
     if (brightness < 0) {
         brightness = 0;
     } else {
@@ -182,15 +200,15 @@ static void _disp_add_blight(XrgPaint2D *pPaint, void *pPic, int x, int y,
         }
     }
 
-    color.r = (s_aCol.r * brightness) >> 7;
-    color.g = (s_aCol.g * brightness) >> 7;
-    color.b = (s_aCol.b * brightness) >> 7;
-    color.a = (s_aCol.a * brightness) >> 7;
+    color.r = (s_aCol.r * brightness) >> TITLE_BRIGHTNESS_SHIFT;
+    color.g = (s_aCol.g * brightness) >> TITLE_BRIGHTNESS_SHIFT;
+    color.b = (s_aCol.b * brightness) >> TITLE_BRIGHTNESS_SHIFT;
+    color.a = (s_aCol.a * brightness) >> TITLE_BRIGHTNESS_SHIFT;
 
     XrgPaint2DUseTexture(pPaint, pPic);
     XrgPaint2DColor(pPaint, &color);
     XrgPaint2DAlpha(pPaint, XRG_PAINT2D_BLEND_ADD);
-    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
 static void _InitTitle(RgTitle *pTitle, int count)
@@ -198,70 +216,66 @@ static void _InitTitle(RgTitle *pTitle, int count)
     unsigned int picture_index;
 
     if (pTitle == 0) {
-        assert_prog(D_00A57150, D_00A57128, 147);
+        assert_prog(titleAssertTitleNotNil, titleSourcePath, 147);
     }
     pTitle->count = count;
     pTitle->cursor_id = 0;
     pTitle->menu_state = 0;
-    pTitle->paint = CreateXrgPaint2D_sub(D_00A57128, 153);
-    pTitle->bxx[0] = LoadRgBxx_sub(D_00A57160, D_00A57128, 155);
-    pTitle->bxx[1] = LoadRgBxx_sub(D_00A57170, D_00A57128, 156);
-    pTitle->bxx[2] = LoadRgBxx_sub(D_00A57188, D_00A57128, 157);
-    pTitle->bxx[3] = LoadRgBxx_sub(D_00A571A0, D_00A57128, 158);
-    pTitle->bxx[4] = LoadRgBxx_sub(D_00A571B0, D_00A57128, 159);
-    pTitle->bxx[5] = LoadRgBxx_sub(D_00A571C0, D_00A57128, 160);
-    pTitle->bxx[6] = LoadRgBxx_sub(D_00A571D0, D_00A57128, 161);
-    pTitle->bxx[7] = LoadRgBxx_sub(D_00A571E0, D_00A57128, 162);
-    pTitle->bxx[8] = LoadRgBxx_sub(D_00A571F0, D_00A57128, 163);
+    pTitle->paint = CreateXrgPaint2D_sub(titleSourcePath, 153);
+    pTitle->bxx[TITLE_BXX_BASE] = LoadRgBxx_sub(titleBaseBxxFileName, titleSourcePath, 155);
+    pTitle->bxx[TITLE_BXX_BASE_AG02] = LoadRgBxx_sub(titleBaseAg02BxxFileName, titleSourcePath, 156);
+    pTitle->bxx[TITLE_BXX_BASE_VX01] = LoadRgBxx_sub(titleBaseVx01BxxFileName, titleSourcePath, 157);
+    pTitle->bxx[TITLE_BXX_TITLE] = LoadRgBxx_sub(titleTitleBxxFileName, titleSourcePath, 158);
+    pTitle->bxx[TITLE_BXX_RED] = LoadRgBxx_sub(titleRedBxxFileName, titleSourcePath, 159);
+    pTitle->bxx[TITLE_BXX_B1H] = LoadRgBxx_sub(titleB1hBxxFileName, titleSourcePath, 160);
+    pTitle->bxx[TITLE_BXX_VE] = LoadRgBxx_sub(titleVeBxxFileName, titleSourcePath, 161);
+    pTitle->bxx[TITLE_BXX_CUR_1E] = LoadRgBxx_sub(titleCursor1eBxxFileName, titleSourcePath, 162);
+    pTitle->bxx[TITLE_BXX_CUR_VH] = LoadRgBxx_sub(titleCursorVhBxxFileName, titleSourcePath, 163);
 
-    pTitle->pictures[0] = RgBxxGetPic(pTitle->bxx[0], D_00A57200);
-    pTitle->pictures[1] = RgBxxGetPic(pTitle->bxx[1], D_00A57208);
-    pTitle->pictures[2] = RgBxxGetPic(pTitle->bxx[2], D_00A57218);
-    pTitle->pictures[3] = RgBxxGetPic(pTitle->bxx[3], D_00A57228);
-    pTitle->pictures[4] = RgBxxGetPic(pTitle->bxx[4], D_00A57238);
-    pTitle->pictures[10] = RgBxxGetPic(pTitle->bxx[7], D_00A57248);
-    pTitle->pictures[11] = RgBxxGetPic(pTitle->bxx[7], D_00A57258);
-    pTitle->pictures[12] = RgBxxGetPic(pTitle->bxx[8], D_00A57268);
-    pTitle->pictures[13] = RgBxxGetPic(pTitle->bxx[8], D_00A57278);
-    pTitle->pictures[5] = RgBxxGetPic(pTitle->bxx[5], D_00A57288);
-    pTitle->pictures[6] = RgBxxGetPic(pTitle->bxx[5], D_00A57298);
-    pTitle->pictures[7] = RgBxxGetPic(pTitle->bxx[5], D_00A572A8);
-    pTitle->pictures[8] = RgBxxGetPic(pTitle->bxx[6], D_00A572B8);
-    pTitle->pictures[9] = RgBxxGetPic(pTitle->bxx[6], D_00A572C8);
+    pTitle->pictures[TITLE_PIC_BG] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_BASE], titleBackgroundPicName);
+    pTitle->pictures[TITLE_PIC_BG_AG02] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_BASE_AG02], titleBackgroundAg02PicName);
+    pTitle->pictures[TITLE_PIC_BG_VX10] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_BASE_VX01], titleBackgroundVx10PicName);
+    pTitle->pictures[TITLE_PIC_BLUE_E] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_TITLE], titleBlueEnglishPicName);
+    pTitle->pictures[TITLE_PIC_RED_ECPT] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_RED], titleRedEcptPicName);
+    pTitle->pictures[TITLE_PIC_RED_1P] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_CUR_1E], titleRed1pPicName);
+    pTitle->pictures[TITLE_PIC_RED_EXIT] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_CUR_1E], titleRedExitPicName);
+    pTitle->pictures[TITLE_PIC_RED_HELP] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_CUR_VH], titleRedHelpPicName);
+    pTitle->pictures[TITLE_PIC_RED_VS] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_CUR_VH], titleRedVsPicName);
+    pTitle->pictures[TITLE_PIC_SEL_BTN] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_B1H], titleSelectButtonPicName);
+    pTitle->pictures[TITLE_PIC_SEL_E1P] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_B1H], titleSelectEnglish1pPicName);
+    pTitle->pictures[TITLE_PIC_SEL_EHLP] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_B1H], titleSelectEnglishHelpPicName);
+    pTitle->pictures[TITLE_PIC_SEL_EVS] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_VE], titleSelectEnglishVsPicName);
+    pTitle->pictures[TITLE_PIC_SEL_EEXT] = RgBxxGetPic(pTitle->bxx[TITLE_BXX_VE], titleSelectEnglishExitPicName);
 
-    for (picture_index = 0; picture_index < 14; picture_index++) {
+    for (picture_index = 0; picture_index < RG_TITLE_PICTURE_COUNT; picture_index++) {
         if (pTitle->pictures[picture_index] == 0) {
-            RgError(D_00A572D8, D_00A57128, 213, picture_index);
+            RgError(titleCannotFindPicFormat, titleSourcePath, 213, picture_index);
         }
     }
 }
 
-extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
-                                  int line);
-extern void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine);
-
 static void _DestructTitle(RgTitle *pTitle)
 {
     if (pTitle == 0) {
-        assert_prog(D_00A57150, D_00A57128, 218);
+        assert_prog(titleAssertTitleNotNil, titleSourcePath, 218);
     }
-    DisposeXrgPaint2D_sub(pTitle->paint, D_00A57128, 219);
-    DisposeRgBxx_sub(pTitle->bxx[0], D_00A57128, 221);
-    DisposeRgBxx_sub(pTitle->bxx[1], D_00A57128, 222);
-    DisposeRgBxx_sub(pTitle->bxx[2], D_00A57128, 223);
-    DisposeRgBxx_sub(pTitle->bxx[3], D_00A57128, 224);
-    DisposeRgBxx_sub(pTitle->bxx[4], D_00A57128, 225);
-    DisposeRgBxx_sub(pTitle->bxx[5], D_00A57128, 226);
-    DisposeRgBxx_sub(pTitle->bxx[6], D_00A57128, 227);
-    DisposeRgBxx_sub(pTitle->bxx[7], D_00A57128, 228);
-    DisposeRgBxx_sub(pTitle->bxx[8], D_00A57128, 229);
+    DisposeXrgPaint2D_sub(pTitle->paint, titleSourcePath, 219);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_BASE], titleSourcePath, 221);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_BASE_AG02], titleSourcePath, 222);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_BASE_VX01], titleSourcePath, 223);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_TITLE], titleSourcePath, 224);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_RED], titleSourcePath, 225);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_B1H], titleSourcePath, 226);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_VE], titleSourcePath, 227);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_CUR_1E], titleSourcePath, 228);
+    DisposeRgBxx_sub(pTitle->bxx[TITLE_BXX_CUR_VH], titleSourcePath, 229);
 }
 
 RgTitle *CreateRgTitle(int count)
 {
     RgTitle *pTitle;
 
-    pTitle = RgHeapAlloc(InstanceOfRgHeap(), 0x70, D_00A57128, 236);
+    pTitle = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgTitle), titleSourcePath, 236);
     _InitTitle(pTitle, count);
     return pTitle;
 }
@@ -269,80 +283,73 @@ RgTitle *CreateRgTitle(int count)
 void DisposeRgTitle(RgTitle *pTitle)
 {
     if (pTitle == 0) {
-        assert_prog(D_00A57150, D_00A57128, 244);
+        assert_prog(titleAssertTitleNotNil, titleSourcePath, 244);
     }
     _DestructTitle(pTitle);
-    RgHeapFree(InstanceOfRgHeap(), pTitle, D_00A57128, 246);
+    RgHeapFree(InstanceOfRgHeap(), pTitle, titleSourcePath, 246);
 }
 
-extern void RgError(const char *message, const char *source_file, int line, ...);
-extern int XrgPadIsSelectLevelLR(void);
-extern int XrgEventGetLevel(void);
-const char D_00A572F0[] = "unknown title cursor id %d";
+const char titleUnknownCursorIdFormat[] = "unknown title cursor id %d";
 static float s_fRot_0 = 0.0f;
 static int s_nID_1 = 0;
-extern void XrgPaint2DFlush(XrgPaint2D *paint);
-static void _disp_blight(float brightness);
-static void _disp_add_blight(XrgPaint2D *paint, void *picture, int x, int y,
-                             int brightness);
 
 int RgTitleGetResult(RgTitle *pTitle)
 {
     int cursor_id;
 
     if (pTitle == 0) {
-        assert_prog(D_00A57150, D_00A57128, 256);
+        assert_prog(titleAssertTitleNotNil, titleSourcePath, 256);
     }
 
-    if (pTitle->menu_state == 3) {
+    if (pTitle->menu_state == TITLE_STATE_DONE) {
         cursor_id = pTitle->cursor_id;
         switch ((unsigned int)cursor_id) {
-        case 1:
-            return 3;
-        case 0:
+        case TITLE_CURSOR_VERSUS:
+            return RG_TITLE_RESULT_VERSUS;
+        case TITLE_CURSOR_ONE_PLAYER:
             if (!XrgPadIsSelectLevelLR() || XrgEventGetLevel() < 2) {
-                return 1;
+                return RG_TITLE_RESULT_ONE_PLAYER;
             }
-            return 2;
-        case 2:
-            return 4;
-        case 3:
-            return 5;
+            return RG_TITLE_RESULT_ONE_PLAYER_LEVEL_SELECT;
+        case TITLE_CURSOR_HELP:
+            return RG_TITLE_RESULT_HELP;
+        case TITLE_CURSOR_EXIT:
+            return RG_TITLE_RESULT_EXIT;
         default:
-            RgError(D_00A572F0, D_00A57128, 274, cursor_id);
+            RgError(titleUnknownCursorIdFormat, titleSourcePath, 274, cursor_id);
             break;
         }
     }
-    return 0;
+    return RG_TITLE_RESULT_NONE;
 }
 
 void RgTitlePassTime(RgTitle *pTitle, float delta)
 {
     if (pTitle == 0) {
-        assert_prog(D_00A57150, D_00A57128, 287);
+        assert_prog(titleAssertTitleNotNil, titleSourcePath, 287);
     }
 
     XrgPadSetID(0);
 
-    if (pTitle->menu_state != 1) {
-        if (pTitle->menu_state != 0) {
-            if (pTitle->menu_state != 2) {
+    if (pTitle->menu_state != TITLE_STATE_DECIDED) {
+        if (pTitle->menu_state != TITLE_STATE_SELECT) {
+            if (pTitle->menu_state != TITLE_STATE_FADE_OUT) {
                 return;
             }
         } else {
-            if (XrgPadIsUp() != 0 && pTitle->cursor_id != 0) {
+            if (XrgPadIsUp() != 0 && pTitle->cursor_id != TITLE_CURSOR_ONE_PLAYER) {
                 pTitle->cursor_id--;
                 XrgSoundSystemCursor();
             }
-            if (XrgPadIsDown() != 0 && (unsigned int) pTitle->cursor_id < 3) {
+            if (XrgPadIsDown() != 0 && (unsigned int) pTitle->cursor_id < TITLE_CURSOR_EXIT) {
                 pTitle->cursor_id++;
                 XrgSoundSystemCursor();
             }
 
             if (XrgPadIsMaru() != 0 || XrgPadIsStart() != 0) {
-                pTitle->menu_state = 1;
-                pTitle->transition_time = 1.0f;
-                if (pTitle->cursor_id == 3) {
+                pTitle->menu_state = TITLE_STATE_DECIDED;
+                pTitle->transition_time = TITLE_DECIDED_TIME;
+                if (pTitle->cursor_id == TITLE_CURSOR_EXIT) {
                     XrgSoundSystemCancel();
                 } else {
                     XrgSoundSystemOk();
@@ -353,15 +360,15 @@ void RgTitlePassTime(RgTitle *pTitle, float delta)
     } else {
         pTitle->transition_time -= delta;
         if (pTitle->transition_time < 0.0f) {
-            pTitle->menu_state = 2;
-            pTitle->transition_time = 0.5f;
+            pTitle->menu_state = TITLE_STATE_FADE_OUT;
+            pTitle->transition_time = TITLE_FADE_OUT_TIME;
         }
         return;
     }
 
     pTitle->transition_time -= delta;
     if (pTitle->transition_time < 0.0f) {
-        pTitle->menu_state = 3;
+        pTitle->menu_state = TITLE_STATE_DONE;
     }
 }
 
@@ -372,12 +379,12 @@ void RgTitleDisp(RgTitle *pTitle)
     int highlight = 1;
 
     if (pTitle == 0) {
-        assert_prog(D_00A57150, D_00A57128, 333);
+        assert_prog(titleAssertTitleNotNil, titleSourcePath, 333);
     }
-    if (pTitle->menu_state == 3) {
+    if (pTitle->menu_state == TITLE_STATE_DONE) {
         return;
     }
-    if (pTitle->menu_state == 2) {
+    if (pTitle->menu_state == TITLE_STATE_FADE_OUT) {
         _disp_blight(pTitle->transition_time * 2.0f);
     } else {
         _disp_blight(1.0f);
@@ -385,10 +392,10 @@ void RgTitleDisp(RgTitle *pTitle)
 
     switch (pTitle->count % TITLE_BACKGROUND_COUNT) {
     case 0:
-        _disp_normal(pTitle->paint, pTitle->pictures[2], 0, 0);
+        _disp_normal(pTitle->paint, pTitle->pictures[TITLE_PIC_BG_VX10], 0, 0);
         break;
     case 1:
-        _disp_normal(pTitle->paint, pTitle->pictures[1], 0, 0);
+        _disp_normal(pTitle->paint, pTitle->pictures[TITLE_PIC_BG_AG02], 0, 0);
         break;
     }
 
@@ -403,41 +410,41 @@ void RgTitleDisp(RgTitle *pTitle)
         } while (rotation < -TITLE_PI);
     }
     s_fRot_0 = rotation;
-    _disp_add_blight(pTitle->paint, pTitle->pictures[4], 0, 0, glow);
-    _disp_add(pTitle->paint, pTitle->pictures[3], 0, 0);
+    _disp_add_blight(pTitle->paint, pTitle->pictures[TITLE_PIC_RED_ECPT], 0, 0, glow);
+    _disp_add(pTitle->paint, pTitle->pictures[TITLE_PIC_BLUE_E], 0, 0);
 
-    if ((unsigned int)(pTitle->menu_state - 1) < 2) {
+    if ((unsigned int)(pTitle->menu_state - TITLE_STATE_DECIDED) < 2) {
         s_nID_1++;
         highlight = s_nID_1 & 1;
     }
 
     switch ((unsigned int)pTitle->cursor_id) {
-    case 0:
-        _disp_linear(pTitle->paint, pTitle->pictures[6], 0, TITLE_CURSOR_Y);
+    case TITLE_CURSOR_ONE_PLAYER:
+        _disp_linear(pTitle->paint, pTitle->pictures[TITLE_PIC_SEL_E1P], 0, TITLE_CURSOR_Y);
         if (highlight) {
-            _disp_add(pTitle->paint, pTitle->pictures[10], 0, TITLE_CURSOR_Y);
+            _disp_add(pTitle->paint, pTitle->pictures[TITLE_PIC_RED_1P], 0, TITLE_CURSOR_Y);
         }
         break;
-    case 1:
-        _disp_linear(pTitle->paint, pTitle->pictures[8], 0, TITLE_CURSOR_Y);
+    case TITLE_CURSOR_VERSUS:
+        _disp_linear(pTitle->paint, pTitle->pictures[TITLE_PIC_SEL_EVS], 0, TITLE_CURSOR_Y);
         if (highlight) {
-            _disp_add(pTitle->paint, pTitle->pictures[13], 0, TITLE_CURSOR_Y);
+            _disp_add(pTitle->paint, pTitle->pictures[TITLE_PIC_RED_VS], 0, TITLE_CURSOR_Y);
         }
         break;
-    case 2:
-        _disp_linear(pTitle->paint, pTitle->pictures[7], 0, TITLE_CURSOR_Y);
+    case TITLE_CURSOR_HELP:
+        _disp_linear(pTitle->paint, pTitle->pictures[TITLE_PIC_SEL_EHLP], 0, TITLE_CURSOR_Y);
         if (highlight) {
-            _disp_add(pTitle->paint, pTitle->pictures[12], 0, TITLE_CURSOR_Y);
+            _disp_add(pTitle->paint, pTitle->pictures[TITLE_PIC_RED_HELP], 0, TITLE_CURSOR_Y);
         }
         break;
-    case 3:
-        _disp_linear(pTitle->paint, pTitle->pictures[9], 0, TITLE_CURSOR_Y);
+    case TITLE_CURSOR_EXIT:
+        _disp_linear(pTitle->paint, pTitle->pictures[TITLE_PIC_SEL_EEXT], 0, TITLE_CURSOR_Y);
         if (highlight) {
-            _disp_add(pTitle->paint, pTitle->pictures[11], 0, TITLE_CURSOR_Y);
+            _disp_add(pTitle->paint, pTitle->pictures[TITLE_PIC_RED_EXIT], 0, TITLE_CURSOR_Y);
         }
         break;
     default:
-        RgError(D_00A572F0, D_00A57128, 403, pTitle->cursor_id);
+        RgError(titleUnknownCursorIdFormat, titleSourcePath, 403, pTitle->cursor_id);
         break;
     }
     XrgPaint2DFlush(pTitle->paint);

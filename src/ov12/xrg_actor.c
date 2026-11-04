@@ -3,182 +3,257 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "xrg_actor.h"
+#include "main/act_1.h"
+#include "main/nml_model_set.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_actor_charid.h"
+#include "ov12/rg_actor_motid.h"
+#include "ov12/rg_battle_common_data.h"
+#include "ov12/rg_debug_flags.h"
 #include "ov12/rg_draw.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_filesys.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_light.h"
+#include "ov12/rg_matrices_effector.h"
+#include "ov12/rg_vector.h"
+#include "ov12/xrg_actor.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_v_log.h"
 
-const char D_00A587B0[48] = "_ActJntToAccID_sub joint=%d error(%s:%d)";
+/*
+ * main/act_2.h declares ACT_setMotion2 with three parameters, but the call
+ * sites in _SetMotionToXenoActorWithRgMotID pass the playback bits twice (a
+ * fourth argument), so this TU declares the ACT_ functions it uses itself.
+ */
+extern void ACT_initMotion(Actor *pXenoAct);
+extern void ACT_initExMotion(Actor *pXenoAct, unsigned int slot, void *motion);
+extern int ACT_jointGetAccessories(Actor *pXenoAct, int jntID);
+extern void ACT_updateMotion(Actor *pXenoAct);
+extern int ACT_modelDraw(Actor *pXenoAct);
+extern void ACT_setMotion2(Actor *pXenoAct, int motionId, int flags, int flagsAgain);
+extern void ACT_setArms(Actor *pChildXenoAct, Actor *pParentXenoAct,
+                        unsigned int accessoryId, int flags);
+extern void ACT_setModelWrapper(Actor *pXenoAct, int flags);
+extern void ACT_resetParent(Actor *pChildXenoAct, Actor *pParentXenoAct);
+extern void ACT_setHumanHand(Actor *pXenoAct, int hand);
 
-const char D_00A587E0[24] = "../xrg_actor.euc.c";
+/* Numbers of the original tables and limits. */
+#define XENO_DAT_COUNT 25
+#define RAW_JNT_DATA_COUNT 12
+#define RAW_JNT_ROOT_INDEX 32 /* jointMap entry that roots a constraint effector */
+#define RAW_JNT_TOP_INDEX 33  /* jointMap entry that tops it, and roots a combine effector */
+#define XRG_ACTOR_MAX_JOINT_ELEMENTS 64
+#define XRG_ACTOR_EFFECT_LIMIT 4 /* live effectors a bank accepts */
+#define XRG_ACTOR_MODEL_FILE_COUNT 3 /* .xtx, .lex and .jnt of a model */
+#define XRG_ACTOR_FILE_NAME_SIZE 64  /* stride of XrgActorEssenceGetFileName's name buffer */
 
-const char D_00A587F8[16] = "pXenoAct != NIL";
+/* Actor.animation.slot.flags: the motion has played to its end. */
+#define XRG_MOTION_FLAG_ENDED 0x1000
 
-const char D_00A58978[40] = "joint id error (jnt:%d elm:%d)\nat %s %d";
+/* Actor.flags: dropping the weapon also hides the actor. */
+#define XRG_ACTOR_FLAGS_DROP_WEAPON 0x408
 
-const char D_00A589A0[24] = "pJnt->numElement > 1";
+/* Actor.drawEnv.flags bits the setters raise. */
+#define XRG_DRAWENV_TRANSPARENT 0x3
+#define XRG_DRAWENV_LIGHT_COST 0x40
+#define XRG_DRAWENV_HIDDEN 0x100
 
-/* The two diagnostics share a 48-byte pool, with the second starting at +16. */
-const struct {
-    char actorNotNil[16];
-    char parentMatrixList[32];
-} D_00A589C8 = {
-    "pActor != NIL",
-    "parent mat list nul (char %d)"
-};
+/* Actor.shadow_kind/shadowSize and drawEnv.renderLevel pairs. */
+#define XRG_ACTOR_SHADOW_KIND 7
+#define XRG_ACTOR_SHADOW_SIZE 0x30
+#define XRG_ACTOR_LIGHT_COST_SHADOW_KIND 9
+#define XRG_ACTOR_LIGHT_COST_SHADOW_SIZE 0x70
+#define XRG_ACTOR_LIGHT_COST_RENDER_LEVEL 0x12
 
-const char D_00A58A30[32] = "pActor != NIL && pChild != NIL";
+/* GS ALPHA register value (Cs - Cd) * As + Cd that XrgActorSetTransparent stores. */
+#define XRG_ACTOR_BLEND_ALPHA 0x44
 
-const char D_00A58A50[72] = "RG_ACTOR_JNT_LEFT_HAND <= (eJntID) && (eJntID) < RG_ACTOR_JNT_MAX";
+/* nmlModelSetRenderLevel level _ActorDrawFunction raises a child actor to. */
+#define XRG_ACTOR_CHILD_RENDER_LEVEL 0x10
 
-const char D_00A58AC8[24] = "pSrcActor != NIL";
+/* ACT_setMotion2 id flag of the weapon's motion bank (RgMotID from RG_MOT_WEAPON_BASE up). */
+#define XRG_ACT_MOTION_ID_EXTENDED 0x100
 
-const char D_00A58AE0[32] = "pActor->m_pXenoAct != NIL";
+/* ACT_setMotion2 playback bits built from smoothPlay and loopPlay. */
+#define XRG_PLAY_SMOOTH 1
+#define XRG_PLAY_LOOP 8
 
-const char D_00A58B00[16] = "pEss != NIL";
-
-const char D_00A58B40[16] = "pDup != NIL";
-
-const char D_00A58B50[24] = "pNewParent != NIL";
-
-const char D_00A58BC0[32] = "cannot delete %p from %p\n";
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-/* Assertion and source-file strings retain their scaffold names. */
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss);
-void _DupXenoActor(XrgActor *pDup, XrgActor *pActor);
-extern void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int attachID);
-void _SetMotUseXenoActor(XrgActor *pActor, int motion);
-extern int _IsEndOfMotUseXenoActor(XrgActor *pActor);
-/* ACT_* animation module (main), config/symbols/main.txt. */
-extern void ACT_initMotion(XenoAct *pXenoAct);
-extern void ACT_initExMotion(XenoAct *pXenoAct, int useExtended, int weaponMotion);
-extern void *InstanceOfRgBattleCommonData(void);
-extern int RgBattleCommonDataGetWeaponMot(void *battleCommonData);
-
-/* The 21-entry table _ActJntToAccID_sub indexes; s_aJntIDToAccID_0
- * (config/symbols/ov12.txt) is 0x54 bytes, i.e. 21 ints. */
-static int s_aJntIDToAccID_0[21] = {
-    0x18, 0x20, 0x19, 0x21, 0x1A, 0x22, 0x1B, 0x23,
-    0, 1, 2, 3, 4, 5, 6, 7, 0x11, 0x12, 0x0F, 0x10, 0x17
-};
-
-extern void RgError(const char *message, const char *source_file, int line, ...);
-
-int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line)
-{
-    if ((unsigned int) jntID >= 21) {
-        RgError(D_00A587B0, D_00A587E0, 62, jntID, sourceFile, line);
-    }
-    return s_aJntIDToAccID_0[jntID];
-}
-
-int XrgActorJntIDtoAccID(int jntID)
-{
-    return _ActJntToAccID_sub(jntID, D_00A587E0, 71);
-}
-
-/* Returns the joint's accessory entry (accessories[jntID]) or the default. */
-extern void *ACT_jointGetAccessories(XenoAct *pXenoAct, int jntID);
-
-void *_AccIDToJoint(XenoAct *pXenoAct, int jntID)
-{
-    if (pXenoAct == 0) {
-        assert_prog(D_00A587F8, D_00A587E0, 78);
-    }
-    return ACT_jointGetAccessories(pXenoAct, jntID);
-}
-
-extern int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line);
-
-void *_ActJntToJoint(XenoAct *pXenoAct, int jntID)
-{
-    if (pXenoAct == 0) {
-        assert_prog(D_00A587F8, D_00A587E0, 86);
-    }
-    return _AccIDToJoint(pXenoAct, _ActJntToAccID_sub(jntID, D_00A587E0, 87));
-}
+/* ACT_initExMotion slots. */
+#define XRG_EX_MOTION_SLOT_ACTOR 0
+#define XRG_EX_MOTION_SLOT_WEAPON 1
 
 typedef struct XenoDatEntry {
     int charID;                     /* 0x00 */
-    const char *m_pszMdlName;       /* 0x04: model file name ACT_create loads */
+    int modelID;                    /* 0x04: the model id ACT_create loads (0x2001, 0x2105, ...) */
     const char *m_pszOptFile;       /* 0x08: optional name XrgActorEssenceGetFileName appends as the fourth entry */
     const char *m_pszFileBase;      /* 0x0C: base name XrgActorEssenceGetFileName copies when the essence has none;
-                                       its assert text (D_00A58B20) calls it m_pszMdlName */
+                                       its assert text (actorAssertEntryModelNameNotNil) calls it m_pszMdlName */
 } XenoDatEntry;
 
-extern XenoDatEntry s_aDatTbl_1[25];
-/* ov12:0x00a58958 "invalid actor char ID = %d" */
-extern const char D_00A58958[];
-extern void RgWarn(const char *format, const char *source_file, int line, ...);
-
-/* Returns the table entry for charID, or warns and returns 0. */
-XenoDatEntry *_GetXenoDatEntry(int charID)
-{
-    unsigned int i;
-
-    for (i = 0; i < 25; i++) {
-        if (s_aDatTbl_1[i].charID == charID) {
-            return &s_aDatTbl_1[i];
-        }
-    }
-    RgWarn(D_00A58958, D_00A587E0, 168, charID);
-    return 0;
-}
-
-extern int RgHeapIsInvalidMemory(RgHeap *heap, void *ptr);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file, int line);
-/* ov12:0x00a58b68 "already disposed XrgActor %p" */
-extern const char D_00A58B68[];
-void _DisposeUseXenoActor(XrgActor *pActor);
-extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *sourceFile, int line);
-extern void DisposeRgVector(void *pVector, const char *sourceFile, int line);
-extern void DisposeRgMatricesEffector(struct MatrixEffector *pEffector);
-extern void ACT_dispose(XenoAct *pXenoAct);
-/* XrgUnitMatrix (ov12/rg_geom_poly.h) and XrgMulMatrix (ov12/rg_matrices_effector.h) are not included here. */
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
-
 /*
- * The joint/skeleton data blob XenoAct.jointData points to: only the
- * element count _InitSkeMani reads back is named here.
+ * The joint/skeleton data blob Actor.move points to: only the element count
+ * _InitSkeMani reads back is named here.
  */
 typedef struct SkeJointData {
     unsigned char unmodeled_00[6];
     unsigned short numElement; /* 0x06 */
 } SkeJointData;
 
-/*
- * The skeleton-manipulator record _InitSkeMani fills: a small get/set
- * dispatch pair plus the joint data and element index it is bound to.
+/* Each record begins with its actor/joint key, followed by the original
+ * signed joint-remapping payload. The payload uses -1 as its list terminator.
  */
-typedef struct SkeMani {
-    void (*get)(struct SkeMani *mani, RgMatrix matrix); /* 0x00: joint matrix out */
-    void (*set)(struct SkeMani *mani, RgMatrix matrix); /* 0x04: joint matrix in */
-    XenoAct *pXenoAct;  /* 0x08: NULL when this manipulator has no joint data */
-    int elementIndex;    /* 0x0C: only set together with pXenoAct */
-} SkeMani;
+typedef struct XrgRawJntData {
+    int id;
+    int jntID;
+    int jointMap[RAW_JNT_TOP_INDEX + 1];
+} XrgRawJntData;
 
-/* * Copies the manipulator's joint matrix into matrix, translation column * dropped. A clear renderLevelFlag also multiplies it by the element-0 * matrix (translation dropped too). */ void _SkeManiGet(SkeMani *mani, RgMatrix matrix);
-/* * Stores the manipulator's matrix (translation column dropped) into the * joint matrix block element. A clear renderLevelFlag first premultiplies * matrix by the inverse of the element-0 base matrix (translation dropped). */ void _SkeManiSet(SkeMani *mani, RgMatrix matrix);
+/* Other translation units. */
+
+/* ACT_* animation module (main), config/symbols/main.txt. */
+
+/* Scaffold-owned data: the joint table, the actor-data table and its strings. */
+extern XenoDatEntry s_aDatTbl_1[XENO_DAT_COUNT];
+extern const char actorInvalidCharIdFormat[]; /* "invalid actor char ID = %d" */
+extern const char actorAlreadyDisposedFormat[]; /* "already disposed XrgActor %p" */
+extern const char actorOver32JointText[];
+extern const char actorCharEffectErrorFormat[];
+extern int nKataJnt_2;
+extern const char actorPakaPakaLogFormat[]; /* "actor %p Pakapaka %s -> %d : paka base %d" */
+extern const char actorPakaPakaLogThree[]; /* "3\n" */
+extern const char actorPakaPakaLogFour[]; /* "4\n" */
+extern const char actorAssertActorAndWeaponNotNil[];
+extern const char actorAssertEffectNotNil[];
+extern const char actorEffectJointLogFormat[];
+extern const char actorAssertEffectTypeInRange[];
+extern const char actorAssertEffectCountBelowFour[];
+extern const char actorAssertWeaponNotNil[];
+
+/* Prototypes of functions used before their definition. */
+void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss);
+void _DupXenoActor(XrgActor *pDup, XrgActor *pActor);
+void _SetMotUseXenoActor(XrgActor *pActor, int motion);
+int _IsEndOfMotUseXenoActor(XrgActor *pActor);
+void _DisposeUseXenoActor(XrgActor *pActor);
+void _SkeManiGet(SkeMani *mani, RgMatrix matrix);
+void _SkeManiSet(SkeMani *mani, RgMatrix matrix);
+void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName);
+void _InitXenoActor(XrgActor *pActor);
+void _InitAfterLoadXenoActor(XrgActor *pActor);
+void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID);
+void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild);
+void _DrawActor(void *pObject, RgDrawStudio *pStudio);
+void _PassTime(XrgActor *pActor, float dt);
+int _GetPakaPakaBaseJnt(int charID, int attachID);
+
+const char actorJointToAccIdErrorFormat[48] = "_ActJntToAccID_sub joint=%d error(%s:%d)";
+
+const char actorSourcePath[24] = "../xrg_actor.euc.c";
+
+const char actorAssertXenoActNotNil[16] = "pXenoAct != NIL";
+
+const char actorJointIdErrorFormat[40] = "joint id error (jnt:%d elm:%d)\nat %s %d";
+
+const char actorAssertJointHasMultipleElements[24] = "pJnt->numElement > 1";
+
+/* The two diagnostics share a 48-byte pool, with the second starting at +16. */
+const struct {
+    char actorNotNil[16];
+    char parentMatrixList[32];
+} actorAssertTexts = {
+    "pActor != NIL",
+    "parent mat list nul (char %d)"
+};
+
+const char actorAssertActorAndChildNotNil[32] = "pActor != NIL && pChild != NIL";
+
+const char actorAssertJointIdInRange[72] = "RG_ACTOR_JNT_LEFT_HAND <= (eJntID) && (eJntID) < RG_ACTOR_JNT_MAX";
+
+const char actorAssertSrcActorNotNil[24] = "pSrcActor != NIL";
+
+const char actorAssertActorXenoActNotNil[32] = "pActor->m_pXenoAct != NIL";
+
+const char actorAssertEssenceNotNil[16] = "pEss != NIL";
+
+const char actorAssertDupNotNil[16] = "pDup != NIL";
+
+const char actorAssertNewParentNotNil[24] = "pNewParent != NIL";
+
+const char actorCannotDeleteChildFormat[32] = "cannot delete %p from %p\n";
+
+
+/* The table _ActJntToAccID_sub indexes: one accessory id per joint id. */
+static int s_aJntIDToAccID_0[RG_ACTOR_JNT_MAX] = {
+    0x18, 0x20, 0x19, 0x21, 0x1A, 0x22, 0x1B, 0x23,
+    0, 1, 2, 3, 4, 5, 6, 7, 0x11, 0x12, 0x0F, 0x10, 0x17
+};
+
+
+int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line)
+{
+    if ((unsigned int) jntID >= RG_ACTOR_JNT_MAX) {
+        RgError(actorJointToAccIdErrorFormat, actorSourcePath, 62, jntID, sourceFile, line);
+    }
+    return s_aJntIDToAccID_0[jntID];
+}
+
+int XrgActorJntIDtoAccID(int jntID)
+{
+    return _ActJntToAccID_sub(jntID, actorSourcePath, 71);
+}
+
+/* Returns the joint's accessory entry (accessories[jntID]) or the default. */
+
+int _AccIDToJoint(Actor *pXenoAct, int jntID)
+{
+    if (pXenoAct == 0) {
+        assert_prog(actorAssertXenoActNotNil, actorSourcePath, 78);
+    }
+    return ACT_jointGetAccessories(pXenoAct, jntID);
+}
+
+
+int _ActJntToJoint(Actor *pXenoAct, int jntID)
+{
+    if (pXenoAct == 0) {
+        assert_prog(actorAssertXenoActNotNil, actorSourcePath, 86);
+    }
+    return _AccIDToJoint(pXenoAct, _ActJntToAccID_sub(jntID, actorSourcePath, 87));
+}
+
+
+/* Returns the table entry for charID, or warns and returns 0. */
+XenoDatEntry *_GetXenoDatEntry(int charID)
+{
+    unsigned int i;
+
+    for (i = 0; i < XENO_DAT_COUNT; i++) {
+        if (s_aDatTbl_1[i].charID == charID) {
+            return &s_aDatTbl_1[i];
+        }
+    }
+    RgWarn(actorInvalidCharIdFormat, actorSourcePath, 168, charID);
+    return 0;
+}
+
+
 
 /*
  * Copies the manipulator's joint matrix into matrix, translation column
- * dropped. A clear renderLevelFlag also multiplies it by the element-0
+ * dropped. A manipulator whose actor has no parent also multiplies it by the element-0
  * matrix (translation dropped too).
  */
 void _SkeManiGet(SkeMani *mani, RgMatrix matrix)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
     RgMatrix *jointMatrices;
     RgMatrix tmp;
 
     pXenoAct = mani->pXenoAct;
     if (pXenoAct != 0) {
         jointMatrices = pXenoAct->jointMatrices;
-        if (pXenoAct->renderLevelFlag != 0) {
+        if (pXenoAct->parent != 0) {
             XrgCopyMatrix(matrix, jointMatrices[mani->elementIndex]);
             matrix[3] = 0.0f;
             matrix[7] = 0.0f;
@@ -201,12 +276,12 @@ void _SkeManiGet(SkeMani *mani, RgMatrix matrix)
 
 /*
  * Stores the manipulator's matrix (translation column dropped) into the
- * joint matrix block element. A clear renderLevelFlag first premultiplies
+ * joint matrix block element. A manipulator whose actor has no parent first premultiplies
  * matrix by the inverse of the element-0 base matrix (translation dropped).
  */
 void _SkeManiSet(SkeMani *mani, RgMatrix matrix)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
     RgMatrix *jointMatrices;
     RgMatrix tmp;
     int elementIndex;
@@ -217,7 +292,7 @@ void _SkeManiSet(SkeMani *mani, RgMatrix matrix)
     if (pXenoAct != 0) {
         elementIndex = mani->elementIndex;
         jointMatrices = pXenoAct->jointMatrices;
-        if (pXenoAct->renderLevelFlag == 0) {
+        if (pXenoAct->parent == 0) {
             XrgCopyMatrix(tmp, jointMatrices[0]);
             tmp[3] = 0.0f;
             tmp[7] = 0.0f;
@@ -233,7 +308,7 @@ void _SkeManiSet(SkeMani *mani, RgMatrix matrix)
     }
 }
 
-int _InitSkeMani(SkeMani *pMani, XenoAct *pXenoAct, int elmID,
+int _InitSkeMani(SkeMani *pMani, Actor *pXenoAct, int elmID,
                  const char *sourceFile, int line)
 {
     int result;
@@ -243,69 +318,69 @@ int _InitSkeMani(SkeMani *pMani, XenoAct *pXenoAct, int elmID,
     pMani->get = _SkeManiGet;
     pMani->set = _SkeManiSet;
     if (pXenoAct != 0) {
-        pJointData = pXenoAct->jointData;
+        pJointData = pXenoAct->move;
         result = 0;
         if (elmID > 0) {
             numElement = pJointData->numElement;
-            if (elmID >= (int) numElement) {
-                RgWarn(D_00A58978, D_00A587E0, 256, elmID, numElement, sourceFile, line);
+            if (elmID >= numElement) {
+                RgWarn(actorJointIdErrorFormat, actorSourcePath, 256, elmID, numElement, sourceFile, line);
                 if (pJointData->numElement < 2) {
-                    assert_prog(D_00A589A0, D_00A587E0, 257);
+                    assert_prog(actorAssertJointHasMultipleElements, actorSourcePath, 257);
                 }
                 elmID = 1;
             }
             pMani->pXenoAct = pXenoAct;
             pMani->elementIndex = elmID;
-            goto done;
+            goto bound;
         }
     } else {
         pMani->pXenoAct = 0;
-      done:
+      bound:
         result = 1;
     }
     return result;
 }
 
-const char D_00A589B8[16] = "pUnit != NIL";
+const char actorAssertUnitNotNil[16] = "pUnit != NIL";
 
 /*
  * Allocates a SkeMani record and binds it to pXenoAct's element elmID through
  * _InitSkeMani; the record is freed and NULL returned when the binding fails.
  */
-SkeMani *_CreateSkeMani_sub(XenoAct *pXenoAct, int elmID, const char *sourceFile,
+SkeMani *_CreateSkeMani_sub(Actor *pXenoAct, int elmID, const char *sourceFile,
                             int line)
 {
     SkeMani *pMani;
 
     pMani = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SkeMani), sourceFile, line);
     if (pMani == 0) {
-        assert_prog(D_00A589B8, D_00A587E0, 272);
+        assert_prog(actorAssertUnitNotNil, actorSourcePath, 272);
     }
     if (_InitSkeMani(pMani, pXenoAct, elmID, sourceFile, line) == 0) {
-        RgHeapFree(InstanceOfRgHeap(), pMani, D_00A587E0, 274);
+        RgHeapFree(InstanceOfRgHeap(), pMani, actorSourcePath, 274);
         return 0;
     }
     return pMani;
 }
 
-const char D_00A58B10[16] = "pEntry != NIL";
+const char actorAssertEntryNotNil[16] = "pEntry != NIL";
 
-SkeMani *_CreateAccMani_sub(XenoAct *pXenoAct, int jntID, const char *sourceFile, int line)
+SkeMani *_CreateAccMani_sub(Actor *pXenoAct, int jntID, const char *sourceFile, int line)
 {
     SkeMani *pMani;
 
-    pMani = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SkeMani), D_00A587E0, 285);
+    pMani = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SkeMani), actorSourcePath, 285);
     if (pMani == 0) {
-        assert_prog(D_00A589B8, D_00A587E0, 286);
+        assert_prog(actorAssertUnitNotNil, actorSourcePath, 286);
     }
     if (pXenoAct != 0) {
-        if (_InitSkeMani(pMani, pXenoAct, (int) _AccIDToJoint(pXenoAct, jntID), sourceFile, line) == 0) {
-            RgHeapFree(InstanceOfRgHeap(), pMani, D_00A587E0, 291);
+        if (_InitSkeMani(pMani, pXenoAct, _AccIDToJoint(pXenoAct, jntID), sourceFile, line) == 0) {
+            RgHeapFree(InstanceOfRgHeap(), pMani, actorSourcePath, 291);
             return 0;
         }
     } else {
         if (_InitSkeMani(pMani, 0, 0, sourceFile, line) == 0) {
-            RgHeapFree(InstanceOfRgHeap(), pMani, D_00A587E0, 296);
+            RgHeapFree(InstanceOfRgHeap(), pMani, actorSourcePath, 296);
             return 0;
         }
     }
@@ -318,27 +393,27 @@ void _DisposeUseXenoActor(XrgActor *pActor)
     unsigned int j;
 
     if (pActor->resourceFiles[0] != 0) {
-        DisposeRgFileSysData_sub(pActor->resourceFiles[0], D_00A587E0, 321);
+        DisposeRgFileSysData_sub(pActor->resourceFiles[0], actorSourcePath, 321);
     }
     if (pActor->resourceFiles[1] != 0) {
-        DisposeRgFileSysData_sub(pActor->resourceFiles[1], D_00A587E0, 323);
+        DisposeRgFileSysData_sub(pActor->resourceFiles[1], actorSourcePath, 323);
     }
     if (pActor->resourceFiles[2] != 0) {
-        DisposeRgFileSysData_sub(pActor->resourceFiles[2], D_00A587E0, 325);
+        DisposeRgFileSysData_sub(pActor->resourceFiles[2], actorSourcePath, 325);
     }
     if (pActor->resourceFiles[3] != 0) {
-        DisposeRgFileSysData_sub(pActor->resourceFiles[3], D_00A587E0, 327);
+        DisposeRgFileSysData_sub(pActor->resourceFiles[3], actorSourcePath, 327);
     }
     if (pActor->pXenoAct != 0) {
         ACT_dispose(pActor->pXenoAct);
     }
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < XRG_ACTOR_EFFECT_BANKS; i++) {
         for (j = 0; j < pActor->effectorCount[i]; j++) {
             DisposeRgMatricesEffector(pActor->effector[i][j]);
         }
         pActor->effectorCount[i] = 0;
     }
-    DisposeRgVector(pActor->children, D_00A587E0, 340);
+    DisposeRgVector(pActor->children, actorSourcePath, 340);
     pActor->children = 0;
 }
 
@@ -378,23 +453,17 @@ static void _store_matrix(RgMatrix dst, const RgMatrix src)
     dst[15] = m33;
 }
 
-extern void ACT_updateMotion(XenoAct *pXenoAct);
-extern double atan2(double y, double x);
-extern void RgMatricesEffectorJob(struct MatrixEffector *pEffector);
-extern const char D_00A589F8[];
-extern const char D_00A58A10[];
-extern int D_00A5ACE4;
 
 void _PassTime(XrgActor *pActor, float dt)
 {
-    RgMatrix locals[64];
+    RgMatrix locals[XRG_ACTOR_MAX_JOINT_ELEMENTS];
     RgMatrix a;
     RgMatrix b;
     RgMatrix c;
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
     XrgActor *pParent;
-    XenoAct *pParentAct;
-    void *pJntData;
+    Actor *pParentAct;
+    SkeJointData *pJntData;
     RgMatrix *pOwnMatrices;
     float *pRoot;
     RgMatrix *pParentMatrices;
@@ -405,7 +474,7 @@ void _PassTime(XrgActor *pActor, float dt)
     const float frameTime = 1.0f / 30.0f;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 371);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 371);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
@@ -414,10 +483,10 @@ void _PassTime(XrgActor *pActor, float dt)
     pParent = pActor->parent;
     if (pParent == 0) {
         pParentAct = 0;
-        pXenoAct->position[0] = pActor->local[12];
-        pXenoAct->position[1] = pActor->local[13] - 1.5f;
-        pXenoAct->position[2] = pActor->local[14];
-        pXenoAct->rotationY = atan2(-pActor->local[8], -pActor->local[10]);
+        pXenoAct->position.x = pActor->local[12];
+        pXenoAct->position.y = pActor->local[13] - 1.5f;
+        pXenoAct->position.z = pActor->local[14];
+        pXenoAct->rotation.y = atan2(-pActor->local[8], -pActor->local[10]);
     } else {
         pParentAct = pParent->pXenoAct;
     }
@@ -425,35 +494,35 @@ void _PassTime(XrgActor *pActor, float dt)
         step = pActor->motionComaStepAccum + dt;
         pActor->motionComaStepAccum = step;
         if (!(frameTime <= step)) {
-            pXenoAct->motion.step = 0.0f;
+            pXenoAct->animation.slot.speed = 0.0f;
         } else {
             pActor->motionComaStepAccum = step - frameTime;
-            pXenoAct->motion.step = frameTime;
+            pXenoAct->animation.slot.speed = frameTime;
         }
     } else {
-        pXenoAct->motion.step = dt;
+        pXenoAct->animation.slot.speed = dt;
     }
     ACT_updateMotion(pXenoAct);
     if (pActor->pakaPaka != 0 && pParentAct != 0) {
-        D_00A5ACE4 = pActor->pakaBaseJnt;
-        pJntData = pXenoAct->jointData;
+        nKataJnt_2 = pActor->pakaBaseJnt;
+        pJntData = pXenoAct->move;
         pOwnMatrices = pXenoAct->jointMatrices;
         pParentMatrices = pParentAct->jointMatrices;
         if (pJntData != 0 && pParentMatrices != 0 && pOwnMatrices != 0) {
             pRoot = pOwnMatrices[1];
             _ActJntToJoint(pParentAct, pActor->attachID);
-            if (pActor->unmodeled_160 == 0) {
+            if (pActor->pakaBaseMatrixSet == 0) {
                 _copy_matrix(b, pParentMatrices[0]);
-                _copy_matrix(a, pParentMatrices[D_00A5ACE4]);
+                _copy_matrix(a, pParentMatrices[nKataJnt_2]);
                 XrgMulMatrix(a, b, a);
                 _copy_matrix(b, pRoot);
                 XrgInvMatrix(c, a);
                 XrgMulMatrix(pActor->pakaBaseMatrix, c, b);
-                pActor->unmodeled_160 = 1;
+                pActor->pakaBaseMatrixSet = 1;
             }
-            numElement = *(unsigned short *) ((char *) pJntData + 6);
-            if (numElement >= 65) {
-                RgWarn(D_00A589F8, D_00A587E0, 456);
+            numElement = pJntData->numElement;
+            if (numElement > XRG_ACTOR_MAX_JOINT_ELEMENTS) {
+                RgWarn(actorOver32JointText, actorSourcePath, 456);
             }
             _copy_matrix(a, pRoot);
             XrgInvMatrix(c, a);
@@ -462,7 +531,7 @@ void _PassTime(XrgActor *pActor, float dt)
                 XrgMulMatrix(locals[i], c, a);
             }
             _copy_matrix(b, pParentMatrices[0]);
-            _copy_matrix(a, pParentMatrices[D_00A5ACE4]);
+            _copy_matrix(a, pParentMatrices[nKataJnt_2]);
             XrgMulMatrix(b, b, a);
             XrgMulMatrix(b, b, pActor->pakaBaseMatrix);
             for (i = 1; i < numElement; i++) {
@@ -471,67 +540,59 @@ void _PassTime(XrgActor *pActor, float dt)
             }
         }
     }
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < XRG_ACTOR_EFFECT_BANKS; i++) {
         for (j = 0; j < pActor->effectorCount[i]; j++) {
             if (pActor->effector[i][j] != 0) {
                 RgMatricesEffectorJob(pActor->effector[i][j]);
             } else {
-                RgWarn(D_00A58A10, D_00A587E0, 487, pActor->charID, i, j);
+                RgWarn(actorCharEffectErrorFormat, actorSourcePath, 487, pActor->charID, i, j);
             }
         }
     }
 }
 
-#include "ov12/rg_debug_flags.h"
-
-extern RgDebugFlags *InstanceOfRgDebugFlags(void);
-extern void nmlModelSetFogCol(float *);
-extern void nmlModelSetFogDist(float, float, float, float);
-extern void nmlModelSetRenderLevel(int);
 
 RgFog *s_pUseFog = 0;
 
-void _ActorDrawFunction(XenoAct *pXenoAct)
+void _ActorDrawFunction(Actor *pXenoAct)
 {
     RgFog *pFog;
-    float color[3];
+    Vector4 color;
 
     if (InstanceOfRgDebugFlags()->flags[2] != 0) {
         pFog = s_pUseFog;
         if (pFog != 0) {
-            color[0] = pFog->color[0];
-            color[1] = pFog->color[1];
-            color[2] = pFog->color[2];
-            nmlModelSetFogCol(color);
+            color.x = pFog->color[0];
+            color.y = pFog->color[1];
+            color.z = pFog->color[2];
+            nmlModelSetFogCol(&color);
             nmlModelSetFogDist(pFog->dist[0], pFog->dist[1], pFog->dist[2], pFog->dist[3]);
-            if (pXenoAct->renderLevelFlag != 0) {
-                nmlModelSetRenderLevel(0x10);
+            if (pXenoAct->parent != 0) {
+                nmlModelSetRenderLevel(XRG_ACTOR_CHILD_RENDER_LEVEL);
             }
         }
     }
 }
 
-/* The initial current-fog block is an explicitly initialized null pointer. */
-extern int ACT_modelDraw(XenoAct *pXenoAct);
 
-void _DrawActor(XrgActor *pActor, void *pStudio)
+void _DrawActor(void *pObject, RgDrawStudio *pStudio)
 {
+    XrgActor *pActor = pObject;
     RgDrawStudio *pDrawStudio;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 527);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 527);
     }
     pDrawStudio = pStudio;
     s_pUseFog = pDrawStudio->m_pFog;
     ACT_modelDraw(pActor->pXenoAct);
 }
 
-extern void ACT_setMotion2(XenoAct *, int, int, int);
 
 void _SetMotionToXenoActorWithRgMotID(XrgActor *pActor, int rgMotID, int playbackParam)
 {
-    if (rgMotID >= 0x800 && pActor->weaponMotionActive != 0) {
-        ACT_setMotion2(pActor->pXenoAct, (rgMotID - 0x800) | 0x100, playbackParam, playbackParam);
+    if (rgMotID >= RG_MOT_WEAPON_BASE && pActor->weaponMotionActive != 0) {
+        ACT_setMotion2(pActor->pXenoAct, (rgMotID - RG_MOT_WEAPON_BASE) | XRG_ACT_MOTION_ID_EXTENDED, playbackParam, playbackParam);
         return;
     }
     ACT_setMotion2(pActor->pXenoAct, rgMotID, playbackParam, playbackParam);
@@ -539,17 +600,17 @@ void _SetMotionToXenoActorWithRgMotID(XrgActor *pActor, int rgMotID, int playbac
 
 void _SetMotUseXenoActor(XrgActor *pActor, int motion)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
     int playbackParam;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 563);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 563);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
         playbackParam = pActor->smoothPlay != 0;
         if (pActor->loopPlay != 0) {
-            playbackParam |= 8;
+            playbackParam |= XRG_PLAY_LOOP;
         }
         pActor->smoothPlay = 0;
         pActor->loopPlay = 0;
@@ -558,7 +619,8 @@ void _SetMotUseXenoActor(XrgActor *pActor, int motion)
         }
         _SetMotionToXenoActorWithRgMotID(pActor, motion, playbackParam);
         pActor->motionID = motion;
-        if (pActor->charID == 2 && motion == 63 || pActor->charID == 3) {
+        if (pActor->charID == RG_ACTOR_CHAR_VX02 && motion == 63 ||
+            pActor->charID == RG_ACTOR_CHAR_AG04) {
             pActor->motionComaStep = 1;
         } else {
             pActor->motionComaStep = 0;
@@ -567,25 +629,14 @@ void _SetMotUseXenoActor(XrgActor *pActor, int motion)
     }
 }
 
-extern void ACT_allocMatrix(XenoAct *pXenoAct, int flags);
-extern void ACT_setArms(XenoAct *pChildXenoAct, XenoAct *pParentXenoAct,
-                        int accID, int flags);
-extern void ACT_setModelWrapper(XenoAct *pXenoAct, int flags);
-
-/*
- * The joint-ID bounds RG_ACTOR_JNT_LEFT_HAND/RG_ACTOR_JNT_MAX, also used by
- * XrgActorAttachChild's own assert message (0x00a58a50).
- */
-#define RG_ACTOR_JNT_LEFT_HAND 0
-#define RG_ACTOR_JNT_MAX 21
 
 void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
     if (pParent == 0 || pChild == 0) {
-        assert_prog(D_00A58A30, D_00A587E0, 606);
+        assert_prog(actorAssertActorAndChildNotNil, actorSourcePath, 606);
     }
     if (!(RG_ACTOR_JNT_LEFT_HAND <= eJntID && eJntID < RG_ACTOR_JNT_MAX)) {
-        assert_prog(D_00A58A50, D_00A587E0, 607);
+        assert_prog(actorAssertJointIdInRange, actorSourcePath, 607);
     }
     if (pParent->pXenoAct == 0) {
         return;
@@ -597,16 +648,14 @@ void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID)
     ACT_allocMatrix(pChild->pXenoAct, -1);
     ACT_setModelWrapper(pChild->pXenoAct, 0);
     ACT_setArms(pChild->pXenoAct, pParent->pXenoAct,
-               _ActJntToAccID_sub(eJntID, D_00A587E0, 615), 0);
+               _ActJntToAccID_sub(eJntID, actorSourcePath, 615), 0);
 }
 
-extern void ACT_resetParent(XenoAct *pChildXenoAct, XenoAct *pParentXenoAct);
-extern void ACT_setHumanHand(XenoAct *pXenoAct, int hand);
 
 void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild)
 {
     if (pParent == 0 || pChild == 0) {
-        assert_prog(D_00A58A30, D_00A587E0, 623);
+        assert_prog(actorAssertActorAndChildNotNil, actorSourcePath, 623);
     }
     if (pParent->pXenoAct == 0) {
         return;
@@ -620,12 +669,12 @@ void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild)
 
 int _IsEndOfMotUseXenoActor(XrgActor *pActor)
 {
-    XenoAct *pXenoAct = pActor->pXenoAct;
+    Actor *pXenoAct = pActor->pXenoAct;
 
     if (pActor->motionID == -1) {
         return 1;
     }
-    if (pXenoAct == 0 || (pXenoAct->motion.flags & 0x1000) == 0) {
+    if (pXenoAct == 0 || (pXenoAct->animation.slot.flags & XRG_MOTION_FLAG_ENDED) == 0) {
         return 0;
     }
     return 1;
@@ -635,35 +684,35 @@ void _DumpHead(RgFileSysData *pFile) {
 
 }
 
-const char D_00A58A98[18] = "pszMdlName != NIL";
+const char actorAssertModelNameNotNil[18] = "pszMdlName != NIL";
 
-const char D_00A58AB0[5] = ".xtx";
+const char actorTextureExtension[5] = ".xtx";
 
-const char D_00A58AB8[5] = ".lex";
+const char actorLexExtension[5] = ".lex";
 
-const char D_00A58AC0[5] = ".jnt";
+const char actorJointExtension[5] = ".jnt";
 
 void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName)
 {
-    XenoAct *pXenoAct;
-    char szFileName[3][128];
+    Actor *pXenoAct;
+    char szFileName[XRG_ACTOR_MODEL_FILE_COUNT][128];
     RgFileSysData *pFile;
     RgFileSysData *pJoint;
     RgFileSysData *pDup;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 681);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 681);
     }
     if (pszMdlName == 0) {
-        assert_prog(D_00A58A98, D_00A587E0, 682);
+        assert_prog(actorAssertModelNameNotNil, actorSourcePath, 682);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
-        assert_prog(D_00A587F8, D_00A587E0, 685);
+        assert_prog(actorAssertXenoActNotNil, actorSourcePath, 685);
     }
-    strcat(strcpy(szFileName[0], pszMdlName), D_00A58AB0);
-    strcat(strcpy(szFileName[1], pszMdlName), D_00A58AB8);
-    strcat(strcpy(szFileName[2], pszMdlName), D_00A58AC0);
+    strcat(strcpy(szFileName[0], pszMdlName), actorTextureExtension);
+    strcat(strcpy(szFileName[1], pszMdlName), actorLexExtension);
+    strcat(strcpy(szFileName[2], pszMdlName), actorJointExtension);
     pFile = RgFileSysRead(InstanceOfRgFileSys(), szFileName[0], 0);
     pActor->resourceFiles[1] = pFile;
     pJoint = RgFileSysRead(InstanceOfRgFileSys(), szFileName[2], 0);
@@ -671,45 +720,39 @@ void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName)
     pDup = RgFileSysDup(InstanceOfRgFileSys(), szFileName[1], 0);
     pActor->resourceFiles[2] = pDup;
     if (pDup != 0) {
-        pXenoAct->dupFileData = pDup->data;
+        pXenoAct->modelResource = pDup->data;
         _DumpHead(pDup);
     }
     if (pFile != 0) {
-        pXenoAct->auxFileData = pFile->data;
+        pXenoAct->matrixResource = pFile->data;
         _DumpHead(pFile);
     }
     if (pJoint != 0) {
-        pXenoAct->jointData = pJoint->data;
+        pXenoAct->move = pJoint->data;
         _DumpHead(pJoint);
     }
 }
 
-extern RgFileSys *InstanceOfRgFileSys(void);
-extern char *RgFileSysDataGetName(RgFileSysData *pFile);
-extern RgFileSysData *RgFileSysDup(RgFileSys *pSys, const char *pszName,
-                                   const char *pszRoot);
-extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
-                                    const char *pszRoot);
 
 void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
 {
     RgFileSysData *pDupFile;
     RgFileSysData *pAuxFile;
     RgFileSysData *pJointFile;
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     pDupFile = 0;
     pAuxFile = 0;
     pJointFile = 0;
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 718);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 718);
     }
     if (pSrcActor == 0) {
-        assert_prog(D_00A58AC8, D_00A587E0, 719);
+        assert_prog(actorAssertSrcActorNotNil, actorSourcePath, 719);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
-        assert_prog(D_00A587F8, D_00A587E0, 723);
+        assert_prog(actorAssertXenoActNotNil, actorSourcePath, 723);
     }
     if (pSrcActor->resourceFiles[1] != 0) {
         pAuxFile = RgFileSysRead(InstanceOfRgFileSys(),
@@ -731,17 +774,16 @@ void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
                                    RgFileSysDataGetName(pSrcActor->resourceFiles[0]), 0);
     }
     if (pDupFile != 0) {
-        pXenoAct->dupFileData = pDupFile->data;
+        pXenoAct->modelResource = pDupFile->data;
     }
     if (pAuxFile != 0) {
-        pXenoAct->auxFileData = pAuxFile->data;
+        pXenoAct->matrixResource = pAuxFile->data;
     }
     if (pJointFile != 0) {
-        pXenoAct->jointData = pJointFile->data;
+        pXenoAct->move = pJointFile->data;
     }
 }
 
-extern void *CreateRgVector(unsigned int capacity, const char *sourceFile, int line);
 
 /*
  * Resets every field of a freshly allocated actor: its charID and parent
@@ -753,12 +795,12 @@ void _InitXenoActor(XrgActor *pActor)
     unsigned int i;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 745);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 745);
     }
     pActor->charID = 0;
     pActor->parent = 0;
-    pActor->children = CreateRgVector(4, D_00A587E0, 748);
-    for (i = 0; i < 2; i++) {
+    pActor->children = CreateRgVector(4, actorSourcePath, 748);
+    for (i = 0; i < XRG_ACTOR_EFFECT_BANKS; i++) {
         pActor->effectorCount[i] = 0;
     }
     pActor->resourceFiles[0] = 0;
@@ -779,98 +821,91 @@ void _InitXenoActor(XrgActor *pActor)
 
 void _SetBattleCommonWepMotion(XrgActor *pActor)
 {
-    int weaponMotion;
-    XenoAct *pXenoAct;
+    void *weaponMotion;
+    Actor *pXenoAct;
 
     weaponMotion = RgBattleCommonDataGetWeaponMot(InstanceOfRgBattleCommonData());
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 776);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 776);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
-        assert_prog(D_00A587F8, D_00A587E0, 778);
+        assert_prog(actorAssertXenoActNotNil, actorSourcePath, 778);
     }
     if (weaponMotion != 0) {
         pActor->weaponMotionActive = 1;
-        ACT_initExMotion(pXenoAct, 1, weaponMotion);
+        ACT_initExMotion(pXenoAct, XRG_EX_MOTION_SLOT_WEAPON, weaponMotion);
     }
 }
 
-extern void xglLightSetDefault(StudioLight *light);
 
 void _InitAfterLoadXenoActor(XrgActor *pActor)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 790);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 790);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
-        assert_prog(D_00A58AE0, D_00A587E0, 791);
+        assert_prog(actorAssertActorXenoActNotNil, actorSourcePath, 791);
         pXenoAct = pActor->pXenoAct;
     }
     pActor->motionComaStep = 0;
     pActor->motionComaStepAccum = 0.0f;
     xglLightSetDefault(&pXenoAct->light);
-    pXenoAct->drawFunc = _ActorDrawFunction;
+    pXenoAct->draw = _ActorDrawFunction;
     pXenoAct->flags |= 0x8000;
     ACT_allocMatrix(pXenoAct, -1);
     ACT_setModelWrapper(pXenoAct, 0);
     if (pActor->resourceFiles[0] != 0) {
         ACT_initMotion(pXenoAct);
-        ACT_initExMotion(pXenoAct, 0, (int) pActor->resourceFiles[0]->data);
+        ACT_initExMotion(pXenoAct, XRG_EX_MOTION_SLOT_ACTOR, pActor->resourceFiles[0]->data);
         _SetBattleCommonWepMotion(pActor);
     }
-    pXenoAct->lightCost[0] = 7;
-    pXenoAct->lightCost[1] = 0x30;
-    pXenoAct->renderFlags |= 0x40;
+    pXenoAct->shadow_kind = XRG_ACTOR_SHADOW_KIND;
+    pXenoAct->shadowSize = XRG_ACTOR_SHADOW_SIZE;
+    pXenoAct->drawEnv.flags |= XRG_DRAWENV_LIGHT_COST;
 }
 
 void XrgActorSetLightCost(XrgActor *pActor)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 841);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 841);
     }
     pXenoAct = pActor->pXenoAct;
-    pXenoAct->lightCost[0] = 9;
-    pXenoAct->lightCost[1] = 0x70;
-    pXenoAct->renderFlags |= 0x40;
-    pXenoAct->lightCostLevel = 0x12;
+    pXenoAct->shadow_kind = XRG_ACTOR_LIGHT_COST_SHADOW_KIND;
+    pXenoAct->shadowSize = XRG_ACTOR_LIGHT_COST_SHADOW_SIZE;
+    pXenoAct->drawEnv.flags |= XRG_DRAWENV_LIGHT_COST;
+    pXenoAct->drawEnv.renderLevel = XRG_ACTOR_LIGHT_COST_RENDER_LEVEL;
 }
 
 void XrgActorSetDropWeapon(XrgActor *pActor)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 859);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 859);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
-        pXenoAct->flags |= 0x408;
+        pXenoAct->flags |= XRG_ACTOR_FLAGS_DROP_WEAPON;
     }
 }
 
 void XrgActorSetPlayMotionComaStep(XrgActor *pActor, int step)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 872);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 872);
     }
     pActor->motionComaStep = step;
     pActor->motionComaStepAccum = 0.0f;
 }
 
-const char D_00A58B20[28] = "pEntry->m_pszMdlName != NIL";
+const char actorAssertEntryModelNameNotNil[28] = "pEntry->m_pszMdlName != NIL";
 
-extern XenoAct *ACT_create(int number, const char *mdlName);
-void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName);
-/* * Resets every field of a freshly allocated actor: its charID and parent * links, a new children vector, the effector counts, the resource file * slots, the identity local matrix, and the motion and light flags. */ void _InitXenoActor(XrgActor *pActor);
-extern void _InitAfterLoadXenoActor(XrgActor *pActor);
-void XrgActorSetLight(XrgActor *pActor, RgVector *light);
-extern void *InstanceOfGlobalLight(void);
 
 void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss)
 {
@@ -878,26 +913,26 @@ void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss)
     int actorID;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 882);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 882);
     }
     if (pEss == 0) {
-        assert_prog(D_00A58B00, D_00A587E0, 883);
+        assert_prog(actorAssertEssenceNotNil, actorSourcePath, 883);
     }
     actorID = pEss->actorID;
     pEntry = _GetXenoDatEntry(actorID);
     if (pEntry == 0) {
-        assert_prog(D_00A58B10, D_00A587E0, 887);
+        assert_prog(actorAssertEntryNotNil, actorSourcePath, 887);
     }
     _InitXenoActor(pActor);
     pActor->charID = actorID;
     if (pEntry != 0) {
-        pActor->pXenoAct = ACT_create(-1, pEntry->m_pszMdlName);
+        pActor->pXenoAct = ACT_create(-1, pEntry->modelID);
         if (pActor->pXenoAct == 0) {
-            assert_prog(D_00A587F8, D_00A587E0, 894);
+            assert_prog(actorAssertXenoActNotNil, actorSourcePath, 894);
         }
         if (pEss->fileName[0] == 0) {
             if (pEntry->m_pszFileBase == 0) {
-                assert_prog(D_00A58B20, D_00A587E0, 899);
+                assert_prog(actorAssertEntryModelNameNotNil, actorSourcePath, 899);
             }
             _LoadXenoActorMdl(pActor, pEntry->m_pszFileBase);
         } else {
@@ -913,10 +948,10 @@ void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss)
     if (pEss->light != 0) {
         XrgActorSetLight(pActor, pEss->light);
     } else {
-        XrgActorSetLight(pActor, (RgVector *) InstanceOfGlobalLight());
+        XrgActorSetLight(pActor, InstanceOfGlobalLight());
     }
     pActor->pakaPaka = 0;
-    pActor->unmodeled_160 = 0;
+    pActor->pakaBaseMatrixSet = 0;
 }
 
 void _DupXenoActor(XrgActor *pDup, XrgActor *pActor)
@@ -924,33 +959,33 @@ void _DupXenoActor(XrgActor *pDup, XrgActor *pActor)
     XenoDatEntry *pEntry;
 
     if (pDup == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 933);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 933);
     }
     if (pActor == 0) {
-        assert_prog(D_00A58AC8, D_00A587E0, 934);
+        assert_prog(actorAssertSrcActorNotNil, actorSourcePath, 934);
     }
     pEntry = _GetXenoDatEntry(pActor->charID);
     if (pEntry == 0) {
-        assert_prog(D_00A58B10, D_00A587E0, 937);
+        assert_prog(actorAssertEntryNotNil, actorSourcePath, 937);
     }
     pDup->charID = pActor->charID;
     pDup->motionComaStep = 0;
     _InitXenoActor(pDup);
-    pDup->pXenoAct = ACT_create(-1, pEntry->m_pszMdlName);
+    pDup->pXenoAct = ACT_create(-1, pEntry->modelID);
     _DupLoadXenoActor(pDup, pActor);
     _InitAfterLoadXenoActor(pDup);
     pDup->pakaPaka = 0;
 }
 
-XrgActor *CreateXrgActor(int actorID)
+XrgActor *CreateXrgActor(XrgActorEssence *pEss)
 {
     XrgActor *pActor;
 
-    pActor = RgHeapAlloc(InstanceOfRgHeap(), XRG_ACTOR_SIZE, D_00A587E0, 957);
+    pActor = RgHeapAlloc(InstanceOfRgHeap(), XRG_ACTOR_SIZE, actorSourcePath, 957);
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 958);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 958);
     }
-    _LoadXenoActor(pActor, actorID);
+    _LoadXenoActor(pActor, pEss);
     return pActor;
 }
 
@@ -958,14 +993,14 @@ XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent)
 {
     XrgActor *pDup;
 
-    pDup = RgHeapAlloc(InstanceOfRgHeap(), XRG_ACTOR_SIZE, D_00A587E0, 968);
+    pDup = RgHeapAlloc(InstanceOfRgHeap(), XRG_ACTOR_SIZE, actorSourcePath, 968);
     if (pDup == 0) {
-        assert_prog(D_00A58B40, D_00A587E0, 969);
+        assert_prog(actorAssertDupNotNil, actorSourcePath, 969);
     }
     _DupXenoActor(pDup, pActor);
     if (pActor->attachID != -1) {
         if (pNewParent == 0) {
-            assert_prog(D_00A58B50, D_00A587E0, 974);
+            assert_prog(actorAssertNewParentNotNil, actorSourcePath, 974);
         }
         XrgActorAttachChild(pNewParent, pDup, pActor->attachID);
     }
@@ -975,38 +1010,38 @@ XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent)
 void DisposeXrgActor(XrgActor *pActor)
 {
     if (RgHeapIsInvalidMemory(InstanceOfRgHeap(), pActor) != 0) {
-        RgError(D_00A58B68, D_00A587E0, 985, pActor);
+        RgError(actorAlreadyDisposedFormat, actorSourcePath, 985, pActor);
     }
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 987);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 987);
     }
     _DisposeUseXenoActor(pActor);
-    RgHeapFree(InstanceOfRgHeap(), pActor, D_00A587E0, 989);
+    RgHeapFree(InstanceOfRgHeap(), pActor, actorSourcePath, 989);
 }
 
 void XrgActorSetLocal(XrgActor *pActor, const RgMatrix matrix)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 999);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 999);
     }
     XrgCopyMatrix(pActor->local, matrix);
 }
 
-void XrgActorSetLight(XrgActor *pActor, RgVector *light)
+void XrgActorSetLight(XrgActor *pActor, RgLight *light)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
     int i;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1008);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1008);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
         if (light != 0) {
-            XrgCopyVector(pXenoAct->light.ambient_color_row, light[0]);
+            XrgCopyVector(pXenoAct->light.ambient_color_row, light->ambient_color);
             for (i = 0; i < 3; i++) {
-                XrgCopyVector(pXenoAct->light.lights[i].color_row, light[4 + i]);
-                XrgCopyVector(pXenoAct->light.lights[i].direction_row, light[1 + i]);
+                XrgCopyVector(pXenoAct->light.lights[i].color_row, light->color[i]);
+                XrgCopyVector(pXenoAct->light.lights[i].direction_row, light->direction[i]);
             }
         } else {
             xglLightSetDefault(&pXenoAct->light);
@@ -1017,7 +1052,7 @@ void XrgActorSetLight(XrgActor *pActor, RgVector *light)
 void XrgActorSetMotion(XrgActor *pActor, int motion)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1030);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1030);
     }
     if (motion != -1) {
         _SetMotUseXenoActor(pActor, motion);
@@ -1027,7 +1062,7 @@ void XrgActorSetMotion(XrgActor *pActor, int motion)
 void XrgActorSetSmoothPlay(XrgActor *pActor, int smoothPlay)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1042);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1042);
     }
     pActor->smoothPlay = smoothPlay;
 }
@@ -1035,7 +1070,7 @@ void XrgActorSetSmoothPlay(XrgActor *pActor, int smoothPlay)
 void XrgActorSetLoopPlay(XrgActor *pActor, int loopPlay)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1050);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1050);
     }
     pActor->loopPlay = loopPlay;
 }
@@ -1043,70 +1078,70 @@ void XrgActorSetLoopPlay(XrgActor *pActor, int loopPlay)
 void XrgActorDeriveMotion(XrgActor *pActor, XrgActor *pSrcActor)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1059);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1059);
     }
     if (pSrcActor == 0) {
-        assert_prog(D_00A58AC8, D_00A587E0, 1060);
+        assert_prog(actorAssertSrcActorNotNil, actorSourcePath, 1060);
     }
     if (pSrcActor->resourceFiles[0] == 0) {
         return;
     }
     ACT_initMotion(pActor->pXenoAct);
-    ACT_initExMotion(pActor->pXenoAct, 0, (int) pSrcActor->resourceFiles[0]->data);
+    ACT_initExMotion(pActor->pXenoAct, XRG_EX_MOTION_SLOT_ACTOR, pSrcActor->resourceFiles[0]->data);
     _SetBattleCommonWepMotion(pActor);
 }
 
 void XrgActorSetMotionFrame(XrgActor *pActor, float frame)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1072);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1072);
     }
     if ((pActor->pXenoAct != 0) && (pActor->motionID != -1)) {
         if (pActor->parent == 0) {
             ACT_initMotion(pActor->pXenoAct);
         }
-        pActor->pXenoAct->motion.frame = frame;
+        pActor->pXenoAct->animation.slot.frame = frame;
     }
 }
 
 void XrgActorSetDraw(XrgActor *pActor, int draw)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1084);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1084);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
         if (draw == 0) {
-            pXenoAct->flags |= 8;
-            pXenoAct->renderFlags |= 0x100;
+            pXenoAct->flags |= ACTOR_FLAG_HIDDEN;
+            pXenoAct->drawEnv.flags |= XRG_DRAWENV_HIDDEN;
         } else {
-            pXenoAct->flags &= ~8;
+            pXenoAct->flags &= ~ACTOR_FLAG_HIDDEN;
         }
     }
 }
 
 void XrgActorSetTransparent(XrgActor *pActor, float transparency)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1100);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1100);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
-        pXenoAct->transparency = transparency;
-        pXenoAct->flags |= 0x800;
-        pXenoAct->blendMode = 0x44;
-        pXenoAct->renderFlags |= 0x3;
+        pXenoAct->drawEnv.transparency = transparency;
+        pXenoAct->flags |= ACTOR_FLAG_TRANSLUCENT;
+        pXenoAct->drawEnv.alpha = XRG_ACTOR_BLEND_ALPHA;
+        pXenoAct->drawEnv.flags |= XRG_DRAWENV_TRANSPARENT;
     }
 }
 
 int XrgActorIsEndOfMotion(XrgActor *pActor)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1118);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1118);
     }
     return _IsEndOfMotUseXenoActor(pActor);
 }
@@ -1114,63 +1149,63 @@ int XrgActorIsEndOfMotion(XrgActor *pActor)
 /* The current motion's length, or 0 when no motion is set or loaded. */
 float XrgActorGetMotionLength(XrgActor *pActor)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1127);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1127);
     }
     if (pActor->motionID == -1 || (pXenoAct = pActor->pXenoAct) == 0) {
         return 0.0f;
     }
-    return pXenoAct->motion.length;
+    return pXenoAct->animation.slot.forwardLimit;
 }
 
 /* The current motion's playing time, or 0 when no motion is set or loaded. */
 float XrgActorGetPlayingMotTime(XrgActor *pActor)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1138);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1138);
     }
     if (pActor->motionID == -1 || (pXenoAct = pActor->pXenoAct) == 0) {
         return 0.0f;
     }
-    return pXenoAct->motion.frame;
+    return pXenoAct->animation.slot.frame;
 }
 
 void XrgActorGetLocal(XrgActor *pActor, RgMatrix matrix)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1149);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1149);
     }
     XrgCopyMatrix(matrix, pActor->local);
 }
 
 int XrgActorGetJointLocal(XrgActor *pActor, int jntID, RgMatrix matrix)
 {
-    XenoAct *pXenoAct;
+    Actor *pXenoAct;
     RgMatrix *jointMatrices;
     int jointIndex;
     int result;
 
     result = 0;
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1161);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1161);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
-        assert_prog(D_00A587F8, D_00A587E0, 1163);
+        assert_prog(actorAssertXenoActNotNil, actorSourcePath, 1163);
     }
     if (!(RG_ACTOR_JNT_LEFT_HAND <= jntID && jntID < RG_ACTOR_JNT_MAX)) {
-        assert_prog(D_00A58A50, D_00A587E0, 1164);
+        assert_prog(actorAssertJointIdInRange, actorSourcePath, 1164);
     }
     if (jntID < 20) {
         if (jntID >= 0) {
-            jointIndex = (int) _ActJntToJoint(pXenoAct, jntID);
+            jointIndex = _ActJntToJoint(pXenoAct, jntID);
             if (jointIndex >= 0) {
                 jointMatrices = pXenoAct->jointMatrices;
-                if (jointIndex < ((SkeJointData *) pXenoAct->jointData)->numElement) {
+                if (jointIndex < ((SkeJointData *) pXenoAct->move)->numElement) {
                     XrgCopyMatrix(matrix, jointMatrices[jointIndex]);
                     result = 1;
                 }
@@ -1183,7 +1218,7 @@ int XrgActorGetJointLocal(XrgActor *pActor, int jntID, RgMatrix matrix)
 int XrgActorGetAttachedJoint(XrgActor *pActor)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1208);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1208);
     }
     if (pActor->parent == 0) {
         return -1;
@@ -1191,17 +1226,14 @@ int XrgActorGetAttachedJoint(XrgActor *pActor)
     return pActor->attachID;
 }
 
-extern void RgVectorPush(void *vector, void *element);
-extern void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild,
-                                     int eJntID);
 
 void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
     if (pParent == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1222);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1222);
     }
     if (!(RG_ACTOR_JNT_LEFT_HAND <= eJntID && eJntID < RG_ACTOR_JNT_MAX)) {
-        assert_prog(D_00A58A50, D_00A587E0, 1223);
+        assert_prog(actorAssertJointIdInRange, actorSourcePath, 1223);
     }
     if (pChild != 0) {
         RgVectorPush(pParent->children, pChild);
@@ -1211,14 +1243,6 @@ void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int eJntID)
     }
 }
 
-/*
- * Scaffold-owned (.rodata still owner: asm): ov12:0x00a58b88 holds the
- * "actor %p Pakapaka %s -> %d : paka base %d" log line.
- */
-extern const char D_00A58B88[];
-extern const char *RgActorCharIDToName(int charID);
-int _GetPakaPakaBaseJnt(int charID, int attachID);
-extern void XrgLog(const char *format, const char *sourceFile, int line, ...);
 
 void XrgActorCheckPakaPaka(XrgActor *pActor)
 {
@@ -1227,7 +1251,7 @@ void XrgActorCheckPakaPaka(XrgActor *pActor)
     int charID;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1240);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1240);
     }
     pParent = pActor->parent;
     if (pParent != 0) {
@@ -1239,7 +1263,7 @@ void XrgActorCheckPakaPaka(XrgActor *pActor)
             pActor->pakaPaka = 1;
             /* do/while (0) keeps the original's jal: no sibling call. */
             do {
-                XrgLog(D_00A58B88, D_00A587E0, 1250, pActor,
+                XrgLog(actorPakaPakaLogFormat, actorSourcePath, 1250, pActor,
                        RgActorCharIDToName(charID), pActor->attachID,
                        pActor->pakaBaseJnt);
             } while (0);
@@ -1247,18 +1271,15 @@ void XrgActorCheckPakaPaka(XrgActor *pActor)
     }
 }
 
-extern int RgVectorRemove(void *vector, void *element, const char *source_file,
-                          int line);
-extern void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild);
 
 void XrgActorDettachChild(XrgActor *pParent, XrgActor *pChild)
 {
     if (pParent == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1259);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1259);
     }
     if (pChild != 0) {
-        if (RgVectorRemove(pParent->children, pChild, D_00A587E0, 1261) == 0) {
-            RgWarn(D_00A58BC0, D_00A587E0, 1262, pParent->children, pChild);
+        if (RgVectorRemove(pParent->children, pChild, actorSourcePath, 1261) == 0) {
+            RgWarn(actorCannotDeleteChildFormat, actorSourcePath, 1262, pParent->children, pChild);
         }
         _DetachChildUseXenoActor(pParent, pChild);
         pChild->parent = 0;
@@ -1266,24 +1287,17 @@ void XrgActorDettachChild(XrgActor *pParent, XrgActor *pChild)
     }
 }
 
-extern RgDraw *InstanceOfRgDraw(void);
-extern void RgDrawReq(RgDraw *pDraw, XrgActor *pActor,
-                      void (*drawFunc)(XrgActor *pActor, void *pStudio),
-                      void (*clearFunc)(XrgActor *pActor, void *pStudio),
-                      int prio, int drawID);
-void _DrawActor(XrgActor *pActor, void *pStudio);
 
 void XrgActorDraw(XrgActor *pActor)
 {
     RgDrawReq(InstanceOfRgDraw(), pActor, &_DrawActor, 0, 0, -1);
 }
 
-void _PassTime(XrgActor *pActor, float dt);
 
 void XrgActorPassTime(XrgActor *pActor, float dt)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1285);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1285);
     }
     _PassTime(pActor, dt);
 }
@@ -1291,20 +1305,19 @@ void XrgActorPassTime(XrgActor *pActor, float dt)
 void InitXrgActorEssence(XrgActorEssence *pEss, int actorID)
 {
     if (pEss == 0) {
-        assert_prog(D_00A58B00, D_00A587E0, 1295);
+        assert_prog(actorAssertEssenceNotNil, actorSourcePath, 1295);
     }
     pEss->actorID = actorID;
     pEss->fileName[0] = 0;
     pEss->light = 0;
 }
 
-const char D_00A58CB0[] = "actor %p (xeno %p) ---------\n";
+const char actorDebugHeaderFormat[] = "actor %p (xeno %p) ---------\n";
 
-const char D_00A58CD0[] = "time = %f start %f end %f\n";
+const char actorDebugTimeFormat[] = "time = %f start %f end %f\n";
 
-const char D_00A58CF0[] = "flags = %x(end %x) next %x\n";
+const char actorDebugFlagsFormat[] = "flags = %x(end %x) next %x\n";
 
-extern char *strcpy(char *destination, const char *source);
 
 int XrgActorEssenceGetFileName(XrgActorEssence *pEss, char *pFileName)
 {
@@ -1312,7 +1325,7 @@ int XrgActorEssenceGetFileName(XrgActorEssence *pEss, char *pFileName)
     int count;
 
     if (pEss == 0) {
-        assert_prog(D_00A58B00, D_00A587E0, 1308);
+        assert_prog(actorAssertEssenceNotNil, actorSourcePath, 1308);
     }
     pEntry = _GetXenoDatEntry(pEss->actorID);
     if (pEntry == 0) {
@@ -1321,39 +1334,30 @@ int XrgActorEssenceGetFileName(XrgActorEssence *pEss, char *pFileName)
     count = 0;
     if (pEss->fileName[0] == 0) {
         if (pEntry->m_pszFileBase == 0) {
-            assert_prog(D_00A58B20, D_00A587E0, 1318);
+            assert_prog(actorAssertEntryModelNameNotNil, actorSourcePath, 1318);
         }
         if (pFileName != 0) {
-            count = 3;
-            strcat(strcpy(pFileName, pEntry->m_pszFileBase), D_00A58AB0);
-            strcat(strcpy(pFileName + 64, pEntry->m_pszFileBase), D_00A58AB8);
-            strcat(strcpy(pFileName + 128, pEntry->m_pszFileBase), D_00A58AC0);
+            count = XRG_ACTOR_MODEL_FILE_COUNT;
+            strcat(strcpy(pFileName, pEntry->m_pszFileBase), actorTextureExtension);
+            strcat(strcpy(pFileName + XRG_ACTOR_FILE_NAME_SIZE, pEntry->m_pszFileBase), actorLexExtension);
+            strcat(strcpy(pFileName + 2 * XRG_ACTOR_FILE_NAME_SIZE, pEntry->m_pszFileBase), actorJointExtension);
         }
     } else {
         if (pFileName != 0) {
-            count = 3;
-            strcat(strcpy(pFileName, pEss->fileName), D_00A58AB0);
-            strcat(strcpy(pFileName + 64, pEss->fileName), D_00A58AB8);
-            strcat(strcpy(pFileName + 128, pEss->fileName), D_00A58AC0);
+            count = XRG_ACTOR_MODEL_FILE_COUNT;
+            strcat(strcpy(pFileName, pEss->fileName), actorTextureExtension);
+            strcat(strcpy(pFileName + XRG_ACTOR_FILE_NAME_SIZE, pEss->fileName), actorLexExtension);
+            strcat(strcpy(pFileName + 2 * XRG_ACTOR_FILE_NAME_SIZE, pEss->fileName), actorJointExtension);
         }
     }
     if (pEntry->m_pszOptFile != 0) {
-        strcpy(pFileName + count * 64, pEntry->m_pszOptFile);
+        strcpy(pFileName + count * XRG_ACTOR_FILE_NAME_SIZE, pEntry->m_pszOptFile);
         count++;
     }
     return count;
 }
 
-/* Each record begins with its actor/joint key, followed by the original
- * signed joint-remapping payload. The payload uses -1 as its list terminator.
- */
-typedef struct XrgRawJntData {
-    int id;
-    int jntID;
-    int jointMap[34];
-} XrgRawJntData;
-
-XrgRawJntData s_aRawJntData[12] = {
+XrgRawJntData s_aRawJntData[RAW_JNT_DATA_COUNT] = {
     {0, 0, {53, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 80, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53, 53}},
     {0, 1, {67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 83, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 67, 67}},
     {1, 0, {128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 138, 138}},
@@ -1374,7 +1378,7 @@ XrgRawJntData *_FindRawJntData(int id, int jntID)
     XrgRawJntData *entry;
 
     entry = s_aRawJntData;
-    for (i = 0; i < 12; i++, entry++) {
+    for (i = 0; i < RAW_JNT_DATA_COUNT; i++, entry++) {
         if (entry->id == id && entry->jntID == jntID) {
             return entry;
         }
@@ -1382,18 +1386,11 @@ XrgRawJntData *_FindRawJntData(int id, int jntID)
     return 0;
 }
 
-/*
- * Scaffold-owned (.rodata still owner: asm): the two bare debug strings
- * _GetPakaPakaBaseJnt logs. ov12:0x00a58be0 holds "3\n", ov12:0x00a58be8
- * holds "4\n".
- */
-extern const char D_00A58BE0[];
-extern const char D_00A58BE8[];
 
 int _GetPakaPakaBaseJnt(int charID, int attachID)
 {
     switch (charID) {
-    case 0:
+    case RG_ACTOR_CHAR_VX01:
         switch (attachID) {
         case 4:
             return 0x35;
@@ -1401,13 +1398,13 @@ int _GetPakaPakaBaseJnt(int charID, int attachID)
             return 0x43;
         }
         break;
-    case 2:
+    case RG_ACTOR_CHAR_VX02:
         switch (attachID) {
         case 4:
-            XrgLog(D_00A58BE0, D_00A587E0, 0x5A8);
+            XrgLog(actorPakaPakaLogThree, actorSourcePath, 0x5A8);
             return 0x31;
         case 5:
-            XrgLog(D_00A58BE8, D_00A587E0, 0x5AB);
+            XrgLog(actorPakaPakaLogFour, actorSourcePath, 0x5AB);
             return 0x40;
         }
         break;
@@ -1415,20 +1412,9 @@ int _GetPakaPakaBaseJnt(int charID, int attachID)
     return -1;
 }
 
-extern const char D_00A58BF0[];
-extern const char D_00A58C10[];
-extern const char D_00A58C20[];
-extern const char D_00A58C38[];
-extern const char D_00A58C68[];
-extern const char D_00A58C88[];
-extern void RgMatEffConstraintSetRoot(void *constraint, void *root, void *top);
-extern void RgMatEffConstraintSetTop(void *constraint, void *top);
-extern void RgMatEffCombineSetRoot(void *combine, void *root, void *top);
-extern void RgMatricesEffectorAddManipulator(void *effector, void *unit);
-extern void RgMatricesEffectorAddDoubleMani(void *effector, void *first, void *second);
-struct MatrixEffector *XrgActorCreateEffConstraint(XrgActor *pActor, unsigned int eEffID, XrgActor *pWep)
+MatrixEffector *XrgActorCreateEffConstraint(XrgActor *pActor, unsigned int eEffID, XrgActor *pWep)
 {
-    void *pCon;
+    MatrixConstraint *pCon;
     XrgRawJntData *pRaw;
     SkeJointData *pJointData;
     SkeMani *pMani;
@@ -1438,58 +1424,58 @@ struct MatrixEffector *XrgActorCreateEffConstraint(XrgActor *pActor, unsigned in
 
     pCon = CreateRgMatEffConstraint();
     if (pActor == 0 || pWep == 0) {
-        assert_prog(D_00A58BF0, D_00A587E0, 1471);
+        assert_prog(actorAssertActorAndWeaponNotNil, actorSourcePath, 1471);
     }
     if (pCon == 0) {
-        assert_prog(D_00A58C10, D_00A587E0, 1472);
+        assert_prog(actorAssertEffectNotNil, actorSourcePath, 1472);
     }
     pRaw = _FindRawJntData(pActor->charID, eEffID);
     if (pRaw == 0) {
-        DisposeRgMatricesEffector(pCon);
+        DisposeRgMatricesEffector(&pCon->effector);
         return 0;
     }
     for (i = 0; pRaw->jointMap[i] >= 0; i++) {
-        pMani = _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[i], D_00A587E0, 1483);
-        RgMatricesEffectorAddManipulator(pCon, pMani);
+        pMani = _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[i], actorSourcePath, 1483);
+        RgMatricesEffectorAddManipulator(&pCon->effector, pMani);
     }
-    loadFile = D_00A587E0;
+    loadFile = actorSourcePath;
     RgMatEffConstraintSetRoot(pCon,
-                              _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[32], loadFile, 1488),
-                              _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[33], loadFile, 1489));
+                              _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[RAW_JNT_ROOT_INDEX], loadFile, 1488),
+                              _CreateSkeMani_sub(pActor->pXenoAct, pRaw->jointMap[RAW_JNT_TOP_INDEX], loadFile, 1489));
     accID = _ActJntToAccID_sub(8, loadFile, 1492);
-    XrgLog(D_00A58C20, loadFile, 1492, 8, accID);
+    XrgLog(actorEffectJointLogFormat, loadFile, 1492, 8, accID);
     accID = _ActJntToAccID_sub(8, loadFile, 1493);
     pMani = _CreateAccMani_sub(pWep->pXenoAct, accID, loadFile, 1493);
     RgMatEffConstraintSetTop(pCon, pMani);
-    pJointData = pWep->pXenoAct->jointData;
+    pJointData = pWep->pXenoAct->move;
     for (i = 1; i < pJointData->numElement; i++) {
         if (pWep->pXenoAct != 0) {
-            pMani = _CreateSkeMani_sub(pWep->pXenoAct, i, D_00A587E0, 1500);
-            RgMatricesEffectorAddManipulator(pCon, pMani);
+            pMani = _CreateSkeMani_sub(pWep->pXenoAct, i, actorSourcePath, 1500);
+            RgMatricesEffectorAddManipulator(&pCon->effector, pMani);
         }
     }
-    if (eEffID >= 2) {
-        assert_prog(D_00A58C38, D_00A587E0, 1505);
+    if (eEffID >= XRG_ACTOR_EFFECT_BANKS) {
+        assert_prog(actorAssertEffectTypeInRange, actorSourcePath, 1505);
     }
-    if ((unsigned int) pActor->effectorCount[eEffID] >= 4) {
-        assert_prog(D_00A58C68, D_00A587E0, 1506);
+    if ((unsigned int) pActor->effectorCount[eEffID] >= XRG_ACTOR_EFFECT_LIMIT) {
+        assert_prog(actorAssertEffectCountBelowFour, actorSourcePath, 1506);
     }
-    RgMatricesEffectorSetActivity(pCon, 0);
-    pActor->effector[eEffID][pActor->effectorCount[eEffID]++] = pCon;
-    return pCon;
+    RgMatricesEffectorSetActivity(&pCon->effector, 0);
+    pActor->effector[eEffID][pActor->effectorCount[eEffID]++] = &pCon->effector;
+    return &pCon->effector;
 }
 
-struct MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActor, XrgActor *pWpn, XrgActor *pSubWpn, unsigned int eEffID)
+MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActor, XrgActor *pWpn, XrgActor *pSubWpn, unsigned int eEffID)
 {
-    void *pCon;
+    MatrixCombine *pCon;
     XrgRawJntData *pRaw;
     SkeJointData *pJointData;
     SkeMani *pRoot;
     SkeMani *pJoint;
-    XenoAct *pXenoAct;
-    XenoAct *pSrcXeno;
-    XenoAct *pWpnXeno;
-    XenoAct *pSubXeno;
+    Actor *pXenoAct;
+    Actor *pSrcXeno;
+    Actor *pWpnXeno;
+    Actor *pSubXeno;
     int effectorIndex;
     int i;
     int jointID;
@@ -1497,13 +1483,13 @@ struct MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *p
     SkeMani *jointMani;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1528);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1528);
     }
     if (pSrcActor == 0) {
-        assert_prog(D_00A58AC8, D_00A587E0, 1529);
+        assert_prog(actorAssertSrcActorNotNil, actorSourcePath, 1529);
     }
     if (pWpn == 0) {
-        assert_prog(D_00A58C88, D_00A587E0, 1530);
+        assert_prog(actorAssertWeaponNotNil, actorSourcePath, 1530);
     }
     pSrcXeno = pSrcActor->pXenoAct;
     pXenoAct = pActor->pXenoAct;
@@ -1514,63 +1500,63 @@ struct MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *p
     pCon = CreateRgMatEffCombine();
     for (i = 0; pRaw->jointMap[i] >= 0; i++) {
         jointID = pRaw->jointMap[i];
-        jointMani = _CreateSkeMani_sub(pXenoAct, jointID, D_00A587E0, 1553);
-        jointSubMani = _CreateSkeMani_sub(pSrcXeno, jointID, D_00A587E0, 1554);
-        RgMatricesEffectorAddDoubleMani(pCon, jointMani, jointSubMani);
+        jointMani = _CreateSkeMani_sub(pXenoAct, jointID, actorSourcePath, 1553);
+        jointSubMani = _CreateSkeMani_sub(pSrcXeno, jointID, actorSourcePath, 1554);
+        RgMatricesEffectorAddDoubleMani(&pCon->effector, jointMani, jointSubMani);
     }
-    i = pRaw->jointMap[33];
-    pRoot = _CreateSkeMani_sub(pXenoAct, i, D_00A587E0, 1560);
-    pJoint = _CreateSkeMani_sub(pSrcXeno, i, D_00A587E0, 1560);
+    i = pRaw->jointMap[RAW_JNT_TOP_INDEX];
+    pRoot = _CreateSkeMani_sub(pXenoAct, i, actorSourcePath, 1560);
+    pJoint = _CreateSkeMani_sub(pSrcXeno, i, actorSourcePath, 1560);
     RgMatEffCombineSetRoot(pCon, pRoot, pJoint);
     if (pWpn != 0) {
         if (pSubWpn != 0) {
             pWpnXeno = pWpn->pXenoAct;
             pSubXeno = pSubWpn->pXenoAct;
-            pJointData = pWpnXeno->jointData;
+            pJointData = pWpnXeno->move;
             for (i = 1; i < pJointData->numElement; i++) {
                 SkeMani *pMani;
                 SkeMani *pSubMani;
-                pMani = _CreateSkeMani_sub(pWpnXeno, i, D_00A587E0, 1569);
-                pSubMani = _CreateSkeMani_sub(pSubXeno, i, D_00A587E0, 1570);
+                pMani = _CreateSkeMani_sub(pWpnXeno, i, actorSourcePath, 1569);
+                pSubMani = _CreateSkeMani_sub(pSubXeno, i, actorSourcePath, 1570);
                 if (pMani != 0 && pSubMani != 0) {
-                    RgMatricesEffectorAddDoubleMani(pCon, pMani, pSubMani);
+                    RgMatricesEffectorAddDoubleMani(&pCon->effector, pMani, pSubMani);
                 }
             }
         }
     }
-    if (eEffID >= 2) {
-        assert_prog(D_00A58C38, D_00A587E0, 1577);
+    if (eEffID >= XRG_ACTOR_EFFECT_BANKS) {
+        assert_prog(actorAssertEffectTypeInRange, actorSourcePath, 1577);
     }
-    if ((unsigned int) pActor->effectorCount[eEffID] >= 4) {
-        assert_prog(D_00A58C68, D_00A587E0, 1578);
+    if ((unsigned int) pActor->effectorCount[eEffID] >= XRG_ACTOR_EFFECT_LIMIT) {
+        assert_prog(actorAssertEffectCountBelowFour, actorSourcePath, 1578);
     }
-    RgMatricesEffectorSetActivity(pCon, 0);
+    RgMatricesEffectorSetActivity(&pCon->effector, 0);
     effectorIndex = pActor->effectorCount[eEffID];
     pActor->effectorCount[eEffID] = effectorIndex + 1;
-    pActor->effector[eEffID][effectorIndex] = pCon;
-    return pCon;
+    pActor->effector[eEffID][effectorIndex] = &pCon->effector;
+    return &pCon->effector;
 }
 
-const char D_00A58C98[18] = "eff over (%d)->%d";
+const char actorEffectOverflowFormat[18] = "eff over (%d)->%d";
 
-void XrgActorDisposeEffector(XrgActor *pActor, struct MatrixEffector *pEffector)
+void XrgActorDisposeEffector(XrgActor *pActor, MatrixEffector *pEffector)
 {
-    struct MatrixEffector *kept[2][4];
-    int keptCount[2];
+    MatrixEffector *kept[XRG_ACTOR_EFFECT_BANKS][XRG_ACTOR_EFFECT_LIMIT];
+    int keptCount[XRG_ACTOR_EFFECT_BANKS];
     unsigned int bank;
     unsigned int i;
     int cnt;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1595);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1595);
     }
-    for (bank = 0; bank < 2; bank++) {
+    for (bank = 0; bank < XRG_ACTOR_EFFECT_BANKS; bank++) {
         keptCount[bank] = pActor->effectorCount[bank];
         for (i = 0; i < pActor->effectorCount[bank]; i++) {
             kept[bank][i] = pActor->effector[bank][i];
         }
     }
-    for (bank = 0; bank < 2; bank++) {
+    for (bank = 0; bank < XRG_ACTOR_EFFECT_BANKS; bank++) {
         for (i = 0; i < keptCount[bank]; i++) {
             if (kept[bank][i] == pEffector) {
                 if (pEffector != 0) {
@@ -1580,7 +1566,7 @@ void XrgActorDisposeEffector(XrgActor *pActor, struct MatrixEffector *pEffector)
             }
         }
     }
-    for (bank = 0; bank < 2; bank++) {
+    for (bank = 0; bank < XRG_ACTOR_EFFECT_BANKS; bank++) {
         cnt = 0;
         for (i = 0; i < keptCount[bank]; i++) {
             if (kept[bank][i] != 0) {
@@ -1589,25 +1575,25 @@ void XrgActorDisposeEffector(XrgActor *pActor, struct MatrixEffector *pEffector)
             }
         }
         pActor->effectorCount[bank] = cnt;
-        if (cnt >= 4) {
-            RgError(D_00A58C98, D_00A587E0, 1623, bank, keptCount[bank]);
+        if (cnt >= XRG_ACTOR_EFFECT_LIMIT) {
+            RgError(actorEffectOverflowFormat, actorSourcePath, 1623, bank, keptCount[bank]);
         }
     }
 }
 
 void XrgActorDebugDisp(XrgActor *pActor)
 {
-    XenoAct *pXenoAct;
-    XenoMotion *pMotion;
+    Actor *pXenoAct;
+    ActorAnimSlot *pMotion;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1634);
+        assert_prog(actorAssertTexts.actorNotNil, actorSourcePath, 1634);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
-        pMotion = &pXenoAct->motion;
-        XrgLog(D_00A58CB0, D_00A587E0, 1638, pActor, pXenoAct);
-        XrgLog(D_00A58CD0, D_00A587E0, 1639, pMotion->frame, pMotion->start, pMotion->length);
-        XrgLog(D_00A58CF0, D_00A587E0, 1640, pMotion->flags, 0x1000, pMotion->next);
+        pMotion = &pXenoAct->animation.slot;
+        XrgLog(actorDebugHeaderFormat, actorSourcePath, 1638, pActor, pXenoAct);
+        XrgLog(actorDebugTimeFormat, actorSourcePath, 1639, pMotion->frame, pMotion->reverseLimit, pMotion->forwardLimit);
+        XrgLog(actorDebugFlagsFormat, actorSourcePath, 1640, pMotion->flags, XRG_MOTION_FLAG_ENDED, pMotion->nextDataId);
     }
 }

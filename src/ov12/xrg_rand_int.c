@@ -3,10 +3,9 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "xrg_rand_int.h"
+#include "ov12/xrg_rand_int.h"
 
-/* newlib rand(), out of recovery scope: this TU only calls it. */
-extern int rand(void);
+/* newlib rand() and libm, out of recovery scope: this TU only calls them. */
 
 int XrgRandInt(void)
 {
@@ -15,7 +14,7 @@ int XrgRandInt(void)
 
 float XrgRand(float lower, float upper)
 {
-    return (float) rand() * 4.656613e-10f * (upper - lower) + lower;
+    return (float) rand() * XRG_RAND_UNIT * (upper - lower) + lower;
 }
 
 int XrgRandIntRange(int lower, int upper)
@@ -151,11 +150,11 @@ void XrgCopyVector(RgVector destination, RgVector source)
     destination[3] = source[3];
 }
 
-float XrgLengthVector(const Vector4 *source)
+float XrgLengthVector(RgVector source)
 {
-    float z_squared = source->z * source->z;
-    float y_squared = source->y * source->y;
-    float x_squared = source->x * source->x;
+    float z_squared = source[2] * source[2];
+    float y_squared = source[1] * source[1];
+    float x_squared = source[0] * source[0];
 
     return __builtin_sqrtf(x_squared + y_squared + z_squared);
 }
@@ -253,9 +252,6 @@ void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right)
         : "$7", "memory");
 }
 
-void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
-void XrgApplyVector(RgVector destination, RgMatrix matrix, RgVector vector);
-
 void XrgTransMatrix(RgMatrix destination, RgMatrix source, RgVector translation)
 {
     RgVector translated;
@@ -289,19 +285,16 @@ void XrgNegateVector(RgVector destination, RgVector source)
     destination[3] = source[3];
 }
 
-void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
-void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle);
-
 void XrgRandVector(RgVector destination)
 {
     float pitch;
     float yaw;
     RgMatrix rotation;
 
-    pitch = (float) rand() * 4.656613e-10f;
-    yaw = (float) rand() * 4.656613e-10f;
-    yaw = yaw * 6.2831855f - 3.1415927f;
-    pitch = pitch * 3.1415927f - 1.5707964f;
+    pitch = (float) rand() * XRG_RAND_UNIT;
+    yaw = (float) rand() * XRG_RAND_UNIT;
+    yaw = yaw * XRG_TWO_PI - XRG_PI;
+    pitch = pitch * XRG_PI - XRG_HALF_PI;
     XrgUnitMatrix(rotation);
     XrgRotMatrixY(rotation, rotation, yaw);
     XrgRotMatrixX(rotation, rotation, pitch);
@@ -314,8 +307,8 @@ void XrgRandVectorRange(RgVector destination, float pitchRange, float yawRange)
     float yaw;
     RgMatrix rotation;
 
-    pitch = (float) rand() * 4.656613e-10f;
-    yaw = (float) rand() * 4.656613e-10f;
+    pitch = (float) rand() * XRG_RAND_UNIT;
+    yaw = (float) rand() * XRG_RAND_UNIT;
     pitch = pitch * pitchRange - 0.5f * pitchRange;
     yaw = yaw * yawRange - 0.5f * yawRange;
     XrgUnitMatrix(rotation);
@@ -366,10 +359,6 @@ void XrgRotVector(RgVector destination, RgMatrix matrix, RgVector vector)
         : "memory"
     );
 }
-
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern void XrgOuterVector(RgVector destination, RgVector first, RgVector second);
-extern void XrgUnitMatrix(RgMatrix destination);
 
 /*
  * Each XrgCalcMatrix<From>to<To> builds an orthonormal frame (matrix rows 0/1/2
@@ -429,9 +418,6 @@ void XrgCalcMatrixXtoZ(RgMatrix matrix, RgVector xAxis, RgVector zAxis)
     XrgNormalizeVector(rowY, rowY);
     XrgOuterVector(matrix + 8, matrix, rowY);
 }
-
-extern float sinf(float angle);
-extern float cosf(float angle);
 
 /*
  * Each XrgRotMatrix<Axis> multiplies source by a rotation of angle radians
@@ -510,14 +496,14 @@ void XrgInvMatrix(RgMatrix destination, const RgMatrix source)
     XrgMulMatrix(destination, rotation, translation);
 }
 
-extern double atan2(double y, double x);
-
-float XrgCalcRotY(const Vector4 *vector)
+float XrgCalcRotY(RgVector vector)
 {
-    return (float) atan2((double) vector->x, (double) vector->z);
+    return (float) atan2((double) vector[0], (double) vector[2]);
 }
 
-static float s_aStack[256];
+#define XRG_MAT_STACK_DEPTH 16
+
+static float s_aStack[XRG_MAT_STACK_DEPTH * XRG_MATRIX_FLOATS];
 static float *s_paTop;
 
 void XrgClearMatStack(void)
@@ -526,14 +512,11 @@ void XrgClearMatStack(void)
     XrgUnitMatrix((float *) s_aStack);
 }
 
-/* The current matrix-stack top. The data is still scaffold-owned
- * (docs/naming.md); the scaffold defines it under the original ELF symbol
- * name s_paTop, imported through config/symbols/ov12.txt. */
 void XrgPushMatStack(void)
 {
     float *previous_top = s_paTop;
 
-    s_paTop = previous_top + 16;
+    s_paTop = previous_top + XRG_MATRIX_FLOATS;
     XrgCopyMatrix(s_paTop, previous_top);
 }
 
@@ -544,7 +527,7 @@ void XrgSetTopMatStack(const RgMatrix source)
 
 void XrgPopMatStack(void)
 {
-    s_paTop -= 16;
+    s_paTop -= XRG_MATRIX_FLOATS;
 }
 
 void XrgMulMatStack(RgMatrix matrix)
@@ -578,6 +561,7 @@ void XrgCopyMatStack(RgMatrix destination)
     XrgCopyMatrix(destination, s_paTop);
 }
 
+/* normal = (p1 - p0) x (p2 - p1), via XrgSubVector and XrgOuterVector. */
 void XrgCalcPlaneNorm(RgVector normal, RgVector p0, RgVector p1, RgVector p2)
 {
     RgVector edge0;
@@ -589,10 +573,6 @@ void XrgCalcPlaneNorm(RgVector normal, RgVector p0, RgVector p1, RgVector p2)
     XrgNormalizeVector(normal, normal);
     normal[3] = 1.0f;
 }
-
-/* normal = (p1 - p0) x (p2 - p1), via XrgSubVector and XrgOuterVector. */
-void XrgCalcPlaneNorm(RgVector normal, RgVector p0, RgVector p1, RgVector p2);
-float XrgInnerVector(RgVector first, RgVector second);
 
 /* The plane through three points is stored as a 4-component vector:
  * XrgCalcPlaneNorm fills the first three floats with the plane normal, and
@@ -650,35 +630,35 @@ int XrgIsTriIntersectedByRay(RgVector origin, RgVector direction, RgVector trian
 
 int XrgQuantAngle(float angle)
 {
-    if (3.1415927f < angle) {
+    if (XRG_PI < angle) {
         do {
-            angle -= 6.2831855f;
-        } while (3.1415927f < angle);
+            angle -= XRG_TWO_PI;
+        } while (XRG_PI < angle);
     }
-    if (angle < -3.1415927f) {
+    if (angle < -XRG_PI) {
         do {
-            angle += 6.2831855f;
-        } while (angle < -3.1415927f);
+            angle += XRG_TWO_PI;
+        } while (angle < -XRG_PI);
     }
-    if (-0.3926991f <= angle && angle < 0.3926991f) {
+    if (-XRG_EIGHTH_PI <= angle && angle < XRG_EIGHTH_PI) {
         return 0;
     }
-    if (0.3926991f <= angle && angle < 1.1780972f) {
+    if (XRG_EIGHTH_PI <= angle && angle < XRG_THREE_EIGHTH_PI) {
         return 1;
     }
-    if (1.1780972f <= angle && angle < 1.9634955f) {
+    if (XRG_THREE_EIGHTH_PI <= angle && angle < XRG_FIVE_EIGHTH_PI) {
         return 2;
     }
-    if (1.9634955f <= angle && angle < 2.7488937f) {
+    if (XRG_FIVE_EIGHTH_PI <= angle && angle < XRG_SEVEN_EIGHTH_PI) {
         return 3;
     }
-    if (2.7488937f <= angle || angle < -2.7488937f) {
+    if (XRG_SEVEN_EIGHTH_PI <= angle || angle < -XRG_SEVEN_EIGHTH_PI) {
         return 4;
     }
-    if (-2.7488937f <= angle && angle < -1.9634955f) {
+    if (-XRG_SEVEN_EIGHTH_PI <= angle && angle < -XRG_FIVE_EIGHTH_PI) {
         return 5;
     }
-    if (-1.9634955f <= angle && angle < -1.1780972f) {
+    if (-XRG_FIVE_EIGHTH_PI <= angle && angle < -XRG_THREE_EIGHTH_PI) {
         return 6;
     }
     return 7;
@@ -687,27 +667,26 @@ int XrgQuantAngle(float angle)
 /*
  * Wraps angle into (-pi, pi] and returns its quadrant around the forward
  * direction: 0 for [-pi/4, pi/4), 1 for [pi/4, 3pi/4), 2 behind (|angle| >= 3pi/4),
- * 3 for [-3pi/4, -pi/4); -1 is unreachable after the wrap. The bounds are
- * the original float literals (0x3F490FDB, 0x4016CBE4).
+ * 3 for [-3pi/4, -pi/4); -1 is unreachable after the wrap.
  */
 int XrgQuantAngle4(float angle)
 {
-    while (angle > 3.1415927f) {
-        angle -= 6.2831855f;
+    while (angle > XRG_PI) {
+        angle -= XRG_TWO_PI;
     }
-    while (angle < -3.1415927f) {
-        angle += 6.2831855f;
+    while (angle < -XRG_PI) {
+        angle += XRG_TWO_PI;
     }
-    if (-0.7853982f <= angle && angle < 0.7853982f) {
+    if (-XRG_QUARTER_PI <= angle && angle < XRG_QUARTER_PI) {
         return 0;
     }
-    if (0.7853982f <= angle && angle < 2.3561945f) {
+    if (XRG_QUARTER_PI <= angle && angle < XRG_THREE_QUARTER_PI) {
         return 1;
     }
-    if (2.3561945f <= angle || angle < -2.3561945f) {
+    if (XRG_THREE_QUARTER_PI <= angle || angle < -XRG_THREE_QUARTER_PI) {
         return 2;
     }
-    if (-2.3561945f <= angle && angle < -0.7853982f) {
+    if (-XRG_THREE_QUARTER_PI <= angle && angle < -XRG_QUARTER_PI) {
         return 3;
     }
     return -1;

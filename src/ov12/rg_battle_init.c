@@ -3,67 +3,85 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_battle_init.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_actor_charid.h"
+#include "ov12/rg_battle_init.h"
+#include "ov12/rg_bg_builder.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_light.h"
+#include "ov12/rg_player.h"
+#include "ov12/rg_read_text.h"
+#include "ov12/rg_robot_db.h"
+#include "ov12/rg_robot_spec.h"
+#include "ov12/rg_weapon_db.h"
 #include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_v_log.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern const char D_00A54E18[];
-extern const char D_00A54E28[];
-extern const unsigned char D_00A54E40[8];
-extern const char D_00A54E48[];
-extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
-extern char *strcpy(char *destination, const char *source);
+extern const char battleInitAssertInfoNotNil[];
+extern const char battleInitSourcePath[];
+extern const unsigned char battleInitEmptyString[8];
+extern const char battleInitAssertDstAndSrcNotNil[];
+extern const char battleInitUnarmedWeaponName[];
+extern const char battleInitBgInfoFileName[];
+extern const char battleInitAssertBgGroupAndNameNotNil[];
+extern const char battleInitCannotOpenFormat[];
+extern const char battleInitAssertDstNotNil[];
+extern const char battleInitDumpHeaderFormat[];
+extern const char battleInitDumpBgFormat[];
+extern const char battleInitDumpPlayerFormat[];
+extern const char battleInitDumpPositionAndWeaponFormats[];
 
-void InitRgBattleInit(RgBattleInitState *pInfo)
+static RgFileSysData *_CreateBg(struct RgGeomGroup *pGroup, char *pszBgName);
+
+void InitRgBattleInit(RgBattleInit *pInfo)
 {
     unsigned int playerIndex;
     unsigned int weaponIndex;
 
     if (pInfo == 0) {
-        assert_prog(D_00A54E18, D_00A54E28, 0x1E);
+        assert_prog(battleInitAssertInfoNotNil, battleInitSourcePath, 0x1E);
     }
-    for (playerIndex = 0; playerIndex < 2; playerIndex++) {
-        pInfo->players[playerIndex].actorName[0] = D_00A54E40[0];
+    for (playerIndex = 0; playerIndex < RG_BATTLE_PLAYER_MAX; playerIndex++) {
+        pInfo->players[playerIndex].actorName[0] = battleInitEmptyString[0];
         XrgClearVector(pInfo->players[playerIndex].position);
         XrgClearVector(pInfo->players[playerIndex].direction);
         pInfo->players[playerIndex].direction[2] = 1.0f;
-        for (weaponIndex = 0; weaponIndex < 3; weaponIndex++) {
-            pInfo->players[playerIndex].weaponName[weaponIndex][0] =
-                D_00A54E40[0];
+        for (weaponIndex = 0; weaponIndex < RG_BATTLE_WEAPON_SLOTS; weaponIndex++) {
+            pInfo->players[playerIndex].weapons.names[weaponIndex][0] =
+                battleInitEmptyString[0];
         }
     }
     XrgSetVectorXYZ(pInfo->players[0].position, 0.0f, 2.0f, -10.0f);
     XrgSetVectorXYZ(pInfo->players[1].position, 0.0f, 2.0f, 10.0f);
     XrgSetVectorXYZ(pInfo->players[0].direction, 0.0f, 0.0f, 1.0f);
     XrgSetVectorXYZ(pInfo->players[1].direction, 0.0f, 0.0f, -1.0f);
-    pInfo->bg[0] = D_00A54E40[0];
-    pInfo->battleMode = 0;
+    pInfo->bg[0] = battleInitEmptyString[0];
+    pInfo->mode = 0;
     pInfo->enemyType = 0;
 }
 
-void RgBattleInitCopy(RgBattleInitState *pDst,
-                      RgBattleInitState *pSrc)
+void RgBattleInitCopy(RgBattleInit *pDst,
+                      RgBattleInit *pSrc)
 {
     int playerIndex;
     int weaponCount;
-    char (*pSrcWeapon)[64];
-    char (*pDstWeapon)[64];
+    char (*pSrcWeapon)[RG_BATTLE_NAME_SIZE];
+    char (*pDstWeapon)[RG_BATTLE_NAME_SIZE];
 
     if ((pDst == 0) || (pSrc == 0)) {
-        assert_prog(D_00A54E48, D_00A54E28, 57);
+        assert_prog(battleInitAssertDstAndSrcNotNil, battleInitSourcePath, 57);
     }
     strcpy(pDst->bg, pSrc->bg);
-    for (playerIndex = 0; playerIndex < 2; playerIndex++) {
+    for (playerIndex = 0; playerIndex < RG_BATTLE_PLAYER_MAX; playerIndex++) {
         strcpy(pDst->players[playerIndex].actorName,
                pSrc->players[playerIndex].actorName);
         XrgCopyVector(pDst->players[playerIndex].position,
                       pSrc->players[playerIndex].position);
         XrgCopyVector(pDst->players[playerIndex].direction,
                       pSrc->players[playerIndex].direction);
-        pSrcWeapon = pSrc->players[playerIndex].weaponName;
-        pDstWeapon = pDst->players[playerIndex].weaponName;
-        for (weaponCount = 2; weaponCount >= 0; weaponCount--) {
+        pSrcWeapon = pSrc->players[playerIndex].weapons.names;
+        pDstWeapon = pDst->players[playerIndex].weapons.names;
+        for (weaponCount = RG_BATTLE_WEAPON_SLOTS - 1; weaponCount >= 0; weaponCount--) {
             strcpy(*pDstWeapon, *pSrcWeapon);
             pDstWeapon++;
             pSrcWeapon++;
@@ -71,52 +89,31 @@ void RgBattleInitCopy(RgBattleInitState *pDst,
     }
 }
 
-extern int strcmp(const char *left, const char *right);
-extern const char D_00A54E68[];
-extern RgSimpleDB *InstanceOfRgWeaponDB(void);
-extern RgSimpleDB *InstanceOfRgRobotDB(void);
-extern int RgActorNameToCharID(const char *pszName);
-extern void *RgRobotDBGetByID(RgSimpleDB *database, int charID);
-extern void *RgWeaponDBGetEssence(RgSimpleDB *pDB, const char *pszName);
-extern void InitRgPlayerEssence(struct RgPlayerEssence *pDat);
-extern struct RgPlayer *CreateRgPlayer(struct RgPlayerEssence *pDat);
-
-/* The player set-up block InitRgPlayerEssence and CreateRgPlayer read; the
- * same 0x40-byte layout tu015 keeps as RgPlayerEssenceFields. */
-struct RgBattlePlayerEssence {
-    RgVector position;
-    RgVector direction;
-    void *spec;
-    void *weaponEssence[3];
-    void *spareWeaponEssence[3];
-    int actorID;
-};
-
-int RgBattleInitCreatePlayers(RgBattleInitState *pInfo,
+int RgBattleInitCreatePlayers(RgBattleInit *pInfo,
                               struct RgPlayer **ppPlayers, int maxPlayers)
 {
-    struct RgBattlePlayerEssence essence;
+    struct RgPlayerEssence essence;
     RgSimpleDB *pWeaponDB;
-    void **pSpareEssence;
-    void *weaponEssence;
-    void *spec;
+    RgWeaponEssence **pSpareEssence;
+    RgWeaponEssence *weaponEssence;
+    RgRobotSpec *spec;
     unsigned int playerIndex;
     unsigned int weaponIndex;
     unsigned int createdCount;
-    RgBattleInitPlayerInfo *pPlayer;
+    RgBattleInitPlayer *pPlayer;
 
     pWeaponDB = InstanceOfRgWeaponDB();
     if (pInfo == 0) {
-        assert_prog(D_00A54E18, D_00A54E28, 82);
+        assert_prog(battleInitAssertInfoNotNil, battleInitSourcePath, 82);
     }
     createdCount = 0;
     playerIndex = 0;
     if (maxPlayers != 0) {
         pPlayer = pInfo->players;
         do {
-            if (strcmp(pPlayer->actorName, D_00A54E40) != 0) {
+            if (strcmp(pPlayer->actorName, battleInitEmptyString) != 0) {
                 weaponIndex = 0;
-                InitRgPlayerEssence((struct RgPlayerEssence *)&essence);
+                InitRgPlayerEssence(&essence);
                 essence.actorID = RgActorNameToCharID(pPlayer->actorName);
                 XrgCopyVector(essence.position, pPlayer->position);
                 XrgCopyVector(essence.direction, pPlayer->direction);
@@ -125,67 +122,49 @@ int RgBattleInitCreatePlayers(RgBattleInitState *pInfo,
                 pSpareEssence = essence.spareWeaponEssence;
                 do {
                     weaponEssence = RgWeaponDBGetEssence(
-                        pWeaponDB, pPlayer->weaponName[weaponIndex]);
+                        pWeaponDB, pPlayer->weapons.names[weaponIndex]);
                     spec = essence.spec;
                     essence.weaponEssence[weaponIndex] = weaponEssence;
                     *pSpareEssence = (spec == 0)
-                        ? RgWeaponDBGetEssence(pWeaponDB, D_00A54E68)
-                        : RgWeaponDBGetEssence(pWeaponDB, (char *)spec + 152);
+                        ? RgWeaponDBGetEssence(pWeaponDB, battleInitUnarmedWeaponName)
+                        : RgWeaponDBGetEssence(pWeaponDB, spec->sude);
                     pSpareEssence++;
                     weaponIndex++;
-                } while (weaponIndex < 3);
+                } while (weaponIndex < RG_BATTLE_WEAPON_SLOTS);
                 ppPlayers[createdCount] =
-                    CreateRgPlayer((struct RgPlayerEssence *)&essence);
+                    CreateRgPlayer(&essence);
                 createdCount++;
             }
             pPlayer++;
             playerIndex++;
-        } while ((playerIndex < 2) && (createdCount < maxPlayers));
+        } while ((playerIndex < RG_BATTLE_PLAYER_MAX) && (createdCount < maxPlayers));
     }
     return createdCount;
 }
 
-static void *_CreateBg(int bgId, char *pszBgName);
-
-void RgBattleInitCreateBg(RgBattleInitInfo *pInfo, int bgId)
+RgFileSysData *RgBattleInitCreateBg(RgBattleInit *pInfo, struct RgGeomGroup *pGroup)
 {
     if (pInfo == 0) {
-        assert_prog(D_00A54E18, D_00A54E28, 0x83);
+        assert_prog(battleInitAssertInfoNotNil, battleInitSourcePath, 0x83);
     }
-    _CreateBg(bgId, pInfo->bg);
+    return _CreateBg(pGroup, pInfo->bg);
 }
 
-extern struct RgReadText *CreateRgReadText(const char *pszName);
-extern void DisposeRgReadText(struct RgReadText *pReader);
-extern struct RgBgBuilder *CreateRgBgBuilder(void *pGroup);
-extern void DisposeRgBgBuilder(struct RgBgBuilder *pBuilder);
-extern void RgBgBuilderBuildFromText(struct RgBgBuilder *pBuilder,
-                                     struct RgReadText *pReader,
-                                     const char *pszStageName);
-extern void *RgBgBuilderGetLoadData(struct RgBgBuilder *pBuilder);
-extern void RgBgBuilderGetLight(struct RgBgBuilder *pBuilder, void *pGetBuf);
-extern void *InstanceOfGlobalLight(void);
-extern void RgWarn(const char *pszFormat, const char *pszSourceFile, int line,
-                   ...);
-extern const char D_00A54E70[];
-extern const char D_00A54E80[];
-extern const char D_00A54EA8[];
-
-static void *_CreateBg(int bgId, char *pszBgName)
+static RgFileSysData *_CreateBg(struct RgGeomGroup *pGroup, char *pszBgName)
 {
     struct RgReadText *pReader;
     struct RgBgBuilder *pBuilder;
-    void *pLoadData;
+    RgFileSysData *pLoadData;
 
-    pReader = CreateRgReadText(D_00A54E70);
-    if ((bgId == 0) || (pszBgName == 0)) {
-        assert_prog(D_00A54E80, D_00A54E28, 148);
+    pReader = CreateRgReadText(battleInitBgInfoFileName);
+    if ((pGroup == 0) || (pszBgName == 0)) {
+        assert_prog(battleInitAssertBgGroupAndNameNotNil, battleInitSourcePath, 148);
     }
     if (pReader == 0) {
-        RgWarn(D_00A54EA8, D_00A54E28, 151, D_00A54E70);
+        RgWarn(battleInitCannotOpenFormat, battleInitSourcePath, 151, battleInitBgInfoFileName);
         return 0;
     }
-    pBuilder = CreateRgBgBuilder((void *)bgId);
+    pBuilder = CreateRgBgBuilder(pGroup);
     RgBgBuilderBuildFromText(pBuilder, pReader, pszBgName);
     pLoadData = RgBgBuilderGetLoadData(pBuilder);
     RgBgBuilderGetLight(pBuilder, InstanceOfGlobalLight());
@@ -194,42 +173,34 @@ static void *_CreateBg(int bgId, char *pszBgName)
     return pLoadData;
 }
 
-extern void XrgLog(const char *pszFormat, const char *pszSourceFile, int line,
-                   ...);
-extern const char D_00A54EC0[];
-extern const char D_00A54ED0[];
-extern const char D_00A54EF0[];
-extern const char D_00A54F00[];
-extern const char D_00A54F10[];
-
-void RgBattleInitDump(RgBattleInitState *pDst)
+void RgBattleInitDump(RgBattleInit *pDst)
 {
-    RgBattleInitPlayerInfo *pPlayer;
+    RgBattleInitPlayer *pPlayer;
     int playerIndex;
     int weaponIndex;
 
     if (pDst == 0) {
-        assert_prog(D_00A54EC0, D_00A54E28, 173);
+        assert_prog(battleInitAssertDstNotNil, battleInitSourcePath, 173);
     }
-    XrgLog(D_00A54ED0, D_00A54E28, 175, pDst);
-    XrgLog(D_00A54EF0, D_00A54E28, 176, pDst->bg);
+    XrgLog(battleInitDumpHeaderFormat, battleInitSourcePath, 175, pDst);
+    XrgLog(battleInitDumpBgFormat, battleInitSourcePath, 176, pDst->bg);
     playerIndex = 0;
-    for (; playerIndex < 2; playerIndex++) {
+    for (; playerIndex < RG_BATTLE_PLAYER_MAX; playerIndex++) {
         pPlayer = &pDst->players[playerIndex];
-        XrgLog(D_00A54F00, D_00A54E28, 179, pPlayer->actorName);
-        XrgLog(D_00A54F10, D_00A54E28, 180, pPlayer->position[0],
+        XrgLog(battleInitDumpPlayerFormat, battleInitSourcePath, 179, pPlayer->actorName);
+        XrgLog(battleInitDumpPositionAndWeaponFormats, battleInitSourcePath, 180, pPlayer->position[0],
                pPlayer->position[1], pPlayer->position[2]);
-        for (weaponIndex = 0; weaponIndex < 3; weaponIndex++) {
-            XrgLog(D_00A54F10 + 24, D_00A54E28, 182, weaponIndex,
-                   pPlayer->weaponName[weaponIndex]);
+        for (weaponIndex = 0; weaponIndex < RG_BATTLE_WEAPON_SLOTS; weaponIndex++) {
+            XrgLog(battleInitDumpPositionAndWeaponFormats + 24, battleInitSourcePath, 182, weaponIndex,
+                   pPlayer->weapons.names[weaponIndex]);
         }
     }
 }
 
-const char D_00A54E18[] = "pInfo != NIL";
+const char battleInitAssertInfoNotNil[] = "pInfo != NIL";
 
-const char D_00A54E28[] = "../rg_battle_init.euc.c";
+const char battleInitSourcePath[] = "../rg_battle_init.euc.c";
 
-const unsigned char D_00A54E40[8] = "";
+const unsigned char battleInitEmptyString[8] = "";
 
-const char D_00A54E48[] = "pDst != NIL && pSrc != NIL";
+const char battleInitAssertDstAndSrcNotNil[] = "pDst != NIL && pSrc != NIL";

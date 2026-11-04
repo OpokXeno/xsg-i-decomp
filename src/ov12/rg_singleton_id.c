@@ -3,26 +3,14 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
 #include "ov12/rg_singleton_id.h"
 #include "rg_singleton_id.h"
 
-/* The assertion strings retain their original source expressions and file
- * name; the compiler emits them as this TU's read-only data. */
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
 static RgSingletonManager s_inIDmgr;
 
 static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
                     void *instance, void (*destructor)(void *instance));
-
-/*
- * Layout and callbacks for the OV12 singleton-manager functions.
- *
- * Identity: slus-20469-412d448de315 / ov12.  The manager layout and callback
- * order are bounded by the original accesses.  The assertion arguments use
- * the roles evidenced by the original file-backed strings: expression, source
- * file, and source line.
- */
 
 static void _Clear(RgSingletonManager *manager)
 {
@@ -33,7 +21,7 @@ static void _Clear(RgSingletonManager *manager)
     }
 
     manager->count = 0;
-    for (index = 0; index < 15; index++) {
+    for (index = 0; index < RG_SID_MAX; index++) {
         manager->instances[index] = 0;
         manager->destructors[index] = 0;
     }
@@ -77,7 +65,7 @@ static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
     if (instance == 0) {
         assert_prog("pPtr != NIL", "../rg_singleton_id.euc.c", 60);
     }
-    if (singleton_id >= 15) {
+    if (singleton_id >= RG_SID_MAX) {
         assert_prog("0 <= eID && eID < RG_SID_MAX",
                     "../rg_singleton_id.euc.c", 61);
     }
@@ -91,14 +79,12 @@ static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
     *count = order_index + 1;
 }
 
-/* Layout and callbacks for the OV12 singleton-manager lookup. */
-
 static void *_Get(RgSingletonManager *manager, unsigned int singleton_id)
 {
     if (manager == 0) {
         assert_prog("pMgr != NIL", "../rg_singleton_id.euc.c", 70);
     }
-    if (singleton_id >= 15) {
+    if (singleton_id >= RG_SID_MAX) {
         assert_prog("0 <= eID && eID < RG_SID_MAX",
                     "../rg_singleton_id.euc.c", 71);
     }
@@ -110,27 +96,16 @@ void RgSingletonIDClear(void)
     _Clear(&s_inIDmgr);
 }
 
-/* Layout and callbacks for the OV12 singleton disposal wrapper. */
-
 void RgSingletonDispose(void)
 {
     _Destruct(&s_inIDmgr);
 }
 
-/*
- * The registry keeps any singleton with its destructor; its shared
- * prototype (include/shared.h, config/header-canon.json) is spelled for
- * the RgSimpleDB singletons, so a non-RgSimpleDB destructor converts at
- * the call (see src/ov12/rg_motion_info_db.c).  _Entry itself stores the
- * pointer and destructor untyped, so the conversion happens here.
- */
-void RgSingletonIDEntry(int singleton_id, RgSimpleDB *database,
-                        void (*destructor)(RgSimpleDB *database))
+void RgSingletonIDEntry(int singleton_id, void *instance,
+                        void (*destructor)(void *instance))
 {
-    _Entry(&s_inIDmgr, singleton_id, database, (void (*)(void *))destructor);
+    _Entry(&s_inIDmgr, singleton_id, instance, destructor);
 }
-
-/* Layout and callbacks for the OV12 singleton ID wrapper. */
 
 void *RgSingletonIDGet(unsigned int singleton_id)
 {

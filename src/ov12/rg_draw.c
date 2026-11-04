@@ -4,39 +4,64 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_studio.h"
-#include "rg_draw.h"
+#include "main/xgl_packet.h"
+#include "ov12/rg_draw.h"
+#include "ov12/rg_singleton_id.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_sysinit.h"
+#include "main/xgl_2.h"
+#include "main/nml_model_set.h"
+#include "ov12/rg_light.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
-                       int line);
-extern void sceVif1PkCloseGifTag(XglPacket *packet);
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-static void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio);
-static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
-                              RgFog *pFog);
-static void _DestructDraw(RgDraw *pDraw);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
+/* Requests are drawn in priority order 0..RG_DRAW_PRIORITY_COUNT - 1. */
+#define RG_DRAW_PRIORITY_COUNT 7
+/* RgDraw.m_FadeCounter: RgDrawFadeIn counts it down by this step to the limit. */
+#define RG_DRAW_FADE_STEP 20
+#define RG_DRAW_FADE_LIMIT 50
 
-typedef struct RgLight RgLight;
+/* Screen index of the global studio, which has no screen (no view). */
+#define RG_DRAW_STUDIO_GLOBAL -1
+/* RgDraw.m_ActiveStudioMask: bit i is set when studio i exists. */
+#define RG_DRAW_STUDIO_MASK_LEFT 1
+#define RG_DRAW_STUDIO_MASK_BOTH 3
 
-extern RgLight *InstanceOfGlobalLight(void);
-extern void xglStudioChange(int studio_index);
-extern void XrgSleep(void);
-extern StudioCamera *xglStudioSelectGetActiveCamera(int studioIndex);
-static void _CopyFog(RgFog *pDst, RgFog *pSrc);
-static void _SetGlobalLight(void);
-static void _ClearStudioList(RgDraw *pDraw);
-static void _FullScreenStudio(RgDraw *pDraw);
-static void _DoubleScreenStudio(RgDraw *pDraw);
-static void _DrawMain(RgDraw *pDraw);
-static void _DrawReqTerminate(RgDraw *pDraw);
+/* drawID of a request: which studio(s) its draw callback is called with. */
+#define RG_DRAW_ID_ALL_STUDIOS -2
+#define RG_DRAW_ID_GLOBAL -1
 
-typedef unsigned int Quadword __attribute__((mode(TI)));
+/* Screen split modes of _GetSplitRect: left/right or top/bottom halves. */
+#define RG_DRAW_SPLIT_LEFT_RIGHT 0
+#define RG_DRAW_SPLIT_TOP_BOTTOM 1
+
+/* Sizes of the heap objects (RgDrawView, RgDrawStudio). */
+#define RG_DRAW_VIEW_SIZE 128
+#define RG_DRAW_STUDIO_SIZE 12
+
+/* StudioCamera.state value the views reset their camera to, and its field of view. */
+#define RG_DRAW_CAMERA_STATE 4
+#define RG_DRAW_CAMERA_FOV 0.698132f
+
+/* GS values _FadeShadow programs: depth test always passes, and the vertex packet. */
+#define RG_DRAW_TEST_ZALWAYS 0x31001
+#define RG_DRAW_REGS_COLOR_4_XYZ 0x44441
+
+/* RgDrawView.projectionMode / clippingMode of the left and right screens. */
+#define RG_DRAW_LEFT_PROJECTION_MODE 5
+#define RG_DRAW_LEFT_CLIPPING_MODE 6
+#define RG_DRAW_RIGHT_PROJECTION_MODE 7
+#define RG_DRAW_RIGHT_CLIPPING_MODE 8
+
+/*
+ * The 0x20-byte VIF1 packet object sceVif1PkInit fills on the stack.
+ * Partial view of XglPacket (measured: XglPacket is 0x28 bytes and the
+ * frame of _FadeShadow needs 0x20).
+ */
+typedef struct XglPacketSdkView {
+    unsigned char opaque[0x20];
+} XglPacketSdkView;
 
 typedef union GifTag {
     struct {
@@ -46,44 +71,66 @@ typedef union GifTag {
     Quadword quad;
 } GifTag;
 
-const GifTag D_00A54AC0 = {
+/* The 64-byte block _FadeShadow copies from ov12:0x00a54c10: four GIF PACKED quadwords. */
+typedef struct GifTagBlock {
+    GifTag v[4];
+} GifTagBlock;
+
+/* One GIF PACKED-mode RGBAQ quadword: four 32-bit channel words. */
+typedef union RgDrawGifRgbaq {
+    int channels[4];
+    Quadword quad;
+} RgDrawGifRgbaq;
+
+extern void xglCameraSetWindow(StudioCamera *camera, int x0, int y0, int x1,
+                               int y1);
+extern const GifTagBlock drawFadeShadowVertexBlock;
+
+static void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio);
+static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
+                              RgFog *pFog);
+static void _DestructDraw(RgDraw *pDraw);
+static void _CopyFog(RgFog *pDst, RgFog *pSrc);
+static void _SetGlobalLight(void);
+static void _ClearStudioList(RgDraw *pDraw);
+static void _FullScreenStudio(RgDraw *pDraw);
+static void _DoubleScreenStudio(RgDraw *pDraw);
+static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect);
+static void _DrawMain(RgDraw *pDraw);
+static void _DrawReqTerminate(RgDraw *pDraw);
+const GifTag drawDirectAdGifTag = {
     .part = {0x1000000000008000ULL, 0xE}
 };
 
 /* The assertion text, filename and error messages referenced by this TU. */
-const char D_00A54AD0[32] = "not exist xeno studio ID (%d)";
+const char drawUnknownStudioIdError[32] = "not exist xeno studio ID (%d)";
 
-const char D_00A54AF0[24] = "../rg_draw.euc.c";
+const char drawSourcePath[24] = "../rg_draw.euc.c";
 
-const char D_00A54B08[16] = "pView != NIL";
+const char drawAssertViewNotNil[16] = "pView != NIL";
 
-const char D_00A54B18[24] = "pParentStudio != NIL";
+const char drawAssertParentStudioNotNil[24] = "pParentStudio != NIL";
 
-const char D_00A54B30[16] = "pStudio != NIL";
+const char drawAssertStudioNotNil[16] = "pStudio != NIL";
 
-const char D_00A54B40[24] = "pStudio->m_pView != NIL";
+const char drawAssertStudioViewNotNil[24] = "pStudio->m_pView != NIL";
 
-const char D_00A54B58[16] = "pDraw != NIL";
+const char drawAssertDrawNotNil[16] = "pDraw != NIL";
 
-const char D_00A54B68[24] = "unknown studio id %d";
+const char drawUnknownStudioIdFormat[24] = "unknown studio id %d";
 
-const char D_00A54B80[16] = "pFog != NIL";
+const char drawAssertFogNotNil[16] = "pFog != NIL";
 
-const char D_00A54B90[32] = "global studio don't have view";
+const char drawGlobalStudioHasNoViewError[32] = "global studio don't have view";
 
-const char D_00A54BB0[24] = "unknown studio ID %d";
+const char drawUnknownStudioIdUpperFormat[24] = "unknown studio ID %d";
 
-const char D_00A54BC8[32] = "pDraw->m_uReqNum < REQ_CAPA";
+const char drawAssertRequestCountBelowCapacity[32] = "pDraw->m_uReqNum < REQ_CAPA";
 
-const char D_00A54BE8[40] = "pObject != NIL && pHandler != NIL";
+const char drawAssertObjectAndHandlerNotNil[40] = "pObject != NIL && pHandler != NIL";
 
-const char D_00A54C50[24] = "unknown draw id %d";
+const char drawUnknownDrawIdFormat[24] = "unknown draw id %d";
 
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkAlign(XglPacket *packet, int align, int size);
-extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-extern void sceVif1PkOpenGifTag(XglPacket *packet, Quadword tag);
 
 /*
  * ov12:0x00a54ac0 is a fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D
@@ -108,7 +155,7 @@ static void _openVifGifAD(XglPacket *packet)
 {
     GifTag tag;
 
-    tag = D_00A54AC0;
+    tag = drawDirectAdGifTag;
     sceVif1PkCnt(packet, 0);
     sceVif1PkAlign(packet, 2, 3);
     sceVif1PkOpenDirectCode(packet, 0);
@@ -163,16 +210,13 @@ static void _CopyFog(RgFog *pDst, RgFog *pSrc)
     pDst->color[2] = pSrc->color[2];
 }
 
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void XrgUnitVector(RgVector vector);
-
 static void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio)
 {
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 169);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 169);
     }
     if (pParentStudio == 0) {
-        assert_prog(D_00A54B18, D_00A54AF0, 170);
+        assert_prog(drawAssertParentStudioNotNil, drawSourcePath, 170);
     }
     XrgUnitMatrix(pView->viewMatrix);
     XrgUnitVector(pView->axisX);
@@ -182,14 +226,14 @@ static void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio)
     pView->m_pParentStudio = pParentStudio;
     pView->screenRect.x0 = 0;
     pView->screenRect.y0 = 0;
-    pView->screenRect.x1 = 512;
-    pView->screenRect.y1 = 448;
+    pView->screenRect.x1 = RG_DRAW_SCREEN_WIDTH;
+    pView->screenRect.y1 = RG_DRAW_SCREEN_HEIGHT;
 }
 
 static void _DestructRgDrawView(RgDrawView *pView)
 {
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 191);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 191);
     }
 }
 
@@ -198,9 +242,9 @@ static RgDrawView *_CreateRgDrawView(RgDrawStudio *pParentStudio)
     RgDrawView *pView;
 
     if (pParentStudio == 0) {
-        assert_prog(D_00A54B18, D_00A54AF0, 197);
+        assert_prog(drawAssertParentStudioNotNil, drawSourcePath, 197);
     }
-    pView = RgHeapAlloc(InstanceOfRgHeap(), 128, D_00A54AF0, 198);
+    pView = RgHeapAlloc(InstanceOfRgHeap(), RG_DRAW_VIEW_SIZE, drawSourcePath, 198);
     _InitRgDrawView(pView, pParentStudio);
     return pView;
 }
@@ -208,21 +252,21 @@ static RgDrawView *_CreateRgDrawView(RgDrawStudio *pParentStudio)
 static void _DisposeRgDrawView(RgDrawView *pView)
 {
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 205);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 205);
     }
     _DestructRgDrawView(pView);
-    RgHeapFree(InstanceOfRgHeap(), pView, D_00A54AF0, 207);
+    RgHeapFree(InstanceOfRgHeap(), pView, drawSourcePath, 207);
 }
 
 static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
                               RgFog *pFog)
 {
     if (pStudio == 0) {
-        assert_prog(D_00A54B30, D_00A54AF0, 215);
+        assert_prog(drawAssertStudioNotNil, drawSourcePath, 215);
     }
     pStudio->m_pFog = pFog;
     pStudio->m_ScreenIndex = screenIndex;
-    if (screenIndex != -1) {
+    if (screenIndex != RG_DRAW_STUDIO_GLOBAL) {
         pStudio->m_pView = _CreateRgDrawView(pStudio);
         return;
     }
@@ -232,7 +276,7 @@ static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
 static void _DestructRgDrawStudio(RgDrawStudio *pStudio)
 {
     if (pStudio == 0) {
-        assert_prog(D_00A54B30, D_00A54AF0, 231);
+        assert_prog(drawAssertStudioNotNil, drawSourcePath, 231);
     }
     if (pStudio->m_pView != 0) {
         _DisposeRgDrawView(pStudio->m_pView);
@@ -243,7 +287,7 @@ static RgDrawStudio *_CreateRgDrawStudio(int screenIndex, RgFog *pFog)
 {
     RgDrawStudio *pStudio;
 
-    pStudio = RgHeapAlloc(InstanceOfRgHeap(), 12, D_00A54AF0, 240);
+    pStudio = RgHeapAlloc(InstanceOfRgHeap(), RG_DRAW_STUDIO_SIZE, drawSourcePath, 240);
     _InitRgDrawStudio(pStudio, screenIndex, pFog);
     return pStudio;
 }
@@ -251,19 +295,19 @@ static RgDrawStudio *_CreateRgDrawStudio(int screenIndex, RgFog *pFog)
 static void _DisposeRgDrawStudio(RgDrawStudio *pStudio)
 {
     if (pStudio == 0) {
-        assert_prog(D_00A54B30, D_00A54AF0, 247);
+        assert_prog(drawAssertStudioNotNil, drawSourcePath, 247);
     }
     _DestructRgDrawStudio(pStudio);
-    RgHeapFree(InstanceOfRgHeap(), pStudio, D_00A54AF0, 249);
+    RgHeapFree(InstanceOfRgHeap(), pStudio, drawSourcePath, 249);
 }
 
 static RgDrawView *_GetViewRgDrawStudio(RgDrawStudio *pStudio)
 {
     if (pStudio == 0) {
-        assert_prog(D_00A54B30, D_00A54AF0, 254);
+        assert_prog(drawAssertStudioNotNil, drawSourcePath, 254);
     }
     if (pStudio->m_pView == 0) {
-        assert_prog(D_00A54B40, D_00A54AF0, 255);
+        assert_prog(drawAssertStudioViewNotNil, drawSourcePath, 255);
     }
     return pStudio->m_pView;
 }
@@ -273,13 +317,13 @@ static void _InitStudioList(RgDraw *pDraw)
     unsigned int slotIndex;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 266);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 266);
     }
     slotIndex = 0;
     do {
         pDraw->m_pStudios[slotIndex] = 0;
         slotIndex += 1;
-    } while (slotIndex < 2U);
+    } while (slotIndex < RG_DRAW_STUDIO_COUNT);
     pDraw->m_ActiveStudioMask = 0;
 }
 
@@ -290,7 +334,7 @@ static void _ClearStudioList(RgDraw *pDraw)
     unsigned int slotIndex;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 276);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 276);
     }
     slotIndex = 0;
     pSlot = pDraw->m_pStudios;
@@ -302,14 +346,9 @@ static void _ClearStudioList(RgDraw *pDraw)
             *pSlot = 0;
         }
         pSlot += 1;
-    } while (slotIndex < 2U);
+    } while (slotIndex < RG_DRAW_STUDIO_COUNT);
     pDraw->m_ActiveStudioMask = 0;
 }
-
-extern StudioCamera *xglStudioSelectGetActiveCamera(int studio_index);
-extern void xglCameraSetWindow(StudioCamera *camera, int x0, int y0, int x1,
-                               int y1);
-extern void nmlModelUseSubWindow(int window_index, int mode);
 
 /*
  * ov12:0x00a50080 is a fixed camera window rectangle (config/symbols/ov12.txt
@@ -323,14 +362,14 @@ static void _FullScreenStudio(RgDraw *pDraw)
     RgDrawStudio *pStudio;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 291);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 291);
     }
     _ClearStudioList(pDraw);
     pDraw->m_FullScreenMode = 1;
     pDraw->m_FullScreenParam = 2;
     pStudio = _CreateRgDrawStudio(0, &pDraw->m_Fog);
     pDraw->m_pStudios[1] = 0;
-    pDraw->m_ActiveStudioMask = 1;
+    pDraw->m_ActiveStudioMask = RG_DRAW_STUDIO_MASK_LEFT;
     pDraw->m_pStudios[0] = pStudio;
     xglCameraSetWindow(xglStudioSelectGetActiveCamera(0), s_aView_0.x0,
                        s_aView_0.y0, s_aView_0.x1, s_aView_0.y1);
@@ -340,23 +379,21 @@ static void _FullScreenStudio(RgDraw *pDraw)
     nmlModelUseSubWindow(3, 0);
 }
 
-extern void XrgSetIVector(int destination[4], int x, int y, int z, int w);
-
 static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect)
 {
     switch (splitMode) {
-    case 0:
+    case RG_DRAW_SPLIT_LEFT_RIGHT:
         if (screenIndex == 0) {
-            XrgSetIVector(&pRect->x0, 0, 0, 256, 448);
+            XrgSetIVector(&pRect->x0, 0, 0, RG_DRAW_SCREEN_WIDTH / 2, RG_DRAW_SCREEN_HEIGHT);
         } else {
-            XrgSetIVector(&pRect->x0, 256, 0, 512, 448);
+            XrgSetIVector(&pRect->x0, RG_DRAW_SCREEN_WIDTH / 2, 0, RG_DRAW_SCREEN_WIDTH, RG_DRAW_SCREEN_HEIGHT);
         }
         break;
-    case 1:
+    case RG_DRAW_SPLIT_TOP_BOTTOM:
         if (screenIndex == 0) {
-            XrgSetIVector(&pRect->x0, 0, 0, 512, 224);
+            XrgSetIVector(&pRect->x0, 0, 0, RG_DRAW_SCREEN_WIDTH, RG_DRAW_SCREEN_HEIGHT / 2);
         } else {
-            XrgSetIVector(&pRect->x0, 0, 224, 512, 448);
+            XrgSetIVector(&pRect->x0, 0, RG_DRAW_SCREEN_HEIGHT / 2, RG_DRAW_SCREEN_WIDTH, RG_DRAW_SCREEN_HEIGHT);
         }
         break;
     default:
@@ -365,8 +402,6 @@ static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect)
     return 1;
 }
 
-static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect);
-
 static void _SetScreenSplitMode(RgDraw *pDraw, int splitMode)
 {
     RgRect rect;
@@ -374,7 +409,7 @@ static void _SetScreenSplitMode(RgDraw *pDraw, int splitMode)
     RgRect *pScreenRect1;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 342);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 342);
     }
     if (pDraw->m_FullScreenMode == 0) {
         if (_GetSplitRect(splitMode, 0, &rect) != 0) {
@@ -400,15 +435,15 @@ static void _DoubleScreenStudio(RgDraw *pDraw)
 
     pFog = &pDraw->m_Fog;
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 375);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 375);
     }
     _ClearStudioList(pDraw);
     pDraw->m_FullScreenMode = 0;
     pDraw->m_FullScreenParam = 0;
     pDraw->m_pStudios[0] = _CreateRgDrawStudio(0, pFog);
     pDraw->m_pStudios[1] = _CreateRgDrawStudio(1, pFog);
-    pDraw->m_ActiveStudioMask = 3;
-    _SetScreenSplitMode(pDraw, 0);
+    pDraw->m_ActiveStudioMask = RG_DRAW_STUDIO_MASK_BOTH;
+    _SetScreenSplitMode(pDraw, RG_DRAW_SPLIT_LEFT_RIGHT);
     nmlModelUseSubWindow(0, 2);
     nmlModelUseSubWindow(1, 2);
     nmlModelUseSubWindow(2, 0);
@@ -421,47 +456,44 @@ static void _InitDraw(RgDraw *pDraw)
 
     pFog = &pDraw->m_Fog;
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 403);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 403);
     }
     pDraw->m_FadeCounter = 0;
     pDraw->m_Enabled = 1;
     pDraw->m_FadeParam = 0;
     pDraw->m_RequestCount = 0;
     _DefaultFog(pFog);
-    pDraw->m_pDefaultStudio = _CreateRgDrawStudio(-1, pFog);
+    pDraw->m_pDefaultStudio = _CreateRgDrawStudio(RG_DRAW_STUDIO_GLOBAL, pFog);
     _InitStudioList(pDraw);
 }
 
 static void _DestructDraw(RgDraw *pDraw)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 0x1A1);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 0x1A1);
     }
     _DisposeRgDrawStudio(pDraw->m_pDefaultStudio);
     _ClearStudioList(pDraw);
 }
 
-static void _WrapperDestruct(RgDraw *pDraw)
+static void _WrapperDestruct(void *pDraw)
 {
     _DestructDraw(pDraw);
-    RgHeapFree(InstanceOfRgHeap(), pDraw, D_00A54AF0, 421);
+    RgHeapFree(InstanceOfRgHeap(), pDraw, drawSourcePath, 421);
 }
-
-void RgDrawCreateDrawStudioFullScreen(RgDraw *pDraw);
 
 RgDraw *InstanceOfRgDraw(void)
 {
     RgDraw *pDraw;
 
-    pDraw = RgSingletonIDGet(9);
+    pDraw = RgSingletonIDGet(RG_SINGLETON_DRAW);
     if (pDraw == 0) {
-        pDraw = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgDraw), D_00A54AF0, 431);
+        pDraw = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgDraw), drawSourcePath, 431);
         if (pDraw == 0) {
-            assert_prog(D_00A54B58, D_00A54AF0, 432);
+            assert_prog(drawAssertDrawNotNil, drawSourcePath, 432);
         }
         _InitDraw(pDraw);
-        RgSingletonIDEntry(9, (RgSimpleDB *)pDraw,
-                           (void (*)(RgSimpleDB *))_WrapperDestruct);
+        RgSingletonIDEntry(RG_SINGLETON_DRAW, pDraw, _WrapperDestruct);
         RgDrawCreateDrawStudioFullScreen(pDraw);
     }
     return pDraw;
@@ -470,16 +502,16 @@ RgDraw *InstanceOfRgDraw(void)
 RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 447);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 447);
     }
     switch (screenIndex) {
-    case -1:
+    case RG_DRAW_STUDIO_GLOBAL:
         return 0;
     case 0:
     case 1:
         return pDraw->m_pStudios[screenIndex];
     default:
-        RgError(D_00A54B68, D_00A54AF0, 458, screenIndex);
+        RgError(drawUnknownStudioIdFormat, drawSourcePath, 458, screenIndex);
         return 0;
     }
 }
@@ -487,7 +519,7 @@ RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex)
 void RgDrawCreateDrawStudioFullScreen(RgDraw *pDraw)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 471);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 471);
     }
     _ClearStudioList(pDraw);
     _FullScreenStudio(pDraw);
@@ -496,7 +528,7 @@ void RgDrawCreateDrawStudioFullScreen(RgDraw *pDraw)
 void RgDrawCreateDrawStudioDouble(RgDraw *pDraw)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 480);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 480);
     }
     _ClearStudioList(pDraw);
     _DoubleScreenStudio(pDraw);
@@ -505,10 +537,10 @@ void RgDrawCreateDrawStudioDouble(RgDraw *pDraw)
 void RgDrawGetGlobalFog(RgDraw *pDraw, RgFog *pFog)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 492);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 492);
     }
     if (pFog == 0) {
-        assert_prog(D_00A54B80, D_00A54AF0, 493);
+        assert_prog(drawAssertFogNotNil, drawSourcePath, 493);
     }
     _CopyFog(pFog, &pDraw->m_Fog);
 }
@@ -516,10 +548,10 @@ void RgDrawGetGlobalFog(RgDraw *pDraw, RgFog *pFog)
 void RgDrawSetGlobalFog(RgDraw *pDraw, RgFog *pFog)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 502);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 502);
     }
     if (pFog == 0) {
-        assert_prog(D_00A54B80, D_00A54AF0, 503);
+        assert_prog(drawAssertFogNotNil, drawSourcePath, 503);
     }
     _CopyFog(&pDraw->m_Fog, pFog);
 }
@@ -531,11 +563,11 @@ void RgDrawViewInit(RgDrawView *pView)
     StudioCamera *pCamera;
 
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 541);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 541);
     }
     screenIndex = pView->m_pParentStudio->m_ScreenIndex;
     pCamera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -546,15 +578,15 @@ void RgDrawViewInit(RgDrawView *pView)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
         }
     }
     if (pCamera != 0) {
-        pCamera->state = 4;
-        pCamera->fov = 0.698132f;
+        pCamera->state = RG_DRAW_CAMERA_STATE;
+        pCamera->fov = RG_DRAW_CAMERA_FOV;
         pCamera->position.vector.y = 0.0f;
         pCamera->position.vector.z = 0.0f;
         pCamera->rotation.vector.x = 0.0f;
@@ -564,13 +596,7 @@ void RgDrawViewInit(RgDrawView *pView)
     }
 }
 
-/*
- * External file-backed witness of this allocation's own functions, not
- * candidate-emitted data (same window as the blocks above).
- *
- * ov12:0x00a54ad0 contains the error message "not exist xeno studio ID (%d)".
- */
-void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
+void RgDrawViewSetPosition(RgDrawView *pView, const RgVector position)
 {
     int screenIndex;
     int cameraIndex;
@@ -578,7 +604,7 @@ void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
 
     screenIndex = pView->m_pParentStudio->m_ScreenIndex;
     pCamera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -589,16 +615,16 @@ void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
         }
     }
     if (pCamera != 0) {
-        pCamera->position.vector.x = pPosition->x;
-        pCamera->position.vector.y = pPosition->y;
-        pCamera->position.vector.z = pPosition->z;
+        pCamera->position.vector.x = position[0];
+        pCamera->position.vector.y = position[1];
+        pCamera->position.vector.z = position[2];
     }
 }
 
@@ -610,7 +636,7 @@ void RgDrawViewSetRotateX(RgDrawView *pView, float angle)
 
     screenIndex = pView->m_pParentStudio->m_ScreenIndex;
     pCamera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -621,7 +647,7 @@ void RgDrawViewSetRotateX(RgDrawView *pView, float angle)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
@@ -640,7 +666,7 @@ void RgDrawViewSetRotateY(RgDrawView *pView, float angle)
 
     screenIndex = pView->m_pParentStudio->m_ScreenIndex;
     pCamera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -651,7 +677,7 @@ void RgDrawViewSetRotateY(RgDrawView *pView, float angle)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
@@ -670,7 +696,7 @@ void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
 
     screenIndex = pView->m_pParentStudio->m_ScreenIndex;
     pCamera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -681,7 +707,7 @@ void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
@@ -692,10 +718,8 @@ void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
     }
 }
 
-extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
-                            const Vector4 *vector);
 
-int RgDrawViewIsPointInView(RgDrawView *pView, Vector4 *pPoint, float margin)
+int RgDrawViewIsPointInView(RgDrawView *pView, const RgVector position, float margin)
 {
     int result;
     int screenIndex;
@@ -710,12 +734,12 @@ int RgDrawViewIsPointInView(RgDrawView *pView, Vector4 *pPoint, float margin)
 
     result = 0;
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 602);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 602);
     }
     limit = -margin;
     screenIndex = pView->m_pParentStudio->m_ScreenIndex;
     pCamera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -726,7 +750,7 @@ int RgDrawViewIsPointInView(RgDrawView *pView, Vector4 *pPoint, float margin)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
@@ -735,9 +759,9 @@ int RgDrawViewIsPointInView(RgDrawView *pView, Vector4 *pPoint, float margin)
     if (pCamera != 0) {
         pClipMatrix0 = &pCamera->clipMatrices[0];
         pClipMatrix1 = &pCamera->clipMatrices[1];
-        point.x = pPoint->x;
-        point.y = pPoint->y;
-        point.z = pPoint->z;
+        point.x = position[0];
+        point.y = position[1];
+        point.z = position[2];
         point.w = 1.0f;
         xglVectorMulMat(&clipped0, *pClipMatrix0, &point);
         xglVectorMulMat(&clipped1, *pClipMatrix1, &point);
@@ -752,7 +776,7 @@ int RgDrawViewIsPointInView(RgDrawView *pView, Vector4 *pPoint, float margin)
 void RgDrawViewGetScreenRect(RgDrawView *pView, RgRect *pRect)
 {
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 632);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 632);
     }
     pRect->x0 = pView->screenRect.x0;
     pRect->y0 = pView->screenRect.y0;
@@ -768,15 +792,15 @@ RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio)
     int cameraIndex;
 
     if (pStudio == 0) {
-        assert_prog(D_00A54B30, D_00A54AF0, 649);
+        assert_prog(drawAssertStudioNotNil, drawSourcePath, 649);
     }
     screenIndex = pStudio->m_ScreenIndex;
     pView = _GetViewRgDrawStudio(pStudio);
     if (pView == 0) {
-        assert_prog(D_00A54B08, D_00A54AF0, 653);
+        assert_prog(drawAssertViewNotNil, drawSourcePath, 653);
     }
     camera = 0;
-    if (screenIndex < 2) {
+    if (screenIndex < RG_DRAW_STUDIO_COUNT) {
         if (screenIndex >= 0) {
             cameraIndex = 0;
             switch (screenIndex) {
@@ -787,7 +811,7 @@ RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio)
                 cameraIndex = 1;
                 break;
             default:
-                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                RgError(drawUnknownStudioIdError, drawSourcePath, 69, screenIndex);
                 break;
             }
             camera = xglStudioSelectGetActiveCamera(cameraIndex);
@@ -799,18 +823,18 @@ RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio)
         XrgCopyVector(pView->axisY, &camera->screenOffset.x);
         switch (screenIndex) {
         case 0:
-            pView->projectionMode = 5;
-            pView->clippingMode = 6;
+            pView->projectionMode = RG_DRAW_LEFT_PROJECTION_MODE;
+            pView->clippingMode = RG_DRAW_LEFT_CLIPPING_MODE;
             break;
         case 1:
-            pView->projectionMode = 7;
-            pView->clippingMode = 8;
+            pView->projectionMode = RG_DRAW_RIGHT_PROJECTION_MODE;
+            pView->clippingMode = RG_DRAW_RIGHT_CLIPPING_MODE;
             break;
-        case -1:
-            RgError(D_00A54B90, D_00A54AF0, 669);
+        case RG_DRAW_STUDIO_GLOBAL:
+            RgError(drawGlobalStudioHasNoViewError, drawSourcePath, 669);
             break;
         default:
-            RgError(D_00A54BB0, D_00A54AF0, 672, screenIndex);
+            RgError(drawUnknownStudioIdUpperFormat, drawSourcePath, 672, screenIndex);
         }
     }
     return pView;
@@ -823,13 +847,13 @@ void RgDrawReq(RgDraw *pDraw, void *pObject,
     RgDrawRequest *request;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 695);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 695);
     }
-    if (pDraw->m_RequestCount >= 128) {
-        assert_prog(D_00A54BC8, D_00A54AF0, 696);
+    if (pDraw->m_RequestCount >= RG_DRAW_REQ_CAPA) {
+        assert_prog(drawAssertRequestCountBelowCapacity, drawSourcePath, 696);
     }
     if (pObject == 0 || drawFunc == 0) {
-        assert_prog(D_00A54BE8, D_00A54AF0, 697);
+        assert_prog(drawAssertObjectAndHandlerNotNil, drawSourcePath, 697);
     }
     request = &pDraw->m_Requests[pDraw->m_RequestCount++];
     request->pObject = pObject;
@@ -839,35 +863,11 @@ void RgDrawReq(RgDraw *pDraw, void *pObject,
     request->drawID = drawID;
 }
 
-/* Four GIF tags, the 64-byte block _FadeShadow copies from ov12:0x00a54c10. */
-/* Two 32-byte halves of the 64-byte vertex block. */
-typedef struct GifTagBlock {
-    GifTag v[4];
-} GifTagBlock;
-
-/* One GIF PACKED-mode RGBAQ quadword: four 32-bit channel words. */
-typedef union RgDrawGifRgbaq {
-    int channels[4];
-    Quadword quad;
-} RgDrawGifRgbaq;
-
-/* The 0x20-byte VIF1 packet object sceVif1PkInit fills on the stack. */
-typedef struct sceVif1Packet {
-    unsigned char opaque[0x20];
-} sceVif1Packet;
-
-extern void sceVif1PkInit(XglPacket *packet, u32 buffer);
-extern int sceVif1PkSize(XglPacket *packet);
-extern void sceVif1PkAddGsAD(XglPacket *packet, int address, u64 data);
-extern void sceVif1PkAddGsPacked(XglPacket *packet, Quadword data);
-extern void nmlModelDirectSend(int mode, const void *data, int count);
-extern const GifTagBlock D_00A54C10;
-
 static void _FadeShadow(int alpha, int mode)
 {
-    GifTagBlock vertices = D_00A54C10;
+    GifTagBlock vertices = drawFadeShadowVertexBlock;
     RgDrawGifRgbaq rgbaq;
-    sceVif1Packet packet;
+    XglPacketSdkView packet;
     XglPacket *pPacket;
     unsigned long long clampData;
 
@@ -876,14 +876,14 @@ static void _FadeShadow(int alpha, int mode)
     pPacket = (XglPacket *)&packet;
     sceVif1PkInit(pPacket, (u32)SCRATCHPAD_BASE);
     _openVifGifAD(pPacket);
-    sceVif1PkAddGsAD(pPacket, 0x3f, 0x0ULL);
-    sceVif1PkAddGsAD(pPacket, 0x47, 0x31001u);
+    sceVif1PkAddGsAD(pPacket, SCE_GS_TEXFLUSH, 0x0ULL);
+    sceVif1PkAddGsAD(pPacket, SCE_GS_TEST_1, RG_DRAW_TEST_ZALWAYS);
     clampData = ((u64)0x3fcu << 32) | ((u64)0x3fu << 16) | 0xc000u;
-    sceVif1PkAddGsAD(pPacket, 0x08, clampData);
+    sceVif1PkAddGsAD(pPacket, SCE_GS_CLAMP_1, clampData);
     sceVif1PkAddGsAD(pPacket, 0x49, 0x0);
-    sceVif1PkAddGsAD(pPacket, 0x42, 0x44);
+    sceVif1PkAddGsAD(pPacket, SCE_GS_ALPHA_1, 0x44);
     _closeVifGif(pPacket);
-    _openVifGif(pPacket, 4u, 5u, 0x44441u);
+    _openVifGif(pPacket, GS_PRIM_TRISTRIP, 5u, RG_DRAW_REGS_COLOR_4_XYZ);
     sceVif1PkAddGsPacked(pPacket, rgbaq.quad);
     sceVif1PkAddGsPacked(pPacket, vertices.v[0].quad);
     sceVif1PkAddGsPacked(pPacket, vertices.v[1].quad);
@@ -922,12 +922,12 @@ static void _DrawMain(RgDraw *pDraw)
     unsigned int activeStudioMask;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 796);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 796);
     }
     if (pDraw->m_Enabled == 0) {
         return;
     }
-    for (priority = 0; priority < 7; priority++) {
+    for (priority = 0; priority < RG_DRAW_PRIORITY_COUNT; priority++) {
         for (requestIndex = 0; requestIndex < pDraw->m_RequestCount;
              requestIndex++) {
             request = &pDraw->m_Requests[requestIndex];
@@ -939,9 +939,9 @@ static void _DrawMain(RgDraw *pDraw)
                 continue;
             }
             switch (request->drawID) {
-            case -2: {
+            case RG_DRAW_ID_ALL_STUDIOS: {
                 unsigned int screenIndex;
-                for (screenIndex = 0; screenIndex < 2; screenIndex++) {
+                for (screenIndex = 0; screenIndex < RG_DRAW_STUDIO_COUNT; screenIndex++) {
                     studio = pDraw->m_pStudios[screenIndex];
                     if (studio != 0) {
                         request->drawFunc(request->pObject, studio);
@@ -949,7 +949,7 @@ static void _DrawMain(RgDraw *pDraw)
                 }
                 break;
             }
-            case -1:
+            case RG_DRAW_ID_GLOBAL:
                 if (activeStudioMask != 0) {
                     request->drawFunc(request->pObject,
                                       pDraw->m_pDefaultStudio);
@@ -968,7 +968,7 @@ static void _DrawMain(RgDraw *pDraw)
                 }
                 break;
             default:
-                RgError(D_00A54C50, D_00A54AF0, 776, request->drawID);
+                RgError(drawUnknownDrawIdFormat, drawSourcePath, 776, request->drawID);
             }
         }
     }
@@ -977,7 +977,7 @@ static void _DrawMain(RgDraw *pDraw)
 void RgDrawJob(RgDraw *pDraw)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 834);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 834);
     }
     _SetGlobalLight();
     _DrawMain(pDraw);
@@ -989,11 +989,11 @@ void RgDrawFadeIn(RgDraw *pDraw)
     int nextFadeCounter;
 
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 856);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 856);
     }
     if (pDraw->m_Enabled != 0) {
-        while (pDraw->m_FadeCounter < 50) {
-            nextFadeCounter = pDraw->m_FadeCounter - 20;
+        while (pDraw->m_FadeCounter < RG_DRAW_FADE_LIMIT) {
+            nextFadeCounter = pDraw->m_FadeCounter - RG_DRAW_FADE_STEP;
             pDraw->m_FadeCounter = nextFadeCounter;
             if (nextFadeCounter >= 0) {
                 _DrawMain(pDraw);
@@ -1007,6 +1007,6 @@ void RgDrawFadeIn(RgDraw *pDraw)
 void RgDrawFadeOut(RgDraw *pDraw)
 {
     if (pDraw == 0) {
-        assert_prog(D_00A54B58, D_00A54AF0, 876);
+        assert_prog(drawAssertDrawNotNil, drawSourcePath, 876);
     }
 }

@@ -2,27 +2,23 @@
  * OV12 original TU 37: 0x00a22668..0x00a22a78 (2 functions)
  */
 #include "common.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_read_text.h"
 #include "ov12/rg_text_info.h"
 
-const char D_00A54480[24] = "pParaList != NIL";
-const char D_00A54498[24] = "../rg_text_info.euc.c";
-const char D_00A544B0[16] = "pszName != NIL";
-const char D_00A544C0[24] = "pReadText != NIL";
-const char D_00A544D8[16] = "pStr != NIL";
-const char D_00A544E8[24] = "unknown key word '%s'";
-const char D_00A54500[8] = ".";
-const char D_00A54508[40] = "unknown parameter type %d";
+/* Buffer size for one keyword or string token. */
+#define RG_TEXT_INFO_TOKEN_MAX 128
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern int strcmp(const char *s1, const char *s2);
-extern int RgReadTextIsEOF(struct RgReadText *pReader);
-extern void RgReadTextGetString(struct RgReadText *pReader, char *pszOut);
-extern float RgReadTextGetFloat(struct RgReadText *pReader);
-extern int RgReadTextGetInt(struct RgReadText *pReader);
-extern int RgReadTextGetBool(struct RgReadText *pReader);
+const char textInfoAssertParaListNotNil[24] = "pParaList != NIL";
+const char textInfoSourcePath[24] = "../rg_text_info.euc.c";
+const char textInfoAssertNameNotNil[16] = "pszName != NIL";
+const char textInfoAssertReadTextNotNil[24] = "pReadText != NIL";
+const char textInfoAssertStringNotNil[16] = "pStr != NIL";
+const char textInfoUnknownKeyWordFormat[24] = "unknown key word '%s'";
+const char textInfoEndMarkerString[8] = ".";
+const char textInfoUnknownParameterTypeFormat[40] = "unknown parameter type %d";
+
 
 struct RgTextInfoEntry *_FindEntry(struct RgTextInfoEntry *pParaList,
                                    const char *pszName)
@@ -30,10 +26,10 @@ struct RgTextInfoEntry *_FindEntry(struct RgTextInfoEntry *pParaList,
     struct RgTextInfoEntry *pEntry;
 
     if (pParaList == 0) {
-        assert_prog(D_00A54480, D_00A54498, 22);
+        assert_prog(textInfoAssertParaListNotNil, textInfoSourcePath, 22);
     }
     if (pszName == 0) {
-        assert_prog(D_00A544B0, D_00A54498, 23);
+        assert_prog(textInfoAssertNameNotNil, textInfoSourcePath, 23);
     }
     for (pEntry = pParaList; pEntry->type != RG_TEXT_INFO_END; pEntry++) {
         if (strcmp(pEntry->pszName, pszName) == 0) {
@@ -46,8 +42,8 @@ struct RgTextInfoEntry *_FindEntry(struct RgTextInfoEntry *pParaList,
 void RgTextInfoRead(struct RgReadText *pReadText,
                     struct RgTextInfoEntry *pParaList, char *pData)
 {
-    char pszName[128];
-    char pszString[128];
+    char pszName[RG_TEXT_INFO_TOKEN_MAX];
+    char pszString[RG_TEXT_INFO_TOKEN_MAX];
     struct RgTextInfoEntry *pEntry;
     unsigned int type;
     unsigned int value_index;
@@ -59,20 +55,20 @@ void RgTextInfoRead(struct RgReadText *pReadText,
     float *address_elements;
 
     if (pReadText == 0) {
-        assert_prog(D_00A544C0, D_00A54498, 41);
+        assert_prog(textInfoAssertReadTextNotNil, textInfoSourcePath, 41);
     }
     if (pParaList == 0) {
-        assert_prog(D_00A54480, D_00A54498, 42);
+        assert_prog(textInfoAssertParaListNotNil, textInfoSourcePath, 42);
     }
     if (pData == 0) {
-        assert_prog(D_00A544D8, D_00A54498, 43);
+        assert_prog(textInfoAssertStringNotNil, textInfoSourcePath, 43);
     }
 
     while (RgReadTextIsEOF(pReadText) == 0) {
         RgReadTextGetString(pReadText, pszName);
         pEntry = _FindEntry(pParaList, pszName);
         if (pEntry == 0) {
-            RgError(D_00A544E8, D_00A54498, 53, pszName);
+            RgError(textInfoUnknownKeyWordFormat, textInfoSourcePath, 53, pszName);
         }
         type = pEntry->type;
         switch (type) {
@@ -135,7 +131,7 @@ void RgTextInfoRead(struct RgReadText *pReadText,
         case RG_TEXT_INFO_CALLBACK_OFFSET:
             value_index = 0;
             RgReadTextGetString(pReadText, pszString);
-            while (strcmp(pszString, D_00A54500) != 0) {
+            while (strcmp(pszString, textInfoEndMarkerString) != 0) {
                 if (pEntry->auxiliary != 0) {
                     ((RgTextInfoParse) pEntry->auxiliary)(
                         pData + (unsigned int) pEntry->destination, pszString,
@@ -151,7 +147,7 @@ void RgTextInfoRead(struct RgReadText *pReadText,
         case RG_TEXT_INFO_CALLBACK_ADDRESS:
             value_index = 0;
             RgReadTextGetString(pReadText, pszString);
-            while (strcmp(pszString, D_00A54500) != 0) {
+            while (strcmp(pszString, textInfoEndMarkerString) != 0) {
                 if (pEntry->auxiliary != 0) {
                     ((RgTextInfoParse) pEntry->auxiliary)(pEntry->destination,
                                             pszString, value_index);
@@ -164,7 +160,7 @@ void RgTextInfoRead(struct RgReadText *pReadText,
             }
             break;
         default:
-            RgError(D_00A54508, D_00A54498, 119, type);
+            RgError(textInfoUnknownParameterTypeFormat, textInfoSourcePath, 119, type);
             break;
         }
     }

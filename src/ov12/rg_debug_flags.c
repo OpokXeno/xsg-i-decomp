@@ -3,25 +3,20 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_debug_flags.h"
+#include "ov12/rg_heap.h"
 #include "ov12/rg_singleton_id.h"
-#include "rg_debug_flags.h"
 
 /* Assertion expression and source location used by the guards below. */
-const char D_00A52438[16] = "pFlags != NIL";
-const char D_00A52448[24] = "../rg_debug_flags.euc.c";
+const char debugFlagsAssertFlagsNotNil[16] = "pFlags != NIL";
+const char debugFlagsSourcePath[24] = "../rg_debug_flags.euc.c";
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
-                       int line);
 
 static void _InitRgDebugFlags(RgDebugFlags *flags)
 {
     if (flags == 0) {
-        assert_prog(D_00A52438, D_00A52448, 16);
+        assert_prog(debugFlagsAssertFlagsNotNil, debugFlagsSourcePath, 16);
     }
     flags->modeEnabled = 0;
     flags->flags[0] = 1;
@@ -34,27 +29,26 @@ static void _InitRgDebugFlags(RgDebugFlags *flags)
 static void _DestructRgDebugFlags(RgDebugFlags *flags)
 {
     if (flags == 0) {
-        assert_prog(D_00A52438, D_00A52448, 27);
+        assert_prog(debugFlagsAssertFlagsNotNil, debugFlagsSourcePath, 27);
     }
 }
 
-static void _WrapperDestruct(RgDebugFlags *pFlags)
+static void _WrapperDestruct(void *pFlags)
 {
     _DestructRgDebugFlags(pFlags);
-    RgHeapFree(InstanceOfRgHeap(), pFlags, D_00A52448, 29);
+    RgHeapFree(InstanceOfRgHeap(), pFlags, debugFlagsSourcePath, 29);
 }
 
 RgDebugFlags *InstanceOfRgDebugFlags(void)
 {
     RgDebugFlags *pFlags;
 
-    pFlags = RgSingletonIDGet(13);
+    pFlags = RgSingletonIDGet(RG_SINGLETON_DEBUG_FLAGS);
     if (pFlags == 0) {
         pFlags = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgDebugFlags),
-                             D_00A52448, 39);
+                             debugFlagsSourcePath, 39);
         _InitRgDebugFlags(pFlags);
-        RgSingletonIDEntry(13, (RgSimpleDB *) pFlags,
-                           (void (*)(RgSimpleDB *)) _WrapperDestruct);
+        RgSingletonIDEntry(RG_SINGLETON_DEBUG_FLAGS, pFlags, _WrapperDestruct);
     }
     return pFlags;
 }

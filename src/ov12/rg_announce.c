@@ -3,10 +3,152 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_battle_common_data.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_font.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_paint2d.h"
 #include "rg_announce.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
+/*
+ * The 16-byte fixed color the total line copies before drawing, as two
+ * doublewords so the copy is an aligned ld/sd pair.
+ */
+typedef union RgAnnounceColorHalves {
+    long long halves[2];
+    XrgPaint2DRGBA rgba;
+} RgAnnounceColorHalves;
+
+/*
+ * The stack copy _time_disp_title and _damage_disp_title hand to _paint_uvwh.
+ * Both titles move their rectangle a word pair at a time: uvOffset is the
+ * u/v pair _paint_uvwh feeds to XrgPaint2DSetUVOffset, uvSize the w/h pair it
+ * feeds to XrgPaint2DSetUVSize and to the draw call's own width/height.
+ */
+typedef struct RgAnnounceUvRectHalves {
+    long long uvOffset;
+    long long uvSize;
+} RgAnnounceUvRectHalves;
+
+/* Scaffold-owned strings of _InitAnn: texture names, assert expressions and the
+ * asset file name. Their bytes stay in the original .rodata. */
+extern const char announceIdHeaderPath[];
+
+extern const char announceRound1PicName[];
+extern const char announceAssertRound1PicNotNil[];
+extern const char announceRound2PicName[];
+extern const char announceAssertRound2PicNotNil[];
+extern const char announceRound3PicName[];
+extern const char announceAssertRound3PicNotNil[];
+extern const char announceReadyPicName[];
+extern const char announceAssertReadyPicNotNil[];
+extern const char announceFightPicName[];
+extern const char announceAssertFightPicNotNil[];
+extern const char announceYouWinPicName[];
+extern const char announceAssertYouWinPicNotNil[];
+extern const char announceYouLosePicName[];
+extern const char announceAssertYouLosePicNotNil[];
+extern const char announceDrawPicName[];
+extern const char announceAssertDrawPicNotNil[];
+extern const char announceTimeOverPicName[];
+extern const char announceAssertTimeOverPicNotNil[];
+extern const char announceGameOverPicName[];
+extern const char announceAssertGameOverPicNotNil[];
+extern const char announceStageClearPicName[];
+extern const char announceAssertStageClearPicNotNil[];
+extern const char announceGameClearPicName[];
+extern const char announceAssertGameClearPicNotNil[];
+extern const char announceContinuePicName[];
+extern const char announceAssertContinuePicNotNil[];
+extern const char announceCount0PicName[];
+extern const char announceAssertCount0PicNotNil[];
+extern const char announceCount1PicName[];
+extern const char announceAssertCount1PicNotNil[];
+extern const char announceCount2PicName[];
+extern const char announceAssertCount2PicNotNil[];
+extern const char announceCount3PicName[];
+extern const char announceAssertCount3PicNotNil[];
+extern const char announceCount4PicName[];
+extern const char announceAssertCount4PicNotNil[];
+extern const char announceCount5PicName[];
+extern const char announceAssertCount5PicNotNil[];
+extern const char announceCount6PicName[];
+extern const char announceAssertCount6PicNotNil[];
+extern const char announceCount7PicName[];
+extern const char announceAssertCount7PicNotNil[];
+extern const char announceCount8PicName[];
+extern const char announceAssertCount8PicNotNil[];
+extern const char announceCount9PicName[];
+extern const char announceAssertCount9PicNotNil[];
+extern const char announceTotalLabelPicName[];
+extern const char announceAssertTotalLabelPicNotNil[];
+extern const char announceTotalValueAPicName[];
+extern const char announceAssertTotalValueAPicNotNil[];
+extern const char announceTotalValueBPicName[];
+extern const char announceAssertTotalValueBPicNotNil[];
+extern const char announceTimePointPicName[];
+extern const char announceAssertTimePointPicNotNil[];
+extern const char announceYouWinSubPicName[];
+extern const char announceAssertYouWinSubPicNotNil[];
+extern const char announceCount0SubPicName[];
+extern const char announceAssertCount0SubPicNotNil[];
+extern const char announceCount1SubPicName[];
+extern const char announceAssertCount1SubPicNotNil[];
+extern const char announceCount2SubPicName[];
+extern const char announceAssertCount2SubPicNotNil[];
+extern const char announceCount3SubPicName[];
+extern const char announceAssertCount3SubPicNotNil[];
+extern const char announceCount4SubPicName[];
+extern const char announceAssertCount4SubPicNotNil[];
+extern const char announceCount5SubPicName[];
+extern const char announceAssertCount5SubPicNotNil[];
+extern const char announceCount6SubPicName[];
+extern const char announceAssertCount6SubPicNotNil[];
+extern const char announceCount7SubPicName[];
+extern const char announceAssertCount7SubPicNotNil[];
+extern const char announcePicNameCount82[];
+extern const char announceAssertPicCount82NotNil[];
+extern const char announcePicNameCount92[];
+extern const char announceAssertPicCount92NotNil[];
+extern const char announcePicNameDraw2[];
+extern const char announceAssertPicDraw2NotNil[];
+extern const char announcePicNameFight2[];
+extern const char announceAssertPicFight2NotNil[];
+extern const char announcePicNameGmcler2[];
+extern const char announceAssertPicGmcler2NotNil[];
+extern const char announcePicNameGmover2[];
+extern const char announceAssertPicGmover2NotNil[];
+extern const char announcePicNameReady2[];
+extern const char announceAssertPicReady2NotNil[];
+extern const char announcePicNameRound12[];
+extern const char announceAssertPicRound12NotNil[];
+extern const char announcePicNameRound22[];
+extern const char announceAssertPicRound22NotNil[];
+extern const char announcePicNameRound32[];
+extern const char announceAssertPicRound32NotNil[];
+extern const char announcePicNameStcler2[];
+extern const char announceAssertPicStcler2NotNil[];
+extern const char announcePicNameTmover2[];
+extern const char announceAssertPicTmover2NotNil[];
+extern const char announcePicNameYoulos2[];
+extern const char announceAssertPicYoulos2NotNil[];
+extern const char announcePicNameCntinu2[];
+extern const char announceAssertPicCntinu2NotNil[];
+
+/* ov12:0x00a586a0: the fixed color the total line copies before drawing (scaffold .rodata). */
+extern const RgAnnounceColorHalves announceClearPanelColor;
+
+static void _InitAnn(RgAnnounce *pAnn);
+static void _time_disp_title(RgAnnounce *pAnn, int x, int y);
+static void _time_disp(RgAnnounce *pAnn, int x, int y, unsigned int time);
+static void _damage_disp_title(RgAnnounce *pAnn, int x, int y);
+static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage);
+static void _paint_flush(RgAnnounce *pAnn);
+static void _paint_uvwh(RgAnnounce *pAnn, int index, int x, int y,
+                        const RgAnnounceUvRect *rect);
+static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
+static void _paint_sub(RgAnnounce *pAnn, int index, int x, int y);
 
 /*
  * External file-backed witnesses, not candidate-emitted data: this window is
@@ -15,350 +157,227 @@ extern void assert_prog(const char *expression, const char *source_file,
  * ov12:0x00a57bc0 contains the source filename "../rg_announce.euc.c".
  * ov12:0x00a57bb0 contains the assertion expression "pAnn != NIL".
  */
-const char D_00A57BB0[] = "pAnn != NIL";
+const char announceAssertAnnNotNil[] = "pAnn != NIL";
 
-const char D_00A57BC0[] = "../rg_announce.euc.c";
-
-extern void XrgPaint2DUseTexture(XrgPaint2D *paint, int texture);
-extern void XrgPaint2DAlpha(XrgPaint2D *paint, int blend);
-extern void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
-                               int width, int height);
-extern void XrgPaint2DSetUVOffset(XrgPaint2D *paint, int u, int v);
-extern void XrgPaint2DSetUVSize(XrgPaint2D *paint, int width, int height);
-extern void XrgPaint2DFlush(XrgPaint2D *paint);
-extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
-                                  int line);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern RgHeap *InstanceOfRgHeap(void);
-static void _InitAnn(RgAnnounce *pAnn);
-extern void *InstanceOfRgBattleCommonData(void);
-extern void *RgBattleCommonDataAnnounceAdd(void *battleCommon);
-extern void *RgBattleCommonDataAnnounceSub(void *battleCommon);
-extern int RgBxxGetPic(void *battleCommon, const char *name);
-extern XrgPaint2D *CreateXrgPaint2D_sub(const char *source_file, int line);
-extern void XrgPaint2DSetDrawPrio(XrgPaint2D *paint, int prio);
-/* Scaffold-owned strings of _InitAnn: texture names, assert expressions and the
- * asset file name. Their bytes stay in the original .rodata. */
-extern const char D_00A57C10[];
-extern const char D_00A57BD8[];
-extern const char D_00A57BE8[];
-extern const char D_00A57C28[];
-extern const char D_00A57C38[];
-extern const char D_00A57C60[];
-extern const char D_00A57C70[];
-extern const char D_00A57C98[];
-extern const char D_00A57CA0[];
-extern const char D_00A57CC8[];
-extern const char D_00A57CD0[];
-extern const char D_00A57CF8[];
-extern const char D_00A57D08[];
-extern const char D_00A57D30[];
-extern const char D_00A57D40[];
-extern const char D_00A57D68[];
-extern const char D_00A57D70[];
-extern const char D_00A57D98[];
-extern const char D_00A57DA8[];
-extern const char D_00A57DD0[];
-extern const char D_00A57DE0[];
-extern const char D_00A57E08[];
-extern const char D_00A57E18[];
-extern const char D_00A57E40[];
-extern const char D_00A57E50[];
-extern const char D_00A57E78[];
-extern const char D_00A57E88[];
-extern const char D_00A57EB0[];
-extern const char D_00A57EC0[];
-extern const char D_00A57EE8[];
-extern const char D_00A57EF8[];
-extern const char D_00A57F20[];
-extern const char D_00A57F30[];
-extern const char D_00A57F58[];
-extern const char D_00A57F68[];
-extern const char D_00A57F90[];
-extern const char D_00A57FA0[];
-extern const char D_00A57FC8[];
-extern const char D_00A57FD8[];
-extern const char D_00A58000[];
-extern const char D_00A58010[];
-extern const char D_00A58038[];
-extern const char D_00A58048[];
-extern const char D_00A58070[];
-extern const char D_00A58080[];
-extern const char D_00A580A8[];
-extern const char D_00A580B8[];
-extern const char D_00A580E0[];
-extern const char D_00A580E8[];
-extern const char D_00A58110[];
-extern const char D_00A58120[];
-extern const char D_00A58148[];
-extern const char D_00A58158[];
-extern const char D_00A58180[];
-extern const char D_00A58188[];
-extern const char D_00A581B0[];
-extern const char D_00A581C0[];
-extern const char D_00A581E8[];
-extern const char D_00A581F8[];
-extern const char D_00A58220[];
-extern const char D_00A58230[];
-extern const char D_00A58258[];
-extern const char D_00A58268[];
-extern const char D_00A58290[];
-extern const char D_00A582A0[];
-extern const char D_00A582C8[];
-extern const char D_00A582D8[];
-extern const char D_00A58300[];
-extern const char D_00A58310[];
-extern const char D_00A58338[];
-extern const char D_00A58348[];
-extern const char D_00A58370[];
-extern const char D_00A58380[];
-extern const char D_00A583A8[];
-extern const char D_00A583B8[];
-extern const char D_00A583E0[];
-extern const char D_00A583F0[];
-extern const char D_00A58418[];
-extern const char D_00A58420[];
-extern const char D_00A58448[];
-extern const char D_00A58450[];
-extern const char D_00A58478[];
-extern const char D_00A58488[];
-extern const char D_00A584B0[];
-extern const char D_00A584C0[];
-extern const char D_00A584E8[];
-extern const char D_00A584F0[];
-extern const char D_00A58518[];
-extern const char D_00A58528[];
-extern const char D_00A58550[];
-extern const char D_00A58560[];
-extern const char D_00A58588[];
-extern const char D_00A58598[];
-extern const char D_00A585C0[];
-extern const char D_00A585D0[];
-extern const char D_00A585F8[];
-extern const char D_00A58608[];
-extern const char D_00A58630[];
-extern const char D_00A58640[];
-extern const char D_00A58668[];
-extern const char D_00A58678[];
+const char announceSourcePath[] = "../rg_announce.euc.c";
 
 static void _InitAnn(RgAnnounce *pAnn)
 {
-    void *common;
-    void *addedCommon;
-    void *subCommon;
+    RgBattleCommonDataEnv *common;
+    RgBxx *addedCommon;
+    RgBxx *subCommon;
 
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 76);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 76);
     }
     common = InstanceOfRgBattleCommonData();
     addedCommon = RgBattleCommonDataAnnounceAdd(common);
     subCommon = RgBattleCommonDataAnnounceSub(common);
 
-    pAnn->textures[0] = RgBxxGetPic(addedCommon, D_00A57BD8);
+    pAnn->textures[0] = RgBxxGetPic(addedCommon, announceRound1PicName);
     if (pAnn->textures[0] == 0) {
-        assert_prog(D_00A57BE8, D_00A57C10, 1);
+        assert_prog(announceAssertRound1PicNotNil, announceIdHeaderPath, 1);
     }
-    pAnn->textures[1] = RgBxxGetPic(addedCommon, D_00A57C28);
+    pAnn->textures[1] = RgBxxGetPic(addedCommon, announceRound2PicName);
     if (pAnn->textures[1] == 0) {
-        assert_prog(D_00A57C38, D_00A57C10, 2);
+        assert_prog(announceAssertRound2PicNotNil, announceIdHeaderPath, 2);
     }
-    pAnn->textures[2] = RgBxxGetPic(addedCommon, D_00A57C60);
+    pAnn->textures[2] = RgBxxGetPic(addedCommon, announceRound3PicName);
     if (pAnn->textures[2] == 0) {
-        assert_prog(D_00A57C70, D_00A57C10, 3);
+        assert_prog(announceAssertRound3PicNotNil, announceIdHeaderPath, 3);
     }
-    pAnn->textures[3] = RgBxxGetPic(addedCommon, D_00A57C98);
+    pAnn->textures[3] = RgBxxGetPic(addedCommon, announceReadyPicName);
     if (pAnn->textures[3] == 0) {
-        assert_prog(D_00A57CA0, D_00A57C10, 4);
+        assert_prog(announceAssertReadyPicNotNil, announceIdHeaderPath, 4);
     }
-    pAnn->textures[4] = RgBxxGetPic(addedCommon, D_00A57CC8);
+    pAnn->textures[4] = RgBxxGetPic(addedCommon, announceFightPicName);
     if (pAnn->textures[4] == 0) {
-        assert_prog(D_00A57CD0, D_00A57C10, 5);
+        assert_prog(announceAssertFightPicNotNil, announceIdHeaderPath, 5);
     }
-    pAnn->textures[5] = RgBxxGetPic(addedCommon, D_00A57CF8);
+    pAnn->textures[5] = RgBxxGetPic(addedCommon, announceYouWinPicName);
     if (pAnn->textures[5] == 0) {
-        assert_prog(D_00A57D08, D_00A57C10, 6);
+        assert_prog(announceAssertYouWinPicNotNil, announceIdHeaderPath, 6);
     }
-    pAnn->textures[6] = RgBxxGetPic(addedCommon, D_00A57D30);
+    pAnn->textures[6] = RgBxxGetPic(addedCommon, announceYouLosePicName);
     if (pAnn->textures[6] == 0) {
-        assert_prog(D_00A57D40, D_00A57C10, 7);
+        assert_prog(announceAssertYouLosePicNotNil, announceIdHeaderPath, 7);
     }
-    pAnn->textures[7] = RgBxxGetPic(addedCommon, D_00A57D68);
+    pAnn->textures[7] = RgBxxGetPic(addedCommon, announceDrawPicName);
     if (pAnn->textures[7] == 0) {
-        assert_prog(D_00A57D70, D_00A57C10, 8);
+        assert_prog(announceAssertDrawPicNotNil, announceIdHeaderPath, 8);
     }
-    pAnn->textures[8] = RgBxxGetPic(addedCommon, D_00A57D98);
+    pAnn->textures[8] = RgBxxGetPic(addedCommon, announceTimeOverPicName);
     if (pAnn->textures[8] == 0) {
-        assert_prog(D_00A57DA8, D_00A57C10, 9);
+        assert_prog(announceAssertTimeOverPicNotNil, announceIdHeaderPath, 9);
     }
-    pAnn->textures[9] = RgBxxGetPic(addedCommon, D_00A57DD0);
+    pAnn->textures[9] = RgBxxGetPic(addedCommon, announceGameOverPicName);
     if (pAnn->textures[9] == 0) {
-        assert_prog(D_00A57DE0, D_00A57C10, 10);
+        assert_prog(announceAssertGameOverPicNotNil, announceIdHeaderPath, 10);
     }
-    pAnn->textures[10] = RgBxxGetPic(addedCommon, D_00A57E08);
+    pAnn->textures[10] = RgBxxGetPic(addedCommon, announceStageClearPicName);
     if (pAnn->textures[10] == 0) {
-        assert_prog(D_00A57E18, D_00A57C10, 11);
+        assert_prog(announceAssertStageClearPicNotNil, announceIdHeaderPath, 11);
     }
-    pAnn->textures[11] = RgBxxGetPic(addedCommon, D_00A57E40);
+    pAnn->textures[11] = RgBxxGetPic(addedCommon, announceGameClearPicName);
     if (pAnn->textures[11] == 0) {
-        assert_prog(D_00A57E50, D_00A57C10, 12);
+        assert_prog(announceAssertGameClearPicNotNil, announceIdHeaderPath, 12);
     }
-    pAnn->textures[12] = RgBxxGetPic(addedCommon, D_00A57E78);
+    pAnn->textures[12] = RgBxxGetPic(addedCommon, announceContinuePicName);
     if (pAnn->textures[12] == 0) {
-        assert_prog(D_00A57E88, D_00A57C10, 13);
+        assert_prog(announceAssertContinuePicNotNil, announceIdHeaderPath, 13);
     }
-    pAnn->textures[13] = RgBxxGetPic(addedCommon, D_00A57EB0);
+    pAnn->textures[13] = RgBxxGetPic(addedCommon, announceCount0PicName);
     if (pAnn->textures[13] == 0) {
-        assert_prog(D_00A57EC0, D_00A57C10, 14);
+        assert_prog(announceAssertCount0PicNotNil, announceIdHeaderPath, 14);
     }
-    pAnn->textures[14] = RgBxxGetPic(addedCommon, D_00A57EE8);
+    pAnn->textures[14] = RgBxxGetPic(addedCommon, announceCount1PicName);
     if (pAnn->textures[14] == 0) {
-        assert_prog(D_00A57EF8, D_00A57C10, 15);
+        assert_prog(announceAssertCount1PicNotNil, announceIdHeaderPath, 15);
     }
-    pAnn->textures[15] = RgBxxGetPic(addedCommon, D_00A57F20);
+    pAnn->textures[15] = RgBxxGetPic(addedCommon, announceCount2PicName);
     if (pAnn->textures[15] == 0) {
-        assert_prog(D_00A57F30, D_00A57C10, 16);
+        assert_prog(announceAssertCount2PicNotNil, announceIdHeaderPath, 16);
     }
-    pAnn->textures[16] = RgBxxGetPic(addedCommon, D_00A57F58);
+    pAnn->textures[16] = RgBxxGetPic(addedCommon, announceCount3PicName);
     if (pAnn->textures[16] == 0) {
-        assert_prog(D_00A57F68, D_00A57C10, 17);
+        assert_prog(announceAssertCount3PicNotNil, announceIdHeaderPath, 17);
     }
-    pAnn->textures[17] = RgBxxGetPic(addedCommon, D_00A57F90);
+    pAnn->textures[17] = RgBxxGetPic(addedCommon, announceCount4PicName);
     if (pAnn->textures[17] == 0) {
-        assert_prog(D_00A57FA0, D_00A57C10, 18);
+        assert_prog(announceAssertCount4PicNotNil, announceIdHeaderPath, 18);
     }
-    pAnn->textures[18] = RgBxxGetPic(addedCommon, D_00A57FC8);
+    pAnn->textures[18] = RgBxxGetPic(addedCommon, announceCount5PicName);
     if (pAnn->textures[18] == 0) {
-        assert_prog(D_00A57FD8, D_00A57C10, 19);
+        assert_prog(announceAssertCount5PicNotNil, announceIdHeaderPath, 19);
     }
-    pAnn->textures[19] = RgBxxGetPic(addedCommon, D_00A58000);
+    pAnn->textures[19] = RgBxxGetPic(addedCommon, announceCount6PicName);
     if (pAnn->textures[19] == 0) {
-        assert_prog(D_00A58010, D_00A57C10, 20);
+        assert_prog(announceAssertCount6PicNotNil, announceIdHeaderPath, 20);
     }
-    pAnn->textures[20] = RgBxxGetPic(addedCommon, D_00A58038);
+    pAnn->textures[20] = RgBxxGetPic(addedCommon, announceCount7PicName);
     if (pAnn->textures[20] == 0) {
-        assert_prog(D_00A58048, D_00A57C10, 21);
+        assert_prog(announceAssertCount7PicNotNil, announceIdHeaderPath, 21);
     }
-    pAnn->textures[21] = RgBxxGetPic(addedCommon, D_00A58070);
+    pAnn->textures[21] = RgBxxGetPic(addedCommon, announceCount8PicName);
     if (pAnn->textures[21] == 0) {
-        assert_prog(D_00A58080, D_00A57C10, 22);
+        assert_prog(announceAssertCount8PicNotNil, announceIdHeaderPath, 22);
     }
-    pAnn->textures[22] = RgBxxGetPic(addedCommon, D_00A580A8);
+    pAnn->textures[22] = RgBxxGetPic(addedCommon, announceCount9PicName);
     if (pAnn->textures[22] == 0) {
-        assert_prog(D_00A580B8, D_00A57C10, 23);
+        assert_prog(announceAssertCount9PicNotNil, announceIdHeaderPath, 23);
     }
-    pAnn->textures[23] = RgBxxGetPic(addedCommon, D_00A580E0);
+    pAnn->textures[23] = RgBxxGetPic(addedCommon, announceTotalLabelPicName);
     if (pAnn->textures[23] == 0) {
-        assert_prog(D_00A580E8, D_00A57C10, 24);
+        assert_prog(announceAssertTotalLabelPicNotNil, announceIdHeaderPath, 24);
     }
-    pAnn->textures[24] = RgBxxGetPic(addedCommon, D_00A58110);
+    pAnn->textures[24] = RgBxxGetPic(addedCommon, announceTotalValueAPicName);
     if (pAnn->textures[24] == 0) {
-        assert_prog(D_00A58120, D_00A57C10, 25);
+        assert_prog(announceAssertTotalValueAPicNotNil, announceIdHeaderPath, 25);
     }
-    pAnn->textures[25] = RgBxxGetPic(addedCommon, D_00A58148);
+    pAnn->textures[25] = RgBxxGetPic(addedCommon, announceTotalValueBPicName);
     if (pAnn->textures[25] == 0) {
-        assert_prog(D_00A58158, D_00A57C10, 26);
+        assert_prog(announceAssertTotalValueBPicNotNil, announceIdHeaderPath, 26);
     }
-    pAnn->textures[26] = RgBxxGetPic(addedCommon, D_00A58180);
+    pAnn->textures[26] = RgBxxGetPic(addedCommon, announceTimePointPicName);
     if (pAnn->textures[26] == 0) {
-        assert_prog(D_00A58188, D_00A57C10, 27);
+        assert_prog(announceAssertTimePointPicNotNil, announceIdHeaderPath, 27);
     }
 
-    pAnn->textures[27] = RgBxxGetPic(subCommon, D_00A581B0);
+    pAnn->textures[27] = RgBxxGetPic(subCommon, announceYouWinSubPicName);
     if (pAnn->textures[27] == 0) {
-        assert_prog(D_00A581C0, D_00A57C10, 29);
+        assert_prog(announceAssertYouWinSubPicNotNil, announceIdHeaderPath, 29);
     }
-    pAnn->textures[28] = RgBxxGetPic(subCommon, D_00A581E8);
+    pAnn->textures[28] = RgBxxGetPic(subCommon, announceCount0SubPicName);
     if (pAnn->textures[28] == 0) {
-        assert_prog(D_00A581F8, D_00A57C10, 30);
+        assert_prog(announceAssertCount0SubPicNotNil, announceIdHeaderPath, 30);
     }
-    pAnn->textures[29] = RgBxxGetPic(subCommon, D_00A58220);
+    pAnn->textures[29] = RgBxxGetPic(subCommon, announceCount1SubPicName);
     if (pAnn->textures[29] == 0) {
-        assert_prog(D_00A58230, D_00A57C10, 31);
+        assert_prog(announceAssertCount1SubPicNotNil, announceIdHeaderPath, 31);
     }
-    pAnn->textures[30] = RgBxxGetPic(subCommon, D_00A58258);
+    pAnn->textures[30] = RgBxxGetPic(subCommon, announceCount2SubPicName);
     if (pAnn->textures[30] == 0) {
-        assert_prog(D_00A58268, D_00A57C10, 32);
+        assert_prog(announceAssertCount2SubPicNotNil, announceIdHeaderPath, 32);
     }
-    pAnn->textures[31] = RgBxxGetPic(subCommon, D_00A58290);
+    pAnn->textures[31] = RgBxxGetPic(subCommon, announceCount3SubPicName);
     if (pAnn->textures[31] == 0) {
-        assert_prog(D_00A582A0, D_00A57C10, 33);
+        assert_prog(announceAssertCount3SubPicNotNil, announceIdHeaderPath, 33);
     }
-    pAnn->textures[32] = RgBxxGetPic(subCommon, D_00A582C8);
+    pAnn->textures[32] = RgBxxGetPic(subCommon, announceCount4SubPicName);
     if (pAnn->textures[32] == 0) {
-        assert_prog(D_00A582D8, D_00A57C10, 34);
+        assert_prog(announceAssertCount4SubPicNotNil, announceIdHeaderPath, 34);
     }
-    pAnn->textures[33] = RgBxxGetPic(subCommon, D_00A58300);
+    pAnn->textures[33] = RgBxxGetPic(subCommon, announceCount5SubPicName);
     if (pAnn->textures[33] == 0) {
-        assert_prog(D_00A58310, D_00A57C10, 35);
+        assert_prog(announceAssertCount5SubPicNotNil, announceIdHeaderPath, 35);
     }
-    pAnn->textures[34] = RgBxxGetPic(subCommon, D_00A58338);
+    pAnn->textures[34] = RgBxxGetPic(subCommon, announceCount6SubPicName);
     if (pAnn->textures[34] == 0) {
-        assert_prog(D_00A58348, D_00A57C10, 36);
+        assert_prog(announceAssertCount6SubPicNotNil, announceIdHeaderPath, 36);
     }
-    pAnn->textures[35] = RgBxxGetPic(subCommon, D_00A58370);
+    pAnn->textures[35] = RgBxxGetPic(subCommon, announceCount7SubPicName);
     if (pAnn->textures[35] == 0) {
-        assert_prog(D_00A58380, D_00A57C10, 37);
+        assert_prog(announceAssertCount7SubPicNotNil, announceIdHeaderPath, 37);
     }
-    pAnn->textures[36] = RgBxxGetPic(subCommon, D_00A583A8);
+    pAnn->textures[36] = RgBxxGetPic(subCommon, announcePicNameCount82);
     if (pAnn->textures[36] == 0) {
-        assert_prog(D_00A583B8, D_00A57C10, 38);
+        assert_prog(announceAssertPicCount82NotNil, announceIdHeaderPath, 38);
     }
-    pAnn->textures[37] = RgBxxGetPic(subCommon, D_00A583E0);
+    pAnn->textures[37] = RgBxxGetPic(subCommon, announcePicNameCount92);
     if (pAnn->textures[37] == 0) {
-        assert_prog(D_00A583F0, D_00A57C10, 39);
+        assert_prog(announceAssertPicCount92NotNil, announceIdHeaderPath, 39);
     }
-    pAnn->textures[38] = RgBxxGetPic(subCommon, D_00A58418);
+    pAnn->textures[38] = RgBxxGetPic(subCommon, announcePicNameDraw2);
     if (pAnn->textures[38] == 0) {
-        assert_prog(D_00A58420, D_00A57C10, 40);
+        assert_prog(announceAssertPicDraw2NotNil, announceIdHeaderPath, 40);
     }
-    pAnn->textures[39] = RgBxxGetPic(subCommon, D_00A58448);
+    pAnn->textures[39] = RgBxxGetPic(subCommon, announcePicNameFight2);
     if (pAnn->textures[39] == 0) {
-        assert_prog(D_00A58450, D_00A57C10, 41);
+        assert_prog(announceAssertPicFight2NotNil, announceIdHeaderPath, 41);
     }
-    pAnn->textures[40] = RgBxxGetPic(subCommon, D_00A58478);
+    pAnn->textures[40] = RgBxxGetPic(subCommon, announcePicNameGmcler2);
     if (pAnn->textures[40] == 0) {
-        assert_prog(D_00A58488, D_00A57C10, 42);
+        assert_prog(announceAssertPicGmcler2NotNil, announceIdHeaderPath, 42);
     }
-    pAnn->textures[41] = RgBxxGetPic(subCommon, D_00A584B0);
+    pAnn->textures[41] = RgBxxGetPic(subCommon, announcePicNameGmover2);
     if (pAnn->textures[41] == 0) {
-        assert_prog(D_00A584C0, D_00A57C10, 43);
+        assert_prog(announceAssertPicGmover2NotNil, announceIdHeaderPath, 43);
     }
-    pAnn->textures[42] = RgBxxGetPic(subCommon, D_00A584E8);
+    pAnn->textures[42] = RgBxxGetPic(subCommon, announcePicNameReady2);
     if (pAnn->textures[42] == 0) {
-        assert_prog(D_00A584F0, D_00A57C10, 44);
+        assert_prog(announceAssertPicReady2NotNil, announceIdHeaderPath, 44);
     }
-    pAnn->textures[43] = RgBxxGetPic(subCommon, D_00A58518);
+    pAnn->textures[43] = RgBxxGetPic(subCommon, announcePicNameRound12);
     if (pAnn->textures[43] == 0) {
-        assert_prog(D_00A58528, D_00A57C10, 45);
+        assert_prog(announceAssertPicRound12NotNil, announceIdHeaderPath, 45);
     }
-    pAnn->textures[44] = RgBxxGetPic(subCommon, D_00A58550);
+    pAnn->textures[44] = RgBxxGetPic(subCommon, announcePicNameRound22);
     if (pAnn->textures[44] == 0) {
-        assert_prog(D_00A58560, D_00A57C10, 46);
+        assert_prog(announceAssertPicRound22NotNil, announceIdHeaderPath, 46);
     }
-    pAnn->textures[45] = RgBxxGetPic(subCommon, D_00A58588);
+    pAnn->textures[45] = RgBxxGetPic(subCommon, announcePicNameRound32);
     if (pAnn->textures[45] == 0) {
-        assert_prog(D_00A58598, D_00A57C10, 47);
+        assert_prog(announceAssertPicRound32NotNil, announceIdHeaderPath, 47);
     }
-    pAnn->textures[46] = RgBxxGetPic(subCommon, D_00A585C0);
+    pAnn->textures[46] = RgBxxGetPic(subCommon, announcePicNameStcler2);
     if (pAnn->textures[46] == 0) {
-        assert_prog(D_00A585D0, D_00A57C10, 48);
+        assert_prog(announceAssertPicStcler2NotNil, announceIdHeaderPath, 48);
     }
-    pAnn->textures[47] = RgBxxGetPic(subCommon, D_00A585F8);
+    pAnn->textures[47] = RgBxxGetPic(subCommon, announcePicNameTmover2);
     if (pAnn->textures[47] == 0) {
-        assert_prog(D_00A58608, D_00A57C10, 49);
+        assert_prog(announceAssertPicTmover2NotNil, announceIdHeaderPath, 49);
     }
-    pAnn->textures[48] = RgBxxGetPic(subCommon, D_00A58630);
+    pAnn->textures[48] = RgBxxGetPic(subCommon, announcePicNameYoulos2);
     if (pAnn->textures[48] == 0) {
-        assert_prog(D_00A58640, D_00A57C10, 50);
+        assert_prog(announceAssertPicYoulos2NotNil, announceIdHeaderPath, 50);
     }
-    pAnn->textures[49] = RgBxxGetPic(subCommon, D_00A58668);
+    pAnn->textures[49] = RgBxxGetPic(subCommon, announcePicNameCntinu2);
     if (pAnn->textures[49] == 0) {
-        assert_prog(D_00A58678, D_00A57C10, 51);
+        assert_prog(announceAssertPicCntinu2NotNil, announceIdHeaderPath, 51);
     }
 
     pAnn->timer = RG_ANNOUNCE_TIMER_INFINITE;
-    pAnn->paint = CreateXrgPaint2D_sub(D_00A57BC0, 91);
+    pAnn->paint = CreateXrgPaint2D_sub(announceSourcePath, 91);
     XrgPaint2DSetDrawPrio(pAnn->paint, 5);
     pAnn->drawFunc = 0;
     pAnn->pendingDispY = RG_ANNOUNCE_DISP_Y_DEFAULT;
@@ -370,36 +389,33 @@ static void _InitAnn(RgAnnounce *pAnn)
 static void _DestructAnn(RgAnnounce *pAnn)
 {
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 102);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 102);
     }
-    DisposeXrgPaint2D_sub(pAnn->paint, D_00A57BC0, 103);
+    DisposeXrgPaint2D_sub(pAnn->paint, announceSourcePath, 103);
 }
 
 RgAnnounce *CreateRgAnnounce(void)
 {
     RgAnnounce *pAnn;
 
-    pAnn = RgHeapAlloc(InstanceOfRgHeap(), RG_ANNOUNCE_SIZE, D_00A57BC0, 110);
+    pAnn = RgHeapAlloc(InstanceOfRgHeap(), RG_ANNOUNCE_SIZE, announceSourcePath, 110);
     _InitAnn(pAnn);
     return pAnn;
 }
 
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-
 void DisposeRgAnnounce(RgAnnounce *pAnn)
 {
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 118);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 118);
     }
     _DestructAnn(pAnn);
-    RgHeapFree(InstanceOfRgHeap(), pAnn, D_00A57BC0, 120);
+    RgHeapFree(InstanceOfRgHeap(), pAnn, announceSourcePath, 120);
 }
 
 void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime)
 {
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 129);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 129);
     }
     if (pAnn->timer != RG_ANNOUNCE_TIMER_INFINITE) {
         pAnn->timer -= deltaTime;
@@ -410,32 +426,6 @@ void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime)
     }
 }
 
-typedef struct RgAnnounceColor {
-    int r;
-    int g;
-    int b;
-    int a;
-} RgAnnounceColor;
-
-extern void XrgPaint2DColor(XrgPaint2D *paint, const RgAnnounceColor *color);
-
-/*
- * The 16-byte fixed color the total line copies before drawing, as two
- * doublewords so the copy is an aligned ld/sd pair.
- */
-typedef struct RgAnnounceColorHalves {
-    long long low;
-    long long high;
-} RgAnnounceColorHalves;
-
-/* ov12:0x00a586a0: the fixed color the total line copies before drawing (scaffold .rodata). */
-extern const RgAnnounceColorHalves D_00A586A0;
-static void _time_disp_title(RgAnnounce *pAnn, int x, int y);
-static void _time_disp(RgAnnounce *pAnn, int x, int y, unsigned int time);
-static void _damage_disp_title(RgAnnounce *pAnn, int x, int y);
-static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage);
-static void _paint_flush(RgAnnounce *pAnn);
-
 void RgAnnounceDisp(RgAnnounce *pAnn)
 {
     unsigned int totalTime;
@@ -444,24 +434,24 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
     int y;
 
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 154);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 154);
     }
     if (pAnn->drawFunc != 0) {
         pAnn->drawFunc(pAnn);
     }
     if (pAnn->stageClearActive != 0) {
         XrgPaint2D *paint;
-        RgAnnounceColor color;
+        XrgPaint2DRGBA color;
         int alpha;
         int fadeAlpha;
         int stageTick;
 
         paint = pAnn->paint;
         memset(&color, 0, sizeof(color));
-        color.a = 80;
+        color.a = RG_ANNOUNCE_CLEAR_PANEL_ALPHA;
         alpha = 0;
         stageTick = pAnn->stageClearTick + 1;
-        fadeAlpha = stageTick * 8;
+        fadeAlpha = stageTick * RG_ANNOUNCE_CLEAR_FADE_STEP;
         pAnn->stageClearTick = stageTick;
         if (fadeAlpha >= 0) {
             if (fadeAlpha <= color.a) {
@@ -473,8 +463,8 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
         color.a = alpha;
         XrgPaint2DColor(paint, &color);
         XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
-        XrgPaint2DDrawXYWH(paint, 0, 0, 218, 512, 128);
-        if (color.a >= 80) {
+        XrgPaint2DDrawXYWH(paint, 0, 0, 218, RG_ANNOUNCE_SCREEN_WIDTH, 128);
+        if (color.a >= RG_ANNOUNCE_CLEAR_PANEL_ALPHA) {
             _time_disp_title(pAnn, 0, 232);
             _time_disp(pAnn, 0, 263, pAnn->stageClearTime);
             _damage_disp_title(pAnn, 0, 289);
@@ -483,7 +473,7 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
     }
     if (pAnn->gameClearActive != 0) {
         XrgPaint2D *paint;
-        RgAnnounceColor color;
+        XrgPaint2DRGBA color;
         RgAnnounceColorHalves fixedColor;
         int alpha;
         int fadeAlpha;
@@ -491,12 +481,12 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
 
         paint = pAnn->paint;
         memset(&color, 0, sizeof(color));
-        color.a = 80;
+        color.a = RG_ANNOUNCE_CLEAR_PANEL_ALPHA;
         totalTime = 0;
         totalDamage = 0.0f;
         stageTick = pAnn->stageClearTick + 1;
         pAnn->stageClearTick = stageTick;
-        fadeAlpha = stageTick * 8;
+        fadeAlpha = stageTick * RG_ANNOUNCE_CLEAR_FADE_STEP;
         alpha = 0;
         if (fadeAlpha >= 0) {
             if (fadeAlpha <= color.a) {
@@ -508,9 +498,9 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
         color.a = alpha;
         XrgPaint2DColor(paint, &color);
         XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
-        XrgPaint2DDrawXYWH(paint, 0, 0, 200, 512, 150);
-        if (color.a >= 80) {
-            fixedColor = D_00A586A0;
+        XrgPaint2DDrawXYWH(paint, 0, 0, 200, RG_ANNOUNCE_SCREEN_WIDTH, 150);
+        if (color.a >= RG_ANNOUNCE_CLEAR_PANEL_ALPHA) {
+            fixedColor = announceClearPanelColor;
             i = 0;
             _time_disp_title(pAnn, -128, 202);
             _damage_disp_title(pAnn, 128, 206);
@@ -525,8 +515,8 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
                 } while (i < pAnn->m_uStage);
             }
             XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
-            XrgPaint2DColor(paint, (const RgAnnounceColor *) &fixedColor);
-            XrgPaint2DDrawXYWH(paint, 0, 0, 316, 512, 1);
+            XrgPaint2DColor(paint, &fixedColor.rgba);
+            XrgPaint2DDrawXYWH(paint, 0, 0, 316, RG_ANNOUNCE_SCREEN_WIDTH, 1);
             _time_disp(pAnn, -128, 322, totalTime);
             _damage_disp(pAnn, 128, 322, totalDamage);
         }
@@ -535,181 +525,158 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
 }
 
 /*
- * The stack copy _time_disp_title and _damage_disp_title hand to _paint_uvwh.
- * Both titles move their rectangle a word pair at a time: uvOffset is the
- * u/v pair _paint_uvwh feeds to XrgPaint2DSetUVOffset, uvSize the w/h pair it
- * feeds to XrgPaint2DSetUVSize and to the draw call's own width/height.
- */
-typedef struct RgAnnounceUvRectHalves {
-    long long uvOffset;
-    long long uvSize;
-} RgAnnounceUvRectHalves;
-
-/*
  * The two fixed title rectangles, asm-owned scaffold data (splat names, no
  * config/symbols/ov12.txt entry): ov12:0x00a586b0 belongs to the time title
  * and ov12:0x00a586c0 to the damage title.
  */
-const RgAnnounceUvRectHalves D_00A586B0 = {
+const RgAnnounceUvRectHalves announceTimeTitleUvRect = {
     0, 0x0000001800000200LL
 };
 
-const RgAnnounceUvRectHalves D_00A586C0 = {
+const RgAnnounceUvRectHalves announceDamageTitleUvRect = {
     0x0000003800000000LL, 0x0000001200000200LL
 };
-
-static void _paint_uvwh(RgAnnounce *pAnn, int index, int x, int y,
-                        const RgAnnounceUvRect *rect);
 
 static void _time_disp_title(RgAnnounce *pAnn, int x, int y)
 {
     RgAnnounceUvRectHalves rect;
 
-    rect.uvSize = D_00A586B0.uvSize;
-    rect.uvOffset = D_00A586B0.uvOffset;
+    rect.uvSize = announceTimeTitleUvRect.uvSize;
+    rect.uvOffset = announceTimeTitleUvRect.uvOffset;
     XrgPaint2DAlpha(pAnn->paint, XRG_PAINT2D_BLEND_ADD);
-    _paint_uvwh(pAnn, 0x17, x, y, (const RgAnnounceUvRect *) &rect);
+    _paint_uvwh(pAnn, RG_ANNOUNCE_TEX_TITLE_BAR, x, y, (const RgAnnounceUvRect *) &rect);
 }
-
-extern int RgBattleCommonDataAnnounceFont(void *pEnv);
-extern int RgFontStr(XrgPaint2D *paint, int fontId, const char *text, int x,
-                     int y, int color);
-static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
 
 static void _time_disp(RgAnnounce *pAnn, int x, int y, unsigned int time)
 {
     XrgPaint2D *paint;
-    int fontId;
+    RgFont *font;
     unsigned int minutes;
     unsigned int rest;
     unsigned int centiseconds;
     char text[16];
 
     paint = pAnn->paint;
-    fontId = RgBattleCommonDataAnnounceFont(InstanceOfRgBattleCommonData());
+    font = RgBattleCommonDataAnnounceFont(InstanceOfRgBattleCommonData());
     minutes = (time / 60000) % 10;
     text[0] = '0' + minutes;
     text[1] = '0' + (time / 6000) % 10;
     text[2] = '\0';
-    RgFontStr(paint, fontId, text, x + 227, y, 0);
+    RgFontStr(paint, font, text, x + 227, y, 0);
     rest = time % 6000;
     text[0] = '0' + (rest / 1000u) % 10u;
     text[1] = '0' + (rest / 100u) % 10u;
-    RgFontStr(paint, fontId, text, x + 256, y, 0);
+    RgFontStr(paint, font, text, x + 256, y, 0);
     centiseconds = rest % 100;
     text[0] = '0' + (centiseconds / 10) % 10;
     text[1] = '0' + centiseconds % 10;
-    RgFontStr(paint, fontId, text, x + 290, y, 0);
-    _paint_add(pAnn, 0x18, x, y - 8);
+    RgFontStr(paint, font, text, x + 290, y, 0);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_TIME_LABEL, x, y - 8);
 }
 
 static void _damage_disp_title(RgAnnounce *pAnn, int x, int y)
 {
     RgAnnounceUvRectHalves rect;
 
-    rect.uvSize = D_00A586C0.uvSize;
-    rect.uvOffset = D_00A586C0.uvOffset;
+    rect.uvSize = announceDamageTitleUvRect.uvSize;
+    rect.uvOffset = announceDamageTitleUvRect.uvOffset;
     XrgPaint2DAlpha(pAnn->paint, XRG_PAINT2D_BLEND_ADD);
-    _paint_uvwh(pAnn, 0x17, x, y, (const RgAnnounceUvRect *) &rect);
+    _paint_uvwh(pAnn, RG_ANNOUNCE_TEX_TITLE_BAR, x, y, (const RgAnnounceUvRect *) &rect);
 }
 
-extern float floorf(float value);
-
 /* ov12:0x00a586d0 is the scaffold-owned "%d" format string. */
-const char D_00A586D0[] = "%d";
+const char announceDamageFormat[] = "%d";
 
 static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage)
 {
     XrgPaint2D *paint;
-    int fontId;
+    RgFont *font;
     unsigned int damageValue;
     char damageText[32];
 
     paint = pAnn->paint;
-    fontId = RgBattleCommonDataAnnounceFont(InstanceOfRgBattleCommonData());
+    font = RgBattleCommonDataAnnounceFont(InstanceOfRgBattleCommonData());
     damageValue = (unsigned int) floorf(damage);
-    sprintf(damageText, D_00A586D0, damageValue);
-    RgFontStr(paint, fontId, damageText, x + 0x11F, y, 1);
-    _paint_add(pAnn, 0x19, x, y - 0x10);
+    sprintf(damageText, announceDamageFormat, damageValue);
+    RgFontStr(paint, font, damageText, x + 0x11F, y, 1);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_DAMAGE_LABEL, x, y - 0x10);
 }
 
-static void _paint_sub(RgAnnounce *pAnn, int index, int x, int y);
-
 static void _round1(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x2B, 0, pAnn->dispY);
-    _paint_add(pAnn, 0, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_ROUND1_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_ROUND1_ADD, 0, pAnn->dispY);
 }
 
 static void _round2(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x2C, 0, pAnn->dispY);
-    _paint_add(pAnn, 1, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_ROUND2_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_ROUND2_ADD, 0, pAnn->dispY);
 }
 
 static void _round3(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x2D, 0, pAnn->dispY);
-    _paint_add(pAnn, 2, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_ROUND3_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_ROUND3_ADD, 0, pAnn->dispY);
 }
 
 static void _ready(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x2A, 0, pAnn->dispY);
-    _paint_add(pAnn, 3, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_READY_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_READY_ADD, 0, pAnn->dispY);
 }
 
 static void _fight(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x27, 0, pAnn->dispY);
-    _paint_add(pAnn, 4, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_FIGHT_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_FIGHT_ADD, 0, pAnn->dispY);
 }
 
 static void _youwin(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x1B, 0, pAnn->dispY);
-    _paint_add(pAnn, 5, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_YOU_WIN_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_WIN_ADD, 0, pAnn->dispY);
 }
 
 static void _youlose(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x30, 0, pAnn->dispY);
-    _paint_add(pAnn, 6, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_ADD, 0, pAnn->dispY);
 }
 
 static void _draw(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x26, 0, pAnn->dispY);
-    _paint_add(pAnn, 7, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_DRAW_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_DRAW_ADD, 0, pAnn->dispY);
 }
 
 static void _gameover(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x29, 0, pAnn->dispY);
-    _paint_add(pAnn, 9, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_GAME_OVER_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_GAME_OVER_ADD, 0, pAnn->dispY);
 }
 
 static void _timeover(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x2F, 0, pAnn->dispY);
-    _paint_add(pAnn, 8, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_TIME_OVER_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_TIME_OVER_ADD, 0, pAnn->dispY);
 }
 
 static void _stageclear(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x2E, 0, pAnn->dispY);
-    _paint_add(pAnn, 0xA, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_STAGE_CLEAR_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_STAGE_CLEAR_ADD, 0, pAnn->dispY);
 }
 
 static void _gameclear(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x28, 0, pAnn->dispY);
-    _paint_add(pAnn, 0xB, 0, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_GAME_CLEAR_SUB, 0, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_GAME_CLEAR_ADD, 0, pAnn->dispY);
 }
 
 static void _you_win_you_lose(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x1B, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
-    _paint_add(pAnn, 5, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
-    _paint_sub(pAnn, 0x30, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
-    _paint_add(pAnn, 6, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_YOU_WIN_SUB, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_WIN_ADD, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_SUB, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_ADD, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
 }
 
 static void _you_lose_you_win(RgAnnounce *pAnn) {
-    _paint_sub(pAnn, 0x1B, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
-    _paint_add(pAnn, 5, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
-    _paint_sub(pAnn, 0x30, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
-    _paint_add(pAnn, 6, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_YOU_WIN_SUB, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_WIN_ADD, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_sub(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_SUB, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_ADD, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
 }
 
-static void _paint(XrgPaint2D *paint, int texture, int blend, int x, int y)
+static void _paint(XrgPaint2D *paint, struct RgBxxPic *texture, int blend, int x, int y)
 {
     if (texture != 0) {
         XrgPaint2DUseTexture(paint, texture);
@@ -757,7 +724,7 @@ void RgAnnounceDispInit(RgAnnounce *pAnn, int kind)
         _you_win_you_lose, _you_lose_you_win
     };
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 466);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 466);
     }
     if ((unsigned int) kind < RG_ANNOUNCE_DRAW_KIND_COUNT) {
         pAnn->timer = RG_ANNOUNCE_TIMER_INFINITE;
@@ -780,7 +747,7 @@ void RgAnnounceDispInitTime(RgAnnounce *pAnn, int kind, float duration)
 void RgAnnounceDispOff(RgAnnounce *pAnn)
 {
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 493);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 493);
     }
     pAnn->drawFunc = 0;
     pAnn->stageClearActive = 0;
@@ -789,7 +756,7 @@ void RgAnnounceDispOff(RgAnnounce *pAnn)
 void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
 {
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 505);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 505);
     }
     pAnn->stageClearTime = time;
     pAnn->stageClearDamage = damage;
@@ -799,7 +766,7 @@ void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
 }
 
 /* "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])" */
-const char D_00A586D8[] =
+const char announceAssertStageInTotalTimeRange[] =
     "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])";
 
 void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
@@ -808,10 +775,10 @@ void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
     unsigned int i;
 
     if (pAnn == 0) {
-        assert_prog(D_00A57BB0, D_00A57BC0, 521);
+        assert_prog(announceAssertAnnNotNil, announceSourcePath, 521);
     }
     if (uStage >= RG_ANNOUNCE_GAMECLEAR_MAX) {
-        assert_prog(D_00A586D8, D_00A57BC0, 522);
+        assert_prog(announceAssertStageInTotalTimeRange, announceSourcePath, 522);
     }
     for (i = 0; i < uStage; i++) {
         pAnn->m_auTotalTime[i] = auTime[i];

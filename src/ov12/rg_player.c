@@ -2,92 +2,101 @@
  * OV12 original TU 15: 0x00a10618..0x00a10f20 (17 functions)
  */
 #include "common.h"
-#include "rg_player.h"
+#include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_camera.h"
+#include "ov12/rg_draw.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_group.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_player.h"
+#include "ov12/rg_robot.h"
+#include "ov12/rg_robot_control.h"
+#include "ov12/rg_weapon.h"
+#include "ov12/xrg_actor.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_sound.h"
 
-typedef struct RgPlayerEssenceFields {
-    RgVector position;
-    RgVector direction;
-    void *spec;
-    struct RgWeaponEssenceCommon *weaponEssence[3];
-    struct RgWeaponEssenceCommon *spareWeaponEssence[3];
-    int actorID;
-} RgPlayerEssenceFields;
+/* Sound set and volume the player's robot is given. */
+#define RG_PLAYER_SOUND_TYPE 1
+#define RG_PLAYER_SOUND_VOLUME 1.0f
 
-extern void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
+/* Radius of the ball that detects what lies in the robot's advance direction. */
+#define RG_PLAYER_ADVANCE_RADIUS 0.1f
+
+/* RgRobotIsAcceptedCommand command numbers the camera actions follow. */
+#define RG_PLAYER_CMD_ADVANCE 0
+#define RG_PLAYER_CMD_ROLL 1
+#define RG_PLAYER_CMD_ATTACK 3
+
+/* RgRobotGetStatusFlags bits the camera actions follow. */
+#define RG_PLAYER_STATUS_SEE_TARGET 1
+#define RG_PLAYER_STATUS_LOCKED_ON 2
+#define RG_PLAYER_STATUS_DASH 4
 
 /*
- * These are external file-backed witnesses, not candidate-emitted data.
- *
- * ov12:0x00a52740 contains the assertion expression "pPlayer != NIL".
- * ov12:0x00a52708 contains the source filename "../rg_player.euc.c".
+ * Partial view of RgWeaponCreateInfo (measured: the record's third member is
+ * an int id there, and storing the shot geometry group pointer through it
+ * reorders the stores): the player's robot, the equip side, and the geometry
+ * groups of its shots and attacks.
  */
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-const char D_00A526F8[16] = "pDat != NIL";
-const char D_00A52708[24] = "../rg_player.euc.c";
-const char D_00A52720[32] = "pPlayer != NIL && pDat != NIL";
-const char D_00A52740[16] = "pPlayer != NIL";
+typedef struct RgWeaponCreateInfoPlayerView {
+    RgStatus *robot;
+    int side;
+    RgGeomGroup *shotGeoms;
+    RgGeomGroup *atkGeoms;
+} RgWeaponCreateInfoPlayerView;
 
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-extern void RgHeapFree(void *heap, void *ptr, const char *source_file, int line);
-extern RgHeap *InstanceOfRgHeap(void);
+
+/*
+ * RgGeomGroupCreateRobot is defined void (its body ends in a tail jump), but
+ * the result register still holds the geometry it created and this caller
+ * passes it on, so only this caller declares the pointer return.
+ */
+extern RgGeomPoint *RgGeomGroupCreateRobot(RgGeomGroup *pGroup, void *parent);
 
 static void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat);
+static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat);
+
+const char playerAssertDatNotNil[16] = "pDat != NIL";
+const char playerSourcePath[24] = "../rg_player.euc.c";
+const char playerAssertPlayerAndDatNotNil[32] = "pPlayer != NIL && pDat != NIL";
+const char playerAssertPlayerNotNil[16] = "pPlayer != NIL";
 
 void InitRgPlayerEssence(RgPlayerEssence *pDat)
 {
-    RgPlayerEssenceFields *essence = (RgPlayerEssenceFields *)pDat;
     int i;
 
     if (pDat == 0) {
-        assert_prog(D_00A526F8, D_00A52708, 41);
+        assert_prog(playerAssertDatNotNil, playerSourcePath, 41);
     }
-    XrgClearVector(essence->position);
-    XrgClearVector(essence->direction);
-    essence->direction[2] = -1.0f;
-    essence->spec = 0;
-    essence->actorID = -1;
-    for (i = 2; i >= 0; i--) {
-        essence->weaponEssence[2 - i] = 0;
-        essence->spareWeaponEssence[2 - i] = 0;
+    XrgClearVector(pDat->position);
+    XrgClearVector(pDat->direction);
+    pDat->direction[2] = -1.0f;
+    pDat->spec = 0;
+    pDat->actorID = -1;
+    for (i = RG_EQUIP_TYPE_NUM - 1; i >= 0; i--) {
+        pDat->weaponEssence[RG_EQUIP_TYPE_NUM - 1 - i] = 0;
+        pDat->spareWeaponEssence[RG_EQUIP_TYPE_NUM - 1 - i] = 0;
     }
 }
 
 static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat)
 {
-    RgPlayerEssenceFields *essence = (RgPlayerEssenceFields *)pDat;
-    struct RgWeaponCreateInfo {
-        RgRobot *robot;
-        int side;
-        RgGeomGroup *shotGeoms;
-        RgGeomGroup *atkGeoms;
-    } weaponInfo;
+    RgWeaponCreateInfoPlayerView weaponInfo;
     void *geometry;
-    struct RgWeaponEssenceCommon *weaponEssence;
+    RgWeaponEssence *weaponEssence;
     int side;
 
-    typedef struct RgWeapon RgWeapon;
-    typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
-
-    extern RgGeomPoint *RgRobotGetGeom(RgRobot *robot);
-    extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
-    extern RgRobotControl *CreateRgRobotControlNul(RgRobot *robot);
-    extern void DisposeRgRobotControl(RgRobotControl *pControl);
-    extern void RgRobotSetWeapon(RgStatus *robot, int side, int weaponID);
-    extern void RgRobotSetSpareWeapon(RgStatus *robot, int side, int weaponID);
-    extern RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(
-        struct RgWeaponEssenceCommon *essence);
-    extern RgWeapon *CreateRgWeaponFromEssence(
-        struct RgWeaponEssenceCommon *essence,
-        struct RgWeaponCreateInfo *info);
-
     if (pPlayer == 0 || pDat == 0) {
-        assert_prog(D_00A52720, D_00A52708, 64);
+        assert_prog(playerAssertPlayerAndDatNotNil, playerSourcePath, 64);
     }
     geometry = RgRobotGetGeom(pPlayer->robot);
-    RgGeomPointSetPos(geometry, essence->position);
-    RgGeomRobotSetDir(geometry, essence->direction);
+    RgGeomPointSetPos(geometry, pDat->position);
+    RgGeomRobotSetDir(geometry, pDat->direction);
     if (pPlayer->control != 0) {
         DisposeRgRobotControl(pPlayer->control);
         pPlayer->control = 0;
@@ -99,61 +108,33 @@ static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat)
         weaponInfo.robot = pPlayer->robot;
         weaponInfo.shotGeoms = pPlayer->shotGeoms;
         weaponInfo.atkGeoms = pPlayer->atkGeoms;
-        weaponEssence = essence->weaponEssence[side];
+        weaponEssence = pDat->weaponEssence[side];
         weaponInfo.side = side;
         if (weaponEssence != 0 &&
-            (side != 2 || RgWeaponEssCastToUnArmed(weaponEssence) == 0)) {
-            RgRobotSetWeapon((RgStatus *)pPlayer->robot, side,
-                            (int)CreateRgWeaponFromEssence(weaponEssence,
-                                                          &weaponInfo));
+            (side != RG_EQUIP_TYPE_BACK ||
+             RgWeaponEssCastToUnArmed(weaponEssence) == 0)) {
+            RgRobotSetWeapon(pPlayer->robot, side,
+                            CreateRgWeaponFromEssence(
+                                weaponEssence,
+                                (RgWeaponCreateInfo *)&weaponInfo));
         }
-        weaponEssence = essence->spareWeaponEssence[side];
+        weaponEssence = pDat->spareWeaponEssence[side];
         if (weaponEssence != 0 &&
-            (side != 2 || RgWeaponEssCastToUnArmed(weaponEssence) == 0)) {
-            RgRobotSetSpareWeapon((RgStatus *)pPlayer->robot, side,
-                                  (int)CreateRgWeaponFromEssence(
-                                      weaponEssence, &weaponInfo));
+            (side != RG_EQUIP_TYPE_BACK ||
+             RgWeaponEssCastToUnArmed(weaponEssence) == 0)) {
+            RgRobotSetSpareWeapon(pPlayer->robot, side,
+                                  CreateRgWeaponFromEssence(
+                                      weaponEssence,
+                                      (RgWeaponCreateInfo *)&weaponInfo));
         }
         side++;
-    } while (side < 3);
+    } while (side < RG_EQUIP_TYPE_NUM);
 }
 
-static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat);
-
-/*
- * _InitRgPlayer is the only function of this TU that reads RgPlayerEssence,
- * at the two offsets named below (the robot spec pointer RgRobotSetSpec
- * receives when non-NULL, and the actor ID InitXrgActorEssence receives);
- * every other byte stays unmodeled.
- */
-struct RgPlayerEssence {
-    unsigned char unmodeled_00[0x20];
-    void *spec;                       /* +0x20 */
-    unsigned char unmodeled_24[0x3C - 0x24];
-    int actorID;                      /* +0x3C */
-};
-
-extern RgRobot *CreateRgRobot(void);
-extern RgGeomGroup *CreateRgGeomGroup(void);
-extern void RgRobotSetSpec(RgRobot *pRobot, void *spec);
-extern void *RgGeomGroupCreateRobot(RgGeomGroup *pGroup, void *parent);
-extern void RgRobotSetGeom(RgRobot *pRobot, void *geometry);
-extern void *RgGeomGroupCreateBall(RgGeomGroup *pGroup, void *parent);
-extern void RgRobotSetEyeGeom(RgRobot *pRobot, void *eyeGeometry);
-extern void RgGeomBallSetRadius(void *geomBall, float radius);
-extern void RgRobotSetAdvanceGeom(RgRobot *pRobot, void *advanceGeometry);
-extern void InitXrgActorEssence(void *pEss, int actorID);
-extern void RgRobotSetActor(RgRobot *pRobot, void *actor);
-extern int RgRobotGetCharID(RgRobot *pRobot);
-extern void *CreateXrgSound(int type, int kind);
-extern void XrgSoundSetVolume(void *sound, float volume);
-extern void RgRobotSetSoundDriver(RgRobot *pRobot, void *soundDriver);
-extern const char D_00A526F8[];
-
-void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat)
+static void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat)
 {
-    int actorEssence[36];
-    RgRobot *pRobot;
+    XrgActorEssence actorEssence;
+    RgStatus *pRobot;
     RgGeomGroup *bodyGeoms;
     RgGeomGroup *shotGeoms;
     RgGeomGroup *atkGeoms;
@@ -164,10 +145,10 @@ void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat)
     void *sound;
 
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 123);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 123);
     }
     if (pDat == 0) {
-        assert_prog(D_00A526F8, D_00A52708, 124);
+        assert_prog(playerAssertDatNotNil, playerSourcePath, 124);
     }
     pRobot = CreateRgRobot();
     pPlayer->control = 0;
@@ -187,14 +168,14 @@ void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat)
         RgRobotSetSpec(pPlayer->robot, spec);
     }
     RgRobotSetGeom(pPlayer->robot, RgGeomGroupCreateRobot(pPlayer->bodyGeoms, pPlayer->robot));
-    RgRobotSetEyeGeom(pPlayer->robot, RgGeomGroupCreateBall(pPlayer->eyeGeoms, pPlayer->robot));
+    RgRobotSetEyeGeom(pPlayer->robot, &RgGeomGroupCreateBall(pPlayer->eyeGeoms, pPlayer->robot)->point);
     advanceGeom = RgGeomGroupCreateBall(pPlayer->advGeoms, pPlayer->robot);
-    RgGeomBallSetRadius(advanceGeom, 0.1f);
+    RgGeomBallSetRadius(advanceGeom, RG_PLAYER_ADVANCE_RADIUS);
     RgRobotSetAdvanceGeom(pPlayer->robot, advanceGeom);
-    InitXrgActorEssence(actorEssence, pDat->actorID);
-    RgRobotSetActor(pPlayer->robot, actorEssence);
-    sound = CreateXrgSound(1, RgRobotGetCharID(pPlayer->robot));
-    XrgSoundSetVolume(sound, 1.0f);
+    InitXrgActorEssence(&actorEssence, pDat->actorID);
+    RgRobotSetActor(pPlayer->robot, &actorEssence);
+    sound = CreateXrgSound(RG_PLAYER_SOUND_TYPE, RgRobotGetCharID(pPlayer->robot));
+    XrgSoundSetVolume(sound, RG_PLAYER_SOUND_VOLUME);
     RgRobotSetSoundDriver(pPlayer->robot, sound);
     _PlayerSetFromEssence(pPlayer, pDat);
 }
@@ -204,24 +185,20 @@ RgPlayer *CreateRgPlayer(RgPlayerEssence *pDat)
     RgPlayer *pPlayer;
 
     pPlayer = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPlayer),
-                          D_00A52708, 173);
+                          playerSourcePath, 173);
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 174);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 174);
     }
     _InitRgPlayer(pPlayer, pDat);
     return pPlayer;
 }
-
-extern void DisposeRgRobot(RgRobot *pRobot);
-extern void DisposeRgRobotControl(RgRobotControl *pControl);
-extern void DisposeRgGeomGroup(RgGeomGroup *pGroup);
 
 void DisposeRgPlayer(RgPlayer *pPlayer)
 {
     RgRobotControl *pControl;
 
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 184);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 184);
     }
     if (pPlayer->robot != 0) {
         DisposeRgRobot(pPlayer->robot);
@@ -237,13 +214,13 @@ void DisposeRgPlayer(RgPlayer *pPlayer)
     DisposeRgGeomGroup(pPlayer->atkGeoms);
     DisposeRgGeomGroup(pPlayer->eyeGeoms);
     DisposeRgGeomGroup(pPlayer->advGeoms);
-    RgHeapFree(InstanceOfRgHeap(), pPlayer, D_00A52708, 200);
+    RgHeapFree(InstanceOfRgHeap(), pPlayer, playerSourcePath, 200);
 }
 
 void RgPlayerSetControl(RgPlayer *pPlayer, RgRobotControl *pControl)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 211);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 211);
     }
     if (pPlayer->control != 0) {
         DisposeRgRobotControl(pPlayer->control);
@@ -256,24 +233,21 @@ void RgPlayerSetTraceCamera(RgPlayer *pPlayer, RgCamera *pCamera)
     void *sound;
 
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 222);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 222);
     }
     pPlayer->traceCamera = pCamera;
-    sound = CreateXrgSound(1, RgRobotGetCharID(pPlayer->robot));
-    XrgSoundSetVolume(sound, 1.0f);
+    sound = CreateXrgSound(RG_PLAYER_SOUND_TYPE, RgRobotGetCharID(pPlayer->robot));
+    XrgSoundSetVolume(sound, RG_PLAYER_SOUND_VOLUME);
     RgRobotSetSoundDriver(pPlayer->robot, sound);
 }
 
-extern RgActor *RgRobotGetActor(RgRobot *pRobot);
-extern void XrgActorSetLightCost(RgActor *pActor);
-
 void RgPlayerSetLightCost(RgPlayer *pPlayer)
 {
-    RgRobot *pRobot;
-    RgActor *pActor;
+    RgStatus *pRobot;
+    XrgActor *pActor;
 
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 234);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 234);
     }
     pRobot = pPlayer->robot;
     if (pRobot != 0) {
@@ -284,10 +258,10 @@ void RgPlayerSetLightCost(RgPlayer *pPlayer)
     }
 }
 
-RgRobot *RgPlayerGetRobot(RgPlayer *pPlayer)
+RgStatus *RgPlayerGetRobot(RgPlayer *pPlayer)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 249);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 249);
     }
     return pPlayer->robot;
 }
@@ -295,7 +269,7 @@ RgRobot *RgPlayerGetRobot(RgPlayer *pPlayer)
 RgGeomGroup *RgPlayerGetBodyGeoms(RgPlayer *pPlayer)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 256);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 256);
     }
     return pPlayer->bodyGeoms;
 }
@@ -303,7 +277,7 @@ RgGeomGroup *RgPlayerGetBodyGeoms(RgPlayer *pPlayer)
 RgGeomGroup *RgPlayerGetShotGeoms(RgPlayer *pPlayer)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 263);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 263);
     }
     return pPlayer->shotGeoms;
 }
@@ -311,7 +285,7 @@ RgGeomGroup *RgPlayerGetShotGeoms(RgPlayer *pPlayer)
 RgGeomGroup *RgPlayerGetAtkGeoms(RgPlayer *pPlayer)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 270);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 270);
     }
     return pPlayer->atkGeoms;
 }
@@ -319,7 +293,7 @@ RgGeomGroup *RgPlayerGetAtkGeoms(RgPlayer *pPlayer)
 RgGeomGroup *RgPlayerGetEyeGeoms(RgPlayer *pPlayer)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 277);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 277);
     }
     return pPlayer->eyeGeoms;
 }
@@ -327,28 +301,14 @@ RgGeomGroup *RgPlayerGetEyeGeoms(RgPlayer *pPlayer)
 RgGeomGroup *RgPlayerGetAdvGeoms(RgPlayer *pPlayer)
 {
     if (pPlayer == 0) {
-        assert_prog(D_00A52740, D_00A52708, 284);
+        assert_prog(playerAssertPlayerNotNil, playerSourcePath, 284);
     }
     return pPlayer->advGeoms;
 }
 
-extern void RgRobotControlJob(RgRobotControl *pControl);
-extern unsigned int RgRobotGetStatusFlags(RgRobot *pRobot);
-extern int RgRobotIsAcceptedCommand(RgRobot *pRobot, int command);
-extern void RgRobotSetRgDrawView(RgRobot *pRobot, RgDrawView *view);
-
-extern RgDrawStudio *RgCameraGetStudio(RgCamera *pCamera);
-extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
-extern void RgCameraSetActionAdvance(RgCamera *pCamera, int flag);
-extern void RgCameraSetActionAttack(RgCamera *pCamera, int flag);
-extern void RgCameraSetActionDash(RgCamera *pCamera, int flag);
-extern void RgCameraSetActionLockedOn(RgCamera *pCamera, int flag);
-extern void RgCameraSetActionRoll(RgCamera *pCamera, int flag);
-extern void RgCameraSetActionSeeTarget(RgCamera *pCamera, int flag);
-
 void RgPlayerControl(RgPlayer *pPlayer)
 {
-    RgRobot *pRobot;
+    RgStatus *pRobot;
     RgCamera *pCamera;
     unsigned int statusFlags;
 
@@ -360,28 +320,26 @@ void RgPlayerControl(RgPlayer *pPlayer)
         pRobot = pPlayer->robot;
         statusFlags = RgRobotGetStatusFlags(pRobot);
         RgRobotSetRgDrawView(pRobot, RgDrawStudioGetView(RgCameraGetStudio(pCamera)));
-        if (RgRobotIsAcceptedCommand(pRobot, 0) != 0) {
+        if (RgRobotIsAcceptedCommand(pRobot, RG_PLAYER_CMD_ADVANCE) != 0) {
             RgCameraSetActionAdvance(pCamera, 1);
         }
-        if (RgRobotIsAcceptedCommand(pRobot, 1) != 0) {
+        if (RgRobotIsAcceptedCommand(pRobot, RG_PLAYER_CMD_ROLL) != 0) {
             RgCameraSetActionRoll(pCamera, 1);
         }
-        if (RgRobotIsAcceptedCommand(pRobot, 3) != 0) {
+        if (RgRobotIsAcceptedCommand(pRobot, RG_PLAYER_CMD_ATTACK) != 0) {
             RgCameraSetActionAttack(pCamera, 1);
         }
-        if (statusFlags & 1) {
+        if (statusFlags & RG_PLAYER_STATUS_SEE_TARGET) {
             RgCameraSetActionSeeTarget(pCamera, 1);
         }
-        if (statusFlags & 2) {
+        if (statusFlags & RG_PLAYER_STATUS_LOCKED_ON) {
             RgCameraSetActionLockedOn(pCamera, 1);
         }
-        if (statusFlags & 4) {
+        if (statusFlags & RG_PLAYER_STATUS_DASH) {
             RgCameraSetActionDash(pCamera, 1);
         }
     }
 }
-
-extern void RgRobotDisp(RgRobot *pRobot);
 
 void RgPlayerDisp(RgPlayer *pPlayer)
 {
@@ -389,8 +347,6 @@ void RgPlayerDisp(RgPlayer *pPlayer)
         RgRobotDisp(pPlayer->robot);
     }
 }
-
-extern void RgRobotPassTime(RgRobot *pRobot, float deltaTime);
 
 void RgPlayerPassTime(RgPlayer *pPlayer, float deltaTime)
 {

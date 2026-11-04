@@ -3,16 +3,49 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_select_robot.h"
+#include "main/act_1.h"
+#include "main/act_2.h"
+#include "main/xgl_font.h"
+#include "main/xgl_light.h"
 #include "main/xgl_studio.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_battle_common_data.h"
+#include "ov12/rg_dispmodel.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_filesys.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_select_robot.h"
+#include "ov12/xrg_actor.h"
+#include "ov12/xrg_rand_int.h"
 
-static int s_bLoading = 0;
+/* Completion codes of the xglCdReadFile callback. */
+#define CD_READ_COMPLETE 4
+#define CD_READ_ERROR_LIMIT (-2)
 
-static unsigned int s_uReqNum;
-static unsigned int s_uOkNum;
-static char s_aszData[4][64];
-static void *s_apBuf[4];
-static void *s_pWhoAreYou;
+/* Mode of xglCdReadFile: read into the caller's buffer. */
+#define CD_READ_MODE_BUFFER 1
+
+/* Size of the heap arena of the preview actors, and of each file's region. */
+#define SELECT_ROBOT_ARENA_SIZE 0xC00000U
+#define SELECT_ROBOT_REGION_SIZE 0xC0000
+
+/* Size of the weapon child records, which stop before heapBuffer. */
+#define SELECT_ROBOT_CHILD_SIZE 356
+
+#define SELECT_ROBOT_NO_ACTOR (-1)
+
+/* Preview actor setup and fading. */
+#define SELECT_ROBOT_EX_MOTION_BLEND 8
+#define SELECT_ROBOT_WEAPON_MOTION_BASE 2048
+#define SELECT_ROBOT_ALPHA 68
+#define SELECT_ROBOT_SHADOW_KIND 7
+#define SELECT_ROBOT_SHADOW_SIZE 48
+#define SELECT_ROBOT_FADE_STEP 0.2f
+#define SELECT_ROBOT_DISPOSE_DELAY 3
+#define SELECT_ROBOT_YAW_FOLLOW 0.2f
+#define SELECT_ROBOT_WEAPON_BLINK_FRAMES 10
+#define SELECT_ROBOT_PI 3.1415927f
+#define SELECT_ROBOT_TWO_PI 6.2831855f
 
 typedef union AlignedLightVector {
     double alignment;
@@ -24,13 +57,73 @@ typedef struct AlignedLightBlock {
     AlignedLightVector vectors[4];
 } AlignedLightBlock;
 
-const char D_00A56D90[] = "who are you ?";
+/* main/xgl_cd.c's CD read cancellation (src/main/xgl_hdd.h declares it with an int result). */
+extern void xglCdReadCancel(void);
 
-const char D_00A56DA0[] = "../rg_select_robot.euc.c";
+/*
+ * main/xgl_light.c takes the intensity as an XglLightQuadword; this TU's
+ * 8-aligned AlignedLightVector blocks (measured: a 16-aligned union changes
+ * the frame and the data alignment) are passed as their Vector4 member.
+ */
+extern void xglLightIntensityAmbient(StudioLight *light,
+                                     const Vector4 *intensity);
+extern void xglLightIntensityParallel(StudioLight *light, unsigned int index,
+                                     const Vector4 *intensity);
+/* Defined elsewhere (scaffold data): file-name and assertion strings. */
+extern const char selectRobotAssertFileNumWithinDataMax[];
+extern const char selectRobotFloorModelFileName[];
+extern const char selectRobotDataDirectory[];
+extern const char selectRobotFloorModelName[];
+extern const char selectRobotAssertActStatOk[];
+extern const char selectRobotAssertActDataNumAtLeastThree[];
+extern const char selectRobotAssertActActorNil[];
+extern const char selectRobotAssertNewNotNil[];
+extern const char selectRobotAssertWepEssNotNil[];
+extern const char selectRobotUnknownActStatError[];
+extern const char selectRobotUnknownRobotKindFormat[];
+extern const char selectRobotAssertActBufferNotNil[];
+extern const char selectRobotDebugStateFormat[];
+extern const char selectRobotDebugWeaponFormat[];
 
-const char D_00A56DD8[] = "pAct != NIL";
+/* Declared here: the load state (defined below, in this order; the order
+ * fixes the layout of the .bss). */
+static int s_bLoading;
+static unsigned int s_uReqNum;
+static unsigned int s_uOkNum;
+static void *s_pWhoAreYou;
 
-const AlignedLightBlock D_00A56E10 = {
+static void _InitSelRob(RgSelectRobot *pCont);
+static void _DestructSelRob(RgSelectRobot *pCont);
+static void _JobAct(RgSelectRobot *pCont, float deltaTime);
+static void *_InitAct(RgSelectRobot *pCont, unsigned char *cursor,
+                      int regionBytes, int count);
+static void _ActorPosUpdate(RgSelectRobot *pCont);
+static void _ActivateAct(RgSelectRobot *pCont);
+static void _ReqAct(RgSelectRobot *pCont, XrgActorEssence *essence,
+                    RgWeaponEssence **weapons, int *extra);
+static void _DestructAct(RgSelectRobot *pCont);
+static void _DrawAct(RgSelectRobot *pCont);
+static int _ReqLoad(const char *const *names, void *const *buffers,
+                    unsigned int count, void *owner);
+/* The published _DumpHead takes no parameter; the original call passes
+   one node pointer, which its empty body ignores. */
+static void _DumpHead();
+
+static int s_bLoading = 0;
+
+static unsigned int s_uReqNum;
+static unsigned int s_uOkNum;
+static char s_aszData[RG_SELECT_ROBOT_FILE_MAX][RG_SELECT_ROBOT_NAME_SIZE];
+static void *s_apBuf[RG_SELECT_ROBOT_FILE_MAX];
+static void *s_pWhoAreYou;
+
+const char selectRobotWhoAreYouWarning[] = "who are you ?";
+
+const char selectRobotSourcePath[] = "../rg_select_robot.euc.c";
+
+const char selectRobotAssertActNotNil[] = "pAct != NIL";
+
+const AlignedLightBlock selectRobotLightIntensityBlock = {
     .vectors = {
         { .components = { 0x1.0p-2f, 0x1.0p-2f, 0x1.0p-2f, 0x1.0p+0f } },
         { .components = { 0x1.99999ap-1f, 0x1.99999ap-1f, 0x1.99999ap-1f, 0x1.0p+0f } },
@@ -39,21 +132,7 @@ const AlignedLightBlock D_00A56E10 = {
     }
 };
 
-const char D_00A56EF8[] = "pCont != NIL";
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
-                       int line);
-static void _InitSelRob(RgSelectRobot *pCont);
-static void _DestructSelRob(RgSelectRobot *pCont);
-static void _JobAct(RgSelectRobot *pCont, float deltaTime);
-/* jal RgWarn(format, file, line, ...), the XrgLogSys-shaped debug warning
-   (also declared this way by src/ov12/rg_main.c, its accepted caller). */
-extern void RgWarn(const char *format, const char *file, int line, ...);
+const char selectRobotAssertContNotNil[] = "pCont != NIL";
 
 /*
  * xglCdReadFile's completion callback: only completion code 4 does
@@ -63,19 +142,19 @@ extern void RgWarn(const char *format, const char *file, int line, ...);
  */
 static void _ReadCallback(int completionCode)
 {
-    if (completionCode < -2) {
+    if (completionCode < CD_READ_ERROR_LIMIT) {
         return;
     }
-    if (completionCode < 4) {
+    if (completionCode < CD_READ_COMPLETE) {
         return;
     }
-    if (completionCode != 4) {
+    if (completionCode != CD_READ_COMPLETE) {
         return;
     }
     if (s_pWhoAreYou != 0) {
         s_uOkNum++;
     } else {
-        RgWarn(D_00A56D90, D_00A56DA0, 55);
+        RgWarn(selectRobotWhoAreYouWarning, selectRobotSourcePath, 55);
     }
     s_bLoading = 0;
 }
@@ -99,9 +178,6 @@ static void _KillLoadIfMe(void *owner)
     }
 }
 
-extern char *strcpy(char *destination, const char *source);
-extern const char D_00A56DC0[];
-
 /*
  * Cancels the current asynchronous load, then installs the next request:
  * names[i] is copied into slot i and buffers[i] becomes its buffer.  A
@@ -112,8 +188,8 @@ static int _ReqLoad(const char *const *names, void *const *buffers,
 {
     unsigned int i;
 
-    if (count >= 5) {
-        assert_prog(D_00A56DC0, D_00A56DA0, 94);
+    if (count > RG_SELECT_ROBOT_FILE_MAX) {
+        assert_prog(selectRobotAssertFileNumWithinDataMax, selectRobotSourcePath, 94);
     }
     if (s_pWhoAreYou == owner || s_pWhoAreYou == 0) {
         _KillLoad();
@@ -139,14 +215,12 @@ static int _IsEndOfLoad(void)
     return 0;
 }
 
-extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-
 static void _JobLoad(void)
 {
     if (s_uReqNum != 0 && s_uOkNum < s_uReqNum) {
         if (s_bLoading == 0 &&
-            xglCdReadFile(s_aszData[s_uOkNum], s_apBuf[s_uOkNum], 1,
-                          (int) _ReadCallback) >= 0) {
+            xglCdReadFile(s_aszData[s_uOkNum], s_apBuf[s_uOkNum],
+                          CD_READ_MODE_BUFFER, (int) _ReadCallback) >= 0) {
             s_bLoading = 1;
         }
         return;
@@ -175,72 +249,58 @@ static void _InitLoad(void)
     xglCdReadCancel();
 }
 
-#include "main/act_1.h"
-
-extern RgFileSys *InstanceOfRgFileSys(void);
-extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
-                                    const char *pszRoot);
-extern RgDispModel *CreateXrgDispModelImpl(const char *name,
-                                           const char *variant);
-extern const char D_00A56DE8[];
-extern const char D_00A56DF8[];
-extern const char D_00A56E08[];
-
-static void *_InitAct(RgSelectRobot *pCont, unsigned char *cursor, int regionBytes, int count)
+static void *_InitAct(RgSelectRobot *pCont, unsigned char *cursor,
+                      int regionBytes, int count)
 {
     RgSelectRobot *child;
     unsigned int i;
 
     if (pCont == 0) {
-        assert_prog(D_00A56DD8, D_00A56DA0, 183);
+        assert_prog(selectRobotAssertActNotNil, selectRobotSourcePath, 183);
     }
     pCont->screenPos = 0.0f;
-    pCont->bufferSlots[4] = (void *)-1;
-    pCont->robotID = 0;
-    pCont->actorFlags = 0;
+    pCont->actorID = SELECT_ROBOT_NO_ACTOR;
+    pCont->state = RG_SELECT_ROBOT_STATE_IDLE;
+    pCont->actor = 0;
     pCont->nameCount = 0;
     pCont->parent = 0;
     pCont->drawCount = 0;
     pCont->displayYaw = pCont->screenPos;
     pCont->displayPosition = pCont->screenPos;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < RG_SELECT_ROBOT_FILE_MAX; i++) {
         pCont->names[i][0] = 0;
-        pCont->bufferSlots[i] = cursor;
+        pCont->buffers[i] = cursor;
         cursor += regionBytes;
     }
     if (count != 0) {
-        pCont->hasActions = 1;
-        for (i = 0; i < 3; i++) {
-            child = RgHeapAlloc(InstanceOfRgHeap(), 356, D_00A56DA0, 204);
-            pCont->actions[i] = (RgSelectAction *)child;
+        pCont->hasWeapons = 1;
+        for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+            child = RgHeapAlloc(InstanceOfRgHeap(), SELECT_ROBOT_CHILD_SIZE,
+                                selectRobotSourcePath, 204);
+            pCont->weapons[i] = child;
             cursor = _InitAct(child, cursor, regionBytes, 0);
             child->parent = pCont;
-            child->equipSlot = i;
-            pCont->actionActive[i] = 0;
-            child->equipTable = 0;
+            child->weaponSlot = i;
+            pCont->weaponActive[i] = 0;
+            child->weapon = 0;
         }
 
-        pCont->fileData = RgFileSysRead(InstanceOfRgFileSys(), D_00A56DE8, D_00A56DF8);
+        pCont->fileData =
+            RgFileSysRead(InstanceOfRgFileSys(), selectRobotFloorModelFileName, selectRobotDataDirectory);
         if (pCont->fileData != 0) {
-            pCont->displayModel = CreateXrgDispModelImpl(pCont->fileData->data, D_00A56E08);
+            pCont->displayModel =
+                CreateXrgDispModelImpl(pCont->fileData->data, selectRobotFloorModelName);
         }
     } else {
         pCont->displayModel = 0;
-        pCont->hasActions = 0;
+        pCont->hasWeapons = 0;
         do {
             pCont->fileData = 0;
         } while (0);
     }
     return cursor;
 }
-
-extern void xglLightIntensityAmbient(StudioLight *light,
-                                     const Vector4 *intensity);
-extern void xglLightIntensityParallel(StudioLight *light, unsigned int index,
-                                     const Vector4 *intensity);
-extern void xglLightAngle(StudioLight *light, unsigned int index,
-                         const Vector4 *direction);
 
 void _select_light(StudioLight *light)
 {
@@ -255,10 +315,10 @@ void _select_light(StudioLight *light)
     AlignedLightBlock intensity;
     int i;
 
-    intensity.vectors[0] = D_00A56E10.vectors[0];
-    intensity.vectors[1] = D_00A56E10.vectors[1];
-    intensity.vectors[2] = D_00A56E10.vectors[2];
-    intensity.vectors[3] = D_00A56E10.vectors[3];
+    intensity.vectors[0] = selectRobotLightIntensityBlock.vectors[0];
+    intensity.vectors[1] = selectRobotLightIntensityBlock.vectors[1];
+    intensity.vectors[2] = selectRobotLightIntensityBlock.vectors[2];
+    intensity.vectors[3] = selectRobotLightIntensityBlock.vectors[3];
 
     for (i = 0; i < 4; i++) {
         intensity.vectors[i].components[0] *= 0.8f;
@@ -278,9 +338,6 @@ void _select_light(StudioLight *light)
     }
 }
 
-extern void XrgLinearIntpVector(RgVector destination, RgVector first,
-                                 RgVector second, float weight);
-
 /* The two positions _ActorPos interpolates between, weighted by
    RgSelectRobot::screenPos: index 1 is the weighted argument, index 0 the
    complement-weighted one. */
@@ -293,78 +350,47 @@ static void _ActorPos(RgSelectRobot *pCont, RgVector position)
     XrgLinearIntpVector(position, s_aPos[1], s_aPos[0], pCont->screenPos);
 }
 
-typedef struct RgSelectActorObject {
-    unsigned char unmodeled_00[0x10];
-    RgVector position;
-    unsigned char unmodeled_20[0x30];
-    float unmodeled_50;
-    float unmodeled_54;
-    int unmodeled_58;
-    unsigned char unmodeled_5c[0x9a0 - 0x5c];
-    unsigned int motionFlags;        /* +0x9a0 */
-    unsigned char unmodeled_9a4[0x9c0 - 0x9a4];
-    float motionTimer;               /* +0x9c0 */
-} RgSelectActorObject;
-
-#include "main/act_2.h"
-
 static void _ActorPosUpdate(RgSelectRobot *pCont)
 {
-    RgSelectActorObject *actor;
+    Actor *actor;
     RgVector position;
     float yawDelta;
     float yaw;
     float wrappedYaw;
 
-    if (pCont->actorFlags == 0) {
+    if (pCont->actor == 0) {
         return;
     }
     if (pCont->parent != 0) {
         return;
     }
     _ActorPos(pCont, position);
-    actor = (RgSelectActorObject *)pCont->actorFlags;
-    actor->position[0] = position[0];
-    actor->position[1] = position[1];
-    actor->position[2] = position[2];
-    actor->unmodeled_50 = 0.0f;
-    actor->unmodeled_54 = pCont->displayYaw;
-    actor->unmodeled_58 = 0;
+    actor = pCont->actor;
+    actor->position.x = position[0];
+    actor->position.y = position[1];
+    actor->position.z = position[2];
+    actor->rotation.x = 0.0f;
+    actor->rotation.y = pCont->displayYaw;
+    actor->rotation.z = 0.0f;
     ACT_updateMotion(actor);
     yawDelta = pCont->displayPosition - pCont->displayYaw;
-    while (yawDelta > 3.1415927f) {
-        yawDelta -= 6.2831855f;
+    while (yawDelta > SELECT_ROBOT_PI) {
+        yawDelta -= SELECT_ROBOT_TWO_PI;
     }
-    while (yawDelta < -3.1415927f) {
-        yawDelta += 6.2831855f;
+    while (yawDelta < -SELECT_ROBOT_PI) {
+        yawDelta += SELECT_ROBOT_TWO_PI;
     }
-    yaw = pCont->displayYaw + yawDelta * 0.2f;
+    yaw = pCont->displayYaw + yawDelta * SELECT_ROBOT_YAW_FOLLOW;
     pCont->displayYaw = yaw;
     wrappedYaw = yaw;
-    while (wrappedYaw > 3.1415927f) {
-        wrappedYaw -= 6.2831855f;
+    while (wrappedYaw > SELECT_ROBOT_PI) {
+        wrappedYaw -= SELECT_ROBOT_TWO_PI;
     }
-    while (wrappedYaw < -3.1415927f) {
-        wrappedYaw += 6.2831855f;
+    while (wrappedYaw < -SELECT_ROBOT_PI) {
+        wrappedYaw += SELECT_ROBOT_TWO_PI;
     }
     pCont->displayYaw = wrappedYaw;
 }
-
-#include "main/act_2.h"
-
-extern const char D_00A56E50[];
-extern const char D_00A56E68[];
-extern const char D_00A56E80[];
-extern const char D_00A56E98[];
-extern int RgEquipMountPos(void *table, int slot, int code, void *extra);
-extern int RgEquipPosToJntID(int mount);
-extern int XrgActorJntIDtoAccID(int jointId);
-extern void *InstanceOfRgBattleCommonData(void);
-extern void *RgBattleCommonDataGetWeaponMot(void *common);
-/* The published _DumpHead takes no parameter; the original call passes
-   one node pointer, which its empty body ignores. */
-static void _DumpHead();
-static void _ActorPosUpdate(RgSelectRobot *pCont);
 
 static void _ActivateAct(RgSelectRobot *pCont)
 {
@@ -381,40 +407,40 @@ static void _ActivateAct(RgSelectRobot *pCont)
     void *weapon;
 
     if (pCont == 0) {
-        assert_prog(D_00A56DD8, D_00A56DA0, 324);
+        assert_prog(selectRobotAssertActNotNil, selectRobotSourcePath, 324);
     }
-    if (pCont->robotID != 2) {
-        assert_prog(D_00A56E50, D_00A56DA0, 325);
+    if (pCont->state != RG_SELECT_ROBOT_STATE_ACTIVE) {
+        assert_prog(selectRobotAssertActStatOk, selectRobotSourcePath, 325);
     }
     if (pCont->nameCount < 3) {
-        assert_prog(D_00A56E68, D_00A56DA0, 326);
+        assert_prog(selectRobotAssertActDataNumAtLeastThree, selectRobotSourcePath, 326);
     }
-    if (pCont->actorFlags != 0) {
-        assert_prog(D_00A56E80, D_00A56DA0, 327);
+    if (pCont->actor != 0) {
+        assert_prog(selectRobotAssertActActorNil, selectRobotSourcePath, 327);
     }
     parent = pCont->parent;
     if (parent != 0) {
-        if (parent->robotID != 2) {
+        if (parent->state != RG_SELECT_ROBOT_STATE_ACTIVE) {
             return;
         }
-        if (parent->actorFlags == 0) {
+        if (parent->actor == 0) {
             return;
         }
     }
-    matrixResource = pCont->bufferSlots[0];
-    modelResource = pCont->bufferSlots[1];
-    moveResource = pCont->bufferSlots[2];
+    matrixResource = pCont->buffers[0];
+    modelResource = pCont->buffers[1];
+    moveResource = pCont->buffers[2];
     extraResource = 0;
-    if (pCont->nameCount == 4) {
-        extraResource = pCont->bufferSlots[3];
+    if (pCont->nameCount == RG_SELECT_ROBOT_FILE_MAX) {
+        extraResource = pCont->buffers[3];
     }
     _DumpHead(modelResource);
     _DumpHead(matrixResource);
     _DumpHead(moveResource);
     actor = ACT_create(-1, 1);
-    pCont->actorFlags = (unsigned int *)actor;
+    pCont->actor = actor;
     if (actor == 0) {
-        assert_prog(D_00A56E98, D_00A56DA0, 346);
+        assert_prog(selectRobotAssertNewNotNil, selectRobotSourcePath, 346);
     }
     for (i = 0; i < ACTOR_RESOURCE_COUNT; i++) {
         ACTOR_RESOURCES(actor)[i] = 0;
@@ -425,33 +451,36 @@ static void _ActivateAct(RgSelectRobot *pCont)
     ACT_allocMatrix(actor, -1);
     ACT_setModelWrapper(actor, 0);
     _select_light(&actor->light);
-    actor->flags |= 0x8800;
+    actor->flags |= 0x8000 | ACTOR_FLAG_TRANSLUCENT;
     actor->drawEnv.flags |= 3;
-    actor->drawEnv.alpha = 68;
+    actor->drawEnv.alpha = SELECT_ROBOT_ALPHA;
     actor->drawEnv.transparency = 0.0f;
     ACT_initMotion(actor);
     if ((exMotion = extraResource) != 0) {
         ACT_initExMotion(actor, 0, exMotion);
-        ACT_setMotion2(actor, 0, 8);
+        ACT_setMotion2(actor, 0, SELECT_ROBOT_EX_MOTION_BLEND);
     }
-    actor->shadow_kind = 7;
-    actor->shadowSize = 48;
+    actor->shadow_kind = SELECT_ROBOT_SHADOW_KIND;
+    actor->shadowSize = SELECT_ROBOT_SHADOW_SIZE;
     if (pCont->parent != 0) {
         RgSelectRobot *up = pCont->parent;
-        unsigned char *table = pCont->equipTable;
-        int slot = pCont->equipSlot;
-        int mount = RgEquipMountPos(table + 0x70, slot, up->bufferSlots[4], table + 0x330);
+        RgWeaponEssence *table = pCont->weapon;
+        int slot = pCont->weaponSlot;
+        int mount = RgEquipMountPos(&table->equip, slot, up->actorID,
+                                    table->databaseName);
         int jnt = RgEquipPosToJntID(mount);
         int acc = XrgActorJntIDtoAccID(jnt);
-        ACT_setArms(actor, (Actor *)up->actorFlags, acc, 0);
-        code = (unsigned int)up->bufferSlots[4];
-        if (code < 6) {
-            value = *(int *)(table + 320 + 4 * (3 * code + slot));
+        ACT_setArms(actor, up->actor, acc, 0);
+        code = up->actorID;
+        if (code < RG_SELECT_CHAR_NUM) {
+            value = table->shotEndMotionTable[code][slot];
             if (value != -1) {
-                if (value >= 2048) {
+                if (value >= SELECT_ROBOT_WEAPON_MOTION_BASE) {
                     if ((weapon = RgBattleCommonDataGetWeaponMot(InstanceOfRgBattleCommonData())) != 0) {
                         ACT_initExMotion(actor, 0, weapon);
-                        ACT_setMotion2(actor, value - 2048, 8);
+                        ACT_setMotion2(actor,
+                                       value - SELECT_ROBOT_WEAPON_MOTION_BASE,
+                                       SELECT_ROBOT_EX_MOTION_BLEND);
                     }
                 }
             }
@@ -463,19 +492,11 @@ static void _ActivateAct(RgSelectRobot *pCont)
     _ActorPosUpdate(pCont);
 }
 
-/* jal RgError(format, file, line, ...), the variadic error report. */
-extern void RgError(const char *format, const char *file, int line, ...);
-extern int strcmp(const char *s1, const char *s2);
-extern unsigned int XrgActorEssenceGetFileName(void *essence, char (*nameBuf)[64]);
-extern const char D_00A56EA8[];
-extern const char D_00A56EB8[];
-extern const char D_00A56ED0[];
-
-static void _ReqAct(RgSelectRobot *pCont, void *essence, int *accessoryIDs,
-                    int *extra)
+static void _ReqAct(RgSelectRobot *pCont, XrgActorEssence *essence,
+                    RgWeaponEssence **weapons, int *extra)
 {
     unsigned int robotKind;
-    char nameBuf[4][64];
+    char nameBuf[RG_SELECT_ROBOT_FILE_MAX][RG_SELECT_ROBOT_NAME_SIZE];
     int count;
     unsigned int i;
     unsigned int code;
@@ -484,22 +505,22 @@ static void _ReqAct(RgSelectRobot *pCont, void *essence, int *accessoryIDs,
     code = -1;
     failed = 0;
     if (pCont == 0) {
-        assert_prog(D_00A56DD8, D_00A56DA0, 447);
+        assert_prog(selectRobotAssertActNotNil, selectRobotSourcePath, 447);
     }
     if (extra != 0) {
-        for (i = 0; i < 3; i++) {
-            pCont->actionActive[i] = extra[i];
+        for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+            pCont->weaponActive[i] = extra[i];
         }
     }
-    if (essence == 0 || *(int *)essence == -1) {
+    if (essence == 0 || essence->actorID == SELECT_ROBOT_NO_ACTOR) {
         count = 0;
         failed = 1;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < RG_SELECT_ROBOT_FILE_MAX; i++) {
             pCont->names[i][0] = 0;
         }
     } else {
-        code = *(int *)essence;
-        count = XrgActorEssenceGetFileName(essence, nameBuf);
+        code = essence->actorID;
+        count = XrgActorEssenceGetFileName(essence, nameBuf[0]);
         for (i = 0; i < count; i++) {
             if (strcmp(pCont->names[i], nameBuf[i]) != 0) {
                 failed = 1;
@@ -509,99 +530,95 @@ static void _ReqAct(RgSelectRobot *pCont, void *essence, int *accessoryIDs,
     }
 
     if (failed == 0) {
-        if (pCont->hasActions == 0) {
+        if (pCont->hasWeapons == 0) {
             return;
         }
-        if (accessoryIDs == 0) {
-            assert_prog(D_00A56EA8, D_00A56DA0, 479);
+        if (weapons == 0) {
+            assert_prog(selectRobotAssertWepEssNotNil, selectRobotSourcePath, 479);
         }
-        for (i = 0; i < 3; i++) {
-            _ReqAct((RgSelectRobot *)pCont->actions[i],
-                    (void *)((char *)accessoryIDs[i] + i * 136 + 400), 0, 0);
-            ((RgSelectRobot *)pCont->actions[i])->equipTable =
-                (unsigned char *)accessoryIDs[i];
+        for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+            _ReqAct(pCont->weapons[i], &weapons[i]->actorSpec[i], 0, 0);
+            pCont->weapons[i]->weapon = weapons[i];
         }
         return;
     }
 
-    robotKind = (unsigned int)pCont->robotID;
-    pCont->bufferSlots[4] = (void *)code;
+    robotKind = pCont->state;
+    pCont->actorID = code;
     switch (robotKind) {
-    case 2:
-        if (pCont->actorFlags != 0) {
-            unsigned int *flags = pCont->actorFlags;
+    case RG_SELECT_ROBOT_STATE_ACTIVE:
+        if (pCont->actor != 0) {
+            Actor *actor = pCont->actor;
             RgSelectRobot *parent;
             unsigned int bits;
             int clearMask;
 
-            pCont->disposeCounter = 3;
-            clearMask = ~0x20;
+            pCont->disposeCounter = SELECT_ROBOT_DISPOSE_DELAY;
+            clearMask = ~ACTOR_FLAGS_INITIAL;
             parent = pCont->parent;
-            bits = *flags;
-            pCont->robotID = 3;
-            *flags = (bits | 0x8) & clearMask;
+            bits = actor->flags;
+            pCont->state = RG_SELECT_ROBOT_STATE_DISPOSING;
+            actor->flags = (bits | ACTOR_FLAG_HIDDEN) & clearMask;
             if (parent != 0) {
-                ACT_resetParent((Actor *)flags, (Actor *)parent->actorFlags);
+                ACT_resetParent(actor, parent->actor);
             }
         } else {
-            pCont->robotID = 0;
+            pCont->state = RG_SELECT_ROBOT_STATE_IDLE;
         }
         /* fall through */
-    case 0:
-    case 1:
-    case 3:
+    case RG_SELECT_ROBOT_STATE_IDLE:
+    case RG_SELECT_ROBOT_STATE_LOADING:
+    case RG_SELECT_ROBOT_STATE_DISPOSING:
         pCont->nameCount = count;
         for (i = 0; i < count; i++) {
             strcpy(pCont->names[i], nameBuf[i]);
         }
-        if (pCont->robotID == 1) {
-            pCont->robotID = 0;
+        if (pCont->state == RG_SELECT_ROBOT_STATE_LOADING) {
+            pCont->state = RG_SELECT_ROBOT_STATE_IDLE;
         }
         _KillLoadIfMe(pCont);
         break;
     default:
-        RgError(D_00A56EB8, D_00A56DA0, 521);
+        RgError(selectRobotUnknownActStatError, selectRobotSourcePath, 521);
         break;
     }
 
-    if (pCont->hasActions != 0) {
-        for (i = 0; i < 3; i++) {
-            RgSelectRobot *child = (RgSelectRobot *)pCont->actions[i];
+    if (pCont->hasWeapons != 0) {
+        for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+            RgSelectRobot *child = pCont->weapons[i];
             _ReqAct(child, 0, 0, 0);
-            robotKind = (unsigned int)child->robotID;
-            if ((unsigned int)(robotKind - 1) < 2) {
-                RgError(D_00A56ED0, D_00A56DA0, 531, robotKind);
+            robotKind = child->state;
+            if ((unsigned int)(robotKind - RG_SELECT_ROBOT_STATE_LOADING) < 2) {
+                RgError(selectRobotUnknownRobotKindFormat, selectRobotSourcePath, 531, robotKind);
             }
         }
     }
 }
-
-extern void DisposeRgDispModel(RgDispModel *pDispModel);
-extern void DisposeRgFileSysData_sub(RgFileSysData *pFile,
-                                     const char *sourceFile, int line);
 
 static void _DestructAct(RgSelectRobot *pCont)
 {
     unsigned int i;
 
     if (pCont == 0) {
-        assert_prog(D_00A56DD8, D_00A56DA0, 540);
+        assert_prog(selectRobotAssertActNotNil, selectRobotSourcePath, 540);
     }
 
-    if (pCont->actorFlags != 0) {
-        *pCont->actorFlags = (*pCont->actorFlags | 0x8) & ~0x20;
+    if (pCont->actor != 0) {
+        pCont->actor->flags =
+            (pCont->actor->flags | ACTOR_FLAG_HIDDEN) & ~ACTOR_FLAGS_INITIAL;
     }
 
-    if (pCont->hasActions != 0) {
-        for (i = 0; i < 3; i++) {
-            if (pCont->actions[i] == 0) {
+    if (pCont->hasWeapons != 0) {
+        for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+            if (pCont->weapons[i] == 0) {
                 continue;
             }
-            if (pCont->actions[i]->actorFlags != 0) {
-                *pCont->actions[i]->actorFlags =
-                    (*pCont->actions[i]->actorFlags | 0x8) & ~0x20;
+            if (pCont->weapons[i]->actor != 0) {
+                pCont->weapons[i]->actor->flags =
+                    (pCont->weapons[i]->actor->flags | ACTOR_FLAG_HIDDEN) &
+                    ~ACTOR_FLAGS_INITIAL;
             }
-            RgHeapFree(InstanceOfRgHeap(), pCont->actions[i], D_00A56DA0, 553);
+            RgHeapFree(InstanceOfRgHeap(), pCont->weapons[i], selectRobotSourcePath, 553);
         }
     }
 
@@ -609,74 +626,70 @@ static void _DestructAct(RgSelectRobot *pCont)
         DisposeRgDispModel(pCont->displayModel);
     }
     if (pCont->fileData != 0) {
-        DisposeRgFileSysData_sub(pCont->fileData, D_00A56DA0, 561);
+        DisposeRgFileSysData_sub(pCont->fileData, selectRobotSourcePath, 561);
     }
 }
 
-/* * Cancels the current asynchronous load, then installs the next request: * names[i] is copied into slot i and buffers[i] becomes its buffer. A * request held by another owner refuses the call and returns 0. */ static int _ReqLoad(const char *const *names, void *const *buffers, unsigned int count, void *owner);
-static void _ActivateAct(RgSelectRobot *pCont);
-extern void ACT_dispose(void *actor);
-extern const char D_00A56EE0[];
-
 static void _JobAct(RgSelectRobot *pCont, float deltaTime)
 {
-    const char *names[4];
-    void *buffers[4];
+    const char *names[RG_SELECT_ROBOT_FILE_MAX];
+    void *buffers[RG_SELECT_ROBOT_FILE_MAX];
     unsigned int i;
     unsigned int child;
     float timer;
-    u32 id;
+    unsigned int id;
 
     if (pCont == 0) {
-        assert_prog(D_00A56DD8, D_00A56DA0, 568);
+        assert_prog(selectRobotAssertActNotNil, selectRobotSourcePath, 568);
     }
-    id = pCont->robotID;
+    id = pCont->state;
     switch (id) {
-        case 0:
+        case RG_SELECT_ROBOT_STATE_IDLE:
             if (pCont->nameCount != 0) {
                 for (i = 0; i < pCont->nameCount; i++) {
-                    if (pCont->bufferSlots[i] == 0) {
-                        assert_prog(D_00A56EE0, D_00A56DA0, 576);
+                    if (pCont->buffers[i] == 0) {
+                        assert_prog(selectRobotAssertActBufferNotNil, selectRobotSourcePath, 576);
                     }
-                    names[i] = (char *)pCont + 12 + i * 64;
-                    buffers[i] = pCont->bufferSlots[i];
+                    names[i] = pCont->names[i];
+                    buffers[i] = pCont->buffers[i];
                 }
-                if (pCont->parent == 0 || pCont->parent->robotID == 2) {
+                if (pCont->parent == 0 ||
+                    pCont->parent->state == RG_SELECT_ROBOT_STATE_ACTIVE) {
                     if (_ReqLoad(names, buffers, pCont->nameCount, pCont) != 0) {
-                        pCont->robotID = 1;
+                        pCont->state = RG_SELECT_ROBOT_STATE_LOADING;
                     }
                 }
             }
             break;
-        case 1:
+        case RG_SELECT_ROBOT_STATE_LOADING:
             if (_IsEndOfLoad()) {
-                pCont->robotID = 2;
+                pCont->state = RG_SELECT_ROBOT_STATE_ACTIVE;
             }
             break;
-        case 2: {
-            RgSelectActorObject *actor = (RgSelectActorObject *)pCont->actorFlags;
+        case RG_SELECT_ROBOT_STATE_ACTIVE: {
+            Actor *actor = pCont->actor;
             if (actor == 0) {
                 if (pCont->nameCount != 0) {
                     _ActivateAct(pCont);
                 }
             } else {
-                timer = actor->motionTimer + 0.2f;
+                timer = actor->drawEnv.transparency + SELECT_ROBOT_FADE_STEP;
                 if (1.0f < timer) {
-                    actor->motionFlags &= ~1u;
+                    actor->drawEnv.flags &= ~1u;
                     timer = 1.0f;
                 }
-                actor->motionTimer = timer;
+                actor->drawEnv.transparency = timer;
                 _ActorPosUpdate(pCont);
             }
             break;
         }
-        case 3: {
-            RgSelectActorObject *actor = (RgSelectActorObject *)pCont->actorFlags;
+        case RG_SELECT_ROBOT_STATE_DISPOSING: {
+            Actor *actor = pCont->actor;
             if (actor != 0) {
                 if (pCont->disposeCounter-- <= 0) {
                     ACT_dispose(actor);
-                    pCont->actorFlags = 0;
-                    pCont->robotID = 0;
+                    pCont->actor = 0;
+                    pCont->state = RG_SELECT_ROBOT_STATE_IDLE;
                 }
             }
             break;
@@ -684,17 +697,12 @@ static void _JobAct(RgSelectRobot *pCont, float deltaTime)
     default:
         break;
     }
-    if (pCont->hasActions != 0) {
-        for (child = 0; child < 3; child++) {
-            _JobAct((RgSelectRobot *)pCont->actions[child], deltaTime);
+    if (pCont->hasWeapons != 0) {
+        for (child = 0; child < RG_SELECT_ROBOT_WEAPON_NUM; child++) {
+            _JobAct(pCont->weapons[child], deltaTime);
         }
     }
 }
-
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
-extern void RgDispModelSetLocal(RgDispModel *pDispModel, const RgMatrix source);
-extern void RgDispModelDisplay(RgDispModel *pDispModel);
 
 static void _DrawAct(RgSelectRobot *pCont)
 {
@@ -703,10 +711,10 @@ static void _DrawAct(RgSelectRobot *pCont)
     unsigned int index;
     RgVector position;
     RgMatrix matrix;
-    int ids[3];
+    int ids[RG_SELECT_ROBOT_WEAPON_NUM];
 
     if (pCont == 0) {
-        assert_prog(D_00A56DD8, D_00A56DA0, 653);
+        assert_prog(selectRobotAssertActNotNil, selectRobotSourcePath, 653);
     }
     if (pCont->displayModel != 0) {
         _ActorPos(pCont, position);
@@ -718,39 +726,39 @@ static void _DrawAct(RgSelectRobot *pCont)
         RgDispModelSetLocal(pCont->displayModel, matrix);
         RgDispModelDisplay(pCont->displayModel);
     }
-    if (pCont->hasActions != 0) {
+    if (pCont->hasWeapons != 0) {
         count = 0;
-        for (i = 0; i < 3; i++) {
-            if (pCont->actionActive[i] != 0) {
+        for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+            if (pCont->weaponActive[i] != 0) {
                 ids[count] = i;
                 count++;
             } else {
-                unsigned int *actorFlags;
-                RgSelectAction *action;
+                Actor *actor;
+                RgSelectRobot *weapon;
 
-                action = pCont->actions[i];
-                actorFlags = action->actorFlags;
-                if (action->weaponID == 2) {
-                    if (actorFlags != 0) {
-                        *actorFlags &= ~0x8;
+                weapon = pCont->weapons[i];
+                actor = weapon->actor;
+                if (weapon->state == RG_SELECT_ROBOT_STATE_ACTIVE) {
+                    if (actor != 0) {
+                        actor->flags &= ~ACTOR_FLAG_HIDDEN;
                     }
                 }
             }
         }
         pCont->drawCount++;
         if (count != 0) {
-            index = (pCont->drawCount / 10) % (count + 1);
+            index = (pCont->drawCount / SELECT_ROBOT_WEAPON_BLINK_FRAMES) % (count + 1);
             for (i = 0; i < count; i++) {
-                unsigned int *actorFlags;
-                RgSelectAction *action = pCont->actions[ids[i]];
+                Actor *actor;
+                RgSelectRobot *weapon = pCont->weapons[ids[i]];
 
-                actorFlags = action->actorFlags;
-                if (action->weaponID == 2) {
-                    if (actorFlags != 0) {
+                actor = weapon->actor;
+                if (weapon->state == RG_SELECT_ROBOT_STATE_ACTIVE) {
+                    if (actor != 0) {
                         if (index == i) {
-                            *actorFlags &= ~0x8;
+                            actor->flags &= ~ACTOR_FLAG_HIDDEN;
                         } else {
-                            *actorFlags |= 0x8;
+                            actor->flags |= ACTOR_FLAG_HIDDEN;
                         }
                     }
                 }
@@ -759,41 +767,37 @@ static void _DrawAct(RgSelectRobot *pCont)
     }
 }
 
-extern RgHeap *InstanceOfRgHeapData(void);
-static void *_InitAct(RgSelectRobot *pCont, unsigned char *cursor, int regionBytes, int count);
-
 void _InitSelRob(RgSelectRobot *pCont)
 {
     void *heapBuffer;
 
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 720);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 720);
     }
     _InitLoad();
-    heapBuffer = RgHeapAlloc(InstanceOfRgHeapData(), 0xC00000U, D_00A56DA0, 726);
+    heapBuffer = RgHeapAlloc(InstanceOfRgHeapData(), SELECT_ROBOT_ARENA_SIZE,
+                             selectRobotSourcePath, 726);
     pCont->heapBuffer = heapBuffer;
-    _InitAct(pCont, heapBuffer, 0xC0000, 1);
+    _InitAct(pCont, heapBuffer, SELECT_ROBOT_REGION_SIZE, 1);
 }
-
-extern void ACT_init(void);
-static void _DestructAct(RgSelectRobot *pCont);
 
 void _DestructSelRob(RgSelectRobot *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 734);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 734);
     }
     _KillLoad();
     _DestructAct(pCont);
-    RgHeapFree(InstanceOfRgHeapData(), pCont->heapBuffer, D_00A56DA0, 737);
+    RgHeapFree(InstanceOfRgHeapData(), pCont->heapBuffer, selectRobotSourcePath, 737);
     ACT_init();
 }
 
-RgSelectRobot *CreateRgSelectRobot(void)
+/* pStudio is accepted and ignored. */
+RgSelectRobot *CreateRgSelectRobot(struct RgDrawStudio *pStudio)
 {
     RgSelectRobot *pCont;
 
-    pCont = RgHeapAlloc(InstanceOfRgHeap(), RG_SELECT_ROBOT_SIZE, D_00A56DA0,
+    pCont = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgSelectRobot), selectRobotSourcePath,
                         745);
     _InitSelRob(pCont);
     return pCont;
@@ -802,17 +806,17 @@ RgSelectRobot *CreateRgSelectRobot(void)
 void DisposeRgSelectRobot(RgSelectRobot *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 753);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 753);
     }
     _DestructSelRob(pCont);
-    RgHeapFree(InstanceOfRgHeap(), pCont, D_00A56DA0, 755);
+    RgHeapFree(InstanceOfRgHeap(), pCont, selectRobotSourcePath, 755);
     xglCdReadCancel();
 }
 
 void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos)
 {
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 766);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 766);
     }
     pCont->screenPos = screenPos;
 }
@@ -820,7 +824,7 @@ void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos)
 void RgSelectRobotSetMode(RgSelectRobot *pCont, int mode)
 {
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 774);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 774);
     }
     switch (mode) {
     case -1:
@@ -840,37 +844,24 @@ void RgSelectRobotSetMode(RgSelectRobot *pCont, int mode)
     }
 }
 
-extern void InitXrgActorEssence(void *essence, int actorID);
-static void _ReqAct(RgSelectRobot *pCont, void *essence, int *accessoryIDs, int *extra);
-
-void RgSelectRobotSet(RgSelectRobot *pCont, int *selection)
+void RgSelectRobotSet(RgSelectRobot *pCont, struct RgSelectRobotChoice *selection)
 {
-    /* Sized to match InitXrgActorEssence's record (xrg_actor.c,
-       ov12/tu080); RgSelectRobotSet never reads or writes its fields
-       directly. */
-    unsigned char essence[0x88];
+    XrgActorEssence essence;
 
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 801);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 801);
     }
-    InitXrgActorEssence(essence, selection[0]);
-    _ReqAct(pCont, essence, selection + 1, selection + 4);
+    InitXrgActorEssence(&essence, selection->actorID);
+    _ReqAct(pCont, &essence, selection->weapons, selection->weaponActive);
 }
 
 void RgSelectRobotPassTime(RgSelectRobot *pCont, float deltaTime)
 {
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 820);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 820);
     }
     _JobAct(pCont, deltaTime);
 }
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern void ACT_draw(void);
-static void _DrawAct(RgSelectRobot *pCont);
-/* ov12:0x00a56f08 holds "ROB %d", ov12:0x00a56f10 holds "WEP(%d) %d". */
-extern const char D_00A56F08[];
-extern const char D_00A56F10[];
 
 void RgSelectRobotDisp(RgSelectRobot *pCont)
 {
@@ -878,13 +869,13 @@ void RgSelectRobotDisp(RgSelectRobot *pCont)
     int weapon;
 
     if (pCont == 0) {
-        assert_prog(D_00A56EF8, D_00A56DA0, 0x33D);
+        assert_prog(selectRobotAssertContNotNil, selectRobotSourcePath, 0x33D);
     }
-    xglFontDebugPrintf(0, 8, D_00A56F08, pCont->robotID);
-    /* y and the action pointer are left to gcc's induction variables. */
-    for (i = 0; i < 3; i++) {
-        weapon = pCont->actions[i]->weaponID;
-        xglFontDebugPrintf(0, 16 + i * 8, D_00A56F10, i, weapon);
+    xglFontDebugPrintf(0, 8, selectRobotDebugStateFormat, pCont->state);
+    /* y and the weapon pointer are left to gcc's induction variables. */
+    for (i = 0; i < RG_SELECT_ROBOT_WEAPON_NUM; i++) {
+        weapon = pCont->weapons[i]->state;
+        xglFontDebugPrintf(0, 16 + i * 8, selectRobotDebugWeaponFormat, i, weapon);
     }
     ACT_draw();
     _DrawAct(pCont);

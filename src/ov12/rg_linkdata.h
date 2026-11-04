@@ -5,19 +5,12 @@
 #ifndef SRC_OV12_RG_LINKDATA_H
 #define SRC_OV12_RG_LINKDATA_H
 
-/*
- * The field this allocation evidences: InitRgLinkData stores the caller's
- * buffer pointer at +0x00, and RgLinkDataMatchDataName reads it back to
- * compare the first four bytes of the buffer against a name. No other
- * function of this allocation touches this object, and the remaining
- * RgLinkData functions of this TU (RgLinkDataVersion, RgLinkDataTime,
- * RgLinkDataNumOfData, RgLinkDataGetName, RgLinkDataGetSize, RgLinkDataGet,
- * RgLinkDataFindExt, RgLinkDataGetIndex) are still INCLUDE_ASM, so nothing
- * past +0x00 is claimed here.
- */
-typedef struct RgLinkData {
-    void *buf; /* +0x00: InitRgLinkData, RgLinkDataMatchDataName */
-} RgLinkData;
+#include "ov12/rg_linkdata.h"
+
+/* Archives older than this version have no offset table RgLinkDataGetSize can use. */
+#define RG_LINKDATA_MIN_VERSION_FOR_SIZE 2
+/* Every data name is a four-character tag. */
+#define RG_LINKDATA_TAG_LENGTH 4
 
 /*
  * The original literals at ov12:0x00a556c0 ("pAna != NIL"), 0x00a556d0
@@ -26,9 +19,9 @@ typedef struct RgLinkData {
  * "asm") and have no entry in config/symbols/ov12.txt, so they keep their
  * splat names (docs/naming.md, "Scaffold-owned data keeps its splat name").
  */
-extern const char D_00A556C0[];
-extern const char D_00A556D0[];
-extern const char D_00A556E8[];
+extern const char linkDataAssertLinkDataNotNil[];
+extern const char linkDataSourcePath[];
+extern const char linkDataAssertBufNotNil[];
 
 /*
  * The archive header pAna->buf points at, read through _get_uint's
@@ -70,10 +63,10 @@ typedef unsigned char RgLinkDataOffset[4];
 /*
  * The literals at ov12:0x00a55708 ("RgLinkDataVersion(pAna) >= 2"),
  * 0x00a556f8 ("uNum > nIndex") and 0x00a55728 ("uNum > uIndex") are
- * scaffold-owned splat data in the same window as D_00A556C0 above.
+ * scaffold-owned splat data in the same window as linkDataAssertLinkDataNotNil above.
  */
-extern const char D_00A55708[];
-extern const char D_00A556F8[];
-extern const char D_00A55728[];
+extern const char linkDataAssertVersionAtLeastTwo[];
+extern const char linkDataAssertNumGreaterThanIndex[];
+extern const char linkDataAssertNumGreaterThanUnsignedIndex[];
 
 #endif /* SRC_OV12_RG_LINKDATA_H */

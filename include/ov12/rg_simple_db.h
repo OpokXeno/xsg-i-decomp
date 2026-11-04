@@ -3,9 +3,15 @@
 
 #include "shared.h"
 
-extern void DisposeRgSimpleDB(RgSimpleDB *database);
-
-/* _InitDB stores capacity at +4 and entry_size at +8 of the descriptor. */
-extern RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size);
+/* Functions and data used by other translation units. */
+RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size);
+void DisposeRgSimpleDB(RgSimpleDB *pDB);
+int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
+int RgSimpleDBSize(RgSimpleDB *pDB);
+void *RgSimpleDBGet(RgSimpleDB *pDB, int nDataID);
+char *RgSimpleDBGetName(RgSimpleDB *pDB, int nDataID);
+void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat, const char *pszName);
+void RgSimpleDBClear(RgSimpleDB *pDB);
+void RgSimpleDBDump(RgSimpleDB *pDB);
 
 #endif /* INCLUDE_OV12_RG_SIMPLE_DB_H */

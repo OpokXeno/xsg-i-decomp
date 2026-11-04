@@ -4,56 +4,51 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_robot_effect.h"
+#include "ov12/rg_effect_env.h"
+#include "ov12/rg_particle_effect.h"
 #include "ov12/xrg_rand_int.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_actor.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern char *strcpy(char *destination, const char *source);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern void RgParticleEffectStopAlive(RgParticleEffect *particle, float time);
-extern void RgParticleEffectPassTime(RgParticleEffect *particle, float time);
-extern void RgParticleEffectDisp(RgParticleEffect *particle);
-extern void RgParticleEffectSetShootLocal(RgParticleEffect *particle,
-                                         RgMatrix local);
-extern void RgParticleEffectSetShootInertia(RgParticleEffect *particle,
-                                            RgVector inertia);
 
-typedef struct XrgActor XrgActor;
+/* A clear or stop time that never runs out (the item is idle). */
+#define RG_ROBOT_EFFECT_TIME_NEVER 999999.0f
 
-extern int XrgActorGetJointLocal(XrgActor *actor, int joint, RgMatrix local);
-extern void XrgActorGetLocal(XrgActor *actor, RgMatrix local);
-extern void XrgNegateVector(RgVector destination, RgVector source);
+/* Joints of the robot actor the two jet particle emitters follow. */
+#define RG_ROBOT_JET_JOINT_FIRST 16
+#define RG_ROBOT_JET_JOINT_SECOND 17
+
+/* Particles of each default essence this TU fills. */
+#define RG_ROBOT_EFFECT_DEFAULT_PARTICLES 32
+
 /* Same TU, not part of this allocation. */
 static void _InitRobEff(RgRobotEffect *effect);
 static void _ClearEffect(RgRobotEffectItem *item);
-extern void RgRobotEffectTermJet(RgRobotEffect *effect);
-extern void InitRgParticleEffectEssence(void *essence);
+static int _GetJetShootLocal(RgRobotEffect *generator, int index,
+                             void *local, RgVector inertia);
+static int _InitJetDefault(void *buffer);
+static int _GetDashShootLocal(RgRobotEffect *generator, int index,
+                              void *local, RgVector inertia);
+static int _InitDashDefault(void *buffer);
 
 /*
- * Partial view of the particle-effect essence the default fillers write
- * (tu035 owns the full RgParticleEffectEssence; its header does not compile
- * standalone). Offsets follow that layout; only these members are named.
+ * Partial view of RgParticleEffectEssence (measured: the default fillers copy
+ * the texture name with aligned ld/sd doublewords, so the name needs a
+ * doubleword-aligned member; adding one to the canonical record changes the
+ * struct copies in rg_particle_effect.c). Same layout, textureWords is never
+ * read on its own.
  */
-struct RgRobotEffectEssence {
-    /*
-     * The default fillers copy the texture name with aligned ld/sd doublewords
-     * (no runtime alignment test), so the name shares storage with a
-     * doubleword view, as RgRobotSpec.sude does; textureWords is never read on
-     * its own.
-     */
+typedef struct RgParticleEffectEssenceDefaultsView {
     union {
         char textureName[0x40];
         unsigned long long textureWords[8];
     };
     int particleCount;
     u8 unmodeled_44[0x50 - 0x44];
-    RgVector position;
-    RgVector direction;
+    RgVector appearance;
+    RgVector appearanceRate;
     float interval;
     float duration;
     u8 unmodeled_78[0x90 - 0x78];
@@ -61,21 +56,21 @@ struct RgRobotEffectEssence {
     float life;
     float shotLife;
     int repeat;
-};
+} RgParticleEffectEssenceDefaultsView;
 
 static int _InitJetDefault(void *buffer)
 {
-    struct RgRobotEffectEssence *essence;
+    RgParticleEffectEssenceDefaultsView *essence;
 
     essence = buffer;
-    InitRgParticleEffectEssence(essence);
+    InitRgParticleEffectEssence(buffer);
     __builtin_strcpy(essence->textureName, "cld01.bmp");
-    essence->particleCount = 32;
+    essence->particleCount = RG_ROBOT_EFFECT_DEFAULT_PARTICLES;
     essence->interval = 5.0f;
-    essence->position[0] = 0.26f;
-    essence->position[1] = 1.0f;
-    essence->direction[0] = -0.1f;
-    essence->direction[1] = -1.0f;
+    essence->appearance[0] = 0.26f;
+    essence->appearance[1] = 1.0f;
+    essence->appearanceRate[0] = -0.1f;
+    essence->appearanceRate[1] = -1.0f;
     essence->duration = 91.3f;
     essence->shotLife = 2.0f;
     essence->life = 2.0f;
@@ -86,17 +81,17 @@ static int _InitJetDefault(void *buffer)
 
 static int _InitDashDefault(void *buffer)
 {
-    struct RgRobotEffectEssence *essence;
+    RgParticleEffectEssenceDefaultsView *essence;
 
     essence = buffer;
-    InitRgParticleEffectEssence(essence);
+    InitRgParticleEffectEssence(buffer);
     __builtin_strcpy(essence->textureName, "tama03.bmp");
-    essence->particleCount = 32;
+    essence->particleCount = RG_ROBOT_EFFECT_DEFAULT_PARTICLES;
     essence->interval = 2.4f;
-    essence->position[0] = 0.56f;
-    essence->position[1] = 1.0f;
-    essence->direction[0] = 5.6f;
-    essence->direction[1] = -5.0f;
+    essence->appearance[0] = 0.56f;
+    essence->appearance[1] = 1.0f;
+    essence->appearanceRate[0] = 5.6f;
+    essence->appearanceRate[1] = -5.0f;
     essence->duration = 91.9f;
     essence->shotLife = 1.5f;
     essence->life = 1.5f;
@@ -109,13 +104,11 @@ static void _InitEffect(RgRobotEffectItem *item)
 {
     item->inertia = 0;
     item->particle_count = 0;
-    item->clear_time = 999999.0f;
+    item->clear_time = RG_ROBOT_EFFECT_TIME_NEVER;
     item->shoot_generator = 0;
     item->shoot_func = 0;
-    item->stop_time = 999999.0f;
+    item->stop_time = RG_ROBOT_EFFECT_TIME_NEVER;
 }
-
-extern void DisposeRgParticleEffect(RgParticleEffect *particleEffect);
 
 void _ClearEffect(RgRobotEffectItem *item)
 {
@@ -129,9 +122,9 @@ void _ClearEffect(RgRobotEffectItem *item)
         }
         item->particles[i] = 0;
     }
-    item->clear_time = 999999.0f;
+    item->clear_time = RG_ROBOT_EFFECT_TIME_NEVER;
     item->particle_count = 0;
-    item->stop_time = 999999.0f;
+    item->stop_time = RG_ROBOT_EFFECT_TIME_NEVER;
 }
 
 static void _SetShootLocalGenEffect(RgRobotEffectItem *item,
@@ -146,20 +139,13 @@ static void _SetShootLocalGenEffect(RgRobotEffectItem *item,
     item->shoot_func = func;
 }
 
-/* Opaque: this TU only forwards a pointer to it, from a stack buffer another
- * TU's function fills; see RgRobotEffectStartJet/RgRobotEffectStartDash. */
-typedef struct RgParticleEffectEssence RgParticleEffectEssence;
-
-extern RgParticleEffect *CreateRgParticleEffect(RgParticleEffectEssence *essence,
-                                                int count);
-
 static void _AddEffect(RgRobotEffectItem *item, RgParticleEffectEssence *essence,
                        int count)
 {
     RgParticleEffect *particle;
     int index;
 
-    if ((u32) item->particle_count >= 2) {
+    if ((u32) item->particle_count >= RG_ROBOT_EFFECT_MAX) {
         assert_prog("pEff->m_uPtclNum < EFF_MAX",
                     "../rg_robot_effect.euc.c", 122);
     }
@@ -284,7 +270,7 @@ static int _GetJetShootLocal(RgRobotEffect *generator, int index, void *local,
         return 0;
     }
     result = XrgActorGetJointLocal(generator->actor,
-                                   index == 0 ? 16 : 17, local);
+                                   index == 0 ? RG_ROBOT_JET_JOINT_FIRST : RG_ROBOT_JET_JOINT_SECOND, local);
     matrix_values = local;
     XrgNegateVector(&matrix_values[8], &matrix_values[8]);
     _GetGeomVel(generator, inertia);
@@ -369,17 +355,6 @@ void RgRobotEffectTermAll(RgRobotEffect *effect)
     RgRobotEffectTermJet(effect);
 }
 
-/* Opaque: the other TU (rg_effect_env.c) that owns RgEffectEnv still keeps
- * RgEffectEnvGetParticleData as scaffold asm, so it has no published
- * prototype yet. */
-typedef struct RgEffectEnv RgEffectEnv;
-
-RgEffectEnv *InstanceOfRgEffectEnv(void);
-int RgEffectEnvGetParticleData(RgEffectEnv *env, char *name, void *buffer);
-static int _GetJetShootLocal(RgRobotEffect *generator, int index,
-                             void *local, RgVector inertia);
-static int _InitJetDefault(void *buffer);
-
 void RgRobotEffectStartJet(RgRobotEffect *effect, float stopTime) {
     /* Raw particle-essence lookup buffer: opaque to this TU, forwarded to
      * _AddEffect / CreateRgParticleEffect (ov12/rg_particle_effect.c). */
@@ -411,7 +386,7 @@ void RgRobotEffectStartJet(RgRobotEffect *effect, float stopTime) {
             do {
                 i += 1;
                 *shotDefault = 2.5f;
-                shotDefault += 0x2C;
+                shotDefault += sizeof(RgParticleEffectEssence) / sizeof(float);
             } while (i < shotCount);
         }
         _AddEffect(jet, (RgParticleEffectEssence *) shotData, shotCount);
@@ -431,10 +406,6 @@ void RgRobotEffectTermJet(RgRobotEffect *effect)
         _StopEffect(&effect->jet);
     }
 }
-
-static int _GetDashShootLocal(RgRobotEffect *generator, int index,
-                              void *local, RgVector inertia);
-static int _InitDashDefault(void *buffer);
 
 void RgRobotEffectStartDash(RgRobotEffect *effect, float stopTime) {
     /* Raw particle-essence lookup buffer, opaque to this TU; see
@@ -470,8 +441,6 @@ void RgRobotEffectTermDash(RgRobotEffect *effect) {
     }
 }
 
-void _PassTimeEffect(RgRobotEffectItem *item, float time);
-
 void RgRobotEffectPassTime(RgRobotEffect *effect, float time) {
     if (effect == 0) {
         assert_prog("pRobEff != NIL", "../rg_robot_effect.euc.c", 441);
@@ -481,8 +450,6 @@ void RgRobotEffectPassTime(RgRobotEffect *effect, float time) {
         _PassTimeEffect(&effect->dash, time);
     }
 }
-
-void _DispEffect(RgRobotEffectItem *item);
 
 void RgRobotEffectDisp(RgRobotEffect *effect) {
     if (effect == 0) {

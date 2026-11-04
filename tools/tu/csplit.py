@@ -78,7 +78,7 @@ def _scan(text):
             depth -= 1
             if depth == 0:
                 head = text[cur_start:text.index("{", cur_start)]
-                if "(" in head and "=" not in head and not re.search(r"\b(struct|union|enum)\b[^(]*$", head):
+                if "(" in head and "=" not in head and (head.rstrip().endswith(")") or not re.search(r"\b(struct|union|enum)\b[^(]*$", head)):
                     items.append((cur_start, i + 1, "func"))
                     cur_start = None
         elif c == ";" and depth == 0 and paren == 0:

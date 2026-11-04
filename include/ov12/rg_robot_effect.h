@@ -27,6 +27,9 @@ typedef int (*RgRobotEffectShootLocalFunc)(RgRobotEffect *generator,
                                             int index, void *local,
                                             RgVector inertia);
 
+/* Particle effects one item holds ("EFF_MAX" in _AddEffect's assertion). */
+#define RG_ROBOT_EFFECT_MAX 2
+
 /*
  * One robot effect "slot" (jet or dash).  RgRobotEffect embeds two of these,
  * 0x40 bytes apart (0x00a0e108.._SetInertiaEffect and the surrounding
@@ -36,7 +39,7 @@ typedef int (*RgRobotEffectShootLocalFunc)(RgRobotEffect *generator,
  * evidence particles/particle_count).
  */
 typedef struct RgRobotEffectItem {
-    RgParticleEffect *particles[2]; /* +0x00 */
+    RgParticleEffect *particles[RG_ROBOT_EFFECT_MAX]; /* +0x00 */
     int particle_count;             /* +0x08 */
     float clear_time;               /* +0x0c: counts down; the item fully
                                       * clears at zero (_PassTimeEffect
@@ -63,5 +66,21 @@ struct RgRobotEffect {
     RgRobotEffectItem jet;     /* +0x10 */
     RgRobotEffectItem dash;    /* +0x50 */
 };
+
+/* Functions and data used by other translation units. */
+RgRobotEffect *CreateRgRobotEffect(void);
+void DisposeRgRobotEffect(RgRobotEffect *effect);
+void RgRobotEffectSetActor(RgRobotEffect *effect, void *actor);
+void RgRobotEffectSetGeom(RgRobotEffect *effect, RgGeomPoint *geom);
+void RgRobotEffectSetJetPtclName(RgRobotEffect *effect, const char *name);
+void RgRobotEffectSetDashPtclName(RgRobotEffect *effect, const char *name);
+void RgRobotEffectSetJetInertia(RgRobotEffect *effect, int inertia);
+void RgRobotEffectTermAll(RgRobotEffect *effect);
+void RgRobotEffectStartJet(RgRobotEffect *effect, float stopTime);
+void RgRobotEffectTermJet(RgRobotEffect *effect);
+void RgRobotEffectStartDash(RgRobotEffect *effect, float stopTime);
+void RgRobotEffectTermDash(RgRobotEffect *effect);
+void RgRobotEffectPassTime(RgRobotEffect *effect, float time);
+void RgRobotEffectDisp(RgRobotEffect *effect);
 
 #endif /* INCLUDE_OV12_RG_ROBOT_EFFECT_H */

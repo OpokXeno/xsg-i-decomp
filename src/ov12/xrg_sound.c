@@ -3,6 +3,10 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/rg_heap.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_sound.h"
+#include "ssd/ssd_dma.h"
 #include "xrg_sound.h"
 
 typedef struct {
@@ -24,23 +28,49 @@ typedef union {
     SoundPathStandardPrefix standard;
 } SoundPath;
 
-const SoundPathAlternatePrefix D_00A59250 = {
+const SoundPathAlternatePrefix soundAlternateSequenceDirectory = {
     0x6d61795c61746164ULL, 0x6e735c6f746f6d61ULL,
     0x6d735c64u, 0x5c64u, 0x00u,
 };
-static const char D_00A59268[8] = ".SWD";
-const SoundPathStandardPrefix D_00A59270 = {
+static const char soundWaveBankExtension[8] = ".SWD";
+const SoundPathStandardPrefix soundStandardSequenceDirectory = {
     0x756f735c61746164ULL, 0x5c646d735c646eULL,
 };
-static const char D_00A59280[8] = ".SMD";
-static const char D_00A59288[24] = "../xrg_sound.euc.c";
-static const char D_00A592A0[8] = "MINIBAT";
-static int s_eLoadedSeq = -1;
+static const char soundSequenceExtension[8] = ".SMD";
+static const char soundSourcePath[24] = "../xrg_sound.euc.c";
+static const char soundMiniBattleBankName[8] = "MINIBAT";
+/* Scratch buffers the loaders borrow from the data heap. */
+#define XRG_SOUND_BANK_BUFFER_SIZE 0x400000
+#define XRG_SOUND_SEQUENCE_BUFFER_SIZE 0x200000
+
+/* The effect bank this game's sounds live in, and its bits in an effect id. */
+#define XRG_SOUND_EFFECT_BANK 2
+#define XRG_SOUND_EFFECT_ID_BANK 0x20000
+
+#define XRG_SOUND_NO_SEQUENCE -1
+#define XRG_SOUND_BGM_CHANNEL 0
+#define XRG_SOUND_BGM_VOLUME 127
+#define XRG_SOUND_BGM_FADE_TIME 100
+
+/* Gain scale (128 is full) and the pan and volume an object starts with. */
+#define XRG_SOUND_GAIN_MAX 128
+#define XRG_SOUND_VOLUME_MAX 127
+#define XRG_SOUND_CENTER 0x40
+
+/* XrgSoundRingMoving picks one of this many sound ids by XrgSound::kind. */
+#define XRG_SOUND_RING_KINDS 6
+
+static int s_eLoadedSeq = XRG_SOUND_NO_SEQUENCE;
 static int s_bNowPlaying = 0;
-extern int xglSoundSendSwd(void *swd, int bank);
-extern int xglSoundSendSmd2(void *smd, int bank);
-extern int SsdSpuDmaCompleted(int wait);
-extern char *strcat(char *destination, const char *source);
+
+/* The sequence names "BATTLE1", "BATTLE2", "BATTLE3" and "Umnmode" are
+ * scaffold-owned rodata. */
+extern const char soundBattle1SequenceName[];
+extern const char soundBattle2SequenceName[];
+extern const char soundBattle3SequenceName[];
+extern const char soundUmnModeSequenceName[];
+
+extern void xglSoundLoadEffect(const char *bank_name, void *buffer, int mode);
 
 static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternatePath)
 {
@@ -53,16 +83,16 @@ static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternat
     }
 
     if (useAlternatePath != 0) {
-        path.alternate.first = D_00A59250.first;
-        path.alternate.second = D_00A59250.second;
-        path.alternate.third = D_00A59250.third;
-        path.alternate.fourth = D_00A59250.fourth;
-        path.alternate.terminator = D_00A59250.terminator;
-        strcat(strcat(path.text, sequenceName), D_00A59268);
+        path.alternate.first = soundAlternateSequenceDirectory.first;
+        path.alternate.second = soundAlternateSequenceDirectory.second;
+        path.alternate.third = soundAlternateSequenceDirectory.third;
+        path.alternate.fourth = soundAlternateSequenceDirectory.fourth;
+        path.alternate.terminator = soundAlternateSequenceDirectory.terminator;
+        strcat(strcat(path.text, sequenceName), soundWaveBankExtension);
     } else {
-        path.standard.first = D_00A59270.first;
-        path.standard.second = D_00A59270.second;
-        strcat(strcat(path.text, sequenceName), D_00A59268);
+        path.standard.first = soundStandardSequenceDirectory.first;
+        path.standard.second = soundStandardSequenceDirectory.second;
+        strcat(strcat(path.text, sequenceName), soundWaveBankExtension);
     }
 
     readResult = xglCdReadFile(path.text, buffer, 0, 0);
@@ -74,16 +104,16 @@ static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternat
     }
 
     if (useAlternatePath != 0) {
-        path.alternate.first = D_00A59250.first;
-        path.alternate.second = D_00A59250.second;
-        path.alternate.third = D_00A59250.third;
-        path.alternate.fourth = D_00A59250.fourth;
-        path.alternate.terminator = D_00A59250.terminator;
-        strcat(strcat(path.text, sequenceName), D_00A59280);
+        path.alternate.first = soundAlternateSequenceDirectory.first;
+        path.alternate.second = soundAlternateSequenceDirectory.second;
+        path.alternate.third = soundAlternateSequenceDirectory.third;
+        path.alternate.fourth = soundAlternateSequenceDirectory.fourth;
+        path.alternate.terminator = soundAlternateSequenceDirectory.terminator;
+        strcat(strcat(path.text, sequenceName), soundSequenceExtension);
     } else {
-        path.standard.first = D_00A59270.first;
-        path.standard.second = D_00A59270.second;
-        strcat(strcat(path.text, sequenceName), D_00A59280);
+        path.standard.first = soundStandardSequenceDirectory.first;
+        path.standard.second = soundStandardSequenceDirectory.second;
+        strcat(strcat(path.text, sequenceName), soundSequenceExtension);
     }
 
     readResult = xglCdReadFile(path.text, buffer, 0, 0);
@@ -96,28 +126,19 @@ static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternat
 
 void InitXrgSoundSystem(void)
 {
-    void *scratch = RgHeapAlloc(InstanceOfRgHeapData(), 0x400000, D_00A59288, 0x66);
+    void *scratch = RgHeapAlloc(InstanceOfRgHeapData(), XRG_SOUND_BANK_BUFFER_SIZE, soundSourcePath, 0x66);
 
-    xglSoundLoadEffect(D_00A592A0, scratch, 2);
-    RgHeapFree(InstanceOfRgHeapData(), scratch, D_00A59288, 0x6C);
-    s_eLoadedSeq = -1;
+    xglSoundLoadEffect(soundMiniBattleBankName, scratch, XRG_SOUND_EFFECT_BANK);
+    RgHeapFree(InstanceOfRgHeapData(), scratch, soundSourcePath, 0x6C);
+    s_eLoadedSeq = XRG_SOUND_NO_SEQUENCE;
     s_bNowPlaying = 0;
 }
 
 void DisposeXrgSoundSystem(void)
 {
-    xglSoundLoadEffect(0, 0, 2);
+    xglSoundLoadEffect(0, 0, XRG_SOUND_EFFECT_BANK);
     _LoadSequence(0, 0, 0);
 }
-
-extern void xglSoundSequenceStop2(int channel);
-
-/* ov12:0x00a592a8..0x00a592c0 hold the sequence names "BATTLE1", "BATTLE2",
- * "BATTLE3" and "Umnmode" (scaffold-owned rodata). */
-extern const char D_00A592A8[];
-extern const char D_00A592B0[];
-extern const char D_00A592B8[];
-extern const char D_00A592C0[];
 
 void _LoadSeq(int sequence)
 {
@@ -126,37 +147,35 @@ void _LoadSeq(int sequence)
     if (sequence == s_eLoadedSeq) {
         return;
     }
-    buffer = RgHeapAlloc(InstanceOfRgHeapData(), 0x200000, D_00A59288, 0x84);
+    buffer = RgHeapAlloc(InstanceOfRgHeapData(), XRG_SOUND_SEQUENCE_BUFFER_SIZE, soundSourcePath, 0x84);
     s_bNowPlaying = 0;
-    xglSoundSequenceStop2(0);
+    xglSoundSequenceStop2(XRG_SOUND_BGM_CHANNEL);
     switch (sequence) {
-    case 0:
-        _LoadSequence(D_00A592A8, buffer, 1);
+    case XRG_SEQ_BATTLE1:
+        _LoadSequence(soundBattle1SequenceName, buffer, 1);
         s_eLoadedSeq = sequence;
         break;
-    case 1:
-        _LoadSequence(D_00A592B0, buffer, 1);
+    case XRG_SEQ_BATTLE2:
+        _LoadSequence(soundBattle2SequenceName, buffer, 1);
         s_eLoadedSeq = sequence;
         break;
-    case 2:
-        _LoadSequence(D_00A592B8, buffer, 1);
+    case XRG_SEQ_BATTLE3:
+        _LoadSequence(soundBattle3SequenceName, buffer, 1);
         s_eLoadedSeq = sequence;
         break;
-    case 3:
-        _LoadSequence(D_00A592C0, buffer, 0);
+    case XRG_SEQ_UMNMODE:
+        _LoadSequence(soundUmnModeSequenceName, buffer, 0);
         s_eLoadedSeq = sequence;
         break;
     }
-    RgHeapFree(InstanceOfRgHeapData(), buffer, D_00A59288, 0x9D);
+    RgHeapFree(InstanceOfRgHeapData(), buffer, soundSourcePath, 0x9D);
 }
-
-extern void xglSoundSequenceNormal2(int channel, int volume);
 
 void XrgSoundSystemPlayBGM(int sequence)
 {
     _LoadSeq(sequence);
-    if (s_eLoadedSeq != -1 && s_bNowPlaying == 0) {
-        xglSoundSequenceNormal2(0, 127);
+    if (s_eLoadedSeq != XRG_SOUND_NO_SEQUENCE && s_bNowPlaying == 0) {
+        xglSoundSequenceNormal2(XRG_SOUND_BGM_CHANNEL, XRG_SOUND_BGM_VOLUME);
         s_bNowPlaying = 1;
     }
 }
@@ -165,12 +184,10 @@ void XrgSoundSystemPlayJingle(void)
 {
 }
 
-extern void xglSoundSequenceFadeOut2(int channel, int time);
-
 void XrgSoundSystemStopSequence(void)
 {
-    if (s_eLoadedSeq != -1) {
-        xglSoundSequenceFadeOut2(0, 100);
+    if (s_eLoadedSeq != XRG_SOUND_NO_SEQUENCE) {
+        xglSoundSequenceFadeOut2(XRG_SOUND_BGM_CHANNEL, XRG_SOUND_BGM_FADE_TIME);
         s_bNowPlaying = 0;
     }
 }
@@ -183,12 +200,12 @@ void XrgSoundSystemStopSequence(void)
  */
 void XrgSoundSystemDisposeSequence(int sequenceId)
 {
-    s_eLoadedSeq = -1;
+    s_eLoadedSeq = XRG_SOUND_NO_SEQUENCE;
 }
 
 void XrgSoundSystemStop(void)
 {
-    xglSoundEffectStopBank(2);
+    xglSoundEffectStopBank(XRG_SOUND_EFFECT_BANK);
 }
 
 void XrgSoundSystemRing(int soundId)
@@ -200,22 +217,22 @@ void XrgSoundSystemRing(int soundId)
 
 void XrgSoundSystemCursor(void)
 {
-    xglSoundEffectNormalID(3, 0);
+    xglSoundEffectNormalID(SE_CURSOR, 0);
 }
 
 void XrgSoundSystemOk(void)
 {
-    xglSoundEffectNormalID(1, 0);
+    xglSoundEffectNormalID(SE_DECIDE, 0);
 }
 
 void XrgSoundSystemCancel(void)
 {
-    xglSoundEffectNormalID(2, 0);
+    xglSoundEffectNormalID(SE_CANCEL, 0);
 }
 
 void XrgSoundSystemNG(void)
 {
-    xglSoundEffectNormalID(5, 0);
+    xglSoundEffectNormalID(SE_BUZZER, 0);
 }
 
 static void _InitSound(XrgSound *sound, int kind)
@@ -224,8 +241,8 @@ static void _InitSound(XrgSound *sound, int kind)
         sound->kind = kind;
         sound->handle = 0;
         sound->cleared_word = 0;
-        sound->volume = 0x40;
-        sound->pan = 0x40;
+        sound->volume = XRG_SOUND_CENTER;
+        sound->pan = XRG_SOUND_CENTER;
     }
 }
 
@@ -237,7 +254,7 @@ XrgSound *CreateXrgSound(int unused, int kind)
 {
     XrgSound *sound;
 
-    sound = RgHeapAlloc(InstanceOfRgHeap(), sizeof(XrgSound), D_00A59288, 253);
+    sound = RgHeapAlloc(InstanceOfRgHeap(), sizeof(XrgSound), soundSourcePath, 253);
     _InitSound(sound, kind);
     return sound;
 }
@@ -246,7 +263,7 @@ void DisposeXrgSound(XrgSound *sound)
 {
     if (sound != 0) {
         _DestructSound();
-        RgHeapFree(InstanceOfRgHeap(), sound, D_00A59288, 0x107);
+        RgHeapFree(InstanceOfRgHeap(), sound, soundSourcePath, 0x107);
     }
 }
 
@@ -254,7 +271,7 @@ static void _ring(XrgSound *sound, int soundId, int gain)
 {
     if (sound != 0) {
         if (soundId > 0) {
-            xglSoundEffectParamID(soundId | 0x20000, (gain * sound->volume) >> 7, sound->pan, 0);
+            xglSoundEffectParamID(soundId | XRG_SOUND_EFFECT_ID_BANK, (gain * sound->volume) >> 7, sound->pan, 0);
         }
     }
 }
@@ -263,7 +280,7 @@ static void _stop(XrgSound *sound, int soundId)
 {
     if (sound != 0) {
         if (soundId > 0) {
-            xglSoundEffectStopID(soundId | 0x20000, 0);
+            xglSoundEffectStopID(soundId | XRG_SOUND_EFFECT_ID_BANK, 0);
         }
     }
 }
@@ -278,7 +295,7 @@ void XrgSoundSetVolume(XrgSound *sound, float volume)
         } else if (volume > max_volume) {
             volume = max_volume;
         }
-        sound->volume = (int)(volume * 127.0f);
+        sound->volume = (int)(volume * (float)XRG_SOUND_VOLUME_MAX);
     }
 }
 
@@ -289,25 +306,25 @@ void XrgSoundRingMoving(XrgSound *sound, int forceRestart, float timer)
     if (sound != 0) {
         int restart = forceRestart != 0;
 
-        if ((unsigned int) sound->kind < 6) {
+        if ((unsigned int) sound->kind < XRG_SOUND_RING_KINDS) {
             switch (sound->kind) {
             case 0:
-                soundEffectId = (restart + 1) | 0x20000;
+                soundEffectId = (restart + 1) | XRG_SOUND_EFFECT_ID_BANK;
                 break;
             case 4:
-                soundEffectId = (restart + 5) | 0x20000;
+                soundEffectId = (restart + 5) | XRG_SOUND_EFFECT_ID_BANK;
                 break;
             case 2:
-                soundEffectId = (restart + 7) | 0x20000;
+                soundEffectId = (restart + 7) | XRG_SOUND_EFFECT_ID_BANK;
                 break;
             case 5:
-                soundEffectId = (restart + 3) | 0x20000;
+                soundEffectId = (restart + 3) | XRG_SOUND_EFFECT_ID_BANK;
                 break;
             case 3:
-                soundEffectId = (restart + 9) | 0x20000;
+                soundEffectId = (restart + 9) | XRG_SOUND_EFFECT_ID_BANK;
                 break;
             case 1:
-                soundEffectId = (restart + 11) | 0x20000;
+                soundEffectId = (restart + 11) | XRG_SOUND_EFFECT_ID_BANK;
                 break;
             }
         }
@@ -318,7 +335,7 @@ void XrgSoundRingMoving(XrgSound *sound, int forceRestart, float timer)
             if (soundEffectId != currentHandle) {
                 if (currentHandle == 0 || forceRestart != 0) {
                     xglSoundEffectStopID(currentHandle, 0);
-                    _ring(sound, soundEffectId, 0x80);
+                    _ring(sound, soundEffectId, XRG_SOUND_GAIN_MAX);
                     sound->handle = soundEffectId;
                 }
             }
@@ -344,7 +361,7 @@ void XrgSoundRing(XrgSound *sound, int soundId)
 {
     if (sound != 0) {
         if (soundId > 0) {
-            _ring(sound, soundId, 128);
+            _ring(sound, soundId, XRG_SOUND_GAIN_MAX);
         }
     }
 }
@@ -353,7 +370,7 @@ void XrgSoundRingVol(XrgSound *sound, int soundId, int gain)
 {
     if (sound != 0) {
         if (soundId > 0) {
-            int maxGain = 128;
+            int maxGain = XRG_SOUND_GAIN_MAX;
 
             if (gain < 0) {
                 gain = 0;

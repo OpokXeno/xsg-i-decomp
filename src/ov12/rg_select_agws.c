@@ -3,122 +3,247 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
 #include "ov12/rg_bxx.h"
-#include "ov12/rg_piclist.h"
 #include "ov12/rg_draw.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_filesys.h"
+#include "ov12/rg_font.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_piclist.h"
+#include "ov12/xrg_main_font.h"
+#include "ov12/xrg_pad.h"
+#include "ov12/xrg_paint2d.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_sound.h"
+#include "ov12/xrg_v_log.h"
 #include "rg_select_agws.h"
-#include "rg_font.h"
 
-/* Referenced original data recovered from this translation unit. */
-const char D_00A56650[16] = "pSelChar != NIL";
+/* Values of SelDat.mode: which selector is active. */
+#define SEL_MODE_CHAR 0
+#define SEL_MODE_WEAPON 1
+#define SEL_MODE_OFF 2
 
-const char D_00A56660[24] = "../rg_select_agws.euc.c";
+/* Values of RgSelectAGWS.state. */
+enum {
+    AGWS_STATE_CHAR_SELECT,
+    AGWS_STATE_WEAPON_SELECT,
+    AGWS_STATE_SLIDE_TO_CHAR,
+    AGWS_STATE_SLIDE_TO_WEAPON,
+    AGWS_STATE_START_CHAR,
+    AGWS_STATE_START_WEAPON,
+    AGWS_STATE_DONE,
+    AGWS_STATE_CANCELLED
+};
 
-const char D_00A56698[16] = "pSelWep != NIL";
+/* The picture lists slide by this many pixels, SEL_SLIDE_STEP per frame. */
+#define SEL_SLIDE_WIDTH 256
+#define SEL_SLIDE_STEP 32
 
-const char D_00A566A8[16] = "uSize > 0";
+/* Phase step and range of the bobbing of the arrows. */
+#define SEL_SIN_STEP 0.3926991f
+#define SEL_PI 3.1415928f
+#define SEL_TWO_PI 6.2831855f
+#define SEL_ARROW_BOB 4
 
-const char D_00A566B8[24] = "uSize <= WEP_MAX";
+/* Weapon list layout: visible rows, row height, origin of the list. */
+#define WEP_LIST_ROWS 7
+#define WEP_LIST_ROW_HEIGHT 23
+#define WEP_LIST_ORIGIN_X 568
+#define WEP_LIST_ORIGIN_Y 168
 
-const char D_00A566D0[24] = "pSelWep->m_uSize > 0";
+/* Determination window text: x of the equip type label and of the weapon
+ * name, and the row height. */
+#define DETERM_LABEL_X 184
+#define DETERM_NAME_X 232
+#define DETERM_ROW_HEIGHT 26
 
-const char D_00A566E8[40] = "0 <= nCur && nCur < pSelWep->m_uSize";
+/* Rows of the determination window between its top and bottom edges. */
+#define DETERM_WINDOW_ROWS 8
 
-const char D_00A56720[32] = "unknown type select ID %d";
+/* Bits of FloatArrow.visibility_mask: the first arrow, both arrows. */
+#define FLOAT_ARROW_FIRST 1
+#define FLOAT_ARROW_BOTH 3
 
-extern const char D_00A56758[];
-extern const char D_00A56768[];
-extern const char D_00A56798[];
-extern const char D_00A56838[];
-extern const char D_00A568C0[];
-extern const char D_00A568E0[];
-extern const char D_00A568F0[];
-extern const char D_00A56928[];
-extern const char D_00A56968[];
-extern const char D_00A56978[];
-extern const char D_00A56988[];
-extern const char D_00A56998[];
-extern const char D_00A569A8[];
-extern const char D_00A569B8[];
-extern const char D_00A569C8[];
-extern const char D_00A569D8[];
-extern const char D_00A569F0[];
-extern const char D_00A56A08[];
-extern const char D_00A56A18[];
-extern const char D_00A56A28[];
-extern const char D_00A56A48[];
-extern const char D_00A56A68[];
-extern const char D_00A56A88[];
-extern const char D_00A56AA8[];
-extern const char D_00A56AC8[];
-extern const char D_00A56AE8[];
-extern const char D_00A56B08[];
-extern const char D_00A56B28[];
-extern const char D_00A56B48[];
-extern const char D_00A56B68[];
-extern const char D_00A56BB0[];
-extern const char D_00A56BC8[];
-extern const char D_00A56C48[];
-extern const char D_00A56C90[];
-extern const char D_00A56CA8[];
-extern const char D_00A56CB8[];
-extern const char D_00A56CC8[];
-extern const char D_00A56CE0[];
-extern const char D_00A56CF0[];
-extern const char D_00A56D00[];
-extern const char D_00A56D10[];
-extern const char D_00A56D20[];
+/* Glyphs of the weapon list font; the two arrows are the characters that
+ * mark more rows above and below. */
+#define WEP_FONT_MORE_ABOVE '@'
+#define WEP_FONT_MORE_BELOW '!'
+#define WEP_FONT_GLYPH_COUNT 0x29
 
 /*
- * The 2D paint context (defined by ov12/tu086 xrg_paint2d.c); this TU only
- * forwards the pointer to the XrgPaint2D* calls, matching src/ov12/
- * rg_announce.h's own opaque typedef for the same handle.
+ * Character-select cursor layout: RG_ACTOR_CHAR_NUM character positions
+ * (s_aeCharTbl) plus one more, SEL_CHAR_CURSOR_NOP. That is the position
+ * _CharIDToCharCursor returns for an unknown character and
+ * _CharCursorToCharID maps back to RG_ACTOR_CHAR_NOP; _InitSelectChar starts
+ * the cursor there and _SetSelectableSelectChar keeps it selectable
+ * (SEL_CHAR_CURSOR_NOP_BIT).
  */
-typedef struct XrgPaint2D XrgPaint2D;
+#define SEL_CHAR_CURSOR_NOP RG_ACTOR_CHAR_NUM
+#define SEL_CHAR_CURSOR_NUM (RG_ACTOR_CHAR_NUM + 1)
+#define SEL_CHAR_CURSOR_NOP_BIT (1 << SEL_CHAR_CURSOR_NOP)
 
-extern void XrgPaint2DUseTexture(XrgPaint2D *paint, void *pic);
-extern void XrgPaint2DAlpha(XrgPaint2D *paint, int blendMode);
-extern void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
-                               int width, int height);
+/* The "no character" id (assert "eCharID != RG_ACTOR_CHAR_NOP"). */
+#define RG_ACTOR_CHAR_NOP (-1)
 
 /*
- * XrgPaint2DDrawXYWH's mode word: bit 0x20 takes the drawn extent from the
- * bound picture instead of the width/height arguments (same convention as
- * src/ov12/rg_announce.h's XRG_PAINT2D_MODE_USE_PIC_SIZE).
+ * SelType cursor positions: 0..2 are the equip types (_EquipCurIDToEquipType),
+ * SEL_TYPE_CURSOR_DETERM is the position _SetDetermModeSelType moves to and
+ * _PassTimeSelType never steps onto, SEL_TYPE_CURSOR_LAST the rightmost.
  */
-#define XRG_PAINT2D_MODE_USE_PIC_SIZE 0x20
-#define XRG_PAINT2D_BLEND_LINEAR 0
+#define SEL_TYPE_CURSOR_DETERM 3
+#define SEL_TYPE_CURSOR_LAST 4
 
-static void _disp_pic(XrgPaint2D *paint, void *pic, int x, int y)
+/* _EquipCurIDToEquipType's result for a cursor that is no equip type
+ * (assert "eType != RG_EQUIP_TYPE_INVALID"). */
+#define RG_EQUIP_TYPE_INVALID (-1)
+
+/* The picture indices of one character on the character-select picture list. */
+typedef struct RgSelCharPicEntry {
+    int m_idx[6];
+} RgSelCharPicEntry;
+
+/* The picture index of each equip type's frame on the weapon picture list. */
+typedef struct SelWepPicIdx {
+    int m_idx[3];
+} SelWepPicIdx;
+
+/* A 4-component color copied as two doublewords (ld/sd); its components are
+ * only read by RgPicSetColor. */
+typedef union SelWepColor {
+    long long halves[2];
+    RgPicColor color;
+} SelWepColor;
+
+/*
+ * Partial view of RgSelectAGWSData as doublewords (measured: a struct copy of
+ * the 4-aligned record compiles to word copies or a call, the 8-aligned view
+ * moves the block with doubleword loads and stores as the original does).
+ */
+typedef struct RgSelectAGWSDataWords {
+    u64 word[sizeof(struct RgSelectAGWSData) / 8];
+} RgSelectAGWSDataWords;
+
+/* Defined elsewhere (scaffold data): messages, picture names and tables. */
+extern const RgFontColor s_aRed_1[2];
+extern const RgFontColor s_aWhite_2[2];
+extern const RgSelCharPicEntry s_ainPics_3[6];
+extern const SelWepPicIdx agwsSelectWepPicIndexTable;
+extern SelWepColor agwsSelectConflictColor;
+extern SelWepColor agwsSelectNormalColor;
+extern const char agwsSelectAssertCharIdNotNop[];
+extern const char agwsSelectAssertNameNotNil[];
+extern const char agwsSelectAssertNameArrayNotNil[];
+extern const char agwsSelectWepListTextureName[];
+extern const char agwsSelectAssertTextureNotNil[];
+extern const char agwsSelectWepListFrameTextureName[];
+extern const char agwsSelectUpArrowTextureName[];
+extern const char agwsSelectDownArrowTextureName[];
+extern const char agwsSelectCannotEquipForBattleText[];
+extern const char agwsSelectCannotEquipTogetherText[];
+extern const char agwsSelectDumpTitleFormat[];
+extern const char agwsSelectDumpCharacterFormat[];
+extern const char agwsSelectDumpWeaponNameFormat[];
+extern const char agwsSelectAssertResultNotNil[];
+extern const char agwsSelectPlayer1FrameTextureName[];
+extern const char agwsSelectPlayer2FrameTextureName[];
+extern const char agwsSelectAssertListNotNil[];
+extern const char agwsSelectDetermLabelFullWidthL[];
+extern const char agwsSelectDetermLabelFullWidthR[];
+extern const char agwsSelectDetermLabelFullWidthLR[];
+extern const char agwsSelectDetermConfirmText[];
+extern const char agwsSelectDetermCancelText[];
+extern const char agwsSelectAssertPaintNotNil[];
+extern const char agwsSelectUnknownSelectModeFormat[];
+
+static void _InitSelect(RgSelectAGWS *pSel);
+static void _Destruct(RgSelectAGWS *pSel);
+static void _PassTime(RgSelectAGWS *pSel, float deltaTime);
+static void _Disp(RgSelectAGWS *pSel);
+
+/* Defined here: the strings of this TU; the later ones stay in place among
+ * the functions and are declared after them. */
+const char agwsSelectAssertSelCharNotNil[16] = "pSelChar != NIL";
+
+const char agwsSelectSourcePath[24] = "../rg_select_agws.euc.c";
+
+const char agwsSelectAssertSelWepNotNil[16] = "pSelWep != NIL";
+
+const char agwsSelectAssertSizePositive[16] = "uSize > 0";
+
+const char agwsSelectAssertSizeWithinWepMax[24] = "uSize <= WEP_MAX";
+
+const char agwsSelectAssertSelWepSizePositive[24] = "pSelWep->m_uSize > 0";
+
+const char agwsSelectAssertCursorWithinSelWepSize[40] = "0 <= nCur && nCur < pSelWep->m_uSize";
+
+const char agwsSelectUnknownTypeSelectIdFormat[32] = "unknown type select ID %d";
+
+/* Declared here, defined further down: */
+extern const char agwsSelectAssertSelTypeNotNil[];
+extern const char agwsSelectAssertEquipTypeNotInvalid[];
+extern const char agwsSelectAssertWepListDispNotNil[];
+extern const char agwsSelectAssertSelDataNotNil[];
+extern const char agwsSelectAssertDataNotNil[];
+extern const char agwsSelectAssertSelNotNil[];
+extern const char agwsSelectAssertInCharNotNop[];
+extern const char agwsSelectAssertBxxNotNil[];
+extern const char agwsSelectDetermFrameTopLeftTextureName[];
+extern const char agwsSelectDetermFrameTopRightTextureName[];
+extern const char agwsSelectDetermFrameBottomLeftTextureName[];
+extern const char agwsSelectDetermFrameBottomRightTextureName[];
+extern const char agwsSelectDetermFrameSideLeftTextureName[];
+extern const char agwsSelectDetermFrameSideRightTextureName[];
+extern const char agwsSelectDetermFrameInnerTextureName[];
+extern const char agwsSelectLeftArrowTextureName[];
+extern const char agwsSelectRightArrowTextureName[];
+extern const char agwsSelectYesTextureName[];
+extern const char agwsSelectNoTextureName[];
+extern const char agwsSelectAssertWinTopLeftNotNil[];
+extern const char agwsSelectAssertWinTopRightNotNil[];
+extern const char agwsSelectAssertWinBottomLeftNotNil[];
+extern const char agwsSelectAssertWinBottomRightNotNil[];
+extern const char agwsSelectAssertWinSideLeftNotNil[];
+extern const char agwsSelectAssertWinSideRightNotNil[];
+extern const char agwsSelectAssertWinInnerNotNil[];
+extern const char agwsSelectAssertWinLeftArrowNotNil[];
+extern const char agwsSelectAssertWinRightArrowNotNil[];
+extern const char agwsSelectAssertWinYesNotNil[];
+extern const char agwsSelectAssertWinNoNotNil[];
+extern const char agwsSelectAssertArrowPicLeftNotNil[];
+extern const char agwsSelectAssertArrowPicRightNotNil[];
+extern const char agwsSelectAssertViewNotNil[];
+extern const char agwsSelectAssertFileNameNotNil[];
+extern const char agwsSelectDataDirectory[];
+extern const char agwsSelectBxxFileName[];
+extern const char agwsSelectCannotLoadBxxError[];
+extern const char agwsSelectAgwsTopPicListFileName[];
+extern const char agwsSelectAgwsPicListFileName[];
+extern const char agwsSelectWepTopPicListFileName[];
+extern const char agwsSelectWepPicListFileName[];
+extern const char agwsSelectAssertCollectsNotNil[];
+
+static void _disp_pic(XrgPaint2D *paint, struct RgBxxPic *pic, int x, int y)
 {
     XrgPaint2DUseTexture(paint, pic);
     XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
-    XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
-/*
- * Each entry is one player's paint tint, copied wholesale into the paint
- * context by XrgPaint2DColor with a single quadword (the same 0x10-byte
- * record src/ov12/rg_title.c's own XrgColor names, owned by that TU);
- * s_aPlayerCol's own size:0x20 (config/symbols/ov12.txt) is two such
- * entries, indexed here without completing that type.
- */
-extern void XrgPaint2DColor(XrgPaint2D *paint, const void *color);
+/* The paint tint of each player. */
+static XrgPaint2DRGBA s_aPlayerCol[2] = {{51, 124, 62, 127}, {123, 90, 64, 127}};
 
-typedef struct XrgPlayerColor { int r; int g; int b; int a; } XrgPlayerColor;
-
-static XrgPlayerColor s_aPlayerCol[2] = {{51, 124, 62, 127}, {123, 90, 64, 127}};
-
-static void _disp_pic_pl(XrgPaint2D *paint, void *pic, int x, int y,
+static void _disp_pic_pl(XrgPaint2D *paint, struct RgBxxPic *pic, int x, int y,
                          int playerIndex)
 {
     XrgPaint2DUseTexture(paint, pic);
     XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
     XrgPaint2DColor(paint, &s_aPlayerCol[playerIndex]);
-    XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
-static RgFontGlyph s_aFontTbl_0[0x29] = {
+static RgFontGlyph s_aFontTbl_0[WEP_FONT_GLYPH_COUNT] = {
     {' ', 0, 0, 0, {0, 0}, 0, 4},
     {'A', 0, 1, 1, {13, 14}, 0, -3},
     {'B', 0, 15, 1, {12, 14}, 0, -3},
@@ -162,11 +287,10 @@ static RgFontGlyph s_aFontTbl_0[0x29] = {
     {'@', 0, 170, 17, {16, 14}, 0, -3},
 };
 
-extern int CreateRgFont(void *table, int glyphCount, int pic);
 
-static int _CreateSelectWepFont(int pic)
+static RgFont *_CreateSelectWepFont(struct RgBxxPic *pic)
 {
-    return CreateRgFont(s_aFontTbl_0, 0x29, pic);
+    return CreateRgFont(s_aFontTbl_0, WEP_FONT_GLYPH_COUNT, pic);
 }
 
 static float s_fSinRad = 0.0f;
@@ -178,11 +302,11 @@ static void _SinInit(void)
 
 static void _SinPassTime(void)
 {
-    float phase = s_fSinRad + 0.3926991f;
-    while (phase > 3.1415928f)
-        phase -= 6.2831855f;
-    while (phase < -3.1415928f)
-        phase += 6.2831855f;
+    float phase = s_fSinRad + SEL_SIN_STEP;
+    while (phase > SEL_PI)
+        phase -= SEL_TWO_PI;
+    while (phase < -SEL_PI)
+        phase += SEL_TWO_PI;
     s_fSinRad = phase;
 }
 
@@ -191,46 +315,24 @@ static int _SinGet(int amplitude)
     return (int)(sinf(s_fSinRad) * (float)amplitude);
 }
 
-extern int RgEquipCheckConfrict(int *equipData, int slot);
-
-/*
- * The essence handle values evidenced by _GetNameOnCursorSelWep also carry
- * an equip sub-record at this offset; the only field _CheckEquipWeps
- * evidences on it (docs/style.md, "Struct fields, not offset casts" --
- * narrowly evidenced scalar access).
- */
-#define WEP_ESSENCE_EQUIP_OFFSET 0x70
-
-static int _CheckEquipWeps(int *essences, int slot)
+static int _CheckEquipWeps(RgWeaponEssence **essences,
+                           int slot)
 {
-    int equipData[3];
+    RgEquip *equipData[RG_EQUIP_TYPE_NUM];
     unsigned int i;
 
-    for (i = 0; i < 3; i++) {
-        equipData[i] = essences[i] + WEP_ESSENCE_EQUIP_OFFSET;
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+        equipData[i] = &essences[i]->equip;
     }
     return RgEquipCheckConfrict(equipData, slot);
 }
-
-/*
- * Character-select cursor layout: RG_ACTOR_CHAR_NUM character positions
- * (rg_select_agws.h; s_aeCharTbl) plus one more, SEL_CHAR_CURSOR_NOP. That
- * is the position _CharIDToCharCursor returns for an unknown character and
- * _CharCursorToCharID maps back to -1 (RG_ACTOR_CHAR_NOP below);
- * _InitSelectChar starts the cursor there and _SetSelectableSelectChar
- * keeps it selectable (SEL_CHAR_CURSOR_NOP_BIT, the 0x40 in
- * selectableMask).
- */
-#define SEL_CHAR_CURSOR_NOP RG_ACTOR_CHAR_NUM
-#define SEL_CHAR_CURSOR_NUM (RG_ACTOR_CHAR_NUM + 1)
-#define SEL_CHAR_CURSOR_NOP_BIT (1 << SEL_CHAR_CURSOR_NOP)
 
 static int s_aeCharTbl[RG_ACTOR_CHAR_NUM] = {0, 4, 2, 5, 3, 1};
 
 static int _CharCursorToCharID(int charCursor)
 {
     if ((unsigned int) charCursor >= RG_ACTOR_CHAR_NUM) {
-        return -1;
+        return RG_ACTOR_CHAR_NOP;
     }
     return s_aeCharTbl[charCursor];
 }
@@ -247,29 +349,20 @@ static int _CharIDToCharCursor(int charID)
     return SEL_CHAR_CURSOR_NOP;
 }
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern const char D_00A56650[];
-/* "pSelChar != NIL" */
-extern const char D_00A56660[];
 
-/* "../rg_select_agws.euc.c" */
 static void _InitSelectChar(SelChar *pSelChar)
 {
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0xD0);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0xD0);
     }
     pSelChar->cursor = SEL_CHAR_CURSOR_NOP;
     pSelChar->selectableMask = SEL_CHAR_CURSOR_NOP_BIT;
 }
 
-/* Defined above (scaffold); returns s_aeCharTbl[charCursor], or -1 past the table. */
-static int _CharCursorToCharID(int charCursor);
-
 static int _GetSelectChar(SelChar *pSelChar)
 {
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0xD8);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0xD8);
     }
     return _CharCursorToCharID(pSelChar->cursor);
 }
@@ -277,7 +370,7 @@ static int _GetSelectChar(SelChar *pSelChar)
 static int _GetSelectCursor(SelChar *pSelChar)
 {
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0xDE);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0xDE);
     }
     return pSelChar->cursor;
 }
@@ -287,7 +380,7 @@ static void _SetSelectableSelectChar(SelChar *pSelChar, unsigned int charIDMask)
     unsigned int i;
 
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0xE7);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0xE7);
     }
     pSelChar->selectableMask = 0;
     for (i = 0; i < RG_ACTOR_CHAR_NUM; i++) {
@@ -306,16 +399,6 @@ static void _SetSelectableSelectChar(SelChar *pSelChar, unsigned int charIDMask)
     }
 }
 
-extern const char D_00A56678[];
-
-/* "eCharID != RG_ACTOR_CHAR_NOP" */
-/*
- * ov12:0x00a568f0 "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP"
- * (_TransitToWeaponSelect below) and ov12:0x00a56678 "eCharID !=
- * RG_ACTOR_CHAR_NOP" (_SetCharSelectChar) are this allocation's own evidence
- * for the original sentinel value _InitSelType resets SelType::charID to.
- */
-#define RG_ACTOR_CHAR_NOP (-1)
 
 static void _SetCharSelectChar(SelChar *pSelChar, int charID)
 {
@@ -323,10 +406,10 @@ static void _SetCharSelectChar(SelChar *pSelChar, int charID)
     unsigned int i;
 
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0xFE);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0xFE);
     }
     if (charID == RG_ACTOR_CHAR_NOP) {
-        assert_prog(D_00A56678, D_00A56660, 0xFF);
+        assert_prog(agwsSelectAssertCharIdNotNop, agwsSelectSourcePath, 0xFF);
     }
     cursor = _CharIDToCharCursor(charID);
     if (pSelChar->selectableMask & (1 << cursor)) {
@@ -343,7 +426,7 @@ static void _SetCharSelectChar(SelChar *pSelChar, int charID)
 static int _IsExistItemUpper(SelChar *pSelChar)
 {
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0x10F);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0x10F);
     }
     return (pSelChar->selectableMask & ((1 << pSelChar->cursor) - 1)) != 0;
 }
@@ -353,7 +436,7 @@ static int _IsExistItemLower(SelChar *pSelChar)
     int cursorBit;
 
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0x119);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0x119);
     }
     cursorBit = 1 << pSelChar->cursor;
     return (pSelChar->selectableMask & ~((cursorBit - 1) | cursorBit)) != 0;
@@ -365,7 +448,7 @@ static int _GetSelectableSelectChar(SelChar *pSelChar)
     unsigned int charID;
 
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0x126);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0x126);
     }
     charMask = 0;
     for (charID = 0; charID < RG_ACTOR_CHAR_NUM; charID++) {
@@ -376,9 +459,6 @@ static int _GetSelectableSelectChar(SelChar *pSelChar)
     return charMask;
 }
 
-extern int XrgPadIsUp(void);
-extern int XrgPadIsDown(void);
-extern void XrgSoundSystemCursor(void);
 
 static void _PassTimeSelectChar(SelChar *pSelChar, float deltaTime)
 {
@@ -387,7 +467,7 @@ static void _PassTimeSelectChar(SelChar *pSelChar, float deltaTime)
     int step;
 
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 0x133);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 0x133);
     }
     cursor = pSelChar->cursor;
     oldCursor = cursor;
@@ -411,36 +491,20 @@ static void _PassTimeSelectChar(SelChar *pSelChar, float deltaTime)
     }
 }
 
-extern const char D_00A56698[];
 
-/* "pSelWep != NIL" */
 static void _InitSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x157);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x157);
     }
     pSelWep->cursor = 0;
     pSelWep->m_uSize = 0;
 }
 
-extern const char D_00A566A8[];
-/* "uSize > 0" */
-extern const char D_00A566B8[];
-/* "uSize <= WEP_MAX" */
 /*
- * Fills `list` with the weapons matching the filter and returns their count.
- * The first call passes no list and its count is checked against WEP_MAX
- * before the second fills pSelWep->list; both forward the same
- * characterID/weaponType (the first call leaves a1/a2 untouched).
- */
-extern unsigned int RgSelectWeapons(int *list, int characterID, int weaponType);
-
-/*
- * characterID/weaponType are the two forwarded filter arguments of
- * RgSelectWeapons, named from this function's own role ("CharType" weapon
- * selection): which character's equippable list this is and which weapon
- * type it is being filtered to. The callee itself is unresolved, so no
- * stronger evidence for these two roles exists within this allocation.
+ * Fills the list with the weapons characterID can use for weaponType. The
+ * first call passes no list and its count is checked against WEP_MAX before
+ * the second fills pSelWep->list.
  */
 static void _InitCharTypeSelWep(SelWep *pSelWep, int characterID,
                                 int weaponType)
@@ -449,37 +513,35 @@ static void _InitCharTypeSelWep(SelWep *pSelWep, int characterID,
 
     uSize = RgSelectWeapons(0, characterID, weaponType);
     if (uSize == 0) {
-        assert_prog(D_00A566A8, D_00A56660, 0x160);
+        assert_prog(agwsSelectAssertSizePositive, agwsSelectSourcePath, 0x160);
     }
     if (uSize > WEP_MAX) {
-        assert_prog(D_00A566B8, D_00A56660, 0x161);
+        assert_prog(agwsSelectAssertSizeWithinWepMax, agwsSelectSourcePath, 0x161);
     }
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x162);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x162);
     }
     uSize = RgSelectWeapons(pSelWep->list, characterID, weaponType);
     pSelWep->cursor = 0;
     pSelWep->m_uSize = uSize;
 }
 
-extern const char D_00A566D0[];
 
-/* "pSelWep->m_uSize > 0" */
-static int _GetEssSelWep(SelWep *pSelWep)
+static RgWeaponEssence *_GetEssSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x16A);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x16A);
     }
     if (pSelWep->m_uSize == 0) {
-        assert_prog(D_00A566D0, D_00A56660, 0x16B);
+        assert_prog(agwsSelectAssertSelWepSizePositive, agwsSelectSourcePath, 0x16B);
     }
     return pSelWep->list[pSelWep->cursor];
 }
 
-static int *_GetEssListSelWep(SelWep *pSelWep)
+static RgWeaponEssence **_GetEssListSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x172);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x172);
     }
     return pSelWep->list;
 }
@@ -487,7 +549,7 @@ static int *_GetEssListSelWep(SelWep *pSelWep)
 static unsigned int _GetEssListSizeSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x179);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x179);
     }
     return pSelWep->m_uSize;
 }
@@ -495,36 +557,24 @@ static unsigned int _GetEssListSizeSelWep(SelWep *pSelWep)
 static int _GetCursorSelWep(SelWep *pSelWep)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x180);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x180);
     }
     return pSelWep->cursor;
 }
 
-extern const char D_00A566E8[];
 
-/* "0 <= nCur && nCur < pSelWep->m_uSize" */
 static void _SetCursorSelWep(SelWep *pSelWep, int nCur)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x187);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x187);
     }
     if (nCur < 0 || (unsigned int) nCur >= pSelWep->m_uSize) {
-        assert_prog(D_00A566E8, D_00A56660, 0x188);
+        assert_prog(agwsSelectAssertCursorWithinSelWepSize, agwsSelectSourcePath, 0x188);
     }
     pSelWep->cursor = nCur;
 }
 
-/*
- * Name field offset within an unrecovered weapon-essence record; only this
- * field is evidenced by _GetNameOnCursorSelWep (docs/style.md, "Struct
- * fields, not offset casts" -- narrowly evidenced scalar access).
- */
-#define WEP_ESSENCE_NAME_OFFSET 0x330
 
-extern int strcmp(const char *left, const char *right);
-extern const char D_00A56710[];
-
-/* "pszName != NIL" */
 /*
  * Selects the first list entry whose name equals pszName and returns 1; the
  * cursor is 0 while nothing matches, and the result is 0.
@@ -534,15 +584,14 @@ static int _SetCursorByNameSelWep(SelWep *pSelWep, char *pszName)
     unsigned int i;
 
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 401);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 401);
     }
     if (pszName == 0) {
-        assert_prog(D_00A56710, D_00A56660, 402);
+        assert_prog(agwsSelectAssertNameNotNil, agwsSelectSourcePath, 402);
     }
     pSelWep->cursor = 0;
     for (i = 0; i < pSelWep->m_uSize; i++) {
-        if (strcmp((const char *) (pSelWep->list[i] + WEP_ESSENCE_NAME_OFFSET),
-                   pszName) == 0) {
+        if (strcmp(pSelWep->list[i]->databaseName, pszName) == 0) {
             pSelWep->cursor = i;
             return 1;
         }
@@ -550,16 +599,14 @@ static int _SetCursorByNameSelWep(SelWep *pSelWep, char *pszName)
     return 0;
 }
 
-extern char *strcpy(char *destination, const char *source);
 
 static void _GetNameOnCursorSelWep(SelWep *pSelWep, char *name)
 {
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x1A1);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x1A1);
     }
     if (pSelWep->m_uSize != 0) {
-        strcpy(name, (const char *) (pSelWep->list[pSelWep->cursor] +
-                                     WEP_ESSENCE_NAME_OFFSET));
+        strcpy(name, pSelWep->list[pSelWep->cursor]->databaseName);
         return;
     }
     *name = '\0';
@@ -575,10 +622,10 @@ static void _PassTimeSelWep(SelWep *pSelWep, float deltaTime)
     int previousCursor;
 
     if (pSelWep == 0) {
-        assert_prog(D_00A56698, D_00A56660, 0x1AD);
+        assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x1AD);
     }
     if (pSelWep->m_uSize == 0) {
-        assert_prog(D_00A566D0, D_00A56660, 0x1AE);
+        assert_prog(agwsSelectAssertSelWepSizePositive, agwsSelectSourcePath, 0x1AE);
     }
     cursor = pSelWep->cursor;
     previousCursor = cursor;
@@ -594,15 +641,12 @@ static void _PassTimeSelWep(SelWep *pSelWep, float deltaTime)
     }
 }
 
-extern const char D_00A56720[];
-/* "unknown type select ID %d" */
-extern void RgError(const char *message, const char *source_file, int line, ...);
 
 static int _EquipCurIDToEquipType(int curID)
 {
     int eType;
 
-    eType = -1;
+    eType = RG_EQUIP_TYPE_INVALID;
     switch (curID) {
     case 0:
         eType = 0;
@@ -617,84 +661,83 @@ static int _EquipCurIDToEquipType(int curID)
     case 4:
         break;
     default:
-        RgError(D_00A56720, D_00A56660, 0x1EC, curID);
+        RgError(agwsSelectUnknownTypeSelectIdFormat, agwsSelectSourcePath, 0x1EC, curID);
         break;
     }
     return eType;
 }
 
-const char D_00A56758[16] = "pSelType != NIL";
+const char agwsSelectAssertSelTypeNotNil[16] = "pSelType != NIL";
 
-const char D_00A56768[32] = "eType != RG_EQUIP_TYPE_INVALID";
+const char agwsSelectAssertEquipTypeNotInvalid[32] = "eType != RG_EQUIP_TYPE_INVALID";
 
-const char D_00A56798[16] = "pDisp != NIL";
+const char agwsSelectAssertWepListDispNotNil[16] = "pDisp != NIL";
 
-const char D_00A56838[16] = "pSelDat != NIL";
+const char agwsSelectAssertSelDataNotNil[16] = "pSelDat != NIL";
 
-const char D_00A568C0[16] = "pData != NIL";
+const char agwsSelectAssertDataNotNil[16] = "pData != NIL";
 
-const char D_00A568E0[16] = "pSel != NIL";
+const char agwsSelectAssertSelNotNil[16] = "pSel != NIL";
 
-const char D_00A568F0[56] = "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP";
+const char agwsSelectAssertInCharNotNop[56] = "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP";
 
-const char D_00A56928[16] = "pBxx != NIL";
+const char agwsSelectAssertBxxNotNil[16] = "pBxx != NIL";
 
-const char D_00A56968[16] = "frm11on_ul.bmp";
+const char agwsSelectDetermFrameTopLeftTextureName[16] = "frm11on_ul.bmp";
 
-const char D_00A56978[16] = "frm11on_ur.bmp";
+const char agwsSelectDetermFrameTopRightTextureName[16] = "frm11on_ur.bmp";
 
-const char D_00A56988[16] = "frm11on_bl.bmp";
+const char agwsSelectDetermFrameBottomLeftTextureName[16] = "frm11on_bl.bmp";
 
-const char D_00A56998[16] = "frm11on_br.bmp";
+const char agwsSelectDetermFrameBottomRightTextureName[16] = "frm11on_br.bmp";
 
-const char D_00A569A8[16] = "frm11on_cl.bmp";
+const char agwsSelectDetermFrameSideLeftTextureName[16] = "frm11on_cl.bmp";
 
-const char D_00A569B8[16] = "frm11on_cr.bmp";
+const char agwsSelectDetermFrameSideRightTextureName[16] = "frm11on_cr.bmp";
 
-const char D_00A569C8[16] = "frm11on_cc.bmp";
+const char agwsSelectDetermFrameInnerTextureName[16] = "frm11on_cc.bmp";
 
-const char D_00A569D8[24] = "icon_leftarrow.bmp";
+const char agwsSelectLeftArrowTextureName[24] = "icon_leftarrow.bmp";
 
-const char D_00A569F0[24] = "icon_rightarrow.bmp";
+const char agwsSelectRightArrowTextureName[24] = "icon_rightarrow.bmp";
 
-const char D_00A56A08[16] = "say_yes.bmp";
+const char agwsSelectYesTextureName[16] = "say_yes.bmp";
 
-const char D_00A56A18[16] = "say_no.bmp";
+const char agwsSelectNoTextureName[16] = "say_no.bmp";
 
-const char D_00A56A28[32] = "pWinInfo->m_pTop[0] != NIL";
+const char agwsSelectAssertWinTopLeftNotNil[32] = "pWinInfo->m_pTop[0] != NIL";
 
-const char D_00A56A48[32] = "pWinInfo->m_pTop[1] != NIL";
+const char agwsSelectAssertWinTopRightNotNil[32] = "pWinInfo->m_pTop[1] != NIL";
 
-const char D_00A56A68[32] = "pWinInfo->m_pBtm[0] != NIL";
+const char agwsSelectAssertWinBottomLeftNotNil[32] = "pWinInfo->m_pBtm[0] != NIL";
 
-const char D_00A56A88[32] = "pWinInfo->m_pBtm[1] != NIL";
+const char agwsSelectAssertWinBottomRightNotNil[32] = "pWinInfo->m_pBtm[1] != NIL";
 
-const char D_00A56AA8[32] = "pWinInfo->m_pSide[0] != NIL";
+const char agwsSelectAssertWinSideLeftNotNil[32] = "pWinInfo->m_pSide[0] != NIL";
 
-const char D_00A56AC8[32] = "pWinInfo->m_pSide[1] != NIL";
+const char agwsSelectAssertWinSideRightNotNil[32] = "pWinInfo->m_pSide[1] != NIL";
 
-const char D_00A56AE8[32] = "pWinInfo->m_pInner != NIL";
+const char agwsSelectAssertWinInnerNotNil[32] = "pWinInfo->m_pInner != NIL";
 
-const char D_00A56B08[32] = "pWinInfo->m_pLeft != NIL";
+const char agwsSelectAssertWinLeftArrowNotNil[32] = "pWinInfo->m_pLeft != NIL";
 
-const char D_00A56B28[32] = "pWinInfo->m_pRight != NIL";
+const char agwsSelectAssertWinRightArrowNotNil[32] = "pWinInfo->m_pRight != NIL";
 
-const char D_00A56B48[32] = "pWinInfo->m_pMaru != NIL";
+const char agwsSelectAssertWinYesNotNil[32] = "pWinInfo->m_pMaru != NIL";
 
-const char D_00A56B68[32] = "pWinInfo->m_pBatu != NIL";
+const char agwsSelectAssertWinNoNotNil[32] = "pWinInfo->m_pBatu != NIL";
 
-const char D_00A56BB0[24] = "pDat->m_apPic[0] != NIL";
+const char agwsSelectAssertArrowPicLeftNotNil[24] = "pDat->m_apPic[0] != NIL";
 
-const char D_00A56BC8[24] = "pDat->m_apPic[1] != NIL";
+const char agwsSelectAssertArrowPicRightNotNil[24] = "pDat->m_apPic[1] != NIL";
 
 
-/* "pSelType != NIL" */
 static void _SetSelTypeCursor(SelType *pSelType, int mode)
 {
     int cursor;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x1F5);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x1F5);
     }
     cursor = pSelType->cursor;
     if (cursor != mode) {
@@ -708,11 +751,10 @@ static void _ResumeSelTypeOldCursor(SelType *pSelType)
     pSelType->cursor = pSelType->oldCursor;
 }
 
-/* "pSelType != NIL" */
 static int _GetCursorSelType(SelType *pSelType)
 {
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 517);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 517);
     }
     return pSelType->cursor;
 }
@@ -720,27 +762,21 @@ static int _GetCursorSelType(SelType *pSelType)
 static int _GetTypeSelType(SelType *pSelType)
 {
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 524);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 524);
     }
     return _EquipCurIDToEquipType(pSelType->cursor);
 }
 
-/*
- * ov12:0x00a56768 "eType != RG_EQUIP_TYPE_INVALID" names the -1 "unknown
- * type" result of _EquipCurIDToEquipType (RG_EQUIP_TYPE_INVALID, defined
- * below where its own assert bound first needs it); this function's own
- * evidence for the same -1 sentinel is the empty-pointer result it returns
- * for it.
- */
+/* Null when the cursor is not on an equip type. */
 static SelWep *_GetCurSelType(SelType *pSelType)
 {
     int eType;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 533);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 533);
     }
     eType = _EquipCurIDToEquipType(pSelType->cursor);
-    if (eType == -1) {
+    if (eType == RG_EQUIP_TYPE_INVALID) {
         return 0;
     }
     return &pSelType->wepList[eType];
@@ -749,7 +785,7 @@ static SelWep *_GetCurSelType(SelType *pSelType)
 static SelWep *_GetSelWepSelType(SelType *pSelType, int equipType)
 {
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 544);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 544);
     }
     return &pSelType->wepList[equipType];
 }
@@ -757,23 +793,15 @@ static SelWep *_GetSelWepSelType(SelType *pSelType, int equipType)
 static int _GetConfrictSelType(SelType *pSelType, int charIndex)
 {
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 551);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 551);
     }
     return pSelType->confrict[charIndex];
 }
 
-/*
- * SelType cursor positions: 0..2 are the equip types (_EquipCurIDToEquipType),
- * SEL_TYPE_CURSOR_DETERM (3) is the position _SetDetermModeSelType moves to and
- * _PassTimeSelType never steps onto, SEL_TYPE_CURSOR_LAST (4) the rightmost.
- */
-#define SEL_TYPE_CURSOR_DETERM 3
-#define SEL_TYPE_CURSOR_LAST 4
-
 static void _SetDetermModeSelType(SelType *pSelType)
 {
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 558);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 558);
     }
     _SetSelTypeCursor(pSelType, SEL_TYPE_CURSOR_DETERM);
 }
@@ -781,48 +809,41 @@ static void _SetDetermModeSelType(SelType *pSelType)
 static void _SetSpecModeSelType(SelType *pSelType, int mode)
 {
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 566);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 566);
     }
     _SetSelTypeCursor(pSelType, mode);
 }
 
-/*
- * ov12:0x00a56768 "eType != RG_EQUIP_TYPE_INVALID": the original bound on
- * _EquipCurIDToEquipType's -1 "unknown type" result, which both functions
- * below fail on.
- */
-#define RG_EQUIP_TYPE_INVALID (-1)
-
-/* "eType != RG_EQUIP_TYPE_INVALID" */
 static int _GetCurrentConfrictSelType(SelType *pSelType)
 {
     int eType;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x23F);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x23F);
     }
     eType = _EquipCurIDToEquipType(pSelType->cursor);
     if (eType == RG_EQUIP_TYPE_INVALID) {
-        assert_prog(D_00A56768, D_00A56660, 0x241);
+        assert_prog(agwsSelectAssertEquipTypeNotInvalid, agwsSelectSourcePath, 0x241);
     }
     return pSelType->confrict[eType];
 }
 
-static int _GetCurrentWeaponSelType(SelType *pSelType)
+static RgWeaponEssence *_GetCurrentWeaponSelType(SelType *pSelType)
 {
     int eType;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x24A);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x24A);
     }
     eType = _EquipCurIDToEquipType(pSelType->cursor);
     if (eType == RG_EQUIP_TYPE_INVALID) {
-        assert_prog(D_00A56768, D_00A56660, 0x24C);
+        assert_prog(agwsSelectAssertEquipTypeNotInvalid, agwsSelectSourcePath, 0x24C);
     }
     return _GetEssSelWep(&pSelType->wepList[eType]);
 }
 
-static void _GetAllSelType(SelType *pSelType, int *out)
+static void _GetAllSelType(SelType *pSelType,
+                           RgWeaponEssence **out)
 {
     unsigned int i;
 
@@ -831,18 +852,16 @@ static void _GetAllSelType(SelType *pSelType, int *out)
     }
 }
 
-extern const char D_00A56788[];
 
-/* "aszName != NIL" */
 static void _GetAllNameOnCursorSelType(SelType *pSelType, char *aszName)
 {
     unsigned int i;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x25C);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x25C);
     }
     if (aszName == 0) {
-        assert_prog(D_00A56788, D_00A56660, 0x25D);
+        assert_prog(agwsSelectAssertNameArrayNotNil, agwsSelectSourcePath, 0x25D);
     }
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         _GetNameOnCursorSelWep(&pSelType->wepList[i], aszName + i * WEP_NAME_SIZE);
@@ -851,7 +870,7 @@ static void _GetAllNameOnCursorSelType(SelType *pSelType, char *aszName)
 
 static void _CheckConfrictSelType(SelType *pSelType)
 {
-    int essences[RG_EQUIP_TYPE_NUM];
+    RgWeaponEssence *essences[RG_EQUIP_TYPE_NUM];
     unsigned int i;
 
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
@@ -862,17 +881,16 @@ static void _CheckConfrictSelType(SelType *pSelType)
     }
 }
 
-/* "pszName != NIL" */ /* * Selects the first list entry whose name equals pszName and returns 1; the * cursor is 0 while nothing matches, and the result is 0. */ static int _SetCursorByNameSelWep(SelWep *pSelWep, char *pszName);
 
 static void _SetAllCursorByNameSelType(SelType *pSelType, char *aszName)
 {
     unsigned int i;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x272);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x272);
     }
     if (aszName == 0) {
-        assert_prog(D_00A56788, D_00A56660, 0x273);
+        assert_prog(agwsSelectAssertNameArrayNotNil, agwsSelectSourcePath, 0x273);
     }
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         _SetCursorByNameSelWep(&pSelType->wepList[i], aszName + i * WEP_NAME_SIZE);
@@ -885,7 +903,7 @@ static void _InitSelType(SelType *pSelType)
     unsigned int i;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x283);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x283);
     }
     pSelType->cursor = 0;
     pSelType->oldCursor = 0;
@@ -901,7 +919,7 @@ static void _InitByCharSelType(SelType *pSelType, int charID)
     unsigned int i;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x293);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x293);
     }
     _InitSelType(pSelType);
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
@@ -911,8 +929,6 @@ static void _InitByCharSelType(SelType *pSelType, int charID)
     _CheckConfrictSelType(pSelType);
 }
 
-extern int XrgPadIsLeft(void);
-extern int XrgPadIsRight(void);
 
 static void _PassTimeSelType(SelType *pSelType, float deltaTime)
 {
@@ -921,7 +937,7 @@ static void _PassTimeSelType(SelType *pSelType, float deltaTime)
     int eType;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x2A3);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x2A3);
     }
     cursor = pSelType->cursor;
     newCursor = cursor;
@@ -957,7 +973,7 @@ static int _DetachWeaponIfConfrictSelType(SelType *pSelType)
     int i;
 
     if (pSelType == 0) {
-        assert_prog(D_00A56758, D_00A56660, 0x2CA);
+        assert_prog(agwsSelectAssertSelTypeNotNil, agwsSelectSourcePath, 0x2CA);
     }
     eType = _EquipCurIDToEquipType(pSelType->cursor);
     if (eType != RG_EQUIP_TYPE_INVALID) {
@@ -975,100 +991,71 @@ static int _DetachWeaponIfConfrictSelType(SelType *pSelType)
     return 0;
 }
 
-/* "pDisp != NIL" */
-extern const char D_00A567A8[];
-/* "fnt02on.bmp" */
-extern const char D_00A567B8[];
-/* "pTex != NIL" */
-extern const char D_00A567C8[];
-/* "frm08on.bmp" */
-extern const char D_00A567D8[];
-/* "icon_uparrow.bmp" */
-extern const char D_00A567F0[];
-/* "icon_downarrow.bmp" */
-extern void *RgBxxGetPic(RgBxx *pBxx, const char *pszName);
 
 static void _InitWepListDisp(WepListDisp *pDisp, RgBxx *pBxx)
 {
-    void *pTex;
+    struct RgBxxPic *pTex;
 
     if (pDisp == 0) {
-        assert_prog(D_00A56798, D_00A56660, 748);
+        assert_prog(agwsSelectAssertWepListDispNotNil, agwsSelectSourcePath, 748);
     }
-    pTex = RgBxxGetPic(pBxx, D_00A567A8);
+    pTex = RgBxxGetPic(pBxx, agwsSelectWepListTextureName);
     if (pTex == 0) {
-        assert_prog(D_00A567B8, D_00A56660, 751);
+        assert_prog(agwsSelectAssertTextureNotNil, agwsSelectSourcePath, 751);
     }
-    pDisp->font = _CreateSelectWepFont((int) pTex);
-    pDisp->pFrame = RgBxxGetPic(pBxx, D_00A567C8);
-    pDisp->pUpArrow = RgBxxGetPic(pBxx, D_00A567D8);
-    pDisp->pDownArrow = RgBxxGetPic(pBxx, D_00A567F0);
-    pDisp->originX = 568;
-    pDisp->originY = 168;
+    pDisp->font = _CreateSelectWepFont(pTex);
+    pDisp->pFrame = RgBxxGetPic(pBxx, agwsSelectWepListFrameTextureName);
+    pDisp->pUpArrow = RgBxxGetPic(pBxx, agwsSelectUpArrowTextureName);
+    pDisp->pDownArrow = RgBxxGetPic(pBxx, agwsSelectDownArrowTextureName);
+    pDisp->originX = WEP_LIST_ORIGIN_X;
+    pDisp->originY = WEP_LIST_ORIGIN_Y;
     pDisp->topIndex = 0;
     pDisp->pSelType = 0;
     pDisp->pSelWep = 0;
 }
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-static void _InitWepListDisp(WepListDisp *pDisp, RgBxx *pBxx);
 
-static WepListDisp *_CreateWepListDisp(int equipType)
+static WepListDisp *_CreateWepListDisp(RgBxx *pBxx)
 {
     WepListDisp *pDisp;
 
-    pDisp = RgHeapAlloc(InstanceOfRgHeap(), sizeof(WepListDisp), D_00A56660,
+    pDisp = RgHeapAlloc(InstanceOfRgHeap(), sizeof(WepListDisp), agwsSelectSourcePath,
                         767);
-    _InitWepListDisp(pDisp, equipType);
+    _InitWepListDisp(pDisp, pBxx);
     return pDisp;
 }
 
-extern void DisposeRgFont(int font);
 
-/* "pDisp != NIL" */
 static void _DestructWepListDisp(WepListDisp *pDisp)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A56798, D_00A56660, 775);
+        assert_prog(agwsSelectAssertWepListDispNotNil, agwsSelectSourcePath, 775);
     }
     if (pDisp->font != 0) {
         DisposeRgFont(pDisp->font);
     }
 }
 
-extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
-                       int line);
 
 static void _DisposeWepListDisp(WepListDisp *pDisp)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A56798, D_00A56660, 0x30F);
+        assert_prog(agwsSelectAssertWepListDispNotNil, agwsSelectSourcePath, 0x30F);
     }
     _DestructWepListDisp(pDisp);
-    RgHeapFree(InstanceOfRgHeap(), pDisp, D_00A56660, 0x311);
+    RgHeapFree(InstanceOfRgHeap(), pDisp, agwsSelectSourcePath, 0x311);
 }
 
 static void _SetSelectorWepListDisp(WepListDisp *pDisp, SelType *pSelType)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A56798, D_00A56660, 791);
+        assert_prog(agwsSelectAssertWepListDispNotNil, agwsSelectSourcePath, 791);
     }
     pDisp->pSelType = pSelType;
     pDisp->pSelWep = 0;
     pDisp->topIndex = 0;
 }
 
-extern void RgFontSetColor(int fontId, const void *color);
-extern void RgFontSetDefaultColor(int fontId);
-extern void RgFontPut(XrgPaint2D *paint, int fontId, int code, int x, int y,
-                      int flag);
-extern void XrgDispMainFont(int x, int y, const char *text, int flag);
-extern const RgFontColor s_aRed_1[2];
-extern const RgFontColor s_aWhite_2[2];
-extern const char D_00A56808[];
-extern const char D_00A56820[];
 
 static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
                              int ofsY)
@@ -1078,7 +1065,7 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
     int yBase;
     int cursor;
     int essSize;
-    int *pSlot;
+    RgWeaponEssence **pSlot;
     int endIdx;
     int maxTop;
     int x;
@@ -1087,14 +1074,14 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
     int selected;
     int confrict;
     int topIndex;
-    int *essList;
+    RgWeaponEssence **essList;
     unsigned int curConfrict;
-    int ess;
+    RgWeaponEssence *ess;
     SelWep *pCur;
-    int essences[4];
+    RgWeaponEssence *essences[RG_EQUIP_TYPE_NUM + 1];
 
     if (pDisp == 0) {
-        assert_prog(D_00A56798, D_00A56660, 813);
+        assert_prog(agwsSelectAssertWepListDispNotNil, agwsSelectSourcePath, 813);
     }
     if (pDisp->pSelType == 0) {
         return;
@@ -1119,7 +1106,7 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
     if (topIndex < cursor - 4) {
         topIndex = cursor - 4;
     }
-    maxTop = essSize - 7;
+    maxTop = essSize - WEP_LIST_ROWS;
     if (maxTop < 0) {
         maxTop = 0;
     }
@@ -1134,7 +1121,7 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
     xBase = x;
     yBase = y;
     essList = _GetEssListSelWep(pCur);
-    endIdx = topIndex + 7;
+    endIdx = topIndex + WEP_LIST_ROWS;
 
     for (i = topIndex; i < endIdx && i < essSize; i++) {
         selected = (i == cursor);
@@ -1144,39 +1131,39 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
         confrict = _CheckEquipWeps(essences, equipType);
         if (selected != 0) {
             XrgPaint2DUseTexture(paint, pDisp->pFrame);
-            XrgPaint2DAlpha(paint, 0);
-            XrgPaint2DDrawXYWH(paint, 32, x - 9, y - 8, 0, 0);
+            XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
+            XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, x - 9, y - 8, 0, 0);
         }
         if (!confrict) {
             RgFontSetColor(pDisp->font, &s_aWhite_2[selected]);
         } else {
             RgFontSetColor(pDisp->font, &s_aRed_1[selected]);
         }
-        RgFontStr(paint, pDisp->font, (const char *)ess + 816, x, y, 0);
-        y += 23;
+        RgFontStr(paint, pDisp->font, ess->databaseName, x, y, 0);
+        y += WEP_LIST_ROW_HEIGHT;
     }
 
     if (topIndex < cursor) {
         x += 108;
-        y = yBase - _SinGet(4) + 58;
+        y = yBase - _SinGet(SEL_ARROW_BOB) + 58;
         XrgPaint2DUseTexture(paint, pDisp->pUpArrow);
-        XrgPaint2DAlpha(paint, 0);
-        XrgPaint2DDrawXYWH(paint, 32, x, y, 0, 0);
+        XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
     }
     if (cursor < essSize - 1) {
         x = xBase + 108;
-        y = yBase + _SinGet(4) + 102;
+        y = yBase + _SinGet(SEL_ARROW_BOB) + 102;
         XrgPaint2DUseTexture(paint, pDisp->pDownArrow);
-        XrgPaint2DAlpha(paint, 0);
-        XrgPaint2DDrawXYWH(paint, 32, x, y, 0, 0);
+        XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
     }
 
     RgFontSetDefaultColor(pDisp->font);
     if (topIndex > 0) {
-        RgFontPut(paint, pDisp->font, 64, xBase + 32, yBase - 20, 1);
+        RgFontPut(paint, pDisp->font, WEP_FONT_MORE_ABOVE, xBase + 32, yBase - 20, 1);
     }
-    if (topIndex < essSize - 7) {
-        RgFontPut(paint, pDisp->font, 33, xBase + 32, yBase + 156, 1);
+    if (topIndex < essSize - WEP_LIST_ROWS) {
+        RgFontPut(paint, pDisp->font, WEP_FONT_MORE_BELOW, xBase + 32, yBase + 156, 1);
     }
 
     x = xBase - 48;
@@ -1184,21 +1171,13 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
     ess = _GetCurrentWeaponSelType(pDisp->pSelType);
     curConfrict = _GetCurrentConfrictSelType(pDisp->pSelType);
     if (!curConfrict) {
-        XrgDispMainFont(x, y, (const char *)ess + 848, 0);
+        XrgDispMainFont(x, y, ess->displayName, 0);
     } else if (curConfrict & (1 << equipType)) {
-        XrgDispMainFont(x, y, D_00A56808, 0);
+        XrgDispMainFont(x, y, agwsSelectCannotEquipForBattleText, 0);
     } else {
-        XrgDispMainFont(x, y, D_00A56820, 0);
+        XrgDispMainFont(x, y, agwsSelectCannotEquipTogetherText, 0);
     }
 }
-
-/* "pSelDat != NIL" */
-/*
- * InitRgSelectAGWSData (ov12:0x00a3c248) is still INCLUDE_ASM; this call
- * only forwards the confrict scratch address below, so no stronger
- * prototype is evidenced within this allocation.
- */
-extern void InitRgSelectAGWSData(int *confrict);
 
 static void _InitSelectData(SelDat *pSelDat)
 {
@@ -1208,58 +1187,42 @@ static void _InitSelectData(SelDat *pSelDat)
     pSelChar = &pSelDat->selChar;
     pSelType = &pSelDat->selType;
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 0x3CD);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 0x3CD);
     }
-    pSelDat->mode = 0;
+    pSelDat->mode = SEL_MODE_CHAR;
     pSelDat->playerMode = 0;
     _InitSelectChar(pSelChar);
     _InitSelType(pSelType);
     _InitByCharSelType(pSelType, _GetSelectChar(pSelChar));
-    InitRgSelectAGWSData(&pSelType->confrict[3]);
+    InitRgSelectAGWSData(&pSelDat->base);
 }
 
-extern void XrgLog(const char *format, const char *sourceFile, int line, ...);
-/* ov12:0x00a56848 "---------------- %s %d ----------------------\n" */
-extern const char D_00A56848[];
-/* ov12:0x00a56878 "char %d (selectable %x)\n" */
-extern const char D_00A56878[];
-/* ov12:0x00a56898 "   **** char %d type %d : '%s' ***\n" */
-extern const char D_00A56898[];
-
-static void _DumpSelect__(SelDumpData *pData, const char *pszTitle, int nValue)
+static void _DumpSelect__(struct RgSelectAGWSData *pData, const char *pszTitle, int nValue)
 {
     unsigned int i;
     unsigned int j;
 
-    XrgLog(D_00A56848, D_00A56660, 0x3DD, pszTitle, nValue);
-    XrgLog(D_00A56878, D_00A56660, 0x3DE, pData->selChar.cursor, pData->selChar.selectableMask);
+    XrgLog(agwsSelectDumpTitleFormat, agwsSelectSourcePath, 0x3DD, pszTitle, nValue);
+    XrgLog(agwsSelectDumpCharacterFormat, agwsSelectSourcePath, 0x3DE, pData->selectedCharacter, pData->availableCharacters);
     for (i = 0; i < RG_ACTOR_CHAR_NUM; i++) {
         for (j = 0; j < RG_EQUIP_TYPE_NUM; j++) {
-            XrgLog(D_00A56898, D_00A56660, 0x3E1, i, j, pData->weaponName[i][j]);
+            XrgLog(agwsSelectDumpWeaponNameFormat, agwsSelectSourcePath, 0x3E1, i, j, pData->weaponName[i][j]);
         }
     }
 }
 
-/* "pData != NIL" */
-static void _SaveCharSelectData(SelDat *pSelDat, int *pData)
+static void _SaveCharSelectData(SelDat *pSelDat,
+                                struct RgSelectAGWSData *pData)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 0x3E9);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 0x3E9);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 0x3EA);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 0x3EA);
     }
-    pData[0] = _GetSelectChar(&pSelDat->selChar);
-    pData[1] = _GetSelectableSelectChar(&pSelDat->selChar);
+    pData->selectedCharacter = _GetSelectChar(&pSelDat->selChar);
+    pData->availableCharacters = _GetSelectableSelectChar(&pSelDat->selChar);
 }
-
-/*
- * Layout of one character's slot inside the save area _SaveToBaseData passes:
- * RG_EQUIP_TYPE_NUM weapon names of WEP_NAME_SIZE bytes each (defined with
- * _GetAllNameOnCursorSelType above), the first slot starting two
- * words after the character data _SaveCharSelectData stores.
- */
-#define WEP_NAME_LIST_OFFSET 8
 
 /*
  * The result is declared int although no caller (_TransitToCharSelect and
@@ -1268,100 +1231,89 @@ static void _SaveCharSelectData(SelDat *pSelDat, int *pData)
  * own epilogue, instead of releasing the frame and jumping to it as a void
  * result would allow.
  */
-static int _SaveWepSelectData(SelDat *pSelDat, int *pData)
+static int _SaveWepSelectData(SelDat *pSelDat,
+                              struct RgSelectAGWSData *pData)
 {
     SelType *pSelType;
     int charID;
     int nameIndex;
 
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1012);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1012);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 1013);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 1013);
     }
     charID = _GetSelectChar(&pSelDat->selChar);
     pSelType = &pSelDat->selType;
     nameIndex = charID * RG_EQUIP_TYPE_NUM;
     if ((unsigned int) charID < RG_ACTOR_CHAR_NUM) {
-        _GetAllNameOnCursorSelType(pSelType,
-                                   (char *) pData + WEP_NAME_LIST_OFFSET +
-                                       nameIndex * WEP_NAME_SIZE);
+        /* nameIndex counts name rows: character * equip types. */
+        _GetAllNameOnCursorSelType(pSelType, pData->weaponName[0][nameIndex]);
     }
 }
 
-/* "pData != NIL" */
-static void _LoadCharSelectData(SelDat *pSelDat, int *pData)
+static void _LoadCharSelectData(SelDat *pSelDat,
+                                struct RgSelectAGWSData *pData)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1027);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1027);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 1028);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 1028);
     }
-    _SetCharSelectChar(&pSelDat->selChar, pData[0]);
-    _SetSelectableSelectChar(&pSelDat->selChar, pData[1]);
+    _SetCharSelectChar(&pSelDat->selChar, pData->selectedCharacter);
+    _SetSelectableSelectChar(&pSelDat->selChar, pData->availableCharacters);
 }
 
 /*
- * Declared int for the same reason as _SaveWepSelectData below: the original
+ * Declared int for the same reason as _SaveWepSelectData above: the original
  * enters _SetAllCursorByNameSelType with jal and returns through its own
  * epilogue instead of tail-jumping to it.
  */
-static int _LoadWepSelectData(SelDat *pSelDat, int *pData)
+static int _LoadWepSelectData(SelDat *pSelDat,
+                              struct RgSelectAGWSData *pData)
 {
     SelType *pSelType;
     int charID;
 
     pSelType = &pSelDat->selType;
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 0x40E);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 0x40E);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 0x40F);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 0x40F);
     }
     charID = _GetSelectChar(&pSelDat->selChar);
     _InitByCharSelType(pSelType, charID);
     if ((unsigned int) charID < RG_ACTOR_CHAR_NUM) {
-        _SetAllCursorByNameSelType(pSelType,
-                                   (char *) pData + WEP_NAME_LIST_OFFSET +
-                                       charID * RG_EQUIP_TYPE_NUM * WEP_NAME_SIZE);
+        _SetAllCursorByNameSelType(pSelType, pData->weaponName[charID][0]);
     }
 }
 
-extern const char D_00A568D0[];
 
-/* "pResult != NIL" */
-/*
- * The 0x248-byte select-data block as doublewords: the 8-byte alignment of
- * this view makes the struct copy below move the block with doubleword
- * loads and stores, as the original does.
- */
-typedef struct SelDumpWords {
-    u64 word[0x248 / 8];
-} SelDumpWords;
-
-static void _GetBaseSelectData(SelDat *pSelDat, void *pResult)
+static void _GetBaseSelectData(SelDat *pSelDat,
+                               struct RgSelectAGWSData *pResult)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1058);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1058);
     }
     if (pResult == 0) {
-        assert_prog(D_00A568D0, D_00A56660, 1059);
+        assert_prog(agwsSelectAssertResultNotNil, agwsSelectSourcePath, 1059);
     }
-    *(SelDumpWords *) pResult = *(SelDumpWords *) &pSelDat->selType.confrict[3];
+    *(RgSelectAGWSDataWords *) pResult = *(RgSelectAGWSDataWords *) &pSelDat->base;
 }
 
-/* "pData != NIL" */
-static void _SetBaseSelectData(SelDat *pSelDat, void *pData)
+static void _SetBaseSelectData(SelDat *pSelDat,
+                               struct RgSelectAGWSData *pData)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1068);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1068);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 1069);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 1069);
     }
-    *(SelDumpWords *) &pSelDat->selType.confrict[3] = *(SelDumpWords *) pData;
+    *(RgSelectAGWSDataWords *) &pSelDat->base = *(RgSelectAGWSDataWords *) pData;
     _LoadCharSelectData(pSelDat, pData);
     _LoadWepSelectData(pSelDat, pData);
 }
@@ -1369,7 +1321,7 @@ static void _SetBaseSelectData(SelDat *pSelDat, void *pData)
 static int _GetModeSelectData(SelDat *pSelDat)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1084);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1084);
     }
     return pSelDat->mode;
 }
@@ -1378,7 +1330,7 @@ static SelDat *_CreateSelectData(void)
 {
     SelDat *pSelDat;
 
-    pSelDat = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SelDat), D_00A56660,
+    pSelDat = RgHeapAlloc(InstanceOfRgHeap(), sizeof(SelDat), agwsSelectSourcePath,
                           1091);
     _InitSelectData(pSelDat);
     return pSelDat;
@@ -1387,63 +1339,61 @@ static SelDat *_CreateSelectData(void)
 static void _DisposeSelectData(SelDat *pSelDat)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1099);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1099);
     }
-    RgHeapFree(InstanceOfRgHeap(), pSelDat, D_00A56660, 1100);
+    RgHeapFree(InstanceOfRgHeap(), pSelDat, agwsSelectSourcePath, 1100);
 }
 
-/* "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP" */
 static void _TransitToWeaponSelect(SelDat *pSel)
 {
-    int *pData;
+    struct RgSelectAGWSData *pData;
 
-    pData = &pSel->selType.confrict[3];
+    pData = &pSel->base;
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 0x452);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x452);
     }
     if (_GetSelectChar(&pSel->selChar) == RG_ACTOR_CHAR_NOP) {
-        assert_prog(D_00A568F0, D_00A56660, 0x453);
+        assert_prog(agwsSelectAssertInCharNotNop, agwsSelectSourcePath, 0x453);
     }
-    pSel->mode = 1;
+    pSel->mode = SEL_MODE_WEAPON;
     _SaveCharSelectData(pSel, pData);
     _LoadWepSelectData(pSel, pData);
 }
 
 static void _TransitToCharSelect(SelDat *pSel)
 {
-    int *pData;
+    struct RgSelectAGWSData *pData;
 
-    pData = &pSel->selType.confrict[3];
+    pData = &pSel->base;
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 0x462);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x462);
     }
     _SaveWepSelectData(pSel, pData);
     _LoadCharSelectData(pSel, pData);
-    pSel->mode = 0;
+    pSel->mode = SEL_MODE_CHAR;
 }
 
 static void _SaveToBaseData(SelDat *pSel)
 {
-    int *pData;
+    struct RgSelectAGWSData *pData;
 
-    pData = &pSel->selType.confrict[3];
+    pData = &pSel->base;
     _SaveWepSelectData(pSel, pData);
     _SaveCharSelectData(pSel, pData);
 }
 
-/* "pSel != NIL" */
 static void _TransitToOffSelect(SelDat *pSel)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 1143);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 1143);
     }
-    pSel->mode = 2;
+    pSel->mode = SEL_MODE_OFF;
 }
 
 static void _SetPlayerModeSelectData(SelDat *pSelDat, int mode)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 1150);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 1150);
     }
     pSelDat->playerMode = mode;
 }
@@ -1451,17 +1401,16 @@ static void _SetPlayerModeSelectData(SelDat *pSelDat, int mode)
 static int _GetPlayerModeSelectData(SelDat *pSel)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 1157);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 1157);
     }
     return pSel->playerMode;
 }
 
-extern void XrgPadSetID(int pad_id);
 
 static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 1164);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 1164);
     }
     if (pSel->playerMode == 0) {
         XrgPadSetID(0);
@@ -1469,11 +1418,11 @@ static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
         XrgPadSetID(1);
     }
     switch (pSel->mode) {
-    case 1:
+    case SEL_MODE_WEAPON:
         _PassTimeSelType(&pSel->selType, deltaTime);
         return;
     do {
-    case 0:
+    case SEL_MODE_CHAR:
         _PassTimeSelectChar(&pSel->selChar, deltaTime);
         return;
     } while (0);
@@ -1483,18 +1432,20 @@ static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
 static int _GetSelectCharID(SelDat *pSelDat)
 {
     if (pSelDat == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 1187);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 1187);
     }
     return _GetSelectChar(&pSelDat->selChar);
 }
 
-static void _GetSelectWeps(SelDat *pSel, int *essences, int *confricts)
+static void _GetSelectWeps(SelDat *pSel,
+                           RgWeaponEssence **essences,
+                           int *confricts)
 {
     SelType *pSelType;
     unsigned int i;
 
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 0x4AC);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x4AC);
     }
     pSelType = &pSel->selType;
     _GetAllSelType(pSelType, essences);
@@ -1503,10 +1454,11 @@ static void _GetSelectWeps(SelDat *pSel, int *essences, int *confricts)
     }
 }
 
-static int _GetWepSelection(SelDat *pSelDat, int *apCollects)
+static int _GetWepSelection(SelDat *pSelDat,
+                            RgWeaponEssence **apCollects)
 {
     SelWep *pSelWep;
-    int *essList;
+    RgWeaponEssence **essList;
     unsigned int i;
     int confrictMask;
 
@@ -1514,7 +1466,7 @@ static int _GetWepSelection(SelDat *pSelDat, int *apCollects)
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         pSelWep = _GetSelWepSelType(&pSelDat->selType, i);
         if (pSelWep == 0) {
-            assert_prog(D_00A56698, D_00A56660, 0x4C0);
+            assert_prog(agwsSelectAssertSelWepNotNil, agwsSelectSourcePath, 0x4C0);
         }
         essList = _GetEssListSelWep(pSelWep);
         if (_GetConfrictSelType(&pSelDat->selType, i) != 0) {
@@ -1528,24 +1480,21 @@ static int _GetWepSelection(SelDat *pSelDat, int *apCollects)
     return confrictMask;
 }
 
-/* ov12:0x00a56938 / 0x00a56948: the picture names for player modes 0 and 1. */
-extern const char D_00A56938[];
-extern const char D_00A56948[];
 
 static void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode)
 {
-    void *pic;
+    struct RgBxxPic *pic;
 
     pic = 0;
     if (pBxx == 0) {
-        assert_prog(D_00A56928, D_00A56660, 0x4D4);
+        assert_prog(agwsSelectAssertBxxNotNil, agwsSelectSourcePath, 0x4D4);
     }
     switch (playerMode) {
     case 0:
-        pic = RgBxxGetPic(pBxx, D_00A56938);
+        pic = RgBxxGetPic(pBxx, agwsSelectPlayer1FrameTextureName);
         break;
     case 1:
-        pic = RgBxxGetPic(pBxx, D_00A56948);
+        pic = RgBxxGetPic(pBxx, agwsSelectPlayer2FrameTextureName);
         break;
     }
     if (pic != 0) {
@@ -1553,16 +1502,6 @@ static void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode)
     }
 }
 
-typedef struct RgSelCharPicEntry {
-    int m_idx[6];
-} RgSelCharPicEntry;
-extern const RgSelCharPicEntry s_ainPics_3[6];
-extern const char D_00A56958[];
-extern void *RgPicListGetPic(RgPicList *pList, int index);
-extern void RgPicSetAlpha(void *pPic, int alpha);
-extern void RgPicNotDraw(void *pPic, int notDraw);
-extern void RgPicSetDark(void *pPic, int dark);
-extern void RgPicSetOfsXY(void *pPic, int ofsX, int ofsY);
 
 static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
 {
@@ -1574,15 +1513,15 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
     int off;
     void *pA;
     void *pB;
-    void *pUp;
+    RgPic *pUp;
     const char *table = (const char *) s_ainPics_3;
-    void *pDown;
+    RgPic *pDown;
 
     if (pList == 0) {
-        assert_prog(D_00A56958, D_00A56660, 1292);
+        assert_prog(agwsSelectAssertListNotNil, agwsSelectSourcePath, 1292);
     }
     if (pSelChar == 0) {
-        assert_prog(D_00A56650, D_00A56660, 1293);
+        assert_prog(agwsSelectAssertSelCharNotNil, agwsSelectSourcePath, 1293);
     }
     i = 0;
     off = 0;
@@ -1590,11 +1529,11 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
     cursor = _GetSelectCursor(pSelChar);
     selectable = _GetSelectableSelectChar(pSelChar);
 
-    for (; i < 6; i++, off += 24) {
-        if ((unsigned int) i < 6) {
-            void *pC;
-            void *pD;
-            void *pE;
+    for (; i < RG_ACTOR_CHAR_NUM; i++, off += 24) {
+        if ((unsigned int) i < RG_ACTOR_CHAR_NUM) {
+            RgPic *pC;
+            RgPic *pD;
+            RgPic *pE;
             pA = RgPicListGetPic(pList, ((const RgSelCharPicEntry *) (table + off))->m_idx[2]);
             table = pA;
             if (pA != 0) {
@@ -1658,12 +1597,12 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
         }
     }
 
-    flag = (cursor != 6);
+    flag = (cursor != SEL_CHAR_CURSOR_NOP);
     RgPicSetDark(RgPicListGetPic(pList, 44), flag);
     RgPicSetDark(RgPicListGetPic(pList, 57), flag);
 
-    for (i = 0; 6 > i; i++) {
-        if ((unsigned int) i < 6) {
+    for (i = 0; RG_ACTOR_CHAR_NUM > i; i++) {
+        if ((unsigned int) i < RG_ACTOR_CHAR_NUM) {
             pA = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[0]);
             pB = RgPicListGetPic(pList, s_ainPics_3[i].m_idx[1]);
             if (pA != 0) {
@@ -1692,7 +1631,7 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
             } else {
                 RgPicNotDraw(pUp, 1);
             }
-            RgPicSetOfsXY(pUp, 0, -_SinGet(4));
+            RgPicSetOfsXY(pUp, 0, -_SinGet(SEL_ARROW_BOB));
         }
     }
     {
@@ -1704,104 +1643,66 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
             } else {
                 RgPicNotDraw(pDown, 1);
             }
-            RgPicSetOfsXY(pDown, 0, _SinGet(4));
+            RgPicSetOfsXY(pDown, 0, _SinGet(SEL_ARROW_BOB));
         }
     }
 }
 
-extern const char D_00A56968[]; /* "frm11on_ul.bmp" */
-extern const char D_00A56978[]; /* "frm11on_ur.bmp" */
-extern const char D_00A56988[]; /* "frm11on_bl.bmp" */
-extern const char D_00A56998[]; /* "frm11on_br.bmp" */
-extern const char D_00A569A8[]; /* "frm11on_cl.bmp" */
-extern const char D_00A569B8[]; /* "frm11on_cr.bmp" */
-extern const char D_00A569C8[]; /* "frm11on_cc.bmp" */
-extern const char D_00A569D8[]; /* "icon_leftarrow.bmp" */
-extern const char D_00A569F0[]; /* "icon_rightarrow.bmp" */
-extern const char D_00A56A08[]; /* "say_yes.bmp" */
-extern const char D_00A56A18[]; /* "say_no.bmp" */
-extern const char D_00A56A28[]; /* "pWinInfo->m_pTop[0] != NIL" */
-extern const char D_00A56A48[]; /* "pWinInfo->m_pTop[1] != NIL" */
-extern const char D_00A56A68[]; /* "pWinInfo->m_pBtm[0] != NIL" */
-extern const char D_00A56A88[]; /* "pWinInfo->m_pBtm[1] != NIL" */
-extern const char D_00A56AA8[]; /* "pWinInfo->m_pSide[0] != NIL" */
-extern const char D_00A56AC8[]; /* "pWinInfo->m_pSide[1] != NIL" */
-extern const char D_00A56AE8[]; /* "pWinInfo->m_pInner != NIL" */
-extern const char D_00A56B08[]; /* "pWinInfo->m_pLeft != NIL" */
-extern const char D_00A56B28[]; /* "pWinInfo->m_pRight != NIL" */
-extern const char D_00A56B48[]; /* "pWinInfo->m_pMaru != NIL" */
-extern const char D_00A56B68[]; /* "pWinInfo->m_pBatu != NIL" */
 
 static void _InitDetermWin(WinInfo *pWinInfo, RgBxx *pBxx, int value0, int value1)
 {
-    void *pBatu;
+    struct RgBxxPic *pBatu;
 
-    pWinInfo->m_pTop[0] = RgBxxGetPic(pBxx, D_00A56968);
-    pWinInfo->m_pTop[1] = RgBxxGetPic(pBxx, D_00A56978);
-    pWinInfo->m_pBtm[0] = RgBxxGetPic(pBxx, D_00A56988);
-    pWinInfo->m_pBtm[1] = RgBxxGetPic(pBxx, D_00A56998);
-    pWinInfo->m_pSide[0] = RgBxxGetPic(pBxx, D_00A569A8);
-    pWinInfo->m_pSide[1] = RgBxxGetPic(pBxx, D_00A569B8);
-    pWinInfo->m_pInner = RgBxxGetPic(pBxx, D_00A569C8);
-    pWinInfo->m_pLeft = RgBxxGetPic(pBxx, D_00A569D8);
-    pWinInfo->m_pRight = RgBxxGetPic(pBxx, D_00A569F0);
-    pWinInfo->m_pMaru = RgBxxGetPic(pBxx, D_00A56A08);
-    pBatu = RgBxxGetPic(pBxx, D_00A56A18);
+    pWinInfo->m_pTop[0] = RgBxxGetPic(pBxx, agwsSelectDetermFrameTopLeftTextureName);
+    pWinInfo->m_pTop[1] = RgBxxGetPic(pBxx, agwsSelectDetermFrameTopRightTextureName);
+    pWinInfo->m_pBtm[0] = RgBxxGetPic(pBxx, agwsSelectDetermFrameBottomLeftTextureName);
+    pWinInfo->m_pBtm[1] = RgBxxGetPic(pBxx, agwsSelectDetermFrameBottomRightTextureName);
+    pWinInfo->m_pSide[0] = RgBxxGetPic(pBxx, agwsSelectDetermFrameSideLeftTextureName);
+    pWinInfo->m_pSide[1] = RgBxxGetPic(pBxx, agwsSelectDetermFrameSideRightTextureName);
+    pWinInfo->m_pInner = RgBxxGetPic(pBxx, agwsSelectDetermFrameInnerTextureName);
+    pWinInfo->m_pLeft = RgBxxGetPic(pBxx, agwsSelectLeftArrowTextureName);
+    pWinInfo->m_pRight = RgBxxGetPic(pBxx, agwsSelectRightArrowTextureName);
+    pWinInfo->m_pMaru = RgBxxGetPic(pBxx, agwsSelectYesTextureName);
+    pBatu = RgBxxGetPic(pBxx, agwsSelectNoTextureName);
     pWinInfo->m_nValue0 = value0;
     pWinInfo->m_pBatu = pBatu;
     pWinInfo->m_nValue1 = value1;
     if (pWinInfo->m_pTop[0] == 0) {
-        assert_prog(D_00A56A28, D_00A56660, 1434);
+        assert_prog(agwsSelectAssertWinTopLeftNotNil, agwsSelectSourcePath, 1434);
     }
     if (pWinInfo->m_pTop[1] == 0) {
-        assert_prog(D_00A56A48, D_00A56660, 1435);
+        assert_prog(agwsSelectAssertWinTopRightNotNil, agwsSelectSourcePath, 1435);
     }
     if (pWinInfo->m_pBtm[0] == 0) {
-        assert_prog(D_00A56A68, D_00A56660, 1436);
+        assert_prog(agwsSelectAssertWinBottomLeftNotNil, agwsSelectSourcePath, 1436);
     }
     if (pWinInfo->m_pBtm[1] == 0) {
-        assert_prog(D_00A56A88, D_00A56660, 1437);
+        assert_prog(agwsSelectAssertWinBottomRightNotNil, agwsSelectSourcePath, 1437);
     }
     if (pWinInfo->m_pSide[0] == 0) {
-        assert_prog(D_00A56AA8, D_00A56660, 1438);
+        assert_prog(agwsSelectAssertWinSideLeftNotNil, agwsSelectSourcePath, 1438);
     }
     if (pWinInfo->m_pSide[1] == 0) {
-        assert_prog(D_00A56AC8, D_00A56660, 1439);
+        assert_prog(agwsSelectAssertWinSideRightNotNil, agwsSelectSourcePath, 1439);
     }
     if (pWinInfo->m_pInner == 0) {
-        assert_prog(D_00A56AE8, D_00A56660, 1440);
+        assert_prog(agwsSelectAssertWinInnerNotNil, agwsSelectSourcePath, 1440);
     }
     if (pWinInfo->m_pLeft == 0) {
-        assert_prog(D_00A56B08, D_00A56660, 1441);
+        assert_prog(agwsSelectAssertWinLeftArrowNotNil, agwsSelectSourcePath, 1441);
     }
     if (pWinInfo->m_pRight == 0) {
-        assert_prog(D_00A56B28, D_00A56660, 1442);
+        assert_prog(agwsSelectAssertWinRightArrowNotNil, agwsSelectSourcePath, 1442);
     }
     if (pWinInfo->m_pMaru == 0) {
-        assert_prog(D_00A56B48, D_00A56660, 1443);
+        assert_prog(agwsSelectAssertWinYesNotNil, agwsSelectSourcePath, 1443);
     }
     if (pWinInfo->m_pBatu == 0) {
-        assert_prog(D_00A56B68, D_00A56660, 1444);
+        assert_prog(agwsSelectAssertWinNoNotNil, agwsSelectSourcePath, 1444);
     }
 }
 
-extern const char D_00A56B88[];
-extern const char D_00A56B90[];
-extern const char D_00A56B98[];
-extern const char D_00A56BA0[];
-extern const char D_00A56BA8[];
 
-#define WEP_ESSENCE_DETERM_TEXT_OFFSET 848
-
-typedef struct RgBxxPicSize RgBxxPicSize;
-
-struct RgBxxPicSize {
-    unsigned char unmodeled_000[0x34];
-    int width;  /* +0x34 */
-    int height; /* +0x38 */
-};
-
-extern void XrgDispMainFont(int x, int y, const char *text, int color);
 
 static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
                               SelDat *pSelDat)
@@ -1810,10 +1711,10 @@ static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
     int innerX;
     unsigned int i;
     unsigned int j;
-    int apCollects[RG_EQUIP_TYPE_NUM];
-    RgBxxPicSize *inner;
-    RgBxxPicSize *side1;
-    RgBxxPicSize *side0;
+    RgWeaponEssence *apCollects[RG_EQUIP_TYPE_NUM];
+    struct RgBxxPic *inner;
+    struct RgBxxPic *side1;
+    struct RgBxxPic *side0;
     int buttonX;
     int y;
     int x;
@@ -1830,10 +1731,10 @@ static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
     originX = x;
     baseY = y;
     _disp_pic(paint, pWinInfo->m_pTop[1],
-              x + ((RgBxxPicSize *) pWinInfo->m_pTop[0])->width, y);
-    coord = y + ((RgBxxPicSize *) pWinInfo->m_pTop[1])->height;
+              x + pWinInfo->m_pTop[0]->width, y);
+    coord = y + pWinInfo->m_pTop[1]->height;
     y = coord;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < DETERM_WINDOW_ROWS; i++) {
         side0 = pWinInfo->m_pSide[0];
         side1 = pWinInfo->m_pSide[1];
         inner = pWinInfo->m_pInner;
@@ -1843,7 +1744,7 @@ static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
         y = y + inner->height;
     }
     _disp_pic(paint, pWinInfo->m_pBtm[0], x, y);
-    x += ((RgBxxPicSize *) pWinInfo->m_pBtm[0])->width;
+    x += pWinInfo->m_pBtm[0]->width;
     buttonX = originX + 281;
     _disp_pic(paint, pWinInfo->m_pBtm[1], x, y);
     y = 183;
@@ -1856,35 +1757,33 @@ static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
     for (j = 0; j < RG_EQUIP_TYPE_NUM; j++) {
         switch (j) {
         case 0:
-            XrgDispMainFont(184, y, D_00A56B88, 0);
+            XrgDispMainFont(DETERM_LABEL_X, y, agwsSelectDetermLabelFullWidthL, 0);
             break;
         case 1:
-            XrgDispMainFont(184, y, D_00A56B90, 0);
+            XrgDispMainFont(DETERM_LABEL_X, y, agwsSelectDetermLabelFullWidthR, 0);
             break;
         case 2:
-            XrgDispMainFont(184, y, D_00A56B98, 0);
+            XrgDispMainFont(DETERM_LABEL_X, y, agwsSelectDetermLabelFullWidthLR, 0);
             break;
         }
-        XrgDispMainFont(232, y,
-                        (const char *) (apCollects[j] +
-                                        WEP_ESSENCE_DETERM_TEXT_OFFSET),
+        XrgDispMainFont(DETERM_NAME_X, y,
+                        apCollects[j]->displayName,
                         charID & (1u << j));
-        y += 26;
+        y += DETERM_ROW_HEIGHT;
     }
-    XrgDispMainFont(372, y + 12, D_00A56BA0, 0);
-    XrgDispMainFont(372, y + 36, D_00A56BA8, 0);
+    XrgDispMainFont(372, y + 12, agwsSelectDetermConfirmText, 0);
+    XrgDispMainFont(372, y + 36, agwsSelectDetermCancelText, 0);
 }
 
-/* "pDat->m_apPic[1] != NIL" */
 static void _InitFloatArrowHori(FloatArrow *pDat, RgBxx *pBxx)
 {
-    pDat->m_apPic[0] = RgBxxGetPic(pBxx, D_00A569D8);
-    pDat->m_apPic[1] = RgBxxGetPic(pBxx, D_00A569F0);
+    pDat->m_apPic[0] = RgBxxGetPic(pBxx, agwsSelectLeftArrowTextureName);
+    pDat->m_apPic[1] = RgBxxGetPic(pBxx, agwsSelectRightArrowTextureName);
     if (pDat->m_apPic[0] == 0) {
-        assert_prog(D_00A56BB0, D_00A56660, 1534);
+        assert_prog(agwsSelectAssertArrowPicLeftNotNil, agwsSelectSourcePath, 1534);
     }
     if (pDat->m_apPic[1] == 0) {
-        assert_prog(D_00A56BC8, D_00A56660, 1535);
+        assert_prog(agwsSelectAssertArrowPicRightNotNil, agwsSelectSourcePath, 1535);
     }
     pDat->visibility_mask = 0;
     pDat->m_aiX[0] = 0;
@@ -1910,65 +1809,35 @@ static void _SetFloatArrowPos(FloatArrow *arrow, int first_x, int first_y,
     arrow->m_aiY[1] = second_y + offset_y;
 }
 
-extern void RgFontSetColor(int fontId, const void *color);
-extern void RgFontSetDefaultColor(int fontId);
-extern void RgFontPut(XrgPaint2D *paint, int fontId, int code, int x, int y,
-                      int flag);
-extern void XrgDispMainFont(int x, int y, const char *text, int flag);
-extern const RgFontColor s_aRed_1[2];
-extern const RgFontColor s_aWhite_2[2];
-extern const char D_00A56808[];
-extern const char D_00A56820[];
 
 static void _DispFloatArrow(XrgPaint2D *paint, FloatArrow *pDat)
 {
     int aOfs[2] = {-1, 1};
     unsigned int i;
-    void *pic;
+    struct RgBxxPic *pic;
 
     for (i = 0; i < 2; i++) {
         if (pDat->visibility_mask & (1 << i)) {
             pic = pDat->m_apPic[i];
             if (pic != 0) {
                 _disp_pic(paint, pic,
-                          pDat->m_aiX[i] + aOfs[i] * _SinGet(4),
+                          pDat->m_aiX[i] + aOfs[i] * _SinGet(SEL_ARROW_BOB),
                           pDat->m_aiY[i]);
             }
         }
     }
 }
 
-extern void *RgPicListGetPic(RgPicList *pList, int index);
-extern void RgPicNotDraw(void *pic, int notDraw);
-extern void RgPicSetDark(void *pic, int dark);
-extern void RgPicSetAlpha(void *pic, int alpha);
 
-typedef struct SelWepPicIdx { int m_idx[3]; } SelWepPicIdx;
-
-/* A 4-component color copied as two doublewords (ld/sd); its components are
- * only read by RgPicSetColor. */
-typedef union SelWepColor {
-    long long halves[2];
-    int channels[4];
-} SelWepColor;
-
-extern void RgPicSetColor(void *pic, const SelWepColor *color);
-extern const SelWepPicIdx D_00A56BE8;
-/* 3 picture indices, one per equip type */
-extern SelWepColor D_00A56C00;
-/* confrict color */
-extern SelWepColor D_00A56C10;
-
-/* normal color */
 static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
 {
     unsigned int slot;
     unsigned int cursor;
     SelWepPicIdx picIdx;
 
-    picIdx = D_00A56BE8;
-    if (_GetModeSelectData(pSelDat) == 1) {
-        void *pic;
+    picIdx = agwsSelectWepPicIndexTable;
+    if (_GetModeSelectData(pSelDat) == SEL_MODE_WEAPON) {
+        RgPic *pic;
         int equipType;
         SelType *pSelType = &pSelDat->selType;
         const SelWepColor *pConfrictColor;
@@ -1980,12 +1849,12 @@ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
         RgPicNotDraw(RgPicListGetPic(pList, 18), 1);
         RgPicNotDraw(RgPicListGetPic(pList, 4), 1);
         RgPicNotDraw(RgPicListGetPic(pList, 3), 1);
-        pConfrictColor = &D_00A56C00;
-        pNormalColor = &D_00A56C10;
+        pConfrictColor = &agwsSelectConflictColor;
+        pNormalColor = &agwsSelectNormalColor;
 
         slot = 0;
-        while (3 > slot) {
-            void *loopPic;
+        while (RG_EQUIP_TYPE_NUM > slot) {
+            RgPic *loopPic;
             SelWepColor colorA;
             SelWepColor colorB;
 
@@ -1994,9 +1863,9 @@ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
             loopPic = RgPicListGetPic(pList, picIdx.m_idx[slot]);
             RgPicSetDark(loopPic, 1);
             if (_GetConfrictSelType(pSelType, slot) != 0) {
-                RgPicSetColor(loopPic, &colorA);
+                RgPicSetColor(loopPic, &colorA.color);
             } else {
-                RgPicSetColor(loopPic, &colorB);
+                RgPicSetColor(loopPic, &colorB.color);
             }
             slot++;
         }
@@ -2004,18 +1873,18 @@ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
         RgPicSetDark(RgPicListGetPic(pList, 15), 1);
         pic = RgPicListGetPic(pList, 14);
         RgPicSetAlpha(pic, 2);
-        if (cursor < 3) {
+        if (cursor < SEL_TYPE_CURSOR_DETERM) {
             RgPicSetDark(pic, 0);
         } else {
             RgPicSetDark(pic, 1);
         }
         switch (cursor) {
-        case 0:
-        case 1:
-        case 2:
+        case RG_EQUIP_TYPE_LEFT:
+        case RG_EQUIP_TYPE_RIGHT:
+        case RG_EQUIP_TYPE_BACK:
             RgPicSetDark(RgPicListGetPic(pList, picIdx.m_idx[equipType]), 0);
             break;
-        case 4:
+        case SEL_TYPE_CURSOR_LAST:
             RgPicSetDark(RgPicListGetPic(pList, 16), 0);
             RgPicSetDark(RgPicListGetPic(pList, 15), 0);
             break;
@@ -2025,10 +1894,6 @@ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
     }
 }
 
-extern const char D_00A56C20[];
-static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
-                              SelDat *pSelDat);
-static void _DispFloatArrow(XrgPaint2D *paint, FloatArrow *pDat);
 
 static void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat,
                                 int ofsX, int ofsY)
@@ -2038,73 +1903,53 @@ static void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat,
     int cursor;
 
     if (paint == 0) {
-        assert_prog(D_00A56C20, D_00A56660, 1651);
+        assert_prog(agwsSelectAssertPaintNotNil, agwsSelectSourcePath, 1651);
     }
     if (pBxx == 0) {
-        assert_prog(D_00A56928, D_00A56660, 1652);
+        assert_prog(agwsSelectAssertBxxNotNil, agwsSelectSourcePath, 1652);
     }
     if (pSelDat == 0) {
-        assert_prog(D_00A56838, D_00A56660, 1653);
+        assert_prog(agwsSelectAssertSelDataNotNil, agwsSelectSourcePath, 1653);
     }
-    if (_GetModeSelectData(pSelDat) == 1) {
+    if (_GetModeSelectData(pSelDat) == SEL_MODE_WEAPON) {
         _InitFloatArrowHori(&arrow, pBxx);
         cursor = _GetCursorSelType(&pSelDat->selType);
         _SetFloatArrowPos(&arrow, 256, 103, 463, 104, 256, 0);
         switch (cursor) {
-        case 0:
-            arrow.visibility_mask = 3;
+        case RG_EQUIP_TYPE_LEFT:
+            arrow.visibility_mask = FLOAT_ARROW_BOTH;
             break;
-        case 1:
-            arrow.visibility_mask = 3;
+        case RG_EQUIP_TYPE_RIGHT:
+            arrow.visibility_mask = FLOAT_ARROW_BOTH;
             break;
-        case 2:
-            arrow.visibility_mask = 3;
+        case RG_EQUIP_TYPE_BACK:
+            arrow.visibility_mask = FLOAT_ARROW_BOTH;
             break;
-        case 3:
+        case SEL_TYPE_CURSOR_DETERM:
             _InitDetermWin(&win, pBxx, 167 - ofsX, 144 - ofsY);
             _DispDetermWindow(paint, &win, pSelDat);
             arrow.visibility_mask = 0;
             break;
-        case 4:
+        case SEL_TYPE_CURSOR_LAST:
             _SetFloatArrowPos(&arrow, 353, 411, 0, 0, -ofsX, -ofsY);
-            arrow.visibility_mask = 1;
+            arrow.visibility_mask = FLOAT_ARROW_FIRST;
             break;
         }
         _DispFloatArrow(paint, &arrow);
     }
 }
 
-const char D_00A56C48[16] = "pView != NIL";
+const char agwsSelectAssertViewNotNil[16] = "pView != NIL";
 
-/*
- * Local helpers still unallocated in this TU. Their own definitions stay
- * INCLUDE_ASM; these forward declarations only let the wrapper accessors
- * below call them (docs/tu-worker.md, "static for LOCAL symbols").
- */
-static void _InitSelect(RgSelectAGWS *pSel);
-static void _Destruct(RgSelectAGWS *pSel);
-static void _PassTime(RgSelectAGWS *pSel, float deltaTime);
-static void _Disp(RgSelectAGWS *pSel);
-/* "pData != NIL" */ static void _SetBaseSelectData(SelDat *pSelDat, void *pData);
-static int _GetWepSelection(SelDat *pSelDat, int *apCollects);
-static int _GetSelectCharID(SelDat *pSelDat);
-static void _SetPlayerModeSelectData(SelDat *pSelDat, int mode);
-extern void RgDrawViewInit(RgDrawView *pView);
 
-/* "pView != NIL" */
 static void _init_camera(RgDrawView *pView)
 {
     if (pView == 0) {
-        assert_prog(D_00A56C48, D_00A56660, 1751);
+        assert_prog(agwsSelectAssertViewNotNil, agwsSelectSourcePath, 1751);
     }
     RgDrawViewInit(pView);
 }
 
-extern void XrgClearVector(RgVector vector);
-extern void RgDrawViewSetPosition(RgDrawView *pView, RgVector position);
-extern void RgDrawViewSetRotateX(RgDrawView *pView, float angle);
-extern void RgDrawViewSetRotateY(RgDrawView *pView, float angle);
-extern void RgDrawViewSetRotateZ(RgDrawView *pView, float angle);
 
 static void _set_camera(RgDrawView *pView)
 {
@@ -2119,18 +1964,12 @@ static void _set_camera(RgDrawView *pView)
     RgDrawViewSetRotateZ(pView, 0.0f);
 }
 
-/* "pSel != NIL" */
-extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
-                                  int line);
-extern void DisposeRgPicList(RgPicList *pList);
-extern void DisposeRgSelectRobot(RgSelectRobot *pRobot);
-extern void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine);
 
 void _Destruct(RgSelectAGWS *pSel) {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 0x6F0);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x6F0);
     }
-    DisposeXrgPaint2D_sub(pSel->paint, D_00A56660, 0x6F2);
+    DisposeXrgPaint2D_sub(pSel->paint, agwsSelectSourcePath, 0x6F2);
     DisposeRgPicList(pSel->pWepSel);
     DisposeRgPicList(pSel->pWepSelTop);
     DisposeRgPicList(pSel->pAgwsSel);
@@ -2138,99 +1977,85 @@ void _Destruct(RgSelectAGWS *pSel) {
     _DisposeSelectData(pSel->pSelDat);
     _DisposeWepListDisp(pSel->pWepListDisp);
     DisposeRgSelectRobot(pSel->pRobot);
-    DisposeRgBxx_sub(pSel->pBxx, D_00A56660, 0x6FA);
+    DisposeRgBxx_sub(pSel->pBxx, agwsSelectSourcePath, 0x6FA);
 }
 
-extern const char D_00A56C58[];
-extern int XrgPadIsMaru(void);
-extern int XrgPadIsBatu(void);
-extern int XrgPadIsLR(void);
-extern int XrgPadIsL12(void);
-extern int XrgPadIsR12(void);
-extern void XrgSoundSystemOk(void);
-extern void XrgSoundSystemNG(void);
-extern void XrgSoundSystemCancel(void);
-extern void RgPicListSetDrawEnable(RgPicList *pList, int enable);
-extern void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos);
-extern void RgSelectRobotSetMode(RgSelectRobot *pCont, int mode);
-extern void RgSelectRobotPassTime(RgSelectRobot *pCont, float deltaTime);
-extern void RgSelectRobotSet(RgSelectRobot *pCont, int *selection);
 
 static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
 {
     SelDat *pSelDat;
     SelType *pSelType;
-    int *pData;
-    int aSelection[7];
+    struct RgSelectAGWSData *pData;
+    struct RgSelectRobotChoice aSelection;
     unsigned int cursor;
     int type;
     int charID;
 
     pSelDat = pSel->pSelDat;
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 1798);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 1798);
     }
     switch (pSel->state) {
-    case 0:
+    case AGWS_STATE_CHAR_SELECT:
         RgSelectRobotScreenPos(pSel->pRobot, 0.0f);
         RgSelectRobotSetMode(pSel->pRobot, -1);
-        pData = &pSelDat->selType.confrict[3];
+        pData = &pSelDat->base;
         _SaveCharSelectData(pSelDat, pData);
         _LoadWepSelectData(pSelDat, pData);
         if (XrgPadIsRight() != 0) {
             charID = _GetSelectCharID(pSelDat);
-            if (charID != -1) {
-                pSel->state = 3;
+            if (charID != RG_ACTOR_CHAR_NOP) {
+                pSel->state = AGWS_STATE_SLIDE_TO_WEAPON;
                 _TransitToOffSelect(pSelDat);
                 XrgSoundSystemCursor();
                 break;
             }
         }
         if (XrgPadIsMaru() != 0) {
-            if (_GetSelectCharID(pSelDat) == -1) {
-                pSel->state = 7;
+            if (_GetSelectCharID(pSelDat) == RG_ACTOR_CHAR_NOP) {
+                pSel->state = AGWS_STATE_CANCELLED;
                 XrgSoundSystemCancel();
             } else {
-                pSel->state = 3;
+                pSel->state = AGWS_STATE_SLIDE_TO_WEAPON;
                 _TransitToOffSelect(pSelDat);
                 XrgSoundSystemOk();
             }
         }
         break;
-    case 1:
+    case AGWS_STATE_WEAPON_SELECT:
         pSelType = &pSelDat->selType;
         cursor = _GetCursorSelType(pSelType);
         type = _GetTypeSelType(pSelType);
         RgSelectRobotSetMode(pSel->pRobot, type);
         RgSelectRobotScreenPos(pSel->pRobot, 1.0f);
-        pData = &pSelDat->selType.confrict[3];
+        pData = &pSelDat->base;
         _SaveWepSelectData(pSelDat, pData);
         if (XrgPadIsLR() != 0) {
-            if (cursor != 3) {
-                _SetSpecModeSelType(pSelType, 2);
+            if (cursor != SEL_TYPE_CURSOR_DETERM) {
+                _SetSpecModeSelType(pSelType, RG_EQUIP_TYPE_BACK);
                 XrgSoundSystemCursor();
             }
         } else if (XrgPadIsL12() != 0) {
-            if (cursor != 3) {
-                _SetSpecModeSelType(pSelType, 0);
+            if (cursor != SEL_TYPE_CURSOR_DETERM) {
+                _SetSpecModeSelType(pSelType, RG_EQUIP_TYPE_LEFT);
                 XrgSoundSystemCursor();
             }
         } else if (XrgPadIsR12() != 0) {
-            if (cursor != 3) {
-                _SetSpecModeSelType(pSelType, 1);
+            if (cursor != SEL_TYPE_CURSOR_DETERM) {
+                _SetSpecModeSelType(pSelType, RG_EQUIP_TYPE_RIGHT);
                 XrgSoundSystemCursor();
             }
         } else if (XrgPadIsLeft() != 0) {
-            if (cursor == 0) {
-                pSel->state = 2;
+            if (cursor == RG_EQUIP_TYPE_LEFT) {
+                pSel->state = AGWS_STATE_SLIDE_TO_CHAR;
                 _TransitToOffSelect(pSelDat);
                 XrgSoundSystemCursor();
             }
         } else if (XrgPadIsMaru() != 0) {
             switch (cursor) {
-            case 0:
-            case 1:
-            case 2:
+            case RG_EQUIP_TYPE_LEFT:
+            case RG_EQUIP_TYPE_RIGHT:
+            case RG_EQUIP_TYPE_BACK:
                 if (_DetachWeaponIfConfrictSelType(pSelType) == 0) {
                     _SetDetermModeSelType(pSelType);
                     XrgSoundSystemOk();
@@ -2238,19 +2063,19 @@ static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
                     XrgSoundSystemNG();
                 }
                 break;
-            case 3:
-                pSel->state = 6;
+            case SEL_TYPE_CURSOR_DETERM:
+                pSel->state = AGWS_STATE_DONE;
                 XrgSoundSystemOk();
                 break;
-            case 4:
-                pSel->state = 2;
+            case SEL_TYPE_CURSOR_LAST:
+                pSel->state = AGWS_STATE_SLIDE_TO_CHAR;
                 _TransitToOffSelect(pSelDat);
                 XrgSoundSystemCancel();
                 break;
             }
         } else if (XrgPadIsBatu() != 0) {
-            if (cursor != 3) {
-                pSel->state = 2;
+            if (cursor != SEL_TYPE_CURSOR_DETERM) {
+                pSel->state = AGWS_STATE_SLIDE_TO_CHAR;
                 _TransitToOffSelect(pSelDat);
                 XrgSoundSystemCancel();
             } else {
@@ -2259,101 +2084,87 @@ static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
             }
         }
         break;
-    case 2:
+    case AGWS_STATE_SLIDE_TO_CHAR:
         if (pSel->ofsX < 0) {
-            pSel->ofsX += 32;
+            pSel->ofsX += SEL_SLIDE_STEP;
             if (pSel->ofsX > 0) {
                 pSel->ofsX = 0;
             }
             if (pSel->ofsX >= 0) {
-                pSel->state = 4;
+                pSel->state = AGWS_STATE_START_CHAR;
             }
         } else {
-            pSel->state = 4;
+            pSel->state = AGWS_STATE_START_CHAR;
         }
-        RgSelectRobotScreenPos(pSel->pRobot, (float) -pSel->ofsX * 0.00390625f);
+        RgSelectRobotScreenPos(pSel->pRobot,
+                               (float) -pSel->ofsX * (1.0f / SEL_SLIDE_WIDTH));
         break;
-    case 3:
-        if (pSel->ofsX < -255) {
-            pSel->state = 5;
+    case AGWS_STATE_SLIDE_TO_WEAPON:
+        if (pSel->ofsX < -(SEL_SLIDE_WIDTH - 1)) {
+            pSel->state = AGWS_STATE_START_WEAPON;
         } else {
-            pSel->ofsX -= 32;
-            if (pSel->ofsX < -256) {
-                pSel->ofsX = -256;
+            pSel->ofsX -= SEL_SLIDE_STEP;
+            if (pSel->ofsX < -SEL_SLIDE_WIDTH) {
+                pSel->ofsX = -SEL_SLIDE_WIDTH;
             }
-            if (pSel->ofsX < -255) {
-                pSel->state = 5;
+            if (pSel->ofsX < -(SEL_SLIDE_WIDTH - 1)) {
+                pSel->state = AGWS_STATE_START_WEAPON;
             }
         }
         _TransitToWeaponSelect(pSelDat);
-        RgSelectRobotScreenPos(pSel->pRobot, (float) -pSel->ofsX * 0.00390625f);
+        RgSelectRobotScreenPos(pSel->pRobot,
+                               (float) -pSel->ofsX * (1.0f / SEL_SLIDE_WIDTH));
         break;
-    case 4:
-        pSel->state = 0;
+    case AGWS_STATE_START_CHAR:
+        pSel->state = AGWS_STATE_CHAR_SELECT;
         RgPicListSetDrawEnable(pSel->pAgwsSelTop, 1);
         RgPicListSetDrawEnable(pSel->pWepSelTop, 0);
         _TransitToCharSelect(pSelDat);
         break;
-    case 5:
-        pSel->state = 1;
+    case AGWS_STATE_START_WEAPON:
+        pSel->state = AGWS_STATE_WEAPON_SELECT;
         RgPicListSetDrawEnable(pSel->pAgwsSelTop, 0);
         RgPicListSetDrawEnable(pSel->pWepSelTop, 1);
         _SetSelectorWepListDisp(pSel->pWepListDisp, &pSelDat->selType);
         break;
-    case 6:
-    case 7:
+    case AGWS_STATE_DONE:
+    case AGWS_STATE_CANCELLED:
         break;
     default:
-        RgError(D_00A56C58, D_00A56660, 1987, pSel->state);
+        RgError(agwsSelectUnknownSelectModeFormat, agwsSelectSourcePath, 1987, pSel->state);
         break;
     }
     _PassTimeSelectData(pSelDat, deltaTime);
     RgSelectRobotPassTime(pSel->pRobot, deltaTime);
-    aSelection[0] = _GetSelectCharID(pSelDat);
-    _GetSelectWeps(pSelDat, &aSelection[1], &aSelection[4]);
-    RgSelectRobotSet(pSel->pRobot, aSelection);
+    aSelection.actorID = _GetSelectCharID(pSelDat);
+    _GetSelectWeps(pSelDat, aSelection.weapons, aSelection.weaponActive);
+    RgSelectRobotSet(pSel->pRobot, &aSelection);
 }
 
-const char D_00A56C90[24] = "pszFileName != NIL";
+const char agwsSelectAssertFileNameNotNil[24] = "pszFileName != NIL";
 
-const char D_00A56CA8[16] = "data\\nisimori\\";
+const char agwsSelectDataDirectory[16] = "data\\nisimori\\";
 
-const char D_00A56CB8[16] = "select.bxx";
+const char agwsSelectBxxFileName[16] = "select.bxx";
 
-const char D_00A56CC8[24] = "cannot load select.bxx";
+const char agwsSelectCannotLoadBxxError[24] = "cannot load select.bxx";
 
-const char D_00A56CE0[16] = "agwsseltop.r2d";
+const char agwsSelectAgwsTopPicListFileName[16] = "agwsseltop.r2d";
 
-const char D_00A56CF0[16] = "agwssel.r2d";
+const char agwsSelectAgwsPicListFileName[16] = "agwssel.r2d";
 
-const char D_00A56D00[16] = "wepseltop.r2d";
+const char agwsSelectWepTopPicListFileName[16] = "wepseltop.r2d";
 
-const char D_00A56D10[16] = "wepsel.r2d";
+const char agwsSelectWepPicListFileName[16] = "wepsel.r2d";
 
-const char D_00A56D20[24] = "apCollects != NIL";
+const char agwsSelectAssertCollectsNotNil[24] = "apCollects != NIL";
 
-
-/*
- * The picture handle RgPicListGetPic indexes out of a RgPicList (owned by
- * ov12/tu075, src/ov12/rg_piclist.c, RgPic tag not published yet). This
- * allocation only forwards it to RgPicSetAlpha and never dereferences it,
- * so it is passed as void *, matching src/ov12/rg_disp_wpn2p.h's own
- * convention for a foreign handle its own TU only forwards.
- */
-extern void RgPicListDraw(RgPicList *pList, XrgPaint2D *paint);
-extern void RgPicListSetOffset(RgPicList *pList, int ofsX, int ofsY);
-extern void RgSelectRobotDisp(RgSelectRobot *pRobot);
-extern void XrgPaint2DFlush(XrgPaint2D *paint);
-static void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat, int ofsX, int ofsY);
-extern void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode);
-extern void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode);
-/* normal color */ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat);
 
 void _Disp(RgSelectAGWS *pSel) {
     SelDat *pSelDat;
 
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 0x7DA);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x7DA);
     }
     pSelDat = pSel->pSelDat;
     _SinPassTime();
@@ -2374,76 +2185,49 @@ void _Disp(RgSelectAGWS *pSel) {
     XrgPaint2DFlush(pSel->paint);
 }
 
-extern RgFileSys *InstanceOfRgFileSys(void);
-extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
-                                    const char *pszRoot);
-extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *pszFile,
-                                     int iLine);
-/*
- * Opaque handle: CreateRgPicListFromBinary is defined by ov12/tu070
- * (src/ov12/rg_piclist.c), still INCLUDE_ASM there, and this call only
- * forwards its result, so an incomplete type is enough here.
- */
-struct RgPicList;
-extern struct RgPicList *CreateRgPicListFromBinary(struct RgBxx *pBxx, void *pData);
-
-/* "data\\nisimori\\" */
 static struct RgPicList *_LoadPicList(const char *pszFileName, struct RgBxx *pBxx)
 {
     RgFileSysData *pFile;
     struct RgPicList *pList;
 
     if (pBxx == 0) {
-        assert_prog(D_00A56928, D_00A56660, 2052);
+        assert_prog(agwsSelectAssertBxxNotNil, agwsSelectSourcePath, 2052);
     }
     if (pszFileName == 0) {
-        assert_prog(D_00A56C90, D_00A56660, 2053);
+        assert_prog(agwsSelectAssertFileNameNotNil, agwsSelectSourcePath, 2053);
     }
-    pFile = RgFileSysRead(InstanceOfRgFileSys(), pszFileName, D_00A56CA8);
+    pFile = RgFileSysRead(InstanceOfRgFileSys(), pszFileName, agwsSelectDataDirectory);
     if (pFile == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 2056);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 2056);
     }
     pList = CreateRgPicListFromBinary(pBxx, pFile->data);
-    DisposeRgFileSysData_sub(pFile, D_00A56660, 2058);
+    DisposeRgFileSysData_sub(pFile, agwsSelectSourcePath, 2058);
     return pList;
 }
 
-/*
- * This TU's own declaration of CreateRgSelectRobot: _InitSelect forwards
- * its studio handle to it, while the accepted definition
- * (ov12/rg_select_robot.c) takes and ignores no argument at all.
- */
-extern RgSelectRobot *CreateRgSelectRobot(RgDrawStudio *pStudio);
-extern XrgPaint2D *CreateXrgPaint2D_sub(const char *source_file, int line);
-extern RgDraw *InstanceOfRgDraw(void);
-extern RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
-                            int nMode);
-extern RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex);
-extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
 
-/* "wepsel.r2d" */
 void _InitSelect(RgSelectAGWS *pSel) {
     RgBxx *pBxx;
     RgDrawStudio *pStudio;
 
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 0x810);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x810);
     }
-    pSel->state = 4;
+    pSel->state = AGWS_STATE_START_CHAR;
     pSel->pSelDat = _CreateSelectData();
     pStudio = RgDrawGetStudio(InstanceOfRgDraw(), 0);
     pSel->pStudio = pStudio;
     _init_camera(RgDrawStudioGetView(pStudio));
     _set_camera(RgDrawStudioGetView(pSel->pStudio));
-    pBxx = LoadRgBxx_sub(D_00A56CB8, D_00A56660, 0x827);
+    pBxx = LoadRgBxx_sub(agwsSelectBxxFileName, agwsSelectSourcePath, 0x827);
     pSel->pBxx = pBxx;
     if (pBxx == 0) {
-        RgError(D_00A56CC8, D_00A56660, 0x829);
+        RgError(agwsSelectCannotLoadBxxError, agwsSelectSourcePath, 0x829);
     }
-    pSel->pAgwsSelTop = _LoadPicList(D_00A56CE0, pSel->pBxx);
-    pSel->pAgwsSel = _LoadPicList(D_00A56CF0, pSel->pBxx);
-    pSel->pWepSelTop = _LoadPicList(D_00A56D00, pSel->pBxx);
-    pSel->pWepSel = _LoadPicList(D_00A56D10, pSel->pBxx);
+    pSel->pAgwsSelTop = _LoadPicList(agwsSelectAgwsTopPicListFileName, pSel->pBxx);
+    pSel->pAgwsSel = _LoadPicList(agwsSelectAgwsPicListFileName, pSel->pBxx);
+    pSel->pWepSelTop = _LoadPicList(agwsSelectWepTopPicListFileName, pSel->pBxx);
+    pSel->pWepSel = _LoadPicList(agwsSelectWepPicListFileName, pSel->pBxx);
     RgPicListSetOffset(pSel->pAgwsSelTop, 0, 0);
     RgPicListSetOffset(pSel->pAgwsSel, 0, 0);
     RgPicListSetOffset(pSel->pWepSelTop, 0, 0);
@@ -2454,80 +2238,64 @@ void _InitSelect(RgSelectAGWS *pSel) {
     RgPicListSetDrawEnable(pSel->pWepSel, 1);
     pSel->ofsY = 0;
     pSel->ofsX = 0;
-    pSel->pWepListDisp = _CreateWepListDisp((int) pSel->pBxx);
-    pSel->paint = CreateXrgPaint2D_sub(D_00A56660, 0x841);
+    pSel->pWepListDisp = _CreateWepListDisp(pSel->pBxx);
+    pSel->paint = CreateXrgPaint2D_sub(agwsSelectSourcePath, 0x841);
     pSel->pRobot = CreateRgSelectRobot(pSel->pStudio);
     _SinInit();
 }
 
-/* "pData != NIL" */
-/*
- * The per-character weapon-name record within pData's caller-owned buffer:
- * one WEP_NAME_LEN-byte slot per equip type (RG_EQUIP_TYPE_NUM), preceded by
- * WEP_NAME_LIST_OFFSET bytes this function does not touch. This function's
- * own byte-store pattern (charID*CHAR_WEP_RECORD_SIZE + i*WEP_NAME_LEN) is
- * this allocation's evidence for both strides.
- */
-#define WEP_NAME_LEN 0x20
-#define CHAR_WEP_RECORD_SIZE (RG_EQUIP_TYPE_NUM * WEP_NAME_LEN)
-
-void InitRgSelectAGWSData(int *pData)
+void InitRgSelectAGWSData(struct RgSelectAGWSData *pData)
 {
-    unsigned char *pNames;
     unsigned int charID;
     unsigned int i;
 
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 2129);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 2129);
     }
-    pData[0] = 0;
-    pData[1] = 1;
-    pNames = (unsigned char *) pData + WEP_NAME_LIST_OFFSET;
+    pData->selectedCharacter = 0;
+    pData->availableCharacters = 1;
     for (charID = 0; charID < RG_ACTOR_CHAR_NUM; charID++) {
         for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
-            pNames[charID * CHAR_WEP_RECORD_SIZE + i * WEP_NAME_LEN] = 0;
+            pData->weaponName[charID][i][0] = 0;
         }
     }
 }
 
-/* "pData != NIL" */
-void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel, void *pData)
+void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel,
+                               struct RgSelectAGWSData *pData)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2143);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2143);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 2144);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 2144);
     }
     _SetBaseSelectData(pSel->pSelDat, pData);
 }
 
-static void _GetBaseSelectData(SelDat *pSelDat, void *pResult);
-
-/* "pSel != NIL" */
-/* "pData != NIL" */
-void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel, void *pData)
+void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel,
+                               struct RgSelectAGWSData *pData)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2152);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2152);
     }
     if (pData == 0) {
-        assert_prog(D_00A568C0, D_00A56660, 2153);
+        assert_prog(agwsSelectAssertDataNotNil, agwsSelectSourcePath, 2153);
     }
     _SaveToBaseData(pSel->pSelDat);
     _GetBaseSelectData(pSel->pSelDat, pData);
 }
 
-/* "apCollects != NIL" */
-int RgSelectAGWSGetCollectData(RgSelectAGWS *pSel, int *apCollects)
+int RgSelectAGWSGetCollectData(RgSelectAGWS *pSel,
+                               RgWeaponEssence **apCollects)
 {
     SelDat *pSelDat;
 
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2169);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2169);
     }
     if (apCollects == 0) {
-        assert_prog(D_00A56D20, D_00A56660, 2170);
+        assert_prog(agwsSelectAssertCollectsNotNil, agwsSelectSourcePath, 2170);
     }
     pSelDat = pSel->pSelDat;
     _GetWepSelection(pSelDat, apCollects);
@@ -2539,23 +2307,22 @@ void RgSelectAGWSSetMode(RgSelectAGWS *pSel, int mode)
     _SetPlayerModeSelectData(pSel->pSelDat, mode);
 }
 
-/* "pSel != NIL" */
 int RgSelectAGWSIsEnd(RgSelectAGWS *pSel)
 {
     int result;
 
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2194);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2194);
     }
     switch (pSel->state) {
-    case 6:
-        result = 1;
+    case AGWS_STATE_DONE:
+        result = RG_SELECT_AGWS_END_DONE;
         break;
-    case 7:
-        result = 2;
+    case AGWS_STATE_CANCELLED:
+        result = RG_SELECT_AGWS_END_CANCELLED;
         break;
     default:
-        result = 0;
+        result = RG_SELECT_AGWS_END_NONE;
         break;
     }
     return result;
@@ -2564,15 +2331,16 @@ int RgSelectAGWSIsEnd(RgSelectAGWS *pSel)
 int RgSelectAGWSGetCharacter(RgSelectAGWS *pSel)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2213);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2213);
     }
     return _GetSelectCharID(pSel->pSelDat);
 }
 
-void RgSelectAGWSGetWeapon(RgSelectAGWS *pSel, int *apCollects)
+void RgSelectAGWSGetWeapon(RgSelectAGWS *pSel,
+                           RgWeaponEssence **apCollects)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2221);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2221);
     }
     _GetWepSelection(pSel->pSelDat, apCollects);
 }
@@ -2581,7 +2349,7 @@ RgSelectAGWS *CreateRgSelectAGWS(void)
 {
     RgSelectAGWS *pSel;
 
-    pSel = RgHeapAlloc(InstanceOfRgHeap(), RG_SELECT_AGWS_SIZE, D_00A56660,
+    pSel = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgSelectAGWS), agwsSelectSourcePath,
                        2231);
     _InitSelect(pSel);
     return pSel;
@@ -2590,16 +2358,16 @@ RgSelectAGWS *CreateRgSelectAGWS(void)
 void DisposeRgSelectAGWS(RgSelectAGWS *pSel)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2239);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2239);
     }
     _Destruct(pSel);
-    RgHeapFree(InstanceOfRgHeap(), pSel, D_00A56660, 2241);
+    RgHeapFree(InstanceOfRgHeap(), pSel, agwsSelectSourcePath, 2241);
 }
 
 void RgSelectAGWSPassTime(RgSelectAGWS *pSel, float deltaTime)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2249);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2249);
     }
     _PassTime(pSel, deltaTime);
 }
@@ -2607,7 +2375,7 @@ void RgSelectAGWSPassTime(RgSelectAGWS *pSel, float deltaTime)
 void RgSelectAGWSDisp(RgSelectAGWS *pSel)
 {
     if (pSel == 0) {
-        assert_prog(D_00A568E0, D_00A56660, 2256);
+        assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 2256);
     }
     _Disp(pSel);
 }

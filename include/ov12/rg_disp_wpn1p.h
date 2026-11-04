@@ -2,83 +2,41 @@
 #define INCLUDE_OV12_RG_DISP_WPN1P_H
 
 #include "shared.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_font.h"
+#include "ov12/rg_gauge.h"
+#include "ov12/rg_weapon.h"
+#include "ov12/xrg_paint2d.h"
 
-/*
- * RgBxx is defined by ov12/tu073 (src/ov12/rg_bxx.c); this allocation only
- * stores and forwards the pointer LoadRgBxx_sub returns and DisposeRgBxx_sub
- * takes, so an incomplete type is enough here.
- */
-typedef struct RgBxx RgBxx;
-
-/*
- * The weapon handle owned by rg_weapon.c, opaque here.
- */
-typedef struct RgWeapon RgWeapon;
-
-/*
- * The gauge handle owned by ov12/rg_gauge.c; this allocation only disposes
- * it (still created by _InitDisp, still INCLUDE_ASM), so an incomplete type
- * is enough here.
- */
-typedef struct RgGauge RgGauge;
-
-/*
- * One weapon slot's gauge state. _InitWepDisp sets +0x00 from its pBxx
- * argument (asserted non-NULL as "pBxx != NIL") and creates the gauge at
- * +0x0c; _DestructWepDisp disposes that gauge, and _PassTimeWepDisp reads
- * the weapon pointer at +0x04 to feed the gauge from RgWeaponGetShotNum.
- * +0x08 is never read or written by any of those three functions (it is
- * the weapon slot index _SetWepDisp/_UpdateWepDisp use, both still
- * INCLUDE_ASM in this TU) and stays unmodeled here.
- */
+/* One weapon slot's HUD entry: the gauge that shows its remaining rounds. */
 typedef struct WepDisp {
-    RgBxx *bxx;                    /* +0x00 */
+    RgBxx *bxx;                    /* +0x00: the display texture archive */
     RgWeapon *weapon;              /* +0x04 */
-    unsigned int index;            /* +0x08 */
+    unsigned int index;            /* +0x08: the slot, an RgEquipType */
     RgGauge *gauge;                /* +0x0c */
 } WepDisp;
 
-/*
- * _DestructDisp, RgDispWpn1PSetRobot and RgDispWpn1PDisp evidence the 0x58
- * bytes of this TU's own allocation (CreateRgDispWpn1P's literal size):
- *   +0x00 robot      RgDispWpn1PSetRobot's argument; RgDispWpn1PDisp's null
- *                     check and its RgDispWpnDat_CreateSpeedStr/
- *                     _UpdateWepDisp argument
- *   +0x04 wep[3]      RgDispWpn1PSetRobot/RgDispWpn1PDisp/_DestructDisp,
- *                     0x10-byte WepDisp stride (_SetWepDisp/_UpdateWepDisp/
- *                     _DispWepDisp, still INCLUDE_ASM, are this array's own
- *                     accessors)
- *   +0x34 boardSaPic  RgBxxGetPic "board_sa.bmp" (set by _InitDisp, still
- *                     INCLUDE_ASM); RgDispWpn1PDisp draws it at (0, 0x160)
- *   +0x38 boardSbPic  RgBxxGetPic "board_sb.bmp"; RgDispWpn1PDisp draws it
- *                     at the same (0, 0x160)
- *   +0x3c boostPic    RgBxxGetPic "boost.bmp"; RgDispWpn1PDisp draws it at
- *                     (0xA0, 0x190)
- *   +0x44 bulletFont  set by _InitDisp; RgDispWpn1PDisp passes it to
- *                     _DispWepDisp
- *   +0x48 weaponFont  set by _InitDisp; RgDispWpn1PDisp passes it to
- *                     _DispWepDisp
- *   +0x4c timeFont    set by _InitDisp; RgDispWpn1PDisp passes it to
- *                     RgFontStr for the speed string
- *   +0x50 gauge       CreateRgGauge (set by _InitDisp); RgGaugeDraw/
- *                     DisposeRgGauge
- *   +0x54 paint       CreateXrgPaint2D_sub (set by _InitDisp);
- *                     DisposeXrgPaint2D_sub and every XrgPaint2D* call
- * +0x40 (RgBxxGetPic "mph1.bmp", set by _InitDisp) is never read by any of
- * these three functions and stays unmodeled.
- */
-struct RgDispWpn1P {
+/* The single-player weapon and status HUD (0x58 bytes). */
+typedef struct RgDispWpn1P {
     RgStatus *robot;                 /* +0x00 */
-    WepDisp wep[3];                  /* +0x04 */
-    int boardSaPic;                  /* +0x34 */
-    int boardSbPic;                  /* +0x38 */
-    int boostPic;                    /* +0x3c */
-    int mphPic;                      /* +0x40 */
-    int bulletFont;                  /* +0x44 */
-    int weaponFont;                  /* +0x48 */
-    int timeFont;                    /* +0x4c */
-    RgGauge *gauge;                  /* +0x50 */
-    void *paint;                     /* +0x54 */
-};
+    WepDisp wep[RG_EQUIP_TYPE_NUM];  /* +0x04 */
+    RgBxxPic *boardSaPic;            /* +0x34: "board_sa.bmp" */
+    RgBxxPic *boardSbPic;            /* +0x38: "board_sb.bmp" */
+    RgBxxPic *boostPic;              /* +0x3c: "boost.bmp" */
+    RgBxxPic *mphPic;                /* +0x40: "mph1.bmp" */
+    RgFont *bulletFont;              /* +0x44 */
+    RgFont *weaponFont;              /* +0x48 */
+    RgFont *timeFont;                /* +0x4c */
+    RgGauge *gauge;                  /* +0x50: the dash gauge */
+    XrgPaint2D *paint;               /* +0x54 */
+} RgDispWpn1P;
+
+/* Functions and data used by other translation units. */
+RgDispWpn1P *CreateRgDispWpn1P(RgBxx *dispTex);
+void DisposeRgDispWpn1P(RgDispWpn1P *pDisp);
+void RgDispWpn1PSetRobot(RgDispWpn1P *pDisp, RgStatus *pRobot);
+void RgDispWpn1PPassTime(RgDispWpn1P *pDisp, float deltaTime);
+void RgDispWpn1PDisp(RgDispWpn1P *pDisp);
 
 #endif /* INCLUDE_OV12_RG_DISP_WPN1P_H */

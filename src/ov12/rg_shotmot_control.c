@@ -1,97 +1,26 @@
-/*
- * OV12 original TU 29: 0x00a1e880..0x00a1eea0 (11 functions)
- */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_shotmot_control.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_matrices_effector.h"
+#include "ov12/xrg_actor.h"
 
-typedef struct XrgActor XrgActor;
-typedef struct MatrixEffector MatrixEffector;
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern void RgMatricesEffectorSetActivity(MatrixEffector *effector,
-                                          int activity);
-extern void XrgActorSetMotion(XrgActor *pActor, int motion);
-extern void XrgActorSetMotionFrame(XrgActor *pActor, float frame);
-extern int XrgActorIsEndOfMotion(XrgActor *pActor);
-extern void XrgActorPassTime(XrgActor *pActor, float deltaTime);
-extern MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pParentActor,
-                                                   XrgActor *shadowActor,
-                                                   XrgActor *attachActor,
-                                                   XrgActor *attachedActor,
-                                                   int combineSelector);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent);
-extern void XrgActorSetDraw(XrgActor *pActor, int draw);
-extern void DisposeXrgActor(XrgActor *pActor);
-extern void XrgActorDisposeEffector(XrgActor *pActor, MatrixEffector *effector);
 
-/*
- * ov12:0x00a53d18 "pParentActor != NIL"
- * ov12:0x00a53d30 "../rg_shotmot_control.euc.c"
- * ov12:0x00a53d50 "RG_EQUIP_TYPE_MIN <= (eArmType) && (eArmType) < RG_EQUIP_TYPE_NUM"
- * ov12:0x00a53d98 "eArmType != RG_EQUIP_BACK"
- * ov12:0x00a53db8 "invalid arm type %d"
- * ov12:0x00a53dd0 "pCont != NIL"
- * All six keep their original splat names.
- */
-const char D_00A53D18[24] = "pParentActor != NIL";
-const char D_00A53D30[32] = "../rg_shotmot_control.euc.c";
-const char D_00A53D50[72] = "RG_EQUIP_TYPE_MIN <= (eArmType) && (eArmType) < RG_EQUIP_TYPE_NUM";
-const char D_00A53D98[32] = "eArmType != RG_EQUIP_BACK";
-const char D_00A53DB8[24] = "invalid arm type %d";
-const char D_00A53DD0[16] = "pCont != NIL";
+/* Assertion expressions, source file and error format used below. */
+const char shotMotControlAssertParentActorNotNil[24] = "pParentActor != NIL";
+const char shotMotControlSourcePath[32] = "../rg_shotmot_control.euc.c";
+const char shotMotControlAssertArmTypeInRange[72] = "RG_EQUIP_TYPE_MIN <= (eArmType) && (eArmType) < RG_EQUIP_TYPE_NUM";
+const char shotMotControlAssertArmTypeNotBack[32] = "eArmType != RG_EQUIP_BACK";
+const char shotMotControlInvalidArmTypeFormat[24] = "invalid arm type %d";
+const char shotMotControlAssertContNotNil[16] = "pCont != NIL";
 
-/*
- * ov12:0x00a53de0 "pCont->m_pMatEff != NIL"
- * ov12:0x00a53df8 "pCont->m_pParent != NIL"
- * Both keep their original splat names.
- */
-const char D_00A53DE0[24] = "pCont->m_pMatEff != NIL";
-const char D_00A53DF8[24] = "pCont->m_pParent != NIL";
+const char shotMotControlAssertMatEffectorNotNil[24] = "pCont->m_pMatEff != NIL";
+const char shotMotControlAssertParentNotNil[24] = "pCont->m_pParent != NIL";
 
-/*
- * RgEquipType slot count and the BACK slot _CreateMatEffector rejects,
- * evidenced by this TU's own assert strings above (0x00a53d50, 0x00a53d98);
- * RG_EQUIP_TYPE_NUM matches the constant already evidenced the same way in
- * src/ov12/rg_robot.h. The unsigned comparison below only tests the upper
- * bound because eArmType is unsigned, so "RG_EQUIP_TYPE_MIN <= eArmType" in
- * the original assert text is always true and was compiled away.
- */
-#define RG_EQUIP_TYPE_NUM 3
-#define RG_EQUIP_BACK 2
-
-/*
- * Partial RgShotMotCont layout. Only the fields this allocation's own
- * functions read or write are named; _InitCont/_DestructCont/
- * CreateRgShotMotCont (still INCLUDE_ASM in this TU) evidence the rest but
- * are not delivered by this allocation, so their bytes stay unmodeled:
- *   +0x00 active        RgShotMotContIsActive (lw 0(s0), ov12:0x00a1edac),
- *                        RgShotMotContPlay/Stop/PassTime set or test it
- *   +0x08 effector       RgMatricesEffectorSetActivity's argument
- *   +0x0c shadowActor    RgShotMotContIsEndOfShadowMotion (lw 12(s0),
- *                        ov12:0x00a1edec) queries this one's end of motion
- *   +0x10 attachedActor  kept at the same frame/time as shadowActor by
- *                        RgShotMotContSetFrame/PassTime, its own end of
- *                        motion is never queried by this allocation
- *   +0x14 motion         the motion id RgShotMotContPlay last set
- */
-typedef struct RgShotMotCont {
-    int active;                     /* 0x00 */
-    XrgActor *m_pParent;            /* 0x04 */
-    MatrixEffector *effector;       /* 0x08 */
-    XrgActor *shadowActor;          /* 0x0c */
-    XrgActor *attachedActor;        /* 0x10 */
-    int motion;                     /* 0x14 */
-} RgShotMotCont;
-
-/* Defined later in this TU (still INCLUDE_ASM); called by the function below. */
 static void _DestructCont(RgShotMotCont *pCont);
 
 static MatrixEffector *_CreateMatEffector(XrgActor *pParentActor,
@@ -104,19 +33,19 @@ static MatrixEffector *_CreateMatEffector(XrgActor *pParentActor,
 
     combineSelector = 0;
     if (pParentActor == 0) {
-        assert_prog(D_00A53D18, D_00A53D30, 47);
+        assert_prog(shotMotControlAssertParentActorNotNil, shotMotControlSourcePath, 47);
     }
     if (eArmType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A53D50, D_00A53D30, 48);
+        assert_prog(shotMotControlAssertArmTypeInRange, shotMotControlSourcePath, 48);
     }
-    if (eArmType == RG_EQUIP_BACK) {
-        assert_prog(D_00A53D98, D_00A53D30, 49);
+    if (eArmType == RG_EQUIP_TYPE_BACK) {
+        assert_prog(shotMotControlAssertArmTypeNotBack, shotMotControlSourcePath, 49);
     }
-    if (eArmType != 0) {
-        if (eArmType == 1) {
+    if (eArmType != RG_EQUIP_TYPE_LEFT) {
+        if (eArmType == RG_EQUIP_TYPE_RIGHT) {
             combineSelector = 1;
         } else {
-            RgError(D_00A53DB8, D_00A53D30, 59, eArmType);
+            RgError(shotMotControlInvalidArmTypeFormat, shotMotControlSourcePath, 59, eArmType);
         }
     }
     return XrgActorCreateEffArmCombine(pParentActor, shadowActor, attachActor,
@@ -127,10 +56,10 @@ static void _InitCont(RgShotMotCont *pCont, XrgActor *pParentActor,
                       XrgActor *attachActor, unsigned int eArmType)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 71);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 71);
     }
     if (eArmType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A53D50, D_00A53D30, 72);
+        assert_prog(shotMotControlAssertArmTypeInRange, shotMotControlSourcePath, 72);
     }
     pCont->active = 0;
     pCont->m_pParent = pParentActor;
@@ -139,7 +68,7 @@ static void _InitCont(RgShotMotCont *pCont, XrgActor *pParentActor,
     pCont->effector = _CreateMatEffector(pParentActor, pCont->shadowActor, attachActor,
                                          pCont->attachedActor, eArmType);
     if (pCont->effector == 0) {
-        assert_prog(D_00A53DE0, D_00A53D30, 83);
+        assert_prog(shotMotControlAssertMatEffectorNotNil, shotMotControlSourcePath, 83);
     }
     RgMatricesEffectorSetActivity(pCont->effector, 0);
     XrgActorSetDraw(pCont->shadowActor, 0);
@@ -150,7 +79,7 @@ static void _InitCont(RgShotMotCont *pCont, XrgActor *pParentActor,
 static void _DestructCont(RgShotMotCont *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 96);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 96);
     }
     DisposeXrgActor(pCont->attachedActor);
     DisposeXrgActor(pCont->shadowActor);
@@ -158,7 +87,7 @@ static void _DestructCont(RgShotMotCont *pCont)
         return;
     }
     if (pCont->m_pParent == 0) {
-        assert_prog(D_00A53DF8, D_00A53D30, 100);
+        assert_prog(shotMotControlAssertParentNotNil, shotMotControlSourcePath, 100);
     }
     XrgActorDisposeEffector(pCont->m_pParent, pCont->effector);
 }
@@ -168,9 +97,10 @@ RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor, XrgActor *attachActor
 {
     RgShotMotCont *pCont;
 
-    pCont = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgShotMotCont), D_00A53D30, 110);
+    pCont = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgShotMotCont), shotMotControlSourcePath,
+                       110);
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 111);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 111);
     }
     _InitCont(pCont, pParentActor, attachActor, eArmType);
     pCont->motion = -1;
@@ -180,16 +110,16 @@ RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor, XrgActor *attachActor
 void DisposeRgShotMotCont(RgShotMotCont *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 120);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 120);
     }
     _DestructCont(pCont);
-    RgHeapFree(InstanceOfRgHeap(), pCont, D_00A53D30, 122);
+    RgHeapFree(InstanceOfRgHeap(), pCont, shotMotControlSourcePath, 122);
 }
 
 void RgShotMotContPlay(RgShotMotCont *pCont, int motion)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 133);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 133);
     }
     pCont->active = 1;
     RgMatricesEffectorSetActivity(pCont->effector, 1);
@@ -200,7 +130,7 @@ void RgShotMotContPlay(RgShotMotCont *pCont, int motion)
 void RgShotMotContSetFrame(RgShotMotCont *pCont, float frame)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 165);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 165);
     }
     if (!XrgActorIsEndOfMotion(pCont->shadowActor)) {
         XrgActorSetMotionFrame(pCont->shadowActor, frame);
@@ -211,7 +141,7 @@ void RgShotMotContSetFrame(RgShotMotCont *pCont, float frame)
 void RgShotMotContStop(RgShotMotCont *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 182);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 182);
     }
     pCont->active = 0;
     RgMatricesEffectorSetActivity(pCont->effector, 0);
@@ -220,7 +150,7 @@ void RgShotMotContStop(RgShotMotCont *pCont)
 int RgShotMotContIsActive(RgShotMotCont *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 195);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 195);
     }
     return pCont->active;
 }
@@ -228,7 +158,7 @@ int RgShotMotContIsActive(RgShotMotCont *pCont)
 int RgShotMotContIsEndOfShadowMotion(RgShotMotCont *pCont)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 203);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 203);
     }
     return XrgActorIsEndOfMotion(pCont->shadowActor);
 }
@@ -236,7 +166,7 @@ int RgShotMotContIsEndOfShadowMotion(RgShotMotCont *pCont)
 void RgShotMotContPassTime(RgShotMotCont *pCont, float deltaTime)
 {
     if (pCont == 0) {
-        assert_prog(D_00A53DD0, D_00A53D30, 214);
+        assert_prog(shotMotControlAssertContNotNil, shotMotControlSourcePath, 214);
     }
     if (pCont->active != 0) {
         XrgActorPassTime(pCont->shadowActor, deltaTime);

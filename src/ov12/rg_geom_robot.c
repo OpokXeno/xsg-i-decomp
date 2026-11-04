@@ -3,59 +3,53 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_geom_robot.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-const char D_00A55170[] = "pGeom != NIL";
-const char D_00A55180[] = "../rg_geom_robot.euc.c";
-const char D_00A55198[] = "pRobot != NIL";
 
-/*
- * InitRgGeomBall, RgGeomSetType, RgGeomSetStatus and RgGeomSetPassTimeMeshod
- * are original functions of other OV12 translation units, already recovered
- * as C (rg_geom_ball.c's InitRgGeomBall; rg_geom.c's RgGeomSetType,
- * RgGeomSetStatus and RgGeomSetPassTimeMeshod).
- */
+/* Collision radius of a robot's ball. */
+#define RG_GEOM_ROBOT_RADIUS 1.5f
 
-/*
- * The RgGeom type tag _InitRgGeomRobot passes to RgGeomSetType; 2 is the
- * value between rg_geom_ball.c's RG_GEOM_TYPE_BALL (1) and
- * rg_geom_poly.c's RG_GEOM_TYPE_POLY (3) in the same sequence.
- */
-#define RG_GEOM_TYPE_ROBOT 2
+/* A robot starts with gravity, move resistance, rotation damping and
+ * push-out. */
+#define RG_GEOM_ROBOT_STATUS \
+    (RG_GEOM_STATUS_GRAVITY | RG_GEOM_STATUS_MOVE_RESIST | \
+     RG_GEOM_STATUS_ROT_DAMPING | RG_GEOM_STATUS_PUSH_OUT)
 
-extern void InitRgGeomBall(RgGeom *geom, float radius, float weight);
-extern void RgGeomSetType(RgGeom *pGeom, int type);
-extern void RgGeomSetStatus(RgGeom *pGeom, unsigned int flags);
-extern void RgGeomSetPassTimeMeshod(RgGeom *pGeom,
-                                    void (*method)(RgGeom *, float));
-
-/* Defined later in this TU (still INCLUDE_ASM); installed by
- * _InitRgGeomRobot as the robot's pass-time method. */
-void RgGeomRobotPassTime(RgGeom *geom, float deltaTime);
+const char geomRobotAssertGeomNotNil[] = "pGeom != NIL";
+const char geomRobotSourcePath[] = "../rg_geom_robot.euc.c";
+const char geomRobotAssertRobotNotNil[] = "pRobot != NIL";
 
 static void _InitRgGeomRobot(RgGeom *geom)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
+
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 30);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 30);
     }
-    InitRgGeomBall(geom, 1.5f, 1.0f);
+    InitRgGeomBall(&robot->ball, RG_GEOM_ROBOT_RADIUS, 1.0f);
     RgGeomSetType(geom, RG_GEOM_TYPE_ROBOT);
-    RgGeomSetStatus(geom, 0x1E);
-    RgGeomRobotStateAt(geom)->rotate = 0.0f;
-    RgGeomRobotStateAt(geom)->rotVel = 0.0f;
-    RgGeomRobotStateAt(geom)->maxRotVel = 1.0e8f;
-    RgGeomRobotStateAt(geom)->rotForce = 0.0f;
-    RgGeomRobotStateAt(geom)->rotResist = 0.0f;
-    RgGeomSetPassTimeMeshod(geom, RgGeomRobotPassTime);
+    RgGeomSetStatus(geom, RG_GEOM_ROBOT_STATUS);
+    robot->rotate = 0.0f;
+    robot->rotVel = 0.0f;
+    robot->maxRotVel = RG_GEOM_NO_LIMIT;
+    robot->rotForce = 0.0f;
+    robot->rotResist = 0.0f;
+    RgGeomSetPassTimeMeshod(geom, (RgGeomPassTimeMethod)RgGeomRobotPassTime);
 }
 
 RgGeom *CreateRgGeomRobot(void)
 {
     RgGeom *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xA0, D_00A55180, 51);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xA0, geomRobotSourcePath, 51);
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 52);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 52);
     }
     _InitRgGeomRobot(geom);
     return geom;
@@ -64,20 +58,19 @@ RgGeom *CreateRgGeomRobot(void)
 void InitRgGeomRobot(RgGeom *geom)
 {
     if (geom == 0) {
-        assert_prog(D_00A55198, D_00A55180, 59);
+        assert_prog(geomRobotAssertRobotNotNil, geomRobotSourcePath, 59);
     }
     _InitRgGeomRobot(geom);
 }
 
 void RgGeomRobotSetRotate(RgGeom *geom, float rotate)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 68);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 68);
     }
-    RgGeomRobotStateAt(geom)->rotate = rotate;
+    robot->rotate = rotate;
 }
-
-extern double atan2(double y, double x);
 
 void RgGeomRobotSetDir(RgGeom *geom, RgVector direction)
 {
@@ -86,79 +79,79 @@ void RgGeomRobotSetDir(RgGeom *geom, RgVector direction)
 
 void RgGeomRobotSetRotVel(RgGeom *geom, float rotVel)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 80);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 80);
     }
-    RgGeomRobotStateAt(geom)->rotVel = rotVel;
+    robot->rotVel = rotVel;
 }
 
 void RgGeomRobotAddRotForce(RgGeom *geom, float force)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 86);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 86);
     }
-    RgGeomRobotStateAt(geom)->rotForce += force;
+    robot->rotForce += force;
 }
 
 void RgGeomRobotSetRotResist(RgGeom *geom, float resist)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 94);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 94);
     }
-    RgGeomRobotStateAt(geom)->rotResist = resist;
+    robot->rotResist = resist;
 }
 
 void RgGeomRobotSetMaxRotVel(RgGeom *geom, float maxRotVel)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 101);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 101);
     }
-    RgGeomRobotStateAt(geom)->maxRotVel = maxRotVel;
+    robot->maxRotVel = maxRotVel;
 }
 
 float RgGeomRobotGetRotate(const RgGeom *geom)
 {
+    const RgGeomRobot *robot = (const RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 111);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 111);
     }
-    return RgGeomRobotStateConstAt(geom)->rotate;
+    return robot->rotate;
 }
 
 float RgGeomRobotGetRotVel(const RgGeom *geom)
 {
+    const RgGeomRobot *robot = (const RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 117);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 117);
     }
-    return RgGeomRobotStateConstAt(geom)->rotVel;
+    return robot->rotVel;
 }
 
 float RgGeomRobotGetRotForce(const RgGeom *geom)
 {
+    const RgGeomRobot *robot = (const RgGeomRobot *)geom;
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 123);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 123);
     }
-    return RgGeomRobotStateConstAt(geom)->rotForce;
+    return robot->rotForce;
 }
-
-extern void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
-                                const char *source_file, int source_line);
-extern float cosf(float angle);
-extern float *XrgVectorY(void);
-extern void XrgCalcMatrixYtoZ(RgMatrix matrix, RgVector z_axis,
-                              RgVector y_axis);
-extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
 
 void RgGeomRobotCalcLocal(RgGeom *geom, RgMatrix matrix)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     RgVector position;
     RgVector direction;
     float rotate;
 
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 135);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 135);
     }
-    __RgGeomPointGetPos((RgGeomPoint *)geom, position, D_00A55180, 137);
-    rotate = RgGeomRobotStateConstAt(geom)->rotate;
+    __RgGeomPointGetPos(&robot->ball.point, position, geomRobotSourcePath, 137);
+    rotate = robot->rotate;
     XrgClearVector(direction);
     direction[0] = -sinf(rotate);
     direction[2] = -cosf(rotate);
@@ -168,51 +161,47 @@ void RgGeomRobotCalcLocal(RgGeom *geom, RgMatrix matrix)
 
 #define RG_GEOM_ROBOT_PI 3.1415927f
 #define RG_GEOM_ROBOT_TWO_PI 6.2831855f
-#define RG_GEOM_ROBOT_STATUS_DAMPING 0x8
-
-extern void RgGeomBallPassTime(RgGeom *geom, float deltaTime);
-extern float RgGeomPointGetWeight(RgGeomPoint *point);
-extern unsigned int RgGeomGetStatus(RgGeom *geom);
 
 void RgGeomRobotPassTime(RgGeom *geom, float deltaTime)
 {
+    RgGeomRobot *robot = (RgGeomRobot *)geom;
     float resistance;
     float angle;
     float angularIncrement;
 
     if (geom == 0) {
-        assert_prog(D_00A55170, D_00A55180, 157);
+        assert_prog(geomRobotAssertGeomNotNil, geomRobotSourcePath, 157);
     }
-    RgGeomBallPassTime(geom, deltaTime);
+    RgGeomBallPassTime(&robot->ball, deltaTime);
 
-    angularIncrement = RgGeomRobotStateAt(geom)->rotForce * deltaTime /
-                       RgGeomPointGetWeight((RgGeomPoint *)geom);
-    RgGeomRobotStateAt(geom)->rotVel += angularIncrement;
-    if (RgGeomRobotStateAt(geom)->rotVel <
-        -RgGeomRobotStateAt(geom)->maxRotVel) {
-        RgGeomRobotStateAt(geom)->rotVel =
-            -RgGeomRobotStateAt(geom)->maxRotVel;
-    } else if (RgGeomRobotStateAt(geom)->maxRotVel <
-               RgGeomRobotStateAt(geom)->rotVel) {
-        RgGeomRobotStateAt(geom)->rotVel =
-            RgGeomRobotStateAt(geom)->maxRotVel;
+    angularIncrement = robot->rotForce * deltaTime /
+                       RgGeomPointGetWeight(&robot->ball.point);
+    robot->rotVel += angularIncrement;
+    if (robot->rotVel <
+        -robot->maxRotVel) {
+        robot->rotVel =
+            -robot->maxRotVel;
+    } else if (robot->maxRotVel <
+               robot->rotVel) {
+        robot->rotVel =
+            robot->maxRotVel;
     }
 
-    angularIncrement = RgGeomRobotStateAt(geom)->rotVel * deltaTime;
-    angle = RgGeomRobotStateAt(geom)->rotate + angularIncrement;
+    angularIncrement = robot->rotVel * deltaTime;
+    angle = robot->rotate + angularIncrement;
     while (angle > RG_GEOM_ROBOT_PI) {
         angle -= RG_GEOM_ROBOT_TWO_PI;
     }
     while (angle < -RG_GEOM_ROBOT_PI) {
         angle += RG_GEOM_ROBOT_TWO_PI;
     }
-    RgGeomRobotStateAt(geom)->rotate = angle;
+    robot->rotate = angle;
 
-    if ((RgGeomGetStatus(geom) & RG_GEOM_ROBOT_STATUS_DAMPING) != 0) {
-        resistance = RgGeomRobotStateAt(geom)->rotResist;
-        RgGeomRobotStateAt(geom)->rotVel -=
-            RgGeomRobotStateAt(geom)->rotVel *
+    if ((RgGeomGetStatus(geom) & RG_GEOM_STATUS_ROT_DAMPING) != 0) {
+        resistance = robot->rotResist;
+        robot->rotVel -=
+            robot->rotVel *
             (resistance * deltaTime);
     }
-    RgGeomRobotStateAt(geom)->rotForce = 0.0f;
+    robot->rotForce = 0.0f;
 }

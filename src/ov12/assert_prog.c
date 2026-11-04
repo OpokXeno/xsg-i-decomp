@@ -2,16 +2,17 @@
  * OV12 original TU 18: 0x00a13200..0x00a13260 (1 functions)
  */
 #include "common.h"
+#include "ov12/assert_prog.h"
+#include "ov12/xrg_exit.h"
+#include "ov12/xrg_v_log.h"
 
-extern void XrgOut(const char *format, ...);
-extern void XrgExit(int status);
 
-const char D_00A529E8[56] = "------------------------------------------------\n";
-const char D_00A52A20[32] = "NIS ASSERT (in %s at %d) : %s\n";
+const char assertProgSeparatorText[56] = "------------------------------------------------\n";
+const char assertProgMessageFormat[32] = "NIS ASSERT (in %s at %d) : %s\n";
 
 void assert_prog(const char *expression, const char *source_file, int line)
 {
-    XrgOut(D_00A529E8);
-    XrgOut(D_00A52A20, source_file, line, expression);
+    XrgOut(assertProgSeparatorText);
+    XrgOut(assertProgMessageFormat, source_file, line, expression);
     XrgExit(1);
 }

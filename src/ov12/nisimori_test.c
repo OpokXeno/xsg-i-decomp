@@ -3,46 +3,30 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_font.h"
+#include "main/xgl_pad.h"
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 /*
- * PARTIAL ACCESSED PREFIX of PadData (0x00490d90, 0xd0 bytes). NisimoriTest
- * reads the doubleword at +0x28 -- the shared half_28/half_2a pair,
- * extended two halfwords further than the shared PadPrefix view (evidenced
- * only to +0x2c) reaches. src/main/game.h's PadDataDebugLayout keeps the
- * same kind of wider local view of this object (config/header-canon.json
- * "PadData" lists the accepted spellings and why each unit needs its own).
- * NisimoriTest addresses the object through the array symbol, the shape
- * its compiled code (lui+addiu into a temporary, reused for both tests)
- * depends on.
+ * NisimoriTest addresses the pad record through the array symbol and reads the
+ * held and newly-pressed halfwords at +0x28/+0x2a together as button_state, the
+ * shape its compiled code (lui+addiu into a temporary, reused for both tests)
+ * needs.
  */
-typedef struct PadDataButtonsView {
-    unsigned char unmodeled_00[0x28];
-    unsigned long long buttons;
-} PadDataButtonsView;
+extern XglPadRecord PadData[];
 
-extern unsigned char PadData[];
-
-/* This TU's own .rodata (scaffold-owned; kept under its splat name,
- * docs/naming.md "Scaffold-owned data keeps its splat name"): the debug
- * font control sequence NisimoriTest passes to xglFontDebugPrintf. */
-/* Font control bytes used by NisimoriTest; operands remain partially unknown. */
+/* The debug font control sequence NisimoriTest passes to xglFontDebugPrintf. */
 /* JP: 西森
  * EN: Nishimori */
-const char D_00A51430[16] = "\x0b\xc0\xbe\xbf\xb9";
+const char nisimoriTestTitleText[16] = "\x0b\xc0\xbe\xbf\xb9";
 
-/*
- * Waits for the debug pad combination (0x08000100, held+pressed bits at
- * PadData+0x28/+0x2a) while pumping xglFontDebugPrintf/xglSleep once per
- * frame -- the usual busy-wait pattern for a developer-kit gate.
- */
+/* Waits for the SELECT + START exit combination, drawing the test text each frame. */
 void NisimoriTest(void)
 {
-    if ((((PadDataButtonsView *)PadData)->buttons & 0x08000100) != 0x08000100) {
+    if ((PadData[0].button_state & PAD_EXIT_COMBO) != PAD_EXIT_COMBO) {
         do {
-            xglFontDebugPrintf(0, 0, D_00A51430);
+            xglFontDebugPrintf(0, 0, nisimoriTestTitleText);
             xglSleep();
-        } while ((((PadDataButtonsView *)PadData)->buttons & 0x08000100) != 0x08000100);
+        } while ((PadData[0].button_state & PAD_EXIT_COMBO) != PAD_EXIT_COMBO);
     }
 }

@@ -3,28 +3,19 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_char.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_char.h"
+#include "ov12/rg_charmgr.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
-                       int line);
-extern RgCharMgr *InstanceOfRgCharMgr(void);
-extern void RgCharMgrEntry(RgCharMgr *manager, RgChar *pChar);
-extern void InitRgChar(RgChar *pChar, int type);
 
 /*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a51808 contains the source filename "../rg_char.euc.c".
- * ov12:0x00a51820 contains the assertion expression "pChar != NIL".
+ * Defined here: the source file name and assertion text the scaffold data
+ * window (ov12:0x00a51808, 0x00a51820) provides.
  */
-const char D_00A51808[] = "../rg_char.euc.c";
-const char D_00A51820[] = "pChar != NIL";
+const char charSourcePath[] = "../rg_char.euc.c";
+const char charAssertCharNotNil[] = "pChar != NIL";
 
 static void _nonControlMethod(RgChar *pChar)
 {
@@ -49,7 +40,7 @@ RgChar *RgCharAlloc(unsigned int size, int type)
 {
     RgChar *pChar;
 
-    pChar = RgHeapAlloc(InstanceOfRgHeap(), size, D_00A51808, 49);
+    pChar = RgHeapAlloc(InstanceOfRgHeap(), size, charSourcePath, 49);
     InitRgChar(pChar, type);
     pChar->mgr = InstanceOfRgCharMgr();
     RgCharMgrEntry(InstanceOfRgCharMgr(), pChar);
@@ -59,7 +50,7 @@ RgChar *RgCharAlloc(unsigned int size, int type)
 void RgCharFree(RgChar *pChar)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 59);
+        assert_prog(charAssertCharNotNil, charSourcePath, 59);
     }
 
     if (pChar->mgr != 0) {
@@ -75,13 +66,13 @@ void RgCharFree(RgChar *pChar)
     if (pChar->destructMethod != 0) {
         pChar->destructMethod(pChar);
     }
-    RgHeapFree(InstanceOfRgHeap(), pChar, D_00A51808, 76);
+    RgHeapFree(InstanceOfRgHeap(), pChar, charSourcePath, 76);
 }
 
 void InitRgChar(RgChar *pChar, int type)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 86);
+        assert_prog(charAssertCharNotNil, charSourcePath, 86);
     }
     pChar->type = type;
     pChar->destructMethod = 0;
@@ -94,7 +85,7 @@ void InitRgChar(RgChar *pChar, int type)
 int RgCharGetType(RgChar *pChar)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 104);
+        assert_prog(charAssertCharNotNil, charSourcePath, 104);
     }
     return pChar->type;
 }
@@ -102,7 +93,7 @@ int RgCharGetType(RgChar *pChar)
 void RgCharSetType(RgChar *pChar, int type)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 114);
+        assert_prog(charAssertCharNotNil, charSourcePath, 114);
     }
     pChar->type = type;
 }
@@ -110,7 +101,7 @@ void RgCharSetType(RgChar *pChar, int type)
 void RgCharControlMethod(RgChar *pChar, RgCharControlFunc controlMethod)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 125);
+        assert_prog(charAssertCharNotNil, charSourcePath, 125);
     }
     pChar->controlMethod = controlMethod;
 }
@@ -118,7 +109,7 @@ void RgCharControlMethod(RgChar *pChar, RgCharControlFunc controlMethod)
 void RgCharDispMethod(RgChar *pChar, RgCharDispFunc dispMethod)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 133);
+        assert_prog(charAssertCharNotNil, charSourcePath, 133);
     }
     pChar->dispMethod = dispMethod;
 }
@@ -126,7 +117,7 @@ void RgCharDispMethod(RgChar *pChar, RgCharDispFunc dispMethod)
 void RgCharDestructMethod(RgChar *pChar, RgCharDestructFunc destructMethod)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 141);
+        assert_prog(charAssertCharNotNil, charSourcePath, 141);
     }
     pChar->destructMethod = destructMethod;
 }
@@ -134,7 +125,7 @@ void RgCharDestructMethod(RgChar *pChar, RgCharDestructFunc destructMethod)
 void RgCharPassTimeMethod(RgChar *pChar, RgCharPassTimeFunc passTimeMethod)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 149);
+        assert_prog(charAssertCharNotNil, charSourcePath, 149);
     }
     pChar->passTimeMethod = passTimeMethod;
 }
@@ -142,7 +133,7 @@ void RgCharPassTimeMethod(RgChar *pChar, RgCharPassTimeFunc passTimeMethod)
 void RgCharControl(RgChar *pChar)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 158);
+        assert_prog(charAssertCharNotNil, charSourcePath, 158);
     }
     if (pChar->type != RG_CHAR_TYPE_DELETED) {
         if (pChar->controlMethod != 0) {
@@ -154,7 +145,7 @@ void RgCharControl(RgChar *pChar)
 void RgCharPassTime(RgChar *pChar, float deltaTime)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 168);
+        assert_prog(charAssertCharNotNil, charSourcePath, 168);
     }
     if (pChar->type != RG_CHAR_TYPE_DELETED) {
         if (pChar->passTimeMethod != 0) {
@@ -166,7 +157,7 @@ void RgCharPassTime(RgChar *pChar, float deltaTime)
 void RgCharDisp(RgChar *pChar)
 {
     if (pChar == 0) {
-        assert_prog(D_00A51820, D_00A51808, 184);
+        assert_prog(charAssertCharNotNil, charSourcePath, 184);
     }
     if (pChar->type != RG_CHAR_TYPE_DELETED) {
         if (pChar->dispMethod != 0) {

@@ -3,13 +3,12 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/xrg_main_font.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern char *strcpy(char *destination, const char *source);
 
-const char D_00A59218[24] = "pszString != NIL";
-const char D_00A59230[32] = "../xrg_main_font.euc.c";
+const char mainFontAssertStringNotNil[24] = "pszString != NIL";
+const char mainFontSourcePath[32] = "../xrg_main_font.euc.c";
 
 void XrgDispMainFont(int x, int y, const char *pszString, int bright)
 {
@@ -17,7 +16,7 @@ void XrgDispMainFont(int x, int y, const char *pszString, int bright)
     char *font_cursor;
 
     if (pszString == 0) {
-        assert_prog(D_00A59218, D_00A59230, 17);
+        assert_prog(mainFontAssertStringNotNil, mainFontSourcePath, 17);
     }
 
     /* xglFontPrint receives this fixed command prefix followed by the text. */

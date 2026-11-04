@@ -6,23 +6,11 @@
 #define SRC_OV12_XRG_CDREAD_H
 
 #include "shared.h"
+#include "ov12/xrg_cdread.h"
 
-extern int xglCdGetFileSize(const char *name);
-
-extern unsigned int strlen(const char *string);
-
-int XrgCdFileSize(const char *pszName);
-
-int XrgCdFileRead(const char *pszName, void *pBuf);
-
-int XrgCdFileAlignmentSize(int uSize);
-
+/* Defined in xrg_cdread.c. */
 extern const char root_name_name_check[];
-
 extern const char root_name_source_file[];
-
 extern const char root_name_result_check[];
-
-char *_GetLocalPath(void);
 
 #endif /* SRC_OV12_XRG_CDREAD_H */

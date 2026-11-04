@@ -2,80 +2,60 @@
  * OV12 original TU 73: 0x00a3ea10..0x00a3f230 (15 functions)
  */
 #include "common.h"
-#include "rg_bxx.h"
+#include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_filesys.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_linkdata.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
 
-extern char *strcpy(char *destination, const char *source);
-extern unsigned int strlen(const char *string);
-extern int strncmp(const char *string1, const char *string2,
-                   unsigned int count);
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern int RgHeapIsInvalidMemory(RgHeap *heap, void *ptr);
 
-extern void *RgLinkDataGetIndex(RgLinkData *pAna, int index);
 
-extern void DisposeRgFileSysData_sub(struct RgFileSysData *pFile,
-                                     const char *pszFile, int iLine);
 
-/*
- * ov12/tu065 (rg_filesys.c) owns RgFileSys/RgFileSysData; this allocation
- * only forwards InstanceOfRgFileSys's result into RgFileSysRead and reads
- * the result's `data` field, so incomplete types are enough here (matching
- * rg_effect_env.c's own declaration of the same pair).
- */
-extern struct RgFileSys *InstanceOfRgFileSys(void);
-extern struct RgFileSysData *RgFileSysRead(struct RgFileSys *pSys,
-                                           const char *pszName,
-                                           const char *pszRoot);
-
-void RgBxxSetData(RgBxx *pBxx, void *pData);
+/* Size of one picture record (sizeof(RgBxxPic)). */
+#define RG_BXX_PIC_SIZE 0x60
+#define RG_BXX_LINK_DATA_COUNT 2
 
 static RgBxxHeader *_GetHeader(RgBxx *pBxx);
 static RgBxxPic *_GetPicTop(RgBxx *pBxx);
 static int _FindPicByName(RgBxx *pBxx, const char *pszName);
 
-extern const char D_00A56F90[];
-extern const char D_00A56FA0[];
-extern const char D_00A56FB0[];
-extern const char D_00A56FE0[];
-extern const char D_00A57010[];
-extern const char D_00A57018[];
-extern const char D_00A57028[];
-extern const char D_00A57038[];
-extern const char D_00A57050[];
+extern const char bxxAssertBxxNotNil[];
+extern const char bxxSourcePath[];
+extern const char bxxInvalidLinkMemoryFormat[];
+extern const char bxxInvalidLoadMemoryFormat[];
+extern const char bxxNameParameterName[];
+extern const char bxxDataDirectory[];
+extern const char bxxAssertDataNotNil[];
+extern const char bxxAssertLoadNil[];
+extern const char bxxDataFormatErrorFormat[];
 typedef struct RgBxxMessageBlock {
     char linkRequired[24];
     char pictureSize[24];
     char headerSize[28];
     char empty[4];
 } RgBxxMessageBlock;
-extern const RgBxxMessageBlock D_00A57078;
-extern const char D_00A570C8[];
-extern const char D_00A570F0[];
-extern const char D_00A57100[];
+extern const RgBxxMessageBlock bxxAssertMessageBlock;
+extern const char bxxTextureIdErrorFormat[];
+extern const char bxxAssertNameNotNil[];
+extern const char bxxUnknownTextureNameFormat[];
 
-#define RG_BXX_NOT_NULL D_00A56F90
-#define RG_BXX_SOURCE_FILE D_00A56FA0
-#define RG_BXX_INVALID_LINK_MEMORY D_00A56FB0
-#define RG_BXX_INVALID_LOAD_MEMORY D_00A56FE0
-#define RG_BXX_NAME_PARAMETER D_00A57010
-#define RG_BXX_DATA_ROOT D_00A57018
-#define RG_BXX_DATA_REQUIRED D_00A57028
-#define RG_BXX_LOAD_REQUIRED D_00A57038
-#define RG_BXX_DATA_FORMAT_ERROR D_00A57050
-#define RG_BXX_LINK_REQUIRED D_00A57078.linkRequired
-#define RG_BXX_TEXTURE_COUNT_ERROR D_00A570C8
-#define RG_BXX_NAME_REQUIRED D_00A570F0
-#define RG_BXX_UNKNOWN_TEXTURE D_00A57100
+#define RG_BXX_NOT_NULL bxxAssertBxxNotNil
+#define RG_BXX_SOURCE_FILE bxxSourcePath
+#define RG_BXX_INVALID_LINK_MEMORY bxxInvalidLinkMemoryFormat
+#define RG_BXX_INVALID_LOAD_MEMORY bxxInvalidLoadMemoryFormat
+#define RG_BXX_NAME_PARAMETER bxxNameParameterName
+#define RG_BXX_DATA_ROOT bxxDataDirectory
+#define RG_BXX_DATA_REQUIRED bxxAssertDataNotNil
+#define RG_BXX_LOAD_REQUIRED bxxAssertLoadNil
+#define RG_BXX_DATA_FORMAT_ERROR bxxDataFormatErrorFormat
+#define RG_BXX_LINK_REQUIRED bxxAssertMessageBlock.linkRequired
+#define RG_BXX_TEXTURE_COUNT_ERROR bxxTextureIdErrorFormat
+#define RG_BXX_NAME_REQUIRED bxxAssertNameNotNil
+#define RG_BXX_UNKNOWN_TEXTURE bxxUnknownTextureNameFormat
 
 static void _InitBxx(RgBxx *pBxx, const char *pszName, int nMode)
 {
@@ -152,20 +132,6 @@ void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine)
     RgHeapFree(InstanceOfRgHeap(), pBxx, RG_BXX_SOURCE_FILE, 83);
 }
 
-extern void InitRgLinkData(RgLinkData *pAna, void *pBuf);
-extern unsigned int RgLinkDataNumOfData(RgLinkData *pAna);
-
-int RgBxxGetTexNum(RgBxx *pBxx);
-
-/*
- * _GetPicTop's picture array is 0x60 (96) bytes per RgBxxPic record
- * (RgBxxGetPicID's own "id * 0x60" stepping); this allocation additionally
- * evidences an owning-archive back-pointer at +0x58 of each record (the
- * type stays incomplete for the reason noted on RgBxxPic above), so the
- * store and the advance to the next record are both byte-offset pointer
- * arithmetic in place of member/array access of a type this allocation
- * does not size.
- */
 void RgBxxSetData(RgBxx *pBxx, void *pData)
 {
     RgHeap *heap;
@@ -190,7 +156,7 @@ void RgBxxSetData(RgBxx *pBxx, void *pData)
         pLink = RgHeapAlloc(heap, 4, RG_BXX_SOURCE_FILE, 100);
         pBxx->m_pLink = pLink;
         InitRgLinkData(pLink, pData);
-        if (RgLinkDataNumOfData(pBxx->m_pLink) != 2) {
+        if (RgLinkDataNumOfData(pBxx->m_pLink) != RG_BXX_LINK_DATA_COUNT) {
             RgError(RG_BXX_DATA_FORMAT_ERROR, RG_BXX_SOURCE_FILE, 103,
                     RgLinkDataNumOfData(pBxx->m_pLink));
         }
@@ -200,8 +166,8 @@ void RgBxxSetData(RgBxx *pBxx, void *pData)
         if (count != 0) {
             do {
                 picIndex++;
-                *(RgBxx **)((char *)pic + 0x58) = pBxx;
-                pic = (RgBxxPic *)((char *)pic + 0x60);
+                pic->pOwner = pBxx;
+                pic++;
             } while (picIndex < count);
         }
     }
@@ -232,9 +198,9 @@ static RgBxxPic *_GetPicTop(RgBxx *pBxx)
     return (RgBxxPic *)(header + 1);
 }
 
-void RgBxxGetHeader(RgBxx *pBxx)
+RgBxxHeader *RgBxxGetHeader(RgBxx *pBxx)
 {
-    _GetHeader(pBxx);
+    return _GetHeader(pBxx);
 }
 
 int RgBxxGetTexNum(RgBxx *pBxx)
@@ -242,13 +208,6 @@ int RgBxxGetTexNum(RgBxx *pBxx)
     return _GetHeader(pBxx)->numTex;
 }
 
-/*
- * rg_help.h already defines the RgBxxPic tag with a partial view (no size
- * this allocation could take), so the 0x60 (96)-byte record step below is
- * the literal step count arithmetic ("id * 0x60") and pointer indexing
- * ("pic + 96 bytes") originally used, in place of a sizeof this allocation
- * cannot take of a type it does not own.
- */
 RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id)
 {
     RgBxxHeader *header;
@@ -261,17 +220,15 @@ RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id)
     if (id >= count) {
         RgError(RG_BXX_TEXTURE_COUNT_ERROR, RG_BXX_SOURCE_FILE, 162, id, count);
     }
-    return (RgBxxPic *)((char *)picTop + id * 0x60);
+    return &picTop[id];
 }
 
 static int _FindPicByName(RgBxx *pBxx, const char *pszName)
 {
     RgBxxHeader *header;
     RgBxxPic *picTop;
-    const char *pictureTable;
     unsigned int nameLength;
     unsigned int picIndex;
-    enum { BXX_PIC_RECORD_SIZE = 0x60 };
 
     header = _GetHeader(pBxx);
     picTop = _GetPicTop(pBxx);
@@ -279,13 +236,11 @@ static int _FindPicByName(RgBxx *pBxx, const char *pszName)
         assert_prog(RG_BXX_NAME_REQUIRED, RG_BXX_SOURCE_FILE, 175);
     }
     nameLength = strlen(pszName);
-    /* Names begin at byte zero of each 0x60-byte picture record. */
-    pictureTable = (const char *)picTop;
     picIndex = 0;
     if (header->numTex != 0) {
         do {
             if (strncmp(pszName,
-                        &pictureTable[picIndex * BXX_PIC_RECORD_SIZE],
+                        picTop[picIndex].name,
                         nameLength) == 0) {
                 return picIndex;
             }
@@ -316,10 +271,10 @@ RgBxxPic *RgBxxGetPic(RgBxx *pBxx, const char *pszName)
     if (index < 0) {
         return 0;
     }
-    return (RgBxxPic *)((char *)picTop + index * 0x60);
+    return &picTop[index];
 }
 
-void RgBxxGetXtx(RgBxx *pBxx)
+void *RgBxxGetXtx(RgBxx *pBxx)
 {
     if (pBxx == 0) {
         assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 212);
@@ -327,24 +282,24 @@ void RgBxxGetXtx(RgBxx *pBxx)
     if (pBxx->m_pLink == 0) {
         assert_prog(RG_BXX_LINK_REQUIRED, RG_BXX_SOURCE_FILE, 213);
     }
-    RgLinkDataGetIndex(pBxx->m_pLink, 1);
+    return RgLinkDataGetIndex(pBxx->m_pLink, 1);
 }
 
-const char D_00A56F90[16] = "pBxx != NIL";
-const char D_00A56FA0[16] = "../rg_bxx.euc.c";
-const char D_00A56FB0[48] = "invalid memory (link) %s %d\n(created %s %d)";
-const char D_00A56FE0[48] = "invalid memory (load) %s %d\n(created %s %d)";
-const char D_00A57010[8] = "pszName";
-const char D_00A57018[16] = "data\\nisimori\\";
-const char D_00A57028[16] = "pData != NIL";
-const char D_00A57038[24] = "pBxx->m_pLoad == NIL";
-const char D_00A57050[40] = "bxx data format error (link num %d)";
-const RgBxxMessageBlock D_00A57078 = {
+const char bxxAssertBxxNotNil[16] = "pBxx != NIL";
+const char bxxSourcePath[16] = "../rg_bxx.euc.c";
+const char bxxInvalidLinkMemoryFormat[48] = "invalid memory (link) %s %d\n(created %s %d)";
+const char bxxInvalidLoadMemoryFormat[48] = "invalid memory (load) %s %d\n(created %s %d)";
+const char bxxNameParameterName[8] = "pszName";
+const char bxxDataDirectory[16] = "data\\nisimori\\";
+const char bxxAssertDataNotNil[16] = "pData != NIL";
+const char bxxAssertLoadNil[24] = "pBxx->m_pLoad == NIL";
+const char bxxDataFormatErrorFormat[40] = "bxx data format error (link num %d)";
+const RgBxxMessageBlock bxxAssertMessageBlock = {
     "pBxx->m_pLink != NIL",
     "sizeof(RgBxxPic) == 96",
     "sizeof(RgBxxHeader) == 48",
     ""
 };
-const char D_00A570C8[40] = "texture ID error (id=%d count=%d)";
-const char D_00A570F0[16] = "pszName != NIL";
-const char D_00A57100[24] = "unknown texture name %s";
+const char bxxTextureIdErrorFormat[40] = "texture ID error (id=%d count=%d)";
+const char bxxAssertNameNotNil[16] = "pszName != NIL";
+const char bxxUnknownTextureNameFormat[24] = "unknown texture name %s";

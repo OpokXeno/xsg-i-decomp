@@ -1,27 +1,16 @@
-/*
- * OV12 original TU 28: 0x00a1e618..0x00a1e880 (5 functions)
- */
 #include "common.h"
 #include "shared.h"
-typedef struct RgChar RgChar;
-#include "ov12/rg_char.h"
-#include "rg_drop_weapon.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_drop_weapon.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
+/* Transparency a dropped weapon loses each tick. */
+#define RG_DROP_WEAPON_FADE_STEP 0.15f
 
-const char D_00A53CF0[] = "pDrop != NIL";
-const char D_00A53D00[] = "../rg_drop_weapon.euc.c";
+/* Defined here: the assert strings. */
+const char dropWeaponAssertDropNotNil[] = "pDrop != NIL";
+const char dropWeaponSourcePath[] = "../rg_drop_weapon.euc.c";
 
-extern void XrgActorDraw(XrgActor *actor);
-extern void XrgActorSetDraw(XrgActor *actor, int flags);
-extern void XrgActorSetTransparent(XrgActor *actor, float transparency);
-extern void DisposeXrgActor(XrgActor *actor);
-
-/* Defined later in this TU (still INCLUDE_ASM); called by CreateRgDropWeapon. */
 static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor);
-
-/* Defined later in this TU (still INCLUDE_ASM); passed to RgCharPassTimeMethod by _InitDrop. */
 static void _PassTime(RgChar *pChar, float deltaTime);
 
 static void _PassTime(RgChar *pChar, float deltaTime)
@@ -34,7 +23,7 @@ static void _PassTime(RgChar *pChar, float deltaTime)
 
     pDrop = (RgDropWeapon *)pChar;
     if (pDrop == 0) {
-        assert_prog(D_00A53CF0, D_00A53D00, 34);
+        assert_prog(dropWeaponAssertDropNotNil, dropWeaponSourcePath, 34);
     }
 
     hidden = pDrop->hidden;
@@ -45,7 +34,7 @@ static void _PassTime(RgChar *pChar, float deltaTime)
             return;
         }
         {
-            transparency = pDrop->transparency - 0.15f;
+            transparency = pDrop->transparency - RG_DROP_WEAPON_FADE_STEP;
             pDrop->transparency = transparency;
             clampedTransparency = 0.0f;
             if (!(transparency < 0.0f)) {
@@ -74,19 +63,16 @@ static void _Disp(RgDropWeapon *pDrop)
     XrgActor *actor;
 
     if (pDrop == 0) {
-        assert_prog(D_00A53CF0, D_00A53D00, 61);
+        assert_prog(dropWeaponAssertDropNotNil, dropWeaponSourcePath, 61);
     }
     if (pDrop->hidden == 0) {
         actor = pDrop->actor;
         if (actor != 0) {
             /*
              * The original calls XrgActorDraw with jal and returns through
-             * the shared epilogue instead of a sibling jump. Under this TU's
-             * compiler the call stays out of tail position only inside a
-             * loop construct, which is the shape a do/while (0) statement
-             * macro gives it; a nested if, a combined condition, early
-             * returns, a switch or a void (RgChar *) signature all compile
-             * to `j XrgActorDraw`.
+             * the epilogue, not a sibling jump. The compiler keeps the call
+             * out of tail position only inside a loop, so the do/while (0)
+             * stays.
              */
             do {
                 XrgActorDraw(actor);
@@ -95,10 +81,12 @@ static void _Disp(RgDropWeapon *pDrop)
     }
 }
 
-static void _Destruct(RgDropWeapon *pDrop)
+static void _Destruct(RgChar *pChar)
 {
+    RgDropWeapon *pDrop = (RgDropWeapon *)pChar;
+
     if (pDrop == 0) {
-        assert_prog(D_00A53CF0, D_00A53D00, 75);
+        assert_prog(dropWeaponAssertDropNotNil, dropWeaponSourcePath, 75);
     }
     if (pDrop->actor != 0) {
         DisposeXrgActor(pDrop->actor);
@@ -108,9 +96,9 @@ static void _Destruct(RgDropWeapon *pDrop)
 static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor)
 {
     if (pDrop == 0) {
-        assert_prog(D_00A53CF0, D_00A53D00, 86);
+        assert_prog(dropWeaponAssertDropNotNil, dropWeaponSourcePath, 86);
     }
-    RgCharDestructMethod(&pDrop->rgChar, (void (*)(RgChar *)) _Destruct);
+    RgCharDestructMethod(&pDrop->rgChar, _Destruct);
     RgCharPassTimeMethod(&pDrop->rgChar, _PassTime);
     RgCharDispMethod(&pDrop->rgChar, (void (*)(RgChar *)) _Disp);
     pDrop->hidden = 0;

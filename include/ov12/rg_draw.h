@@ -3,6 +3,16 @@
 
 #include "shared.h"
 
+/* The request array of an RgDraw holds at most this many requests. */
+#define RG_DRAW_REQ_CAPA 128
+
+/* An RgDraw has at most this many studios, one per screen (left, right). */
+#define RG_DRAW_STUDIO_COUNT 2
+
+/* The 2D screen size the draw views start with. */
+#define RG_DRAW_SCREEN_WIDTH 512
+#define RG_DRAW_SCREEN_HEIGHT 448
+
 typedef struct RgDrawStudio RgDrawStudio;
 
 typedef struct RgDraw RgDraw;
@@ -100,8 +110,7 @@ struct RgDrawView {
 
 /*
  * One entry of RgDraw's request array at +0x10 (RgDrawReq, ov12:0x00a28028,
- * and _DrawMain, ov12:0x00a28320, both still assembly, outside this
- * allocation). Per src/ov12/xrg_dispmodel_impl.c's own citation of
+ * and _DrawMain, ov12:0x00a28320). Per src/ov12/xrg_dispmodel_impl.c's own citation of
  * RgDrawReq, one 20-byte entry stores the request's object, its draw
  * callback, its clear callback and RgDrawReq's last two int parameters
  * (prio, drawID), in that order. _DrawReqTerminate (this allocation) calls
@@ -120,12 +129,12 @@ typedef struct RgDrawRequest {
 struct RgDraw {
     int m_Enabled;
     unsigned char unmodeled_04[0xc];
-    RgDrawRequest m_Requests[128];
+    RgDrawRequest m_Requests[RG_DRAW_REQ_CAPA];
     unsigned int m_RequestCount;
     unsigned char unmodeled_a14[0xc];
     RgFog m_Fog;
     RgDrawStudio *m_pDefaultStudio;
-    RgDrawStudio *m_pStudios[2];
+    RgDrawStudio *m_pStudios[RG_DRAW_STUDIO_COUNT];
     unsigned int m_ActiveStudioMask;
     int m_FullScreenMode;
     int m_FullScreenParam;
@@ -133,5 +142,28 @@ struct RgDraw {
     int m_FadeParam;
     unsigned char unmodeled_a5c[4];
 };
+
+/* Functions and data used by other translation units. */
+RgDraw *InstanceOfRgDraw(void);
+void RgDrawReq(RgDraw *pDraw, void *pObject,
+               void (*drawFunc)(void *pObject, RgDrawStudio *pStudio),
+               void (*clearFunc)(void *pObject), int priority, int drawID);
+RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex);
+void RgDrawCreateDrawStudioFullScreen(RgDraw *pDraw);
+void RgDrawCreateDrawStudioDouble(RgDraw *pDraw);
+void RgDrawGetGlobalFog(RgDraw *pDraw, RgFog *pFog);
+void RgDrawSetGlobalFog(RgDraw *pDraw, RgFog *pFog);
+void RgDrawViewInit(RgDrawView *pView);
+void RgDrawViewSetPosition(RgDrawView *pView, const RgVector position);
+void RgDrawViewSetRotateX(RgDrawView *pView, float angle);
+void RgDrawViewSetRotateY(RgDrawView *pView, float angle);
+void RgDrawViewSetRotateZ(RgDrawView *pView, float angle);
+void RgDrawViewGetScreenRect(RgDrawView *pView, RgRect *pRect);
+RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
+int RgDrawViewIsPointInView(RgDrawView *pView, const RgVector position,
+                            float margin);
+void RgDrawJob(RgDraw *pDraw);
+void RgDrawFadeIn(RgDraw *pDraw);
+void RgDrawFadeOut(RgDraw *pDraw);
 
 #endif /* INCLUDE_OV12_RG_DRAW_H */

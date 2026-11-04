@@ -3,21 +3,19 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_cd.h"
+#include "ov12/assert_prog.h"
 #include "xrg_cdread.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern char *strcpy(char *destination, const char *source);
-extern char *strcat(char *destination, const char *source);
 
-const char D_00A58E28[8] = {0};
+const char cdReadEmptyPath[8] = {0};
 const char root_name_name_check[] = "pszName != NIL";
 const char root_name_source_file[] = "../xrg_cdread.euc.c";
 const char root_name_result_check[] = "pszResult != NIL";
 
 char *_GetLocalPath(void)
 {
-    return (char *) D_00A58E28;
+    return (char *) cdReadEmptyPath;
 }
 
 static char *_RootName(const char *pszName, char *pszResult, const char *pszRoot)
@@ -59,5 +57,5 @@ int XrgCdFileRead(const char *pszName, void *pBuf)
 
 int XrgCdFileAlignmentSize(int uSize)
 {
-    return (uSize + 0x7ff) & ~0x7ff;
+    return (uSize + (XRG_CD_SECTOR_SIZE - 1)) & ~(XRG_CD_SECTOR_SIZE - 1);
 }

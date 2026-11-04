@@ -3,36 +3,27 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_geom_poly.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_colidata.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_poly.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-const char D_00A551A8[16] = "pData != NIL";
+const char geomPolyAssertDataNotNil[16] = "pData != NIL";
 
-const char D_00A551B8[24] = "../rg_geom_poly.euc.c";
+const char geomPolySourcePath[24] = "../rg_geom_poly.euc.c";
 
-const char D_00A551D0[16] = "pPoly != NIL";
+const char geomPolyAssertPolyNotNil[16] = "pPoly != NIL";
 
-const char D_00A551E0[56] = "pPoly != NIL && pOrgArg != NIL && pResult != NIL";
-
-#define RgGeomLocalMatricesAt(geom) \
-    ((RgGeomLocalMatrices *)((unsigned char *)(geom) + 0x20))
-#define RgGeomLocalMatricesConstAt(geom) \
-    ((const RgGeomLocalMatrices *)((const unsigned char *)(geom) + 0x20))
-
-/* RgGeomInit and RgGeomSetType are original functions of the base geometry
- * TU (rg_geom.c, ov12/tu051), already recovered as C. */
-extern void RgGeomInit(RgGeom *pGeom);
-extern void RgGeomSetType(RgGeom *pGeom, int type);
-
-/* The type tag _InitRgGeomPoly passes to RgGeomSetType; no other OV12
- * translation unit names this value yet. */
-#define RG_GEOM_TYPE_POLY 3
+const char geomPolyAssertCollisionArgumentsNotNil[56] = "pPoly != NIL && pOrgArg != NIL && pResult != NIL";
 
 static void _InitRgGeomPoly(RgGeom *geom)
 {
     RgGeomPoly *poly = (RgGeomPoly *)geom;
 
     if (geom == 0) {
-        assert_prog(D_00A551A8, D_00A551B8, 21);
+        assert_prog(geomPolyAssertDataNotNil, geomPolySourcePath, 21);
     }
     RgGeomInit(geom);
     RgGeomSetType(geom, RG_GEOM_TYPE_POLY);
@@ -42,7 +33,7 @@ static void _InitRgGeomPoly(RgGeom *geom)
 }
 
 /*
- * The failed-allocation assert reuses "pData != NIL" (D_00A551A8), not the
+ * The failed-allocation assert reuses "pData != NIL" (geomPolyAssertDataNotNil), not the
  * "pPoly != NIL" text the rest of this TU validates a geometry pointer with;
  * the object is still the same RgGeom every RgGeomPoly accessor here calls
  * geom.
@@ -51,9 +42,9 @@ RgGeom *CreateRgGeomPoly(void)
 {
     RgGeom *geom;
 
-    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomPoly), D_00A551B8, 36);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomPoly), geomPolySourcePath, 36);
     if (geom == 0) {
-        assert_prog(D_00A551A8, D_00A551B8, 37);
+        assert_prog(geomPolyAssertDataNotNil, geomPolySourcePath, 37);
     }
     _InitRgGeomPoly(geom);
     return geom;
@@ -62,7 +53,7 @@ RgGeom *CreateRgGeomPoly(void)
 void InitRgGeomPoly(RgGeom *geom)
 {
     if (geom == 0) {
-        assert_prog(D_00A551D0, D_00A551B8, 44);
+        assert_prog(geomPolyAssertPolyNotNil, geomPolySourcePath, 44);
     }
     _InitRgGeomPoly(geom);
 }
@@ -70,33 +61,35 @@ void InitRgGeomPoly(RgGeom *geom)
 void RgGeomPolySetColiData(RgGeom *geom, RgColiData *coliData)
 {
     if (geom == 0) {
-        assert_prog(D_00A551D0, D_00A551B8, 55);
+        assert_prog(geomPolyAssertPolyNotNil, geomPolySourcePath, 55);
     }
     ((RgGeomPoly *)geom)->coliData = coliData;
 }
 
 void RgGeomPolySetLocal(RgGeom *geom, const RgMatrix local)
 {
-    if (geom != 0) {
-        RgGeomLocalMatrices *matrices = RgGeomLocalMatricesAt(geom);
+    RgGeomPoly *poly = (RgGeomPoly *)geom;
 
-        XrgCopyMatrix(matrices->local, local);
-        XrgInvMatrix(matrices->inverse_local, local);
+    if (geom != 0) {
+        XrgCopyMatrix(poly->local, local);
+        XrgInvMatrix(poly->inverseLocal, local);
     }
 }
 
 RgColiData *RgGeomPolyGetData(const RgGeom *geom)
 {
     if (geom == 0) {
-        assert_prog(D_00A551D0, D_00A551B8, 77);
+        assert_prog(geomPolyAssertPolyNotNil, geomPolySourcePath, 77);
     }
     return ((const RgGeomPoly *)geom)->coliData;
 }
 
 void RgGeomPolyGetLocal(const RgGeom *geom, RgMatrix destination)
 {
+    const RgGeomPoly *poly = (const RgGeomPoly *)geom;
+
     if (geom != 0) {
-        XrgCopyMatrix(destination, RgGeomLocalMatricesConstAt(geom)->local);
+        XrgCopyMatrix(destination, poly->local);
     } else {
         XrgUnitMatrix(destination);
     }
@@ -104,76 +97,72 @@ void RgGeomPolyGetLocal(const RgGeom *geom, RgMatrix destination)
 
 void RgGeomPolyGetInvLocal(const RgGeom *geom, RgMatrix destination)
 {
+    const RgGeomPoly *poly = (const RgGeomPoly *)geom;
+
     if (geom != 0) {
-        XrgCopyMatrix(destination, RgGeomLocalMatricesConstAt(geom)->inverse_local);
+        XrgCopyMatrix(destination, poly->inverseLocal);
     } else {
         XrgUnitMatrix(destination);
     }
 }
 
 /*
- * pOrgArg is transformed into the poly's local space with inverseLocal, its
- * homogeneous component forced to 1.0 (a point, not a direction), then
- * bundled with the ball's own radius (the float just past pOrgArg's four
- * components) into a local Ball-shaped buffer RgColiDataVsBall reads through
- * its own void *pArg. On a hit, pResult's hit-point vector (its homogeneous
- * component forced to 0.0, a direction rather than a point) is transformed
- * back out of local space with the poly's local matrix.
+ * The ball's center is transformed into the poly's local space with
+ * inverseLocal, its homogeneous component forced to 1.0 (a point, not a
+ * direction), and tested with its radius. On a hit, the correction vector
+ * (homogeneous component forced to 0.0, a direction rather than a point) is
+ * transformed back out of local space with the poly's local matrix.
  */
-int RgGeomPolyCheckBall(RgGeom *pPoly, float *pOrgArg, float *pResult)
+int RgGeomPolyCheckBall(RgGeom *pPoly, RgColiBall *pOrgArg,
+                        RgColiBallResult *pResult)
 {
     RgGeomPoly *poly = (RgGeomPoly *)pPoly;
-    struct {
-        RgVector center;
-        float radius;
-    } ball;
+    RgColiBall ball;
 
     if (pPoly == 0 || pOrgArg == 0 || pResult == 0) {
-        assert_prog(D_00A551E0, D_00A551B8, 108);
+        assert_prog(geomPolyAssertCollisionArgumentsNotNil, geomPolySourcePath, 108);
     }
 
     if (poly->coliData == 0) {
         return 0;
     }
 
-    pOrgArg[3] = 1.0f;
-    XrgApplyVector(ball.center, poly->inverseLocal, pOrgArg);
-    ball.radius = pOrgArg[4];
+    pOrgArg->m_center[3] = 1.0f;
+    XrgApplyVector(ball.m_center, poly->inverseLocal, pOrgArg->m_center);
+    ball.m_radius = pOrgArg->m_radius;
 
     if (RgColiDataVsBall(poly->coliData, &ball, pResult) == 0) {
         return 0;
     }
 
-    pResult[7] = 0.0f;
-    XrgApplyVector(pResult + 4, poly->local, pResult + 4);
+    pResult->m_correction[3] = 0.0f;
+    XrgApplyVector(pResult->m_correction, poly->local, pResult->m_correction);
     return 1;
 }
 
 /*
- * pOrgArg holds the ray origin (pOrgArg[0..3], homogeneous component forced
- * to 1.0) and direction (pOrgArg[4..7], component forced to 0.0). Both are
- * transformed into poly space with inverseLocal into a local ray buffer that
- * RgColiDataVsRay reads. On a hit, the hit-point vector pResult (component
- * forced to 0.0) is transformed back out with the poly's local matrix.
+ * The segment's start (homogeneous component forced to 1.0) and vector
+ * (component forced to 0.0) are transformed into poly space with inverseLocal
+ * into a local segment that RgColiDataVsRay reads. On a hit, the hit plane
+ * (component forced to 0.0) is transformed back out with the poly's local
+ * matrix.
  */
-int RgGeomPolyCheckRay(RgGeom *pPoly, float *pOrgArg, float *pResult)
+int RgGeomPolyCheckRay(RgGeom *pPoly, RgColiSegment *pOrgArg,
+                       RgColiSegmentHit *pResult)
 {
     RgGeomPoly *poly = (RgGeomPoly *)pPoly;
-    struct {
-        RgVector origin;
-        RgVector direction;
-    } ray;
+    RgColiSegment ray;
 
     if (pPoly == 0 || pOrgArg == 0 || pResult == 0) {
-        assert_prog(D_00A551E0, D_00A551B8, 134);
+        assert_prog(geomPolyAssertCollisionArgumentsNotNil, geomPolySourcePath, 134);
     }
 
     if (poly->coliData == 0) {
         return 0;
     }
 
-    pOrgArg[3] = 1.0f;
-    pOrgArg[7] = 0.0f;
+    pOrgArg->m_start[3] = 1.0f;
+    pOrgArg->m_vector[3] = 0.0f;
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
         "lqc2 $vf3, 0(%2)\n\t"
@@ -185,7 +174,7 @@ int RgGeomPolyCheckRay(RgGeom *pPoly, float *pOrgArg, float *pResult)
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(ray.origin), "r"(pOrgArg), "r"(poly->inverseLocal)
+        : : "r"(ray.m_start), "r"(pOrgArg->m_start), "r"(poly->inverseLocal)
         : "memory");
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
@@ -198,14 +187,14 @@ int RgGeomPolyCheckRay(RgGeom *pPoly, float *pOrgArg, float *pResult)
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(ray.direction), "r"(pOrgArg + 4), "r"(poly->inverseLocal)
+        : : "r"(ray.m_vector), "r"(pOrgArg->m_vector), "r"(poly->inverseLocal)
         : "memory");
 
     if (RgColiDataVsRay(poly->coliData, &ray, pResult) == 0) {
         return 0;
     }
 
-    pResult[3] = 0.0f;
+    pResult->m_plane[3] = 0.0f;
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
         "lqc2 $vf3, 0(%2)\n\t"
@@ -217,7 +206,7 @@ int RgGeomPolyCheckRay(RgGeom *pPoly, float *pOrgArg, float *pResult)
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(pResult), "r"(pResult), "r"(poly->local)
+        : : "r"(pResult->m_plane), "r"(pResult->m_plane), "r"(poly->local)
         : "memory");
     return 1;
 }

@@ -3,56 +3,61 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_vector.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_vector.h"
+#include "ov12/rg_error.h"
+#include "ov12/xrg_v_log.h"
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
-extern const char D_00A54F40[];
-extern const char D_00A54F68[];
-extern const char D_00A55030[];
-extern const char D_00A55090[];
-extern const char D_00A550B8[];
 
-static void _VecAssert(RgVectorPrefix *vector, const char *message,
+/* Defined at the end of this file. */
+extern const char vectorErrorWithCreationSiteFormat[];
+extern const char vectorNilErrorFormat[];
+extern const char rg_vector_not_null_message[];
+extern const char vectorSourcePath[]; /* "../rg_vector.euc.c", the TU's own __FILE__ */
+extern const char vectorAssertCapacityPositive[]; /* "uCapa > 0" */
+extern const char vectorAssertListNotNil[]; /* "pVector->m_apList != NIL" */
+extern const char vectorAssertVecNotNil[]; /* "pVec != NIL" */
+extern const char vectorCapacityOverFormat[]; /* "vec(%p) capa over (capa %d size %d)" */
+extern const char rg_vector_index_message[];
+extern const char vectorAssertSizeWithinCapacity[];
+extern const char vectorAssertIndexWithinSize[]; /* "0 <= uIndex && uIndex < pVector->m_uSize" */
+extern const char vectorDumpHeaderFormat[];
+extern const char vectorDumpElementFormat[];
+
+static void _VecAssert(RgPtrVector *vector, const char *message,
                        const char *file, int line)
 {
     if (vector != 0) {
-        RgError(D_00A54F40, file, line, vector, message, vector->m_szFile,
+        RgError(vectorErrorWithCreationSiteFormat, file, line, vector, message, vector->m_szFile,
                 vector->m_nLine);
     } else {
-        RgError(D_00A54F68, file, line, message);
+        RgError(vectorNilErrorFormat, file, line, message);
     }
 }
 
-static void _InitRgVector(RgVectorPrefix *vector, unsigned int capacity)
+static void _InitRgVector(RgPtrVector *vector, unsigned int capacity)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 31);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 31);
     if (capacity == 0)
-        _VecAssert(vector, D_00A54FA8, D_00A54F90, 32);
+        _VecAssert(vector, vectorAssertCapacityPositive, vectorSourcePath, 32);
     vector->m_apList = RgHeapAlloc(InstanceOfRgHeap(),
-                                   capacity * sizeof(void *), D_00A54F90, 33);
+                                   capacity * sizeof(void *), vectorSourcePath, 33);
     if (vector->m_apList == 0)
-        _VecAssert(vector, D_00A54FB8, D_00A54F90, 34);
+        _VecAssert(vector, vectorAssertListNotNil, vectorSourcePath, 34);
     vector->m_uCapa = capacity;
     vector->m_uSize = 0;
     vector->m_szFile[0] = 0;
     vector->m_nLine = 0;
 }
 
-extern char *strncpy(char *dest, const char *src, unsigned int n);
-
-RgVectorPrefix *CreateRgVector(unsigned int capacity, const char *file, int line)
+RgPtrVector *CreateRgVector(unsigned int capacity, const char *file, int line)
 {
-    RgVectorPrefix *vector;
+    RgPtrVector *vector;
 
-    vector = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgVectorPrefix), D_00A54F90, 45);
+    vector = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPtrVector), vectorSourcePath, 45);
     if (vector == 0)
-        _VecAssert(vector, D_00A54FD8, file, line);
+        _VecAssert(vector, vectorAssertVecNotNil, file, line);
     _InitRgVector(vector, capacity);
     strncpy(vector->m_szFile, file, sizeof(vector->m_szFile) - 1);
     vector->m_szFile[sizeof(vector->m_szFile) - 1] = 0;
@@ -60,35 +65,31 @@ RgVectorPrefix *CreateRgVector(unsigned int capacity, const char *file, int line
     return vector;
 }
 
-extern void RgHeapFree(void *heap, void *pointer, const char *source_file, int line);
-
-void DisposeRgVector(RgVectorPrefix *vector, const char *file, int line)
+void DisposeRgVector(RgPtrVector *vector, const char *file, int line)
 {
     if (vector == 0)
         _VecAssert(vector, rg_vector_not_null_message, file, line);
-    RgHeapFree(InstanceOfRgHeap(), vector->m_apList, D_00A54F90, 60);
-    RgHeapFree(InstanceOfRgHeap(), vector, D_00A54F90, 61);
+    RgHeapFree(InstanceOfRgHeap(), vector->m_apList, vectorSourcePath, 60);
+    RgHeapFree(InstanceOfRgHeap(), vector, vectorSourcePath, 61);
 }
 
-void RgVectorPush(RgVectorPrefix *vector, void *element)
+void RgVectorPush(RgPtrVector *vector, void *element)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 70);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 70);
     if (vector->m_uCapa <= vector->m_uSize) {
-        RgError(D_00A54FE8, D_00A54F90, 73, vector, vector->m_uCapa,
+        RgError(vectorCapacityOverFormat, vectorSourcePath, 73, vector, vector->m_uCapa,
                vector->m_uSize);
     }
     vector->m_apList[vector->m_uSize++] = element;
 }
 
 /*
- * RgVectorIndex reads one pointer-sized element from the vector's compact
- * pointer array. Only the proven three-word prefix is modeled; later vector
- * state is outside this function's access range. Message addresses are
- * retained from the original OV12 text/data image.
+ * RgVectorIndex returns one element of the pointer array, asserting the
+ * index is below the current size.
  */
 
-void *RgVectorIndex(RgVectorPrefix *vector, unsigned int index,
+void *RgVectorIndex(RgPtrVector *vector, unsigned int index,
                     const char *file, int line)
 {
     if (vector == 0)
@@ -98,21 +99,21 @@ void *RgVectorIndex(RgVectorPrefix *vector, unsigned int index,
     return vector->m_apList[index];
 }
 
-unsigned int RgVectorSize(RgVectorPrefix *vector)
+unsigned int RgVectorSize(RgPtrVector *vector)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 89);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 89);
     return vector->m_uSize;
 }
 
-unsigned int RgVectorCapacity(RgVectorPrefix *vector)
+unsigned int RgVectorCapacity(RgPtrVector *vector)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 96);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 96);
     return vector->m_uCapa;
 }
 
-int RgVectorRemove(RgVectorPrefix *vector, void *element, const char *file,
+int RgVectorRemove(RgPtrVector *vector, void *element, const char *file,
                    int line)
 {
     unsigned int index;
@@ -136,14 +137,14 @@ int RgVectorRemove(RgVectorPrefix *vector, void *element, const char *file,
     return removed;
 }
 
-void RgVectorClear(RgVectorPrefix *vector)
+void RgVectorClear(RgPtrVector *vector)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 125);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 125);
     vector->m_uSize = 0;
 }
 
-int RgVectorFind_sub(RgVectorPrefix *vector, void *element,
+int RgVectorFind_sub(RgPtrVector *vector, void *element,
                      const char *file, int line)
 {
     unsigned int index;
@@ -157,14 +158,14 @@ int RgVectorFind_sub(RgVectorPrefix *vector, void *element,
     return -1;
 }
 
-void RgVectorResize(RgVectorPrefix *vector, unsigned int size)
+void RgVectorResize(RgPtrVector *vector, unsigned int size)
 {
     unsigned int index;
 
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 145);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 145);
     if (size > vector->m_uCapa)
-        _VecAssert(vector, D_00A55030, D_00A54F90, 146);
+        _VecAssert(vector, vectorAssertSizeWithinCapacity, vectorSourcePath, 146);
     if (size > vector->m_uSize) {
         for (index = vector->m_uSize; index < size; index++)
             vector->m_apList[index] = 0;
@@ -172,22 +173,22 @@ void RgVectorResize(RgVectorPrefix *vector, unsigned int size)
     vector->m_uSize = size;
 }
 
-void RgVectorAssign(RgVectorPrefix *vector, unsigned int index, void *element)
+void RgVectorAssign(RgPtrVector *vector, unsigned int index, void *element)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 158);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 158);
     if (index >= vector->m_uSize)
-        _VecAssert(vector, D_00A55060, D_00A54F90, 159);
+        _VecAssert(vector, vectorAssertIndexWithinSize, vectorSourcePath, 159);
     vector->m_apList[index] = element;
 }
 
-void RgVectorDup(RgVectorPrefix *vector, void **dest)
+void RgVectorDup(RgPtrVector *vector, void **dest)
 {
     void **src;
     int count;
 
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 169);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 169);
     count = vector->m_uSize;
     src = vector->m_apList;
     if (count > 0) {
@@ -198,37 +199,37 @@ void RgVectorDup(RgVectorPrefix *vector, void **dest)
     }
 }
 
-void **RgVectorGetArray(RgVectorPrefix *vector)
+void **RgVectorGetArray(RgPtrVector *vector)
 {
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 178);
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 178);
     return vector->m_apList;
 }
 
-void RgVectorDump(RgVectorPrefix *vector)
+void RgVectorDump(RgPtrVector *vector)
 {
     unsigned int index;
 
     if (vector == 0)
-        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 187);
-    XrgLog(D_00A55090, D_00A54F90, 189, vector, vector->m_uCapa,
+        _VecAssert(vector, rg_vector_not_null_message, vectorSourcePath, 187);
+    XrgLog(vectorDumpHeaderFormat, vectorSourcePath, 189, vector, vector->m_uCapa,
            vector->m_uSize);
     for (index = 0; index < vector->m_uSize; index++) {
-        XrgLog(D_00A550B8, D_00A54F90, 191, index,
+        XrgLog(vectorDumpElementFormat, vectorSourcePath, 191, index,
                vector->m_apList[index]);
     }
 }
 
-const char D_00A54F40[40] = "vector(%p) error (%s)\ncreated at %s,%d";
-const char D_00A54F68[24] = "vector nil error (%s)";
+const char vectorErrorWithCreationSiteFormat[40] = "vector(%p) error (%s)\ncreated at %s,%d";
+const char vectorNilErrorFormat[24] = "vector nil error (%s)";
 const char rg_vector_not_null_message[16] = "pVector != NIL";
-const char D_00A54F90[24] = "../rg_vector.euc.c";
-const char D_00A54FA8[16] = "uCapa > 0";
-const char D_00A54FB8[32] = "pVector->m_apList != NIL";
-const char D_00A54FD8[16] = "pVec != NIL";
-const char D_00A54FE8[40] = "vec(%p) capa over (capa %d size %d)";
+const char vectorSourcePath[24] = "../rg_vector.euc.c";
+const char vectorAssertCapacityPositive[16] = "uCapa > 0";
+const char vectorAssertListNotNil[32] = "pVector->m_apList != NIL";
+const char vectorAssertVecNotNil[16] = "pVec != NIL";
+const char vectorCapacityOverFormat[40] = "vec(%p) capa over (capa %d size %d)";
 const char rg_vector_index_message[32] = "pVector->m_uSize > uIndex";
-const char D_00A55030[48] = "0U <= uSize && uSize <= pVector->m_uCapa";
-const char D_00A55060[48] = "0 <= uIndex && uIndex < pVector->m_uSize";
-const char D_00A55090[40] = "--- dump vector (%p:capa=%d size=%d)\n";
-const char D_00A550B8[16] = "  [%d] -> %p\n";
+const char vectorAssertSizeWithinCapacity[48] = "0U <= uSize && uSize <= pVector->m_uCapa";
+const char vectorAssertIndexWithinSize[48] = "0 <= uIndex && uIndex < pVector->m_uSize";
+const char vectorDumpHeaderFormat[40] = "--- dump vector (%p:capa=%d size=%d)\n";
+const char vectorDumpElementFormat[16] = "  [%d] -> %p\n";

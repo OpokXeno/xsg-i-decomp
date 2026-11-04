@@ -3,84 +3,56 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_geom_point.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void InitRgGeomPoint(RgGeomPoint *point, float weight);
-extern void XrgAddVectorXYZ(RgVector destination, RgVector source1,
-                            RgVector source2);
-extern float XrgLengthVector(RgVector vector);
-extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern void XrgClearVector(RgVector destination);
-extern unsigned int RgGeomGetStatus(RgGeom *pGeom);
 
 /*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a55100 contains the source filename "../rg_geom_point.euc.c".
- * ov12:0x00a55118 contains the assertion expression
- * "fWeight > RG_FCONST(0.0)".
- * ov12:0x00a55138 contains the assertion expression "pGeom != NIL".
+ * Scaffold-owned .rodata, kept under splat names:
+ * ov12:0x00a55100 "../rg_geom_point.euc.c", 0x00a55118
+ * "fWeight > RG_FCONST(0.0)", 0x00a55138 "pGeom != NIL".
  */
 const char rg_point_assert_expression[16] = "pPoint != NIL";
-const char D_00A55100[24] = "../rg_geom_point.euc.c";
-const char D_00A55118[32] = "fWeight > RG_FCONST(0.0)";
-const char D_00A55138[16] = "pGeom != NIL";
+const char geomPointSourcePath[24] = "../rg_geom_point.euc.c";
+const char geomPointAssertWeightPositive[32] = "fWeight > RG_FCONST(0.0)";
+const char geomPointAssertGeomNotNil[16] = "pGeom != NIL";
 
 float RgGetGeomGravity(void)
 {
-    return 60.0f;
+    return RG_GEOM_GRAVITY;
 }
-
-/*
- * RgGeomInit, RgGeomSetType and RgGeomSetPassTimeMeshod are original
- * functions of the base geometry TU (rg_geom.c, ov12/tu051), already
- * recovered as C.
- */
-extern void RgGeomInit(RgGeom *pGeom);
-extern void RgGeomSetType(RgGeom *pGeom, int type);
-extern void RgGeomSetPassTimeMeshod(RgGeom *pGeom,
-                                     void (*method)(RgGeom *, float));
-extern void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime);
-
-/* The type tag InitRgGeomPoint passes to RgGeomSetType; no other OV12
-   translation unit names this value yet. */
-#define RG_GEOM_TYPE_POINT 0
 
 void InitRgGeomPoint(RgGeomPoint *point, float weight)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 32);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 32);
     }
     if (!(weight > 0.0f)) {
-        assert_prog(D_00A55118, D_00A55100, 33);
+        assert_prog(geomPointAssertWeightPositive, geomPointSourcePath, 33);
     }
-    RgGeomInit((RgGeom *)point);
-    RgGeomSetType((RgGeom *)point, RG_GEOM_TYPE_POINT);
-    RgGeomSetPassTimeMeshod((RgGeom *)point,
-                            (void (*)(RgGeom *, float))RgGeomPointPassTime);
+    RgGeomInit(&point->geom);
+    RgGeomSetType(&point->geom, RG_GEOM_TYPE_POINT);
+    RgGeomSetPassTimeMeshod(&point->geom,
+                            (RgGeomPassTimeMethod)RgGeomPointPassTime);
     XrgClearVector(point->position);
     XrgClearVector(point->velocity);
     XrgClearVector(point->force);
     XrgClearVector(point->oldPosition);
     point->moveResist = 0.0f;
-    point->maxXYSpd = 1e8f;
+    point->maxXYSpd = RG_GEOM_NO_LIMIT;
 }
 
 RgGeomPoint *CreateRgGeomPoint(float weight)
 {
     RgGeomPoint *point;
 
-    point = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomPoint), D_00A55100,
+    point = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomPoint), geomPointSourcePath,
                         50);
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 51);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 51);
     }
     InitRgGeomPoint(point, weight);
     return point;
@@ -89,7 +61,7 @@ RgGeomPoint *CreateRgGeomPoint(float weight)
 void RgGeomPointSetPos(RgGeomPoint *point, RgVector position)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 64);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 64);
     }
     XrgCopyVector(point->position, position);
     XrgCopyVector(point->oldPosition, position);
@@ -98,7 +70,7 @@ void RgGeomPointSetPos(RgGeomPoint *point, RgVector position)
 void RgGeomPointMovePos(RgGeomPoint *point, RgVector position)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 71);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 71);
     }
     XrgCopyVector(point->position, position);
 }
@@ -106,7 +78,7 @@ void RgGeomPointMovePos(RgGeomPoint *point, RgVector position)
 void RgGeomPointResetPos(RgGeomPoint *point)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 77);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 77);
     }
     XrgCopyVector(point->oldPosition, point->position);
 }
@@ -114,7 +86,7 @@ void RgGeomPointResetPos(RgGeomPoint *point)
 void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 84);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 84);
     }
     XrgCopyVector(point->velocity, velocity);
 }
@@ -122,7 +94,7 @@ void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity)
 void RgGeomPointAddForce(RgGeomPoint *point, RgVector force)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 92);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 92);
     }
     XrgAddVectorXYZ(point->force, point->force, force);
 }
@@ -130,10 +102,10 @@ void RgGeomPointAddForce(RgGeomPoint *point, RgVector force)
 void RgGeomPointSetWeight(RgGeomPoint *point, float weight)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 99);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 99);
     }
     if (!(weight > 0.0f)) {
-        assert_prog(D_00A55118, D_00A55100, 100);
+        assert_prog(geomPointAssertWeightPositive, geomPointSourcePath, 100);
     }
     point->weight = weight;
 }
@@ -141,7 +113,7 @@ void RgGeomPointSetWeight(RgGeomPoint *point, float weight)
 void RgGeomPointSetMoveResist(RgGeomPoint *point, float moveResist)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 107);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 107);
     }
     point->moveResist = moveResist;
 }
@@ -154,7 +126,7 @@ void RgGeomPointSetMoveResist(RgGeomPoint *point, float moveResist)
 void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxXYSpd)
 {
     if (point == 0) {
-        assert_prog(D_00A55138, D_00A55100, 114);
+        assert_prog(geomPointAssertGeomNotNil, geomPointSourcePath, 114);
     }
     if (maxXYSpd <= 0.0f) {
         maxXYSpd = 1.0f;
@@ -162,30 +134,28 @@ void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxXYSpd)
     point->maxXYSpd = maxXYSpd;
 }
 
-void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
+void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
                          const char *source_file, int source_line)
 {
     if (point == 0) {
         assert_prog(rg_point_assert_expression, source_file, source_line);
     }
-    XrgCopyVector((float *)destination,
-                  (float *)((const char *)point + 0x20));
+    XrgCopyVector(destination, point->position);
 }
 
-void __RgGeomPointGetOldPos(RgGeomPoint *point, RgPointVector *destination,
+void __RgGeomPointGetOldPos(RgGeomPoint *point, RgVector destination,
                             const char *source_file, int source_line)
 {
     if (point == 0) {
         assert_prog(rg_point_assert_expression, source_file, source_line);
     }
-    XrgCopyVector((float *)destination,
-                  (float *)((const char *)point + 0x30));
+    XrgCopyVector(destination, point->oldPosition);
 }
 
 void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 139);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 139);
     }
     XrgCopyVector(velocity, point->velocity);
 }
@@ -193,7 +163,7 @@ void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity)
 float RgGeomPointGetSpeed(RgGeomPoint *point)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 145);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 145);
     }
     return XrgLengthVector(point->velocity);
 }
@@ -201,7 +171,7 @@ float RgGeomPointGetSpeed(RgGeomPoint *point)
 float RgGeomPointGetWeight(RgGeomPoint *point)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 152);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 152);
     }
     return point->weight;
 }
@@ -209,39 +179,17 @@ float RgGeomPointGetWeight(RgGeomPoint *point)
 float RgGeomPointGetMoveResist(RgGeomPoint *point)
 {
     if (point == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 159);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 159);
     }
     return point->moveResist;
 }
-
-/*
- * This function reads RgGeom's own status word (rg_geom.c's third member,
- * "status") directly through the same (RgGeom *) cast RgGeomInit and
- * RgGeomSetType already use on this same pointer above, alongside a second
- * read through RgGeomGetStatus further down; each TU that looks inside
- * RgGeom keeps its own minimal view of the bytes it touches, the way
- * rg_geom_pillar.c already does for the matrices past this word.
- */
-struct RgGeom {
-    unsigned char unmodeled_00[8];
-    unsigned int status;
-};
-
-/*
- * The two RgGeom status bits this function tests: set, gravity is
- * integrated into the vertical velocity below, or the horizontal velocity
- * is damped by moveResist. Bit 1, RG_GEOM_STATUS_ACTIVE, is rg_geom.c's own
- * name for this same status word's low bit.
- */
-#define RG_GEOM_STATUS_GRAVITY 2
-#define RG_GEOM_STATUS_MOVE_RESIST 4
 
 void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime)
 {
     RgVector delta;
 
     if (pPoint == 0) {
-        assert_prog(rg_point_assert_expression, D_00A55100, 172);
+        assert_prog(rg_point_assert_expression, geomPointSourcePath, 172);
     }
 
     __asm__ __volatile__(
@@ -271,14 +219,14 @@ void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime)
         pPoint->velocity[2] = horizontal[2];
     }
 
-    if (((RgGeom *)pPoint)->status & RG_GEOM_STATUS_GRAVITY) {
-        pPoint->velocity[1] -= 60.0f * deltaTime;
+    if (pPoint->geom.status & RG_GEOM_STATUS_GRAVITY) {
+        pPoint->velocity[1] -= RG_GEOM_GRAVITY * deltaTime;
     }
 
     XrgScaleVector(delta, pPoint->velocity, deltaTime);
     XrgAddVectorXYZ(pPoint->position, pPoint->position, delta);
 
-    if (RgGeomGetStatus((RgGeom *)pPoint) & RG_GEOM_STATUS_MOVE_RESIST) {
+    if (RgGeomGetStatus(&pPoint->geom) & RG_GEOM_STATUS_MOVE_RESIST) {
         float damping = pPoint->moveResist * deltaTime;
 
         pPoint->velocity[0] -= pPoint->velocity[0] * damping;

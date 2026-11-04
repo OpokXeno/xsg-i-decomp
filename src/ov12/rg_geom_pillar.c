@@ -3,60 +3,38 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_pillar.h"
+#include "ov12/rg_geom_tray.h"
+#include "ov12/xrg_rand_int.h"
 
-/* CheckBallBoxCollision is an original function of this same TU and
- * XrgApplyVector and XrgSetVectorXYZ of a neighbouring xrg_* one; all three
- * are still assembly, so this TU declares them. */
 static int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int flag);
 static int _CheckPillarBall(const RgVector localPosition, RgVector localNormal, RgVector localContact, RgVector localCorrection, float halfWidth, float halfDepth, float radius);
-extern void XrgApplyVector(RgVector destination, const RgMatrix matrix, const RgVector source);
-extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
-/* InitRgGeomTray is an original function of a neighbouring tray TU
- * (rg_geom_tray.c, ov12/tu056), already recovered as C; CreateRgGeomTray in
- * that same TU is still assembly.  This TU declares both, as it does for the
- * other still-assembly siblings above. */
-extern void InitRgGeomTray(RgGeom *geom);
-extern RgGeom *CreateRgGeomTray(void);
-/* RgGeomSetType is an original function of the base geometry TU
- * (rg_geom.c, ov12/tu051), already recovered as C. */
-extern void RgGeomSetType(RgGeom *pGeom, int type);
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
 
 /* Assertion and source strings referenced by InitRgGeomPillar. */
-const char D_00A55260[16] = "pPillar != NIL";
+const char geomPillarAssertPillarNotNil[16] = "pPillar != NIL";
 
-const char D_00A55270[32] = "../rg_geom_pillar.euc.c";
-
-/* The type tag InitRgGeomPillar and CreateRgGeomPillar pass to
- * RgGeomSetType; no other OV12 translation unit names this value yet. */
-#define RG_GEOM_TYPE_PILLAR 5
-
-/* The four scratch vectors are defined as function-scope statics below. */
-/* The members this TU evidences.  RgGeom's two matrix members are the ones
- * rg_geom_tray.c and rg_geom_poly.c already document at +0x20 and +0x60; the
- * pillar's half-extents along local X and Z sit just before them.  The bytes
- * this allocation has no evidence about are named for their offset and stay
- * unread. */
-struct RgGeom {
-    unsigned char unknown_0x00[0x18];
-    float halfWidth;
-    float halfDepth;
-    RgMatrix local;
-    RgMatrix inverseLocal;
-};
-
-struct RgGeomPoint {
-    unsigned char unmodeled_00[0x20];
-    RgVector position;
-    RgVector oldPosition;
-    unsigned char unmodeled_40[0x30];
-    float radius;
-};
+const char geomPillarSourcePath[32] = "../rg_geom_pillar.euc.c";
 
 /* Both diagonal corners of the test box are given the same fixed local Y;
  * only their X and Z carry the pillar's own half-extents. */
 #define RG_GEOM_PILLAR_CORNER_Y 3.0f
+
+/* The pillar's footprint as a 3x3 grid of cells around the box, numbered
+ * x cell (low 0, middle 1, high 2) plus 3 per z row (low 0, middle 1, high
+ * 2) by _CheckPillarBall. */
+enum {
+    RG_PILLAR_CELL_NEG_X_NEG_Z_CORNER = 0,
+    RG_PILLAR_CELL_NEG_Z_FACE = 1,
+    RG_PILLAR_CELL_POS_X_NEG_Z_CORNER = 2,
+    RG_PILLAR_CELL_NEG_X_FACE = 3,
+    RG_PILLAR_CELL_INSIDE = 4,
+    RG_PILLAR_CELL_POS_X_FACE = 5,
+    RG_PILLAR_CELL_NEG_X_POS_Z_CORNER = 6,
+    RG_PILLAR_CELL_POS_Z_FACE = 7,
+    RG_PILLAR_CELL_POS_X_POS_Z_CORNER = 8
+};
 
 /*
  * Initialises the pillar: asserts the geometry handle is non-null, then
@@ -65,7 +43,7 @@ struct RgGeomPoint {
 void InitRgGeomPillar(RgGeom *pPillar)
 {
     if (pPillar == 0) {
-        assert_prog(D_00A55260, D_00A55270, 0x15);
+        assert_prog(geomPillarAssertPillarNotNil, geomPillarSourcePath, 0x15);
     }
     InitRgGeomTray(pPillar);
     RgGeomSetType(pPillar, RG_GEOM_TYPE_PILLAR);
@@ -94,7 +72,7 @@ RgGeom *CreateRgGeomPillar(void)
  * are the function's own four scratch vectors.
  *
  */
-int RgGeomPillarCheckPoint(RgGeom *pillar, RgGeomPoint *point, RgVector contact)
+int RgGeomPillarCheckPoint(RgGeomTray *pillar, RgGeomBall *ball, RgVector contact)
 {
     static RgVector aFrom;
     static RgVector aTo;
@@ -106,27 +84,27 @@ int RgGeomPillarCheckPoint(RgGeom *pillar, RgGeomPoint *point, RgVector contact)
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
-        : : "r"(aFrom), "r"(point->oldPosition) : "memory");
+        : : "r"(aFrom), "r"(ball->point.oldPosition) : "memory");
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
-        : : "r"(aTo), "r"(point->position) : "memory");
+        : : "r"(aTo), "r"(ball->point.position) : "memory");
 
     {
-        const float *inverseLocal = pillar->inverseLocal;
+        float *inverseLocal = pillar->inverseLocal;
 
         aTo[3] = 1.0f;
         aFrom[3] = 1.0f;
         XrgApplyVector(aFrom, inverseLocal, aFrom);
         XrgApplyVector(aTo, inverseLocal, aTo);
     }
-    aFrom[3] = point->radius;
-    aTo[3] = point->radius;
+    aFrom[3] = ball->radius;
+    aTo[3] = ball->radius;
 
-    XrgSetVectorXYZ(aLeftC, -pillar->halfWidth,
-                    RG_GEOM_PILLAR_CORNER_Y, -pillar->halfDepth);
-    XrgSetVectorXYZ(aRightC, pillar->halfWidth,
-                    RG_GEOM_PILLAR_CORNER_Y, pillar->halfDepth);
+    XrgSetVectorXYZ(aLeftC, -pillar->width,
+                    RG_GEOM_PILLAR_CORNER_Y, -pillar->height);
+    XrgSetVectorXYZ(aRightC, pillar->width,
+                    RG_GEOM_PILLAR_CORNER_Y, pillar->height);
 
     corners[0] = &aLeftC;
     corners[1] = &aRightC;
@@ -135,7 +113,7 @@ int RgGeomPillarCheckPoint(RgGeom *pillar, RgGeomPoint *point, RgVector contact)
     hit = CheckBallBoxCollision(contact, corners, 0);
 
     if (hit != 0) {
-        const float *local = pillar->local;
+        float *local = pillar->local;
 
         contact[3] = 1.0f;
         __asm__ __volatile__(
@@ -474,7 +452,7 @@ static int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int fla
     return 1;
 }
 
-int RgGeomPillarCheckBall(RgGeom *pillar, RgGeomPoint *point,
+int RgGeomPillarCheckBall(RgGeomTray *pillar, RgGeomBall *ball,
                           RgVector worldResults[3])
 {
     RgVector localPosition;
@@ -495,11 +473,11 @@ int RgGeomPillarCheckBall(RgGeom *pillar, RgGeomPoint *point,
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
         : : "r"(localPosition), "r"(pillar->inverseLocal),
-            "r"(point->position) : "memory");
+            "r"(ball->point.position) : "memory");
 
     hit = _CheckPillarBall(localPosition, localNormal, localContact,
-                           localCorrection, pillar->halfWidth,
-                           pillar->halfDepth, point->radius);
+                           localCorrection, pillar->width,
+                           pillar->height, ball->radius);
     if (hit == 0) {
         return hit;
     }
@@ -546,8 +524,6 @@ int RgGeomPillarCheckBall(RgGeom *pillar, RgGeomPoint *point,
             "r"(pillar->local) : "memory");
     return hit;
 }
-
-extern float XrgNormalizeVector(RgVector destination, const RgVector source);
 
 /* Pushes the local normal out of a box corner by the scaled corner offset. */
 static inline void _AddCornerOffset(RgVector localNormal, RgVector cornerOffset)
@@ -622,7 +598,7 @@ static int _CheckPillarBall(const RgVector localPosition,
     }
 
     switch (cell) {
-    case 1:
+    case RG_PILLAR_CELL_NEG_Z_FACE:
         faceDistance = negHalfDepth - z;
         hit = faceDistance < radius;
         if (hit) {
@@ -633,7 +609,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         }
         break;
 
-    case 3:
+    case RG_PILLAR_CELL_NEG_X_FACE:
         faceDistance = negHalfWidth - x;
         hit = faceDistance < radius;
         if (hit) {
@@ -644,7 +620,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         }
         break;
 
-    case 5:
+    case RG_PILLAR_CELL_POS_X_FACE:
         faceDistance = x - halfWidth;
         hit = faceDistance < radius;
         if (hit) {
@@ -655,7 +631,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         }
         break;
 
-    case 7:
+    case RG_PILLAR_CELL_POS_Z_FACE:
         faceDistance = z - halfDepth;
         hit = faceDistance < radius;
         if (hit) {
@@ -666,7 +642,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         }
         break;
 
-    case 0:
+    case RG_PILLAR_CELL_NEG_X_NEG_Z_CORNER:
     {
         float *cornerOffset = cornerOffsets[0];
 
@@ -696,7 +672,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         break;
     }
 
-    case 2:
+    case RG_PILLAR_CELL_POS_X_NEG_Z_CORNER:
     {
         float *cornerOffset = cornerOffsets[1];
 
@@ -726,7 +702,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         break;
     }
 
-    case 6:
+    case RG_PILLAR_CELL_NEG_X_POS_Z_CORNER:
     {
         float *cornerOffset = cornerOffsets[2];
 
@@ -756,7 +732,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         break;
     }
 
-    case 8:
+    case RG_PILLAR_CELL_POS_X_POS_Z_CORNER:
     {
         float *cornerOffset = cornerOffsets[3];
 
@@ -786,7 +762,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         break;
     }
 
-    case 4:
+    case RG_PILLAR_CELL_INSIDE:
         sector = (z <= -x) ? 0 : 1;
         if (!(z <= x)) {
             sector += 2;

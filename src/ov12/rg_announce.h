@@ -5,13 +5,8 @@
 #ifndef SRC_OV12_RG_ANNOUNCE_H
 #define SRC_OV12_RG_ANNOUNCE_H
 
-/*
- * The 2D paint context (defined by ov12/tu086 xrg_paint2d); this TU only
- * stores the pointer and hands it to the XrgPaint2D* calls.
- */
-typedef struct XrgPaint2D XrgPaint2D;
-
-typedef struct RgAnnounce RgAnnounce;
+#include "ov12/rg_announce.h"
+#include "ov12/xrg_paint2d.h"
 
 typedef void (*RgAnnounceDrawFunc)(RgAnnounce *pAnn);
 
@@ -53,13 +48,6 @@ typedef void (*RgAnnounceDrawFunc)(RgAnnounce *pAnn);
 #define RG_ANNOUNCE_SIZE 0x174
 
 /*
- * RgAnnounceSetGameClear (this allocation) resolves the remaining
- * +0xF0..+0x173 the comment above still describes as unclaimed: m_auTotalTime
- * at +0xF0, m_afTotalDamage at +0x130 and m_uStage at +0x170, ending exactly
- * at +0x174.
- */
-
-/*
  * RgAnnounceDispInit resets pAnn->dispY from pendingDispY to this constant
  * each time a new kind is dispatched; _InitAnn stores the same 0x99 in both
  * words when it first builds the announce (see the dispY/pendingDispY
@@ -78,10 +66,50 @@ typedef void (*RgAnnounceDrawFunc)(RgAnnounce *pAnn);
 /*
  * RgAnnounceSetGameClear's own assert bounds uStage against
  * sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0]) (the
- * D_00A586D8 string below); m_auTotalTime and m_afTotalDamage each span
+ * announceAssertStageInTotalTimeRange string below); m_auTotalTime and m_afTotalDamage each span
  * 0x40 bytes, 16 elements of 4 bytes.
  */
 #define RG_ANNOUNCE_GAMECLEAR_MAX 16
+
+/*
+ * Texture slots of RgAnnounce.textures used by name: the ADD layer of kind K
+ * is slot K (kinds 0..11 in order, except TIME_OVER/GAME_OVER swapped), the
+ * SUB layer follows the table below; the three clear-screen slots are the
+ * time/damage title bar and their unit labels. The slot roles come from the
+ * draw callbacks; the artwork names are not recovered.
+ */
+#define RG_ANNOUNCE_TEX_ROUND1_ADD 0
+#define RG_ANNOUNCE_TEX_ROUND2_ADD 1
+#define RG_ANNOUNCE_TEX_ROUND3_ADD 2
+#define RG_ANNOUNCE_TEX_READY_ADD 3
+#define RG_ANNOUNCE_TEX_FIGHT_ADD 4
+#define RG_ANNOUNCE_TEX_YOU_WIN_ADD 5
+#define RG_ANNOUNCE_TEX_YOU_LOSE_ADD 6
+#define RG_ANNOUNCE_TEX_DRAW_ADD 7
+#define RG_ANNOUNCE_TEX_TIME_OVER_ADD 8
+#define RG_ANNOUNCE_TEX_GAME_OVER_ADD 9
+#define RG_ANNOUNCE_TEX_STAGE_CLEAR_ADD 10
+#define RG_ANNOUNCE_TEX_GAME_CLEAR_ADD 11
+#define RG_ANNOUNCE_TEX_TITLE_BAR 0x17
+#define RG_ANNOUNCE_TEX_TIME_LABEL 0x18
+#define RG_ANNOUNCE_TEX_DAMAGE_LABEL 0x19
+#define RG_ANNOUNCE_TEX_YOU_WIN_SUB 0x1B
+#define RG_ANNOUNCE_TEX_DRAW_SUB 0x26
+#define RG_ANNOUNCE_TEX_FIGHT_SUB 0x27
+#define RG_ANNOUNCE_TEX_GAME_CLEAR_SUB 0x28
+#define RG_ANNOUNCE_TEX_GAME_OVER_SUB 0x29
+#define RG_ANNOUNCE_TEX_READY_SUB 0x2A
+#define RG_ANNOUNCE_TEX_ROUND1_SUB 0x2B
+#define RG_ANNOUNCE_TEX_ROUND2_SUB 0x2C
+#define RG_ANNOUNCE_TEX_ROUND3_SUB 0x2D
+#define RG_ANNOUNCE_TEX_STAGE_CLEAR_SUB 0x2E
+#define RG_ANNOUNCE_TEX_TIME_OVER_SUB 0x2F
+#define RG_ANNOUNCE_TEX_YOU_LOSE_SUB 0x30
+
+/* The stage/game clear overlays fade a dark panel in to this alpha, FADE_STEP per frame. */
+#define RG_ANNOUNCE_CLEAR_PANEL_ALPHA 80
+#define RG_ANNOUNCE_CLEAR_FADE_STEP 8
+#define RG_ANNOUNCE_SCREEN_WIDTH 512
 
 /*
  * _you_win_you_lose/_you_lose_you_win draw their paired banners this many
@@ -124,7 +152,7 @@ struct RgAnnounce {
     float timer;                             /* 0x00 */
     XrgPaint2D *paint;                       /* 0x04 */
     RgAnnounceDrawFunc drawFunc;              /* 0x08 */
-    int textures[RG_ANNOUNCE_TEXTURE_COUNT];  /* 0x0C */
+    struct RgBxxPic *textures[RG_ANNOUNCE_TEXTURE_COUNT];  /* 0x0C */
     int dispY;                                /* 0xD4 */
     int pendingDispY;                         /* 0xD8 */
     int stageClearActive;                     /* 0xDC */
@@ -135,7 +163,7 @@ struct RgAnnounce {
     /*
      * RgAnnounceSetGameClear's assert names m_auTotalTime directly
      * ("uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])",
-     * D_00A586D8). m_afTotalDamage is the adjacent float array the same loop
+     * announceAssertStageInTotalTimeRange). m_afTotalDamage is the adjacent float array the same loop
      * and index fill from its afDamage argument (only its position and
      * per-index pairing with m_auTotalTime are evidenced, not its original
      * name). m_uStage is the count RgAnnounceSetGameClear stores once the
@@ -145,16 +173,5 @@ struct RgAnnounce {
     float m_afTotalDamage[RG_ANNOUNCE_GAMECLEAR_MAX];      /* 0x130 */
     unsigned int m_uStage;                    /* 0x170 */
 };
-
-extern void RgAnnounceDispInit(RgAnnounce *pAnn, int kind);
-
-RgAnnounce *CreateRgAnnounce(void);
-void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime);
-void RgAnnounceDispInitTime(RgAnnounce *pAnn, int kind, float duration);
-void RgAnnounceDispOff(RgAnnounce *pAnn);
-void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage);
-void DisposeRgAnnounce(RgAnnounce *pAnn);
-void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
-                            const float *afDamage, unsigned int uStage);
 
 #endif /* SRC_OV12_RG_ANNOUNCE_H */

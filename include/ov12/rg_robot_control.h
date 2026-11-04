@@ -1,6 +1,9 @@
 #ifndef INCLUDE_OV12_RG_ROBOT_CONTROL_H
 #define INCLUDE_OV12_RG_ROBOT_CONTROL_H
 
+#include "shared.h"
+
+struct RgCamera;
 typedef struct RgRobotControl RgRobotControl;
 
 typedef void (*RgRobotControlDestructFunc)(RgRobotControl *pControl);
@@ -18,11 +21,39 @@ typedef void (*RgRobotControlJobFunc)(RgRobotControl *pControl);
  * 8($16), ov12:0x00a09b7c).
  */
 struct RgRobotControl {
-    RgRobot *robot;                            /* +0x00 */
+    RgStatus *robot;                            /* +0x00 */
     RgRobotControlDestructFunc destructMethod; /* +0x04 */
     RgRobotControlJobFunc jobMethod;           /* +0x08 */
 };
 
-RgRobotControl *CreateRgRobotControlNul(RgRobot *pRobot);
+/*
+ * Partial layout of the player-input control object CreateRgRobotControlInput
+ * allocates (RgHeapAlloc size 0x20, ov12:0x00a09a68). _InitControlInput
+ * (ov12:0x00a098d0, outside this allocation) embeds the RgRobotControl base
+ * at offset 0, then allocates its own 0x30-byte buffer (RgHeapAlloc size 48,
+ * ov12:0x00a09968) and stores it at offset 0x0C (sw v0,12(s0),
+ * ov12:0x00a09984) -- the field _DestructControlInput frees (lw a1,12(s0),
+ * ov12:0x00a09854). _InitControlInput separately asserts its own third
+ * argument (the camera, "pCam != NIL") non-null and stores it unchanged at
+ * offset 0x10 (sw s3,16(s0), ov12:0x00a0998c); _jobControlInput hands it to
+ * RgCameraLocal. The object's size is the 0x20 bytes
+ * CreateRgRobotControlInput allocates; no function here touches +0x14..+0x1F.
+ */
+typedef struct RgControlInput {
+    RgRobotControl control; /* +0x00 */
+    void *buffer;           /* +0x0C, freed by _DestructControlInput */
+    struct RgCamera *camera; /* +0x10, the camera the control moves relative to */
+    unsigned char unmodeled_14[0x20 - 0x14];
+} RgControlInput;
+
+/* Functions and data used by other translation units. */
+void RgRobotControlSetRobot(RgRobotControl *pControl, RgStatus *pRobot);
+void InitRgRobotControlCommon(RgRobotControl *pControl, RgStatus *pRobot);
+RgRobotControl *CreateRgRobotControlNul(RgStatus *pRobot);
+RgRobotControl *CreateRgRobotControlInput(RgStatus *pRobot,
+                                          struct RgCamera *pCamera,
+                                          int padId);
+void DisposeRgRobotControl(RgRobotControl *pControl);
+void RgRobotControlJob(RgRobotControl *pControl);
 
 #endif /* INCLUDE_OV12_RG_ROBOT_CONTROL_H */

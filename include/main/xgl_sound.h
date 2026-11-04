@@ -71,6 +71,8 @@ void xglSoundSendEffect(void *swd, void *sed, int bank);
 extern struct SoundWork SoundWork;
 void xglSoundEffectPosID(int soundEffectId, const float *position, int use_update_packet, int source);
 void xglSoundEffectNormalDirect(int effect_id);
+void xglSoundEffectStopBank(int bank);
+void xglSoundEffectParamID(int soundEffectId, int volume, int pan, int pitch);
 void xglSoundStreamStop(int stream);
 extern int xglSoundSendSwd(void *swd, int bank);
 /* The original leaves the sequence result word in v0, including 0xffff

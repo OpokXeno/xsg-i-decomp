@@ -251,17 +251,12 @@ char *RgFileSysDataGetName(RgFileSysData *pFile);
 
 void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
 
-void RgRobotSetWeapon(RgStatus *pRobot, int eSide, int weaponID);
-void RgRobotSetSpareWeapon(RgStatus *pRobot, int eSide, int weaponID);
-
 extern void DisposeRgSimpleDB(RgSimpleDB *database);
 extern RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size);
 
 void *RgSingletonIDGet(unsigned int singleton_id);
-extern void RgSingletonIDEntry(
-    int singleton_id,
-    RgSimpleDB *database,
-    void (*destructor)(RgSimpleDB *database));
+extern void RgSingletonIDEntry(int singleton_id, void *instance,
+                               void (*destructor)(void *instance));
 
 int XrgHostRead(int handle, void *buffer, int size);
 

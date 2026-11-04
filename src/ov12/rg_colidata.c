@@ -3,7 +3,10 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_colidata.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_colidata.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
 struct RgColiTriangle {
     RgVector m_vertices[3];
@@ -11,32 +14,57 @@ struct RgColiTriangle {
     RgMatrix m_planeMatrix;
 };
 
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
-extern void XrgCalcPlane(RgVector plane, RgVector p0, RgVector p1,
-                         RgVector p2);
-extern void XrgSubVector(RgVector destination, RgVector first,
-                         RgVector second);
-extern void XrgOuterVector(RgVector destination, RgVector first,
-                           RgVector second);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern float XrgInnerVector(RgVector first, RgVector second);
 
-const char D_00A554F0[] = "pData != NIL";
+/* Per-triangle result of the ball and segment tests: a hit, or the reason
+ * the triangle was missed (any negative value). */
+enum {
+    RG_COLI_HIT = 1,
+    RG_COLI_MISS_OUT_OF_RANGE = -1,
+    RG_COLI_MISS_OUTSIDE_TRIANGLE = -2,
+    RG_COLI_MISS_BEYOND_SEGMENT = -3,
+    RG_COLI_MISS_NOT_FACING = -4
+};
 
-const char D_00A55500[] = "../rg_colidata.euc.c";
+/* Tolerance of the segment test's side and facing comparisons. */
+#define RG_COLI_EPSILON 1e-4f
 
-const char D_00A55518[] = "nCapa > 0";
+/* The quad prism template: 8 vertices and 6 quads, 2 triangles each. */
+#define RG_COLI_PRISM_VERTICES 8
+#define RG_COLI_PRISM_QUADS 6
+#define RG_COLI_PRISM_TRIANGLES (RG_COLI_PRISM_QUADS * 2)
 
-const char D_00A55528[] = "pData->m_pTriangles != NIL";
+/*
+ * Scaffold-owned quad prism template: 0x00a55590 holds eight vertices, and
+ * 0x00a55610 holds six quads of four vertex indices each.
+ */
+typedef struct RgColiQuadVertices {
+    DoublewordAlignedVector4 m_vertices[RG_COLI_PRISM_VERTICES];
+} RgColiQuadVertices;
 
-const char D_00A55548[] = "nNumOfTriangles > 0";
+typedef union RgColiQuadIndices {
+    DoublewordAlignedVector4 m_vectors[RG_COLI_PRISM_QUADS];
+    int m_quads[RG_COLI_PRISM_QUADS][4];
+} RgColiQuadIndices;
 
-const char D_00A55560[] = "pData->m_nCapaOfTri > pData->m_nNumOfTri";
+extern const RgColiQuadVertices coliDataQuadPrismVertexTable;
+extern const RgColiQuadIndices coliDataQuadPrismIndexTable;
 
-const char D_00A55670[] = "pPoly != NIL && pArg != NIL && pResult != NIL";
+const char coliDataAssertDataNotNil[] = "pData != NIL";
 
-static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2)
+const char coliDataSourcePath[] = "../rg_colidata.euc.c";
+
+const char coliDataAssertCapacityPositive[] = "nCapa > 0";
+
+const char coliDataAssertTrianglesNotNil[] = "pData->m_pTriangles != NIL";
+
+const char coliDataAssertTriangleCountPositive[] = "nNumOfTriangles > 0";
+
+const char coliDataAssertTriangleCapacityLeftOver[] = "pData->m_nCapaOfTri > pData->m_nNumOfTri";
+
+const char coliDataAssertBallArgumentsNotNil[] = "pPoly != NIL && pArg != NIL && pResult != NIL";
+
+static void _InitTriColi(RgColiTriangle *triangle, void *pV0, void *pV1,
+                         void *pV2)
 {
     RgVector edge;
     RgVector cross;
@@ -44,9 +72,7 @@ static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2)
     RgVector sidePlanes[3];
     int component;
     int plane;
-    RgColiTriangle *triangle;
 
-    triangle = pTri;
     XrgUnitMatrix(triangle->m_planeMatrix);
     XrgClearVector(triangle->m_vertices[0]);
     XrgClearVector(triangle->m_vertices[1]);
@@ -86,24 +112,21 @@ static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2)
 static void _AllocDataMemory(RgColiData *pData, int nCapa)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 0xAC);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 0xAC);
     }
     if (nCapa <= 0) {
-        assert_prog(D_00A55518, D_00A55500, 0xAD);
+        assert_prog(coliDataAssertCapacityPositive, coliDataSourcePath, 0xAD);
     }
-    pData->m_pTriangles = RgHeapAlloc(InstanceOfRgHeap(), nCapa << 7,
-                                      D_00A55500, 0xAE);
+    pData->m_pTriangles = RgHeapAlloc(InstanceOfRgHeap(), nCapa * sizeof(RgColiTriangle),
+                                      coliDataSourcePath, 0xAE);
     if (pData->m_pTriangles == 0) {
-        assert_prog(D_00A55528, D_00A55500, 0xAF);
+        assert_prog(coliDataAssertTrianglesNotNil, coliDataSourcePath, 0xAF);
     }
     pData->m_nCapacity = nCapa;
     pData->m_nTriangles = 0;
 }
 
-extern void XrgAddVector(RgVector destination, RgVector first,
-                         RgVector second);
-
-static int _CheckIntersectBall(RgColiData *pPoly, void *pArg, RgColiBallResult *pHit)
+static int _CheckIntersectBall(RgColiData *pPoly, RgColiBall *pArg, RgColiBallResult *pHit)
 {
     int i;
 
@@ -124,7 +147,7 @@ static int _CheckIntersectBall(RgColiData *pPoly, void *pArg, RgColiBallResult *
 
         pTriangle = &pPoly->m_pTriangles[i];
         pMatrix = pTriangle->m_planeMatrix;
-        radius = ((RgColiBall *)pArg)->m_radius;
+        radius = pArg->m_radius;
         __asm__ __volatile__(
             "lqc2 $vf31, 0(%1)\n\t"
             "sqc2 $vf31, 0(%0)\n\t"
@@ -144,16 +167,16 @@ static int _CheckIntersectBall(RgColiData *pPoly, void *pArg, RgColiBallResult *
             : : "r"(&planeDistance), "r"(pTriangle->m_planeMatrix), "r"(&ball)
             : "memory");
         if (!(planeDistance.w < -radius || radius < planeDistance.w)) {
-            status = -2;
+            status = RG_COLI_MISS_OUTSIDE_TRIANGLE;
             if (planeDistance.x >= 0.0f && planeDistance.y >= 0.0f && planeDistance.z >= 0.0f) {
                 delta[0] = pMatrix[3] * (radius - planeDistance.w);
                 delta[1] = pMatrix[7] * (radius - planeDistance.w);
                 delta[2] = pMatrix[11] * (radius - planeDistance.w);
                 delta[3] = 0.0f;
-                status = 1;
+                status = RG_COLI_HIT;
             }
         } else {
-            status = -1;
+            status = RG_COLI_MISS_OUT_OF_RANGE;
         }
         if (status >= 0) {
             XrgAddVector(pHit->m_correction, pHit->m_correction, delta);
@@ -169,7 +192,7 @@ static int _CheckIntersectBall(RgColiData *pPoly, void *pArg, RgColiBallResult *
 static void _InitColiData(RgColiData *pData)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 0xEB);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 0xEB);
     }
     pData->m_pTriangles = 0;
     pData->m_nTriangles = 0;
@@ -179,10 +202,10 @@ static void _InitColiData(RgColiData *pData)
 static void _DisposeColiData(RgColiData *pData)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 243);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 243);
     }
     if (pData->m_pTriangles != 0) {
-        RgHeapFree(InstanceOfRgHeap(), pData->m_pTriangles, D_00A55500, 245);
+        RgHeapFree(InstanceOfRgHeap(), pData->m_pTriangles, coliDataSourcePath, 245);
     }
     _InitColiData(pData);
 }
@@ -190,17 +213,15 @@ static void _DisposeColiData(RgColiData *pData)
 static void _InitTriangles(RgColiData *pData, int nCapa)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 252);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 252);
     }
     if (nCapa <= 0) {
-        assert_prog(D_00A55548, D_00A55500, 253);
+        assert_prog(coliDataAssertTriangleCountPositive, coliDataSourcePath, 253);
     }
 
     _DisposeColiData(pData);
     _AllocDataMemory(pData, nCapa);
 }
-
-static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2);
 
 static void _AddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2)
 {
@@ -212,15 +233,15 @@ static void _AddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2)
     nTriangles = nIndex;
 
     if (pData->m_pTriangles == 0) {
-        assert_prog(D_00A55528, D_00A55500, 264);
+        assert_prog(coliDataAssertTrianglesNotNil, coliDataSourcePath, 264);
         nTriangles = pData->m_nTriangles;
     }
 
     if (nTriangles >= pData->m_nCapacity) {
-        assert_prog(D_00A55560, D_00A55500, 265);
+        assert_prog(coliDataAssertTriangleCapacityLeftOver, coliDataSourcePath, 265);
     }
 
-    _InitTriColi((char *) pData->m_pTriangles + (nIndex << 7), pV0, pV1, pV2);
+    _InitTriColi(&pData->m_pTriangles[nIndex], pV0, pV1, pV2);
     pData->m_nTriangles++;
 }
 
@@ -228,7 +249,7 @@ RgColiData *CreateRgColiData(void)
 {
     RgColiData *pData;
 
-    pData = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgColiData), D_00A55500, 275);
+    pData = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgColiData), coliDataSourcePath, 275);
     _InitColiData(pData);
     return pData;
 }
@@ -243,18 +264,18 @@ RgColiData *CreateRgColiDataQuadPrism(float width, float height)
     int i;
 
     pData = CreateRgColiData();
-    vertices = D_00A55590;
+    vertices = coliDataQuadPrismVertexTable;
     pIndex = indices.m_quads[0];
-    indices = D_00A55610;
-    RgColiDataInitTriangles(pData, 12);
+    indices = coliDataQuadPrismIndexTable;
+    RgColiDataInitTriangles(pData, RG_COLI_PRISM_TRIANGLES);
     pCoord = &vertices.m_vertices[0].z;
-    for (i = 7; i >= 0; i--, pCoord += 4) {
+    for (i = RG_COLI_PRISM_VERTICES - 1; i >= 0; i--, pCoord += 4) {
         pCoord[-2] *= width;
         pCoord[-1] *= height;
         pCoord[0] *= width;
     }
     pIndex += 1;
-    for (i = 5; i >= 0; i--, pIndex += 4) {
+    for (i = RG_COLI_PRISM_QUADS - 1; i >= 0; i--, pIndex += 4) {
         RgColiDataAddTriangle(pData, &vertices.m_vertices[pIndex[-1]],
                               &vertices.m_vertices[pIndex[1]],
                               &vertices.m_vertices[pIndex[0]]);
@@ -268,16 +289,16 @@ RgColiData *CreateRgColiDataQuadPrism(float width, float height)
 void DisposeRgColiData(RgColiData *pData)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 0x145);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 0x145);
     }
     _DisposeColiData(pData);
-    RgHeapFree(InstanceOfRgHeap(), pData, D_00A55500, 0x147);
+    RgHeapFree(InstanceOfRgHeap(), pData, coliDataSourcePath, 0x147);
 }
 
 void RgColiDataInitTriangles(RgColiData *pData, int nCapa)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 0x150);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 0x150);
     }
     _InitTriangles(pData, nCapa);
 }
@@ -285,37 +306,23 @@ void RgColiDataInitTriangles(RgColiData *pData, int nCapa)
 void RgColiDataAddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2)
 {
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 0x156);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 0x156);
     }
     _AddTriangle(pData, pV0, pV1, pV2);
 }
 
-void RgColiDataVsBall(RgColiData *pPoly, void *pArg, void *pResult)
+int RgColiDataVsBall(RgColiData *pPoly, RgColiBall *pBall,
+                     RgColiBallResult *pResult)
 {
-    if (pPoly == 0 || pArg == 0 || pResult == 0) {
-        assert_prog(D_00A55670, D_00A55500, 0x18D);
+    if (pPoly == 0 || pBall == 0 || pResult == 0) {
+        assert_prog(coliDataAssertBallArgumentsNotNil, coliDataSourcePath, 0x18D);
     }
-    _CheckIntersectBall(pPoly, pArg, pResult);
+    return _CheckIntersectBall(pPoly, pBall, pResult);
 }
 
-/* The segment RgColiDataVsRay tests: its start point, then the vector to its
- * end point (the hit fraction runs over 0..1 along this vector). */
-typedef struct RgColiSegment {
-    RgVector m_start;
-    RgVector m_vector;
-} RgColiSegment;
-
-/* The hit record RgColiDataVsRay writes: the plane of the first triangle the
- * segment crosses, then the fraction along the segment where it crosses. */
-typedef struct RgColiSegmentHit {
-    RgVector m_plane;
-    float m_fraction;
-} RgColiSegmentHit;
-
 /* 0x00a556a0 "pArg != NIL", 0x00a556b0 "pResult != NIL" */
-extern const char D_00A556A0[];
-extern const char D_00A556B0[];
-
+extern const char coliDataAssertSegmentNotNil[];
+extern const char coliDataAssertRayResultNotNil[];
 
 int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
                     RgColiSegmentHit *pResult)
@@ -328,13 +335,13 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
     AlignedVector4 offset;
 
     if (pData == 0) {
-        assert_prog(D_00A554F0, D_00A55500, 411);
+        assert_prog(coliDataAssertDataNotNil, coliDataSourcePath, 411);
     }
     if (pSegment == 0) {
-        assert_prog(D_00A556A0, D_00A55500, 412);
+        assert_prog(coliDataAssertSegmentNotNil, coliDataSourcePath, 412);
     }
     if (pResult == 0) {
-        assert_prog(D_00A556B0, D_00A55500, 413);
+        assert_prog(coliDataAssertRayResultNotNil, coliDataSourcePath, 413);
     }
     if (pData->m_pTriangles == 0 || pData->m_nTriangles <= 0) {
         return 0;
@@ -386,8 +393,8 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
             "sqc2 $vf30, 0(%0)\n\t"
             : : "r"(&offset), "r"(pSegment->m_start),
                 "r"(pTriangle->m_vertices[0]) : "memory", "$2");
-        if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -1e-4f) {
-            status = -2;
+        if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -RG_COLI_EPSILON) {
+            status = RG_COLI_MISS_OUTSIDE_TRIANGLE;
         } else {
             __asm__ __volatile__(
                 "lqc2 $vf30, 0(%1)\n\t"
@@ -404,8 +411,8 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
                 "sqc2 $vf30, 0(%0)\n\t"
                 : : "r"(&offset), "r"(pSegment->m_start),
                     "r"(pVertex1) : "memory", "$2");
-            if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -1e-4f) {
-                status = -2;
+            if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -RG_COLI_EPSILON) {
+                status = RG_COLI_MISS_OUTSIDE_TRIANGLE;
             } else {
                 __asm__ __volatile__(
                     "lqc2 $vf30, 0(%1)\n\t"
@@ -422,14 +429,14 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
                     "sqc2 $vf30, 0(%0)\n\t"
                     : : "r"(&offset), "r"(pSegment->m_start),
                         "r"(pTriangle->m_vertices[2]) : "memory", "$2");
-                if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -1e-4f) {
-                    status = -2;
+                if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -RG_COLI_EPSILON) {
+                    status = RG_COLI_MISS_OUTSIDE_TRIANGLE;
                 } else {
                     denom = pPlane[0] * pVector[0]
                           + pPlane[1] * pVector[1]
                           + pPlane[2] * pVector[2];
-                    if (denom >= -1e-4f) {
-                        status = -4;
+                    if (denom >= -RG_COLI_EPSILON) {
+                        status = RG_COLI_MISS_NOT_FACING;
                     } else {
                         t = -(pPlane[0] * pSegment->m_start[0]
                               + pPlane[1] * pSegment->m_start[1]
@@ -437,9 +444,9 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
                               + pPlane[3]) / denom;
                         if (0.0f <= t && t <= 1.0f) {
                             fraction = t;
-                            status = 1;
+                            status = RG_COLI_HIT;
                         } else {
-                            status = -3;
+                            status = RG_COLI_MISS_BEYOND_SEGMENT;
                         }
                     }
                 }

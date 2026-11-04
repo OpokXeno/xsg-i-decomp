@@ -3,9 +3,16 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_filesys_mode.h"
+#include "ov12/rg_error.h"
 
-static int s_aeModeStack[8] = {0};
-static unsigned int s_uStackTop = 1;
+#define MODE_STACK_DEPTH 8
+#define MODE_STACK_BOTTOM 1 /* slot 0 is the base mode and is never popped */
+
+static int s_aeModeStack[MODE_STACK_DEPTH] = {0};
+static unsigned int s_uStackTop = MODE_STACK_BOTTOM;
 
 const char mode_stack_depth_check[32] = "s_uStackTop < MODE_STACK_DEPTH";
 const char mode_source_file[32] = "../xrg_filesys_mode.euc.c";
@@ -13,20 +20,8 @@ const char mode_stack_top_check[16] = "s_uStackTop > 1";
 const char file_sys_size_check[16] = "uSize > 0";
 const char unknown_filesys_mode[32] = "unknown filesys mode %d\n";
 const char allocate_error[16] = "allocate error";
-const char D_00A58F00[16] = "pBuf != NIL";
+const char fileSysModeAssertBufNotNil[16] = "pBuf != NIL";
 
-#define MODE_STACK_DEPTH 8
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-extern void RgError(const char *message, const char *source_file, int line, ...);
-extern RgHeap *InstanceOfRgHeapData(void);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr);
 
 static void _PushMode(int eMode)
 {
@@ -38,7 +33,7 @@ static void _PushMode(int eMode)
 
 static void _PopMode(void)
 {
-    if (s_uStackTop <= 1)
+    if (s_uStackTop <= MODE_STACK_BOTTOM)
         assert_prog(mode_stack_top_check, mode_source_file, 29);
     --s_uStackTop;
 }
@@ -73,10 +68,10 @@ void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile, int iLine)
 
     eMode = _CurMode();
     switch (eMode) {
-    case 0:
+    case XRG_FILESYS_MODE_DATA_HEAP:
         pBuf = RgHeapAlloc(InstanceOfRgHeapData(), uSize, pszFile, iLine);
         break;
-    case 1:
+    case XRG_FILESYS_MODE_CODE_HEAP:
         pBuf = RgHeapAlloc(InstanceOfRgHeap(), uSize, pszFile, iLine);
         break;
     default:
@@ -91,7 +86,7 @@ void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile, int iLine)
 void XrgFileSysFree(void *pBuf, const char *pszFile, int iLine)
 {
     if (pBuf == 0)
-        assert_prog(D_00A58F00, mode_source_file, 84);
+        assert_prog(fileSysModeAssertBufNotNil, mode_source_file, 84);
 
     if (RgHeapIsInSelf(InstanceOfRgHeap(), pBuf))
         RgHeapFree(InstanceOfRgHeap(), pBuf, pszFile, iLine);

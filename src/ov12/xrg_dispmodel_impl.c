@@ -5,46 +5,28 @@
 #include "shared.h"
 #include "ov12/rg_dispmodel.h"
 #include "ov12/rg_draw.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_linkdata.h"
+#include "main/nml_model_set.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgDraw *InstanceOfRgDraw(void);
+#define XRG_DISPMODEL_IMPL_SIZE 112
 
-/*
- * RgDrawReq (ov12:0x00a28028, still assembly) queues one draw request: it
- * stores the object, the draw callback, the clear callback and the last two
- * words into one 20-byte entry of the RgDraw request list at +0xa10.
- * XrgPaint2DFlush passes a real clear callback and the paint's prio and
- * drawID in the same argument slots; this caller has no clear callback and
- * requests prio 0 with drawID -1.
- */
-extern void RgDrawReq(RgDraw *pDraw, RgDispModel *pDisp,
-                      void (*drawFunc)(RgDispModel *pDisp, void *pStudio),
-                      void (*clearFunc)(RgDispModel *pDisp, void *pStudio),
-                      int prio, int drawID);
+/* Below this transparency the model is drawn translucent. */
+#define XRG_DISPMODEL_IMPL_OPAQUE_LIMIT 0.95f
+/* nmlModelSetAlpha blend selector used for MODE_ALPHA models. */
+#define XRG_DISPMODEL_IMPL_ALPHA_BLEND 0x48
+#define XRG_DISPMODEL_IMPL_RENDER_LEVEL 2
 
-/*
- * The draw callback's second argument is the studio being drawn:
- * _DrawMain (ov12:0x00a28320) calls each request's callback with the
- * object and an entry of RgDraw's m_pStudios, and _Disp reads the RgFog
- * pointer at the studio's +0x4 (the pFog word _InitRgDrawStudio stores) to
- * set the model fog distance and color.
- */
-static void _Disp(RgDispModel *pDisp, void *pStudio);
+extern void nmlModelEntry(const char *pLexData);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a58750 contains the assertion expression "pDisp != NIL".
- * ov12:0x00a58760 contains the source filename "../xrg_dispmodel_impl.euc.c".
- * ov12:0x00a58780 contains the assertion expression "pXtxData != NIL".
- * ov12:0x00a58790 contains the assertion expression "pLexData != NIL".
- */
-const char D_00A58750[] = "pDisp != NIL";
-const char D_00A58760[] = "../xrg_dispmodel_impl.euc.c";
-const char D_00A58780[] = "pXtxData != NIL";
-const char D_00A58790[] = "pLexData != NIL";
+/* The draw callback RgDrawReq queues: the studio being drawn gives the fog. */
+static void _Disp(void *pObject, RgDrawStudio *pStudio);
+
+const char dispModelImplAssertDispNotNil[] = "pDisp != NIL";
+const char dispModelImplSourcePath[] = "../xrg_dispmodel_impl.euc.c";
+const char dispModelImplAssertXtxDataNotNil[] = "pXtxData != NIL";
+const char dispModelImplAssertLexDataNotNil[] = "pLexData != NIL";
 
 /*
  * The object CreateXrgDispModelImpl (ov12:0x00a453cc) allocates: 112 bytes
@@ -66,28 +48,16 @@ typedef struct XrgDispModelImpl {
     const char *pLexData;
 } XrgDispModelImpl;
 
-extern void nmlModelEntry(const char *pLexData);
-extern void nmlModelSetAlpha(int alpha);
-extern void nmlModelSetFogCol(float *);
-extern void nmlModelSetFogDist(float, float, float, float);
-extern void nmlModelSetMapClip(int enabled);
-extern void nmlModelSetPlace(RgMatrix matrix);
-extern void nmlModelSetRenderLevel(int);
-extern void nmlModelSetTexture(const char *pXtxData);
-extern void nmlModelSetToumei(int enabled);
-extern void nmlModelSetTransparency(float transparency);
-extern void nmlModelSetZwrite(int enabled);
-
-static void _Disp(RgDispModel *pDisp, void *pStudio)
+static void _Disp(void *pObject, RgDrawStudio *pStudio)
 {
+    RgDispModel *pDisp = pObject;
     XrgDispModelImpl *pImpl;
-    RgDrawStudio *pDrawStudio;
     RgFog *pFog;
     float transparent;
-    float color[4];
+    Vector4 color;
 
     if (pDisp == 0) {
-        assert_prog(D_00A58750, D_00A58760, 47);
+        assert_prog(dispModelImplAssertDispNotNil, dispModelImplSourcePath, 47);
     }
 
     pImpl = (XrgDispModelImpl *)pDisp;
@@ -100,40 +70,39 @@ static void _Disp(RgDispModel *pDisp, void *pStudio)
         return;
     }
 
-    if (transparent >= 0.0f && transparent < 0.95f) {
+    if (transparent >= 0.0f && transparent < XRG_DISPMODEL_IMPL_OPAQUE_LIMIT) {
         /*
          * color is opaque white with the model's own transparency as its
          * fourth component here; the only call that reads the array back is
          * nmlModelSetFogCol below, after the fog pass has replaced the first
          * three components with the studio's fog color.
          */
-        color[3] = transparent;
-        color[0] = color[1] = color[2] = 1.0f;
+        color.w = transparent;
+        color.x = color.y = color.z = 1.0f;
         nmlModelSetTransparency(transparent);
         nmlModelSetToumei(1);
         nmlModelSetZwrite(1);
-        if (pDisp->mode & 4) {
-            nmlModelSetAlpha(0x48);
+        if (pDisp->mode & RG_DISP_MODEL_MODE_ALPHA) {
+            nmlModelSetAlpha(XRG_DISPMODEL_IMPL_ALPHA_BLEND);
         }
     }
 
-    if (pStudio != 0 && (pDisp->mode & 1)) {
-        pDrawStudio = pStudio;
-        pFog = pDrawStudio->m_pFog;
-        color[0] = pFog->color[0];
-        color[1] = pFog->color[1];
-        color[2] = pFog->color[2];
-        nmlModelSetFogCol(color);
+    if (pStudio != 0 && (pDisp->mode & RG_DISP_MODEL_MODE_FOG)) {
+        pFog = pStudio->m_pFog;
+        color.x = pFog->color[0];
+        color.y = pFog->color[1];
+        color.z = pFog->color[2];
+        nmlModelSetFogCol(&color);
         nmlModelSetFogDist(pFog->dist[0], pFog->dist[1], pFog->dist[2],
                            pFog->dist[3]);
     }
 
-    if (pDisp->mode & 8) {
+    if (pDisp->mode & RG_DISP_MODEL_MODE_MAPCLIP) {
         nmlModelSetMapClip(1);
     }
-    nmlModelSetPlace(pDisp->local);
+    nmlModelSetPlace((Matrix4 *)pDisp->local);
     nmlModelSetTexture(pImpl->pXtxData);
-    nmlModelSetRenderLevel(2);
+    nmlModelSetRenderLevel(XRG_DISPMODEL_IMPL_RENDER_LEVEL);
     nmlModelEntry(pImpl->pLexData);
 }
 
@@ -142,36 +111,24 @@ static void _DispRgDispModelImpl(RgDispModel *pDisp)
     RgDrawReq(InstanceOfRgDraw(), pDisp, &_Disp, 0, 0, -1);
 }
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a58750 contains the assertion expression "pDisp != NIL".
- * ov12:0x00a58760 contains the source filename "../xrg_dispmodel_impl.euc.c".
- */
-extern const char D_00A58750[];
-extern const char D_00A58760[];
-
 static void _DestructRgDispModelImpl(RgDispModel *pDisp)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A58750, D_00A58760, 119);
+        assert_prog(dispModelImplAssertDispNotNil, dispModelImplSourcePath, 119);
     }
 }
-
-extern void InitRgDispModel(RgDispModel *pDispModel);
 
 static void _InitRgDispModelImpl(XrgDispModelImpl *pDisp, const char *pXtxData,
                                  const char *pLexData)
 {
     if (pDisp == 0) {
-        assert_prog(D_00A58750, D_00A58760, 126);
+        assert_prog(dispModelImplAssertDispNotNil, dispModelImplSourcePath, 126);
     }
     if (pXtxData == 0) {
-        assert_prog(D_00A58780, D_00A58760, 127);
+        assert_prog(dispModelImplAssertXtxDataNotNil, dispModelImplSourcePath, 127);
     }
     if (pLexData == 0) {
-        assert_prog(D_00A58790, D_00A58760, 128);
+        assert_prog(dispModelImplAssertLexDataNotNil, dispModelImplSourcePath, 128);
     }
 
     InitRgDispModel(&pDisp->model);
@@ -181,34 +138,18 @@ static void _InitRgDispModelImpl(XrgDispModelImpl *pDisp, const char *pXtxData,
     pDisp->pLexData = pLexData;
 }
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern char *strcpy(char *destination, const char *source);
-extern char *strcat(char *destination, const char *source);
-
-/*
- * RgLinkData (src/ov12/rg_linkdata.c, ov12/tu063) is a struct whose only
- * field is the archive buffer pointer InitRgLinkData stores at +0x00; a
- * local pointer-sized slot is enough storage for its address to be passed
- * opaquely to InitRgLinkData/RgLinkDataGet/RgLinkDataFindExt.
- */
-extern void InitRgLinkData(void *pAna, void *pBuf);
-extern void *RgLinkDataGet(void *pAna, const char *name);
-extern void *RgLinkDataFindExt(void *pAna, const char *ext);
-
-RgDispModel *CreateXrgDispModelImpl(const char *name, const char *variant)
+RgDispModel *CreateXrgDispModelImpl(void *archive, const char *variant)
 {
     char szLexName[128];
     char szXtxName[128];
-    void *linkData;
+    RgLinkData linkData;
     const char *pLexData;
     const char *pXtxData;
     XrgDispModelImpl *pDisp;
 
     strcat(strcpy(szLexName, variant), ".lex");
     strcat(strcpy(szXtxName, variant), ".xtx");
-    InitRgLinkData(&linkData, (void *)name);
+    InitRgLinkData(&linkData, archive);
     pLexData = RgLinkDataGet(&linkData, szLexName);
     pXtxData = RgLinkDataGet(&linkData, szXtxName);
     if (pXtxData == 0) {
@@ -216,9 +157,9 @@ RgDispModel *CreateXrgDispModelImpl(const char *name, const char *variant)
     }
 
     if (pLexData != 0 && pXtxData != 0) {
-        pDisp = RgHeapAlloc(InstanceOfRgHeap(), 112, D_00A58760, 168);
+        pDisp = RgHeapAlloc(InstanceOfRgHeap(), XRG_DISPMODEL_IMPL_SIZE, dispModelImplSourcePath, 168);
         if (pDisp == 0) {
-            assert_prog(D_00A58750, D_00A58760, 169);
+            assert_prog(dispModelImplAssertDispNotNil, dispModelImplSourcePath, 169);
         }
         _InitRgDispModelImpl(pDisp, pXtxData, pLexData);
     } else {

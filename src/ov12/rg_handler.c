@@ -2,14 +2,25 @@
  * OV12 original TU 48: 0x00a2ab70..0x00a2af20 (8 functions)
  */
 #include "common.h"
-#include "rg_handler.h"
+#include "shared.h"
+#include "ov12/rg_bgobj.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_handler.h"
+#include "ov12/rg_robot.h"
+#include "ov12/rg_robot_spec.h"
+#include "ov12/rg_shot.h"
+#include "ov12/rg_weapon.h"
+#include "ov12/xrg_rand_int.h"
 
-extern void *RgGeomGetParent(RgGeom *pGeom);
-extern unsigned int RgRobotGetStatusFlags(RgStatus *pRobot);
-extern void *RgRobotGetSpec(RgStatus *pRobot);
-extern void RgRobotHitByBody(RgStatus *pRobot, RgVector direction, RgVector position,
-                             float damage, float scale);
-extern void XrgNegateVector(RgVector destination, RgVector source);
+/* Force scale of a body hit (damaging) and of a plain push (no damage) between robots. */
+#define RG_HANDLER_BODY_HIT_FORCE 600000.0f
+
+#define RG_HANDLER_PUSH_FORCE 3000000.0f
+
+/* Seconds a background object stays hidden after the camera passes through it. */
+#define RG_HANDLER_CAMERA_HIDE_TIME 0.5f
+
 
 void RgHandlerRobotVsRobot(RgGeom *robotGeom, RgBgCollision *collision)
 {
@@ -17,8 +28,8 @@ void RgHandlerRobotVsRobot(RgGeom *robotGeom, RgBgCollision *collision)
     RgStatus *robotBStatus;
     unsigned int flagsA;
     unsigned int flagsB;
-    RgRobotSpecPower *specA;
-    RgRobotSpecPower *specB;
+    RgRobotSpec *specA;
+    RgRobotSpec *specB;
     float robotAPower;
     float robotBPower;
     RgVector negatedDirection;
@@ -29,46 +40,37 @@ void RgHandlerRobotVsRobot(RgGeom *robotGeom, RgBgCollision *collision)
     flagsB = RgRobotGetStatusFlags(robotBStatus);
     specA = RgRobotGetSpec(robotAStatus);
     specB = RgRobotGetSpec(robotBStatus);
-    robotAPower = specA->bodyPower;
-    robotBPower = specB->bodyPower;
+    robotAPower = specA->bodyAttackDamage;
+    robotBPower = specB->bodyAttackDamage;
     if (flagsB & 0x400) {
         RgRobotHitByBody(robotAStatus, collision->hitDirection, collision->direction,
-                         robotBPower, 600000.0f);
+                         robotBPower, RG_HANDLER_BODY_HIT_FORCE);
     } else if (flagsB & 0x100) {
         RgRobotHitByBody(robotAStatus, collision->hitDirection, collision->direction,
-                         0.0f, 3000000.0f);
+                         0.0f, RG_HANDLER_PUSH_FORCE);
     }
     XrgNegateVector(negatedDirection, collision->direction);
     if (flagsA & 0x400) {
         RgRobotHitByBody(robotBStatus, collision->hitDirection, negatedDirection,
-                         robotAPower, 600000.0f);
+                         robotAPower, RG_HANDLER_BODY_HIT_FORCE);
     }
     if (flagsA & 0x100) {
         RgRobotHitByBody(robotBStatus, collision->hitDirection, negatedDirection,
-                         0.0f, 3000000.0f);
+                         0.0f, RG_HANDLER_PUSH_FORCE);
     }
 }
 
-
-extern void RgShotHitRobot(void *shot, int robot, RgVector position);
-extern void RgWeaponHitRobot(void *weapon, int robotId, int damage);
-extern void RgShotHitBg(void *shot, int bgObject, RgVector position);
-extern void RgWeaponHitBG(void *weapon, int bgObject, int damage);
-extern void RgBgObjSetHide(void *pObj, float duration);
-
 /*
- * Each of RgShotHitRobot/RgWeaponHitRobot/RgShotHitBg/RgWeaponHitBG forwards
- * this handler's own collision record unchanged as its trailing
- * position/damage argument (ov12:0x00a2acd8..0x00a2adf7): none of them
- * dereference it along this call path, so it is passed opaquely, cast to
- * whatever scalar or vector shape that parameter declares.
+ * The shot handlers pass the collision's hit direction (its first member, so
+ * the record's own address) as the position; the weapon handlers pass that
+ * same address where the callee declares an int damage.
  */
 void RgHandlerShotVsRobot(RgGeom *shotGeom, RgBgCollision *collision)
 {
     void *shot;
 
     shot = RgGeomGetParent(shotGeom);
-    RgShotHitRobot(shot, (int) RgGeomGetParent(collision->geom), (float *) collision);
+    RgShotHitRobot(shot, RgGeomGetParent(collision->geom), collision->hitDirection);
 }
 
 void RgHandlerWeaponVsRobot(RgGeom *weaponGeom, RgBgCollision *collision)
@@ -76,7 +78,7 @@ void RgHandlerWeaponVsRobot(RgGeom *weaponGeom, RgBgCollision *collision)
     void *weapon;
 
     weapon = RgGeomGetParent(weaponGeom);
-    RgWeaponHitRobot(weapon, (int) RgGeomGetParent(collision->geom), (int) collision);
+    RgWeaponHitRobot(weapon, RgGeomGetParent(collision->geom), collision->hitDirection);
 }
 
 void RgHandlerShotVsBG(RgGeom *shotGeom, RgBgCollision *collision)
@@ -84,7 +86,7 @@ void RgHandlerShotVsBG(RgGeom *shotGeom, RgBgCollision *collision)
     void *shot;
 
     shot = RgGeomGetParent(shotGeom);
-    RgShotHitBg(shot, (int) RgGeomGetParent(collision->geom), (float *) collision);
+    RgShotHitBg(shot, RgGeomGetParent(collision->geom), collision->hitDirection);
 }
 
 void RgHandlerWeaponVsBG(RgGeom *weaponGeom, RgBgCollision *collision)
@@ -92,7 +94,7 @@ void RgHandlerWeaponVsBG(RgGeom *weaponGeom, RgBgCollision *collision)
     void *weapon;
 
     weapon = RgGeomGetParent(weaponGeom);
-    RgWeaponHitBG(weapon, (int) RgGeomGetParent(collision->geom), (int) collision);
+    RgWeaponHitBG(weapon, RgGeomGetParent(collision->geom), collision->hitDirection);
 }
 
 void RgHandlerCameraVsBG(RgGeom *cameraGeom, RgBgCollision *collision)
@@ -101,28 +103,20 @@ void RgHandlerCameraVsBG(RgGeom *cameraGeom, RgBgCollision *collision)
 
     bgObject = RgGeomGetParent(collision->geom);
     if (bgObject != 0) {
-        RgBgObjSetHide(bgObject, 0.5f);
+        RgBgObjSetHide(bgObject, RG_HANDLER_CAMERA_HIDE_TIME);
     }
 }
 
-extern float RgGeomPointGetSpeed(RgGeomPoint *point);
-extern float RgGeomPointGetWeight(RgGeomPoint *point);
-extern void RgRobotHitBG(void *robot, RgVector direction);
-extern void RgBgObjTryToBodyAttack(void *bgObject, float energy);
-
-/*
- * point's leading 0x20 bytes are unmodeled in rg_geom_point.h, wide enough
- * to hold the RgGeom every geometry object leads with (rg_geom.c), so
- * passing it to RgGeomGetParent through that common head is exact here.
- */
-void RgHandlerRobotVsBG(RgGeomPoint *point, RgBgCollision *collision)
+/* The robot's geometry is a point: its RgGeom head leads the RgGeomPoint. */
+void RgHandlerRobotVsBG(RgGeom *robotGeom, RgBgCollision *collision)
 {
+    RgGeomPoint *point = (RgGeomPoint *) robotGeom;
     void *robot;
     void *bgObject;
     float weight;
     float speed;
 
-    robot = RgGeomGetParent((RgGeom *) point);
+    robot = RgGeomGetParent(robotGeom);
     bgObject = RgGeomGetParent(collision->geom);
     RgRobotHitBG(robot, collision->direction);
     if (bgObject != 0) {
@@ -131,8 +125,6 @@ void RgHandlerRobotVsBG(RgGeomPoint *point, RgBgCollision *collision)
         RgBgObjTryToBodyAttack(bgObject, weight * 0.5f * speed * speed);
     }
 }
-
-extern void RgRobotNearBG(void *pRobot, RgVector direction);
 
 void RgHandlerRobotAdvVsBG(RgGeom *robotGeom, RgBgCollision *collision)
 {

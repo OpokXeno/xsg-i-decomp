@@ -3,76 +3,35 @@
  */
 #include "common.h"
 #include "rg_robot_control.h"
+#include "init_xrg_input.h"
 #include "ov12/rg_camera.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_get_frame_time.h"
+#include "ov12/rg_heap.h"
+#include "ov12/assert_prog.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/rg_robot.h"
 
-const char D_00A51C20[] = "pControl != NIL";
-const char D_00A51C30[] = "../rg_robot_control.euc.c";
-const char D_00A51C50[] = "pCam != NIL";
+/* Action bits of XrgInput.flags without a name in init_xrg_input.h: both
+ * sticks pushed apart (brake) and pushed together (target). */
+#define RG_CONTROL_INPUT_BREAK 0x20
+#define RG_CONTROL_INPUT_TARGETTING 0x40
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
-                       int line);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a51c20 contains the assertion expression "pControl != NIL".
- * ov12:0x00a51c30 contains the source filename "../rg_robot_control.euc.c".
- */
-extern const char D_00A51C20[];
-extern const char D_00A51C30[];
-
-/*
- * ov12:0x00a51c50 contains the assertion expression "pCam != NIL", the same
- * asm-owned scaffold data window as above; _InitControlInput reuses it as a
- * generic non-null check on its pEssence argument.
- */
-extern const char D_00A51C50[];
-
-extern void InitXrgInput(void *pBuffer, int padId);
-
-static void _InitControlInput(RgControlInput *pInput, RgRobot *pRobot,
-                              void *pEssence, int padId);
+static void _InitControlInput(RgControlInput *pInput, RgStatus *pRobot,
+                              struct RgCamera *pCamera, int padId);
 static void _jobControlInput(RgRobotControl *pControl);
 
-/* The input handler reads the two stick angles and magnitudes and the action
- * flags from the buffer allocated by _InitControlInput (0x00a09968). */
-typedef struct RgControlInputState {
-    int padId;
-    float angle[2];
-    float magnitude[2];
-    unsigned int flags;
-} RgControlInputState;
-
-extern float cosf(float angle);
-extern float RgGetFrameTime(void);
-extern RgGeomPoint *RgRobotGetGeom(RgRobot *pRobot);
-extern float RgGeomRobotGetRotate(RgGeomPoint *point);
-extern void RgCameraLocal(struct RgCamera *pCam, RgMatrix matrix);
-extern void RgRobotAccelarate(RgRobot *pRobot, RgVector velocity);
-extern void RgRobotAccelarateRotate(RgRobot *pRobot, float rotate);
-extern void RgRobotBreak(RgRobot *pRobot);
-extern void RgRobotDash(RgRobot *pRobot, RgVector direction);
-extern void RgRobotDashContinue(RgRobot *pRobot);
-extern void RgRobotDropWeapon(RgRobot *pRobot, unsigned int eType);
-extern void RgRobotShot(RgRobot *pRobot, unsigned int eType);
-extern void RgRobotTargetting(RgRobot *pRobot);
-extern void XrgApplyVector(RgVector destination, RgMatrix matrix,
-                           RgVector source);
-extern void XrgInputDeviceCheck(void *pInput, float frameTime);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
+const char robotControlAssertControlNotNil[] = "pControl != NIL";
+const char robotControlSourcePath[] = "../rg_robot_control.euc.c";
+const char robotControlAssertCameraNotNil[] = "pCam != NIL";
 
 static void _jobControlInput(RgRobotControl *pControl)
 {
     RgControlInput *controlInput;
-    RgControlInputState *input;
-    RgRobot *robot;
+    XrgInput *input;
+    RgStatus *robot;
     struct RgCamera *camera;
     unsigned int flags;
     RgVector firstStick;
@@ -94,9 +53,9 @@ static void _jobControlInput(RgRobotControl *pControl)
     int hasMovement;
 
     controlInput = (RgControlInput *)pControl;
-    input = (RgControlInputState *)controlInput->buffer;
+    input = controlInput->buffer;
     robot = pControl->robot;
-    camera = controlInput->essence;
+    camera = controlInput->camera;
     flags = input->flags;
     hasMovement = 0;
     rotation = 0.0f;
@@ -133,18 +92,18 @@ static void _jobControlInput(RgRobotControl *pControl)
         RgRobotAccelarate(robot, movement);
     }
 
-    if ((flags & 0x80) != 0) {
+    if ((flags & XRG_INPUT_FLAG_STICK_CLICK) != 0) {
         if (hasMovement != 0) {
             RgRobotDash(robot, movement);
         } else {
             geometry = RgRobotGetGeom(robot);
-            heading = RgGeomRobotGetRotate(geometry);
+            heading = RgGeomRobotGetRotate(&geometry->geom);
             XrgSetVectorXYZ(dashDirection, sinf(heading), 0.0f,
                             cosf(heading));
             RgRobotDash(robot, dashDirection);
         }
     }
-    if ((flags & 0x100) != 0) {
+    if ((flags & XRG_INPUT_FLAG_BOTH_STICK_CLICKS) != 0) {
         RgRobotDashContinue(robot);
     }
 
@@ -166,36 +125,36 @@ static void _jobControlInput(RgRobotControl *pControl)
         RgRobotAccelarateRotate(robot, rotation);
     }
 
-    if ((flags & 0x1) != 0) {
-        RgRobotShot(robot, 0);
+    if ((flags & XRG_INPUT_FLAG_LEFT_SHOULDER) != 0) {
+        RgRobotShot(robot, RG_EQUIP_TYPE_LEFT);
     }
-    if ((flags & 0x2) != 0) {
-        RgRobotShot(robot, 1);
+    if ((flags & XRG_INPUT_FLAG_RIGHT_SHOULDER) != 0) {
+        RgRobotShot(robot, RG_EQUIP_TYPE_RIGHT);
     }
-    if ((flags & 0x4) != 0) {
-        RgRobotShot(robot, 2);
+    if ((flags & XRG_INPUT_FLAG_BOTH_SHOULDERS) != 0) {
+        RgRobotShot(robot, RG_EQUIP_TYPE_BACK);
     }
-    if ((flags & 0x20) != 0) {
+    if ((flags & RG_CONTROL_INPUT_BREAK) != 0) {
         RgRobotBreak(robot);
     }
-    if ((flags & 0x40) != 0) {
+    if ((flags & RG_CONTROL_INPUT_TARGETTING) != 0) {
         RgRobotTargetting(robot);
     }
-    if ((flags & 0x200) != 0) {
-        RgRobotDropWeapon(robot, 0);
+    if ((flags & XRG_INPUT_FLAG_LEFT_PAIR) != 0) {
+        RgRobotDropWeapon(robot, RG_EQUIP_TYPE_LEFT);
     }
-    if ((flags & 0x400) != 0) {
-        RgRobotDropWeapon(robot, 1);
+    if ((flags & XRG_INPUT_FLAG_RIGHT_PAIR) != 0) {
+        RgRobotDropWeapon(robot, RG_EQUIP_TYPE_RIGHT);
     }
-    if ((flags & 0x800) != 0) {
-        RgRobotDropWeapon(robot, 2);
+    if ((flags & XRG_INPUT_FLAG_BOTH_PAIRS) != 0) {
+        RgRobotDropWeapon(robot, RG_EQUIP_TYPE_BACK);
     }
 }
 
-void RgRobotControlSetRobot(RgRobotControl *pControl, RgRobot *pRobot)
+void RgRobotControlSetRobot(RgRobotControl *pControl, RgStatus *pRobot)
 {
     if (pControl == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 175);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 175);
     }
     pControl->robot = pRobot;
 }
@@ -205,83 +164,83 @@ static void _DestructControlInput(RgRobotControl *pControl)
     RgControlInput *pInput;
 
     if (pControl == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 185);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 185);
     }
     pInput = (RgControlInput *)pControl;
-    RgHeapFree(InstanceOfRgHeap(), pInput->buffer, D_00A51C30, 186);
+    RgHeapFree(InstanceOfRgHeap(), pInput->buffer, robotControlSourcePath, 186);
 }
 
-void InitRgRobotControlCommon(RgRobotControl *pControl, RgRobot *pRobot)
+void InitRgRobotControlCommon(RgRobotControl *pControl, RgStatus *pRobot)
 {
     if (pControl == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 195);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 195);
     }
     pControl->robot = pRobot;
     pControl->jobMethod = 0;
     pControl->destructMethod = 0;
 }
 
-static void _InitControlInput(RgControlInput *pInput, RgRobot *pRobot,
-                              void *pEssence, int padId)
+static void _InitControlInput(RgControlInput *pInput, RgStatus *pRobot,
+                              struct RgCamera *pCamera, int padId)
 {
     void *pBuffer;
 
     if (pInput == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 204);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 204);
     }
-    if (pEssence == 0) {
-        assert_prog(D_00A51C50, D_00A51C30, 205);
+    if (pCamera == 0) {
+        assert_prog(robotControlAssertCameraNotNil, robotControlSourcePath, 205);
     }
     InitRgRobotControlCommon(&pInput->control, pRobot);
     pInput->control.destructMethod = _DestructControlInput;
     pInput->control.jobMethod = _jobControlInput;
-    pBuffer = RgHeapAlloc(InstanceOfRgHeap(), 48, D_00A51C30, 213);
+    pBuffer = RgHeapAlloc(InstanceOfRgHeap(), sizeof(XrgInput), robotControlSourcePath, 213);
     pInput->buffer = pBuffer;
     InitXrgInput(pBuffer, padId);
-    pInput->essence = pEssence;
+    pInput->camera = pCamera;
 }
 
-RgRobotControl *CreateRgRobotControlNul(RgRobot *pRobot)
+RgRobotControl *CreateRgRobotControlNul(RgStatus *pRobot)
 {
     RgRobotControl *pControl;
 
-    pControl = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgRobotControl), D_00A51C30, 224);
+    pControl = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgRobotControl), robotControlSourcePath, 224);
     if (pControl == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 225);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 225);
     }
     InitRgRobotControlCommon(pControl, pRobot);
     return pControl;
 }
 
-RgRobotControl *CreateRgRobotControlInput(RgRobot *pRobot, void *pEssence,
+RgRobotControl *CreateRgRobotControlInput(RgStatus *pRobot, struct RgCamera *pCamera,
                                           int padId)
 {
     RgControlInput *pInput;
 
-    pInput = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgControlInput), D_00A51C30,
+    pInput = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgControlInput), robotControlSourcePath,
                          233);
     if (pInput == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 234);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 234);
     }
-    _InitControlInput(pInput, pRobot, pEssence, padId);
+    _InitControlInput(pInput, pRobot, pCamera, padId);
     return &pInput->control;
 }
 
 void DisposeRgRobotControl(RgRobotControl *pControl)
 {
     if (pControl == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 242);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 242);
     }
     if (pControl->destructMethod != 0) {
         pControl->destructMethod(pControl);
     }
-    RgHeapFree(InstanceOfRgHeap(), pControl, D_00A51C30, 245);
+    RgHeapFree(InstanceOfRgHeap(), pControl, robotControlSourcePath, 245);
 }
 
 void RgRobotControlJob(RgRobotControl *pControl)
 {
     if (pControl == 0) {
-        assert_prog(D_00A51C20, D_00A51C30, 253);
+        assert_prog(robotControlAssertControlNotNil, robotControlSourcePath, 253);
     }
     if (pControl->jobMethod != 0) {
         pControl->jobMethod(pControl);

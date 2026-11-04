@@ -2,74 +2,44 @@
  * OV12 original TU 61: 0x00a31768..0x00a31970 (2 functions)
  */
 #include "common.h"
+#include "ov12/rg_error.h"
+#include "ov12/xrg_exit.h"
+#include "ov12/xrg_v_log.h"
 
-typedef char *va_list;
-#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
-#define va_end(ap) ((void)0)
-
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
-extern void XrgVLog(const char *format, const char *source_file, int line,
-                    va_list ap);
-extern void XrgExit(int status);
-
-/*
- * ov12:0x00a55478 contains the source filename "../rg_error.euc.c".
- * ov12:0x00a55448 contains the format string
- *      "------------------------------------------\n".
- * ov12:0x00a55490 contains the format string "RG : FATAL-ERROR\n".
- * ov12:0x00a554a8 contains the format string
- *      "\n\nerror in %s at %d\n".
- */
-const char D_00A55448[] = "------------------------------------------\n";
-const char D_00A55478[] = "../rg_error.euc.c";
-const char D_00A55490[] = "RG : FATAL-ERROR\n";
-const char D_00A554A8[] = "\n\nerror in %s at %d\n";
+const char errorSeparatorLine[] = "------------------------------------------\n";
+const char errorSourcePath[] = "../rg_error.euc.c";
+const char errorFatalBanner[] = "RG : FATAL-ERROR\n";
+const char errorFatalLocationFormat[] = "\n\nerror in %s at %d\n";
 
 void RgError(const char *format, const char *source_file, int line, ...)
 {
     va_list ap;
     va_start(ap, line);
 
-    XrgLog(D_00A55448, D_00A55478, 18);
-    XrgLog(D_00A55490, D_00A55478, 19);
-    XrgVLog(format, D_00A55478, 20, ap);
-    XrgLog(D_00A554A8, D_00A55478, 21, source_file, line);
-    XrgLog(D_00A55448, D_00A55478, 22);
+    XrgLog(errorSeparatorLine, errorSourcePath, 18);
+    XrgLog(errorFatalBanner, errorSourcePath, 19);
+    XrgVLog(format, errorSourcePath, 20, ap);
+    XrgLog(errorFatalLocationFormat, errorSourcePath, 21, source_file, line);
+    XrgLog(errorSeparatorLine, errorSourcePath, 22);
 
     va_end(ap);
 
     XrgExit(1);
 }
 
-typedef char *va_list;
-#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
-#define va_end(ap) ((void)0)
-
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
-extern void XrgVLog(const char *format, const char *source_file, int line,
-                    va_list ap);
-
-/*
- * ov12:0x00a55478 contains the source filename "../rg_error.euc.c".
- * ov12:0x00a55448 contains the format string
- *      "------------------------------------------\n".
- * ov12:0x00a554c0 contains the format string "RG : WARNING!\n".
- * ov12:0x00a554d0 contains the format string
- *      "\n\nwarning in %s at %d\n".
- */
-const char D_00A554C0[] = "RG : WARNING!\n";
-const char D_00A554D0[] = "\n\nwarning in %s at %d\n";
+const char errorWarningBanner[] = "RG : WARNING!\n";
+const char errorWarningLocationFormat[] = "\n\nwarning in %s at %d\n";
 
 void RgWarn(const char *format, const char *source_file, int line, ...)
 {
     va_list ap;
     va_start(ap, line);
 
-    XrgLog(D_00A55448, D_00A55478, 31);
-    XrgLog(D_00A554C0, D_00A55478, 32);
-    XrgVLog(format, D_00A55478, 33, ap);
-    XrgLog(D_00A554D0, D_00A55478, 34, source_file, line);
-    XrgLog(D_00A55448, D_00A55478, 35);
+    XrgLog(errorSeparatorLine, errorSourcePath, 31);
+    XrgLog(errorWarningBanner, errorSourcePath, 32);
+    XrgVLog(format, errorSourcePath, 33, ap);
+    XrgLog(errorWarningLocationFormat, errorSourcePath, 34, source_file, line);
+    XrgLog(errorSeparatorLine, errorSourcePath, 35);
 
     va_end(ap);
 }

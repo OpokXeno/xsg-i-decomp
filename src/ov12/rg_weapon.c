@@ -3,113 +3,104 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_weapon.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_robot.h"
+#include "ov12/rg_heap.h"
 #include "ov12/rg_matrices_effector.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/xrg_sound.h"
+#include "rg_weapon.h"
+#include "ov12/rg_bgobj.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_geom_group.h"
+#include "ov12/rg_robot.h"
+#include "ov12/rg_shot.h"
+#include "ov12/create_rg.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
+/* Distance in front of the weapon at which a locked-on weapon aims its constraint. */
+#define RG_WEAPON_LOCKON_AIM_DISTANCE 100.0f
 
-const char D_00A53648[16] = "pAttach != NIL";
+/* Radius of the collision ball of an attack weapon. */
+#define RG_WEAPON_ATTACK_BALL_RADIUS 1.5f
 
-const char D_00A53658[24] = "../rg_weapon.euc.c";
+/* Default melee damage, and the energy weapon defaults. */
+#define RG_WEAPON_ATTACK_DEFAULT_DAMAGE 10.0f
+#define RG_WEAPON_ENERGY_DEFAULT_CAPACITY 200.0f
+#define RG_WEAPON_ENERGY_DEFAULT_UP_TEMP 100.0f
+#define RG_WEAPON_ENERGY_DEFAULT_LIMIT_TEMP 100.0f
+#define RG_WEAPON_ENERGY_DEFAULT_DOWN_TEMP 50.0f
 
-const char D_00A536F0[16] = "pWpn != NIL";
+/* Declared here: functions of other translation units. */
 
-const char D_00A53710[16] = "pEss != NIL";
+/* Declared here: strings of the scaffold-owned data window (ov12:0x00a53642..0x00a53818). */
+extern const char weaponAssertAttachNumInRange[]; /* "pAttach->m_uAttachNum < ATTACH_MAX" */
+extern const char weaponAssertEquipTypeInRange[]; /* "RG_EQUIP_TYPE_MIN <= (eEquipType) && (eEquipType) < RG_EQUIP_TYPE_NUM" */
+extern const char weaponAssertShotTypePNotNil[]; /* assert string of _ShotTypeShot */
+extern const char weaponAssertRobotNotNilEffector[]; /* assert string of _InitWeaponCommonEffector */
+extern const char weaponAssertAttackGeomNotNil[]; /* assert string of _InitWeaponAttack */
+extern const char weaponAssertWeaponPointerNotNil[]; /* assert string of RgWeaponGetRestUnit */
+extern const char weaponNoEssenceWarnFormat[]; /* RgWarn format of RgWeaponGetRestUnit */
 
-const char D_00A53720[16] = "pInfo != NIL";
-
-const char D_00A53730[16] = "eff15.ptcl";
-
-const char D_00A53740[16] = "eff11.ptcl";
-
-const char D_00A53768[32] = "pEss != NIL && pInfo != NIL";
-
-const char D_00A53788[32] = "pEss->m_pCreateMethod != NIL";
-
-const char D_00A537D8[48] = "0 <= eCharID && eCharID < RG_ACTOR_CHAR_ROBNUM";
-
-const char D_00A53808[16] = "pRobot != NIL";
-
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53642..0x00a53818): the assert_prog expression
- * and source-file strings this allocation's assertions cite (docs/naming.md,
- * "Scaffold-owned data keeps its splat name"). ov12:0x00a536f0 holds
- * "pWpn != NIL", ov12:0x00a53658 holds "../rg_weapon.euc.c", ov12:0x00a537d8
- * holds "0 <= eCharID && eCharID < RG_ACTOR_CHAR_ROBNUM".
- */
-extern const char D_00A536F0[];
-extern const char D_00A53658[];
-extern const char D_00A537D8[];
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53642..0x00a53818): the assert_prog expression
- * strings the ov12:0x00a1a6e8..0x00a1b52c allocation's create-function
- * assertions cite. ov12:0x00a53710 holds "pEss != NIL", ov12:0x00a53720
- * holds "pInfo != NIL".
- */
-extern const char D_00A53710[];
-extern const char D_00A53720[];
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53642..0x00a53818): the assert_prog
- * expression string _GetShotInfo's assertion cites. ov12:0x00a53808 holds
- * "pRobot != NIL".
- */
-extern const char D_00A53808[];
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern void _DestructWeaponCommon(RgWeapon *weapon);
-extern void _PlayShotMotion(RgWeapon *weapon);
-extern void XrgActorSetMotion(XrgActor *actor, int motion);
-extern XrgActor *RgRobotGetActor(int robotId);
-extern void XrgActorDisposeEffector(XrgActor *actor, int effector);
-extern int RgBgObjTryToBreak(int bgObject, float damage);
-extern void _InitWeaponAttack(RgWeaponAttackType *weapon,
-                               RgWeaponAttackEssence *essence,
-                               RgWeaponCreateInfo *info);
-void _InitWeaponUnArmedType(RgWeapon *weapon, RgWeaponUnArmedEssence *essence, RgWeaponCreateInfo *info);
-void _InitWeaponShield(RgWeapon *weapon, RgWeaponShieldEssence *essence, RgWeaponCreateInfo *info);
-extern void _InitEnergyType(RgWeaponEnergyType *weapon,
-                             RgWeaponEnergyEssence *essence,
-                             RgWeaponCreateInfo *info);
-void _InitEssenceCommon(void *essence);
+/* Prototypes of the functions defined below that are used before their definition. */
 static int _GetNumAttach(RgWeaponAttach *pAttach);
-extern void _CommonPassTime(RgWeapon *weapon, float dt);
-extern int _GetDefShotPosDir(RgWeapon *pWpn, RgVector position, RgVector direction);
-extern int RgRobotGetCharID(int robotId);
-extern void *RgRobotGetTarget(int robotId);
-extern int RgRobotIsConfused(int robotId);
-extern void XrgSoundRingVol(int driver, int soundId, int volume);
-extern void XrgActorPassTime(XrgActor *actor, float dt);
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53642..0x00a53818): the assert_prog expression
- * string _InitAttach/_GetNumAttach's assertions cite. ov12:0x00a53648 holds
- * "pAttach != NIL".
- */
-extern const char D_00A53648[];
+void _CommonDispose(RgWeapon *weapon);
+void _CommonPassTime(RgWeapon *weapon, float dt);
+void _CommonDisp(RgWeapon *weapon);
+void _InitWeaponCommon(RgWeapon *weapon, RgWeaponEssence *base, RgWeaponCreateInfo *info);
+void _DestructWeaponCommon(RgWeapon *weapon);
+void _InitEssenceCommon(RgWeaponEssence *ess);
+void _InitWeaponCommonEffector(RgWeapon *weapon, RgStatus *robot, unsigned int equipType);
+int _ShotTypeShot(RgWeapon *pWeapon);
+void _InitWeaponShot(RgWeaponShotType *weapon, RgWeaponShotEssence *essence, RgWeaponCreateInfo *info);
+void _InitWeaponAttack(RgWeaponAttackType *weapon, RgWeaponAttackEssence *essence, RgWeaponCreateInfo *info);
+void _InitWeaponUnArmedType(RgWeaponAttackType *weapon, RgWeaponUnArmedEssence *essence, RgWeaponCreateInfo *info);
+void _InitWeaponShield(RgWeapon *weapon, RgWeaponShieldEssence *essence, RgWeaponCreateInfo *info);
+void _InitEnergyType(RgWeaponEnergyType *weapon, RgWeaponEnergyEssence *essence, RgWeaponCreateInfo *info);
+void _PlayShotMotion(RgWeapon *weapon);
+void _CheckLockOn(RgWeapon *weapon);
+int _GetParentCharID(RgWeapon *weapon);
+int _GetDefShotPosDir(void *posOwner, RgVector position, RgVector direction);
+void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector direction);
+void _GetShotInfo(RgWeapon *weapon, RgShotRequest *info);
+
+const char weaponAssertAttachNotNil[16] = "pAttach != NIL";
+
+const char weaponSourcePath[24] = "../rg_weapon.euc.c";
+
+const char weaponAssertWeaponNotNil[16] = "pWpn != NIL";
+
+const char weaponAssertEssenceNotNil[16] = "pEss != NIL";
+
+const char weaponAssertInfoNotNil[16] = "pInfo != NIL";
+
+const char weaponHitEffectFallbackName[16] = "eff15.ptcl";
+
+const char weaponRobotHitEffectName[16] = "eff11.ptcl";
+
+const char weaponAssertEssenceAndInfoNotNil[32] = "pEss != NIL && pInfo != NIL";
+
+const char weaponAssertCreateMethodNotNil[32] = "pEss->m_pCreateMethod != NIL";
+
+const char weaponAssertCharIdInRobotRange[48] = "0 <= eCharID && eCharID < RG_ACTOR_CHAR_ROBNUM";
+
+const char weaponAssertRobotNotNil[16] = "pRobot != NIL";
 
 static void _InitAttach(RgWeaponAttach *pAttach)
 {
     if (pAttach == 0) {
-        assert_prog(D_00A53648, D_00A53658, 38);
+        assert_prog(weaponAssertAttachNotNil, weaponSourcePath, 38);
     }
     pAttach->m_uAttachNum = 0;
 }
-
-extern void RgShotRelease(RgShot *shot);
 
 static void _ReleaseAttach(RgWeaponAttach *pAttach)
 {
     unsigned int i;
 
     if (pAttach == 0) {
-        assert_prog(D_00A53648, D_00A53658, 46);
+        assert_prog(weaponAssertAttachNotNil, weaponSourcePath, 46);
     }
     for (i = 0; i < pAttach->m_uAttachNum; i++) {
         RgShotRelease(pAttach->shots[i]);
@@ -119,7 +110,7 @@ static void _ReleaseAttach(RgWeaponAttach *pAttach)
 static int _GetNumAttach(RgWeaponAttach *pAttach)
 {
     if (pAttach == 0) {
-        assert_prog(D_00A53648, D_00A53658, 54);
+        assert_prog(weaponAssertAttachNotNil, weaponSourcePath, 54);
     }
     return pAttach->m_uAttachNum;
 }
@@ -129,7 +120,7 @@ static unsigned int _GetAllAttach(RgWeaponAttach *pAttach, RgShot **shots)
     unsigned int i;
 
     if (pAttach == 0) {
-        assert_prog(D_00A53648, D_00A53658, 62);
+        assert_prog(weaponAssertAttachNotNil, weaponSourcePath, 62);
     }
     for (i = 0; i < pAttach->m_uAttachNum; i++) {
         shots[i] = pAttach->shots[i];
@@ -137,29 +128,19 @@ static unsigned int _GetAllAttach(RgWeaponAttach *pAttach, RgShot **shots)
     return pAttach->m_uAttachNum;
 }
 
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53642..0x00a53818): the assert_prog expression
- * string _AddShotAttach's bound check cites. ov12:0x00a53670 holds
- * "pAttach->m_uAttachNum < ATTACH_MAX".
- */
-extern const char D_00A53670[];
-
 static void _AddShotAttach(RgWeaponAttach *pAttach, RgShot *shot)
 {
     if (pAttach == 0) {
-        assert_prog(D_00A53648, D_00A53658, 71);
+        assert_prog(weaponAssertAttachNotNil, weaponSourcePath, 71);
     }
     if (shot == 0) {
         return;
     }
     if (pAttach->m_uAttachNum >= ATTACH_MAX) {
-        assert_prog(D_00A53670, D_00A53658, 73);
+        assert_prog(weaponAssertAttachNumInRange, weaponSourcePath, 73);
     }
     pAttach->shots[pAttach->m_uAttachNum++] = shot;
 }
-
-extern int RgShotIsReleased(RgShot *shot);
 
 static void _CheckAttach(RgWeaponAttach *pAttach)
 {
@@ -169,7 +150,7 @@ static void _CheckAttach(RgWeaponAttach *pAttach)
     unsigned int aliveNum;
 
     if (pAttach == 0) {
-        assert_prog(D_00A53648, D_00A53658, 83);
+        assert_prog(weaponAssertAttachNotNil, weaponSourcePath, 83);
     }
     aliveNum = 0;
     for (i = 0; i < pAttach->m_uAttachNum; i++) {
@@ -184,11 +165,9 @@ static void _CheckAttach(RgWeaponAttach *pAttach)
     pAttach->m_uAttachNum = aliveNum;
 }
 
-void _CommonDispose(void)
+void _CommonDispose(RgWeapon *weapon)
 {
 }
-
-extern int XrgActorIsEndOfMotion(XrgActor *pActor);
 
 void _CommonPassTime(RgWeapon *weapon, float dt)
 {
@@ -207,78 +186,45 @@ void _CommonPassTime(RgWeapon *weapon, float dt)
     _CheckAttach(&weapon->shotAttach);
 }
 
-/* Opaque here: rg_matrices_effector.c (ov12/tu068) owns MatrixConstraint's definition. */
-typedef struct MatrixConstraint MatrixConstraint;
-
-extern void RgMatricesEffectorSetActivity(MatrixEffector *effector, int activity);
-extern void RgMatEffConstraintSetTarget(MatrixConstraint *constraint, RgVector target);
-extern void XrgClearVector(RgVector vector);
-extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
-extern void XrgNormalizeVector(RgVector destination, RgVector source);
-extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
-extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
-
-/* Opaque here: rg_geom_point.c (ov12/tu052) owns the RgPointVector definition. */
-typedef struct RgPointVector RgPointVector;
-
-extern void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
-                                const char *source_file, int source_line);
-void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector direction);
-void _CheckLockOn(RgWeapon *weapon);
-
 void _CommonDisp(RgWeapon *weapon)
 {
     RgVector position;
     RgVector fromPosition;
     RgVector toPosition;
     RgVector aimPoint;
-    void *target;
-    int robotId;
+    RgGeomPoint *target;
+    RgStatus *robot;
 
-    robotId = weapon->robotId;
+    robot = weapon->robot;
     _CheckLockOn(weapon);
     if (weapon->lockedOn != 0) {
-        target = RgRobotGetTarget(robotId);
+        target = RgRobotGetTarget(robot);
         if (target != 0) {
-            __RgGeomPointGetPos(target, (RgPointVector *) position, D_00A53658, 287);
+            __RgGeomPointGetPos(target, position, weaponSourcePath, 287);
         } else {
             XrgClearVector(position);
         }
         if (weapon->lockOnEffector != 0) {
-            RgMatricesEffectorSetActivity((MatrixEffector *) weapon->lockOnEffector, 1);
+            RgMatricesEffectorSetActivity(weapon->lockOnEffector, 1);
             RgMatEffConstraintSetTarget((MatrixConstraint *) weapon->lockOnEffector, position);
         }
     } else if (weapon->lockOnEffector != 0) {
-        if (weapon->equipped != 0 && (weapon->controlFlags & 0x20)) {
+        if (weapon->equipped != 0 && (weapon->controlFlags & RG_WEAPON_CONTROL_LOCKON)) {
             _GetDefShotPosDirFunc(weapon, fromPosition, toPosition);
             XrgSubVector(aimPoint, toPosition, fromPosition);
             XrgNormalizeVector(aimPoint, aimPoint);
-            XrgScaleVector(aimPoint, aimPoint, 100.0f);
+            XrgScaleVector(aimPoint, aimPoint, RG_WEAPON_LOCKON_AIM_DISTANCE);
             XrgAddVector(aimPoint, fromPosition, aimPoint);
-            RgMatricesEffectorSetActivity((MatrixEffector *) weapon->lockOnEffector, 1);
+            RgMatricesEffectorSetActivity(weapon->lockOnEffector, 1);
             RgMatEffConstraintSetTarget((MatrixConstraint *) weapon->lockOnEffector, aimPoint);
         } else {
-            RgMatricesEffectorSetActivity((MatrixEffector *) weapon->lockOnEffector, 0);
+            RgMatricesEffectorSetActivity(weapon->lockOnEffector, 0);
         }
     }
 }
 
-#include "ov12/rg_weapon_db.h"
-
-/*
- * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
- * data_ownership window 0x00a53642..0x00a53818): the assert_prog expression
- * string _InitWeaponCommon's equip-type check cites. ov12:0x00a53698 holds
- * "RG_EQUIP_TYPE_MIN <= (eEquipType) && (eEquipType) < RG_EQUIP_TYPE_NUM".
- */
-extern const char D_00A53698[];
-extern void CopyRgEquip(RgEquip *destination, RgEquip *source);
-extern XrgActor *CreateXrgActor(int actorID);
-void _InitWeaponCommon(RgWeapon *weapon, void *essence, RgWeaponCreateInfo *info);
-
-void _InitWeaponCommon(RgWeapon *weapon, void *essence, RgWeaponCreateInfo *info)
+void _InitWeaponCommon(RgWeapon *weapon, RgWeaponEssence *base, RgWeaponCreateInfo *info)
 {
-    RgWeaponBaseEssence *base;
     int i;
     int j;
     unsigned int equipType;
@@ -287,22 +233,21 @@ void _InitWeaponCommon(RgWeapon *weapon, void *essence, RgWeaponCreateInfo *info
 
     equipType = info->equipType;
     if (equipType >= RG_EQUIP_TYPE_NUM) {
-        assert_prog(D_00A53698, D_00A53658, 329);
+        assert_prog(weaponAssertEquipTypeInRange, weaponSourcePath, 329);
     }
-    base = (RgWeaponBaseEssence *) essence;
     weapon->id = info->id;
     weapon->shotNum = base->capacity;
     weapon->shotRequested = 0;
     weapon->lockedOn = 0;
     weapon->targeting = 0;
-    weapon->controlFlags = base->controlMode;
-    weapon->robotId = info->robotId;
+    weapon->controlFlags = base->controlFlags;
+    weapon->robot = (RgStatus *) info->robot;
     weapon->shotEssence = base->shotEssence;
     weapon->atkGeoms = info->atkGeoms;
     weapon->dispose = _CommonDispose;
     weapon->disp = _CommonDisp;
-    weapon->weight = base->weight;
-    weapon->ess = (int) base;
+    weapon->weight = base->mass;
+    weapon->ess = base;
     actorFlag = base->actorFlag;
     weapon->shoot = 0;
     weapon->passTime = 0;
@@ -315,71 +260,71 @@ void _InitWeaponCommon(RgWeapon *weapon, void *essence, RgWeaponCreateInfo *info
         weapon->shotMotionOffset = equipType;
     } while (0);
     if (actorFlag != 0) {
-        weapon->actor = CreateXrgActor((int) base->actorSpec[equipType]);
+        weapon->actor = CreateXrgActor(&base->actorSpec[equipType]);
     } else {
         weapon->actor = 0;
     }
     _InitAttach(&weapon->shotAttach);
     weapon->aimJointCursor = 0;
     CopyRgEquip(&weapon->equip, &base->equip);
-    weapon->equip.equipExtra = base->equip.equipExtra;
+    weapon->useMask = base->useMask;
     weapon->lockOnEffector = 0;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         for (j = 0; j < RG_ACTOR_CHAR_ROBNUM; j++) {
             weapon->shotMotionTable[j][i] = base->shotMotionTable[j][i];
             weapon->shotStartMotionTable[j][i] = base->shotStartMotionTable[j][i];
             weapon->shotEndMotionTable[j][i] = base->shotEndMotionTable[j][i];
         }
     }
-    if (info->equipType == 0) {
-        angle = base->angleMin;
-        while (angle > 3.1415927f) {
-            angle -= 6.2831855f;
+    if (info->equipType == RG_EQUIP_TYPE_LEFT) {
+        angle = base->lockOnAngleMin;
+        while (angle > XRG_PI) {
+            angle -= XRG_TWO_PI;
         }
-        while (angle < -3.1415927f) {
-            angle += 6.2831855f;
+        while (angle < -XRG_PI) {
+            angle += XRG_TWO_PI;
         }
         weapon->lockOnAngleMin = angle;
-        angle = base->angleMax;
-        while (angle > 3.1415927f) {
-            angle -= 6.2831855f;
+        angle = base->lockOnAngleMax;
+        while (angle > XRG_PI) {
+            angle -= XRG_TWO_PI;
         }
-        while (angle < -3.1415927f) {
-            angle += 6.2831855f;
+        while (angle < -XRG_PI) {
+            angle += XRG_TWO_PI;
         }
         weapon->lockOnAngleMax = angle;
-    } else if (info->equipType == 1) {
-        angle = -base->angleMax;
-        while (angle > 3.1415927f) {
-            angle -= 6.2831855f;
+    } else if (info->equipType == RG_EQUIP_TYPE_RIGHT) {
+        angle = -base->lockOnAngleMax;
+        while (angle > XRG_PI) {
+            angle -= XRG_TWO_PI;
         }
-        while (angle < -3.1415927f) {
-            angle += 6.2831855f;
+        while (angle < -XRG_PI) {
+            angle += XRG_TWO_PI;
         }
         weapon->lockOnAngleMin = angle;
-        angle = -base->angleMin;
-        while (angle > 3.1415927f) {
-            angle -= 6.2831855f;
+        angle = -base->lockOnAngleMin;
+        while (angle > XRG_PI) {
+            angle -= XRG_TWO_PI;
         }
-        while (angle < -3.1415927f) {
-            angle += 6.2831855f;
+        while (angle < -XRG_PI) {
+            angle += XRG_TWO_PI;
         }
         weapon->lockOnAngleMax = angle;
     } else {
-        angle = base->angleMin;
-        while (angle > 3.1415927f) {
-            angle -= 6.2831855f;
+        angle = base->lockOnAngleMin;
+        while (angle > XRG_PI) {
+            angle -= XRG_TWO_PI;
         }
-        while (angle < -3.1415927f) {
-            angle += 6.2831855f;
+        while (angle < -XRG_PI) {
+            angle += XRG_TWO_PI;
         }
         weapon->lockOnAngleMin = angle;
-        angle = base->angleMax;
-        while (angle > 3.1415927f) {
-            angle -= 6.2831855f;
+        angle = base->lockOnAngleMax;
+        while (angle > XRG_PI) {
+            angle -= XRG_TWO_PI;
         }
-        while (angle < -3.1415927f) {
-            angle += 6.2831855f;
+        while (angle < -XRG_PI) {
+            angle += XRG_TWO_PI;
         }
         weapon->lockOnAngleMax = angle;
     }
@@ -388,15 +333,13 @@ void _InitWeaponCommon(RgWeapon *weapon, void *essence, RgWeaponCreateInfo *info
     weapon->lockOnStopped = 0;
     weapon->bgHitSound = base->bgHitSound;
     weapon->sound = 0;
-    weapon->bgHitVolume = base->bgHitVolume;
+    weapon->lifeSound = base->lifeSound;
     weapon->shotSound = base->shotSound;
     weapon->robotHitVolume = base->robotHitVolume;
-    weapon->extraVolume0 = base->extraVolume0;
-    weapon->extraVolume1 = base->extraVolume1;
+    weapon->bgHitVolume = base->bgHitVolume;
+    weapon->lifeVolume = base->lifeVolume;
     weapon->shotVolume = base->shotVolume;
 }
-
-extern void DisposeXrgActor(XrgActor *actor);
 
 void _DestructWeaponCommon(RgWeapon *weapon)
 {
@@ -410,83 +353,71 @@ void _DestructWeaponCommon(RgWeapon *weapon)
     if (weapon->lockOnEffector == 0) {
         return;
     }
-    if (weapon->robotId == 0) {
+    if (weapon->robot == 0) {
         return;
     }
-    XrgActorDisposeEffector(RgRobotGetActor(weapon->robotId), weapon->lockOnEffector);
+    XrgActorDisposeEffector(RgRobotGetActor(weapon->robot), weapon->lockOnEffector);
 }
 
-extern void InitRgEquip(void *pEquip);
-extern int InitXrgActorEssence(void *pEss, int actorID);
-
-void _InitEssenceCommon(void *essence)
+void _InitEssenceCommon(RgWeaponEssence *ess)
 {
-    RgWeaponBaseEssence *ess;
     unsigned int i;
     unsigned int j;
     float weight = 1.0f;
 
-    ess = (RgWeaponBaseEssence *) essence;
-    ess->aimAxis = 3;
-    ess->angleMin = -0.3926991f;
-    ess->angleMax = 1.1780972f;
-    ess->capacity = 50.0f;
+    ess->aimAxis = RG_WEAPON_AIM_AXIS_NONE;
+    ess->lockOnAngleMin = -XRG_EIGHTH_PI;
+    ess->lockOnAngleMax = XRG_THREE_EIGHTH_PI;
+    ess->capacity = RG_WEAPON_DEFAULT_CAPACITY;
     ess->m_pCreateMethod = 0;
-    ess->controlMode = 0;
+    ess->controlFlags = 0;
     ess->shotEssence = 0;
     ess->shotPitch = 0.0f;
     ess->shotYaw = 0.0f;
-    ess->aimJointCount = 0;
-    ess->unmodeled68 = 0;
+    ess->shotPntNum = 0;
+    ess->unmodeled_68 = 0;
     InitRgEquip(&ess->equip);
-    ess->equip.equipExtra = -1;
+    ess->useMask = -1;
     for (i = 0; i < RG_ACTOR_CHAR_ROBNUM; i++) {
-        ess->shotMotionTable[i][0] = 39;
-        ess->shotMotionTable[i][1] = 40;
-        ess->shotMotionTable[i][2] = -1;
-        for (j = 0; j < 3; j++) {
+        ess->shotMotionTable[i][RG_EQUIP_TYPE_LEFT] = RG_WEAPON_MOTION_SHOT_LEFT;
+        ess->shotMotionTable[i][RG_EQUIP_TYPE_RIGHT] = RG_WEAPON_MOTION_SHOT_RIGHT;
+        ess->shotMotionTable[i][RG_EQUIP_TYPE_BACK] = -1;
+        for (j = 0; j < RG_EQUIP_TYPE_NUM; j++) {
             ess->shotStartMotionTable[i][j] = -1;
             ess->shotEndMotionTable[i][j] = -1;
         }
     }
     ess->actorFlag = 1;
-    InitXrgActorEssence(ess->actorSpec[0], -1);
-    InitXrgActorEssence(ess->actorSpec[1], -1);
-    InitXrgActorEssence(ess->actorSpec[2], -1);
-    ess->weight = weight;
-    ess->shotSound = 21;
-    ess->unmodeled3a4 = 0;
-    ess->unmodeled350 = 0;
-    ess->unmodeled330 = 0;
-    ess->robotHitSound = 22;
-    ess->bgHitSound = 22;
-    ess->bgHitVolume = 0;
-    ess->robotHitVolume = 128;
-    ess->extraVolume0 = 128;
-    ess->extraVolume1 = 128;
-    ess->unmodeled3a0 = -1;
+    InitXrgActorEssence(&ess->actorSpec[0], -1);
+    InitXrgActorEssence(&ess->actorSpec[1], -1);
+    InitXrgActorEssence(&ess->actorSpec[2], -1);
+    ess->mass = weight;
+    ess->shotSound = RG_WEAPON_SOUND_SHOT;
+    ess->isDefault = 0;
+    ess->displayName[0] = 0;
+    ess->databaseName[0] = 0;
+    ess->robotHitSound = RG_WEAPON_SOUND_HIT;
+    ess->bgHitSound = RG_WEAPON_SOUND_HIT;
+    ess->lifeSound = 0;
+    ess->robotHitVolume = RG_WEAPON_VOLUME_MAX;
+    ess->bgHitVolume = RG_WEAPON_VOLUME_MAX;
+    ess->lifeVolume = RG_WEAPON_VOLUME_MAX;
+    ess->eventLevel = -1;
     ess->shotVolume = 1;
 }
 
-extern const char D_00A536E0[];
-extern void _GetShotInfo(RgWeapon *weapon, RgWeaponShotRequest *info);
-extern RgShot *CreateRgShotFromEssence(struct RgShotEssence *ess, RgWeaponShotRequest *info);
-extern void RgShotSetSoundDriver(RgShot *shot, int sound);
-extern void RgShotSetHitSound(RgShot *shot, int sound, int volume);
-extern void RgShotSetBgHitSound(RgShot *shot, int sound, int volume);
-extern void RgShotSetNoLifeSound(RgShot *shot, int sound, int volume);
-extern void RgShotSetHideSound(RgShot *shot, int sound);
-
-int _ShotTypeShot(RgWeaponShotType *weapon)
+int _ShotTypeShot(RgWeapon *pWeapon)
 {
+    RgWeaponShotType *weapon = (RgWeaponShotType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536E0, D_00A53658, 520);
+        assert_prog(weaponAssertShotTypePNotNil, weaponSourcePath, 520);
     }
     if (weapon->cooldown > 0.0f || _GetNumAttach(&weapon->common.shotAttach) != 0) {
         return 0;
     }
     {
-        RgWeaponShotRequest info;
+        RgShotRequest info;
 
         _GetShotInfo(&weapon->common, &info);
         if (weapon->common.shotEssence != 0) {
@@ -496,11 +427,11 @@ int _ShotTypeShot(RgWeaponShotType *weapon)
             _AddShotAttach(&weapon->common.shotAttach, shot);
             RgShotSetSoundDriver(shot, weapon->common.sound);
             RgShotSetHitSound(shot, weapon->common.robotHitSound, weapon->common.robotHitVolume);
-            RgShotSetBgHitSound(shot, weapon->common.bgHitSound, weapon->common.extraVolume0);
-            RgShotSetNoLifeSound(shot, weapon->common.bgHitVolume, weapon->common.extraVolume1);
+            RgShotSetBgHitSound(shot, weapon->common.bgHitSound, weapon->common.bgHitVolume);
+            RgShotSetNoLifeSound(shot, weapon->common.lifeSound, weapon->common.lifeVolume);
             RgShotSetHideSound(shot, weapon->common.shotSound);
             XrgSoundRingVol(weapon->common.sound, weapon->common.shotSound, weapon->common.shotVolume);
-            if (weapon->common.shotNum != 1.0e8f) {
+            if (weapon->common.shotNum != RG_WEAPON_SHOT_INFINITE) {
                 weapon->common.shotNum = weapon->common.shotNum - 1.0f;
             }
             weapon->cooldown = weapon->busyTime;
@@ -510,24 +441,29 @@ int _ShotTypeShot(RgWeaponShotType *weapon)
     return 0;
 }
 
-int _ShotTypeIsBusy(RgWeaponShotType *weapon)
+int _ShotTypeIsBusy(RgWeapon *pWeapon)
 {
+    RgWeaponShotType *weapon = (RgWeaponShotType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 572);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 572);
     }
     return weapon->cooldown > 0.0f;
 }
 
-void _ShotTypeFree(RgWeaponShotType *weapon)
+void _ShotTypeFree(RgWeapon *pWeapon)
 {
+    RgWeaponShotType *weapon = (RgWeaponShotType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 580);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 580);
     }
     weapon->cooldown = 0.0f;
 }
 
-void _ShotTypePassTime(RgWeaponShotType *weapon, float dt)
+void _ShotTypePassTime(RgWeapon *pWeapon, float dt)
 {
+    RgWeaponShotType *weapon = (RgWeaponShotType *) pWeapon;
     float cooldown;
 
     if (_GetNumAttach(&weapon->common.shotAttach) == 0) {
@@ -539,91 +475,81 @@ void _ShotTypePassTime(RgWeaponShotType *weapon, float dt)
     }
 }
 
-extern const char D_00A53700[];
-extern int XrgActorCreateEffConstraint(XrgActor *actor, int equipType,
-                                       XrgActor *owner);
-
-void _InitWeaponCommonEffector(RgWeapon *weapon, int robotId,
+void _InitWeaponCommonEffector(RgWeapon *weapon, RgStatus *robot,
                                unsigned int equipType)
 {
     XrgActor *actor;
     XrgActor *owner;
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 607);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 607);
     }
-    if (robotId == 0) {
-        assert_prog(D_00A53700, D_00A53658, 608);
+    if (robot == 0) {
+        assert_prog(weaponAssertRobotNotNilEffector, weaponSourcePath, 608);
     }
-    if ((weapon->controlFlags & 7) == 1) {
+    if ((weapon->controlFlags & RG_WEAPON_CONTROL_KIND_MASK) == RG_WEAPON_CONTROL_KIND_FULL_MOT) {
         return;
     }
-    if ((weapon->controlFlags & 0x80) != 0) {
+    if ((weapon->controlFlags & RG_WEAPON_CONTROL_NO_ROBMOT) != 0) {
         return;
     }
-    actor = RgRobotGetActor(robotId);
+    actor = RgRobotGetActor(robot);
     owner = weapon->actor;
-    if (equipType == 0) {
+    if (equipType == RG_EQUIP_TYPE_LEFT) {
         weapon->lockOnEffector = XrgActorCreateEffConstraint(actor, 0, owner);
-    } else if (equipType == 1) {
+    } else if (equipType == RG_EQUIP_TYPE_RIGHT) {
         weapon->lockOnEffector = XrgActorCreateEffConstraint(actor, 1, owner);
     }
 }
 
-void _InitWeaponCommonEffector(RgWeapon *weapon, int robotId, unsigned int equipType);
-int _ShotTypeShot(RgWeaponShotType *weapon);
-
 void _InitWeaponShot(RgWeaponShotType *weapon, RgWeaponShotEssence *essence,
                      RgWeaponCreateInfo *info)
 {
-    _InitWeaponCommon(&weapon->common, essence, info);
+    _InitWeaponCommon(&weapon->common, &essence->common, info);
     weapon->common.shoot = _ShotTypeShot;
     weapon->common.passTime = _ShotTypePassTime;
     weapon->common.isBusy = _ShotTypeIsBusy;
     weapon->common.setFree = _ShotTypeFree;
     weapon->busyTime = essence->busyTime;
     weapon->cooldown = 0.0f;
-    _InitWeaponCommonEffector(&weapon->common, info->robotId, info->equipType);
+    _InitWeaponCommonEffector(&weapon->common, (RgStatus *) info->robot, info->equipType);
 }
 
-void _InitWeaponShot(RgWeaponShotType *weapon, RgWeaponShotEssence *essence, RgWeaponCreateInfo *info);
-
-RgWeaponShotType *_CreateWeaponShotType(RgWeaponShotEssence *pEss,
-                                         RgWeaponCreateInfo *pInfo)
+RgWeapon *_CreateWeaponShotType(void *pEss, RgWeaponCreateInfo *pInfo)
 {
     RgWeaponShotType *pWpn;
 
-    pWpn = RgHeapAlloc(InstanceOfRgHeap(), 0x200, D_00A53658, 668);
+    pWpn = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponShotType), weaponSourcePath, 668);
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 671);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 671);
     }
     if (pWpn == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 672);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 672);
     }
     if (pInfo == 0) {
-        assert_prog(D_00A53720, D_00A53658, 673);
+        assert_prog(weaponAssertInfoNotNil, weaponSourcePath, 673);
     }
     _InitWeaponShot(pWpn, pEss, pInfo);
-    return pWpn;
+    return &pWpn->common;
 }
 
 void InitRgWeaponShotEssence(RgWeaponShotEssence *pEss)
 {
-    RgWeaponShotEssenceInit *init = (RgWeaponShotEssenceInit *) pEss;
-
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 684);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 684);
     }
-    _InitEssenceCommon(pEss);
-    init->m_pCreateMethod = _CreateWeaponShotType;
-    init->controlMode = 0x20;
-    init->busyTime = 0.4f;
+    _InitEssenceCommon(&pEss->common);
+    pEss->common.m_pCreateMethod = _CreateWeaponShotType;
+    pEss->common.controlFlags = RG_WEAPON_CONTROL_LOCKON;
+    pEss->busyTime = 0.4f;
 }
 
-int _ShotAttackType(RgWeaponAttackType *weapon)
+int _ShotAttackType(RgWeapon *pWeapon)
 {
+    RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 725);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 725);
     }
     if (weapon->shotSoundPlaying == 0) {
         weapon->shotSoundPlaying = 1;
@@ -633,25 +559,20 @@ int _ShotAttackType(RgWeaponAttackType *weapon)
     return 0;
 }
 
-void _ShotStopAttackType(RgWeaponAttackType *weapon)
+void _ShotStopAttackType(RgWeapon *pWeapon)
 {
+    RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 737);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 737);
     }
     weapon->shotSoundPlaying = 0;
     weapon->active = 1;
 }
 
-extern int RgGeomGetStatus(int geom);
-extern void RgGeomPointMovePos(int geom, RgVector position);
-extern void RgGeomPointSetPos(int geom, RgVector position);
-extern void RgGeomResetStatus(int geom, int status);
-extern void RgGeomSetStatus(int geom, int status);
-extern int XrgActorGetJointLocal(XrgActor *actor, int joint, RgMatrix local);
-extern void XrgCopyVector(RgVector destination, RgVector source);
-
-void _PassTimeAttackType(RgWeaponAttackType *weapon)
+void _PassTimeAttackType(RgWeapon *pWeapon, float dt)
 {
+    RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
     /*
      * XrgActorGetJointLocal fills the whole 4x4 local transform of the
      * followed joint; only its translation row (the last four floats) is a
@@ -671,90 +592,77 @@ void _PassTimeAttackType(RgWeaponAttackType *weapon)
             goto resetStatus;
         }
         if (weapon->active != 0) {
-            if (!(RgGeomGetStatus(weapon->geom) & 1)) {
-                RgGeomSetStatus(weapon->geom, 1);
+            if (!(RgGeomGetStatus(&weapon->geom->point.geom) & RG_GEOM_STATUS_ACTIVE)) {
+                RgGeomSetStatus(&weapon->geom->point.geom, RG_GEOM_STATUS_ACTIVE);
                 XrgCopyVector(weapon->followPosition, &jointLocal[12]);
             }
-            RgGeomPointSetPos(weapon->geom, weapon->followPosition);
-            RgGeomPointMovePos(weapon->geom, &jointLocal[12]);
+            RgGeomPointSetPos(&weapon->geom->point, weapon->followPosition);
+            RgGeomPointMovePos(&weapon->geom->point, &jointLocal[12]);
             XrgCopyVector(weapon->followPosition, &jointLocal[12]);
         } else {
 resetStatus:
-            RgGeomResetStatus(weapon->geom, 1);
+            RgGeomResetStatus(&weapon->geom->point.geom, RG_GEOM_STATUS_ACTIVE);
         }
     }
 }
 
-extern void RgGeomFree(int geom);
-
-void _DestructAttackType(RgWeaponAttackType *weapon)
+void _DestructAttackType(RgWeapon *pWeapon)
 {
-    RgGeomFree(weapon->geom);
+    RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
+    RgGeomFree(&weapon->geom->point.geom);
 }
 
-void _HitBgAttackType(RgWeaponAttackType *weapon, int bgObject)
+void _HitBgAttackType(RgWeapon *pWeapon, RgBgObj *bgObject, RgVector position)
 {
+    RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
+
     if (RgBgObjTryToBreak(bgObject, weapon->damage) != 0) {
         weapon->active = 0;
     }
 }
 
-extern void CreateRgHitEffectPosDir(int id, RgVector direction, const void *, const void *);
-extern int RgRobotGetGeom(int robotId);
-extern void RgRobotGiveDamage(int robotId, RgVector direction, int flags, float damage);
-extern void RgRobotInvalidAttack(int robotId, RgVector direction, float damage);
-extern int RgRobotIsInvalidAttack(int robotId, RgVector direction);
-extern RgWeaponAttackEssence *RgWeaponEssCastToAttack(RgWeaponEssenceCommon *ess);
-extern const char D_00A53730[];
-extern const char D_00A53740[];
-
-void _HitRobotAttackType(RgWeaponAttackType *weapon, int robotId, int damage)
+void _HitRobotAttackType(RgWeapon *pWeapon, RgStatus *robot, RgVector position)
 {
+    RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
+
     RgVector ownPosition;
     RgVector targetPosition;
     RgVector direction;
-    int ownGeom;
-    int targetGeom;
-    unsigned char *attackEssence;
+    RgGeomPoint *ownGeom;
+    RgGeomPoint *targetGeom;
+    RgWeaponAttackEssence *attackEssence;
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 802);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 802);
     }
-    if (weapon->common.robotId != 0) {
-        ownGeom = RgRobotGetGeom(weapon->common.robotId);
-        targetGeom = RgRobotGetGeom(robotId);
-        __RgGeomPointGetPos((RgGeomPoint *) ownGeom, (RgPointVector *) ownPosition, D_00A53658, 811);
-        __RgGeomPointGetPos((RgGeomPoint *) targetGeom, (RgPointVector *) targetPosition, D_00A53658, 812);
+    if (weapon->common.robot != 0) {
+        ownGeom = RgRobotGetGeom(weapon->common.robot);
+        targetGeom = RgRobotGetGeom(robot);
+        __RgGeomPointGetPos(ownGeom, ownPosition, weaponSourcePath, 811);
+        __RgGeomPointGetPos(targetGeom, targetPosition, weaponSourcePath, 812);
         weapon->active = 0;
         XrgSubVector(direction, ownPosition, targetPosition);
-        if (RgRobotIsInvalidAttack(robotId, direction) == 0) {
-            attackEssence = (unsigned char *) RgWeaponEssCastToAttack((RgWeaponEssenceCommon *) weapon->common.ess);
+        if (RgRobotIsInvalidAttack(robot, direction) == 0) {
+            attackEssence = RgWeaponEssCastToAttack(weapon->common.ess);
             if (attackEssence != 0) {
-                CreateRgHitEffectPosDir(damage, direction, attackEssence + 0x3bc, D_00A53730);
+                CreateRgHitEffectPosDir(position, direction, attackEssence->hitEffectName, weaponHitEffectFallbackName);
             }
-            RgRobotGiveDamage(robotId, direction, 0, weapon->damage);
+            RgRobotGiveDamage(robot, direction, 0, weapon->damage);
             XrgSoundRingVol(weapon->common.sound, weapon->common.robotHitSound, weapon->common.robotHitVolume);
             return;
         }
-        CreateRgHitEffectPosDir(damage, direction, D_00A53740, 0);
-        RgRobotInvalidAttack(robotId, direction, weapon->damage);
+        CreateRgHitEffectPosDir(position, direction, weaponRobotHitEffectName, 0);
+        RgRobotInvalidAttack(robot, direction, weapon->damage);
     }
 }
-
-extern const char D_00A53750[];
-extern int RgGeomGroupCreateBall(void *group, RgWeapon *weapon);
-extern int CreateRgGeomBall(float radius, float scale);
-extern void RgGeomBallSetRadius(int geom, float radius);
 
 void _InitWeaponAttack(RgWeaponAttackType *weapon, RgWeaponAttackEssence *essence,
                        RgWeaponCreateInfo *info)
 {
-    RgWeaponAttackEssenceInit *ess;
     void *group;
 
-    ess = (RgWeaponAttackEssenceInit *) essence;
-    _InitWeaponCommon((RgWeapon *) weapon, essence, info);
-    *(void **) &weapon->followJoint = *(void **) &ess->followJoint;
+    _InitWeaponCommon(&weapon->common, &essence->common, info);
+    *(void **) &weapon->followJoint = *(void **) &essence->followJoint;
     weapon->common.shotNum = 1.0f;
     weapon->common.passTime = _PassTimeAttackType;
     weapon->common.dispose = _DestructAttackType;
@@ -763,145 +671,133 @@ void _InitWeaponAttack(RgWeaponAttackType *weapon, RgWeaponAttackEssence *essenc
     weapon->common.hitRobot = _HitRobotAttackType;
     weapon->common.hitBG = _HitBgAttackType;
     group = info->atkGeoms;
-    weapon->followExtra = (int) *(char **) &ess->followExtra;
-    weapon->damage = ess->damage;
+    weapon->followExtra = (int) *(char **) &essence->followExtra;
+    weapon->damage = essence->damage;
     weapon->followActor = weapon->common.actor;
     weapon->active = 1;
     weapon->common.lockedOn = 0;
     weapon->common.targeting = 0;
-    *(int *) ((unsigned char *) weapon + 0x38) = 0;
+    weapon->common.shotEssence = 0;
     weapon->shotSoundPlaying = 0;
     if (group != 0) {
-        weapon->geom = RgGeomGroupCreateBall(group, (RgWeapon *) weapon);
+        weapon->geom = RgGeomGroupCreateBall(group, &weapon->common);
     } else {
-        weapon->geom = CreateRgGeomBall(1.5f, 1.0f);
+        weapon->geom = CreateRgGeomBall(RG_WEAPON_ATTACK_BALL_RADIUS, 1.0f);
     }
     if (weapon->geom == 0) {
-        assert_prog(D_00A53750, D_00A53658, 880);
+        assert_prog(weaponAssertAttackGeomNotNil, weaponSourcePath, 880);
     }
-    RgGeomBallSetRadius(weapon->geom, 1.5f);
-    RgGeomResetStatus(weapon->geom, 1);
+    RgGeomBallSetRadius(weapon->geom, RG_WEAPON_ATTACK_BALL_RADIUS);
+    RgGeomResetStatus(&weapon->geom->point.geom, RG_GEOM_STATUS_ACTIVE);
 }
 
-RgWeaponAttackType *_CreateWeaponAttackType(RgWeaponAttackEssence *pEss,
-                                             RgWeaponCreateInfo *pInfo)
+RgWeapon *_CreateWeaponAttackType(void *pEss, RgWeaponCreateInfo *pInfo)
 {
     RgWeaponAttackType *pWpn;
 
-    pWpn = RgHeapAlloc(InstanceOfRgHeap(), 0x230, D_00A53658, 889);
+    pWpn = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponAttackType), weaponSourcePath, 889);
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 892);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 892);
     }
     if (pWpn == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 893);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 893);
     }
     if (pInfo == 0) {
-        assert_prog(D_00A53720, D_00A53658, 894);
+        assert_prog(weaponAssertInfoNotNil, weaponSourcePath, 894);
     }
     _InitWeaponAttack(pWpn, pEss, pInfo);
-    return pWpn;
+    return &pWpn->common;
 }
 
 void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss)
 {
-    RgWeaponAttackEssenceInit *init = (RgWeaponAttackEssenceInit *) pEss;
     unsigned int i;
 
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 905);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 905);
     }
-    _InitEssenceCommon(pEss);
-    init->m_pCreateMethod = _CreateWeaponAttackType;
+    _InitEssenceCommon(&pEss->common);
+    pEss->common.m_pCreateMethod = _CreateWeaponAttackType;
     for (i = 0; i < RG_ACTOR_CHAR_ROBNUM; i++) {
-        init->shotMotionTable[i][0] = 0x2B;
-        init->shotMotionTable[i][1] = 0x2C;
-        init->shotMotionTable[i][2] = -1;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_LEFT] = RG_WEAPON_MOTION_ATTACK_LEFT;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_RIGHT] = RG_WEAPON_MOTION_ATTACK_RIGHT;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_BACK] = -1;
     }
-    init->followJoint = 8;
-    init->followExtra = 8;
-    init->controlMode = 0x4A;
-    init->damage = 10.0f;
-    init->hitEffectName[0] = '\0';
+    pEss->followJoint = 8;
+    pEss->followExtra = 8;
+    pEss->common.controlFlags = RG_WEAPON_CONTROL_ADV | RG_WEAPON_CONTROL_TARGET_WTH | RG_WEAPON_CONTROL_KIND_ATTACK;
+    pEss->damage = RG_WEAPON_ATTACK_DEFAULT_DAMAGE;
+    pEss->hitEffectName[0] = '\0';
 }
 
-void _InitWeaponUnArmedType(RgWeapon *weapon, RgWeaponUnArmedEssence *essence,
+void _InitWeaponUnArmedType(RgWeaponAttackType *weapon, RgWeaponUnArmedEssence *essence,
                             RgWeaponCreateInfo *info)
 {
     int charID;
 
-    _InitWeaponAttack((RgWeaponAttackType *) weapon,
-                      (RgWeaponAttackEssence *) essence, info);
-    ((RgWeaponAttackType *) weapon)->followActor =
-        RgRobotGetActor(info->robotId);
-    charID = RgRobotGetCharID(info->robotId);
+    _InitWeaponAttack(weapon, essence, info);
+    weapon->followActor = RgRobotGetActor((RgStatus *) info->robot);
+    charID = RgRobotGetCharID((RgStatus *) info->robot);
     if (charID == 3) {
-        if (info->equipType == 0) {
-            ((RgWeaponAttackType *) weapon)->followJoint = 2;
-        } else if (info->equipType == 1) {
-            ((RgWeaponAttackType *) weapon)->followJoint = charID;
+        if (info->equipType == RG_EQUIP_TYPE_LEFT) {
+            weapon->followJoint = 2;
+        } else if (info->equipType == RG_EQUIP_TYPE_RIGHT) {
+            weapon->followJoint = charID;
         } else {
-            ((RgWeaponAttackType *) weapon)->followJoint = 20;
+            weapon->followJoint = 20;
         }
     } else {
-        if (info->equipType == 0) {
-            ((RgWeaponAttackType *) weapon)->followJoint = 0;
-        } else if (info->equipType == 1) {
-            ((RgWeaponAttackType *) weapon)->followJoint = info->equipType;
+        if (info->equipType == RG_EQUIP_TYPE_LEFT) {
+            weapon->followJoint = 0;
+        } else if (info->equipType == RG_EQUIP_TYPE_RIGHT) {
+            weapon->followJoint = info->equipType;
         } else {
-            ((RgWeaponAttackType *) weapon)->followJoint = 20;
+            weapon->followJoint = 20;
         }
     }
 }
 
-RgWeapon *_CreateWeaponUnArmedType(RgWeaponUnArmedEssence *pEss,
-                                    RgWeaponCreateInfo *pInfo)
+RgWeapon *_CreateWeaponUnArmedType(void *pEss, RgWeaponCreateInfo *pInfo)
 {
-    RgWeapon *pWpn;
+    RgWeaponAttackType *pWpn;
 
-    pWpn = RgHeapAlloc(InstanceOfRgHeap(), 0x230, D_00A53658, 969);
+    pWpn = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponAttackType), weaponSourcePath, 969);
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 972);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 972);
     }
     if (pWpn == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 973);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 973);
     }
     if (pInfo == 0) {
-        assert_prog(D_00A53720, D_00A53658, 974);
+        assert_prog(weaponAssertInfoNotNil, weaponSourcePath, 974);
     }
     _InitWeaponUnArmedType(pWpn, pEss, pInfo);
-    return pWpn;
+    return &pWpn->common;
 }
 
 void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss)
 {
-    /*
-     * pEss really addresses the RgWeaponUnArmedEssenceInit layout this
-     * allocation evidences (see the header: the tag RgWeaponUnArmedEssence
-     * itself is left opaque because ov12/tu027 already completes it for its
-     * own, unrelated, non-overlapping field layout).
-     */
-    RgWeaponUnArmedEssenceInit *init = (RgWeaponUnArmedEssenceInit *) pEss;
     unsigned int i;
 
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 988);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 988);
     }
-    InitRgWeaponAttackEssence((RgWeaponAttackEssence *) pEss);
-    init->m_pCreateMethod = _CreateWeaponUnArmedType;
-    init->resetFlag = 0;
-    init->controlMode = 76;
+    InitRgWeaponAttackEssence(pEss);
+    pEss->common.m_pCreateMethod = _CreateWeaponUnArmedType;
+    pEss->common.actorFlag = 0;
+    pEss->common.controlFlags = RG_WEAPON_CONTROL_ADV | RG_WEAPON_CONTROL_TARGET_WTH | RG_WEAPON_CONTROL_KIND_UNARMED;
     for (i = 0; i < RG_ACTOR_CHAR_ROBNUM; i++) {
-        init->shotMotionTable[i][0] = 0x15;
-        init->shotMotionTable[i][1] = 0x16;
-        init->shotMotionTable[i][2] = -1;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_LEFT] = RG_WEAPON_MOTION_UNARMED_LEFT;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_RIGHT] = RG_WEAPON_MOTION_UNARMED_RIGHT;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_BACK] = -1;
     }
-    init->terminator = -1;
+    pEss->followJoint = -1;
 }
 
 int _ShotShieldType(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1026);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1026);
     }
     return 0;
 }
@@ -909,11 +805,11 @@ int _ShotShieldType(RgWeapon *weapon)
 void _ShotStopShieldType(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1033);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1033);
     }
 }
 
-void _PassTimeShieldType(RgWeapon *weapon)
+void _PassTimeShieldType(RgWeapon *weapon, float dt)
 {
 }
 
@@ -924,7 +820,7 @@ void _DestructShieldType(RgWeapon *weapon)
 void _InitWeaponShield(RgWeapon *weapon, RgWeaponShieldEssence *essence,
                        RgWeaponCreateInfo *info)
 {
-    _InitWeaponCommon(weapon, essence, info);
+    _InitWeaponCommon(weapon, &essence->common, info);
     weapon->lockedOn = 0;
     weapon->targeting = 0;
     weapon->shotEssence = 0;
@@ -934,20 +830,19 @@ void _InitWeaponShield(RgWeapon *weapon, RgWeaponShieldEssence *essence,
     weapon->shotStop = _ShotStopShieldType;
 }
 
-RgWeapon *_CreateWeaponShieldType(RgWeaponShieldEssence *pEss,
-                                   RgWeaponCreateInfo *pInfo)
+RgWeapon *_CreateWeaponShieldType(void *pEss, RgWeaponCreateInfo *pInfo)
 {
     RgWeapon *pWpn;
 
-    pWpn = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeapon), D_00A53658, 1068);
+    pWpn = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeapon), weaponSourcePath, 1068);
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 1071);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 1071);
     }
     if (pWpn == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1072);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1072);
     }
     if (pInfo == 0) {
-        assert_prog(D_00A53720, D_00A53658, 1073);
+        assert_prog(weaponAssertInfoNotNil, weaponSourcePath, 1073);
     }
     _InitWeaponShield(pWpn, pEss, pInfo);
     return pWpn;
@@ -958,22 +853,24 @@ void InitRgWeaponShieldEssence(RgWeaponShieldEssence *pEss)
     unsigned int i;
 
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 1084);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 1084);
     }
-    _InitEssenceCommon(pEss);
-    pEss->m_pCreateMethod = _CreateWeaponShieldType;
+    _InitEssenceCommon(&pEss->common);
+    pEss->common.m_pCreateMethod = _CreateWeaponShieldType;
     for (i = 0; i < RG_ACTOR_CHAR_ROBNUM; i++) {
-        pEss->shotMotionTable[i][0] = 0x2B;
-        pEss->shotMotionTable[i][1] = 0x2C;
-        pEss->shotMotionTable[i][2] = -1;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_LEFT] = RG_WEAPON_MOTION_ATTACK_LEFT;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_RIGHT] = RG_WEAPON_MOTION_ATTACK_RIGHT;
+        pEss->common.shotMotionTable[i][RG_EQUIP_TYPE_BACK] = -1;
     }
-    pEss->controlMode = 3;
+    pEss->common.controlFlags = RG_WEAPON_CONTROL_KIND_SHIELD;
 }
 
-int _EnergyIsBusy(RgWeaponEnergyType *weapon)
+int _EnergyIsBusy(RgWeapon *pWeapon)
 {
+    RgWeaponEnergyType *weapon = (RgWeaponEnergyType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1120);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1120);
     }
     if (_GetNumAttach(&weapon->common.shotAttach) != 0) {
         return 1;
@@ -981,10 +878,12 @@ int _EnergyIsBusy(RgWeaponEnergyType *weapon)
     return weapon->active != 0;
 }
 
-void _EnergyFree(RgWeaponEnergyType *weapon)
+void _EnergyFree(RgWeapon *pWeapon)
 {
+    RgWeaponEnergyType *weapon = (RgWeaponEnergyType *) pWeapon;
+
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1138);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1138);
     }
     weapon->active = 0;
     weapon->energyCharge = 0;
@@ -995,8 +894,10 @@ void _EnergyFree(RgWeaponEnergyType *weapon)
  * and reports whether a new shot can start (no attached shot and not
  * already active).
  */
-int _EnergyShot(RgWeaponEnergyType *weapon)
+int _EnergyShot(RgWeapon *pWeapon)
 {
+    RgWeaponEnergyType *weapon = (RgWeaponEnergyType *) pWeapon;
+
     weapon->shotPending = 1;
     if (_GetNumAttach(&weapon->common.shotAttach) != 0) {
         return 0;
@@ -1004,9 +905,10 @@ int _EnergyShot(RgWeaponEnergyType *weapon)
     return weapon->active == 0;
 }
 
-void _EnergyPassTime(RgWeaponEnergyType *weapon, float dt)
+void _EnergyPassTime(RgWeapon *pWeapon, float dt)
 {
-    RgWeaponShotRequest info;
+    RgWeaponEnergyType *weapon = (RgWeaponEnergyType *) pWeapon;
+    RgShotRequest info;
     RgShot *shot;
     int startShot;
 
@@ -1024,8 +926,8 @@ void _EnergyPassTime(RgWeaponEnergyType *weapon, float dt)
         shot = CreateRgShotFromEssence(weapon->common.shotEssence, &info);
         RgShotSetSoundDriver(shot, weapon->common.sound);
         RgShotSetHitSound(shot, weapon->common.robotHitSound, weapon->common.robotHitVolume);
-        RgShotSetBgHitSound(shot, weapon->common.bgHitSound, weapon->common.extraVolume0);
-        RgShotSetNoLifeSound(shot, weapon->common.bgHitVolume, weapon->common.extraVolume1);
+        RgShotSetBgHitSound(shot, weapon->common.bgHitSound, weapon->common.bgHitVolume);
+        RgShotSetNoLifeSound(shot, weapon->common.lifeSound, weapon->common.lifeVolume);
         RgShotSetHideSound(shot, weapon->common.shotSound);
         XrgSoundRingVol(weapon->common.sound, weapon->common.shotSound, weapon->common.shotVolume);
         if (shot != 0 && RgShotIsReleased(shot) == 0) {
@@ -1037,7 +939,7 @@ void _EnergyPassTime(RgWeaponEnergyType *weapon, float dt)
     if (startShot == 0) {
         float newCharge;
 
-        if (weapon->common.shotNum != 1.0e8f) {
+        if (weapon->common.shotNum != RG_WEAPON_SHOT_INFINITE) {
             weapon->common.shotNum = weapon->common.shotNum - weapon->shotEnergy * dt;
         }
         newCharge = weapon->energyCharge + weapon->upTemp * dt;
@@ -1063,7 +965,7 @@ void _InitEnergyType(RgWeaponEnergyType *weapon, RgWeaponEnergyEssence *essence,
 {
     RgWeapon *common;
 
-    _InitWeaponCommon(&weapon->common, essence, info);
+    _InitWeaponCommon(&weapon->common, &essence->common, info);
     weapon->energyCharge = 0;
     common = &weapon->common;
     common->shoot = _EnergyShot;
@@ -1076,57 +978,49 @@ void _InitEnergyType(RgWeaponEnergyType *weapon, RgWeaponEnergyEssence *essence,
     *(void **) &weapon->active = 0;
     weapon->downTemp = essence->downTemp;
     *(void **) &weapon->shotPending = 0;
-    _InitWeaponCommonEffector(common, info->robotId, info->equipType);
+    _InitWeaponCommonEffector(common, (RgStatus *) info->robot, info->equipType);
 }
 
-RgWeaponEnergyType *_CreateWeaponEnergyType(RgWeaponEnergyEssence *pEss,
-                                             RgWeaponCreateInfo *pInfo)
+RgWeapon *_CreateWeaponEnergyType(void *pEss, RgWeaponCreateInfo *pInfo)
 {
     RgWeaponEnergyType *pWpn;
 
-    pWpn = RgHeapAlloc(InstanceOfRgHeap(), 0x210, D_00A53658, 1302);
+    pWpn = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponEnergyType), weaponSourcePath, 1302);
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 1305);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 1305);
     }
     if (pWpn == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1306);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1306);
     }
     if (pInfo == 0) {
-        assert_prog(D_00A53720, D_00A53658, 1307);
+        assert_prog(weaponAssertInfoNotNil, weaponSourcePath, 1307);
     }
     _InitEnergyType(pWpn, pEss, pInfo);
-    return pWpn;
+    return &pWpn->common;
 }
 
 void InitRgWeaponEnergyEssence(RgWeaponEnergyEssence *pEss)
 {
-    RgWeaponEnergyEssenceInit *init = (RgWeaponEnergyEssenceInit *) pEss;
-
     if (pEss == 0) {
-        assert_prog(D_00A53710, D_00A53658, 1318);
+        assert_prog(weaponAssertEssenceNotNil, weaponSourcePath, 1318);
     }
-    _InitEssenceCommon(pEss);
-    init->m_pCreateMethod = _CreateWeaponEnergyType;
-    init->capacity = 200.0f;
-    init->controlMode = 0x20;
-    init->shotEnergy = 1.0f;
-    init->upTemp = 100.0f;
-    init->limitTemp = 100.0f;
-    init->downTemp = 50.0f;
+    _InitEssenceCommon(&pEss->common);
+    pEss->common.m_pCreateMethod = _CreateWeaponEnergyType;
+    pEss->common.capacity = RG_WEAPON_ENERGY_DEFAULT_CAPACITY;
+    pEss->common.controlFlags = RG_WEAPON_CONTROL_LOCKON;
+    pEss->shotEnergy = 1.0f;
+    pEss->upTemp = RG_WEAPON_ENERGY_DEFAULT_UP_TEMP;
+    pEss->limitTemp = RG_WEAPON_ENERGY_DEFAULT_LIMIT_TEMP;
+    pEss->downTemp = RG_WEAPON_ENERGY_DEFAULT_DOWN_TEMP;
 }
 
-/* ov12:0x00a53768 "pEss != NIL && pInfo != NIL" */
-extern const char D_00A53768[];
-/* ov12:0x00a53788 "pEss->m_pCreateMethod != NIL" */
-extern const char D_00A53788[];
-
-RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssenceCommon *pEss, RgWeaponCreateInfo *pInfo)
+RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssence *pEss, RgWeaponCreateInfo *pInfo)
 {
     if (pEss == 0 || pInfo == 0) {
-        assert_prog((char *) D_00A53768, D_00A53658, 1340);
+        assert_prog(weaponAssertEssenceAndInfoNotNil, weaponSourcePath, 1340);
     }
     if (pEss->m_pCreateMethod == 0) {
-        assert_prog((char *) D_00A53788, D_00A53658, 1341);
+        assert_prog(weaponAssertCreateMethodNotNil, weaponSourcePath, 1341);
     }
     return pEss->m_pCreateMethod(pEss, pInfo);
 }
@@ -1134,13 +1028,13 @@ RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssenceCommon *pEss, RgWeaponCreateI
 void DisposeRgWeapon(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1348);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1348);
     }
     if (weapon->dispose != 0) {
         weapon->dispose(weapon);
     }
     _DestructWeaponCommon(weapon);
-    RgHeapFree(InstanceOfRgHeap(), weapon, D_00A53658, 1352);
+    RgHeapFree(InstanceOfRgHeap(), weapon, weaponSourcePath, 1352);
 }
 
 XrgActor *DisposeRgWeaponNotActor(RgWeapon *weapon)
@@ -1148,7 +1042,7 @@ XrgActor *DisposeRgWeaponNotActor(RgWeapon *weapon)
     XrgActor *actor;
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x551);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x551);
     }
     if (weapon->dispose != 0) {
         weapon->dispose(weapon);
@@ -1156,14 +1050,14 @@ XrgActor *DisposeRgWeaponNotActor(RgWeapon *weapon)
     actor = weapon->actor;
     weapon->actor = 0;
     _DestructWeaponCommon(weapon);
-    RgHeapFree(InstanceOfRgHeap(), weapon, D_00A53658, 0x557);
+    RgHeapFree(InstanceOfRgHeap(), weapon, weaponSourcePath, 0x557);
     return actor;
 }
 
-void RgWeaponSetSound(RgWeapon *weapon, int sound)
+void RgWeaponSetSound(RgWeapon *weapon, XrgSound *sound)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x585);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x585);
     }
     weapon->sound = sound;
 }
@@ -1171,7 +1065,7 @@ void RgWeaponSetSound(RgWeapon *weapon, int sound)
 int RgWeaponIsLockedOn(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x58F);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x58F);
     }
     return weapon->lockedOn;
 }
@@ -1179,7 +1073,7 @@ int RgWeaponIsLockedOn(RgWeapon *weapon)
 int RgWeaponIsTargetting(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x597);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x597);
     }
     return weapon->targeting;
 }
@@ -1187,7 +1081,7 @@ int RgWeaponIsTargetting(RgWeapon *weapon)
 float RgWeaponGetShotNum(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x59F);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x59F);
     }
     return weapon->shotNum;
 }
@@ -1195,7 +1089,7 @@ float RgWeaponGetShotNum(RgWeapon *weapon)
 int RgWeaponIsNotBusy(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x5A8);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x5A8);
     }
     if (weapon->isBusy != 0) {
         return weapon->isBusy(weapon) == 0;
@@ -1203,36 +1097,30 @@ int RgWeaponIsNotBusy(RgWeapon *weapon)
     return 1;
 }
 
-extern void RgWarn(const char *format, const char *file, int line, ...);
-extern const char D_00A537A8[];
-extern const char D_00A537B8[];
-extern int RgWeaponGetEss(RgWeapon *weapon);
-extern RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssenceCommon *ess);
-
 int RgWeaponGetRestUnit(RgWeapon *weapon)
 {
-    RgWeaponBaseEssence *ess;
+    RgWeaponEssence *ess;
     int result;
 
     if (weapon == 0) {
-        assert_prog(D_00A537A8, D_00A53658, 1461);
+        assert_prog(weaponAssertWeaponPointerNotNil, weaponSourcePath, 1461);
     }
-    ess = (RgWeaponBaseEssence *) RgWeaponGetEss(weapon);
-    result = 2;
+    ess = RgWeaponGetEss(weapon);
+    result = RG_WEAPON_REST_UNIT_NONE;
     if (ess == 0) {
-        RgWarn(D_00A537B8, D_00A53658, 1466, weapon, weapon->shotMotionOffset);
-        return 2;
+        RgWarn(weaponNoEssenceWarnFormat, weaponSourcePath, 1466, weapon, weapon->shotMotionOffset);
+        return RG_WEAPON_REST_UNIT_NONE;
     }
-    if (ess->capacity == 1e8f) {
+    if (ess->capacity == RG_WEAPON_SHOT_INFINITE) {
         return result;
     }
-    if (RgWeaponEssCastToShot((RgWeaponEssenceCommon *) ess) != 0) {
-        return 0;
+    if (RgWeaponEssCastToShot(ess) != 0) {
+        return RG_WEAPON_REST_UNIT_COUNT;
     }
-    if (RgWeaponEssCastToAttack((RgWeaponEssenceCommon *) ess) != 0) {
-        result = 2;
+    if (RgWeaponEssCastToAttack(ess) != 0) {
+        result = RG_WEAPON_REST_UNIT_NONE;
     } else {
-        result = 1;
+        result = RG_WEAPON_REST_UNIT_PERCENT;
     }
     return result;
 }
@@ -1240,10 +1128,10 @@ int RgWeaponGetRestUnit(RgWeapon *weapon)
 int RgWeaponRobotShotMotion(RgWeapon *weapon, int eCharID)
 {
     if (!(0 <= eCharID && eCharID < RG_ACTOR_CHAR_ROBNUM)) {
-        assert_prog(D_00A537D8, D_00A53658, 0x5D2);
+        assert_prog(weaponAssertCharIdInRobotRange, weaponSourcePath, 0x5D2);
     }
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x5D4);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x5D4);
     }
     return weapon->shotMotionTable[eCharID][weapon->shotMotionOffset];
 }
@@ -1251,7 +1139,7 @@ int RgWeaponRobotShotMotion(RgWeapon *weapon, int eCharID)
 XrgActor *RgWeaponGetActor(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x5DC);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x5DC);
     }
     return weapon->actor;
 }
@@ -1259,7 +1147,7 @@ XrgActor *RgWeaponGetActor(RgWeapon *weapon)
 RgEquip *RgWeaponGetEquip(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x5E4);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x5E4);
     }
     return &weapon->equip;
 }
@@ -1267,7 +1155,7 @@ RgEquip *RgWeaponGetEquip(RgWeapon *weapon)
 float RgWeaponGetWeight(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x5EC);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x5EC);
     }
     return weapon->weight;
 }
@@ -1275,7 +1163,7 @@ float RgWeaponGetWeight(RgWeapon *weapon)
 int RgWeaponIsAttachedShot(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1525);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1525);
     }
     return _GetNumAttach(&weapon->shotAttach) != 0;
 }
@@ -1283,15 +1171,15 @@ int RgWeaponIsAttachedShot(RgWeapon *weapon)
 int RgWeaponGetControlFlag(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x5FE);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x5FE);
     }
     return weapon->controlFlags;
 }
 
-int RgWeaponGetEss(RgWeapon *weapon)
+RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x606);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x606);
     }
     return weapon->ess;
 }
@@ -1299,7 +1187,7 @@ int RgWeaponGetEss(RgWeapon *weapon)
 unsigned int RgWeaponGetAttachedShot(RgWeapon *weapon, RgShot **shots)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x624);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x624);
     }
     if (shots == 0) {
         return _GetNumAttach(&weapon->shotAttach);
@@ -1310,7 +1198,7 @@ unsigned int RgWeaponGetAttachedShot(RgWeapon *weapon, RgShot **shots)
 int RgWeaponIsActiveLockOnSys(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x62F);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x62F);
     }
     return weapon->lockOnEffector != 0;
 }
@@ -1320,7 +1208,7 @@ void RgWeaponPlayMotion(RgWeapon *weapon, int motion)
     XrgActor *actor;
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x63E);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x63E);
     }
     actor = weapon->actor;
     if (actor != 0) {
@@ -1331,7 +1219,7 @@ void RgWeaponPlayMotion(RgWeapon *weapon, int motion)
 void RgWeaponPlayShotMotion(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x649);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x649);
     }
     _PlayShotMotion(weapon);
 }
@@ -1339,7 +1227,7 @@ void RgWeaponPlayShotMotion(RgWeapon *weapon)
 int RgWeaponShot(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x651);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x651);
     }
     weapon->shotRequested = 1;
     if (weapon->shotNum > 0.0f) {
@@ -1353,7 +1241,7 @@ int RgWeaponShot(RgWeapon *weapon)
 void RgWeaponSetup(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x660);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x660);
     }
     weapon->equipped = 1;
 }
@@ -1361,7 +1249,7 @@ void RgWeaponSetup(RgWeapon *weapon)
 void RgWeaponSetdown(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x669);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x669);
     }
     weapon->equipped = 0;
 }
@@ -1369,7 +1257,7 @@ void RgWeaponSetdown(RgWeapon *weapon)
 void RgWeaponStopLockon(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x672);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x672);
     }
     weapon->lockOnStopped = 1;
 }
@@ -1377,7 +1265,7 @@ void RgWeaponStopLockon(RgWeapon *weapon)
 void RgWeaponRestartLockon(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x67B);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x67B);
     }
     weapon->lockOnStopped = 0;
 }
@@ -1385,10 +1273,10 @@ void RgWeaponRestartLockon(RgWeapon *weapon)
 void RgWeaponDisposeLockon(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x684);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x684);
     }
     if (weapon->lockOnEffector != 0) {
-        XrgActorDisposeEffector(RgRobotGetActor(weapon->robotId), weapon->lockOnEffector);
+        XrgActorDisposeEffector(RgRobotGetActor(weapon->robot), weapon->lockOnEffector);
         weapon->lockOnEffector = 0;
     }
 }
@@ -1399,7 +1287,7 @@ void RgWeaponShotStop(RgWeapon *weapon)
     void (*shotStop)(RgWeapon *weapon);
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x691);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x691);
     }
     shotStop = weapon->shotStop;
     weapon->shotRequested = 0;
@@ -1409,23 +1297,23 @@ void RgWeaponShotStop(RgWeapon *weapon)
     weapon->equipped = 0;
 }
 
-void RgWeaponHitRobot(RgWeapon *weapon, int robotId, int damage)
+void RgWeaponHitRobot(RgWeapon *weapon, RgStatus *robot, RgVector position)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x69E);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x69E);
     }
     if (weapon->hitRobot != 0) {
-        weapon->hitRobot(weapon, robotId, damage);
+        weapon->hitRobot(weapon, robot, position);
     }
 }
 
-void RgWeaponHitBG(RgWeapon *weapon, int bgObject, int damage)
+void RgWeaponHitBG(RgWeapon *weapon, RgBgObj *bgObject, RgVector position)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x6A9);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x6A9);
     }
     if (weapon->hitBG != 0) {
-        weapon->hitBG(weapon, bgObject, damage);
+        weapon->hitBG(weapon, bgObject, position);
     }
     XrgSoundRingVol(weapon->sound, weapon->bgHitSound, weapon->bgHitSound);
 }
@@ -1436,10 +1324,10 @@ void RgWeaponSubShotNum(RgWeapon *weapon, float delta)
     float newShotNum;
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x6B5);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x6B5);
     }
     shotNum = weapon->shotNum;
-    if (shotNum != 1e8f) {
+    if (shotNum != RG_WEAPON_SHOT_INFINITE) {
         newShotNum = shotNum - delta;
         weapon->shotNum = newShotNum;
         if (newShotNum < 0.0f) {
@@ -1451,19 +1339,17 @@ void RgWeaponSubShotNum(RgWeapon *weapon, float delta)
 void RgWeaponSetFree(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x6C3);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x6C3);
     }
     if (weapon->setFree != 0) {
         weapon->setFree(weapon);
     }
 }
 
-extern void XrgActorDraw(XrgActor *actor);
-
 void RgWeaponDisp(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x6CD);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x6CD);
     }
     weapon->disp(weapon);
     if (weapon->actor != 0) {
@@ -1474,7 +1360,7 @@ void RgWeaponDisp(RgWeapon *weapon)
 void RgWeaponPassTime(RgWeapon *weapon, float dt)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x6D9);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x6D9);
     }
     _CommonPassTime(weapon, dt);
     if (weapon->passTime != 0) {
@@ -1485,10 +1371,6 @@ void RgWeaponPassTime(RgWeapon *weapon, float dt)
     }
 }
 
-extern void RgGeomRobotCalcLocal(int geom, RgMatrix local);
-extern int RgRobotGetStatusFlags(int robotId);
-extern float atan2f(float y, float x);
-
 void _CheckLockOn(RgWeapon *weapon)
 {
     RgMatrix local;
@@ -1496,27 +1378,27 @@ void _CheckLockOn(RgWeapon *weapon)
     RgVector targetLocal;
     RgVector targetWorld;
     float angle;
-    int robotId;
-    int statusFlags;
+    RgStatus *robot;
+    unsigned int statusFlags;
     int wasLockedOn;
     int lockedOn;
-    void *target;
+    RgGeomPoint *target;
 
-    robotId = weapon->robotId;
+    robot = weapon->robot;
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 1779);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 1779);
     }
     wasLockedOn = weapon->lockedOn;
     weapon->targeting = 0;
     weapon->lockedOn = 0;
-    statusFlags = RgRobotGetStatusFlags(robotId);
-    if (robotId != 0 && (statusFlags & 1) && RgRobotIsConfused(robotId) == 0 &&
+    statusFlags = RgRobotGetStatusFlags(robot);
+    if (robot != 0 && (statusFlags & 1) && RgRobotIsConfused(robot) == 0 &&
             !(statusFlags & 0x100) && weapon->lockOnStopped == 0) {
-        RgGeomRobotCalcLocal(RgRobotGetGeom(robotId), local);
+        RgGeomRobotCalcLocal(&RgRobotGetGeom(robot)->geom, local);
         XrgInvMatrix(invLocal, local);
-        target = RgRobotGetTarget(robotId);
+        target = RgRobotGetTarget(robot);
         if (target != 0) {
-            __RgGeomPointGetPos((RgGeomPoint *) target, (RgPointVector *) targetWorld, D_00A53658, 1819);
+            __RgGeomPointGetPos(target, targetWorld, weaponSourcePath, 1819);
             __asm__ __volatile__(
                 "lqc2 $vf2, 0(%0)\n\t"
                 "lqc2 $vf3, 0(%1)\n\t"
@@ -1529,21 +1411,21 @@ void _CheckLockOn(RgWeapon *weapon)
                 "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
                 "sqc2 $vf2, 0(%2)\n\t"
                 : : "r"(targetWorld), "r"(invLocal), "r"(targetLocal) : "memory");
-            angle = atan2f(targetLocal[0], targetLocal[2]) + 3.1415927f;
-            while (angle > 3.1415927f) {
-                angle -= 6.2831855f;
+            angle = atan2f(targetLocal[0], targetLocal[2]) + XRG_PI;
+            while (angle > XRG_PI) {
+                angle -= XRG_TWO_PI;
             }
-            if (angle < -3.1415927f) {
+            if (angle < -XRG_PI) {
                 do {
-                    angle += 6.2831855f;
-                } while (angle < -3.1415927f);
+                    angle += XRG_TWO_PI;
+                } while (angle < -XRG_PI);
             }
             lockedOn = 0;
             if (weapon->lockOnAngleMin <= angle && angle <= weapon->lockOnAngleMax) {
                 lockedOn = 1;
             }
             weapon->targeting = lockedOn;
-            if (weapon->controlFlags & 0x20) {
+            if (weapon->controlFlags & RG_WEAPON_CONTROL_LOCKON) {
                 weapon->lockedOn = lockedOn;
             }
             XrgCopyVector(weapon->targetPosition, targetWorld);
@@ -1557,10 +1439,10 @@ void _CheckLockOn(RgWeapon *weapon)
 int _GetParentCharID(RgWeapon *weapon)
 {
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x73A);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x73A);
     }
-    if (weapon->robotId != 0) {
-        return RgRobotGetCharID(weapon->robotId);
+    if (weapon->robot != 0) {
+        return RgRobotGetCharID(weapon->robot);
     }
     return -1;
 }
@@ -1573,7 +1455,7 @@ void _PlayShotMotion(RgWeapon *weapon)
     int motion;
 
     if (weapon == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x747);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x747);
     }
     shotMotionOffset = weapon->shotMotionOffset;
     charID = _GetParentCharID(weapon);
@@ -1587,10 +1469,12 @@ void _PlayShotMotion(RgWeapon *weapon)
     }
 }
 
-int _GetDefShotPosDir(RgWeapon *pWpn, RgVector position, RgVector direction)
+int _GetDefShotPosDir(void *posOwner, RgVector position, RgVector direction)
 {
+    RgWeapon *pWpn = posOwner;
+
     if (pWpn == 0) {
-        assert_prog(D_00A536F0, D_00A53658, 0x756);
+        assert_prog(weaponAssertWeaponNotNil, weaponSourcePath, 0x756);
     }
     if (pWpn->shotRequested == 0) {
         return 0;
@@ -1598,14 +1482,6 @@ int _GetDefShotPosDir(RgWeapon *pWpn, RgVector position, RgVector direction)
     _GetDefShotPosDirFunc(pWpn, position, direction);
     return 1;
 }
-
-extern void XrgCopyMatrix(RgMatrix destination, const RgMatrix source);
-extern void XrgRotMatrixX(RgMatrix destination, const RgMatrix source, float angle);
-extern void XrgRotMatrixY(RgMatrix destination, const RgMatrix source, float angle);
-extern void XrgCalcMatrixZtoY(RgMatrix matrix, RgVector zAxis, RgVector yAxis);
-extern float *XrgVectorY(void);
-extern float XrgLengthVector(RgVector vector);
-extern void XrgNegateVector(RgVector destination, RgVector source);
 
 void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector direction)
 {
@@ -1617,31 +1493,31 @@ void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector directi
     RgMatrix jointLocal;
     RgMatrix robotLocal;
     RgVector aimVector;
-    RgWeaponBaseEssence *ess;
+    RgWeaponEssence *ess;
     float length;
     int joint;
     int found;
-    int robotId;
+    RgStatus *robot;
 
-    robotId = weapon->robotId;
-    ess = (RgWeaponBaseEssence *) weapon->ess;
+    robot = weapon->robot;
+    ess = weapon->ess;
     found = 0;
-    if (robotId == 0) {
-        assert_prog(D_00A53808, D_00A53658, 1892);
+    if (robot == 0) {
+        assert_prog(weaponAssertRobotNotNil, weaponSourcePath, 1892);
     }
-    RgGeomRobotCalcLocal(RgRobotGetGeom(robotId), robotLocal);
+    RgGeomRobotCalcLocal(&RgRobotGetGeom(robot)->geom, robotLocal);
     if (weapon->actor == 0) {
         XrgCopyMatrix(jointLocal, robotLocal);
     } else {
-        if (ess->aimJointCount != 0) {
+        if (ess->shotPntNum != 0) {
             unsigned int cursor;
             unsigned int count;
             do {
                 cursor = weapon->aimJointCursor;
                 weapon->aimJointCursor = cursor + 1;
-                joint = ess->aimJointTable[cursor];
+                joint = ess->shotPnt[cursor];
             } while (0);
-            count = ess->aimJointCount;
+            count = ess->shotPntNum;
             if (cursor + 1 >= count) {
                 weapon->aimJointCursor = 0;
             }
@@ -1654,7 +1530,7 @@ void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector directi
         }
     }
     XrgCopyVector(position, &jointLocal[12]);
-    if (ess->aimAxis != 3 && found != 0) {
+    if (ess->aimAxis != RG_WEAPON_AIM_AXIS_NONE && found != 0) {
         XrgAddVector(direction, position, &jointLocal[ess->aimAxis * 4]);
     } else if (weapon->lockedOn != 0) {
         XrgCopyVector(direction, weapon->targetPosition);
@@ -1677,63 +1553,63 @@ void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector directi
     XrgAddVector(direction, position, aimVector);
 }
 
-void _GetShotInfo(RgWeapon *weapon, RgWeaponShotRequest *info)
+void _GetShotInfo(RgWeapon *weapon, RgShotRequest *info)
 {
-    /* separate load keeps the owning robot's id in its own register, read
+    /* separate load keeps the owning robot in its own register, read
      * once and passed to both RgRobotGetTarget and RgRobotIsConfused */
-    int robotId;
+    RgStatus *robot;
 
-    robotId = weapon->robotId;
-    if (robotId == 0) {
-        assert_prog(D_00A53808, D_00A53658, 0x7A5);
+    robot = weapon->robot;
+    if (robot == 0) {
+        assert_prog(weaponAssertRobotNotNil, weaponSourcePath, 0x7A5);
     }
-    info->target = RgRobotGetTarget(robotId);
-    info->id = weapon->id;
-    info->weapon = weapon;
-    info->getPosDir = _GetDefShotPosDir;
-    info->targetConfused = RgRobotIsConfused(robotId);
+    info->target = RgRobotGetTarget(robot);
+    info->shotGroup = (struct RgGeomGroup *) weapon->id;
+    info->posOwner = weapon;
+    info->getPos = _GetDefShotPosDir;
+    info->targetConfused = RgRobotIsConfused(robot);
 }
 
-RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssenceCommon *ess)
+RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssence *ess)
 {
-    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponShotType) {
+    if (ess != 0 && ess->m_pCreateMethod == _CreateWeaponShotType) {
         return (RgWeaponShotEssence *) ess;
     }
     return 0;
 }
 
-RgWeaponEnergyEssence *RgWeaponEssCastToEnergy(RgWeaponEssenceCommon *ess)
+RgWeaponEnergyEssence *RgWeaponEssCastToEnergy(RgWeaponEssence *ess)
 {
-    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponEnergyType) {
+    if (ess != 0 && ess->m_pCreateMethod == _CreateWeaponEnergyType) {
         return (RgWeaponEnergyEssence *) ess;
     }
     return 0;
 }
 
-RgWeaponAttackEssence *RgWeaponEssCastToAttack(RgWeaponEssenceCommon *ess)
+RgWeaponAttackEssence *RgWeaponEssCastToAttack(RgWeaponEssence *ess)
 {
     if (ess != 0) {
-        if ((int) ess->m_pCreateMethod == (int) _CreateWeaponAttackType) {
+        if (ess->m_pCreateMethod == _CreateWeaponAttackType) {
             return (RgWeaponAttackEssence *) ess;
         }
-        if ((int) ess->m_pCreateMethod == (int) _CreateWeaponUnArmedType) {
+        if (ess->m_pCreateMethod == _CreateWeaponUnArmedType) {
             return (RgWeaponAttackEssence *) ess;
         }
     }
     return 0;
 }
 
-RgWeaponShieldEssence *RgWeaponEssCastToShield(RgWeaponEssenceCommon *ess)
+RgWeaponShieldEssence *RgWeaponEssCastToShield(RgWeaponEssence *ess)
 {
-    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponShieldType) {
+    if (ess != 0 && ess->m_pCreateMethod == _CreateWeaponShieldType) {
         return (RgWeaponShieldEssence *) ess;
     }
     return 0;
 }
 
-RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(RgWeaponEssenceCommon *ess)
+RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(RgWeaponEssence *ess)
 {
-    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponUnArmedType) {
+    if (ess != 0 && ess->m_pCreateMethod == _CreateWeaponUnArmedType) {
         return (RgWeaponUnArmedEssence *) ess;
     }
     return 0;

@@ -1,36 +1,80 @@
 #ifndef INCLUDE_OV12_RG_WEAPON_H
 #define INCLUDE_OV12_RG_WEAPON_H
 
-/*
- * The weapon handle owned by rg_weapon.c, opaque here.
- */
-typedef struct RgWeapon RgWeapon;
+#include "shared.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_weapon_db.h"
+#include "ov12/xrg_actor.h"
+#include "ov12/xrg_sound.h"
+#include "ov12/rg_bgobj.h"
+
+/* A shot a weapon keeps attached while it lasts (src/ov12/rg_shot.c). */
+typedef struct RgShot RgShot;
+
+/* The geometry group an attack weapon's collision ball joins (src/ov12/rg_geom_group.c). */
+struct RgGeomGroup;
 
 /*
- * Opaque per-type essence and creation-info handles _CreateWeaponAttackType,
- * _CreateWeaponUnArmedType, _CreateWeaponShieldType and _CreateWeaponEnergyType
- * only null-check ("pEss != NIL", "pInfo != NIL", ov12:0x00a53710/0x00a53720)
- * and forward to their still-unrecovered _InitWeaponAttack/_InitWeaponUnArmedType/
- * _InitWeaponShield/_InitEnergyType; no interior is evidenced here.
+ * The creation info CreateRgWeaponFromEssence hands to the essence's create
+ * method: the owning robot, the equip type the weapon is mounted on
+ * (asserted against RG_EQUIP_TYPE_NUM), the weapon id and the attack
+ * geometry group.
  */
-typedef struct RgWeaponCreateInfo RgWeaponCreateInfo;
+struct RgWeaponCreateInfo {
+    int robot; /* an RgStatus * (measured: an int-typed member is needed in the record) */
+    unsigned int equipType;
+    int id; /* really the shot geometry group pointer (measured: a pointer-typed member reorders the stores in _InitWeaponCommon) */
+    void *atkGeoms; /* the geometry group (struct RgGeomGroup) an attack weapon joins */
+};
 
-typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
+/* What RgWeaponGetRestUnit reports the remaining ammunition in. */
+#define RG_WEAPON_REST_UNIT_COUNT 0   /* "shots/capacity" */
+#define RG_WEAPON_REST_UNIT_PERCENT 1 /* percent of capacity */
+#define RG_WEAPON_REST_UNIT_NONE 2    /* nothing to show */
 
-/*
- * CreateRgWeaponFromEssence (ov12:0x00a1b420) is the shared essence -> weapon
- * front end every concrete essence type's create-info pair goes through: it
- * only ever reads the create-method slot every essence type places at +0x00
- * (RgWeaponShieldEssence.m_pCreateMethod below, RgWeaponUnArmedEssenceInit's
- * own m_pCreateMethod further below), so only that one member is claimed
- * through this generic view.
- */
-typedef struct RgWeaponEssenceCommon {
-    RgWeapon *(*m_pCreateMethod)(void *essence, RgWeaponCreateInfo *info);
-} RgWeaponEssenceCommon;
-
-RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssenceCommon *pEss, RgWeaponCreateInfo *pInfo);
-
-RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(RgWeaponEssenceCommon *ess);
+/* Functions and data used by other translation units. */
+void InitRgWeaponShotEssence(RgWeaponShotEssence *pEss);
+void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss);
+void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss);
+void InitRgWeaponShieldEssence(RgWeaponShieldEssence *pEss);
+void InitRgWeaponEnergyEssence(RgWeaponEnergyEssence *pEss);
+RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssence *pEss, RgWeaponCreateInfo *pInfo);
+void DisposeRgWeapon(RgWeapon *weapon);
+XrgActor *DisposeRgWeaponNotActor(RgWeapon *weapon);
+void RgWeaponSetSound(RgWeapon *weapon, XrgSound *sound);
+int RgWeaponIsLockedOn(RgWeapon *weapon);
+int RgWeaponIsTargetting(RgWeapon *weapon);
+float RgWeaponGetShotNum(RgWeapon *weapon);
+int RgWeaponIsNotBusy(RgWeapon *weapon);
+int RgWeaponGetRestUnit(RgWeapon *weapon);
+int RgWeaponRobotShotMotion(RgWeapon *weapon, int eCharID);
+XrgActor *RgWeaponGetActor(RgWeapon *weapon);
+RgEquip *RgWeaponGetEquip(RgWeapon *weapon);
+float RgWeaponGetWeight(RgWeapon *weapon);
+int RgWeaponIsAttachedShot(RgWeapon *weapon);
+int RgWeaponGetControlFlag(RgWeapon *weapon);
+RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon);
+unsigned int RgWeaponGetAttachedShot(RgWeapon *weapon, RgShot **shots);
+int RgWeaponIsActiveLockOnSys(RgWeapon *weapon);
+void RgWeaponPlayMotion(RgWeapon *weapon, int motion);
+void RgWeaponPlayShotMotion(RgWeapon *weapon);
+int RgWeaponShot(RgWeapon *weapon);
+void RgWeaponSetup(RgWeapon *weapon);
+void RgWeaponSetdown(RgWeapon *weapon);
+void RgWeaponStopLockon(RgWeapon *weapon);
+void RgWeaponRestartLockon(RgWeapon *weapon);
+void RgWeaponDisposeLockon(RgWeapon *weapon);
+void RgWeaponShotStop(RgWeapon *weapon);
+void RgWeaponHitRobot(RgWeapon *weapon, RgStatus *robot, RgVector position);
+void RgWeaponHitBG(RgWeapon *weapon, RgBgObj *bgObject, RgVector position);
+void RgWeaponSubShotNum(RgWeapon *weapon, float delta);
+void RgWeaponSetFree(RgWeapon *weapon);
+void RgWeaponDisp(RgWeapon *weapon);
+void RgWeaponPassTime(RgWeapon *weapon, float dt);
+RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssence *ess);
+RgWeaponEnergyEssence *RgWeaponEssCastToEnergy(RgWeaponEssence *ess);
+RgWeaponAttackEssence *RgWeaponEssCastToAttack(RgWeaponEssence *ess);
+RgWeaponShieldEssence *RgWeaponEssCastToShield(RgWeaponEssence *ess);
+RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(RgWeaponEssence *ess);
 
 #endif /* INCLUDE_OV12_RG_WEAPON_H */

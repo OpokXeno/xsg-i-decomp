@@ -7,284 +7,60 @@
 
 #include "shared.h"
 #include "ov12/rg_draw.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/rg_robot_effect.h"
+#include "ov12/rg_shot_thread.h"
+#include "ov12/xrg_actor.h"
+#include "ov12/xrg_sound.h"
+#include "ov12/rg_robot_spec.h"
+#include "ov12/rg_dull_flag.h"
 
 typedef struct RgStatus RgStatus;
 
-/* Opaque here: rg_robot_effect.c (ov12/tu010) owns the RgRobotEffect definition. */
-typedef struct RgRobotEffect RgRobotEffect;
-
-/* Opaque here: rg_weapon.c (ov12/tu026) owns the RgWeapon definition. */
 typedef struct RgWeapon RgWeapon;
 
-/* Number of equip sides a body carries (RgRobotGetWeapon's own range check,
- * ov12:0x00a51be0, "RG_EQUIP_TYPE_MIN <= (eSide) && (eSide) < RG_EQUIP_TYPE_NUM"). */
-#define RG_EQUIP_TYPE_NUM 3
-/* The back equip side: _IsBackWeaponReady (ov12:0x00a076d0) only reports a
- * ready weapon for eType 2 (li $3, 2 at 0x00a07708) and reads that side's
- * weapon slot, RgBody.weapon[2] (lw 0x78). */
-#define RG_EQUIP_TYPE_BACK 2
+/* RgHomingThread.state. */
+#define RG_HOMING_IDLE 0
+#define RG_HOMING_ACTIVE 1
+#define RG_HOMING_STOPPED 2
 
 /*
- * Homing-thread control block for a robot's ranged weapon lock-on.
- * _CreateHomingThread allocates it with RgHeapAlloc (size 0x18,
- * ov12:0x00a02594) and _InitHomingThread zeroes it.
- * _StartHomingThread, _StopHomingThread, _GetStatHomingThread and
- * _GetSleepTimeHomingThread evidence every field but homingSpeed:
- *   +0x00 geometry   the geometry to home toward (sw 0($16),
- *                     ov12:0x00a02674)
- *   +0x04 target     the homing target object (sw 4($16),
- *                     ov12:0x00a02670)
- *   +0x08 actionTime the requested homing duration (swc1 8($16),
- *                     ov12:0x00a0266c)
- *   +0x0c sleepTime  cleared unconditionally by _StartHomingThread (sw
- *                     0xC($16), ov12:0x00a0267c) and by _StopHomingThread
- *                     (sw 0xC($16), ov12:0x00a026f0); read back as a float
- *                     once state reaches 2 by _GetSleepTimeHomingThread
- *                     (lwc1 0xC($16), ov12:0x00a0278c)
- *   +0x14 state      0 idle, 1 homing, 2 stopped: written by
- *                     _StartHomingThread (ov12:0x00a02680/0x00a02684/
- *                     0x00a0268c), read back by _GetStatHomingThread
- *                     (ov12:0x00a02734) and _GetSleepTimeHomingThread
- *                     (ov12:0x00a02774), and advanced to 2 by
- *                     _StopHomingThread (ov12:0x00a026f4)
- *   +0x10 homingSpeed the rotation speed limit _PassTimeHomingThread passes
- *                     as RgRobSubHoming's `speed` argument (lwc1 0x10($16)
- *                     into $f12, ov12:0x00a02824); _InitHomingThread sets
- *                     it to 4*pi (0x41490FDB, ov12:0x00a0253c)
+ * Homing-thread control block (0x18 bytes) for a robot's ranged weapon
+ * lock-on. homingSpeed is the rotation speed limit passed to RgRobSubHoming
+ * (4*pi by default); sleepTime is read back as a float once the thread has
+ * stopped.
  */
 typedef struct RgHomingThread {
     RgGeomPoint *geometry;          /* +0x00 */
-    void *target;                   /* +0x04 */
+    RgGeomPoint *target;            /* +0x04 */
     float actionTime;               /* +0x08 */
     float sleepTime;                /* +0x0c */
     float homingSpeed;              /* +0x10 */
-    int state;                      /* +0x14 */
+    int state;                      /* +0x14: RG_HOMING_* */
 } RgHomingThread;
 
 /*
- * Partial RgRobotSpec layout. _CalcMaxSpeed is the only claimed function
- * that dereferences RgBody's spec pointer, reading +0x1c as the float
- * combined with the requested base speed to produce the robot's max speed
- * (lwc1 0x1C($2), ov12:0x00a02890).
+ * The body of one robot: 0xb0 bytes allocated by _CreateBody. Its geometry
+ * pointers (geometry, eyeGeometry, advanceGeometry) are all robot geometries;
+ * cmdMask collects the (1 << command type) bits _BodyExecCmd executes while
+ * _PassTimeRobot runs the queue and prevCmdMask keeps the previous frame's.
+ * flags bit 0 selects RgGeomRobotSetMaxRotVel's unlimited rotation cap and
+ * _BodyGeomPassTime clears the flags afterward; the weakHit* fields track
+ * consecutive weak hits for _ExecWeakDamageCmd.
  */
-/*
- * _BodyGeomPassTime evidences two more RgRobotSpec fields, each read by
- * exactly one lwc1 at the offset shown:
- *   +0x0c moveSpeedMax the value it passes as _CalcMaxSpeed's own baseSpeed
- *                    argument (lwc1 0xC($18), ov12:0x00a06bc8)
- *   +0x14 turnRate   scaled by the damped rotation ratio and handed to
- *                    RgGeomRobotSetMaxRotVel (lwc1 0x14($18),
- *                    ov12:0x00a06c1c)
- * Bytes 0x10-0x13 and 0x18-0x1b stay unmodeled.
- */
-/*
- * _ExecAccelarateCmd and _BodyAdvanceForAttack evidence two trailing
- * RgRobotSpec fields, each read by exactly one lwc1 at the offset shown:
- *   +0x20 enginePower       the scale _ExecAccelarateCmd hands
- *                            RgRobSubAcceralate directly (lwc1 0x20($18),
- *                            ov12:0x00a075dc) and _BodyAdvanceForAttack
- *                            multiplies by dashPower (lwc1 0x20($16),
- *                            ov12:0x00a06008)
- *   +0x34 dashPower         multiplied by enginePower for
- *                            _BodyAdvanceForAttack's own acceleration scale
- *                            (lwc1 0x34($16), ov12:0x00a0600c)
- * Bytes 0x24-0x33 stay unmodeled; the struct is not known to end at 0x38.
- */
-/*
- * _ExecDashContinueCmd reads one leading field, gating whether the DashVR
- * status is re-entered when compared against 1 (lw 0x4($2), ov12:0x00a07ad0):
- *   +0x04 type
- * Bytes 0x00-0x03 and 0x08-0x0b stay unmodeled.
- */
-/*
- * _ExecRotateCmd evidences one more field in that gap, read by exactly one
- * lwc1 at the offset shown:
- *   +0x24 rotateForce scale applied to the queued command's own rotate
- *                      sign before RgGeomRobotAddRotForce (lwc1 0x24($2),
- *                      ov12:0x00a07688)
- */
-/*
- * _BodySetGeom evidences two more fields within that same gap, each read
- * by exactly one lwc1 at the offset shown:
- *   +0x28 moveResist scaled linear move resistance, handed to
- *                     RgGeomPointSetMoveResist (lwc1 0x28($16),
- *                     ov12:0x00a061e4)
- *   +0x2c rotResist   scaled rotational resistance, handed to
- *                     RgGeomRobotSetRotResist (lwc1 0x2c($16),
- *                     ov12:0x00a061fc)
- */
-/*
- * rg_robot_spec.c (ov12/tu008) evidences the rest of the record:
- *   +0x00 charID   RgRobotDBRead stores RgActorNameToCharID's result here
- *                  (sw at 0x00a0de5c); InitRgRobotSpec sets -1
- *   the text keywords RgRobotSpecReadFromText hands to RgTextInfoRead
- *   (stack table at sp+0x1b0, FLOAT_OFFSET / STRING_OFFSET entries) name
- *   +0x10 "dash-spd-max", +0x18 "rot-spd-bottom-rate", +0x30 "dash-time",
- *   +0x38 "dash-cooldown", +0x4c "life", +0x50 "damage-stiff-time",
- *   +0x54 "body-attack-damage", +0x58 "jet-eff", +0x78 "dash-eff" and
- *   +0x98 "sude" (32-byte strings up to the 0xb8 RgRobotDBRead allocates)
- *   +0x3c m_aAutoHoming[2], the name in _AnaAutoHoming's assert
- *         "nID < sizeof(pSpec->m_aAutoHoming) / ...": per entry a float
- *         value (atof times pi) and a flag word ORed from "see-target" 1,
- *         "lock-on" 2, "shot" 4 and "in-scrn" 8
- * The same table names +0x0c "move-spd-max" (moveSpeedMax), +0x1c
- * "weight" (weight; also RgGeomPointSetWeight's argument in _BodySetGeom),
- * +0x20 "engine-power"/"engine-impulse" (enginePower) and +0x34
- * "dash-power" (dashPower); +0x04 (type) receives the "dash-mode" keyword
- * (normal 0, vr 1, neo 2, neo2 3, neo3 4).
- */
-typedef struct RgAutoHoming {
-    float value;
-    unsigned int flags;
-} RgAutoHoming;
+/* RgBody.flags, cleared and set again every frame. */
+#define RG_BODY_FLAG_FREE_TURN 1       /* turns without the speed-based rotation cap (1e8) */
+#define RG_BODY_FLAG_NO_AUTO_HOMING 2  /* a rotation or homing already ran: skip the auto homing */
 
-typedef struct RgRobotSpec {
-    int charID;                      /* +0x00 */
-    int type;                        /* +0x04 */
-    unsigned char unmodeled_08[4];   /* +0x08 */
-    float moveSpeedMax;              /* +0x0c */
-    float dashSpeedMax;              /* +0x10 */
-    float turnRate;                  /* +0x14 */
-    float rotSpeedBottomRate;        /* +0x18 */
-    float weight;                    /* +0x1c */
-    float enginePower;               /* +0x20 */
-    float rotateForce;               /* +0x24 */
-    float moveResist;                /* +0x28 */
-    float rotResist;                 /* +0x2c */
-    float dashTime;                  /* +0x30 */
-    float dashPower;                 /* +0x34 */
-    float dashCooldown;              /* +0x38 */
-    RgAutoHoming m_aAutoHoming[2];   /* +0x3c */
-    float life;                      /* +0x4c */
-    float damageStiffTime;           /* +0x50 */
-    float bodyAttackDamage;          /* +0x54 */
-    char jetEffect[0x20];            /* +0x58 */
-    char dashEffect[0x20];           /* +0x78 */
-    /*
-     * InitRgRobotSpec copies its 8-byte default "UNARMED" here with one
-     * aligned ld/sd pair (sd at 0x00a0d268), so the name shares storage
-     * with a doubleword view, as RgBattleNames.weaponStorage does in
-     * rg_main.c; sudeWords is never read on its own.
-     */
-    union {
-        char sude[0x20];
-        unsigned long long sudeWords[4];
-    };                               /* +0x98 */
-} RgRobotSpec;
+/* A time past the end of any action or sound timer. */
+#define RG_ROBOT_TIME_UNLIMITED 100000000.0f
 
-/*
- * Partial RgBody layout. The geometry pointer at +0x60 was already evidenced
- * by _ExecBreakCmd. ov12/tu004's RgRobotGetXxx/SetXxx accessors evidence the
- * remaining named fields, each read or written by exactly one lw/sw/lwc1/swc1
- * at the offset shown, with no other byte of the gaps ever touched by a
- * claimed function of this TU:
- *   +0x0c grounded  _BodyOnGround (lw 12($16), ov12:0x00a02948)
- *   +0x10 life      RgRobotGetLife (lwc1 16($2), ov12:0x00a08a2c),
- *                    RgRobotIsDead (lwc1 16($2), ov12:0x00a089cc)
- *   +0x14 lifeMax   RgRobotGetLifeMax (lwc1 20($2), ov12:0x00a08a74)
- *   +0x1c charID    RgRobotGetCharID (lw 28($3), ov12:0x00a08b04)
- *   +0x50 dashTime  RgRobotGetDashTime (lwc1 80($2), ov12:0x00a08bec)
- *   +0x54 spec      RgRobotGetSpec (lw 84($3), ov12:0x00a08c34); _CalcMaxSpeed
- *                    dereferences it (lw 0x54($3), ov12:0x00a02888)
- *   +0x58 target    RgRobotGetTarget (lw 88($3), ov12:0x00a08984)
- *   +0x5c actor     RgRobotGetActor (lw 92($3), ov12:0x00a08abc)
- *   +0x60 geometry  RgRobotGetGeom (lw 96($3), ov12:0x00a088bc); _CalcMaxSpeed
- *                    passes it to RgGeomPointGetWeight (lw 0x60($3),
- *                    ov12:0x00a02884)
- *   +0x70 weapon[3] RgRobotGetWeapon (lw 112($3) indexed by eSide,
- *                    ov12:0x00a0893c)
- *   +0x9c motSmooth RgRobotSetMotSmooth (sw 156($2), ov12:0x00a08764)
- *   +0xa4 confuse   RgRobotSetConfuse (swc1 164($2), ov12:0x00a087b4)
- *   +0xa8 landingSoundID _BodyOnGround (lw 168($16), ov12:0x00a02954)
- * target/actor/weapon are read and returned but never dereferenced by any
- * claimed function, so their pointee stays unresolved (void *). Every other
- * byte stays unmodeled.
- *
- * +0x7c spareWeapon[3] is _BodySetSpareWeapon's own array (extern below);
- * _DropPassTime (ov12:0x00a05af0) reads spareWeapon[eSide], hands it to
- * _BodyEquipWeapon and clears the slot once the drop's timed removal point
- * is reached.
- */
-/*
- * _BodySetEyeGeom/_BodySetAdvanceGeom evidence two more geometry pointers,
- * each read and overwritten by lw/sw at the offset shown:
- *   +0x64 eyeGeometry      _BodySetEyeGeom (lw 0x64($16), sw 0x64($16),
- *                           ov12:0x00a0627c/0x00a06284)
- *   +0x68 advanceGeometry  _BodySetAdvanceGeom (lw 0x68($17), sw 0x68($17),
- *                           ov12:0x00a062e8/0x00a0630c); _AdvanceGeomPassTime
- *                           reads it and hands it to RgGeomPassTime/
- *                           RgGeomPointSetPos/RgGeomPointMovePos
- *                           (lw 0x68($4), ov12:0x00a06d44)
- * Bytes 0x6c-0x6f stay unmodeled.
- *
- * _BodyPlayMotion/_BodyPlayMotionLoop evidence one more boolean-shaped
- * field, tested by exactly one lw at the offset shown:
- *   +0xa0 smoothSuppressed when nonzero, forces XrgActorSetSmoothPlay's
- *          smoothPlay argument to 0 instead of motSmooth (lw 0xA0($4),
- *          ov12:0x00a05ee4/0x00a05f64)
- */
-/*
- * _BodyExecCmd (still asm) ORs each executed command's (1 << type) bit into
- * +0x04 while _PassTimeRobot runs the queue; _PassTimeRobot itself moves that
- * accumulated mask to +0x08 and clears +0x04 before running the new frame's
- * commands (lw/sw 0x4($16)/0x8($16), ov12:0x00a07f48/0x00a07f4c/0x00a07f50).
- * Nothing claimed reads +0x08 back; it only holds the previous frame's mask.
- */
-/*
- * _BodyGeomPassTime evidences two more RgBody fields, each touched by
- * exactly one instruction at the offset shown:
- *   +0x00 flags         bit 0 forces RgGeomRobotSetMaxRotVel's escape branch
- *                        (RG_FCONST(1e8)) instead of the speed-based damped
- *                        rotation cap when set (lw/andi 0($16),
- *                        ov12:0x00a06bd8/0x00a06be4); cleared unconditionally
- *                        afterward (lw/and/sw 0($16), ov12:0x00a06c30/
- *                        0x00a06c40/0x00a06c50/0x00a06c58)
- *   +0x18 autoHomingEnv written by _BodySetAutoHomingEnv from its own
- *                        argument (sw 24($16), ov12:0x00a06adc)
- */
-/*
- * _CreateBody sizes the whole allocation at 0xb0 bytes (RgHeapAlloc size
- * 0xB0, ov12:0x00a074c0), 4 bytes past landingSoundID; nothing claimed
- * touches that trailing span.
- */
-/*
- * _BodySetGeom evidences the last unmodeled geometry-pointer byte as the
- * robot's own damped rotation, written from RgGeomRobotGetRotate's return
- * every time the geometry changes (swc1 0x6c($18), ov12:0x00a0620c).
- */
-/*
- * _DashVRExit reads one more field, passed unchanged as the argument to
- * both RgRobotEffectTermJet and RgRobotEffectTermDash (lw 0x98($16),
- * ov12:0x00a05660/0x00a05668):
- *   +0x98 effect
- * Bytes 0x88-0x97 stay unmodeled.
- */
-/*
- * _AttackExit reads one more field within that same span, the homing
- * thread the Attack status started for the robot's own ranged weapon,
- * read to stop it (lw 0x94($18), ov12:0x00a03324):
- *   +0x94 homingThread
- * Bytes 0x88-0x93 stay unmodeled.
- */
-/*
- * _ExecWeakDamageCmd evidences four more fields, each touched at the
- * offset shown:
- *   +0x20 weakHitMotion  the queued command's own scratch3, stored back
- *                        only while the accumulated hits stay below the
- *                        command's own threshold (swc1 0x20($16),
- *                        ov12:0x00a07d94)
- *   +0x24 weakHitPower   the queued command's own scratch4, stored back
- *                        alongside weakHitMotion (swc1 0x24($16),
- *                        ov12:0x00a07d98)
- *   +0x28 weakHitAccum   the running total of RgCmd.scratch0 across
- *                        consecutive weak hits, compared against
- *                        RgCmd.scratch1 to trigger Damage status (swc1
- *                        0x28($16), ov12:0x00a07d64)
- *   +0x2c weakHitWindow  reseeded from the queued command's own scratch2
- *                        whenever it has decayed to zero or less, alongside
- *                        clearing weakHitAccum (swc1 0x2c($16),
- *                        ov12:0x00a07d54)
- */
+/* Rotation speed cap while RG_BODY_FLAG_FREE_TURN is set. */
+#define RG_ROBOT_ROT_VEL_UNLIMITED 1e8f
+
+/* Turn speed limit of a homing status (4*pi), as RgHomingThread's default. */
+#define RG_ROBOT_HOMING_TURN_SPEED 12.566371f
+
 typedef struct RgBody {
     unsigned int flags;               /* +0x00 */
     int cmdMask;                      /* +0x04 */
@@ -308,62 +84,29 @@ typedef struct RgBody {
     RgVector shieldDirection;
     float dashTime;                   /* +0x50 */
     RgRobotSpec *spec;                /* +0x54 */
-    void *target;                     /* +0x58 */
-    void *actor;                      /* +0x5c */
+    RgGeomPoint *target;              /* +0x58 */
+    XrgActor *actor;                  /* +0x5c */
     RgGeomPoint *geometry;            /* +0x60 */
     RgGeomPoint *eyeGeometry;         /* +0x64 */
     RgGeomPoint *advanceGeometry;     /* +0x68 */
     float rotate;                     /* +0x6c */
-    void *weapon[RG_EQUIP_TYPE_NUM];  /* +0x70 */
-    void *spareWeapon[RG_EQUIP_TYPE_NUM]; /* +0x7c */
-    struct RgShotThread *shotThread[RG_EQUIP_TYPE_NUM]; /* +0x88 */
+    RgWeapon *weapon[RG_EQUIP_TYPE_NUM]; /* +0x70 */
+    RgWeapon *spareWeapon[RG_EQUIP_TYPE_NUM]; /* +0x7c */
+    RgShotThread *shotThread[RG_EQUIP_TYPE_NUM]; /* +0x88 */
     RgHomingThread *homingThread;     /* +0x94 */
     RgRobotEffect *effect;            /* +0x98 */
     int motSmooth;                    /* +0x9c */
     int smoothSuppressed;             /* +0xa0 */
     float confuse;                    /* +0xa4 */
-    int landingSoundID;               /* +0xa8 */
+    XrgSound *landingSound;           /* +0xa8 */
     float landingSoundTime;           /* +0xac: landing sound age; advanced by _BodyPassTime */
 } RgBody;
 
 /*
- * Partial RgStatus layout, evidenced by ov12/tu004's own-object accessors
- * (every field after body has exactly one claimed reader):
- *   +0x00 body               shared by every RgRobotGetXxx/SetXxx accessor
- *                             above (lw 0($16), e.g. RgRobotGetLife at
- *                             ov12:0x00a08a24)
- *   +0x08 cmdQueue            RgRobotBreak (lw 8($16), ov12:0x00a08f2c)
- *   +0x0c acceptedCommandMask RgRobotIsAcceptedCommand (lw 12($16),
- *                             ov12:0x00a08cdc)
- *   +0x10 statusFlags         RgRobotGetStatusFlags (lw 16($16),
- *                             ov12:0x00a08d34)
- * Unread bytes stay unmodeled.
+ * The robot object (0x60 bytes): its body, the status machine block
+ * (robotStatus), the command ring (cmdQueue), the commands accepted this
+ * frame, the status flags and the three dull flags RgRobotPassTime ages.
  */
-/*
- * _PassTimeRobot (ov12:0x00a07f08) reads +0x04 back as the pointer
- * _InitRobot stores there (see the RgRobotStatus comment below) and forwards
- * it to _BodyExecCmd/_BodyPassTime, confirming the field as a RgRobotStatus
- * pointer. CreateRgRobot's RgHeapAlloc call (ov12:0x00a08194) sizes the whole
- * allocation at 0x60 bytes; RgRobotSetRgDrawView (ov12:0x00a086fc) is the
- * only claimed writer past +0x10, storing its RgDrawView argument at +0x48.
- * Nothing claimed touches +0x14..0x47 or +0x4c..0x5f.
- */
-/* Same four-float position as src/ov12/rg_geom_point.h (not included here). */
-typedef struct RgPointVector RgPointVector;
-struct RgPointVector {
-    float x;
-    float y;
-    float z;
-    float w;
-};
-
-/* ov12/tu031's dull flag (src/ov12/rg_dull_flag.h), redeclared opaque-free here. */
-typedef struct RgDullFlag RgDullFlag;
-struct RgDullFlag {
-    float time;                       /* +0x00 */
-    float dullTime;                   /* +0x04 */
-};
-
 struct RgStatus {
     RgBody *body;                     /* +0x00 */
     struct RgRobotStatus *robotStatus; /* +0x04 */
@@ -380,6 +123,40 @@ struct RgStatus {
     int passTimePhase;                /* +0x4c: RgRobotPassTime phase (0 idle, 1 timing, 2 done) */
     float passTimeTimer;              /* +0x50: RgRobotPassTime countdown */
     unsigned char unmodeled_54[0x0c]; /* +0x54 */
+};
+
+/* RgRobotStatus.type: the status the robot is in. */
+enum {
+    RG_STATUS_NONE,
+    RG_STATUS_MOVING,
+    RG_STATUS_ATTACK,
+    RG_STATUS_SHIELD,
+    RG_STATUS_TARGETTING,
+    RG_STATUS_DASH,
+    RG_STATUS_DAMAGE,
+    RG_STATUS_DASH_VR,
+    RG_STATUS_BREAKING,
+    RG_STATUS_DROP,
+    RG_STATUS_HISSATU
+};
+
+/* RgCmd.type, one value per queuing function (RgRobotAccelarate, ...). */
+enum {
+    RG_CMD_ACCELARATE,
+    RG_CMD_ACCELARATE_ROTATE,
+    RG_CMD_SHOT,
+    RG_CMD_TARGETTING,
+    RG_CMD_BREAK,
+    RG_CMD_DASH,
+    RG_CMD_DASH_CONTINUE,
+    RG_CMD_DROP_WEAPON,
+    RG_CMD_DAMAGE,
+    RG_CMD_WEAK_DAMAGE,
+    RG_CMD_HIT_WEAPON_ATTACK,
+    RG_CMD_INVALID_ATTACK,
+    RG_CMD_HIT_BG,
+    RG_CMD_NEAR_BG,
+    RG_CMD_HIT_BY_BODY
 };
 
 typedef struct RgRobotStatus RgRobotStatus;
@@ -400,77 +177,12 @@ typedef void (*RgStatusDispFunc)(RgRobotStatus *status, RgBody *body);
 typedef void (*RgStatusExitFunc)(RgRobotStatus *status, RgBody *body);
 
 /*
- * The robot's status-machine block: a separate 0x60-byte allocation
- * (RgHeapAlloc size 0x60, ov12:0x00a029f0) that _CreateStatue creates and
- * hands straight to _InitStatus (ov12:0x00a02a00); _InitRobot keeps the
- * pointer at robot+0x04 (ov12:0x00a08114). It is distinct from the robot
- * object (struct RgStatus above) the pRobot accessors use -- its own assert
- * message is "pStatus != NIL" (D_00A518F0), not the robot's "pRobot != NIL"
- * (D_00A51BB0).
- * _InitStatus/_SetStatus/_DisposeStatus/_StatusExecCmd/_StatusPassTime/
- * _StatusDisp evidence the fields after the unmodeled header:
- *   +0x40 type                written by _SetStatus from its own type
- *                             argument (sw 0x40($16), ov12:0x00a02a78);
- *                             cleared by _InitStatus (sw 0x40($16),
- *                             ov12:0x00a029a8)
- *   +0x44 elapsedTime         accumulated by _StatusPassTime (swc1
- *                             0x44($16), ov12:0x00a02bfc); cleared by
- *                             _InitStatus (sw 0x44($16), ov12:0x00a029ac)
- *   +0x48 execCmdMethod       called by _StatusExecCmd (lw 0x48($16),
- *                             ov12:0x00a02b3c); cleared by _InitStatus
- *                             (sw 0x48($16), ov12:0x00a029b0)
- *   +0x4c passTimeMethod      called by _StatusPassTime (lw 0x4C($16),
- *                             ov12:0x00a02bc4); cleared by _InitStatus
- *                             (sw 0x4C($16), ov12:0x00a029b4)
- *   +0x50 dispMethod          called by _StatusDisp (lw 0x50($16),
- *                             ov12:0x00a02c44); cleared by _InitStatus
- *                             (sw 0x50($16), ov12:0x00a029b8)
- *   +0x54 exitMethod          called by _SetStatus before it resets the
- *                             block (lw 0x54($16), ov12:0x00a02a5c);
- *                             cleared by _InitStatus (sw 0x54($16),
- *                             ov12:0x00a029a4)
- * Bytes 0x00-0x3f are untouched by any claimed function of this TU and stay
- * unmodeled; the allocation continues to 0x60, but nothing beyond 0x54 is
- * evidenced either.
- *
- * Bytes 0x00-0x0f are in fact a private scratch area each status type's
- * own _Init<Xxx>Status (still asm) seeds on entry; the generic _InitStatus
- * above does not clear it, so its meaning depends on the current type.
- * ov12/tu004's own Drop and Damage/DashVR status handlers evidence every
- * scratch word they touch (rest of 0x10-0x3f stays unmodeled):
- *   scratch0 (+0x00) Drop's target equip side, read/written by
- *                     _ExecCmdInDrop and _DropPassTime (ov12:0x00a05a50/
- *                     0x00a05af0); DashVR's follow-state tag, written 1 by
- *                     _DashVRMainToFollow (ov12:0x00a04e98)
- *   scratch1 (+0x04) Drop's dropMotionInfo: the RgMotionInfoDBGet record
- *                     for the drop motion, stored by _InitDropStatus (sw
- *                     $19, 0x4($16), ov12:0x00a05c84) and handed to
- *                     RgMotionInfoGetActionInTime by _DropPassTime;
- *                     Damage's dash-escape gate, read by
- *                     _DamageExecCmd (ov12:0x00a05868)
- *   scratch2 (+0x08) Drop's pending spare-weapon-removal flag, read and
- *                     cleared by _ExecCmdInDrop/_DropPassTime
- *   scratchTimer (+0x0c) DashVR's countdown timer, set to 0.1 by
- *                     _DashVRMainToFollow
- */
-/*
- * The Dash status's restoreDashTime (+0x30): _InitDashStatus sets it to 1
- * when the dash starts from the body's full dashTime (sw $2, 0x30($16),
- * ov12:0x00a04da8) and clears it otherwise (ov12:0x00a04de8/0x00a04e28);
- * _DashExit refills RgBody's dashTime from the spec only while it is set
- * (lw 0x30($16), ov12:0x00a04c48).
- */
-/*
- * _AttackExit evidences the Attack status's own reuse of two scratch words
- * and one more field of the 0x10-0x3f span:
- *   scratch1 (+0x04) the ranged weapon handle passed to RgWeaponGetEss and
- *                     RgWeaponPlayMotion (lw 0x4($17), ov12:0x00a0330c);
- *                     also the RgWeaponShotStop argument on entry
- *   scratch2 (+0x08) the weapon handle passed to RgWeaponRestartLockon on
- *                     exit (lw 0x8($17), ov12:0x00a0336c)
- *   eSide (+0x18) the attacking equip side, combined with the robot's
- *                 charID to index the weapon-essence motion table (lw
- *                 0x18($17), ov12:0x00a0334c)
+ * The robot's status-machine block: a separate 0x60-byte allocation that
+ * _CreateStatue creates and _InitRobot keeps at RgStatus.robotStatus. Its
+ * first 0x40 bytes are a scratch area each status type (RgRobotStatus.type)
+ * seeds on entry and reads with its own meaning; the fields of the status
+ * types sharing a slot sit in one union. _InitStatus clears the handlers and
+ * type; _SetStatus runs the previous status' exitMethod first.
  */
 struct RgRobotStatus {
     union {
@@ -533,68 +245,23 @@ struct RgRobotStatus {
 };
 
 /*
- * One queued robot command. _BodyExecCmd (still asm, ov12:0x00a06b5c) reads
- * +0x30 as the command's type to build the (1 << type) bit it ORs into
- * RgBody's cmdMask; _ExecDropWeaponCmd reads +0x00 of the command it is
- * given as the equip side to drop. No other byte of either allocation is
- * claimed.
- */
-/*
- * RgRobotAccelarate/RgRobotShot/RgRobotTargetting/RgRobotDash/
- * RgRobotGiveDamage/RgRobotDropWeapon/RgRobotInvalidAttack/RgRobotHitBG/
- * RgRobotNearBG evidence every queuer's own writes into the entry
- * _EntryCmdQueue (still asm) returns; bytes 0x00-0x0f hold a direction
- * vector for the vector-shaped commands (Accelarate/Dash/GiveDamage/
- * InvalidAttack/HitBG/NearBG, written through XrgCopyVector/
- * XrgNormalizeVector's destination cast at that address) and reuse +0x00 as
- * a plain int for the value-shaped commands (param below, written by
- * Shot/Targetting/DropWeapon). scratch0/scratch1 are each written by
- * exactly one command's queuer, at the offset shown:
- *   +0x10 scratch0 RgRobotGiveDamage's own damage magnitude (swc1 0x10($2),
- *                   ov12:0x00a09064); RgRobotInvalidAttack's own scale,
- *                   reusing the same offset for its own command type
- *                   (swc1 0x10($16), ov12:0x00a09348)
- *   +0x14 scratch1 RgRobotGiveDamage's own damage type (sw 0x14($2),
- *                   ov12:0x00a09068)
- * Bytes 0x18-0x2f stay unmodeled.
- */
-/*
- * RgRobotGiveWeakDamage/RgRobotHitByBody evidence four more scratch words
- * of that same span, each written by exactly one queuer, plus a float
- * reuse of scratch1; _ExecWeakDamageCmd/_ExecHitByBody read them back:
- *   +0x14 scratch1 read as a float threshold by _ExecWeakDamageCmd (lwc1
- *                   0x14($2), ov12:0x00a07d38), compared against the
- *                   accumulated scratch0 hits
- *   +0x18 scratch2 RgRobotGiveWeakDamage's own third float argument (swc1
- *                   0x18($16), ov12:0x00a09130); the reseed value
- *                   _ExecWeakDamageCmd stores into RgBody's own
- *                   weakHitWindow (lwc1 0x18($2), ov12:0x00a07d48)
- *   +0x1c scratch3 RgRobotGiveWeakDamage's own fourth float argument (swc1
- *                   0x1c($16), ov12:0x00a09134); read back into RgBody's
- *                   weakHitMotion (lwc1 0x1c($2), ov12:0x00a07d90)
- *   +0x20 scratch4 RgRobotGiveWeakDamage's own fifth float argument (swc1
- *                   0x20($16), ov12:0x00a0912c), read back into RgBody's
- *                   weakHitPower (lwc1 0x20($2), ov12:0x00a07d98);
- *                   RgRobotHitByBody's own damage magnitude, reusing the
- *                   same offset for its own command type (swc1 0x20($16),
- *                   ov12:0x00a091e0), subtracted from RgBody's life by
- *                   _ExecHitByBody (lwc1 0x20($16), ov12:0x00a07c9c)
- *   +0x24 scratch5 RgRobotHitByBody's own force scale (swc1 0x24($16),
- *                   ov12:0x00a091dc), handed to XrgScaleVector by
- *                   _ExecHitByBody (lwc1 0x24($16), ov12:0x00a07c74)
- * RgRobotHitByBody also copies its own direction argument into
- * scratch0..scratch3 as an inline RgVector (XrgCopyVector destination cast
- * at &scratch0, ov12:0x00a091c8), and its own position argument into
- * param..+0xc the same way (ov12:0x00a091d4), both read back by
- * _ExecHitByBody through the same casts (ov12:0x00a07c6c/0x00a07c74).
- * Bytes 0x28-0x2f stay unmodeled.
+ * One queued robot command (0x40 bytes). The first 16 bytes hold the
+ * direction, velocity or position of the vector-shaped commands
+ * (Accelarate, Dash, GiveDamage, InvalidAttack, HitBG, NearBG) or a plain
+ * value for the others (Shot, Targetting, DropWeapon, Rotate). The scratch
+ * words carry per-type values: GiveDamage's magnitude and type, the weak
+ * damage threshold/window/motion/power, HitByBody's damage and force scale
+ * (it also copies its direction into scratch0..scratch3 as an inline
+ * vector). type selects the command and is the bit _BodyExecCmd sets in
+ * RgBody.cmdMask.
  */
 struct RgCmd {
     union {
         int param;                   /* +0x00 */
         RgWeapon *weapon;            /* +0x00: the Attack command's weapon handle */
+        float rotate;                /* +0x00: the Rotate command's signed input */
+        RgVector vector;             /* +0x00: the direction, velocity or position the command carries */
     };
-    unsigned char unmodeled_04[0xc]; /* +0x04 */
     float scratch0;                  /* +0x10 */
     int scratch1;                    /* +0x14 */
     float scratch2;                  /* +0x18 */
@@ -607,19 +274,9 @@ struct RgCmd {
 };
 
 /*
- * RgStatus's cmdQueue (+0x08) points to this fixed-size ring: _PassTimeRobot
- * (ov12:0x00a07f54/0x00a07f8c) reads a count at +0x400 and, when nonzero,
- * walks that many 0x40-byte RgCmd entries starting at +0x000, which is
- * exactly RG_CMD_QUEUE_CAPACITY * sizeof(RgCmd).
- *
- * _CreateCmdQueue (still asm, ov12:0x00a05e10) allocates the whole ring
- * with RgHeapAlloc(size 0x410), so the ring is 0xc bytes larger than
- * cmd[]+count; _InitCmdQueue clears an additional word at +0x404 that
- * _EntryCmdQueue (still asm, ov12:0x00a05d00/0x00a05d18) reads back and
- * increments each time it accepts a command of a valid type while the
- * ring is not full, so it counts total accepted entries. _ClearCmdQueue
- * only resets count, leaving that counter running across frames. Bytes
- * 0x408..0x410 stay unmodeled.
+ * RgStatus.cmdQueue points to this ring: _CreateCmdQueue allocates 0x410
+ * bytes (cmd[] plus count and the accepted-entry counter _EntryCmdQueue
+ * increments and _ClearCmdQueue leaves running).
  */
 #define RG_CMD_QUEUE_CAPACITY 16
 
@@ -630,9 +287,6 @@ typedef struct RgCmdQueue {
     unsigned char unmodeled_408[8];   /* +0x408 */
 } RgCmdQueue;
 
-extern void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
-                           float rotational_scale);
-
 static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body);
 
 /* Returns the accepted entry, or 0 when the ring is full or the type invalid. */
@@ -640,6 +294,6 @@ static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType);
 
 static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon);
 
-static void _BodySetSpareWeapon(RgBody *body, int eSide, int weaponID);
+static void _BodySetSpareWeapon(RgBody *body, int eSide, RgWeapon *weapon);
 
 #endif /* SRC_OV12_RG_ROBOT_H */

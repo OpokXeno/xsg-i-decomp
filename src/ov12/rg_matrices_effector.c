@@ -3,74 +3,24 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_matrices_effector.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_error.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_matrices_effector.h"
+#include "ov12/rg_vector.h"
+#include "ov12/xrg_rand_int.h"
 
-/*
- * The constraint's point-to vector.  MatrixConstraint's layout is not recovered
- * (src/ov12/rg_matrices_effector.h), so this one offset keeps the named-offset
- * fallback of docs/style.md rule 2: _InitConstraint seeds it with XrgUnitVector
- * (0x00a3783c) and _ConstraintStartFunc aims the constrained frame at it
- * (XrgSubVector against the root frame's translation, 0x00a37674).
- */
-#define MATRIX_CONSTRAINT_POINT_TO(constraint) \
-    ((float *)((unsigned char *)(constraint) + 0x30))
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-const char D_00A565D8[] = "../rg_matrices_effector.euc.c";
-const char D_00A565F8[] = "unknown effector type";
-const char D_00A56610[] = "pEff != NIL";
-const char D_00A56620[] = "_IsSingleEffector(pEff)";
-const char D_00A56638[] = "_IsDoubleEffector(pEff)";
-static int s_inSingleIdentifier;
-static int s_inDoubleIdentifier;
-
-static void _InitCombine(MatrixCombine *combine);
-static void _EffectorSetActivity(MatrixEffector *effector, int activity);
-static void _DestructEffector(MatrixEffector *effector);
-static void _EffectorJob(MatrixEffector *effector);
-static MatrixConstraint *_CreateConstraint(void);
-static void _ConstraintSetRoot(MatrixConstraint *constraint, void *root,
-                               void *joint);
-static void _ConstraintSetTop(MatrixConstraint *constraint, void *top);
-
-/*
- * The per-unit RgVector container (ov12/tu050, src/ov12/rg_vector.c) that
- * MatrixEffector.units points at.  Its RgVectorPrefix layout belongs to that
- * TU, so these four entry points keep the generic pointer this TU already
- * uses for the field.
- */
-extern unsigned int RgVectorSize(void *vector);
-extern void *RgVectorIndex(void *vector, unsigned int index,
-                           const char *source_file, int line);
-extern void RgVectorPush(void *vector, void *element);
-extern void DisposeRgVector(void *vector, const char *source_file, int line);
-
-/*
- * MatrixConstraint's three still-unrecovered manipulator slots.  Like the
- * point-to vector above, docs/style.md rule 2's named-offset fallback:
- * _ConstraintDestructFunc (0x00a37738) only frees each through RgHeapFree
- * when non-null, so no store site evidences a field name yet.
- */
-#define MATRIX_CONSTRAINT_MANIPULATOR_1(constraint) \
-    (*(void **)((unsigned char *)(constraint) + 0x20))
-#define MATRIX_CONSTRAINT_MANIPULATOR_2(constraint) \
-    (*(void **)((unsigned char *)(constraint) + 0x24))
-#define MATRIX_CONSTRAINT_MANIPULATOR_3(constraint) \
-    (*(void **)((unsigned char *)(constraint) + 0x28))
-
-/*
- * RgHeapAlloc's byte count for one MatrixCombine: sizeof(MatrixCombine) plus
- * the twelve trailing bytes documented on struct MatrixCombine
- * (src/ov12/rg_matrices_effector.h) that no instruction in the six images
- * reads or writes.
- */
+/* RgHeapAlloc's byte counts: the matrix combine and constraint allocations. */
 #define MATRIX_COMBINE_ALLOC_BYTES 0x140
+#define MATRIX_CONSTRAINT_ALLOC_BYTES 0xD0
+
+/* Capacity RgVector of units is created with. */
+#define MATRIX_EFFECTOR_UNIT_CAPACITY 0x30
+
+/* Per-pass weight ramps of the constraint and the combine effectors. */
+#define MATRIX_CONSTRAINT_WEIGHT_STEP 0.3f
+#define MATRIX_COMBINE_WEIGHT_RISE 0.4f
+#define MATRIX_COMBINE_WEIGHT_FALL 0.15f
 
 /*
  * A double effector's per-unit record: the two manipulators
@@ -80,47 +30,55 @@ extern void DisposeRgVector(void *vector, const char *source_file, int line);
  */
 typedef struct ManipulatorPair ManipulatorPair;
 struct ManipulatorPair {
-    void *first;
-    void *second;
+    SkeMani *first;
+    SkeMani *second;
 };
 
 /*
- * The manipulator's setter callback at offset four, the counterpart of the
- * getter _ManiGet (0x00a36e18) reads at offset zero.  Both are called with
- * the manipulator forwarded unmodified in $a0, so the callback can identify
- * which instance to write back through; the manipulator's own shape belongs
- * to another TU (see the MatrixCombine.root/top comment above), so it stays
- * the named-offset fallback of docs/style.md rule 2.
+ * The per-unit RgVector container (ov12/tu050, src/ov12/rg_vector.c) that
+ * MatrixEffector.units points at.  Its layout belongs to that TU, so these
+ * entry points keep the generic pointer this TU already uses for the field.
  */
-#define MANIPULATOR_SET(manipulator) \
-    (*(void (**)(void *, RgMatrix))((unsigned char *)(manipulator) + 4))
 
-#define MANIPULATOR_GET(manipulator) \
-    (*(void (**)(void *, RgMatrix))(manipulator))
+static void _InitCombine(MatrixCombine *combine);
+static void _EffectorSetActivity(MatrixEffector *effector, int activity);
+static void _DestructEffector(MatrixEffector *effector);
+static void _EffectorJob(MatrixEffector *effector);
+static MatrixConstraint *_CreateConstraint(void);
+static void _ConstraintSetRoot(MatrixConstraint *constraint, SkeMani *root,
+                               SkeMani *joint);
+static void _ConstraintSetTop(MatrixConstraint *constraint, SkeMani *top);
+static void _ManiGet(SkeMani *manipulator, RgMatrix matrix);
+static void _InitEffector(MatrixEffector *effector);
+static void _SingleEffectorJob(MatrixEffector *effector);
+static void _DoubleEffectorJob(MatrixEffector *effector);
+static void _ConstraintStartFunc(MatrixConstraint *constraint);
+static void _InitConstraint(MatrixConstraint *constraint);
 
-static void _ManiSet(void *manipulator, RgMatrix matrix)
+const char matricesEffectorSourcePath[] = "../rg_matrices_effector.euc.c";
+const char matricesEffectorUnknownTypeMessage[] = "unknown effector type";
+const char matricesEffectorAssertEffNotNil[] = "pEff != NIL";
+const char matricesEffectorAssertIsSingle[] = "_IsSingleEffector(pEff)";
+const char matricesEffectorAssertIsDouble[] = "_IsDoubleEffector(pEff)";
+static int s_inSingleIdentifier;
+static int s_inDoubleIdentifier;
+
+static void _ManiSet(SkeMani *manipulator, RgMatrix matrix)
 {
-    void (*setter)(void *manipulator, RgMatrix matrix);
-
     if (manipulator == 0) {
         return;
     }
-    setter = MANIPULATOR_SET(manipulator);
-    if (setter != 0) {
-        setter(manipulator, matrix);
+    if (manipulator->set != 0) {
+        manipulator->set(manipulator, matrix);
     }
 }
 
-extern void XrgUnitMatrix(RgMatrix destination);
 
-static void _ManiGet(void *manipulator, RgMatrix matrix)
+static void _ManiGet(SkeMani *manipulator, RgMatrix matrix)
 {
-    void (*getter)(void *, RgMatrix);
-    
     if (manipulator != 0) {
-        getter = MANIPULATOR_GET(manipulator);
-        if (getter != 0) {
-            getter(manipulator, matrix);
+        if (manipulator->get != 0) {
+            manipulator->get(manipulator, matrix);
             return;
         }
         return XrgUnitMatrix(matrix);
@@ -129,19 +87,18 @@ static void _ManiGet(void *manipulator, RgMatrix matrix)
     return XrgUnitMatrix(matrix);
 }
 
-extern void *CreateRgVector(int capacity, const char *source_file, int line);
 
 static void _InitEffector(MatrixEffector *effector)
 {
     void *units;
 
-    effector->identifier = (void *) 0;
-    units = CreateRgVector(0x30, D_00A565D8, 75);
-    effector->start = (void *) 0;
+    effector->identifier = 0;
+    units = CreateRgVector(MATRIX_EFFECTOR_UNIT_CAPACITY, matricesEffectorSourcePath, 75);
+    effector->start = 0;
     effector->units = units;
-    effector->apply = (void *) 0;
-    effector->destruct = (void *) 0;
-    effector->set_activity = (void *) 0;
+    effector->apply = 0;
+    effector->destruct = 0;
+    effector->set_activity = 0;
     effector->activity = 1;
 }
 
@@ -155,14 +112,14 @@ static void _DestructSingleEffector(MatrixEffector *effector)
     count = RgVectorSize(effector->units);
     if (count != 0) {
         do {
-            unit = RgVectorIndex(effector->units, index, D_00A565D8, 100);
+            unit = RgVectorIndex(effector->units, index, matricesEffectorSourcePath, 100);
             index++;
             if (unit != 0) {
-                RgHeapFree(InstanceOfRgHeap(), unit, D_00A565D8, 102);
+                RgHeapFree(InstanceOfRgHeap(), unit, matricesEffectorSourcePath, 102);
             }
         } while (index < count);
     }
-    DisposeRgVector(effector->units, D_00A565D8, 104);
+    DisposeRgVector(effector->units, matricesEffectorSourcePath, 104);
 }
 
 static void _DestructDoubleEffector(MatrixEffector *effector)
@@ -175,24 +132,20 @@ static void _DestructDoubleEffector(MatrixEffector *effector)
     count = RgVectorSize(effector->units);
     if (count != 0) {
         do {
-            pair = RgVectorIndex(effector->units, index, D_00A565D8, 113);
+            pair = RgVectorIndex(effector->units, index, matricesEffectorSourcePath, 113);
             index++;
             if (pair->first != 0) {
-                RgHeapFree(InstanceOfRgHeap(), pair->first, D_00A565D8, 115);
+                RgHeapFree(InstanceOfRgHeap(), pair->first, matricesEffectorSourcePath, 115);
             }
             if (pair->second != 0) {
-                RgHeapFree(InstanceOfRgHeap(), pair->second, D_00A565D8, 117);
+                RgHeapFree(InstanceOfRgHeap(), pair->second, matricesEffectorSourcePath, 117);
             }
-            RgHeapFree(InstanceOfRgHeap(), pair, D_00A565D8, 118);
+            RgHeapFree(InstanceOfRgHeap(), pair, matricesEffectorSourcePath, 118);
         } while (index < count);
     }
-    DisposeRgVector(effector->units, D_00A565D8, 120);
+    DisposeRgVector(effector->units, matricesEffectorSourcePath, 120);
 }
 
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
-extern int s_inSingleIdentifier;
-extern int s_inDoubleIdentifier;
 
 static void _DestructEffector(MatrixEffector *effector)
 {
@@ -204,7 +157,7 @@ static void _DestructEffector(MatrixEffector *effector)
     } else if (identifier == &s_inSingleIdentifier) {
         _DestructSingleEffector(effector);
     } else {
-        RgError(D_00A565F8, D_00A565D8, 130);
+        RgError(matricesEffectorUnknownTypeMessage, matricesEffectorSourcePath, 130);
     }
     if (effector->destruct != 0) {
         effector->destruct(effector);
@@ -213,8 +166,6 @@ static void _DestructEffector(MatrixEffector *effector)
 
 static void _SingleEffectorJob(MatrixEffector *effector)
 {
-    extern const char D_00A56620[];
-    extern int s_inSingleIdentifier;
     unsigned int unit_count;
     unsigned int index;
     void *manipulator;
@@ -222,7 +173,7 @@ static void _SingleEffectorJob(MatrixEffector *effector)
     RgMatrix matrix;
 
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 140);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 140);
     }
     if (effector->start != 0) {
         effector->start(effector);
@@ -232,10 +183,10 @@ static void _SingleEffectorJob(MatrixEffector *effector)
         apply = effector->apply;
         unit_count = RgVectorSize(effector->units);
         if (effector->identifier != &s_inSingleIdentifier) {
-            assert_prog(D_00A56620, D_00A565D8, 149);
+            assert_prog(matricesEffectorAssertIsSingle, matricesEffectorSourcePath, 149);
         }
         for (index = 0; index < unit_count; index++) {
-            manipulator = RgVectorIndex(effector->units, index, D_00A565D8,
+            manipulator = RgVectorIndex(effector->units, index, matricesEffectorSourcePath,
                                        152);
             _ManiGet(manipulator, matrix);
             apply(effector, matrix);
@@ -246,7 +197,6 @@ static void _SingleEffectorJob(MatrixEffector *effector)
 
 static void _DoubleEffectorJob(MatrixEffector *effector)
 {
-    extern int s_inDoubleIdentifier;
     unsigned int unit_count;
     unsigned int index;
     ManipulatorPair *pair;
@@ -255,7 +205,7 @@ static void _DoubleEffectorJob(MatrixEffector *effector)
     RgMatrix second_matrix;
 
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 162);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 162);
     }
     if (effector->start != 0) {
         effector->start(effector);
@@ -265,7 +215,7 @@ static void _DoubleEffectorJob(MatrixEffector *effector)
         apply = effector->apply;
         unit_count = RgVectorSize(effector->units);
         for (index = 0; index < unit_count; index++) {
-            pair = RgVectorIndex(effector->units, index, D_00A565D8, 173);
+            pair = RgVectorIndex(effector->units, index, matricesEffectorSourcePath, 173);
             _ManiGet(pair->first, first_matrix);
             _ManiGet(pair->second, second_matrix);
             apply(effector, first_matrix, second_matrix);
@@ -280,7 +230,7 @@ static void _EffectorSetActivity(MatrixEffector *effector, int activity)
     void (*set_activity)(MatrixEffector *effector, int activity);
 
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 187);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 187);
     }
     set_activity = effector->set_activity;
     effector->activity = activity;
@@ -289,39 +239,22 @@ static void _EffectorSetActivity(MatrixEffector *effector, int activity)
     }
 }
 
-static void _EffectorAddUnit(MatrixEffector *effector, void *unit)
+static void _EffectorAddUnit(MatrixEffector *effector, SkeMani *unit)
 {
     if (unit != 0) {
         RgVectorPush(effector->units, unit);
     }
 }
 
-/*
- * One manipulator: the get/set record _ManiGet (0x00a36e18) reads at offset
- * zero and _ManiSet (0x00a36de8) at offset four.  Its shape belongs to the TU
- * that builds one, so the type is named here and never completed.
- */
-typedef struct MatrixManipulator MatrixManipulator;
-
-/*
- * The heap block is the ManipulatorPair above - two manipulators in a row,
- * which _DestructDoubleEffector (0x00a36f90) reads back as `first` and
- * `second` and frees apart - so its size is that record's.  The two slots are
- * written here through the manipulator pointer the words actually hold,
- * because the original reads the effector's `units` pointer at 0x00a3742c
- * ahead of both stores, an order the compiler only reaches while the words
- * being written and `units` are of different types.
- */
-static void _EffectorAddDoubleUnit(MatrixEffector *effector,
-                                   MatrixManipulator *first,
-                                   MatrixManipulator *second)
+static void _EffectorAddDoubleUnit(MatrixEffector *effector, SkeMani *first,
+                                   SkeMani *second)
 {
-    MatrixManipulator **pair;
+    ManipulatorPair *pair;
 
-    pair = RgHeapAlloc(InstanceOfRgHeap(), sizeof(ManipulatorPair), D_00A565D8,
+    pair = RgHeapAlloc(InstanceOfRgHeap(), sizeof(ManipulatorPair), matricesEffectorSourcePath,
                        202);
-    pair[0] = first;
-    pair[1] = second;
+    pair->first = first;
+    pair->second = second;
     RgVectorPush(effector->units, pair);
 }
 
@@ -330,17 +263,13 @@ static void _EffectorJob(MatrixEffector *effector)
     void (*job)(MatrixEffector *effector);
 
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 214);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 214);
     }
     job = effector->job;
     if (job != 0) {
         job(effector);
     }
 }
-
-static void _InitEffector(MatrixEffector *effector);
-
-static void _SingleEffectorJob(MatrixEffector *effector);
 
 static void _InitSingleEffector(MatrixEffector *effector)
 {
@@ -349,8 +278,6 @@ static void _InitSingleEffector(MatrixEffector *effector)
     effector->job = _SingleEffectorJob;
 }
 
-
-static void _DoubleEffectorJob(MatrixEffector *effector);
 
 static void _InitDoubleEffector(MatrixEffector *effector)
 {
@@ -361,10 +288,6 @@ static void _InitDoubleEffector(MatrixEffector *effector)
 
 static void _ConstraintStartFunc(MatrixConstraint *constraint)
 {
-    extern void XrgSubVector(RgVector destination, RgVector first,
-                             RgVector second);
-    extern void XrgCalcMatrixXtoZ(RgMatrix destination, RgVector x_axis,
-                                  RgVector z_axis);
     RgMatrix root_frame;
     RgMatrix top_frame;
     RgMatrix root_matrix;
@@ -383,9 +306,9 @@ static void _ConstraintStartFunc(MatrixConstraint *constraint)
     }
 
     if (constraint->effector.activity != 0) {
-        constraint->weight += 0.3f;
+        constraint->weight += MATRIX_CONSTRAINT_WEIGHT_STEP;
     } else {
-        constraint->weight -= 0.3f;
+        constraint->weight -= MATRIX_CONSTRAINT_WEIGHT_STEP;
     }
     bound = 0.0f;
     if (bound > constraint->weight) {
@@ -417,113 +340,87 @@ static void _ConstraintStartFunc(MatrixConstraint *constraint)
     XrgCopyVector(&constraint->constrained_frame[12], &joint_matrix[12]);
 }
 
-/*
- * The constraint's two stored 4x4 matrices _ConstraintFunc multiplies the
- * target matrix by, in sequence.  MatrixConstraint's layout stays
- * unrecovered (see the point-to vector above), so these follow the same
- * named-offset fallback of docs/style.md rule 2; each RgMatrix is 0x40
- * bytes, so the two lie back-to-back at +0x40 and +0x80.
- */
-#define MATRIX_CONSTRAINT_MATRIX_1(constraint) \
-    ((float *)((unsigned char *)(constraint) + 0x40))
-#define MATRIX_CONSTRAINT_MATRIX_2(constraint) \
-    ((float *)((unsigned char *)(constraint) + 0x80))
-
 static void _ConstraintFunc(MatrixConstraint *constraint, RgMatrix matrix)
 {
-    XrgMulMatrix(matrix, MATRIX_CONSTRAINT_MATRIX_1(constraint), matrix);
-    XrgMulMatrix(matrix, MATRIX_CONSTRAINT_MATRIX_2(constraint), matrix);
+    XrgMulMatrix(matrix, constraint->root_inverse, matrix);
+    XrgMulMatrix(matrix, constraint->constrained_frame, matrix);
 }
 
 static void _ConstraintDestructFunc(MatrixConstraint *constraint)
 {
-    if (MATRIX_CONSTRAINT_MANIPULATOR_3(constraint) != 0) {
-        RgHeapFree(InstanceOfRgHeap(), MATRIX_CONSTRAINT_MANIPULATOR_3(constraint),
-                  D_00A565D8, 326);
+    if (constraint->top_manipulator != 0) {
+        RgHeapFree(InstanceOfRgHeap(), constraint->top_manipulator,
+                  matricesEffectorSourcePath, 326);
     }
-    if (MATRIX_CONSTRAINT_MANIPULATOR_1(constraint) != 0) {
-        RgHeapFree(InstanceOfRgHeap(), MATRIX_CONSTRAINT_MANIPULATOR_1(constraint),
-                  D_00A565D8, 328);
+    if (constraint->root_manipulator != 0) {
+        RgHeapFree(InstanceOfRgHeap(), constraint->root_manipulator,
+                  matricesEffectorSourcePath, 328);
     }
-    if (MATRIX_CONSTRAINT_MANIPULATOR_2(constraint) == 0) {
+    if (constraint->joint_manipulator == 0) {
         return;
     }
-    RgHeapFree(InstanceOfRgHeap(), MATRIX_CONSTRAINT_MANIPULATOR_2(constraint),
-              D_00A565D8, 330);
+    RgHeapFree(InstanceOfRgHeap(), constraint->joint_manipulator,
+              matricesEffectorSourcePath, 330);
 }
-
-extern void XrgUnitVector(RgVector vector);
-static void _ConstraintStartFunc(MatrixConstraint *constraint);
-
-/*
- * The constraint's blend weight, ramped in _ConstraintStartFunc (0x00a37528)
- * by +-0.3 per pass and clamped to [0.0, 1.0], exactly like
- * MatrixCombine.weight; MatrixConstraint's layout stays unrecovered (see the
- * point-to vector above), so this keeps the same named-offset fallback.
- */
-#define MATRIX_CONSTRAINT_WEIGHT(constraint) \
-    (*(float *)((unsigned char *)(constraint) + 0xC0))
 
 static void _InitConstraint(MatrixConstraint *constraint) {
     MatrixEffector *effector;
 
-    effector = (MatrixEffector *) constraint;
+    effector = &constraint->effector;
     _InitSingleEffector(effector);
     effector->start = (void (*)(MatrixEffector *)) _ConstraintStartFunc;
     effector->apply = _ConstraintFunc;
     effector->destruct = (void (*)(MatrixEffector *)) _ConstraintDestructFunc;
-    MATRIX_CONSTRAINT_MANIPULATOR_1(constraint) = 0;
-    MATRIX_CONSTRAINT_MANIPULATOR_2(constraint) = 0;
-    MATRIX_CONSTRAINT_MANIPULATOR_3(constraint) = 0;
-    MATRIX_CONSTRAINT_WEIGHT(constraint) = 0.0f;
-    XrgUnitVector(MATRIX_CONSTRAINT_POINT_TO(constraint));
+    constraint->root_manipulator = 0;
+    constraint->joint_manipulator = 0;
+    constraint->top_manipulator = 0;
+    constraint->weight = 0.0f;
+    XrgUnitVector(constraint->point_to);
 }
-
-static void _InitConstraint(MatrixConstraint *constraint);
 
 static MatrixConstraint *_CreateConstraint(void)
 {
     MatrixConstraint *constraint;
 
-    constraint = RgHeapAlloc(InstanceOfRgHeap(), 0xD0, D_00A565D8, 352);
+    constraint = RgHeapAlloc(InstanceOfRgHeap(), MATRIX_CONSTRAINT_ALLOC_BYTES, matricesEffectorSourcePath, 352);
     if (constraint == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 353);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 353);
     }
     _InitConstraint(constraint);
     return constraint;
 }
 
-static void _ConstraintSetRoot(MatrixConstraint *constraint, void *root, void *joint)
+static void _ConstraintSetRoot(MatrixConstraint *constraint, SkeMani *root, SkeMani *joint)
 {
-    if (MATRIX_CONSTRAINT_MANIPULATOR_1(constraint) != 0) {
-        RgHeapFree(InstanceOfRgHeap(), MATRIX_CONSTRAINT_MANIPULATOR_1(constraint),
-                  D_00A565D8, 363);
+    if (constraint->root_manipulator != 0) {
+        RgHeapFree(InstanceOfRgHeap(), constraint->root_manipulator,
+                  matricesEffectorSourcePath, 363);
     }
-    if (MATRIX_CONSTRAINT_MANIPULATOR_2(constraint) != 0) {
-        RgHeapFree(InstanceOfRgHeap(), MATRIX_CONSTRAINT_MANIPULATOR_2(constraint),
-                  D_00A565D8, 365);
+    if (constraint->joint_manipulator != 0) {
+        RgHeapFree(InstanceOfRgHeap(), constraint->joint_manipulator,
+                  matricesEffectorSourcePath, 365);
     }
-    MATRIX_CONSTRAINT_MANIPULATOR_1(constraint) = root;
-    MATRIX_CONSTRAINT_MANIPULATOR_2(constraint) = joint;
+    constraint->root_manipulator = root;
+    constraint->joint_manipulator = joint;
 }
 
-static void _ConstraintSetTop(MatrixConstraint *constraint, void *top)
+static void _ConstraintSetTop(MatrixConstraint *constraint, SkeMani *top)
 {
-    if (MATRIX_CONSTRAINT_MANIPULATOR_3(constraint) != 0) {
-        RgHeapFree(InstanceOfRgHeap(), MATRIX_CONSTRAINT_MANIPULATOR_3(constraint),
-                  D_00A565D8, 375);
+    if (constraint->top_manipulator != 0) {
+        RgHeapFree(InstanceOfRgHeap(), constraint->top_manipulator,
+                  matricesEffectorSourcePath, 375);
     }
-    MATRIX_CONSTRAINT_MANIPULATOR_3(constraint) = top;
+    constraint->top_manipulator = top;
 }
 
 static void _ConstraintGetPointTo(MatrixConstraint *constraint, RgVector output)
 {
-    XrgCopyVector(output, MATRIX_CONSTRAINT_POINT_TO(constraint));
+    XrgCopyVector(output, constraint->point_to);
 }
 
 static void _ConstraintSetPointTo(MatrixConstraint *constraint, RgVector input)
 {
-    XrgCopyVector(MATRIX_CONSTRAINT_POINT_TO(constraint), input);
+    XrgCopyVector(constraint->point_to, input);
 }
 
 static void _CombineStartFunc(MatrixCombine *combine)
@@ -540,11 +437,11 @@ static void _CombineStartFunc(MatrixCombine *combine)
 
     {
         float weight = 0.0f;
-        float step = 0.400000006f;
+        float step = MATRIX_COMBINE_WEIGHT_RISE;
         float boundary;
 
         if (combine->effector.activity == 0)
-            step = -0.150000006f;
+            step = -MATRIX_COMBINE_WEIGHT_FALL;
 
         boundary = weight;
         weight = combine->weight + step;
@@ -581,25 +478,25 @@ static void _CombineFunc(MatrixCombine *combine, RgMatrix first, RgMatrix second
 static void _CombineDestructFunc(MatrixCombine *combine)
 {
     if (combine->root != 0) {
-        RgHeapFree(InstanceOfRgHeap(), combine->root, D_00A565D8, 453);
+        RgHeapFree(InstanceOfRgHeap(), combine->root, matricesEffectorSourcePath, 453);
     }
     if (combine->top == 0) {
         return;
     }
-    RgHeapFree(InstanceOfRgHeap(), combine->top, D_00A565D8, 455);
+    RgHeapFree(InstanceOfRgHeap(), combine->top, matricesEffectorSourcePath, 455);
 }
 
 static void _InitCombine(MatrixCombine *combine)
 {
-    if (combine == (void *) 0) {
-        assert_prog(D_00A56610, D_00A565D8, 462);
+    if (combine == 0) {
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 462);
     }
     _InitDoubleEffector(&combine->effector);
     combine->effector.start = (void (*)(MatrixEffector *)) _CombineStartFunc;
     combine->effector.apply = _CombineFunc;
-    combine->root = (void *) 0;
+    combine->root = 0;
     combine->effector.destruct = (void (*)(MatrixEffector *)) _CombineDestructFunc;
-    combine->top = (void *) 0;
+    combine->top = 0;
 }
 
 MatrixCombine *CreateRgMatEffCombine(void)
@@ -607,19 +504,19 @@ MatrixCombine *CreateRgMatEffCombine(void)
     MatrixCombine *combine;
 
     combine = RgHeapAlloc(InstanceOfRgHeap(), MATRIX_COMBINE_ALLOC_BYTES,
-                          D_00A565D8, 475);
+                          matricesEffectorSourcePath, 475);
     _InitCombine(combine);
     return combine;
 }
 
-void RgMatEffCombineSetRoot(MatrixCombine *combine, void *root, void *top)
+void RgMatEffCombineSetRoot(MatrixCombine *combine, SkeMani *root, SkeMani *top)
 {
     if (combine->root != 0) {
-        RgHeapFree(InstanceOfRgHeap(), combine->root, D_00A565D8, 488);
+        RgHeapFree(InstanceOfRgHeap(), combine->root, matricesEffectorSourcePath, 488);
     }
     combine->root = root;
     if (combine->top != 0) {
-        RgHeapFree(InstanceOfRgHeap(), combine->top, D_00A565D8, 491);
+        RgHeapFree(InstanceOfRgHeap(), combine->top, matricesEffectorSourcePath, 491);
     }
     combine->top = top;
 }
@@ -627,7 +524,7 @@ void RgMatEffCombineSetRoot(MatrixCombine *combine, void *root, void *top)
 void RgMatricesEffectorSetActivity(MatrixEffector *effector, int activity)
 {
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 500);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 500);
     }
     _EffectorSetActivity(effector, activity);
 }
@@ -635,34 +532,33 @@ void RgMatricesEffectorSetActivity(MatrixEffector *effector, int activity)
 void DisposeRgMatricesEffector(MatrixEffector *effector)
 {
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 506);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 506);
     }
     _DestructEffector(effector);
-    RgHeapFree(InstanceOfRgHeap(), effector, D_00A565D8, 508);
+    RgHeapFree(InstanceOfRgHeap(), effector, matricesEffectorSourcePath, 508);
 }
 
-extern const char D_00A56620[];
 
-void RgMatricesEffectorAddManipulator(MatrixEffector *effector, void *unit)
+void RgMatricesEffectorAddManipulator(MatrixEffector *effector, SkeMani *unit)
 {
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 513);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 513);
     }
     if (effector->identifier != &s_inSingleIdentifier) {
-        assert_prog(D_00A56620, D_00A565D8, 514);
+        assert_prog(matricesEffectorAssertIsSingle, matricesEffectorSourcePath, 514);
     }
     _EffectorAddUnit(effector, unit);
 }
 
-extern const char D_00A56638[];
 
-void RgMatricesEffectorAddDoubleMani(MatrixEffector *effector, void *first, void *second)
+void RgMatricesEffectorAddDoubleMani(MatrixEffector *effector, SkeMani *first,
+                                     SkeMani *second)
 {
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 520);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 520);
     }
     if (effector->identifier != &s_inDoubleIdentifier) {
-        assert_prog(D_00A56638, D_00A565D8, 521);
+        assert_prog(matricesEffectorAssertIsDouble, matricesEffectorSourcePath, 521);
     }
     _EffectorAddDoubleUnit(effector, first, second);
 }
@@ -670,7 +566,7 @@ void RgMatricesEffectorAddDoubleMani(MatrixEffector *effector, void *first, void
 void RgMatricesEffectorJob(MatrixEffector *effector)
 {
     if (effector == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 527);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 527);
     }
     _EffectorJob(effector);
 }
@@ -680,19 +576,19 @@ MatrixConstraint *CreateRgMatEffConstraint(void)
     return _CreateConstraint();
 }
 
-void RgMatEffConstraintSetRoot(MatrixConstraint *constraint, void *root,
-                               void *joint)
+void RgMatEffConstraintSetRoot(MatrixConstraint *constraint, SkeMani *root,
+                               SkeMani *joint)
 {
     if (constraint == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 538);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 538);
     }
     _ConstraintSetRoot(constraint, root, joint);
 }
 
-void RgMatEffConstraintSetTop(MatrixConstraint *constraint, void *top)
+void RgMatEffConstraintSetTop(MatrixConstraint *constraint, SkeMani *top)
 {
     if (constraint == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 544);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 544);
     }
     _ConstraintSetTop(constraint, top);
 }
@@ -700,7 +596,7 @@ void RgMatEffConstraintSetTop(MatrixConstraint *constraint, void *top)
 void RgMatEffConstraintSetTarget(MatrixConstraint *constraint, RgVector target)
 {
     if (constraint == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 550);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 550);
     }
     _ConstraintSetPointTo(constraint, target);
 }
@@ -708,7 +604,7 @@ void RgMatEffConstraintSetTarget(MatrixConstraint *constraint, RgVector target)
 void RgMatEffConstraintGetTarget(MatrixConstraint *constraint, RgVector target)
 {
     if (constraint == 0) {
-        assert_prog(D_00A56610, D_00A565D8, 556);
+        assert_prog(matricesEffectorAssertEffNotNil, matricesEffectorSourcePath, 556);
     }
     _ConstraintGetPointTo(constraint, target);
 }

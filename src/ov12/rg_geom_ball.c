@@ -3,92 +3,34 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_heap.h"
+#include "ov12/xrg_rand_int.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-
-/*
- * The complete ball layout is outside this allocation. CreateRgGeomBall
- * allocates sizeof(RgGeomBall) (0x80) bytes -- rg_geom_group.c's own
- * RG_GEOM_BALL_GROUP_OFFSET, the byte immediately past it where a
- * group-owned ball keeps its owning RgGeomGroup. The first 0x70 bytes are
- * the ball's point body (InitRgGeomBall runs InitRgGeomPoint on it; the
- * point type's definition is local to src/ov12/rg_geom_point.c), and
- * InitRgGeomBall, RgGeomBallSetRadius and RgGeomBallGetRadius all keep the
- * radius at 0x70.
- */
-typedef struct RgGeomBall {
-    unsigned char unmodeled_00[0x20];
-    float position[4];
-    float oldPosition[4];
-    unsigned char unmodeled_40[0x30];
-    float radius;
-    unsigned char unmodeled_74[0x0c];
-} RgGeomBall;
-
-typedef struct RgGeomBallContact {
-    RgVector position1;
-    RgVector position2;
-    RgVector penetration;
-    float distance;
-} RgGeomBallContact;
-
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern float XrgLengthVector(RgVector vector);
-extern void XrgNegateVector(RgVector destination, RgVector source);
-
-/* InitRgGeomBall stores its first float at the radius and hands its second
- * to InitRgGeomPoint as the point's weight. */
-extern void InitRgGeomBall(RgGeomBall *pBall, float radius, float weight);
-
-/*
- * RgGeomBallPassTime forwards its pointer unmodified into
- * RgGeomPointPassTime (still assembly, src/ov12/rg_geom_point.c): a ball's
- * pass-time method is the point's, applied to the ball's point body.
- */
-extern void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime);
 
 /* This TU's own .rodata (scaffold-owned; kept under their splat names,
  * docs/naming.md "Scaffold-owned data keeps its splat name"): 0x00a55148
  * "pBall != NIL", 0x00a55158 "../rg_geom_ball.euc.c". */
-const char D_00A55148[16] = "pBall != NIL";
-const char D_00A55158[24] = "../rg_geom_ball.euc.c";
+const char geomBallAssertBallNotNil[16] = "pBall != NIL";
 
-/*
- * InitRgGeomPoint, RgGeomSetType and RgGeomSetPassTimeMeshod are original
- * functions of other OV12 translation units, already recovered as C
- * (rg_geom_point.c's InitRgGeomPoint; rg_geom.c's RgGeomSetType and
- * RgGeomSetPassTimeMeshod).
- */
-extern void InitRgGeomPoint(RgGeomPoint *point, float weight);
-extern void RgGeomSetType(RgGeom *pGeom, int type);
-extern void RgGeomSetPassTimeMeshod(RgGeom *pGeom,
-                                     void (*method)(RgGeom *, float));
+/* A ball whose squared motion this frame is below this is treated as at rest
+ * by RgGeomBallCheckBall. */
+#define RG_GEOM_BALL_MIN_MOTION_SQ 0.005f
 
-/* Forward declaration: RgGeomBallPassTime is defined further down this
- * file and InitRgGeomBall below installs it as the ball's pass-time
- * method. */
-void RgGeomBallPassTime(RgGeomBall *pBall, float deltaTime);
-
-/*
- * The type tag InitRgGeomBall passes to RgGeomSetType;
- * src/ov12/rg_geom_point.c's RG_GEOM_TYPE_POINT (0) precedes it in the
- * same sequence.
- */
-#define RG_GEOM_TYPE_BALL 1
+const char geomBallSourcePath[24] = "../rg_geom_ball.euc.c";
 
 void InitRgGeomBall(RgGeomBall *pBall, float radius, float weight)
 {
     if (pBall == 0) {
-        assert_prog(D_00A55148, D_00A55158, 20);
+        assert_prog(geomBallAssertBallNotNil, geomBallSourcePath, 20);
     }
-    InitRgGeomPoint((RgGeomPoint *)pBall, weight);
-    RgGeomSetType((RgGeom *)pBall, RG_GEOM_TYPE_BALL);
-    RgGeomSetPassTimeMeshod((RgGeom *)pBall,
-                            (void (*)(RgGeom *, float))RgGeomBallPassTime);
+    InitRgGeomPoint(&pBall->point, weight);
+    RgGeomSetType(&pBall->point.geom, RG_GEOM_TYPE_BALL);
+    RgGeomSetPassTimeMeshod(&pBall->point.geom,
+                            (RgGeomPassTimeMethod)RgGeomBallPassTime);
     pBall->radius = radius;
 }
 
@@ -96,9 +38,9 @@ RgGeomBall *CreateRgGeomBall(float radius, float weight)
 {
     RgGeomBall *pBall;
 
-    pBall = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomBall), D_00A55158, 32);
+    pBall = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomBall), geomBallSourcePath, 32);
     if (pBall == 0) {
-        assert_prog(D_00A55148, D_00A55158, 33);
+        assert_prog(geomBallAssertBallNotNil, geomBallSourcePath, 33);
     }
     InitRgGeomBall(pBall, radius, weight);
     return pBall;
@@ -107,7 +49,7 @@ RgGeomBall *CreateRgGeomBall(float radius, float weight)
 void RgGeomBallSetRadius(RgGeomBall *pBall, float radius)
 {
     if (pBall == 0) {
-        assert_prog(D_00A55148, D_00A55158, 44);
+        assert_prog(geomBallAssertBallNotNil, geomBallSourcePath, 44);
     }
     pBall->radius = radius;
 }
@@ -115,7 +57,7 @@ void RgGeomBallSetRadius(RgGeomBall *pBall, float radius)
 float RgGeomBallGetRadius(RgGeomBall *pBall)
 {
     if (pBall == 0) {
-        assert_prog(D_00A55148, D_00A55158, 53);
+        assert_prog(geomBallAssertBallNotNil, geomBallSourcePath, 53);
     }
     return pBall->radius;
 }
@@ -123,9 +65,9 @@ float RgGeomBallGetRadius(RgGeomBall *pBall)
 void RgGeomBallPassTime(RgGeomBall *pBall, float deltaTime)
 {
     if (pBall == 0) {
-        assert_prog(D_00A55148, D_00A55158, 61);
+        assert_prog(geomBallAssertBallNotNil, geomBallSourcePath, 61);
     }
-    RgGeomPointPassTime((RgGeomPoint *)pBall, deltaTime);
+    RgGeomPointPassTime(&pBall->point, deltaTime);
 }
 
 int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
@@ -145,20 +87,20 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
 
     __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                          "sqc2 $vf31, 0(%0)\n\t"
-                         : : "r"(oldPosition1), "r"(ball1->oldPosition) : "memory");
+                         : : "r"(oldPosition1), "r"(ball1->point.oldPosition) : "memory");
     __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                          "sqc2 $vf31, 0(%0)\n\t"
-                         : : "r"(oldPosition2), "r"(ball2->oldPosition) : "memory");
+                         : : "r"(oldPosition2), "r"(ball2->point.oldPosition) : "memory");
     __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
                          "lqc2 $vf31, 0(%2)\n\t"
                          "vsub.xyzw $vf30, $vf30, $vf31\n\t"
                          "sqc2 $vf30, 0(%0)\n\t"
-                         : : "r"(motion1), "r"(ball1->position), "r"(oldPosition1) : "memory");
+                         : : "r"(motion1), "r"(ball1->point.position), "r"(oldPosition1) : "memory");
     __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
                          "lqc2 $vf31, 0(%2)\n\t"
                          "vsub.xyzw $vf30, $vf30, $vf31\n\t"
                          "sqc2 $vf30, 0(%0)\n\t"
-                         : : "r"(motion2), "r"(ball2->position), "r"(oldPosition2) : "memory", "$2");
+                         : : "r"(motion2), "r"(ball2->point.position), "r"(oldPosition2) : "memory", "$2");
     __asm__ __volatile__("lqc2 $vf30, 0(%1)\n\t"
                          "lqc2 $vf31, 0(%2)\n\t"
                          "vsub.xyzw $vf30, $vf30, $vf31\n\t"
@@ -178,7 +120,7 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
     speedSq2 = motion2[0] * motion2[0] + motion2[1] * motion2[1] +
                motion2[2] * motion2[2];
 
-    if (0.005f <= speedSq1 && 0.005f <= speedSq2) {
+    if (RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq1 && RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq2) {
         float one = 1.0f;
         float offsetDot1 = startOffset[0] * motion1[0] +
                            startOffset[1] * motion1[1] +
@@ -239,10 +181,10 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                              "sqc2 $vf31, 0(%0)\n\t"
                              : : "r"(contact->penetration), "r"(motion1) : "memory");
         contact->distance = XrgLengthVector(motion1);
-    } else if (0.005f <= speedSq1) {
+    } else if (RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq1) {
         RgVector closest;
         float one = 1.0f;
-        float *position2 = ball2->position;
+        float *position2 = ball2->point.position;
         s = ((position2[0] * motion1[0] + position2[1] * motion1[1] +
               position2[2] * motion1[2]) -
              (oldPosition1[0] * motion1[0] + oldPosition1[1] * motion1[1] +
@@ -268,20 +210,20 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                              : : "r"(contact->position1), "r"(closest) : "memory");
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
-                             : : "r"(contact->position2), "r"(ball2->position) : "memory");
+                             : : "r"(contact->position2), "r"(ball2->point.position) : "memory");
         __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
                              "lqc2 $vf31, 0(%1)\n\t"
                              "vsub.xyzw $vf30, $vf30, $vf31\n\t"
                              "sqc2 $vf30, 0(%0)\n\t"
-                             : : "r"(closest), "r"(ball2->position) : "memory");
+                             : : "r"(closest), "r"(ball2->point.position) : "memory");
         contact->distance = XrgLengthVector(closest);
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
                              : : "r"(contact->penetration), "r"(closest) : "memory");
-    } else if (0.005f <= speedSq2) {
+    } else if (RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq2) {
         RgVector closest;
         float one = 1.0f;
-        float *position1 = ball1->position;
+        float *position1 = ball1->point.position;
         s = ((position1[0] * motion2[0] + position1[1] * motion2[1] +
               position1[2] * motion2[2]) -
              (oldPosition2[0] * motion2[0] + oldPosition2[1] * motion2[1] +
@@ -304,7 +246,7 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                              : : "r"(closest), "r"(oldPosition2) : "memory");
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
-                             : : "r"(contact->position1), "r"(ball1->position) : "memory");
+                             : : "r"(contact->position1), "r"(ball1->point.position) : "memory");
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
                              : : "r"(contact->position2), "r"(closest) : "memory");
@@ -312,16 +254,16 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                              "lqc2 $vf31, 0(%1)\n\t"
                              "vsub.xyzw $vf30, $vf30, $vf31\n\t"
                              "sqc2 $vf30, 0(%0)\n\t"
-                             : : "r"(closest), "r"(ball1->position) : "memory");
+                             : : "r"(closest), "r"(ball1->point.position) : "memory");
         contact->distance = XrgLengthVector(closest);
         XrgNegateVector(contact->penetration, closest);
     } else {
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
-                             : : "r"(contact->position1), "r"(ball1->position) : "memory");
+                             : : "r"(contact->position1), "r"(ball1->point.position) : "memory");
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
-                             : : "r"(contact->position2), "r"(ball2->position) : "memory");
+                             : : "r"(contact->position2), "r"(ball2->point.position) : "memory");
         __asm__ __volatile__("lqc2 $vf31, 0(%1)\n\t"
                              "sqc2 $vf31, 0(%0)\n\t"
                              : : "r"(contact->penetration), "r"(startOffset) : "memory");
@@ -356,7 +298,7 @@ int RgGeomBallCheckBallDist(RgGeomBall *ball1, RgGeomBall *ball2,
                          "vsub.xyzw $vf30, $vf30, $vf31\n\t"
                          "sqc2 $vf30, 0(%2)"
                          :
-                         : "r"(&ball1->position), "r"(&ball2->position),
+                         : "r"(ball1->point.position), "r"(ball2->point.position),
                            "r"(direction)
                          : "memory");
     {
@@ -366,35 +308,24 @@ int RgGeomBallCheckBallDist(RgGeomBall *ball1, RgGeomBall *ball2,
         if (distance < radius_sum) {
             penetration = radius_sum - distance;
             penetration_vector = &contact->penetration;
-            {
-                float x_component = direction[0];
-                float y_component = direction[1];
-
-                y_component *= penetration;
-                __asm__ __volatile__("" : : "f"(y_component));
-                x_component *= penetration;
-                (*penetration_vector)[1] = y_component;
-                (*penetration_vector)[0] = x_component;
-            }
-            /* Keep each pair's store order and its scalar inputs visible. */
-            __asm__ __volatile__("" : : "r"(penetration_vector));
-            {
-                float z_component = direction[2] * penetration;
-
-                (*penetration_vector)[2] = z_component;
-                __asm__ __volatile__("" : : "f"(z_component));
+            (*penetration_vector)[1] = direction[1] * penetration;
+            (*penetration_vector)[0] = direction[0] * penetration;
+            do {
+                (*penetration_vector)[2] = direction[2] * penetration;
+            } while (0);
+            do {
                 (*penetration_vector)[3] = direction[3] * penetration;
-            }
+            } while (0);
             __asm__ __volatile__("lqc2 $vf31, 0(%0)\n\t"
                                  "sqc2 $vf31, 0(%1)"
                                  :
-                                 : "r"(&ball1->position),
+                                 : "r"(ball1->point.position),
                                    "r"(contact->position1)
                                  : "memory");
             __asm__ __volatile__("lqc2 $vf31, 0(%0)\n\t"
                                  "sqc2 $vf31, 0(%1)"
                                  :
-                                 : "r"(&ball2->position),
+                                 : "r"(ball2->point.position),
                                    "r"(contact->position2)
                                  : "memory");
             contact->distance = distance;

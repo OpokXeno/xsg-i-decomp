@@ -2,11 +2,8 @@
  * OV12 original TU 31: 0x00a1f7e0..0x00a1fa30 (6 functions)
  */
 #include "common.h"
-#include "rg_dull_flag.h"
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-
+#include "ov12/assert_prog.h"
+#include "ov12/rg_dull_flag.h"
 
 void InitRgDullFlag(RgDullFlag *pDull)
 {
@@ -16,9 +13,6 @@ void InitRgDullFlag(RgDullFlag *pDull)
     pDull->time = 0.0f;
     pDull->dullTime = 0.0f;
 }
-
-/* The assertion text "fTime >= RG_FCONST(0.0)". */
-
 
 void RgDullFlagSetDullTime(RgDullFlag *pDull, float fTime)
 {
@@ -57,7 +51,6 @@ int RgDullFlagGet(RgDullFlag *pDull)
     }
     return 1;
 }
-
 
 void RgDullFlagPassTime(RgDullFlag *pDull, float fTime)
 {

@@ -5,9 +5,10 @@
 #ifndef SRC_OV12_XRG_EVENT_H
 #define SRC_OV12_XRG_EVENT_H
 
-extern int s_eEventLevel;
-
-/* Defined in main/xgl_flags.c; reads back a single flag bit. */
-extern int xglFlagsGet1(int bit_offset);
+#include "ov12/xrg_event.h"
+#include "main/xgl_flags.h"
+#include "main/party.h"
+#include "main/data.h"
+#include "main/menu_1.h"
 
 #endif /* SRC_OV12_XRG_EVENT_H */

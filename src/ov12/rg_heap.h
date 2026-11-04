@@ -6,6 +6,14 @@
 #define SRC_OV12_RG_HEAP_H
 
 #include "shared.h"
+#include "ov12/rg_heap.h"
+
+/* Size of the header in front of every block; a block must be larger than it. */
+#define RG_HEAP_HEAD_SIZE 0x40
+#define RG_HEAP_ALIGN_MASK 0xFU
+/* The stamp length and the longest module name a block keeps (a terminator follows). */
+#define RG_HEAP_MAGIC_LENGTH 0xF
+#define RG_HEAP_MODULE_LENGTH 31
 
 /*
  * RgHeap fields, evidenced by InitRgHeap/ClearRgHeap and the heap-level
@@ -14,7 +22,7 @@
  * free-block list head _SetHeapHead returns and InitRgHeap/ClearRgHeap store
  * at 0x08. pAlloc is the allocated-block list head RgHeapAlloc reads and
  * writes at 0x0C, which InitRgHeap clears to NULL. sizeof(RgHeap) == 0x10
- * matches the scaffold's D_00A59AA0/D_00A5A2B0 singletons.
+ * matches the scaffold's s_inHeap_1/s_inHeap_4 singletons.
  */
 struct RgHeap {
     void *top;
@@ -23,10 +31,29 @@ struct RgHeap {
     struct RgHeapBlock *pAlloc;
 };
 
-void InitRgHeap(RgHeap *pHeap, void *pTop, u32 nBufSize);
-void ClearRgHeap(RgHeap *pHeap);
-RgHeap *InstanceOfRgHeap(void);
-RgHeap *InstanceOfRgHeapData(void);
-void RgHeapDumpBlock(RgHeap *pHeap, void *pPtr);
+/*
+ * RgHeapBlock: the fixed 0x40-byte header RgHeapAlloc places immediately
+ * before the block it returns (RgHeapDumpBlock reads it at pPtr - 0x40).
+ * pre/next link the block into whichever circular list currently owns it
+ * (RgHeap's free chain from _SetHeapHead, or its allocated chain from
+ * _Link/_InsertNext), evidenced by "pre %p next %p\n". size is the block's
+ * byte size and mark is set/cleared by _MarkAlloc/_UnmarkAlloc/_IsAllocated,
+ * evidenced by "size %p mark %d\n" (size itself is dumped through %p in that
+ * string). module and line record the RgHeapAlloc call site (module is
+ * strncpy'd from its source_file argument and terminated at module[31]),
+ * evidenced by "module '%s' line %d\n". magic holds the 15-character
+ * s_szMagicString stamp _SetMagicString/_IsCollectMagicString read and write
+ * at block+0x30. Every byte from 0x00 to 0x3F is accounted for by these six
+ * members (4+4+4+2+2+32+16 == 0x40).
+ */
+struct RgHeapBlock {
+    struct RgHeapBlock *pre;
+    struct RgHeapBlock *next;
+    u32 size;
+    u16 mark;
+    u16 line;
+    char module[32];
+    char magic[16];
+};
 
 #endif /* SRC_OV12_RG_HEAP_H */

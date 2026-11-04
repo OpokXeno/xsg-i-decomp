@@ -3,22 +3,77 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "xrg_paint2d.h"
+#include "ov12/xrg_paint2d.h"
 #include "ov12/rg_draw.h"
 #include "ov12/rg_singleton_id.h"
 #include "ov12/xrg_rand_int.h"
+#include "main/xgl_packet.h"
 #include "vu0_macro.h"
+#include "main/nml_model_set.h"
+#include "ov12/xrg_bxx_ps2.h"
+#include "ov12/rg_heap.h"
+
+/* Largest vertex coordinate _CalcRectangle lets the far corners reach. */
+#define XRG_PAINT2D_COORD_MAX 0x3FFF
 
 /*
- * _openVifGif and _openVifGifAD build the 128-bit VIF1 GIF tag
- * sceVif1PkOpenGifTag takes in the single register the original loads with
- * one `lq`; no wide arithmetic is done on it: bit 15 is EOP, bit 46 is PRE,
- * bits 47..57 are PRIM, bits 60..63 are NREG, and the high 64 bits are the
- * REGS descriptor. The union lets the two halves be stored as ordinary
- * 64-bit fields and the whole 16 bytes be read back as the single register
- * sceVif1PkOpenGifTag takes.
+ * XrgPaint2DRect.mode low four bits: one 2-bit anchor selector per axis
+ * (_Geom2D): keep the corner, subtract half the extent, subtract the extent.
  */
-typedef unsigned int Quadword __attribute__((mode(TI)));
+#define XRG_PAINT2D_ANCHOR_CORNER 0
+#define XRG_PAINT2D_ANCHOR_HALF 1
+#define XRG_PAINT2D_ANCHOR_FULL 2
+
+/*
+ * XrgPaint2DDrawReq.offsetMode: the low two bits pick how _CalcOffset derives
+ * the screen position; the other bits are flags.
+ */
+#define XRG_PAINT2D_OFFSET_HOME 0   /* the screen home position */
+#define XRG_PAINT2D_OFFSET_2D 1     /* home plus a 2D offset */
+#define XRG_PAINT2D_OFFSET_3D 2     /* project a 3D point onto the screen */
+#define XRG_PAINT2D_OFFSET_3D_FORCE 3 /* 3D point clamped to a radius */
+#define XRG_PAINT2D_OFFSET_KIND_MASK 3
+#define XRG_PAINT2D_OFFSET_LINEAR 8   /* average with the explicit linear pair */
+#define XRG_PAINT2D_OFFSET_OVERRIDE 0x10 /* offsetResult.i.y is an override block */
+
+/* XrgPaint2DDrawReq.uvMode bits set by the explicit UV setters. */
+#define XRG_PAINT2D_UV_OFFSET 1
+#define XRG_PAINT2D_UV_SIZE 2
+
+/*
+ * What a geometry callback returns and the draw callback receives (flags & 3
+ * as the primitive): 0 nothing to draw, 1 a two-corner sprite, 2 a
+ * four-corner strip, 6 (strip plus the depth-test bit) a projected line.
+ */
+#define XRG_PAINT2D_GEOM_SPRITE 1
+#define XRG_PAINT2D_GEOM_QUAD 2
+#define XRG_PAINT2D_GEOM_PRIMITIVE_MASK 3
+#define XRG_PAINT2D_GEOM_DEPTH_TEST 4
+#define XRG_PAINT2D_GEOM_LINE (XRG_PAINT2D_GEOM_QUAD | XRG_PAINT2D_GEOM_DEPTH_TEST)
+
+/* The request ring holds at most this many requests. */
+#define XRG_PAINT2D_MAX_REQUESTS 255
+
+/* Packed GIF register descriptors of the vertex packets. */
+#define XRG_PAINT2D_REGS_COLOR_4_XYZ 0x44441
+#define XRG_PAINT2D_REGS_COLOR_2_UV_XYZ 0x43431
+#define XRG_PAINT2D_REGS_COLOR_4_UV_XYZ 0x434343431ULL
+
+/* GS TEST_1 values: depth test always passes, or only greater passes. */
+#define XRG_PAINT2D_TEST_ZALWAYS 0x31001
+#define XRG_PAINT2D_TEST_ZGREATER 0x71001
+
+#define XRG_PAINT2D_VIF_FLUSHA 0x13000000
+#define XRG_PAINT2D_COLOR_HALF 0x7F
+
+/*
+ * The 128-bit VIF1 GIF tag sceVif1PkOpenGifTag takes in the single register
+ * the original loads with one `lq`; no wide arithmetic is done on it: bit 15
+ * is EOP, bit 46 is PRE, bits 47..57 are PRIM, bits 60..63 are NREG, and the
+ * high 64 bits are the REGS descriptor. The union lets the two halves be
+ * stored as ordinary 64-bit fields and the whole 16 bytes be read back as the
+ * single register sceVif1PkOpenGifTag takes.
+ */
 
 typedef union XrgPaint2DGifTag {
     struct {
@@ -28,11 +83,48 @@ typedef union XrgPaint2DGifTag {
     Quadword quad;
 } XrgPaint2DGifTag;
 
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkAlign(XglPacket *packet, int align, int size);
-extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-extern void sceVif1PkOpenGifTag(XglPacket *packet, Quadword tag);
+/*
+ * Partial view of main's DispEnv: the display bitfields at +0x18 (magh only
+ * is read here).
+ */
+extern struct XrgPaint2DDispEnvView {
+    u64 flags;
+    unsigned char unmodeled_08[0x10];
+    struct {
+        unsigned int dx : 12;
+        unsigned int dy : 11;
+        unsigned int magh : 4;
+        unsigned int magv : 2;
+        unsigned int unmodeled_29 : 3;
+        unsigned int dw : 12;
+        unsigned int dh : 11;
+        unsigned int unmodeled_55 : 9;
+    } display;
+} DispEnv;
+
+/* The current view and its screen metrics, set by _Paint2DFlush. */
+extern RgDrawView *s_pCurView_00A51220;
+extern int s_anHomePos[2];
+extern float s_aSizeRatio[2];
+extern RgVector s_aCurCenterPos;
+
+/* Scaffold-owned strings. */
+extern const char paint2dUnknownOffsetModeFormat[];
+extern const char paint2dUnknownGeomModeFormat[];
+extern const char paint2dAssertRequestCountBelowMax[];
+extern const char paint2dAssertViewNotNil[];
+/* Defined here: paint2dAssertPicNotNil ("pPic != NIL"), further down. */
+extern const char paint2dAssertPicNotNil[];
+
+static int _Geom2D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners);
+static int _Line3D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners);
+static void _DrawNoTex(XrgPaint2DDrawReq *req, XglPacket *packet,
+                       XrgPaint2DVertex *corners, int primitive);
+static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
+                         XrgPaint2DVertex *corners, int primitive);
+static void _InitReq(XrgPaint2DDrawReq *req);
+static void _Paint2DFlush(void *pObject, RgDrawStudio *pStudio);
+static void _Paint2DClearReq(void *pObject);
 
 static void _openVifGif(XglPacket *packet, u64 prim,
                         unsigned int nreg, u64 regs)
@@ -53,19 +145,19 @@ static void _openVifGif(XglPacket *packet, u64 prim,
  * address+data register code), the constant _openVifGifAD passes to
  * sceVif1PkOpenGifTag.
  */
-const XrgPaint2DGifTag D_00A59030 = {
+const XrgPaint2DGifTag paint2dGifTag = {
     .part = {0x1000000000008000ULL, 0xE}
 };
 
-const char D_00A59058[24] = "../xrg_paint2d.euc.c";
+const char paint2dSourcePath[24] = "../xrg_paint2d.euc.c";
 
-const char D_00A59098[24] = "pPaint != NIL";
+const char paint2dAssertPaintNotNil[24] = "pPaint != NIL";
 
 static void _openVifGifAD(XglPacket *packet)
 {
     XrgPaint2DGifTag tag;
 
-    tag = D_00A59030;
+    tag = paint2dGifTag;
     sceVif1PkCnt(packet, 0);
     sceVif1PkAlign(packet, 2, 3);
     sceVif1PkOpenDirectCode(packet, 0);
@@ -79,18 +171,10 @@ static void _openVifGifAD(XglPacket *packet)
  * argument live across both calls (a0 into s0) rather than discarding it
  * after the first.
  */
-typedef struct sceVif1Packet sceVif1Packet;
-
-extern void sceVif1PkCloseGifTag(sceVif1Packet *packet);
-extern void sceVif1PkCloseDirectHLCode(sceVif1Packet *packet);
-
-static void _closeVifGif(sceVif1Packet *packet) {
+static void _closeVifGif(XglPacket *packet) {
     sceVif1PkCloseGifTag(packet);
     sceVif1PkCloseDirectHLCode(packet);
 }
-
-static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners);
-static void _DrawNoTex(XrgPaint2DDrawReq *req, XglPacket *packet, struct XrgPaint2DVertex *corners);
 
 static void _InitReq(XrgPaint2DDrawReq *req)
 {
@@ -102,10 +186,10 @@ static void _InitReq(XrgPaint2DDrawReq *req)
     req->offsetAnchor.whole = 0;
     req->offsetResult.whole = 0;
     req->mode = 0;
-    req->color[3] = 0x7F;
-    req->color[2] = 0x7F;
-    req->color[1] = 0x7F;
-    req->color[0] = 0x7F;
+    req->color[3] = XRG_PAINT2D_COLOR_HALF;
+    req->color[2] = XRG_PAINT2D_COLOR_HALF;
+    req->color[1] = XRG_PAINT2D_COLOR_HALF;
+    req->color[0] = XRG_PAINT2D_COLOR_HALF;
     req->alpha = 0;
     req->tex0 = 0;
     req->texture = 0;
@@ -119,8 +203,6 @@ static void _DeriveInfoReq(XrgPaint2DDrawReq *dst, XrgPaint2DDrawReq *src)
     dst->offsetAnchor = src->offsetAnchor;
     dst->offsetResult = src->offsetResult;
 }
-
-#define XRG_PAINT2D_COORD_MAX 0x3FFF
 
 static void _CalcRectangle(XrgPaint2DVertex corners[4], const XrgIntRect *rect,
                            int color, int prio)
@@ -179,8 +261,6 @@ static void _CalcUV(XrgPaint2DVertex corners[4], const XrgIntRect *base,
     }
     _CalcRectangle(corners, &rect, 0, 0);
 }
-
-extern RgDrawView *s_pCurView_00A51220;
 
 /*
  * Both projections are whole VU0 sequences of the original: load the current
@@ -251,27 +331,6 @@ static void _CalcPosOnScreenFloat(XrgPaint2DOffset *screen, const XrgPaint2DOffs
 }
 
 
-extern void XrgSubVectorXYZ(RgVector destination, RgVector first, RgVector second);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern int s_anHomePos[2];
-extern float s_aSizeRatio[2];
-extern RgVector s_aCurCenterPos;
-extern const char D_00A59040[];
-
-/*
- * The block the optional override pointer (bit 0x10 of the mode, stored in the
- * second word of the result block) refers to.
- */
-typedef struct XrgPaint2DOffsetOverride {
-    int dx;
-    int dy;
-    int cx;
-    int cy;
-    int flag;
-    unsigned char unmodeled_14[0xC];
-    Quadword quad;
-} XrgPaint2DOffsetOverride;
-
 static int _CalcOffset(XrgPaint2DOffset *out, int mode,
                        const XrgPaint2DOffset *anchor,
                        XrgPaint2DOffset *result)
@@ -292,22 +351,22 @@ static int _CalcOffset(XrgPaint2DOffset *out, int mode,
     anchorCopy = *anchor;
     resultCopy = *result;
     result = &resultCopy;
-    override = (mode & 0x10) ? (XrgPaint2DOffsetOverride *) resultCopy.i.y : override;
-    switch ((unsigned int) mode & 3) {
-    case 0:
+    override = (mode & XRG_PAINT2D_OFFSET_OVERRIDE) ? (XrgPaint2DOffsetOverride *) resultCopy.i.y : override;
+    switch ((unsigned int) mode & XRG_PAINT2D_OFFSET_KIND_MASK) {
+    case XRG_PAINT2D_OFFSET_HOME:
         out->i.x = s_anHomePos[0];
         out->i.y = s_anHomePos[1];
         break;
-    case 1:
+    case XRG_PAINT2D_OFFSET_2D:
         out->i.x = s_anHomePos[0] + anchorCopy.i.x;
         out->i.y = s_anHomePos[1] + anchorCopy.i.y;
         break;
-    case 2:
+    case XRG_PAINT2D_OFFSET_3D:
         flag = _CalcPosOnScreen(&screen, &anchorCopy, &scaledAxisX);
         out->i.x = screen.i.x;
         out->i.y = screen.i.y;
         break;
-    case 3:
+    case XRG_PAINT2D_OFFSET_3D_FORCE:
         _CalcPosOnScreenFloat(&screen, &anchorCopy);
         if (0.0f > screen.f.z) {
             screen.f.x = (s_aCurCenterPos[0] + s_aCurCenterPos[0]) - screen.f.x;
@@ -344,16 +403,16 @@ static int _CalcOffset(XrgPaint2DOffset *out, int mode,
             __asm__ __volatile__(
                 "lqc2 vf31, 0(%0)\n\t"
                 "sqc2 vf31, 0(%1)"
-                : : "r"(&dir), "r"(&override->quad) : "memory");
+                : : "r"(&dir), "r"(&override->direction) : "memory");
         }
         break;
     default:
-        RgError(D_00A59040, D_00A59058, 385, mode);
+        RgError(paint2dUnknownOffsetModeFormat, paint2dSourcePath, 385, mode);
     }
     if (override) {
         override->dx = out->i.x - s_anHomePos[0];
         override->dy = out->i.y - s_anHomePos[1];
-        if (mode & 8) {
+        if (mode & XRG_PAINT2D_OFFSET_LINEAR) {
             int nx;
 
             nx = (result->i.z + override->dx) / 2;
@@ -370,26 +429,7 @@ static int _CalcOffset(XrgPaint2DOffset *out, int mode,
     return flag;
 }
 
-extern const char D_00A59070[];
-/* TU-local view of the display environment: display bitfields at +0x18 (magh only). */
-extern struct XrgPaint2DDispEnvView {
-    u64 flags;
-    unsigned char unmodeled_08[0x10];
-    struct {
-        unsigned int dx : 12;
-        unsigned int dy : 11;
-        unsigned int magh : 4;
-        unsigned int magv : 2;
-        unsigned int unmodeled_29 : 3;
-        unsigned int dw : 12;
-        unsigned int dh : 11;
-        unsigned int unmodeled_55 : 9;
-    } display;
-} DispEnv;
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle);
-
-static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
+static int _Geom2D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
 {
     struct {
         float box[4];
@@ -403,23 +443,23 @@ static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
     int i;
     float x1;
     float y1;
-    struct XrgPaint2DVertex *corner;
+    XrgPaint2DVertex *corner;
     int color = 0x40000;
     int prio = 0x7F;
 
     mode = req->mode;
-    status = 1;
+    status = XRG_PAINT2D_GEOM_SPRITE;
     if (!_CalcOffset(&w.offset, req->offsetMode, &req->offsetAnchor, &req->offsetResult)) {
         return 0;
     }
-    if ((mode & 0x20) && req->tex0 != 0) {
+    if ((mode & XRG_PAINT2D_MODE_PIC_SIZE) && req->tex0 != 0) {
         w.box[2] = (float) req->uHigh;
         w.box[3] = (float) req->vHigh;
     } else {
         w.box[2] = (float) (((XrgIntRect *) &req->rectQuad)->width << 4);
         w.box[3] = (float) (((XrgIntRect *) &req->rectQuad)->height << 4);
     }
-    if (mode & 0x40) {
+    if (mode & XRG_PAINT2D_MODE_SCALE) {
         w.box[2] = w.box[2] * req->rectScaleAngle.scaleAngle.scale;
         w.box[3] = w.box[3] * req->rectScaleAngle.scaleAngle.scale;
     }
@@ -432,17 +472,17 @@ static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
 
         bits = bits >> 2;
         switch (action) {
-        case 0:
+        case XRG_PAINT2D_ANCHOR_CORNER:
             w.box[i] = edge;
             break;
-        case 1:
+        case XRG_PAINT2D_ANCHOR_HALF:
             w.box[i] = edge - w.box[i + 2] * 0.5f;
             break;
-        case 2:
+        case XRG_PAINT2D_ANCHOR_FULL:
             w.box[i] = edge - w.box[i + 2];
             break;
         default:
-            RgError(D_00A59070, D_00A59058, 454, mode);
+            RgError(paint2dUnknownGeomModeFormat, paint2dSourcePath, 454, mode);
             break;
         }
     }
@@ -460,7 +500,7 @@ static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
     y1 = w.box[1] + w.box[3];
     w.quad[2].f.y = y1;
     w.quad[3].f.y = y1;
-    if (mode & 0x80) {
+    if (mode & XRG_PAINT2D_MODE_ANGLE) {
         XrgUnitMatrix(w.matrix);
         XrgRotMatrixZ(w.matrix, w.matrix, req->rectScaleAngle.scaleAngle.angle);
         for (i = 0; i < 4; i++) {
@@ -477,9 +517,9 @@ static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
                 "sqc2 vf2, 0(%0)"
                 : : "r"(&w.quad[i].f.x), "r"(w.matrix) : "memory");
         }
-        status = 2;
+        status = XRG_PAINT2D_GEOM_QUAD;
     }
-    if (mode & 0x100) {
+    if (mode & XRG_PAINT2D_MODE_JITTER) {
         float scale = 12.272727f / (54.0f / (float) (DispEnv.display.magh + 1));
 
         float *py = &w.quad[0].f.y;
@@ -510,8 +550,7 @@ static int _Geom2D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
     return status;
 }
 
-extern float XrgLengthVector(float *vector);
-static int _Line3D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
+static int _Line3D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
 {
     XrgPaint2DOffset screen[2];
     int flags[2];
@@ -644,44 +683,41 @@ static int _Line3D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners)
             x[0] -= offset[1].i.x;
             y[0] -= offset[1].i.y;
         }
-        return 6;
+        return XRG_PAINT2D_GEOM_LINE;
     }
     return 0;
 }
 
-extern void sceVif1PkAddGsAD(XglPacket *packet, int reg, u64 value);
-extern void sceVif1PkAddGsPacked(XglPacket *packet, Quadword value);
-
 static void _DrawNoTex(XrgPaint2DDrawReq *req, XglPacket *packet,
-                       struct XrgPaint2DVertex *corners)
+                       XrgPaint2DVertex *corners, int primitive)
 {
     Quadword color;
     Quadword *vertices;
     unsigned int prim;
 
     vertices = (Quadword *)corners;
-    prim = 4;
+    prim = GS_PRIM_TRISTRIP;
     __asm__ __volatile__(
         "lqc2 vf31, 0(%0)\n\t"
         "sqc2 vf31, 0(%1)"
         : : "r"(req->color), "r"(&color) : "memory");
     if (req->alpha != 0) {
         _openVifGifAD(packet);
-        sceVif1PkAddGsAD(packet, 0x42, req->alpha);
-        _closeVifGif((sceVif1Packet *)packet);
-        prim = 68;
+        sceVif1PkAddGsAD(packet, SCE_GS_ALPHA_1, req->alpha);
+        _closeVifGif(packet);
+        prim = GS_PRIM_TRISTRIP | GS_PRIM_ABE;
     }
-    _openVifGif(packet, prim, 5, 0x44441);
+    _openVifGif(packet, prim, 5, XRG_PAINT2D_REGS_COLOR_4_XYZ);
     sceVif1PkAddGsPacked(packet, color);
     sceVif1PkAddGsPacked(packet, vertices[0]);
     sceVif1PkAddGsPacked(packet, vertices[1]);
     sceVif1PkAddGsPacked(packet, vertices[2]);
     sceVif1PkAddGsPacked(packet, vertices[3]);
-    _closeVifGif((sceVif1Packet *)packet);
+    _closeVifGif(packet);
 }
 
 static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
-                         struct XrgPaint2DVertex *corners, int mode)
+                         XrgPaint2DVertex *corners, int primitive)
 {
     struct {
         Quadword color;
@@ -691,7 +727,7 @@ static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
     int alphaFlag;
     unsigned long long prim;
 
-    prim = 4;
+    prim = GS_PRIM_TRISTRIP;
     alphaFlag = 0;
     _CalcUV(frame.uvs, (const XrgIntRect *) &req->uLow, req->uvMode,
             (const XrgIntRect *) &req->uOffset);
@@ -699,31 +735,31 @@ static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
         "lqc2 vf31, 0(%0)\n\t"
         "sqc2 vf31, 0(%1)"
         : : "r"(req->color), "r"(&frame.color) : "memory");
-    if (mode == 1) {
-        prim = 6;
+    if (primitive == XRG_PAINT2D_GEOM_SPRITE) {
+        prim = GS_PRIM_SPRITE;
     }
     if (req->alpha != 0) {
         _openVifGifAD(packet);
-        sceVif1PkAddGsAD(packet, 0x42, req->alpha);
-        _closeVifGif((sceVif1Packet *) packet);
+        sceVif1PkAddGsAD(packet, SCE_GS_ALPHA_1, req->alpha);
+        _closeVifGif(packet);
         alphaFlag = 1;
     }
     xyz = (Quadword *) corners;
-    prim = prim | (alphaFlag << 6) | 0x110;
+    prim = prim | (alphaFlag << 6) | GS_PRIM_TME | GS_PRIM_FST;
     _openVifGifAD(packet);
-    sceVif1PkAddGsAD(packet, 6, req->tex0);
-    _closeVifGif((sceVif1Packet *) packet);
-    if (mode == 1) {
-        _openVifGif(packet, prim, 5, 0x43431);
+    sceVif1PkAddGsAD(packet, SCE_GS_TEX0_1, req->tex0);
+    _closeVifGif(packet);
+    if (primitive == XRG_PAINT2D_GEOM_SPRITE) {
+        _openVifGif(packet, prim, 5, XRG_PAINT2D_REGS_COLOR_2_UV_XYZ);
         sceVif1PkAddGsPacked(packet, frame.color);
         sceVif1PkAddGsPacked(packet, ((Quadword *) frame.uvs)[0]);
         sceVif1PkAddGsPacked(packet, xyz[0]);
         sceVif1PkAddGsPacked(packet, ((Quadword *) frame.uvs)[3]);
         sceVif1PkAddGsPacked(packet, xyz[3]);
-        _closeVifGif((sceVif1Packet *) packet);
+        _closeVifGif(packet);
         return;
     }
-    _openVifGif(packet, prim, 9, 0x434343431ULL);
+    _openVifGif(packet, prim, 9, XRG_PAINT2D_REGS_COLOR_4_UV_XYZ);
     sceVif1PkAddGsPacked(packet, frame.color);
     sceVif1PkAddGsPacked(packet, ((Quadword *) frame.uvs)[0]);
     sceVif1PkAddGsPacked(packet, xyz[0]);
@@ -733,16 +769,13 @@ static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
     sceVif1PkAddGsPacked(packet, xyz[2]);
     sceVif1PkAddGsPacked(packet, ((Quadword *) frame.uvs)[3]);
     sceVif1PkAddGsPacked(packet, xyz[3]);
-    _closeVifGif((sceVif1Packet *) packet);
+    _closeVifGif(packet);
 }
-
-extern char *strcpy(char *destination, const char *source);
-static void _InitReq(XrgPaint2DDrawReq *req);
 
 static void _InitPaint(XrgPaint2D *paint, const char *sourceFile, int line)
 {
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 701);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 701);
     }
     strcpy(paint->sourceFile, sourceFile);
     paint->line = line;
@@ -755,60 +788,52 @@ static void _InitPaint(XrgPaint2D *paint, const char *sourceFile, int line)
 
 static void _DestructPaint(XrgPaint2D *paint) {
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 713);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 713);
     }
 }
-
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size, const char *source_file,
-                        int line);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
 
 XrgPaint2D *CreateXrgPaint2D_sub(const char *sourceFile, int line) {
     XrgPaint2D *paint;
 
-    paint = RgHeapAlloc(InstanceOfRgHeap(), XRG_PAINT2D_SIZE, D_00A59058, 720);
+    paint = RgHeapAlloc(InstanceOfRgHeap(), XRG_PAINT2D_SIZE, paint2dSourcePath, 720);
     _InitPaint(paint, sourceFile, line);
     return paint;
 }
 
 void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *sourceFile, int line) {
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 727);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 727);
     }
     _DestructPaint(paint);
     RgHeapFree(InstanceOfRgHeap(), paint, sourceFile, line);
 }
 
-static void _WrapperDestruct(RgSimpleDB *database) {
-    DisposeXrgPaint2D_sub((XrgPaint2D *) database, D_00A59058, 0x2DC);
+static void _WrapperDestruct(void *database) {
+    DisposeXrgPaint2D_sub(database, paint2dSourcePath, 0x2DC);
 }
-
-void XrgPaint2DSetDrawPrio(XrgPaint2D *paint, int prio);
 
 XrgPaint2D *InstanceOfXrgPaint2D(void) {
     XrgPaint2D *paint;
 
-    paint = RgSingletonIDGet(10);
+    paint = RgSingletonIDGet(RG_SINGLETON_PAINT2D);
     if (paint == 0) {
-        paint = CreateXrgPaint2D_sub(D_00A59058, 742);
+        paint = CreateXrgPaint2D_sub(paint2dSourcePath, 742);
         XrgPaint2DSetDrawPrio(paint, 3);
-        RgSingletonIDEntry(10, (RgSimpleDB *) paint, _WrapperDestruct);
+        RgSingletonIDEntry(RG_SINGLETON_PAINT2D, paint, _WrapperDestruct);
     }
     return paint;
 }
 
 void XrgPaint2DSetDrawID(XrgPaint2D *paint, int drawID) {
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 757);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 757);
     }
     paint->drawID = drawID;
 }
 
 void XrgPaint2DSetDrawPrio(XrgPaint2D *paint, int prio) {
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 765);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 765);
     }
     paint->prio = prio;
 }
@@ -832,11 +857,11 @@ void XrgPaint2DOffset2D(XrgPaint2D *paint, int x, int y)
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 777);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 777);
     }
     req = paint->request;
     req->offsetAnchor.i.x = x;
-    req->offsetMode = 1;
+    req->offsetMode = XRG_PAINT2D_OFFSET_2D;
     paint->request->offsetAnchor.i.y = y;
 }
 
@@ -845,11 +870,11 @@ void XrgPaint2DOffset2DDot(XrgPaint2D *paint, int x, int y)
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 786);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 786);
     }
     req = paint->request;
     req->offsetAnchor.i.x = x << XRG_PAINT2D_SUBPIXEL_SHIFT;
-    req->offsetMode = 1;
+    req->offsetMode = XRG_PAINT2D_OFFSET_2D;
     paint->request->offsetAnchor.i.y = y << XRG_PAINT2D_SUBPIXEL_SHIFT;
 }
 
@@ -858,24 +883,24 @@ void XrgPaint2DOffsetCenter(XrgPaint2D *paint)
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 795);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 795);
     }
     req = paint->request;
     req->offsetAnchor.i.x = XRG_PAINT2D_SCREEN_CENTER_X << XRG_PAINT2D_SUBPIXEL_SHIFT;
-    req->offsetMode = 1;
+    req->offsetMode = XRG_PAINT2D_OFFSET_2D;
     paint->request->offsetAnchor.i.y = XRG_PAINT2D_SCREEN_CENTER_Y
                                        << XRG_PAINT2D_SUBPIXEL_SHIFT;
 }
 
-void XrgPaint2DOffset3D(XrgPaint2D *paint, const XrgPaint2DOffset *anchor)
+void XrgPaint2DOffset3D(XrgPaint2D *paint, const RgVector anchor)
 {
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 804);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 804);
     }
     req = paint->request;
-    req->offsetMode = 2;
+    req->offsetMode = XRG_PAINT2D_OFFSET_3D;
     __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
                          : : "r"(anchor), "r"(&req->offsetAnchor) : "memory");
 }
@@ -886,16 +911,16 @@ void XrgPaint2DOffset3D(XrgPaint2D *paint, const XrgPaint2DOffset *anchor)
  * register there rather than keeping the first one live across the COP2
  * transfer.
  */
-void XrgPaint2DOffset3DForce(XrgPaint2D *paint, const XrgPaint2DOffset *anchor,
+void XrgPaint2DOffset3DForce(XrgPaint2D *paint, const RgVector anchor,
                              float force)
 {
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 812);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 812);
     }
     req = paint->request;
-    req->offsetMode = 3;
+    req->offsetMode = XRG_PAINT2D_OFFSET_3D_FORCE;
     __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
                          : : "r"(anchor), "r"(&req->offsetAnchor) : "memory");
     paint->request->offsetResult.f.x = force;
@@ -906,16 +931,16 @@ void XrgPaint2DOffset3DForce(XrgPaint2D *paint, const XrgPaint2DOffset *anchor,
  * bound paint's draw request and flags it as such (offsetMode bit 0x10,
  * XrgPaint2DDrawReq above).
  */
-void XrgPaint2DOffsetResult(XrgPaint2D *paint, int value)
+void XrgPaint2DOffsetResult(XrgPaint2D *paint, XrgPaint2DOffsetOverride *value)
 {
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 821);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 821);
     }
     req = paint->request;
-    req->offsetResult.i.y = value;
-    req->offsetMode |= 0x10;
+    req->offsetResult.i.y = (int) value;
+    req->offsetMode |= XRG_PAINT2D_OFFSET_OVERRIDE;
 }
 
 void XrgPaint2DOffsetLinear(XrgPaint2D *paint, int x, int y)
@@ -924,16 +949,16 @@ void XrgPaint2DOffsetLinear(XrgPaint2D *paint, int x, int y)
 
     request = paint->request;
     request->offsetResult.i.z = x;
-    request->offsetMode |= 8;
+    request->offsetMode |= XRG_PAINT2D_OFFSET_LINEAR;
     paint->request->offsetResult.i.w = y;
 }
 
-void XrgPaint2DColor(XrgPaint2D *paint, const unsigned int *color)
+void XrgPaint2DColor(XrgPaint2D *paint, const XrgPaint2DRGBA *color)
 {
     unsigned int *dst;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 843);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 843);
     }
     dst = paint->request->color;
     __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(color) : "memory");
@@ -952,7 +977,7 @@ void XrgPaint2DAlpha(XrgPaint2D *paint, unsigned int mode)
 
     alpha = 0;
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 852);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 852);
     }
     switch (mode) {
     case 0:
@@ -977,52 +1002,29 @@ void XrgPaint2DAlpha(XrgPaint2D *paint, unsigned int mode)
     paint->request->alpha = alpha;
 }
 
-extern void RgBxxGetHeader(int header);
-extern long long XrgBxxPs2Tex0(void *texture);
+const char paint2dAssertPicNotNil[16] = "pPic != NIL";
 
-const char D_00A590C8[16] = "pPic != NIL";
-
-static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet, struct XrgPaint2DVertex *corners, int mode);
-
-/*
- * The texture object XrgPaint2DUseTexture binds to a paint request: only the
- * four members this function itself reads are named, all of them consumed
- * as the source rectangle for the GS TEXCLAMP bounds it derives (see
- * XrgPaint2DDrawReq's uLow/vLow/uHigh/vHigh). `header` is the value the
- * function forwards to RgBxxGetHeader without itself reading the result.
- * Nothing else about this foreign object is evidenced here.
- */
-typedef struct XrgPaint2DTexture {
-    unsigned char unmodeled_00[0x2C];
-    int left;
-    int top;
-    int right;
-    int bottom;
-    unsigned char unmodeled_3C[0x1C];
-    int header;
-} XrgPaint2DTexture;
-
-void XrgPaint2DUseTexture(XrgPaint2D *paint, XrgPaint2DTexture *texture)
+void XrgPaint2DUseTexture(XrgPaint2D *paint, RgBxxPic *texture)
 {
     XrgPaint2DDrawReq *req;
     long long tex0;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 887);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 887);
     }
     if (texture == 0) {
-        assert_prog(D_00A590C8, D_00A59058, 888);
+        assert_prog(paint2dAssertPicNotNil, paint2dSourcePath, 888);
     }
     req = paint->request;
-    RgBxxGetHeader(texture->header);
+    RgBxxGetHeader(texture->pOwner);
     tex0 = XrgBxxPs2Tex0(texture);
     req->texture = texture;
     req->tex0 = tex0;
     req->draw = _DrawWithTex;
-    req->uLow = texture->left * 0x10 + 8;
-    req->vLow = texture->top * 0x10 + 8;
-    req->uHigh = texture->right * 0x10 - 8;
-    req->vHigh = texture->bottom * 0x10 - 8;
+    req->uLow = texture->x * 0x10 + 8;
+    req->vLow = texture->y * 0x10 + 8;
+    req->uHigh = texture->width * 0x10 - 8;
+    req->vHigh = texture->height * 0x10 - 8;
 }
 
 void XrgPaint2DSetUVOffset(XrgPaint2D *paint, int uOffset, int vOffset)
@@ -1031,13 +1033,13 @@ void XrgPaint2DSetUVOffset(XrgPaint2D *paint, int uOffset, int vOffset)
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 913);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 913);
     }
     scaledUOffset = uOffset * 0x10;
     req = paint->request;
     req->vOffset = vOffset * 0x10;
     req->uOffset = scaledUOffset;
-    req->uvMode |= 1;
+    req->uvMode |= XRG_PAINT2D_UV_OFFSET;
 }
 
 void XrgPaint2DSetUVSize(XrgPaint2D *paint, int width, int height)
@@ -1046,24 +1048,19 @@ void XrgPaint2DSetUVSize(XrgPaint2D *paint, int width, int height)
     XrgPaint2DDrawReq *req;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 927);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 927);
     }
     uSize = width * 0x10;
     req = paint->request;
     req->vSize = height * 0x10;
     req->uSize = uSize;
-    req->uvMode |= 2;
+    req->uvMode |= XRG_PAINT2D_UV_SIZE;
 }
 
 /*
  * InitXrgPaint2DRect clears the rectangle request consumed by the adjacent
  * XrgPaint2DDrawRect/XrgPaint2DDrawXYWH routines: an all-zero rectangle at the
- * screen origin, unrotated, at its natural size.  The layout the members come
- * from is recovered in src/ov12/xrg_paint2d.h.
- *
- * The store order (mode, scale, height, width, y, x, angle) is the one the
- * accepted form was matched with and is unchanged here, so this form isolates
- * the layout recovery from the schedule.
+ * screen origin, unrotated, at its natural size.
  */
 void InitXrgPaint2DRect(XrgPaint2DRect *rectangle, int mode)
 {
@@ -1076,8 +1073,6 @@ void InitXrgPaint2DRect(XrgPaint2DRect *rectangle, int mode)
     rectangle->angle = 0.0f;
 }
 
-extern const char D_00A590D8[];
-
 void XrgPaint2DDrawRect(XrgPaint2D *paint, XrgPaint2DRect *rect)
 {
     XrgPaint2DDrawReq *current;
@@ -1085,10 +1080,10 @@ void XrgPaint2DDrawRect(XrgPaint2D *paint, XrgPaint2DRect *rect)
     unsigned int count;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 954);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 954);
     }
-    if (paint->reqCount >= 255) {
-        assert_prog(D_00A590D8, D_00A59058, 955);
+    if (paint->reqCount >= XRG_PAINT2D_MAX_REQUESTS) {
+        assert_prog(paint2dAssertRequestCountBelowMax, paint2dSourcePath, 955);
     }
     current = paint->request;
     current->mode = rect->mode;
@@ -1106,8 +1101,6 @@ void XrgPaint2DDrawRect(XrgPaint2D *paint, XrgPaint2DRect *rect)
     _DeriveInfoReq(paint->request, old);
 }
 
-void XrgPaint2DDrawRect(XrgPaint2D *paint, XrgPaint2DRect *rect);
-
 void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
                         int width, int height)
 {
@@ -1121,15 +1114,14 @@ void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
     XrgPaint2DDrawRect(paint, &rect);
 }
 
-void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, float width)
+/* flags is not read: mode is always cleared (RgShotEffectDisp passes 1). */
+void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, int flags, float width)
 {
     line->mode = 0;
     XrgClearVector(line->start);
     XrgClearVector(line->end);
     line->width = width;
 }
-
-static int _Line3D(XrgPaint2DDrawReq *req, struct XrgPaint2DVertex *corners);
 
 void XrgPaint2DDrawLine(XrgPaint2D *paint, XrgPaint2DLine3D *line)
 {
@@ -1138,10 +1130,10 @@ void XrgPaint2DDrawLine(XrgPaint2D *paint, XrgPaint2DLine3D *line)
     unsigned int count;
 
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 1004);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 1004);
     }
-    if (paint->reqCount >= 255) {
-        assert_prog(D_00A590D8, D_00A59058, 1005);
+    if (paint->reqCount >= XRG_PAINT2D_MAX_REQUESTS) {
+        assert_prog(paint2dAssertRequestCountBelowMax, paint2dSourcePath, 1005);
     }
     current = paint->request;
     current->geom = _Line3D;
@@ -1163,20 +1155,9 @@ void XrgPaint2DDrawLine(XrgPaint2D *paint, XrgPaint2DLine3D *line)
     _DeriveInfoReq(paint->request, old);
 }
 
-extern float s_aSizeRatio[2];
-extern RgVector s_aCurCenterPos;
-extern const char D_00A590F8[];
-extern RgDrawView *RgDrawStudioGetView(void *pStudio);
-extern void RgDrawViewGetScreenRect(RgDrawView *view, RgRect *rect);
-extern void *RgBxxGetXtx(int header);
-extern void nmlModelDirectSendXtx(int modelId, void *data);
-extern void nmlModelDirectSend(int mode, const void *data, int count);
-extern void sceVif1PkInit(XglPacket *packet, unsigned int base);
-extern unsigned int sceVif1PkSize(XglPacket *packet);
-extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
-
-static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio)
+static void _Paint2DFlush(void *pObject, RgDrawStudio *pStudio)
 {
+    XrgPaint2D *paint = pObject;
     unsigned char packetBuffer[0x20];
     XglPacket *packet;
     RgRect rect;
@@ -1197,7 +1178,7 @@ static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio)
     prevFlags = 0;
     packet = (XglPacket *) packetBuffer;
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 1042);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 1042);
     }
     if (paint->reqCount == 0) {
         return;
@@ -1207,7 +1188,7 @@ static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio)
     }
     view = RgDrawStudioGetView(pStudio);
     if (view == 0) {
-        assert_prog(D_00A590F8, D_00A59058, 1052);
+        assert_prog(paint2dAssertViewNotNil, paint2dSourcePath, 1052);
     }
     s_pCurView_00A51220 = view;
     RgDrawViewGetScreenRect(view, &rect);
@@ -1219,22 +1200,22 @@ static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio)
     s_aCurCenterPos[1] = 2048.0f + (float) (((rect.y0 + rectY1) >> 1) - 224);
     s_aSizeRatio[1] = (float) (rectY1 - rect.y0) / 448.0f;
 
-    sceVif1PkInit(packet, 0x70000000);
+    sceVif1PkInit(packet, SCRATCHPAD_BASE);
     sceVif1PkCnt(packet, 0);
-    sceVif1PkAddCode(packet, 0x13000000);
+    sceVif1PkAddCode(packet, XRG_PAINT2D_VIF_FLUSHA);
     sceVif1PkAlign(packet, 2, 3);
     _openVifGifAD(packet);
-    sceVif1PkAddGsAD(packet, 0x3F, 0);
-    sceVif1PkAddGsAD(packet, 0x47, 0x31001);
-    sceVif1PkAddGsAD(packet, 0x08, (0x3FCULL << 32) | (0x3FULL << 16) | 0xC000);
+    sceVif1PkAddGsAD(packet, SCE_GS_TEXFLUSH, 0);
+    sceVif1PkAddGsAD(packet, SCE_GS_TEST_1, XRG_PAINT2D_TEST_ZALWAYS);
+    sceVif1PkAddGsAD(packet, SCE_GS_CLAMP_1, (0x3FCULL << 32) | (0x3FULL << 16) | 0xC000);
     sceVif1PkAddGsAD(packet, 0x49, 0);
-    sceVif1PkAddGsAD(packet, 0x42, 0x44);
-    _closeVifGif((sceVif1Packet *) packet);
+    sceVif1PkAddGsAD(packet, SCE_GS_ALPHA_1, 0x44);
+    _closeVifGif(packet);
     size = sceVif1PkSize(packet);
     if (size != 0) {
-        nmlModelDirectSend(view->projectionMode, (void *) 0x70000000, size);
+        nmlModelDirectSend(view->projectionMode, (void *) SCRATCHPAD_BASE, size);
     }
-    sceVif1PkInit(packet, 0x70000000);
+    sceVif1PkInit(packet, SCRATCHPAD_BASE);
 
     prevXtx = 0;
     i = 0;
@@ -1243,43 +1224,43 @@ static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio)
         do {
             xtx = 0;
             if (req->texture != 0) {
-                xtx = RgBxxGetXtx(((XrgPaint2DTexture *) req->texture)->header);
+                xtx = RgBxxGetXtx(req->texture->pOwner);
             }
             if (xtx != prevXtx) {
                 size = sceVif1PkSize(packet);
                 if (size != 0) {
-                    nmlModelDirectSend(view->projectionMode, (void *) 0x70000000, size);
+                    nmlModelDirectSend(view->projectionMode, (void *) SCRATCHPAD_BASE, size);
                 }
-                sceVif1PkInit(packet, 0x70000000);
+                sceVif1PkInit(packet, SCRATCHPAD_BASE);
                 prevXtx = xtx;
                 if (xtx != 0) {
                     nmlModelDirectSendXtx(view->projectionMode, xtx);
                     _openVifGifAD(packet);
-                    sceVif1PkAddGsAD(packet, 0x3F, 0);
-                    _closeVifGif((sceVif1Packet *) packet);
+                    sceVif1PkAddGsAD(packet, SCE_GS_TEXFLUSH, 0);
+                    _closeVifGif(packet);
                 }
             }
             if (req->geom != 0) {
-                flags = ((int (*)(XrgPaint2DDrawReq *, struct XrgPaint2DVertex *)) req->geom)(req, corners);
-                if ((flags & 4) != (prevFlags & 4)) {
+                flags = ((int (*)(XrgPaint2DDrawReq *, XrgPaint2DVertex *)) req->geom)(req, corners);
+                if ((flags & XRG_PAINT2D_GEOM_DEPTH_TEST) != (prevFlags & XRG_PAINT2D_GEOM_DEPTH_TEST)) {
                     _openVifGifAD(packet);
-                    if ((flags & 4) != 0) {
-                        sceVif1PkAddGsAD(packet, 0x47, 0x71001);
+                    if ((flags & XRG_PAINT2D_GEOM_DEPTH_TEST) != 0) {
+                        sceVif1PkAddGsAD(packet, SCE_GS_TEST_1, XRG_PAINT2D_TEST_ZGREATER);
                     } else {
-                        sceVif1PkAddGsAD(packet, 0x47, 0x31001);
+                        sceVif1PkAddGsAD(packet, SCE_GS_TEST_1, XRG_PAINT2D_TEST_ZALWAYS);
                     }
-                    _closeVifGif((sceVif1Packet *) packet);
+                    _closeVifGif(packet);
                 }
-                prim = flags & 3;
+                prim = flags & XRG_PAINT2D_GEOM_PRIMITIVE_MASK;
                 if (prim != 0 && req->draw != 0) {
-                    ((void (*)(XrgPaint2DDrawReq *, XglPacket *, struct XrgPaint2DVertex *, int)) req->draw)(req, packet, corners, prim);
+                    ((void (*)(XrgPaint2DDrawReq *, XglPacket *, XrgPaint2DVertex *, int)) req->draw)(req, packet, corners, prim);
                     prevFlags = flags;
                 }
             }
             size = sceVif1PkSize(packet);
             if (size >= 0x381) {
-                nmlModelDirectSend(view->projectionMode, (void *) 0x70000000, size);
-                sceVif1PkInit(packet, 0x70000000);
+                nmlModelDirectSend(view->projectionMode, (void *) SCRATCHPAD_BASE, size);
+                sceVif1PkInit(packet, SCRATCHPAD_BASE);
             }
             i++;
             req++;
@@ -1287,36 +1268,25 @@ static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio)
     }
     size = sceVif1PkSize(packet);
     if (size != 0) {
-        nmlModelDirectSend(view->projectionMode, (void *) 0x70000000, size);
+        nmlModelDirectSend(view->projectionMode, (void *) SCRATCHPAD_BASE, size);
     }
 }
 
-static void _Paint2DClearReq(XrgPaint2D *paint, void *pStudio) {
+static void _Paint2DClearReq(void *pObject) {
+    XrgPaint2D *paint = pObject;
+
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 0x484);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 0x484);
     }
     paint->reqCount = 0;
     paint->request = &paint->req;
     _InitReq(&paint->req);
 }
 
-extern RgDraw *InstanceOfRgDraw(void);
-/*
- * RgDraw's _DrawMain (ov12:0x00a28320) calls both callbacks with the paint
- * and the studio being drawn; _Paint2DFlush passes that studio to
- * RgDrawStudioGetView.
- */
-extern void RgDrawReq(RgDraw *draw, XrgPaint2D *paint,
-                      void (*flush)(XrgPaint2D *paint, void *pStudio),
-                      void (*clear)(XrgPaint2D *paint, void *pStudio),
-                      int prio, int drawID);
-static void _Paint2DFlush(XrgPaint2D *paint, void *pStudio);
-static void _Paint2DClearReq(XrgPaint2D *paint, void *pStudio);
-
 void XrgPaint2DFlush(XrgPaint2D *paint)
 {
     if (paint == 0) {
-        assert_prog(D_00A59098, D_00A59058, 1168);
+        assert_prog(paint2dAssertPaintNotNil, paint2dSourcePath, 1168);
     }
     RgDrawReq(InstanceOfRgDraw(), paint, _Paint2DFlush, _Paint2DClearReq,
              paint->prio, paint->drawID);

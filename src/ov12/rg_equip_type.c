@@ -3,65 +3,76 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_equip_type.h"
+#include "ov12/rg_equip_type.h"
+#include "ov12/assert_prog.h"
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
 
+/* Defined here: mount position -> joint id, then the assert and name strings. */
 static int s_aePosToJntID[8] = {0, 2, 4, 1, 3, 5, 6, 7};
 
-const char D_00A53E10[] = "(RG_EQUIP_POS_LEFT_HAND <= (ePos) && (ePos) <= RG_EQUIP_POS_BACK_RIGHT) || (ePos) == RG_EQUIP_POS_INVALID";
+const char equipTypeAssertEquipPosInRange[] = "(RG_EQUIP_POS_LEFT_HAND <= (ePos) && (ePos) <= RG_EQUIP_POS_BACK_RIGHT) || (ePos) == RG_EQUIP_POS_INVALID";
 
-const char D_00A53E80[] = "../rg_equip_type.euc.c";
+const char equipTypeSourcePath[] = "../rg_equip_type.euc.c";
 
-const char D_00A53E98[] = "pEquip != NIL";
+const char equipTypeAssertEquipNotNil[] = "pEquip != NIL";
 
-const char D_00A53EC8[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
+const char equipTypeAssertTypeInRange[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
 
-const char D_00A53F90[] = "left";
+const char equipTypeLeftText[] = "left";
 
-const char D_00A53F98[] = "right";
+const char equipTypeRightText[] = "right";
 
-const char D_00A53FA0[] = "back";
+const char equipTypeBackText[] = "back";
 
-const char D_00A53FA8[] = "?\?\?";
+const char equipTypeUnknownText[] = "?\?\?";
 
-#define RG_EQUIP_TYPE_COUNT 3
-/*
- * The 8 mount positions RG_EQUIP_POS_LEFT_HAND..RG_EQUIP_POS_BACK_RIGHT
- * (D_00A53E10; RgEquipAddMount bounds ePos + 1 below 9).
- */
-#define RG_EQUIP_POS_NUM 8
+/* Declared here: rodata strings and scaffold-owned data defined elsewhere. */
+extern const char equipTypeAssertCopyPointersNotNil[];  /* CopyRgEquip assert text */
+extern const char equipTypeAssertMountCountBelowMax[];  /* mount-count assert text */
+extern const char equipTypeAssertMountCountNotNegative[];  /* "nMount >= 0" */
+extern const char equipTypeAssertEquipArrayNotNil[];  /* "apEquip != NIL" */
+extern const char equipTypeAssertTypeInRangeLoose[];  /* "RG_EQUIP_TYPE_MIN <= eType && eType < RG_EQUIP_TYPE_NUM" */
+extern const char equipTypeWeaponNameBmp45vx[];  /* weapon name "BMP45VX" */
+extern const char equipTypeWeaponNameSmp53ag[];  /* weapon name "SMP53AG" */
+extern const char equipTypeWeaponNameCb85vx[];  /* weapon name "CB85VX" */
+/* The eight mount position names, in RgEquipMountPos order. */
+extern const char equipMountLeftHandText[];
+extern const char equipMountLeftElbowText[];
+extern const char equipMountLeftShoulderText[];
+extern const char equipMountRightHandText[];
+extern const char equipMountRightElbowText[];
+extern const char equipMountRightShoulderText[];
+extern const char equipMountBackLeftText[];
+extern const char equipMountBackRightText[];
+/* Maps each mount position to its equip type. */
+extern int s_aePosToType[RG_EQUIP_POS_NUM];
 
 int RgEquipPosToJntID(int ePos)
 {
     if ((unsigned int)ePos + 1u >= 9u) {
-        assert_prog(D_00A53E10, D_00A53E80, 50);
+        assert_prog(equipTypeAssertEquipPosInRange, equipTypeSourcePath, 50);
     }
-    if (ePos == -1) {
+    if (ePos == RG_EQUIP_POS_INVALID) {
         return -1;
     }
     return s_aePosToJntID[ePos];
 }
 
-void InitRgEquip(RgEquipRecord *pEquip)
+void InitRgEquip(RgEquip *pEquip)
 {
     if (pEquip == 0) {
-        assert_prog(D_00A53E98, D_00A53E80, 0x3D);
+        assert_prog(equipTypeAssertEquipNotNil, equipTypeSourcePath, 0x3D);
     }
     pEquip->mountCount = 0;
     pEquip->activeMount = 0;
 }
 
-/* ov12:0x00a53ea8 holds the CopyRgEquip assert text (line 69). */
-extern const char D_00A53EA8[];
-
-void CopyRgEquip(RgEquipRecord *pDst, RgEquipRecord *pSrc)
+void CopyRgEquip(RgEquip *pDst, RgEquip *pSrc)
 {
     int i;
 
     if (pDst == 0 || pSrc == 0) {
-        assert_prog(D_00A53EA8, D_00A53E80, 69);
+        assert_prog(equipTypeAssertCopyPointersNotNil, equipTypeSourcePath, 69);
     }
     pDst->mountCount = pSrc->mountCount;
     for (i = 0; i < pSrc->mountCount; i++) {
@@ -71,25 +82,22 @@ void CopyRgEquip(RgEquipRecord *pDst, RgEquipRecord *pSrc)
     }
 }
 
-/* ov12:0x00a53f08 is the mount-count assert text (line 89). */
-extern const char D_00A53F08[];
-
-void RgEquipAddMount(RgEquipRecord *pEquip, unsigned int eType, int ePos,
+void RgEquipAddMount(RgEquip *pEquip, unsigned int eType, int ePos,
                      unsigned int posMask)
 {
     int mountIndex;
 
     if (pEquip == 0) {
-        assert_prog(D_00A53E98, D_00A53E80, 85);
+        assert_prog(equipTypeAssertEquipNotNil, equipTypeSourcePath, 85);
     }
-    if (eType >= RG_EQUIP_TYPE_COUNT) {
-        assert_prog(D_00A53EC8, D_00A53E80, 86);
+    if (eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(equipTypeAssertTypeInRange, equipTypeSourcePath, 86);
     }
     if ((unsigned int)ePos + 1u >= RG_EQUIP_POS_NUM + 1) {
-        assert_prog(D_00A53E10, D_00A53E80, 88);
+        assert_prog(equipTypeAssertEquipPosInRange, equipTypeSourcePath, 88);
     }
     if (pEquip->mountCount >= RG_EQUIP_MOUNT_MAX) {
-        assert_prog(D_00A53F08, D_00A53E80, 89);
+        assert_prog(equipTypeAssertMountCountBelowMax, equipTypeSourcePath, 89);
     }
     mountIndex = pEquip->mountCount++;
     pEquip->mounts[mountIndex].type = eType;
@@ -97,13 +105,7 @@ void RgEquipAddMount(RgEquipRecord *pEquip, unsigned int eType, int ePos,
     pEquip->mounts[mountIndex].posMask = posMask;
 }
 
-void RgEquipAddMount(RgEquipRecord *pEquip, unsigned int eType, int ePos, unsigned int posMask);
-/* ov12:0x00a53f38 holds "nMount >= 0"; s_aePosToType (.data, still
- * scaffold-owned) maps each of the 8 mount positions to its equip type. */
-extern const char D_00A53F38[];
-extern int s_aePosToType[RG_EQUIP_POS_NUM];
-
-void RgEquipSetDefault(RgEquipRecord *pEquip, unsigned int posMask)
+void RgEquipSetDefault(RgEquip *pEquip, unsigned int posMask)
 {
     int eType;
     int ePos;
@@ -113,10 +115,10 @@ void RgEquipSetDefault(RgEquipRecord *pEquip, unsigned int posMask)
     unsigned int mountMask;
 
     if (pEquip == 0) {
-        assert_prog(D_00A53E98, D_00A53E80, 100);
+        assert_prog(equipTypeAssertEquipNotNil, equipTypeSourcePath, 100);
     }
     pEquip->mountCount = 0;
-    for (eType = 0; eType < RG_EQUIP_TYPE_COUNT; eType++) {
+    for (eType = 0; eType < RG_EQUIP_TYPE_NUM; eType++) {
         typeMask = 0;
         for (ePos = 0; ePos < RG_EQUIP_POS_NUM; ePos++) {
             if (s_aePosToType[ePos] == eType) {
@@ -132,19 +134,19 @@ void RgEquipSetDefault(RgEquipRecord *pEquip, unsigned int posMask)
                 }
             }
             if (nMount < 0) {
-                assert_prog(D_00A53F38, D_00A53E80, 118);
+                assert_prog(equipTypeAssertMountCountNotNegative, equipTypeSourcePath, 118);
             }
             RgEquipAddMount(pEquip, eType, nMount, mountMask);
         }
     }
 }
 
-int RgEquipIsEquipable(RgEquipRecord *pEquip, int eType)
+int RgEquipIsEquipable(RgEquip *pEquip, int eType)
 {
     int mountIndex;
 
     if (pEquip == 0) {
-        assert_prog(D_00A53E98, D_00A53E80, 131);
+        assert_prog(equipTypeAssertEquipNotNil, equipTypeSourcePath, 131);
     }
     for (mountIndex = 0; mountIndex < pEquip->mountCount; mountIndex++) {
         if (pEquip->mounts[mountIndex].type == eType) {
@@ -154,26 +156,24 @@ int RgEquipIsEquipable(RgEquipRecord *pEquip, int eType)
     return 0;
 }
 
-extern const char D_00A53F48[];
-extern const char D_00A53F58[];
-int RgEquipCheckConfrict(RgEquipRecord **ppEquip, unsigned int eType)
+int RgEquipCheckConfrict(RgEquip **ppEquip, unsigned int eType)
 {
-    unsigned int mask[RG_EQUIP_TYPE_COUNT];
+    unsigned int mask[RG_EQUIP_TYPE_NUM];
     unsigned int i;
     unsigned int j;
     unsigned int result;
     RgEquipMount *pMount;
 
     if (ppEquip == 0) {
-        assert_prog(D_00A53F48, D_00A53E80, 149);
+        assert_prog(equipTypeAssertEquipArrayNotNil, equipTypeSourcePath, 149);
     }
-    if (eType >= RG_EQUIP_TYPE_COUNT) {
-        assert_prog(D_00A53F58, D_00A53E80, 150);
+    if (eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(equipTypeAssertTypeInRangeLoose, equipTypeSourcePath, 150);
     }
     if (ppEquip[eType] == 0) {
         return 0;
     }
-    for (i = 0; i < RG_EQUIP_TYPE_COUNT; i++) {
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         mask[i] = 0;
         if (ppEquip[i] != 0) {
             for (j = 0; j < ppEquip[i]->mountCount; j++) {
@@ -185,7 +185,7 @@ int RgEquipCheckConfrict(RgEquipRecord **ppEquip, unsigned int eType)
         }
     }
     result = 0;
-    for (i = 0; i < RG_EQUIP_TYPE_COUNT; i++) {
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         if (i != eType && (mask[i] & mask[eType]) != 0) {
             result = result | (1u << i);
         }
@@ -198,27 +198,27 @@ int RgEquipCheckConfrict(RgEquipRecord **ppEquip, unsigned int eType)
 
 const char *RgEquipTypeString(int eType)
 {
-    if ((unsigned int)eType >= RG_EQUIP_TYPE_COUNT) {
-        assert_prog(D_00A53EC8, D_00A53E80, 276);
+    if ((unsigned int)eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(equipTypeAssertTypeInRange, equipTypeSourcePath, 276);
     }
     switch (eType) {
-    case 0:
-        return D_00A53F90;
-    case 1:
-        return D_00A53F98;
-    case 2:
-        return D_00A53FA0;
+    case RG_EQUIP_TYPE_LEFT:
+        return equipTypeLeftText;
+    case RG_EQUIP_TYPE_RIGHT:
+        return equipTypeRightText;
+    case RG_EQUIP_TYPE_BACK:
+        return equipTypeBackText;
     default:
-        return D_00A53FA8;
+        return equipTypeUnknownText;
     }
 }
 
-static RgEquipMount *_GetMountData(RgEquipRecord *pEquip, int eType)
+static RgEquipMount *_GetMountData(RgEquip *pEquip, int eType)
 {
     unsigned int mountIndex;
 
     if (pEquip == 0) {
-        assert_prog(D_00A53E98, D_00A53E80, 296);
+        assert_prog(equipTypeAssertEquipNotNil, equipTypeSourcePath, 296);
     }
     for (mountIndex = 0; mountIndex < pEquip->mountCount; mountIndex++) {
         if (pEquip->mounts[mountIndex].type == eType) {
@@ -228,89 +228,67 @@ static RgEquipMount *_GetMountData(RgEquipRecord *pEquip, int eType)
     return 0;
 }
 
-extern int strcmp(const char *s1, const char *s2);
-/* ov12:0x00a53fb0/0x00a53fb8/0x00a53fc0 hold the weapon names "BMP45VX",
- * "SMP53AG" and "CB85VX". */
-extern const char D_00A53FB0[];
-extern const char D_00A53FB8[];
-extern const char D_00A53FC0[];
-
-/* The last mount position (D_00A53E10's RG_EQUIP_POS_BACK_RIGHT). */
-#define RG_EQUIP_POS_BACK_RIGHT (RG_EQUIP_POS_NUM - 1)
-
-int RgEquipMountPos(RgEquipRecord *pEquip, unsigned int eType, int charID,
+int RgEquipMountPos(RgEquip *pEquip, unsigned int eType, int charID,
                     const char *pszWepName)
 {
     RgEquipMount *pMount;
     int ePos;
 
-    if (eType >= RG_EQUIP_TYPE_COUNT) {
-        assert_prog(D_00A53EC8, D_00A53E80, 311);
+    if (eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(equipTypeAssertTypeInRange, equipTypeSourcePath, 311);
     }
-    ePos = -1;
+    ePos = RG_EQUIP_POS_INVALID;
     pMount = _GetMountData(pEquip, eType);
     if (pMount != 0) {
         ePos = pMount->pos;
     }
     /* Character 4 carries these three weapons on the back-right mount. */
     if (charID == 4 && pszWepName != 0) {
-        if (strcmp(pszWepName, D_00A53FB0) == 0
-            || strcmp(pszWepName, D_00A53FB8) == 0) {
+        if (strcmp(pszWepName, equipTypeWeaponNameBmp45vx) == 0
+            || strcmp(pszWepName, equipTypeWeaponNameSmp53ag) == 0) {
             ePos = RG_EQUIP_POS_BACK_RIGHT;
-        } else if (strcmp(pszWepName, D_00A53FC0) == 0) {
+        } else if (strcmp(pszWepName, equipTypeWeaponNameCb85vx) == 0) {
             ePos = RG_EQUIP_POS_BACK_RIGHT;
         }
     }
     return ePos;
 }
 
-/* ov12:0x00a53f48 holds "apEquip != NIL"; ov12:0x00a53f58 holds
- * "RG_EQUIP_TYPE_MIN <= eType && eType < RG_EQUIP_TYPE_NUM". */
-/* The eight mount position names, in RgEquipMountPos order (ov12 rodata). */
-extern const char D_00A53FC8[];
-extern const char D_00A53FD8[];
-extern const char D_00A53FE8[];
-extern const char D_00A53FF8[];
-extern const char D_00A54008[];
-extern const char D_00A54018[];
-extern const char D_00A54028[];
-extern const char D_00A54038[];
-
-const char *RgEquipMountPosString(RgEquipRecord *pEquip, unsigned int eType,
+const char *RgEquipMountPosString(RgEquip *pEquip, unsigned int eType,
                                   int charID, const char *pszWepName)
 {
     int ePos;
 
-    if (eType >= RG_EQUIP_TYPE_COUNT) {
-        assert_prog(D_00A53EC8, D_00A53E80, 340);
+    if (eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(equipTypeAssertTypeInRange, equipTypeSourcePath, 340);
     }
-    if (eType == 2) {
-        return D_00A53FA0;
+    if (eType == RG_EQUIP_TYPE_BACK) {
+        return equipTypeBackText;
     }
     ePos = RgEquipMountPos(pEquip, eType, charID, pszWepName);
     switch (ePos) {
     case 0:
-        return D_00A53FC8;
+        return equipMountLeftHandText;
     case 1:
-        return D_00A53FD8;
+        return equipMountLeftElbowText;
     case 2:
-        return D_00A53FE8;
+        return equipMountLeftShoulderText;
     case 3:
-        return D_00A53FF8;
+        return equipMountRightHandText;
     case 4:
-        return D_00A54008;
+        return equipMountRightElbowText;
     case 5:
-        return D_00A54018;
+        return equipMountRightShoulderText;
     case 6:
-        return D_00A54028;
+        return equipMountBackLeftText;
     case 7:
-        return D_00A54038;
+        return equipMountBackRightText;
     default:
-        if (eType == 0) {
-            return D_00A53F90;
+        if (eType == RG_EQUIP_TYPE_LEFT) {
+            return equipTypeLeftText;
         }
-        if (eType == 1) {
-            return D_00A53F98;
+        if (eType == RG_EQUIP_TYPE_RIGHT) {
+            return equipTypeRightText;
         }
         return RgEquipTypeString(eType);
     }

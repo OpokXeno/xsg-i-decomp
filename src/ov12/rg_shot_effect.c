@@ -1,111 +1,35 @@
-/*
- * OV12 original TU 24: 0x00a17c90..0x00a18668 (19 functions)
- */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_effect_env.h"
+#include "ov12/rg_shot_effect.h"
+#include "ov12/xrg_rand_int.h"
+#include "ov12/rg_dispmodel.h"
+#include "ov12/xrg_paint2d.h"
 
-const char D_00A53418[] = "pEff != NIL";
 
-const char D_00A53428[] = "../rg_shot_effect.euc.c";
+const char shotEffectAssertEffNotNil[] = "pEff != NIL";
 
-const char D_00A53440[] = "pShotEff != NIL";
+const char shotEffectSourcePath[] = "../rg_shot_effect.euc.c";
 
-/* Opaque handles this TU only ever passes through by pointer. */
-typedef struct RgDispModel RgDispModel;
+const char shotEffectAssertShotEffNotNil[] = "pShotEff != NIL";
 
-typedef struct RgParticleEffect RgParticleEffect;
-
-typedef struct RgEffectEnv RgEffectEnv;
-
-typedef struct RgBxx RgBxx;
-
-/*
- * CreateRgShotEffect is the object's only allocator, and its RgHeapAlloc call
- * sizes it at 0xA0 bytes. _InitEffect (0x00a17c90) evidences the layout past
- * texLineModelHeight: it stores 0x7F into each of four ints at 0x30/0x34/
- * 0x38/0x3C, calls XrgUnitMatrix(p+0x40), and clears vectors at p+0x80 and
- * p+0x90; RgShotEffectSetTexLineModelColor copies a 16-byte quadword into
- * +0x30 and RgShotEffectSetPos copies a matrix into +0x40 and two vectors
- * into +0x80/+0x90. No claimed function touches 0x24..0x2F.
- */
-typedef struct RgShotEffect {
-    RgDispModel *dispModel;          /* 0x00 */
-    float scale;                     /* 0x04 */
-    float yRotation;                 /* 0x08 */
-    float transparent;               /* 0x0C */
-    RgParticleEffect *particleEffect; /* 0x10 */
-    int particleShootReverse;        /* 0x14 */
-    int texLinePicId;                /* 0x18 */
-    float texLineModelWidth;         /* 0x1C */
-    float texLineModelHeight;        /* 0x20 */
-    unsigned char unmodeled_24[0xC]; /* 0x24, untouched by every claimed function */
-    int texLineModelColor[4];        /* 0x30 */
-    RgMatrix matrix;                 /* 0x40 */
-    RgVector startPos;               /* 0x80 */
-    RgVector endPos;                 /* 0x90 */
-} RgShotEffect;
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
-                         int line);
-extern RgEffectEnv *InstanceOfRgEffectEnv(void);
-extern const char **RgEffectEnvGetShotMdl(RgEffectEnv *effectEnv);
-extern RgBxx *RgEffectEnvGetBxx(RgEffectEnv *effectEnv);
-extern int RgBxxGetPic(RgBxx *bxx, const char *name);
-extern RgDispModel *CreateXrgDispModelImpl(const char *name, const char *variant);
-extern void DisposeRgDispModel(RgDispModel *dispModel);
-extern void RgDispModelSetMode(RgDispModel *dispModel, int mode);
-extern void DisposeRgParticleEffect(RgParticleEffect *particleEffect);
-extern void RgParticleEffectStopAlive(RgParticleEffect *particleEffect, float time);
-extern int RgParticleEffectIsAlive(RgParticleEffect *particleEffect);
-extern void RgParticleEffectPassTime(RgParticleEffect *particleEffect, float time);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
-extern int RgEffectEnvGetParticleData(RgEffectEnv *effectEnv, char *name,
-                                      void *buffer);
-
-typedef struct RgParticleEffectEssence RgParticleEffectEssence;
-
-extern RgParticleEffect *CreateRgParticleEffect(RgParticleEffectEssence *essence,
-                                                int context);
-extern void XrgUnitMatrix(RgMatrix destination);
-extern void XrgCalcMatrixZtoY(RgMatrix matrix, RgVector zAxis, RgVector yAxis);
-extern float *XrgVectorY(void);
-extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
-extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
-extern void XrgNegateVector(RgVector destination, RgVector source);
-extern void RgParticleEffectSetShootLocal(RgParticleEffect *effect,
-                                          RgMatrix local);
-/*
- * Linker witnesses for the original literals at ov12:0x00a53418,
- * 0x00a53428 and 0x00a53440; this TU's .rodata stays scaffold-owned
- * (config/tu-build.json).
- */
-/*
- * Linker witnesses for the original literals at ov12:0x00a53418 and
- * 0x00a53428; this TU's .rodata stays scaffold-owned (config/tu-build.json).
- */
-extern const char D_00A53418[];
-extern const char D_00A53428[];
-extern const char D_00A53440[];
 
 /* The one evidenced RgDispModelSetMode mode this TU passes. */
 #define RG_DISP_MODEL_MODE_ADD_ALPHA 4
 
-static void _InitEffect(RgShotEffect *pEff);
-
 static void _InitEffect(RgShotEffect *pEff)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 47);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 47);
     }
     pEff->scale = 0.1f;
     pEff->transparent = 1.0f;
     pEff->dispModel = 0;
     pEff->particleEffect = 0;
-    pEff->texLinePicId = 0;
+    pEff->texLinePic = 0;
     pEff->yRotation = 0.0f;
     XrgUnitMatrix(pEff->matrix);
     XrgClearVector(pEff->startPos);
@@ -113,10 +37,10 @@ static void _InitEffect(RgShotEffect *pEff)
     pEff->texLineModelWidth = 1.0f;
     pEff->particleShootReverse = 1;
     pEff->texLineModelHeight = 0.2f;
-    pEff->texLineModelColor[3] = 0x7F;
-    pEff->texLineModelColor[2] = 0x7F;
-    pEff->texLineModelColor[1] = 0x7F;
-    pEff->texLineModelColor[0] = 0x7F;
+    pEff->texLineModelColor.a = 0x7F;
+    pEff->texLineModelColor.b = 0x7F;
+    pEff->texLineModelColor.g = 0x7F;
+    pEff->texLineModelColor.r = 0x7F;
 }
 
 static void _DestructEffect(RgShotEffect *pEff)
@@ -133,9 +57,9 @@ RgShotEffect *CreateRgShotEffect(void)
 {
     RgShotEffect *pEff;
 
-    pEff = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgShotEffect), D_00A53428, 75);
+    pEff = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgShotEffect), shotEffectSourcePath, 75);
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 76);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 76);
     }
     _InitEffect(pEff);
     return pEff;
@@ -144,16 +68,16 @@ RgShotEffect *CreateRgShotEffect(void)
 void DisposeRgShotEffect(RgShotEffect *pShotEff)
 {
     if (pShotEff == 0) {
-        assert_prog(D_00A53440, D_00A53428, 83);
+        assert_prog(shotEffectAssertShotEffNotNil, shotEffectSourcePath, 83);
     }
     _DestructEffect(pShotEff);
-    RgHeapFree(InstanceOfRgHeap(), pShotEff, D_00A53428, 85);
+    RgHeapFree(InstanceOfRgHeap(), pShotEff, shotEffectSourcePath, 85);
 }
 
 void RgShotEffectStopAlive(RgShotEffect *pEff, float time)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 96);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 96);
     }
     if (pEff->particleEffect != 0) {
         RgParticleEffectStopAlive(pEff->particleEffect, time);
@@ -162,10 +86,10 @@ void RgShotEffectStopAlive(RgShotEffect *pEff, float time)
 
 void RgShotEffectSetModel(RgShotEffect *pEff, const char *variant)
 {
-    const char **shotMdl;
+    RgFileSysData *shotMdl;
 
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 108);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 108);
     }
     if (pEff->dispModel != 0) {
         DisposeRgDispModel(pEff->dispModel);
@@ -173,30 +97,29 @@ void RgShotEffectSetModel(RgShotEffect *pEff, const char *variant)
     }
     shotMdl = RgEffectEnvGetShotMdl(InstanceOfRgEffectEnv());
     if (shotMdl != 0) {
-        pEff->dispModel = CreateXrgDispModelImpl(*shotMdl, variant);
+        pEff->dispModel = CreateXrgDispModelImpl(shotMdl->data, variant);
     }
 }
 
 void RgShotEffectSetParticle(RgShotEffect *pEff, char *name)
 {
-    /* Raw particle-essence lookup buffer, opaque to this TU; see
-     * RgRobotEffectStartJet (ov12/rg_robot_effect.c). */
-    int shotData[0xB0];
+    RgParticleEffectEssence essences[RG_PARTICLE_SHOT_MAX];
     int shotCount;
 
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 127);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 127);
     }
-    shotCount = RgEffectEnvGetParticleData(InstanceOfRgEffectEnv(), name, shotData);
+    shotCount = RgEffectEnvGetParticleData(InstanceOfRgEffectEnv(), name,
+                                           essences);
     if (shotCount != 0) {
-        pEff->particleEffect = CreateRgParticleEffect((RgParticleEffectEssence *) shotData, shotCount);
+        pEff->particleEffect = CreateRgParticleEffect(essences, shotCount);
     }
 }
 
 void RgShotEffectSetParticleShootReverse(RgShotEffect *pEff)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 139);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 139);
     }
     pEff->particleShootReverse = 0;
 }
@@ -204,7 +127,7 @@ void RgShotEffectSetParticleShootReverse(RgShotEffect *pEff)
 RgParticleEffect *RgShotEffectGetPtclEffect(RgShotEffect *pEff)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 147);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 147);
     }
     return pEff->particleEffect;
 }
@@ -215,29 +138,29 @@ void RgShotEffectSetTexLine(RgShotEffect *pEff, const char *name)
 
     bxx = RgEffectEnvGetBxx(InstanceOfRgEffectEnv());
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 157);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 157);
     }
     if (name != 0 && *name != 0) {
-        pEff->texLinePicId = RgBxxGetPic(bxx, name);
+        pEff->texLinePic = RgBxxGetPic(bxx, name);
     }
 }
 
 void RgShotEffectSetTexLineModelSize(RgShotEffect *pEff, float width, float height)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 168);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 168);
     }
     pEff->texLineModelWidth = width;
     pEff->texLineModelHeight = height;
 }
 
-void RgShotEffectSetTexLineModelColor(RgShotEffect *pEff, const int *color)
+void RgShotEffectSetTexLineModelColor(RgShotEffect *pEff, const XrgPaint2DRGBA *color)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 177);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 177);
     }
     __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
-                         : : "r"(color), "r"(pEff->texLineModelColor) : "memory");
+                         : : "r"(color), "r"(&pEff->texLineModelColor) : "memory");
 }
 
 void RgShotEffectSetPos(RgShotEffect *pEff, RgVector startPos, RgVector endPos)
@@ -246,7 +169,7 @@ void RgShotEffectSetPos(RgShotEffect *pEff, RgVector startPos, RgVector endPos)
     RgMatrix localMatrix;
 
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 189);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 189);
     }
     __asm__ __volatile__("lqc2 vf31, 0(%0)\n\t"
                          "sqc2 vf31, 0(%1)"
@@ -288,7 +211,7 @@ void RgShotEffectSetPos(RgShotEffect *pEff, RgVector startPos, RgVector endPos)
 void RgShotEffectSetScale(RgShotEffect *pEff, float scale)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 229);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 229);
     }
     pEff->scale = scale;
 }
@@ -296,7 +219,7 @@ void RgShotEffectSetScale(RgShotEffect *pEff, float scale)
 void RgShotEffectSetYRot(RgShotEffect *pEff, float yRotation)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 237);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 237);
     }
     pEff->yRotation = yRotation;
 }
@@ -304,7 +227,7 @@ void RgShotEffectSetYRot(RgShotEffect *pEff, float yRotation)
 void RgShotEffectSetTransparent(RgShotEffect *pEff, float transparent)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 245);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 245);
     }
     pEff->transparent = transparent;
 }
@@ -312,7 +235,7 @@ void RgShotEffectSetTransparent(RgShotEffect *pEff, float transparent)
 void RgShotEffectSetAddAlpha(RgShotEffect *pEff)
 {
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 253);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 253);
     }
     if (pEff->dispModel != 0) {
         RgDispModelSetMode(pEff->dispModel, RG_DISP_MODEL_MODE_ADD_ALPHA);
@@ -324,7 +247,7 @@ void RgShotEffectPassTime(RgShotEffect *pEff, float time)
     RgParticleEffect *ptclEffect;
 
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 267);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 267);
     }
     ptclEffect = pEff->particleEffect;
     if (ptclEffect != 0) {
@@ -336,38 +259,15 @@ void RgShotEffectPassTime(RgShotEffect *pEff, float time)
     }
 }
 
-typedef struct XrgPaint2D XrgPaint2D;
-
-typedef struct XrgPaint2DLine3D XrgPaint2DLine3D;
-
-extern void RgDispModelSetLocal(RgDispModel *dispModel, const RgMatrix matrix);
-extern void RgDispModelSetTransparent(RgDispModel *dispModel, float transparent);
-extern void RgDispModelDisplay(RgDispModel *dispModel);
-extern void RgParticleEffectDisp(RgParticleEffect *particleEffect);
-extern XrgPaint2D *InstanceOfXrgPaint2D(void);
-extern void XrgPaint2DAlpha(XrgPaint2D *paint2D, int alpha);
-extern void XrgPaint2DUseTexture(XrgPaint2D *paint2D, int picId);
-extern void XrgPaint2DColor(XrgPaint2D *paint2D, int *color);
-extern void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, int flags, float width);
-extern void XrgPaint2DDrawLine(XrgPaint2D *paint2D, XrgPaint2DLine3D *line);
-extern void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
-extern void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
-extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
-extern void XrgScaleVectorXYZ(RgVector destination, RgVector source, float scale);
-extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
-
 void RgShotEffectDisp(RgShotEffect *pEff)
 {
     RgMatrix matrix;
-    /* Raw XrgPaint2DLine3D descriptor: its struct lives in ov12/xrg_paint2d.c's
-     * TU-local header (mode, 12-byte gap, start at 16, end at 32, width at 48);
-     * this TU fills start and end only. */
-    RgVector line[4];
+    XrgPaint2DLine3D line;
     RgVector diff;
     XrgPaint2D *paint2D;
 
     if (pEff == 0) {
-        assert_prog(D_00A53418, D_00A53428, 284);
+        assert_prog(shotEffectAssertEffNotNil, shotEffectSourcePath, 284);
     }
     if (pEff->dispModel != 0) {
         XrgUnitMatrix(matrix);
@@ -383,20 +283,20 @@ void RgShotEffectDisp(RgShotEffect *pEff)
     if (pEff->particleEffect != 0) {
         RgParticleEffectDisp(pEff->particleEffect);
     }
-    if (pEff->texLinePicId != 0) {
+    if (pEff->texLinePic != 0) {
         paint2D = InstanceOfXrgPaint2D();
         XrgPaint2DAlpha(paint2D, 1);
-        XrgPaint2DUseTexture(paint2D, pEff->texLinePicId);
-        InitXrgPaint2DLine3D((XrgPaint2DLine3D *) line, 1, pEff->texLineModelHeight);
+        XrgPaint2DUseTexture(paint2D, pEff->texLinePic);
+        InitXrgPaint2DLine3D(&line, 1, pEff->texLineModelHeight);
         __asm__ __volatile__("lqc2 vf31, 0(%0)\n\t"
                              "sqc2 vf31, 0(%1)"
                              :
-                             : "r"(pEff->endPos), "r"(line[1])
+                             : "r"(pEff->endPos), "r"(line.start)
                              : "memory");
         XrgSubVector(diff, pEff->startPos, pEff->endPos);
         XrgScaleVectorXYZ(diff, diff, pEff->texLineModelWidth);
-        XrgAddVector(line[2], line[1], diff);
-        XrgPaint2DColor(paint2D, pEff->texLineModelColor);
-        XrgPaint2DDrawLine(paint2D, (XrgPaint2DLine3D *) line);
+        XrgAddVector(line.end, line.start, diff);
+        XrgPaint2DColor(paint2D, &pEff->texLineModelColor);
+        XrgPaint2DDrawLine(paint2D, &line);
     }
 }

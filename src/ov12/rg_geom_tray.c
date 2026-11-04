@@ -3,61 +3,45 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_geom_tray.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_tray.h"
+#include "ov12/rg_heap.h"
 #include "ov12/xrg_rand_int.h"
 
-extern const char D_00A55218[];
-extern const char D_00A55228[];
+/* Defined at the end of this file. */
+extern const char geomTrayAssertTrayNotNil[];
+extern const char geomTraySourcePath[];
+extern const char geomTrayAssertCheckNotNil[];
+extern const char geomTrayAssertResultNotNil[];
 
-#define RgGeomLocalMatricesAt(geom) \
-    ((RgGeomLocalMatrices *)((unsigned char *)(geom) + 0x20))
-#define RgGeomLocalMatricesConstAt(geom) \
-    ((const RgGeomLocalMatrices *)((const unsigned char *)(geom) + 0x20))
+/* Clip-direction bits of _CalcIntersect: which tray bound already produced a
+ * contact on that axis. */
+#define RG_GEOM_TRAY_HIT_Z_LOW 0x1
+#define RG_GEOM_TRAY_HIT_Z_HIGH 0x2
+#define RG_GEOM_TRAY_HIT_X_LOW 0x4
+#define RG_GEOM_TRAY_HIT_X_HIGH 0x8
+#define RG_GEOM_TRAY_HIT_FLOOR 0x10
 
-/*
- * assert_prog: shared assertion helper, still assembly; this TU's own
- * RgGeomTraySetSize below declares it the same way.
- */
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-/*
- * RgGeomInit / RgGeomSetType: original functions of the base geometry TU
- * (rg_geom.c, ov12/tu051), already recovered as C. Declared TU-locally, as
- * src/ov12/rg_geom_pillar.c also does, until that TU's own header is
- * published.
- */
-extern void RgGeomInit(RgGeom *pGeom);
-extern void RgGeomSetType(RgGeom *pGeom, int type);
-/*
- * XrgUnitMatrix: original function of the polygon-geometry TU
- * (rg_geom_poly.c, ov12/tu055), still assembly there. Declared TU-locally,
- * as that TU also does, until it is recovered.
- */
-extern void XrgUnitMatrix(RgMatrix destination);
+/* Movement along an axis below this threshold does not cross the bound. */
+#define RG_GEOM_TRAY_MOVE_EPSILON 0.001f
 
-/*
- * The type tag _InitRgGeomTray passes to RgGeomSetType; src/ov12/rg_geom_pillar.c's
- * RG_GEOM_TYPE_PILLAR (5) is the next value of the same sequence.
- */
-#define RG_GEOM_TYPE_TRAY 4
-
-extern void XrgSubVectorXYZ(RgVector destination, RgVector first,
-                            RgVector second);
-extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
+/* Default width and height of a new tray. */
+#define RG_GEOM_TRAY_DEFAULT_SIZE 100.0f
 
 static void _InitRgGeomTray(RgGeom *geom)
 {
     RgGeomTray *tray = (RgGeomTray *)geom;
 
     if (geom == 0) {
-        assert_prog(D_00A55218, D_00A55228, 19);
+        assert_prog(geomTrayAssertTrayNotNil, geomTraySourcePath, 19);
     }
     RgGeomInit(geom);
     RgGeomSetType(geom, RG_GEOM_TYPE_TRAY);
-    tray->width = 100.0f;
-    tray->height = 100.0f;
+    tray->width = RG_GEOM_TRAY_DEFAULT_SIZE;
+    tray->height = RG_GEOM_TRAY_DEFAULT_SIZE;
     XrgUnitMatrix(tray->local);
-    XrgUnitMatrix(tray->inverse_local);
+    XrgUnitMatrix(tray->inverseLocal);
 }
 
 void InitRgGeomTray(RgGeom *geom)
@@ -65,18 +49,14 @@ void InitRgGeomTray(RgGeom *geom)
     _InitRgGeomTray(geom);
 }
 
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(void *heap, unsigned int size,
-                         const char *source_file, int line);
-
 RgGeom *CreateRgGeomTray(void)
 {
     RgGeomTray *tray;
 
     tray = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomTray),
-                       D_00A55228, 37);
-    _InitRgGeomTray((RgGeom *)tray);
-    return (RgGeom *)tray;
+                       geomTraySourcePath, 37);
+    _InitRgGeomTray(&tray->geom);
+    return &tray->geom;
 }
 
 void RgGeomTraySetSize(void *tray, float width, float height)
@@ -84,7 +64,7 @@ void RgGeomTraySetSize(void *tray, float width, float height)
     RgGeomTray *pTray = tray;
 
     if (pTray == 0) {
-        assert_prog(D_00A55218, D_00A55228, 48);
+        assert_prog(geomTrayAssertTrayNotNil, geomTraySourcePath, 48);
     }
     if (width <= 0.0f) {
         width = 0.0f;
@@ -96,21 +76,19 @@ void RgGeomTraySetSize(void *tray, float width, float height)
     pTray->height = height;
 }
 
-/*
- * The tray stores its local and inverse-local four-by-four matrices at byte
- * offsets 0x20 and 0x60.  The preceding geometry header is intentionally not
- * modelled here: these two routines only address the two evidenced matrix
- * objects and pass them to the established matrix helpers.
- */
-void RgGeomTraySetLocal(void *tray, Matrix4 source)
+void RgGeomTraySetLocal(void *tray, RgMatrix source)
 {
-    XrgCopyMatrix((float *)((char *)tray + 0x20), (const float *)source);
-    XrgInvMatrix((float *)((char *)tray + 0x60), (const float *)source);
+    RgGeomTray *pTray = tray;
+
+    XrgCopyMatrix(pTray->local, source);
+    XrgInvMatrix(pTray->inverseLocal, source);
 }
 
-void RgGeomTrayGetLocal(void *tray, Matrix4 destination)
+void RgGeomTrayGetLocal(void *tray, RgMatrix destination)
 {
-    XrgCopyMatrix((float *)destination, (const float *)((char *)tray + 0x20));
+    RgGeomTray *pTray = tray;
+
+    XrgCopyMatrix(destination, pTray->local);
 }
 
 /*
@@ -149,7 +127,7 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         : : "r"(last_contact), "r"(current_position) : "memory");
 
     XrgSubVectorXYZ(&movement.x, current_position, start_position);
-    if (movement.z < -0.001f) {
+    if (movement.z < -RG_GEOM_TRAY_MOVE_EPSILON) {
         boundary = radius - height;
         time = (boundary - start_position[2]) / movement.z;
         if (time >= 0.0f && time <= 1.0f) {
@@ -159,11 +137,11 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
             last_contact[2] = start_position[2] + time * movement.z;
             XrgSetVectorXYZ(normals[hit_count], 0.0f, 0.0f, 1.0f);
             hit_count++;
-            hit_axes |= 1;
+            hit_axes |= RG_GEOM_TRAY_HIT_Z_LOW;
+        }
     }
-}
 
-    if ((hit_axes & 1) == 0 && current_position[2] < radius - height) {
+    if ((hit_axes & RG_GEOM_TRAY_HIT_Z_LOW) == 0 && current_position[2] < radius - height) {
         current_position[2] = radius - height;
         __asm__ __volatile__(
             "lqc2 vf31, 0(%1)\n\t"
@@ -172,11 +150,11 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         last_contact[2] -= radius;
         XrgSetVectorXYZ(normals[hit_count], 0.0f, 0.0f, 1.0f);
         hit_count++;
-        hit_axes |= 1;
+        hit_axes |= RG_GEOM_TRAY_HIT_Z_LOW;
     }
 
     XrgSubVectorXYZ(&movement.x, current_position, start_position);
-    if (movement.z > 0.001f) {
+    if (movement.z > RG_GEOM_TRAY_MOVE_EPSILON) {
         boundary = height - radius;
         time = (boundary - start_position[2]) / movement.z;
         if (time >= 0.0f && time <= 1.0f) {
@@ -186,10 +164,10 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
             last_contact[2] = start_position[2] + time * movement.z;
             XrgSetVectorXYZ(normals[hit_count], 0.0f, 0.0f, -1.0f);
             hit_count++;
-            hit_axes |= 2;
+            hit_axes |= RG_GEOM_TRAY_HIT_Z_HIGH;
         }
     }
-    if ((hit_axes & 2) == 0 && current_position[2] > height - radius) {
+    if ((hit_axes & RG_GEOM_TRAY_HIT_Z_HIGH) == 0 && current_position[2] > height - radius) {
         current_position[2] = height - radius;
         __asm__ __volatile__(
             "lqc2 vf31, 0(%1)\n\t"
@@ -198,11 +176,11 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         last_contact[2] += radius;
         XrgSetVectorXYZ(normals[hit_count], 0.0f, 0.0f, -1.0f);
         hit_count++;
-        hit_axes |= 2;
+        hit_axes |= RG_GEOM_TRAY_HIT_Z_HIGH;
     }
 
     XrgSubVectorXYZ(&movement.x, current_position, start_position);
-    if (movement.x < -0.001f) {
+    if (movement.x < -RG_GEOM_TRAY_MOVE_EPSILON) {
         left_boundary = radius - width;
         time = (left_boundary - start_position[0]) / movement.x;
         if (time >= 0.0f && time <= 1.0f) {
@@ -212,10 +190,10 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
             last_contact[2] = start_position[2] + time * movement.z;
             XrgSetVectorXYZ(normals[hit_count], 1.0f, 0.0f, 0.0f);
             hit_count++;
-            hit_axes |= 4;
+            hit_axes |= RG_GEOM_TRAY_HIT_X_LOW;
         }
     }
-    if ((hit_axes & 4) == 0 && current_position[0] < radius - width) {
+    if ((hit_axes & RG_GEOM_TRAY_HIT_X_LOW) == 0 && current_position[0] < radius - width) {
         current_position[0] = radius - width;
         __asm__ __volatile__(
             "lqc2 vf31, 0(%1)\n\t"
@@ -224,11 +202,11 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         last_contact[0] -= radius;
         XrgSetVectorXYZ(normals[hit_count], 1.0f, 0.0f, 0.0f);
         hit_count++;
-        hit_axes |= 4;
+        hit_axes |= RG_GEOM_TRAY_HIT_X_LOW;
     }
 
     XrgSubVectorXYZ(&movement.x, current_position, start_position);
-    if (movement.x > 0.001f) {
+    if (movement.x > RG_GEOM_TRAY_MOVE_EPSILON) {
         right_boundary = width - radius;
         time = (right_boundary - start_position[0]) / movement.x;
         if (time >= 0.0f && time <= 1.0f) {
@@ -238,10 +216,10 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
             last_contact[2] = start_position[2] + time * movement.z;
             XrgSetVectorXYZ(normals[hit_count], -1.0f, 0.0f, 0.0f);
             hit_count++;
-            hit_axes |= 8;
+            hit_axes |= RG_GEOM_TRAY_HIT_X_HIGH;
         }
     }
-    if ((hit_axes & 8) == 0 && current_position[0] > width - radius) {
+    if ((hit_axes & RG_GEOM_TRAY_HIT_X_HIGH) == 0 && current_position[0] > width - radius) {
         current_position[0] = width - radius;
         __asm__ __volatile__(
             "lqc2 vf31, 0(%1)\n\t"
@@ -250,10 +228,10 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         last_contact[0] += radius;
         XrgSetVectorXYZ(normals[hit_count], -1.0f, 0.0f, 0.0f);
         hit_count++;
-        hit_axes |= 8;
+        hit_axes |= RG_GEOM_TRAY_HIT_X_HIGH;
     }
 
-    if ((hit_axes & 0x10) == 0 && current_position[1] < radius) {
+    if ((hit_axes & RG_GEOM_TRAY_HIT_FLOOR) == 0 && current_position[1] < radius) {
         current_position[1] = radius;
         __asm__ __volatile__(
             "lqc2 vf31, 0(%1)\n\t"
@@ -271,9 +249,6 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
     return hit_count;
 }
 
-extern const char D_00A55240[];
-extern const char D_00A55250[];
-
 /*
  * Sweeps the ball from its previous position to its current one through the
  * tray.  Both path endpoints are taken into the tray's local space with the
@@ -282,7 +257,7 @@ extern const char D_00A55250[];
  * world space with the local matrix.  Returns non-zero when the ball touched
  * the tray.
  */
-int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
+int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBall *ball,
                         RgGeomTrayContact *contact)
 {
     RgVector clipped_position;
@@ -293,23 +268,23 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
     unsigned int i;
 
     if (tray == 0) {
-        assert_prog(D_00A55218, D_00A55228, 226);
+        assert_prog(geomTrayAssertTrayNotNil, geomTraySourcePath, 226);
     }
     if (ball == 0) {
-        assert_prog(D_00A55240, D_00A55228, 227);
+        assert_prog(geomTrayAssertCheckNotNil, geomTraySourcePath, 227);
     }
     if (contact == 0) {
-        assert_prog(D_00A55250, D_00A55228, 228);
+        assert_prog(geomTrayAssertResultNotNil, geomTraySourcePath, 228);
     }
 
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
-        : : "r"(start_position), "r"(ball->old_position) : "memory");
+        : : "r"(start_position), "r"(ball->point.oldPosition) : "memory");
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
-        : : "r"(end_position), "r"(ball->position) : "memory");
+        : : "r"(end_position), "r"(ball->point.position) : "memory");
 
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%0)\n\t"
@@ -322,7 +297,7 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(start_position), "r"(tray->inverse_local) : "memory");
+        : : "r"(start_position), "r"(tray->inverseLocal) : "memory");
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%0)\n\t"
         "lqc2 $vf3, 0(%1)\n\t"
@@ -334,7 +309,7 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(end_position), "r"(tray->inverse_local) : "memory");
+        : : "r"(end_position), "r"(tray->inverseLocal) : "memory");
 
     contact->hit_count = _CalcIntersect(clipped_position, last_contact,
                                         start_position, end_position,
@@ -388,6 +363,6 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBallBody *ball,
     return contact->hit_count != 0;
 }
 
-const char D_00A55218[16] = "pTray != NIL";
+const char geomTrayAssertTrayNotNil[16] = "pTray != NIL";
 
-const char D_00A55228[24] = "../rg_geom_tray.euc.c";
+const char geomTraySourcePath[24] = "../rg_geom_tray.euc.c";

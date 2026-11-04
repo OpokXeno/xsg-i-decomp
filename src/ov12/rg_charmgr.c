@@ -3,85 +3,23 @@
  */
 #include "common.h"
 #include "shared.h"
-#define _DestructCharMgr RgCharMgrHeaderDestructDecl
-#include "rg_charmgr.h"
-#undef _DestructCharMgr
-
-/*
- * RgChar is defined in src/ov12/rg_char.h (another translation unit). The
- * functions this file recovers only pass RgChar pointers through, so the
- * tag is forward-declared here without repeating that TU's member layout.
- */
-typedef struct RgChar RgChar;
-
-/*
- * RgCharMgrFree clears the owning-manager field ov12/tu002's own
- * include/ov12/rg_char.h already declares (RgChar::mgr, +0x18), so that
- * TU's header is included here instead of restating the layout.
- */
+#include "ov12/assert_prog.h"
 #include "ov12/rg_char.h"
-
-/*
- * RgSingletonIDGet/RgSingletonIDEntry are defined and declared by their own
- * owning TU (include/ov12/rg_singleton_id.h); InstanceOfRgCharMgr uses the
- * registry to keep one lazily-allocated RgCharMgr singleton.
- */
+#include "ov12/rg_charmgr.h"
+#include "ov12/rg_heap.h"
 #include "ov12/rg_singleton_id.h"
+#include "ov12/xrg_v_log.h"
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (config/tu/ov12/tu021.json data_ownership window
- * 0x00a53085..0x00a531f0, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a530b8 contains the source filename "../rg_charmgr.euc.c".
- * ov12:0x00a53108 contains the assertion expression "pChar != NIL".
- * ov12:0x00a53138 contains the assertion expression "pMgr != NIL".
- */
 
-/*
- * Same window: ov12:0x00a53118 contains the assertion expression
- * "pMgr != NIL && pChar != NIL", RgCharMgrFree's own guard.
- */
-
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-extern RgHeap *InstanceOfRgHeap(void);
-extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
-                         const char *source_file, int line);
-extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
-                       int line);
-
+static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar);
 static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
                               RgChar *pChar);
 static unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
                                RgChar *pChar);
-/*
- * RgCharFree is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
- * src/ov12/rg_shot.c already redeclares it the same way to call it from a
- * different TU, so this follows that precedent instead of including that
- * TU's own src header.
- */
-extern void RgCharFree(RgChar *pChar);
 static void _RgCharMgrCallControl(RgCharMgr *manager);
 static void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime);
 static void _RgCharMgrCallDisp(RgCharMgr *manager);
-
-/*
- * The observed access view: up to 256 registered character pointers at
- * +0x000 and how many of them are in use at +0x400 (InstanceOfRgCharMgr
- * allocates exactly 0x404 bytes for it). This TU's own unrecovered
- * _RgCharMgrCallControl, _DestructCharMgr and RgCharMgrGC all read count at
- * +0x400 and index chars[0..count) with sltu-bounded loops; _EntryPtr and
- * _DeletePtr (also unrecovered) take and return the updated count.
- */
-struct RgCharMgr {
-    RgChar *chars[256]; /* +0x000 */
-    unsigned int count; /* +0x400 */
-};
-
-extern int RgCharGetType(RgChar *pChar);
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
-void InitRgCharMgr(RgCharMgr *manager);
+static void _DestructCharMgr(RgCharMgr *manager);
 
 static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar)
 {
@@ -95,8 +33,6 @@ static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar)
     return -1;
 }
 
-static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar);
-
 static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
                               RgChar *pChar)
 {
@@ -105,7 +41,7 @@ static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
     if (_FindPtr(manager->chars, count, pChar) >= 0) {
         assert_prog("_FindPtr(apPtrTbl, nTblSize, pEntry) < 0", "../rg_charmgr.euc.c", 32);
     }
-    if (count >= 0x100) {
+    if (count >= RG_CHAR_MAX) {
         assert_prog("nTblSize < RG_CHAR_MAX", "../rg_charmgr.euc.c", 33);
     }
     if (pChar == 0) {
@@ -178,7 +114,7 @@ int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
     if (manager == 0) {
         assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 93);
     }
-    if (manager->count + count < 0x100) {
+    if (manager->count + count < RG_CHAR_MAX) {
         return 0;
     }
     return 1;
@@ -186,7 +122,7 @@ int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
 
 void RgCharMgrGC(RgCharMgr *manager)
 {
-    RgChar *deleted_chars[256];
+    RgChar *deleted_chars[RG_CHAR_MAX];
     int deleted_count;
     int index;
 
@@ -195,7 +131,7 @@ void RgCharMgrGC(RgCharMgr *manager)
     }
     deleted_count = 0;
     for (index = 0; index < manager->count; index++) {
-        if (manager->chars[index]->type == -1) {
+        if (manager->chars[index]->type == RG_CHAR_TYPE_DELETED) {
             deleted_chars[deleted_count] = manager->chars[index];
             deleted_count++;
         }
@@ -205,12 +141,9 @@ void RgCharMgrGC(RgCharMgr *manager)
     }
 }
 
-/* RgCharControl follows its owning ov12/tu002 declaration (src/ov12/rg_char.h). */
-extern void RgCharControl(RgChar *pChar);
-
 void _RgCharMgrCallControl(RgCharMgr *manager)
 {
-    RgChar *chars[256];
+    RgChar *chars[RG_CHAR_MAX];
     unsigned int count;
     unsigned int i;
 
@@ -226,12 +159,9 @@ void _RgCharMgrCallControl(RgCharMgr *manager)
     }
 }
 
-/* RgCharDisp follows its owning ov12/tu002 declaration (src/ov12/rg_char.h). */
-extern void RgCharDisp(RgChar *pChar);
-
 void _RgCharMgrCallDisp(RgCharMgr *manager)
 {
-    RgChar *chars[256];
+    RgChar *chars[RG_CHAR_MAX];
     unsigned int count;
     unsigned int i;
 
@@ -247,12 +177,9 @@ void _RgCharMgrCallDisp(RgCharMgr *manager)
     }
 }
 
-/* RgCharPassTime follows its owning ov12/tu002 declaration (src/ov12/rg_char.h). */
-extern void RgCharPassTime(RgChar *pChar, float deltaTime);
-
 void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime)
 {
-    RgChar *chars[256];
+    RgChar *chars[RG_CHAR_MAX];
     unsigned int count;
     unsigned int i;
 
@@ -285,7 +212,7 @@ void RgCharMgrDisp(RgCharMgr *manager)
 
 static void _DestructCharMgr(RgCharMgr *manager)
 {
-    RgChar *characters[256];
+    RgChar *characters[RG_CHAR_MAX];
     unsigned int count;
     unsigned int index;
 
@@ -303,7 +230,7 @@ static void _DestructCharMgr(RgCharMgr *manager)
     InitRgCharMgr(manager);
 }
 
-static void _DisposeCharMgr(RgCharMgr *manager)
+static void _DisposeCharMgr(void *manager)
 {
     _DestructCharMgr(manager);
     RgHeapFree(InstanceOfRgHeap(), manager, "../rg_charmgr.euc.c", 246);
@@ -321,12 +248,11 @@ RgCharMgr *InstanceOfRgCharMgr(void)
 {
     RgCharMgr *manager;
 
-    manager = RgSingletonIDGet(0);
+    manager = RgSingletonIDGet(RG_SINGLETON_CHAR_MANAGER);
     if (manager == 0) {
-        manager = RgHeapAlloc(InstanceOfRgHeap(), 0x404, "../rg_charmgr.euc.c", 277);
+        manager = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgCharMgr), "../rg_charmgr.euc.c", 277);
         InitRgCharMgr(manager);
-        RgSingletonIDEntry(0, (RgSimpleDB *) manager,
-                           (void (*)(RgSimpleDB *)) _DisposeCharMgr);
+        RgSingletonIDEntry(RG_SINGLETON_CHAR_MANAGER, manager, _DisposeCharMgr);
     }
     return manager;
 }

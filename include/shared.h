@@ -450,6 +450,7 @@ struct ObjectTask {
 /* Only an opaque handle crosses this bounded source slice. */
 typedef struct RgSimpleDB RgSimpleDB;
 
+typedef struct RgChar RgChar;
 typedef struct RgCharMgr RgCharMgr;
 
 struct stat;
@@ -519,6 +520,18 @@ typedef struct RgGeomPoint RgGeomPoint;
 
 typedef float RgVector[4];
 
+/*
+ * The vertex color XrgPaint2DColor copies into a 2D paint request as one
+ * quadword (the default is 0x7F in all four channels); RgFontColor is this
+ * type. Integer components, never floats.
+ */
+typedef struct XrgPaint2DRGBA {
+    int r;
+    int g;
+    int b;
+    int a;
+} XrgPaint2DRGBA;
+
 typedef struct RgStatus RgStatus;
 
 extern int WakeupThread(int thread_id);
@@ -527,6 +540,22 @@ extern void sceVif1PkRef(XglPacket *packet, const void *environment,
                          int count, int mode, int offset, int flags);
 
 extern char *strcat(char *destination, const char *source);
+
+/* A 128-bit quadword (one lq/sq), as the VIF1 packet writers take it. */
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
+extern void sceVif1PkInit(XglPacket *packet, unsigned int base);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAlign(XglPacket *packet, int align, int size);
+extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
+extern int sceVif1PkSize(XglPacket *packet);
+extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkOpenGifTag(XglPacket *packet, Quadword tag);
+extern void sceVif1PkCloseGifTag(XglPacket *packet);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void sceVif1PkAddGsAD(XglPacket *packet, int reg, u64 value);
+extern void sceVif1PkAddGsPacked(XglPacket *packet, Quadword value);
 
 extern int sprintf(char *destination, const char *format, ...);
 
@@ -547,6 +576,21 @@ extern float defaultOffset[];
 extern float sinf(float angle);
 
 extern void *memset(void *destination, int value, unsigned int count);
+
+extern void *memcpy(void *destination, const void *source, unsigned int count);
+extern unsigned int strlen(const char *string);
+extern char *strcpy(char *destination, const char *source);
+extern char *strncpy(char *destination, const char *source, unsigned int count);
+extern int strcmp(const char *left, const char *right);
+extern int strncmp(const char *left, const char *right, unsigned int count);
+extern int strcasecmp(const char *left, const char *right);
+extern int atoi(const char *string);
+extern double atof(const char *string);
+extern int rand(void);
+extern float cosf(float angle);
+extern float atan2f(float y, float x);
+extern float floorf(float value);
+extern double atan2(double y, double x);
 
 extern void XrgInvMatrix(RgMatrix destination, const RgMatrix source);
 

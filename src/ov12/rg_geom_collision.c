@@ -3,37 +3,25 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_colidata.h"
+#include "ov12/rg_geom.h"
+#include "ov12/rg_geom_ball.h"
+#include "ov12/rg_geom_collision.h"
+#include "ov12/rg_geom_pillar.h"
+#include "ov12/rg_geom_point.h"
+#include "ov12/rg_geom_poly.h"
+#include "ov12/rg_geom_tray.h"
 #include "ov12/xrg_rand_int.h"
 
-/* Referenced original data recovered from this translation unit. */
-const char D_00A552F8[32] = "../rg_geom_collision.euc.c";
+/* Defined here: this TU's own .rodata. */
+const char geomCollisionSourcePath[32] = "../rg_geom_collision.euc.c";
 
-const char D_00A55328[16] = "pArg != NIL";
+const char geomCollisionAssertArgNotNil[16] = "pArg != NIL";
 
-extern const char D_00A552E8[];
-/* "pRobot1 != NIL" */
-extern const char D_00A55318[];
-/* "pPoly2 != NIL" */
-extern int RgGeomPillarCheckPoint(RgGeom *pillar, RgGeomPoint *point, RgVector contact);
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern void XrgNegateVector(RgVector destination, RgVector source);
-extern int RgGeomPillarCheckBall(RgGeom *pillar, RgGeomPoint *point, RgVector worldResults[3]);
-extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
-extern float XrgInnerVector(RgVector first, RgVector second);
-extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
-extern int RgGeomPolyCheckBall(RgGeom *poly, float *position, float *results);
-extern void assert_prog(const char *expression, const char *source_file, int line);
-extern void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination, const char *source_file, int source_line);
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern float RgGeomBallGetRadius(RgGeomPoint *ball);
-extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
-
-/*
- * A pairwise collision-response callback, stored by RgGeomColiArg's own
- * words (data[1]/data[3] above): called with the OTHER side's object
- * pointer and the contact point _BallVsPillar computes.
- */
-typedef void (*RgGeomColiCallback)(void *object, RgVector contact);
+/* Declared here: defined elsewhere in the original image. */
+extern const char geomCollisionAssertRobot1NotNil[]; /* "pRobot1 != NIL" */
+extern const char geomCollisionAssertPoly2NotNil[]; /* "pPoly2 != NIL" */
 
 /*
  * A hit-normal scratch record _BallVsPillar builds beside the contact point:
@@ -48,35 +36,17 @@ typedef struct {
     unsigned char unmodeled_14[0xC];
 } RgGeomColiHit;
 
-/*
- * The ball-pair contact record the ball checks fill: the two contact points
- * at +0x00 and +0x10, the separating direction at +0x20 and the distance at
- * +0x30. Only the members _BallVsBall reads are named.
- */
-typedef struct RgGeomBallCheck {
-    RgVector position1;
-    RgVector position2;
-    RgVector penetration;
-    float distance;
-} RgGeomBallCheck;
+/* The pair-dispatch table, scaffold data at 0x00a50090: handlers for the
+ * [typeA][typeB] geometry pairs. */
+typedef int (*RgGeomCollisionHandler)(RgGeomCollisionPair *pPair);
+extern RgGeomCollisionHandler s_apJobFuncTbl[RG_GEOM_TYPE_COUNT][RG_GEOM_TYPE_COUNT];
 
-/* A ball's status word, which sits at +0x08 of its RgGeom body. */
-typedef struct RgGeomBallHead {
-    unsigned char unmodeled_00[8];
-    unsigned int status;
-} RgGeomBallHead;
-
-extern int RgGeomGetType(RgGeom *pGeom);
-extern float RgGeomPointGetWeight(RgGeomPoint *point);
-extern int RgGeomBallCheckBall(RgGeom *ball1, RgGeom *ball2, RgGeomBallCheck *contact);
-extern int RgGeomBallCheckBallDist(RgGeom *ball1, RgGeom *ball2, RgGeomBallCheck *contact);
-
-static int _BallVsBall(unsigned int *pArg)
+static int _BallVsBall(RgGeomCollisionPair *pArg)
 {
     int result;
-    RgGeomPoint *ball1;
-    RgGeomPoint *ball2;
-    RgGeomBallCheck check;
+    RgGeomBall *ball1;
+    RgGeomBall *ball2;
+    RgGeomBallContact check;
     RgVector shift;
     RgVector newPosition;
     RgVector contact;
@@ -89,31 +59,31 @@ static int _BallVsBall(unsigned int *pArg)
     unsigned int bothStatus;
     unsigned int ball2Status;
 
-    ball1 = (RgGeomPoint *) pArg[0];
-    ball2 = (RgGeomPoint *) pArg[2];
-    type1 = RgGeomGetType((RgGeom *) ball1);
-    type2 = RgGeomGetType((RgGeom *) ball2);
-    if (type1 == 2 && type2 == type1) {
-        result = RgGeomBallCheckBallDist((RgGeom *) ball1, (RgGeom *) ball2, &check);
-    } else if (type1 != type2 && (type1 == 2 || type2 == 2)) {
-        result = RgGeomBallCheckBall((RgGeom *) ball1, (RgGeom *) ball2, &check);
+    ball1 = (RgGeomBall *) pArg->pGeom1;
+    ball2 = (RgGeomBall *) pArg->pGeom2;
+    type1 = RgGeomGetType(&ball1->point.geom);
+    type2 = RgGeomGetType(&ball2->point.geom);
+    if (type1 == RG_GEOM_TYPE_ROBOT && type2 == type1) {
+        result = RgGeomBallCheckBallDist(ball1, ball2, &check);
+    } else if (type1 != type2 && (type1 == RG_GEOM_TYPE_ROBOT || type2 == RG_GEOM_TYPE_ROBOT)) {
+        result = RgGeomBallCheckBall(ball1, ball2, &check);
     } else {
-        result = RgGeomBallCheckBallDist((RgGeom *) ball1, (RgGeom *) ball2, &check);
+        result = RgGeomBallCheckBallDist(ball1, ball2, &check);
     }
     if (result != 0) {
-        ball2Status = ((RgGeomBallHead *) ball2)->status;
-        bothStatus = ((RgGeomBallHead *) ball1)->status & ball2Status;
-        weight1 = RgGeomPointGetWeight(ball1);
-        bothStatus &= 0x10;
-        weight2 = RgGeomPointGetWeight(ball2);
+        ball2Status = ball2->point.geom.status;
+        bothStatus = ball1->point.geom.status & ball2Status;
+        weight1 = RgGeomPointGetWeight(&ball1->point);
+        bothStatus &= RG_GEOM_STATUS_PUSH_OUT;
+        weight2 = RgGeomPointGetWeight(&ball2->point);
         if (bothStatus != 0) {
             totalWeight = weight1 + weight2;
             XrgScaleVector(shift, check.penetration, weight2 / totalWeight);
             XrgAddVector(newPosition, check.position1, shift);
-            RgGeomPointSetPos(ball1, newPosition);
+            RgGeomPointSetPos(&ball1->point, newPosition);
             XrgScaleVector(shift, check.penetration, weight1 / totalWeight);
             XrgSubVector(newPosition, check.position2, shift);
-            RgGeomPointSetPos(ball2, newPosition);
+            RgGeomPointSetPos(&ball2->point, newPosition);
         }
         __asm__ __volatile__(
             "lqc2 vf30, 0(%0)\n\t"
@@ -126,63 +96,36 @@ static int _BallVsBall(unsigned int *pArg)
         contact[2] *= 0.5f;
         contact[3] *= 0.5f;
         XrgCopyVector(hit.normal, check.penetration);
-        if (pArg[1] != 0) {
+        if (pArg->callback1 != 0) {
             hit.otherObject = ball2;
-            ((RgGeomColiCallback) pArg[1])(ball1, contact);
+            pArg->callback1(ball1, contact);
         }
-        if (pArg[3] != 0) {
+        if (pArg->callback2 != 0) {
             XrgNegateVector(hit.normal, hit.normal);
             hit.otherObject = ball1;
-            ((RgGeomColiCallback) pArg[3])(ball2, contact);
+            pArg->callback2(ball2, contact);
         }
         return 1;
     }
     return 0;
 }
 
-extern int RgGeomTrayCheckBall(RgGeom *tray, RgGeomPoint *point, RgVector contact);
-extern int RgGeomPolyCheckRay(RgGeom *poly, RgVector ray[2], RgVector rayHit[2]);
-
-/*
- * The ball's motion record as _BallVsPoly reads it: the current position at
- * +0x20 and the old position at +0x30; the movement ray runs from the old
- * position to the current one.
- */
-typedef struct RgGeomPointMotion {
-    unsigned char unmodeled_00[0x20];
-    RgVector position;
-    RgVector oldPosition;
-} RgGeomPointMotion;
-
-/*
- * The polygon's local transform as RgGeomPolySetLocal stores it: a 4x4
- * matrix at +0x60.
- */
-typedef struct RgGeomPolyTransform {
-    unsigned char unmodeled_00[0x60];
-    RgMatrix local;
-} RgGeomPolyTransform;
-
-static int _BallVsBall(unsigned int *pArg);
-
-static int _BallVsPoly(unsigned int *pArg)
+static int _BallVsPoly(RgGeomCollisionPair *pArg)
 {
-    RgGeomPoint *ball;
-    RgGeom *poly;
-    RgGeomPointMotion *motion;
-    RgVector ray[2];
-    RgVector rayHit[2];
+    RgGeomBall *ball;
+    RgGeomPoly *poly;
+    RgColiSegment ray;
+    RgColiSegmentHit rayHit;
     RgVector localOldPosition;
     RgVector localPosition;
     RgVector contact;
     float *contactPtr;
     RgGeomColiHit hit;
 
-    ball = (RgGeomPoint *) pArg[0];
-    poly = (RgGeom *) pArg[2];
-    motion = (RgGeomPointMotion *) ball;
-    __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(localPosition), "r"(motion->position) : "memory");
-    __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%2)" : : "r"(localOldPosition), "r"(motion->oldPosition), "r"(localOldPosition) : "memory");
+    ball = (RgGeomBall *) pArg->pGeom1;
+    poly = (RgGeomPoly *) pArg->pGeom2;
+    __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(localPosition), "r"(ball->point.position) : "memory");
+    __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%2)" : : "r"(localOldPosition), "r"(ball->point.oldPosition), "r"(localOldPosition) : "memory");
     localPosition[3] = 1.0f;
     localOldPosition[3] = 1.0f;
     __asm__ __volatile__(
@@ -196,7 +139,7 @@ static int _BallVsPoly(unsigned int *pArg)
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(localPosition), "r"(((RgGeomPolyTransform *) poly)->local) : "memory");
+        : : "r"(localPosition), "r"(poly->inverseLocal) : "memory");
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%0)\n\t"
         "lqc2 $vf3, 0(%1)\n\t"
@@ -208,246 +151,200 @@ static int _BallVsPoly(unsigned int *pArg)
         "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
         "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
         "sqc2 $vf2, 0(%0)\n\t"
-        : : "r"(localOldPosition), "r"(((RgGeomPolyTransform *) poly)->local) : "memory");
-    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(motion->oldPosition) : "memory");
-    __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(ray[0]) : "memory");
+        : : "r"(localOldPosition), "r"(poly->inverseLocal) : "memory");
+    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(ball->point.oldPosition) : "memory");
+    __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(ray.m_start) : "memory");
     __asm__ __volatile__(
         "lqc2 vf30, 0(%0)\n"
         "lqc2 vf31, 0(%1)\n"
         "vsub.xyzw vf30, vf30, vf31\n"
         "sqc2 vf30, 0(%2)\n"
-        : : "r"(motion->position), "r"(motion->oldPosition), "r"(ray[1]) : "memory");
-    if (RgGeomPolyCheckRay(poly, ray, rayHit) == 0) {
+        : : "r"(ball->point.position), "r"(ball->point.oldPosition), "r"(ray.m_vector) : "memory");
+    if (RgGeomPolyCheckRay(&poly->geom, &ray, &rayHit) == 0) {
         return 0;
     }
-    contact[0] = ray[1][0] * rayHit[1][0];
-    contact[1] = ray[1][1] * rayHit[1][0];
-    contact[2] = ray[1][2] * rayHit[1][0];
-    contact[3] = ray[1][3] * rayHit[1][0];
+    contact[0] = ray.m_vector[0] * rayHit.m_fraction;
+    contact[1] = ray.m_vector[1] * rayHit.m_fraction;
+    contact[2] = ray.m_vector[2] * rayHit.m_fraction;
+    contact[3] = ray.m_vector[3] * rayHit.m_fraction;
     contactPtr = contact;
     __asm__ __volatile__("lqc2 vf30, 0(%0)" : : "r"(contactPtr) : "memory");
-    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(ray[0]) : "memory");
+    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(ray.m_start) : "memory");
     __asm__ __volatile__("vadd.xyzw vf30, vf30, vf31" : : : "memory");
     __asm__ __volatile__("sqc2 vf30, 0(%0)" : : "r"(contactPtr) : "memory");
-    __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(hit.normal), "r"(rayHit[0]) : "memory");
+    __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(hit.normal), "r"(rayHit.m_plane) : "memory");
     hit.normal[3] = 1.0f;
-    if (pArg[1] != 0) {
+    if (pArg->callback1 != 0) {
         hit.otherObject = poly;
-        ((RgGeomColiCallback) pArg[1])(ball, contactPtr);
+        pArg->callback1(ball, contactPtr);
     }
-    if (pArg[3] != 0) {
+    if (pArg->callback2 != 0) {
         XrgNegateVector(hit.normal, hit.normal);
         hit.otherObject = ball;
-        ((RgGeomColiCallback) pArg[3])(poly, contactPtr);
+        pArg->callback2(poly, contactPtr);
     }
     return 1;
 }
 
-static int _BallVsPoly(unsigned int *pArg);
-
-static void _PolyVsBall(unsigned int *pArg)
+static void _PolyVsBall(RgGeomCollisionPair *pArg)
 {
-    unsigned int reordered[4];
-    unsigned int first;
-    unsigned int second;
-    unsigned int third;
-    unsigned int fourth;
+    RgGeomCollisionPair reordered;
+    RgGeom *geom1;
+    RgGeom *geom2;
+    RgGeomColiCallback callback1;
+    RgGeomColiCallback callback2;
 
-    third = pArg[2];
-    first = pArg[0];
-    fourth = pArg[3];
-    second = pArg[1];
-    reordered[0] = third;
-    reordered[2] = first;
-    reordered[1] = fourth;
-    reordered[3] = second;
-    _BallVsPoly(reordered);
+    geom2 = pArg->pGeom2;
+    geom1 = pArg->pGeom1;
+    callback2 = pArg->callback2;
+    callback1 = pArg->callback1;
+    reordered.pGeom1 = geom2;
+    reordered.pGeom2 = geom1;
+    reordered.callback1 = callback2;
+    reordered.callback2 = callback1;
+    _BallVsPoly(&reordered);
 }
 
-/*
- * The robot's head as _RobVsPillar reads it: the status word at +8 (tested
- * against the 0x10 bit) and the velocity vector at +0x40.
- */
-typedef struct RgGeomRobotHead {
-    unsigned char unmodeled_00[8];
-    unsigned int status;
-    unsigned char unmodeled_0c[0x34];
-    RgVector velocity;
-} RgGeomRobotHead;
-
-static int _RobotVsPoly(unsigned int *pArg)
+static int _RobotVsPoly(RgGeomCollisionPair *pArg)
 {
-    RgGeomPoint *robot;
+    RgGeomRobot *robot;
     RgGeom *poly;
-    struct {
-        RgVector center;
-        float radius;
-    } ball;
-    RgVector results[2];
+    RgColiBall ball;
+    RgColiBallResult results;
     RgVector contact;
     RgGeomColiHit hit;
     RgVector position;
     RgVector normal;
     RgVector offset;
     RgVector velocity;
-    RgGeomRobotHead *head;
     float *contactPtr;
     float dot;
 
-    robot = (RgGeomPoint *) pArg[0];
-    poly = (RgGeom *) pArg[2];
+    robot = (RgGeomRobot *) pArg->pGeom1;
+    poly = pArg->pGeom2;
     if (robot == 0) {
-        assert_prog(D_00A552E8, D_00A552F8, 161);
+        assert_prog(geomCollisionAssertRobot1NotNil, geomCollisionSourcePath, 161);
     }
     if (poly == 0) {
-        assert_prog(D_00A55318, D_00A552F8, 162);
+        assert_prog(geomCollisionAssertPoly2NotNil, geomCollisionSourcePath, 162);
     }
-    __RgGeomPointGetPos(robot, ball.center, D_00A552F8, 164);
-    ball.radius = RgGeomBallGetRadius(robot);
-    if (RgGeomPolyCheckBall(poly, ball.center, results[0]) == 0) {
+    __RgGeomPointGetPos(&robot->ball.point, ball.m_center, geomCollisionSourcePath, 164);
+    ball.m_radius = RgGeomBallGetRadius(&robot->ball);
+    if (RgGeomPolyCheckBall(poly, &ball, &results) == 0) {
         return 0;
     }
     contactPtr = contact;
-    XrgNormalizeVector(hit.normal, results[1]);
-    if (pArg[1] != 0) {
+    XrgNormalizeVector(hit.normal, results.m_correction);
+    if (pArg->callback1 != 0) {
         hit.otherObject = poly;
-        ((RgGeomColiCallback) pArg[1])(robot, contactPtr);
+        pArg->callback1(robot, contactPtr);
     }
-    if (pArg[3] != 0) {
+    if (pArg->callback2 != 0) {
         hit.otherObject = robot;
-        ((RgGeomColiCallback) pArg[3])(poly, contactPtr);
+        pArg->callback2(poly, contactPtr);
     }
-    head = (RgGeomRobotHead *) robot;
-    if ((head->status & 0x10) != 0) {
-        __RgGeomPointGetPos(robot, position, D_00A552F8, 185);
-        __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(offset), "r"(results[1]) : "memory");
+    if ((robot->ball.point.geom.status & RG_GEOM_STATUS_PUSH_OUT) != 0) {
+        __RgGeomPointGetPos(&robot->ball.point, position, geomCollisionSourcePath, 185);
+        __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(offset), "r"(results.m_correction) : "memory");
         XrgAddVector(position, position, offset);
-        RgGeomPointSetPos(robot, position);
+        RgGeomPointSetPos(&robot->ball.point, position);
     }
-    XrgNormalizeVector(normal, results[1]);
-    RgGeomPointGetVel(robot, velocity);
+    XrgNormalizeVector(normal, results.m_correction);
+    RgGeomPointGetVel(&robot->ball.point, velocity);
     dot = XrgInnerVector(normal, velocity);
     XrgScaleVector(position, normal, dot);
-    XrgSubVector(head->velocity, head->velocity, position);
+    XrgSubVector(robot->ball.point.velocity, robot->ball.point.velocity, position);
     return 1;
 }
 
-static int _RobotVsPoly(unsigned int *pArg);
-
-static void _PolyVsRobot(unsigned int *pArg)
+static void _PolyVsRobot(RgGeomCollisionPair *pArg)
 {
-    unsigned int reordered[4];
-    unsigned int first;
-    unsigned int second;
-    unsigned int third;
-    unsigned int fourth;
+    RgGeomCollisionPair reordered;
+    RgGeom *geom1;
+    RgGeom *geom2;
+    RgGeomColiCallback callback1;
+    RgGeomColiCallback callback2;
 
-    third = pArg[2];
-    first = pArg[0];
-    fourth = pArg[3];
-    second = pArg[1];
-    reordered[0] = third;
-    reordered[2] = first;
-    reordered[1] = fourth;
-    reordered[3] = second;
-    _RobotVsPoly(reordered);
+    geom2 = pArg->pGeom2;
+    geom1 = pArg->pGeom1;
+    callback2 = pArg->callback2;
+    callback1 = pArg->callback1;
+    reordered.pGeom1 = geom2;
+    reordered.pGeom2 = geom1;
+    reordered.callback1 = callback2;
+    reordered.callback2 = callback1;
+    _RobotVsPoly(&reordered);
 }
 
-/*
- * The tray check's output record: the contact point written at +0x00, the
- * position at +0x10 (the vector _RobVsTray hands to RgGeomPointSetPos), the
- * three-vector scratch the normal is averaged from at +0x20, and its element
- * count at +0x50.
- */
-typedef struct RgGeomTrayCheck {
-    RgVector contact;
-    RgVector position;
-    RgVector points[3];
-    unsigned int count;
-} RgGeomTrayCheck;
-
-static int _BallVsTray(unsigned int *pArg)
+static int _BallVsTray(RgGeomCollisionPair *pArg)
 {
-    RgGeomTrayCheck check;
+    RgGeomTrayContact check;
     RgVector contact;
     RgGeomColiHit hit;
-    RgGeomPoint *point;
-    RgGeom *tray;
+    RgGeomBall *point;
+    RgGeomTray *tray;
     float *contactPtr;
     RgVector accumulated;
     unsigned int i;
     int result;
 
-    point = (RgGeomPoint *) pArg[0];
-    tray = (RgGeom *) pArg[2];
-    result = RgGeomTrayCheckBall(tray, point, check.contact);
+    point = (RgGeomBall *) pArg->pGeom1;
+    tray = (RgGeomTray *) pArg->pGeom2;
+    result = RgGeomTrayCheckBall(tray, point, &check);
     if (result == 0) {
         return 0;
     }
     contactPtr = contact;
-    __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)" : : "r"(check.contact), "r"(contactPtr) : "memory");
-    if (check.count >= 2) {
+    __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)" : : "r"(check.last_contact), "r"(contactPtr) : "memory");
+    if (check.hit_count >= 2) {
         XrgClearVector(accumulated);
-        for (i = 0; i < check.count; i++) {
+        for (i = 0; i < check.hit_count; i++) {
             __asm__ __volatile__(
                 "lqc2 vf30, 0(%0)\n"
                 "lqc2 vf31, 0(%1)\n"
                 "vadd.xyzw vf30, vf30, vf31\n"
                 "sqc2 vf30, 0(%2)\n"
-                : : "r"(accumulated), "r"(check.points[i]), "r"(accumulated) : "memory");
+                : : "r"(accumulated), "r"(check.normals[i]), "r"(accumulated) : "memory");
         }
         XrgNormalizeVector(hit.normal, accumulated);
     } else {
-        __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(hit.normal), "r"(check.points[0]) : "memory");
+        __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(hit.normal), "r"(check.normals[0]) : "memory");
     }
-    if (pArg[1] != 0) {
+    if (pArg->callback1 != 0) {
         hit.otherObject = tray;
-        ((RgGeomColiCallback) pArg[1])(point, contactPtr);
+        pArg->callback1(point, contactPtr);
     }
-    if (pArg[3] != 0) {
+    if (pArg->callback2 != 0) {
         XrgNegateVector(hit.normal, hit.normal);
         hit.otherObject = point;
-        ((RgGeomColiCallback) pArg[3])(tray, contactPtr);
+        pArg->callback2(tray, contactPtr);
     }
     return 1;
 }
 
-static int _BallVsTray(unsigned int *pArg);
-
-static void _TrayVsBall(void *pArg)
+static void _TrayVsBall(RgGeomCollisionPair *pArg)
 {
-    unsigned int *argWords = pArg;
-    unsigned int reordered[4];
-    unsigned int first;
-    unsigned int second;
-    unsigned int third;
-    unsigned int fourth;
+    RgGeomCollisionPair reordered;
+    RgGeom *geom1;
+    RgGeom *geom2;
+    RgGeomColiCallback callback1;
+    RgGeomColiCallback callback2;
 
-    third = argWords[2];
-    first = argWords[0];
-    fourth = argWords[3];
-    second = argWords[1];
-    reordered[0] = third;
-    reordered[2] = first;
-    reordered[1] = fourth;
-    reordered[3] = second;
-    _BallVsTray(reordered);
+    geom2 = pArg->pGeom2;
+    geom1 = pArg->pGeom1;
+    callback2 = pArg->callback2;
+    callback1 = pArg->callback1;
+    reordered.pGeom1 = geom2;
+    reordered.pGeom2 = geom1;
+    reordered.callback1 = callback2;
+    reordered.callback2 = callback1;
+    _BallVsTray(&reordered);
 }
 
-/*
- * The pairwise collision-check argument this TU's _XxxVsYyy functions use
- * (still INCLUDE_ASM in this allocation, so only InitRgGeomColiArg's own
- * writes are evidenced here: it clears exactly these four words to a common
- * role, so they are modelled as one array rather than four distinct fields).
- */
-typedef struct RgGeomColiArg {
-    unsigned int data[4];
-} RgGeomColiArg;
-
-static int _BallVsPillar(RgGeomColiArg *pArg)
+static int _BallVsPillar(RgGeomCollisionPair *pArg)
 {
-    RgGeomPoint *point;
-    RgGeom *pillar;
+    RgGeomBall *point;
+    RgGeomTray *pillar;
     RgVector contact;
     RgVector hitContact;
     float *hitContactPtr;
@@ -455,21 +352,21 @@ static int _BallVsPillar(RgGeomColiArg *pArg)
     RgGeomColiCallback callback;
     int result;
 
-    point = (RgGeomPoint *) pArg->data[0];
-    pillar = (RgGeom *) pArg->data[2];
+    point = (RgGeomBall *) pArg->pGeom1;
+    pillar = (RgGeomTray *) pArg->pGeom2;
     result = RgGeomPillarCheckPoint(pillar, point, contact);
     hitContactPtr = hitContact;
     if (result != 0) {
         __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(contact) : "memory");
         __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(hitContactPtr) : "memory");
         XrgClearVector(hit.normal);
-        callback = (RgGeomColiCallback) pArg->data[1];
+        callback = pArg->callback1;
         hit.normal[1] = 1.0f;
         if (callback != 0) {
             hit.otherObject = pillar;
             callback(point, hitContactPtr);
         }
-        callback = (RgGeomColiCallback) pArg->data[3];
+        callback = pArg->callback2;
         if (callback != 0) {
             hit.otherObject = point;
             callback(pillar, hitContactPtr);
@@ -479,119 +376,112 @@ static int _BallVsPillar(RgGeomColiArg *pArg)
     return result;
 }
 
-static void _PillarVsBall(RgGeomColiArg *pArg)
+static void _PillarVsBall(RgGeomCollisionPair *pArg)
 {
-    RgGeomColiArg reordered;
-    unsigned int first;
-    unsigned int second;
-    unsigned int third;
-    unsigned int fourth;
+    RgGeomCollisionPair reordered;
+    RgGeom *geom1;
+    RgGeom *geom2;
+    RgGeomColiCallback callback1;
+    RgGeomColiCallback callback2;
 
-    third = pArg->data[2];
-    first = pArg->data[0];
-    fourth = pArg->data[3];
-    second = pArg->data[1];
-    reordered.data[0] = third;
-    reordered.data[2] = first;
-    reordered.data[1] = fourth;
-    reordered.data[3] = second;
+    geom2 = pArg->pGeom2;
+    geom1 = pArg->pGeom1;
+    callback2 = pArg->callback2;
+    callback1 = pArg->callback1;
+    reordered.pGeom1 = geom2;
+    reordered.pGeom2 = geom1;
+    reordered.callback1 = callback2;
+    reordered.callback2 = callback1;
     _BallVsPillar(&reordered);
 }
 
-static int _RobVsTray(RgGeomColiArg *pArg)
+static int _RobVsTray(RgGeomCollisionPair *pArg)
 {
-    RgGeomTrayCheck check;
+    RgGeomTrayContact check;
     RgVector contact;
     RgGeomColiHit hit;
-    RgGeom *tray;
-    RgGeomPoint *robot;
+    RgGeomTray *tray;
+    RgGeomRobot *robot;
     float *contactPtr;
-    RgGeomRobotHead *head;
     RgVector scratch;
     unsigned int i;
     int result;
 
-    robot = (RgGeomPoint *) pArg->data[0];
-    tray = (RgGeom *) pArg->data[2];
-    result = RgGeomTrayCheckBall(tray, robot, check.contact);
+    robot = (RgGeomRobot *) pArg->pGeom1;
+    tray = (RgGeomTray *) pArg->pGeom2;
+    result = RgGeomTrayCheckBall(tray, &robot->ball, &check);
     if (result == 0) {
         return 0;
     }
     contactPtr = contact;
-    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(check.contact) : "memory");
+    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(check.last_contact) : "memory");
     __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(contactPtr) : "memory");
-    if (check.count >= 2) {
+    if (check.hit_count >= 2) {
         XrgClearVector(scratch);
-        for (i = 0; i < check.count; i++) {
+        for (i = 0; i < check.hit_count; i++) {
             __asm__ __volatile__(
                 "lqc2 vf30, 0(%0)\n"
                 "lqc2 vf31, 0(%1)\n"
                 "vadd.xyzw vf30, vf30, vf31\n"
                 "sqc2 vf30, 0(%2)\n"
-                : : "r"(scratch), "r"(check.points[i]), "r"(scratch) : "memory");
+                : : "r"(scratch), "r"(check.normals[i]), "r"(scratch) : "memory");
         }
         XrgNormalizeVector(hit.normal, scratch);
     } else {
-        __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(hit.normal), "r"(check.points[0]) : "memory");
+        __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(hit.normal), "r"(check.normals[0]) : "memory");
     }
-    if (pArg->data[1] != 0) {
+    if (pArg->callback1 != 0) {
         hit.otherObject = tray;
-        ((RgGeomColiCallback) pArg->data[1])(robot, contactPtr);
+        pArg->callback1(robot, contactPtr);
     }
-    if (pArg->data[3] != 0) {
+    if (pArg->callback2 != 0) {
         hit.otherObject = robot;
-        ((RgGeomColiCallback) pArg->data[3])(tray, contactPtr);
+        pArg->callback2(tray, contactPtr);
     }
-    head = (RgGeomRobotHead *) robot;
-    if ((head->status & 0x10) != 0) {
-        RgGeomPointSetPos(robot, check.position);
+    if ((robot->ball.point.geom.status & RG_GEOM_STATUS_PUSH_OUT) != 0) {
+        RgGeomPointSetPos(&robot->ball.point, check.clipped_position);
     }
-    for (i = 0; i < check.count; i++) {
+    for (i = 0; i < check.hit_count; i++) {
         RgVector velocity;
         float *point;
         float dot;
 
-        point = check.points[i];
-        __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(head->velocity) : "memory");
+        point = check.normals[i];
+        __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(robot->ball.point.velocity) : "memory");
         __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(velocity) : "memory");
         dot = point[0] * velocity[0] + point[1] * velocity[1] + point[2] * velocity[2];
         if (dot < 0.0f) {
             XrgScaleVector(scratch, point, dot);
-            XrgSubVector(head->velocity, head->velocity, scratch);
+            XrgSubVector(robot->ball.point.velocity, robot->ball.point.velocity, scratch);
         }
     }
     return 1;
 }
 
-/* Still INCLUDE_ASM in this TU. hit: a four-word pair record whose halves
- * _TrayVsBall swaps before calling _BallVsTray (layout not yet recovered). */
-static void _TrayVsBall(void *hit);
-
 /* Reuses tray-versus-ball collision handling for a robot collider (elf_names
  * annotation); a plain tail call to _TrayVsBall with the caller's record. */
-static void _TrayVsRob(void *hit)
+static void _TrayVsRob(RgGeomCollisionPair *pArg)
 {
-    _TrayVsBall(hit);
+    _TrayVsBall(pArg);
 }
 
-static int _RobVsPillar(RgGeomColiArg *pArg)
+static int _RobVsPillar(RgGeomCollisionPair *pArg)
 {
-    RgGeom *pillar;
-    RgGeomPoint *robot;
+    RgGeomTray *pillar;
+    RgGeomRobot *robot;
     RgVector results[3];
     RgVector contact;
     RgGeomColiHit hit;
     RgVector normalComponent;
     RgVector velocity;
-    RgGeomRobotHead *head;
     float *contactPtr;
     float *normalPtr;
     float dot;
     int result;
 
-    robot = (RgGeomPoint *) pArg->data[0];
-    pillar = (RgGeom *) pArg->data[2];
-    result = RgGeomPillarCheckBall(pillar, robot, results);
+    robot = (RgGeomRobot *) pArg->pGeom1;
+    pillar = (RgGeomTray *) pArg->pGeom2;
+    result = RgGeomPillarCheckBall(pillar, &robot->ball, results);
     if (result == 0) {
         return 0;
     }
@@ -601,117 +491,91 @@ static int _RobVsPillar(RgGeomColiArg *pArg)
     normalPtr = hit.normal;
     __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(results[2]) : "memory");
     __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(normalPtr) : "memory");
-    if (pArg->data[1] != 0) {
+    if (pArg->callback1 != 0) {
         hit.otherObject = pillar;
-        ((RgGeomColiCallback) pArg->data[1])(robot, contactPtr);
+        pArg->callback1(robot, contactPtr);
     }
-    if (pArg->data[3] != 0) {
+    if (pArg->callback2 != 0) {
         XrgNegateVector(hit.normal, hit.normal);
         hit.otherObject = robot;
-        ((RgGeomColiCallback) pArg->data[3])(pillar, contactPtr);
+        pArg->callback2(pillar, contactPtr);
     }
-    head = (RgGeomRobotHead *) robot;
-    if ((head->status & 0x10) != 0) {
-        RgGeomPointSetPos(robot, results[1]);
+    if ((robot->ball.point.geom.status & RG_GEOM_STATUS_PUSH_OUT) != 0) {
+        RgGeomPointSetPos(&robot->ball.point, results[1]);
     }
-    XrgCopyVector(velocity, head->velocity);
+    XrgCopyVector(velocity, robot->ball.point.velocity);
     dot = XrgInnerVector(results[2], velocity);
     if (dot < 0.0f) {
         XrgScaleVector(normalComponent, results[2], dot);
-        XrgSubVector(head->velocity, head->velocity, normalComponent);
+        XrgSubVector(robot->ball.point.velocity, robot->ball.point.velocity, normalComponent);
     }
     return 1;
 }
 
-static int _RobVsPillar(RgGeomColiArg *pArg);
-
-static void _PillarVsRob(RgGeomColiArg *pArg)
+static void _PillarVsRob(RgGeomCollisionPair *pArg)
 {
-    RgGeomColiArg reordered;
-    unsigned int first;
-    unsigned int second;
-    unsigned int third;
-    unsigned int fourth;
+    RgGeomCollisionPair reordered;
+    RgGeom *geom1;
+    RgGeom *geom2;
+    RgGeomColiCallback callback1;
+    RgGeomColiCallback callback2;
 
-    third = pArg->data[2];
-    first = pArg->data[0];
-    fourth = pArg->data[3];
-    second = pArg->data[1];
-    reordered.data[0] = third;
-    reordered.data[2] = first;
-    reordered.data[1] = fourth;
-    reordered.data[3] = second;
+    geom2 = pArg->pGeom2;
+    geom1 = pArg->pGeom1;
+    callback2 = pArg->callback2;
+    callback1 = pArg->callback1;
+    reordered.pGeom1 = geom2;
+    reordered.pGeom2 = geom1;
+    reordered.callback1 = callback2;
+    reordered.callback2 = callback1;
     _RobVsPillar(&reordered);
 }
 
-extern const char D_00A55328[];
-/* "pArg != NIL" */
-extern const char D_00A552F8[];
-
-/* "../rg_geom_collision.euc.c" */
-void InitRgGeomColiArg(RgGeomColiArg *pArg)
+void InitRgGeomColiArg(RgGeomCollisionPair *pArg)
 {
     if (pArg == 0) {
-        assert_prog(D_00A55328, D_00A552F8, 465);
+        assert_prog(geomCollisionAssertArgNotNil, geomCollisionSourcePath, 465);
     }
-    pArg->data[0] = 0;
-    pArg->data[1] = 0;
-    pArg->data[2] = 0;
-    pArg->data[3] = 0;
+    pArg->pGeom1 = 0;
+    pArg->callback1 = 0;
+    pArg->pGeom2 = 0;
+    pArg->callback2 = 0;
 }
 
 
-/*
- * The head of an RgGeom as RgGeomCollisionJob reads it: the status word at
- * +8 (tested against the active bit) and the event flag at +12 that a
- * successful pair marks. RgGeom's complete layout is owned by ov12/tu051.
- */
-typedef struct RgGeomCollisionHead {
-    unsigned char unmodeled_00[8];
-    unsigned int status;
-    int eventFlag;
-} RgGeomCollisionHead;
-
-typedef int (*RgGeomCollisionHandler)(RgGeomColiArg *pArg);
-
-/* The 6-by-6 handler table indexed by [typeA][typeB] (scaffold data at
- * 0x00A50090). */
-extern RgGeomCollisionHandler s_apJobFuncTbl[6][6];
-
-
-int RgGeomCollisionJob(RgGeomColiArg *pArg)
+int RgGeomCollisionJob(RgGeomCollisionPair *pArg)
 {
     RgGeomCollisionHandler handler;
-    RgGeomCollisionHead *objA;
-    RgGeomCollisionHead *objB;
+    RgGeom *objA;
+    RgGeom *objB;
     int typeA;
     int typeB;
     int result;
 
     result = 0;
     if (pArg == 0) {
-        assert_prog(D_00A55328, D_00A552F8, 480);
+        assert_prog(geomCollisionAssertArgNotNil, geomCollisionSourcePath, 480);
     }
-    objA = (RgGeomCollisionHead *) pArg->data[0];
-    if (objA == 0 || (objB = (RgGeomCollisionHead *) pArg->data[2]) == 0) {
+    objA = pArg->pGeom1;
+    if (objA == 0 || (objB = pArg->pGeom2) == 0) {
         return 0;
     } else {
         if ((objA->status & objB->status & 1) == 0) {
             return 0;
         }
-        typeA = RgGeomGetType((RgGeom *) objA);
-        typeB = RgGeomGetType((RgGeom *) pArg->data[2]);
+        typeA = RgGeomGetType(objA);
+        typeB = RgGeomGetType(pArg->pGeom2);
         if (typeA >= 0 && typeB >= 0) {
             handler = s_apJobFuncTbl[typeA][typeB];
             if (handler != 0) {
                 result = handler(pArg);
             }
             if (result != 0) {
-                RgGeomCollisionHead *hitA;
-                RgGeomCollisionHead *hitB;
+                RgGeom *hitA;
+                RgGeom *hitB;
 
-                hitA = (RgGeomCollisionHead *) pArg->data[0];
-                hitB = (RgGeomCollisionHead *) pArg->data[2];
+                hitA = pArg->pGeom1;
+                hitB = pArg->pGeom2;
                 hitA->eventFlag = 1;
                 hitB->eventFlag = 1;
             }

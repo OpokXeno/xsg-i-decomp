@@ -338,6 +338,8 @@ typedef struct Actor {
     unsigned char unmodeled_a64[0xa70 - 0xa64];
 } Actor;
 
+void ACT_init(void);
+void ACT_dispose(Actor *self);
 void ACT_dispose2(Actor *self, int quick);
 int ACT_allocMatrix(Actor *self, int count);
 Actor *ACT_create(int slot, int id);
@@ -392,6 +394,7 @@ void ACT_draw(void);
 #define ACTOR_TRANSLUCENT_ALPHA 0x48
 
 /* Functions and data used by other translation units. */
+void ACT_init(void);
 void ACT_matrixInit(void);
 void ACT_update(void);
 

@@ -7,34 +7,14 @@
 
 #include "shared.h"
 #include "ov12/rg_bxx.h"
-
-typedef struct RgBxx RgBxx;
+#include "ov12/xrg_paint2d.h"
+#include "ov12/rg_help.h"
 
 /* A catalog entry has a 64-byte archive name followed by its loaded archive. */
 typedef struct RgHelpArchiveEntry {
     char archiveName[0x40];
     RgBxx *archive;
 } RgHelpArchiveEntry;
-
-/*
- * Partial view of the picture object RgBxxGetPic returns for one of the help
- * screen's catalog entries. _InitHelp (ov12:0x00a42130, outside this
- * allocation) resolves each catalog entry through LoadRgBxx_sub/RgBxxGetPic
- * (ov12:0x00a42204/0x00a4229c) and stores the result in RgHelp::pics. The
- * only member any function claimed here reads is the height at +0x38:
- * _paint_bg_lower (ov12:0x00a42b90) draws that picture at y = 464 - height,
- * so its bottom edge sits on screen line 464. The 96-byte extent is
- * rg_bxx.c's own assert "sizeof(RgBxxPic) == 96" (OV12 .rodata); rg_bxx
- * (ov12/tu073) owns this type, and this view must stay identical to its
- * definition there.
- */
-typedef struct RgBxxPic {
-    unsigned char unmodeled_000[0x38];
-    int height;
-    unsigned char unmodeled_03C[0x24];
-} RgBxxPic;
-
-typedef struct RgHelp RgHelp;
 
 /*
  * _InitHelp (ov12:0x00a42130, outside this allocation) builds this object in
@@ -72,17 +52,11 @@ struct RgHelp {
     RgHelpArchiveEntry archives[20];
     int bxxCount;
     RgBxxPic *pics[62];
-    void *paintContext;
+    XrgPaint2D *paintContext;
     int phase;
     int cursor;
     float blinkTimer;
     float countdown;
 };
-
-RgHelp *CreateRgHelp(void);
-void DisposeRgHelp(RgHelp *pHelp);
-int RgHelpIsEnd(RgHelp *pHelp);
-void RgHelpPassTime(RgHelp *pHelp, float deltaTime);
-void RgHelpDisp(RgHelp *pHelp);
 
 #endif /* SRC_OV12_RG_HELP_H */

@@ -6,6 +6,30 @@
 #define SRC_OV12_INIT_XRG_INPUT_H
 
 #include "shared.h"
+#include "ov12/init_xrg_input.h"
+
+/* XrgInput::flags, as XrgInputDeviceCheck derives them each frame. */
+#define XRG_INPUT_FLAG_LEFT_SHOULDER 0x1       /* L1/L2 held after a fresh press */
+#define XRG_INPUT_FLAG_RIGHT_SHOULDER 0x2      /* R1/R2 held after a fresh press */
+#define XRG_INPUT_FLAG_BOTH_SHOULDERS 0x4      /* both sides held, pressed together */
+#define XRG_INPUT_FLAG_STICK_CLICK 0x80        /* L3 or R3 held */
+#define XRG_INPUT_FLAG_BOTH_STICK_CLICKS 0x100 /* L3 and R3 held */
+#define XRG_INPUT_FLAG_LEFT_PAIR 0x200         /* L1 and L2 pressed within the pair window */
+#define XRG_INPUT_FLAG_RIGHT_PAIR 0x400        /* R1 and R2 pressed within the pair window */
+#define XRG_INPUT_FLAG_BOTH_PAIRS 0x800        /* both pairs at once; replaces the two above */
+
+/* Shoulder buttons of each side, and both stick clicks. */
+#define XRG_INPUT_LEFT_SHOULDER_BUTTONS (PAD_L1 | PAD_L2)
+#define XRG_INPUT_RIGHT_SHOULDER_BUTTONS (PAD_R1 | PAD_R2)
+#define XRG_INPUT_STICK_CLICKS (PAD_L3 | PAD_R3)
+
+/* Seconds: both sides count as pressed together, and one pair counts as pressed together. */
+#define XRG_INPUT_BOTH_SIDES_WINDOW 0.2f
+#define XRG_INPUT_PAIR_WINDOW 0.1f
+/* Stick values below this magnitude read as centered. */
+#define XRG_INPUT_STICK_DEAD_ZONE 0.3f
+/* A button timer that is not counting (no press yet). */
+#define XRG_INPUT_TIMER_IDLE 100000000.0f
 
 /*
  * XrgInput is the 0x30-byte per-pad input state _InitControlInput allocates
@@ -15,7 +39,7 @@
  *
  * padId (+0x00) indexes PadData[2] (XrgInputDeviceCheck, ov12:0x00a4a048..).
  * angle[2]/magnitude[2] (+0x04/+0x0C) are the per-stick polar values
- * XrgInputDeviceCheck derives with func_003240C8 and its deadzone clamp
+ * XrgInputDeviceCheck derives with atan2f and its deadzone clamp
  * (ov12:0x00a4a238..0x00a4a260), one pair per analog stick.
  * flags (+0x14) accumulates the digital/analog state bits
  * XrgInputDeviceCheck sets from held/pressed masks and stick magnitude
@@ -29,7 +53,7 @@
  * them once the matching shoulder button is released
  * (ov12:0x00a4a534..0x00a4a5a0).
  */
-typedef struct XrgInput {
+struct XrgInput {
     int padId;               /* +0x00 */
     float angle[2];          /* +0x04 */
     float magnitude[2];      /* +0x0C */
@@ -37,35 +61,6 @@ typedef struct XrgInput {
     float buttonTimer[4];    /* +0x18 */
     unsigned int pressFlags; /* +0x28 */
     unsigned int latchedFlags; /* +0x2C */
-} XrgInput;
-
-/*
- * One 0x68-byte per-pad record of PadData (ov12:0x00490d90). XrgInputDeviceCheck
- * reads the held (+0x28) and pressed (+0x2a) halfwords and four signed stick
- * bytes at +0x38..+0x3b, scaled by 1/128.
- */
-typedef struct XrgPadSticks {
-    u8 unmodeled_00[8];
-    signed char analog[4];
-} XrgPadSticks;
-
-typedef struct XrgPadPrefix {
-    u8 pad_00[0x28];
-    u16 half_28;
-    u16 half_2a;
-} XrgPadPrefix;
-
-typedef struct XrgPadRecord {
-    XrgPadPrefix prefix;
-    u8 unmodeled_2c[0x30 - 0x2c];
-    XrgPadSticks sticks;
-    u8 unmodeled_3c[0x68 - 0x3c];
-} XrgPadRecord;
-
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern float atan2f(float y, float x);
-
-void InitXrgInput(XrgInput *pInput, int padId);
-void XrgInputDeviceCheck(XrgInput *pInput, float frameTime);
+};
 
 #endif /* SRC_OV12_INIT_XRG_INPUT_H */

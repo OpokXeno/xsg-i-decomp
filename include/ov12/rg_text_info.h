@@ -30,6 +30,7 @@ struct RgTextInfoEntry {
     void *auxiliary;   /* element count or RgTextInfoParse, by type */
 } __attribute__((aligned(8)));
 
+/* Functions and data used by other translation units. */
 struct RgReadText;
 extern void RgTextInfoRead(struct RgReadText *pReadText,
                            struct RgTextInfoEntry *pParaList, char *pData);

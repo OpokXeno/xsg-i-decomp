@@ -14,9 +14,4 @@
  */
 #include "ov12/rg_weapon_db.h"
 
-/*
- * The weapon handle owned by rg_weapon.c, opaque here.
- */
-typedef struct RgWeapon RgWeapon;
-
 #endif /* SRC_OV12_RG_DISP_H */

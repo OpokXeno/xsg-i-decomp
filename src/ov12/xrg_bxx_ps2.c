@@ -3,13 +3,19 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_packet.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_bxx.h"
+#include "ov12/rg_error.h"
+#include "ov12/xrg_bxx_ps2.h"
 
-const char D_00A58D10[16] = "log2 error %d";
+/* VRAM base (TBP0 and the palette CBP offset) the textures are uploaded to. */
+#define XRG_BXX_PS2_TEXTURE_BASE 0x3800
 
-const char D_00A58D20[24] = "../xrg_bxx_ps2.euc.c";
+const char bxxPs2Log2ErrorFormat[16] = "log2 error %d";
 
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
+const char bxxPs2SourcePath[24] = "../xrg_bxx_ps2.euc.c";
+
 
 static int _Log2(u32 bucket_count)
 {
@@ -50,105 +56,80 @@ static int _Log2(u32 bucket_count)
         return 12;
     }
 
-    RgError(D_00A58D10, D_00A58D20, 50, bucket_count);
+    RgError(bxxPs2Log2ErrorFormat, bxxPs2SourcePath, 50, bucket_count);
     return 0;
 }
 
-const char D_00A58D38[16] = "pPic != NIL";
+const char bxxPs2AssertPicNotNil[16] = "pPic != NIL";
 
-const char D_00A58D48[16] = "pHead != NIL";
+const char bxxPs2AssertHeadNotNil[16] = "pHead != NIL";
 
-const char D_00A58D58[8] = "muri";
+const char bxxPs2ImpossibleText[8] = "muri";
 
-const char D_00A58D60[32] = "unknown BPP type %d";
+const char bxxPs2UnknownBppFormat[32] = "unknown BPP type %d";
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
-
-/* Partial view of the texture object: only the members this function reads. */
-typedef struct XrgBxxPs2Texture {
-    unsigned char unmodeled_00[0x24];
-    int bpp;
-    unsigned char unmodeled_28[0x14];
-    u32 paletteBase;
-    unsigned char unmodeled_40[0x18];
-    u32 header;
-} XrgBxxPs2Texture;
-
-/* Partial view of the archive header returned by RgBxxGetHeader. */
-typedef struct XrgBxxPs2Header {
-    unsigned char unmodeled_00[0x10];
-    int width4;
-    int width8;
-    int width16;
-    int width24;
-    u32 height;
-} XrgBxxPs2Header;
-
-extern XrgBxxPs2Header *RgBxxGetHeader(int header);
-
-long long XrgBxxPs2Tex0(XrgBxxPs2Texture *texture)
+long long XrgBxxPs2Tex0(RgBxxPic *texture)
 {
     long long tex0;
     long long pixelBits;
     u64 paletteBits;
     u64 tbpCldBits;
-    XrgBxxPs2Header *header;
+    RgBxxHeader *header;
     u32 width = 0;
-    u32 psm = 0;
+    u32 psm = SCE_GS_PSMCT32;
     int bpp;
     u32 height;
     u32 widthLog2;
     u32 heightLog2;
 
     if (texture == 0) {
-        assert_prog(D_00A58D38, D_00A58D20, 69);
+        assert_prog(bxxPs2AssertPicNotNil, bxxPs2SourcePath, 69);
     }
-    header = RgBxxGetHeader(texture->header);
+    header = RgBxxGetHeader(texture->pOwner);
     if (header == 0) {
-        assert_prog(D_00A58D48, D_00A58D20, 71);
+        assert_prog(bxxPs2AssertHeadNotNil, bxxPs2SourcePath, 71);
     }
     bpp = texture->bpp;
     height = header->height;
     switch (texture->bpp) {
     case 4:
-        psm = 20;
+        psm = SCE_GS_PSMT4;
         width = header->width4;
         break;
     case 8:
-        psm = 19;
+        psm = SCE_GS_PSMT8;
         width = header->width8;
         break;
     case 16:
-        psm = 2;
+        psm = SCE_GS_PSMCT16;
         width = header->width16;
         break;
     case 24:
-        psm = 1;
+        psm = SCE_GS_PSMCT24;
         width = header->width24;
         break;
     case 32:
-        psm = 0;
+        psm = SCE_GS_PSMCT32;
         width = header->width24;
         break;
     case -8:
-        RgError(D_00A58D58, D_00A58D20, 95, texture->bpp);
+        RgError(bxxPs2ImpossibleText, bxxPs2SourcePath, 95, texture->bpp);
         break;
     default:
-        RgError(D_00A58D60, D_00A58D20, 98, texture->bpp);
+        RgError(bxxPs2UnknownBppFormat, bxxPs2SourcePath, 98, texture->bpp);
         break;
     }
     widthLog2 = _Log2(width << 6);
     heightLog2 = _Log2(height);
-    tbpCldBits = 0x3800ULL | (1ULL << 61);
+    tbpCldBits = XRG_BXX_PS2_TEXTURE_BASE | (1ULL << GS_TEX0_CLD_SHIFT);
     tex0 = widthLog2;
-    tex0 = tex0 << 26;
-    tex0 |= (u64)0x8000 << 19;
+    tex0 = tex0 << GS_TEX0_TW_SHIFT;
+    tex0 |= (u64)1 << GS_TEX0_TCC_SHIFT;
     pixelBits = psm;
-    pixelBits <<= 20;
-    pixelBits |= (u64)width << 14;
-    paletteBits = (u64)heightLog2 << 30;
-    paletteBits |= (u64)(u32)(texture->paletteBase + 0x3800) << 37;
+    pixelBits <<= GS_TEX0_PSM_SHIFT;
+    pixelBits |= (u64)width << GS_TEX0_TBW_SHIFT;
+    paletteBits = (u64)heightLog2 << GS_TEX0_TH_SHIFT;
+    paletteBits |= (u64)(u32)(texture->paletteBase + XRG_BXX_PS2_TEXTURE_BASE) << GS_TEX0_CBP_SHIFT;
     tex0 |= tbpCldBits;
     pixelBits |= paletteBits;
     tex0 |= pixelBits;

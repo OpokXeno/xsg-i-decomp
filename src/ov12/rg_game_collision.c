@@ -3,49 +3,60 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_game_collision.h"
+#include "ov12/assert_prog.h"
+#include "ov12/rg_game_collision.h"
+#include "ov12/rg_geom_group.h"
+#include "ov12/rg_heap.h"
+#include "ov12/rg_vector.h"
 
-const char D_00A553C8[32] = "../rg_game_collision.euc.c";
-const char D_00A553E8[16] = "pSrc != NIL";
-const char D_00A553F8[40] = "pSrc->m_pGroup1 != pSrc->m_pGroup2";
-const char D_00A55420[16] = "pArg != NIL";
-const char D_00A55430[24] = "pGameColi != NIL";
+/* Most group pairs queued for checking at once. */
+#define RG_GAME_COLLISION_MAX_CHECKS 16
+
+struct RgGameCollision {
+    RgPtrVector *m_pCheckList;
+};
+
+const char gameCollisionSourcePath[32] = "../rg_game_collision.euc.c";
+const char gameCollisionAssertSrcNotNil[16] = "pSrc != NIL";
+const char gameCollisionAssertGroupsDiffer[40] = "pSrc->m_pGroup1 != pSrc->m_pGroup2";
+const char gameCollisionAssertArgNotNil[16] = "pArg != NIL";
+const char gameCollisionAssertGameColiNotNil[24] = "pGameColi != NIL";
 
 static RgGameColiArg *_CreateColiArg(RgGameColiArg *pSrc)
 {
     RgGameColiArg *pArg;
 
-    pArg = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGameColiArg), D_00A553C8, 31);
+    pArg = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGameColiArg), gameCollisionSourcePath, 31);
     if (pSrc == 0) {
-        assert_prog(D_00A553E8, D_00A553C8, 33);
+        assert_prog(gameCollisionAssertSrcNotNil, gameCollisionSourcePath, 33);
     }
     if (pSrc->m_pGroup1 == pSrc->m_pGroup2) {
-        assert_prog(D_00A553F8, D_00A553C8, 34);
+        assert_prog(gameCollisionAssertGroupsDiffer, gameCollisionSourcePath, 34);
     }
     InitRgGeomGroupColiArg(pArg);
     pArg->m_pGroup1 = pSrc->m_pGroup1;
-    pArg->unmodeled_04 = pSrc->unmodeled_04;
+    pArg->hitCallback1 = pSrc->hitCallback1;
     pArg->m_pGroup2 = pSrc->m_pGroup2;
-    pArg->unmodeled_10 = pSrc->unmodeled_10;
-    pArg->unmodeled_08 = pSrc->unmodeled_08;
-    pArg->unmodeled_14 = pSrc->unmodeled_14;
+    pArg->hitCallback2 = pSrc->hitCallback2;
+    pArg->missCallback1 = pSrc->missCallback1;
+    pArg->missCallback2 = pSrc->missCallback2;
     return pArg;
 }
 
 static void _DisposeColiArg(RgGameColiArg *pArg)
 {
     if (pArg == 0) {
-        assert_prog(D_00A55420, D_00A553C8, 48);
+        assert_prog(gameCollisionAssertArgNotNil, gameCollisionSourcePath, 48);
     }
-    RgHeapFree(InstanceOfRgHeap(), pArg, D_00A553C8, 49);
+    RgHeapFree(InstanceOfRgHeap(), pArg, gameCollisionSourcePath, 49);
 }
 
 static void _InitGameCollision(RgGameCollision *pGameColi)
 {
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 56);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 56);
     }
-    pGameColi->m_pCheckList = CreateRgVector(16, D_00A553C8, 57);
+    pGameColi->m_pCheckList = CreateRgVector(RG_GAME_COLLISION_MAX_CHECKS, gameCollisionSourcePath, 57);
 }
 
 static void _DisposeGameCollision(RgGameCollision *pGameColi)
@@ -55,14 +66,14 @@ static void _DisposeGameCollision(RgGameCollision *pGameColi)
     RgGameColiArg *pArg;
 
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 64);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 64);
     }
     size = RgVectorSize(pGameColi->m_pCheckList);
     for (i = 0; i < size; i++) {
-        pArg = RgVectorIndex(pGameColi->m_pCheckList, i, D_00A553C8, 69);
+        pArg = RgVectorIndex(pGameColi->m_pCheckList, i, gameCollisionSourcePath, 69);
         _DisposeColiArg(pArg);
     }
-    DisposeRgVector(pGameColi->m_pCheckList, D_00A553C8, 72);
+    DisposeRgVector(pGameColi->m_pCheckList, gameCollisionSourcePath, 72);
     pGameColi->m_pCheckList = 0;
 }
 
@@ -71,10 +82,10 @@ static void _AddCheck(RgGameCollision *pGameColi, RgGameColiArg *pArg)
     RgGameColiArg *pNewArg;
 
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 83);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 83);
     }
     if (pArg == 0) {
-        assert_prog(D_00A55420, D_00A553C8, 84);
+        assert_prog(gameCollisionAssertArgNotNil, gameCollisionSourcePath, 84);
     }
     pNewArg = _CreateColiArg(pArg);
     RgVectorPush(pGameColi->m_pCheckList, pNewArg);
@@ -82,18 +93,18 @@ static void _AddCheck(RgGameCollision *pGameColi, RgGameColiArg *pArg)
 
 static void _ClearCheck(RgGameCollision *pGameColi)
 {
-    void *pCheckList;
+    RgPtrVector *pCheckList;
     unsigned int i;
     unsigned int size;
     RgGameColiArg *pArg;
 
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 96);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 96);
     }
     pCheckList = pGameColi->m_pCheckList;
     size = RgVectorSize(pCheckList);
     for (i = 0; i < size; i++) {
-        pArg = RgVectorIndex(pCheckList, i, D_00A553C8, 100);
+        pArg = RgVectorIndex(pCheckList, i, gameCollisionSourcePath, 100);
         _DisposeColiArg(pArg);
     }
     RgVectorClear(pCheckList);
@@ -103,15 +114,15 @@ static void _JobCheck(RgGameCollision *pGameColi)
 {
     unsigned int i;
     unsigned int size;
-    RgGeomGroup *pGroup;
+    RgGameColiArg *pArg;
 
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 110);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 110);
     }
     size = RgVectorSize(pGameColi->m_pCheckList);
     for (i = 0; i < size; i++) {
-        pGroup = RgVectorIndex(pGameColi->m_pCheckList, i, D_00A553C8, 113);
-        RgGeomGroupCollision(pGroup);
+        pArg = RgVectorIndex(pGameColi->m_pCheckList, i, gameCollisionSourcePath, 113);
+        RgGeomGroupCollision(pArg);
     }
 }
 
@@ -119,9 +130,9 @@ RgGameCollision *CreateRgGameCollision(void)
 {
     RgGameCollision *pGameColi;
 
-    pGameColi = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGameCollision), D_00A553C8, 123);
+    pGameColi = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGameCollision), gameCollisionSourcePath, 123);
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 124);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 124);
     }
     _InitGameCollision(pGameColi);
     return pGameColi;
@@ -130,19 +141,19 @@ RgGameCollision *CreateRgGameCollision(void)
 void DisposeRgGameCollision(RgGameCollision *pGameColi)
 {
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 131);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 131);
     }
     _DisposeGameCollision(pGameColi);
-    RgHeapFree(InstanceOfRgHeap(), pGameColi, D_00A553C8, 133);
+    RgHeapFree(InstanceOfRgHeap(), pGameColi, gameCollisionSourcePath, 133);
 }
 
 void RgGameCollisionAdd(RgGameCollision *pGameColi, RgGameColiArg *pArg)
 {
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 140);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 140);
     }
     if (pArg == 0) {
-        assert_prog(D_00A55420, D_00A553C8, 141);
+        assert_prog(gameCollisionAssertArgNotNil, gameCollisionSourcePath, 141);
     }
     if ((pArg->m_pGroup1 != 0) && (pArg->m_pGroup2 != 0)) {
         _AddCheck(pGameColi, pArg);
@@ -152,7 +163,7 @@ void RgGameCollisionAdd(RgGameCollision *pGameColi, RgGameColiArg *pArg)
 void RgGameCollisionClear(RgGameCollision *pGameColi)
 {
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 150);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 150);
     }
     _ClearCheck(pGameColi);
 }
@@ -160,7 +171,7 @@ void RgGameCollisionClear(RgGameCollision *pGameColi)
 void RgGameCollisionJob(RgGameCollision *pGameColi)
 {
     if (pGameColi == 0) {
-        assert_prog(D_00A55430, D_00A553C8, 158);
+        assert_prog(gameCollisionAssertGameColiNotNil, gameCollisionSourcePath, 158);
     }
     _JobCheck(pGameColi);
 }
