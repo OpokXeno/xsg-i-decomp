@@ -587,7 +587,7 @@ int unitCmdMove(UnitRecord *unit)
     unitCmdPtrGet(&unit->task);
     if (!(*(u32 *)unit->task.work & ACTOR_FLAG_ENEMY)) {
         calcParam = calcUPGet(&unit->task);
-        useWarp = calcParam->flags & 0x40;
+        useWarp = calcParam->flags & CALC_UNIT_FLAG_AGWS;
     } else {
         calcParam = calcUPGet(&unit->task);
         useWarp = calcParam->moveKindId == 4;
@@ -656,7 +656,7 @@ int unitCmdAgws(ObjectTask *unit)
 
     cmd = unitCmdPtrGet(unit);
     param = calcUPGet(unit);
-    if (param->flags & 0x40) {
+    if (param->flags & CALC_UNIT_FLAG_AGWS) {
         charaId = param->linkedUnit->charaId;
     } else {
         charaId = param->baseCharaId;
@@ -668,7 +668,7 @@ int unitCmdAgws(ObjectTask *unit)
     unitCmdSet(unit, &entry);
     entry.selector = 0x2D;
     unitCmdSet(unit, &entry);
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) {
         effectId = 0x67;
         soundId = 0x20;
     } else {
@@ -1256,7 +1256,7 @@ void unitCmdPosAdj(ObjectTask *unit)
     frame = motionActor->motionFrame;
     index = 0;
     if (!(actor->flags & ACTOR_FLAG_ENEMY) &&
-        !(calcUPGet(unit)->flags & 0x40) &&
+        !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
         (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
         table = adjTblPl;
         for (i = 0; table[i].charaId != 0; i++) {
@@ -1448,11 +1448,161 @@ void unitCmdDivSet(UnitRecord *unit, float distance, float step)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdVASet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveCalc);
+/*
+ * One step of a move command toward cmdTarget: each axis adds the motion
+ * actor's acceleration into its velocity and the velocity into its position.
+ * An axis whose free flag is 1 keeps moving while at least one step remains
+ * in posSnapX (the step count unitCmdVASet stores there, decremented here by
+ * one per call); any other axis counts as arrived when it already equals the
+ * target, or snaps onto the target once it passes it or comes within 1e-6.
+ * Returns 1 when all three axes have arrived.
+ *
+ * Forms that moved the bytes: velocity/position locals keep both in FPRs
+ * across the stores (no reload of +0x30/+0x10); the block-scoped zero is
+ * materialized once per axis after the velocity/acceleration loads
+ * (mtc1 $0,$f3 at 0x00a060e8) and shared by the three sign tests; the ||
+ * form of the overshoot test allocates arrived to $9 and the target base to
+ * $8; the magnitude negates distance inside the comparison, which keeps
+ * neg.s (0x00a06160) and the duplicated 1e-6 test, where a separate
+ * `if (distance < zero) distance = -distance;` gives a branch-likely neg and
+ * a ternary without the assignment folds into a compare against -1e-6.
+ */
+int unitCmdMoveCalc(ObjectTask *unit, int freeX, int freeY, int freeZ)
+{
+    Actor *actor = unit->work;
+    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    int arrived = 0;
+    Vector4 *target = &actor->cmdTarget.vector;
+    float *steps = &actor->posSnapX;
+    float velocity;
+    float position;
+    float distance;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTelIn);
+    if (freeX == 1 && *steps >= 1.0f) {
+        motionActor->velocity.x += motionActor->acceleration.x;
+        motionActor->position.x += motionActor->velocity.x;
+    } else if (motionActor->position.x == target->x) {
+        arrived++;
+    } else {
+        float zero = 0.0f;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTelOut);
+        velocity = motionActor->velocity.x + motionActor->acceleration.x;
+        position = motionActor->position.x + velocity;
+        motionActor->velocity.x = velocity;
+        motionActor->position.x = position;
+        if ((velocity > zero && position > target->x)
+            || (velocity < zero && position < target->x)) {
+            motionActor->position.x = target->x;
+            arrived++;
+        } else {
+            distance = target->x - position;
+            if ((distance < zero ? (distance = -distance) : distance) <= 1e-6f) {
+                motionActor->position.x = target->x;
+                arrived++;
+            }
+        }
+    }
+
+    if (freeY == 1 && *steps >= 1.0f) {
+        motionActor->velocity.y += motionActor->acceleration.y;
+        motionActor->position.y += motionActor->velocity.y;
+    } else if (motionActor->position.y == target->y) {
+        arrived++;
+    } else {
+        float zero = 0.0f;
+
+        velocity = motionActor->velocity.y + motionActor->acceleration.y;
+        position = motionActor->position.y + velocity;
+        motionActor->velocity.y = velocity;
+        motionActor->position.y = position;
+        if ((velocity > zero && position > target->y)
+            || (velocity < zero && position < target->y)) {
+            motionActor->position.y = target->y;
+            arrived++;
+        } else {
+            distance = target->y - position;
+            if ((distance < zero ? (distance = -distance) : distance) <= 1e-6f) {
+                motionActor->position.y = target->y;
+                arrived++;
+            }
+        }
+    }
+
+    if (freeZ == 1 && *steps >= 1.0f) {
+        motionActor->velocity.z += motionActor->acceleration.z;
+        motionActor->position.z += motionActor->velocity.z;
+    } else if (motionActor->position.z == target->z) {
+        arrived++;
+    } else {
+        float zero = 0.0f;
+
+        velocity = motionActor->velocity.z + motionActor->acceleration.z;
+        position = motionActor->position.z + velocity;
+        motionActor->velocity.z = velocity;
+        motionActor->position.z = position;
+        if ((velocity > zero && position > target->z)
+            || (velocity < zero && position < target->z)) {
+            motionActor->position.z = target->z;
+            arrived++;
+        } else {
+            distance = target->z - position;
+            if ((distance < zero ? (distance = -distance) : distance) <= 1e-6f) {
+                motionActor->position.z = target->z;
+                arrived++;
+            }
+        }
+    }
+
+    *steps -= 1.0f;
+    return arrived == 3;
+}
+
+/*
+ * Teleport fade-in: the first step clears the motion actor's transparency
+ * and its hidden-draw flag (bit 0x8, the one unitDispOn clears); later steps
+ * raise transparency by posSnapX until it reaches 1.0 and report 1.
+ */
+int unitTelIn(ObjectTask *unit)
+{
+    Actor *actor = unit->work;
+    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+
+    if (actor->movePhaseTimer == 0) {
+        motionActor->transparency = 0.0f;
+        ((UnitRecord *)unit)->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
+        actor->movePhaseTimer++;
+    } else {
+        motionActor->transparency += motionActor->posSnapX;
+        if (motionActor->transparency >= 1.0f) {
+            motionActor->transparency = 1.0f;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Teleport fade-out, unitTelIn reversed: the first step only starts the
+ * phase timer; after that transparency falls by posSnapX each step, and at
+ * 0.0 the hidden-draw flag is set and the step reports 1.
+ */
+int unitTelOut(ObjectTask *unit)
+{
+    Actor *actor = unit->work;
+    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+
+    if (actor->movePhaseTimer == 0) {
+        actor->movePhaseTimer++;
+    } else {
+        motionActor->transparency -= motionActor->posSnapX;
+        if (motionActor->transparency <= 0.0f) {
+            motionActor->transparency = 0.0f;
+            ((UnitRecord *)unit)->motionActor->flags |= ACTOR_FLAG_HIDDEN;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /*
  * Battle start: step 0 counts the queued command's argument down as a delay,
@@ -1476,7 +1626,7 @@ int unitCmdBtst(ObjectTask *unit)
         }
     } else if (actor->moveState == 1) {
         if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-            !(calcUPGet(unit)->flags & 0x40) &&
+            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
             (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
             unitMotSet(unit, 0x23);
             unitWpnMotSet(unit, 0, 0, 0x2F);
@@ -1492,7 +1642,7 @@ int unitCmdBtst(ObjectTask *unit)
             actor->moveState++;
         }
     } else if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-               !(calcUPGet(unit)->flags & 0x40) &&
+               !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
                (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
         unitMtdProc((UnitRecord *)unit);
         if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
@@ -1521,7 +1671,7 @@ int unitCmdBted(ObjectTask *unit)
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
         if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-            !(calcUPGet(unit)->flags & 0x40) &&
+            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
             (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
             unitMotSet(unit, 0x24);
             unitWpnMotSet(unit, 0, 0, 0x30);
@@ -1533,10 +1683,10 @@ int unitCmdBted(ObjectTask *unit)
     } else {
         unitMtdProc((UnitRecord *)unit);
         if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
-            if (calcUPGet(unit)->flags & 0x40) {
+            if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) {
                 unitWpnMotSet(unit, 0, 0, 5);
             } else if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-                       !(calcUPGet(unit)->flags & 0x40) &&
+                       !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
                        (calcUPGet(unit)->charaId < 0xBB ||
                         calcUPGet(unit)->charaId >= 0xC3)) {
                 unitWpnMotSet(unit, 0, 0, 0xFF);
@@ -1661,7 +1811,7 @@ int unitCmdAgws2(ObjectTask *unit)
     actor = unit->work;
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
-        decoEffCall(unit, (calcUPGet(unit)->flags & 0x40) ? 0x67 : 0x66);
+        decoEffCall(unit, (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) ? 0x67 : 0x66);
         actor->moveState++;
     } else if (actor->moveState == 1) {
         unitMotStandSet(unit);
@@ -1783,7 +1933,30 @@ void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitFaceMotSet);
+/*
+ * Plays a motion on the unit's sub-actor (UnitRecord.subActor), when it has
+ * the animation: ACT_setMotion2's flags are 0 for motions 0x3A and 0x3B
+ * (the compiler folds the two tests into the sltiu at 0x00a0722c) and 8
+ * otherwise.
+ * Receipts: flags starts at 0 and the if sets 8 (daddu $17,$0,$0 then
+ * movz at 0x00a0723c; a ternary gives movn with 8 preloaded), and
+ * `motion - 1` is written in both calls, which keeps it in $18 and the
+ * flags in $17 (a named dataId local swaps the two).
+ */
+void unitFaceMotSet(ObjectTask *unit, int motion)
+{
+    Actor *faceActor;
+    unsigned int flags;
+
+    flags = 0;
+    if (motion != 0x3A && motion != 0x3B) {
+        flags = 8; /* ACT_setMotion2's flag, not ACTOR_FLAG_HIDDEN */
+    }
+    faceActor = ((UnitRecord *)unit)->subActor;
+    if (faceActor != 0 && ACT_animGetData(faceActor, motion - 1) != 0) {
+        ACT_setMotion2(faceActor, motion - 1, flags);
+    }
+}
 
 int unitMotGet(ObjectTask *unit)
 {
@@ -1878,7 +2051,7 @@ void unitDispOn(int side)
             if (unit != 0) {
                 /* Clears the motion actor's hidden-draw flag (bit 0x8 of
                  * Actor.flags); no other claimed function here touches it. */
-                unit->motionActor->flags &= ~8;
+                unit->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
             }
             remaining--;
         } while (remaining != 0);
@@ -1901,7 +2074,7 @@ void unitDispOff(int side)
             unit = *cur;
             cur++;
             if (unit != 0) {
-                unit->motionActor->flags |= 8;
+                unit->motionActor->flags |= ACTOR_FLAG_HIDDEN;
             }
             remaining--;
         } while (remaining != 0);
@@ -1923,7 +2096,27 @@ float unitColiGet(ObjectTask *unit, ObjectTask *targetUnit)
     return distance / 100.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitAgwsChk);
+/*
+ * Whether any unit on the side carries CalcUnitParam.flags bit 0x40 (lhu
+ * 0x1C, andi 0x40 at 0x00a07558), the bit unitCmdMove tests to pick a warp
+ * move for a player unit.
+ */
+int unitAgwsChk(int side)
+{
+    UnitRecord **table;
+    int count;
+    int found;
+    int i;
+
+    found = 0;
+    count = unitTblGet(side, &table);
+    for (i = 0; i < count; i++) {
+        if (table[i] != 0 && (calcUPGet(&table[i]->task)->flags & CALC_UNIT_FLAG_AGWS)) {
+            found++;
+        }
+    }
+    return found != 0;
+}
 
 /*
  * Counts the units on one side whose CalcUnitParam.charaId equals charaId.
@@ -1978,14 +2171,14 @@ void unitDispOnOff(int flag)
             unit = table[index];
             if (unit != 0) {
                 if (flag == 0) {
-                    unit->motionActor->flags &= ~8;
+                    unit->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
                     effectUnit = calcUPGet((ObjectTask *) unit)->effectUnit;
                     if (effectUnit != 0) {
                         effectUnit->flags &= ~UNIT_WORK_STATUS_BLOCKED;
                     }
                     statEffOn((ObjectTask *) table[index]);
                 } else {
-                    unit->motionActor->flags |= 8;
+                    unit->motionActor->flags |= ACTOR_FLAG_HIDDEN;
                     effectUnit = calcUPGet((ObjectTask *) unit)->effectUnit;
                     if (effectUnit != 0) {
                         effectUnit->flags |= UNIT_WORK_STATUS_BLOCKED;

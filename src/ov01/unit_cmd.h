@@ -72,8 +72,9 @@ typedef struct Actor {
                              * advance it through their own per-move-kind
                              * phases. */
     int movePhaseTimer;     /* +0x7C: unitCmdWarp zeroes it every time it
-                             * advances movePhase; no claimed function here
-                             * reads it. */
+                             * advances movePhase; unitTelIn/unitTelOut use
+                             * it as their own first-step flag (lw 0x7C($5)
+                             * at 0x00a0644c/0x00a064bc). */
     ObjectTask *targetUnit; /* +0x80: unitCmdDstSet's mode-0 path reads the
                              * command target's own CalcUnitParam/table
                              * position through it. */
@@ -84,8 +85,21 @@ typedef struct Actor {
                             * position by a supplied ratio. y and w are
                             * untouched by any function this TU claims. */
     unsigned char unmodeled_a0[0xC0 - 0xA0];
-    float transparency;   /* +0xC0: unitActdraw draws translucent below 1.0 */
-    unsigned char unmodeled_c4[0xD0 - 0xC4];
+    /*
+     * +0xC0 opens the kind-specific block that include/main/act_1.h models
+     * as an anonymous union (menu control, Java arguments, enemy
+     * parameters) and ACTOR_ARGS reads as bytes; a battle unit's motion actor
+     * keeps its transparency there. `args` covers the bytes of the block this
+     * view models, up to posSnapX. Accessed as a union member, transparency
+     * may alias any other access: unitTelIn/unitTelOut reload
+     * UnitRecord.motionActor after storing it (lw $4,0x14($4) at 0x00a06460
+     * and 0x00a06500), which a plain float member lets the compiler merge
+     * into the first load.
+     */
+    union {
+        float transparency;   /* +0xC0: unitActdraw draws translucent below 1.0 */
+        unsigned char args[0xD0 - 0xC0];
+    };
     float posSnapX;        /* +0xD0: unitCmdJump's arrival check rounds it
                              * and compares against posSnapZ*0.5 rounded. */
     float hopLength;       /* +0xD4: replaces four bytes of filler
@@ -160,6 +174,15 @@ extern void *ACT_animGetData(Actor *actor, unsigned int dataId);
  * it. */
 extern void ACT_setMotion(Actor *actor, unsigned int dataId);
 
+/* Defined in src/main/act_2.c on its own Actor spelling, declared the same
+ * way in include/main/act_2.h; unitFaceMotSet tail-calls it
+ * (j ACT_setMotion2 at 0x00a07270). */
+extern void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags);
+
+/* Defined later in this TU; unitCmdAtkEnd, unitCmdDmg and unitCmdBtst call
+ * it before its definition with a motion number. */
+extern void unitFaceMotSet(ObjectTask *unit, int motion);
+
 /*
  * unitLoad and unitActupdate both test this bit of Actor.flags to tell an
  * enemy-controlled unit from a player-controlled one: unitLoad picks
@@ -167,6 +190,12 @@ extern void ACT_setMotion(Actor *actor, unsigned int dataId);
  * recomputes the ground-height component of position when it is set.
  */
 #define ACTOR_FLAG_ENEMY 0x40u
+
+/* Bit 0x8 of Actor.flags hides the actor (include/main/act_1.h spells it the same). */
+#define ACTOR_FLAG_HIDDEN 0x8
+
+/* Bit 0x40 of CalcUnitParam.flags, a different record's bit of the same value. */
+#define CALC_UNIT_FLAG_AGWS 0x40
 
 /*
  * unitCmdSet (src/ov01/unit_cmd.c, still asm) sets this bit of Actor.flags
@@ -304,8 +333,8 @@ extern int unitCmdMoveNext(ObjectTask *unit, int);
 extern int unitCmdRun(ObjectTask *unit, int, int);
 
 /*
- * unitCmdWarp's own siblings, still asm in this TU; forward-declared for the
- * calls it makes before their definitions appear later in the file.
+ * unitCmdWarp's own siblings, defined later in this TU; forward-declared for
+ * the calls it makes before their definitions appear in the file.
  */
 extern int unitTelIn(ObjectTask *unit);
 extern int unitTelOut(ObjectTask *unit);
