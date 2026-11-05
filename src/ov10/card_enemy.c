@@ -1106,7 +1106,7 @@ void CardEnemyComm(int side, CardGameWork *work) {
  * Card id 7 is the AI's search target here: the same draw-to-hand/CleanYama/
  * ShuffleYama sequence, keyed off the same card id, is already accepted for
  * the manual case in ccu_038_exec_sub.c (CCU038ExecSub step 4.3,
- * `ownSide->deck[D_00A57830] == 7`).
+ * `ownSide->deck[NowNo_32] == 7`).
  */
 void CardEnemyAnswerSionSearch(int side, CardGameWork *work) {
     CardPlaySide *ownSide = side == 0 ? &work->player : &work->enemy;

@@ -15,75 +15,75 @@ extern void nmlModelSetRenderLevel(int level);
 extern void nmlModelSetTexture(const void *texture);
 extern void nmlModelSetPlace(Matrix4 matrix);
 extern void nmlModelEntry(u32 model);
-extern int tutopage;       /* 0x00A487C8 */
-extern u32 tulex_tbl[];    /* 0x00A57DB0, 2 entries */
-extern void *tuxtx_tbl[];  /* 0x00A57DB8, 2 entries */
-extern u32 lex;            /* 0x00A57DA8 */
+static int tutopage;       /* 0x00A487C8 */
+static u32 tulex_tbl[2];    /* 0x00A57DB0, 2 entries */
+static void *tuxtx_tbl[2];  /* 0x00A57DB8, 2 entries */
+static u32 lex;            /* 0x00A57DA8 */
 
 /* "data\carddata\tuto\" */
 char datapath[0x14] = "data\\carddata\\tuto\\";
-extern const char D_00A4E320[];
-extern const char D_00A4E328[];
-extern const char D_00A4E330[];
-extern const char D_00A4E338[];
-extern const char D_00A4E340[];
-extern const char D_00A4E348[];
-extern const char D_00A4E350[];
-extern const char D_00A4E358[];
-extern const char D_00A4E360[];
-extern const char D_00A4E368[];
-extern const char D_00A4E370[];
-extern const char D_00A4E378[];
-extern const char D_00A4E380[];
-extern const char D_00A4E388[];
-extern const char D_00A4E390[];
-extern const char D_00A4E398[];
-extern const char D_00A4E3A0[];
-extern const char D_00A4E3A8[];
-extern const char D_00A4E3B0[];
-extern const char D_00A4E3B8[];
-extern const char D_00A4E3C0[];
-extern const char D_00A4E3C8[];
-extern const char D_00A4E3D0[];
-extern const char D_00A4E3D8[];
-extern const char D_00A4E3E0[];
-extern const char D_00A4E3E8[];
-extern const char D_00A4E3F0[];
-extern const char D_00A4E3F8[];
-extern const char D_00A4E400[];
-extern const char D_00A4E408[];
-extern const char D_00A4E410[];
-extern const char D_00A4E418[];
-extern const char D_00A4E420[];
-extern const char D_00A4E428[];
-extern const char D_00A4E430[];
-extern const char D_00A4E438[];
-extern const char D_00A4E440[];
-extern const char D_00A4E448[];
-extern const char D_00A4E450[];
-extern const char D_00A4E458[];
-extern const char D_00A4E460[];
-extern const char D_00A4E468[];
-extern const char D_00A4E470[];
-extern const char D_00A4E478[];
-extern const char D_00A4E480[];
-extern const char D_00A4E488[];
-extern const char D_00A4E490[];
+extern const char cardTutorialNameTu046[];
+extern const char cardTutorialNameTu045[];
+extern const char cardTutorialNameTu044[];
+extern const char cardTutorialNameTu043[];
+extern const char cardTutorialNameTu042[];
+extern const char cardTutorialNameTu041[];
+extern const char cardTutorialNameTu040[];
+extern const char cardTutorialNameTu039[];
+extern const char cardTutorialNameTu038[];
+extern const char cardTutorialNameTu037[];
+extern const char cardTutorialNameTu036[];
+extern const char cardTutorialNameTu035[];
+extern const char cardTutorialNameTu034[];
+extern const char cardTutorialNameTu033[];
+extern const char cardTutorialNameTu032[];
+extern const char cardTutorialNameTu031[];
+extern const char cardTutorialNameTu030[];
+extern const char cardTutorialNameTu029[];
+extern const char cardTutorialNameTu028[];
+extern const char cardTutorialNameTu027[];
+extern const char cardTutorialNameTu026[];
+extern const char cardTutorialNameTu025[];
+extern const char cardTutorialNameTu024[];
+extern const char cardTutorialNameTu023[];
+extern const char cardTutorialNameTu022[];
+extern const char cardTutorialNameTu021[];
+extern const char cardTutorialNameTu020[];
+extern const char cardTutorialNameTu019[];
+extern const char cardTutorialNameTu018[];
+extern const char cardTutorialNameTu017[];
+extern const char cardTutorialNameTu016[];
+extern const char cardTutorialNameTu015[];
+extern const char cardTutorialNameTu014[];
+extern const char cardTutorialNameTu013[];
+extern const char cardTutorialNameTu012[];
+extern const char cardTutorialNameTu011[];
+extern const char cardTutorialNameTu010[];
+extern const char cardTutorialNameTu009[];
+extern const char cardTutorialNameTu008[];
+extern const char cardTutorialNameTu007[];
+extern const char cardTutorialNameTu006[];
+extern const char cardTutorialNameTu005[];
+extern const char cardTutorialNameTu004[];
+extern const char cardTutorialNameTu003[];
+extern const char cardTutorialNameTu002[];
+extern const char cardTutorialNameTu001[];
+extern const char cardTutorialNameTu000[];
 static const char *tutoxtx_tbl[64] = {
-    D_00A4E490, D_00A4E488, D_00A4E480, D_00A4E478,
-    D_00A4E470, D_00A4E468, D_00A4E460, D_00A4E458,
-    D_00A4E450, D_00A4E448, D_00A4E440, D_00A4E438,
-    D_00A4E430, D_00A4E428, D_00A4E420, D_00A4E418,
-    D_00A4E410, D_00A4E408, D_00A4E400, D_00A4E3F8,
-    D_00A4E3F0, D_00A4E3E8, D_00A4E3E0, D_00A4E3D8,
-    D_00A4E3D0, D_00A4E3C8, D_00A4E3C0, D_00A4E3B8,
-    D_00A4E3B0, D_00A4E3A8, D_00A4E3A0, D_00A4E398,
-    D_00A4E390, D_00A4E388, D_00A4E380, D_00A4E378,
-    D_00A4E370, D_00A4E368, D_00A4E360, D_00A4E358,
-    D_00A4E350, D_00A4E348, D_00A4E340, D_00A4E338,
-    D_00A4E330, D_00A4E328, D_00A4E320,
+    cardTutorialNameTu000, cardTutorialNameTu001, cardTutorialNameTu002, cardTutorialNameTu003,
+    cardTutorialNameTu004, cardTutorialNameTu005, cardTutorialNameTu006, cardTutorialNameTu007,
+    cardTutorialNameTu008, cardTutorialNameTu009, cardTutorialNameTu010, cardTutorialNameTu011,
+    cardTutorialNameTu012, cardTutorialNameTu013, cardTutorialNameTu014, cardTutorialNameTu015,
+    cardTutorialNameTu016, cardTutorialNameTu017, cardTutorialNameTu018, cardTutorialNameTu019,
+    cardTutorialNameTu020, cardTutorialNameTu021, cardTutorialNameTu022, cardTutorialNameTu023,
+    cardTutorialNameTu024, cardTutorialNameTu025, cardTutorialNameTu026, cardTutorialNameTu027,
+    cardTutorialNameTu028, cardTutorialNameTu029, cardTutorialNameTu030, cardTutorialNameTu031,
+    cardTutorialNameTu032, cardTutorialNameTu033, cardTutorialNameTu034, cardTutorialNameTu035,
+    cardTutorialNameTu036, cardTutorialNameTu037, cardTutorialNameTu038, cardTutorialNameTu039,
+    cardTutorialNameTu040, cardTutorialNameTu041, cardTutorialNameTu042, cardTutorialNameTu043,
+    cardTutorialNameTu044, cardTutorialNameTu045, cardTutorialNameTu046,
 };
-const char D_00A4E498[8] = ".xtx";
+const char cardTutorialXtxExtension[8] = ".xtx";
 static void *tuxtx;
 
 int CardTutorialFileLoad(int tutorialIndex)
@@ -93,7 +93,7 @@ int CardTutorialFileLoad(int tutorialIndex)
     memset(path, 0, sizeof(path));
     strcpy(path, datapath);
     strcat(path, tutoxtx_tbl[tutorialIndex]);
-    strcat(path, D_00A4E498);
+    strcat(path, cardTutorialXtxExtension);
     return xglCdReadFile(path, tuxtx, 0, 1);
 }
 
@@ -102,9 +102,9 @@ typedef struct {
     const char *name[2];
 } TutorialNameList;
 
-extern const TutorialNameList D_00A4E4B0;
-extern const char D_00A4E4B8[];   /* "Tu_000.lex" at 0x00A4E4B8 */
-extern const char D_00A4E4C8[];   /* ".lex" at 0x00A4E4C8 */
+extern const TutorialNameList cardTutorialNameListInit;
+extern const char cardTutorialFirstLexName[];   /* "Tu_000.lex" at 0x00A4E4B8 */
+extern const char cardTutorialLexExtension[];   /* ".lex" at 0x00A4E4C8 */
 
 void CardTutorialInit(void)
 {
@@ -117,11 +117,11 @@ void CardTutorialInit(void)
     buffer = (char *)0x01a00000;
     tutopage = 0;
     lex = (u32)buffer;
-    names = D_00A4E4B0;
+    names = cardTutorialNameListInit;
 
     memset(path, 0, sizeof(path));
     strcpy(path, datapath);
-    strcat(path, D_00A4E4B8);
+    strcat(path, cardTutorialFirstLexName);
     count = xglCdReadFile(path, (void *)0x01a00000, 0, 1);
     if (count > 0) {
         buffer += count;
@@ -132,7 +132,7 @@ void CardTutorialInit(void)
         memset(path, 0, sizeof(path));
         strcpy(path, datapath);
         strcat(path, names.name[i]);
-        strcat(path, D_00A4E4C8);
+        strcat(path, cardTutorialLexExtension);
         tulex_tbl[i] = (u32)buffer;
         count = xglCdReadFile(path, buffer, 0, 1);
         if (count > 0) {
@@ -143,7 +143,7 @@ void CardTutorialInit(void)
         memset(path, 0, sizeof(path));
         strcpy(path, datapath);
         strcat(path, names.name[i]);
-        strcat(path, D_00A4E498);
+        strcat(path, cardTutorialXtxExtension);
         tuxtx_tbl[i] = buffer;
         count = xglCdReadFile(path, buffer, 0, 1);
         if (count > 0) {
@@ -169,21 +169,21 @@ void CardTutorialInit(void)
 #define CARD_TUTORIAL_PAD_CLOSE 0x0800
 
 /* Translation vector {1.2f, -1.82f, 0.0f, 1.0f}, read by xglMatrixTrans as four floats. The original copies the 16 bytes from
- * D_00A4E4D0 with two doubleword moves (`ld`/`ld`/`sd`/`sd` at 0x00a21600..0x00a21610). A plain float[4] or struct of floats has
+ * cardTutorialTranslationInit with two doubleword moves (`ld`/`ld`/`sd`/`sd` at 0x00a21600..0x00a21610). A plain float[4] or struct of floats has
  * only 4-byte alignment and compiles to unaligned ldl/ldr/sdl/sdr pairs; the u64 member gives the aggregate the 8-byte alignment
  * that yields the doubleword copy. */
 typedef union CardTutorialTranslation {
     float v[4];
     u64 words[2];
 } CardTutorialTranslation;
-extern const CardTutorialTranslation D_00A4E4D0;
-extern const char D_00A4E4E0[];
+extern const CardTutorialTranslation cardTutorialTranslationInit;
+extern const char cardTutorialEndLog[];
 
 int CardTutorialProc(CardGameWork *work)
 {
     Matrix4 source;
     Matrix4 placed;
-    CardTutorialTranslation translation = D_00A4E4D0;
+    CardTutorialTranslation translation = cardTutorialTranslationInit;
     unsigned short pressed;
 
     xglMatrixUnit(source);
@@ -192,7 +192,7 @@ int CardTutorialProc(CardGameWork *work)
         xglSoundEffectNormalID(1, 0);
         tutopage++;
         if (tutopage >= CARD_TUTORIAL_PAGE_COUNT) {
-            printf(D_00A4E4E0);
+            printf(cardTutorialEndLog);
             return 0;
         }
         if (tutoxtx_tbl[tutopage] == 0) {
@@ -231,96 +231,118 @@ int CardTutorialProc(CardGameWork *work)
 
 
 
-const char D_00A4E320[8] = "Tu_046";
+const char cardTutorialNameTu046[8] = "Tu_046";
 
-const char D_00A4E328[8] = "Tu_045";
+const char cardTutorialNameTu045[8] = "Tu_045";
 
-const char D_00A4E330[8] = "Tu_044";
+const char cardTutorialNameTu044[8] = "Tu_044";
 
-const char D_00A4E338[8] = "Tu_043";
+const char cardTutorialNameTu043[8] = "Tu_043";
 
-const char D_00A4E340[8] = "Tu_042";
+const char cardTutorialNameTu042[8] = "Tu_042";
 
-const char D_00A4E348[8] = "Tu_041";
+const char cardTutorialNameTu041[8] = "Tu_041";
 
-const char D_00A4E350[8] = "Tu_040";
+const char cardTutorialNameTu040[8] = "Tu_040";
 
-const char D_00A4E358[8] = "Tu_039";
+const char cardTutorialNameTu039[8] = "Tu_039";
 
-const char D_00A4E360[8] = "Tu_038";
+const char cardTutorialNameTu038[8] = "Tu_038";
 
-const char D_00A4E368[8] = "Tu_037";
+const char cardTutorialNameTu037[8] = "Tu_037";
 
-const char D_00A4E370[8] = "Tu_036";
+const char cardTutorialNameTu036[8] = "Tu_036";
 
-const char D_00A4E378[8] = "Tu_035";
+const char cardTutorialNameTu035[8] = "Tu_035";
 
-const char D_00A4E380[8] = "Tu_034";
+const char cardTutorialNameTu034[8] = "Tu_034";
 
-const char D_00A4E388[8] = "Tu_033";
+const char cardTutorialNameTu033[8] = "Tu_033";
 
-const char D_00A4E390[8] = "Tu_032";
+const char cardTutorialNameTu032[8] = "Tu_032";
 
-const char D_00A4E398[8] = "Tu_031";
+const char cardTutorialNameTu031[8] = "Tu_031";
 
-const char D_00A4E3A0[8] = "Tu_030";
+const char cardTutorialNameTu030[8] = "Tu_030";
 
-const char D_00A4E3A8[8] = "Tu_029";
+const char cardTutorialNameTu029[8] = "Tu_029";
 
-const char D_00A4E3B0[8] = "Tu_028";
+const char cardTutorialNameTu028[8] = "Tu_028";
 
-const char D_00A4E3B8[8] = "Tu_027";
+const char cardTutorialNameTu027[8] = "Tu_027";
 
-const char D_00A4E3C0[8] = "Tu_026";
+const char cardTutorialNameTu026[8] = "Tu_026";
 
-const char D_00A4E3C8[8] = "Tu_025";
+const char cardTutorialNameTu025[8] = "Tu_025";
 
-const char D_00A4E3D0[8] = "Tu_024";
+const char cardTutorialNameTu024[8] = "Tu_024";
 
-const char D_00A4E3D8[8] = "Tu_023";
+const char cardTutorialNameTu023[8] = "Tu_023";
 
-const char D_00A4E3E0[8] = "Tu_022";
+const char cardTutorialNameTu022[8] = "Tu_022";
 
-const char D_00A4E3E8[8] = "Tu_021";
+const char cardTutorialNameTu021[8] = "Tu_021";
 
-const char D_00A4E3F0[8] = "Tu_020";
+const char cardTutorialNameTu020[8] = "Tu_020";
 
-const char D_00A4E3F8[8] = "Tu_019";
+const char cardTutorialNameTu019[8] = "Tu_019";
 
-const char D_00A4E400[8] = "Tu_018";
+const char cardTutorialNameTu018[8] = "Tu_018";
 
-const char D_00A4E408[8] = "Tu_017";
+const char cardTutorialNameTu017[8] = "Tu_017";
 
-const char D_00A4E410[8] = "Tu_016";
+const char cardTutorialNameTu016[8] = "Tu_016";
 
-const char D_00A4E418[8] = "Tu_015";
+const char cardTutorialNameTu015[8] = "Tu_015";
 
-const char D_00A4E420[8] = "Tu_014";
+const char cardTutorialNameTu014[8] = "Tu_014";
 
-const char D_00A4E428[8] = "Tu_013";
+const char cardTutorialNameTu013[8] = "Tu_013";
 
-const char D_00A4E430[8] = "Tu_012";
+const char cardTutorialNameTu012[8] = "Tu_012";
 
-const char D_00A4E438[8] = "Tu_011";
+const char cardTutorialNameTu011[8] = "Tu_011";
 
-const char D_00A4E440[8] = "Tu_010";
+const char cardTutorialNameTu010[8] = "Tu_010";
 
-const char D_00A4E448[8] = "Tu_009";
+const char cardTutorialNameTu009[8] = "Tu_009";
 
-const char D_00A4E450[8] = "Tu_008";
+const char cardTutorialNameTu008[8] = "Tu_008";
 
-const char D_00A4E458[8] = "Tu_007";
+const char cardTutorialNameTu007[8] = "Tu_007";
 
-const char D_00A4E460[8] = "Tu_006";
+const char cardTutorialNameTu006[8] = "Tu_006";
 
-const char D_00A4E468[8] = "Tu_005";
+const char cardTutorialNameTu005[8] = "Tu_005";
 
-const char D_00A4E470[8] = "Tu_004";
+const char cardTutorialNameTu004[8] = "Tu_004";
 
-const char D_00A4E478[8] = "Tu_003";
+const char cardTutorialNameTu003[8] = "Tu_003";
 
-const char D_00A4E480[8] = "Tu_002";
+const char cardTutorialNameTu002[8] = "Tu_002";
 
-const char D_00A4E488[8] = "Tu_001";
+const char cardTutorialNameTu001[8] = "Tu_001";
 
-const char D_00A4E490[8] = "Tu_000";
+const char cardTutorialNameTu000[8] = "Tu_000";
+
+extern const char cardTutorialDirectoryName[];
+
+static int tutopage = 0;
+
+const char cardTutorialDirectoryName[16] = "Tutorial";
+
+const TutorialNameList cardTutorialNameListInit = { .name = { cardTutorialDirectoryName, 0 } };
+
+const char cardTutorialFirstLexName[16] = "Tu_000.lex";
+
+const char cardTutorialLexExtension[8] = ".lex";
+
+const CardTutorialTranslation cardTutorialTranslationInit = { .v = { 1.2000000476837158f, -1.8200000524520874f, 0.0f, 1.0f } };
+
+const char cardTutorialEndLog[16] = "tutoend\n";
+
+static u32 lex;
+
+static u32 tulex_tbl[2];
+
+static void * tuxtx_tbl[2];

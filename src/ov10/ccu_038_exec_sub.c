@@ -104,45 +104,41 @@ extern int CGPCursorMove(int side, CardGameWork *work);
 extern void CGPCursor2Pos(CardCursorPosition *position, CardGameWork *work);
 extern void CardSetEffect(int side, CardGameWork *work, u8 kind, s8 amount,
                           int sound, void *position, void *target);
-const char D_00A4D7C8[40] = "\x0b\x19\x03\x0d\0Select card to discard.";
-static int D_00A57760;
-static int D_00A57764;
-static int D_00A57788;
-static int D_00A5778C;
-static int D_00A57790;
-static int D_00A57794;
-static int D_00A577C0;
-static int D_00A577C4;
-static int D_00A577C8;
-static int D_00A57830;
-static int D_00A577E0;
-static int D_00A577F0;
-static int D_00A57800;
-static s8 D_00A57834;
-static CardCursorPosition D_00A57750;
-static CardCursorPosition D_00A57758;
-static CardCursorPosition D_00A57768;
-static CardCursorPosition D_00A57770;
-static CardCursorPosition D_00A57778;
-static CardCursorPosition D_00A57780;
-static CardCursorPosition D_00A57798;
-static CardCursorPosition D_00A577A0;
-static CardCursorPosition D_00A577A8;
-static CardCursorPosition D_00A577B0;
-static CardCursorPosition D_00A577B8;
-static CardCursorPosition D_00A577D0;
-static CardCursorPosition D_00A577D8;
-static CardCursorPosition D_00A577E8;
-static CardCursorPosition D_00A577F8;
-static CardCursorPosition D_00A57808;
-static CardCursorPosition D_00A57810;
-static CardCursorPosition D_00A57818;
-static CardCursorPosition D_00A57820;
-static CardCursorPosition D_00A57828;
-extern s16 D_00A5779A;
-extern s16 D_00A577B2;
-extern s16 D_00A5780A;
-extern s16 D_00A5781A;
+const char cardPlayDiscardPrompt[40] = "\x0b\x19\x03\x0d\0Select card to discard.";
+static int cnt_2;
+static int cnt_3;
+static int cnt_8;
+static int cnt_9;
+static int cnt_10;
+static int NowNo_11;
+static int NowNo_17;
+static int NowNo_18;
+static int lpcnt_19;
+static int NowNo_32;
+static int lp_22;
+static int NowNo_24;
+static int NowNo_26;
+static s8 timer_33;
+static CardCursorPosition work_0;
+static CardCursorPosition work_1;
+static CardCursorPosition work_4;
+static CardCursorPosition work_5;
+static CardCursorPosition work_6;
+static CardCursorPosition work_7;
+static CardCursorPosition work_12;
+static CardCursorPosition work_13;
+static CardCursorPosition work_14;
+static CardCursorPosition work_15;
+static CardCursorPosition work_16;
+static CardCursorPosition work_20;
+static CardCursorPosition work_21;
+static CardCursorPosition work_23;
+static CardCursorPosition work_25;
+static CardCursorPosition work_27;
+static CardCursorPosition work_28;
+static CardCursorPosition work_29;
+static CardCursorPosition work_30;
+static CardCursorPosition work_31;
 /* This TU saw an int first parameter: CardPlayCommandPlay passes its u16 side
  * number without the s8 sign extension a narrower prototype would add. */
 
@@ -1131,12 +1127,12 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57750, work);
+            CGPCursor2Pos(&work_0, work);
             if (pressed & 0x20) {
-                if ((disposeZone == D_00A57750.zone || battleZone == D_00A57750.zone) &&
-                    D_00A57750.cardId >= 0 &&
-                    (CardSelectBattle(ownSide, D_00A57750.index,
-                                      disposeZone == D_00A57750.zone)->flags & 2)) {
+                if ((disposeZone == work_0.zone || battleZone == work_0.zone) &&
+                    work_0.cardId >= 0 &&
+                    (CardSelectBattle(ownSide, work_0.index,
+                                      disposeZone == work_0.zone)->flags & 2)) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1148,8 +1144,8 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2:
             complete = 1;
-            CCC02ExecSub(&CardSelectBattle(ownSide, D_00A57750.index,
-                                           disposeZone == D_00A57750.zone)->flags);
+            CCC02ExecSub(&CardSelectBattle(ownSide, work_0.index,
+                                           disposeZone == work_0.zone)->flags);
             CardCursorPassive(CardCursorFor(work));
             break;
         }
@@ -1190,10 +1186,10 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57758, work);
+            CGPCursor2Pos(&work_1, work);
             if (pressed & 0x20) {
-                if ((disposeZone == D_00A57758.zone || battleZone == D_00A57758.zone) &&
-                    D_00A57758.cardId >= 0 && !(CardDefinitionsFor(work)[D_00A57758.cardId].flags & 4)) {
+                if ((disposeZone == work_1.zone || battleZone == work_1.zone) &&
+                    work_1.cardId >= 0 && !(CardDefinitionsFor(work)[work_1.cardId].flags & 4)) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1206,8 +1202,8 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 2:
             complete = 1;
             CCC03ExecSub(side, work, &ownSide->hand,
-                         CardSelectBattle(ownSide, D_00A57758.index,
-                                          disposeZone == D_00A57758.zone));
+                         CardSelectBattle(ownSide, work_1.index,
+                                          disposeZone == work_1.zone));
             CardCursorPassive(CardCursorFor(work));
             break;
         }
@@ -1221,7 +1217,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         switch (CardCommandStep(work)) {
         case 0:
             CardCommandAdvance(work);
-            D_00A57760 = 5;
+            cnt_2 = 5;
             CardSetEffect(side, work, 12, 5, 0x2000D, 0, 0);
             /* The first recovery occurs in the same tick as setup. */
         case 1:
@@ -1230,13 +1226,13 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             {
                 /* Typed reference: the original schedules this store apart
                  * from the step store below. */
-                int *remaining = &D_00A57760;
+                int *remaining = &cnt_2;
                 (*remaining)--;
             }
             CardCommandAdvance(work);
             /* Recheck the count without waiting another tick. */
         case 2:
-            if (D_00A57760 > 0)
+            if (cnt_2 > 0)
                 CardCommandRewind(work);
             else
                 CardCommandAdvance(work);
@@ -1250,16 +1246,16 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         int i;
         switch (CardCommandStep(work)) {
         case 0:
-            D_00A57764 = 0;
+            cnt_3 = 0;
             for (i = 0; i < 4; i++) {
                 if (ownSide->disposal[i].battle.layers[0].cardId > 0)
-                    D_00A57764++;
+                    cnt_3++;
             }
             for (i = 0; i < 4; i++) {
                 if (ownSide->battle[i].battle.layers[0].cardId > 0)
-                    D_00A57764++;
+                    cnt_3++;
             }
-            CardSetEffect(side, work, 12, D_00A57764, 0x2000D, 0, 0);
+            CardSetEffect(side, work, 12, cnt_3, 0x2000D, 0, 0);
             CardCommandAdvance(work);
         case 1:
             CardPlayRecavery(&ownSide->hand);
@@ -1267,12 +1263,12 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             {
                 /* Typed reference: the original schedules this store apart
                  * from the step store below. */
-                int *remaining = &D_00A57764;
+                int *remaining = &cnt_3;
                 (*remaining)--;
             }
             CardCommandAdvance(work);
         case 2:
-            if (D_00A57764 > 0)
+            if (cnt_3 > 0)
                 CardCommandRewind(work);
             else
                 CardCommandAdvance(work);
@@ -1304,9 +1300,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57768, work);
+            CGPCursor2Pos(&work_4, work);
             if (pressed & 0x20) {
-                if (battleZone == D_00A57768.zone && D_00A57768.cardId >= 0) {
+                if (battleZone == work_4.zone && work_4.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1317,7 +1313,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             }
             break;
         case 2:
-            CCC07ExecSub(work, &otherSide->hand, &D_00A57768);
+            CCC07ExecSub(work, &otherSide->hand, &work_4);
             CardCursorPassive(CardCursorFor(work));
             complete = 1;
             break;
@@ -1355,9 +1351,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57770, work);
+            CGPCursor2Pos(&work_5, work);
             if (pressed & 0x20) {
-                if ((disposalTargetZone == D_00A57770.zone || battleTargetZone == D_00A57770.zone) && D_00A57770.cardId >= 0) {
+                if ((disposalTargetZone == work_5.zone || battleTargetZone == work_5.zone) && work_5.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1369,10 +1365,10 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2: {
             CardLayerStack *selected;
-            if (disposalTargetZone == D_00A57770.zone)
-                selected = &otherSide->disposal[D_00A57770.index].battle;
+            if (disposalTargetZone == work_5.zone)
+                selected = &otherSide->disposal[work_5.index].battle;
             else
-                selected = &otherSide->battle[D_00A57770.index].battle;
+                selected = &otherSide->battle[work_5.index].battle;
             complete = 1;
             CCC31ExecSub(opponentSide, work, selected);
             CardCursorPassive(CardCursorFor(work));
@@ -1410,9 +1406,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57778, work);
+            CGPCursor2Pos(&work_6, work);
             if (pressed & 0x20) {
-                if (disposalTargetZone == D_00A57778.zone && D_00A57778.cardId >= 0) {
+                if (disposalTargetZone == work_6.zone && work_6.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1424,7 +1420,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2:
             complete = 1;
-            CCC38ExecSub(opponentSide, work, otherSide, &D_00A57778);
+            CCC38ExecSub(opponentSide, work, otherSide, &work_6);
             break;
         default:
             break;
@@ -1451,9 +1447,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57780, work);
+            CGPCursor2Pos(&work_7, work);
             if (pressed & 0x20) {
-                if (battleZone == D_00A57780.zone && D_00A57780.cardId >= 0) {
+                if (battleZone == work_7.zone && work_7.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1465,7 +1461,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2:
             complete = 1;
-            CCC10ExecSub(opponentSide, work, &otherSide->hand, &D_00A57780);
+            CCC10ExecSub(opponentSide, work, &otherSide->hand, &work_7);
             CardCursorPassive(CardCursorFor(work));
             break;
         }
@@ -1475,14 +1471,14 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         int i;
         switch (CardCommandStep(work)) {
         case 0:
-            D_00A57788 = 0;
+            cnt_8 = 0;
             for (i = 0; i < 4; i++) {
                 CardLayerStack *card = &ownSide->battle[i].battle;
                 if (card->layers[0].cardId >= 0 && CardChkAttackType(CardDefinitionsFor(work), card) == 1) {
                     int power = CardDefinitionsFor(work)[card->layers[0].cardId].attackPower;
                     if (card->layers[1].cardId >= 0)
                         power = CardDefinitionsFor(work)[card->layers[1].cardId].attackPower;
-                    D_00A57788 += CGPCalcPowerPlus(work, card, power);
+                    cnt_8 += CGPCalcPowerPlus(work, card, power);
                 }
             }
             CardCommandAdvance(work);
@@ -1492,12 +1488,12 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardPlayRecavery(&ownSide->hand);
             CardSetEffect(side, work, 10, 0, 0, 0, 0);
             CardSetEffect(side, work, 12, 1, 0x2000D, 0, 0);
-            remainingRecovery = D_00A57788 - 1;
+            remainingRecovery = cnt_8 - 1;
             CardCommandAdvance(work);
-            D_00A57788 = remainingRecovery;
+            cnt_8 = remainingRecovery;
         }
         case 2:
-            if (D_00A57788 > 0)
+            if (cnt_8 > 0)
                 CardCommandRewind(work);
             else
                 CardCommandAdvance(work);
@@ -1513,18 +1509,18 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         switch (CardCommandStep(work)) {
         case 0:
             CardCommandAdvance(work);
-            D_00A5778C = 2;
+            cnt_9 = 2;
             break;
         case 1: {
             int drawsRemaining;
             CardPlayDrawCard(&ownSide->hand);
-            drawsRemaining = D_00A5778C - 1;
+            drawsRemaining = cnt_9 - 1;
             CardCommandAdvance(work);
-            D_00A5778C = drawsRemaining;
+            cnt_9 = drawsRemaining;
             break;
         }
         case 2:
-            if (D_00A5778C > 0)
+            if (cnt_9 > 0)
                 CardCommandRewind(work);
             else
                 CardCommandAdvance(work);
@@ -1538,17 +1534,17 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         switch (CardCommandStep(work)) {
         case 0:
             CardCommandAdvance(work);
-            D_00A57790 = 2;
+            cnt_10 = 2;
             break;
         case 1: {
             int drawsRemaining;
             CardPlayDrawSute(&ownSide->hand);
-            drawsRemaining = D_00A57790 - 1;
+            drawsRemaining = cnt_10 - 1;
             CardCommandAdvance(work);
-            D_00A57790 = drawsRemaining;
+            cnt_10 = drawsRemaining;
         }
         case 2:
-            if (D_00A57790 > 0)
+            if (cnt_10 > 0)
                 CardCommandRewind(work);
             else
                 CardCommandAdvance(work);
@@ -1570,16 +1566,16 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             if (count >= 6)
                 count = 5;
             if (repeated & 0x2000) {
-                D_00A57794++;
+                NowNo_11++;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A57794 >= count)
-                    D_00A57794 = count - 1;
+                if (NowNo_11 >= count)
+                    NowNo_11 = count - 1;
             }
             if (repeated & 0x8000) {
-                D_00A57794--;
+                NowNo_11--;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A57794 < 0)
-                    D_00A57794 = 0;
+                if (NowNo_11 < 0)
+                    NowNo_11 = 0;
             }
             if (pressed & 0x20) {
                 xglSoundEffectNormalID(1, 0);
@@ -1597,7 +1593,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                     CGCPHandDispSub2(CardDefinitionsFor(work), &ownSide->hand, -1, 0);
                 }
             }
-            CGCPYamaDispSub(&ownSide->hand, D_00A57794, count, held, rotated);
+            CGCPYamaDispSub(&ownSide->hand, NowNo_11, count, held, rotated);
             break;
         }
         case 2: {
@@ -1606,8 +1602,8 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 first -= 5;
             else
                 first = 0;
-            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->deck[first + D_00A57794];
-            ownSide->deck[first + D_00A57794] = -1;
+            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->deck[first + NowNo_11];
+            ownSide->deck[first + NowNo_11] = -1;
             CardPlayCleanYama(&ownSide->hand);
             CardPlayShuffleYama(&ownSide->hand);
             CardCommandAdvance(work);
@@ -1639,9 +1635,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57798, work);
+            CGPCursor2Pos(&work_12, work);
             if (pressed & 0x20) {
-                if (battleZone == D_00A57798.zone && D_00A57798.cardId >= 0) {
+                if (battleZone == work_12.zone && work_12.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -1653,7 +1649,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2:
             complete = 1;
-            CardPlayDesertOperation(&otherSide->hand, D_00A5779A);
+            CardPlayDesertOperation(&otherSide->hand, work_12.index);
             CardCursorPassive(CardCursorFor(work));
             break;
         }
@@ -1676,30 +1672,30 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             for (i = 0; i < 4; i++) {
                 if (otherSide->disposal[i].battle.layers[0].cardId >= 0 &&
                     (otherSide->disposal[i].battle.flags & 1)) {
-                    D_00A577A0.zone = disposalTargetZone;
-                    D_00A577A0.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577A0, 1);
+                    work_13.zone = disposalTargetZone;
+                    work_13.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_13, 1);
                 }
             }
             for (i = 0; i < 4; i++) {
                 if (otherSide->operations[i] >= 0 && (otherSide->operationFlags[i] & 1)) {
-                    D_00A577A0.zone = operationTargetZone;
-                    D_00A577A0.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577A0, 1);
+                    work_13.zone = operationTargetZone;
+                    work_13.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_13, 1);
                 }
             }
             CardCommandAdvance(work);
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577A0, work);
+            CGPCursor2Pos(&work_13, work);
             if (pressed & 0x20) {
-                if (D_00A577A0.cardId >= 0) {
-                    if (disposalTargetZone == D_00A577A0.zone) {
-                        if (otherSide->disposal[D_00A577A0.index].battle.flags & 1)
+                if (work_13.cardId >= 0) {
+                    if (disposalTargetZone == work_13.zone) {
+                        if (otherSide->disposal[work_13.index].battle.flags & 1)
                             CardCommandAdvance(work);
-                    } else if (operationTargetZone == D_00A577A0.zone &&
-                               (otherSide->operationFlags[D_00A577A0.index] & 1)) {
+                    } else if (operationTargetZone == work_13.zone &&
+                               (otherSide->operationFlags[work_13.index] & 1)) {
                         CardCommandAdvance(work);
                     }
                 }
@@ -1712,10 +1708,10 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             }
             break;
         case 2:
-            if (disposalTargetZone == D_00A577A0.zone)
-                otherSide->disposal[D_00A577A0.index].battle.layers[0].life = 0;
+            if (disposalTargetZone == work_13.zone)
+                otherSide->disposal[work_13.index].battle.layers[0].life = 0;
             else
-                CardPlayDesertOperation(&otherSide->hand, D_00A577A0.index);
+                CardPlayDesertOperation(&otherSide->hand, work_13.index);
             complete = 1;
             CardCursorPassive(CardCursorFor(work));
             break;
@@ -1737,22 +1733,22 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardBoardSlot *slot;
             CardCommandAdvance(work);
             CardCursorPassive(CardCursorFor(work));
-            D_00A577A8.zone = disposeZone;
+            work_14.zone = disposeZone;
             for (i = 0; i < 4; i++) {
                 slot = &otherSide->disposal[i];
                 if (slot->battle.layers[0].cardId >= 0 && (slot->battle.flags & 2) &&
                     (CardDefinitionsFor(work)[slot->battle.layers[0].cardId].flags & 4)) {
-                    D_00A577A8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577A8, 1);
+                    work_14.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_14, 1);
                 }
             }
-            D_00A577A8.zone = battleZone;
+            work_14.zone = battleZone;
             for (i = 0; i < 4; i++) {
                 slot = &otherSide->battle[i];
                 if (slot->battle.layers[0].cardId >= 0 && (slot->battle.flags & 2) &&
                     (CardDefinitionsFor(work)[slot->battle.layers[0].cardId].flags & 4)) {
-                    D_00A577A8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577A8, 1);
+                    work_14.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_14, 1);
                 }
             }
             CGPSetPermanentMess(work, 12);
@@ -1760,13 +1756,13 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577A8, work);
+            CGPCursor2Pos(&work_14, work);
             if (pressed & 0x20) {
-                if (D_00A577A8.cardId >= 0 &&
-                    (disposeZone == D_00A577A8.zone || battleZone == D_00A577A8.zone)) {
-                    card = &otherSide->disposal[D_00A577A8.index].battle;
-                    if (battleZone == D_00A577A8.zone)
-                        card = &otherSide->battle[D_00A577A8.index].battle;
+                if (work_14.cardId >= 0 &&
+                    (disposeZone == work_14.zone || battleZone == work_14.zone)) {
+                    card = &otherSide->disposal[work_14.index].battle;
+                    if (battleZone == work_14.zone)
+                        card = &otherSide->battle[work_14.index].battle;
                     if ((CardDefinitionsFor(work)[card->layers[0].cardId].flags & 4) && (card->flags & 2)) {
                         CardCursorPassive(CardCursorFor(work));
                         xglSoundEffectNormalID(1, 0);
@@ -1782,9 +1778,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             }
             break;
         case 2: {
-            CardLayerStack *stack = &otherSide->disposal[D_00A577A8.index].battle;
-            if (battleZone == D_00A577A8.zone)
-                stack = &otherSide->battle[D_00A577A8.index].battle;
+            CardLayerStack *stack = &otherSide->disposal[work_14.index].battle;
+            if (battleZone == work_14.zone)
+                stack = &otherSide->battle[work_14.index].battle;
             complete = 1;
             stack->layers[0].life = 0;
             CardSetEffect(side, work, 10, 0, 0x20008, stack->position, 0);
@@ -1805,20 +1801,20 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             for (i = 0; i < 4; i++) {
                 CardBoardSlot *slot = &otherSide->disposal[i];
                 if (slot->battle.layers[0].cardId >= 0 && (CardDefinitionsFor(work)[slot->battle.layers[0].cardId].flags & 1) && (slot->battle.flags & 1)) {
-                    D_00A577B0.zone = targetZone;
-                    D_00A577B0.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577B0, 1);
+                    work_15.zone = targetZone;
+                    work_15.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_15, 1);
                 }
             }
             CardCommandAdvance(work);
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577B0, work);
+            CGPCursor2Pos(&work_15, work);
             if (pressed & 0x20) {
-                if (D_00A577B0.cardId >= 0 && targetZone == D_00A577B0.zone) {
-                    if ((CardDefinitionsFor(work)[otherSide->disposal[D_00A577B0.index].battle.layers[0].cardId].flags & 1) &&
-                        (otherSide->disposal[D_00A577B0.index].battle.flags & 1)) {
+                if (work_15.cardId >= 0 && targetZone == work_15.zone) {
+                    if ((CardDefinitionsFor(work)[otherSide->disposal[work_15.index].battle.layers[0].cardId].flags & 1) &&
+                        (otherSide->disposal[work_15.index].battle.flags & 1)) {
                         xglSoundEffectNormalID(1, 0);
                         CardCommandAdvance(work);
                     } else {
@@ -1833,7 +1829,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2:
             complete = 1;
-            otherSide->disposal[D_00A577B2].battle.layers[0].life = 0;
+            otherSide->disposal[work_15.index].battle.layers[0].life = 0;
             CardCursorPassive(CardCursorFor(work));
             break;
         }
@@ -2080,29 +2076,29 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardCursorPassive(CardCursorFor(work));
             for (i = 0; i < 4; i++) {
                 if (otherSide->disposal[i].battle.layers[0].cardId >= 0 && otherSide->disposal[i].battle.layers[1].cardId >= 0) {
-                    D_00A577B8.zone = disposalTargetZone;
-                    D_00A577B8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577B8, 1);
+                    work_16.zone = disposalTargetZone;
+                    work_16.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_16, 1);
                 }
             }
             for (i = 0; i < 4; i++) {
                 if (otherSide->battle[i].battle.layers[0].cardId >= 0 && otherSide->battle[i].battle.layers[1].cardId >= 0) {
-                    D_00A577B8.zone = battleTargetZone;
-                    D_00A577B8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577B8, 1);
+                    work_16.zone = battleTargetZone;
+                    work_16.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_16, 1);
                 }
             }
             CardCommandAdvance(work);
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577B8, work);
+            CGPCursor2Pos(&work_16, work);
             if (pressed & 0x20) {
-                if (D_00A577B8.cardId >= 0 &&
-                    (disposalTargetZone == D_00A577B8.zone || battleTargetZone == D_00A577B8.zone)) {
-                    CardLayerStack *card = &otherSide->battle[D_00A577B8.index].battle;
-                    if (disposalTargetZone == D_00A577B8.zone)
-                        card = &otherSide->disposal[D_00A577B8.index].battle;
+                if (work_16.cardId >= 0 &&
+                    (disposalTargetZone == work_16.zone || battleTargetZone == work_16.zone)) {
+                    CardLayerStack *card = &otherSide->battle[work_16.index].battle;
+                    if (disposalTargetZone == work_16.zone)
+                        card = &otherSide->disposal[work_16.index].battle;
                     if (card->layers[1].cardId >= 0) {
                         xglSoundEffectNormalID(1, 0);
                         CardCommandAdvance(work);
@@ -2120,9 +2116,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardLayerStack *stack;
             int junkCount;
             int layerIndex;
-            stack = &otherSide->battle[D_00A577B8.index].battle;
-            if (disposalTargetZone == D_00A577B8.zone)
-                stack = &otherSide->disposal[D_00A577B8.index].battle;
+            stack = &otherSide->battle[work_16.index].battle;
+            if (disposalTargetZone == work_16.zone)
+                stack = &otherSide->disposal[work_16.index].battle;
             if (stack->layers[1].cardId != 0x2C) {
                 stack->power = CardDefinitionsFor(work)[stack->layers[0].cardId].basePower;
                 stack->powerLimit = CardDefinitionsFor(work)[stack->layers[0].cardId].basePower;
@@ -2228,19 +2224,19 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 1: {
             int count = CardPlayJunkCnt(&ownSide->hand);
             if (pressed & 0x2000) {
-                D_00A577C0++;
+                NowNo_17++;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A577C0 >= count)
-                    D_00A577C0 = count - 1;
+                if (NowNo_17 >= count)
+                    NowNo_17 = count - 1;
             }
             if (pressed & 0x8000) {
-                D_00A577C0--;
+                NowNo_17--;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A577C0 < 0)
-                    D_00A577C0 = 0;
+                if (NowNo_17 < 0)
+                    NowNo_17 = 0;
             }
             if (pressed & 0x20) {
-                int cardId = ownSide->junk[D_00A577C0];
+                int cardId = ownSide->junk[NowNo_17];
                 if (CardDefinitionsFor(work)[cardId].kind == 1 &&
                     (CardDefinitionsFor(work)[cardId].flags & 0x68)) {
                     xglSoundEffectNormalID(1, 0);
@@ -2251,12 +2247,12 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             } else if (pressed & 0x40) {
                 xglSoundEffectNormalID(5, 0);
             }
-            CGCPJunkDispSub(&ownSide->hand, D_00A577C0);
+            CGCPJunkDispSub(&ownSide->hand, NowNo_17);
             break;
         }
         case 2:
-            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->junk[D_00A577C0];
-            ownSide->junk[D_00A577C0] = -1;
+            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->junk[NowNo_17];
+            ownSide->junk[NowNo_17] = -1;
             CardPlayCleanJunk(&ownSide->hand);
             CardCommandAdvance(work);
             break;
@@ -2269,25 +2265,25 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         switch (CardCommandStep(work)) {
         case 0:
             CardCommandAdvance(work);
-            D_00A577C8 = 1;
+            lpcnt_19 = 1;
             CGPSetPermanentMess(work, 3);
             break;
         case 1: {
             int count = CardPlayJunkCnt(&ownSide->hand);
             if (pressed & 0x2000) {
-                D_00A577C4++;
+                NowNo_18++;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A577C4 >= count)
-                    D_00A577C4 = count - 1;
+                if (NowNo_18 >= count)
+                    NowNo_18 = count - 1;
             }
             if (pressed & 0x8000) {
-                D_00A577C4--;
+                NowNo_18--;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A577C4 < 0)
-                    D_00A577C4 = 0;
+                if (NowNo_18 < 0)
+                    NowNo_18 = 0;
             }
             if (pressed & 0x20) {
-                if (CardDefinitionsFor(work)[ownSide->junk[D_00A577C4]].flags & 1) {
+                if (CardDefinitionsFor(work)[ownSide->junk[NowNo_18]].flags & 1) {
                     xglSoundEffectNormalID(1, 0);
                     CardCommandAdvance(work);
                 } else {
@@ -2296,18 +2292,18 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             } else if (pressed & 0x40) {
                 xglSoundEffectNormalID(5, 0);
             }
-            CGCPJunkDispSub(&ownSide->hand, D_00A577C4);
+            CGCPJunkDispSub(&ownSide->hand, NowNo_18);
             break;
         }
         case 2:
-            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->junk[D_00A577C4];
-            ownSide->junk[D_00A577C4] = -1;
+            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->junk[NowNo_18];
+            ownSide->junk[NowNo_18] = -1;
             CardPlayCleanJunk(&ownSide->hand);
             CardCommandAdvance(work);
             break;
         case 3:
-            if (D_00A577C8 != 0) {
-                D_00A577C8--;
+            if (lpcnt_19 != 0) {
+                lpcnt_19--;
                 CardCommandSetStep(work, 1);
             } else {
                 CardCommandSetStep(work, 10);
@@ -2329,19 +2325,19 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardCursorPassive(CardCursorFor(work));
             for (i = 0; i < 4; i++) {
                 if (ownSide->battle[i].battle.layers[0].cardId >= 0 && CCC107ChkSub(&ownSide->battle[i].battle) == 0) {
-                    D_00A577D0.zone = battleZone;
-                    D_00A577D0.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577D0, 1);
+                    work_20.zone = battleZone;
+                    work_20.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_20, 1);
                 }
             }
             CardCommandAdvance(work);
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577D0, work);
+            CGPCursor2Pos(&work_20, work);
             if (pressed & 0x20) {
-                if (D_00A577D0.cardId >= 0 && battleZone == D_00A577D0.zone &&
-                    CCC107ChkSub(&ownSide->battle[D_00A577D0.index].battle) == 0) {
+                if (work_20.cardId >= 0 && battleZone == work_20.zone &&
+                    CCC107ChkSub(&ownSide->battle[work_20.index].battle) == 0) {
                     xglSoundEffectNormalID(1, 0);
                     CardCommandAdvance(work);
                 } else {
@@ -2353,7 +2349,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         case 2:
             complete = 1;
-            CCC26ExecSub(side, work, ownSide, &D_00A577D0);
+            CCC26ExecSub(side, work, ownSide, &work_20);
             break;
         default:
             break;
@@ -2393,16 +2389,16 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             } else {
                 for (i = 0; i < 4; i++) {
                     if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
-                        D_00A577D8.zone = disposeZone;
-                        D_00A577D8.index = i;
-                        CardCursorActive(CardCursorFor(work), &D_00A577D8, 1);
+                        work_21.zone = disposeZone;
+                        work_21.index = i;
+                        CardCursorActive(CardCursorFor(work), &work_21, 1);
                     }
                 }
                 for (i = 0; i < 4; i++) {
                     if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
-                        D_00A577D8.zone = battleZone;
-                        D_00A577D8.index = i;
-                        CardCursorActive(CardCursorFor(work), &D_00A577D8, 1);
+                        work_21.zone = battleZone;
+                        work_21.index = i;
+                        CardCursorActive(CardCursorFor(work), &work_21, 1);
                     }
                 }
             }
@@ -2411,11 +2407,11 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577D8, work);
+            CGPCursor2Pos(&work_21, work);
             if (pressed & 0x20) {
-                if ((disposeZone == D_00A577D8.zone || battleZone == D_00A577D8.zone) &&
-                    D_00A577D8.cardId >= 0) {
-                    CardCursorActive(CardCursorFor(work), &D_00A577D8, 2);
+                if ((disposeZone == work_21.zone || battleZone == work_21.zone) &&
+                    work_21.cardId >= 0) {
+                    CardCursorActive(CardCursorFor(work), &work_21, 2);
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -2438,12 +2434,12 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             }
             break;
         case 3:
-            if (disposeZone == D_00A577D8.zone)
-                ownSide->disposal[D_00A577D8.index].battle.layers[0].life = 0;
+            if (disposeZone == work_21.zone)
+                ownSide->disposal[work_21.index].battle.layers[0].life = 0;
             else
-                ownSide->battle[D_00A577D8.index].battle.layers[0].life = 0;
+                ownSide->battle[work_21.index].battle.layers[0].life = 0;
             CardCommandAdvance(work);
-            D_00A577E0 = 4;
+            lp_22 = 4;
             xglSoundEffectNormalID(0x2000D, 0);
             break;
         case 4: {
@@ -2451,13 +2447,13 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardPlayRecavery(&ownSide->hand);
             CardSetEffect(side, work, 10, 0, 0, 0, 0);
             CardSetEffect(side, work, 12, 1, 0, 0, 0);
-            remainingRecovery = D_00A577E0 - 1;
+            remainingRecovery = lp_22 - 1;
             CardCommandAdvance(work);
-            D_00A577E0 = remainingRecovery;
+            lp_22 = remainingRecovery;
             break;
         }
         case 5:
-            if (D_00A577E0 > 0)
+            if (lp_22 > 0)
                 CardCommandRewind(work);
             else
                 CardCommandSetStep(work, 0);
@@ -2522,25 +2518,25 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardCursorPassive(CardCursorFor(work));
             for (i = 0; i < 4; i++) {
                 if (otherSide->disposal[i].battle.layers[0].cardId >= 0) {
-                    D_00A577E8.zone = disposeZone;
-                    D_00A577E8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577E8, 1);
+                    work_23.zone = disposeZone;
+                    work_23.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_23, 1);
                 }
             }
             for (i = 0; i < 4; i++) {
                 if (otherSide->battle[i].battle.layers[0].cardId >= 0) {
-                    D_00A577E8.zone = battleZone;
-                    D_00A577E8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577E8, 1);
+                    work_23.zone = battleZone;
+                    work_23.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_23, 1);
                 }
             }
             CardCommandAdvance(work);
             break;
         case 1:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577E8, work);
+            CGPCursor2Pos(&work_23, work);
             if (pressed & 0x20) {
-                if ((disposeZone == D_00A577E8.zone || battleZone == D_00A577E8.zone) && D_00A577E8.cardId >= 0) {
+                if ((disposeZone == work_23.zone || battleZone == work_23.zone) && work_23.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -2553,8 +2549,8 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 2:
             complete = 1;
             CCC30ExecSub(opponentSide, work,
-                         CardSelectBattle(otherSide, D_00A577E8.index,
-                                          disposeZone == D_00A577E8.zone));
+                         CardSelectBattle(otherSide, work_23.index,
+                                          disposeZone == work_23.zone));
             CardCursorPassive(CardCursorFor(work));
             break;
         }
@@ -2587,21 +2583,21 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 const s16 *commandId = &ownSide->battle[i].battle.layers[0].cardId;
                 int cardId = (s16) *commandId;
                 if (cardId >= 0 && (CardDefinitionsFor(work)[cardId].flags & 1)) {
-                    D_00A577F8.zone = battleZone;
-                    D_00A577F8.index = i;
-                    CardCursorActive(CardCursorFor(work), &D_00A577F8, 1);
+                    work_25.zone = battleZone;
+                    work_25.index = i;
+                    CardCursorActive(CardCursorFor(work), &work_25, 1);
                 }
             }
             CardCommandAdvance(work);
             break;
         case 2:
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A577F8, work);
+            CGPCursor2Pos(&work_25, work);
             if (pressed & 0x20) {
-                if (battleZone == D_00A577F8.zone && D_00A577F8.cardId >= 0 &&
-                    CardDefinitionsFor(work)[D_00A577F8.index].kind == 1 &&
-                    CardDefinitionsFor(work)[D_00A577F8.cardId].flags == 1) {
-                    CardCursorActive(CardCursorFor(work), &D_00A577F8, 2);
+                if (battleZone == work_25.zone && work_25.cardId >= 0 &&
+                    CardDefinitionsFor(work)[work_25.index].kind == 1 &&
+                    CardDefinitionsFor(work)[work_25.cardId].flags == 1) {
+                    CardCursorActive(CardCursorFor(work), &work_25, 2);
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -2618,7 +2614,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 xglSoundEffectNormalID(1, 0);
                 nextStep = work->command.step;
                 nextStep++;
-                D_00A577F0 = 0;
+                NowNo_24 = 0;
                 CardCommandSetStep(work, nextStep);
             }
             if (pressed & 0x40) {
@@ -2630,16 +2626,16 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 4: {
             int junkCount = CardPlayJunkCnt(&ownSide->hand);
             if (repeated & 0x2000) {
-                if (D_00A577F0 < junkCount - 1) {
+                if (NowNo_24 < junkCount - 1) {
                     xglSoundEffectNormalID(3, 0);
-                    D_00A577F0++;
+                    NowNo_24++;
                 }
-            } else if ((repeated & 0x8000) && D_00A577F0 > 0) {
+            } else if ((repeated & 0x8000) && NowNo_24 > 0) {
                 xglSoundEffectNormalID(3, 0);
-                D_00A577F0--;
+                NowNo_24--;
             }
             if (pressed & 0x20) {
-                int cardId = ownSide->junk[D_00A577F0];
+                int cardId = ownSide->junk[NowNo_24];
                 if ((CardDefinitionsFor(work)[cardId].flags & 1) &&
                     CardPlayIdentityCheck(work, &ownSide->hand,
                                           CardDefinitionsFor(work)[cardId].identity) == 0) {
@@ -2652,7 +2648,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 xglSoundEffectNormalID(2, 0);
                 CardCommandSetStep(work, 1);
             }
-            CGCPJunkDispSub(&ownSide->hand, D_00A577F0);
+            CGCPJunkDispSub(&ownSide->hand, NowNo_24);
             break;
         }
         case 5:
@@ -2664,13 +2660,13 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 xglSoundEffectNormalID(2, 0);
                 CardCommandSetStep(work, 4);
             }
-            CGCPJunkDispSub(&ownSide->hand, D_00A577F0);
+            CGCPJunkDispSub(&ownSide->hand, NowNo_24);
             break;
         case 6:
             complete = 1;
-            CardPlayDesertBattle(&ownSide->hand, &ownSide->battle[D_00A577F8.index].battle);
-            ownSide->battle[D_00A577F8.index].battle.layers[0].cardId = ownSide->junk[D_00A577F0];
-            ownSide->junk[D_00A577F0] = -1;
+            CardPlayDesertBattle(&ownSide->hand, &ownSide->battle[work_25.index].battle);
+            ownSide->battle[work_25.index].battle.layers[0].cardId = ownSide->junk[NowNo_24];
+            ownSide->junk[NowNo_24] = -1;
             CardPlayCleanJunk(&ownSide->hand);
             CardCursorPassive(CardCursorFor(work));
             break;
@@ -2696,7 +2692,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 unsigned int nextStep;
                 int *selectedCard;
                 CGPSetErrorMessPlus(opponentSide, work, 0x24, 0x87);
-                selectedCard = &D_00A57800;
+                selectedCard = &NowNo_26;
                 nextStep = (u16) work->command.step;
                 *selectedCard = 0;
                 nextStep++;
@@ -2712,21 +2708,21 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 break;
             }
             if (opponentRepeated & 0x8000) {
-                if (D_00A57800 > 0) {
+                if (NowNo_26 > 0) {
                     xglSoundEffectNormalID(3, 0);
-                    D_00A57800--;
+                    NowNo_26--;
                 }
             } else if (opponentRepeated & 0x2000) {
-                if (D_00A57800 < count - 1) {
+                if (NowNo_26 < count - 1) {
                     xglSoundEffectNormalID(3, 0);
-                    D_00A57800++;
+                    NowNo_26++;
                 }
             }
             if (opponentRepeated & 0x20) {
                 CardCommandAdvance(work);
                 xglSoundEffectNormalID(1, 0);
             }
-            xglFontPrint(143, 213, 0xFFF8, D_00A4D7C8);
+            xglFontPrint(143, 213, 0xFFF8, cardPlayDiscardPrompt);
             scale[0] = 1.5f;
             scale[1] = scale[2] = scale[3] = 1.0f;
             translation[0] = translation[1] = 0.0f;
@@ -2740,17 +2736,17 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             nmlModelEntryCard((void *) 0x01DAAC00);
             if ((side != 0 && work->rotStageId == 0) ||
                 (side == 0 && work->rotStageId != 0)) {
-                CGCPHandDispSub2(CardDefinitionsFor(work), &otherSide->hand, D_00A57800, 0);
+                CGCPHandDispSub2(CardDefinitionsFor(work), &otherSide->hand, NowNo_26, 0);
             } else {
-                CGCPHandDispSub3(CardDefinitionsFor(work), &otherSide->hand, D_00A57800, 0, 0);
+                CGCPHandDispSub3(CardDefinitionsFor(work), &otherSide->hand, NowNo_26, 0, 0);
             }
             break;
         case 2:
-            CGPDispErrorMessPlus(opponentSide, 0x19, otherSide->hand.cards[D_00A57800]);
+            CGPDispErrorMessPlus(opponentSide, 0x19, otherSide->hand.cards[NowNo_26]);
             if (opponentRepeated & 0x20) {
                 xglSoundEffectNormalID(1, 0);
                 CardCommandAdvance(work);
-                CardPlayDesertCard(&otherSide->hand, D_00A57800);
+                CardPlayDesertCard(&otherSide->hand, NowNo_26);
             } else if (opponentRepeated & 0x40) {
                 xglSoundEffectNormalID(1, 0);
                 CardCommandRewind(work);
@@ -2804,9 +2800,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 1:
             CGPSetPermanentMess(work, 10);
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57808, work);
+            CGPCursor2Pos(&work_27, work);
             if (pressed & 0x20) {
-                if (battleZone == D_00A57808.zone && D_00A57808.cardId >= 0) {
+                if (battleZone == work_27.zone && work_27.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -2817,7 +2813,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 2:
             CGPDispErrorMess(side, 0x18);
             if (pressed & 0x20) {
-                otherSide->battle[D_00A5780A].battle.flags |= 2;
+                otherSide->battle[work_27.index].battle.flags |= 2;
                 xglSoundEffectNormalID(1, 0);
                 CardCommandAdvance(work);
             } else if (pressed & 0x40) {
@@ -2872,9 +2868,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 1:
             CGPSetPermanentMess(work, 5);
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57810, work);
+            CGPCursor2Pos(&work_28, work);
             if (pressed & 0x20) {
-                if (targetZone == D_00A57810.zone && D_00A57810.cardId >= 0) {
+                if (targetZone == work_28.zone && work_28.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -2885,7 +2881,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 2:
             CGPDispErrorMess(side, 0x18);
             if (pressed & 0x20) {
-                CCC07ExecSub(work, &otherSide->hand, &D_00A57810);
+                CCC07ExecSub(work, &otherSide->hand, &work_28);
                 xglSoundEffectNormalID(1, 0);
                 CardCommandAdvance(work);
             } else if (pressed & 0x40) {
@@ -2938,9 +2934,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 1:
             CGPSetPermanentMess(work, 10);
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57818, work);
+            CGPCursor2Pos(&work_29, work);
             if (pressed & 0x20) {
-                if (targetZone == D_00A57818.zone && D_00A57818.cardId >= 0) {
+                if (targetZone == work_29.zone && work_29.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -2951,7 +2947,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 2:
             CGPDispErrorMess(side, 0x18);
             if (pressed & 0x20) {
-                otherSide->disposal[D_00A5781A].battle.flags |= 2;
+                otherSide->disposal[work_29.index].battle.flags |= 2;
                 xglSoundEffectNormalID(1, 0);
                 CardCommandAdvance(work);
             } else if (pressed & 0x40) {
@@ -3006,9 +3002,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             if (side != 0)
                 battleZone = 7;
             CGPCursorMove(side, work);
-            CGPCursor2Pos(&D_00A57820, work);
+            CGPCursor2Pos(&work_30, work);
             if (pressed & 0x20) {
-                if (battleZone == D_00A57820.zone && D_00A57820.cardId >= 0) {
+                if (battleZone == work_30.zone && work_30.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -3020,7 +3016,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CGPDispErrorMess(side, 0x18);
             if (pressed & 0x20) {
                 CardCommandAdvance(work);
-                CCU055ExecSub(&otherSide->hand, &D_00A57820);
+                CCU055ExecSub(&otherSide->hand, &work_30);
                 xglSoundEffectNormalID(1, 0);
             } else if (pressed & 0x40) {
                 xglSoundEffectNormalID(2, 0);
@@ -3204,11 +3200,11 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 CardCursorPassive(CardCursorFor(work));
                 CGPSetPermanentMess(work, 12);
                 CardCursorSetSelectionMode(work, 1);
-                D_00A57828.zone = ownDisposalZone;
+                work_31.zone = ownDisposalZone;
                 for (i = 0; i < 4; i++) {
                     if (ownSide->disposal[i].battle.layers[0].cardId > 0) {
-                        D_00A57828.index = i;
-                        CardCursorActive(CardCursorFor(work), &D_00A57828, 1);
+                        work_31.index = i;
+                        CardCursorActive(CardCursorFor(work), &work_31, 1);
                     }
                 }
                 CardCommandAdvance(work);
@@ -3219,9 +3215,9 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 1:
             CardCursorSetSide(work, opponentSide);
             CGPCursorMove(opponentSide, work);
-            CGPCursor2Pos(&D_00A57828, work);
+            CGPCursor2Pos(&work_31, work);
             if (opponentPressed & 0x20) {
-                if (ownDisposalZone == D_00A57828.zone && D_00A57828.cardId >= 0) {
+                if (ownDisposalZone == work_31.zone && work_31.cardId >= 0) {
                     CardCommandAdvance(work);
                     xglSoundEffectNormalID(1, 0);
                 } else {
@@ -3237,7 +3233,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CGPDispErrorMess(opponentSide, 0x18);
             if (opponentPressed & 0x20) {
                 CardCommandAdvance(work);
-                CCU038ExecSub(&ownSide->hand, &D_00A57828);
+                CCU038ExecSub(&ownSide->hand, &work_31);
                 xglSoundEffectNormalID(1, 0);
                 CardCursorSetSelectionMode(work, 0);
             } else if (opponentPressed & 0x40) {
@@ -3270,7 +3266,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                     CGPSetPermanentMess(work, 1);
                     nextStep = work->command.step;
                     nextStep++;
-                    D_00A57830 = 0;
+                    NowNo_32 = 0;
                     CardCommandSetStep(work, nextStep);
                 }
                 if (pressed & 0x40)
@@ -3280,19 +3276,19 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         case 2: {
             int count = CardPlayYamaCnt(&ownSide->hand);
             if (repeated & 0x2000) {
-                D_00A57830++;
+                NowNo_32++;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A57830 >= count)
-                    D_00A57830 = count - 1;
+                if (NowNo_32 >= count)
+                    NowNo_32 = count - 1;
             }
             if (repeated & 0x8000) {
-                D_00A57830--;
+                NowNo_32--;
                 xglSoundEffectNormalID(3, 0);
-                if (D_00A57830 < 0)
-                    D_00A57830 = 0;
+                if (NowNo_32 < 0)
+                    NowNo_32 = 0;
             }
             if (pressed & 0x20) {
-                if (ownSide->deck[D_00A57830] == 7) {
+                if (ownSide->deck[NowNo_32] == 7) {
                     xglSoundEffectNormalID(1, 0);
                     CardCommandAdvance(work);
                 } else {
@@ -3302,12 +3298,12 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 xglSoundEffectNormalID(2, 0);
                 CardCommandSetStep(work, 10);
             }
-            CGCPYamaDispSub(&ownSide->hand, D_00A57830, count, held, 0);
+            CGCPYamaDispSub(&ownSide->hand, NowNo_32, count, held, 0);
             break;
         }
         case 3:
-            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->deck[D_00A57830];
-            ownSide->deck[D_00A57830] = -1;
+            ownSide->hand.cards[CardPlayHandCnt(&ownSide->hand)] = ownSide->deck[NowNo_32];
+            ownSide->deck[NowNo_32] = -1;
             CardPlayCleanYama(&ownSide->hand);
             CardPlayShuffleYama(&ownSide->hand);
             CardCommandAdvance(work);
@@ -3357,7 +3353,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             u16 nextStep;
             s8 *timer;
             CGPSetErrorMessPlus(opponentSide, work, 0x24, 0x3B);
-            timer = &D_00A57834;
+            timer = &timer_33;
             nextStep = work->command.step;
             nextStep++;
             *timer = 20;
@@ -3373,8 +3369,8 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             CardCommandAdvance(work);
             break;
         case 3:
-            if (D_00A57834 != 0) {
-                D_00A57834--;
+            if (timer_33 != 0) {
+                timer_33--;
             } else {
                 u16 nextStep;
                 CardPlayCostCard(&ownSide->hand);
@@ -3385,13 +3381,13 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                 CardSetEffect(opponentSide, work, 13, 4, 0, 0, 0);
                 nextStep = work->command.step;
                 nextStep++;
-                D_00A57834 = 15;
+                timer_33 = 15;
                 CardCommandSetStep(work, nextStep);
             }
             break;
         case 4:
-            if (D_00A57834 != 0)
-                D_00A57834--;
+            if (timer_33 != 0)
+                timer_33--;
             else
                 complete = 1;
             break;

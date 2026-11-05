@@ -93,15 +93,6 @@ typedef struct CardSaveView {
 #define CARD_SAVE_LARGE_CARDS 0x20   /* toggled from the title menu */
 #define CARD_SAVE_PROMO_GIVEN 0x40   /* the promotional card was awarded */
 
-extern CardListWindow D_00A56F18;
-extern CardListWindow D_00A57188;
-extern CardListWindow D_00A573F8;
-extern int D_00A57668[];
-extern int D_00A57728;
-extern int D_00A57730[4];
-extern int D_00A57740[];
-extern int D_00A57744;
-extern int D_00A57748;
 
 /* Font colour strings the earlier title functions emitted first. */
 typedef struct CardFontCode5 {
@@ -119,18 +110,18 @@ typedef struct CardFontCodeRecord {
     char trailing[3];
 } CardFontCodeRecord;
 
-extern const CardFontCodeRecord D_00A4C780;
-extern const CardFontCode8 D_00A4C7C8;
-extern const CardFontCodeRecord D_00A4C7D0;
-extern char D_00A4C790[];
-extern char D_00A4C868[];
-extern char D_00A4C870[];
-extern char D_00A4C5A0[];
-extern char D_00A4C5B8[];
-extern char D_00A4C5D0[];
-extern char D_00A4C5E8[];
-extern char D_00A4C600[];
-extern char D_00A4C618[];
+extern const CardFontCodeRecord cardHelpFontCodes;
+extern const CardFontCode8 cardPlayerLabelFontCodes;
+extern const CardFontCodeRecord cardPlayerAutoLabel;
+extern char cardHelpLabel[];
+extern char cardMenuFooterFontCode[];
+extern char cardMenuFooterEndCode[];
+extern char cardBattleWin1LexName[];
+extern char cardBattleWin2LexName[];
+extern char cardBattleWin3LexName[];
+extern char cardBattleWin4LexName[];
+extern char cardBattleWin5LexName[];
+extern char cardBattleWinBinName[];
 
 extern void CardPlaySound1(void);
 extern void CardPlaySound2(void);

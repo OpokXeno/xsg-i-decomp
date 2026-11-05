@@ -393,7 +393,7 @@ void CardDeckDisp(CardDeckListView *deck, CardDefinitionName *definitions)
     char *name;
     CardDefinitionName *definition;
 
-    xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, D_00A4D140);
+    xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardDeckHeaderFontCode);
     if (deck->windowRows > 0) {
         for (; row < deck->windowRows; row++) {
             if (row < deck->rowCount) {
@@ -402,24 +402,24 @@ void CardDeckDisp(CardDeckListView *deck, CardDefinitionName *definitions)
                     definition = &definitions[cardId];
                     name = (char *)(CARD_DATA_BUFFER + definition->nameOffset);
                     if (row == deck->cursor) {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, D_00A4D150);
+                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                     }
                     for (i = 0; i < deck->textLength * CARD_TEXT_CHAR_BYTES; i++) {
                         nameText[i] = name[i];
                     }
                     nameText[i] = 0;
                     CardNameConvert(nameText);
-                    xglFontPrint(0, 0, 0, D_00A4D158);
+                    xglFontPrint(0, 0, 0, cardRowPrefixFontCode);
                     xglFontPrint(deck->originX, deck->originY + row * DECK_DISP_ROW_HEIGHT,
                                  DECK_LIST_TEXT_COLOR, (char *)nameText);
                     if (row == deck->cursor) {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, D_00A4D160);
+                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardCopyCountFontCode);
                     }
-                    sprintf(countText, D_00A4D168, deck->entries[row + deck->scroll].copies);
+                    sprintf(countText, cardCopyCountFormat, deck->entries[row + deck->scroll].copies);
                     xglFontPrint(deck->originX + deck->textLength * DECK_DISP_CHAR_WIDTH + DECK_DISP_COUNT_GAP,
                                  deck->originY + row * DECK_DISP_ROW_HEIGHT, DECK_LIST_TEXT_COLOR, countText);
                 }
@@ -427,7 +427,7 @@ void CardDeckDisp(CardDeckListView *deck, CardDefinitionName *definitions)
         }
     }
     deck->cursorLimit = deck->rowCount;
-    xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, D_00A4D170);
+    xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -463,7 +463,7 @@ int CDTSGetStrLen(unsigned char *text)
 /*
  * Prints one line of card text at (x, y) with colour index colorIndex (asm
  * 0x00a09140, 452 bytes). First two font strings are printed: the constant
- * escape D_00A4D180 and colorCode, the escape 0x15 0x03 0x03 followed by the
+ * escape cardTextLineFontCode and colorCode, the escape 0x15 0x03 0x03 followed by the
  * 16-bit big-endian value colorIndex * 21 (0x00a09144..0x00a091DC). The text
  * is then rewritten in place for its first CDTSGetStrLen(text) bytes, with the
  * CardNameConvert rules: '$' becomes a newline, '#' an apostrophe, '@' a comma
@@ -477,7 +477,7 @@ void CardDispTxtSub(u16 x, u16 y, unsigned char *text, u16 colorIndex)
     int length;
     int i;
 
-    xglFontPrint(0, 0, 0, D_00A4D180);
+    xglFontPrint(0, 0, 0, cardTextLineFontCode);
     colorValue = colorIndex * CARD_TEXT_COLOR_STEP;
     colorCode[CARD_COLOR_CODE_HIGH] = colorValue >> CARD_BYTE_BITS;
     colorCode[CARD_COLOR_CODE_LOW] = colorValue;
@@ -519,7 +519,7 @@ void CardDispTxtSub(u16 x, u16 y, unsigned char *text, u16 colorIndex)
 /*
  * Prints one card text line at (x, y) with the default colour 0xFFF0 (asm
  * 0x00a09308, 420 bytes). It is CardDispTxtSub without the colour argument:
- * the font escape D_00A4D180 is printed, then the three-byte colour code
+ * the font escape cardTextLineFontCode is printed, then the three-byte colour code
  * 0x15 0x03 0x03 (copied from .rodata 0x00a4d190 at 0x00a09328..0x00a09344).
  * The text is then rewritten in place with the CardNameConvert rules: '$' becomes
  * a newline, '#' an apostrophe and '@' a comma, and a backslash pair followed by
@@ -531,7 +531,7 @@ void CardDispTxtSub2(u16 x, u16 y, unsigned char *text)
     int length;
     int i;
 
-    xglFontPrint(0, 0, 0, D_00A4D180);
+    xglFontPrint(0, 0, 0, cardTextLineFontCode);
     xglFontPrint(0, 0, 0, colorCode);
 
     length = CDTSGetStrLen(text);
@@ -1218,7 +1218,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         return;
     }
     if (text->captionOffset != 0) {
-        xglFontPrint(CARD_TEXT_TITLE_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, D_00A4D150);
+        xglFontPrint(CARD_TEXT_TITLE_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, cardOtherRowFontCode);
         if (owned > 0) {
             CardDispTxtSub(CARD_TEXT_X, CARD_TEXT_CAPTION_Y, (unsigned char *)(CARD_DATA_BUFFER + text->captionOffset), CARD_TEXT_CAPTION_COLOR);
         } else {
@@ -1229,7 +1229,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         xglFontPrint(CARD_TEXT_X, CARD_TEXT_DESCRIPTION_Y, CARD_TEXT_COLOR, "\x0b\r\0\x0c@@\x80\xa1\xa9\xa1\xa9\xa1\xa9\xa1\xa9\xa1\xa9");
     } else if (text->descriptionOffset != 0) {
         xglFontPrint(CARD_TEXT_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, "\x0b\r\0\x0c@@\x80");
-        xglFontPrint(0, 0, 0, D_00A4D158);
+        xglFontPrint(0, 0, 0, cardRowPrefixFontCode);
         xglFontPrint(CARD_TEXT_X, CARD_TEXT_DESCRIPTION_Y, CARD_TEXT_COLOR, (const char *)(CARD_DATA_BUFFER + text->descriptionOffset));
     }
     xglFontPrint(CARD_TEXT_TITLE_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, "\x0b");
@@ -2756,7 +2756,7 @@ void CPCMSub(CardCursorControl *cursor, CardPlaySide *side, u16 buttons, u16 dra
 }
 
 extern float HandPos1P[4][3];
-extern float *CursorTbl_00A43420[];
+static float *CursorTbl[16];
 
 #define CARD_CURSOR_HAND_HIGHLIGHT 0.175f    /* hand cursor highlight size: 0x3E333333 (lui/ori at 0x00a0d190) */
 #define CARD_CURSOR_ZONE_BACK_BUTTON 0x1000  /* steps the zone back (`andi $2,$17,0x1000`, 0x00a0d0d0) */
@@ -2766,7 +2766,7 @@ extern float *CursorTbl_00A43420[];
 #define CARD_CURSOR_ZONE_LIMIT 5             /* zones 5 and above clamp to the hand zone (`slti $2,$2,5`, 0x00a0d150) */
 #define CARD_CURSOR_HAND_ZONE 4              /* zone of the hand (`slti $2,$2,4`, 0x00a0d170) */
 #define CARD_CURSOR_EMPTY_HAND_ZONE 3        /* zone taken when the hand is empty (`addiu $2,$0,3`, 0x00a0d1bc) */
-#define CARD_CURSOR_ZONE_STRIDE 4            /* indices per zone in CursorTbl_00A43420 (`sll $2,$2,2`, 0x00a0d1e8) */
+#define CARD_CURSOR_ZONE_STRIDE 4            /* indices per zone in CursorTbl (`sll $2,$2,2`, 0x00a0d1e8) */
 
 /*
  * Moves the board cursor with the pad buttons (asm 0x00a0d0a8, 0x224 bytes).
@@ -2810,7 +2810,7 @@ void CardPlayCursorMove(CardCursorControl *cursor, CardPlaySide *side, u16 butto
     }
     if (cursor->cursorZone < CARD_CURSOR_HAND_ZONE) {
         CPCMSub(cursor, side, buttons, drawFlags, previousZone);
-        slot = CursorTbl_00A43420[cursor->cursorZone * CARD_CURSOR_ZONE_STRIDE + cursor->cursorIndex];
+        slot = CursorTbl[cursor->cursorZone * CARD_CURSOR_ZONE_STRIDE + cursor->cursorIndex];
         cursor->position[0] = slot[0];
         cursor->position[1] = slot[1];
         cursor->position[2] = slot[2];
@@ -2824,7 +2824,7 @@ void CardPlayCursorMove(CardCursorControl *cursor, CardPlaySide *side, u16 butto
     if (count == 0) {
         cursor->cursorZone = CARD_CURSOR_EMPTY_HAND_ZONE;
         CPCMSub(cursor, side, buttons, drawFlags, previousZone);
-        slot = CursorTbl_00A43420[cursor->cursorZone * CARD_CURSOR_ZONE_STRIDE + cursor->cursorIndex];
+        slot = CursorTbl[cursor->cursorZone * CARD_CURSOR_ZONE_STRIDE + cursor->cursorIndex];
         cursor->position[0] = slot[0];
         cursor->position[1] = slot[1];
         cursor->position[2] = slot[2];
@@ -2843,15 +2843,15 @@ void CardPlayCursorMove(CardCursorControl *cursor, CardPlaySide *side, u16 butto
 
 /*
  * Draws the card list window with the owned copies of each row (asm
- * 0x00a0d2d0, 0x2F8 bytes). The header (D_00A4D500) is printed at the window
+ * 0x00a0d2d0, 0x2F8 bytes). The header (cardEnemyListHeaderFontCode) is printed at the window
  * origin. For each of the first windowRows rows below rowCount, the entry's card
  * id selects the owned copy count in work->ownedCount and the card name in
  * work->definitions (read through CardDefinitionName, which models only the
  * name offset at +0x18 that CardDefinition lacks). A row with no owned copy
- * prints its marker and the placeholder D_00A4D508 instead of the name. With
+ * prints its marker and the placeholder cardUnownedRowText instead of the name. With
  * flags bit 0 (`andi $2,$2,0x1`, 0x00a0d458) the owned count
  * (CARD_LIST_COPY_CAP when it reaches CARD_LIST_COPY_LIMIT) follows the name.
- * Rows are DECK_DISP_ROW_HEIGHT pixels apart; the footer is D_00A4D170.
+ * Rows are DECK_DISP_ROW_HEIGHT pixels apart; the footer is cardWindowFooterFontCode.
  */
 void CardListDisp(CardDeckListView *list, CardGameWork *work)
 {
@@ -2866,7 +2866,7 @@ void CardListDisp(CardDeckListView *list, CardGameWork *work)
     CardDefinitionName *definitions = (CardDefinitionName *)work->definitions;
     s16 *ownedCount = work->ownedCount;
 
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D500);
+    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardEnemyListHeaderFontCode);
     if (list->windowRows > 0) {
         for (; row < list->windowRows; row++) {
             if (row < list->rowCount) {
@@ -2875,16 +2875,16 @@ void CardListDisp(CardDeckListView *list, CardGameWork *work)
                     definition = &definitions[cardId];
                     name = (char *)(CARD_DATA_BUFFER + definition->nameOffset);
                     if (row == list->cursor) {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D150);
+                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                     }
                     for (i = 0; i < list->textLength * CARD_TEXT_CHAR_BYTES; i++) {
                         nameText[i] = name[i];
                     }
                     nameText[i] = 0;
                     CardNameConvert(nameText);
-                    xglFontPrint(0, 0, 0, D_00A4D158);
+                    xglFontPrint(0, 0, 0, cardRowPrefixFontCode);
                     xglFontPrint(list->originX, list->originY + row * DECK_DISP_ROW_HEIGHT,
                                  DECK_LIST_TEXT_COLOR, (char *)nameText);
                     if (list->flags & 1) {
@@ -2892,28 +2892,28 @@ void CardListDisp(CardDeckListView *list, CardGameWork *work)
                         if (copies >= CARD_LIST_COPY_LIMIT) {
                             copies = CARD_LIST_COPY_CAP;
                         }
-                        sprintf(countText, D_00A4D168, copies);
+                        sprintf(countText, cardCopyCountFormat, copies);
                         if (row == list->cursor) {
-                            xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                            xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                         } else {
-                            xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D160);
+                            xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardCopyCountFontCode);
                         }
                         xglFontPrint(list->originX + list->textLength * DECK_DISP_CHAR_WIDTH + DECK_DISP_COUNT_GAP,
                                      list->originY + row * DECK_DISP_ROW_HEIGHT, DECK_LIST_TEXT_COLOR, countText);
                     }
                 } else {
                     if (row == list->cursor) {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D150);
+                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                     }
                     xglFontPrint(list->originX, list->originY + row * DECK_DISP_ROW_HEIGHT,
-                                 DECK_LIST_TEXT_COLOR, D_00A4D508);
+                                 DECK_LIST_TEXT_COLOR, cardUnownedRowText);
                 }
             }
         }
     }
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D170);
+    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -2930,16 +2930,16 @@ void CardDeckListDisp(CardDeckListView *list)
     s32 row;
     s32 length;
 
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D518);
+    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardWindowHeaderFontCode);
     rowText[0] = 0x19;
     rowText[1] = 0x03;
     for (row = 0; row < list->windowRows; row++) {
         if (row < list->rowCount) {
             name = DeckListStr[row];
             if (row == list->cursor) {
-                xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
             } else {
-                xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D150);
+                xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
             }
             for (length = 0; length < list->textLength; length++) {
                 rowText[CARD_ROW_PREFIX_BYTES + length] = name[length];
@@ -2949,7 +2949,7 @@ void CardDeckListDisp(CardDeckListView *list)
                          DECK_LIST_TEXT_COLOR, rowText);
         }
     }
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, D_00A4D170);
+    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -2970,7 +2970,7 @@ void CardStrListDisp(CHPTitleListView *list, char **strings, int index)
     char *text;
     int i;
 
-    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D518);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowHeaderFontCode);
     rowText[0] = 0x19;
     rowText[1] = 0x03;
     if (list->count > 0) {
@@ -2980,9 +2980,9 @@ void CardStrListDisp(CHPTitleListView *list, char **strings, int index)
             if (row < list->limit) {
                 text = *rowPtr;
                 if (row == index) {
-                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                 } else {
-                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D150);
+                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                 }
                 for (i = 0; i < list->textLength; i++) {
                     rowText[i + CARD_ROW_PREFIX_BYTES] = text[i];
@@ -2994,7 +2994,7 @@ void CardStrListDisp(CHPTitleListView *list, char **strings, int index)
             rowPtr++;
         }
     }
-    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D170);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -3014,7 +3014,7 @@ void CardEnemyListDisp(CHPTitleListView *list, s32 *entries, int index)
     char *text;
     int i;
 
-    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D500);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardEnemyListHeaderFontCode);
     if (list->count > 0) {
         rowPtr = entries;
         rowY = 0;
@@ -3022,9 +3022,9 @@ void CardEnemyListDisp(CHPTitleListView *list, s32 *entries, int index)
             if (row < list->limit) {
                 text = DeckListStr[*rowPtr];
                 if (row == index) {
-                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D148);
+                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                 } else {
-                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D150);
+                    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                 }
                 for (i = 0; i < list->textLength; i++) {
                     rowText[i] = text[i];
@@ -3036,7 +3036,7 @@ void CardEnemyListDisp(CHPTitleListView *list, s32 *entries, int index)
             rowPtr++;
         }
     }
-    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, D_00A4D170);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -5153,7 +5153,7 @@ void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flag
     nmlModelSetTexture(CARD_HAND_TEXTURE);
     nmlModelSetPlace(&cardMatrix);
     nmlModelEntryCard(CARD_YAMA_MODEL_PILE);
-    xglFontPrint(CARD_WINDOW_CAPTION_X, CARD_WINDOW_CAPTION_Y, CARD_WINDOW_CAPTION_COLOR, D_00A4D710);
+    xglFontPrint(CARD_WINDOW_CAPTION_X, CARD_WINDOW_CAPTION_Y, CARD_WINDOW_CAPTION_COLOR, cardDeckCaption);
 }
 
 /*
@@ -5162,7 +5162,7 @@ void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flag
  * than the one before it in reverse order (the first card is deepest); the card at
  * `selected` is placed (count + 1) steps back and drawn at CARD_HAND_SELECTED_SCALE.
  * The pile marker model is drawn afterwards at CARD_WINDOW_PILE_X/Y with a flattened
- * scale (CARD_WINDOW_PILE_SCALE_Y) and the pile caption D_00A4D720 is printed.
+ * scale (CARD_WINDOW_PILE_SCALE_Y) and the pile caption cardJunkCaption is printed.
  */
 void CGCPJunkDispSub(CardPlaySide *side, int selected)
 {
@@ -5225,7 +5225,7 @@ void CGCPJunkDispSub(CardPlaySide *side, int selected)
     nmlModelSetTexture(CARD_HAND_TEXTURE);
     nmlModelSetPlace(&cardMatrix);
     nmlModelEntryCard(CARD_JUNK_PILE_MODEL);
-    xglFontPrint(CARD_WINDOW_CAPTION_X, CARD_WINDOW_CAPTION_Y, CARD_WINDOW_CAPTION_COLOR, D_00A4D720);
+    xglFontPrint(CARD_WINDOW_CAPTION_X, CARD_WINDOW_CAPTION_Y, CARD_WINDOW_CAPTION_COLOR, cardJunkCaption);
 }
 
 s32 CardPlayCntAllOpe(CardGameWork *work, s16 opId)
@@ -5462,3 +5462,85 @@ int CardPlayCntFld(CardGameWork *work, s16 cardId) {
     count = count + CardPlayCntDsp(enemyHand, cardId);
     return count + CardPlayCntBtl(enemyHand, cardId);
 }
+
+extern float DisposePos1P[4][3];
+extern float BattlePos1P[4][3];
+extern float OperationPos1P[4][3];
+
+static float *CursorTbl[16] = {
+    DisposePos1P[0], BattlePos1P[0], BattlePos1P[1], OperationPos1P[0],
+    DisposePos1P[1], BattlePos1P[0], BattlePos1P[1], OperationPos1P[1],
+    DisposePos1P[2], BattlePos1P[2], BattlePos1P[3], OperationPos1P[2],
+    DisposePos1P[3], BattlePos1P[2], BattlePos1P[3], OperationPos1P[3]
+};
+
+static float CardHpPos01[3] = { 1.3422000408172607f, 0.59920001029968262f, 0.0099999997764825821f };
+
+static float CardHpPos10[3] = { 1.2441999912261963f, 0.59939998388290405f, 0.0099999997764825821f };
+
+static float CardPowPos01[3] = { 1.3422000408172607f, 0.44060000777244568f, 0.0099999997764825821f };
+
+static float CardPowPos10[3] = { 1.2441999912261963f, 0.44060000777244568f, 0.0099999997764825821f };
+
+static float CardStnbyPos[3] = { 1.3422000408172607f, -0.64399999380111694f, 0.0099999997764825821f };
+
+static float CardAttriPos[3] = { 1.2788000106811523f, 0.84460002183914185f, 0.0099999997764825821f };
+
+static float CardAttakPos[3] = { 1.1656999588012695f, 0.25920000672340393f, 0.0099999997764825821f };
+
+float CardCondPos[4][3] = { { 1.055400013923645f, -0.11680000275373459f, 0.0099999997764825821f }, { 1.2678999900817871f, -0.15710000693798065f, 0.0099999997764825821f }, { 1.055400013923645f, -0.39550000429153442f, 0.0099999997764825821f }, { 1.2680000066757202f, -0.43560001254081726f, 0.0099999997764825821f } };
+
+static int oldno_0 = 65535;
+
+char DeckListStr[10][16] = {
+    "Deck 1",
+    "Deck 2",
+    "Deck 3",
+    "Deck 4",
+    "Deck 5",
+    "Deck 6",
+    "Deck 7",
+    "Deck 8",
+    "Deck 9",
+    "Deck 0"
+};
+
+float CPSInfoPos[4][2] = { { -1.5740000009536743f, -0.3970000147819519f }, { 1.5740000009536743f, -0.3970000147819519f }, { -1.5740000009536743f, -1.1799999475479126f }, { 1.5740000009536743f, -1.1799999475479126f } };
+
+static float CardStackPos[3] = { 0.67239999771118164f, -0.37790000438690186f, 0.019999999552965164f };
+
+static float DisposeHP10pos[4][2] = { { -2.4059998989105225f, -0.33190000057220459f }, { -2.4059998989105225f, -0.69900000095367432f }, { -2.4059998989105225f, -1.0789999961853027f }, { -2.4059998989105225f, -1.4589999914169312f } };
+
+static float DisposeHP01pos[4][3] = { { -2.3190000057220459f, -0.33190000057220459f, 0.0f }, { -2.3190000057220459f, -0.69900000095367432f, 0.0f }, { -2.3190000057220459f, -1.0789999961853027f, 0.0f }, { -2.3190000057220459f, -1.4589999914169312f, 0.0f } };
+
+static float win0pos[2][3] = { { -1.891200065612793f, 0.0f, 0.0010000000474974513f }, { 1.891200065612793f, 0.0f, 0.0010000000474974513f } };
+
+static float NewWin0pos[4][3] = { { -2.3239998817443848f, 0.0f, 0.0010000000474974513f }, { 0.69999998807907104f, 0.0f, 0.0010000000474974513f }, { -0.69999998807907104f, 0.0f, 0.0010000000474974513f }, { 2.3239998817443848f, 0.0f, 0.0010000000474974513f } };
+
+u16 CardCommandPlay[150] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+const char cardDeckHeaderFontCode[8] = "\013\031\000\r";
+
+const char cardSelectedRowFontCode[8] = "\014\200";
+
+const char cardOtherRowFontCode[8] = "\013\r";
+
+const char cardRowPrefixFontCode[8] = "\031\003";
+
+const char cardCopyCountFontCode[8] = "\014@@";
+
+const char cardCopyCountFormat[8] = "%d";
+
+const char cardWindowFooterFontCode[8] = "\013\031";
+
+const char cardTextLineFontCode[16] = "\013\r\000\031\003  \025\002\001\n";
+
+const char cardEnemyListHeaderFontCode[8] = "\031\000\r";
+
+const char cardUnownedRowText[16] = "\241\251\241\251\241\251\241\251\241\251";
+
+const char cardWindowHeaderFontCode[8] = "\031\003\r";
+
+const char cardDeckCaption[16] = "\r\000\031\003Deck";
+
+const char cardJunkCaption[16] = "\r\000\031\003Junk";

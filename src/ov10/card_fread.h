@@ -149,9 +149,9 @@ extern void nmlModelEntryCard(unsigned int model);
  * Window edge corners {x, y, z} of the card hand (asm 0x00A43628, 0x18 bytes in the
  * data section): win0pos[0] is the first corner, win0pos[1] the second.
  */
-extern float win0pos[2][3];
+static float win0pos[2][3];
 /* Hand fan corners of the in-battle window (0x00A43640, 0x30 bytes, 4x3 floats). */
-extern float NewWin0pos[4][3];
+static float NewWin0pos[4][3];
 extern float OperationPos1P[4][3];
 
 /*
@@ -179,25 +179,25 @@ void nmlModelSetLight(Matrix4 *direction, Matrix4 *color);
  * 0x40 bytes); the position triples are {x, y, z} offsets of the digit and icon models.
  */
 extern Matrix4 CCColor;
-extern float CardHpPos01[3];          /* 0x00A43460: hit points, units digit */
-extern float CardHpPos10[3];          /* 0x00A43470: hit points, tens digit */
-extern float CardPowPos01[3];         /* 0x00A43480: power, units digit */
-extern float CardPowPos10[3];         /* 0x00A43490: power, tens digit */
-extern float CardStnbyPos[3];         /* 0x00A434A0: reserve cost digit */
-extern float CardAttriPos[3];         /* 0x00A434B0: attribute icon */
-extern float CardAttakPos[3];         /* 0x00A434C0: attack type icon */
+static float CardHpPos01[3];          /* 0x00A43460: hit points, units digit */
+static float CardHpPos10[3];          /* 0x00A43470: hit points, tens digit */
+static float CardPowPos01[3];         /* 0x00A43480: power, units digit */
+static float CardPowPos10[3];         /* 0x00A43490: power, tens digit */
+static float CardStnbyPos[3];         /* 0x00A434A0: reserve cost digit */
+static float CardAttriPos[3];         /* 0x00A434B0: attribute icon */
+static float CardAttakPos[3];         /* 0x00A434C0: attack type icon */
 extern float CardCondPos[4][3];       /* 0x00A434D0: requirement icons */
 /* Last card CardDispLight drew (0x00A43500, initial value 0xFFFF). */
-extern int oldno_0;
+static int oldno_0;
 
 /* Resting positions of the battle and disposal slots (x, y, z per slot); defined in ov10/card_play_sound1.c. */
 extern float BattlePos1P[][3];
 extern float DisposePos1P[][3];
 /* Offset of a stacked card within a disposal slot (0x00A435C8) and the x, y positions of the tens (0x00A435D8) and
  * units (0x00A435F8) life digits per slot; read by CardPlayDispDispose. */
-extern float CardStackPos[3];
-extern float DisposeHP10pos[][2];
-extern float DisposeHP01pos[][3];
+static float CardStackPos[3];
+static float DisposeHP10pos[][2];
+static float DisposeHP01pos[][3];
 
 /*
  * Index of the first mark of each zone's column in CardCursorControl.markTable
@@ -318,23 +318,23 @@ extern char DeckListStr[10][16];
  * (CardPlayDispBattle references none); they stay extern for two reasons. Most are
  * printed by several functions of this TU, so they need one shared label, while a C
  * literal would give every function its own copy and a data-carve row hands the label
- * to a single C user (data-carve rows are per C owner). The single-user ones (D_00A4D140 in CardDeckDisp,
- * D_00A4D710 in CGCPYamaDispSub, D_00A4D720 in CGCPJunkDispSub) carry original bytes
+ * to a single C user (data-carve rows are per C owner). The single-user ones (cardDeckHeaderFontCode in CardDeckDisp,
+ * cardDeckCaption in CGCPYamaDispSub, cardJunkCaption in CGCPJunkDispSub) carry original bytes
  * after the terminating NUL (a 0x0D at +3, "\x19\x03Deck" and "\x19\x03Junk" from +2) that
  * a plain literal followed by zero padding does not reproduce.
  */
-extern char D_00A4D140[];    /* "\x0b\x19" (a 0x0D follows the NUL): CardDeckDisp header */
-extern char D_00A4D158[];    /* "\x19\x03": row prefix printed at the origin */
-extern char D_00A4D160[];    /* "\x0c@@": marker before the copy count */
-extern char D_00A4D168[];    /* "%d": copy count format */
-extern char D_00A4D148[];    /* "\x0c\x80": cursor marker of the selected row */
-extern char D_00A4D150[];    /* "\x0b\r": marker of the other rows */
-extern char D_00A4D170[];    /* "\x0b\x19": window footer */
-extern char D_00A4D518[];    /* "\x19\x03\r": window header */
-extern char D_00A4D720[];    /* "\r" then, after the NUL, "\x19\x03Junk": caption printed by CGCPJunkDispSub */
-extern char D_00A4D180[];    /* "\x0b\r": font escape pair printed before each CardDispTxtSub line */
-extern char D_00A4D710[];    /* "\r" then, after the NUL, "\x19\x03Deck": caption printed by CGCPYamaDispSub */
-extern char D_00A4D500[];    /* enemy list window header (CardEnemyListDisp) */
-extern char D_00A4D508[];    /* placeholder of an unowned list row (CardListDisp) */
+extern const char cardDeckHeaderFontCode[];    /* "\x0b\x19" (a 0x0D follows the NUL): CardDeckDisp header */
+extern const char cardRowPrefixFontCode[];    /* "\x19\x03": row prefix printed at the origin */
+extern const char cardCopyCountFontCode[];    /* "\x0c@@": marker before the copy count */
+extern const char cardCopyCountFormat[];    /* "%d": copy count format */
+extern const char cardSelectedRowFontCode[];    /* "\x0c\x80": cursor marker of the selected row */
+extern const char cardOtherRowFontCode[];    /* "\x0b\r": marker of the other rows */
+extern const char cardWindowFooterFontCode[];    /* "\x0b\x19": window footer */
+extern const char cardWindowHeaderFontCode[];    /* "\x19\x03\r": window header */
+extern const char cardJunkCaption[];    /* "\r" then, after the NUL, "\x19\x03Junk": caption printed by CGCPJunkDispSub */
+extern const char cardTextLineFontCode[];    /* "\x0b\r": font escape pair printed before each CardDispTxtSub line */
+extern const char cardDeckCaption[];    /* "\r" then, after the NUL, "\x19\x03Deck": caption printed by CGCPYamaDispSub */
+extern const char cardEnemyListHeaderFontCode[];    /* enemy list window header (CardEnemyListDisp) */
+extern const char cardUnownedRowText[];    /* placeholder of an unowned list row (CardListDisp) */
 
 #endif /* SRC_OV10_CARD_FREAD_H */

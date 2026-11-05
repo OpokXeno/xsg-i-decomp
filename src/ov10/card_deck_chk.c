@@ -136,10 +136,10 @@ enum {
 
 #include "ov10/cgp.h"
 
-extern int ActiveCursol_0;
-extern int ActiveCursol_2;
-extern int ActiveCursol_4;
-extern int ActiveCursol_6;
+static int ActiveCursol_0;
+static int ActiveCursol_2;
+static int ActiveCursol_4;
+static int ActiveCursol_6;
 
 /* The pad record's halfwords at +0x28 (buttons held), +0x2A (pressed this frame) and +0x2C (d-pad). */
 typedef struct CardPadState {
@@ -175,13 +175,13 @@ typedef struct CardDeckListWindow {
     CardDeckEntry entries[CARD_DECK_SIZE]; /* +0x14 */
 } CardDeckListWindow;
 
-extern CardDeckListWindow *D_00A57838;
-extern CardDeckListWindow *D_00A5783C;
-extern CardDeckListWindow *D_00A57840;
-extern CardDeckListWindow *D_00A57844;
+static CardDeckListWindow *pCnow_1;
+static CardDeckListWindow *pCnow_3;
+static CardDeckListWindow *pCnow_5;
+static CardDeckListWindow *pCnow_7;
 extern unsigned char *EnemyDeckLst[];
-extern u8 TypeMaskLst[];
-extern u8 AttriMaskLst[];
+static u8 TypeMaskLst[4];
+static u8 AttriMaskLst[7];
 
 void xglMatrixTrans(Matrix4 destination, Matrix4 source, const float translation[4]);
 void xglMatrixScale(Matrix4 destination, Matrix4 source, const float scale[4]);
@@ -259,11 +259,11 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     work->helpTopic = CARD_HELP_TOPIC_MAKE_DECK;
 
     if (ActiveCursol_0 != 0) {
-        D_00A57838 = deck;
+        pCnow_1 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
         deck->cursor &= CARD_CURSOR_INDEX_MASK;
     } else {
-        D_00A57838 = list;
+        pCnow_1 = list;
         list->cursor &= CARD_CURSOR_INDEX_MASK;
         deck->cursor |= CARD_PANE_INACTIVE;
     }
@@ -304,19 +304,19 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         }
         if (PadData.pressed & CARD_PAD_ACCEPT) {
             xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
-            D_00A57838->action = CARD_ACTION_ADD;
+            pCnow_1->action = CARD_ACTION_ADD;
         }
         if (PadData.pressed & CARD_PAD_CANCEL) {
             xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
-            D_00A57838->action = CARD_ACTION_REMOVE;
+            pCnow_1->action = CARD_ACTION_REMOVE;
         }
         if (PadData.directions & CARD_PAD_UP) {
             xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-            D_00A57838->action = CARD_ACTION_SCROLL_UP;
+            pCnow_1->action = CARD_ACTION_SCROLL_UP;
         }
         if (PadData.directions & CARD_PAD_DOWN) {
             xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-            D_00A57838->action = CARD_ACTION_SCROLL_DOWN;
+            pCnow_1->action = CARD_ACTION_SCROLL_DOWN;
         }
         if (PadData.directions & CARD_PAD_RIGHT) {
             xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
@@ -481,10 +481,10 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         hovered = 1;
         if (ActiveCursol_0 != 0) {
             offset[0] = -1.15f;
-            D_00A57838 = deck;
+            pCnow_1 = deck;
         } else {
             offset[0] = 1.15f;
-            D_00A57838 = list;
+            pCnow_1 = list;
         }
         offset[1] = 0.45f;
         offset[2] = 0.2f;
@@ -492,7 +492,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         xglMatrixUnit(pinMatrix);
         xglMatrixTrans(pinMatrix, pinMatrix, offset);
         {
-            CardDeckListWindow *sel = D_00A57838;
+            CardDeckListWindow *sel = pCnow_1;
             int id = sel->entries[sel->scroll + sel->cursor].cardId;
             CardDisp(pinMatrix, id, (s16) work->ownedCount[id] != 0, exiting == 0);
         }
@@ -567,12 +567,12 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     nmlModelEntryCard(entry);
 
     if (ActiveCursol_0 != 0) {
-        D_00A57838 = deck;
+        pCnow_1 = deck;
     } else {
-        D_00A57838 = list;
+        pCnow_1 = list;
     }
     {
-        CardDeckListWindow *sel = D_00A57838;
+        CardDeckListWindow *sel = pCnow_1;
         int id = sel->entries[sel->scroll + sel->cursor].cardId;
         int flag;
 
@@ -690,11 +690,11 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
 
     work->helpTopic = CARD_HELP_TOPIC_LOAD_DECK;
     if (ActiveCursol_2 != 0) {
-        D_00A5783C = deck;
+        pCnow_3 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
         deck->cursor &= CARD_CURSOR_INDEX_MASK;
     } else {
-        D_00A5783C = list;
+        pCnow_3 = list;
         list->cursor &= CARD_CURSOR_INDEX_MASK;
         deck->cursor |= CARD_PANE_INACTIVE;
     }
@@ -705,14 +705,14 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             drawCards = 0;
             if ((PadData.held & CARD_PAD_PREVIEW) != 0 && exiting == 0 && ActiveCursol_2 != 0) {
                 drawCards = 1;
-                D_00A5783C = deck;
+                pCnow_3 = deck;
                 initVec[0] = -1.15f;
                 initVec[1] = 0.45f;
                 initVec[2] = 0.2f;
                 initVec[3] = 1.0f;
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, initVec);
-                cardId = D_00A5783C->entries[D_00A5783C->scroll + D_00A5783C->cursor].cardId;
+                cardId = pCnow_3->entries[pCnow_3->scroll + pCnow_3->cursor].cardId;
                 CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, 1);
             }
 
@@ -750,17 +750,17 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, vecA);
                 xglMatrixScale(cursor, cursor, vecB);
-                cardId = D_00A5783C->entries[D_00A5783C->scroll + D_00A5783C->cursor].cardId;
+                cardId = pCnow_3->entries[pCnow_3->scroll + pCnow_3->cursor].cardId;
                 CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, exiting == 0);
             }
 
             if (exiting == 0) {
                 if ((PadData.directions & CARD_PAD_UP) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    D_00A5783C->action = CARD_ACTION_SCROLL_UP;
+                    pCnow_3->action = CARD_ACTION_SCROLL_UP;
                 } else if ((PadData.directions & CARD_PAD_DOWN) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    D_00A5783C->action = CARD_ACTION_SCROLL_DOWN;
+                    pCnow_3->action = CARD_ACTION_SCROLL_DOWN;
                 }
                 if ((PadData.directions & CARD_PAD_RIGHT) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
@@ -908,11 +908,11 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
 
     work->helpTopic = CARD_HELP_TOPIC_SAVE_DECK;
     if (ActiveCursol_4 != 0) {
-        D_00A57840 = deck;
+        pCnow_5 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
         deck->cursor &= CARD_CURSOR_INDEX_MASK;
     } else {
-        D_00A57840 = list;
+        pCnow_5 = list;
         list->cursor &= CARD_CURSOR_INDEX_MASK;
         deck->cursor |= CARD_PANE_INACTIVE;
     }
@@ -923,11 +923,11 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             if (exiting == 0) {
                 if ((PadData.directions & CARD_PAD_UP) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    D_00A57840->action = CARD_ACTION_SCROLL_UP;
+                    pCnow_5->action = CARD_ACTION_SCROLL_UP;
                 }
                 if ((PadData.directions & CARD_PAD_DOWN) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    D_00A57840->action = CARD_ACTION_SCROLL_DOWN;
+                    pCnow_5->action = CARD_ACTION_SCROLL_DOWN;
                 }
                 if ((PadData.directions & CARD_PAD_RIGHT) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
@@ -1033,14 +1033,14 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             if ((PadData.held & CARD_PAD_PREVIEW) != 0 && exiting == 0) {
                 drawCards = 1;
                 if (ActiveCursol_4 != 0) {
-                    D_00A57840 = deck;
+                    pCnow_5 = deck;
                     initVec[0] = -1.15f;
                     initVec[1] = 0.45f;
                     initVec[2] = 0.2f;
                     initVec[3] = 1.0f;
                     xglMatrixUnit(cursor);
                     xglMatrixTrans(cursor, cursor, initVec);
-                    cardId = D_00A57840->entries[D_00A57840->scroll + D_00A57840->cursor].cardId;
+                    cardId = pCnow_5->entries[pCnow_5->scroll + pCnow_5->cursor].cardId;
                     CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, 1);
                 }
             }
@@ -1116,11 +1116,11 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
 
     work->helpTopic = CARD_HELP_TOPIC_LOAD_DECK;
     if (ActiveCursol_6 != 0) {
-        D_00A57844 = deck;
+        pCnow_7 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
         deck->cursor &= CARD_CURSOR_INDEX_MASK;
     } else {
-        D_00A57844 = list;
+        pCnow_7 = list;
         list->cursor &= CARD_CURSOR_INDEX_MASK;
         deck->cursor |= CARD_PANE_INACTIVE;
     }
@@ -1131,14 +1131,14 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
             drawCards = 0;
             if ((PadData.held & CARD_PAD_PREVIEW) != 0 && exiting == 0 && ActiveCursol_6 != 0) {
                 drawCards = 1;
-                D_00A57844 = deck;
+                pCnow_7 = deck;
                 initVec[0] = -1.15f;
                 initVec[1] = 0.45f;
                 initVec[2] = 0.2f;
                 initVec[3] = 1.0f;
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, initVec);
-                cardId = D_00A57844->entries[D_00A57844->scroll + D_00A57844->cursor].cardId;
+                cardId = pCnow_7->entries[pCnow_7->scroll + pCnow_7->cursor].cardId;
                 CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, 1);
             }
 
@@ -1176,17 +1176,17 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, vecA);
                 xglMatrixScale(cursor, cursor, vecB);
-                cardId = D_00A57844->entries[D_00A57844->scroll + D_00A57844->cursor].cardId;
+                cardId = pCnow_7->entries[pCnow_7->scroll + pCnow_7->cursor].cardId;
                 CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, exiting == 0);
             }
 
             if (exiting == 0) {
                 if ((PadData.directions & CARD_PAD_UP) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    D_00A57844->action = CARD_ACTION_SCROLL_UP;
+                    pCnow_7->action = CARD_ACTION_SCROLL_UP;
                 } else if ((PadData.directions & CARD_PAD_DOWN) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    D_00A57844->action = CARD_ACTION_SCROLL_DOWN;
+                    pCnow_7->action = CARD_ACTION_SCROLL_DOWN;
                 }
                 if ((PadData.directions & CARD_PAD_RIGHT) != 0) {
                     xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
@@ -1308,3 +1308,66 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
     }
     return result;
 }
+
+
+
+static u8 TypeMaskLst[4] = { 7, 1, 2, 4 };
+
+static u8 AttriMaskLst[7] = { 127, 1, 2, 16, 4, 8, 96 };
+
+static int ActiveCursol_0 = 0;
+
+static int ActiveCursol_2 = 0;
+
+static int ActiveCursol_4 = 0;
+
+static int ActiveCursol_6 = 0;
+
+char ZenkakuListB[20] = "0 1 2 3 4 5 6 7 8 9 ";
+
+char CardConvertNameLst[20][24] = {
+    "\031\003PM Card A",
+    "\031\003PM Card B",
+    "\031\003PM Card C",
+    "\031\003PM Card D",
+    "\031\003PM Card E",
+    "\031\003PM Card F",
+    "\031\003PM Card G",
+    "\031\003PM Card H",
+    "\031\003PM Card I",
+    "\031\003PM Card J",
+    "\031\003PM Card K",
+    "\031\003PM Card L",
+    "\031\003PM Card M",
+    "\031\003PM Card N",
+    "\031\003PM Card O",
+    "\031\003PM Card P",
+    "\031\003PM Card Q",
+    "\031\003Starter Set",
+    "\031\003Card Pack #821",
+    "\031\003Card Pack #822"
+};
+
+unsigned char ST1RariLst[6] = { 0, 2, 3, 4, 5, 6 };
+
+unsigned char ST1CardLst[39] = { 16, 16, 17, 17, 18, 18, 19, 19, 22, 23, 23, 24, 25, 25, 36, 36, 36, 33, 33, 33, 43, 48, 49, 49, 49, 50, 50, 50, 83, 83, 83, 84, 84, 84, 91, 91, 91, 111, 111 };
+
+unsigned char BS1RariLst[16] = { 0, 2, 3, 4, 5, 6, 7, 44, 59, 65, 74, 87, 101, 107, 115, 132 };
+
+unsigned char BS1UncoLst[23] = { 15, 22, 26, 27, 28, 31, 33, 39, 46, 54, 55, 56, 60, 75, 86, 89, 92, 97, 98, 100, 109, 117, 129 };
+
+unsigned char BS1ComoLst[44] = { 16, 17, 18, 19, 20, 21, 23, 24, 25, 36, 42, 43, 47, 48, 49, 50, 53, 61, 62, 67, 69, 83, 84, 85, 88, 91, 96, 103, 105, 106, 108, 111, 116, 120, 121, 124, 126, 130, 136, 138, 140, 145, 146, 147 };
+
+unsigned char BS2RariLst[20] = { 9, 10, 12, 14, 32, 40, 45, 64, 76, 77, 78, 79, 80, 81, 82, 93, 94, 99, 110, 127 };
+
+unsigned char BS2UncoLst[9] = { 37, 38, 41, 57, 66, 125, 131, 134, 119 };
+
+unsigned char BS2ComoLst[17] = { 51, 63, 68, 70, 71, 72, 73, 95, 104, 122, 123, 133, 135, 137, 90, 112, 114 };
+
+static CardDeckListWindow * pCnow_1;
+
+static CardDeckListWindow * pCnow_3;
+
+static CardDeckListWindow * pCnow_5;
+
+static CardDeckListWindow * pCnow_7;
