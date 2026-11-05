@@ -266,8 +266,8 @@ extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int fla
  * completed here. thinkUnitAtkExec (0x00a1dc40) reads a signed half two
  * levels down: the pointer this offset holds (into calcUPGet's unmodeled_44
  * span) points at one entry of this TU's own attack table (cmdAtktbl/
- * cmdAtkset/cmdAtktblSort/cmdAtktblSortSub/cmdAtktblSearch below, all still
- * asm), whose script-offset field thinkUnitAtkExec is the first claimed
+ * cmdAtkset/cmdAtktblSort/cmdAtktblSortSub/cmdAtktblSearch below), whose
+ * script-offset field thinkUnitAtkExec is the first claimed
  * reader of.
  */
 #define CALC_UNIT_PARAM_ATK_TBL_OFF 0x48
@@ -340,7 +340,7 @@ extern int monsSetNoGet(void);
  * The AI script command argument the interpreter (thinkExec and friends,
  * still asm) hands to every opcode handler in this TU's cmd* family:
  * cmdLineChk, cmdAtktblSort, cmdAtktblSortRev, cmdMonsSetNoGet and
- * cmdAtktblSortSub (this TU, still asm) all take the same pointer. Each
+ * cmdAtktblSortSub (this TU) all take the same pointer. Each
  * handler reads a 16-bit operand from the running AI script through the
  * cursor at +0x4 (thinkAdrGet(cursor) resolves it to an address) and
  * advances the cursor by 2 per operand it consumes; cmdAtktblSort and
@@ -371,16 +371,24 @@ extern int monsSetNoGet(void);
  */
 /*
  * thinkRegNo/thinkRegGet/thinkRegSet/cmdNum/cmdThinksetSub/cmdAtktblSortSub
- * are this TU's own siblings, still asm; forward-declared here for the
- * functions above that call them.
+ * are this TU's own siblings; forward-declared here for the functions above
+ * that call them. cmdAtktblSortSub returns int: `daddu $2,$0,$0` at 0x00a202dc
+ * sets its result on the way out.
  */
 extern short thinkRegNo(short pc);
-extern int thinkRegGet(int regIndex);
+/*
+ * thinkRegGet, cmdReg and cmdNum return the 16-bit script value as short:
+ * cmdAtktbl passes a stored cmdNum result straight to thinkAdrGet(short)
+ * (lw $4,0x8($29) at 0x00a1ff5c with no sll/sra) and cmdAtktblSearch does
+ * the same from a register (daddu $4,$16,$0 at 0x00a203c4), which gcc only
+ * omits for a value it already holds sign-extended.
+ */
+extern short thinkRegGet(int regIndex);
 extern void thinkRegSet(int regIndex, int value);
 
-extern int cmdNum(short pc);
+extern short cmdNum(short pc);
 extern int cmdThinksetSub(ThinkProcess *proc);
-extern void cmdAtktblSortSub(ThinkProcess *proc);
+extern int cmdAtktblSortSub(ThinkProcess *proc);
 extern int thinkProcessChk(int slot);
 
 /*
@@ -409,6 +417,33 @@ extern void dataVPadSet(int padMask);
  * slot; cmdEventSlotGet (0x00a220e8) is the only claimed caller here.
  */
 extern int menuTimeGet(void);
+
+/*
+ * Camera-event request record cmdThinkCamEvent (0x00a22140) fills on its
+ * stack for camEventExec (this TU, still asm): type at +0x0
+ * (sw $3,0x0($29) after addiu $3,$0,0x19), the script operand at +0x4
+ * (sw $2,0x4($29), cmdNum's result), the acting unit pThinkUnit at +0x8
+ * (sw $5,0x8($29)) and no target at +0xC (sw $0,0xC($29)); the same four
+ * words as src/ov01/battle_init.c's CamEvent, which types the units as
+ * BattleUnit; this TU holds the acting unit as ObjectTask (pThinkUnit).
+ */
+typedef struct ThinkCamEvent {
+    int type;            /* +0x00 */
+    int param;           /* +0x04 */
+    ObjectTask *unit;    /* +0x08 */
+    ObjectTask *target;  /* +0x0C */
+} ThinkCamEvent;
+#define CAM_EVENT_THINK 0x19
+/*
+ * Declared returning int, as src/ov01/entry_first_init.c does (the value is
+ * not read): with a void declaration sched1 ranks the param store
+ * (sw $2,0x4($29), the live cmdNum result) last of the four record stores
+ * and emits it before sw $3,0x0($29) / sw $5,0x8($29) (ready list
+ * 71 65 58 68 instead of 71 68 65 58 in the -dS dump; the dependence links
+ * of the four stores are identical in both forms); the int declaration
+ * keeps the original order type, unit, param, target.
+ */
+extern int camEventExec(ThinkCamEvent *event);
 
 /*
  * cfEncountGet (src/ov01/battle_init.c, still asm) returns the active
@@ -516,12 +551,30 @@ extern const char D_00A461B8[];
 extern int cmdUnitpara(ObjectTask *unit, int category, int value, int mode);
 
 /*
- * cmdTecpara/dataTecGet (this TU and src/ov01/data_unit_org_get.c, both
- * still asm) look up a technique's parameter; cmdTecparaGet (0x00a20518) is
+ * cmdTecpara/dataTecGet (this TU and src/ov01/data_unit_org_get.c) look up a
+ * technique's parameter; cmdTecparaGet (0x00a20518) is
  * the only claimed caller here.
  */
-extern int cmdTecpara(int tec, int category);
-extern int dataTecGet(int tecId);
+/*
+ * dataTecGet's record (TecRecord, TU-local to src/ov01/data_unit_org_get.c),
+ * as far as this TU reads it: cmdAtktbl loads the byte at +0x00 (lbu $5,0x0($2)
+ * at 0x00a1fe50) as calcTrg2PE's target-selection flags, the same byte
+ * src/ov01/calc.c's TecKindView names attr. cmdTecpara/cmdTecparaSub only
+ * forward the pointer.
+ */
+typedef struct CmdTecRecord {
+    unsigned char attr;    /* +0x00 */
+} CmdTecRecord;
+
+extern int cmdTecpara(CmdTecRecord *tecRecord, int category);
+extern CmdTecRecord *dataTecGet(int tecId);
+
+/*
+ * calcTrg2PE and calcAtkChk (src/ov01/calc.c, C there) are declared the way
+ * that TU declares them; cmdAtktbl is this TU's only caller of either.
+ */
+extern int calcTrg2PE(ObjectTask *unit, int trgFlags);
+extern short calcAtkChk(ObjectTask *unit, ObjectTask *target, int tecId);
 
 /*
  * mapMulSet's own parameter block is a different TU's union

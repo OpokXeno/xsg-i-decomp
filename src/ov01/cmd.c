@@ -12,7 +12,7 @@ typedef union {
     short halfwordValue;
 } CmdTecparaValue;
 
-extern CmdTecparaValue *cmdTecparaSub(int tec, short category, short *valueType);
+extern CmdTecparaValue *cmdTecparaSub(CmdTecRecord *tecRecord, short category, short *valueType);
 
 /*
  * Returns int: with a void callee gcc keeps cmdUnitChange's 0x25 command in
@@ -385,7 +385,7 @@ int thinkValSet(int value)
     return value;
 }
 
-int thinkRegGet(int regIndex)
+short thinkRegGet(int regIndex)
 {
     unsigned short reg = regIndex;
     short *value_address = (short *)(pContext + ((reg & 0x3FFF) * 2));
@@ -435,31 +435,31 @@ void thinkRegSet(int regOperand, int value)
     }
 }
 
-int cmdReg(short pc)
+short cmdReg(short pc)
 {
     unsigned short *reg_address = (unsigned short *)thinkAdrGet(pc);
     unsigned short reg = *reg_address;
-    int register_value;
-    int result;
 
     ((int (*)(int, int))regChk)(reg, pc);
-    result = (register_value = thinkRegGet(reg));
-    return result;
+    return thinkRegGet(reg);
 }
 
-int cmdNum(short pc)
+short cmdNum(short pc)
 {
     short *value_address = (short *)thinkAdrGet(pc);
     short value = *value_address;
-    int result;
 
     /* Bit 0x8000 marks a register operand; anything else is a literal. */
     if (value & 0x8000) {
-        result = cmdReg(pc);
-    } else {
-        result = thinkValSet(value);
+        return cmdReg(pc);
     }
-    return result;
+    /*
+     * thinkValSet is defined returning int: a short definition adds sll/sra
+     * after its `or` (0x00a1e064) in every spelling, while cmdNum passes the
+     * value on unextended (0x00a1e1c0..0x00a1e1d0), so the result is taken as
+     * the short the callers store (same idiom as regChk in thinkRegNo).
+     */
+    return ((short (*)(int))thinkValSet)(value);
 }
 
 int cmdExit(void)
@@ -1103,7 +1103,56 @@ int cmdUnitChange(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktbl);
+/*
+ * Builds the attack table at script offset outStart: for every one of the
+ * unit's normal techniques, every eligible live target adds a (technique
+ * slot, unit number) pair after entry 0, which finally receives the pair
+ * count (also stored in the script register regNo). Eligible means: on the side
+ * calcTrg2PE selects from the technique's target flags (unitTblGet's table),
+ * not flagged dead (andi $2,$2,0x80 at 0x00a1fe9c) and accepted by calcAtkChk.
+ */
+int cmdAtktbl(ThinkProcess *proc)
+{
+    int regNo;
+    short outStart;
+    int tecCount;
+    ObjectTask *unit;
+    ObjectTask **table;
+    short entry = 1;
+    int slot;
+    short tec;
+    int targetCount;
+    int i;
+
+    regNo = thinkRegNo(proc->pc);
+    proc->pc += 2;
+    outStart = cmdNum(proc->pc);
+    proc->pc += 2;
+    tecCount = cmdNum(proc->pc);
+    proc->pc += 2;
+    unit = thinkUnitPtrGetReg(0x8010);
+    for (slot = 0; slot < tecCount; slot++) {
+        tec = calcUPGet(unit)->normalTechniqueId[slot];
+        if (tec != 0) {
+            targetCount = unitTblGet(calcTrg2PE(unit, dataTecGet(tec)->attr), &table);
+            for (i = 0; i < targetCount; i++) {
+                if (table[i] != 0 && !(((CmdActorFlags *)table[i]->work)->flags & CMD_ACTOR_FLAG_DEAD)) {
+                    if (calcAtkChk(unit, table[i], tec)) {
+                        *(short *)thinkAdrGet(outStart + entry * 2) = slot;
+                        entry++;
+                        *(short *)thinkAdrGet(outStart + entry * 2) = unitNoGet(table[i]);
+                        entry++;
+                    }
+                }
+            }
+        }
+    }
+    /* The table's entry count becomes its pair count, stored in entry 0. */
+    entry = (entry - 1) / 2;
+    thinkRegSet(regNo & 0xFFFF, entry & 0xFFFF);
+    *(short *)thinkAdrGet(outStart) = entry;
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtkset);
 
@@ -1119,9 +1168,121 @@ void cmdAtktblSortRev(ThinkProcess *proc)
     cmdAtktblSortSub(proc);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktblSortSub);
+/*
+ * Sorts the (technique slot, unit number) pairs of the attack table at the
+ * script offset of the first operand by the unit parameter the second operand
+ * selects: descending (largest first) when cmdAtktblSort called (sortMode 0,
+ * a larger value moves into the slot), ascending from cmdAtktblSortRev
+ * (sortMode 1, a smaller one does). A sort that swaps on every improvement, over the table's own
+ * script memory, every access going through thinkAdrGet.
+ */
+int cmdAtktblSortSub(ThinkProcess *proc)
+{
+    short valueType;
+    short tableStart;
+    short category;
+    int count;
+    int best = 0;    /* read by the movz before any write (sw $0,0x14($29) at 0x00a200d8) */
+    int i;
+    int j;
+    int value;
+    short jSlot;
+    short iSlot;
+    short jUnit;
+    short iUnit;
+    CmdUnitParaValue *unitParaValue;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktblSearch);
+    tableStart = cmdNum(proc->pc);
+    proc->pc += 2;
+    category = cmdNum(proc->pc);
+    proc->pc += 2;
+    count = *(short *)thinkAdrGet(tableStart);
+    tableStart += 2;
+    for (i = 0; i < count - 1; i++) {
+        for (j = i; j < count; j++) {
+            unitParaValue = cmdUnitparaSub(unitPtrGet(*(short *)thinkAdrGet(tableStart + j * 4 + 2)),
+                                           category, &valueType);
+            value = (valueType == 1) ? unitParaValue->byteValue : unitParaValue->halfwordValue;
+            if (i == j) {
+                best = value;
+            }
+            if ((proc->sortMode == 0 && best < value) || (proc->sortMode == 1 && value < best)) {
+                /* Swap pair j into slot i, slot halves first. */
+                jSlot = *(short *)thinkAdrGet(tableStart + j * 4);
+                iSlot = *(short *)thinkAdrGet(tableStart + i * 4);
+                *(short *)thinkAdrGet(tableStart + j * 4) = iSlot;
+                *(short *)thinkAdrGet(tableStart + i * 4) = jSlot;
+                jUnit = *(short *)thinkAdrGet(tableStart + j * 4 + 2);
+                iUnit = *(short *)thinkAdrGet(tableStart + i * 4 + 2);
+                *(short *)thinkAdrGet(tableStart + j * 4 + 2) = iUnit;
+                *(short *)thinkAdrGet(tableStart + i * 4 + 2) = jUnit;
+                best = value;
+            }
+        }
+    }
+    return 0;
+}
+
+/*
+ * Runs the script at the third operand once per (technique slot, unit number)
+ * pair of the attack table at the first operand, with the unit number in
+ * register 0x8010 and the technique slot in 0x8012, and copies every pair the script accepts (register 0x8018
+ * nonzero) into the table at the second operand, whose entry 0 receives the
+ * accepted pair count (also stored in the script register regNo). The process's
+ * pc and both registers are restored afterwards.
+ */
+int cmdAtktblSearch(ThinkProcess *proc)
+{
+    int regNo;
+    short srcTable;
+    short outStart;
+    short script;
+    int savedUnitReg;
+    int savedSlotReg;
+    int count;
+    short savedPc;
+    short slot;
+    short unitNo;
+    int entry = 1;
+    int i;
+
+    regNo = thinkRegNo(proc->pc);
+    proc->pc += 2;
+    srcTable = cmdNum(proc->pc);
+    proc->pc += 2;
+    outStart = cmdNum(proc->pc);
+    proc->pc += 2;
+    script = cmdNum(proc->pc);
+    proc->pc += 2;
+    savedUnitReg = thinkRegGet(0x8010);
+    savedSlotReg = thinkRegGet(0x8012);
+    count = *(short *)thinkAdrGet(srcTable);
+    srcTable += 2;
+    savedPc = proc->pc;
+    for (i = 0; i < count; i++) {
+        slot = *(short *)thinkAdrGet(srcTable + i * 4);
+        unitNo = *(short *)thinkAdrGet(srcTable + i * 4 + 2);
+        thinkRegSet(0x8010, unitNo & 0xFFFF);
+        thinkRegSet(0x8012, slot & 0xFFFF);
+        proc->pc = script;
+        while (thinkExecSub(proc) == 0) {
+        }
+        if (thinkRegGet(0x8018) != 0) {
+            *(short *)thinkAdrGet(outStart + entry * 2) = slot;
+            entry++;
+            *(short *)thinkAdrGet(outStart + entry * 2) = unitNo;
+            entry++;
+        }
+    }
+    proc->pc = savedPc;
+    thinkRegSet(0x8012, savedSlotReg & 0xFFFF);
+    thinkRegSet(0x8010, savedUnitReg & 0xFFFF);
+    /* Entries after the count word come in pairs. */
+    entry = (entry - 1) / 2;
+    thinkRegSet(regNo & 0xFFFF, entry & 0xFFFF);
+    *(short *)thinkAdrGet(outStart) = entry;
+    return 0;
+}
 
 int cmdTecparaGet(ThinkProcess *proc)
 {
@@ -1138,10 +1299,10 @@ int cmdTecparaGet(ThinkProcess *proc)
     return 0;
 }
 
-int cmdTecpara(int tec, int category)
+int cmdTecpara(CmdTecRecord *tecRecord, int category)
 {
     short valueType;
-    CmdTecparaValue *valueAddress = cmdTecparaSub(tec, category, &valueType);
+    CmdTecparaValue *valueAddress = cmdTecparaSub(tecRecord, category, &valueType);
 
     if (valueType == 1) {
         return valueAddress->byteValue;
@@ -1702,7 +1863,7 @@ int cmdCamCoordGet(ThinkProcess *proc)
 }
 
 /*
- * mbankPtrGet (this TU, still asm) returns the bank parameter block
+ * mbankPtrGet (defined above in this TU) returns the bank parameter block
  * cmdCamBank fills in; only the member that function touches is modeled.
  */
 typedef struct MbankParams {
@@ -1731,7 +1892,7 @@ int cmdCamBank(ThinkProcess *proc)
 }
 
 /*
- * mpersPtrGet (this TU, still asm) returns the perspective parameter block
+ * mpersPtrGet (defined above in this TU) returns the perspective parameter block
  * cmdCamPers fills in; only the member that function touches is modeled.
  */
 typedef struct MpersParams {
@@ -1937,7 +2098,26 @@ int cmdEventSlotGet(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkCamEvent);
+int cmdThinkCamEvent(ThinkProcess *proc)
+{
+    ThinkCamEvent event;
+    ThinkProcess saved;
+    short param;
+
+    param = cmdNum(proc->pc);
+    proc->pc += 2;
+    /* A block copy, not struct assignment: an assignment lets `sw $5,8($29)` float above it. */
+    __builtin_memcpy(&saved, proc, sizeof(ThinkProcess));
+    event.type = CAM_EVENT_THINK;
+    event.unit = pThinkUnit;
+    event.param = param;
+    event.target = 0;
+    camEventExec(&event);
+    __builtin_memcpy(proc, &saved, sizeof(ThinkProcess));
+    thinkTopSet(pThinkTop);
+    thinkContextSet((int)context);
+    return 0;
+}
 
 int cmdCfEncountGet(ThinkProcess *proc)
 {
