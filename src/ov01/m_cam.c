@@ -23,12 +23,25 @@ extern const char D_00A50FD8[]; /* "MCamGetActorCoord: actor is NULL" */
 
 extern void bcopy(const void *source, void *destination, unsigned int count);
 /*
+ * The interpolation curve MCamMoveProc_CalcRatio applies to a move's ratio
+ * (its "Invalid IPTYPE" message names the selector; the cases are its
+ * switch: linear, (1 - cos(pi r)) / 2, 1 - cos(pi r / 2), sin(pi r / 2)).
+ */
+typedef enum MCamIpType {
+    MCAM_IP_LINEAR = 0,
+    MCAM_IP_SINE_IN_OUT = 1,
+    MCAM_IP_SINE_IN = 2,
+    MCAM_IP_SINE_OUT = 3
+} MCamIpType;
+
+/*
  * Linear interpolation state shared by the per-parameter MoveProc callbacks
  * (mode/duration/elapsed feed MCamMoveProc_CalcRatio; start/end/current hold
- * the eased scalar value).
+ * the eased scalar value). The counters compare unsigned (`sltu $2,$2,$3`,
+ * 0x00a32bf8 in MCamMoveProc_Bank).
  */
 typedef struct MCamMoveState {
-    unsigned int mode;
+    MCamIpType mode;
     unsigned int duration;
     unsigned int elapsed;
     float start;
@@ -82,7 +95,7 @@ typedef struct MCamCoordOffset {
     float distance;
     float pitch;
     float yaw;
-    unsigned char unmodeled_2C[0x8];
+    unsigned char unmodeled_2C[0x4]; /* ends at MCamPointParams +0xA0, where bank sits */
 } MCamCoordOffset;
 
 /*
@@ -134,6 +147,10 @@ typedef struct MCamPointParams {
     unsigned char unmodeled_44[0x28];
     float ratio;
     MCamCoordOffset coordOffset;
+    /* Bank angle: MCamMove_Bank reads a request's target bank here
+     * (`lwc1 $f1,0xA0($4)`, 0x00a3277c); MCamSet mode 2 copies the same word
+     * to camParams.bank (`lwc1 $f0,0xA0($5)`, 0x00a31a78). */
+    float bank;
     /* MCamMove_Pers reads a request's perspective angle (degrees) here. */
     float perspectiveAngle;
     unsigned char unmodeled_A8[0x8];
@@ -221,13 +238,6 @@ extern Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, c
 static void *sysCam;
 /* MCamTakeControl saves the StudioCamera returned by xglStudioGetCamera2. */
 static StudioCamera sysCamBuff;
-static int camFlags;
-static MCamParameterStorage camParams;
-
-/* Original local labels are interior views in camParams, not extra storage. */
-#define D_00A5B220 (camParams.actorLength[0])
-#define D_00A5B224 (camParams.actorLength[1])
-#define D_00A5B5F8 (camParams.perspectiveMove)
 
 /* Bits of camFlags. MCamMove_Coord picks CAM_FLAG_FIX_COORD (point 0) or
  * CAM_FLAG_FIX_TARGET (point 1) at its head (`addiu $21,$0,0x2000` at
@@ -236,7 +246,9 @@ static MCamParameterStorage camParams;
  * (`lh $3,0xBC($18)`, 0x00a3270c) is nonzero, after the move bit
  * (`or $2,$2,$22`, 0x00a3271c); the bits the older functions test keep
  * their names. Enum constants, not macros, as the project publishes them
- * (CALC_NORMAL_TECHNIQUE_COUNT). */
+ * (CALC_NORMAL_TECHNIQUE_COUNT). camFlags has this type because an int camFlags
+ * shares the alias class of MCamMoveState's counters, and `sw $3,0($5)` then
+ * schedules ahead of `swc1 $f0,0x14($2)` (0x00a32784, MCamMove_Bank). */
 enum CamFlag {
     CAM_FLAG_ACTIVE = 0x1,
     CAM_FLAG_DUMP_DISABLED = 0x10,
@@ -248,6 +260,14 @@ enum CamFlag {
     CAM_FLAG_FIX_TARGET = 0x4000
 };
 #define CAM_SHAKE_BIT 12
+
+static enum CamFlag camFlags;
+static MCamParameterStorage camParams;
+
+/* Original local labels are interior views in camParams, not extra storage. */
+#define D_00A5B220 (camParams.actorLength[0])
+#define D_00A5B224 (camParams.actorLength[1])
+#define D_00A5B5F8 (camParams.perspectiveMove)
 
 void *MCamGetSysCam(void)
 {
@@ -392,12 +412,14 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamSet);
  * 0xB4, duration at 0xB8); this one is reshaped (target point record 0xB0, path
  * 0xB0, mode 0xB4, duration 0xB8) and extended by the halfword at 0xBC. MCamMove_Coord copies its leading 0xB0 bytes as the target
  * point record and sets the point's fix flag when fixOnArrival (lh +0xBC)
- * is non-zero.
+ * is non-zero. mode is the MCamIpType selector MCamMove_Bank and MCamMove_Pers
+ * copy to MCamMoveState.mode. The original loads duration first (`lw $7,0xB8($4)`
+ * at 0x00a32774, `lw $6,0xB4($4)` at 0x00a32780); as an int, mode loads first.
  */
 typedef struct MCamMoveRequest {
     MCamPointParams target;
     int path;
-    int mode;
+    MCamIpType mode;
     int duration;
     short fixOnArrival;
 } MCamMoveRequest;
@@ -519,7 +541,8 @@ void MCamShake(unsigned int mode, unsigned int amplitude, unsigned int phaseStep
 
 int MCamIsShaking(void)
 {
-    return (camFlags >> CAM_SHAKE_BIT) & 1;
+    /* Arithmetic shift (`sra $2,$2,12`, 0x00a31e10); enum CamFlag is unsigned. */
+    return ((int)camFlags >> CAM_SHAKE_BIT) & 1;
 }
 
 /* Local in the original: splat emits `glabel MCamGetActorCoord, local`; no reference outside m_cam.c. */
@@ -762,12 +785,36 @@ static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Bank);
+/*
+ * Starts the bank (roll) move from the current bank to the request's target
+ * bank. The start store precedes the request's bank load (`swc1 $f0,0xC($2)`
+ * 0x00a32770, `lwc1 $f1,0xA0($4)` 0x00a3277c: both float class).
+ */
+static void MCamMove_Bank(MCamMoveRequest *request)
+{
+    MCamMoveState *state = &camParams.bankMove;
+    float start;
+    int duration;
+    MCamIpType mode;
+    float end;
+
+    start = camParams.bank;
+    state->start = start;
+    mode = request->mode;
+    duration = request->duration;
+    end = request->target.bank;
+    state->mode = mode;
+    state->duration = duration;
+    state->end = end;
+    state->elapsed = 0;
+    state->current = start;
+    camFlags |= CAM_FLAG_MOVE_BANK;
+}
 
 static void MCamMove_Pers(MCamMoveRequest *request)
 {
     MCamMoveState *state = &D_00A5B5F8;
-    int mode;
+    MCamIpType mode;
     int duration;
     float angle;
     float angleRad;
@@ -805,7 +852,7 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
     ratio = (float)elapsed / (float)duration;
 
     switch (mode) {
-    case 1: {
+    case MCAM_IP_SINE_IN_OUT: {
         float sine1;
         ratio = ratio * 3.14159265f + 4.712389f;
         __asm__ __volatile__(
@@ -821,9 +868,9 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
         ratio = (sine1 + 1.0f) * 0.5f;
         break;
     }
-    case 0:
+    case MCAM_IP_LINEAR:
         break;
-    case 2: {
+    case MCAM_IP_SINE_IN: {
         float sine2;
         ratio = ratio * 1.57079633f + 4.712389f;
         __asm__ __volatile__(
@@ -839,7 +886,7 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
         ratio = sine2 + 1.0f;
         break;
     }
-    case 3: {
+    case MCAM_IP_SINE_OUT: {
         float sine3;
         ratio = ratio * 1.57079633f;
         __asm__ __volatile__(
