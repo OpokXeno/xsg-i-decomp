@@ -1435,8 +1435,24 @@ void menuPlStatPut(ObjectTask *task, GrPacket *packet, BattleUnit *unit);
 void menuStatNamePut(ObjectTask *task);
 
 /*
- * The status-icon task's own work record, as far as menuStatObjDraw and
- * menuStatNamePut read it. menuStatNamePut (0x00a2a5c0..0x00a2a5c8) loads
+ * The status window's +0x90 block (MenuObjTransform's span in the other
+ * objects' work): the window position, then the displayed values that
+ * menuPlStatPut truncates to ints. It reads position.x/z (lwc1 0x90/0x98
+ * off work) and ap/hp/ep/bp (work + 0xA0/0xA4/0xA8/0xC0, each address
+ * formed once and dereferenced with lwc1 0x0).
+ */
+typedef struct MenuStatDisplay {
+    Vector4 position;                  /* +0x00 */
+    float ap;                          /* +0x10 */
+    float hp;                          /* +0x14 */
+    float ep;                          /* +0x18 */
+    unsigned char unmodeled_1c[0x30 - 0x1C];
+    float bp;                          /* +0x30 */
+} MenuStatDisplay;
+
+/*
+ * The status-icon task's own work record, as far as menuStatObjDraw,
+ * menuStatNamePut and menuPlStatPut read it. menuStatNamePut (0x00a2a5c0..0x00a2a5c8) loads
  * `lw $17,0x78($2)` / `lw $5,0x7c($2)` from task->work and passes them to
  * menuStatIconChk/dataStatNameGet as the character id and the icon slot to
  * check; menuStatObjDraw (0x00a29bf4..0x00a29c00) loads `lw $17,0x80($2)`
@@ -1449,6 +1465,8 @@ struct MenuStatObjWork {
     int charaId;       /* +0x78 */
     int iconSlot;       /* +0x7C */
     BattleUnit *unit;   /* +0x80 */
+    unsigned char unmodeled_84[0x90 - 0x84];
+    MenuStatDisplay display; /* +0x90 */
 };
 
 void menuStatObjDraw(ObjectTask *task) {
@@ -1496,11 +1514,105 @@ int menuStatChrIdGet(ObjectTask *unit)
     return charaId - 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuPlStatPut);
+/* calc.c (ov01/tu004): nonzero while the unit's HP sits in the low range
+ * (src/ov01/unit_cmd.h declares it the same way). */
+extern int calcIdol2Chk(ObjectTask *unit);
+void menuFaceEnvMake(void *packet);
+void menuApBarPut(GrPacket *packet, int x, int y, int amount, BattleUnit *unit);
+void menuBpBarPut(GrPacket *packet, int x, int y, int length);
+void menuStatIconPut(GrPacket *packet, int x, int y, int charaId, int statFlags);
+
+/*
+ * Draws one party member's status window at the work position: the active
+ * unit's pulsing frame (ALPHA_1 FIX term from the frame counter), the face
+ * (6 faces per texture row, 40 x 80 each), the four value labels, HP/EP
+ * current and max, the AP bar, the BC digit, the BP bar and, when an icon
+ * slot is selected, the status icon.
+ */
+void menuPlStatPut(ObjectTask *task, GrPacket *packet, BattleUnit *unit)
+{
+    /* The spilled locals keep the original's slots in declaration order
+     * (0x10 up, 0x14 charaId, 0x18 iconSlot, 0x1C ap, 0x20 ep, 0x24 bp). */
+    CalcUnitParam *up;
+    MenuStatObjWork *work;
+    int charaId;
+    int iconSlot;
+    float *ap;
+    float *hp;
+    float *ep;
+    float *bp;
+    int x;
+    int z;
+    int chrId;
+    int faceU;
+    int faceV;
+    int pulse;
+
+    up = calcUPGet((ObjectTask *)unit);
+    work = task->work;
+    z = work->display.position.z;
+    x = work->display.position.x;
+    hp = &work->display.hp;
+    ep = &work->display.ep;
+    bp = &work->display.bp;
+    charaId = work->charaId;
+    iconSlot = work->iconSlot;
+    /* Last read of work: the scheduler hoists the instruction that frees
+     * it (addiu $3,$2,0xA0 right after lw $2,0x10($16)). */
+    ap = &work->display.ap;
+    /* One variable reassigned, not `(int)x - 8` in one expression: the
+     * original keeps x - 8 itself in $30 (addiu $30,$30,-8) and adds every
+     * window offset to it; the one-expression form folds the -8 into each
+     * offset (addiu $5,$22,4 for x + 0xC) and spills a second copy. */
+    x -= 8;
+    chrId = menuStatChrIdGet((ObjectTask *)unit);
+    faceU = (chrId % 6) * 40;
+    faceV = (chrId / 6) * 80;
+    menuFaceEnvMake(packet);
+    pulse = (frameCntGet() * 2) & 0xFF;
+    if (pulse >= 0x80) {
+        pulse = 0xFF - pulse;
+    }
+    grGsRegSet(packet, 0x42, ((long long)(pulse + 10) << 32) | 0x68);
+    grOpenSpr(packet);
+    if (actUnitGet() == unit) {
+        menuStatSprite2(packet, x + 0xC, z - 0xC, 0xA0, 0x58, 0xC8, 0xA0, 0xFF, 0xF0);
+    }
+    grCloseSpr();
+    grGsRegSet(packet, 0x42, 0);
+    grOpenSpr(packet);
+    menuStatSprite(packet, x + 0x10, z - 8, 0x28, 0x50, faceU, faceV);
+    grCloseSpr();
+    menuStatEnvMake(packet);
+    grOpenSpr(packet);
+    menuStatSprite(packet, x + 0x30, z, 0x12, 0xC, 0, 0xAE);
+    menuStatSprite(packet, x + 0x30, z + 0x10, 0x12, 0xC, 0x12, 0xAE);
+    menuStatSprite(packet, x + 0x30, z + 0x22, 0x12, 0xC, 0x24, 0xAE);
+    menuStatSprite(packet, x + 0x30, z + 0x32, 0x12, 0xC, 0x36, 0xAE);
+    menuNumPut(packet, x + 0x42, z, (int)*hp, 4, (calcIdol2Chk((ObjectTask *)unit) != 0) ? 2 : 0);
+    menuStatSprite(packet, x + 0x76, z + 2, 8, 0x10, 0x7A, 0x90);
+    menuNumPut(packet, x + 0x7E, z + 2, up->maxHp, 4, 1);
+    menuNumPut(packet, x + 0x5A, z + 0x11, (int)*ep, 2, 0);
+    menuStatSprite(packet, x + 0x76, z + 0x13, 8, 0x10, 0x7A, 0x90);
+    menuNumPut(packet, x + 0x7E, z + 0x13, up->maxEp, 2, 1);
+    menuApBarPut(packet, x + 0x42, z + 0x22, (int)*ap, unit);
+    menuStatSprite(packet, x + 0x44, z + 0x30, 0x3C, 0x10, 0x30, 0xF0);
+    menuNumPut(packet, x + 0x82, z + 0x30, up->bcValue, 1, 1);
+    grCloseSpr();
+    menuBpBarPut(packet, x, z, (int)*bp);
+    if (iconSlot != 0) {
+        menuStatIconEnvMake(packet);
+        grOpenSpr(packet);
+        menuStatIconPut(packet, x, z, charaId, iconSlot);
+        grCloseSpr();
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuNumPut);
 
-void menuApBarPut(GrPacket *packet, int x, int y, int amount)
+/* The unit is a fifth argument menuPlStatPut passes (daddu $8,$21,$0 at
+ * 0x00A29FF4 right before its jal) and this body never reads. */
+void menuApBarPut(GrPacket *packet, int x, int y, int amount, BattleUnit *unit)
 {
     int i;
     int xPosition;
