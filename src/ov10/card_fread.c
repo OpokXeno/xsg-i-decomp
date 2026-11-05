@@ -5,12 +5,10 @@
 #include "quadword.h"
 #include "shared.h"
 #include "ov10/cgp.h"
+#include "ov10/card_id.h"
+#include "ov10/card_enemy.h"
 #include "main/xgl_font.h"
 #include "card_fread.h"
-
-/* The card-model fade state in CardGameWork (+0x7100..+0x71A0, ov10/cgp.h):
- * four model slots, of whose four color channels the fades touch 0..2. */
-#define CARD_MODEL_COLOR_CHANNELS 3
 
 /*
  * Reads a card-data file ("data\carddata\" + filename) into the buffer at
@@ -18,13 +16,13 @@
  * inline from the string literal in .rodata (ld/lw/lhu/lbu block move), which
  * plain strcpy would not do under -fno-builtin.
  */
-int CardFread(u32 address, char *filename)
+int CardFread(void *address, char *filename)
 {
     char path[256];
 
     __builtin_strcpy(path, "data\\carddata\\");
     strcat(path, filename);
-    return xglCdReadFile(path, (void *) address, 0, 0);
+    return xglCdReadFile(path, address, 0, 0);
 }
 
 /*
@@ -131,7 +129,7 @@ int CardMakeDispList(CardListEntry *entries, u16 filter, CardDefinition *definit
         if (!(definitions->kind & kindMask)) {
             continue;
         }
-        if (definitions->kind == 1 && !(definitions->flags & flagMask)) {
+        if (definitions->kind == CARD_KIND_BATTLE && !(definitions->flags & flagMask)) {
             continue;
         }
         entries->cardId = i;
@@ -141,67 +139,45 @@ int CardMakeDispList(CardListEntry *entries, u16 filter, CardDefinition *definit
     return count;
 }
 
-/* Compact deck-build list CardMakeDeckProc/CardLoadDeckProc/CardSaveDeckProc
- * edit: a card-type group count followed by one 4-byte group record per
- * group: the card id (CardGetDeckCardCnt compares it, lh at +0x14 + 4*i)
- * and its selected-copy count (lh at +0x16 + 4*i in both counters). */
-typedef struct CardDeckGroupEntry {
-    s16 cardId;                 /* +0x00 */
-    s16 copyCount;              /* +0x02 */
-} CardDeckGroupEntry;
-
-typedef struct CardDeckGroupList {
-    u8 unmodeled_00[0x05];
-    s8 pendingFlag;             /* +0x05: counted down by CardDelDeck (lb/sb at 0x00a08cc8..0x00a08cdc) */
-    u8 unmodeled_06[0x06];
-    s16 pendingCount;           /* +0x0C: counted down by CardDelDeck (lh/sh at 0x00a08ca0..0x00a08cc4) */
-    s16 groupTotal;             /* +0x0E: total group count, lowered with groupCount (lhu/sh at 0x00a08c9c, 0x00a08cb0) */
-    u8 unmodeled_10[0x02];
-    s16 groupCount;             /* +0x12 */
-    CardDeckGroupEntry groups[1]; /* +0x14: groupCount entries */
-} CardDeckGroupList;
-
 /*
  * Expand the run-length deck list into the flat deck: each group i writes its
  * cardId copyCount times, in group order (asm 0x00a088f0).
  */
-void CardCopyDeckWork(s16 *deck, CardDeckGroupList *list)
+void CardCopyDeckWork(s16 *deck, CardListWindow *list)
 {
     int group;
     int copy;
     int deckIndex;
 
     deckIndex = 0;
-    for (group = 0; group < list->groupCount; group++) {
-        for (copy = 0; copy < list->groups[group].copyCount; copy++) {
-            deck[deckIndex++] = list->groups[group].cardId;
+    for (group = 0; group < list->count; group++) {
+        for (copy = 0; copy < list->entries[group].count; copy++) {
+            deck[deckIndex++] = list->entries[group].cardId;
         }
     }
 }
 
-typedef int s32;
-
-s32 CardGetDeckAllCnt(CardDeckGroupList *deck)
+s32 CardGetDeckAllCnt(CardListWindow *deck)
 {
     s32 total;
     int i;
 
     total = 0;
-    for (i = 0; i < deck->groupCount; i++) {
-        total += deck->groups[i].copyCount;
+    for (i = 0; i < deck->count; i++) {
+        total += deck->entries[i].count;
     }
     return total;
 }
 
-s32 CardGetDeckCardCnt(s16 cardId, CardDeckGroupList *deck)
+s32 CardGetDeckCardCnt(s16 cardId, CardListWindow *deck)
 {
     s32 total;
     int i;
 
     total = 0;
-    for (i = 0; i < deck->groupCount; i++) {
-        if (deck->groups[i].cardId == cardId) {
-            total += deck->groups[i].copyCount;
+    for (i = 0; i < deck->count; i++) {
+        if (deck->entries[i].cardId == cardId) {
+            total += deck->entries[i].count;
         }
     }
     return total;
@@ -213,7 +189,7 @@ s32 CardGetDeckCardCnt(s16 cardId, CardDeckGroupList *deck)
  * The card ids are compared as unsigned halfwords. CardDelDeck calls it with
  * the group count before it decrements the count (lh at 0x00a08c94).
  */
-void CardCleanUpDeck(CardDeckGroupEntry *groups, s16 groupCount)
+void CardCleanUpDeck(CardListEntry *groups, s16 groupCount)
 {
     int i;
     int j;
@@ -232,12 +208,12 @@ void CardCleanUpDeck(CardDeckGroupEntry *groups, s16 groupCount)
         }
         if (least > 0) {
             s16 cardId = groups[i].cardId;
-            s16 copyCount = groups[i].copyCount;
+            s16 copyCount = groups[i].count;
 
             groups[i].cardId = groups[least].cardId;
-            groups[i].copyCount = groups[least].copyCount;
+            groups[i].count = groups[least].count;
             groups[least].cardId = cardId;
-            groups[least].copyCount = copyCount;
+            groups[least].count = copyCount;
         }
     }
 }
@@ -249,30 +225,30 @@ void CardCleanUpDeck(CardDeckGroupEntry *groups, s16 groupCount)
  * sorted with CardCleanUpDeck, and the function returns the position of the
  * card's group after the sort (the group count when no group matches).
  */
-s32 CardAddDeck(CardDeckGroupList *deck, s16 cardId)
+s32 CardAddDeck(CardListWindow *deck, s16 cardId)
 {
     s32 index;
     s32 found;
 
     found = 0;
-    for (index = 0; index < deck->groupCount; index++) {
-        if (deck->groups[index].cardId == cardId) {
+    for (index = 0; index < deck->count; index++) {
+        if (deck->entries[index].cardId == cardId) {
             found = 1;
             break;
         }
     }
     if (found) {
-        if (deck->groups[index].copyCount < CARD_DECK_MAX_COPIES) {
-            deck->groups[index].copyCount++;
+        if (deck->entries[index].count < CARD_DECK_MAX_COPIES) {
+            deck->entries[index].count++;
         }
     } else {
-        deck->groups[deck->groupCount].cardId = cardId;
-        deck->groups[deck->groupCount].copyCount = 1;
-        deck->groupCount++;
+        deck->entries[deck->count].cardId = cardId;
+        deck->entries[deck->count].count = 1;
+        deck->count++;
     }
-    CardCleanUpDeck(deck->groups, deck->groupCount);
-    for (index = 0; index < deck->groupCount; index++) {
-        if (deck->groups[index].cardId == cardId) {
+    CardCleanUpDeck(deck->entries, deck->count);
+    for (index = 0; index < deck->count; index++) {
+        if (deck->entries[index].cardId == cardId) {
             break;
         }
     }
@@ -287,46 +263,35 @@ s32 CardAddDeck(CardDeckGroupList *deck, s16 cardId)
  * counters then go down once each while nonzero. Returns 0 only when the group was
  * dropped and both counters were zero; otherwise 1.
  */
-int CardDelDeck(CardDeckGroupList *deck, s16 cardId)
+int CardDelDeck(CardListWindow *deck, s16 cardId)
 {
     s32 group;
 
-    for (group = 0; group < deck->groupCount; group++) {
-        if (deck->groups[group].cardId == cardId) {
-            if (deck->groups[group].copyCount < 2) {
-                deck->groups[group].cardId = -1;
-                deck->groups[group].copyCount = 0;
-                CardCleanUpDeck(deck->groups, deck->groupCount);
-                deck->groupCount -= 1;
-                deck->groupTotal -= 1;
-                if (deck->pendingCount != 0) {
-                    deck->pendingCount -= 1;
+    for (group = 0; group < deck->count; group++) {
+        if (deck->entries[group].cardId == cardId) {
+            if (deck->entries[group].count < 2) {
+                deck->entries[group].cardId = -1;
+                deck->entries[group].count = 0;
+                CardCleanUpDeck(deck->entries, deck->count);
+                deck->count -= 1;
+                deck->shownCount -= 1;
+                if (deck->top != 0) {
+                    deck->top -= 1;
                     break;
                 }
-                if (deck->pendingFlag != 0) {
-                    deck->pendingFlag -= 1;
+                if (deck->cursor != 0) {
+                    deck->cursor -= 1;
                     break;
                 }
                 return 0;
             } else {
-                deck->groups[group].copyCount -= 1;
+                deck->entries[group].count -= 1;
                 break;
             }
         }
     }
     return 1;
 }
-
-#define CARD_TEXT_SECOND_CHAR 1  /* byte after the backslash that CardNameConvert tests */
-#define CARD_TEXT_THIRD_CHAR 2   /* byte after that: a backslash gives "#73", a '%' gives "#23" */
-#define CARD_BYTE_BITS 8         /* bits of a byte: the colour value is stored high byte first */
-#define CARD_COLOR_CODE_HIGH 3   /* colorCode[3]: high byte of the 16-bit colour value, after the 3-byte prefix 0x15 0x03 0x03 */
-#define CARD_COLOR_CODE_LOW 4    /* colorCode[4]: low byte of the colour value */
-#define CARD_COLOR_CODE_END 5    /* colorCode[5]: terminating zero */
-#define CARD_ROW_PREFIX_BYTES 2  /* escape bytes 0x19 0x03 in front of the text of a list row */
-
-/* Forward declaration: defined further down, in the original function order of this TU. */
-int CDTSGetStrLen(unsigned char *text);
 
 /*
  * Rewrites the escape codes of a card name in place (asm 0x00a08d18). The
@@ -383,28 +348,28 @@ void CardNameConvert(unsigned char *text)
  * row is shown, then the footer is printed. `row` is initialised at its declaration
  * (the original sets $s2 before the first xglFontPrint, 0x00a08e4c).
  */
-void CardDeckDisp(CardDeckListView *deck, CardDefinitionName *definitions)
+void CardDeckDisp(CardListWindow *deck, CardDefinition *definitions)
 {
-    unsigned char nameText[32];
+    char nameText[32];
     char countText[16];
     s32 row = 0;
     s32 cardId;
     s32 i;
     char *name;
-    CardDefinitionName *definition;
+    CardDefinition *definition;
 
-    xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardDeckHeaderFontCode);
-    if (deck->windowRows > 0) {
-        for (; row < deck->windowRows; row++) {
-            if (row < deck->rowCount) {
-                cardId = deck->entries[row + deck->scroll].cardId;
+    xglFontPrint(deck->x, deck->y, DECK_LIST_TEXT_COLOR, cardDeckHeaderFontCode);
+    if (deck->rows > 0) {
+        for (; row < deck->rows; row++) {
+            if (row < deck->count) {
+                cardId = deck->entries[row + deck->top].cardId;
                 if (cardId >= 0) {
                     definition = &definitions[cardId];
-                    name = (char *)(CARD_DATA_BUFFER + definition->nameOffset);
+                    name = CARD_DATA_BUFFER + definition->nameOffset;
                     if (row == deck->cursor) {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
+                        xglFontPrint(deck->x, deck->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
+                        xglFontPrint(deck->x, deck->y, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                     }
                     for (i = 0; i < deck->textLength * CARD_TEXT_CHAR_BYTES; i++) {
                         nameText[i] = name[i];
@@ -412,22 +377,22 @@ void CardDeckDisp(CardDeckListView *deck, CardDefinitionName *definitions)
                     nameText[i] = 0;
                     CardNameConvert(nameText);
                     xglFontPrint(0, 0, 0, cardRowPrefixFontCode);
-                    xglFontPrint(deck->originX, deck->originY + row * DECK_DISP_ROW_HEIGHT,
-                                 DECK_LIST_TEXT_COLOR, (char *)nameText);
+                    xglFontPrint(deck->x, deck->y + row * DECK_DISP_ROW_HEIGHT,
+                                 DECK_LIST_TEXT_COLOR, nameText);
                     if (row == deck->cursor) {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
+                        xglFontPrint(deck->x, deck->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardCopyCountFontCode);
+                        xglFontPrint(deck->x, deck->y, DECK_LIST_TEXT_COLOR, cardCopyCountFontCode);
                     }
-                    sprintf(countText, cardCopyCountFormat, deck->entries[row + deck->scroll].copies);
-                    xglFontPrint(deck->originX + deck->textLength * DECK_DISP_CHAR_WIDTH + DECK_DISP_COUNT_GAP,
-                                 deck->originY + row * DECK_DISP_ROW_HEIGHT, DECK_LIST_TEXT_COLOR, countText);
+                    sprintf(countText, cardCopyCountFormat, deck->entries[row + deck->top].count);
+                    xglFontPrint(deck->x + deck->textLength * DECK_DISP_CHAR_WIDTH + DECK_DISP_COUNT_GAP,
+                                 deck->y + row * DECK_DISP_ROW_HEIGHT, DECK_LIST_TEXT_COLOR, countText);
                 }
             }
         }
     }
-    deck->cursorLimit = deck->rowCount;
-    xglFontPrint(deck->originX, deck->originY, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
+    deck->shownCount = deck->count;
+    xglFontPrint(deck->x, deck->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -572,75 +537,6 @@ void CardDispTxtSub2(u16 x, u16 y, unsigned char *text)
 }
 
 /*
- * Card range, texture and model addresses shared by CardDispLight (asm 0x00a094b0),
- * CardDispCard (asm 0x00a0a068) and CardDisp (asm 0x00a0a2f0).
- */
-#define CARD_DISP_ID_COUNT 0x94                     /* sltiu 0x94, 0x00a0a0a8 */
-#define CARD_MASTER_TABLE ((CardDefinition *)0x01000010) /* 0x00a0a0d8 */
-#define CARD_NAME_TABLE ((CardDefinitionName *)0x01000010) /* the same table seen through its name fields */
-#define CARD_TEXTURE_BASE 0x0100C000                /* 0x00a0a0e4 */
-#define CARD_TEXTURE_STRIDE 0x0000BAB0              /* 0x00a0a0b0 */
-#define CARD_TEXTURE(cardId) ((const char *)(CARD_TEXTURE_BASE + (cardId) * CARD_TEXTURE_STRIDE)) /* texture of a card face */
-#define CARD_DISP_ENABLED 0x01                      /* bit 0 of the flags: draw at all (`andi 0x1`, 0x00a0a350) */
-#define CARD_DISP_OVERLAY 0x02                      /* andi 0x2, 0x00a0a2a0 */
-#define CARD_DISP_LIGHT_MIDDLE 0x40                 /* andi 0x40, 0x00a0a0f8 */
-#define CARD_DISP_LIGHT_CN 0x80                     /* andi 0x80, 0x00a0a120 */
-#define CARD_MODEL_FRAME 0x016F8500                 /* 0x00a0a150 */
-#define CARD_MODEL_FACE 0x016F8100                  /* 0x00a0a200 */
-#define CARD_MODEL_DEFAULT 0x01701F80               /* 0x00a0a1f4 */
-#define CARD_MODEL_KIND1 0x016F8900                 /* 0x00a0a230 */
-#define CARD_MODEL_KIND2 0x016FD440                 /* ori 0x00a0a240 */
-#define CARD_MODEL_OVERLAY 0x01706AC0               /* 0x00a0a2bc */
-#define CARD_OVERLAY_TEXTURE ((const char *)0x016E0000) /* 0x00a0a250 */
-
-/*
- * CardDispLight light bits (the fourth argument): each bit applies the card light
- * (CCColor, asDir) to one part before its model is entered.
- */
-#define CARD_LIGHT_FRAME 0x01       /* frame, overlay and back models (andi 0x1, 0x00a09544) */
-#define CARD_LIGHT_HIT_POINTS 0x02  /* hit point digits (andi 0x2, 0x00a09668) */
-#define CARD_LIGHT_POWER 0x04       /* power digits (andi 0x4, 0x00a09834) */
-#define CARD_LIGHT_RESERVE 0x08     /* reserve cost digit (andi 0x8, 0x00a09a78) */
-#define CARD_LIGHT_ATTRIBUTE 0x10   /* attribute icon (andi 0x10, 0x00a09bc0) */
-#define CARD_LIGHT_NEED 0x20        /* requirement icons (andi 0x20, 0x00a09d34) */
-#define CARD_LIGHT_ATTACK 0x40      /* attack type icon (andi 0x40, 0x00a09e90) */
-#define CARD_LIGHT_ELEMENT 0x80     /* element icon (andi 0x80, 0x00a09f14) */
-
-#define CARD_BACK_TEXTURE CARD_FRAME_TEXTURE /* lui 0x00a0a000 */
-#define CARD_BACK_MODEL 0x01713600                      /* lui 0x00a0a010 */
-
-/* Hit points are shown only when no flag above bit 4 is set (andi 0xFFE0, 0x00a09628). */
-#define CARD_FLAGS_NO_HIT_POINTS 0xFFE0
-
-/* Icon textures and model bases of CardDispLight. */
-#define CARD_ICON_TEXTURE ((const char *)0x01C91000)    /* lui 0x00a096fc */
-#define CARD_ATTACK_TEXTURE ((const char *)0x01C94050)  /* lui 0x00a09e08 */
-#define CARD_ELEMENT_TEXTURE ((const char *)0x01C9BB70) /* lui 0x00a09f1c */
-#define CARD_DIGIT_MODEL 0x01C80000         /* digit models 0..9 (lui 0x00a09674 as a float) */
-#define CARD_ATTRIBUTE_MODEL 0x01C87400     /* attribute icons (CardDispLight loads it as the float 0x4BE43A00, lui 0x00a09b3c) */
-#define CARD_NEED_MODEL 0x01C85000          /* requirement icons (float 0x4BE42800, lui 0x00a09c98) */
-#define CARD_ATTACK_MODEL 0x01C89400        /* attack type icons (float 0x4BE44A00, lui 0x00a09e0c) */
-#define CARD_MODEL_STRIDE 1024              /* models of one icon family are 0x400 apart */
-#define CARD_MODEL_ELEMENT_50 0x01C90730    /* lui 0x00a09ec8 */
-#define CARD_MODEL_ELEMENT_52 0x01C90220    /* lui 0x00a09ee4 */
-#define CARD_MODEL_ELEMENT_55 0x01C8FD10    /* lui 0x00a09ef4 */
-#define CARD_MODEL_ELEMENT_NONE 0x01C8F800  /* lui 0x00a09ee0 */
-#define CARD_ATTR_BIT4 0x10                 /* attribute icon flag without a name: jump table of the icon switch (sltiu 0x40, 0x00a09ac8) */
-#define CARD_ATTR_BIT5 0x20                 /* as CARD_ATTR_BIT4 */
-#define CARD_ATTR_BIT6 0x40                 /* as CARD_ATTR_BIT4 */
-#define CARD_ELEMENT_50 0x50                /* element code (`addiu $2,$0,0x50`, 0x00a09ecc) */
-#define CARD_ELEMENT_52 0x52                /* element code (`addiu $2,$0,0x52`, 0x00a09ee8) */
-#define CARD_ELEMENT_55 0x55                /* element code (`addiu $2,$0,0x55`, 0x00a09ef8) */
-#define CARD_ELEMENT_4F 0x4F                /* compared in the original switch but never matches (`slti $3,0x51` bound, 0x00a09ed8) */
-#define CARD_KIND_UNUSED_3 3                /* kind 3 is compared in the overlay switch but no card has it (`slti $3,0x3`, 0x00a09f6c) */
-#define CARD_NEED_ICON_ANY 6                /* requirement icon index of CARD_NEED_ANY, 0x40C00000 (0x00a09c58) */
-#define CARD_NEED_ICON_NONE 8               /* no requirement icon is drawn, 0x41000000 (0x00a09c68) */
-#define CARD_ICON_INDEX_NONE (-1)           /* no attack icon is drawn, 0xBF800000 (0x00a09de0) */
-#define CARD_FACE_X (-0.436f)               /* face model offset, 0xBEDF3B64 (0x00a09580) */
-#define CARD_FACE_Y 0.847f                  /* 0x3F58D4FE (0x00a09590) */
-#define CARD_FACE_Z 0.005f                  /* 0x3BA3D70A (0x00a0959c) */
-
-/*
  * `number` is a float because the original does the icon index in the FPU:
  * digits are converted with `cvt.s.w` (0x00a09658), the fall-through cases add
  * 1.0 per step (`add.s`, 0x00a09afc..0x00a09b2c) and the model id is formed by
@@ -684,12 +580,12 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
         }
         nmlModelEntryCard(CARD_MODEL_FACE);
     }
-    if (definition->kind == 1) {
+    if (definition->kind == CARD_KIND_BATTLE) {
         if ((definition->flags & CARD_FLAGS_NO_HIT_POINTS) == 0) {
             /* hit points: tens digit (only when non-zero), then units digit */
             number = definition->operationDuration / CARD_DIGIT_BASE;
             if (number != 0.0f) {
-                model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL);
+                model = number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL;
                 translation[0] = CardHpPos10[0];
                 translation[1] = CardHpPos10[1];
                 translation[2] = CardHpPos10[2];
@@ -702,7 +598,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
                 nmlModelEntryCard(model);
             }
             number = definition->operationDuration % CARD_DIGIT_BASE;
-            model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL);
+            model = number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL;
             translation[0] = CardHpPos01[0];
             translation[1] = CardHpPos01[1];
             translation[2] = CardHpPos01[2];
@@ -716,7 +612,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
         }
         number = definition->attackPower / CARD_DIGIT_BASE;
         if (number != 0.0f) {
-            model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL);
+            model = number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL;
             translation[0] = CardPowPos10[0];
             translation[1] = CardPowPos10[1];
             translation[2] = CardPowPos10[2];
@@ -729,7 +625,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
             nmlModelEntryCard(model);
         }
         number = definition->attackPower % CARD_DIGIT_BASE;
-        model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL);
+        model = number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL;
         translation[0] = CardPowPos01[0];
         translation[1] = CardPowPos01[1];
         translation[2] = CardPowPos01[2];
@@ -743,7 +639,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
     }
     texture = CARD_ICON_TEXTURE;
     number = definition->reserveCost % CARD_DIGIT_BASE;
-    model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL);
+    model = number * CARD_MODEL_STRIDE + CARD_DIGIT_MODEL;
     translation[0] = CardStnbyPos[0];
     translation[1] = CardStnbyPos[1];
     translation[2] = CardStnbyPos[2];
@@ -758,10 +654,10 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
         number = 0.0f;
         /* Each label falls through to the next and adds one icon step. */
         switch (definition->flags) {
-        case CARD_ATTR_BIT5:
-        case CARD_ATTR_BIT6:
+        case CARD_ATTR_WEAPON_MECH:
+        case CARD_ATTR_WEAPON_HUMAN:
             number += 1.0f;
-        case CARD_ATTR_BIT4:
+        case CARD_ATTR_UNKNOWN:
             number += 1.0f;
         case CARD_ATTR_GNOSIS:
             number += 1.0f;
@@ -774,7 +670,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
             break;
         }
         texture = CARD_ICON_TEXTURE;
-        model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_ATTRIBUTE_MODEL);
+        model = number * CARD_MODEL_STRIDE + CARD_ICON_MODEL_BASE;
         translation[0] = CardAttriPos[0];
         translation[1] = CardAttriPos[1];
         translation[2] = CardAttriPos[2];
@@ -810,7 +706,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
             continue;
         }
         texture = CARD_ICON_TEXTURE;
-        model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_NEED_MODEL);
+        model = number * CARD_MODEL_STRIDE + CARD_NEED_MODEL;
         translation[0] = CardCondPos[i][0];
         translation[1] = CardCondPos[i][1];
         translation[2] = CardCondPos[i][2];
@@ -839,7 +735,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
     }
     if (number >= 0.0f) {
         texture = CARD_ATTACK_TEXTURE;
-        model = (unsigned int)(number * CARD_MODEL_STRIDE + CARD_ATTACK_MODEL);
+        model = number * CARD_MODEL_STRIDE + CARD_ATTACK_MODEL;
         translation[0] = CardAttakPos[0];
         translation[1] = CardAttakPos[1];
         translation[2] = CardAttakPos[2];
@@ -984,26 +880,9 @@ void CardDispCard(Matrix4 *matrix, s16 cardId, s16 enabled)
  * (owned == 0) is drawn as CARD_UNOWNED_MODEL. The last two flags are sign-extended
  * halfwords (`sll`/`sra 16` on $6 and $7, 0x00a0a2f8..0x00a0a314); no result is returned.
  */
-#define CARD_DISP_MARKER 0x04                       /* andi 0x4, 0x00a0aaf0 */
-#define CARD_UNOWNED_TEXTURE ((const char *)0x01C74000) /* lui 0x00a0a93c */
-#define CARD_UNOWNED_MODEL 0x01C73000               /* lui 0x00a0a948 */
-#define CARD_TEXT_COLOR 0xFFF0                      /* ori 0xFFF0, 0x00a0aa18 */
-#define CARD_DISP_FACE_X (-0.41599998f)             /* face model offset of CardDisp, 0xBED4FDF3 (0x00a0a398); -0.416f encodes 0xBED4FDF4 */
-#define CARD_DISP_MARKER_Y (-1.2f)                  /* selected marker offset, 0xBF99999A (0x00a0aafc) */
-#define CARD_DISP_MARKER_Z 0.8f                     /* 0x3F4CCCCD (0x00a0ab0c) */
-#define CARD_DISP_MARKER_SCALE_X 0.88f              /* 0x3F6147AE (0x00a0ab48) */
-#define CARD_DISP_MARKER_SCALE_Y 0.92f              /* 0x3F6B851F (0x00a0ab54) */
-#define CARD_TEXT_TITLE_X 0x78                      /* addiu 0x78, 0x00a0aa04 */
-#define CARD_TEXT_TITLE_Y 0x120                     /* addiu 0x120, 0x00a0aa10 */
-#define CARD_TEXT_X 0x18                            /* addiu 0x18, 0x00a0aa28 */
-#define CARD_TEXT_CAPTION_Y 0x138                   /* addiu 0x138, 0x00a0aa2c */
-#define CARD_TEXT_CAPTION_COLOR 0x17                /* addiu 0x17, 0x00a0aa3c */
-#define CARD_TEXT_DESCRIPTION_Y 0x19C               /* addiu 0x19C, 0x00a0aa70 */
-
 void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
 {
     CardDefinition *definition;
-    CardDefinitionName *text;
     const char *texture;
     unsigned int model;
     int number;
@@ -1016,7 +895,6 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         return;
     }
     definition = CARD_MASTER_TABLE + cardId;
-    text = CARD_NAME_TABLE + cardId;
     texture = CARD_TEXTURE(cardId);
     if (owned & CARD_DISP_ENABLED) {
         nmlModelSetPlace(matrix);
@@ -1030,7 +908,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         nmlModelSetPlace(&place);
         nmlModelSetTexture(texture);
         nmlModelEntryCard(CARD_MODEL_FACE);
-        if (definition->kind == 1) {
+        if (definition->kind == CARD_KIND_BATTLE) {
             if ((definition->flags & CARD_FLAGS_NO_HIT_POINTS) == 0) {
                 number = (u8)(definition->operationDuration / CARD_DIGIT_BASE); /* the quotient is cut to a byte: `divu` then `andi 0xFF`, 0x00a0a43c */
                 if (number != 0) {
@@ -1084,10 +962,10 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
             number = 0;
             /* Each label falls through to the next and adds one icon step. */
             switch (definition->flags) {
-            case CARD_ATTR_BIT5:
-            case CARD_ATTR_BIT6:
+            case CARD_ATTR_WEAPON_MECH:
+            case CARD_ATTR_WEAPON_HUMAN:
                 number++;
-            case CARD_ATTR_BIT4:
+            case CARD_ATTR_UNKNOWN:
                 number++;
             case CARD_ATTR_GNOSIS:
                 number++;
@@ -1099,7 +977,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
             case CARD_ATTR_HUMAN:
                 break;
             }
-            model = CARD_ATTRIBUTE_MODEL + number * CARD_MODEL_STRIDE;
+            model = CARD_ICON_MODEL_BASE + number * CARD_MODEL_STRIDE;
             translation[0] = CardAttriPos[0];
             translation[1] = CardAttriPos[1];
             translation[2] = CardAttriPos[2];
@@ -1217,20 +1095,20 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
     if (selected == 0) {
         return;
     }
-    if (text->captionOffset != 0) {
+    if (definition->captionOffset != 0) {
         xglFontPrint(CARD_TEXT_TITLE_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, cardOtherRowFontCode);
         if (owned > 0) {
-            CardDispTxtSub(CARD_TEXT_X, CARD_TEXT_CAPTION_Y, (unsigned char *)(CARD_DATA_BUFFER + text->captionOffset), CARD_TEXT_CAPTION_COLOR);
+            CardDispTxtSub(CARD_TEXT_X, CARD_TEXT_CAPTION_Y, (unsigned char *)(CARD_DATA_BUFFER + definition->captionOffset), CARD_TEXT_CAPTION_COLOR);
         } else {
             CardDispTxtSub(CARD_TEXT_X, CARD_TEXT_CAPTION_Y, (unsigned char *)"\x0b\r\0\xa1\xa9\xa1\xa9\xa1\xa9\xa1\xa9\xa1\xa9", CARD_TEXT_CAPTION_COLOR);
         }
     }
     if (owned <= 0) {
         xglFontPrint(CARD_TEXT_X, CARD_TEXT_DESCRIPTION_Y, CARD_TEXT_COLOR, "\x0b\r\0\x0c@@\x80\xa1\xa9\xa1\xa9\xa1\xa9\xa1\xa9\xa1\xa9");
-    } else if (text->descriptionOffset != 0) {
+    } else if (definition->descriptionOffset != 0) {
         xglFontPrint(CARD_TEXT_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, "\x0b\r\0\x0c@@\x80");
         xglFontPrint(0, 0, 0, cardRowPrefixFontCode);
-        xglFontPrint(CARD_TEXT_X, CARD_TEXT_DESCRIPTION_Y, CARD_TEXT_COLOR, (const char *)(CARD_DATA_BUFFER + text->descriptionOffset));
+        xglFontPrint(CARD_TEXT_X, CARD_TEXT_DESCRIPTION_Y, CARD_TEXT_COLOR, CARD_DATA_BUFFER + definition->descriptionOffset);
     }
     xglFontPrint(CARD_TEXT_TITLE_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, "\x0b");
     if (selected & CARD_DISP_MARKER) {
@@ -1250,118 +1128,95 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
     }
 }
 
-extern unsigned char SampleDeck0[];
-
 void CardSampleInitDeck0(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck0[i];
     }
 }
-
-extern unsigned char SampleDeck1[];
 
 void CardSampleInitDeck1(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck1[i];
     }
 }
-
-extern unsigned char SampleDeck2[];
 
 void CardSampleInitDeck2(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck2[i];
     }
 }
-
-extern unsigned char SampleDeck3[];
 
 void CardSampleInitDeck3(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck3[i];
     }
 }
-
-extern unsigned char SampleDeck4[];
 
 void CardSampleInitDeck4(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck4[i];
     }
 }
-
-extern unsigned char SampleDeck5[];
 
 void CardSampleInitDeck5(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck5[i];
     }
 }
-
-extern unsigned char SampleDeck6[];
 
 void CardSampleInitDeck6(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck6[i];
     }
 }
-
-extern unsigned char SampleDeck7[];
 
 void CardSampleInitDeck7(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck7[i];
     }
 }
-
-extern unsigned char SampleDeck8[];
 
 void CardSampleInitDeck8(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck8[i];
     }
 }
-
-extern unsigned char SampleDeck9[];
 
 void CardSampleInitDeck9(s16 *deck)
 {
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = SampleDeck9[i];
     }
 }
-
-/* Per-enemy ROM deck lists (each entry points at a 40-byte card-id array). */
-extern unsigned char *EnemyDeckLst[];
 
 void CardCopyRom2Deck(s16 *deck, s32 enemyId)
 {
@@ -1369,30 +1224,31 @@ void CardCopyRom2Deck(s16 *deck, s32 enemyId)
     int i;
 
     romDeck = EnemyDeckLst[enemyId];
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_DECK_SIZE; i++) {
         deck[i] = romDeck[i];
     }
 }
 
-/* The stored decks repeat CardSaveData.deck as 42-byte records, so the record
- * of slot n starts n * 42 bytes into the save block; the address is formed as
- * n * 32 plus n * 10 (0x00a0ae48..0x00a0ae60). Only the forty card ids at the
- * start of a record are copied, one byte each into a halfword entry. */
+/* Copies the forty card ids of stored deck `slot`, one byte each into a halfword
+ * entry. The original forms the address of the 42-byte record as slot * 32 plus
+ * slot * 10 (0x00a0ae48..0x00a0ae60); CardSaveData.decks[slot] indexes it with
+ * another multiplication. Measured: decks[slot].cards (one multiply by 42) and the pointer-sum
+ * forms (save->decks[0].cards + slot * 32 + slot * 10 in either order) change the instruction
+ * order, so the integer sum is kept: it is address(save) + 32 * slot + 10 * slot, +0x2C for the cards. */
 void CardCopyRam2Deck(s16 *deck, CardGameWork *work, s32 slot)
 {
     unsigned char *stored;
     int i;
 
-    stored = ((CardSaveData *)((slot << 5) + (unsigned int)work->save + slot * 10))->deck;
-    for (i = 39; i >= 0; i--) {
+    stored = ((CardSaveData *)((slot << 5) + (unsigned int)work->save + slot * 10))->decks[0].cards;
+    for (i = CARD_DECK_SIZE - 1; i >= 0; i--) {
         *deck++ = *stored++;
     }
 }
 
 /* Collapses the 40 card ids of stored deck `slot` into (card id, copy count)
- * groups. The stored decks are 42-byte records (CARD_DECK_RECORD_SIZE), so card i
- * of the deck sits at CardSaveData.deck[slot * CARD_DECK_RECORD_SIZE + i]. */
-void CardCopyRam2CLD(CardDeckGroupList *list, CardGameWork *work, s32 slot)
+ * groups. */
+void CardCopyRam2CLD(CardListWindow *list, CardGameWork *work, s32 slot)
 {
     int prev;
     int groupIndex;
@@ -1401,41 +1257,39 @@ void CardCopyRam2CLD(CardDeckGroupList *list, CardGameWork *work, s32 slot)
     prev = -1;
     groupIndex = -1;
     for (i = 0; i < CARD_LIST_SIZE; i++) {
-        if (prev != work->save->deck[slot * CARD_DECK_RECORD_SIZE + i]) {
+        if (prev != work->save->decks[slot].cards[i]) {
             groupIndex++;
-            list->groups[groupIndex].cardId = work->save->deck[slot * CARD_DECK_RECORD_SIZE + i];
-            list->groups[groupIndex].copyCount = 1;
+            list->entries[groupIndex].cardId = work->save->decks[slot].cards[i];
+            list->entries[groupIndex].count = 1;
         } else {
-            list->groups[groupIndex].copyCount++;
+            list->entries[groupIndex].count++;
         }
-        prev = work->save->deck[slot * CARD_DECK_RECORD_SIZE + i];
+        prev = work->save->decks[slot].cards[i];
     }
-    list->groupCount = groupIndex + 1;
+    list->count = groupIndex + 1;
 }
 
 /* Expands the (card id, copy count) groups of `list` back into the 40 card
  * ids of stored deck `slot`. */
-void CardCopyCLD2Ram(CardDeckGroupList *list, CardGameWork *work, s32 slot)
+void CardCopyCLD2Ram(CardListWindow *list, CardGameWork *work, s32 slot)
 {
     int group;
     int copy;
     int cardIndex;
 
     cardIndex = 0;
-    for (group = 0; group < list->groupCount; group++) {
-        for (copy = 0; copy < list->groups[group].copyCount; copy++) {
-            work->save->deck[slot * CARD_DECK_RECORD_SIZE + cardIndex] = list->groups[group].cardId;
+    for (group = 0; group < list->count; group++) {
+        for (copy = 0; copy < list->entries[group].count; copy++) {
+            work->save->decks[slot].cards[cardIndex] = list->entries[group].cardId;
             cardIndex++;
         }
     }
 }
 
 /*
- * The one's-complement checksum of a stored deck's 40 card bytes
- * (CardCopyRam2Deck's comment documents the record's 42-byte stride and the
- * CardSaveData reuse for the deck bytes themselves); the stored checksum
- * sits 2 bytes before that same deck array, inside CardSaveData's own
- * unmodeled_02 span (+0x2A).
+ * Compares the one's-complement checksum of a stored deck's 40 card bytes with
+ * the checksum saved in the same record. The card bytes are addressed like
+ * CardCopyRam2Deck's.
  */
 s32 CardChkDeckRam(CardGameWork *work, int unused, s32 slot)
 {
@@ -1444,24 +1298,17 @@ s32 CardChkDeckRam(CardGameWork *work, int unused, s32 slot)
     u8 sum;
     s32 remaining;
 
-    deckByte = ((CardSaveData *) ((slot << 5) + (unsigned int) work->save + slot * 10))->deck;
+    deckByte = ((CardSaveData *) ((slot << 5) + (unsigned int) work->save + slot * 10))->decks[0].cards;
     sum = 0;
-    remaining = 0x27;
+    remaining = CARD_DECK_SIZE - 1;
     do {
         sum += *deckByte;
         deckByte += 1;
         remaining -= 1;
     } while (remaining >= 0);
-    storedChecksum = ((CardDeckRecord *) ((unsigned int) work->save + slot * 0x2A))->checksum;
+    storedChecksum = work->save->decks[slot].checksum;
     return (u8) ~sum == storedChecksum;
 }
-
-#define CARD_COUNT_BITS 2                    /* bits of one owned-copy count in CardSaveData.cardCounts */
-#define CARD_COUNT_MAX 3                     /* most copies of a card that are counted */
-#define CARD_COUNTS_PER_BYTE 4               /* card ids packed in one cardCounts byte (8 / CARD_COUNT_BITS) */
-#define CARD_COUNT_MASK(field) (CARD_COUNT_MAX << ((field) * CARD_COUNT_BITS)) /* bits of the count of id % 4 == field: 0x03, 0x0C, 0x30, 0xC0 */
-#define CARD_COUNT_STEP(field) (1 << ((field) * CARD_COUNT_BITS))              /* one copy in that field: 0x01, 0x04, 0x10, 0x40 */
-#define CARD_COUNT_KEEP(field) (0xFF ^ CARD_COUNT_MASK(field))                 /* the other three fields: 0xFC, 0xF3, 0xCF, 0x3F */
 
 /*
  * Owned copies (0..3) of one card id. The save block packs two bits per card
@@ -1545,9 +1392,6 @@ int CardAddList(CardGameWork *work, int cardId)
     return overflow;
 }
 
-/* Forward declaration: defined further down, in the original function order of this TU. */
-s32 CardPlayDrawCard(CardPlaySide *side);
-
 /*
  * Starts a game for one side (asm 0x00a0b1c8): the zone reset of CPIWsub is
  * done inline, then every deck index is placed at a random position
@@ -1591,7 +1435,7 @@ void CardPlayInitWork(CardPlaySide *side, s16 *deck)
             side->battle[slot].battle.layers[i].life = 0;
             side->battle[slot].battle.layers[i].shownLife = 0;
             side->battle[slot].battle.layers[i].damageTimer = 0;
-            side->battle[slot].battle.layers[i].state = 0;
+            side->battle[slot].battle.layers[i].powerPlus = 0;
             side->battle[slot].battle.position[0] = BattlePos1P[slot][0];
             side->battle[slot].battle.position[1] = BattlePos1P[slot][1];
             side->battle[slot].battle.position[2] = BattlePos1P[slot][2];
@@ -1599,7 +1443,7 @@ void CardPlayInitWork(CardPlaySide *side, s16 *deck)
             side->disposal[slot].battle.layers[i].life = 0;
             side->disposal[slot].battle.layers[i].shownLife = 0;
             side->disposal[slot].battle.layers[i].damageTimer = 0;
-            side->disposal[slot].battle.layers[i].state = 0;
+            side->disposal[slot].battle.layers[i].powerPlus = 0;
             side->disposal[slot].battle.position[0] = DisposePos1P[slot][0];
             side->disposal[slot].battle.position[1] = DisposePos1P[slot][1];
             side->disposal[slot].battle.position[2] = DisposePos1P[slot][2];
@@ -1666,7 +1510,7 @@ void CPIWsub(CardPlaySide *side, s16 *deck)
             side->battle[slot].battle.layers[i].life = 0;
             side->battle[slot].battle.layers[i].shownLife = 0;
             side->battle[slot].battle.layers[i].damageTimer = 0;
-            side->battle[slot].battle.layers[i].state = 0;
+            side->battle[slot].battle.layers[i].powerPlus = 0;
             side->battle[slot].battle.position[0] = BattlePos1P[slot][0];
             side->battle[slot].battle.position[1] = BattlePos1P[slot][1];
             side->battle[slot].battle.position[2] = BattlePos1P[slot][2];
@@ -1674,7 +1518,7 @@ void CPIWsub(CardPlaySide *side, s16 *deck)
             side->disposal[slot].battle.layers[i].life = 0;
             side->disposal[slot].battle.layers[i].shownLife = 0;
             side->disposal[slot].battle.layers[i].damageTimer = 0;
-            side->disposal[slot].battle.layers[i].state = 0;
+            side->disposal[slot].battle.layers[i].powerPlus = 0;
             side->disposal[slot].battle.position[0] = DisposePos1P[slot][0];
             side->disposal[slot].battle.position[1] = DisposePos1P[slot][1];
             side->disposal[slot].battle.position[2] = DisposePos1P[slot][2];
@@ -1703,12 +1547,6 @@ void CardPlayNoInitWork(CardPlaySide *side, s16 *deck)
         handCard++;
     }
 }
-
-/* Forward declaration: defined further down, in the original function order of this TU. */
-void CardPlayShuffleYama(CardPlaySide *side);
-
-/* Forward declaration: defined further down, in the original function order of this TU. */
-s32 CardPlayYamaCnt(CardPlaySide *side);
 
 /*
  * Starts a game for the enemy side with a fixed opening (asm 0x00a0b618,
@@ -1747,7 +1585,10 @@ void CardPlayInitWorkFake(CardPlaySide *side, s16 *deck, CardDefinition *definit
             if (order[candidate] < 0) {
                 continue;
             }
-            if (definitions[order[candidate]].kind != 1 || definitions[order[candidate]].flags != 1) {
+            if (definitions[order[candidate]].kind != CARD_KIND_BATTLE) {
+                continue;
+            }
+            if (definitions[order[candidate]].flags != CARD_ATTR_HUMAN) {
                 continue;
             }
             found = 0;
@@ -1967,7 +1808,7 @@ void CardPlayCleanHand(CardHand *hand)
     s32 i;
 
     kept = 0;
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_LIST_SIZE; i++) {
         if (hand->cards[i] >= 0) {
             if (i != kept) {
                 hand->cards[kept] = hand->cards[i];
@@ -1984,7 +1825,7 @@ void CardPlayCleanYama(CardPlaySide *side)
     s32 i;
 
     kept = 0;
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_LIST_SIZE; i++) {
         if (side->deck[i] >= 0) {
             if (i != kept) {
                 side->deck[kept] = side->deck[i];
@@ -2001,7 +1842,7 @@ void CardPlayCleanJunk(CardPlaySide *side)
     s32 i;
 
     kept = 0;
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CARD_LIST_SIZE; i++) {
         if (side->junk[i] >= 0) {
             if (i != kept) {
                 side->junk[kept] = side->junk[i];
@@ -2223,7 +2064,7 @@ s32 CardPlayYamaCnt(CardPlaySide *side)
 
     card = side->deck;
     count = 0;
-    remaining = 0x27;
+    remaining = CARD_LIST_SIZE - 1;
     do {
         id = *card;
         card += 1;
@@ -2244,7 +2085,7 @@ s32 CardPlaySuteCnt(CardPlaySide *side)
 
     card = side->sute;
     count = 0;
-    remaining = 0x27;
+    remaining = CARD_LIST_SIZE - 1;
     do {
         id = *card;
         card += 1;
@@ -2265,7 +2106,7 @@ s32 CardPlayJunkCnt(CardPlaySide *side)
 
     card = side->junk;
     count = 0;
-    remaining = 0x27;
+    remaining = CARD_LIST_SIZE - 1;
     do {
         id = *card;
         card += 1;
@@ -2286,7 +2127,7 @@ s32 CardPlayOperationCnt(CardPlaySide *side)
 
     op = side->operations;
     count = 0;
-    remaining = 0x27;
+    remaining = CARD_LIST_SIZE - 1;
     do {
         id = *op;
         op += 1;
@@ -2307,10 +2148,10 @@ s32 CardPlayDisposeCnt(CardPlaySide *side)
 
     cardId = &side->disposal[0].battle.layers[0].cardId;
     count = 0;
-    remaining = 3;
+    remaining = CARD_BOARD_SLOTS - 1;
     do {
         id = *cardId;
-        cardId += 0xDE;
+        cardId += CARD_SLOT_STRIDE_HALFWORDS;
         remaining -= 1;
         if (id >= 0) {
             count = count + 1;
@@ -2328,7 +2169,7 @@ s32 CardPlayHandCnt(CardHand *hand)
 
     card = hand->cards;
     count = 0;
-    remaining = 0x27;
+    remaining = CARD_LIST_SIZE - 1;
     do {
         id = *card;
         card += 1;
@@ -2349,10 +2190,10 @@ s32 CardPlayBattleCnt(CardPlaySide *side)
 
     cardId = &side->battle[0].battle.layers[0].cardId;
     count = 0;
-    remaining = 3;
+    remaining = CARD_BOARD_SLOTS - 1;
     do {
         id = *cardId;
-        cardId += 0xDE;
+        cardId += CARD_SLOT_STRIDE_HALFWORDS;
         remaining -= 1;
         if (id >= 0) {
             count = count + 1;
@@ -2418,9 +2259,6 @@ void CardPlayTypeSort(CardDefinition *definitions, s16 *cards, s32 count, s8 *or
     }
 }
 
-/* Definition flags that let a card skip the slot check (andi 0x64 at asm 0x00a0c938). */
-#define CARD_FLAGS_NO_SLOT_CHECK 0x64
-
 /*
  * Check whether a card cannot be played for lack of room (asm 0x00a0c910).
  * A card whose kind has bit 0x1 needs a free disposal slot (base layer card id
@@ -2464,7 +2302,7 @@ s32 CardPlayChkCost(CardDefinition *definitions, CardPlaySide *side, s32 cardId,
  * Counts the cards of one side by generation: counts[0..4] are cleared, then
  * the four disposal slots (skipped when empty or flagged in battle.flags bit 0)
  * and the four battle slots each add one to the bucket picked from the card
- * definition flags (2 -> 1, 8 -> 2, 4 -> 3, 0x10 -> 4, anything else -> 0).
+ * definition flags (realian -> 1, mech -> 2, gnosis -> 3, unknown -> 4, anything else -> 0).
  * The battle slots are walked with a pointer to their cardId, advanced by one
  * CardBoardSlot per step (the original keeps it in a register from 0x00a0c9d0).
  */
@@ -2484,7 +2322,7 @@ void CardCountGeneration(u8 *counts, CardDefinition *definitions, CardPlaySide *
             index = 0;
             /* Each label falls through to the next and moves the generation up one bucket. */
             switch (definitions[cardId].flags) {
-            case CARD_ATTR_BIT4:
+            case CARD_ATTR_UNKNOWN:
                 index++;
             case CARD_ATTR_GNOSIS:
                 index++;
@@ -2506,7 +2344,7 @@ void CardCountGeneration(u8 *counts, CardDefinition *definitions, CardPlaySide *
             index = 0;
             /* Each label falls through to the next and moves the generation up one bucket. */
             switch (definitions[cardId].flags) {
-            case CARD_ATTR_BIT4:
+            case CARD_ATTR_UNKNOWN:
                 index++;
             case CARD_ATTR_GNOSIS:
                 index++;
@@ -2523,14 +2361,6 @@ void CardCountGeneration(u8 *counts, CardDefinition *definitions, CardPlaySide *
         battleCardId += sizeof(CardBoardSlot) / sizeof(*battleCardId);
     }
 }
-
-/* CardPlayChkCondition results other than 0 (the card may be played). */
-#define CARD_CONDITION_NEED_UNMET 2       /* `addiu $2,$0,0x2` (0x00a0cd00) */
-#define CARD_CONDITION_DISCARD_UNMET 4    /* `addiu $2,$0,0x4` (0x00a0ce74) */
-#define CARD_CONDITION_IDENTITY_TAKEN 5   /* `addiu $2,$0,0x5` (0x00a0ceac) */
-
-/* Forward declaration: defined further down, in the original function order of this TU. */
-int CardPlayIdentityCheck(CardGameWork *work, CardHand *hand, u16 identity);
 
 /*
  * Checks whether `side` may play card `cardId`; returns 0 if it may, else a
@@ -2648,7 +2478,7 @@ s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side, s32 ca
     }
 
     if (definitions[cardId].kind & CARD_KIND_BATTLE) {
-        if (CardPlayIdentityCheck(work, &side->hand, work->definitions[cardId].identity) != 0) {
+        if (CardPlayIdentityCheck(work, side, work->definitions[cardId].identity) != 0) {
             return CARD_CONDITION_IDENTITY_TAKEN;
         }
     }
@@ -2657,8 +2487,8 @@ s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side, s32 ca
 
 /*
  * The attack type of the topmost card in play: the stack's layers are walked
- * from layers[39] down, skipping empty layers (cardId < 0) and cards 0x2F and
- * 0x2C, which never decide the type. The result is held in a u8, the width of
+ * from layers[39] down, skipping empty layers (cardId < 0) and the defensive
+ * equipment Battle Suit and Shield (attack type 0), which never decide the type. The result is held in a u8, the width of
  * CardDefinition.attackType.
  */
 s32 CardChkAttackType(CardDefinition *definitions, CardLayerStack *card)
@@ -2667,9 +2497,9 @@ s32 CardChkAttackType(CardDefinition *definitions, CardLayerStack *card)
     int i;
 
     attackType = 0;
-    for (i = 39; i >= 0; i--) {
+    for (i = CARD_BATTLE_LAYER_COUNT - 1; i >= 0; i--) {
         if (card->layers[i].cardId >= 0) {
-            if (card->layers[i].cardId == 0x2F || card->layers[i].cardId == 0x2C) {
+            if (card->layers[i].cardId == CARD_ID_BATTLE_SUIT || card->layers[i].cardId == CARD_ID_SHIELD) {
                 continue;
             }
             attackType = definitions[card->layers[i].cardId].attackType;
@@ -2678,27 +2508,6 @@ s32 CardChkAttackType(CardDefinition *definitions, CardLayerStack *card)
     }
     return attackType;
 }
-
-#define CARD_CURSOR_EDGE_HIGHLIGHT 0.175f    /* highlight size at positions 0 and 3: 0x3E333333 (0x00a0cf80) */
-#define CARD_CURSOR_INNER_HIGHLIGHT 0.355f   /* highlight size at positions 1 and 2: 0x3EB5C28F (0x00a0d048) */
-#define CARD_CURSOR_INDEX_COUNT 4            /* positions inside a zone (`slti $2,$2,4`, 0x00a0cf50) */
-#define CARD_CURSOR_SHOW_CARD_FLAG 0x10      /* drawFlags bit: also draw the card (`andi $2,$7,0x10`, 0x00a0cf8c) */
-#define CARD_CURSOR_CARD_ID_MASK 0xF0FF      /* 0x00a0cfbc */
-#define CARD_CURSOR_PAIR_ZONE_MASK 0xFE      /* zones 1 and 3 fold onto 0 and 2 (0x00a0d08c) */
-#define CARD_CURSOR_PREVIEW_Z 0.1f           /* depth of the previewed card, 0x3DCCCCCD (0x00a0cfd0) */
-#define CARD_CURSOR_ZONE_1 1                 /* cursor zone numbers (CardCursorPosition.zone, cursorZone) */
-#define CARD_CURSOR_ZONE_2 2                 /* `addiu $2,$0,0x2` (0x00a0d06c) */
-#define CARD_CURSOR_ZONE_3 3                 /* zone taken when the hand is empty is the same number (0x00a0d1bc) */
-#define CARD_CURSOR_ZONE_4 4                 /* hand zone (0x00a0d170) */
-#define CARD_CURSOR_ZONE_5 5                 /* 0x00a10188 */
-#define CARD_CURSOR_ZONE_6 6                 /* mark zones 2..7 form the jump table of CardCursorActive (sltiu 0x6, 0x00a10130) */
-#define CARD_CURSOR_ZONE_7 7
-#define CARD_CURSOR_MARK_COUNT 24            /* marks in markTable and markTableB: six columns of four (counter 0x17, 0x00a100f8) */
-#define CARD_CURSOR_MARK_1 1                 /* mark codes: the mode stored by CardCursorActive; CAMASub maps 2, 3 and 4 to mark models */
-#define CARD_CURSOR_MARK_2 2                 /* `addiu $3,$0,0x2` (0x00a101e0) */
-#define CARD_CURSOR_MARK_3 3                 /* 0x00a101f0 */
-#define CARD_CURSOR_MARK_4 4                 /* 0x00a101fc */
-#define CARD_CURSOR_JUMP_BUTTON 0x4000       /* button that jumps from position 1 or 2 to zone 2 (0x00a0d064) */
 
 /*
  * Adjusts the board cursor after a move: clamps its position to 0..3, resets
@@ -2754,19 +2563,6 @@ void CPCMSub(CardCursorControl *cursor, CardPlaySide *side, u16 buttons, u16 dra
         cursor->cursorZone &= CARD_CURSOR_PAIR_ZONE_MASK;
     }
 }
-
-extern float HandPos1P[4][3];
-static float *CursorTbl[16];
-
-#define CARD_CURSOR_HAND_HIGHLIGHT 0.175f    /* hand cursor highlight size: 0x3E333333 (lui/ori at 0x00a0d190) */
-#define CARD_CURSOR_ZONE_BACK_BUTTON 0x1000  /* steps the zone back (`andi $2,$17,0x1000`, 0x00a0d0d0) */
-#define CARD_CURSOR_INDEX_FORWARD_BUTTON 0x2000 /* steps the index forward (`andi $2,$17,0x2000`, 0x00a0d0f0) */
-#define CARD_CURSOR_ZONE_FORWARD_BUTTON 0x4000  /* steps the zone forward (`andi $2,$17,0x4000`, 0x00a0d0f8) */
-#define CARD_CURSOR_INDEX_BACK_BUTTON 0x8000    /* steps the index back (`andi $2,$17,0x8000`, 0x00a0d11c) */
-#define CARD_CURSOR_ZONE_LIMIT 5             /* zones 5 and above clamp to the hand zone (`slti $2,$2,5`, 0x00a0d150) */
-#define CARD_CURSOR_HAND_ZONE 4              /* zone of the hand (`slti $2,$2,4`, 0x00a0d170) */
-#define CARD_CURSOR_EMPTY_HAND_ZONE 3        /* zone taken when the hand is empty (`addiu $2,$0,3`, 0x00a0d1bc) */
-#define CARD_CURSOR_ZONE_STRIDE 4            /* indices per zone in CursorTbl (`sll $2,$2,2`, 0x00a0d1e8) */
 
 /*
  * Moves the board cursor with the pad buttons (asm 0x00a0d0a8, 0x224 bytes).
@@ -2846,38 +2642,37 @@ void CardPlayCursorMove(CardCursorControl *cursor, CardPlaySide *side, u16 butto
  * 0x00a0d2d0, 0x2F8 bytes). The header (cardEnemyListHeaderFontCode) is printed at the window
  * origin. For each of the first windowRows rows below rowCount, the entry's card
  * id selects the owned copy count in work->ownedCount and the card name in
- * work->definitions (read through CardDefinitionName, which models only the
- * name offset at +0x18 that CardDefinition lacks). A row with no owned copy
+ * work->definitions. A row with no owned copy
  * prints its marker and the placeholder cardUnownedRowText instead of the name. With
  * flags bit 0 (`andi $2,$2,0x1`, 0x00a0d458) the owned count
  * (CARD_LIST_COPY_CAP when it reaches CARD_LIST_COPY_LIMIT) follows the name.
  * Rows are DECK_DISP_ROW_HEIGHT pixels apart; the footer is cardWindowFooterFontCode.
  */
-void CardListDisp(CardDeckListView *list, CardGameWork *work)
+void CardListDisp(CardListWindow *list, CardGameWork *work)
 {
-    unsigned char nameText[32];
+    char nameText[32];
     char countText[16];
     s32 row = 0;
     s32 cardId;
     s32 copies;
     s32 i;
     char *name;
-    CardDefinitionName *definition;
-    CardDefinitionName *definitions = (CardDefinitionName *)work->definitions;
+    CardDefinition *definition;
+    CardDefinition *definitions = work->definitions;
     s16 *ownedCount = work->ownedCount;
 
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardEnemyListHeaderFontCode);
-    if (list->windowRows > 0) {
-        for (; row < list->windowRows; row++) {
-            if (row < list->rowCount) {
-                cardId = list->entries[row + list->scroll].cardId;
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardEnemyListHeaderFontCode);
+    if (list->rows > 0) {
+        for (; row < list->rows; row++) {
+            if (row < list->count) {
+                cardId = list->entries[row + list->top].cardId;
                 if (work->ownedCount[cardId] > 0) {
                     definition = &definitions[cardId];
-                    name = (char *)(CARD_DATA_BUFFER + definition->nameOffset);
+                    name = CARD_DATA_BUFFER + definition->nameOffset;
                     if (row == list->cursor) {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
+                        xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
+                        xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                     }
                     for (i = 0; i < list->textLength * CARD_TEXT_CHAR_BYTES; i++) {
                         nameText[i] = name[i];
@@ -2885,35 +2680,35 @@ void CardListDisp(CardDeckListView *list, CardGameWork *work)
                     nameText[i] = 0;
                     CardNameConvert(nameText);
                     xglFontPrint(0, 0, 0, cardRowPrefixFontCode);
-                    xglFontPrint(list->originX, list->originY + row * DECK_DISP_ROW_HEIGHT,
-                                 DECK_LIST_TEXT_COLOR, (char *)nameText);
-                    if (list->flags & 1) {
+                    xglFontPrint(list->x, list->y + row * DECK_DISP_ROW_HEIGHT,
+                                 DECK_LIST_TEXT_COLOR, nameText);
+                    if (list->active & 1) {
                         copies = ownedCount[cardId];
                         if (copies >= CARD_LIST_COPY_LIMIT) {
                             copies = CARD_LIST_COPY_CAP;
                         }
                         sprintf(countText, cardCopyCountFormat, copies);
                         if (row == list->cursor) {
-                            xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
+                            xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                         } else {
-                            xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardCopyCountFontCode);
+                            xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardCopyCountFontCode);
                         }
-                        xglFontPrint(list->originX + list->textLength * DECK_DISP_CHAR_WIDTH + DECK_DISP_COUNT_GAP,
-                                     list->originY + row * DECK_DISP_ROW_HEIGHT, DECK_LIST_TEXT_COLOR, countText);
+                        xglFontPrint(list->x + list->textLength * DECK_DISP_CHAR_WIDTH + DECK_DISP_COUNT_GAP,
+                                     list->y + row * DECK_DISP_ROW_HEIGHT, DECK_LIST_TEXT_COLOR, countText);
                     }
                 } else {
                     if (row == list->cursor) {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
+                        xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
                     } else {
-                        xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
+                        xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
                     }
-                    xglFontPrint(list->originX, list->originY + row * DECK_DISP_ROW_HEIGHT,
+                    xglFontPrint(list->x, list->y + row * DECK_DISP_ROW_HEIGHT,
                                  DECK_LIST_TEXT_COLOR, cardUnownedRowText);
                 }
             }
         }
     }
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -2923,33 +2718,33 @@ void CardListDisp(CardDeckListView *list, CardGameWork *work)
  * the footer. A row is the font prefix "\x19\x03" followed by textLength
  * bytes of the name.
  */
-void CardDeckListDisp(CardDeckListView *list)
+void CardDeckListDisp(CardListWindow *list)
 {
     char rowText[32];
     char *name;
     s32 row;
     s32 length;
 
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardWindowHeaderFontCode);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowHeaderFontCode);
     rowText[0] = 0x19;
     rowText[1] = 0x03;
-    for (row = 0; row < list->windowRows; row++) {
-        if (row < list->rowCount) {
+    for (row = 0; row < list->rows; row++) {
+        if (row < list->count) {
             name = DeckListStr[row];
             if (row == list->cursor) {
-                xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
+                xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
             } else {
-                xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
+                xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardOtherRowFontCode);
             }
             for (length = 0; length < list->textLength; length++) {
                 rowText[CARD_ROW_PREFIX_BYTES + length] = name[length];
             }
             rowText[CARD_ROW_PREFIX_BYTES + length] = '\0';
-            xglFontPrint(list->originX, list->originY + row * DECK_LIST_ROW_HEIGHT,
+            xglFontPrint(list->x, list->y + row * DECK_LIST_ROW_HEIGHT,
                          DECK_LIST_TEXT_COLOR, rowText);
         }
     }
-    xglFontPrint(list->originX, list->originY, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
+    xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
 /*
@@ -2961,7 +2756,7 @@ void CardDeckListDisp(CardDeckListView *list)
  * prefix 0x19 0x03, printed 25 pixels lower per row. Rows at or past
  * `limit` print nothing. The footer (0x00A4D170) is printed last.
  */
-void CardStrListDisp(CHPTitleListView *list, char **strings, int index)
+void CardStrListDisp(CardListWindow *list, char **strings, int index)
 {
     char rowText[32];
     int row = 0;
@@ -2973,11 +2768,11 @@ void CardStrListDisp(CHPTitleListView *list, char **strings, int index)
     xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowHeaderFontCode);
     rowText[0] = 0x19;
     rowText[1] = 0x03;
-    if (list->count > 0) {
+    if (list->rows > 0) {
         rowPtr = strings;
         rowY = 0;
-        for (; row < list->count; row++) {
-            if (row < list->limit) {
+        for (; row < list->rows; row++) {
+            if (row < list->count) {
                 text = *rowPtr;
                 if (row == index) {
                     xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
@@ -3005,7 +2800,7 @@ void CardStrListDisp(CHPTitleListView *list, char **strings, int index)
  * escape is 0x00A4D500, the row marker 0x00A4D148 (row at `index`) or
  * 0x00A4D150, the footer 0x00A4D170.
  */
-void CardEnemyListDisp(CHPTitleListView *list, s32 *entries, int index)
+void CardEnemyListDisp(CardListWindow *list, s32 *entries, int index)
 {
     char rowText[32];
     int row = 0;
@@ -3015,11 +2810,11 @@ void CardEnemyListDisp(CHPTitleListView *list, s32 *entries, int index)
     int i;
 
     xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardEnemyListHeaderFontCode);
-    if (list->count > 0) {
+    if (list->rows > 0) {
         rowPtr = entries;
         rowY = 0;
-        for (; row < list->count; row++) {
-            if (row < list->limit) {
+        for (; row < list->rows; row++) {
+            if (row < list->count) {
                 text = DeckListStr[*rowPtr];
                 if (row == index) {
                     xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardSelectedRowFontCode);
@@ -3039,18 +2834,8 @@ void CardEnemyListDisp(CHPTitleListView *list, s32 *entries, int index)
     xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
-/*
- * CGPCalcPowerPlus (ov10/tu008 cgp.c, already accepted C) takes CardPowerCard
- * *card, declared there a second time from the same memory CardLayerStack
- * covers because its own loads at +0x08..+0x0A are signed where
- * CardBattleLayer's accepted accesses of the same bytes are unsigned
- * (ov10/cgp.h's own comment on CardPowerCard). CardPlayCntPower always
- * passes a whole CardLayerStack's address, so the call below casts to the
- * accepted definition's own parameter type instead of redeclaring the
- * extern with a different one.
- */
-extern s32 CGPCalcPowerPlus(CardGameWork *work, CardPowerCard *card, s32 power);
-
+/* The power of a slot: that of the card stacked on its base card, except for the equipment that adds no attack of
+ * its own (Eyeglasses, Battle Suit, Shield: attack 0 in card.dat), which leaves the base card's. */
 s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *slot)
 {
     CardDefinition *def;
@@ -3058,13 +2843,13 @@ s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *slot)
     s32 power;
 
     power = 0;
-    if (!(slot->flags & 0x80)) {
+    if (!(slot->flags & CARD_STACK_FLAG_NO_DAMAGE)) {
         def = &work->definitions[slot->layers[0].cardId];
         topCardId = slot->layers[1].cardId;
-        if (topCardId >= 0 && topCardId != 0x35 && topCardId != 0x2F && topCardId != 0x2C) {
+        if (topCardId >= 0 && topCardId != CARD_ID_EYEGLASSES && topCardId != CARD_ID_BATTLE_SUIT && topCardId != CARD_ID_SHIELD) {
             def = &work->definitions[topCardId];
         }
-        power = CGPCalcPowerPlus(work, (CardPowerCard *) slot, def->attackPower);
+        power = CGPCalcPowerPlus(work, slot, def->attackPower);
     }
     return power;
 }
@@ -3075,54 +2860,6 @@ s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *slot)
  * attack type icon, effective power, boost pips, equipment kind, life digits, life bar and flag markers.
  * An empty slot is reset to its resting position.
  */
-#define CARD_BATTLE_ARRIVE_SOUND 0x2000F      /* sound when a card lands (0x00a0db9c) */
-#define CARD_BATTLE_MARKER_TEXTURE ((const char *)0x01F70200)
-#define CARD_BATTLE_DIGIT_TEXTURE ((const char *)0x01C91000)
-#define CARD_BATTLE_FRAME_MODEL 0x01714600
-#define CARD_BATTLE_SCALE 0.355f              /* card size in the slot, 0x3EB5C28F (0x00a0dacc) */
-#define CARD_BATTLE_STACK_SCALE 0.5070423f    /* stacked card size, 0x3F01CD86 (0x00a0dadc) */
-#define CARD_BATTLE_PLATE_FRAME_MODEL 0x01E30000
-#define CARD_BATTLE_PLATE_MODEL 0x01E38000
-#define CARD_BATTLE_PLATE_X (-0.345f)         /* 0xBEB0A3D7 (0x00a0de64) */
-#define CARD_BATTLE_PLATE_Y 0.192f            /* 0x3E449BA6 (0x00a0de70) */
-#define CARD_BATTLE_ICON_Z 0.05f              /* 0x3D4CCCCD (0x00a0de4c) */
-#define CARD_BATTLE_INFO_Z 0.01f              /* 0x3C23D70A (0x00a0df24) */
-#define CARD_BATTLE_ATTACK_X 0.131f           /* 0x3E0624DD (0x00a0df58) */
-#define CARD_BATTLE_ATTACK_Y (-0.0981f)       /* 0xBDC8E8A7 (0x00a0df64) */
-#define CARD_BATTLE_ATTACK_SCALE 1.5f         /* 0x3FC00000 (0x00a0df50) */
-#define CARD_BATTLE_ATTACK_MODEL 0x01C89400
-#define CARD_BATTLE_ICON_TEXTURE ((const char *)0x01C94050)
-#define CARD_BATTLE_POWER_MAX 99              /* `addiu $2,$0,99` (0x00a0e0c0) */
-#define CARD_BATTLE_POWER_SCALE 1.2f          /* 0x3F99999A (0x00a0e0d4) */
-#define CARD_BATTLE_TENS_X 0.371f             /* 0x3EBDF3B6 (0x00a0e10c) */
-#define CARD_BATTLE_UNITS_X 0.455f            /* 0x3EE8F5C3 (0x00a0e178) */
-#define CARD_BATTLE_POWER_Y 0.1079f           /* 0x3DDCFAAD (0x00a0e118) */
-#define CARD_BATTLE_PIP_X (-0.15f)            /* 0xBE19999A (0x00a0e1f8) */
-#define CARD_BATTLE_PIP_Y (-0.2621f)          /* 0xBE8631F9 (0x00a0e208) */
-#define CARD_BATTLE_PIP_STEP 0.14f            /* 0x3E0F5C29 (0x00a0e244) */
-#define CARD_BATTLE_PIP_ON_MODEL 0x01901000
-#define CARD_BATTLE_PIP_OFF_MODEL 0x01901400
-#define CARD_BATTLE_EQUIP_X (-0.3589f)        /* 0xBEB7C1BE (0x00a0e2f8) */
-#define CARD_BATTLE_EQUIP_Y (-0.1832f)        /* 0xBE3B98C8 (0x00a0e304) */
-#define CARD_BATTLE_EQUIP_MODEL 0x01C87400
-#define CARD_BATTLE_LIFE_SCALE 1.4f           /* 0x3FB33333 (0x00a0e2e4) */
-#define CARD_BATTLE_LIFE_Y 0.277f             /* 0x3E8DD2F2 (0x00a0e444) */
-#define CARD_BATTLE_BAR_X (-0.297f)           /* 0xBE981062 (0x00a0e544) */
-#define CARD_BATTLE_BAR_Y 0.274f              /* 0x3E8C49BA (0x00a0e564) */
-#define CARD_BATTLE_BAR_Z (-0.01f)            /* 0xBC23D70A (0x00a0e570) */
-#define CARD_BATTLE_BAR_FULL 10.0f            /* life shown at full bar width, 0x41200000 (0x00a0e550) */
-#define CARD_BATTLE_BAR_TEXTURE ((const char *)0x01985400)
-#define CARD_BATTLE_BAR_MODEL 0x01919800
-#define CARD_BATTLE_MARKER_MODEL_BIT0 0x01900000
-#define CARD_BATTLE_MARKER_MODEL_BIT1 0x01900800
-#define CARD_BATTLE_REFLECT_CARD 15           /* a card of this id gains a power per marked slot (0x00a0e070) */
-#define CARD_BATTLE_REFLECT_FLAG 8            /* CardDefinition.flags bit it counts (`andi $2,$2,8`, 0x00a0e0b0) */
-
-/* Info plate position of each battle slot (0x00A435A8, 0x20 bytes, x and y). */
-extern float CPSInfoPos[][2];
-extern Matrix4 Player1Color;
-extern Matrix4 Player2Color;
-
 void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -3229,13 +2966,13 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                 scale[0] = scale[1] = CARD_BATTLE_ATTACK_SCALE;
                 model = 0;
                 switch (CardChkAttackType(work->definitions, &ownSide->battle[i].battle)) {
-                case 4:
+                case CARD_ATTACK_HOMING:
                     model = 1;
-                case 3:
+                case CARD_ATTACK_SPREAD:
                     model++;
-                case 2:
+                case CARD_ATTACK_BALLISTIC:
                     model++;
-                case 1:
+                case CARD_ATTACK_HAND:
                     break;
                 default:
                     model = -1;
@@ -3258,7 +2995,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                         }
                     }
                 }
-                if (power >= 100) {
+                if (power > CARD_BATTLE_POWER_MAX) {
                     power = CARD_BATTLE_POWER_MAX;
                 }
                 scale[0] = scale[1] = CARD_BATTLE_POWER_SCALE;
@@ -3283,9 +3020,9 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                 nmlModelEntryCard(model);
                 translation[0] = CARD_BATTLE_PIP_X;
                 translation[1] = CARD_BATTLE_PIP_Y;
-                for (j = 0; j < (s8)ownSide->battle[i].battle.powerLimit; j++) {
+                for (j = 0; j < ownSide->battle[i].battle.powerLimit; j++) {
                     model = CARD_BATTLE_PIP_OFF_MODEL;
-                    if (!((s8)ownSide->battle[i].battle.powerLimit - (s8)ownSide->battle[i].battle.power < j)) {
+                    if (!(ownSide->battle[i].battle.powerLimit - ownSide->battle[i].battle.power < j)) {
                         model = CARD_BATTLE_PIP_ON_MODEL;
                     }
                     xglMatrixTrans(iconPlace, place, translation);
@@ -3300,27 +3037,27 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                 model = 0;
                 def = &work->definitions[ownSide->battle[i].battle.layers[0].cardId];
                 switch (def->flags) {
-                case 32:
-                case 64:
+                case CARD_ATTR_WEAPON_MECH:
+                case CARD_ATTR_WEAPON_HUMAN:
                     model = 1;
-                case 16:
+                case CARD_ATTR_UNKNOWN:
                     model++;
-                case 4:
+                case CARD_ATTR_GNOSIS:
                     model++;
-                case 8:
+                case CARD_ATTR_MECH:
                     model++;
-                case 2:
+                case CARD_ATTR_REALIAN:
                     model++;
-                case 1:
+                case CARD_ATTR_HUMAN:
                     break;
                 }
-                model = CARD_BATTLE_EQUIP_MODEL + (model * CARD_MODEL_STRIDE);
+                model = CARD_ICON_MODEL_BASE + (model * CARD_MODEL_STRIDE);
                 xglMatrixTrans(iconPlace, place, translation);
                 xglMatrixScale(iconPlace, iconPlace, scale);
                 nmlModelSetPlace(&iconPlace);
                 nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
                 nmlModelEntryCard(model);
-                if ((s8)ownSide->battle[i].battle.layers[0].shownLife < 0) {
+                if (ownSide->battle[i].battle.layers[0].shownLife < 0) {
                     ownSide->battle[i].battle.layers[0].shownLife = 0;
                 }
                 /* Neither test below leaves code. They lengthen the life of the reloaded shownLife byte, which
@@ -3332,7 +3069,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                     power = ownSide->battle[i].battle.moveFrames;
                 }
                 scale[0] = scale[1] = CARD_BATTLE_LIFE_SCALE;
-                model = (s8)ownSide->battle[i].battle.layers[0].shownLife / CARD_DIGIT_BASE;
+                model = ownSide->battle[i].battle.layers[0].shownLife / CARD_DIGIT_BASE;
                 if (model != 0) {
                     model = CARD_DIGIT_MODEL + (model * CARD_MODEL_STRIDE);
                     translation[0] = CARD_BATTLE_TENS_X;
@@ -3343,7 +3080,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                     nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
                     nmlModelEntryCard(model);
                 }
-                model = CARD_DIGIT_MODEL + (((s8)ownSide->battle[i].battle.layers[0].shownLife % CARD_DIGIT_BASE) * CARD_MODEL_STRIDE);
+                model = CARD_DIGIT_MODEL + ((ownSide->battle[i].battle.layers[0].shownLife % CARD_DIGIT_BASE) * CARD_MODEL_STRIDE);
                 translation[0] = CARD_BATTLE_UNITS_X;
                 translation[1] = CARD_BATTLE_LIFE_Y;
                 xglMatrixTrans(iconPlace, place, translation);
@@ -3355,7 +3092,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                 translation[1] = CARD_BATTLE_BAR_Y;
                 translation[2] = CARD_BATTLE_BAR_Z;
                 scale[1] = 1.0f;
-                scale[0] = (float)(s8)ownSide->battle[i].battle.layers[0].shownLife / CARD_BATTLE_BAR_FULL;
+                scale[0] = (float)ownSide->battle[i].battle.layers[0].shownLife / CARD_BATTLE_BAR_FULL;
                 xglMatrixTrans(iconPlace, place, translation);
                 xglMatrixScale(iconPlace, iconPlace, scale);
                 nmlModelSetPlace(&iconPlace);
@@ -3394,20 +3131,6 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
 }
 
 /*
- * Pile counters shared by CardPlayDispHand, CardPlayDispJunk and CardPlayDispSute: the pile size is shown as
- * tens (model CARD_PILE_COUNT_MODEL + (tens << 10)) and units (+ (units << 10)) digit models
- * (asm 0x00a0ef24 / 0x00a0efac and 0x00a0fe30 / 0x00a0feb4), both with CARD_PILE_COUNT_TEXTURE.
- */
-#define CARD_PILE_STACK_SIZE 10               /* `addiu $2,$0,10` before the div (0x00a0ee9c) */
-#define CARD_PILE_COUNT_MODEL 0x01C80000
-#define CARD_PILE_COUNT_TEXTURE ((const char *)0x01C91000)
-#define CARD_PILE_COUNT_SCALE 1.4f            /* 0x3FB33333 (0x00a0eeac) */
-#define CARD_PILE_COUNT_Y (-1.876f)           /* 0xBFF020C5 (0x00a0ef08) */
-#define CARD_PILE_COUNT_Z 0.01f               /* 0x3C23D70A (0x00a0eeb8) */
-#define CARD_PILE_CARD_SCALE 0.175f           /* size of a pile card in motion, 0x3E333333 (0x00a0eff4) */
-#define CARD_MOVE_ARRIVE_SOUND 0x2000F        /* sound when a card lands (0x00a0eb68, 0x00a0f0e8, 0x00a0f304, 0x00a0f754, 0x00a0fc14, 0x00a0ffd8) */
-
-/*
  * Draws the hand of one side (asm 0x00a0e7a0): the hand size as tens and units digit models,
  * then every hand card along its handMove record. A card in motion advances by its step and
  * flips by kind (4: growing face-down flip, 3: turning over, 2: face up, other: shrinking);
@@ -3415,12 +3138,6 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
  * sends it to its hand slot) or rests in its slot. On side != 0 a settled card (kind 0)
  * shows the card id from the other end of the hand.
  */
-#define CARD_HAND_TENS_X (-0.964f)           /* digit x of the tens count, 0xBF76C8B4 (0x00a0e854) */
-#define CARD_HAND_UNITS_X (-0.85f)           /* digit x of the units count, 0xBF59999A (0x00a0e8c4) */
-#define CARD_HAND_SETTLE_DEPTH 0.005f        /* depth step between the hand cards, 0x3BA3D70A (0x00a0ec20) */
-#define CARD_HAND_FULL_SCALE 2.0f            /* full flip scale of a card, 0x40000000 (0x00a0e9d0) */
-#define CARD_HAND_FLAG_BITS 0x0F00           /* flag bits cleared from a hand entry before drawing (addiu -0xF01, 0x00a0ed8c) */
-
 void CardPlayDispHand(s32 side, s32 faceUp, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -3596,10 +3313,6 @@ void CardPlayDispHand(s32 side, s32 faceUp, CardPlaySide *ownSide, Matrix4 matri
  * is the last one.
  * The first argument (the side number) is not read.
  */
-#define CARD_JUNK_COUNT_TENS_X 1.919f         /* 0x3FF5A1CB (0x00a0eefc) */
-#define CARD_JUNK_COUNT_UNITS_X 2.033f        /* 0x40021CAC (0x00a0ef78) */
-#define CARD_JUNK_TOP_DROP 0.02f              /* resting top card sits this far below the pile, 0x3CA3D70A (0x00a0f044) */
-
 void CardPlayDispJunk(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -3687,20 +3400,12 @@ void CardPlayDispJunk(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
     }
 }
 
-
 /*
  * Draws the four disposal slots of one side (asm 0x00a0f230). Each slot's cards move from
  * DisposePos1P toward their resting place, the top card is drawn with its frame, a stacked card
  * sits at CardStackPos, the flag markers follow, and the slot value is shown as two digits.
  * The first argument (the side number) is not read.
  */
-#define CARD_DISPOSE_SCALE 0.175f             /* card size in the slot, 0x3E333333 (0x00a0f240) */
-#define CARD_DISPOSE_STACK_SCALE 0.5070423f   /* stacked card size, 0x3F01CD86 (0x00a0f254) */
-#define CARD_DISPOSE_DIGIT_Z 0.05f            /* digit depth, 0x3D4CCCCD (0x00a0f554) */
-#define CARD_DISPOSE_MARKER_TEXTURE ((const char *)0x01F70200) /* flag markers (0x00a0f4a8, 0x00a0f4f8) */
-#define CARD_DISPOSE_MARKER_MODEL_BIT0 0x01900400
-#define CARD_DISPOSE_MARKER_MODEL_BIT1 0x01900C00
-
 void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -3775,12 +3480,12 @@ void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
                     nmlModelSetTexture(CARD_DISPOSE_MARKER_TEXTURE);
                     nmlModelEntryCard(CARD_DISPOSE_MARKER_MODEL_BIT1);
                 }
-                if ((s8)ownSide->disposal[slot].battle.layers[0].shownLife < 0) {
+                if (ownSide->disposal[slot].battle.layers[0].shownLife < 0) {
                     ownSide->disposal[slot].battle.layers[0].shownLife = 0;
                 }
                 /* The compiled code reads shownLife as a signed byte here (lb at 0x00a0f510). The field stays u8
                  * because CGPHPCheckSub fills it from the unsigned life byte, so the signed view is a cast. */
-                tens = (s8)ownSide->disposal[slot].battle.layers[0].shownLife / CARD_DIGIT_BASE;
+                tens = ownSide->disposal[slot].battle.layers[0].shownLife / CARD_DIGIT_BASE;
                 if (tens != 0) {
                     model = CARD_PILE_COUNT_MODEL + (tens * CARD_MODEL_STRIDE);
                     translation[0] = DisposeHP10pos[slot][0];
@@ -3791,7 +3496,7 @@ void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
                     nmlModelSetTexture(CARD_PILE_COUNT_TEXTURE);
                     nmlModelEntryCard(model);
                 }
-                model = CARD_PILE_COUNT_MODEL + (((s8)ownSide->disposal[slot].battle.layers[0].shownLife % CARD_DIGIT_BASE) * CARD_MODEL_STRIDE);
+                model = CARD_PILE_COUNT_MODEL + ((ownSide->disposal[slot].battle.layers[0].shownLife % CARD_DIGIT_BASE) * CARD_MODEL_STRIDE);
                 translation[0] = DisposeHP01pos[slot][0];
                 translation[1] = DisposeHP01pos[slot][1];
                 translation[2] = CARD_DISPOSE_DIGIT_Z;
@@ -3819,12 +3524,6 @@ void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
  * with operationFlags bit 0 also gets a marker above its slot.
  * The first argument (the side number) is not read.
  */
-#define CARD_OPERATION_SCALE 0.175f           /* card size, 0x3E333333 (0x00a0f6ec) */
-#define CARD_OPERATION_MARKER_Z 0.01f         /* marker depth (0x00a0f894) */
-#define CARD_OPERATION_MARKER_TEXTURE ((const char *)0x01F70200)
-#define CARD_OPERATION_MARKER_MODEL 0x01900400
-#define CARD_OPERATION_FLAG_MARKER 1          /* operationFlags bit (`andi $2,1`, 0x00a0f87c) */
-
 void CardPlayDispOperation(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -3878,7 +3577,6 @@ void CardPlayDispOperation(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
     }
 }
 
-
 /*
  * Draws the deck pile of one side (asm 0x00a0f928): the deck count as tens and units digit
  * models, then the pile marker and a second marker below it (both only while the deck is not
@@ -3886,20 +3584,6 @@ void CardPlayDispOperation(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
  * for the enemy, which selects the enemy variant of the two marker models (asm 0x00a0fb40,
  * 0x00a0fb9c).
  */
-#define CARD_YAMA_COUNT_SCALE 1.7f            /* digit scale of the deck count, 0x3FD9999A (0x00a0f9b4) */
-#define CARD_YAMA_COUNT_TENS_X 0.401f         /* 0x3ECD4FDF (0x00a0fa00) */
-#define CARD_YAMA_COUNT_UNITS_X 0.547f        /* 0x3F0C0831 (0x00a0fa80) */
-#define CARD_YAMA_COUNT_Y (-1.855f)           /* 0xBFED70A4 (0x00a0fa0c) */
-#define CARD_YAMA_MARKER_Y (-1.81f)           /* 0xBFE7AE14 (0x00a0fafc) */
-#define CARD_YAMA_MARKER_TEXTURE ((const char *)0x016E0000)   /* (0x00a0fb3c) */
-#define CARD_YAMA_MARKER_MODEL 0x01911800     /* (0x00a0fb44) */
-#define CARD_YAMA_MARKER_MODEL_ENEMY 0x01915800 /* (0x00a0fb5c) */
-#define CARD_YAMA_MARKER2_X (-0.484f)         /* 0xBEF7CED9 (0x00a0fb60) */
-#define CARD_YAMA_MARKER2_Y (-1.851f)         /* 0xBFECED91 (0x00a0fb70) */
-#define CARD_YAMA_MARKER2_TEXTURE ((const char *)0x01D80000)  /* (0x00a0fb9c) */
-#define CARD_YAMA_MARKER2_MODEL 0x01D18000    /* (0x00a0fba4) */
-#define CARD_YAMA_MARKER2_MODEL_ENEMY 0x01D1C000 /* ori 0x00a0fbbc */
-
 void CardPlayDispYama(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -4014,11 +3698,6 @@ void CardPlayDispYama(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
  * kind cleared and its timer restarted at CARD_SLIDE_FRAMES.
  * The first argument (the side number) is not read.
  */
-#define CARD_SUTE_COUNT_TENS_X 0.889f         /* 0x3F639581 (0x00a0fe08) */
-#define CARD_SUTE_COUNT_UNITS_X 1.0f          /* units digit x offset */
-#define CARD_SUTE_MARKER_TEXTURE ((const char *)0x016E0000)
-#define CARD_SUTE_MARKER_MODEL 0x01901800
-
 void CardPlayDispSute(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 {
     Matrix4 place;
@@ -4114,7 +3793,6 @@ void CardPlayDispSute(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
     }
 }
 
-
 /*
  * Clears both mark tables of the board cursor (asm 0x00a100f0): the 24 marks
  * of markTable (+0x30) and of markTableB (+0x48).
@@ -4192,12 +3870,12 @@ int CAMASub(int areaCode) {
     int addr;
 
     code = areaCode & 0xFF;
-    addr = 0x01D0C000;
-    if ((code != 2) &&
-        ((code < 3) ||
-         (((addr = 0x01D10000), (code != 3)) &&
-          ((addr = 0x01D12000), (code != 4))))) {
-        addr = 0x01D08000;
+    addr = CARD_CURSOR_MARK_MODEL_2;
+    if ((code != CARD_CURSOR_MARK_2) &&
+        ((code < CARD_CURSOR_MARK_3) ||
+         (((addr = CARD_CURSOR_MARK_MODEL_3), (code != CARD_CURSOR_MARK_3)) &&
+          ((addr = CARD_CURSOR_MARK_MODEL_4), (code != CARD_CURSOR_MARK_4))))) {
+        addr = CARD_CURSOR_MARK_MODEL_DEFAULT;
     }
     return addr;
 }
@@ -4208,33 +3886,6 @@ int CAMASub(int areaCode) {
  * the six zone columns of CardCursorControl.markTable (own side, then the far side turned
  * half a turn about Z). A zero `mode` also advances the animation and both light pulses.
  */
-#define CARD_CURSOR_FRAME_MODEL 0x01D00000       /* own side (0x00a1031c) */
-#define CARD_CURSOR_FRAME_MODEL_ENEMY 0x01D02000 /* (0x00a10328) */
-#define CARD_CURSOR_MARKER_MODEL 0x01D18000      /* (0x00a102d8) */
-#define CARD_CURSOR_MARKER_MODEL_ENEMY 0x01D1C000 /* (0x00a1032c) */
-#define CARD_CURSOR_MARKER_TEXTURE ((const char *)0x01D80000) /* (0x00a1047c) */
-#define CARD_CURSOR_FRAME_STRIDE 0x510           /* bytes between two animation frames (built from shifts and an add: `sll 2` 0x00a10374, `sll 4` 0x00a10398) */
-#define CARD_CURSOR_ANIM_TICKS 24                /* animFrame counts 0..23 (sltiu 0x18, 0x00a10350) */
-#define CARD_CURSOR_ANIM_TICKS_PER_FRAME_SHIFT 2 /* four ticks per frame (srl 2, 0x00a10358) */
-#define CARD_CURSOR_SCALE 1.15f                  /* 0x3F933333 (0x00a10368) */
-#define CARD_CURSOR_MARKER_X 0.275f              /* 0x3E8CCCCD (0x00a1043c) */
-#define CARD_CURSOR_MARKER_Y 0.4f                /* 0x3ECCCCCD (0x00a10448) */
-#define CARD_CURSOR_PULSE_A_MASK 0x1F            /* andi 0x1F (0x00a104ac) */
-#define CARD_CURSOR_PULSE_A_STEP 11.25f          /* degrees per step, 0x41340000 (0x00a104bc) */
-#define CARD_CURSOR_LIGHT_A_SWING 0.5f           /* CLColor swing around 1.0, 0x3F000000 (0x00a10504) */
-#define CARD_CURSOR_LIGHT_B_SWING 0.25f          /* CLP1Color blue / CLP2Color red swing, 0x3E800000 (0x00a104e4) */
-#define CARD_CURSOR_LIGHT_B_BASE 1.75f           /* 0x3FE00000 (0x00a1053c) */
-#define CARD_CURSOR_LIGHT_C_SWING 0.235f         /* CLP1Color red and green swing, 0x3E70A3D7 (0x00a10574) */
-#define CARD_CURSOR_LIGHT_C_BASE 0.735f          /* 0x3F3C28F6 (0x00a10588) */
-#define CARD_CURSOR_LIGHT_D_SWING 0.285f         /* CLP2Color green and blue swing, 0x3E91EB85 (0x00a105bc) */
-#define CARD_CURSOR_LIGHT_D_BASE 0.685f          /* 0x3F2F5C29 (0x00a105c8) */
-#define CARD_CURSOR_LIGHT_E_SWING 0.25f          /* CMColor swing around 1.0: the same word as the B swing (0x00a104e4) */
-#define CARD_CURSOR_PULSE_B_MASK 0x3F            /* andi 0x3F (0x00a10620) */
-#define CARD_CURSOR_PULSE_B_STEP 5.625f          /* degrees per step, 0x40B40000 (0x00a10630) */
-#define CARD_CURSOR_MARK_Z_LIFT 0.015f           /* 0x3C75C28F (0x00a10648) */
-#define CARD_CURSOR_MARK_SCALE_SMALL 0.175f      /* disposal and operation marks, 0x3E333333 (0x00a1065c) */
-#define CARD_CURSOR_MARK_SCALE_LARGE 0.355f      /* battle marks, 0x3EB5C28F (0x00a10744) */
-
 void CardPlayDispCursor(s32 mode, CardGameWork *work, Matrix4 matrix)
 {
     Matrix4 place;
@@ -4266,7 +3917,7 @@ void CardPlayDispCursor(s32 mode, CardGameWork *work, Matrix4 matrix)
                 frameModel = CARD_CURSOR_FRAME_MODEL_ENEMY;
             }
         } else {
-            switch ((s16) work->command.phase) { /* phase is u16 in the record; the original reads it with `lh` (0x00a102f0) */
+            switch (work->command.phase) {
             case CARD_PHASE_DRAW:
             case CARD_PHASE_MOVE:
             case CARD_PHASE_EVENT:
@@ -4436,71 +4087,60 @@ void CardPlayDispCursor(s32 mode, CardGameWork *work, Matrix4 matrix)
  * slots, at every stacked layer, for a card whose CardDefinition.identity
  * matches. `identity` masks to 16 bits at entry (`andi $a2,$a2,0xffff`, the
  * function's first instruction) rather than to a byte, so the parameter
- * itself is 16 bits wide; ccu_038_exec_sub.c's extern still declares it
- * `u8` and needs updating to match this definition.
+ * itself is 16 bits wide.
  */
-int CardPlayIdentityCheck(CardGameWork *work, CardHand *hand, u16 identity)
+int CardPlayIdentityCheck(CardGameWork *work, CardPlaySide *side, u16 identity)
 {
-    s16 *cardIdSlot;    /* walks disposal[3]'s cardId column, one layer per iteration */
     int layer;
     int found;
     s16 cardId;
 
     found = 0;
-    if (identity < 0x80) {
-        cardIdSlot = (s16 *)((u8 *)hand + 0xDCE); /* &((CardPlaySide *)hand)->disposal[3].battle.layers[0].cardId */
-
-        /*
-         * battle[0..3] and disposal[0..3] are 8 consecutive CardBoardSlot
-         * records; each check below reads the same layer of a different
-         * slot, at a fixed distance (a multiple of sizeof(CardBoardSlot))
-         * behind cardIdSlot's current slot, disposal[3].
-         */
+    if (identity < CARD_IDENTITY_COUNT) {
         layer = 0;
         do {
-            cardId = *(s16 *)((u8 *)cardIdSlot - 7 * sizeof(CardBoardSlot)); /* battle[0] */
+            cardId = side->battle[0].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *(s16 *)((u8 *)cardIdSlot - 6 * sizeof(CardBoardSlot)); /* battle[1] */
+            cardId = side->battle[1].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *(s16 *)((u8 *)cardIdSlot - 5 * sizeof(CardBoardSlot)); /* battle[2] */
+            cardId = side->battle[2].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *(s16 *)((u8 *)cardIdSlot - 4 * sizeof(CardBoardSlot)); /* battle[3] */
+            cardId = side->battle[3].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *(s16 *)((u8 *)cardIdSlot - 3 * sizeof(CardBoardSlot)); /* disposal[0] */
+            cardId = side->disposal[0].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *(s16 *)((u8 *)cardIdSlot - 2 * sizeof(CardBoardSlot)); /* disposal[1] */
+            cardId = side->disposal[1].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *(s16 *)((u8 *)cardIdSlot - sizeof(CardBoardSlot));    /* disposal[2] */
+            cardId = side->disposal[2].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardId = *cardIdSlot;                                          /* disposal[3] */
+            cardId = side->disposal[3].battle.layers[layer].cardId;
             if (cardId >= 0 && work->definitions[cardId].identity == identity) {
                 found = 1;
                 break;
             }
-            cardIdSlot = (s16 *)((u8 *)cardIdSlot + sizeof(CardBattleLayer));
             layer++;
-        } while (layer < 40);
+        } while (layer < CARD_BATTLE_LAYER_COUNT);
     }
     return found;
 }
@@ -4627,7 +4267,7 @@ void CGCPNeedDispSub(int flipped, u8 *need, Matrix4 *matrix, u8 *counts)
             break;
         }
         if (generation >= 0) {
-            model = CARD_GENERATION_MODEL_BASE + generation * CARD_GENERATION_MODEL_SIZE;
+            model = CARD_ICON_MODEL_BASE + generation * CARD_MODEL_STRIDE;
             xglMatrixScale(placement, cardMatrix, scale);
             nmlModelSetPlace(&placement);
             if (anyGeneration) {
@@ -4694,7 +4334,7 @@ void CGCPGeneDispSub(int flipped, CardDefinition *definitions, CardPlaySide *sid
             for (i = 0; i < counts[slot]; i++) {
                 /* Declared first: the slot * 0x400 offset (`sll 10`, 0x00a11274) is the first
                  * value set up before the loop, ahead of the array addresses (0x00a11278..0x00a1127c). */
-                unsigned int model = CARD_GENERATION_MODEL_BASE + slot * CARD_GENERATION_MODEL_SIZE;
+                unsigned int model = CARD_ICON_MODEL_BASE + slot * CARD_MODEL_STRIDE;
 
                 xglMatrixScale(placement, matrix, scale);
                 nmlModelSetPlace(&placement);
@@ -4705,17 +4345,6 @@ void CGCPGeneDispSub(int flipped, CardDefinition *definitions, CardPlaySide *sid
         }
     }
 }
-
-#define CARD_HAND3_BASE_Y 1.5f                 /* 0x3FC00000, 0x00a11370 */
-#define CARD_HAND3_BASE_Y_OPTION 1.74f         /* 0x3FDEB852, 0x00a11384 */
-#define CARD_HAND3_BASE_Z 0.15f                /* 0x3E19999A, 0x00a113a4 */
-#define CARD_HAND3_BASE_SCALE_Y 0.97f          /* 0x3F7851EC, 0x00a113b4 */
-#define CARD_HAND3_SCALE 0.23f                 /* 0x3E6B851F, 0x00a11474 */
-#define CARD_HAND3_SELECTED_SCALE 0.3f         /* 0x3E99999A, 0x00a11480 */
-#define CARD_HAND3_SELECTED_TEXTURE ((const char *)0x01D60000) /* 0x00a116a0 */
-#define CARD_HAND3_SELECTED_MODEL 0x01D12000   /* 0x00a116a4 */
-#define CARD_HAND3_BASE_TEXTURE ((const char *)0x019B0000)     /* 0x00a11788 */
-#define CARD_HAND3_BASE_MODEL 0x019AC000       /* 0x00a1178c */
 
 /*
  * Draws the hand of one side on the battle window (asm 0x00a11320): the cards are
@@ -4847,20 +4476,6 @@ void CGCPHandDispSub3(CardDefinition *definitions, CardPlaySide *side, int selec
     CGCPNeedDispSub(1, definitions[side->hand.cards[selected]].need, &matrix, counts);
 }
 
-#define CARD_HAND2_BASE_Y (-1.7f)               /* 0xBFD9999A, 0x00a1187c */
-#define CARD_HAND2_BASE_Z 0.1f                  /* 0x3DCCCCCD, 0x00a11888 */
-#define CARD_HAND2_BASE_SCALE_Y 0.97f           /* 0x3F7851EC, 0x00a11898 */
-#define CARD_HAND2_SCALE 0.23f                  /* 0x3E6B851F, 0x00a1195c */
-#define CARD_HAND2_SELECTED_SCALE 0.3f          /* 0x3E99999A, 0x00a11968 */
-#define CARD_HAND2_SELECTED_TEXTURE ((const char *)0x01D60000)  /* 0x00a11b8c */
-#define CARD_HAND2_SELECTED_MODEL 0x01D12000    /* 0x00a11b90 */
-#define CARD_HAND2_PILE_SCALE 1.2f              /* 0x3F99999A, 0x00a11c60 */
-#define CARD_HAND2_PILE_Y (-0.005f)             /* 0xBBA3D70A, 0x00a11c70 */
-#define CARD_HAND2_TENS_X 1.116f                /* 0x3F8ED917, 0x00a11cb8 */
-#define CARD_HAND2_UNITS_X 1.229f               /* 0x3F9D4FDF, 0x00a11d24 */
-#define CARD_HAND2_BASE_TEXTURE ((const char *)0x019B0000)      /* 0x00a11db4 */
-#define CARD_HAND2_BASE_MODEL 0x019A8000        /* 0x00a11db8 */
-
 /*
  * Draws the hand of one side on the battle window (asm 0x00a11820): like
  * CGCPHandDispSub3 but spread from NewWin0pos[0] to NewWin0pos[1], with the selected
@@ -4923,8 +4538,8 @@ void CGCPHandDispSub2(CardDefinition *definitions, CardPlaySide *side, int selec
         }
         if (mode != 0) {
             switch (definitions[side->hand.cards[i]].kind) {
-            case 1:
-                if ((mode & 1) == 0) {
+            case CARD_KIND_BATTLE:
+                if ((mode & CARD_KIND_BATTLE) == 0) {
                     flags |= CARD_DISP_LIGHT_MIDDLE;
                 } else {
                     flags |= CARD_DISP_LIGHT_CN;
@@ -5039,18 +4654,7 @@ void CGCPHandDispSub(CardHand *hand, int selected, int flipped)
  * drawn as a mark at (0, CARD_YAMA_MARK_Y). Afterwards the deck back and the pile
  * model are entered and the caption string is printed.
  */
-#define CARD_YAMA_MARK_Y 0.369f
-#define CARD_YAMA_MARK_Z 0.3f
-#define CARD_YAMA_MODEL_BASE 0x01DA0000
-#define CARD_YAMA_MODEL_PILE 0x01DAAC00
 /* CardDisp mode of the selected card when a style is set (asm 0x00a12118) and of its mark (asm 0x00a121a0) */
-#define CARD_YAMA_SELECTED_MODE 5
-#define CARD_YAMA_MARK_FLAG 0x10               /* flags bit: also draw the marker card (`andi $20,$20,0x10`, 0x00a12060) */
-#define CARD_WINDOW_SINGLE_X (-2.0f)           /* x offset of the pile card with a single card, 0xC0000000 (0x00a12224) */
-#define CARD_WINDOW_CAPTION_X 22               /* caption position (`addiu $4,$0,0x16`, 0x00a12338) */
-#define CARD_WINDOW_CAPTION_Y 140              /* `addiu $5,$0,0x8C` (0x00a1233c) */
-#define CARD_WINDOW_CAPTION_COLOR 0xFFF8       /* `ori $6,$0,0xFFF8` (0x00a12344) */
-
 void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flags, int style)
 {
     Matrix4 base;
@@ -5240,7 +4844,7 @@ s32 CardPlayCntAllOpe(CardGameWork *work, s16 opId)
     count = 0;
     enemyOp = work->enemy.operations;
     playerOp = work->player.operations;
-    remaining = 3;
+    remaining = CARD_OPERATION_SLOTS - 1;
     do {
         s16 playerId = *playerOp;
         s16 enemyId;
@@ -5270,7 +4874,7 @@ s32 CardPlayCntOpe(CardPlaySide *side, s16 opId)
     want = opId;
     op = side->operations;
     count = 0;
-    remaining = 3;
+    remaining = CARD_OPERATION_SLOTS - 1;
     do {
         id = *op;
         op += 1;
@@ -5283,15 +4887,11 @@ s32 CardPlayCntOpe(CardPlaySide *side, s16 opId)
 }
 
 /*
- * hand is CardHand only by its call sites' declared type (CardPlayCntFld,
- * outside this TU's allocation, passes &work->player.hand/&work->enemy.hand);
- * CardHand is CardPlaySide's own first member (ov10/cgp.h, offset +0x000), so
- * that address is numerically CardPlaySide's own and this reaches
- * disposal[0]'s top card id, sibling to CardPlayCntBtl's battle[0].
+ * Counts the copies of cardId on top of the side's disposal slots, sibling to
+ * CardPlayCntBtl's battle slots.
  */
-int CardPlayCntDsp(CardHand *hand, s16 cardId)
+int CardPlayCntDsp(CardPlaySide *side, s16 cardId)
 {
-    CardPlaySide *side;
     s16 *cardIdField;
     s16 id;
     s16 want;
@@ -5299,13 +4899,12 @@ int CardPlayCntDsp(CardHand *hand, s16 cardId)
     s32 remaining;
 
     want = cardId;
-    side = (CardPlaySide *) hand;
     cardIdField = &side->disposal[0].battle.layers[0].cardId;
     count = 0;
-    remaining = 3;
+    remaining = CARD_BOARD_SLOTS - 1;
     do {
         id = *cardIdField;
-        cardIdField += 0xDE;
+        cardIdField += CARD_SLOT_STRIDE_HALFWORDS;
         remaining -= 1;
         if ((want ^ id) == 0) {
             count = count + 1;
@@ -5314,10 +4913,9 @@ int CardPlayCntDsp(CardHand *hand, s16 cardId)
     return count;
 }
 
-/* Same base-address identity as CardPlayCntDsp, reaching battle[0] instead. */
-int CardPlayCntBtl(CardHand *hand, s16 cardId)
+/* Same count as CardPlayCntDsp, over the battle slots. */
+int CardPlayCntBtl(CardPlaySide *side, s16 cardId)
 {
-    CardPlaySide *side;
     s16 *cardIdField;
     s16 id;
     s16 want;
@@ -5325,13 +4923,12 @@ int CardPlayCntBtl(CardHand *hand, s16 cardId)
     s32 remaining;
 
     want = cardId;
-    side = (CardPlaySide *) hand;
     cardIdField = &side->battle[0].battle.layers[0].cardId;
     count = 0;
-    remaining = 3;
+    remaining = CARD_BOARD_SLOTS - 1;
     do {
         id = *cardIdField;
-        cardIdField += 0xDE;
+        cardIdField += CARD_SLOT_STRIDE_HALFWORDS;
         remaining -= 1;
         if ((want ^ id) == 0) {
             count = count + 1;
@@ -5444,29 +5041,20 @@ s32 CardEquipCntHeavy(CardGameWork *work, CardPlaySide *side, s32 cardId)
     return count;
 }
 
-/* still INCLUDE_ASM above in this TU; CardHand * matches CardPlayHandCnt's
- * argument (ov10/cgp.h), the same player.hand/enemy.hand records this
- * function indexes. */
-extern int CardPlayCntDsp(CardHand *hand, s16 cardId);
-extern int CardPlayCntBtl(CardHand *hand, s16 cardId);
-
 int CardPlayCntFld(CardGameWork *work, s16 cardId) {
-    CardHand *playerHand;
-    CardHand *enemyHand;
+    CardPlaySide *playerSide;
+    CardPlaySide *enemySide;
     int count;
 
-    playerHand = &work->player.hand;
-    enemyHand = &work->enemy.hand;
-    count = CardPlayCntDsp(playerHand, cardId);
-    count = count + CardPlayCntBtl(playerHand, cardId);
-    count = count + CardPlayCntDsp(enemyHand, cardId);
-    return count + CardPlayCntBtl(enemyHand, cardId);
+    playerSide = &work->player;
+    enemySide = &work->enemy;
+    count = CardPlayCntDsp(playerSide, cardId);
+    count = count + CardPlayCntBtl(playerSide, cardId);
+    count = count + CardPlayCntDsp(enemySide, cardId);
+    return count + CardPlayCntBtl(enemySide, cardId);
 }
 
-extern float DisposePos1P[4][3];
-extern float BattlePos1P[4][3];
-extern float OperationPos1P[4][3];
-
+/* Defined here: CursorTbl and the data declared in card_fread.h. */
 static float *CursorTbl[16] = {
     DisposePos1P[0], BattlePos1P[0], BattlePos1P[1], OperationPos1P[0],
     DisposePos1P[1], BattlePos1P[0], BattlePos1P[1], OperationPos1P[1],
@@ -5517,7 +5105,7 @@ static float win0pos[2][3] = { { -1.891200065612793f, 0.0f, 0.001000000047497451
 
 static float NewWin0pos[4][3] = { { -2.3239998817443848f, 0.0f, 0.0010000000474974513f }, { 0.69999998807907104f, 0.0f, 0.0010000000474974513f }, { -0.69999998807907104f, 0.0f, 0.0010000000474974513f }, { 2.3239998817443848f, 0.0f, 0.0010000000474974513f } };
 
-u16 CardCommandPlay[150] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+u16 CardCommandPlay[CARD_ID_COUNT] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 const char cardDeckHeaderFontCode[8] = "\013\031\000\r";
 

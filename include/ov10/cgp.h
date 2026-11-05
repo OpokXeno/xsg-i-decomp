@@ -10,6 +10,33 @@ typedef signed int s32;
 #define CARD_BOARD_SLOTS 4         /* battle slots per side, and disposal slots per side */
 #define CARD_SLIDE_FRAMES 10       /* frames a card takes to slide to a new slot */
 
+/* Bits of CardGameWork.flags. */
+#define CGP_FLAG_SIDE1_AUTO 0x20       /* the computer plays side 1 */
+#define CGP_FLAG_SIDE0_AUTO 0x40       /* the computer plays side 0 */
+#define CGP_FLAG_ERROR_PLUS 0x0002u    /* CGPSetErrorMessPlus message on display */
+
+/* Rows of ErrorMessTbl (ov10/cgp.c) the command cards display. */
+#define CGP_MESS_CONFIRM_CARD 23
+#define CGP_MESS_SELECT_CARD 24
+#define CGP_MESS_SELECT_DISCARD 25
+
+/* Indices of PermMessTbl (CGPSetPermanentMess): the prompt shown while a command waits for a choice. */
+#define CGP_PERM_MESS_SELECT_LV10_SHION 1
+#define CGP_PERM_MESS_SELECT_ADD_TO_HAND 3
+#define CGP_PERM_MESS_SELECT_RETURN_TO_HAND 5
+#define CGP_PERM_MESS_SELECT_REPLACED 6
+#define CGP_PERM_MESS_SELECT_RECOVER_HP 7
+#define CGP_PERM_MESS_SELECT_DOUBLE_ATK 8
+#define CGP_PERM_MESS_SELECT_ATTACK 9
+#define CGP_PERM_MESS_SELECT_DOWN 10
+#define CGP_PERM_MESS_SELECT_REMOVE_DOWN 11
+#define CGP_PERM_MESS_SELECT_DISCARDED 12
+#define CGP_PERM_MESS_SELECT_DISCARD_WEAPON 13
+#define CGP_PERM_MESS_SELECT_RETURN_TO_STANDBY 14
+
+/* ErrorMessTbl row "Use Card Effect": CGPSetErrorMessPlus shows it with the card id as value. */
+#define CGP_ERR_USE_CARD_EFFECT 36
+
 /*
  * Phases of a turn, in the order of the help screen's list (DRAW PHASE ...
  * ADJUST PHASE); CardCommandControl.phase counts them for side 0 and then,
@@ -50,15 +77,24 @@ typedef signed int s32;
 #define CARD_ATTR_REALIAN 0x0002
 #define CARD_ATTR_GNOSIS 0x0004
 #define CARD_ATTR_MECH 0x0008
+/*
+ * The two remaining icons of the help page "ATTRIBUTES" (card.dat flags of the battle cards):
+ * U Unknown on Lv 1/10 chaos, Bunnie and Testament; W Weapon on the equipment cards,
+ * 0x20 for those "only M can equip" and 0x40 for those "only H and R can equip".
+ */
+#define CARD_ATTR_UNKNOWN 0x0010
+#define CARD_ATTR_WEAPON_MECH 0x0020
+#define CARD_ATTR_WEAPON_HUMAN 0x0040
+#define CARD_ATTR_WEAPON (CARD_ATTR_WEAPON_MECH | CARD_ATTR_WEAPON_HUMAN)
 
 /* CardLayerStack.flags bits. */
-#define CARD_STACK_FLAG_END 0x01       /* cleared by CardPlayClearEndflg */
-#define CARD_STACK_FLAG_FROZEN 0x02    /* no countdown and no attack (CGP_STACK_FLAG_FROZEN in ov10/cgp.c) */
+#define CARD_STACK_FLAG_END 0x01       /* the "E mark" of the card texts; cleared by CardPlayClearEndflg */
+#define CARD_STACK_FLAG_FROZEN 0x02    /* no countdown and no attack (`andi $2,$2,0x2`, 0x00a29e08) */
+#define CARD_STACK_FLAG_NO_DAMAGE 0x80 /* the attack deals no damage (CGP_STACK_FLAG_NO_DAMAGE in ov10/cgp.c); CardPlayCntPower counts no power for such a slot */
 
 /*
  * A board or hand position: the zone code, the slot or hand index and the
- * card there (8 bytes, passed by value to CGPDisposeWeaponSub). ov10/cgp.c
- * keeps the same record as CGPCursorPosition.
+ * card there (8 bytes, passed by value to CGPDisposeWeaponSub).
  */
 typedef struct CardCursorPosition {
     s16 zone;
@@ -66,6 +102,27 @@ typedef struct CardCursorPosition {
     s16 cardId;
     s16 stackedCard;               /* +0x06: the card stacked on the slot's base card */
 } CardCursorPosition;
+
+/*
+ * Zone codes of CardCursorPosition.zone: side 1 owns the rows 2..4, side 0
+ * the rows 5..7.
+ */
+#define CARD_ZONE_SIDE1_DISPOSAL 2
+#define CARD_ZONE_SIDE1_OPERATION 3
+#define CARD_ZONE_SIDE1_BATTLE 4
+#define CARD_ZONE_SIDE0_BATTLE 5
+#define CARD_ZONE_SIDE0_DISPOSAL 6
+#define CARD_ZONE_SIDE0_OPERATION 7
+
+/* Effect codes CardSetEffect is called with (see CardSetEffect in ov10/cgp.c). */
+#define CARD_EFFECT_DECK_BURST 5       /* burst over the deck (CardDispEffect draws the burst strip at the deck) */
+#define CARD_EFFECT_SWIRL 10           /* swirl around a card */
+#define CARD_EFFECT_NUMBER 12          /* number that rises over the card */
+#define CARD_EFFECT_DAMAGE_NUMBER 13   /* number with the second digit set (negative: life lost) */
+
+/* Sounds the command cards play. */
+#define CARD_SE_HIT 0x20008
+#define CARD_SE_REGEN 0x2000D
 
 /*
  * One side's hand of card ids inside CardGameWork. CardPlayHandCnt (ov10/tu002,
@@ -79,7 +136,7 @@ typedef struct CardHand {
     s8 playPoints[3];              /* +0x00: per-kind points available for playing cards; [2] is set to 1
                                     * together with the first two when the draw fase starts (sb 0x00a2a7c0),
                                     * no reader found */
-    u8 commandFlags;               /* +0x03: CardPlayCommandPlay command 37 sets bit 0 */
+    u8 commandFlags;               /* +0x03: the Impregnable Guard command (37) sets bit 0 */
     u8 deckCount;                  /* +0x04: cards left in the deck, CardPlayYamaCnt's result (CaedGameWinMode) */
     u8 suteCount;                  /* +0x05: cards in the discard pile, CardPlaySuteCnt's result (CGPHPCheckSub, sb 0x00a295ac) */
     u8 junkCount;                  /* +0x06: junk pile count, kept next to deckCount and suteCount; the three
@@ -114,17 +171,19 @@ typedef struct CardDefinition {
     u8 basePower;                  /* +0x15 */
     u8 element;                    /* +0x16: element code 0x50, 0x52 or 0x55 (asm 0x00a09ec4, 0x00a0a8a4) */
     u8 identity;                   /* +0x17 */
-    u8 unmodeled_18[12];
+    u32 nameOffset;
+    u32 captionOffset;
+    u32 descriptionOffset;
 } CardDefinition;
 
 /* One card of a board slot's stack (10 bytes). */
 typedef struct CardBattleLayer {
-    u8 state;
+    s8 powerPlus;                  /* +0x00: added to the card's power (CGPCalcPowerPlus) */
     s8 flag;                       /* +0x01: signed byte; CardEnemySet tests it with `lb` (0x00a3271c) and
-                                    * clears it with `sb` for the base layer of a slot holding card 14 */
-    u8 boostCount;                 /* +0x02: CCC26ExecSub adds one */
+                                    * clears it with `sb` for the base layer of a slot holding Albedo */
+    s8 boostCount;                 /* +0x02: CCC26ExecSub adds one */
     s8 life;                       /* +0x03: CCC38ExecSub subtracts two, clamped at zero */
-    u8 shownLife;                  /* +0x04: copy of life CGPHPCheckSub refreshes while the damage timer is
+    s8 shownLife;                  /* +0x04: copy of life CGPHPCheckSub refreshes while the damage timer is
                                     * zero (lbu 0x00a295e0, sb 0x00a295e4) */
     u8 damageTimer;                /* +0x05 */
     s16 cardId;                    /* +0x06 */
@@ -138,8 +197,8 @@ typedef struct CardBattleLayer {
 typedef struct CardLayerStack {
     u8 flags;
     u8 moveFrames;                 /* +0x01: frames remaining in the current movement */
-    u8 power;
-    u8 powerLimit;
+    s8 power;
+    s8 powerLimit;
     u8 previousFlags;              /* +0x04: copy of flags CGPHPCheckSub makes (lbu 0x00a295b0, sb 0x00a295b8) */
     u8 unmodeled_05[3];
     CardBattleLayer layers[40];    /* +0x008 */
@@ -224,17 +283,6 @@ typedef struct CardPlaySide {
                                     * ends at the 0x2AAC side stride (0x2F08 - 0x45C) */
 } CardPlaySide;
 
-/*
- * Partial view of a side past the end of the first 0x106C bytes of CardPlaySide,
- * for the published callers: they cast their CardPlaySide pointer, because a
- * separately computed pointer changes the schedule. CardPlaySide above carries
- * the full 0x2AAC layout itself, so ov10/card_fread indexes its handMove directly.
- */
-typedef struct CardPlaySideMoveView {
-    u8 unmodeled_0000[0x192C];
-    CardHandMoveRecord handMove[40];   /* +0x192C */
-} CardPlaySideMoveView;
-
 /* One side's controller snapshot for the command being played. */
 typedef struct CardCommandInput {
     union {
@@ -253,11 +301,25 @@ typedef struct CardCommandInput {
     };
 } CardCommandInput;
 
+/* CardCommandControl.flowRequest values CardGameProc dispatches (see the field). */
+#define CARD_FLOW_CONFIRM 1            /* confirm prompt */
+#define CARD_FLOW_ENEMY_DECK_OUT 3     /* the enemy's deck ran out */
+#define CARD_FLOW_PLAYER_DECK_OUT 4    /* the player's deck ran out */
+#define CARD_FLOW_FINAL_ROUND 5        /* the final round was played */
+#define CARD_FLOW_START_MENU 6         /* START menu */
+
+/* Outcomes CardGameProc passes to CaedGameWinMode (ov10/card_play_sound1.c defines the same names). */
+#define CARD_WIN_OUTCOME_ENEMY_DECK_OUT_FASE9 1
+#define CARD_WIN_OUTCOME_ENEMY_DECK_OUT 0
+#define CARD_WIN_OUTCOME_PLAYER_DECK_OUT_FASE9 2
+#define CARD_WIN_OUTCOME_FINAL_ROUND 3
+#define CARD_WIN_OUTCOME_PLAYER_DECK_OUT (-1)
+
 /* State of the command card being played (CardPlayCommandPlay, 0x30 bytes). */
 typedef struct CardCommandControl {
     s16 turn;                      /* +0x00: current turn number */
-    u16 phase;                     /* +0x02 */
-    u16 phaseTimer;                /* +0x04: frames spent in the current phase */
+    s16 phase;                     /* +0x02: current phase, read with `lh` */
+    u16 phaseTimer;                /* +0x04: frames spent in the current phase; ov10/cgp.c reads it with an (s16) cast (`lh`) */
     s16 step;                      /* +0x06: CardPlayCommandPlay's step within the command */
     s16 flowRequest;               /* +0x08: pending game-flow request, 0 = none. CardGameProc reads it
                                     * with lh (0x00a31900) and dispatches 1..6 through a jump table
@@ -330,6 +392,15 @@ typedef struct CardCursorBlock {
     void *xtx[4];                  /* +0x7C: texture file of each cursor kind */
 } CardCursorBlock;
 
+#define CARD_DECK_SIZE 40            /* card ids of a deck (loop test `slti 0x28`, CardMainInit 0x00a00ba0) */
+#define CARD_STORED_DECK_COUNT 5
+
+/* A stored deck of the save data: a checksum halfword and the 40 card ids (42 bytes). */
+typedef struct CardStoredDeck {
+    u16 checksum;                  /* +0x00: one's complement of the sum of the card ids */
+    u8 cards[CARD_DECK_SIZE];      /* +0x02 */
+} CardStoredDeck;
+
 /*
  * The card game part of the save data CardGameWork.save points to. Every
  * access is a byte access through the pointer loaded from work +0x0C.
@@ -344,13 +415,14 @@ typedef struct CardSaveData {
                                     * unpacks them into CardGameWork.ownedCount (0x00a1dfb4 `lbu $4,0($6+(i>>2))`,
                                     * 0x00a1dfc4 `srav`, 0x00a1dfcc `andi $4,$4,3`), CardCntList reads them
                                     * one card at a time (0x00a0b068 `lbu $3,4($6)`, masks 3/0xC/0x30/0xC0) */
-    u8 unmodeled_2A[0x2C - 0x2A];
-    u8 deck[40];                   /* +0x2C: the first stored deck, card ids read with lbu
-                                    * (CardMainProc 0x00a07400 `addiu $3,$4,44`, 40 iterations);
-                                    * CardCopyRam2Deck (ov10 0x00a0ae40) reads stored deck n at
-                                    * +0x2C + n * 42, so the stored decks are 42-byte records whose
-                                    * last two bytes are not modeled */
+    CardStoredDeck decks[CARD_STORED_DECK_COUNT]; /* +0x2A: the stored decks */
 } CardSaveData;
+
+/* CardSaveData.flags bit CGPRotStageSub tests (0x00a2a698 `andi $2,$2,0x10`). */
+#define CARD_SAVE_ROTATE_STAGE 0x10
+
+/* CardSaveData.flags bit CardPlayDispInfo tests before it draws the phase guide; the title menu's option toggles it (ov10/card_play_sound1.c). */
+#define CARD_SAVE_HIDE_TURN 0x02
 
 /*
  * One model CardMainProc's common tail draws (0x50 bytes; the table at work
@@ -522,37 +594,74 @@ typedef struct CardGameWork {
      */
 } CardGameWork;
 
-/*
- * The card in play CGPCalcPowerPlus and CardChkAttackType receive. It is the
- * memory a board slot's CardLayerStack covers - CardPlayCntPower (ov10/tu002,
- * 0x00a0da40) reads CardLayerStack.flags and layers[0]/layers[1].cardId from
- * the pointer it hands on - but CGPCalcPowerPlus loads the three bytes at
- * +0x08..+0x0A signed (`lb` at 0x00a29268, 0x00a2926c and 0x00a2928c) where
- * the accepted CardBattleLayer accesses of the same bytes load them unsigned,
- * so the record was declared a second time, as CardHand and CardPlayHand are.
- */
-typedef struct CardPowerCard {
-    u8 unmodeled_00[8];
-    s8 powerPlus[2];                /* +0x08: both are added to the card's power */
-    s8 boostCount;                  /* +0x0A: the power doubles once per boost;
-                                     * cleared for attack type 4 */
-    u8 unmodeled_0B[3];
-    s16 cardId;                     /* +0x0E: negative while the slot is empty */
-} CardPowerCard;
+/* Board area and slot of a stack (CGPHPCheckSub's `place`); the first two fields of CardCursorPosition. */
+typedef struct CGPBoardArea {
+    s16 area;
+    s16 slot;
+} CGPBoardArea;
 
-/* Resting positions of the junk pile (x, y, z per row); defined in ov10/cgp.c. */
-extern float JunkPos1P[][3];
+/* Functions and data used by other translation units. */
 
-/*
- * Swap a disposal slot's stack with a battle slot's and start the ten-frame
+/* Swap a disposal slot's stack with a battle slot's and start the ten-frame
  * slide that carries each of them to the other's position. Each argument is
  * the `battle` member of a CardBoardSlot; the swap also exchanges the 12 bytes
  * that follow the stack, which are the next slot's shunt position (ov10/cgp.c
- * models that span as its own CardMoveWork record).
- */
+ * models that span as its own CardMoveWork record). */
 void CGPMoveDSBATTLEwork(CardLayerStack *disposal, CardLayerStack *battle);
 
 /* Whether the equipment card equipId can be attached to the weapon card weaponId. */
 s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId);
+
+void CCO143ExecSub(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPlaySide *foeSide);
+void CGPShuntPosSub(CardPlaySide *side);
+void CGPRecalcPosSub(CardPlaySide *side);
+void CGPSetPermanentMess(CardGameWork *work, s32 index);
+void CGPNextTurnSub(CardGameWork *work);
+void CGPCommFinishSub(CardGameWork *work, CardPlaySide *side, s32 index);
+void CGPAnswerSub(CardGameWork *work, CardPlaySide *side, s32 cardIndex);
+s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId);
+void CGPCursor2Pos(CardCursorPosition *position, CardGameWork *work);
+s32 CGPChkCardPlayCost(CardGameWork *work, CardPlaySide *side, s32 command);
+s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command);
+s32 CGPDispoSub0(s32 side, CardGameWork *work, s32 index);
+void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CardCursorPosition held,
+                         CardCursorPosition target);
+void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide);
+void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
+                   CardLayerStack *stack, CGPBoardArea *place);
+void CardSetEffect(s32 side, CardGameWork *work, u8 code, s8 value, s32 soundId,
+                   float *position, CardLayerStack *stack);
+void CGPSetErrorMessPlus(s32 side, CardGameWork *work, u8 reason, s16 value);
+void CGPDispErrorMess(s32 side, s32 reason);
+void CGPDispErrorMessPlus(s32 side, u16 reason, s32 cardId);
+s32 CGPCalcPowerPlus(CardGameWork *work, CardLayerStack *card, s32 power);
+void CardPlayDisployment(u16 side, CardGameWork *work, CardPlaySide *ownSide, s32 index);
+
+/* Main-module functions that no include/main header declares (or declares differently). */
+extern int printf(const char *format, ...);
+extern void xglMatrixTrans(float destination[4][4], float source[4][4], const float position[4]);
+extern void xglMatrixRotX(float destination[4][4], float source[4][4], float angle);
+extern void xglMatrixRotZ(float destination[4][4], float source[4][4], float angle);
+extern void xglSoundEffectParamDirect(int sound, int volume, int pan);
+extern void nmlModelEntry(s32 model);
+extern void nmlModelSetPlace(Matrix4 *place);
+extern void nmlModelSetTexture(const char *texture);
+/* Unprototyped on purpose: OV10 passes pointers and integer addresses, some computed in float. */
+extern void nmlModelEntryCard();
+
+extern float Player1Color[4][4];
+extern float Player2Color[4][4];
+extern char *ErrorMessTbl[39][5];
+extern unsigned char CardDat[0x100];
+extern unsigned char SampleDeck0[40];
+extern unsigned char SampleDeck1[40];
+extern unsigned char SampleDeck2[40];
+extern unsigned char SampleDeck3[40];
+extern unsigned char SampleDeck4[40];
+extern unsigned char SampleDeck5[40];
+extern unsigned char SampleDeck6[40];
+extern unsigned char SampleDeck7[40];
+extern unsigned char SampleDeck8[40];
+extern unsigned char SampleDeck9[40];
 
 #endif /* INCLUDE_OV10_CGP_H */

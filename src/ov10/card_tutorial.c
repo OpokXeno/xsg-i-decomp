@@ -4,24 +4,62 @@
 #include "common.h"
 #include "shared.h"
 #include "ov10/cgp.h"
+#include "ov10/card_play_sound1.h"
+#include "ov10/card_disp.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_sound.h"
 
-extern char *strcat(char *destination, const char *source);
-extern char *strcpy(char *destination, const char *source);
-extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-extern int printf(const char *format, ...);
-extern void xglSoundEffectNormalID(int sound_id, int variant);
-extern void xglMatrixTrans(Matrix4 destination, Matrix4 source, const float translation[4]);
-extern void nmlModelSetRenderLevel(int level);
-extern void nmlModelSetTexture(const void *texture);
-extern void nmlModelSetPlace(Matrix4 matrix);
-extern void nmlModelEntry(u32 model);
+/* Tutorial viewer memory: layout files and textures are loaded back to back from here. */
+#define CARD_TUTORIAL_BUFFER ((char *) 0x01a00000)
+#define CARD_TUTORIAL_ALIGN 16            /* every file starts on a 16-byte boundary */
+#define CARD_TUTORIAL_PATH_SIZE 0x80
+#define CARD_TUTORIAL_SET_COUNT 2         /* layout/texture pairs loaded after the first file */
+#define CARD_TUTORIAL_TABLE_SIZE 64       /* tutoxtx_tbl entries; 47 are filled */
+
+/* Tutorial page count and the pad actions CardTutorialProc handles. Evidence (OV10, CardTutorialProc 0x00a215e0):
+ * `slti a0,a1,47` at 0x00a2163c ends the pages after tutopage++ (valid pages are 0..46); `andi v0,a1,0x8` at 0x00a21618
+ * advances (sound 1, tutopage++, load the page); `andi v0,a1,0x4` at 0x00a21690 goes back (tutopage--, sound 2, load the
+ * page); `andi v1,a1,0x800` at 0x00a216d0 closes the viewer (returns 0). */
+#define CARD_TUTORIAL_PAGE_COUNT 47
+#define CARD_TUTORIAL_PAD_NEXT 0x0008
+#define CARD_TUTORIAL_PAD_PREV 0x0004
+#define CARD_TUTORIAL_PAD_CLOSE 0x0800
+
+/* Two-entry, NULL-terminated list of tutorial base names; the original pair is at 0x00A4E4B0 ({"Tutorial", NULL}). */
+typedef struct {
+    const char *name[CARD_TUTORIAL_SET_COUNT];
+} TutorialNameList;
+
+/* Translation vector {1.2f, -1.82f, 0.0f, 1.0f}, read by xglMatrixTrans as four floats. The original copies the 16 bytes from
+ * cardTutorialTranslationInit with two doubleword moves (`ld`/`ld`/`sd`/`sd` at 0x00a21600..0x00a21610). A plain float[4] or struct of floats has
+ * only 4-byte alignment and compiles to unaligned ldl/ldr/sdl/sdr pairs; the u64 member gives the aggregate the 8-byte alignment
+ * that yields the doubleword copy. */
+typedef union CardTutorialTranslation {
+    float v[4];
+    u64 words[2];
+} CardTutorialTranslation;
+
+
+/* Declared here: nmlModelSetRenderLevel is void (main/nml_model_set.h returns int)
+ * (measured: with the int return CardTutorialProc keeps a different register for the lex table address). */
+
 static int tutopage;       /* 0x00A487C8 */
-static u32 tulex_tbl[2];    /* 0x00A57DB0, 2 entries */
-static void *tuxtx_tbl[2];  /* 0x00A57DB8, 2 entries */
+static u32 tulex_tbl[CARD_TUTORIAL_SET_COUNT];    /* 0x00A57DB0 */
+static void *tuxtx_tbl[CARD_TUTORIAL_SET_COUNT];  /* 0x00A57DB8 */
 static u32 lex;            /* 0x00A57DA8 */
+
+/* Declared here, defined at the end of the file (the name table above them needs each address): */
+/* Void here (measured): declaring the int it returns changes the object at its call sites. */
+extern void nmlModelSetRenderLevel(int level);
+extern const TutorialNameList cardTutorialNameListInit;
+extern const char cardTutorialFirstLexName[];   /* "Tu_000.lex" at 0x00A4E4B8 */
+extern const char cardTutorialLexExtension[];   /* ".lex" at 0x00A4E4C8 */
+extern const CardTutorialTranslation cardTutorialTranslationInit;
+extern const char cardTutorialEndLog[];
 
 /* "data\carddata\tuto\" */
 char datapath[0x14] = "data\\carddata\\tuto\\";
+/* Declared here: the page names Tu_000..Tu_046, defined at the end of the file, which tutoxtx_tbl lists. */
 extern const char cardTutorialNameTu046[];
 extern const char cardTutorialNameTu045[];
 extern const char cardTutorialNameTu044[];
@@ -69,7 +107,7 @@ extern const char cardTutorialNameTu003[];
 extern const char cardTutorialNameTu002[];
 extern const char cardTutorialNameTu001[];
 extern const char cardTutorialNameTu000[];
-static const char *tutoxtx_tbl[64] = {
+static const char *tutoxtx_tbl[CARD_TUTORIAL_TABLE_SIZE] = {
     cardTutorialNameTu000, cardTutorialNameTu001, cardTutorialNameTu002, cardTutorialNameTu003,
     cardTutorialNameTu004, cardTutorialNameTu005, cardTutorialNameTu006, cardTutorialNameTu007,
     cardTutorialNameTu008, cardTutorialNameTu009, cardTutorialNameTu010, cardTutorialNameTu011,
@@ -88,7 +126,7 @@ static void *tuxtx;
 
 int CardTutorialFileLoad(int tutorialIndex)
 {
-    char path[0x80];
+    char path[CARD_TUTORIAL_PATH_SIZE];
 
     memset(path, 0, sizeof(path));
     strcpy(path, datapath);
@@ -97,24 +135,15 @@ int CardTutorialFileLoad(int tutorialIndex)
     return xglCdReadFile(path, tuxtx, 0, 1);
 }
 
-/* Two-entry, NULL-terminated list of tutorial base names; the original pair is at 0x00A4E4B0 ({"Tutorial", NULL}). */
-typedef struct {
-    const char *name[2];
-} TutorialNameList;
-
-extern const TutorialNameList cardTutorialNameListInit;
-extern const char cardTutorialFirstLexName[];   /* "Tu_000.lex" at 0x00A4E4B8 */
-extern const char cardTutorialLexExtension[];   /* ".lex" at 0x00A4E4C8 */
-
 void CardTutorialInit(void)
 {
-    char path[0x80];
+    char path[CARD_TUTORIAL_PATH_SIZE];
     char *buffer;
     int count;
     int i;
     TutorialNameList names;
 
-    buffer = (char *)0x01a00000;
+    buffer = CARD_TUTORIAL_BUFFER;
     tutopage = 0;
     lex = (u32)buffer;
     names = cardTutorialNameListInit;
@@ -122,13 +151,13 @@ void CardTutorialInit(void)
     memset(path, 0, sizeof(path));
     strcpy(path, datapath);
     strcat(path, cardTutorialFirstLexName);
-    count = xglCdReadFile(path, (void *)0x01a00000, 0, 1);
+    count = xglCdReadFile(path, CARD_TUTORIAL_BUFFER, 0, 1);
     if (count > 0) {
         buffer += count;
-        buffer = (char *)(((unsigned int)buffer + 15) & ~15u);
+        buffer = (char *)(((unsigned int)buffer + CARD_TUTORIAL_ALIGN - 1) & ~(CARD_TUTORIAL_ALIGN - 1u));
     }
 
-    for (i = 0; i < 2 && names.name[i] != 0; i++) {
+    for (i = 0; i < CARD_TUTORIAL_SET_COUNT && names.name[i] != 0; i++) {
         memset(path, 0, sizeof(path));
         strcpy(path, datapath);
         strcat(path, names.name[i]);
@@ -137,7 +166,7 @@ void CardTutorialInit(void)
         count = xglCdReadFile(path, buffer, 0, 1);
         if (count > 0) {
             buffer += count;
-            buffer = (char *)(((unsigned int)buffer + 15) & ~15u);
+            buffer = (char *)(((unsigned int)buffer + CARD_TUTORIAL_ALIGN - 1) & ~(CARD_TUTORIAL_ALIGN - 1u));
         }
 
         memset(path, 0, sizeof(path));
@@ -148,36 +177,13 @@ void CardTutorialInit(void)
         count = xglCdReadFile(path, buffer, 0, 1);
         if (count > 0) {
             buffer += count;
-            buffer = (char *)(((unsigned int)buffer + 15) & ~15u);
+            buffer = (char *)(((unsigned int)buffer + CARD_TUTORIAL_ALIGN - 1) & ~(CARD_TUTORIAL_ALIGN - 1u));
         }
     }
 
     tuxtx = buffer;
     CardTutorialFileLoad(0);
 }
-
-/* Tutorial page count and the pad actions CardTutorialProc handles. Evidence (OV10, CardTutorialProc 0x00a215e0):
- * `slti a0,a1,47` at 0x00a2163c ends the pages after tutopage++ (valid pages are 0..46); `andi v0,a1,0x8` at 0x00a21618
- * advances (sound 1, tutopage++, load the page); `andi v0,a1,0x4` at 0x00a21690 goes back (tutopage--, sound 2, load the
- * page); `andi v1,a1,0x800` at 0x00a216d0 closes the viewer (returns 0). */
-#define CARD_TUTORIAL_PAGE_COUNT 47
-
-#define CARD_TUTORIAL_PAD_NEXT 0x0008
-
-#define CARD_TUTORIAL_PAD_PREV 0x0004
-
-#define CARD_TUTORIAL_PAD_CLOSE 0x0800
-
-/* Translation vector {1.2f, -1.82f, 0.0f, 1.0f}, read by xglMatrixTrans as four floats. The original copies the 16 bytes from
- * cardTutorialTranslationInit with two doubleword moves (`ld`/`ld`/`sd`/`sd` at 0x00a21600..0x00a21610). A plain float[4] or struct of floats has
- * only 4-byte alignment and compiles to unaligned ldl/ldr/sdl/sdr pairs; the u64 member gives the aggregate the 8-byte alignment
- * that yields the doubleword copy. */
-typedef union CardTutorialTranslation {
-    float v[4];
-    u64 words[2];
-} CardTutorialTranslation;
-extern const CardTutorialTranslation cardTutorialTranslationInit;
-extern const char cardTutorialEndLog[];
 
 int CardTutorialProc(CardGameWork *work)
 {
@@ -189,7 +195,7 @@ int CardTutorialProc(CardGameWork *work)
     xglMatrixUnit(source);
     pressed = work->command.input[0].pressed;
     if (pressed & CARD_TUTORIAL_PAD_NEXT) {
-        xglSoundEffectNormalID(1, 0);
+        xglSoundEffectNormalID(SE_DECIDE, 0);
         tutopage++;
         if (tutopage >= CARD_TUTORIAL_PAGE_COUNT) {
             printf(cardTutorialEndLog);
@@ -208,7 +214,7 @@ int CardTutorialProc(CardGameWork *work)
         if (tutopage < 0) {
             tutopage = 0;
         } else {
-            xglSoundEffectNormalID(2, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             CardTutorialFileLoad(tutopage);
             pressed = work->command.input[0].pressed;
         }
@@ -218,12 +224,12 @@ int CardTutorialProc(CardGameWork *work)
     }
     xglMatrixTrans(placed, source, translation.v);
     nmlModelSetTexture(tuxtx_tbl[0]);
-    nmlModelSetPlace(placed);
-    nmlModelSetRenderLevel(2);
+    nmlModelSetPlace(&placed);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
     nmlModelEntry(tulex_tbl[0]);
     xglMatrixUnit(source);
     source[3][2] = -1.0f;
-    nmlModelSetPlace(source);
+    nmlModelSetPlace(&source);
     nmlModelSetTexture(tuxtx);
     nmlModelEntry(lex);
     return 1;

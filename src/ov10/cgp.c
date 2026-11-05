@@ -3,21 +3,722 @@
  */
 #include "common.h"
 #include "cgp.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+#include "main/xgl_2.h"
+#include "main/nml_model_set.h"
+#include "ov10/card_id.h"
+#include "ov10/ccu_038_exec_sub.h"
+#include "ov10/card_play_sound1.h"
+#include "ov10/card_fread.h"
+#include "ov10/card_enemy.h"
+#include "ov10/card_deck_chk.h"
+#include "ov10/card_disp.h"
 
-static char OLMess0000Txt[8];
-static char OLMess0010Txt[32];
-static char OLMess0011Txt[48];
-static char OLMess0020Txt[56];
-static char OLMess0030Txt[48];
-static char OLMess0040Txt[56];
-static char OLMess0041Txt[40];
-static char OLMess0042Txt[40];
-static char OLMess0050Txt[32];
-static char OLMess0060Txt[32];
-static char OLMess0061Txt[48];
-static char OLMess0070Txt[56];
-static char OLMess0080Txt[48];
-static char OLMess0090Txt[56];
+/*
+ * Card models are loaded into a fixed EE runtime arena.  card_play_sound1.c
+ * fills that arena with CardFread at 0x01900000 and 0x01930000, then passes
+ * those addresses to nmlModelEntryCard.  These tables retain the original
+ * arena addresses; they do not define storage for the model payloads.
+ */
+#define CARD_MODEL_ARENA_BASE 0x01900000
+#define CARD_MODEL_AT(offset) ((void *)(CARD_MODEL_ARENA_BASE + (offset)))
+
+/* Cards a hand holds at most before one must be discarded (`slti $2,$8,7`, 0x00a250d4). */
+#define CGP_HAND_LIMIT 7
+
+/* Layout CGPCheckTeMax gives the hand's card list window (stores at 0x00a250f8..0x00a25118). */
+#define CGP_HAND_LIST_BASE_COLOR 7
+#define CGP_HAND_LIST_CURSOR_COLOR 15
+#define CGP_HAND_LIST_X 0x150
+#define CGP_HAND_LIST_Y 0x30
+#define CGP_HAND_LIST_TEXT_LENGTH 14
+#define CGP_HAND_LIST_ROWS 10
+
+/* Phases of a turn: 0..6 belong to side 0 and 7..13 to the other side. */
+#define CGP_PHASE_COUNT 14           /* `slti $2,$3,0xE`, 0x00a25a74 */
+#define CGP_SIDE1_FIRST_PHASE 7      /* `addiu $2,$0,7`, 0x00a25aa0 */
+
+/* Sound ids CGPNextTurnSub plays. */
+#define CGP_SE_NEXT_TURN 0x20001     /* a new turn and the switch to the other side (0x00a25a90, 0x00a25ab4) */
+#define CGP_SE_NEXT_PHASE 6          /* every other phase change (`addiu $4,$0,6`, 0x00a25aa8) */
+
+
+
+/* Error message id CGPDispoSub0 and CGPDisposeSub use for "play points fall short" (CGPSetErrorMess reason 12). */
+#define CGP_ERR_NOT_ENOUGH_POINTS 12
+#define CGP_ERR_CARDS_TO_PLAY 14         /* "Move Error: There are cards still available to play." */
+
+/* Cards 7, 9 and 10..13 are paired with the card seven ids below them (`addiu $8,$5,-0x7`, 0x00a2817c). */
+#define CGP_PAIRED_CARD_OFFSET 7
+
+/*
+ * Board areas of the cursor, as CGPCursor2Pos reports them in its zone field
+ * (the cases that index disposal and battle slots): each side's disposal row
+ * and battle row.
+ */
+#define CGP_AREA_ENEMY_HAND 0
+#define CGP_AREA_ENEMY_DISPOSAL 2
+#define CGP_AREA_ENEMY_BATTLE 4
+#define CGP_AREA_PLAYER_BATTLE 5
+#define CGP_AREA_PLAYER_DISPOSAL 6
+#define CGP_AREA_PLAYER_HAND 9
+
+/* Frames the interrupt message of a new phase stays up (`addiu $3,$0,0x2D`, 0x00a25ad4). */
+#define CGP_INTERRUPT_MESS_FRAMES 45
+
+
+/* Text colour of the card game's font strings (`ori $6,$0,0xFFF0`, 0x00a21efc and 0x00a2ddc8). */
+#define CGP_TEXT_COLOR 0xFFF0
+
+/* Vertical distance between the text lines of one error message (`addiu $16,$20,0x18`, 0x00a21f7c). */
+#define CGP_ERROR_MESS_LINE_PITCH 24
+
+/* Fixed EE runtime addresses of the textures the game screen draws with. CGP_PANEL_TEXTURE is the one texture
+ * of the whole model group from 0x01DA0000 (title logo, hand, piles, message window, prompts, card backdrop,
+ * phase lamp and turn plate); CGP_MAT_FG_TEXTURE is game\mat_fg.xtx and CGP_CARD_INFO_TEXTURE CardInfo0.bin
+ * (ov10/card_play_sound1.c loads both). */
+#define CGP_PANEL_TEXTURE ((void *) 0x01DB5800)
+#define CGP_MAT_FG_TEXTURE ((void *) 0x01F70200)
+#define CGP_CARD_INFO_TEXTURE ((void *) 0x01C91000)
+
+/* Models of the information panel and the phase guide, fixed arena addresses (0x01C80000: the ten digit models,
+ * 0x400 bytes apart). */
+#define CGP_TURN_DIGIT_MODEL_BASE 0x01C80000
+#define CGP_TURN_DIGIT_MODEL_SIZE 0x400
+#define CGP_PHASE_LAMP_MODEL ((void *) 0x01DB0200)    /* lit marker drawn over each entry of CPIPhaseMdlLst */
+#define CGP_TURN_PLATE_MODEL ((void *) 0x01DB2D00)    /* turn counter plate, lit with turnColor */
+#define CGP_TURN_NUMBER_MODEL ((void *) 0x01921800)   /* turn counter number frame, 0.05 in front of the plate */
+#define CGP_INFO_PANEL_SIDE_MODEL 0x01DAD700           /* side nameplate, lit 1P or 2P */
+
+/* Fixed EE runtime address of the message window model (`lui $4,0x1DA2` + `ori $4,$4,0x2B00`, 0x00a2214c..0x00a22154). */
+#define CGP_ERROR_MESS_MODEL ((void *) 0x01DA2B00)
+
+#define CARD_EFFECT_COUNT 64                  /* `slti $2,$23,0x40`, 0x00a2506c */
+#define CARD_EFFECT_SE_HIT 0x20008            /* 0x00a23b0c */
+#define CARD_EFFECT_SE_BURST 0x2000A
+#define CARD_EFFECT_ALPHA 0x48                /* nmlModelSetAlpha argument, 0x00a246ec */
+#define CARD_EFFECT_SPRITE_MODEL ((void *) 0x01A00000)   /* entry model of an unscaled effect sprite, 0x00a24a00 */
+#define CARD_EFFECT_SCALED_MODEL ((void *) 0x01A00800)   /* entry model after xglMatrixScale, 0x00a246f0 */
+
+/* Animation strips: frame n of a strip is at base + n * frame size (sll/addu chains, 0x00a239d0 and 0x00a23b9c). */
+#define CARD_EFFECT_SMALL_FRAME 0x1480        /* 41 * 128 */
+#define CARD_EFFECT_LARGE_FRAME 0x1D80        /* 59 * 128 */
+#define CARD_EFFECT_FRAME(base, index, size) ((void *) ((base) + (index) * (size)))
+#define CARD_EFFECT_STRIP_TRAVEL_1 0x1BF0000  /* 0x00a239e4 */
+#define CARD_EFFECT_STRIP_TRAVEL_2 0x1C04000  /* 0x00a23a18 */
+#define CARD_EFFECT_STRIP_TRAVEL_3 0x1A14000  /* 0x00a23a4c */
+#define CARD_EFFECT_STRIP_TRAVEL_4 0x1A01000  /* 0x00a23a78 */
+#define CARD_EFFECT_STRIP_BURST_1 0x1BD8000   /* 0x00a23bac */
+#define CARD_EFFECT_STRIP_BURST_2 0x1AA0000   /* 0x00a23c18 */
+#define CARD_EFFECT_STRIP_BURST_3 0x1A85000   /* 0x00a23c88 */
+#define CARD_EFFECT_STRIP_BURST_4 0x1A67000   /* 0x00a23cfc */
+#define CARD_EFFECT_STRIP_FADE 0x1A28000      /* 0x00a23d90 */
+#define CARD_EFFECT_STRIP_SWIRL 0x1A40000     /* code 10, 0x00a249b4 */
+
+/* Damage digits: model n of a digit set is at base + (n << 10). */
+#define CARD_EFFECT_DIGIT_TEXTURE ((void *) 0x1C990A0)   /* 0x00a24b90 */
+#define CARD_EFFECT_DIGITS_FIRST 0x1C8A400    /* code 12 while phase is 0, 0x00a24b60 */
+#define CARD_EFFECT_DIGITS 0x1C8CC00          /* 0x00a24b7c */
+#define CARD_EFFECT_DIGIT_MODEL(base, n) ((void *) ((base) + ((n) << 10)))
+
+/* Arena the card game loads its model, texture and effect files into (see CPISMdlLst). */
+#define CGP_ARENA(offset) CARD_MODEL_AT(offset)
+
+#define CGP_FLAG_HELD_TRIANGLE 0x80   /* triangle was held when the game started (`addiu $2,$0,0x80`, 0x00a25254) */
+/* Steps of the information panel's animation (infoPanelPhase, CardPlayDispInfo): it appears scaled up and shrinks in,
+ * waits, slides toward its corner and rests there; the draw fades it in during CGP_INFO_PANEL_ZOOM. */
+#define CGP_INFO_PANEL_INIT 0
+#define CGP_INFO_PANEL_ZOOM 1
+#define CGP_INFO_PANEL_HOLD 2
+#define CGP_INFO_PANEL_SLIDE 3
+#define CGP_INFO_PANEL_SETTLE 4
+
+#define CGP_EFFECT_COUNT 64           /* `addiu $6,$0,0x3F`, 0x00a2526c counts down to zero */
+#define CGP_QUEUE_SLOTS 40            /* `addiu $6,$0,0x27`, 0x00a25308 */
+#define CGP_QUEUE_SIDE_DISTANCE 160   /* halfwords from the enemy's queue back to the player's (`sh $4,-0x140($2)`, 0x00a25314) */
+
+/* Rotation vector the stage starts from (lui/ori 0xBF666666 at 0x00a25354, lui 0xC1A00000 at 0x00a25348). */
+#define CGP_ROT_STAGE_START_X (-0.9f)
+#define CGP_ROT_STAGE_START_Y (-20.0f)
+#define CGP_ROT_STAGE_COOLDOWN 20          /* frames before the stage may rotate again (CGPRotStageSub and CardGameProc) */
+
+/* A top card of one of these ids attacks with the power of the base card. */
+/* CardDefinition.kind: a battle card is paid from playPoints[0] and a situation card from playPoints[1]; the
+ * situation card is the one CardPlayDesertOperation removes; an event card cannot be played from the hand
+ * (error 11) and is the one the hand discard step accepts (`kind & 2`). */
+/* CardLayerStack.flags bit set on a locked battle slot (`andi $2,$2,0x2`, 0x00a2ea70 and 0x00a2eba8; error CGP_ERR_SLOT_LOCKED). */
+/* Operation card 122 in play on the defending side lowers the attack power (`addiu $5,$0,0x7A`, 0x00a288b0). */
+
+/*
+ * The cursor of a controller steps over the board zones (CGP_AREA_*), four
+ * slots per zone. A card pile can also be walked: cursorMoveStep[0] is the
+ * player's discard pile and cursorMoveStep[1] the enemy's.
+ */
+#define CGP_PILE_BOARD 0              /* the cursor is on the board */
+#define CGP_PILE_TOP 1                /* the cursor sits on the pile and shows its top card */
+#define CGP_PILE_BROWSE 2             /* the cards of the pile are walked one by one */
+
+/*
+ * Cursor slot that stands for a pile: slot 3 of the player's hand zone (the
+ * `ld` at 0x00a26c14 compares zone and slot with 0x00090003 << 32) and slot 0
+ * of the enemy's hand zone (the `ld` at 0x00a26c64 requires both to be zero).
+ */
+#define CGP_PLAYER_PILE_SLOT 3
+
+/* Highlight of the cursor over a hand (`lui $1,0x3E33`, 0x00a26db4). */
+#define CGP_HAND_HIGHLIGHT 0.175f
+
+/* Card id bits 8..11 are cleared before the preview draws the card (`andi $2,$3,0xF0FF`, 0x00a270e0). */
+#define CGP_CARD_ID_MASK 0xF0FF
+
+/*
+ * Card preview, shown while the preview button is held: the card under the
+ * cursor in the middle, the card stacked under it on the right and the card
+ * the side is playing on the left. CardDisp's last argument is the display
+ * mode: CGP_CARD_MODE_FULL draws the card at full size with its text,
+ * CGP_CARD_MODE_ICON a plain card. The two side cards are shown small and
+ * enlarged while their zoom button is held (PAD_L1/RIGHT); small
+ * they get a frame model, the enlarged ones sit nearer the middle.
+ */
+#define CGP_CARD_MODE_ICON 0
+#define CGP_CARD_MODE_FULL 5
+#define CGP_PREVIEW_FULL_Y 0.369f     /* `lui $1,0x3EBC`, 0x00a270f4 */
+#define CGP_PREVIEW_FULL_Z 0.5f       /* `lui $1,0x3F00`, 0x00a27100 */
+#define CGP_PREVIEW_FULL_SCALE 1.1f   /* `lui $1,0x3F8C`, 0x00a270e4 */
+#define CGP_PREVIEW_SMALL_Y 0.096f    /* `lui $1,0x3DC4`, 0x00a27164 */
+#define CGP_PREVIEW_SMALL_Z 0.48f     /* `lui $1,0x3EF5`, 0x00a27170 */
+#define CGP_PREVIEW_SMALL_SCALE 0.55f /* `lui $1,0x3F0C`, 0x00a27154 */
+#define CGP_PREVIEW_SIDE_X 1.904f     /* small side cards stand this far from the middle (`lui $1,0x3FF3`, 0x00a271f8) */
+#define CGP_PREVIEW_ZOOMED_X 0.9f     /* enlarged side cards (`lui $1,0x3F66`, 0x00a2724c) */
+#define CGP_PREVIEW_FRAME_Z 0.29f     /* frame model behind a small side card (`lui $1,0x3E94`, 0x00a272c4) */
+#define CGP_PREVIEW_FRAME_TEXTURE CARD_MODEL_AT(0x39800)  /* `lui $4,0x193`, 0x00a272fc */
+#define CGP_PREVIEW_FRAME_RIGHT CARD_MODEL_AT(0x29800)    /* 0x00a27308 */
+#define CGP_PREVIEW_FRAME_LEFT CARD_MODEL_AT(0x2B000)     /* 0x00a27448 */
+
+/* Situation cards CGPChkOpePlayable checks the board for before they may be discarded (switch cases 0x8B, 0x8D, 0x8F). */
+
+
+/*
+ * While this operation card is in play a dying CARD_ATTR_GNOSIS card goes to
+ * the discard (sute) pile instead of the junk pile (`addiu $5,$0,0x82`, 0x00a29648).
+ */
+
+/*
+ * A card leaving the board slides to its pile in this many frames: the move
+ * record's timer (`addiu $7,$0,0xA`, 0x00a296d0) and the divisor of its
+ * per-frame step (`div.s` by 10.0f, 0x00a29728).
+ */
+#define CGP_PILE_MOVE_FRAMES 10
+#define CGP_PILE_MOVE_Z 0.12f        /* height of the sliding card, 0x3DF5C28F (`lui`, 0x00a29688) */
+#define CGP_SUTE_PILE_X 1.265f       /* discard pile position, 0x3FA1EB85 (`lui`, 0x00a296a8) */
+#define CGP_SUTE_PILE_Y (-1.81f)     /* 0xBFE7AE14 (`lui`, 0x00a296c0) */
+
+/*
+ * Attack types CardChkAttackType reports for the card in play and the battle
+ * command an attack runs under (CGPBattleSub attacks only when they agree).
+ */
+#define CGP_ATTACK_FRONT 1        /* front slots only, at the opposing card (`addiu $2,$0,1`, 0x00a2a160) */
+#define CGP_ATTACK_PIERCE 2       /* also hits the card behind its target (`addiu $2,$0,2`, 0x00a2a168) */
+#define CGP_ATTACK_SUPPORT 3      /* strikes the stack passed as `support` (`addiu $2,$0,3`, 0x00a29de8) */
+#define CGP_ATTACK_DIRECT 4       /* no target card (`addiu $2,$0,4`, 0x00a29f00) */
+
+#define CGP_STACK_TOP_LAYER 39    /* highest layer searched for the top card (`addiu $16,$0,0x27`, 0x00a29cb4) */
+
+#define CGP_HAND_FLAG_NO_DAMAGE 0x01   /* CardHand.commandFlags bit 0 (`andi $2,$2,0x1`, 0x00a2a4f4) */
+#define CGP_LIFE_WEAR_LIMIT 64         /* a stacked card below this life wears down (`slti $2,$2,0x40`, 0x00a29eb8) */
+#define CGP_POWER_MAX 99               /* `addiu $2,$0,0x63`, 0x00a2a3d8 */
+
+#define CGP_SE_ATTACK 0x20004          /* 0x00a2a244 */
+#define CGP_SE_ATTACK_ALT 0x20009      /* 0x00a2a24c */
+#define CGP_SE_FRONT_ATTACK 0x20002    /* 0x00a2a218 */
+#define CGP_SE_FRONT_ATTACK_ALT 0x20005 /* 0x00a2a1ec */
+#define CGP_SE_DIRECT_ATTACK 0x20007   /* 0x00a2a4b4 */
+#define CGP_SE_DIRECT_VOLUME 60        /* `addiu $5,$0,0x3C`, 0x00a2a4b8 */
+#define CGP_SE_DIRECT_PAN 64           /* `addiu $6,$0,0x40`, 0x00a2a4c4 */
+
+/* Steps of CGPDrawFaseProc (command.phaseTimer). */
+#define CGP_DRAW_STEP_BEGIN 0
+#define CGP_DRAW_STEP_EXCHANGE_OFFER 1
+#define CGP_DRAW_STEP_EXCHANGE_PROMPT 2
+#define CGP_DRAW_STEP_EXCHANGE 3
+#define CGP_DRAW_STEP_EFFECT_BEGIN 10
+#define CGP_DRAW_STEP_EFFECT_COUNT 11
+#define CGP_DRAW_STEP_EFFECT_PAY 12
+#define CGP_DRAW_STEP_EFFECT_WAIT 13
+#define CGP_DRAW_STEP_OPE_CURSOR 20
+#define CGP_DRAW_STEP_ADD_PROMPT 21
+#define CGP_DRAW_STEP_BONUS_COUNT 30
+#define CGP_DRAW_STEP_DRAW 31
+#define CGP_DRAW_STEP_DRAW_WAIT 32
+
+/* Interrupt message the fase shows on entry (`addiu $7,$0,0x16`, 0x00a2a79c). */
+#define CGP_DRAW_INTERRUPT_MESS 22
+/* Exchanges of the opening hand a side is offered (`addiu $2,$0,0x3`, 0x00a2a78c). */
+#define CGP_DRAW_EXCHANGES 3
+/* Cards drawn for the opening hand (the loop counts 5 down to 0, 0x00a2aa5c..0x00a2aa70). */
+#define CGP_DRAW_HAND_SIZE 6
+/* Frames the draw step waits after each card (`addiu $2,$0,0x32`, 0x00a2af44). */
+#define CGP_DRAW_WAIT_FRAMES 50
+
+/*
+ * Error messages (ErrorMessTbl rows) of the fase: 33..35 "Exchange Cards - Is
+ * this hand okay? You have 3/2/1 more exchange(s)", 26 "Select Card - Add this
+ * card to your hand?" and 36 "Use Card Effect - Executing this card's text".
+ */
+#define CGP_ERR_EXCHANGE_THREE 33
+#define CGP_ERR_EXCHANGE_TWO 34
+#define CGP_ERR_EXCHANGE_ONE 35
+#define CGP_ERR_ADD_TO_HAND 26
+
+/* Cards and operation cards whose presence the fase reacts to (the ids the CardPlayCnt* calls and slot tests use). */
+
+/*
+ * Operation card whose duration is refilled from its definition while a card with
+ * CARD_ATTR_GNOSIS (tested at 0x00a2fbb8) stands on the board (`addiu $20,$0,0x84`, 0x00a2fb50;
+ * definitions[132].operationDuration is `lbu 0x12A2($2)`, 0x00a2fc28);
+ * CGPDrawFaseProc highlights it on the board (`addiu $23,$0,0x84`, 0x00a2aca8).
+ */
+
+/* Operation slot rows of the cursor (CGP_AREA_* continued). */
+#define CGP_AREA_ENEMY_OPERATION 3
+#define CGP_AREA_PLAYER_OPERATION 7
+
+/* Whether the card list of the side is drawn upside down: the player's hand when the stage is rotated, the other hand when it is not. */
+#define CGP_HAND_FLIPPED(side, work) \
+    (((side) != 0 && (work)->rotStageId == 0) || ((side) == 0 && (work)->rotStageId != 0))
+
+/* CGPMoveFaseProc steps (command.phaseTimer). */
+#define CGP_MOVE_STEP_PICK 0          /* put the cursor on the first occupied slot */
+#define CGP_MOVE_STEP_LIST 1          /* light up the slots a card can be picked from */
+#define CGP_MOVE_STEP_SELECT 2        /* confirm the card to move */
+#define CGP_MOVE_STEP_TARGET 3        /* confirm the slot to move it to */
+#define CGP_MOVE_STEP_DONE 4          /* back to the first step */
+#define CGP_MOVE_STEP_END 20          /* nothing left to move: wait one frame */
+#define CGP_MOVE_STEP_NEXT_TURN 21
+
+/* Cursor modes CardCursorActive takes. */
+#define CGP_CURSOR_SELECTABLE 4       /* `addiu $6,$0,4`, 0x00a2b43c */
+#define CGP_CURSOR_BLOCKED 3          /* a Gnosis card while Hilbert Effect is in play (`addiu $23,$0,3`, 0x00a2b430; `movn`, 0x00a2b498) */
+#define CGP_CURSOR_PICKED 2           /* the card that was picked up */
+#define CGP_CURSOR_TARGET 1           /* a slot it can be moved to */
+
+/* CardSaveData.flags bits that make the side's moves automatic (0x00a2b1dc, 0x00a2b1f4). */
+#define CGP_SAVE_FLAG_SIDE0_AUTO 0x08
+#define CGP_SAVE_FLAG_SIDE1_AUTO 0x04
+
+#define CGP_ERR_NO_MOVABLE_CARD 6     /* `addiu $6,$0,6`, 0x00a2b20c */
+#define CGP_ERR_NO_CARD_THERE 11      /* hand area chosen, `addiu $6,$0,0xB`, 0x00a2b734 */
+#define CGP_ERR_MOVE_REFUSED 15       /* `addiu $6,$0,0xF`, 0x00a2b5ec */
+
+/* Cards and operation cards that stop a move (CardPlayCntBtl / CardPlayCntOpe arguments). */
+
+/*
+ * Steps of CGPSetFaseProc (command.phaseTimer): the fase in which the side puts hand cards on the
+ * board. The hand is sorted first (0), then the cursor picks a card (1). A card that fits is placed by
+ * CGPDisposeSub; weapon cards go through the attach steps (2, 3); a card that finds no free slot needs
+ * cards discarded first (10..13) or, for the Lv 10 cards, replaces the Lv 1 card seven ids below it (20).
+ */
+#define CGP_SET_STEP_SORT_HAND 0
+#define CGP_SET_STEP_PICK_CARD 1
+#define CGP_SET_STEP_ATTACH_LIGHT 2   /* light the cards the picked weapon card can attach to */
+#define CGP_SET_STEP_ATTACH_PICK 3
+#define CGP_SET_STEP_DISCARD_BEGIN 10
+#define CGP_SET_STEP_DISCARD_PICK 11  /* "Cards to be discarded: N" */
+#define CGP_SET_STEP_DISCARD_NEXT 12
+#define CGP_SET_STEP_PUT_DOWN 13      /* "Where do you want to put it?" */
+#define CGP_SET_STEP_PAIRED_SLOT 20
+
+/* CGPDisposeSub's result for a card that finds no free slot (`addiu $2,$0,0xF`, 0x00a2bd9c). */
+#define CGP_DISPOSE_NO_FREE_SLOT 15
+
+#define CGP_CARD_FLAG_RESET 14        /* its layer flag is cleared unless the side has exactly one battle card */
+
+#define CGP_ERR_FLAG_RESET 0x25       /* `addiu $6,$0,0x25`, 0x00a2bd1c */
+#define CGP_ERR_NO_WEAPON_TARGET 2    /* `addiu $6,$0,2`, 0x00a2beb4 */
+
+/* Cursor zones the sorted hand starts on: the zone beside the hand while the hand is empty (0x00a2bc58, 0x00a2bc78). */
+#define CGP_AREA_PLAYER_NO_HAND 8
+#define CGP_AREA_ENEMY_NO_HAND (-1)
+
+/* CardCursorActive mode that lights a slot as selectable (`addiu $6,$0,1`, 0x00a2bfa0). */
+#define CGP_CURSOR_LIGHT 1
+/* CGCPHandDispSub2/3 mode of the hand while a card is picked (`addiu $7,$0,5`, 0x00a2bf14). */
+#define CGP_HAND_DISP_PICK 5
+
+#define CGP_SET_DISCARD_TEXT_X 143    /* `addiu $4,$0,0x8F`, 0x00a2c308 */
+#define CGP_SET_DISCARD_COUNT_X 363   /* `addiu $4,$0,0x16B`, 0x00a2c350 */
+#define CGP_SET_PUT_DOWN_TEXT_X 160   /* `addiu $4,$0,0xA0`, 0x00a2c5fc */
+#define CGP_SET_PROMPT_Y 213          /* `addiu $5,$0,0xD5` */
+#define CGP_SET_TEXT_COLOR 0xFFF8     /* `ori $6,$0,0xFFF8` */
+#define CGP_ZENKAKU_GLYPH_SIZE 2      /* full-width digit tables hold two bytes per glyph */
+
+/* Prompt panel: model and texture of the card frame, placed 0.91 in front for the discard prompt (0x00a2c35c..0x00a2c3e0). */
+#define CGP_SET_PROMPT_MODEL ((void *) 0x01DAAC00)
+#define CGP_SET_PROMPT_SCALE_X 1.5f
+#define CGP_SET_PROMPT_Z 0.91f
+
+/* A card put on the board starts its slide at this height and takes ten frames (0x00a2c6f8, 0x00a2c818). */
+#define CGP_PLACE_START_Z 0.12f
+#define CGP_PLACE_FRAMES 10
+#define CGP_PLACE_SLIDE_DIVISOR 10.0f
+
+/* CardDefinition.discardRequirements has one byte per requirement. */
+#define CGP_REQUIREMENT_COUNT 4
+
+/*
+ * Message ids the command steps hand to CGPSetErrorMess / CGPDispErrorMess /
+ * CGPDispErrorMessPlus (rows of ErrorMessTbl).
+ */
+#define CGP_ERR_COMMAND_FAILED 13      /* "Command Error", `addiu $6,$0,0xD`, 0x00a2ce18 */
+
+/* Sound CardSetEffect starts with an operation effect (`lui $8,2` / `ori $8,$8,8`, 0x00a2d720). */
+#define CGP_SE_COMMAND_EFFECT 0x20008
+
+/* Card kind and definition flag the discard step looks for (`lbu`/`lhu`/`andi $2,$2,4`, 0x00a2d1d4..0x00a2d1e4). */
+
+/* Prompt "Cards to be discarded" of command 131 (xglFontPrint 0x00a2ce38 / 0x00a2cf90) and its card model. */
+#define CGP_DISCARD_PROMPT_X 0x8F
+#define CGP_DISCARD_PROMPT_Y 0xD5
+#define CGP_DISCARD_PROMPT_COLOR 0xFFF8
+#define CGP_DISCARD_PROMPT_MODEL ((void *) 0x01DAAC00)
+#define CGP_DISCARD_PROMPT_SCALE_X 1.5f   /* 0x3FC00000, 0x00a2ce50 */
+
+/* Life command 139 takes off the card it targets (`addiu $3,$3,-3`, 0x00a2d6dc). */
+#define CGP_TARGET_LIFE_LOSS 3
+
+/* Frames Rhine Maiden pays its cost cards for, and Unknown Armament waits before and after its effect. */
+#define CGP_COST_REPEAT 4              /* `addiu $2,$0,4`, 0x00a2d960 */
+#define CGP_EFFECT_DELAY 10            /* `addiu $3,$0,0xA`, 0x00a2da50 */
+#define CGP_EFFECT_HOLD 15             /* `addiu $3,$0,0xF`, 0x00a2da94 */
+
+/* Cursor modes CardCursorActive takes for the selectable cards of these commands. */
+#define CGP_CURSOR_PICK 1
+
+/*
+ * Models and textures in the card game's arena: the card backdrop and its texture
+ * (CardViewProc draws the same ones) and the cursor frame model that CardMainInit
+ * loads from game\\Cur_WakuW.lex, which the prompt reuses as its frame.
+ */
+#define CGP_CARD_BACKDROP_MODEL ((void *) 0x01DA5600)     /* lui/ori 0x00a2dc28 */
+#define CGP_ANSWER_FRAME_MODEL ((void *) 0x01D12000)      /* lui/ori 0x00a2dda8 */
+
+#define CGP_ANSWER_PROMPT_X 0x7C               /* `addiu $4,$0,0x7C`, 0x00a2ddbc */
+#define CGP_ANSWER_PROMPT_Y 0x82               /* `addiu $5,$0,0x82`, 0x00a2ddc0 */
+#define CGP_ANSWER_HINT_X 0x18                 /* `addiu $4,$0,0x18`, 0x00a2ddf0 */
+#define CGP_ANSWER_HINT_Y 0x127                /* `addiu $5,$0,0x127`, 0x00a2ddf8 */
+
+/*
+ * Answer cards are drawn in a row: each one 0.5663 wide in x and 0.02 higher in z than
+ * the one before, starting at -1.4193; the right-hand panel is shifted by half a pitch.
+ */
+#define CGP_ANSWER_CARD_PITCH 0.5663f          /* 0x3F10F909, 0x00a2dbc8 */
+#define CGP_ANSWER_CARD_START_X (-1.4193f)     /* 0xBFB5AB9F, 0x00a2de90 */
+#define CGP_ANSWER_CARD_STEP_Z 0.02f           /* 0x3CA3D70A, 0x00a2dea0 */
+#define CGP_ANSWER_PANEL_SHIFT 0.28315f        /* 0x3E90F909, 0x00a2de34 */
+#define CGP_ANSWER_ROW_Y 0.25f                 /* 0x3E800000, 0x00a2dfc8 */
+#define CGP_ANSWER_CARD_SCALE 0.35f            /* 0x3EB33333, 0x00a2de08 */
+
+/* Placement of the prompt's backdrop and of the card being answered (0x00a2db70..0x00a2dc88). */
+#define CGP_BACKDROP_Z 0.1f                    /* 0x3DCCCCCD */
+#define CGP_BACKDROP_SCALE_Y 0.75f             /* 0x3F400000 */
+#define CGP_MAIN_CARD_X (-1.9785f)             /* 0xBFFD3F7D */
+#define CGP_MAIN_CARD_Z 0.01f                  /* 0x3C23D70A */
+#define CGP_MAIN_CARD_SCALE 0.4f               /* 0x3ECCCCCD */
+
+/* Cards in the second row face the other way: a half turn about z (0x40490FDB, 0x00a2df08). */
+#define CGP_HALF_TURN 3.1415927f
+
+/*
+ * The answer cards follow the card list at +0x148 of a side's hand: 160 halfwords
+ * past hand->cards (CardPlayHand.answerCards).
+ */
+#define CGP_ANSWER_OFFSET 160
+#define CGP_ANSWER_MAX 40
+
+/* Steps of CGPCommFaseSub (command.phaseTimer). */
+#define CGP_COMM_STEP_JUNK_CHECK 0
+#define CGP_COMM_STEP_SORT_HAND 1
+#define CGP_COMM_STEP_PICK 2
+#define CGP_COMM_STEP_CONFIRM 3
+#define CGP_COMM_STEP_OPERATION 4
+#define CGP_COMM_STEP_RESTART 5
+#define CGP_COMM_STEP_CONDITION 10
+#define CGP_COMM_STEP_DISCARD 11
+#define CGP_COMM_STEP_OFFER 12
+#define CGP_COMM_STEP_SHOW 13
+#define CGP_COMM_STEP_PLAY 14
+#define CGP_COMM_STEP_AFTER_PLAY 15
+#define CGP_COMM_STEP_ADVANCE 20
+#define CGP_COMM_STEP_FOE_ANSWER 21
+#define CGP_COMM_STEP_OWN_ANSWER 22
+#define CGP_COMM_STEP_JUNK_ANSWERS 23
+#define CGP_COMM_STEP_ANSWER_NOTE 24
+#define CGP_COMM_STEP_FINISH 25
+#define CGP_COMM_STEP_END_PHASE 30
+#define CGP_COMM_STEP_NEXT_TURN 31
+#define CGP_COMM_STEP_ENEMY_REQUEST 40
+#define CGP_COMM_STEP_ENEMY_OPERATION 41
+
+/* Messages of CGPCommFaseSub (CGPSetErrorMess / CGPDispErrorMess reasons). */
+#define CGP_MESS_JUNK_COUNTED 0x24     /* card 14 takes the junk count, `addiu $6,$0,0x24`, 0x00a2e600 */
+#define CGP_ERR_NO_PLAYABLE_CARD 30    /* `addiu $6,$0,0x1E`, 0x00a2e90c */
+#define CGP_ERR_NOT_PLAYABLE 17        /* CGPChkPlayable refused the card, `addiu $6,$0,0x11`, 0x00a2eb0c */
+#define CGP_ERR_NOT_DISCARDABLE 18     /* hand card without kind bit 1, `addiu $6,$0,0x12`, 0x00a2eb60 */
+#define CGP_ERR_SLOT_LOCKED 38         /* battle slot with flag 2 set, `addiu $6,$0,0x26`, 0x00a2ebb8 */
+#define CGP_ERR_WRONG_AREA 19          /* `addiu $6,$0,0x13`, 0x00a2ebd0 */
+#define CGP_ERR_ANSWERS_DONE 29        /* `addiu $6,$0,0x1D`, 0x00a2f9cc */
+#define CGP_MESS_ANSWER_OFFER 22       /* shown to the answering side, `addiu $5,$0,0x16`, 0x00a2ee98 */
+#define CGP_MESS_ANSWER_NOTE 28        /* `addiu $5,$0,0x1C`, 0x00a2f89c */
+
+#define CGP_PAD_DISMISS 0x00F0         /* any face button closes the answer note (`andi $2,$17,0xF0`, 0x00a2f8a0) */
+
+#define CGP_COMMAND_CARD_Z 0.02f       /* 0x3CA3D70A, 0x00a2efcc */
+#define CGP_COMMAND_CARD_SCALE 0.355f  /* 0x3EB5C28F, 0x00a2efbc */
+#define CGP_DEGREES_HALF_TURN 180.0f   /* 0x43340000, 0x00a2f118 */
+#define CGP_COMMAND_BACK_MODEL ((void *) 0x01D0C000) /* lui/ori 0x00a2f1ec */
+
+/*
+ * CardLayerStack.flags bit CGPBattleAfterEffect sets on an attacking stack; the
+ * end phase clears it on every slot of the side (`andi $2,$2,0xFD`, 0x00a2fadc).
+ */
+
+/* Operation cards CardPlayCntOpe counts; ids as in the other CardPlayCntOpe tests of this TU. */
+
+/*
+ * An operation card with a duration below this counts down once per end phase;
+ * higher durations never expire (`slti $2,$2,0x40`, 0x00a2fb70).
+ */
+#define CGP_OPE_PERMANENT_DURATION 64
+
+/* Cards that regain life at the end phase (`addiu $2,$0,6`, 0x00a2fed4; `0xD`, 0x00a2fedc; `0x4D`, 0x00a300d4). */
+
+/* The foe's battle card that makes this side play command 77 on the same slot (`addiu $2,$0,0x36`, 0x00a30204;
+ * `addiu $5,$0,0x4D`, 0x00a3021c). */
+
+/* CardSetEffect codes of the attack and damage effects: CardDispEffect plays codes 1-4 as a travelling strip
+ * followed by a burst, 21-24 and 31-34 as the variants after one and several destroyed cards, and 11/15/16 as the
+ * damage number for the same three cases. */
+#define CGP_EFFECT_FRONT_ATTACK 1
+#define CGP_EFFECT_PIERCE_ATTACK 2
+#define CGP_EFFECT_SUPPORT_ATTACK 3    /* CardSetEffect turns code 23 into it; CardDispEffect plays it as the third strip */
+#define CGP_EFFECT_DIRECT_ATTACK 4
+#define CGP_EFFECT_BURST 5
+#define CGP_EFFECT_FRONT_ATTACK_ONE_DESTROYED 21
+#define CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED 22
+#define CGP_EFFECT_DIRECT_ATTACK_ONE_DESTROYED 24
+#define CGP_EFFECT_DOUBLE_BURST 25     /* a burst that repeats once, 0.25 further along */
+#define CGP_EFFECT_FRONT_ATTACK_MANY_DESTROYED 31
+#define CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED 32
+#define CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED 34
+#define CGP_EFFECT_SWIRL 10            /* swirl around a card (strip CARD_EFFECT_STRIP_SWIRL) */
+#define CGP_EFFECT_DAMAGE 11
+#define CGP_EFFECT_NUMBER 12           /* number that rises over a card, 0x00a2fe8c */
+#define CGP_SE_REGEN 0x2000D           /* `lui $8,2` 0x00a2fe84 */
+
+/* CardEffect.phase of the attack effects 1-4 (travel, burst, check whether the card was destroyed, fade), of
+ * the delayed attack effects 21-24 and 31-34 (travel, hold, burst, check, fade) and of the damage numbers
+ * 11 and 14-16 (wait, show). */
+#define CGP_EFFECT_PHASE_TRAVEL 0
+#define CGP_EFFECT_PHASE_BURST 1
+#define CGP_EFFECT_PHASE_CHECK 2
+#define CGP_EFFECT_PHASE_FADE 3
+#define CGP_EFFECT_PHASE_DELAY 1
+#define CGP_EFFECT_PHASE_DELAYED_BURST 2
+#define CGP_EFFECT_PHASE_DELAYED_CHECK 3
+#define CGP_EFFECT_PHASE_DELAYED_FADE 4
+#define CGP_EFFECT_PHASE_WAIT 0
+#define CGP_EFFECT_PHASE_SHOW 1
+
+/* CardEffect.phase of CGP_EFFECT_NUMBER: where the number rises (y -1.81 at the bottom, 1.81 at the top) and which digit set it uses. */
+#define CGP_NUMBER_BOTTOM 0
+#define CGP_NUMBER_TOP 1
+#define CGP_EFFECT_NUMBER_TOP 13       /* CardSetEffect turns it into CGP_EFFECT_NUMBER with phase 1: the number rises at the top of the screen (y 1.81) with the second digit set */
+#define CGP_EFFECT_DAMAGE_LEFT 14      /* damage-style number whose digits sit left of the position (-0.35, -0.25) */
+#define CGP_EFFECT_DAMAGE_ONE_DESTROYED 15
+#define CGP_EFFECT_DAMAGE_MANY_DESTROYED 16
+
+
+/*
+ * Steps of CGPBattleFaseProc (command.phaseTimer). The values are the entries of its
+ * switch jump table jtbl_00A4F4C0 (0x00a4f4c0, dispatched at 0x00a312cc..0x00a312e8 on the
+ * s16 phaseTimer, 62 entries, every other entry goes to the end label 0x00a31138):
+ * 0 -> 0x00a302f0, 1 -> 0x00a304d0, 5 -> 0x00a30560, 10 -> 0x00a305d8, 11 -> 0x00a30640,
+ * 20 -> 0x00a30698, 21 -> 0x00a30718, 22 -> 0x00a307f0, 30 -> 0x00a30870, 31 -> 0x00a30908,
+ * 32 -> 0x00a30950, 40 -> 0x00a30998, 41 -> 0x00a30b58, 42 -> 0x00a30c78, 43 -> 0x00a30e50,
+ * 50 -> 0x00a30f28, 51 -> 0x00a30fb8, 52 -> 0x00a31038, 60 -> 0x00a310e0, 61 -> 0x00a31108.
+ * The names describe what the code at each target does.
+ */
+#define CGP_BATTLE_STEP_BEGIN 0            /* check that a battle can take place */
+#define CGP_BATTLE_STEP_COMMAND 1          /* queued battle command, then the front attacks */
+#define CGP_BATTLE_STEP_END 5              /* nothing (more) to fight: next turn */
+#define CGP_BATTLE_STEP_FRONT 10           /* CGP_ATTACK_FRONT attacks, one slot per step */
+#define CGP_BATTLE_STEP_FRONT_WAIT 11
+#define CGP_BATTLE_STEP_PIERCE 20          /* CGP_ATTACK_PIERCE attacks */
+#define CGP_BATTLE_STEP_PIERCE_WAIT 21
+#define CGP_BATTLE_STEP_PIERCE_COMMAND 22  /* after the command of a CARD_ID_GARGOYLE card */
+#define CGP_BATTLE_STEP_COUNTER 30         /* the foe's counter cards strike back */
+#define CGP_BATTLE_STEP_COUNTER_ATTACK 31
+#define CGP_BATTLE_STEP_COUNTER_WAIT 32
+#define CGP_BATTLE_STEP_SUPPORT_CHARGE 40  /* support cards count down and show their effect */
+#define CGP_BATTLE_STEP_SUPPORT 41         /* CGP_ATTACK_SUPPORT attacks on each foe slot */
+#define CGP_BATTLE_STEP_SUPPORT_NEXT 42
+#define CGP_BATTLE_STEP_SUPPORT_COMMAND 43 /* after the command of a CARD_ID_SIMEON card */
+#define CGP_BATTLE_STEP_DIRECT 50          /* CGP_ATTACK_DIRECT attacks */
+#define CGP_BATTLE_STEP_DIRECT_WAIT 51
+#define CGP_BATTLE_STEP_FINISH 52
+#define CGP_BATTLE_STEP_CLOSE 60
+#define CGP_BATTLE_STEP_CLOSE_WAIT 61
+
+/* Foe battle cards that strike back during this side's battle (`addiu $5,$0,0x5`, 0x00a30304; `0xC`, 0x00a30314). */
+/* Operation card in play on either side that stops the battle (`addiu $5,$0,0x7D`, 0x00a3044c). */
+/* Card whose attack is followed by its queued command (`addiu $4,$0,0x4C`, 0x00a30744). */
+/* Support card that plays CARD_COMMAND_GARGOYLE_TRIGGER after its attacks (`addiu $4,$0,0x20`, 0x00a30d84;
+ * `addiu $5,$0,0x49`, 0x00a30dcc). */
+/* A support card's second layer below this life wears down after the attacks (`slti $2,$2,0x50`, 0x00a30d24). */
+#define CGP_SUPPORT_WEAR_LIMIT 80
+
+/* Error messages of the phase (`addiu $6,$0,6`, 0x00a303ac; `0x14`, 0x00a30410; `0x15`, 0x00a310bc). */
+#define CGP_ERR_NO_BATTLE 6
+#define CGP_ERR_BATTLE_BLOCKED 20
+#define CGP_ERR_BATTLE_DONE 21
+/* Value shown with CGP_ERR_BATTLE_BLOCKED while command.recoveryApplied is set (`addiu $7,$0,0x5C`, 0x00a30418). */
+
+/* Frames the phase waits after an attack (`addiu $2,$0,0x1E`) and after a strong support effect (`0x2D`, 0x00a30ab8). */
+#define CGP_BATTLE_WAIT_FRAMES 30
+#define CGP_BATTLE_SUPPORT_WAIT_FRAMES 45
+/* Frames of the slide of the command window and of the closing wait (`addiu $3,$0,0xA`, 0x00a30510). */
+#define CGP_BATTLE_SLIDE_FRAMES 10
+
+/* CardSetEffect codes and sound of a charged support card (`addiu $6,$0,0x21`, 0x00a30ad0; `0x17`, 0x00a30b20;
+ * `lui $8,2` + `ori $8,$8,6`, 0x00a30ab0). Power 3 or more shows the strong effect. */
+#define CGP_EFFECT_SUPPORT_STRONG 33
+#define CGP_EFFECT_SUPPORT 23
+#define CGP_SUPPORT_STRONG_POWER 3
+#define CGP_SE_SUPPORT 0x20006
+
+/* Interrupt message CGPEndFaseProc shows when the hand is over the limit ("Too many cards in your hand"). */
+#define CGP_MESS_HAND_FULL 0x2B
+/* Error message of the discard prompt ("Throw away this card?"). */
+#define CGP_ERR_DISCARD_CONFIRM 25
+/* Frames the hand list stays inert after it opens (`addiu $3,$0,0x19`, 0x00a312f8). */
+#define CGP_DISCARD_INPUT_DELAY 25
+
+/* Where the enlarged card of the discard selection is drawn (0x3EBCED91 and 0x3E99999A, 0x00a313d4..0x00a313e4). */
+#define CGP_DISCARD_PREVIEW_Y 0.369f
+#define CGP_DISCARD_PREVIEW_Z 0.3f
+
+/* Steps of CGPEndFaseProc (command.phaseTimer). */
+#define CGP_END_STEP_BEGIN 0
+#define CGP_END_STEP_DRAW 1
+#define CGP_END_STEP_HAND_CHECK 2
+#define CGP_END_STEP_SELECT 3
+#define CGP_END_STEP_CONFIRM 4
+#define CGP_END_STEP_NEXT_TURN 10
+
+/* Halfword index of command.input[0].held in CardGameWork (+0x5AD0 / 2). The loop that flips the pads walks the
+ * work area as halfwords (measured: pointers formed as &work->command.input[n].held + k make GCC keep both words
+ * of a pass in one base register and drop four instructions of the original's byte-offset induction). */
+#define CARD_PAD_INPUT0_WORD 0x2D68
+#define CARD_CMD_INPUT_WORDS (sizeof(CardCommandInput) / sizeof(u16))
+/* 0xC000 sign-extended: the loop keeps it in $9 (addiu $9,$0,-0x4000, 0x00a315c4) ahead of the work + 8 base in $10. */
+#define CARD_PAD_UP_PAIR (-0x4000)
+
+/*
+ * CARD_PAD_FLIP(pad, mask, turned): flips the d-pad bits of the halfword `*pad` (two statements,
+ * `turned` is a u16 temporary, `mask` is the 0xC000 pair as the sign-extended register constant the
+ * loop keeps, see CARD_PAD_UP_PAIR). The 0xF000 d-pad nibble moves: the 0xC000 bit pair shifts left
+ * by 2, the 0x3000 pair shifts right by 2, and the low 12 bits stay (PADFLIP, original
+ * 0x00a315e0..0x00a31640).
+ */
+#define CARD_PAD_FLIP(pad, mask, turned)                                     \
+    turned = ((*(pad) & 0xF000) << 2) & mask;                                 \
+    *(pad) = (((*(pad) & 0xF000) >> 2) & 0x3000) | (turned | (*(pad) & 0x0FFF))
+
+/* Situation cards CardGameProc checks on either side. D.S.S.S., Compulsory Sortie and Override Code refuse the end of
+ * a turn while the turn's side still has a card to place and a disposal card that is a Gnosis (D.S.S.S.), a Realian
+ * (Override Code) or any disposal card (Compulsory Sortie), waiting (`addiu $5,$0,0x91`, 0x00a31a68; `0x92`,
+ * 0x00a319f0; `0x93`, 0x00a31afc). Analyze (`addiu $5,$0,0x79`, 0x00a32244 and 0x00a333b4) shows the hands. */
+
+/* Buttons that dismiss the error message window (`andi $2,$3,0xF0`, 0x00a3173c, on the pressed bits of the side's pad). */
+#define CGP_PAD_FACE_BUTTONS 0x00F0
+/* Button that asks for the phase change (`andi $2,$23,0x80`, 0x00a31ce0). */
+#define CGP_PAD_SQUARE 0x0080
+/* Start button of either pad, which opens the menu (`andi $2,$2,0x800`, 0x00a31d28 for pad 0 and 0x00a31d64 for pad 1). */
+#define CGP_PAD_START 0x0800
+/* Button that turns the stage (`andi $2,$4,0x1` on cursorPressed, 0x00a32028). */
+#define CGP_PAD_ROTATE_STAGE 0x0001
+/* CardGameWork.flags bit that hides the hands (`andi $2,$3,0x80` on the flags halfword, 0x00a321e8 and 0x00a32354). */
+#define CGP_FLAG_HIDE_HANDS 0x80
+/* Fixed EE runtime address of the model the error window of CardGameProc enters after the texture
+ * (`lui $4,0x1DA8` + `ori $4,$4,0x8100`, 0x00a31714..0x00a3171c). */
+#define CGP_GAME_MESS_MODEL ((void *) 0x01DA8100)
+#define PI_F 3.1415927f
+
+/*
+ * Partial view of CardDefinition (measured: the canonical record carries u32
+ * text offsets, which give it word alignment, and GCC then folds the kind and
+ * flags tests of CGPCFPlayCommOperation into one word access; this TU's code
+ * keeps them as a byte load and a halfword load. Nested ifs or a local
+ * CardDefinition pointer keep the two loads but change the loop: it is no longer
+ * strength reduced and one more local label appears).
+ */
+typedef struct CardDefinitionView {
+    u8 kind;
+    u8 unmodeled_01;
+    u16 flags;
+    u8 unmodeled_04[0x20];
+} CardDefinitionView;
+
+/* Movement record fields used by the slot swap at 0x00a25b70. */
+typedef struct CardMoveLayer {
+    u8 powerPlus;
+    u8 preservedByte01;
+    u8 boostCount;
+    u8 life;
+    u8 preservedByte04;
+    u8 damageTimer;
+    s16 cardId;
+    u8 unmodeled_08[2];
+} CardMoveLayer;
+
+typedef struct CardMoveWork {
+    u8 flags;
+    u8 moveStep;
+    u8 power;
+    u8 powerLimit;
+    u8 unmodeled_04[4];
+    CardMoveLayer layers[40];
+    float position[3];
+    float velocity[3];
+    float shuntPosition[3];
+} CardMoveWork;
+
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
+/* The placement matrix as floats, or as four quadwords for the per-effect copy (lq/sq, 0x00a238e8). */
+typedef union CardEffectMatrix {
+    float m[4][4];
+    Quadword q[4];
+} CardEffectMatrix;
+
+/*
+ * A battle slot as the command code walks it, from the card stack on: the
+ * stack, then the shunt position, 0x1BC bytes in all (partial view of
+ * CardBoardSlot, measured: indexing a CardBoardSlot array instead puts the
+ * slot's 12 byte head into every address and moves the base register, and
+ * taking &slots[index].battle once into a local drops 22 instructions).
+ */
+typedef struct CGPStackSlot {
+    CardLayerStack stack;
+    float shuntPosition[3];
+} CGPStackSlot;
+
+
+/* Defined in this translation unit, used before its definition. */
+extern s32 CGPCursor2Area(CardGameWork *work);
+
+/* Defined here: data that is read before its definition. */
 extern char PermMess000Txt[];
 extern char PermMess001Txt[];
 extern char PermMess002Txt[];
@@ -40,15 +741,102 @@ extern const char cgpPrintJunkFormat[];
 extern const char cgpPrintSuteFormat[];
 extern const char cgpMessFontCode[8];
 extern const char cgpMessColorCode[8];
+extern float *CursorTbl[32];
+extern u8 HelpPageList[14];
+extern const char cgpDiscardTwoPrompt[];
+extern const char cgpDiscardOnePrompt[];
+extern const char cgpBlockEventPrompt[];
+extern const char cgpBlockFurtherPrompt[];
+extern const char cgpBlockSelectCardHint[];
+extern char EMTitle03Txt[24];
+extern char EMMess072Txt[32];
+extern char EMMess016Txt[32];
+extern char EMMess060Txt[32];
+extern char EMTitle90Txt[24];
+extern char EMMess091Txt[32];
+extern char EMMess092Txt[32];
+extern char EMMess102Txt[40];
+extern char EMTitle95Txt[24];
+extern char EMMess018Txt[32];
+extern char EMMess084Txt[40];
+extern char EMMess902Txt[];
+extern char EMMess062Txt[40];
+extern char EMMess991Txt[16];
+extern char EMMess017Txt[32];
+extern char EMMess057Txt[8];
+extern char EMTitle93Txt[24];
+extern char EMMess078Txt[32];
+extern char EMMess900Txt[24];
+extern char EMMess103Txt[8];
+extern char EMMess001Txt[24];
+extern char EMMess070Txt[32];
+extern char EMMess020Txt[40];
+extern char EMMess014Txt[40];
+extern char EMMess012Txt[40];
+extern char EMMess000Txt[32];
+extern char EMMess052Txt[40];
+extern char EMMess013Txt[24];
+extern char EMMess074Txt[32];
+extern char EMMess110Txt[40];
+extern char EMMess073Txt[24];
+extern char EMMess111Txt[24];
+extern char EMMess094Txt[40];
+extern char EMMess054Txt[24];
+extern char EMMess077Txt[32];
+extern char EMMess063Txt[32];
+extern char EMMess061Txt[32];
+extern char EMMess010Txt[32];
+extern char EMMess040Txt[32];
+extern char EMTitle02Txt[24];
+extern char EMMess910Txt[24];
+extern char EMMess056Txt[32];
+extern char EMMess080Txt[24];
+extern char EMMess093Txt[32];
+extern char EMTitle01Txt[24];
+extern char EMMess041Txt[32];
+extern char EMTitle00Txt[24];
+extern char EMTitle99Txt[24];
+extern char EMMess030Txt[32];
+extern char EMMess076Txt[8];
+extern char EMMess990Txt[16];
+extern char EMTitle94Txt[24];
+extern char EMMess903Txt[];
+extern char EMMess050Txt[32];
+extern char EMMess101Txt[8];
+extern char EMTitle04Txt[32];
+extern char EMMess015Txt[24];
+extern char EMTitle92Txt[24];
+extern char EMMess071Txt[24];
+extern char EMMess090Txt[24];
+extern char EMMess901Txt[];
+extern char EMMess083Txt[40];
+extern char EMMess031Txt[24];
+extern char EMMess082Txt[24];
+extern char EMMess053Txt[32];
+extern char EMTitle91Txt[24];
+extern char EMMess055Txt[32];
+extern char EMMess051Txt[32];
+extern char EMMess019Txt[24];
+extern char EMMess100Txt[40];
+extern char EMMess075Txt[40];
+extern char EMMess011Txt[24];
+extern char EMMess081Txt[40];
 
-/*
- * Card models are loaded into a fixed EE runtime arena.  card_play_sound1.c
- * fills that arena with CardFread at 0x01900000 and 0x01930000, then passes
- * those addresses to nmlModelEntryCard.  These tables retain the original
- * arena addresses; they do not define storage for the model payloads.
- */
-#define CARD_MODEL_ARENA_BASE 0x01900000
-#define CARD_MODEL_AT(offset) ((void *)(CARD_MODEL_ARENA_BASE + (offset)))
+static char OLMess0000Txt[8];
+static char OLMess0010Txt[32];
+static char OLMess0011Txt[48];
+static char OLMess0020Txt[56];
+static char OLMess0030Txt[48];
+static char OLMess0040Txt[56];
+static char OLMess0041Txt[40];
+static char OLMess0042Txt[40];
+static char OLMess0050Txt[32];
+static char OLMess0060Txt[32];
+static char OLMess0061Txt[48];
+static char OLMess0070Txt[56];
+static char OLMess0080Txt[48];
+static char OLMess0090Txt[56];
+
 
 static void *CPISMdlLst[14] = {
     CARD_MODEL_AT(0xA800), CARD_MODEL_AT(0xB800), CARD_MODEL_AT(0xD800),
@@ -130,243 +918,40 @@ unsigned char SampleDeck9[40] = {
     0x10, 0x10, 0x10, 0x16, 0x5F, 0x5F, 0x5F, 0x5F, 0x18, 0x18, 0x18, 0x37, 0x37, 0x37, 0x39, 0x39, 0x39, 0x3A, 0x3A, 0x3A, 0x3E, 0x3E, 0x3E, 0x3D, 0x3D, 0x3D, 0x1D, 0x1D, 0x1D, 0x5B, 0x74, 0x74, 0x65, 0x76, 0x18, 0x0C, 0x0D, 0x8B, 0x8B, 0x8B
 };
 
-char *EnemyDeckLst[48] = {0};
 
-char *DeckDataLst[48] = {0};
+unsigned char *EnemyDeckLst[CPU_DECK_COUNT] = {0};
 
-char *DeckGeneLst[48] = {0};
+unsigned char *DeckDataLst[CPU_DECK_COUNT] = {0};
 
-char *EnemyDeckListStr[48] = {0};
+unsigned char *DeckGeneLst[CPU_DECK_COUNT] = {0};
 
-typedef struct CpuDeckRecord {
-    char name[0x20];
-    char gene[0x10];
-    char deck[0x28];
-    char data[0x28];
-} CpuDeckRecord;
+unsigned char *EnemyDeckListStr[CPU_DECK_COUNT] = {0};
 
-CpuDeckRecord cpudeck[48] = {{0}};
+CpuDeckRecord cpudeck[CPU_DECK_COUNT] = {{0}};
 
 unsigned char CardDat[0x100] = {
     0x3C, 0x1E, 0x3C, 0x37, 0x50, 0x50, 0x41, 0x64, 0x1E, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x3C, 0x1E, 0x1E, 0x1E, 0x1E, 0x32, 0x32, 0x4B, 0x14, 0x14, 0x14, 0x14, 0x28, 0x28, 0x0F, 0x50, 0x69, 0x82, 0x4B, 0x6E, 0x64, 0x46, 0x4F, 0x50, 0x50, 0x50, 0x50, 0x1E, 0x3C, 0x19, 0x32, 0x32, 0x14, 0x0A, 0x1E, 0x28, 0x32, 0x32, 0x32, 0x64, 0x3C, 0x64, 0x32, 0x32, 0x32, 0x46, 0x46, 0x32, 0x2D, 0x1E, 0x2D, 0x3C, 0x32, 0x46, 0x32, 0x3C, 0x3C, 0x6E, 0x3C, 0x64, 0x5A, 0x8C, 0x3C, 0x50, 0x32, 0x64, 0x37, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-typedef struct CGPCursorPosition {
-    s16 zone;
-    s16 index;
-    s16 cardId;
-    s16 stackedCard;
-} CGPCursorPosition;
 
 
-/* Movement record fields used by the slot swap at 0x00a25b70. */
-typedef struct CardMoveLayer {
-    u8 state;
-    u8 preservedByte01;
-    u8 boostCount;
-    u8 life;
-    u8 preservedByte04;
-    u8 damageTimer;
-    s16 cardId;
-    u8 unmodeled_08[2];
-} CardMoveLayer;
 
-typedef struct CardMoveWork {
-    u8 flags;
-    u8 moveStep;
-    u8 power;
-    u8 powerLimit;
-    u8 unmodeled_04[4];
-    CardMoveLayer layers[40];
-    float position[3];
-    float velocity[3];
-    float shuntPosition[3];
-} CardMoveWork;
 
-/* The same hand bytes have two evidenced owner views in this TU. */
-typedef union CardPlayHandViews {
-    CardHand costView;
-    CardPlayHand maintenanceView;
-} CardPlayHandViews;
 
-typedef struct CardPlayDeploymentStack {
-    u8 flags;
-    u8 moveTimer;
-    u8 power;
-    u8 powerLimit;
-    u8 unmodeled_04[4];
-    CardBattleLayer layers[40];
-    float position[3];
-    float step[3];
-} CardPlayDeploymentStack;
 
-typedef struct CardPlayDeploymentSlot {
-    u8 unmodeled_00[0x0C];
-    CardPlayDeploymentStack stack;
-} CardPlayDeploymentSlot;
 
-typedef struct CardMoveRecord {
-    u8 unmodeled_00[2];
-    u8 kind;                       /* +0x02: zero for the moves into the discard pile (sb 0x00a296f0) */
-    u8 moveTimer;
-    float position[3];
-    float step[3];
-} CardMoveRecord;
 
-typedef struct CardPlayField {
-    CardPlayHandViews hand;
-    u8 unmodeled_019A[0x0880 - 0x019A];
-    CardPlayDeploymentSlot disposal[4];
-    u8 unmodeled_0F70[0x0F7C - 0x0F70];
-    s16 operations[40];
-    s16 operationFlags[40];
-    s16 operationDuration[40];
-    u8 unmodeled_106C[0x14CC - 0x106C];
-    CardMoveRecord operationMove[4];
-    u8 unmodeled_153C[0x192C - 0x153C];
-    CardMoveRecord handMove[40];
-    u8 unmodeled_1D8C[0x21EC - 0x1D8C];
-    CardMoveRecord suteMove[40];
-    CardMoveRecord junkMove[40];
-} CardPlayField;
 
-extern float HandPos1P[4][3];
-extern float HandPos2P[4][3];
-extern float JunkPos1P[][3];
-extern float JunkPos2P[][3];
 
-extern void CGPCursor2Pos(CGPCursorPosition *position, CardGameWork *work);
 
-extern int CardPlayIdentityCheck(CardGameWork *work, CardHand *hand, u16 identity);
-extern int CardPlayRecavery(CardHand *hand);
-extern s16 *CPCSearchCommWk(u16 side, CardGameWork *work);
-extern s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
-                               s16 operand, s16 target);
-extern int CardPlayCntOpe(CardPlaySide *side, int opeId);
-extern float DisposePos1P[][3];
-extern float OperationPos1P[][3];
 
-/* One line of a card list window: a card id and how many copies it holds. */
-typedef struct CardListEntry {
-    s16 cardId;
-    u16 count;
-} CardListEntry;
 
-/*
- * The scrolling card list window CGPCheckTeMax lays out for the hand; it is the
- * window CardMainProc passes to CardGameProc (cldtmp), which hands it on to
- * CGPEndFaseProc.
- */
-typedef struct CardListWindow {
-    s16 active;
-    u8 baseColor;                  /* +0x02 */
-    u8 cursorColor;                /* +0x03 */
-    s8 mode;                       /* +0x04 */
-    s8 cursor;                     /* +0x05 */
-    s16 x;                         /* +0x06 */
-    s16 y;                         /* +0x08 */
-    s16 lineHeight;                /* +0x0A */
-    s16 top;                       /* +0x0C */
-    s16 columns;                   /* +0x0E */
-    s16 rows;                      /* +0x10 */
-    s16 count;                     /* +0x12: entries in use */
-    CardListEntry entries[151];    /* +0x14 */
-} CardListWindow;
 
-/* Cards a hand holds at most before one must be discarded (`slti $2,$8,7`, 0x00a250d4). */
-#define CGP_HAND_LIMIT 7
 
-/* Layout CGPCheckTeMax gives the hand's card list window (stores at 0x00a250f8..0x00a25118). */
-#define CGP_HAND_LIST_BASE_COLOR 7
-#define CGP_HAND_LIST_CURSOR_COLOR 15
-#define CGP_HAND_LIST_X 0x150
-#define CGP_HAND_LIST_Y 0x30
-#define CGP_HAND_LIST_LINE_HEIGHT 14
-#define CGP_HAND_LIST_ROWS 10
 
-/*
- * CardGameWork.flags bits that mark a side as not controlled by the player at
- * the pad: CardPlayDispInfo tests 0x40 for side 0 and 0x20 for the other side
- * (0x00a23120 `andi $2,$2,0x40`, 0x00a2312c `andi $2,$2,0x20`), and the card
- * game start for a match against the computer sets 0x20.
- */
-#define CGP_FLAG_SIDE1_AUTO 0x20
-#define CGP_FLAG_SIDE0_AUTO 0x40
 
-/* Phases of a turn: 0..6 belong to side 0 and 7..13 to the other side. */
-#define CGP_PHASE_COUNT 14           /* `slti $2,$3,0xE`, 0x00a25a74 */
-#define CGP_SIDE1_FIRST_PHASE 7      /* `addiu $2,$0,7`, 0x00a25aa0 */
 
-/* Sound ids CGPNextTurnSub plays. */
-#define CGP_SE_NEXT_TURN 0x20001     /* a new turn and the switch to the other side (0x00a25a90, 0x00a25ab4) */
-#define CGP_SE_NEXT_PHASE 6          /* every other phase change (`addiu $4,$0,6`, 0x00a25aa8) */
 
-/* Sound ids of the card game's confirmation and refusal feedback (xglSoundEffectNormalID). */
-#define CGP_SE_DECIDE 1
-#define CGP_SE_BUZZER 5
-#define CGP_SE_CANCEL 2
-#define CGP_SE_CURSOR 3
-
-/* Confirm button (circle) in a controller's pressed halfword (`andi $2,$17,0x20`, 0x00a28070). */
-#define CGP_PAD_CONFIRM 0x0020
-#define CGP_PAD_PREVIEW 0x0010       /* triangle, held (`andi $2,$23,0x10`, 0x00a313c8) */
-#define CGP_PAD_CANCEL 0x0040        /* cross (`andi $2,$21,0x40`, 0x00a314d0) */
-#define CGP_PAD_RIGHT 0x2000         /* `andi $2,$21,0x2000`, 0x00a31364 */
-#define CGP_PAD_LEFT 0x8000          /* `andi $2,$21,0x8000`, 0x00a31398 */
-
-/* Error message id CGPDispoSub0 and CGPDisposeSub use for "play points fall short" (CGPSetErrorMess reason 12). */
-#define CGP_ERR_NOT_ENOUGH_POINTS 12
-
-/* Cards 7, 9 and 10..13 are paired with the card seven ids below them (`addiu $8,$5,-0x7`, 0x00a2817c). */
-#define CGP_PAIRED_CARD_OFFSET 7
-
-/*
- * Board areas of the cursor, as CGPCursor2Pos reports them in its zone field
- * (the cases that index disposal and battle slots): each side's disposal row
- * and battle row.
- */
-#define CGP_AREA_ENEMY_HAND 0
-#define CGP_AREA_ENEMY_DISPOSAL 2
-#define CGP_AREA_ENEMY_BATTLE 4
-#define CGP_AREA_PLAYER_BATTLE 5
-#define CGP_AREA_PLAYER_DISPOSAL 6
-#define CGP_AREA_PLAYER_HAND 9
-
-/* Frames the interrupt message of a new phase stays up (`addiu $3,$0,0x2D`, 0x00a25ad4). */
-#define CGP_INTERRUPT_MESS_FRAMES 45
-
-extern void CardPlayCleanJunk(CardPlaySide *side);
-extern void CGCPJunkDispSub(CardPlaySide *side, s32 index);
-extern float *CursorTbl[];
-
-#define CGP_PAD_UP 0x1000            /* `andi $2,$18,0x1000`, 0x00a268c0 */
-#define CGP_PAD_DOWN 0x4000          /* `andi $2,$18,0x4000`, 0x00a26ba8 */
-#define CGP_PAD_DIRECTIONS 0xF000    /* `andi $2,$18,0xF000`, 0x00a26b50 */
-#define CGP_PAD_ZOOM_LEFT 0x0004     /* held: `andi $2,$21,0x4`, 0x00a27148 */
-#define CGP_PAD_ZOOM_RIGHT 0x0008    /* held: `andi $2,$21,0x8`, 0x00a27134 */
-extern void CardCursorPassive(CardCursorControl *cursor);
-extern u8 HelpPageList[14];
-extern s32 CGPCursor2Area(CardGameWork *work);
-extern void CardDisp(Matrix4 matrix, s16 kind, s16 flagA, s16 flagB);
-extern void xglMatrixUnit(float matrix[4][4]);
-extern void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
-                           const float position[4]);
-extern void xglMatrixScale(Matrix4 destination, const Matrix4 source,
-                           const float scale[4]);
-extern void nmlModelSetLight(float color[4][4], float direction[4][4]);
-extern void nmlModelSetPlace(float matrix[4][4]);
-extern void nmlModelSetTexture(void *texture);
-extern void nmlModelSetToumei(s32 enabled);
-extern void nmlModelSetTransparency(float transparency);
-extern void nmlModelSetAlpha(u64 alpha);
-extern void nmlModelEntry(s32 model);
-extern void nmlModelEntryCard(void *model);
-extern float asColor[4][4];
-extern float asDir[4][4];
-extern float CLP1Color[4][4];
-extern float CLP2Color[4][4];
-extern const char cgpMessFontCode[];
-extern const char cgpMessColorCode[];
 
 /*
  * Shunt one side's cards aside before the computer opponent moves
@@ -380,7 +965,7 @@ void CGPShuntPosSub(CardPlaySide *side)
 {
     s32 i;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         if (side->disposal[i].battle.layers[0].cardId >= 0) {
             side->disposal[i + 1].shuntPosition[0] = side->disposal[i].battle.position[0];
             side->disposal[i + 1].shuntPosition[1] = side->disposal[i].battle.position[1];
@@ -388,7 +973,7 @@ void CGPShuntPosSub(CardPlaySide *side)
         }
     }
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         if (side->battle[i].battle.layers[0].cardId >= 0) {
             side->battle[i + 1].shuntPosition[0] = side->battle[i].battle.position[0];
             side->battle[i + 1].shuntPosition[1] = side->battle[i].battle.position[1];
@@ -397,8 +982,6 @@ void CGPShuntPosSub(CardPlaySide *side)
     }
 }
 
-extern s32 CardPlayHandCnt(CardHand *hand);
-extern s32 CardPlayCntBtl(CardHand *hand, s16 cardId);
 
 /*
  * Where the cards in play are moving to after the board shifted. Each occupied
@@ -412,7 +995,7 @@ void CGPRecalcPosSub(CardPlaySide *side)
     float dest[3];
     s32 i;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         stack = &side->disposal[i].battle;
         if (stack->layers[0].cardId >= 0) {
             dest[0] = stack->position[0] + stack->step[0] * stack->moveFrames;
@@ -426,7 +1009,7 @@ void CGPRecalcPosSub(CardPlaySide *side)
             stack->step[2] = (dest[2] - stack->position[2]) / 10.0f;
         }
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         stack = &side->battle[i].battle;
         if (stack->layers[0].cardId >= 0) {
             dest[0] = stack->position[0] + stack->step[0] * stack->moveFrames;
@@ -442,12 +1025,9 @@ void CGPRecalcPosSub(CardPlaySide *side)
     }
 }
 
-extern void CardSetEffect(s32 side, CardGameWork *work, u8 code, s8 value, s32 option,
-                          float *position, CardLayerStack *stack);
-extern void xglSoundEffectNormalID(int sound_id, int variant);
 
 /*
- * Command 143 takes two life off every card standing on a battle or disposal
+ * Unknown Armament takes two life off every card standing on a battle or disposal
  * slot of either side, clamped at zero, and starts effects 5 and 13 at each of
  * those stacks, the card's own side for its own cards and the other side for
  * the opponent's.
@@ -460,13 +1040,13 @@ void CCO143ExecSub(s32 side, CardGameWork *work, CardPlaySide *ownSide,
 
     xglSoundEffectNormalID(0x20008, 0);
     otherSide = (side == 0);
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
             ownSide->battle[i].battle.layers[0].life -= 2;
             if (ownSide->battle[i].battle.layers[0].life < 0) {
                 ownSide->battle[i].battle.layers[0].life = 0;
             }
-            CardSetEffect(side, work, 5, 0, 0, ownSide->battle[i].battle.position, 0);
+            CardSetEffect(side, work, CGP_EFFECT_BURST,0, 0, ownSide->battle[i].battle.position, 0);
             CardSetEffect(side, work, 13, 2, 0, ownSide->battle[i].battle.position,
                           &ownSide->battle[i].battle);
         }
@@ -475,18 +1055,18 @@ void CCO143ExecSub(s32 side, CardGameWork *work, CardPlaySide *ownSide,
             if (foeSide->battle[i].battle.layers[0].life < 0) {
                 foeSide->battle[i].battle.layers[0].life = 0;
             }
-            CardSetEffect(otherSide, work, 5, 0, 0, foeSide->battle[i].battle.position, 0);
+            CardSetEffect(otherSide, work, CGP_EFFECT_BURST,0, 0, foeSide->battle[i].battle.position, 0);
             CardSetEffect(otherSide, work, 13, 2, 0, foeSide->battle[i].battle.position,
                           &foeSide->battle[i].battle);
         }
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
             ownSide->disposal[i].battle.layers[0].life -= 2;
             if (ownSide->disposal[i].battle.layers[0].life < 0) {
                 ownSide->disposal[i].battle.layers[0].life = 0;
             }
-            CardSetEffect(side, work, 5, 0, 0, ownSide->disposal[i].battle.position, 0);
+            CardSetEffect(side, work, CGP_EFFECT_BURST,0, 0, ownSide->disposal[i].battle.position, 0);
             CardSetEffect(side, work, 13, 2, 0, ownSide->disposal[i].battle.position,
                           &ownSide->disposal[i].battle);
         }
@@ -495,14 +1075,13 @@ void CCO143ExecSub(s32 side, CardGameWork *work, CardPlaySide *ownSide,
             if (foeSide->disposal[i].battle.layers[0].life < 0) {
                 foeSide->disposal[i].battle.layers[0].life = 0;
             }
-            CardSetEffect(otherSide, work, 5, 0, 0, foeSide->disposal[i].battle.position, 0);
+            CardSetEffect(otherSide, work, CGP_EFFECT_BURST,0, 0, foeSide->disposal[i].battle.position, 0);
             CardSetEffect(otherSide, work, 13, 2, 0, foeSide->disposal[i].battle.position,
                           &foeSide->disposal[i].battle);
         }
     }
 }
 
-extern int printf(const char *format, ...);
 
 void CGPPrintYama(CardPlaySide *side)
 {
@@ -604,18 +1183,9 @@ void CGPSetErrorMessPlus(s32 side, CardGameWork *work, u8 reason, s16 value)
     work->errorMessValue = value;
 }
 
-extern char *ErrorMessTbl[][5];
 
-/* Text colour of the card game's font strings (`ori $6,$0,0xFFF0`, 0x00a21efc and 0x00a2ddc8). */
-#define CGP_TEXT_COLOR 0xFFF0
 
-/* Vertical distance between the text lines of one error message (`addiu $16,$20,0x18`, 0x00a21f7c). */
-#define CGP_ERROR_MESS_LINE_PITCH 24
 
-/* Fixed EE runtime addresses of the message window texture and model (`lui $4,0x1DB5` + `ori $4,$4,0x5800`, 0x00a22140..0x00a22148;
- * `lui $4,0x1DA2` + `ori $4,$4,0x2B00`, 0x00a2214c..0x00a22154). */
-#define CGP_ERROR_MESS_TEXTURE 0x01DB5800
-#define CGP_ERROR_MESS_MODEL 0x01DA2B00
 
 /*
  * Draws the message of one error reason: the lines of its ErrorMessTbl row
@@ -654,20 +1224,20 @@ void CGPDispErrorMessCore(s32 side, u16 reason, u16 x, u16 y, const float positi
         xglFontPrint(x, y + 4 * CGP_ERROR_MESS_LINE_PITCH, CGP_TEXT_COLOR, ErrorMessTbl[reason][4]);
     }
     xglMatrixUnit(matrix);
-    xglMatrixTrans(matrix, (const float (*)[4]) matrix, position);
+    xglMatrixTrans(matrix, matrix, position);
     scale[0] = 1.35f;
     scale[1] = scale[2] = scale[3] = 1.0f;
-    xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-    nmlModelSetPlace(matrix);
+    xglMatrixScale(matrix, matrix, scale);
+    nmlModelSetPlace(&matrix);
     if (side >= 0) {
         if (side == 0) {
-            nmlModelSetLight(Player1Color, asDir);
+            nmlModelSetLight(&Player1Color, &asDir);
         } else {
-            nmlModelSetLight(Player2Color, asDir);
+            nmlModelSetLight(&Player2Color, &asDir);
         }
     }
-    nmlModelSetTexture((void *) CGP_ERROR_MESS_TEXTURE);
-    nmlModelEntryCard((void *) CGP_ERROR_MESS_MODEL);
+    nmlModelSetTexture(CGP_PANEL_TEXTURE);
+    nmlModelEntryCard(CGP_ERROR_MESS_MODEL);
 }
 
 void CGPDispErrorMess3(s32 side, s32 reason)
@@ -698,11 +1268,11 @@ void CGPDispErrorMessPlus(s32 side, u16 reason, s32 cardId)
     vec[1] = 0.2f;
     vec[2] = 0.3f;
     vec[3] = 1.0f;
-    xglMatrixTrans(matrix, (const float (*)[4]) matrix, vec);
+    xglMatrixTrans(matrix, matrix, vec);
     vec[0] = vec[1] = 0.8f;
     vec[2] = 1.0f;
-    xglMatrixScale(matrix, (const float (*)[4]) matrix, vec);
-    CardDisp(matrix, cardId, 1, 5);
+    xglMatrixScale(matrix, matrix, vec);
+    CardDisp(&matrix, cardId, 1, 5);
 }
 
 void CGPDispErrorMess(s32 side, s32 reason)
@@ -766,11 +1336,11 @@ void CardPlayDispInfo(CardGameWork *workAddress)
 
         bothSides = 0;
         if (work->errorMessSide == 0) {
-            if (work->flags & 0x40) {
+            if (work->flags & CGP_FLAG_SIDE0_AUTO) {
                 bothSides = 1;
             }
         } else {
-            if (work->flags & 0x20) {
+            if (work->flags & CGP_FLAG_SIDE1_AUTO) {
                 bothSides = 1;
             }
         }
@@ -790,14 +1360,14 @@ void CardPlayDispInfo(CardGameWork *workAddress)
     }
 
     flag = 1;
-    if (work->infoPanelPhase == 1) {
+    if (work->infoPanelPhase == CGP_INFO_PANEL_ZOOM) {
         flag = work->resultWait < 4;
     }
-    switch ((s16) work->command.phase) {
-    case 2:
-    case 4:
-    case 9:
-    case 11:
+    switch (work->command.phase) {
+    case CARD_PHASE_EVENT:
+    case CARD_PHASE_BLOCK:
+    case CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE:
+    case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
         if ((u32) (work->command.phaseTimer - 20) < 10) {
             flag = 0;
         }
@@ -809,15 +1379,15 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         xglFontPrint(2, 2, CGP_TEXT_COLOR, text);
     }
 
-    model = CPISMdlLst[(s16) work->command.phase];
+    model = CPISMdlLst[work->command.phase];
     flag = 1;
-    if ((s16) work->command.phase < 7) {
-        if ((s16) work->command.phase >= 0) {
+    if (work->command.phase < CARD_PHASES_PER_SIDE) {
+        if (work->command.phase >= 0) {
             flag = 0;
         }
     }
     switch (work->infoPanelPhase) {
-    case 0:
+    case CGP_INFO_PANEL_INIT:
     default:
         work->infoPanelPos[0] = 0.0f;
         work->infoPanelPos[1] = 0.0f;
@@ -836,9 +1406,9 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         work->infoPanelScaleStep[2] = 0.0f;
         work->infoPanelScaleStep[3] = 1.0f;
         work->resultWait = 10;
-        work->infoPanelPhase = 1;
+        work->infoPanelPhase = CGP_INFO_PANEL_ZOOM;
         break;
-    case 1:
+    case CGP_INFO_PANEL_ZOOM:
         if (work->resultWait <= 0) {
             work->resultWait = 15;
             work->infoPanelPhase++;
@@ -852,12 +1422,12 @@ void CardPlayDispInfo(CardGameWork *workAddress)
             work->infoPanelPos[2] += work->infoPanelPosStep[2];
         }
         break;
-    case 2:
+    case CGP_INFO_PANEL_HOLD:
         if (work->resultWait <= 0) {
             work->infoPanelPhase++;
             work->resultWait = 6;
-            if ((s16) work->command.phase < 7) {
-                if ((s16) work->command.phase >= 0) {
+            if (work->command.phase < CARD_PHASES_PER_SIDE) {
+                if (work->command.phase >= 0) {
                     work->infoPanelPosStep[0] = -0.25833334f;
                     work->infoPanelPosStep[1] = 0.27166668f;
                 } else {
@@ -875,7 +1445,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
             work->resultWait--;
         }
         break;
-    case 3:
+    case CGP_INFO_PANEL_SLIDE:
         if (work->resultWait <= 0) {
             work->infoPanelPhase++;
         } else {
@@ -888,7 +1458,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
             work->infoPanelScale[2] += work->infoPanelScaleStep[2];
         }
         break;
-    case 4:
+    case CGP_INFO_PANEL_SETTLE:
         if (work->resultWait > 0) {
             work->resultWait--;
             work->infoPanelPos[0] += work->infoPanelPosStep[0];
@@ -897,27 +1467,27 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         break;
     }
 
-    if (((s16) work->command.phase == 5 || (s16) work->command.phase == 12) &&
-        work->infoPanelPhase >= 4 && (s16) work->command.phaseTimer >= 10) {
+    if ((work->command.phase == CARD_PHASE_BATTLE || work->command.phase == CARD_PHASE_BATTLE + CARD_PHASES_PER_SIDE) &&
+        work->infoPanelPhase >= CGP_INFO_PANEL_SETTLE && (s16) work->command.phaseTimer >= 10) {
         return;
     }
-    if (work->command.flowRequest == 3) {
+    if (work->command.flowRequest == CARD_FLOW_ENEMY_DECK_OUT) {
         return;
     }
-    if (work->command.flowRequest == 4) {
+    if (work->command.flowRequest == CARD_FLOW_PLAYER_DECK_OUT) {
         return;
     }
-    if (work->command.flowRequest == 5) {
+    if (work->command.flowRequest == CARD_FLOW_FINAL_ROUND) {
         return;
     }
 
     xglMatrixUnit(place);
-    xglMatrixTrans(place, (const float (*)[4]) place, work->infoPanelPos);
-    xglMatrixScale(place, (const float (*)[4]) place, work->infoPanelScale);
-    nmlModelSetLight(asColor, asDir);
-    nmlModelSetPlace(place);
-    nmlModelSetTexture((void *) 0x01F70200);
-    if (work->infoPanelPhase == 1) {
+    xglMatrixTrans(place, place, work->infoPanelPos);
+    xglMatrixScale(place, place, work->infoPanelScale);
+    nmlModelSetLight(&asColor, &asDir);
+    nmlModelSetPlace(&place);
+    nmlModelSetTexture(CGP_MAT_FG_TEXTURE);
+    if (work->infoPanelPhase == CGP_INFO_PANEL_ZOOM) {
         transparency = 1.0f;
         transparency -= (work->resultWait * 0.3f) / 10.0f;
         nmlModelSetToumei(1);
@@ -955,61 +1525,61 @@ void CardPlayDispInfo(CardGameWork *workAddress)
     shadowPos[1] = work->infoPanelPos[1];
     shadowPos[2] = work->infoPanelPos[2] - 0.01f;
     shadowPos[3] = 1.0f;
-    xglMatrixTrans(place, (const float (*)[4]) place, shadowPos);
-    xglMatrixScale(place, (const float (*)[4]) place, work->infoPanelScale);
+    xglMatrixTrans(place, place, shadowPos);
+    xglMatrixScale(place, place, work->infoPanelScale);
     if (flag == 0) {
-        nmlModelSetLight(color1P, asDir);
+        nmlModelSetLight(&color1P, &asDir);
     } else {
-        nmlModelSetLight(color2P, asDir);
+        nmlModelSetLight(&color2P, &asDir);
     }
-    nmlModelSetPlace(place);
-    nmlModelSetTexture((void *) 0x01DB5800);
-    if (work->infoPanelPhase == 1) {
+    nmlModelSetPlace(&place);
+    nmlModelSetTexture(CGP_PANEL_TEXTURE);
+    if (work->infoPanelPhase == CGP_INFO_PANEL_ZOOM) {
         transparency = 1.0f;
         transparency -= (work->resultWait * 0.3f) / 10.0f;
         nmlModelSetToumei(1);
         nmlModelSetTransparency(transparency);
     }
-    nmlModelEntry(0x01DAD700);
+    nmlModelEntry(CGP_INFO_PANEL_SIDE_MODEL);
 
     pos[0] = 0.0f;
     pos[1] = 1.72f;
     pos[2] = 0.0f;
     pos[3] = 1.0f;
     xglMatrixUnit(place);
-    xglMatrixTrans(place, (const float (*)[4]) place, pos);
-    nmlModelSetLight(turnColor, asDir);
-    nmlModelSetPlace(place);
-    nmlModelSetTexture((void *) 0x01DB5800);
-    nmlModelEntryCard((void *) 0x01DB2D00);
+    xglMatrixTrans(place, place, pos);
+    nmlModelSetLight(&turnColor, &asDir);
+    nmlModelSetPlace(&place);
+    nmlModelSetTexture(CGP_PANEL_TEXTURE);
+    nmlModelEntryCard(CGP_TURN_PLATE_MODEL);
 
     pos[0] = 0.0f;
     pos[1] = -0.02f;
     pos[2] = 0.05f;
     pos[3] = 1.0f;
-    xglMatrixTrans(place, (const float (*)[4]) place, pos);
-    nmlModelSetPlace(place);
-    nmlModelSetTexture((void *) 0x01F70200);
-    nmlModelEntryCard((void *) 0x01921800);
+    xglMatrixTrans(place, place, pos);
+    nmlModelSetPlace(&place);
+    nmlModelSetTexture(CGP_MAT_FG_TEXTURE);
+    nmlModelEntryCard(CGP_TURN_NUMBER_MODEL);
 
     tens = (work->command.turn + 1) / 10;
     if (tens != 0) {
-        model = (void *) (0x01C80000 + (tens << 10));
+        model = (void *) (CGP_TURN_DIGIT_MODEL_BASE + tens * CGP_TURN_DIGIT_MODEL_SIZE);
         pos[0] = 0.213f;
         pos[1] = -0.003f;
         pos[2] = 0.0f;
-        xglMatrixTrans(guidePlace, (const float (*)[4]) place, pos);
-        nmlModelSetPlace(guidePlace);
-        nmlModelSetTexture((void *) 0x01C91000);
+        xglMatrixTrans(guidePlace, place, pos);
+        nmlModelSetPlace(&guidePlace);
+        nmlModelSetTexture(CGP_CARD_INFO_TEXTURE);
         nmlModelEntryCard(model);
     }
-    model = (void *) (0x01C80000 + (((work->command.turn + 1) % 10) << 10));
+    model = (void *) (CGP_TURN_DIGIT_MODEL_BASE + ((work->command.turn + 1) % 10) * CGP_TURN_DIGIT_MODEL_SIZE);
     pos[0] = 0.311f;
     pos[1] = -0.003f;
     pos[2] = 0.0f;
-    xglMatrixTrans(guidePlace, (const float (*)[4]) place, pos);
-    nmlModelSetPlace(guidePlace);
-    nmlModelSetTexture((void *) 0x01C91000);
+    xglMatrixTrans(guidePlace, place, pos);
+    nmlModelSetPlace(&guidePlace);
+    nmlModelSetTexture(CGP_CARD_INFO_TEXTURE);
     nmlModelEntryCard(model);
 
     pos[0] = -2.3f;
@@ -1019,11 +1589,11 @@ void CardPlayDispInfo(CardGameWork *workAddress)
     guideScale[1] = 0.5f;
     guideScale[2] = 1.0f;
     guideScale[3] = 1.0f;
-    if (work->save->flags & 0x02) {
+    if (work->save->flags & CARD_SAVE_HIDE_TURN) {
         return;
     }
 
-    if ((s16) work->command.phase < 7) {
+    if (work->command.phase < CARD_PHASES_PER_SIDE) {
         area = CGPCursor2Area(workAddress);
         pos[1] = 1.53f;
         if (work->rotStageId == 0) {
@@ -1039,28 +1609,28 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         xglMatrixUnit(place);
         for (i = 0; i < 7; i++) {
             model = CPIPhaseMdlLst[i];
-            xglMatrixTrans(guidePlace, (const float (*)[4]) place, pos);
-            xglMatrixScale(guidePlace, (const float (*)[4]) guidePlace, guideScale);
-            nmlModelSetPlace(guidePlace);
-            nmlModelSetLight(asColor, asDir);
-            nmlModelSetTexture((void *) 0x01F70200);
+            xglMatrixTrans(guidePlace, place, pos);
+            xglMatrixScale(guidePlace, guidePlace, guideScale);
+            nmlModelSetPlace(&guidePlace);
+            nmlModelSetLight(&asColor, &asDir);
+            nmlModelSetTexture(CGP_MAT_FG_TEXTURE);
             nmlModelEntryCard(model);
-            xglMatrixTrans(guidePlace, (const float (*)[4]) place, pos);
-            xglMatrixScale(guidePlace, (const float (*)[4]) guidePlace, guideScale);
+            xglMatrixTrans(guidePlace, place, pos);
+            xglMatrixScale(guidePlace, guidePlace, guideScale);
             if (i == 4) {
-                if ((s16) work->command.phase == i) {
-                    nmlModelSetLight(CLP2Color, asDir);
+                if (work->command.phase == i) {
+                    nmlModelSetLight(&CLP2Color, &asDir);
                 } else {
-                    nmlModelSetLight(color2P, asDir);
+                    nmlModelSetLight(&color2P, &asDir);
                 }
-            } else if ((s16) work->command.phase == i) {
-                nmlModelSetLight(CLP1Color, asDir);
+            } else if (work->command.phase == i) {
+                nmlModelSetLight(&CLP1Color, &asDir);
             } else {
-                nmlModelSetLight(color1P, asDir);
+                nmlModelSetLight(&color1P, &asDir);
             }
-            nmlModelSetPlace(guidePlace);
-            nmlModelSetTexture((void *) 0x01DB5800);
-            nmlModelEntryCard((void *) 0x01DB0200);
+            nmlModelSetPlace(&guidePlace);
+            nmlModelSetTexture(CGP_PANEL_TEXTURE);
+            nmlModelEntryCard(CGP_PHASE_LAMP_MODEL);
             pos[1] -= 0.23f;
         }
     } else {
@@ -1080,35 +1650,35 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         xglMatrixUnit(place);
         for (i = 0; i < 7; i++) {
             model = CPIPhaseMdlLst[i];
-            xglMatrixTrans(guidePlace, (const float (*)[4]) place, pos);
-            xglMatrixScale(guidePlace, (const float (*)[4]) guidePlace, guideScale);
-            nmlModelSetPlace(guidePlace);
-            nmlModelSetLight(asColor, asDir);
-            nmlModelSetTexture((void *) 0x01F70200);
+            xglMatrixTrans(guidePlace, place, pos);
+            xglMatrixScale(guidePlace, guidePlace, guideScale);
+            nmlModelSetPlace(&guidePlace);
+            nmlModelSetLight(&asColor, &asDir);
+            nmlModelSetTexture(CGP_MAT_FG_TEXTURE);
             nmlModelEntryCard(model);
-            xglMatrixTrans(guidePlace, (const float (*)[4]) place, pos);
-            xglMatrixScale(guidePlace, (const float (*)[4]) guidePlace, guideScale);
+            xglMatrixTrans(guidePlace, place, pos);
+            xglMatrixScale(guidePlace, guidePlace, guideScale);
             if (i == 4) {
-                if ((s16) work->command.phase - 7 == i) {
-                    nmlModelSetLight(CLP1Color, asDir);
+                if (work->command.phase - CARD_PHASES_PER_SIDE == i) {
+                    nmlModelSetLight(&CLP1Color, &asDir);
                 } else {
-                    nmlModelSetLight(color1P, asDir);
+                    nmlModelSetLight(&color1P, &asDir);
                 }
-            } else if ((s16) work->command.phase - 7 == i) {
-                nmlModelSetLight(CLP2Color, asDir);
+            } else if (work->command.phase - CARD_PHASES_PER_SIDE == i) {
+                nmlModelSetLight(&CLP2Color, &asDir);
             } else {
-                nmlModelSetLight(color2P, asDir);
+                nmlModelSetLight(&color2P, &asDir);
             }
-            nmlModelSetPlace(guidePlace);
-            nmlModelSetTexture((void *) 0x01DB5800);
-            nmlModelEntryCard((void *) 0x01DB0200);
+            nmlModelSetPlace(&guidePlace);
+            nmlModelSetTexture(CGP_PANEL_TEXTURE);
+            nmlModelEntryCard(CGP_PHASE_LAMP_MODEL);
             pos[1] -= 0.23f;
         }
     }
 }
 
 /*
- * Whether the Square request for the confirm prompt (flowRequest 1) is allowed
+ * Whether the Square request for the confirm prompt (CARD_FLOW_CONFIRM) is allowed
  * in the current phase; CardGameProc asks before it sets it (0x00a31ca8,
  * 0x00a31cec). Phases 0, 5, 6, 7, 12 and 13 never allow it and a phase outside
  * 0..13 always does. Phases 1 and 8 refuse it when their flag is set; phases 2,
@@ -1120,35 +1690,35 @@ s32 CGPChkFaseLock(CardGameWork *work)
     s32 allowed;
 
     allowed = 1;
-    switch ((s16) work->command.phase) {
-    case 0:
-    case 5:
-    case 6:
-    case 7:
-    case 12:
-    case 13:
+    switch (work->command.phase) {
+    case CARD_PHASE_DRAW:
+    case CARD_PHASE_BATTLE:
+    case CARD_PHASE_ADJUST:
+    case CARD_PHASE_DRAW + CARD_PHASES_PER_SIDE:
+    case CARD_PHASE_BATTLE + CARD_PHASES_PER_SIDE:
+    case CARD_PHASE_ADJUST + CARD_PHASES_PER_SIDE:
         allowed = 0;
         break;
-    case 1:
+    case CARD_PHASE_MOVE:
         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
             allowed = 0;
         }
         break;
-    case 8:
+    case CARD_PHASE_MOVE + CARD_PHASES_PER_SIDE:
         if (work->flags & CGP_FLAG_SIDE1_AUTO) {
             allowed = 0;
         }
         break;
-    case 2:
-    case 3:
-    case 11:
+    case CARD_PHASE_EVENT:
+    case CARD_PHASE_SET:
+    case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
         if ((work->flags & CGP_FLAG_SIDE0_AUTO) || (s16) work->command.phaseTimer >= 3) {
             allowed = 0;
         }
         break;
-    case 4:
-    case 9:
-    case 10:
+    case CARD_PHASE_BLOCK:
+    case CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE:
+    case CARD_PHASE_SET + CARD_PHASES_PER_SIDE:
         if ((work->flags & CGP_FLAG_SIDE1_AUTO) || (s16) work->command.phaseTimer >= 3) {
             allowed = 0;
         }
@@ -1199,8 +1769,8 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
     effect->position[3] = 1.0f;
 
     switch (code) {
-    case 10:
-        xglSoundEffectNormalID(0x2000D, 0);
+    case CGP_EFFECT_SWIRL:
+        xglSoundEffectNormalID(CGP_SE_REGEN, 0);
         if (position == 0) {
             if (value == 0) {
                 effect->position[1] = -1.81f;
@@ -1222,7 +1792,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
         effect->velocity[3] = 1.0f;
         effect->position[3] = 1.0f;
         break;
-    case 11:
+    case CGP_EFFECT_DAMAGE:
         effect->stack = stack;
         effect->position[2] = 0.1f;
         effect->position[0] = 0.0f;
@@ -1240,7 +1810,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->code = 0;
         }
         break;
-    case 15:
+    case CGP_EFFECT_DAMAGE_ONE_DESTROYED:
         effect->timer = 24;
         effect->stack = stack;
         effect->position[2] = 0.1f;
@@ -1259,7 +1829,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->code = 0;
         }
         break;
-    case 16:
+    case CGP_EFFECT_DAMAGE_MANY_DESTROYED:
         effect->timer = 33;
         effect->stack = stack;
         effect->position[2] = 0.1f;
@@ -1278,11 +1848,11 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->code = 0;
         }
         break;
-    case 12:
+    case CGP_EFFECT_NUMBER:
         effect->stack = stack;
-        effect->code = 12;
+        effect->code = CGP_EFFECT_NUMBER;
         effect->position[2] = 0.1f;
-        effect->phase = 0;
+        effect->phase = CGP_NUMBER_BOTTOM;
         effect->position[0] = 0.0f;
         effect->position[1] = 0.0f;
         effect->scale[3] = 1.0f;
@@ -1300,10 +1870,10 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->velocity[1] = -0.0033333334f;
         }
         break;
-    case 13:
+    case CGP_EFFECT_NUMBER_TOP:
         effect->stack = stack;
-        effect->phase = 1;
-        effect->code = 12;
+        effect->phase = CGP_NUMBER_TOP;
+        effect->code = CGP_EFFECT_NUMBER;
         effect->position[2] = 0.1f;
         effect->position[0] = 0.0f;
         effect->position[1] = 0.0f;
@@ -1322,7 +1892,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->velocity[1] = -0.0033333334f;
         }
         break;
-    case 14:
+    case CGP_EFFECT_DAMAGE_LEFT:
         effect->stack = stack;
         effect->position[2] = 0.1f;
         effect->position[0] = 0.0f;
@@ -1334,7 +1904,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->velocity[1] = 0.0053333333f;
         }
         break;
-    case 5:
+    case CGP_EFFECT_BURST:
         if (effect->soundId != 0) {
             xglSoundEffectNormalID(effect->soundId, 0);
         }
@@ -1350,7 +1920,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
         effect->velocity[3] = 1.0f;
         effect->position[3] = 1.0f;
         break;
-    case 25:
+    case CGP_EFFECT_DOUBLE_BURST:
         if (effect->soundId != 0) {
             xglSoundEffectNormalID(effect->soundId, 0);
         }
@@ -1373,12 +1943,12 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             xglSoundEffectNormalID(effect->soundId, 0);
         }
         if (stack != 0) {
-            if (code == 23) {
-                effect->code = 3;
+            if (code == CGP_EFFECT_SUPPORT) {
+                effect->code = CGP_EFFECT_SUPPORT_ATTACK;
                 effect->velocity[2] = 0.006666667f;
                 effect->velocity[0] = -effect->position[0] / 15.0f;
                 effect->velocity[1] = (0.7885f - effect->position[1]) / 15.0f;
-            } else if (code == 33) {
+            } else if (code == CGP_EFFECT_SUPPORT_STRONG) {
                 effect->velocity[2] = 0.006666667f;
                 effect->velocity[0] = -effect->position[0] / 15.0f;
                 effect->velocity[1] = (0.7885f - effect->position[1]) / 15.0f;
@@ -1388,20 +1958,20 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
             effect->velocity[1] = (-stack->position[1] - position[1]) / 15.0f;
         } else {
             switch (code) {
-            case 2:
-            case 4:
-            case 22:
-            case 24:
-            case 32:
-            case 34:
+            case CGP_EFFECT_PIERCE_ATTACK:
+            case CGP_EFFECT_DIRECT_ATTACK:
+            case CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED:
+            case CGP_EFFECT_DIRECT_ATTACK_ONE_DESTROYED:
+            case CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED:
+            case CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED:
                 effect->velocity[2] = 0.006666667f;
                 effect->velocity[0] = -effect->position[0] / 15.0f;
                 effect->velocity[1] = (1.81f - effect->position[1]) / 15.0f;
                 break;
-            case 23:
-                effect->code = 3;
+            case CGP_EFFECT_SUPPORT:
+                effect->code = CGP_EFFECT_SUPPORT_ATTACK;
                 /* fallthrough */
-            case 33:
+            case CGP_EFFECT_SUPPORT_STRONG:
                 effect->velocity[2] = 0.006666667f;
                 effect->velocity[0] = -effect->position[0] / 15.0f;
                 effect->velocity[1] = (0.7885f - effect->position[1]) / 15.0f;
@@ -1439,40 +2009,10 @@ void CDEMatrixSub(float matrix[4][4])
     matrix[3][3] = row3[3];
 }
 
-#define CARD_EFFECT_COUNT 64                  /* `slti $2,$23,0x40`, 0x00a2506c */
-#define CARD_EFFECT_SE_HIT 0x20008            /* 0x00a23b0c */
-#define CARD_EFFECT_SE_BURST 0x2000A
-#define CARD_EFFECT_ALPHA 0x48                /* nmlModelSetAlpha argument, 0x00a246ec */
-#define CARD_EFFECT_SPRITE_MODEL 0x01A00000   /* entry model of an unscaled effect sprite, 0x00a24a00 */
-#define CARD_EFFECT_SCALED_MODEL 0x01A00800   /* entry model after xglMatrixScale, 0x00a246f0 */
 
-/* Animation strips: frame n of a strip is at base + n * frame size (sll/addu chains, 0x00a239d0 and 0x00a23b9c). */
-#define CARD_EFFECT_SMALL_FRAME 0x1480        /* 41 * 128 */
-#define CARD_EFFECT_LARGE_FRAME 0x1D80        /* 59 * 128 */
-#define CARD_EFFECT_FRAME(base, index, size) ((void *) ((base) + (index) * (size)))
-#define CARD_EFFECT_STRIP_TRAVEL_1 0x1BF0000  /* 0x00a239e4 */
-#define CARD_EFFECT_STRIP_TRAVEL_2 0x1C04000  /* 0x00a23a18 */
-#define CARD_EFFECT_STRIP_TRAVEL_3 0x1A14000  /* 0x00a23a4c */
-#define CARD_EFFECT_STRIP_TRAVEL_4 0x1A01000  /* 0x00a23a78 */
-#define CARD_EFFECT_STRIP_BURST_1 0x1BD8000   /* 0x00a23bac */
-#define CARD_EFFECT_STRIP_BURST_2 0x1AA0000   /* 0x00a23c18 */
-#define CARD_EFFECT_STRIP_BURST_3 0x1A85000   /* 0x00a23c88 */
-#define CARD_EFFECT_STRIP_BURST_4 0x1A67000   /* 0x00a23cfc */
-#define CARD_EFFECT_STRIP_FADE 0x1A28000      /* 0x00a23d90 */
-#define CARD_EFFECT_STRIP_SWIRL 0x1A40000     /* code 10, 0x00a249b4 */
 
-/* Damage digits: model n of a digit set is at base + (n << 10). */
-#define CARD_EFFECT_DIGIT_TEXTURE 0x1C990A0   /* 0x00a24b90 */
-#define CARD_EFFECT_DIGITS_FIRST 0x1C8A400    /* code 12 while phase is 0, 0x00a24b60 */
-#define CARD_EFFECT_DIGITS 0x1C8CC00          /* 0x00a24b7c */
 
-typedef unsigned int Quadword __attribute__((mode(TI)));
 
-/* The placement matrix as floats, or as four quadwords for the per-effect copy (lq/sq, 0x00a238e8). */
-typedef union CardEffectMatrix {
-    float m[4][4];
-    Quadword q[4];
-} CardEffectMatrix;
 
 /*
  * Draws and advances the 64 card-game effects of one side. Each effect starts
@@ -1491,6 +2031,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
         float offset[4];
         CardEffectMatrix quad;
         void *texture;
+        void *digitModel;
         s32 digit;
         Quadword row;
 
@@ -1504,25 +2045,25 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
         local.q[3] = row;
 
         switch (effect->code) {
-        case 1:
-        case 2:
-        case 3:
-        case 4:
+        case CGP_EFFECT_FRONT_ATTACK:
+        case CGP_EFFECT_PIERCE_ATTACK:
+        case CGP_EFFECT_SUPPORT_ATTACK:
+        case CGP_EFFECT_DIRECT_ATTACK:
             if (side != effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_TRAVEL:
                 if (effect->timer != 0) {
                     effect->timer--;
                     switch (effect->code) {
-                    case 1:
+                    case CGP_EFFECT_FRONT_ATTACK:
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_TRAVEL_1, 14 - effect->timer, CARD_EFFECT_SMALL_FRAME);
                         break;
-                    case 2:
+                    case CGP_EFFECT_PIERCE_ATTACK:
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_TRAVEL_2, 14 - effect->timer, CARD_EFFECT_SMALL_FRAME);
                         break;
-                    case 3:
+                    case CGP_EFFECT_SUPPORT_ATTACK:
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_TRAVEL_3, 14 - effect->timer, CARD_EFFECT_SMALL_FRAME);
                         break;
                     default:
@@ -1532,132 +2073,132 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                     effect->position[0] += effect->velocity[0];
                     effect->position[1] += effect->velocity[1];
                     effect->position[2] += effect->velocity[2];
-                    xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                    xglMatrixTrans(local.m, local.m, effect->position);
                     nmlModelSetTexture(texture);
-                    nmlModelSetPlace(local.m);
+                    nmlModelSetPlace(&local.m);
                     nmlModelSetToumei(1);
                     nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                    nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+                    nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
                 } else {
-                    effect->phase = 1;
+                    effect->phase = CGP_EFFECT_PHASE_BURST;
                     switch (effect->code) {
-                    case 1:
+                    case CGP_EFFECT_FRONT_ATTACK:
                         effect->timer = 13;
                         xglSoundEffectNormalID(CARD_EFFECT_SE_BURST, 0);
                         break;
-                    case 2:
+                    case CGP_EFFECT_PIERCE_ATTACK:
                         xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                         effect->timer = 16;
                         break;
-                    case 3:
+                    case CGP_EFFECT_SUPPORT_ATTACK:
                         xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                         effect->timer = 11;
                         break;
-                    case 4:
+                    case CGP_EFFECT_DIRECT_ATTACK:
                         xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                         effect->timer = 15;
                         break;
                     }
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_BURST:
                 switch (effect->code) {
-                case 1:
+                case CGP_EFFECT_FRONT_ATTACK:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_1, 12 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
-                        effect->phase = 2;
+                        effect->phase = CGP_EFFECT_PHASE_CHECK;
                     }
                     break;
-                case 2:
+                case CGP_EFFECT_PIERCE_ATTACK:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_2, 15 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
-                        effect->phase = 2;
+                        effect->phase = CGP_EFFECT_PHASE_CHECK;
                     }
                     break;
-                case 3:
+                case CGP_EFFECT_SUPPORT_ATTACK:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_3, 10 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
-                        effect->phase = 2;
+                        effect->phase = CGP_EFFECT_PHASE_CHECK;
                     }
                     break;
-                case 4:
+                case CGP_EFFECT_DIRECT_ATTACK:
                     if (effect->timer == 0) {
                         effect->code = 0;
                         break;
                     }
                     effect->timer--;
                     texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_4, 14 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                    xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                    xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                    xglMatrixTrans(local.m, local.m, effect->position);
+                    xglMatrixScale(local.m, local.m, effect->scale);
                     nmlModelSetTexture(texture);
-                    nmlModelSetPlace(local.m);
+                    nmlModelSetPlace(&local.m);
                     nmlModelSetToumei(1);
                     nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                    nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                    nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     break;
                 }
                 break;
-            case 2:
+            case CGP_EFFECT_PHASE_CHECK:
                 if (effect->stack == 0 || effect->stack->layers[0].life > 0) {
                     effect->code = 0;
                 } else {
-                    effect->phase = 3;
+                    effect->phase = CGP_EFFECT_PHASE_FADE;
                     effect->timer = 20;
                 }
                 break;
-            case 3:
+            case CGP_EFFECT_PHASE_FADE:
                 if (effect->timer == 0) {
                     effect->code = 0;
                     break;
                 }
                 effect->timer--;
                 texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_FADE, 10 - effect->timer / 2, CARD_EFFECT_SMALL_FRAME);
-                xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                xglMatrixTrans(local.m, local.m, effect->position);
                 CDEMatrixSub(local.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(local.m);
+                nmlModelSetPlace(&local.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
                 break;
             }
             break;
-        case 21:
-        case 22:
-        case 23:
-        case 24:
+        case CGP_EFFECT_FRONT_ATTACK_ONE_DESTROYED:
+        case CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED:
+        case CGP_EFFECT_SUPPORT:
+        case CGP_EFFECT_DIRECT_ATTACK_ONE_DESTROYED:
             if (side != effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_TRAVEL:
                 if (effect->timer != 0) {
                     effect->timer--;
                     effect->position[0] += effect->velocity[0];
@@ -1668,96 +2209,96 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                     effect->phase++;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_DELAY:
                 if (effect->timer != 0) {
                     effect->timer--;
                     break;
                 }
                 effect->phase++;
                 switch (effect->code) {
-                case 21:
+                case CGP_EFFECT_FRONT_ATTACK_ONE_DESTROYED:
                     effect->timer = 13;
                     xglSoundEffectNormalID(CARD_EFFECT_SE_BURST, 0);
                     break;
-                case 22:
+                case CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED:
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 16;
                     break;
-                case 23:
+                case CGP_EFFECT_SUPPORT:
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 11;
                     break;
-                case 24:
+                case CGP_EFFECT_DIRECT_ATTACK_ONE_DESTROYED:
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 15;
                     break;
                 }
                 break;
-            case 2:
+            case CGP_EFFECT_PHASE_DELAYED_BURST:
                 switch (effect->code) {
-                case 21:
+                case CGP_EFFECT_FRONT_ATTACK_ONE_DESTROYED:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_1, 12 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
                         effect->phase++;
                     }
                     break;
-                case 22:
+                case CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_2, 15 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
                         effect->phase++;
                     }
                     break;
-                case 23:
+                case CGP_EFFECT_SUPPORT:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_3, 10 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
                         effect->phase++;
                     }
                     break;
-                case 24:
+                case CGP_EFFECT_DIRECT_ATTACK_ONE_DESTROYED:
                     if (effect->timer == 0) {
                         effect->code = 0;
                         break;
                     }
                     effect->timer--;
                     texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_4, 14 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                    xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                    xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                    xglMatrixTrans(local.m, local.m, effect->position);
+                    xglMatrixScale(local.m, local.m, effect->scale);
                     nmlModelSetTexture(texture);
-                    nmlModelSetPlace(local.m);
+                    nmlModelSetPlace(&local.m);
                     nmlModelSetToumei(1);
                     nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                    nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                    nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     break;
                 }
                 break;
-            case 3:
+            case CGP_EFFECT_PHASE_DELAYED_CHECK:
                 if (effect->stack == 0 || effect->stack->layers[0].life > 0) {
                     effect->code = 0;
                 } else {
@@ -1765,31 +2306,31 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                     effect->phase++;
                 }
                 break;
-            case 4:
+            case CGP_EFFECT_PHASE_DELAYED_FADE:
                 if (effect->timer == 0) {
                     effect->code = 0;
                     break;
                 }
                 effect->timer--;
                 texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_FADE, 10 - effect->timer / 2, CARD_EFFECT_SMALL_FRAME);
-                xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                xglMatrixTrans(local.m, local.m, effect->position);
                 CDEMatrixSub(local.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(local.m);
+                nmlModelSetPlace(&local.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
                 break;
             }
             break;
-        case 31:
-        case 32:
-        case 34:
+        case CGP_EFFECT_FRONT_ATTACK_MANY_DESTROYED:
+        case CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED:
+        case CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED:
             if (side != effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_TRAVEL:
                 if (effect->timer != 0) {
                     effect->timer--;
                     effect->position[0] += effect->velocity[0];
@@ -1800,96 +2341,96 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                     effect->phase++;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_DELAY:
                 if (effect->timer != 0) {
                     effect->timer--;
                     break;
                 }
                 effect->phase++;
                 switch (effect->code) {
-                case 31:
+                case CGP_EFFECT_FRONT_ATTACK_MANY_DESTROYED:
                     effect->timer = 13;
                     xglSoundEffectNormalID(CARD_EFFECT_SE_BURST, 0);
                     break;
-                case 32:
+                case CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED:
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 16;
                     break;
-                case 33:
+                case CGP_EFFECT_SUPPORT_STRONG:
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 11;
                     break;
-                case 34:
+                case CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED:
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 15;
                     break;
                 }
                 break;
-            case 2:
+            case CGP_EFFECT_PHASE_DELAYED_BURST:
                 switch (effect->code) {
-                case 31:
+                case CGP_EFFECT_FRONT_ATTACK_MANY_DESTROYED:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_1, 12 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
                         effect->phase++;
                     }
                     break;
-                case 32:
+                case CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_2, 15 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
                         effect->phase++;
                     }
                     break;
-                case 33:
+                case CGP_EFFECT_SUPPORT_STRONG:
                     if (effect->timer != 0) {
                         effect->timer--;
                         texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_3, 10 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                        xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                        xglMatrixTrans(local.m, local.m, effect->position);
+                        xglMatrixScale(local.m, local.m, effect->scale);
                         nmlModelSetTexture(texture);
-                        nmlModelSetPlace(local.m);
+                        nmlModelSetPlace(&local.m);
                         nmlModelSetToumei(1);
                         nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                        nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                        nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     } else {
                         effect->phase++;
                     }
                     break;
-                case 34:
+                case CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED:
                     if (effect->timer == 0) {
                         effect->code = 0;
                         break;
                     }
                     effect->timer--;
                     texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_4, 14 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                    xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                    xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                    xglMatrixTrans(local.m, local.m, effect->position);
+                    xglMatrixScale(local.m, local.m, effect->scale);
                     nmlModelSetTexture(texture);
-                    nmlModelSetPlace(local.m);
+                    nmlModelSetPlace(&local.m);
                     nmlModelSetToumei(1);
                     nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                    nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                    nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                     break;
                 }
                 break;
-            case 3:
+            case CGP_EFFECT_PHASE_DELAYED_CHECK:
                 if (effect->stack == 0 || effect->stack->layers[0].life > 0) {
                     effect->code = 0;
                 } else {
@@ -1897,65 +2438,65 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                     effect->phase++;
                 }
                 break;
-            case 4:
+            case CGP_EFFECT_PHASE_DELAYED_FADE:
                 if (effect->timer == 0) {
                     effect->code = 0;
                     break;
                 }
                 effect->timer--;
                 texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_FADE, 10 - effect->timer / 2, CARD_EFFECT_SMALL_FRAME);
-                xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                xglMatrixTrans(local.m, local.m, effect->position);
                 CDEMatrixSub(local.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(local.m);
+                nmlModelSetPlace(&local.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
                 break;
             }
             break;
-        case 33:
+        case CGP_EFFECT_SUPPORT_STRONG:
             if (side != effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_TRAVEL:
                 if (effect->timer != 0) {
                     effect->timer--;
                     effect->position[0] += effect->velocity[0];
                     effect->position[1] += effect->velocity[1];
                     effect->position[2] += effect->velocity[2];
                     texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_TRAVEL_3, 14 - effect->timer, CARD_EFFECT_SMALL_FRAME);
-                    xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                    xglMatrixTrans(local.m, local.m, effect->position);
                     nmlModelSetTexture(texture);
-                    nmlModelSetPlace(local.m);
+                    nmlModelSetPlace(&local.m);
                     nmlModelSetToumei(1);
                     nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                    nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+                    nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
                 } else {
-                    effect->phase = 1;
+                    effect->phase = CGP_EFFECT_PHASE_DELAY;
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                     effect->timer = 11;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_DELAY:
                 if (effect->timer != 0) {
                     effect->timer--;
                     texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_3, 10 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                    xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
-                    xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
+                    xglMatrixTrans(local.m, local.m, effect->position);
+                    xglMatrixScale(local.m, local.m, effect->scale);
                     nmlModelSetTexture(texture);
-                    nmlModelSetPlace(local.m);
+                    nmlModelSetPlace(&local.m);
                     nmlModelSetToumei(1);
                     nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                    nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                    nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                 } else {
                     effect->timer = 15;
-                    effect->phase = 2;
+                    effect->phase = CGP_EFFECT_PHASE_DELAYED_BURST;
                     xglSoundEffectNormalID(CARD_EFFECT_SE_HIT, 0);
                 }
                 break;
-            case 2:
+            case CGP_EFFECT_PHASE_DELAYED_BURST:
                 if (effect->timer == 0) {
                     effect->code = 0;
                     break;
@@ -1966,44 +2507,44 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 offset[3] = 1.0f;
                 offset[0] = effect->position[0] - 0.54f;
                 offset[1] = effect->position[1] + 0.3915f;
-                xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
+                xglMatrixTrans(quad.m, local.m, offset);
                 CDEMatrixSub(quad.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(quad.m);
+                nmlModelSetPlace(&quad.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                 offset[0] = effect->position[0] + 0.54f;
                 offset[1] = effect->position[1] + 0.3915f;
-                xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
+                xglMatrixTrans(quad.m, local.m, offset);
                 CDEMatrixSub(quad.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(quad.m);
+                nmlModelSetPlace(&quad.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                 offset[0] = effect->position[0] - 0.54f;
                 offset[1] = effect->position[1] - 0.3915f;
-                xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
+                xglMatrixTrans(quad.m, local.m, offset);
                 CDEMatrixSub(quad.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(quad.m);
+                nmlModelSetPlace(&quad.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                 offset[0] = effect->position[0] + 0.54f;
                 offset[1] = effect->position[1] - 0.3915f;
-                xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
+                xglMatrixTrans(quad.m, local.m, offset);
                 CDEMatrixSub(quad.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(quad.m);
+                nmlModelSetPlace(&quad.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SCALED_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SCALED_MODEL);
                 break;
             }
             break;
-        case 5:
+        case CGP_EFFECT_BURST:
             if (side != effect->side) {
                 break;
             }
@@ -2013,28 +2554,28 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
             }
             effect->timer--;
             texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_2, 15 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-            xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+            xglMatrixTrans(local.m, local.m, effect->position);
             CDEMatrixSub(local.m);
             nmlModelSetTexture(texture);
-            nmlModelSetPlace(local.m);
+            nmlModelSetPlace(&local.m);
             nmlModelSetToumei(1);
             nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-            nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+            nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
             break;
-        case 25:
+        case CGP_EFFECT_DOUBLE_BURST:
             if (side != effect->side) {
                 break;
             }
             if (effect->timer != 0) {
                 effect->timer--;
                 texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_BURST_2, 15 - effect->timer, CARD_EFFECT_LARGE_FRAME);
-                xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                xglMatrixTrans(local.m, local.m, effect->position);
                 CDEMatrixSub(local.m);
                 nmlModelSetTexture(texture);
-                nmlModelSetPlace(local.m);
+                nmlModelSetPlace(&local.m);
                 nmlModelSetToumei(1);
                 nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-                nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+                nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
             } else if (effect->phase != 0) {
                 effect->code = 0;
             } else {
@@ -2045,7 +2586,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 effect->position[1] += 0.25f;
             }
             break;
-        case 10:
+        case CGP_EFFECT_SWIRL:
             if (side != effect->side) {
                 break;
             }
@@ -2055,29 +2596,29 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
             }
             effect->timer--;
             texture = CARD_EFFECT_FRAME(CARD_EFFECT_STRIP_SWIRL, 29 - effect->timer, CARD_EFFECT_SMALL_FRAME);
-            xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+            xglMatrixTrans(local.m, local.m, effect->position);
             CDEMatrixSub(local.m);
             nmlModelSetTexture(texture);
-            xglMatrixScale(local.m, (const float (*)[4]) local.m, effect->scale);
-            nmlModelSetPlace(local.m);
+            xglMatrixScale(local.m, local.m, effect->scale);
+            nmlModelSetPlace(&local.m);
             nmlModelSetToumei(1);
             nmlModelSetAlpha(CARD_EFFECT_ALPHA);
-            nmlModelEntryCard((void *) CARD_EFFECT_SPRITE_MODEL);
+            nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
             break;
-        case 11:
+        case CGP_EFFECT_DAMAGE:
             if (side == effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_WAIT:
                 if (effect->timer != 0) {
                     effect->timer--;
                 } else {
-                    effect->phase = 1;
+                    effect->phase = CGP_EFFECT_PHASE_SHOW;
                     effect->timer = 15;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_SHOW:
                 if (effect->timer != 0) {
                     effect->timer--;
                         offset[3] = 1.0f;
@@ -2090,30 +2631,30 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                             offset[1] = -1.81f;
                             offset[2] = 0.0f;
                         }
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, offset);
+                        xglMatrixTrans(local.m, local.m, offset);
                         CDEMatrixSub(local.m);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                        xglMatrixTrans(local.m, local.m, effect->position);
                         offset[0] = 0.15f;
                         offset[1] = 0.0f;
                         offset[2] = 0.1f;
                         offset[3] = 1.0f;
                         digit = effect->value / 10;
                         if (digit != 0) {
-                            xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                            digit = CARD_EFFECT_DIGITS + (digit << 10);
-                            nmlModelSetPlace(quad.m);
-                            nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                            nmlModelSetLight(asColor, asDir);
-                            nmlModelEntryCard((void *) digit);
+                            xglMatrixTrans(quad.m, local.m, offset);
+                            digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                            nmlModelSetPlace(&quad.m);
+                            nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                            nmlModelSetLight(&asColor, &asDir);
+                            nmlModelEntryCard(digitModel);
                         }
                         offset[0] = 0.25f;
                         digit = effect->value % 10;
-                        digit = CARD_EFFECT_DIGITS + (digit << 10);
-                        xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                        nmlModelSetPlace(quad.m);
-                        nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                        nmlModelSetLight(asColor, asDir);
-                        nmlModelEntryCard((void *) digit);
+                        digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                        xglMatrixTrans(quad.m, local.m, offset);
+                        nmlModelSetPlace(&quad.m);
+                        nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                        nmlModelSetLight(&asColor, &asDir);
+                        nmlModelEntryCard(digitModel);
                         effect->position[0] += effect->velocity[0];
                         effect->position[1] += effect->velocity[1];
                         effect->position[2] += effect->velocity[2];
@@ -2123,20 +2664,20 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
-        case 15:
+        case CGP_EFFECT_DAMAGE_ONE_DESTROYED:
             if (side == effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_WAIT:
                 if (effect->timer != 0) {
                     effect->timer--;
                 } else {
-                    effect->phase = 1;
+                    effect->phase = CGP_EFFECT_PHASE_SHOW;
                     effect->timer = 15;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_SHOW:
                 if (effect->timer != 0) {
                     effect->timer--;
                         offset[3] = 1.0f;
@@ -2149,30 +2690,30 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                             offset[1] = -1.81f;
                             offset[2] = 0.0f;
                         }
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, offset);
+                        xglMatrixTrans(local.m, local.m, offset);
                         CDEMatrixSub(local.m);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                        xglMatrixTrans(local.m, local.m, effect->position);
                         offset[0] = 0.15f;
                         offset[1] = 0.0f;
                         offset[2] = 0.1f;
                         offset[3] = 1.0f;
                         digit = effect->value / 10;
                         if (digit != 0) {
-                            xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                            digit = CARD_EFFECT_DIGITS + (digit << 10);
-                            nmlModelSetPlace(quad.m);
-                            nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                            nmlModelSetLight(asColor, asDir);
-                            nmlModelEntryCard((void *) digit);
+                            xglMatrixTrans(quad.m, local.m, offset);
+                            digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                            nmlModelSetPlace(&quad.m);
+                            nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                            nmlModelSetLight(&asColor, &asDir);
+                            nmlModelEntryCard(digitModel);
                         }
                         offset[0] = 0.25f;
                         digit = effect->value % 10;
-                        digit = CARD_EFFECT_DIGITS + (digit << 10);
-                        xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                        nmlModelSetPlace(quad.m);
-                        nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                        nmlModelSetLight(asColor, asDir);
-                        nmlModelEntryCard((void *) digit);
+                        digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                        xglMatrixTrans(quad.m, local.m, offset);
+                        nmlModelSetPlace(&quad.m);
+                        nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                        nmlModelSetLight(&asColor, &asDir);
+                        nmlModelEntryCard(digitModel);
                         effect->position[0] += effect->velocity[0];
                         effect->position[1] += effect->velocity[1];
                         effect->position[2] += effect->velocity[2];
@@ -2182,7 +2723,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
-        case 12:
+        case CGP_EFFECT_NUMBER:
             if (side != effect->side) {
                 break;
             }
@@ -2197,7 +2738,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 offset[1] = effect->stack->position[1];
                 offset[2] = effect->stack->position[2];
             } else {
-                if (effect->phase == 0) {
+                if (effect->phase == CGP_NUMBER_BOTTOM) {
                     offset[1] = -1.81f;
                 } else {
                     offset[1] = 1.81f;
@@ -2205,55 +2746,55 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 offset[0] = 0.0f;
                 offset[2] = 0.0f;
             }
-            xglMatrixTrans(local.m, (const float (*)[4]) local.m, offset);
+            xglMatrixTrans(local.m, local.m, offset);
             CDEMatrixSub(local.m);
-            xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+            xglMatrixTrans(local.m, local.m, effect->position);
             offset[0] = 0.15f;
             offset[1] = 0.0f;
             offset[2] = 0.1f;
             digit = effect->value / 10;
             if (digit != 0) {
-                xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                if (effect->phase == 0) {
-                    digit = CARD_EFFECT_DIGITS_FIRST + (digit << 10);
+                xglMatrixTrans(quad.m, local.m, offset);
+                if (effect->phase == CGP_NUMBER_BOTTOM) {
+                    digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS_FIRST, digit);
                 } else {
-                    digit = CARD_EFFECT_DIGITS + (digit << 10);
+                    digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
                 }
-                nmlModelSetPlace(quad.m);
-                nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                nmlModelSetLight(asColor, asDir);
-                nmlModelEntryCard((void *) digit);
+                nmlModelSetPlace(&quad.m);
+                nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                nmlModelSetLight(&asColor, &asDir);
+                nmlModelEntryCard(digitModel);
             }
             offset[0] = 0.25f;
             digit = effect->value % 10;
-            if (effect->phase == 0) {
-                digit = CARD_EFFECT_DIGITS_FIRST + (digit << 10);
+            if (effect->phase == CGP_NUMBER_BOTTOM) {
+                digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS_FIRST, digit);
             } else {
-                digit = CARD_EFFECT_DIGITS + (digit << 10);
+                digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
             }
-            xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-            nmlModelSetPlace(quad.m);
-            nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-            nmlModelSetLight(asColor, asDir);
-            nmlModelEntryCard((void *) digit);
+            xglMatrixTrans(quad.m, local.m, offset);
+            nmlModelSetPlace(&quad.m);
+            nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+            nmlModelSetLight(&asColor, &asDir);
+            nmlModelEntryCard(digitModel);
             effect->position[0] += effect->velocity[0];
             effect->position[1] += effect->velocity[1];
             effect->position[2] += effect->velocity[2];
             break;
-        case 14:
+        case CGP_EFFECT_DAMAGE_LEFT:
             if (side == effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_WAIT:
                 if (effect->timer != 0) {
                     effect->timer--;
                 } else {
-                    effect->phase = 1;
+                    effect->phase = CGP_EFFECT_PHASE_SHOW;
                     effect->timer = 15;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_SHOW:
                 if (effect->timer != 0) {
                     effect->timer--;
                         offset[3] = 1.0f;
@@ -2266,30 +2807,30 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                             offset[1] = -1.81f;
                             offset[2] = 0.0f;
                         }
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, offset);
+                        xglMatrixTrans(local.m, local.m, offset);
                         CDEMatrixSub(local.m);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                        xglMatrixTrans(local.m, local.m, effect->position);
                         offset[0] = -0.35f;
                         offset[1] = 0.0f;
                         offset[2] = 0.1f;
                         offset[3] = 1.0f;
                         digit = effect->value / 10;
                         if (digit != 0) {
-                            xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                            digit = CARD_EFFECT_DIGITS + (digit << 10);
-                            nmlModelSetPlace(quad.m);
-                            nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                            nmlModelSetLight(asColor, asDir);
-                            nmlModelEntryCard((void *) digit);
+                            xglMatrixTrans(quad.m, local.m, offset);
+                            digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                            nmlModelSetPlace(&quad.m);
+                            nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                            nmlModelSetLight(&asColor, &asDir);
+                            nmlModelEntryCard(digitModel);
                         }
                         offset[0] = -0.25f;
                         digit = effect->value % 10;
-                        digit = CARD_EFFECT_DIGITS + (digit << 10);
-                        xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                        nmlModelSetPlace(quad.m);
-                        nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                        nmlModelSetLight(asColor, asDir);
-                        nmlModelEntryCard((void *) digit);
+                        digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                        xglMatrixTrans(quad.m, local.m, offset);
+                        nmlModelSetPlace(&quad.m);
+                        nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                        nmlModelSetLight(&asColor, &asDir);
+                        nmlModelEntryCard(digitModel);
                         effect->position[0] += effect->velocity[0];
                         effect->position[1] += effect->velocity[1];
                         effect->position[2] += effect->velocity[2];
@@ -2299,20 +2840,20 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
-        case 16:
+        case CGP_EFFECT_DAMAGE_MANY_DESTROYED:
             if (side == effect->side) {
                 break;
             }
             switch (effect->phase) {
-            case 0:
+            case CGP_EFFECT_PHASE_WAIT:
                 if (effect->timer != 0) {
                     effect->timer--;
                 } else {
-                    effect->phase = 1;
+                    effect->phase = CGP_EFFECT_PHASE_SHOW;
                     effect->timer = 15;
                 }
                 break;
-            case 1:
+            case CGP_EFFECT_PHASE_SHOW:
                 if (effect->timer != 0) {
                     effect->timer--;
                         offset[3] = 1.0f;
@@ -2325,30 +2866,30 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                             offset[1] = -1.81f;
                             offset[2] = 0.0f;
                         }
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, offset);
+                        xglMatrixTrans(local.m, local.m, offset);
                         CDEMatrixSub(local.m);
-                        xglMatrixTrans(local.m, (const float (*)[4]) local.m, effect->position);
+                        xglMatrixTrans(local.m, local.m, effect->position);
                         offset[0] = 0.15f;
                         offset[1] = 0.0f;
                         offset[2] = 0.1f;
                         offset[3] = 1.0f;
                         digit = effect->value / 10;
                         if (digit != 0) {
-                            xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                            digit = CARD_EFFECT_DIGITS + (digit << 10);
-                            nmlModelSetPlace(quad.m);
-                            nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                            nmlModelSetLight(asColor, asDir);
-                            nmlModelEntryCard((void *) digit);
+                            xglMatrixTrans(quad.m, local.m, offset);
+                            digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                            nmlModelSetPlace(&quad.m);
+                            nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                            nmlModelSetLight(&asColor, &asDir);
+                            nmlModelEntryCard(digitModel);
                         }
                         offset[0] = 0.25f;
                         digit = effect->value % 10;
-                        digit = CARD_EFFECT_DIGITS + (digit << 10);
-                        xglMatrixTrans(quad.m, (const float (*)[4]) local.m, offset);
-                        nmlModelSetPlace(quad.m);
-                        nmlModelSetTexture((void *) CARD_EFFECT_DIGIT_TEXTURE);
-                        nmlModelSetLight(asColor, asDir);
-                        nmlModelEntryCard((void *) digit);
+                        digitModel = CARD_EFFECT_DIGIT_MODEL(CARD_EFFECT_DIGITS, digit);
+                        xglMatrixTrans(quad.m, local.m, offset);
+                        nmlModelSetPlace(&quad.m);
+                        nmlModelSetTexture(CARD_EFFECT_DIGIT_TEXTURE);
+                        nmlModelSetLight(&asColor, &asDir);
+                        nmlModelEntryCard(digitModel);
                         effect->position[0] += effect->velocity[0];
                         effect->position[1] += effect->velocity[1];
                         effect->position[2] += effect->velocity[2];
@@ -2378,7 +2919,7 @@ s32 CGPCheckTeMax(CardListWindow *list, CardHand *hand)
         list->cursorColor = CGP_HAND_LIST_CURSOR_COLOR;
         list->x = CGP_HAND_LIST_X;
         list->y = CGP_HAND_LIST_Y;
-        list->lineHeight = CGP_HAND_LIST_LINE_HEIGHT;
+        list->textLength = CGP_HAND_LIST_TEXT_LENGTH;
         list->rows = CGP_HAND_LIST_ROWS;
         list->active = 0;
         list->cursor = 0;
@@ -2392,42 +2933,31 @@ s32 CGPCheckTeMax(CardListWindow *list, CardHand *hand)
     return 0;
 }
 
-void CGPCommFinishSub(CGPCardDefSource *src, CardPlayHand *work, s32 index)
+void CGPCommFinishSub(CardGameWork *work, CardPlaySide *side, s32 index)
 {
     s32 cost;
     s32 j;
     s32 junkCnt;
 
     if (index >= 0) {
-        work->lastCardValue = work->cards[index];
-        work->cards[index] = -1;
-        CardPlayCleanHand(work);
+        side->battle[0].cmdView.playedCard = side->hand.cards[index];
+        side->hand.cards[index] = -1;
+        CardPlayCleanHand(&side->hand);
     }
 
-    cost = src->defs[work->lastCardValue].cost;
+    cost = work->definitions[side->battle[0].cmdView.playedCard].reserveCost;
     for (j = 0; j < cost; j++) {
-        CardPlayCostCard(work);
+        CardPlayCostCard(side);
     }
 
-    junkCnt = CardPlayJunkCnt(work);
-    work->junkPile[junkCnt] = work->lastCardValue;
-    work->lastCardValue = -1;
+    junkCnt = CardPlayJunkCnt(side);
+    side->junk[junkCnt] = side->battle[0].cmdView.playedCard;
+    side->battle[0].cmdView.playedCard = -1;
 }
 
-/* Arena the card game loads its model, texture and effect files into (see CPISMdlLst). */
-#define CGP_ARENA(offset) (CARD_MODEL_ARENA_BASE + (offset))
 
-#define CGP_FLAG_HELD_TRIANGLE 0x80   /* triangle was held when the game started (`addiu $2,$0,0x80`, 0x00a25254) */
-#define CGP_HELP_TOPIC_GAME 0x21      /* `addiu $4,$0,0x21`, 0x00a2525c */
-#define CGP_EFFECT_COUNT 64           /* `addiu $6,$0,0x3F`, 0x00a2526c counts down to zero */
-#define CGP_QUEUE_SLOTS 40            /* `addiu $6,$0,0x27`, 0x00a25308 */
-#define CGP_QUEUE_SIDE_DISTANCE 160   /* halfwords from the enemy's queue back to the player's (`sh $4,-0x140($2)`, 0x00a25314) */
 
-/* Rotation vector the stage starts from (lui/ori 0xBF666666 at 0x00a25354, lui 0xC1A00000 at 0x00a25348). */
-#define CGP_ROT_STAGE_START_X (-0.9f)
-#define CGP_ROT_STAGE_START_Y (-20.0f)
 
-extern int CardFread(u32 destination, char *filename);
 
 /*
  * Starts a card game: clears the game flags, the command control, the messages,
@@ -2440,7 +2970,7 @@ void CardGameInit(CardGameWork *work)
     s32 shown;
 
     work->flags = 0;
-    if (work->command.input[0].held & CGP_PAD_PREVIEW) {
+    if (work->command.input[0].held & PAD_TRIANGLE) {
         work->flags = CGP_FLAG_HELD_TRIANGLE;
     }
     work->command.interruptMessId = 1;
@@ -2458,7 +2988,7 @@ void CardGameInit(CardGameWork *work)
     work->command.aiPhase = 0;
     work->errorMessSide = 0;
     work->errorMessKind = 0;
-    work->infoPanelPhase = 0;
+    work->infoPanelPhase = CGP_INFO_PANEL_INIT;
     work->resultWait = 0;
     work->errorMessReason = 0;
     work->mess = 0;
@@ -2468,7 +2998,7 @@ void CardGameInit(CardGameWork *work)
     work->cursorMoveStep[1] = 0;
     work->effectsActive = 0;
     work->effectsSet = 0;
-    work->helpTopic = CGP_HELP_TOPIC_GAME;
+    work->helpTopic = CARD_HELP_PAGE_DRAW_PHASE;
     work->errorMessValue = -1;
     for (i = 0; i < CGP_EFFECT_COUNT; i++) {
         work->effects[i].side = 0;
@@ -2608,13 +3138,13 @@ void CardGameInit(CardGameWork *work)
  */
 void CGPNextTurnSub(CardGameWork *work)
 {
-    work->infoPanelPhase = 0;
+    work->infoPanelPhase = CGP_INFO_PANEL_INIT;
     work->command.phase++;
-    if ((s16) work->command.phase >= CGP_PHASE_COUNT) {
+    if (work->command.phase >= CGP_PHASE_COUNT) {
         work->command.phase = 0;
         work->command.turn++;
         xglSoundEffectNormalID(CGP_SE_NEXT_TURN, 0);
-    } else if ((s16) work->command.phase == CGP_SIDE1_FIRST_PHASE) {
+    } else if (work->command.phase == CGP_SIDE1_FIRST_PHASE) {
         xglSoundEffectNormalID(CGP_SE_NEXT_TURN, 0);
     } else {
         xglSoundEffectNormalID(CGP_SE_NEXT_PHASE, 0);
@@ -2629,9 +3159,9 @@ void CGPNextTurnSub(CardGameWork *work)
     work->cursor.controllingSide = -1;
     work->cursorMoveStep[0] = 0;
     work->cursorMoveStep[1] = 0;
-    CGPSetMessage(work, (s16) work->command.phase);
-    CGPSetInterruptMess(work, (s16) work->command.phase + 1);
-    work->helpTopic = HelpPageList[(s16) work->command.phase];
+    CGPSetMessage(work, work->command.phase);
+    CGPSetInterruptMess(work, work->command.phase + 1);
+    work->helpTopic = HelpPageList[work->command.phase];
     work->rotStageVector[1] = -20.0f;
     work->command.slideDirection = 0;
     work->rotStageVector[0] = -0.9f;
@@ -2643,8 +3173,10 @@ void CGPNextTurnSub(CardGameWork *work)
  * Swap a disposal slot's stack with a battle slot's and start the ten-frame
  * slide that carries each of them to the other's position.
  */
-void CGPMoveDSBATTLEwork(CardMoveWork *disposal, CardMoveWork *battle)
+void CGPMoveDSBATTLEwork(CardLayerStack *disposalStack, CardLayerStack *battleStack)
 {
+    CardMoveWork *disposal = (CardMoveWork *) disposalStack;
+    CardMoveWork *battle = (CardMoveWork *) battleStack;
     CardMoveWork moved;
     s32 i;
 
@@ -2673,7 +3205,7 @@ void CGPMoveDSBATTLEwork(CardMoveWork *disposal, CardMoveWork *battle)
     moved.shuntPosition[1] = disposal->shuntPosition[1];
     moved.shuntPosition[2] = disposal->shuntPosition[2];
     for (i = 0; i < 40; i++) {
-        moved.layers[i].state = disposal->layers[i].state;
+        moved.layers[i].powerPlus = disposal->layers[i].powerPlus;
         moved.layers[i].preservedByte01 = disposal->layers[i].preservedByte01;
         moved.layers[i].boostCount = disposal->layers[i].boostCount;
         moved.layers[i].life = disposal->layers[i].life;
@@ -2711,7 +3243,7 @@ void CGPMoveDSBATTLEwork(CardMoveWork *disposal, CardMoveWork *battle)
     battle->position[1] = moved.position[1];
     battle->position[2] = 0.12f;
     for (i = 0; i < 40; i++) {
-        battle->layers[i].state = moved.layers[i].state;
+        battle->layers[i].powerPlus = moved.layers[i].powerPlus;
         battle->layers[i].preservedByte01 = moved.layers[i].preservedByte01;
         battle->layers[i].boostCount = moved.layers[i].boostCount;
         battle->layers[i].life = moved.layers[i].life;
@@ -2724,66 +3256,50 @@ void CGPMoveDSBATTLEwork(CardMoveWork *disposal, CardMoveWork *battle)
     }
 }
 
-/* A top card of one of these ids attacks with the power of the base card. */
-#define CGP_CARD_BASE_POWER_1 44  /* `addiu $4,$0,0x2C`, 0x00a29d00 */
-#define CGP_CARD_BASE_POWER_2 47  /* `addiu $2,$0,0x2F`, 0x00a29d30 */
-#define CGP_CARD_BASE_POWER_3 53  /* `addiu $2,$0,0x35`, 0x00a29d38 */
-/* Cards the steps single out (ids from the immediates around 0x00a2bd04, 0x00a2bdac and 0x00a2bf68). */
-#define CGP_CARD_SIDE_WEAPON 52       /* attaches only to card 11 (CGPDisposeWeaponSub) */
-#define CGP_CARD_SIDE_WEAPON_TARGET 11
-/* Card kinds (CardDefinition.kind). Kind 1 is paid from playPoints[0] and kind 4 from playPoints[1]; kind 4 is
- * the one CardPlayDesertOperation removes; kind 2 cannot be played (error 11) and is the one the hand discard
- * step accepts (`kind & 2`). */
-#define CGP_CARD_KIND_COMMAND 1
-#define CGP_CARD_KIND_DISCARD_ONLY 2
-#define CGP_CARD_KIND_OPERATION 4
-/* CardLayerStack.flags bit set on a locked battle slot (`andi $2,$2,0x2`, 0x00a2ea70 and 0x00a2eba8; error CGP_ERR_SLOT_LOCKED). */
-#define CGP_BATTLE_FLAG_SLOT_LOCKED 0x02
-/* Operation card 122 in play on the defending side lowers the attack power (`addiu $5,$0,0x7A`, 0x00a288b0). */
-#define CGP_OPE_DEFENCE_DOWN 122
 
 /*
  * Attaches the equipment card at hand position index to a weapon stack: the
  * weapon's displaced previous equipment card goes to the junk pile, the new
  * card becomes layer one with its operation duration as life, takes the card's
  * reserve cost from the draw pile and its play cost from the play points, and
- * leaves the hand. Cards 44, 47 and 53 keep the stack's power.
+ * leaves the hand. Shield, Battle Suit and Eyeglasses keep the stack's power.
  */
-void CGPequipSub(CardGameWork *work, CardPlayHand *hand, CardLayerStack *stack, s32 index)
+void CGPequipSub(CardGameWork *work, CardPlaySide *side, CardLayerStack *stack, s32 index)
 {
     s32 i;
     s32 junkCount;
 
     if (stack->layers[1].cardId >= 0) {
-        junkCount = CardPlayJunkCnt(hand);
+        junkCount = CardPlayJunkCnt(side);
         stack->power = work->definitions[stack->layers[0].cardId].basePower;
         stack->powerLimit = work->definitions[stack->layers[0].cardId].basePower;
-        hand->junkPile[junkCount] = stack->layers[1].cardId;
+        side->junk[junkCount] = stack->layers[1].cardId;
     }
-    stack->layers[1].life = work->definitions[hand->cards[index]].operationDuration;
-    if (hand->cards[index] != CGP_CARD_BASE_POWER_1 && hand->cards[index] != CGP_CARD_BASE_POWER_2 &&
-        hand->cards[index] != CGP_CARD_BASE_POWER_3) {
-        stack->power = work->definitions[hand->cards[index]].basePower;
-        stack->powerLimit = work->definitions[hand->cards[index]].basePower;
+    stack->layers[1].life = work->definitions[side->hand.cards[index]].operationDuration;
+    if (side->hand.cards[index] != CARD_ID_SHIELD && side->hand.cards[index] != CARD_ID_BATTLE_SUIT &&
+        side->hand.cards[index] != CARD_ID_EYEGLASSES) {
+        stack->power = work->definitions[side->hand.cards[index]].basePower;
+        stack->powerLimit = work->definitions[side->hand.cards[index]].basePower;
     }
-    stack->layers[1].state = 0;
+    stack->layers[1].powerPlus = 0;
     stack->layers[1].flag = 0;
     stack->layers[1].boostCount = 0;
-    stack->layers[1].cardId = hand->cards[index];
-    for (i = 0; i < work->definitions[hand->cards[index]].reserveCost; i++) {
-        CardPlayCostCard(hand);
+    stack->layers[1].cardId = side->hand.cards[index];
+    for (i = 0; i < work->definitions[side->hand.cards[index]].reserveCost; i++) {
+        CardPlayCostCard(side);
     }
-    hand->playPoints[0] -= work->definitions[hand->cards[index]].playCost;
-    hand->cards[index] = -1;
-    CardPlayCleanHand(hand);
+    side->hand.playPoints[0] -= work->definitions[side->hand.cards[index]].playCost;
+    side->hand.cards[index] = -1;
+    CardPlayCleanHand(&side->hand);
 }
 
 /*
  * Whether one equipment card may be attached to one weapon card. Both cards
- * must carry kind bit 0. A weapon whose flags are 32 takes an equipment card
- * with flag 8, except cards 4, 80 and 65, and card 11 only on weapon 52; a
- * weapon whose flags are 64 takes an equipment card with flag 1 or flag 2,
- * except cards 2, 9 and 14. Every other weapon takes none.
+ * must be battle cards. A weapon that only a Mech can equip takes a Mech card,
+ * except Lv 1 KOS-MOS, Durandal and Zohar Emulator, and Lv 10 KOS-MOS only on
+ * the Third Armament; a weapon that only Humans and Realians can equip takes a
+ * Human or Realian card, except the Ziggy cards and Albedo. Every other weapon
+ * takes none.
  */
 s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId)
 {
@@ -2798,22 +3314,22 @@ s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId)
     weaponFlags = work->definitions[weaponId].flags;
     equipFlags = work->definitions[equipId].flags;
     allowed = 0;
-    if ((weaponKind & 1) && (equipKind & 1)) {
+    if ((weaponKind & CARD_KIND_BATTLE) && (equipKind & CARD_KIND_BATTLE)) {
         switch (weaponFlags) {
-        case 32:
-            if ((equipFlags & 8) && equipId != 4 && equipId != 80 &&
-                equipId != 65)
+        case CARD_ATTR_WEAPON_MECH:
+            if ((equipFlags & CARD_ATTR_MECH) && equipId != CARD_ID_LV_1_KOS_MOS && equipId != CARD_ID_DURANDAL &&
+                equipId != CARD_ID_ZOHAR_EMULATOR)
             {
-                if (equipId != 11) {
+                if (equipId != CARD_ID_LV_10_KOS_MOS) {
                     allowed = 1;
-                } else if (weaponId == 52) {
+                } else if (weaponId == CARD_ID_THIRD_ARMAMENT) {
                     allowed = 1;
                 }
             }
             break;
-        case 64:
-            if (((equipFlags & 1) || (equipFlags & 2)) &&
-                equipId != 2 && equipId != 9 && equipId != 14)
+        case CARD_ATTR_WEAPON_HUMAN:
+            if (((equipFlags & CARD_ATTR_HUMAN) || (equipFlags & CARD_ATTR_REALIAN)) &&
+                equipId != CARD_ID_LV_1_ZIGGY && equipId != CARD_ID_LV_10_ZIGGY && equipId != CARD_ID_ALBEDO)
             {
                 allowed = 1;
             }
@@ -2828,20 +3344,21 @@ s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId)
  * board card under the cursor (target), then confirms with the decide sound
  * and restarts the phase timer. Every refusal plays the buzzer instead.
  * The target must lie in the acting side's disposal or battle row and hold a
- * card. Card 52 only attaches to card 11. A card with definition flags 0x20
- * attaches to a card with flag 8 except cards 4, 11, 80 and 65. Any other card
- * needs flag 0x40 and a target with flag 1 or 2 except cards 2, 9 and 14.
+ * card. The Third Armament only attaches to Lv 10 KOS-MOS. A Mech weapon
+ * attaches to a Mech card except Lv 1 and Lv 10 KOS-MOS, Durandal and Zohar
+ * Emulator. A Human weapon needs a Human or Realian target other than the
+ * Ziggy cards and Albedo.
  */
 static inline void CGPAttachHeldCard(CardGameWork *work, CardPlaySide *ownSide,
                                      CardLayerStack *stack, s32 handIndex)
 {
-    CGPequipSub(work, (CardPlayHand *) &ownSide->hand, stack, handIndex);
-    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+    CGPequipSub(work, ownSide, stack, handIndex);
+    xglSoundEffectNormalID(SE_DECIDE, 0);
     work->command.phaseTimer = 1;
 }
 
-void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CGPCursorPosition held,
-                         CGPCursorPosition target)
+void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CardCursorPosition held,
+                         CardCursorPosition target)
 {
     CardPlaySide *ownSide;
     CardLayerStack *stack;
@@ -2865,33 +3382,33 @@ void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CGPCursorPosition held,
         } else {
             stack = &ownSide->battle[target.index].battle;
         }
-        if (held.cardId == CGP_CARD_SIDE_WEAPON) {
-            if (target.cardId == CGP_CARD_SIDE_WEAPON_TARGET) {
+        if (held.cardId == CARD_ID_THIRD_ARMAMENT) {
+            if (target.cardId == CARD_ID_LV_10_KOS_MOS) {
                 CGPAttachHeldCard(work, ownSide, stack, held.index);
             } else {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
-        } else if ((work->definitions[held.cardId].flags & 0x20) &&
-                   (work->definitions[target.cardId].flags & 8)) {
-            if (target.cardId != 4 && target.cardId != 11 && target.cardId != 80 &&
-                target.cardId != 65) {
+        } else if ((work->definitions[held.cardId].flags & CARD_ATTR_WEAPON_MECH) &&
+                   (work->definitions[target.cardId].flags & CARD_ATTR_MECH)) {
+            if (target.cardId != CARD_ID_LV_1_KOS_MOS && target.cardId != CARD_ID_LV_10_KOS_MOS &&
+                target.cardId != CARD_ID_DURANDAL && target.cardId != CARD_ID_ZOHAR_EMULATOR) {
                 CGPAttachHeldCard(work, ownSide, stack, held.index);
             } else {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
-        } else if (work->definitions[held.cardId].flags & 0x40) {
+        } else if (work->definitions[held.cardId].flags & CARD_ATTR_WEAPON_HUMAN) {
             targetFlags = work->definitions[target.cardId].flags;
-            if (((targetFlags & 1) || (targetFlags & 2)) && target.cardId != 2 &&
-                target.cardId != 9 && target.cardId != 14) {
+            if (((targetFlags & CARD_ATTR_HUMAN) || (targetFlags & CARD_ATTR_REALIAN)) && target.cardId != CARD_ID_LV_1_ZIGGY &&
+                target.cardId != CARD_ID_LV_10_ZIGGY && target.cardId != CARD_ID_ALBEDO) {
                 CGPAttachHeldCard(work, ownSide, stack, held.index);
             } else {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
         } else {
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            xglSoundEffectNormalID(SE_BUZZER, 0);
         }
     } else {
-        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+        xglSoundEffectNormalID(SE_BUZZER, 0);
     }
 }
 
@@ -2944,7 +3461,7 @@ s32 CGPCursor2Area(CardGameWork *work)
     return area;
 }
 
-void CGPCursor2Pos(CGPCursorPosition *position, CardGameWork *work)
+void CGPCursor2Pos(CardCursorPosition *position, CardGameWork *work)
 {
     position->cardId = -1;
     position->stackedCard = -1;
@@ -3026,7 +3543,7 @@ void CGPCursor2Pos(CGPCursorPosition *position, CardGameWork *work)
  */
 s16 CGPCMSub(CardGameWork *work)
 {
-    CGPCursorPosition position;
+    CardCursorPosition position;
 
     work->highlightScaleX = work->highlightScaleY = 1.0f;
     if (work->cursorIndex < 0) {
@@ -3052,51 +3569,10 @@ s16 CGPCMSub(CardGameWork *work)
     return position.cardId;
 }
 
-/*
- * The cursor of a controller steps over the board zones (CGP_AREA_*), four
- * slots per zone. A card pile can also be walked: cursorMoveStep[0] is the
- * player's discard pile and cursorMoveStep[1] the enemy's.
- */
-#define CGP_PILE_BOARD 0              /* the cursor is on the board */
-#define CGP_PILE_TOP 1                /* the cursor sits on the pile and shows its top card */
-#define CGP_PILE_BROWSE 2             /* the cards of the pile are walked one by one */
 
-/*
- * Cursor slot that stands for a pile: slot 3 of the player's hand zone (the
- * `ld` at 0x00a26c14 compares zone and slot with 0x00090003 << 32) and slot 0
- * of the enemy's hand zone (the `ld` at 0x00a26c64 requires both to be zero).
- */
-#define CGP_PLAYER_PILE_SLOT 3
 
-/* Highlight of the cursor over a hand (`lui $1,0x3E33`, 0x00a26db4). */
-#define CGP_HAND_HIGHLIGHT 0.175f
 
-/* Card id bits 8..11 are cleared before the preview draws the card (`andi $2,$3,0xF0FF`, 0x00a270e0). */
-#define CGP_CARD_ID_MASK 0xF0FF
 
-/*
- * Card preview, shown while the preview button is held: the card under the
- * cursor in the middle, the card stacked under it on the right and the card
- * the side is playing on the left. CardDisp's last argument is the display
- * mode: CGP_CARD_MODE_FULL draws the card at full size with its text,
- * CGP_CARD_MODE_ICON a plain card. The two side cards are shown small and
- * enlarged while their zoom button is held (CGP_PAD_ZOOM_LEFT/RIGHT); small
- * they get a frame model, the enlarged ones sit nearer the middle.
- */
-#define CGP_CARD_MODE_ICON 0
-#define CGP_CARD_MODE_FULL 5
-#define CGP_PREVIEW_FULL_Y 0.369f     /* `lui $1,0x3EBC`, 0x00a270f4 */
-#define CGP_PREVIEW_FULL_Z 0.5f       /* `lui $1,0x3F00`, 0x00a27100 */
-#define CGP_PREVIEW_FULL_SCALE 1.1f   /* `lui $1,0x3F8C`, 0x00a270e4 */
-#define CGP_PREVIEW_SMALL_Y 0.096f    /* `lui $1,0x3DC4`, 0x00a27164 */
-#define CGP_PREVIEW_SMALL_Z 0.48f     /* `lui $1,0x3EF5`, 0x00a27170 */
-#define CGP_PREVIEW_SMALL_SCALE 0.55f /* `lui $1,0x3F0C`, 0x00a27154 */
-#define CGP_PREVIEW_SIDE_X 1.904f     /* small side cards stand this far from the middle (`lui $1,0x3FF3`, 0x00a271f8) */
-#define CGP_PREVIEW_ZOOMED_X 0.9f     /* enlarged side cards (`lui $1,0x3F66`, 0x00a2724c) */
-#define CGP_PREVIEW_FRAME_Z 0.29f     /* frame model behind a small side card (`lui $1,0x3E94`, 0x00a272c4) */
-#define CGP_PREVIEW_FRAME_TEXTURE CARD_MODEL_AT(0x39800)  /* `lui $4,0x193`, 0x00a272fc */
-#define CGP_PREVIEW_FRAME_RIGHT CARD_MODEL_AT(0x29800)    /* 0x00a27308 */
-#define CGP_PREVIEW_FRAME_LEFT CARD_MODEL_AT(0x2B000)     /* 0x00a27448 */
 
 /*
  * Spacing of the cards of a row: the distance from its first to its last
@@ -3137,7 +3613,7 @@ static inline void CGPCursorToSlot(CardGameWork *work)
  */
 s32 CGPCursorMove2(s32 side, CardGameWork *work)
 {
-    CGPCursorPosition position;
+    CardCursorPosition position;
     CardPlaySide *ownSide;
     u16 held;
     u16 repeat;
@@ -3157,40 +3633,40 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
     if (work->cursorMoveStep[0] != 0) {
         s32 junkCnt;
 
-        junkCnt = CardPlayJunkCnt((CardPlayHand *) &work->player);
+        junkCnt = CardPlayJunkCnt(&work->player);
         work->cursorPos[0] = JunkPos1P[0][0];
         work->cursorPos[1] = JunkPos1P[0][1];
         work->cursorPos[2] = JunkPos1P[0][2];
         switch (work->cursorMoveStep[0]) {
         case CGP_PILE_TOP:
-            if (pressed & CGP_PAD_UP) {
+            if (pressed & PAD_UP) {
                 work->cursorMoveStep[0] = CGP_PILE_BOARD;
                 work->cursorZone--;
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
-            } else if (pressed & CGP_PAD_CONFIRM) {
+                xglSoundEffectNormalID(SE_CURSOR, 0);
+            } else if (pressed & PAD_CIRCLE) {
                 work->junkPick[0] = 0;
                 work->cursorMoveStep[0] = CGP_PILE_BROWSE;
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 CardPlayCleanJunk(&work->player);
             }
             position.stackedCard = -1;
             position.cardId = work->player.junk[junkCnt - 1];
             break;
         case CGP_PILE_BROWSE:
-            if (repeat & CGP_PAD_LEFT) {
+            if (repeat & PAD_LEFT) {
                 if (work->junkPick[0] != 0) {
                     work->junkPick[0]--;
-                    xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
-            } else if (repeat & CGP_PAD_RIGHT) {
+            } else if (repeat & PAD_RIGHT) {
                 if (work->junkPick[0] < junkCnt - 1) {
                     work->junkPick[0]++;
-                    xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
             }
-            if (pressed & CGP_PAD_CANCEL) {
+            if (pressed & PAD_CROSS) {
                 work->cursorMoveStep[0] = CGP_PILE_TOP;
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
             CGCPJunkDispSub(&work->player, work->junkPick[0]);
             position.cardId = work->player.junk[work->junkPick[0]];
@@ -3202,40 +3678,40 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
         s32 junkCnt;
 
         enemy = &work->enemy;
-        junkCnt = CardPlayJunkCnt((CardPlayHand *) enemy);
+        junkCnt = CardPlayJunkCnt(enemy);
         work->cursorPos[0] = JunkPos2P[0][0];
         work->cursorPos[1] = JunkPos2P[0][1];
         work->cursorPos[2] = JunkPos2P[0][2];
         switch (work->cursorMoveStep[1]) {
         case CGP_PILE_TOP:
-            if (pressed & CGP_PAD_DOWN) {
+            if (pressed & PAD_DOWN) {
                 work->cursorMoveStep[1] = CGP_PILE_BOARD;
                 work->cursorZone++;
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
-            } else if (pressed & CGP_PAD_CONFIRM) {
+                xglSoundEffectNormalID(SE_CURSOR, 0);
+            } else if (pressed & PAD_CIRCLE) {
                 work->junkPick[1] = 0;
                 work->cursorMoveStep[1] = CGP_PILE_BROWSE;
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 CardPlayCleanJunk(enemy);
             }
             position.stackedCard = -1;
             position.cardId = work->enemy.junk[junkCnt - 1];
             break;
         case CGP_PILE_BROWSE:
-            if (repeat & CGP_PAD_LEFT) {
+            if (repeat & PAD_LEFT) {
                 if (work->junkPick[1] != 0) {
                     work->junkPick[1]--;
-                    xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
-            } else if (repeat & CGP_PAD_RIGHT) {
+            } else if (repeat & PAD_RIGHT) {
                 if (work->junkPick[1] < junkCnt - 1) {
                     work->junkPick[1]++;
-                    xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                 }
             }
-            if (pressed & CGP_PAD_CANCEL) {
+            if (pressed & PAD_CROSS) {
                 work->cursorMoveStep[1] = CGP_PILE_TOP;
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+                xglSoundEffectNormalID(SE_CANCEL, 0);
             }
             CGCPJunkDispSub(enemy, work->junkPick[1]);
             position.cardId = work->enemy.junk[work->junkPick[1]];
@@ -3249,20 +3725,20 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
         s32 flag;
         s32 started;
 
-        if (pressed & CGP_PAD_DIRECTIONS) {
-            xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+        if (pressed & (PAD_UP | PAD_RIGHT | PAD_DOWN | PAD_LEFT)) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
         }
         prevZone = work->cursorZone;
         area = CGPCursor2Area(work);
         /* flag: the cursor stands in one of the two middle columns of a board row, which up/down skips */
         flag = area == CGP_AREA_ENEMY_BATTLE || area == CGP_AREA_PLAYER_BATTLE;
-        if (pressed & CGP_PAD_UP) {
+        if (pressed & PAD_UP) {
             work->cursorZone--;
             if (flag && work->cursorZone != 0) {
                 work->cursorZone--;
             }
         }
-        if (pressed & CGP_PAD_DOWN) {
+        if (pressed & PAD_DOWN) {
             work->cursorZone++;
             if (flag && work->cursorZone != CGP_AREA_PLAYER_HAND) {
                 work->cursorZone++;
@@ -3277,7 +3753,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
         started = 0;
         if (prevZone != CGP_AREA_PLAYER_HAND && work->cursorZone == CGP_AREA_PLAYER_HAND &&
             work->cursorIndex == CGP_PLAYER_PILE_SLOT) {
-            s32 junkCnt = CardPlayJunkCnt((CardPlayHand *) &work->player);
+            s32 junkCnt = CardPlayJunkCnt(&work->player);
 
             if (junkCnt != 0) {
                 started++;
@@ -3287,7 +3763,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
         }
         if (prevZone != CGP_AREA_ENEMY_HAND && work->cursorZone == CGP_AREA_ENEMY_HAND &&
             work->cursorIndex == 0) {
-            s32 junkCnt = CardPlayJunkCnt((CardPlayHand *) &work->enemy);
+            s32 junkCnt = CardPlayJunkCnt(&work->enemy);
 
             if (junkCnt != 0) {
                 work->cursorMoveStep[1] = CGP_PILE_TOP;
@@ -3304,43 +3780,43 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
              * CGP_SIDE1_FIRST_PHASE for the phases of the second side.
              */
             flag = 0;
-            switch ((s16) work->command.phase) {
-            case 1:
-            case 2:
-            case 3:
-            case 11:
+            switch (work->command.phase) {
+            case CARD_PHASE_MOVE:
+            case CARD_PHASE_EVENT:
+            case CARD_PHASE_SET:
+            case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
                 if (work->cursorZone == CGP_AREA_PLAYER_HAND && work->rotStageId != 0) {
                     flag = 1;
                 }
                 break;
-            case 4:
-            case 8:
-            case 9:
-            case 10:
+            case CARD_PHASE_BLOCK:
+            case CARD_PHASE_MOVE + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_SET + CARD_PHASES_PER_SIDE:
                 if (work->cursorZone == CGP_AREA_ENEMY_HAND) {
                     flag = work->rotStageId != 0;
                 }
                 break;
             }
             if (flag) {
-                if (pressed & CGP_PAD_RIGHT) {
+                if (pressed & PAD_RIGHT) {
                     work->cursorIndex--;
                 }
-                if (pressed & CGP_PAD_LEFT) {
+                if (pressed & PAD_LEFT) {
                     work->cursorIndex++;
                 }
             } else {
-                if (pressed & CGP_PAD_RIGHT) {
+                if (pressed & PAD_RIGHT) {
                     work->cursorIndex++;
                 }
-                if (pressed & CGP_PAD_LEFT) {
+                if (pressed & PAD_LEFT) {
                     work->cursorIndex--;
                 }
             }
             if (work->cursorZone == CGP_AREA_ENEMY_HAND) {
                 CardPlaySide *enemy = &work->enemy;
                 s32 handCnt = CardPlayHandCnt(&enemy->hand);
-                s32 junkCnt = CardPlayJunkCnt((CardPlayHand *) enemy);
+                s32 junkCnt = CardPlayJunkCnt(enemy);
 
                 work->highlightX = work->highlightY = CGP_HAND_HIGHLIGHT;
                 work->highlightScaleX = work->highlightScaleY = 1.0f;
@@ -3362,7 +3838,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
                 }
             } else if (work->cursorZone == CGP_AREA_PLAYER_HAND) {
                 s32 handCnt = CardPlayHandCnt(&work->player.hand);
-                s32 junkCnt = CardPlayJunkCnt((CardPlayHand *) &work->player);
+                s32 junkCnt = CardPlayJunkCnt(&work->player);
 
                 work->highlightX = work->highlightY = CGP_HAND_HIGHLIGHT;
                 work->highlightScaleX = work->highlightScaleY = 1.0f;
@@ -3408,14 +3884,14 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
          * player's in the phases the zone-0 row is the active one) is not
          * previewed.
          */
-        switch ((s16) work->command.phase) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-        case 5:
-        case 6:
-        case 11:
+        switch (work->command.phase) {
+        case CARD_PHASE_DRAW:
+        case CARD_PHASE_MOVE:
+        case CARD_PHASE_EVENT:
+        case CARD_PHASE_SET:
+        case CARD_PHASE_BATTLE:
+        case CARD_PHASE_ADJUST:
+        case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
             if (position.zone == CGP_AREA_ENEMY_HAND) {
                 canPreview = 0;
             }
@@ -3425,7 +3901,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
             break;
         }
     }
-    if (held & CGP_PAD_PREVIEW) {
+    if (held & PAD_TRIANGLE) {
         if (canPreview && position.cardId >= 0) {
             Matrix4 matrix;
             float place[4];
@@ -3442,8 +3918,8 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
             scale[3] = 1.0f;
             scale[2] = 1.0f;
             mode = CGP_CARD_MODE_FULL;
-            if ((position.stackedCard >= 0 && (held & CGP_PAD_ZOOM_RIGHT)) ||
-                (ownSide->battle[0].cmdView.playedCard >= 0 && (held & CGP_PAD_ZOOM_LEFT))) {
+            if ((position.stackedCard >= 0 && (held & PAD_R1)) ||
+                (ownSide->battle[0].cmdView.playedCard >= 0 && (held & PAD_L1))) {
                 /* a side card is enlarged: the middle card shrinks to make room */
                 mode = CGP_CARD_MODE_ICON;
                 place[1] = CGP_PREVIEW_SMALL_Y;
@@ -3452,9 +3928,9 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
                 scale[0] = CGP_PREVIEW_SMALL_SCALE;
             }
             xglMatrixUnit(matrix);
-            xglMatrixTrans(matrix, (const float (*)[4]) matrix, place);
-            xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-            CardDisp(matrix, position.cardId, 1, mode);
+            xglMatrixTrans(matrix, matrix, place);
+            xglMatrixScale(matrix, matrix, scale);
+            CardDisp(&matrix, position.cardId, 1, mode);
             if (position.stackedCard >= 0) {
                 mode = CGP_CARD_MODE_ICON;
                 place[0] = CGP_PREVIEW_SIDE_X;
@@ -3464,7 +3940,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
                 scale[0] = CGP_PREVIEW_SMALL_SCALE;
                 scale[3] = 1.0f;
                 scale[2] = 1.0f;
-                if (held & CGP_PAD_ZOOM_RIGHT) {
+                if (held & PAD_R1) {
                     mode = CGP_CARD_MODE_FULL;
                     place[0] = CGP_PREVIEW_ZOOMED_X;
                     place[1] = CGP_PREVIEW_FULL_Y;
@@ -3473,16 +3949,16 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
                     scale[0] = CGP_PREVIEW_FULL_SCALE;
                 }
                 xglMatrixUnit(matrix);
-                xglMatrixTrans(matrix, (const float (*)[4]) matrix, place);
-                xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-                CardDisp(matrix, position.stackedCard, 1, mode);
-                if (!(held & CGP_PAD_ZOOM_RIGHT)) {
+                xglMatrixTrans(matrix, matrix, place);
+                xglMatrixScale(matrix, matrix, scale);
+                CardDisp(&matrix, position.stackedCard, 1, mode);
+                if (!(held & PAD_R1)) {
                     place[0] = CGP_PREVIEW_SIDE_X;
                     place[1] = CGP_PREVIEW_SMALL_Y;
                     place[2] = CGP_PREVIEW_FRAME_Z;
                     xglMatrixUnit(matrix);
-                    xglMatrixTrans(matrix, (const float (*)[4]) matrix, place);
-                    nmlModelSetPlace(matrix);
+                    xglMatrixTrans(matrix, matrix, place);
+                    nmlModelSetPlace(&matrix);
                     nmlModelSetTexture(CGP_PREVIEW_FRAME_TEXTURE);
                     nmlModelEntryCard(CGP_PREVIEW_FRAME_RIGHT);
                 }
@@ -3496,7 +3972,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
                 scale[0] = CGP_PREVIEW_SMALL_SCALE;
                 scale[3] = 1.0f;
                 scale[2] = 1.0f;
-                if (held & CGP_PAD_ZOOM_LEFT) {
+                if (held & PAD_L1) {
                     mode = CGP_CARD_MODE_FULL;
                     place[0] = -CGP_PREVIEW_ZOOMED_X;
                     place[1] = CGP_PREVIEW_FULL_Y;
@@ -3505,16 +3981,16 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
                     scale[0] = CGP_PREVIEW_FULL_SCALE;
                 }
                 xglMatrixUnit(matrix);
-                xglMatrixTrans(matrix, (const float (*)[4]) matrix, place);
-                xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-                CardDisp(matrix, ownSide->battle[0].cmdView.playedCard, 1, mode);
-                if (!(held & CGP_PAD_ZOOM_LEFT)) {
+                xglMatrixTrans(matrix, matrix, place);
+                xglMatrixScale(matrix, matrix, scale);
+                CardDisp(&matrix, ownSide->battle[0].cmdView.playedCard, 1, mode);
+                if (!(held & PAD_L1)) {
                     place[0] = -CGP_PREVIEW_SIDE_X;
                     place[1] = CGP_PREVIEW_SMALL_Y;
                     place[2] = CGP_PREVIEW_FRAME_Z;
                     xglMatrixUnit(matrix);
-                    xglMatrixTrans(matrix, (const float (*)[4]) matrix, place);
-                    nmlModelSetPlace(matrix);
+                    xglMatrixTrans(matrix, matrix, place);
+                    nmlModelSetPlace(&matrix);
                     nmlModelSetTexture(CGP_PREVIEW_FRAME_TEXTURE);
                     nmlModelEntryCard(CGP_PREVIEW_FRAME_LEFT);
                 }
@@ -3525,6 +4001,12 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
     return 0;
 }
 
+/*
+ * Moves the cursor (CGPCursorMove2) and discards its result. Defined void, but
+ * ov10/ccu_038_exec_sub.c declares it as returning s32 (ccu_038_exec_sub.h records
+ * the measurement: with a void declaration the register allocation of the loops
+ * after each of its seven calls changes), so it is not in include/ov10/cgp.h.
+ */
 void CGPCursorMove(s32 flag, CardGameWork *work)
 {
     CGPCursorMove2(flag, work);
@@ -3620,10 +4102,6 @@ s32 CGPChkPlayable(s16 command)
     return 0;
 }
 
-/* Operation commands CGPChkOpePlayable checks the board for (switch cases 0x8B, 0x8D, 0x8F). */
-#define CGP_CMD_TARGET_LIFE 139          /* needs a card on a battle slot of either side */
-#define CGP_CMD_OPPONENT_OPERATION 141   /* needs an operation card on the opponent's side */
-#define CGP_CMD_BOARD_LIFE_LOSS 143      /* needs a card on a disposal or battle slot of either side */
 
 s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
 {
@@ -3654,9 +4132,9 @@ s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
         i = 0;
     }
     switch (command) {
-    case CGP_CMD_TARGET_LIFE:
+    case CARD_ID_SO_WEAK:
         found = 0;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             s32 ownCard = own->battle[i].battle.layers[0].cardId;
             if (ownCard >= 0) {
                 found = 1;
@@ -3671,9 +4149,9 @@ s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
             break;
         }
         return 0;
-    case CGP_CMD_OPPONENT_OPERATION:
+    case CARD_ID_PHENOMENON_CHANGE:
         found = 0;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
             if (foe->operations[i] >= 0) {
                 found = 1;
                 break;
@@ -3683,9 +4161,9 @@ s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
             break;
         }
         return 0;
-    case CGP_CMD_BOARD_LIFE_LOSS:
+    case CARD_ID_UNKNOWN_ARMAMENT:
         found = 0;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             s32 ownCard = own->disposal[i].battle.layers[0].cardId;
             if (ownCard >= 0) {
                 found = 1;
@@ -3696,7 +4174,7 @@ s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
                 break;
             }
         }
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             s32 ownCard = own->battle[i].battle.layers[0].cardId;
             if (ownCard >= 0) {
                 found = 1;
@@ -3721,35 +4199,34 @@ void CardPlayClearEndflg(CardPlaySide *side)
 {
     s32 i;
 
-    for (i = 0; i < 4; i++) {
-        side->disposal[i].battle.flags &= ~1;
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+        side->disposal[i].battle.flags &= ~CARD_STACK_FLAG_END;
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
         side->operationFlags[i] &= ~1;
     }
 }
 
 /*
- * Cards a command reserves from the draw pile, zero once the command's own
- * card is already in play on the side that would play it: command 37 is free
- * while card 5 or card 12 stands on the board, commands 4 and 39 while card 0,
- * card 1 or card 7 does.
+ * Cards a card reserves from the draw pile, zero once its partner is already in
+ * play on the side that would play it: VX-7000 is free while Lv 1 or Lv 10 Jr.
+ * stands on the board, Lv 1 KOS-MOS and VX-10000 while a Shion card does.
  */
-s32 CGPChkCardPlayCost(CardGameWork *work, CardHand *hand, s32 command)
+s32 CGPChkCardPlayCost(CardGameWork *work, CardPlaySide *side, s32 command)
 {
     s32 cost;
 
     cost = work->definitions[command].reserveCost;
     switch (command) {
-    case 4:
-    case 39:
-        if (CardPlayCntBtl(hand, 0) || CardPlayCntBtl(hand, 1) ||
-            CardPlayCntBtl(hand, 7)) {
+    case CARD_ID_LV_1_KOS_MOS:
+    case CARD_ID_VX_10000:
+        if (CardPlayCntBtl(side, CARD_ID_LV_1_SHION) || CardPlayCntBtl(side, CARD_ID_SWIM_SUIT_SHION) ||
+            CardPlayCntBtl(side, CARD_ID_LV_10_SHION)) {
             cost = 0;
         }
         break;
-    case 37:
-        if (CardPlayCntBtl(hand, 5) || CardPlayCntBtl(hand, 12)) {
+    case CARD_ID_VX_7000:
+        if (CardPlayCntBtl(side, CARD_ID_LV_1_JR) || CardPlayCntBtl(side, CARD_ID_LV_10_JR)) {
             cost = 0;
         }
         break;
@@ -3757,7 +4234,7 @@ s32 CGPChkCardPlayCost(CardGameWork *work, CardHand *hand, s32 command)
     return cost;
 }
 
-void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlayField *field, s32 index)
+void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlaySide *ownSide, s32 index)
 {
     CardGameWork *work = workAddress;
     CardDefinition *defs;
@@ -3767,10 +4244,10 @@ void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlayField *fie
 
     defs = work->definitions;
     cost = 0;
-    switch (defs[field->hand.maintenanceView.cards[index]].kind) {
-    case 1:
-        for (i = 0, slot = -1; i < 4; i++) {
-            if (field->disposal[i].stack.layers[0].cardId < 0) {
+    switch (defs[ownSide->hand.cards[index]].kind) {
+    case CARD_KIND_BATTLE:
+        for (i = 0, slot = -1; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId < 0) {
                 slot = i;
                 break;
             }
@@ -3778,33 +4255,33 @@ void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlayField *fie
         if (slot < 0) {
             return;
         }
-        CardPlayCommandPlay(side, work->commandIds[field->hand.maintenanceView.cards[index]],
+        CardPlayCommandPlay(side, work->commandIds[ownSide->hand.cards[index]],
                             workAddress, 0, 0);
-        field->disposal[slot].stack.flags = 1;
-        field->disposal[slot].stack.power =
-            defs[field->hand.maintenanceView.cards[index]].basePower;
-        field->disposal[slot].stack.powerLimit =
-            defs[field->hand.maintenanceView.cards[index]].basePower;
-        field->disposal[slot].stack.layers[0].cardId = field->hand.maintenanceView.cards[index];
-        field->disposal[slot].stack.layers[0].life =
-            defs[field->hand.maintenanceView.cards[index]].operationDuration;
-        cost = CGPChkCardPlayCost(workAddress, &field->hand.costView,
-                                  field->hand.maintenanceView.cards[index]);
-        field->disposal[slot].stack.position[0] = field->handMove[index].position[0];
-        field->disposal[slot].stack.position[1] = field->handMove[index].position[1];
-        field->disposal[slot].stack.position[2] = field->handMove[index].position[2];
-        field->disposal[slot].stack.step[0] =
-            (DisposePos1P[slot][0] - field->handMove[index].position[0]) / 10.0f;
-        field->disposal[slot].stack.step[1] =
-            (DisposePos1P[slot][1] - field->handMove[index].position[1]) / 10.0f;
-        field->disposal[slot].stack.step[2] =
-            (DisposePos1P[slot][2] - field->handMove[index].position[2]) / 10.0f;
-        field->disposal[slot].stack.moveTimer = 10;
-        field->hand.maintenanceView.cards[index] = -1;
+        ownSide->disposal[slot].battle.flags = 1;
+        ownSide->disposal[slot].battle.power =
+            defs[ownSide->hand.cards[index]].basePower;
+        ownSide->disposal[slot].battle.powerLimit =
+            defs[ownSide->hand.cards[index]].basePower;
+        ownSide->disposal[slot].battle.layers[0].cardId = ownSide->hand.cards[index];
+        ownSide->disposal[slot].battle.layers[0].life =
+            defs[ownSide->hand.cards[index]].operationDuration;
+        cost = CGPChkCardPlayCost(workAddress, ownSide,
+                                  ownSide->hand.cards[index]);
+        ownSide->disposal[slot].battle.position[0] = ownSide->handMove[index].position[0];
+        ownSide->disposal[slot].battle.position[1] = ownSide->handMove[index].position[1];
+        ownSide->disposal[slot].battle.position[2] = ownSide->handMove[index].position[2];
+        ownSide->disposal[slot].battle.step[0] =
+            (DisposePos1P[slot][0] - ownSide->handMove[index].position[0]) / 10.0f;
+        ownSide->disposal[slot].battle.step[1] =
+            (DisposePos1P[slot][1] - ownSide->handMove[index].position[1]) / 10.0f;
+        ownSide->disposal[slot].battle.step[2] =
+            (DisposePos1P[slot][2] - ownSide->handMove[index].position[2]) / 10.0f;
+        ownSide->disposal[slot].battle.moveFrames = 10;
+        ownSide->hand.cards[index] = -1;
         break;
-    case 4:
-        for (i = 0, slot = -1; i < 4; i++) {
-            if (field->operations[i] < 0) {
+    case CARD_KIND_SITUATION:
+        for (i = 0, slot = -1; i < CARD_OPERATION_SLOTS; i++) {
+            if (ownSide->operations[i] < 0) {
                 slot = i;
                 break;
             }
@@ -3812,45 +4289,39 @@ void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlayField *fie
         if (slot < 0) {
             return;
         }
-        field->operationFlags[slot] |= 1;
-        field->operations[slot] = field->hand.maintenanceView.cards[index];
-        field->operationDuration[slot] =
-            defs[field->hand.maintenanceView.cards[index]].operationDuration;
-        cost = CGPChkCardPlayCost(workAddress, &field->hand.costView,
-                                  field->hand.maintenanceView.cards[index]);
-        field->operationMove[slot].position[0] = field->handMove[index].position[0];
-        field->operationMove[slot].position[1] = field->handMove[index].position[1];
-        field->operationMove[slot].position[2] = field->handMove[index].position[2];
-        field->operationMove[slot].step[0] =
-            (OperationPos1P[slot][0] - field->handMove[index].position[0]) / 10.0f;
-        field->operationMove[slot].step[1] =
-            (OperationPos1P[slot][1] - field->handMove[index].position[1]) / 10.0f;
-        field->operationMove[slot].step[2] =
-            (OperationPos1P[slot][2] - field->handMove[index].position[2]) / 10.0f;
-        field->operationMove[slot].moveTimer = 10;
-        field->hand.maintenanceView.cards[index] = -1;
+        ownSide->operationFlags[slot] |= 1;
+        ownSide->operations[slot] = ownSide->hand.cards[index];
+        ownSide->operationDuration[slot] =
+            defs[ownSide->hand.cards[index]].operationDuration;
+        cost = CGPChkCardPlayCost(workAddress, ownSide,
+                                  ownSide->hand.cards[index]);
+        ownSide->operationMove[slot].position[0] = ownSide->handMove[index].position[0];
+        ownSide->operationMove[slot].position[1] = ownSide->handMove[index].position[1];
+        ownSide->operationMove[slot].position[2] = ownSide->handMove[index].position[2];
+        ownSide->operationMove[slot].step[0] =
+            (OperationPos1P[slot][0] - ownSide->handMove[index].position[0]) / 10.0f;
+        ownSide->operationMove[slot].step[1] =
+            (OperationPos1P[slot][1] - ownSide->handMove[index].position[1]) / 10.0f;
+        ownSide->operationMove[slot].step[2] =
+            (OperationPos1P[slot][2] - ownSide->handMove[index].position[2]) / 10.0f;
+        ownSide->operationMove[slot].moveTimer = 10;
+        ownSide->hand.cards[index] = -1;
         break;
     }
 
     for (i = 0; i < cost; i++) {
-        CardPlayCostCard(&field->hand.maintenanceView);
+        CardPlayCostCard(ownSide);
     }
-    CardPlayCleanHand(&field->hand.maintenanceView);
+    CardPlayCleanHand(&ownSide->hand);
 }
 
 
-extern s32 CardPlayChkCost(CardDefinition *definitions, CardPlaySide *side,
-                           s32 cardId, CardGameWork *work);
-extern s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side,
-                                s32 cardId, CardGameWork *work);
-extern s32 CardPlayCntLight(CardGameWork *work, CardPlaySide *side);
-extern s32 CardEquipCntHeavy(CardGameWork *work, CardPlaySide *side, s32 cardId);
 
 /*
  * Why one side may not play the card at the given hand position, or zero when
- * it may. Kind 2 is never playable (11) and kinds 1 and 4 need enough play
- * points (12); a card whose definition carries any of the flags 0x64 also has
- * to pass the equipment checks, where flag 4 has no free slot (15), flag 0x40
+ * it may. Event cards are never playable (11) and battle and situation cards
+ * need enough play points (12); a Gnosis card or weapon also has to pass the
+ * equipment checks, where a Gnosis card has no free slot (15), a Human weapon
  * needs a light slot (13) and every other such card a heavy one (14), and 16
  * means the card is equipment the slot search accepted.
  */
@@ -3863,29 +4334,29 @@ s32 CGPDispoSub0(s32 side, CardGameWork *work, s32 index)
         ownSide = &work->enemy;
     }
     error = 0;
-    if (work->definitions[ownSide->hand.cards[index]].kind == CGP_CARD_KIND_DISCARD_ONLY) {
+    if (work->definitions[ownSide->hand.cards[index]].kind == CARD_KIND_EVENT) {
         error = 11;
     } else {
-        if (work->definitions[ownSide->hand.cards[index]].kind == CGP_CARD_KIND_COMMAND) {
+        if (work->definitions[ownSide->hand.cards[index]].kind == CARD_KIND_BATTLE) {
             if (ownSide->hand.playPoints[0] < work->definitions[ownSide->hand.cards[index]].playCost) {
                 error = 12;
             }
-        } else if (work->definitions[ownSide->hand.cards[index]].kind == CGP_CARD_KIND_OPERATION) {
+        } else if (work->definitions[ownSide->hand.cards[index]].kind == CARD_KIND_SITUATION) {
             if (ownSide->hand.playPoints[1] < work->definitions[ownSide->hand.cards[index]].playCost) {
                 error = 12;
             }
         }
         if (error == 0) {
-            if (work->definitions[ownSide->hand.cards[index]].flags & 0x64) {
+            if (work->definitions[ownSide->hand.cards[index]].flags & (CARD_ATTR_GNOSIS | CARD_ATTR_WEAPON)) {
                 error = CardPlayChkCost(work->definitions, ownSide, ownSide->hand.cards[index], work);
                 if (error == 0) {
                     error = CardPlayChkCondition(work->definitions, ownSide,
                                                  ownSide->hand.cards[index], work);
                     if (error == 0) {
                         error = 16;
-                        if (work->definitions[ownSide->hand.cards[index]].flags & 4) {
+                        if (work->definitions[ownSide->hand.cards[index]].flags & CARD_ATTR_GNOSIS) {
                             error = 15;
-                        } else if (work->definitions[ownSide->hand.cards[index]].flags & 0x40) {
+                        } else if (work->definitions[ownSide->hand.cards[index]].flags & CARD_ATTR_WEAPON_HUMAN) {
                             if (CardPlayCntLight(work, ownSide) != 0) {
                                 error = 13;
                             }
@@ -3912,7 +4383,7 @@ s32 CGPDispoSub0(s32 side, CardGameWork *work, s32 index)
  * zero (played, or nothing to do), 13..15 (CGPDispoSub0's codes for a card that
  * still needs a board slot, answered with the decide sound) or 15 as well when
  * the card paired with the played one (the id 7 below it) stands on the battle
- * row. Cards 7, 9 and 10..13 are refused when the play points fall short (12)
+ * row. The Lv 10 cards are refused when the play points fall short (12)
  * or when the card, or the card paired with it, is already in the disposal row
  * (5 and 9); a refusal shows its error message with the buzzer and returns zero.
  */
@@ -3931,26 +4402,26 @@ s32 CGPDisposeSub(s32 side, CardGameWork *work, s32 index)
         pressed = work->command.input[1].pressed;
         ownSide = &work->enemy;
     }
-    if (index < CardPlayHandCnt(&ownSide->hand) && (pressed & CGP_PAD_CONFIRM)) {
+    if (index < CardPlayHandCnt(&ownSide->hand) && (pressed & PAD_CIRCLE)) {
         pairedOnBattle = 0;
         switch (ownSide->hand.cards[index]) {
-        case 10:
-        case 11:
-        case 12:
-        case 13:
+        case CARD_ID_LV_10_MOMO:
+        case CARD_ID_LV_10_KOS_MOS:
+        case CARD_ID_LV_10_JR:
+        case CARD_ID_LV_10_CHAOS:
             result = CGPDispoSub0(side, work, index);
             if (result == 5 || result == 1) {
                 result = 0;
             }
             /* fall through */
-        case 7:
-        case 9:
+        case CARD_ID_LV_10_SHION:
+        case CARD_ID_LV_10_ZIGGY:
             if (result == 0) {
                 if (ownSide->hand.playPoints[0] <
                     work->definitions[ownSide->hand.cards[index]].playCost) {
                     result = CGP_ERR_NOT_ENOUGH_POINTS;
                 } else {
-                    for (i = 0; i < 4; i++) {
+                    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                         s32 slotCard = ownSide->disposal[i].battle.layers[0].cardId;
 
                         if (ownSide->hand.cards[index] - CGP_PAIRED_CARD_OFFSET == slotCard) {
@@ -3962,7 +4433,7 @@ s32 CGPDisposeSub(s32 side, CardGameWork *work, s32 index)
                             break;
                         }
                     }
-                    for (i = 0; i < 4; i++) {
+                    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                         if (ownSide->hand.cards[index] - CGP_PAIRED_CARD_OFFSET ==
                             ownSide->battle[i].battle.layers[0].cardId) {
                             pairedOnBattle = 1;
@@ -3979,24 +4450,23 @@ s32 CGPDisposeSub(s32 side, CardGameWork *work, s32 index)
             }
             switch (result) {
             case 0:
-                if (work->definitions[ownSide->hand.cards[index]].kind == CGP_CARD_KIND_COMMAND) {
+                if (work->definitions[ownSide->hand.cards[index]].kind == CARD_KIND_BATTLE) {
                     ownSide->hand.playPoints[0] -=
                         work->definitions[ownSide->hand.cards[index]].playCost;
                 } else {
                     ownSide->hand.playPoints[1] -=
                         work->definitions[ownSide->hand.cards[index]].playCost;
                 }
-                /* CardPlayDisployment views the side record as a CardPlayField. */
-                CardPlayDisployment(side, work, (CardPlayField *) ownSide, index);
+                CardPlayDisployment(side, work, ownSide, index);
                 /* fall through */
             case 13:
             case 14:
             case 15:
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 return result;
             default:
                 if (result == CGP_ERR_NOT_ENOUGH_POINTS) {
-                    if (work->definitions[ownSide->hand.cards[index]].kind == CGP_CARD_KIND_COMMAND) {
+                    if (work->definitions[ownSide->hand.cards[index]].kind == CARD_KIND_BATTLE) {
                         CGPSetErrorMess(side, work, CGP_ERR_NOT_ENOUGH_POINTS);
                     } else {
                         CGPSetErrorMess(side, work, 10);
@@ -4004,7 +4474,7 @@ s32 CGPDisposeSub(s32 side, CardGameWork *work, s32 index)
                 } else {
                     CGPSetErrorMess(side, work, result);
                 }
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 result = 0;
                 break;
             }
@@ -4021,7 +4491,7 @@ s32 CGPDisposeSub(s32 side, CardGameWork *work, s32 index)
  */
 s16 CGPMoveSub(s32 flag, void *unused, CardGameWork *work)
 {
-    CGPCursorPosition position;
+    CardCursorPosition position;
 
     position.index = -1;
     CGPCursorMove2(flag, work);
@@ -4041,9 +4511,9 @@ s16 CGPMoveSub(s32 flag, void *unused, CardGameWork *work)
 /*
  * Raise or lower an attack's power before the damage is worked out. Operation
  * cards in play on either side act through the attacking card's flags, and
- * three attacking cards act on their own: 15 counts the cards in play on its
- * own board that carry flag 8, 14 looks for card 79 there and 76 plays command
- * 73. A power that fell below zero counts as none.
+ * three attacking cards act on their own: Hammer counts the Mech cards in play on
+ * its own board, Albedo looks for Kirschwasser there and Gargoyle plays its
+ * trigger command. A power that fell below zero counts as none.
  */
 s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStack *stack,
                           s32 slot)
@@ -4062,15 +4532,15 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
         foe = &work->player;
     }
 
-    if (CardPlayCntOpe(own, 120) != 0 || CardPlayCntOpe(foe, 120) != 0) {
-        if (work->definitions[cardId].flags & 4) {
+    if (CardPlayCntOpe(own, CARD_ID_HILBERT_EFFECT) != 0 || CardPlayCntOpe(foe, CARD_ID_HILBERT_EFFECT) != 0) {
+        if (work->definitions[cardId].flags & CARD_ATTR_GNOSIS) {
             power--;
         }
     }
 
-    i = CardPlayCntOpe(own, 123);
+    i = CardPlayCntOpe(own, CARD_ID_STIM);
     if (i != 0) {
-        if (work->definitions[cardId].flags & 1) {
+        if (work->definitions[cardId].flags & CARD_ATTR_HUMAN) {
             while (i > 0) {
                 i--;
                 power++;
@@ -4078,9 +4548,9 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
         }
     }
 
-    i = CardPlayCntOpe(own, 134) + CardPlayCntOpe(foe, 134);
+    i = CardPlayCntOpe(own, CARD_ID_MYSTERIOUS_GIRL) + CardPlayCntOpe(foe, CARD_ID_MYSTERIOUS_GIRL);
     if (i != 0) {
-        if (work->definitions[cardId].flags & 4) {
+        if (work->definitions[cardId].flags & CARD_ATTR_GNOSIS) {
             while (i > 0) {
                 i--;
                 power++;
@@ -4088,7 +4558,7 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
         }
     }
 
-    i = CardPlayCntOpe(own, 144) + CardPlayCntOpe(foe, 144);
+    i = CardPlayCntOpe(own, CARD_ID_ZOHAR) + CardPlayCntOpe(foe, CARD_ID_ZOHAR);
     if (i != 0) {
         while (i > 0) {
             i--;
@@ -4097,27 +4567,27 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
     }
 
     switch (cardId) {
-    case 15:
-        if (stack->layers[1].cardId != 53 && stack->layers[1].cardId != 48) {
-            for (i = 0; i < 4; i++) {
+    case CARD_ID_HAMMER:
+        if (stack->layers[1].cardId != CARD_ID_EYEGLASSES && stack->layers[1].cardId != CARD_ID_MISSILE_POD) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 if (own->battle[i].battle.layers[0].cardId >= 0) {
-                    if (work->definitions[own->battle[i].battle.layers[0].cardId].flags & 8) {
+                    if (work->definitions[own->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_MECH) {
                         power++;
                     }
                 }
             }
         }
         break;
-    case 14:
-        for (i = 0; i < 4; i++) {
-            if (own->battle[i].battle.layers[0].cardId == 79) {
+    case CARD_ID_ALBEDO:
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (own->battle[i].battle.layers[0].cardId == CARD_ID_KIRSCHWASSER) {
                 power++;
                 break;
             }
         }
         break;
-    case 76:
-        CardPlayCommandPlay(side, 73, work, (s16) slot, 0);
+    case CARD_ID_GARGOYLE:
+        CardPlayCommandPlay(side, CARD_COMMAND_GARGOYLE_TRIGGER, work, slot, 0);
         break;
     }
 
@@ -4129,10 +4599,10 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
 /*
  * Extra battle effects the attacking card scores, added to the effect count
  * CGPBattleCalcuration keeps. A card whose stack carries flag 0x80 scores
- * nothing at all. Cards 3, 8 and 10 score one for card 79 standing anywhere on
- * their own battle row; they and card 26 score one more when the defending
- * card's definition carries flag 4, and any attacker stacking card 42 scores
- * three for the same definition flag.
+ * nothing at all. The MOMO cards score one for Kirschwasser standing anywhere on
+ * their own battle row; they and the 100 Series score one more when the defending
+ * card is a Gnosis, and any attacker stacking a Saber scores three for the
+ * same reason.
  */
 s32 CGPBattleAttackEffect(s32 side, CardGameWork *work, s32 effect,
                           CardLayerStack *attacker, CardLayerStack *defender)
@@ -4146,34 +4616,34 @@ s32 CGPBattleAttackEffect(s32 side, CardGameWork *work, s32 effect,
         own = &work->enemy;
     }
     attackCard = attacker->layers[0].cardId;
-    if (attacker->flags & 0x80) {
+    if (attacker->flags & CARD_STACK_FLAG_NO_DAMAGE) {
         effect = 0;
     } else if (defender != 0) {
         switch (attackCard) {
-        case 3:
-        case 8:
-        case 10:
-            for (i = 0; i < 4; i++) {
-                if (own->battle[i].battle.layers[0].cardId == 79) {
+        case CARD_ID_LV_1_MOMO:
+        case CARD_ID_SWIM_SUIT_MOMO:
+        case CARD_ID_LV_10_MOMO:
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+                if (own->battle[i].battle.layers[0].cardId == CARD_ID_KIRSCHWASSER) {
                     effect++;
                     break;
                 }
             }
             if (defender->layers[0].cardId >= 0 &&
-                (work->definitions[defender->layers[0].cardId].flags & 4)) {
+                (work->definitions[defender->layers[0].cardId].flags & CARD_ATTR_GNOSIS)) {
                 effect++;
             }
             break;
-        case 26:
+        case CARD_ID_100_SERIES:
             if (defender->layers[0].cardId >= 0 &&
-                (work->definitions[defender->layers[0].cardId].flags & 4)) {
+                (work->definitions[defender->layers[0].cardId].flags & CARD_ATTR_GNOSIS)) {
                 effect++;
             }
             break;
         }
-        if (attacker->layers[1].cardId == 42 &&
+        if (attacker->layers[1].cardId == CARD_ID_SABER &&
             defender->layers[0].cardId >= 0 &&
-            (work->definitions[defender->layers[0].cardId].flags & 4)) {
+            (work->definitions[defender->layers[0].cardId].flags & CARD_ATTR_GNOSIS)) {
             effect += 3;
         }
     }
@@ -4182,10 +4652,9 @@ s32 CGPBattleAttackEffect(s32 side, CardGameWork *work, s32 effect,
 
 /*
  * Attack power left after the defender's protections: it drops by one for every
- * operation card 122 in play on the defending side when the defender's base card
- * carries definition flag 8, and by one for each defender layer that is card 44
- * or 47, or card 7 while the attacker's base card carries flag 2 (the card ids
- * are fixed cards of the card master table). Never below zero.
+ * Tune Up in play on the defending side when the defender's base card is a
+ * Mech, and by one for each defender layer that is a Shield or a Battle Suit,
+ * or Lv 10 Shion while the attacker's base card is a Realian. Never below zero.
  */
 s32 CGPBattleDiffenceEffect(s32 side, CardGameWork *work, s32 power, CardLayerStack *defender,
                             CardLayerStack *attacker)
@@ -4197,10 +4666,10 @@ s32 CGPBattleDiffenceEffect(s32 side, CardGameWork *work, s32 power, CardLayerSt
     s16 i;
 
     defenderSide = (side == 0) ? &work->enemy : &work->player;
-    value = CardPlayCntOpe(defenderSide, CGP_OPE_DEFENCE_DOWN);
+    value = CardPlayCntOpe(defenderSide, CARD_ID_TUNE_UP);
     cardId = defender->layers[0].cardId;
     defs = work->definitions;
-    if (defs[cardId].flags & 8) {
+    if (defs[cardId].flags & CARD_ATTR_MECH) {
         for (i = 0; i < value; i++) {
             power--;
         }
@@ -4209,14 +4678,14 @@ s32 CGPBattleDiffenceEffect(s32 side, CardGameWork *work, s32 power, CardLayerSt
         value = defender->layers[i].cardId;
         if (value >= 0) {
             switch (value) {
-            case 7:
+            case CARD_ID_LV_10_SHION:
                 if (attacker->layers[0].cardId >= 0 &&
-                    (defs[attacker->layers[0].cardId].flags & 2)) {
+                    (defs[attacker->layers[0].cardId].flags & CARD_ATTR_REALIAN)) {
                     power--;
                 }
                 break;
-            case 44:
-            case 47:
+            case CARD_ID_SHIELD:
+            case CARD_ID_BATTLE_SUIT:
                 power--;
                 break;
             }
@@ -4226,12 +4695,13 @@ s32 CGPBattleDiffenceEffect(s32 side, CardGameWork *work, s32 power, CardLayerSt
 }
 
 /*
- * What a destroyed card leaves behind. The card survives with one life left
- * while the other side has card 81 in play; cards 22, 38, 59 and 60 each play a
- * command of their own, and 60 queues the last card of the other side's junk
- * pile again when a copy of 60 is destroyed there. Once the card is really
- * gone, operation card 126 recovers as many cards as the card reserved and
- * operation card 129 plays command 75 for every side that has one in play.
+ * What a destroyed card leaves behind. A MOMO card survives with one life left
+ * while the other side has Joachim Mizrahi in play; U-Tic Soldier, VX-9000, Wilhelm
+ * and Cherenkov each play a command of their own, and Cherenkov queues the last
+ * card of the other side's junk pile again when a copy of it is destroyed there.
+ * Once the card is really gone, Human Sacrifice recovers as many cards as the card
+ * reserved and Supply Order plays its trigger command for every side that has one
+ * in play.
  */
 s32 CGPBAEsub(s32 side, CardGameWork *work, s32 power, CardLayerStack *attacker,
               CardLayerStack *defender)
@@ -4261,40 +4731,40 @@ s32 CGPBAEsub(s32 side, CardGameWork *work, s32 power, CardLayerStack *attacker,
         defender->layers[0].life = 0;
 
         ownSlot = -1;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (attacker == &own->battle[i].battle) {
                 ownSlot = i;
                 break;
             }
         }
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (defender == &foe->battle[i].battle) {
                 break;
             }
         }
 
         switch (cardId) {
-        case 3:
-        case 8:
-        case 10:
-            if (CardPlayCntBtl((CardHand *) foe, 81) != 0) {
+        case CARD_ID_LV_1_MOMO:
+        case CARD_ID_SWIM_SUIT_MOMO:
+        case CARD_ID_LV_10_MOMO:
+            if (CardPlayCntBtl(foe, CARD_ID_JOACHIM_MIZRAHI) != 0) {
                 defender->layers[0].life = 1;
-                CardPlayCommandPlay(side, 71, work, foeSide, 0);
+                CardPlayCommandPlay(side, CARD_COMMAND_JOACHIM_MIZRAHI_TRIGGER, work, foeSide, 0);
             }
             break;
-        case 22:
-            CardPlayCommandPlay(side, 66, work, foeSide, 0);
+        case CARD_ID_U_TIC_SOLDIER:
+            CardPlayCommandPlay(side, CARD_COMMAND_U_TIC_SOLDIER_TRIGGER, work, foeSide, 0);
             break;
-        case 38:
-            CardPlayCommandPlay(side, 68, work, 0, 0);
+        case CARD_ID_VX_9000:
+            CardPlayCommandPlay(side, CARD_COMMAND_VX_9000_BATTLE_TRIGGER, work, 0, 0);
             break;
-        case 59:
-            CardPlayCommandPlay(side, 69, work, ownSlot, 0);
+        case CARD_ID_WILHELM:
+            CardPlayCommandPlay(side, CARD_COMMAND_WILHELM_TRIGGER, work, ownSlot, 0);
             break;
-        case 60:
+        case CARD_ID_CHERENKOV:
             found = 0;
-            for (i = 0; i < 4; i++) {
-                if (foe->battle[i].battle.layers[0].cardId == 60 &&
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+                if (foe->battle[i].battle.layers[0].cardId == CARD_ID_CHERENKOV &&
                     foe->battle[i].battle.layers[0].life <= 0) {
                     found = 1;
                     break;
@@ -4302,22 +4772,22 @@ s32 CGPBAEsub(s32 side, CardGameWork *work, s32 power, CardLayerStack *attacker,
             }
             if (found != 0) {
                 /* the head of a side record is the play record of its hand */
-                junkIndex = CardPlayJunkCnt((CardPlayHand *) foe) - 1;
+                junkIndex = CardPlayJunkCnt(foe) - 1;
                 if (junkIndex >= 0) {
                     card = foe->junk[junkIndex];
-                    if (work->definitions[card].kind == CGP_CARD_KIND_COMMAND) {
-                        if ((work->definitions[card].flags & 0xB) != 0) {
-                            if (CardPlayIdentityCheck(work, (CardHand *) foe,
+                    if (work->definitions[card].kind == CARD_KIND_BATTLE) {
+                        if ((work->definitions[card].flags & (CARD_ATTR_HUMAN | CARD_ATTR_REALIAN | CARD_ATTR_MECH)) != 0) {
+                            if (CardPlayIdentityCheck(work, foe,
                                                       work->definitions[card].identity) == 0) {
                                 command = CPCSearchCommWk(side, work);
                                 if (command != 0) {
-                                    command[1] = 10;
-                                    command[0] = 6;
+                                    command[CARD_QUEUE_COMMAND] = CARD_COMMAND_CHERENKOV;
+                                    command[CARD_QUEUE_PHASE] = CARD_PHASE_ADJUST;
                                     if (side != 0) {
-                                        command[0] = 13;
+                                        command[CARD_QUEUE_PHASE] = CARD_PHASE_ADJUST + CARD_PHASES_PER_SIDE;
                                     }
-                                    command[2] = i;
-                                    command[3] = junkIndex;
+                                    command[CARD_QUEUE_OPERAND] = i;
+                                    command[CARD_QUEUE_TARGET] = junkIndex;
                                 }
                             }
                         }
@@ -4328,18 +4798,18 @@ s32 CGPBAEsub(s32 side, CardGameWork *work, s32 power, CardLayerStack *attacker,
         }
 
         if (defender->layers[0].life <= 0) {
-            if (CardPlayCntOpe(foe, 126) != 0) {
+            if (CardPlayCntOpe(foe, CARD_ID_HUMAN_SACRIFICE) != 0) {
                 for (i = 0; i < work->definitions[defender->layers[0].cardId].reserveCost;
                      i++) {
-                    CardPlayRecavery((CardHand *) foe);
+                    CardPlayRecavery(foe);
                 }
             }
-            if (work->definitions[defender->layers[0].cardId].flags & 2) {
-                if (CardPlayCntOpe(own, 129) != 0) {
-                    CardPlayCommandPlay(side, 75, work, (s16) side, 0);
+            if (work->definitions[defender->layers[0].cardId].flags & CARD_ATTR_REALIAN) {
+                if (CardPlayCntOpe(own, CARD_ID_SUPPLY_ORDER) != 0) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_SUPPLY_ORDER_TRIGGER, work, side, 0);
                 }
-                if (CardPlayCntOpe(foe, 129) != 0) {
-                    CardPlayCommandPlay(side, 75, work, foeSide, 0);
+                if (CardPlayCntOpe(foe, CARD_ID_SUPPLY_ORDER) != 0) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_SUPPLY_ORDER_TRIGGER, work, foeSide, 0);
                 }
             }
         }
@@ -4351,9 +4821,9 @@ s32 CGPBAEsub(s32 side, CardGameWork *work, s32 power, CardLayerStack *attacker,
 
 /*
  * Effects that resolve once a battle is over. While the battle produced an
- * effect, the defending cards 2 and 9 mark the attacking stack, cards 30, 31,
- * 67 and 72 mark it as well, and card 0 queues command 3 for the side once the
- * attacking stack has run out of life. Both the attacking and the supporting
+ * effect, the defending Ziggy cards down the attacking stack, AG-04, AG-02 M,
+ * Goblin and Cerberus down it as well, and Lv 1 Shion plays its trigger command
+ * once the attacking stack has run out of life. Both the attacking and the supporting
  * stack then run their own after-effects.
  */
 void CGPBattleAfterEffect(s32 side, CardGameWork *work, s32 effect, s32 operand,
@@ -4363,25 +4833,25 @@ void CGPBattleAfterEffect(s32 side, CardGameWork *work, s32 effect, s32 operand,
     s16 card;
 
     card = defender->layers[0].cardId;
-    if (card == 2 || card == 9) {
+    if (card == CARD_ID_LV_1_ZIGGY || card == CARD_ID_LV_10_ZIGGY) {
         if (effect != 0 && attacker != 0) {
-            attacker->flags |= 2;
+            attacker->flags |= CARD_STACK_FLAG_FROZEN;
         }
     }
     if (effect != 0) {
         switch (card) {
-        case 0:
+        case CARD_ID_LV_1_SHION:
             if (attacker->layers[0].life <= 0) {
-                CardPlayCommandPlay(side, 3, work, operand, 0);
+                CardPlayCommandPlay(side, CARD_COMMAND_LV_1_SHION_TRIGGER, work, operand, 0);
             }
             break;
-        case 30:
-        case 31:
-            attacker->flags |= 2;
+        case CARD_ID_AG_04:
+        case CARD_ID_AG_02_M:
+            attacker->flags |= CARD_STACK_FLAG_FROZEN;
             break;
-        case 67:
-        case 72:
-            attacker->flags |= 2;
+        case CARD_ID_GOBLIN:
+        case CARD_ID_CERBERUS:
+            attacker->flags |= CARD_STACK_FLAG_FROZEN;
             break;
         }
     }
@@ -4396,7 +4866,7 @@ void CGPBattleAfterEffect(s32 side, CardGameWork *work, s32 effect, s32 operand,
 /*
  * Damage one attack deals. The attacker's effects raise the power, the
  * defender's lower it, and what is left is taken off the defending card. A
- * card stacked on the attacker that pierces (34, 35, 37 or 43) lets the damage
+ * card stacked on the attacker that pierces (Proto Dora, AG-05, VX-7000 or Cannon) lets the damage
  * that destroys the defending card pass to the card behind it, which sets the
  * destroyed code to 1 for the defending card alone and to 2 for both. The
  * damage still left over is returned.
@@ -4417,8 +4887,8 @@ s32 CGPBattleCalcuration(s32 side, CardGameWork *work, s32 power, s32 *battleDon
     if (damage != 0) {
         for (i = 39; i >= 0; i--) {
             if (attacker->layers[i].cardId >= 0) {
-                if (attacker->layers[i].cardId == 34 || attacker->layers[i].cardId == 35 ||
-                    attacker->layers[i].cardId == 37 || attacker->layers[i].cardId == 43) {
+                if (attacker->layers[i].cardId == CARD_ID_PROTO_DORA || attacker->layers[i].cardId == CARD_ID_AG_05 ||
+                    attacker->layers[i].cardId == CARD_ID_VX_7000 || attacker->layers[i].cardId == CARD_ID_CANNON) {
                     pierces = 1;
                     break;
                 }
@@ -4428,7 +4898,7 @@ s32 CGPBattleCalcuration(s32 side, CardGameWork *work, s32 power, s32 *battleDon
             *destroyed = 1;
             taken = defender->layers[0].life;
             defender->layers[0].life = 0;
-            CardSetEffect(side, work, 11, taken, 0, defender->position, defender);
+            CardSetEffect(side, work, CGP_EFFECT_DAMAGE,taken, 0, defender->position, defender);
             damage -= taken;
             if (behind != 0) {
                 if (behind->layers[0].life < damage) {
@@ -4441,11 +4911,11 @@ s32 CGPBattleCalcuration(s32 side, CardGameWork *work, s32 power, s32 *battleDon
                     damage = 0;
                     behind->layers[0].life -= taken;
                 }
-                CardSetEffect(side, work, 22, 0, 0, attacker->position, behind);
-                CardSetEffect(side, work, 15, taken, 0, behind->position, behind);
+                CardSetEffect(side, work, CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED, 0, 0, attacker->position, behind);
+                CardSetEffect(side, work, CGP_EFFECT_DAMAGE_ONE_DESTROYED,taken, 0, behind->position, behind);
             }
         } else {
-            CardSetEffect(side, work, 11, damage, 0, defender->position, defender);
+            CardSetEffect(side, work, CGP_EFFECT_DAMAGE,damage, 0, defender->position, defender);
             defender->layers[0].life -= damage;
             damage = 0;
         }
@@ -4465,8 +4935,8 @@ s32 CGPBattleCalcuration(s32 side, CardGameWork *work, s32 power, s32 *battleDon
 
 /*
  * Base attack power of the topmost card on a stack, scanning down from the
- * last layer for the highest occupied one; ids 44, 47 and 53 are placeholder
- * equipment cards, so the base layer (index 0) is used instead when the
+ * last layer for the highest occupied one; Shield, Battle Suit and Eyeglasses
+ * only modify a card, so the base layer (index 0) is used instead when the
  * topmost occupied layer holds one of them.
  */
 s32 CGPCalcPower(CardGameWork *work, CardLayerStack *stack)
@@ -4480,7 +4950,7 @@ s32 CGPCalcPower(CardGameWork *work, CardLayerStack *stack)
         }
     }
     cardId = stack->layers[i].cardId;
-    if (cardId == 44 || cardId == 47 || cardId == 53) {
+    if (cardId == CARD_ID_SHIELD || cardId == CARD_ID_BATTLE_SUIT || cardId == CARD_ID_EYEGLASSES) {
         i = 0;
     }
     return work->definitions[stack->layers[i].cardId].attackPower;
@@ -4491,19 +4961,19 @@ s32 CGPCalcPower(CardGameWork *work, CardLayerStack *stack)
  * carries, doubled once per boost. A card whose attack type is 4 spends its
  * boosts instead of doubling.
  */
-s32 CGPCalcPowerPlus(CardGameWork *work, CardPowerCard *card, s32 power)
+s32 CGPCalcPowerPlus(CardGameWork *work, CardLayerStack *card, s32 power)
 {
     s32 boosts;
 
-    if (card->cardId < 0) {
+    if (card->layers[0].cardId < 0) {
         power = 0;
     } else {
-        power += card->powerPlus[0];
-        power += card->powerPlus[1];
-        if (CardChkAttackType(work->definitions, (CardLayerStack *) card) == 4) {
-            card->boostCount = 0;
+        power += card->layers[0].powerPlus;
+        power += card->layers[0].flag;
+        if (CardChkAttackType(work->definitions, card) == 4) {
+            card->layers[0].boostCount = 0;
         }
-        boosts = card->boostCount;
+        boosts = card->layers[0].boostCount;
         if (boosts > 0) {
             do {
                 boosts--;
@@ -4515,12 +4985,12 @@ s32 CGPCalcPowerPlus(CardGameWork *work, CardPowerCard *card, s32 power)
 }
 
 /*
- * Power a card gains or loses from the operation cards in play. Operation 120
- * on either side costs a card carrying flag 4 one point; every copy of 123 on
- * this side adds one to a card carrying flag 1, every copy of 134 on either
- * side one to a card carrying flag 4, and every copy of 144 one to any card.
- * Card 14 also gains a point while card 79 stands on one of this side's battle
- * slots, and card 15 one for every battle slot holding a card with flag 8.
+ * Power a card gains or loses from the situation cards in play. Hilbert Effect
+ * on either side costs a Gnosis card one point; every copy of Stim on this side
+ * adds one to a Human, every copy of Mysterious Girl on either side one to a
+ * Gnosis (the disc text says every card except Gnosis), and every copy of Zohar
+ * one to any card. Albedo also gains a point while Kirschwasser stands on one of
+ * this side's battle slots, and Hammer one for every battle slot holding a Mech.
  */
 s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId)
 {
@@ -4535,30 +5005,30 @@ s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId)
         ownSide = &work->enemy;
         foeSide = &work->player;
     }
-    if (CardPlayCntOpe(ownSide, 120) != 0 || CardPlayCntOpe(foeSide, 120) != 0) {
-        if (work->definitions[cardId].flags & 4) {
+    if (CardPlayCntOpe(ownSide, CARD_ID_HILBERT_EFFECT) != 0 || CardPlayCntOpe(foeSide, CARD_ID_HILBERT_EFFECT) != 0) {
+        if (work->definitions[cardId].flags & CARD_ATTR_GNOSIS) {
             power--;
         }
     }
-    i = CardPlayCntOpe(ownSide, 123);
+    i = CardPlayCntOpe(ownSide, CARD_ID_STIM);
     if (i != 0) {
-        if (work->definitions[cardId].flags & 1) {
+        if (work->definitions[cardId].flags & CARD_ATTR_HUMAN) {
             while (i > 0) {
                 i--;
                 power++;
             }
         }
     }
-    i = CardPlayCntOpe(ownSide, 134) + CardPlayCntOpe(foeSide, 134);
+    i = CardPlayCntOpe(ownSide, CARD_ID_MYSTERIOUS_GIRL) + CardPlayCntOpe(foeSide, CARD_ID_MYSTERIOUS_GIRL);
     if (i != 0) {
-        if (work->definitions[cardId].flags & 4) {
+        if (work->definitions[cardId].flags & CARD_ATTR_GNOSIS) {
             while (i > 0) {
                 i--;
                 power++;
             }
         }
     }
-    i = CardPlayCntOpe(ownSide, 144) + CardPlayCntOpe(foeSide, 144);
+    i = CardPlayCntOpe(ownSide, CARD_ID_ZOHAR) + CardPlayCntOpe(foeSide, CARD_ID_ZOHAR);
     if (i != 0) {
         while (i > 0) {
             i--;
@@ -4566,17 +5036,17 @@ s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId)
         }
     }
     switch (cardId) {
-    case 15:
-        for (i = 0; i < 4; i++) {
+    case CARD_ID_HAMMER:
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId >= 0 &&
-                (work->definitions[ownSide->battle[i].battle.layers[0].cardId].flags & 8)) {
+                (work->definitions[ownSide->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_MECH)) {
                 power++;
             }
         }
         break;
-    case 14:
-        for (i = 0; i < 4; i++) {
-            if (ownSide->battle[i].battle.layers[0].cardId == 79) {
+    case CARD_ID_ALBEDO:
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->battle[i].battle.layers[0].cardId == CARD_ID_KIRSCHWASSER) {
                 power++;
                 break;
             }
@@ -4586,39 +5056,10 @@ s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId)
     return power;
 }
 
-extern s32 CardPlayYamaCnt(CardPlaySide *side);
-extern s32 CardPlaySuteCnt(CardPlaySide *side);
 
-typedef struct CGPBoardArea {
-    s16 area;
-    s16 slot;
-} CGPBoardArea;
-extern void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
-                          CardLayerStack *stack, CGPBoardArea *place);
 
-/*
- * CardDefinition.flags bit 4: the card class that several rules single out
- * (operation 130 sends it to the discard pile, operations 120/134/136 change its
- * power or life, error 15 when it is played); what the class means is not
- * established.
- */
-#define CGP_CARD_FLAG_CLASS4 0x04
 
-/*
- * While this operation card is in play a dying CGP_CARD_FLAG_CLASS4 card goes to
- * the discard (sute) pile instead of the junk pile (`addiu $5,$0,0x82`, 0x00a29648).
- */
-#define CGP_OPE_DISCARD_TO_SUTE 130
 
-/*
- * A card leaving the board slides to its pile in this many frames: the move
- * record's timer (`addiu $7,$0,0xA`, 0x00a296d0) and the divisor of its
- * per-frame step (`div.s` by 10.0f, 0x00a29728).
- */
-#define CGP_PILE_MOVE_FRAMES 10
-#define CGP_PILE_MOVE_Z 0.12f        /* height of the sliding card, 0x3DF5C28F (`lui`, 0x00a29688) */
-#define CGP_SUTE_PILE_X 1.265f       /* discard pile position, 0x3FA1EB85 (`lui`, 0x00a296a8) */
-#define CGP_SUTE_PILE_Y (-1.81f)     /* 0xBFE7AE14 (`lui`, 0x00a296c0) */
 
 /*
  * Upkeep of one board slot: refreshes the side's deck and discard counts, counts
@@ -4632,11 +5073,9 @@ extern void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
 void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
                    CardLayerStack *stack, CGPBoardArea *place)
 {
-    CardPlayField *field;
     s32 count;
     s32 i;
 
-    field = (CardPlayField *) side;
     side->hand.deckCount = CardPlayYamaCnt(side);
     side->hand.suteCount = CardPlaySuteCnt(side);
     stack->previousFlags = stack->flags;
@@ -4650,56 +5089,56 @@ void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
     }
     if (stack->layers[1].cardId < 0) {
         /* powerLimit is compared as a signed byte (`lb`, 0x00a295f8). */
-        if ((s8) stack->powerLimit != definitions[stack->layers[0].cardId].basePower) {
+        if (stack->powerLimit != definitions[stack->layers[0].cardId].basePower) {
             stack->power = definitions[stack->layers[0].cardId].basePower;
             stack->powerLimit = definitions[stack->layers[0].cardId].basePower;
         }
     }
     if (stack->layers[0].damageTimer == 0 && stack->layers[0].life <= 0) {
-        if (CardPlayCntOpe(side, CGP_OPE_DISCARD_TO_SUTE) &&
-            (definitions[stack->layers[0].cardId].flags & CGP_CARD_FLAG_CLASS4)) {
+        if (CardPlayCntOpe(side, CARD_ID_GNOSIS_PHENOMENON) &&
+            (definitions[stack->layers[0].cardId].flags & CARD_ATTR_GNOSIS)) {
             count = CardPlaySuteCnt(side);
             for (i = 0; i < 40; i++) {
                 if (stack->layers[i].cardId >= 0) {
-                    field->suteMove[count].moveTimer = CGP_PILE_MOVE_FRAMES;
-                    field->suteMove[count].kind = 0;
-                    field->suteMove[count].position[0] = stack->position[0];
+                    side->suteMove[count].moveTimer = CGP_PILE_MOVE_FRAMES;
+                    side->suteMove[count].kind = 0;
+                    side->suteMove[count].position[0] = stack->position[0];
                     side->sute[count] = stack->layers[i].cardId;
-                    field->suteMove[count].position[1] = stack->position[1];
-                    field->suteMove[count].position[2] = CGP_PILE_MOVE_Z;
+                    side->suteMove[count].position[1] = stack->position[1];
+                    side->suteMove[count].position[2] = CGP_PILE_MOVE_Z;
                     stack->layers[i].cardId = -1;
-                    field->suteMove[count].step[0] =
+                    side->suteMove[count].step[0] =
                         (CGP_SUTE_PILE_X - stack->position[0]) / CGP_PILE_MOVE_FRAMES;
-                    field->suteMove[count].step[1] =
+                    side->suteMove[count].step[1] =
                         (CGP_SUTE_PILE_Y - stack->position[1]) / CGP_PILE_MOVE_FRAMES;
-                    field->suteMove[count].step[2] = 0.0f;
+                    side->suteMove[count].step[2] = 0.0f;
                     count++;
                 }
             }
         } else {
-            count = CardPlayJunkCnt((CardPlayHand *) side);
+            count = CardPlayJunkCnt(side);
             for (i = 0; i < 40; i++) {
                 if (stack->layers[i].cardId >= 0) {
                     if (place->area == CGP_AREA_ENEMY_DISPOSAL ||
                         place->area == CGP_AREA_PLAYER_DISPOSAL) {
-                        field->junkMove[count].position[0] =
+                        side->junkMove[count].position[0] =
                             side->disposal[place->slot].battle.position[0];
-                        field->junkMove[count].position[1] =
+                        side->junkMove[count].position[1] =
                             side->disposal[place->slot].battle.position[1];
-                        field->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
+                        side->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
                     } else {
-                        field->junkMove[count].position[0] =
+                        side->junkMove[count].position[0] =
                             side->battle[place->slot].battle.position[0];
-                        field->junkMove[count].position[1] =
+                        side->junkMove[count].position[1] =
                             side->battle[place->slot].battle.position[1];
-                        field->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
+                        side->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
                     }
-                    field->junkMove[count].step[0] =
-                        (JunkPos1P[1][0] - field->junkMove[count].position[0]) / CGP_PILE_MOVE_FRAMES;
-                    field->junkMove[count].step[1] =
-                        (JunkPos1P[1][1] - field->junkMove[count].position[1]) / CGP_PILE_MOVE_FRAMES;
-                    field->junkMove[count].step[2] = 0.0f;
-                    field->junkMove[count].moveTimer = CGP_PILE_MOVE_FRAMES;
+                    side->junkMove[count].step[0] =
+                        (JunkPos1P[1][0] - side->junkMove[count].position[0]) / CGP_PILE_MOVE_FRAMES;
+                    side->junkMove[count].step[1] =
+                        (JunkPos1P[1][1] - side->junkMove[count].position[1]) / CGP_PILE_MOVE_FRAMES;
+                    side->junkMove[count].step[2] = 0.0f;
+                    side->junkMove[count].moveTimer = CGP_PILE_MOVE_FRAMES;
                     side->junk[count] = stack->layers[i].cardId;
                     stack->layers[i].cardId = -1;
                     count++;
@@ -4710,23 +5149,23 @@ void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
     if (stack->layers[1].cardId >= 0 && stack->layers[1].life <= 0) {
         stack->power = definitions[stack->layers[0].cardId].basePower;
         stack->powerLimit = definitions[stack->layers[0].cardId].basePower;
-        count = CardPlayJunkCnt((CardPlayHand *) side);
+        count = CardPlayJunkCnt(side);
         if (place->area == CGP_AREA_ENEMY_DISPOSAL ||
             place->area == CGP_AREA_PLAYER_DISPOSAL) {
-            field->junkMove[count].position[0] = side->disposal[place->slot].battle.position[0];
-            field->junkMove[count].position[1] = side->disposal[place->slot].battle.position[1];
-            field->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
+            side->junkMove[count].position[0] = side->disposal[place->slot].battle.position[0];
+            side->junkMove[count].position[1] = side->disposal[place->slot].battle.position[1];
+            side->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
         } else {
-            field->junkMove[count].position[0] = side->battle[place->slot].battle.position[0];
-            field->junkMove[count].position[1] = side->battle[place->slot].battle.position[1];
-            field->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
+            side->junkMove[count].position[0] = side->battle[place->slot].battle.position[0];
+            side->junkMove[count].position[1] = side->battle[place->slot].battle.position[1];
+            side->junkMove[count].position[2] = CGP_PILE_MOVE_Z;
         }
-        field->junkMove[count].step[0] =
-            (JunkPos1P[1][0] - field->junkMove[count].position[0]) / CGP_PILE_MOVE_FRAMES;
-        field->junkMove[count].step[1] =
-            (JunkPos1P[1][1] - field->junkMove[count].position[1]) / CGP_PILE_MOVE_FRAMES;
-        field->junkMove[count].step[2] = 0.0f;
-        field->junkMove[count].moveTimer = CGP_PILE_MOVE_FRAMES;
+        side->junkMove[count].step[0] =
+            (JunkPos1P[1][0] - side->junkMove[count].position[0]) / CGP_PILE_MOVE_FRAMES;
+        side->junkMove[count].step[1] =
+            (JunkPos1P[1][1] - side->junkMove[count].position[1]) / CGP_PILE_MOVE_FRAMES;
+        side->junkMove[count].step[2] = 0.0f;
+        side->junkMove[count].moveTimer = CGP_PILE_MOVE_FRAMES;
         side->junk[count] = stack->layers[1].cardId;
         stack->layers[1].cardId = -1;
     }
@@ -4748,7 +5187,7 @@ void CGPRefreshFieldHP(CardGameWork *work)
     enemy = &work->enemy;
     playerPlace.area = 6;
     enemyPlace.area = 2;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         playerPlace.slot = i;
         enemyPlace.slot = i;
         CGPHPCheckSub(work->definitions, player,
@@ -4758,7 +5197,7 @@ void CGPRefreshFieldHP(CardGameWork *work)
     }
     playerPlace.area = 5;
     enemyPlace.area = 4;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         playerPlace.slot = i;
         enemyPlace.slot = i;
         CGPHPCheckSub(work->definitions, player,
@@ -4768,42 +5207,10 @@ void CGPRefreshFieldHP(CardGameWork *work)
     }
 }
 
-/*
- * Attack types CardChkAttackType reports for the card in play and the battle
- * command an attack runs under (CGPBattleSub attacks only when they agree).
- */
-#define CGP_ATTACK_FRONT 1        /* front slots only, at the opposing card (`addiu $2,$0,1`, 0x00a2a160) */
-#define CGP_ATTACK_PIERCE 2       /* also hits the card behind its target (`addiu $2,$0,2`, 0x00a2a168) */
-#define CGP_ATTACK_SUPPORT 3      /* strikes the stack passed as `support` (`addiu $2,$0,3`, 0x00a29de8) */
-#define CGP_ATTACK_DIRECT 4       /* no target card (`addiu $2,$0,4`, 0x00a29f00) */
 
-#define CGP_STACK_TOP_LAYER 39    /* highest layer searched for the top card (`addiu $16,$0,0x27`, 0x00a29cb4) */
 
-#define CGP_STACK_FLAG_FROZEN 0x02     /* no countdown and no attack (`andi $2,$2,0x2`, 0x00a29e08) */
-#define CGP_STACK_FLAG_NO_DAMAGE 0x80  /* the attack deals no damage (`andi $2,$2,0x80`, 0x00a29f54) */
-#define CGP_CARD_FLAG_GUARDED 0x01     /* cannot be targeted while CGP_OPE_GUARD is in play (0x00a29fc0) */
-#define CGP_CARD_FLAG_ALT_SE 0x08      /* attacks with the alternate sound (`andi $3,$3,0x8`, 0x00a2a1e0) */
-#define CGP_CARD_STOPS_DIRECT 39       /* battle card on either board cancels a direct attack (0x00a29f14) */
-#define CGP_OPE_GUARD 124              /* `addiu $5,$0,0x7C`, 0x00a29f90 */
-#define CGP_OPE_POINT_COMMAND 135      /* `addiu $5,$0,0x87`, 0x00a2a504 */
-#define CGP_COMMAND_POINT_ATTACK 17    /* played for a class-4 attacker (`addiu $5,$0,0x11`, 0x00a2a580) */
-#define CGP_COMMAND_NO_DAMAGE 79       /* played instead of the damage (`addiu $5,$0,0x4F`, 0x00a2a654) */
-#define CGP_HAND_FLAG_NO_DAMAGE 0x01   /* CardHand.commandFlags bit 0 (`andi $2,$2,0x1`, 0x00a2a4f4) */
-#define CGP_LIFE_WEAR_LIMIT 64         /* a stacked card below this life wears down (`slti $2,$2,0x40`, 0x00a29eb8) */
-#define CGP_POWER_MAX 99               /* `addiu $2,$0,0x63`, 0x00a2a3d8 */
 
-#define CGP_SE_ATTACK 0x20004          /* 0x00a2a244 */
-#define CGP_SE_ATTACK_ALT 0x20009      /* 0x00a2a24c */
-#define CGP_SE_FRONT_ATTACK 0x20002    /* 0x00a2a218 */
-#define CGP_SE_FRONT_ATTACK_ALT 0x20005 /* 0x00a2a1ec */
-#define CGP_SE_DIRECT_ATTACK 0x20007   /* 0x00a2a4b4 */
-#define CGP_SE_DIRECT_VOLUME 60        /* `addiu $5,$0,0x3C`, 0x00a2a4b8 */
-#define CGP_SE_DIRECT_PAN 64           /* `addiu $6,$0,0x40`, 0x00a2a4c4 */
 
-extern int CardPlayCommandCheck(s16 command, s16 *queue);
-extern void CardPlayCommandBattleExecute(s16 side, s16 command, CardGameWork *work);
-extern void CardCursorActive(CardCursorControl *cursor, CGPCursorPosition *position, int mode);
-extern void xglSoundEffectParamDirect(int sound, int volume, int pan);
 
 /*
  * One battle step of the card in battle slot `slot` of `side`. A queued battle
@@ -4817,7 +5224,7 @@ extern void xglSoundEffectParamDirect(int sound, int volume, int pan);
 s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                  CardPlaySide *ownSide, CardPlaySide *foeSide, CardLayerStack *support)
 {
-    CGPCursorPosition cursor;
+    CardCursorPosition cursor;
     s32 battleDone;
     s32 destroyed;
     s16 *queue;
@@ -4844,14 +5251,14 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
             }
         }
         hasUpperLayer = (i != 0);
-        if (ownSide->battle[slot].battle.layers[i].cardId == CGP_CARD_BASE_POWER_1 ||
-            ownSide->battle[slot].battle.layers[i].cardId == CGP_CARD_BASE_POWER_2 ||
-            ownSide->battle[slot].battle.layers[i].cardId == CGP_CARD_BASE_POWER_3) {
+        if (ownSide->battle[slot].battle.layers[i].cardId == CARD_ID_SHIELD ||
+            ownSide->battle[slot].battle.layers[i].cardId == CARD_ID_BATTLE_SUIT ||
+            ownSide->battle[slot].battle.layers[i].cardId == CARD_ID_EYEGLASSES) {
             i = 0;
         }
         power = work->definitions[ownSide->battle[slot].battle.layers[i].cardId].attackPower;
         attackType = CardChkAttackType(work->definitions, &ownSide->battle[slot].battle);
-        power = CGPCalcPowerPlus(work, (CardPowerCard *) &ownSide->battle[slot].battle, power);
+        power = CGPCalcPowerPlus(work, &ownSide->battle[slot].battle, power);
         if (command == attackType) {
             cursor.zone = CGP_AREA_PLAYER_BATTLE;
             if (side != 0) {
@@ -4860,13 +5267,13 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
             cursor.index = slot;
             CardCursorActive(&work->cursor, &cursor, 2);
             if (attackType != CGP_ATTACK_SUPPORT) {
-                if ((s8) ownSide->battle[slot].battle.power > 0) {
-                    if (!(ownSide->battle[slot].battle.flags & CGP_STACK_FLAG_FROZEN)) {
-                        ownSide->battle[slot].battle.power = (s8)ownSide->battle[slot].battle.power - 1;
+                if (ownSide->battle[slot].battle.power > 0) {
+                    if (!(ownSide->battle[slot].battle.flags & CARD_STACK_FLAG_FROZEN)) {
+                        ownSide->battle[slot].battle.power = ownSide->battle[slot].battle.power - 1;
                     }
                 }
             }
-            if ((s8) ownSide->battle[slot].battle.power <= 0 && !(ownSide->battle[slot].battle.flags & CGP_STACK_FLAG_FROZEN)) {
+            if (ownSide->battle[slot].battle.power <= 0 && !(ownSide->battle[slot].battle.flags & CARD_STACK_FLAG_FROZEN)) {
                 if (command != CGP_ATTACK_SUPPORT) {
                     ownSide->battle[slot].battle.power = ownSide->battle[slot].battle.powerLimit;
                 }
@@ -4879,11 +5286,11 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                 }
                 power = CGPBattleBeforeEffect(side, work, power, &ownSide->battle[slot].battle, slot);
                 if (attackType == CGP_ATTACK_DIRECT) {
-                    if (CardPlayCntBtl(&ownSide->hand, CGP_CARD_STOPS_DIRECT) != 0 || CardPlayCntBtl(&foeSide->hand, CGP_CARD_STOPS_DIRECT) != 0) {
+                    if (CardPlayCntBtl(ownSide, CARD_ID_VX_10000) != 0 || CardPlayCntBtl(foeSide, CARD_ID_VX_10000) != 0) {
                         power = 0;
                     }
                 }
-                if (ownSide->battle[slot].battle.flags & CGP_STACK_FLAG_NO_DAMAGE) {
+                if (ownSide->battle[slot].battle.flags & CARD_STACK_FLAG_NO_DAMAGE) {
                     power = 0;
                 }
                 if (power != 0) {
@@ -4896,15 +5303,15 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                     if (command == CGP_ATTACK_SUPPORT) {
                         if (support != 0 && support->layers[0].cardId >= 0) {
                             target = support;
-                            if (CardPlayCntOpe(foeSide, CGP_OPE_GUARD)) {
-                                if (work->definitions[target->layers[0].cardId].flags & CGP_CARD_FLAG_GUARDED) {
+                            if (CardPlayCntOpe(foeSide, CARD_ID_GOOD_LUCK)) {
+                                if (work->definitions[target->layers[0].cardId].flags & CARD_ATTR_HUMAN) {
                                     power = 0;
                                 }
                             }
                             if (power != 0) {
                                 CGPBattleCalcuration(side, work, power, &battleDone, &ownSide->battle[slot].battle,
                                                      target, 0, &destroyed);
-                                CardSetEffect(otherSide, work, 5, 0, CARD_EFFECT_SE_HIT, target->position, target);
+                                CardSetEffect(otherSide, work, CGP_EFFECT_BURST,0, CARD_EFFECT_SE_HIT, target->position, target);
                             }
                         }
                         power = 0;
@@ -4919,12 +5326,12 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                                 target = &foeSide->battle[3 - (slot & 1)].battle;
                             }
                         }
-                        if (CardPlayCntOpe(foeSide, CGP_OPE_GUARD) && target != 0) {
-                            if (work->definitions[target->layers[0].cardId].flags & CGP_CARD_FLAG_GUARDED) {
+                        if (CardPlayCntOpe(foeSide, CARD_ID_GOOD_LUCK) && target != 0) {
+                            if (work->definitions[target->layers[0].cardId].flags & CARD_ATTR_HUMAN) {
                                 if (behind != 0) {
                                     target = behind;
                                     behind = 0;
-                                    if (work->definitions[target->layers[0].cardId].flags & CGP_CARD_FLAG_GUARDED) {
+                                    if (work->definitions[target->layers[0].cardId].flags & CARD_ATTR_HUMAN) {
                                         target = 0;
                                     }
                                 } else {
@@ -4938,10 +5345,10 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                                 if (target != 0) {
                                     CGPBattleCalcuration(side, work, power, &battleDone, &ownSide->battle[slot].battle,
                                                          target, 0, &destroyed);
-                                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CGP_CARD_FLAG_ALT_SE) {
-                                        CardSetEffect(side, work, 1, 0, CGP_SE_FRONT_ATTACK_ALT, ownSide->battle[slot].battle.position, target);
+                                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CARD_ATTR_MECH) {
+                                        CardSetEffect(side, work, CGP_EFFECT_FRONT_ATTACK, 0,CGP_SE_FRONT_ATTACK_ALT, ownSide->battle[slot].battle.position, target);
                                     } else {
-                                        CardSetEffect(side, work, 1, 0, CGP_SE_FRONT_ATTACK, ownSide->battle[slot].battle.position, target);
+                                        CardSetEffect(side, work, CGP_EFFECT_FRONT_ATTACK, 0,CGP_SE_FRONT_ATTACK, ownSide->battle[slot].battle.position, target);
                                     }
                                 }
                                 power = 0;
@@ -4951,12 +5358,12 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                                     s32 sound;
 
                                     sound = CGP_SE_ATTACK;
-                                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CGP_CARD_FLAG_ALT_SE) {
+                                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CARD_ATTR_MECH) {
                                         sound = CGP_SE_ATTACK_ALT;
                                     }
                                     power = CGPBattleCalcuration(side, work, power, &battleDone,
                                                                  &ownSide->battle[slot].battle, target, behind, &destroyed);
-                                    CardSetEffect(side, work, 2, 0, sound, ownSide->battle[slot].battle.position, target);
+                                    CardSetEffect(side, work, CGP_EFFECT_PIERCE_ATTACK, 0, sound, ownSide->battle[slot].battle.position, target);
                                 }
                                 break;
                             }
@@ -4970,12 +5377,12 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                                     s32 sound;
 
                                     sound = CGP_SE_ATTACK;
-                                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CGP_CARD_FLAG_ALT_SE) {
+                                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CARD_ATTR_MECH) {
                                         sound = CGP_SE_ATTACK_ALT;
                                     }
                                     power = CGPBattleCalcuration(side, work, power, &battleDone,
                                                                  &ownSide->battle[slot].battle, target, behind, &destroyed);
-                                    CardSetEffect(side, work, 2, 0, sound, ownSide->battle[slot].battle.position, target);
+                                    CardSetEffect(side, work, CGP_EFFECT_PIERCE_ATTACK, 0, sound, ownSide->battle[slot].battle.position, target);
                                 }
                                 break;
                             }
@@ -4990,43 +5397,43 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
                     s32 sound;
 
                     sound = CGP_SE_ATTACK;
-                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CGP_CARD_FLAG_ALT_SE) {
+                    if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CARD_ATTR_MECH) {
                         sound = CGP_SE_ATTACK_ALT;
                     }
                     if (attackType == CGP_ATTACK_PIERCE) {
                         if (destroyed == 0) {
-                            CardSetEffect(side, work, 2, 0, sound, ownSide->battle[slot].battle.position, 0);
+                            CardSetEffect(side, work, CGP_EFFECT_PIERCE_ATTACK, 0, sound, ownSide->battle[slot].battle.position, 0);
                         } else if (destroyed == 1) {
-                            CardSetEffect(side, work, 22, 0, sound, ownSide->battle[slot].battle.position, 0);
+                            CardSetEffect(side, work, CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED, 0, sound, ownSide->battle[slot].battle.position, 0);
                         } else {
-                            CardSetEffect(side, work, 32, 0, sound, ownSide->battle[slot].battle.position, 0);
+                            CardSetEffect(side, work, CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED, 0, sound, ownSide->battle[slot].battle.position, 0);
                         }
                     } else if (attackType == CGP_ATTACK_DIRECT) {
                         xglSoundEffectParamDirect(CGP_SE_DIRECT_ATTACK, CGP_SE_DIRECT_VOLUME, CGP_SE_DIRECT_PAN);
-                        CardSetEffect(side, work, 4, 0, 0, ownSide->battle[slot].battle.position, 0);
+                        CardSetEffect(side, work, CGP_EFFECT_DIRECT_ATTACK, 0, 0, ownSide->battle[slot].battle.position, 0);
                     }
                     if (!(foeSide->hand.commandFlags & CGP_HAND_FLAG_NO_DAMAGE)) {
-                        i = CardPlayCntOpe(ownSide, CGP_OPE_POINT_COMMAND) + CardPlayCntOpe(foeSide, CGP_OPE_POINT_COMMAND);
+                        i = CardPlayCntOpe(ownSide, CARD_ID_TERRITORY_SHIFT) + CardPlayCntOpe(foeSide, CARD_ID_TERRITORY_SHIFT);
                         if (i != 0) {
-                            if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CGP_CARD_FLAG_CLASS4) {
+                            if (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CARD_ATTR_GNOSIS) {
                                 if (ownSide->hand.playPoints[2] > 0) {
                                     ownSide->hand.playPoints[2]--;
-                                    CardPlayCommandPlay(side, CGP_COMMAND_POINT_ATTACK, work, 0, 0);
+                                    CardPlayCommandPlay(side, CARD_COMMAND_TERRITORY_SHIFT_TRIGGER, work, 0, 0);
                                 }
                             }
                         }
                         if (destroyed == 0) {
-                            CardSetEffect(side, work, 11, (s8) power, CARD_EFFECT_SE_HIT, 0, 0);
+                            CardSetEffect(side, work, CGP_EFFECT_DAMAGE, power, CARD_EFFECT_SE_HIT, 0, 0);
                         } else if (destroyed == 1) {
-                            CardSetEffect(side, work, 15, (s8) power, CARD_EFFECT_SE_HIT, 0, 0);
+                            CardSetEffect(side, work, CGP_EFFECT_DAMAGE_ONE_DESTROYED, power, CARD_EFFECT_SE_HIT, 0, 0);
                         } else {
-                            CardSetEffect(side, work, 16, (s8) power, CARD_EFFECT_SE_HIT, 0, 0);
+                            CardSetEffect(side, work, CGP_EFFECT_DAMAGE_MANY_DESTROYED, power, CARD_EFFECT_SE_HIT, 0, 0);
                         }
                         for (i = 0; i < power; i++) {
-                            CardPlayCostCard((CardPlayHand *) &foeSide->hand);
+                            CardPlayCostCard(foeSide);
                         }
                     } else {
-                        CardPlayCommandPlay(side, CGP_COMMAND_NO_DAMAGE, work, 0, 0);
+                        CardPlayCommandPlay(side, CARD_COMMAND_IMPREGNABLE_GUARD_TRIGGER, work, 0, 0);
                     }
                 }
             }
@@ -5037,79 +5444,21 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
 
 void CGPRotStageSub(CardGameWork *work, u32 stage)
 {
-    if ((work->save->flags & CARD_SAVE_ROTATE_STAGE) && work->fase == 9 &&
+    if ((work->save->flags & CARD_SAVE_ROTATE_STAGE) && work->fase == CARD_FASE_BATTLE_2P &&
         work->rotStageId != stage && work->rotStageCooldown == 0)
     {
         work->rotStageId = stage;
-        work->rotStageCooldown = 20;
+        work->rotStageCooldown = CGP_ROT_STAGE_COOLDOWN;
     }
 }
 
-/* Steps of CGPDrawFaseProc (command.phaseTimer). */
-#define CGP_DRAW_STEP_BEGIN 0
-#define CGP_DRAW_STEP_EXCHANGE_OFFER 1
-#define CGP_DRAW_STEP_EXCHANGE_PROMPT 2
-#define CGP_DRAW_STEP_EXCHANGE 3
-#define CGP_DRAW_STEP_EFFECT_BEGIN 10
-#define CGP_DRAW_STEP_EFFECT_COUNT 11
-#define CGP_DRAW_STEP_EFFECT_PAY 12
-#define CGP_DRAW_STEP_EFFECT_WAIT 13
-#define CGP_DRAW_STEP_OPE_CURSOR 20
-#define CGP_DRAW_STEP_ADD_PROMPT 21
-#define CGP_DRAW_STEP_BONUS_COUNT 30
-#define CGP_DRAW_STEP_DRAW 31
-#define CGP_DRAW_STEP_DRAW_WAIT 32
 
-/* Interrupt message the fase shows on entry (`addiu $7,$0,0x16`, 0x00a2a79c). */
-#define CGP_DRAW_INTERRUPT_MESS 22
-/* Exchanges of the opening hand a side is offered (`addiu $2,$0,0x3`, 0x00a2a78c). */
-#define CGP_DRAW_EXCHANGES 3
-/* Cards drawn for the opening hand (the loop counts 5 down to 0, 0x00a2aa5c..0x00a2aa70). */
-#define CGP_DRAW_HAND_SIZE 6
-/* Frames the draw step waits after each card (`addiu $2,$0,0x32`, 0x00a2af44). */
-#define CGP_DRAW_WAIT_FRAMES 50
 
-/*
- * Error messages (ErrorMessTbl rows) of the fase: 33..35 "Exchange Cards - Is
- * this hand okay? You have 3/2/1 more exchange(s)", 26 "Select Card - Add this
- * card to your hand?" and 36 "Use Card Effect - Executing this card's text".
- */
-#define CGP_ERR_EXCHANGE_THREE 33
-#define CGP_ERR_EXCHANGE_TWO 34
-#define CGP_ERR_EXCHANGE_ONE 35
-#define CGP_ERR_ADD_TO_HAND 26
-#define CGP_ERR_USE_CARD_EFFECT 36
 
-/* Cards and operation cards whose presence the fase reacts to (the ids the CardPlayCnt* calls and slot tests use). */
-#define CGP_CARD_DRAW_EFFECT 56       /* `addiu $5,$0,0x38`, 0x00a2aaac: on the board it is highlighted and paid for */
-#define CGP_CARD_DRAW_FROM_SUTE 78    /* battle card, `addiu $5,$0,0x4E`, 0x00a2ae68: draws from the discard pile */
-#define CGP_OPE_DRAW_FROM_SUTE 137    /* `addiu $5,$0,0x89`, 0x00a2af04 */
-#define CGP_OPE_EXTRA_DRAW 140        /* `addiu $5,$0,0x8C`, 0x00a2ae38: one more draw per copy */
 
-/*
- * Operation card whose duration is refilled from its definition while a card with
- * CGP_CARD_FLAG_CLASS4 (tested at 0x00a2fbb8) stands on the board (`addiu $20,$0,0x84`, 0x00a2fb50;
- * definitions[132].operationDuration is `lbu 0x12A2($2)`, 0x00a2fc28);
- * CGPDrawFaseProc highlights it on the board (`addiu $23,$0,0x84`, 0x00a2aca8).
- */
-#define CGP_OPE_TIMED_CARD 132
 
-/* Operation slot rows of the cursor (CGP_AREA_* continued). */
-#define CGP_AREA_ENEMY_OPERATION 3
-#define CGP_AREA_PLAYER_OPERATION 7
 
-/* Whether the card list of the side is drawn upside down: the player's hand when the stage is rotated, the other hand when it is not. */
-#define CGP_HAND_FLIPPED(side, work) \
-    (((side) != 0 && (work)->rotStageId == 0) || ((side) == 0 && (work)->rotStageId != 0))
 
-extern void CardPlayShuffleYama(CardHand *hand);
-extern int CardPlayDrawCard(CardHand *hand);
-extern int CardPlayDrawSute(CardHand *hand);
-extern s32 CardPlayCntDsp(CardPlaySide *side, s16 cardId);
-extern s32 CardPlayCntAllOpe(CardGameWork *work, s16 opId);
-extern void CGCPHandDispSub2(CardDefinition *definitions, CardHand *hand, int selected, int mode);
-extern void CGCPHandDispSub3(CardDefinition *definitions, CardHand *hand, int selected, int mode, int option);
-extern void CGCPYamaDispSub(CardHand *hand, int index, int count, int buttons, int rotated);
 
 /* Frames left to wait after a draw (`sb` 0x00a2af48, counted down `lbu`/`sb` 0x00a2afdc / 0x00a2afec). */
 static u8 timer_1;
@@ -5136,8 +5485,8 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
     u16 pressed;
     s32 autoPlay;
     s32 i;
-    CGPCursorPosition position;
-    CGPCursorPosition operationPosition;
+    CardCursorPosition position;
+    CardCursorPosition operationPosition;
 
     autoPlay = 0;
     if (side == 0) {
@@ -5201,35 +5550,35 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
             break;
         }
         /* With the stage rotated the pad's left and right swap their meaning. */
-        if ((work->rotStageId == 0 && (pressed & CGP_PAD_RIGHT)) ||
-            (work->rotStageId != 0 && (pressed & CGP_PAD_LEFT))) {
+        if ((work->rotStageId == 0 && (pressed & PAD_RIGHT)) ||
+            (work->rotStageId != 0 && (pressed & PAD_LEFT))) {
             if (cardno_3 < count - 1) {
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 cardno_3++;
             }
-        } else if ((work->rotStageId == 0 && (pressed & CGP_PAD_LEFT)) ||
-                   (work->rotStageId != 0 && (pressed & CGP_PAD_RIGHT))) {
+        } else if ((work->rotStageId == 0 && (pressed & PAD_LEFT)) ||
+                   (work->rotStageId != 0 && (pressed & PAD_RIGHT))) {
             if (cardno_3 > 0) {
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 cardno_3--;
             }
         }
-        if (pressed & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+        if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer++;
-        } else if (pressed & CGP_PAD_CONFIRM) {
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+        } else if (pressed & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->command.phaseTimer = CGP_DRAW_STEP_EFFECT_BEGIN;
         }
-        if (held & CGP_PAD_PREVIEW) {
+        if (held & PAD_TRIANGLE) {
             CGPDispErrorMessPlus(side, message, activeSide->hand.cards[cardno_3]);
         } else {
             CGPDispErrorMess(side, message);
         }
         if (CGP_HAND_FLIPPED(side, work)) {
-            CGCPHandDispSub3(work->definitions, &activeSide->hand, cardno_3, 0, 0);
+            CGCPHandDispSub3(work->definitions, activeSide, cardno_3, 0, 0);
         } else {
-            CGCPHandDispSub2(work->definitions, &activeSide->hand, cardno_3, 0);
+            CGCPHandDispSub2(work->definitions, activeSide, cardno_3, 0);
         }
         break;
     }
@@ -5243,9 +5592,9 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
             activeSide->deck[deckCount + i] = activeSide->hand.cards[i];
             activeSide->hand.cards[i] = -1;
         }
-        CardPlayShuffleYama(&activeSide->hand);
+        CardPlayShuffleYama(activeSide);
         for (i = CGP_DRAW_HAND_SIZE - 1; i >= 0; i--) {
-            CardPlayDrawCard(&activeSide->hand);
+            CardPlayDrawCard(activeSide);
         }
         work->command.phaseTimer = CGP_DRAW_STEP_EXCHANGE_OFFER;
         change_2--;
@@ -5260,16 +5609,16 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
 
         /* Count the effect cards on the board: 1 for a disposal slot, 2 for a battle slot, both sides. */
         cnt_0 = 0;
-        if (CardPlayCntDsp(ownSide, CGP_CARD_DRAW_EFFECT)) {
+        if (CardPlayCntDsp(ownSide, CARD_ID_MATTHEWS)) {
             cnt_0 += 1;
         }
-        if (CardPlayCntBtl(&ownSide->hand, CGP_CARD_DRAW_EFFECT)) {
+        if (CardPlayCntBtl(ownSide, CARD_ID_MATTHEWS)) {
             cnt_0 += 2;
         }
-        if (CardPlayCntDsp(foeSide, CGP_CARD_DRAW_EFFECT)) {
+        if (CardPlayCntDsp(foeSide, CARD_ID_MATTHEWS)) {
             cnt_0 += 1;
         }
-        if (CardPlayCntBtl(&foeSide->hand, CGP_CARD_DRAW_EFFECT)) {
+        if (CardPlayCntBtl(foeSide, CARD_ID_MATTHEWS)) {
             cnt_0 += 2;
         }
         if (cnt_0 == 0) {
@@ -5277,27 +5626,27 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
             break;
         }
         if (!autoPlay) {
-            CGPSetErrorMessPlus(side, work, CGP_ERR_USE_CARD_EFFECT, CGP_CARD_DRAW_EFFECT);
+            CGPSetErrorMessPlus(side, work, CGP_ERR_USE_CARD_EFFECT, CARD_ID_MATTHEWS);
         }
-        for (slot = 0; slot < 4; slot++) {
-            if (work->player.battle[slot].battle.layers[0].cardId == CGP_CARD_DRAW_EFFECT) {
+        for (slot = 0; slot < CARD_BOARD_SLOTS; slot++) {
+            if (work->player.battle[slot].battle.layers[0].cardId == CARD_ID_MATTHEWS) {
                 position.zone = CGP_AREA_PLAYER_BATTLE;
                 position.index = slot;
                 CardCursorActive(&work->cursor, &position, 2);
             }
-            if (work->enemy.battle[slot].battle.layers[0].cardId == CGP_CARD_DRAW_EFFECT) {
+            if (work->enemy.battle[slot].battle.layers[0].cardId == CARD_ID_MATTHEWS) {
                 position.zone = CGP_AREA_ENEMY_BATTLE;
                 position.index = slot;
                 CardCursorActive(&work->cursor, &position, 2);
             }
         }
-        for (slot = 0; slot < 4; slot++) {
-            if (work->player.disposal[slot].battle.layers[0].cardId == CGP_CARD_DRAW_EFFECT) {
+        for (slot = 0; slot < CARD_BOARD_SLOTS; slot++) {
+            if (work->player.disposal[slot].battle.layers[0].cardId == CARD_ID_MATTHEWS) {
                 position.zone = CGP_AREA_PLAYER_DISPOSAL;
                 position.index = slot;
                 CardCursorActive(&work->cursor, &position, 2);
             }
-            if (work->enemy.disposal[slot].battle.layers[0].cardId == CGP_CARD_DRAW_EFFECT) {
+            if (work->enemy.disposal[slot].battle.layers[0].cardId == CARD_ID_MATTHEWS) {
                 position.zone = CGP_AREA_ENEMY_DISPOSAL;
                 position.index = slot;
                 CardCursorActive(&work->cursor, &position, 2);
@@ -5307,7 +5656,7 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
         break;
     }
     case CGP_DRAW_STEP_EFFECT_PAY:
-        CardPlayCostCard((CardPlayHand *) &ownSide->hand);
+        CardPlayCostCard(ownSide);
         cnt_0--;
         work->command.phaseTimer++;
         break;
@@ -5322,9 +5671,9 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
         CardCursorPassive(&work->cursor);
         cnt_0 = 0;
         if (!autoPlay) {
-            if (CardPlayCntOpe(ownSide, CGP_OPE_TIMED_CARD) != 0) {
-                for (i = 0; i < 4; i++) {
-                    if (ownSide->operations[i] == CGP_OPE_TIMED_CARD) {
+            if (CardPlayCntOpe(ownSide, CARD_ID_COLLECTIVE) != 0) {
+                for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
+                    if (ownSide->operations[i] == CARD_ID_COLLECTIVE) {
                         operationPosition.zone = CGP_AREA_PLAYER_OPERATION;
                         if (side != 0) {
                             operationPosition.zone = CGP_AREA_ENEMY_OPERATION;
@@ -5343,13 +5692,13 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
         break;
     case CGP_DRAW_STEP_ADD_PROMPT:
         CGPDispErrorMess3(side, CGP_ERR_ADD_TO_HAND);
-        if (pressed & CGP_PAD_CANCEL) {
+        if (pressed & PAD_CROSS) {
             s16 top;
             s32 deckCount;
             s32 j;
 
             /* Declining sends the top card of the deck to the bottom. */
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             deckCount = CardPlayYamaCnt(ownSide);
             top = ownSide->deck[deckCount - 1];
             for (j = deckCount - 1; j > 0; j--) {
@@ -5357,31 +5706,31 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
             }
             ownSide->deck[0] = top;
             work->command.phaseTimer = CGP_DRAW_STEP_BONUS_COUNT;
-        } else if (pressed & CGP_PAD_CONFIRM) {
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+        } else if (pressed & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer = CGP_DRAW_STEP_BONUS_COUNT;
         }
         {
             s32 rotated = 1;
 
-            if (!(held & CGP_PAD_PREVIEW)) {
+            if (!(held & PAD_TRIANGLE)) {
                 if (CGP_HAND_FLIPPED(side, work)) {
-                    CGCPHandDispSub3(work->definitions, &activeSide->hand, -1, 0, 0);
+                    CGCPHandDispSub3(work->definitions, activeSide, -1, 0, 0);
                 } else {
                     rotated = 0;
-                    CGCPHandDispSub2(work->definitions, &activeSide->hand, -1, 0);
+                    CGCPHandDispSub2(work->definitions, activeSide, -1, 0);
                 }
             }
-            CGCPYamaDispSub(&ownSide->hand, 0, 1, held, rotated);
+            CGCPYamaDispSub(ownSide, 0, 1, held, rotated);
         }
         break;
     case CGP_DRAW_STEP_BONUS_COUNT:
         CardCursorPassive(&work->cursor);
-        cnt_0 = CardPlayCntAllOpe(work, CGP_OPE_EXTRA_DRAW);
+        cnt_0 = CardPlayCntAllOpe(work, CARD_ID_WASTE_MONEY);
         if (cnt_0 != 0) {
-            CGPSetErrorMessPlus(side, work, CGP_ERR_USE_CARD_EFFECT, CGP_OPE_EXTRA_DRAW);
+            CGPSetErrorMessPlus(side, work, CGP_ERR_USE_CARD_EFFECT, CARD_ID_WASTE_MONEY);
         }
-        if (CardPlayCntBtl(&ownSide->hand, CGP_CARD_DRAW_FROM_SUTE)) {
+        if (CardPlayCntBtl(ownSide, CARD_ID_SANCTUARY_SHIP)) {
             cnt_0 += 1;
         }
         cnt_0 += 1;
@@ -5390,16 +5739,16 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
     case CGP_DRAW_STEP_DRAW:
         if (!autoPlay) {
             if (CGP_HAND_FLIPPED(side, work)) {
-                CGCPHandDispSub3(work->definitions, &activeSide->hand, cardno_3, 0, 0);
+                CGCPHandDispSub3(work->definitions, activeSide, cardno_3, 0, 0);
             } else {
-                CGCPHandDispSub2(work->definitions, &activeSide->hand, cardno_3, 0);
+                CGCPHandDispSub2(work->definitions, activeSide, cardno_3, 0);
             }
         }
-        if (CardPlayCntOpe(ownSide, CGP_OPE_DRAW_FROM_SUTE) || CardPlayCntBtl(&ownSide->hand, CGP_CARD_DRAW_FROM_SUTE)) {
-            CardPlayDrawSute(&ownSide->hand);
+        if (CardPlayCntOpe(ownSide, CARD_ID_IMAGINARY_SPACE) || CardPlayCntBtl(ownSide, CARD_ID_SANCTUARY_SHIP)) {
+            CardPlayDrawSute(ownSide);
             timer_1 = CGP_DRAW_WAIT_FRAMES;
         } else {
-            CardPlayDrawCard(&ownSide->hand);
+            CardPlayDrawCard(ownSide);
             timer_1 = CGP_DRAW_WAIT_FRAMES;
         }
         work->command.phaseTimer++;
@@ -5408,9 +5757,9 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
     case CGP_DRAW_STEP_DRAW_WAIT:
         if (!autoPlay) {
             if (CGP_HAND_FLIPPED(side, work)) {
-                CGCPHandDispSub3(work->definitions, &activeSide->hand, cardno_3, 0, 0);
+                CGCPHandDispSub3(work->definitions, activeSide, cardno_3, 0, 0);
             } else {
-                CGCPHandDispSub2(work->definitions, &activeSide->hand, cardno_3, 0);
+                CGCPHandDispSub2(work->definitions, activeSide, cardno_3, 0);
             }
         }
         if (timer_1 != 0) {
@@ -5424,47 +5773,22 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
     }
 }
 
-extern int CardPlayDisposeCnt(CardPlaySide *side);
-extern int CardPlayBattleCnt(CardPlaySide *side);
 
 /* Card id of the last card CGPMoveSub hovered, or -1 when the cursor is on no card. */
 static s16 no_4;
 /* Board position the held card was picked up from. */
-static CGPCursorPosition mas_5;
+static CardCursorPosition mas_5;
 
-/* CGPMoveFaseProc steps (command.phaseTimer). */
-#define CGP_MOVE_STEP_PICK 0          /* put the cursor on the first occupied slot */
-#define CGP_MOVE_STEP_LIST 1          /* light up the slots a card can be picked from */
-#define CGP_MOVE_STEP_SELECT 2        /* confirm the card to move */
-#define CGP_MOVE_STEP_TARGET 3        /* confirm the slot to move it to */
-#define CGP_MOVE_STEP_DONE 4          /* back to the first step */
-#define CGP_MOVE_STEP_END 20          /* nothing left to move: wait one frame */
-#define CGP_MOVE_STEP_NEXT_TURN 21
 
-/* Cursor modes CardCursorActive takes. */
-#define CGP_CURSOR_SELECTABLE 4       /* `addiu $6,$0,4`, 0x00a2b43c */
-#define CGP_CURSOR_BLOCKED 3          /* a class-4 card while operation 120 is in play (`addiu $23,$0,3`, 0x00a2b430; `movn`, 0x00a2b498) */
-#define CGP_CURSOR_PICKED 2           /* the card that was picked up */
-#define CGP_CURSOR_TARGET 1           /* a slot it can be moved to */
 
-/* CardSaveData.flags bits that make the side's moves automatic (0x00a2b1dc, 0x00a2b1f4). */
-#define CGP_SAVE_FLAG_SIDE0_AUTO 0x08
-#define CGP_SAVE_FLAG_SIDE1_AUTO 0x04
 
-#define CGP_ERR_NO_MOVABLE_CARD 6     /* `addiu $6,$0,6`, 0x00a2b20c */
-#define CGP_ERR_NO_CARD_THERE 11      /* hand area chosen, `addiu $6,$0,0xB`, 0x00a2b734 */
-#define CGP_ERR_MOVE_REFUSED 15       /* `addiu $6,$0,0xF`, 0x00a2b5ec */
 
-/* Cards and operation cards that stop a move (CardPlayCntBtl / CardPlayCntOpe arguments). */
-#define CGP_CARD_BLOCKS_CLASS4 10     /* `addiu $5,$0,0xA`, 0x00a2b5b4: card on either hand's board stops a class-4 card */
-#define CGP_OPE_BLOCKS_CLASS4 120     /* `addiu $5,$0,0x78`, 0x00a2b480 */
-#define CGP_OPE_LOCK_MOVES 138        /* `addiu $5,$0,0x8A`, 0x00a2b7dc */
 
 /* Refuses the move with an error message and the buzzer; the caller returns. */
 static inline void CGPMoveRefuse(s32 side, CardGameWork *work, s16 reason)
 {
     CGPSetErrorMessPlus(side, work, CGP_ERR_MOVE_REFUSED, reason);
-    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+    xglSoundEffectNormalID(SE_BUZZER, 0);
 }
 
 void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
@@ -5474,9 +5798,9 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
     s32 battleArea;
     s32 handArea;
     s32 i;
-    CGPCursorPosition position;
-    CGPCursorPosition activePosition;
-    CGPCursorPosition target;
+    CardCursorPosition position;
+    CardCursorPosition activePosition;
+    CardCursorPosition target;
 
     if (side == 0) {
         pressed = work->command.input[0].pressed;
@@ -5493,9 +5817,9 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
     if ((s16) work->command.phaseTimer != 0 && handArea == position.zone && work->cursorMoveAny == 0) {
         work->cursor.selectionMode = 0;
         if (CGP_HAND_FLIPPED(side, work)) {
-            CGCPHandDispSub3(work->definitions, &ownSide->hand, position.index, 0, 0);
+            CGCPHandDispSub3(work->definitions, ownSide, position.index, 0, 0);
         } else {
-            CGCPHandDispSub2(work->definitions, &ownSide->hand, position.index, 0);
+            CGCPHandDispSub2(work->definitions, ownSide, position.index, 0);
         }
     } else {
         work->cursor.selectionMode = 1;
@@ -5522,7 +5846,7 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         }
         if (side == 0) {
             if (disposeCount != 0) {
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
                         work->cursorIndex = 0;
                         work->cursorZone = 5 + i;
@@ -5530,7 +5854,7 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
                     }
                 }
             } else {
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
                         work->cursorIndex = 1 + (i & 1);
                         work->cursorZone = 5 + (i & 2);
@@ -5540,7 +5864,7 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
             }
         } else {
             if (disposeCount != 0) {
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
                         work->cursorIndex = 3;
                         work->cursorZone = 4 - i;
@@ -5548,7 +5872,7 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
                     }
                 }
             } else {
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
                         work->cursorIndex = 2 - (i & 1);
                         work->cursorZone = 4 - (i & 2);
@@ -5568,22 +5892,22 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         CardCursorControl *cursor = &work->cursor;
 
         CardCursorPassive(cursor);
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
                 mas_5.zone = disposalArea;
                 mas_5.index = i;
                 CardCursorActive(cursor, &mas_5, CGP_CURSOR_SELECTABLE);
             }
         }
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
                 s32 mode;
 
                 mas_5.zone = battleArea;
                 mas_5.index = i;
                 mode = CGP_CURSOR_SELECTABLE;
-                if (work->definitions[ownSide->battle[i].battle.layers[0].cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                    if (CardPlayCntOpe(&work->player, CGP_OPE_BLOCKS_CLASS4) + CardPlayCntOpe(&work->enemy, CGP_OPE_BLOCKS_CLASS4)) {
+                if (work->definitions[ownSide->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_GNOSIS) {
+                    if (CardPlayCntOpe(&work->player, CARD_ID_HILBERT_EFFECT) + CardPlayCntOpe(&work->enemy, CARD_ID_HILBERT_EFFECT)) {
                         mode = CGP_CURSOR_BLOCKED;
                     }
                 }
@@ -5598,7 +5922,7 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         s16 *hovered = &no_4;
 
         *hovered = CGPMoveSub(side, ownSide, work);
-        if (!(pressed & CGP_PAD_CONFIRM)) {
+        if (!(pressed & PAD_CIRCLE)) {
             return;
         }
         if (work->cursorMoveAny != 0) {
@@ -5607,39 +5931,39 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         if (*hovered >= 0) {
             CGPCursor2Pos(&mas_5, work);
             if (disposalArea == mas_5.zone) {
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 CardCursorPassive(&work->cursor);
                 CardCursorActive(&work->cursor, &mas_5, CGP_CURSOR_PICKED);
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     activePosition.zone = battleArea;
                     activePosition.index = i;
                     CardCursorActive(&work->cursor, &activePosition, CGP_CURSOR_TARGET);
                 }
                 work->command.phaseTimer++;
             } else if (battleArea == mas_5.zone) {
-                if (work->definitions[*hovered].flags & CGP_CARD_FLAG_CLASS4) {
-                    if (CardPlayCntBtl(&work->player.hand, CGP_CARD_BLOCKS_CLASS4) || CardPlayCntBtl(&work->enemy.hand, CGP_CARD_BLOCKS_CLASS4)) {
-                        CGPMoveRefuse(side, work, CGP_CARD_BLOCKS_CLASS4);
+                if (work->definitions[*hovered].flags & CARD_ATTR_GNOSIS) {
+                    if (CardPlayCntBtl(&work->player, CARD_ID_LV_10_MOMO) || CardPlayCntBtl(&work->enemy, CARD_ID_LV_10_MOMO)) {
+                        CGPMoveRefuse(side, work, CARD_ID_LV_10_MOMO);
                         return;
                     }
-                    if (work->definitions[*hovered].flags & CGP_CARD_FLAG_CLASS4) {
-                        if (CardPlayCntOpe(&work->player, CGP_OPE_BLOCKS_CLASS4) || CardPlayCntOpe(&work->enemy, CGP_OPE_BLOCKS_CLASS4)) {
-                            CGPMoveRefuse(side, work, CGP_OPE_BLOCKS_CLASS4);
+                    if (work->definitions[*hovered].flags & CARD_ATTR_GNOSIS) {
+                        if (CardPlayCntOpe(&work->player, CARD_ID_HILBERT_EFFECT) || CardPlayCntOpe(&work->enemy, CARD_ID_HILBERT_EFFECT)) {
+                            CGPMoveRefuse(side, work, CARD_ID_HILBERT_EFFECT);
                             return;
                         }
                     }
                 }
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 CardCursorPassive(&work->cursor);
                 CardCursorActive(&work->cursor, &mas_5, CGP_CURSOR_PICKED);
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     if (battleArea != mas_5.zone || i != mas_5.index) {
                         target.zone = battleArea;
                         target.index = i;
                         CardCursorActive(&work->cursor, &target, CGP_CURSOR_TARGET);
                     }
                 }
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     target.zone = disposalArea;
                     target.index = i;
                     CardCursorActive(&work->cursor, &target, CGP_CURSOR_TARGET);
@@ -5651,95 +5975,95 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
             if (handArea == target.zone) {
                 CGPSetErrorMess(side, work, CGP_ERR_NO_CARD_THERE);
             }
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            xglSoundEffectNormalID(SE_BUZZER, 0);
             CGPCursor2Pos(&mas_5, work);
         }
         break;
     }
     case CGP_MOVE_STEP_TARGET:
         CGPMoveSub(side, ownSide, work);
-        if (pressed & CGP_PAD_CANCEL) {
+        if (pressed & PAD_CROSS) {
             work->command.phaseTimer = CGP_MOVE_STEP_LIST;
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             CardCursorPassive(&work->cursor);
         }
-        if (!(pressed & CGP_PAD_CONFIRM)) {
+        if (!(pressed & PAD_CIRCLE)) {
             return;
         }
         CGPCursor2Pos(&target, work);
         if (battleArea == target.zone) {
             if (disposalArea == mas_5.zone) {
                 if (target.cardId >= 0) {
-                    if (CardPlayCntOpe(&work->player, CGP_OPE_LOCK_MOVES) || CardPlayCntOpe(&work->enemy, CGP_OPE_LOCK_MOVES)) {
-                        CGPMoveRefuse(side, work, CGP_OPE_LOCK_MOVES);
+                    if (CardPlayCntOpe(&work->player, CARD_ID_A_RAT_IN_A_TRAP) || CardPlayCntOpe(&work->enemy, CARD_ID_A_RAT_IN_A_TRAP)) {
+                        CGPMoveRefuse(side, work, CARD_ID_A_RAT_IN_A_TRAP);
                         return;
                     }
                 }
-                if (work->definitions[target.cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                    if (CardPlayCntBtl(&work->player.hand, CGP_CARD_BLOCKS_CLASS4) || CardPlayCntBtl(&work->enemy.hand, CGP_CARD_BLOCKS_CLASS4)) {
-                        CGPMoveRefuse(side, work, CGP_CARD_BLOCKS_CLASS4);
+                if (work->definitions[target.cardId].flags & CARD_ATTR_GNOSIS) {
+                    if (CardPlayCntBtl(&work->player, CARD_ID_LV_10_MOMO) || CardPlayCntBtl(&work->enemy, CARD_ID_LV_10_MOMO)) {
+                        CGPMoveRefuse(side, work, CARD_ID_LV_10_MOMO);
                         return;
                     }
-                    if (work->definitions[target.cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                        if (CardPlayCntOpe(&work->player, CGP_OPE_BLOCKS_CLASS4) || CardPlayCntOpe(&work->enemy, CGP_OPE_BLOCKS_CLASS4)) {
-                            CGPMoveRefuse(side, work, CGP_OPE_BLOCKS_CLASS4);
+                    if (work->definitions[target.cardId].flags & CARD_ATTR_GNOSIS) {
+                        if (CardPlayCntOpe(&work->player, CARD_ID_HILBERT_EFFECT) || CardPlayCntOpe(&work->enemy, CARD_ID_HILBERT_EFFECT)) {
+                            CGPMoveRefuse(side, work, CARD_ID_HILBERT_EFFECT);
                             return;
                         }
                     }
                 }
-                CGPMoveDSBATTLEwork((CardMoveWork *) &ownSide->battle[target.index].battle,
-                                    (CardMoveWork *) &ownSide->disposal[mas_5.index].battle);
+                CGPMoveDSBATTLEwork(&ownSide->battle[target.index].battle,
+                                    &ownSide->disposal[mas_5.index].battle);
                 work->command.phaseTimer++;
             } else {
                 if (mas_5.index == target.index) {
                     return;
                 }
-                if (work->definitions[target.cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                    if (CardPlayCntBtl(&work->player.hand, CGP_CARD_BLOCKS_CLASS4) || CardPlayCntBtl(&work->enemy.hand, CGP_CARD_BLOCKS_CLASS4)) {
-                        CGPMoveRefuse(side, work, CGP_CARD_BLOCKS_CLASS4);
+                if (work->definitions[target.cardId].flags & CARD_ATTR_GNOSIS) {
+                    if (CardPlayCntBtl(&work->player, CARD_ID_LV_10_MOMO) || CardPlayCntBtl(&work->enemy, CARD_ID_LV_10_MOMO)) {
+                        CGPMoveRefuse(side, work, CARD_ID_LV_10_MOMO);
                         return;
                     }
-                    if (work->definitions[target.cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                        if (CardPlayCntOpe(&work->player, CGP_OPE_BLOCKS_CLASS4) || CardPlayCntOpe(&work->enemy, CGP_OPE_BLOCKS_CLASS4)) {
-                            CGPMoveRefuse(side, work, CGP_OPE_BLOCKS_CLASS4);
+                    if (work->definitions[target.cardId].flags & CARD_ATTR_GNOSIS) {
+                        if (CardPlayCntOpe(&work->player, CARD_ID_HILBERT_EFFECT) || CardPlayCntOpe(&work->enemy, CARD_ID_HILBERT_EFFECT)) {
+                            CGPMoveRefuse(side, work, CARD_ID_HILBERT_EFFECT);
                             return;
                         }
                     }
                 }
-                CGPMoveDSBATTLEwork((CardMoveWork *) &ownSide->battle[target.index].battle,
-                                    (CardMoveWork *) &ownSide->battle[mas_5.index].battle);
+                CGPMoveDSBATTLEwork(&ownSide->battle[target.index].battle,
+                                    &ownSide->battle[mas_5.index].battle);
                 work->command.phaseTimer++;
             }
         } else if (disposalArea == target.zone) {
-            if (CardPlayCntOpe(&work->player, CGP_OPE_LOCK_MOVES) || CardPlayCntOpe(&work->enemy, CGP_OPE_LOCK_MOVES)) {
-                CGPMoveRefuse(side, work, CGP_OPE_LOCK_MOVES);
+            if (CardPlayCntOpe(&work->player, CARD_ID_A_RAT_IN_A_TRAP) || CardPlayCntOpe(&work->enemy, CARD_ID_A_RAT_IN_A_TRAP)) {
+                CGPMoveRefuse(side, work, CARD_ID_A_RAT_IN_A_TRAP);
                 return;
             }
-            if (work->definitions[target.cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                if (CardPlayCntBtl(&work->player.hand, CGP_CARD_BLOCKS_CLASS4) || CardPlayCntBtl(&work->enemy.hand, CGP_CARD_BLOCKS_CLASS4)) {
-                    CGPMoveRefuse(side, work, CGP_CARD_BLOCKS_CLASS4);
+            if (work->definitions[target.cardId].flags & CARD_ATTR_GNOSIS) {
+                if (CardPlayCntBtl(&work->player, CARD_ID_LV_10_MOMO) || CardPlayCntBtl(&work->enemy, CARD_ID_LV_10_MOMO)) {
+                    CGPMoveRefuse(side, work, CARD_ID_LV_10_MOMO);
                     return;
                 }
-                if (work->definitions[target.cardId].flags & CGP_CARD_FLAG_CLASS4) {
-                    if (CardPlayCntOpe(&work->player, CGP_OPE_BLOCKS_CLASS4) || CardPlayCntOpe(&work->enemy, CGP_OPE_BLOCKS_CLASS4)) {
-                        CGPMoveRefuse(side, work, CGP_OPE_BLOCKS_CLASS4);
+                if (work->definitions[target.cardId].flags & CARD_ATTR_GNOSIS) {
+                    if (CardPlayCntOpe(&work->player, CARD_ID_HILBERT_EFFECT) || CardPlayCntOpe(&work->enemy, CARD_ID_HILBERT_EFFECT)) {
+                        CGPMoveRefuse(side, work, CARD_ID_HILBERT_EFFECT);
                         return;
                     }
                 }
             }
             if (battleArea == mas_5.zone) {
-                CGPMoveDSBATTLEwork((CardMoveWork *) &ownSide->disposal[target.index].battle,
-                                    (CardMoveWork *) &ownSide->battle[mas_5.index].battle);
+                CGPMoveDSBATTLEwork(&ownSide->disposal[target.index].battle,
+                                    &ownSide->battle[mas_5.index].battle);
                 work->command.phaseTimer++;
             } else {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
         } else {
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            xglSoundEffectNormalID(SE_BUZZER, 0);
         }
         break;
     case CGP_MOVE_STEP_DONE:
-        xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+        xglSoundEffectNormalID(SE_DECIDE, 0);
         CardCursorPassive(&work->cursor);
         work->command.phaseTimer = CGP_MOVE_STEP_LIST;
         break;
@@ -5752,73 +6076,20 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
     }
 }
 
-/*
- * Steps of CGPSetFaseProc (command.phaseTimer): the fase in which the side puts hand cards on the
- * board. The hand is sorted first (0), then the cursor picks a card (1). A card that fits is placed by
- * CGPDisposeSub; weapon cards go through the attach steps (2, 3); a card that finds no free slot needs
- * cards discarded first (10..13) or, for the paired cards, replaces the card seven ids below it (20).
- */
-#define CGP_SET_STEP_SORT_HAND 0
-#define CGP_SET_STEP_PICK_CARD 1
-#define CGP_SET_STEP_ATTACH_LIGHT 2   /* light the cards the picked weapon card can attach to */
-#define CGP_SET_STEP_ATTACH_PICK 3
-#define CGP_SET_STEP_DISCARD_BEGIN 10
-#define CGP_SET_STEP_DISCARD_PICK 11  /* "Cards to be discarded: N" */
-#define CGP_SET_STEP_DISCARD_NEXT 12
-#define CGP_SET_STEP_PUT_DOWN 13      /* "Where do you want to put it?" */
-#define CGP_SET_STEP_PAIRED_SLOT 20
 
-/* CGPDisposeSub's result for a card that finds no free slot (`addiu $2,$0,0xF`, 0x00a2bd9c). */
-#define CGP_DISPOSE_NO_FREE_SLOT 15
 
-/* Cards the steps single out (ids from the immediates around 0x00a2bd04, 0x00a2bdac and 0x00a2bf68). */
-#define CGP_CARD_FLAG_RESET 14        /* its layer flag is cleared unless the side has exactly one battle card */
 
-#define CGP_ERR_FLAG_RESET 0x25       /* `addiu $6,$0,0x25`, 0x00a2bd1c */
-#define CGP_ERR_NO_WEAPON_TARGET 2    /* `addiu $6,$0,2`, 0x00a2beb4 */
 
-/* Cursor zones the sorted hand starts on: the zone beside the hand while the hand is empty (0x00a2bc58, 0x00a2bc78). */
-#define CGP_AREA_PLAYER_NO_HAND 8
-#define CGP_AREA_ENEMY_NO_HAND (-1)
 
-/* CardCursorActive mode that lights a slot as selectable (`addiu $6,$0,1`, 0x00a2bfa0). */
-#define CGP_CURSOR_LIGHT 1
-/* CGCPHandDispSub2/3 mode of the hand while a card is picked (`addiu $7,$0,5`, 0x00a2bf14). */
-#define CGP_HAND_DISP_PICK 5
 
-#define CGP_SET_DISCARD_TEXT_X 143    /* `addiu $4,$0,0x8F`, 0x00a2c308 */
-#define CGP_SET_DISCARD_COUNT_X 363   /* `addiu $4,$0,0x16B`, 0x00a2c350 */
-#define CGP_SET_PUT_DOWN_TEXT_X 160   /* `addiu $4,$0,0xA0`, 0x00a2c5fc */
-#define CGP_SET_PROMPT_Y 213          /* `addiu $5,$0,0xD5` */
-#define CGP_SET_TEXT_COLOR 0xFFF8     /* `ori $6,$0,0xFFF8` */
-#define CGP_ZENKAKU_GLYPH_SIZE 2      /* full-width digit tables hold two bytes per glyph */
 
-/* Prompt panel: model and texture of the card frame, placed 0.91 in front for the discard prompt (0x00a2c35c..0x00a2c3e0). */
-#define CGP_SET_PROMPT_TEXTURE 0x01DB5800
-#define CGP_SET_PROMPT_MODEL 0x01DAAC00
-#define CGP_SET_PROMPT_SCALE_X 1.5f
-#define CGP_SET_PROMPT_Z 0.91f
 
-/* A card put on the board starts its slide at this height and takes ten frames (0x00a2c6f8, 0x00a2c818). */
-#define CGP_PLACE_START_Z 0.12f
-#define CGP_PLACE_FRAMES 10
-#define CGP_PLACE_SLIDE_DIVISOR 10.0f
 
-/* CardDefinition.discardRequirements has one byte per requirement. */
-#define CGP_REQUIREMENT_COUNT 4
 
-extern void CardPlayTypeSort(CardDefinition *definitions, s16 *cards, s32 count, u8 *order);
-extern float BattlePos1P[][3];
 /* The hand card the cursor picked (CGPCursor2Pos fills it in step 1); every later step works on it. */
-static CGPCursorPosition mas_6;
+static CardCursorPosition mas_6;
 /* Cards still to be discarded (`lw`/`sw` 0x00a2be14, 0x00a2c2fc, 0x00a2c4f8). */
 static s32 OfferingCnt_7;
-extern char ZenkakuListB[];
-extern void xglFontPrint(int x, int y, int color, const char *text);
-
-/* The definition and the hand-slide record of the picked hand card; CardPlayField is the same side record seen with the slide records. */
-#define CGP_HELD_DEFINITION work->definitions[ownSide->hand.cards[mas_6.index]]
-#define CGP_HELD_MOVE ((CardPlayField *) ownSide)->handMove[mas_6.index]
 
 /*
  * One call per frame for the side whose turn it is (called with the side, the work area and the side's
@@ -5829,9 +6100,9 @@ extern void xglFontPrint(int x, int y, int color, const char *text);
 void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 {
     u8 order[3];
-    CGPCursorPosition position;
-    CGPCursorPosition target;
-    CGPCursorPosition highlight;
+    CardCursorPosition position;
+    CardCursorPosition target;
+    CardCursorPosition highlight;
     char digits[3];
     float matrix[4][4];
     float place[4];
@@ -5884,7 +6155,7 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         s32 i;
 
         if (CardPlayBattleCnt(ownSide) != 1) {
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 if (ownSide->battle[i].battle.layers[0].cardId == CGP_CARD_FLAG_RESET) {
                     if (ownSide->battle[i].battle.layers[0].flag != 0) {
                         CGPSetErrorMessPlus(side, work, CGP_ERR_FLAG_RESET, CGP_CARD_FLAG_RESET);
@@ -5905,14 +6176,14 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
             result = CGPDisposeSub(side, work, mas_6.index);
             if (result != 0) {
                 if (result == CGP_DISPOSE_NO_FREE_SLOT) {
-                    /* Cards 7 and 9..13 pair with the card seven ids below them (CGP_PAIRED_CARD_OFFSET). */
+                    /* The Lv 10 cards pair with the Lv 1 card seven ids below them (CGP_PAIRED_CARD_OFFSET). */
                     switch (mas_6.cardId) {
-                    case 7:
-                    case 9:
-                    case 10:
-                    case 11:
-                    case 12:
-                    case 13:
+                    case CARD_ID_LV_10_SHION:
+                    case CARD_ID_LV_10_ZIGGY:
+                    case CARD_ID_LV_10_MOMO:
+                    case CARD_ID_LV_10_KOS_MOS:
+                    case CARD_ID_LV_10_JR:
+                    case CARD_ID_LV_10_CHAOS:
                         work->command.phaseTimer = CGP_SET_STEP_PAIRED_SLOT;
                         break;
                     default:
@@ -5930,26 +6201,26 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
                         work->command.phaseTimer = CGP_SET_STEP_DISCARD_BEGIN;
                         break;
                     }
-                } else if (mas_6.cardId == CGP_CARD_SIDE_WEAPON) {
-                    if (CardPlayCntBtl(&ownSide->hand, CGP_CARD_SIDE_WEAPON_TARGET) &&
-                        (CardPlayCntBtl(&ownSide->hand, 0) || CardPlayCntBtl(&ownSide->hand, 1) ||
-                         CardPlayCntBtl(&ownSide->hand, 7))) {
+                } else if (mas_6.cardId == CARD_ID_THIRD_ARMAMENT) {
+                    if (CardPlayCntBtl(ownSide, CARD_ID_LV_10_KOS_MOS) &&
+                        (CardPlayCntBtl(ownSide, CARD_ID_LV_1_SHION) || CardPlayCntBtl(ownSide, CARD_ID_SWIM_SUIT_SHION) ||
+                         CardPlayCntBtl(ownSide, CARD_ID_LV_10_SHION))) {
                         work->command.phaseTimer++;
                     } else {
                         CGPSetErrorMess(side, work, CGP_ERR_NO_WEAPON_TARGET);
-                        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 } else {
                     work->command.phaseTimer++;
                 }
             }
             if (CGP_HAND_FLIPPED(side, work)) {
-                CGCPHandDispSub3(work->definitions, &ownSide->hand, mas_6.index, CGP_HAND_DISP_PICK, 0);
+                CGCPHandDispSub3(work->definitions, ownSide, mas_6.index, CGP_HAND_DISP_PICK, 0);
             } else {
-                CGCPHandDispSub2(work->definitions, &ownSide->hand, mas_6.index, CGP_HAND_DISP_PICK);
+                CGCPHandDispSub2(work->definitions, ownSide, mas_6.index, CGP_HAND_DISP_PICK);
             }
-        } else if (pressed & CGP_PAD_CONFIRM) {
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+        } else if (pressed & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_BUZZER, 0);
         }
         break;
     }
@@ -5959,23 +6230,23 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 
         CardCursorPassive(&work->cursor);
         work->cursor.selectionMode = 1;
-        if (mas_6.cardId == CGP_CARD_SIDE_WEAPON) {
-            for (i = 0; i < 4; i++) {
-                if (ownSide->battle[i].battle.layers[0].cardId == CGP_CARD_SIDE_WEAPON_TARGET) {
+        if (mas_6.cardId == CARD_ID_THIRD_ARMAMENT) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+                if (ownSide->battle[i].battle.layers[0].cardId == CARD_ID_LV_10_KOS_MOS) {
                     position.zone = zoneC;
                     position.index = i;
                     CardCursorActive(&work->cursor, &position, CGP_CURSOR_LIGHT);
                 }
             }
-            for (i = 0; i < 4; i++) {
-                if (ownSide->disposal[i].battle.layers[0].cardId == CGP_CARD_SIDE_WEAPON_TARGET) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+                if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_LV_10_KOS_MOS) {
                     position.zone = zoneB;
                     position.index = i;
                     CardCursorActive(&work->cursor, &position, CGP_CURSOR_LIGHT);
                 }
             }
         } else {
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 if (ownSide->battle[i].battle.layers[0].cardId >= 0 &&
                     CGPWeaponEquipChk(work, mas_6.cardId, ownSide->battle[i].battle.layers[0].cardId)) {
                     position.zone = zoneC;
@@ -5983,7 +6254,7 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
                     CardCursorActive(&work->cursor, &position, CGP_CURSOR_LIGHT);
                 }
             }
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 if (ownSide->disposal[i].battle.layers[0].cardId >= 0 &&
                     CGPWeaponEquipChk(work, mas_6.cardId, ownSide->disposal[i].battle.layers[0].cardId)) {
                     position.zone = zoneB;
@@ -5998,12 +6269,12 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
     case CGP_SET_STEP_ATTACH_PICK:
         CGPCursorMove2(side, work);
         CGPCursor2Pos(&position, work);
-        if (pressed & CGP_PAD_CONFIRM) {
+        if (pressed & PAD_CIRCLE) {
             CGPDisposeWeaponSub(side, work, mas_6, position);
             return;
         }
-        if (pressed & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+        if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->command.phaseTimer = CGP_SET_STEP_PICK_CARD;
         }
         break;
@@ -6022,10 +6293,10 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
             zoneA = CGP_AREA_ENEMY_DISPOSAL;
             zoneB = CGP_AREA_ENEMY_BATTLE;
         }
-        if (ownSide->hand.cards[mas_6.index] == CGP_CARD_DRAW_FROM_SUTE) {
+        if (ownSide->hand.cards[mas_6.index] == CARD_ID_SANCTUARY_SHIP) {
             CardCursorPassive(&work->cursor);
             highlight.zone = zoneA;
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 highlight.index = i;
                 CardCursorActive(&work->cursor, &highlight, CGP_CURSOR_LIGHT);
                 if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
@@ -6033,7 +6304,7 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
                 }
             }
             highlight.zone = zoneB;
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 highlight.index = i;
                 CardCursorActive(&work->cursor, &highlight, CGP_CURSOR_LIGHT);
                 if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
@@ -6046,18 +6317,18 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         CGPCursorMove2(side, work);
         CGPCursor2Pos(&target, work);
         CardCursorPassive(&work->cursor);
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId >= 0 &&
-                (work->definitions[ownSide->battle[i].battle.layers[0].cardId].flags & 1)) {
+                (work->definitions[ownSide->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_HUMAN)) {
                 highlight.zone = zoneB;
                 highlight.index = i;
                 CardCursorActive(&work->cursor, &highlight, CGP_CURSOR_LIGHT);
             }
         }
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->disposal[i].battle.layers[0].cardId >= 0 &&
-                !(ownSide->disposal[i].battle.flags & 1) &&
-                (work->definitions[ownSide->disposal[i].battle.layers[0].cardId].flags & 1)) {
+                !(ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) &&
+                (work->definitions[ownSide->disposal[i].battle.layers[0].cardId].flags & CARD_ATTR_HUMAN)) {
                 highlight.zone = zoneA;
                 highlight.index = i;
                 CardCursorActive(&work->cursor, &highlight, CGP_CURSOR_LIGHT);
@@ -6074,36 +6345,36 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         place[2] = CGP_SET_PROMPT_Z;
         place[3] = 1.0f;
         xglMatrixUnit(matrix);
-        xglMatrixTrans(matrix, (const float (*)[4]) matrix, place);
-        xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-        nmlModelSetPlace(matrix);
-        nmlModelSetTexture((void *) CGP_SET_PROMPT_TEXTURE);
-        nmlModelEntryCard((void *) CGP_SET_PROMPT_MODEL);
-        if (pressed & CGP_PAD_CONFIRM) {
-            if (target.cardId < 0 || !(work->definitions[target.cardId].flags & 1)) {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+        xglMatrixTrans(matrix, matrix, place);
+        xglMatrixScale(matrix, matrix, scale);
+        nmlModelSetPlace(&matrix);
+        nmlModelSetTexture(CGP_PANEL_TEXTURE);
+        nmlModelEntryCard(CGP_SET_PROMPT_MODEL);
+        if (pressed & PAD_CIRCLE) {
+            if (target.cardId < 0 || !(work->definitions[target.cardId].flags & CARD_ATTR_HUMAN)) {
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 break;
             }
             area = target.zone;
             if (zoneA == area || zoneB == area) {
                 if (zoneA == area) {
-                    if (ownSide->disposal[target.index].battle.flags & 1) {
-                        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                    if (ownSide->disposal[target.index].battle.flags & CARD_STACK_FLAG_END) {
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                         break;
                     }
-                    CardPlayDesertBattle(&ownSide->hand, &ownSide->disposal[target.index].battle);
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    CardPlayDesertBattle(ownSide, &ownSide->disposal[target.index].battle);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     work->command.phaseTimer++;
                 } else {
-                    CardPlayDesertBattle(&ownSide->hand, &ownSide->battle[target.index].battle);
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    CardPlayDesertBattle(ownSide, &ownSide->battle[target.index].battle);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     work->command.phaseTimer++;
                 }
             } else {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             }
-        } else if (pressed & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+        } else if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_BUZZER, 0);
         }
         break;
     }
@@ -6125,14 +6396,14 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         }
         CardCursorPassive(&work->cursor);
         highlight.zone = zoneA;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->disposal[i].battle.layers[0].cardId < 0) {
                 highlight.index = i;
                 CardCursorActive(&work->cursor, &highlight, CGP_CURSOR_LIGHT);
             }
         }
         highlight.zone = zoneB;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId < 0) {
                 highlight.index = i;
                 CardCursorActive(&work->cursor, &highlight, CGP_CURSOR_LIGHT);
@@ -6158,11 +6429,11 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         scale[0] = CGP_SET_PROMPT_SCALE_X;
         scale[1] = scale[2] = scale[3] = 1.0f;
         xglMatrixUnit(matrix);
-        xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-        nmlModelSetPlace(matrix);
-        nmlModelSetTexture((void *) CGP_SET_PROMPT_TEXTURE);
-        nmlModelEntryCard((void *) CGP_SET_PROMPT_MODEL);
-        if (pressed & CGP_PAD_CONFIRM) {
+        xglMatrixScale(matrix, matrix, scale);
+        nmlModelSetPlace(&matrix);
+        nmlModelSetTexture(CGP_PANEL_TEXTURE);
+        nmlModelEntryCard(CGP_SET_PROMPT_MODEL);
+        if (pressed & PAD_CIRCLE) {
             if (target.cardId >= 0) {
                 return;
             }
@@ -6172,42 +6443,42 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
             }
             if (zoneB == area) {
                 ownSide->battle[target.index].battle.flags = 0;
-                ownSide->battle[target.index].battle.power = CGP_HELD_DEFINITION.basePower;
-                ownSide->battle[target.index].battle.powerLimit = CGP_HELD_DEFINITION.basePower;
+                ownSide->battle[target.index].battle.power = work->definitions[ownSide->hand.cards[mas_6.index]].basePower;
+                ownSide->battle[target.index].battle.powerLimit = work->definitions[ownSide->hand.cards[mas_6.index]].basePower;
                 ownSide->battle[target.index].battle.layers[0].cardId = ownSide->hand.cards[mas_6.index];
-                ownSide->battle[target.index].battle.layers[0].life = CGP_HELD_DEFINITION.operationDuration;
-                ownSide->battle[target.index].battle.position[0] = CGP_HELD_MOVE.position[0];
-                ownSide->battle[target.index].battle.position[1] = CGP_HELD_MOVE.position[1];
+                ownSide->battle[target.index].battle.layers[0].life = work->definitions[ownSide->hand.cards[mas_6.index]].operationDuration;
+                ownSide->battle[target.index].battle.position[0] = ownSide->handMove[mas_6.index].position[0];
+                ownSide->battle[target.index].battle.position[1] = ownSide->handMove[mas_6.index].position[1];
                 ownSide->battle[target.index].battle.position[2] = CGP_PLACE_START_Z;
-                ownSide->battle[target.index].battle.step[0] = (BattlePos1P[target.index][0] - CGP_HELD_MOVE.position[0]) / CGP_PLACE_SLIDE_DIVISOR;
-                ownSide->battle[target.index].battle.step[1] = (BattlePos1P[target.index][1] - CGP_HELD_MOVE.position[1]) / CGP_PLACE_SLIDE_DIVISOR;
+                ownSide->battle[target.index].battle.step[0] = (BattlePos1P[target.index][0] - ownSide->handMove[mas_6.index].position[0]) / CGP_PLACE_SLIDE_DIVISOR;
+                ownSide->battle[target.index].battle.step[1] = (BattlePos1P[target.index][1] - ownSide->handMove[mas_6.index].position[1]) / CGP_PLACE_SLIDE_DIVISOR;
                 ownSide->battle[target.index].battle.step[2] = 0;
                 ownSide->battle[target.index].battle.moveFrames = CGP_PLACE_FRAMES;
             } else {
-                ownSide->disposal[target.index].battle.power = CGP_HELD_DEFINITION.basePower;
-                ownSide->disposal[target.index].battle.powerLimit = CGP_HELD_DEFINITION.basePower;
+                ownSide->disposal[target.index].battle.power = work->definitions[ownSide->hand.cards[mas_6.index]].basePower;
+                ownSide->disposal[target.index].battle.powerLimit = work->definitions[ownSide->hand.cards[mas_6.index]].basePower;
                 ownSide->disposal[target.index].battle.layers[0].cardId = ownSide->hand.cards[mas_6.index];
-                ownSide->disposal[target.index].battle.layers[0].life = CGP_HELD_DEFINITION.operationDuration;
-                ownSide->disposal[target.index].battle.position[0] = CGP_HELD_MOVE.position[0];
-                ownSide->disposal[target.index].battle.position[1] = CGP_HELD_MOVE.position[1];
+                ownSide->disposal[target.index].battle.layers[0].life = work->definitions[ownSide->hand.cards[mas_6.index]].operationDuration;
+                ownSide->disposal[target.index].battle.position[0] = ownSide->handMove[mas_6.index].position[0];
+                ownSide->disposal[target.index].battle.position[1] = ownSide->handMove[mas_6.index].position[1];
                 ownSide->disposal[target.index].battle.position[2] = CGP_PLACE_START_Z;
-                ownSide->disposal[target.index].battle.step[0] = (DisposePos1P[target.index][0] - CGP_HELD_MOVE.position[0]) / CGP_PLACE_SLIDE_DIVISOR;
-                ownSide->disposal[target.index].battle.step[1] = (DisposePos1P[target.index][1] - CGP_HELD_MOVE.position[1]) / CGP_PLACE_SLIDE_DIVISOR;
+                ownSide->disposal[target.index].battle.step[0] = (DisposePos1P[target.index][0] - ownSide->handMove[mas_6.index].position[0]) / CGP_PLACE_SLIDE_DIVISOR;
+                ownSide->disposal[target.index].battle.step[1] = (DisposePos1P[target.index][1] - ownSide->handMove[mas_6.index].position[1]) / CGP_PLACE_SLIDE_DIVISOR;
                 ownSide->disposal[target.index].battle.step[2] = 0;
                 ownSide->disposal[target.index].battle.moveFrames = CGP_PLACE_FRAMES;
             }
             {
-                s32 cost = CGP_HELD_DEFINITION.reserveCost;
+                s32 cost = work->definitions[ownSide->hand.cards[mas_6.index]].reserveCost;
 
-                ownSide->hand.playPoints[0] -= CGP_HELD_DEFINITION.playCost;
+                ownSide->hand.playPoints[0] -= work->definitions[ownSide->hand.cards[mas_6.index]].playCost;
                 ownSide->hand.cards[mas_6.index] = -1;
                 for (i = 0; i < cost; i++) {
-                    CardPlayCostCard((CardPlayHand *) &ownSide->hand);
+                    CardPlayCostCard(ownSide);
                 }
             }
-            CardPlayCleanHand((CardPlayHand *) &ownSide->hand);
+            CardPlayCleanHand(&ownSide->hand);
             CardCursorPassive(&work->cursor);
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer = CGP_SET_STEP_PICK_CARD;
         }
         break;
@@ -6221,7 +6492,7 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 
         slot = 0;
         stack = 0;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (mas_6.cardId - CGP_PAIRED_CARD_OFFSET == ownSide->battle[i].battle.layers[0].cardId) {
                 slot = i;
                 stack = &ownSide->battle[i].battle;
@@ -6230,22 +6501,22 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         }
         if (stack != 0) {
             life = stack->layers[0].life - work->definitions[stack->layers[0].cardId].operationDuration;
-            CardPlayDesertBattle(&ownSide->hand, stack);
+            CardPlayDesertBattle(ownSide, stack);
             stack->power = work->definitions[mas_6.cardId].basePower;
             stack->powerLimit = work->definitions[mas_6.cardId].basePower;
             stack->layers[0].cardId = mas_6.cardId;
             stack->layers[0].life = work->definitions[mas_6.cardId].operationDuration + life;
-            stack->position[0] = CGP_HELD_MOVE.position[0];
-            stack->position[1] = CGP_HELD_MOVE.position[1];
+            stack->position[0] = ownSide->handMove[mas_6.index].position[0];
+            stack->position[1] = ownSide->handMove[mas_6.index].position[1];
             stack->position[2] = CGP_PLACE_START_Z;
-            stack->step[0] = (BattlePos1P[slot][0] - CGP_HELD_MOVE.position[0]) / CGP_PLACE_SLIDE_DIVISOR;
-            stack->step[1] = (BattlePos1P[slot][1] - CGP_HELD_MOVE.position[1]) / CGP_PLACE_SLIDE_DIVISOR;
+            stack->step[0] = (BattlePos1P[slot][0] - ownSide->handMove[mas_6.index].position[0]) / CGP_PLACE_SLIDE_DIVISOR;
+            stack->step[1] = (BattlePos1P[slot][1] - ownSide->handMove[mas_6.index].position[1]) / CGP_PLACE_SLIDE_DIVISOR;
             stack->step[2] = 0;
             stack->moveFrames = CGP_PLACE_FRAMES;
-            ownSide->hand.playPoints[0] -= CGP_HELD_DEFINITION.playCost;
+            ownSide->hand.playPoints[0] -= work->definitions[ownSide->hand.cards[mas_6.index]].playCost;
             ownSide->hand.cards[mas_6.index] = -1;
-            CardPlayCleanHand((CardPlayHand *) &ownSide->hand);
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            CardPlayCleanHand(&ownSide->hand);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
         }
         work->command.phaseTimer = CGP_SET_STEP_PICK_CARD;
         break;
@@ -6253,57 +6524,14 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
     }
 }
 
-extern int CardPlayDesert2Card(CardHand *hand, s32 first, s32 second);
-extern void CardPlayDesertOperation(CardPlaySide *side, s32 index);
-extern void CardPlayCleanYama(CardHand *hand);
-extern void CCU063ExecSub(CardGameWork *work, CardPlaySide *side);
-extern void CCU064ExecSub(CardGameWork *work, CardPlaySide *side);
-extern void CCU065ExecSub(CardGameWork *work, CardPlaySide *side);
-extern void CGCPHandDispSub(CardHand *hand, int selected, int flipped);
-extern const char cgpDiscardTwoPrompt[];
-extern const char cgpDiscardOnePrompt[];
 
-/*
- * Message ids the command steps hand to CGPSetErrorMess / CGPDispErrorMess /
- * CGPDispErrorMessPlus (rows of ErrorMessTbl).
- */
-#define CGP_ERR_COMMAND_FAILED 13      /* "Command Error", `addiu $6,$0,0xD`, 0x00a2ce18 */
-#define CGP_MESS_SELECT_CARD 24        /* "Select Card" prompt, `addiu $5,$0,0x18`, 0x00a2d100 */
-#define CGP_MESS_SELECT_DISCARD 25     /* the same prompt for the card to throw away, `addiu $5,$0,0x19`, 0x00a2d354 */
 
-/* Sound CardSetEffect starts with an operation effect (`lui $8,2` / `ori $8,$8,8`, 0x00a2d720). */
-#define CGP_SE_COMMAND_EFFECT 0x20008
 
-/* Card kind and definition flag the discard step looks for (`lbu`/`lhu`/`andi $2,$2,4`, 0x00a2d1d4..0x00a2d1e4). */
-#define CGP_CARD_FLAG_COMMAND_TARGET 0x04
 
-/* Prompt "Cards to be discarded" of command 131 (xglFontPrint 0x00a2ce38 / 0x00a2cf90) and its card model. */
-#define CGP_DISCARD_PROMPT_X 0x8F
-#define CGP_DISCARD_PROMPT_Y 0xD5
-#define CGP_DISCARD_PROMPT_COLOR 0xFFF8
-#define CGP_DISCARD_PROMPT_TEXTURE 0x01DB5800
-#define CGP_DISCARD_PROMPT_MODEL 0x01DAAC00
-#define CGP_DISCARD_PROMPT_SCALE_X 1.5f   /* 0x3FC00000, 0x00a2ce50 */
 
-/* Life command 139 takes off the card it targets (`addiu $3,$3,-3`, 0x00a2d6dc). */
-#define CGP_TARGET_LIFE_LOSS 3
 
-/* Frames command 142 pays its cost cards for, and command 143 waits before and after its effect. */
-#define CGP_COST_REPEAT 4              /* `addiu $2,$0,4`, 0x00a2d960 */
-#define CGP_EFFECT_DELAY 10            /* `addiu $3,$0,0xA`, 0x00a2da50 */
-#define CGP_EFFECT_HOLD 15             /* `addiu $3,$0,0xF`, 0x00a2da94 */
 
-/* Cursor modes CardCursorActive takes for the selectable cards of these commands. */
-#define CGP_CURSOR_PICK 1
 
-/*
- * A battle slot as the command code walks it: the card stack, then the shunt
- * position, 0x1BC bytes in all. Command 139 indexes the stacks of a side from the first one.
- */
-typedef struct CGPStackSlot {
-    CardLayerStack stack;
-    float shuntPosition[3];
-} CGPStackSlot;
 
 s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
 {
@@ -6318,16 +6546,16 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
     float secondScale[4];
     Matrix4 secondMatrix;
     /* The original static names are noted beside each. */
-    static CGPCursorPosition cursor;        /* cursor */
+    static CardCursorPosition cursor;        /* cursor */
     static s16 card0[1];                    /* card0: first card picked to throw away */
     static s16 card1;                       /* card1: second card */
-    static CGPCursorPosition handCursor;    /* work: hand slot under the cursor */
+    static CardCursorPosition handCursor;    /* work: hand slot under the cursor */
     static s32 NowNo;                       /* NowNo: deck position */
     static s32 lp;                          /* lp: cost cards still to pay */
     static s32 timer;                       /* timer: frames to wait */
-    CGPCursorPosition ownPos;
-    CGPCursorPosition foePos;
-    CGPCursorPosition opePos;
+    CardCursorPosition ownPos;
+    CardCursorPosition foePos;
+    CardCursorPosition opePos;
 
     result = 0;
     if (side == 0) {
@@ -6344,8 +6572,8 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         repeat = work->command.input[1].repeat;
     }
     switch (command) {
-    case 63:
-        switch ((s16) work->command.step) {
+    case CARD_ID_JULI_MIZRAHI:
+        switch (work->command.step) {
         case 0:
             work->command.step++;
             break;
@@ -6358,8 +6586,8 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
-    case 64:
-        switch ((s16) work->command.step) {
+    case CARD_ID_PELLEGRI:
+        switch (work->command.step) {
         case 0:
             work->command.step++;
             break;
@@ -6372,8 +6600,8 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
-    case 65:
-        switch ((s16) work->command.step) {
+    case CARD_ID_ZOHAR_EMULATOR:
+        switch (work->command.step) {
         case 0:
             work->command.step++;
             break;
@@ -6386,18 +6614,18 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
-    case 131:
+    case CARD_ID_GNOSIFY:
     {
         s16 handCount = CardPlayHandCnt(&own->hand);
 
-        switch ((s16) work->command.step) {
+        switch (work->command.step) {
         case 0:
             card0[0] = 0;
             card1 = 0;
             if (handCount < 2) {
                 CGPSetErrorMess(side, work, CGP_ERR_COMMAND_FAILED);
                 result = 1;
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 break;
             }
             work->command.step++;
@@ -6409,28 +6637,28 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             firstScale[2] = 1.0f;
             firstScale[1] = 1.0f;
             xglMatrixUnit(firstMatrix);
-            xglMatrixScale(firstMatrix, (const float (*)[4]) firstMatrix, firstScale);
-            nmlModelSetPlace(firstMatrix);
-            nmlModelSetTexture((void *) CGP_DISCARD_PROMPT_TEXTURE);
-            nmlModelEntryCard((void *) CGP_DISCARD_PROMPT_MODEL);
+            xglMatrixScale(firstMatrix, firstMatrix, firstScale);
+            nmlModelSetPlace(&firstMatrix);
+            nmlModelSetTexture(CGP_PANEL_TEXTURE);
+            nmlModelEntryCard(CGP_DISCARD_PROMPT_MODEL);
             if (CGP_HAND_FLIPPED(side, work)) {
-                CGCPHandDispSub3(work->definitions, &own->hand, card0[0], 0, 0);
+                CGCPHandDispSub3(work->definitions, own, card0[0], 0, 0);
             } else {
-                CGCPHandDispSub2(work->definitions, &own->hand, card0[0], 0);
+                CGCPHandDispSub2(work->definitions, own, card0[0], 0);
             }
-            if (repeat & CGP_PAD_LEFT) {
+            if (repeat & PAD_LEFT) {
                 if (card0[0] > 0) {
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     card0[0]--;
                 }
-            } else if (repeat & CGP_PAD_RIGHT) {
+            } else if (repeat & PAD_RIGHT) {
                 if (card0[0] < handCount - 1) {
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     card0[0]++;
                 }
             }
-            if (pressed & CGP_PAD_CONFIRM) {
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            if (pressed & PAD_CIRCLE) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->command.step++;
             }
             break;
@@ -6441,55 +6669,55 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             secondScale[2] = 1.0f;
             secondScale[1] = 1.0f;
             xglMatrixUnit(secondMatrix);
-            xglMatrixScale(secondMatrix, (const float (*)[4]) secondMatrix, secondScale);
-            nmlModelSetPlace(secondMatrix);
-            nmlModelSetTexture((void *) CGP_DISCARD_PROMPT_TEXTURE);
-            nmlModelEntryCard((void *) CGP_DISCARD_PROMPT_MODEL);
+            xglMatrixScale(secondMatrix, secondMatrix, secondScale);
+            nmlModelSetPlace(&secondMatrix);
+            nmlModelSetTexture(CGP_PANEL_TEXTURE);
+            nmlModelEntryCard(CGP_DISCARD_PROMPT_MODEL);
             if (CGP_HAND_FLIPPED(side, work)) {
-                CGCPHandDispSub3(work->definitions, &own->hand, card1, 0, 0);
+                CGCPHandDispSub3(work->definitions, own, card1, 0, 0);
             } else {
-                CGCPHandDispSub2(work->definitions, &own->hand, card1, 0);
+                CGCPHandDispSub2(work->definitions, own, card1, 0);
             }
-            if (repeat & CGP_PAD_LEFT) {
+            if (repeat & PAD_LEFT) {
                 if (card1 > 0) {
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     card1--;
                 }
-            } else if (repeat & CGP_PAD_RIGHT) {
+            } else if (repeat & PAD_RIGHT) {
                 if (card1 < handCount - 1) {
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     card1++;
                 }
             }
-            if (pressed & CGP_PAD_CONFIRM) {
+            if (pressed & PAD_CIRCLE) {
                 if (card0[0] == card1) {
-                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                     break;
                 }
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->command.step++;
             }
             break;
         case 3:
             CGPDispErrorMess(side, CGP_MESS_SELECT_CARD);
-            if (pressed & CGP_PAD_CONFIRM) {
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            if (pressed & PAD_CIRCLE) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->command.step++;
-            } else if (pressed & CGP_PAD_CANCEL) {
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            } else if (pressed & PAD_CROSS) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step = 1;
             }
             break;
         case 4:
             result = 1;
-            CardPlayDesert2Card(&own->hand, card0[0], card1);
-            CardPlayDrawSute(&own->hand);
+            CardPlayDesert2Card(own, card0[0], card1);
+            CardPlayDrawSute(own);
             break;
         }
         break;
     }
-    case 133:
-        switch ((s16) work->command.step) {
+    case CARD_ID_TRANSFIGURATION:
+        switch (work->command.step) {
         case 0:
         {
             s32 count = CardPlayHandCnt(&own->hand);
@@ -6497,14 +6725,16 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             s32 i;
 
             for (i = 0; i < count; i++) {
-                if (work->definitions[own->hand.cards[i]].kind == CGP_CARD_KIND_COMMAND &&
-                    (work->definitions[own->hand.cards[i]].flags & CGP_CARD_FLAG_COMMAND_TARGET)) {
+                CardDefinitionView *definitions = (CardDefinitionView *) work->definitions;
+
+                if (definitions[own->hand.cards[i]].kind == CARD_KIND_BATTLE &&
+                    (definitions[own->hand.cards[i]].flags & CARD_ATTR_GNOSIS)) {
                     found = 1;
                     break;
                 }
             }
             if (!found) {
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 CGPSetErrorMess(side, work, CGP_ERR_COMMAND_FAILED);
                 result = 1;
             } else {
@@ -6525,20 +6755,20 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             }
             CGCPHandDispSub(&own->hand, handCursor.index, flipped);
             count = CardPlayHandCnt(&own->hand);
-            if (repeat & CGP_PAD_RIGHT) {
+            if (repeat & PAD_RIGHT) {
                 if (handCursor.index < count - 1) {
-                    xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     handCursor.index++;
                 }
-            } else if (repeat & CGP_PAD_LEFT) {
+            } else if (repeat & PAD_LEFT) {
                 if (handCursor.index > 0) {
-                    xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     handCursor.index--;
                 }
             }
-            if (pressed & CGP_PAD_CONFIRM) {
-                if (!(work->definitions[own->hand.cards[handCursor.index]].flags & CGP_CARD_FLAG_COMMAND_TARGET)) {
-                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            if (pressed & PAD_CIRCLE) {
+                if (!(work->definitions[own->hand.cards[handCursor.index]].flags & CARD_ATTR_GNOSIS)) {
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                     break;
                 }
                 handCursor.zone = CGP_AREA_PLAYER_HAND;
@@ -6546,19 +6776,19 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
                     handCursor.zone = CGP_AREA_ENEMY_HAND;
                 }
                 work->command.step++;
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 break;
             }
             break;
         }
         case 2:
             CGPDispErrorMessPlus(side, CGP_MESS_SELECT_DISCARD, own->hand.cards[handCursor.index]);
-            if (pressed & CGP_PAD_CONFIRM) {
+            if (pressed & PAD_CIRCLE) {
                 NowNo = 0;
                 work->command.step++;
-                CardPlayDesertCard(&own->hand, handCursor.index);
+                CardPlayDesertCard(own, handCursor.index);
             }
-            if (pressed & CGP_PAD_CANCEL) {
+            if (pressed & PAD_CROSS) {
                 work->command.phaseTimer = (s16) work->command.phaseTimer - 1;
             }
             break;
@@ -6566,34 +6796,34 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         {
             s32 yamaCount = CardPlayYamaCnt(own);
 
-            if (pressed & CGP_PAD_CONFIRM) {
-                if (work->definitions[own->deck[NowNo]].flags & CGP_CARD_FLAG_COMMAND_TARGET) {
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            if (pressed & PAD_CIRCLE) {
+                if (work->definitions[own->deck[NowNo]].flags & CARD_ATTR_GNOSIS) {
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     work->command.step++;
                 } else {
-                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
             }
-            if (pressed & CGP_PAD_CANCEL) {
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            if (pressed & PAD_CROSS) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step = 0;
                 result = 1;
             }
-            if (repeat & CGP_PAD_RIGHT) {
+            if (repeat & PAD_RIGHT) {
                 NowNo++;
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 if (NowNo >= yamaCount) {
                     NowNo = yamaCount - 1;
                 }
             }
-            if (repeat & CGP_PAD_LEFT) {
+            if (repeat & PAD_LEFT) {
                 NowNo--;
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 if (NowNo < 0) {
                     NowNo = 0;
                 }
             }
-            CGCPYamaDispSub(&own->hand, NowNo, yamaCount, held, 0);
+            CGCPYamaDispSub(own, NowNo, yamaCount, held, 0);
             break;
         }
         case 4:
@@ -6605,8 +6835,8 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
 
             own->hand.cards[count] = own->deck[NowNo];
             own->deck[NowNo] = -1;
-            CardPlayCleanYama(&own->hand);
-            CardPlayShuffleYama(&own->hand);
+            CardPlayCleanYama(own);
+            CardPlayShuffleYama(own);
             work->command.step++;
             break;
         }
@@ -6618,8 +6848,8 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
-    case 139:
-        switch ((s16) work->command.step) {
+    case CARD_ID_SO_WEAK:
+        switch (work->command.step) {
         case 0:
         {
             s32 i;
@@ -6631,7 +6861,7 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
                 foePos.zone = CGP_AREA_PLAYER_BATTLE;
             }
             CardCursorPassive(&work->cursor);
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 if (own->battle[i].battle.layers[0].cardId >= 0) {
                     ownPos.index = i;
                     CardCursorActive(&work->cursor, &ownPos, CGP_CURSOR_PICK);
@@ -6647,23 +6877,23 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         case 1:
             CGPCursorMove2(side, work);
             CGPCursor2Pos(&cursor, work);
-            if (pressed & CGP_PAD_CONFIRM) {
+            if (pressed & PAD_CIRCLE) {
                 if (cursor.cardId < 0 ||
                     !(cursor.zone == CGP_AREA_ENEMY_BATTLE || cursor.zone == CGP_AREA_PLAYER_BATTLE)) {
-                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                     break;
                 }
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->command.step++;
             }
             break;
         case 2:
             CGPDispErrorMess(side, CGP_MESS_SELECT_CARD);
-            if (pressed & CGP_PAD_CONFIRM) {
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            if (pressed & PAD_CIRCLE) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->command.step++;
-            } else if (pressed & CGP_PAD_CANCEL) {
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            } else if (pressed & PAD_CROSS) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step = 1;
             }
             break;
@@ -6686,10 +6916,10 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             if (slots[cursor.index].stack.layers[0].life < 0) {
                 slots[cursor.index].stack.layers[0].life = 0;
             }
-            CardSetEffect(targetSide, work, 5, 0, CGP_SE_COMMAND_EFFECT,
+            CardSetEffect(targetSide, work, CGP_EFFECT_BURST,0, CGP_SE_COMMAND_EFFECT,
                           slots[cursor.index].stack.position,
                           &slots[cursor.index].stack);
-            CardSetEffect(targetSide, work, 13, 3, 0,
+            CardSetEffect(targetSide, work, CGP_EFFECT_NUMBER_TOP, 3, 0,
                           slots[cursor.index].stack.position,
                           &slots[cursor.index].stack);
             result = -1;
@@ -6697,7 +6927,7 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         }
         }
         break;
-    case 141:
+    case CARD_ID_PHENOMENON_CHANGE:
     {
         s32 opeZone = CGP_AREA_ENEMY_OPERATION;
 
@@ -6705,14 +6935,14 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             opeZone = CGP_AREA_PLAYER_OPERATION;
         }
 
-        switch ((s16) work->command.step) {
+        switch (work->command.step) {
         case 0:
         {
             s32 i;
 
             CardCursorPassive(&work->cursor);
             opePos.zone = opeZone;
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
                 if (foe->operations[i] >= 0) {
                     opePos.index = i;
                     CardCursorActive(&work->cursor, &opePos, CGP_CURSOR_PICK);
@@ -6724,9 +6954,9 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         case 1:
             CGPCursorMove2(side, work);
             CGPCursor2Pos(&cursor, work);
-            if (pressed & CGP_PAD_CONFIRM) {
+            if (pressed & PAD_CIRCLE) {
                 if (cursor.cardId < 0 || opeZone != cursor.zone) {
-                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                     break;
                 }
                 work->command.step++;
@@ -6734,11 +6964,11 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         case 2:
             CGPDispErrorMess(side, CGP_MESS_SELECT_CARD);
-            if (pressed & CGP_PAD_CONFIRM) {
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            if (pressed & PAD_CIRCLE) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->command.step++;
-            } else if (pressed & CGP_PAD_CANCEL) {
-                xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            } else if (pressed & PAD_CROSS) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step = 1;
             }
             break;
@@ -6749,16 +6979,16 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         }
         break;
     }
-    case 142:
-        switch ((s16) work->command.step) {
+    case CARD_ID_RHINE_MAIDEN:
+        switch (work->command.step) {
         case 0:
             work->command.step++;
             lp = CGP_COST_REPEAT;
-            CardSetEffect(side, work, 5, 0, CGP_SE_COMMAND_EFFECT, 0, 0);
+            CardSetEffect(side, work, CGP_EFFECT_BURST,0, CGP_SE_COMMAND_EFFECT, 0, 0);
             CardSetEffect(side, work, 13, 4, 0, 0, 0);
             break;
         case 1:
-            CardPlayCostCard((CardPlayHand *) &foe->hand);
+            CardPlayCostCard(foe);
             work->command.step++;
             break;
         case 2:
@@ -6773,8 +7003,8 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
-    case 143:
-        switch ((s16) work->command.step) {
+    case CARD_ID_UNKNOWN_ARMAMENT:
+        switch (work->command.step) {
         case 0:
             work->command.step++;
             timer = CGP_EFFECT_DELAY;
@@ -6801,53 +7031,12 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
     return result;
 }
 
-extern void CardDispCard(Matrix4 matrix, s16 card, int enabled);
-extern void xglMatrixRotZ(Matrix4 destination, const Matrix4 source, float angle);
-extern const char cgpBlockEventPrompt[];
-extern const char cgpBlockFurtherPrompt[];
-extern const char cgpBlockSelectCardHint[];
 
-/*
- * Models and textures in the card game's arena: the card backdrop and its texture
- * (CardViewProc draws the same ones) and the cursor frame model that CardMainInit
- * loads from game\\Cur_WakuW.lex, which the prompt reuses as its frame.
- */
-#define CGP_CARD_BACKDROP_MODEL 0x01DA5600     /* lui/ori 0x00a2dc28 */
-#define CGP_CARD_BACKDROP_TEXTURE 0x01DB5800   /* lui 0x00a2dc10, ori 0x00a2dc1c */
-#define CGP_ANSWER_FRAME_MODEL 0x01D12000      /* lui/ori 0x00a2dda8 */
 
-#define CGP_ANSWER_PROMPT_X 0x7C               /* `addiu $4,$0,0x7C`, 0x00a2ddbc */
-#define CGP_ANSWER_PROMPT_Y 0x82               /* `addiu $5,$0,0x82`, 0x00a2ddc0 */
-#define CGP_ANSWER_HINT_X 0x18                 /* `addiu $4,$0,0x18`, 0x00a2ddf0 */
-#define CGP_ANSWER_HINT_Y 0x127                /* `addiu $5,$0,0x127`, 0x00a2ddf8 */
 
-/*
- * Answer cards are drawn in a row: each one 0.5663 wide in x and 0.02 higher in z than
- * the one before, starting at -1.4193; the right-hand panel is shifted by half a pitch.
- */
-#define CGP_ANSWER_CARD_PITCH 0.5663f          /* 0x3F10F909, 0x00a2dbc8 */
-#define CGP_ANSWER_CARD_START_X (-1.4193f)     /* 0xBFB5AB9F, 0x00a2de90 */
-#define CGP_ANSWER_CARD_STEP_Z 0.02f           /* 0x3CA3D70A, 0x00a2dea0 */
-#define CGP_ANSWER_PANEL_SHIFT 0.28315f        /* 0x3E90F909, 0x00a2de34 */
-#define CGP_ANSWER_ROW_Y 0.25f                 /* 0x3E800000, 0x00a2dfc8 */
-#define CGP_ANSWER_CARD_SCALE 0.35f            /* 0x3EB33333, 0x00a2de08 */
 
-/* Placement of the prompt's backdrop and of the card being answered (0x00a2db70..0x00a2dc88). */
-#define CGP_BACKDROP_Z 0.1f                    /* 0x3DCCCCCD */
-#define CGP_BACKDROP_SCALE_Y 0.75f             /* 0x3F400000 */
-#define CGP_MAIN_CARD_X (-1.9785f)             /* 0xBFFD3F7D */
-#define CGP_MAIN_CARD_Z 0.01f                  /* 0x3C23D70A */
-#define CGP_MAIN_CARD_SCALE 0.4f               /* 0x3ECCCCCD */
 
-/* Cards in the second row face the other way: a half turn about z (0x40490FDB, 0x00a2df08). */
-#define CGP_HALF_TURN 3.1415927f
 
-/*
- * The answer cards follow the card list at +0x148 of a side's hand: 160 halfwords
- * past hand->cards (CardPlayHand.answerCards).
- */
-#define CGP_ANSWER_OFFSET 160
-#define CGP_ANSWER_MAX 40
 
 /*
  * Draws the "block" prompt for the command card cardId: the card on its backdrop,
@@ -6882,18 +7071,18 @@ void CGPCFSDispSub(s32 frameSide, s32 side, CardGameWork *work, s16 cardId, s16 
     scale[0] = 1.0f;
     scale[3] = 1.0f;
     scale[2] = 1.0f;
-    xglMatrixTrans(base, (const float (*)[4]) base, position);
+    xglMatrixTrans(base, base, position);
     spacing = CGP_ANSWER_CARD_PITCH;
-    xglMatrixScale(place, (const float (*)[4]) base, scale);
+    xglMatrixScale(place, base, scale);
     if (side == 0) {
-        nmlModelSetLight(Player1Color, asDir);
+        nmlModelSetLight(&Player1Color, &asDir);
     } else {
-        nmlModelSetLight(Player2Color, asDir);
+        nmlModelSetLight(&Player2Color, &asDir);
     }
     found = 0;
-    nmlModelSetTexture((void *) CGP_CARD_BACKDROP_TEXTURE);
-    nmlModelSetPlace(place);
-    nmlModelEntryCard((void *) CGP_CARD_BACKDROP_MODEL);
+    nmlModelSetTexture(CGP_PANEL_TEXTURE);
+    nmlModelSetPlace(&place);
+    nmlModelEntryCard(CGP_CARD_BACKDROP_MODEL);
     position[0] = CGP_MAIN_CARD_X;
     position[1] = 0.0f;
     position[2] = CGP_MAIN_CARD_Z;
@@ -6902,9 +7091,9 @@ void CGPCFSDispSub(s32 frameSide, s32 side, CardGameWork *work, s16 cardId, s16 
     scale[0] = CGP_MAIN_CARD_SCALE;
     scale[3] = 1.0f;
     scale[2] = 1.0f;
-    xglMatrixTrans(place, (const float (*)[4]) base, position);
-    xglMatrixScale(place, (const float (*)[4]) place, scale);
-    CardDispCard(place, cardId, 1);
+    xglMatrixTrans(place, base, position);
+    xglMatrixScale(place, place, scale);
+    CardDispCard(&place, cardId, 1);
     if (side == 0) {
         for (i = 0; i < CGP_ANSWER_MAX; i++) {
             if (foeHand->cards[CGP_ANSWER_OFFSET + i] >= 0) {
@@ -6922,13 +7111,13 @@ void CGPCFSDispSub(s32 frameSide, s32 side, CardGameWork *work, s16 cardId, s16 
     }
     if (found == 0) {
         if (frameSide == 0) {
-            nmlModelSetLight(CLP1Color, asDir);
+            nmlModelSetLight(&CLP1Color, &asDir);
         } else {
-            nmlModelSetLight(CLP2Color, asDir);
+            nmlModelSetLight(&CLP2Color, &asDir);
         }
-        nmlModelSetPlace(place);
+        nmlModelSetPlace(&place);
         nmlModelSetTexture(work->cursorXtx[2]);
-        nmlModelEntryCard((void *) CGP_ANSWER_FRAME_MODEL);
+        nmlModelEntryCard(CGP_ANSWER_FRAME_MODEL);
         xglFontPrint(CGP_ANSWER_PROMPT_X, CGP_ANSWER_PROMPT_Y, CGP_TEXT_COLOR, cgpBlockEventPrompt);
     } else {
         xglFontPrint(CGP_ANSWER_PROMPT_X, CGP_ANSWER_PROMPT_Y, CGP_TEXT_COLOR, cgpBlockFurtherPrompt);
@@ -6956,18 +7145,18 @@ void CGPCFSDispSub(s32 frameSide, s32 side, CardGameWork *work, s16 cardId, s16 
     for (i = 0; i < count; i++) {
         position[0] = spacing * i + CGP_ANSWER_CARD_START_X + xShift;
         position[2] = i * CGP_ANSWER_CARD_STEP_Z + CGP_ANSWER_CARD_STEP_Z;
-        xglMatrixTrans(place, (const float (*)[4]) base, position);
-        xglMatrixScale(place, (const float (*)[4]) place, scale);
+        xglMatrixTrans(place, base, position);
+        xglMatrixScale(place, place, scale);
         if (work->rotStageId != 0) {
-            xglMatrixRotZ(place, (const float (*)[4]) place, CGP_HALF_TURN);
+            xglMatrixRotZ(place, place, CGP_HALF_TURN);
         }
-        CardDispCard(place, ownHand->cards[CGP_ANSWER_OFFSET + i], 1);
+        CardDispCard(&place, ownHand->cards[CGP_ANSWER_OFFSET + i], 1);
     }
     if (count != 0 && side != 0) {
-        nmlModelSetLight(CLP1Color, asDir);
-        nmlModelSetPlace(place);
+        nmlModelSetLight(&CLP1Color, &asDir);
+        nmlModelSetPlace(&place);
         nmlModelSetTexture(work->cursorXtx[2]);
-        nmlModelEntryCard((void *) CGP_ANSWER_FRAME_MODEL);
+        nmlModelEntryCard(CGP_ANSWER_FRAME_MODEL);
     }
     count = 0;
     cards = foeHand->cards;
@@ -6991,18 +7180,18 @@ void CGPCFSDispSub(s32 frameSide, s32 side, CardGameWork *work, s16 cardId, s16 
     for (i = 0; i < count; i++) {
         position[0] = spacing * i + CGP_ANSWER_CARD_START_X + xShift;
         position[2] = i * CGP_ANSWER_CARD_STEP_Z + CGP_ANSWER_CARD_STEP_Z;
-        xglMatrixTrans(place, (const float (*)[4]) base, position);
-        xglMatrixScale(place, (const float (*)[4]) place, scale);
+        xglMatrixTrans(place, base, position);
+        xglMatrixScale(place, place, scale);
         if (work->rotStageId == 0) {
-            xglMatrixRotZ(place, (const float (*)[4]) place, CGP_HALF_TURN);
+            xglMatrixRotZ(place, place, CGP_HALF_TURN);
         }
-        CardDispCard(place, foeHand->cards[CGP_ANSWER_OFFSET + i], 1);
+        CardDispCard(&place, foeHand->cards[CGP_ANSWER_OFFSET + i], 1);
     }
     if (count != 0 && side == 0) {
-        nmlModelSetLight(CLP2Color, asDir);
-        nmlModelSetPlace(place);
+        nmlModelSetLight(&CLP2Color, &asDir);
+        nmlModelSetPlace(&place);
         nmlModelSetTexture(work->cursorXtx[2]);
-        nmlModelEntryCard((void *) CGP_ANSWER_FRAME_MODEL);
+        nmlModelEntryCard(CGP_ANSWER_FRAME_MODEL);
     }
 }
 
@@ -7011,148 +7200,100 @@ void CGPCFSDispSub(s32 frameSide, s32 side, CardGameWork *work, s16 cardId, s16 
  * of hand->answerCards, pays its cost by calling CardPlayCostCard that many
  * times, removes it from hand->cards and tail-calls CardPlayCleanHand.
  */
-void CGPAnswerSub(CGPCardDefSource *src, CardPlayHand *hand, s32 cardIndex)
+void CGPAnswerSub(CardGameWork *work, CardPlaySide *side, s32 cardIndex)
 {
     s32 i;
     s32 cost;
 
     for (i = 0; i < 40; i++) {
-        if (hand->answerCards[i] < 0) {
+        if (side->answerCards[i] < 0) {
             break;
         }
     }
-    hand->answerCards[i] = hand->cards[cardIndex];
-    cost = src->defs[hand->cards[cardIndex]].cost;
+    side->answerCards[i] = side->hand.cards[cardIndex];
+    cost = work->definitions[side->hand.cards[cardIndex]].reserveCost;
     for (i = 0; i < cost; i++) {
-        CardPlayCostCard(hand);
+        CardPlayCostCard(side);
     }
-    hand->cards[cardIndex] = -1;
-    CardPlayCleanHand(hand);
+    side->hand.cards[cardIndex] = -1;
+    CardPlayCleanHand(&side->hand);
 }
 
 /*
  * Commands one side's disposal slots play once its command phase ends. A slot
  * holding one of these cards whose stack carries flag 1 plays the command that
- * card ends the phase with: card 29 command 62, card 58 command 13, card 62
- * command 15, card 61 command 60, card 57 command 64 and card 55 command 11.
+ * card ends the phase with: Bunnie, Testament, Allen, Tony, Gaignun and Margulis
+ * each play their own trigger command (their E mark has been removed).
  */
 void CGPCommFaseEndSub(s32 side, CardPlaySide *ownSide, CardGameWork *work)
 {
     s32 i;
 
-    if (CardPlayCntDsp(ownSide, 29) != 0) {
-        for (i = 0; i < 4; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 29) {
-                if (ownSide->disposal[i].battle.flags & 1) {
-                    CardPlayCommandPlay(side, 62, work, 0, 0);
+    if (CardPlayCntDsp(ownSide, CARD_ID_BUNNIE) != 0) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_BUNNIE) {
+                if (ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_BUNNIE_TRIGGER, work, 0, 0);
                 }
             }
         }
     }
-    if (CardPlayCntDsp(ownSide, 58) != 0) {
-        for (i = 0; i < 4; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 58) {
-                if (ownSide->disposal[i].battle.flags & 1) {
-                    CardPlayCommandPlay(side, 13, work, 0, 0);
+    if (CardPlayCntDsp(ownSide, CARD_ID_TESTAMENT) != 0) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_TESTAMENT) {
+                if (ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_TESTAMENT_TRIGGER, work, 0, 0);
                 }
             }
         }
     }
-    if (CardPlayCntDsp(ownSide, 62) != 0) {
-        for (i = 0; i < 4; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 62) {
-                if (ownSide->disposal[i].battle.flags & 1) {
-                    CardPlayCommandPlay(side, 15, work, 0, 0);
+    if (CardPlayCntDsp(ownSide, CARD_ID_ALLEN) != 0) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_ALLEN) {
+                if (ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_ALLEN_TRIGGER, work, 0, 0);
                 }
             }
         }
     }
-    if (CardPlayCntDsp(ownSide, 61) != 0) {
-        for (i = 0; i < 4; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 61) {
-                if (ownSide->disposal[i].battle.flags & 1) {
-                    CardPlayCommandPlay(side, 60, work, 0, 0);
+    if (CardPlayCntDsp(ownSide, CARD_ID_TONY) != 0) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_TONY) {
+                if (ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_TONY_TRIGGER, work, 0, 0);
                 }
             }
         }
     }
-    if (CardPlayCntDsp(ownSide, 57) != 0) {
-        for (i = 0; i < 4; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 57) {
-                if (ownSide->disposal[i].battle.flags & 1) {
-                    CardPlayCommandPlay(side, 64, work, 0, 0);
+    if (CardPlayCntDsp(ownSide, CARD_ID_GAIGNUN) != 0) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_GAIGNUN) {
+                if (ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_GAIGNUN_TRIGGER, work, 0, 0);
                 }
             }
         }
     }
-    if (CardPlayCntDsp(ownSide, 55) != 0) {
-        for (i = 0; i < 4; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 55) {
-                if (ownSide->disposal[i].battle.flags & 1) {
-                    CardPlayCommandPlay(side, 11, work, 0, 0);
+    if (CardPlayCntDsp(ownSide, CARD_ID_MARGULIS) != 0) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_MARGULIS) {
+                if (ownSide->disposal[i].battle.flags & CARD_STACK_FLAG_END) {
+                    CardPlayCommandPlay(side, CARD_COMMAND_MARGULIS_TRIGGER, work, 0, 0);
                 }
             }
         }
     }
 }
 
-/* Steps of CGPCommFaseSub (command.phaseTimer). */
-#define CGP_COMM_STEP_JUNK_CHECK 0
-#define CGP_COMM_STEP_SORT_HAND 1
-#define CGP_COMM_STEP_PICK 2
-#define CGP_COMM_STEP_CONFIRM 3
-#define CGP_COMM_STEP_OPERATION 4
-#define CGP_COMM_STEP_RESTART 5
-#define CGP_COMM_STEP_CONDITION 10
-#define CGP_COMM_STEP_DISCARD 11
-#define CGP_COMM_STEP_OFFER 12
-#define CGP_COMM_STEP_SHOW 13
-#define CGP_COMM_STEP_PLAY 14
-#define CGP_COMM_STEP_AFTER_PLAY 15
-#define CGP_COMM_STEP_ADVANCE 20
-#define CGP_COMM_STEP_FOE_ANSWER 21
-#define CGP_COMM_STEP_OWN_ANSWER 22
-#define CGP_COMM_STEP_JUNK_ANSWERS 23
-#define CGP_COMM_STEP_ANSWER_NOTE 24
-#define CGP_COMM_STEP_FINISH 25
-#define CGP_COMM_STEP_END_PHASE 30
-#define CGP_COMM_STEP_NEXT_TURN 31
-#define CGP_COMM_STEP_ENEMY_REQUEST 40
-#define CGP_COMM_STEP_ENEMY_OPERATION 41
 
 
-/* Messages of CGPCommFaseSub (CGPSetErrorMess / CGPDispErrorMess reasons). */
-#define CGP_MESS_JUNK_COUNTED 0x24     /* card 14 takes the junk count, `addiu $6,$0,0x24`, 0x00a2e600 */
-#define CGP_ERR_NO_PLAYABLE_CARD 30    /* `addiu $6,$0,0x1E`, 0x00a2e90c */
-#define CGP_ERR_NOT_PLAYABLE 17        /* CGPChkPlayable refused the card, `addiu $6,$0,0x11`, 0x00a2eb0c */
-#define CGP_ERR_NOT_DISCARDABLE 18     /* hand card without kind bit 1, `addiu $6,$0,0x12`, 0x00a2eb60 */
-#define CGP_ERR_SLOT_LOCKED 38         /* battle slot with flag 2 set, `addiu $6,$0,0x26`, 0x00a2ebb8 */
-#define CGP_ERR_WRONG_AREA 19          /* `addiu $6,$0,0x13`, 0x00a2ebd0 */
-#define CGP_ERR_ANSWERS_DONE 29        /* `addiu $6,$0,0x1D`, 0x00a2f9cc */
-#define CGP_MESS_CONFIRM_CARD 23       /* `addiu $5,$0,0x17`, 0x00a2ec00 and 0x00a2edf8 */
-#define CGP_MESS_ANSWER_OFFER 22       /* shown to the answering side, `addiu $5,$0,0x16`, 0x00a2ee98 */
-#define CGP_MESS_ANSWER_NOTE 28        /* `addiu $5,$0,0x1C`, 0x00a2f89c */
 
-#define CGP_CARD_ANSWER_A 82           /* the two answer cards (`addiu $8,$0,0x52`, 0x00a2e7f0) */
-#define CGP_CARD_ANSWER_B 116          /* `addiu $7,$0,0x74`, 0x00a2e7f4 */
-#define CGP_PAD_DISMISS 0x00F0         /* any face button closes the answer note (`andi $2,$17,0xF0`, 0x00a2f8a0) */
 
-#define CGP_COMMAND_CARD_Z 0.02f       /* 0x3CA3D70A, 0x00a2efcc */
-#define CGP_COMMAND_CARD_SCALE 0.355f  /* 0x3EB5C28F, 0x00a2efbc */
-#define CGP_DEGREES_HALF_TURN 180.0f   /* 0x43340000, 0x00a2f118 */
-#define CGP_COMMAND_BACK_MODEL 0x01D0C000 /* lui/ori 0x00a2f1ec */
 
-static CGPCursorPosition mas_15;
+static CardCursorPosition mas_15;
 static s16 no_16;
 static s16 p1no_17;
 static s16 p2no_18;
-extern float CLColor[4][4];
-extern int CardEnemyCommandRequest(int side, CardGameWork *work);
-extern int CardEnemyOperationPlay(int side, CardGameWork *work);
-extern int CardEnemy1stAnswer(int side, CardGameWork *work);
-extern int CardEnemyAnswer(int side, CardGameWork *work);
-extern int CardEnemyCommandPlay(int side, CardGameWork *work);
-extern s32 CardPlayCommandCondition(u16 side, u16 command, CardGameWork *work);
 
 void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
 {
@@ -7196,13 +7337,13 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
     {
         s32 i;
 
-        if ((s16) work->command.phase == 2 || (s16) work->command.phase == 9) {
-            if (CardPlayCntBtl(&ownSide->hand, CGP_CARD_FLAG_RESET) != 0 && CardPlayBattleCnt(ownSide) == 1) {
-                s32 junkCount = CardPlayJunkCnt((CardPlayHand *) &ownSide->hand);
+        if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+            if (CardPlayCntBtl(ownSide, CGP_CARD_FLAG_RESET) != 0 && CardPlayBattleCnt(ownSide) == 1) {
+                s32 junkCount = CardPlayJunkCnt(ownSide);
 
                 if (junkCount != 0) {
                     CGPSetErrorMessPlus(side, work, CGP_MESS_JUNK_COUNTED, CGP_CARD_FLAG_RESET);
-                    for (i = 0; i < 4; i++) {
+                    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                         if (ownSide->battle[i].battle.layers[0].cardId == CGP_CARD_FLAG_RESET) {
                             ownSide->battle[i].battle.layers[0].flag = junkCount;
                             break;
@@ -7238,19 +7379,19 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         order[2] = 4;
         CardPlayTypeSort(work->definitions, ownSide->hand.cards, value, order);
         playable = 0;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->disposal[i].battle.layers[0].cardId >= 0) {
                 playable++;
                 break;
             }
         }
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
                 playable++;
                 break;
             }
         }
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
             if (ownSide->operations[i] >= 0) {
                 playable++;
                 break;
@@ -7261,22 +7402,22 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             for (i = 0; i < value; i++) {
                 s32 card = ownSide->hand.cards[i];
 
-                if (work->definitions[card].kind == CGP_CARD_KIND_DISCARD_ONLY) {
-                    if (card != CGP_CARD_ANSWER_A) {
-                        if (card != CGP_CARD_ANSWER_B) {
+                if (work->definitions[card].kind == CARD_KIND_EVENT) {
+                    if (card != CARD_ID_MIYUKIS_EMAIL) {
+                        if (card != CARD_ID_SONG) {
                             playable++;
                         }
                     }
                 }
             }
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
                 if (ownSide->operations[i] >= 0) {
                     if (CGPChkPlayable(ownSide->operations[i])) {
                         playable++;
                     }
                 }
             }
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
                     if (CGPChkPlayable(ownSide->battle[i].battle.layers[0].cardId)) {
                         playable++;
@@ -7312,18 +7453,18 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         if (work->cursorMoveAny == 0 && handArea == mas_15.zone) {
             if (CGP_HAND_FLIPPED(side, work)) {
                 work->cursor.selectionMode = 0;
-                CGCPHandDispSub3(work->definitions, &ownSide->hand, mas_15.index, 2, 0);
+                CGCPHandDispSub3(work->definitions, ownSide, mas_15.index, 2, 0);
             } else {
                 work->cursor.selectionMode = 0;
-                CGCPHandDispSub2(work->definitions, &ownSide->hand, mas_15.index, 2);
+                CGCPHandDispSub2(work->definitions, ownSide, mas_15.index, 2);
             }
         }
-        if (pressed & CGP_PAD_CONFIRM) {
+        if (pressed & PAD_CIRCLE) {
             if (work->cursorMoveAny == 0 && no_16 >= 0) {
                 CGPCursor2Pos(&mas_15, work);
                 if ((operationArea == mas_15.zone && (ownSide->operationFlags[mas_15.index] & 1) == 0) ||
                     (battleArea == mas_15.zone &&
-                     (ownSide->battle[mas_15.index].battle.flags & CGP_BATTLE_FLAG_SLOT_LOCKED) == 0)) {
+                     (ownSide->battle[mas_15.index].battle.flags & CARD_STACK_FLAG_FROZEN) == 0)) {
                     if (CGPChkPlayable(no_16)) {
                         s32 allowed = 1;
 
@@ -7332,55 +7473,55 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
                         }
                         if (allowed) {
                             CardCursorActive(&work->cursor, &mas_15, 2);
-                            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                            xglSoundEffectNormalID(SE_DECIDE, 0);
                             work->cursor.selectionMode = 1;
                             acted = 1;
                             work->command.phaseTimer++;
                         } else {
                             CGPSetErrorMess(side, work, CGP_ERR_COMMAND_FAILED);
-                            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                         }
                     } else {
                         CGPSetErrorMess(side, work, CGP_ERR_NOT_PLAYABLE);
-                        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 } else if (handArea == mas_15.zone) {
-                    if (work->definitions[mas_15.cardId].kind & CGP_CARD_KIND_DISCARD_ONLY) {
+                    if (work->definitions[mas_15.cardId].kind & CARD_KIND_EVENT) {
                         work->cursor.selectionMode = 0;
                         work->command.phaseTimer = CGP_COMM_STEP_CONDITION;
                         acted = 1;
                     } else {
                         CGPSetErrorMess(side, work, CGP_ERR_NOT_DISCARDABLE);
-                        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 } else {
-                    if (battleArea == mas_15.zone && (ownSide->battle[mas_15.index].battle.flags & CGP_BATTLE_FLAG_SLOT_LOCKED)) {
+                    if (battleArea == mas_15.zone && (ownSide->battle[mas_15.index].battle.flags & CARD_STACK_FLAG_FROZEN)) {
                         CGPSetErrorMess(side, work, CGP_ERR_SLOT_LOCKED);
                     } else {
                         CGPSetErrorMess(side, work, CGP_ERR_WRONG_AREA);
                     }
-                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                    xglSoundEffectNormalID(SE_BUZZER, 0);
                 }
             }
             if (acted != 0) {
                 return;
             }
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            xglSoundEffectNormalID(SE_BUZZER, 0);
         }
         break;
     }
     case CGP_COMM_STEP_CONFIRM:
         CGPDispErrorMessPlus(side, CGP_MESS_CONFIRM_CARD, no_16);
-        if (pressed & CGP_PAD_CONFIRM) {
+        if (pressed & PAD_CIRCLE) {
             work->command.step = 0;
             work->command.phaseTimer++;
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             return;
         }
-        if (pressed & CGP_PAD_CANCEL) {
+        if (pressed & PAD_CROSS) {
             work->command.phaseTimer = (s16) work->command.phaseTimer - 1;
             CardCursorPassive(&work->cursor);
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
     case CGP_COMM_STEP_OPERATION:
@@ -7391,7 +7532,7 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             return;
         }
         if (result < 0) {
-            if (work->definitions[no_16].kind == CGP_CARD_KIND_OPERATION) {
+            if (work->definitions[no_16].kind == CARD_KIND_SITUATION) {
                 CardPlayDesertOperation(ownSide, mas_15.index);
             } else {
                 ownSide->battle[mas_15.index].battle.layers[0].life = 0;
@@ -7414,7 +7555,7 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         }
         ownSide->battle[0].cmdView.playedCard = ownSide->hand.cards[index];
         ownSide->hand.cards[index] = -1;
-        CardPlayCleanHand((CardPlayHand *) &ownSide->hand);
+        CardPlayCleanHand(&ownSide->hand);
         work->command.step = 0;
         work->command.phaseTimer = CGP_COMM_STEP_OFFER;
         break;
@@ -7433,10 +7574,10 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         }
         if (error != 0) {
             CGPSetErrorMess(side, work, error);
-            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            xglSoundEffectNormalID(SE_BUZZER, 0);
             work->command.phaseTimer = CGP_COMM_STEP_SORT_HAND;
         } else {
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.step = 0;
             work->command.phaseTimer++;
             p1no_17 = p2no_18 = 0;
@@ -7445,15 +7586,15 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
     }
     case CGP_COMM_STEP_DISCARD:
         CGPDispErrorMess(side, CGP_MESS_CONFIRM_CARD);
-        if (pressed & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+        if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->command.phaseTimer = CGP_COMM_STEP_PICK;
             break;
         }
-        if (pressed & CGP_PAD_CONFIRM) {
+        if (pressed & PAD_CIRCLE) {
             ownSide->battle[0].cmdView.playedCard = ownSide->hand.cards[mas_15.index];
             ownSide->hand.cards[mas_15.index] = -1;
-            CardPlayCleanHand((CardPlayHand *) &ownSide->hand);
+            CardPlayCleanHand(&ownSide->hand);
             work->command.step = 0;
             work->command.phaseTimer++;
         }
@@ -7468,28 +7609,32 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             break;
         }
         CGPDispErrorMessPlus(foeIndex, CGP_MESS_ANSWER_OFFER, ownSide->battle[0].cmdView.playedCard);
-        if (pressedFoe & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+        if (pressedFoe & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->command.phaseTimer++;
         }
-        if (pressedFoe & CGP_PAD_CONFIRM) {
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+        if (pressedFoe & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer = CGP_COMM_STEP_ADVANCE;
             work->cursor.selectionMode = 0;
         }
         break;
     case CGP_COMM_STEP_SHOW:
         switch (ownSide->battle[0].cmdView.playedCard) {
-        case 83: case 84: case 85: case 86: case 87: case 88:
-        case 92: case 107: case 109: case 117: case 118:
+        case CARD_ID_CURE_ALL: case CARD_ID_CURRY: case CARD_ID_BIO_SPHERE:
+        case CARD_ID_SUPPLY_SHIP: case CARD_ID_SUPPLY_FLEET: case CARD_ID_RETREAT:
+        case CARD_ID_INVITATION: case CARD_ID_STIM_DX: case CARD_ID_WAR_CASUALTY:
+        case CARD_ID_START_UP: case CARD_ID_DESTINY:
             if (side == 0) {
                 CGPSetCursor(work, CGP_AREA_PLAYER_BATTLE, 0);
             } else {
                 CGPSetCursor(work, CGP_AREA_ENEMY_BATTLE, 0);
             }
             break;
-        case 89: case 90: case 91: case 96: case 97: case 98: case 99:
-        case 103: case 111: case 112: case 114: case 119:
+        case CARD_ID_WOGLINDE: case CARD_ID_SURPRISE_ATTACK: case CARD_ID_FEDERATION_CRUISER:
+        case CARD_ID_LANDING_OPERATIONS: case CARD_ID_PREMONITION: case CARD_ID_DRAGON_SKULL:
+        case CARD_ID_EXPULSION_ORDER: case CARD_ID_NOTICE: case CARD_ID_CHARGE:
+        case CARD_ID_PRECISE_SHOOTING: case CARD_ID_CONFUSION: case CARD_ID_BREAK_THROUGH:
             if (side == 0) {
                 CGPSetCursor(work, CGP_AREA_ENEMY_BATTLE, 0);
             } else {
@@ -7504,16 +7649,16 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         work->command.step = 0;
         xglMatrixUnit(matrix);
         if (side != 0) {
-            xglMatrixRotZ(matrix, (const float (*)[4]) matrix, CGP_HALF_TURN);
+            xglMatrixRotZ(matrix, matrix, CGP_HALF_TURN);
         }
         position[0] = position[1] = 0.0f;
         position[2] = CGP_COMMAND_CARD_Z;
         position[3] = 1.0f;
         scale[0] = scale[1] = CGP_COMMAND_CARD_SCALE;
         scale[2] = scale[3] = 1.0f;
-        xglMatrixTrans(matrix, (const float (*)[4]) matrix, position);
-        xglMatrixScale(matrix, (const float (*)[4]) matrix, scale);
-        CardDispCard(matrix, ownSide->battle[0].cmdView.playedCard, 1);
+        xglMatrixTrans(matrix, matrix, position);
+        xglMatrixScale(matrix, matrix, scale);
+        CardDispCard(&matrix, ownSide->battle[0].cmdView.playedCard, 1);
         break;
     case CGP_COMM_STEP_PLAY:
     {
@@ -7529,13 +7674,13 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             s32 cost = work->definitions[ownSide->battle[0].cmdView.playedCard].reserveCost;
 
             for (i = 0; i < cost; i++) {
-                CardPlayCostCard((CardPlayHand *) &ownSide->hand);
+                CardPlayCostCard(ownSide);
             }
             CardCursorPassive(&work->cursor);
             CGPSetPermanentMess(work, 0);
-            ownSide->junk[CardPlayJunkCnt((CardPlayHand *) &ownSide->hand)] = ownSide->battle[0].cmdView.playedCard;
+            ownSide->junk[CardPlayJunkCnt(ownSide)] = ownSide->battle[0].cmdView.playedCard;
             ownSide->battle[0].cmdView.playedCard = -1;
-            CardPlayCleanHand((CardPlayHand *) &ownSide->hand);
+            CardPlayCleanHand(&ownSide->hand);
             CardPlayCleanJunk(ownSide);
             work->command.phaseTimer++;
             break;
@@ -7544,22 +7689,22 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             float halfTurn = CGP_HALF_TURN;
 
             xglMatrixUnit(backMatrix);
-            xglMatrixRotZ(backMatrix, (const float (*)[4]) backMatrix, -work->rotStageVector[2] / CGP_DEGREES_HALF_TURN * halfTurn);
+            xglMatrixRotZ(backMatrix, backMatrix, -work->rotStageVector[2] / CGP_DEGREES_HALF_TURN * halfTurn);
             if (side != 0) {
-                xglMatrixRotZ(backMatrix, (const float (*)[4]) backMatrix, halfTurn);
+                xglMatrixRotZ(backMatrix, backMatrix, halfTurn);
             }
             backPosition[0] = backPosition[1] = 0.0f;
             backPosition[2] = CGP_COMMAND_CARD_Z;
             backPosition[3] = 1.0f;
             backScale[0] = backScale[1] = CGP_COMMAND_CARD_SCALE;
             backScale[2] = backScale[3] = 1.0f;
-            xglMatrixTrans(backMatrix, (const float (*)[4]) backMatrix, backPosition);
-            xglMatrixScale(backMatrix, (const float (*)[4]) backMatrix, backScale);
-            CardDispCard(backMatrix, ownSide->battle[0].cmdView.playedCard, 1);
-            nmlModelSetLight(CLColor, asDir);
-            nmlModelSetPlace(backMatrix);
+            xglMatrixTrans(backMatrix, backMatrix, backPosition);
+            xglMatrixScale(backMatrix, backMatrix, backScale);
+            CardDispCard(&backMatrix, ownSide->battle[0].cmdView.playedCard, 1);
+            nmlModelSetLight(&CLColor, &asDir);
+            nmlModelSetPlace(&backMatrix);
             nmlModelSetTexture(work->cursorXtx[2]);
-            nmlModelEntryCard((void *) CGP_COMMAND_BACK_MODEL);
+            nmlModelEntryCard(CGP_COMMAND_BACK_MODEL);
         }
         break;
     }
@@ -7587,52 +7732,52 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         }
         value = CardPlayHandCnt(&foeSide->hand);
         if (work->rotStageId == 0) {
-            if (pressedFoe & CGP_PAD_RIGHT) {
+            if (pressedFoe & PAD_RIGHT) {
                 if (p2no_18 < value - 1) {
                     p2no_18++;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
-            } else if (pressedFoe & CGP_PAD_LEFT) {
+            } else if (pressedFoe & PAD_LEFT) {
                 if (p2no_18 > 0) {
                     p2no_18--;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             }
         } else {
-            if (pressedFoe & CGP_PAD_LEFT) {
+            if (pressedFoe & PAD_LEFT) {
                 if (p2no_18 < value - 1) {
                     p2no_18++;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
-            } else if (pressedFoe & CGP_PAD_RIGHT) {
+            } else if (pressedFoe & PAD_RIGHT) {
                 if (p2no_18 > 0) {
                     p2no_18--;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             }
         }
         CGPCFSDispSub(side, foeIndex, work, ownSide->battle[0].cmdView.playedCard, p2no_18);
         if (CGP_HAND_FLIPPED(foeIndex, work)) {
-            CGCPHandDispSub3(work->definitions, &foeSide->hand, p2no_18, 2, 1);
+            CGCPHandDispSub3(work->definitions, foeSide, p2no_18, 2, 1);
         } else {
-            CGCPHandDispSub2(work->definitions, &foeSide->hand, p2no_18, 2);
+            CGCPHandDispSub2(work->definitions, foeSide, p2no_18, 2);
         }
-        if (pressedFoe & CGP_PAD_CONFIRM) {
+        if (pressedFoe & PAD_CIRCLE) {
             s32 card = foeSide->hand.cards[p2no_18];
 
-            if (card != CGP_CARD_ANSWER_A && card != CGP_CARD_ANSWER_B) {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            if (card != CARD_ID_MIYUKIS_EMAIL && card != CARD_ID_SONG) {
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 return;
             }
             value = CardPlayChkCondition(work->definitions, foeSide, foeSide->hand.cards[p2no_18], work);
             if (value != 0) {
                 CGPSetErrorMess(foeIndex, work, value);
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 return;
             }
             value = work->definitions[foeSide->hand.cards[p2no_18]].reserveCost;
             for (i = 0; i < value; i++) {
-                CardPlayCostCard((CardPlayHand *) &foeSide->hand);
+                CardPlayCostCard(foeSide);
             }
             for (i = 0; i < CGP_ANSWER_MAX; i++) {
                 if (foeSide->hand.cards[CGP_ANSWER_OFFSET + i] < 0) {
@@ -7641,13 +7786,13 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             }
             foeSide->hand.cards[CGP_ANSWER_OFFSET + i] = foeSide->hand.cards[p2no_18];
             foeSide->hand.cards[p2no_18] = -1;
-            CardPlayCleanHand((CardPlayHand *) &foeSide->hand);
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            CardPlayCleanHand(&foeSide->hand);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer++;
             break;
         }
-        if (pressedFoe & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+        if (pressedFoe & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->command.phaseTimer = CGP_COMM_STEP_JUNK_ANSWERS;
         }
         break;
@@ -7667,52 +7812,52 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         }
         value = CardPlayHandCnt(&ownSide->hand);
         if (work->rotStageId == 0) {
-            if (pressed & CGP_PAD_RIGHT) {
+            if (pressed & PAD_RIGHT) {
                 if (p1no_17 < value - 1) {
                     p1no_17++;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
-            } else if (pressed & CGP_PAD_LEFT) {
+            } else if (pressed & PAD_LEFT) {
                 if (p1no_17 > 0) {
                     p1no_17--;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             }
         } else {
-            if (pressed & CGP_PAD_LEFT) {
+            if (pressed & PAD_LEFT) {
                 if (p1no_17 < value - 1) {
                     p1no_17++;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
-            } else if (pressed & CGP_PAD_RIGHT) {
+            } else if (pressed & PAD_RIGHT) {
                 if (p1no_17 > 0) {
                     p1no_17--;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
             }
         }
         CGPCFSDispSub(side, side, work, ownSide->battle[0].cmdView.playedCard, p1no_17);
         if (CGP_HAND_FLIPPED(side, work)) {
-            CGCPHandDispSub3(work->definitions, &ownSide->hand, p1no_17, 2, 1);
+            CGCPHandDispSub3(work->definitions, ownSide, p1no_17, 2, 1);
         } else {
-            CGCPHandDispSub2(work->definitions, &ownSide->hand, p1no_17, 2);
+            CGCPHandDispSub2(work->definitions, ownSide, p1no_17, 2);
         }
-        if (pressed & CGP_PAD_CONFIRM) {
+        if (pressed & PAD_CIRCLE) {
             s32 card = ownSide->hand.cards[p1no_17];
 
-            if (card != CGP_CARD_ANSWER_A && card != CGP_CARD_ANSWER_B) {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            if (card != CARD_ID_MIYUKIS_EMAIL && card != CARD_ID_SONG) {
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 return;
             }
             value = CardPlayChkCondition(work->definitions, ownSide, ownSide->hand.cards[p1no_17], work);
             if (value != 0) {
                 CGPSetErrorMess(side, work, value);
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                xglSoundEffectNormalID(SE_BUZZER, 0);
                 return;
             }
             value = work->definitions[ownSide->hand.cards[p1no_17]].reserveCost;
             for (i = 0; i < value; i++) {
-                CardPlayCostCard((CardPlayHand *) &ownSide->hand);
+                CardPlayCostCard(ownSide);
             }
             for (i = 0; i < CGP_ANSWER_MAX; i++) {
                 if (ownSide->hand.cards[CGP_ANSWER_OFFSET + i] < 0) {
@@ -7721,13 +7866,13 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             }
             ownSide->hand.cards[CGP_ANSWER_OFFSET + i] = ownSide->hand.cards[p1no_17];
             ownSide->hand.cards[p1no_17] = -1;
-            CardPlayCleanHand((CardPlayHand *) &ownSide->hand);
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            CardPlayCleanHand(&ownSide->hand);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer = (s16) work->command.phaseTimer - 1;
             break;
         }
-        if (pressed & CGP_PAD_CANCEL) {
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+        if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->command.phaseTimer = CGP_COMM_STEP_FINISH;
         }
         break;
@@ -7735,7 +7880,7 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
     case CGP_COMM_STEP_JUNK_ANSWERS:
     {
         s32 i;
-        s32 junk = CardPlayJunkCnt((CardPlayHand *) &ownSide->hand);
+        s32 junk = CardPlayJunkCnt(ownSide);
 
         for (i = 0; i < CGP_ANSWER_MAX; i++) {
             if (ownSide->hand.cards[CGP_ANSWER_OFFSET + i] >= 0) {
@@ -7743,7 +7888,7 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
                 ownSide->hand.cards[CGP_ANSWER_OFFSET + i] = -1;
             }
         }
-        junk = CardPlayJunkCnt((CardPlayHand *) &foeSide->hand);
+        junk = CardPlayJunkCnt(foeSide);
         for (i = 0; i < CGP_ANSWER_MAX; i++) {
             if (foeSide->hand.cards[CGP_ANSWER_OFFSET + i] >= 0) {
                 foeSide->junk[junk++] = foeSide->hand.cards[CGP_ANSWER_OFFSET + i];
@@ -7761,14 +7906,14 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         }
         CGPDispErrorMessPlus(side, CGP_MESS_ANSWER_NOTE, ownSide->battle[0].cmdView.playedCard);
         if (pressed & CGP_PAD_DISMISS) {
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer = CGP_COMM_STEP_SHOW;
         }
         break;
     case CGP_COMM_STEP_FINISH:
     {
         s32 i;
-        s32 junk = CardPlayJunkCnt((CardPlayHand *) &ownSide->hand);
+        s32 junk = CardPlayJunkCnt(ownSide);
 
         for (i = 0; i < CGP_ANSWER_MAX; i++) {
             if (ownSide->hand.cards[CGP_ANSWER_OFFSET + i] >= 0) {
@@ -7780,12 +7925,12 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
             s32 cost = work->definitions[ownSide->battle[0].cmdView.playedCard].reserveCost;
 
             for (i = 0; i < cost; i++) {
-                CardPlayCostCard((CardPlayHand *) &ownSide->hand);
+                CardPlayCostCard(ownSide);
             }
         }
         ownSide->junk[junk] = ownSide->battle[0].cmdView.playedCard;
         ownSide->battle[0].cmdView.playedCard = -1;
-        junk = CardPlayJunkCnt((CardPlayHand *) &foeSide->hand);
+        junk = CardPlayJunkCnt(foeSide);
         for (i = 0; i < CGP_ANSWER_MAX; i++) {
             if (foeSide->hand.cards[CGP_ANSWER_OFFSET + i] >= 0) {
                 foeSide->junk[junk++] = foeSide->hand.cards[CGP_ANSWER_OFFSET + i];
@@ -7801,11 +7946,11 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
         break;
     }
     case CGP_COMM_STEP_END_PHASE:
-        switch ((s16) work->command.phase) {
-        case 4:
+        switch (work->command.phase) {
+        case CARD_PHASE_BLOCK:
             CGPCommFaseEndSub(0, &work->player, work);
             break;
-        case 11:
+        case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
             CGPCommFaseEndSub(1, &work->enemy, work);
             break;
         }
@@ -7817,44 +7962,18 @@ void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
     }
 }
 
-/*
- * CardLayerStack.flags bit CGPBattleAfterEffect sets on an attacking stack; the
- * end phase clears it on every slot of the side (`andi $2,$2,0xFD`, 0x00a2fadc).
- */
-#define CGP_STACK_FLAG_MARKED 0x02
 
-/* Operation cards CardPlayCntOpe counts; ids as in the other CardPlayCntOpe tests of this TU. */
-#define CGP_OPE_RECOVERY 128          /* CardPlayRecavery runs once per copy (`addiu $5,$0,0x80`, 0x00a2fda0) */
-#define CGP_OPE_REGEN_CLASS4 136      /* either side: +1 life on each disposal card of class 4 (0x00a2fdd0, 0x00a2fddc) */
-#define CGP_OPE_REGEN_OTHER 127       /* own side: +1 life on each disposal card not of class 4 (0x00a2ffdc) */
 
-/*
- * An operation card with a duration below this counts down once per end phase;
- * higher durations never expire (`slti $2,$2,0x40`, 0x00a2fb70).
- */
-#define CGP_OPE_PERMANENT_DURATION 64
 
-/* Cards that regain life at the end phase (`addiu $2,$0,6`, 0x00a2fed4; `0xD`, 0x00a2fedc; `0x4D`, 0x00a300d4). */
-#define CGP_CARD_REGEN_SMALL 6           /* +2 life, clamped at its operationDuration (0xEA is definitions[6]+0x12) */
-#define CGP_CARD_REGEN_LARGE 13          /* +3 life (0x1E6 is definitions[13]+0x12) */
-#define CGP_CARD_REGEN_LARGE_BATTLE 77   /* +3 life on a battle slot only */
 
-/* The foe's battle card that makes this side play command 77 on the same slot (`addiu $2,$0,0x36`, 0x00a30204;
- * `addiu $5,$0,0x4D`, 0x00a3021c). */
-#define CGP_CARD_FOE_TRIGGER 54
-#define CGP_COMMAND_FOE_TRIGGERED 77
 
-/* CardSetEffect codes and sound of the regeneration effect (0x00a2fe5c, 0x00a2fe8c, `lui $8,2` 0x00a2fe84). */
-#define CGP_EFFECT_REGEN_START 10
-#define CGP_EFFECT_REGEN 12
-#define CGP_SE_REGEN 0x2000D
 
 /*
  * End of a side's turn: clears the per-turn marks of the own battle and disposal
  * slots, counts down the command timers, expires the operation cards of both
  * sides (duration exhausted: the card moves to the junk pile), applies the
  * recovery and regeneration operation cards and the regenerating cards on the
- * own slots, and answers a foe battle card 54 with command 77.
+ * own slots, and answers a foe Virgil on the battle row with its trigger command.
  */
 void CGPEndFaseSub(s32 side, CardPlaySide *ownSide, CardPlaySide *foeSide,
                    CardGameWork *work)
@@ -7869,15 +7988,15 @@ void CGPEndFaseSub(s32 side, CardPlaySide *ownSide, CardPlaySide *foeSide,
     s32 battleCard;
 
     otherSide = (side == 0);
-    for (i = 0; i < 4; i++) {
-        ownSide->battle[i].battle.flags &= ~CGP_STACK_FLAG_MARKED;
-        ownSide->battle[i].battle.layers[0].state = 0;
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+        ownSide->battle[i].battle.flags &= ~CARD_STACK_FLAG_FROZEN;
+        ownSide->battle[i].battle.layers[0].powerPlus = 0;
         ownSide->battle[i].battle.layers[0].flag = 0;
         ownSide->battle[i].battle.layers[0].boostCount = 0;
     }
-    for (i = 0; i < 4; i++) {
-        ownSide->disposal[i].battle.flags &= ~CGP_STACK_FLAG_MARKED;
-        ownSide->disposal[i].battle.layers[0].state = 0;
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+        ownSide->disposal[i].battle.flags &= ~CARD_STACK_FLAG_FROZEN;
+        ownSide->disposal[i].battle.layers[0].powerPlus = 0;
         ownSide->disposal[i].battle.layers[0].flag = 0;
         ownSide->disposal[i].battle.layers[0].boostCount = 0;
     }
@@ -7887,29 +8006,29 @@ void CGPEndFaseSub(s32 side, CardPlaySide *ownSide, CardPlaySide *foeSide,
     if (work->command.recoveryApplied != 0) {
         work->command.recoveryApplied--;
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_OPERATION_SLOTS; i++) {
         if (ownSide->operations[i] >= 0) {
             if (ownSide->operationDuration[i] < CGP_OPE_PERMANENT_DURATION) {
-                if (ownSide->operations[i] == CGP_OPE_TIMED_CARD) {
+                if (ownSide->operations[i] == CARD_ID_COLLECTIVE) {
                     found = 0;
-                    for (j = 0; j < 4; j++) {
+                    for (j = 0; j < CARD_BOARD_SLOTS; j++) {
                         if (ownSide->disposal[j].battle.layers[0].cardId >= 0 &&
                             (work->definitions[ownSide->disposal[j].battle.layers[0].cardId].flags &
-                             CGP_CARD_FLAG_CLASS4)) {
+                             CARD_ATTR_GNOSIS)) {
                             found = 1;
                             break;
                         }
                     }
-                    for (j = 0; j < 4; j++) {
+                    for (j = 0; j < CARD_BOARD_SLOTS; j++) {
                         if (ownSide->battle[j].battle.layers[0].cardId >= 0 &&
                             (work->definitions[ownSide->battle[j].battle.layers[0].cardId].flags &
-                             CGP_CARD_FLAG_CLASS4)) {
+                             CARD_ATTR_GNOSIS)) {
                             found = 1;
                             break;
                         }
                     }
                     if (found) {
-                        ownSide->operationDuration[i] = work->definitions[CGP_OPE_TIMED_CARD].operationDuration;
+                        ownSide->operationDuration[i] = work->definitions[CARD_ID_COLLECTIVE].operationDuration;
                     } else {
                         ownSide->operationDuration[i]--;
                     }
@@ -7918,33 +8037,33 @@ void CGPEndFaseSub(s32 side, CardPlaySide *ownSide, CardPlaySide *foeSide,
                 }
             }
             if (ownSide->operationDuration[i] <= 0) {
-                ownSide->junk[CardPlayJunkCnt((CardPlayHand *) ownSide)] = ownSide->operations[i];
+                ownSide->junk[CardPlayJunkCnt(ownSide)] = ownSide->operations[i];
                 ownSide->operations[i] = -1;
             }
         }
         if (foeSide->operations[i] >= 0) {
             if (foeSide->operationDuration[i] < CGP_OPE_PERMANENT_DURATION) {
                 /* Tests the own side's operation card, not the foe's (0x00a2fc84). */
-                if (ownSide->operations[i] == CGP_OPE_TIMED_CARD) {
+                if (ownSide->operations[i] == CARD_ID_COLLECTIVE) {
                     found = 0;
-                    for (j = 0; j < 4; j++) {
+                    for (j = 0; j < CARD_BOARD_SLOTS; j++) {
                         if (foeSide->disposal[j].battle.layers[0].cardId >= 0 &&
                             (work->definitions[foeSide->disposal[j].battle.layers[0].cardId].flags &
-                             CGP_CARD_FLAG_CLASS4)) {
+                             CARD_ATTR_GNOSIS)) {
                             found = 1;
                             break;
                         }
                     }
-                    for (j = 0; j < 4; j++) {
+                    for (j = 0; j < CARD_BOARD_SLOTS; j++) {
                         if (foeSide->battle[j].battle.layers[0].cardId >= 0 &&
                             (work->definitions[foeSide->battle[j].battle.layers[0].cardId].flags &
-                             CGP_CARD_FLAG_CLASS4)) {
+                             CARD_ATTR_GNOSIS)) {
                             found = 1;
                             break;
                         }
                     }
                     if (found) {
-                        foeSide->operationDuration[i] = work->definitions[CGP_OPE_TIMED_CARD].operationDuration;
+                        foeSide->operationDuration[i] = work->definitions[CARD_ID_COLLECTIVE].operationDuration;
                     } else {
                         foeSide->operationDuration[i]--;
                     }
@@ -7953,105 +8072,105 @@ void CGPEndFaseSub(s32 side, CardPlaySide *ownSide, CardPlaySide *foeSide,
                 }
             }
             if (foeSide->operationDuration[i] <= 0) {
-                foeSide->junk[CardPlayJunkCnt((CardPlayHand *) foeSide)] = foeSide->operations[i];
+                foeSide->junk[CardPlayJunkCnt(foeSide)] = foeSide->operations[i];
                 foeSide->operations[i] = -1;
             }
         }
     }
-    i = CardPlayCntOpe(ownSide, CGP_OPE_RECOVERY);
+    i = CardPlayCntOpe(ownSide, CARD_ID_DAMMERUNG);
     if (i != 0) {
         while (i > 0) {
-            CardPlayRecavery(&ownSide->hand);
+            CardPlayRecavery(ownSide);
             i--;
         }
     }
-    count = CardPlayCntOpe(ownSide, CGP_OPE_REGEN_CLASS4) +
-            CardPlayCntOpe(foeSide, CGP_OPE_REGEN_CLASS4);
+    count = CardPlayCntOpe(ownSide, CARD_ID_PILGRIMAGE_FLEET) +
+            CardPlayCntOpe(foeSide, CARD_ID_PILGRIMAGE_FLEET);
     if (count != 0) {
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->disposal[i].battle.layers[0].cardId >= 0 &&
                 (work->definitions[ownSide->disposal[i].battle.layers[0].cardId].flags &
-                 CGP_CARD_FLAG_CLASS4)) {
+                 CARD_ATTR_GNOSIS)) {
                 ownSide->disposal[i].battle.layers[0].life++;
                 if (work->definitions[ownSide->disposal[i].battle.layers[0].cardId].operationDuration <
                     ownSide->disposal[i].battle.layers[0].life) {
                     ownSide->disposal[i].battle.layers[0].life =
                         work->definitions[ownSide->disposal[i].battle.layers[0].cardId].operationDuration;
                 }
-                CardSetEffect(side, work, CGP_EFFECT_REGEN_START, 0, 0, ownSide->disposal[i].battle.position, 0);
-                CardSetEffect(side, work, CGP_EFFECT_REGEN, 1, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
+                CardSetEffect(side, work, CGP_EFFECT_SWIRL, 0, 0, ownSide->disposal[i].battle.position, 0);
+                CardSetEffect(side, work, CGP_EFFECT_NUMBER, 1, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
                               &ownSide->disposal[i].battle);
             }
         }
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         disposalCard = ownSide->disposal[i].battle.layers[0].cardId;
         if (disposalCard >= 0) {
             switch ((s16) disposalCard) {
-            case CGP_CARD_REGEN_SMALL:
+            case CARD_ID_LV_1_CHAOS:
                 ownSide->disposal[i].battle.layers[0].life += 2;
-                if (work->definitions[CGP_CARD_REGEN_SMALL].operationDuration < ownSide->disposal[i].battle.layers[0].life) {
-                    ownSide->disposal[i].battle.layers[0].life = work->definitions[CGP_CARD_REGEN_SMALL].operationDuration;
+                if (work->definitions[CARD_ID_LV_1_CHAOS].operationDuration < ownSide->disposal[i].battle.layers[0].life) {
+                    ownSide->disposal[i].battle.layers[0].life = work->definitions[CARD_ID_LV_1_CHAOS].operationDuration;
                 }
-                CardSetEffect(side, work, CGP_EFFECT_REGEN_START, 0, 0, ownSide->disposal[i].battle.position, 0);
-                CardSetEffect(side, work, CGP_EFFECT_REGEN, 2, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
+                CardSetEffect(side, work, CGP_EFFECT_SWIRL, 0, 0, ownSide->disposal[i].battle.position, 0);
+                CardSetEffect(side, work, CGP_EFFECT_NUMBER, 2, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
                               &ownSide->disposal[i].battle);
                 break;
-            case CGP_CARD_REGEN_LARGE:
+            case CARD_ID_LV_10_CHAOS:
                 ownSide->disposal[i].battle.layers[0].life += 3;
-                if (work->definitions[CGP_CARD_REGEN_LARGE].operationDuration < ownSide->disposal[i].battle.layers[0].life) {
-                    ownSide->disposal[i].battle.layers[0].life = work->definitions[CGP_CARD_REGEN_LARGE].operationDuration;
+                if (work->definitions[CARD_ID_LV_10_CHAOS].operationDuration < ownSide->disposal[i].battle.layers[0].life) {
+                    ownSide->disposal[i].battle.layers[0].life = work->definitions[CARD_ID_LV_10_CHAOS].operationDuration;
                 }
-                CardSetEffect(side, work, CGP_EFFECT_REGEN_START, 0, 0, ownSide->disposal[i].battle.position, 0);
-                CardSetEffect(side, work, CGP_EFFECT_REGEN, 3, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
+                CardSetEffect(side, work, CGP_EFFECT_SWIRL, 0, 0, ownSide->disposal[i].battle.position, 0);
+                CardSetEffect(side, work, CGP_EFFECT_NUMBER, 3, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
                               &ownSide->disposal[i].battle);
                 break;
             }
-            if (CardPlayCntOpe(ownSide, CGP_OPE_REGEN_OTHER) &&
-                !(work->definitions[disposalCard].flags & CGP_CARD_FLAG_CLASS4)) {
+            if (CardPlayCntOpe(ownSide, CARD_ID_KUKAI_FOUNDATION) &&
+                !(work->definitions[disposalCard].flags & CARD_ATTR_GNOSIS)) {
                 ownSide->disposal[i].battle.layers[0].life++;
                 if (work->definitions[disposalCard].operationDuration <
                     ownSide->disposal[i].battle.layers[0].life) {
                     ownSide->disposal[i].battle.layers[0].life =
                         work->definitions[disposalCard].operationDuration;
                 }
-                CardSetEffect(side, work, CGP_EFFECT_REGEN_START, 0, 0, ownSide->disposal[i].battle.position, 0);
-                CardSetEffect(side, work, CGP_EFFECT_REGEN, 1, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
+                CardSetEffect(side, work, CGP_EFFECT_SWIRL, 0, 0, ownSide->disposal[i].battle.position, 0);
+                CardSetEffect(side, work, CGP_EFFECT_NUMBER, 1, CGP_SE_REGEN, ownSide->disposal[i].battle.position,
                               &ownSide->disposal[i].battle);
             }
         }
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         battleCard = ownSide->battle[i].battle.layers[0].cardId;
         if (battleCard >= 0) {
             switch ((s16) battleCard) {
-            case CGP_CARD_REGEN_SMALL:
+            case CARD_ID_LV_1_CHAOS:
                 ownSide->battle[i].battle.layers[0].life += 2;
-                if (work->definitions[CGP_CARD_REGEN_SMALL].operationDuration < ownSide->battle[i].battle.layers[0].life) {
-                    ownSide->battle[i].battle.layers[0].life = work->definitions[CGP_CARD_REGEN_SMALL].operationDuration;
+                if (work->definitions[CARD_ID_LV_1_CHAOS].operationDuration < ownSide->battle[i].battle.layers[0].life) {
+                    ownSide->battle[i].battle.layers[0].life = work->definitions[CARD_ID_LV_1_CHAOS].operationDuration;
                 }
-                CardSetEffect(side, work, CGP_EFFECT_REGEN_START, 0, 0, ownSide->battle[i].battle.position, 0);
-                CardSetEffect(side, work, CGP_EFFECT_REGEN, 2, CGP_SE_REGEN, ownSide->battle[i].battle.position,
+                CardSetEffect(side, work, CGP_EFFECT_SWIRL, 0, 0, ownSide->battle[i].battle.position, 0);
+                CardSetEffect(side, work, CGP_EFFECT_NUMBER, 2, CGP_SE_REGEN, ownSide->battle[i].battle.position,
                               &ownSide->battle[i].battle);
                 break;
-            case CGP_CARD_REGEN_LARGE:
-            case CGP_CARD_REGEN_LARGE_BATTLE:
+            case CARD_ID_LV_10_CHAOS:
+            case CARD_ID_UNICORN:
                 ownSide->battle[i].battle.layers[0].life += 3;
                 if (work->definitions[battleCard].operationDuration <
                     ownSide->battle[i].battle.layers[0].life) {
                     ownSide->battle[i].battle.layers[0].life =
                         work->definitions[battleCard].operationDuration;
                 }
-                CardSetEffect(side, work, CGP_EFFECT_REGEN_START, 0, 0, ownSide->battle[i].battle.position, 0);
-                CardSetEffect(side, work, CGP_EFFECT_REGEN, 3, CGP_SE_REGEN, ownSide->battle[i].battle.position,
+                CardSetEffect(side, work, CGP_EFFECT_SWIRL, 0, 0, ownSide->battle[i].battle.position, 0);
+                CardSetEffect(side, work, CGP_EFFECT_NUMBER, 3, CGP_SE_REGEN, ownSide->battle[i].battle.position,
                               &ownSide->battle[i].battle);
                 break;
             }
         }
         foeCard = foeSide->battle[i].battle.layers[0].cardId;
         if (foeCard >= 0) {
-            if (foeCard == CGP_CARD_FOE_TRIGGER) {
-                CardPlayCommandPlay(otherSide, CGP_COMMAND_FOE_TRIGGERED, work, i, 0);
+            if (foeCard == CARD_ID_VIRGIL) {
+                CardPlayCommandPlay(otherSide, CARD_COMMAND_VIRGIL_TRIGGER, work, i, 0);
             }
         }
     }
@@ -8066,70 +8185,10 @@ static u8 timer_21;
 /* Cleared when the support step starts; no reader found. */
 static u8 firstattack_22;
 
-/*
- * Steps of CGPBattleFaseProc (command.phaseTimer). The values are the entries of its
- * switch jump table jtbl_00A4F4C0 (0x00a4f4c0, dispatched at 0x00a312cc..0x00a312e8 on the
- * s16 phaseTimer, 62 entries, every other entry goes to the end label 0x00a31138):
- * 0 -> 0x00a302f0, 1 -> 0x00a304d0, 5 -> 0x00a30560, 10 -> 0x00a305d8, 11 -> 0x00a30640,
- * 20 -> 0x00a30698, 21 -> 0x00a30718, 22 -> 0x00a307f0, 30 -> 0x00a30870, 31 -> 0x00a30908,
- * 32 -> 0x00a30950, 40 -> 0x00a30998, 41 -> 0x00a30b58, 42 -> 0x00a30c78, 43 -> 0x00a30e50,
- * 50 -> 0x00a30f28, 51 -> 0x00a30fb8, 52 -> 0x00a31038, 60 -> 0x00a310e0, 61 -> 0x00a31108.
- * The names describe what the code at each target does.
- */
-#define CGP_BATTLE_STEP_BEGIN 0            /* check that a battle can take place */
-#define CGP_BATTLE_STEP_COMMAND 1          /* queued battle command, then the front attacks */
-#define CGP_BATTLE_STEP_END 5              /* nothing (more) to fight: next turn */
-#define CGP_BATTLE_STEP_FRONT 10           /* CGP_ATTACK_FRONT attacks, one slot per step */
-#define CGP_BATTLE_STEP_FRONT_WAIT 11
-#define CGP_BATTLE_STEP_PIERCE 20          /* CGP_ATTACK_PIERCE attacks */
-#define CGP_BATTLE_STEP_PIERCE_WAIT 21
-#define CGP_BATTLE_STEP_PIERCE_COMMAND 22  /* after the command of a CGP_CARD_PIERCE_COMMAND card */
-#define CGP_BATTLE_STEP_COUNTER 30         /* the foe's counter cards strike back */
-#define CGP_BATTLE_STEP_COUNTER_ATTACK 31
-#define CGP_BATTLE_STEP_COUNTER_WAIT 32
-#define CGP_BATTLE_STEP_SUPPORT_CHARGE 40  /* support cards count down and show their effect */
-#define CGP_BATTLE_STEP_SUPPORT 41         /* CGP_ATTACK_SUPPORT attacks on each foe slot */
-#define CGP_BATTLE_STEP_SUPPORT_NEXT 42
-#define CGP_BATTLE_STEP_SUPPORT_COMMAND 43 /* after the command of a CGP_CARD_SUPPORT_COMMAND card */
-#define CGP_BATTLE_STEP_DIRECT 50          /* CGP_ATTACK_DIRECT attacks */
-#define CGP_BATTLE_STEP_DIRECT_WAIT 51
-#define CGP_BATTLE_STEP_FINISH 52
-#define CGP_BATTLE_STEP_CLOSE 60
-#define CGP_BATTLE_STEP_CLOSE_WAIT 61
 
-/* Foe battle cards that strike back during this side's battle (`addiu $5,$0,0x5`, 0x00a30304; `0xC`, 0x00a30314). */
-#define CGP_CARD_COUNTER_1 5
-#define CGP_CARD_COUNTER_2 12
-/* Operation card in play on either side that stops the battle (`addiu $5,$0,0x7D`, 0x00a3044c). */
-#define CGP_OPE_NO_BATTLE 125
-/* Card whose attack is followed by its queued command (`addiu $4,$0,0x4C`, 0x00a30744). */
-#define CGP_CARD_PIERCE_COMMAND 76
-/* Support card that plays CGP_COMMAND_SUPPORT_FOLLOWUP after its attacks (`addiu $4,$0,0x20`, 0x00a30d84;
- * `addiu $5,$0,0x49`, 0x00a30dcc). */
-#define CGP_CARD_SUPPORT_COMMAND 32
-#define CGP_COMMAND_SUPPORT_FOLLOWUP 73
-/* A support card's second layer below this life wears down after the attacks (`slti $2,$2,0x50`, 0x00a30d24). */
-#define CGP_SUPPORT_WEAR_LIMIT 80
 
-/* Error messages of the phase (`addiu $6,$0,6`, 0x00a303ac; `0x14`, 0x00a30410; `0x15`, 0x00a310bc). */
-#define CGP_ERR_NO_BATTLE 6
-#define CGP_ERR_BATTLE_BLOCKED 20
-#define CGP_ERR_BATTLE_DONE 21
-/* Value shown with CGP_ERR_BATTLE_BLOCKED while command.recoveryApplied is set (`addiu $7,$0,0x5C`, 0x00a30418). */
-#define CGP_BATTLE_BLOCK_RECOVERY 92
 
-/* Frames the phase waits after an attack (`addiu $2,$0,0x1E`) and after a strong support effect (`0x2D`, 0x00a30ab8). */
-#define CGP_BATTLE_WAIT_FRAMES 30
-#define CGP_BATTLE_SUPPORT_WAIT_FRAMES 45
-/* Frames of the slide of the command window and of the closing wait (`addiu $3,$0,0xA`, 0x00a30510). */
-#define CGP_BATTLE_SLIDE_FRAMES 10
 
-/* CardSetEffect codes and sound of a charged support card (`addiu $6,$0,0x21`, 0x00a30ad0; `0x17`, 0x00a30b20;
- * `lui $8,2` + `ori $8,$8,6`, 0x00a30ab0). Power 3 or more shows the strong effect. */
-#define CGP_EFFECT_SUPPORT_STRONG 33
-#define CGP_EFFECT_SUPPORT 23
-#define CGP_SUPPORT_STRONG_POWER 3
-#define CGP_SE_SUPPORT 0x20006
 
 /*
  * Battle phase of one side, one step per call (command.phaseTimer). After a
@@ -8161,8 +8220,8 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
 
         CardPlayClearEndflg(ownSide);
         ownCount = CardPlayBattleCnt(ownSide);
-        foeCount = CardPlayCntBtl(&foeSide->hand, CGP_CARD_COUNTER_1);
-        foeCount += CardPlayCntBtl(&foeSide->hand, CGP_CARD_COUNTER_2);
+        foeCount = CardPlayCntBtl(foeSide, CARD_ID_LV_1_JR);
+        foeCount += CardPlayCntBtl(foeSide, CARD_ID_LV_10_JR);
         if (ownCount == 0 && foeCount == 0) {
             work->command.phaseTimer = CGP_BATTLE_STEP_END;
             if ((side == 0 && (work->flags & CGP_FLAG_SIDE0_AUTO)) || (side != 0 && (work->flags & CGP_FLAG_SIDE1_AUTO))) {
@@ -8179,13 +8238,13 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
             if ((side == 0 && (work->flags & CGP_FLAG_SIDE0_AUTO)) || (side != 0 && (work->flags & CGP_FLAG_SIDE1_AUTO))) {
                 return;
             }
-            CGPSetErrorMessPlus(side, work, CGP_ERR_BATTLE_BLOCKED, CGP_BATTLE_BLOCK_RECOVERY);
+            CGPSetErrorMessPlus(side, work, CGP_ERR_BATTLE_BLOCKED, CARD_ID_INVITATION);
             return;
         }
-        if (work->command.turnCountdown != 0 || CardPlayCntOpe(ownSide, CGP_OPE_NO_BATTLE) != 0 ||
-            CardPlayCntOpe(foeSide, CGP_OPE_NO_BATTLE) != 0) {
+        if (work->command.turnCountdown != 0 || CardPlayCntOpe(ownSide, CARD_ID_ARMISTICE) != 0 ||
+            CardPlayCntOpe(foeSide, CARD_ID_ARMISTICE) != 0) {
             work->command.phaseTimer = CGP_BATTLE_STEP_END;
-            CGPSetErrorMessPlus(side, work, CGP_ERR_BATTLE_BLOCKED, CGP_OPE_NO_BATTLE);
+            CGPSetErrorMessPlus(side, work, CGP_ERR_BATTLE_BLOCKED, CARD_ID_ARMISTICE);
             return;
         }
         CGPRotStageSub(work, side);
@@ -8264,7 +8323,7 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         CGPRefreshFieldHP(work);
         CardCursorPassive(&work->cursor);
         work->command.step = 0;
-        if (ownSide->battle[i_19].battle.layers[0].cardId == CGP_CARD_PIERCE_COMMAND) {
+        if (ownSide->battle[i_19].battle.layers[0].cardId == CARD_ID_GARGOYLE) {
             if (CardPlayCommandCheck(work->command.phase,
                                      side == 0 ? &work->commandQueue[0][0][0] : &work->commandQueue[1][0][0])) {
                 CardPlayCommandBattleExecute(side, work->command.phase, work);
@@ -8303,11 +8362,11 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         s32 i;
 
         found = 0;
-        if (CardPlayCntBtl(&foeSide->hand, CGP_CARD_COUNTER_1) != 0 ||
-            CardPlayCntBtl(&foeSide->hand, CGP_CARD_COUNTER_2) != 0) {
-            for (i = 0; i < 4; i++) {
-                if (foeSide->battle[i].battle.layers[0].cardId == CGP_CARD_COUNTER_1 ||
-                    foeSide->battle[i].battle.layers[0].cardId == CGP_CARD_COUNTER_2) {
+        if (CardPlayCntBtl(foeSide, CARD_ID_LV_1_JR) != 0 ||
+            CardPlayCntBtl(foeSide, CARD_ID_LV_10_JR) != 0) {
+            for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+                if (foeSide->battle[i].battle.layers[0].cardId == CARD_ID_LV_1_JR ||
+                    foeSide->battle[i].battle.layers[0].cardId == CARD_ID_LV_10_JR) {
                     if (foeSide->battle[i].battle.layers[1].cardId < 0) {
                         i_19 = i;
                         found = 1;
@@ -8345,14 +8404,14 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         firstattack_22 = 0;
         if (ownSide->battle[i_19].battle.layers[0].cardId >= 0) {
             if (CardChkAttackType(work->definitions, &ownSide->battle[i_19].battle) == CGP_ATTACK_SUPPORT &&
-                !(ownSide->battle[i_19].battle.flags & CGP_STACK_FLAG_FROZEN)) {
+                !(ownSide->battle[i_19].battle.flags & CARD_STACK_FLAG_FROZEN)) {
                 s32 power;
 
-                ownSide->battle[i_19].battle.power = (s8) ownSide->battle[i_19].battle.power - 1;
+                ownSide->battle[i_19].battle.power = ownSide->battle[i_19].battle.power - 1;
                 power = CardPlayBattleCnt(foeSide);
-                if ((s8) ownSide->battle[i_19].battle.power == 0 && power != 0) {
+                if (ownSide->battle[i_19].battle.power == 0 && power != 0) {
                     power = CGPCalcPower(work, &ownSide->battle[i_19].battle);
-                    power += CGPCalcPowerPlus(work, (CardPowerCard *) &ownSide->battle[i_19].battle, power);
+                    power += CGPCalcPowerPlus(work, &ownSide->battle[i_19].battle, power);
                     if (power >= CGP_SUPPORT_STRONG_POWER) {
                         timer_21 = CGP_BATTLE_SUPPORT_WAIT_FRAMES;
                         CardSetEffect(side, work, CGP_EFFECT_SUPPORT_STRONG, 0, CGP_SE_SUPPORT,
@@ -8381,7 +8440,7 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         timer_21 = 0;
         if (attackType == CGP_ATTACK_SUPPORT) {
             if (foeSide->battle[j_20].battle.layers[0].cardId >= 0 &&
-                (s8) ownSide->battle[i_19].battle.power == 0) {
+                ownSide->battle[i_19].battle.power == 0) {
                 timer_21 = CGP_BATTLE_WAIT_FRAMES;
             }
         }
@@ -8400,20 +8459,20 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
                 if (CardChkAttackType(work->definitions, &ownSide->battle[i_19].battle) == CGP_ATTACK_SUPPORT) {
                     if (ownSide->battle[i_19].battle.layers[1].cardId >= 0) {
                         if (ownSide->battle[i_19].battle.layers[1].life < CGP_SUPPORT_WEAR_LIMIT) {
-                            if (!(ownSide->battle[i_19].battle.flags & CGP_STACK_FLAG_FROZEN)) {
+                            if (!(ownSide->battle[i_19].battle.flags & CARD_STACK_FLAG_FROZEN)) {
                                 ownSide->battle[i_19].battle.layers[1].life--;
                             }
                         }
                     }
-                    if ((s8) ownSide->battle[i_19].battle.power <= 0) {
+                    if (ownSide->battle[i_19].battle.power <= 0) {
                         ownSide->battle[i_19].battle.power = ownSide->battle[i_19].battle.powerLimit;
                     }
                 }
             }
             j_20 = 0;
-            if (ownSide->battle[i_19].battle.layers[0].cardId == CGP_CARD_SUPPORT_COMMAND &&
-                !(ownSide->battle[i_19].battle.flags & CGP_STACK_FLAG_FROZEN)) {
-                CardPlayCommandPlay(side, CGP_COMMAND_SUPPORT_FOLLOWUP, work, i_19, 0);
+            if (ownSide->battle[i_19].battle.layers[0].cardId == CARD_ID_SIMEON &&
+                !(ownSide->battle[i_19].battle.flags & CARD_STACK_FLAG_FROZEN)) {
+                CardPlayCommandPlay(side, CARD_COMMAND_GARGOYLE_TRIGGER, work, i_19, 0);
                 work->command.phaseTimer++;
                 timer_21 = CGP_BATTLE_WAIT_FRAMES;
             } else {
@@ -8504,28 +8563,9 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
     }
 }
 
-/* Interrupt message CGPEndFaseProc shows when the hand is over the limit ("Too many cards in your hand"). */
-#define CGP_MESS_HAND_FULL 0x2B
-/* Error message of the discard prompt ("Throw away this card?"). */
-#define CGP_ERR_DISCARD_CONFIRM 25
-/* Frames the hand list stays inert after it opens (`addiu $3,$0,0x19`, 0x00a312f8). */
-#define CGP_DISCARD_INPUT_DELAY 25
 
-/* Where the enlarged card of the discard selection is drawn (0x3EBCED91 and 0x3E99999A, 0x00a313d4..0x00a313e4). */
-#define CGP_DISCARD_PREVIEW_Y 0.369f
-#define CGP_DISCARD_PREVIEW_Z 0.3f
 
-/* Steps of CGPEndFaseProc (command.phaseTimer). */
-#define CGP_END_STEP_BEGIN 0
-#define CGP_END_STEP_DRAW 1
-#define CGP_END_STEP_HAND_CHECK 2
-#define CGP_END_STEP_SELECT 3
-#define CGP_END_STEP_CONFIRM 4
-#define CGP_END_STEP_NEXT_TURN 10
 
-extern int CardPlayCommandExecute(s16 command, CardGameWork *work);
-extern void CardEnemyEnd(int side, CardGameWork *work);
-extern int CardPlayDesertCard(CardHand *hand, int index);
 
 /* Hand index the discard selection stands on (read `lw` 0x00a31354, written 0x00a312fc). */
 static s32 Now_23;
@@ -8584,7 +8624,7 @@ void CGPEndFaseProc(s32 side, CardGameWork *work, CardListWindow *window)
             CardEnemyEnd(side, work);
             break;
         }
-        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+        xglSoundEffectNormalID(SE_BUZZER, 0);
         CGPSetInterruptMess(work, CGP_MESS_HAND_FULL);
         CGPRotStageSub(work, side);
         work->command.phaseTimer++;
@@ -8602,28 +8642,28 @@ void CGPEndFaseProc(s32 side, CardGameWork *work, CardListWindow *window)
             CGCPHandDispSub(&ownSide->hand, Now_23, flipped);
         }
         count = CardPlayHandCnt(&ownSide->hand);
-        if (repeat & CGP_PAD_RIGHT) {
+        if (repeat & PAD_RIGHT) {
             if (Now_23 < count - 1) {
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 Now_23++;
             }
-        } else if (repeat & CGP_PAD_LEFT) {
+        } else if (repeat & PAD_LEFT) {
             if (Now_23 > 0) {
-                xglSoundEffectNormalID(CGP_SE_CURSOR, 0);
+                xglSoundEffectNormalID(SE_CURSOR, 0);
                 Now_23--;
             }
         }
-        if (held & CGP_PAD_PREVIEW) {
+        if (held & PAD_TRIANGLE) {
             position[0] = 0.0f;
             position[1] = CGP_DISCARD_PREVIEW_Y;
             position[2] = CGP_DISCARD_PREVIEW_Z;
             position[3] = 1.0f;
             xglMatrixUnit(matrix);
-            xglMatrixTrans(matrix, (const float (*)[4]) matrix, position);
-            CardDisp(matrix, ownSide->hand.cards[Now_23], 1, 5);
+            xglMatrixTrans(matrix, matrix, position);
+            CardDisp(&matrix, ownSide->hand.cards[Now_23], 1, 5);
         }
-        if (repeat & CGP_PAD_CONFIRM) {
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+        if (repeat & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->command.phaseTimer++;
         }
         break;
@@ -8633,13 +8673,13 @@ void CGPEndFaseProc(s32 side, CardGameWork *work, CardListWindow *window)
 
         CGPDispErrorMess2(side, CGP_ERR_DISCARD_CONFIRM);
         CGCPHandDispSub(&ownSide->hand, Now_23, flipped);
-        if (repeat & CGP_PAD_CONFIRM) {
+        if (repeat & PAD_CIRCLE) {
             work->command.phaseTimer = CGP_END_STEP_HAND_CHECK;
-            CardPlayDesertCard(&ownSide->hand, Now_23);
-            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
-        } else if (repeat & CGP_PAD_CANCEL) {
+            CardPlayDesertCard(ownSide, Now_23);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
+        } else if (repeat & PAD_CROSS) {
             work->command.phaseTimer = (s16) work->command.phaseTimer - 1;
-            xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
     }
@@ -8649,19 +8689,6 @@ void CGPEndFaseProc(s32 side, CardGameWork *work, CardListWindow *window)
     }
 }
 
-extern void CardPlayDispHand(s32 side, s32 faceUp, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispOperation(s32 side, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispYama(s32 side, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispSute(s32 side, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispJunk(s32 side, CardPlaySide *ownSide, Matrix4 matrix);
-extern void CardPlayDispCursor(s32 mode, CardGameWork *work, Matrix4 matrix);
-extern void CardEnemyMove(s32 side, CardGameWork *work);
-extern void CardEnemySet(s32 side, CardGameWork *work);
-extern void CaedGameWinMode(s32 outcome, CardGameWork *work, s32 round);
-extern s32 NewCMPGameModeExit(s32 player, CardGameWork *work, s32 round);
-extern void xglMatrixRotX(Matrix4 destination, const Matrix4 source, float angle);
 
 
 /*
@@ -8685,47 +8712,10 @@ extern void xglMatrixRotX(Matrix4 destination, const Matrix4 source, float angle
  * CardCommandInput (4 halfwords). Addressed through the structure members the compiler folds 0x5AD0
  * into each address and the shared offset register is lost.
  */
-/* Halfword index of command.input[0].held in CardGameWork (+0x5AD0 / 2). */
-#define CARD_PAD_INPUT0_WORD 0x2D68
-#define CARD_CMD_INPUT_WORDS (sizeof(CardCommandInput) / sizeof(u16))
-/* 0xC000 sign-extended: the loop keeps it in $9 (addiu $9,$0,-0x4000, 0x00a315c4) ahead of the work + 8 base in $10. */
-#define CARD_PAD_UP_PAIR (-0x4000)
 
-/*
- * CARD_PAD_FLIP(pad, mask, turned): flips the d-pad bits of the halfword `*pad` (two statements,
- * `turned` is a u16 temporary, `mask` is the 0xC000 pair as the sign-extended register constant the
- * loop keeps, see CARD_PAD_UP_PAIR). The 0xF000 d-pad nibble moves: the 0xC000 bit pair shifts left
- * by 2, the 0x3000 pair shifts right by 2, and the low 12 bits stay (PADFLIP, original
- * 0x00a315e0..0x00a31640).
- */
-#define CARD_PAD_FLIP(pad, mask, turned)                                     \
-    turned = ((*(pad) & 0xF000) << 2) & mask;                                 \
-    *(pad) = (((*(pad) & 0xF000) >> 2) & 0x3000) | (turned | (*(pad) & 0x0FFF))
 
-/* Operation cards CardGameProc checks on either side. 145, 146 and 147 refuse the end of a turn while the turn's
- * side still has a card to place and a disposal card with definition flag 4 (145) or 2 (147), or any disposal card
- * (146), waiting (`addiu $5,$0,0x91`, 0x00a31a68; `0x92`, 0x00a319f0; `0x93`, 0x00a31afc). 121 turns the hands
- * face down (`addiu $5,$0,0x79`, 0x00a32244 and 0x00a333b4). */
-#define CGP_OPE_DISPOSE_LOCK_FLAG4 145
-#define CGP_OPE_DISPOSE_LOCK_ANY 146
-#define CGP_OPE_DISPOSE_LOCK_FLAG2 147
-#define CGP_OPE_HANDS_FACE_DOWN 121
 
 /* Pad and flag bits CardGameProc tests. */
-/* Buttons that dismiss the error message window (`andi $2,$3,0xF0`, 0x00a3173c, on the pressed bits of the side's pad). */
-#define CGP_PAD_FACE_BUTTONS 0x00F0
-/* Button that asks for the phase change (`andi $2,$23,0x80`, 0x00a31ce0). */
-#define CGP_PAD_SQUARE 0x0080
-/* Start button of either pad, which opens the menu (`andi $2,$2,0x800`, 0x00a31d28 for pad 0 and 0x00a31d64 for pad 1). */
-#define CGP_PAD_START 0x0800
-/* Button that turns the stage (`andi $2,$4,0x1` on cursorPressed, 0x00a32028). */
-#define CGP_PAD_ROTATE_STAGE 0x0001
-/* CardGameWork.flags bit that hides the hands (`andi $2,$3,0x80` on the flags halfword, 0x00a321e8 and 0x00a32354). */
-#define CGP_FLAG_HIDE_HANDS 0x80
-/* Fixed EE runtime address of the model the error window of CardGameProc enters after the texture
- * (`lui $4,0x1DA8` + `ori $4,$4,0x8100`, 0x00a31714..0x00a3171c). */
-#define CGP_GAME_MESS_MODEL 0x01DA8100
-#define PI_F 3.1415927f
 
 s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round)
 {
@@ -8744,14 +8734,14 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
     u16 cpuFoe;
 
     result = 0;
-    switch ((s16) work->command.phase) {
-    case 0:
-    case 1:
-    case 2:
-    case 3:
-    case 5:
-    case 6:
-    case 11:
+    switch (work->command.phase) {
+    case CARD_PHASE_DRAW:
+    case CARD_PHASE_MOVE:
+    case CARD_PHASE_EVENT:
+    case CARD_PHASE_SET:
+    case CARD_PHASE_BATTLE:
+    case CARD_PHASE_ADJUST:
+    case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
         side = 0;
         pressed = work->command.input[0].pressed;
         break;
@@ -8789,16 +8779,16 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         vec[2] = 1.0f;
         vec[3] = 1.0f;
         xglMatrixUnit(matrix.m);
-        xglMatrixTrans(matrix.m, (const float (*)[4]) matrix.m, offset);
-        xglMatrixScale(matrix.m, (const float (*)[4]) matrix.m, vec);
-        nmlModelSetPlace(matrix.m);
+        xglMatrixTrans(matrix.m, matrix.m, offset);
+        xglMatrixScale(matrix.m, matrix.m, vec);
+        nmlModelSetPlace(&matrix.m);
         if (side == 0) {
-            nmlModelSetLight(Player1Color, asDir);
+            nmlModelSetLight(&Player1Color, &asDir);
         } else {
-            nmlModelSetLight(Player2Color, asDir);
+            nmlModelSetLight(&Player2Color, &asDir);
         }
-        nmlModelSetTexture((void *) CGP_ERROR_MESS_TEXTURE);
-        nmlModelEntryCard((void *) CGP_GAME_MESS_MODEL);
+        nmlModelSetTexture(CGP_PANEL_TEXTURE);
+        nmlModelEntryCard(CGP_GAME_MESS_MODEL);
         if (work->errorMessKind != 0) {
             u16 answer = work->command.input[0].pressed;
 
@@ -8806,7 +8796,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                 answer = work->command.input[1].pressed;
             }
             if (answer & CGP_PAD_FACE_BUTTONS) {
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 work->errorMessKind = 0;
                 work->flags &= ~CGP_FLAG_ERROR_PLUS;
             }
@@ -8819,82 +8809,82 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                 work->interruptMess = 0;
             }
         } else {
-            if ((u16) (work->command.flowRequest - 3) >= 3) {
+            if ((u16) (work->command.flowRequest - CARD_FLOW_ENEMY_DECK_OUT) > CARD_FLOW_FINAL_ROUND - CARD_FLOW_ENEMY_DECK_OUT) {
                 if (CardPlayYamaCnt(&work->enemy) == 0) {
                     work->command.step = 0;
-                    work->command.flowRequest = 3;
+                    work->command.flowRequest = CARD_FLOW_ENEMY_DECK_OUT;
                 } else if (CardPlayYamaCnt(&work->player) == 0) {
                     work->command.step = 0;
-                    work->command.flowRequest = 4;
+                    work->command.flowRequest = CARD_FLOW_PLAYER_DECK_OUT;
                 }
             }
-            if ((s16) work->command.phase != 5 && (s16) work->command.phase != 12) {
+            if (work->command.phase != CARD_PHASE_BATTLE && work->command.phase != CARD_PHASE_BATTLE + CARD_PHASES_PER_SIDE) {
                 place.area = CGP_AREA_PLAYER_BATTLE;
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     place.slot = i;
                     CGPHPCheckSub(work->definitions, &work->player, &work->player.battle[i].battle, &place);
                 }
                 place.area = CGP_AREA_PLAYER_DISPOSAL;
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     place.slot = i;
                     CGPHPCheckSub(work->definitions, &work->player, &work->player.disposal[i].battle, &place);
                 }
                 place.area = CGP_AREA_ENEMY_BATTLE;
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     place.slot = i;
                     CGPHPCheckSub(work->definitions, &work->enemy, &work->enemy.battle[i].battle, &place);
                 }
                 place.area = CGP_AREA_ENEMY_DISPOSAL;
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                     place.slot = i;
                     CGPHPCheckSub(work->definitions, &work->enemy, &work->enemy.disposal[i].battle, &place);
                 }
             }
             if (work->command.flowRequest != 0) {
                 switch (work->command.flowRequest) {
-                case 1:
+                case CARD_FLOW_CONFIRM:
                     CGPDispErrorMess(-1, 0);
-                    if (pressed & CGP_PAD_CONFIRM) {
+                    if (pressed & PAD_CIRCLE) {
                         CardPlaySide *turnSide = &work->player;
                         s32 blocked;
                         s32 slot;
 
-                        xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
-                        switch ((s16) work->command.phase) {
-                        case 8:
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
+                        switch (work->command.phase) {
+                        case CARD_PHASE_MOVE + CARD_PHASES_PER_SIDE:
                             turnSide = &work->enemy;
                             /* fall through */
-                        case 1:
+                        case CARD_PHASE_MOVE:
                             blocked = 0;
-                            if (CardPlayCntOpe(&work->player, CGP_OPE_DISPOSE_LOCK_ANY) != 0 || CardPlayCntOpe(&work->enemy, CGP_OPE_DISPOSE_LOCK_ANY) != 0) {
-                                if (CardPlayBattleCnt(turnSide) < 4 && CardPlayDisposeCnt(turnSide) > 0) {
-                                    CGPSetErrorMessPlus(1, work, 14, CGP_OPE_DISPOSE_LOCK_ANY);
-                                    xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                            if (CardPlayCntOpe(&work->player, CARD_ID_COMPULSORY_SORTIE) != 0 || CardPlayCntOpe(&work->enemy, CARD_ID_COMPULSORY_SORTIE) != 0) {
+                                if (CardPlayBattleCnt(turnSide) < CARD_BOARD_SLOTS && CardPlayDisposeCnt(turnSide) > 0) {
+                                    CGPSetErrorMessPlus(1, work, CGP_ERR_CARDS_TO_PLAY, CARD_ID_COMPULSORY_SORTIE);
+                                    xglSoundEffectNormalID(SE_BUZZER, 0);
                                     blocked = 1;
                                 }
                             }
-                            if (CardPlayCntOpe(&work->player, CGP_OPE_DISPOSE_LOCK_FLAG4) != 0 || CardPlayCntOpe(&work->enemy, CGP_OPE_DISPOSE_LOCK_FLAG4) != 0) {
-                                if (CardPlayBattleCnt(turnSide) < 4 && CardPlayDisposeCnt(turnSide) > 0) {
+                            if (CardPlayCntOpe(&work->player, CARD_ID_DSSS) != 0 || CardPlayCntOpe(&work->enemy, CARD_ID_DSSS) != 0) {
+                                if (CardPlayBattleCnt(turnSide) < CARD_BOARD_SLOTS && CardPlayDisposeCnt(turnSide) > 0) {
                                     blocked = 0;
-                                    for (slot = 0; slot < 4; slot++) {
+                                    for (slot = 0; slot < CARD_BOARD_SLOTS; slot++) {
                                         if (turnSide->disposal[slot].battle.layers[0].cardId >= 0 &&
-                                            (work->definitions[turnSide->disposal[slot].battle.layers[0].cardId].flags & 4)) {
-                                            CGPSetErrorMessPlus(1, work, 14, CGP_OPE_DISPOSE_LOCK_FLAG4);
-                                            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                                            (work->definitions[turnSide->disposal[slot].battle.layers[0].cardId].flags & CARD_ATTR_GNOSIS)) {
+                                            CGPSetErrorMessPlus(1, work, CGP_ERR_CARDS_TO_PLAY, CARD_ID_DSSS);
+                                            xglSoundEffectNormalID(SE_BUZZER, 0);
                                             blocked = 1;
                                             break;
                                         }
                                     }
                                 }
                             }
-                            if (CardPlayCntOpe(&work->player, CGP_OPE_DISPOSE_LOCK_FLAG2) != 0 || CardPlayCntOpe(&work->enemy, CGP_OPE_DISPOSE_LOCK_FLAG2) != 0) {
-                                if (CardPlayBattleCnt(turnSide) < 4 && CardPlayDisposeCnt(turnSide) > 0) {
+                            if (CardPlayCntOpe(&work->player, CARD_ID_OVERRIDE_CODE) != 0 || CardPlayCntOpe(&work->enemy, CARD_ID_OVERRIDE_CODE) != 0) {
+                                if (CardPlayBattleCnt(turnSide) < CARD_BOARD_SLOTS && CardPlayDisposeCnt(turnSide) > 0) {
                                     blocked = 0;
-                                    for (slot = 0; slot < 4; slot++) {
+                                    for (slot = 0; slot < CARD_BOARD_SLOTS; slot++) {
                                         if (turnSide->disposal[slot].battle.layers[0].cardId >= 0 &&
-                                            (work->definitions[turnSide->disposal[slot].battle.layers[0].cardId].flags & 2)) {
-                                            CGPSetErrorMessPlus(1, work, 14, CGP_OPE_DISPOSE_LOCK_FLAG2);
-                                            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                                            (work->definitions[turnSide->disposal[slot].battle.layers[0].cardId].flags & CARD_ATTR_REALIAN)) {
+                                            CGPSetErrorMessPlus(1, work, CGP_ERR_CARDS_TO_PLAY, CARD_ID_OVERRIDE_CODE);
+                                            xglSoundEffectNormalID(SE_BUZZER, 0);
                                             blocked = 1;
                                             break;
                                         }
@@ -8906,12 +8896,12 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                                 CGPNextTurnSub(work);
                             }
                             break;
-                        case 4:
+                        case CARD_PHASE_BLOCK:
                             CGPCommFaseEndSub(0, &work->player, work);
                             work->command.flowRequest = 0;
                             CGPNextTurnSub(work);
                             break;
-                        case 11:
+                        case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
                             CGPCommFaseEndSub(1, &work->enemy, work);
                             work->command.flowRequest = 0;
                             CGPNextTurnSub(work);
@@ -8921,31 +8911,31 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                             CGPNextTurnSub(work);
                             break;
                         }
-                    } else if (pressed & CGP_PAD_CANCEL) {
+                    } else if (pressed & PAD_CROSS) {
                         work->command.flowRequest = 0;
-                        xglSoundEffectNormalID(CGP_SE_CANCEL, 0);
+                        xglSoundEffectNormalID(SE_CANCEL, 0);
                     }
                     break;
-                case 3:
-                    if (work->fase == 9) {
-                        CaedGameWinMode(1, work, round);
+                case CARD_FLOW_ENEMY_DECK_OUT:
+                    if (work->fase == CARD_FASE_BATTLE_2P) {
+                        CaedGameWinMode(CARD_WIN_OUTCOME_ENEMY_DECK_OUT_FASE9, work, round);
                     } else {
-                        CaedGameWinMode(0, work, round);
+                        CaedGameWinMode(CARD_WIN_OUTCOME_ENEMY_DECK_OUT, work, round);
                     }
                     result = 1;
                     break;
-                case 4:
-                    if (work->fase == 9) {
-                        CaedGameWinMode(2, work, round);
+                case CARD_FLOW_PLAYER_DECK_OUT:
+                    if (work->fase == CARD_FASE_BATTLE_2P) {
+                        CaedGameWinMode(CARD_WIN_OUTCOME_PLAYER_DECK_OUT_FASE9, work, round);
                     } else {
-                        CaedGameWinMode(-1, work, round);
+                        CaedGameWinMode(CARD_WIN_OUTCOME_PLAYER_DECK_OUT, work, round);
                     }
                     result = 2;
                     break;
-                case 5:
-                    CaedGameWinMode(3, work, round);
+                case CARD_FLOW_FINAL_ROUND:
+                    CaedGameWinMode(CARD_WIN_OUTCOME_FINAL_ROUND, work, round);
                     break;
-                case 6:
+                case CARD_FLOW_START_MENU:
                 {
                     s32 exitResult = NewCMPGameModeExit(work->menuPlayer, work, round);
 
@@ -8953,10 +8943,10 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                         work->command.flowRequest = 0;
                     } else if (exitResult != 0) {
                         if (CGPChkFaseLock(work)) {
-                            work->command.flowRequest = 1;
-                            xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                            work->command.flowRequest = CARD_FLOW_CONFIRM;
+                            xglSoundEffectNormalID(SE_DECIDE, 0);
                         } else {
-                            xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                            xglSoundEffectNormalID(SE_BUZZER, 0);
                         }
                     }
                     break;
@@ -8965,48 +8955,48 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
             } else {
                 if (pressed & CGP_PAD_SQUARE) {
                     if (CGPChkFaseLock(work)) {
-                        work->command.flowRequest = 1;
-                        xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                        work->command.flowRequest = CARD_FLOW_CONFIRM;
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
                     } else {
-                        xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+                        xglSoundEffectNormalID(SE_BUZZER, 0);
                     }
                 }
                 if (work->command.input[0].pressed & CGP_PAD_START) {
-                    work->command.flowRequest = 6;
+                    work->command.flowRequest = CARD_FLOW_START_MENU;
                     work->menuPlayer = 0;
                     work->command.exitMenuSub = -1;
                     work->command.exitMenuItem = 0;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 } else if (work->command.input[1].pressed & CGP_PAD_START) {
-                    work->command.flowRequest = 6;
+                    work->command.flowRequest = CARD_FLOW_START_MENU;
                     work->menuPlayer = 1;
                     work->command.exitMenuSub = -1;
                     work->command.exitMenuItem = 0;
-                    xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                 }
                 if (work->fadeOutFlag != 0) {
                     work->fadeOutFlag = 0;
                     CGPNextTurnSub(work);
                 } else {
-                    switch ((s16) work->command.phase) {
-                    case 0:
+                    switch (work->command.phase) {
+                    case CARD_PHASE_DRAW:
                         CGPDrawFaseProc(0, work, &work->player, &work->enemy);
                         break;
-                    case 1:
+                    case CARD_PHASE_MOVE:
                         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
                             CardEnemyMove(0, work);
                         } else {
                             CGPMoveFaseProc(0, work, &work->player);
                         }
                         break;
-                    case 3:
+                    case CARD_PHASE_SET:
                         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
                             CardEnemySet(0, work);
                         } else {
                             CGPSetFaseProc(0, work, &work->player);
                         }
                         break;
-                    case 4:
+                    case CARD_PHASE_BLOCK:
                         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
                             cpuFoe = 1;
                         } else {
@@ -9019,30 +9009,30 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                         }
                         CGPCommFaseSub(1, work, cpuTurn, cpuFoe);
                         break;
-                    case 5:
+                    case CARD_PHASE_BATTLE:
                         CGPBattleFaseProc(0, work);
                         break;
-                    case 6:
+                    case CARD_PHASE_ADJUST:
                         CGPEndFaseProc(0, work, window);
                         break;
-                    case 7:
+                    case CARD_PHASE_DRAW + CARD_PHASES_PER_SIDE:
                         CGPDrawFaseProc(1, work, &work->enemy, &work->player);
                         break;
-                    case 8:
+                    case CARD_PHASE_MOVE + CARD_PHASES_PER_SIDE:
                         if (work->flags & CGP_FLAG_SIDE1_AUTO) {
                             CardEnemyMove(1, work);
                         } else {
                             CGPMoveFaseProc(1, work, &work->enemy);
                         }
                         break;
-                    case 10:
+                    case CARD_PHASE_SET + CARD_PHASES_PER_SIDE:
                         if (work->flags & CGP_FLAG_SIDE1_AUTO) {
                             CardEnemySet(1, work);
                         } else {
                             CGPSetFaseProc(1, work, &work->enemy);
                         }
                         break;
-                    case 9:
+                    case CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE:
                         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
                             cpuFoe = 1;
                         } else {
@@ -9055,8 +9045,8 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                         }
                         CGPCommFaseSub(1, work, cpuTurn, cpuFoe);
                         break;
-                    case 2:
-                    case 11:
+                    case CARD_PHASE_EVENT:
+                    case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
                         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
                             cpuTurn = 1;
                         } else {
@@ -9069,10 +9059,10 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
                         }
                         CGPCommFaseSub(0, work, cpuTurn, cpuFoe);
                         break;
-                    case 12:
+                    case CARD_PHASE_BATTLE + CARD_PHASES_PER_SIDE:
                         CGPBattleFaseProc(1, work);
                         break;
-                    case 13:
+                    case CARD_PHASE_ADJUST + CARD_PHASES_PER_SIDE:
                         CGPEndFaseProc(1, work, window);
                         break;
                     }
@@ -9081,14 +9071,14 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         }
     }
     xglMatrixUnit(matrix.m);
-    switch ((s16) work->command.phase) {
-    case 0:
-    case 1:
-    case 2:
-    case 3:
-    case 5:
-    case 6:
-    case 11:
+    switch (work->command.phase) {
+    case CARD_PHASE_DRAW:
+    case CARD_PHASE_MOVE:
+    case CARD_PHASE_EVENT:
+    case CARD_PHASE_SET:
+    case CARD_PHASE_BATTLE:
+    case CARD_PHASE_ADJUST:
+    case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
         cursorPressed = work->command.input[0].pressed;
         break;
     default:
@@ -9109,12 +9099,12 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
     }
     if (work->rotStageCooldown == 0) {
         if (cursorPressed & CGP_PAD_ROTATE_STAGE) {
-            if ((s16) work->command.phase == 5 || (s16) work->command.phase == 12) {
-                xglSoundEffectNormalID(CGP_SE_BUZZER, 0);
+            if (work->command.phase == CARD_PHASE_BATTLE || work->command.phase == CARD_PHASE_BATTLE + CARD_PHASES_PER_SIDE) {
+                xglSoundEffectNormalID(SE_BUZZER, 0);
             } else {
-                work->rotStageCooldown = 20;
+                work->rotStageCooldown = CGP_ROT_STAGE_COOLDOWN;
                 work->rotStageId = (work->rotStageId + 1) & 1;
-                xglSoundEffectNormalID(CGP_SE_DECIDE, 0);
+                xglSoundEffectNormalID(SE_DECIDE, 0);
             }
         }
     } else {
@@ -9127,9 +9117,9 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         vec[2] = work->rotStageVector[0] - work->command.slideOffset;
     }
     vec[3] = 1.0f;
-    xglMatrixTrans(matrix.m, (const float (*)[4]) matrix.m, vec);
-    xglMatrixRotX(matrix.m, (const float (*)[4]) matrix.m, work->rotStageVector[1] / 180.0f * PI_F);
-    xglMatrixRotZ(matrix.m, (const float (*)[4]) matrix.m, work->rotStageVector[2] / 180.0f * PI_F);
+    xglMatrixTrans(matrix.m, matrix.m, vec);
+    xglMatrixRotX(matrix.m, matrix.m, work->rotStageVector[1] / 180.0f * PI_F);
+    xglMatrixRotZ(matrix.m, matrix.m, work->rotStageVector[2] / 180.0f * PI_F);
     __asm__ __volatile__(
         "lq $2, 0(%1)\n"
         "sq $2, 0(%0)\n"
@@ -9154,7 +9144,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         :
         : "r" ((CardEffectMatrix *) work->models[5].matrix), "r" (&matrix)
         : "$2", "memory");
-    xglMatrixRotZ(work->models[15].matrix, (const float (*)[4]) matrix.m, -work->rotStageVector[2] / 180.0f * PI_F);
+    xglMatrixRotZ(work->models[15].matrix, matrix.m, -work->rotStageVector[2] / 180.0f * PI_F);
     __asm__ __volatile__(
         "lq $2, 0(%1)\n"
         "sq $2, 0(%0)\n"
@@ -9172,18 +9162,18 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         if (work->flags & CGP_FLAG_SIDE0_AUTO) {
             faceUp = 1;
         } else {
-            switch ((s16) work->command.phase) {
-            case 4:
-            case 7:
-            case 8:
-            case 9:
-            case 10:
-            case 12:
-            case 13:
+            switch (work->command.phase) {
+            case CARD_PHASE_BLOCK:
+            case CARD_PHASE_DRAW + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_MOVE + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_SET + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_BATTLE + CARD_PHASES_PER_SIDE:
+            case CARD_PHASE_ADJUST + CARD_PHASES_PER_SIDE:
                 faceUp = 1;
                 break;
-            case 2:
-            case 11:
+            case CARD_PHASE_EVENT:
+            case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
                 if ((s16) work->command.phaseTimer >= 10) {
                     faceUp = 1;
                 }
@@ -9191,7 +9181,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
             }
         }
     }
-    if (CardPlayCntOpe(&work->player, CGP_OPE_HANDS_FACE_DOWN) != 0 || CardPlayCntOpe(&work->enemy, CGP_OPE_HANDS_FACE_DOWN) != 0) {
+    if (CardPlayCntOpe(&work->player, CARD_ID_ANALYZE) != 0 || CardPlayCntOpe(&work->enemy, CARD_ID_ANALYZE) != 0) {
         faceUp = 0;
     }
     CardPlayDispHand(0, faceUp, &work->player, matrix.m);
@@ -9202,7 +9192,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
     CardPlayDispSute(0, &work->player, matrix.m);
     CardPlayDispJunk(0, &work->player, matrix.m);
     CardDispEffect(0, work, &matrix);
-    xglMatrixRotZ(matrix.m, (const float (*)[4]) matrix.m, PI_F);
+    xglMatrixRotZ(matrix.m, matrix.m, PI_F);
     __asm__ __volatile__(
         "lq $2, 0(%1)\n"
         "sq $2, 0(%0)\n"
@@ -9232,18 +9222,18 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         if (work->flags & CGP_FLAG_SIDE1_AUTO) {
             faceUp = 1;
         } else {
-            switch ((s16) work->command.phase) {
-            case 0:
-            case 1:
-            case 2:
-            case 3:
-            case 5:
-            case 6:
-            case 11:
+            switch (work->command.phase) {
+            case CARD_PHASE_DRAW:
+            case CARD_PHASE_MOVE:
+            case CARD_PHASE_EVENT:
+            case CARD_PHASE_SET:
+            case CARD_PHASE_BATTLE:
+            case CARD_PHASE_ADJUST:
+            case CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE:
                 faceUp = 1;
                 break;
-            case 4:
-            case 9:
+            case CARD_PHASE_BLOCK:
+            case CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE:
                 if ((s16) work->command.phaseTimer >= 10) {
                     faceUp = 1;
                 }
@@ -9251,7 +9241,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
             }
         }
     }
-    if (CardPlayCntOpe(&work->player, CGP_OPE_HANDS_FACE_DOWN) != 0 || CardPlayCntOpe(&work->enemy, CGP_OPE_HANDS_FACE_DOWN) != 0) {
+    if (CardPlayCntOpe(&work->player, CARD_ID_ANALYZE) != 0 || CardPlayCntOpe(&work->enemy, CARD_ID_ANALYZE) != 0) {
         faceUp = 0;
     }
     CardPlayDispHand(1, faceUp, &work->enemy, matrix.m);
@@ -9327,92 +9317,6 @@ static char OLMess0080Txt[48] = "\013\031\003\r\000 \243\262P can use a battle o
 
 static char OLMess0090Txt[56] = "\013\031\003\r\000 \243\262P can use an event card or the card text.";
 
-extern char EMTitle03Txt[24];
-extern char EMMess072Txt[32];
-extern char EMMess016Txt[32];
-extern char EMMess060Txt[32];
-extern char EMTitle90Txt[24];
-extern char EMMess091Txt[32];
-extern char EMMess092Txt[32];
-extern char EMMess102Txt[40];
-extern char EMTitle95Txt[24];
-extern char EMMess018Txt[32];
-extern char EMMess084Txt[40];
-extern char EMMess902Txt[];
-extern char EMMess062Txt[40];
-extern char EMMess991Txt[16];
-extern char EMMess017Txt[32];
-extern char EMMess057Txt[8];
-extern char EMTitle93Txt[24];
-extern char EMMess078Txt[32];
-extern char EMMess900Txt[24];
-extern char EMMess103Txt[8];
-extern char EMMess001Txt[24];
-extern char EMMess070Txt[32];
-extern char EMMess020Txt[40];
-extern char EMMess014Txt[40];
-extern char EMMess012Txt[40];
-extern char EMMess000Txt[32];
-extern char EMMess052Txt[40];
-extern char EMMess013Txt[24];
-extern char EMMess074Txt[32];
-extern char EMMess110Txt[40];
-extern char EMMess073Txt[24];
-extern char EMMess111Txt[24];
-extern char EMMess094Txt[40];
-extern char EMMess054Txt[24];
-extern char EMMess077Txt[32];
-extern char EMMess063Txt[32];
-extern char EMMess061Txt[32];
-extern char EMMess010Txt[32];
-extern char EMMess040Txt[32];
-extern char EMTitle02Txt[24];
-extern char EMMess910Txt[24];
-extern char EMMess056Txt[32];
-extern char EMMess080Txt[24];
-extern char EMMess093Txt[32];
-extern char EMTitle01Txt[24];
-extern char EMMess041Txt[32];
-extern char EMTitle00Txt[24];
-extern char EMTitle99Txt[24];
-extern char EMMess030Txt[32];
-extern char EMMess076Txt[8];
-extern char EMMess990Txt[16];
-extern char EMTitle94Txt[24];
-extern char EMMess903Txt[];
-extern char EMMess050Txt[32];
-extern char EMMess101Txt[8];
-extern char EMTitle04Txt[32];
-extern char EMMess015Txt[24];
-extern char EMTitle92Txt[24];
-extern char EMMess071Txt[24];
-extern char EMMess090Txt[24];
-extern char EMMess901Txt[];
-extern char EMMess083Txt[40];
-extern char EMMess031Txt[24];
-extern char EMMess082Txt[24];
-extern char EMMess053Txt[32];
-extern char EMTitle91Txt[24];
-extern char EMMess055Txt[32];
-extern char EMMess051Txt[32];
-extern char EMMess019Txt[24];
-extern char EMMess100Txt[40];
-extern char EMMess075Txt[40];
-extern char EMMess011Txt[24];
-extern char EMMess081Txt[40];
-extern float OperationPos2P[4][3];
-extern float BattlePos2P[4][3];
-extern float DisposePos2P[4][3];
-extern unsigned char SampleDeck0[];
-extern unsigned char SampleDeck1[];
-extern unsigned char SampleDeck2[];
-extern unsigned char SampleDeck3[];
-extern unsigned char SampleDeck4[];
-extern unsigned char SampleDeck5[];
-extern unsigned char SampleDeck6[];
-extern unsigned char SampleDeck7[];
-extern unsigned char SampleDeck8[];
-extern unsigned char SampleDeck9[];
 
 char EMTitle00Txt[24] = "\031\003\014\200@@Phase Error";
 
@@ -9568,7 +9472,13 @@ char EMMess991Txt[16] = "\013\031\003\r\002P wins.";
 
 char * ErrorMessTbl[39][5] = { { EMTitle90Txt, EMMess900Txt, 0, 0, EMMess901Txt }, { EMTitle01Txt, EMMess018Txt, EMMess019Txt, 0, EMMess902Txt }, { EMTitle04Txt, EMMess040Txt, EMMess041Txt, 0, 0 }, { EMTitle04Txt, EMMess040Txt, EMMess041Txt, 0, 0 }, { EMTitle04Txt, EMMess040Txt, EMMess041Txt, 0, 0 }, { EMTitle01Txt, EMMess060Txt, EMMess061Txt, 0, 0 }, { EMTitle90Txt, EMMess020Txt, 0, 0, EMMess902Txt }, { EMTitle01Txt, 0, 0, 0, 0 }, { EMTitle01Txt, 0, 0, 0, 0 }, { EMTitle01Txt, EMMess062Txt, EMMess063Txt, 0, EMMess902Txt }, { EMTitle01Txt, EMMess014Txt, EMMess015Txt, EMMess016Txt, EMMess017Txt }, { EMTitle00Txt, EMMess000Txt, EMMess001Txt, 0, 0 }, { EMTitle01Txt, EMMess010Txt, EMMess011Txt, EMMess012Txt, EMMess013Txt }, { EMTitle03Txt, EMMess020Txt, 0, 0, 0 }, { EMTitle02Txt, EMMess030Txt, EMMess031Txt, 0, 0 }, { EMTitle02Txt, EMMess050Txt, EMMess051Txt, 0, 0 }, { EMTitle01Txt, EMMess020Txt, 0, 0, 0 }, { EMTitle03Txt, EMMess052Txt, EMMess051Txt, 0, 0 }, { EMTitle03Txt, EMMess000Txt, EMMess001Txt, 0, 0 }, { EMTitle03Txt, EMMess053Txt, EMMess054Txt, EMMess057Txt, 0 }, { EMTitle90Txt, EMMess055Txt, EMMess056Txt, 0, 0 }, { EMTitle90Txt, EMMess910Txt, 0, 0, EMMess902Txt }, { EMTitle91Txt, EMMess070Txt, EMMess071Txt, 0, EMMess901Txt }, { EMTitle92Txt, EMMess072Txt, EMMess076Txt, 0, EMMess901Txt }, { EMTitle93Txt, EMMess073Txt, 0, 0, EMMess901Txt }, { EMTitle93Txt, EMMess074Txt, 0, 0, EMMess901Txt }, { EMTitle93Txt, EMMess075Txt, EMMess076Txt, 0, EMMess901Txt }, { EMTitle93Txt, EMMess075Txt, EMMess076Txt, 0, EMMess901Txt }, { EMTitle91Txt, EMMess080Txt, EMMess081Txt, EMMess101Txt, EMMess902Txt }, { EMTitle91Txt, EMMess082Txt, EMMess083Txt, EMMess084Txt, EMMess902Txt }, { EMTitle90Txt, EMMess077Txt, EMMess078Txt, EMMess910Txt, EMMess902Txt }, { EMTitle99Txt, EMMess990Txt, 0, 0, 0 }, { EMTitle99Txt, EMMess991Txt, 0, 0, 0 }, { EMTitle94Txt, EMMess090Txt, EMMess091Txt, EMMess094Txt, EMMess903Txt }, { EMTitle94Txt, EMMess090Txt, EMMess092Txt, EMMess094Txt, EMMess903Txt }, { EMTitle94Txt, EMMess090Txt, EMMess093Txt, EMMess094Txt, EMMess903Txt }, { EMTitle92Txt, EMMess100Txt, EMMess101Txt, 0, EMMess902Txt }, { EMTitle95Txt, EMMess102Txt, EMMess103Txt, 0, EMMess902Txt }, { EMTitle04Txt, EMMess110Txt, EMMess111Txt, 0, EMMess902Txt } };
 
-u8 HelpPageList[14] = { 33, 34, 35, 38, 40, 41, 43, 33, 34, 35, 38, 40, 41, 43 };
+u8 HelpPageList[14] = {
+    CARD_HELP_PAGE_DRAW_PHASE, CARD_HELP_PAGE_MOVE_PHASE, CARD_HELP_PAGE_EVENT_PHASE_A,
+    CARD_HELP_PAGE_SET_PHASE_A, CARD_HELP_PAGE_BLOCK_PHASE, CARD_HELP_PAGE_BATTLE_PHASE_A,
+    CARD_HELP_PAGE_ADJUST_PHASE, CARD_HELP_PAGE_DRAW_PHASE, CARD_HELP_PAGE_MOVE_PHASE,
+    CARD_HELP_PAGE_EVENT_PHASE_A, CARD_HELP_PAGE_SET_PHASE_A, CARD_HELP_PAGE_BLOCK_PHASE,
+    CARD_HELP_PAGE_BATTLE_PHASE_A, CARD_HELP_PAGE_ADJUST_PHASE
+};
 
 float *CursorTbl[32] = {
     OperationPos2P[3], BattlePos2P[3], BattlePos2P[2], DisposePos2P[3],
@@ -9705,13 +9615,13 @@ static s8 cardno_3;
 
 static s16 no_4;
 
-static CGPCursorPosition mas_5;
+static CardCursorPosition mas_5;
 
-static CGPCursorPosition mas_6;
+static CardCursorPosition mas_6;
 
 static s32 OfferingCnt_7;
 
-static CGPCursorPosition mas_15;
+static CardCursorPosition mas_15;
 
 static s16 no_16;
 

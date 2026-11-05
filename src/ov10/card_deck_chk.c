@@ -2,71 +2,65 @@
  * OV10 original TU 4: 0x00a19a20..0x00a1c1b8 (5 functions)
  */
 #include "common.h"
-
-char ZenkakuListA[20] = "\xA1\xA1" "1 2 3 4 5 6 7 8 9 ";
 #include "shared.h"
+#include "ov10/cgp.h"
+#include "ov10/card_play_sound1.h"
+#include "ov10/card_fread.h"
+#include "ov10/card_enemy.h"
+#include "ov10/card_disp.h"
+#include "ov10/card_deck_chk.h"
+#include "main/xgl_2.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+#include "main/nml_model_set.h"
 
 /*
- * PadData halfwords used by the deck screens. The bit positions follow the
- * standard PS2 pad layout; the on-screen prompts show circle = accept and
- * cross = cancel.
+ * PadData halfwords used by the deck screens (the shared PAD_* bits): the on-screen prompts
+ * show circle = accept and cross = cancel. The L/R shoulder buttons step the filters.
  */
-#define CARD_PAD_ATTR_PREV 0x0001      /* L2 */
-#define CARD_PAD_ATTR_NEXT 0x0002      /* R2 */
-#define CARD_PAD_TYPE_PREV 0x0004      /* L1 */
-#define CARD_PAD_TYPE_NEXT 0x0008      /* R1 */
-#define CARD_PAD_PREVIEW 0x0010        /* triangle, held: show the selected card large */
-#define CARD_PAD_ACCEPT 0x0020         /* circle */
-#define CARD_PAD_CANCEL 0x0040         /* cross */
+#define CARD_PAD_ATTR_PREV PAD_L2
+#define CARD_PAD_ATTR_NEXT PAD_R2
+#define CARD_PAD_TYPE_PREV PAD_L1
+#define CARD_PAD_TYPE_NEXT PAD_R1
+#define CARD_PAD_PREVIEW PAD_TRIANGLE  /* held: show the selected card large */
 
-/* D-pad bits: UP and DOWN scroll the focused list, RIGHT and LEFT move focus
- * between the list and the deck (RIGHT/LEFT as tested by CardOpenProc, see
- * ov10/cgp.h). */
-#define CARD_PAD_UP 0x1000
-#define CARD_PAD_RIGHT 0x2000
-#define CARD_PAD_DOWN 0x4000
-#define CARD_PAD_LEFT 0x8000
+/*
+ * Placement of the selected card shown beside the lists (matrix scaled by CARD_SELECTED_SCALE)
+ * and of the card shown large while CARD_PAD_PREVIEW is held (CARD_PREVIEW_OFFSET_X mirrored
+ * to the side of the focused pane).
+ */
+#define CARD_SELECTED_OFFSET_Y  -0.3932f
+#define CARD_SELECTED_OFFSET_Z  0.1f
+#define CARD_SELECTED_SCALE     0.335f
+#define CARD_PREVIEW_OFFSET_X   1.15f
+#define CARD_PREVIEW_OFFSET_Y   0.45f
+#define CARD_PREVIEW_OFFSET_Z   0.2f
 
-/* Sound effect ids passed to xglSoundEffectNormalID by the deck screens. */
-#define CARD_SE_ACCEPT 1
-#define CARD_SE_CANCEL 2
-#define CARD_SE_CURSOR 3
+/*
+ * Prompt text positions (pixels): the optional deck title, the message and the accept/cancel
+ * line, and the font state reset printed before and after them.
+ */
+#define CARD_PROMPT_X           24
+#define CARD_PROMPT_TITLE_Y     312
+#define CARD_PROMPT_MESSAGE_Y   336
+#define CARD_PROMPT_BUTTONS_Y   360
+#define CARD_PROMPT_STATE_X     120
+#define CARD_PROMPT_STATE_Y     288
 
 /* Accept/cancel button prompt line (control codes position and colour the circle/cross icons). */
 #define CARD_PROMPT_ACCEPT_CANCEL \
     "\r\x04\x0c\x80\x40\x40\xa1\xfb \x0b\x19\x03\r\0Accept\xa1\xa1\r\x04\x0c\x40\x40\x80\xa1\xdf \x0b\x19\x03\r\0Cancel"
 
-/*
- * helpTopic ids the deck screens store in CardGameWork.helpTopic (+0x59BF, see
- * ov10/cgp.h) on entry: CardMakeDeckProc `li v0,55` at 0x00a19aac, CardLoadDeckProc
- * `li v0,58` at 0x00a1aa7c, CardSaveDeckProc `li v0,56` at 0x00a1b284 and
- * CardLoadDeckProc2 `li v0,58` at 0x00a1b9b4 (the same topic as CardLoadDeckProc).
- */
-#define CARD_HELP_TOPIC_MAKE_DECK 55
-#define CARD_HELP_TOPIC_SAVE_DECK 56
-#define CARD_HELP_TOPIC_LOAD_DECK 58
-
 /* Rows kept between the cursor and the window edge before the list scrolls (`slti v0,v1,2` and
- * windowRows - 2 in the scroll steps). */
+ * rows - 2 in the scroll steps). */
 #define CARD_SCROLL_MARGIN 2
 
-/* Render level argument of every nmlModelSetRenderLevel call in CardMakeDeckProc. */
-#define CARD_MODEL_RENDER_LEVEL 2
-
 /*
- * TypeMaskLst entries (card type bits) and the AttriMaskLst entries the type1/type2 filter
- * icons are chosen by in CardMakeDeckProc; the attribute masks are named by the icon they
- * select (type2_1..type2_6), their element meaning is not evidenced here.
+ * TypeMaskLst entries (CardDefinition.kind bits) and the AttriMaskLst entries the type1/type2
+ * filter icons are chosen by in CardMakeDeckProc. The attribute masks are the CARD_ATTR_*
+ * flags of ov10/cgp.h: icons type2_1..type2_6 are H, R, M, G, U and W (CARD_ATTR_WEAPON is
+ * both weapon bits, so it matches only the combined mask).
  */
-#define CARD_TYPE_MASK_B 0x01          /* icon type1_B */
-#define CARD_TYPE_MASK_E 0x02          /* icon type1_E */
-#define CARD_TYPE_MASK_S 0x04          /* icon type1_S */
-#define CARD_ATTR_MASK_1 0x01
-#define CARD_ATTR_MASK_2 0x02
-#define CARD_ATTR_MASK_3 0x08
-#define CARD_ATTR_MASK_4 0x04
-#define CARD_ATTR_MASK_5 0x10
-#define CARD_ATTR_MASK_6 0x60          /* two bits: the icon is chosen only on the combined mask */
 
 /* Cursor bit set while a window is not the focused pane. */
 #define CARD_PANE_INACTIVE 0x80
@@ -74,8 +68,7 @@ char ZenkakuListA[20] = "\xA1\xA1" "1 2 3 4 5 6 7 8 9 ";
 /* Cursor bits that hold the row index. */
 #define CARD_CURSOR_INDEX_MASK 0x7f
 
-/* A deck holds 40 cards, at most 3 copies of one card (CardDeckChk). */
-#define CARD_DECK_SIZE 40
+/* At most 3 copies of one card in a deck (CardDeckChk). */
 #define CARD_MAX_COPIES 3
 
 /* The stored-deck list shows five slots. */
@@ -86,7 +79,7 @@ char ZenkakuListA[20] = "\xA1\xA1" "1 2 3 4 5 6 7 8 9 ";
 #define CARD_ATTR_FILTER_COUNT 7
 
 /*
- * CardDeckListWindow.action requests. Scrolling is -1 (up) / 1 (down); the deck
+ * CardListWindow.mode requests. Scrolling is -1 (up) / 1 (down); the deck
  * builder also uses the add/remove requests, the list window the refresh.
  */
 enum {
@@ -96,6 +89,12 @@ enum {
     CARD_ACTION_ADD = 3,           /* add the selected card to the deck */
     CARD_ACTION_REMOVE = 4,        /* remove the selected card from the deck */
     CARD_ACTION_SCROLL_UP = -1
+};
+
+/* CardCommandControl.step of the deck load and save screens: pick a slot, then confirm it. */
+enum {
+    CARD_DECK_STEP_SELECT = 0,
+    CARD_DECK_STEP_CONFIRM = 1
 };
 
 /*
@@ -114,7 +113,7 @@ enum {
  * Deck-builder graphics, loaded by the caller (CardFread into fixed buffers):
  * the type filter icons type1_B/E/S, then the attribute icons type2_0..6 at
  * 0x400 intervals, and their textures. The digit models of the card number and
- * deck count are 0x400 apart, indexed by the digit.
+ * deck count are 0x400 apart, indexed by the digit (CARD_DIGIT_MODEL_BASE).
  */
 #define CARD_MODEL_TYPE1_B 0x01900000
 #define CARD_MODEL_TYPE1_E 0x01900400
@@ -126,79 +125,24 @@ enum {
 #define CARD_MODEL_TYPE2_4 0x01901C00
 #define CARD_MODEL_TYPE2_5 0x01902000
 #define CARD_MODEL_TYPE2_6 0x01902400
-#define CARD_TEXTURE_TYPE1_B 0x01908000
-#define CARD_TEXTURE_TYPE1_E 0x01918100
-#define CARD_TEXTURE_TYPE1_S 0x01928200
-#define CARD_TEXTURE_TYPE2_0 0x01938300
-#define CARD_DIGIT_MODEL_BASE 0x01C8A400
-#define CARD_DIGIT_MODEL_SHIFT 10
-#define CARD_DIGIT_TEXTURE 0x01C990A0
+#define CARD_TEXTURE_TYPE1_B ((const char *)0x01908000)
+#define CARD_TEXTURE_TYPE1_E ((const char *)0x01918100)
+#define CARD_TEXTURE_TYPE1_S ((const char *)0x01928200)
+#define CARD_TEXTURE_TYPE2_0 ((const char *)0x01938300)
 
-#include "ov10/cgp.h"
+char ZenkakuListA[20] = "\xA1\xA1" "1 2 3 4 5 6 7 8 9 ";
 
 static int ActiveCursol_0;
 static int ActiveCursol_2;
 static int ActiveCursol_4;
 static int ActiveCursol_6;
 
-/* The pad record's halfwords at +0x28 (buttons held), +0x2A (pressed this frame) and +0x2C (d-pad). */
-typedef struct CardPadState {
-    u8 unmodeled_00[0x28];
-    u16 held;
-    u16 pressed;
-    u16 directions;
-} CardPadState;
-
-extern CardPadState PadData;
-
-/* One entry of a deck or deck-list window: a card id and its copy count. */
-typedef struct CardDeckEntry {
-    s16 cardId;                    /* +0x00 */
-    s16 copies;                    /* +0x02 */
-} CardDeckEntry;
-
-/*
- * Card list window (filter list) or the deck window of the deck screens: the
- * cursor/scroll pair selects the row.
- */
-typedef struct CardDeckListWindow {
-    u8 unmodeled_00[2];
-    s8 typeFilter;                 /* +0x02: index into TypeMaskLst (list only) */
-    s8 attrFilter;                 /* +0x03: index into AttriMaskLst (list only) */
-    s8 action;                     /* +0x04: pending CARD_ACTION_* request */
-    s8 cursor;                     /* +0x05 */
-    u8 unmodeled_06[6];
-    s16 scroll;                    /* +0x0C */
-    s16 cursorLimit;               /* +0x0E */
-    s16 windowRows;                /* +0x10 */
-    s16 rowCount;                  /* +0x12 */
-    CardDeckEntry entries[CARD_DECK_SIZE]; /* +0x14 */
-} CardDeckListWindow;
-
-static CardDeckListWindow *pCnow_1;
-static CardDeckListWindow *pCnow_3;
-static CardDeckListWindow *pCnow_5;
-static CardDeckListWindow *pCnow_7;
-extern unsigned char *EnemyDeckLst[];
+static CardListWindow *pCnow_1;
+static CardListWindow *pCnow_3;
+static CardListWindow *pCnow_5;
+static CardListWindow *pCnow_7;
 static u8 TypeMaskLst[4];
 static u8 AttriMaskLst[7];
-
-void xglMatrixTrans(Matrix4 destination, Matrix4 source, const float translation[4]);
-void xglMatrixScale(Matrix4 destination, Matrix4 source, const float scale[4]);
-void xglSoundEffectNormalID(int id, int unused);
-int CardGetDeckAllCnt(void *deck);
-void CardDisp(float matrix[4][4], int cardId, int hasCopies, int active);
-void CardDeckListDisp(CardDeckListWindow *list);
-void CardDeckDisp(void *deck, void *definitions);
-void CardListDisp(void *list, CardGameWork *work);
-int CardGetDeckCardCnt(int cardId, void *deck);
-int CardAddDeck(void *deck, int cardId);
-void CardDelDeck(void *deck, int cardId);
-int CardMakeDispList(void *rows, u16 mask, void *definitions, int cardCount);
-void nmlModelSetPlace(float matrix[4][4]);
-void nmlModelSetTexture(int texture);
-void nmlModelSetRenderLevel(int level);
-void nmlModelEntryCard(int entry);
 
 int CardDeckChk(s16 *cards) {
     int first_index;
@@ -234,7 +178,7 @@ int CardDeckChk(s16 *cards) {
  * `exiting` is nonzero while the caller shows the exit prompt (the screen is
  * only drawn). Returns a CARD_DECK_MSG_* code when an edit is refused.
  */
-int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *deck, CardGameWork *work)
+int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work)
 {
     float matrix[4][4];
     float offset[4];
@@ -250,13 +194,12 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     int digit;
     int typeMask;
     int attr;
-    int texture;
+    const char *texture;
     int entry;
     int model;
 
-    /* Signed view of the owned-copy table: the original loads it with lh. */
-    ownedCount = (s16 *) work->ownedCount;
-    work->helpTopic = CARD_HELP_TOPIC_MAKE_DECK;
+    ownedCount = work->ownedCount;
+    work->helpTopic = CARD_HELP_PAGE_CREATING_DECKS;
 
     if (ActiveCursol_0 != 0) {
         pCnow_1 = deck;
@@ -270,11 +213,11 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
 
     result = 0;
     offset[0] = 0.0f;
-    offset[1] = -0.3932f;
-    offset[2] = 0.1f;
+    offset[1] = CARD_SELECTED_OFFSET_Y;
+    offset[2] = CARD_SELECTED_OFFSET_Z;
     offset[3] = 1.0f;
-    scale[1] = 0.335f;
-    scale[0] = 0.335f;
+    scale[1] = CARD_SELECTED_SCALE;
+    scale[0] = CARD_SELECTED_SCALE;
     scale[3] = 1.0f;
     scale[2] = 1.0f;
     xglMatrixUnit(matrix);
@@ -282,52 +225,52 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     xglMatrixScale(matrix, matrix, scale);
 
     if (exiting == 0) {
-        if (PadData.pressed & CARD_PAD_TYPE_NEXT) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+        if (PadData[0].half_2a & CARD_PAD_TYPE_NEXT) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             list->typeFilter++;
-            list->action = CARD_ACTION_REFRESH;
+            list->mode = CARD_ACTION_REFRESH;
         }
-        if (PadData.pressed & CARD_PAD_TYPE_PREV) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+        if (PadData[0].half_2a & CARD_PAD_TYPE_PREV) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             list->typeFilter--;
-            list->action = CARD_ACTION_REFRESH;
+            list->mode = CARD_ACTION_REFRESH;
         }
-        if (PadData.pressed & CARD_PAD_ATTR_NEXT) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+        if (PadData[0].half_2a & CARD_PAD_ATTR_NEXT) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             list->attrFilter++;
-            list->action = CARD_ACTION_REFRESH;
+            list->mode = CARD_ACTION_REFRESH;
         }
-        if (PadData.pressed & CARD_PAD_ATTR_PREV) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+        if (PadData[0].half_2a & CARD_PAD_ATTR_PREV) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             list->attrFilter--;
-            list->action = CARD_ACTION_REFRESH;
+            list->mode = CARD_ACTION_REFRESH;
         }
-        if (PadData.pressed & CARD_PAD_ACCEPT) {
-            xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
-            pCnow_1->action = CARD_ACTION_ADD;
+        if (PadData[0].half_2a & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
+            pCnow_1->mode = CARD_ACTION_ADD;
         }
-        if (PadData.pressed & CARD_PAD_CANCEL) {
-            xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
-            pCnow_1->action = CARD_ACTION_REMOVE;
+        if (PadData[0].half_2a & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
+            pCnow_1->mode = CARD_ACTION_REMOVE;
         }
-        if (PadData.directions & CARD_PAD_UP) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-            pCnow_1->action = CARD_ACTION_SCROLL_UP;
+        if (PadData[0].directions & PAD_UP) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
+            pCnow_1->mode = CARD_ACTION_SCROLL_UP;
         }
-        if (PadData.directions & CARD_PAD_DOWN) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-            pCnow_1->action = CARD_ACTION_SCROLL_DOWN;
+        if (PadData[0].directions & PAD_DOWN) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
+            pCnow_1->mode = CARD_ACTION_SCROLL_DOWN;
         }
-        if (PadData.directions & CARD_PAD_RIGHT) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+        if (PadData[0].directions & PAD_RIGHT) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             if (CardGetDeckAllCnt(deck) != 0) {
                 ActiveCursol_0 = 1;
                 list->cursor |= CARD_PANE_INACTIVE;
                 deck->cursor &= CARD_CURSOR_INDEX_MASK;
             }
         }
-        if (PadData.directions & CARD_PAD_LEFT) {
-            xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+        if (PadData[0].directions & PAD_LEFT) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             ActiveCursol_0 = 0;
             list->cursor &= CARD_CURSOR_INDEX_MASK;
             deck->cursor |= CARD_PANE_INACTIVE;
@@ -347,14 +290,14 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         list->attrFilter = 0;
     }
 
-    if (deck->action != CARD_ACTION_NONE) {
-        switch (deck->action) {
+    if (deck->mode != CARD_ACTION_NONE) {
+        switch (deck->mode) {
         case CARD_ACTION_SCROLL_DOWN:
         case CARD_ACTION_SCROLL_UP:
-            if (deck->action < 0) {
-                if (deck->scroll > 0) {
+            if (deck->mode < 0) {
+                if (deck->top > 0) {
                     if (deck->cursor < CARD_SCROLL_MARGIN) {
-                        deck->scroll = deck->scroll - 1;
+                        deck->top = deck->top - 1;
                     } else {
                         deck->cursor = deck->cursor - 1;
                         if (deck->cursor < 0) {
@@ -364,23 +307,23 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                 } else if (deck->cursor > 0) {
                     deck->cursor = deck->cursor - 1;
                 }
-            } else if (deck->rowCount > deck->scroll + deck->windowRows) {
-                if (deck->cursor >= deck->windowRows - CARD_SCROLL_MARGIN) {
-                    deck->scroll = deck->scroll + 1;
+            } else if (deck->count > deck->top + deck->rows) {
+                if (deck->cursor >= deck->rows - CARD_SCROLL_MARGIN) {
+                    deck->top = deck->top + 1;
                 } else {
                     deck->cursor = deck->cursor + 1;
                 }
             } else {
-                if (deck->cursor < deck->windowRows - 1
-                    && deck->cursor < deck->rowCount - 1
-                    && deck->cursor < deck->cursorLimit) {
+                if (deck->cursor < deck->rows - 1
+                    && deck->cursor < deck->count - 1
+                    && deck->cursor < deck->shownCount) {
                     deck->cursor = deck->cursor + 1;
                 }
             }
             break;
         case CARD_ACTION_ADD:
             if (CardGetDeckAllCnt(deck) < CARD_DECK_SIZE) {
-                int id = deck->entries[deck->scroll + deck->cursor].cardId;
+                s16 id = deck->entries[deck->top + deck->cursor].cardId;
 
                 if (CardGetDeckCardCnt(id, deck) < ownedCount[id]) {
                     CardAddDeck(deck, id);
@@ -392,7 +335,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             }
             break;
         case CARD_ACTION_REMOVE:
-            CardDelDeck(deck, deck->entries[deck->scroll + deck->cursor].cardId);
+            CardDelDeck(deck, deck->entries[deck->top + deck->cursor].cardId);
             if (CardGetDeckAllCnt(deck) == 0) {
                 ActiveCursol_0 = 0;
                 list->cursor &= CARD_CURSOR_INDEX_MASK;
@@ -400,21 +343,21 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             }
             break;
         }
-        deck->action = CARD_ACTION_NONE;
-    } else if (list->action != CARD_ACTION_NONE) {
-        list->rowCount = CardMakeDispList(list->entries,
+        deck->mode = CARD_ACTION_NONE;
+    } else if (list->mode != CARD_ACTION_NONE) {
+        list->count = CardMakeDispList(list->entries,
                                           AttriMaskLst[list->attrFilter]
                                               | (TypeMaskLst[list->typeFilter] << 8),
                                           work->definitions, work->cardCount);
-        switch (list->action) {
-        case 0:
+        switch (list->mode) {
+        case CARD_ACTION_NONE:
             break;
         case CARD_ACTION_SCROLL_DOWN:
         case CARD_ACTION_SCROLL_UP:
-            if (list->action < 0) {
-                if (list->scroll > 0) {
+            if (list->mode < 0) {
+                if (list->top > 0) {
                     if (list->cursor < CARD_SCROLL_MARGIN) {
-                        list->scroll = list->scroll - 1;
+                        list->top = list->top - 1;
                     } else {
                         list->cursor = list->cursor - 1;
                         if (list->cursor < 0) {
@@ -424,37 +367,37 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                 } else if (list->cursor > 0) {
                     list->cursor = list->cursor - 1;
                 }
-            } else if (list->scroll + list->windowRows < list->rowCount) {
-                if (list->cursor >= list->windowRows - CARD_SCROLL_MARGIN) {
-                    list->scroll = list->scroll + 1;
+            } else if (list->top + list->rows < list->count) {
+                if (list->cursor >= list->rows - CARD_SCROLL_MARGIN) {
+                    list->top = list->top + 1;
                 } else {
                     list->cursor = list->cursor + 1;
                 }
-            } else if (list->cursor < list->windowRows - 1
-                       && list->cursor < list->rowCount - 1) {
+            } else if (list->cursor < list->rows - 1
+                       && list->cursor < list->count - 1) {
                 list->cursor = list->cursor + 1;
             }
             break;
         case CARD_ACTION_REFRESH:
             list->cursor = 0;
-            list->scroll = 0;
+            list->top = 0;
             break;
         case CARD_ACTION_ADD:
             result = CARD_DECK_MSG_DECK_FULL;
             if (CardGetDeckAllCnt(deck) < CARD_DECK_SIZE) {
-                int id = list->entries[list->scroll + list->cursor].cardId;
+                s16 id = list->entries[list->top + list->cursor].cardId;
                 total = CardGetDeckCardCnt(id, deck);
 
                 if (total < CARD_MAX_COPIES) {
                     if (total < ownedCount[id]) {
                         int newIdx = CardAddDeck(deck, id);
-                        if (newIdx - deck->windowRows + 1 < 0) {
-                            deck->scroll = 0;
+                        if (newIdx - deck->rows + 1 < 0) {
+                            deck->top = 0;
                         } else {
-                            deck->scroll = newIdx - deck->windowRows + 1;
+                            deck->top = newIdx - deck->rows + 1;
                         }
                         /* Row within the window, with CARD_PANE_INACTIVE set (the list has focus). */
-                        deck->cursor = (newIdx % deck->windowRows) - CARD_PANE_INACTIVE;
+                        deck->cursor = (newIdx % deck->rows) - CARD_PANE_INACTIVE;
                         result = 0;
                     } else {
                         result = (ownedCount[id] == 0) ? CARD_DECK_MSG_NOT_OWNED : CARD_DECK_MSG_COPIES_USED;
@@ -463,38 +406,38 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             }
             break;
         case CARD_ACTION_REMOVE:
-            CardDelDeck(deck, list->entries[list->scroll + list->cursor].cardId);
+            CardDelDeck(deck, list->entries[list->top + list->cursor].cardId);
             break;
         }
-        list->action = CARD_ACTION_NONE;
+        list->mode = CARD_ACTION_NONE;
     }
 
-    if (deck->rowCount - 1 < deck->cursor) {
-        deck->cursor = deck->rowCount - 1;
+    if (deck->count - 1 < deck->cursor) {
+        deck->cursor = deck->count - 1;
     }
-    if (deck->cursorLimit - 1 < deck->cursor) {
-        deck->cursor = deck->cursorLimit - 1;
+    if (deck->shownCount - 1 < deck->cursor) {
+        deck->cursor = deck->shownCount - 1;
     }
 
     hovered = 0;
-    if ((PadData.held & CARD_PAD_PREVIEW) && exiting == 0) {
+    if ((PadData[0].half_28 & CARD_PAD_PREVIEW) && exiting == 0) {
         hovered = 1;
         if (ActiveCursol_0 != 0) {
-            offset[0] = -1.15f;
+            offset[0] = -CARD_PREVIEW_OFFSET_X;
             pCnow_1 = deck;
         } else {
-            offset[0] = 1.15f;
+            offset[0] = CARD_PREVIEW_OFFSET_X;
             pCnow_1 = list;
         }
-        offset[1] = 0.45f;
-        offset[2] = 0.2f;
+        offset[1] = CARD_PREVIEW_OFFSET_Y;
+        offset[2] = CARD_PREVIEW_OFFSET_Z;
         offset[3] = 1.0f;
         xglMatrixUnit(pinMatrix);
         xglMatrixTrans(pinMatrix, pinMatrix, offset);
         {
-            CardDeckListWindow *sel = pCnow_1;
-            int id = sel->entries[sel->scroll + sel->cursor].cardId;
-            CardDisp(pinMatrix, id, (s16) work->ownedCount[id] != 0, exiting == 0);
+            CardListWindow *sel = pCnow_1;
+            s16 id = sel->entries[sel->top + sel->cursor].cardId;
+            CardDisp(&pinMatrix, id, work->ownedCount[id] != 0, exiting == 0);
         }
     }
     if (hovered == 0 || ActiveCursol_0 == 0) {
@@ -509,15 +452,15 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     offset[3] = 1.0f;
     xglMatrixUnit(filterMatrix);
     xglMatrixTrans(filterMatrix, filterMatrix, offset);
-    nmlModelSetPlace(filterMatrix);
+    nmlModelSetPlace(&filterMatrix);
     typeMask = TypeMaskLst[list->typeFilter];
-    if (typeMask == CARD_TYPE_MASK_B) {
+    if (typeMask == CARD_KIND_BATTLE) {
         texture = CARD_TEXTURE_TYPE1_B;
         entry = CARD_MODEL_TYPE1_B;
-    } else if (typeMask == CARD_TYPE_MASK_E) {
+    } else if (typeMask == CARD_KIND_EVENT) {
         texture = CARD_TEXTURE_TYPE1_E;
         entry = CARD_MODEL_TYPE1_E;
-    } else if (typeMask == CARD_TYPE_MASK_S) {
+    } else if (typeMask == CARD_KIND_SITUATION) {
         texture = CARD_TEXTURE_TYPE1_S;
         entry = CARD_MODEL_TYPE1_S;
     } else {
@@ -532,25 +475,25 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     entry = CARD_MODEL_TYPE2_1;
     xglMatrixUnit(filterMatrix);
     xglMatrixTrans(filterMatrix, filterMatrix, offset);
-    nmlModelSetPlace(filterMatrix);
+    nmlModelSetPlace(&filterMatrix);
     /*
-     * Attribute masks CARD_ATTR_MASK_1..6 (1, 2, 8, 4, 0x10, 0x60) select type2_1..type2_6; any
+     * Attribute masks CARD_ATTR_HUMAN, REALIAN, MECH, GNOSIS, CARD_ATTR_UNKNOWN and CARD_ATTR_WEAPON select type2_1..type2_6; any
      * other value (no filter) shows type2_0. The texture assignments in the
      * last two arms are never read: with a single assignment per arm the
      * compiler turns the final test into a conditional move (the original
      * branches), so both arms keep their second statement.
      */
     attr = AttriMaskLst[list->attrFilter];
-    if (attr != CARD_ATTR_MASK_1) {
+    if (attr != CARD_ATTR_HUMAN) {
         entry = CARD_MODEL_TYPE2_2;
-        if (attr != CARD_ATTR_MASK_2) {
+        if (attr != CARD_ATTR_REALIAN) {
             entry = CARD_MODEL_TYPE2_3;
-            if (attr != CARD_ATTR_MASK_3) {
+            if (attr != CARD_ATTR_MECH) {
                 entry = CARD_MODEL_TYPE2_4;
-                if (attr != CARD_ATTR_MASK_4) {
+                if (attr != CARD_ATTR_GNOSIS) {
                     entry = CARD_MODEL_TYPE2_5;
-                    if (attr != CARD_ATTR_MASK_5) {
-                        if (attr == CARD_ATTR_MASK_6) {
+                    if (attr != CARD_ATTR_UNKNOWN) {
+                        if (attr == CARD_ATTR_WEAPON) {
                             texture = CARD_TEXTURE_TYPE2_0;
                             entry = CARD_MODEL_TYPE2_6;
                         } else {
@@ -572,8 +515,8 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         pCnow_1 = list;
     }
     {
-        CardDeckListWindow *sel = pCnow_1;
-        int id = sel->entries[sel->scroll + sel->cursor].cardId;
+        CardListWindow *sel = pCnow_1;
+        s16 id = sel->entries[sel->top + sel->cursor].cardId;
         int flag;
 
         /* The flag is materialised with a branch; `exiting == 0` inline changes the code. */
@@ -582,10 +525,10 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         } else {
             flag = 1;
         }
-        CardDisp(matrix, id, (s16) work->ownedCount[id] != 0, flag);
+        CardDisp(&matrix, id, work->ownedCount[id] != 0, flag);
     }
 
-    total = list->entries[list->scroll + (list->cursor & CARD_CURSOR_INDEX_MASK)].cardId + 1;
+    total = list->entries[list->top + (list->cursor & CARD_CURSOR_INDEX_MASK)].cardId + 1;
     digit = total / 100;
     offset[1] = 1.764f;
     offset[2] = 0.01f;
@@ -600,7 +543,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         model = (digit << CARD_DIGIT_MODEL_SHIFT) + CARD_DIGIT_MODEL_BASE;
         offset[0] = -0.895f;
         xglMatrixTrans(matrix, digitMatrix, offset);
-        nmlModelSetPlace(matrix);
+        nmlModelSetPlace(&matrix);
         nmlModelSetTexture(CARD_DIGIT_TEXTURE);
         nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
         nmlModelEntryCard(model);
@@ -610,7 +553,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         model = (digit << CARD_DIGIT_MODEL_SHIFT) + CARD_DIGIT_MODEL_BASE;
         offset[0] = -0.748f;
         xglMatrixTrans(matrix, digitMatrix, offset);
-        nmlModelSetPlace(matrix);
+        nmlModelSetPlace(&matrix);
         nmlModelSetTexture(CARD_DIGIT_TEXTURE);
         nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
         nmlModelEntryCard(model);
@@ -619,7 +562,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     model = (digit << CARD_DIGIT_MODEL_SHIFT) + CARD_DIGIT_MODEL_BASE;
     offset[0] = -0.588f;
     xglMatrixTrans(matrix, digitMatrix, offset);
-    nmlModelSetPlace(matrix);
+    nmlModelSetPlace(&matrix);
     nmlModelSetTexture(CARD_DIGIT_TEXTURE);
     nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
     nmlModelEntryCard(model);
@@ -639,7 +582,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         entry = (digit << CARD_DIGIT_MODEL_SHIFT) + CARD_DIGIT_MODEL_BASE;
         offset[0] = 1.948f;
         xglMatrixTrans(matrix, countMatrix, offset);
-        nmlModelSetPlace(matrix);
+        nmlModelSetPlace(&matrix);
         nmlModelSetTexture(CARD_DIGIT_TEXTURE);
         nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
         nmlModelEntryCard(entry);
@@ -649,7 +592,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
         entry = (digit << CARD_DIGIT_MODEL_SHIFT) + CARD_DIGIT_MODEL_BASE;
         offset[0] = 2.095f;
         xglMatrixTrans(matrix, countMatrix, offset);
-        nmlModelSetPlace(matrix);
+        nmlModelSetPlace(&matrix);
         nmlModelSetTexture(CARD_DIGIT_TEXTURE);
         nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
         nmlModelEntryCard(entry);
@@ -658,7 +601,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     entry = (digit << CARD_DIGIT_MODEL_SHIFT) + CARD_DIGIT_MODEL_BASE;
     offset[0] = 2.255f;
     xglMatrixTrans(matrix, countMatrix, offset);
-    nmlModelSetPlace(matrix);
+    nmlModelSetPlace(&matrix);
     nmlModelSetTexture(CARD_DIGIT_TEXTURE);
     nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
     nmlModelEntryCard(entry);
@@ -672,7 +615,7 @@ int CardMakeDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
  * `exiting` is nonzero while the caller shows the exit prompt (the screen is
  * only drawn). Returns the chosen slot + 1, or -1 when cancelled (0 otherwise).
  */
-int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *deck, CardGameWork *work, const char *title)
+int CardLoadDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work, const char *title)
 {
     int drawCards;
     int result;
@@ -680,7 +623,7 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     float cursor[4][4];
     float vecA[4];
     float vecB[4];
-    int cardId;
+    s16 cardId;
     int pos;
     int entry;
     int prev;
@@ -688,7 +631,7 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     int slot;
     int pressed;
 
-    work->helpTopic = CARD_HELP_TOPIC_LOAD_DECK;
+    work->helpTopic = CARD_HELP_PAGE_SELECTING_DECKS;
     if (ActiveCursol_2 != 0) {
         pCnow_3 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
@@ -701,19 +644,19 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
 
     result = 0;
     switch (work->command.step) {
-    case 0:
+    case CARD_DECK_STEP_SELECT:
             drawCards = 0;
-            if ((PadData.held & CARD_PAD_PREVIEW) != 0 && exiting == 0 && ActiveCursol_2 != 0) {
+            if ((PadData[0].half_28 & CARD_PAD_PREVIEW) != 0 && exiting == 0 && ActiveCursol_2 != 0) {
                 drawCards = 1;
                 pCnow_3 = deck;
-                initVec[0] = -1.15f;
-                initVec[1] = 0.45f;
-                initVec[2] = 0.2f;
+                initVec[0] = -CARD_PREVIEW_OFFSET_X;
+                initVec[1] = CARD_PREVIEW_OFFSET_Y;
+                initVec[2] = CARD_PREVIEW_OFFSET_Z;
                 initVec[3] = 1.0f;
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, initVec);
-                cardId = pCnow_3->entries[pCnow_3->scroll + pCnow_3->cursor].cardId;
-                CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, 1);
+                cardId = pCnow_3->entries[pCnow_3->top + pCnow_3->cursor].cardId;
+                CardDisp(&cursor, cardId, work->ownedCount[cardId] != 0, 1);
             }
 
             if (drawCards == 0 || ActiveCursol_2 == 0) {
@@ -724,65 +667,65 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
             if (ActiveCursol_2 == 0) {
                 if (exiting == 0 && drawCards == 0) {
                     if (title != 0) {
-                        xglFontPrint(24, 312, 0xfff0, title);
+                        xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_TITLE_Y, CARD_TEXT_COLOR, title);
                     }
                     xglFontPrint(0, 0, 0, "\x19\x03");
-                    xglFontPrint(120, 288, 0xfff0, "");
-                    xglFontPrint(24, 336, 0xfff0, "\x0b\x19\x03\r\0Please select a deck to load.");
-                    xglFontPrint(24, 360, 0xfff0, CARD_PROMPT_ACCEPT_CANCEL);
-                    xglFontPrint(120, 288, 0xfff0, "\x0b");
+                    xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "");
+                    xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_MESSAGE_Y, CARD_TEXT_COLOR, "\x0b\x19\x03\r\0Please select a deck to load.");
+                    xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_BUTTONS_Y, CARD_TEXT_COLOR, CARD_PROMPT_ACCEPT_CANCEL);
+                    xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "\x0b");
                     pressed = work->command.input[0].pressed;
-                    if ((pressed & CARD_PAD_ACCEPT) != 0) {
-                        xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
+                    if ((pressed & PAD_CIRCLE) != 0) {
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
                         work->command.step++;
-                    } else if ((pressed & CARD_PAD_CANCEL) != 0) {
-                        xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
+                    } else if ((pressed & PAD_CROSS) != 0) {
+                        xglSoundEffectNormalID(SE_CANCEL, 0);
                         result = -1;
                     }
                 }
             } else {
                 vecA[0] = 0.0f;
-                vecA[1] = -0.3932f;
-                vecA[2] = 0.1f;
+                vecA[1] = CARD_SELECTED_OFFSET_Y;
+                vecA[2] = CARD_SELECTED_OFFSET_Z;
                 vecA[3] = 1.0f;
-                vecB[0] = vecB[1] = 0.335f;
+                vecB[0] = vecB[1] = CARD_SELECTED_SCALE;
                 vecB[2] = vecB[3] = 1.0f;
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, vecA);
                 xglMatrixScale(cursor, cursor, vecB);
-                cardId = pCnow_3->entries[pCnow_3->scroll + pCnow_3->cursor].cardId;
-                CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, exiting == 0);
+                cardId = pCnow_3->entries[pCnow_3->top + pCnow_3->cursor].cardId;
+                CardDisp(&cursor, cardId, work->ownedCount[cardId] != 0, exiting == 0);
             }
 
             if (exiting == 0) {
-                if ((PadData.directions & CARD_PAD_UP) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    pCnow_3->action = CARD_ACTION_SCROLL_UP;
-                } else if ((PadData.directions & CARD_PAD_DOWN) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    pCnow_3->action = CARD_ACTION_SCROLL_DOWN;
+                if ((PadData[0].directions & PAD_UP) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
+                    pCnow_3->mode = CARD_ACTION_SCROLL_UP;
+                } else if ((PadData[0].directions & PAD_DOWN) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
+                    pCnow_3->mode = CARD_ACTION_SCROLL_DOWN;
                 }
-                if ((PadData.directions & CARD_PAD_RIGHT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+                if ((PadData[0].directions & PAD_RIGHT) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     if (CardGetDeckAllCnt(deck) != 0) {
                         ActiveCursol_2 = 1;
                         list->cursor |= CARD_PANE_INACTIVE;
                         deck->cursor &= CARD_CURSOR_INDEX_MASK;
                     }
-                } else if ((PadData.directions & CARD_PAD_LEFT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+                } else if ((PadData[0].directions & PAD_LEFT) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     ActiveCursol_2 = 0;
                     list->cursor &= CARD_CURSOR_INDEX_MASK;
                     deck->cursor |= CARD_PANE_INACTIVE;
                 }
             }
 
-            if (deck->action != CARD_ACTION_NONE) {
-                if (deck->action == CARD_ACTION_SCROLL_UP || deck->action == CARD_ACTION_SCROLL_DOWN) {
-                    if (deck->action < 0) {
-                        if (deck->scroll > 0) {
+            if (deck->mode != CARD_ACTION_NONE) {
+                if (deck->mode == CARD_ACTION_SCROLL_UP || deck->mode == CARD_ACTION_SCROLL_DOWN) {
+                    if (deck->mode < 0) {
+                        if (deck->top > 0) {
                             if (deck->cursor < CARD_SCROLL_MARGIN) {
-                                deck->scroll = deck->scroll - 1;
+                                deck->top = deck->top - 1;
                             } else {
                                 deck->cursor = deck->cursor - 1;
                                 if (deck->cursor < 0) {
@@ -793,28 +736,28 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                             deck->cursor = deck->cursor - 1;
                         }
                     } else {
-                        if (deck->scroll + deck->windowRows < deck->rowCount) {
-                            if (deck->cursor >= deck->windowRows - CARD_SCROLL_MARGIN) {
-                                deck->scroll = deck->scroll + 1;
+                        if (deck->top + deck->rows < deck->count) {
+                            if (deck->cursor >= deck->rows - CARD_SCROLL_MARGIN) {
+                                deck->top = deck->top + 1;
                             } else {
                                 deck->cursor = deck->cursor + 1;
                             }
-                        } else if (deck->cursor < deck->windowRows - 1 && deck->cursor < deck->rowCount - 1
-                                   && deck->cursor < deck->cursorLimit) {
+                        } else if (deck->cursor < deck->rows - 1 && deck->cursor < deck->count - 1
+                                   && deck->cursor < deck->shownCount) {
                             deck->cursor = deck->cursor + 1;
                         }
                     }
                 }
-                deck->action = CARD_ACTION_NONE;
+                deck->mode = CARD_ACTION_NONE;
             }
 
-            if (list->action != CARD_ACTION_NONE) {
-                list->rowCount = CARD_DECK_SLOT_COUNT;
-                if (list->action == CARD_ACTION_SCROLL_UP || list->action == CARD_ACTION_SCROLL_DOWN) {
-                    if (list->action < 0) {
-                        if (list->scroll > 0) {
+            if (list->mode != CARD_ACTION_NONE) {
+                list->count = CARD_DECK_SLOT_COUNT;
+                if (list->mode == CARD_ACTION_SCROLL_UP || list->mode == CARD_ACTION_SCROLL_DOWN) {
+                    if (list->mode < 0) {
+                        if (list->top > 0) {
                             if (list->cursor < CARD_SCROLL_MARGIN) {
-                                list->scroll = list->scroll - 1;
+                                list->top = list->top - 1;
                             } else {
                                 list->cursor = list->cursor - 1;
                                 if (list->cursor < 0) {
@@ -825,59 +768,60 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                             list->cursor = list->cursor - 1;
                         }
                     } else {
-                        if (list->scroll + list->windowRows < list->rowCount) {
-                            if (list->cursor >= list->windowRows - CARD_SCROLL_MARGIN) {
-                                list->scroll = list->scroll + 1;
+                        if (list->top + list->rows < list->count) {
+                            if (list->cursor >= list->rows - CARD_SCROLL_MARGIN) {
+                                list->top = list->top + 1;
                             } else {
                                 list->cursor = list->cursor + 1;
                             }
-                        } else if (list->cursor < list->windowRows - 1 && list->cursor < CARD_DECK_SLOT_COUNT - 1) {
+                        } else if (list->cursor < list->rows - 1 && list->cursor < CARD_DECK_SLOT_COUNT - 1) {
                             list->cursor = list->cursor + 1;
                         }
                     }
-                    slot = list->scroll + (list->cursor & CARD_CURSOR_INDEX_MASK);
-                    /* Stored deck slot: CardSaveData records 42 bytes apart (slot * 32 + slot * 10). */
+                    slot = list->top + (list->cursor & CARD_CURSOR_INDEX_MASK);
+                    /* Stored deck slot: CardSaveData records 42 bytes apart (slot * 32 + slot * 10) (measured: indexing
+                     * work->save->decks[slot] computes the address with a different instruction order). */
                     stored = (CardSaveData *)((slot << 5) + (unsigned int)work->save + slot * 10);
                     prev = -1;
                     entry = -1;
                     for (pos = 0; pos < CARD_DECK_SIZE; pos++) {
-                        if (prev != stored->deck[pos]) {
+                        if (prev != stored->decks[0].cards[pos]) {
                             entry++;
-                            deck->entries[entry].cardId = stored->deck[pos];
-                            deck->entries[entry].copies = 1;
+                            deck->entries[entry].cardId = stored->decks[0].cards[pos];
+                            deck->entries[entry].count = 1;
                         } else {
-                            deck->entries[entry].copies++;
+                            deck->entries[entry].count++;
                         }
-                        prev = stored->deck[pos];
+                        prev = stored->decks[0].cards[pos];
                     }
-                    deck->cursor = (s8)CARD_PANE_INACTIVE;
-                    deck->rowCount = entry + 1;
-                    deck->scroll = 0;
+                    deck->cursor = CARD_PANE_INACTIVE;
+                    deck->count = entry + 1;
+                    deck->top = 0;
                 }
-                list->action = CARD_ACTION_NONE;
+                list->mode = CARD_ACTION_NONE;
             }
 
-            if ((s16)deck->rowCount - 1 < deck->cursor) {
-                deck->cursor = deck->rowCount - 1;
+            if (deck->count - 1 < deck->cursor) {
+                deck->cursor = deck->count - 1;
             }
         break;
-    case 1:
+    case CARD_DECK_STEP_CONFIRM:
             CardDeckListDisp(list);
             CardDeckDisp(deck, work->definitions);
             if (exiting != 0) {
                 break;
             }
             xglFontPrint(0, 0, 0, "\x19\x03");
-            xglFontPrint(120, 288, 0xfff0, "");
-            xglFontPrint(24, 336, 0xfff0, "\x0b\x19\x03\r\0Is this deck okay?");
-            xglFontPrint(24, 360, 0xfff0, CARD_PROMPT_ACCEPT_CANCEL);
-            xglFontPrint(120, 288, 0xfff0, "\x0b");
+            xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "");
+            xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_MESSAGE_Y, CARD_TEXT_COLOR, "\x0b\x19\x03\r\0Is this deck okay?");
+            xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_BUTTONS_Y, CARD_TEXT_COLOR, CARD_PROMPT_ACCEPT_CANCEL);
+            xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "\x0b");
             pressed = work->command.input[0].pressed;
-            if ((pressed & CARD_PAD_ACCEPT) != 0) {
-                xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
+            if ((pressed & PAD_CIRCLE) != 0) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 result = (list->cursor & CARD_CURSOR_INDEX_MASK) + 1;
-            } else if ((pressed & CARD_PAD_CANCEL) != 0) {
-                xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
+            } else if ((pressed & PAD_CROSS) != 0) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step--;
             }
         break;
@@ -892,13 +836,13 @@ int CardLoadDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
  * only drawn). Returns the chosen slot + 1 to save into, or -1 when cancelled
  * (0 otherwise).
  */
-int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *deck, CardGameWork *work, const char *title)
+int CardSaveDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work, const char *title)
 {
     int drawCards;
     int result;
     float initVec[4];
     float cursor[4][4];
-    int cardId;
+    s16 cardId;
     int pos;
     int entry;
     int prev;
@@ -906,7 +850,7 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
     int slot;
     int pressed;
 
-    work->helpTopic = CARD_HELP_TOPIC_SAVE_DECK;
+    work->helpTopic = CARD_HELP_PAGE_SAVING_DECKS;
     if (ActiveCursol_4 != 0) {
         pCnow_5 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
@@ -919,38 +863,38 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
 
     result = 0;
     switch (work->command.step) {
-    case 0:
+    case CARD_DECK_STEP_SELECT:
             if (exiting == 0) {
-                if ((PadData.directions & CARD_PAD_UP) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    pCnow_5->action = CARD_ACTION_SCROLL_UP;
+                if ((PadData[0].directions & PAD_UP) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
+                    pCnow_5->mode = CARD_ACTION_SCROLL_UP;
                 }
-                if ((PadData.directions & CARD_PAD_DOWN) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    pCnow_5->action = CARD_ACTION_SCROLL_DOWN;
+                if ((PadData[0].directions & PAD_DOWN) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
+                    pCnow_5->mode = CARD_ACTION_SCROLL_DOWN;
                 }
-                if ((PadData.directions & CARD_PAD_RIGHT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+                if ((PadData[0].directions & PAD_RIGHT) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     if (CardGetDeckAllCnt(deck) != 0) {
                         ActiveCursol_4 = 1;
                         list->cursor |= CARD_PANE_INACTIVE;
                         deck->cursor &= CARD_CURSOR_INDEX_MASK;
                     }
                 }
-                if ((PadData.directions & CARD_PAD_LEFT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+                if ((PadData[0].directions & PAD_LEFT) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     ActiveCursol_4 = 0;
                     list->cursor &= CARD_CURSOR_INDEX_MASK;
                     deck->cursor |= CARD_PANE_INACTIVE;
                 }
             }
 
-            if (deck->action != CARD_ACTION_NONE) {
-                if (deck->action == CARD_ACTION_SCROLL_UP || deck->action == CARD_ACTION_SCROLL_DOWN) {
-                    if (deck->action < 0) {
-                        if (deck->scroll > 0) {
+            if (deck->mode != CARD_ACTION_NONE) {
+                if (deck->mode == CARD_ACTION_SCROLL_UP || deck->mode == CARD_ACTION_SCROLL_DOWN) {
+                    if (deck->mode < 0) {
+                        if (deck->top > 0) {
                             if (deck->cursor < CARD_SCROLL_MARGIN) {
-                                deck->scroll = deck->scroll - 1;
+                                deck->top = deck->top - 1;
                             } else {
                                 deck->cursor = deck->cursor - 1;
                                 if (deck->cursor < 0) {
@@ -961,28 +905,28 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                             deck->cursor = deck->cursor - 1;
                         }
                     } else {
-                        if (deck->scroll + deck->windowRows < deck->rowCount) {
-                            if (deck->cursor >= deck->windowRows - CARD_SCROLL_MARGIN) {
-                                deck->scroll = deck->scroll + 1;
+                        if (deck->top + deck->rows < deck->count) {
+                            if (deck->cursor >= deck->rows - CARD_SCROLL_MARGIN) {
+                                deck->top = deck->top + 1;
                             } else {
                                 deck->cursor = deck->cursor + 1;
                             }
-                        } else if (deck->cursor < deck->windowRows - 1 && deck->cursor < deck->rowCount - 1
-                                   && deck->cursor < deck->cursorLimit) {
+                        } else if (deck->cursor < deck->rows - 1 && deck->cursor < deck->count - 1
+                                   && deck->cursor < deck->shownCount) {
                             deck->cursor = deck->cursor + 1;
                         }
                     }
                 }
-                deck->action = CARD_ACTION_NONE;
+                deck->mode = CARD_ACTION_NONE;
             }
 
-            if (list->action != CARD_ACTION_NONE) {
-                list->rowCount = CARD_DECK_SLOT_COUNT;
-                if (list->action == CARD_ACTION_SCROLL_UP || list->action == CARD_ACTION_SCROLL_DOWN) {
-                    if (list->action < 0) {
-                        if (list->scroll > 0) {
+            if (list->mode != CARD_ACTION_NONE) {
+                list->count = CARD_DECK_SLOT_COUNT;
+                if (list->mode == CARD_ACTION_SCROLL_UP || list->mode == CARD_ACTION_SCROLL_DOWN) {
+                    if (list->mode < 0) {
+                        if (list->top > 0) {
                             if (list->cursor < CARD_SCROLL_MARGIN) {
-                                list->scroll = list->scroll - 1;
+                                list->top = list->top - 1;
                             } else {
                                 list->cursor = list->cursor - 1;
                                 if (list->cursor < 0) {
@@ -993,55 +937,56 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
                             list->cursor = list->cursor - 1;
                         }
                     } else {
-                        if (list->scroll + list->windowRows < list->rowCount) {
-                            if (list->cursor >= list->windowRows - CARD_SCROLL_MARGIN) {
-                                list->scroll = list->scroll + 1;
+                        if (list->top + list->rows < list->count) {
+                            if (list->cursor >= list->rows - CARD_SCROLL_MARGIN) {
+                                list->top = list->top + 1;
                             } else {
                                 list->cursor = list->cursor + 1;
                             }
-                        } else if (list->cursor < list->windowRows - 1 && list->cursor < CARD_DECK_SLOT_COUNT - 1) {
+                        } else if (list->cursor < list->rows - 1 && list->cursor < CARD_DECK_SLOT_COUNT - 1) {
                             list->cursor = list->cursor + 1;
                         }
                     }
-                    slot = list->scroll + (list->cursor & CARD_CURSOR_INDEX_MASK);
-                    /* Stored deck slot: CardSaveData records 42 bytes apart (slot * 32 + slot * 10). */
+                    slot = list->top + (list->cursor & CARD_CURSOR_INDEX_MASK);
+                    /* Stored deck slot: CardSaveData records 42 bytes apart (slot * 32 + slot * 10) (measured: indexing
+                     * work->save->decks[slot] computes the address with a different instruction order). */
                     stored = (CardSaveData *)((slot << 5) + (unsigned int)work->save + slot * 10);
                     prev = -1;
                     entry = -1;
                     for (pos = 0; pos < CARD_DECK_SIZE; pos++) {
-                        if (prev != stored->deck[pos]) {
+                        if (prev != stored->decks[0].cards[pos]) {
                             entry++;
-                            deck->entries[entry].cardId = stored->deck[pos];
-                            deck->entries[entry].copies = 1;
+                            deck->entries[entry].cardId = stored->decks[0].cards[pos];
+                            deck->entries[entry].count = 1;
                         } else {
-                            deck->entries[entry].copies++;
+                            deck->entries[entry].count++;
                         }
-                        prev = stored->deck[pos];
+                        prev = stored->decks[0].cards[pos];
                     }
-                    deck->cursor = (s8)CARD_PANE_INACTIVE;
-                    deck->rowCount = entry + 1;
-                    deck->scroll = 0;
+                    deck->cursor = CARD_PANE_INACTIVE;
+                    deck->count = entry + 1;
+                    deck->top = 0;
                 }
-                list->action = CARD_ACTION_NONE;
+                list->mode = CARD_ACTION_NONE;
             }
 
-            if ((s16)deck->rowCount - 1 < deck->cursor) {
-                deck->cursor = deck->rowCount - 1;
+            if (deck->count - 1 < deck->cursor) {
+                deck->cursor = deck->count - 1;
             }
 
             drawCards = 0;
-            if ((PadData.held & CARD_PAD_PREVIEW) != 0 && exiting == 0) {
+            if ((PadData[0].half_28 & CARD_PAD_PREVIEW) != 0 && exiting == 0) {
                 drawCards = 1;
                 if (ActiveCursol_4 != 0) {
                     pCnow_5 = deck;
-                    initVec[0] = -1.15f;
-                    initVec[1] = 0.45f;
-                    initVec[2] = 0.2f;
+                    initVec[0] = -CARD_PREVIEW_OFFSET_X;
+                    initVec[1] = CARD_PREVIEW_OFFSET_Y;
+                    initVec[2] = CARD_PREVIEW_OFFSET_Z;
                     initVec[3] = 1.0f;
                     xglMatrixUnit(cursor);
                     xglMatrixTrans(cursor, cursor, initVec);
-                    cardId = pCnow_5->entries[pCnow_5->scroll + pCnow_5->cursor].cardId;
-                    CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, 1);
+                    cardId = pCnow_5->entries[pCnow_5->top + pCnow_5->cursor].cardId;
+                    CardDisp(&cursor, cardId, work->ownedCount[cardId] != 0, 1);
                 }
             }
 
@@ -1052,40 +997,40 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
 
             if (ActiveCursol_4 == 0 && exiting == 0) {
                 xglFontPrint(0, 0, 0, "\x19\x03");
-                xglFontPrint(120, 288, 0xfff0, "");
+                xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "");
                 if (title != 0) {
-                    xglFontPrint(24, 312, 0xfff0, title);
+                    xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_TITLE_Y, CARD_TEXT_COLOR, title);
                 }
-                xglFontPrint(24, 336, 0xfff0, "\x0b\x19\x03\r\0Select deck to save in.");
-                xglFontPrint(24, 360, 0xfff0, CARD_PROMPT_ACCEPT_CANCEL);
-                xglFontPrint(120, 288, 0xfff0, "\x0b");
+                xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_MESSAGE_Y, CARD_TEXT_COLOR, "\x0b\x19\x03\r\0Select deck to save in.");
+                xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_BUTTONS_Y, CARD_TEXT_COLOR, CARD_PROMPT_ACCEPT_CANCEL);
+                xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "\x0b");
                 pressed = work->command.input[0].pressed;
-                if ((pressed & CARD_PAD_ACCEPT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
+                if ((pressed & PAD_CIRCLE) != 0) {
+                    xglSoundEffectNormalID(SE_DECIDE, 0);
                     work->command.step++;
-                } else if ((pressed & CARD_PAD_CANCEL) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
+                } else if ((pressed & PAD_CROSS) != 0) {
+                    xglSoundEffectNormalID(SE_CANCEL, 0);
                     result = -1;
                 }
             }
         break;
-    case 1:
+    case CARD_DECK_STEP_CONFIRM:
             CardDeckListDisp(list);
             CardDeckDisp(deck, work->definitions);
             if (exiting != 0) {
                 break;
             }
             xglFontPrint(0, 0, 0, "\x19\x03");
-            xglFontPrint(120, 288, 0xfff0, "");
-            xglFontPrint(24, 336, 0xfff0, "\x0b\x19\x03\r\0Is this deck okay?");
-            xglFontPrint(24, 360, 0xfff0, CARD_PROMPT_ACCEPT_CANCEL);
-            xglFontPrint(120, 288, 0xfff0, "\x0b");
+            xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "");
+            xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_MESSAGE_Y, CARD_TEXT_COLOR, "\x0b\x19\x03\r\0Is this deck okay?");
+            xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_BUTTONS_Y, CARD_TEXT_COLOR, CARD_PROMPT_ACCEPT_CANCEL);
+            xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "\x0b");
             pressed = work->command.input[0].pressed;
-            if ((pressed & CARD_PAD_ACCEPT) != 0) {
-                xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
+            if ((pressed & PAD_CIRCLE) != 0) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 result = (list->cursor & CARD_CURSOR_INDEX_MASK) + 1;
-            } else if ((pressed & CARD_PAD_CANCEL) != 0) {
-                xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
+            } else if ((pressed & PAD_CROSS) != 0) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step--;
             }
         break;
@@ -1099,7 +1044,7 @@ int CardSaveDeckProc(int exiting, CardDeckListWindow *list, CardDeckListWindow *
  * the selected deck in the deck window (deck); step 1 asks for confirmation.
  * Returns the chosen slot + 1, or -1 when cancelled (0 otherwise).
  */
-int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow *deck, CardGameWork *work, const char *title)
+int CardLoadDeckProc2(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work, const char *title)
 {
     int drawCards;
     int result;
@@ -1107,14 +1052,14 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
     float cursor[4][4];
     float vecA[4];
     float vecB[4];
-    int cardId;
+    s16 cardId;
     int pos;
     int entry;
     int prev;
     int slot;
     int pressed;
 
-    work->helpTopic = CARD_HELP_TOPIC_LOAD_DECK;
+    work->helpTopic = CARD_HELP_PAGE_SELECTING_DECKS;
     if (ActiveCursol_6 != 0) {
         pCnow_7 = deck;
         list->cursor |= CARD_PANE_INACTIVE;
@@ -1127,19 +1072,19 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
 
     result = 0;
     switch (work->command.step) {
-    case 0:
+    case CARD_DECK_STEP_SELECT:
             drawCards = 0;
-            if ((PadData.held & CARD_PAD_PREVIEW) != 0 && exiting == 0 && ActiveCursol_6 != 0) {
+            if ((PadData[0].half_28 & CARD_PAD_PREVIEW) != 0 && exiting == 0 && ActiveCursol_6 != 0) {
                 drawCards = 1;
                 pCnow_7 = deck;
-                initVec[0] = -1.15f;
-                initVec[1] = 0.45f;
-                initVec[2] = 0.2f;
+                initVec[0] = -CARD_PREVIEW_OFFSET_X;
+                initVec[1] = CARD_PREVIEW_OFFSET_Y;
+                initVec[2] = CARD_PREVIEW_OFFSET_Z;
                 initVec[3] = 1.0f;
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, initVec);
-                cardId = pCnow_7->entries[pCnow_7->scroll + pCnow_7->cursor].cardId;
-                CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, 1);
+                cardId = pCnow_7->entries[pCnow_7->top + pCnow_7->cursor].cardId;
+                CardDisp(&cursor, cardId, work->ownedCount[cardId] != 0, 1);
             }
 
             if (drawCards == 0 || ActiveCursol_6 == 0) {
@@ -1151,64 +1096,64 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
                 if (exiting == 0 && drawCards == 0) {
                     if (title != 0) {
                         xglFontPrint(0, 0, 0, "\x19\x03");
-                        xglFontPrint(24, 312, 0xfff0, title);
+                        xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_TITLE_Y, CARD_TEXT_COLOR, title);
                     }
-                    xglFontPrint(120, 288, 0xfff0, "");
-                    xglFontPrint(24, 336, 0xfff0, "\x0b\x19\x03\r\0Select deck to load.");
-                    xglFontPrint(24, 360, 0xfff0, CARD_PROMPT_ACCEPT_CANCEL);
-                    xglFontPrint(120, 288, 0xfff0, "\x0b");
+                    xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "");
+                    xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_MESSAGE_Y, CARD_TEXT_COLOR, "\x0b\x19\x03\r\0Select deck to load.");
+                    xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_BUTTONS_Y, CARD_TEXT_COLOR, CARD_PROMPT_ACCEPT_CANCEL);
+                    xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "\x0b");
                     pressed = work->command.input[0].pressed;
-                    if ((pressed & CARD_PAD_ACCEPT) != 0) {
-                        xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
+                    if ((pressed & PAD_CIRCLE) != 0) {
+                        xglSoundEffectNormalID(SE_DECIDE, 0);
                         work->command.step++;
-                    } else if ((pressed & CARD_PAD_CANCEL) != 0) {
-                        xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
+                    } else if ((pressed & PAD_CROSS) != 0) {
+                        xglSoundEffectNormalID(SE_CANCEL, 0);
                         result = -1;
                     }
                 }
             } else {
                 vecA[0] = 0.0f;
-                vecA[1] = -0.3932f;
-                vecA[2] = 0.1f;
+                vecA[1] = CARD_SELECTED_OFFSET_Y;
+                vecA[2] = CARD_SELECTED_OFFSET_Z;
                 vecA[3] = 1.0f;
-                vecB[0] = vecB[1] = 0.335f;
+                vecB[0] = vecB[1] = CARD_SELECTED_SCALE;
                 vecB[2] = vecB[3] = 1.0f;
                 xglMatrixUnit(cursor);
                 xglMatrixTrans(cursor, cursor, vecA);
                 xglMatrixScale(cursor, cursor, vecB);
-                cardId = pCnow_7->entries[pCnow_7->scroll + pCnow_7->cursor].cardId;
-                CardDisp(cursor, cardId, ((s16 *)work->ownedCount)[cardId] != 0, exiting == 0);
+                cardId = pCnow_7->entries[pCnow_7->top + pCnow_7->cursor].cardId;
+                CardDisp(&cursor, cardId, work->ownedCount[cardId] != 0, exiting == 0);
             }
 
             if (exiting == 0) {
-                if ((PadData.directions & CARD_PAD_UP) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    pCnow_7->action = CARD_ACTION_SCROLL_UP;
-                } else if ((PadData.directions & CARD_PAD_DOWN) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
-                    pCnow_7->action = CARD_ACTION_SCROLL_DOWN;
+                if ((PadData[0].directions & PAD_UP) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
+                    pCnow_7->mode = CARD_ACTION_SCROLL_UP;
+                } else if ((PadData[0].directions & PAD_DOWN) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
+                    pCnow_7->mode = CARD_ACTION_SCROLL_DOWN;
                 }
-                if ((PadData.directions & CARD_PAD_RIGHT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+                if ((PadData[0].directions & PAD_RIGHT) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     if (CardGetDeckAllCnt(deck) != 0) {
                         ActiveCursol_6 = 1;
                         list->cursor |= CARD_PANE_INACTIVE;
                         deck->cursor &= CARD_CURSOR_INDEX_MASK;
                     }
-                } else if ((PadData.directions & CARD_PAD_LEFT) != 0) {
-                    xglSoundEffectNormalID(CARD_SE_CURSOR, 0);
+                } else if ((PadData[0].directions & PAD_LEFT) != 0) {
+                    xglSoundEffectNormalID(SE_CURSOR, 0);
                     ActiveCursol_6 = 0;
                     list->cursor &= CARD_CURSOR_INDEX_MASK;
                     deck->cursor |= CARD_PANE_INACTIVE;
                 }
             }
 
-            if (deck->action != CARD_ACTION_NONE) {
-                if (deck->action == CARD_ACTION_SCROLL_UP || deck->action == CARD_ACTION_SCROLL_DOWN) {
-                    if (deck->action < 0) {
-                        if (deck->scroll > 0) {
+            if (deck->mode != CARD_ACTION_NONE) {
+                if (deck->mode == CARD_ACTION_SCROLL_UP || deck->mode == CARD_ACTION_SCROLL_DOWN) {
+                    if (deck->mode < 0) {
+                        if (deck->top > 0) {
                             if (deck->cursor < CARD_SCROLL_MARGIN) {
-                                deck->scroll = deck->scroll - 1;
+                                deck->top = deck->top - 1;
                             } else {
                                 deck->cursor = deck->cursor - 1;
                                 if (deck->cursor < 0) {
@@ -1219,28 +1164,28 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
                             deck->cursor = deck->cursor - 1;
                         }
                     } else {
-                        if (deck->scroll + deck->windowRows < deck->rowCount) {
-                            if (deck->cursor >= deck->windowRows - CARD_SCROLL_MARGIN) {
-                                deck->scroll = deck->scroll + 1;
+                        if (deck->top + deck->rows < deck->count) {
+                            if (deck->cursor >= deck->rows - CARD_SCROLL_MARGIN) {
+                                deck->top = deck->top + 1;
                             } else {
                                 deck->cursor = deck->cursor + 1;
                             }
-                        } else if (deck->cursor < deck->windowRows - 1 && deck->cursor < deck->rowCount - 1
-                                   && deck->cursor < deck->cursorLimit) {
+                        } else if (deck->cursor < deck->rows - 1 && deck->cursor < deck->count - 1
+                                   && deck->cursor < deck->shownCount) {
                             deck->cursor = deck->cursor + 1;
                         }
                     }
                 }
-                deck->action = CARD_ACTION_NONE;
+                deck->mode = CARD_ACTION_NONE;
             }
 
-            if (list->action != CARD_ACTION_NONE) {
-                list->rowCount = CARD_DECK_SLOT_COUNT;
-                if (list->action == CARD_ACTION_SCROLL_UP || list->action == CARD_ACTION_SCROLL_DOWN) {
-                    if (list->action < 0) {
-                        if (list->scroll > 0) {
+            if (list->mode != CARD_ACTION_NONE) {
+                list->count = CARD_DECK_SLOT_COUNT;
+                if (list->mode == CARD_ACTION_SCROLL_UP || list->mode == CARD_ACTION_SCROLL_DOWN) {
+                    if (list->mode < 0) {
+                        if (list->top > 0) {
                             if (list->cursor < CARD_SCROLL_MARGIN) {
-                                list->scroll = list->scroll - 1;
+                                list->top = list->top - 1;
                             } else {
                                 list->cursor = list->cursor - 1;
                                 if (list->cursor < 0) {
@@ -1251,65 +1196,63 @@ int CardLoadDeckProc2(int exiting, CardDeckListWindow *list, CardDeckListWindow 
                             list->cursor = list->cursor - 1;
                         }
                     } else {
-                        if (list->scroll + list->windowRows < list->rowCount) {
-                            if (list->cursor >= list->windowRows - CARD_SCROLL_MARGIN) {
-                                list->scroll = list->scroll + 1;
+                        if (list->top + list->rows < list->count) {
+                            if (list->cursor >= list->rows - CARD_SCROLL_MARGIN) {
+                                list->top = list->top + 1;
                             } else {
                                 list->cursor = list->cursor + 1;
                             }
-                        } else if (list->cursor < list->windowRows - 1 && list->cursor < CARD_DECK_SLOT_COUNT - 1) {
+                        } else if (list->cursor < list->rows - 1 && list->cursor < CARD_DECK_SLOT_COUNT - 1) {
                             list->cursor = list->cursor + 1;
                         }
                     }
-                    slot = list->scroll + (list->cursor & CARD_CURSOR_INDEX_MASK);
+                    slot = list->top + (list->cursor & CARD_CURSOR_INDEX_MASK);
                     prev = -1;
                     entry = -1;
                     for (pos = 0; pos < CARD_DECK_SIZE; pos++) {
                         if (prev != EnemyDeckLst[slot][pos]) {
                             entry++;
                             deck->entries[entry].cardId = EnemyDeckLst[slot][pos];
-                            deck->entries[entry].copies = 1;
+                            deck->entries[entry].count = 1;
                         } else {
-                            deck->entries[entry].copies++;
+                            deck->entries[entry].count++;
                         }
                         prev = EnemyDeckLst[slot][pos];
                     }
-                    deck->cursor = (s8)CARD_PANE_INACTIVE;
-                    deck->rowCount = entry + 1;
-                    deck->scroll = 0;
+                    deck->cursor = CARD_PANE_INACTIVE;
+                    deck->count = entry + 1;
+                    deck->top = 0;
                 }
-                list->action = CARD_ACTION_NONE;
+                list->mode = CARD_ACTION_NONE;
             }
 
-            if ((s16)deck->rowCount - 1 < deck->cursor) {
-                deck->cursor = deck->rowCount - 1;
+            if (deck->count - 1 < deck->cursor) {
+                deck->cursor = deck->count - 1;
             }
         break;
-    case 1:
+    case CARD_DECK_STEP_CONFIRM:
             CardDeckListDisp(list);
             CardDeckDisp(deck, work->definitions);
             if (exiting != 0) {
                 break;
             }
             xglFontPrint(0, 0, 0, "\x19\x03");
-            xglFontPrint(120, 288, 0xfff0, "");
-            xglFontPrint(24, 336, 0xfff0, "\x0b\x19\x03\r\0Is this deck okay?");
-            xglFontPrint(24, 360, 0xfff0, CARD_PROMPT_ACCEPT_CANCEL);
-            xglFontPrint(120, 288, 0xfff0, "\x0b");
+            xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "");
+            xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_MESSAGE_Y, CARD_TEXT_COLOR, "\x0b\x19\x03\r\0Is this deck okay?");
+            xglFontPrint(CARD_PROMPT_X, CARD_PROMPT_BUTTONS_Y, CARD_TEXT_COLOR, CARD_PROMPT_ACCEPT_CANCEL);
+            xglFontPrint(CARD_PROMPT_STATE_X, CARD_PROMPT_STATE_Y, CARD_TEXT_COLOR, "\x0b");
             pressed = work->command.input[0].pressed;
-            if ((pressed & CARD_PAD_ACCEPT) != 0) {
-                xglSoundEffectNormalID(CARD_SE_ACCEPT, 0);
+            if ((pressed & PAD_CIRCLE) != 0) {
+                xglSoundEffectNormalID(SE_DECIDE, 0);
                 result = (list->cursor & CARD_CURSOR_INDEX_MASK) + 1;
-            } else if ((pressed & CARD_PAD_CANCEL) != 0) {
-                xglSoundEffectNormalID(CARD_SE_CANCEL, 0);
+            } else if ((pressed & PAD_CROSS) != 0) {
+                xglSoundEffectNormalID(SE_CANCEL, 0);
                 work->command.step--;
             }
         break;
     }
     return result;
 }
-
-
 
 static u8 TypeMaskLst[4] = { 7, 1, 2, 4 };
 
@@ -1364,10 +1307,10 @@ unsigned char BS2UncoLst[9] = { 37, 38, 41, 57, 66, 125, 131, 134, 119 };
 
 unsigned char BS2ComoLst[17] = { 51, 63, 68, 70, 71, 72, 73, 95, 104, 122, 123, 133, 135, 137, 90, 112, 114 };
 
-static CardDeckListWindow * pCnow_1;
+static CardListWindow * pCnow_1;
 
-static CardDeckListWindow * pCnow_3;
+static CardListWindow * pCnow_3;
 
-static CardDeckListWindow * pCnow_5;
+static CardListWindow * pCnow_5;
 
-static CardDeckListWindow * pCnow_7;
+static CardListWindow * pCnow_7;

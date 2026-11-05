@@ -4,6 +4,16 @@
 #include "common.h"
 #include "shared.h"
 #include "ov10/cgp.h"
+#include "ov10/card_id.h"
+#include "ov10/card_play_sound1.h"
+#include "ov10/card_disp.h"
+#include "ov10/card_fread.h"
+#include "main/xgl_2.h"
+#include "main/xgl_font.h"
+#include "main/xgl_sound.h"
+
+/* Void here (measured): declaring the int it returns changes the object at its call sites. */
+extern void nmlModelSetRenderLevel(int level);
 
 /*
  * 16-byte float vector the original copies with doubleword moves (ld/sd pairs): the u64 member gives
@@ -15,66 +25,12 @@ typedef union CardHelpFloat4 {
     u64 words[2];
 } CardHelpFloat4;
 
-void xglMatrixScale(Matrix4 destination, const Matrix4 source,
-                            const float scale[4]);
-void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
-                            const float translation[4]);
-void CardDispLight(Matrix4 matrix, s16 card, s16 enabled, u8 color);
-extern void nmlModelEntry(u32 model);
-extern void CardDisp(Matrix4 matrix, s16 kind, s16 flagA, s16 flagB);
-extern void nmlModelEntryCard(void *model);
-extern void nmlModelSetPlace(const Vector4 *matrix);
-extern void nmlModelSetRenderLevel(int level);
-extern void nmlModelSetTexture(const char *texture);
-
-extern const CardHelpFloat4 cardDispCtrTranslation;
-extern const CardHelpFloat4 cardDispTurnTranslation;
-extern const CardHelpFloat4 cardDispTurnScale;
-extern const CardHelpFloat4 cardDispShineCurryScale;
-extern const CardHelpFloat4 cardDispAttrTranslation;
-extern const CardHelpFloat4 cardDispNazoTranslation;
-extern const CardHelpFloat4 cardDispGunoTranslation;
-extern const CardHelpFloat4 cardDispCommTranslation;
-extern const CardHelpFloat4 cardDispPhaseTranslation;
-extern const char *cardxtx_tbl[];
-extern u32 cardlex_tbl[];
-
-extern const CardHelpFloat4 cardDispDeckMakeTranslation;
-extern const CardHelpFloat4 cardDispTejyunTranslation;
-extern const CardHelpFloat4 cardDispTejyunOffset;
-extern const CardHelpFloat4 cardDispTejyunScale;
-extern const CardHelpFloat4 cardDispDeckMakeScale;
-
-/* Original 16-byte vectors (translation, scale and place constants) of the help screen. */
-const CardHelpFloat4 cardDispCtrTranslation = {{ 1.48f, 0.16f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispDeckMakeTranslation = {{ 1.37f, 0.2f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispDeckMakeScale = {{ 0.9f, 0.9f, 1.0f, 1.0f }};
-const CardHelpFloat4 cardDispTurnTranslation = {{ 1.5f, 0.18f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispTurnScale = {{ 0.9f, 0.9f, 1.0f, 1.0f }};
-const CardHelpFloat4 cardDispTejyunTranslation = {{ 1.397f, -0.317f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispTejyunOffset = {{ 1.397f, 1.457f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispTejyunScale = {{ 0.9f, 0.9f, 1.0f, 1.0f }};
-const CardHelpFloat4 cardDispGunTranslation = {{ 1.397f, 0.863f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispGunScale = {{ 0.6f, 0.6f, 1.0f, 1.0f }};
-const CardHelpFloat4 cardDispShineCurryScale = {{ 0.17f, 0.17f, 1.0f, 1.0f }};
-const CardHelpFloat4 cardDispAttrTranslation = {{ -2.64f, 1.16f, 0.02f, 1.0f }};
-const CardHelpFloat4 cardDispNazoTranslation = {{ -2.2f, 0.58f, 0.02f, 1.0f }};
-const CardHelpFloat4 cardDispGunoTranslation = {{ -1.1f, 1.53f, 0.02f, 1.0f }};
-const CardHelpFloat4 cardDispOnceTranslation = {{ 1.397f, 0.179f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispCommTranslation = {{ 1.36f, 0.15f, 0.0f, 1.0f }};
-const CardHelpFloat4 cardDispPhaseTranslation = {{ 1.36f, 0.15f, 0.0f, 1.0f }};
-const char *cardxtx_tbl[64] = {0};
-u32 cardlex_tbl[64] = {0};
-extern char *strcpy(char *destination, const char *source);
-
 /* 16-byte float vector with doubleword alignment (see CardDispHelpSlide2/3). */
-typedef unsigned int Quadword __attribute__((mode(TI)));
 typedef union CardHelpVector {
     float v[4];
     Quadword q;
 } CardHelpVector;
-extern void nmlModelSetLight(Matrix4 color, Matrix4 direction);
-extern float xglSin(float angle);
+
 /*
  * Help resources: index of each file CardHelpFileLoad reads, in the order of its name list,
  * which is also the index into cardlex_tbl[] / cardxtx_tbl[]. The names are the disc file
@@ -118,147 +74,167 @@ enum CardHelpResource {
 };
 
 /*
- * Help pages: page ids are the indices of CardTitleTxtLst (0x00a483e8, 59 entries) and of the
- * jump table in CardDispHelpCard; each name spells that page's title string. Pages whose
- * title repeats get an _A/_B/_C suffix in id order.
+ * Help screen layout (pixels): the header line sits at HELP_HEADER_Y; the index (category)
+ * list and the page text start at HELP_INDEX_X, the topic list at HELP_TOPICS_X, both lists
+ * at HELP_LIST_Y; the category name of a page is printed
+ * at HELP_CATEGORY_X. HELP_TITLE_COLOR is the CardDispTxtSub colour index of titles.
  */
-enum CardHelpPage {
-    CARD_HELP_PAGE_WHAT_IS_XENO_CARD = 0,
-    CARD_HELP_PAGE_CONTROLS = 1,
-    CARD_HELP_PAGE_CARD_OUTLINE = 2,
-    CARD_HELP_PAGE_GAME_PROGRESSION = 3,
-    CARD_HELP_PAGE_PROGRESSION_PHASE = 4,
-    CARD_HELP_PAGE_PROGRESSION_TURN = 5,
-    CARD_HELP_PAGE_POSITIONING = 6,
-    CARD_HELP_PAGE_DECK = 7,
-    CARD_HELP_PAGE_LOST_PILE = 8,
-    CARD_HELP_PAGE_HAND = 9,
-    CARD_HELP_PAGE_JUNK_PILE = 10,
-    CARD_HELP_PAGE_STANDBY_AREA = 11,
-    CARD_HELP_PAGE_SITUATION_AREA = 12,
-    CARD_HELP_PAGE_BATTLEFIELD = 13,
-    CARD_HELP_PAGE_FIELD = 14,
-    CARD_HELP_PAGE_CARD = 15,
-    CARD_HELP_PAGE_BATTLE_CARD = 16,
-    CARD_HELP_PAGE_EVENT_CARD = 17,
-    CARD_HELP_PAGE_SITUATION_CARD = 18,
-    CARD_HELP_PAGE_DETAILS = 19,
-    CARD_HELP_PAGE_TYPES = 20,
-    CARD_HELP_PAGE_NAMES = 21,
-    CARD_HELP_PAGE_ATTRIBUTES = 22,
-    CARD_HELP_PAGE_REQUIREMENTS_A = 23,
-    CARD_HELP_PAGE_REQUIREMENTS_B = 24,
-    CARD_HELP_PAGE_COST = 25,
-    CARD_HELP_PAGE_HP = 26,
-    CARD_HELP_PAGE_ATK = 27,
-    CARD_HELP_PAGE_ATTACK_TYPE = 28,
-    CARD_HELP_PAGE_TEXT = 29,
-    CARD_HELP_PAGE_HOW_TO_PLAY = 30,
-    CARD_HELP_PAGE_TURNS_A = 31,
-    CARD_HELP_PAGE_TURNS_B = 32,
-    CARD_HELP_PAGE_DRAW_PHASE = 33,
-    CARD_HELP_PAGE_MOVE_PHASE = 34,
-    CARD_HELP_PAGE_EVENT_PHASE_A = 35,
-    CARD_HELP_PAGE_EVENT_PHASE_B = 36,
-    CARD_HELP_PAGE_EVENT_PHASE_C = 37,
-    CARD_HELP_PAGE_SET_PHASE_A = 38,
-    CARD_HELP_PAGE_SET_PHASE_B = 39,
-    CARD_HELP_PAGE_BLOCK_PHASE = 40,
-    CARD_HELP_PAGE_BATTLE_PHASE_A = 41,
-    CARD_HELP_PAGE_BATTLE_PHASE_B = 42,
-    CARD_HELP_PAGE_ADJUST_PHASE = 43,
-    CARD_HELP_PAGE_SPECIAL_CARD = 44,
-    CARD_HELP_PAGE_WEAPONS_A = 45,
-    CARD_HELP_PAGE_WEAPONS_B = 46,
-    CARD_HELP_PAGE_GNOSIS = 47,
-    CARD_HELP_PAGE_TERMINOLOGY = 48,
-    CARD_HELP_PAGE_PENETRATE = 49,
-    CARD_HELP_PAGE_DOWN = 50,
-    CARD_HELP_PAGE_E_MARK = 51,
-    CARD_HELP_PAGE_EVENT_BLOCK = 52,
-    CARD_HELP_PAGE_OPENING_CARDS = 53,
-    CARD_HELP_PAGE_VIEWING_CARDS = 54,
-    CARD_HELP_PAGE_CREATING_DECKS = 55,
-    CARD_HELP_PAGE_SAVING_DECKS = 56,
-    CARD_HELP_PAGE_TWO_PLAYER_BATTLE = 57,
-    CARD_HELP_PAGE_SELECTING_DECKS = 58,
-    CARD_HELP_PAGE_COUNT = 59  /* slti 0x3B at 0x00a20d68 */
-};
-#define CARD_HELP_PAGE_LAST (CARD_HELP_PAGE_COUNT - 1)  /* li 0x3A at 0x00a20da8 */
+#define HELP_INDEX_X        6
+#define HELP_TOPICS_X       266
+#define HELP_CATEGORY_X     286
+#define HELP_HEADER_Y       25
+#define HELP_LIST_Y         50
+#define HELP_LIST_TEXT_LENGTH 24  /* characters printed per list row */
+#define HELP_TITLE_COLOR    12
 
-static int ChangeCnt = 0;
-extern Matrix4 asDir;
+/* CardHelpFileLoad: the help files are read into one area, each file 16-byte aligned. */
+#define CARD_HELP_FILE_BUFFER   0x01720000  /* lui s0,0x172 at 0x00a1e7f0 */
+#define CARD_HELP_FILE_ALIGN    16          /* addiu 15 / and -16 at 0x00a1e884 */
+#define CARD_HELP_FILE_MAX      64          /* loop bound s6 + 256 at 0x00a1e8e4 = sizeof cardlex_tbl / 4 */
+#define CARD_HELP_NAME_COUNT    35          /* 34 names plus the NULL terminator (140-byte copy) */
 
 /*
- * Help-title list state CHPTitleInitSub resets when CardHelpProc
- * (0x00a20908) opens a help category; CHPMenuInitSub (0x00a1e640, not part
- * of this TU's claimed source) runs immediately after it. TitleMaxList
- * (config/symbols/ov10.txt, 7 bytes) holds one entry-count byte per
- * category, read here through a pointer captured early and dereferenced
- * once per field (count and limit each get their own read). Only the
- * members CHPTitleInitSub writes are named; +0x04 stays unmodeled because
- * this function does not touch it.
+ * Help-slide animation (shared by CardDispHelpSlide1/2/3): the counter ChangeCnt wraps
+ * around the list length and the entry shown changes every HELP_SLIDE_ENTRY_TICKS.
  */
-typedef struct CHPTitleList {
-    s16 cursor;      /* +0x00: selected row, reset to the top */
-    s8 flagA;        /* +0x02 */
-    s8 flagB;        /* +0x03 */
-    u8 unmodeled_04;
-    s8 flagC;        /* +0x05 */
-    s16 x;           /* +0x06: screen column */
-    s16 y;           /* +0x08: screen row */
-    s16 rowHeight;   /* +0x0A */
-    s16 scroll;      /* +0x0C: top row offset, reset */
-    s16 step;        /* +0x0E: row step */
-    s16 count;       /* +0x10: TitleMaxList[category], sign-extended */
-    s16 limit;       /* +0x12: TitleMaxList[category], sign-extended */
-    u32 entries[151]; /* +0x14: list rows, not read through this view */
-} CHPTitleList;
+#define HELP_SLIDE_ENTRY_TICKS      64                                  /* sra 6 at 0x00a1ec6c */
+#define HELP_SLIDE_CYCLE_4          (4 * HELP_SLIDE_ENTRY_TICKS)        /* 256: sra 8 / sll 8 at 0x00a1ec4c */
+#define HELP_SLIDE_CYCLE_3          (3 * HELP_SLIDE_ENTRY_TICKS)        /* 192: li a3,0xc0 at 0x00a1ec9c */
+#define HELP_SLIDE_CYCLE_6          (6 * HELP_SLIDE_ENTRY_TICKS)        /* 384: six-entry lists of CardDispHelpSlide2 */
 
-extern const u8 TitleMaxList[7];
+/*
+ * Pulse of the lit help card: the light level is 1 + sin(ChangeCnt * 11.25 degrees) / 2
+ * (angle converted to radians as degrees / 180 * pi, in float).
+ */
+#define HELP_PULSE_DEGREES_PER_TICK 11.25f
+#define HELP_PULSE_HALF_TURN        180.0f
+#define HELP_PULSE_PI               3.1415927f
 
-void CHPTitleInitSub(CHPTitleList *list, int category)
+/* CardDispTejyun: the phase cards are stacked, each this much lower than the one above. */
+#define HELP_PHASE_ROW_STEP         0.3f
+
+/*
+ * Card resource models and textures at fixed addresses (loaded by the caller). The icon
+ * models are 0x400 apart from CARD_ICON_MODEL_BASE (the generation markers of
+ * CardCountGeneration in card_fread.h are the same bank); CardDispAttr, CardDispNazo and
+ * CardDispGuno draw them by index. The frame models and textures belong to the help menu
+ * panels (letters follow the address order).
+ */
+#define CARD_HELP_STATUS_MODEL_BASE 0x01C8A800  /* page mark, indexed by PageStatusLst[3 * helpTopic] */
+#define CARD_HELP_FRAME_MODEL_A     0x01CA1000
+#define CARD_HELP_FRAME_MODEL_B     0x01CA1C00
+#define CARD_HELP_FRAME_MODEL_C     0x01CA2B00
+#define CARD_HELP_FRAME_MODEL_D     0x01CA4000
+#define CARD_HELP_FRAME_MODEL_E     0x01CA6000
+#define CARD_HELP_FRAME_TEXTURE_A   ((const char *)0x01CB0000)
+#define CARD_HELP_FRAME_TEXTURE_B   ((const char *)0x01CC0050)
+
+#define CARD_HELP_CARD_REQUIREMENTS_A    CARD_ID_LV_10_SHION    /* first REQUIREMENTS page (its three H cards): li a1,7 at 0x00a206e0 */
+#define CARD_HELP_CARD_REQUIREMENTS_B    CARD_ID_BUNNIE    /* second REQUIREMENTS page (the any-attribute requirement): li a1,0x1D at 0x00a20700 */
+
+/*
+ * CardHelpProc states: the high nibble of CardGameWork.helpState selects the screen
+ * (`andi $4,$2,0xF0` at 0x00a209ac); every other value shows a help page.
+ */
+#define CARD_HELP_STATE_MASK    0xF0    /* 0x00a209ac */
+#define CARD_HELP_STATE_OFF     0x00    /* sb $0 at 0x00a20e34: back out of the first page, help ends */
+#define CARD_HELP_STATE_PAGE    0x01    /* sb 1 at 0x00a20a20, 0x00a20c60: show helpTopic */
+#define CARD_HELP_STATE_INDEX   0x10    /* sb at 0x00a209f4, 0x00a20b88, 0x00a20e0c: category list ("Help Index") */
+#define CARD_HELP_STATE_TOPICS  0x20    /* sb at 0x00a20abc, case at 0x00a209a8: topic list of one category */
+
+/*
+ * Pad bits CardHelpProc tests (input[].pressed; the d-pad ones are input[].directions).
+ * Next/previous page are R1/L1 as in CardTutorialProc; the compound masks accept the
+ * d-pad direction beside the button.
+ */
+#define CARD_HELP_PAD_BACK_OR_LEFT    (PAD_CROSS | PAD_LEFT)    /* andi 0x8040 at 0x00a20b70: cancel the topic list */
+#define CARD_HELP_PAD_SELECT_OR_RIGHT (PAD_CIRCLE | PAD_RIGHT)  /* andi 0x2020 at 0x00a20a5c: open the chosen category's topics */
+
+#define CARD_HELP_CATEGORY_COUNT      7     /* TitleMaxList[7]; the last category index is 6 (slti 6 at 0x00a20a68) */
+#define CARD_HELP_INDEX_ROWS          9     /* `rows` of the category list (sh 9 at 0x00a1e680) */
+#define CARD_HELP_TOPICS_PER_CATEGORY 14    /* SkipPageLst row stride, x14 at 0x00a20c3c..0x00a20c48 (7 rows, 0x62 bytes) */
+#define CARD_HELP_HISTORY_MAX       100     /* sltiu 0x64 at 0x00a20c4c, 0x00a20db4: bound of activeHelpPage */
+#define CARD_HELP_STATUS_STRIDE     3       /* PageStatusLst bytes per page (177 = 59 pages x 3): mark, number in the category, one more */
+#define CARD_HELP_RADIX             10     /* page-number digits: addiu 0xA at 0x00a20e90 */
+
+/* nmlModelSetRenderLevel is declared void here although main/nml_model_set.h returns int (measured: the
+ * int return changes the scheduling around its calls in CardHelpProc, so the header is not included). */
+extern char *CardSkipTitleTxtLst[];
+extern char *CardBookMarkTxtLst[];
+extern char *CardTitleTxtLst[];
+extern char *CardHelpTxtLst[];
+
+/* Original 16-byte vectors (translation, scale and place constants) of the help screen. */
+const CardHelpFloat4 cardDispCtrTranslation = {{ 1.48f, 0.16f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispDeckMakeTranslation = {{ 1.37f, 0.2f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispDeckMakeScale = {{ 0.9f, 0.9f, 1.0f, 1.0f }};
+const CardHelpFloat4 cardDispTurnTranslation = {{ 1.5f, 0.18f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispTurnScale = {{ 0.9f, 0.9f, 1.0f, 1.0f }};
+const CardHelpFloat4 cardDispTejyunTranslation = {{ 1.397f, -0.317f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispTejyunOffset = {{ 1.397f, 1.457f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispTejyunScale = {{ 0.9f, 0.9f, 1.0f, 1.0f }};
+const CardHelpFloat4 cardDispGunTranslation = {{ 1.397f, 0.863f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispGunScale = {{ 0.6f, 0.6f, 1.0f, 1.0f }};
+const CardHelpFloat4 cardDispShineCurryScale = {{ 0.17f, 0.17f, 1.0f, 1.0f }};
+const CardHelpFloat4 cardDispAttrTranslation = {{ -2.64f, 1.16f, 0.02f, 1.0f }};
+const CardHelpFloat4 cardDispNazoTranslation = {{ -2.2f, 0.58f, 0.02f, 1.0f }};
+const CardHelpFloat4 cardDispGunoTranslation = {{ -1.1f, 1.53f, 0.02f, 1.0f }};
+const CardHelpFloat4 cardDispOnceTranslation = {{ 1.397f, 0.179f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispCommTranslation = {{ 1.36f, 0.15f, 0.0f, 1.0f }};
+const CardHelpFloat4 cardDispPhaseTranslation = {{ 1.36f, 0.15f, 0.0f, 1.0f }};
+const char *cardxtx_tbl[64] = {0};
+u32 cardlex_tbl[64] = {0};
+static int ChangeCnt = 0;
+
+/*
+ * CHPTitleInitSub resets the help-title list when CardHelpProc (0x00a20908) opens a
+ * help category; CHPMenuInitSub (0x00a1e640) runs immediately after it. TitleMaxList
+ * (7 bytes) holds one entry-count byte per category, read here through a pointer
+ * captured early and dereferenced once per field (rows and count each get their own
+ * read). The help lists are CardListWindow records: the title string table is the one
+ * the list draws (`rows` strings from `top`), `cursor` the selected row.
+ */
+void CHPTitleInitSub(CardListWindow *list, int category)
 {
     const u8 *entry;
     u8 raw;
 
-    list->x = 266;
-    list->y = 50;
+    list->x = HELP_TOPICS_X;
+    list->y = HELP_LIST_Y;
     entry = &TitleMaxList[category];
-    list->rowHeight = 24;
+    list->textLength = HELP_LIST_TEXT_LENGTH;
+    list->active = 0;
+    list->baseColor = 0;
+    list->cursorColor = 0;
     list->cursor = 0;
-    list->flagA = 0;
-    list->flagB = 0;
-    list->flagC = 0;
-    list->scroll = 0;
+    list->top = 0;
     raw = *entry;
-    list->step = 1;
+    list->shownCount = 1;
+    list->rows = (s8)raw;
+    raw = *entry;
     list->count = (s8)raw;
-    raw = *entry;
-    list->limit = (s8)raw;
 }
 
 /*
- * CHPMenuInitSub (0x00a1e640, 0x64 bytes): resets the help-menu list at
- * cld0_17 (same field layout as CHPTitleList), then re-initialises the
- * title list cld1_18 for category 0 (TitleMaxList[0] = 6) by a tail jump
+ * CHPMenuInitSub (0x00a1e640, 0x64 bytes): resets the help-menu list `menu`
+ * (its `rows` field is CARD_HELP_INDEX_ROWS, its `count` the seven categories), then re-initialises the
+ * title list `title` for category 0 (TitleMaxList[0] = 6) by a tail jump
  * (0x00a1e69c `j CHPTitleInitSub`, a0 = 2nd argument, a1 = 0).
- * Callers: CardHelpProc 0x00a209ec and 0x00a21df0 (a0 = cld0_17, a1 = cld1_18).
- * CHPTitleInitSub is defined in this TU and returns void.
+ * Callers: CardHelpProc 0x00a209ec and 0x00a21df0.
  */
-void CHPMenuInitSub(CHPTitleList *menu, CHPTitleList *title)
+void CHPMenuInitSub(CardListWindow *menu, CardListWindow *title)
 {
-    menu->x = 6;            /* 0x00a1e674 sh $6,0x6 */
-    menu->y = 50;           /* 0x00a1e678 sh $7,0x8 */
-    menu->rowHeight = 24;   /* 0x00a1e67c sh $8,0xA */
+    menu->x = HELP_INDEX_X;         /* 0x00a1e674 sh $6,0x6 */
+    menu->y = HELP_LIST_Y;          /* 0x00a1e678 sh $7,0x8 */
+    menu->textLength = HELP_LIST_TEXT_LENGTH; /* 0x00a1e67c sh $8,0xA */
+    menu->active = 0;
+    menu->baseColor = 0;
+    menu->cursorColor = 0;
     menu->cursor = 0;
-    menu->flagA = 0;
-    menu->flagB = 0;
-    menu->flagC = 0;
-    menu->scroll = 0;
-    menu->count = 9;        /* 0x00a1e680 sh $9,0x10 */
-    menu->step = 1;         /* 0x00a1e684 sh $10,0xE */
-    menu->limit = 7;        /* 0x00a1e670 sh $2,0x12 */
+    menu->top = 0;
+    menu->rows = CARD_HELP_INDEX_ROWS;       /* 0x00a1e680 sh $9,0x10 */
+    menu->shownCount = 1;              /* 0x00a1e684 sh $10,0xE */
+    menu->count = CARD_HELP_CATEGORY_COUNT;  /* 0x00a1e670 sh $2,0x12 */
     CHPTitleInitSub(title, 0);
 }
 
@@ -274,11 +250,6 @@ void CHPMenuInitSub(CHPTitleList *menu, CHPTitleList *title)
  * automatics: the compiler copies them from rodata (20 bytes + memset of the rest
  * at 0x00a1e6e4..0x00a1e714, 35 words at 0x00a1e738..0x00a1e7e4).
  */
-#define CARD_HELP_FILE_BUFFER   0x01720000  /* lui s0,0x172 at 0x00a1e7f0 */
-#define CARD_HELP_FILE_ALIGN    16          /* addiu 15 / and -16 at 0x00a1e884 */
-#define CARD_HELP_FILE_MAX      64          /* loop bound s6 + 256 at 0x00a1e8e4 = sizeof cardlex_tbl / 4 */
-#define CARD_HELP_NAME_COUNT    35          /* 34 names plus the NULL terminator (140-byte copy) */
-
 void CardHelpFileLoad(void)
 {
     char dir[64] = "data\\carddata\\help\\";
@@ -323,7 +294,7 @@ void CardHelpFileLoad(void)
 /*
  * CHPMenuBackDispSub (0x00a1e940, 0x130 bytes): three help-menu back panels, each
  * placed with xglMatrixTrans and entered with nmlModelEntryCard after
- * nmlModelSetTexture / nmlModelSetPlace / nmlModelSetRenderLevel(2).
+ * nmlModelSetTexture / nmlModelSetPlace / nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL).
  * Caller: CardHelpProc 0x00a20d34 (a0 = sp). All callees void (no $v0 reads).
  * The two float locals `left` and `zero` stay in callee-saved FP registers across
  * the calls; z is assigned before y in each position block.
@@ -331,42 +302,43 @@ void CardHelpFileLoad(void)
 static void CHPMenuBackDispSub(Matrix4 matrix)
 {
     Matrix4 transformed;
-    Vector4 position;
+    float position[4];
     float left = -1.4184f;     /* 0xBFB58E22 */
     float zero = 0.0f;
 
-    position.x = left;
-    position.z = zero;
-    position.y = zero;
-    position.w = 1.0f;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, (const float *)&position);
-    nmlModelSetTexture((const char *)0x01CB0000);
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntryCard((void *)0x01CA2B00);
+    position[0] = left;
+    position[2] = zero;
+    position[1] = zero;
+    position[3] = 1.0f;
+    xglMatrixTrans(transformed, matrix, position);
+    nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_A);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntryCard(CARD_HELP_FRAME_MODEL_C);
 
-    position.x = 1.4184f;      /* 0x3FB58E22 */
-    position.z = zero;
-    position.y = zero;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, (const float *)&position);
-    nmlModelSetTexture((const char *)0x01CB0000);
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntryCard((void *)0x01CA1000);
+    position[0] = 1.4184f;      /* 0x3FB58E22 */
+    position[2] = zero;
+    position[1] = zero;
+    xglMatrixTrans(transformed, matrix, position);
+    nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_A);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntryCard(CARD_HELP_FRAME_MODEL_A);
 
-    position.x = left;
-    position.y = -1.832f;      /* 0xBFEA7EFA */
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, (const float *)&position);
-    nmlModelSetTexture((const char *)0x01CC0050);
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntryCard((void *)0x01CA4000);
+    position[0] = left;
+    position[1] = -1.832f;      /* 0xBFEA7EFA */
+    xglMatrixTrans(transformed, matrix, position);
+    nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_B);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntryCard(CARD_HELP_FRAME_MODEL_D);
 }
 
 /*
  * CardDispHelpCurrySet (0x00a1ea70, 0x140 bytes): three curry card models drawn at
  * translation (1.5143, y, 0, 1), scale (0.46, 0.46, 1, 1); y = 1.186, 0.215, -0.757
- * with card kinds 0, 0x54 (84), 0x78 (120) passed to CardDisp(.., 1, 0).
+ * with the cards Lv 1 Shion (a battle card), Curry (situation) and Hilbert Effect (event) passed to
+ * CardDisp(.., 1, 0).
  * Caller: CardDispHelpCard 0x00a205f8. CardDisp is void (no $v0 read after
  * 0x00a1eb08/0x00a1eb4c/0x00a1eb90).
  */
@@ -384,29 +356,20 @@ void CardDispHelpCurrySet(Matrix4 matrix)
     scale[1] = 0.46f;
     scale[2] = 1.0f;
     scale[3] = 1.0f;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-    CardDisp(transformed, 0, 1, 0);
+    xglMatrixTrans(transformed, matrix, translation);
+    xglMatrixScale(transformed, transformed, scale);
+    CardDisp(&transformed, CARD_ID_LV_1_SHION, 1, 0);
 
     translation[1] = 0.215f;      /* 0x3E5C28F6 */
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-    CardDisp(transformed, 84, 1, 0);
+    xglMatrixTrans(transformed, matrix, translation);
+    xglMatrixScale(transformed, transformed, scale);
+    CardDisp(&transformed, CARD_ID_CURRY, 1, 0);
 
     translation[1] = -0.757f;     /* 0xBF41CAC1 */
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-    CardDisp(transformed, 120, 1, 0);
+    xglMatrixTrans(transformed, matrix, translation);
+    xglMatrixScale(transformed, transformed, scale);
+    CardDisp(&transformed, CARD_ID_HILBERT_EFFECT, 1, 0);
 }
-
-/*
- * Help-slide animation (shared by CardDispHelpSlide1/2/3): the counter ChangeCnt wraps
- * around the list length and the entry shown changes every HELP_SLIDE_ENTRY_TICKS.
- */
-#define HELP_SLIDE_ENTRY_TICKS      64                                  /* sra 6 at 0x00a1ec6c */
-#define HELP_SLIDE_CYCLE_4          (4 * HELP_SLIDE_ENTRY_TICKS)        /* 256: sra 8 / sll 8 at 0x00a1ec4c */
-#define HELP_SLIDE_CYCLE_3          (3 * HELP_SLIDE_ENTRY_TICKS)        /* 192: li a3,0xc0 at 0x00a1ec9c */
-#define HELP_SLIDE_CYCLE_6          (6 * HELP_SLIDE_ENTRY_TICKS)        /* 384: six-entry lists of CardDispHelpSlide2 */
 
 /*
  * CardDispHelpSlide1 (0x00a1ebb0, 0x1e0 bytes): help pages 16..18 draw one card of a
@@ -435,23 +398,23 @@ void CardDispHelpSlide1(s8 page, Matrix4 matrix)
     case CARD_HELP_PAGE_BATTLE_CARD:               /* body at 0x00a1ec28 */
         ChangeCnt %= HELP_SLIDE_CYCLE_4;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, trans);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list16[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, trans);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list16[i], 1, 0);
         break;
     case CARD_HELP_PAGE_EVENT_CARD:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, trans);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list17[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, trans);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list17[i], 1, 0);
         break;
     case CARD_HELP_PAGE_SITUATION_CARD:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, trans);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list18[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, trans);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list18[i], 1, 0);
         break;
     }
 }
@@ -492,79 +455,79 @@ void CardDispHelpSlide2(s8 page, Matrix4 matrix)
     case CARD_HELP_PAGE_DETAILS:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list19[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list19[i], 1, 0);
         break;
     case CARD_HELP_PAGE_TYPES:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list20[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list20[i], 1, 0);
         break;
     case CARD_HELP_PAGE_NAMES:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list21[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list21[i], 1, 0);
         break;
     case CARD_HELP_PAGE_ATTRIBUTES:
         ChangeCnt %= HELP_SLIDE_CYCLE_6;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDispLight(transformed, list22[i], 1, 0x10);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDispLight(&transformed, list22[i], 1, CARD_LIGHT_ATTRIBUTE);
         break;
     case CARD_HELP_PAGE_COST:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDispLight(transformed, list25[i], 1, 0x8);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDispLight(&transformed, list25[i], 1, CARD_LIGHT_RESERVE);
         break;
     case CARD_HELP_PAGE_HP:
         ChangeCnt %= HELP_SLIDE_CYCLE_6;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDispLight(transformed, list26[i], 1, 0x2);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDispLight(&transformed, list26[i], 1, CARD_LIGHT_HIT_POINTS);
         break;
     case CARD_HELP_PAGE_ATK:
         ChangeCnt %= HELP_SLIDE_CYCLE_6;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDispLight(transformed, list27[i], 1, 0x4);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDispLight(&transformed, list27[i], 1, CARD_LIGHT_POWER);
         break;
     case CARD_HELP_PAGE_ATTACK_TYPE:
         ChangeCnt %= HELP_SLIDE_CYCLE_4;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDispLight(transformed, list28[i], 1, 0x40);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDispLight(&transformed, list28[i], 1, CARD_LIGHT_ATTACK);
         break;
     case CARD_HELP_PAGE_WEAPONS_A:
         ChangeCnt %= HELP_SLIDE_CYCLE_6;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list45[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list45[i], 1, 0);
         break;
     case CARD_HELP_PAGE_WEAPONS_B:
         ChangeCnt %= HELP_SLIDE_CYCLE_6;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list46[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list46[i], 1, 0);
         break;
     case CARD_HELP_PAGE_GNOSIS:
         ChangeCnt %= HELP_SLIDE_CYCLE_4;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list47[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list47[i], 1, 0);
         break;
     }
 }
@@ -597,16 +560,16 @@ void CardDispHelpSlide3(s8 page, Matrix4 matrix)
     case CARD_HELP_PAGE_REQUIREMENTS_A:               /* body at 0x00a1f378 */
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list23[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list23[i], 1, 0);
         break;
     case CARD_HELP_PAGE_REQUIREMENTS_B:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation.v);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        CardDisp(transformed, list24[i], 1, 0);
+        xglMatrixTrans(transformed, matrix, translation.v);
+        xglMatrixScale(transformed, transformed, scale);
+        CardDisp(&transformed, list24[i], 1, 0);
         break;
     }
 }
@@ -617,9 +580,9 @@ void CardDispCtr(Matrix4 matrix)
     CardHelpFloat4 translation;
 
     translation = cardDispCtrTranslation;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_HELP5]);
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_HELP5]);
 }
@@ -628,8 +591,8 @@ void CardDispField(Matrix4 matrix, const float translation[4])
 {
     Matrix4 transformed;
 
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    xglMatrixTrans(transformed, matrix, translation);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_FIELD]);
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_FIELD]);
 }
@@ -642,11 +605,11 @@ void CardDispDeckMake(Matrix4 matrix)
 
     translation = cardDispDeckMakeTranslation;
     scale = cardDispDeckMakeScale;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    xglMatrixScale(transformed, (const float (*)[4])transformed,
+    xglMatrixScale(transformed, transformed,
                    scale.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_DECKMAKE]);
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_DECKMAKE]);
 }
@@ -655,8 +618,8 @@ void CardDispH1P2P(Matrix4 matrix, const float translation[4])
 {
     Matrix4 transformed;
 
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    xglMatrixTrans(transformed, matrix, translation);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_H1P2P]);
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_H1P2P]);
 }
@@ -669,11 +632,11 @@ void CardDispTurn(Matrix4 matrix)
 
     translation = cardDispTurnTranslation;
     scale = cardDispTurnScale;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    xglMatrixScale(transformed, (const float (*)[4])transformed,
+    xglMatrixScale(transformed, transformed,
                    scale.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_HELP6]);
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_HELP6]);
 }
@@ -685,12 +648,13 @@ void CardDispFieldPointScale(Matrix4 matrix, const float translation[4],
     Matrix4 color;
     float light;
 
-    light = (xglSin((((float)ChangeCnt * 11.25f) / 180.0f) * 3.1415927f) * 0.5f) + 1.0f;
+    light = (xglSin((((float)ChangeCnt * HELP_PULSE_DEGREES_PER_TICK) / HELP_PULSE_HALF_TURN) * HELP_PULSE_PI)
+             * 0.5f) + 1.0f;
     color[3][0] = color[3][1] = color[3][2] = light;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-    nmlModelSetLight(color, asDir);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    xglMatrixTrans(transformed, matrix, translation);
+    xglMatrixScale(transformed, transformed, scale);
+    nmlModelSetLight(&color, &asDir);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[kind]);
     nmlModelEntry(cardlex_tbl[kind]);
 }
@@ -704,9 +668,6 @@ void CardDispFieldPointScale(Matrix4 matrix, const float translation[4],
  * the page's own card lit by nmlModelSetLight and the extra cards the page
  * explains drawn by CardDispFieldPointScale. kind indexes a seven-entry jump
  * table (jtbl_00A4E120); an out-of-range kind draws the frame only.
- * The two card tables are read directly, so GCC rematerialises their bases per
- * case, and the three-card tails of the PHASE1 and PHASE2 kinds are identical and get
- * cross-jumped.
  */
 void CardDispTejyun(Matrix4 matrix, int kind)
 {
@@ -720,16 +681,17 @@ void CardDispTejyun(Matrix4 matrix, int kind)
     translation = cardDispTejyunTranslation;
     offset = cardDispTejyunOffset;
     scale = cardDispTejyunScale;
-    light = (xglSin((((float)ChangeCnt * 11.25f) / 180.0f) * 3.1415927f) * 0.5f) + 1.0f;
+    light = (xglSin((((float)ChangeCnt * HELP_PULSE_DEGREES_PER_TICK) / HELP_PULSE_HALF_TURN) * HELP_PULSE_PI)
+             * 0.5f) + 1.0f;
     color[3][0] = color[3][1] = color[3][2] = light;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    xglMatrixScale(transformed, (const float (*)[4])transformed,
+    xglMatrixScale(transformed, transformed,
                    scale.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_FIELD]);
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_FIELD]);
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    offset.v);
 
     switch (kind) {
@@ -738,16 +700,16 @@ void CardDispTejyun(Matrix4 matrix, int kind)
                                 scale.v, CARD_HELP_RES_BASE);
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_HAND);
-        nmlModelSetLight(color, asDir);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetLight(&color, &asDir);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE1]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE1]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE2]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE2]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE3]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE3]);
         break;
@@ -756,32 +718,32 @@ void CardDispTejyun(Matrix4 matrix, int kind)
                                 scale.v, CARD_HELP_RES_BATTL);
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_STANDBY);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE1]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE1]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetLight(color, asDir);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
+        nmlModelSetLight(&color, &asDir);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE2]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE2]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE3]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE3]);
         break;
     case CARD_HELP_RES_PHASE3:
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_HAND);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE2]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE2]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetLight(color, asDir);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
+        nmlModelSetLight(&color, &asDir);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE3]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE3]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE4]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE4]);
         break;
@@ -790,65 +752,65 @@ void CardDispTejyun(Matrix4 matrix, int kind)
                                 scale.v, CARD_HELP_RES_HAND);
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_STANDBY);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE3]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE3]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetLight(color, asDir);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
+        nmlModelSetLight(&color, &asDir);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE4]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE4]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE5]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE5]);
         break;
     case CARD_HELP_RES_PHASE5:
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_HAND2);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE4]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE4]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetLight(color, asDir);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
+        nmlModelSetLight(&color, &asDir);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE5]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE5]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE6]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE6]);
         break;
     case CARD_HELP_RES_PHASE6:
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_BATTL);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE5]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE5]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetLight(color, asDir);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
+        nmlModelSetLight(&color, &asDir);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE6]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE6]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE7]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE7]);
         break;
     case CARD_HELP_RES_PHASE7:
         CardDispFieldPointScale(matrix, translation.v,
                                 scale.v, CARD_HELP_RES_HAND);
-        nmlModelSetPlace((const Vector4 *)transformed);
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE5]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE5]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE6]);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE6]);
-        transformed[3][1] -= 0.3f;
-        nmlModelSetPlace((const Vector4 *)transformed);
+        transformed[3][1] -= HELP_PHASE_ROW_STEP;
+        nmlModelSetPlace(&transformed);
         nmlModelSetTexture(cardxtx_tbl[CARD_HELP_RES_PHASE7]);
-        nmlModelSetLight(color, asDir);
+        nmlModelSetLight(&color, &asDir);
         nmlModelEntry(cardlex_tbl[CARD_HELP_RES_PHASE7]);
         break;
     }
@@ -860,20 +822,21 @@ void CardDispFieldPoint(Matrix4 matrix, const float translation[4], int kind)
     Matrix4 color;
     float light;
 
-    light = (xglSin((((float)ChangeCnt * 11.25f) / 180.0f) * 3.1415927f) * 0.5f) + 1.0f;
+    light = (xglSin((((float)ChangeCnt * HELP_PULSE_DEGREES_PER_TICK) / HELP_PULSE_HALF_TURN) * HELP_PULSE_PI)
+             * 0.5f) + 1.0f;
     color[3][0] = color[3][1] = color[3][2] = light;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    nmlModelSetLight(color, asDir);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    xglMatrixTrans(transformed, matrix, translation);
+    nmlModelSetLight(&color, &asDir);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[kind]);
     nmlModelEntry(cardlex_tbl[kind]);
 }
 
 /*
  * CardDispGun (0x00a1fe60, 0xb8 bytes): translation cardDispGunTranslation {1.397, 0.863, 0, 1},
- * scale cardDispGunScale {0.6, 0.6, 1, 1}; CardDisp(kind 0x31, 1, 0); then the model is
+ * scale cardDispGunScale {0.6, 0.6, 1, 1}; CardDisp(Handgun, 1, 0); then the model is
  * moved down by 1.33 (double: fptodp 0x00a1fecc, ld the double literal at 0x00a4e160, dpsub, dptofp,
- * stored back at sp+0x34 = transformed[3][1]) and CardDisp(kind 0x44, 1, 0).
+ * stored back at sp+0x34 = transformed[3][1]) and CardDisp(Ogre, 1, 0).
  * Caller: CardDispHelpCard 0x00a207e0. CardDisp (0x00a0a2f0) is void (no $v0 read
  * at 0x00a1fec8/0x00a1ff08).
  */
@@ -885,15 +848,14 @@ void CardDispGun(Matrix4 matrix)
 
     translation = cardDispGunTranslation;
     scale = cardDispGunScale;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    xglMatrixScale(transformed, (const float (*)[4])transformed,
+    xglMatrixScale(transformed, transformed,
                    scale.v);
-    CardDisp(transformed, 49, 1, 0);      /* 0x00a1feb8 addiu a1,0x31 */
+    CardDisp(&transformed, CARD_ID_HANDGUN, 1, 0);      /* 0x00a1feb8 addiu a1,0x31 */
     transformed[3][1] -= 1.33;            /* double literal at 0x00a4e160 */
-    CardDisp(transformed, 68, 1, 0);      /* 0x00a1fef4 addiu a1,0x44 */
+    CardDisp(&transformed, CARD_ID_OGRE, 1, 0);      /* 0x00a1fef4 addiu a1,0x44 */
 }
-
 
 void CardDispShineCurry(Matrix4 matrix, const float translation[4])
 {
@@ -901,10 +863,10 @@ void CardDispShineCurry(Matrix4 matrix, const float translation[4])
     CardHelpFloat4 scale;
 
     scale = cardDispShineCurryScale;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-    xglMatrixScale(transformed, (const float (*)[4])transformed,
+    xglMatrixTrans(transformed, matrix, translation);
+    xglMatrixScale(transformed, transformed,
                    scale.v);
-    CardDispLight(transformed, 84, 1, 255);
+    CardDispLight(&transformed, CARD_ID_CURRY, 1, CARD_LIGHT_ALL);
 }
 
 void CardDispAttr(Matrix4 matrix)
@@ -914,43 +876,43 @@ void CardDispAttr(Matrix4 matrix)
     const float step = -0.38f;
 
     translation = cardDispAttrTranslation;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetPlace(&transformed);
 
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C87400);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE);
     transformed[3][1] += step;
 
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C87C00);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 2 * CARD_MODEL_STRIDE);
     transformed[3][1] += step;
 
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C88000);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 3 * CARD_MODEL_STRIDE);
     transformed[3][1] += step;
 
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C87800);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 1 * CARD_MODEL_STRIDE);
     transformed[3][1] += step;
 
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C88800);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 5 * CARD_MODEL_STRIDE);
     transformed[3][1] += -0.57f;
 
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C88400);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 4 * CARD_MODEL_STRIDE);
 }
 
 void CardDispNazo(Matrix4 matrix)
@@ -959,12 +921,12 @@ void CardDispNazo(Matrix4 matrix)
     CardHelpFloat4 translation;
 
     translation = cardDispNazoTranslation;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C89000);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 7 * CARD_MODEL_STRIDE);
 }
 
 void CardDispGuno(Matrix4 matrix)
@@ -973,12 +935,12 @@ void CardDispGuno(Matrix4 matrix)
     CardHelpFloat4 translation;
 
     translation = cardDispGunoTranslation;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
-    nmlModelSetTexture((const char *)0x01C91000);
-    nmlModelSetRenderLevel(2);
-    nmlModelEntry(0x01C88000);
+    nmlModelSetPlace(&transformed);
+    nmlModelSetTexture(CARD_ICON_TEXTURE);
+    nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+    nmlModelEntry(CARD_ICON_MODEL_BASE + 3 * CARD_MODEL_STRIDE);
 }
 
 /*
@@ -1000,12 +962,11 @@ void CardDispOnce(Matrix4 matrix, int card)
     scale[1] = 0.9f;
     scale[2] = 1.0f;
     scale[3] = 1.0f;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-    CardDispLight(transformed, card, 1, 32);   /* 0x00a2024c: a2 = 1, a3 = 0x20 */
+    xglMatrixScale(transformed, transformed, scale);
+    CardDispLight(&transformed, card, 1, CARD_LIGHT_NEED);   /* 0x00a2024c: a2 = 1, a3 = 0x20 */
 }
-
 
 void CardDispComm(Matrix4 matrix, int kind)
 {
@@ -1013,9 +974,9 @@ void CardDispComm(Matrix4 matrix, int kind)
     CardHelpFloat4 translation;
 
     translation = cardDispCommTranslation;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[kind]);
     nmlModelEntry(cardlex_tbl[kind]);
 }
@@ -1028,23 +989,19 @@ void CardDispPhase(Matrix4 matrix, int kind)
     float light;
 
     translation = cardDispPhaseTranslation;
-    light = (xglSin((((float)ChangeCnt * 11.25f) / 180.0f) * 3.1415927f) * 0.5f) + 1.0f;
+    light = (xglSin((((float)ChangeCnt * HELP_PULSE_DEGREES_PER_TICK) / HELP_PULSE_HALF_TURN) * HELP_PULSE_PI)
+             * 0.5f) + 1.0f;
     color[3][0] = color[3][1] = color[3][2] = light;
-    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+    xglMatrixTrans(transformed, matrix,
                    translation.v);
-    nmlModelSetLight(color, asDir);
-    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetLight(&color, &asDir);
+    nmlModelSetPlace(&transformed);
     nmlModelSetTexture(cardxtx_tbl[kind]);
     nmlModelEntry(cardlex_tbl[kind]);
 }
 
 const CardHelpFloat4 cardDispHelpCardTranslationA = {{ 1.397f, 0.215f, 0.0f, 1.0f }};
 const CardHelpFloat4 cardDispHelpCardTranslationB = {{ 1.397f, -0.188f, 0.0f, 1.0f }};
-
-void CardDispTejyun(Matrix4 matrix, int kind);
-
-#define CARD_HELP_CARD_REQUIREMENTS_A    7     /* card shown on the first REQUIREMENTS page: li a1,7 at 0x00a206e0 */
-#define CARD_HELP_CARD_REQUIREMENTS_B    29    /* card shown on the second REQUIREMENTS page: li a1,0x1D at 0x00a20700 */
 
 /*
  * Help-card page drawer: `page` selects one of 59 page ids; `matrix` is the
@@ -1225,53 +1182,8 @@ void CardDispHelpCard(s8 page, Matrix4 matrix)
     }
 }
 
-/* Help-page data and callees used by CardHelpProc. */
-
-/*
- * CardHelpProc states: the high nibble of CardGameWork.helpState selects the screen
- * (`andi $4,$2,0xF0` at 0x00a209ac); every other value shows a help page.
- */
-#define CARD_HELP_STATE_MASK    0xF0    /* 0x00a209ac */
-#define CARD_HELP_STATE_OFF     0x00    /* sb $0 at 0x00a20e34: back out of the first page, help ends */
-#define CARD_HELP_STATE_PAGE    0x01    /* sb 1 at 0x00a20a20, 0x00a20c60: show helpTopic */
-#define CARD_HELP_STATE_INDEX   0x10    /* sb at 0x00a209f4, 0x00a20b88, 0x00a20e0c: category list ("Help Index") */
-#define CARD_HELP_STATE_TOPICS  0x20    /* sb at 0x00a20abc, case at 0x00a209a8: topic list of one category */
-#define CARD_HELP_STATE_OPEN    0x30    /* case at 0x00a209bc: reset both lists, then run the INDEX screen */
-
-/* Pad bits CardHelpProc tests; input[].pressed unless noted. */
-#define CARD_HELP_PAD_NEXT            0x0008    /* andi 0x8 at 0x00a209c8: next page (CardTutorialProc's NEXT bit) */
-#define CARD_HELP_PAD_PREV            0x0004    /* andi 0x4 at 0x00a20d80: previous page (CardTutorialProc's PREV bit) */
-#define CARD_HELP_PAD_BACK            0x0040    /* andi 0x40 at 0x00a20a08, 0x00a20e10: cancel (sound 2), leave the screen / page */
-#define CARD_HELP_PAD_BACK_OR_LEFT    0x8040    /* andi 0x8040 at 0x00a20b70: cancel the topic list (sound 2) */
-#define CARD_HELP_PAD_SELECT          0x0020    /* andi 0x20 at 0x00a20bd0: open the chosen topic (sound 1) */
-#define CARD_HELP_PAD_SELECT_OR_RIGHT 0x2020    /* andi 0x2020 at 0x00a20a5c: open the chosen category's topics (sound 1) */
-#define CARD_HELP_PAD_OPEN_INDEX      0x0080    /* andi 0x80 at 0x00a20d88: open the help index (sound 1) */
-#define CARD_HELP_DIR_UP              0x1000    /* input[].directions, andi at 0x00a20a24, 0x00a20b8c: previous row */
-#define CARD_HELP_DIR_DOWN            0x4000    /* input[].directions, andi at 0x00a20a2c, 0x00a20bc8: next row */
-
-/* Sound effect ids (first argument of xglSoundEffectNormalID; the second is 0). */
-#define CARD_HELP_SE_SELECT     1       /* li a0,1 at 0x00a20aac, 0x00a20c18, 0x00a20df8 */
-#define CARD_HELP_SE_CANCEL     2       /* li a0,2 at 0x00a20a10, 0x00a20b78, 0x00a20e18 */
-#define CARD_HELP_SE_CURSOR     3       /* li a0,3 at 0x00a20a3c, 0x00a20bf0, 0x00a20d4c */
-
-#define CARD_HELP_CATEGORY_LAST     6       /* slti 6 at 0x00a20a68: seven categories (TitleMaxList[7]) */
-#define CARD_HELP_TOPICS_PER_CATEGORY 14    /* SkipPageLst row stride, x14 at 0x00a20c3c..0x00a20c48 (7 rows, 0x62 bytes) */
-#define CARD_HELP_HISTORY_MAX       100     /* sltiu 0x64 at 0x00a20c4c, 0x00a20db4: bound of activeHelpPage */
-#define CARD_HELP_RADIX             10      /* page-number digits: addiu 0xA at 0x00a20e90 */
-
-static CHPTitleList cld0_17;
-static CHPTitleList cld1_18;
-extern u8 SkipPageLst[];
-extern s8 SkipStartList[];
-extern s8 PageStatusLst[];
-extern char *CardSkipTitleTxtLst[];
-extern char *CardBookMarkTxtLst[];
-extern char *CardTitleTxtLst[];
-extern char *CardHelpTxtLst[];
-extern void CardStrListDisp(CHPTitleList *list, char **strings, int index);
-extern void CardDispTxtSub(int x, int y, char *text, int color);
-extern void CardDispTxtSub2(u16 x, u16 y, const char *text);
-extern void xglMatrixUnit(float matrix[4][4]);
+static CardListWindow cld0_17;
+static CardListWindow cld1_18;
 
 void CardHelpProc(CardGameWork *work)
 {
@@ -1290,7 +1202,7 @@ void CardHelpProc(CardGameWork *work)
     scale[2] = scale[3] = 1.0f;
     translation[0] = translation[1] = translation[2] = 0.0f;
     translation[3] = 1.0f;
-    xglMatrixScale(matrix, (const float (*)[4])matrix, scale);
+    xglMatrixScale(matrix, matrix, scale);
 
     pressed = work->command.input[0].pressed;
     directions = work->command.input[0].directions;
@@ -1306,93 +1218,93 @@ void CardHelpProc(CardGameWork *work)
         work->helpState = CARD_HELP_STATE_INDEX;
         /* falls through into the INDEX body */
     case CARD_HELP_STATE_INDEX: {
-        if (pressed & CARD_HELP_PAD_BACK) {
-            xglSoundEffectNormalID(CARD_HELP_SE_CANCEL, 0);
+        if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->helpState = CARD_HELP_STATE_PAGE;
         }
-        if (directions & CARD_HELP_DIR_UP) {
-            if (cld0_17.flagC != 0) {
-                xglSoundEffectNormalID(CARD_HELP_SE_CURSOR, 0);
-                cld0_17.flagC--;
-                CHPTitleInitSub(&cld1_18, cld0_17.flagC);
+        if (directions & PAD_UP) {
+            if (cld0_17.cursor != 0) {
+                xglSoundEffectNormalID(SE_CURSOR, 0);
+                cld0_17.cursor--;
+                CHPTitleInitSub(&cld1_18, cld0_17.cursor);
             }
-        } else if (directions & CARD_HELP_DIR_DOWN) {
-            if (cld0_17.flagC < CARD_HELP_CATEGORY_LAST) {
-                xglSoundEffectNormalID(CARD_HELP_SE_CURSOR, 0);
-                cld0_17.flagC++;
-                CHPTitleInitSub(&cld1_18, cld0_17.flagC);
+        } else if (directions & PAD_DOWN) {
+            if (cld0_17.cursor < CARD_HELP_CATEGORY_COUNT - 1) {
+                xglSoundEffectNormalID(SE_CURSOR, 0);
+                cld0_17.cursor++;
+                CHPTitleInitSub(&cld1_18, cld0_17.cursor);
             }
         } else if (pressed & CARD_HELP_PAD_SELECT_OR_RIGHT) {
-            xglSoundEffectNormalID(CARD_HELP_SE_SELECT, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->helpState = CARD_HELP_STATE_TOPICS;
         }
         xglFontPrint(0, 0, 0, "\031\003");
-        xglFontPrint(6, 0x19, 0xFFF0, "\r");
-        xglFontPrint(6, 0x19, 0xFFF0, "Help Index");
-        xglFontPrint(0x10A, 0x19, 0xFFF0, "Topics");
-        CardStrListDisp(&cld0_17, CardBookMarkTxtLst, cld0_17.flagC);
-        CardStrListDisp(&cld1_18, &CardSkipTitleTxtLst[SkipStartList[cld0_17.flagC]], -1);
+        xglFontPrint(HELP_INDEX_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "\r");
+        xglFontPrint(HELP_INDEX_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "Help Index");
+        xglFontPrint(HELP_TOPICS_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "Topics");
+        CardStrListDisp(&cld0_17, CardBookMarkTxtLst, cld0_17.cursor);
+        CardStrListDisp(&cld1_18, &CardSkipTitleTxtLst[SkipStartList[cld0_17.cursor]], -1);
         CHPMenuBackDispSub(matrix);
     } break;
     case CARD_HELP_STATE_TOPICS: {
         if (pressed & CARD_HELP_PAD_BACK_OR_LEFT) {
-            xglSoundEffectNormalID(CARD_HELP_SE_CANCEL, 0);
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             work->helpState = CARD_HELP_STATE_INDEX;
         }
-        if (directions & CARD_HELP_DIR_UP) {
-            if (cld1_18.flagC != 0) {
-                xglSoundEffectNormalID(CARD_HELP_SE_CURSOR, 0);
-                cld1_18.flagC--;
+        if (directions & PAD_UP) {
+            if (cld1_18.cursor != 0) {
+                xglSoundEffectNormalID(SE_CURSOR, 0);
+                cld1_18.cursor--;
             }
-        } else if (directions & CARD_HELP_DIR_DOWN) {
-            if (cld1_18.flagC < cld1_18.count - 1) {
-                xglSoundEffectNormalID(CARD_HELP_SE_CURSOR, 0);
-                cld1_18.flagC++;
+        } else if (directions & PAD_DOWN) {
+            if (cld1_18.cursor < cld1_18.rows - 1) {
+                xglSoundEffectNormalID(SE_CURSOR, 0);
+                cld1_18.cursor++;
             }
-        } else if (pressed & CARD_HELP_PAD_SELECT) {
-            xglSoundEffectNormalID(CARD_HELP_SE_SELECT, 0);
-            work->helpTopic = SkipPageLst[cld1_18.flagC + cld0_17.flagC * CARD_HELP_TOPICS_PER_CATEGORY];
+        } else if (pressed & PAD_CIRCLE) {
+            xglSoundEffectNormalID(SE_DECIDE, 0);
+            work->helpTopic = SkipPageLst[cld1_18.cursor + cld0_17.cursor * CARD_HELP_TOPICS_PER_CATEGORY];
             work->helpState = CARD_HELP_STATE_PAGE;
             if (work->activeHelpPage < CARD_HELP_HISTORY_MAX) {
                 work->activeHelpPage++;
             }
             work->helpPage[work->activeHelpPage] = work->helpTopic;
         }
-        CardStrListDisp(&cld0_17, CardBookMarkTxtLst, cld0_17.flagC);
-        CardStrListDisp(&cld1_18, &CardSkipTitleTxtLst[SkipStartList[cld0_17.flagC]], cld1_18.flagC);
+        CardStrListDisp(&cld0_17, CardBookMarkTxtLst, cld0_17.cursor);
+        CardStrListDisp(&cld1_18, &CardSkipTitleTxtLst[SkipStartList[cld0_17.cursor]], cld1_18.cursor);
         xglFontPrint(0, 0, 0, "\031\003");
-        xglFontPrint(6, 0x19, 0xFFF0, "\r");
-        xglFontPrint(6, 0x19, 0xFFF0, "Help Index");
-        xglFontPrint(0x10A, 0x19, 0xFFF0, "Topics");
+        xglFontPrint(HELP_INDEX_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "\r");
+        xglFontPrint(HELP_INDEX_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "Help Index");
+        xglFontPrint(HELP_TOPICS_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "Topics");
         CHPMenuBackDispSub(matrix);
     } break;
     default: {
-        if (pressed & CARD_HELP_PAD_NEXT) {
-            xglSoundEffectNormalID(CARD_HELP_SE_CURSOR, 0);
+        if (pressed & PAD_R1) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
             work->helpTopic++;
-            if ((s8)work->helpTopic >= CARD_HELP_PAGE_COUNT) {
+            if (work->helpTopic >= CARD_HELP_PAGE_COUNT) {
                 work->helpTopic = 0;
             }
             if (work->activeHelpPage < CARD_HELP_HISTORY_MAX) {
                 work->activeHelpPage++;
             }
             work->helpPage[work->activeHelpPage] = work->helpTopic;
-        } else if (pressed & CARD_HELP_PAD_PREV) {
-            xglSoundEffectNormalID(CARD_HELP_SE_CURSOR, 0);
-            work->helpTopic = (s8)work->helpTopic - 1;
-            if ((s8)work->helpTopic < 0) {
+        } else if (pressed & PAD_L1) {
+            xglSoundEffectNormalID(SE_CURSOR, 0);
+            work->helpTopic = work->helpTopic - 1;
+            if (work->helpTopic < 0) {
                 work->helpTopic = CARD_HELP_PAGE_LAST;
             }
             if (work->activeHelpPage < CARD_HELP_HISTORY_MAX) {
                 work->activeHelpPage++;
             }
             work->helpPage[work->activeHelpPage] = work->helpTopic;
-        } else if (pressed & CARD_HELP_PAD_OPEN_INDEX) {
+        } else if (pressed & PAD_SQUARE) {
             CHPMenuInitSub(&cld0_17, &cld1_18);
-            xglSoundEffectNormalID(CARD_HELP_SE_SELECT, 0);
+            xglSoundEffectNormalID(SE_DECIDE, 0);
             work->helpState = CARD_HELP_STATE_INDEX;
-        } else if (pressed & CARD_HELP_PAD_BACK) {
-            xglSoundEffectNormalID(CARD_HELP_SE_CANCEL, 0);
+        } else if (pressed & PAD_CROSS) {
+            xglSoundEffectNormalID(SE_CANCEL, 0);
             if (work->activeHelpPage == 0) {
                 work->helpState = CARD_HELP_STATE_OFF;
             } else {
@@ -1401,11 +1313,12 @@ void CardHelpProc(CardGameWork *work)
             }
         }
 
-        xglFontPrint(6, 0x19, 0xFFF0, "");
-        CardDispTxtSub(6, 0x19, CardTitleTxtLst[(s8)work->helpTopic], 0xC);
-        CardDispTxtSub2(6, 0x32, CardHelpTxtLst[(s8)work->helpTopic]);
-        CardDispTxtSub(0x11E, 0x19, CardBookMarkTxtLst[PageStatusLst[3 * (s8)work->helpTopic]], 0xC);
-        CardDispHelpCard((s8)work->helpTopic, matrix);
+        xglFontPrint(HELP_INDEX_X, HELP_HEADER_Y, CARD_TEXT_COLOR, "");
+        CardDispTxtSub(HELP_INDEX_X, HELP_HEADER_Y, CardTitleTxtLst[work->helpTopic], HELP_TITLE_COLOR);
+        CardDispTxtSub2(HELP_INDEX_X, HELP_LIST_Y, CardHelpTxtLst[work->helpTopic]);
+        CardDispTxtSub(HELP_CATEGORY_X, HELP_HEADER_Y, CardBookMarkTxtLst[PageStatusLst[CARD_HELP_STATUS_STRIDE * work->helpTopic]],
+                       HELP_TITLE_COLOR);
+        CardDispHelpCard(work->helpTopic, matrix);
 
         translation[1] = -1.496f;
         translation[2] = 0.0f;
@@ -1413,83 +1326,84 @@ void CardHelpProc(CardGameWork *work)
         scale[0] = scale[1] = 0.9f;
         scale[2] = scale[3] = 1.0f;
         translation[0] = 1.0064001f;
-        cardModel = 0x01C8A800 + (PageStatusLst[3 * (s8)work->helpTopic] << 10);
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetTexture((const char *)0x01C990A0);
-        nmlModelSetRenderLevel(2);
-        nmlModelEntryCard((void *)cardModel);
+        cardModel = CARD_HELP_STATUS_MODEL_BASE + (PageStatusLst[CARD_HELP_STATUS_STRIDE * work->helpTopic] << CARD_DIGIT_MODEL_SHIFT);
+        xglMatrixTrans(transformed, matrix, translation);
+        xglMatrixScale(transformed, transformed, scale);
+        nmlModelSetPlace(&transformed);
+        nmlModelSetTexture(CARD_DIGIT_TEXTURE);
+        nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+        nmlModelEntryCard(cardModel);
 
-        digit = (PageStatusLst[3 * (s8)work->helpTopic + 1] + 1) / CARD_HELP_RADIX;
+        digit = (PageStatusLst[CARD_HELP_STATUS_STRIDE * work->helpTopic + 1] + 1) / CARD_HELP_RADIX;
         if (digit != 0) {
             translation[0] = 1.3564f;
-            cardModel = 0x01C8A400 + (digit << 10);
-            xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-            xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-            nmlModelSetPlace((const Vector4 *)transformed);
-            nmlModelSetTexture((const char *)0x01C990A0);
-            nmlModelSetRenderLevel(2);
-            nmlModelEntryCard((void *)cardModel);
+            cardModel = CARD_DIGIT_MODEL_BASE + (digit << CARD_DIGIT_MODEL_SHIFT);
+            xglMatrixTrans(transformed, matrix, translation);
+            xglMatrixScale(transformed, transformed, scale);
+            nmlModelSetPlace(&transformed);
+            nmlModelSetTexture(CARD_DIGIT_TEXTURE);
+            nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+            nmlModelEntryCard(cardModel);
         }
 
-        cardModel = 0x01C8A400 + (((PageStatusLst[3 * (s8)work->helpTopic + 1] + 1) % CARD_HELP_RADIX) << 10);
+        cardModel = CARD_DIGIT_MODEL_BASE
+                    + (((PageStatusLst[CARD_HELP_STATUS_STRIDE * work->helpTopic + 1] + 1) % CARD_HELP_RADIX) << CARD_DIGIT_MODEL_SHIFT);
         translation[0] = 1.4824001f;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetTexture((const char *)0x01C990A0);
-        nmlModelSetRenderLevel(2);
-        nmlModelEntryCard((void *)cardModel);
+        xglMatrixTrans(transformed, matrix, translation);
+        xglMatrixScale(transformed, transformed, scale);
+        nmlModelSetPlace(&transformed);
+        nmlModelSetTexture(CARD_DIGIT_TEXTURE);
+        nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+        nmlModelEntryCard(cardModel);
 
-        digit = ((s8)work->helpTopic + 1) / CARD_HELP_RADIX;
+        digit = (work->helpTopic + 1) / CARD_HELP_RADIX;
         if (digit != 0) {
             translation[0] = 1.8304f;
-            cardModel = 0x01C8A400 + (digit << 10);
-            xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-            xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-            nmlModelSetPlace((const Vector4 *)transformed);
-            nmlModelSetTexture((const char *)0x01C990A0);
-            nmlModelSetRenderLevel(2);
-            nmlModelEntryCard((void *)cardModel);
+            cardModel = CARD_DIGIT_MODEL_BASE + (digit << CARD_DIGIT_MODEL_SHIFT);
+            xglMatrixTrans(transformed, matrix, translation);
+            xglMatrixScale(transformed, transformed, scale);
+            nmlModelSetPlace(&transformed);
+            nmlModelSetTexture(CARD_DIGIT_TEXTURE);
+            nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+            nmlModelEntryCard(cardModel);
         }
 
-        cardModel = 0x01C8A400 + ((((s8)work->helpTopic + 1) % CARD_HELP_RADIX) << 10);
+        cardModel = CARD_DIGIT_MODEL_BASE + (((work->helpTopic + 1) % CARD_HELP_RADIX) << CARD_DIGIT_MODEL_SHIFT);
         translation[0] = 1.9564f;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-        xglMatrixScale(transformed, (const float (*)[4])transformed, scale);
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetTexture((const char *)0x01C990A0);
-        nmlModelSetRenderLevel(2);
-        nmlModelEntryCard((void *)cardModel);
+        xglMatrixTrans(transformed, matrix, translation);
+        xglMatrixScale(transformed, transformed, scale);
+        nmlModelSetPlace(&transformed);
+        nmlModelSetTexture(CARD_DIGIT_TEXTURE);
+        nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+        nmlModelEntryCard(cardModel);
 
         translation[0] = -1.4184f;
         translation[1] = translation[2] = 0.0f;
         translation[3] = 1.0f;
-        cardModel = 0x01CA1000;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-        nmlModelSetTexture((const char *)0x01CB0000);
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetRenderLevel(2);
-        nmlModelEntryCard((void *)cardModel);
+        cardModel = CARD_HELP_FRAME_MODEL_A;
+        xglMatrixTrans(transformed, matrix, translation);
+        nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_A);
+        nmlModelSetPlace(&transformed);
+        nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+        nmlModelEntryCard(cardModel);
 
         translation[0] = 1.4184f;
         translation[1] = 1.832f;
-        cardModel = 0x01CA1C00;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-        nmlModelSetTexture((const char *)0x01CC0050);
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetRenderLevel(2);
-        nmlModelEntryCard((void *)cardModel);
+        cardModel = CARD_HELP_FRAME_MODEL_B;
+        xglMatrixTrans(transformed, matrix, translation);
+        nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_B);
+        nmlModelSetPlace(&transformed);
+        nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+        nmlModelEntryCard(cardModel);
 
         translation[0] = 1.4184f;
         translation[1] = -1.832f;
-        cardModel = 0x01CA6000;
-        xglMatrixTrans(transformed, (const float (*)[4])matrix, translation);
-        nmlModelSetTexture((const char *)0x01CC0050);
-        nmlModelSetPlace((const Vector4 *)transformed);
-        nmlModelSetRenderLevel(2);
-        nmlModelEntryCard((void *)cardModel);
+        cardModel = CARD_HELP_FRAME_MODEL_E;
+        xglMatrixTrans(transformed, matrix, translation);
+        nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_B);
+        nmlModelSetPlace(&transformed);
+        nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
+        nmlModelEntryCard(cardModel);
     } break;
     }
 }
@@ -1892,6 +1806,6 @@ char * CardSkipTitleTxtLst[52] = { Title1_01_txt, Title1_02_txt, Title1_03_txt, 
 
 char * CardBookMarkTxtLst[7] = { BookMark1_txt, BookMark2_txt, BookMark3_txt, BookMark4_txt, BookMark5_txt, BookMark6_txt, BookMark7_txt };
 
-static CHPTitleList cld0_17;
+static CardListWindow cld0_17;
 
-static CHPTitleList cld1_18;
+static CardListWindow cld1_18;

@@ -7,11 +7,15 @@
 
 #include "ov10/cgp.h"
 
+/* War Casualty: cards the deck recovers for each discarded battle card (the four CardPlayRecavery calls per target of CGPEnemyExecCommand), and the deck size at which SensiEvent stops discarding. */
+#define CARD_WAR_CASUALTY_RECOVERY 4
+#define WAR_CASUALTY_DECK_LIMIT 20
+
 /* Phase handlers CardEnemy* (ov10/card_enemy.c) runs for the computer side. */
 s32 CC_Kara_SetFase(s32 side, CardGameWork *work);
 s32 CC_Kara_CommFase(s32 side, CardGameWork *work);
 s32 CC_Kara_CommRequest(s32 side, CardGameWork *work);
-void CC_Kara_CommPlay(s32 side, CardGameWork *work);
+s32 CC_Kara_CommPlay(s32 side, CardGameWork *work);
 s32 CC_Kara_MoveFase(s32 side, CardGameWork *work);
 s32 CC_Kara_1stAnswer(s32 side, CardGameWork *work);
 s32 CC_Kara_EndFase(s32 side, CardGameWork *work);

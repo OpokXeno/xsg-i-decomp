@@ -5,7 +5,11 @@
  */
 #include "common.h"
 #include "ov10/cgp.h"
+#include "ov10/card_id.h"
 #include "ov10/battle_area_check_enemy.h"
+#include "ov10/card_enemy.h"
+#include "ov10/card_fread.h"
+#include "ov10/ccu_038_exec_sub.h"
 
 /*
  * Slot codes. A slot index sits in the low halfword; CARD_SLOT_BATTLE marks a
@@ -17,6 +21,16 @@
 #define CARD_SLOT_BATTLE 0x000F0000
 #define CARD_SLOT_OTHER_SIDE 0x00F00000
 
+/*
+ * A battle stack and the 12 bytes after it, the next slot's shunt position:
+ * the span (0x1BC bytes, a CardBoardSlot's size) the AI copies when it
+ * simulates a swap of battle slots, as CGPMoveDSBATTLEwork exchanges them.
+ */
+typedef struct CardStackSpan {
+    CardLayerStack stack;
+    float nextShunt[3];
+} CardStackSpan;
+
 /* Halfwords from one board slot's field to the same field of the next slot. */
 #define CARD_SLOT_HALFWORDS (sizeof(CardBoardSlot) / sizeof(s16))
 
@@ -25,101 +39,46 @@
  * set-phase choices read it: the attack power in the low halfword plus flags.
  */
 #define ATTACK_POWER_MASK 0x0000FFFF
-#define ATTACK_REWARD_BONUS 0x00010000 /* half the target's reward on top of the damage share */
+#define ATTACK_DOWNS_TARGET 0x00010000 /* the attack downs the card it hits (Lv 1 and Lv 10 Ziggy, AG-02-M, AG-04, Goblin); worth half the target's reward on top of the damage share */
 #define ATTACK_HAND 0x00020000         /* CARD_ATTACK_HAND */
 #define ATTACK_SPREAD 0x00040000       /* CARD_ATTACK_SPREAD: hits every target */
 #define ATTACK_HOMING 0x00080000       /* CARD_ATTACK_HOMING: counts against the other side's deck */
 #define ATTACK_SPLASH 0x00100000       /* one more point of damage to every target */
 
-/* Character cards the checks of this TU name. */
-#define CARD_ID_MOMO_A 3               /* MoMoCheck / YoakimuMoMoCheck: the three MoMo cards */
-#define CARD_ID_MOMO_B 8
-#define CARD_ID_MOMO_C 10
-#define CARD_ID_ALBEDO 14              /* AlbedoCheck */
-#define CARD_ID_VX10000 0x27           /* VX10000Check */
-#define CARD_ID_YOAKIMU 0x51           /* YoakimuMoMoCheck, YoakimuMove */
+/*
+ * TodomeHyouka scores. It adds TODOME_DECK_OUT_BONUS when the other side's draw pile would be down to
+ * fewer than two cards, so any score from TODOME_DECK_OUT_SCORE up (and none below it)
+ * includes the bonus; the checks read it as a winning move. The margins are how far a candidate has to
+ * beat the current score before the AI plays it.
+ */
+#define TODOME_DECK_OUT_BONUS 1000
+#define TODOME_DECK_OUT_SCORE 1001
+#define TODOME_MARGIN 30
+#define TODOME_MARGIN_SMALL 15 /* the margin of CheckCurryCommand, CheckTentCommand and CheckSeimitsuCommand */
+#define TODOME_DISPOSE_MARGIN 120
 
 /*
- * Event cards (CardDefinition.kind CARD_KIND_EVENT), named after the
- * evaluator CC_Kara_CommRequest asks for each; the ids it accepts without an
- * evaluator stay numeric.
+ * The event cards CC_Kara_CommRequest asks an evaluator about are named after
+ * the disc's card names (ov10/card_id.h). The evaluators keep the AI's own
+ * Japanese names: CheckExtCommand (Cure-All, Start Up), CheckCurryCommand,
+ * CheckTentCommand (Bio Sphere), CheckTaikyakuCommand (Retreat, Woglinde),
+ * CheckDamageCommand (Surprise Attack, Federation Cruiser), CheckNazoCommand
+ * (Invitation), CheckGunoYokanCommand (Premonition), CheckDownGunoCommand
+ * (Dragon Skull), CheckChudanCommand (Expulsion Order), CheckTeppekiCommand
+ * (Impregnable Guard), Check413Command (Article 4-13), CheckSouteniHouCommand
+ * (Phase Cannon), CheckTuukokuCommand (Notice), CheckKetugiCommand
+ * (Resolution), CheckBujinCommand (Stim DX), CheckSensiCommand (War
+ * Casualty), CheckXDamageCommand (X-Buster), CheckTotugekiCommand (Charge),
+ * CheckSeimitsuCommand (Precise Shooting), CheckHatudouCommand (Invoke),
+ * CheckKonranCommand (Confusion), CheckMilCommand (Miltian Conflict),
+ * CheckShukumeiCommand (Destiny), CheckKyoukouCommand (Break Through).
  */
-#define CARD_EVENT_EXT_A 83              /* CheckExtCommand; CheckDownKaifukuCommand looks for both EXT cards */
-#define CARD_EVENT_CURRY 84
-#define CARD_EVENT_TENT 85
-#define CARD_EVENT_TAIKYAKU_A 88
-#define CARD_EVENT_TAIKYAKU_B 89
-#define CARD_EVENT_DAMAGE_A 90
-#define CARD_EVENT_DAMAGE_B 91
-#define CARD_EVENT_NAZO 92
-#define CARD_EVENT_GUNO_YOKAN 97
-#define CARD_EVENT_DOWN_GUNO 98
-#define CARD_EVENT_CHUDAN 99
-#define CARD_EVENT_TEPPEKI 100
-#define CARD_EVENT_413 101
-#define CARD_EVENT_SOUTENI_HOU 102
-#define CARD_EVENT_TUUKOKU 103
-#define CARD_EVENT_KETUGI 104
-#define CARD_EVENT_BUJIN 107
-#define CARD_EVENT_SENSI 109
-#define CARD_EVENT_X_DAMAGE 110
-#define CARD_EVENT_TOTUGEKI 111
-#define CARD_EVENT_SEIMITSU 112
-#define CARD_EVENT_HATUDOU 113
-#define CARD_EVENT_KONRAN 114
-#define CARD_EVENT_MIL 115
-#define CARD_EVENT_EXT_B 117
-#define CARD_EVENT_SHUKUMEI 118
-#define CARD_EVENT_KYOUKOU 119
 
-/* Situation card CheckTamasii looks for in the hand. */
-#define CARD_SITUATION_TAMASII 0x7B
-
-/* Cards and pile helpers of ov10/card_fread.c (ov10/tu002). */
-extern s32 CardChkAttackType(CardDefinition *definitions, CardLayerStack *card);
-extern s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *card);
-extern void CardCountGeneration(u8 *counts, CardDefinition *definitions, CardPlaySide *side);
-extern s32 CardPlayYamaCnt(CardPlaySide *side);
-extern s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side, s32 cardId, CardGameWork *work);
-extern s32 CardPlayHandCnt(CardHand *hand);
-extern s32 CardPlayOperationCnt(CardPlaySide *side);
-extern s32 CardPlayJunkCnt(CardPlaySide *side);
-extern void CardPlayCleanHand(CardPlaySide *side);
-extern void CardPlayCostCard(CardPlaySide *side);
-extern s32 CardPlayDesertBattle(CardHand *hand, CardLayerStack *card);
-extern s32 CardPlaySuteCnt(CardPlaySide *side);
-extern s32 CardPlayCntOpe(CardPlaySide *side, s32 opId);
-extern int CardPlayDesertCard(CardHand *hand, int index);
-
-/* Command handlers of ov10/ccu_038_exec_sub.c (ov10/tu003). */
-extern s32 CardPlayCommandCondition(u16 side, u16 cardId, CardGameWork *work);
-extern s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work, s16 operand, s16 target);
-extern void CCU063ExecSub(CardGameWork *work, CardPlaySide *side);
-extern void CCU064ExecSub(CardGameWork *work, CardPlaySide *side);
-extern void CCU065ExecSub(CardGameWork *work, CardPlaySide *side);
-
-/* Game procedures of ov10/cgp.c (ov10/tu008). */
-extern s32 CGPCalcPowerEnv(s32 isOwnSide, CardGameWork *work, s32 count, s32 cardId);
-extern s32 CGPDispoSub0(s32 side, CardGameWork *work, s32 index);
-extern void CardPlayDisployment(u16 side, CardGameWork *work, CardHand *hand, s32 index);
-extern void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CardCursorPosition held, CardCursorPosition target);
-extern s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId);
-extern void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide);
-extern s32 CGPChkCardPlayCost(CardGameWork *work, CardHand *hand, s32 command);
-extern void CGPCommFinishSub(CardGameWork *work, CardPlaySide *side, s32 index);
-extern float BattlePos1P[][3];
-
-/* Computer-player helpers of ov10/card_enemy.c (ov10/tu009). */
-extern s32 CGPEnemyLv10SetSub(s32 side, CardGameWork *work, s32 index);
-extern int CGPEnemyExecCommand(int side, CardGameWork *work, CardCursorPosition *targets, int count);
-
-/* ROM deck tables, one entry per computer deck (filled by CardEnemyInit). */
-extern char *DeckGeneLst[48];
-extern char *EnemyDeckLst[48];
-extern char *DeckDataLst[48];
-
-/* Price/reward of each card id. */
-extern u8 CardDat[0x100];
+/* A slot code as CC_Kara_CommRequest stores it: the slot index is the low halfword. */
+typedef union CardTargetCode {
+    u32 code;
+    u16 index;
+} CardTargetCode;
 
 /*
  * Computer-player state. commplay holds the target CC_Kara_CommRequest chose
@@ -312,8 +271,8 @@ s32 CheckFriendKakutouCnt(s32 side, CardGameWork *work)
 }
 
 /* -1 unless `side` has exactly one occupied battle slot. Otherwise the first
- * battle slot index (tagged 0xF0000 as in CheckShukumeiCommand) holding card
- * 14 whose CheckNowPower value differs from that card's attackPower. */
+ * battle slot index (tagged 0xF0000 as in CheckShukumeiCommand) holding Albedo
+ * whose CheckNowPower value differs from that card's attackPower. */
 s32 AlbedoCheck(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = &work->player;
@@ -349,8 +308,8 @@ s32 GainanCheck(s32 side, CardGameWork *work)
     CardPlaySide *otherSide;
     s32 index;
     s32 occupied = 0;
-    s32 friendA[4];
-    s32 friendB[4];
+    s32 friendA[CARD_BOARD_SLOTS];
+    s32 friendB[CARD_BOARD_SLOTS];
     s32 junkCount;
     s32 slot = -1;
     s32 score;
@@ -443,7 +402,7 @@ s32 GainanCheck(s32 side, CardGameWork *work)
         for (index = 0; index < handCount; index++) {
             s32 cardId = (u16) ownSide->hand.cards[index];
 
-            if (cardId == 0x58 || cardId == 0x59) {
+            if (cardId == CARD_ID_RETREAT || cardId == CARD_ID_WOGLINDE) {
                 if (CheckCommandPlay(side, work, (s16) cardId) == 1) {
                     playable++;
                 }
@@ -630,7 +589,7 @@ s32 CheckREAL(s32 side, CardGameWork *work)
  * CGPCalcPowerEnv value of the caller's card in a slot: a battle slot when
  * `slot` has 0xF0000 set (slot index in the low halfword), otherwise a
  * disposal slot. Zero when cardId or slot is negative, the slot index is not
- * below four, the slot's base layer is empty, or VX10000Check finds card 0x27
+ * below four, the slot's base layer is empty, or VX10000Check finds the VX-10000
  * on a battle board while that card's attack type is 4.
  */
 s32 CheckNowPower(s32 side, CardGameWork *work, s32 slot, s32 cardId)
@@ -677,13 +636,8 @@ s32 CheckNowPower(s32 side, CardGameWork *work, s32 slot, s32 cardId)
     return power;
 }
 
-/*
- * CardLayerStack.power (ov10/cgp.h) reads unsigned everywhere it is stored so
- * far, but CheckEnemy12Attack and CheckEnemyFight both compare it with `lb`
- * (0x00a35168, 0x00a35204, 0x00a3530c, 0x00a35384): it is signed here.
- */
 static inline s8 CardLayerPower(CardLayerStack *card) {
-    return *(s8 *) &card->power;
+    return card->power;
 }
 
 /*
@@ -878,7 +832,7 @@ s32 CheckGeneration(s32 side, CardGameWork *work)
         deck = work->enemyDeckId;
         ownSide = &work->enemy;
     }
-    gene = (u8 *) DeckGeneLst[deck];
+    gene = DeckGeneLst[deck];
     CardCountGeneration(counts, work->definitions, ownSide);
     for (i = 0; i < 5; i++) {
         total += counts[i];
@@ -914,9 +868,9 @@ u32 GetDeckData(int side, CardGameWork *work, int cardId)
     } else {
         deck = work->enemyDeckId;
     }
-    cards = (u8 *)EnemyDeckLst[deck];
-    data = (u8 *)DeckDataLst[deck];
-    for (i = 0; i < 40; i++) {
+    cards = EnemyDeckLst[deck];
+    data = DeckDataLst[deck];
+    for (i = 0; i < CPU_DECK_CARDS; i++) {
         if (cards[i] == cardId) {
             return data[i];
         }
@@ -945,14 +899,14 @@ u32 GetDeckDataAdjust(s32 side, CardGameWork *work, s32 cardId)
     } else {
         deck = work->enemyDeckId;
     }
-    cards = (u8 *) EnemyDeckLst[deck];
-    data = (u8 *) DeckDataLst[deck];
+    cards = EnemyDeckLst[deck];
+    data = DeckDataLst[deck];
     total = BattleAreaCheckEnemy(side, work);
     total += DisposeAreaCheckEnemy(side, work);
     if (total == 0) {
         return 3;
     }
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < CPU_DECK_CARDS; i++) {
         if (cards[i] == cardId) {
             if (CheckGeneration(side, work)) {
                 if (data[i] == 0) {
@@ -989,7 +943,7 @@ s32 CheckCommandPlay(s32 side, CardGameWork *work, s32 cardId)
     return 0;
 }
 
-/* Card ids 0x53/0x75: the two Down/Kaifuku recovery command cards. */
+/* Cure-All and Start Up: the two command cards that revive a downed card. */
 s32 CheckDownKaifukuCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = &work->player;
@@ -1006,7 +960,7 @@ s32 CheckDownKaifukuCommand(s32 side, CardGameWork *work)
     do {
         s16 cardId = sideData->hand.cards[cardIndex];
 
-        if (cardId == CARD_EVENT_EXT_A || cardId == CARD_EVENT_EXT_B) {
+        if (cardId == CARD_ID_CURE_ALL || cardId == CARD_ID_START_UP) {
             s32 result = CheckCommandPlay(side, work, cardId);
             if (result == 1) {
                 return result;
@@ -1080,13 +1034,13 @@ s32 CC_Kara_SetOpe(s32 side, CardGameWork *work)
     if (play413 == 1) {
         for (index = 0; index < handCount; index++) {
             cardId = ownSide->hand.cards[index];
-            if (work->definitions[cardId].kind == CARD_KIND_SITUATION && cardId == 125 &&
+            if (work->definitions[cardId].kind == CARD_KIND_SITUATION && cardId == CARD_ID_ARMISTICE &&
                 CGPDispoSub0(side, work, index) == 0) {
-                if (CardPlayYamaCnt(ownSide) - work->definitions[125].reserveCost <= 0) {
+                if (CardPlayYamaCnt(ownSide) - work->definitions[CARD_ID_ARMISTICE].reserveCost <= 0) {
                     return 0;
                 }
                 ownSide->hand.playPoints[1] -= work->definitions[ownSide->hand.cards[index]].playCost;
-                CardPlayDisployment((u16) side, work, &ownSide->hand, index);
+                CardPlayDisployment(side, work, ownSide, index);
                 return 1;
             }
         }
@@ -1103,12 +1057,12 @@ flag_done:
     if (battleFlagged == 1) {
         for (index = 0; index < handCount; index++) {
             cardId = ownSide->hand.cards[index];
-            if (work->definitions[cardId].kind != CARD_KIND_SITUATION || cardId != 123) {
+            if (work->definitions[cardId].kind != CARD_KIND_SITUATION || cardId != CARD_ID_STIM) {
                 continue;
             }
             if (CGPDispoSub0(side, work, index) == 0) {
                 ownSide->hand.playPoints[1] -= work->definitions[ownSide->hand.cards[index]].playCost;
-                CardPlayDisployment((u16) side, work, &ownSide->hand, index);
+                CardPlayDisployment(side, work, ownSide, index);
                 return 1;
             }
         }
@@ -1121,17 +1075,17 @@ flag_done:
             continue;
         }
         dispoResult = CGPDispoSub0(side, work, index);
-        if ((cardId == 123 || cardId == 124) && battleFlagged == 0) {
+        if ((cardId == CARD_ID_STIM || cardId == CARD_ID_GOOD_LUCK) && battleFlagged == 0) {
             continue;
         }
-        if (cardId == 120 || cardId == 145) {
+        if (cardId == CARD_ID_HILBERT_EFFECT || cardId == CARD_ID_DSSS) {
             if (CheckEnemyGuno(side, work) == 0) {
                 continue;
             }
         }
-        if (cardId == 125) {
-            s32 attack[4];
-            s32 status[4];
+        if (cardId == CARD_ID_ARMISTICE) {
+            s32 attack[CARD_BOARD_SLOTS];
+            s32 status[CARD_BOARD_SLOTS];
             s32 flagCount;
             s32 hasSpecial;
             s32 scanSlot;
@@ -1140,7 +1094,7 @@ flag_done:
             hasSpecial = 0;
             for (scanSlot = 0; scanSlot < CARD_BOARD_SLOTS; scanSlot++) {
                 if (ownSide->battle[scanSlot].battle.layers[0].cardId >= 0) {
-                    if (ownSide->battle[scanSlot].battle.layers[0].cardId == 54) {
+                    if (ownSide->battle[scanSlot].battle.layers[0].cardId == CARD_ID_VIRGIL) {
                         hasSpecial = 1;
                     }
                     if (work->definitions[ownSide->battle[scanSlot].battle.layers[0].cardId].flags & CARD_ATTR_REALIAN) {
@@ -1156,7 +1110,7 @@ flag_done:
                     return 0;
                 }
                 ownSide->hand.playPoints[1] -= work->definitions[ownSide->hand.cards[index]].playCost;
-                CardPlayDisployment((u16) side, work, &ownSide->hand, index);
+                CardPlayDisployment(side, work, ownSide, index);
                 return 1;
             }
             {
@@ -1179,7 +1133,7 @@ flag_done:
                         return 0;
                     }
                     ownSide->hand.playPoints[1] -= work->definitions[ownSide->hand.cards[index]].playCost;
-                    CardPlayDisployment((u16) side, work, &ownSide->hand, index);
+                    CardPlayDisployment(side, work, ownSide, index);
                     return 1;
                 }
                 if (ownTotal < otherTotal) {
@@ -1199,14 +1153,14 @@ flag_done:
             return 0;
         }
         ownSide->hand.playPoints[1] -= work->definitions[ownSide->hand.cards[index]].playCost;
-        CardPlayDisployment((u16) side, work, &ownSide->hand, index);
+        CardPlayDisployment(side, work, ownSide, index);
         return 1;
     }
     return 0;
 }
 
 /*
- * Whether the side's hand holds the identity command card 0x7B (a kind-4
+ * Whether the side's hand holds Stim (a kind-4
  * card) that CardPlayChkCondition accepts (returns 0); only the phase-1 and
  * phase-8 turns are checked.
  */
@@ -1225,13 +1179,13 @@ s32 CheckTamasii(s32 side, CardGameWork *work)
         sideData = &work->enemy;
         hand = &sideData->hand;
     }
-    phase = (s16) work->command.phase;
+    phase = work->command.phase;
     if (phase == CARD_PHASE_MOVE || phase == CARD_PHASE_MOVE + CARD_PHASES_PER_SIDE) {
         handCount = CardPlayHandCnt(hand);
         for (cardIndex = 0; cardIndex < handCount; cardIndex++) {
             s16 cardId = hand->cards[cardIndex];
-            if (work->definitions[cardId].kind == CARD_KIND_SITUATION && cardId == CARD_SITUATION_TAMASII) {
-                if (CardPlayChkCondition(work->definitions, sideData, CARD_SITUATION_TAMASII, work) == 0) {
+            if (work->definitions[cardId].kind == CARD_KIND_SITUATION && cardId == CARD_ID_STIM) {
+                if (CardPlayChkCondition(work->definitions, sideData, CARD_ID_STIM, work) == 0) {
                     return 1;
                 }
             }
@@ -1249,7 +1203,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
     CardCursorPosition held;
     CardCursorPosition disposalTarget;
     CardCursorPosition battleTarget;
-    s32 slotCard[4];
+    s32 slotCard[CARD_BOARD_SLOTS];
     s32 bestSlot;
     s32 i;
 
@@ -1257,29 +1211,29 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         ownSide = &work->player;
         otherSide = &work->enemy;
         held.zone = 9;
-        disposalTarget.zone = 6;
-        battleTarget.zone = 5;
+        disposalTarget.zone = CARD_ZONE_SIDE0_DISPOSAL;
+        battleTarget.zone = CARD_ZONE_SIDE0_BATTLE;
     } else {
         ownSide = &work->enemy;
         otherSide = &work->player;
         held.zone = 0;
-        disposalTarget.zone = 2;
-        battleTarget.zone = 4;
+        disposalTarget.zone = CARD_ZONE_SIDE1_DISPOSAL;
+        battleTarget.zone = CARD_ZONE_SIDE1_BATTLE;
     }
     if (CardPlayChkCondition(definitions, ownSide, ownSide->hand.cards[index], work) != 0) {
         return 0;
     }
     held.index = index;
     held.cardId = ownSide->hand.cards[index];
-    if (held.cardId == 0x30 || held.cardId == 0x35) {
+    if (held.cardId == CARD_ID_MISSILE_POD || held.cardId == CARD_ID_EYEGLASSES) {
         if (BattleAreaCheckEnemy(side, work) < 2) {
             return 0;
         }
     }
 
-    if (held.cardId == 0x2C) {
+    if (held.cardId == CARD_ID_SHIELD) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            if (ownSide->battle[i].battle.layers[0].cardId == 0x1F) {
+            if (ownSide->battle[i].battle.layers[0].cardId == CARD_ID_AG_02_M) {
                 if (ownSide->battle[i].battle.layers[1].cardId < 0) {
                     battleTarget.index = i;
                     battleTarget.cardId = ownSide->battle[i].battle.layers[0].cardId;
@@ -1287,7 +1241,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
                     CGPDisposeWeaponSub(side, work, held, battleTarget);
                     return 1;
                 }
-                if (ownSide->battle[i].battle.layers[1].cardId == 0x2A &&
+                if (ownSide->battle[i].battle.layers[1].cardId == CARD_ID_SABER &&
                     otherSide->battle[0].battle.layers[0].cardId < 0 &&
                     otherSide->battle[1].battle.layers[0].cardId < 0) {
                     battleTarget.index = i;
@@ -1299,7 +1253,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
             }
         }
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            if (ownSide->disposal[i].battle.layers[0].cardId == 0x1F) {
+            if (ownSide->disposal[i].battle.layers[0].cardId == CARD_ID_AG_02_M) {
                 if (ownSide->disposal[i].battle.layers[1].cardId < 0) {
                     disposalTarget.index = i;
                     disposalTarget.cardId = ownSide->disposal[i].battle.layers[0].cardId;
@@ -1307,7 +1261,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
                     CGPDisposeWeaponSub(side, work, held, disposalTarget);
                     return 1;
                 }
-                if (ownSide->disposal[i].battle.layers[1].cardId == 0x2A) {
+                if (ownSide->disposal[i].battle.layers[1].cardId == CARD_ID_SABER) {
                     disposalTarget.index = i;
                     disposalTarget.cardId = ownSide->disposal[i].battle.layers[0].cardId;
                     ownSide->hand.playPoints[0] -= work->definitions[ownSide->hand.cards[index]].playCost;
@@ -1325,12 +1279,12 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         if (ownSide->battle[i].battle.layers[0].cardId >= 0 && ownSide->battle[i].battle.layers[1].cardId < 0) {
             battleTarget.index = i;
             battleTarget.cardId = ownSide->battle[i].battle.layers[0].cardId;
-            if (battleTarget.cardId != 5 && battleTarget.cardId != 12 &&
+            if (battleTarget.cardId != CARD_ID_LV_1_JR && battleTarget.cardId != CARD_ID_LV_10_JR &&
                 CGPWeaponEquipChk(work, held.cardId, battleTarget.cardId) != 0) {
-                if (held.cardId == 0x2C || held.cardId == 0x2F || held.cardId == 0x35 ||
+                if (held.cardId == CARD_ID_SHIELD || held.cardId == CARD_ID_BATTLE_SUIT || held.cardId == CARD_ID_EYEGLASSES ||
                     definitions[held.cardId].attackType != definitions[battleTarget.cardId].attackType ||
                     definitions[held.cardId].attackPower > definitions[battleTarget.cardId].attackPower) {
-                    if (held.cardId != 0x2D || definitions[battleTarget.cardId].attackType != CARD_ATTACK_BALLISTIC) {
+                    if (held.cardId != CARD_ID_AIRD || definitions[battleTarget.cardId].attackType != CARD_ATTACK_BALLISTIC) {
                         slotCard[i] = battleTarget.cardId;
                     }
                 }
@@ -1343,7 +1297,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         if (slotCard[i] == -1) {
             continue;
         }
-        if (held.cardId == 0x2A) {
+        if (held.cardId == CARD_ID_SABER) {
             if (i >= 2) {
                 continue;
             }
@@ -1356,7 +1310,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
         if (bestSlot == -1) {
             bestSlot = i;
-        } else if (held.cardId == 0x35) {
+        } else if (held.cardId == CARD_ID_EYEGLASSES) {
             s32 power = CheckNowPower(side, work, CARD_SLOT_BATTLE | i, slotCard[i]);
             if (CheckNowPower(side, work, CARD_SLOT_BATTLE | bestSlot, slotCard[bestSlot]) < power) {
                 bestSlot = i;
@@ -1375,7 +1329,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
             }
         }
     }
-    if (held.cardId == 0x35 && bestSlot != -1) {
+    if (held.cardId == CARD_ID_EYEGLASSES && bestSlot != -1) {
         if (CheckNowPower(side, work, CARD_SLOT_BATTLE | bestSlot, slotCard[bestSlot]) < 2) {
             if (BattleAreaCheckEnemy(side, work) < 3) {
                 bestSlot = -1;
@@ -1384,8 +1338,8 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
     }
 
     if (bestSlot != -1) {
-        s32 attack[4];
-        s32 status[4];
+        s32 attack[CARD_BOARD_SLOTS];
+        s32 status[CARD_BOARD_SLOTS];
         s32 result;
         GetFriendAttack(side, work, attack, status);
         result = TodomeHyouka(side, work, 0, 0, attack, status);
@@ -1398,17 +1352,17 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         } else if (work->definitions[held.cardId].attackType == CARD_ATTACK_HOMING) {
             status[bestSlot] = work->definitions[held.cardId].attackPower | ATTACK_HOMING;
         }
-        if (held.cardId == 0x35) {
+        if (held.cardId == CARD_ID_EYEGLASSES) {
             status[bestSlot] = CheckNowPower(side, work, CARD_SLOT_BATTLE | bestSlot, slotCard[bestSlot]) | ATTACK_SPREAD;
         }
-        if (held.cardId == 0x2B || held.cardId == 0x2D || held.cardId == 0x2E) {
-            if (slotCard[bestSlot] == 0x24) {
+        if (held.cardId == CARD_ID_CANNON || held.cardId == CARD_ID_AIRD || held.cardId == CARD_ID_BEAM) {
+            if (slotCard[bestSlot] == CARD_ID_DRONE) {
                 status[bestSlot] = ATTACK_HAND;
             }
             status[bestSlot] &= ~ATTACK_POWER_MASK;
         }
-        if (ownSide->battle[bestSlot].battle.layers[0].cardId == 0x20 ||
-            ownSide->battle[bestSlot].battle.layers[0].cardId == 0x4C) {
+        if (ownSide->battle[bestSlot].battle.layers[0].cardId == CARD_ID_SIMEON ||
+            ownSide->battle[bestSlot].battle.layers[0].cardId == CARD_ID_GARGOYLE) {
             status[bestSlot] |= ATTACK_SPLASH;
         }
         if (TodomeHyouka(side, work, 0, 0, attack, status) >= result) {
@@ -1429,12 +1383,12 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         if (ownSide->disposal[i].battle.layers[0].cardId >= 0 && ownSide->disposal[i].battle.layers[1].cardId < 0) {
             disposalTarget.index = i;
             disposalTarget.cardId = ownSide->disposal[i].battle.layers[0].cardId;
-            if (disposalTarget.cardId != 5 && disposalTarget.cardId != 12 &&
+            if (disposalTarget.cardId != CARD_ID_LV_1_JR && disposalTarget.cardId != CARD_ID_LV_10_JR &&
                 CGPWeaponEquipChk(work, held.cardId, disposalTarget.cardId) != 0) {
-                if (held.cardId == 0x2C || held.cardId == 0x2F || held.cardId == 0x35 ||
+                if (held.cardId == CARD_ID_SHIELD || held.cardId == CARD_ID_BATTLE_SUIT || held.cardId == CARD_ID_EYEGLASSES ||
                     definitions[held.cardId].attackType != definitions[disposalTarget.cardId].attackType ||
                     definitions[held.cardId].attackPower > definitions[disposalTarget.cardId].attackPower) {
-                    if (held.cardId != 0x2A && held.cardId != 0x2D) {
+                    if (held.cardId != CARD_ID_SABER && held.cardId != CARD_ID_AIRD) {
                         slotCard[i] = disposalTarget.cardId;
                     }
                 }
@@ -1449,7 +1403,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
         if (bestSlot == -1) {
             bestSlot = i;
-        } else if (held.cardId == 0x35) {
+        } else if (held.cardId == CARD_ID_EYEGLASSES) {
             if (work->definitions[slotCard[bestSlot]].attackPower < work->definitions[slotCard[i]].attackPower) {
                 bestSlot = i;
             }
@@ -1468,7 +1422,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
     }
     if (bestSlot != -1) {
-        if (held.cardId == 0x35 && work->definitions[slotCard[bestSlot]].attackPower < 2) {
+        if (held.cardId == CARD_ID_EYEGLASSES && work->definitions[slotCard[bestSlot]].attackPower < 2) {
             return 0;
         }
         disposalTarget.index = bestSlot;
@@ -1482,7 +1436,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
 
 /*
  * Starts the level-ten set phase when the side's hand card at handIndex is
- * card seven and one of its four battle slots holds no card.
+ * Lv 10 Shion and one of its four battle slots holds Lv 1 Shion.
  */
 s32 CC_Kara_SetLv10(s32 side, CardGameWork *work, s32 handIndex)
 {
@@ -1497,9 +1451,9 @@ s32 CC_Kara_SetLv10(s32 side, CardGameWork *work, s32 handIndex)
         sideData = &work->enemy;
         hand = &work->enemy.hand;
     }
-    if (hand->cards[handIndex] == 7) {
+    if (hand->cards[handIndex] == CARD_ID_LV_10_SHION) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            if (sideData->battle[i].battle.layers[0].cardId == 0) {
+            if (sideData->battle[i].battle.layers[0].cardId == CARD_ID_LV_1_SHION) {
                 work->command.phaseTimer = 20;
                 CGPSetFaseProc(side, work, sideData);
                 return 1;
@@ -1512,8 +1466,8 @@ s32 CC_Kara_SetLv10(s32 side, CardGameWork *work, s32 handIndex)
 s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
 {
     CardPlaySide *ownSide;
-    s32 attack[4];
-    s32 status[4];
+    s32 attack[CARD_BOARD_SLOTS];
+    s32 status[CARD_BOARD_SLOTS];
     s32 cardId;
     s32 power;
     s32 bestSlot;
@@ -1535,8 +1489,8 @@ s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
             if (ownSide->battle[i].battle.layers[0].cardId < 0) {
                 GetFriendAttack(side, work, attack, status);
                 status[i] = power + ATTACK_HAND;
-                if (cardId == 0x43) {
-                    status[i] |= ATTACK_REWARD_BONUS;
+                if (cardId == CARD_ID_GOBLIN) {
+                    status[i] |= ATTACK_DOWNS_TARGET;
                 }
                 result = TodomeHyouka(side, work, i, i, attack, status);
                 if (bestValue < result) {
@@ -1572,12 +1526,12 @@ s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
         ownSide->battle[bestSlot].battle.powerLimit = work->definitions[cardId].basePower;
         ownSide->battle[bestSlot].battle.layers[0].cardId = ownSide->hand.cards[index];
         ownSide->battle[bestSlot].battle.layers[0].life = work->definitions[cardId].operationDuration;
-        ownSide->battle[bestSlot].battle.position[0] = ((CardPlaySideMoveView *) ownSide)->handMove[index].position[0];
-        ownSide->battle[bestSlot].battle.position[1] = ((CardPlaySideMoveView *) ownSide)->handMove[index].position[1];
-        ownSide->battle[bestSlot].battle.position[2] = ((CardPlaySideMoveView *) ownSide)->handMove[index].position[2];
-        ownSide->battle[bestSlot].battle.step[0] = (BattlePos1P[bestSlot][0] - ((CardPlaySideMoveView *) ownSide)->handMove[index].position[0]) / 10.0f;
-        ownSide->battle[bestSlot].battle.step[1] = (BattlePos1P[bestSlot][1] - ((CardPlaySideMoveView *) ownSide)->handMove[index].position[1]) / 10.0f;
-        ownSide->battle[bestSlot].battle.step[2] = (BattlePos1P[bestSlot][2] - ((CardPlaySideMoveView *) ownSide)->handMove[index].position[2]) / 10.0f;
+        ownSide->battle[bestSlot].battle.position[0] = ownSide->handMove[index].position[0];
+        ownSide->battle[bestSlot].battle.position[1] = ownSide->handMove[index].position[1];
+        ownSide->battle[bestSlot].battle.position[2] = ownSide->handMove[index].position[2];
+        ownSide->battle[bestSlot].battle.step[0] = (BattlePos1P[bestSlot][0] - ownSide->handMove[index].position[0]) / 10.0f;
+        ownSide->battle[bestSlot].battle.step[1] = (BattlePos1P[bestSlot][1] - ownSide->handMove[index].position[1]) / 10.0f;
+        ownSide->battle[bestSlot].battle.step[2] = (BattlePos1P[bestSlot][2] - ownSide->handMove[index].position[2]) / 10.0f;
         ownSide->battle[bestSlot].battle.moveFrames = CARD_SLIDE_FRAMES;
     } else {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
@@ -1587,12 +1541,12 @@ s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
                 ownSide->disposal[i].battle.powerLimit = work->definitions[cardId].basePower;
                 ownSide->disposal[i].battle.layers[0].cardId = ownSide->hand.cards[index];
                 ownSide->disposal[i].battle.layers[0].life = work->definitions[cardId].operationDuration;
-                ownSide->disposal[i].battle.position[0] = ((CardPlaySideMoveView *) ownSide)->handMove[index].position[0];
-                ownSide->disposal[i].battle.position[1] = ((CardPlaySideMoveView *) ownSide)->handMove[index].position[1];
-                ownSide->disposal[i].battle.position[2] = ((CardPlaySideMoveView *) ownSide)->handMove[index].position[2];
-                ownSide->disposal[i].battle.step[0] = (BattlePos1P[bestSlot][0] - ((CardPlaySideMoveView *) ownSide)->handMove[index].position[0]) / 10.0f;
-                ownSide->disposal[i].battle.step[1] = (BattlePos1P[bestSlot][1] - ((CardPlaySideMoveView *) ownSide)->handMove[index].position[1]) / 10.0f;
-                ownSide->disposal[i].battle.step[2] = (BattlePos1P[bestSlot][2] - ((CardPlaySideMoveView *) ownSide)->handMove[index].position[2]) / 10.0f;
+                ownSide->disposal[i].battle.position[0] = ownSide->handMove[index].position[0];
+                ownSide->disposal[i].battle.position[1] = ownSide->handMove[index].position[1];
+                ownSide->disposal[i].battle.position[2] = ownSide->handMove[index].position[2];
+                ownSide->disposal[i].battle.step[0] = (BattlePos1P[bestSlot][0] - ownSide->handMove[index].position[0]) / 10.0f;
+                ownSide->disposal[i].battle.step[1] = (BattlePos1P[bestSlot][1] - ownSide->handMove[index].position[1]) / 10.0f;
+                ownSide->disposal[i].battle.step[2] = (BattlePos1P[bestSlot][2] - ownSide->handMove[index].position[2]) / 10.0f;
                 ownSide->disposal[i].battle.moveFrames = CARD_SLIDE_FRAMES;
                 break;
             }
@@ -1609,7 +1563,7 @@ s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
             CardPlayCostCard(ownSide);
         } while (i != 0);
     }
-    CardPlayCleanHand(ownSide);
+    CardPlayCleanHand(&ownSide->hand);
     return 1;
 }
 
@@ -1628,8 +1582,8 @@ s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
     s32 discards = 0;
     s32 candidates;
     s32 remaining;
-    s32 disposalCardId[4];
-    s32 battleCardId[4];
+    s32 disposalCardId[CARD_BOARD_SLOTS];
+    s32 battleCardId[CARD_BOARD_SLOTS];
     s32 *picked;
     CardBoardSlot *slot;
     CardLayerStack *stack;
@@ -1677,7 +1631,7 @@ s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
     if (BattleAreaCheckFriend(side, work) == 4) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (battleCardId[i] != -1) {
-                CardPlayDesertBattle(&ownSide->hand, &ownSide->battle[i].battle);
+                CardPlayDesertBattle(ownSide, &ownSide->battle[i].battle);
                 discards--;
             }
             if (discards <= 0) {
@@ -1687,7 +1641,7 @@ s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
         }
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (disposalCardId[i] != -1) {
-                CardPlayDesertBattle(&ownSide->hand, &ownSide->disposal[i].battle);
+                CardPlayDesertBattle(ownSide, &ownSide->disposal[i].battle);
                 discards--;
             }
             if (discards <= 0) {
@@ -1698,7 +1652,7 @@ s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
     } else {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (disposalCardId[i] != -1) {
-                CardPlayDesertBattle(&ownSide->hand, &ownSide->disposal[i].battle);
+                CardPlayDesertBattle(ownSide, &ownSide->disposal[i].battle);
                 discards--;
             }
             if (discards <= 0) {
@@ -1708,7 +1662,7 @@ s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
         }
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (battleCardId[i] != -1) {
-                CardPlayDesertBattle(&ownSide->hand, &ownSide->battle[i].battle);
+                CardPlayDesertBattle(ownSide, &ownSide->battle[i].battle);
                 discards--;
             }
             if (discards <= 0) {
@@ -1741,13 +1695,13 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
     definitions = work->definitions;
     if (side == 0) {
         sideScratch[0][0] = 9;
-        sideScratch[1][0] = 6;
-        sideScratch[2][0] = 5;
+        sideScratch[1][0] = CARD_ZONE_SIDE0_DISPOSAL;
+        sideScratch[2][0] = CARD_ZONE_SIDE0_BATTLE;
         ownSide = &work->player;
         otherSide = &work->enemy;
     } else {
-        sideScratch[1][0] = 2;
-        sideScratch[2][0] = 4;
+        sideScratch[1][0] = CARD_ZONE_SIDE1_DISPOSAL;
+        sideScratch[2][0] = CARD_ZONE_SIDE1_BATTLE;
         sideScratch[0][0] = 0;
         ownSide = &work->enemy;
         otherSide = &work->player;
@@ -1766,9 +1720,9 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
     yama = CardPlayYamaCnt(ownSide);
     if (yama >= 5) {
         for (i = 0; i < handCount; i++) {
-            if (ownSide->hand.cards[i] == 7 || ownSide->hand.cards[i] == 9 ||
-                ownSide->hand.cards[i] == 10 || ownSide->hand.cards[i] == 11 ||
-                ownSide->hand.cards[i] == 12 || ownSide->hand.cards[i] == 13) {
+            if (ownSide->hand.cards[i] == CARD_ID_LV_10_SHION || ownSide->hand.cards[i] == CARD_ID_LV_10_ZIGGY ||
+                ownSide->hand.cards[i] == CARD_ID_LV_10_MOMO || ownSide->hand.cards[i] == CARD_ID_LV_10_KOS_MOS ||
+                ownSide->hand.cards[i] == CARD_ID_LV_10_JR || ownSide->hand.cards[i] == CARD_ID_LV_10_CHAOS) {
                 if (CGPEnemyLv10SetSub(side, work, i) == 0) {
                     return 1;
                 }
@@ -1781,7 +1735,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
             if (handPick[i] == -1) {
                 continue;
             }
-            cost = CGPChkCardPlayCost(work, &ownSide->hand, ownSide->hand.cards[i]);
+            cost = CGPChkCardPlayCost(work, ownSide, ownSide->hand.cards[i]);
             if (cost == 1) {
                 if (yama - 1 < 4) {
                     handPick[i] = -1;
@@ -1838,7 +1792,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
             if (CardDat[price2] > CardDat[price1]) {
                 pickB = i;
             }
-            if (ownSide->hand.cards[pickB] == 0x43 && handCount < 8 &&
+            if (ownSide->hand.cards[pickB] == CARD_ID_GOBLIN && handCount < 8 &&
                 otherSide->battle[0].battle.layers[0].cardId < 0 &&
                 otherSide->battle[1].battle.layers[0].cardId < 0) {
                 pickB = -1;
@@ -1866,7 +1820,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         if (handPick[i] < 13) {
             continue;
         }
-        if (ownSide->hand.cards[i] == 0x35) {
+        if (ownSide->hand.cards[i] == CARD_ID_EYEGLASSES) {
             if (CC_Kara_SetWeapon(side, work, i) == 1) {
                 return 1;
             }
@@ -1876,7 +1830,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
     if (price2 < price1) {
         if (pickA != -1) {
             ownSide->hand.playPoints[0] -= work->definitions[ownSide->hand.cards[pickA]].playCost;
-            CardPlayDisployment((u16) side, work, &ownSide->hand, pickA);
+            CardPlayDisployment(side, work, ownSide, pickA);
             return 1;
         }
         if (pickB != -1 && AlbedoCheck(side, work) == -1 && CC_Kara_SetGuno(side, work, pickB) == 1) {
@@ -1888,7 +1842,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         }
         if (pickA != -1) {
             ownSide->hand.playPoints[0] -= work->definitions[ownSide->hand.cards[pickA]].playCost;
-            CardPlayDisployment((u16) side, work, &ownSide->hand, pickA);
+            CardPlayDisployment(side, work, ownSide, pickA);
             return 1;
         }
     }
@@ -1903,7 +1857,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         if (handPick[i] < 13) {
             continue;
         }
-        if (ownSide->hand.cards[i] == 0x2D && VX10000Check(side, work) == 1) {
+        if (ownSide->hand.cards[i] == CARD_ID_AIRD && VX10000Check(side, work) == 1) {
             continue;
         }
         if (CC_Kara_SetWeapon(side, work, i) == 1) {
@@ -1912,9 +1866,9 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
     }
 
     for (i = 0; i < handCount; i++) {
-        if (ownSide->hand.cards[i] == 7 || ownSide->hand.cards[i] == 9 ||
-            ownSide->hand.cards[i] == 10 || ownSide->hand.cards[i] == 11 ||
-            ownSide->hand.cards[i] == 12 || ownSide->hand.cards[i] == 13) {
+        if (ownSide->hand.cards[i] == CARD_ID_LV_10_SHION || ownSide->hand.cards[i] == CARD_ID_LV_10_ZIGGY ||
+            ownSide->hand.cards[i] == CARD_ID_LV_10_MOMO || ownSide->hand.cards[i] == CARD_ID_LV_10_KOS_MOS ||
+            ownSide->hand.cards[i] == CARD_ID_LV_10_JR || ownSide->hand.cards[i] == CARD_ID_LV_10_CHAOS) {
             if (CGPEnemyLv10SetSub(side, work, i) == 0) {
                 return 1;
             }
@@ -1954,8 +1908,8 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
                 cardId = ownSide->hand.cards[i];
 
                 switch (cardId) {
-                case 86:
-                case 87:
+                case CARD_ID_SUPPLY_SHIP:
+                case CARD_ID_SUPPLY_FLEET:
                     if (CheckCommandPlay(side, work, cardId)) {
                         if (5 <= CardPlaySuteCnt(ownSide)) {
                             no = i;
@@ -1965,8 +1919,8 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
                         }
                     }
                     break;
-                case 93:
-                    if (CheckCommandPlay(side, work, 93) && CardPlayYamaCnt(ownSide) >= 11) {
+                case CARD_ID_MARY_AND_SHELLEY:
+                    if (CheckCommandPlay(side, work, CARD_ID_MARY_AND_SHELLEY) && CardPlayYamaCnt(ownSide) >= 11) {
                         if (7 > handCount) {
                             no = i;
                             cardno = ownSide->hand.cards[no];
@@ -1975,8 +1929,8 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
                         }
                     }
                     break;
-                case 94:
-                    if (CheckCommandPlay(side, work, 94) && CardPlaySuteCnt(ownSide) >= 2) {
+                case CARD_ID_UMN_INVASION:
+                    if (CheckCommandPlay(side, work, CARD_ID_UMN_INVASION) && CardPlaySuteCnt(ownSide) >= 2) {
                         if (7 > handCount) {
                             cardno = ownSide->hand.cards[i];
                             no = i;
@@ -1992,7 +1946,7 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
         break;
     }
     case 1: {
-        s32 ret = CardPlayCommandPlay((u16) side, work->commandIds[cardno], work, 0, 0);
+        s32 ret = CardPlayCommandPlay(side, work->commandIds[cardno], work, 0, 0);
 
         if (ret != 0) {
             CGPCommFinishSub(work, ownSide, no);
@@ -2007,8 +1961,8 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
 
 s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
 {
-    s32 attack[4];
-    s32 status[4];
+    s32 attack[CARD_BOARD_SLOTS];
+    s32 status[CARD_BOARD_SLOTS];
     s32 total;
     s16 *cardCursor;
     s32 bonus;
@@ -2043,7 +1997,7 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
         do {
             cardId = (u16) *cardCursor;
             cardCursor++;
-            if (cardId - 0x5A < 2U) {
+            if (cardId - CARD_ID_SURPRISE_ATTACK < 2U) {
                 if (CheckCommandPlay(side, work, (s16) cardId) == 1) {
                     bonus += 2;
                 }
@@ -2052,7 +2006,7 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
         } while (i != 0);
     }
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-        if (ownSide->operations[i] == 0x8B) {
+        if (ownSide->operations[i] == CARD_ID_SO_WEAK) {
             bonus += 3;
         }
     }
@@ -2060,7 +2014,7 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
     if (bonus > threshold) {
         threshold = bonus;
     }
-    phase = (s16) work->command.phase;
+    phase = work->command.phase;
     if (phase == CARD_PHASE_EVENT || phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         GetFriendAttack(side, work, attack, status);
         bestValue = TodomeHyouka(side, work, 0, 0, attack, status);
@@ -2070,7 +2024,7 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
                 GetFriendAttack(side, work, attack, status);
                 total = attack[i] - threshold;
                 if (total > 0) {
-                    value = (s32) (((f32) GetShoukin(&otherSide->battle[i].battle) / 10.0f) * (f32) threshold);
+                    value = (GetShoukin(&otherSide->battle[i].battle) / 10.0f) * threshold;
                     attack[i] = attack[i] - threshold;
                 } else {
                     value = GetShoukin(&otherSide->battle[i].battle) - total;
@@ -2094,7 +2048,7 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
                 GetFriendAttack(side, work, attack, status);
                 total = attack[i] - threshold;
                 if (0 < total) {
-                    score = (s32) (((f32) GetShoukin(&otherSide->battle[i].battle) / 10.0f) * (f32) threshold);
+                    score = (GetShoukin(&otherSide->battle[i].battle) / 10.0f) * threshold;
                     attack[i] = attack[i] - threshold;
                 } else {
                     score = GetShoukin(&otherSide->battle[i].battle) - total;
@@ -2118,8 +2072,8 @@ s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
 {
     s32 bonus;
     s32 albedo;
-    s32 attack[4];
-    s32 status[4];
+    s32 attack[CARD_BOARD_SLOTS];
+    s32 status[CARD_BOARD_SLOTS];
     s32 initialScore;
     s32 i;
     CardPlaySide *ownSide;
@@ -2146,7 +2100,7 @@ s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
         handCount = CardPlayHandCnt(&ownSide->hand);
         for (i = 0; i < handCount; i++) {
             cardId = (u16) ownSide->hand.cards[i];
-            if (cardId - 0x58 < 2U) {
+            if (cardId - CARD_ID_RETREAT < 2U) {
                 if (CheckCommandPlay(side, work, (s16) cardId) == 1) {
                     bonus += 1;
                 }
@@ -2174,7 +2128,7 @@ s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
         }
     }
 
-    phase = (s16) work->command.phase;
+    phase = work->command.phase;
     if (phase == CARD_PHASE_BLOCK + CARD_PHASES_PER_SIDE || phase == CARD_PHASE_BLOCK) {
         GetFriendAttack(side == 0, work, attack, status);
         best = TodomeHyouka(side == 0, work, 0, 0, attack, status);
@@ -2190,7 +2144,7 @@ s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
                 }
             }
         }
-        if (initialScore < best + 0x1E) {
+        if (initialScore < best + TODOME_MARGIN) {
             bestSlot = -1;
         }
     } else {
@@ -2208,7 +2162,7 @@ s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
                 }
             }
         }
-        if (best < initialScore + 0x1E) {
+        if (best < initialScore + TODOME_MARGIN) {
             bestSlot = -1;
         }
     }
@@ -2222,8 +2176,8 @@ s32 CheckTotugekiCommand(s32 side, CardGameWork *work)
     s32 slotIndex;
     s32 bestSlot;
     CardPlaySide *otherSide = (side == 0) ? &work->enemy : &work->player;
-    s32 attackVectors[4];
-    s32 statusVectors[4];
+    s32 attackVectors[CARD_BOARD_SLOTS];
+    s32 statusVectors[CARD_BOARD_SLOTS];
     s32 best;
     s32 value;
     s32 initial;
@@ -2232,7 +2186,7 @@ s32 CheckTotugekiCommand(s32 side, CardGameWork *work)
     bestSlot = -1;
     initial = 0;
     slotIndex = initial;
-    if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+    if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         return -1;
     }
     GetFriendAttack(side == 0, work, attackVectors, statusVectors);
@@ -2249,7 +2203,7 @@ s32 CheckTotugekiCommand(s32 side, CardGameWork *work)
             bestSlot = slotIndex;
         }
     }
-    if (best + 30 < initial) {
+    if (best + TODOME_MARGIN < initial) {
         return -1;
     }
     return bestSlot;
@@ -2258,9 +2212,9 @@ s32 CheckTotugekiCommand(s32 side, CardGameWork *work)
 s32 CheckKonranCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *target;
-    s32 attackVec[4];
-    s32 statusVec[4];
-    CardBoardSlot savedBattle[4];
+    s32 attackVec[CARD_BOARD_SLOTS];
+    s32 statusVec[CARD_BOARD_SLOTS];
+    CardStackSpan savedBattle[CARD_BOARD_SLOTS];
     s32 score;
     s32 rescore;
     s32 other;
@@ -2276,20 +2230,20 @@ s32 CheckKonranCommand(s32 side, CardGameWork *work)
         score = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
         battleBase = target->battle;
         for (i = 0; i < CARD_BOARD_SLOTS; battleBase++, i++) {
-            savedBattle[i] = *(CardBoardSlot *)&battleBase->battle;
+            savedBattle[i] = *(CardStackSpan *)&battleBase->battle;
         }
-        *(CardBoardSlot *)&target->battle[0].battle = savedBattle[2];
-        *(CardBoardSlot *)&target->battle[1].battle = savedBattle[3];
-        *(CardBoardSlot *)&target->battle[2].battle = savedBattle[0];
-        *(CardBoardSlot *)&target->battle[3].battle = savedBattle[1];
+        *(CardStackSpan *)&target->battle[0].battle = savedBattle[2];
+        *(CardStackSpan *)&target->battle[1].battle = savedBattle[3];
+        *(CardStackSpan *)&target->battle[2].battle = savedBattle[0];
+        *(CardStackSpan *)&target->battle[3].battle = savedBattle[1];
         GetFriendAttack(side, work, attackVec, statusVec);
         rescore = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             s32 slotOffset = i * 444 + 400;
             CardBoardSlot *slot = (CardBoardSlot *)((u8 *)target + slotOffset);
-            *(CardBoardSlot *)&slot->battle = savedBattle[i];
+            *(CardStackSpan *)&slot->battle = savedBattle[i];
         }
-        insufficient = rescore < score + 30;
+        insufficient = rescore < score + TODOME_MARGIN;
         if (insufficient) {
             return 0;
         }
@@ -2301,22 +2255,22 @@ s32 CheckKonranCommand(s32 side, CardGameWork *work)
     for (; i < CARD_BOARD_SLOTS; i++) {
         s32 slotOffset = i * 444 + 400;
         CardBoardSlot *slot = (CardBoardSlot *)((u8 *)target + slotOffset);
-        CardBoardSlot *dest = &savedBattle[i];
-        CardBoardSlot *src = (CardBoardSlot *)&slot->battle;
+        CardStackSpan *dest = &savedBattle[i];
+        CardStackSpan *src = (CardStackSpan *)&slot->battle;
         *dest = *src;
     }
-    *(CardBoardSlot *)&target->battle[0].battle = savedBattle[2];
-    *(CardBoardSlot *)&target->battle[1].battle = savedBattle[3];
-    *(CardBoardSlot *)&target->battle[2].battle = savedBattle[0];
-    *(CardBoardSlot *)&target->battle[3].battle = savedBattle[1];
+    *(CardStackSpan *)&target->battle[0].battle = savedBattle[2];
+    *(CardStackSpan *)&target->battle[1].battle = savedBattle[3];
+    *(CardStackSpan *)&target->battle[2].battle = savedBattle[0];
+    *(CardStackSpan *)&target->battle[3].battle = savedBattle[1];
     GetFriendAttack(other, work, attackVec, statusVec);
     rescore = TodomeHyouka(other, work, 0, 0, attackVec, statusVec);
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         s32 slotOffset = i * 444 + 400;
         CardBoardSlot *slot = (CardBoardSlot *)((u8 *)target + slotOffset);
-        *(CardBoardSlot *)&slot->battle = savedBattle[i];
+        *(CardStackSpan *)&slot->battle = savedBattle[i];
     }
-    insufficient = score < rescore + 30;
+    insufficient = score < rescore + TODOME_MARGIN;
     if (insufficient) {
         return 0;
     }
@@ -2332,8 +2286,8 @@ s32 CheckCurryCommand(s32 side, CardGameWork *work)
     s32 slotIndex;
     s32 bestSlot;
     CardPlaySide *ownSide = (side == 0) ? &work->player : &work->enemy;
-    s32 durations[4];
-    s32 flags[4];
+    s32 durations[CARD_BOARD_SLOTS];
+    s32 flags[CARD_BOARD_SLOTS];
     s32 best;
     s32 value;
     s32 initial;
@@ -2341,12 +2295,12 @@ s32 CheckCurryCommand(s32 side, CardGameWork *work)
     bestSlot = -1;
     initial = 0;
     slotIndex = initial;
-    if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+    if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         return -1;
     }
     GetFriendAttack(side == 0, work, durations, flags);
     for (slotIndex = initial; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
-        flags[slotIndex] &= 0xFFFEFFFF;
+        flags[slotIndex] &= ~ATTACK_DOWNS_TARGET;
     }
     initial = TodomeHyouka(side == 0, work, 0, 0, durations, flags);
     best = initial;
@@ -2378,7 +2332,7 @@ s32 CheckCurryCommand(s32 side, CardGameWork *work)
             bestSlot = slotIndex | CARD_SLOT_BATTLE;
         }
     }
-    if (initial < best + 15) {
+    if (initial < best + TODOME_MARGIN_SMALL) {
         return -1;
     }
     return bestSlot;
@@ -2388,8 +2342,8 @@ s32 CheckTentCommand(s32 side, CardGameWork *work)
 {
     s16 *cardIdPtr;
     CardPlaySide *ownSide;
-    s32 durations[4];
-    s32 flags[4];
+    s32 durations[CARD_BOARD_SLOTS];
+    s32 flags[CARD_BOARD_SLOTS];
     s32 value;
     s32 slotIndex;
     s32 initial;
@@ -2399,12 +2353,12 @@ s32 CheckTentCommand(s32 side, CardGameWork *work)
     initial = 0;
     slotIndex = initial;
     ownSide = (side == 0) ? &work->player : &work->enemy;
-    if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+    if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         result = 0;
     } else {
         GetFriendAttack(side == 0, work, durations, flags);
         for (slotIndex = initial; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
-            flags[slotIndex] &= 0xFFFEFFFF;
+            flags[slotIndex] &= ~ATTACK_DOWNS_TARGET;
         }
         cardIdPtr = &ownSide->battle[0].battle.layers[0].cardId;
         initial = TodomeHyouka(side == 0, work, 0, 0, durations, flags);
@@ -2426,7 +2380,7 @@ s32 CheckTentCommand(s32 side, CardGameWork *work)
             flags[slotIndex] &= 0x00F0FFFF;
             slotIndex++;
         }
-        below = initial < value + 15;
+        below = initial < value + TODOME_MARGIN_SMALL;
         result = below == 0;
     }
     return result;
@@ -2516,7 +2470,7 @@ s32 CheckXDamageCommand(s32 side, CardGameWork *work, s32 damage)
                 ownTotal += GetPrice(&ownSide->disposal[slotIndex].battle);
             } else {
                 s32 price = GetPrice(&ownSide->disposal[slotIndex].battle);
-                ownTotal = (s32) ((double) ownTotal + (double) price / 10.0 * damage);
+                ownTotal = ownTotal + price / 10.0 * damage;
             }
         }
         if (otherSide->disposal[slotIndex].battle.layers[0].cardId >= 0) {
@@ -2524,7 +2478,7 @@ s32 CheckXDamageCommand(s32 side, CardGameWork *work, s32 damage)
                 otherTotal += GetPrice(&otherSide->disposal[slotIndex].battle);
             } else {
                 s32 price = GetPrice(&otherSide->disposal[slotIndex].battle);
-                otherTotal = (s32) ((double) otherTotal + (double) price / 10.0 * damage);
+                otherTotal = otherTotal + price / 10.0 * damage;
             }
         }
         if (ownSide->battle[slotIndex].battle.layers[0].cardId >= 0) {
@@ -2532,7 +2486,7 @@ s32 CheckXDamageCommand(s32 side, CardGameWork *work, s32 damage)
                 ownTotal += GetShoukin(&ownSide->battle[slotIndex].battle);
             } else {
                 s32 reward = GetShoukin(&ownSide->battle[slotIndex].battle);
-                ownTotal = (s32) ((double) ownTotal + (double) reward / 10.0 * damage);
+                ownTotal = ownTotal + reward / 10.0 * damage;
             }
         }
         if (otherSide->battle[slotIndex].battle.layers[0].cardId >= 0) {
@@ -2540,7 +2494,7 @@ s32 CheckXDamageCommand(s32 side, CardGameWork *work, s32 damage)
                 otherTotal += GetShoukin(&otherSide->battle[slotIndex].battle);
             } else {
                 s32 reward = GetShoukin(&otherSide->battle[slotIndex].battle);
-                otherTotal = (s32) ((double) otherTotal + (double) reward / 10.0 * damage);
+                otherTotal = otherTotal + reward / 10.0 * damage;
             }
         }
     }
@@ -2555,10 +2509,10 @@ s32 CheckMilCommand(s32 side, CardGameWork *work)
     s32 reward = 0;
 
     if (sideData->battle[2].battle.layers[0].cardId >= 0) {
-        reward = (s32) (GetShoukin(&sideData->battle[2].battle) * 0.9f + reward);
+        reward = GetShoukin(&sideData->battle[2].battle) * 0.9f + reward;
     }
     if (sideData->battle[3].battle.layers[0].cardId >= 0) {
-        reward = (s32) (reward + GetShoukin(&sideData->battle[3].battle) * 0.9f);
+        reward = reward + GetShoukin(&sideData->battle[3].battle) * 0.9f;
     }
     if (reward < 81) {
         return 0;
@@ -2607,8 +2561,8 @@ s32 CheckNazoCommand(s32 side, CardGameWork *work)
 s32 CheckSeimitsuCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *otherSide = (side == 0) ? &work->enemy : &work->player;
-    s32 friendAttack[4];
-    s32 friendStatus[4];
+    s32 friendAttack[CARD_BOARD_SLOTS];
+    s32 friendStatus[CARD_BOARD_SLOTS];
     s32 baseScore;
     s32 bestScore;
     s32 bestSlot = -1;
@@ -2628,7 +2582,7 @@ s32 CheckSeimitsuCommand(s32 side, CardGameWork *work)
             if (remaining > 0) {
                 reward = GetShoukin(&otherSide->battle[slotIndex].battle);
                 friendAttack[slotIndex] -= 1;
-                score = (s32) ((float) reward / 10.0f);
+                score = reward / 10.0f;
             } else {
                 reward = GetShoukin(&otherSide->battle[slotIndex].battle);
                 friendAttack[slotIndex] = 0;
@@ -2652,7 +2606,7 @@ s32 CheckSeimitsuCommand(s32 side, CardGameWork *work)
             if (remaining > 0) {
                 reward = GetPrice(&otherSide->disposal[slotIndex].battle);
                 friendAttack[slotIndex] -= 1;
-                score = (s32) ((float) reward / 10.0f);
+                score = reward / 10.0f;
             } else {
                 reward = GetPrice(&otherSide->disposal[slotIndex].battle);
                 friendAttack[slotIndex] = 0;
@@ -2665,7 +2619,7 @@ s32 CheckSeimitsuCommand(s32 side, CardGameWork *work)
             }
         }
     }
-    if (bestScore < baseScore + 15) {
+    if (bestScore < baseScore + TODOME_MARGIN_SMALL) {
         return -1;
     }
     return bestSlot;
@@ -2889,15 +2843,15 @@ s32 CheckShukumeiCommand(s32 side, CardGameWork *work)
  * Target for the Bujin command, on the caller's own battle board: a slot
  * whose doubled attack (the low halfword of its friendStatus word) lifts the
  * TodomeHyouka score above the baseline by at least 30. The first slot with
- * a stacked card 53 that clears the threshold is returned at once; otherwise
+ * a stacked Eyeglasses card that clears the threshold is returned at once; otherwise
  * the best of the remaining battle slots is returned if it clears it. Battle
  * slots are encoded with the 0xF0000 tag, -1 means none.
  */
 s32 CheckBujinCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *ownSide = &work->enemy;
-    s32 friendAttack[4];
-    s32 friendStatus[4];
+    s32 friendAttack[CARD_BOARD_SLOTS];
+    s32 friendStatus[CARD_BOARD_SLOTS];
     s32 baseScore;
     s32 bestScore;
     s32 bestSlot;
@@ -2916,7 +2870,7 @@ s32 CheckBujinCommand(s32 side, CardGameWork *work)
     GetFriendAttack(side, work, friendAttack, friendStatus);
     baseScore = TodomeHyouka(side, work, 0, 0, friendAttack, friendStatus);
     bestScore = baseScore;
-    threshold = baseScore + 30;
+    threshold = baseScore + TODOME_MARGIN;
     for (slotIndex = 0; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
         slot = &ownSide->battle[slotIndex];
         if (slot->battle.layers[0].cardId < 0) {
@@ -2925,7 +2879,7 @@ s32 CheckBujinCommand(s32 side, CardGameWork *work)
         if (slot->battle.flags & CARD_STACK_FLAG_FROZEN) {
             continue;
         }
-        if (slot->battle.layers[1].cardId != 53) {
+        if (slot->battle.layers[1].cardId != CARD_ID_EYEGLASSES) {
             continue;
         }
         GetFriendAttack(side, work, friendAttack, friendStatus);
@@ -2942,7 +2896,7 @@ s32 CheckBujinCommand(s32 side, CardGameWork *work)
         if (cardId >= 0 && (ownSide->battle[slotIndex].battle.flags & CARD_STACK_FLAG_FROZEN) == 0) {
             s32 attackType = CardChkAttackType(work->definitions, &ownSide->battle[slotIndex].battle);
 
-            if ((u32)(cardId - 34) >= 2 && cardId != 37 && cardId != 43 &&
+            if ((u32)(cardId - CARD_ID_PROTO_DORA) >= 2 && cardId != CARD_ID_VX_7000 && cardId != CARD_ID_CANNON &&
                 attackType != CARD_ATTACK_HOMING) {
                 GetFriendAttack(side, work, friendAttack, friendStatus);
                 friendStatus[slotIndex] = (friendStatus[slotIndex] & ~ATTACK_POWER_MASK) +
@@ -2955,7 +2909,7 @@ s32 CheckBujinCommand(s32 side, CardGameWork *work)
             }
         }
     }
-    return (bestScore < baseScore + 30) ? -1 : bestSlot;
+    return (bestScore < baseScore + TODOME_MARGIN) ? -1 : bestSlot;
 }
 
 /* Greatest CardDat value of the card stacked on an occupied battle or
@@ -3043,8 +2997,8 @@ s32 CheckTeppekiCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *otherSide;
     CardPlaySide *ownSide;
-    s32 friendAttack[4];
-    s32 friendStatus[4];
+    s32 friendAttack[CARD_BOARD_SLOTS];
+    s32 friendStatus[CARD_BOARD_SLOTS];
     s32 attack;
     s32 slotIndex;
     CardBoardSlot *slot;
@@ -3076,7 +3030,7 @@ s32 CheckTeppekiCommand(s32 side, CardGameWork *work)
         }
     }
     GetFriendAttack((side == 0), work, friendAttack, friendStatus);
-    if (TodomeHyouka((side == 0), work, 0, 0, friendAttack, friendStatus) >= 1001) {
+    if (TodomeHyouka((side == 0), work, 0, 0, friendAttack, friendStatus) >= TODOME_DECK_OUT_SCORE) {
         return 1;
     }
     return CardPlayYamaCnt(ownSide) < attack;
@@ -3115,7 +3069,7 @@ s32 CheckSensiCommand(s32 side, CardGameWork *work)
     if (CardPlayYamaCnt(sideData) >= 11) {
         return -1;
     }
-    if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+    if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         return -1;
     }
     for (; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
@@ -3147,11 +3101,11 @@ s32 CheckSensiCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
-void SensiEvent(s32 side, CardGameWork *work)
+s32 SensiEvent(s32 side, CardGameWork *work)
 {
     s32 i;
-    s32 flagBattle[4];
-    s32 flagDisposal[4];
+    s32 flagBattle[CARD_BOARD_SLOTS];
+    s32 flagDisposal[CARD_BOARD_SLOTS];
     CardCursorPosition targets[8];
     s32 round;
     CardPlaySide *own;
@@ -3165,12 +3119,12 @@ void SensiEvent(s32 side, CardGameWork *work)
 
     if (side == 0) {
         own = &work->player;
-        typeBattle = 5;
-        typeDisposal = 6;
+        typeBattle = CARD_ZONE_SIDE0_BATTLE;
+        typeDisposal = CARD_ZONE_SIDE0_DISPOSAL;
     } else {
         own = &work->enemy;
-        typeBattle = 4;
-        typeDisposal = 2;
+        typeBattle = CARD_ZONE_SIDE1_BATTLE;
+        typeDisposal = CARD_ZONE_SIDE1_DISPOSAL;
     }
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         flagBattle[i] = -1;
@@ -3218,29 +3172,29 @@ void SensiEvent(s32 side, CardGameWork *work)
                 }
             }
         }
-        if (yama >= 20 || sute < 4) {
+        if (yama >= WAR_CASUALTY_DECK_LIMIT || sute < CARD_WAR_CASUALTY_RECOVERY) {
             break;
         }
         if (bestDisposal != -1) {
-            sute -= 4;
+            sute -= CARD_WAR_CASUALTY_RECOVERY;
             targets[count].zone = typeDisposal;
             targets[count].index = bestDisposal;
-            yama += 4;
+            yama += CARD_WAR_CASUALTY_RECOVERY;
             flagDisposal[bestDisposal] = -1;
             count++;
         }
-        if (yama >= 20 || sute < 4) {
+        if (yama >= WAR_CASUALTY_DECK_LIMIT || sute < CARD_WAR_CASUALTY_RECOVERY) {
             break;
         }
         if (bestBattle != -1) {
-            sute -= 4;
+            sute -= CARD_WAR_CASUALTY_RECOVERY;
             targets[count].zone = typeBattle;
             targets[count].index = bestBattle;
-            yama += 4;
+            yama += CARD_WAR_CASUALTY_RECOVERY;
             flagBattle[bestBattle] = -1;
             count++;
         }
-        if (yama >= 20 || sute < 4) {
+        if (yama >= WAR_CASUALTY_DECK_LIMIT || sute < CARD_WAR_CASUALTY_RECOVERY) {
             break;
         }
         round++;
@@ -3250,73 +3204,73 @@ void SensiEvent(s32 side, CardGameWork *work)
         do {
         } while (--i != 0);
     }
-    CGPEnemyExecCommand(side, work, targets, count);
+    return CGPEnemyExecCommand(side, work, targets, count);
 }
 
 int CC_Kara_DisposeEvent(s32 side, CardGameWork *work)
 {
     CardPlaySide *own;
-    s32 attackVec[4];
-    s32 statusVec[4];
-    s32 idx63;
-    s32 idx64;
-    s32 idx65;
+    s32 attackVec[CARD_BOARD_SLOTS];
+    s32 statusVec[CARD_BOARD_SLOTS];
+    s32 idxJuli;
+    s32 idxPellegri;
+    s32 idxZoharEmulator;
     s32 i;
     s32 cardId;
     s32 score;
     s32 rescore;
 
     own = (side == 0) ? &work->player : &work->enemy;
-    idx63 = -1;
-    idx64 = -1;
-    idx65 = -1;
+    idxJuli = -1;
+    idxPellegri = -1;
+    idxZoharEmulator = -1;
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-        if (own->battle[i].battle.layers[0].cardId == 63) {
-            idx63 = i;
-        } else if (own->battle[i].battle.layers[0].cardId == 64) {
-            idx64 = i;
-        } else if (own->battle[i].battle.layers[0].cardId == 65) {
-            idx65 = i;
+        if (own->battle[i].battle.layers[0].cardId == CARD_ID_JULI_MIZRAHI) {
+            idxJuli = i;
+        } else if (own->battle[i].battle.layers[0].cardId == CARD_ID_PELLEGRI) {
+            idxPellegri = i;
+        } else if (own->battle[i].battle.layers[0].cardId == CARD_ID_ZOHAR_EMULATOR) {
+            idxZoharEmulator = i;
         }
     }
     GetFriendAttack(side, work, attackVec, statusVec);
     score = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
-    if (idx63 != -1) {
+    if (idxJuli != -1) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (own->battle[i].battle.layers[0].cardId >= 0 && (work->definitions[own->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_HUMAN) != 0) {
                 statusVec[i] += 1;
             }
-            statusVec[idx63] = 0;
+            statusVec[idxJuli] = 0;
         }
         rescore = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
-        if (score + 120 < rescore) {
-            own->battle[idx63].battle.layers[0].life = 0;
+        if (score + TODOME_DISPOSE_MARGIN < rescore) {
+            own->battle[idxJuli].battle.layers[0].life = 0;
             CCU063ExecSub(work, own);
         }
     }
-    if (idx64 != -1) {
+    if (idxPellegri != -1) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (own->battle[i].battle.layers[0].cardId >= 0 && (work->definitions[own->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_MECH) != 0) {
                 statusVec[i] += 1;
             }
-            statusVec[idx64] = 0;
+            statusVec[idxPellegri] = 0;
         }
         rescore = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
-        if (score + 120 < rescore) {
-            own->battle[idx64].battle.layers[0].life = 0;
+        if (score + TODOME_DISPOSE_MARGIN < rescore) {
+            own->battle[idxPellegri].battle.layers[0].life = 0;
             CCU064ExecSub(work, own);
         }
     }
-    if (idx65 != -1) {
+    if (idxZoharEmulator != -1) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (own->battle[i].battle.layers[0].cardId >= 0 && (work->definitions[own->battle[i].battle.layers[0].cardId].flags & CARD_ATTR_GNOSIS) != 0) {
                 statusVec[i] += 2;
             }
-            statusVec[idx65] = 0;
+            statusVec[idxZoharEmulator] = 0;
         }
         rescore = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
-        if (score + 120 < rescore) {
-            own->battle[idx65].battle.layers[0].life = 0;
+        if (score + TODOME_DISPOSE_MARGIN < rescore) {
+            own->battle[idxZoharEmulator].battle.layers[0].life = 0;
             CCU065ExecSub(work, own);
         }
     }
@@ -3347,7 +3301,7 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
             work->definitions = definitions;
         }
     }
-    if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+    if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         CC_Kara_DisposeEvent(side, work);
     }
     index = 0;
@@ -3369,35 +3323,35 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
             continue;
         }
         switch (*cardPtr) {
-        case CARD_EVENT_EXT_A:
+        case CARD_ID_CURE_ALL:
             result = CheckExtCommand(side, work);
             if (result != -1) {
                 commplay = result;
                 return index;
             }
             break;
-        case CARD_EVENT_CURRY:
+        case CARD_ID_CURRY:
             result = CheckCurryCommand(side, work);
             if (result != -1) {
                 commplay = result;
                 return index;
             }
             break;
-        case CARD_EVENT_TENT:
+        case CARD_ID_BIO_SPHERE:
             if (CheckTentCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case 86:
-            if ((s16) work->command.phase != CARD_PHASE_EVENT && (s16) work->command.phase != CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE &&
+        case CARD_ID_SUPPLY_SHIP:
+            if (work->command.phase != CARD_PHASE_EVENT && work->command.phase != CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE &&
                 CardPlaySuteCnt(ownSide) >= 5) {
                 commplay = 0;
                 return index;
             }
             break;
-        case 87:
-            if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+        case CARD_ID_SUPPLY_FLEET:
+            if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
                 break;
             }
             sum = DisposeAreaCheckFriend(side, work);
@@ -3410,30 +3364,30 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
                 return index;
             }
             break;
-        case CARD_EVENT_TAIKYAKU_A:
-        case CARD_EVENT_TAIKYAKU_B:
+        case CARD_ID_RETREAT:
+        case CARD_ID_WOGLINDE:
             result = CheckTaikyakuCommand(side, work);
             if (result != -1) {
                 commplay = result | CARD_SLOT_OTHER_SIDE | CARD_SLOT_BATTLE;
                 return index;
             }
             break;
-        case CARD_EVENT_DAMAGE_A:
-        case CARD_EVENT_DAMAGE_B:
+        case CARD_ID_SURPRISE_ATTACK:
+        case CARD_ID_FEDERATION_CRUISER:
             result = CheckDamageCommand(side, work, 2);
             if (result != -1) {
                 commplay = result | CARD_SLOT_OTHER_SIDE | CARD_SLOT_BATTLE;
                 return index;
             }
             break;
-        case CARD_EVENT_NAZO:
+        case CARD_ID_INVITATION:
             if (CheckNazoCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case 93:
-            if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+        case CARD_ID_MARY_AND_SHELLEY:
+            if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
                 if (CardPlayYamaCnt(ownSide) >= 11 && handCount < 7) {
                     commplay = 0;
                     return index;
@@ -3443,8 +3397,8 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
                 return index;
             }
             break;
-        case 94:
-            if ((s16) work->command.phase == CARD_PHASE_EVENT || (s16) work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
+        case CARD_ID_UMN_INVASION:
+            if (work->command.phase == CARD_PHASE_EVENT || work->command.phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
                 if (CardPlaySuteCnt(ownSide) >= 2 && handCount < 7) {
                     commplay = 0;
                     return index;
@@ -3454,80 +3408,80 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
                 return index;
             }
             break;
-        case 95:
-        case 96:
-        case 105:
-        case 108:
+        case CARD_ID_INVESTIGATION:
+        case CARD_ID_LANDING_OPERATIONS:
+        case CARD_ID_RECYCLER:
+        case CARD_ID_SIMULATION:
             return index;
-        case CARD_EVENT_GUNO_YOKAN:
+        case CARD_ID_PREMONITION:
             result = CheckGunoYokanCommand(side, work);
             goto commit;
-        case CARD_EVENT_DOWN_GUNO:
+        case CARD_ID_DRAGON_SKULL:
             result = CheckDownGunoCommand(side, work);
             goto commit;
-        case CARD_EVENT_CHUDAN:
+        case CARD_ID_EXPULSION_ORDER:
             result = CheckChudanCommand(side, work);
             goto commit;
-        case CARD_EVENT_TEPPEKI:
+        case CARD_ID_IMPREGNABLE_GUARD:
             if (CheckTeppekiCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_413:
+        case CARD_ID_ARTICLE_4_13:
             if (Check413Command(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_SOUTENI_HOU:
+        case CARD_ID_PHASE_CANNON:
             if (CheckSouteniHouCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_TUUKOKU:
+        case CARD_ID_NOTICE:
             result = CheckTuukokuCommand(side, work);
             goto commit;
-        case CARD_EVENT_KETUGI:
+        case CARD_ID_RESOLUTION:
             if (CheckKetugiCommand(side, work) != 0) {
                 commplay = 0;
                 return index;
             }
             break;
-        case 106:
+        case CARD_ID_REVIVE_DX:
             if (handCount < 7) {
                 return index;
             }
             break;
-        case CARD_EVENT_BUJIN:
+        case CARD_ID_STIM_DX:
             result = CheckBujinCommand(side, work);
             if (result != -1) {
                 commplay = result | CARD_SLOT_BATTLE;
                 return index;
             }
             break;
-        case CARD_EVENT_SENSI:
+        case CARD_ID_WAR_CASUALTY:
             result = CheckSensiCommand(side, work);
             if (result != -1) {
                 commplay = result;
                 return index;
             }
             break;
-        case CARD_EVENT_X_DAMAGE:
+        case CARD_ID_X_BUSTER:
             if (CheckXDamageCommand(side, work, 1) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_TOTUGEKI:
+        case CARD_ID_CHARGE:
             result = CheckTotugekiCommand(side, work);
             if (result != -1) {
                 commplay = result | CARD_SLOT_OTHER_SIDE | CARD_SLOT_BATTLE;
                 return index;
             }
             break;
-        case CARD_EVENT_SEIMITSU:
+        case CARD_ID_PRECISE_SHOOTING:
             result = CheckSeimitsuCommand(side, work);
         commit:
             if (result != -1) {
@@ -3535,39 +3489,39 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
                 return index;
             }
             break;
-        case CARD_EVENT_HATUDOU:
+        case CARD_ID_INVOKE:
             if (CheckHatudouCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_KONRAN:
+        case CARD_ID_CONFUSION:
             if (CheckKonranCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_MIL:
+        case CARD_ID_MILTIAN_CONFLICT:
             if (CheckMilCommand(side, work) == 1) {
                 commplay = 0;
                 return index;
             }
             break;
-        case CARD_EVENT_EXT_B:
+        case CARD_ID_START_UP:
             result = CheckExtCommand(side, work);
             if (result != -1) {
                 commplay = result;
                 return index;
             }
             break;
-        case CARD_EVENT_SHUKUMEI:
+        case CARD_ID_DESTINY:
             result = CheckShukumeiCommand(side, work);
             if (result != -1) {
                 commplay = result;
                 return index;
             }
             break;
-        case CARD_EVENT_KYOUKOU:
+        case CARD_ID_BREAK_THROUGH:
             result = CheckKyoukouCommand(side, work);
             goto commit;
         default:
@@ -3582,67 +3536,70 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
  * index, the masks pick the zone) and either dispatches the command through
  * CGPEnemyExecCommand or plays the Sensi event for the played card.
  */
-void CC_Kara_CommPlay(s32 side, CardGameWork *work)
+s32 CC_Kara_CommPlay(s32 side, CardGameWork *work)
 {
     u16 index;
-    s16 zoneLowOnly;
-    s16 zoneBothMask;
-    s16 zoneNoMask;
-    s16 zoneHighOnly;
+    s16 ownBattleZone;
+    s16 otherBattleZone;
+    s16 ownDisposalZone;
+    s16 otherDisposalZone;
     CardPlaySide *ownSide;
     CardCursorPosition cursor;
     u32 *commPtr;
 
     if (side == 0) {
         ownSide = &work->player;
-        zoneLowOnly = 5;
-        zoneBothMask = 4;
-        zoneNoMask = 6;
-        zoneHighOnly = 2;
+        ownBattleZone = CARD_ZONE_SIDE0_BATTLE;
+        otherBattleZone = CARD_ZONE_SIDE1_BATTLE;
+        ownDisposalZone = CARD_ZONE_SIDE0_DISPOSAL;
+        otherDisposalZone = CARD_ZONE_SIDE1_DISPOSAL;
     } else {
         ownSide = &work->enemy;
-        zoneLowOnly = 4;
-        zoneBothMask = 5;
-        zoneNoMask = 2;
-        zoneHighOnly = 6;
+        ownBattleZone = CARD_ZONE_SIDE1_BATTLE;
+        otherBattleZone = CARD_ZONE_SIDE0_BATTLE;
+        ownDisposalZone = CARD_ZONE_SIDE1_DISPOSAL;
+        otherDisposalZone = CARD_ZONE_SIDE0_DISPOSAL;
     }
     commPtr = &commplay;
     if (!(*commPtr & CARD_SLOT_OTHER_SIDE)) {
         if (!(*commPtr & CARD_SLOT_BATTLE)) {
-            cursor.zone = zoneNoMask;
+            cursor.zone = ownDisposalZone;
             cursor.index = *(u16 *) commPtr;
         } else {
-            cursor.zone = zoneLowOnly;
+            cursor.zone = ownBattleZone;
             cursor.index = *(u16 *) commPtr;
         }
     } else {
         if (!(*commPtr & CARD_SLOT_BATTLE)) {
-            cursor.zone = zoneHighOnly;
+            cursor.zone = otherDisposalZone;
             cursor.index = *(u16 *) commPtr;
         } else {
-            cursor.zone = zoneBothMask;
+            cursor.zone = otherBattleZone;
             cursor.index = *(u16 *) commPtr;
         }
     }
     switch (ownSide->battle[0].cmdView.playedCard) {
-    case CARD_EVENT_EXT_A:
+    case CARD_ID_CURE_ALL:
         break;
-    case CARD_EVENT_TEPPEKI:
+    case CARD_ID_IMPREGNABLE_GUARD:
         playteppeki = 1;
         break;
-    case CARD_EVENT_413:
+    case CARD_ID_ARTICLE_4_13:
         play413 = 1;
         break;
-    case CARD_EVENT_SENSI:
-        SensiEvent(side, work);
-        return;
-    case CARD_EVENT_KYOUKOU:
+    case CARD_ID_WAR_CASUALTY:
+        return SensiEvent(side, work);
+    case CARD_ID_BREAK_THROUGH:
         break;
     default:
         break;
     }
-    CGPEnemyExecCommand(side, work, &cursor, 0);
+    return CGPEnemyExecCommand(side, work, &cursor, 0);
 }
+
+/* Frames between two set attempts, and the number of attempts after which the set phase ends. */
+#define CC_KARA_SET_WAIT_FRAMES 15
+#define CC_KARA_SET_MAX_ATTEMPTS 41
 
 /* Runs timed AI set attempts: the first call of a phase arms aiStep and the
  * wait counter, later calls count the wait down, then aiStep counts the
@@ -3655,15 +3612,15 @@ s32 CC_Kara_SetFase(s32 side, CardGameWork *work)
 
     if (work->aiStep == 0) {
         work->aiStep = 1;
-        timer = 15;
+        timer = CC_KARA_SET_WAIT_FRAMES;
     }
     if (timer == 0) {
         attempts = work->aiStep + 1;
         work->aiStep = attempts;
-        if ((u8)attempts >= 41) {
+        if ((u8)attempts >= CC_KARA_SET_MAX_ATTEMPTS) {
             return 0;
         }
-        timer = 15;
+        timer = CC_KARA_SET_WAIT_FRAMES;
         return CC_Kara_SetFase_1(side, work);
     }
     timer = timer - 1;
@@ -3711,10 +3668,10 @@ s32 GetPrice(CardLayerStack *stack)
 }
 
 s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds, s32 *results) {
-    s32 life[4];
-    s32 flags[4];
-    s32 bonusFlag[4];
-    s32 bonus[4];
+    s32 life[CARD_BOARD_SLOTS];
+    s32 flags[CARD_BOARD_SLOTS];
+    s32 bonusFlag[CARD_BOARD_SLOTS];
+    s32 bonus[CARD_BOARD_SLOTS];
     s32 gain;
     s32 *flagPtr;
     s32 pinnedA;
@@ -3763,7 +3720,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
     flagPtr = &flags[2];
     specialOps = 0;
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-        if (other->operations[i] == 0x7A) {
+        if (other->operations[i] == CARD_ID_TUNE_UP) {
             specialOps += 1;
         }
     }
@@ -3771,7 +3728,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
         cardId = other->battle[i].battle.layers[0].cardId;
         bonus[i] = 0;
         if (cardId >= 0) {
-            if (other->battle[i].battle.layers[1].cardId == 0x2C || other->battle[i].battle.layers[1].cardId == 0x2F) {
+            if (other->battle[i].battle.layers[1].cardId == CARD_ID_SHIELD || other->battle[i].battle.layers[1].cardId == CARD_ID_BATTLE_SUIT) {
                 bonus[i] = 1;
             }
             if (work->definitions[cardId].flags == CARD_ATTR_MECH) {
@@ -3896,12 +3853,12 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
         flags[3] = 0;
     }
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-        if (flags[i] & ATTACK_REWARD_BONUS) {
+        if (flags[i] & ATTACK_DOWNS_TARGET) {
             bonusFlag[i] = 1;
         } else {
             bonusFlag[i] = 0;
         }
-        flags[i] = (u16) flags[i];
+        flags[i] &= ATTACK_POWER_MASK;
     }
     if (life[0] != 0) {
         remain = life[0] - flags[1];
@@ -3919,10 +3876,10 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
             if (remain > 0) {
                 if ((bonusFlag[1] == 1) || (bonusFlag[3] == 1)) {
                     stack = &other->battle[0].battle;
-                    score = (s32) ((f32) score + ((f32) GetShoukin(stack) * 0.5f));
-                    score = (s32) ((f32) score + (((f32) GetShoukin(stack) / 20.0f) * (f32) (life[0] - remain)));
+                    score = score + (GetShoukin(stack) * 0.5f);
+                    score = score + ((GetShoukin(stack) / 20.0f) * (life[0] - remain));
                 } else {
-                    score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[0].battle) / 10.0f) * (f32) (life[0] - remain)));
+                    score = score + ((GetShoukin(&other->battle[0].battle) / 10.0f) * (life[0] - remain));
                 }
                 life[0] = remain;
             } else if (momoBonus != 0) {
@@ -3941,10 +3898,10 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
                     if (remain > 0) {
                         if (bonusFlag[3] == 1) {
                             stack = &other->battle[2].battle;
-                            score = (s32) ((f32) score + ((f32) GetShoukin(stack) * 0.5f));
-                            score = (s32) ((f32) score + (((f32) GetShoukin(stack) / 20.0f) * (f32) (life[2] - remain)));
+                            score = score + (GetShoukin(stack) * 0.5f);
+                            score = score + ((GetShoukin(stack) / 20.0f) * (life[2] - remain));
                         } else {
-                            score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[2].battle) / 10.0f) * (f32) (life[2] - remain)));
+                            score = score + ((GetShoukin(&other->battle[2].battle) / 10.0f) * (life[2] - remain));
                         }
                         life[2] = remain;
                     } else if (momoBonus != 2) {
@@ -3973,10 +3930,10 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
             if (remain > 0) {
                 if ((pinnedB == 0) && ((bonusFlag[1] == 1) || (bonusFlag[3] == 1))) {
                     stack = &other->battle[2].battle;
-                    score = (s32) ((f32) score + ((f32) GetShoukin(stack) * 0.5f));
-                    score = (s32) ((f32) score + (((f32) GetShoukin(stack) / 20.0f) * (f32) (life[2] - remain)));
+                    score = score + (GetShoukin(stack) * 0.5f);
+                    score = score + ((GetShoukin(stack) / 20.0f) * (life[2] - remain));
                 } else {
-                    score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[2].battle) / 10.0f) * (f32) (life[2] - remain)));
+                    score = score + ((GetShoukin(&other->battle[2].battle) / 10.0f) * (life[2] - remain));
                 }
                 life[2] = remain;
             } else if (momoBonus != 2) {
@@ -4013,10 +3970,10 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
             if (remain > 0) {
                 if ((bonusFlag[0] == 1) || (bonusFlag[2] == 1)) {
                     stack = &other->battle[1].battle;
-                    score = (s32) ((f32) score + ((f32) GetShoukin(stack) * 0.5f));
-                    score = (s32) ((f32) score + (((f32) GetShoukin(stack) / 20.0f) * (f32) (life[1] - remain)));
+                    score = score + (GetShoukin(stack) * 0.5f);
+                    score = score + ((GetShoukin(stack) / 20.0f) * (life[1] - remain));
                 } else {
-                    score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[1].battle) / 10.0f) * (f32) (life[1] - remain)));
+                    score = score + ((GetShoukin(&other->battle[1].battle) / 10.0f) * (life[1] - remain));
                 }
                 life[1] = remain;
             } else if (momoBonus != 1) {
@@ -4033,10 +3990,10 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
                 if (remain > 0) {
                     if (bonusFlag[2] == 1) {
                         stack = &other->battle[3].battle;
-                        score = (s32) ((f32) score + ((f32) GetShoukin(stack) * 0.5f));
-                        score = (s32) ((f32) score + (((f32) GetShoukin(stack) / 20.0f) * (f32) (life[3] - remain)));
+                        score = score + (GetShoukin(stack) * 0.5f);
+                        score = score + ((GetShoukin(stack) / 20.0f) * (life[3] - remain));
                     } else {
-                        score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[3].battle) / 10.0f) * (f32) (life[3] - remain)));
+                        score = score + ((GetShoukin(&other->battle[3].battle) / 10.0f) * (life[3] - remain));
                     }
                     life[3] = remain;
                 } else if (momoBonus != 3) {
@@ -4061,10 +4018,10 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
             if (remain > 0) {
                 if ((pinnedA == 0) && ((bonusFlag[0] == 1) || (bonusFlag[2] == 1))) {
                     stack = &other->battle[3].battle;
-                    score = (s32) ((f32) score + ((f32) GetShoukin(stack) * 0.5f));
-                    score = (s32) ((f32) score + (((f32) GetShoukin(stack) / 20.0f) * (f32) (life[3] - remain)));
+                    score = score + (GetShoukin(stack) * 0.5f);
+                    score = score + ((GetShoukin(stack) / 20.0f) * (life[3] - remain));
                 } else {
-                    score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[3].battle) / 10.0f) * (f32) (life[3] - remain)));
+                    score = score + ((GetShoukin(&other->battle[3].battle) / 10.0f) * (life[3] - remain));
                 }
                 life[3] = remain;
             } else if (momoBonus != 3) {
@@ -4092,7 +4049,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (life[i] > 0) {
                 life[i] -= spreadPower;
-                score = (s32) ((f32) score + (((f32) GetShoukin(&other->battle[i].battle) / 10.0f) * (f32) spreadPower));
+                score = score + ((GetShoukin(&other->battle[i].battle) / 10.0f) * spreadPower);
             }
         }
     }
@@ -4100,7 +4057,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
         score += homingPower;
         total += homingPower;
     }
-    score = ((CardPlayYamaCnt(other) - total) < 2) ? (score + 0x3E8) : score;
+    score = ((CardPlayYamaCnt(other) - total) < 2) ? (score + TODOME_DECK_OUT_BONUS) : score;
     if (AlbedoCheck(side, work) != -1) {
         score += total * 0xA;
     }
@@ -4135,15 +4092,15 @@ s32 GetFriendAttack(s32 side, CardGameWork *work, s32 *kinds, s32 *results)
             continue;
         }
         type = CardChkAttackType(work->definitions, &ownSide->battle[index].battle);
-        if ((s8) ownSide->battle[index].battle.power < 2) {
+        if (ownSide->battle[index].battle.power < 2) {
             if (type == CARD_ATTACK_BALLISTIC) {
                 kind = index | CARD_SLOT_BATTLE;
                 results[index] = CheckNowPower(side, work, kind, ownSide->battle[index].battle.layers[0].cardId);
                 if (LvUpCheck(side, work, kind) != -1) {
                     results[index] = LvUpCheck(side, work, kind);
                 }
-                if (cardId == 31 || cardId == 9) {
-                    results[index] |= ATTACK_REWARD_BONUS;
+                if (cardId == CARD_ID_AG_02_M || cardId == CARD_ID_LV_10_ZIGGY) {
+                    results[index] |= ATTACK_DOWNS_TARGET;
                 }
                 if (cardId == CARD_ID_ALBEDO) {
                     friendIndex = index;
@@ -4155,8 +4112,8 @@ s32 GetFriendAttack(s32 side, CardGameWork *work, s32 *kinds, s32 *results)
                     results[index] = LvUpCheck(side, work, kind);
                 }
                 results[index] |= ATTACK_HAND;
-                if (cardId == 2 || cardId == 9 || cardId == 30 || cardId == 67) {
-                    results[index] |= ATTACK_REWARD_BONUS;
+                if (cardId == CARD_ID_LV_1_ZIGGY || cardId == CARD_ID_LV_10_ZIGGY || cardId == CARD_ID_AG_04 || cardId == CARD_ID_GOBLIN) {
+                    results[index] |= ATTACK_DOWNS_TARGET;
                 }
             } else if (type == CARD_ATTACK_SPREAD) {
                 kind = index | CARD_SLOT_BATTLE;
@@ -4172,12 +4129,12 @@ s32 GetFriendAttack(s32 side, CardGameWork *work, s32 *kinds, s32 *results)
         if (type == CARD_ATTACK_HOMING) {
             results[index] |= ATTACK_HOMING;
         }
-        if (cardId == 32 || cardId == 76) {
+        if (cardId == CARD_ID_SIMEON || cardId == CARD_ID_GARGOYLE) {
             results[index] |= ATTACK_SPLASH;
         }
         if (ownSide->battle[index].battle.flags & CARD_STACK_FLAG_FROZEN) {
             results[index] &= ~ATTACK_POWER_MASK;
-            results[index] &= ~ATTACK_REWARD_BONUS;
+            results[index] &= ~ATTACK_DOWNS_TARGET;
             results[index] &= ~ATTACK_SPLASH;
         }
     }
@@ -4207,9 +4164,9 @@ s32 GetFriendAttack(s32 side, CardGameWork *work, s32 *kinds, s32 *results)
 
 s32 CC_Kara_TodomeMove(s32 side, CardGameWork *work, s32 slot)
 {
-    s32 friendA[4];
-    s32 friendB[4];
-    s32 hyouka[4];
+    s32 friendA[CARD_BOARD_SLOTS];
+    s32 friendB[CARD_BOARD_SLOTS];
+    s32 hyouka[CARD_BOARD_SLOTS];
     s32 best;
     s32 bestSlot;
     s32 i;
@@ -4235,7 +4192,7 @@ s32 CC_Kara_TodomeMove(s32 side, CardGameWork *work, s32 slot)
             continue;
         }
         if (best < hyouka[i]) {
-            if (hyouka[i] >= 1001) {
+            if (hyouka[i] >= TODOME_DECK_OUT_SCORE) {
                 best = hyouka[i];
                 bestSlot = i;
             } else {
@@ -4278,8 +4235,8 @@ s32 CC_Kara_AttackMove(s32 side, CardGameWork *work, s32 slot)
 
 s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
 {
-    s32 attack[4];
-    s32 status[4];
+    s32 attack[CARD_BOARD_SLOTS];
+    s32 status[CARD_BOARD_SLOTS];
     s32 score;
     s32 cardId;
     CardPlaySide *ownSide;
@@ -4303,7 +4260,7 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
                                     &ownSide->battle[0].battle);
                 return 1;
             }
-            if (1000 < TodomeHyouka(side, work, 2, 0, attack, status)) {
+            if (TODOME_DECK_OUT_BONUS < TodomeHyouka(side, work, 2, 0, attack, status)) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[2].battle,
                                     &ownSide->battle[0].battle);
                 return 1;
@@ -4316,7 +4273,7 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
                                     &ownSide->battle[slot].battle);
                 return 1;
             }
-            if (TodomeHyouka(side, work, 3, 0, attack, status) >= 1001) {
+            if (TodomeHyouka(side, work, 3, 0, attack, status) >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[3].battle,
                                     &ownSide->battle[slot].battle);
                 return 1;
@@ -4334,7 +4291,7 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
                                     &ownSide->battle[1].battle);
                 return 1;
             }
-            if (TodomeHyouka(side, work, 2, 1, attack, status) >= 1001) {
+            if (TodomeHyouka(side, work, 2, 1, attack, status) >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[2].battle,
                                     &ownSide->battle[1].battle);
                 return 1;
@@ -4347,7 +4304,7 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
                                     &ownSide->battle[slot].battle);
                 return 1;
             }
-            if (TodomeHyouka(side, work, 3, 1, attack, status) >= 1001) {
+            if (TodomeHyouka(side, work, 3, 1, attack, status) >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[3].battle,
                                     &ownSide->battle[slot].battle);
                 return 1;
@@ -4365,7 +4322,7 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
                                     &ownSide->battle[2].battle);
                 return 1;
             }
-            if (TodomeHyouka(side, work, 3, 2, attack, status) >= 1001) {
+            if (TodomeHyouka(side, work, 3, 2, attack, status) >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[3].battle,
                                     &ownSide->battle[2].battle);
                 return 1;
@@ -4383,7 +4340,7 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
                                     &ownSide->battle[3].battle);
                 return 1;
             }
-            if (TodomeHyouka(side, work, 2, 3, attack, status) >= 1001) {
+            if (TodomeHyouka(side, work, 2, 3, attack, status) >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[2].battle,
                                     &ownSide->battle[3].battle);
                 return 1;
@@ -4398,8 +4355,8 @@ s32 CC_Kara_FrontTodomeMove(s32 side, CardGameWork *work, s32 slot)
 {
     CardPlaySide *mySide;
     CardPlaySide *otherSide;
-    s32 friendA[4];
-    s32 friendB[4];
+    s32 friendA[CARD_BOARD_SLOTS];
+    s32 friendB[CARD_BOARD_SLOTS];
     s32 first;
     s32 second;
     s16 cardId;
@@ -4424,7 +4381,7 @@ s32 CC_Kara_FrontTodomeMove(s32 side, CardGameWork *work, s32 slot)
                     CGPMoveDSBATTLEwork(&mySide->battle[1].battle,
                                         &mySide->battle[0].battle);
                     return 1;
-                } else if (second >= 1001) {
+                } else if (second >= TODOME_DECK_OUT_SCORE) {
                     CGPMoveDSBATTLEwork(&mySide->battle[1].battle,
                                         &mySide->battle[0].battle);
                     return 1;
@@ -4462,7 +4419,7 @@ s32 CC_Kara_FrontTodomeMove(s32 side, CardGameWork *work, s32 slot)
                     CGPMoveDSBATTLEwork(&mySide->battle[0].battle,
                                         &mySide->battle[1].battle);
                     return 1;
-                } else if (second >= 1001) {
+                } else if (second >= TODOME_DECK_OUT_SCORE) {
                     CGPMoveDSBATTLEwork(&mySide->battle[0].battle,
                                         &mySide->battle[1].battle);
                     return 1;
@@ -4536,7 +4493,7 @@ s32 CC_Kara_BackAttackMove(s32 side, CardGameWork *work, s32 battleSlot)
     return 0;
 }
 
-/* Card id 0x27 (VX10000) on either side's battle board, checking both sides'
+/* The VX-10000 card on either side's battle board, checking both sides'
  * slot i together for i in 0..3. */
 s32 VX10000Check(s32 side, CardGameWork *work)
 {
@@ -4552,18 +4509,18 @@ s32 VX10000Check(s32 side, CardGameWork *work)
         sideB = &work->player;
     }
     for (slotIndex = 0; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
-        if (sideA->battle[slotIndex].battle.layers[0].cardId == CARD_ID_VX10000) {
+        if (sideA->battle[slotIndex].battle.layers[0].cardId == CARD_ID_VX_10000) {
             return 1;
         }
-        if (sideB->battle[slotIndex].battle.layers[0].cardId == CARD_ID_VX10000) {
+        if (sideB->battle[slotIndex].battle.layers[0].cardId == CARD_ID_VX_10000) {
             return 1;
         }
     }
     return 0;
 }
 
-/* Whether `side`'s battle board has card id 0x51 (Yoakimu) in some slot and
- * card id 3, 8 or 10 (MoMo) in some slot. */
+/* Whether `side`'s battle board has Joachim Mizrahi (Yoakimu) in some slot and
+ * one of the MoMo cards (Lv 1, Swim Suit, Lv 10) in some slot. */
 s32 YoakimuMoMoCheck(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = &work->player;
@@ -4580,10 +4537,10 @@ s32 YoakimuMoMoCheck(s32 side, CardGameWork *work)
         s16 cardId = *cardIdPtr;
 
         cardIdPtr += CARD_SLOT_HALFWORDS;
-        if (cardId == CARD_ID_YOAKIMU) {
+        if (cardId == CARD_ID_JOACHIM_MIZRAHI) {
             yoakimuSlot = slotIndex;
         }
-        if (cardId == CARD_ID_MOMO_A || cardId == CARD_ID_MOMO_B || cardId == CARD_ID_MOMO_C) {
+        if (cardId == CARD_ID_LV_1_MOMO || cardId == CARD_ID_SWIM_SUIT_MOMO || cardId == CARD_ID_LV_10_MOMO) {
             moMoSlot = slotIndex;
         }
     }
@@ -4595,7 +4552,7 @@ s32 YoakimuMoMoCheck(s32 side, CardGameWork *work)
     return 0;
 }
 
-/* Index of the first MoMo card (id 3, 8 or 10) on `side`'s disposal board
+/* Index of the first MoMo card (Lv 1, Swim Suit or Lv 10) on `side`'s disposal board
  * (slot index), else on its battle board (slot index | 0xF0000), else -1. */
 s32 MoMoCheck(s32 side, CardGameWork *work)
 {
@@ -4605,20 +4562,20 @@ s32 MoMoCheck(s32 side, CardGameWork *work)
 
     for (slotIndex = 0; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
         cardId = *(&ownSide->disposal->battle.layers[0].cardId + slotIndex * CARD_SLOT_HALFWORDS);
-        if (cardId == CARD_ID_MOMO_A || cardId == CARD_ID_MOMO_B || cardId == CARD_ID_MOMO_C) {
+        if (cardId == CARD_ID_LV_1_MOMO || cardId == CARD_ID_SWIM_SUIT_MOMO || cardId == CARD_ID_LV_10_MOMO) {
             return slotIndex;
         }
     }
     for (slotIndex = 0; slotIndex < CARD_BOARD_SLOTS; slotIndex++) {
         cardId = *(&ownSide->battle[0].battle.layers[0].cardId + slotIndex * CARD_SLOT_HALFWORDS);
-        if (cardId == CARD_ID_MOMO_A || cardId == CARD_ID_MOMO_B || cardId == CARD_ID_MOMO_C) {
+        if (cardId == CARD_ID_LV_1_MOMO || cardId == CARD_ID_SWIM_SUIT_MOMO || cardId == CARD_ID_LV_10_MOMO) {
             return slotIndex | CARD_SLOT_BATTLE;
         }
     }
     return -1;
 }
 
-/* Card id 0x51 (Yoakimu) moves to the battle slot MoMoCheck names, or checks
+/* Joachim Mizrahi (Yoakimu) moves to the battle slot MoMoCheck names, or checks
  * the hand and the power of the disposal slot it was played from. A slot
  * with bits 0xF0000 set names a battle slot instead. */
 s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
@@ -4633,7 +4590,7 @@ s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
         sideData = &work->enemy;
     }
     if ((slot & CARD_SLOT_BATTLE) == 0) {
-        if (sideData->disposal[slot].battle.layers[0].cardId == CARD_ID_YOAKIMU) {
+        if (sideData->disposal[slot].battle.layers[0].cardId == CARD_ID_JOACHIM_MIZRAHI) {
         moMoResult = MoMoCheck(side, work);
         if (moMoResult != -1 && (moMoResult & CARD_SLOT_BATTLE) != 0) {
             switch (moMoResult & CARD_SLOT_INDEX_MASK) {
@@ -4663,7 +4620,7 @@ s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
         for (i = 0; i < handCount; i++) {
             u16 cardId = (u16) sideData->hand.cards[i];
 
-            if ((u32) (cardId - 0x32) < 2U) {
+            if ((u32) (cardId - CARD_ID_RIFLE) < 2U) {
                 return 0;
             }
         }
@@ -4672,7 +4629,7 @@ s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
         return 0;
     }
     battleSlot = slot & CARD_SLOT_INDEX_MASK;
-    if (sideData->battle[battleSlot].battle.layers[0].cardId == CARD_ID_YOAKIMU) {
+    if (sideData->battle[battleSlot].battle.layers[0].cardId == CARD_ID_JOACHIM_MIZRAHI) {
     moMoResult = MoMoCheck(side, work);
     if (moMoResult != -1 && (moMoResult & CARD_SLOT_BATTLE) != 0) {
         switch (moMoResult & CARD_SLOT_INDEX_MASK) {
@@ -4698,8 +4655,8 @@ s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
 
 s32 MoMoMove(s32 side, CardGameWork *work, s32 slot)
 {
-    s32 attack[4];
-    s32 status[4];
+    s32 attack[CARD_BOARD_SLOTS];
+    s32 status[CARD_BOARD_SLOTS];
     CardPlaySide *ownSide;
     s32 idx;
     s32 i;
@@ -4714,13 +4671,13 @@ s32 MoMoMove(s32 side, CardGameWork *work, s32 slot)
 
     i = 0;
     idx = -1;
-    if (ownSide->battle[0].battle.layers[0].cardId == CARD_ID_YOAKIMU) {
+    if (ownSide->battle[0].battle.layers[0].cardId == CARD_ID_JOACHIM_MIZRAHI) {
         idx = 0;
     } else {
     scanLoop:
         i++;
-        if (i < 4) {
-            if (ownSide->battle[i].battle.layers[0].cardId != CARD_ID_YOAKIMU) {
+        if (i < CARD_BOARD_SLOTS) {
+            if (ownSide->battle[i].battle.layers[0].cardId != CARD_ID_JOACHIM_MIZRAHI) {
                 goto scanLoop;
             }
             idx = i;
@@ -4796,7 +4753,7 @@ s32 MoMoMove(s32 side, CardGameWork *work, s32 slot)
                 CGPMoveDSBATTLEwork(&ownSide->battle[3].battle, &ownSide->battle[2].battle);
                 return 1;
             }
-            if (scoreB >= 1001) {
+            if (scoreB >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[1].battle, &ownSide->battle[0].battle);
                 CGPMoveDSBATTLEwork(&ownSide->battle[3].battle, &ownSide->battle[2].battle);
                 return 1;
@@ -4820,7 +4777,7 @@ s32 MoMoMove(s32 side, CardGameWork *work, s32 slot)
                 CGPMoveDSBATTLEwork(&ownSide->battle[2].battle, &ownSide->battle[3].battle);
                 return 1;
             }
-            if (scoreB >= 1001) {
+            if (scoreB >= TODOME_DECK_OUT_SCORE) {
                 CGPMoveDSBATTLEwork(&ownSide->battle[0].battle, &ownSide->battle[1].battle);
                 CGPMoveDSBATTLEwork(&ownSide->battle[2].battle, &ownSide->battle[3].battle);
                 return 1;
@@ -4951,7 +4908,7 @@ s32 CC_Kara_SensiMove(s32 side, CardGameWork *work, s32 slot)
                                         &ownSide->disposal[slot].battle);
                     return 1;
                 }
-                powerA = CheckNowPower(side, work, 0xF0001, ownSide->battle[1].battle.layers[0].cardId);
+                powerA = CheckNowPower(side, work, CARD_SLOT_BATTLE | 1, ownSide->battle[1].battle.layers[0].cardId);
                 powerB = CheckNowPower(side, work, slot, ownSide->disposal[slot].battle.layers[0].cardId);
                 if (powerA < powerB) {
                     if (YoakimuMoMoCheck(side, work) == 0) {
@@ -4983,7 +4940,7 @@ s32 CC_Kara_SensiMove(s32 side, CardGameWork *work, s32 slot)
                     }
                 }
                 if (i == 1 && otherSide->battle[0].battle.layers[0].cardId >= 0) {
-                    powerA = CheckNowPower(side, work, 0xF0001, ownSide->battle[1].battle.layers[0].cardId);
+                    powerA = CheckNowPower(side, work, CARD_SLOT_BATTLE | 1, ownSide->battle[1].battle.layers[0].cardId);
                     powerB = CheckNowPower(side, work, slot, ownSide->disposal[slot].battle.layers[0].cardId);
                     if (powerA >= powerB && YoakimuMoMoCheck(side, work) == 0) {
                         continue;
@@ -5012,10 +4969,10 @@ s32 CC_Kara_SensiMove(s32 side, CardGameWork *work, s32 slot)
                 if (attackType == CARD_ATTACK_SPREAD) {
                     powerA = powerA * ret;
                 }
-                if ((&ownSide->battle[i].battle.layers[0])->cardId == 0x20) {
+                if ((&ownSide->battle[i].battle.layers[0])->cardId == CARD_ID_SIMEON) {
                     powerA = powerA + 3;
                 }
-                if (ownSide->disposal[slot].battle.layers[0].cardId == 0x20) {
+                if (ownSide->disposal[slot].battle.layers[0].cardId == CARD_ID_SIMEON) {
                     powerA = powerA + 3;
                 }
                 if (3 == disposalAttack) {
@@ -5343,7 +5300,7 @@ s32 EscapeMove(s32 side, CardGameWork *work, s32 slot)
         enemyAttack = CheckEnemy12Attack(side, work);
         if ((slot & CARD_SLOT_BATTLE) == 0) {
             attackType = CardChkAttackType(work->definitions, &sideData->disposal[slot].battle);
-            if ((s8) sideData->disposal[slot].battle.power < 2 && attackType == CARD_ATTACK_SPREAD) {
+            if (sideData->disposal[slot].battle.power < 2 && attackType == CARD_ATTACK_SPREAD) {
                 if (BattleAreaCheckEnemy(side, work) >= 2) {
                     return 0;
                 }
@@ -5356,7 +5313,7 @@ s32 EscapeMove(s32 side, CardGameWork *work, s32 slot)
         } else {
             slot &= CARD_SLOT_INDEX_MASK;
             attackType = CardChkAttackType(work->definitions, &sideData->battle[slot].battle);
-            if ((s8) sideData->battle[slot].battle.power < 2 && attackType == CARD_ATTACK_SPREAD) {
+            if (sideData->battle[slot].battle.power < 2 && attackType == CARD_ATTACK_SPREAD) {
                 if (BattleAreaCheckEnemy(side, work) >= 2) {
                     return 0;
                 }
@@ -5397,44 +5354,44 @@ s32 LvUpCheck(s32 side, CardGameWork *work, s32 slot)
     handCount = CardPlayHandCnt(&sideData->hand);
     if ((slot & CARD_SLOT_BATTLE) == 0) {
         switch (sideData->disposal[slot].battle.layers[0].cardId) {
-        case 0:
+        case CARD_ID_LV_1_SHION:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 7) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_SHION) {
                     return 3;
                 }
             }
             break;
-        case 2:
+        case CARD_ID_LV_1_ZIGGY:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 9) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_ZIGGY) {
                     return 2;
                 }
             }
             break;
-        case 3:
+        case CARD_ID_LV_1_MOMO:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 10) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_MOMO) {
                     return 3;
                 }
             }
             break;
-        case 4:
+        case CARD_ID_LV_1_KOS_MOS:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 11) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_KOS_MOS) {
                     return -1;
                 }
             }
             break;
-        case 5:
+        case CARD_ID_LV_1_JR:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 12) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_JR) {
                     return 2;
                 }
             }
             break;
-        case 6:
+        case CARD_ID_LV_1_CHAOS:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 13) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_CHAOS) {
                     return 3;
                 }
             }
@@ -5442,44 +5399,44 @@ s32 LvUpCheck(s32 side, CardGameWork *work, s32 slot)
         }
     } else {
         switch (sideData->battle[slot & CARD_SLOT_INDEX_MASK].battle.layers[0].cardId) {
-        case 0:
+        case CARD_ID_LV_1_SHION:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 7) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_SHION) {
                     return 3;
                 }
             }
             break;
-        case 2:
+        case CARD_ID_LV_1_ZIGGY:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 9) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_ZIGGY) {
                     return 2;
                 }
             }
             break;
-        case 3:
+        case CARD_ID_LV_1_MOMO:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 10) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_MOMO) {
                     return 3;
                 }
             }
             break;
-        case 4:
+        case CARD_ID_LV_1_KOS_MOS:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 11) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_KOS_MOS) {
                     return -1;
                 }
             }
             break;
-        case 5:
+        case CARD_ID_LV_1_JR:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 12) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_JR) {
                     return 2;
                 }
             }
             break;
-        case 6:
+        case CARD_ID_LV_1_CHAOS:
             for (i = 0; i < handCount; i++) {
-                if (sideData->hand.cards[i] == 13) {
+                if (sideData->hand.cards[i] == CARD_ID_LV_10_CHAOS) {
                     return 3;
                 }
             }
@@ -5609,31 +5566,31 @@ s32 CC_Kara_MoveFase_Type2(s32 side, CardGameWork *work, s32 slot)
     }
 
     if ((slot & CARD_SLOT_BATTLE) == 0) {
-        if (own->disposal[slot].battle.layers[0].cardId == CARD_ID_MOMO_A ||
-            own->disposal[slot].battle.layers[0].cardId == CARD_ID_MOMO_B ||
-            own->disposal[slot].battle.layers[0].cardId == CARD_ID_MOMO_C) {
+        if (own->disposal[slot].battle.layers[0].cardId == CARD_ID_LV_1_MOMO ||
+            own->disposal[slot].battle.layers[0].cardId == CARD_ID_SWIM_SUIT_MOMO ||
+            own->disposal[slot].battle.layers[0].cardId == CARD_ID_LV_10_MOMO) {
             if (MoMoMove(side, work, slot) == 1) {
                 return 1;
             }
         }
         if (own->disposal[slot].battle.layers[0].cardId >= 0 &&
-            own->disposal[slot].battle.layers[1].cardId != 44 &&
-            own->disposal[slot].battle.layers[1].cardId != 47) {
+            own->disposal[slot].battle.layers[1].cardId != CARD_ID_SHIELD &&
+            own->disposal[slot].battle.layers[1].cardId != CARD_ID_BATTLE_SUIT) {
             CC_Kara_SensiMove(side, work, slot);
             return 1;
         }
     } else {
         index = slot;
-        if (own->battle[index].battle.layers[0].cardId == CARD_ID_MOMO_A ||
-            own->battle[index].battle.layers[0].cardId == CARD_ID_MOMO_B ||
-            own->battle[index].battle.layers[0].cardId == CARD_ID_MOMO_C) {
+        if (own->battle[index].battle.layers[0].cardId == CARD_ID_LV_1_MOMO ||
+            own->battle[index].battle.layers[0].cardId == CARD_ID_SWIM_SUIT_MOMO ||
+            own->battle[index].battle.layers[0].cardId == CARD_ID_LV_10_MOMO) {
             if (MoMoMove(side, work, index | CARD_SLOT_BATTLE) == 1) {
                 return 1;
             }
         }
         if (own->battle[index].battle.layers[0].cardId >= 0 &&
-            own->battle[index].battle.layers[1].cardId != 44 &&
-            own->battle[index].battle.layers[1].cardId != 47) {
+            own->battle[index].battle.layers[1].cardId != CARD_ID_SHIELD &&
+            own->battle[index].battle.layers[1].cardId != CARD_ID_BATTLE_SUIT) {
             CC_Kara_SensiMove(side, work, slot);
             return 1;
         }
@@ -5747,7 +5704,7 @@ tagged:
 }
 
 /*
- * Type-three AI move: a move of the Momo cards (identities 3, 8 and 10) first,
+ * Type-three AI move: a move of the Momo cards (Lv 1, Swim Suit and Lv 10) first,
  * then the attack-type and escape checks, ending in the Sensi, Haibi-kabe or
  * kabe move for the chosen slot.
  */
@@ -5764,14 +5721,14 @@ s32 CC_Kara_MoveFase_Type3(s32 side, CardGameWork *work, s32 slot)
 
     if ((slot & CARD_SLOT_BATTLE) == 0) {
         cardId = ownSide->disposal[slot].battle.layers[0].cardId;
-        if (cardId == CARD_ID_MOMO_A || cardId == CARD_ID_MOMO_B || cardId == CARD_ID_MOMO_C) {
+        if (cardId == CARD_ID_LV_1_MOMO || cardId == CARD_ID_SWIM_SUIT_MOMO || cardId == CARD_ID_LV_10_MOMO) {
             if (MoMoMove(side, work, slot) == 1) {
                 return 1;
             }
         }
     } else {
         cardId = ownSide->battle[slot & CARD_SLOT_INDEX_MASK].battle.layers[0].cardId;
-        if (cardId == CARD_ID_MOMO_A || cardId == CARD_ID_MOMO_B || cardId == CARD_ID_MOMO_C) {
+        if (cardId == CARD_ID_LV_1_MOMO || cardId == CARD_ID_SWIM_SUIT_MOMO || cardId == CARD_ID_LV_10_MOMO) {
             if (MoMoMove(side, work, (slot & CARD_SLOT_INDEX_MASK) | CARD_SLOT_BATTLE) == 1) {
                 return 1;
             }
@@ -5909,13 +5866,13 @@ s32 CC_Kara_MoveFase_2(s32 side, CardGameWork *work)
                 s32 layer1Id = ownSide->disposal[i].battle.layers[1].cardId;
 
                 if (CardLayerPower(&slot->battle) < 2) {
-                    if (layer1Id == 0x35) {
+                    if (layer1Id == CARD_ID_EYEGLASSES) {
                         continue;
                     }
-                    if (layer1Id == 0x30) {
+                    if (layer1Id == CARD_ID_MISSILE_POD) {
                         continue;
                     }
-                    if (layer1Id == 0x2E) {
+                    if (layer1Id == CARD_ID_BEAM) {
                         continue;
                     }
                 }
@@ -5960,7 +5917,7 @@ s32 CC_Kara_MoveFase_2(s32 side, CardGameWork *work)
                     s32 layer1Id = ownSide->battle[i].battle.layers[1].cardId;
 
                     if (CardLayerPower(&slot->battle) < 2 &&
-                        (layer1Id == 0x35 || layer1Id == 0x30 || layer1Id == 0x2E)) {
+                        (layer1Id == CARD_ID_EYEGLASSES || layer1Id == CARD_ID_MISSILE_POD || layer1Id == CARD_ID_BEAM)) {
                         for (k = 0; k < CARD_BOARD_SLOTS; k++) {
                             if (ownSide->disposal[k].battle.layers[0].cardId < 0) {
                                 CGPMoveDSBATTLEwork(&ownSide->disposal[k].battle,
@@ -6067,8 +6024,8 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
     s32 handCount;
     CardDefinition *definitions;
     s32 friendSum;
-    s32 attack0[4];
-    s32 attack16[4];
+    s32 attack0[CARD_BOARD_SLOTS];
+    s32 attack16[CARD_BOARD_SLOTS];
     s32 i;
     s32 k;
     s32 m;
@@ -6079,10 +6036,10 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
     s32 ownYamaCount;
     s32 pick;
     s32 pick2;
-    s32 flag44;
+    s32 virgilOnBoard;
     s32 n;
     s32 count;
-    s32 n54;
+    s32 virgilInBattle;
 
     if (side == 0) {
         own = &work->player;
@@ -6101,12 +6058,12 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
         return 0;
     }
     GetFriendAttack(side, work, attack0, attack16);
-    if (TodomeHyouka(side, work, 0, 0, attack0, attack16) >= 1001) {
+    if (TodomeHyouka(side, work, 0, 0, attack0, attack16) >= TODOME_DECK_OUT_SCORE) {
         return 0;
     }
 
     for (i = 0; i < handCount; i++) {
-        if (own->hand.cards[i] == 102 && CheckCommandPlay(side, work, 102) == 1 &&
+        if (own->hand.cards[i] == CARD_ID_PHASE_CANNON && CheckCommandPlay(side, work, CARD_ID_PHASE_CANNON) == 1 &&
             BattleAreaCheckEnemy(side, work) > 0) {
             for (k = 0; k < CARD_BOARD_SLOTS; k++) {
                 cardId = own->battle[k].battle.layers[0].cardId;
@@ -6136,13 +6093,13 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
     ownYamaCount = CardPlayYamaCnt(own);
     pick = 0;
     pick2 = 0;
-    flag44 = 0;
+    virgilOnBoard = 0;
     for (i = 0; i < handCount; i++) {
         if (ownYamaCount >= 2) {
-                if (own->hand.cards[i] == 101 && CheckCommandPlay(side, work, 101) == 1) {
+                if (own->hand.cards[i] == CARD_ID_ARTICLE_4_13 && CheckCommandPlay(side, work, CARD_ID_ARTICLE_4_13) == 1) {
                     pick = 1;
                 }
-                if (own->hand.cards[i] == 125 && CGPDispoSub0(side, work, i) == 0) {
+                if (own->hand.cards[i] == CARD_ID_ARMISTICE && CGPDispoSub0(side, work, i) == 0) {
                     pick2 = 1;
                 }
             }
@@ -6180,18 +6137,18 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         s32 slotCard;
 
-        if (own->disposal[i].battle.layers[0].cardId == 54) {
-            flag44 = 1;
+        if (own->disposal[i].battle.layers[0].cardId == CARD_ID_VIRGIL) {
+            virgilOnBoard = 1;
             break;
         }
         slotCard = own->battle[i].battle.layers[0].cardId;
-        if (slotCard == 54) {
-            flag44 = 1;
+        if (slotCard == CARD_ID_VIRGIL) {
+            virgilOnBoard = 1;
             break;
         }
     }
-    if (pick2 == 1 && flag44 == 1) {
-        n54 = 0;
+    if (pick2 == 1 && virgilOnBoard == 1) {
+        virgilInBattle = 0;
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             cardId = own->disposal[i].battle.layers[0].cardId;
             if (cardId >= 0 && definitions[cardId].flags == CARD_ATTR_REALIAN) {
@@ -6211,7 +6168,7 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
         }
 
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            if (own->disposal[i].battle.layers[0].cardId == 54) {
+            if (own->disposal[i].battle.layers[0].cardId == CARD_ID_VIRGIL) {
                 for (m = 0; m < CARD_BOARD_SLOTS; m++) {
                     cardId = own->battle[m].battle.layers[0].cardId;
                     if (cardId < 0) {
@@ -6235,8 +6192,8 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
         }
 
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            if (own->battle[i].battle.layers[0].cardId == 54) {
-                n54 = 1;
+            if (own->battle[i].battle.layers[0].cardId == CARD_ID_VIRGIL) {
+                virgilInBattle = 1;
                 break;
             }
         }
@@ -6248,7 +6205,7 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
                 count++;
             }
         }
-        if (count > 0 && n54 == 1) {
+        if (count > 0 && virgilInBattle == 1) {
             return 1;
         }
     }
@@ -6277,7 +6234,7 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
     if (CheckComboMove(side, work) == 1) {
         return 0;
     }
-    if (CardPlayCntOpe(player, 145) != 0 || CardPlayCntOpe(enemy, 145) != 0) {
+    if (CardPlayCntOpe(player, CARD_ID_DSSS) != 0 || CardPlayCntOpe(enemy, CARD_ID_DSSS) != 0) {
         if (CheckGuno(side, work) != 0) {
             for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 s32 k;
@@ -6299,7 +6256,7 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
             return 0;
         }
     }
-    if (CardPlayCntOpe(player, 146) != 0 || CardPlayCntOpe(enemy, 146) != 0) {
+    if (CardPlayCntOpe(player, CARD_ID_COMPULSORY_SORTIE) != 0 || CardPlayCntOpe(enemy, CARD_ID_COMPULSORY_SORTIE) != 0) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             s32 k;
 
@@ -6315,7 +6272,7 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
         }
         return 0;
     }
-    if (CardPlayCntOpe(player, 147) != 0 || CardPlayCntOpe(enemy, 147) != 0) {
+    if (CardPlayCntOpe(player, CARD_ID_OVERRIDE_CODE) != 0 || CardPlayCntOpe(enemy, CARD_ID_OVERRIDE_CODE) != 0) {
         if (CheckREAL(side, work) != 0) {
             for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                 s32 k;
@@ -6334,18 +6291,18 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
             return 0;
         }
     }
-    if (CardPlayCntOpe(player, 120) != 0 || CardPlayCntOpe(enemy, 120) != 0) {
+    if (CardPlayCntOpe(player, CARD_ID_HILBERT_EFFECT) != 0 || CardPlayCntOpe(enemy, CARD_ID_HILBERT_EFFECT) != 0) {
         if (CheckGuno(side, work) != 0) {
             return 0;
         }
     }
-    if (CardPlayCntOpe(player, 138) != 0 || CardPlayCntOpe(enemy, 138) != 0) {
+    if (CardPlayCntOpe(player, CARD_ID_A_RAT_IN_A_TRAP) != 0 || CardPlayCntOpe(enemy, CARD_ID_A_RAT_IN_A_TRAP) != 0) {
         return 0;
     }
     if (CheckGuno(side, work) != 0) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            if (ownSide->battle[i].battle.layers[0].cardId == 10 ||
-                otherSide->battle[i].battle.layers[0].cardId == 10) {
+            if (ownSide->battle[i].battle.layers[0].cardId == CARD_ID_LV_10_MOMO ||
+                otherSide->battle[i].battle.layers[0].cardId == CARD_ID_LV_10_MOMO) {
                 s32 j;
 
                 for (j = 0; j < CARD_BOARD_SLOTS; j++) {
@@ -6375,7 +6332,7 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
 }
 
 /*
- * Whether the side's hand holds card 0x52 or 0x74 whose play condition
+ * Whether the side's hand holds Miyuki's Email or Song, whose play condition
  * CardPlayChkCondition accepts (it returns 0 for an allowed card).
  */
 s32 CC_Kara_1stAnswer(s32 side, CardGameWork *work)
@@ -6397,7 +6354,7 @@ s32 CC_Kara_1stAnswer(s32 side, CardGameWork *work)
         do {
             s16 cardId = hand->cards[cardIndex];
 
-            if (cardId == 0x52 || cardId == 0x74) {
+            if (cardId == CARD_ID_MIYUKIS_EMAIL || cardId == CARD_ID_SONG) {
                 if (CardPlayChkCondition(work->definitions, ownSide, cardId, work) == 0) {
                     return 1;
                 }
@@ -6416,32 +6373,32 @@ s32 CC_Kara_1stAnswer(s32 side, CardGameWork *work)
 s32 CC_Kara_EndFase(s32 side, CardGameWork *work)
 {
     s32 cardIndex;
-    CardHand *hand = &work->enemy.hand;
+    CardPlaySide *ownSide = &work->enemy;
     s32 handCount;
 
     if (side == 0) {
-        hand = &work->player.hand;
+        ownSide = &work->player;
         cardIndex = 0;
     } else {
         cardIndex = 0;
     }
     cardIndex = 0;
-    handCount = CardPlayHandCnt(hand);
+    handCount = CardPlayHandCnt(&ownSide->hand);
     if (0 < handCount) {
         do {
-            s16 cardId = hand->cards[cardIndex];
+            s16 cardId = ownSide->hand.cards[cardIndex];
 
             if (GetDeckData(side, work, cardId) == 0) {
-                CardPlayDesertCard(hand, cardIndex);
+                CardPlayDesertCard(ownSide, cardIndex);
                 return 1;
             }
             if (GetDeckData(side, work, cardId) == 1) {
-                CardPlayDesertCard(hand, cardIndex);
+                CardPlayDesertCard(ownSide, cardIndex);
                 return 1;
             }
             cardIndex++;
         } while (cardIndex < handCount);
     }
-    CardPlayDesertCard(hand, 0);
+    CardPlayDesertCard(ownSide, 0);
     return 1;
 }
