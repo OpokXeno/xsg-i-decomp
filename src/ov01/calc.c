@@ -180,7 +180,49 @@ void calcPara2OrgSub(ObjectTask *unit) {
     origin->ep = param->currentEp;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcDeadReset);
+/*
+ * Gives one hit point in the persistent origin record to every unit that,
+ * when its table slot is re-read after the two lookups, is gone or dead
+ * (CALC_ACTOR_FLAG_DEAD), or whose origin record is at zero HP. A slot that is already empty at
+ * the first read is skipped: it has no origin record to update.
+ *
+ * The original keeps the unit table in a register across the loop (`lw
+ * $5,0x0($29)` once before it, 0x00a10f74) and refreshes that register after
+ * the two calls through a second load that is copied over it (`lw $2,0x0($29)`
+ * / `daddu $5,$2`, 0x00a10fa8..0x00a10fac) before the element is indexed
+ * through the refreshed copy (`addu $3,$16,$5`). Only this spelling, the
+ * re-read into its own local and the cursor assigned from it, reproduces
+ * that copy: reading `table` again directly merges into one load.
+ */
+void calcDeadReset(void)
+{
+    ObjectTask **table;
+    ObjectTask **units;
+    ObjectTask **refreshed;
+    ObjectTask *unit;
+    CalcCharParaData *origin;
+    int count;
+    int i;
+
+    i = 0;
+    count = unitTblGet(0, &table);
+    if (count > 0) {
+        units = table;
+        do {
+            unit = units[i];
+            if (unit != 0) {
+                origin = dataUnitOrgGet(calcUPGet(unit)->charaId);
+                refreshed = table;
+                units = refreshed;
+                if (refreshed[i] == 0
+                    || (((CalcActorRecord *) refreshed[i]->work)->flags & CALC_ACTOR_FLAG_DEAD)
+                    || origin->hp == 0) {
+                    origin->hp = 1;
+                }
+            }
+        } while (++i < count);
+    }
+}
 
 CalcUnitParam *calcUPGet(ObjectTask *unit)
 {
@@ -288,7 +330,199 @@ int calcTakeEpGetMenu(int charaId, int etherId) {
     return calcTakeEpGet(&arg.task, dataEthGet(etherId)->tecId);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcUseEtherMenu);
+/*
+ * dataTecGet's return, as far as calcBp2Tid reads it: a byte at +0x11
+ * selecting the BP timeline (data_unit_org_get.c, dataTecGet's own TU,
+ * still asm, owns the rest of the layout).
+ */
+typedef struct TecKindView TecKindView;
+
+struct TecKindView {
+    /*
+     * +0x00: attribute bits: calcAtkChk's range class, `lbu $3,0x0($2)`/`andi
+     * $16,$3,0x3` (0x00a16024..0x00a16028; TEC_ATTR_RANGE, defined beside
+     * calcAtkChk), and calcUseEtherMenu's CALC_TRG_BIT4 (0x00a112f4).
+     */
+    u8 attr;
+    signed char epCost;     /* +0x01: calcTakeEpGet's base term, `lb $16,0x1($2)` */
+    u16 flags;              /* +0x02: bit 0x800 rules out a counter */
+    signed char effectType; /* +0x04: calcStatClr's `lb $4,0x4($18)`, 4 clears statuses */
+    /*
+     * +0x05: calcStat's `lb $3,0x5($2)`: 1 makes the hit double *damage
+     * while the target carries status (0, 0x20), which calcStat then resets.
+     */
+    signed char doubleDamageKind;
+    /*
+     * +0x06: calcPowLevGet's base term, `lbu $18,0x6($2)` (0x00a13684,
+     * unsigned byte load). TecRecord (src/ov01/data_unit_org_get.c) owns
+     * the rest of this layout and does not yet name this byte or the next
+     * one either (its unmodeled_00[0x11] covers both).
+     */
+    u8 powLevBase;
+    signed char agility;    /* +0x07: calcPlusAglGet's base term, `lb $18,0x7($2)` */
+    unsigned char unmodeled_08[0x0C - 0x08];
+    signed char statCategory; /* +0x0C: calcStatClr's `lb $3,0xC($18)` */
+    unsigned char unmodeled_0d[0x0E - 0x0D];
+    u16 statMask;           /* +0x0E: calcStatClr's `lhu $2,0xE($18)` */
+    unsigned char unmodeled_10[0x11 - 0x10];
+    /*
+     * +0x11: calcBp2Tid's timeline selector. calcBp2Tid (0x00a1267c)
+     * reads it with `lb $2,0x11($2)` (signed byte load), hence `signed char`.
+     */
+    signed char kind;
+};
+
+/*
+ * Bits of TecKindView.flags (+0x02, `lhu $3,0x2($2)`/`andi $3,$3,<bit>`),
+ * each named by the effect its one test has; the field stays u16.
+ */
+enum TecFlag {
+    /* futtobiChk (`lhu $3,0x2($5)`/`andi $3,$3,0x100`, 0x00a14600..0x00a14604,
+     * on its technique argument): clear, no knockback (result 0). */
+    TEC_FLAG_KNOCKBACK = 0x100,
+    /* calcHitRate (0x00a130bc): set, the hit roll is skipped (result 0). */
+    TEC_FLAG_NO_HIT_ROLL = 0x200,
+    /* calcHitRate (0x00a1310c): set, the first roll's result 2 is blocked. */
+    TEC_FLAG_NO_HIT_RESULT_2 = 0x400
+};
+
+extern TecKindView *dataTecGet(int tecId);
+
+/*
+ * The battle command tgtFindFirst (this TU, still asm) passes on to
+ * tgtFindChk, as far as either reads it: tgtFindFirst resolves +0x00
+ * through dataTecGet and +0x08 through dataItmGet, takes the target from
+ * +0x04, and branches on mode 3 (an item, as in sndConvSpid's mode 3).
+ * calcHitRate (below) reads the same +0x00 (`lw $4,0x0($17)` before
+ * dataTecGet) and +0x04 (`lw $4,0x4($17)` before calcUPGet).
+ */
+typedef struct TgtCmd {
+    int tecId;          /* +0x00 */
+    ObjectTask *target; /* +0x04 */
+    int itmId;          /* +0x08: an item's id, or an ether's for mode 2 */
+    int mode;           /* +0x0C: 2 = ether, 3 = item */
+} TgtCmd;
+
+/*
+ * The hit record calcHitDmg (this TU, still asm) fills and hands to
+ * calcDmg, which passes it on to calcLinePos; calcLinePos reads only the
+ * byte at +0x00 (`lbu $16,0x0($6)`) and goes on when it is 1; calcStatClr
+ * records the status category and bits the technique clears.
+ */
+typedef struct CalcHitInfo {
+    /*
+     * +0x00: calcRevHit's packed word, the hit mode in the low byte and
+     * the side above it. A word: calcHitDmg stores it with `sw $2,0x0($17)`
+     * and calcStat hands it whole to calcRevHit (`lw $4,0x0($18)`) and
+     * stores the answer back; calcLinePos and calcStat read the mode alone
+     * (`lbu`, `& 0xFF`).
+     */
+    int result;
+    /*
+     * +0x04: the damage amount. calcUseEtherMenu (this TU) hands the record's
+     * +0x00 and +0x04 words to calcHpDmg (`lw $6,0x330($29)` /
+     * `lw $7,0x334($29)` at 0x00a113ec..0x00a113f0), which applies the word
+     * as the calcHp/calcEp delta for the mode in result's low byte.
+     */
+    int damage;
+    unsigned char unmodeled_08[0x0C - 0x08];
+    int setCategory;   /* +0x0C: calcHitItem's `sw $3,0xC($16)`, 8 = none */
+    int setMask;       /* +0x10: calcHitItem's `sw $0,0x10($16)` */
+    /*
+     * +0x14/+0x18: calcStatClr's `sw $3,0x14($16)` / `sw $2,0x18($16)`. Read
+     * together: category 8 with a zero mask records no clearing; category 8
+     * with mask 0xFFFF clears every bit of every category; any other category
+     * clears that category's statMask bits.
+     */
+    int clearCategory;
+    int clearMask;
+} CalcHitInfo;
+
+/* calcUseEtherMenu's `addiu $2,$0,2` / `sw $2,0x32C($29)`, cmd at 0x320 (0x00a112cc). */
+#define TGT_CMD_MODE_ETHER 2
+
+/*
+ * calcHitDmg/calcHpDmg (this TU, still asm): calcUseEtherMenu's own
+ * callees. calcHitDmg resolves cmd against the user's unit into hit;
+ * calcHpDmg applies hit's mode (its +0x00 word, low byte) and amount (+0x04)
+ * to the target through calcHp/calcEp.
+ */
+extern int calcHitDmg(ObjectTask *user, TgtCmd *cmd, CalcHitInfo *hit);
+extern int calcHpDmg(ObjectTask *user, ObjectTask *target, int result, int damage);
+
+/*
+ * Uses ether etherId from the menu: charaId's character casts it on
+ * targetCharaId, or on every party member when the technique's attr
+ * carries CALC_TRG_BIT4 (`lbu $3,0x0($2)` / `andi $3,$3,0x10`, 0x00a112f4).
+ * Both the user and each target are fake units whose actor points at the
+ * character's origin record; the target's maxHp/maxEp and statAltMask are
+ * calcTotalParaMenu's recalculated values while calcHitDmg/calcHpDmg run,
+ * as in calcUseItemMenu, and the user's maxEp while calcEp takes the cost.
+ */
+int calcUseEtherMenu(int charaId, int targetCharaId, int etherId)
+{
+    CalcScratchUnit user;
+    CalcScratchUnit target;
+    CalcScratchActor userActor;
+    CalcScratchActor targetActor;
+    TgtCmd cmd;
+    CalcHitInfo hit;
+    int partyIds[8];
+    u16 savedStatAlt[8];
+    int *targetIds;
+    CalcCharParaData *origin;
+    CalcCharParaData *total;
+    short maxHp;
+    short maxEp;
+    int count;
+    int member;
+    int i;
+
+    user.task.work = &userActor;
+    userActor.actor.up = (CalcUnitParam *) dataUnitOrgGet(charaId);
+    target.task.work = &targetActor;
+    cmd.tecId = dataEthGet(etherId)->tecId;
+    cmd.target = &target.task;
+    cmd.itmId = etherId;
+    cmd.mode = TGT_CMD_MODE_ETHER;
+    if (dataTecGet(dataEthGet(etherId)->tecId)->attr & CALC_TRG_BIT4) {
+        targetIds = partyIds;
+        count = PartyAllPartyGet(targetIds, 0);
+    } else {
+        targetIds = partyIds;
+        count = 1;
+        targetIds[0] = targetCharaId;
+    }
+    for (member = 0; member < count; member++) {
+        origin = dataUnitOrgGet(targetIds[member]);
+        total = calcTotalParaMenu(targetIds[member], 0, 0);
+        maxHp = origin->maxHp;
+        maxEp = origin->maxEp;
+        for (i = 0; i < 8; i++) {
+            savedStatAlt[i] = origin->statAltMask[i];
+        }
+        origin->maxHp = total->maxHp;
+        origin->maxEp = total->maxEp;
+        for (i = 0; i < 8; i++) {
+            origin->statAltMask[i] = total->statAltMask[i];
+        }
+        targetActor.actor.up = (CalcUnitParam *) origin;
+        calcHitDmg(&user.task, &cmd, &hit);
+        calcHpDmg(&user.task, &target.task, hit.result, hit.damage);
+        origin->maxHp = maxHp;
+        origin->maxEp = maxEp;
+        for (i = 0; i < 8; i++) {
+            origin->statAltMask[i] = savedStatAlt[i];
+        }
+    }
+    origin = dataUnitOrgGet(charaId);
+    total = calcTotalParaMenu(charaId, 0, 0);
+    maxEp = origin->maxEp;
+    origin->maxEp = total->maxEp;
+    calcEp(&user.task, -calcTakeEpGetMenu(charaId, etherId));
+    origin->maxEp = maxEp;
+    return 1;
+}
 
 /*
  * dataItmGet's return, as far as calcUseItemMenu, calcItmEnableChk,
@@ -786,68 +1020,6 @@ int calcBp(ObjectTask *unit, int bp)
     return 1;
 }
 
-/*
- * dataTecGet's return, as far as calcBp2Tid reads it: a byte at +0x11
- * selecting the BP timeline (data_unit_org_get.c, dataTecGet's own TU,
- * still asm, owns the rest of the layout).
- */
-typedef struct TecKindView TecKindView;
-
-struct TecKindView {
-    /*
-     * +0x00: on origin/master this view (calc.c's own, private bounded view
-     * of dataTecGet's record; no header owns it) begins with
-     * `unsigned char unmodeled_00[1];`. That one byte is named here, same
-     * size and offset, because calcAtkChk (this TU, now C) reads it:
-     * `lbu $3,0x0($2)`/`andi $16,$3,0x3` (0x00a16024..0x00a16028) for its
-     * range class (TEC_ATTR_RANGE, defined beside calcAtkChk). It is still
-     * needed by that function and by nothing else.
-     */
-    u8 attr;
-    signed char epCost;     /* +0x01: calcTakeEpGet's base term, `lb $16,0x1($2)` */
-    u16 flags;              /* +0x02: bit 0x800 rules out a counter */
-    signed char effectType; /* +0x04: calcStatClr's `lb $4,0x4($18)`, 4 clears statuses */
-    /*
-     * +0x05: calcStat's `lb $3,0x5($2)`: 1 makes the hit double *damage
-     * while the target carries status (0, 0x20), which calcStat then resets.
-     */
-    signed char doubleDamageKind;
-    /*
-     * +0x06: calcPowLevGet's base term, `lbu $18,0x6($2)` (0x00a13684,
-     * unsigned byte load). TecRecord (src/ov01/data_unit_org_get.c) owns
-     * the rest of this layout and does not yet name this byte or the next
-     * one either (its unmodeled_00[0x11] covers both); see
-     * OUTDIR/proposals.md for the same-size split that would.
-     */
-    u8 powLevBase;
-    signed char agility;    /* +0x07: calcPlusAglGet's base term, `lb $18,0x7($2)` */
-    unsigned char unmodeled_08[0x0C - 0x08];
-    signed char statCategory; /* +0x0C: calcStatClr's `lb $3,0xC($18)` */
-    unsigned char unmodeled_0d[0x0E - 0x0D];
-    u16 statMask;           /* +0x0E: calcStatClr's `lhu $2,0xE($18)` */
-    unsigned char unmodeled_10[0x11 - 0x10];
-    /*
-     * +0x11: calcBp2Tid's timeline selector. calcBp2Tid.s (0x00a1267c)
-     * reads it with `lb $2,0x11($2)` (signed byte load), hence `signed char`.
-     */
-    signed char kind;
-};
-
-/*
- * Bits of TecKindView.flags (+0x02, `lhu $3,0x2($2)`/`andi $3,$3,<bit>`),
- * each named by the effect its one test has; the field stays u16.
- */
-enum TecFlag {
-    /* futtobiChk (`lhu $3,0x2($5)`/`andi $3,$3,0x100`, 0x00a14600..0x00a14604,
-     * on its technique argument): clear, no knockback (result 0). */
-    TEC_FLAG_KNOCKBACK = 0x100,
-    /* calcHitRate (0x00a130bc): set, the hit roll is skipped (result 0). */
-    TEC_FLAG_NO_HIT_ROLL = 0x200,
-    /* calcHitRate (0x00a1310c): set, the first roll's result 2 is blocked. */
-    TEC_FLAG_NO_HIT_RESULT_2 = 0x400
-};
-
-extern TecKindView *dataTecGet(int tecId);
 extern int menuTimeGet(void);
 extern const char D_00A443D8[]; /* "** BP up: EventTimer G (%d)\n" */
 
@@ -1087,21 +1259,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHitMotChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHitDmg);
 
-/*
- * The battle command tgtFindFirst (this TU, still asm) passes on to
- * tgtFindChk, as far as either reads it: tgtFindFirst resolves +0x00
- * through dataTecGet and +0x08 through dataItmGet, takes the target from
- * +0x04, and branches on mode 3 (an item, as in sndConvSpid's mode 3).
- * calcHitRate (below) reads the same +0x00 (`lw $4,0x0($17)` before
- * dataTecGet) and +0x04 (`lw $4,0x4($17)` before calcUPGet).
- */
-typedef struct TgtCmd {
-    int tecId;          /* +0x00 */
-    ObjectTask *target; /* +0x04 */
-    int itmId;          /* +0x08 */
-    int mode;           /* +0x0C: 3 = item */
-} TgtCmd;
-
 /* calcHitParaGet (defined below): the attacker's hit rate. */
 int calcHitParaGet(ObjectTask *unit);
 
@@ -1180,9 +1337,9 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHit);
  * `typedef struct AttRecord { unsigned char opaque[0x0E]; } AttRecord;`),
  * this TU's own bounded view: calcWpnAtkGet's attachment attack term,
  * `lh $19,0x0($2)` (0x00a13410). AttRecord does not name this field and is
- * not published, so this is a second definition of the same record; see
- * OUTDIR/proposals.md (a same-size split of AttRecord's `opaque[0x0E]` names
- * it on the owner side instead).
+ * not published, so this is a second definition of the same record (a
+ * same-size split of AttRecord's `opaque[0x0E]` would name it on the owner
+ * side instead).
  */
 typedef struct CalcAttData {
     short attack; /* +0x00 */
@@ -1199,7 +1356,7 @@ extern const char D_00A44478[]; /* "** calcWpnAtkGet: wpnAtkAdj=%d\n" */
  * 0x00a134cc). CalcUnitParam (above) ends at 0x17C (effectUnit at +0x158 plus
  * statEffUnits[8] reaches exactly +0x17C), so a trailing member would change
  * the struct's size; that extent/alignment decision is not this function's to
- * make (see OUTDIR/proposals.md), so the term is read through this named
+ * make, so the term is read through this named
  * offset, not a member.
  */
 #define CALC_PARAM_ATK_BOOST_PCT_OFF 0x17C
@@ -1321,8 +1478,8 @@ int calcMagDefGet(ObjectTask *unit)
  * agility. dataSpecDataGet's own TU already names this record
  * (src/ov01/data_unit_org_get.h's `PlSpecialSlot`, an 0xC-byte id/unmodeled
  * pair) but does not yet name these two fields and is not published to
- * calc.c (its header includes this one); see OUTDIR/proposals.md for the
- * same-size split of `PlSpecialSlot.unmodeled_2[10]` that would.
+ * calc.c (its header includes this one); a same-size split of
+ * `PlSpecialSlot.unmodeled_2[10]` would.
  */
 typedef struct CalcSpecSlot {
     short id;                      /* +0x00 */
@@ -1465,34 +1622,6 @@ int futtobiChk(ObjectTask *unit, TecKindView *tec)
     }
     return 1;
 }
-
-/*
- * The hit record calcHitDmg (this TU, still asm) fills and hands to
- * calcDmg, which passes it on to calcLinePos; calcLinePos reads only the
- * byte at +0x00 (`lbu $16,0x0($6)`) and goes on when it is 1; calcStatClr
- * records the status category and bits the technique clears.
- */
-typedef struct CalcHitInfo {
-    /*
-     * +0x00: calcRevHit's packed word, the hit mode in the low byte and
-     * the side above it. A word: calcHitDmg stores it with `sw $2,0x0($17)`
-     * and calcStat hands it whole to calcRevHit (`lw $4,0x0($18)`) and
-     * stores the answer back; calcLinePos and calcStat read the mode alone
-     * (`lbu`, `& 0xFF`).
-     */
-    int result;
-    unsigned char unmodeled_04[0x0C - 0x04];
-    int setCategory;   /* +0x0C: calcHitItem's `sw $3,0xC($16)`, 8 = none */
-    int setMask;       /* +0x10: calcHitItem's `sw $0,0x10($16)` */
-    /*
-     * +0x14/+0x18: calcStatClr's `sw $3,0x14($16)` / `sw $2,0x18($16)`. Read
-     * together: category 8 with a zero mask records no clearing; category 8
-     * with mask 0xFFFF clears every bit of every category; any other category
-     * clears that category's statMask bits.
-     */
-    int clearCategory;
-    int clearMask;
-} CalcHitInfo;
 
 /* calcStatReset (this TU, defined below): calcStat's own callee. */
 extern void calcStatReset(ObjectTask *unit, int category, int mask, int useAltMask);
