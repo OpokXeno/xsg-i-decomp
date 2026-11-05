@@ -82,7 +82,11 @@ typedef struct CardHand {
     u8 commandFlags;               /* +0x03: CardPlayCommandPlay command 37 sets bit 0 */
     u8 deckCount;                  /* +0x04: cards left in the deck, CardPlayYamaCnt's result (CaedGameWinMode) */
     u8 suteCount;                  /* +0x05: cards in the discard pile, CardPlaySuteCnt's result (CGPHPCheckSub, sb 0x00a295ac) */
-    u8 unmodeled_06[2];
+    u8 junkCount;                  /* +0x06: junk pile count, kept next to deckCount and suteCount; the three
+                                    * piles are the lists at +0x58, +0xA8 and +0xF8 (CardPlayYamaCnt, CardPlaySuteCnt,
+                                    * CardPlayJunkCnt count their non-negative entries). Written only (cleared
+                                    * with them at game start, sb 0x00a0b440 and 0x00a0b218); no reader found */
+    u8 unmodeled_07;
     s16 cards[40];                 /* +0x08 */
 } CardHand;
 
@@ -94,18 +98,21 @@ typedef struct CardDefinition {
     u8 kind;
     u8 unmodeled_01;
     u16 flags;
-    u8 unmodeled_04[8];
+    u8 need[4];                    /* +0x04: requirement bytes; CGCPNeedDispSub gets definitions[cardId] + 4
+                                    * (`addiu $5,$5,4`, 0x00a117e4, 0x00a11e14) and CardPlayInitWorkFake counts
+                                    * the set ones (lbu at 0x00a0b788, 0x00a0b790) */
+    u8 unmodeled_08[4];
     u8 discardRequirements[4];     /* +0x0C: CGPSetFaseProc counts the set ones (lbu at
                                     * 0x00a2be20); one card is discarded for each */
     u8 reserveCost;               /* +0x10: cards this command reserves from the draw pile */
     u8 playCost;                   /* +0x11: points required to play this card */
-    u8 operationDuration;          /* +0x12 */
+    u8 operationDuration;          /* +0x12: operation duration; ov10/card_fread also reads it as the hit points drawn for a kind 1 card */
     u8 attackType;                 /* +0x13: CardChkAttackType returns it (lbu at
                                     * 0x00a0cefc); type 4 spends a card's boosts
                                     * (CGPCalcPowerPlus), CCC38ExecSub tests type 1 */
     u8 attackPower;                /* +0x14 */
     u8 basePower;                  /* +0x15 */
-    u8 unmodeled_16;
+    u8 element;                    /* +0x16: element code 0x50, 0x52 or 0x55 (asm 0x00a09ec4, 0x00a0a8a4) */
     u8 identity;                   /* +0x17 */
     u8 unmodeled_18[12];
 } CardDefinition;
@@ -162,7 +169,26 @@ typedef struct CardBoardSlot {
 } CardBoardSlot;
 
 /*
- * One side's cards (0x106C bytes): the hand record, the deck and junk piles,
+ * Per-frame movement record of a card sliding between two piles of its side
+ * (hand, deck, discard and junk piles, operation cards): 28 bytes, ten frames
+ * long (moveTimer is set to 10 by every writer). The first word is named here
+ * because the card-game TUs write it; the other users only read position.
+ */
+typedef struct CardHandMoveRecord {
+    s16 cardId;                    /* +0x00: halfword like the card lists it moves between; every record array
+                                    * (operationMove, handMove, yamaMove, suteMove) has it cleared with `sh $0`
+                                    * (CPIWsub 0x00a0b490.., CardPlayInitWork 0x00a0b268..). Written only
+                                    * (cleared there); no reader found */
+    u8 kind;                       /* +0x02: 4 for a card drawn from the discard pile into the hand
+                                    * (sb 0x00a0bcc0), 0 for the moves into the deck and the discard
+                                    * and junk piles (sb 0x00a0bde4, 0x00a0c4e8, 0x00a296f0) */
+    u8 moveTimer;                  /* +0x03: frames left, set to 10 (sb 0x00a0bcc4, 0x00a0c4e0) */
+    float position[3];             /* +0x04 */
+    float step[3];                 /* +0x10: position change per frame */
+} CardHandMoveRecord;
+
+/*
+ * One side's cards (0x2AAC bytes): the hand record, the deck and junk piles,
  * four battle and four disposal slots and the operation cards in play.
  */
 typedef struct CardPlaySide {
@@ -173,7 +199,11 @@ typedef struct CardPlaySide {
                                     * line ("Sute[%2d]:" row header, "%3d,"
                                     * per entry) */
     s16 junk[40];                  /* +0x0F8 */
-    u8 unmodeled_0148[0x190 - 0x148];
+    s16 answerCards[36];           /* +0x148: cards answered to the other side's command (CGPAnswerSub,
+                                    * CGPCommFaseSub). The record is 40 entries long (CPIWsub 0x00a0b488 `sh 0x140($9)`
+                                    * stores i = 0..39, CGPCommFaseSub scans `slti 0x28` at 0x00a2f458):
+                                    * entries 36..39 (+0x190..+0x197) overlay the unused shuntPosition
+                                    * of battle[0], and lastCardValue (+0x198) is battle[0].cmdView.playedCard */
     CardBoardSlot battle[4];       /* +0x190 */
     CardBoardSlot disposal[4];     /* +0x880 */
     float lastShuntPosition[3];    /* +0xF70: shunt position of the last disposal
@@ -182,24 +212,23 @@ typedef struct CardPlaySide {
     s16 operations[40];            /* +0xF7C */
     s16 operationFlags[40];        /* +0xFCC */
     s16 operationDuration[40];     /* +0x101C */
+    u8 unmodeled_106C[0x14CC - 0x106C];
+    CardHandMoveRecord operationMove[40]; /* +0x14CC: one record per operation card; CPIWsub clears all forty
+                                    * (0x00a0b4d4.. `sh 0xC($6)` with $6 = side + 0x14C0 + 28 * i);
+                                    * CardPlayDesertOperation reads it at 0x00a0c208 `lwc1 0x14C0($2)`
+                                    * with $2 = side + 0x10 + 28 * slot */
+    CardHandMoveRecord handMove[40];   /* +0x192C: CardPlayDrawSute 0x00a0bcc0..0x00a0bce0 */
+    CardHandMoveRecord yamaMove[40];   /* +0x1D8C: CardPlayRecavery 0x00a0bde4..0x00a0be08 */
+    CardHandMoveRecord suteMove[40];   /* +0x21EC: CardPlayCostCard 0x00a0c4e0..0x00a0c504 */
+    CardHandMoveRecord junkMove[40];   /* +0x264C: CardPlayDesertOperation 0x00a0c298 `swc1 0x2650($10)`;
+                                    * ends at the 0x2AAC side stride (0x2F08 - 0x45C) */
 } CardPlaySide;
 
 /*
- * Per-frame movement record of a hand card (28 bytes each), at +0x192C of a
- * side (CardMoveRecord / CardPlayField.handMove in ov10/cgp.c).
- */
-typedef struct CardHandMoveRecord {
-    u8 unmodeled_00[4];
-    float position[3];             /* +0x04 */
-    float step[3];                 /* +0x10 */
-} CardHandMoveRecord;
-
-/*
- * Partial view of a side past the end of CardPlaySide (measured: CardPlaySide
- * stops at 0x106C, and making handMove a real member breaks the ov10/tu000
- * data carve, "allocation refused: D_00A4FA10 cc1 directives prove
- * size/alignment 0x8be0/0x8, record claims 0x71a0/0x8"). Callers cast their
- * CardPlaySide pointer; a separately computed pointer changes the schedule.
+ * Partial view of a side past the end of the first 0x106C bytes of CardPlaySide,
+ * for the published callers: they cast their CardPlaySide pointer, because a
+ * separately computed pointer changes the schedule. CardPlaySide above carries
+ * the full 0x2AAC layout itself, so ov10/card_fread indexes its handMove directly.
  */
 typedef struct CardPlaySideMoveView {
     u8 unmodeled_0000[0x192C];
@@ -266,14 +295,40 @@ typedef struct CardCommandControl {
                                     * 0x00a085ec swc1) */
 } CardCommandControl;
 
-/* The board cursor (CardCursorActive/CardCursorPassive). */
+/* The board cursor (CardCursorActive/CardCursorPassive), 0x6C bytes at CardGameWork+0x5B50. */
 typedef struct CardCursorControl {
-    s16 selectionMode;
+    u16 selectionMode;
     s16 selectionSubMode;          /* +0x02: stored with selectionMode when a fase starts (sh 0x00a2a7d0 / 0x00a2a7d8,
                                     * 0x00a2b3cc / 0x00a2b3c4, 0x00a2bca4 / 0x00a2bcb0); no reader found */
-    u8 unmodeled_04[2];
+    u16 animFrame;                 /* +0x04: cursor animation frame, 0..23 (lhu 0x00a1033c, sh 0x00a10348 in CardPlayDispCursor) */
     s16 controllingSide;           /* +0x06 */
+    u8 unmodeled_08[0x0C - 0x08];  /* the movement counters of CardGameWork */
+    s16 cursorIndex;               /* +0x0C: position inside the selected zone, kept 0..3 by CPCMSub */
+    s16 cursorZone;                /* +0x0E: selected board zone */
+    float highlightX;              /* +0x10 */
+    float highlightY;              /* +0x14 */
+    float highlightScaleX;         /* +0x18 */
+    float highlightScaleY;         /* +0x1C */
+    float position[3];             /* +0x20: cursor position (CardPlayCursorMove) */
+    u8 unmodeled_2C[0x30 - 0x2C];
+    u8 markTable[24];              /* +0x30: six columns of four marks, 0 or 1..4 (sb 0x00a101c0 / 0x00a10208 in
+                                    * CardCursorActive; CardCursorPassive clears it, sb 0x00a10104) */
+    u8 markTableB[24];             /* +0x48: second table CardCursorPassive clears (sb 0x00a10108); no reader found */
+    u8 pulseA;                     /* +0x60: light pulse phase, 0..31 */
+    u8 pulseB;                     /* +0x61: second light pulse phase, 0..63 */
+    u8 unmodeled_62[0x6C - 0x62];
 } CardCursorControl;
+
+/*
+ * The cursor control followed by the layout and texture files of the four cursor
+ * kinds (CardGameWork +0x5B50..+0x5BDC). CardPlayDispCursor addresses all of it
+ * from one base register (`addiu $21,$16,0x5B50`).
+ */
+typedef struct CardCursorBlock {
+    CardCursorControl control;     /* +0x00 */
+    void *lex[4];                  /* +0x6C: layout file of each cursor kind, loaded by CardMainInit */
+    void *xtx[4];                  /* +0x7C: texture file of each cursor kind */
+} CardCursorBlock;
 
 /*
  * The card game part of the save data CardGameWork.save points to. Every
@@ -351,9 +406,7 @@ typedef struct CardGameWork {
     s16 commandQueue[2][40][4];    /* +0x01DC: queued commands of the player and the enemy;
                                     * a negative first word marks a free entry (CPCSearchCommWk) */
     CardPlaySide player;           /* +0x045C: side 0 (CardEnemyCommandRequest `addiu $2,$16,0x45C`) */
-    u8 unmodeled_14C8[0x2F08 - 0x14C8];
     CardPlaySide enemy;            /* +0x2F08: side 1 (`addiu $4,$16,0x2F08`) */
-    u8 unmodeled_3F74[0x59B4 - 0x3F74];
     u16 fase;                      /* +0x59B4: card game phase counter; CGPRotStageSub's six callers are all
                                     * *FaseProc/*FaseSub phase handlers, and it only requests a stage rotation
                                     * while fase == 9 */
@@ -401,23 +454,38 @@ typedef struct CardGameWork {
     char *interruptMess;           /* +0x5B44: CGPSetInterruptMess, indexed from CardPlayTMessList */
     char *permanentMess;           /* +0x5B48: CGPSetPermanentMess, indexed from PermMessTbl or NULL */
     u8 unmodeled_5B4C[0x5B50 - 0x5B4C];
-    CardCursorControl cursor;      /* +0x5B50 */
+    /*
+     * The cursor area at +0x5B50, seen three ways. `cursor` and `cursorBlock` are the typed
+     * views CardCursorControl users take (card_fread.c); the flat members are the names the
+     * published cgp.c and card_play_sound1.c use. Merging the flat structs changes the code
+     * generated for cgp.c, so they stay as separate members of the union.
+     */
     union {
-        u8 cursorMoveStep[2];      /* +0x5B58: one movement counter per side */
-        u16 cursorMoveAny;         /* both counters at once (lhu 0x00a2b0cc) */
-    };
-    u8 junkPick[2];                /* +0x5B5A: junk pile card under the cursor while one is browsed, one per pile
+        CardCursorControl cursor;  /* +0x5B50 */
+        CardCursorBlock cursorBlock;
+        struct {
+            u8 unmodeled_5B50[8];  /* selection fields of cursor */
+            u8 cursorMoveStep[2];  /* +0x5B58: one movement counter per side */
+            u8 junkPick[2];        /* +0x5B5A: junk pile card under the cursor while one is browsed, one per pile
                                     * (player pile, enemy pile); CGPCursorMove2 steps it with lbu/sb */
-    s16 cursorIndex;               /* +0x5B5C: position inside the selected zone */
-    s16 cursorZone;                /* +0x5B5E: selected board zone */
-    float highlightX;              /* +0x5B60 */
-    float highlightY;              /* +0x5B64 */
-    float highlightScaleX;         /* +0x5B68 */
-    float highlightScaleY;         /* +0x5B6C */
-    float cursorPos[4];            /* +0x5B70: cursor world position, w = 1.0 (CardMainInit 0x00a00ca8) */
-    u8 unmodeled_5B80[0x5BBC - 0x5B80];
-    void *cursorLex[4];            /* +0x5BBC: layout file of each cursor kind, loaded by CardMainInit */
-    void *cursorXtx[4];            /* +0x5BCC: texture file of each cursor kind */
+            s16 cursorIndex;       /* +0x5B5C: position inside the selected zone */
+            s16 cursorZone;        /* +0x5B5E: selected board zone */
+            float highlightX;      /* +0x5B60 */
+            float highlightY;      /* +0x5B64 */
+            float highlightScaleX; /* +0x5B68 */
+            float highlightScaleY; /* +0x5B6C */
+            float cursorPos[4];    /* +0x5B70: cursor world position, w = 1.0 (CardMainInit 0x00a00ca8) */
+        };
+        struct {
+            u8 unmodeled_5B50_any[8];  /* selection fields and counters before cursorMoveAny */
+            u16 cursorMoveAny;     /* +0x5B58: both movement counters at once (lhu 0x00a2b0cc) */
+        };
+        struct {
+            u8 unmodeled_5B50_control[sizeof(CardCursorControl)]; /* CardCursorControl bytes, the part of the area in front of the cursorLex/cursorXtx tables */
+            void *cursorLex[4];    /* +0x5BBC: layout file of each cursor kind, loaded by CardMainInit */
+            void *cursorXtx[4];    /* +0x5BCC: texture file of each cursor kind */
+        };
+    };
     u8 unmodeled_5BDC[0x5BE0 - 0x5BDC];
     u16 effectsActive;             /* +0x5BE0: only write is CardGameInit's clear (sh 0x00a252cc); no reader found */
     u16 effectsSet;                /* +0x5BE2: number of effect entries registered */
@@ -472,6 +540,9 @@ typedef struct CardPowerCard {
     s16 cardId;                     /* +0x0E: negative while the slot is empty */
 } CardPowerCard;
 
+/* Resting positions of the junk pile (x, y, z per row); defined in ov10/cgp.c. */
+extern float JunkPos1P[][3];
+
 /*
  * Swap a disposal slot's stack with a battle slot's and start the ten-frame
  * slide that carries each of them to the other's position. Each argument is
@@ -480,5 +551,8 @@ typedef struct CardPowerCard {
  * models that span as its own CardMoveWork record).
  */
 void CGPMoveDSBATTLEwork(CardLayerStack *disposal, CardLayerStack *battle);
+
+/* Whether the equipment card equipId can be attached to the weapon card weaponId. */
+s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId);
 
 #endif /* INCLUDE_OV10_CGP_H */
