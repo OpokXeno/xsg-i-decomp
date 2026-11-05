@@ -10,6 +10,9 @@ extern int dataFileLoadNB(const char *filename, void *destination);
 #define SND_MU_VOLUME_MAX 0x7F
 #define SND_MU_FADE_TIME  2000
 
+/* Unprototyped on purpose: sndSeStop calls it with no arguments (jal with no
+ * argument setup, ov01:0x00a2db90) while sndSePlay passes (unit, id); the
+ * definition below takes (ObjectTask *unit, int id). */
 extern int sndBankGet();
 
 /* ov01:0x00a2d1f8. The base of loaded sound-effect bank metadata (one record
@@ -163,7 +166,7 @@ int sndSeRegRemove(int id)
         if (sndSeRegDat[i].id == id) {
             sndSeRegDat[i].id = 0;
             for (j = 4; j >= 0; j--) {
-                sndSeRegDat[i].bank[j].work.seType = 0;
+                sndSeRegDat[i].bank[j].work.seType = SND_SE_TYPE_NONE;
             }
             return 1;
         }
@@ -175,6 +178,8 @@ typedef struct SndSeActorFlags {
     unsigned int flags;
 } SndSeActorFlags;
 #define SND_SE_ACTOR_FLAG_ENEMY 0x40u
+/* The same bit value on CalcUnitParam.flags means AGWS, not enemy. */
+#define SND_SE_UNIT_FLAG_AGWS 0x40u
 
 /*
  * ov01:0x00a2d388. Reports whether the sound-effect index seType has a
@@ -188,19 +193,19 @@ int sndSeRegChk(ObjectTask *unit, int seType)
     int registered = 0;
 
     if (!(((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY)
-        && !(calcUPGet(unit)->flags & SND_SE_ACTOR_FLAG_ENEMY)
+        && !(calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS)
         && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
-        if (seType > 0 && (seType < 5 || seType == 23)) {
+        if (seType > SND_SE_TYPE_NONE && (seType <= SND_SE_TYPE_AT2 || seType == SND_SE_TYPE_CV)) {
             registered = 1;
         }
     } else if (calcUPGet(unit)->charaId >= 0x97 && calcUPGet(unit)->charaId < 0xBB) {
-        if (seType < 3) {
-            if (seType > 0) {
+        if (seType < SND_SE_TYPE_SLOT_FIRST) {
+            if (seType > SND_SE_TYPE_NONE) {
                 registered = 1;
             }
         }
-    } else if (seType < 6) {
-        registered = seType > 0;
+    } else if (seType <= SND_SE_TYPE_SLOT_LAST) {
+        registered = seType > SND_SE_TYPE_NONE;
     }
     return registered;
 }
@@ -262,21 +267,21 @@ typedef struct {
 
 int dataSndSeLoadSub(ObjectTask *unit, int seType, SndSeLoadWork *work)
 {
-    char name;
+    char name[16];
     int fileSize;
     int withSlack;
     int clamped;
     int roundedSize;
 
-    dataSndSeNameGet(&name, unit, seType);
-    if (name == 0) {
+    dataSndSeNameGet(name, unit, seType);
+    if (name[0] == 0) {
         printf(D_00A4E6A8, calcUPGet(unit)->charaId, seType);
-        work->seType = 0;
+        work->seType = SND_SE_TYPE_NONE;
         return 0;
     }
 
     strcpy(fileName, sndSeNameBase);
-    strcat(fileName, &name);
+    strcat(fileName, name);
     strcat(fileName, sndSeNameExt);
     dataFileLoadNB(fileName, work->dest);
 
@@ -342,17 +347,17 @@ int dataSndSeRegLoad(ObjectTask *unit)
         return 0;
     }
     bank = &record->bank[0];
-    if (dataSndSeLoadSub(unit, 0, &bank->work) == 0) {
+    if (dataSndSeLoadSub(unit, SND_SE_TYPE_BASE, &bank->work) == 0) {
         return 0;
     }
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS) {
         end = (unsigned char *)bank->work.dest + bank->work.size;
-        for (seType = 3; seType < 6; seType++) {
+        for (seType = SND_SE_TYPE_SLOT_FIRST; seType <= SND_SE_TYPE_SLOT_LAST; seType++) {
             bank = &record->bank[seType - 1];
             bank->work.dest = end;
             if (dataSndSeLoadSub(unit, seType, &bank->work) == 0) {
                 bank->work.size = 0;
-                bank->work.seType = 0;
+                bank->work.seType = SND_SE_TYPE_NONE;
             }
             end = (unsigned char *)bank->work.dest + bank->work.size;
         }
@@ -361,7 +366,55 @@ int dataSndSeRegLoad(ObjectTask *unit)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeRegLoad2);
+/*
+ * ov01:0x00a2d7b0. Once the unit's base sound-effect bank file is loaded,
+ * resolves every bank's "sed"/"swd" block address from the file's offset
+ * table (bank i gets index i + 1), then, for an AGWS unit, relocates the
+ * three bank files dataSndSeRegLoad loaded after it from their own headers.
+ * The offset table is read as 8-byte records from the file start: record 0
+ * is the count, so bank i's offsets are the record after record i. The
+ * cursor starts at the file start, not at SndSeBankHeader.offset: the loop
+ * head's `lw $2,8($7)` addresses from it.
+ */
+void dataSndSeRegLoad2(ObjectTask *unit)
+{
+    char name[16];
+    SndSeRegDat *record;
+    SndSeRegBank *bank;
+    SndSeBankHeader *header;
+    SndSeBankOffset *entry;
+    int count;
+    int i;
+
+    dataSndSeNameGet(name, unit, SND_SE_TYPE_BASE);
+    if (name[0] == 0) {
+        return;
+    }
+    record = sndSeRegAdrGet(calcUPGet(unit)->charaId);
+    if (record == 0) {
+        return;
+    }
+    bank = &record->bank[0];
+    header = bank->work.dest;
+    count = header->count / 2;
+    for (i = 0; i < count; i++) {
+        entry = (SndSeBankOffset *)header + i;
+        bank->sed = (unsigned char *)header + entry[1].sed;
+        bank->swd = (unsigned char *)header + entry[1].swd;
+        bank->work.seType = i + 1;
+        bank++;
+    }
+    if (calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS) {
+        for (i = 2; i >= 0; i--) {
+            if (bank->work.seType != SND_SE_TYPE_NONE) {
+                header = bank->work.dest;
+                bank->sed = (unsigned char *)header + header->offset.sed;
+                bank->swd = (unsigned char *)header + header->offset.swd;
+            }
+            bank++;
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeTrans);
 
@@ -413,7 +466,6 @@ int sndSePlay(int unit, int id, int no)
     return 1;
 }
 
-extern int sndBankGet(void);
 extern void xglSoundEffectStopID(int sound_id, int flags);
 
 int sndSeStop(int unused, int pack)
@@ -446,7 +498,58 @@ int sndConvRegNo(int id)
     return -1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndBankGet);
+/*
+ * ov01:0x00a2dca0. Picks the sound-effect bank a sound id plays from. Ids
+ * 5..22 of a player-side unit (no actor enemy flag, no CalcUnitParam AGWS flag)
+ * use bank 2 unless the unit is a boss (charaId 0xBB..0xC2); ids 24, 25 and
+ * 26 up use bank 2, ids 3..7 of an enemy actor too; id 1 uses bank 3, every
+ * other id but 2 bank 1. The damage sound (id 2) gets one of the banks 4..6:
+ * the one dmgBankOffs already keys to this charaId, else the first free one,
+ * claimed here; bank 4 when none is free.
+ * Shape receipts: ids 24, 25, 26 up and the enemy 3..7 case are one condition
+ * (separate arms gave `bne flag,L10` for the original's `beqz flag,L70; b`),
+ * the id 2 search is the then-branch and bank 1 the else (the other order
+ * gave `bne` for the original's `bnel`), and the claim stays inside the
+ * free-slot loop (after it, `i` is kept as an index: sll/addu).
+ */
+int sndBankGet(ObjectTask *unit, int id)
+{
+    int bank;
+    int i;
+
+    if (id >= 5 && id < 23
+        && !(((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY)
+        && !(calcUPGet(unit)->flags & SND_SE_UNIT_FLAG_AGWS)
+        && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
+        bank = 2;
+    } else if (id >= 26 || id == 24 || id == 25
+               || (id >= 3 && id < 8
+                   && (((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY))) {
+        bank = 2;
+    } else if (id == 1) {
+        bank = 3;
+    } else if (id == 2) {
+        bank = 4;
+        for (i = 0; i < 3; i++) {
+            if (dmgBankOffs[i] == calcUPGet(unit)->charaId) {
+                bank += i;
+                break;
+            }
+        }
+        if (i >= 3) {
+            for (i = 0; i < 3; i++) {
+                if (dmgBankOffs[i] == 0) {
+                    bank += i;
+                    dmgBankOffs[i] = calcUPGet(unit)->charaId;
+                    break;
+                }
+            }
+        }
+    } else {
+        bank = 1;
+    }
+    return bank;
+}
 
 typedef struct {
     unsigned char unmodeled_00[0x11]; /* +0x00 */
