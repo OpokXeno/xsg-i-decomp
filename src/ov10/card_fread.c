@@ -3069,7 +3069,329 @@ s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *slot)
     return power;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_fread", CardPlayDispBattle);
+/*
+ * Draws the battle slots of one side (asm 0x00a0dac8): each live slot moves along its step or rests at
+ * BattlePos1P, is drawn as a card with its frame and stacked card; a settled card also gets its info plate:
+ * attack type icon, effective power, boost pips, equipment kind, life digits, life bar and flag markers.
+ * An empty slot is reset to its resting position.
+ */
+#define CARD_BATTLE_ARRIVE_SOUND 0x2000F      /* sound when a card lands (0x00a0db9c) */
+#define CARD_BATTLE_MARKER_TEXTURE ((const char *)0x01F70200)
+#define CARD_BATTLE_DIGIT_TEXTURE ((const char *)0x01C91000)
+#define CARD_BATTLE_FRAME_MODEL 0x01714600
+#define CARD_BATTLE_SCALE 0.355f              /* card size in the slot, 0x3EB5C28F (0x00a0dacc) */
+#define CARD_BATTLE_STACK_SCALE 0.5070423f    /* stacked card size, 0x3F01CD86 (0x00a0dadc) */
+#define CARD_BATTLE_PLATE_FRAME_MODEL 0x01E30000
+#define CARD_BATTLE_PLATE_MODEL 0x01E38000
+#define CARD_BATTLE_PLATE_X (-0.345f)         /* 0xBEB0A3D7 (0x00a0de64) */
+#define CARD_BATTLE_PLATE_Y 0.192f            /* 0x3E449BA6 (0x00a0de70) */
+#define CARD_BATTLE_ICON_Z 0.05f              /* 0x3D4CCCCD (0x00a0de4c) */
+#define CARD_BATTLE_INFO_Z 0.01f              /* 0x3C23D70A (0x00a0df24) */
+#define CARD_BATTLE_ATTACK_X 0.131f           /* 0x3E0624DD (0x00a0df58) */
+#define CARD_BATTLE_ATTACK_Y (-0.0981f)       /* 0xBDC8E8A7 (0x00a0df64) */
+#define CARD_BATTLE_ATTACK_SCALE 1.5f         /* 0x3FC00000 (0x00a0df50) */
+#define CARD_BATTLE_ATTACK_MODEL 0x01C89400
+#define CARD_BATTLE_ICON_TEXTURE ((const char *)0x01C94050)
+#define CARD_BATTLE_POWER_MAX 99              /* `addiu $2,$0,99` (0x00a0e0c0) */
+#define CARD_BATTLE_POWER_SCALE 1.2f          /* 0x3F99999A (0x00a0e0d4) */
+#define CARD_BATTLE_TENS_X 0.371f             /* 0x3EBDF3B6 (0x00a0e10c) */
+#define CARD_BATTLE_UNITS_X 0.455f            /* 0x3EE8F5C3 (0x00a0e178) */
+#define CARD_BATTLE_POWER_Y 0.1079f           /* 0x3DDCFAAD (0x00a0e118) */
+#define CARD_BATTLE_PIP_X (-0.15f)            /* 0xBE19999A (0x00a0e1f8) */
+#define CARD_BATTLE_PIP_Y (-0.2621f)          /* 0xBE8631F9 (0x00a0e208) */
+#define CARD_BATTLE_PIP_STEP 0.14f            /* 0x3E0F5C29 (0x00a0e244) */
+#define CARD_BATTLE_PIP_ON_MODEL 0x01901000
+#define CARD_BATTLE_PIP_OFF_MODEL 0x01901400
+#define CARD_BATTLE_EQUIP_X (-0.3589f)        /* 0xBEB7C1BE (0x00a0e2f8) */
+#define CARD_BATTLE_EQUIP_Y (-0.1832f)        /* 0xBE3B98C8 (0x00a0e304) */
+#define CARD_BATTLE_EQUIP_MODEL 0x01C87400
+#define CARD_BATTLE_LIFE_SCALE 1.4f           /* 0x3FB33333 (0x00a0e2e4) */
+#define CARD_BATTLE_LIFE_Y 0.277f             /* 0x3E8DD2F2 (0x00a0e444) */
+#define CARD_BATTLE_BAR_X (-0.297f)           /* 0xBE981062 (0x00a0e544) */
+#define CARD_BATTLE_BAR_Y 0.274f              /* 0x3E8C49BA (0x00a0e564) */
+#define CARD_BATTLE_BAR_Z (-0.01f)            /* 0xBC23D70A (0x00a0e570) */
+#define CARD_BATTLE_BAR_FULL 10.0f            /* life shown at full bar width, 0x41200000 (0x00a0e550) */
+#define CARD_BATTLE_BAR_TEXTURE ((const char *)0x01985400)
+#define CARD_BATTLE_BAR_MODEL 0x01919800
+#define CARD_BATTLE_MARKER_MODEL_BIT0 0x01900000
+#define CARD_BATTLE_MARKER_MODEL_BIT1 0x01900800
+#define CARD_BATTLE_REFLECT_CARD 15           /* a card of this id gains a power per marked slot (0x00a0e070) */
+#define CARD_BATTLE_REFLECT_FLAG 8            /* CardDefinition.flags bit it counts (`andi $2,$2,8`, 0x00a0e0b0) */
+
+/* Info plate position of each battle slot (0x00A435A8, 0x20 bytes, x and y). */
+extern float CPSInfoPos[][2];
+extern Matrix4 Player1Color;
+extern Matrix4 Player2Color;
+
+void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Matrix4 matrix)
+{
+    Matrix4 place;
+    float translation[4];
+    float scale[4];
+    float stackScale[4];
+    Matrix4 iconPlace;
+    s32 i;
+    s32 j;
+    s32 slot;
+    s32 power;
+    u32 model;
+    float *infoPos;
+    CardDefinition *def;
+
+    translation[3] = 1.0f;
+    scale[1] = CARD_BATTLE_SCALE;
+    scale[3] = 1.0f;
+    scale[2] = 1.0f;
+    stackScale[1] = CARD_BATTLE_STACK_SCALE;
+    stackScale[3] = 1.0f;
+    scale[0] = CARD_BATTLE_SCALE;
+    stackScale[0] = CARD_BATTLE_STACK_SCALE;
+    stackScale[2] = 1.0f;
+
+    for (i = 0; i < CARD_BOARD_SLOTS; i++) {
+        if (ownSide->battle[i].battle.layers[0].cardId >= 0) {
+            if (ownSide->battle[i].battle.moveFrames != 0) {
+                ownSide->battle[i].battle.moveFrames--;
+                if (ownSide->battle[i].battle.moveFrames == 0) {
+                    xglSoundEffectNormalID(CARD_BATTLE_ARRIVE_SOUND, 0);
+                }
+                ownSide->battle[i].battle.position[0] += ownSide->battle[i].battle.step[0];
+                ownSide->battle[i].battle.position[1] += ownSide->battle[i].battle.step[1];
+                ownSide->battle[i].battle.position[2] += ownSide->battle[i].battle.step[2];
+            } else {
+                ownSide->battle[i].battle.position[0] = BattlePos1P[i][0];
+                ownSide->battle[i].battle.position[1] = BattlePos1P[i][1];
+                ownSide->battle[i].battle.position[2] = BattlePos1P[i][2];
+            }
+            translation[0] = ownSide->battle[i].battle.position[0];
+            translation[1] = ownSide->battle[i].battle.position[1];
+            translation[2] = ownSide->battle[i].battle.position[2];
+            scale[0] = scale[1] = CARD_BATTLE_SCALE;
+            scale[3] = 1.0f;
+            scale[2] = 1.0f;
+            xglMatrixTrans(place, matrix, translation);
+            xglMatrixScale(place, place, scale);
+            CardDispCard(&place, ownSide->battle[i].battle.layers[0].cardId & CARD_CURSOR_CARD_ID_MASK, 1);
+            nmlModelSetPlace(&place);
+            nmlModelSetTexture(CARD_FRAME_TEXTURE);
+            nmlModelEntryCard(CARD_BATTLE_FRAME_MODEL);
+            if (ownSide->battle[i].battle.layers[1].cardId >= 0) {
+                translation[0] = CardStackPos[0];
+                translation[1] = CardStackPos[1];
+                translation[2] = CardStackPos[2];
+                xglMatrixTrans(place, place, translation);
+                xglMatrixScale(place, place, stackScale);
+                CardDispCard(&place, ownSide->battle[i].battle.layers[1].cardId & CARD_CURSOR_CARD_ID_MASK, 1);
+                nmlModelSetPlace(&place);
+                nmlModelSetTexture(CARD_FRAME_TEXTURE);
+                nmlModelEntryCard(CARD_FRAME_MODEL);
+            }
+            if (ownSide->battle[i].battle.moveFrames == 0) {
+                infoPos = CPSInfoPos[i];
+                translation[0] = infoPos[0];
+                translation[1] = infoPos[1];
+                translation[3] = 1.0f;
+                translation[2] = 0.0f;
+                xglMatrixTrans(place, matrix, translation);
+                nmlModelSetPlace(&place);
+                if (side == 0) {
+                    nmlModelSetLight(&Player1Color, &asDir);
+                } else {
+                    nmlModelSetLight(&Player2Color, &asDir);
+                }
+                nmlModelSetTexture(CARD_BATTLE_MARKER_TEXTURE);
+                nmlModelEntryCard(CARD_BATTLE_PLATE_FRAME_MODEL);
+                translation[0] = CARD_BATTLE_PLATE_X;
+                translation[1] = CARD_BATTLE_PLATE_Y;
+                translation[2] = CARD_BATTLE_ICON_Z;
+                xglMatrixTrans(place, place, translation);
+                nmlModelSetPlace(&place);
+                nmlModelSetTexture(CARD_BATTLE_MARKER_TEXTURE);
+                nmlModelEntryCard(CARD_BATTLE_PLATE_MODEL);
+                QuadwordCopyMatrix(place, matrix);
+                /* No code survives for this test or its unused assignment. The branch still divides the block
+                 * at allocation time, which leaves the slot offset in $16 and the chain computing it in $3
+                 * (`sll $16,$3,0x2`, 0x00a0df24), so the offset stays live across the xglMatrixTrans call. */
+                if (ownSide->battle[i].battle.flags != 0) {
+                    power = ownSide->battle[i].battle.moveFrames;
+                }
+                scale[3] = 1.0f;
+                scale[2] = 1.0f;
+                scale[1] = 1.0f;
+                scale[0] = 1.0f;
+                translation[0] = infoPos[0];
+                translation[1] = infoPos[1];
+                translation[2] = CARD_BATTLE_INFO_Z;
+                xglMatrixTrans(place, place, translation);
+                translation[0] = CARD_BATTLE_ATTACK_X;
+                translation[1] = CARD_BATTLE_ATTACK_Y;
+                translation[2] = CARD_BATTLE_ICON_Z;
+                scale[0] = scale[1] = CARD_BATTLE_ATTACK_SCALE;
+                model = 0;
+                switch (CardChkAttackType(work->definitions, &ownSide->battle[i].battle)) {
+                case 4:
+                    model = 1;
+                case 3:
+                    model++;
+                case 2:
+                    model++;
+                case 1:
+                    break;
+                default:
+                    model = -1;
+                    break;
+                }
+                if ((s32)model >= 0) {
+                    model = CARD_BATTLE_ATTACK_MODEL + (model * CARD_MODEL_STRIDE);
+                    xglMatrixTrans(iconPlace, place, translation);
+                    xglMatrixScale(iconPlace, iconPlace, scale);
+                    nmlModelSetPlace(&iconPlace);
+                    nmlModelSetTexture(CARD_BATTLE_ICON_TEXTURE);
+                    nmlModelEntryCard(model);
+                }
+                power = CardPlayCntPower(work, &ownSide->battle[i].battle);
+                if (ownSide->battle[i].battle.layers[0].cardId == CARD_BATTLE_REFLECT_CARD) {
+                    for (slot = 0; slot < CARD_BOARD_SLOTS; slot++) {
+                        if (ownSide->battle[slot].battle.layers[0].cardId >= 0
+                            && (work->definitions[ownSide->battle[slot].battle.layers[0].cardId].flags & CARD_BATTLE_REFLECT_FLAG) != 0) {
+                            power++;
+                        }
+                    }
+                }
+                if (power >= 100) {
+                    power = CARD_BATTLE_POWER_MAX;
+                }
+                scale[0] = scale[1] = CARD_BATTLE_POWER_SCALE;
+                model = power / CARD_DIGIT_BASE;
+                if (model != 0) {
+                    model = CARD_DIGIT_MODEL + (model * CARD_MODEL_STRIDE);
+                    translation[0] = CARD_BATTLE_TENS_X;
+                    translation[1] = CARD_BATTLE_POWER_Y;
+                    xglMatrixTrans(iconPlace, place, translation);
+                    xglMatrixScale(iconPlace, iconPlace, scale);
+                    nmlModelSetPlace(&iconPlace);
+                    nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
+                    nmlModelEntryCard(model);
+                }
+                model = CARD_DIGIT_MODEL + ((power % CARD_DIGIT_BASE) * CARD_MODEL_STRIDE);
+                translation[0] = CARD_BATTLE_UNITS_X;
+                translation[1] = CARD_BATTLE_POWER_Y;
+                xglMatrixTrans(iconPlace, place, translation);
+                xglMatrixScale(iconPlace, iconPlace, scale);
+                nmlModelSetPlace(&iconPlace);
+                nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
+                nmlModelEntryCard(model);
+                translation[0] = CARD_BATTLE_PIP_X;
+                translation[1] = CARD_BATTLE_PIP_Y;
+                for (j = 0; j < (s8)ownSide->battle[i].battle.powerLimit; j++) {
+                    model = CARD_BATTLE_PIP_OFF_MODEL;
+                    if (!((s8)ownSide->battle[i].battle.powerLimit - (s8)ownSide->battle[i].battle.power < j)) {
+                        model = CARD_BATTLE_PIP_ON_MODEL;
+                    }
+                    xglMatrixTrans(iconPlace, place, translation);
+                    nmlModelSetPlace(&iconPlace);
+                    nmlModelSetTexture(CARD_BATTLE_ICON_TEXTURE);
+                    nmlModelEntryCard(model);
+                    translation[0] += CARD_BATTLE_PIP_STEP;
+                }
+                translation[0] = CARD_BATTLE_EQUIP_X;
+                translation[1] = CARD_BATTLE_EQUIP_Y;
+                scale[0] = scale[1] = CARD_BATTLE_LIFE_SCALE;
+                model = 0;
+                def = &work->definitions[ownSide->battle[i].battle.layers[0].cardId];
+                switch (def->flags) {
+                case 32:
+                case 64:
+                    model = 1;
+                case 16:
+                    model++;
+                case 4:
+                    model++;
+                case 8:
+                    model++;
+                case 2:
+                    model++;
+                case 1:
+                    break;
+                }
+                model = CARD_BATTLE_EQUIP_MODEL + (model * CARD_MODEL_STRIDE);
+                xglMatrixTrans(iconPlace, place, translation);
+                xglMatrixScale(iconPlace, iconPlace, scale);
+                nmlModelSetPlace(&iconPlace);
+                nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
+                nmlModelEntryCard(model);
+                if ((s8)ownSide->battle[i].battle.layers[0].shownLife < 0) {
+                    ownSide->battle[i].battle.layers[0].shownLife = 0;
+                }
+                /* Neither test below leaves code. They lengthen the life of the reloaded shownLife byte, which
+                 * ends up in $4 (`lbu $4,24($16)`, 0x00a0e3fc) rather than the next argument register. */
+                if (ownSide->battle[i].battle.flags != 0) {
+                    power = ownSide->battle[i].battle.moveFrames;
+                }
+                if (ownSide->battle[i].battle.moveFrames != 0) {
+                    power = ownSide->battle[i].battle.moveFrames;
+                }
+                scale[0] = scale[1] = CARD_BATTLE_LIFE_SCALE;
+                model = (s8)ownSide->battle[i].battle.layers[0].shownLife / CARD_DIGIT_BASE;
+                if (model != 0) {
+                    model = CARD_DIGIT_MODEL + (model * CARD_MODEL_STRIDE);
+                    translation[0] = CARD_BATTLE_TENS_X;
+                    translation[1] = CARD_BATTLE_LIFE_Y;
+                    xglMatrixTrans(iconPlace, place, translation);
+                    xglMatrixScale(iconPlace, iconPlace, scale);
+                    nmlModelSetPlace(&iconPlace);
+                    nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
+                    nmlModelEntryCard(model);
+                }
+                model = CARD_DIGIT_MODEL + (((s8)ownSide->battle[i].battle.layers[0].shownLife % CARD_DIGIT_BASE) * CARD_MODEL_STRIDE);
+                translation[0] = CARD_BATTLE_UNITS_X;
+                translation[1] = CARD_BATTLE_LIFE_Y;
+                xglMatrixTrans(iconPlace, place, translation);
+                xglMatrixScale(iconPlace, iconPlace, scale);
+                nmlModelSetPlace(&iconPlace);
+                nmlModelSetTexture(CARD_BATTLE_DIGIT_TEXTURE);
+                nmlModelEntryCard(model);
+                translation[0] = CARD_BATTLE_BAR_X;
+                translation[1] = CARD_BATTLE_BAR_Y;
+                translation[2] = CARD_BATTLE_BAR_Z;
+                scale[1] = 1.0f;
+                scale[0] = (float)(s8)ownSide->battle[i].battle.layers[0].shownLife / CARD_BATTLE_BAR_FULL;
+                xglMatrixTrans(iconPlace, place, translation);
+                xglMatrixScale(iconPlace, iconPlace, scale);
+                nmlModelSetPlace(&iconPlace);
+                nmlModelSetTexture(CARD_BATTLE_BAR_TEXTURE);
+                nmlModelEntryCard(CARD_BATTLE_BAR_MODEL);
+                if ((ownSide->battle[i].battle.previousFlags & CARD_STACK_FLAG_END) != 0) {
+                    translation[0] = BattlePos1P[i][0];
+                    translation[1] = BattlePos1P[i][1];
+                    translation[2] = CARD_BATTLE_INFO_Z;
+                    xglMatrixTrans(iconPlace, matrix, translation);
+                    nmlModelSetPlace(&iconPlace);
+                    nmlModelSetTexture(CARD_BATTLE_MARKER_TEXTURE);
+                    nmlModelEntryCard(CARD_BATTLE_MARKER_MODEL_BIT0);
+                }
+                if ((ownSide->battle[i].battle.previousFlags & CARD_STACK_FLAG_FROZEN) != 0) {
+                    translation[0] = BattlePos1P[i][0];
+                    translation[1] = BattlePos1P[i][1];
+                    translation[2] = CARD_BATTLE_INFO_Z;
+                    xglMatrixTrans(iconPlace, matrix, translation);
+                    nmlModelSetPlace(&iconPlace);
+                    nmlModelSetTexture(CARD_BATTLE_MARKER_TEXTURE);
+                    nmlModelEntryCard(CARD_BATTLE_MARKER_MODEL_BIT1);
+                }
+            }
+        } else {
+            ownSide->battle[i].battle.flags = 0;
+            ownSide->battle[i].battle.moveFrames = 0;
+            ownSide->battle[i].battle.position[0] = BattlePos1P[i][0];
+            ownSide->battle[i].battle.position[1] = BattlePos1P[i][1];
+            ownSide->battle[i].battle.position[2] = BattlePos1P[i][2];
+            ownSide->battle[i].battle.step[0] = 0.0f;
+            ownSide->battle[i].battle.step[1] = 0.0f;
+            ownSide->battle[i].battle.step[2] = 0.0f;
+        }
+    }
+}
 
 /*
  * Pile counters shared by CardPlayDispHand, CardPlayDispJunk and CardPlayDispSute: the pile size is shown as

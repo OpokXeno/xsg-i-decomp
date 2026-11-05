@@ -264940,276 +264940,599 @@
     "ov10/tu002": {
       ".rodata": [
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D130"
+          "range": [
+            "0x00a4d130",
+            "0x00a4d13f"
           ],
           "generated": [
             "0x00a4d130",
             "0x00a4d13f"
           ],
-          "generated_by": [
-            "CardFread"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D130"
           ],
-          "range": [
-            "0x00a4d130",
-            "0x00a4d140"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d130",
+                "0x00a4d13f"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                0,
+                15
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D178"
+          "range": [
+            "0x00a4d178",
+            "0x00a4d17b"
           ],
           "generated": [
             "0x00a4d178",
             "0x00a4d17b"
           ],
-          "generated_by": [
-            "CardDispTxtSub"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D178"
           ],
-          "range": [
-            "0x00a4d178",
-            "0x00a4d180"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d178",
+                "0x00a4d17b"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                16,
+                19
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D190"
+          "range": [
+            "0x00a4d190",
+            "0x00a4d193"
           ],
           "generated": [
             "0x00a4d190",
             "0x00a4d193"
           ],
-          "generated_by": [
-            "CardDispTxtSub2"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D190"
           ],
-          "range": [
-            "0x00a4d190",
-            "0x00a4d1a0"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d190",
+                "0x00a4d193"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                24,
+                27
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D1A0"
+          "range": [
+            "0x00a4d1a0",
+            "0x00a4d2a0"
           ],
           "generated": [
             "0x00a4d1a0",
             "0x00a4d2a0"
           ],
-          "generated_by": [
-            "CardDispLight"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D1A0"
           ],
-          "range": [
-            "0x00a4d1a0",
-            "0x00a4d2a0"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d1a0",
+                "0x00a4d2a0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                32,
+                288
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D2A0"
+          "range": [
+            "0x00a4d2a0",
+            "0x00a4d31c"
           ],
           "generated": [
             "0x00a4d2a0",
             "0x00a4d31c"
           ],
-          "generated_by": [
-            "CardDispLight"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D2A0"
           ],
-          "range": [
-            "0x00a4d2a0",
-            "0x00a4d320"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d2a0",
+                "0x00a4d31c"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                288,
+                412
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D320"
-          ],
-          "generated": [
-            "0x00a4d320",
-            "0x00a4d338"
-          ],
-          "generated_by": [
-            "CardDispCard"
-          ],
           "range": [
             "0x00a4d320",
             "0x00a4d340"
-          ]
+          ],
+          "generated": [
+            "0x00a4d320",
+            "0x00a4d340"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D320"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d320",
+                "0x00a4d340"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                416,
+                448
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D340"
+          "range": [
+            "0x00a4d340",
+            "0x00a4d34d"
           ],
           "generated": [
             "0x00a4d340",
             "0x00a4d34d"
           ],
-          "generated_by": [
-            "CardDisp"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D340"
           ],
-          "range": [
-            "0x00a4d340",
-            "0x00a4d350"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d340",
+                "0x00a4d34d"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                448,
+                461
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D350"
+          "range": [
+            "0x00a4d350",
+            "0x00a4d361"
           ],
           "generated": [
             "0x00a4d350",
             "0x00a4d361"
           ],
-          "generated_by": [
-            "CardDisp"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D350"
           ],
-          "range": [
-            "0x00a4d350",
-            "0x00a4d368"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d350",
+                "0x00a4d361"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                464,
+                481
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D368"
+          "range": [
+            "0x00a4d368",
+            "0x00a4d36f"
           ],
           "generated": [
             "0x00a4d368",
             "0x00a4d36f"
           ],
-          "generated_by": [
-            "CardDisp"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D368"
           ],
-          "range": [
-            "0x00a4d368",
-            "0x00a4d370"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d368",
+                "0x00a4d36f"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                488,
+                495
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "D_00A4D370"
+          "range": [
+            "0x00a4d370",
+            "0x00a4d371"
           ],
           "generated": [
             "0x00a4d370",
             "0x00a4d371"
           ],
-          "generated_by": [
-            "CardDisp"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "D_00A4D370"
           ],
-          "range": [
-            "0x00a4d370",
-            "0x00a4d380"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d370",
+                "0x00a4d371"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                496,
+                497
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D380"
+          "range": [
+            "0x00a4d380",
+            "0x00a4d480"
           ],
           "generated": [
             "0x00a4d380",
             "0x00a4d480"
           ],
-          "generated_by": [
-            "CardDisp"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D380"
           ],
-          "range": [
-            "0x00a4d380",
-            "0x00a4d480"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d380",
+                "0x00a4d480"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                512,
+                768
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D480"
+          "range": [
+            "0x00a4d480",
+            "0x00a4d4fc"
           ],
           "generated": [
             "0x00a4d480",
             "0x00a4d4fc"
           ],
-          "generated_by": [
-            "CardDisp"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D480"
           ],
-          "range": [
-            "0x00a4d480",
-            "0x00a4d500"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d480",
+                "0x00a4d4fc"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                768,
+                892
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
+          "range": [
+            "0x00a4d520",
+            "0x00a4d620"
+          ],
+          "generated": [
+            "0x00a4d520",
+            "0x00a4d620"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
-            "jtbl_00A4D620"
+            "jtbl_00A4D520"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d520",
+                "0x00a4d620"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                896,
+                1152
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
+        },
+        {
+          "range": [
+            "0x00a4d620",
+            "0x00a4d638"
           ],
           "generated": [
             "0x00a4d620",
             "0x00a4d638"
           ],
-          "generated_by": [
-            "CardCursorActive"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D620"
           ],
-          "range": [
-            "0x00a4d620",
-            "0x00a4d640"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d620",
+                "0x00a4d638"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1152,
+                1176
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D640"
+          "range": [
+            "0x00a4d640",
+            "0x00a4d654"
           ],
           "generated": [
             "0x00a4d640",
             "0x00a4d654"
           ],
-          "generated_by": [
-            "CardCursorActive"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D640"
           ],
-          "range": [
-            "0x00a4d640",
-            "0x00a4d660"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d640",
+                "0x00a4d654"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1184,
+                1204
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D660"
+          "range": [
+            "0x00a4d660",
+            "0x00a4d690"
           ],
           "generated": [
             "0x00a4d660",
             "0x00a4d690"
           ],
-          "generated_by": [
-            "CardPlayDispCursor"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D660"
           ],
-          "range": [
-            "0x00a4d660",
-            "0x00a4d690"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d660",
+                "0x00a4d690"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1216,
+                1264
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         },
         {
-          "also_referenced_by_c": [],
-          "c_owned_symbols": [
-            "jtbl_00A4D690"
+          "range": [
+            "0x00a4d690",
+            "0x00a4d70c"
           ],
           "generated": [
             "0x00a4d690",
             "0x00a4d70c"
           ],
-          "generated_by": [
-            "CGCPNeedDispSub"
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D690"
           ],
-          "range": [
-            "0x00a4d690",
-            "0x00a4d710"
-          ]
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a4d690",
+                "0x00a4d70c"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1264,
+                1388
+              ]
+            }
+          ],
+          "basis": {
+            "kind": "derived",
+            "tool": "tools/tu/data_carve.py derive",
+            "object": "build/ov10/build/scaffold/src/ov10/card_fread.o"
+          }
         }
       ]
     },
