@@ -65,7 +65,10 @@ struct CursorCommandState {
     unsigned char unmodeled_04[0x78 - 0x04];
     int selectActive; /* +0x78: objDispEnCur draws the target's name only
                        * while 1 (`lw $16,0x78($2)` at 0x00a105c0) */
-    unsigned char unmodeled_7c[0x80 - 0x7C];
+    struct BattleUnit *targetUnit; /* +0x7C: the unit curTgtProc last
+                                    * pointed at (`lw $4,0x7C($6)` at
+                                    * 0x00a103e8, `sw $2,0x7C($3)` at
+                                    * 0x00a10450) */
     int targetPosId; /* +0x80: the position id curSel last requested
                       * (compared and rewritten there; objEnCurCreate
                       * clears it) */
