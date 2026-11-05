@@ -8,9 +8,9 @@
 
 static int s_nDebMode = 0;
 static int s_nMode = 0;
-static CardGameWork D_00A4FA10;
-const char D_00A4BBA0[] = "Minicard";
-const char D_00A4BBB0[] = "Card Inisialize ERROR!!!\n";
+static CardGameWork proc_0;
+const char cardMinicardEffectGroup[] = "Minicard";
+const char cardInitErrorFormat[32] = "Card Inisialize ERROR!!!\n";
 extern void xglRenderClearFrame(void);
 extern void xglRenderGlobalFadeInit(void);
 extern void xglSleep(void);
@@ -87,12 +87,12 @@ typedef struct ModelRecord {
 } ModelRecord;
 
 extern CardClearEnv ClearEnv;
-extern int s_nPause_00A42038;
-extern float s_inMulCol[4];
-extern float s_inMulColAdd[4];
-extern float s_fvInt[4];
-extern float s_fvPos[4];
-extern ModelRecord s_aModel[10];
+static int s_nPause_00A42038;
+static float s_inMulCol[4];
+static float s_inMulColAdd[4];
+static float s_fvInt[4];
+static float s_fvPos[4];
+static ModelRecord s_aModel[10];
 extern void xglStudioInit(void);
 extern void xglStudioChange(int studio_index);
 extern void xglStudioMainCameraInit(void);
@@ -150,11 +150,11 @@ void CardGameRoot(void)
     s_nMode = 1;
     s_nDebMode = 0;
     xglRenderGlobalFadeInit();
-    xglSoundLoadEffect(D_00A4BBA0, (void *)0x01B00000, 2);
-    if (CardMainInit(&D_00A4FA10) < 0)
-        printf(D_00A4BBB0);
+    xglSoundLoadEffect(cardMinicardEffectGroup, (void *)0x01B00000, 2);
+    if (CardMainInit(&proc_0) < 0)
+        printf(cardInitErrorFormat);
 
-    while (CardMainProc(&D_00A4FA10))
+    while (CardMainProc(&proc_0))
         xglSleep();
 
     xglSoundLoadEffect(0, 0, 1);
@@ -167,3 +167,17 @@ void CardGameRoot(void);
 void YmineTest(void) {
     CardGameRoot();
 }
+
+
+
+static int s_nPause_00A42038 = 0;
+
+static float s_inMulCol[4];
+
+static float s_inMulColAdd[4];
+
+static float s_fvInt[4];
+
+static float s_fvPos[4];
+
+static ModelRecord s_aModel[10];
