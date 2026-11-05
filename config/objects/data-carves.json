@@ -264937,6 +264937,282 @@
         }
       ]
     },
+    "ov10/tu002": {
+      ".rodata": [
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D130"
+          ],
+          "generated": [
+            "0x00a4d130",
+            "0x00a4d13f"
+          ],
+          "generated_by": [
+            "CardFread"
+          ],
+          "range": [
+            "0x00a4d130",
+            "0x00a4d140"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D178"
+          ],
+          "generated": [
+            "0x00a4d178",
+            "0x00a4d17b"
+          ],
+          "generated_by": [
+            "CardDispTxtSub"
+          ],
+          "range": [
+            "0x00a4d178",
+            "0x00a4d180"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D190"
+          ],
+          "generated": [
+            "0x00a4d190",
+            "0x00a4d193"
+          ],
+          "generated_by": [
+            "CardDispTxtSub2"
+          ],
+          "range": [
+            "0x00a4d190",
+            "0x00a4d1a0"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D1A0"
+          ],
+          "generated": [
+            "0x00a4d1a0",
+            "0x00a4d2a0"
+          ],
+          "generated_by": [
+            "CardDispLight"
+          ],
+          "range": [
+            "0x00a4d1a0",
+            "0x00a4d2a0"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D2A0"
+          ],
+          "generated": [
+            "0x00a4d2a0",
+            "0x00a4d31c"
+          ],
+          "generated_by": [
+            "CardDispLight"
+          ],
+          "range": [
+            "0x00a4d2a0",
+            "0x00a4d320"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D320"
+          ],
+          "generated": [
+            "0x00a4d320",
+            "0x00a4d338"
+          ],
+          "generated_by": [
+            "CardDispCard"
+          ],
+          "range": [
+            "0x00a4d320",
+            "0x00a4d340"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D340"
+          ],
+          "generated": [
+            "0x00a4d340",
+            "0x00a4d34d"
+          ],
+          "generated_by": [
+            "CardDisp"
+          ],
+          "range": [
+            "0x00a4d340",
+            "0x00a4d350"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D350"
+          ],
+          "generated": [
+            "0x00a4d350",
+            "0x00a4d361"
+          ],
+          "generated_by": [
+            "CardDisp"
+          ],
+          "range": [
+            "0x00a4d350",
+            "0x00a4d368"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D368"
+          ],
+          "generated": [
+            "0x00a4d368",
+            "0x00a4d36f"
+          ],
+          "generated_by": [
+            "CardDisp"
+          ],
+          "range": [
+            "0x00a4d368",
+            "0x00a4d370"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A4D370"
+          ],
+          "generated": [
+            "0x00a4d370",
+            "0x00a4d371"
+          ],
+          "generated_by": [
+            "CardDisp"
+          ],
+          "range": [
+            "0x00a4d370",
+            "0x00a4d380"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D380"
+          ],
+          "generated": [
+            "0x00a4d380",
+            "0x00a4d480"
+          ],
+          "generated_by": [
+            "CardDisp"
+          ],
+          "range": [
+            "0x00a4d380",
+            "0x00a4d480"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D480"
+          ],
+          "generated": [
+            "0x00a4d480",
+            "0x00a4d4fc"
+          ],
+          "generated_by": [
+            "CardDisp"
+          ],
+          "range": [
+            "0x00a4d480",
+            "0x00a4d500"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D620"
+          ],
+          "generated": [
+            "0x00a4d620",
+            "0x00a4d638"
+          ],
+          "generated_by": [
+            "CardCursorActive"
+          ],
+          "range": [
+            "0x00a4d620",
+            "0x00a4d640"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D640"
+          ],
+          "generated": [
+            "0x00a4d640",
+            "0x00a4d654"
+          ],
+          "generated_by": [
+            "CardCursorActive"
+          ],
+          "range": [
+            "0x00a4d640",
+            "0x00a4d660"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D660"
+          ],
+          "generated": [
+            "0x00a4d660",
+            "0x00a4d690"
+          ],
+          "generated_by": [
+            "CardPlayDispCursor"
+          ],
+          "range": [
+            "0x00a4d660",
+            "0x00a4d690"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "jtbl_00A4D690"
+          ],
+          "generated": [
+            "0x00a4d690",
+            "0x00a4d70c"
+          ],
+          "generated_by": [
+            "CGCPNeedDispSub"
+          ],
+          "range": [
+            "0x00a4d690",
+            "0x00a4d710"
+          ]
+        }
+      ]
+    },
     "ov10/tu003": {
       ".bss": [
         {

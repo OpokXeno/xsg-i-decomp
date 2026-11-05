@@ -3114,10 +3114,13 @@ static inline float CGPRowSpacing(float pos[][3], s32 count)
  */
 static inline void CGPCursorToSlot(CardGameWork *work)
 {
+    float *slot;
+
     CGPCMSub(work);
-    work->cursorPos[0] = CursorTbl_00A49B58[(work->cursorZone - 1) * 4 + work->cursorIndex][0];
-    work->cursorPos[1] = CursorTbl_00A49B58[(work->cursorZone - 1) * 4 + work->cursorIndex][1];
-    work->cursorPos[2] = CursorTbl_00A49B58[(work->cursorZone - 1) * 4 + work->cursorIndex][2];
+    slot = CursorTbl_00A49B58[(work->cursorZone - 1) * 4 + work->cursorIndex];
+    work->cursorPos[0] = slot[0];
+    work->cursorPos[1] = slot[1];
+    work->cursorPos[2] = slot[2];
 }
 
 /*
