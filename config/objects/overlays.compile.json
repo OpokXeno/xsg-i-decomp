@@ -3300,12 +3300,8 @@
       "g_flag": "-G0",
       "id": "ov01#30"
      },
-     "accepted_records": [
-      "config/units/math-correction13-17.json"
-     ],
-     "accepted_functions": [
-      "fnECM01_DP000"
-     ],
+     "accepted_records": [],
+     "accepted_functions": [],
      "kind": "c",
      "source": "src/ov01/m_ef_create_ecm_01.c",
      "object": "build/src/ov01/m_ef_create_ecm_01.o",
@@ -3334,39 +3330,17 @@
      "contract_basis": {
       "decision": "one compile contract per TU: lp7 cc1 (single GCC 2.96 cc1) + LA29-vsqrt (single game/runtime assembler), flags of the accepted records (user decisions 2026-09-11)",
       "g_flag_classification": "-G0",
-      "records": [
-       {
-        "record": "config/units/math-correction13-17.json",
-        "flags": [
-         "-O2",
-         "-G0"
-        ],
-        "recorded_runner": null,
-        "recorded_profile": null
-       }
-      ]
+      "records": []
      },
      "include_asm_files": [
       "asm/nonmatchings/ov01/m_ef_create_ecm_01/MEfCreate_ECM01.s",
       "asm/nonmatchings/ov01/m_ef_create_ecm_01/fnECM01_PR000.s",
       "asm/nonmatchings/ov01/m_ef_create_ecm_01/fnECM01_PO000.s"
      ],
-     "accepted_asm_files": [
-      {
-       "file": "src/ov01/m_ef_create_ecm_01/fnECM01_DP000.s",
-       "record": "config/units/math-correction13-17.json",
-       "source": "src/ov01/m_ef_create_ecm_01/fnECM01_DP000.s",
-       "sha256": "fddddee7ad885118653fd17c7d99412e0dc53095f1a780494e27efdfbea76715",
-       "functions": [
-        "fnECM01_DP000"
-       ]
-      }
-     ],
+     "accepted_asm_files": [],
      "header_divergence": [],
      "c_functions": [],
-     "accepted_asm_functions": [
-      "fnECM01_DP000"
-     ],
+     "accepted_asm_functions": [],
      "local_renames": {},
      "adaptations": []
     },
