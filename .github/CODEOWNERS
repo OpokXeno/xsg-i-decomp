@@ -1,0 +1,11 @@
+# Default owner
+* @CaptainTuckerRvB
+
+# Renderer
+/src/render/ @CaptainTuckerRvB
+
+# Audio
+/src/audio/ @CaptainTuckerRvB
+
+# PS4
+/platform/ps4/ @CaptainTuckerRvB

@@ -1,0 +1,11 @@
+name: Performance Benchmark (Placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not implemented
+        run: echo "Performance benchmark workflow placeholder; implementation pending."

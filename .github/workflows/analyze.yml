@@ -1,0 +1,26 @@
+name: Static Analysis
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 5 * * 1'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install
+        run: |
+          sudo apt update
+          sudo apt install -y cppcheck
+
+      - name: Run Cppcheck
+        run: |
+          cppcheck \
+            --enable=all \
+            --error-exitcode=1 \
+            src \
+            platform

@@ -1,4 +1,35 @@
-# Xenosaga Episode I
+# Xenosaga Episode I PS4 Port
+
+## Target Platforms
+
+- Windows
+- Linux
+- OpenOrbis PS4
+
+## Primary Goals
+
+- Native execution
+- Base PS4 support
+- Stable 30 FPS
+- No emulator dependency
+
+## Branches
+
+- `main`
+- `develop`
+- `feature/*`
+- `platform/*`
+- `ai/*`
+
+See [COPILOT_RULES.md](COPILOT_RULES.md).
+
+The repository currently contains a matching decompilation of the PlayStation 2
+release. The PS4 port goals above describe the intended direction; they are not
+claims that a native port is already implemented. The existing build and
+toolchain documentation below applies to the PS2 decompilation baseline.
+
+## PS2 Decompilation Baseline
+
 [![Code](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?mode=shield&label=Code)](https://decomp.dev/OpokXeno/xsg-i-decomp)
 [![Functions](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/OpokXeno/xsg-i-decomp)
 [![Linked](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?mode=shield&measure=complete_code&label=Linked)](https://decomp.dev/OpokXeno/xsg-i-decomp)

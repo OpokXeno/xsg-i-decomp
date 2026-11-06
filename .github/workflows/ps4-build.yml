@@ -1,0 +1,11 @@
+name: PS4 Build (Placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not implemented
+        run: echo "PS4 build workflow placeholder; implementation pending."

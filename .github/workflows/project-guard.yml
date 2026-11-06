@@ -1,0 +1,20 @@
+name: Project Guard
+
+on:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block PS4 leakage
+        run: |
+          BAD=$(grep -R "#if.*PS4" src || true)
+
+          if [ ! -z "$BAD" ]; then
+            echo "PS4 code detected in src/"
+            exit 1
+          fi

@@ -1,0 +1,19 @@
+name: AI Review
+
+on:
+  pull_request:
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check PR Body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "Reviewing PR metadata"
+
+          if grep -qi -- "AI Generated" <<< "$PR_BODY"; then
+            echo "AI-generated content detected"
+          fi

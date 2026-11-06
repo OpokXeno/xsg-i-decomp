@@ -1,0 +1,11 @@
+name: Gameplay Regression (Placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not implemented
+        run: echo "Gameplay regression workflow placeholder; implementation pending."
